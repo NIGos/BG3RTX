@@ -46,9 +46,9 @@ void watchdog_start() {
         if (cfg_int("watchdog_s", 5) <= 0) continue;
         uint64_t d[DIAG_COUNT];
         for (int i = 0; i < DIAG_COUNT; ++i) d[i] = g_watch[i].exchange(0);
-        log("[watch] presents %llu | pipelines %llu (%.0f ms in driver) | shader modules %llu | descriptor writes %llu | "
+        log("[watch] presents %llu (displayed %llu) | pipelines %llu (%.0f ms in driver) | shader modules %llu | descriptor writes %llu | "
             "submits %llu | draws %llu",
-            d[DIAG_PRESENT], d[DIAG_PIPELINES], d[DIAG_PIPELINE_US] / 1000.0, d[DIAG_SHADER_MODULES],
+            d[DIAG_PRESENT], d[DIAG_DISPLAYED], d[DIAG_PIPELINES], d[DIAG_PIPELINE_US] / 1000.0, d[DIAG_SHADER_MODULES],
             d[DIAG_DESC_WRITES], d[DIAG_SUBMIT], d[DIAG_DRAW]);
       }
     }).detach();

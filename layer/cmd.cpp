@@ -2,6 +2,8 @@
 // pipeline/descriptor binding state, and draw/dispatch notes for the tracer.
 #include "host.h"
 
+#include <cstring>
+
 namespace bg3 {
 
 using HookMap = std::unordered_map<std::string, PFN_vkVoidFunction>;
@@ -115,6 +117,7 @@ static void end_pass(VkCommandBuffer cmd) {
     std::string dumps = trace_dump_pass(cmd, s);
     trace_event(s, "{\"op\":\"end\",\"draws\":" + std::to_string(s->pass.draw_count) + ",\"dumps\":[" + dumps + "]}");
   }
+  sl_note_pass_end(cmd, s);
   core_on_pass_end(cmd, &s->pass);
 }
 
@@ -126,6 +129,7 @@ static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra =
     if (!s->pass.draw_count++) {
       s->pass.first_vs_hash = s->vs;
       s->pass.first_fs_hash = s->fs;
+      sl_note_draw(cmd, s);
     }
     s->pass.last_fs_hash = s->fs;
   }
@@ -167,6 +171,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->dumps.clear();
   s->seg_key.clear();
   s->seg_count = 0;
+  s->sl_layouts.clear();
+  s->sl_cam_valid = false;
+  for (auto& d : s->dyn) d.clear();
   return r;
 }
 
@@ -248,6 +255,38 @@ static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(VkCommandBuffer cmd, VkP
   if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return;
   CmdState* s = cmd_state(cmd, true);
   for (uint32_t i = 0; i < count && first + i < 8; ++i) s->sets[bp_index(bp)][first + i] = sets[i];
+  // Dynamic offsets start at 0 for the first set of the call; later sets'
+  // slices would need their layouts, which are not tracked.
+  if (bp == VK_PIPELINE_BIND_POINT_GRAPHICS && first < 8) {
+    s->dyn[first].assign(dyn, dyn + dyn_count);
+    for (uint32_t i = 1; i < count && first + i < 8; ++i) s->dyn[first + i].clear();
+  }
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdPipelineBarrier(VkCommandBuffer cmd, VkPipelineStageFlags src,
+                                                     VkPipelineStageFlags dst, VkDependencyFlags dep, uint32_t nm,
+                                                     const VkMemoryBarrier* mb, uint32_t nb,
+                                                     const VkBufferMemoryBarrier* bb, uint32_t ni,
+                                                     const VkImageMemoryBarrier* ib) {
+  vk(cmd).CmdPipelineBarrier(cmd, src, dst, dep, nm, mb, nb, bb, ni, ib);
+  CmdState* s = nullptr;
+  for (uint32_t i = 0; i < ni; ++i)
+    if (sl_watched(ib[i].image)) {
+      if (!s) s = cmd_state(cmd, true);
+      sl_note_barrier(s, ib[i].image, ib[i].newLayout);
+    }
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdPipelineBarrier2(VkCommandBuffer cmd, const VkDependencyInfo* info) {
+  vk(cmd).CmdPipelineBarrier2(cmd, info);
+  CmdState* s = nullptr;
+  for (uint32_t i = 0; i < info->imageMemoryBarrierCount; ++i) {
+    const auto& b = info->pImageMemoryBarriers[i];
+    if (sl_watched(b.image)) {
+      if (!s) s = cmd_state(cmd, true);
+      sl_note_barrier(s, b.image, b.newLayout);
+    }
+  }
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet(VkCommandBuffer cmd, VkPipelineBindPoint bp,
@@ -365,7 +404,18 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
   diag(DIAG_EXEC);
   vk(cmd).CmdExecuteCommands(cmd, n, cmds);
   CmdState* s = cmd_state(cmd);
-  if (!s || !s->tracing) return;
+  if (!s) return;
+  // Streamline bookkeeping recorded in secondaries counts when the primary is submitted.
+  for (uint32_t i = 0; i < n; ++i) {
+    CmdState* sec = cmd_state(cmds[i]);
+    if (!sec) continue;
+    for (auto& [img, lay] : sec->sl_layouts) sl_note_barrier(s, img, lay);
+    if (sec->sl_cam_valid) {
+      memcpy(s->sl_cam, sec->sl_cam, sizeof s->sl_cam);
+      s->sl_cam_valid = true;
+    }
+  }
+  if (!s->tracing) return;
   trace_flush_segment(s);
   // Secondaries are never submitted on their own, so their events are inlined
   // into the primary here, in execution order.
@@ -416,6 +466,8 @@ void register_cmd_hooks(HookMap& m) {
   HOOK(CmdClearColorImage);
   HOOK(CmdClearDepthStencilImage);
   HOOK(CmdExecuteCommands);
+  HOOK(CmdPipelineBarrier);
+  HOOK(CmdPipelineBarrier2);
 #undef HOOK
 }
 

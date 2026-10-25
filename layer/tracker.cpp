@@ -213,6 +213,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
 }
 
 static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAllocationCallbacks* a) {
+  sl_note_image_destroyed(img);
   device_of(device)->vk.DestroyImage(device, img, a);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().images.erase(img);
@@ -360,7 +361,8 @@ static std::unordered_map<VkSwapchainKHR, VkSwapchainCreateInfoKHR> g_swapchains
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR* ci,
                                                          const VkAllocationCallbacks* alloc, VkSwapchainKHR* out) {
-  VkResult r = device_of(device)->vk.CreateSwapchainKHR(device, ci, alloc, out);
+  VkResult r;
+  if (!sl_create_swapchain(device, ci, alloc, out, &r)) r = device_of(device)->vk.CreateSwapchainKHR(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
     log("[layer] swapchain %ux%u format %d colorspace %d images>=%u present mode %d usage 0x%x", ci->imageExtent.width,
         ci->imageExtent.height, ci->imageFormat, ci->imageColorSpace, ci->minImageCount, ci->presentMode,
@@ -373,7 +375,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device, const 
 
 static VKAPI_ATTR VkResult VKAPI_CALL GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR sc, uint32_t* count,
                                                             VkImage* images) {
-  VkResult r = device_of(device)->vk.GetSwapchainImagesKHR(device, sc, count, images);
+  VkResult r;
+  if (!sl_get_swapchain_images(device, sc, count, images, &r))
+    r = device_of(device)->vk.GetSwapchainImagesKHR(device, sc, count, images);
   if (images && (r == VK_SUCCESS || r == VK_INCOMPLETE)) {
     VkSwapchainCreateInfoKHR sci{};
     {
@@ -397,6 +401,81 @@ static VKAPI_ATTR VkResult VKAPI_CALL GetSwapchainImagesKHR(VkDevice device, VkS
     }
   }
   return r;
+}
+
+static VKAPI_ATTR void VKAPI_CALL DestroySwapchainKHR(VkDevice device, VkSwapchainKHR sc, const VkAllocationCallbacks* a) {
+  if (!sl_destroy_swapchain(device, sc, a)) device_of(device)->vk.DestroySwapchainKHR(device, sc, a);
+  std::lock_guard<std::mutex> lock(g_sc_mu);
+  g_swapchains.erase(sc);
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL AcquireNextImageKHR(VkDevice device, VkSwapchainKHR sc, uint64_t timeout,
+                                                          VkSemaphore sem, VkFence fence, uint32_t* index) {
+  VkResult r;
+  if (sl_acquire(device, sc, timeout, sem, fence, index, &r)) return r;
+  return device_of(device)->vk.AcquireNextImageKHR(device, sc, timeout, sem, fence, index);
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL AcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR* info,
+                                                           uint32_t* index) {
+  static bool once = false;
+  if (!once) {
+    once = true;
+    log("[layer] the game uses vkAcquireNextImage2KHR, which Streamline does not hook; mapped to vkAcquireNextImageKHR");
+  }
+  return AcquireNextImageKHR(device, info->swapchain, info->timeout, info->semaphore, info->fence, index);
+}
+
+// ---- host-visible memory, so uniform buffers can be read on the CPU ----
+
+static VKAPI_ATTR VkResult VKAPI_CALL BindBufferMemory(VkDevice device, VkBuffer b, VkDeviceMemory m, VkDeviceSize o) {
+  VkResult r = device_of(device)->vk.BindBufferMemory(device, b, m, o);
+  if (r == VK_SUCCESS) {
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    tracker().buffer_mem[b] = {m, o};
+  }
+  return r;
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL BindBufferMemory2(VkDevice device, uint32_t n, const VkBindBufferMemoryInfo* infos) {
+  VkResult r = device_of(device)->vk.BindBufferMemory2(device, n, infos);
+  if (r == VK_SUCCESS) {
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    for (uint32_t i = 0; i < n; ++i) tracker().buffer_mem[infos[i].buffer] = {infos[i].memory, infos[i].memoryOffset};
+  }
+  return r;
+}
+
+static VKAPI_ATTR void VKAPI_CALL DestroyBuffer(VkDevice device, VkBuffer b, const VkAllocationCallbacks* a) {
+  device_of(device)->vk.DestroyBuffer(device, b, a);
+  std::unique_lock<std::shared_mutex> lock(tracker().mu);
+  tracker().buffer_mem.erase(b);
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL MapMemory(VkDevice device, VkDeviceMemory m, VkDeviceSize o, VkDeviceSize size,
+                                                VkMemoryMapFlags f, void** data) {
+  VkResult r = device_of(device)->vk.MapMemory(device, m, o, size, f, data);
+  if (r == VK_SUCCESS && data && *data) {
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    tracker().mapped[m] = static_cast<uint8_t*>(*data) - o;
+  }
+  return r;
+}
+
+static VKAPI_ATTR void VKAPI_CALL UnmapMemory(VkDevice device, VkDeviceMemory m) {
+  {
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    tracker().mapped.erase(m);
+  }
+  device_of(device)->vk.UnmapMemory(device, m);
+}
+
+static VKAPI_ATTR void VKAPI_CALL FreeMemory(VkDevice device, VkDeviceMemory m, const VkAllocationCallbacks* a) {
+  {
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    tracker().mapped.erase(m);
+  }
+  device_of(device)->vk.FreeMemory(device, m, a);
 }
 
 void register_tracker_hooks(HookMap& m) {
@@ -423,9 +502,18 @@ void register_tracker_hooks(HookMap& m) {
   HOOK(CreateDescriptorUpdateTemplate);
   HOOK(DestroyDescriptorUpdateTemplate);
   HOOK(UpdateDescriptorSetWithTemplate);
-#undef HOOK
   m["vkCreateSwapchainKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&CreateSwapchainKHR);
   m["vkGetSwapchainImagesKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&GetSwapchainImagesKHR);
+  m["vkDestroySwapchainKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&DestroySwapchainKHR);
+  m["vkAcquireNextImageKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&AcquireNextImageKHR);
+  m["vkAcquireNextImage2KHR"] = reinterpret_cast<PFN_vkVoidFunction>(&AcquireNextImage2KHR);
+  HOOK(BindBufferMemory);
+  HOOK(BindBufferMemory2);
+  HOOK(DestroyBuffer);
+  HOOK(MapMemory);
+  HOOK(UnmapMemory);
+  HOOK(FreeMemory);
+#undef HOOK
 }
 
 }  // namespace bg3

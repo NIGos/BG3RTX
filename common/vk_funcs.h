@@ -99,7 +99,9 @@
   X(WaitForFences)                             \
   X(ResetFences)                               \
   X(CreateSemaphore)                           \
-  X(DestroySemaphore)
+  X(DestroySemaphore)                          \
+  X(AcquireNextImageKHR)                       \
+  X(BindBufferMemory2)
 
 struct VkDeviceFuncs {
 #define BG3RTX_DECL(name) PFN_vk##name name = nullptr;
