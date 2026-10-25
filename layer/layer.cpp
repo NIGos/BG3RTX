@@ -58,6 +58,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
   LOADI(GetPhysicalDeviceQueueFamilyProperties);
   LOADI(GetPhysicalDeviceProperties);
   LOADI(EnumerateDeviceExtensionProperties);
+  LOADI(GetPhysicalDeviceMemoryProperties);
 #undef LOADI
   {
     std::unique_lock<std::shared_mutex> lock(g_mu);

@@ -2,11 +2,13 @@
 # registry or the game folder: the layer is found through VK_ADD_LAYER_PATH and
 # enabled for this process only.
 #   .\scripts\launch-bg3.ps1                  layer on, other overlays as usual
-#   .\scripts\launch-bg3.ps1 -Clean           also disable the Steam overlay and Fossilize layers
+#   .\scripts\launch-bg3.ps1 -Clean           also disable third-party overlay layers (Steam, Fossilize, EOS, GOG)
+#   .\scripts\launch-bg3.ps1 -GameArgs -continueGame   load the most recent save directly
 #   .\scripts\launch-bg3.ps1 -Exe <path>      another Vulkan program (e.g. vkcube) for testing
 param(
   [string]$Game = "D:\SteamLibrary\steamapps\common\Baldurs Gate 3\bin",
   [string]$Exe,
+  [string[]]$GameArgs = @(),
   [switch]$Clean,
   [switch]$Validation
 )
@@ -23,6 +25,8 @@ $env:VK_LOADER_LAYERS_ENABLE = ($layers -join ",")
 if ($Clean) {
   $env:DISABLE_VK_LAYER_VALVE_steam_overlay_1 = "1"
   $env:DISABLE_VK_LAYER_VALVE_steam_fossilize_1 = "1"
+  $env:EOS_OVERLAY_DISABLE_VULKAN_WIN64 = "1"
+  $env:DISABLE_GALAXY_OVERLAY = "1"
 }
 
 if (-not $Exe) {
@@ -32,5 +36,6 @@ if (-not $Exe) {
   $env:SteamGameId = "1086940"
 }
 $wd = Split-Path $Exe
-Write-Host "Launching $Exe with $($env:VK_INSTANCE_LAYERS)"
-Start-Process -FilePath $Exe -WorkingDirectory $wd
+Write-Host "Launching $Exe $GameArgs with $($env:VK_INSTANCE_LAYERS)"
+if ($GameArgs.Count) { Start-Process -FilePath $Exe -WorkingDirectory $wd -ArgumentList $GameArgs }
+else { Start-Process -FilePath $Exe -WorkingDirectory $wd }

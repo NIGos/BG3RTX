@@ -1,0 +1,67 @@
+# Unattended capture loop: build, start BG3 on its most recent save, let the
+# layer take traces by itself once gameplay frames are stable, close the game
+# and analyse every new capture.
+#   .\scripts\auto-run.ps1                          one trace
+#   .\scripts\auto-run.ps1 -Traces 3                three, auto_interval presents apart
+#   .\scripts\auto-run.ps1 -Set dump_images=0       extra bg3rtx.ini overrides for this run
+#   .\scripts\auto-run.ps1 -KeepRunning             leave the game open afterwards
+param(
+  [int]$Traces = 1,
+  [int]$TimeoutSec = 480,
+  [string[]]$Set = @(),
+  [switch]$NoBuild,
+  [switch]$KeepRunning
+)
+$ErrorActionPreference = "Stop"
+$root = Split-Path $PSScriptRoot
+$caps = Join-Path $root "captures"
+New-Item -ItemType Directory -Force $caps | Out-Null
+
+if (-not $NoBuild) { & (Join-Path $PSScriptRoot "build.ps1") }
+
+Get-Process bg3 -ErrorAction SilentlyContinue | ForEach-Object {
+  Write-Host "Closing a running bg3.exe (pid $($_.Id))"
+  $_ | Stop-Process -Force
+  $_.WaitForExit(15000) | Out-Null
+}
+
+# This run's settings: the repository's bg3rtx.ini plus auto-trace overrides.
+$ini = Join-Path $caps "auto.ini"
+$lines = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @("auto_trace=1", "auto_traces=$Traces") + $Set
+$lines | Set-Content $ini
+$env:BG3RTX_INI = $ini
+Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
+
+$start = Get-Date
+& (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -GameArgs "-continueGame"
+
+$log = Join-Path $root "bg3rtx.log"
+$deadline = $start.AddSeconds($TimeoutSec)
+$lastNote = Get-Date
+$result = "timeout"
+while ((Get-Date) -lt $deadline) {
+  Start-Sleep -Seconds 2
+  if (Test-Path (Join-Path $caps "auto.done")) { $result = "done"; break }
+  $p = Get-Process bg3 -ErrorAction SilentlyContinue
+  if (-not $p -and ((Get-Date) - $start).TotalSeconds -gt 30) { $result = "game exited"; break }
+  if (((Get-Date) - $lastNote).TotalSeconds -ge 30) {
+    $lastNote = Get-Date
+    $tail = if (Test-Path $log) { (Get-Content $log -Tail 1) } else { "(no log yet)" }
+    Write-Host "$([int]((Get-Date) - $start).TotalSeconds)s: $tail"
+  }
+}
+Write-Host "Run ended: $result after $([int]((Get-Date) - $start).TotalSeconds)s"
+
+if (-not $KeepRunning) {
+  Get-Process bg3 -ErrorAction SilentlyContinue | Stop-Process -Force
+}
+
+$new = Get-ChildItem $caps -Directory | Where-Object { $_.Name -ne "shaders" -and $_.LastWriteTime -ge $start -and (Test-Path (Join-Path $_.FullName "done.txt")) } | Sort-Object Name
+foreach ($c in $new) {
+  py -3 (Join-Path $PSScriptRoot "analyze_trace.py") $c.FullName --disasm
+}
+if (-not $new) {
+  Write-Host "No completed capture. Last log lines:"
+  if (Test-Path $log) { Get-Content $log -Tail 25 }
+  exit 1
+}

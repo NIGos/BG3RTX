@@ -186,9 +186,16 @@ static VKAPI_ATTR void VKAPI_CALL DestroyPipeline(VkDevice device, VkPipeline p,
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImageCreateInfo* ci,
                                                   const VkAllocationCallbacks* alloc, VkImage* out) {
-  VkResult r = device_of(device)->vk.CreateImage(device, ci, alloc, out);
+  // Render targets get TRANSFER_SRC so the tracer can read them back. Decided
+  // once per process: the flag must not change while images exist.
+  static const bool force_src = cfg_int("force_transfer_src", 1) != 0;
+  VkImageCreateInfo patched = *ci;
+  if (force_src && (ci->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                                 VK_IMAGE_USAGE_STORAGE_BIT)))
+    patched.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  VkResult r = device_of(device)->vk.CreateImage(device, &patched, alloc, out);
   if (r == VK_SUCCESS) {
-    ImageRec rec{tracker().next_image_id++, *ci, false};
+    ImageRec rec{tracker().next_image_id++, patched, false};
     rec.ci.pNext = nullptr;
     rec.ci.pQueueFamilyIndices = nullptr;
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
@@ -243,7 +250,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass(VkDevice device, const Vk
   VkResult r = device_of(device)->vk.CreateRenderPass(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
     RenderPassRec rec;
-    for (uint32_t i = 0; i < ci->attachmentCount; ++i) rec.formats.push_back(ci->pAttachments[i].format);
+    for (uint32_t i = 0; i < ci->attachmentCount; ++i) {
+      rec.formats.push_back(ci->pAttachments[i].format);
+      rec.final_layouts.push_back(ci->pAttachments[i].finalLayout);
+    }
     for (uint32_t s = 0; s < ci->subpassCount; ++s) {
       RenderPassRec::Subpass sp;
       for (uint32_t c = 0; c < ci->pSubpasses[s].colorAttachmentCount; ++c)
@@ -262,7 +272,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass2(VkDevice device, const V
   VkResult r = device_of(device)->vk.CreateRenderPass2(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
     RenderPassRec rec;
-    for (uint32_t i = 0; i < ci->attachmentCount; ++i) rec.formats.push_back(ci->pAttachments[i].format);
+    for (uint32_t i = 0; i < ci->attachmentCount; ++i) {
+      rec.formats.push_back(ci->pAttachments[i].format);
+      rec.final_layouts.push_back(ci->pAttachments[i].finalLayout);
+    }
     for (uint32_t s = 0; s < ci->subpassCount; ++s) {
       RenderPassRec::Subpass sp;
       for (uint32_t c = 0; c < ci->pSubpasses[s].colorAttachmentCount; ++c)

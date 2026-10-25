@@ -19,6 +19,12 @@ static std::vector<SubmitRec> g_submits;
 static std::mutex g_ref_mu;
 static std::unordered_set<VkImage> g_refs;
 static bool g_key_was_down = false;
+static std::atomic<uint32_t> g_passes{0};
+// auto trigger state
+static uint32_t g_streak = 0, g_auto_done = 0;
+static uint64_t g_auto_next_allowed = 0;
+
+void count_pass() { g_passes.fetch_add(1, std::memory_order_relaxed); }
 
 bool trace_recording() { return g_recording.load(std::memory_order_relaxed); }
 
@@ -131,8 +137,11 @@ void trace_on_submit(const std::vector<VkCommandBuffer>& cmds) {
     j += "]}";
   }
   j += "]}";
-  std::lock_guard<std::mutex> lock(g_mu);
-  g_submits.push_back({frame_index(), std::move(j)});
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    g_submits.push_back({frame_index(), std::move(j)});
+  }
+  dumps_on_submit(cmds, frame_index());
 }
 
 void shader_dump(uint64_t hash, const void* code, size_t size) {
@@ -150,7 +159,7 @@ void shader_dump(uint64_t hash, const void* code, size_t size) {
   if (!file_mtime(path)) write_file(path, code, size);
 }
 
-static void write_trace(uint64_t frame, const VkPresentInfoKHR* info) {
+static std::string write_trace(uint64_t frame, const VkPresentInfoKHR* info) {
   std::string dir = root_dir() + "\\captures\\" + now_stamp();
   make_dirs(dir);
 
@@ -195,19 +204,37 @@ static void write_trace(uint64_t frame, const VkPresentInfoKHR* info) {
   write_file(dir + "\\frame.json", j.data(), j.size());
   log("[trace] frame %llu written: %zu submits, %zu images -> %s", static_cast<unsigned long long>(frame), n,
       refs.size(), dir.c_str());
+  return dir;
 }
 
-void trace_on_present(VkQueue, const VkPresentInfoKHR* info) {
+// Auto trigger (auto_trace=1): once the frame has had at least
+// auto_min_passes render passes for auto_stable_frames presents in a row (the
+// game is past loading screens), take auto_traces traces auto_interval
+// presents apart, then write captures/auto.done.
+static bool auto_trigger(uint64_t frame, uint32_t passes) {
+  if (frame % 300 == 0) log("[auto] present %llu: %u passes in the last frame", (unsigned long long)frame, passes);
+  if (!cfg_int("auto_trace", 0)) return false;
+  int want = cfg_int("auto_traces", 1);
+  if (int(g_auto_done) >= want) return false;
+  g_streak = passes >= uint32_t(cfg_int("auto_min_passes", 20)) ? g_streak + 1 : 0;
+  if (g_streak < uint32_t(cfg_int("auto_stable_frames", 600)) || frame < g_auto_next_allowed) return false;
+  g_auto_next_allowed = frame + uint64_t(cfg_int("auto_interval", 600));
+  return true;
+}
+
+void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info) {
   uint64_t frame = frame_index();
+  uint32_t passes = g_passes.exchange(0, std::memory_order_relaxed);
   if (!g_recording) {
     bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
                 (GetAsyncKeyState(VK_F10) & 0x8000);
     bool key = down && !g_key_was_down;
     g_key_was_down = down;
-    std::string req = root_dir() + "\\trace.request";
+    std::string req = root_dir() + "\trace.request";
     bool file = file_mtime(req) != 0;
     if (file) DeleteFileA(req.c_str());
-    if (key || file) {
+    bool automatic = auto_trigger(frame, passes);
+    if (key || file || automatic) {
       {
         std::lock_guard<std::mutex> lock(g_mu);
         g_submits.clear();
@@ -218,7 +245,8 @@ void trace_on_present(VkQueue, const VkPresentInfoKHR* info) {
       }
       g_start = frame;
       g_recording = true;
-      log("[trace] recording from present %llu (%s)", static_cast<unsigned long long>(frame), key ? "hotkey" : "file");
+      log("[trace] recording from present %llu (%s, %u passes last frame)", static_cast<unsigned long long>(frame),
+          key ? "hotkey" : file ? "file" : "auto", passes);
     }
     return;
   }
@@ -226,7 +254,14 @@ void trace_on_present(VkQueue, const VkPresentInfoKHR* info) {
   // tagged start+1 is the first whose command buffers were all begun while recording.
   if (frame >= g_start + 2) {
     g_recording = false;
-    write_trace(g_start + 1, info);
+    std::string dir = write_trace(g_start + 1, info);
+    dumps_finish(g_start + 1, dir, queue);
+    write_file(dir + "\\done.txt", "ok\n", 3);
+    if (cfg_int("auto_trace", 0) && ++g_auto_done >= uint32_t(cfg_int("auto_traces", 1))) {
+      std::string marker = root_dir() + "\\captures\\auto.done";
+      write_file(marker, "done\n", 5);
+      log("[auto] all %u traces taken", g_auto_done);
+    }
   }
 }
 

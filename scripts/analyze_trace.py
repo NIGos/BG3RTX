@@ -67,6 +67,7 @@ def build_passes(frame):
         elif op == "end":
             if cur:
                 cur["draws"] = ev.get("draws", 0)
+                cur["dumps"] = ev.get("dumps", [])
             cur = None
         elif op in ("draw", "draw_indirect"):
             if cur is None:
@@ -143,6 +144,8 @@ def main():
     frame = json.loads((cap / "frame.json").read_text())
     images = frame["images"]
     units = build_passes(frame)
+    dumps_path = cap / "dumps.json"
+    dumps = json.loads(dumps_path.read_text()) if dumps_path.exists() else {}
 
     producers, consumers = defaultdict(list), defaultdict(list)
     for i, u in enumerate(units):
@@ -185,7 +188,7 @@ def main():
         lines += ["## Guesses", ""] + guesses + [""]
 
     lines += ["## Units in execution order", "",
-              "| # | sub/cmd | kind | size | writes | reads | shaders | n |", "|---|---|---|---|---|---|---|---|"]
+              "| # | sub/cmd | kind | size | writes | reads | shaders | n | dumps |", "|---|---|---|---|---|---|---|---|---|"]
     shader_hashes = set()
     for i, u in enumerate(units):
         if u["kind"] == "untraced_cmd":
@@ -207,11 +210,23 @@ def main():
         w = "<br>".join(image_desc(images, r) for r in sorted(writes_of(u)))
         r = "<br>".join(image_desc(images, x) for x in sorted(reads_of(u)))[:600]
         shaders = " ".join(uniq[:6]) + (f" +{len(uniq) - 6}" if len(uniq) > 6 else "")
-        lines.append(f"| {i} | {u['submit']}/{u['cmd']} | {u['kind']} | {size} | {w} | {r} | {shaders} | {n} |")
+        dl = " ".join(d for d in u.get("dumps", []) if d in dumps)
+        lines.append(f"| {i} | {u['submit']}/{u['cmd']} | {u['kind']} | {size} | {w} | {r} | {shaders} | {n} | {dl} |")
 
     lines += ["", "## Render targets: who writes, who reads", "", "| image | written by | read by |", "|---|---|---|"]
     for ref in sorted(producers, key=lambda r: producers[r][0]):
         lines.append(f"| {image_desc(images, ref)} | {producers[ref][:12]} | {consumers.get(ref, [])[:16]} |")
+
+    if dumps:
+        unit_of = {d: i for i, u in enumerate(units) for d in u.get("dumps", [])}
+        lines += ["", "## Dumps (attachment contents after the pass)", "",
+                  "| dump | unit | slot | image | fmt | min | max | mean | nonfinite | png |",
+                  "|---|---|---|---|---|---|---|---|---|---|"]
+        g = lambda v: "[" + ", ".join(f"{x:.4g}" for x in v) + "]"
+        for k in sorted(dumps, key=lambda d: int(d[1:])):
+            d = dumps[k]
+            lines.append(f"| {k} | {unit_of.get(k, '?')} | {d['slot']} | {d['image']} {d['w']}x{d['h']} | {d['fmt']} | "
+                         f"{g(d['min'])} | {g(d['max'])} | {g(d['mean'])} | {d['nonfinite']} | {d['png']} |")
 
     (cap / "report.md").write_text("\n".join(lines), encoding="utf-8")
 

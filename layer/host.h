@@ -47,6 +47,7 @@ struct InstanceData {
   PFN_vkGetPhysicalDeviceQueueFamilyProperties GetPhysicalDeviceQueueFamilyProperties = nullptr;
   PFN_vkGetPhysicalDeviceProperties GetPhysicalDeviceProperties = nullptr;
   PFN_vkEnumerateDeviceExtensionProperties EnumerateDeviceExtensionProperties = nullptr;
+  PFN_vkGetPhysicalDeviceMemoryProperties GetPhysicalDeviceMemoryProperties = nullptr;
 };
 
 struct DeviceData {
@@ -79,6 +80,7 @@ struct PipelineRec {
 };
 struct RenderPassRec {
   std::vector<VkFormat> formats;
+  std::vector<VkImageLayout> final_layouts;
   struct Subpass { std::vector<uint32_t> color; uint32_t depth = VK_ATTACHMENT_UNUSED; };
   std::vector<Subpass> subpasses;
 };
@@ -113,7 +115,10 @@ std::vector<DescEntry> decode_push_template(VkDescriptorUpdateTemplate tpl, cons
 struct CmdState {
   bool in_pass = false;
   Bg3PassInfo pass{};
+  VkImageLayout color_layouts[8] = {};  // layout each attachment is left in when the pass ends
+  VkImageLayout depth_layout = VK_IMAGE_LAYOUT_UNDEFINED;
   uint32_t pass_ordinal = 0;
+  std::vector<uint32_t> dumps;         // image dumps recorded into this buffer
   VkPipeline pipe[2] = {};             // graphics, compute
   uint32_t pipe_id[2] = {};
   uint64_t vs = 0, fs = 0, cs = 0;     // stage hashes of the bound pipelines
@@ -139,6 +144,12 @@ void trace_note_draw(CmdState* s, int bind_point, const char* kind, const char* 
 void shader_dump(uint64_t hash, const void* code, size_t size);
 std::string image_ref(VkImage image);
 std::string view_ref(VkImageView view);
+// Records copies of the pass's attachments into readback buffers; returns
+// the dump ids as a JSON array fragment for the pass's "end" event.
+std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s);
+void count_pass();                     // passes per frame feed the auto trigger
+void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
+void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue);
 
 // ---- hot reload + shader compiler (hotreload.cpp, shaders.cpp) ----
 void core_init(DeviceData* dd);

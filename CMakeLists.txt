@@ -31,6 +31,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/hotreload.cpp
   layer/shaders.cpp
   layer/util.cpp
+  layer/dump.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
 add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD

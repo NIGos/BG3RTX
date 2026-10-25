@@ -101,7 +101,9 @@ static std::unordered_map<std::string, std::string> g_cfg;
 static uint64_t g_cfg_mtime = 0;
 
 void cfg_poll() {
-  const std::string path = root_dir() + "\\bg3rtx.ini";
+  char env[MAX_PATH] = {};
+  const std::string path = GetEnvironmentVariableA("BG3RTX_INI", env, MAX_PATH) ? std::string(env)
+                                                                                 : root_dir() + "\\bg3rtx.ini";
   uint64_t mt = file_mtime(path);
   if (mt == g_cfg_mtime) return;
   g_cfg_mtime = mt;

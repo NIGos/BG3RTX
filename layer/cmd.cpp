@@ -65,6 +65,9 @@ static void begin_pass(VkCommandBuffer cmd, CmdState* s, const VkRect2D& area) {
   s->pass.ordinal = s->pass_ordinal++;
   s->pass.width = area.extent.width;
   s->pass.height = area.extent.height;
+  for (auto& l : s->color_layouts) l = VK_IMAGE_LAYOUT_UNDEFINED;
+  s->depth_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+  count_pass();
 }
 
 static void begin_classic(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info) {
@@ -89,8 +92,16 @@ static void begin_classic(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info
   }
   if (!rp.subpasses.empty()) {
     for (uint32_t a : rp.subpasses[0].color)
-      if (a < views.size()) fill_attachment(s->pass, views[a], false);
-    if (rp.subpasses[0].depth < views.size()) fill_attachment(s->pass, views[rp.subpasses[0].depth], true);
+      if (a < views.size()) {
+        uint32_t slot = s->pass.color_count;
+        fill_attachment(s->pass, views[a], false);
+        if (slot < 8 && a < rp.final_layouts.size()) s->color_layouts[slot] = rp.final_layouts[a];
+      }
+    uint32_t d = rp.subpasses[0].depth;
+    if (d < views.size()) {
+      fill_attachment(s->pass, views[d], true);
+      if (d < rp.final_layouts.size()) s->depth_layout = rp.final_layouts[d];
+    }
   }
   if (s->tracing) trace_event(s, pass_json(s->pass));
 }
@@ -101,7 +112,8 @@ static void end_pass(VkCommandBuffer cmd) {
   s->in_pass = false;
   if (s->tracing) {
     trace_flush_segment(s);
-    trace_event(s, "{\"op\":\"end\",\"draws\":" + std::to_string(s->pass.draw_count) + "}");
+    std::string dumps = trace_dump_pass(cmd, s);
+    trace_event(s, "{\"op\":\"end\",\"draws\":" + std::to_string(s->pass.draw_count) + ",\"dumps\":[" + dumps + "]}");
   }
   core_on_pass_end(cmd, &s->pass);
 }
@@ -150,6 +162,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->push[1].clear();
   s->tracing = trace_recording();
   s->events.clear();
+  s->dumps.clear();
   s->seg_key.clear();
   s->seg_count = 0;
   return r;
@@ -187,9 +200,15 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cmd, const V
   vk(cmd).CmdBeginRendering(cmd, info);
   CmdState* s = cmd_state(cmd, true);
   begin_pass(cmd, s, info->renderArea);
-  for (uint32_t i = 0; i < info->colorAttachmentCount; ++i)
+  for (uint32_t i = 0; i < info->colorAttachmentCount; ++i) {
+    uint32_t slot = s->pass.color_count;
     fill_attachment(s->pass, info->pColorAttachments[i].imageView, false);
-  if (info->pDepthAttachment) fill_attachment(s->pass, info->pDepthAttachment->imageView, true);
+    if (slot < 8 && s->pass.color_count > slot) s->color_layouts[slot] = info->pColorAttachments[i].imageLayout;
+  }
+  if (info->pDepthAttachment && info->pDepthAttachment->imageView) {
+    fill_attachment(s->pass, info->pDepthAttachment->imageView, true);
+    s->depth_layout = info->pDepthAttachment->imageLayout;
+  }
   if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
