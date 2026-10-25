@@ -1,0 +1,108 @@
+// Device-level Vulkan entry points the host layer resolves from the next layer.
+// Shared by the host and the hot-reloadable core so both see the same table type.
+// Names are core names without the "vk" prefix; the loader falls back to the
+// KHR-suffixed name when the core one is not exposed by the device.
+#pragma once
+#include <vulkan/vulkan.h>
+
+#define BG3RTX_DEVICE_FUNCS(X)                 \
+  X(DestroyDevice)                             \
+  X(GetDeviceQueue)                            \
+  X(GetDeviceQueue2)                           \
+  X(DeviceWaitIdle)                            \
+  X(QueueSubmit)                               \
+  X(QueueSubmit2)                              \
+  X(QueueWaitIdle)                             \
+  X(QueuePresentKHR)                           \
+  X(CreateSwapchainKHR)                        \
+  X(DestroySwapchainKHR)                       \
+  X(GetSwapchainImagesKHR)                     \
+  X(CreateShaderModule)                        \
+  X(DestroyShaderModule)                       \
+  X(CreateGraphicsPipelines)                   \
+  X(CreateComputePipelines)                    \
+  X(DestroyPipeline)                           \
+  X(CreatePipelineLayout)                      \
+  X(DestroyPipelineLayout)                     \
+  X(CreateDescriptorSetLayout)                 \
+  X(DestroyDescriptorSetLayout)                \
+  X(CreateDescriptorPool)                      \
+  X(DestroyDescriptorPool)                     \
+  X(ResetDescriptorPool)                       \
+  X(AllocateDescriptorSets)                    \
+  X(FreeDescriptorSets)                        \
+  X(UpdateDescriptorSets)                      \
+  X(CreateDescriptorUpdateTemplate)            \
+  X(DestroyDescriptorUpdateTemplate)           \
+  X(UpdateDescriptorSetWithTemplate)           \
+  X(CreateImage)                               \
+  X(DestroyImage)                              \
+  X(CreateImageView)                           \
+  X(DestroyImageView)                          \
+  X(CreateBuffer)                              \
+  X(DestroyBuffer)                             \
+  X(GetImageMemoryRequirements)                \
+  X(GetBufferMemoryRequirements)               \
+  X(AllocateMemory)                            \
+  X(FreeMemory)                                \
+  X(BindImageMemory)                           \
+  X(BindBufferMemory)                          \
+  X(MapMemory)                                 \
+  X(UnmapMemory)                               \
+  X(CreateSampler)                             \
+  X(DestroySampler)                            \
+  X(CreateFramebuffer)                         \
+  X(DestroyFramebuffer)                        \
+  X(CreateRenderPass)                          \
+  X(CreateRenderPass2)                         \
+  X(DestroyRenderPass)                         \
+  X(CreateCommandPool)                         \
+  X(DestroyCommandPool)                        \
+  X(ResetCommandPool)                          \
+  X(AllocateCommandBuffers)                    \
+  X(FreeCommandBuffers)                        \
+  X(BeginCommandBuffer)                        \
+  X(EndCommandBuffer)                          \
+  X(ResetCommandBuffer)                        \
+  X(CmdBeginRenderPass)                        \
+  X(CmdBeginRenderPass2)                       \
+  X(CmdNextSubpass)                            \
+  X(CmdEndRenderPass)                          \
+  X(CmdEndRenderPass2)                         \
+  X(CmdBeginRendering)                         \
+  X(CmdEndRendering)                           \
+  X(CmdBindPipeline)                           \
+  X(CmdBindDescriptorSets)                     \
+  X(CmdPushDescriptorSet)                      \
+  X(CmdPushDescriptorSetWithTemplate)          \
+  X(CmdPushConstants)                          \
+  X(CmdDraw)                                   \
+  X(CmdDrawIndexed)                            \
+  X(CmdDrawIndirect)                           \
+  X(CmdDrawIndexedIndirect)                    \
+  X(CmdDrawIndirectCount)                      \
+  X(CmdDrawIndexedIndirectCount)               \
+  X(CmdDispatch)                               \
+  X(CmdDispatchIndirect)                       \
+  X(CmdCopyImage)                              \
+  X(CmdBlitImage)                              \
+  X(CmdResolveImage)                           \
+  X(CmdClearColorImage)                        \
+  X(CmdClearDepthStencilImage)                 \
+  X(CmdCopyBufferToImage)                      \
+  X(CmdCopyImageToBuffer)                      \
+  X(CmdPipelineBarrier)                        \
+  X(CmdPipelineBarrier2)                       \
+  X(CmdExecuteCommands)                        \
+  X(CreateFence)                               \
+  X(DestroyFence)                              \
+  X(WaitForFences)                             \
+  X(ResetFences)                               \
+  X(CreateSemaphore)                           \
+  X(DestroySemaphore)
+
+struct VkDeviceFuncs {
+#define BG3RTX_DECL(name) PFN_vk##name name = nullptr;
+  BG3RTX_DEVICE_FUNCS(BG3RTX_DECL)
+#undef BG3RTX_DECL
+};

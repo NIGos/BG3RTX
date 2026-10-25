@@ -1,0 +1,11 @@
+{
+  "file_format_version": "1.2.0",
+  "layer": {
+    "name": "VK_LAYER_BG3RTX_host",
+    "type": "GLOBAL",
+    "library_path": ".\\VkLayer_bg3rtx.dll",
+    "api_version": "1.4.357",
+    "implementation_version": "1",
+    "description": "BG3RTX host layer: frame tracer, hot-reloaded core, injection points"
+  }
+}

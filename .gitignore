@@ -1,0 +1,7 @@
+/build/
+/bin/
+/captures/
+/bg3rtx.log
+/trace.request
+__pycache__/
+/external/
