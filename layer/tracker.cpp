@@ -25,8 +25,12 @@ static bool is_buffer_type(VkDescriptorType t) {
 
 static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& out) {
   for (uint32_t i = 0; i < w.descriptorCount; ++i) {
-    DescEntry e{w.dstBinding, w.dstArrayElement + i, w.descriptorType, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0};
-    if (is_image_type(w.descriptorType) && w.pImageInfo) e.view = w.pImageInfo[i].imageView;
+    DescEntry e{w.dstBinding, w.dstArrayElement + i, w.descriptorType, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0,
+                VK_IMAGE_LAYOUT_UNDEFINED};
+    if (is_image_type(w.descriptorType) && w.pImageInfo) {
+      e.view = w.pImageInfo[i].imageView;
+      e.layout = w.pImageInfo[i].imageLayout;
+    }
     else if (is_buffer_type(w.descriptorType) && w.pBufferInfo) {
       e.buffer = w.pBufferInfo[i].buffer;
       e.offset = w.pBufferInfo[i].offset;
@@ -36,8 +40,13 @@ static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& 
   }
 }
 
-static void merge(std::unordered_map<uint64_t, DescEntry>& dst, const std::vector<DescEntry>& src) {
-  for (const auto& e : src) dst[desc_key(e.binding, e.element)] = e;
+// Caller holds tracker().mu exclusively.
+static void merge(VkDescriptorSet set, const std::vector<DescEntry>& src) {
+  auto& dst = tracker().sets[set];
+  for (const auto& e : src) {
+    auto [it, inserted] = dst.insert_or_assign(desc_key(e.binding, e.element), e);
+    if (inserted && is_dynamic_type(e.type)) ++tracker().dynamic_counts[set];
+  }
 }
 
 void track_set_write(const VkWriteDescriptorSet& w) {
@@ -45,7 +54,7 @@ void track_set_write(const VkWriteDescriptorSet& w) {
   decode_write(w, entries);
   if (entries.empty()) return;
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
-  merge(tracker().sets[w.dstSet], entries);
+  merge(w.dstSet, entries);
 }
 
 static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate tpl, const void* data) {
@@ -56,8 +65,13 @@ static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate 
   for (const auto& t : it->second) {
     for (uint32_t i = 0; i < t.descriptorCount; ++i) {
       const uint8_t* p = base + t.offset + i * t.stride;
-      DescEntry e{t.dstBinding, t.dstArrayElement + i, t.descriptorType, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0};
-      if (is_image_type(t.descriptorType)) e.view = reinterpret_cast<const VkDescriptorImageInfo*>(p)->imageView;
+      DescEntry e{t.dstBinding, t.dstArrayElement + i, t.descriptorType, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0,
+                  VK_IMAGE_LAYOUT_UNDEFINED};
+      if (is_image_type(t.descriptorType)) {
+        auto ii = reinterpret_cast<const VkDescriptorImageInfo*>(p);
+        e.view = ii->imageView;
+        e.layout = ii->imageLayout;
+      }
       else if (is_buffer_type(t.descriptorType)) {
         auto b = reinterpret_cast<const VkDescriptorBufferInfo*>(p);
         e.buffer = b->buffer;
@@ -73,7 +87,7 @@ static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate 
 void track_set_template(VkDescriptorSet set, VkDescriptorUpdateTemplate tpl, const void* data) {
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   auto entries = decode_template_locked(tpl, data);
-  if (!entries.empty()) merge(tracker().sets[set], entries);
+  if (!entries.empty()) merge(set, entries);
 }
 
 std::vector<DescEntry> decode_push(const VkWriteDescriptorSet* writes, uint32_t count) {
@@ -323,7 +337,7 @@ static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t
         d.element = c[i].dstArrayElement + k;
         moved.push_back(d);
       }
-      merge(tracker().sets[c[i].dstSet], moved);
+      merge(c[i].dstSet, moved);
     }
   }
 }
@@ -361,6 +375,13 @@ static std::unordered_map<VkSwapchainKHR, VkSwapchainCreateInfoKHR> g_swapchains
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR* ci,
                                                          const VkAllocationCallbacks* alloc, VkSwapchainKHR* out) {
+  // force_present_mode: -1 leaves the game's choice. 0 (IMMEDIATE) decouples
+  // test runs from the display, which matters when it is asleep.
+  VkSwapchainCreateInfoKHR patched = *ci;
+  headless_on_swapchain();
+  int force = cfg_int("force_present_mode", -1);
+  if (force >= 0) patched.presentMode = VkPresentModeKHR(force);
+  ci = &patched;
   VkResult r = device_of(device)->vk.CreateSwapchainKHR(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
     log("[layer] swapchain %ux%u format %d colorspace %d images>=%u present mode %d usage 0x%x", ci->imageExtent.width,

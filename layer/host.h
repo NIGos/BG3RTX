@@ -61,6 +61,7 @@ struct DeviceData {
   std::vector<std::string> extensions;
 };
 
+void headless_on_swapchain();
 DeviceData* main_device();             // the first device created; BG3 makes one
 DeviceData* device_of(const void* dispatchable);   // device, queue or command buffer
 
@@ -90,9 +91,13 @@ struct DescEntry {
   VkImageView view;                    // image descriptors
   VkBuffer buffer;                     // buffer descriptors
   VkDeviceSize offset, range;
+  VkImageLayout layout;                // image descriptors
 };
 
 inline uint64_t desc_key(uint32_t binding, uint32_t element) { return (uint64_t(binding) << 32) | element; }
+inline bool is_dynamic_type(VkDescriptorType t) {
+  return t == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC || t == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+}
 
 struct Tracker {
   std::shared_mutex mu;
@@ -104,6 +109,7 @@ struct Tracker {
   std::unordered_map<VkPipeline, PipelineRec> pipelines;
   // Keyed by (binding << 32 | element): BG3's bindless sets hold very large arrays.
   std::unordered_map<VkDescriptorSet, std::unordered_map<uint64_t, DescEntry>> sets;
+  std::unordered_map<VkDescriptorSet, uint32_t> dynamic_counts;  // dynamic buffer descriptors per set
   std::unordered_map<VkDescriptorUpdateTemplate, std::vector<VkDescriptorUpdateTemplateEntry>> templates;
   std::atomic<uint32_t> next_image_id{1}, next_pipeline_id{1};
 };
@@ -126,7 +132,12 @@ struct CmdState {
   uint32_t pipe_id[2] = {};
   uint64_t vs = 0, fs = 0, cs = 0;     // stage hashes of the bound pipelines
   std::array<VkDescriptorSet, 8> sets[2] = {};
+  std::vector<uint32_t> dyn[2][8];     // dynamic offsets of each bound set, in binding order
+  VkPipelineLayout set_layout[2][8] = {};
   std::vector<DescEntry> push[2];
+  uint32_t push_set[2] = {UINT32_MAX, UINT32_MAX};
+  uint32_t dispatches_since_pass = 0, indirect_since_pass = 0;
+  uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
   std::vector<std::string> events;     // pre-rendered JSON objects, one per event
   // segment aggregation for the trace
@@ -165,6 +176,14 @@ void core_shutdown();
 void core_poll(VkQueue present_queue); // at present: reload if the DLL changed
 void core_on_frame(uint64_t frame);
 void core_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* pass);
+void core_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* pass);
+void core_on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* info);
+void core_on_cmd_end(VkCommandBuffer cmd);
+bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
+                   Bg3Binding* out);
+bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out);
+void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp);
+uint32_t find_memory_type(DeviceData* dd, uint32_t bits, VkMemoryPropertyFlags want);
 void defer_destroy(Bg3DeferKind kind, uint64_t handle);
 void defer_tick(bool flush_all);
 
