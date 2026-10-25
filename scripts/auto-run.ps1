@@ -19,6 +19,29 @@ New-Item -ItemType Directory -Force $caps | Out-Null
 
 if (-not $NoBuild) { & (Join-Path $PSScriptRoot "build.ps1") }
 
+# One game at a time across every checkout and worktree of this repository.
+$mutex = New-Object System.Threading.Mutex($false, "Global\BG3RTX_game_run")
+Write-Host "Waiting for the game lock..."
+try { [void]$mutex.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
+
+Add-Type -Namespace BG3RTX -Name Win -MemberDefinition @"
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr h);
+[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int cmd);
+[DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, System.UIntPtr extra);
+"@ -ErrorAction SilentlyContinue
+# BG3 renders but stops presenting while its window is not in the foreground.
+function Focus-Game {
+  $p = Get-Process bg3 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+  if (-not $p) { return }
+  $h = $p.MainWindowHandle
+  if ([BG3RTX.Win]::GetForegroundWindow() -eq $h) { return }
+  [BG3RTX.Win]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)   # Alt tap lifts the foreground lock
+  [BG3RTX.Win]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
+  [void][BG3RTX.Win]::ShowWindow($h, 9)
+  [void][BG3RTX.Win]::SetForegroundWindow($h)
+}
+
 Get-Process bg3 -ErrorAction SilentlyContinue | ForEach-Object {
   Write-Host "Closing a running bg3.exe (pid $($_.Id))"
   $_ | Stop-Process -Force
@@ -41,6 +64,7 @@ $lastNote = Get-Date
 $result = "timeout"
 while ((Get-Date) -lt $deadline) {
   Start-Sleep -Seconds 2
+  Focus-Game
   if (Test-Path (Join-Path $caps "auto.done")) { $result = "done"; break }
   $p = Get-Process bg3 -ErrorAction SilentlyContinue
   if (-not $p -and ((Get-Date) - $start).TotalSeconds -gt 30) { $result = "game exited"; break }
@@ -53,8 +77,15 @@ while ((Get-Date) -lt $deadline) {
 Write-Host "Run ended: $result after $([int]((Get-Date) - $start).TotalSeconds)s"
 
 if (-not $KeepRunning) {
-  Get-Process bg3 -ErrorAction SilentlyContinue | Stop-Process -Force
+  # Ask nicely first so the game can save its pipeline cache; a killed game
+  # recompiles ~30k pipelines on the next start.
+  $p = Get-Process bg3 -ErrorAction SilentlyContinue
+  if ($p) {
+    [void]$p.CloseMainWindow()
+    if (-not $p.WaitForExit(20000)) { $p | Stop-Process -Force }
+  }
 }
+$mutex.ReleaseMutex()
 
 $new = Get-ChildItem $caps -Directory | Where-Object { $_.Name -ne "shaders" -and $_.LastWriteTime -ge $start -and (Test-Path (Join-Path $_.FullName "done.txt")) } | Sort-Object Name
 foreach ($c in $new) {

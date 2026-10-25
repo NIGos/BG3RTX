@@ -3,6 +3,7 @@
 #include "host.h"
 
 #include <cstring>
+#include <unordered_set>
 
 namespace bg3 {
 
@@ -148,6 +149,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     g_devices[dkey(*out)] = dd;
     if (!g_main) g_main = dd;
   }
+  watchdog_start();
   return VK_SUCCESS;
 }
 
@@ -184,6 +186,7 @@ static VKAPI_ATTR void VKAPI_CALL GetDeviceQueue2(VkDevice device, const VkDevic
 static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo* submits,
                                                   VkFence fence) {
   DeviceData* dd = device_of(queue);
+  diag(DIAG_SUBMIT);
   if (trace_recording()) {
     std::vector<VkCommandBuffer> cmds;
     for (uint32_t i = 0; i < count; ++i)
@@ -196,6 +199,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
 static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count, const VkSubmitInfo2* submits,
                                                    VkFence fence) {
   DeviceData* dd = device_of(queue);
+  diag(DIAG_SUBMIT);
   if (trace_recording()) {
     std::vector<VkCommandBuffer> cmds;
     for (uint32_t i = 0; i < count; ++i)
@@ -209,6 +213,16 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
 static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
   DeviceData* dd = device_of(queue);
   uint64_t frame = ++g_frame;
+  diag(DIAG_PRESENT);
+  static int presents_logged = 0;
+  if (frame > 600 && presents_logged < cfg_int("log_presents", 0)) {
+    ++presents_logged;
+    std::string chain;
+    for (auto p = static_cast<const VkBaseInStructure*>(info->pNext); p; p = p->pNext) chain += " " + std::to_string(p->sType);
+    log("[present] #%llu thread %lu queue %p swapchains %u first %p image %u waits %u pNext:%s",
+        (unsigned long long)frame, GetCurrentThreadId(), (void*)queue, info->swapchainCount,
+        (void*)info->pSwapchains[0], info->pImageIndices[0], info->waitSemaphoreCount, chain.c_str());
+  }
   cfg_poll();
   if (dd == g_main) {
     if (!g_core_started) {
@@ -253,6 +267,8 @@ static const HookMap& hooks() {
 
 using namespace bg3;
 
+static void note_proc(const char* via, const char* name, bool hooked, bool exists);
+
 extern "C" PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char* name);
 
 extern "C" PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
@@ -264,19 +280,33 @@ extern "C" PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instan
   if (!strcmp(name, "vkCreateDevice")) return reinterpret_cast<PFN_vkVoidFunction>(&CreateDevice);
   if (instance) {
     auto it = hooks().find(name);
+    note_proc("GIPA", name, it != hooks().end(), true);
     if (it != hooks().end()) return it->second;
   }
   InstanceData* id = instance ? instance_of(instance) : nullptr;
   return id ? id->gipa(instance, name) : nullptr;
 }
 
+static void note_proc(const char* via, const char* name, bool hooked, bool exists) {
+  static std::mutex mu;
+  static std::unordered_set<std::string> seen;
+  if (!cfg_int("log_procs", 0)) return;
+  std::lock_guard<std::mutex> lock(mu);
+  if (seen.insert(std::string(via) + name).second)
+    log("[procs] %s %s%s%s", via, name, hooked ? " (hooked)" : "", exists ? "" : " (missing)");
+}
+
 extern "C" PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char* name) {
   if (!strcmp(name, "vkGetDeviceProcAddr")) return reinterpret_cast<PFN_vkVoidFunction>(&vkGetDeviceProcAddr);
   DeviceData* dd = device_of(device);
-  if (!dd) return nullptr;
+  if (!dd) {
+    note_proc("GDPA(unknown device)", name, false, false);
+    return nullptr;
+  }
   PFN_vkVoidFunction next = dd->gdpa(device, name);
-  if (!next) return nullptr;  // never claim what the device does not have
   auto it = hooks().find(name);
+  note_proc("GDPA", name, it != hooks().end(), next != nullptr);
+  if (!next) return nullptr;  // never claim what the device does not have
   return it != hooks().end() ? it->second : next;
 }
 

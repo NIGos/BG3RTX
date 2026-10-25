@@ -27,6 +27,9 @@ if ($Clean) {
   $env:DISABLE_VK_LAYER_VALVE_steam_fossilize_1 = "1"
   $env:EOS_OVERLAY_DISABLE_VULKAN_WIN64 = "1"
   $env:DISABLE_GALAXY_OVERLAY = "1"
+  # NVIDIA's present layer is Smooth Motion: it interleaves driver-generated
+  # presents with the game's. Off for analysis, and it must be off for DLSS-G.
+  $env:DISABLE_LAYER_NV_PRESENT_1 = "1"
 }
 
 if (-not $Exe) {

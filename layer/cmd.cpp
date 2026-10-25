@@ -119,6 +119,7 @@ static void end_pass(VkCommandBuffer cmd) {
 }
 
 static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra = nullptr) {
+  diag(DIAG_DRAW);
   CmdState* s = cmd_state(cmd);
   if (!s) return;
   if (s->in_pass) {
@@ -149,6 +150,7 @@ static VKAPI_ATTR void VKAPI_CALL FreeCommandBuffers(VkDevice device, VkCommandP
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, const VkCommandBufferBeginInfo* bi) {
+  diag(DIAG_BEGIN_CMD);
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
   CmdState* s = cmd_state(cmd, true);
   s->in_pass = false;
@@ -176,12 +178,14 @@ static VKAPI_ATTR VkResult VKAPI_CALL EndCommandBuffer(VkCommandBuffer cmd) {
 
 static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info,
                                                      VkSubpassContents contents) {
+  diag(DIAG_BEGIN_PASS);
   vk(cmd).CmdBeginRenderPass(cmd, info, contents);
   begin_classic(cmd, info);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass2(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info,
                                                       const VkSubpassBeginInfo* sbi) {
+  diag(DIAG_BEGIN_PASS);
   vk(cmd).CmdBeginRenderPass2(cmd, info, sbi);
   begin_classic(cmd, info);
 }
@@ -197,6 +201,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass2(VkCommandBuffer cmd, const V
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cmd, const VkRenderingInfo* info) {
+  diag(DIAG_BEGIN_RENDERING);
   vk(cmd).CmdBeginRendering(cmd, info);
   CmdState* s = cmd_state(cmd, true);
   begin_pass(cmd, s, info->renderArea);
@@ -218,6 +223,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdEndRendering(VkCommandBuffer cmd) {
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBindPipeline(VkCommandBuffer cmd, VkPipelineBindPoint bp, VkPipeline pipe) {
+  diag(DIAG_BIND_PIPE);
   vk(cmd).CmdBindPipeline(cmd, bp, pipe);
   if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return;
   CmdState* s = cmd_state(cmd, true);
@@ -297,6 +303,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cm
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, uint32_t y, uint32_t z) {
+  diag(DIAG_DISPATCH);
   vk(cmd).CmdDispatch(cmd, x, y, z);
   CmdState* s = cmd_state(cmd);
   if (s && s->tracing) {
@@ -355,6 +362,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdClearDepthStencilImage(VkCommandBuffer cmd,
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32_t n, const VkCommandBuffer* cmds) {
+  diag(DIAG_EXEC);
   vk(cmd).CmdExecuteCommands(cmd, n, cmds);
   CmdState* s = cmd_state(cmd);
   if (!s || !s->tracing) return;

@@ -36,13 +36,8 @@ static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& 
   }
 }
 
-static void merge(std::vector<DescEntry>& dst, const std::vector<DescEntry>& src) {
-  for (const auto& e : src) {
-    bool replaced = false;
-    for (auto& d : dst)
-      if (d.binding == e.binding && d.element == e.element) { d = e; replaced = true; break; }
-    if (!replaced) dst.push_back(e);
-  }
+static void merge(std::unordered_map<uint64_t, DescEntry>& dst, const std::vector<DescEntry>& src) {
+  for (const auto& e : src) dst[desc_key(e.binding, e.element)] = e;
 }
 
 void track_set_write(const VkWriteDescriptorSet& w) {
@@ -96,6 +91,7 @@ std::vector<DescEntry> decode_push_template(VkDescriptorUpdateTemplate tpl, cons
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* ci,
                                                          const VkAllocationCallbacks* alloc, VkShaderModule* out) {
+  diag(DIAG_SHADER_MODULES);
   VkResult r = device_of(device)->vk.CreateShaderModule(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
     uint64_t h = hash64(ci->pCode, ci->codeSize);
@@ -140,7 +136,13 @@ static void assign_stage(PipelineRec& rec, VkShaderStageFlagBits stage, uint64_t
 static VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device, VkPipelineCache cache, uint32_t count,
                                                               const VkGraphicsPipelineCreateInfo* cis,
                                                               const VkAllocationCallbacks* alloc, VkPipeline* out) {
+  LARGE_INTEGER t0, t1, f;
+  QueryPerformanceCounter(&t0);
   VkResult r = device_of(device)->vk.CreateGraphicsPipelines(device, cache, count, cis, alloc, out);
+  QueryPerformanceCounter(&t1);
+  QueryPerformanceFrequency(&f);
+  diag(DIAG_PIPELINES, count);
+  diag(DIAG_PIPELINE_US, uint64_t((t1.QuadPart - t0.QuadPart) * 1000000 / f.QuadPart));
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   for (uint32_t i = 0; i < count; ++i) {
     if (!out[i]) continue;
@@ -167,7 +169,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device, V
 static VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device, VkPipelineCache cache, uint32_t count,
                                                              const VkComputePipelineCreateInfo* cis,
                                                              const VkAllocationCallbacks* alloc, VkPipeline* out) {
+  LARGE_INTEGER t0, t1, f;
+  QueryPerformanceCounter(&t0);
   VkResult r = device_of(device)->vk.CreateComputePipelines(device, cache, count, cis, alloc, out);
+  QueryPerformanceCounter(&t1);
+  QueryPerformanceFrequency(&f);
+  diag(DIAG_PIPELINES, count);
+  diag(DIAG_PIPELINE_US, uint64_t((t1.QuadPart - t0.QuadPart) * 1000000 / f.QuadPart));
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   for (uint32_t i = 0; i < count; ++i) {
     if (!out[i]) continue;
@@ -298,6 +306,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyRenderPass(VkDevice device, VkRenderPas
 static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t wc, const VkWriteDescriptorSet* w,
                                                        uint32_t cc, const VkCopyDescriptorSet* c) {
   device_of(device)->vk.UpdateDescriptorSets(device, wc, w, cc, c);
+  diag(DIAG_DESC_WRITES, wc + cc);
   for (uint32_t i = 0; i < wc; ++i) track_set_write(w[i]);
   if (cc) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
@@ -305,14 +314,14 @@ static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t
       auto src = tracker().sets.find(c[i].srcSet);
       if (src == tracker().sets.end()) continue;
       std::vector<DescEntry> moved;
-      for (const auto& e : src->second)
-        if (e.binding == c[i].srcBinding && e.element >= c[i].srcArrayElement &&
-            e.element < c[i].srcArrayElement + c[i].descriptorCount) {
-          DescEntry d = e;
-          d.binding = c[i].dstBinding;
-          d.element = c[i].dstArrayElement + (e.element - c[i].srcArrayElement);
-          moved.push_back(d);
-        }
+      for (uint32_t k = 0; k < c[i].descriptorCount; ++k) {
+        auto e = src->second.find(desc_key(c[i].srcBinding, c[i].srcArrayElement + k));
+        if (e == src->second.end()) continue;
+        DescEntry d = e->second;
+        d.binding = c[i].dstBinding;
+        d.element = c[i].dstArrayElement + k;
+        moved.push_back(d);
+      }
       merge(tracker().sets[c[i].dstSet], moved);
     }
   }
@@ -341,6 +350,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDescriptorUpdateTemplate(VkDevice devic
 static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSetWithTemplate(VkDevice device, VkDescriptorSet set,
                                                                   VkDescriptorUpdateTemplate tpl, const void* data) {
   device_of(device)->vk.UpdateDescriptorSetWithTemplate(device, set, tpl, data);
+  diag(DIAG_DESC_WRITES);
   track_set_template(set, tpl, data);
 }
 

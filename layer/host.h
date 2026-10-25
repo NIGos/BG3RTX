@@ -92,6 +92,8 @@ struct DescEntry {
   VkDeviceSize offset, range;
 };
 
+inline uint64_t desc_key(uint32_t binding, uint32_t element) { return (uint64_t(binding) << 32) | element; }
+
 struct Tracker {
   std::shared_mutex mu;
   std::unordered_map<VkShaderModule, uint64_t> modules;
@@ -100,7 +102,8 @@ struct Tracker {
   std::unordered_map<VkFramebuffer, std::vector<VkImageView>> framebuffers;
   std::unordered_map<VkRenderPass, RenderPassRec> render_passes;
   std::unordered_map<VkPipeline, PipelineRec> pipelines;
-  std::unordered_map<VkDescriptorSet, std::vector<DescEntry>> sets;
+  // Keyed by (binding << 32 | element): BG3's bindless sets hold very large arrays.
+  std::unordered_map<VkDescriptorSet, std::unordered_map<uint64_t, DescEntry>> sets;
   std::unordered_map<VkDescriptorUpdateTemplate, std::vector<VkDescriptorUpdateTemplateEntry>> templates;
   std::atomic<uint32_t> next_image_id{1}, next_pipeline_id{1};
 };
@@ -147,7 +150,12 @@ std::string view_ref(VkImageView view);
 // Records copies of the pass's attachments into readback buffers; returns
 // the dump ids as a JSON array fragment for the pass's "end" event.
 std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s);
-void count_pass();                     // passes per frame feed the auto trigger
+void count_pass();
+// Diagnostic counters, logged with the periodic [auto] line.
+enum DiagCounter { DIAG_PRESENT, DIAG_PIPELINES, DIAG_PIPELINE_US, DIAG_DESC_WRITES, DIAG_SHADER_MODULES, DIAG_SUBMIT, DIAG_BEGIN_CMD, DIAG_BEGIN_PASS, DIAG_BEGIN_RENDERING, DIAG_BIND_PIPE, DIAG_DRAW,
+                   DIAG_DISPATCH, DIAG_EXEC, DIAG_COUNT };
+void diag(DiagCounter c, uint64_t n = 1);
+void watchdog_start();                     // passes per frame feed the auto trigger
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
 void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue);
 

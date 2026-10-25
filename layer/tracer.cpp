@@ -4,6 +4,7 @@
 // captures/shaders/<hash>.spv as the game creates them.
 #include "host.h"
 
+#include <thread>
 #include <unordered_set>
 
 namespace bg3 {
@@ -19,12 +20,40 @@ static std::vector<SubmitRec> g_submits;
 static std::mutex g_ref_mu;
 static std::unordered_set<VkImage> g_refs;
 static bool g_key_was_down = false;
-static std::atomic<uint32_t> g_passes{0};
+static std::atomic<uint32_t> g_passes{0}, g_draws{0};
 // auto trigger state
 static uint32_t g_streak = 0, g_auto_done = 0;
 static uint64_t g_auto_next_allowed = 0;
 
 void count_pass() { g_passes.fetch_add(1, std::memory_order_relaxed); }
+static std::atomic<uint64_t> g_diag[DIAG_COUNT];
+static std::atomic<uint64_t> g_watch[DIAG_COUNT];
+void diag(DiagCounter c, uint64_t n) {
+  g_diag[c].fetch_add(n, std::memory_order_relaxed);
+  g_watch[c].fetch_add(n, std::memory_order_relaxed);
+  if (c == DIAG_DRAW) g_draws.fetch_add(uint32_t(n), std::memory_order_relaxed);
+}
+
+// Logs activity every watchdog_s seconds from its own thread, so a stalled
+// render thread still leaves a record of what the process was doing.
+void watchdog_start() {
+  static std::once_flag once;
+  std::call_once(once, [] {
+    std::thread([] {
+      for (;;) {
+        int s = cfg_int("watchdog_s", 5);
+        Sleep(DWORD((s > 0 ? s : 5) * 1000));
+        if (cfg_int("watchdog_s", 5) <= 0) continue;
+        uint64_t d[DIAG_COUNT];
+        for (int i = 0; i < DIAG_COUNT; ++i) d[i] = g_watch[i].exchange(0);
+        log("[watch] presents %llu | pipelines %llu (%.0f ms in driver) | shader modules %llu | descriptor writes %llu | "
+            "submits %llu | draws %llu",
+            d[DIAG_PRESENT], d[DIAG_PIPELINES], d[DIAG_PIPELINE_US] / 1000.0, d[DIAG_SHADER_MODULES],
+            d[DIAG_DESC_WRITES], d[DIAG_SUBMIT], d[DIAG_DRAW]);
+      }
+    }).detach();
+  });
+}
 
 bool trace_recording() { return g_recording.load(std::memory_order_relaxed); }
 
@@ -90,7 +119,7 @@ void trace_note_draw(CmdState* s, int bp, const char* kind, const char* extra) {
       auto it = tracker().sets.find(set);
       if (it == tracker().sets.end()) continue;
       uint32_t n = 0, skipped = 0;
-      for (const auto& e : it->second) {
+      for (const auto& [key, e] : it->second) {
         if (!e.view) continue;
         if (n++ >= kMaxPerSet) { ++skipped; continue; }
         add("s" + std::to_string(k) + "b" + std::to_string(e.binding) +
@@ -211,12 +240,24 @@ static std::string write_trace(uint64_t frame, const VkPresentInfoKHR* info) {
 // auto_min_passes render passes for auto_stable_frames presents in a row (the
 // game is past loading screens), take auto_traces traces auto_interval
 // presents apart, then write captures/auto.done.
-static bool auto_trigger(uint64_t frame, uint32_t passes) {
-  if (frame % 300 == 0) log("[auto] present %llu: %u passes in the last frame", (unsigned long long)frame, passes);
+static bool auto_trigger(uint64_t frame, uint32_t passes, uint32_t draws) {
+  if (frame % 300 == 0) {
+    uint64_t d[DIAG_COUNT];
+    for (int i = 0; i < DIAG_COUNT; ++i) d[i] = g_diag[i].exchange(0);
+    log("[auto] present %llu: %u passes, %u draws in the last frame | last 300 presents: submit %llu begin_cmd %llu "
+        "render_pass %llu bind %llu draw %llu dispatch %llu",
+        (unsigned long long)frame, passes, draws, d[DIAG_SUBMIT], d[DIAG_BEGIN_CMD], d[DIAG_BEGIN_PASS],
+        d[DIAG_BIND_PIPE], d[DIAG_DRAW], d[DIAG_DISPATCH]);
+  }
   if (!cfg_int("auto_trace", 0)) return false;
   int want = cfg_int("auto_traces", 1);
   if (int(g_auto_done) >= want) return false;
-  g_streak = passes >= uint32_t(cfg_int("auto_min_passes", 20)) ? g_streak + 1 : 0;
+  // A present with no passes at all (a driver-inserted one) neither counts nor resets.
+  // Draws tell gameplay (~3000/frame at 3840x1600) from the 3D main menu (~1300).
+  if (passes)
+    g_streak = passes >= uint32_t(cfg_int("auto_min_passes", 40)) && draws >= uint32_t(cfg_int("auto_min_draws", 2000))
+                   ? g_streak + 1
+                   : 0;
   if (g_streak < uint32_t(cfg_int("auto_stable_frames", 600)) || frame < g_auto_next_allowed) return false;
   g_auto_next_allowed = frame + uint64_t(cfg_int("auto_interval", 600));
   return true;
@@ -225,6 +266,7 @@ static bool auto_trigger(uint64_t frame, uint32_t passes) {
 void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info) {
   uint64_t frame = frame_index();
   uint32_t passes = g_passes.exchange(0, std::memory_order_relaxed);
+  uint32_t draws = g_draws.exchange(0, std::memory_order_relaxed);
   if (!g_recording) {
     bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
                 (GetAsyncKeyState(VK_F10) & 0x8000);
@@ -233,7 +275,7 @@ void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info) {
     std::string req = root_dir() + "\trace.request";
     bool file = file_mtime(req) != 0;
     if (file) DeleteFileA(req.c_str());
-    bool automatic = auto_trigger(frame, passes);
+    bool automatic = auto_trigger(frame, passes, draws);
     if (key || file || automatic) {
       {
         std::lock_guard<std::mutex> lock(g_mu);
