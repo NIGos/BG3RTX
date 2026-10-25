@@ -10,7 +10,10 @@ param(
   [int]$TimeoutSec = 480,
   [string[]]$Set = @(),
   [switch]$NoBuild,
-  [switch]$KeepRunning
+  [switch]$KeepRunning,
+  # Real presentation instead of headless (needed for frame generation and for
+  # anything that must reach the display).
+  [switch]$RealPresent
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -29,7 +32,14 @@ Add-Type -Namespace BG3RTX -Name Win -MemberDefinition @"
 [DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int cmd);
 [DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, System.UIntPtr extra);
+[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
+[DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, System.UIntPtr extra);
 "@ -ErrorAction SilentlyContinue
+# With the display asleep Windows throttles presentation to a few frames per
+# second, which makes every measurement meaningless: keep it on (and wake it).
+[void][BG3RTX.Win]::SetThreadExecutionState([uint32]2147483651)   # CONTINUOUS | SYSTEM_REQUIRED | DISPLAY_REQUIRED
+[BG3RTX.Win]::mouse_event(0x0001, 1, 0, 0, [UIntPtr]::Zero)
+[BG3RTX.Win]::mouse_event(0x0001, -1, 0, 0, [UIntPtr]::Zero)
 # BG3 renders but stops presenting while its window is not in the foreground.
 function Focus-Game {
   $p = Get-Process bg3 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
@@ -50,7 +60,8 @@ Get-Process bg3 -ErrorAction SilentlyContinue | ForEach-Object {
 
 # This run's settings: the repository's bg3rtx.ini plus auto-trace overrides.
 $ini = Join-Path $caps "auto.ini"
-$lines = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @("auto_trace=1", "auto_traces=$Traces") + $Set
+$lines = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @("auto_trace=1", "auto_traces=$Traces") +
+         @(if (-not $RealPresent) { "headless=1" }) + $Set
 $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
 Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
@@ -71,7 +82,9 @@ while ((Get-Date) -lt $deadline) {
   if (((Get-Date) - $lastNote).TotalSeconds -ge 30) {
     $lastNote = Get-Date
     $tail = if (Test-Path $log) { (Get-Content $log -Tail 1) } else { "(no log yet)" }
-    Write-Host "$([int]((Get-Date) - $start).TotalSeconds)s: $tail"
+    $fg = [BG3RTX.Win]::GetForegroundWindow()
+    $owner = Get-Process | Where-Object { $_.MainWindowHandle -eq $fg } | Select-Object -First 1 -ExpandProperty ProcessName
+    Write-Host "$([int]((Get-Date) - $start).TotalSeconds)s [foreground: $owner]: $tail"
   }
 }
 Write-Host "Run ended: $result after $([int]((Get-Date) - $start).TotalSeconds)s"

@@ -7,7 +7,7 @@
 #include <cstdint>
 #include "vk_funcs.h"
 
-#define BG3RTX_ABI_VERSION 1
+#define BG3RTX_ABI_VERSION 2
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -26,6 +26,39 @@ struct Bg3PassInfo {
   uint64_t first_vs_hash;      // SPIR-V hash of the first draw's vertex shader
   uint64_t first_fs_hash;      // and fragment shader: the pass's practical name
   uint64_t last_fs_hash;
+  // Classic render passes: each attachment's finalLayout. Dynamic rendering:
+  // the layout it is rendered in. UNDEFINED when unknown.
+  VkImageLayout color_layouts[8];
+  VkImageLayout depth_layout;
+  // What ran in this command buffer since the previous render pass ended.
+  uint32_t dispatches_before;
+  uint32_t indirect_dispatches_before;
+  uint64_t last_cs_hash_before;
+};
+
+struct Bg3DispatchInfo {
+  uint64_t cs_hash;
+  bool indirect;
+  uint32_t groups[3];          // zero for indirect dispatches
+};
+
+// A resource the game has bound at the moment of the query.
+struct Bg3Binding {
+  VkDescriptorType type;
+  VkImageView view;            // image descriptors
+  VkImage image;
+  VkFormat format;             // of the view
+  VkImageLayout layout;        // as written into the descriptor
+  uint32_t width, height;      // of the image's mip 0
+  VkBuffer buffer;             // buffer descriptors
+  VkDeviceSize offset;         // dynamic offset already applied
+  VkDeviceSize range;          // VK_WHOLE_SIZE resolved to the remaining size when known
+};
+
+struct Bg3Image {
+  VkImage image;
+  VkImageView view;
+  VkDeviceMemory memory;
 };
 
 enum Bg3DeferKind : uint32_t {
@@ -69,6 +102,21 @@ struct Bg3HostApi {
 
   uint64_t (*frame_index)();
   const char* root_dir;        // repository root: shaders/, captures/, bg3rtx.ini
+
+  // Looks up what the game has bound right now in `cmd` at (bind point, set,
+  // binding, array element), including push descriptors. Only valid inside a
+  // callback for that command buffer.
+  bool (*query_binding)(VkCommandBuffer cmd, VkPipelineBindPoint bind_point, uint32_t set, uint32_t binding,
+                        uint32_t element, Bg3Binding* out);
+
+  // Device-local 2D image plus a full view. Free with defer_destroy (image,
+  // view, memory).
+  bool (*alloc_image)(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, Bg3Image* out);
+
+  // Re-binds the game's pipeline and descriptor sets (with their dynamic
+  // offsets) at this bind point, after the core recorded its own work.
+  // Push descriptors and push constants are not restored.
+  void (*restore_bindings)(VkCommandBuffer cmd, VkPipelineBindPoint bind_point);
 };
 
 struct Bg3CoreApi {
@@ -80,6 +128,13 @@ struct Bg3CoreApi {
   // After the game's render pass ends, outside any render pass, in the game's
   // command buffer. The core may record its own work here.
   void (*on_pass_end)(VkCommandBuffer cmd, const Bg3PassInfo* pass);
+  // Right before the game's render pass begins (the pass is not open yet, so
+  // compute work may be recorded). Attachments are filled; draw fields are zero.
+  void (*on_pass_begin)(VkCommandBuffer cmd, const Bg3PassInfo* pass);
+  // After each game dispatch, outside any render pass.
+  void (*on_dispatch)(VkCommandBuffer cmd, const Bg3DispatchInfo* dispatch);
+  // Right before the game ends a command buffer (outside any render pass).
+  void (*on_cmd_end)(VkCommandBuffer cmd);
 };
 
 typedef const Bg3CoreApi* (*PFN_bg3rtx_core_load)(const Bg3HostApi* host);

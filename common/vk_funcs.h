@@ -17,6 +17,9 @@
   X(CreateSwapchainKHR)                        \
   X(DestroySwapchainKHR)                       \
   X(GetSwapchainImagesKHR)                     \
+  X(AcquireNextImageKHR)                       \
+  X(AcquireNextImage2KHR)                      \
+  X(WaitForPresentKHR)                         \
   X(CreateShaderModule)                        \
   X(DestroyShaderModule)                       \
   X(CreateGraphicsPipelines)                   \

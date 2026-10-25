@@ -14,9 +14,9 @@
 #include <string>
 #include <tuple>
 
-#include "../common/host_api.h"
+#include "core.h"
 
-static const Bg3HostApi* host = nullptr;
+const Bg3HostApi* host = nullptr;
 
 // ---- pass census ----
 
@@ -125,12 +125,17 @@ static void on_pass_end(VkCommandBuffer, const Bg3PassInfo* p) {
   s.draws = p->draw_count;
 }
 
+static void on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* p) { gi_on_pass_begin(cmd, p); }
+static void on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* d) { gi_on_dispatch(cmd, d); }
+static void on_cmd_end(VkCommandBuffer cmd) { gi_on_cmd_end(cmd); }
+
 static void unload() {
+  gi_release();
   compute_release(g_probe);
   host->log("core unloading");
 }
 
-static const Bg3CoreApi g_api = {BG3RTX_ABI_VERSION, &unload, &on_frame, &on_pass_end};
+static const Bg3CoreApi g_api = {BG3RTX_ABI_VERSION, &unload, &on_frame, &on_pass_end, &on_pass_begin, &on_dispatch, &on_cmd_end};
 
 extern "C" __declspec(dllexport) const Bg3CoreApi* bg3rtx_core_load(const Bg3HostApi* h) {
   host = h;

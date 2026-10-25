@@ -183,6 +183,60 @@ static VKAPI_ATTR void VKAPI_CALL GetDeviceQueue2(VkDevice device, const VkDevic
 
 // ---- frame boundary ----
 
+// Headless mode (headless=1 in bg3rtx.ini, read when a swapchain is created):
+// nothing reaches the display. Acquire hands out images round-robin and
+// signals its semaphore/fence through an empty submit; present only consumes
+// its wait semaphores. The game then renders as fast as the GPU allows even
+// with the display asleep, which otherwise throttles presentation. All queue
+// submissions are serialised while it is on, since the empty submits share
+// the game's queues.
+static std::atomic<bool> g_headless{false};
+static std::mutex g_queue_mu;
+static std::mutex g_sc_mu;
+static std::unordered_map<VkSwapchainKHR, std::pair<uint32_t, uint32_t>> g_sc_images;  // count, next
+
+static std::unique_lock<std::mutex> queue_lock() {
+  return g_headless ? std::unique_lock<std::mutex>(g_queue_mu) : std::unique_lock<std::mutex>();
+}
+
+void headless_on_swapchain() {
+  bool on = cfg_int("headless", 0) != 0;
+  if (on != g_headless.exchange(on)) log("[layer] headless presentation %s", on ? "ON" : "off");
+}
+
+static VkResult fake_acquire(VkDevice device, VkSwapchainKHR sc, VkSemaphore sem, VkFence fence, uint32_t* index) {
+  DeviceData* dd = device_of(device);
+  {
+    std::lock_guard<std::mutex> lock(g_sc_mu);
+    auto& e = g_sc_images[sc];
+    if (!e.first) dd->vk.GetSwapchainImagesKHR(device, sc, &e.first, nullptr);
+    *index = e.second++ % (std::max)(e.first, 1u);
+  }
+  VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+  si.signalSemaphoreCount = sem ? 1 : 0;
+  si.pSignalSemaphores = &sem;
+  std::lock_guard<std::mutex> lock(g_queue_mu);
+  return dd->vk.QueueSubmit(dd->graphics_queue, 1, &si, fence);
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL AcquireNextImageKHR(VkDevice device, VkSwapchainKHR sc, uint64_t timeout,
+                                                          VkSemaphore sem, VkFence fence, uint32_t* index) {
+  if (g_headless) return fake_acquire(device, sc, sem, fence, index);
+  return device_of(device)->vk.AcquireNextImageKHR(device, sc, timeout, sem, fence, index);
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL AcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR* info,
+                                                           uint32_t* index) {
+  if (g_headless) return fake_acquire(device, info->swapchain, info->semaphore, info->fence, index);
+  return device_of(device)->vk.AcquireNextImage2KHR(device, info, index);
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL WaitForPresentKHR(VkDevice device, VkSwapchainKHR sc, uint64_t id,
+                                                        uint64_t timeout) {
+  if (g_headless) return VK_SUCCESS;
+  return device_of(device)->vk.WaitForPresentKHR(device, sc, id, timeout);
+}
+
 static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo* submits,
                                                   VkFence fence) {
   DeviceData* dd = device_of(queue);
@@ -193,6 +247,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
       cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
     trace_on_submit(cmds);
   }
+  auto lock = queue_lock();
   return dd->vk.QueueSubmit(queue, count, submits, fence);
 }
 
@@ -207,6 +262,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
         cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
     trace_on_submit(cmds);
   }
+  auto lock = queue_lock();
   return dd->vk.QueueSubmit2(queue, count, submits, fence);
 }
 
@@ -236,6 +292,19 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     core_on_frame(frame);
   }
   trace_on_present(queue, info);
+  if (g_headless) {
+    std::vector<VkPipelineStageFlags> stages(info->waitSemaphoreCount, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+    VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    si.waitSemaphoreCount = info->waitSemaphoreCount;
+    si.pWaitSemaphores = info->pWaitSemaphores;
+    si.pWaitDstStageMask = stages.data();
+    std::lock_guard<std::mutex> lock(g_queue_mu);
+    VkResult r = dd->vk.QueueSubmit(queue, 1, &si, VK_NULL_HANDLE);
+    if (info->pResults)
+      for (uint32_t i = 0; i < info->swapchainCount; ++i) info->pResults[i] = r;
+    return r;
+  }
+  auto lock = queue_lock();
   return dd->vk.QueuePresentKHR(queue, info);
 }
 
@@ -250,6 +319,9 @@ static void register_device_hooks(HookMap& m) {
   add("QueueSubmit", reinterpret_cast<PFN_vkVoidFunction>(&QueueSubmit));
   add("QueueSubmit2", reinterpret_cast<PFN_vkVoidFunction>(&QueueSubmit2));
   m["vkQueuePresentKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&QueuePresentKHR);
+  m["vkAcquireNextImageKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&AcquireNextImageKHR);
+  m["vkAcquireNextImage2KHR"] = reinterpret_cast<PFN_vkVoidFunction>(&AcquireNextImage2KHR);
+  m["vkWaitForPresentKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&WaitForPresentKHR);
 }
 
 static const HookMap& hooks() {
