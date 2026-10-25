@@ -171,6 +171,12 @@ void defer_tick(bool flush_all);
 bool shader_get(const char* file, const char* entry, const char* profile, Bg3ShaderBlob* out);
 void shader_poll();
 
+// ---- NGX: SR -> Ray Reconstruction (ngx.cpp) ----
+void ngx_init();                       // hooks _nvngx.dll now or when it loads
+void ngx_note_pass(const Bg3PassInfo& p, const VkImageLayout* layouts);   // G-buffer discovery
+void ngx_on_destroy_image(VkImage img);
+void ngx_on_present();
+
 uint64_t frame_index();
 void* persist(const char* key, size_t size);
 

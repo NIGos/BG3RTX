@@ -213,6 +213,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
 }
 
 static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAllocationCallbacks* a) {
+  ngx_on_destroy_image(img);  // our views of it go first
   device_of(device)->vk.DestroyImage(device, img, a);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().images.erase(img);
