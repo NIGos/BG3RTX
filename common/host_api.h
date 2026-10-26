@@ -6,8 +6,10 @@
 #include <cstddef>
 #include <cstdint>
 #include "vk_funcs.h"
+#include "assetdb_api.h"
 
-#define BG3RTX_ABI_VERSION 5
+// 6: Bg3HostApi::assetdb (appended).
+#define BG3RTX_ABI_VERSION 6
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -156,6 +158,11 @@ struct Bg3HostApi {
   // resolution, GENERAL layout, written this frame). The core calls it every
   // frame it writes the image, and with VK_NULL_HANDLE before releasing it.
   void (*set_spec_hit_distance)(VkImage image, VkImageView view, VkFormat format, uint32_t width, uint32_t height);
+
+  // ABI 6: the offline asset database (common/assetdb_api.h, docs/ASSET_DB.md): placed
+  // lights, shader -> material bindings, rooms/roofs, presets, probes. Never null; the
+  // table carries its own version and loads the data on first use.
+  const Bg3AssetDbApi* assetdb;
 };
 
 struct Bg3CoreApi {

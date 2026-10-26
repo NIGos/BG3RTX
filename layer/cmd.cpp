@@ -1,6 +1,7 @@
 // Command buffer hooks: pass boundaries (where the core gets to inject work),
 // pipeline/descriptor binding state, and draw/dispatch notes for the tracer.
 #include "host.h"
+#include "assetdb.h"
 
 #include <cstring>
 
@@ -142,6 +143,7 @@ static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra =
   diag(DIAG_DRAW);
   CmdState* s = cmd_state(cmd);
   if (!s) return;
+  assetdb_note_draw(s->vs, s->fs);
   if (s->in_pass) {
     if (!s->pass.draw_count++) {
       s->pass.first_vs_hash = s->vs;
@@ -627,6 +629,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, u
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, false, {x, y, z}};
     core_on_dispatch_pre(cmd, &info);
+    assetdb_on_dispatch_pre(cmd);
   }
   vk(cmd).CmdDispatch(cmd, x, y, z);
   CmdState* s = cmd_state(cmd);
@@ -644,6 +647,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuf
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, true, {0, 0, 0}};
     core_on_dispatch_pre(cmd, &info);
+    assetdb_on_dispatch_pre(cmd);
   }
   vk(cmd).CmdDispatchIndirect(cmd, b, o);
   CmdState* s = cmd_state(cmd);
