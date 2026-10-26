@@ -55,6 +55,10 @@ constexpr uint64_t kKnownInChain[] = {
     0x3f6186576f49de56ull, 0x784f260b3b7195bdull,
     0x38f22d8be6074b47ull,  // exposure measure (reads only)
     0x3434e56117615cf9ull, 0x6bfc74d75d384c8aull, 0x779cbf3adb06ab7eull,  // bloom down/up
+    // Colour-LUT bakes (32x32 groups writing a 3D rgba32f image), recorded in the
+    // post command buffer while the camera moves between atmosphere areas. They
+    // only rebuild the LUTs the grade and tonemap read later.
+    0x304fe7e0211939a9ull, 0xdd9110b27471f886ull,
 };
 constexpr uint64_t kCsLighting = 0xf469db7865d7c524ull;  // tiled lighting, standard class
 constexpr uint64_t kCsAdapt = 0xbd9db92d9abc7fb7ull;     // exposure adaptation
@@ -435,11 +439,63 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   return true;
 }
 
+// Our own views of the game's colour images (mip 0, layer 0, identity
+// swizzle), destroyed deferred when the game destroys the image. Our descriptor
+// sets never reference a game view, which the game may destroy while a command
+// buffer that recorded our work is still pending (BG3 binds most of its images
+// through push descriptors). Depth/stencil views stay the game's (the stencil
+// read relies on the game's view).
+struct ViewKey {
+  VkImage image;
+  VkFormat format;
+  bool operator==(const ViewKey& o) const { return image == o.image && format == o.format; }
+};
+struct ViewKeyHash {
+  size_t operator()(const ViewKey& k) const { return std::hash<uint64_t>()((uint64_t)k.image ^ (uint64_t(k.format) << 48)); }
+};
+std::unordered_map<ViewKey, VkImageView, ViewKeyHash> g_own_views;
+
+VkImageView own_view(DeviceData* dd, VkImage image, VkFormat fmt) {
+  auto it = g_own_views.find({image, fmt});
+  if (it != g_own_views.end()) return it->second;
+  VkImageType type = VK_IMAGE_TYPE_2D;
+  {
+    std::shared_lock<std::shared_mutex> lock(tracker().mu);
+    auto rec = tracker().images.find(image);
+    if (rec == tracker().images.end()) return VK_NULL_HANDLE;
+    type = rec->second.ci.imageType;
+  }
+  VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+  vi.image = image;
+  vi.viewType = type == VK_IMAGE_TYPE_3D ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D;
+  vi.format = fmt;
+  vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  VkImageView v = VK_NULL_HANDLE;
+  if (dd->vk.CreateImageView(dd->device, &vi, nullptr, &v) != VK_SUCCESS) return VK_NULL_HANDLE;
+  g_own_views[{image, fmt}] = v;
+  return v;
+}
+
+bool is_depth_format(VkFormat f) {
+  return f == VK_FORMAT_D16_UNORM || f == VK_FORMAT_D24_UNORM_S8_UINT || f == VK_FORMAT_D32_SFLOAT ||
+         f == VK_FORMAT_D32_SFLOAT_S8_UINT || f == VK_FORMAT_X8_D24_UNORM_PACK32 || f == VK_FORMAT_S8_UINT ||
+         f == VK_FORMAT_D16_UNORM_S8_UINT;
+}
+
 bool image_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, VkImageView* v,
                    VkImageLayout* l, VkImage* img = nullptr, uint32_t* w = nullptr, uint32_t* h = nullptr) {
   Bg3Binding b{};
   if (!query_binding(cmd, bp, set, binding, 0, &b) || !b.view) return false;
   *v = b.view;
+  DeviceData* dd = device_of(cmd);
+  VkFormat imgfmt = VK_FORMAT_UNDEFINED;
+  {
+    std::shared_lock<std::shared_mutex> lock(tracker().mu);
+    auto rec = tracker().images.find(b.image);
+    if (rec != tracker().images.end()) imgfmt = rec->second.ci.format;
+  }
+  if (dd && b.image && !is_depth_format(imgfmt) && !is_depth_format(b.format))
+    if (VkImageView own = own_view(dd, b.image, b.format)) *v = own;
   *l = b.layout;
   if (img) *img = b.image;
   if (w) *w = b.width;
@@ -879,30 +935,18 @@ bool rrpost_take(VkCommandBuffer cmd, uint32_t w, uint32_t h, uint32_t ow, uint3
   return true;
 }
 
-// Our own storage view of the game's DLSS output image. The game only hands
-// its view to NGX, which no validation tracks, and may destroy it as soon as its
-// own work is done; ours is destroyed deferred, after our commands ran.
-static std::unordered_map<VkImage, VkImageView> g_out_views;
-static VkImageView out_view(DeviceData* dd, VkImage image, VkFormat fmt) {
-  auto it = g_out_views.find(image);
-  if (it != g_out_views.end()) return it->second;
-  VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-  vi.image = image;
-  vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  vi.format = fmt;
-  vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-  VkImageView v = VK_NULL_HANDLE;
-  if (dd->vk.CreateImageView(dd->device, &vi, nullptr, &v) != VK_SUCCESS) return VK_NULL_HANDLE;
-  g_out_views[image] = v;
-  return v;
-}
-
 void rrpost_forget_image(VkImage image) {
   std::lock_guard<std::mutex> lock(g_mu);
-  auto it = g_out_views.find(image);
-  if (it == g_out_views.end()) return;
-  defer_destroy(BG3_DEFER_IMAGE_VIEW, (uint64_t)it->second);
-  g_out_views.erase(it);
+  for (auto it = g_own_views.begin(); it != g_own_views.end();) {
+    if (it->first.image == image) {
+      static int logged = 0;
+      if (logged++ < 16)
+        log("[rrpost] the game destroys an image our post steps read (frame %llu; last chain recorded in frame %llu)",
+            (unsigned long long)frame_index(), (unsigned long long)g_ch.frame);
+      defer_destroy(BG3_DEFER_IMAGE_VIEW, (uint64_t)it->second);
+      it = g_own_views.erase(it);
+    } else ++it;
+  }
 }
 
 // After the RR evaluate: grade(A * RR + C) into the game's DLSS output image.
@@ -910,7 +954,7 @@ bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint
   std::lock_guard<std::mutex> lock(g_mu);
   DeviceData* dd = device_of(cmd);
   if (!dd || !out_image) return false;
-  VkImageView game_out = out_view(dd, out_image, out_fmt);
+  VkImageView game_out = own_view(dd, out_image, out_fmt);
   if (!game_out) return false;
   Binds b;
   b.in[0] = g_z.view;
