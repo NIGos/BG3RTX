@@ -134,6 +134,7 @@ static void end_pass(VkCommandBuffer cmd) {
     trace_event(s, "{\"op\":\"end\",\"draws\":" + std::to_string(s->pass.draw_count) + ",\"dumps\":[" + dumps + "]}");
   }
   ngx_note_pass(cmd, s->pass, s->color_layouts, s->depth_layout);
+  rrpost_pass_end(cmd, s->pass, s->color_layouts);
   sl_note_pass_end(cmd, s);
   core_on_pass_end(cmd, &s->pass);
 }
@@ -552,6 +553,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, u
   diag(DIAG_DISPATCH);
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, false, {x, y, z}};
+    rrpost_dispatch_pre(cmd, pre->cs);
     core_on_dispatch_pre(cmd, &info);
   }
   vk(cmd).CmdDispatch(cmd, x, y, z);
@@ -569,6 +571,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuf
   diag(DIAG_DISPATCH);
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, true, {0, 0, 0}};
+    rrpost_dispatch_pre(cmd, pre->cs);
     core_on_dispatch_pre(cmd, &info);
   }
   vk(cmd).CmdDispatchIndirect(cmd, b, o);

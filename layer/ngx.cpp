@@ -21,8 +21,13 @@
 #include <nvsdk_ngx_vk.h>
 #include <nvsdk_ngx_defs_dlssd.h>
 
+#include <tlhelp32.h>
+
+#include <atomic>
 #include <cmath>
 #include <cstring>
+
+#pragma comment(lib, "version.lib")
 
 namespace bg3 {
 
@@ -320,6 +325,42 @@ static std::mutex g_shd_mu;
 static NVSDK_NGX_Resource_VK g_shd_res{};
 static uint64_t g_shd_frame = 0;
 static bool g_shd_logged = false;
+
+// ABI 6: whether Ray Reconstruction actually denoises the frame. The core's
+// GI, local-light shadows and reflections pick their 1-spp RR modes from this,
+// not from the rr key: with FSR/TAA, an SR fallback or a failed RR creation
+// they must not leave raw 1-spp noise in the frame.
+static std::atomic<uint64_t> g_rr_frame{0};
+bool ngx_rr_active() {
+  uint64_t f = g_rr_frame.load();
+  return f != 0 && f + 3 >= frame_index();
+}
+
+// The nvngx_dlssd snippet NGX actually loaded (the game's 310.7.129, or
+// Streamline's 310.9.16 from bin/sl with fg>=2, or an OTA copy).
+static void log_dlssd_module() {
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
+  if (snap == INVALID_HANDLE_VALUE) return;
+  MODULEENTRY32W me{};
+  me.dwSize = sizeof me;
+  bool found = false;
+  for (BOOL ok = Module32FirstW(snap, &me); ok; ok = Module32NextW(snap, &me)) {
+    if (_wcsnicmp(me.szModule, L"nvngx_dlssd", 11) != 0) continue;
+    found = true;
+    DWORD dummy = 0, size = GetFileVersionInfoSizeW(me.szExePath, &dummy);
+    std::vector<uint8_t> buf(size ? size : 1);
+    VS_FIXEDFILEINFO* fi = nullptr;
+    UINT len = 0;
+    if (size && GetFileVersionInfoW(me.szExePath, 0, size, buf.data()) &&
+        VerQueryValueW(buf.data(), L"\\", reinterpret_cast<void**>(&fi), &len) && fi)
+      log("[ngx] RR snippet loaded: %ls, version %u.%u.%u.%u", me.szExePath, HIWORD(fi->dwFileVersionMS),
+          LOWORD(fi->dwFileVersionMS), HIWORD(fi->dwFileVersionLS), LOWORD(fi->dwFileVersionLS));
+    else
+      log("[ngx] RR snippet loaded: %ls (no version resource)", me.szExePath);
+  }
+  CloseHandle(snap);
+  if (!found) log("[ngx] RR snippet: no nvngx_dlssd module found in the process");
+}
 
 void ngx_set_spec_hit_distance(VkImage image, VkImageView view, VkFormat format, uint32_t w, uint32_t h) {
   std::lock_guard<std::mutex> lock(g_shd_mu);
@@ -1020,12 +1061,14 @@ static bool rr_create(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f) {
     f.rr = nullptr;
     return false;
   }
+  log_dlssd_module();
   return true;
 }
 
 // Fake pass around our guide images so the tracer dumps them (PNG + stats).
 // gbuf (optional): the G-buffer RT0-RT2 as they are at evaluate time.
-static void trace_guides(VkCommandBuffer cmd, VkImage extra, const VkImage* gbuf, const char* tag) {
+static void trace_guides(VkCommandBuffer cmd, VkImage extra, const VkImage* gbuf, const char* tag,
+                         const VkImage* more = nullptr, int more_n = 0) {
   CmdState* s = cmd_state(cmd);
   if (!s || !s->tracing) return;
   Bg3PassInfo saved = s->pass;
@@ -1037,8 +1080,10 @@ static void trace_guides(VkCommandBuffer cmd, VkImage extra, const VkImage* gbuf
   p.draw_count = 1;
   VkImage imgs[7] = {g_guide[0].image, g_guide[1].image, g_guide[2].image, extra,
                      gbuf ? gbuf[0] : VK_NULL_HANDLE, gbuf ? gbuf[1] : VK_NULL_HANDLE, gbuf ? gbuf[2] : VK_NULL_HANDLE};
-  for (VkImage img : imgs) {
-    if (!img) continue;
+  std::vector<VkImage> all(imgs, imgs + 7);
+  for (int i = 0; i < more_n; ++i) all.push_back(more[i]);
+  for (VkImage img : all) {
+    if (!img || p.color_count >= 8) continue;
     ImageRec rec{};
     {
       std::shared_lock<std::shared_mutex> lock(tracker().mu);
