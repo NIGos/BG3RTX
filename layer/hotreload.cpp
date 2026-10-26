@@ -176,6 +176,7 @@ void core_init(DeviceData* dd) {
   g_host.query_binding = &query_binding;
   g_host.alloc_image = &alloc_image;
   g_host.restore_bindings = &restore_bindings;
+  g_host.dlss_motion_vectors = &ngx_motion_vectors;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);

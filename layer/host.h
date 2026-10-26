@@ -184,6 +184,7 @@ bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, ui
                    Bg3Binding* out);
 bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out);
 void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp);
+bool ngx_motion_vectors(VkImage* image, VkImageView* view, VkFormat* format, float scale[2]);
 uint32_t find_memory_type(DeviceData* dd, uint32_t bits, VkMemoryPropertyFlags want);
 void defer_destroy(Bg3DeferKind kind, uint64_t handle);
 void defer_tick(bool flush_all);

@@ -38,9 +38,11 @@ struct Push {
   float history, ao;
   float cs_length, cs_strength;
   uint32_t cs_steps;
+  float mv_scale[2];
+  uint32_t has_mv, pad;
 };
 
-constexpr uint32_t kBindings = 17;
+constexpr uint32_t kBindings = 18;
 
 std::mutex g_mu;
 std::unordered_map<VkCommandBuffer, Snapshot> g_pending;   // pre done, post owed
@@ -51,6 +53,12 @@ Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance
 uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0;
 bool g_images_ready = false, g_logged = false;
 uint64_t g_last_pre_frame = 0;
+
+// Motion vectors (from the NGX hook) and the layout their render pass leaves them in.
+VkImage g_mv_image = VK_NULL_HANDLE;
+VkImageView g_mv_view = VK_NULL_HANDLE;
+VkImageLayout g_mv_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+float g_mv_scale[2] = {0, 0};
 
 // GPU timing: 4 timestamps per frame (pre start/end, post start/end) in a ring
 // of 8 frames, read back a few frames later without waiting.
@@ -154,8 +162,8 @@ bool ensure_layout() {
   VkDescriptorSetLayoutBinding b[kBindings];
   for (uint32_t i = 0; i < kBindings; ++i) {
     VkDescriptorType t = i <= 1 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-                       : i <= 5 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
-                                : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                       : (i <= 5 || i == 17) ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
+                                             : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     b[i] = {i, t, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
   }
   VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
@@ -163,7 +171,7 @@ bool ensure_layout() {
   sci.bindingCount = kBindings;
   sci.pBindings = b;
   if (host->vk->CreateDescriptorSetLayout(host->device, &sci, nullptr, &g_set_layout) != VK_SUCCESS) return false;
-  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, 64};
+  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, 80};
   VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   lci.setLayoutCount = 1;
   lci.pSetLayouts = &g_set_layout;
@@ -238,7 +246,9 @@ void bind_all(Bound& b, const Snapshot& s) {
       {VK_NULL_HANDLE, hout.view, G},            {VK_NULL_HANDLE, g_prev_radiance.view, G},
       {VK_NULL_HANDLE, s.ao.view, G},            {VK_NULL_HANDLE, g_raw_depth.view, G},
       {VK_NULL_HANDLE, din.view, G},             {VK_NULL_HANDLE, dout.view, G},
-      {VK_NULL_HANDLE, s.shadow.view ? s.shadow.view : s.ao.view, G}};
+      {VK_NULL_HANDLE, s.shadow.view ? s.shadow.view : s.ao.view, G},
+      {VK_NULL_HANDLE, g_mv_view ? g_mv_view : s.nrm.view,
+       g_mv_view ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : s.nrm.layout}};
   memcpy(b.img, img, sizeof img);
   for (uint32_t i = 0; i < kBindings; ++i) {
     b.w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -248,7 +258,7 @@ void bind_all(Bound& b, const Snapshot& s) {
       b.w[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
       b.w[i].pBufferInfo = i == 0 ? &b.cam : &b.vp;
     } else {
-      b.w[i].descriptorType = i <= 5 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+      b.w[i].descriptorType = (i <= 5 || i == 17) ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
       b.w[i].pImageInfo = &b.img[i - 2];
     }
   }
@@ -269,6 +279,9 @@ Push make_push() {
   pc.cs_length = host->cfg_float("cs_length", 0.02f);
   pc.cs_strength = host->cfg_float("cs_strength", 1.0f);
   pc.cs_steps = uint32_t(host->cfg_int("cs_steps", 12));
+  pc.mv_scale[0] = g_mv_scale[0];
+  pc.mv_scale[1] = g_mv_scale[1];
+  pc.has_mv = g_mv_view && host->cfg_int("gi_reproject", 1) ? 1u : 0u;
   return pc;
 }
 
@@ -302,6 +315,18 @@ bool run_pre(VkCommandBuffer cmd, const Snapshot& s) {
   timing_init();
   timing_collect();
   timestamp(cmd, 0);
+  {
+    VkImage im;
+    VkImageView v;
+    VkFormat f;
+    float sc[2];
+    if (host->dlss_motion_vectors && host->dlss_motion_vectors(&im, &v, &f, sc) && f == VK_FORMAT_R16G16_SFLOAT &&
+        g_mv_layout != VK_IMAGE_LAYOUT_UNDEFINED) {
+      g_mv_image = im, g_mv_view = v, g_mv_scale[0] = sc[0], g_mv_scale[1] = sc[1];
+    } else {
+      g_mv_image = VK_NULL_HANDLE, g_mv_view = VK_NULL_HANDLE;
+    }
+  }
   Bound b;
   bind_all(b, s);
   Push pc = make_push();
@@ -309,7 +334,11 @@ bool run_pre(VkCommandBuffer cmd, const Snapshot& s) {
   memory_barrier(cmd, kAll, kCS);
   dispatch(cmd, g_trace, b, pc, g_hw, g_hh);
   memory_barrier(cmd, kCS, kCS);
+  // The MVs are sampled in SHADER_READ_ONLY; their pass may leave them elsewhere.
+  bool mv_move = pc.has_mv && g_mv_layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  if (mv_move) image_layout(cmd, g_mv_image, g_mv_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, kAll, kCS);
   dispatch(cmd, g_temporal, b, pc, g_hw, g_hh);
+  if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
   memory_barrier(cmd, kCS, kCS);
   if (pc.ao > 0.0f || pc.debug == 3) {
     image_layout(cmd, s.ao.image, s.ao.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
@@ -392,6 +421,28 @@ void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
 }
 
 void gi_on_dispatch(VkCommandBuffer, const Bg3DispatchInfo*) {}
+
+// Learns the layout the game's velocity pass leaves the motion vectors in.
+void gi_on_pass_end(VkCommandBuffer, const Bg3PassInfo* p) {
+  if (p->color_count != 1 || p->color_formats[0] != VK_FORMAT_R16G16_SFLOAT || !host->dlss_motion_vectors) return;
+  VkImage im;
+  VkImageView v;
+  VkFormat f;
+  float sc[2];
+  bool have = host->dlss_motion_vectors(&im, &v, &f, sc);
+  static int seen = 0;
+  if (seen < host->cfg_int("gi_describe_mv", 0)) {
+    ++seen;
+    host->log("gi: RG16F pass: image %p layout %d draws %u fs %016llx | DLSS MV %s %p", (void*)p->color_images[0],
+              p->color_layouts[0], p->draw_count, (unsigned long long)p->first_fs_hash, have ? "image" : "none",
+              have ? (void*)im : nullptr);
+  }
+  if (!have || im != p->color_images[0]) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (g_mv_layout != p->color_layouts[0])
+    host->log("gi: motion vectors found (image %p), left in layout %d by their pass", (void*)im, p->color_layouts[0]);
+  g_mv_layout = p->color_layouts[0];
+}
 
 // The lighting and the SSS pass that reads its output are in different
 // command buffers: finish at the end of the lighting's own buffer, or at the

@@ -285,6 +285,24 @@ static uint32_t g_acc_n[2];
 static ULONGLONG g_acc_tick = 0;
 
 static bool g_logged_eval_contract = false;
+
+// Last motion vectors the game gave DLSS, for the core's temporal passes.
+static std::mutex g_mv_mu;
+static VkImage g_mv_image = VK_NULL_HANDLE;
+static VkImageView g_mv_view = VK_NULL_HANDLE;
+static VkFormat g_mv_format = VK_FORMAT_UNDEFINED;
+static float g_mv_scale[2] = {1.0f, 1.0f};
+
+bool ngx_motion_vectors(VkImage* image, VkImageView* view, VkFormat* format, float scale[2]) {
+  std::lock_guard<std::mutex> lock(g_mv_mu);
+  if (!g_mv_image) return false;
+  *image = g_mv_image;
+  *view = g_mv_view;
+  *format = g_mv_format;
+  scale[0] = g_mv_scale[0];
+  scale[1] = g_mv_scale[1];
+  return true;
+}
 static int g_jitter_logs = 0;
 
 // ---------------------------------------------------------------------------
@@ -1095,6 +1113,14 @@ static NVSDK_NGX_Result Detour_Eval(VkCommandBuffer cmd, const NVSDK_NGX_Handle*
   }
   auto* p = const_cast<NVSDK_NGX_Parameter*>(cp);
   ++f->evals;
+  if (NVSDK_NGX_Resource_VK* mv = get_res(p, NVSDK_NGX_Parameter_MotionVectors)) {
+    std::lock_guard<std::mutex> mvl(g_mv_mu);
+    g_mv_image = mv->Resource.ImageViewInfo.Image;
+    g_mv_view = mv->Resource.ImageViewInfo.ImageView;
+    g_mv_format = mv->Resource.ImageViewInfo.Format;
+    get_f(p, NVSDK_NGX_Parameter_MV_Scale_X, g_mv_scale[0]);
+    get_f(p, NVSDK_NGX_Parameter_MV_Scale_Y, g_mv_scale[1]);
+  }
   if (!g_logged_eval_contract) {
     g_logged_eval_contract = true;
     log_eval(*f, p);

@@ -117,6 +117,12 @@ struct Bg3HostApi {
   // offsets) at this bind point, after the core recorded its own work.
   // Push descriptors and push constants are not restored.
   void (*restore_bindings)(VkCommandBuffer cmd, VkPipelineBindPoint bind_point);
+
+  // The motion vectors the game last passed to DLSS (seen by the NGX hook):
+  // image, a view of it, its format and the game's MV scale. In render
+  // pixels, so that previous = current + mv * scale. False until the first
+  // DLSS evaluate.
+  bool (*dlss_motion_vectors)(VkImage* image, VkImageView* view, VkFormat* format, float scale[2]);
 };
 
 struct Bg3CoreApi {

@@ -65,8 +65,12 @@ only the game's own constants, so no matrices are guessed.
   - The GI must never write non-finite values into game buffers.
   - `dumps.json` wrote `inf`/`nan`, which is not valid JSON.
 
+- Temporal reprojection uses the motion vectors the game passes to DLSS (exposed by the NGX hook,
+  `host->dlss_motion_vectors`; their pass leaves them in COLOR_ATTACHMENT layout, so they are
+  transitioned around the read). Verified with `auto-run.ps1 -Move` (camera pan): no visible ghosting.
+- Sun contact shadows refine the game's screen-space sun shadow mask (`contact_shadows`, `cs_*`).
+
 ## Next
-- Reprojection using the DLSS motion vectors, identified by Track A.
 - A world-space radiance cache (SHaRC-style) for rays that leave the screen.
 - ReSTIR-style reuse.
 - Screen-space contact shadows for the direct lights. Real RT shadows belong to Track D.

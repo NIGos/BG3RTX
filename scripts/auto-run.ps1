@@ -13,7 +13,11 @@ param(
   [switch]$KeepRunning,
   # Real presentation instead of headless (needed for frame generation and for
   # anything that must reach the display).
-  [switch]$RealPresent
+  [switch]$RealPresent,
+  # Hold a camera-pan key (default D) once gameplay is reached, so the
+  # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
+  [switch]$Move,
+  [byte]$MoveScan = 0x20   # hardware scan code (D); SDL reads scan codes, not virtual keys
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -80,9 +84,19 @@ $log = Join-Path $root "bg3rtx.log"
 $deadline = $start.AddSeconds($TimeoutSec)
 $lastNote = Get-Date
 $result = "timeout"
+$moving = $false
 while ((Get-Date) -lt $deadline) {
   Start-Sleep -Seconds 2
   Focus-Game
+  if ($Move -and (Test-Path $log)) {
+    $last = Get-Content $log -Tail 40 | Select-String '(\d+) draws in the last frame' | Select-Object -Last 1
+    if ((Get-Item $log).LastWriteTime -lt $start) { $last = $null }
+    if ($last -and [int]$last.Matches[0].Groups[1].Value -gt 2000) {
+      if (-not $moving) { Write-Host "gameplay reached: holding scan code 0x$('{0:X2}' -f $MoveScan)" }
+      $moving = $true
+    }
+    if ($moving) { [BG3RTX.Win]::keybd_event(0, $MoveScan, 0x0008, [UIntPtr]::Zero) }   # KEYEVENTF_SCANCODE down
+  }
   if (Test-Path (Join-Path $caps "auto.done")) { $result = "done"; break }
   $p = Get-Process bg3 -ErrorAction SilentlyContinue
   if (-not $p -and ((Get-Date) - $start).TotalSeconds -gt 30) { $result = "game exited"; break }
@@ -94,6 +108,7 @@ while ((Get-Date) -lt $deadline) {
     Write-Host "$([int]((Get-Date) - $start).TotalSeconds)s [foreground: $owner]: $tail"
   }
 }
+if ($moving) { [BG3RTX.Win]::keybd_event(0, $MoveScan, 0x000A, [UIntPtr]::Zero) }   # scan-code key up
 Write-Host "Run ended: $result after $([int]((Get-Date) - $start).TotalSeconds)s"
 
 if (-not $KeepRunning) {

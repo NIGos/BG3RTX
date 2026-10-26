@@ -38,6 +38,8 @@ struct ViewportCB {
 [[vk::binding(15, 0)]] [[vk::image_format("r32f")]] RWTexture2D<float> giHistDepthOut;
 // The game's screen-space sun shadow mask (R8), read by its sun term.
 [[vk::binding(16, 0)]] [[vk::image_format("r8")]] RWTexture2D<float> gSunShadow;
+// The motion vectors the game gives DLSS: previous = current + mv * mv_scale, render pixels.
+[[vk::binding(17, 0)]] Texture2D<float2> gVelocity;
 
 struct Push {
   uint2 full;       // render resolution
@@ -54,6 +56,9 @@ struct Push {
   float cs_length;  // contact-shadow march length, fraction of camera distance
   float cs_strength;
   uint cs_steps;
+  float2 mv_scale;
+  uint has_mv;
+  uint pad;
 };
 [[vk::push_constant]] Push pc;
 
