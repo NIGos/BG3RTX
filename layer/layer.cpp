@@ -493,10 +493,11 @@ static const HookMap& hooks() {
 // The loader hands the application *our* functions for vkQueuePresentKHR and
 // the swapchain calls. The BG3 Script Extender Detours-patches exactly those
 // right after vkCreateDevice (bg3se IMGUI/Vulkan.inl, vkCreateDeviceHooked),
-// so its ImGui present pre-hook runs in front of this layer and of
-// Streamline's DLSS-G swapchain: it submits on queue 0 of family 0 and swaps
-// the present's wait semaphore for its own. That stops DLSS-G from showing
-// generated frames (docs/TRACK_B_FG.md, "Script Extender").
+// so its ImGui present hook runs in front of this layer and of Streamline's
+// DLSS-G swapchain: ImGui set up on Streamline's back buffers and queue 0, a
+// lock per present and, once a mod draws ImGui, a queue-0 submit that replaces
+// the present's wait semaphore. With it installed DLSS-G showed no generated
+// frames (docs/TRACK_B_FG.md, "Script Extender").
 // se_unhook: 0 log only; 1 (default) put our original bytes back when the
 // patch leads into the Script Extender (its overlay is then never set up,
 // everything else in it keeps working); 2 also for any other module.

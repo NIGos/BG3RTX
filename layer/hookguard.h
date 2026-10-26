@@ -4,10 +4,9 @@
 // layer active that is *our* code: the BG3 Script Extender (bg3se) resolves
 // vkQueuePresentKHR, vkCreateSwapchainKHR and vkDestroySwapchainKHR right
 // after vkCreateDevice and Detours-patches their first bytes
-// (BG3Extender/Extender/Client/IMGUI/Vulkan.inl, vkCreateDeviceHooked). Its
-// present pre-hook then runs an ImGui pass on queue family 0 queue 0 and
-// rewrites the present's wait semaphore before our present (and Streamline's
-// DLSS-G swapchain) ever sees it. See docs/TRACK_B_FG.md, "Script Extender".
+// (BG3Extender/Extender/Client/IMGUI/Vulkan.inl, vkCreateDeviceHooked), so
+// its ImGui hooks run in front of our present and of Streamline's DLSS-G
+// swapchain. See docs/TRACK_B_FG.md, "Script Extender".
 //
 // This file snapshots the first bytes of chosen entry points before anyone
 // can patch them, recognises a later inline patch, follows its jumps to the
