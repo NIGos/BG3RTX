@@ -34,7 +34,9 @@ param(
   [switch]$Background,
   # A bg3rtx_user.ini to layer between bg3rtx.ini and this run's overrides (as
   # the launcher writes it). Default: none, so test runs ignore the player's file.
-  [string]$UserIni = ""
+  [string]$UserIni = "",
+  # Skip analyze_trace.py on the new captures (the QA harness reads dumps.json only).
+  [switch]$NoAnalyze
 )
 $ErrorActionPreference = "Stop"
 # "powershell -File" passes "-Set a=1,b=2" as one string: split it.
@@ -246,6 +248,7 @@ $mutex.ReleaseMutex()
 
 $new = Get-ChildItem $caps -Directory | Where-Object { $_.Name -ne "shaders" -and $_.LastWriteTime -ge $start -and (Test-Path (Join-Path $_.FullName "done.txt")) } | Sort-Object Name
 foreach ($c in $new) {
+  if ($NoAnalyze) { Write-Host "capture: $($c.FullName)"; continue }
   py -3 (Join-Path $PSScriptRoot "analyze_trace.py") $c.FullName --disasm
   $geo = Join-Path $c.FullName "geo\report.json"
   if (Test-Path $geo) {
