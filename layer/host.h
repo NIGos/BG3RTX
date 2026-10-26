@@ -144,6 +144,7 @@ struct CmdState {
   uint8_t sl_cam[2][256] = {};
   std::vector<DescEntry> push[2];
   bool tracing = false;                // began while a trace was recording
+  bool game_alloc = false;             // allocated through this layer (not by Streamline below it)
   std::vector<std::string> events;     // pre-rendered JSON objects, one per event
   // segment aggregation for the trace
   std::string seg_key;
@@ -184,7 +185,7 @@ SlDeviceScratch* sl_device_pre(InstanceData* id, VkPhysicalDevice phys, const Vk
                                VkDeviceCreateInfo& out);
 void sl_device_post(SlDeviceScratch* s, DeviceData* dd, VkResult r);
 void sl_device_destroy(DeviceData* dd);
-void sl_device_ready(DeviceData* dd);   // first game call on the finished device
+void sl_device_ready(DeviceData* dd, bool at_swapchain = false);   // a game call on the finished device
 // Swapchain/present entry points Streamline hooks. Each returns false when
 // Streamline is not active, and the caller goes straight to the next layer.
 bool sl_create_swapchain(VkDevice d, const VkSwapchainCreateInfoKHR* ci, const VkAllocationCallbacks* a,

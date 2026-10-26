@@ -258,6 +258,40 @@ std::mutex g_patch_mu;
 std::set<HMODULE> g_patched;
 std::atomic<uint32_t> g_gpa_redirects{0};
 
+// bg3.exe's own NGX (DLSS SR) initialises a second NGX instance on the same
+// VkDevice. Whichever NVSDK_NGX_VULKAN_Init runs last owns the process-wide
+// NGX state: with Streamline first, DLSS-G feature creation fails
+// (0xbad0000b); with the game first, DLSS-G evaluation crashes the driver.
+// fg_game_ngx selects what the game's NGX init does:
+//   0  pass through (the conflict above)
+//   1  blocked: "not supported", the game falls back to TAA (no DLSS SR)
+//   2  shared (default): Streamline initialises NGX first; the game's Init*
+//      returns success without re-initialising and its Shutdown* is a no-op,
+//      so its DLSS SR features are created on Streamline's NGX instance.
+int game_ngx_mode() { return g_sl_init ? cfg_int("fg_game_ngx", 2) : 0; }
+int64_t ngx_unsupported() { return int64_t(int32_t(0xBAD00001)); }   // NVSDK_NGX_Result_FAIL_FeatureNotSupported
+int64_t ngx_success() { return 1; }                                  // NVSDK_NGX_Result_Success
+
+FARPROC WINAPI hk_GetProcAddress_game(HMODULE mod, LPCSTR name) {
+  if (reinterpret_cast<uintptr_t>(name) > 0xFFFF && !strncmp(name, "NVSDK_NGX_", 10)) {
+    int mode = game_ngx_mode();
+    bool init = !strncmp(name, "NVSDK_NGX_VULKAN_Init", 21);
+    bool shutdown = !strncmp(name, "NVSDK_NGX_VULKAN_Shutdown", 25);
+    FARPROC repl = nullptr;
+    if (mode == 1 && init) repl = reinterpret_cast<FARPROC>(&ngx_unsupported);
+    if (mode == 2 && (init || shutdown)) repl = reinterpret_cast<FARPROC>(&ngx_success);
+    static std::mutex mu;
+    static std::set<std::string> seen;
+    {
+      std::lock_guard<std::mutex> lock(mu);
+      if (seen.insert(name).second)
+        log("[sl] the game resolves %s%s", name, !repl ? "" : mode == 1 ? " (blocked)" : " (shared with Streamline)");
+    }
+    if (repl) return repl;
+  }
+  return GetProcAddress(mod, name);
+}
+
 FARPROC WINAPI hk_GetProcAddress(HMODULE mod, LPCSTR name) {
   if (mod && g_vulkan1 && mod == g_vulkan1 && reinterpret_cast<uintptr_t>(name) > 0xFFFF) {
     // Instance-level functions stay on the loader's trampolines: NGX is
@@ -276,7 +310,8 @@ FARPROC WINAPI hk_GetProcAddress(HMODULE mod, LPCSTR name) {
   return GetProcAddress(mod, name);
 }
 
-void patch_iat(HMODULE mod, const char* label) {
+void patch_iat(HMODULE mod, const char* label, void* hook = nullptr) {
+  if (!hook) hook = reinterpret_cast<void*>(&hk_GetProcAddress);
   auto base = reinterpret_cast<uint8_t*>(mod);
   auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
   if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
@@ -294,7 +329,7 @@ void patch_iat(HMODULE mod, const char* label) {
       if (strcmp(reinterpret_cast<const char*>(ibn->Name), "GetProcAddress")) continue;
       DWORD old = 0;
       VirtualProtect(&iat->u1.Function, sizeof(void*), PAGE_READWRITE, &old);
-      iat->u1.Function = reinterpret_cast<ULONG_PTR>(&hk_GetProcAddress);
+      iat->u1.Function = reinterpret_cast<ULONG_PTR>(hook);
       VirtualProtect(&iat->u1.Function, sizeof(void*), old, &old);
       ++patched;
     }
@@ -338,7 +373,15 @@ Img g_depth, g_mvec, g_hudless, g_ui;
 VkImageView g_depth_only_view = VK_NULL_HANDLE;   // ours: depth aspect only
 VkImage g_depth_only_for = VK_NULL_HANDLE;
 std::unordered_map<VkImage, VkImageLayout> g_layout;   // queue-order layout at the last submit
-std::atomic<VkImage> g_watch[4] = {};
+// Every image that has been a tag (the game rotates several per kind), so
+// their layouts are tracked before they are identified in a given frame.
+constexpr int kWatch = 32;
+std::atomic<VkImage> g_watch[kWatch] = {};
+// Frame of the last destruction of a current tag: DLSS-G stays off for
+// fg_stable_frames after it (BG3 recreates its targets when gameplay starts).
+std::atomic<uint64_t> g_last_tag_destroy{0};
+std::atomic<bool> g_fg_running{false};
+int g_watch_next = 0;
 
 // Camera constants from the last submitted velocity pass.
 struct CamRaw {
@@ -352,7 +395,6 @@ uint32_t g_cam_log = 0;
 std::string g_cam_err;
 
 constexpr uint64_t kVelocityFs = 0x788dfdf60d8ed4cdull;    // camera velocity pass (first draw)
-constexpr uint64_t kCompositeFs = 0x046c6949b0e5297bull;   // UI composite -> swapchain
 constexpr uint64_t kTonemapFs = 0xd25b8086de1734d5ull;     // tonemap (hudless fallback)
 
 void fill_img(Img& out, VkImage image, VkImageView view) {
@@ -368,11 +410,15 @@ void fill_img(Img& out, VkImage image, VkImageView view) {
   out.seen = frame_index();
 }
 
-void set_watch() {
-  g_watch[0] = g_depth.image;
-  g_watch[1] = g_mvec.image;
-  g_watch[2] = g_hudless.image;
-  g_watch[3] = g_ui.image;
+void set_watch() {   // caller holds g_mu
+  for (VkImage img : {g_depth.image, g_mvec.image, g_hudless.image, g_ui.image}) {
+    if (!img) continue;
+    bool have = false;
+    for (auto& w : g_watch) have |= w.load(std::memory_order_relaxed) == img;
+    if (have) continue;
+    g_watch[g_watch_next] = img;
+    g_watch_next = (g_watch_next + 1) % kWatch;
+  }
 }
 
 // The uniform buffer behind (set, binding) of the bound graphics sets, read
@@ -554,13 +600,35 @@ void fill_constants(sl::Constants& c, uint32_t rw, uint32_t rh) {
   bool ok = false;
   float jx = 0, jy = 0;
   if (g_cam_valid && cfg_int("fg_camera", 1)) {
-    vp_c = load(&g_cam.cam[32]);
-    vp_p = load(&g_cam.prev[32]);
+    // m1 is the jittered reversed-Z projection (row-vector, w = view z): the
+    // jitter sits in row 2, columns 0 and 1. clip.xy_unjittered = clip.xy -
+    // P[2][0..1] * w, i.e. post-multiplying by S with S[3][0..1] = -P[2][0..1].
     proj = load(&g_cam.cam[16]);
+    M4 pprev = load(&g_cam.prev[16]);
+    M4 s_c = I, s_p = I;
+    s_c.m[3][0] = -proj.m[2][0];
+    s_c.m[3][1] = -proj.m[2][1];
+    bool prev_is_proj = std::fabs(pprev.m[2][3] - 1.0f) < 1e-3f && std::fabs(pprev.m[0][1]) < 1e-6f;
+    if (prev_is_proj) {
+      s_p.m[3][0] = -pprev.m[2][0];
+      s_p.m[3][1] = -pprev.m[2][1];
+    } else {
+      s_p = s_c;
+    }
+    float pjx = proj.m[2][0], pjy = proj.m[2][1];
+    vp_c = mul(load(&g_cam.cam[32]), s_c);
+    vp_p = mul(load(&g_cam.prev[32]), s_p);
+    proj.m[2][0] = 0;
+    proj.m[2][1] = 0;
+    if (g_cam.cam[48] > 0 && g_cam.cam[49] > g_cam.cam[48]) {
+      c.cameraNear = g_cam.cam[48];
+      c.cameraFar = g_cam.cam[49];
+    }
     const float* cp = &g_cam.cam[52];
     const float* pp = &g_cam.prev[48];
-    jx = g_cam.prev[52];
-    jy = g_cam.prev[53];
+    // jitter in pixels, from the projection: x = P20 * W / 2, y = -P21 * H / 2 (y down)
+    jx = pjx * float(rw) * 0.5f;
+    jy = -pjy * float(rh) * 0.5f;
     M4 t = I;
     t.m[3][0] = cp[0] - pp[0];
     t.m[3][1] = cp[1] - pp[1];
@@ -618,6 +686,50 @@ void fill_constants(sl::Constants& c, uint32_t rw, uint32_t rh) {
 }  // namespace
 
 // ---------------------------------------------------------------------------
+// crash diagnostics: the game's own crash handler exits silently, so fatal
+// exceptions are logged (module + offset, and the frames above them) first.
+
+namespace {
+std::string where(void* addr) {
+  HMODULE mod = nullptr;
+  char name[MAX_PATH] = "?";
+  if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                         reinterpret_cast<LPCSTR>(addr), &mod) && mod) {
+    GetModuleFileNameA(mod, name, MAX_PATH);
+    const char* base = strrchr(name, '\\');
+    char b[MAX_PATH + 32];
+    snprintf(b, sizeof b, "%s+0x%llx", base ? base + 1 : name,
+             (unsigned long long)(reinterpret_cast<uint8_t*>(addr) - reinterpret_cast<uint8_t*>(mod)));
+    return b;
+  }
+  char b[32];
+  snprintf(b, sizeof b, "%p", addr);
+  return b;
+}
+
+std::atomic<int> g_veh_logged{0};
+
+LONG CALLBACK veh(EXCEPTION_POINTERS* ep) {
+  DWORD code = ep->ExceptionRecord->ExceptionCode;
+  bool fatal = code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_ILLEGAL_INSTRUCTION ||
+               code == EXCEPTION_STACK_OVERFLOW || code == EXCEPTION_INT_DIVIDE_BY_ZERO ||
+               code == EXCEPTION_PRIV_INSTRUCTION || code == 0xC0000409 /* fast fail / GS */ ||
+               code == 0xC0000374 /* heap corruption */ || code == 0x40000015 /* abort */;
+  if (!fatal || g_veh_logged++ >= cfg_int("sl_veh_max", 8)) return EXCEPTION_CONTINUE_SEARCH;
+  void* frames[24];
+  USHORT n = CaptureStackBackTrace(0, 24, frames, nullptr);
+  std::string st;
+  for (USHORT i = 0; i < n; ++i) st += " " + where(frames[i]);
+  ULONG_PTR info0 = ep->ExceptionRecord->NumberParameters > 0 ? ep->ExceptionRecord->ExceptionInformation[0] : 0;
+  ULONG_PTR info1 = ep->ExceptionRecord->NumberParameters > 1 ? ep->ExceptionRecord->ExceptionInformation[1] : 0;
+  log("[crash] exception 0x%08lx at %s (thread %lu, info %llu %p) stack:%s", code,
+      where(ep->ExceptionRecord->ExceptionAddress).c_str(), GetCurrentThreadId(), (unsigned long long)info0,
+      (void*)info1, st.c_str());
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+}  // namespace
+
+// ---------------------------------------------------------------------------
 // instance
 
 void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) {
@@ -639,6 +751,8 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
     return;
   }
   patch_modules();
+  if (cfg_int("sl_veh", 1)) AddVectoredExceptionHandler(1, veh);
+  if (cfg_int("fg_watch_game_ngx", 1)) patch_iat(GetModuleHandleA(nullptr), "bg3.exe", reinterpret_cast<void*>(&hk_GetProcAddress_game));
 #define SLF(n) g_sl.n = reinterpret_cast<PFun_sl##n*>(GetProcAddress(g_interposer, "sl" #n))
   SLF(Init);
   SLF(Shutdown);
@@ -671,7 +785,7 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
   pref.pathToLogsAndData = s_logs.c_str();
   pref.logMessageCallback = &sl_logcb;
   pref.flags = sl::PreferenceFlags::eDisableCLStateTracking | sl::PreferenceFlags::eUseManualHooking |
-               sl::PreferenceFlags::eDisableDebugText;
+               sl::PreferenceFlags::eDisableDebugText | sl::PreferenceFlags::eUseFrameBasedResourceTagging;
   pref.featuresToLoad = features;
   pref.numFeaturesToLoad = 3;
   pref.applicationId = uint32_t(cfg_int("sl_app_id", 0));
@@ -1073,8 +1187,14 @@ void sl_device_post(SlDeviceScratch* s, DeviceData* dd, VkResult r) {
   g_pending = std::move(own);
 }
 
-void sl_device_ready(DeviceData* dd) {
+void sl_device_ready(DeviceData* dd, bool at_swapchain) {
   if (!g_pending || dd != g_dd) return;
+  // sl_init_at=1 (default): at the first swapchain creation, which BG3 does
+  // after initialising its own NGX instance (for DLSS SR). 0: at the first
+  // vkGetDeviceQueue.
+  // Sharing the game's NGX needs Streamline's NGX to exist before the game's init.
+  int at = cfg_int("sl_init_at", game_ngx_mode() == 2 ? 0 : 1);
+  if (!at_swapchain && at != 0) return;
   std::unique_ptr<SlDeviceScratch> s;
   {
     std::lock_guard<std::mutex> lock(g_pending_mu);
@@ -1171,7 +1291,7 @@ void sl_device_destroy(DeviceData* dd) {
 
 bool sl_create_swapchain(VkDevice d, const VkSwapchainCreateInfoKHR* ci, const VkAllocationCallbacks* a,
                          VkSwapchainKHR* out, VkResult* r) {
-  if (g_dd && d == g_dd->device) sl_device_ready(g_dd);
+  if (g_dd && d == g_dd->device) sl_device_ready(g_dd, true);
   if (g_active && g_dd && d == g_dd->device) register_surface(g_dd->inst->instance, ci->surface);
   if (!g_active || !g_dd || d != g_dd->device) return false;
   InSl guard;
@@ -1243,32 +1363,50 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
         log("[sl] camera uniforms not readable (%s)", err.c_str());
       }
     }
-  } else if (p.first_fs_hash == kCompositeFs) {
-    // UI composite: set 1 binding 1 = tonemapped scene (hudless), binding 2 = UI with alpha
+  } else if (p.color_count >= 1 && p.color_images[0]) {
+    // UI composite: the pass that draws into a swapchain image and samples two
+    // output-sized images, the scene (hudless) and the UI with alpha (RGBA8).
+    // HDR10 output uses fs 046c6949 with set 1 bindings 1 and 2; SDR output
+    // uses a different shader, so the images are classified, not the shader.
+    bool to_swapchain = false;
+    {
+      std::shared_lock<std::shared_mutex> lock(tracker().mu);
+      auto it = tracker().images.find(p.color_images[0]);
+      to_swapchain = it != tracker().images.end() && it->second.swapchain;
+    }
+    if (!to_swapchain) return;
     VkDescriptorSet ds = s->sets[0][1];
+    VkImage i_h = VK_NULL_HANDLE, i_u = VK_NULL_HANDLE;
     VkImageView v_h = VK_NULL_HANDLE, v_u = VK_NULL_HANDLE;
     {
       std::shared_lock<std::shared_mutex> lock(tracker().mu);
       auto si = tracker().sets.find(ds);
       if (si != tracker().sets.end()) {
-        auto h = si->second.find(desc_key(1, 0));
-        auto u = si->second.find(desc_key(2, 0));
-        if (h != si->second.end()) v_h = h->second.view;
-        if (u != si->second.end()) v_u = u->second.view;
+        for (auto& [key, e] : si->second) {
+          if (!e.view) continue;
+          auto vi = tracker().views.find(e.view);
+          if (vi == tracker().views.end()) continue;
+          auto ii = tracker().images.find(vi->second.image);
+          if (ii == tracker().images.end()) continue;
+          const auto& ci = ii->second.ci;
+          if (ci.extent.width != p.width || ci.extent.height != p.height) continue;
+          bool rgba8 = ci.format == VK_FORMAT_R8G8B8A8_UNORM || ci.format == VK_FORMAT_B8G8R8A8_UNORM ||
+                       ci.format == VK_FORMAT_R8G8B8A8_SRGB || ci.format == VK_FORMAT_B8G8R8A8_SRGB;
+          if (rgba8 && !i_u) {
+            i_u = vi->second.image;
+            v_u = e.view;
+          } else if (!rgba8 && !i_h) {
+            i_h = vi->second.image;
+            v_h = e.view;
+          }
+        }
       }
-    }
-    VkImage i_h = VK_NULL_HANDLE, i_u = VK_NULL_HANDLE;
-    {
-      std::shared_lock<std::shared_mutex> lock(tracker().mu);
-      auto a = tracker().views.find(v_h);
-      auto b = tracker().views.find(v_u);
-      if (a != tracker().views.end()) i_h = a->second.image;
-      if (b != tracker().views.end()) i_u = b->second.image;
     }
     std::lock_guard<std::mutex> lock(g_mu);
     if (i_h && i_h != g_hudless.image)
-      log("[sl] hudless = image %p (composite set 1 binding 1)", (void*)i_h);
-    if (i_u && i_u != g_ui.image) log("[sl] UI color+alpha = image %p (composite set 1 binding 2)", (void*)i_u);
+      log("[sl] hudless = image %p (composite fs %016llx)", (void*)i_h, (unsigned long long)p.first_fs_hash);
+    if (i_u && i_u != g_ui.image)
+      log("[sl] UI color+alpha = image %p (composite fs %016llx)", (void*)i_u, (unsigned long long)p.first_fs_hash);
     if (i_h) fill_img(g_hudless, i_h, v_h);
     if (i_u) fill_img(g_ui, i_u, v_u);
     set_watch();
@@ -1281,7 +1419,8 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s) {
   const Bg3PassInfo& p = s->pass;
   if (p.first_fs_hash == kVelocityFs && p.color_count >= 1 && p.depth_image) {
     std::lock_guard<std::mutex> lock(g_mu);
-    if (p.color_images[0] != g_mvec.image)
+    static int logged = 0;   // the game rotates several motion-vector images
+    if (p.color_images[0] != g_mvec.image && logged++ < 6)
       log("[sl] motion vectors = image %p fmt %d, depth = image %p fmt %d (%ux%u velocity pass)",
           (void*)p.color_images[0], p.color_formats[0], (void*)p.depth_image, p.depth_format, p.width, p.height);
     fill_img(g_mvec, p.color_images[0], p.color_views[0]);
@@ -1318,11 +1457,26 @@ void sl_note_submit(const std::vector<VkCommandBuffer>& cmds) {
 
 void sl_note_image_destroyed(VkImage image) {
   if (!g_active || !sl_watched(image)) return;
+  bool current = false;
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui}) current |= i->image == image;
+  }
+  if (current) {
+    g_last_tag_destroy = frame_index();
+    // Streamline does not keep tagged Vulkan images alive: let its queued
+    // frame-generation work finish before the game's image goes away.
+    if (g_fg_running && g_dd && !t_in_sl) {
+      g_dd->vk.DeviceWaitIdle(g_dd->device);
+      log("[sl] tagged image %p destroyed while frame generation runs: waited for the GPU", (void*)image);
+    }
+  }
   std::lock_guard<std::mutex> lock(g_mu);
   for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui})
     if (i->image == image) *i = Img{};
   g_layout.erase(image);
-  set_watch();
+  for (auto& w : g_watch)
+    if (w.load() == image) w = VK_NULL_HANDLE;
   log("[sl] a tagged image was destroyed; waiting for the passes to show it again");
 }
 
@@ -1340,18 +1494,31 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
 
   bool ready = false;
   if (g_token) {
-    std::lock_guard<std::mutex> lock(g_mu);
-    // everything identified within the last couple of frames (menus have no velocity pass)
-    ready = g_depth.image && g_mvec.image && g_hudless.image && g_ui.image && frame <= g_mvec.seen + 3 &&
-            frame <= g_ui.seen + 3;
+    // Snapshot under the lock; Streamline is called without it (it may wait on
+    // GPU work that the game's recording threads, which take g_mu, still have to submit).
+    Img d, m, h, u;
+    VkImageView dview = VK_NULL_HANDLE;
+    VkImageLayout ld{}, lm{}, lh{}, lu{};
+    {
+      std::lock_guard<std::mutex> lock(g_mu);
+      // everything identified within the last couple of frames (menus have no velocity pass)
+      ready = g_depth.image && g_mvec.image && g_hudless.image && g_ui.image && frame <= g_mvec.seen + 3 &&
+              frame <= g_ui.seen + 3;      if (ready) {
+        ensure_depth_view();
+        d = g_depth, m = g_mvec, h = g_hudless, u = g_ui;
+        dview = g_depth_only_view;
+        ld = layout_of(d.image, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+        lm = layout_of(m.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        lh = layout_of(h.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        lu = layout_of(u.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      }
+    }
     if (ready) {
-      ensure_depth_view();
-      sl::Resource depth = make_res(g_depth, g_depth_only_view,
-                                    layout_of(g_depth.image, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL));
-      sl::Resource mvec = make_res(g_mvec, g_mvec.view, layout_of(g_mvec.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
-      sl::Resource hud = make_res(g_hudless, g_hudless.view,
-                                  layout_of(g_hudless.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
-      sl::Resource ui = make_res(g_ui, g_ui.view, layout_of(g_ui.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+      const Img &g_depth = d, &g_mvec = m, &g_hudless = h, &g_ui = u;
+      sl::Resource depth = make_res(g_depth, dview, ld);
+      sl::Resource mvec = make_res(g_mvec, g_mvec.view, lm);
+      sl::Resource hud = make_res(g_hudless, g_hudless.view, lh);
+      sl::Resource ui = make_res(g_ui, g_ui.view, lu);
       sl::Extent rx{0, 0, g_mvec.w, g_mvec.h};
       sl::Extent dx{0, 0, g_depth.w, g_depth.h};
       sl::Extent ox{0, 0, g_hudless.w, g_hudless.h};
@@ -1370,7 +1537,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
       fill_constants(c, g_mvec.w, g_mvec.h);
       sl::Result cr = g_sl.SetConstants(c, *g_token, 0);
       static uint32_t logged = 0;
-      if ((tr != sl::Result::eOk || cr != sl::Result::eOk || logged < 1) && logged < 20) {
+      if (((tr != sl::Result::eOk || cr != sl::Result::eOk) && logged < 20) || frame % 600 == 0) {
         ++logged;
         log("[sl] frame %u: tags %s, constants %s | layouts depth %d mvec %d hudless %d ui %d", uint32_t(*g_token),
             res_str(tr), res_str(cr), int(depth.state), int(mvec.state), int(hud.state), int(ui.state));
@@ -1382,7 +1549,13 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
   uint32_t flags = uint32_t(sl::DLSSGFlags::eRetainResourcesWhenOff);
   if (cfg_int("fg_only_interpolated", 0)) flags |= uint32_t(sl::DLSSGFlags::eShowOnlyInterpolatedFrame);
   if (cfg_int("fg_menu_detect", 1)) flags |= uint32_t(sl::DLSSGFlags::eEnableFullscreenMenuDetection);
-  int want = ready ? fg : 0;
+  // Frame generation only once the inputs have been stable for a while.
+  static uint64_t stable_from = 0;
+  uint64_t stable_n = uint64_t(cfg_int("fg_stable_frames", 30));
+  if (!ready || g_last_tag_destroy.load() + stable_n > frame) stable_from = 0;
+  else if (!stable_from) stable_from = frame;
+  bool stable = ready && stable_from && frame >= stable_from + stable_n;
+  int want = stable ? fg : 0;
   if (g_sl.DLSSGSetOptions && (want != g_fg_applied || flags != g_flags_applied)) {
     sl::DLSSGOptions o{};
     o.mode = want >= 2 ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
@@ -1395,6 +1568,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
         o.numFramesToGenerate, flags, res_str(r));
     g_fg_applied = want;
     g_flags_applied = flags;
+    g_fg_running = want >= 2;
   }
 
   if (g_token && g_sl.PCLSetMarker) {
