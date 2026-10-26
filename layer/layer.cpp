@@ -4,8 +4,11 @@
 #include <vector>
 #include "host.h"
 #include "assetdb.h"
+#include "hookguard.h"
 
+#include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <unordered_set>
 
 namespace bg3 {
@@ -24,6 +27,9 @@ static std::atomic<uint64_t> g_frame{0};
 static bool g_core_started = false;
 
 static void* dkey(const void* handle) { return *static_cast<void* const*>(handle); }
+
+static void guard_init();
+static void guard_check(const char* where, bool safe);
 
 DeviceData* main_device() { return g_main; }
 uint64_t frame_index() { return g_frame.load(); }
@@ -47,6 +53,7 @@ DeviceData* device_of(const void* handle) {
 static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* ci, const VkAllocationCallbacks* alloc,
                                                      VkInstance* out) {
   cfg_poll();  // settings that matter before the first present (dump_shaders)
+  guard_init();  // before vkCreateDevice, after which the Script Extender patches our entry points
   ngx_init();  // BG3 loads _nvngx.dll after device creation; hook it as it maps
   auto* link = static_cast<VkLayerInstanceCreateInfo*>(const_cast<void*>(ci->pNext));
   while (link && !(link->sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO && link->function == VK_LAYER_LINK_INFO))
@@ -270,6 +277,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
 static VKAPI_ATTR void VKAPI_CALL GetDeviceQueue(VkDevice device, uint32_t family, uint32_t index, VkQueue* out) {
   DeviceData* dd = device_of(device);
   dd->vk.GetDeviceQueue(device, family, index, out);
+  guard_check("vkGetDeviceQueue", frame_index() == 0);   // no present can be running yet
   sl_device_ready(dd);
   if (family == dd->graphics_family && index == 0 && !dd->graphics_queue) dd->graphics_queue = *out;
 }
@@ -277,6 +285,7 @@ static VKAPI_ATTR void VKAPI_CALL GetDeviceQueue(VkDevice device, uint32_t famil
 static VKAPI_ATTR void VKAPI_CALL GetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2* info, VkQueue* out) {
   DeviceData* dd = device_of(device);
   dd->vk.GetDeviceQueue2(device, info, out);
+  guard_check("vkGetDeviceQueue2", frame_index() == 0);
   sl_device_ready(dd);
   if (info->queueFamilyIndex == dd->graphics_family && info->queueIndex == 0 && !dd->graphics_queue)
     dd->graphics_queue = *out;
@@ -380,6 +389,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
 static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
   DeviceData* dd = device_of(queue);
   uint64_t frame = ++g_frame;
+  if (frame <= 4 || (frame & 63) == 0) guard_check("vkQueuePresentKHR", true);   // on the presenting thread
   diag(DIAG_PRESENT);
   static int presents_logged = 0;
   if (frame > 600 && presents_logged < cfg_int("log_presents", 0)) {
@@ -480,6 +490,73 @@ static const HookMap& hooks() {
     return h;
   }();
   return m;
+}
+
+// ---- inline patches on our own entry points (hookguard.h) ----
+// The loader hands the application *our* functions for vkQueuePresentKHR and
+// the swapchain calls. The BG3 Script Extender Detours-patches exactly those
+// right after vkCreateDevice (bg3se IMGUI/Vulkan.inl, vkCreateDeviceHooked),
+// so its ImGui present hook runs in front of this layer and of Streamline's
+// DLSS-G swapchain: ImGui set up on Streamline's back buffers and queue 0, a
+// lock per present and, once a mod draws ImGui, a queue-0 submit that replaces
+// the present's wait semaphore. With it installed DLSS-G showed no generated
+// frames (docs/TRACK_B_FG.md, "Script Extender").
+// se_unhook: 0 log only; 1 (default) put our original bytes back when the
+// patch leads into the Script Extender (its overlay is then never set up,
+// everything else in it keeps working); 2 also for any other module.
+// Bytes are written back only where no thread can be running them: before the
+// first present, or on the presenting thread itself.
+static const char* const kGuarded[] = {"vkQueuePresentKHR", "vkCreateSwapchainKHR", "vkDestroySwapchainKHR"};
+static std::mutex g_guard_mu;
+static guard::Entry g_guard[std::size(kGuarded)];
+static const void* g_guard_logged[std::size(kGuarded)] = {};
+static bool g_guard_ready = false;
+
+static bool script_extender_loaded() {
+  wchar_t name[64];
+  swprintf_s(name, L"BG3SE_Ext_%lu", GetCurrentProcessId());   // created by the extender (Shared/dllmain.cpp)
+  HANDLE m = OpenMutexW(SYNCHRONIZE, FALSE, name);
+  if (m) CloseHandle(m);
+  return m != nullptr || GetModuleHandleW(L"BG3ScriptExtender.dll") != nullptr;
+}
+
+static void guard_init() {
+  std::lock_guard<std::mutex> lock(g_guard_mu);
+  if (g_guard_ready) return;
+  g_guard_ready = true;
+  for (size_t i = 0; i < std::size(kGuarded); ++i) {
+    auto it = hooks().find(kGuarded[i]);
+    if (it == hooks().end() || !guard::snapshot(g_guard[i], kGuarded[i], reinterpret_cast<const void*>(it->second)))
+      log("[compat] cannot snapshot %s", kGuarded[i]);
+  }
+  log("[compat] entry-point guard armed (%zu functions, se_unhook=%d); BG3 Script Extender %s", std::size(kGuarded),
+      cfg_int("se_unhook", 1), script_extender_loaded() ? "LOADED" : "not loaded");
+}
+
+static void guard_check(const char* where, bool safe) {
+  std::lock_guard<std::mutex> lock(g_guard_mu);
+  if (!g_guard_ready) return;
+  int mode = cfg_int("se_unhook", 1);
+  for (size_t i = 0; i < std::size(kGuarded); ++i) {
+    guard::Patch p = guard::inspect(g_guard[i]);
+    if (!p.patched) continue;
+    bool se = guard::module_matches(p.module, L"ScriptExtender");
+    bool want = mode >= 2 || (mode == 1 && se);
+    if (g_guard_logged[i] != p.first) {
+      g_guard_logged[i] = p.first;
+      log("[compat] %s: our entry point is inline-patched (%zu bytes changed), jump %p -> detour %p in %ls%s; seen in %s",
+          kGuarded[i], p.changed, p.first, p.final, p.module.empty() ? L"(no module)" : p.module.c_str(),
+          se ? " (BG3 Script Extender)" : "", where);
+      if (!want) log("[compat] %s: left patched (se_unhook=%d)", kGuarded[i], mode);
+      else if (!safe) log("[compat] %s: restoring at the next present", kGuarded[i]);
+    }
+    if (want && safe) {
+      bool ok = guard::restore(g_guard[i], p);
+      g_guard_logged[i] = nullptr;
+      log("[compat] %s: original bytes %s; the %ls hook is bypassed", kGuarded[i], ok ? "restored" : "NOT restored",
+          p.module.empty() ? L"foreign" : p.module.c_str());
+    }
+  }
 }
 
 }  // namespace bg3

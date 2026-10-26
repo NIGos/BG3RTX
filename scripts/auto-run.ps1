@@ -37,6 +37,8 @@ param(
   [string]$UserIni = ""
 )
 $ErrorActionPreference = "Stop"
+# "powershell -File" passes "-Set a=1,b=2" as one string: split it.
+$Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $root = Split-Path $PSScriptRoot
 $caps = Join-Path $root "captures"
 New-Item -ItemType Directory -Force $caps | Out-Null
