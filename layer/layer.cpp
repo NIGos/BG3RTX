@@ -1,5 +1,7 @@
 // Vulkan layer entry points: loader negotiation, instance/device creation,
 // dispatch, and the frame boundary (submit/present).
+#include <algorithm>
+#include <vector>
 #include "host.h"
 
 #include <cstring>
@@ -388,6 +390,26 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
   }
   cfg_poll();
   if (dd == g_main) {
+    // Rendered-frame pacing (the game's own presents, before frame generation):
+    // median and 99th-percentile frame time and the 1% low, every 600 frames.
+    static LARGE_INTEGER freq{}, last{};
+    static std::vector<float> ft;
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
+    if (last.QuadPart) ft.push_back(float(double(now.QuadPart - last.QuadPart) * 1000.0 / double(freq.QuadPart)));
+    last = now;
+    if (ft.size() >= 600) {
+      std::vector<float> s = ft;
+      std::sort(s.begin(), s.end());
+      float med = s[s.size() / 2], p99 = s[s.size() * 99 / 100];
+      double worst = 0;
+      for (size_t i = s.size() * 99 / 100; i < s.size(); ++i) worst += s[i];
+      worst /= double(s.size() - s.size() * 99 / 100);
+      log("[pace] rendered frame time over 600 frames: median %.2f ms (%.1f fps), p99 %.2f ms, 1%% low %.1f fps, max %.2f ms",
+          med, 1000.0 / med, p99, 1000.0 / worst, s.back());
+      ft.clear();
+    }
     if (!g_core_started) {
       g_core_started = true;
       if (!dd->graphics_queue) dd->graphics_queue = queue;
