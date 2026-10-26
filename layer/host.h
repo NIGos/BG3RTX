@@ -48,6 +48,9 @@ struct InstanceData {
   PFN_vkGetPhysicalDeviceProperties GetPhysicalDeviceProperties = nullptr;
   PFN_vkEnumerateDeviceExtensionProperties EnumerateDeviceExtensionProperties = nullptr;
   PFN_vkGetPhysicalDeviceMemoryProperties GetPhysicalDeviceMemoryProperties = nullptr;
+  PFN_vkGetPhysicalDeviceFeatures2 GetPhysicalDeviceFeatures2 = nullptr;
+  PFN_vkCreateWin32SurfaceKHR CreateWin32SurfaceKHR = nullptr;
+  PFN_vkDestroySurfaceKHR DestroySurfaceKHR = nullptr;
 };
 
 struct DeviceData {
@@ -59,11 +62,15 @@ struct DeviceData {
   uint32_t graphics_family = UINT32_MAX;
   VkQueue graphics_queue = VK_NULL_HANDLE;
   std::vector<std::string> extensions;
+  // Loader callback for dispatchable objects created below the loader's
+  // trampolines (Streamline's command buffers and queues).
+  PFN_vkSetDeviceLoaderData set_loader_data = nullptr;
 };
 
 void headless_on_swapchain();
 DeviceData* main_device();             // the first device created; BG3 makes one
 DeviceData* device_of(const void* dispatchable);   // device, queue or command buffer
+InstanceData* instance_data(const void* dispatchable);   // instance or physical device
 
 // ---- object tracking (tracker.cpp) ----
 struct ImageRec {
@@ -116,6 +123,9 @@ struct Tracker {
   std::unordered_map<VkDescriptorSetLayout, std::vector<std::pair<uint32_t, uint32_t>>> layout_dynamic;
   std::unordered_map<VkDescriptorSet, VkDescriptorSetLayout> set_layouts;
   std::unordered_map<VkDescriptorUpdateTemplate, std::vector<VkDescriptorUpdateTemplateEntry>> templates;
+  // Host-visible memory, so uniform buffer contents can be read on the CPU.
+  std::unordered_map<VkBuffer, std::pair<VkDeviceMemory, VkDeviceSize>> buffer_mem;
+  std::unordered_map<VkDeviceMemory, uint8_t*> mapped;   // base of the mapping (offset 0)
   std::atomic<uint32_t> next_image_id{1}, next_pipeline_id{1};
 };
 Tracker& tracker();
@@ -152,11 +162,17 @@ struct CmdState {
     std::vector<uint32_t> dyn;
   };
   std::vector<BindCall> calls[2];
+  // Streamline bookkeeping: layouts the watched images end this buffer in, and
+  // the camera constants read at the velocity pass (applied at submit).
+  std::vector<std::pair<VkImage, VkImageLayout>> sl_layouts;
+  bool sl_cam_valid = false;
+  uint8_t sl_cam[2][256] = {};
   std::vector<DescEntry> push[2];
   uint32_t push_set[2] = {UINT32_MAX, UINT32_MAX};
   uint32_t dispatches_since_pass = 0, indirect_since_pass = 0;
   uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
+  bool game_alloc = false;             // allocated through this layer (not by Streamline below it)
   std::vector<std::string> events;     // pre-rendered JSON objects, one per event
   // segment aggregation for the trace
   std::string seg_key;
@@ -187,11 +203,44 @@ std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s);
 void count_pass();
 // Diagnostic counters, logged with the periodic [auto] line.
 enum DiagCounter { DIAG_PRESENT, DIAG_PIPELINES, DIAG_PIPELINE_US, DIAG_DESC_WRITES, DIAG_SHADER_MODULES, DIAG_SUBMIT, DIAG_BEGIN_CMD, DIAG_BEGIN_PASS, DIAG_BEGIN_RENDERING, DIAG_BIND_PIPE, DIAG_DRAW,
-                   DIAG_DISPATCH, DIAG_EXEC, DIAG_COUNT };
+                   DIAG_DISPATCH, DIAG_EXEC, DIAG_DISPLAYED, DIAG_COUNT };
 void diag(DiagCounter c, uint64_t n = 1);
 void watchdog_start();                     // passes per frame feed the auto trigger
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
 void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue);
+bool write_png_rgb(const std::string& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb);
+
+// ---- Streamline DLSS-G (streamline.cpp) ----
+// Instance/device creation: merge Streamline's requirements into the game's.
+struct SlDeviceScratch;               // storage for the patched VkDeviceCreateInfo
+void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out);
+void sl_instance_post(VkInstance instance, VkResult r);
+SlDeviceScratch* sl_device_pre(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* in,
+                               VkDeviceCreateInfo& out);
+void sl_device_post(SlDeviceScratch* s, DeviceData* dd, VkResult r);
+void sl_device_destroy(DeviceData* dd);
+void sl_device_ready(DeviceData* dd, bool at_swapchain = false);   // a game call on the finished device
+// Swapchain/present entry points Streamline hooks. Each returns false when
+// Streamline is not active, and the caller goes straight to the next layer.
+bool sl_create_swapchain(VkDevice d, const VkSwapchainCreateInfoKHR* ci, const VkAllocationCallbacks* a,
+                         VkSwapchainKHR* out, VkResult* r);
+bool sl_destroy_swapchain(VkDevice d, VkSwapchainKHR sc, const VkAllocationCallbacks* a);
+bool sl_get_swapchain_images(VkDevice d, VkSwapchainKHR sc, uint32_t* n, VkImage* imgs, VkResult* r);
+bool sl_acquire(VkDevice d, VkSwapchainKHR sc, uint64_t timeout, VkSemaphore s, VkFence f, uint32_t* idx,
+                VkResult* r);
+bool sl_device_wait_idle(VkDevice d, VkResult* r);
+bool sl_create_surface(VkInstance i, const VkWin32SurfaceCreateInfoKHR* ci, const VkAllocationCallbacks* a,
+                       VkSurfaceKHR* out, VkResult* r);
+bool sl_destroy_surface(VkInstance i, VkSurfaceKHR s, const VkAllocationCallbacks* a);
+void sl_note_surface(VkSurfaceKHR surface, HWND hwnd);   // hwnd null: destroyed
+VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info);
+// Observers fed by the command buffer hooks.
+void sl_note_draw(VkCommandBuffer cmd, CmdState* s);           // first draw of a pass
+void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s);
+void sl_note_barrier(CmdState* s, VkImage image, VkImageLayout layout);
+void sl_note_submit(const std::vector<VkCommandBuffer>& cmds);
+void sl_note_image_destroyed(VkImage image);
+bool sl_watched(VkImage image);
 
 // ---- hot reload + shader compiler (hotreload.cpp, shaders.cpp) ----
 void core_init(DeviceData* dd);

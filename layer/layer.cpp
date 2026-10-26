@@ -30,6 +30,8 @@ static InstanceData* instance_of(const void* handle) {
   return it == g_instances.end() ? nullptr : it->second;
 }
 
+InstanceData* instance_data(const void* handle) { return instance_of(handle); }
+
 DeviceData* device_of(const void* handle) {
   std::shared_lock<std::shared_mutex> lock(g_mu);
   auto it = g_devices.find(dkey(handle));
@@ -50,8 +52,15 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
   PFN_vkGetInstanceProcAddr next = link->u.pLayerInfo->pfnNextGetInstanceProcAddr;
   link->u.pLayerInfo = link->u.pLayerInfo->pNext;
   auto create = reinterpret_cast<PFN_vkCreateInstance>(next(VK_NULL_HANDLE, "vkCreateInstance"));
-  VkResult r = create(ci, alloc, out);
-  if (r != VK_SUCCESS) return r;
+  // Streamline (fg>=2) is initialised here, before the game's instance exists,
+  // and adds its instance extensions.
+  VkInstanceCreateInfo patched;
+  sl_instance_pre(ci, patched);
+  VkResult r = create(&patched, alloc, out);
+  if (r != VK_SUCCESS) {
+    sl_instance_post(VK_NULL_HANDLE, r);
+    return r;
+  }
 
   auto* id = new InstanceData;
   id->instance = *out;
@@ -62,11 +71,17 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
   LOADI(GetPhysicalDeviceProperties);
   LOADI(EnumerateDeviceExtensionProperties);
   LOADI(GetPhysicalDeviceMemoryProperties);
+  LOADI(GetPhysicalDeviceFeatures2);
+  if (!id->GetPhysicalDeviceFeatures2)
+    id->GetPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(next(*out, "vkGetPhysicalDeviceFeatures2KHR"));
+  LOADI(CreateWin32SurfaceKHR);
+  LOADI(DestroySurfaceKHR);
 #undef LOADI
   {
     std::unique_lock<std::shared_mutex> lock(g_mu);
     g_instances[dkey(*out)] = id;
   }
+  sl_instance_post(*out, VK_SUCCESS);
   const VkApplicationInfo* app = ci->pApplicationInfo;
   log("[layer] instance created: app '%s' engine '%s' api %u.%u, %u extensions",
       app && app->pApplicationName ? app->pApplicationName : "?", app && app->pEngineName ? app->pEngineName : "?",
@@ -84,6 +99,21 @@ static VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkA
   delete id;
 }
 
+static VKAPI_ATTR VkResult VKAPI_CALL CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* ci,
+                                                            const VkAllocationCallbacks* alloc, VkSurfaceKHR* out) {
+  VkResult r;
+  if (sl_create_surface(instance, ci, alloc, out, &r)) return r;
+  r = instance_of(instance)->CreateWin32SurfaceKHR(instance, ci, alloc, out);
+  if (r == VK_SUCCESS) sl_note_surface(*out, ci->hwnd);
+  return r;
+}
+
+static VKAPI_ATTR void VKAPI_CALL DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
+                                                    const VkAllocationCallbacks* alloc) {
+  sl_note_surface(surface, nullptr);
+  instance_of(instance)->DestroySurfaceKHR(instance, surface, alloc);
+}
+
 // ---- device ----
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
@@ -94,31 +124,44 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     link = static_cast<VkLayerDeviceCreateInfo*>(const_cast<void*>(link->pNext));
   if (!link) return VK_ERROR_INITIALIZATION_FAILED;
 
+  PFN_vkSetDeviceLoaderData set_loader_data = nullptr;
+  for (auto p = static_cast<const VkLayerDeviceCreateInfo*>(ci->pNext); p; p = static_cast<const VkLayerDeviceCreateInfo*>(p->pNext))
+    if (p->sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO && p->function == VK_LOADER_DATA_CALLBACK)
+      set_loader_data = p->u.pfnSetDeviceLoaderData;
+
   InstanceData* id = instance_of(phys);
   PFN_vkGetInstanceProcAddr gipa = link->u.pLayerInfo->pfnNextGetInstanceProcAddr;
   PFN_vkGetDeviceProcAddr gdpa = link->u.pLayerInfo->pfnNextGetDeviceProcAddr;
   link->u.pLayerInfo = link->u.pLayerInfo->pNext;
 
-  // Future: Streamline's DLSS-G device requirements (extensions, extra queues)
-  // get merged into a copy of `ci` here.
-  // Track D: VK_EXT_transform_feedback for the geometry capture (geo_capture=1).
+  // Device-creation patches, chained: Track D's transform feedback first
+  // (geo_capture=1), then Streamline's DLSS-G requirements (extensions,
+  // features, extra queues including a dedicated optical-flow family).
   VkDeviceCreateInfo geo_ci;
   const VkDeviceCreateInfo* use_ci = geo_device_create_info(id, phys, ci, &geo_ci);
+  VkDeviceCreateInfo patched;
+  SlDeviceScratch* sl_scratch = sl_device_pre(id, phys, use_ci, patched);
   auto create = reinterpret_cast<PFN_vkCreateDevice>(gipa(id ? id->instance : VK_NULL_HANDLE, "vkCreateDevice"));
-  VkResult r = create(phys, use_ci, alloc, out);
+  VkResult r = create(phys, &patched, alloc, out);
   if (r != VK_SUCCESS && use_ci != ci) {
     log("[layer] device creation with the geometry capture extensions failed (%d); retrying without", r);
+    sl_device_post(sl_scratch, nullptr, r);
     use_ci = ci;
-    r = create(phys, ci, alloc, out);
+    sl_scratch = sl_device_pre(id, phys, use_ci, patched);
+    r = create(phys, &patched, alloc, out);
   }
-  if (r != VK_SUCCESS) return r;
-  ci = use_ci;
+  if (r != VK_SUCCESS) {
+    sl_device_post(sl_scratch, nullptr, r);
+    return r;
+  }
+  ci = &patched;
 
   auto* dd = new DeviceData;
   dd->device = *out;
   dd->physical = phys;
   dd->inst = id;
   dd->gdpa = gdpa;
+  dd->set_loader_data = set_loader_data;
 #define LOADD(n)                                                                             \
   dd->vk.n = reinterpret_cast<PFN_vk##n>(gdpa(*out, "vk" #n));                              \
   if (!dd->vk.n) dd->vk.n = reinterpret_cast<PFN_vk##n>(gdpa(*out, "vk" #n "KHR"));
@@ -162,6 +205,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     if (!g_main) g_main = dd;
   }
   if (dd == g_main) geo_device_created(dd, use_ci != ci_orig);
+  sl_device_post(sl_scratch, dd, VK_SUCCESS);
   watchdog_start();
   return VK_SUCCESS;
 }
@@ -169,6 +213,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
 static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCallbacks* alloc) {
   DeviceData* dd = device_of(device);
   if (!dd) return;
+  sl_device_destroy(dd);
   if (dd == g_main) {
     core_shutdown();
     geo_device_destroyed(dd);
@@ -185,12 +230,14 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
 static VKAPI_ATTR void VKAPI_CALL GetDeviceQueue(VkDevice device, uint32_t family, uint32_t index, VkQueue* out) {
   DeviceData* dd = device_of(device);
   dd->vk.GetDeviceQueue(device, family, index, out);
+  sl_device_ready(dd);
   if (family == dd->graphics_family && index == 0 && !dd->graphics_queue) dd->graphics_queue = *out;
 }
 
 static VKAPI_ATTR void VKAPI_CALL GetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2* info, VkQueue* out) {
   DeviceData* dd = device_of(device);
   dd->vk.GetDeviceQueue2(device, info, out);
+  sl_device_ready(dd);
   if (info->queueFamilyIndex == dd->graphics_family && info->queueIndex == 0 && !dd->graphics_queue)
     dd->graphics_queue = *out;
 }
@@ -215,6 +262,11 @@ static std::unique_lock<std::mutex> queue_lock() {
 
 void headless_on_swapchain() {
   bool on = cfg_int("headless", 0) != 0;
+  // Streamline owns the swapchain and presentation with frame generation on.
+  if (on && cfg_int("fg", 0) >= 2) {
+    log("[layer] headless ignored: frame generation (fg>=2) needs real presentation");
+    on = false;
+  }
   if (on != g_headless.exchange(on)) log("[layer] headless presentation %s", on ? "ON" : "off");
 }
 
@@ -236,12 +288,17 @@ static VkResult fake_acquire(VkDevice device, VkSwapchainKHR sc, VkSemaphore sem
 static VKAPI_ATTR VkResult VKAPI_CALL AcquireNextImageKHR(VkDevice device, VkSwapchainKHR sc, uint64_t timeout,
                                                           VkSemaphore sem, VkFence fence, uint32_t* index) {
   if (g_headless) return fake_acquire(device, sc, sem, fence, index);
+  VkResult r;
+  if (sl_acquire(device, sc, timeout, sem, fence, index, &r)) return r;
   return device_of(device)->vk.AcquireNextImageKHR(device, sc, timeout, sem, fence, index);
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL AcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR* info,
                                                            uint32_t* index) {
   if (g_headless) return fake_acquire(device, info->swapchain, info->semaphore, info->fence, index);
+  // Streamline hooks only vkAcquireNextImageKHR.
+  VkResult r;
+  if (sl_acquire(device, info->swapchain, info->timeout, info->semaphore, info->fence, index, &r)) return r;
   return device_of(device)->vk.AcquireNextImage2KHR(device, info, index);
 }
 
@@ -255,18 +312,12 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
                                                   VkFence fence) {
   DeviceData* dd = device_of(queue);
   diag(DIAG_SUBMIT);
-  if (trace_recording()) {
-    std::vector<VkCommandBuffer> cmds;
-    for (uint32_t i = 0; i < count; ++i)
-      cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
-    trace_on_submit(cmds);
-  }
-  if (geo_submit_wanted()) {
-    std::vector<VkCommandBuffer> cmds;
-    for (uint32_t i = 0; i < count; ++i)
-      cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
-    geo_on_submit(cmds);
-  }
+  std::vector<VkCommandBuffer> cmds;
+  for (uint32_t i = 0; i < count; ++i)
+    cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
+  if (trace_recording()) trace_on_submit(cmds);
+  if (geo_submit_wanted()) geo_on_submit(cmds);
+  sl_note_submit(cmds);
   auto lock = queue_lock();
   return dd->vk.QueueSubmit(queue, count, submits, fence);
 }
@@ -275,20 +326,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
                                                    VkFence fence) {
   DeviceData* dd = device_of(queue);
   diag(DIAG_SUBMIT);
-  if (trace_recording()) {
-    std::vector<VkCommandBuffer> cmds;
-    for (uint32_t i = 0; i < count; ++i)
-      for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
-        cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
-    trace_on_submit(cmds);
-  }
-  if (geo_submit_wanted()) {
-    std::vector<VkCommandBuffer> cmds;
-    for (uint32_t i = 0; i < count; ++i)
-      for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
-        cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
-    geo_on_submit(cmds);
-  }
+  std::vector<VkCommandBuffer> cmds;
+  for (uint32_t i = 0; i < count; ++i)
+    for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
+      cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
+  if (trace_recording()) trace_on_submit(cmds);
+  if (geo_submit_wanted()) geo_on_submit(cmds);
+  sl_note_submit(cmds);
   auto lock = queue_lock();
   return dd->vk.QueueSubmit2(queue, count, submits, fence);
 }
@@ -334,7 +378,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     return r;
   }
   auto lock = queue_lock();
-  return dd->vk.QueuePresentKHR(queue, info);
+  return sl_present(dd, queue, info);   // through Streamline's proxy when DLSS-G is set up
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL DeviceWaitIdle(VkDevice device) {
+  VkResult r;
+  if (sl_device_wait_idle(device, &r)) return r;
+  return device_of(device)->vk.DeviceWaitIdle(device);
 }
 
 static void register_device_hooks(HookMap& m) {
@@ -348,6 +398,9 @@ static void register_device_hooks(HookMap& m) {
   add("QueueSubmit", reinterpret_cast<PFN_vkVoidFunction>(&QueueSubmit));
   add("QueueSubmit2", reinterpret_cast<PFN_vkVoidFunction>(&QueueSubmit2));
   m["vkQueuePresentKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&QueuePresentKHR);
+  m["vkDeviceWaitIdle"] = reinterpret_cast<PFN_vkVoidFunction>(&DeviceWaitIdle);
+  m["vkCreateWin32SurfaceKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&CreateWin32SurfaceKHR);
+  m["vkDestroySurfaceKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&DestroySurfaceKHR);
   m["vkAcquireNextImageKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&AcquireNextImageKHR);
   m["vkAcquireNextImage2KHR"] = reinterpret_cast<PFN_vkVoidFunction>(&AcquireNextImage2KHR);
   m["vkWaitForPresentKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&WaitForPresentKHR);

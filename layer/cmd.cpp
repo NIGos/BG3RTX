@@ -2,6 +2,8 @@
 // pipeline/descriptor binding state, and draw/dispatch notes for the tracer.
 #include "host.h"
 
+#include <cstring>
+
 namespace bg3 {
 
 using HookMap = std::unordered_map<std::string, PFN_vkVoidFunction>;
@@ -132,6 +134,7 @@ static void end_pass(VkCommandBuffer cmd) {
     trace_event(s, "{\"op\":\"end\",\"draws\":" + std::to_string(s->pass.draw_count) + ",\"dumps\":[" + dumps + "]}");
   }
   ngx_note_pass(cmd, s->pass, s->color_layouts, s->depth_layout);
+  sl_note_pass_end(cmd, s);
   core_on_pass_end(cmd, &s->pass);
 }
 
@@ -143,6 +146,7 @@ static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra =
     if (!s->pass.draw_count++) {
       s->pass.first_vs_hash = s->vs;
       s->pass.first_fs_hash = s->fs;
+      sl_note_draw(cmd, s);
     }
     s->pass.last_fs_hash = s->fs;
   }
@@ -233,7 +237,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateCommandBuffers(VkDevice device, co
                                                              VkCommandBuffer* out) {
   VkResult r = device_of(device)->vk.AllocateCommandBuffers(device, ai, out);
   if (r == VK_SUCCESS)
-    for (uint32_t i = 0; i < ai->commandBufferCount; ++i) cmd_state(out[i], true);
+    for (uint32_t i = 0; i < ai->commandBufferCount; ++i) cmd_state(out[i], true)->game_alloc = true;
   return r;
 }
 
@@ -272,6 +276,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->geo = nullptr;
   s->geo_ts = -1;
   s->has_viewport = false;
+  s->sl_layouts.clear();
+  s->sl_cam_valid = false;
   return r;
 }
 
@@ -378,6 +384,66 @@ static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(VkCommandBuffer cmd, VkP
   if (calls.size() >= 32) calls.erase(calls.begin());
   calls.push_back({layout, first, std::vector<VkDescriptorSet>(sets, sets + count),
                    std::vector<uint32_t>(dyn, dyn + dyn_count)});
+}
+
+// Barriers recorded into command buffers the game did not allocate (Streamline
+// and NGX ones), logged with sl_log_barriers=N for the first N barriers.
+static void log_foreign_barrier(VkCommandBuffer cmd, const char* kind, VkImage img, VkImageLayout from, VkImageLayout to,
+                                uint32_t aspect, uint32_t qsrc, uint32_t qdst, uint32_t mips, uint32_t layers) {
+  static std::atomic<int> n{0};
+  if (n >= cfg_int("sl_log_barriers", 0)) return;
+  CmdState* s = cmd_state(cmd);
+  if (s && s->game_alloc) return;
+  ++n;
+  bool tracked = false;
+  VkFormat fmt = VK_FORMAT_UNDEFINED;
+  {
+    std::shared_lock<std::shared_mutex> lock(tracker().mu);
+    auto it = tracker().images.find(img);
+    if (it != tracker().images.end()) {
+      tracked = true;
+      fmt = it->second.ci.format;
+    }
+  }
+  log("[barrier] %s cmd %p image %p (%s fmt %d, tag %d) %d -> %d aspect 0x%x queues %u -> %u mips %u layers %u", kind,
+      (void*)cmd, (void*)img, tracked ? "tracked" : "untracked", fmt, sl_watched(img), from, to, aspect, qsrc, qdst, mips,
+      layers);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdPipelineBarrier(VkCommandBuffer cmd, VkPipelineStageFlags src,
+                                                     VkPipelineStageFlags dst, VkDependencyFlags dep, uint32_t nm,
+                                                     const VkMemoryBarrier* mb, uint32_t nb,
+                                                     const VkBufferMemoryBarrier* bb, uint32_t ni,
+                                                     const VkImageMemoryBarrier* ib) {
+  for (uint32_t i = 0; i < ni; ++i)
+    log_foreign_barrier(cmd, "v1", ib[i].image, ib[i].oldLayout, ib[i].newLayout, ib[i].subresourceRange.aspectMask,
+                        ib[i].srcQueueFamilyIndex, ib[i].dstQueueFamilyIndex, ib[i].subresourceRange.levelCount,
+                        ib[i].subresourceRange.layerCount);
+  vk(cmd).CmdPipelineBarrier(cmd, src, dst, dep, nm, mb, nb, bb, ni, ib);
+  CmdState* s = nullptr;
+  for (uint32_t i = 0; i < ni; ++i)
+    if (sl_watched(ib[i].image)) {
+      if (!s) s = cmd_state(cmd, true);
+      sl_note_barrier(s, ib[i].image, ib[i].newLayout);
+    }
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdPipelineBarrier2(VkCommandBuffer cmd, const VkDependencyInfo* info) {
+  for (uint32_t i = 0; i < info->imageMemoryBarrierCount; ++i) {
+    const auto& b = info->pImageMemoryBarriers[i];
+    log_foreign_barrier(cmd, "v2", b.image, b.oldLayout, b.newLayout, b.subresourceRange.aspectMask,
+                        b.srcQueueFamilyIndex, b.dstQueueFamilyIndex, b.subresourceRange.levelCount,
+                        b.subresourceRange.layerCount);
+  }
+  vk(cmd).CmdPipelineBarrier2(cmd, info);
+  CmdState* s = nullptr;
+  for (uint32_t i = 0; i < info->imageMemoryBarrierCount; ++i) {
+    const auto& b = info->pImageMemoryBarriers[i];
+    if (sl_watched(b.image)) {
+      if (!s) s = cmd_state(cmd, true);
+      sl_note_barrier(s, b.image, b.newLayout);
+    }
+  }
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet(VkCommandBuffer cmd, VkPipelineBindPoint bp,
@@ -535,7 +601,18 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
   diag(DIAG_EXEC);
   vk(cmd).CmdExecuteCommands(cmd, n, cmds);
   CmdState* s = cmd_state(cmd);
-  if (!s || !s->tracing) return;
+  if (!s) return;
+  // Streamline bookkeeping recorded in secondaries counts when the primary is submitted.
+  for (uint32_t i = 0; i < n; ++i) {
+    CmdState* sec = cmd_state(cmds[i]);
+    if (!sec) continue;
+    for (auto& [img, lay] : sec->sl_layouts) sl_note_barrier(s, img, lay);
+    if (sec->sl_cam_valid) {
+      memcpy(s->sl_cam, sec->sl_cam, sizeof s->sl_cam);
+      s->sl_cam_valid = true;
+    }
+  }
+  if (!s->tracing) return;
   trace_flush_segment(s);
   // Secondaries are never submitted on their own, so their events are inlined
   // into the primary here, in execution order.
@@ -586,6 +663,8 @@ void register_cmd_hooks(HookMap& m) {
   HOOK(CmdClearColorImage);
   HOOK(CmdClearDepthStencilImage);
   HOOK(CmdExecuteCommands);
+  HOOK(CmdPipelineBarrier);
+  HOOK(CmdPipelineBarrier2);
 #undef HOOK
 }
 

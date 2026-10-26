@@ -5,4 +5,5 @@
 /trace.request
 __pycache__/
 /external/
+/sl_logs/
 /.claude/worktrees/

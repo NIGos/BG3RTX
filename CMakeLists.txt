@@ -34,6 +34,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/dump.cpp
   layer/ngx.cpp
   layer/geocapture.cpp
+  layer/streamline.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
 
@@ -50,6 +51,38 @@ if(NOT EXISTS "${BG3RTX_EXTERNAL}/DLSS/include/nvsdk_ngx_vk.h")
   endif()
 endif()
 target_include_directories(VkLayer_bg3rtx PRIVATE ${BG3RTX_EXTERNAL}/DLSS/include)
+
+# NVIDIA Streamline (DLSS-G): headers at build time, prebuilt signed binaries
+# copied next to the layer (bin/sl production, bin/sl_dev development).
+# external/ is not part of the repository; a worktree finds the main checkout's.
+set(BG3RTX_SL_SDK "" CACHE PATH "Streamline SDK release (with bin/x64 and include/)")
+if(NOT BG3RTX_SL_SDK)
+  foreach(c "${CMAKE_SOURCE_DIR}/external/streamline-sdk-v2.14.16"
+            "$ENV{BG3RTX_SL_SDK}"
+            "${CMAKE_SOURCE_DIR}/../../../external/streamline-sdk-v2.14.16")
+    if(c AND EXISTS "${c}/include/sl.h")
+      get_filename_component(BG3RTX_SL_SDK "${c}" ABSOLUTE)
+      break()
+    endif()
+  endforeach()
+endif()
+if(NOT BG3RTX_SL_SDK)
+  message(FATAL_ERROR "Streamline SDK not found: download streamline-sdk-v2.14.16.zip from github.com/NVIDIA-RTX/Streamline/releases into external/streamline-sdk-v2.14.16 or set BG3RTX_SL_SDK")
+endif()
+message(STATUS "Streamline SDK: ${BG3RTX_SL_SDK}")
+target_include_directories(VkLayer_bg3rtx PRIVATE ${BG3RTX_SL_SDK}/include)
+# nvngx_dlss(d) are there for the game: its DLSS SR shares Streamline's NGX
+# instance (fg_game_ngx=2), which looks for snippets in this folder.
+set(SL_DLLS sl.interposer.dll sl.common.dll sl.dlss_g.dll sl.reflex.dll sl.pcl.dll nvngx_dlssg.dll NvLowLatencyVk.dll
+    nvngx_dlss.dll nvngx_dlssd.dll)
+foreach(dll ${SL_DLLS})
+  add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${BG3RTX_BIN}/sl ${BG3RTX_BIN}/sl_dev
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BG3RTX_SL_SDK}/bin/x64/${dll} ${BG3RTX_BIN}/sl/${dll}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BG3RTX_SL_SDK}/bin/x64/development/${dll} ${BG3RTX_BIN}/sl_dev/${dll})
+endforeach()
+add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BG3RTX_SL_SDK}/bin/x64/development/WinPixEventRuntime.dll ${BG3RTX_BIN}/sl_dev/WinPixEventRuntime.dll)
 add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/layer/VkLayer_bg3rtx.json ${BG3RTX_BIN}/VkLayer_bg3rtx.json)
 

@@ -15,8 +15,9 @@ Built from automatic captures `captures/20261025-234821` and `-235042`: Steel Wa
 | 2 | Depth prepass | D24S8 (reversed-Z-ish range 0.0014–0.029) | |
 | 3 | **G-buffer** | 5 colour + depth, see below | 3D geometry, about 3000 draws |
 | 4 | Linear depth | R32F | range 0.0023–0.046 |
-| 5 | **Velocity** | RG16F, written in a pass that reads depth and G-buffer RT0 | pixels; static camera mean ≈ 0.5 |
+| 5 | RG16F copy of G-buffer RT0 | fs `f90209c7` copies RT0 (stereographic normals) for pixels flagged in RT2.a bit 3; in `-235042` its stats equal RT0's | Track B found this; cross-check which RG16F image DLSS SR actually receives (step 6b's MV image vs this one) with Track A's evaluate hook |
 | 6 | Decal / G-buffer second pass | the same 4 colour targets + depth | |
+| 6b | **Motion vectors** | RG16F + D24S8 (render res). First draw is a full-screen camera pass (fs `788dfdf60d8ed4cd`): world position from linear depth, projected with the previous view-projection; then dynamic objects. Values in pixels, current − previous, jitter removed | used by DLSS SR and DLSS-G (TRACK_B_FG.md) |
 | 7 | **Deferred lighting** (several passes, additive) | R11G11B10F HDR accumulation | max 2–6, mostly dark (point lights) |
 | 8 | Half-res AO / blur chain | R16F, RGBA16F 1280x534, R8 | |
 | 9 | SSR / AO composite | RGB10A2 ping-pong | |
@@ -83,7 +84,14 @@ The parameter block is shared between create and evaluate (as the dlss5-bridge f
 - **Frame generation (Track B).**
   - Hudless colour = the tonemapped image from step 16, and UI = the RGBA8 target from step 17. Both are inputs of the final composite pass.
   - Depth and MV as above.
-  - Camera matrices: the per-camera UBO. Foliage vertex shaders use `_19._m2` as view-projection, and `_19._m6` is a camera-relative translation.
+  - Camera matrices: the per-camera UBO, set 0 binding 2. Layout: std140, row-major, used as `v * M`:
+    - `m0`: world view;
+    - `m1`: jittered reversed-Z infinite projection (near 0.1, jitter in row 2);
+    - `m2`: camera-relative jittered view-projection;
+    - `m3`, `m4`: near and far (0.1, 40000);
+    - `m6`: camera world position.
+
+    Set 0 binding 5 holds the previous frame's values: `m2` is the previous view-projection, `m3` the previous camera position, and `m5`/`m6` the current and previous jitter in pixels. Both are read on the CPU by `layer/streamline.cpp`.
 - **GI (Track C).**
   - Inject between steps 7 and 13, after deferred lighting and before compose/fog/transparents.
   - Inputs: G-buffer albedo and normals, linear depth (R32F), and the lighting buffer.

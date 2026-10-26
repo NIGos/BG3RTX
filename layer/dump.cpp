@@ -317,6 +317,14 @@ bool write_png(const std::wstring& path, uint32_t w, uint32_t h, const std::vect
   return ok;
 }
 
+bool write_png_rgb(const std::string& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb) {
+  // COM may not be initialised on Streamline's present thread.
+  HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  bool ok = write_png(std::wstring(path.begin(), path.end()), w, h, rgb);
+  if (SUCCEEDED(hr)) CoUninitialize();
+  return ok;
+}
+
 static std::string format_name(VkFormat f) {
   switch (f) {
     case VK_FORMAT_R8_UNORM: return "R8";
