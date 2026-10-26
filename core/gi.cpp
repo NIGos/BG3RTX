@@ -154,7 +154,7 @@ uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0, g_shift = 1;
 // input RR is designed for. gi_rr: -1 follows rr, 0 off, 1 on.
 uint32_t gi_res_shift() {
   int m = host->cfg_int("gi_rr", -1);
-  bool rr = m < 0 ? host->cfg_int("rr", 1) != 0 : m != 0;
+  bool rr = m < 0 ? host->rr_active() : m != 0;
   return rr ? 0u : 1u;
 }
 bool g_images_ready = false, g_logged = false;
@@ -904,7 +904,7 @@ Push make_push() {
   pc.ls_debug = uint32_t(host->cfg_int("ls_debug", 0));
   pc.ls_stats = host->cfg_int("ls_stats", 0) ? 1u : 0u;
   int soft = host->cfg_int("ls_soft", -1);   // -1 follows rr
-  pc.ls_soft = (soft < 0 ? host->cfg_int("rr", 1) != 0 : soft != 0) ? 1u : 0u;
+  pc.ls_soft = (soft < 0 ? host->rr_active() : soft != 0) ? 1u : 0u;
   pc.ls_strength = host->cfg_float("ls_strength", 1.0f);
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;
   pc.mat_classes = host->cfg_int("mat_classes", 1) ? 1u : 0u;
@@ -913,7 +913,7 @@ Push make_push() {
   // D-RF. GGX samples only with RR (rf_rr=-1 follows rr): without a denoiser,
   // mirror rays for smooth surfaces only.
   int rf_rr = host->cfg_int("rf_rr", -1);
-  bool rf_noisy = rf_rr < 0 ? host->cfg_int("rr", 1) != 0 : rf_rr != 0;
+  bool rf_noisy = rf_rr < 0 ? host->rr_active() : rf_rr != 0;
   pc.rf_sample = rf_noisy ? 1u : 0u;
   pc.rf_max_rough = rf_noisy ? host->cfg_float("rf_max_rough", 0.6f) : host->cfg_float("rf_max_rough_norr", 0.3f);
   pc.rf_mirror_rough = host->cfg_float("rf_mirror_rough", 0.1f);
@@ -1029,7 +1029,7 @@ void rf_timing_collect() {
   auto& v = g_rf_ms;
   std::sort(v.begin(), v.end());
   int rf_rr = host->cfg_int("rf_rr", -1);
-  bool noisy = rf_rr < 0 ? host->cfg_int("rr", 1) != 0 : rf_rr != 0;
+  bool noisy = rf_rr < 0 ? host->rr_active() : rf_rr != 0;
   host->log("rf: reflection pass GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames; %s, max roughness %.2f, debug %d, "
             "validate %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], v.size(),

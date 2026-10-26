@@ -135,6 +135,7 @@ static void end_pass(VkCommandBuffer cmd) {
     trace_event(s, "{\"op\":\"end\",\"draws\":" + std::to_string(s->pass.draw_count) + ",\"dumps\":[" + dumps + "]}");
   }
   ngx_note_pass(cmd, s->pass, s->color_layouts, s->depth_layout);
+  rrpost_pass_end(cmd, s->pass, s->color_layouts);
   sl_note_pass_end(cmd, s);
   core_on_pass_end(cmd, &s->pass);
 }
@@ -277,6 +278,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   diag(DIAG_BEGIN_CMD);
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
   CmdState* s = cmd_state(cmd, true);
+  static std::atomic<uint64_t> recordings{0};
+  s->recording = ++recordings;
   s->in_pass = false;
   s->pass_ordinal = 0;
   s->pipe[0] = s->pipe[1] = VK_NULL_HANDLE;
@@ -628,6 +631,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, u
   diag(DIAG_DISPATCH);
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, false, {x, y, z}};
+    rrpost_dispatch_pre(cmd, pre->cs);
     core_on_dispatch_pre(cmd, &info);
     assetdb_on_dispatch_pre(cmd);
   }
@@ -646,6 +650,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuf
   diag(DIAG_DISPATCH);
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, true, {0, 0, 0}};
+    rrpost_dispatch_pre(cmd, pre->cs);
     core_on_dispatch_pre(cmd, &info);
     assetdb_on_dispatch_pre(cmd);
   }

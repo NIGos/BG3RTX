@@ -526,6 +526,14 @@ Changing any knob switches the preset combo to **Custom**. "Reset to preset" res
    - **The fix.** The host exposes "RR evaluated in the last 2 frames" (`ngx.cpp` already
      knows `last_mode`). The core uses that instead.
    - It is the prerequisite for AMD/Intel and for "game upscaler ≠ DLSS".
+   - **Done (2026-10-26).** Host API ABI 7 adds `rr_active()`: true while an
+     RR evaluate succeeded in the last 3 frames (`ngx_rr_active`,
+     `layer/ngx.cpp`). `gi_rr`, `ls_soft` and `rf_rr` at -1 follow it
+     (`core/gi.cpp`). With FSR/TAA no evaluate happens, with an SR fallback or a
+     failed creation (`rr_test_fail=1` simulates one) it stays false, so the
+     effects use their non-RR modes. On a level load RR pauses for a few frames
+     and the GI drops to its half-resolution mode until RR runs again (logged
+     as `gi: resources for ...`).
 2. **Derived `rt_build`.** Build the scene only if any RT consumer is on (`rt_shadows`,
    `gi_rt`, `rt_ao`, `rt_local_shadows`, `rt_reflections`). Today `rt_build=1` with every
    effect off still spends ≈ 1.9 ms static / 4.4 ms pan.

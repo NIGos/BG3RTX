@@ -21,8 +21,13 @@
 #include <nvsdk_ngx_vk.h>
 #include <nvsdk_ngx_defs_dlssd.h>
 
+#include <tlhelp32.h>
+
+#include <atomic>
 #include <cmath>
 #include <cstring>
+
+#pragma comment(lib, "version.lib")
 
 namespace bg3 {
 
@@ -321,6 +326,42 @@ static NVSDK_NGX_Resource_VK g_shd_res{};
 static uint64_t g_shd_frame = 0;
 static bool g_shd_logged = false;
 
+// ABI 7: whether Ray Reconstruction actually denoises the frame. The core's
+// GI, local-light shadows and reflections pick their 1-spp RR modes from this,
+// not from the rr key: with FSR/TAA, an SR fallback or a failed RR creation
+// they must not leave raw 1-spp noise in the frame.
+static std::atomic<uint64_t> g_rr_frame{0};
+bool ngx_rr_active() {
+  uint64_t f = g_rr_frame.load();
+  return f != 0 && f + 3 >= frame_index();
+}
+
+// The nvngx_dlssd snippet NGX actually loaded (the game's 310.7.129, or
+// Streamline's 310.9.16 from bin/sl with fg>=2, or an OTA copy).
+static void log_dlssd_module() {
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
+  if (snap == INVALID_HANDLE_VALUE) return;
+  MODULEENTRY32W me{};
+  me.dwSize = sizeof me;
+  bool found = false;
+  for (BOOL ok = Module32FirstW(snap, &me); ok; ok = Module32NextW(snap, &me)) {
+    if (_wcsnicmp(me.szModule, L"nvngx_dlssd", 11) != 0) continue;
+    found = true;
+    DWORD dummy = 0, size = GetFileVersionInfoSizeW(me.szExePath, &dummy);
+    std::vector<uint8_t> buf(size ? size : 1);
+    VS_FIXEDFILEINFO* fi = nullptr;
+    UINT len = 0;
+    if (size && GetFileVersionInfoW(me.szExePath, 0, size, buf.data()) &&
+        VerQueryValueW(buf.data(), L"\\", reinterpret_cast<void**>(&fi), &len) && fi)
+      log("[ngx] RR snippet loaded: %ls, version %u.%u.%u.%u", me.szExePath, HIWORD(fi->dwFileVersionMS),
+          LOWORD(fi->dwFileVersionMS), HIWORD(fi->dwFileVersionLS), LOWORD(fi->dwFileVersionLS));
+    else
+      log("[ngx] RR snippet loaded: %ls (no version resource)", me.szExePath);
+  }
+  CloseHandle(snap);
+  if (!found) log("[ngx] RR snippet: no nvngx_dlssd module found in the process");
+}
+
 void ngx_set_spec_hit_distance(VkImage image, VkImageView view, VkFormat format, uint32_t w, uint32_t h) {
   std::lock_guard<std::mutex> lock(g_shd_mu);
   g_shd_res = {};
@@ -433,6 +474,12 @@ static bool guide_create(DeviceData* dd, Guide& g, VkFormat fmt, uint32_t w, uin
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().images[g.image] = rec;
   tracker().views[g.view] = ViewRec{g.image, fmt, vi.subresourceRange};
+  return true;
+}
+
+bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view) {
+  if (!g_guide[0].view || g_guide_w != w || g_guide_h != h || !g_guide[0].initialized) return false;
+  *view = g_guide[0].view;
   return true;
 }
 
@@ -879,6 +926,7 @@ static void ts_mark(DeviceData* dd, VkCommandBuffer cmd, uint32_t slot, uint32_t
 }
 
 void ngx_on_present() {
+  rrpost_on_present();
   std::lock_guard<std::mutex> lock(g_mu);
   ULONGLONG now = GetTickCount64();
   if (!g_acc_tick) g_acc_tick = now;
@@ -981,6 +1029,12 @@ static bool rr_create(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f) {
     log("[ngx] RR: NVSDK_NGX_VULKAN_AllocateParameters not found");
     return false;
   }
+  // Test switch for the fallback: RR creation "fails", SR runs, ngx_rr_active()
+  // stays false and the core's effects must use their non-RR modes.
+  if (cfg_int("rr_test_fail", 0)) {
+    log("[ngx] rr_test_fail=1: RR creation refused (test)");
+    return false;
+  }
   NVSDK_NGX_Parameter* p = nullptr;
   if (g_alloc_params(&p) != NVSDK_NGX_Result_Success || !p) {
     log("[ngx] RR: AllocateParameters failed");
@@ -1020,12 +1074,22 @@ static bool rr_create(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f) {
     f.rr = nullptr;
     return false;
   }
+  log_dlssd_module();
   return true;
 }
 
 // Fake pass around our guide images so the tracer dumps them (PNG + stats).
 // gbuf (optional): the G-buffer RT0-RT2 as they are at evaluate time.
-static void trace_guides(VkCommandBuffer cmd, VkImage extra, const VkImage* gbuf, const char* tag) {
+static void trace_images(VkCommandBuffer cmd, const VkImage* imgs, int count, const char* tag);
+static void trace_guides(VkCommandBuffer cmd, VkImage extra, const VkImage* gbuf, const char* tag,
+                         const VkImage* more = nullptr, int more_n = 0) {
+  VkImage imgs[7] = {g_guide[0].image, g_guide[1].image, g_guide[2].image, extra,
+                     gbuf ? gbuf[0] : VK_NULL_HANDLE, gbuf ? gbuf[1] : VK_NULL_HANDLE, gbuf ? gbuf[2] : VK_NULL_HANDLE};
+  trace_images(cmd, imgs, 7, tag);
+  if (more_n) trace_images(cmd, more, more_n, "rrpost");
+}
+
+static void trace_images(VkCommandBuffer cmd, const VkImage* all, int count, const char* tag) {
   CmdState* s = cmd_state(cmd);
   if (!s || !s->tracing) return;
   Bg3PassInfo saved = s->pass;
@@ -1035,10 +1099,9 @@ static void trace_guides(VkCommandBuffer cmd, VkImage extra, const VkImage* gbuf
   Bg3PassInfo p{};
   p.ordinal = s->pass_ordinal++;
   p.draw_count = 1;
-  VkImage imgs[7] = {g_guide[0].image, g_guide[1].image, g_guide[2].image, extra,
-                     gbuf ? gbuf[0] : VK_NULL_HANDLE, gbuf ? gbuf[1] : VK_NULL_HANDLE, gbuf ? gbuf[2] : VK_NULL_HANDLE};
-  for (VkImage img : imgs) {
-    if (!img) continue;
+  for (int i = 0; i < count; ++i) {
+    VkImage img = all[i];
+    if (!img || p.color_count >= 8) continue;
     ImageRec rec{};
     {
       std::shared_lock<std::shared_mutex> lock(tracker().mu);
@@ -1070,8 +1133,11 @@ static void trace_guides(VkCommandBuffer cmd, VkImage extra, const VkImage* gbuf
 
 // Records guides + RR evaluate. Returns false when RR cannot run this frame
 // (the caller then forwards the game's SR evaluate unchanged).
+// mode: in, the feature's last mode (-1 none, 0 SR, 1 RR on the graded colour,
+// 2 RR before post); out, the mode this frame ran in.
 static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK_NGX_Parameter* p,
-                        PFN_NVSDK_NGX_ProgressCallback cb, bool reset, uint32_t ts_slot, NVSDK_NGX_Result& result) {
+                        PFN_NVSDK_NGX_ProgressCallback cb, int& mode, uint32_t ts_slot, NVSDK_NGX_Result& result) {
+  const int last_mode = mode;
   static int refusals = 0;
   auto refuse = [&](const char* why) {
     if (refusals++ < 8) log("[ngx] RR skipped this frame: %s", why);
@@ -1124,6 +1190,24 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
     }
   }
   if (!f.rr) return false;
+
+  // RR at the start of post (rr_post=1, layer/rrpost.cpp): RR denoises the
+  // ungraded, pre-DoF colour and the game's post chain is replayed after it.
+  // Otherwise (rr_post=0, rr_show, or a frame whose chain was not followed) RR
+  // gets the game's graded colour, as before.
+  RrPostInputs post{};
+  const uint32_t ow = out->Resource.ImageViewInfo.Width, oh = out->Resource.ImageViewInfo.Height;
+  bool use_post = false;
+  if (cfg_int("rr_post", 1) && !show) {
+    use_post = rrpost_take(cmd, w, h, ow, oh, &post);
+    static int post_refusals = 0;
+    if (!use_post && post_refusals++ < 8) log("[ngx] RR before post unavailable this frame (%s)", post.why);
+  }
+  mode = use_post ? 2 : 1;
+  const bool reset = last_mode != -1 && last_mode != mode;
+  if (CmdState* ts = cmd_state(cmd); ts && ts->tracing)
+    log("[ngx] traced frame %llu: %s%s%s", (unsigned long long)frame_index(),
+        use_post ? "RR before post" : "RR on the graded colour", use_post ? "" : " - ", use_post ? "" : post.why);
 
   GuidePush pc = guide_push(f, w, h);
   pc.out_size[0] = out->Resource.ImageViewInfo.Width;
@@ -1182,6 +1266,63 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
           int(s_shd.Resource.ImageViewInfo.Format));
     }
   }
+  // RR before post: our colour, output and colour-before-transparency guide
+  // (RR guide 3.4.11; same format as the colour, both pre-exposed). The game's
+  // resources are put back after the evaluate (the block is reused).
+  auto res_of = [](const RrPostImage& im, bool rw) {
+    NVSDK_NGX_Resource_VK r{};
+    r.Resource.ImageViewInfo.ImageView = im.view;
+    r.Resource.ImageViewInfo.Image = im.image;
+    r.Resource.ImageViewInfo.SubresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    r.Resource.ImageViewInfo.Format = im.format;
+    r.Resource.ImageViewInfo.Width = im.w;
+    r.Resource.ImageViewInfo.Height = im.h;
+    r.Type = NVSDK_NGX_RESOURCE_VK_TYPE_VK_IMAGEVIEW;
+    r.ReadWrite = rw;
+    return r;
+  };
+  static NVSDK_NGX_Resource_VK s_color, s_out, s_cbt;
+  const bool cbt_ok = use_post && post.cbt.image && cfg_int("rr_cbt", 1);
+  if (use_post) {
+    s_color = res_of(post.color, false);
+    s_out = res_of(post.output, true);
+    p->Set(NVSDK_NGX_Parameter_Color, static_cast<void*>(&s_color));
+    p->Set(NVSDK_NGX_Parameter_Output, static_cast<void*>(&s_out));
+  }
+  if (cbt_ok) {
+    s_cbt = res_of(post.cbt, false);
+    p->Set(NVSDK_NGX_Parameter_DLSSD_ColorBeforeTransparency_Subrect_Base_X, 0u);
+    p->Set(NVSDK_NGX_Parameter_DLSSD_ColorBeforeTransparency_Subrect_Base_Y, 0u);
+  }
+  p->Set(NVSDK_NGX_Parameter_DLSSD_ColorBeforeTransparency, cbt_ok ? static_cast<void*>(&s_cbt) : nullptr);
+  // Screen-space SSS guide (RR guide 3.4.12): lum(after - before * albedo) of
+  // BG3's skin blur (6f535075/d1669194), 0 elsewhere. Same space as the colour
+  // only with rr_post=1 (before the grade), so only then.
+  static NVSDK_NGX_Resource_VK s_sss;
+  const bool sss_ok = use_post && post.sss.image && cfg_int("rr_sss", 1);
+  if (sss_ok) {
+    s_sss = res_of(post.sss, false);
+    p->Set(NVSDK_NGX_Parameter_DLSSD_ScreenSpaceSubsurfaceScatteringGuide_Subrect_Base_X, 0u);
+    p->Set(NVSDK_NGX_Parameter_DLSSD_ScreenSpaceSubsurfaceScatteringGuide_Subrect_Base_Y, 0u);
+  }
+  p->Set(NVSDK_NGX_Parameter_DLSSD_ScreenSpaceSubsurfaceScatteringGuide, sss_ok ? static_cast<void*>(&s_sss) : nullptr);
+  // Pre-exposure (rr_pre_exposure=1, A/B only): the RR guide 3.7 says RR does
+  // not support the exposure parameters, so by default the game's own value
+  // (1) stays. With 1, the lighting's s1b13[0] as read back by rrpost.
+  float old_pe = 1.0f;
+  const bool had_pe = get_f(p, NVSDK_NGX_Parameter_DLSS_Pre_Exposure, old_pe);
+  const float pe = rrpost_pre_exposure();
+  const bool set_pe = use_post && cfg_int("rr_pre_exposure", 0) && pe > 0.0f;
+  if (set_pe) p->Set(NVSDK_NGX_Parameter_DLSS_Pre_Exposure, pe);
+  static bool said_post = false;
+  if (use_post && !said_post) {
+    said_post = true;
+    log("[ngx] RR before post: colour %ux%u fmt %d (pre-DoF, pre-grade), output %ux%u RGBA16F, CBT %s, SSS guide %s, "
+        "pre-exposure %s",
+        post.color.w, post.color.h, int(post.color.format), ow, oh, cbt_ok ? "yes" : "no", sss_ok ? "yes" : "no",
+        set_pe ? "lighting s1b13[0]" : "game's (1)");
+  }
+
   int old_reset = 0;
   bool had_reset = get_i(p, NVSDK_NGX_Parameter_Reset, old_reset);
   if (reset) p->Set(NVSDK_NGX_Parameter_Reset, 1);
@@ -1190,10 +1331,18 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
     result = orig_eval()(cmd, f.rr, p, cb);
   }
   if (reset) p->Set(NVSDK_NGX_Parameter_Reset, had_reset ? old_reset : 0);
+  if (use_post) {
+    p->Set(NVSDK_NGX_Parameter_Color, static_cast<void*>(color));
+    p->Set(NVSDK_NGX_Parameter_Output, static_cast<void*>(out));
+  }
+  if (set_pe) p->Set(NVSDK_NGX_Parameter_DLSS_Pre_Exposure, had_pe ? old_pe : 1.0f);
   static int eval_logs = 0;
   if (result != NVSDK_NGX_Result_Success && eval_logs++ < 8)
     log("[ngx] RR evaluate failed: %s (0x%08x)", result_name(result), unsigned(result));
   if (g_qpool) ts_mark(dd, cmd, ts_slot, 2);
+  // The game's post chain after RR, at output resolution, into its DLSS output.
+  if (use_post && result == NVSDK_NGX_Result_Success && !rrpost_final(cmd, out->Resource.ImageViewInfo.Image, VkFormat(out->Resource.ImageViewInfo.Format), ow, oh))
+    log("[ngx] RR before post: the output-resolution grade could not be recorded");
 
   if (show && result == NVSDK_NGX_Result_Success) {
     memory_barrier(dd, cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -1206,7 +1355,9 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
                    VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT);
     restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   }
-  trace_guides(cmd, out_img, cfg_int("rr_dump_gbuffer", 0) ? gb.rt : nullptr, "rr");
+  VkImage more[8];
+  int more_n = use_post ? rrpost_trace_images(more, 8) : 0;
+  trace_guides(cmd, out_img, cfg_int("rr_dump_gbuffer", 0) ? gb.rt : nullptr, "rr", more, more_n);
   return result == NVSDK_NGX_Result_Success;
 }
 
@@ -1318,31 +1469,34 @@ static NVSDK_NGX_Result Detour_Eval(VkCommandBuffer cmd, const NVSDK_NGX_Handle*
   }
 
   int want = cfg_int("rr", 1) && !f->rr_failed ? 1 : 0;
-  bool reset = f->last_mode != -1 && f->last_mode != want;
-  if (f->last_mode != want) log("[ngx] upscaler for feature %p: %s", (void*)h, want ? "Ray Reconstruction" : "DLSS SR");
 
   ts_init(dd);
   uint32_t slot = g_qpool ? ts_begin(dd, cmd, want) : 0;
   NVSDK_NGX_Result r = NVSDK_NGX_Result_Fail;
   bool done = false;
-  if (want) done = rr_evaluate(dd, cmd, *f, p, cb, reset, slot, r);
+  int mode = f->last_mode;   // in: last mode; out: the RR mode run (1 graded input, 2 before post)
+  if (want) done = rr_evaluate(dd, cmd, *f, p, cb, mode, slot, r);
   if (!done) {
-    if (want && f->rr_failed) want = 0;
+    mode = 0;  // the game's own SR evaluate (RR off, declined or failed)
     if (g_qpool) {
       g_ts_mode[slot] = 0;
       ts_mark(dd, cmd, slot, 1);
     }
+    const bool reset = f->last_mode != -1 && f->last_mode != 0;
     int old_reset = 0;
     bool had_reset = get_i(p, NVSDK_NGX_Parameter_Reset, old_reset);
     if (reset) p->Set(NVSDK_NGX_Parameter_Reset, 1);
     r = orig_eval()(cmd, h, cp, cb);
     if (reset) p->Set(NVSDK_NGX_Parameter_Reset, had_reset ? old_reset : 0);
     if (g_qpool) ts_mark(dd, cmd, slot, 2);
-    if (want) want = 0;  // RR declined this frame: SR history continues
     NVSDK_NGX_Resource_VK* out = get_res(p, NVSDK_NGX_Parameter_Output);
     trace_guides(cmd, out ? out->Resource.ImageViewInfo.Image : VK_NULL_HANDLE, nullptr, "sr");
+  } else {
+    g_rr_frame.store(frame_index());
   }
-  f->last_mode = want;
+  static const char* names[3] = {"DLSS SR", "Ray Reconstruction (graded input)", "Ray Reconstruction before post"};
+  if (f->last_mode != mode) log("[ngx] upscaler for feature %p: %s", (void*)h, names[mode]);
+  f->last_mode = mode;
   return r;
 }
 

@@ -365,6 +365,7 @@ static std::string format_name(VkFormat f) {
 // Preview mapping: HDR colour → Reinhard + gamma; two-channel / signed data →
 // 0.5 + 0.5 * v / max|v|; one channel → min..max stretch; UNORM colour as is.
 // A fourth channel that varies gets its own *_a.png.
+static bool g_dump_raw = false;   // set per capture by dumps_finish
 static std::string process(const Dump& d, const uint8_t* data, const std::string& dir, int max_w) {
   const size_t n = size_t(d.w) * d.h;
   float mn[4] = {INFINITY, INFINITY, INFINITY, INFINITY}, mx[4] = {-INFINITY, -INFINITY, -INFINITY, -INFINITY};
@@ -420,6 +421,17 @@ static std::string process(const Dump& d, const uint8_t* data, const std::string
   std::string png = std::string(base) + ".png";
   std::wstring wdir(dir.begin(), dir.end());
   write_png(wdir + L"\\" + std::wstring(png.begin(), png.end()), ow, oh, rgb);
+  // dump_raw=1: full-resolution float32 RGBA (no header; w, h in dumps.json) for
+  // the images A/B comparisons need: our own fake passes (RR guides, rr_post
+  // images, the DLSS output), the game's grade output (its old DLSS input,
+  // 0592680b) and the tonemapped frame (d25b8086).
+  if (g_dump_raw && !d.depth &&
+      (d.pass_fs == 0 || d.pass_fs == 0x0592680bc336dca3ull || d.pass_fs == 0xd25b8086de1734d5ull)) {
+    std::vector<float> raw(n * 4);
+    for (size_t i = 0; i < n; ++i) decode(d.format, d.depth, data + i * d.texel, &raw[i * 4]);
+    std::string f32 = std::string(base) + ".f32";
+    write_file(dir + "\\" + f32, raw.data(), raw.size() * sizeof(float));
+  }
   bool alpha_varies = ch == 4 && mx[3] > mn[3];
   if (alpha_varies) {
     std::vector<uint8_t> a3(alpha.size() * 3);
@@ -470,6 +482,7 @@ void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue)
   std::string dir = capture_dir + "\\img";
   make_dirs(dir);
   int max_w = cfg_int("dump_png_width", 1280);
+  g_dump_raw = cfg_int("dump_raw", 0) != 0;
   ULONGLONG t0 = GetTickCount64();
   std::vector<std::string> parts(mine.size());
   std::vector<void*> maps(mine.size(), nullptr);

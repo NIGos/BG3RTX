@@ -177,6 +177,7 @@ struct CmdState {
   uint32_t dispatches_since_pass = 0, indirect_since_pass = 0;
   uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
+  uint64_t recording = 0;              // unique per vkBeginCommandBuffer (rrpost chains)
   bool game_alloc = false;             // allocated through this layer (not by Streamline below it)
   std::vector<std::string> events;     // pre-rendered JSON objects, one per event
   // segment aggregation for the trace
@@ -295,6 +296,35 @@ void ngx_init();                       // hooks _nvngx.dll now or when it loads
 void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts, VkImageLayout depth_layout);
 void ngx_on_destroy_image(VkImage img);
 void ngx_on_present();
+// ABI 7: Ray Reconstruction evaluated in the last few frames (not the rr key):
+// false with FSR/TAA, SR fallback, or a failed RR creation.
+bool ngx_rr_active();
+// RR's diffuse albedo guide (RGBA8, GENERAL) when it has this size.
+bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view);
+
+// ---- RR at the start of post-processing (rrpost.cpp, rr_post=1) ----
+struct RrPostImage {
+  VkImage image;
+  VkImageView view;
+  VkFormat format;
+  uint32_t w, h;
+};
+struct RrPostInputs {
+  RrPostImage color;    // RR colour: the dither-resolved pre-post scene colour
+  RrPostImage output;   // RR writes here (RGBA16F, output resolution)
+  RrPostImage cbt;      // colour before transparency (image null when stale)
+  RrPostImage sss;      // screen-space SSS guide, R16F (image null when stale)
+  bool dof;             // the game's DoF composite ran this frame
+  char why[96];         // why not, when rrpost_take fails
+};
+void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts);
+void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs);
+bool rrpost_take(VkCommandBuffer cmd, uint32_t w, uint32_t h, uint32_t ow, uint32_t oh, RrPostInputs* out);
+bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint32_t ow, uint32_t oh);
+void rrpost_forget_image(VkImage image);   // the game destroys an image
+int rrpost_trace_images(VkImage* out, int max);
+float rrpost_pre_exposure();   // lighting s1b13[0] as last read back (0 if unknown)
+void rrpost_on_present();
 
 // ---- Track D: G-buffer geometry capture via transform feedback (geocapture.cpp) ----
 const VkDeviceCreateInfo* geo_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
