@@ -786,6 +786,8 @@ Each entry gives the ID, the data needed, the injection point, the cost, the pri
 and the steps. Priority: P1 next, P2 after P1, P3 later, P4 not recommended.
 
 #### D-LS: ray-traced local-light shadows (P1)
+- **Status (2026-10-26): implemented, on by default (`rt_local_shadows=1`).** Results, choices
+  and numbers in [section 9](#9-d-ls-ray-traced-local-light-shadows-implemented). The plan below is kept as written.
 - **Data:** EN1 (lights, clusters, atlas), the G-buffer, the TLAS (+ alpha).
 - **Injection:** the post-lighting hook. Per pixel, the exact delta
   `Σ_i c_i·(v_i − s_i)`:
@@ -960,3 +962,222 @@ and the steps. Priority: P1 next, P2 after P1, P3 later, P4 not recommended.
 | 9 | D-TR, D-VOL | low-medium | medium | niche |
 | 10 | D-RFR, transparents/particles | low | high | forward-pass capture and shader patching |
 | — | D-PT | reference only | medium | not a product |
+
+## 9. D-LS: ray-traced local-light shadows (implemented)
+
+Status (2026-10-26): **on by default** (`rt_local_shadows=1`, live; needs `rt=1`).
+Code: `shaders/gi/rt_local_shadows.hlsl`, `shaders/rt/bg3_lights.hlsli` (the light list
+and the game's per-light shading, D-EN1), `shaders/gi/rt_local_shadows_prep.hlsl`
+(validation only), `core/gi.cpp` (snapshot, bindings, pass, timing, statistics).
+Tools: `scripts/live_phases.py` (live setting phases during one auto-run),
+`scripts/ab_compare.py` (A/B stills and crops from two captures).
+Measured in the Steel Watch Foundry (the auto-run save), RTX 5090, 2560x1067.
+
+### 9.1 The light list (D-EN1)
+
+At the first tiled-lighting dispatch the core snapshots, with `query_binding`, the
+lighting's own set 1 b0 (flags), b13 (global light scale), b23 (froxel headers),
+b24 (index list), b25 (light array), b39 (lighting constants), b40 (shadow views),
+b41 (shadow atlas) and set 0 b2 (the froxel depth scale), and re-binds them read-only
+to the D-LS pass (push-descriptor bindings 21-29). Every offset comes from the SPIR-V
+`Offset`/`ArrayStride` decorations of `f469db78` (listed in `bg3_lights.hlsli`).
+If any of them is missing, the pass is skipped and the log says so once (R8).
+
+| What | Value in the foundry |
+|---|---|
+| Light array b25 | 4096 slots of 80 bytes (327680 B); shadow views b40: 4096 x 96 B |
+| Froxels b23 / index list b24 | 397440 B (24840 froxels) / 6.36 MB |
+| Shadow atlas b41 | 8192x8192 R16_UNORM, SHADER_READ_ONLY |
+| Lights listed in the pixel's froxel (points + spots) | **5.61 per pixel** |
+| Lights the game actually evaluates (channel, range, cone, N·L > 0) | **2.31 per pixel**; 89% of pixels get at least one |
+| ... of which have a game shadow map (`m7` bit 0) | **0.00**: in this scene no point/spot light casts a shadow |
+| Projector lights listed (b29, third loop of `f469db78`) | 1.02 per pixel (not handled, see 9.7) |
+| `set1/b0 m0.y`, the AO factor on direct light (QUALITY Q3) | **0.5** in gameplay (1.0 on the loading screen); `m0.x = m0.w = 1` |
+| `b13[0]`, the global light scale (lights with `m3 < 0`) | 0.000407 |
+
+So Q3 is answered: BG3 multiplies direct local and sun light by `mix(1, AO, 0.5)`.
+Our AO fold (RT AO / RT GI visibility into `b6.x`) therefore also darkens direct light
+by half its occlusion. That is the game's own formula, and it is kept.
+
+### 9.2 What the pass does
+
+Full resolution, after the lighting and **before** the GI composite (so next frame's
+bounce source, `prevRadiance`, already contains the shadows), SSS and fog.
+
+1. It rebuilds the surface exactly as `f469db78` does: `P = ray(uv)·depth`, the view
+   normal rotated by `_m6` (not renormalised), F0 `mix(0.16·spec², base, metal)`, the
+   diffuse colour, the light-channel bits, roughness `max(0.09, r)` with the game's
+   specular AA (`sqrt(r² + min(var, 0.18))`; the 2x2 quad's normal differences are read
+   from the neighbours instead of quad shuffles), N·V and the IGN of the atlas PCF.
+2. It walks the pixel's froxel (`log2(depth·_m4)·_m21 + _m22`, tiles of `_m25`) through
+   the point lights, then the spot lights, and recomputes each one's **unshadowed**
+   diffuse and specular `c_i` with the game's terms: the range test, the
+   `pow(sat(1 − x²), m4)` falloff with both bias models, the spot cone², `1/4π` (points)
+   and `1/π` (spots), `b13[0]` for `m3 < 0`, GGX D, the approximate height-correlated
+   Smith visibility, Schlick F, and renormalised Burley × `mix(1, 0.662, a)`.
+3. For each light the game left **unshadowed** (`m7` bit 0 clear), it traces one ray
+   (alpha-tested TLAS, `rt_occluded`) and adds the exact delta
+   `out += c_i·(v_i − 1)·mix(1, AO, m0.y)` into b10 (diffuse) and b11 (specular, with the
+   game's Lagarde specular occlusion in place of AO). Since `v_i ≤ 1`, a light can only
+   lose what the game gave it. The result is clamped at 0 only against the
+   transmittance, which the delta does not replicate (it is 1 indoors, see 9.3).
+4. Non-finite guard on both writes (R5).
+
+**Lights that have a game shadow map** (`ls_shadowed`, default 0 = *skip*): their
+contribution is left exactly as the game computed it. Reason: the atlas is rendered
+from the light and contains casters the TLAS does not have (culled walls, cut-away
+roofs, everything off screen). Replacing it with the traced visibility could
+*un*-shadow those, which is worse than the low-resolution penumbra it would fix.
+- `ls_shadowed=1` replaces the atlas by the traced visibility (`c·(v − s)`, with `s`
+  the game's own PCF term replicated exactly: tetrahedral face, 12-tap Vogel disc
+  rotated by IGN, `textureGather` emulated with loads, camera-distance fade × `m8`).
+- `ls_shadowed=2` takes `min(v, s)`.
+
+Both are A/B options only. Neither could be judged here, because no light in the
+foundry has a shadow map.
+
+**Sampling (R1).**
+- With RR (`rr=1`; `ls_soft=-1` follows it) each traced light gets one ray to a
+  uniform point of its sphere by solid angle (radius `ls_source_radius`, 0.05 world
+  units: BG3's lights have no source size, so this is an artistic value). White noise
+  from `pcg3d(pixel, frame·1024 + light index)`. RR denoises the penumbra; nothing of
+  ours filters it (R2).
+- Without RR there is no denoiser, so the ray goes to the light centre (hard shadows,
+  no noise).
+- `ls_samples=1|2` instead traces 1-2 rays per pixel to lights chosen by RIS over the
+  unshadowed luminance (unbiased; cheaper, noisier). It is an option, not the default,
+  because 2.31 rays per pixel are affordable.
+
+Rays start at `P + N·dist·rt_bias` and stop `ls_clear` (0.2) short of the light, so a
+lamp's own housing does not shadow it completely:
+
+| `ls_clear` | occluded light evaluations per pixel (of 2.31) |
+|---|---|
+| 0.05 | 1.00 |
+| **0.2** (default) | **0.80** |
+| 0.5 | 0.77 |
+
+Most of the step from 0.05 to 0.2 is the fixture geometry around the light. Beyond
+0.2 almost nothing changes, so the occlusion that remains is the scene's.
+
+### 9.3 Validation of the recompute
+
+`ls_debug=4` runs `rt_local_shadows_prep.hlsl` before the lighting. It sets the game's
+AO to 0 (no ambient; direct light keeps `1 − m0.y` of itself, which the recompute
+applies too) and its sun mask to 0. The game's diffuse + specular then hold only the
+direct local lights, plus the terms the recompute does not model (projector lights,
+the atmosphere's in-scatter). With `ls_stats=1` the core fits
+`game = k·recomputed + r` per pixel, over the pixels whose froxel lists no projector
+light (counters in `rtStats`, 120-frame windows):
+
+| | AO 0 (`ls_debug=4`) |
+|---|---|
+| Fit over 1.20M lit pixels | **game = 1.07 × recomputed + 0.0134** |
+| Mean recomputed / game | 0.0093 / 0.0234 |
+| Game where no local light reaches (0.15M px) | 0.0181 |
+| Recompute above the game (luminance) | 0.004% of the game's; 0.02% of pixels |
+
+- The residual is an additive term of about the same size where no local light reaches
+  at all (0.018) as under the lights (intercept 0.013).
+- The recompute is never above the game's output. An error in a factor, the falloff or
+  the BRDF would produce that somewhere.
+- The slope of 1.07 is within what that spatially varying additive term can bias a
+  least-squares fit by.
+- The exact < 1% check of D-EN1 needs that residual removed too (the in-scatter
+  replicated, or the projector lights added to the recompute). That is not done.
+- `ls_debug=5` shows the recomputed light; `ls_debug=6` is the same check with AO = 1.
+
+### 9.4 Results (A/B, same view, one run, live toggle)
+
+`auto-run.ps1 -Traces 3` with `scripts/live_phases.py`: trace 1 on, trace 2 off (set live
+right after trace 1), trace 3 `ls_debug=2` (the light removed, ×4); then `scripts/ab_compare.py`.
+
+- [ls_foundry_off.png](img/ls_foundry_off.png) / [ls_foundry_on.png](img/ls_foundry_on.png):
+  the presented frames (after RR, post and exposure), downscaled.
+- [ls_foundry_removed.png](img/ls_foundry_removed.png): the light D-LS removes (×4,
+  written over the lit diffuse, so it also passes through SSS and fog). This is where
+  light previously leaked through geometry:
+  - the floor behind the curved beam (right);
+  - the beam's back face and the area above its lamp;
+  - the walkway under the pipes and railings;
+  - the machinery at the left;
+  - the character's shadow wedge across the walkway, from the light above it.
+- [ls_foundry_crops.png](img/ls_foundry_crops.png): three 1:1 crops of the 3840x1600
+  frame, rows off / on / removed.
+
+| Metric | Value |
+|---|---|
+| Light removed (unshadowed lights only) | **7.2% of the lit diffuse + specular luminance** (mean 0.0046 of 0.063) |
+| Occluded evaluations | 0.80 of 2.31 per pixel (35%) |
+| Mean luminance of the presented frame | −2.6% (exposure adapts partly); HDR compose output −2.3 to −2.7% |
+| Non-finite values (every dumped image of all three traces) | **0** |
+
+The render-resolution HDR images (compose, before RR) are not usable for a diff: the
+per-frame jitter and the 1-spp noise of RR mode dominate it. The presented frames and
+the debug view are the evidence.
+
+Not done from R6:
+- the docks, foliage and night-interior scenes. The `-Move` pan reached the docks once;
+  there 0.07 lights are listed per pixel and none is evaluated, so the pass costs
+  0.068 ms and changes nothing;
+- FLIP against an accumulated reference;
+- the temporal-stability metric.
+
+### 9.5 Cost (GPU timestamps around the pass, medians of 300 frames)
+
+| Configuration | Foundry, static |
+|---|---|
+| **Default: every unshadowed light, 1 ray each, soft (RR)** | **0.345 ms** (p10 0.342, p90 0.348) |
+| Same, hard (`ls_soft=0`, the `rr=0` path) | 0.337 ms |
+| RIS, 1 ray per pixel (`ls_samples=1`) | 0.219 ms |
+| `-Validation`, default | 0.325-0.329 ms |
+| Docks (no lights evaluated) / loading screen | 0.068 / 0.12 ms |
+| `ls_stats=1` (wave-reduced atomics; measurement only) | 4-5 ms |
+
+The budget (QUALITY R7) is 0.5 ms for local-light shadows: met. All rt passes together
+(sun shadows + RT GI 0.26-0.28 ms, D-LS 0.35 ms) stay well inside the 2.5 ms Track D total.
+
+### 9.6 Validation layer and robustness (R5, R8)
+
+- `auto-run.ps1 -Validation`, `rt_local_shadows=0` against `1` with every mode toggled
+  live in the lit foundry (`ls_stats`, debug views 1-6 including the validation
+  pre-pass, `ls_samples=2` with `ls_shadowed=1`, `ls_shadowed=2`, live off and on):
+  **identical message IDs**, all the game's own (`09600`, `10788`,
+  `StorageImage-FormatMismatch`, `OutputNotWritten`, `CopyBuffer-00118`, `08737`, the
+  headless `non-acquired-swapchain-image-used`). No core faults.
+
+- The first on-run showed one new ID, `VUID-vkCmdDispatch-imageLayout-00344`. The
+  validation pre-pass lived in the main shader, so the sun mask (binding 16) was
+  statically used by the post pass while it was in SHADER_READ_ONLY. Fixed by moving
+  the pre-pass into `rt_local_shadows_prep.hlsl`.
+- `-Validation -Move`: the pan left the foundry for the docks (a large change of
+  geometry and an outdoor view). No faults, no non-finite values, IDs as above.
+- Missing light-list bindings, no TLAS or a stale one (more than one frame old): the
+  pass does not run, and the game's lighting is untouched. It only ever removes light
+  the game added this frame.
+- `fg=2` (`-RealPresent`, DLSS-G 2x) with D-LS on: DLSS-G status 0x0, 2 presents per
+  rendered frame, 0 Streamline API errors; the pass costs the same (0.331 ms).
+
+### 9.7 What does not work / next steps
+
+- **Projector lights** (b29, about 1 per pixel here) are not shadowed. Their loop has
+  its own falloff and cookie terms; adding them follows the same pattern.
+- **Shadowed lights** are skipped by default. `ls_shadowed=1/2` are untested in a scene
+  that has them (a torch-lit interior with shadow-casting lights is needed, R6).
+- **Art intent.** Every unshadowed light is shadowed, including fill lights that may be
+  meant to leak and the light that follows the active character (its wedge-shaped
+  shadow on the floor). `ls_min_radius` and `ls_strength` exist as controls. A
+  per-channel exclusion was not needed here.
+- **Off-screen casters** are missing from the TLAS, so leaks through geometry the camera
+  does not see remain (cascade-caster capture, 6.7 item 2, and D-EN3 retention).
+- **Exactness.** The transmittance and in-scatter are not replicated (they are why 9.3
+  stops at a fit), and the delta is clamped at 0 for that reason.
+- **Light source radius.** BG3 gives none; 0.05 is a guess, to tune by eye.
+- **`rr=0`**: hard shadows only (no SIGMA).
+
+Settings (`bg3rtx.ini`, all live): `rt_local_shadows`, `ls_shadowed`, `ls_source_radius`,
+`ls_soft`, `ls_clear`, `ls_min_radius`, `ls_samples`, `ls_strength`, `ls_debug`
+(1 lights per pixel, 2 light removed ×4, 3 traced visibility, 4/5/6 validation),
+`ls_stats`. The log reports `ls: first frame ...` (the bindings),
+`ls: local-light shadow pass GPU median ...` and, with `ls_stats=1`, `ls stats` and
+`ls validation fit`.
