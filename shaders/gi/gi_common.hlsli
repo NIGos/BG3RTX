@@ -24,9 +24,18 @@ struct ViewportCB {
 [[vk::binding(5, 0)]] Texture2D<float> gDepth;      // R32F linear depth
 [[vk::binding(6, 0)]] [[vk::image_format("r11g11b10f")]] RWTexture2D<float3> gDiffuse;
 [[vk::binding(7, 0)]] [[vk::image_format("r11g11b10f")]] RWTexture2D<float3> gSpecular;
+// GI state, half resolution: rgb = one-bounce radiance, a = visibility
+// (fraction of rays that found no occluder within the search radius).
 [[vk::binding(8, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> giRaw;
 [[vk::binding(9, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> giHistIn;
 [[vk::binding(10, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> giHistOut;
+// Last frame's lit diffuse + specular at render resolution: radiance at ray hits.
+[[vk::binding(11, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> prevRadiance;
+// The game's AO target (RGB10A2, AO in .x), read by its ambient term.
+[[vk::binding(12, 0)]] [[vk::image_format("rgb10a2")]] RWTexture2D<float4> gAO;
+[[vk::binding(13, 0)]] [[vk::image_format("r32f")]] RWTexture2D<float> giRawDepth;
+[[vk::binding(14, 0)]] [[vk::image_format("r32f")]] RWTexture2D<float> giHistDepthIn;
+[[vk::binding(15, 0)]] [[vk::image_format("r32f")]] RWTexture2D<float> giHistDepthOut;
 
 struct Push {
   uint2 full;       // render resolution
@@ -39,6 +48,7 @@ struct Push {
   uint steps;
   uint debug;       // 0 off, 1 GI irradiance only, 2 added term x4
   float history;    // temporal blend weight of the new sample
+  float ao;         // how strongly visibility multiplies the game's AO (0..1)
 };
 [[vk::push_constant]] Push pc;
 
@@ -83,6 +93,22 @@ uint hash(uint x) {
   x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16;
   return x;
 }
+// Depth-aware 3x3 gather of the accumulated half-resolution history.
+float4 gather_history(uint2 fp, float d) {
+  int2 hp = int2(fp / 2);
+  float4 acc = 0;
+  float wsum = 0;
+  for (int y = -1; y <= 1; ++y)
+    for (int x = -1; x <= 1; ++x) {
+      int2 q = clamp(hp + int2(x, y), int2(0, 0), int2(pc.half) - 1);
+      float hd = giHistDepthOut[q];
+      float w = hd > 0.0 ? exp(-abs(hd - d) / (d * 0.01)) * (x == 0 && y == 0 ? 2.0 : 1.0) : 0.0;
+      acc += giHistOut[q] * w;
+      wsum += w;
+    }
+  return wsum > 1e-4 ? acc / wsum : float4(0, 0, 0, 1);
+}
+
 float rand01(inout uint s) { s = hash(s); return float(s & 0x00ffffff) / 16777216.0; }
 
 float3 cosine_hemisphere(float3 n, float u1, float u2) {

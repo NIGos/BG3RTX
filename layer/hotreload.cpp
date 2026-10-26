@@ -83,6 +83,15 @@ static bool seh_dispatch(const Bg3CoreApi* c, VkCommandBuffer cmd, const Bg3Disp
   }
 }
 
+static bool seh_dispatch_pre(const Bg3CoreApi* c, VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
+  __try {
+    c->on_dispatch_pre(cmd, d);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
 static bool seh_cmd_end(const Bg3CoreApi* c, VkCommandBuffer cmd) {
   __try {
     c->on_cmd_end(cmd);
@@ -235,6 +244,12 @@ void core_on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* info) {
   std::shared_lock<std::shared_mutex> lock(g_core_mu);
   if (!g_core || g_faulted || !g_core->on_dispatch) return;
   if (!seh_dispatch(g_core, cmd, info)) fault("on_dispatch");
+}
+
+void core_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* info) {
+  std::shared_lock<std::shared_mutex> lock(g_core_mu);
+  if (!g_core || g_faulted || !g_core->on_dispatch_pre) return;
+  if (!seh_dispatch_pre(g_core, cmd, info)) fault("on_dispatch_pre");
 }
 
 void core_on_cmd_end(VkCommandBuffer cmd) {

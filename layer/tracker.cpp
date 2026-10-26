@@ -215,6 +215,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
   if (force_src && (ci->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                                  VK_IMAGE_USAGE_STORAGE_BIT)))
     patched.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  // BG3's AO/SSR target (RGB10A2 render target) gets STORAGE so the GI can
+  // fold its visibility into the game's own ambient occlusion.
+  static const bool force_storage = cfg_int("force_storage_rgb10a2", 1) != 0;
+  if (force_storage && ci->format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 && (ci->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+    patched.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
   VkResult r = device_of(device)->vk.CreateImage(device, &patched, alloc, out);
   if (r == VK_SUCCESS) {
     ImageRec rec{tracker().next_image_id++, patched, false};

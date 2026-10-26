@@ -66,6 +66,7 @@ $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
 Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
 
+py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py")
 $start = Get-Date
 & (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -GameArgs "-continueGame"
 

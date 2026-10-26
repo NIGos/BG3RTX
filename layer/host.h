@@ -179,6 +179,7 @@ void core_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* pass);
 void core_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* pass);
 void core_on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* info);
 void core_on_cmd_end(VkCommandBuffer cmd);
+void core_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* info);
 bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
                    Bg3Binding* out);
 bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out);

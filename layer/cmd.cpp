@@ -416,6 +416,10 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cm
 
 static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, uint32_t y, uint32_t z) {
   diag(DIAG_DISPATCH);
+  if (CmdState* pre = cmd_state(cmd)) {
+    Bg3DispatchInfo info{pre->cs, false, {x, y, z}};
+    core_on_dispatch_pre(cmd, &info);
+  }
   vk(cmd).CmdDispatch(cmd, x, y, z);
   CmdState* s = cmd_state(cmd);
   if (!s) return;
@@ -429,6 +433,10 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, u
 
 static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o) {
   diag(DIAG_DISPATCH);
+  if (CmdState* pre = cmd_state(cmd)) {
+    Bg3DispatchInfo info{pre->cs, true, {0, 0, 0}};
+    core_on_dispatch_pre(cmd, &info);
+  }
   vk(cmd).CmdDispatchIndirect(cmd, b, o);
   CmdState* s = cmd_state(cmd);
   if (!s) return;

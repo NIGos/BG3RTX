@@ -430,7 +430,9 @@ static std::string process(const Dump& d, const uint8_t* data, const std::string
   auto arr = [&](const char* name, auto get) {
     j += std::string(",\"") + name + "\":[";
     for (int c = 0; c < ch; ++c) {
-      snprintf(b, sizeof b, "%s%.6g", c ? "," : "", double(get(c)));
+      double v = double(get(c));
+      if (std::isfinite(v)) snprintf(b, sizeof b, "%s%.6g", c ? "," : "", v);
+      else snprintf(b, sizeof b, "%snull", c ? "," : "");  // JSON has no inf/nan
       j += b;
     }
     j += "]";

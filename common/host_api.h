@@ -135,6 +135,9 @@ struct Bg3CoreApi {
   void (*on_dispatch)(VkCommandBuffer cmd, const Bg3DispatchInfo* dispatch);
   // Right before the game ends a command buffer (outside any render pass).
   void (*on_cmd_end)(VkCommandBuffer cmd);
+  // Right before each game dispatch is recorded; its pipeline and descriptors
+  // are already bound, so query_binding sees what it will read and write.
+  void (*on_dispatch_pre)(VkCommandBuffer cmd, const Bg3DispatchInfo* dispatch);
 };
 
 typedef const Bg3CoreApi* (*PFN_bg3rtx_core_load)(const Bg3HostApi* host);
