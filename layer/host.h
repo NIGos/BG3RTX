@@ -27,6 +27,12 @@ namespace bg3 {
 void log(const char* fmt, ...);
 const std::string& root_dir();        // repository root (parent of bin/)
 const std::string& bin_dir();
+// %BG3RTX_RUN_TAG% (scripts/auto-run.ps1 -Tag): lets two games run from one checkout.
+// Empty when unset; otherwise the log, the auto.done marker, trace.request and the
+// capture folders carry it (bg3rtx.<tag>.log, captures/<stamp>-<tag>, ...).
+const std::string& run_tag();
+std::string tagged(const std::string& base, const std::string& ext);   // base + ".<tag>" + ext
+std::string capture_stamp();          // now_stamp(), plus "-<tag>" when tagged
 std::string now_stamp();              // 20261025-224512
 uint64_t file_mtime(const std::string& path);   // 0 if missing
 bool write_file(const std::string& path, const void* data, size_t size);

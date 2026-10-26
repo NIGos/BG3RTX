@@ -14,8 +14,15 @@ python -m scripts.qa analyze captures/qa/<stamp>/<scene> ...   # re-analyse kept
 Scene ids are the ones in [TEST_SCENES.md](TEST_SCENES.md) (read from
 `scripts/scene-sweep.ps1`). Build first with `scripts/build.ps1`; the harness
 runs `auto-run.ps1 -NoBuild -NoAnalyze -Background`, so the user keeps the PC.
-Game runs are serialised by the `Global\BG3RTX_game_run` mutex that every
-checkout shares, so a run may first wait for another agent's game.
+Two scenes are captured at once (`--parallel 2`, the default): two lanes, each an
+`auto-run.ps1 -Tag a|b` shared background run taking the next scene when its run
+ends. Up to two games of ours run at once across all checkouts; older copies of the
+script and exclusive runs still serialise against everything
+([TEST_SCENES.md](TEST_SCENES.md#concurrent-runs)), so a run may first wait for
+another agent's game. `--exclusive` captures one scene at a time alone on the GPU.
+Image results do not depend on the mode; timings do: `run.json` and the report mark
+shared runs (`"exclusive": false`, "shared run: not a timing"), and performance
+numbers are taken only from exclusive runs ([QUALITY.md](QUALITY.md) R7).
 
 ## One run per scene
 

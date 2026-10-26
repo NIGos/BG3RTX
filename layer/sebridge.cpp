@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwctype>
 #include <mutex>
 #include <set>
 #include <sstream>
@@ -95,7 +96,7 @@ void reader() {
     static int beat = 0, beat_n = 0;
     if (++beat_n >= 10) {   // once per second
       beat_n = 0;
-      CreateDirectoryA(dir.c_str(), nullptr);
+      make_dirs(dir);
       std::string b = std::to_string(++beat) + "\n";
       write_file(dir + "\\active.txt", b.data(), b.size());
     }
@@ -165,11 +166,31 @@ const char* se_intern(const std::string& s) {
   return pool.insert(s).first->c_str();
 }
 
+// Two games at once (scripts/auto-run.ps1 shared runs) would both read and write the
+// same bridge files. auto-run.ps1 then passes "bg3rtxse=<token>" on the game's command
+// line; this process and its Lua (Ext.Utils.GetCommandLineParams) both see it, and
+// both use the subfolder bg3rtx\<token>\ instead (docs/SE_BRIDGE.md).
+std::string se_token() {
+  static const std::string tok = [] {
+    std::string t;
+    const wchar_t* cl = GetCommandLineW();
+    const wchar_t* at = cl ? wcsstr(cl, L"bg3rtxse=") : nullptr;
+    if (at)
+      for (const wchar_t* c = at + 9; *c && t.size() < 24; ++c) {
+        if (!(iswalnum(*c) || *c == L'_' || *c == L'-')) break;
+        t += char(*c);
+      }
+    return t;
+  }();
+  return tok;
+}
+
 std::string se_dir() {
   char buf[MAX_PATH];
   if (GetEnvironmentVariableA("BG3RTX_SE_DIR", buf, MAX_PATH)) return buf;
   if (!GetEnvironmentVariableA("LOCALAPPDATA", buf, MAX_PATH)) return "";
-  return std::string(buf) + "\\Larian Studios\\Baldur's Gate 3\\Script Extender\\bg3rtx";
+  std::string d = std::string(buf) + "\\Larian Studios\\Baldur's Gate 3\\Script Extender\\bg3rtx";
+  return se_token().empty() ? d : d + "\\" + se_token();
 }
 
 bool se_parse_lights(const std::string& text, SeSnapshot& out) {

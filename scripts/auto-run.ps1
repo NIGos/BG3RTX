@@ -7,6 +7,14 @@
 #   .\scripts\auto-run.ps1 -Set preset=ultra        a settings preset (common/settings.h) for this run
 #   .\scripts\auto-run.ps1 -UserIni <file>          also layer a launcher-written bg3rtx_user.ini
 #   .\scripts\auto-run.ps1 -KeepRunning             leave the game open afterwards
+#
+# Concurrency (docs/TEST_SCENES.md, "Concurrent runs"): -Background headless runs are
+# "shared": up to two games of ours run at once, from any checkouts. -RealPresent,
+# -Exclusive and foreground runs are "exclusive": nothing else of ours runs meanwhile.
+# Timings are only meaningful from exclusive runs; the run mode is printed and written
+# to each capture's run.json. -Tag lets two runs share one checkout (scene-sweep.ps1,
+# scripts/qa): their files get the tag (captures\auto.<tag>.ini, bg3rtx.<tag>.log,
+# captures\<stamp>-<tag>, ...).
 param(
   [int]$Traces = 1,
   [int]$TimeoutSec = 480,
@@ -14,7 +22,7 @@ param(
   [switch]$NoBuild,
   [switch]$KeepRunning,
   # Real presentation instead of headless (needed for frame generation and for
-  # anything that must reach the display).
+  # anything that must reach the display). Always exclusive.
   [switch]$RealPresent,
   # Hold a camera-pan key (default D) once gameplay is reached, so the
   # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
@@ -36,7 +44,12 @@ param(
   # the launcher writes it). Default: none, so test runs ignore the player's file.
   [string]$UserIni = "",
   # Skip analyze_trace.py on the new captures (the QA harness reads dumps.json only).
-  [switch]$NoAnalyze
+  [switch]$NoAnalyze,
+  # Timing / performance runs: no other game of ours runs at the same time.
+  [switch]$Exclusive,
+  # Run files of this checkout carry this tag, so two runs can share the checkout.
+  [ValidatePattern('^[A-Za-z0-9_]{0,16}$')]
+  [string]$Tag = ""
 )
 $ErrorActionPreference = "Stop"
 # "powershell -File" passes "-Set a=1,b=2" as one string: split it.
@@ -44,13 +57,40 @@ $Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $root = Split-Path $PSScriptRoot
 $caps = Join-Path $root "captures"
 New-Item -ItemType Directory -Force $caps | Out-Null
+. (Join-Path $PSScriptRoot "gamelock.ps1")
 
 if (-not $NoBuild) { & (Join-Path $PSScriptRoot "build.ps1") }
 
-# One game at a time across every checkout and worktree of this repository.
-$mutex = New-Object System.Threading.Mutex($false, "Global\BG3RTX_game_run")
-Write-Host "Waiting for the game lock..."
-try { [void]$mutex.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
+# This run's files: untagged as before, or with ".<tag>" (the layer reads BG3RTX_RUN_TAG).
+function Tagged([string]$dir, [string]$name, [string]$ext) {
+  if ($Tag) { Join-Path $dir "$name.$Tag$ext" } else { Join-Path $dir "$name$ext" }
+}
+$ini = Tagged $caps "auto" ".ini"
+$doneFile = Tagged $caps "auto" ".done"
+$log = Tagged $root "bg3rtx" ".log"
+$pidFile = Tagged $caps "game" ".pid"
+$saveLog = Tagged $caps "saves" ".txt"
+
+# One run per checkout and tag: two would share the files above.
+$sha = [System.Security.Cryptography.SHA1]::Create()
+$rootKey = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($root.ToLowerInvariant())) | Select-Object -First 8 | ForEach-Object { $_.ToString("x2") })
+$checkoutMutex = New-NamedMutex "Global\BG3RTX_checkout_${rootKey}_$Tag"
+if (-not (Lock-Mutex $checkoutMutex 0)) {
+  Write-Host "Another run of this checkout$(if ($Tag) { " (tag $Tag)" }) is active; waiting..."
+  [void](Lock-Mutex $checkoutMutex)
+}
+
+# Exclusive: frame generation and anything presented for real needs the foreground,
+# foreground runs move the focus, and timings must not share the GPU.
+$isExclusive = $Exclusive -or $RealPresent -or -not $Background
+Write-Host "Waiting for the game lock ($(if ($isExclusive) { 'exclusive' } else { 'shared' }))..."
+$lock = if ($isExclusive) { Enter-ExclusiveLock } else { Enter-SharedLock (Join-Path $PSScriptRoot "gamelock.ps1") }
+$runMode = $lock.Mode
+$slot = $lock.Slot
+Write-Host "Run mode: $runMode$(if ($slot -ge 0) { " (slot $slot): timings are not exclusive" })"
+$game = $null
+$cleanedUp = $false
+try {
 
 Add-Type -Namespace BG3RTX -Name Win -MemberDefinition @"
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr h);
@@ -68,23 +108,29 @@ if (-not $Background) {
   [BG3RTX.Win]::mouse_event(0x0001, 1, 0, 0, [UIntPtr]::Zero)
   [BG3RTX.Win]::mouse_event(0x0001, -1, 0, 0, [UIntPtr]::Zero)
 }
+
+# Only this run's game (by PID) is ever focused, sent keys, or closed.
+function Get-GameWindow {
+  if (-not $game -or $game.HasExited) { return [IntPtr]::Zero }
+  $game.Refresh()
+  $game.MainWindowHandle
+}
+
 # BG3 renders but stops presenting while its window is not in the foreground.
 # Background runs: the new game window takes the foreground when it is
 # created; hand it back to whatever the user had in front.
 $userFg = [BG3RTX.Win]::GetForegroundWindow()
 function Focus-Game {
+  $h = Get-GameWindow
+  if ($h -eq [IntPtr]::Zero) { return }
   if ($Background) {
-    $p = Get-Process bg3 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-    if ($p -and [BG3RTX.Win]::GetForegroundWindow() -eq $p.MainWindowHandle -and $userFg -ne [IntPtr]::Zero) {
+    if ([BG3RTX.Win]::GetForegroundWindow() -eq $h -and $userFg -ne [IntPtr]::Zero) {
       [BG3RTX.Win]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)   # Alt tap lifts the foreground lock
       [BG3RTX.Win]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
       [void][BG3RTX.Win]::SetForegroundWindow($userFg)
     }
     return
   }
-  $p = Get-Process bg3 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-  if (-not $p) { return }
-  $h = $p.MainWindowHandle
   if ([BG3RTX.Win]::GetForegroundWindow() -eq $h) { return }
   [BG3RTX.Win]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)   # Alt tap lifts the foreground lock
   [BG3RTX.Win]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
@@ -100,45 +146,56 @@ function Send-MoveKey([bool]$down, [bool]$repeat = $false) {
     [BG3RTX.Win]::keybd_event(0, $MoveScan, $(if ($down) { 0x0008 } else { 0x000A }), [UIntPtr]::Zero)
     return
   }
-  $p = Get-Process bg3 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-  if (-not $p) { return }
+  $h = Get-GameWindow
+  if ($h -eq [IntPtr]::Zero) { return }
   $l = 1 -bor ([int64]$MoveScan -shl 16)
   if (-not $down) { $l = $l -bor 0xC0000000 }
   elseif ($repeat) { $l = $l -bor 0x40000000 }   # auto-repeat: the key was already down
-  [void][BG3RTX.Win]::PostMessage($p.MainWindowHandle, $(if ($down) { 0x0100 } else { 0x0101 }), [IntPtr]$moveVk, [IntPtr]$l)
+  [void][BG3RTX.Win]::PostMessage($h, $(if ($down) { 0x0100 } else { 0x0101 }), [IntPtr]$moveVk, [IntPtr]$l)
 }
 
-Get-Process bg3 -ErrorAction SilentlyContinue | ForEach-Object {
-  Write-Host "Closing a running bg3.exe (pid $($_.Id))"
-  $_ | Stop-Process -Force
-  $_.WaitForExit(15000) | Out-Null
+# A game this checkout (and tag) left running: an earlier run with -KeepRunning, or
+# one whose script was killed. Other games, other agents' and the player's, stay.
+if (Test-Path $pidFile) {
+  $old = try { Get-Content $pidFile -Raw | ConvertFrom-Json } catch { $null }
+  if ($old -and (Test-ProcAlive $old.pid $old.start)) {
+    $p = Get-Process -Id $old.pid
+    Write-Host "Closing the game an earlier run of this checkout left running (pid $($p.Id))"
+    [void]$p.CloseMainWindow()
+    if (-not $p.WaitForExit(20000)) { $p | Stop-Process -Force; $p.WaitForExit(15000) | Out-Null }
+  }
+  Remove-Item $pidFile -ErrorAction SilentlyContinue
 }
+$others = @(Get-Process bg3, bg3_dx11 -ErrorAction SilentlyContinue)
+if ($others.Count) { Write-Host "Other games running (left alone): pid $(($others | ForEach-Object Id) -join ', ')" }
 
 # Only once the game lock is held: a game that exited while we waited may have
 # rewritten graphicSettings.lsx without its DLSS entries.
 $ensure = @((Join-Path $PSScriptRoot "ensure-settings.py"),
             (Join-Path $root "..\..\..\scripts\ensure-settings.py")) | Where-Object { Test-Path $_ } | Select-Object -First 1
+$ensureHere = Join-Path $PSScriptRoot "ensure-settings.py"
+Repair-DisplaySettings $ensureHere (Join-Path $caps "display_prev.json")
 if ($ensure) { py -3 -I $ensure }
 
 # This run's settings: the layer reads the repository's bg3rtx.ini, then this
 # override file (%BG3RTX_INI%) with the auto-trace keys and -Set. -Set preset=ultra
 # expands that preset here; explicit keys of this file (headless, fg=0, other -Set
 # keys) still win. The player's bg3rtx_user.ini is skipped unless -UserIni.
-$ini = Join-Path $caps "auto.ini"
-$lines = @("# auto-run.ps1 overrides, layered over bg3rtx.ini") + @("auto_trace=1", "auto_traces=$Traces") +
-         @(if (-not $RealPresent) { "headless=1", "fg=0" }) +
-         @(if ($Save) { "auto_min_draws=400", "auto_after_load=1" }) + $Set   # other scenes draw far fewer than the foundry (Rivington ~1240)   # headless test runs: no frame generation unless asked
+$lines = @("# auto-run.ps1 overrides, layered over bg3rtx.ini ($runMode run)") + @("auto_trace=1", "auto_traces=$Traces") +
+         @(if (-not $RealPresent) { "headless=1", "fg=0" }) +   # headless test runs: no frame generation unless asked
+         @(if ($Save) { "auto_min_draws=400", "auto_after_load=1" }) + $Set   # other scenes draw far fewer than the foundry (Rivington ~1240)
 $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
 if ($UserIni) { $env:BG3RTX_USER_INI = (Resolve-Path $UserIni).Path } else { $env:BG3RTX_USER_INI = "none" }
-Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
+if ($Tag) { $env:BG3RTX_RUN_TAG = $Tag } else { Remove-Item Env:BG3RTX_RUN_TAG -ErrorAction SilentlyContinue }
+Remove-Item $doneFile -ErrorAction SilentlyContinue
 
-py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py")
-$displayPrev = Join-Path $caps "display_prev.json"
 Remove-Item Env:BG3RTX_BACKGROUND -ErrorAction SilentlyContinue
+$displayUser = Join-Path $script:DisplayUsers "$PID.json"
 if ($Background) {
-  # Borderless at the desktop resolution; the player's values come back after the run.
-  py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py") --set Fullscreen=0 FakeFullscreenEnabled=1 --prev $displayPrev
+  # Borderless at the desktop resolution; the player's values come back after the
+  # last background run (gamelock.ps1, Enter-/Exit-BackgroundDisplay).
+  Enter-BackgroundDisplay $ensureHere $displayUser
   $env:BG3RTX_BACKGROUND = "1"
 }
 
@@ -146,44 +203,58 @@ if ($Background) {
 # package (file timestamps are ignored). To load another one, the layer hides
 # every other save folder from the game's listing of Savegames\Story
 # (layer/savefilter.cpp, BG3RTX_SAVE_ONLY); nothing on disk changes, so Steam
-# Cloud sees no difference. Saves the game writes during the run (autosaves)
-# are moved into Savegames\_bg3rtx_parked so the player's list is unaffected.
+# Cloud sees no difference. Saves this game writes during the run (autosaves) are
+# recorded by the layer (BG3RTX_SAVE_LOG) and moved into Savegames\_bg3rtx_parked,
+# so the player's list is unaffected; saves of other games are never moved.
 $saveRoot = Join-Path $env:LOCALAPPDATA "Larian Studios\Baldur's Gate 3\PlayerProfiles\Public\Savegames\Story"
 $savesBefore = @(Get-ChildItem $saveRoot -Directory | ForEach-Object Name)
+Remove-Item $saveLog -ErrorAction SilentlyContinue
+$env:BG3RTX_SAVE_LOG = $saveLog
 $gameArgs = @("-continueGame")
 Remove-Item Env:BG3RTX_SAVE_ONLY -ErrorAction SilentlyContinue
 if ($Save) {
   $sd = Get-ChildItem $saveRoot -Directory | Where-Object { $_.Name -like "*__*$Save*" } | Select-Object -First 1
-  if (-not $sd) { $mutex.ReleaseMutex(); throw "No save matching '$Save'" }
+  if (-not $sd) { throw "No save matching '$Save'" }
   Write-Host "Save: $($sd.Name)"
-  $lsv = Get-ChildItem -LiteralPath $sd.FullName -Filter *.lsv | Select-Object -First 1
+  $env:BG3RTX_SAVE_ONLY = $sd.Name
   $gameArgs = @("-loadSaveGame", "`"$($sd.Name)`"")
 }
+# Shared runs: this game's Script Extender bridge files go to bg3rtx\slot<N>\
+# (layer/sebridge.cpp se_token, mods/BG3RTX_Bridge), so two games never mix.
+if ($slot -ge 0) { $gameArgs += "bg3rtxse=slot$slot" }
 function Restore-Saves {
   $parked = Join-Path (Split-Path $saveRoot) "_bg3rtx_parked"
-  Get-ChildItem $saveRoot -Directory | Where-Object { $savesBefore -notcontains $_.Name } | ForEach-Object {
+  $mine = @(if (Test-Path $saveLog) { Get-Content $saveLog -Encoding UTF8 | Where-Object { $_ } | Sort-Object -Unique })
+  foreach ($name in $mine) {
+    $d = Join-Path $saveRoot $name
+    if ($savesBefore -contains $name -or -not (Test-Path -LiteralPath $d)) { continue }
     New-Item -ItemType Directory -Force $parked | Out-Null
-    Write-Host "Parking save written during the run: $($_.Name)"
-    Move-Item -LiteralPath $_.FullName -Destination $parked
+    Write-Host "Parking save written during the run: $name"
+    Move-Item -LiteralPath $d -Destination $parked
   }
+  $foreign = @(Get-ChildItem $saveRoot -Directory | Where-Object { $savesBefore -notcontains $_.Name -and $mine -notcontains $_.Name })
+  if ($foreign.Count) { Write-Host "New saves not written by this run's game (left in place): $(($foreign | ForEach-Object Name) -join ', ')" }
 }
 
 $start = Get-Date
+$launchArgs = @{ Clean = $true; GameArgs = $gameArgs }
 if ($Validation) {
-  $vlog = Join-Path $caps "validation.log"
+  $vlog = Tagged $caps "validation" ".log"
   Remove-Item $vlog -ErrorAction SilentlyContinue
-  $settings = Join-Path $caps "vk_layer_settings.txt"
+  $settings = Tagged $caps "vk_layer_settings" ".txt"
   @("khronos_validation.log_filename = $($vlog.Replace('\','/'))",
     "khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG",
     "khronos_validation.report_flags = error,warn",
     "khronos_validation.duplicate_message_limit = 3") | Set-Content $settings
   $env:VK_LAYER_SETTINGS_PATH = $settings
-  & (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -Validation -GameArgs $gameArgs
-} else {
-& (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -GameArgs $gameArgs
+  $launchArgs.Validation = $true
 }
+$game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
+if (-not $game) { throw "launch-bg3.ps1 returned no process" }
+@{ pid = $game.Id; start = (Get-ProcStart $game); tag = $Tag; mode = $runMode; slot = $slot } | ConvertTo-Json | Set-Content $pidFile
+if ($Background) { Set-DisplayUserGame $displayUser $game }
+Write-Host "Game pid $($game.Id)"
 
-$log = Join-Path $root "bg3rtx.log"
 $deadline = $start.AddSeconds($TimeoutSec)
 $lastNote = Get-Date
 $result = "timeout"
@@ -214,9 +285,8 @@ while ((Get-Date) -lt $deadline) {
     }
     if ($moving) { Send-MoveKey $true }
   }
-  if (Test-Path (Join-Path $caps "auto.done")) { $result = "done"; break }
-  $p = Get-Process bg3 -ErrorAction SilentlyContinue
-  if (-not $p -and ((Get-Date) - $start).TotalSeconds -gt 30) { $result = "game exited"; break }
+  if (Test-Path $doneFile) { $result = "done"; break }
+  if ($game.HasExited) { $result = "game exited"; break }
   if (((Get-Date) - $lastNote).TotalSeconds -ge 30) {
     $lastNote = Get-Date
     $tail = if (Test-Path $log) { (Get-Content $log -Tail 1) } else { "(no log yet)" }
@@ -226,28 +296,36 @@ while ((Get-Date) -lt $deadline) {
   }
 }
 if ($moving) { Send-MoveKey $false }
-Write-Host "Run ended: $result after $([int]((Get-Date) - $start).TotalSeconds)s"
+$end = Get-Date
+Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($runMode)"
 
-if (-not $KeepRunning) {
-  # Ask nicely first so the game can save its pipeline cache; a killed game
-  # recompiles ~30k pipelines on the next start.
-  $p = Get-Process bg3 -ErrorAction SilentlyContinue
-  if ($p) {
-    [void]$p.CloseMainWindow()
-    if (-not $p.WaitForExit(20000)) { $p | Stop-Process -Force }
+} finally {
+  # Also on errors and Ctrl+C. A killed script skips this: its locks are released by
+  # Windows, the next run of this checkout closes its game (game.pid), and the next
+  # background run restores the display settings once no run of ours is alive.
+  if (-not $KeepRunning) {
+    # Ask nicely first so the game can save its pipeline cache; a killed game
+    # recompiles ~30k pipelines on the next start.
+    if ($game -and -not $game.HasExited) {
+      [void]$game.CloseMainWindow()
+      if (-not $game.WaitForExit(20000)) { $game | Stop-Process -Force; $game.WaitForExit(15000) | Out-Null }
+    }
+    Remove-Item $pidFile -ErrorAction SilentlyContinue
+    if (Get-Command Restore-Saves -ErrorAction SilentlyContinue) { Restore-Saves }
+  } elseif ($Save) {
+    Write-Host "KeepRunning: saves written during the run are not parked"
   }
-  Restore-Saves
-  if ($Background -and (Test-Path $displayPrev)) {
-    py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py") --restore $displayPrev
-    Remove-Item $displayPrev
-  }
-} elseif ($Save) {
-  Write-Host "KeepRunning: saves written during the run are not parked"
+  if ($Background -and $displayUser) { Exit-BackgroundDisplay $ensureHere $displayUser ([bool]$KeepRunning) }
+  Exit-GameLock $lock
+  $checkoutMutex.ReleaseMutex()
 }
-$mutex.ReleaseMutex()
 
-$new = Get-ChildItem $caps -Directory | Where-Object { $_.Name -ne "shaders" -and $_.LastWriteTime -ge $start -and (Test-Path (Join-Path $_.FullName "done.txt")) } | Sort-Object Name
+$capRe = if ($Tag) { "^\d{8}-\d{6}-$Tag$" } else { '^\d{8}-\d{6}$' }
+$new = Get-ChildItem $caps -Directory | Where-Object { $_.Name -match $capRe -and $_.LastWriteTime -ge $start -and (Test-Path (Join-Path $_.FullName "done.txt")) } | Sort-Object Name
 foreach ($c in $new) {
+  # Whether timings in this capture can be trusted (only exclusive runs).
+  @{ mode = $runMode; slot = $slot; exclusive = ($runMode -eq "exclusive"); tag = $Tag; save = $Save; game_pid = $game.Id
+     run_start = $start.ToString("o"); run_end = $end.ToString("o") } | ConvertTo-Json | Set-Content (Join-Path $c.FullName "run.json")
   if ($NoAnalyze) { Write-Host "capture: $($c.FullName)"; continue }
   py -3 (Join-Path $PSScriptRoot "analyze_trace.py") $c.FullName --disasm
   $geo = Join-Path $c.FullName "geo\report.json"
@@ -258,6 +336,7 @@ foreach ($c in $new) {
       ($g.depth.behind / $g.depth.geometry), ($g.depth.missing / $g.depth.geometry), $g.normals.abs_dot_median)
   }
 }
+if ($runMode -ne "exclusive" -and -not $NoAnalyze) { Write-Host "Note: shared run - frame timings above are not exclusive (another game may have used the GPU)" }
 if (-not $new) {
   Write-Host "No completed capture. Last log lines:"
   if (Test-Path $log) { Get-Content $log -Tail 25 }

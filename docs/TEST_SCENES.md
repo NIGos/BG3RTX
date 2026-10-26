@@ -23,11 +23,14 @@ could look like a deletion to it.
 
 Runs with `-Save` set `auto_after_load=1`: the trace waits for a loading screen
 after the 3D main menu, since other scenes draw about as much as the menu.
-`scripts/scene-sweep.ps1` runs every scene in turn and writes
-`captures/scene-sweep.json`.
+`scripts/scene-sweep.ps1` runs every scene, two at a time (see below), and writes
+`captures/scene-sweep.json`. `-Exclusive` runs them one at a time.
 
-Saves the game writes during the run are parked in `Savegames\_bg3rtx_parked`
-instead of joining the player's list. Save content is never modified. A full copy of the player's profile and saves, taken
+Saves this run's game writes (the layer records the folders it creates,
+`BG3RTX_SAVE_LOG`, `layer/savefilter.cpp`) are parked in `Savegames\_bg3rtx_parked`
+instead of joining the player's list. Saves of any other game, a concurrent test
+run's or the player's, are never moved; new folders not written by this run's game
+are only listed in its output. Save content is never modified. A full copy of the player's profile and saves, taken
 2026-10-26 before the first `-Save` run, is in
 `D:\BG3_Save_Backup\20261026_PlayerProfiles`. It has 227 files and 2.12 GB, and
 the newest save's hash matches the original. To restore, copy it back over

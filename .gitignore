@@ -14,3 +14,5 @@ __pycache__/
 
 # Asset database: generated from the game install (python -m tools.assets build)
 /data/assetdb/
+bg3rtx.*.log
+trace.*.request

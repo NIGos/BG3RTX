@@ -17,7 +17,23 @@
 -- and only the lights within RANGE are read again: visual and character lights each export,
 -- placed lights (which do not move) a quarter of them per export.
 
-local OUT = "bg3rtx/lights.txt"
+-- Two games at once (scripts/auto-run.ps1 shared runs): each gets "bg3rtxse=<token>" on
+-- its command line and uses the folder bg3rtx/<token>/, as its layer does
+-- (layer/sebridge.cpp se_token). Without it: bg3rtx/ as before.
+local function bridge_dir()
+  local ok, params = pcall(function() return Ext.Utils.GetCommandLineParams() end)
+  if ok and type(params) == "table" then
+    local function find(s) return type(s) == "string" and s:match("bg3rtxse=([%w_%-]+)") end
+    for k, v in pairs(params) do
+      local t = find(k) or find(v) or (k == "bg3rtxse" and type(v) == "string" and v:match("^([%w_%-]+)$"))
+      if not t and type(v) == "table" then for _, s in pairs(v) do t = t or find(s) end end
+      if t then return "bg3rtx/" .. t .. "/" end
+    end
+  end
+  return "bg3rtx/"
+end
+local DIR = bridge_dir()
+local OUT = DIR .. "lights.txt"
 local PERIOD_US = 250000        -- 4 Hz
 local RANGE = 60.0              -- m around the controlled character
 local CLASSIFY_BUDGET = 100     -- new light entities classified per tick
@@ -272,13 +288,13 @@ local function tick()
   Ext.IO.SaveFile(OUT, hdr .. "\n" .. table.concat(out, "\n") .. "\nEND\n")
 end
 
--- Active only while the BG3RTX layer runs: it rewrites bg3rtx/active.txt every
+-- Active only while the BG3RTX layer runs: it rewrites <bridge dir>/active.txt every
 -- second. Without the layer (a normal game start) the bridge does no work.
 local hb_last, hb_seen, hb_check = nil, -1e9, -1e9
 local function layer_active(now)
   if now - hb_check >= 2.0 then
     hb_check = now
-    local s = Ext.IO.LoadFile("bg3rtx/active.txt")
+    local s = Ext.IO.LoadFile(DIR .. "active.txt")
     if s ~= nil and s ~= hb_last then hb_last = s; hb_seen = now end
   end
   return now - hb_seen < 5.0
@@ -287,5 +303,5 @@ end
 Ext.Events.Tick:Subscribe(function()
   if not layer_active(Ext.Timer.MicrosecTime() / 1e6) then return end
   local ok, err = pcall(tick)
-  if not ok then Ext.IO.SaveFile("bg3rtx/error_client.txt", tostring(err)) end
+  if not ok then Ext.IO.SaveFile(DIR .. "error_client.txt", tostring(err)) end
 end)
