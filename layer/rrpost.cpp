@@ -35,12 +35,27 @@ namespace bg3 {
 namespace {
 
 constexpr uint64_t kFsCompose = 0x5c3fdabc477f316aull;
+constexpr uint64_t kFsSss1 = 0x6f5350759c4ad056ull;   // SSS blur 1: reads the diffuse light before SSS (set 1 b3)
 constexpr uint64_t kFsGodRays = 0xa7466e4ef8df23b6ull;
 constexpr uint64_t kFsDof = 0x96bb806dece0ad36ull;
 constexpr uint64_t kCsResolve = 0x7401d78564eb8bacull;
 constexpr uint64_t kFsExposure = 0x2cdd9f08314642a3ull;
 constexpr uint64_t kFsBloom = 0x0463a5279d9589c2ull;
 constexpr uint64_t kFsGrade = 0x0592680bc336dca3ull;
+// Every other pass or dispatch the game records between the first post step
+// and the grade. Anything not in this list is a post effect the chain does not
+// model (seen: a tint vignette 3b556695 with its mask abfdaa7e, a 3D overlay
+// a1e30a20, chromatic aberration b9f5a8ab, all in one Goblin Camp state): the
+// frame then falls back to RR on the game's graded colour, so the look never
+// changes.
+constexpr uint64_t kKnownInChain[] = {
+    0xf4b1495e5e81a27eull,  // god-ray mask (half res)
+    0x126243ea812375e2ull, 0xea7685a91b8621d6ull, 0x22a45f323076c7eeull, 0x0963a38316d723ceull,  // DoF
+    0xb0b686139cc06ff7ull, 0x061a44c27a2cd65bull, 0x05bac4b30d959fd1ull, 0x6d4e162f416a5e66ull,
+    0x3f6186576f49de56ull, 0x784f260b3b7195bdull,
+    0x38f22d8be6074b47ull,  // exposure measure (reads only)
+    0x3434e56117615cf9ull, 0x6bfc74d75d384c8aull, 0x779cbf3adb06ab7eull,  // bloom down/up
+};
 constexpr uint64_t kCsLighting = 0xf469db7865d7c524ull;  // tiled lighting, standard class
 constexpr uint64_t kCsAdapt = 0xbd9db92d9abc7fb7ull;     // exposure adaptation
 
@@ -71,7 +86,7 @@ struct Binds {
   VkImageView stencil = VK_NULL_HANDLE;
   VkImageLayout stencil_l = VK_IMAGE_LAYOUT_UNDEFINED;
   bool ac = false;
-  VkImageView out11 = VK_NULL_HANDLE, out16 = VK_NULL_HANDLE;
+  VkImageView out11 = VK_NULL_HANDLE, out16 = VK_NULL_HANDLE, out_r16 = VK_NULL_HANDLE;
   VkDescriptorBufferInfo buf[3] = {};
   bool has_buf[3] = {};
   bool probe = false;
@@ -80,6 +95,7 @@ struct Binds {
 struct Chain {
   VkCommandBuffer cmd = VK_NULL_HANDLE;
   uint64_t frame = 0;
+  uint64_t recording = 0;   // CmdState::recording: one chain per recording of a command buffer
   int stage = 0;  // 1 started, 2 dof, 3 resolved, 4 exposed, 5 bloom, 6 graded
   bool broken = false;
   std::string why;
@@ -92,7 +108,8 @@ struct Chain {
 
 std::mutex g_mu;
 Chain g_ch;
-Img g_xs, g_xr, g_ac, g_check, g_cbt, g_z;
+Img g_xs, g_xr, g_ac, g_check, g_cbt, g_z, g_sss_before, g_sss;
+uint64_t g_sss_before_frame = 0, g_sss_frame = 0;
 uint64_t g_cbt_frame = 0;
 VkDescriptorSetLayout g_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_pl = VK_NULL_HANDLE;
@@ -106,8 +123,8 @@ struct Pipe {
   VkPipeline pipe = VK_NULL_HANDLE;
   uint64_t gen = 0;
 };
-Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}};
-enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE };
+Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}};
+enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS };
 std::string g_last_logged_why;
 uint64_t g_completed = 0, g_broken_frames = 0;
 
@@ -205,21 +222,21 @@ bool img_ensure(DeviceData* dd, Img& g, VkFormat fmt, uint32_t w, uint32_t h, co
 
 bool ensure_layout(DeviceData* dd) {
   if (g_dsl) return true;
-  VkDescriptorSetLayoutBinding b[13] = {};
-  const VkDescriptorType types[13] = {
+  VkDescriptorSetLayoutBinding b[14] = {};
+  const VkDescriptorType types[14] = {
       VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
       VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLER,
       VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
-  for (uint32_t i = 0; i < 13; ++i) {
+      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+  for (uint32_t i = 0; i < 14; ++i) {
     b[i].binding = i;
     b[i].descriptorType = types[i];
     b[i].descriptorCount = 1;
     b[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
   }
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.bindingCount = 13;
+  dci.bindingCount = 14;
   dci.pBindings = b;
   if (dd->vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) != VK_SUCCESS) return false;
   VkPushConstantRange pcr{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
@@ -231,7 +248,7 @@ bool ensure_layout(DeviceData* dd) {
   if (dd->vk.CreatePipelineLayout(dd->device, &pci, nullptr, &g_pl) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 5 * kRing},
                                    {VK_DESCRIPTOR_TYPE_SAMPLER, kRing},
-                                   {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3 * kRing},
+                                   {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4 * kRing},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4 * kRing}};
   VkDescriptorPoolCreateInfo ppi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   ppi.maxSets = kRing;
@@ -335,8 +352,8 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   VkPipeline pipe = pipeline(dd, g_pipes[which]);
   if (!pipe) return false;
   VkDescriptorSet set = g_sets[g_next_set++ % kRing];
-  VkDescriptorImageInfo ii[10] = {};
-  VkWriteDescriptorSet w[13] = {};
+  VkDescriptorImageInfo ii[12] = {};
+  VkWriteDescriptorSet w[14] = {};
   uint32_t n = 0, k = 0;
   auto img = [&](uint32_t binding, VkDescriptorType t, VkImageView v, VkImageLayout l) {
     if (!v) return;
@@ -363,6 +380,7 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   if (b.ac) img(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, g_ac.view, VK_IMAGE_LAYOUT_GENERAL);
   img(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.out11, VK_IMAGE_LAYOUT_GENERAL);
   img(8, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.out16, VK_IMAGE_LAYOUT_GENERAL);
+  img(13, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.out_r16, VK_IMAGE_LAYOUT_GENERAL);
   VkDescriptorBufferInfo bi[4];
   for (uint32_t i = 0; i < 3; ++i)
     if (b.has_buf[i]) {
@@ -484,10 +502,13 @@ void breaks(const char* why) {
 
 // A new chain when a post step arrives in another command buffer or frame.
 void touch(VkCommandBuffer cmd) {
-  if (g_ch.cmd == cmd && g_ch.frame == frame_index()) return;
+  CmdState* cs = cmd_state(cmd);
+  const uint64_t rec = cs ? cs->recording : 0;
+  if (g_ch.cmd == cmd && g_ch.recording == rec) return;
   g_ch = Chain{};
   g_ch.cmd = cmd;
   g_ch.frame = frame_index();
+  g_ch.recording = rec;
 }
 
 bool start(DeviceData* dd, VkCommandBuffer cmd, VkImageView x, VkImageLayout xl, uint32_t w, uint32_t h) {
@@ -664,8 +685,45 @@ void on_grade(DeviceData* dd, VkCommandBuffer cmd) {
     Push pc{};
     pc.size[0] = g_ch.w, pc.size[1] = g_ch.h;
     memcpy(pc.grade, g_ch.grade, sizeof pc.grade);
+    pc.flags = cfg_int("rr_post_quantise", 1) ? 2u : 0u;
     run(dd, cmd, P_CHECK, b, pc, (g_ch.w + 7) / 8, (g_ch.h + 7) / 8);
   }
+}
+
+// SSS guide, step 1: the diffuse light before the SSS blur (set 1 b3 of the
+// first SSS pass 6f535075; that pass does not write it).
+void on_sss1(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
+  if (!cfg_int("rr_sss", 1)) return;
+  Binds b;
+  if (!image_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 3, &b.in[0], &b.in_l[0])) return;
+  if (!img_ensure(dd, g_sss_before, VK_FORMAT_B10G11R11_UFLOAT_PACK32, p.width, p.height, "SSS before (diffuse light)"))
+    return;
+  to_general(dd, cmd, {&g_sss_before});
+  b.out11 = g_sss_before.view;
+  Push pc{};
+  pc.size[0] = p.width, pc.size[1] = p.height;
+  if (run(dd, cmd, P_COPY, b, pc, (p.width + 7) / 8, (p.height + 7) / 8)) g_sss_before_frame = frame_index();
+}
+
+// SSS guide, step 2 (at the compose, which reads the diffuse light after SSS
+// at set 1 b2): lum(after - before * albedo), 0 where SSS did not run.
+void on_sss2(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
+  if (!cfg_int("rr_sss", 1) || !g_sss_before.image || g_sss_before_frame + 1 < frame_index()) return;
+  if (g_sss_before.w != p.width || g_sss_before.h != p.height) return;
+  VkImageView albedo = VK_NULL_HANDLE;
+  if (!ngx_diffuse_albedo(p.width, p.height, &albedo)) return;
+  Binds b;
+  if (!image_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 2, &b.in[0], &b.in_l[0])) return;
+  b.in[1] = g_sss_before.view;
+  b.in_l[1] = VK_IMAGE_LAYOUT_GENERAL;
+  b.in[2] = albedo;
+  b.in_l[2] = VK_IMAGE_LAYOUT_GENERAL;
+  if (!img_ensure(dd, g_sss, VK_FORMAT_R16_SFLOAT, p.width, p.height, "SSS guide (R16F)")) return;
+  to_general(dd, cmd, {&g_sss});
+  b.out_r16 = g_sss.view;
+  Push pc{};
+  pc.size[0] = p.width, pc.size[1] = p.height;
+  if (run(dd, cmd, P_SSS, b, pc, (p.width + 7) / 8, (p.height + 7) / 8)) g_sss_frame = frame_index();
 }
 
 // Colour before transparency (RR guide 3.4.11): the compose output, before the
@@ -716,16 +774,36 @@ void on_compose(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p, VkIma
 // Hooks (layer/cmd.cpp)
 // ---------------------------------------------------------------------------
 
+// A pass or dispatch inside a running chain (this recording, after its first
+// step, before the grade) that is neither a chain step nor a known helper.
+void check_unknown(VkCommandBuffer cmd, uint64_t hash, bool compute) {
+  CmdState* cs = cmd_state(cmd);
+  if (!cs || g_ch.cmd != cmd || g_ch.recording != cs->recording || g_ch.broken) return;
+  if (g_ch.stage < 1 || g_ch.stage >= 6) return;
+  for (uint64_t k : kKnownInChain)
+    if (k == hash) return;
+  char why[96];
+  snprintf(why, sizeof why, "unmodelled post effect %s %016llx", compute ? "cs" : "fs", (unsigned long long)hash);
+  breaks(why);
+}
+
 void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts) {
   if (!cfg_int("rr", 1) || !cfg_int("rr_post", 1) || p.draw_count == 0) return;
   const uint64_t fs = p.first_fs_hash;
-  if (fs != kFsCompose && fs != kFsGodRays && fs != kFsDof && fs != kFsExposure && fs != kFsBloom && fs != kFsGrade)
+  if (fs != kFsCompose && fs != kFsSss1 && fs != kFsGodRays && fs != kFsDof && fs != kFsExposure && fs != kFsBloom && fs != kFsGrade) {
+    std::lock_guard<std::mutex> lock(g_mu);
+    check_unknown(cmd, fs, false);
+    if (p.last_fs_hash != fs) check_unknown(cmd, p.last_fs_hash, false);
     return;
+  }
   DeviceData* dd = device_of(cmd);
   if (!dd) return;
   std::lock_guard<std::mutex> lock(g_mu);
   if (!ensure_layout(dd)) return;
-  if (fs == kFsCompose) on_compose(dd, cmd, p, layouts[0]);
+  if (fs == kFsCompose) {
+    on_sss2(dd, cmd, p);
+    on_compose(dd, cmd, p, layouts[0]);
+  } else if (fs == kFsSss1) on_sss1(dd, cmd, p);
   else if (fs == kFsGodRays) on_godrays(dd, cmd, p);
   else if (fs == kFsDof) on_dof(dd, cmd, p);
   else if (fs == kFsExposure) on_exposure(dd, cmd);
@@ -734,8 +812,12 @@ void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLay
 }
 
 void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs) {
-  if (cs != kCsResolve && cs != kCsLighting && cs != kCsAdapt) return;
   if (!cfg_int("rr", 1) || !cfg_int("rr_post", 1)) return;
+  if (cs != kCsResolve && cs != kCsLighting && cs != kCsAdapt) {
+    std::lock_guard<std::mutex> lock(g_mu);
+    check_unknown(cmd, cs, true);
+    return;
+  }
   DeviceData* dd = device_of(cmd);
   if (!dd) return;
   std::lock_guard<std::mutex> lock(g_mu);
@@ -773,7 +855,8 @@ bool rrpost_take(VkCommandBuffer cmd, uint32_t w, uint32_t h, uint32_t ow, uint3
     snprintf(out->why, sizeof out->why, "%s", why);
     return false;
   };
-  if (g_ch.cmd != cmd || g_ch.frame != frame_index()) return fail("no post chain in this command buffer");
+  CmdState* cs = cmd_state(cmd);
+  if (g_ch.cmd != cmd || !cs || g_ch.recording != cs->recording) return fail("no post chain in this command buffer");
   if (g_ch.broken) return fail(g_ch.why.c_str());
   if (g_ch.stage != 6) return fail("post chain incomplete (no grade pass)");
   if (g_ch.w != w || g_ch.h != h) return fail("post chain at another resolution");
@@ -786,6 +869,8 @@ bool rrpost_take(VkCommandBuffer cmd, uint32_t w, uint32_t h, uint32_t ow, uint3
   out->output = {g_z.image, g_z.view, g_z.fmt, ow, oh};
   if (g_cbt.image && g_cbt.w == w && g_cbt.h == h && g_cbt_frame + 1 >= frame_index())
     out->cbt = {g_cbt.image, g_cbt.view, g_cbt.fmt, w, h};
+  if (g_sss.image && g_sss.w == w && g_sss.h == h && g_sss_frame + 1 >= frame_index())
+    out->sss = {g_sss.image, g_sss.view, g_sss.fmt, w, h};
   out->dof = g_ch.dof;
   return true;
 }
@@ -807,6 +892,7 @@ bool rrpost_final(VkCommandBuffer cmd, VkImageView game_out, uint32_t ow, uint32
   pc.size[0] = ow, pc.size[1] = oh;
   pc.src[0] = g_ch.w, pc.src[1] = g_ch.h;
   memcpy(pc.grade, g_ch.grade, sizeof pc.grade);
+  pc.flags = cfg_int("rr_post_quantise", 1) ? 2u : 0u;
   return run(dd, cmd, P_FINAL, b, pc, (ow + 7) / 8, (oh + 7) / 8);
 }
 
@@ -814,7 +900,7 @@ bool rrpost_final(VkCommandBuffer cmd, VkImageView game_out, uint32_t ow, uint32
 int rrpost_trace_images(VkImage* out, int max) {
   std::lock_guard<std::mutex> lock(g_mu);
   int n = 0;
-  for (const Img* g : {&g_xr, &g_ac, &g_z, &g_check, &g_cbt})
+  for (const Img* g : {&g_xr, &g_ac, &g_z, &g_check, &g_cbt, &g_sss})
     if (g->image && n < max) out[n++] = g->image;
   return n;
 }

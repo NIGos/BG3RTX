@@ -42,6 +42,7 @@
 [[vk::binding(10, 0)]] StructuredBuffer<float> BufB;
 [[vk::binding(11, 0)]] StructuredBuffer<float> BufC;
 [[vk::binding(12, 0)]] RWStructuredBuffer<float> Probe;
+[[vk::binding(13, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> OutR16;
 
 struct Push {
   uint2 size;        // dispatch domain
@@ -50,11 +51,20 @@ struct Push {
   float4 uvclamp;    // texture uv clamp (set 0 b4 _m11, _m12)
   float2 uvscale;    // set 0 b4 _m15
   int dof_m0;        // DoF composite set 1 b2 _m0
-  uint flags;        // bit 0: clamp negatives in final
+  uint flags;        // bit 1: truncate the grade input to R11G11B10 (rr_post_quantise)
   float4 grade;      // grade UBO _m0.._m3
   uint2 bmin, bmax;  // 7401d785 bounds (set 0 b4 _m3, _m4)
 };
 [[vk::push_constant]] Push pc;
+
+// The game's grade input is an R11G11B10 image (6/6/5-bit mantissas), and the
+// GPU truncates on store. flags bit 1 rounds our fp16 chain value the same way
+// before the grade, so the LUT sees the values it always saw.
+float3 trunc_r11g11b10(float3 v) {
+  uint3 u = asuint(max(v, 0.0));
+  u &= uint3(~((1u << 17) - 1u), ~((1u << 17) - 1u), ~((1u << 18) - 1u));
+  return asfloat(u);
+}
 
 float3 finite3(float3 v) { return float3(isfinite(v.x) ? v.x : 0.0, isfinite(v.y) ? v.y : 0.0, isfinite(v.z) ? v.z : 0.0); }
 
@@ -184,6 +194,7 @@ void final(uint3 id : SV_DispatchThreadID) {
   float3 z = finite3(In0.Load(int3(id.xy, 0)).rgb);
   float3 v = finite3(ac.a * z + ac.rgb);
   v = max(v, 0.0);  // the game's grade input is unsigned (R11G11B10)
+  if ((pc.flags & 2u) != 0u) v = trunc_r11g11b10(v);
   OutR11[id.xy] = finite3(bg3_grade(v));
 }
 
@@ -194,6 +205,7 @@ void check(uint3 id : SV_DispatchThreadID) {
   if (any(id.xy >= pc.size)) return;
   float4 ac = In1.Load(int3(id.xy, 0));
   float3 v = max(finite3(ac.a * In0.Load(int3(id.xy, 0)).rgb + ac.rgb), 0.0);
+  if ((pc.flags & 2u) != 0u) v = trunc_r11g11b10(v);
   Out16[id.xy] = float4(bg3_grade(v), 1.0);
 }
 
@@ -206,4 +218,32 @@ void probe(uint3 id : SV_DispatchThreadID) {
     Probe[6 + i] = BufB[i];
   }
   [unroll] for (uint j = 0; j < 4; ++j) Probe[12 + j] = BufC[j];
+}
+
+// copy: In0 -> OutR11 (snapshots, e.g. the diffuse light before the SSS blur).
+[numthreads(8, 8, 1)]
+void copy(uint3 id : SV_DispatchThreadID) {
+  if (any(id.xy >= pc.size)) return;
+  OutR11[id.xy] = In0.Load(int3(id.xy, 0)).rgb;
+}
+
+// sss: RR's screen-space subsurface-scattering guide (RR guide 3.4.12),
+// luminance((after - before) * albedo) with luminance = (r + 2g + b) / 4.
+// BG3's skin pixels are lit with diffuse colour 1 and the SSS pass multiplies
+// the albedo back in (d1669194: out = albedo * blur), so the guide is
+// lum(after - before * albedo). Pixels the SSS passes did not touch (stencil-
+// culled: after == before exactly) get 0, as the guide requires.
+// In0 = diffuse after SSS (the compose's input), In1 = before (our snapshot),
+// In2 = RR's diffuse albedo guide.
+[numthreads(8, 8, 1)]
+void sss(uint3 id : SV_DispatchThreadID) {
+  if (any(id.xy >= pc.size)) return;
+  float3 after = In0.Load(int3(id.xy, 0)).rgb;
+  float3 before = In1.Load(int3(id.xy, 0)).rgb;
+  float g = 0.0;
+  if (any(after != before)) {
+    float3 d = after - before * In2.Load(int3(id.xy, 0)).rgb;
+    g = (d.r + 2.0 * d.g + d.b) * 0.25;
+  }
+  OutR16[id.xy] = isfinite(g) ? g : 0.0;
 }

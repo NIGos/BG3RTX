@@ -177,6 +177,7 @@ struct CmdState {
   uint32_t dispatches_since_pass = 0, indirect_since_pass = 0;
   uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
+  uint64_t recording = 0;              // unique per vkBeginCommandBuffer (rrpost chains)
   bool game_alloc = false;             // allocated through this layer (not by Streamline below it)
   std::vector<std::string> events;     // pre-rendered JSON objects, one per event
   // segment aggregation for the trace
@@ -283,6 +284,8 @@ void ngx_on_present();
 // ABI 6: Ray Reconstruction evaluated in the last few frames (not the rr key):
 // false with FSR/TAA, SR fallback, or a failed RR creation.
 bool ngx_rr_active();
+// RR's diffuse albedo guide (RGBA8, GENERAL) when it has this size.
+bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view);
 
 // ---- RR at the start of post-processing (rrpost.cpp, rr_post=1) ----
 struct RrPostImage {
@@ -295,6 +298,7 @@ struct RrPostInputs {
   RrPostImage color;    // RR colour: the dither-resolved pre-post scene colour
   RrPostImage output;   // RR writes here (RGBA16F, output resolution)
   RrPostImage cbt;      // colour before transparency (image null when stale)
+  RrPostImage sss;      // screen-space SSS guide, R16F (image null when stale)
   bool dof;             // the game's DoF composite ran this frame
   char why[96];         // why not, when rrpost_take fails
 };

@@ -349,6 +349,123 @@ from the latest save. The pairs differ only in `rr_guides_v2`.
   evaluate, measured with timestamp queries around the evaluate in the game's
   command buffer.
 
+## RR before post (`rr_post=1`, the default; AUDIT_SOTA #1, 2026-10-26)
+
+**The problem.** BG3 hands DLSS its *graded* image. Between the scene colour
+and the evaluate it runs, at render resolution: god rays (`a7466e4e`), depth of
+field (12 passes, composite `96bb806d`), a stencil-tagged dither resolve
+(`7401d785`), exposure (`2cdd9f08`), bloom (`0463a527`, `+0.2·bloom`) and a
+PQ-space 3D-LUT grade with an HSV adjust (`0592680b`). RR therefore denoised a
+non-linear, DoF-blurred signal. The RR guide 3.1 wants RR "as close to the start
+of post-processing as possible" and DoF after it.
+
+**What runs now** (`layer/rrpost.cpp`, `shaders/rr_post.hlsl`):
+- **RR's colour** is the scene colour after compose, transparents and
+  `c1fb2881`, before god rays and DoF (`X`), with the game's own dither resolve
+  applied to it (a line-by-line port of `7401d785`, same stencil view, same
+  16x16 tiling and border quirk). RR writes an RGBA16F image of ours.
+- **The post chain is carried to output resolution as a per-pixel affine map**
+  `chain(X) = A·X + C` (render resolution, RGBA16F, rgb C and a A). Each step is
+  recorded in the game's command buffer right where the game's own step is:
+  `start` (first post step: snapshot X, A = 1, C = 0), `dof` (the composite's own
+  far/near blend weights from its CoC images and constants: `A *= (1−w_far)(1−w_near)`),
+  `resolve` (before `7401d785`: RR's colour, and `C = U − A·X` with `U` the
+  game's own chain value there, so god rays and the blurred DoF layers enter
+  exactly), `exposure` (`A, C *= b0[1]·b1[0]`, the game's buffers bound live),
+  `bloom` (`C += 0.2·bloom` at the game's uv).
+- **After RR**, one output-resolution pass writes the game's DLSS output image:
+  `grade(A·RR + C)`, A and C bilinear from render resolution, the game's grade
+  UBO (4 floats, read per frame, so per-area grades follow) and its 32³ LUT,
+  the grade input truncated to R11G11B10 like the game's (`rr_post_quantise`).
+  The tonemap and UI read that image as before.
+- **Guides added:** colour before transparency (the compose output, copied at
+  the compose pass end, same format as the colour; `rr_cbt`) and the
+  screen-space SSS guide (below; `rr_sss`). The DoF guide is not needed: DoF now
+  runs after RR (guide 3.4.13, "can be omitted").
+- **Fallback.** Anything the chain does not model breaks it for that frame and
+  RR gets the game's graded colour, as before (`[rrpost] post chain not
+  followed`, then `[ngx] upscaler ...`; a switch resets RR's history once). The
+  game's other post passes inside the chain are whitelisted by hash; any other
+  pass or dispatch between the first step and the grade is "unmodelled".
+  Seen so far: a level-load transition (1-2 frames, `cs 4681b95e`), and one
+  Goblin Camp cinematic state with chromatic aberration `b9f5a8ab`, a tint
+  vignette `3b556695` (mask `abfdaa7e`) and a 3D overlay `a1e30a20`.
+
+**Replication check.** `rr_post_check=1` (and every trace) also evaluates
+`grade(A·Xr + C)` at render resolution, i.e. our reconstruction of the game's
+own DLSS input from the snapshot, and `scripts/rr_post_compare.py` compares it
+with the game's grade output of the same frame (`dump_raw=1`):
+
+| Scene | Frame | Identical texels | Within 1 R11G11B10 ULP | Notes |
+|---|---|---|---|---|
+| Foundry (god rays pass, no DoF) | `captures/20261026-152537`, `-152554` | **100.00%** | 100.00% | bit-exact |
+| Goblin Camp dialogue (DoF) | see "Runs" below | | | |
+
+Before the R11G11B10 truncation of the grade input was added, the foundry was
+97.4% identical and 100% within 1 ULP, and a DoF frame was uniformly 1.4% (red,
+green) and 2.9% (blue) brighter than the game. That is the game's own chain of
+R11G11B10 stores, which truncate (the GPU rounds toward zero, checked against
+round-to-nearest): each step whose result is not already representable loses
+half a ULP on average. Our chain keeps fp16 between steps, so only the last
+truncation is reproduced.
+
+**A/B against the old path** (foundry, static, the same run toggled live with
+`scripts/live_phases.py`; tonemapped HDR10 frames compared in PQ code values):
+
+| Pair | mean abs delta (10-bit PQ codes) | px > 4 codes | px > 16 codes | mean luminance |
+|---|---|---|---|---|
+| new vs old (`-152554` vs `-152546`) | 1.75 | 11.5% | 0.65% | −0.79% |
+| new vs new, 17 s apart (`-152537` vs `-152554`) | 1.54 | 9.4% | 0.69% | +0.19% |
+
+- Almost all of the difference is the animated character, a flickering sign and
+  small lights (`img/rrpost_foundry_diff_x4.png`); the 1:1 crops
+  (`img/rrpost_foundry_crops.png`, top new, bottom old) show no visible change
+  in static content.
+- The new-vs-old difference is barely above the frame-to-frame floor of the
+  same mode. In a static, converged frame RR's temporal accumulation hides most
+  of what a non-linear input costs; the expected gains are in motion, in dark
+  1-spp areas and in DoF scenes, where the old path also fed RR the blur. That
+  is **not** measured yet (no motion metric; see "Not verified").
+- The mean luminance shift (−0.8%, ≈ 0.4 PQ codes) is within the quantisation
+  difference of the two paths (the old path stores the graded image and RR's
+  output in R11G11B10 twice after the grade).
+- High-frequency energy (mean |Laplacian| in PQ codes) is 15.8 new vs 15.6 old:
+  no loss of detail.
+
+**Pre-exposure (`s1b13[0]`) confirmed.** The exposure probe (logged by
+`[rrpost] exposure probe`) binds the game's buffers in our own compute:
+- the lighting's set 1 b13 is **the same buffer** as `2cdd9f08`'s b0, and the
+  adaptation `bd9db92d` writes the other one (b1): two buffers that swap each
+  frame;
+- their layout is `[0] = 0.8333/2^EV`, `[1] = 1.2·2^EV`, `[2] = EV` (e.g. EV 14.18,
+  `[0] = 4.50e-5` in the foundry);
+- so the lighting is pre-exposed by `0.8333/2^EV(previous)`, and `2cdd9f08`
+  multiplies by `b0[1]·b1[0] = 2^(EV_prev − EV_new)`, a re-exposure that is
+  1.000-1.005 in steady state.
+
+RR's input (both the old graded colour and the new `X`) is therefore already
+eye-adapted. The RR guide 3.7 says the exposure parameters (DLSS guide 3.9,
+which includes the pre-exposure factor) are not supported by RR, so
+`DLSS.Pre.Exposure` stays the game's 1. `rr_pre_exposure=1` passes
+`s1b13[0]` (read back a frame or two late) for an A/B.
+
+**Cost** (RTX 5090, 2560x1067 → 3840x1600, GPU timestamps, `[rrpost] gpu`):
+render-resolution steps 0.088-0.117 ms per frame, output-resolution grade
+0.056-0.067 ms, the CBT copy unmeasured (one 11 MB image copy). About
+**+0.15-0.18 ms** in total. The RR evaluate itself is unchanged (2.5-2.7 ms).
+
+### Preset and snippet
+
+The loaded snippet is now logged at RR creation (`[ngx] RR snippet loaded`):
+- `fg=0` (headless test runs): the game's `bin\nvngx_dlssd.dll`, **310.7.129**;
+- `fg=2`: Streamline's `bin\sl\nvngx_dlssd.dll`, **310.9.16**.
+
+A/B on 310.9.16 (foundry, static, separate runs `-153811` preset 0 and
+`-153033` preset 6): evaluate 2.50-2.56 ms vs 2.50-2.55 ms, and the frames differ
+by 1.15 PQ codes on average (median 0), below the same-mode floor above. The
+default on 310.9.16 is F, as its header says ("Default model RR2"). `rr_preset=6`
+is pinned so an OTA snippet cannot change the model silently.
+
 ## Known limits and next steps
 
 - **Done (v2):** world-space normals, per-pixel N·V and the

@@ -182,6 +182,7 @@ void core_init(DeviceData* dd) {
   g_host.alloc_host_buffer = &alloc_host_buffer;
   g_host.query_set = &query_set;
   g_host.set_spec_hit_distance = &ngx_set_spec_hit_distance;
+  g_host.rr_active = &ngx_rr_active;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);
