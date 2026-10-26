@@ -1480,9 +1480,9 @@ gives: where its vertices are (the mesh pool, binding 8, object space; or the so
 | ray origins: TLAS surface found under | 98.3-99.3% | 98.3-99.3% |
 
 The 0.95% "opaque in front" is the screen-door dithered geometry of 7.1, present in both.
-- In the 3D main menu (before the save loads) the split's primary check reads only 68-72%.
-  The legacy path was not traced there with `rt_stats` in the same run, so this is
-  **not compared yet** (see 11.5).
+- In the 3D main menu, before the save loads, the primary check reads 67-69% with the legacy
+  soup and 68-72% with the split (separate runs, same scene). That low figure belongs to the
+  menu scene, not to the split.
 - The static instance count follows the view. During a pan the cache grew to 627 meshes
   (1.81M unique triangles) with 0 rejections for mismatch.
 
@@ -1494,13 +1494,14 @@ The depth prepass time with XFB active is separate (`geo_timing=1`).
 |---|---|---|
 | **camera panning** (`-Move`), scene build | median **1.37 ms**, p99 **2.91 ms** (every frame a rebuild: BLAS 1.47-2.55 ms) | median **0.45 ms**, p99 **0.83 ms** |
 | panning, depth prepass with XFB | 0.22 ms (0.16-0.37) | 0.17 ms (0.14-0.20) |
-| static foundry, scene build | 0.72 ms (p99 0.78), forced rebuild every 60 frames 2.9 ms | 0.49 ms (p99 0.75) |
-| static foundry, depth prepass with XFB | 0.47 ms | 0.24 ms |
-| static, light view after the pan | 0.21 ms (refit of a small soup) | 0.34-0.37 ms (TLAS 0.14 ms, 60 small per-draw refits 0.17 ms) before the TLAS refit; {TLASREFIT} |
+| static foundry, scene build | 0.71-0.72 ms (p99 0.73-0.92); forced rebuild every 60 frames 2.8-2.9 ms | 0.49 ms (p99 0.75) before the TLAS refit; **0.29-0.35 ms (p99 0.57-0.74)** with it |
+| static foundry, depth prepass with XFB | 0.47-0.49 ms | 0.23-0.24 ms |
+| static, light view after the pan | 0.21 ms (refit of a small soup) | 0.34-0.37 ms (TLAS 0.14 ms, 60 small per-draw refits 0.17 ms) before the TLAS refit; TLAS 0.020 ms once refit (98% of static frames), total 0.25 ms in a comparable light view |
 | level load / first frames | rebuild 2.9 ms | up to 2.1 ms p99 while ~500 meshes are built once |
 
 - **Motion: −0.9 ms median and −2.1 ms p99** per frame on this machine.
-- **Static foundry: −0.46 ms** (−0.23 build, −0.23 XFB).
+- **Static foundry: about −0.65 ms** (build −0.40, XFB −0.25), and no 2.8 ms rebuild every 60
+  frames.
 - In the light outdoor view after the pan, the split was 0.15 ms slower than a legacy refit:
   the fixed TLAS cost plus many small refits. The TLAS refit (11.2) was added for this.
 - The forced legacy rebuild every 60 frames (2.9 ms, the 1% lows) is gone for static
@@ -1512,7 +1513,16 @@ per 100-500 meshes (about 25-35%).
 
 ### 11.4 Validation layer and robustness
 
-{VALIDATION}
+- `auto-run.ps1 -Validation -Background` (Khronos validation below the layer): a baseline
+  was taken with the unmodified main first, then the split was run in gameplay with a 15 s
+  pan (8 minutes). **The message IDs are identical**: the game's own `09600`, `10788`,
+  `08737`, `CopyBuffer-00118`, and the headless `non-acquired-swapchain-image-used`.
+  - The first split run added two IDs of ours: `vkCmdFillBuffer-dstBuffer-00029` and
+    `vkCmdCopyQueryPoolResults-dstBuffer-00825`. The status buffer lacked
+    `TRANSFER_DST` usage; that is fixed.
+  - A third run covered the main menu only, also clean.
+- Non-finite values: 0 in every image dump of the 15 traces taken during this work (legacy
+  and split, static and panning).
 
 - Per run: 0 non-finite or singular instance matrices (about 600k read per 300 frames), 0
   late instance writes, 0 commands recorded but never submitted, 0 validation results lost
@@ -1524,8 +1534,7 @@ per 100-500 meshes (about 25-35%).
 
 ### 11.5 What does not work / next steps
 
-- **Not compared:** the main-menu scene's primary check (68-72% with the split) against the
-  legacy path; Campsite, Lower City and Water Queen's House (foliage, view distance) were not
+- **Not compared:** Campsite, Lower City and Water Queen's House (foliage, view distance) were not
   run with the split; `fg>=2` with the split.
 - **UBO-offset class-A variants** (`2ad8656b`, `106a0550`, `05d39f75`; 45+ draws in the
   foundry prepass) stay per-draw: their rows plus a per-draw translation from a UBO. The

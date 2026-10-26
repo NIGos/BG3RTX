@@ -113,8 +113,9 @@ inline constexpr Knob kKnobs[] = {
 
   {"rt_geometry", "Ray-traced geometry",
    "Builds the game's geometry into a ray-tracing scene every frame. Every ray-traced effect below needs it. "
-   "Opaque leaves alpha-tested casters (grates, foliage, chains) out, which halves the scene update cost. "
-   "Off frees about 2-4 ms on mid-range GPUs.",
+   "Static meshes are built once and cached, so the update costs about 0.5 ms on an RTX 5090, panning or not "
+   "(it was 1.4-2.9 ms while the camera moved). Opaque leaves alpha-tested casters (grates, foliage, chains) out. "
+   "Off frees that cost and the geometry capture.",
    Kind::Choice, Apply::Partial, "Opaque <-> Full: restart", false,
    {{"off", "Off", 0, {{"rt_build", "0"}, {"rt_alpha", "0"}}, {}},
     {"opaque", "Opaque only", kCapRayQuery, {{"rt_build", "auto"}, {"rt_alpha", "0"}}, {}},
