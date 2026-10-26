@@ -120,7 +120,76 @@ evaluate.** This was the key finding:
 
 ## Verification
 
-RESULTS_PLACEHOLDER
+### Test conditions
+
+- **Scene.** Steel Watch Foundry, static camera, loaded from the latest save
+  with `scripts/auto-run.ps1` (headless presentation, from main `e002608`).
+- **Output.** SDR: the display was in standby, so BG3 fell back from HDR10 to
+  B8G8R8A8.
+- **Pair.** RR `captures/20261026-012711`, SR `captures/20261026-013939`, both
+  with `dump_png_width=3840`.
+
+### Images
+
+- **`docs/img/sr_full.png` / `docs/img/rr_full.png`.** Tonemapped output
+  (the tonemap pass that reads the DLSS output), 3840x1600 scaled to 1920x800.
+- **`docs/img/sr_vs_rr_crops.png`.** Three 640x400 crops at 1:1, SR on top
+  and RR below.
+- **`docs/img/sr_vs_rr_diff_x4.png`.** Absolute difference ×4.
+- **The output is correct:** same exposure, colour and geometry.
+  - **Size of the difference.** The mean absolute difference of the tonemapped
+    8-bit images is 0.71/255 (p99 5.3/255).
+  - **Where it differs.** Almost all of the difference is the animated
+    character (a different idle frame) and small light sources. RR's HDR
+    output keeps brighter highlights (max 23.8 vs SR's 9.8 in the linear
+    output), while the means agree to 1.5%.
+  - **Aspects that look the same.** Edges, thin geometry (chains, railings,
+    cables) and texture detail are reconstructed as well as with SR. There is
+    no ghosting or smearing in the static shot.
+- **Guides, at full resolution in the RR capture:**
+  - `d162` diffuse albedo: metals dark, cloth and wood coloured, as expected;
+  - `d163` specular albedo: metals bright, dielectrics about 0.04;
+  - `d164` normals + roughness: world-aligned, the floor +Y.
+
+### Non-finite values and stability
+
+- **Non-finite values: none.** Every dump of both captures has nonfinite = 0,
+  including the guides and the RR output (`d165`).
+- **The one exception was the evaluate-time guide attempt.** Before the
+  guides moved to the G-buffer pass, the normal guide had 267 non-finite
+  texels, because RT0 is aliased at the evaluate.
+- **Crashes: none.** Four RR sessions ran, each including at least one level
+  load. RR creation succeeded every time.
+- **One SR evaluate during a load.** About 20 s in, the game renders one
+  frame without a G-buffer pass (a loading transition). RR declines that frame
+  (`RR skipped this frame`), the game's SR runs, and the next RR frame resets
+  its history.
+- **The live toggle** (`rr` 1→0→1→0→1 in the running game) is covered
+  below.
+
+### Frame cost
+
+Measured with GPU timestamps around the evaluate (`[ngx] gpu` lines) in the
+same scene and run conditions:
+
+| | Guides | Evaluate | Total |
+|---|---|---|---|
+| DLSS SR (preset default, 2560x1067 → 3840x1600) | — | 0.68–0.91 ms | ≈ 0.8 ms |
+| DLSS RR (preset default) | 0.03 ms (one compute pass at render resolution, measured when it ran at the evaluate) | 2.48–2.84 ms | ≈ 2.6 ms |
+
+- **Cost.** RR costs about **+1.8 ms of GPU time per frame** on the RTX 5090
+  at this resolution. That is in line with NVIDIA's table for RR presets D/E
+  in Quality mode (about 1.5–2 ms at a 4K-class output).
+- **Throughput.** The evaluate count per 5 s, a proxy for gameplay frame rate
+  with headless presentation, was about 520 with RR against about 600 with SR
+  in the same scene.
+- **Why `[watch]` is not used.** Its `presents` count mixes in the loading
+  screen's presents, so it is not a clean figure for the frame-rate
+  comparison here. Repeat with the display on to get real fps.
+
+### Live switch
+
+TOGGLE_PLACEHOLDER
 
 ## Debug switches
 
