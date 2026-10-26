@@ -49,13 +49,24 @@ only the game's own constants, so no matrices are guessed.
 `gi_history`, `gi_debug` (1 = GI irradiance only, 2 = added term ×4), and
 `gi_describe=N` (logs the bindings of the first N indirect dispatches).
 
-## Status (2026-10-26)
-- Injection works in game: found every frame, no faults, no non-finite values in the dumps. `gi_debug=1` shows plausible warm bounce from the lamps.
-- Not yet measured: cost, with the display on and `headless=0`, and an on/off comparison.
+## Status (2026-10-26, v1)
+- v1 does two things. Before the lighting, ray-traced visibility is multiplied into BG3's
+  AO target, so the game's own IBL ambient (diffuse and specular) is occluded. After the
+  lighting, a one-bounce term from last frame's radiance is added, which also gives
+  multi-bounce over frames.
+- Verified in game. Contact occlusion is visible under pipes and railings and around
+  characters, and the mean frame luminance is about 5% lower than with GI off. No
+  non-finite values and no faults, including together with Ray Reconstruction (Track A).
+- GPU cost, from timestamps: about 0.18 ms at 2 rays / 12 steps and about 0.28 ms at
+  4 rays / 16 steps (the new default). Half resolution, 2560x1067 internal.
+- Bugs fixed during the bugfix pause:
+  - Ray lengths must scale with the camera distance: the frustum rays carry the
+    far-plane scale.
+  - The GI must never write non-finite values into game buffers.
+  - `dumps.json` wrote `inf`/`nan`, which is not valid JSON.
 
 ## Next
-- Reprojection: the motion vectors used by DLSS, or the previous frame's camera UBO copied into our own buffer.
+- Reprojection using the DLSS motion vectors, identified by Track A.
 - A world-space radiance cache (SHaRC-style) for rays that leave the screen.
-- ReSTIR-style reuse, and denoising by RR (Track A) once available.
-- Replace, not just add to, the game's flat IBL ambient where the GI has coverage. This needs the ambient term isolated, possibly through shader replacement.
-- Screen-space contact shadows for direct lights. Proper RT shadows belong to Track D.
+- ReSTIR-style reuse.
+- Screen-space contact shadows for the direct lights. Real RT shadows belong to Track D.
