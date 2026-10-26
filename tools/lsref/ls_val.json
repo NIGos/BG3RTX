@@ -1,0 +1,13 @@
+{"start": "\\[trace\\] frame \\d+ written", "timeout": 1800,
+ "phases": [
+  {"at": 1, "name": "A default", "set": {}},
+  {"at": 20, "name": "B check", "set": {"ls_check": "1"}},
+  {"at": 40, "name": "C self-check", "set": {"ls_check": "2"}},
+  {"at": 60, "name": "D full check samples 2 shadowed 1", "set": {"ls_check": "1", "ls_samples": "2", "ls_shadowed": "1"}},
+  {"at": 80, "name": "E full debug 4 stats", "set": {"ls_check": "0", "ls_samples": "0", "ls_shadowed": "0", "ls_debug": "4", "ls_stats": "1"}},
+  {"at": 100, "name": "F ref", "set": {"ls_debug": "0", "ls_stats": "0", "ls_impl": "0"}},
+  {"at": 120, "name": "G ls_lights 0", "set": {"ls_impl": "1", "ls_lights": "0"}},
+  {"at": 140, "name": "H off", "set": {"ls_lights": "1", "rt_local_shadows": "0"}},
+  {"at": 160, "name": "I on", "set": {"rt_local_shadows": "1"}},
+  {"at": 185, "name": "end", "set": {}}
+ ]}
