@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include "host.h"
+#include "assetdb.h"
 #include "hookguard.h"
 
 #include <cstdio>
@@ -261,6 +262,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
     core_shutdown();
     alpha_device_destroyed(dd);
     rt_device_destroyed(dd);
+    assetdb_device_destroyed();
     geo_device_destroyed(dd);
     defer_tick(true);
     g_core_started = false;
@@ -432,6 +434,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     ngx_on_present();
     geo_on_present(queue);
     rt_on_present();
+    assetdb_on_present(frame);
   }
   trace_on_present(queue, info);
   framecap_on_present();
