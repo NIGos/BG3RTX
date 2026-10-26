@@ -259,6 +259,9 @@ bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usag
 bool alloc_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer, VkDeviceMemory* memory,
                        void** mapped);
 void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp);
+bool query_set(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, VkDescriptorSet* out_set,
+               VkDescriptorSetLayout* out_layout, uint32_t* dyn, uint32_t* dyn_count);
+void ngx_set_spec_hit_distance(VkImage image, VkImageView view, VkFormat format, uint32_t w, uint32_t h);
 bool ngx_motion_vectors(VkImage* image, VkImageView* view, VkFormat* format, float scale[2]);
 uint32_t find_memory_type(DeviceData* dd, uint32_t bits, VkMemoryPropertyFlags want);
 void defer_destroy(Bg3DeferKind kind, uint64_t handle);

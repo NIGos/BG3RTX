@@ -70,6 +70,17 @@ uint3 bg3_cluster(uint2 px, float depth) {
   return uint3(c.x, c.y & 4095u, (c.y >> 12) & 4095u);
 }
 
+// The pixel's froxel record as stored (b23): x first index, y point/spot/env-probe
+// counts, z projector count.
+uint4 bg3_cluster_raw(uint2 px, float depth) {
+  uint tsize = max(asuint(lConsts.c[31].x), 1u);
+  uint2 tile = px / tsize;
+  float zmax = float(asuint(lConsts.c[31].y));
+  float z = float(int(clamp(log2(depth * cam2.c[12].y) * lConsts.c[30].x + lConsts.c[30].y, 0.0, zmax)));
+  uint idx = uint(int((z * lConsts.c[30].w + float(tile.y)) * lConsts.c[30].z + float(tile.x)));
+  return lClusters.Load4(idx * 16u);
+}
+
 uint bg3_cluster_projectors(uint2 px, float depth) {
   uint tsize = max(asuint(lConsts.c[31].x), 1u);
   uint2 tile = px / tsize;

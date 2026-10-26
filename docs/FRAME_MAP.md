@@ -48,6 +48,33 @@ Built from automatic captures `captures/20261025-234821` and `-235042`: Steel Wa
 
 G-buffer pass signature for code: colour formats `[R16G16_SFLOAT, R8G8B8A8_UNORM ×3(+1)]`, depth `D24_UNORM_S8_UINT`, render resolution; both the 5-target G-buffer pass and the 4-target decal pass match, and each leaves RT0–RT2 in `COLOR_ATTACHMENT_OPTIMAL` and depth in `DEPTH_STENCIL_ATTACHMENT_OPTIMAL`. The G-buffer images are recreated on every level load (new image ids).
 
+## Specular ambient: the game's only reflections (tiled lighting, `f469db78`)
+
+BG3 has no SSR. Every reflection is a cube-map probe, applied inside the tiled
+lighting compute pass (step 7) and written into the specular target b11 together
+with the direct light. Lines refer to `captures/20261025-235042/shaders/f469db7865d7c524.glsl`;
+the 13 other permutations of the pass have the same code (checked by pattern in
+`captures/20261026-092112`), except the uber permutation `34a007cc`, which adds
+shading models 2-7 (`RT2.w & 7`; e.g. 5 = two-sided, which blends a back-face
+probe 70/30, and 7, which takes F0 from RT3).
+
+| Input | Where | Notes |
+|---|---|---|
+| Roughness `a` (`_515`) | RT2.x → `max(0.09, r)`, then specular AA `sqrt(sat(a² + min(Σ|Δn|², 0.18)))` over the 2x2 quad | perceptual; GGX α = a² |
+| F0 (`_482`) | `mix(0.16·RT2.y², RT1.rgb, RT2.z)` | |
+| N, V | `N = n_view · mat3(_m6)` (not renormalised), `V = normalize(−P)` | lighting space (camera-relative world) |
+| Global specular probes | set 1 b35 (and b37), sampler b16, direction `R = reflect(−V, N)`, mip `a·8 + _m30 − 8` (b37: `_m31`), × `_m27` (b37: `_m28`), blended by `_m29` (b39 offsets 504-520) | line 970-984 |
+| Env BRDF (split sum) | DFG LUT set 1 b38 (sampler b32) at `(max(N·V, 1/512), a)`: `E = F0·x + y`; `.z` is the diffuse term | line 985-993 |
+| Local probes | listed per froxel after the point, spot and projector lights (b23 `y >> 24`); records b33 (stride 144: `m0` extents/radius², row-major 3x4 world→probe at 16, `m3` blend/scale at 128, `m4` intensity, `m5` bits 0 box, 2 has specular, `m6` cube indices into the bindless array b45, rgb cube + weight cube) | box or sphere parallax correction, edge fade, roughness `mix(clamp(t/|X|·a, 0, a), a, a)`, mip `·8`, each `mix`es over the running term by weight × fade (line 997-1344) |
+| Specular occlusion `SO` (`_2469`) | `sat(pow(|N·V + AO|, exp2(−16a − 1)) − 1 + AO)`, AO = b6 `.x` (when `b0 m0.x > 0`) | Lagarde |
+| Scale | `b13[0] · 100` (`_2104`) | |
+
+Composition (line 1452, 1622): `b11 = T · (direct_spec · mix(1, SO, b0 m0.y) + S · b13[0]·100 · SO)`,
+with `S` the probe term after the local-probe loop (`_1684`) and `T` the aerial-perspective
+transmittance (`_2978`, only when `_26._m19 > 0`; 1 indoors). D-RF
+(`shaders/rt/bg3_ambient.hlsli`) replicates `S·k·SO` from the lighting's own descriptor set
+and replaces it by an exact delta; see [TRACK_D_RT.md section 10](TRACK_D_RT.md).
+
 ## DLSS SR contract (hooked in `_nvngx.dll`, `layer/ngx.cpp`)
 
 BG3 links the NGX client statically (bg3.exe exports `NVSDK_NGX_*`) and calls the driver's loader `_nvngx.dll`; one SR feature (feature 1) is created about 15 s into loading, through `NVSDK_NGX_VULKAN_CreateFeature` (not `CreateFeature1`).
@@ -81,6 +108,7 @@ The parameter block is shared between create and evaluate (as the dlss5-bridge f
 - **Ray Reconstruction (Track A)** — done, see [TRACK_A_RR.md](TRACK_A_RR.md).
   - Inputs from the scene: the game's own SR evaluate block (colour, depth, MV, output, jitter, MV scale).
   - Guides, built at the G-buffer pass end: diffuse albedo `RT1·(1−RT2.z)`, specular albedo `EnvBRDFApprox2(F0, RT2.x², N·V)`, normals decoded from RT0 and rotated to world space with the G-buffer camera (set 0 b2 `_m0`), roughness RT2.x packed in w; plus the unjittered `_m0`/`_m1` as WorldToView/ViewToClip (TRACK_A "Guides v2").
+  - `DLSSD.SpecularHitDistance`: D-RF's reflection-ray hit distance, written after the lighting (TRACK_D 10.3).
 - **Frame generation (Track B).**
   - Hudless colour = the tonemapped image from step 16, and UI = the RGBA8 target from step 17. Both are inputs of the final composite pass.
   - Depth and MV as above.

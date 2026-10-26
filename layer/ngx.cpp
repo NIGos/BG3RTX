@@ -314,6 +314,29 @@ bool ngx_motion_vectors(VkImage* image, VkImageView* view, VkFormat* format, flo
 }
 static int g_jitter_logs = 0;
 
+// Track D reflections (D-RF): the core's specular hit distance image, handed to
+// RR as DLSSD.SpecularHitDistance while it is fresh (written this or last frame).
+static std::mutex g_shd_mu;
+static NVSDK_NGX_Resource_VK g_shd_res{};
+static uint64_t g_shd_frame = 0;
+static bool g_shd_logged = false;
+
+void ngx_set_spec_hit_distance(VkImage image, VkImageView view, VkFormat format, uint32_t w, uint32_t h) {
+  std::lock_guard<std::mutex> lock(g_shd_mu);
+  g_shd_res = {};
+  g_shd_frame = 0;
+  if (!image || !view) return;
+  g_shd_res.Resource.ImageViewInfo.ImageView = view;
+  g_shd_res.Resource.ImageViewInfo.Image = image;
+  g_shd_res.Resource.ImageViewInfo.SubresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  g_shd_res.Resource.ImageViewInfo.Format = format;
+  g_shd_res.Resource.ImageViewInfo.Width = w;
+  g_shd_res.Resource.ImageViewInfo.Height = h;
+  g_shd_res.Type = NVSDK_NGX_RESOURCE_VK_TYPE_VK_IMAGEVIEW;
+  g_shd_res.ReadWrite = true;
+  g_shd_frame = frame_index();
+}
+
 // ---------------------------------------------------------------------------
 // G-buffer discovery (called at every render pass end, on recording threads)
 // ---------------------------------------------------------------------------
@@ -1138,6 +1161,27 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   }
   p->Set(NVSDK_NGX_Parameter_DLSS_WORLD_TO_VIEW_MATRIX, cam_ok ? static_cast<void*>(s_w2v) : nullptr);
   p->Set(NVSDK_NGX_Parameter_DLSS_VIEW_TO_CLIP_MATRIX, cam_ok ? static_cast<void*>(s_v2c) : nullptr);
+  // D-RF: the specular hit distance of the reflection rays (with the matrices,
+  // what RR needs to reproject reflections). Only while fresh and at the render
+  // resolution; cleared otherwise, since the parameter block is reused.
+  static NVSDK_NGX_Resource_VK s_shd;
+  bool shd_ok = false;
+  {
+    std::lock_guard<std::mutex> lock(g_shd_mu);
+    shd_ok = cfg_int("rr_spec_hit_distance", 1) && g_shd_frame && g_shd_frame + 2 >= frame_index() &&
+             g_shd_res.Resource.ImageViewInfo.Width == w && g_shd_res.Resource.ImageViewInfo.Height == h;
+    if (shd_ok) s_shd = g_shd_res;
+  }
+  p->Set(NVSDK_NGX_Parameter_DLSSD_SpecularHitDistance, shd_ok ? static_cast<void*>(&s_shd) : nullptr);
+  if (shd_ok) {
+    p->Set(NVSDK_NGX_Parameter_DLSSD_SpecularHitDistance_Subrect_Base_X, 0u);
+    p->Set(NVSDK_NGX_Parameter_DLSSD_SpecularHitDistance_Subrect_Base_Y, 0u);
+    if (!g_shd_logged) {
+      g_shd_logged = true;
+      log("[ngx] RR gets the specular hit distance (D-RF), %ux%u format %d", w, h,
+          int(s_shd.Resource.ImageViewInfo.Format));
+    }
+  }
   int old_reset = 0;
   bool had_reset = get_i(p, NVSDK_NGX_Parameter_Reset, old_reset);
   if (reset) p->Set(NVSDK_NGX_Parameter_Reset, 1);

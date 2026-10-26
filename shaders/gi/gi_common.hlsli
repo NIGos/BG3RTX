@@ -89,6 +89,19 @@ struct Push {
   float ls_strength;
   uint ls_has_mask;
   uint pad4;
+  // D-RF ray-traced reflections (rt_reflections.hlsl)
+  float rf_max_rough;     // perceptual roughness at which reflections have faded to the probe
+  float rf_mirror_rough;  // below it one deterministic mirror ray
+  float rf_tmax;          // reflection ray length (world units)
+  float rf_depth_tol;     // relative depth agreement of an on-screen hit
+  float rf_edge;          // screen-edge fade width (uv)
+  float rf_strength;
+  uint rf_debug;
+  uint rf_sample;         // 1 GGX bounded VNDF (RR denoises), 0 mirror rays only (no denoiser)
+  uint rf_so;             // 1 also apply the game's specular occlusion to traced hits
+  uint rf_validate;       // 1 EN4 check: the lighting ran with AO 1 and no sun (prep pass)
+  uint rf_models;         // bit mask of the shading models (RT2.w & 7) that get reflections
+  uint rf_stats;
 };
 [[vk::push_constant]] Push pc;
 
