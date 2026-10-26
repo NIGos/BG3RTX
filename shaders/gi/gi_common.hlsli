@@ -67,6 +67,11 @@ struct Push {
   float rt_ao_radius; // ray-traced AO ray length (world units, rt_ao.hlsl)
   uint rt_ao_rays;
   uint2 pad2;
+  // Hybrid ray-traced GI (gi_trace_rt.hlsl)
+  float gi_rt_radius;   // ray length and falloff radius (world units)
+  float gi_rt_tol;      // relative depth agreement for an on-screen hit
+  uint gi_rt_fallback;  // 0 occlude, no bounce; 1 ignore; 2 occlude + mean on-screen radiance
+  uint rt_stats;       // 1: count into rtStats (rt_common.hlsli)
 };
 [[vk::push_constant]] Push pc;
 
@@ -89,6 +94,12 @@ float2 ab_to_uv(float2 ab) { return (ab * 2.0) * vp.scale + vp.bias; }
 float3 ray_at(float2 uv) {
   float2 ab = uv_to_ab(uv);
   return cam.ray0.xyz * (1.0 - ab.x - ab.y) + cam.ray1.xyz * ab.x + cam.ray2.xyz * ab.y;
+}
+
+// Angle one render pixel subtends at uv (the frustum rays are not unit length).
+float pixel_angle(float2 uv) {
+  float3 r = ray_at(uv);
+  return length(ray_at(uv + float2(1.0 / float(pc.full.x), 0.0)) - r) / max(length(r), 1e-20);
 }
 
 // Inverse of P = d * (r0 + (r1 - r0) a + (r2 - r0) b).

@@ -60,12 +60,22 @@ float g_ts_period = 1.0f;
 std::vector<const char*> g_ext_names;
 VkPhysicalDeviceTransformFeedbackFeaturesEXT g_xfb_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT};
 
+// XFB vertex layout, fixed at device creation: 16 bytes (gl_Position), or 24
+// with the UV output (Track D phase 3, rt=1 and rt_alpha=1). With rt_alpha the
+// per-frame scene comes from the depth prepass (its fragment shaders are the
+// ones that alpha test), otherwise from the G-buffer pass.
+uint32_t g_stride = 16;
+bool g_alpha_mode = false;
+std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the last G-buffer pass
+thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
+
 std::mutex g_mu;  // modules, pipelines, buffers
-std::unordered_set<VkShaderModule> g_patched;
+std::unordered_map<VkShaderModule, int> g_patched;   // -> UV output location (-1 none)
 struct PipeInfo {
   bool xfb;                  // VS patched, VS is the last pre-raster stage
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
   VkPrimitiveTopology topo;
+  int uv = -1;               // VS output location captured as UV (stride 24)
 };
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
@@ -158,6 +168,10 @@ struct Capture {
   VkDeviceSize rt_ubo_off = 0;
   uint64_t sig = 0;
   uint32_t rt_draws = 0;
+  // rt_alpha: opaque draws fill [0, opaque_end), alpha-tested ones
+  // [alpha_base, xfb.size) from alpha_cursor.
+  VkDeviceSize opaque_end = 0, alpha_base = 0, alpha_cursor = 0;
+  uint32_t alpha_draws = 0;
 };
 
 std::mutex g_cap_mu;
@@ -181,6 +195,15 @@ bool is_gbuffer(const Bg3PassInfo& p) {
     if (p.color_formats[i] != VK_FORMAT_R8G8B8A8_UNORM) return false;
   return true;
 }
+
+// Depth-only D24S8 at render resolution (rt_alpha's source pass).
+bool is_prepass(const Bg3PassInfo& p) {
+  return g_alpha_mode && p.color_count == 0 && p.depth_format == VK_FORMAT_D24_UNORM_S8_UINT && g_gbuf_w &&
+         p.width == g_gbuf_w && p.height == g_gbuf_h;
+}
+constexpr uint32_t kPrepassMinDraws = 64;
+std::atomic<int> g_prepass_ordinal{-1};   // learned: ordinal of the depth-only pass with the scene
+std::atomic<uint64_t> g_prepass_frame{0}; // frame it was last captured in (relearned when it goes missing)
 
 // ---- hooks of our own ----
 VKAPI_ATTR void VKAPI_CALL CmdSetViewport(VkCommandBuffer cmd, uint32_t first, uint32_t n, const VkViewport* vps) {
@@ -290,6 +313,16 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.rt_ubo_off = 0;
   c.sig = 1469598103934665603ull;
   c.rt_draws = 0;
+  c.opaque_end = c.xfb.size;
+  c.alpha_base = c.alpha_cursor = c.xfb.size;
+  c.alpha_draws = 0;
+  if (!readback && g_alpha_mode && rt_enabled()) {
+    VkDeviceSize amb = VkDeviceSize((std::max)(cfg_int("rt_alpha_mb", 64), 1)) << 20;
+    if (amb < c.xfb.size / 2) {
+      c.alpha_base = c.alpha_cursor = c.opaque_end = c.xfb.size - amb;
+      alpha_begin_capture();
+    }
+  }
   return true;
 }
 
@@ -480,10 +513,15 @@ void process(Capture& c) {
     if (d.slot < 0) continue;
     uint64_t written = q[size_t(d.slot) * 2], needed = q[size_t(d.slot) * 2 + 1];
     if (needed > written) needed_more += needed - written;
-    if (written * 48 > d.reserved) { ++mismatched; written = d.reserved / 48; }
+    const uint64_t tri_bytes = 3ull * g_stride;
+    if (written * tri_bytes > d.reserved) { ++mismatched; written = d.reserved / tri_bytes; }
     uint64_t end = prev + written * 48;
-    // Compact: draws were written at their reserved offsets.
-    if (written) std::memmove(compact.data() + prev, xfb_raw + d.offset, size_t(written * 48));
+    // Compact to 16 bytes per vertex (gl_Position): draws were written at
+    // their reserved offsets, g_stride bytes per vertex.
+    if (written && g_stride == 16) std::memmove(compact.data() + prev, xfb_raw + d.offset, size_t(written * 48));
+    else
+      for (uint64_t v = 0; v < written * 3; ++v)
+        std::memcpy(compact.data() + prev + v * 16, xfb_raw + d.offset + v * g_stride, 16);
     ranges[i] = {prev / 16, uint32_t((end - prev) / 16)};
     if (d.count && d.instances && (d.kind == 0 || d.kind == 1)) {
       uint64_t want = uint64_t(d.count / 3) * d.instances * 3;
@@ -840,7 +878,13 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
     p_begin_xfb = reinterpret_cast<PFN_vkCmdBeginTransformFeedbackEXT>(dd->gdpa(dd->device, "vkCmdBeginTransformFeedbackEXT"));
     p_end_xfb = reinterpret_cast<PFN_vkCmdEndTransformFeedbackEXT>(dd->gdpa(dd->device, "vkCmdEndTransformFeedbackEXT"));
     g_on = p_bind_xfb && p_begin_xfb && p_end_xfb && p_begin_query && p_end_query;
-    log("[geo] transform feedback %s: vertex shaders get Position XFB decorations", g_on ? "enabled" : "FAILED to load");
+    // Track D phase 3: the UV goes along with the position, and the scene
+    // comes from the depth prepass (rt_alpha needs rt=1; both are read here, once).
+    g_alpha_mode = cfg_int("rt", 0) && cfg_int("rt_alpha", 0);
+    g_stride = g_alpha_mode ? 24 : 16;
+    log("[geo] transform feedback %s: vertex shaders get Position%s XFB decorations (stride %u)%s",
+        g_on ? "enabled" : "FAILED to load", g_alpha_mode ? " + UV" : "", g_stride,
+        g_alpha_mode ? "; ray tracing scene from the depth prepass" : "");
   }
   if (g_timing) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
@@ -852,8 +896,9 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
 }
 
 bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>& out) {
+  t_last_uv = -1;
   if (!g_on) return false;
-  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out);
+  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv);
   if (!ok) return false;
   // geo_patch_dump=N writes the first N patched modules next to the shader
   // dumps, for spirv-val.
@@ -869,7 +914,7 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
 void geo_note_module(VkShaderModule m, bool patched) {
   if (!patched) return;
   std::lock_guard<std::mutex> lock(g_mu);
-  g_patched.insert(m);
+  g_patched[m] = t_last_uv;   // same thread, right after geo_patch_shader
 }
 
 void geo_forget_module(VkShaderModule m) {
@@ -887,8 +932,13 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     bool vs_patched = false, other = false;
     for (uint32_t s = 0; s < cis[i].stageCount; ++s) {
       const auto& st = cis[i].pStages[s];
-      if (st.stage == VK_SHADER_STAGE_VERTEX_BIT) vs_patched = st.module && g_patched.count(st.module);
-      else if (st.stage != VK_SHADER_STAGE_FRAGMENT_BIT) other = true;
+      if (st.stage == VK_SHADER_STAGE_VERTEX_BIT) {
+        auto it = st.module ? g_patched.find(st.module) : g_patched.end();
+        vs_patched = it != g_patched.end();
+        if (vs_patched) pi.uv = it->second;
+      } else if (st.stage != VK_SHADER_STAGE_FRAGMENT_BIT) {
+        other = true;
+      }
     }
     pi.xfb = vs_patched && !other;
     bool dyn_topo = false;
@@ -916,11 +966,21 @@ void geo_forget_pipeline(VkPipeline p) {
 void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
   s->geo = nullptr;
   s->geo_ts = -1;
-  if (!g_dd || !is_gbuffer(s->pass)) return;
+  if (!g_dd) return;
+  const bool gbuf = is_gbuffer(s->pass);
+  if (gbuf) g_gbuf_w = s->pass.width, g_gbuf_h = s->pass.height;
+  // The ray tracing scene's source pass: with rt_alpha the depth prepass
+  // (depth-only D24S8 at render resolution), otherwise the G-buffer.
+  // BG3 draws a few small depth-only passes before the big one: once seen, only
+  // the big one's ordinal (its position in the command buffer) is captured.
+  if (g_prepass_ordinal >= 0 && frame_index() > g_prepass_frame + 8) g_prepass_ordinal = -1;
+  const bool prepass = is_prepass(s->pass) && (g_prepass_ordinal < 0 || int(s->pass.ordinal) == g_prepass_ordinal);
+  const bool rt_src = g_alpha_mode ? prepass : gbuf;
+  if (!gbuf && !rt_src) return;
   bool xfb = false;
   if (g_on) {
     std::lock_guard<std::mutex> lock(g_cap_mu);
-    if (trace_recording() && s->tracing && g_cap.state == 0 && frame_index() >= trace_start_frame() + 1 &&
+    if (gbuf && trace_recording() && s->tracing && g_cap.state == 0 && frame_index() >= trace_start_frame() + 1 &&
         cfg_int("geo_capture", 0)) {
       if (start_capture(g_cap, true, s->pass.width, s->pass.height)) {
         g_cap.cmd = cmd;
@@ -929,10 +989,10 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
         g_submit_wanted = true;
         g_dd->vk.CmdResetQueryPool(cmd, g_cap.qp, 0, g_cap.max_slots);
       }
-    } else if (g_scratch.state != 1 && (rt_capture_wanted() || cfg_int("geo_xfb_always", 0))) {
+    } else if (g_scratch.state != 1 && ((rt_src && rt_capture_wanted()) || (gbuf && cfg_int("geo_xfb_always", 0)))) {
       if (start_capture(g_scratch, false, s->pass.width, s->pass.height)) {
         g_scratch.cmd = cmd;
-        g_scratch.rt = rt_capture_wanted();
+        g_scratch.rt = rt_src && rt_capture_wanted();
         s->geo = &g_scratch;
         // The previous frame's AS build read this buffer.
         if (g_scratch.rt) rt_before_capture(cmd);
@@ -940,7 +1000,8 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
     }
     xfb = s->geo != nullptr;
   }
-  if (g_timing && g_qp) {
+  // Timed: the ray tracing source pass (the G-buffer without rt_alpha).
+  if (g_timing && g_qp && rt_src) {
     std::lock_guard<std::mutex> lock(g_ts_mu);
     uint32_t slot = uint32_t(frame_index() % kTsSlots);
     if (!g_ts_frame[slot]) {
@@ -1007,28 +1068,44 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t coun
     }
     prims *= instances;
   } else {
-    prims = (uint64_t((std::max)(cfg_int("geo_indirect_mb", 8), 1)) << 20) / 48;
+    prims = (uint64_t((std::max)(cfg_int("geo_indirect_mb", 8), 1)) << 20) / (3ull * g_stride);
   }
-  d.reserved = prims * 48;
+  const uint64_t tri_bytes = 3ull * g_stride;
+  d.reserved = prims * tri_bytes;
   d.offset = c->cursor;
   if (!pi.xfb) d.skip = 1;
   else if (!pi.triangles) d.skip = 2;
   // The RT soup must be gap-free: only draws whose output size is exact.
   else if (c->rt && (kind > 1 || pi.topo != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) d.skip = 4;
-  else if ((c->readback && c->slots >= c->max_slots) || c->cursor + d.reserved > c->xfb.size) d.skip = 3;
-  const bool capture = d.skip == 0 && d.reserved > 0;
+  else if ((c->readback && c->slots >= c->max_slots) || c->cursor + d.reserved > c->opaque_end) d.skip = 3;
+  bool capture = d.skip == 0 && d.reserved > 0;
+  // Track D phase 3: an alpha-tested draw (its fragment shader is in the
+  // table, the VS captured the UV it samples with) goes into the alpha region.
+  bool alpha = false;
+  if (c->rt && g_alpha_mode && d.skip != 1 && d.skip != 2 && d.skip != 4 && d.reserved > 0 &&
+      c->alpha_cursor + d.reserved <= c->xfb.size) {
+    AlphaFs a;
+    if (alpha_lookup(s->fs, &a) && a.uv == pi.uv && pi.uv >= 0 && cfg_int("rt_alpha_capture", 1) &&
+        alpha_add_draw(cmd, a, uint32_t((c->alpha_cursor - c->alpha_base) / tri_bytes), uint32_t(prims))) {
+      alpha = true;
+      capture = true;
+      d.offset = c->alpha_cursor;
+    }
+  }
   if (capture && c->rt) {
     // Draw identity for the refit decision: same draws in the same order give
     // the same triangle order.
-    for (uint64_t v : {uint64_t(d.pipe_id), uint64_t(count), uint64_t(instances)}) c->sig = (c->sig ^ v) * 1099511628211ull;
+    for (uint64_t v : {uint64_t(d.pipe_id), uint64_t(count), uint64_t(instances), uint64_t(alpha)})
+      c->sig = (c->sig ^ v) * 1099511628211ull;
     ++c->rt_draws;
+    c->alpha_draws += alpha;
   }
   if (capture) {
     VkDeviceSize off = d.offset, size = d.reserved;
     p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
     p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
     c->xfb_active = true;
-    c->cursor += d.reserved;
+    (alpha ? c->alpha_cursor : c->cursor) += d.reserved;
   }
   if (capture && c->readback) {
     d.slot = int32_t(c->slots);
@@ -1060,7 +1137,28 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
   s->geo = nullptr;
   if (!c) return;
   if (!c->readback) {
-    if (c->rt) rt_after_capture(cmd, c->xfb.b, c->cursor, c->rt_ubo, c->rt_ubo_off, c->sig, c->rt_draws);
+    // rt_alpha: a small depth-only pass (not the scene's) is captured once
+    // until the big one is known, and dropped.
+    const bool minor_pass = g_alpha_mode && s->pass.draw_count < kPrepassMinDraws;
+    if (g_alpha_mode && !minor_pass) {
+      g_prepass_ordinal = int(s->pass.ordinal);
+      g_prepass_frame = frame_index();
+    }
+    if (c->rt && !minor_pass) {
+      RtCapture rc{};
+      rc.xfb = c->xfb.b;
+      rc.opaque_bytes = c->cursor;
+      rc.alpha_base = c->alpha_base;
+      rc.alpha_bytes = c->alpha_cursor - c->alpha_base;
+      rc.stride = g_stride;
+      rc.alpha_region = c->alpha_base < c->xfb.size;
+      rc.ubo = c->rt_ubo;
+      rc.ubo_offset = c->rt_ubo_off;
+      rc.signature = c->sig;
+      rc.draws = c->rt_draws;
+      rc.alpha_draws = c->alpha_draws;
+      rt_after_capture(cmd, rc);
+    }
     // Next frame's capture into the same scratch memory comes after this one.
     barrier(cmd, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT,
             VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT | VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT,

@@ -8,8 +8,8 @@
 //     with rt_ao=1, screen-space otherwise)
 // Views 1-3 need rt_shadows=1 (they read its visibility image).
 #include "gi_common.hlsli"
+#include "../rt/rt_common.hlsli"
 
-[[vk::binding(18, 0)]] RaytracingAccelerationStructure gScene;
 [[vk::binding(19, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> rtVis;
 
 [numthreads(8, 8, 1)]
@@ -20,6 +20,18 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 c;
   if (pc.rt_debug == 1) c = v.rrr;
   else if (pc.rt_debug == 2) c = float3(v.g, v.r, 0.0);
+  else if (pc.rt_debug == 5) {
+    // The primary-ray check's errors by origin: in front on opaque geometry
+    // purple, on a virtual-texture cutout red, on a plain-texture cutout orange;
+    // behind (a cutout let through) blue for vt, cyan for tex; match dark green.
+    uint who = uint(v.a * 3.0 + 0.5);
+    float k = v.b;
+    bool front = k > 0.5 && k < 0.9, behind = k > 0.2 && k < 0.5;
+    c = k > 0.9 ? float3(0, 0.25, 0) : k < 0.2 ? float3(1, 0, 1) : float3(0.5, 0.5, 0.5);
+    if (front) c = who == 3 ? float3(0.6, 0, 1) : who == 1 ? float3(1, 0, 0) : who == 2 ? float3(1, 0.5, 0) : c;
+    if (behind) c = who == 1 ? float3(0, 0.3, 1) : who == 2 ? float3(0, 1, 1) : c;
+    if (gDepth.Load(int3(fp, 0)) <= 0.0) c = 0.0;
+  }
   else if (pc.rt_debug == 4) {
     float d = gDepth.Load(int3(fp, 0));
     c = d > 0.0 ? gather_history(fp, d).aaa : 0.0;

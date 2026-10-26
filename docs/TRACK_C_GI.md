@@ -84,6 +84,14 @@ it also checks what we record. Comparing message IDs with GI off and on isolated
 - Remaining: one `Threading-MultipleThreads-Write` (`vkDeviceWaitIdle` vs `vkQueueSubmit`) at
   shutdown, related to headless presentation. It is low priority.
 
+## Hybrid ray-traced trace (`gi_rt=1`, Track D phase 3, off by default)
+With `rt=1` the trace can use hardware ray queries against the TLAS
+(`shaders/gi/gi_trace_rt.hlsl`); temporal, AO fold and composite are unchanged.
+Hits that project on screen with matching depth take last frame's radiance;
+hidden or off-screen hits count as occlusion with no bounce (`gi_rt_fallback`).
+Trace pass 0.175 ms vs 0.248 ms screen-space (4 rays, half res); see
+TRACK_D_RT.md section 7.2 for numbers and comparison images.
+
 ## Next
 - A world-space radiance cache (SHaRC-style) for rays that leave the screen.
 - ReSTIR-style reuse.
