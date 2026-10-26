@@ -1098,9 +1098,10 @@ void ls_timing_collect() {
   auto& v = g_ls_ms;
   std::sort(v.begin(), v.end());
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames; samples %d, soft %d, "
-            "shadowed mode %d, debug %d)",
+            "shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], v.size(), host->cfg_int("ls_samples", 0),
-            host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 0), host->cfg_int("ls_debug", 0));
+            host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 0), host->cfg_int("ls_debug", 0),
+            host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off", host->cfg_int("ls_owners", 0x0F));
   v.clear();
 }
 
@@ -1314,6 +1315,8 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if (s.shadow.view) image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     Push lp = pc;
     lp.ls_has_mask = s.shadow.view ? 1u : 0u;
+    const VkDescriptorSet sun = write_sun_set(s);
+    ls_timestamp(cmd, 0);   // the timing covers the join pass and the shadow pass
     // Per-light data: the join pass writes one record per light array slot.
     g_lsl_ok = lsl_begin(&g_lsl) && refresh(g_ls_match, "gi/rt_local_shadows_match.hlsl", g_ls_layout);
     if (g_lsl_ok) {
@@ -1324,11 +1327,10 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       }
       bind_extras(lb, s);
       lp.ls_flags |= host->cfg_int("ls_lights", 1) ? 1u : 0u;
-      ls_dispatch(cmd, lb, lp, write_sun_set(s), g_ls_match.pipeline, kLslSlots / 64, 1);
+      ls_dispatch(cmd, lb, lp, sun, g_ls_match.pipeline, kLslSlots / 64, 1);
       memory_barrier(cmd, kCS, kCS);
     }
-    ls_timestamp(cmd, 0);
-    ls_dispatch(cmd, lb, lp, write_sun_set(s), g_ls.pipeline, (g_w + 7) / 8, (g_h + 7) / 8);
+    ls_dispatch(cmd, lb, lp, sun, g_ls.pipeline, (g_w + 7) / 8, (g_h + 7) / 8);
     ls_timestamp(cmd, 1);
     if (s.shadow.view) image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kAll);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kAll);
