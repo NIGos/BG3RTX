@@ -315,6 +315,30 @@ rays only. TRACK_D_RT 7.1b, `img/alpha_campsite_*`.
 Every new effect, and every change to an existing one, must satisfy these before it
 can become a default.
 
+**R0 Target: physically correct, not "same as the original".** (Set by the user on
+2026-10-26.) Ray tracing is there to improve on the game's approximations, not to
+reproduce them.
+- An effect may brighten as well as darken, wherever the game's own term is wrong:
+  - SSAO that is too dark;
+  - shadow-map acne, over-wide filtering or light leaks;
+  - probes that are too bright or too flat;
+  - missing bounce.
+- Brightening or darkening against the game is therefore not a defect by itself.
+  The question is only whether the result is physically right for the real scene.
+- **Real scene** means the full geometry, including what the camera hides. Roofs
+  cut away by the isometric camera still block the sun and the sky. Use the asset DB
+  rooms/roofs (`docs/ASSET_DB.md`) and off-screen data wherever possible. Where our
+  BVH is known to be incomplete (geometry culled or never captured), the game's term
+  stays the fallback, so a missing caster never turns into a light leak.
+- **Art intent** still applies where the game expresses it explicitly: authored
+  shadow-caster flags, light channels, the colour grade, and lights flagged not to
+  cast shadows.
+- The exact-delta and fold mechanics below (R3) remain the tool for removing the
+  game's term without double counting. They do not mean "never brighter than the
+  game".
+- QA (`docs/QA.md`) reports brightening for review, not as a failure, unless it is
+  physically implausible: energy gain, or light through geometry that exists.
+
 **R1 Sampling.**
 - Importance-sample the integrand:
   - cosine-weighted for diffuse;
