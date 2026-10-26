@@ -6,12 +6,12 @@
 //   (Xfb, XfbBuffer 0 / XfbStride 16 / Offset 0 on its Position output). Nothing
 //   else in the shader changes, so all ~36 G-buffer VS variants (static,
 //   instanced, compute-skinned, wind, terrain) are covered the same way.
-// - Transform feedback is active for the whole captured G-buffer pass (one
-//   Begin/End), and every draw is wrapped in a transform feedback stream query
-//   whose primitive count gives exact per-draw ranges of the triangle soup.
-//   (Ending and resuming XFB per draw through counter buffers does not work
-//   inside a render pass: the counter written by End is not visible to the
-//   next Begin without a barrier, which a render pass cannot hold.)
+// - Every captured draw is self-contained: the XFB buffer is bound at a
+//   CPU-known offset (prefix sum of indexCount/3 * instances), XFB begins,
+//   the draw runs, XFB ends. No counter buffers (an End's counter is not
+//   visible to the next Begin without a barrier, which a render pass cannot
+//   hold), and no pipeline bind while XFB is active (VUID-02323). A transform
+//   feedback stream query per draw checks the count and detects overflow.
 // - gl_Position = vec4(W, 1) * ViewProj (y negated) in every G-buffer VS, with
 //   ViewProj at offset 128 of the camera UBO (set 0, binding 2). W, the
 //   camera-relative world position, is recovered by solving the x, y and w rows
@@ -65,6 +65,7 @@ std::unordered_set<VkShaderModule> g_patched;
 struct PipeInfo {
   bool xfb;                  // VS patched, VS is the last pre-raster stage
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
+  VkPrimitiveTopology topo;
 };
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
@@ -124,6 +125,7 @@ struct DrawRec {
   uint32_t skip;             // 1 no xfb pipeline, 2 not triangles, 3 out of slots
   VkBuffer ubo;
   VkDeviceSize ubo_off;
+  uint64_t offset, reserved; // byte range bound for this draw's XFB output
 };
 
 struct Capture {
@@ -136,7 +138,7 @@ struct Capture {
   uint32_t max_slots = 0, slots = 0;
   int32_t active_slot = -1;
   bool xfb_active = false;
-  uint32_t pauses = 0;               // XFB ended and resumed around a draw we do not capture
+  uint64_t cursor = 0;               // next free byte of the XFB buffer
   uint32_t w = 0, h = 0;
   VkViewport viewport{};
   VkFormat depth_format = VK_FORMAT_UNDEFINED, normal_format = VK_FORMAT_UNDEFINED;
@@ -263,7 +265,7 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.slots = 0;
   c.active_slot = -1;
   c.xfb_active = false;
-  c.pauses = 0;
+  c.cursor = 0;
   c.draws.clear();
   c.w = w;
   c.h = h;
@@ -441,10 +443,10 @@ void process(Capture& c) {
   ULONGLONG t0 = GetTickCount64();
   std::string dir = c.dir + "\\geo";
   make_dirs(dir);
-  const uint8_t* xfb = static_cast<const uint8_t*>(c.xfb.map);
+  const uint8_t* xfb_raw = static_cast<const uint8_t*>(c.xfb.map);
 
   // Per-draw ranges from the stream queries: primitives written per draw, in
-  // recording order (XFB appends, so the prefix sum is each draw's start).
+  // recording order; each draw's output sits at its reserved offset.
   std::vector<uint64_t> q(size_t(c.slots) * 2, 0);
   VkResult qr = c.slots ? g_dd->vk.GetQueryPoolResults(g_dd->device, c.qp, 0, c.slots, q.size() * 8, q.data(), 16,
                                                        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT)
@@ -452,6 +454,7 @@ void process(Capture& c) {
   if (qr != VK_SUCCESS) log("[geo] transform feedback query results: %d", qr);
   struct Range { uint32_t first, count; };
   std::vector<Range> ranges(c.draws.size(), Range{0, 0});
+  std::vector<uint8_t> compact(size_t(c.cursor));
   uint32_t prev = 0, total_bytes = 0, mismatched = 0, overflow = 0;
   uint64_t expect_tris = 0, expect_known = 0, needed_more = 0;
   for (size_t i = 0; i < c.draws.size(); ++i) {
@@ -459,8 +462,10 @@ void process(Capture& c) {
     if (d.slot < 0) continue;
     uint64_t written = q[size_t(d.slot) * 2], needed = q[size_t(d.slot) * 2 + 1];
     if (needed > written) needed_more += needed - written;
+    if (written * 48 > d.reserved) { ++mismatched; written = d.reserved / 48; }
     uint64_t end = prev + written * 48;
-    if (end > c.xfb.size) { ++mismatched; end = prev; }
+    // Compact: draws were written at their reserved offsets.
+    if (written) std::memmove(compact.data() + prev, xfb_raw + d.offset, size_t(written * 48));
     ranges[i] = {prev / 16, uint32_t((end - prev) / 16)};
     if (d.count && d.instances && (d.kind == 0 || d.kind == 1)) {
       uint64_t want = uint64_t(d.count / 3) * d.instances * 3;
@@ -471,10 +476,11 @@ void process(Capture& c) {
     prev = uint32_t(end);
   }
   total_bytes = prev;
-  if (needed_more || VkDeviceSize(total_bytes) + 48 * 64 >= c.xfb.size) overflow = 1;
+  for (const auto& d : c.draws) overflow += d.skip == 3;
+  if (needed_more) ++overflow;
   const uint32_t nvert = total_bytes / 16;
   const uint32_t ntri = nvert / 3;
-  const V4* clip = reinterpret_cast<const V4*>(xfb);
+  const V4* clip = reinterpret_cast<const V4*>(compact.data());
 
   // Camera UBO: ViewProj at 128.
   Unproject un;
@@ -665,7 +671,7 @@ void process(Capture& c) {
        std::to_string(skipped[2]) + ",\"out_of_slots\":" + std::to_string(skipped[3]) + "},\n";
   j += "\"triangles\":" + std::to_string(ntri) + ",\"vertices\":" + std::to_string(nvert) +
        ",\"xfb_bytes\":" + std::to_string(total_bytes) + ",\"xfb_overflow\":" + std::to_string(overflow) +
-       ",\"primitives_dropped\":" + std::to_string(needed_more) + ",\"xfb_pauses\":" + std::to_string(c.pauses) +
+       ",\"primitives_dropped\":" + std::to_string(needed_more) + ",\"xfb_reserved_bytes\":" + std::to_string(c.cursor) +
        ",\"count_mismatches\":" + std::to_string(mismatched) + ",\"direct_draws_checked\":" +
        std::to_string(expect_known) + ",\"expected_triangles_direct\":" + std::to_string(expect_tris) + ",\n";
   j += "\"width\":" + std::to_string(c.w) + ",\"height\":" + std::to_string(c.h) + ",\"viewport\":[" + jnum(r.vp.x) +
@@ -859,7 +865,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
   std::lock_guard<std::mutex> lock(g_mu);
   for (uint32_t i = 0; i < n; ++i) {
     if (!out[i]) continue;
-    PipeInfo pi{false, false};
+    PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
     bool vs_patched = false, other = false;
     for (uint32_t s = 0; s < cis[i].stageCount; ++s) {
       const auto& st = cis[i].pStages[s];
@@ -873,6 +879,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
         dyn_topo |= cis[i].pDynamicState->pDynamicStates[d] == VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
     if (cis[i].pInputAssemblyState && !dyn_topo) {
       VkPrimitiveTopology t = cis[i].pInputAssemblyState->topology;
+      pi.topo = t;
       pi.triangles = t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST || t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP ||
                      t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN || t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY ||
                      t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY;
@@ -929,9 +936,8 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
 void geo_pass_begun(VkCommandBuffer cmd, CmdState* s) {
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
-  VkDeviceSize zero = 0;
-  p_bind_xfb(cmd, 0, 1, &c->xfb.b, &zero, &c->xfb.size);
-  // Started at the first capturable draw: Begin needs an XFB pipeline bound.
+  // Buffers are bound per draw (geo_pre_draw).
+  (void)cmd;
 }
 
 // Right before the game's vkCmdEndRenderPass / vkCmdEndRendering (inside the pass).
@@ -945,8 +951,8 @@ void geo_pass_ending(VkCommandBuffer cmd, CmdState* s) {
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t count, uint32_t instances) {
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
-  DrawRec d{kind, s->pipe_id[0], s->vs, s->fs, count, instances, -1, 0, VK_NULL_HANDLE, 0};
-  PipeInfo pi{false, false};
+  DrawRec d{kind, s->pipe_id[0], s->vs, s->fs, count, instances, -1, 0, VK_NULL_HANDLE, 0, 0, 0};
+  PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
   {
     std::lock_guard<std::mutex> lock(g_mu);
     auto it = g_pipes.find(s->pipe[0]);
@@ -960,22 +966,31 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t coun
       d.ubo_off = b.offset;
     }
   }
+  // Output size: exact for direct lists, an upper bound for strips/fans, a
+  // fixed slab for indirect draws (the stream query tells what was written).
+  uint64_t prims = 0;
+  if (kind <= 1) {
+    switch (pi.topo) {
+      case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST: prims = count / 3; break;
+      case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY: prims = count / 6; break;
+      default: prims = count > 2 ? count - 2 : 0; break;
+    }
+    prims *= instances;
+  } else {
+    prims = (uint64_t((std::max)(cfg_int("geo_indirect_mb", 8), 1)) << 20) / 48;
+  }
+  d.reserved = prims * 48;
+  d.offset = c->cursor;
   if (!pi.xfb) d.skip = 1;
   else if (!pi.triangles) d.skip = 2;
-  else if (c->readback && c->slots >= c->max_slots) d.skip = 3;
-  const bool capture = d.skip == 0;
-  if (!capture && c->xfb_active) {
-    // Pause around a draw we do not capture; counter slot 0 holds the position.
-    // (Rare: in BG3 every G-buffer pipeline is capturable.)
-    VkDeviceSize off = 0;
-    p_end_xfb(cmd, 0, 1, &c->counters.b, &off);
-    c->xfb_active = false;
-    ++c->pauses;
-  } else if (capture && !c->xfb_active) {
-    VkDeviceSize off = 0;
-    if (c->pauses) p_begin_xfb(cmd, 0, 1, &c->counters.b, &off);
-    else p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
+  else if ((c->readback && c->slots >= c->max_slots) || c->cursor + d.reserved > c->xfb.size) d.skip = 3;
+  const bool capture = d.skip == 0 && d.reserved > 0;
+  if (capture) {
+    VkDeviceSize off = d.offset, size = d.reserved;
+    p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
+    p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
     c->xfb_active = true;
+    c->cursor += d.reserved;
   }
   if (capture && c->readback) {
     d.slot = int32_t(c->slots);
@@ -987,10 +1002,16 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t coun
 
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
   auto* c = static_cast<Capture*>(s->geo);
-  if (!c || c->active_slot < 0) return;
-  p_end_query(cmd, c->qp, uint32_t(c->active_slot));
-  c->active_slot = -1;
-  ++c->slots;
+  if (!c) return;
+  if (c->active_slot >= 0) {
+    p_end_query(cmd, c->qp, uint32_t(c->active_slot));
+    c->active_slot = -1;
+    ++c->slots;
+  }
+  if (c->xfb_active) {
+    p_end_xfb(cmd, 0, 0, nullptr, nullptr);
+    c->xfb_active = false;
+  }
 }
 
 // After the game's vkCmdEndRenderPass (outside the pass).
