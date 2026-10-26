@@ -636,6 +636,26 @@ cut0=<first>`; `rt_alpha_cut=0` (live) restores the first.
   rays`): each fallback, vt/tex solid/clear, records with a loose first
   cut-off, blur level >= 2 / >= 4, stochastic share, pages from a coarser level.
 
+**QA harness** (`python -m scripts.qa run --scenes S3`, Campsite; "before" is the
+same build with the old table and `rt_alpha_cut/stochastic/unknown=0`):
+
+| detector (‰ of the frame) | before | after |
+|---|---|---|
+| hard-dark, GI (final / lighting) | 10.9 / 2.35 | **0 / 0** |
+| hard-dark, all RT (final) | 20.4 | **0** |
+| sun extra casters | 15.8 | 3.3 |
+| flicker excess area (std on/off) | 76.4 (1.73) | 15.6 (1.28) |
+| brightening, GI (final) | 2.26 | 7.86 |
+| brightening, sun RT shadows (final) | 0.53 | 4.40 |
+
+Brightening rose where the grass no longer blocks light: under the log at the
+bottom right the traced visibility now replaces the game's SSAO (which treats the
+grass as solid) with ×2.8 more ambient, and the RT sun now passes between twig
+blades where the game's shadow map is a blurred mass. These are flagged for
+review, not confirmed errors; a run with `rt_alpha_stochastic=0` to separate
+the stochastic part did not complete (the game was closed by another session's
+run). S1 (foundry) with the fix: hard-dark GI 0.066‰, no baseline compared.
+
 **Cost** (Campsite, 2560x1067, 300-frame averages, shared GPU, noise ~0.2 ms):
 4 x more alpha-tested draws (1.85M alpha triangles), visibility candidates
 2.0M → 7.1M/frame; GI 2.95-3.0 → 3.0-3.4 ms, RT passes 1.35-1.40 → 1.40-1.53 ms.
