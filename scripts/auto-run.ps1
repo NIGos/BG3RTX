@@ -18,6 +18,9 @@ param(
   # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
   [switch]$Move,
   [byte]$MoveScan = 0x20,
+  # With -Move: release the key after this many seconds (0 = hold until the end),
+  # so later traces see a static camera at the end of the pan (A/B at a new view).
+  [int]$MoveSec = 0,
   # Run under the Khronos validation layer; messages go to captures/validation.log.
   [switch]$Validation,
   # Load this save instead of the newest: a substring of its folder name, for
@@ -130,15 +133,23 @@ $deadline = $start.AddSeconds($TimeoutSec)
 $lastNote = Get-Date
 $result = "timeout"
 $moving = $false
+$moveDone = $false
+$moveStart = Get-Date
 while ((Get-Date) -lt $deadline) {
   Start-Sleep -Seconds 2
   Focus-Game
   if ($Move -and (Test-Path $log)) {
     $last = Get-Content $log -Tail 40 | Select-String '(\d+) draws in the last frame' | Select-Object -Last 1
     if ((Get-Item $log).LastWriteTime -lt $start) { $last = $null }
-    if ($last -and [int]$last.Matches[0].Groups[1].Value -gt 2000) {
-      if (-not $moving) { Write-Host "gameplay reached: holding scan code 0x$('{0:X2}' -f $MoveScan)" }
+    if (-not $moveDone -and $last -and [int]$last.Matches[0].Groups[1].Value -gt 2000) {
+      if (-not $moving) { Write-Host "gameplay reached: holding scan code 0x$('{0:X2}' -f $MoveScan)"; $moveStart = Get-Date }
       $moving = $true
+    }
+    if ($moving -and $MoveSec -gt 0 -and ((Get-Date) - $moveStart).TotalSeconds -ge $MoveSec) {
+      [BG3RTX.Win]::keybd_event(0, $MoveScan, 0x000A, [UIntPtr]::Zero)   # release: the camera stays where the pan ended
+      Write-Host "pan stopped after $MoveSec s"
+      $moving = $false
+      $moveDone = $true
     }
     if ($moving) { [BG3RTX.Win]::keybd_event(0, $MoveScan, 0x0008, [UIntPtr]::Zero) }   # KEYEVENTF_SCANCODE down
   }

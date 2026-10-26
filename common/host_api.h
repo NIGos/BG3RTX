@@ -7,7 +7,7 @@
 #include <cstdint>
 #include "vk_funcs.h"
 
-#define BG3RTX_ABI_VERSION 4
+#define BG3RTX_ABI_VERSION 5
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -145,6 +145,17 @@ struct Bg3HostApi {
   // by the core). Free with defer_destroy (buffer, memory).
   bool (*alloc_host_buffer)(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer, VkDeviceMemory* memory,
                             void** mapped);
+
+  // ABI 5 (Track D reflections). The descriptor set the game has bound right
+  // now at (bind point, set) in `cmd`, the layout it was allocated with, and its
+  // dynamic offsets (`dyn_count`: capacity in, count out). False for a push
+  // descriptor set or an untracked one. Only valid inside a callback for `cmd`.
+  bool (*query_set)(VkCommandBuffer cmd, VkPipelineBindPoint bind_point, uint32_t set, VkDescriptorSet* out_set,
+                    VkDescriptorSetLayout* out_layout, uint32_t* dyn, uint32_t* dyn_count);
+  // ABI 5: the image Ray Reconstruction gets as DLSSD.SpecularHitDistance (render
+  // resolution, GENERAL layout, written this frame). The core calls it every
+  // frame it writes the image, and with VK_NULL_HANDLE before releasing it.
+  void (*set_spec_hit_distance)(VkImage image, VkImageView view, VkFormat format, uint32_t width, uint32_t height);
 };
 
 struct Bg3CoreApi {

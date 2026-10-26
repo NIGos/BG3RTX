@@ -1,0 +1,248 @@
+// Track D, D-RF: ray-traced reflections (rt_reflections=1; docs/TRACK_D_RT.md section 10).
+//
+// Full resolution, right after the tiled lighting and D-LS, before the GI composite
+// (which keeps the result as next frame's radiance), SSS and fog.
+//
+// The game's only reflections are its probes: b11 holds S·k·SO, the specular ambient
+// of bg3_ambient.hlsli (k = b13[0]·100, SO its specular occlusion). This pass
+// replicates that term exactly (Tp) from the lighting's own bindings, traces one
+// reflection ray against the TLAS, and adds the exact delta
+//     b11 += w · (L_rt · E − Tp)
+// where E = F0·DFG.x + DFG.y is the game's own env BRDF at this pixel and L_rt the
+// radiance where the ray hits:
+//   tier (a) the hit projects on screen and the depth there is the hit itself:
+//            last frame's lit radiance, reprojected with the motion vectors
+//            (prev_radiance_at); w = 1, faded at the screen edge and towards
+//            rf_max_rough;
+//   tier (c) a miss, a hit off screen or hidden on screen: w = 0, the game's probe
+//            stays exactly as it was (a TLAS miss is not sky: roofs are cut away).
+// Tier (b), shading off-screen hits, needs the hit material (D-EN2) and is not done.
+// The game's specular occlusion is not applied to traced hits (rf_so=0): the ray
+// already found the occluder and returns its radiance.
+//
+// Sampling (QUALITY R1, R2). With RR (rf_sample=1): one ray per pixel, GGX bounded
+// VNDF (Eto & Tokuyoshi 2023) with alpha = a², white noise from pcg3d keyed by
+// (pixel, frame); a mirror ray below rf_mirror_rough. Nothing of ours filters it; RR
+// gets the hit distance (rfHitDist, DLSSD.SpecularHitDistance). Without RR there is no
+// denoiser: mirror rays only, for smooth surfaces (the core lowers rf_max_rough).
+//
+// rf_validate=1 checks the replication: a pre-pass set the AO to 1 and the sun mask
+// to 0 before the lighting, so b11 = sum of local-light specular (recomputed here with
+// the game's own shadows, as D-LS does) + projector lights + Tp, and the residual
+// b11 − local − Tp must be 0 where no projector light is listed.
+#include "gi_common.hlsli"
+#include "../rt/rt_common.hlsli"
+#include "../rt/bg3_lights.hlsli"
+#include "../rt/bg3_ambient.hlsli"
+
+[[vk::binding(30, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> rfHitDist;
+
+static const float kNoHit = 65504.0;
+
+float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+float u01(uint x) { return float(x >> 8) * (1.0 / 16777216.0); }
+float3 n_world(float3 nv) { return nv.x * cam.m6_r0.xyz + nv.y * cam.m6_r1.xyz + nv.z * cam.m6_r2.xyz; }
+float3 n_view_at(int2 p) { return decode_normal(gNormal.Load(int3(clamp(p, int2(0, 0), int2(pc.full) - 1), 0)).xy); }
+float3 nan0(float3 v) { return any(isnan(v)) ? float3(0, 0, 0) : v; }
+
+// Lanes' sum of v added to counter `index`, spread over 64 bins.
+void stat_addv(uint index, uint v, uint bin) {
+  uint n = WaveActiveSum(v);
+  uint b = WaveReadLaneFirst(bin) & 63u;
+  if (WaveIsFirstLane() && n) rtStats.InterlockedAdd((index * 64 + b) * 4, n);
+}
+uint fxl(float v) { return uint(clamp(v, 0.0, 4.0) * 4096.0 + 0.5); }
+
+// GGX visible normals within the spherical cap that keeps the reflection above the
+// horizon (Eto & Tokuyoshi 2023, isotropic). wi in tangent space (z = normal).
+float3 sample_vndf_bounded(float3 wi, float alpha, float2 u) {
+  float3 wi_std = normalize(float3(wi.xy * alpha, wi.z));
+  float phi = (2.0 * u.x - 1.0) * 3.14159265;
+  float a = saturate(alpha);
+  float s = 1.0 + length(wi.xy);
+  float a2 = a * a, s2 = s * s;
+  float k = (1.0 - a2) * s2 / (s2 + a2 * wi.z * wi.z);
+  float b = wi.z > 0.0 ? k * wi_std.z : wi_std.z;
+  float z = (1.0 - u.y) * (1.0 + b) - b;
+  float st = sqrt(saturate(1.0 - z * z));
+  float3 c = float3(st * cos(phi), st * sin(phi), z) + wi_std;
+  return normalize(float3(c.xy * alpha, c.z));
+}
+
+[numthreads(8, 8, 1)]
+void main(uint3 tid : SV_DispatchThreadID) {
+  uint2 fp = tid.xy;
+  if (any(fp >= pc.full)) return;
+  float d = gDepth.Load(int3(fp, 0));
+  if (d <= 0.0) {
+    rfHitDist[fp] = kNoHit;
+    return;
+  }
+
+  // ---- the surface, as f469db78 sets it up (same as D-LS) ----
+  Bg3Surface sf;
+  float2 uv = (float2(fp) + 0.5) / float2(lFlags.res);
+  sf.P = ray_at(uv) * d;
+  sf.dist = length(sf.P);
+  float3 nv = decode_normal(gNormal.Load(int3(fp, 0)).xy);
+  sf.N = n_world(nv);
+  sf.V = normalize(-sf.P);
+  float4 alb = gAlbedo.Load(int3(fp, 0));
+  float4 mat = gMaterial.Load(int3(fp, 0));
+  uint flags = uint(round(mat.w * 255.0));
+  sf.channel = (flags & 112u) >> 4;
+  uint model = flags & 7u;
+  sf.diff_col = alb.rgb * (1.0 - mat.z);
+  sf.f0 = lerp((0.16 * mat.y * mat.y).xxx, alb.rgb, mat.z);
+  int2 q0 = int2(fp & ~1u);
+  float3 dh = nan0(n_view_at(int2(q0.x + 1, fp.y)) - n_view_at(int2(q0.x, fp.y)));
+  float3 dv = nan0(n_view_at(int2(fp.x, q0.y + 1)) - n_view_at(int2(fp.x, q0.y)));
+  float r = max(0.09, mat.x);
+  sf.a = sqrt(saturate(r * r + min(dot(dh, dh) + dot(dv, dv), 0.18)));
+  sf.nov_raw = dot(sf.N, sf.V);
+  sf.nov = max(sf.nov_raw, 9.9999997e-06);
+  sf.ign = frac(52.982918 * frac(0.06711056 * float(fp.x) + 0.0058371499 * float(fp.y)));
+
+  const bool model_ok = ((pc.rf_models >> model) & 1u) != 0u;
+  const bool validate = pc.rf_validate != 0;
+  const float k = asfloat(lScale.Load(0)) * 100.0;
+
+  // ---- the game's specular ambient term, exactly (EN4) ----
+  uint4 cl = bg3_cluster_raw(fp, d);
+  float3 E;
+  uint n_local;
+  float3 S = bg3_spec_ambient(sf.P, sf.N, sf.V, sf.f0, sf.a, cl, E, n_local);
+  float so = bg3_spec_occlusion(fp, sf.nov_raw, sf.a);
+  float3 Tp = S * (k * so);
+
+  // ---- one reflection ray ----
+  float rough_w = 1.0 - smoothstep(pc.rf_max_rough * 0.75, pc.rf_max_rough, sf.a);
+  bool eligible = model_ok && rough_w > 0.0 && !validate;
+  uint tier = 0;   // 0 not traced, 1 on-screen hit (a), 2 hidden on screen, 3 off screen, 4 miss, 5 below horizon
+  float w = 0.0, hit_t = kNoHit;
+  float3 Lrt = 0;
+  if (eligible) {
+    float3 Nn = normalize(sf.N);
+    float3 dir = reflect(-sf.V, Nn);
+    bool valid = dot(Nn, sf.V) > 0.0;
+    if (valid && pc.rf_sample != 0 && sf.a >= pc.rf_mirror_rough) {
+      float3 t = abs(Nn.y) < 0.999 ? normalize(cross(float3(0, 1, 0), Nn)) : float3(1, 0, 0);
+      float3 b = cross(Nn, t);
+      float3 wi = float3(dot(sf.V, t), dot(sf.V, b), dot(sf.V, Nn));
+      uint3 rnd = pcg3d(uint3(fp, pc.frame) ^ uint3(0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u));
+      float3 h = sample_vndf_bounded(wi, sf.a * sf.a, float2(u01(rnd.x), u01(rnd.y)));
+      float3 H = normalize(t * h.x + b * h.y + Nn * h.z);
+      dir = reflect(-sf.V, H);
+    }
+    valid = valid && dot(Nn, dir) > 0.0;
+    if (!valid) {
+      tier = 5;
+    } else {
+      float pa = pixel_angle(uv);
+      RtCone cone = {sf.dist * pa, pa + sf.a * sf.a};
+      float3 o = sf.P + Nn * (sf.dist * pc.rt_bias);
+      float t = rt_closest(o, dir, pc.rf_tmax, cone);
+      if (t < 0.0) {
+        tier = 4;
+      } else {
+        float3x3 inv = frustum_inverse();
+        float2 quv;
+        float qd;
+        bool onscreen = project(inv, o + dir * t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
+        tier = 3;
+        if (onscreen) {
+          tier = 2;
+          int2 qp = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
+          float sd = gDepth.Load(int3(qp, 0));
+          float3 nq = n_world(decode_normal(gNormal.Load(int3(qp, 0)).xy));
+          // The camera must see the same point, from the side the ray arrives at.
+          if (sd > 0.0 && abs(qd - sd) < sd * pc.rf_depth_tol && dot(nq, dir) < 0.2) {
+            float3 L = prev_radiance_at(qp);
+            if (all(isfinite(L))) {
+              float2 e = min(quv, 1.0 - quv) / max(pc.rf_edge, 1e-4);
+              w = rough_w * saturate(min(e.x, e.y)) * saturate(pc.rf_strength);
+              Lrt = max(L, 0.0);
+              hit_t = t;
+              tier = 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  float3 gs = gSpecular[fp];
+  float3 Trt = Lrt * E * (pc.rf_so != 0 ? so : 1.0);
+  float3 delta = w * (Trt - Tp);
+  float3 os = max(gs + delta, 0.0);
+  float3 gd = gDiffuse[fp], od = gd;
+
+  // ---- validation (rf_validate=1): local lights recomputed with the game's shadows ----
+  float3 ms = 0;
+  if (validate) {
+    uint end_p = cl.x + (cl.y & 4095u), end_s = end_p + ((cl.y >> 12) & 4095u);
+    for (uint i = cl.x; i < end_s; ++i) {
+      uint li = lIndex.Load(i * 4u);
+      bool spot = i >= end_p;
+      Bg3Light l = load_light(li);
+      float3 cd, cs, Ld;
+      float d2, nol;
+      if (!bg3_light_eval(l, spot, sf, cd, cs, Ld, d2, nol)) continue;
+      float s = (l.flags & 1u) != 0u ? bg3_atlas_shadow(l, spot, sf, Ld, d2, nol) : 1.0;
+      ms += cs * s;
+    }
+    os = gs;
+  }
+
+  if (pc.rf_debug == 1) {   // tier: green on-screen hit, red hidden, orange off screen, blue miss, grey not traced
+    float3 c = tier == 1 ? float3(0, 1, 0) : tier == 2 ? float3(1, 0, 0) : tier == 3 ? float3(1, 0.5, 0)
+             : tier == 4 ? float3(0, 0, 1) : tier == 5 ? float3(1, 0, 1) : float3(0.2, 0.2, 0.2);
+    od = c * 0.25;
+    os = 0;
+  } else if (pc.rf_debug == 2) {   // specular change x4: green added, red removed
+    od = float3(lum(max(-delta, 0.0)), lum(max(delta, 0.0)), 0.0) * 4.0;
+    os = 0;
+  } else if (pc.rf_debug == 3) {   // the game's probe term as replicated
+    od = Tp;
+    os = 0;
+  } else if (pc.rf_debug == 4) {   // the probe term with tier (a) replaced
+    od = Tp + delta;
+    os = 0;
+  } else if (pc.rf_debug == 5) {   // validation residual x4 (grey), red where the recompute exceeds the game
+    float3 res = gs - ms - Tp;
+    float over = lum(max(-res, 0.0));
+    od = over > 1e-3 + 0.01 * lum(gs) ? float3(1, 0, 0) : abs(res) * 4.0;
+    os = 0;
+  } else if (pc.rf_debug == 6) {   // hit distance / 10 (tier a only)
+    od = (tier == 1 ? saturate(hit_t / 10.0) : 0.0).xxx * 0.5;
+    os = 0;
+  }
+  // Never hand the game a non-finite value.
+  if (any(!isfinite(os))) os = gs;
+  if (any(!isfinite(od))) od = gd;
+  gSpecular[fp] = os;
+  if (pc.rf_debug != 0) gDiffuse[fp] = od;
+  rfHitDist[fp] = tier == 1 && w > 0.0 ? min(hit_t, kNoHit) : kNoHit;
+
+  if (pc.rf_stats != 0) {
+    uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
+    stat_addv(48, 1u, bin);
+    stat_addv(49, eligible ? 1u : 0u, bin);
+    stat_addv(50, tier == 1 ? 1u : 0u, bin);
+    stat_addv(51, tier == 2 ? 1u : 0u, bin);
+    stat_addv(52, tier == 3 ? 1u : 0u, bin);
+    stat_addv(53, tier == 4 ? 1u : 0u, bin);
+    stat_addv(54, tier == 5 ? 1u : 0u, bin);
+    stat_addv(55, model_ok ? 0u : 1u, bin);
+    stat_addv(56, fxl(lum(Tp)), bin);
+    stat_addv(57, fxl(lum(max(Tp + delta, 0.0))), bin);
+    // validation sums, only where no projector light is listed (not recomputed)
+    bool vpx = validate && model_ok && (cl.z & 1023u) == 0u;
+    stat_addv(58, !validate || vpx ? fxl(lum(gs)) : 0u, bin);
+    stat_addv(59, n_local, bin);
+    stat_addv(60, vpx ? 1u : 0u, bin);
+    stat_addv(61, vpx ? fxl(lum(ms + Tp)) : 0u, bin);
+    stat_addv(62, vpx ? fxl(lum(abs(gs - ms - Tp))) : 0u, bin);
+    stat_addv(63, vpx ? fxl(lum(max(ms + Tp - gs, 0.0))) : 0u, bin);
+  }
+}

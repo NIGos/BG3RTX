@@ -218,6 +218,29 @@ bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, ui
   return true;
 }
 
+// The descriptor set bound at (bind point, set), its layout and dynamic offsets.
+bool query_set(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, VkDescriptorSet* out_set,
+               VkDescriptorSetLayout* out_layout, uint32_t* dyn, uint32_t* dyn_count) {
+  if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return false;
+  CmdState* s = cmd_state(cmd);
+  if (!s || set >= 8) return false;
+  int b = bp_index(bp);
+  if (s->push_set[b] == set) return false;
+  VkDescriptorSet ds = s->sets[b][set];
+  if (!ds) return false;
+  std::shared_lock<std::shared_mutex> lock(tracker().mu);
+  auto l = tracker().set_layouts.find(ds);
+  if (l == tracker().set_layouts.end() || !l->second) return false;
+  const auto& d = s->dyn[b][set];
+  uint32_t cap = dyn_count ? *dyn_count : 0;
+  if (d.size() > cap) return false;
+  for (size_t i = 0; i < d.size(); ++i) dyn[i] = d[i];
+  if (dyn_count) *dyn_count = uint32_t(d.size());
+  *out_set = ds;
+  *out_layout = l->second;
+  return true;
+}
+
 void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp) {
   if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return;
   CmdState* s = cmd_state(cmd);

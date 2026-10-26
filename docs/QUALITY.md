@@ -214,8 +214,9 @@ Evidence, all in game:
   frame is clean.
 - No non-finite values in 21 traces. The `-Validation` message IDs and counts
   are identical with v2 on and off.
-- Not done: specular hit distance (there is no specular ray yet; it belongs to
-  D-RF).
+- Specular hit distance: done with D-RF (2026-10-26, TRACK_D 10.3).
+  `DLSSD.SpecularHitDistance` is the reflection ray's hit distance for on-screen
+  hits and 65504 elsewhere; RR accepted it in every run, including `fg=2`.
 
 The original finding:
 - `rr_guides.hlsl:59` writes the decoded RT0. Track D proved those normals are
@@ -425,3 +426,4 @@ can become a default.
 | 3. RR fed an already-denoised GI | **Done.** RR mode (`gi_rr=-1` follows `rr`): full-res, 1 spp, no own history or spatial filter; RR denoises. Half-res accumulation remains for `rr=0`. | Same A/B: no visible noise. GI cost unchanged (about 0.34 ms). |
 | 4. RR guides (world normals, N·V, matrices) | In progress (separate branch). | |
 | 5. Noise and sun shadows | **Done.** pcg3d per-pixel/per-frame seeds; soft sun shadows sampling the sun disc (`rt_sun_radius=0.0023` rad, BG3's 0.263° diameter), 1 ray, denoised by RR. | Validation pending in the next combined run |
+| D-RF against the rules (TRACK_D 10) | R1: bounded GGX VNDF, pcg3d white noise on its own stream, mirror below a = 0.1. R2: RR only, no history or filter of ours; without RR deterministic mirror rays only (a < 0.3). R3: exact delta on the game's probe term (D-EN4, mean error 0.58%), TLAS miss keeps the probe, the game's DFG LUT as env BRDF, its SO kept for the probe and not re-applied to traced hits. R5: debug views 1-6, `rf_stats` tier fractions, non-finite guards, identical `-Validation` IDs, `-Move`, `fg=2`. R6: foundry A/B + crops; **reflective-scene A/B and stability metric not done**. R7: 0.33 ms. | `img/rf_foundry_*.png`, `img/rf_docks_*.png` |
