@@ -33,6 +33,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/util.cpp
   layer/dump.cpp
   layer/ngx.cpp
+  layer/rrpost.cpp
   layer/geocapture.cpp
   layer/rtscene.cpp
   layer/alphatest.cpp

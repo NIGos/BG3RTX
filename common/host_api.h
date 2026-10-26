@@ -9,7 +9,8 @@
 #include "assetdb_api.h"
 
 // 6: Bg3HostApi::assetdb (appended).
-#define BG3RTX_ABI_VERSION 6
+// 7: Bg3HostApi::rr_active (appended).
+#define BG3RTX_ABI_VERSION 7
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -163,6 +164,12 @@ struct Bg3HostApi {
   // lights, shader -> material bindings, rooms/roofs, presets, probes. Never null; the
   // table carries its own version and loads the data on first use.
   const Bg3AssetDbApi* assetdb;
+
+  // ABI 7: true while Ray Reconstruction actually denoises the frame (an RR
+  // evaluate succeeded in the last 3 frames). The core picks its 1-spp "RR
+  // modes" (gi_rr, ls_soft, rf_rr = -1) from this, not from the rr key, so
+  // FSR/TAA, an SR fallback or a failed RR creation get the non-RR modes.
+  bool (*rr_active)();
 };
 
 struct Bg3CoreApi {
