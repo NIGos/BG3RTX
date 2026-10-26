@@ -39,6 +39,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/streamline.cpp
   layer/savefilter.cpp
   layer/background.cpp
+  layer/hookguard.cpp
   layer/framecap.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
@@ -90,6 +91,9 @@ add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BG3RTX_SL_SDK}/bin/x64/development/WinPixEventRuntime.dll ${BG3RTX_BIN}/sl_dev/WinPixEventRuntime.dll)
 add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/layer/VkLayer_bg3rtx.json ${BG3RTX_BIN}/VkLayer_bg3rtx.json)
+
+# Unit test of the inline-hook guard (layer/hookguard.cpp): mock Detours-style patches.
+add_executable(hookguard_test tools/hookguard_test.cpp layer/hookguard.cpp)
 
 # Track D tools: offline check of the XFB shader patch.
 add_executable(xfb_patch_test tools/xfb_patch_test.cpp)
