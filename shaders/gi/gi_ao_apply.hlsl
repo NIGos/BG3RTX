@@ -10,6 +10,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (d <= 0.0) return;
   float vis = gather_history(fp, d).a;
   float4 ao = gAO[fp];
+  // The game's own AO, for the D-LS pass's AO-on-direct factor (ao_direct=2).
+  gAux[fp] = float4(ao.x, 0.0, 0.0, 0.0);
   // Replace rather than multiply: the game's SSAO and our visibility measure
   // the same occlusion, and their product darkens contacts twice.
   ao.x = lerp(ao.x, vis, pc.ao);

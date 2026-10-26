@@ -76,6 +76,7 @@ struct PipeInfo {
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
   VkPrimitiveTopology topo;
   int uv = -1;               // VS output location captured as UV (stride 24)
+  bool restart = true;       // primitive restart enabled, or dynamic (unknown)
 };
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
@@ -172,7 +173,26 @@ struct Capture {
   // [alpha_base, xfb.size) from alpha_cursor.
   VkDeviceSize opaque_end = 0, alpha_base = 0, alpha_cursor = 0;
   uint32_t alpha_draws = 0;
+  // What this frame wanted (for the next frame's split, AUDIT_RT fix 5) and what
+  // did not fit; draws left out of the RT soup (fix 7).
+  VkDeviceSize alpha_demand = 0, alpha_overflow_bytes = 0, opaque_overflow_bytes = 0;
+  uint32_t alpha_overflow = 0, opaque_overflow = 0;
+  uint32_t drop_indirect = 0, drop_topo = 0, strips = 0;
+  uint64_t drop_topo_tris = 0, strip_tris = 0;
 };
+
+// The split of the RT capture's XFB buffer between opaque and alpha-tested
+// triangles, sized from the previous frame's demand (rt_alpha_auto=1).
+std::atomic<uint64_t> g_alpha_region{0}, g_alpha_demand_prev{0}, g_opaque_demand_prev{0};
+// Logged loudly: per-window totals, and the first occurrence at once.
+struct RtDropLog {
+  uint64_t frames = 0, alpha_overflow = 0, alpha_overflow_mb = 0, opaque_overflow = 0, drop_indirect = 0, drop_topo = 0,
+           drop_topo_tris = 0, strips = 0, strip_tris = 0;
+  uint64_t peak_alpha = 0, peak_opaque = 0;
+  bool first_alpha = false, first_opaque = false, first_drop = false;
+};
+std::mutex g_drop_mu;
+RtDropLog g_drop;
 
 std::mutex g_cap_mu;
 Capture g_cap;                 // the readback capture (one per trace)
@@ -316,10 +336,34 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.opaque_end = c.xfb.size;
   c.alpha_base = c.alpha_cursor = c.xfb.size;
   c.alpha_draws = 0;
+  c.alpha_demand = c.alpha_overflow_bytes = c.opaque_overflow_bytes = 0;
+  c.alpha_overflow = c.opaque_overflow = 0;
+  c.drop_indirect = c.drop_topo = c.strips = 0;
+  c.drop_topo_tris = c.strip_tris = 0;
   if (!readback && g_alpha_mode && rt_enabled()) {
-    VkDeviceSize amb = VkDeviceSize((std::max)(cfg_int("rt_alpha_mb", 64), 1)) << 20;
-    if (amb < c.xfb.size / 2) {
-      c.alpha_base = c.alpha_cursor = c.opaque_end = c.xfb.size - amb;
+    // Alpha region: rt_alpha_mb at first; with rt_alpha_auto, 1.5x the last
+    // frame's demand (grown at once, shrunk only below a third of it), at least
+    // rt_alpha_mb, capped by rt_alpha_max_pct of the buffer and by what the
+    // opaque triangles needed last frame.
+    const VkDeviceSize mb = VkDeviceSize(1) << 20, size = c.xfb.size;
+    VkDeviceSize floor_b = VkDeviceSize((std::max)(cfg_int("rt_alpha_mb", 64), 1)) * mb;
+    VkDeviceSize amb = g_alpha_region.load();
+    if (!amb) amb = floor_b;
+    if (cfg_int("rt_alpha_auto", 1)) {
+      VkDeviceSize want = (std::max)(floor_b, (g_alpha_demand_prev.load() * 3 / 2 + mb - 1) / mb * mb);
+      if (want > amb || want * 2 < amb) amb = want;
+      VkDeviceSize cap = size / 100 * VkDeviceSize((std::min)((std::max)(cfg_int("rt_alpha_max_pct", 60), 5), 90));
+      VkDeviceSize opaque = g_opaque_demand_prev.load() * 11 / 10;
+      if (opaque && opaque < size) cap = (std::min)(cap, (std::max)(size - opaque, floor_b));
+      amb = (std::min)(amb, cap);
+    } else {
+      amb = floor_b;
+    }
+    if (amb < size) {
+      g_alpha_region = amb;
+      c.alpha_base = c.alpha_cursor = c.opaque_end = (size - amb) & ~VkDeviceSize(255);
+      // A new split moves the alpha geometry: the BLAS must be rebuilt, not refit.
+      c.sig = (c.sig ^ c.alpha_base) * 1099511628211ull;
       alpha_begin_capture();
     }
   }
@@ -945,9 +989,14 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     if (cis[i].pDynamicState)
       for (uint32_t d = 0; d < cis[i].pDynamicState->dynamicStateCount; ++d)
         dyn_topo |= cis[i].pDynamicState->pDynamicStates[d] == VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
+    bool dyn_restart = false;
+    if (cis[i].pDynamicState)
+      for (uint32_t d = 0; d < cis[i].pDynamicState->dynamicStateCount; ++d)
+        dyn_restart |= cis[i].pDynamicState->pDynamicStates[d] == VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE;
     if (cis[i].pInputAssemblyState && !dyn_topo) {
       VkPrimitiveTopology t = cis[i].pInputAssemblyState->topology;
       pi.topo = t;
+      pi.restart = dyn_restart || cis[i].pInputAssemblyState->primitiveRestartEnable;
       pi.triangles = t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST || t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP ||
                      t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN || t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY ||
                      t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY;
@@ -1030,6 +1079,57 @@ void geo_pass_ending(VkCommandBuffer cmd, CmdState* s) {
   c->xfb_active = false;
 }
 
+// The demand of this frame (next frame's alpha/opaque split) and the loud log of
+// everything that did not make it into the RT soup as it should.
+void rt_capture_stats(const Capture& c) {
+  g_alpha_demand_prev = c.alpha_demand;
+  g_opaque_demand_prev = c.cursor + c.opaque_overflow_bytes;
+  std::lock_guard<std::mutex> lock(g_drop_mu);
+  RtDropLog& l = g_drop;
+  ++l.frames;
+  l.alpha_overflow += c.alpha_overflow;
+  l.alpha_overflow_mb += c.alpha_overflow_bytes >> 20;
+  l.opaque_overflow += c.opaque_overflow;
+  l.drop_indirect += c.drop_indirect;
+  l.drop_topo += c.drop_topo;
+  l.drop_topo_tris += c.drop_topo_tris;
+  l.strips += c.strips;
+  l.strip_tris += c.strip_tris;
+  l.peak_alpha = (std::max)(l.peak_alpha, uint64_t(c.alpha_demand));
+  l.peak_opaque = (std::max)(l.peak_opaque, uint64_t(c.cursor + c.opaque_overflow_bytes));
+  const double mb = 1.0 / (1 << 20);
+  if (c.alpha_overflow && !l.first_alpha) {
+    l.first_alpha = true;
+    log("[geo] WARNING alpha-tested region full (%.1f MB of %.1f MB wanted): %u alpha-tested draws (%.1f MB) made "
+        "OPAQUE this frame (foliage and cutouts turn solid in RT). Raise rt_alpha_max_pct or rt_xfb_mb.",
+        double(c.xfb.size - c.alpha_base) * mb, double(c.alpha_demand) * mb, c.alpha_overflow,
+        double(c.alpha_overflow_bytes) * mb);
+  }
+  if (c.opaque_overflow && !l.first_opaque) {
+    l.first_opaque = true;
+    log("[geo] WARNING opaque region full (%.1f MB): %u draws (%.1f MB) left out of the RT scene this frame. Raise "
+        "rt_xfb_mb.", double(c.opaque_end) * mb, c.opaque_overflow, double(c.opaque_overflow_bytes) * mb);
+  }
+  if ((c.drop_indirect || c.drop_topo) && !l.first_drop) {
+    l.first_drop = true;
+    log("[geo] WARNING draws left out of the RT scene this frame: %u indirect, %u with a topology that cannot be "
+        "sized exactly (%llu triangles)", c.drop_indirect, c.drop_topo, (unsigned long long)c.drop_topo_tris);
+  }
+  int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  if (l.frames >= uint64_t(every)) {
+    log("[geo] RT capture, last %llu frames: alpha region %.0f MB (peak demand %.1f MB), opaque peak %.1f MB of a "
+        "%.0f MB buffer; per frame: alpha draws made opaque (region full) %.2f, opaque draws dropped (buffer full) %.2f, "
+        "indirect draws dropped %.2f, non-list draws dropped %.2f (%.0f triangles), strips/fans captured %.2f (%.0f "
+        "triangles)",
+        (unsigned long long)l.frames, double(g_alpha_region.load()) * mb, double(l.peak_alpha) * mb,
+        double(l.peak_opaque) * mb, double(c.xfb.size) * mb, double(l.alpha_overflow) / l.frames,
+        double(l.opaque_overflow) / l.frames, double(l.drop_indirect) / l.frames, double(l.drop_topo) / l.frames,
+        double(l.drop_topo_tris) / l.frames, double(l.strips) / l.frames, double(l.strip_tris) / l.frames);
+    l = RtDropLog{};
+    l.first_alpha = l.first_opaque = l.first_drop = true;   // only the first occurrence is logged at once
+  }
+}
+
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t count, uint32_t instances) {
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
@@ -1064,6 +1164,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t coun
     switch (pi.topo) {
       case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST: prims = count / 3; break;
       case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY: prims = count / 6; break;
+      case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY: prims = count >= 6 ? (count - 4) / 2 : 0; break;
       default: prims = count > 2 ? count - 2 : 0; break;
     }
     prims *= instances;
@@ -1075,23 +1176,40 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t coun
   d.offset = c->cursor;
   if (!pi.xfb) d.skip = 1;
   else if (!pi.triangles) d.skip = 2;
-  // The RT soup must be gap-free: only draws whose output size is exact.
-  else if (c->rt && (kind > 1 || pi.topo != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) d.skip = 4;
+  // The RT soup must be gap-free: only draws whose output size is exact. Strips
+  // and fans are (count - 2 triangles per instance, each written as 3 vertices)
+  // for non-indexed draws, and for indexed ones without primitive restart.
+  // Indirect draws are not (the count is on the GPU): counted and logged.
+  else if (c->rt && kind > 1) d.skip = 4, ++c->drop_indirect;
+  else if (c->rt && pi.topo != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST &&
+           !((pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP || pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN) &&
+             (kind == 0 || !pi.restart) && cfg_int("rt_strips", 1)))
+    d.skip = 4, ++c->drop_topo, c->drop_topo_tris += prims;
   else if ((c->readback && c->slots >= c->max_slots) || c->cursor + d.reserved > c->opaque_end) d.skip = 3;
   bool capture = d.skip == 0 && d.reserved > 0;
+  if (c->rt && d.skip == 0 && pi.topo != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST) ++c->strips, c->strip_tris += prims;
   // Track D phase 3: an alpha-tested draw (its fragment shader is in the
   // table, the VS captured the UV it samples with) goes into the alpha region.
-  bool alpha = false;
-  if (c->rt && g_alpha_mode && d.skip != 1 && d.skip != 2 && d.skip != 4 && d.reserved > 0 &&
-      c->alpha_cursor + d.reserved <= c->xfb.size) {
+  bool alpha = false, alpha_wanted = false;
+  if (c->rt && g_alpha_mode && d.skip != 1 && d.skip != 2 && d.skip != 4 && d.reserved > 0) {
     AlphaFs a;
-    if (alpha_lookup(s->fs, &a) && a.uv == pi.uv && pi.uv >= 0 && cfg_int("rt_alpha_capture", 1) &&
-        alpha_add_draw(cmd, a, uint32_t((c->alpha_cursor - c->alpha_base) / tri_bytes), uint32_t(prims))) {
-      alpha = true;
-      capture = true;
-      d.offset = c->alpha_cursor;
+    if (alpha_lookup(s->fs, &a) && a.uv == pi.uv && pi.uv >= 0 && cfg_int("rt_alpha_capture", 1)) {
+      alpha_wanted = true;
+      c->alpha_demand += d.reserved;
+      if (c->alpha_cursor + d.reserved > c->xfb.size) {
+        // Region full: the draw would silently turn opaque. Counted and logged.
+        ++c->alpha_overflow;
+        c->alpha_overflow_bytes += d.reserved;
+      } else if (alpha_add_draw(cmd, a, uint32_t((c->alpha_cursor - c->alpha_base) / tri_bytes), uint32_t(prims))) {
+        alpha = true;
+        capture = true;
+        d.offset = c->alpha_cursor;
+      }
     }
   }
+  if (c->rt && !alpha && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
+    ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
+  (void)alpha_wanted;
   if (capture && c->rt) {
     // Draw identity for the refit decision: same draws in the same order give
     // the same triangle order.
@@ -1145,6 +1263,7 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
       g_prepass_frame = frame_index();
     }
     if (c->rt && !minor_pass) {
+      rt_capture_stats(*c);
       RtCapture rc{};
       rc.xfb = c->xfb.b;
       rc.opaque_bytes = c->cursor;

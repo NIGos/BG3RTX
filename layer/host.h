@@ -363,7 +363,9 @@ void alpha_begin_capture();
 bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, uint32_t tris);
 uint32_t alpha_record_count();
 // Outside the pass: uploads the capture's records and writes its descriptor set.
-void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, VkDeviceSize alpha_bytes);
+// opaque_bytes/stride: geometry 0's soup at offset 0 (binding 6, geometric normals of hits).
+void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, VkDeviceSize alpha_bytes,
+                  VkDeviceSize opaque_bytes, uint32_t stride);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
 
 uint64_t frame_index();

@@ -571,7 +571,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     return;
   }
   // Track D phase 3: the alpha-tested draws' records and textures.
-  alpha_commit(cmd, xfb, cap.alpha_base, geoms == 2 ? VkDeviceSize(aprims) * tri_bytes : 0);
+  alpha_commit(cmd, xfb, cap.alpha_base, geoms == 2 ? VkDeviceSize(aprims) * tri_bytes : 0,
+               VkDeviceSize(prims) * tri_bytes, stride);
   const DeviceData* dd = g_dd;
   int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
   bool refit = want_refit && g_blas_valid && prims == g_built_prims && aprims == g_built_aprims &&

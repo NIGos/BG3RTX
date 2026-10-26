@@ -38,8 +38,24 @@ Built from automatic captures `captures/20261025-234821` and `-235042`: Steel Wa
 |---|---|---|---|
 | 0 | RG16F | **Normals, stereographic projection** (see below). Not velocity: the velocity target is a separate RG16F written right after linear depth | G-buffer fs `aa4efa4d` writes `rg = n.xy/(1-n.z) * 0.28125 + 0.5`; tiled lighting cs `f469db78` decodes it |
 | 1 | RGBA8 | **Base colour** (rgb, clamped 0–1), a ≈ 0.95 | fs `aa4efa4d` location 1; lighting uses it as baseColor |
-| 2 | RGBA8 | x **perceptual roughness**, y **specular reflectance** (F0 = 0.16·y² for dielectrics, a per-material constant), z **metalness**, w bit flags (bits 4–6: light-channel mask) | fs `aa4efa4d` location 2; lighting clamps roughness to ≥ 0.09 and computes `F0 = mix(0.16·y², base, metal)`, `diffuse = base·(1-metal)` |
-| 3 | RGBA8 | Almost all zero: emissive or sparse material flags | mean ≈ 0.0005 |
+| 2 | RGBA8 | x **perceptual roughness**, y **specular reflectance** (F0 = 0.16·y² for dielectrics, a per-material constant), z **metalness** (hair: "backlit"), w: bits 0–2 **material class** (table below), bit 3 the RG16F-copy flag, bits 4–6 light-channel mask | fs `aa4efa4d` location 2; lighting clamps roughness to ≥ 0.09 and computes `F0 = mix(0.16·y², base, metal)`, `diffuse = base·(1-metal)` (class 0) |
+| 3 | RGBA8 | **Per-class material parameters** (zero for class 0, so mostly zero on screen): skin/translucent profile index, scale, thickness, transmission flag; anisotropic or hair tangent (octahedral 12:12 in xyz) with the anisotropy/scatter in w; cloth sheen colour (and GGX weight in w) | bound only to the material lighting permutations (set 1 b4); `118833ff:367-380`, `4265b844:349-356`, `95af6e4f:340`; non-zero on 0.2% of the foundry, 21-48% outdoors |
+
+**Material classes** (RT2.a & 7). The tiled lighting dispatches one permutation per tile class
+set: a pure-class one and a "0 + class" one for each, plus the uber-shader `34a007cc` for mixed tiles.
+
+| Class | What | RT3 | Lighting difference from class 0 | Permutations |
+|---|---|---|---|---|
+| 0 | standard | — | (reference) | `f469db78` |
+| 1 | unlit | — | skipped: nothing is written to b10/b11 | `702bda11` (0+1) |
+| 2 | anisotropic GGX | xyz tangent (rotated by `_m6`), w anisotropy | specular D only | `4265b844`, `953fb057` |
+| 3 | skin (SSS) | x profile (SSBO set 1 b28, 64 B each), y scatter scale, z thickness, w transmission on | diffuse colour **1** when set 0 b0 `_m4 ≠ 0` (1 in gameplay; the SSS pass `d1669194:359` multiplies the albedo back in), two GGX lobes from the profile, wrap transmission `T(thickness)·saturate((0.2588 − N·L)·0.631)` for local lights and the sun (sun × the mask b7) | `118833ff`, `8b781b6e` |
+| 4 | thin translucency (foliage) | x profile, z thickness | standard reflectance + the transmission lobe (always on); not blurred by the SSS pass | `19763259`, `4f4077b6` |
+| 5 | hair (Marschner R/TT/TRT) | xyz tangent (**not** rotated), w scatter | no N·L gate, self-shadow `saturate(2·N·L + 0.5)`, metalness forced 0, roughness without specular AA, ambient 0.3 front / 0.7 back | `3033c895`, `49f89784` |
+| 6 | cloth (sheen) | rgb sheen colour | Charlie D × Neubelt V replaces GGX; diffuse colour = raw albedo | `95af6e4f`, `cb6d23ac` |
+| 7 | cloth / GGX blend | rgb sheen colour, w GGX weight | `GGX·w + sheen·(1 − w)` | `7f110c00` (0+6+7) |
+
+Replicated in `shaders/rt/bg3_materials.hlsli` (local lights) and `shaders/rt/bg3_sun.hlsli` (sun).
 | 4 | RGBA8 | Per-object constant colour: object ID / material ID | preview `d97` |
 
 **Normal decode** (identical to the game's): `e = rg·3.5554 − 1.7777`, `t = e·e + 1`; if `t > 5.4e10` then `n = (0,0,1)` else `n = (2e/t, 1 − 2/t)`. The decoded normals are **world-aligned, Y up**: floors decode to +Y, walls to ±X/±Z, independent of the camera pitch (`captures/20261026-011007`, guide dump `d167`). **Correction (Track D):** they are *view space*. The captured world-space triangle normals rotated by the view matrix (`set0/b2._m0` of the G-buffer VS) match them at |dot| median 0.998, against 0.77 without the rotation; see [TRACK_D_RT.md](TRACK_D_RT.md). The top-down capture was nearly view-aligned with world Y. The lighting shader multiplies them by `mat3(cb._m6)` into its own lighting space; its view vector comes from the frustum-corner rays `cb._m7[0..2]` × linear depth.

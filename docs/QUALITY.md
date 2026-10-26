@@ -56,7 +56,8 @@ Priority: **P1** do next (correctness or a large cheap gain), **P2** soon, **P3*
   (estimated 5-15% of ambient in creases), and gives a consistent energy balance
   with the bounce.
 
-**Q3 (P1, verify). The game multiplies *direct* light by AO.** Answered by D-LS
+**Q3 (P1, verify). The game multiplies *direct* light by AO.** **Status: resolved by RT audit fix 4**
+(`ao_direct=1`: no AO on ray-traced direct light, exact compensation; AUDIT_RT §4). Answered by D-LS
 (TRACK_D 9.1): `set1/b0 _m0.y = 0.5` in gameplay, so the AO fold darkens direct light
 by half its occlusion. Kept as the game's art intent.
 - `f469db78` line 1451/1452: local-light and sun diffuse are × `mix(1, AO, b0._m0.y)`,
@@ -146,7 +147,9 @@ by half its occlusion. Kept as the game's art intent.
 - **Expected gain:** for RR, cleaner convergence and no structured artefacts. For
   `rr=0`, about 2× lower perceived error at equal sample count with a short EMA.
 
-**Q10 (P1). Hard sun shadows from a point sun; bias.**
+**Q10 (P1). Hard sun shadows from a point sun; bias.** **Status: done** (soft sun: fix 5,
+with the half-angle corrected by the RT audit; bias: RT audit fix 6, `rt_origin=1`, see
+[AUDIT_RT.md §4](AUDIT_RT.md#4-fix-batch-2026-10-26-branch-of-e285602)).
 - `rt_shadow.hlsl:40` traces 1 deterministic ray to a point light. The game's own
   sun specular uses a disc with `sin θ = 0.00459` (TRACK_D 8.1), so shadow and
   specular disagree, and distant casters get a pixel-hard edge.
@@ -425,5 +428,11 @@ can become a default.
 | 2. Double darkening with the game's SSAO | **Done.** The traced visibility *replaces* the SSAO (`gi_ao=1.0`, lerp instead of multiply). | `img/quality_ab_ao_rr_mode.png`: top before, bottom after. Shadowed areas are about 5% brighter, and contacts are still occluded. |
 | 3. RR fed an already-denoised GI | **Done.** RR mode (`gi_rr=-1` follows `rr`): full-res, 1 spp, no own history or spatial filter; RR denoises. Half-res accumulation remains for `rr=0`. | Same A/B: no visible noise. GI cost unchanged (about 0.34 ms). |
 | 4. RR guides (world normals, N·V, matrices) | In progress (separate branch). | |
-| 5. Noise and sun shadows | **Done.** pcg3d per-pixel/per-frame seeds; soft sun shadows sampling the sun disc (`rt_sun_radius=0.0023` rad, BG3's 0.263° diameter), 1 ray, denoised by RR. | Validation pending in the next combined run |
+| 5. Noise and sun shadows | **Done.** pcg3d per-pixel/per-frame seeds; soft sun shadows sampling the sun disc, 1 ray, denoised by RR. **Corrected (RT audit fix 1):** the default was 0.0023 rad, described as "BG3's 0.263° diameter"; the game's 0.0045900648 (`f469db78:1428`) is the sine of the **half-angle** (0.263°), and the shader samples a cone of half-angle `rt_sun_radius`, so the default is now `rt_sun_radius=0.00459`. | Validation pending in the next combined run |
+| RT audit 2. Back-lit translucency | **Done.** Skin, thin-translucency and hair pixels are traced for N·L ≤ 0 too (their transmission reads the sun mask); other back faces are left untouched. `rt_backlit`. | AUDIT_RT §4 #2: game mask lit on 66% of back-lit transmitting px at the docks, all of them zeroed before; `img/rtfix2_backlit_docks_*` |
+| RT audit 3. Material classes | **Done.** RT2.a & 7 and RT3 decoded as the game does. D-LS evaluates each light with the class's exact term, and the GI composite uses the class's diffuse colour (no albedo² on skin, none on unlit). `mat_classes`. | AUDIT_RT §4 #3: the recompute never exceeds the game on those px; `img/rtfix3_materials_*` |
+| RT audit 4 / Q3. AO on direct light | **Done.** `ao_direct=1`: no AO factor on ray-traced direct light (D-LS lights; the sun, recomputed exactly). The RT visibility stays on the ambient only, so no contact is darkened twice and direct light carries no 1-spp AO noise. `ao_direct=2`: the game's SSAO factor instead. | AUDIT_RT §4 #4: 1.9% of the locally lit luminance given back in the foundry; sun recompute = game − in-scatter at the docks |
+| RT audit 5. Alpha region / textures | **Done.** Sized from demand, 4096 textures, overflow logged loudly. | AUDIT_RT §4 #5 |
+| RT audit 6 / Q10 bias. Ray origins | **Done.** Exact TLAS surface + Wächter & Binder offset along the geometric normal, in every RT pass. `rt_origin`. Q10 is now fully done (soft sun: fix 5; bias: this). | AUDIT_RT §4 #6; `img/rtfix6_origin_*` |
+| RT audit 10. Dropped draws | **Done.** Counted and logged; strips and fans captured. `rt_strips`. | 0 dropped in the foundry, the docks and the menu scene |
 | D-RF against the rules (TRACK_D 10) | R1: bounded GGX VNDF, pcg3d white noise on its own stream, mirror below a = 0.1. R2: RR only, no history or filter of ours; without RR deterministic mirror rays only (a < 0.3). R3: exact delta on the game's probe term (D-EN4, mean error 0.58%), TLAS miss keeps the probe, the game's DFG LUT as env BRDF, its SO kept for the probe and not re-applied to traced hits. R5: debug views 1-6, `rf_stats` tier fractions, non-finite guards, identical `-Validation` IDs, `-Move`, `fg=2`. R6: foundry A/B + crops; **reflective-scene A/B and stability metric not done**. R7: 0.33 ms. | `img/rf_foundry_*.png`, `img/rf_docks_*.png` |

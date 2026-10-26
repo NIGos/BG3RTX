@@ -28,10 +28,13 @@ namespace bg3 {
 
 namespace {
 
-constexpr uint32_t kTextures = 256;   // Texture2D slots (0 = dummy)
-constexpr uint32_t kCaches = 4;       // Texture2DArray slots (0 = dummy)
+// Must match shaders/rt/rt_common.hlsli. Outdoors (foliage) a frame binds far
+// more than the 256 views of the first version; a full list turns draws opaque
+// (logged at once, "views full").
+constexpr uint32_t kTextures = 4096;  // Texture2D slots (0 = dummy)
+constexpr uint32_t kCaches = 16;      // Texture2DArray slots (0 = dummy)
 constexpr uint32_t kRing = 8;         // descriptor sets / record regions in flight
-constexpr uint32_t kMaxRecords = 2048;
+constexpr uint32_t kMaxRecords = 8192;
 constexpr VkDeviceSize kRegion = 16 + VkDeviceSize(kMaxRecords) * sizeof(AlphaRec);
 
 DeviceData* g_dd = nullptr;
@@ -52,6 +55,10 @@ bool g_dummy_ready = false;
 VkBuffer g_dummy_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_dummy_mem = VK_NULL_HANDLE;
 uint32_t g_slot = 0;            // next ring slot
+uint32_t g_set_tex[kRing] = {};     // per set: texture slots holding real views (the rest: dummies)
+uint32_t g_set_cache[kRing] = {};
+bool g_set_init[kRing] = {};
+bool g_full_logged = false;
 int g_current = -1;             // slot of the last commit
 bool g_logged = false;
 
@@ -196,18 +203,19 @@ void alpha_device_created(DeviceData* dd) {
   bool ok = vk.CreateSampler(dd->device, &si, nullptr, &g_wrap) == VK_SUCCESS;
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   ok = ok && vk.CreateSampler(dd->device, &si, nullptr, &g_clamp) == VK_SUCCESS;
-  VkDescriptorSetLayoutBinding b[6] = {
+  VkDescriptorSetLayoutBinding b[7] = {
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+      {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kTextures, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kCaches, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {4, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_wrap},
       {5, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_clamp}};
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.bindingCount = 6;
+  dci.bindingCount = 7;
   dci.pBindings = b;
   ok = ok && vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) == VK_SUCCESS;
-  VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 * kRing},
+  VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3 * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches) * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLER, 2 * kRing}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -321,12 +329,21 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_recs.size() >= kMaxRecords) {
     ++g_fail[4];
+    if (!g_full_logged) {
+      g_full_logged = true;
+      log("[alpha] WARNING record list full (%u draws): further alpha-tested draws are made OPAQUE", kMaxRecords);
+    }
     return false;
   }
   r.tex = slot_of(g_tex, kTextures, t.view, t.layout);
   r.cache = a.kind == 1 ? slot_of(g_cache, kCaches, c.view, c.layout) : 0;
   if (!r.tex || (a.kind == 1 && !r.cache)) {
     ++g_fail[5];
+    if (!g_full_logged) {
+      g_full_logged = true;
+      log("[alpha] WARNING view list full (%zu textures of %u, %zu tile caches of %u): further alpha-tested draws are "
+          "made OPAQUE", g_tex.size(), kTextures - 1, g_cache.size(), kCaches - 1);
+    }
     return false;
   }
   g_recs.push_back(r);
@@ -338,7 +355,8 @@ uint32_t alpha_record_count() {
   return uint32_t(g_recs.size());
 }
 
-void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, VkDeviceSize alpha_bytes) {
+void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, VkDeviceSize alpha_bytes,
+                  VkDeviceSize opaque_bytes, uint32_t stride) {
   if (!g_on) return;
   const VkDeviceFuncs& vk = g_dd->vk;
   std::lock_guard<std::mutex> lock(g_mu);
@@ -379,7 +397,8 @@ void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, V
   // Records: a 16-byte header (count) and the records, in this slot's region.
   // The slot was last read kRing frames ago; order the update after any reads anyway.
   const VkDeviceSize base = VkDeviceSize(slot) * kRegion;
-  uint32_t header[4] = {uint32_t(g_recs.size()), 0, 0, 0};
+  // header: record count, the opaque soup's vertex stride (0: not bound)
+  uint32_t header[4] = {uint32_t(g_recs.size()), soup && opaque_bytes ? stride : 0u, 0, 0};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -403,25 +422,36 @@ void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, V
   VkDescriptorBufferInfo rec{g_rec_buf, base, kRegion};
   VkDescriptorBufferInfo soupi = soup && alpha_bytes ? VkDescriptorBufferInfo{soup, alpha_base, alpha_bytes}
                                                      : VkDescriptorBufferInfo{g_dummy_buf, 0, 256};
-  std::vector<VkDescriptorImageInfo> tex(kTextures), cache(kCaches);
-  for (uint32_t i = 0; i < kTextures; ++i)
+  VkDescriptorBufferInfo opaquei = soup && opaque_bytes ? VkDescriptorBufferInfo{soup, 0, opaque_bytes}
+                                                        : VkDescriptorBufferInfo{g_dummy_buf, 0, 256};
+  // Every slot must hold a live view: this frame's views, dummies after them.
+  // Only the slots a set ever held real views in need rewriting (all of them the
+  // first time a set is used): writing 4096 descriptors per frame is avoided.
+  const uint32_t ntex = g_set_init[slot] ? (std::max)(g_set_tex[slot], uint32_t(g_tex.size())) + 1 : kTextures;
+  const uint32_t ncache = g_set_init[slot] ? (std::max)(g_set_cache[slot], uint32_t(g_cache.size())) + 1 : kCaches;
+  g_set_init[slot] = true;
+  g_set_tex[slot] = uint32_t(g_tex.size());
+  g_set_cache[slot] = uint32_t(g_cache.size());
+  std::vector<VkDescriptorImageInfo> tex(ntex), cache(ncache);
+  for (uint32_t i = 0; i < ntex; ++i)
     tex[i] = i && i <= g_tex.size() ? VkDescriptorImageInfo{VK_NULL_HANDLE, g_tex[i - 1].first, g_tex[i - 1].second}
                                     : VkDescriptorImageInfo{VK_NULL_HANDLE, g_dummy2d.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  for (uint32_t i = 0; i < kCaches; ++i)
+  for (uint32_t i = 0; i < ncache; ++i)
     cache[i] = i && i <= g_cache.size()
                    ? VkDescriptorImageInfo{VK_NULL_HANDLE, g_cache[i - 1].first, g_cache[i - 1].second}
                    : VkDescriptorImageInfo{VK_NULL_HANDLE, g_dummy_arr.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet w[4] = {};
-  for (int i = 0; i < 4; ++i) {
+  VkWriteDescriptorSet w[5] = {};
+  for (int i = 0; i < 5; ++i) {
     w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     w[i].dstSet = g_sets[slot];
-    w[i].dstBinding = uint32_t(i);
+    w[i].dstBinding = i < 4 ? uint32_t(i) : 6u;
   }
+  w[4].descriptorCount = 1, w[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[4].pBufferInfo = &opaquei;
   w[0].descriptorCount = 1, w[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[0].pBufferInfo = &rec;
   w[1].descriptorCount = 1, w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[1].pBufferInfo = &soupi;
-  w[2].descriptorCount = kTextures, w[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[2].pImageInfo = tex.data();
-  w[3].descriptorCount = kCaches, w[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[3].pImageInfo = cache.data();
-  vk.UpdateDescriptorSets(g_dd->device, 4, w, 0, nullptr);
+  w[2].descriptorCount = ntex, w[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[2].pImageInfo = tex.data();
+  w[3].descriptorCount = ncache, w[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[3].pImageInfo = cache.data();
+  vk.UpdateDescriptorSets(g_dd->device, 5, w, 0, nullptr);
   g_current = int(slot);
 
   ++g_frames;
@@ -434,10 +464,12 @@ void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, V
   }
   int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
   if (g_frames >= uint64_t(every)) {
-    log("[alpha] last %llu frames: %.1f alpha-tested draws, %.0f triangles per frame; opaque fallbacks: no view %u, "
-        "UBO %u, SSBO %u, non-finite %u, records full %u, views full %u",
-        (unsigned long long)g_frames, double(g_draws) / g_frames, double(g_tris) / g_frames, g_fail[0], g_fail[1],
-        g_fail[2], g_fail[3], g_fail[4], g_fail[5]);
+    log("[alpha] last %llu frames: %.1f alpha-tested draws, %.0f triangles, %zu textures, %zu tile caches per frame "
+        "(capacity %u, %u, %u records); opaque fallbacks: no view %u, UBO %u, SSBO %u, non-finite %u, records full %u, "
+        "views full %u",
+        (unsigned long long)g_frames, double(g_draws) / g_frames, double(g_tris) / g_frames, g_tex.size(),
+        g_cache.size(), kTextures - 1, kCaches - 1, kMaxRecords, g_fail[0], g_fail[1], g_fail[2], g_fail[3], g_fail[4],
+        g_fail[5]);
     g_frames = g_draws = g_tris = 0;
     std::memset(g_fail, 0, sizeof g_fail);
   }
