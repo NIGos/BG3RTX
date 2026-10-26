@@ -298,6 +298,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->seg_count = 0;
   s->geo = nullptr;
   s->geo_ts = -1;
+  s->vb.fill({});
+  s->ib = VK_NULL_HANDLE;
+  s->ib_offset = 0;
   s->has_viewport = false;
   s->sl_layouts.clear();
   s->sl_cam_valid = false;
@@ -492,7 +495,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate(VkCommandBuff
 static VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cmd, uint32_t vc, uint32_t ic, uint32_t fv, uint32_t fi) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, 0, vc, ic);
+  if (geo) geo_pre_draw(cmd, gs, DrawArgs{0, vc, ic, fv, 0, fi});
   vk(cmd).CmdDraw(cmd, vc, ic, fv, fi);
   if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw");
@@ -502,17 +505,88 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cmd, uint32_t n
                                                  uint32_t fin) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, 1, n, ic);
+  if (geo) geo_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin});
   vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin);
   if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw");
+}
+
+// ---- vertex/index buffer bindings and buffer writes (Track D BVH split) ----
+
+static VKAPI_ATTR void VKAPI_CALL CmdBindVertexBuffers(VkCommandBuffer cmd, uint32_t first, uint32_t n, const VkBuffer* b,
+                                                       const VkDeviceSize* o) {
+  vk(cmd).CmdBindVertexBuffers(cmd, first, n, b, o);
+  if (CmdState* s = cmd_state(cmd))
+    for (uint32_t i = 0; i < n && first + i < CmdState::kMaxVertexBindings; ++i) s->vb[first + i] = {b[i], o[i], 0};
+}
+
+static void note_vb2(VkCommandBuffer cmd, uint32_t first, uint32_t n, const VkBuffer* b, const VkDeviceSize* o,
+                     const VkDeviceSize* strides) {
+  if (CmdState* s = cmd_state(cmd))
+    for (uint32_t i = 0; i < n && first + i < CmdState::kMaxVertexBindings; ++i)
+      s->vb[first + i] = {b[i], o[i], strides ? strides[i] : 0};
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdBindVertexBuffers2(VkCommandBuffer cmd, uint32_t first, uint32_t n, const VkBuffer* b,
+                                                        const VkDeviceSize* o, const VkDeviceSize* sizes,
+                                                        const VkDeviceSize* strides) {
+  vk(cmd).CmdBindVertexBuffers2(cmd, first, n, b, o, sizes, strides);
+  note_vb2(cmd, first, n, b, o, strides);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdBindVertexBuffers2EXT(VkCommandBuffer cmd, uint32_t first, uint32_t n,
+                                                           const VkBuffer* b, const VkDeviceSize* o,
+                                                           const VkDeviceSize* sizes, const VkDeviceSize* strides) {
+  static std::atomic<PFN_vkCmdBindVertexBuffers2> next{nullptr};
+  PFN_vkCmdBindVertexBuffers2 f = next.load();
+  if (!f) {
+    DeviceData* dd = device_of(cmd);
+    f = reinterpret_cast<PFN_vkCmdBindVertexBuffers2>(dd->gdpa(dd->device, "vkCmdBindVertexBuffers2EXT"));
+    if (!f) f = dd->vk.CmdBindVertexBuffers2;
+    next = f;
+  }
+  f(cmd, first, n, b, o, sizes, strides);
+  note_vb2(cmd, first, n, b, o, strides);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdBindIndexBuffer(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o, VkIndexType t) {
+  vk(cmd).CmdBindIndexBuffer(cmd, b, o, t);
+  if (CmdState* s = cmd_state(cmd)) {
+    s->ib = b;
+    s->ib_offset = o;
+    s->ib_type = t;
+  }
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdCopyBuffer(VkCommandBuffer cmd, VkBuffer src, VkBuffer dst, uint32_t n,
+                                                const VkBufferCopy* r) {
+  vk(cmd).CmdCopyBuffer(cmd, src, dst, n, r);
+  for (uint32_t i = 0; i < n; ++i) bvh_buffer_written(dst, r[i].dstOffset, r[i].size);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdCopyBuffer2(VkCommandBuffer cmd, const VkCopyBufferInfo2* info) {
+  vk(cmd).CmdCopyBuffer2(cmd, info);
+  for (uint32_t i = 0; i < info->regionCount; ++i)
+    bvh_buffer_written(info->dstBuffer, info->pRegions[i].dstOffset, info->pRegions[i].size);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdUpdateBuffer(VkCommandBuffer cmd, VkBuffer dst, VkDeviceSize o, VkDeviceSize size,
+                                                  const void* data) {
+  vk(cmd).CmdUpdateBuffer(cmd, dst, o, size, data);
+  bvh_buffer_written(dst, o, size);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdFillBuffer(VkCommandBuffer cmd, VkBuffer dst, VkDeviceSize o, VkDeviceSize size,
+                                                uint32_t data) {
+  vk(cmd).CmdFillBuffer(cmd, dst, o, size, data);
+  bvh_buffer_written(dst, o, size);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o, uint32_t n,
                                                   uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, 2, 0, 0);
+  if (geo) geo_pre_draw(cmd, gs, DrawArgs{2, 0, 0, 0, 0, 0});
   vk(cmd).CmdDrawIndirect(cmd, b, o, n, st);
   if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw_indirect");
@@ -522,7 +596,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(VkCommandBuffer cmd, Vk
                                                          uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, 3, 0, 0);
+  if (geo) geo_pre_draw(cmd, gs, DrawArgs{3, 0, 0, 0, 0, 0});
   vk(cmd).CmdDrawIndexedIndirect(cmd, b, o, n, st);
   if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw_indirect");
@@ -532,7 +606,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectCount(VkCommandBuffer cmd, VkBu
                                                        VkDeviceSize co, uint32_t mx, uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, 4, 0, 0);
+  if (geo) geo_pre_draw(cmd, gs, DrawArgs{4, 0, 0, 0, 0, 0});
   vk(cmd).CmdDrawIndirectCount(cmd, b, o, cb, co, mx, st);
   if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw_indirect");
@@ -542,7 +616,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cm
                                                               VkBuffer cb, VkDeviceSize co, uint32_t mx, uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, 5, 0, 0);
+  if (geo) geo_pre_draw(cmd, gs, DrawArgs{5, 0, 0, 0, 0, 0});
   vk(cmd).CmdDrawIndexedIndirectCount(cmd, b, o, cb, co, mx, st);
   if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw_indirect");
@@ -688,6 +762,14 @@ void register_cmd_hooks(HookMap& m) {
   HOOK(CmdExecuteCommands);
   HOOK(CmdPipelineBarrier);
   HOOK(CmdPipelineBarrier2);
+  HOOK(CmdBindVertexBuffers);
+  HOOK(CmdBindVertexBuffers2);
+  HOOK(CmdBindIndexBuffer);
+  HOOK(CmdCopyBuffer);
+  HOOK(CmdCopyBuffer2);
+  HOOK(CmdUpdateBuffer);
+  HOOK(CmdFillBuffer);
+  m["vkCmdBindVertexBuffers2EXT"] = reinterpret_cast<PFN_vkVoidFunction>(&CmdBindVertexBuffers2EXT);
 #undef HOOK
 }
 
