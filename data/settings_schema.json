@@ -1,0 +1,95 @@
+{
+  "generated_from": "common/settings.h",
+  "presets": [
+    {"id": "low", "label": "Low", "description": "RTX 2060-3060 / 4060, AMD and Intel with RT. No hardware scene build, no Ray Reconstruction: screen-space GI and contact shadows.", "extra": {}},
+    {"id": "medium", "label": "Medium", "description": "RTX 3070/3080, 4060 Ti/4070. Opaque ray-traced geometry, RT GI, fast local-light shadows, glossy reflections.", "extra": {}},
+    {"id": "high", "label": "High", "description": "RTX 4080/4090, 5080. Everything ray traced at the developer defaults (today's bg3rtx.ini).", "extra": {}},
+    {"id": "ultra", "label": "Ultra (RTX 5090)", "description": "RTX 5090 at 4K-class output. High plus 2 GI rays, shadowed lights, rougher reflections and a 58 fps rendered cap (116 displayed with frame generation 2x).", "extra": {"rt_rebuild_frames": "600"}}
+  ],
+  "knobs": [
+    {"id": "rr", "label": "Ray Reconstruction",
+     "description": "DLSS Ray Reconstruction replaces the game's DLSS upscaler and denoises the ray-traced effects. Needs an NVIDIA RTX GPU and the game's upscaler set to DLSS. Off: DLSS Super Resolution, and the effects switch to their non-denoised paths. About +1.8 ms on an RTX 5090.",
+     "apply": "hitch", "apply_note": "brief hitch (history reset)", "advanced": false,
+     "preset_values": {"low": 0, "medium": 1, "high": 1, "ultra": 1},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rr": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["dlss"], "keys": {"rr": "1"}, "needs": {}}
+     ]},
+    {"id": "rt_geometry", "label": "Ray-traced geometry",
+     "description": "Builds the game's geometry into a ray-tracing scene every frame. Every ray-traced effect below needs it. Opaque leaves alpha-tested casters (grates, foliage, chains) out, which halves the scene update cost. Off frees about 2-4 ms on mid-range GPUs.",
+     "apply": "partial", "apply_note": "Opaque <-> Full: restart", "advanced": false,
+     "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 2},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_build": "0", "rt_alpha": "0"}, "needs": {}},
+       {"id": "opaque", "label": "Opaque only", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "0"}, "needs": {}},
+       {"id": "full", "label": "Full (with alpha-tested)", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "1"}, "needs": {}}
+     ]},
+    {"id": "sun_shadows", "label": "Sun shadows",
+     "description": "Ray-traced sun shadows replace the game's shadow-map detail; screen-space keeps the game's sun shadows with contact shadows. About 0.1 ms.",
+     "apply": "live", "apply_note": "", "advanced": false,
+     "preset_values": {"low": 0, "medium": 1, "high": 1, "ultra": 1},
+     "kind": "choice", "choices": [
+       {"id": "ss", "label": "Screen-space", "caps": [], "keys": {"rt_shadows": "0", "contact_shadows": "1"}, "needs": {}},
+       {"id": "rt", "label": "Ray-traced", "caps": ["ray_query"], "keys": {"rt_shadows": "1", "contact_shadows": "1"}, "needs": {"rt_geometry": 1}}
+     ]},
+    {"id": "gi", "label": "Global illumination",
+     "description": "One bounce of indirect light and ambient occlusion. Screen-space traces the depth buffer; ray-traced traces the scene. RT High uses 2 rays per pixel (less noise in dim interiors, about +0.2 ms).",
+     "apply": "live", "apply_note": "", "advanced": false,
+     "preset_values": {"low": 1, "medium": 2, "high": 2, "ultra": 3},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"gi": "0"}, "needs": {}},
+       {"id": "ss", "label": "Screen-space", "caps": [], "keys": {"gi": "1", "gi_rt": "0", "gi_rays": "2", "gi_steps": "12"}, "needs": {}},
+       {"id": "rt", "label": "Ray-traced", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "1"}, "needs": {"rt_geometry": 1}},
+       {"id": "rt_high", "label": "Ray-traced High", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "2"}, "needs": {"rt_geometry": 1}}
+     ]},
+    {"id": "local_shadows", "label": "Local light shadows",
+     "description": "Ray-traced shadows for torches, lamps and spells, so lights without a shadow map stop leaking through walls. Fast samples 1 light per pixel (noisier, needs Ray Reconstruction). Full+ also re-traces the lights that have a game shadow map. About 0.2-0.35 ms.",
+     "apply": "live", "apply_note": "", "advanced": false,
+     "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 3},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_local_shadows": "0"}, "needs": {}},
+       {"id": "fast", "label": "Fast", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "1", "ls_shadowed": "0"}, "needs": {"rt_geometry": 1}},
+       {"id": "full", "label": "Full", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "0"}, "needs": {"rt_geometry": 1}},
+       {"id": "full_plus", "label": "Full + shadowed lights", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "2"}, "needs": {"rt_geometry": 1}}
+     ]},
+    {"id": "reflections", "label": "Reflections",
+     "description": "Ray-traced reflections replace the game's reflection probes where the reflected point is on screen. Higher settings reach rougher surfaces. Without Ray Reconstruction only mirror-like surfaces are traced. About 0.15-0.45 ms.",
+     "apply": "live", "apply_note": "", "advanced": false,
+     "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 3},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_reflections": "0"}, "needs": {}},
+       {"id": "glossy", "label": "Glossy", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.4"}, "needs": {"rt_geometry": 1, "gi": 1}},
+       {"id": "standard", "label": "Standard", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.6"}, "needs": {"rt_geometry": 1, "gi": 1}},
+       {"id": "rough", "label": "Rough", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.8"}, "needs": {"rt_geometry": 1, "gi": 1}}
+     ]},
+    {"id": "frame_generation", "label": "Frame generation",
+     "description": "DLSS Frame Generation: 2x on RTX 40 and later, 3x/4x on RTX 50. Needs Reflex.",
+     "apply": "partial", "apply_note": "Off <-> on: restart", "advanced": false,
+     "preset_values": {"low": 1, "medium": 1, "high": 1, "ultra": 1},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"fg": "0"}, "needs": {}},
+       {"id": "2x", "label": "2x", "caps": ["fg"], "keys": {"fg": "2"}, "needs": {}},
+       {"id": "3x", "label": "3x", "caps": ["mfg"], "keys": {"fg": "3"}, "needs": {}},
+       {"id": "4x", "label": "4x", "caps": ["mfg"], "keys": {"fg": "4"}, "needs": {}}
+     ]},
+    {"id": "rt_intensity", "label": "RT lighting intensity",
+     "description": "Scales the ray-traced bounce light, local-light shadows and reflections together. 100% is physically matched to the game; lower blends towards the original look.",
+     "apply": "live", "apply_note": "", "advanced": false,
+     "preset_values": {"low": 100, "medium": 100, "high": 100, "ultra": 100},
+     "kind": "slider", "min": 50, "max": 100, "step": 5, "off_value": null, "unit": "%", "keys": ["gi_strength", "ls_strength", "rf_strength"], "scale": 0.01},
+    {"id": "fps_cap", "label": "Frame cap (rendered fps)",
+     "description": "Caps the rendered frame rate (with frame generation 2x the display shows twice as many). Through the Reflex limiter when frame generation is on, a sleep limiter otherwise.",
+     "apply": "live", "apply_note": "", "advanced": false,
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 58},
+     "kind": "slider", "min": 30, "max": 240, "step": 1, "off_value": 0, "unit": "fps", "keys": ["fps_cap"], "scale": 1},
+    {"id": "reflex", "label": "NVIDIA Reflex",
+     "description": "Low-latency mode. Frame generation needs it on.",
+     "apply": "live", "apply_note": "", "advanced": true,
+     "preset_values": {"low": 1, "medium": 1, "high": 1, "ultra": 1},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"reflex": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": [], "keys": {"reflex": "1"}, "needs": {}},
+       {"id": "boost", "label": "On + Boost", "caps": [], "keys": {"reflex": "2"}, "needs": {}}
+     ]}
+  ]
+}

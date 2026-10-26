@@ -40,6 +40,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/savefilter.cpp
   layer/background.cpp
   layer/hookguard.cpp
+  layer/framecap.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
 
@@ -100,6 +101,19 @@ add_executable(xfb_patch_test tools/xfb_patch_test.cpp)
 add_executable(geo_blas_bench tools/geo_blas_bench.cpp)
 target_include_directories(geo_blas_bench PRIVATE ${VULKAN_SDK}/Include)
 target_link_directories(geo_blas_bench PRIVATE ${VULKAN_SDK}/Lib)
+
+# Player settings and launcher: bin/BG3RTX.exe (tools/launcher, docs/USER_SETTINGS.md).
+add_executable(bg3rtx_launcher WIN32 tools/launcher/main.cpp tools/launcher/launch.cpp tools/launcher/gpu.cpp)
+set_target_properties(bg3rtx_launcher PROPERTIES OUTPUT_NAME BG3RTX)
+target_include_directories(bg3rtx_launcher PRIVATE ${VULKAN_SDK}/Include)
+target_compile_definitions(bg3rtx_launcher PRIVATE UNICODE _UNICODE)
+target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 user32 gdi32)
+
+# Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
+enable_testing()
+add_executable(settings_test tests/settings_test.cpp)
+target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME settings_test COMMAND settings_test)
 
 # Hot-reloadable core: rebuild while the game runs.
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp)

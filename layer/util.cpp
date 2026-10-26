@@ -1,5 +1,7 @@
 #include "host.h"
 
+#include "../common/settings.h"
+
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -94,49 +96,123 @@ void log(const char* fmt, ...) {
   OutputDebugStringA(line);
 }
 
-// ---- config: key=value lines, '#' comments ----
+// ---- config: layered ini files (key=value lines, '#' comments) ----
+// The layers, in order (common/settings.h):
+//   1. bg3rtx.ini         developer / shipped defaults
+//   2. bg3rtx_user.ini    written by the launcher; %BG3RTX_USER_INI% replaces the
+//                         path, BG3RTX_USER_INI=none skips it (test runs)
+//   3. %BG3RTX_INI%       per-run overrides (scripts/auto-run.ps1)
+// A layer with preset=<id> expands that preset first; its own keys override it.
+// Every layer is re-read when its mtime changes.
 
 static std::mutex g_cfg_mu;
+static std::mutex g_cfg_poll_mu;
 static std::unordered_map<std::string, std::string> g_cfg;
-static uint64_t g_cfg_mtime = 0;
+
+struct CfgFile {
+  std::string path;
+  uint64_t mtime = ~0ull;   // matches no real mtime: read on the first poll
+  settings::Map keys;
+};
+static CfgFile g_cfg_files[3];
+
+static std::string env_str(const char* name) {
+  char buf[MAX_PATH] = {};
+  DWORD n = GetEnvironmentVariableA(name, buf, MAX_PATH);
+  return n && n < MAX_PATH ? std::string(buf) : std::string();
+}
+
+static std::string read_text(const std::string& path) {
+  std::string text;
+  FILE* f = _fsopen(path.c_str(), "rb", _SH_DENYNO);
+  if (!f) return text;
+  char buf[4096];
+  size_t n;
+  while ((n = fread(buf, 1, sizeof buf, f)) > 0) text.append(buf, n);
+  fclose(f);
+  return text;
+}
+
+static std::string base_name(const std::string& path) {
+  size_t s = path.find_last_of("\\/");
+  return s == std::string::npos ? path : path.substr(s + 1);
+}
+
+static void cfg_log_effective(const settings::Map& raw, bool derived) {
+  std::string files;
+  for (CfgFile& f : g_cfg_files) {
+    if (f.path.empty() || !f.mtime || f.mtime == ~0ull) continue;
+    auto p = f.keys.find("preset");
+    files += (files.empty() ? "" : " + ") + base_name(f.path) + " (" + std::to_string(f.keys.size()) + " keys" +
+             (p != f.keys.end() ? ", preset=" + p->second : std::string()) + ")";
+  }
+  log("[cfg] settings read: %s -> %zu keys", files.c_str(), raw.size());
+
+  // The user-facing settings as they took effect (docs/USER_SETTINGS.md).
+  std::vector<int> values = settings::knob_values(raw);
+  int preset = settings::matching_preset(values);
+  std::string knobs;
+  for (int i = 0; i < settings::kKnobCount; ++i) {
+    const settings::Knob& k = settings::kKnobs[i];
+    std::string v = values[i] < 0                        ? std::string("custom")
+                    : k.kind == settings::Kind::Choice ? std::string(k.choices[values[i]].id)
+                                                         : std::to_string(values[i]);
+    knobs += std::string(i ? " " : "") + k.id + "=" + v;
+  }
+  log("[cfg] knobs: %s (%s)", knobs.c_str(),
+      preset >= 0 ? (std::string("preset ") + settings::kPresetId[preset]).c_str() : "custom");
+  std::string keys;
+  std::lock_guard<std::mutex> lock(g_cfg_mu);
+  for (const settings::Knob& k : settings::kKnobs)
+    for (const std::string& key : settings::knob_keys(k)) {
+      auto it = g_cfg.find(key);
+      keys += " " + key + "=" + (it == g_cfg.end() ? std::string("(default)") : it->second);
+    }
+  auto rb = g_cfg.find("rt_rebuild_frames");
+  if (rb != g_cfg.end()) keys += " rt_rebuild_frames=" + rb->second;
+  log("[cfg] keys:%s%s", keys.c_str(), derived ? " (rt_build from auto)" : "");
+}
 
 void cfg_poll() {
-  char env[MAX_PATH] = {};
-  const std::string path = GetEnvironmentVariableA("BG3RTX_INI", env, MAX_PATH) ? std::string(env)
-                                                                                 : root_dir() + "\\bg3rtx.ini";
-  uint64_t mt = file_mtime(path);
-  if (mt == g_cfg_mtime) return;
-  g_cfg_mtime = mt;
+  std::lock_guard<std::mutex> poll_lock(g_cfg_poll_mu);
+  std::string user = env_str("BG3RTX_USER_INI");
+  if (user.empty()) user = root_dir() + "\\bg3rtx_user.ini";
+  else if (settings::lower(user) == "none" || user == "0") user.clear();
+  const std::string paths[3] = {root_dir() + "\\bg3rtx.ini", user, env_str("BG3RTX_INI")};
 
-  std::unordered_map<std::string, std::string> next;
-  FILE* f = nullptr;
-  if (fopen_s(&f, path.c_str(), "r") == 0 && f) {
-    char line[512];
-    while (fgets(line, sizeof line, f)) {
-      std::string s(line);
-      size_t hash = s.find('#');
-      if (hash != std::string::npos) s.resize(hash);
-      size_t eq = s.find('=');
-      if (eq == std::string::npos) continue;
-      auto trim = [](std::string v) {
-        size_t a = v.find_first_not_of(" \t\r\n"), b = v.find_last_not_of(" \t\r\n");
-        return a == std::string::npos ? std::string() : v.substr(a, b - a + 1);
-      };
-      next[trim(s.substr(0, eq))] = trim(s.substr(eq + 1));
+  bool changed = false;
+  for (int i = 0; i < 3; ++i) {
+    CfgFile& f = g_cfg_files[i];
+    uint64_t mt = paths[i].empty() ? 0 : file_mtime(paths[i]);
+    if (paths[i] == f.path && mt == f.mtime) continue;
+    settings::Map keys = mt ? settings::parse_ini(read_text(paths[i])) : settings::Map();
+    if (keys.empty() && mt) {
+      // Caught mid-write (an editor or script truncates before writing): keep
+      // this layer's previous keys and read it again on the next poll.
+      f.mtime = ~0ull;
+      continue;
     }
-    fclose(f);
+    f.path = paths[i];
+    f.mtime = mt;
+    f.keys.swap(keys);
+    changed = true;
   }
-  if (next.empty() && mt) {
-    // Caught mid-write (an editor or script truncates before writing): keep
-    // the previous settings and read again on the next poll.
-    g_cfg_mtime = 0;
-    return;
+  if (!changed) return;
+
+  settings::Map raw;
+  std::vector<std::string> notes;
+  for (CfgFile& f : g_cfg_files) {
+    std::string n = settings::apply_layer(raw, f.keys);
+    if (!n.empty()) notes.push_back(base_name(f.path) + ": " + n);
   }
+  settings::Map next = raw;
+  bool derived = settings::resolve_derived(next);
   {
     std::lock_guard<std::mutex> lock(g_cfg_mu);
     g_cfg.swap(next);
   }
-  log("[cfg] bg3rtx.ini read, %zu keys", g_cfg.size());
+  for (const std::string& n : notes) log("[cfg] WARNING %s", n.c_str());
+  cfg_log_effective(raw, derived);
 }
 
 static bool cfg_raw(const char* key, std::string& out) {

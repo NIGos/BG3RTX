@@ -2,7 +2,9 @@
 #   .\scripts\build.ps1               build everything (RelWithDebInfo)
 #   .\scripts\build.ps1 -Core         rebuild only the hot-reloadable core
 #   .\scripts\build.ps1 -Watch        rebuild the core on every save under core/
-param([switch]$Core, [switch]$Watch, [string]$Config = "RelWithDebInfo")
+#   .\scripts\build.ps1 -Launcher     build only the player launcher, bin\BG3RTX.exe
+#   .\scripts\build.ps1 -Test         build everything, then run the settings unit tests
+param([switch]$Core, [switch]$Watch, [switch]$Launcher, [switch]$Test, [string]$Config = "RelWithDebInfo")
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
 $build = Join-Path $root "build"
@@ -29,7 +31,11 @@ function Invoke-Build([string]$target) {
 
 Enter-VsShell
 if (-not $Watch) {
-  Invoke-Build $(if ($Core) { "bg3rtx_core" } else { "" })
+  Invoke-Build $(if ($Core) { "bg3rtx_core" } elseif ($Launcher) { "bg3rtx_launcher" } else { "" })
+  if ($Test) {
+    & (Join-Path $root "bin\settings_test.exe")
+    if ($LASTEXITCODE) { throw "settings tests failed" }
+  }
   return
 }
 

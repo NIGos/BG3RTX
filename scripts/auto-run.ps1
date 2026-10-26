@@ -4,6 +4,8 @@
 #   .\scripts\auto-run.ps1                          one trace
 #   .\scripts\auto-run.ps1 -Traces 3                three, auto_interval presents apart
 #   .\scripts\auto-run.ps1 -Set dump_images=0       extra bg3rtx.ini overrides for this run
+#   .\scripts\auto-run.ps1 -Set preset=ultra        a settings preset (common/settings.h) for this run
+#   .\scripts\auto-run.ps1 -UserIni <file>          also layer a launcher-written bg3rtx_user.ini
 #   .\scripts\auto-run.ps1 -KeepRunning             leave the game open afterwards
 param(
   [int]$Traces = 1,
@@ -29,7 +31,10 @@ param(
   # Leave the PC to the user: the game runs borderless (no desktop mode change),
   # never takes the foreground, and believes it has focus (layer/background.cpp).
   # Keys for -Move are posted to the game window instead of typed globally.
-  [switch]$Background
+  [switch]$Background,
+  # A bg3rtx_user.ini to layer between bg3rtx.ini and this run's overrides (as
+  # the launcher writes it). Default: none, so test runs ignore the player's file.
+  [string]$UserIni = ""
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -110,13 +115,17 @@ $ensure = @((Join-Path $PSScriptRoot "ensure-settings.py"),
             (Join-Path $root "..\..\..\scripts\ensure-settings.py")) | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($ensure) { py -3 -I $ensure }
 
-# This run's settings: the repository's bg3rtx.ini plus auto-trace overrides.
+# This run's settings: the layer reads the repository's bg3rtx.ini, then this
+# override file (%BG3RTX_INI%) with the auto-trace keys and -Set. -Set preset=ultra
+# expands that preset here; explicit keys of this file (headless, fg=0, other -Set
+# keys) still win. The player's bg3rtx_user.ini is skipped unless -UserIni.
 $ini = Join-Path $caps "auto.ini"
-$lines = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @("auto_trace=1", "auto_traces=$Traces") +
+$lines = @("# auto-run.ps1 overrides, layered over bg3rtx.ini") + @("auto_trace=1", "auto_traces=$Traces") +
          @(if (-not $RealPresent) { "headless=1", "fg=0" }) +
          @(if ($Save) { "auto_min_draws=400", "auto_after_load=1" }) + $Set   # other scenes draw far fewer than the foundry (Rivington ~1240)   # headless test runs: no frame generation unless asked
 $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
+if ($UserIni) { $env:BG3RTX_USER_INI = (Resolve-Path $UserIni).Path } else { $env:BG3RTX_USER_INI = "none" }
 Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
 
 py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py")

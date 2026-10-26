@@ -1,8 +1,10 @@
 # User-facing settings: design study
 
-Status: **study only (2026-10-26), nothing implemented.** Scope: how BG3RTX exposes its
-ray-tracing settings to players with weaker PCs. It covers presets, a short list of exposed
-knobs, where the menu lives, and how changes apply while the game runs.
+Status: **phase 1 implemented (2026-10-26)**: settings table, presets, layered ini, launcher,
+release profile, `fps_cap`. See §9 for what is done, what differs from this study, and what
+is still open. Scope: how BG3RTX exposes its ray-tracing settings to players with weaker PCs.
+It covers presets, a short list of exposed knobs, where the menu lives, and how changes apply
+while the game runs.
 
 Sources: the code (`layer/`, `core/`, `bg3rtx.ini`), the track docs (costs) and the web
 sources cited inline. Every cost figure says whether it was **measured** (RTX 5090, render
@@ -574,3 +576,66 @@ So, among the user-facing knobs, only **"Ray-traced geometry: Full ↔ Opaque"**
      precompiling the SPIR-V.
    - Streamline binaries ship under `bin/sl`.
    - Both affect the launcher's install layout.
+
+---
+
+## 9. Implementation status (phase 1, 2026-10-26)
+
+### 9.1 Done
+
+| Item | Where | Notes |
+|---|---|---|
+| Settings table (single source of truth) | `common/settings.h` | Header-only, standard C++. It holds the entries of §6 (9 knobs + Reflex under Advanced; the preset is the combo), with labels, descriptions, choices → keys, per-preset values, apply class (live / hitch / partial restart), hardware caps per choice and dependencies between knobs. It also has the preset extras (Ultra: `rt_rebuild_frames=600`), `render_user_ini`, `suggest_preset` and `gpu_caps`. The phase-2 overlay can include it as is. `data/settings_schema.json` is the same table as JSON (also `BG3RTX.exe --dump-schema`); `settings_test` fails when the file is stale, and `settings_test.exe --write-schema` regenerates it |
+| Layered config | `layer/util.cpp` `cfg_poll` | Order: `bg3rtx.ini` → `bg3rtx_user.ini` (`%BG3RTX_USER_INI%` replaces the path; `none` skips it) → `%BG3RTX_INI%`. **Change from §7.3.3:** the preset is not a separate layer. Any file may contain `preset=`, which expands at that file's position before the file's own keys, so a later file (test overrides) beats a user preset. Each layer is hot-reloaded on its own mtime, and a truncated layer keeps its previous keys. The log prints `[cfg] settings read`, `[cfg] knobs:` (choices + matching preset) and `[cfg] keys:` |
+| Derived `rt_build` (§7.3.2, partly) | `settings::resolve_derived` | Presets write `rt_build=auto`, which resolves to 1 only while an RT consumer (`rt_shadows`, `rt_ao`, `gi_rt`, `rt_local_shadows`, `rt_reflections`, `rt_debug`) is on. `bg3rtx.ini` keeps `rt_build=1`, so the developer default is unchanged. `rtscene.cpp` is untouched |
+| `fps_cap` (§7.3.4) | `layer/streamline.cpp` `reflex_apply`, `layer/framecap.cpp` | With Streamline active, `slReflexSetOptions` gets `frameLimitUs = 1e6/fps_cap`, and `reflex`/`fps_cap` are re-applied whenever they change (Reflex used to be set once). Without Streamline, a sleep limiter (high-resolution waitable timer, then a spin) runs in `QueuePresentKHR` |
+| Release defaults (§7.3.5) | `data/release.ini`, `scripts/package.ps1`, `layer/tracer.cpp` | The trace hotkey needs `dev=1` (code default 0; the repository's `bg3rtx.ini` has `dev=1`). The `dump_shaders` code default is now 0; the repository ini keeps 1. `package.ps1` builds `dist/BG3RTX` with `bg3rtx.ini` = repository ini + `release.ini` (D keys off) |
+| Launcher | `tools/launcher` → `bin/BG3RTX.exe` (target `bg3rtx_launcher`, `build.ps1 -Launcher`) | The window is generated from the table: preset combo + "Use suggested", knobs, markers (live / brief hitch / restart required / unmet dependency / not supported), description panel, game folder (Steam registry + `libraryfolders.vdf`, or Browse), Save (atomic: temp + `MoveFileEx`), Save and launch. There is also a command line (`--launch`, `--dry-run`, `--preset`, `--detect`, `--dump-schema`) and a Steam `%command%` mode |
+| GPU detection (§5.3) | `tools/launcher/gpu.cpp`, `settings::gpu_caps` | A Vulkan instance in the launcher process (implicit layers disabled) reads the ray-query and AS extensions. The RTX series comes from the name, or from the PCI device ID for workstation names. Unsupported choices are marked and presets are clamped. Without ray query the launcher writes `rt=0` |
+| Tests | `tests/settings_test.cpp` (`build.ps1 -Test`, `ctest`) | Parsing, preset expansion, layer order, `rt_build=auto`, read-back of every preset, "the developer ini equals High", the release profile, the user-ini writer (keeps hand-edited keys), dependencies, GPU rules, the schema file |
+| Test harness | `scripts/auto-run.ps1` | `auto.ini` now holds only the overrides (the layer reads `bg3rtx.ini` itself), so `-Set preset=<id>` works. `-UserIni <file>` layers a launcher file. By default `BG3RTX_USER_INI=none`, so test runs ignore the player's file. `live_phases.py` still works |
+
+**Launcher toolkit: plain Win32 + common controls, not Dear ImGui (change from §4).**
+- The window is about 15 standard controls generated from the table. Native controls bring
+  keyboard navigation, DPI scaling and screen-reader support at no cost.
+- It needs no third-party source in the repository (Dear ImGui is not vendored, and
+  `external/` is not versioned) and no DX11 device.
+- The overlay needs ImGui with the Vulkan backend anyway. It shares the table rather than the
+  drawing code, so the two UIs still cannot drift.
+
+### 9.2 Verified
+
+- `settings_test`: 120 checks pass.
+- `BG3RTX.exe --detect` reports the RTX 5090 (0x2B85): ray query yes, series 50, suggested
+  preset Ultra.
+- **Launch path.**
+  - `--launch --dry-run` gives `bin\bg3.exe` in the game folder, with `VK_ADD_LAYER_PATH`,
+    `VK_INSTANCE_LAYERS`, `VK_LOADER_LAYERS_ENABLE`, `SteamAppId`/`SteamGameId` and
+    `DISABLE_LAYER_NV_PRESENT_1` (fg ≥ 2).
+  - The Steam `%command%` form (`Launcher\LariLauncher.exe`) resolves to `bin\bg3.exe`.
+  - A real `CreateProcess` with `--exe cmd.exe` shows the layer variables in the child and an
+    inherited `BG3RTX_INI` removed.
+  - The game itself was not started through the launcher.
+- **Window layout:** checked off screen with `--screenshot`.
+- **Game run:** `auto-run.ps1 -Background -UserIni <launcher-written preset=ultra>`, headless.
+  The trace completed. `bg3rtx.log` shows:
+  - `settings read: bg3rtx.ini (83 keys) + bg3rtx_user.ini (1 keys, preset=ultra) + auto.ini (4 keys)`
+  - `keys: … gi_rr_rays=2 … ls_shadowed=2 … rf_max_rough=0.8 fg=0 … fps_cap=58 … rt_rebuild_frames=600 (rt_build from auto)`.
+    `fg=0` is the headless override winning over the preset, as intended.
+  - `[framecap] fps_cap 58: sleep limiter in the present path`
+  - `[watch]` ≈ 290 presents per 5 s, which is the 58 fps cap.
+
+### 9.3 Not done / unverified
+
+- **Reflex frame limit with DLSS-G** (`frameLimitUs`): compiled but not run, because that
+  needs `-RealPresent` with `fg=2`. Whether the Reflex limiter applies with Reflex mode off is
+  also untested.
+- **Effective RR (§7.3.1):** not done. It needs `ngx.cpp` / `core/gi.cpp`, which other work
+  owns. The launcher greys out RR only on non-RTX GPUs; it cannot see the game's upscaler.
+- **DLSS mode in `graphicSettings.lsx`** (§4 item 4): the launcher does not write it.
+- **Ultra's `rt_rebuild_frames=600`:** refit quality over long pans is unchecked (§5.4 #4).
+- **Presets below the 5090:** still extrapolations (§8 risk 2).
+- **The release package (`dist/`):** assembled, but not run from a clean folder (DXC and the
+  shader layout untested).
+- **Not covered by tests:** Steam library detection, and the UI's interactive paths (combo
+  changes, Browse).

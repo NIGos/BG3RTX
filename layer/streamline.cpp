@@ -738,8 +738,27 @@ void api_error_cb(const sl::APIError& e) {
   g_last_api_error = int(e.vkRes);
 }
 
+// Reflex mode and frame limiter (reflex, fps_cap: live). fps_cap caps the
+// rendered frame rate; with DLSS-G the display shows a multiple of it.
+int g_reflex_applied = -1, g_cap_applied = -1;
+void reflex_apply() {
+  if (!g_sl.ReflexSetOptions) return;
+  int reflex = cfg_int("reflex", 1), cap = cfg_int("fps_cap", 0);
+  if (cap < 0) cap = 0;
+  if (reflex == g_reflex_applied && cap == g_cap_applied) return;
+  g_reflex_applied = reflex;
+  g_cap_applied = cap;
+  sl::ReflexOptions ro{};
+  ro.mode = reflex == 2 ? sl::ReflexMode::eLowLatencyWithBoost : reflex ? sl::ReflexMode::eLowLatency : sl::ReflexMode::eOff;
+  ro.frameLimitUs = cap > 0 ? uint32_t(1000000 / cap) : 0;
+  sl::Result rr = g_sl.ReflexSetOptions(ro);
+  log("[sl] slReflexSetOptions(mode %d, frame limit %u us = fps_cap %d): %s", int(ro.mode), ro.frameLimitUs, cap,
+      res_str(rr));
+}
+
 void new_frame() {
   if (!g_sl.GetNewFrameToken) return;
+  reflex_apply();
   ++g_token_index;
   if (g_sl.GetNewFrameToken(g_token, &g_token_index) != sl::Result::eOk) g_token = nullptr;
   if (!g_token) return;
@@ -1482,13 +1501,8 @@ static void finish_device(SlDeviceScratch* s, DeviceData* dd) {
     log("[sl] missing Streamline proxies");
     return;
   }
-  if (g_sl.ReflexSetOptions) {
-    sl::ReflexOptions ro{};
-    int reflex = cfg_int("reflex", 1);
-    ro.mode = reflex == 2 ? sl::ReflexMode::eLowLatencyWithBoost : reflex ? sl::ReflexMode::eLowLatency : sl::ReflexMode::eOff;
-    sl::Result rr = g_sl.ReflexSetOptions(ro);
-    log("[sl] slReflexSetOptions(mode %d): %s", int(ro.mode), res_str(rr));
-  }
+  g_reflex_applied = g_cap_applied = -1;
+  reflex_apply();
   if (g_sl.DLSSGGetState) {
     sl::DLSSGState st{};
     sl::Result gr = g_sl.DLSSGGetState(0, st, nullptr);
@@ -1862,5 +1876,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
   new_frame();
   return r;
 }
+
+bool sl_limits_frames() { return g_active && g_sl.ReflexSetOptions != nullptr; }
 
 }  // namespace bg3
