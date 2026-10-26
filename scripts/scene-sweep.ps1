@@ -27,7 +27,7 @@ foreach ($id in $scenes.Keys) {
   if ($Only.Count -and $Only -notcontains $id) { continue }
   # A child process per run: its stderr is plain text here, never a terminating error.
   $runArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $PSScriptRoot "auto-run.ps1"),
-               "-NoBuild", "-Save", $scenes[$id], "-TimeoutSec", $TimeoutSec)
+               "-NoBuild", "-Background", "-Save", $scenes[$id], "-TimeoutSec", $TimeoutSec)
   if ($Move) { $runArgs += "-Move" }
   if ($Set.Count) { $runArgs += @("-Set", ($Set -join ",")) }
   $first = $false
