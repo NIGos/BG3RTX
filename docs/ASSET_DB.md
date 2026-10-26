@@ -14,9 +14,11 @@ It implements AUDIT_ENGINE_DATA §2.3 (route c), R2 A1, A4, A5 and A11.
 Code:
 - `tools/assets/` builds it: a Python package with tests.
 - `layer/assetdb.cpp` loads it and runs the join check.
-- `common/assetdb_api.h` is the core's view (`Bg3HostApi::assetdb`, ABI 6).
+- `common/assetdb_api.h` is the core's view (`Bg3HostApi::assetdb`, ABI 6; table
+  version 2 adds the runtime lights of the Script Extender bridge, docs/SE_BRIDGE.md).
 
-Effects do not use it yet. Light radius for D-LS, hit materials and emissives come later.
+D-LS uses it for each light's source radius and owner (TRACK_D 9.8), merged with the
+Script Extender bridge when that runs. Hit materials and emissives come later.
 
 ## Build
 
@@ -253,7 +255,9 @@ The queries in `Bg3AssetDbApi` work in absolute world space. Add the camera posi
 | `engine_shader(hash)` | The engine shader's name |
 | `room_at(pos)` | inside room / roofed / covered floor / portal, room name, building, floor, and the lighting and atmosphere presets. The smallest containing lighting trigger wins, else the level's. |
 | `probes_near`, `probe`, `probe_capture`, `preset`, `light`, `string` | Record access |
-| `current_level(&name, &source)` | The level and how it was found |
+| `current_level(&name, &source)` | The level and how it was found (`"se"` when the Script Extender bridge reported it) |
+| `runtime_lights(pos, r)` (v2) | The bridge's lights joined to their database records, plus the placed lights it did not report; the database alone without the bridge (docs/SE_BRIDGE.md) |
+| `se_info`, `se_environment` (v2) | The bridge's state; the atmosphere and lighting resource in force at a point |
 
 ### Level detection
 
@@ -400,8 +404,13 @@ to port into the launcher (C++). `layer/assetdb.cpp` already has the LSPK and LZ
     lights are not in `Lights/`. They are 28-35% of the listed runtime lights in the
     foundry and Grymforge.
   - Item lights come from the item template's visual or script (`BASE_LIGHT` children,
-    `Stats: OBJ_Torch`). Adding them means resolving item placements × the light their
-    visual attaches; that is the next step for full coverage.
+    `Stats: OBJ_Torch`). Adding them offline means resolving item placements × the
+    light their visual attaches.
+  - **The Script Extender bridge covers them at run time** (docs/SE_BRIDGE.md). In the
+    foundry, the listed lights covered went from 26/40 (65%, database) to 40/40 (100%,
+    bridge + database). The 14 missing lights were 12-13 glasshouse lamp items, the
+    darkvision light of the controlled character, and one lamp whose item had not
+    loaded yet.
   - Effect lights are definitions without placement.
 - **Story state.**
   - Lights toggled by Osiris or layers, and sub-levels loaded later

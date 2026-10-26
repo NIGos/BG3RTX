@@ -14,7 +14,8 @@
 --
 -- Cost: lights are classified once (template file, owner) and cached by entity handle,
 -- at most CLASSIFY_BUDGET per tick; placed lights are then found through a 16 m grid,
--- and only the lights within RANGE are read again each period.
+-- and only the lights within RANGE are read again: visual and character lights each export,
+-- placed lights (which do not move) a quarter of them per export.
 
 local OUT = "bg3rtx/lights.txt"
 local PERIOD_US = 250000        -- 4 Hz
@@ -55,8 +56,11 @@ local function host()
   end
 end
 
+-- Integer cell keys (world coordinates stay within +-16 km, so 2048 cells per axis).
+local function ckey(x, y, z) return ((x + 1024) * 2048 + (y + 1024)) * 2048 + (z + 1024) end
+
 local function key(x, y, z)
-  return math.floor(x / CELL) .. ":" .. math.floor(y / CELL) .. ":" .. math.floor(z / CELL)
+  return ckey(math.floor(x / CELL), math.floor(y / CELL), math.floor(z / CELL))
 end
 
 local function collect_charlights()
@@ -215,7 +219,18 @@ local function tick()
     end
     if #q > 0 then pending, pending_i = q, 1 end
     local d = {}
-    for _, r in ipairs(dynamic) do if live[r.e] then d[#d + 1] = r else cache[r.e] = nil end end
+    for _, r in ipairs(dynamic) do
+      if live[r.e] then
+        d[#d + 1] = r
+        -- a visual light classified before its item or scenery streamed in: ask again (5 tries)
+        if r.owner == OWNER_UNKNOWN and (r.tries or 0) < 5 then
+          r.tries = (r.tries or 0) + 1
+          r.owner = owner_near({r.x, r.y, r.z})
+        end
+      else
+        cache[r.e] = nil
+      end
+    end
     dynamic = d
   end
 
@@ -225,12 +240,16 @@ local function tick()
   local cx, cy, cz = math.floor(hx / CELL), math.floor(hy / CELL), math.floor(hz / CELL)
   local n = math.ceil(RANGE / CELL)
   for x = cx - n, cx + n do
-    for y = cy - n, cy + n do
+    for y = cy - 2, cy + 2 do   -- +-32 m vertically
       for z = cz - n, cz + n do
-        local c = grid[x .. ":" .. y .. ":" .. z]
+        local c = grid[ckey(x, y, z)]
         if c then
           for _, r in ipairs(c) do
-            if near(r, hx, hy, hz, RANGE) then out[#out + 1] = try(line, r) end
+            if near(r, hx, hy, hz, RANGE) then
+              -- placed lights do not move: their state is re-read at 1 Hz (a quarter per export)
+              if r.line == nil or (seq + r.id) % 4 == 0 then r.line = try(line, r) end
+              out[#out + 1] = r.line
+            end
           end
         end
       end
