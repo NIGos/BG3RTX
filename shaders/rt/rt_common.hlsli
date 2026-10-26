@@ -49,12 +49,65 @@ uint rec_addr(uint i) { return 16 + i * kRecBytes; }
 // Tile-set constant: matrix m (0/1), column c, row r of the SSBO entry (row-major mat4).
 float vt_t(uint a, uint m, uint c, uint r) { return asfloat(gAlphaRec.Load(a + 80 + 4 * (m * 16 + r * 4 + c))); }
 
+// ---- alpha-test policy (docs/TRACK_D_RT.md 7.1, "Alpha test at secondary hits") ----
+// gAlphaRec header uint 2, written per frame by layer/alphatest.cpp from bg3rtx.ini
+// (live A/B switches; every bit set is the default):
+//   kAlphaCutEff      rt_alpha_cut=1: the record's effective cut-off (the strictest
+//                     constant of the shader's discard tests on the alpha), not the
+//                     first test's (an early-out at 0.001 / 0.01 on 76 vt shaders);
+//   kAlphaStochastic  rt_alpha_stochastic=1: where the texel footprint has blurred the
+//                     mask (level >= 1 above mip 0), compare against a hashed threshold
+//                     instead of the hard cut-off: P(solid) -> the filtered alpha, i.e.
+//                     the coverage, so partial coverage stays unbiased under RR;
+//   kAlphaUnknownClear rt_alpha_unknown=1: a candidate whose alpha cannot be evaluated
+//                     (no record or UV, a non-resident tile set) lets visibility rays
+//                     (GI, AO, reflections) through; shadow rays still treat it as solid.
+static const uint kAlphaCutEff = 1u, kAlphaStochastic = 2u, kAlphaUnknownClear = 4u;
+uint alpha_flags() { return gAlphaRec.Load(8); }
+
+// Class of the running ray query, for the counters and the unknown-case policy:
+// 0 visibility (closest hit: GI, AO, reflections, origins, debug), 1 shadow (any hit).
+static uint g_rt_class = 0u;
+
+// Alpha-test counters (rt_stats=1, core/gi.cpp): 80 + 16 x class + k, k:
+//   0 candidates; solid without evaluation: 1 no record, 2 no UV (stride < 24),
+//   3 prim >= tris, 4 non-finite uv/footprint, 5 vt tile set not resident;
+//   6/7 vt solid/clear, 8/9 tex solid/clear; 10 records whose first cut-off is < 0.1,
+//   11 of those solid; 12 level >= 2, 13 level >= 4 (blur level of the alpha read,
+//   log2 mip-0 texels); 14 stochastic (level > 1); 15 vt page from a coarser level
+//   than requested (not resident at the cone's mip).
+void alpha_stat(uint k, bool cond, uint bin) {
+  if (pc.rt_stats != 0u) stat_add(80u + 16u * g_rt_class + k, cond, bin);
+}
+
+// A candidate whose alpha is unknown: solid (true) or let through.
+bool alpha_unknown(uint flags) { return (flags & kAlphaUnknownClear) == 0u || g_rt_class == 1u; }
+
+// Uniform [0, 1) per ray and hit: the hit's uv bits, its triangle and the frame.
+float alpha_hash(float2 uv, uint prim) {
+  uint3 h = pcg3d(uint3(asuint(uv.x), asuint(uv.y), prim ^ (pc.frame * 0x9E3779B9u) ^ (g_rt_class << 31)));
+  return float(h.x >> 8) * (1.0 / 16777216.0);
+}
+
+// An alpha read: the value, the blur level of the data it came from (log2 of mip-0
+// texels per texel: the mip, or the level of the coarser page that stood in), and
+// whether it could be read at all.
+struct AlphaRead { float a; float lvl; bool ok; bool coarser; };
+
 // BG3's Granite lookup, as in its prepass fragment shaders (e.g. 84d5df19):
 // mip from the uv footprint, page entry from the indirection texture, texel in
 // the tile cache; the tile set's albedo layer `col` carries the alpha. Without
-// screen derivatives the footprint is the ray cone's, isotropic.
-float vt_alpha(uint a, float2 uv, float g, uint tex, uint cache, uint col) {
-  if (vt_t(a, 0, 2, 3) != 2202.0) return 1.0;   // the game's "tile set resident" sentinel
+// screen derivatives the footprint is the ray cone's, isotropic. The indirection
+// entry of a page that is not resident at that mip points at the finest resident
+// ancestor (its tile scale, e & 15, is then smaller): the read clamps itself to
+// the finest resident level, and `lvl` reports the level actually used.
+AlphaRead vt_alpha(uint a, float2 uv, float g, uint tex, uint cache, uint col) {
+  AlphaRead r;
+  r.a = 1.0;
+  r.lvl = 0.0;
+  r.coarser = false;
+  r.ok = vt_t(a, 0, 2, 3) == 2202.0;   // the game's "tile set resident" sentinel
+  if (!r.ok) return r;
   float4 P0 = asfloat(gAlphaRec.Load4(a + 48));
   float4 P1 = asfloat(gAlphaRec.Load4(a + 64));
   float2 u = frac(uv) * P0.zw + P0.xy;
@@ -68,21 +121,31 @@ float vt_alpha(uint a, float2 uv, float g, uint tex, uint cache, uint col) {
   float2 ip = floor(u * dims * pow(0.5, mip));
   uint e = asuint(gAlphaTex[NonUniformResourceIndex(tex)].Load(int3(int2(ip), int(mip))).x);
   float sc = pow(2.0, float(e & 15u));
+  // Pages across the tile set at the level the entry points to vs at mip 0.
+  float used = max(log2(max(dims.x, 1.0)) - float(e & 15u), 0.0);
+  r.lvl = max(used, mip);
+  r.coarser = used > mip + 0.5;
   float2 s163 = float2(sc, sc * vt_t(a, 0, 1, 3));
   float2 s168 = float2(vt_t(a, 0, 0, 2), vt_t(a, 0, 1, 2));
   float2 s175 = float2(vt_t(a, 1, 0, 0), vt_t(a, 1, 1, 0));
   float2 c = (frac(u * s163) * s168 + float2(float((e >> 14) & 1023u), float((e >> 4) & 1023u))) * s175 +
              float2(vt_t(a, 1, 2, col), vt_t(a, 1, 3, col));
-  return gAlphaCache[NonUniformResourceIndex(cache)].SampleLevel(gAlphaClamp, float3(c, float((e >> 24) & 127u)), 0).w;
+  r.a = gAlphaCache[NonUniformResourceIndex(cache)].SampleLevel(gAlphaClamp, float3(c, float((e >> 24) & 127u)), 0).w;
+  return r;
 }
 
-float tex_alpha(uint a, float2 uv, float g, uint tex, uint ch) {
+AlphaRead tex_alpha(uint a, float2 uv, float g, uint tex, uint ch) {
   float2 sc = asfloat(gAlphaRec.Load2(a + 32));
   uint w, h, levels;
   gAlphaTex[NonUniformResourceIndex(tex)].GetDimensions(0, w, h, levels);
-  float lod = log2(max(g * max(abs(sc.x), abs(sc.y)) * float(max(w, h)), 1e-8));
-  float4 v = gAlphaTex[NonUniformResourceIndex(tex)].SampleLevel(gAlphaWrap, uv * sc, clamp(lod, 0.0, float(levels) - 1.0));
-  return ch == 0 ? v.x : ch == 1 ? v.y : ch == 2 ? v.z : v.w;
+  float lod = clamp(log2(max(g * max(abs(sc.x), abs(sc.y)) * float(max(w, h)), 1e-8)), 0.0, float(levels) - 1.0);
+  float4 v = gAlphaTex[NonUniformResourceIndex(tex)].SampleLevel(gAlphaWrap, uv * sc, lod);
+  AlphaRead r;
+  r.a = ch == 0 ? v.x : ch == 1 ? v.y : ch == 2 ? v.z : v.w;
+  r.lvl = lod;
+  r.ok = true;
+  r.coarser = false;
+  return r;
 }
 
 // ---- per-instance data (Track D BVH split, layer/bvhsplit.cpp) ----
@@ -144,44 +207,92 @@ uint find_rec(uint prim) {
 // The game's alpha test of record `a` at barycentrics `bary` of the triangle
 // (p: world-space corners, u: their UVs). `footprint`: world-space width of the
 // ray's footprint at the hit.
-bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, float2 u2, float2 bary, float footprint) {
+bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, float2 u2, float2 bary, float footprint,
+                uint prim) {
+  const uint flags = alpha_flags();
   uint4 h0 = gAlphaRec.Load4(a);        // first_tri, tris, kind, tex
-  uint4 h1 = gAlphaRec.Load4(a + 16);   // cache, channel, cut
+  uint4 h1 = gAlphaRec.Load4(a + 16);   // cache, channel, cut (effective), cut of the first test
   float2 uv = u0 + (u1 - u0) * bary.x + (u2 - u0) * bary.y;
   float2 e1 = u1 - u0, e2 = u2 - u0;
   float area_uv = abs(e1.x * e2.y - e1.y * e2.x);
   float area_w = length(cross(p1 - p0, p2 - p0));
   float g = footprint * sqrt(area_uv / max(area_w, 1e-12));   // uv change across the footprint
-  if (!all(isfinite(uv)) || !isfinite(g)) return true;
+  if (!all(isfinite(uv)) || !isfinite(g)) {
+    alpha_stat(4, true, prim);
+    return alpha_unknown(flags);
+  }
   uint tex = min(h0.w, 4095u), cache = min(h1.x, 15u);
-  float alpha = h0.z == 1 ? vt_alpha(a, uv, g, tex, cache, min(h1.y, 3u)) : tex_alpha(a, uv, g, tex, h1.y);
-  return alpha >= asfloat(h1.z);
+  const bool vt = h0.z == 1;
+  AlphaRead r;
+  if (vt) r = vt_alpha(a, uv, g, tex, cache, min(h1.y, 3u));
+  else r = tex_alpha(a, uv, g, tex, h1.y);
+  if (!r.ok) {
+    alpha_stat(5, true, prim);
+    return alpha_unknown(flags);
+  }
+  const float cut_first = asfloat(h1.w);
+  const float cut = (flags & kAlphaCutEff) != 0u ? asfloat(h1.z) : cut_first;
+  // Hard cut-off where the read is as sharp as the game's (levels 0-1); towards
+  // a hashed threshold over the next level, where it is a blurred coverage.
+  const float k = (flags & kAlphaStochastic) != 0u ? saturate(r.lvl - 1.0) : 0.0;
+  const float thr = k > 0.0 ? lerp(cut, alpha_hash(uv, prim), k) : cut;
+  const bool solid = r.a >= thr;
+  if (pc.rt_stats != 0u) {
+    alpha_stat(6, vt && solid, prim);
+    alpha_stat(7, vt && !solid, prim);
+    alpha_stat(8, !vt && solid, prim);
+    alpha_stat(9, !vt && !solid, prim);
+    alpha_stat(10, cut_first < 0.1, prim);
+    alpha_stat(11, cut_first < 0.1 && solid, prim);
+    alpha_stat(12, r.lvl >= 2.0, prim);
+    alpha_stat(13, r.lvl >= 4.0, prim);
+    alpha_stat(14, k > 0.0, prim);
+    alpha_stat(15, r.coarser, prim);
+  }
+  return solid;
 }
 
 // Legacy: true if the alpha-tested triangle `prim` of geometry 1 is solid at `bary`.
 bool alpha_pass(uint prim, float2 bary, float footprint) {
+  alpha_stat(0, true, prim);
   uint a = find_rec(prim);
-  if (a == 0) return true;
+  if (a == 0) {
+    alpha_stat(1, true, prim);
+    return alpha_unknown(alpha_flags());
+  }
   uint4 h0 = gAlphaRec.Load4(a);
-  if (prim < h0.x || prim - h0.x >= h0.y) return true;
+  if (prim < h0.x || prim - h0.x >= h0.y) {
+    alpha_stat(1, true, prim);
+    return alpha_unknown(alpha_flags());
+  }
   uint vb = prim * 72;
   float3 p0 = asfloat(gAlphaSoup.Load3(vb)), p1 = asfloat(gAlphaSoup.Load3(vb + 24)), p2 = asfloat(gAlphaSoup.Load3(vb + 48));
   float2 u0 = asfloat(gAlphaSoup.Load2(vb + 16)), u1 = asfloat(gAlphaSoup.Load2(vb + 40)), u2 = asfloat(gAlphaSoup.Load2(vb + 64));
-  return alpha_eval(a, p0, p1, p2, u0, u1, u2, bary, footprint);
+  return alpha_eval(a, p0, p1, p2, u0, u1, u2, bary, footprint, prim);
 }
 
 // A non-opaque candidate of any instance: solid at `bary`?
 bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprint, float3x4 o2w) {
   InstInfo ii = inst_info(inst);
   if ((ii.meta & kInfoLegacy) != 0u) return geom == 1u ? alpha_pass(prim, bary, footprint) : true;
-  if ((ii.meta & kInfoAlpha) == 0u || ii.rec == 0u || prim >= ii.tris || (ii.meta & 0xffu) < 24u) return true;
+  alpha_stat(0, true, prim);
+  if ((ii.meta & kInfoAlpha) == 0u || ii.rec == 0u || prim >= ii.tris || (ii.meta & 0xffu) < 24u) {
+    if (pc.rt_stats != 0u) {
+      const bool norec = (ii.meta & kInfoAlpha) == 0u || ii.rec == 0u;
+      alpha_stat(1, norec, prim);
+      alpha_stat(2, !norec && (ii.meta & 0xffu) < 24u, prim);
+      alpha_stat(3, !norec && (ii.meta & 0xffu) >= 24u, prim);
+    }
+    return alpha_unknown(alpha_flags());
+  }
   float3 p0 = inst_pos(ii, prim, 0), p1 = inst_pos(ii, prim, 1), p2 = inst_pos(ii, prim, 2);
   if ((ii.meta & kInfoPool) != 0u) {
     p0 = mul(o2w, float4(p0, 1.0));
     p1 = mul(o2w, float4(p1, 1.0));
     p2 = mul(o2w, float4(p2, 1.0));
   }
-  return alpha_eval(ii.rec, p0, p1, p2, inst_uv(ii, prim, 0), inst_uv(ii, prim, 1), inst_uv(ii, prim, 2), bary, footprint);
+  return alpha_eval(ii.rec, p0, p1, p2, inst_uv(ii, prim, 0), inst_uv(ii, prim, 1), inst_uv(ii, prim, 2), bary, footprint,
+                    prim);
 }
 
 // Debug: the family of the draw behind a hit (1 vt, 2 tex, 0 not alpha-tested).
@@ -210,6 +321,7 @@ struct RtCone { float f0, spread; };
 
 // Any alpha-tested hit within [0, tmax] (shadow and occlusion rays).
 bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
+  g_rt_class = 1u;
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;
@@ -228,6 +340,7 @@ bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
 // it was let through or not.
 struct RtDebugHit { float t; bool alpha; uint near_kind; uint hit_kind; };
 RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
+  g_rt_class = 0u;
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;
@@ -258,6 +371,7 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
 // Closest hit (alpha-tested): distance (-1 on a miss), the triangle and its instance.
 struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; };
 RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
+  g_rt_class = 0u;
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;
@@ -363,6 +477,7 @@ float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
 
 // Closest alpha-tested hit distance, or -1.
 float rt_closest(float3 o, float3 d, float tmax, RtCone cone) {
+  g_rt_class = 0u;
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;

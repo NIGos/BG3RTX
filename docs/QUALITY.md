@@ -259,6 +259,14 @@ only by overriding the projection jitter, which we do not control. Diagnostic on
 
 ### Alpha handling (Track D phase 3)
 
+**Q16 (P1, done 2026-10-26). Grass opaque in the TLAS; loose cut-offs.** Black
+polygons under grass in GI and reflections, card-shaped grass shadows: the grass
+family's alpha test was not recognised (opaque BLAS geometry), and 76 shaders
+took their 0.001 early-out as the cut-off. Fixed in `alpha_table.py`; the
+per-hit test now blends to a hashed threshold where the read is blurred
+(unbiased coverage under RR) and lets unreadable cutouts through for visibility
+rays only. TRACK_D_RT 7.1b, `img/alpha_campsite_*`.
+
 **Q14 (P3). Dithered LOD cross-fades and unrecognised cutouts.**
 - The 0.73% "opaque in front" is screen-door dithered geometry. During a LOD
   cross-fade both LODs are in the BLAS, solid, which can self-shadow (acne between
@@ -435,6 +443,7 @@ can become a default.
 | RT audit 5. Alpha region / textures | **Done.** Sized from demand, 4096 textures, overflow logged loudly. | AUDIT_RT §4 #5 |
 | RT audit 6 / Q10 bias. Ray origins | **Done.** Exact TLAS surface + Wächter & Binder offset along the geometric normal, in every RT pass. `rt_origin`. Q10 is now fully done (soft sun: fix 5; bias: this). | AUDIT_RT §4 #6; `img/rtfix6_origin_*` |
 | RT audit 10. Dropped draws | **Done.** Counted and logged; strips and fans captured. `rt_strips`. | 0 dropped in the foundry, the docks and the menu scene |
+| Q16. Grass / cutouts at secondary hits | **Done.** Grass family recognised (24 shaders, 108 → 412 alpha-tested draws in Campsite), effective cut-offs (76 shaders), stochastic alpha where the read is blurred, unknown cutouts clear for visibility rays. `rt_alpha_cut`, `rt_alpha_stochastic`, `rt_alpha_unknown` (live). R7: GI + RT passes about +0.1-0.4 ms in Campsite (noise ~0.2). | `img/alpha_campsite_*`; TRACK_D_RT 7.1b |
 | RR before post (AUDIT_SOTA #1) | RR denoises the pre-DoF, pre-grade scene colour; the game's post chain (DoF weights, exposure, bloom, grade UBO + LUT) is replayed at output resolution. R3: bit-exact replication at render resolution (100.00% identical texels, foundry and Goblin Camp; a DoF frame not re-checked on the final build). R5: non-finite 0, fallback per frame on unmodelled post effects, `-Move` clean, `-Validation` one new ID at load transitions (the game destroys images of a pending frame; TRACK_A). R6: foundry A/B, difference at the frame-to-frame floor; motion/dark-scene metric not done. R7: about +0.2 ms. Effective RR (SETTINGS_DESIGN 7.3.1): the core's RR modes follow `rr_active()`, not the key. | `img/rrpost_foundry_*.png` |
 | D-RF against the rules (TRACK_D 10) | R1: bounded GGX VNDF, pcg3d white noise on its own stream, mirror below a = 0.1. R2: RR only, no history or filter of ours; without RR deterministic mirror rays only (a < 0.3). R3: exact delta on the game's probe term (D-EN4, mean error 0.58%), TLAS miss keeps the probe, the game's DFG LUT as env BRDF, its SO kept for the probe and not re-applied to traced hits. R5: debug views 1-6, `rf_stats` tier fractions, non-finite guards, identical `-Validation` IDs, `-Move`, `fg=2`. R6: foundry A/B + crops; **reflective-scene A/B and stability metric not done**. R7: 0.33 ms. | `img/rf_foundry_*.png`, `img/rf_docks_*.png` |
 | AUDIT_SOTA 2. Static/dynamic BVH split (TRACK_D 11) | **Done.** Class-A meshes get one object-space BLAS each, built once from their first XFB capture (the inverse instance matrix), verified against another instance or a later frame, compacted and cached. The TLAS takes every instance with the game's matrices, read at submit. The rest is captured with a BLAS per draw, refit while its triangle count holds. `rt_bvh_split` (live; 0 = the old soup). R3: the primary-ray check and triangle count match the soup in the same view. R5: audits recapture cached draws and evict on mismatch; non-finite matrices are masked; `-Move` and `-Validation` runs (TRACK_D 11.4). R7: pan 1.37 → 0.45 ms median, 2.91 → 0.83 ms p99. | Foundry A/B: match 98.98% / 98.98%, 2.59M / 2.595M triangles; foliage scenes and the main menu not compared |

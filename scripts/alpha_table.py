@@ -12,12 +12,14 @@ std140 offsets) and recognises the two families of alpha test that cover BG3's c
 
 Writes shaders/rt/alpha_fs.txt, one line per recognised shader:
 
-  <fs hash> vt  uv=L cut=C ubo=S.B p0=OFF idx=OFF ssbo=S.B ind=S.B cache=S.B col=K
-  <fs hash> tex uv=L cut=C tex=S.B ch=K [ubo=S.B scale=OFF | k=CONST]
+  <fs hash> vt  uv=L cut=C [cut0=C0] ubo=S.B p0=OFF idx=OFF ssbo=S.B ind=S.B cache=S.B col=K
+  <fs hash> tex uv=L cut=C [cut0=C0] tex=S.B ch=K [ubo=S.B scale=OFF | k=CONST]
 
 The layer (layer/alphatest.cpp) loads it at startup. Anything else (no texture, dithering
 only, the camera cut-away fade, unrecognised shapes) is left out and stays opaque. Fade and
-vertex-colour factors in the condition are ignored: the test is "alpha >= cut".
+vertex-colour factors in the condition are ignored: the test is "alpha >= cut", cut the
+strictest constant cut-off of the shader's tests on that alpha (effective_cut; cut0 the first
+test's, an early-out, when it differs).
 
   py -3 scripts\\alpha_table.py [--dump captures\\shaders] [--frame captures\\<ts>\\frame.json]
 
@@ -77,6 +79,90 @@ def cutoff(cond):
     return 0.5
 
 
+def const_cut(cond):
+    """The constant cut-off of a discard test ("x - C < 0", "fma(a, b, -C) < 0", step), or None."""
+    m = re.search(r"-\s*([0-9]*\.[0-9]+)\)\s*<\s*0\.0\s*$", cond)
+    if m: return float(m.group(1))
+    m = re.search(r"(?<![a-z])step\(([0-9.]+),", cond)   # not smoothstep(
+    if m: return float(m.group(1))
+    return None
+
+
+# A local variable (not a block such as _14 in _14._m3).
+VAR = r"\b(_\d+)\b(?!\._m)"
+
+
+def split_args(t, start):
+    """The comma-separated top-level arguments of the call whose "(" is at t[start], and the end."""
+    args, depth, cur, k = [], 0, start + 1, start
+    while k < len(t):
+        c = t[k]
+        if c == "(": depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                args.append(t[cur:k])
+                return args, k + 1
+        elif c == "," and depth == 1:
+            args.append(t[cur:k])
+            cur = k + 1
+        k += 1
+    return args, len(t)
+
+
+def effective_cut(conds, first, body, tex):
+    """The strictest constant cut-off among the shader's discard tests that scale the
+    alpha read from `tex` (the texture the ray query samples) by other factors.
+
+    BG3's cutout shaders often discard twice: an early-out `alpha * mask < 0.001` (or
+    0.01) and then `fade * alpha * mask < 0.5`. With the other factors in [0, 1], the
+    pixel survives only if alpha >= 0.5, so 0.5 is the ray query's cut-off; the first
+    test's 0.001 makes every texel of a card with any coverage solid (the whole grass
+    card at a filtered mip). The alpha must stay a factor of the tested expression: in
+    mix(a, b, t) only when both a and b carry it (mix(1.0, alpha, t) can ignore it);
+    through variables (any branch that reads it). Tests on UBO cut-offs are skipped."""
+    defs = {}
+    for m in re.finditer(r"^\s*(?:[\w]+\s+)?(_\d+)\s*=\s*(.*?);\s*$", body, re.M):
+        defs.setdefault(m.group(1), []).append(m.group(2))
+    hit = re.compile(r"(?:textureGrad|texture|textureLod)\((?:sampler2DArray|sampler2D)\(%s," % re.escape(tex))
+    memo = {}
+
+    def carries(t, depth=0):
+        """Is the alpha a factor of expression t?"""
+        if hit.search(t) and "mix(" not in t: return True
+        i = 0
+        while True:
+            j = t.find("mix(", i)
+            if j < 0: break
+            args, end = split_args(t, j + 3)
+            # mix(sample, vec4(1, 0, 0, 1), bvec4(not resident)): Granite's select of a
+            # resident tile set, i.e. the sample itself (as rt_common.hlsli's vt_alpha)
+            sel = len(args) == 3 and "bvec" in args[2] and carries(args[0], depth)
+            if sel or (len(args) == 3 and carries(args[0], depth) and carries(args[1], depth)): return True
+            t = t[:j] + " " + t[end:]   # the mix does not carry it: drop it
+            i = j
+        if hit.search(t): return True
+        if depth >= 4: return False
+        for v in re.findall(VAR, t):
+            if v not in memo:
+                memo[v] = False
+                # assigned in branches (vt or a plain texture by a material flag):
+                # the branch that reads `tex` is the one the ray query evaluates
+                memo[v] = any(carries(d, depth + 1) for d in defs.get(v, []))
+            if memo[v]: return True
+        return False
+
+    c0 = cutoff(first)
+    best = c0
+    for c in conds:
+        # screen-door dithers (step(fract(hash of gl_FragCoord), alpha)): a stochastic
+        # test beyond a fade distance, not a cut-off
+        if c is first or "gl_FragCoord" in c: continue
+        k = const_cut(c)
+        if k is not None and k <= 1.0 and k > best and carries(c): best = k
+    return c0, best
+
+
 def classify(h, s, refl):
     body = s[s.find("void main"):]
     conds = [m.group(1) for m in re.finditer(r"if \((.*)\)\s*\n\s*\{\s*\n\s*discard;", body)]
@@ -104,10 +190,18 @@ def classify(h, s, refl):
 
     for cond in conds:
         sl = slice_of(body, cond)
-        cut = cutoff(cond)
+        def cuts(tex):
+            c0, c = effective_cut(conds, cond, body, tex)
+            return "%g cut0=%g" % (c, c0) if c != c0 else "%g" % c
         # --- virtual texture: the 2202 sentinel selects the real sample
         m = re.search(r"textureGrad\(sampler2DArray\((_\d+), _\d+\), vec3\(.*?_m0\[1\]\[2\]\.([xyzw])", sl)
-        if m and "2202" in sl and re.search(r"2202\.0\)\)\.w", sl):
+        # The alpha is the .w of the selected sample: inline ("...2202.0)).w"), or
+        # the sample kept in a vec4 whose .w the test reads ("_225 = mix(...2202.0)));
+        # _226 = _225.w": the grass and foliage family 73849471, missed before and
+        # so opaque, with flat ground-cover cards that blocked every GI ray under them).
+        via_var = re.search(r"^\s*vec4 (_\d+) = mix\(textureGrad\(sampler2DArray\(.*2202\.0\)\);\s*$", body, re.M)
+        via_var = via_var and re.search(r"\b%s\.w\b" % via_var.group(1), sl)
+        if m and "2202" in sl and (re.search(r"2202\.0\)\)\.w", sl) or via_var):
             cache, col = m.group(1), "xyzw".index(m.group(2))
             ind = re.search(r"texelFetch\((_\d+),", sl)
             uv = re.search(r"fma\(fract\((_\d+)\), (_\d+)\.(_m\d+)\[0\]\.zw, \2\.\3\[0\]\.xy\)", sl)
@@ -120,7 +214,7 @@ def classify(h, s, refl):
             io = member_offset(ubo, idx.group(3))
             b = {n: binding(v) for n, v in (("ubo", ubo), ("ssbo", idx.group(1)), ("ind", ind.group(1)), ("cache", cache))}
             if None in b.values() or p0 is None or io is None: return None, "vt: binding"
-            return ("vt", inputs[uvv]["location"], cut,
+            return ("vt", inputs[uvv]["location"], cuts(cache),
                     "ubo=%d.%d p0=%d idx=%d ssbo=%d.%d ind=%d.%d cache=%d.%d col=%d" % (
                         *b["ubo"], p0, io, *b["ssbo"], *b["ind"], *b["cache"], col)), "ok"
         # --- plain texture alpha. Only where the ray query's test is conservative
@@ -153,7 +247,7 @@ def classify(h, s, refl):
                 extra = " ubo=%d.%d scale=%d" % (*ub, off)
             elif k:
                 extra = " k=%s" % k
-            return ("tex", inputs[uvv]["location"], cut, "tex=%d.%d ch=%d%s" % (*tb, "xyzw".index(ch), extra)), "ok"
+            return ("tex", inputs[uvv]["location"], cuts(tex), "tex=%d.%d ch=%d%s" % (*tb, "xyzw".index(ch), extra)), "ok"
     return None, "no texture alpha"
 
 
@@ -177,7 +271,7 @@ def main():
         r, reason = classify(h, *d)
         why[r[0] if r else reason] += 1
         fam[h] = r[0] if r else reason
-        if r: rows.append("%s %s uv=%d cut=%g %s" % (h, r[0], r[1], r[2], r[3]))
+        if r: rows.append("%s %s uv=%d cut=%s %s" % (h, r[0], r[1], r[2], r[3]))
     pathlib.Path(a.out).write_text(
         "# Generated by scripts/alpha_table.py from the shader dump: depth-prepass fragment shaders\n"
         "# whose alpha test the ray queries reproduce (docs/TRACK_D_RT.md, phase 3).\n" + "\n".join(rows) + "\n")
