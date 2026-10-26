@@ -376,6 +376,18 @@ can become a default.
   - temporal stability: the mean frame-to-frame difference on a static camera,
     and during `-Move`.
 
+**R6a Automated QA checkpoint (every scene sweep, [QA.md](QA.md)).**
+- Run `python -m scripts.qa run --scenes S1,S2,S3,... --full-res` after every change
+  to an effect and before a default changes. It is one game run per scene (live
+  toggles), so it costs about as much as a plain sweep.
+- Gates: `hard_dark`, `brightening`, `sun_extra_casters`, `nonfinite` and `flicker`
+  must pass on every scene, on the final frame and on the lighting buffer. A failure
+  is judged from its crop sheet, never from thumbnails; a justified exception is
+  written into the track doc with the crop.
+- `--reference` (FLIP against more rays) for any change to sampling or ray counts.
+- The report (`captures/qa/<stamp>/report.html`) and its one-line summaries go into
+  the review; the raw traces are pruned by the harness.
+
 **R7 Cost budget.**
 - RTX 5090, 2560x1067 render resolution, GPU timestamps, medians of 300 frames,
   static and moving camera, logged by the core.
