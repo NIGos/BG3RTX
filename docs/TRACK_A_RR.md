@@ -189,7 +189,29 @@ same scene and run conditions:
 
 ### Live switch
 
-TOGGLE_PLACEHOLDER
+Run `captures/20261026-0213xx`, four traces, with `bg3rtx_toggle.log` in
+`-021355`. `rr` in the live ini was flipped 1→0→1→0→1, 1.5 s apart, during
+gameplay. The log shows:
+
+```
+02:13:44.988  [ngx] upscaler for feature 000001E913D62730: DLSS SR
+02:13:48.061  [ngx] upscaler for feature 000001E913D62730: Ray Reconstruction
+02:13:48.994  [ngx] gpu SR: ... evaluate 0.653 ms (avg of 320)
+02:13:48.994  [ngx] gpu RR: ... evaluate 2.592 ms (avg of 376)
+```
+
+- **Coalesced flips.** Two of the four flips landed while the game was
+  writing a trace (no presents, so no ini poll) and were folded into the
+  next read.
+- **No restart and no re-creation.** The RR feature stays alive while SR
+  runs, and each switch resets the history of the feature that takes over.
+- **The trace at `-021346` ran on SR.** It was taken in the middle of the
+  session, between the two switches.
+- **Non-finite values: none.** All four traces have nonfinite = 0.
+- **A config fix found by this test.** `cfg_poll` used to accept an ini read
+  while a script was rewriting it (0 keys), which silently reset every setting
+  to its default. It now keeps the previous settings and reads again on the
+  next poll (`layer/util.cpp`).
 
 ## Debug switches
 

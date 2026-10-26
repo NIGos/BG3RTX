@@ -58,6 +58,12 @@ Get-Process bg3 -ErrorAction SilentlyContinue | ForEach-Object {
   $_.WaitForExit(15000) | Out-Null
 }
 
+# Only once the game lock is held: a game that exited while we waited may have
+# rewritten graphicSettings.lsx without its DLSS entries.
+$ensure = @((Join-Path $PSScriptRoot "ensure-settings.py"),
+            (Join-Path $root "..\..\..\scripts\ensure-settings.py")) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($ensure) { py -3 -I $ensure }
+
 # This run's settings: the repository's bg3rtx.ini plus auto-trace overrides.
 $ini = Join-Path $caps "auto.ini"
 $lines = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @("auto_trace=1", "auto_traces=$Traces") +
