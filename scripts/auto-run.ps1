@@ -25,7 +25,11 @@ param(
   [switch]$Validation,
   # Load this save instead of the newest: a substring of its folder name, for
   # example "Rivington - 74h". See docs/TEST_SCENES.md.
-  [string]$Save = ""
+  [string]$Save = "",
+  # Leave the PC to the user: the game runs borderless (no desktop mode change),
+  # never takes the foreground, and believes it has focus (layer/background.cpp).
+  # Keys for -Move are posted to the game window instead of typed globally.
+  [switch]$Background
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -46,14 +50,29 @@ Add-Type -Namespace BG3RTX -Name Win -MemberDefinition @"
 [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, System.UIntPtr extra);
 [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
 [DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, System.UIntPtr extra);
+[DllImport("user32.dll")] public static extern bool PostMessage(System.IntPtr h, uint msg, System.IntPtr w, System.IntPtr l);
 "@ -ErrorAction SilentlyContinue
 # With the display asleep Windows throttles presentation to a few frames per
 # second, which makes every measurement meaningless: keep it on (and wake it).
 [void][BG3RTX.Win]::SetThreadExecutionState([uint32]2147483651)   # CONTINUOUS | SYSTEM_REQUIRED | DISPLAY_REQUIRED
-[BG3RTX.Win]::mouse_event(0x0001, 1, 0, 0, [UIntPtr]::Zero)
-[BG3RTX.Win]::mouse_event(0x0001, -1, 0, 0, [UIntPtr]::Zero)
+if (-not $Background) {
+  [BG3RTX.Win]::mouse_event(0x0001, 1, 0, 0, [UIntPtr]::Zero)
+  [BG3RTX.Win]::mouse_event(0x0001, -1, 0, 0, [UIntPtr]::Zero)
+}
 # BG3 renders but stops presenting while its window is not in the foreground.
+# Background runs: the new game window takes the foreground when it is
+# created; hand it back to whatever the user had in front.
+$userFg = [BG3RTX.Win]::GetForegroundWindow()
 function Focus-Game {
+  if ($Background) {
+    $p = Get-Process bg3 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+    if ($p -and [BG3RTX.Win]::GetForegroundWindow() -eq $p.MainWindowHandle -and $userFg -ne [IntPtr]::Zero) {
+      [BG3RTX.Win]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)   # Alt tap lifts the foreground lock
+      [BG3RTX.Win]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
+      [void][BG3RTX.Win]::SetForegroundWindow($userFg)
+    }
+    return
+  }
   $p = Get-Process bg3 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
   if (-not $p) { return }
   $h = $p.MainWindowHandle
@@ -62,6 +81,21 @@ function Focus-Game {
   [BG3RTX.Win]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
   [void][BG3RTX.Win]::ShowWindow($h, 9)
   [void][BG3RTX.Win]::SetForegroundWindow($h)
+}
+
+# The -Move key: typed globally when the game is in front, posted to its
+# window in background runs (WM_KEYDOWN/WM_KEYUP carry the scan code; SDL reads it).
+$moveVk = 0x44   # D, for the default scan code 0x20
+function Send-MoveKey([bool]$down) {
+  if (-not $Background) {
+    [BG3RTX.Win]::keybd_event(0, $MoveScan, $(if ($down) { 0x0008 } else { 0x000A }), [UIntPtr]::Zero)
+    return
+  }
+  $p = Get-Process bg3 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+  if (-not $p) { return }
+  $l = 1 -bor ([int64]$MoveScan -shl 16)
+  if (-not $down) { $l = $l -bor 0xC0000000 }
+  [void][BG3RTX.Win]::PostMessage($p.MainWindowHandle, $(if ($down) { 0x0100 } else { 0x0101 }), [IntPtr]$moveVk, [IntPtr]$l)
 }
 
 Get-Process bg3 -ErrorAction SilentlyContinue | ForEach-Object {
@@ -86,6 +120,13 @@ $env:BG3RTX_INI = $ini
 Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
 
 py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py")
+$displayPrev = Join-Path $caps "display_prev.json"
+Remove-Item Env:BG3RTX_BACKGROUND -ErrorAction SilentlyContinue
+if ($Background) {
+  # Borderless at the desktop resolution; the player's values come back after the run.
+  py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py") --set Fullscreen=0 FakeFullscreenEnabled=1 --prev $displayPrev
+  $env:BG3RTX_BACKGROUND = "1"
+}
 
 # -continueGame loads the newest save, by the save time stored inside each
 # package (file timestamps are ignored). To load another one, the layer hides
@@ -146,12 +187,12 @@ while ((Get-Date) -lt $deadline) {
       $moving = $true
     }
     if ($moving -and $MoveSec -gt 0 -and ((Get-Date) - $moveStart).TotalSeconds -ge $MoveSec) {
-      [BG3RTX.Win]::keybd_event(0, $MoveScan, 0x000A, [UIntPtr]::Zero)   # release: the camera stays where the pan ended
+      Send-MoveKey $false   # release: the camera stays where the pan ended
       Write-Host "pan stopped after $MoveSec s"
       $moving = $false
       $moveDone = $true
     }
-    if ($moving) { [BG3RTX.Win]::keybd_event(0, $MoveScan, 0x0008, [UIntPtr]::Zero) }   # KEYEVENTF_SCANCODE down
+    if ($moving) { Send-MoveKey $true }
   }
   if (Test-Path (Join-Path $caps "auto.done")) { $result = "done"; break }
   $p = Get-Process bg3 -ErrorAction SilentlyContinue
@@ -164,7 +205,7 @@ while ((Get-Date) -lt $deadline) {
     Write-Host "$([int]((Get-Date) - $start).TotalSeconds)s [foreground: $owner]: $tail"
   }
 }
-if ($moving) { [BG3RTX.Win]::keybd_event(0, $MoveScan, 0x000A, [UIntPtr]::Zero) }   # scan-code key up
+if ($moving) { Send-MoveKey $false }
 Write-Host "Run ended: $result after $([int]((Get-Date) - $start).TotalSeconds)s"
 
 if (-not $KeepRunning) {
@@ -176,6 +217,10 @@ if (-not $KeepRunning) {
     if (-not $p.WaitForExit(20000)) { $p | Stop-Process -Force }
   }
   Restore-Saves
+  if ($Background -and (Test-Path $displayPrev)) {
+    py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py") --restore $displayPrev
+    Remove-Item $displayPrev
+  }
 } elseif ($Save) {
   Write-Host "KeepRunning: saves written during the run are not parked"
 }

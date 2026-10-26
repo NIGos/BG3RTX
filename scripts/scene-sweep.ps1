@@ -10,12 +10,15 @@ param(
 )
 # Continue: auto-run.ps1 writes native stderr (build, game) that must not abort the sweep.
 $ErrorActionPreference = "Continue"
+# -File passes "S2,S8" as one string: split it.
+$Only = @($Only | ForEach-Object { $_ -split "," } | Where-Object { $_ })
+$Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "build.ps1") 2>&1 | Select-Object -Last 1
 $root = Split-Path $PSScriptRoot
 $scenes = [ordered]@{
   S1 = "QuickSave_3784"; S2 = "Rivington - 74h"; S3 = "Campsite - 27h"; S4 = "Goblin Camp - 18h";
   S5 = "Grymforge - 32h 59m"; S6 = "Adamantine Forge"; S7 = "The Blushing Mermaid - 96h"; S8 = "Water Queens House";
-  S9 = "Crèche Yllek"; S10 = "Shadow-Cursed Lands - 52h"; S11 = "Gauntlet of Shar - 57h";
+  S9 = "che Yllek"; S10 = "Shadow-Cursed Lands - 52h"; S11 = "Gauntlet of Shar - 57h";
   S12 = "Moonrise Towers Main Floor - 65h"; S13 = "Mind Flayer Colony"; S14 = "Lower City - 91h"
 }
 $summary = @()
@@ -38,4 +41,4 @@ foreach ($id in $scenes.Keys) {
   Write-Host "$id loaded=$ok capture=$($cap.Name)"
 }
 $summary | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
-$summary | ConvertTo-Json | Set-Content (Join-Path $root "captures\scene-sweep.json")
+$summary | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $root "captures\scene-sweep.json")
