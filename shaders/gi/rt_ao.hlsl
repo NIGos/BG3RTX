@@ -13,7 +13,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   uint2 id = tid.xy;
   if (any(id >= pc.half)) return;
   // The same full-resolution sample gi_trace used.
-  uint2 fp = min(id * 2 + uint2(pc.frame & 1, (pc.frame >> 1) & 1), pc.full - 1);
+  uint2 fp = gi_fp(id);
   float d = gDepth.Load(int3(fp, 0));
   float2 enc = gNormal.Load(int3(fp, 0)).xy;
   float2 e = enc * 3.5554 - 1.7777;

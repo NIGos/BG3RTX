@@ -395,3 +395,13 @@ can become a default.
 | 4 | Q3 (read `b0._m0.y`), Q8, Q12 | small, needs EN1's bindings |
 | 5 | Q6, Q7, Q9 | the `rr=0` path quality |
 | 6 | Q13, Q14, Q15 | polish and rules |
+
+
+## Status of the audit fixes (2026-10-26)
+| Fix | State | Evidence |
+|---|---|---|
+| 1. Bounce radiance reprojection | **Done.** `prev_radiance_at()` follows the game's MVs back to last frame; the MV layout transition now covers the traces. | Stable in `-Move` runs, no non-finite values |
+| 2. Double darkening with the game's SSAO | **Done.** The traced visibility *replaces* the SSAO (`gi_ao=1.0`, lerp instead of multiply). | `img/quality_ab_ao_rr_mode.png`: top before, bottom after. Shadowed areas are about 5% brighter, and contacts are still occluded. |
+| 3. RR fed an already-denoised GI | **Done.** RR mode (`gi_rr=-1` follows `rr`): full-res, 1 spp, no own history or spatial filter; RR denoises. Half-res accumulation remains for `rr=0`. | Same A/B: no visible noise. GI cost unchanged (about 0.34 ms). |
+| 4. RR guides (world normals, N·V, matrices) | In progress (separate branch). | |
+| 5. Noise and sun shadows | **Done.** pcg3d per-pixel/per-frame seeds; soft sun shadows sampling the sun disc (`rt_sun_radius=0.0023` rad, BG3's 0.263° diameter), 1 ray, denoised by RR. | Validation pending in the next combined run |

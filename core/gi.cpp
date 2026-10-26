@@ -53,8 +53,11 @@ struct Push {
   uint32_t pad2[2];
   float gi_rt_radius, gi_rt_tol;
   uint32_t gi_rt_fallback, rt_stats;
+  float sun_radius;
+  uint32_t res_shift;
+  uint32_t pad3[2];
 };
-static_assert(sizeof(Push) == 128, "Push must match gi_common.hlsli");
+static_assert(sizeof(Push) == 144, "Push must match gi_common.hlsli");
 
 constexpr uint32_t kBindings = 18;
 // The ray-traced passes add the TLAS (18), their visibility image (19) and a
@@ -67,7 +70,16 @@ VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_H
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt;
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
-uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0;
+uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0, g_shift = 1;
+
+// RR mode (docs/QUALITY.md fix 3): with Ray Reconstruction denoising the frame,
+// the GI traces 1 ray per full-res pixel and keeps no history of its own, the
+// input RR is designed for. gi_rr: -1 follows rr, 0 off, 1 on.
+uint32_t gi_res_shift() {
+  int m = host->cfg_int("gi_rr", -1);
+  bool rr = m < 0 ? host->cfg_int("rr", 1) != 0 : m != 0;
+  return rr ? 0u : 1u;
+}
 bool g_images_ready = false, g_logged = false;
 uint64_t g_last_pre_frame = 0;
 
@@ -239,9 +251,11 @@ void release_images() {
 }
 
 bool ensure_images(uint32_t w, uint32_t h) {
-  if (w == g_w && h == g_h && g_raw.image) return true;
+  uint32_t shift = gi_res_shift();
+  if (w == g_w && h == g_h && shift == g_shift && g_raw.image) return true;
   release_images();
-  uint32_t hw = (w + 1) / 2, hh = (h + 1) / 2;
+  g_shift = shift;
+  uint32_t hw = shift ? (w + 1) / 2 : w, hh = shift ? (h + 1) / 2 : h;
   VkImageUsageFlags use = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   bool ok = host->alloc_image(hw, hh, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_raw) &&
             host->alloc_image(hw, hh, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_hist[0]) &&
@@ -499,10 +513,16 @@ Push make_push() {
   pc.radius = host->cfg_float("gi_radius", 0.15f);
   pc.thickness = host->cfg_float("gi_thickness", 0.03f);
   pc.rays = uint32_t(host->cfg_int("gi_rays", 2));
+  pc.res_shift = g_shift;
+  pc.sun_radius = host->cfg_float("rt_sun_radius", 0.0023f);
   pc.steps = uint32_t(host->cfg_int("gi_steps", 12));
   pc.debug = uint32_t(host->cfg_int("gi_debug", 0));
   pc.history = host->cfg_float("gi_history", 0.1f);
-  pc.ao = host->cfg_float("gi_ao", 0.7f);
+  pc.ao = host->cfg_float("gi_ao", 1.0f);
+  if (g_shift == 0) {   // RR mode: 1 spp, no accumulation of our own
+    pc.rays = uint32_t(host->cfg_int("gi_rr_rays", 1));
+    pc.history = 1.0f;
+  }
   pc.cs_length = host->cfg_float("cs_length", 0.02f);
   pc.cs_strength = host->cfg_float("cs_strength", 1.0f);
   pc.cs_steps = uint32_t(host->cfg_int("cs_steps", 12));
@@ -626,6 +646,10 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // Depth, normals and AO come from earlier graphics passes.
   memory_barrier(cmd, kAll, kCS);
   if (s.gi) {
+    // The MVs are sampled in SHADER_READ_ONLY by the traces (bounce
+    // reprojection) and the temporal pass; their pass may leave them elsewhere.
+    bool mv_move = pc.has_mv && g_mv_layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    if (mv_move) image_layout(cmd, g_mv_image, g_mv_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, kAll, kCS);
     trace_timing_collect();
     trace_timestamp(cmd, 0);
     if (gi_rt) {
@@ -642,9 +666,6 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
       dispatch(cmd, g_rt_ao, b, pc, g_hw, g_hh, true);
       memory_barrier(cmd, kCS, kCS);
     }
-    // The MVs are sampled in SHADER_READ_ONLY; their pass may leave them elsewhere.
-    bool mv_move = pc.has_mv && g_mv_layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    if (mv_move) image_layout(cmd, g_mv_image, g_mv_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, kAll, kCS);
     dispatch(cmd, g_temporal, b, pc, g_hw, g_hh);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);

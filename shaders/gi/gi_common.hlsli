@@ -72,6 +72,10 @@ struct Push {
   float gi_rt_tol;      // relative depth agreement for an on-screen hit
   uint gi_rt_fallback;  // 0 occlude, no bounce; 1 ignore; 2 occlude + mean on-screen radiance
   uint rt_stats;       // 1: count into rtStats (rt_common.hlsli)
+  // Quality pass (docs/QUALITY.md)
+  float sun_radius;    // sun angular radius (rad); 0 = hard shadows
+  uint res_shift;      // GI resolution: 1 half res (own denoise), 0 full res, 1 spp, for RR
+  uint2 pad3;
 };
 [[vk::push_constant]] Push pc;
 
@@ -118,13 +122,43 @@ bool project(float3x3 inv, float3 P, out float2 uv, out float d) {
   return d > 0.0;
 }
 
+// Last frame's lit radiance at the surface now seen at pixel qp: follow the
+// motion vector back to where that surface was a frame ago.
+float3 prev_radiance_at(int2 qp) {
+  if (pc.has_mv == 0) return prevRadiance[qp].rgb;
+  float2 mv = gVelocity.Load(int3(qp, 0)) * pc.mv_scale;
+  int2 pq = int2(floor(float2(qp) + 0.5 + mv));
+  if (any(pq < 0) || any(pq >= int2(pc.full))) return prevRadiance[qp].rgb;
+  return prevRadiance[pq].rgb;
+}
+
+// pcg3d (Jarzynski & Olano 2020): decorrelated across pixels and frames,
+// unlike a linear mix of coordinates fed to a 1D hash.
+uint3 pcg3d(uint3 v) {
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  v ^= v >> 16u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  return v;
+}
+uint pixel_seed(uint2 p, uint salt) { return pcg3d(uint3(p, pc.frame * 4u + salt)).x; }
+
+// GI sample position: one full-res pixel per GI texel. At half res it rotates
+// inside each 2x2 block over frames; at full res (RR mode) it is the pixel itself.
+uint2 gi_fp(uint2 id) {
+  if (pc.res_shift == 0) return min(id, pc.full - 1);
+  return min(id * 2 + uint2(pc.frame & 1, (pc.frame >> 1) & 1), pc.full - 1);
+}
+
 uint hash(uint x) {
   x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16;
   return x;
 }
 // Depth-aware 3x3 gather of the accumulated half-resolution history.
 float4 gather_history(uint2 fp, float d) {
-  int2 hp = int2(fp / 2);
+  // Full res (RR mode): RR denoises; no spatial filter of our own.
+  if (pc.res_shift == 0) return giHistOut[min(fp, pc.half - 1)];
+  int2 hp = int2(fp >> pc.res_shift);
   float4 acc = 0;
   float wsum = 0;
   for (int y = -1; y <= 1; ++y)

@@ -10,7 +10,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (d <= 0.0) return;
   float vis = gather_history(fp, d).a;
   float4 ao = gAO[fp];
-  ao.x *= lerp(1.0, vis, pc.ao);
+  // Replace rather than multiply: the game's SSAO and our visibility measure
+  // the same occlusion, and their product darkens contacts twice.
+  ao.x = lerp(ao.x, vis, pc.ao);
   if (pc.debug == 3) ao.x = vis;
   gAO[fp] = ao;
 }

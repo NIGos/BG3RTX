@@ -37,7 +37,16 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (dot(N, L) > 0.0) {
     float3 o = P + N * (dist * pc.rt_bias);
     RtCone cone = {dist * pa, pa};
-    vis = rt_occluded(o, L, pc.rt_tmax, cone) ? 0.0 : 1.0;
+    float3 dir = L;
+    if (pc.sun_radius > 0.0) {   // uniform sample of the sun's disc (BG3's sun: 0.263 deg across)
+      uint s = pixel_seed(fp, 1u);
+      float u1 = rand01(s), u2 = rand01(s);
+      float3 t = abs(L.y) < 0.99 ? normalize(cross(float3(0, 1, 0), L)) : float3(1, 0, 0);
+      float3 b = cross(L, t);
+      float r = sqrt(u1) * tan(pc.sun_radius), phi = 6.2831853 * u2;
+      dir = normalize(L + (t * cos(phi) + b * sin(phi)) * r);
+    }
+    vis = rt_occluded(o, dir, pc.rt_tmax, cone) ? 0.0 : 1.0;
   }
   float check = 0.0, fam = 0.0;
   if (pc.rt_debug == 3 || pc.rt_debug == 5) {

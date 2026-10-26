@@ -25,7 +25,7 @@
 void main(uint3 tid : SV_DispatchThreadID) {
   uint2 id = tid.xy;
   if (any(id >= pc.half)) return;
-  uint2 fp = min(id * 2 + uint2(pc.frame & 1, (pc.frame >> 1) & 1), pc.full - 1);
+  uint2 fp = gi_fp(id);
   float d = gDepth.Load(int3(fp, 0));
   float2 enc = gNormal.Load(int3(fp, 0)).xy;
   float2 e = enc * 3.5554 - 1.7777;
@@ -44,7 +44,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   RtCone cone = {dist * pa * 2.0, pa * 2.0};   // half resolution
   const float R = pc.gi_rt_radius;
 
-  uint seed = hash(id.x * 1973u + id.y * 9277u + pc.frame * 26699u);
+  uint seed = pixel_seed(fp, 0u);
   float3 bounce = 0, seen = 0;
   float occ = 0, nseen = 0, wfall = 0;
   for (uint r = 0; r < pc.rays; ++r) {
@@ -60,7 +60,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       int2 qp = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
       float sd = gDepth.Load(int3(qp, 0));
       if (sd > 0.0 && abs(qd - sd) < sd * pc.gi_rt_tol) {
-        float3 L = prevRadiance[qp].rgb;
+        float3 L = prev_radiance_at(qp);
         if (all(isfinite(L))) {
           bounce += L * w;
           seen += L;

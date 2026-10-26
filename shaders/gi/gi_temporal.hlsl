@@ -11,9 +11,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float cd = giRawDepth[id];
   int2 hp = int2(id);
   if (pc.has_mv != 0) {
-    float2 fpix = float2(min(id * 2 + 1, pc.full - 1)) + 0.5;
+    float scale = pc.res_shift ? 2.0 : 1.0;
+    float2 fpix = float2(min(id * (pc.res_shift ? 2u : 1u) + pc.res_shift, pc.full - 1)) + 0.5;
     float2 mv = gVelocity.Load(int3(int2(fpix), 0)) * pc.mv_scale;
-    float2 prev = (fpix + mv) * 0.5;
+    float2 prev = (fpix + mv) / scale;
     hp = int2(floor(prev));
   }
   bool inside = all(hp >= 0) && all(hp < int2(pc.half));
