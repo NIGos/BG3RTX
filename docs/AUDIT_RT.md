@@ -193,3 +193,25 @@ sun), RTX 5090, 2560x1067. Images in `docs/img/rtfix*`.
 - The D-LS base cost rose from 0.345 ms (the doc) to about 0.48 ms with every fix off in
   the same run. That is the generic per-class evaluation (register pressure). The cost is
   within budget, but not optimised.
+
+**Verification (after merging main `1046622`, D-RF included).**
+- `-Validation`, foundry: the message IDs and counts are identical to the baseline captured
+  on `e285602` (`09600`, `10788`, `StorageImage-FormatMismatch`, `OutputNotWritten`,
+  `CopyBuffer-00118`, `08737`, the headless swapchain message).
+- No non-finite value in any dump of the A/B traces.
+- `-Move` to the docks with every fix on: no faults and no `nvlddmkm` events (since the
+  push-layout fix).
+- `-Background -RealPresent fg=2`: DLSS-G status 0x0 and 0 API errors. It presented 1 frame
+  per app frame, and exactly the same with all four fixes off, so that is the background
+  mode, not the fixes. 2x generation was not re-confirmed in front.
+- GPU cost, foundry static, RTX 5090, medians of 300 frames:
+
+  | | all fixes off | all on |
+  |---|---|---|
+  | RT pre passes (`rt_origin` + sun + GI) | 0.29–0.35 ms | 0.50 ms |
+  | GI trace | 0.149 ms | 0.163 ms |
+  | D-LS | 0.477 ms | 0.559 ms |
+
+  At the docks the RT pre passes take 0.43 ms with `rt_origin` (0.275 ms without), and D-LS
+  0.136 ms. The parts: `rt_origin` costs +0.15–0.2 ms, the sun recompute +0.045 ms, and the
+  material classes about 0.
