@@ -22,7 +22,7 @@
 namespace {
 
 struct Snapshot {
-  Bg3Binding cam, vp, nrm, alb, mat, dep, ao, dif, spe;
+  Bg3Binding cam, vp, nrm, alb, mat, dep, ao, shadow, dif, spe;
 };
 
 struct Pipe {
@@ -36,15 +36,17 @@ struct Push {
   float strength, radius, thickness;
   uint32_t rays, steps, debug;
   float history, ao;
+  float cs_length, cs_strength;
+  uint32_t cs_steps;
 };
 
-constexpr uint32_t kBindings = 16;
+constexpr uint32_t kBindings = 17;
 
 std::mutex g_mu;
 std::unordered_map<VkCommandBuffer, Snapshot> g_pending;   // pre done, post owed
 VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE;
-Pipe g_trace, g_temporal, g_ao_apply, g_composite;
+Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact;
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{};
 uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0;
 bool g_images_ready = false, g_logged = false;
@@ -109,6 +111,7 @@ bool snapshot(VkCommandBuffer cmd, Snapshot& s) {
   if (!q(1, 1, s.nrm) || s.nrm.format != VK_FORMAT_R16G16_SFLOAT) return false;
   if (!q(1, 2, s.alb) || !q(1, 3, s.mat) || !q(1, 5, s.dep) || s.dep.format != VK_FORMAT_R32_SFLOAT) return false;
   if (!q(1, 6, s.ao) || s.ao.format != VK_FORMAT_A2B10G10R10_UNORM_PACK32) return false;
+  if (!q(1, 7, s.shadow) || s.shadow.format != VK_FORMAT_R8_UNORM) s.shadow = Bg3Binding{};
   if (!q(0, 1, s.cam) || !s.cam.buffer || !q(0, 4, s.vp) || !s.vp.buffer) return false;
   return s.nrm.width == s.dif.width && s.dep.width == s.dif.width && s.ao.width == s.dif.width && s.dif.width > 0;
 }
@@ -234,7 +237,8 @@ void bind_all(Bound& b, const Snapshot& s) {
       {VK_NULL_HANDLE, g_raw.view, G},           {VK_NULL_HANDLE, hin.view, G},
       {VK_NULL_HANDLE, hout.view, G},            {VK_NULL_HANDLE, g_prev_radiance.view, G},
       {VK_NULL_HANDLE, s.ao.view, G},            {VK_NULL_HANDLE, g_raw_depth.view, G},
-      {VK_NULL_HANDLE, din.view, G},             {VK_NULL_HANDLE, dout.view, G}};
+      {VK_NULL_HANDLE, din.view, G},             {VK_NULL_HANDLE, dout.view, G},
+      {VK_NULL_HANDLE, s.shadow.view ? s.shadow.view : s.ao.view, G}};
   memcpy(b.img, img, sizeof img);
   for (uint32_t i = 0; i < kBindings; ++i) {
     b.w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -262,6 +266,9 @@ Push make_push() {
   pc.debug = uint32_t(host->cfg_int("gi_debug", 0));
   pc.history = host->cfg_float("gi_history", 0.1f);
   pc.ao = host->cfg_float("gi_ao", 0.7f);
+  pc.cs_length = host->cfg_float("cs_length", 0.02f);
+  pc.cs_strength = host->cfg_float("cs_strength", 1.0f);
+  pc.cs_steps = uint32_t(host->cfg_int("cs_steps", 12));
   return pc;
 }
 
@@ -279,7 +286,8 @@ constexpr VkPipelineStageFlags kAll = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 bool run_pre(VkCommandBuffer cmd, const Snapshot& s) {
   if (!ensure_layout() || !ensure_images(s.dif.width, s.dif.height)) return false;
   bool ok = refresh(g_trace, "gi/gi_trace.hlsl") & refresh(g_temporal, "gi/gi_temporal.hlsl") &
-            refresh(g_ao_apply, "gi/gi_ao_apply.hlsl") & refresh(g_composite, "gi/gi_composite.hlsl");
+            refresh(g_ao_apply, "gi/gi_ao_apply.hlsl") & refresh(g_composite, "gi/gi_composite.hlsl") &
+            refresh(g_contact, "gi/gi_contact.hlsl");
   if (!ok) return false;
   if (!g_images_ready) {
     for (Bg3Image* im : all_images)
@@ -307,6 +315,12 @@ bool run_pre(VkCommandBuffer cmd, const Snapshot& s) {
     image_layout(cmd, s.ao.image, s.ao.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     dispatch(cmd, g_ao_apply, b, pc, g_w, g_h);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kCS);
+  }
+  // Contact shadows for the sun, folded into the game's sun shadow mask.
+  if (s.shadow.view && host->cfg_int("contact_shadows", 1)) {
+    image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
+    dispatch(cmd, g_contact, b, pc, g_w, g_h);
+    image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
   }
   timestamp(cmd, 1);
   host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -393,7 +407,7 @@ void gi_on_frame(uint64_t) {}
 void gi_release() {
   std::lock_guard<std::mutex> lock(g_mu);
   release_images();
-  for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite}) {
+  for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
     *p = Pipe{};
   }

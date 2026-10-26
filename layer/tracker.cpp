@@ -220,6 +220,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
   static const bool force_storage = cfg_int("force_storage_rgb10a2", 1) != 0;
   if (force_storage && ci->format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 && (ci->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
     patched.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+  // Same for R8 render targets: the sun shadow mask, refined by contact shadows.
+  static const bool force_storage_r8 = cfg_int("force_storage_r8", 1) != 0;
+  if (force_storage_r8 && ci->format == VK_FORMAT_R8_UNORM && (ci->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+    patched.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
   VkResult r = device_of(device)->vk.CreateImage(device, &patched, alloc, out);
   if (r == VK_SUCCESS) {
     ImageRec rec{tracker().next_image_id++, patched, false};

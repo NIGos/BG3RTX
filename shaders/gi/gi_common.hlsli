@@ -6,7 +6,7 @@
 // set 0 binding 1 of the lighting shader. Positions in this space are
 // camera-relative: P = ray(uv) * linear_depth.
 struct CameraCB {
-  float4 v0, v1, v2;                   // _m0.._m5 (unidentified)
+  float4 v0, v1, v2;                   // v0.xyz = direction towards the sun (_m0), v1.xyz = sun colour (_m2)
   float4 m6_r0, m6_r1, m6_r2, m6_r3;   // _m6, row-major: view normal -> lighting space
   float4 ray0, ray1, ray2;             // _m7: frustum rays at the viewport's (0,0), (1,0), (0,1) in ab space
 };
@@ -36,6 +36,8 @@ struct ViewportCB {
 [[vk::binding(13, 0)]] [[vk::image_format("r32f")]] RWTexture2D<float> giRawDepth;
 [[vk::binding(14, 0)]] [[vk::image_format("r32f")]] RWTexture2D<float> giHistDepthIn;
 [[vk::binding(15, 0)]] [[vk::image_format("r32f")]] RWTexture2D<float> giHistDepthOut;
+// The game's screen-space sun shadow mask (R8), read by its sun term.
+[[vk::binding(16, 0)]] [[vk::image_format("r8")]] RWTexture2D<float> gSunShadow;
 
 struct Push {
   uint2 full;       // render resolution
@@ -49,6 +51,9 @@ struct Push {
   uint debug;       // 0 off, 1 GI irradiance only, 2 added term x4
   float history;    // temporal blend weight of the new sample
   float ao;         // how strongly visibility multiplies the game's AO (0..1)
+  float cs_length;  // contact-shadow march length, fraction of camera distance
+  float cs_strength;
+  uint cs_steps;
 };
 [[vk::push_constant]] Push pc;
 
