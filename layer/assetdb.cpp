@@ -1175,9 +1175,20 @@ void join_check(Db& d, const Pending& p) {
     for (int a = 0; a < 3; ++a) {
       float qv[3] = {anchors[a][0] - m[0][3], anchors[a][1] - m[1][3], anchors[a][2] - m[2][3]}, w[3];
       for (int r = 0; r < 3; ++r) w[r] = inv[r][0] * qv[0] + inv[r][1] * qv[1] + inv[r][2] * qv[2] + cam[r];
-      if (nearest(d, g_grid, w, 2.0f * tol, nullptr,
-                  [&](uint32_t j) { return d.lights[j].type == BG3_DB_LIGHT_BOX; }) != kNone)
-        ++m_proj[a];
+      float pd = -1;
+      uint32_t pj = nearest(d, g_grid, w, 2.0f * tol, &pd,
+                            [&](uint32_t j) { return d.lights[j].type == BG3_DB_LIGHT_BOX; });
+      if (pj != kNone) ++m_proj[a];
+      if (a == 0) {  // projector rows: slot P<i>, near-face anchor, box size from the matrix
+        float sx = 1.0f / std::sqrt(m[0][0] * m[0][0] + m[0][1] * m[0][1] + m[0][2] * m[0][2]);
+        float sy = 1.0f / std::sqrt(m[1][0] * m[1][0] + m[1][1] * m[1][1] + m[1][2] * m[1][2]);
+        float sz = 1.0f / std::sqrt(m[2][0] * m[2][0] + m[2][1] * m[2][1] + m[2][2] * m[2][2]);
+        char line[384];
+        snprintf(line, sizeof line, "P%u,%d,%.4f,%.4f,%.4f,0,%.4g,%.4g,%.4g,,,,,,%s,%.4f,%s,2,,,,,,,,\n", i,
+                 int(pref[i]), w[0], w[1], w[2], sx, sy, sz, pj == kNone ? "" : std::to_string(pj).c_str(), pd,
+                 pj == kNone ? "" : d.str(d.lights[pj].name));
+        csv += line;
+      }
     }
   }
   // Database lights near the camera that the runtime array does not hold
