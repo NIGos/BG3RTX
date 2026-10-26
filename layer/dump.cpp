@@ -288,7 +288,7 @@ static bool is_hdr(VkFormat f) {
          f == VK_FORMAT_R16G16B16A16_SFLOAT || f == VK_FORMAT_R32G32B32A32_SFLOAT;
 }
 
-static bool write_png(const std::wstring& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb) {
+bool write_png(const std::wstring& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb) {
   IWICImagingFactory* f = nullptr;
   if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&f)))) return false;
   IWICStream* st = nullptr;
@@ -311,6 +311,14 @@ static bool write_png(const std::wstring& path, uint32_t w, uint32_t h, const st
   if (enc) enc->Release();
   if (st) st->Release();
   f->Release();
+  return ok;
+}
+
+bool write_png_rgb(const std::string& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb) {
+  // COM may not be initialised on Streamline's present thread.
+  HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  bool ok = write_png(std::wstring(path.begin(), path.end()), w, h, rgb);
+  if (SUCCEEDED(hr)) CoUninitialize();
   return ok;
 }
 

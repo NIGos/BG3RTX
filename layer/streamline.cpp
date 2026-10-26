@@ -166,11 +166,40 @@ struct InSl {
 };
 
 std::atomic<uint64_t> g_displayed{0};
+std::mutex g_queue_mu;
+std::unordered_map<VkQueue, uint32_t> g_queue_family;   // queues Streamline took
+bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, VkPresentInfoKHR& out,
+                  VkSemaphore& wait);
+void snap_finish(DeviceData* dd);
+bool g_fg_running_flag();
 
+// Every present Streamline makes (real and generated frames) passes here.
 VKAPI_ATTR VkResult VKAPI_CALL w_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
   diag(DIAG_DISPLAYED);
   g_displayed.fetch_add(1, std::memory_order_relaxed);
-  return device_of(queue)->vk.QueuePresentKHR(queue, info);
+  DeviceData* dd = device_of(queue);
+  static std::atomic<int> logged{0};
+  if (g_fg_running_flag() && logged < cfg_int("fg_log_presents", 6)) {
+    ++logged;
+    std::string chain;
+    for (auto p = static_cast<const VkBaseInStructure*>(info->pNext); p; p = p->pNext) {
+      chain += " " + std::to_string(p->sType);
+      if (p->sType == VK_STRUCTURE_TYPE_SET_PRESENT_CONFIG_NV) {
+        auto c = reinterpret_cast<const VkSetPresentConfigNV*>(p);
+        chain += "(frames per batch " + std::to_string(c->numFramesPerBatch) + ")";
+      }
+    }
+    log("[sl] Streamline present: thread %lu queue %p swapchains %u image %u waits %u pNext:%s", GetCurrentThreadId(),
+        (void*)queue, info->swapchainCount, info->pImageIndices[0], info->waitSemaphoreCount, chain.c_str());
+  }
+  VkPresentInfoKHR copy;
+  VkSemaphore wait = VK_NULL_HANDLE;
+  if (snap_present(dd, queue, info, copy, wait)) {
+    VkResult r = dd->vk.QueuePresentKHR(queue, &copy);
+    snap_finish(dd);
+    return r;
+  }
+  return dd->vk.QueuePresentKHR(queue, info);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL w_AllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* ai,
@@ -186,12 +215,187 @@ VKAPI_ATTR void VKAPI_CALL w_GetDeviceQueue(VkDevice device, uint32_t family, ui
   DeviceData* dd = device_of(device);
   dd->vk.GetDeviceQueue(device, family, index, out);
   if (*out && dd->set_loader_data) dd->set_loader_data(device, *out);
+  std::lock_guard<std::mutex> lock(g_queue_mu);
+  if (*out) g_queue_family[*out] = family;
 }
 
 VKAPI_ATTR void VKAPI_CALL w_GetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2* info, VkQueue* out) {
   DeviceData* dd = device_of(device);
   dd->vk.GetDeviceQueue2(device, info, out);
   if (*out && dd->set_loader_data) dd->set_loader_data(device, *out);
+  std::lock_guard<std::mutex> lock(g_queue_mu);
+  if (*out) g_queue_family[*out] = info->queueFamilyIndex;
+}
+
+// ---- snapshots of what is actually presented (fg_snap=N) ----
+// Once frame generation has run for fg_snap_after frames, the next N presents
+// are copied to captures/fg_<stamp>/pNN.png: alternating real and generated
+// frames, for checking UI and motion artifacts.
+VkExtent2D g_sc_extent{};
+VkFormat g_sc_format = VK_FORMAT_UNDEFINED;
+uint64_t g_fg_on_frame = 0;
+int g_fg_enables = 0;   // times frame generation went on (the first is usually the loading screen)
+int g_snaps_left = -1;
+std::string g_snap_dir;
+struct Snap {
+  VkCommandPool pool = VK_NULL_HANDLE;
+  VkCommandBuffer cmd = VK_NULL_HANDLE;
+  VkBuffer buf = VK_NULL_HANDLE;
+  VkDeviceMemory mem = VK_NULL_HANDLE;
+  VkSemaphore sem = VK_NULL_HANDLE;
+  VkFence fence = VK_NULL_HANDLE;
+  uint32_t family = UINT32_MAX;
+  bool pending = false;
+  int index = 0;
+} g_snap;
+bool fg_running_now();
+
+uint32_t snap_memory_type(DeviceData* dd, uint32_t bits) {
+  VkPhysicalDeviceMemoryProperties props{};
+  dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical, &props);
+  for (uint32_t i = 0; i < props.memoryTypeCount; ++i)
+    if ((bits & (1u << i)) && (props.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) ==
+                                  (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+      return i;
+  return UINT32_MAX;
+}
+
+bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, VkPresentInfoKHR& out,
+                  VkSemaphore& wait) {
+  if (g_snaps_left == 0 || info->swapchainCount != 1 || !g_sc_extent.width) return false;
+  if (g_snaps_left < 0) {
+    int n = cfg_int("fg_snap", 0);
+    if (n <= 0 || !fg_running_now() || g_fg_enables < cfg_int("fg_snap_on", 1) ||
+        frame_index() < g_fg_on_frame + uint64_t(cfg_int("fg_snap_after", 60)))
+      return false;
+    g_snaps_left = n;
+    g_snap_dir = root_dir() + "\\captures\\fg_" + now_stamp();
+    make_dirs(g_snap_dir);
+    log("[sl] capturing %d presented frames to %s", n, g_snap_dir.c_str());
+  }
+  uint32_t family = dd->graphics_family;
+  {
+    std::lock_guard<std::mutex> lock(g_queue_mu);
+    auto it = g_queue_family.find(queue);
+    if (it != g_queue_family.end()) family = it->second;
+  }
+  Snap& S = g_snap;
+  VkDevice dev = dd->device;
+  if (!S.pool || S.family != family) {
+    VkCommandPoolCreateInfo pci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    pci.queueFamilyIndex = family;
+    if (dd->vk.CreateCommandPool(dev, &pci, nullptr, &S.pool) != VK_SUCCESS) return g_snaps_left = 0, false;
+    VkCommandBufferAllocateInfo ai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    ai.commandPool = S.pool;
+    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    ai.commandBufferCount = 1;
+    dd->vk.AllocateCommandBuffers(dev, &ai, &S.cmd);
+    if (dd->set_loader_data) dd->set_loader_data(dev, S.cmd);
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size = VkDeviceSize(g_sc_extent.width) * g_sc_extent.height * 4;
+    bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    dd->vk.CreateBuffer(dev, &bci, nullptr, &S.buf);
+    VkMemoryRequirements req;
+    dd->vk.GetBufferMemoryRequirements(dev, S.buf, &req);
+    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = snap_memory_type(dd, req.memoryTypeBits);
+    if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dev, &mai, nullptr, &S.mem) != VK_SUCCESS)
+      return g_snaps_left = 0, false;
+    dd->vk.BindBufferMemory(dev, S.buf, S.mem, 0);
+    VkSemaphoreCreateInfo sci{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    dd->vk.CreateSemaphore(dev, &sci, nullptr, &S.sem);
+    VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    dd->vk.CreateFence(dev, &fci, nullptr, &S.fence);
+    S.family = family;
+  }
+  uint32_t n = 0;
+  dd->vk.GetSwapchainImagesKHR(dev, info->pSwapchains[0], &n, nullptr);
+  std::vector<VkImage> imgs(n);
+  dd->vk.GetSwapchainImagesKHR(dev, info->pSwapchains[0], &n, imgs.data());
+  uint32_t idx = info->pImageIndices[0];
+  if (idx >= n) return false;
+  VkImage img = imgs[idx];
+
+  dd->vk.ResetCommandBuffer(S.cmd, 0);
+  VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+  bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  dd->vk.BeginCommandBuffer(S.cmd, &bi);
+  VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+  b.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+  b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  b.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  b.image = img;
+  b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  dd->vk.CmdPipelineBarrier(S.cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                            nullptr, 1, &b);
+  VkBufferImageCopy region{};
+  region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  region.imageExtent = {g_sc_extent.width, g_sc_extent.height, 1};
+  dd->vk.CmdCopyImageToBuffer(S.cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, S.buf, 1, &region);
+  b.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  b.dstAccessMask = 0;
+  b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  b.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  dd->vk.CmdPipelineBarrier(S.cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
+                            nullptr, 1, &b);
+  dd->vk.EndCommandBuffer(S.cmd);
+
+  std::vector<VkPipelineStageFlags> stages(info->waitSemaphoreCount, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+  VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+  si.waitSemaphoreCount = info->waitSemaphoreCount;
+  si.pWaitSemaphores = info->pWaitSemaphores;
+  si.pWaitDstStageMask = stages.data();
+  si.commandBufferCount = 1;
+  si.pCommandBuffers = &S.cmd;
+  si.signalSemaphoreCount = 1;
+  si.pSignalSemaphores = &S.sem;
+  dd->vk.ResetFences(dev, 1, &S.fence);
+  if (dd->vk.QueueSubmit(queue, 1, &si, S.fence) != VK_SUCCESS) return g_snaps_left = 0, false;
+  out = *info;
+  wait = S.sem;
+  out.waitSemaphoreCount = 1;
+  out.pWaitSemaphores = &S.sem;
+  S.pending = true;
+  return true;
+}
+
+void snap_finish(DeviceData* dd) {
+  Snap& S = g_snap;
+  if (!S.pending) return;
+  S.pending = false;
+  dd->vk.WaitForFences(dd->device, 1, &S.fence, VK_TRUE, 2000000000ull);
+  void* p = nullptr;
+  if (dd->vk.MapMemory(dd->device, S.mem, 0, VK_WHOLE_SIZE, 0, &p) == VK_SUCCESS && p) {
+    uint32_t w = g_sc_extent.width, h = g_sc_extent.height;
+    // half-size PNG, decoded from B8G8R8A8 / R8G8B8A8 / A2B10G10R10
+    uint32_t ow = w / 2, oh = h / 2;
+    std::vector<uint8_t> rgb(size_t(ow) * oh * 3);
+    const uint32_t* px = static_cast<const uint32_t*>(p);
+    for (uint32_t y = 0; y < oh; ++y)
+      for (uint32_t x = 0; x < ow; ++x) {
+        uint32_t v = px[size_t(y * 2) * w + x * 2];
+        uint8_t r, g, bl;
+        if (g_sc_format == VK_FORMAT_A2B10G10R10_UNORM_PACK32) {
+          r = uint8_t((v & 1023) >> 2), g = uint8_t(((v >> 10) & 1023) >> 2), bl = uint8_t(((v >> 20) & 1023) >> 2);
+        } else if (g_sc_format == VK_FORMAT_B8G8R8A8_UNORM || g_sc_format == VK_FORMAT_B8G8R8A8_SRGB) {
+          bl = uint8_t(v), g = uint8_t(v >> 8), r = uint8_t(v >> 16);
+        } else {
+          r = uint8_t(v), g = uint8_t(v >> 8), bl = uint8_t(v >> 16);
+        }
+        uint8_t* o = &rgb[(size_t(y) * ow + x) * 3];
+        o[0] = r, o[1] = g, o[2] = bl;
+      }
+    dd->vk.UnmapMemory(dd->device, S.mem);
+    char name[64];
+    snprintf(name, sizeof name, "\\p%02d.png", S.index++);
+    bool ok = write_png_rgb(g_snap_dir + name, ow, oh, rgb);
+    log("[sl] presented frame %d -> %s%s (%s)", S.index - 1, g_snap_dir.c_str(), name, ok ? "ok" : "PNG write failed");
+  }
+  if (--g_snaps_left == 0) log("[sl] present capture done");
 }
 
 PFN_vkVoidFunction wrapped(const char* name) {
@@ -381,6 +585,14 @@ std::atomic<VkImage> g_watch[kWatch] = {};
 // fg_stable_frames after it (BG3 recreates its targets when gameplay starts).
 std::atomic<uint64_t> g_last_tag_destroy{0};
 std::atomic<bool> g_fg_running{false};
+bool g_fg_running_flag() { return g_fg_running.load(); }
+// DLSS-G's inputs-processing completion fence (a timeline semaphore on
+// Vulkan) and the value that marks the last presented frame's inputs consumed,
+// read on the present thread after every present while frame generation runs.
+std::mutex g_fence_mu;
+VkSemaphore g_inputs_fence = VK_NULL_HANDLE;
+uint64_t g_inputs_value = 0;
+PFN_vkWaitSemaphores g_wait_semaphores = nullptr;
 int g_watch_next = 0;
 
 // Camera constants from the last submitted velocity pass.
@@ -729,6 +941,10 @@ LONG CALLBACK veh(EXCEPTION_POINTERS* ep) {
 }
 }  // namespace
 
+namespace {
+bool fg_running_now() { return g_fg_running.load(); }
+}  // namespace
+
 // ---------------------------------------------------------------------------
 // instance
 
@@ -742,7 +958,7 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
     log("[sl] fg=%d: Streamline not loaded", fg);
     return;
   }
-  std::string dir = bin_dir() + (cfg_int("sl_dev", 1) ? "\\sl_dev" : "\\sl");
+  std::string dir = bin_dir() + (cfg_int("sl_dev", 0) ? "\\sl_dev" : "\\sl");
   std::wstring wdir = widen(dir);
   g_vulkan1 = GetModuleHandleA("vulkan-1.dll");
   g_interposer = LoadLibraryW((wdir + L"\\sl.interposer.dll").c_str());
@@ -1239,6 +1455,9 @@ static void finish_device(SlDeviceScratch* s, DeviceData* dd) {
   g_sl.ReflexSleep = reinterpret_cast<PFun_slReflexSleep*>(ff(sl::kFeatureReflex, "slReflexSleep"));
   g_sl.PCLSetMarker = reinterpret_cast<PFun_slPCLSetMarker*>(ff(sl::kFeaturePCL, "slPCLSetMarker"));
 
+  g_wait_semaphores = reinterpret_cast<PFN_vkWaitSemaphores>(dd->gdpa(dd->device, "vkWaitSemaphores"));
+  if (!g_wait_semaphores)
+    g_wait_semaphores = reinterpret_cast<PFN_vkWaitSemaphores>(dd->gdpa(dd->device, "vkWaitSemaphoresKHR"));
 #define PX(n) g_px.n = reinterpret_cast<PFN_vk##n>(g_sl.gdpa(dd->device, "vk" #n))
   PX(CreateSwapchainKHR);
   PX(DestroySwapchainKHR);
@@ -1294,6 +1513,8 @@ bool sl_create_swapchain(VkDevice d, const VkSwapchainCreateInfoKHR* ci, const V
   if (g_dd && d == g_dd->device) sl_device_ready(g_dd, true);
   if (g_active && g_dd && d == g_dd->device) register_surface(g_dd->inst->instance, ci->surface);
   if (!g_active || !g_dd || d != g_dd->device) return false;
+  g_sc_extent = ci->imageExtent;
+  g_sc_format = ci->imageFormat;
   InSl guard;
   *r = g_px.CreateSwapchainKHR(d, ci, a, out);
   log("[sl] swapchain created through Streamline: %d", *r);
@@ -1462,13 +1683,29 @@ void sl_note_image_destroyed(VkImage image) {
     std::lock_guard<std::mutex> lock(g_mu);
     for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui}) current |= i->image == image;
   }
+  // Any tag image going away means the game is recreating its targets (the
+  // loading screen -> gameplay switch, resolution changes): frame generation
+  // goes off at the very next present and stays off for fg_stable_frames.
+  g_last_tag_destroy = frame_index();
   if (current) {
-    g_last_tag_destroy = frame_index();
-    // Streamline does not keep tagged Vulkan images alive: let its queued
-    // frame-generation work finish before the game's image goes away.
-    if (g_fg_running && g_dd && !t_in_sl) {
-      g_dd->vk.DeviceWaitIdle(g_dd->device);
-      log("[sl] tagged image %p destroyed while frame generation runs: waited for the GPU", (void*)image);
+    // Streamline does not keep tagged Vulkan images alive: wait until DLSS-G
+    // has consumed the last presented frame's inputs (its documented fence),
+    // so its queued work never touches the game's destroyed image.
+    VkSemaphore fence;
+    uint64_t value;
+    {
+      std::lock_guard<std::mutex> lock(g_fence_mu);
+      fence = g_inputs_fence;
+      value = g_inputs_value;
+    }
+    if (g_fg_running && fence && value && g_wait_semaphores && g_dd && !t_in_sl) {
+      VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
+      wi.semaphoreCount = 1;
+      wi.pSemaphores = &fence;
+      wi.pValues = &value;
+      VkResult r = g_wait_semaphores(g_dd->device, &wi, 1000000000ull);
+      log("[sl] tagged image %p destroyed while frame generation runs: waited for DLSS-G inputs fence value %llu (%d)",
+          (void*)image, (unsigned long long)value, r);
     }
   }
   std::lock_guard<std::mutex> lock(g_mu);
@@ -1568,6 +1805,10 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
         o.numFramesToGenerate, flags, res_str(r));
     g_fg_applied = want;
     g_flags_applied = flags;
+    if (want >= 2 && !g_fg_running) {
+      g_fg_on_frame = frame;
+      ++g_fg_enables;
+    }
     g_fg_running = want >= 2;
   }
 
@@ -1581,8 +1822,16 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     r = g_px.QueuePresentKHR(queue, info);
   }
   if (g_token && g_sl.PCLSetMarker) g_sl.PCLSetMarker(sl::PCLMarker::ePresentEnd, *g_token);
+  if (g_fg_running && g_sl.DLSSGGetState) {
+    sl::DLSSGState st{};
+    if (g_sl.DLSSGGetState(0, st, nullptr) == sl::Result::eOk) {
+      std::lock_guard<std::mutex> lock(g_fence_mu);
+      g_inputs_fence = reinterpret_cast<VkSemaphore>(st.inputsProcessingCompletionFence);
+      g_inputs_value = st.lastPresentInputsProcessingCompletionFenceValue;
+    }
+  }
 
-  if (g_sl.DLSSGGetState && frame >= g_last_state_log + 600) {
+  if (g_sl.DLSSGGetState && frame >= g_last_state_log + uint64_t(g_fg_running ? cfg_int("fg_state_every", 60) : 600)) {
     sl::DLSSGState st{};
     g_sl.DLSSGGetState(0, st, nullptr);
     uint64_t shown = g_displayed.load();

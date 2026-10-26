@@ -175,6 +175,7 @@ void diag(DiagCounter c, uint64_t n = 1);
 void watchdog_start();                     // passes per frame feed the auto trigger
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
 void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue);
+bool write_png_rgb(const std::string& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb);
 
 // ---- Streamline DLSS-G (streamline.cpp) ----
 // Instance/device creation: merge Streamline's requirements into the game's.

@@ -55,7 +55,10 @@ if(NOT BG3RTX_SL_SDK)
 endif()
 message(STATUS "Streamline SDK: ${BG3RTX_SL_SDK}")
 target_include_directories(VkLayer_bg3rtx PRIVATE ${BG3RTX_SL_SDK}/include)
-set(SL_DLLS sl.interposer.dll sl.common.dll sl.dlss_g.dll sl.reflex.dll sl.pcl.dll nvngx_dlssg.dll NvLowLatencyVk.dll)
+# nvngx_dlss(d) are there for the game: its DLSS SR shares Streamline's NGX
+# instance (fg_game_ngx=2), which looks for snippets in this folder.
+set(SL_DLLS sl.interposer.dll sl.common.dll sl.dlss_g.dll sl.reflex.dll sl.pcl.dll nvngx_dlssg.dll NvLowLatencyVk.dll
+    nvngx_dlss.dll nvngx_dlssd.dll)
 foreach(dll ${SL_DLLS})
   add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory ${BG3RTX_BIN}/sl ${BG3RTX_BIN}/sl_dev
