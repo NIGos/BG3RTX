@@ -107,7 +107,12 @@
   X(WaitForFences)                             \
   X(ResetFences)                               \
   X(CreateSemaphore)                           \
-  X(DestroySemaphore)
+  X(DestroySemaphore)                          \
+  X(CreateQueryPool)                           \
+  X(DestroyQueryPool)                          \
+  X(CmdResetQueryPool)                         \
+  X(CmdWriteTimestamp)                         \
+  X(GetQueryPoolResults)
 
 struct VkDeviceFuncs {
 #define BG3RTX_DECL(name) PFN_vk##name name = nullptr;

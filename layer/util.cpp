@@ -126,6 +126,12 @@ void cfg_poll() {
     }
     fclose(f);
   }
+  if (next.empty() && mt) {
+    // Caught mid-write (an editor or script truncates before writing): keep
+    // the previous settings and read again on the next poll.
+    g_cfg_mtime = 0;
+    return;
+  }
   {
     std::lock_guard<std::mutex> lock(g_cfg_mu);
     g_cfg.swap(next);

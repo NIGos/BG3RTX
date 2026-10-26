@@ -32,8 +32,23 @@ add_library(VkLayer_bg3rtx SHARED
   layer/shaders.cpp
   layer/util.cpp
   layer/dump.cpp
+  layer/ngx.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
+
+# NVIDIA SDKs (DLSS headers only: NGX is reached through the driver's
+# _nvngx.dll at run time, nothing is linked). external/ is not versioned; a
+# worktree under .claude/worktrees/ finds the main checkout's copy.
+set(BG3RTX_EXTERNAL "${CMAKE_SOURCE_DIR}/external" CACHE PATH "NVIDIA SDK clones (DLSS, Streamline, NRD, SHARC)")
+if(NOT EXISTS "${BG3RTX_EXTERNAL}/DLSS/include/nvsdk_ngx_vk.h")
+  get_filename_component(_main "${CMAKE_SOURCE_DIR}/../../../external" ABSOLUTE)
+  if(EXISTS "${_main}/DLSS/include/nvsdk_ngx_vk.h")
+    set(BG3RTX_EXTERNAL "${_main}" CACHE PATH "" FORCE)
+  else()
+    message(FATAL_ERROR "DLSS SDK not found: clone github.com/NVIDIA/DLSS into ${BG3RTX_EXTERNAL}/DLSS")
+  endif()
+endif()
+target_include_directories(VkLayer_bg3rtx PRIVATE ${BG3RTX_EXTERNAL}/DLSS/include)
 add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/layer/VkLayer_bg3rtx.json ${BG3RTX_BIN}/VkLayer_bg3rtx.json)
 

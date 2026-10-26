@@ -40,6 +40,7 @@ DeviceData* device_of(const void* handle) {
 static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* ci, const VkAllocationCallbacks* alloc,
                                                      VkInstance* out) {
   cfg_poll();  // settings that matter before the first present (dump_shaders)
+  ngx_init();  // BG3 loads _nvngx.dll after device creation; hook it as it maps
   auto* link = static_cast<VkLayerInstanceCreateInfo*>(const_cast<void*>(ci->pNext));
   while (link && !(link->sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO && link->function == VK_LAYER_LINK_INFO))
     link = static_cast<VkLayerInstanceCreateInfo*>(const_cast<void*>(link->pNext));
@@ -290,6 +291,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     defer_tick(false);
     core_poll(queue);
     core_on_frame(frame);
+    ngx_on_present();
   }
   trace_on_present(queue, info);
   if (g_headless) {
