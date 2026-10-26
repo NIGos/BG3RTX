@@ -166,6 +166,7 @@ struct InSl {
 };
 
 std::atomic<uint64_t> g_displayed{0};
+std::atomic<uint64_t> g_batched{0};   // presents carrying VkSetPresentConfigNV with more than one frame per batch
 std::mutex g_queue_mu;
 std::unordered_map<VkQueue, uint32_t> g_queue_family;   // queues Streamline took
 bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, VkPresentInfoKHR& out,
@@ -177,6 +178,10 @@ bool g_fg_running_flag();
 VKAPI_ATTR VkResult VKAPI_CALL w_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
   diag(DIAG_DISPLAYED);
   g_displayed.fetch_add(1, std::memory_order_relaxed);
+  for (auto p = static_cast<const VkBaseInStructure*>(info->pNext); p; p = p->pNext)
+    if (p->sType == VK_STRUCTURE_TYPE_SET_PRESENT_CONFIG_NV &&
+        reinterpret_cast<const VkSetPresentConfigNV*>(p)->numFramesPerBatch > 1)
+      g_batched.fetch_add(1, std::memory_order_relaxed);
   DeviceData* dd = device_of(queue);
   static std::atomic<int> logged{0};
   if (g_fg_running_flag() && logged < cfg_int("fg_log_presents", 6)) {
@@ -1855,12 +1860,15 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     sl::DLSSGState st{};
     g_sl.DLSSGGetState(0, st, nullptr);
     uint64_t shown = g_displayed.load();
+    uint64_t batched = g_batched.load();
+    static uint64_t prev_batched = 0;
     double ratio = frame > g_prev_frame ? double(shown - g_prev_displayed) / double(frame - g_prev_frame) : 0.0;
     log("[sl] DLSS-G frame %llu: status 0x%x, presented per app frame %u, displayed/rendered over the last %llu frames "
-        "%.2f, api errors %u (last %d), camera %s",
+        "%.2f (batch-of-2 presents %llu), api errors %u (last %d), camera %s",
         (unsigned long long)frame, uint32_t(st.status), st.numFramesActuallyPresented,
-        (unsigned long long)(frame - g_prev_frame), ratio, g_api_errors.load(), g_last_api_error.load(),
-        g_cam_valid ? "from uniforms" : "identity");
+        (unsigned long long)(frame - g_prev_frame), ratio, (unsigned long long)(batched - prev_batched),
+        g_api_errors.load(), g_last_api_error.load(), g_cam_valid ? "from uniforms" : "identity");
+    prev_batched = batched;
     g_prev_displayed = shown;
     g_prev_frame = frame;
     g_last_state_log = frame;
