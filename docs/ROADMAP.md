@@ -16,7 +16,7 @@ summarised in the sections below.
 | A, Ray Reconstruction | **Done, merged.** RR replaces SR with G-buffer guides, about +1.8 ms GPU, live `rr` switch. See `TRACK_A_RR.md`. |
 | B, DLSS-G | **Done, merged.** Streamline DLSS-G 2x/3x/4x inside the host layer; shares the game's NGX instance. Verified with RR + GI on (10 min stable, no API errors). See `TRACK_B_FG.md`. Still unverified: motion-vector sign in motion, HDR10 output, UI during gameplay. These need the display on. |
 | C, GI | **v1 in main.** Ray-traced visibility folded into the game's AO, one-bounce GI, MV reprojection, sun contact shadows. About 0.3 ms GPU, validation-clean. See `TRACK_C_GI.md`. |
-| D, hardware RT | **Phase 1 done** on its branch: G-buffer geometry captured every frame by transform feedback (all 835 draws / 36 VS, 3.16M triangles, 97.8% depth match, 0% missing), +0.45 ms; BLAS refit 0.55 ms, rebuild 2.5–3.4 ms. See `TRACK_D_RT.md`. |
+| D, hardware RT | **Phase 2 done, off by default (`rt=1`).** AS + ray query on the game's device (instance API 1.3, the game's EXT BDA kept next to the core feature); per-frame BLAS refit 0.39 ms / rebuild 2.3 ms + TLAS from the XFB capture; ray-query sun shadows folded into the game's sun mask (0.1 ms) and ray-traced AO (0.13 ms); about 1.5 ms in total with a static camera. TLAS matches the depth buffer on 98.1% of pixels; validation-clean. Next: alpha test, cascade-pass casters, static/dynamic BLAS split. See `TRACK_D_RT.md` section 6. |
 
 ## Phase 0 — map the frame (blocks everything)
 - [ ] Trace one frame in an outdoor area and one in a dungeon. Run `analyze_trace.py --disasm`.
