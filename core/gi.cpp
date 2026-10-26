@@ -50,6 +50,53 @@ uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0;
 bool g_images_ready = false, g_logged = false;
 uint64_t g_last_pre_frame = 0;
 
+// GPU timing: 4 timestamps per frame (pre start/end, post start/end) in a ring
+// of 8 frames, read back a few frames later without waiting.
+constexpr uint32_t kRing = 8;
+VkQueryPool g_queries = VK_NULL_HANDLE;
+uint32_t g_slot = 0;
+bool g_slot_written[kRing] = {};
+double g_ns_per_tick = 1.0, g_ms_sum = 0;
+uint32_t g_ms_count = 0;
+
+void timing_init() {
+  if (g_queries) return;
+  VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+  qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+  qi.queryCount = kRing * 4;
+  host->vk->CreateQueryPool(host->device, &qi, nullptr, &g_queries);
+  g_ns_per_tick = host->cfg_float("gpu_timestamp_period_ns", 1.0f);
+}
+
+void timestamp(VkCommandBuffer cmd, uint32_t index) {
+  if (!g_queries) return;
+  uint32_t q = g_slot * 4 + index;
+  host->vk->CmdResetQueryPool(cmd, g_queries, q, 1);
+  host->vk->CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_queries, q);
+}
+
+// Reads the oldest ring slot if the GPU is done with it.
+void timing_collect() {
+  if (!g_queries) return;
+  uint32_t old = (g_slot + 1) % kRing;
+  if (!g_slot_written[old]) return;
+  uint64_t t[4];
+  if (host->vk->GetQueryPoolResults(host->device, g_queries, old * 4, 4, sizeof t, t, sizeof(uint64_t),
+                                    VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
+    return;
+  g_slot_written[old] = false;
+  double ms = (double(t[1] - t[0]) + double(t[3] - t[2])) * g_ns_per_tick * 1e-6;
+  if (ms >= 0 && ms < 1000) {
+    g_ms_sum += ms;
+    ++g_ms_count;
+  }
+  if (g_ms_count >= 300) {
+    host->log("gi: GPU cost %.3f ms/frame (average of %u frames)", g_ms_sum / g_ms_count, g_ms_count);
+    g_ms_sum = 0;
+    g_ms_count = 0;
+  }
+}
+
 Bg3Image* const all_images[] = {&g_raw, &g_hist[0], &g_hist[1], &g_raw_depth, &g_hist_depth[0], &g_hist_depth[1],
                                 &g_prev_radiance};
 
@@ -244,6 +291,9 @@ bool run_pre(VkCommandBuffer cmd, const Snapshot& s) {
     memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
     g_images_ready = true;
   }
+  timing_init();
+  timing_collect();
+  timestamp(cmd, 0);
   Bound b;
   bind_all(b, s);
   Push pc = make_push();
@@ -258,6 +308,7 @@ bool run_pre(VkCommandBuffer cmd, const Snapshot& s) {
     dispatch(cmd, g_ao_apply, b, pc, g_w, g_h);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kCS);
   }
+  timestamp(cmd, 1);
   host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   return true;
 }
@@ -268,7 +319,11 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   Push pc = make_push();
   // The tiled lighting just wrote diffuse/specular from compute.
   memory_barrier(cmd, kCS, kCS);
+  timestamp(cmd, 2);
   dispatch(cmd, g_composite, b, pc, g_w, g_h);
+  timestamp(cmd, 3);
+  g_slot_written[g_slot] = true;
+  g_slot = (g_slot + 1) % kRing;
   // The SSS pass samples the diffuse buffer in its fragment shader.
   memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | kCS);
   g_parity ^= 1;
@@ -342,6 +397,8 @@ void gi_release() {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
     *p = Pipe{};
   }
+  host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_queries);
+  g_queries = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_layout);
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_set_layout);
   g_layout = VK_NULL_HANDLE;

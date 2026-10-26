@@ -342,6 +342,7 @@ void defer_tick(bool flush_all) {
       case BG3_DEFER_COMMAND_POOL: vk.DestroyCommandPool(d, reinterpret_cast<VkCommandPool>(x.handle), nullptr); break;
       case BG3_DEFER_FENCE: vk.DestroyFence(d, reinterpret_cast<VkFence>(x.handle), nullptr); break;
       case BG3_DEFER_SEMAPHORE: vk.DestroySemaphore(d, reinterpret_cast<VkSemaphore>(x.handle), nullptr); break;
+      case BG3_DEFER_QUERY_POOL: vk.DestroyQueryPool(d, reinterpret_cast<VkQueryPool>(x.handle), nullptr); break;
     }
   }
 }

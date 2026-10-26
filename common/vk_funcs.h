@@ -97,6 +97,11 @@
   X(CmdPipelineBarrier)                        \
   X(CmdPipelineBarrier2)                       \
   X(CmdExecuteCommands)                        \
+  X(CreateQueryPool)                           \
+  X(DestroyQueryPool)                          \
+  X(CmdResetQueryPool)                         \
+  X(CmdWriteTimestamp)                         \
+  X(GetQueryPoolResults)                       \
   X(CreateFence)                               \
   X(DestroyFence)                              \
   X(WaitForFences)                             \
