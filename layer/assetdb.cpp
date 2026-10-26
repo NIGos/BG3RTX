@@ -129,7 +129,7 @@ struct Db {
   View<RAlias> alias;
   View<Bg3DbLight> lights;
   View<RTrig> trigs;
-  View<float> tpts;   // pairs
+  View<float> tpts;   // n = number of (x, z) points; p is the float array
   View<uint32_t> tref;
   View<Bg3DbProbe> probes;
   View<Bg3DbProbeCapture> caps;
@@ -259,7 +259,7 @@ std::unique_ptr<Db> load(std::string& err) {
     for (uint32_t k = 0; k < db->levels[i].n_light; ++k) db->light_level[db->levels[i].first_light + k] = int32_t(i);
   for (uint32_t i = 0; i < db->trigs.n; ++i) {
     const RTrig& t = db->trigs[i];
-    if (uint64_t(t.first_point) + t.point_count > db->tpts.n / 2 || uint64_t(t.first_ref) + t.ref_count > db->tref.n)
+    if (uint64_t(t.first_point) + t.point_count > db->tpts.n || uint64_t(t.first_ref) + t.ref_count > db->tref.n)
       return bad("trigger ranges"), nullptr;
   }
   for (uint32_t i = 0; i < db->probes.n; ++i)
@@ -788,6 +788,20 @@ bool readback_ready(DeviceData* dd) {
 }  // namespace
 
 const Bg3AssetDbApi* assetdb_api() { return &g_api; }
+
+bool assetdb_select_level(const char* name, const char* source) {
+  Db* d = db();
+  if (!d || !name) return false;
+  auto it = d->level_by_name.find(name);
+  if (it == d->level_by_name.end()) {
+    auto s = d->world_of_sublevel.find(name);
+    if (s == d->world_of_sublevel.end()) return false;
+    set_level(s->second, source);
+    return true;
+  }
+  set_level(it->second, source);
+  return true;
+}
 
 void assetdb_dispatch_pre(VkCommandBuffer cmd) {
   // Recognise the tiled lighting by its light list: set 1 b25 (80-byte lights), b29

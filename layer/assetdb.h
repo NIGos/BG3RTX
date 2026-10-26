@@ -25,6 +25,9 @@ inline void assetdb_note_draw(uint64_t vs, uint64_t fs) {
   if (g_assetdb_counting.load(std::memory_order_relaxed)) assetdb_count_draw(vs, fs);
 }
 void assetdb_on_present(uint64_t frame);          // layer.cpp, main device present
+// Makes `name` (a level, or a sub-level of one) current; false when it is not in the
+// database. For tests and tools; the layer itself detects the level.
+bool assetdb_select_level(const char* name, const char* source);
 void assetdb_device_destroyed();
 
 }  // namespace bg3
