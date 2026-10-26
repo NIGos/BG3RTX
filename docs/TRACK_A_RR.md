@@ -62,19 +62,65 @@ render resolution. They are stored in our own images, which stay in `GENERAL`:
 |---|---|---|---|
 | Diffuse albedo | RGBA8 | `RT1.rgb · (1 − RT2.z)` | 0.5 |
 | Specular albedo | RGBA16F | `EnvBRDFApprox2(F0, RT2.x², N·V)` with `F0 = mix(0.16·RT2.y², RT1.rgb, RT2.z)` (the RR guide's appendix formula and BG3's own F0) | 0 |
-| Normals + roughness | RGBA16F | xyz = decoded RT0 (world-aligned, unit length, NaN-guarded), w = RT2.x perceptual roughness; `DLSS.Roughness.Mode = Packed` | 0 |
+| Normals + roughness | RGBA16F | xyz = decoded RT0 rotated to **world space** (unit length, NaN-guarded), w = RT2.x perceptual roughness; `DLSS.Roughness.Mode = Packed` | 0 |
 
 Sky is detected from depth (reversed Z, depth = 0).
+
+### Guides v2 (`rr_guides_v2=1`, the default)
+
+RT0 holds **view-space** normals (Track D proved it; see FRAME_MAP). The v1
+guides passed them as they were, with a constant N·V and no matrices. v2 fixes
+all three from one source: **the camera UBO of the G-buffer pass itself**,
+set 0 binding 2 of the G-buffer vertex shaders.
+- **How it is read.** When the G-buffer/decal pass ends,
+  `read_guide_camera` (`layer/ngx.cpp`) resolves the binding with
+  `query_binding` (dynamic offset applied) and copies its 224 bytes from the
+  game's mapped memory. This is the same mechanism and layout that
+  `layer/streamline.cpp` uses at the velocity pass: std140, row-major,
+  `v * M`, `_m0` world-to-view, `_m1` the jittered reversed-Z infinite
+  projection. It is the current frame's camera, read where the guides are
+  recorded, so no frame lag.
+- **Checks.** `_m1` must look like a perspective projection (`P23 = 1`,
+  `P33 = 0`, no shear) and `_m0` like an affine view (last column `0,0,0,1`,
+  non-singular 3x3). Otherwise the frame falls back to v1 and the reason is
+  logged once.
+- **World normals.** The game's relation is `n_view = n_world * R`, with
+  `R = mat3(_m0)` (the same check Track D used, |dot| median 0.998). The host
+  inverts R on the CPU (adjugate) and pushes its rows. The shader computes
+  `n_world = normalize(n_view * inverse(R))`. In game, R is orthonormal
+  (rows of unit length; for example world up maps to view `(0, 0.758, -0.652)`
+  in the foundry shot), so this is the transpose.
+- **Per-pixel N·V.** The view direction of the pixel centre is
+  `d = ((ndc.x − P20)/P00, (ndc.y − P21)/P11, 1)`. It uses the jittered `_m1`,
+  because the G-buffer was rendered jittered. The NDC is D3D-style
+  (`ndc.y = 1 − 2·uv.y`), because the game's vertex shaders negate clip y
+  for Vulkan (TRACK_D). Then `N·V = dot(n_view, −normalize(d))`, and
+  `EnvBRDFApprox2` gets `max(|N·V|, 1e-3)`.
+- **Matrices for RR.** `WorldToViewMatrix` = `_m0`, and `ViewToClipMatrix` =
+  `_m1` with the jitter (`P[2][0..1]`) zeroed. Both stay in the game's
+  row-major, row-vector form, which is what the RR guide (3.4.9) asks for:
+  "Row Major Order and use left multiplication". `_m0` is the absolute
+  world-to-view: the camera position (UBO floats 52–54) times `_m0` gives the
+  origin to < 1e-3. They are set on every RR evaluate whose guides are at most
+  2 frames old. Otherwise they are set to null, because the game reuses its
+  parameter block.
+- **The lighting shader's `_m6`** (camera UBO set 0/b1 of the lighting pass,
+  Track C) is a different UBO, bound only after the G-buffer pass. It is not
+  needed: `_m0` of the G-buffer pass is the matrix the G-buffer normals were
+  written with.
+- **Not given: specular hit distance and specular motion vectors.** BG3's
+  specular is raster plus SSR, and the guides have no per-pixel specular ray.
+  So `DLSSD.SpecularHitDistance` stays unset. The matrices are what RR needs
+  together with a hit distance once one exists (Track D reflections, D-RF).
+- **Cost.** Unmeasurable: same dispatch, 96 bytes of push constants instead of
+  32, and a 224-byte memcpy on the CPU per G-buffer pass.
 
 - **G-buffer decode.** Confirmed against the G-buffer fragment shader
   `aa4efa4d` (it writes `rg = n.xy/(1−n.z)·0.28125 + 0.5`, base colour,
   `(roughness, specular, metal, flags)`) and against the tiled lighting shader
   `f469db78`. See FRAME_MAP.
-- **N·V is a constant** (`rr_nov=0.5`). The normals are world-space and the
-  guide pass does not know the camera yet. This is the one approximation left.
-  The fix is to read the per-camera UBO (also needed by Track B). With
-  `rr_nov<=0` the shader uses `|n.z|`, which is only correct for view-space
-  normals.
+- **N·V** is per pixel with v2 (above). With `rr_guides_v2=0` it is the
+  constant `rr_nov` (default 0.5), or `|n.z|` with `rr_nov<=0`.
 
 **The guides have to be built at the end of the G-buffer pass, not at the
 evaluate.** This was the key finding:
@@ -149,7 +195,9 @@ evaluate.** This was the key finding:
 - **Guides, at full resolution in the RR capture:**
   - `d162` diffuse albedo: metals dark, cloth and wood coloured, as expected;
   - `d163` specular albedo: metals bright, dielectrics about 0.04;
-  - `d164` normals + roughness: world-aligned, the floor +Y.
+  - `d164` normals + roughness. This capture predates v2, so these were
+    view-space normals. That camera was nearly view-aligned with world Y,
+    which is why they were taken for world-aligned (see "Guides v2").
 
 ### Non-finite values and stability
 
@@ -213,11 +261,84 @@ gameplay. The log shows:
   to its default. It now keeps the previous settings and reads again on the
   next poll (`layer/util.cpp`).
 
+### Guides v2 (2026-10-26)
+
+Runs on this branch, `scripts/auto-run.ps1` (headless), Steel Watch Foundry
+from the latest save. The pairs differ only in `rr_guides_v2`.
+
+| Run | Capture |
+|---|---|
+| v2, static | `captures/20261026-083016` |
+| v1, static | `captures/20261026-084630` |
+| v2, `rr_show=7` (N·V) | `captures/20261026-084817` |
+| v2, `-Move`, 4 traces | `captures/20261026-090804` … `-090849` |
+| v1, `-Move`, 4 traces | `captures/20261026-091145` … `-091229` (the pan key did not take, static) |
+| v1, `-Move`, 1 trace | `captures/20261026-085747` (panned through the foundry) |
+| `-Validation`, v2 / v1 | `captures/20261026-085212` / `-085333` |
+
+- **Normals: floors decode to +Y world.**
+  - [rr_v2_normal_guide_world.png](img/rr_v2_normal_guide_world.png) is the
+    v2 guide (`d164`): floors green, walls red (+X) or blue (+Z).
+  - Decoded from the dump preview, a 140x90 patch of the walkway has a median
+    normal of (0.000, 0.998, 0.037). Four other floor spots give 0.967–0.998
+    in Y.
+  - The v1 guide of the same view
+    ([rr_v1_normal_guide_view.png](img/rr_v1_normal_guide_view.png)) has the
+    walkway at view (0.03, 0.73, −0.69), which is exactly world up times
+    this camera's R.
+  - During the pan out to the docks (v2 trace 4,
+    [rr_v2_moving_docks_normals.png](img/rr_v2_moving_docks_normals.png)), the
+    quay and the water plane are still +Y with a different camera, so the
+    rotation follows the camera.
+- **N·V is per pixel and has the right sign.**
+  - [rr_v2_nov_show7.png](img/rr_v2_nov_show7.png) is `rr_show=7`
+    (tonemapped): silhouettes are dark (grazing), and only 0.8% of pixels are
+    negative (red), at normal-mapped pipe edges.
+  - On the flat walkway N·V rises from 0.42 (top of the screen) through 0.57,
+    0.72 and 0.84 to 0.92 (bottom).
+  - The prediction from this camera's floor normal is 0.69 at the centre and
+    0.91 at row 500. A flipped NDC y would give 0.38 at the bottom. This
+    confirms the D3D-style NDC.
+- **Specular albedo.** The `d163` mean goes from (0.130, 0.106, 0.086) with
+  v1 to (0.128, 0.104, 0.083) with v2. The spread is larger: higher at grazing
+  angles and lower facing the camera.
+- **RR output, static** (`d166`, tonemapped): mean absolute difference
+  v1 → v2 0.20/255 (p99 1/255). The mean is 61.11 against 61.14.
+  [rr_v1_vs_v2_static_diff_x4.png](img/rr_v1_vs_v2_static_diff_x4.png)
+  shows the difference ×4: only the animated character, animated hazard
+  stripes and a flickering sign differ. In a static frame RR's output is
+  dominated by the colour input, so this was expected.
+- **RR output, moving.**
+  - The v2 pan's traces 3 and 4 were taken while the camera moved: the `_m0`
+    translation changes between consecutive traces.
+  - [rr_v2_moving_docks.png](img/rr_v2_moving_docks.png): clean, with no
+    ghosting, trails or smearing on the masts, rigging or water glints at
+    1280-wide preview resolution.
+  - The v1 references are the same scene and quality, but at a different
+    point of the pan. There is no exact like-for-like moving pair (the key
+    injection is not deterministic).
+- **Non-finite values: none.** Every dump of all 21 traces of this work has
+  nonfinite = 0, including the guides and the RR output. No `RR evaluate
+  failed`. Each run has the usual single `RR skipped` (the load frame).
+- **Validation.** The `-Validation` runs with v2 and v1 report exactly the
+  same message IDs, with the same counts:
+  - `0xfa0c48b`, `0x46582f7b`, `0x3a9b375b`, `0x1cecb534` and `0x13365b2`,
+    three each (duplicate limit);
+  - `0xa5625282` and `0x779fc816`, once each.
+
+  v2 adds no validation messages.
+
 ## Debug switches
 
 - **`rr_show=N`** replaces the upscaled frame with one guide (nearest
   upsampling), so the tonemapped dump shows exactly what RR gets:
-  1 diffuse, 2 specular, 3 normals, 4 roughness, 5 raw RT0, 6 depth×20.
+  1 diffuse, 2 specular, 3 normals, 4 roughness, 5 raw RT0, 6 depth×20,
+  7 the guides' N·V (grey, red where negative; carried in the specular
+  guide's alpha only while `rr_show=7`).
+- **`rr_guides_v2=0`** gives back the v1 guides (view-space normals, constant
+  N·V, no matrices) for A/B tests. It switches live. **`rr_log_camera=1`**
+  logs the guide camera every 600 frames (it is always logged for the first
+  two frames and on every trace frame).
 - **`rr_guides_at=0`** builds the guides at the evaluate. It is kept only to
   reproduce the aliasing finding.
 - **`rr_dump_gbuffer=1`** adds RT0–RT2, as they are at the evaluate, to the
@@ -230,13 +351,17 @@ gameplay. The log shows:
 
 ## Known limits and next steps
 
-- **N·V for the specular albedo is a constant.** Read the camera UBO (View at
-  0x00 of PerCamera) to get the true view vector. The same work unblocks
-  `pInWorldToViewMatrix`/`pInViewToClipMatrix` for RR's own specular motion
-  estimate.
-- **No specular hit distance or specular MVs are given.** BG3 has no RT, so the
-  noisy input is raster lighting plus SSR. Once Track C produces GI, it should
-  feed `DLSSD.DiffuseHitDistance`/`SpecularHitDistance`.
+- **Done (v2):** world-space normals, per-pixel N·V and the
+  WorldToView/ViewToClip matrices. See "Guides v2".
+- **No specular hit distance or specular MVs are given.** BG3 has no RT
+  reflections, so the noisy input is raster lighting plus SSR. The matrices
+  are in place; a Track D reflection pass (D-RF) should add
+  `DLSSD.SpecularHitDistance` (65504 for sky), and the GI
+  `DLSSD.DiffuseHitDistance`.
+- **Not checked: what RR does with the matrices without a hit distance.** It
+  gets them every frame, and they caused no visible change in static or
+  moving frames and no validation or NGX errors. Their effect on reflections
+  can only be judged once a hit distance is given.
 - **Transparents, fog and particles** are in the colour but not in the guides,
   so RR sees background albedo under them. The RR guide suggests blending the
   guides towards transparent surfaces; BG3's forward pass would need a hook for

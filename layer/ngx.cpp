@@ -444,7 +444,7 @@ static bool ensure_layouts(DeviceData* dd) {
   dci.bindingCount = 8;
   dci.pBindings = b;
   if (dd->vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) != VK_SUCCESS) return false;
-  VkPushConstantRange pcr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 32};
+  VkPushConstantRange pcr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 96};  // sizeof(GuidePush)
   VkPipelineLayoutCreateInfo pci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   pci.setLayoutCount = 1;
   pci.pSetLayouts = &g_dsl;
@@ -580,18 +580,104 @@ static void memory_barrier(DeviceData* dd, VkCommandBuffer cmd, VkPipelineStageF
 // Guide dispatch
 // ---------------------------------------------------------------------------
 
+// Matches rr_guides.hlsl's Push (96 bytes).
 struct GuidePush {
   uint32_t size[2], out_size[2];
-  float nov, pad;
+  float nov;
+  uint32_t v2;
   uint32_t depth_inverted, show;
+  float rot[3][4];   // rows of inverse(mat3(view)): n_world = n_view * inverse(R)
+  float proj[4];     // P00, P11, P20, P21 of the jittered projection
 };
+static_assert(sizeof(GuidePush) == 96, "GuidePush must match rr_guides.hlsl");
 
-static GuidePush guide_push(const SrFeature& f, uint32_t w, uint32_t h) {
+// The camera of the G-buffer pass: set 0 binding 2 of the G-buffer vertex
+// shaders (224 bytes, std140, row-major, used as v * M; FRAME_MAP/TRACK_B):
+// _m0 (floats 0-15) world-to-view, _m1 (16-31) the jittered reversed-Z
+// projection with the jitter in row 2, _m2 the camera-relative view-projection,
+// floats 48/49 near/far, 52-54 the camera position. Read on the CPU from the
+// game's mapped memory when the pass ends, the same way layer/streamline.cpp
+// reads it at the velocity pass.
+struct GuideCamera {
+  bool ok = false;
+  float raw[56] = {};
+  float view[16] = {};       // world-to-view as given to RR (row-major, v * M)
+  float proj[16] = {};       // view-to-clip, jitter removed (row-major, v * M)
+  float inv_rot[3][4] = {};  // inverse(mat3(_m0)), rows
+  float pj[4] = {};          // jittered P00, P11, P20, P21
+  uint64_t frame = 0;
+};
+static GuideCamera g_gcam;   // under g_mu
+static std::string g_gcam_err;
+
+static bool finite_all(const float* f, int n) {
+  for (int i = 0; i < n; ++i)
+    if (!std::isfinite(f[i])) return false;
+  return true;
+}
+
+static bool read_guide_camera(VkCommandBuffer cmd, GuideCamera& c, std::string& why) {
+  Bg3Binding b{};
+  if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) || !b.buffer)
+    return why = "set 0 binding 2 not bound", false;
+  if (b.type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && b.type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
+    return why = "set 0 binding 2 is not a uniform buffer", false;
+  if (b.range != VK_WHOLE_SIZE && b.range < sizeof c.raw) return why = "uniform range < 224 bytes", false;
+  {
+    std::shared_lock<std::shared_mutex> lock(tracker().mu);
+    auto bm = tracker().buffer_mem.find(b.buffer);
+    if (bm == tracker().buffer_mem.end()) return why = "buffer memory unknown", false;
+    auto mp = tracker().mapped.find(bm->second.first);
+    if (mp == tracker().mapped.end() || !mp->second) return why = "memory not mapped", false;
+    memcpy(c.raw, mp->second + bm->second.second + b.offset, sizeof c.raw);
+  }
+  const float* v = &c.raw[0];
+  const float* p = &c.raw[16];
+  if (!finite_all(c.raw, 32)) return why = "non-finite matrices", false;
+  // A perspective projection in the row-vector convention: clip.w = view.z.
+  if (std::fabs(p[11] - 1.0f) > 1e-3f || std::fabs(p[15]) > 1e-3f || std::fabs(p[0]) < 1e-3f ||
+      std::fabs(p[5]) < 1e-3f || std::fabs(p[1]) > 1e-4f || std::fabs(p[4]) > 1e-4f)
+    return why = "_m1 is not the expected projection", false;
+  if (std::fabs(v[3]) > 1e-4f || std::fabs(v[7]) > 1e-4f || std::fabs(v[11]) > 1e-4f || std::fabs(v[15] - 1.0f) > 1e-4f)
+    return why = "_m0 is not an affine view matrix", false;
+  // inverse(R) by the adjugate; R = rows 0..2, columns 0..2 of _m0.
+  double r[3][3];
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) r[i][j] = v[i * 4 + j];
+  double det = r[0][0] * (r[1][1] * r[2][2] - r[1][2] * r[2][1]) - r[0][1] * (r[1][0] * r[2][2] - r[1][2] * r[2][0]) +
+               r[0][2] * (r[1][0] * r[2][1] - r[1][1] * r[2][0]);
+  if (!(std::fabs(det) > 1e-6)) return why = "_m0 rotation is singular", false;
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) {
+      // inv[i][j] = cofactor[j][i] / det
+      int a0 = (j + 1) % 3, a1 = (j + 2) % 3, b0 = (i + 1) % 3, b1 = (i + 2) % 3;
+      c.inv_rot[i][j] = float((r[a0][b0] * r[a1][b1] - r[a0][b1] * r[a1][b0]) / det);
+    }
+  for (auto& row : c.inv_rot) row[3] = 0.0f;
+  memcpy(c.view, v, sizeof c.view);
+  memcpy(c.proj, p, sizeof c.proj);
+  c.pj[0] = p[0];
+  c.pj[1] = p[5];
+  c.pj[2] = p[8];
+  c.pj[3] = p[9];
+  c.proj[8] = 0.0f;  // unjittered: the jitter is P[2][0..1] (TRACK_B_FG.md)
+  c.proj[9] = 0.0f;
+  c.ok = true;
+  return true;
+}
+
+static GuidePush guide_push(const SrFeature& f, uint32_t w, uint32_t h, const GuideCamera* cam = nullptr) {
   GuidePush pc{};
   pc.size[0] = w;
   pc.size[1] = h;
   pc.nov = cfg_float("rr_nov", 0.5f);
   pc.depth_inverted = (f.flags & NVSDK_NGX_DLSS_Feature_Flags_DepthInverted) ? 1 : 0;
+  pc.show = uint32_t(cfg_int("rr_show", 0));
+  if (cam && cam->ok) {
+    pc.v2 = 1;
+    memcpy(pc.rot, cam->inv_rot, sizeof pc.rot);
+    memcpy(pc.proj, cam->pj, sizeof pc.proj);
+  }
   return pc;
 }
 
@@ -677,7 +763,40 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
                                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
   if (known)
     dd->vk.CmdPipelineBarrier(cmd, att, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 4, b);
-  dispatch_guides(dd, cmd, set, guide_push(*f, p.width, p.height));
+  const GuideCamera* cam = nullptr;
+  if (cfg_int("rr_guides_v2", 1)) {
+    GuideCamera c;
+    std::string why;
+    if (read_guide_camera(cmd, c, why)) {
+      c.frame = frame_index();
+      g_gcam = c;
+      cam = &g_gcam;
+      static int logged = 0;
+      static uint64_t traced_frame = 0;
+      CmdState* cs = cmd_state(cmd);
+      const bool tracing = cs && cs->tracing && traced_frame != frame_index();   // the camera of every trace
+      if (tracing) traced_frame = frame_index();
+      if (logged++ < 2 || tracing || (cfg_int("rr_log_camera", 0) && frame_index() % 600 == 0)) {
+        const float* v = c.raw;
+        const float* q = c.raw + 16;
+        log("[ngx] guide camera _m0 [%.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f "
+            "%.4f]",
+            v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]);
+        log("[ngx] guide camera _m1 [%.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f "
+            "%.4f], near/far %g %g, pos %g %g %g",
+            q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], q[9], q[10], q[11], q[12], q[13], q[14], q[15],
+            c.raw[48], c.raw[49], c.raw[52], c.raw[53], c.raw[54]);
+        log("[ngx] guide camera inverse(R) rows [%.4f %.4f %.4f | %.4f %.4f %.4f | %.4f %.4f %.4f]", c.inv_rot[0][0],
+            c.inv_rot[0][1], c.inv_rot[0][2], c.inv_rot[1][0], c.inv_rot[1][1], c.inv_rot[1][2], c.inv_rot[2][0],
+            c.inv_rot[2][1], c.inv_rot[2][2]);
+      }
+      g_gcam_err.clear();
+    } else if (why != g_gcam_err) {
+      g_gcam_err = why;
+      log("[ngx] guide camera unavailable (%s): this frame uses the v1 guides", why.c_str());
+    }
+  }
+  dispatch_guides(dd, cmd, set, guide_push(*f, p.width, p.height, cam));
   if (known) {
     for (auto& x : b) {
       std::swap(x.oldLayout, x.newLayout);
@@ -1007,6 +1126,18 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
                              NVSDK_NGX_Parameter_DLSS_Input_Roughness_Subrect_Base_X,
                              NVSDK_NGX_Parameter_DLSS_Input_Roughness_Subrect_Base_Y};
   for (const char* k : zero_keys) p->Set(k, 0u);
+  // Camera matrices (row-major, left multiplication, as the RR guide 3.4.9
+  // asks), unjittered, from the G-buffer pass of this frame. They go with the
+  // world-space normals; without them (v1, or no camera read) the keys are
+  // cleared, since the game's parameter block is reused between frames.
+  static float s_w2v[16], s_v2c[16];
+  const bool cam_ok = cfg_int("rr_guides_v2", 1) && g_gcam.ok && g_gcam.frame + 2 >= frame_index();
+  if (cam_ok) {
+    memcpy(s_w2v, g_gcam.view, sizeof s_w2v);
+    memcpy(s_v2c, g_gcam.proj, sizeof s_v2c);
+  }
+  p->Set(NVSDK_NGX_Parameter_DLSS_WORLD_TO_VIEW_MATRIX, cam_ok ? static_cast<void*>(s_w2v) : nullptr);
+  p->Set(NVSDK_NGX_Parameter_DLSS_VIEW_TO_CLIP_MATRIX, cam_ok ? static_cast<void*>(s_v2c) : nullptr);
   int old_reset = 0;
   bool had_reset = get_i(p, NVSDK_NGX_Parameter_Reset, old_reset);
   if (reset) p->Set(NVSDK_NGX_Parameter_Reset, 1);
