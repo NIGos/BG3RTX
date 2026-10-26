@@ -198,6 +198,24 @@ Priority: **P1** do next (correctness or a large cheap gain), **P2** soon, **P3*
 ### DLSS Ray Reconstruction inputs (Track A)
 
 **Q11 (P1). The normal guide is view space; N·V is a constant; matrices are missing.**
+**Status: done (2026-10-26), `rr_guides_v2=1` (the default).** Implemented as
+proposed below. The camera is read on the CPU from the G-buffer pass's own
+set 0 b2 when the pass ends. Details in
+[TRACK_A_RR.md "Guides v2"](TRACK_A_RR.md#guides-v2-rr_guides_v21-the-default).
+Evidence, all in game:
+- Floors decode to +Y world: walkway median (0.000, 0.998, 0.037), and still +Y
+  after the camera pans to the docks.
+- N·V rises from 0.42 to 0.92 down the walkway, matching the value predicted
+  from the camera (0.69 at the centre, 0.91 at row 500; a flipped y would give
+  0.38). Only 0.8% of pixels are negative, at silhouettes.
+- RR output, static: v1 → v2 differs by 0.20/255 on average. The moving pan
+  frame is clean.
+- No non-finite values in 21 traces. The `-Validation` message IDs and counts
+  are identical with v2 on and off.
+- Not done: specular hit distance (there is no specular ray yet; it belongs to
+  D-RF).
+
+The original finding:
 - `rr_guides.hlsl:59` writes the decoded RT0. Track D proved those normals are
   *view* space (TRACK_D section 1), but the guide comment and TRACK_A treat them as
   world space.
@@ -389,7 +407,7 @@ can become a default.
 
 | Order | Items | Why first |
 |---|---|---|
-| 1 | Q1, Q2, Q11 | correctness bugs; tiny code changes |
+| 1 | Q1, Q2, Q11 (Q11 done) | correctness bugs; tiny code changes |
 | 2 | Q4 + Q5 (RR path) | the biggest quality gain for the GI at zero cost; defines how every later effect feeds RR |
 | 3 | Q10 (soft sun + bias) | together with TRACK_D 8.5 |
 | 4 | Q3 (read `b0._m0.y`), Q8, Q12 | small, needs EN1's bindings |

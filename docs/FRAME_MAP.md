@@ -80,7 +80,7 @@ The parameter block is shared between create and evaluate (as the dlss5-bridge f
 
 - **Ray Reconstruction (Track A)** — done, see [TRACK_A_RR.md](TRACK_A_RR.md).
   - Inputs from the scene: the game's own SR evaluate block (colour, depth, MV, output, jitter, MV scale).
-  - Guides, built at the G-buffer pass end: diffuse albedo `RT1·(1−RT2.z)`, specular albedo `EnvBRDFApprox2(F0, RT2.x², N·V)`, normals decoded from RT0 with roughness RT2.x packed in w.
+  - Guides, built at the G-buffer pass end: diffuse albedo `RT1·(1−RT2.z)`, specular albedo `EnvBRDFApprox2(F0, RT2.x², N·V)`, normals decoded from RT0 and rotated to world space with the G-buffer camera (set 0 b2 `_m0`), roughness RT2.x packed in w; plus the unjittered `_m0`/`_m1` as WorldToView/ViewToClip (TRACK_A "Guides v2").
 - **Frame generation (Track B).**
   - Hudless colour = the tonemapped image from step 16, and UI = the RGBA8 target from step 17. Both are inputs of the final composite pass.
   - Depth and MV as above.
