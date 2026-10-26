@@ -39,6 +39,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/streamline.cpp
   layer/savefilter.cpp
   layer/background.cpp
+  layer/assetdb.cpp
   layer/framecap.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
