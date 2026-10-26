@@ -59,6 +59,7 @@ VkImage g_mv_image = VK_NULL_HANDLE;
 VkImageView g_mv_view = VK_NULL_HANDLE;
 VkImageLayout g_mv_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 float g_mv_scale[2] = {0, 0};
+uint64_t g_mv_frame = 0;   // frame in which the velocity pass was last seen writing the MVs
 
 // GPU timing: 4 timestamps per frame (pre start/end, post start/end) in a ring
 // of 8 frames, read back a few frames later without waiting.
@@ -204,17 +205,18 @@ bool refresh(Pipe& p, const char* file) {
 }
 
 void memory_barrier(VkCommandBuffer cmd, VkPipelineStageFlags src, VkPipelineStageFlags dst) {
+  // MEMORY_* access is valid with every stage mask.
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-  mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-  mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+  mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
   host->vk->CmdPipelineBarrier(cmd, src, dst, 0, 1, &mb, 0, nullptr, 0, nullptr);
 }
 
 void image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to, VkPipelineStageFlags src,
                   VkPipelineStageFlags dst) {
   VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-  b.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+  b.srcAccessMask = (src & VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT) ? 0 : VK_ACCESS_MEMORY_WRITE_BIT;
+  b.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
   b.oldLayout = from;
   b.newLayout = to;
   b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -320,8 +322,9 @@ bool run_pre(VkCommandBuffer cmd, const Snapshot& s) {
     VkImageView v;
     VkFormat f;
     float sc[2];
+    // Only an image seen being written this frame is known to be alive.
     if (host->dlss_motion_vectors && host->dlss_motion_vectors(&im, &v, &f, sc) && f == VK_FORMAT_R16G16_SFLOAT &&
-        g_mv_layout != VK_IMAGE_LAYOUT_UNDEFINED) {
+        g_mv_layout != VK_IMAGE_LAYOUT_UNDEFINED && g_mv_frame == host->frame_index()) {
       g_mv_image = im, g_mv_view = v, g_mv_scale[0] = sc[0], g_mv_scale[1] = sc[1];
     } else {
       g_mv_image = VK_NULL_HANDLE, g_mv_view = VK_NULL_HANDLE;
@@ -442,6 +445,7 @@ void gi_on_pass_end(VkCommandBuffer, const Bg3PassInfo* p) {
   if (g_mv_layout != p->color_layouts[0])
     host->log("gi: motion vectors found (image %p), left in layout %d by their pass", (void*)im, p->color_layouts[0]);
   g_mv_layout = p->color_layouts[0];
+  g_mv_frame = host->frame_index();
 }
 
 // The lighting and the SSS pass that reads its output are in different

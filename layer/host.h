@@ -109,11 +109,21 @@ struct Tracker {
   std::unordered_map<VkPipeline, PipelineRec> pipelines;
   // Keyed by (binding << 32 | element): BG3's bindless sets hold very large arrays.
   std::unordered_map<VkDescriptorSet, std::unordered_map<uint64_t, DescEntry>> sets;
-  std::unordered_map<VkDescriptorSet, uint32_t> dynamic_counts;  // dynamic buffer descriptors per set
+  std::unordered_map<VkDescriptorSet, uint32_t> dynamic_counts;  // fallback: dynamic descriptors written per set
+  // Dynamic-buffer bindings of each set layout as (binding, count), sorted by
+  // binding, and the layout every set was allocated with: dynamic offsets are
+  // consumed in this order.
+  std::unordered_map<VkDescriptorSetLayout, std::vector<std::pair<uint32_t, uint32_t>>> layout_dynamic;
+  std::unordered_map<VkDescriptorSet, VkDescriptorSetLayout> set_layouts;
   std::unordered_map<VkDescriptorUpdateTemplate, std::vector<VkDescriptorUpdateTemplateEntry>> templates;
   std::atomic<uint32_t> next_image_id{1}, next_pipeline_id{1};
 };
 Tracker& tracker();
+// Caller holds tracker().mu. Number of dynamic offsets a set consumes, and the
+// index of (binding, element) among them (UINT32_MAX if not dynamic/unknown).
+uint32_t set_dynamic_count_locked(VkDescriptorSet set);
+uint32_t set_dynamic_index_locked(VkDescriptorSet set, uint32_t binding, uint32_t element);
+void ngx_forget_image(VkImage image);
 
 void track_set_write(const VkWriteDescriptorSet& w);
 void track_set_template(VkDescriptorSet set, VkDescriptorUpdateTemplate tpl, const void* data);
@@ -134,6 +144,14 @@ struct CmdState {
   std::array<VkDescriptorSet, 8> sets[2] = {};
   std::vector<uint32_t> dyn[2][8];     // dynamic offsets of each bound set, in binding order
   VkPipelineLayout set_layout[2][8] = {};
+  // The game's descriptor binds, replayed verbatim by restore_bindings.
+  struct BindCall {
+    VkPipelineLayout layout;
+    uint32_t first;
+    std::vector<VkDescriptorSet> sets;
+    std::vector<uint32_t> dyn;
+  };
+  std::vector<BindCall> calls[2];
   std::vector<DescEntry> push[2];
   uint32_t push_set[2] = {UINT32_MAX, UINT32_MAX};
   uint32_t dispatches_since_pass = 0, indirect_since_pass = 0;

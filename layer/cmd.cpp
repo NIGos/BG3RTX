@@ -177,10 +177,13 @@ bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, ui
         e = ent->second;
         found = true;
         if (is_dynamic_type(e.type)) {
-          // Index of this descriptor among the set's dynamic ones, in binding order.
-          uint32_t index = 0;
-          for (const auto& [k, other] : it->second)
-            if (is_dynamic_type(other.type) && k < desc_key(binding, element)) ++index;
+          // Index of this descriptor among the set layout's dynamic ones, in binding order.
+          uint32_t index = set_dynamic_index_locked(ds, binding, element);
+          if (index == UINT32_MAX) {
+            index = 0;
+            for (const auto& [k, other] : it->second)
+              if (is_dynamic_type(other.type) && k < desc_key(binding, element)) ++index;
+          }
           if (index < s->dyn[b][set].size()) e.offset += s->dyn[b][set][index];
         }
       }
@@ -215,10 +218,11 @@ void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp) {
   if (!s) return;
   int b = bp_index(bp);
   if (s->pipe[b]) vk(cmd).CmdBindPipeline(cmd, bp, s->pipe[b]);
-  for (uint32_t k = 0; k < 8; ++k)
-    if (s->sets[b][k] && s->set_layout[b][k])
-      vk(cmd).CmdBindDescriptorSets(cmd, bp, s->set_layout[b][k], k, 1, &s->sets[b][k], uint32_t(s->dyn[b][k].size()),
-                                    s->dyn[b][k].data());
+  // Replay the game's own bind calls in order: exact dynamic offsets, and
+  // later calls re-establish whatever an earlier, wider call disturbed.
+  for (const auto& c : s->calls[b])
+    vk(cmd).CmdBindDescriptorSets(cmd, bp, c.layout, c.first, uint32_t(c.sets.size()), c.sets.data(),
+                                  uint32_t(c.dyn.size()), c.dyn.data());
 }
 
 // ---- hooks ----
@@ -252,6 +256,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->push[0].clear();
   s->push[1].clear();
   s->push_set[0] = s->push_set[1] = UINT32_MAX;
+  s->calls[0].clear();
+  s->calls[1].clear();
   for (auto& bp : s->dyn)
     for (auto& v : bp) v.clear();
   s->dispatches_since_pass = s->indirect_since_pass = 0;
@@ -354,10 +360,13 @@ static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(VkCommandBuffer cmd, VkP
     s->set_layout[b][first + i] = layout;
     auto& d = s->dyn[b][first + i];
     d.clear();
-    auto it = tracker().dynamic_counts.find(sets[i]);
-    uint32_t n = it == tracker().dynamic_counts.end() ? 0 : it->second;
+    uint32_t n = set_dynamic_count_locked(sets[i]);
     for (uint32_t k = 0; k < n && used < dyn_count; ++k) d.push_back(dyn[used++]);
   }
+  auto& calls = s->calls[b];
+  if (calls.size() >= 32) calls.erase(calls.begin());
+  calls.push_back({layout, first, std::vector<VkDescriptorSet>(sets, sets + count),
+                   std::vector<uint32_t>(dyn, dyn + dyn_count)});
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet(VkCommandBuffer cmd, VkPipelineBindPoint bp,

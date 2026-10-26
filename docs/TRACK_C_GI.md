@@ -70,6 +70,20 @@ only the game's own constants, so no matrices are guessed.
   transitioned around the read). Verified with `auto-run.ps1 -Move` (camera pan): no visible ghosting.
 - Sun contact shadows refine the game's screen-space sun shadow mask (`contact_shadows`, `cs_*`).
 
+## Validation pass (2026-10-26)
+`auto-run.ps1 -Validation` runs the game under the Khronos validation layer, placed below our layer so
+it also checks what we record. Comparing message IDs with GI off and on isolated our errors:
+- A stale motion-vector image after a level load (render targets are recreated) made the GI barrier
+  an invalid handle. Under validation this faulted inside the validation layer's locks and hung the
+  game. Fixed two ways: the NGX hook drops a destroyed MV image, and the GI uses MVs only if the
+  velocity pass was seen writing them in the current frame.
+- `restore_bindings` rebound sets with too few dynamic offsets (7 required, 5 tracked). The tracker
+  now records descriptor set layouts, so dynamic offsets are split exactly. Restore replays the game's
+  own bind calls verbatim, and `query_binding` resolves dynamic UBO offsets from the layout.
+- Barrier access masks were invalid for their stages; they now use MEMORY_READ/WRITE.
+- Remaining: one `Threading-MultipleThreads-Write` (`vkDeviceWaitIdle` vs `vkQueueSubmit`) at
+  shutdown, related to headless presentation. It is low priority.
+
 ## Next
 - A world-space radiance cache (SHaRC-style) for rays that leave the screen.
 - ReSTIR-style reuse.

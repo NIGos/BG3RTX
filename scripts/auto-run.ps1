@@ -17,7 +17,9 @@ param(
   # Hold a camera-pan key (default D) once gameplay is reached, so the
   # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
   [switch]$Move,
-  [byte]$MoveScan = 0x20   # hardware scan code (D); SDL reads scan codes, not virtual keys
+  [byte]$MoveScan = 0x20,
+  # Run under the Khronos validation layer; messages go to captures/validation.log.
+  [switch]$Validation
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -78,7 +80,19 @@ Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
 
 py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py")
 $start = Get-Date
+if ($Validation) {
+  $vlog = Join-Path $caps "validation.log"
+  Remove-Item $vlog -ErrorAction SilentlyContinue
+  $settings = Join-Path $caps "vk_layer_settings.txt"
+  @("khronos_validation.log_filename = $($vlog.Replace('\','/'))",
+    "khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG",
+    "khronos_validation.report_flags = error,warn",
+    "khronos_validation.duplicate_message_limit = 3") | Set-Content $settings
+  $env:VK_LAYER_SETTINGS_PATH = $settings
+  & (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -Validation -GameArgs "-continueGame"
+} else {
 & (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -GameArgs "-continueGame"
+}
 
 $log = Join-Path $root "bg3rtx.log"
 $deadline = $start.AddSeconds($TimeoutSec)

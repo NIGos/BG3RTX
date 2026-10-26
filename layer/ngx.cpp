@@ -293,6 +293,15 @@ static VkImageView g_mv_view = VK_NULL_HANDLE;
 static VkFormat g_mv_format = VK_FORMAT_UNDEFINED;
 static float g_mv_scale[2] = {1.0f, 1.0f};
 
+// The game recreates its render targets on level loads: drop a destroyed MV image.
+void ngx_forget_image(VkImage image) {
+  std::lock_guard<std::mutex> lock(g_mv_mu);
+  if (image == g_mv_image) {
+    g_mv_image = VK_NULL_HANDLE;
+    g_mv_view = VK_NULL_HANDLE;
+  }
+}
+
 bool ngx_motion_vectors(VkImage* image, VkImageView* view, VkFormat* format, float scale[2]) {
   std::lock_guard<std::mutex> lock(g_mv_mu);
   if (!g_mv_image) return false;

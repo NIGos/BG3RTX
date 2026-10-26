@@ -3,6 +3,7 @@
 // render passes and descriptor set contents.
 #include "host.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace bg3 {
@@ -101,7 +102,61 @@ std::vector<DescEntry> decode_push_template(VkDescriptorUpdateTemplate tpl, cons
   return decode_template_locked(tpl, data);
 }
 
+uint32_t set_dynamic_count_locked(VkDescriptorSet set) {
+  auto l = tracker().set_layouts.find(set);
+  if (l != tracker().set_layouts.end()) {
+    auto d = tracker().layout_dynamic.find(l->second);
+    if (d != tracker().layout_dynamic.end()) {
+      uint32_t n = 0;
+      for (auto& [b, c] : d->second) n += c;
+      return n;
+    }
+  }
+  auto it = tracker().dynamic_counts.find(set);
+  return it == tracker().dynamic_counts.end() ? 0 : it->second;
+}
+
+uint32_t set_dynamic_index_locked(VkDescriptorSet set, uint32_t binding, uint32_t element) {
+  auto l = tracker().set_layouts.find(set);
+  if (l == tracker().set_layouts.end()) return UINT32_MAX;
+  auto d = tracker().layout_dynamic.find(l->second);
+  if (d == tracker().layout_dynamic.end()) return UINT32_MAX;
+  uint32_t index = 0;
+  for (auto& [b, c] : d->second) {
+    if (b == binding) return element < c ? index + element : UINT32_MAX;
+    if (b > binding) break;
+    index += c;
+  }
+  return UINT32_MAX;
+}
+
 // ---- hooks ----
+
+static VKAPI_ATTR VkResult VKAPI_CALL CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo* ci,
+                                                                const VkAllocationCallbacks* alloc,
+                                                                VkDescriptorSetLayout* out) {
+  VkResult r = device_of(device)->vk.CreateDescriptorSetLayout(device, ci, alloc, out);
+  if (r == VK_SUCCESS) {
+    std::vector<std::pair<uint32_t, uint32_t>> dyn;
+    for (uint32_t i = 0; i < ci->bindingCount; ++i)
+      if (is_dynamic_type(ci->pBindings[i].descriptorType))
+        dyn.emplace_back(ci->pBindings[i].binding, ci->pBindings[i].descriptorCount);
+    std::sort(dyn.begin(), dyn.end());
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    tracker().layout_dynamic[*out] = std::move(dyn);
+  }
+  return r;
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo* ai,
+                                                             VkDescriptorSet* out) {
+  VkResult r = device_of(device)->vk.AllocateDescriptorSets(device, ai, out);
+  if (r == VK_SUCCESS) {
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i) tracker().set_layouts[out[i]] = ai->pSetLayouts[i];
+  }
+  return r;
+}
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* ci,
                                                          const VkAllocationCallbacks* alloc, VkShaderModule* out) {
@@ -238,6 +293,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
 static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAllocationCallbacks* a) {
   ngx_on_destroy_image(img);  // our views of it go first
   device_of(device)->vk.DestroyImage(device, img, a);
+  ngx_forget_image(img);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().images.erase(img);
 }
@@ -451,6 +507,8 @@ void register_tracker_hooks(HookMap& m) {
   HOOK(CreateRenderPass2);
   HOOK(DestroyRenderPass);
   HOOK(UpdateDescriptorSets);
+  HOOK(CreateDescriptorSetLayout);
+  HOOK(AllocateDescriptorSets);
   HOOK(CreateDescriptorUpdateTemplate);
   HOOK(DestroyDescriptorUpdateTemplate);
   HOOK(UpdateDescriptorSetWithTemplate);
