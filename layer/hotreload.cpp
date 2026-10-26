@@ -177,6 +177,7 @@ void core_init(DeviceData* dd) {
   g_host.alloc_image = &alloc_image;
   g_host.restore_bindings = &restore_bindings;
   g_host.dlss_motion_vectors = &ngx_motion_vectors;
+  g_host.rt_scene = &rt_scene;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);
@@ -344,6 +345,10 @@ void defer_tick(bool flush_all) {
       case BG3_DEFER_FENCE: vk.DestroyFence(d, reinterpret_cast<VkFence>(x.handle), nullptr); break;
       case BG3_DEFER_SEMAPHORE: vk.DestroySemaphore(d, reinterpret_cast<VkSemaphore>(x.handle), nullptr); break;
       case BG3_DEFER_QUERY_POOL: vk.DestroyQueryPool(d, reinterpret_cast<VkQueryPool>(x.handle), nullptr); break;
+      case BG3_DEFER_ACCELERATION_STRUCTURE:
+        if (vk.DestroyAccelerationStructureKHR)
+          vk.DestroyAccelerationStructureKHR(d, reinterpret_cast<VkAccelerationStructureKHR>(x.handle), nullptr);
+        break;
     }
   }
 }

@@ -51,6 +51,7 @@ struct InstanceData {
   PFN_vkGetPhysicalDeviceFeatures2 GetPhysicalDeviceFeatures2 = nullptr;
   PFN_vkCreateWin32SurfaceKHR CreateWin32SurfaceKHR = nullptr;
   PFN_vkDestroySurfaceKHR DestroySurfaceKHR = nullptr;
+  uint32_t api_version = 0;            // as created (after our own bump for rt=1)
 };
 
 struct DeviceData {
@@ -293,6 +294,26 @@ void geo_on_present(VkQueue queue);
 void geo_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue);
 uint64_t trace_start_frame();
 bool write_png(const std::wstring& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb);  // dump.cpp
+
+// ---- Track D phase 2: acceleration structures + ray query on the game's device (rtscene.cpp) ----
+// Instance API version the layer asks for (rt=1 needs 1.2+ for the AS/ray query
+// dependencies; the game asks for 1.1).
+uint32_t rt_instance_api(uint32_t requested);
+const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
+                                                VkDeviceCreateInfo* scratch);
+void rt_device_created(DeviceData* dd, bool enabled);
+void rt_device_destroyed(DeviceData* dd);
+bool rt_enabled();                         // AS + ray query are on the device
+bool rt_capture_wanted();                  // build the scene this frame (rt_build=1, not yet built)
+VkBufferUsageFlags rt_xfb_usage();         // extra usage the per-frame XFB buffer needs
+bool rt_alloc_device_address();            // memory for BDA buffers needs VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
+void rt_before_capture(VkCommandBuffer cmd);   // outside the G-buffer pass, before it begins
+// After the G-buffer pass, outside it: XFB clip positions -> camera-relative
+// world in place, BLAS build or refit, TLAS build.
+void rt_after_capture(VkCommandBuffer cmd, VkBuffer xfb, VkDeviceSize bytes, VkBuffer ubo, VkDeviceSize ubo_offset,
+                      uint64_t signature, uint32_t draws);
+bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
+void rt_on_present();
 
 uint64_t frame_index();
 void* persist(const char* key, size_t size);

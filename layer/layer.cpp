@@ -11,6 +11,7 @@ using HookMap = std::unordered_map<std::string, PFN_vkVoidFunction>;
 void register_tracker_hooks(HookMap& m);
 void register_cmd_hooks(HookMap& m);
 void register_geo_hooks(HookMap& m);
+void register_rt_hooks(HookMap& m);
 
 static std::shared_mutex g_mu;
 static std::unordered_map<void*, InstanceData*> g_instances;
@@ -56,6 +57,21 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
   // and adds its instance extensions.
   VkInstanceCreateInfo patched;
   sl_instance_pre(ci, patched);
+  // Hardware RT (rt=1) needs instance API 1.2+: VK_KHR_acceleration_structure
+  // and VK_KHR_ray_query then depend on core features only, and the game's
+  // VK_EXT_buffer_device_address can stay (the KHR one would conflict, VUID-03328).
+  static VkApplicationInfo rt_app;
+  uint32_t api = patched.pApplicationInfo && patched.pApplicationInfo->apiVersion ? patched.pApplicationInfo->apiVersion
+                                                                                  : VK_API_VERSION_1_0;
+  uint32_t want_api = rt_instance_api(api);
+  if (want_api != api) {
+    rt_app = patched.pApplicationInfo ? *patched.pApplicationInfo : VkApplicationInfo{VK_STRUCTURE_TYPE_APPLICATION_INFO};
+    rt_app.apiVersion = want_api;
+    patched.pApplicationInfo = &rt_app;
+    log("[rt] instance API %u.%u -> %u.%u", VK_API_VERSION_MAJOR(api), VK_API_VERSION_MINOR(api),
+        VK_API_VERSION_MAJOR(want_api), VK_API_VERSION_MINOR(want_api));
+    api = want_api;
+  }
   VkResult r = create(&patched, alloc, out);
   if (r != VK_SUCCESS) {
     sl_instance_post(VK_NULL_HANDLE, r);
@@ -65,6 +81,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
   auto* id = new InstanceData;
   id->instance = *out;
   id->gipa = next;
+  id->api_version = api;
 #define LOADI(n) id->n = reinterpret_cast<PFN_vk##n>(next(*out, "vk" #n))
   LOADI(DestroyInstance);
   LOADI(GetPhysicalDeviceQueueFamilyProperties);
@@ -135,18 +152,31 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
   link->u.pLayerInfo = link->u.pLayerInfo->pNext;
 
   // Device-creation patches, chained: Track D's transform feedback first
-  // (geo_capture=1), then Streamline's DLSS-G requirements (extensions,
-  // features, extra queues including a dedicated optical-flow family).
-  VkDeviceCreateInfo geo_ci;
-  const VkDeviceCreateInfo* use_ci = geo_device_create_info(id, phys, ci, &geo_ci);
+  // (geo_capture=1 or rt=1), then hardware RT (rt=1: acceleration structures,
+  // ray query), then Streamline's DLSS-G requirements (extensions, features,
+  // extra queues including a dedicated optical-flow family). If the driver
+  // refuses, RT is dropped first, then the geometry capture.
+  VkDeviceCreateInfo geo_ci, rt_ci;
+  const VkDeviceCreateInfo* geo_use = geo_device_create_info(id, phys, ci, &geo_ci);
+  const VkDeviceCreateInfo* use_ci = rt_device_create_info(id, phys, geo_use, &rt_ci);
+  bool rt_on = use_ci != geo_use;
   VkDeviceCreateInfo patched;
   SlDeviceScratch* sl_scratch = sl_device_pre(id, phys, use_ci, patched);
   auto create = reinterpret_cast<PFN_vkCreateDevice>(gipa(id ? id->instance : VK_NULL_HANDLE, "vkCreateDevice"));
   VkResult r = create(phys, &patched, alloc, out);
+  if (r != VK_SUCCESS && rt_on) {
+    log("[layer] device creation with the ray tracing extensions failed (%d); retrying without", r);
+    sl_device_post(sl_scratch, nullptr, r);
+    rt_on = false;
+    use_ci = geo_use;
+    sl_scratch = sl_device_pre(id, phys, use_ci, patched);
+    r = create(phys, &patched, alloc, out);
+  }
   if (r != VK_SUCCESS && use_ci != ci) {
     log("[layer] device creation with the geometry capture extensions failed (%d); retrying without", r);
     sl_device_post(sl_scratch, nullptr, r);
     use_ci = ci;
+    geo_use = ci;
     sl_scratch = sl_device_pre(id, phys, use_ci, patched);
     r = create(phys, &patched, alloc, out);
   }
@@ -204,7 +234,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     g_devices[dkey(*out)] = dd;
     if (!g_main) g_main = dd;
   }
-  if (dd == g_main) geo_device_created(dd, use_ci != ci_orig);
+  if (dd == g_main) {
+    geo_device_created(dd, geo_use != ci_orig);
+    rt_device_created(dd, rt_on);
+  }
   sl_device_post(sl_scratch, dd, VK_SUCCESS);
   watchdog_start();
   return VK_SUCCESS;
@@ -216,6 +249,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   sl_device_destroy(dd);
   if (dd == g_main) {
     core_shutdown();
+    rt_device_destroyed(dd);
     geo_device_destroyed(dd);
     defer_tick(true);
     g_core_started = false;
@@ -363,6 +397,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     core_on_frame(frame);
     ngx_on_present();
     geo_on_present(queue);
+    rt_on_present();
   }
   trace_on_present(queue, info);
   if (g_headless) {
@@ -413,6 +448,7 @@ static const HookMap& hooks() {
     register_tracker_hooks(h);
     register_cmd_hooks(h);
     register_geo_hooks(h);
+    register_rt_hooks(h);
     return h;
   }();
   return m;

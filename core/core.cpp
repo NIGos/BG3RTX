@@ -86,12 +86,16 @@ static bool compute_refresh(Compute& c, const char* file) {
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
   mci.pCode = blob.code;
+  // A real module: a null module with VkShaderModuleCreateInfo chained needs maintenance5.
+  VkShaderModule mod = VK_NULL_HANDLE;
+  if (vk.CreateShaderModule(dev, &mci, nullptr, &mod) != VK_SUCCESS) return c.pipeline != VK_NULL_HANDLE;
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-  pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, &mci, 0, VK_SHADER_STAGE_COMPUTE_BIT,
-               VK_NULL_HANDLE, "main", nullptr};
+  pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
+               nullptr};
   pci.layout = c.layout;
   VkPipeline p = VK_NULL_HANDLE;
   VkResult r = vk.CreateComputePipelines(dev, VK_NULL_HANDLE, 1, &pci, nullptr, &p);
+  vk.DestroyShaderModule(dev, mod, nullptr);
   if (r != VK_SUCCESS) {
     host->log("%s: pipeline creation failed (%d), keeping the previous one", file, r);
     return c.pipeline != VK_NULL_HANDLE;

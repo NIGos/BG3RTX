@@ -12,7 +12,10 @@ bg3.exe ──► Vulkan loader ──► VK_LAYER_BG3RTX_host (bin/VkLayer_bg3r
                                  │            catches faults, deferred GPU-object destruction
                                  ├─ ngx       hooks _nvngx.dll's Vulkan entry points; game's DLSS SR
                                  │            evaluate → Ray Reconstruction + G-buffer guides (TRACK_A_RR.md)
-                                 └─ (next) streamline: DLSS-G
+                                 ├─ streamline: DLSS-G (TRACK_B_FG.md)
+                                 ├─ geocapture: G-buffer geometry by transform feedback (TRACK_D_RT.md)
+                                 └─ rtscene: rt=1 enables AS + ray query; per-frame BLAS/TLAS
+                                              over the captured geometry, handed to the core
                                  │
                                  ▼  Bg3HostApi / Bg3CoreApi (common/host_api.h, plain C ABI)
                            bg3rtx_core.dll   hot-reloadable: all lighting/RT/GI logic lives here

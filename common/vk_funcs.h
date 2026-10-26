@@ -108,7 +108,15 @@
   X(ResetFences)                               \
   X(CreateSemaphore)                           \
   X(DestroySemaphore)                          \
-  X(BindBufferMemory2)
+  X(BindBufferMemory2)                         \
+  X(CmdUpdateBuffer)                           \
+  X(CmdFillBuffer)                             \
+  X(GetBufferDeviceAddress)                    \
+  X(CreateAccelerationStructureKHR)            \
+  X(DestroyAccelerationStructureKHR)           \
+  X(GetAccelerationStructureBuildSizesKHR)     \
+  X(GetAccelerationStructureDeviceAddressKHR)  \
+  X(CmdBuildAccelerationStructuresKHR)
 
 struct VkDeviceFuncs {
 #define BG3RTX_DECL(name) PFN_vk##name name = nullptr;

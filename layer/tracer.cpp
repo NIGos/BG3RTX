@@ -259,7 +259,10 @@ static bool auto_trigger(uint64_t frame, uint32_t passes, uint32_t draws) {
   // Windows throttles presentation to a few frames per second.
   static ULONGLONG streak_start = 0;
   if (passes) {
-    bool good = passes >= uint32_t(cfg_int("auto_min_passes", 40)) && draws >= uint32_t(cfg_int("auto_min_draws", 2000));
+    // auto_max_draws picks a lighter view, e.g. the docks the -Move pan reaches
+    // after a minute or two (about 780 draws, outdoors, docs/TRACK_D_RT.md).
+    bool good = passes >= uint32_t(cfg_int("auto_min_passes", 40)) && draws >= uint32_t(cfg_int("auto_min_draws", 2000)) &&
+                draws <= uint32_t(cfg_int("auto_max_draws", 1000000));
     if (good && !g_streak) streak_start = GetTickCount64();
     g_streak = good ? g_streak + 1 : 0;
   }

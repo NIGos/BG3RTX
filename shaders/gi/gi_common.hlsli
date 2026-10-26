@@ -59,6 +59,14 @@ struct Push {
   float2 mv_scale;
   uint has_mv;
   uint pad;
+  // Track D ray-traced sun shadows (rt_shadow.hlsl)
+  float rt_bias;      // ray origin offset along the normal, fraction of camera distance
+  float rt_tmax;      // shadow ray length (world units)
+  uint rt_debug;      // 0 off, 1 visibility, 2 game mask (red) vs traced (green), 3 primary-ray depth check
+  float rt_strength;  // how strongly traced visibility darkens the game's sun shadow mask
+  float rt_ao_radius; // ray-traced AO ray length (world units, rt_ao.hlsl)
+  uint rt_ao_rays;
+  uint2 pad2;
 };
 [[vk::push_constant]] Push pc;
 
