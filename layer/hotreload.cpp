@@ -178,6 +178,8 @@ void core_init(DeviceData* dd) {
   g_host.restore_bindings = &restore_bindings;
   g_host.dlss_motion_vectors = &ngx_motion_vectors;
   g_host.rt_scene = &rt_scene;
+  g_host.rt_alpha = &rt_alpha_set;
+  g_host.alloc_host_buffer = &alloc_host_buffer;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);
@@ -258,6 +260,34 @@ void core_on_cmd_end(VkCommandBuffer cmd) {
   std::shared_lock<std::shared_mutex> lock(g_core_mu);
   if (!g_core || g_faulted || !g_core->on_cmd_end) return;
   if (!seh_cmd_end(g_core, cmd)) fault("on_cmd_end");
+}
+
+bool alloc_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer, VkDeviceMemory* memory,
+                       void** mapped) {
+  DeviceData* dd = main_device();
+  *buffer = VK_NULL_HANDLE;
+  *memory = VK_NULL_HANDLE;
+  *mapped = nullptr;
+  VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bci.size = size;
+  bci.usage = usage;
+  if (dd->vk.CreateBuffer(dd->device, &bci, nullptr, buffer) != VK_SUCCESS) return false;
+  VkMemoryRequirements req;
+  dd->vk.GetBufferMemoryRequirements(dd->device, *buffer, &req);
+  VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  mai.allocationSize = req.size;
+  mai.memoryTypeIndex =
+      find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &mai, nullptr, memory) != VK_SUCCESS ||
+      dd->vk.BindBufferMemory(dd->device, *buffer, *memory, 0) != VK_SUCCESS ||
+      dd->vk.MapMemory(dd->device, *memory, 0, VK_WHOLE_SIZE, 0, mapped) != VK_SUCCESS) {
+    dd->vk.DestroyBuffer(dd->device, *buffer, nullptr);
+    if (*memory) dd->vk.FreeMemory(dd->device, *memory, nullptr);
+    *buffer = VK_NULL_HANDLE;
+    *memory = VK_NULL_HANDLE;
+    return false;
+  }
+  return true;
 }
 
 bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out) {

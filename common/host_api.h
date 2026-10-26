@@ -7,7 +7,7 @@
 #include <cstdint>
 #include "vk_funcs.h"
 
-#define BG3RTX_ABI_VERSION 3
+#define BG3RTX_ABI_VERSION 4
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -132,6 +132,19 @@ struct Bg3HostApi {
   // handle is the host's; it stays valid for a few frames after it is
   // replaced, like everything handed to defer_destroy.
   bool (*rt_scene)(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
+
+  // Track D phase 3 (ABI 4): set 1 of every ray query pass. The layout is fixed
+  // for the device's lifetime; the set belongs to the latest scene build and
+  // holds what alpha-tested candidates are tested with (shaders/rt/rt_common.hlsli):
+  // per-draw records, the captured UV soup, the textures and tile caches the
+  // game sampled in that frame, two samplers. `set` is VK_NULL_HANDLE before the
+  // first build. False when hardware RT is not enabled.
+  bool (*rt_alpha)(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
+
+  // A host-visible, coherent, persistently mapped buffer (statistics read back
+  // by the core). Free with defer_destroy (buffer, memory).
+  bool (*alloc_host_buffer)(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer, VkDeviceMemory* memory,
+                            void** mapped);
 };
 
 struct Bg3CoreApi {

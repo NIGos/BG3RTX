@@ -10,11 +10,15 @@
 // shadow ray must never hit it. Such triangles, and those with non-finite
 // vertices (the game parks culled vertices at NaN), collapse to one point:
 // zero area, never hit, but still active, which keeps BLAS refits valid.
+//
+// Phase 3: vertices are `stride` bytes apart (16, or 24 with the UV captured
+// at +16 for alpha testing); only the first 16 bytes are rewritten. The bound
+// range starts at the region being converted (opaque or alpha-tested).
 struct Camera { float4 v[14]; };
 [[vk::binding(0, 0)]] ConstantBuffer<Camera> Cam;
-[[vk::binding(1, 0)]] RWStructuredBuffer<float4> Verts;
+[[vk::binding(1, 0)]] RWByteAddressBuffer Verts;
 
-struct Push { uint tris; uint stride; uint pad0, pad1; };
+struct Push { uint tris; uint step; uint stride; uint pad; };
 [[vk::push_constant]] Push pc;
 
 bool finite4(float4 v) { return all(abs(v) < 1e30); }   // false for NaN and inf too
@@ -31,12 +35,13 @@ void main(uint3 id : SV_DispatchThreadID) {
   float det = dot(r0, c0);
   if (!(abs(det) > 1e-30)) det = 1e-30;
   float inv = 1.0 / det;
+  uint stride = pc.stride ? pc.stride : 16;
 
-  for (uint tri = id.x; tri < pc.tris; tri += pc.stride) {
+  for (uint tri = id.x; tri < pc.tris; tri += pc.step) {
     float3 w[3];
     bool ok = true;
     [unroll] for (uint k = 0; k < 3; ++k) {
-      float4 c = Verts[tri * 3 + k];
+      float4 c = asfloat(Verts.Load4((tri * 3 + k) * stride));
       bool vok = finite4(c);
       float3 b = float3(c.x - t.x, -c.y - t.y, c.w - t.w);
       float3 p = (c0 * b.x + c1 * b.y + c2 * b.z) * inv;
@@ -47,6 +52,6 @@ void main(uint3 id : SV_DispatchThreadID) {
       ok = ok && vok;
     }
     if (!ok) w[1] = w[2] = w[0];
-    [unroll] for (uint k = 0; k < 3; ++k) Verts[tri * 3 + k] = float4(w[k], 1.0);
+    [unroll] for (uint k = 0; k < 3; ++k) Verts.Store4((tri * 3 + k) * stride, asuint(float4(w[k], 1.0)));
   }
 }

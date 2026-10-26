@@ -17,6 +17,7 @@
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 #include "core.h"
 
@@ -25,6 +26,7 @@ namespace {
 struct Snapshot {
   Bg3Binding cam, vp, nrm, alb, mat, dep, ao, shadow, dif, spe;
   VkAccelerationStructureKHR tlas;   // the TLAS the ray-traced passes used (Track D)
+  VkDescriptorSet alpha;             // the host's set 1 for them (alpha-tested geometry, phase 3)
   bool gi;                           // the GI passes ran (gi=1); otherwise only the sun shadow work
 };
 
@@ -49,18 +51,21 @@ struct Push {
   float rt_ao_radius;
   uint32_t rt_ao_rays;
   uint32_t pad2[2];
+  float gi_rt_radius, gi_rt_tol;
+  uint32_t gi_rt_fallback, rt_stats;
 };
-static_assert(sizeof(Push) == 112, "Push must match gi_common.hlsli");
+static_assert(sizeof(Push) == 128, "Push must match gi_common.hlsli");
 
 constexpr uint32_t kBindings = 18;
-// The ray-traced passes add the TLAS (18) and their visibility image (19).
-constexpr uint32_t kRtBindings = kBindings + 2;
+// The ray-traced passes add the TLAS (18), their visibility image (19) and a
+// statistics buffer (20, rt_stats=1).
+constexpr uint32_t kRtBindings = kBindings + 3;
 
 std::mutex g_mu;
 std::unordered_map<VkCommandBuffer, Snapshot> g_pending;   // pre done, post owed
 VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE;
-Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao;
+Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt;
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
 uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0;
 bool g_images_ready = false, g_logged = false;
@@ -163,6 +168,51 @@ void rt_timestamp(VkCommandBuffer cmd, uint32_t index) {
   host->vk->CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_rt_queries, q);
 }
 
+// GI trace pass alone (screen-space march or ray queries), 2 timestamps per frame.
+VkQueryPool g_tr_queries = VK_NULL_HANDLE;
+uint32_t g_tr_slot = 0;
+bool g_tr_written[kRing] = {}, g_tr_rt[kRing] = {};
+std::vector<float> g_tr_ms[2];   // [0] screen-space, [1] ray-traced
+
+void trace_timestamp(VkCommandBuffer cmd, uint32_t index, bool rt = false) {
+  if (!g_tr_queries) {
+    VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    qi.queryCount = kRing * 2;
+    if (host->vk->CreateQueryPool(host->device, &qi, nullptr, &g_tr_queries) != VK_SUCCESS) return;
+  }
+  uint32_t q = g_tr_slot * 2 + index;
+  host->vk->CmdResetQueryPool(cmd, g_tr_queries, q, 1);
+  host->vk->CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_tr_queries, q);
+  if (index == 1) {
+    g_tr_written[g_tr_slot] = true;
+    g_tr_rt[g_tr_slot] = rt;
+    g_tr_slot = (g_tr_slot + 1) % kRing;
+  }
+}
+
+void trace_timing_collect() {
+  if (!g_tr_queries) return;
+  uint32_t old = (g_tr_slot + 1) % kRing;
+  if (!g_tr_written[old]) return;
+  uint64_t t[2];
+  if (host->vk->GetQueryPoolResults(host->device, g_tr_queries, old * 2, 2, sizeof t, t, sizeof(uint64_t),
+                                    VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
+    return;
+  g_tr_written[old] = false;
+  double ms = double(t[1] - t[0]) * g_ns_per_tick * 1e-6;
+  if (ms >= 0 && ms < 1000) g_tr_ms[g_tr_rt[old] ? 1 : 0].push_back(float(ms));
+  for (int k = 0; k < 2; ++k) {
+    auto& v = g_tr_ms[k];
+    if (v.size() < 300) continue;
+    std::sort(v.begin(), v.end());
+    host->log("gi: trace pass (%s, %u rays/sample, half res) GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames)",
+              k ? "ray-traced, gi_rt=1" : "screen-space", uint32_t(host->cfg_int("gi_rays", 2)), v[v.size() / 2],
+              v[v.size() / 10], v[v.size() * 9 / 10], v.size());
+    v.clear();
+  }
+}
+
 bool snapshot(VkCommandBuffer cmd, Snapshot& s) {
   auto q = [&](uint32_t set, uint32_t b, Bg3Binding& o) {
     return host->query_binding(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, set, b, 0, &o);
@@ -215,10 +265,13 @@ VkDescriptorType binding_type(uint32_t i) {
   return i <= 1                ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
          : (i <= 5 || i == 17) ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
          : i == 18             ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR
+         : i == 20             ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
                                : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 }
 
-bool make_layout(uint32_t count, VkDescriptorSetLayout* set_layout, VkPipelineLayout* layout) {
+// `set1`: the host's set layout for the ray-traced passes (alpha-tested geometry).
+bool make_layout(uint32_t count, VkDescriptorSetLayout* set_layout, VkPipelineLayout* layout,
+                 VkDescriptorSetLayout set1 = VK_NULL_HANDLE) {
   VkDescriptorSetLayoutBinding b[kRtBindings];
   for (uint32_t i = 0; i < count; ++i) b[i] = {i, binding_type(i), 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
   VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
@@ -227,9 +280,10 @@ bool make_layout(uint32_t count, VkDescriptorSetLayout* set_layout, VkPipelineLa
   sci.pBindings = b;
   if (host->vk->CreateDescriptorSetLayout(host->device, &sci, nullptr, set_layout) != VK_SUCCESS) return false;
   VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
+  VkDescriptorSetLayout sets[2] = {*set_layout, set1};
   VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-  lci.setLayoutCount = 1;
-  lci.pSetLayouts = set_layout;
+  lci.setLayoutCount = set1 ? 2 : 1;
+  lci.pSetLayouts = sets;
   lci.pushConstantRangeCount = 1;
   lci.pPushConstantRanges = &pc;
   return host->vk->CreatePipelineLayout(host->device, &lci, nullptr, layout) == VK_SUCCESS;
@@ -240,10 +294,14 @@ bool ensure_layout() {
   return make_layout(kBindings, &g_set_layout, &g_layout);
 }
 
-// Only on a device with ray tracing (rt=1): the layout has an AS binding.
+// Only on a device with ray tracing (rt=1): the layout has an AS binding, and
+// set 1 is the host's (alpha-tested geometry, Track D phase 3).
 bool ensure_rt_layout() {
   if (g_rt_layout) return true;
-  return make_layout(kRtBindings, &g_rt_set_layout, &g_rt_layout);
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
+  return make_layout(kRtBindings, &g_rt_set_layout, &g_rt_layout, host_layout);
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
@@ -301,16 +359,82 @@ void image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImag
 
 // Everything the passes need, bound through one push-descriptor layout.
 struct Bound {
-  VkDescriptorBufferInfo cam, vp;
+  VkDescriptorBufferInfo cam, vp, stats;
   VkDescriptorImageInfo img[kRtBindings - 2];
   VkWriteDescriptorSet w[kRtBindings];
   VkWriteDescriptorSetAccelerationStructureKHR as;
   VkAccelerationStructureKHR tlas;
+  VkDescriptorSet alpha;
 };
 
+// Statistics of the ray-traced passes (rt_stats=1), counted on the GPU with
+// wave-reduced atomics into a host-visible ring, read kStatsRing frames later:
+//   [0] pixels with depth, [1..4] primary-ray check (rt_debug=3/5): match, hit
+//   in front, hit behind, miss; [5..7] in front on opaque geometry / a vt
+//   cutout / a tex cutout; [13, 14] behind through a vt / tex cutout;
+//   [8..12] hybrid GI rays: traced, hits, hits shaded from the screen, on
+//   screen but hidden, off screen.
+// Each counter has 64 bins (spread atomics); the slot holds 16 x 64 uints.
+constexpr uint32_t kStatsRing = 8;
+constexpr VkDeviceSize kStatsSlot = 16 * 64 * 4;
+VkBuffer g_stats_buf = VK_NULL_HANDLE;
+VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
+uint32_t* g_stats_map = nullptr;
+uint32_t g_stats_slot = 0;
+uint64_t g_stats_frame[kStatsRing] = {};
+uint64_t g_stats_sum[16] = {};
+uint32_t g_stats_n = 0;
+
+bool stats_init() {
+  if (g_stats_buf) return true;
+  if (!host->alloc_host_buffer) return false;
+  void* m = nullptr;
+  if (!host->alloc_host_buffer(kStatsSlot * kStatsRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                               &g_stats_buf, &g_stats_mem, &m))
+    return false;
+  g_stats_map = static_cast<uint32_t*>(m);
+  return true;
+}
+
+// Picks this frame's slot (cleared on the GPU) after folding in the one written
+// kStatsRing - 1 frames ago.
+void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
+  uint64_t now = host->frame_index();
+  uint32_t slot = uint32_t(now % kStatsRing);
+  if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
+    const uint32_t* c = g_stats_map + slot * (kStatsSlot / 4);
+    for (int i = 0; i < 16; ++i)
+      for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
+    ++g_stats_n;
+  }
+  g_stats_slot = slot;
+  g_stats_frame[slot] = now;
+  host->vk->CmdFillBuffer(cmd, g_stats_buf, VkDeviceSize(slot) * kStatsSlot, kStatsSlot, 0);
+  memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+  if (g_stats_n < 120) return;
+  const uint64_t* t = g_stats_sum;
+  if (t[0]) {
+    double px = double(t[0]);
+    host->log("rt stats (%u frames, alpha test %s): primary-ray check match %.3f%%, in front %.3f%% (opaque geometry "
+              "%.3f, vt cutouts %.3f, tex cutouts %.3f), behind %.3f%% (through vt %.3f, tex %.3f), miss %.3f%%",
+              g_stats_n, alpha_test ? "on" : "off", 100.0 * t[1] / px, 100.0 * t[2] / px, 100.0 * t[5] / px,
+              100.0 * t[6] / px, 100.0 * t[7] / px, 100.0 * t[3] / px, 100.0 * t[13] / px, 100.0 * t[14] / px,
+              100.0 * t[4] / px);
+  }
+  if (t[8]) {
+    double r = double(t[8]), h = double(t[9] ? t[9] : 1);
+    host->log("rt stats (%u frames): hybrid GI %.2fM rays/frame, %.1f%% hit; of the hits %.1f%% shaded from the screen, "
+              "%.1f%% on screen but hidden, %.1f%% off screen",
+              g_stats_n, r / g_stats_n * 1e-6, 100.0 * t[9] / r, 100.0 * t[10] / h, 100.0 * t[11] / h, 100.0 * t[12] / h);
+  }
+  std::memset(g_stats_sum, 0, sizeof g_stats_sum);
+  g_stats_n = 0;
+}
+
 // Adds the TLAS and the visibility image (bindings 18, 19) for the RT passes.
-void bind_rt(Bound& b, VkAccelerationStructureKHR tlas) {
+void bind_rt(Bound& b, VkAccelerationStructureKHR tlas, VkDescriptorSet alpha) {
   b.tlas = tlas;
+  b.alpha = alpha;
   b.as = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
   b.as.accelerationStructureCount = 1;
   b.as.pAccelerationStructures = &b.tlas;
@@ -325,6 +449,12 @@ void bind_rt(Bound& b, VkAccelerationStructureKHR tlas) {
   b.w[19].descriptorCount = 1;
   b.w[19].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
   b.w[19].pImageInfo = &b.img[17];
+  b.stats = {g_stats_buf, VkDeviceSize(g_stats_slot) * kStatsSlot, kStatsSlot};
+  b.w[20] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+  b.w[20].dstBinding = 20;
+  b.w[20].descriptorCount = 1;
+  b.w[20].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  b.w[20].pBufferInfo = &b.stats;
 }
 
 void bind_all(Bound& b, const Snapshot& s) {
@@ -385,6 +515,9 @@ Push make_push() {
   pc.rt_strength = host->cfg_float("rt_strength", 1.0f);
   pc.rt_ao_radius = host->cfg_float("rt_ao_radius", 1.0f);
   pc.rt_ao_rays = uint32_t((std::max)(host->cfg_int("rt_ao_rays", 2), 1));
+  pc.gi_rt_radius = (std::max)(host->cfg_float("gi_rt_radius", 1.0f), 0.01f);
+  pc.gi_rt_tol = host->cfg_float("gi_rt_depth_tol", 0.03f);
+  pc.gi_rt_fallback = uint32_t(host->cfg_int("gi_rt_fallback", 0));
   return pc;
 }
 
@@ -393,6 +526,7 @@ void dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w
   VkPipelineLayout layout = rt ? g_rt_layout : g_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p.pipeline);
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, rt ? kRtBindings : kBindings, b.w);
+  if (rt) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 1, &b.alpha, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
 }
@@ -405,11 +539,14 @@ constexpr VkPipelineStageFlags kAll = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 // before presenting the previous one and the lighting after, so the build is
 // usually stamped one frame earlier. The GPU still runs it first (submission
 // order), and the handle is the same object every frame.
-VkAccelerationStructureKHR rt_tlas() {
-  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 0) && !host->cfg_int("rt_ao", 0))) return VK_NULL_HANDLE;
+VkAccelerationStructureKHR rt_tlas(VkDescriptorSet* alpha) {
+  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 0) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 0)))
+    return VK_NULL_HANDLE;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+  VkDescriptorSetLayout layout;
   uint64_t built = 0, now = host->frame_index();
-  if (!host->rt_scene(&tlas, &built) || !tlas || built + 1 < now) {
+  if (!host->rt_scene(&tlas, &built) || !tlas || built + 1 < now || !host->rt_alpha || !host->rt_alpha(&layout, alpha) ||
+      !*alpha) {
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
   }
@@ -453,12 +590,16 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   bind_all(b, s);
   Push pc = make_push();
   // Track D: the frame's TLAS for the ray-traced passes.
-  VkAccelerationStructureKHR tlas = rt_tlas();
+  VkDescriptorSet alpha = VK_NULL_HANDLE;
+  VkAccelerationStructureKHR tlas = rt_tlas(&alpha);
   if (tlas && (!ensure_rt_layout() || !refresh(g_rt_shadow, "gi/rt_shadow.hlsl", g_rt_layout) ||
-               !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) || !refresh(g_rt_ao, "gi/rt_ao.hlsl", g_rt_layout)))
-    tlas = VK_NULL_HANDLE;
+               !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) || !refresh(g_rt_ao, "gi/rt_ao.hlsl", g_rt_layout) ||
+               !refresh(g_trace_rt, "gi/gi_trace_rt.hlsl", g_rt_layout) || !stats_init()))
+    tlas = VK_NULL_HANDLE;   // (the statistics buffer is binding 20 and must exist)
   s.gi = host->cfg_int("gi", 0) != 0;
-  const bool rt_ao = tlas && s.gi && host->cfg_int("rt_ao", 0);
+  // Hybrid GI: ray queries replace the screen-space march (and do the AO rays too).
+  const bool gi_rt = tlas && s.gi && host->cfg_int("gi_rt", 0);
+  const bool rt_ao = tlas && s.gi && !gi_rt && host->cfg_int("rt_ao", 0);
   const bool rt_shadows = tlas && s.shadow.view && host->cfg_int("rt_shadows", 0);
   if (tlas) {
     if (!g_rt_queries) {
@@ -468,10 +609,13 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
       host->vk->CreateQueryPool(host->device, &qi, nullptr, &g_rt_queries);
     }
     rt_timing_collect();
-    bind_rt(b, tlas);
+    pc.rt_stats = host->cfg_int("rt_stats", 0) ? 1u : 0u;
+    if (pc.rt_stats) stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0);
+    bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
-      host->log("rt: first traced frame at %ux%u (TLAS %p, shadows %d, AO %d)", g_w, g_h, (void*)tlas, rt_shadows, rt_ao);
+      host->log("rt: first traced frame at %ux%u (TLAS %p, shadows %d, AO %d, GI %d)", g_w, g_h, (void*)tlas, rt_shadows,
+                rt_ao, gi_rt);
     }
   }
   bool rt_started = false;
@@ -482,7 +626,15 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // Depth, normals and AO come from earlier graphics passes.
   memory_barrier(cmd, kAll, kCS);
   if (s.gi) {
-    dispatch(cmd, g_trace, b, pc, g_hw, g_hh);
+    trace_timing_collect();
+    trace_timestamp(cmd, 0);
+    if (gi_rt) {
+      rt_begin();
+      dispatch(cmd, g_trace_rt, b, pc, g_hw, g_hh, true);
+    } else {
+      dispatch(cmd, g_trace, b, pc, g_hw, g_hh);
+    }
+    trace_timestamp(cmd, 1, gi_rt);
     memory_barrier(cmd, kCS, kCS);
     if (rt_ao) {
       // Ray-traced visibility replaces the screen-space one before accumulation.
@@ -505,6 +657,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // Ray-traced sun shadows (Track D) when the host has a scene, otherwise
   // screen-space contact shadows; both fold into the game's sun shadow mask.
   s.tlas = tlas;   // the post pass's debug views
+  s.alpha = alpha;
   if (rt_shadows) {
     rt_begin();
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
@@ -533,9 +686,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   memory_barrier(cmd, kCS, kCS);
   timestamp(cmd, 2);
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
-  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 4) {
+  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 5) {
     memory_barrier(cmd, kCS, kCS);
-    bind_rt(b, s.tlas);
+    bind_rt(b, s.tlas, s.alpha);
     dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);
   }
   timestamp(cmd, 3);
@@ -634,7 +787,8 @@ void gi_on_frame(uint64_t) {}
 void gi_release() {
   std::lock_guard<std::mutex> lock(g_mu);
   release_images();
-  for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao}) {
+  for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
+                  &g_trace_rt}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
     *p = Pipe{};
   }
@@ -642,6 +796,14 @@ void gi_release() {
   g_queries = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_rt_queries);
   g_rt_queries = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_tr_queries);
+  g_tr_queries = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_stats_buf);
+  host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_stats_mem);
+  g_stats_buf = VK_NULL_HANDLE;
+  g_stats_mem = VK_NULL_HANDLE;
+  g_stats_map = nullptr;
+  std::memset(g_stats_frame, 0, sizeof g_stats_frame);
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_layout);
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_set_layout);
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rt_layout);

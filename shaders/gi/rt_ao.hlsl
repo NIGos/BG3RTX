@@ -4,9 +4,9 @@
 // geometry (TLAS, layer/rtscene.cpp); the bounce (rgb) stays screen-space.
 // The temporal pass and gi_ao_apply then fold it into the game's AO as before,
 // so off-screen and behind-the-surface occluders now count.
+// (With gi_rt=1 the hybrid trace, gi_trace_rt.hlsl, does this itself.)
 #include "gi_common.hlsli"
-
-[[vk::binding(18, 0)]] RaytracingAccelerationStructure gScene;
+#include "../rt/rt_common.hlsli"
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -23,23 +23,18 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 N = to_lighting_space(decode_normal(enc));
   float dist = length(P);
   float3 o = P + N * (dist * pc.rt_bias);
+  float pa = pixel_angle(uv);
+  RtCone cone = {dist * pa * 2.0, pa * 2.0};   // half resolution
 
   uint seed = hash(id.x * 7307u + id.y * 3323u + pc.frame * 15013u);
   float occ = 0.0;
   for (uint r = 0; r < pc.rt_ao_rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
-    RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> q;
-    RayDesc ray;
-    ray.Origin = o;
-    ray.Direction = dir;
-    ray.TMin = 0.0;
-    ray.TMax = pc.rt_ao_radius;
-    q.TraceRayInline(gScene, 0, 0xFF, ray);
-    while (q.Proceed()) {}
-    if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
+    float t = rt_closest(o, dir, pc.rt_ao_radius, cone);
+    if (t >= 0.0) {
       // Closer occluders count more: a smooth falloff to zero at the radius.
-      float t = q.CommittedRayT() / pc.rt_ao_radius;
-      occ += 1.0 - t * t;
+      float k = t / pc.rt_ao_radius;
+      occ += 1.0 - k * k;
     }
   }
   float4 g = giRaw[id];

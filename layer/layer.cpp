@@ -237,6 +237,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
   if (dd == g_main) {
     geo_device_created(dd, geo_use != ci_orig);
     rt_device_created(dd, rt_on);
+    if (rt_on && rt_enabled()) alpha_device_created(dd);
   }
   sl_device_post(sl_scratch, dd, VK_SUCCESS);
   watchdog_start();
@@ -249,6 +250,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   sl_device_destroy(dd);
   if (dd == g_main) {
     core_shutdown();
+    alpha_device_destroyed(dd);
     rt_device_destroyed(dd);
     geo_device_destroyed(dd);
     defer_tick(true);

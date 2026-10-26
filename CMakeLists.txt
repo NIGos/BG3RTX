@@ -35,6 +35,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/ngx.cpp
   layer/geocapture.cpp
   layer/rtscene.cpp
+  layer/alphatest.cpp
   layer/streamline.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)

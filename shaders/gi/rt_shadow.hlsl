@@ -6,37 +6,15 @@
 // Space: the TLAS holds camera-relative world positions (W of the G-buffer
 // VS), the lighting reconstructs P = ray(uv) * linear depth in the same space
 // (checked with rt_debug=3), and cam.v0 points towards the sun.
+// Phase 3: alpha-tested geometry (grates, chains, foliage) lets light through
+// where the game's own alpha test discards (rt_common.hlsli).
 #include "gi_common.hlsli"
+#include "../rt/rt_common.hlsli"
 
-[[vk::binding(18, 0)]] RaytracingAccelerationStructure gScene;
 // r: traced sun visibility, g: the game's sun mask before the fold,
-// b: primary-ray check (1 match, 0.66 hit in front, 0.33 hit behind, 0 miss; rt_debug=3 only)
+// b: primary-ray check (1 match, 0.66 hit in front, 0.33 hit behind, 0 miss; rt_debug=3/5 only)
+// a: which geometry an in-front/behind error comes from (x3: 1 alpha vt, 2 alpha tex, 3 opaque)
 [[vk::binding(19, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> rtVis;
-
-float shadow_ray(float3 o, float3 dir, float tmax) {
-  RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> q;
-  RayDesc r;
-  r.Origin = o;
-  r.Direction = dir;
-  r.TMin = 0.0;
-  r.TMax = tmax;
-  q.TraceRayInline(gScene, 0, 0xFF, r);
-  q.Proceed();
-  return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0 : 1.0;
-}
-
-// Closest hit distance along a ray, or -1.
-float closest_hit(float3 o, float3 dir, float tmax) {
-  RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> q;
-  RayDesc r;
-  r.Origin = o;
-  r.Direction = dir;
-  r.TMin = 0.0;
-  r.TMax = tmax;
-  q.TraceRayInline(gScene, 0, 0xFF, r);
-  while (q.Proceed()) {}
-  return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? q.CommittedRayT() : -1.0;
-}
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -53,19 +31,40 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float2 uv = (float2(fp) + 0.5) / float2(pc.full);
   float3 P = ray_at(uv) * d;
   float dist = length(P);
+  float pa = pixel_angle(uv);
 
   float vis = 0.0;
   if (dot(N, L) > 0.0) {
     float3 o = P + N * (dist * pc.rt_bias);
-    vis = shadow_ray(o, L, pc.rt_tmax);
+    RtCone cone = {dist * pa, pa};
+    vis = rt_occluded(o, L, pc.rt_tmax, cone) ? 0.0 : 1.0;
   }
-  float check = 0.0;
-  if (pc.rt_debug == 3) {
-    float t = closest_hit(float3(0, 0, 0), P / dist, dist * 1.5 + 1.0);
-    float rel = t / dist - 1.0;
-    check = t < 0.0 ? 0.0 : abs(rel) < 0.005 ? 1.0 : rel < 0.0 ? 0.66 : 0.33;
+  float check = 0.0, fam = 0.0;
+  if (pc.rt_debug == 3 || pc.rt_debug == 5) {
+    RtCone cone = {0.0, pa};
+    RtDebugHit h = rt_closest_debug(float3(0, 0, 0), P / dist, dist * 1.5 + 1.0, cone);
+    float rel = h.t / dist - 1.0;
+    check = h.t < 0.0 ? 0.0 : abs(rel) < 0.005 ? 1.0 : rel < 0.0 ? 0.66 : 0.33;
+    bool front = check > 0.5 && check < 0.9, behind = check > 0.2 && check < 0.5;
+    // Who is to blame: in front, the geometry hit (opaque, or an alpha-tested
+    // draw of family 1/2); behind, the nearest alpha-tested candidate let through.
+    uint who = front ? (h.geom == 0 ? 3u : h.hit_kind) : behind ? h.near_kind : 0u;
+    fam = float(who) / 3.0;
+    if (pc.rt_stats != 0) {
+      uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
+      stat_add(0, true, bin);
+      stat_add(1, check > 0.9, bin);
+      stat_add(2, front, bin);
+      stat_add(3, behind, bin);
+      stat_add(4, check < 0.2, bin);
+      stat_add(5, front && who == 3, bin);   // in front: opaque geometry
+      stat_add(6, front && who == 1, bin);   // in front: alpha-tested, virtual texture
+      stat_add(7, front && who == 2, bin);   // in front: alpha-tested, plain texture
+      stat_add(13, behind && who == 1, bin); // behind: passed through a vt cutout
+      stat_add(14, behind && who == 2, bin); // behind: passed through a tex cutout
+    }
   }
-  rtVis[fp] = float4(vis, mask, check, 1);
+  rtVis[fp] = float4(vis, mask, check, fam);
   // Only ever darkens: off-screen casters still come from the game's cascades.
   if (mask > 0.0 && pc.rt_debug == 0) gSunShadow[fp] = mask * lerp(1.0, vis, saturate(pc.rt_strength));
 }

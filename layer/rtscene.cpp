@@ -61,6 +61,9 @@ Buf g_blas_buf, g_tlas_buf, g_scratch, g_inst;
 VkAccelerationStructureKHR g_blas = VK_NULL_HANDLE, g_tlas = VK_NULL_HANDLE;
 VkDeviceAddress g_blas_addr = 0;
 uint32_t g_blas_capacity = 0;     // primitives the BLAS storage was sized for
+uint32_t g_alpha_capacity = 0;    // ... in the alpha-tested geometry
+uint32_t g_blas_geoms = 0;
+uint32_t g_built_aprims = 0;
 VkBuildAccelerationStructureFlagsKHR g_blas_flags = 0;
 bool g_blas_valid = false;        // built at least once with the current storage
 uint32_t g_built_prims = 0;
@@ -86,7 +89,7 @@ uint32_t g_next_slot = 0;
 struct Acc { std::vector<float> conv, blas, tlas; };
 Acc g_acc[2];                      // [0] rebuild, [1] refit
 uint32_t g_n_rebuild = 0, g_n_refit = 0, g_n_frames = 0;
-uint64_t g_prims_sum = 0;
+uint64_t g_prims_sum = 0, g_aprims_sum = 0, g_alpha_draws_sum = 0;
 
 const VkBaseInStructure* find_in(const void* chain, VkStructureType t) {
   for (auto p = static_cast<const VkBaseInStructure*>(chain); p; p = p->pNext)
@@ -189,15 +192,17 @@ bool ensure_pipeline() {
   return true;
 }
 
-VkAccelerationStructureGeometryKHR blas_geometry(VkDeviceAddress verts, uint32_t prims) {
+// Geometry 0: the opaque soup. Geometry 1 (rt_alpha): the alpha-tested draws,
+// not opaque, so ray queries see them as candidates and test their alpha.
+VkAccelerationStructureGeometryKHR blas_geometry(VkDeviceAddress verts, uint32_t prims, uint32_t stride, bool opaque) {
   VkAccelerationStructureGeometryKHR g{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
   g.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-  g.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+  g.flags = opaque ? VK_GEOMETRY_OPAQUE_BIT_KHR : VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
   auto& t = g.geometry.triangles;
   t.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
   t.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
   t.vertexData.deviceAddress = verts;
-  t.vertexStride = 16;
+  t.vertexStride = stride;
   t.maxVertex = prims * 3 ? prims * 3 - 1 : 0;
   t.indexType = VK_INDEX_TYPE_NONE_KHR;
   return g;
@@ -221,20 +226,26 @@ bool grow_scratch(VkDeviceSize need) {
 
 VkDeviceAddress scratch_addr() { return (g_scratch.addr + g_scratch_align - 1) & ~(g_scratch_align - 1); }
 
-// BLAS storage for at least `prims` primitives with `flags`.
-bool ensure_blas(uint32_t prims, VkBuildAccelerationStructureFlagsKHR flags, VkDeviceAddress verts) {
-  if (g_blas && prims <= g_blas_capacity && flags == g_blas_flags) return true;
+// BLAS storage for at least `prims` opaque and `aprims` alpha-tested primitives
+// with `flags` (`geoms` = 2 with the alpha geometry).
+bool ensure_blas(uint32_t prims, uint32_t aprims, uint32_t geoms, uint32_t stride, VkBuildAccelerationStructureFlagsKHR flags,
+                 VkDeviceAddress verts, VkDeviceAddress averts) {
+  if (g_blas && prims <= g_blas_capacity && aprims <= g_alpha_capacity && geoms == g_blas_geoms && flags == g_blas_flags)
+    return true;
   DeviceData* dd = g_dd;
   uint32_t cap = (std::max)(prims + prims / 4, 65536u);
-  VkAccelerationStructureGeometryKHR g = blas_geometry(verts, cap);
+  uint32_t acap = geoms > 1 ? (std::max)(aprims + aprims / 4, 16384u) : 0;
+  VkAccelerationStructureGeometryKHR g[2] = {blas_geometry(verts, cap, stride, true),
+                                             blas_geometry(averts, acap, stride, false)};
+  uint32_t caps[2] = {cap, acap};
   VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
   bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
   bi.flags = flags;
   bi.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-  bi.geometryCount = 1;
-  bi.pGeometries = &g;
+  bi.geometryCount = geoms;
+  bi.pGeometries = g;
   VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-  dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, &cap, &sz);
+  dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, caps, &sz);
   if (g_blas) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_blas));
   g_blas = VK_NULL_HANDLE;
   g_blas_valid = false;
@@ -257,8 +268,11 @@ bool ensure_blas(uint32_t prims, VkBuildAccelerationStructureFlagsKHR flags, VkD
   ai.accelerationStructure = g_blas;
   g_blas_addr = dd->vk.GetAccelerationStructureDeviceAddressKHR(dd->device, &ai);
   g_blas_capacity = cap;
+  g_alpha_capacity = acap;
+  g_blas_geoms = geoms;
   g_blas_flags = flags;
-  log("[rt] BLAS storage for %u primitives: %llu MB, scratch build %llu MB / update %llu MB (flags 0x%x)", cap,
+  log("[rt] BLAS storage for %u + %u alpha-tested primitives: %llu MB, scratch build %llu MB / update %llu MB (flags 0x%x)",
+      cap, acap,
       (unsigned long long)(sz.accelerationStructureSize >> 20), (unsigned long long)(sz.buildScratchSize >> 20),
       (unsigned long long)(sz.updateScratchSize >> 20), flags);
   return true;
@@ -300,7 +314,7 @@ void release_all() {
   g_blas = g_tlas = VK_NULL_HANDLE;
   for (Buf* b : {&g_blas_buf, &g_tlas_buf, &g_scratch, &g_inst})
     if (b->b) free_buf(*b);
-  g_blas_capacity = 0;
+  g_blas_capacity = g_alpha_capacity = g_blas_geoms = 0;
   g_blas_valid = false;
 }
 
@@ -363,6 +377,11 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   std::string chain;
   for (auto p = static_cast<const VkBaseInStructure*>(ci->pNext); p; p = p->pNext) chain += " " + std::to_string(p->sType);
   log("[rt] game device create chain:%s", chain.c_str());
+  // Track D phase 3 indexes sampled-image arrays non-uniformly (rt_common.hlsli).
+  if (auto* di = reinterpret_cast<const VkPhysicalDeviceDescriptorIndexingFeatures*>(
+          find_in(ci->pNext, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES)))
+    log("[rt] game's descriptor indexing: sampledImageArrayNonUniform %d, runtimeArray %d, partiallyBound %d",
+        di->shaderSampledImageArrayNonUniformIndexing, di->runtimeDescriptorArray, di->descriptorBindingPartiallyBound);
   g_ext_names.assign(ci->ppEnabledExtensionNames, ci->ppEnabledExtensionNames + ci->enabledExtensionCount);
   auto listed = [&](const char* e) {
     for (auto x : g_ext_names)
@@ -520,12 +539,18 @@ void rt_before_capture(VkCommandBuffer cmd) {
   g_dd->vk.CmdPipelineBarrier(cmd, kAS | kCS, kXFB, 0, 1, &mb, 0, nullptr, 0, nullptr);
 }
 
-void rt_after_capture(VkCommandBuffer cmd, VkBuffer xfb, VkDeviceSize bytes, VkBuffer ubo, VkDeviceSize ubo_offset,
-                      uint64_t signature, uint32_t draws) {
+void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   if (!g_rt) return;
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_last_frame == frame_index()) return;
-  uint32_t prims = uint32_t(bytes / 48);
+  const VkBuffer xfb = cap.xfb, ubo = cap.ubo;
+  const VkDeviceSize ubo_offset = cap.ubo_offset;
+  const uint64_t signature = cap.signature;
+  const uint32_t draws = cap.draws, stride = cap.stride, tri_bytes = 3 * cap.stride;
+  const uint32_t prims = uint32_t(cap.opaque_bytes / tri_bytes), aprims = uint32_t(cap.alpha_bytes / tri_bytes);
+  // Two geometries whenever the capture has an alpha region (rt_alpha=1), so the
+  // BLAS layout does not change with the number of alpha-tested draws.
+  const uint32_t geoms = cap.alpha_region ? 2 : 1;
   if (!prims || !ubo || !xfb) {
     static int warned = 0;
     if (warned++ < 5) log("[rt] frame %llu: nothing to build (%u triangles, camera UBO %s)",
@@ -538,17 +563,19 @@ void rt_after_capture(VkCommandBuffer cmd, VkBuffer xfb, VkDeviceSize bytes, VkB
       (cfg_int("rt_fast_trace", 0) ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
                                    : VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR) |
       (want_refit ? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR : 0);
-  VkDeviceAddress verts = buffer_address(xfb);
-  if (!ensure_tlas() || !ensure_blas(prims, flags, verts)) {
+  VkDeviceAddress verts = buffer_address(xfb), averts = verts + cap.alpha_base;
+  if (!ensure_tlas() || !ensure_blas(prims, aprims, geoms, stride, flags, verts, averts)) {
     g_failed = true;
     log("[rt] acceleration structure allocation failed; scene building stopped");
     release_all();
     return;
   }
+  // Track D phase 3: the alpha-tested draws' records and textures.
+  alpha_commit(cmd, xfb, cap.alpha_base, geoms == 2 ? VkDeviceSize(aprims) * tri_bytes : 0);
   const DeviceData* dd = g_dd;
   int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
-  bool refit = want_refit && g_blas_valid && prims == g_built_prims && signature == g_built_sig &&
-               int(g_since_build) < rebuild_frames;
+  bool refit = want_refit && g_blas_valid && prims == g_built_prims && aprims == g_built_aprims &&
+               signature == g_built_sig && int(g_since_build) < rebuild_frames;
 
   int slot = -1;
   if (g_qp) {
@@ -567,13 +594,20 @@ void rt_after_capture(VkCommandBuffer cmd, VkBuffer xfb, VkDeviceSize bytes, VkB
   VkAccelerationStructureInstanceKHR inst{};
   inst.transform.matrix[0][0] = inst.transform.matrix[1][1] = inst.transform.matrix[2][2] = 1.0f;
   inst.mask = 0xFF;
-  inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
+  // Alpha-tested geometry is tested in the ray queries; rt_alpha_test=0 makes
+  // the instance opaque again (live A/B switch, no rebuild).
+  const bool alpha_live = geoms == 2 && cfg_int("rt_alpha_test", 1) != 0;
+  inst.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
+               (alpha_live ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
   inst.accelerationStructureReference = g_blas_addr;
   dd->vk.CmdUpdateBuffer(cmd, g_inst.b, 0, sizeof inst, &inst);
 
-  // 1. clip -> camera-relative world, in place.
-  {
-    VkDescriptorBufferInfo in{ubo, ubo_offset, 224}, out{xfb, 0, VkDeviceSize(prims) * 48};
+  // 1. clip -> camera-relative world, in place: the opaque region, then the alpha one.
+  for (uint32_t region = 0; region < geoms; ++region) {
+    const uint32_t n = region ? aprims : prims;
+    if (!n) continue;
+    const VkDeviceSize base = region ? cap.alpha_base : 0;
+    VkDescriptorBufferInfo in{ubo, ubo_offset, 224}, out{xfb, base, VkDeviceSize(n) * tri_bytes};
     VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
     w[0].dstBinding = 0;
     w[0].descriptorCount = 1;
@@ -583,8 +617,8 @@ void rt_after_capture(VkCommandBuffer cmd, VkBuffer xfb, VkDeviceSize bytes, VkB
     w[1].descriptorCount = 1;
     w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     w[1].pBufferInfo = &out;
-    uint32_t groups = (std::min)((prims + 255) / 256, 65535u);
-    uint32_t pc[4] = {prims, groups * 256, 0, 0};
+    uint32_t groups = (std::min)((n + 255) / 256, 65535u);
+    uint32_t pc[4] = {n, groups * 256, stride, 0};
     dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pipe);
     dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pl, 0, 2, w);
     dd->vk.CmdPushConstants(cmd, g_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
@@ -595,18 +629,19 @@ void rt_after_capture(VkCommandBuffer cmd, VkBuffer xfb, VkDeviceSize bytes, VkB
 
   // 2. BLAS
   {
-    VkAccelerationStructureGeometryKHR g = blas_geometry(verts, prims);
+    VkAccelerationStructureGeometryKHR g[2] = {blas_geometry(verts, prims, stride, true),
+                                               blas_geometry(averts, aprims, stride, false)};
     VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
     bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
     bi.flags = g_blas_flags;
     bi.mode = refit ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
     bi.srcAccelerationStructure = refit ? g_blas : VK_NULL_HANDLE;
     bi.dstAccelerationStructure = g_blas;
-    bi.geometryCount = 1;
-    bi.pGeometries = &g;
+    bi.geometryCount = geoms;
+    bi.pGeometries = g;
     bi.scratchData.deviceAddress = scratch_addr();
-    VkAccelerationStructureBuildRangeInfoKHR range{prims, 0, 0, 0};
-    const VkAccelerationStructureBuildRangeInfoKHR* ranges = &range;
+    VkAccelerationStructureBuildRangeInfoKHR range[2] = {{prims, 0, 0, 0}, {aprims, 0, 0, 0}};
+    const VkAccelerationStructureBuildRangeInfoKHR* ranges = range;
     dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &bi, &ranges);
   }
   // The TLAS build reads the BLAS and reuses the scratch memory.
@@ -642,15 +677,18 @@ void rt_after_capture(VkCommandBuffer cmd, VkBuffer xfb, VkDeviceSize bytes, VkB
   }
   ++g_n_frames;
   g_prims_sum += prims;
+  g_aprims_sum += aprims;
+  g_alpha_draws_sum += cap.alpha_draws;
   g_blas_valid = true;
   g_built_prims = prims;
+  g_built_aprims = aprims;
   g_built_sig = signature;
   g_last_frame = frame_index();
   g_tlas_frame = frame_index();
   if (!g_logged_first) {
     g_logged_first = true;
-    log("[rt] first scene: %u draws, %u triangles, camera UBO %p+%llu", draws, prims, (void*)ubo,
-        (unsigned long long)ubo_offset);
+    log("[rt] first scene: %u draws (%u alpha-tested), %u + %u triangles, camera UBO %p+%llu, stride %u", draws,
+        cap.alpha_draws, prims, aprims, (void*)ubo, (unsigned long long)ubo_offset, stride);
   }
 }
 
@@ -703,10 +741,12 @@ void rt_on_present() {
         k ? "BLAS refit" : "BLAS rebuild", n, c, b, t, c + b + t);
     a = Acc{};
   }
-  log("[rt] last %u frames: %u rebuilds, %u refits, %.2fM triangles average, BLAS capacity %u", g_n_frames, g_n_rebuild,
-      g_n_refit, double(g_prims_sum) / g_n_frames * 1e-6, g_blas_capacity);
+  log("[rt] last %u frames: %u rebuilds, %u refits, %.2fM triangles average (+%.3fM alpha-tested in %.1f draws), BLAS "
+      "capacity %u + %u",
+      g_n_frames, g_n_rebuild, g_n_refit, double(g_prims_sum) / g_n_frames * 1e-6, double(g_aprims_sum) / g_n_frames * 1e-6,
+      double(g_alpha_draws_sum) / g_n_frames, g_blas_capacity, g_alpha_capacity);
   g_n_frames = g_n_rebuild = g_n_refit = 0;
-  g_prims_sum = 0;
+  g_prims_sum = g_aprims_sum = g_alpha_draws_sum = 0;
 }
 
 // Diagnostic: who allocates memory with VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT

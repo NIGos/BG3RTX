@@ -256,6 +256,8 @@ void core_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* info);
 bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
                    Bg3Binding* out);
 bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out);
+bool alloc_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer, VkDeviceMemory* memory,
+                       void** mapped);
 void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp);
 bool ngx_motion_vectors(VkImage* image, VkImageView* view, VkFormat* format, float scale[2]);
 uint32_t find_memory_type(DeviceData* dd, uint32_t bits, VkMemoryPropertyFlags want);
@@ -310,10 +312,56 @@ bool rt_alloc_device_address();            // memory for BDA buffers needs VK_ME
 void rt_before_capture(VkCommandBuffer cmd);   // outside the G-buffer pass, before it begins
 // After the G-buffer pass, outside it: XFB clip positions -> camera-relative
 // world in place, BLAS build or refit, TLAS build.
-void rt_after_capture(VkCommandBuffer cmd, VkBuffer xfb, VkDeviceSize bytes, VkBuffer ubo, VkDeviceSize ubo_offset,
-                      uint64_t signature, uint32_t draws);
+// The soup in `xfb`: opaque triangles from 0, alpha-tested ones (rt_alpha=1)
+// from alpha_base; `stride` bytes per vertex (16 position, 24 with the UV).
+struct RtCapture {
+  VkBuffer xfb;
+  VkDeviceSize opaque_bytes, alpha_base, alpha_bytes;
+  uint32_t stride;
+  bool alpha_region;         // the capture reserved an alpha region (rt_alpha=1)
+  VkBuffer ubo;
+  VkDeviceSize ubo_offset;
+  uint64_t signature;
+  uint32_t draws, alpha_draws;
+};
+void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
 void rt_on_present();
+
+// ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
+// One line of shaders/rt/alpha_fs.txt (scripts/alpha_table.py).
+struct AlphaFs {
+  uint8_t kind;              // 1 virtual texture, 2 plain texture
+  int8_t uv;                 // FS input location of the texture coordinate
+  float cut;                 // discard below this alpha
+  uint8_t ubo_set, ubo_bind; // material UBO
+  bool has_ubo, has_scale;
+  uint32_t p0, idx, scale;   // UBO offsets: uv transform vec4[2], tile-set index (vt); uv scale vec2 (tex)
+  uint8_t ssbo_set, ssbo_bind;   // tile-set constants (vt)
+  uint8_t tex_set, tex_bind;     // indirection (vt) or the texture (tex)
+  uint8_t cache_set, cache_bind; // tile cache array (vt)
+  uint8_t channel;           // vt: tile-set column of the albedo layer; tex: component holding alpha
+  float k;                   // tex: constant uv scale
+};
+// Per alpha-tested draw, as read by shaders/rt/rt_common.hlsli (208 bytes).
+struct AlphaRec {
+  uint32_t first_tri, tris, kind, tex;   // triangles in the alpha geometry; kind; texture slot
+  uint32_t cache, channel;               // tile cache slot; column / component
+  float cut, pad0;
+  float scale[2], pad1[2];
+  float p0[4], p1[4];                    // vt: uv transform
+  float t[32];                           // vt: the SSBO entry, two row-major mat4
+};
+static_assert(sizeof(AlphaRec) == 208, "AlphaRec must match rt_common.hlsli");
+void alpha_device_created(DeviceData* dd);
+void alpha_device_destroyed(DeviceData* dd);
+bool alpha_lookup(uint64_t fs_hash, AlphaFs* out);   // copied: the table may be reloaded
+void alpha_begin_capture();
+bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, uint32_t tris);
+uint32_t alpha_record_count();
+// Outside the pass: uploads the capture's records and writes its descriptor set.
+void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, VkDeviceSize alpha_bytes);
+bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
 
 uint64_t frame_index();
 void* persist(const char* key, size_t size);

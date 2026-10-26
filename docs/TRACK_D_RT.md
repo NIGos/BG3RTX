@@ -528,3 +528,90 @@ Settings (`bg3rtx.ini`):
 
 The log reports `[rt] scene build GPU …` (convert, BLAS, TLAS per rebuild/refit),
 `[rt] last N frames: … rebuilds, … refits` and `[core] rt passes: GPU cost …`.
+
+## 7. Phase 3 (2026-10-26): alpha-tested geometry and hybrid RT GI — PAUSED, WIP
+
+Status: both parts work in game behind switches that are **off by default**
+(`rt_alpha=0`, `gi_rt=0`). Paused on request before the final write-up; the
+numbers below are from the runs done (Steel Watch Foundry, static camera,
+RTX 5090, 2560x1067, GPU timestamps, 300-frame medians/averages).
+
+### 7.1 Alpha test (`rt_alpha=1`, restart; `rt_alpha_test` is a live A/B switch)
+
+- **Where the alpha test lives.** BG3's G-buffer FS never discard; the depth
+  prepass does (G-buffer then depth-tests against it). So with `rt_alpha=1` the
+  scene is captured from the **depth prepass** (depth-only D24S8 at render
+  resolution; its small 5-draw sibling pass is learned and skipped), XFB stride
+  24: `gl_Position` + the VS's lowest-location vec2 output (the UV in every
+  prepass VS). `tools/xfb_patch_test <dump> <out> 24`: 2385/2385 VS patch and
+  pass `spirv-val`.
+- **Which draws alpha test, and with what.** `scripts/alpha_table.py` decompiles
+  every depth-only discarding FS in the shader dump (1243) and writes
+  `shaders/rt/alpha_fs.txt` (372 shaders):
+  - `vt` (252): BG3's virtual texturing (Granite). Alpha = `.w` of the albedo
+    tile, through an indirection texture (`texelFetch`, page bits in `.x`) into
+    the tile cache array; per-draw UV transform + tile-set index in the material
+    UBO (set 1 b0), tile-set constants (2 row-major mat4) in SSBO set 0 b12.
+    `rt_common.hlsli` `vt_alpha()` replicates the lookup; mip from a ray cone.
+  - `tex` (120): a plain texture's `.w`/`.x` (optional UBO uv scale). Only
+    where our test is conservative: condition reads the sample directly; blends
+    (`mix`) and branch-selected alpha are rejected (they let rays through solid
+    pixels: 0.30% "behind" before this rule).
+- **Per draw** (`layer/alphatest.cpp`): UBO/SSBO constants read from the game's
+  mapped memory at the draw; views recorded; after the pass the records go to a
+  buffer and the views into one of 8 ring descriptor sets (set 1 of the core's
+  RT passes: records, UV soup, Texture2D[256], Texture2DArray[4], 2 samplers).
+  Only views bound that frame. Alpha draws go to BLAS geometry 1 (not opaque);
+  ray queries loop `Proceed()` and commit non-opaque candidates that pass.
+- **Primary-ray check** (`rt_debug=3/5`, `rt_stats=1`, same view, live A/B):
+
+  | | alpha test off | on |
+  |---|---|---|
+  | match | 98.12% | **99.09%** |
+  | in front | 1.88% (vt cutouts 1.13, tex 0.01, opaque 0.73) | **0.91%** (vt 0.17, opaque 0.73) |
+  | behind | 0.002% | 0.007% |
+
+  The remaining 0.73% "opaque" is screen-door dithered geometry (camera
+  cut-away / LOD fades, [rt_alpha_primary_check.png](img/rt_alpha_primary_check.png),
+  purple) — correctly solid for secondary rays — plus unrecognised cutouts.
+- **Cost**: shadows + AO 0.201 → 0.22 ms with the alpha test; BLAS: 2.23M opaque
+  + 0.83–0.93M alpha triangles, refit 0.88 ms (convert 0.40 at stride 24),
+  rebuild 3.4 ms; XFB buffer 384 MB, alpha region 64 MB.
+
+### 7.2 Hybrid RT GI (`gi_rt=1`, live; see TRACK_C_GI.md)
+
+`shaders/gi/gi_trace_rt.hlsl` replaces `gi_trace` (+`rt_ao`): same samples and
+outputs, `gi_rays` alpha-tested ray queries to `gi_rt_radius` (1 m). Hit on
+screen with matching depth: last frame's radiance; otherwise occlusion only
+(`gi_rt_fallback=0`). Hits: 18% of 2.73M rays/frame; 86% shaded from the
+screen, 11.7% hidden, 2.2% off screen.
+
+| trace pass, 4 rays/sample, half res | GPU |
+|---|---|
+| screen-space (16 steps) | 0.248 ms |
+| ray-traced, alpha test on / off | **0.175** / 0.124 ms |
+| GI total (pre + post) ss + rt_ao → gi_rt | 0.44 → 0.35 ms |
+
+Images: [gi_ss_visibility.png](img/gi_ss_visibility.png) vs
+[gi_rt_visibility.png](img/gi_rt_visibility.png) (`rt_debug=4`; mean
+visibility 0.74 vs 0.80: no screen-space halos at depth edges, crisper contact
+occlusion), irradiance [gi_ss_irradiance.png](img/gi_ss_irradiance.png) vs
+[gi_rt_irradiance.png](img/gi_rt_irradiance.png) (`gi_debug=1`).
+
+### 7.3 Validation
+
+`-Validation` with `rt=1 rt_alpha=0 gi_rt=0` vs `rt=1 rt_alpha=1 gi_rt=1`
+(toggling rt_ao, rt_debug=5, rt_stats, rt_alpha_test live): identical message
+IDs (game's own 09600, 10788, StorageImage-FormatMismatch, OutputNotWritten,
+CopyBuffer-00118, 08737, headless swapchain); none from our work.
+
+### 7.4 Not done / next steps
+
+- Not verified: camera motion (`-Move`) with `rt_alpha=1` (rebuild path, prepass
+  ordinal relearning), outdoor/foliage scenes, `rt_alpha` + `fg>=2`.
+- `rt_stats=1` costs ~2 ms (atomics); measurement only.
+- 781cd8d1-style cutouts (alpha chosen by a vertex-colour branch) and blended
+  `tex` shaders stay opaque; would need a second captured varying.
+- Off-screen hit radiance: a world-space radiance cache instead of fallback 0.
+- Opacity micromaps would remove most candidate shader work.
+- Decide default-on for `rt_alpha`/`gi_rt` after the motion run; update ROADMAP.
