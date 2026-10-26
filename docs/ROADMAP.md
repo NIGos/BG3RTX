@@ -14,7 +14,7 @@ summarised in the sections below.
 |---|---|
 | Phase 0, frame mapping | **Done.** See `FRAME_MAP.md`: pass order, G-buffer decode, the DLSS contract, the UI composite. Unattended loop: `auto-run.ps1` (headless, `-Move`, `-Validation`). |
 | A, Ray Reconstruction | **Done, merged.** RR replaces SR with G-buffer guides, about +1.8 ms GPU, live `rr` switch. See `TRACK_A_RR.md`. |
-| B, DLSS-G | **In progress** on its own branch. FG is reported working in game; merge pending verification. |
+| B, DLSS-G | **Done, merged.** Streamline DLSS-G 2x/3x/4x inside the host layer; shares the game's NGX instance. Verified with RR + GI on (10 min stable, no API errors). See `TRACK_B_FG.md`. Still unverified: motion-vector sign in motion, HDR10 output, UI during gameplay. These need the display on. |
 | C, GI | **v1 in main.** Ray-traced visibility folded into the game's AO, one-bounce GI, MV reprojection, sun contact shadows. About 0.3 ms GPU, validation-clean. See `TRACK_C_GI.md`. |
 | D, hardware RT | **Phase 1 done** on its branch: G-buffer geometry captured every frame by transform feedback (all 835 draws / 36 VS, 3.16M triangles, 97.8% depth match, 0% missing), +0.45 ms; BLAS refit 0.55 ms, rebuild 2.5–3.4 ms. See `TRACK_D_RT.md`. |
 
