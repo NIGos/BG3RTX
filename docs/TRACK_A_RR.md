@@ -477,6 +477,44 @@ bloom, SSS before/guide) 0.14-0.17 ms per frame, the output-resolution grade
 total (0.15 ms before the SSS guide and the store replay were added). The RR
 evaluate itself is unchanged (2.5-2.7 ms).
 
+### Robustness checks (merged with main `a5603a9`, BVH split)
+
+- **Non-finite values: 0** in every dump of every trace with `rr_post=1`
+  (foundry, Goblin Camp; Xr, AC, EB, Z, the check image, CBT, the SSS guide,
+  the DLSS output and the tonemapped frame).
+- **`-Validation`** against the baseline taken first on the unmodified branch
+  (`captures/validation_baseline.log`: 7 IDs) and a merged-build run with
+  `rr_post=0` (the same 7): `rr_post=1` adds **one** ID, once per run,
+  `VUID-vkDestroyImage-image-01000` (`0xf2d29b5a`). The new
+  `[rrpost] the game destroys an image our post steps read` log shows when: at
+  the level-load transitions only (the frame after the last chain, where the
+  game recreates its render targets). The game itself reads those images in
+  the same, still-pending command buffer, but through push descriptors, which
+  the validation layer does not track; our descriptor sets make the reference
+  visible. Earlier builds reported it as `VUID-vkDestroyImageView-01026` on the
+  game's own views; our steps now use views of their own (destroyed deferred),
+  so only the image destruction remains. It is the game's lifetime, not a new
+  hazard of ours, but it is a new message ID.
+- **Fallback test** (`rr_test_fail=1`): RR creation refused, the game's SR
+  runs, `rr_active()` stays false, and the core switches to its non-RR modes:
+  `gi: resources ... (GI at 1280x534)`, "half res, own accumulation", and
+  reflections "mirror rays, no denoiser, max roughness 0.30". Before this
+  change they would have stayed in their 1-spp RR modes with no denoiser.
+- **Level loads**: RR pauses for a few frames, so `rr_active()` drops and the GI
+  reallocates to half resolution and back (two `gi: resources` lines per load).
+- **Unmodelled steps seen in motion**: three colour-LUT bakes (`304fe7e0`,
+  `dd9110b2`, `66cc9cb8`, compute writing a 3D image) run inside the post
+  command buffer when the camera enters another atmosphere area; they are
+  whitelisted, since they only rebuild the LUTs read later (`66cc9cb8` was
+  added after the last `-Move` run, so that run still fell back on it, once).
+- **`-Move`** (foundry, pan then hold, 480 s of gameplay with `rr_post=1`,
+  BVH split on): no fault, no `RR evaluate failed`, the traced frame after the
+  pan has 0 non-finite values in 90 dumps (`captures/20261026-174211`). The
+  chain fell back only at the three load transitions and on the LUT bake above.
+  (Two earlier `-Move` attempts ended early: one game exit at the loading
+  screen before RR or our post steps had run, and one exit after 108 s with no
+  fault logged; neither is explained, and the 480 s rerun was clean.)
+
 ### Preset and snippet
 
 The loaded snippet is now logged at RR creation (`[ngx] RR snippet loaded`):
@@ -495,6 +533,20 @@ with `fg=0` NGX loads the game's snippet, so the headless test runs and the
 player's `fg=2` setup can run different RR versions.
 
 ## Known limits and next steps
+
+- **RR before post, not verified:** a DoF frame on the final build (the DoF
+  weights were checked only on an earlier build); a motion/temporal quality
+  metric (the expected gains are in motion, dark 1-spp areas and DoF scenes);
+  the `rr_pre_exposure=1` A/B; whether 310.7.129 runs RR2 for preset F; the
+  SSS guide's effect on skin (it is set, non-finite-free, but not A/B'd).
+- **RR before post, fallbacks:** effects the chain does not model (the Goblin
+  Camp cinematic's chromatic aberration, tint vignette and overlay, and the
+  load transition) switch the frame back to the graded input, with one RR
+  history reset at each switch. Modelling them (the tint is per-channel
+  affine; the aberration needs an output-resolution intermediate) would remove
+  those switches.
+- **A once-per-run validation message** (`VUID-vkDestroyImage-image-01000`) at
+  level-load transitions; see "Robustness checks".
 
 - **Done (v2):** world-space normals, per-pixel N·V and the
   WorldToView/ViewToClip matrices. See "Guides v2".

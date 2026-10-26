@@ -58,7 +58,7 @@ constexpr uint64_t kKnownInChain[] = {
     // Colour-LUT bakes (32x32 groups writing a 3D rgba32f image), recorded in the
     // post command buffer while the camera moves between atmosphere areas. They
     // only rebuild the LUTs the grade and tonemap read later.
-    0x304fe7e0211939a9ull, 0xdd9110b27471f886ull,
+    0x304fe7e0211939a9ull, 0xdd9110b27471f886ull, 0x66cc9cb83c097230ull,
 };
 constexpr uint64_t kCsLighting = 0xf469db7865d7c524ull;  // tiled lighting, standard class
 constexpr uint64_t kCsAdapt = 0xbd9db92d9abc7fb7ull;     // exposure adaptation
