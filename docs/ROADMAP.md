@@ -9,6 +9,15 @@ Target: BG3 Vulkan. Final per-frame order:
 Background research: [research.md](research.md) and the agent findings
 summarised in the sections below.
 
+## Status (2026-10-26)
+| Track | State |
+|---|---|
+| Phase 0, frame mapping | **Done.** See `FRAME_MAP.md`: pass order, G-buffer decode, the DLSS contract, the UI composite. Unattended loop: `auto-run.ps1` (headless, `-Move`, `-Validation`). |
+| A, Ray Reconstruction | **Done, merged.** RR replaces SR with G-buffer guides, about +1.8 ms GPU, live `rr` switch. See `TRACK_A_RR.md`. |
+| B, DLSS-G | **In progress** on its own branch. FG is reported working in game; merge pending verification. |
+| C, GI | **v1 in main.** Ray-traced visibility folded into the game's AO, one-bounce GI, MV reprojection, sun contact shadows. About 0.3 ms GPU, validation-clean. See `TRACK_C_GI.md`. |
+| D, hardware RT | Not started. |
+
 ## Phase 0 — map the frame (blocks everything)
 - [ ] Trace one frame in an outdoor area and one in a dungeon. Run `analyze_trace.py --disasm`.
 - [ ] Find these passes by signature:
