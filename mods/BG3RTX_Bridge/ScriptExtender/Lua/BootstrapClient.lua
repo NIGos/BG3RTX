@@ -272,7 +272,20 @@ local function tick()
   Ext.IO.SaveFile(OUT, hdr .. "\n" .. table.concat(out, "\n") .. "\nEND\n")
 end
 
+-- Active only while the BG3RTX layer runs: it rewrites bg3rtx/active.txt every
+-- second. Without the layer (a normal game start) the bridge does no work.
+local hb_last, hb_seen, hb_check = nil, -1e9, -1e9
+local function layer_active(now)
+  if now - hb_check >= 2.0 then
+    hb_check = now
+    local s = Ext.IO.LoadFile("bg3rtx/active.txt")
+    if s ~= nil and s ~= hb_last then hb_last = s; hb_seen = now end
+  end
+  return now - hb_seen < 5.0
+end
+
 Ext.Events.Tick:Subscribe(function()
+  if not layer_active(Ext.Timer.MicrosecTime() / 1e6) then return end
   local ok, err = pcall(tick)
   if not ok then Ext.IO.SaveFile("bg3rtx/error_client.txt", tostring(err)) end
 end)

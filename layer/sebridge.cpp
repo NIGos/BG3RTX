@@ -90,6 +90,15 @@ void reader() {
       if (g_stop_cv.wait_for(lk, std::chrono::milliseconds(100), [] { return g_stop; })) return;
     }
     if (!cfg_int("se_bridge", 1)) continue;
+    // Heartbeat: the mod exports only while this file keeps changing, so a game
+    // started without the layer pays nothing for the bridge.
+    static int beat = 0, beat_n = 0;
+    if (++beat_n >= 10) {   // once per second
+      beat_n = 0;
+      CreateDirectoryA(dir.c_str(), nullptr);
+      std::string b = std::to_string(++beat) + "\n";
+      write_file(dir + "\\active.txt", b.data(), b.size());
+    }
     bool changed = false;
     double t;
     if (file_time(lights_path, t) && t != t_lights) {
