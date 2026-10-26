@@ -19,7 +19,10 @@ param(
   [switch]$Move,
   [byte]$MoveScan = 0x20,
   # Run under the Khronos validation layer; messages go to captures/validation.log.
-  [switch]$Validation
+  [switch]$Validation,
+  # Load this save instead of the newest: a substring of its folder name, for
+  # example "Rivington - 74h". See docs/TEST_SCENES.md.
+  [string]$Save = ""
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -73,12 +76,40 @@ if ($ensure) { py -3 -I $ensure }
 # This run's settings: the repository's bg3rtx.ini plus auto-trace overrides.
 $ini = Join-Path $caps "auto.ini"
 $lines = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @("auto_trace=1", "auto_traces=$Traces") +
-         @(if (-not $RealPresent) { "headless=1", "fg=0" }) + $Set   # headless test runs: no frame generation unless asked
+         @(if (-not $RealPresent) { "headless=1", "fg=0" }) +
+         @(if ($Save) { "auto_min_draws=400", "auto_after_load=1" }) + $Set   # other scenes draw far fewer than the foundry (Rivington ~1240)   # headless test runs: no frame generation unless asked
 $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
 Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
 
 py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py")
+
+# -continueGame loads the newest save, by the save time stored inside each
+# package (file timestamps are ignored). To load another one, the layer hides
+# every other save folder from the game's listing of Savegames\Story
+# (layer/savefilter.cpp, BG3RTX_SAVE_ONLY); nothing on disk changes, so Steam
+# Cloud sees no difference. Saves the game writes during the run (autosaves)
+# are moved into Savegames\_bg3rtx_parked so the player's list is unaffected.
+$saveRoot = Join-Path $env:LOCALAPPDATA "Larian Studios\Baldur's Gate 3\PlayerProfiles\Public\Savegames\Story"
+$savesBefore = @(Get-ChildItem $saveRoot -Directory | ForEach-Object Name)
+$gameArgs = @("-continueGame")
+Remove-Item Env:BG3RTX_SAVE_ONLY -ErrorAction SilentlyContinue
+if ($Save) {
+  $sd = Get-ChildItem $saveRoot -Directory | Where-Object { $_.Name -like "*__*$Save*" } | Select-Object -First 1
+  if (-not $sd) { $mutex.ReleaseMutex(); throw "No save matching '$Save'" }
+  Write-Host "Save: $($sd.Name)"
+  $lsv = Get-ChildItem -LiteralPath $sd.FullName -Filter *.lsv | Select-Object -First 1
+  $gameArgs = @("-loadSaveGame", "`"$($sd.Name)`"")
+}
+function Restore-Saves {
+  $parked = Join-Path (Split-Path $saveRoot) "_bg3rtx_parked"
+  Get-ChildItem $saveRoot -Directory | Where-Object { $savesBefore -notcontains $_.Name } | ForEach-Object {
+    New-Item -ItemType Directory -Force $parked | Out-Null
+    Write-Host "Parking save written during the run: $($_.Name)"
+    Move-Item -LiteralPath $_.FullName -Destination $parked
+  }
+}
+
 $start = Get-Date
 if ($Validation) {
   $vlog = Join-Path $caps "validation.log"
@@ -89,9 +120,9 @@ if ($Validation) {
     "khronos_validation.report_flags = error,warn",
     "khronos_validation.duplicate_message_limit = 3") | Set-Content $settings
   $env:VK_LAYER_SETTINGS_PATH = $settings
-  & (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -Validation -GameArgs "-continueGame"
+  & (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -Validation -GameArgs $gameArgs
 } else {
-& (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -GameArgs "-continueGame"
+& (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -GameArgs $gameArgs
 }
 
 $log = Join-Path $root "bg3rtx.log"
@@ -133,6 +164,9 @@ if (-not $KeepRunning) {
     [void]$p.CloseMainWindow()
     if (-not $p.WaitForExit(20000)) { $p | Stop-Process -Force }
   }
+  Restore-Saves
+} elseif ($Save) {
+  Write-Host "KeepRunning: saves written during the run are not parked"
 }
 $mutex.ReleaseMutex()
 

@@ -263,6 +263,13 @@ static bool auto_trigger(uint64_t frame, uint32_t passes, uint32_t draws) {
     // after a minute or two (about 780 draws, outdoors, docs/TRACK_D_RT.md).
     bool good = passes >= uint32_t(cfg_int("auto_min_passes", 40)) && draws >= uint32_t(cfg_int("auto_min_draws", 2000)) &&
                 draws <= uint32_t(cfg_int("auto_max_draws", 1000000));
+    // auto_after_load: only after a loading screen that follows a 3D scene,
+    // i.e. the 3D main menu has given way to the loaded save. Needed for scenes
+    // that draw about as much as the menu (auto-run.ps1 -Save).
+    static bool seen_scene = false, loaded = false;
+    if (passes >= 40) seen_scene = true;
+    else if (seen_scene && passes < 10) loaded = true;
+    if (cfg_int("auto_after_load", 0) && !loaded) good = false;
     if (good && !g_streak) streak_start = GetTickCount64();
     g_streak = good ? g_streak + 1 : 0;
   }
