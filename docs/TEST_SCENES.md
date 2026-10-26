@@ -7,13 +7,24 @@ confirm the view and the time of day.
 
 Load one with `scripts/auto-run.ps1 -Save "<folder substring>"`.
 
-The game's `-continueGame` picks the newest save by the save time stored inside
-each package, so changing file timestamps has no effect (tried and confirmed).
-Instead, the layer filters the game's own listing of `Savegames\Story`, so the
-game sees only the chosen folder (`layer/savefilter.cpp`, env
-`BG3RTX_SAVE_ONLY`). Nothing on disk is moved or changed. That matters because
-Steam Cloud syncs that folder (`remotecache.vdf` lists every save), and
-moving saves out, even temporarily, could look like a deletion to it.
+`bg3.exe` has an undocumented `-loadSaveGame <save folder name>` argument
+(found next to `-continueGame` in the executable's strings; "GameStateInit:
+These commands should be mutually exclusive"). `auto-run.ps1 -Save` passes the
+matching folder name. Neither the full `.lsv` path nor file timestamps work:
+`-continueGame` picks the newest save by the save time stored inside each
+package.
+
+`layer/savefilter.cpp` (env `BG3RTX_SAVE_ONLY`) can also hide every other save
+from the game's listing of `Savegames\Story`. It works, but `-continueGame`
+then stays in the main menu, so it is kept only as a tool. Nothing on disk is
+ever moved for a test. That matters because Steam Cloud syncs that folder
+(`remotecache.vdf` lists every save), and moving saves out, even temporarily,
+could look like a deletion to it.
+
+Runs with `-Save` set `auto_after_load=1`: the trace waits for a loading screen
+after the 3D main menu, since other scenes draw about as much as the menu.
+`scripts/scene-sweep.ps1` runs every scene in turn and writes
+`captures/scene-sweep.json`.
 
 Saves the game writes during the run are parked in `Savegames\_bg3rtx_parked`
 instead of joining the player's list. Save content is never modified. A full copy of the player's profile and saves, taken
