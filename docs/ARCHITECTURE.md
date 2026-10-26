@@ -21,6 +21,22 @@ bg3.exe ──► Vulkan loader ──► VK_LAYER_BG3RTX_host (bin/VkLayer_bg3r
                            bg3rtx_core.dll   hot-reloadable: all lighting/RT/GI logic lives here
 ```
 
+## Settings
+
+- **One table.** `common/settings.h` (header-only) holds the user-facing knobs, the presets
+  and the layering rules. The layer (`layer/util.cpp`), the launcher (`tools/launcher`,
+  `bin/BG3RTX.exe`), the unit tests (`tests/settings_test.cpp`) and the phase-2 overlay all
+  use it. `data/settings_schema.json` is the same table as JSON; a test keeps it current.
+- **Layers.** `bg3rtx.ini` (developer defaults), then `bg3rtx_user.ini` (launcher), then
+  `%BG3RTX_INI%` (per-run overrides from `auto-run.ps1`). `preset=<id>` in a layer expands
+  first; that layer's own keys override it. `cfg_poll()` re-reads any layer whose mtime
+  changed and logs the effective knobs (`[cfg] knobs:` / `[cfg] keys:`).
+- **Derived.** `rt_build=auto` (presets) builds the scene only while a ray-traced effect
+  uses it.
+- **Release profile.** `data/release.ini`, appended by `scripts/package.ps1`, turns the
+  developer keys off (`dev=0` disables the trace hotkey, `dump_shaders=0`).
+- Player guide: `docs/USER_SETTINGS.md`. Design: `docs/SETTINGS_DESIGN.md`.
+
 ## Why a layer of our own and not a ReShade add-on
 
 - **Frame generation.** Streamline DLSS-G on Vulkan has to add extensions and queues
