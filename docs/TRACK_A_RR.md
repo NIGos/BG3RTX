@@ -371,17 +371,22 @@ of post-processing as possible" and DoF after it.
   far/near blend weights from its CoC images and constants: `A *= (1−w_far)(1−w_near)`),
   `resolve` (before `7401d785`: RR's colour, and `C = U − A·X` with `U` the
   game's own chain value there, so god rays and the blurred DoF layers enter
-  exactly), `exposure` (`A, C *= b0[1]·b1[0]`, the game's buffers bound live),
-  `bloom` (`C += 0.2·bloom` at the game's uv).
+  exactly), `exposure` (`k = b0[1]·b1[0]`, the game's buffers bound live),
+  `bloom` (`B = 0.2·bloom` at the game's uv). k and B live in a second
+  RGBA16F image so the stores can be replayed in order.
 - **After RR**, one output-resolution pass writes the game's DLSS output image:
-  `grade(A·RR + C)`, A and C bilinear from render resolution, the game's grade
-  UBO (4 floats, read per frame, so per-area grades follow) and its 32³ LUT,
-  the grade input truncated to R11G11B10 like the game's (`rr_post_quantise`).
-  The tonemap and UI read that image as before.
+  `grade(((A·RR + C)·k) + B)`, A, C, k and B bilinear from render resolution,
+  the game's grade UBO (4 floats, read per frame, so per-area grades follow)
+  and its 32³ LUT. Each intermediate is truncated to R11G11B10 where the game
+  stores one (`rr_post_quantise`, see below). The tonemap and UI read that
+  image as before.
 - **Guides added:** colour before transparency (the compose output, copied at
   the compose pass end, same format as the colour; `rr_cbt`) and the
-  screen-space SSS guide (below; `rr_sss`). The DoF guide is not needed: DoF now
-  runs after RR (guide 3.4.13, "can be omitted").
+  screen-space SSS guide (`rr_sss`): `lum(after − before·albedo)` of the SSS
+  blur (`6f535075`/`d1669194`; the skin pixels are lit with diffuse colour 1 and
+  the blur multiplies the albedo back in), 0 where the stencil-culled blur did
+  not touch the pixel. The DoF guide is not needed: DoF now runs after RR
+  (guide 3.4.13, "can be omitted").
 - **Fallback.** Anything the chain does not model breaks it for that frame and
   RR gets the game's graded colour, as before (`[rrpost] post chain not
   followed`, then `[ngx] upscaler ...`; a switch resets RR's history once). The
@@ -391,44 +396,59 @@ of post-processing as possible" and DoF after it.
   Goblin Camp cinematic state with chromatic aberration `b9f5a8ab`, a tint
   vignette `3b556695` (mask `abfdaa7e`) and a 3D overlay `a1e30a20`.
 
-**Replication check.** `rr_post_check=1` (and every trace) also evaluates
-`grade(A·Xr + C)` at render resolution, i.e. our reconstruction of the game's
-own DLSS input from the snapshot, and `scripts/rr_post_compare.py` compares it
-with the game's grade output of the same frame (`dump_raw=1`):
+**Replication check.** `rr_post_check=1` (and every trace) also evaluates the
+same chain on RR's own input `Xr` at render resolution, i.e. our reconstruction
+of the game's DLSS input, and `scripts/rr_post_compare.py` compares it with the
+game's grade output of the same frame (`dump_raw=1`):
 
-| Scene | Frame | Identical texels | Within 1 R11G11B10 ULP | Notes |
+| Scene | Frame | k | Identical texels | Within 1 R11G11B10 ULP |
 |---|---|---|---|---|
-| Foundry (god rays pass, no DoF) | `captures/20261026-152537`, `-152554` | **100.00%** | 100.00% | bit-exact |
-| Goblin Camp dialogue (DoF) | see "Runs" below | | | |
+| Foundry (god-ray pass, no DoF) | `captures/20261026-162517`, `-162536` | 1.0048 | **100.00%** | 100.00% |
+| Goblin Camp (no DoF in the traced frame) | `captures/20261026-162210` | 0.997 | **100.00%** | 100.00% |
 
-Before the R11G11B10 truncation of the grade input was added, the foundry was
-97.4% identical and 100% within 1 ULP, and a DoF frame was uniformly 1.4% (red,
-green) and 2.9% (blue) brighter than the game. That is the game's own chain of
-R11G11B10 stores, which truncate (the GPU rounds toward zero, checked against
-round-to-nearest): each step whose result is not already representable loses
-half a ULP on average. Our chain keeps fp16 between steps, so only the last
-truncation is reproduced.
+The store order matters. The GPU truncates R11G11B10 stores (checked against
+round-to-nearest), and the game stores after every step: with k slightly below
+1 (Goblin Camp's steady state) the exposure store alone drops a whole ULP, so
+the game's image is 0.65% (red, green) and 1.4% (blue) darker than an fp16
+chain. Without the replayed stores the foundry was 97.4% identical, Goblin Camp
+74%, and a DoF dialogue frame (earlier build) was within 1 ULP on 87-98% of the
+texels with the same uniform offset. **Not verified with the final build: a DoF
+frame** (the traced Goblin Camp frame had no DoF; the DoF weights were checked
+only on the earlier build, where the residual error was the uniform store
+offset, independent of the DoF weight).
 
-**A/B against the old path** (foundry, static, the same run toggled live with
-`scripts/live_phases.py`; tonemapped HDR10 frames compared in PQ code values):
+**A/B against the old path** (foundry, static, one run toggled live with
+`scripts/live_phases.py`: new, old, new; tonemapped HDR10 frames compared in PQ
+code values):
 
 | Pair | mean abs delta (10-bit PQ codes) | px > 4 codes | px > 16 codes | mean luminance |
 |---|---|---|---|---|
-| new vs old (`-152554` vs `-152546`) | 1.75 | 11.5% | 0.65% | −0.79% |
-| new vs new, 17 s apart (`-152537` vs `-152554`) | 1.54 | 9.4% | 0.69% | +0.19% |
+| new vs old (`-162536` vs `-162527`) | 1.79 | 11.4% | 0.71% | −0.79% |
+| new vs new, 19 s apart (`-162517` vs `-162536`) | 1.57 | 9.5% | 0.74% | −0.03% |
 
 - Almost all of the difference is the animated character, a flickering sign and
   small lights (`img/rrpost_foundry_diff_x4.png`); the 1:1 crops
   (`img/rrpost_foundry_crops.png`, top new, bottom old) show no visible change
   in static content.
-- The new-vs-old difference is barely above the frame-to-frame floor of the
-  same mode. In a static, converged frame RR's temporal accumulation hides most
-  of what a non-linear input costs; the expected gains are in motion, in dark
-  1-spp areas and in DoF scenes, where the old path also fed RR the blur. That
-  is **not** measured yet (no motion metric; see "Not verified").
-- The mean luminance shift (−0.8%, ≈ 0.4 PQ codes) is within the quantisation
-  difference of the two paths (the old path stores the graded image and RR's
-  output in R11G11B10 twice after the grade).
+- **The luminance shift is the expected bias removal, not a replication error**
+  (the replication is bit-exact). Sorting the static pixels (|delta| < 16 codes)
+  by the local noise of RR's input (|x − 3x3 mean| / mean):
+
+  | input noise quantile | 0-50% | 50-80% | 80-95% | 95-100% |
+  |---|---|---|---|---|
+  | new vs old | −0.49% | −0.67% | −1.01% | −1.54% |
+  | new vs new | +0.02% | −0.05% | −0.10% | −0.06% |
+
+  The old path was brighter where RR's input was noisier: RR averaged graded
+  values, and the mean of a convex-ish grade of a noisy signal is above the
+  grade of its mean (Jensen). The new path no longer has that bias. Part of the
+  −0.5% in the cleanest pixels is the same effect at lower noise (the metric
+  also counts texture detail as "noise").
+- Apart from that, the new-vs-old difference is barely above the frame-to-frame
+  floor of the same mode: in a static, converged frame RR's temporal
+  accumulation hides most of the rest. The gains expected in motion, in dark
+  1-spp areas and in DoF scenes (where the old path fed RR the blur) are **not
+  measured** (no motion metric yet).
 - High-frequency energy (mean |Laplacian| in PQ codes) is 15.8 new vs 15.6 old:
   no loss of detail.
 
@@ -440,19 +460,22 @@ truncation is reproduced.
 - their layout is `[0] = 0.8333/2^EV`, `[1] = 1.2·2^EV`, `[2] = EV` (e.g. EV 14.18,
   `[0] = 4.50e-5` in the foundry);
 - so the lighting is pre-exposed by `0.8333/2^EV(previous)`, and `2cdd9f08`
-  multiplies by `b0[1]·b1[0] = 2^(EV_prev − EV_new)`, a re-exposure that is
-  1.000-1.005 in steady state.
+  multiplies by `b0[1]·b1[0] = 2^(EV_prev − EV_new)`, a re-exposure: 1.0048 in
+  the foundry, 0.997 in Goblin Camp, in steady state.
 
 RR's input (both the old graded colour and the new `X`) is therefore already
 eye-adapted. The RR guide 3.7 says the exposure parameters (DLSS guide 3.9,
 which includes the pre-exposure factor) are not supported by RR, so
 `DLSS.Pre.Exposure` stays the game's 1. `rr_pre_exposure=1` passes
-`s1b13[0]` (read back a frame or two late) for an A/B.
+`s1b13[0]` (read back a frame or two late) for an A/B; **that A/B has not been
+run**.
 
-**Cost** (RTX 5090, 2560x1067 → 3840x1600, GPU timestamps, `[rrpost] gpu`):
-render-resolution steps 0.088-0.117 ms per frame, output-resolution grade
-0.056-0.067 ms, the CBT copy unmeasured (one 11 MB image copy). About
-**+0.15-0.18 ms** in total. The RR evaluate itself is unchanged (2.5-2.7 ms).
+**Cost** (RTX 5090, 2560x1067 → 3840x1600, GPU timestamps, `[rrpost] gpu`,
+foundry): render-resolution steps (snapshot, DoF weights, resolve, exposure,
+bloom, SSS before/guide) 0.14-0.17 ms per frame, the output-resolution grade
+0.06 ms, the CBT copy unmeasured (one 11 MB image copy). About **+0.2 ms** in
+total (0.15 ms before the SSS guide and the store replay were added). The RR
+evaluate itself is unchanged (2.5-2.7 ms).
 
 ### Preset and snippet
 
@@ -464,7 +487,12 @@ A/B on 310.9.16 (foundry, static, separate runs `-153811` preset 0 and
 `-153033` preset 6): evaluate 2.50-2.56 ms vs 2.50-2.55 ms, and the frames differ
 by 1.15 PQ codes on average (median 0), below the same-mode floor above. The
 default on 310.9.16 is F, as its header says ("Default model RR2"). `rr_preset=6`
-is pinned so an OTA snippet cannot change the model silently.
+is pinned so an OTA snippet cannot change the model silently. 310.7.129 (the
+game's snippet, `fg=0`) also accepts preset 6 (creation Success, Goblin Camp
+run, evaluate 2.6-2.7 ms); whether that older snippet really runs RR2 or falls
+back to its default is **not known** (NGX does not report the model). Note that
+with `fg=0` NGX loads the game's snippet, so the headless test runs and the
+player's `fg=2` setup can run different RR versions.
 
 ## Known limits and next steps
 

@@ -108,7 +108,7 @@ struct Chain {
 
 std::mutex g_mu;
 Chain g_ch;
-Img g_xs, g_xr, g_ac, g_check, g_cbt, g_z, g_sss_before, g_sss;
+Img g_xs, g_xr, g_ac, g_eb, g_check, g_cbt, g_z, g_sss_before, g_sss;
 uint64_t g_sss_before_frame = 0, g_sss_frame = 0;
 uint64_t g_cbt_frame = 0;
 VkDescriptorSetLayout g_dsl = VK_NULL_HANDLE;
@@ -222,21 +222,21 @@ bool img_ensure(DeviceData* dd, Img& g, VkFormat fmt, uint32_t w, uint32_t h, co
 
 bool ensure_layout(DeviceData* dd) {
   if (g_dsl) return true;
-  VkDescriptorSetLayoutBinding b[14] = {};
-  const VkDescriptorType types[14] = {
+  VkDescriptorSetLayoutBinding b[15] = {};
+  const VkDescriptorType types[15] = {
       VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
       VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLER,
       VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
-  for (uint32_t i = 0; i < 14; ++i) {
+      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+  for (uint32_t i = 0; i < 15; ++i) {
     b[i].binding = i;
     b[i].descriptorType = types[i];
     b[i].descriptorCount = 1;
     b[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
   }
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.bindingCount = 14;
+  dci.bindingCount = 15;
   dci.pBindings = b;
   if (dd->vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) != VK_SUCCESS) return false;
   VkPushConstantRange pcr{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
@@ -248,7 +248,7 @@ bool ensure_layout(DeviceData* dd) {
   if (dd->vk.CreatePipelineLayout(dd->device, &pci, nullptr, &g_pl) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 5 * kRing},
                                    {VK_DESCRIPTOR_TYPE_SAMPLER, kRing},
-                                   {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4 * kRing},
+                                   {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 5 * kRing},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4 * kRing}};
   VkDescriptorPoolCreateInfo ppi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   ppi.maxSets = kRing;
@@ -352,8 +352,8 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   VkPipeline pipe = pipeline(dd, g_pipes[which]);
   if (!pipe) return false;
   VkDescriptorSet set = g_sets[g_next_set++ % kRing];
-  VkDescriptorImageInfo ii[12] = {};
-  VkWriteDescriptorSet w[14] = {};
+  VkDescriptorImageInfo ii[13] = {};
+  VkWriteDescriptorSet w[15] = {};
   uint32_t n = 0, k = 0;
   auto img = [&](uint32_t binding, VkDescriptorType t, VkImageView v, VkImageLayout l) {
     if (!v) return;
@@ -378,6 +378,7 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   w[n].pImageInfo = &ii[k];
   ++n, ++k;
   if (b.ac) img(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, g_ac.view, VK_IMAGE_LAYOUT_GENERAL);
+  if (b.ac) img(14, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, g_eb.view, VK_IMAGE_LAYOUT_GENERAL);
   img(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.out11, VK_IMAGE_LAYOUT_GENERAL);
   img(8, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.out16, VK_IMAGE_LAYOUT_GENERAL);
   img(13, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.out_r16, VK_IMAGE_LAYOUT_GENERAL);
@@ -514,9 +515,10 @@ void touch(VkCommandBuffer cmd) {
 bool start(DeviceData* dd, VkCommandBuffer cmd, VkImageView x, VkImageLayout xl, uint32_t w, uint32_t h) {
   if (!img_ensure(dd, g_xs, VK_FORMAT_B10G11R11_UFLOAT_PACK32, w, h, "Xs (post input snapshot)") ||
       !img_ensure(dd, g_xr, VK_FORMAT_B10G11R11_UFLOAT_PACK32, w, h, "Xr (RR colour: dither-resolved X)") ||
-      !img_ensure(dd, g_ac, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, "AC (post chain: rgb C, a A)"))
+      !img_ensure(dd, g_ac, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, "AC (post chain: rgb C, a A)") ||
+      !img_ensure(dd, g_eb, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, "EB (post chain: rgb 0.2 bloom, a exposure)"))
     return false;
-  to_general(dd, cmd, {&g_xs, &g_ac});
+  to_general(dd, cmd, {&g_xs, &g_ac, &g_eb});
   Binds b;
   b.in[0] = x;
   b.in_l[0] = xl;
@@ -679,6 +681,8 @@ void on_grade(DeviceData* dd, VkCommandBuffer cmd) {
     b.in_l[0] = VK_IMAGE_LAYOUT_GENERAL;
     b.in[1] = g_ac.view;
     b.in_l[1] = VK_IMAGE_LAYOUT_GENERAL;
+    b.in[2] = g_eb.view;
+    b.in_l[2] = VK_IMAGE_LAYOUT_GENERAL;
     b.lut = g_ch.lut;
     b.lut_l = g_ch.lut_l;
     b.out16 = g_check.view;
@@ -875,16 +879,46 @@ bool rrpost_take(VkCommandBuffer cmd, uint32_t w, uint32_t h, uint32_t ow, uint3
   return true;
 }
 
+// Our own storage view of the game's DLSS output image. The game only hands
+// its view to NGX, which no validation tracks, and may destroy it as soon as its
+// own work is done; ours is destroyed deferred, after our commands ran.
+static std::unordered_map<VkImage, VkImageView> g_out_views;
+static VkImageView out_view(DeviceData* dd, VkImage image, VkFormat fmt) {
+  auto it = g_out_views.find(image);
+  if (it != g_out_views.end()) return it->second;
+  VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+  vi.image = image;
+  vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  vi.format = fmt;
+  vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  VkImageView v = VK_NULL_HANDLE;
+  if (dd->vk.CreateImageView(dd->device, &vi, nullptr, &v) != VK_SUCCESS) return VK_NULL_HANDLE;
+  g_out_views[image] = v;
+  return v;
+}
+
+void rrpost_forget_image(VkImage image) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  auto it = g_out_views.find(image);
+  if (it == g_out_views.end()) return;
+  defer_destroy(BG3_DEFER_IMAGE_VIEW, (uint64_t)it->second);
+  g_out_views.erase(it);
+}
+
 // After the RR evaluate: grade(A * RR + C) into the game's DLSS output image.
-bool rrpost_final(VkCommandBuffer cmd, VkImageView game_out, uint32_t ow, uint32_t oh) {
+bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint32_t ow, uint32_t oh) {
   std::lock_guard<std::mutex> lock(g_mu);
   DeviceData* dd = device_of(cmd);
-  if (!dd || !game_out) return false;
+  if (!dd || !out_image) return false;
+  VkImageView game_out = out_view(dd, out_image, out_fmt);
+  if (!game_out) return false;
   Binds b;
   b.in[0] = g_z.view;
   b.in_l[0] = VK_IMAGE_LAYOUT_GENERAL;
   b.in[1] = g_ac.view;
   b.in_l[1] = VK_IMAGE_LAYOUT_GENERAL;
+  b.in[2] = g_eb.view;
+  b.in_l[2] = VK_IMAGE_LAYOUT_GENERAL;
   b.lut = g_ch.lut;
   b.lut_l = g_ch.lut_l;
   b.out11 = game_out;
@@ -900,7 +934,7 @@ bool rrpost_final(VkCommandBuffer cmd, VkImageView game_out, uint32_t ow, uint32
 int rrpost_trace_images(VkImage* out, int max) {
   std::lock_guard<std::mutex> lock(g_mu);
   int n = 0;
-  for (const Img* g : {&g_xr, &g_ac, &g_z, &g_check, &g_cbt, &g_sss})
+  for (const Img* g : {&g_xr, &g_ac, &g_z, &g_check, &g_cbt, &g_sss, &g_eb})
     if (g->image && n < max) out[n++] = g->image;
   return n;
 }

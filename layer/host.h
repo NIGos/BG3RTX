@@ -305,7 +305,8 @@ struct RrPostInputs {
 void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts);
 void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs);
 bool rrpost_take(VkCommandBuffer cmd, uint32_t w, uint32_t h, uint32_t ow, uint32_t oh, RrPostInputs* out);
-bool rrpost_final(VkCommandBuffer cmd, VkImageView game_out, uint32_t ow, uint32_t oh);
+bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint32_t ow, uint32_t oh);
+void rrpost_forget_image(VkImage image);   // the game destroys an image
 int rrpost_trace_images(VkImage* out, int max);
 float rrpost_pre_exposure();   // lighting s1b13[0] as last read back (0 if unknown)
 void rrpost_on_present();

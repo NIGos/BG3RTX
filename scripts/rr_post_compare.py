@@ -86,12 +86,13 @@ def replication(cap_path):
     cap, dumps, frame = load_capture(cap_path)
     game = by_fs(dumps, "0592680bc336dca3")
     rr = tagged(frame, dumps, "rrpost")
-    check = [d for d in rr if d["fmt"] == "RGBA16F" and d["w"] == game[0]["w"]]
+    # rrpost pass slots: Xr, AC, Z, check, CBT, SSS guide, EB (layer/rrpost.cpp)
+    check = [d for d in rr if d["slot"] == 3 and d["fmt"] == "RGBA16F"]
     if not game or not check:
         print("no game grade output or check image in", cap)
         return None
     g = raw(cap, game[0])[..., :3]
-    ours = raw(cap, check[-1])[..., :3]
+    ours = raw(cap, check[0])[..., :3]
     res = {}
     for name, q in (("round", quant_r11g11b10), ("trunc", quant_trunc)):
         o = q(ours)

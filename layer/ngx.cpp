@@ -1341,7 +1341,7 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
     log("[ngx] RR evaluate failed: %s (0x%08x)", result_name(result), unsigned(result));
   if (g_qpool) ts_mark(dd, cmd, ts_slot, 2);
   // The game's post chain after RR, at output resolution, into its DLSS output.
-  if (use_post && result == NVSDK_NGX_Result_Success && !rrpost_final(cmd, out->Resource.ImageViewInfo.ImageView, ow, oh))
+  if (use_post && result == NVSDK_NGX_Result_Success && !rrpost_final(cmd, out->Resource.ImageViewInfo.Image, VkFormat(out->Resource.ImageViewInfo.Format), ow, oh))
     log("[ngx] RR before post: the output-resolution grade could not be recorded");
 
   if (show && result == NVSDK_NGX_Result_Success) {

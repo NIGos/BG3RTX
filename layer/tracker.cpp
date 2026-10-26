@@ -312,6 +312,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
 static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAllocationCallbacks* a) {
   sl_note_image_destroyed(img);
   ngx_on_destroy_image(img);  // our views of it go first
+  rrpost_forget_image(img);
   device_of(device)->vk.DestroyImage(device, img, a);
   ngx_forget_image(img);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);

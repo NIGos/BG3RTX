@@ -21,10 +21,11 @@
 //   resolve    before 7401d785: Xr = the game's dither resolve of Xs (RR's
 //              colour input), and C = U - A * Xs with U the game's own chain
 //              value there (god rays and the blurred DoF layers, exactly)
-//   exposure   at 2cdd9f08's end: A, C *= b0[1] * b1[0] (the game's buffers)
-//   bloom      at 0463a527's end: C += 0.2 * bloom
+//   exposure   at 2cdd9f08's end: k = b0[1] * b1[0] (the game's buffers)
+//   bloom      at 0463a527's end: B = 0.2 * bloom
 // and after RR, at output resolution:
-//   final      out = grade(A * RR + C), A and C bilinear from render resolution
+//   final      out = grade(((A * RR + C) * k) + B), A, C, k, B bilinear from
+//              render resolution, each step stored as R11G11B10 like the game
 // The grade is the game's own: its UBO (4 floats) and LUT, bound live, so
 // per-area grades follow. `check` evaluates the same at render resolution on
 // Xr, for comparison with the game's grade output in a trace.
@@ -43,6 +44,9 @@
 [[vk::binding(11, 0)]] StructuredBuffer<float> BufC;
 [[vk::binding(12, 0)]] RWStructuredBuffer<float> Probe;
 [[vk::binding(13, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> OutR16;
+// The steps after the dither resolve: rgb 0.2 * bloom, a the exposure k. Kept
+// apart from A, C so `final` can store-truncate in the game's order.
+[[vk::binding(14, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> EB;
 
 struct Push {
   uint2 size;        // dispatch domain
@@ -102,6 +106,7 @@ void start(uint3 id : SV_DispatchThreadID) {
   if (any(id.xy >= pc.size)) return;
   OutR11[id.xy] = In0.Load(int3(id.xy, 0)).rgb;
   AC[id.xy] = float4(0.0, 0.0, 0.0, 1.0);
+  EB[id.xy] = float4(0.0, 0.0, 0.0, 1.0);
 }
 
 // dof: the composite's blend weights (96bb806d). In0 = full-res CoC (set 1 b5,
@@ -171,8 +176,8 @@ void resolve(uint3 id : SV_DispatchThreadID) {
 void exposure(uint3 id : SV_DispatchThreadID) {
   if (any(id.xy >= pc.size)) return;
   float k = BufA[1] * BufB[0];
-  float4 ac = AC[id.xy];
-  AC[id.xy] = float4(finite3(ac.rgb * k), isfinite(ac.a * k) ? ac.a * k : 0.0);
+  float4 e = EB[id.xy];
+  EB[id.xy] = float4(e.rgb, isfinite(k) ? k : 1.0);
 }
 
 // bloom: 0463a527 adds 0.2 * bloom (In0 = its set 1 b2) at the game's uv.
@@ -180,33 +185,45 @@ void exposure(uint3 id : SV_DispatchThreadID) {
 void bloom(uint3 id : SV_DispatchThreadID) {
   if (any(id.xy >= pc.size)) return;
   float3 b = In0.SampleLevel(LinClamp, game_uv(id.xy), 0.0).rgb;
-  float4 ac = AC[id.xy];
-  AC[id.xy] = float4(finite3(ac.rgb + b * 0.2), ac.a);
+  float4 e = EB[id.xy];
+  EB[id.xy] = float4(finite3(e.rgb + b * 0.2), e.a);
 }
 
-// final (output resolution): In0 = RR output (ours, GENERAL), In1 = AC (GENERAL,
-// bilinear), the game's LUT; writes the game's DLSS output image.
+// The chain value from the sharp colour s: the DoF composite (A, C), its
+// R11G11B10 store, the exposure (k) and its store, the bloom add and its store,
+// as the game does it (flags bit 1; the GPU truncates on store). Without the
+// stores, plain A*s + C, k and + bloom in fp32.
+float3 chain_value(float3 s, float4 ac, float4 e) {
+  const bool q = (pc.flags & 2u) != 0u;
+  float3 v = max(finite3(ac.a * s + ac.rgb), 0.0);
+  if (q) v = trunc_r11g11b10(v);
+  v = finite3(v * e.a);
+  if (q) v = trunc_r11g11b10(v);
+  v = max(finite3(v + e.rgb), 0.0);
+  if (q) v = trunc_r11g11b10(v);
+  return v;
+}
+
+// final (output resolution): In0 = RR output (ours, GENERAL), In1 = AC, In2 = EB
+// (GENERAL, bilinear), the game's LUT; writes the game's DLSS output image.
 [numthreads(8, 8, 1)]
 void final(uint3 id : SV_DispatchThreadID) {
   if (any(id.xy >= pc.size)) return;
   float2 uv = (float2(id.xy) + 0.5) / float2(pc.size);
   float4 ac = In1.SampleLevel(LinClamp, uv, 0.0);
+  float4 e = In2.SampleLevel(LinClamp, uv, 0.0);
   float3 z = finite3(In0.Load(int3(id.xy, 0)).rgb);
-  float3 v = finite3(ac.a * z + ac.rgb);
-  v = max(v, 0.0);  // the game's grade input is unsigned (R11G11B10)
-  if ((pc.flags & 2u) != 0u) v = trunc_r11g11b10(v);
-  OutR11[id.xy] = finite3(bg3_grade(v));
+  OutR11[id.xy] = finite3(bg3_grade(chain_value(z, ac, e)));
 }
 
 // check (render resolution): grade(A * Xr + C) for comparison with the game's
-// own grade output in a trace. In0 = Xr, In1 = AC.
+// own grade output in a trace. In0 = Xr, In1 = AC, In2 = EB.
 [numthreads(8, 8, 1)]
 void check(uint3 id : SV_DispatchThreadID) {
   if (any(id.xy >= pc.size)) return;
   float4 ac = In1.Load(int3(id.xy, 0));
-  float3 v = max(finite3(ac.a * In0.Load(int3(id.xy, 0)).rgb + ac.rgb), 0.0);
-  if ((pc.flags & 2u) != 0u) v = trunc_r11g11b10(v);
-  Out16[id.xy] = float4(bg3_grade(v), 1.0);
+  float4 e = In2.Load(int3(id.xy, 0));
+  Out16[id.xy] = float4(bg3_grade(chain_value(In0.Load(int3(id.xy, 0)).rgb, ac, e)), 1.0);
 }
 
 // probe: copies the exposure values the game uses into a host-visible buffer.
