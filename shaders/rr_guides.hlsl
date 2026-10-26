@@ -6,7 +6,7 @@
 // Outputs (formats chosen by the host):
 //   DiffuseAlbedo   RGBA8    baseColor * (1 - metal)            sky: 0.5
 //   SpecularAlbedo  RGBA16F  EnvBRDFApprox2(F0, rough^2, NoV)   sky: 0
-//   NormalRough     RGBA16F  xyz view-space normal, w roughness  sky: 0
+//   NormalRough     RGBA16F  xyz world normal, w roughness       sky: 0
 //                            (DLSS.Roughness.Mode = Packed)
 #include "common.hlsli"
 
@@ -23,7 +23,8 @@
 struct Push {
   uint2 size;          // render resolution
   uint2 out_size;      // DLSS output resolution (show only)
-  float2 tan_half_fov; // 0,0 -> NoV = |n.z|
+  float nov;           // > 0: constant N.V for specular albedo; <= 0: |n.z| (needs view-space normals)
+  float pad;
   uint depth_inverted; // reversed Z: far plane = 0
   uint show;           // 1 diffuse, 2 specular, 3 normals, 4 roughness, 5 raw RT0, 6 depth
 };
@@ -43,13 +44,14 @@ void main(uint3 id : SV_DispatchThreadID) {
     return;
   }
   float3 n = bg3_decode_normal(GNormal.Load(p).xy);
+  if (any(!isfinite(n))) n = float3(0.0, 0.0, 1.0);  // RR must never see NaN/Inf
   float3 base = GBase.Load(p).rgb;
   float4 m = GMaterial.Load(p);
   float rough = m.x, spec = m.y, metal = m.z;
 
-  float2 ndc = (float2(id.xy) + 0.5) / float2(pc.size) * 2.0 - 1.0;
-  float3 v = normalize(float3(-ndc * pc.tan_half_fov, 1.0));
-  float NoV = saturate(abs(dot(n, v)));
+  // RT0 normals are world-aligned (floors decode to +Y), and the camera is not
+  // known here, so N.V is a constant by default. TODO: camera UBO -> true N.V.
+  float NoV = pc.nov > 0.0 ? pc.nov : saturate(abs(n.z));
 
   float3 f0 = bg3_f0(base, spec, metal);
   ODiffuse[id.xy] = float4(base * (1.0 - metal), 1.0);

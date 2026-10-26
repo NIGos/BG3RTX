@@ -129,7 +129,7 @@ static void end_pass(VkCommandBuffer cmd) {
     std::string dumps = trace_dump_pass(cmd, s);
     trace_event(s, "{\"op\":\"end\",\"draws\":" + std::to_string(s->pass.draw_count) + ",\"dumps\":[" + dumps + "]}");
   }
-  ngx_note_pass(s->pass, s->color_layouts);
+  ngx_note_pass(cmd, s->pass, s->color_layouts, s->depth_layout);
   core_on_pass_end(cmd, &s->pass);
 }
 

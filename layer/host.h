@@ -192,7 +192,8 @@ void shader_poll();
 
 // ---- NGX: SR -> Ray Reconstruction (ngx.cpp) ----
 void ngx_init();                       // hooks _nvngx.dll now or when it loads
-void ngx_note_pass(const Bg3PassInfo& p, const VkImageLayout* layouts);   // G-buffer discovery
+// G-buffer discovery; with rr=1 also records the RR guide dispatch into `cmd`.
+void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts, VkImageLayout depth_layout);
 void ngx_on_destroy_image(VkImage img);
 void ngx_on_present();
 

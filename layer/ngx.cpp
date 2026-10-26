@@ -250,8 +250,10 @@ struct Guide {
 
 struct SetKey {
   VkImage rt0, rt1, rt2, depth, out;
+  VkImageLayout rt_layout, depth_layout;
   bool operator==(const SetKey& o) const {
-    return rt0 == o.rt0 && rt1 == o.rt1 && rt2 == o.rt2 && depth == o.depth && out == o.out;
+    return rt0 == o.rt0 && rt1 == o.rt1 && rt2 == o.rt2 && depth == o.depth && out == o.out &&
+           rt_layout == o.rt_layout && depth_layout == o.depth_layout;
   }
 };
 
@@ -289,12 +291,17 @@ static int g_jitter_logs = 0;
 // G-buffer discovery (called at every render pass end, on recording threads)
 // ---------------------------------------------------------------------------
 
-void ngx_note_pass(const Bg3PassInfo& p, const VkImageLayout* layouts) {
+static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts,
+                                     VkImageLayout depth_layout);
+
+void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts,
+                   VkImageLayout depth_layout) {
   if (p.color_count < 4 || p.draw_count == 0) return;
   if (p.color_formats[0] != VK_FORMAT_R16G16_SFLOAT || p.color_formats[1] != VK_FORMAT_R8G8B8A8_UNORM ||
       p.color_formats[2] != VK_FORMAT_R8G8B8A8_UNORM || p.color_formats[3] != VK_FORMAT_R8G8B8A8_UNORM)
     return;
   if (p.depth_format != VK_FORMAT_D24_UNORM_S8_UINT) return;
+  record_guides_at_gbuffer(cmd, p, layouts, depth_layout);
   std::lock_guard<std::mutex> lock(g_gbuf_mu);
   bool changed = g_gbuf.rt[0] != p.color_images[0] || g_gbuf.w != p.width;
   for (int i = 0; i < 3; ++i) {
@@ -487,13 +494,7 @@ void ngx_on_destroy_image(VkImage img) {
   }
 }
 
-static VkImageLayout sampled_layout(VkImageLayout l) {
-  return (l == VK_IMAGE_LAYOUT_GENERAL || l == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) ? l
-                                                                                        : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-}
-
-static VkDescriptorSet get_set(DeviceData* dd, const SetKey& key, const GBuffer& gb, VkImage out_img,
-                               VkImageView out_view) {
+static VkDescriptorSet get_set(DeviceData* dd, const SetKey& key, VkImageView out_view) {
   for (auto& [k, s] : g_sets)
     if (k == key) return s;
   if (g_sets.size() >= 48) {
@@ -507,11 +508,18 @@ static VkDescriptorSet get_set(DeviceData* dd, const SetKey& key, const GBuffer&
   ai.descriptorSetCount = 1;
   ai.pSetLayouts = &g_dsl;
   VkDescriptorSet set = VK_NULL_HANDLE;
-  if (dd->vk.AllocateDescriptorSets(dd->device, &ai, &set) != VK_SUCCESS) return VK_NULL_HANDLE;
+  if (dd->vk.AllocateDescriptorSets(dd->device, &ai, &set) != VK_SUCCESS) {
+    // Sets abandoned by destroyed G-buffers (one per level load) fill the pool.
+    log("[ngx] descriptor pool exhausted; waiting idle and resetting it");
+    dd->vk.DeviceWaitIdle(dd->device);
+    dd->vk.ResetDescriptorPool(dd->device, g_pool, 0);
+    g_sets.clear();
+    if (dd->vk.AllocateDescriptorSets(dd->device, &ai, &set) != VK_SUCCESS) return VK_NULL_HANDLE;
+  }
   VkDescriptorImageInfo ii[8] = {};
   VkImage srcs[3] = {key.rt0, key.rt1, key.rt2};
-  for (int i = 0; i < 3; ++i) ii[i] = {VK_NULL_HANDLE, view_of(dd, srcs[i], false), sampled_layout(gb.layout[i])};
-  ii[3] = {VK_NULL_HANDLE, view_of(dd, key.depth, true), VK_IMAGE_LAYOUT_GENERAL};
+  for (int i = 0; i < 3; ++i) ii[i] = {VK_NULL_HANDLE, view_of(dd, srcs[i], false), key.rt_layout};
+  ii[3] = {VK_NULL_HANDLE, view_of(dd, key.depth, true), key.depth_layout};
   for (int i = 0; i < 3; ++i) ii[4 + i] = {VK_NULL_HANDLE, g_guide[i].view, VK_IMAGE_LAYOUT_GENERAL};
   ii[7] = {VK_NULL_HANDLE, out_view, VK_IMAGE_LAYOUT_GENERAL};
   for (int i = 0; i < 4; ++i)
@@ -530,7 +538,6 @@ static VkDescriptorSet get_set(DeviceData* dd, const SetKey& key, const GBuffer&
   }
   dd->vk.UpdateDescriptorSets(dd->device, n, w, 0, nullptr);
   g_sets.push_back({key, set});
-  (void)out_img;
   return set;
 }
 
@@ -540,6 +547,126 @@ static void memory_barrier(DeviceData* dd, VkCommandBuffer cmd, VkPipelineStageF
   mb.srcAccessMask = sa;
   mb.dstAccessMask = da;
   dd->vk.CmdPipelineBarrier(cmd, src, dst, 0, 1, &mb, 0, nullptr, 0, nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// Guide dispatch
+// ---------------------------------------------------------------------------
+
+struct GuidePush {
+  uint32_t size[2], out_size[2];
+  float nov, pad;
+  uint32_t depth_inverted, show;
+};
+
+static GuidePush guide_push(const SrFeature& f, uint32_t w, uint32_t h) {
+  GuidePush pc{};
+  pc.size[0] = w;
+  pc.size[1] = h;
+  pc.nov = cfg_float("rr_nov", 0.5f);
+  pc.depth_inverted = (f.flags & NVSDK_NGX_DLSS_Feature_Flags_DepthInverted) ? 1 : 0;
+  return pc;
+}
+
+// Guide images go UNDEFINED -> GENERAL once, then stay GENERAL.
+static void guides_init_barrier(DeviceData* dd, VkCommandBuffer cmd) {
+  VkImageMemoryBarrier init[3];
+  uint32_t n = 0;
+  for (auto& g : g_guide)
+    if (!g.initialized) {
+      init[n] = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+      init[n].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+      init[n].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+      init[n].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+      init[n].srcQueueFamilyIndex = init[n].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      init[n].image = g.image;
+      init[n].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+      ++n;
+      g.initialized = true;
+    }
+  if (n)
+    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
+                              nullptr, 0, nullptr, n, init);
+}
+
+static void dispatch_guides(DeviceData* dd, VkCommandBuffer cmd, VkDescriptorSet set, const GuidePush& pc) {
+  guides_init_barrier(dd, cmd);
+  // Earlier reads of the guides (last frame's NGX) and writes of the inputs.
+  memory_barrier(dd, cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                 VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+  dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pipe);
+  dd->vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pl, 0, 1, &set, 0, nullptr);
+  dd->vk.CmdPushConstants(cmd, g_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  dd->vk.CmdDispatch(cmd, (pc.size[0] + 7) / 8, (pc.size[1] + 7) / 8, 1);
+  memory_barrier(dd, cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                 VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_SHADER_READ_BIT);
+  restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);  // the game's compute state survives us
+}
+
+static uint64_t g_guides_frame = 0;
+
+// Called right after a G-buffer pass ends, in the game's command buffer and
+// outside any render pass: the only moment RT0-RT2 are known to hold the
+// G-buffer (their memory is reused before the DLSS evaluate). The RTs are left
+// in COLOR_ATTACHMENT_OPTIMAL by the pass, depth in its final layout; both are
+// moved to read-only layouts for the dispatch and back afterwards.
+static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts,
+                                     VkImageLayout depth_layout) {
+  if (!cfg_int("rr", 1) || cfg_int("rr_guides_at", 1) != 1) return;
+  DeviceData* dd = device_of(cmd);
+  if (!dd || !p.depth_image) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  const SrFeature* f = nullptr;
+  for (auto& x : g_feats)
+    if (x.w == p.width && x.h == p.height && !x.rr_failed) f = &x;
+  if (!f) return;
+  if (!ensure_layouts(dd) || !ensure_guides(dd, p.width, p.height)) return;
+  g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe);
+  if (!g_pipe) return;
+
+  bool known = depth_layout != VK_IMAGE_LAYOUT_UNDEFINED;
+  for (int i = 0; i < 3; ++i) known &= layouts[i] != VK_IMAGE_LAYOUT_UNDEFINED;
+  const VkImageLayout rt_read = known ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+  const VkImageLayout depth_read = known ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+  SetKey key{p.color_images[0], p.color_images[1], p.color_images[2], p.depth_image, VK_NULL_HANDLE, rt_read,
+             depth_read};
+  VkDescriptorSet set = get_set(dd, key, VK_NULL_HANDLE);
+  if (!set) return;
+
+  VkImageMemoryBarrier b[4] = {};
+  for (int i = 0; i < 4; ++i) {
+    b[i] = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    b[i].srcQueueFamilyIndex = b[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b[i].image = i < 3 ? p.color_images[i] : p.depth_image;
+    b[i].oldLayout = i < 3 ? layouts[i] : depth_layout;
+    b[i].newLayout = i < 3 ? rt_read : depth_read;
+    b[i].srcAccessMask = i < 3 ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    b[i].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    b[i].subresourceRange = {VkImageAspectFlags(i < 3 ? VK_IMAGE_ASPECT_COLOR_BIT
+                                                      : VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT),
+                             0, 1, 0, 1};
+  }
+  const VkPipelineStageFlags att = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+  if (known)
+    dd->vk.CmdPipelineBarrier(cmd, att, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 4, b);
+  dispatch_guides(dd, cmd, set, guide_push(*f, p.width, p.height));
+  if (known) {
+    for (auto& x : b) {
+      std::swap(x.oldLayout, x.newLayout);
+      x.srcAccessMask = 0;
+      x.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+    }
+    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
+                              nullptr, 0, nullptr, 4, b);
+  }
+  g_guides_frame = frame_index();
+  static bool said = false;
+  if (!said) {
+    said = true;
+    log("[ngx] guides recorded at the G-buffer pass end (RT layouts %d %d %d -> %d, depth %d -> %d)", layouts[0],
+        layouts[1], layouts[2], rt_read, depth_layout, depth_read);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -728,7 +855,8 @@ static bool rr_create(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f) {
 }
 
 // Fake pass around our guide images so the tracer dumps them (PNG + stats).
-static void trace_guides(VkCommandBuffer cmd, VkImage extra, const char* tag) {
+// gbuf (optional): the G-buffer RT0-RT2 as they are at evaluate time.
+static void trace_guides(VkCommandBuffer cmd, VkImage extra, const VkImage* gbuf, const char* tag) {
   CmdState* s = cmd_state(cmd);
   if (!s || !s->tracing) return;
   Bg3PassInfo saved = s->pass;
@@ -738,7 +866,8 @@ static void trace_guides(VkCommandBuffer cmd, VkImage extra, const char* tag) {
   Bg3PassInfo p{};
   p.ordinal = s->pass_ordinal++;
   p.draw_count = 1;
-  VkImage imgs[4] = {g_guide[0].image, g_guide[1].image, g_guide[2].image, extra};
+  VkImage imgs[7] = {g_guide[0].image, g_guide[1].image, g_guide[2].image, extra,
+                     gbuf ? gbuf[0] : VK_NULL_HANDLE, gbuf ? gbuf[1] : VK_NULL_HANDLE, gbuf ? gbuf[2] : VK_NULL_HANDLE};
   for (VkImage img : imgs) {
     if (!img) continue;
     ImageRec rec{};
@@ -807,9 +936,16 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
     }
     if (!out_view || !g_pipe_show) show = 0;
   }
-  SetKey key{gb.rt[0], gb.rt[1], gb.rt[2], depth->Resource.ImageViewInfo.Image, out_view ? out_img : VK_NULL_HANDLE};
-  VkDescriptorSet set = get_set(dd, key, gb, out_img, out_view);
-  if (!set) return refuse("descriptor set for the G-buffer could not be built");
+  // Guides were normally built at the end of the G-buffer pass (rr_guides_at=1,
+  // see record_guides_at_gbuffer). At evaluate time the G-buffer memory has
+  // already been reused by later passes, so rr_guides_at=0 is a debug mode.
+  const bool late = cfg_int("rr_guides_at", 1) == 0;
+  const bool fresh = g_guides_frame + 2 >= frame_index() && g_guides_frame != 0;
+  if (!late && !fresh) return refuse("no guides recorded at the G-buffer pass this frame");
+  SetKey key{gb.rt[0], gb.rt[1], gb.rt[2], depth->Resource.ImageViewInfo.Image, out_view ? out_img : VK_NULL_HANDLE,
+             VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL};
+  VkDescriptorSet set = (late || show) ? get_set(dd, key, out_view) : VK_NULL_HANDLE;
+  if ((late || show) && !set) return refuse("descriptor set for the G-buffer could not be built");
 
   if (!f.rr && !f.rr_failed) {
     if (!rr_create(dd, cmd, f)) {
@@ -820,47 +956,14 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   }
   if (!f.rr) return false;
 
-  // ---- guides ----
-  VkImageMemoryBarrier init[3];
-  uint32_t ninit = 0;
-  for (auto& g : g_guide)
-    if (!g.initialized) {
-      init[ninit] = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-      init[ninit].srcAccessMask = 0;
-      init[ninit].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-      init[ninit].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      init[ninit].newLayout = VK_IMAGE_LAYOUT_GENERAL;
-      init[ninit].srcQueueFamilyIndex = init[ninit].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-      init[ninit].image = g.image;
-      init[ninit].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-      ++ninit;
-      g.initialized = true;
-    }
-  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-  mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-  mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb,
-                            0, nullptr, ninit, init);
-
-  struct Push {
-    uint32_t size[2], out_size[2];
-    float tan_half_fov[2];
-    uint32_t depth_inverted, show;
-  } pc{};
-  pc.size[0] = w;
-  pc.size[1] = h;
+  GuidePush pc = guide_push(f, w, h);
   pc.out_size[0] = out->Resource.ImageViewInfo.Width;
   pc.out_size[1] = out->Resource.ImageViewInfo.Height;
-  pc.tan_half_fov[0] = cfg_float("rr_tan_half_fov_x", 0.0f);
-  pc.tan_half_fov[1] = cfg_float("rr_tan_half_fov_y", 0.0f);
-  pc.depth_inverted = (f.flags & NVSDK_NGX_DLSS_Feature_Flags_DepthInverted) ? 1 : 0;
   pc.show = uint32_t(show);
-  dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pipe);
-  dd->vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pl, 0, 1, &set, 0, nullptr);
-  dd->vk.CmdPushConstants(cmd, g_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
-  dd->vk.CmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
-  memory_barrier(dd, cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                 VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_SHADER_READ_BIT);
+  if (late) dispatch_guides(dd, cmd, set, pc);
+  // Makes the guide writes (this or an earlier command buffer) visible to NGX.
+  memory_barrier(dd, cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                 VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_SHADER_READ_BIT);
   if (g_qpool) ts_mark(dd, cmd, ts_slot, 1);
 
   // ---- evaluate ----
@@ -899,8 +1002,9 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
     dd->vk.CmdDispatch(cmd, (pc.out_size[0] + 7) / 8, (pc.out_size[1] + 7) / 8, 1);
     memory_barrier(dd, cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                    VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT);
+    restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   }
-  trace_guides(cmd, out_img, "rr");
+  trace_guides(cmd, out_img, cfg_int("rr_dump_gbuffer", 0) ? gb.rt : nullptr, "rr");
   return result == NVSDK_NGX_Result_Success;
 }
 
@@ -1026,7 +1130,7 @@ static NVSDK_NGX_Result Detour_Eval(VkCommandBuffer cmd, const NVSDK_NGX_Handle*
     if (g_qpool) ts_mark(dd, cmd, slot, 2);
     if (want) want = 0;  // RR declined this frame: SR history continues
     NVSDK_NGX_Resource_VK* out = get_res(p, NVSDK_NGX_Parameter_Output);
-    trace_guides(cmd, out ? out->Resource.ImageViewInfo.Image : VK_NULL_HANDLE, "sr");
+    trace_guides(cmd, out ? out->Resource.ImageViewInfo.Image : VK_NULL_HANDLE, nullptr, "sr");
   }
   f->last_mode = want;
   return r;
