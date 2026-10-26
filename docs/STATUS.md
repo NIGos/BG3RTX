@@ -38,6 +38,24 @@ Main is buildable and verified up to `1e87553`.
 | `agent-a369c987e3572f784` | Image lifetime at level load | `VUID-vkDestroyImage-image-01000` since RR before post. |
 | `agent-a57aa2a0cc31585bb` | Two concurrent game instances for tests | Feasibility test ran with two live instances. |
 
+State of each branch at the pause, as reported:
+- **Foliage alpha** (`7a6a90a`).
+  - Root cause: 24 grass shader families were missing from `alpha_fs.txt` (the table generator missed the temporary-variable form), and 76 shaders used the wrong cut-off.
+  - Effect on Campsite QA: GI hard-edged darkening 10.9‰ → 0, flicker 76 → 16.
+  - To do: a `-Move` run, a check of the other alpha content (Goblin Camp foliage, foundry chains), and 20 shaders that still use the loose cut-off.
+- **Local-light shadow cost** (`fa7f537`).
+  - −31 to −37% (foundry 0.40 ms), bit-exact (`ls_check=1`).
+  - To do: validation, `-Move`, the docs (draft in `tools/lsref/`).
+  - Grymforge is still 0.72 ms because of its many torches.
+- **Image lifetime** (`2170b41`).
+  - The validation ID is gone in 3 scenes: the descriptor ring held stale bindings, and the destroy hooks now wait on our fence (0 ms stall measured).
+  - To do: one `-Move` run with a non-finite check, plus a doc fix.
+- **Two instances** (`91b50c3`).
+  - Feasible: two instances ran for 150 s, using 26 GB of VRAM.
+  - The slot locks, the PID-only control, the display-settings restore counted across runs and the per-instance Script Extender bridge are written.
+  - To do: the foundry capture timeout when shared, the second instance writing no bridge data, the 4-scene speed-up measurement, and the docs.
+  - Before merging, confirm old-style scripts can no longer kill shared games.
+
 **To resume:** read each `PAUSED.md`, finish and verify, merge one branch at a time into main (`git merge --no-ff -X renormalize -X ignore-space-at-eol`), rebuild, run QA, then remove the worktree.
 
 ## Next after the paused work
