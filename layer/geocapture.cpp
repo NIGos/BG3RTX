@@ -88,6 +88,9 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host) 
   VkMemoryRequirements req;
   dd->vk.GetBufferMemoryRequirements(dd->device, out.b, &req);
   VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  VkMemoryAllocateFlagsInfo flags{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};
+  flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+  if ((usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) && rt_alloc_device_address()) mai.pNext = &flags;
   mai.allocationSize = req.size;
   mai.memoryTypeIndex =
       host ? find_memory_type(dd, req.memoryTypeBits,
@@ -148,6 +151,13 @@ struct Capture {
   std::vector<DrawRec> draws;
   std::string dir;
   uint64_t wait_until = 0;
+  // Per-frame capture for the acceleration structures (rt=1): only exactly
+  // sized draws, so the soup is contiguous; the camera UBO of the first one.
+  bool rt = false;
+  VkBuffer rt_ubo = VK_NULL_HANDLE;
+  VkDeviceSize rt_ubo_off = 0;
+  uint64_t sig = 0;
+  uint32_t rt_draws = 0;
 };
 
 std::mutex g_cap_mu;
@@ -238,11 +248,14 @@ bool copy_image(VkCommandBuffer cmd, VkImage image, VkImageLayout layout, VkForm
 
 bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   if (!c.xfb.b) {
-    VkDeviceSize mb = VkDeviceSize((std::max)(cfg_int("geo_xfb_mb", 768), 16));
+    // The per-frame RT capture holds one frame's soup (3.2M triangles = 152 MB
+    // in the test scene) and is read in place by the AS build.
+    const bool rt = !readback && rt_enabled();
+    VkDeviceSize mb = VkDeviceSize((std::max)(rt ? cfg_int("rt_xfb_mb", 384) : cfg_int("geo_xfb_mb", 768), 16));
     c.max_slots = uint32_t((std::max)(cfg_int("geo_max_draws", 16384), 256));
     // Readback captures write straight into host-cached memory (one frame, so
     // the PCIe traffic does not matter); the cost probe uses device memory.
-    if (!make_buf(c.xfb, mb << 20, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT, readback) ||
+    if (!make_buf(c.xfb, mb << 20, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | (rt ? rt_xfb_usage() : 0), readback) ||
         !make_buf(c.counters, VkDeviceSize(c.max_slots) * 4, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT,
                   readback)) {
       log("[geo] could not allocate %llu MB of transform feedback memory", (unsigned long long)mb);
@@ -272,6 +285,11 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.frame_tag = UINT64_MAX;
   c.record_frame = frame_index();
   c.have_depth = c.have_normals = c.have_ubo = false;
+  c.rt = false;
+  c.rt_ubo = VK_NULL_HANDLE;
+  c.rt_ubo_off = 0;
+  c.sig = 1469598103934665603ull;
+  c.rt_draws = 0;
   return true;
 }
 
@@ -766,7 +784,7 @@ void release(Capture& c) {
 const VkDeviceCreateInfo* geo_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
                                                  VkDeviceCreateInfo* scratch) {
   g_timing = cfg_int("geo_timing", 0) != 0;
-  if (!cfg_int("geo_capture", 0) || !id) return ci;
+  if ((!cfg_int("geo_capture", 0) && !cfg_int("rt", 0)) || !id) return ci;
   uint32_t n = 0;
   id->EnumerateDeviceExtensionProperties(phys, nullptr, &n, nullptr);
   std::vector<VkExtensionProperties> props(n);
@@ -911,10 +929,13 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
         g_submit_wanted = true;
         g_dd->vk.CmdResetQueryPool(cmd, g_cap.qp, 0, g_cap.max_slots);
       }
-    } else if (cfg_int("geo_xfb_always", 0) && g_scratch.state != 1) {
+    } else if (g_scratch.state != 1 && (rt_capture_wanted() || cfg_int("geo_xfb_always", 0))) {
       if (start_capture(g_scratch, false, s->pass.width, s->pass.height)) {
         g_scratch.cmd = cmd;
+        g_scratch.rt = rt_capture_wanted();
         s->geo = &g_scratch;
+        // The previous frame's AS build read this buffer.
+        if (g_scratch.rt) rt_before_capture(cmd);
       }
     }
     xfb = s->geo != nullptr;
@@ -958,6 +979,15 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t coun
     auto it = g_pipes.find(s->pipe[0]);
     if (it != g_pipes.end()) pi = it->second;
   }
+  if (c->rt && !c->rt_ubo) {
+    Bg3Binding b;
+    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+        (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
+        b.offset % g_ubo_align == 0) {
+      c->rt_ubo = b.buffer;
+      c->rt_ubo_off = b.offset;
+    }
+  }
   if (c->readback && c->draws.size() < 65536) {
     Bg3Binding b;
     if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
@@ -983,8 +1013,16 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t coun
   d.offset = c->cursor;
   if (!pi.xfb) d.skip = 1;
   else if (!pi.triangles) d.skip = 2;
+  // The RT soup must be gap-free: only draws whose output size is exact.
+  else if (c->rt && (kind > 1 || pi.topo != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) d.skip = 4;
   else if ((c->readback && c->slots >= c->max_slots) || c->cursor + d.reserved > c->xfb.size) d.skip = 3;
   const bool capture = d.skip == 0 && d.reserved > 0;
+  if (capture && c->rt) {
+    // Draw identity for the refit decision: same draws in the same order give
+    // the same triangle order.
+    for (uint64_t v : {uint64_t(d.pipe_id), uint64_t(count), uint64_t(instances)}) c->sig = (c->sig ^ v) * 1099511628211ull;
+    ++c->rt_draws;
+  }
   if (capture) {
     VkDeviceSize off = d.offset, size = d.reserved;
     p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
@@ -1022,6 +1060,7 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
   s->geo = nullptr;
   if (!c) return;
   if (!c->readback) {
+    if (c->rt) rt_after_capture(cmd, c->xfb.b, c->cursor, c->rt_ubo, c->rt_ubo_off, c->sig, c->rt_draws);
     // Next frame's capture into the same scratch memory comes after this one.
     barrier(cmd, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT,
             VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT | VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT,

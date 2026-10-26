@@ -7,7 +7,7 @@
 #include <cstdint>
 #include "vk_funcs.h"
 
-#define BG3RTX_ABI_VERSION 2
+#define BG3RTX_ABI_VERSION 3
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -66,6 +66,7 @@ enum Bg3DeferKind : uint32_t {
   BG3_DEFER_DESCRIPTOR_POOL, BG3_DEFER_SHADER_MODULE, BG3_DEFER_IMAGE,
   BG3_DEFER_IMAGE_VIEW, BG3_DEFER_BUFFER, BG3_DEFER_MEMORY, BG3_DEFER_SAMPLER,
   BG3_DEFER_COMMAND_POOL, BG3_DEFER_FENCE, BG3_DEFER_SEMAPHORE, BG3_DEFER_QUERY_POOL,
+  BG3_DEFER_ACCELERATION_STRUCTURE,
 };
 
 struct Bg3ShaderBlob {
@@ -123,6 +124,14 @@ struct Bg3HostApi {
   // pixels, so that previous = current + mv * scale. False until the first
   // DLSS evaluate.
   bool (*dlss_motion_vectors)(VkImage* image, VkImageView* view, VkFormat* format, float scale[2]);
+
+  // Track D: the top-level acceleration structure over this frame's captured
+  // G-buffer geometry (camera-relative world space, the lighting pass's space),
+  // and the frame index it was last recorded in. False when hardware RT is
+  // not enabled on the device (rt=0) or nothing has been built yet. The
+  // handle is the host's; it stays valid for a few frames after it is
+  // replaced, like everything handed to defer_destroy.
+  bool (*rt_scene)(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
 };
 
 struct Bg3CoreApi {
