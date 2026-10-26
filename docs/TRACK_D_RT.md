@@ -4,7 +4,9 @@
 device**, against acceleration structures rebuilt or refit every frame from the
 captured G-buffer geometry. Off by default (`rt=0`). Results, costs and next steps
 are in [section 6](#6-phase-2-results-acceleration-structures-and-ray-queries-on-the-games-device).
-Sections 1-5 are phase 1 (the capture) and the original phase-2 plan.
+Sections 1-5 are phase 1 (the capture) and the original phase-2 plan. Section 7 is
+phase 3 (alpha test, hybrid GI). Section 8 is the effect catalogue and roadmap for
+further RT effects (see also [QUALITY.md](QUALITY.md)).
 
 Goal of phase 1: prove that the frame's opaque scene geometry can be captured
 every frame in camera-relative world space, as the input for BLAS/TLAS builds and
@@ -615,3 +617,346 @@ CopyBuffer-00118, 08737, headless swapchain); none from our work.
 - Off-screen hit radiance: a world-space radiance cache instead of fallback 0.
 - Opacity micromaps would remove most candidate shader work.
 - Decide default-on for `rt_alpha`/`gi_rt` after the motion run; update ROADMAP.
+
+## 8. Effect catalogue and roadmap (analysis, 2026-10-26)
+
+A feasibility study of further ray/path-traced effects. It was done without running
+the game, from the decompiled shaders of `captures/20261025-235042` (mainly the
+tiled lighting `f469db78`), the report of that capture, and the code of
+Tracks A, C and D. The plans in sections 5-7 stay as they are. This section only adds
+effects that were not already planned, plus the enablers they share. The quality
+audit of the existing effects, and the rules every new effect must follow, are in
+[QUALITY.md](QUALITY.md).
+
+### 8.1 What the game gives us (data inventory)
+
+Everything below is in the **lighting space**, which is camera-relative world
+(`P = ray(uv) × linear depth`, the same space as the TLAS; see 6.4). Absolute world =
+`P + _m6` of the camera UBO (set 0 b2). Light positions in the light array are in
+this space too: the lighting computes `light.m0.xyz − P`.
+
+| Data | Where | Have it? | Notes |
+|---|---|---|---|
+| Position, view-space normal, base colour, roughness, F0 (`0.16·spec²`/metal), metalness, light-channel bits (RT2.w bits 4-6) | G-buffer RT0-RT2, linear depth; bound to the tiled lighting at set 1 b1/b2/b3/b5 | **yes** (core snapshot) | Primary hit only. RT3 is almost empty. |
+| **Local lights** | lighting set 1: b23 cluster headers (ivec4: x offset; y bits 0-11 points, 12-23 spots, 24-31 env probes; z bits 0-9 projector lights), b24 index list, **b25 light array** (struct `_50`) | **readable** (same `query_binding` route as the camera UBO; not done yet) | `_50`: m0.xyz position, m0.w = 1/radius; m1.xyz colour, m1.w spot cos-outer; m2.xyz spot direction, m2.w cos-inner; m3 < 0 → × global scale `b13[0]`; m4 falloff exponent; m5 falloff model/bias (sign selects the model); m6 light-channel mask; m7 bit 0 = casts a shadow, m7>>2 = shadow-atlas slot; m8 shadow strength. Clusters are froxels (log depth), so they only index lights for points inside the view frustum. |
+| Projector (textured) lights | b29 (struct `_53`, row-major mat4x3 projection, cookie index into b45 `texture2D[]`) | readable | Third light loop in `f469db78`. |
+| Local-light shadows | b40 (per-face mat4 + atlas rect + bias), b41 atlas | readable | Point lights: 4-face **tetrahedral** maps. 12-tap Vogel-disc PCF rotated by interleaved gradient noise (`fract(52.98·fract(0.0671·x + 0.00584·y))`), faded by camera distance (`b39 _m34`) and by m8. Lights without m7 bit 0 have **no shadow at all**. |
+| Sun | camera CB set 0 b1: `_m0` direction (= `cam.v0`), `_m2` colour, or a transmittance-LUT colour when the atmosphere is on; × `b13[0]` | **yes** | **Angular radius:** the sun specular uses a representative-point disc with `sin θ = 0.0045901`, `cos θ = 0.9999894` (θ = 0.263°, the real sun). Shadow = mask b7 (ours to fold into) × two cloud-shadow textures. |
+| Ambient | global sky cubemaps b34-b37 (irradiance + prefiltered spec, two sets blended by `b39 _m29`), local parallax-corrected box/sphere env probes (b33 list + b45 cube array), DFG LUT b38, × `b13[0]·100` | readable | Diffuse ambient = irradiance · diffuse colour · DFG.z · AO. Specular ambient = prefiltered probe · (F0·A + B) · Lagarde specular occlusion(AO, N·V, roughness). **There is no SSR in BG3.** All indirect specular comes from probes. |
+| AO | b6 RGB10A2 `.x` = the game's **half-res SSAO** (units 88-91: `0effa9ff` → `af81b62d` deinterleave → `a6bb35c6` blur) | **yes** (we fold into it) | The lighting also multiplies **direct** light (local lights and sun) by `mix(1, AO, b0._m0.y)` (diffuse) and `mix(1, specOcc, b0._m0.y)` (specular). That value has not been read yet. |
+| BRDF | `f469db78` | **known exactly** | GGX D, height-correlated Smith (the approximate form), Schlick F; renormalised Burley diffuse × `mix(1, 0.662, r)`; roughness ≥ 0.09, plus specular AA from the quad normal variance (`sqrt(r² + min(var, 0.18))`). |
+| Atmosphere | inside the lighting: aerial-perspective transmittance multiplies both outputs, and the in-scatter is added to diffuse (b10) | known | So the lit diffuse buffer contains in-scatter. Negligible at gameplay distances (the planet is scaled, R ≈ 636 km), but not zero. |
+| Emissive / sky / FX | a B10G11R11 render-resolution target written **before** the lighting (units 78-85: sky `c9f013fc`, half-res clouds, projected FX) and added in compose `5c3fdabc`: `(diffuse_after_SSS + specular + this) · fogT + fogInscatter` | not captured | Not in our `prevRadiance` (QUALITY Q8). Where emissive *materials* go is unverified: RT3 is near zero, so either this target or the forward pass. |
+| SSS | units 121/122 (`6f535075`, `d1669194`), profiles in an SSBO (set 2 b15); they read our diffuse buffer | yes (we inject before it) | Screen-space blur, two passes. |
+| Fog / volumetrics | froxel grid 285x119xZ: `c3e212ad` density, `ca8adce7` scattering (sun cascades via samplerShadow + local lights), `8a4e0720` integration; tricubic lookup in compose | known | Volumetric sun shafts already exist (from the cascades). |
+| Transparents | forward pass unit 125 (46 draws, water among them), after a colour copy for refraction (unit 124) | **not in the TLAS** | Would need XFB on the forward pass. |
+| Off-screen geometry | — | **no** | The TLAS holds what the camera's G-buffer (or prepass) drew: frustum-culled, **roofs cut away indoors**, no forward geometry. The shadow cascades contain more (roofs, casters around the view): 6.7 item 2. |
+| Materials at secondary hits | — | **partly feasible** | `vt_alpha()` already samples the Granite tile set for alpha. The same lookup in the albedo layer gives the hit's **base colour** for the 252 VT shader families. Normal/physical layers and plain-texture materials would need more decoding. |
+
+### 8.2 Composition: how a new term enters without double counting
+
+Every effect must name the game term it replaces and use one of three patterns:
+
+1. **Fold** through a game input whose meaning is verified. Example: visibility into AO
+   `.x`, or into the sun mask b7. Use *replace* semantics when the new signal contains
+   the old one (RT AO contains SSAO's occluders). Use *multiply* only when the two are
+   independent (RT on-screen casters vs off-screen cascade casters).
+2. **Exact delta.** Re-evaluate the game's term `T_game` from the decompiled code with
+   the same bound resources, then write `out += T_ours − T_game` into b10/b11 at
+   the post-lighting hook (where `gi_composite` runs, before SSS). Since `T_game` is
+   computed exactly, the result is `out − T_game + T_ours ≥ 0` whenever
+   `T_ours ≥ 0`, with no clamping bias. This works for per-light shadow terms, the
+   specular probe term and the diffuse ambient term.
+   - Limitation: the aerial-perspective transmittance is not replicated, so
+     deltas fade back to the game's term beyond about 100 m.
+3. **Lighting-shader patch** (enabler D-EN5): a SPIR-V patch of the `f469db78` family
+   that multiplies or replaces specific terms by values from our images. It is the
+   cheapest at run time, but the most fragile.
+
+| Game term | Replaced by | Pattern |
+|---|---|---|
+| SSAO (b6 `.x`) | RT ambient visibility | fold, **replace** (today: multiply, see QUALITY Q2) |
+| Sun mask (b7) | RT sun visibility (hard, then soft) | fold; multiply until cascade casters are captured, then replace within TLAS coverage |
+| Per-light atlas shadow, or no shadow | RT per-light visibility (D-LS) | exact delta (v1), patch (v2) |
+| Specular ambient (probes) | RT reflection (D-RF) | exact delta (v1), patch (v2) |
+| Diffuse ambient (probes · AO) | RT/cached irradiance (D-GI2) | fold (today's hybrid) → exact delta |
+| Emissive/FX target | (source of bounce only) | read-only (D-EM) |
+
+### 8.3 Feasibility of the candidates (summary)
+
+Costs are for the RTX 5090 at 2560x1067 (2.73 M pixels), scaled from what was measured:
+- sun shadows: 2.73 M rays, 0.08-0.11 ms;
+- hybrid GI: 2.73 M alpha-tested rays of 1 m, 0.175 ms.
+
+That works out to about **0.04-0.07 ms per million short rays**. For long closest-hit
+rays, assume 2-3× that.
+
+| Candidate | Data needed → have? | Injection | Gain | Cost | Risk | Verdict |
+|---|---|---|---|---|---|---|
+| Soft sun shadows | sun dir + **angular radius 0.00459 rad** (found) → yes | sun mask b7 (as now) | medium: penumbrae grow with caster distance (~0.9% of the distance), mostly for buildings and trees | 0.10-0.15 ms + denoise (RR: 0) | the fold only darkens, so penumbrae appear only where the cascades are lit | **already planned** (6.7 item 5); refined in 8.5 |
+| RT shadows for local point/spot lights | light array b25 (pos, 1/r, colour, cone, flags), clusters b23/b24, atlas b40/b41 → **readable** | exact delta at post-lighting | **high**: BG3 has many unshadowed fill and torch lights that leak through walls and floors, and its shadowed lights use a low-res tetrahedral atlas | 0.3-0.6 ms (stochastic 1-2 rays/px + RR) | art intent: some fill lights are meant to leak, so shadowing is per-light and opt-in | **new: D-LS** |
+| ReSTIR DI / RTXDI | as D-LS; RTXDI SDK **not** in `external/` | sampler inside D-LS | medium: BG3 has tens of lights per view, not thousands. Worth it only with emissive triangles. | +0.2 ms over D-LS | RR wants permuted/randomised reuse | **new: D-DI** (after D-LS) |
+| RT reflections (glossy and mirror) | roughness/F0/metal decode → yes; hit radiance: on-screen → yes (reprojected); off-screen → needs EN1 + EN2 (+EN3) | exact delta on the specular ambient (probes) | **very high**: there is no SSR in BG3; wet stone, polished floors and metal show only probe reflections | 0.5-1.0 ms | the TLAS lacks geometry behind the camera and above the screen (culled), so the probe is the fallback; RR needs specular hit distance and matrices | **new: D-RF** |
+| Multi-bounce GI + radiance cache | TLAS, hit albedo (EN2), lights at hits (EN1), sky (b34) → mostly | today's hybrid (fold) → delta on the diffuse ambient | medium-high: the GI reach grows from 1 m to the room scale, with colour bleeding | 0.4-0.6 ms, 160 MiB (SHaRC) | **roofs are cut away indoors**: a TLAS miss is not sky, so misses must keep the game's probe; that needs cascade casters for closed rooms | radiance cache **planned** (C/D "next"); the multi-bounce, screen-seeded SHaRC design is **new: D-GI2** |
+| Emissive surfaces as light | on-screen: the emissive/FX target (8.1) → capturable; as RTXDI lights: emissive triangles + radiance → **no** | bounce source (`prevRadiance`) | low-medium (glyphs, lava, braziers; flames are particles with their own point lights) | ~0.02 ms | where emissive materials go is unverified | **new: D-EM** (part a now, b deferred) |
+| Translucency / SSS | SSS pixel mask (stencil/flags, unverified), TLAS for thickness → partly | delta into diffuse before the SSS blur | low-medium (back-lit ears, leaves, cloth) | 0.05-0.1 ms | finding the SSS/foliage classification | **new: D-TR** (low) |
+| RT refraction (glass, water) | refractive surfaces are forward-drawn and not in the TLAS; the game's refraction samples the unit-124 copy | patch the forward FS families | low (BG3's water is stylised; screen-space refraction rarely fails at the isometric angle) | 0.3 ms + XFB on the forward pass | high: shader patching of forward materials; RR resampling caveats | **new: D-RFR**, deferred |
+| RT for transparents/particles | forward pass not captured | — | low | — | — | **not recommended**. Do RR transparency guides instead (QUALITY Q12) |
+| Volumetric light shafts with RT visibility | froxel grid known; sun-view geometry needs cascade capture | patch `ca8adce7`'s cascade lookup, or replicate it | low-medium: the game's froxels already sample the cascades; RT adds only on-screen detail | ~0.1 ms (1 ray per froxel) | patching a 1227-line compute shader | **new: D-VOL**, low |
+| Full path tracing replacing the lighting | geometry incomplete (culled, roofs cut away, no forward), secondary materials approximate, light list view-culled, baked probe look, unshadowed art lights | replace b10/b11 | — | 5-8 ms | **infeasible as a product**: it cannot reproduce what the game does not draw | **new: D-PT**, a reference/debug mode only |
+
+### 8.4 Enablers (shared by several effects)
+
+**D-EN1 Light-list snapshot.**
+- Add set 1 b13, b23, b24, b25, b29, b39 (the lighting constants), b40 and b41 to the
+  core's `Snapshot` at the tiled-lighting dispatch, and bind them to our passes
+  read-only.
+- Write `shaders/rt/bg3_lights.hlsli`: the struct decode, the cluster walk (same
+  froxel formula as `f469db78`: `log2(depth·far)·_m21 + _m22`), the exact
+  unshadowed contribution (falloff models, spot cone, channel mask, ×`b13[0]`, AO
+  factor `mix(1, AO, b0._m0.y)`), and the atlas PCF including its IGN rotation.
+- Validation: `light_debug=1` recomputes Σ of all lights and compares it with the
+  game's b10/b11 minus ambient and sun (by toggling the ambient terms via debug
+  modes), so the mean error must be < 1%.
+- Log statistics: number of lights, number shadowed, lights per pixel.
+- Also read `b0._m0.y` (the AO-on-direct factor) and log it.
+- Cost: 0.
+
+**D-EN2 Hit material.**
+- Capture the UV for **all** draws (stride 24, as `rt_alpha=1` does for the prepass)
+  and keep a per-draw material record for every VT draw, not only alpha-tested
+  ones: tile-set constants, UV transform, albedo layer.
+- `hit_base_colour(prim, bary, cone)` = the `vt_alpha()` lookup returning `.rgb`.
+- Plain-texture draws, and draws not recognised, get a per-draw average colour
+  (sampled once from the G-buffer where the draw is visible) or 0.5 grey.
+- Roughness/metal at hits: per-draw constants from the G-buffer median.
+- Normal: geometric, from the triangle.
+
+**D-EN3 Geometry retention and closure.**
+- The static/dynamic split (6.7 item 3) plus **retention**: a static instance
+  stays in the TLAS for `rt_retain_frames` (e.g. 300) after the game stops
+  drawing it (culled, behind the camera).
+- Together with cascade-caster capture (6.7 item 2, which also brings the roofs the
+  camera cut-away hides), this gives off-screen geometry for reflections and GI,
+  and closed rooms.
+- Instance masks: bit 0 G-buffer, 1 cascade-only, 2 retained, 3 dynamic. Each
+  effect chooses its masks. For example, the sun uses all of them; reflections
+  exclude cascade-only geometry if it is missing faces that face the camera.
+
+**D-EN4 Exact-delta library.**
+- Replicate the game's specular ambient (global and local probe loop, DFG,
+  Lagarde specular occlusion) and diffuse ambient from `f469db78` lines
+  ~1210-1450, in `shaders/rt/bg3_ambient.hlsli`.
+- Validate it against b10/b11 the same way as EN1.
+
+**D-EN5 Lighting-shader patch hooks (v2 of the deltas).**
+- A SPIR-V pass over the ~15 `f469db78` permutations that adds
+  `ourFactor(pixel, term)` reads at three sites:
+  - the per-light shadow factor (`_802`/`_1087`/`_1427`);
+  - the specular ambient `_1684`;
+  - the diffuse ambient `_1687`.
+- This removes the ALU of re-evaluating the lights and makes the composition exact,
+  including the transmittance.
+- Do it only after the deltas are validated, as an optimisation.
+
+### 8.5 Refinements to already-planned items
+
+- **Soft sun shadows (6.7 item 5).**
+  - Sample a cone of half-angle `rt_sun_radius` (default **0.00459 rad**, the game's
+    own value) with uniform disc samples, 1 ray per pixel at full resolution.
+  - With `rr=1`: per-pixel white noise from a proper hash (no checkerboard), fed to
+    the mask raw; RR denoises.
+  - With `rr=0`: NRD SIGMA (in `external/NRD`) from the occluder distance, or a
+    penumbra-sized bilateral blur.
+  - Keep the multiply fold until cascade casters exist, then replace within TLAS
+    coverage (`mask = vis_rt` where the cascades' casters are all in the TLAS).
+  - An artistic `rt_sun_scale` multiplier, since BG3's PCF cascades are softer than
+    the real sun.
+  - Cost 0.10-0.15 ms.
+- **Cascade-caster capture (6.7 item 2).**
+  - It is now also the prerequisite for closed interiors in GI and for volumetric
+    shafts.
+  - Capture the largest cascade first: one more XFB pass of about +0.3 ms, and
+    duplicates with the G-buffer soup are harmless for any-hit rays.
+- **Radiance cache (TRACK_C next, 7.4).** D-GI2 below fixes the design.
+
+### 8.6 New effects
+
+Each entry gives the ID, the data needed, the injection point, the cost, the priority
+and the steps. Priority: P1 next, P2 after P1, P3 later, P4 not recommended.
+
+#### D-LS: ray-traced local-light shadows (P1)
+- **Data:** EN1 (lights, clusters, atlas), the G-buffer, the TLAS (+ alpha).
+- **Injection:** the post-lighting hook. Per pixel, the exact delta
+  `Σ_i c_i·(v_i − s_i)`:
+  - `c_i` is the unshadowed contribution (diffuse to b10, specular to b11);
+  - `s_i` is the game's own shadow term (atlas PCF × fade × m8, or 1 when the
+    light casts no shadow);
+  - `v_i` is the ray-traced visibility.
+- **Which lights:** `ls_mode=1` shadowed lights only (the game's intent, better
+  shadows); `ls_mode=2` also unshadowed lights with radius > `ls_min_radius`
+  (stops leaks); `ls_exclude_channel` for art lights.
+- **Sampling:** v1 is deterministic, 1 ray to the light centre per light (hard).
+  v2 samples the sphere by solid angle, using the radius from `_m5` if it encodes a
+  source size (to verify), with 1-2 rays per pixel chosen by RIS over the cluster's
+  lights weighted by `c_i`. The estimate is `Σ c_i s_i` (exact, subtracted) plus
+  `c_j v_j / p_j` (stochastic, ≥ 0). RR denoises; with `rr=0`, SIGMA.
+- **Cost:** v1 about 0.05 ms per light-per-pixel on average (measure the light
+  count first); v2 0.25-0.4 ms.
+- **Steps:**
+  1. EN1, with its validation (Σ of lights matches the game's buffers).
+  2. Debug view: per-pixel light count, and shadowed vs unshadowed lights.
+  3. v1 deterministic, for shadowed lights only. A/B against the atlas in a
+     torch-lit interior.
+  4. `ls_mode=2`. A/B for light leaks under floors and through walls.
+  5. v2 stochastic plus RR.
+  6. Validation, motion run, cost table. Then default-on decision.
+
+#### D-DI: ReSTIR DI over the local lights (P3)
+- **Data:** as D-LS, plus emissive triangles (D-EM b) if they ever exist.
+- **Injection:** the sampler inside D-LS v2; the composition is unchanged.
+- **Cost:** +0.15-0.25 ms (temporal and spatial reuse, 1 shadow ray).
+- **Steps:**
+  1. Fetch RTXDI (not in `external/`).
+  2. Initial RIS over the cluster lights.
+  3. Temporal reuse with randomised neighbours, then spatial reuse with permutation
+     sampling (the RR guide's rule, QUALITY R1).
+  4. Visibility reuse.
+  5. Compare its variance with D-LS v2 at equal cost. Keep it only if it wins in
+     scenes with more than 8 lights per pixel.
+
+#### D-RF: ray-traced reflections (P1)
+- **Data:**
+  - G-buffer roughness (after the game's specular AA: `sqrt(r² + min(var, 0.18))`,
+    then `r ≥ 0.09`), F0 and metalness.
+  - Hit radiance in three tiers:
+    - (a) on screen with matching depth: `prevRadiance`, reprojected (QUALITY Q1);
+    - (b) off screen but in the TLAS: EN2 albedo × (sun with an RT shadow ray +
+      EN1 lights + sky irradiance b34) + emissive 0;
+    - (c) miss, or a cascade-only hit: the game's probe.
+- **Injection:** exact delta on the specular ambient (EN4):
+  `b11 += (L_rt · DFG(F0, NoV, r) · SO − probeSpec_game)`.
+  It is blended toward the probe with a confidence weight: tier (a) 1, tier (b)
+  `rf_offscreen_w`, tier (c) 0. The weight also fades to 0 at roughness
+  `rf_max_rough` (0.6).
+- **Sampling:**
+  - 1 ray per pixel, GGX bounded-VNDF sampling, for pixels with r < `rf_max_rough`;
+  - mirror (r < 0.1) gets a single deterministic ray;
+  - RR gets `DLSSD.SpecularHitDistance` (FP16_MAX for misses) plus the
+    world-to-view and view-to-clip matrices (QUALITY Q11).
+  - With `rr=0`: NRD REBLUR specular.
+- **Cost:**
+  - about 1.4 M rays (≈ 50% of pixels) at 0.15-0.3 ms;
+  - tier (b) shading 0.2-0.4 ms;
+  - EN4 0.1 ms;
+  - total **0.5-1.0 ms**.
+- **Steps:**
+  1. QUALITY Q11, the RR world-space normals and matrices.
+  2. EN4, with its validation.
+  3. Tiers (a) and (c) only: on-screen reflections with probe fallback. This is
+     already "SSR quality with RT accuracy". Debug view: tier per pixel.
+  4. Hit-distance output to RR. A/B on a wet or polished floor scene and on metal.
+  5. EN2 + EN1, then tier (b). Measure the tier fractions with `rt_stats`.
+  6. EN3 retention, which shrinks tier (c).
+  7. Then specular occlusion from the same rays replaces Lagarde's for those pixels.
+
+#### D-GI2: multi-bounce GI with a screen-seeded SHaRC cache (P2)
+- **Data:** TLAS, EN2, EN1, the sky b34, absolute world (`+ _m6`) for hashing.
+  `external/SHARC` (needs `-enable-16bit-types` for DXC).
+- **Design (screen-seeded):**
+  - **Update** pass: about 1/16 of pixels trace paths with 2-3 bounces. At each hit:
+    if it is on screen with matching depth, its radiance is the game's own lit
+    diffuse (exact, with all the game's lights and baked probes) and the path
+    terminates; otherwise it is shaded as D-RF tier (b) and the path continues.
+  - **Miss** rule: a miss *indoors* (or anywhere until EN3 closure) returns the
+    game's diffuse probe irradiance at the last vertex, never the open sky. Roofs
+    are cut away.
+  - **Resolve:** the SHaRC accumulation, with a 32-64 frame cap and stale eviction.
+  - **Query:** the existing GI rays (radius raised from 1 m to `gi_rt_radius` 8-30 m)
+    read the cache at off-screen hits instead of fallback 0.
+- **Injection:** unchanged (AO fold + bounce add), until EN4 allows an exact delta on
+  the diffuse ambient.
+- **Cost:** update 0.1-0.2 ms, resolve 0.05 ms, longer query rays +0.2 ms;
+  **0.4-0.6 ms**, 160 MiB.
+- **Steps:**
+  1. EN2, EN1.
+  2. SHaRC update/resolve on our own passes; hash-grid debug view.
+  3. Query in `gi_trace_rt` for hidden and off-screen hits (replaces
+     `gi_rt_fallback`).
+  4. Raise the radius; A/B for colour bleeding and interior leaks.
+  5. EN3 closure, then misses use the sky irradiance outdoors only.
+
+#### D-EM: emissive surfaces (a: P1-small, b: P4)
+- **(a) Emissive in the bounce.**
+  - Find the pre-lighting additive target: B10G11R11 + D24S8 at render resolution,
+    the passes before the tiled lighting (units 78-85), and the third colour input
+    of compose `5c3fdabc`.
+  - Add it to `prevRadiance` (it is available during the lighting).
+  - Verify which materials write there (glowing glyphs? lava? or only sky/FX), and
+    exclude the sky (depth = 0).
+  - Cost 0.02 ms.
+- **(b) Emissive triangles as lights** (RTXDI). This needs per-draw emissive
+  detection and radiance. Not recommended until (a) shows that emissive
+  surfaces are common.
+
+#### D-TR: ray-traced thickness for translucency (P3)
+- **Data:** a mask of SSS/foliage pixels (to find: G-buffer flag bits in RT2.w, the
+  stencil, or the SSS profile index); TLAS.
+- **Injection:** a delta into b10 before the SSS passes. A sun and light
+  transmission term `c·albedo·exp(−σ·thickness)`, with the thickness from one
+  ray along −N, inside the object.
+- **Cost:** 0.05-0.1 ms.
+- **Steps:**
+  1. Find the mask.
+  2. Thickness debug view.
+  3. Back-lit leaves and ears A/B.
+  4. Set the RR SSS guides (QUALITY Q12) first.
+
+#### D-RFR: ray-traced refraction for glass and water (P4)
+- **Data:** XFB on the forward pass (unit 125) for the refractive surfaces; their
+  IOR and tint from the forward FS.
+- **Injection:** patch the forward FS families' refraction sample (the unit-124
+  copy).
+- Deferred. RR's guide warns that refraction resampling breaks its sample
+  independence.
+
+#### D-VOL: RT sun visibility for the volumetrics (P3)
+- **Data:** cascade-caster capture (6.7 item 2) for the sun-view geometry; the
+  froxel grid of `ca8adce7`.
+- **Injection:** a per-froxel sun visibility volume (1 ray per froxel), read by a
+  patched `ca8adce7` in place of its cascade compare.
+- **Cost:** about 0.1 ms.
+- Worth it only if cascade-resolution aliasing in the shafts is visible in A/B.
+
+#### D-PT: path-traced reference mode (P4, a tool, not an effect)
+- A debug mode accumulating 1 path per pixel per frame over a static camera.
+  - The primary hit comes from the G-buffer; secondary hits use EN2 materials,
+    EN1 lights with RT shadows, and the sky.
+- It writes to `rt_debug` only and replaces nothing.
+- Purpose: a "how wrong is the hybrid" reference *within the captured geometry*,
+  for the A/B metrics of QUALITY R6.
+- Infeasible as a product for these reasons:
+  - **Geometry:** culled and cut-away surfaces are not in any capture (even with
+    EN3, interiors are closed only where cascades reach).
+  - **Materials:** only the primary hit's material is exact.
+  - **Lights:** the list is view-culled; emissive materials are unknown.
+  - **Look:** the game's look depends on baked probes and deliberately unshadowed
+    fill lights.
+  - **Cost:** 5-8 ms with RR.
+
+### 8.7 Ranking by value/effort
+
+| Rank | Item | Value | Effort | Why |
+|---|---|---|---|---|
+| 0 | QUALITY P1 fixes (Q1, Q2, Q4, Q11) | high | low | they make every later effect correct and cheaper to denoise |
+| 1 | Soft sun shadows (planned, 8.5) | medium | **low** | data complete (angular radius known), 0.1 ms, RR denoises |
+| 2 | D-LS local-light shadows | **high** | medium | fixes BG3's most visible lighting flaw (leaks from unshadowed lights); all data readable |
+| 3 | D-RF reflections, tiers (a)+(c) | **very high** | medium | BG3 has no SSR at all; the on-screen tier needs no new data |
+| 4 | D-EM (a) emissive in the bounce | low-medium | **very low** | one target capture |
+| 5 | Cascade-caster capture (planned) + EN3 retention | enabler | medium | closes interiors for GI, adds off-screen casters, shrinks D-RF tier (c) |
+| 6 | D-RF tier (b) + EN2 | high | high | off-screen reflections |
+| 7 | D-GI2 screen-seeded SHaRC | medium-high | high | room-scale GI; needs EN2 and closure to avoid leaks |
+| 8 | D-DI ReSTIR DI | medium | medium | only after D-LS, and only with many lights |
+| 9 | D-TR, D-VOL | low-medium | medium | niche |
+| 10 | D-RFR, transparents/particles | low | high | forward-pass capture and shader patching |
+| — | D-PT | reference only | medium | not a product |
