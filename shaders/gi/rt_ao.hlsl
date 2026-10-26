@@ -22,14 +22,15 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 P = ray_at(uv) * d;
   float3 N = to_lighting_space(decode_normal(enc));
   float dist = length(P);
-  float3 o = P + N * (dist * pc.rt_bias);
   float pa = pixel_angle(uv);
   RtCone cone = {dist * pa * 2.0, pa * 2.0};   // half resolution
+  const float4 org = rt_origin_at(fp);
 
-  uint seed = hash(id.x * 7307u + id.y * 3323u + pc.frame * 15013u);
+  uint seed = pixel_seed(fp, 2u);
   float occ = 0.0;
   for (uint r = 0; r < pc.rt_ao_rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
+    float3 o = rt_ray_origin_o(org, P, N, dist * pa, dir);
     float t = rt_closest(o, dir, pc.rt_ao_radius, cone);
     if (t >= 0.0) {
       // Closer occluders count more: a smooth falloff to zero at the radius.

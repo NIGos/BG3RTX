@@ -26,10 +26,18 @@ void stat_add(uint index, bool cond, uint bin) {
 [[vk::binding(0, 1)]] ByteAddressBuffer gAlphaRec;
 // Geometry 1's vertices, 24 bytes each: camera-relative position (float4), UV.
 [[vk::binding(1, 1)]] ByteAddressBuffer gAlphaSoup;
-[[vk::binding(2, 1)]] Texture2D<float4> gAlphaTex[256];        // indirection (vt) or the alpha texture (tex)
-[[vk::binding(3, 1)]] Texture2DArray<float4> gAlphaCache[4];   // virtual texture tile caches
+// Sizes: layer/alphatest.cpp kTextures / kCaches.
+[[vk::binding(2, 1)]] Texture2D<float4> gAlphaTex[4096];       // indirection (vt) or the alpha texture (tex)
+[[vk::binding(3, 1)]] Texture2DArray<float4> gAlphaCache[16];  // virtual texture tile caches
 [[vk::binding(4, 1)]] SamplerState gAlphaWrap;
 [[vk::binding(5, 1)]] SamplerState gAlphaClamp;
+// Geometry 0's vertices (the opaque soup), same layout; the vertex stride is in
+// gAlphaRec's header (uint 1). For the geometric normal of a hit (rt_origin=1).
+[[vk::binding(6, 1)]] ByteAddressBuffer gOpaqueSoup;
+// Per pixel (written by gi/rt_origin.hlsl): xyz the geometric normal facing the
+// camera, w = t_hit / |P| - 1 of the TLAS surface under the pixel, or kNoHit.
+[[vk::binding(40, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> rtOrigin;
+static const float kNoHit = 1000.0;
 
 static const uint kRecBytes = 208;
 
@@ -110,7 +118,7 @@ bool alpha_pass(uint prim, float2 bary, float footprint) {
   float area_w = length(cross(p1 - p0, p2 - p0));
   float g = footprint * sqrt(area_uv / max(area_w, 1e-12));   // uv change across the footprint
   if (!all(isfinite(uv)) || !isfinite(g)) return true;
-  uint tex = min(h0.w, 255u), cache = min(h1.x, 3u);
+  uint tex = min(h0.w, 4095u), cache = min(h1.x, 15u);
   float alpha = h0.z == 1 ? vt_alpha(a, uv, g, tex, cache, min(h1.y, 3u)) : tex_alpha(a, uv, g, tex, h1.y);
   return alpha >= asfloat(h1.z);
 }
@@ -166,6 +174,94 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   h.geom = hit ? q.CommittedGeometryIndex() : 0;
   h.hit_kind = hit && h.geom == 1 ? alpha_kind(q.CommittedPrimitiveIndex()) : 0;
   return h;
+}
+
+// Closest hit (alpha-tested): distance (-1 on a miss), geometry and primitive.
+struct RtHit { float t; uint geom; uint prim; };
+RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
+  RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+  RayDesc r;
+  r.Origin = o;
+  r.Direction = d;
+  r.TMin = 0.0;
+  r.TMax = tmax;
+  q.TraceRayInline(gScene, 0, 0xFF, r);
+  while (q.Proceed()) {
+    if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
+        alpha_pass(q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(),
+                   cone.f0 + cone.spread * q.CandidateTriangleRayT()))
+      q.CommitNonOpaqueTriangleHit();
+  }
+  RtHit h;
+  bool hit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+  h.t = hit ? q.CommittedRayT() : -1.0;
+  h.geom = hit ? q.CommittedGeometryIndex() : 0u;
+  h.prim = hit ? q.CommittedPrimitiveIndex() : 0u;
+  return h;
+}
+
+// Unnormalised geometric normal of a TLAS triangle (the soups are camera-relative,
+// the lighting space).
+float3 rt_tri_normal(uint geom, uint prim) {
+  float3 p0, p1, p2;
+  // Never read past the soups' descriptors (a hit is always inside them; this
+  // only guards against a scene and a set from different builds).
+  uint bytes;
+  if (geom == 0u) {
+    uint stride = gAlphaRec.Load(4);
+    gOpaqueSoup.GetDimensions(bytes);
+    if (stride == 0u || stride > 64u || prim >= bytes / (3u * stride)) return 0.0.xxx;
+    uint vb = prim * 3u * stride;
+    p0 = asfloat(gOpaqueSoup.Load3(vb));
+    p1 = asfloat(gOpaqueSoup.Load3(vb + stride));
+    p2 = asfloat(gOpaqueSoup.Load3(vb + 2u * stride));
+  } else {
+    gAlphaSoup.GetDimensions(bytes);
+    if (prim >= bytes / 72u) return 0.0.xxx;
+    uint vb = prim * 72u;
+    p0 = asfloat(gAlphaSoup.Load3(vb));
+    p1 = asfloat(gAlphaSoup.Load3(vb + 24u));
+    p2 = asfloat(gAlphaSoup.Load3(vb + 48u));
+  }
+  float3 n = cross(p1 - p0, p2 - p0);
+  return all(isfinite(n)) ? n : 0.0.xxx;
+}
+
+// Wachter & Binder, "A Fast and Robust Method for Avoiding Self-Intersection"
+// (Ray Tracing Gems, ch. 6): moves p off its surface along n (facing the side the
+// ray leaves on) by a fixed number of float ULPs, or a fixed distance near 0.
+float3 rt_offset_ray(float3 p, float3 n) {
+  const float origin = 1.0 / 32.0, float_scale = 1.0 / 65536.0, int_scale = 256.0;
+  int3 of_i = int3(int_scale * n);
+  float3 p_i = asfloat(asint(p) + int3(p.x < 0.0 ? -of_i.x : of_i.x, p.y < 0.0 ? -of_i.y : of_i.y, p.z < 0.0 ? -of_i.z : of_i.z));
+  return float3(abs(p.x) < origin ? p.x + float_scale * n.x : p_i.x,
+                abs(p.y) < origin ? p.y + float_scale * n.y : p_i.y,
+                abs(p.z) < origin ? p.z + float_scale * n.z : p_i.z);
+}
+
+// Origin of a secondary ray in direction `dir` from the surface at pixel fp (P its
+// depth-buffer point, Ns its shading normal, `foot` the pixel's footprint there).
+//   rt_origin=0: P + Ns x rt_bias x |P| (towards the ray's side of Ns), the old way;
+//   rt_origin=1: the exact TLAS surface point under the pixel, pushed off along the
+//     geometric normal towards the ray's side by Wachter & Binder's ULP offset.
+//     Where the shading and the geometric normal disagree about the side (the
+//     shadow terminator of coarse meshes) or no triangle matched the depth buffer,
+//     the offset is 2 footprints, along the shading normal resp. the depth normal.
+// `o`: rt_origin_at(fp), read once per pixel by passes that trace several rays.
+float4 rt_origin_at(uint2 fp) { return pc.rt_origin != 0u ? rtOrigin[fp] : float4(0, 0, 0, kNoHit); }
+float3 rt_ray_origin_o(float4 o, float3 P, float3 Ns, float foot, float3 dir) {
+  float ss = dot(Ns, dir) < 0.0 ? -1.0 : 1.0;
+  if (pc.rt_origin == 0u) return P + Ns * (length(P) * pc.rt_bias * ss);
+  float3 r;
+  float sg = dot(o.xyz, dir) < 0.0 ? -1.0 : 1.0;
+  if (sg != ss) r = P + Ns * (2.0 * foot * ss);
+  else if (!(o.w < kNoHit)) r = P + o.xyz * (2.0 * foot * sg);
+  else r = rt_offset_ray(P * (1.0 + o.w), o.xyz * sg);
+  // A non-finite ray origin is undefined behaviour for ray queries.
+  return all(isfinite(r)) ? r : P + Ns * (2.0 * foot * ss);
+}
+float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
+  return rt_ray_origin_o(rt_origin_at(fp), P, Ns, foot, dir);
 }
 
 // Closest alpha-tested hit distance, or -1.

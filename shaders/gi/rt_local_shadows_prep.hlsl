@@ -12,5 +12,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (any(fp >= pc.full)) return;
   float4 ao = gAO[fp];
   gAO[fp] = float4(pc.ls_debug == 6 ? 1.0 : 0.0, ao.yzw);
-  if (pc.ls_has_mask != 0) gSunShadow[fp] = 0.0;
+  // ls_debug=7 keeps the sun (validates the sun recompute of rt/bg3_sun.hlsli).
+  if (pc.ls_has_mask != 0 && pc.ls_debug != 7) gSunShadow[fp] = 0.0;
 }

@@ -282,7 +282,7 @@ void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info) {
                 (GetAsyncKeyState(VK_F10) & 0x8000);
     bool key = down && !g_key_was_down;
     g_key_was_down = down;
-    std::string req = root_dir() + "\trace.request";
+    std::string req = root_dir() + "\\trace.request";   // (was "\t...": a tab, so the request file never worked)
     bool file = file_mtime(req) != 0;
     if (file) DeleteFileA(req.c_str());
     bool automatic = auto_trigger(frame, passes, draws);

@@ -9,6 +9,7 @@ struct CameraCB {
   float4 v0, v1, v2;                   // v0.xyz = direction towards the sun (_m0), v1.xyz = sun colour (_m2)
   float4 m6_r0, m6_r1, m6_r2, m6_r3;   // _m6, row-major: view normal -> lighting space
   float4 ray0, ray1, ray2;             // _m7: frustum rays at the viewport's (0,0), (1,0), (0,1) in ab space
+  float4 x[15];                        // _m8.._m37 (sun colour, atmosphere, cloud shadows; rt/bg3_sun.hlsli)
 };
 // set 0 binding 4: viewport mapping, ab = ((uv - bias) / scale) * 0.5
 struct ViewportCB {
@@ -73,7 +74,7 @@ struct Push {
   uint gi_rt_fallback;  // 0 occlude, no bounce; 1 ignore; 2 occlude + mean on-screen radiance
   uint rt_stats;       // 1: count into rtStats (rt_common.hlsli)
   // Quality pass (docs/QUALITY.md)
-  float sun_radius;    // sun angular radius (rad); 0 = hard shadows
+  float sun_radius;    // half-angle of the sun disc (rad; the game: 0.00459); 0 = hard shadows
   uint res_shift;      // GI resolution: 1 half res (own denoise), 0 full res, 1 spp, for RR
   uint2 pad3;
   // D-LS ray-traced local-light shadows (rt_local_shadows.hlsl)
@@ -89,6 +90,11 @@ struct Push {
   float ls_strength;
   uint ls_has_mask;
   uint pad4;
+  // RT audit fixes (docs/AUDIT_RT.md)
+  uint rt_backlit;   // 1: trace the sun for back-lit skin/translucent/hair pixels (0: zero their mask)
+  uint mat_classes;  // 1: material classes in D-LS and the GI composite (0: everything class 0)
+  uint ao_direct;    // AO on direct light: 0 the game's mix(1, AO, m0.y) on what b6 holds, 1 none on traced lights
+  uint rt_origin;    // ray origins: 0 shading normal x rt_bias x distance, 1 geometric normal, robust offset
 };
 [[vk::push_constant]] Push pc;
 
@@ -192,4 +198,42 @@ float3 cosine_hemisphere(float3 n, float u1, float u2) {
   float3 t = abs(n.z) < 0.999 ? normalize(cross(float3(0, 0, 1), n)) : float3(1, 0, 0);
   float3 b = cross(n, t);
   return normalize(t * (r * cos(phi)) + b * (r * sin(phi)) + n * sqrt(max(0.0, 1.0 - u1)));
+}
+
+// ---- G-buffer material classes: RT2.a bits 0-2 (bits 4-6 are the light channel) ----
+// Read the way the lighting permutations do (f469db78 class 0 only, 118833ff class 3
+// only, 34a007cc all classes; docs/FRAME_MAP.md). RT3 holds the per-class parameters.
+static const uint kMatStandard = 0u;
+static const uint kMatUnlit = 1u;        // the lighting skips it: nothing is written to b10/b11
+static const uint kMatAniso = 2u;        // RT3.xyz tangent (oct 12:12), RT3.w anisotropy
+static const uint kMatSkin = 3u;         // SSS: RT3.x profile, .y scatter scale, .z thickness, .w transmission
+static const uint kMatTranslucent = 4u;  // thin translucency (foliage): RT3.x profile, .z thickness
+static const uint kMatHair = 5u;         // Marschner hair: RT3.xyz tangent, .w scatter; RT2.z backlit
+static const uint kMatCloth = 6u;        // sheen only: RT3.rgb sheen colour
+static const uint kMatClothGgx = 7u;     // GGX * RT3.w + sheen * (1 - RT3.w)
+uint mat_class(float4 m) { return uint(round(m.w * 255.0)) & 7u; }
+// Classes whose sun and local-light terms read the shadow on back-lit pixels: SSS
+// and thin translucency add a transmission lobe for N.L < 0.2588, hair has no N.L gate.
+bool mat_transmits(uint cls) { return cls == kMatSkin || cls == kMatTranslucent || cls == kMatHair; }
+
+// Extra bindings (core/gi.cpp kExtras). The lighting's set 0 b0 (std140 floats):
+// _m4 (b.x) != 0 makes the skin permutations shade with diffuse colour 1, the SSS
+// pass multiplying the albedo back in afterwards (118833ff:371, d1669194:359).
+struct FrameCB { float4 a, b; };
+[[vk::binding(43, 0)]] ConstantBuffer<FrameCB> gFrame;
+// Ours, full resolution: .x the game's own AO before the GI fold (gi_ao_apply.hlsl).
+[[vk::binding(44, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> gAux;
+
+bool mat_on() { return (pc.mat_classes & 1u) != 0u; }
+// The class the lighting shaded this pixel as (0 when mat_classes=0).
+uint mat_class_at(uint2 fp) { return mat_on() ? mat_class(gMaterial.Load(int3(fp, 0))) : kMatStandard; }
+// Diffuse colour 1 on skin pixels (the albedo is applied by the SSS pass).
+bool skin_white() { return (pc.mat_classes & 8u) != 0u && gFrame.b.x != 0.0; }
+// The diffuse colour the game's lighting multiplies diffuse light by, per class
+// (f469db78:343; 118833ff:371; 3033c895:354 hair, metalness forced 0; 95af6e4f:340 cloth, raw albedo).
+float3 mat_diffuse_colour(uint cls, float3 albedo, float metal) {
+  if (cls == kMatUnlit) return 0.0.xxx;
+  if (cls == kMatHair || cls == kMatCloth) return albedo;
+  if (cls == kMatSkin && skin_white()) return (1.0 - metal).xxx;
+  return albedo * (1.0 - metal);
 }

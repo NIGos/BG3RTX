@@ -33,12 +33,18 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float dist = length(P);
   float pa = pixel_angle(uv);
 
-  float vis = 0.0;
-  if (dot(N, L) > 0.0) {
-    float3 o = P + N * (dist * pc.rt_bias);
+  // Back-lit pixels: the skin and thin-translucency permutations add transmitted sun
+  // `T * mask * sun * saturate((0.2588 - N.L) * 0.631)` (118833ff:1905-1920, 19763259:1750),
+  // and hair has no N.L gate (3033c895:1739), so their mask must hold the sun's
+  // visibility from the far side too. Other back-facing pixels never read it: left as is.
+  const float nl = dot(N, L);
+  const uint cls = mat_class(gMaterial.Load(int3(fp, 0)));
+  const bool backlit = pc.rt_backlit != 0 && nl <= 0.0 && mat_transmits(cls);
+  float vis = pc.rt_backlit != 0 ? 1.0 : 0.0;   // (legacy: back faces were zeroed)
+  if (nl > 0.0 || backlit) {
     RtCone cone = {dist * pa, pa};
     float3 dir = L;
-    if (pc.sun_radius > 0.0) {   // uniform sample of the sun's disc (BG3's sun: 0.263 deg across)
+    if (pc.sun_radius > 0.0) {   // uniform sample of the sun's disc (half-angle sun_radius)
       uint s = pixel_seed(fp, 1u);
       float u1 = rand01(s), u2 = rand01(s);
       float3 t = abs(L.y) < 0.99 ? normalize(cross(float3(0, 1, 0), L)) : float3(1, 0, 0);
@@ -46,6 +52,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
       float r = sqrt(u1) * tan(pc.sun_radius), phi = 6.2831853 * u2;
       dir = normalize(L + (t * cos(phi) + b * sin(phi)) * r);
     }
+    // From the side the light comes from (the back side for transmission).
+    float3 o = rt_ray_origin(fp, P, N, dist * pa, dir);
     vis = rt_occluded(o, dir, pc.rt_tmax, cone) ? 0.0 : 1.0;
   }
   float check = 0.0, fam = 0.0;
@@ -72,6 +80,21 @@ void main(uint3 tid : SV_DispatchThreadID) {
       stat_add(13, behind && who == 1, bin); // behind: passed through a vt cutout
       stat_add(14, behind && who == 2, bin); // behind: passed through a tex cutout
     }
+  }
+  if (pc.rt_stats != 0) {
+    // Back-lit transmitting pixels (N.L < 0.2588, where the transmission lobe is
+    // non-zero): how lit the game's mask is there, and how lit the trace is.
+    uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
+    bool tr = mat_transmits(cls) && nl < 0.25881907;
+    stat_add(39, true, bin);
+    stat_add(40, tr, bin);
+    stat_add(41, tr && mask > 0.5, bin);
+    stat_add(42, tr && vis > 0.5, bin);
+    stat_add(43, tr && mask > 0.5 && vis < 0.5, bin);
+    stat_add(44, cls == kMatTranslucent, bin);
+    stat_add(45, cls == kMatSkin, bin);
+    stat_add(46, cls == kMatHair, bin);
+    stat_add(47, cls != kMatStandard, bin);
   }
   rtVis[fp] = float4(vis, mask, check, fam);
   // Only ever darkens: off-screen casters still come from the game's cascades.

@@ -39,9 +39,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 N = to_lighting_space(decode_normal(enc));
   float3x3 inv = frustum_inverse();
   float dist = length(P);
-  float3 o = P + N * (dist * pc.rt_bias);
   float pa = pixel_angle(uv);
   RtCone cone = {dist * pa * 2.0, pa * 2.0};   // half resolution
+  const float4 org = rt_origin_at(fp);
   const float R = pc.gi_rt_radius;
 
   uint seed = pixel_seed(fp, 0u);
@@ -49,6 +49,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float occ = 0, nseen = 0, wfall = 0;
   for (uint r = 0; r < pc.rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
+    float3 o = rt_ray_origin_o(org, P, N, dist * pa, dir);
     float t = rt_closest(o, dir, R, cone);
     float k = saturate(t / R);
     float w = 1.0 - k * k;

@@ -89,6 +89,7 @@ struct Bg3Surface {
   uint channel;
   float ign;      // interleaved gradient noise of the atlas PCF (_556)
   float dist;
+  float4 org;     // rt_origin_at(): this pixel's ray-origin data (rt_common.hlsli)
 };
 
 float bg3_pow5(float x) { return pow(max(abs(x), 9.9999997e-05), 5.0); }
