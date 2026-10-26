@@ -93,7 +93,7 @@ function Focus-Game {
 # The -Move key: typed globally when the game is in front, posted to its
 # window in background runs (WM_KEYDOWN/WM_KEYUP carry the scan code; SDL reads it).
 $moveVk = 0x44   # D, for the default scan code 0x20
-function Send-MoveKey([bool]$down) {
+function Send-MoveKey([bool]$down, [bool]$repeat = $false) {
   if (-not $Background) {
     [BG3RTX.Win]::keybd_event(0, $MoveScan, $(if ($down) { 0x0008 } else { 0x000A }), [UIntPtr]::Zero)
     return
@@ -102,6 +102,7 @@ function Send-MoveKey([bool]$down) {
   if (-not $p) { return }
   $l = 1 -bor ([int64]$MoveScan -shl 16)
   if (-not $down) { $l = $l -bor 0xC0000000 }
+  elseif ($repeat) { $l = $l -bor 0x40000000 }   # auto-repeat: the key was already down
   [void][BG3RTX.Win]::PostMessage($p.MainWindowHandle, $(if ($down) { 0x0100 } else { 0x0101 }), [IntPtr]$moveVk, [IntPtr]$l)
 }
 
@@ -188,7 +189,13 @@ $moving = $false
 $moveDone = $false
 $moveStart = Get-Date
 while ((Get-Date) -lt $deadline) {
-  Start-Sleep -Seconds 2
+  if ($moving -and $Background) {
+    # A posted key-down is a single press to the game; a held key is what
+    # keyboard auto-repeat delivers: key-downs at ~30 Hz with the repeat bit.
+    for ($i = 0; $i -lt 60; ++$i) { Send-MoveKey $true $true; Start-Sleep -Milliseconds 33 }
+  } else {
+    Start-Sleep -Seconds 2
+  }
   Focus-Game
   if ($Move -and (Test-Path $log)) {
     $last = Get-Content $log -Tail 40 | Select-String '(\d+) draws in the last frame' | Select-Object -Last 1

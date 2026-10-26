@@ -113,8 +113,9 @@ inline constexpr Knob kKnobs[] = {
 
   {"rt_geometry", "Ray-traced geometry",
    "Builds the game's geometry into a ray-tracing scene every frame. Every ray-traced effect below needs it. "
-   "Opaque leaves alpha-tested casters (grates, foliage, chains) out, which halves the scene update cost. "
-   "Off frees about 2-4 ms on mid-range GPUs.",
+   "Static meshes are built once and cached, so the update costs about 0.5 ms on an RTX 5090, panning or not "
+   "(it was 1.4-2.9 ms while the camera moved). Opaque leaves alpha-tested casters (grates, foliage, chains) out. "
+   "Off frees that cost and the geometry capture.",
    Kind::Choice, Apply::Partial, "Opaque <-> Full: restart", false,
    {{"off", "Off", 0, {{"rt_build", "0"}, {"rt_alpha", "0"}}, {}},
     {"opaque", "Opaque only", kCapRayQuery, {{"rt_build", "auto"}, {"rt_alpha", "0"}}, {}},
@@ -194,8 +195,10 @@ inline constexpr Knob kKnobs[] = {
 inline constexpr int kKnobCount = int(sizeof kKnobs / sizeof kKnobs[0]);
 
 // Internal keys a preset sets besides its knobs (never shown in a UI).
-// Ultra: no forced periodic BVH rebuild (SETTINGS_DESIGN 5.4 #4; refit quality
-// over long pans still to be checked).
+// Ultra: rare forced BVH rebuilds (SETTINGS_DESIGN 5.4 #4). With the BVH split
+// (rt_bvh_split=1, TRACK_D_RT.md 11) rt_rebuild_frames only paces the per-draw
+// BLAS of the captured (skinned, wind, per-draw matrix) draws, staggered per draw;
+// static meshes are built once for trace speed and never refit.
 inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_frames", "600"}}};
 
 // What the code uses when a key is in no layer (the cfg_* fallbacks), for the

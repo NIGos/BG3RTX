@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
   }
   namespace fs = std::filesystem;
   fs::create_directories(argv[2]);
-  int total = 0, patched = 0, vertices = 0, with_uv = 0;
+  int total = 0, patched = 0, vertices = 0, with_uv = 0, instanced = 0, uv_copy = 0;
   const uint32_t stride = argc > 3 ? uint32_t(std::atoi(argv[3])) : 16;
   for (const auto& e : fs::directory_iterator(argv[1])) {
     if (e.path().extension() != ".spv" || e.path().string().find(".xfb.") != std::string::npos) continue;
@@ -41,10 +41,19 @@ int main(int argc, char** argv) {
     }
     ++patched;
     with_uv += uv >= 0;
+    // Track D BVH split: the class-A instancing analysis on the original module.
+    bg3::VsInstancing vi = bg3::analyze_vs_instancing(code.data(), code.size(), uv);
+    if (vi.ok) {
+      ++instanced;
+      uv_copy += vi.uv_input_location >= 0;
+      if (std::getenv("XFB_LIST_INST"))
+        std::printf("instanced: %s pos %d rows %d %d %d uv-in %d\n", e.path().filename().string().c_str(), vi.pos_location,
+                    vi.row_location[0], vi.row_location[1], vi.row_location[2], vi.uv_input_location);
+    }
     std::ofstream o(fs::path(argv[2]) / e.path().filename(), std::ios::binary);
     o.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size() * 4));
   }
-  std::printf("%d modules, %d vertex shaders, %d patched (stride %u, %d with a UV output)\n", total, vertices, patched,
-              stride, with_uv);
+  std::printf("%d modules, %d vertex shaders, %d patched (stride %u, %d with a UV output), %d class-A instanced (%d with the UV a copy of an input)\n",
+              total, vertices, patched, stride, with_uv, instanced, uv_copy);
   return 0;
 }

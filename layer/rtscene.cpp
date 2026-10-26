@@ -29,6 +29,7 @@
 #include <intrin.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace bg3 {
@@ -80,16 +81,20 @@ VkPipelineLayout g_pl = VK_NULL_HANDLE;
 VkPipeline g_pipe = VK_NULL_HANDLE;
 uint64_t g_pipe_gen = 0;
 
+// The split's TLAS (bvhsplit.cpp), when the last build was a split one.
+VkAccelerationStructureKHR g_split_tlas = VK_NULL_HANDLE;
+bool g_split_valid = false;
+
 // GPU timing: 4 timestamps per build (start, converted, BLAS, TLAS) in a ring.
 constexpr uint32_t kRing = 16;
 VkQueryPool g_qp = VK_NULL_HANDLE;
-struct Slot { uint64_t frame = 0; bool refit = false; uint32_t prims = 0; };
+struct Slot { uint64_t frame = 0; int mode = 0; bool moving = false; uint32_t prims = 0; };   // mode: 0 rebuild, 1 refit, 2 split
 Slot g_slots[kRing];
 uint32_t g_next_slot = 0;
-struct Acc { std::vector<float> conv, blas, tlas; };
-Acc g_acc[2];                      // [0] rebuild, [1] refit
-uint32_t g_n_rebuild = 0, g_n_refit = 0, g_n_frames = 0;
-uint64_t g_prims_sum = 0, g_aprims_sum = 0, g_alpha_draws_sum = 0;
+struct Acc { std::vector<float> conv, blas, tlas, total; };
+Acc g_acc[3][2];                   // [rebuild, refit, split][static, camera moving]
+uint32_t g_n_rebuild = 0, g_n_refit = 0, g_n_split = 0, g_n_frames = 0;
+uint64_t g_prims_sum = 0, g_aprims_sum = 0, g_alpha_draws_sum = 0, g_static_tris_sum = 0, g_instances_sum = 0;
 
 const VkBaseInStructure* find_in(const void* chain, VkStructureType t) {
   for (auto p = static_cast<const VkBaseInStructure*>(chain); p; p = p->pNext)
@@ -539,6 +544,92 @@ void rt_before_capture(VkCommandBuffer cmd) {
   g_dd->vk.CmdPipelineBarrier(cmd, kAS | kCS, kXFB, 0, 1, &mb, 0, nullptr, 0, nullptr);
 }
 
+// ---- helpers shared with the split (bvhsplit.cpp) ----
+
+VkDeviceAddress rt_buffer_address(VkBuffer b) { return buffer_address(b); }
+VkDeviceSize rt_scratch_alignment() { return g_scratch_align; }
+
+const uint8_t* mapped_ptr(VkBuffer b, VkDeviceSize offset) {
+  std::shared_lock<std::shared_mutex> lock(tracker().mu);
+  auto bm = tracker().buffer_mem.find(b);
+  if (bm == tracker().buffer_mem.end()) return nullptr;
+  auto mp = tracker().mapped.find(bm->second.first);
+  if (mp == tracker().mapped.end() || !mp->second) return nullptr;
+  return mp->second + bm->second.second + offset;
+}
+
+bool read_mapped(VkBuffer b, VkDeviceSize offset, void* dst, size_t n) {
+  const uint8_t* p = mapped_ptr(b, offset);
+  if (!p) return false;
+  std::memcpy(dst, p, n);
+  return true;
+}
+
+// 1. clip -> camera-relative world, in place: the opaque region, then the alpha one.
+// Caller holds g_mu (or the split's lock; the pipeline is only replaced on present).
+bool rt_convert(VkCommandBuffer cmd, const RtCapture& cap) {
+  if (!g_pipe) return false;
+  const DeviceData* dd = g_dd;
+  const uint32_t stride = cap.stride, tri_bytes = 3 * cap.stride;
+  const uint32_t prims = uint32_t(cap.opaque_bytes / tri_bytes), aprims = uint32_t(cap.alpha_bytes / tri_bytes);
+  for (uint32_t region = 0; region < 2; ++region) {
+    const uint32_t n = region ? aprims : prims;
+    if (!n) continue;
+    const VkDeviceSize base = region ? cap.alpha_base : 0;
+    VkDescriptorBufferInfo in{cap.ubo, cap.ubo_offset, 224}, out{cap.xfb, base, VkDeviceSize(n) * tri_bytes};
+    VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+    w[0].dstBinding = 0;
+    w[0].descriptorCount = 1;
+    w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    w[0].pBufferInfo = &in;
+    w[1].dstBinding = 1;
+    w[1].descriptorCount = 1;
+    w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    w[1].pBufferInfo = &out;
+    uint32_t groups = (std::min)((n + 255) / 256, 65535u);
+    uint32_t pc[4] = {n, groups * 256, stride, 0};
+    dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pipe);
+    dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pl, 0, 2, w);
+    dd->vk.CmdPushConstants(cmd, g_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
+    dd->vk.CmdDispatch(cmd, groups, 1, 1);
+  }
+  return true;
+}
+
+namespace {
+VkCommandBuffer g_stamp_cmd = VK_NULL_HANDLE;
+int g_stamp_slot = -1;
+void stamp_cb(VkCommandBuffer cmd, uint32_t i) { timestamp(cmd, g_stamp_slot, i); }
+
+// Camera motion of this build's frame: the view matrix and position of the
+// camera UBO (set 0 binding 2, read from its host mapping) against the last build.
+float g_prev_cam[56] = {};
+bool g_prev_cam_valid = false, g_cam_unreadable_logged = false;
+std::atomic<bool> g_moving{false};
+
+void note_camera(const RtCapture& cap) {
+  float cam[56];
+  if (!read_mapped(cap.ubo, cap.ubo_offset, cam, sizeof cam)) {
+    if (!g_cam_unreadable_logged) {
+      g_cam_unreadable_logged = true;
+      log("[rt] the camera UBO is not host-mapped: timings are not split by camera motion");
+    }
+    g_moving = false;
+    return;
+  }
+  bool moving = false;
+  if (g_prev_cam_valid) {
+    for (int i = 0; i < 16 && !moving; ++i) moving = std::fabs(cam[i] - g_prev_cam[i]) > 1e-5f;      // view (_m0)
+    for (int i = 52; i < 55 && !moving; ++i) moving = std::fabs(cam[i] - g_prev_cam[i]) > 1e-4f;     // position (_m6)
+  }
+  std::memcpy(g_prev_cam, cam, sizeof cam);
+  g_prev_cam_valid = true;
+  g_moving = moving;
+}
+}  // namespace
+
+bool rt_camera_moving() { return g_moving.load(); }
+
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   if (!g_rt) return;
   std::lock_guard<std::mutex> lock(g_mu);
@@ -551,13 +642,68 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   // Two geometries whenever the capture has an alpha region (rt_alpha=1), so the
   // BLAS layout does not change with the number of alpha-tested draws.
   const uint32_t geoms = cap.alpha_region ? 2 : 1;
-  if (!prims || !ubo || !xfb) {
+  // The split may have nothing to capture (everything cached); the legacy build needs triangles.
+  if ((!cap.split && !prims) || !ubo || !xfb) {
     static int warned = 0;
     if (warned++ < 5) log("[rt] frame %llu: nothing to build (%u triangles, camera UBO %s)",
                           (unsigned long long)frame_index(), prims, ubo ? "found" : "missing");
     return;
   }
   if (!ensure_pipeline()) return;
+  note_camera(cap);
+  const DeviceData* dd = g_dd;
+
+  // ---- Track D BVH split (bvhsplit.cpp) ----
+  if (cap.split) {
+    if (g_blas) {   // the legacy soup BLAS is not used while the split runs
+      if (g_blas) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_blas));
+      g_blas = VK_NULL_HANDLE;
+      if (g_blas_buf.b) free_buf(g_blas_buf);
+      g_blas_capacity = g_alpha_capacity = g_blas_geoms = 0;
+      g_blas_valid = false;
+    }
+    int slot = -1;
+    if (g_qp) {
+      uint32_t s = g_next_slot % kRing;
+      if (!g_slots[s].frame) {
+        slot = int(s);
+        g_next_slot = s + 1;
+        g_slots[s] = {frame_index() + 1, 2, g_moving.load(), prims};
+        dd->vk.CmdResetQueryPool(cmd, g_qp, s * 4, 4);
+      }
+    }
+    timestamp(cmd, slot, 0);
+    g_stamp_slot = slot;
+    BvhResult res{};
+    if (!bvh_build(cmd, cap, &stamp_cb, &res)) {
+      if (slot >= 0) g_slots[slot] = Slot{};   // the timestamps were not all written
+      restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
+      return;
+    }
+    restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
+    AlphaBindings ab{xfb, cap.alpha_base, aprims ? VkDeviceSize(aprims) * tri_bytes : 0, VkDeviceSize(prims) * tri_bytes,
+                     cap.xfb_size, stride, true, res.info, res.info_off, res.info_bytes, res.pool, res.pool_bytes};
+    alpha_commit(cmd, ab);
+    g_split_tlas = res.tlas;
+    g_split_valid = res.tlas != VK_NULL_HANDLE;
+    ++g_n_frames;
+    ++g_n_split;
+    g_prims_sum += res.static_tris + res.dynamic_tris;
+    g_static_tris_sum += res.static_tris;
+    g_instances_sum += res.instances;
+    g_last_frame = frame_index();
+    g_tlas_frame = frame_index();
+    if (!g_logged_first) {
+      g_logged_first = true;
+      log("[rt] first split scene: %u TLAS instances (%u static from %u cached draws, %u dynamic draws), %.2fM + %.2fM "
+          "triangles (static + dynamic), %u new meshes",
+          res.instances, res.static_instances, res.cached_draws, res.dynamic_draws, double(res.static_tris) * 1e-6,
+          double(res.dynamic_tris) * 1e-6, res.new_meshes);
+    }
+    return;
+  }
+
+  // ---- legacy: one BLAS over the whole soup ----
   const bool want_refit = cfg_int("rt_refit", 1) != 0;
   VkBuildAccelerationStructureFlagsKHR flags =
       (cfg_int("rt_fast_trace", 0) ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
@@ -570,10 +716,13 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     release_all();
     return;
   }
-  // Track D phase 3: the alpha-tested draws' records and textures.
-  alpha_commit(cmd, xfb, cap.alpha_base, geoms == 2 ? VkDeviceSize(aprims) * tri_bytes : 0,
-               VkDeviceSize(prims) * tri_bytes, stride);
-  const DeviceData* dd = g_dd;
+  // Track D phase 3: the alpha-tested draws' records and textures; InstInfo of the one instance.
+  VkBuffer info = VK_NULL_HANDLE;
+  VkDeviceSize info_bytes = 0;
+  alpha_legacy_info(cmd, stride, &info, &info_bytes);
+  AlphaBindings ab{xfb, cap.alpha_base, geoms == 2 ? VkDeviceSize(aprims) * tri_bytes : 0, VkDeviceSize(prims) * tri_bytes,
+                   cap.xfb_size, stride, false, info, 0, info_bytes, VK_NULL_HANDLE, 0};
+  alpha_commit(cmd, ab);
   int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
   bool refit = want_refit && g_blas_valid && prims == g_built_prims && aprims == g_built_aprims &&
                signature == g_built_sig && int(g_since_build) < rebuild_frames;
@@ -584,7 +733,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     if (!g_slots[s].frame) {
       slot = int(s);
       g_next_slot = s + 1;
-      g_slots[s] = {frame_index() + 1, refit, prims};
+      g_slots[s] = {frame_index() + 1, refit ? 1 : 0, g_moving.load(), prims};
       dd->vk.CmdResetQueryPool(cmd, g_qp, s * 4, 4);
     }
   }
@@ -603,28 +752,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   inst.accelerationStructureReference = g_blas_addr;
   dd->vk.CmdUpdateBuffer(cmd, g_inst.b, 0, sizeof inst, &inst);
 
-  // 1. clip -> camera-relative world, in place: the opaque region, then the alpha one.
-  for (uint32_t region = 0; region < geoms; ++region) {
-    const uint32_t n = region ? aprims : prims;
-    if (!n) continue;
-    const VkDeviceSize base = region ? cap.alpha_base : 0;
-    VkDescriptorBufferInfo in{ubo, ubo_offset, 224}, out{xfb, base, VkDeviceSize(n) * tri_bytes};
-    VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
-    w[0].dstBinding = 0;
-    w[0].descriptorCount = 1;
-    w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    w[0].pBufferInfo = &in;
-    w[1].dstBinding = 1;
-    w[1].descriptorCount = 1;
-    w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    w[1].pBufferInfo = &out;
-    uint32_t groups = (std::min)((n + 255) / 256, 65535u);
-    uint32_t pc[4] = {n, groups * 256, stride, 0};
-    dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pipe);
-    dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pl, 0, 2, w);
-    dd->vk.CmdPushConstants(cmd, g_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
-    dd->vk.CmdDispatch(cmd, groups, 1, 1);
-  }
+  // 1. clip -> camera-relative world, in place.
+  rt_convert(cmd, cap);
   barrier(cmd, kCS | kXfer, kAS);
   timestamp(cmd, slot, 1);
 
@@ -677,10 +806,11 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     ++g_n_rebuild;
   }
   ++g_n_frames;
-  g_prims_sum += prims;
+  g_prims_sum += prims + aprims;
   g_aprims_sum += aprims;
   g_alpha_draws_sum += cap.alpha_draws;
   g_blas_valid = true;
+  g_split_valid = false;
   g_built_prims = prims;
   g_built_aprims = aprims;
   g_built_sig = signature;
@@ -696,14 +826,19 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame) {
   if (!g_rt) return false;
   std::lock_guard<std::mutex> lock(g_mu);
-  if (!g_tlas || !g_blas_valid) return false;
-  *tlas = g_tlas;
+  if (g_split_valid && g_split_tlas) {
+    *tlas = g_split_tlas;
+  } else {
+    if (!g_tlas || !g_blas_valid) return false;
+    *tlas = g_tlas;
+  }
   *built_frame = g_tlas_frame;
   return true;
 }
 
 void rt_on_present() {
   if (!g_rt || !g_qp) return;
+  bvh_on_present();
   std::lock_guard<std::mutex> lock(g_mu);
   // Compile (and recompile after edits) on the present thread, not while
   // the game records.
@@ -717,37 +852,52 @@ void rt_on_present() {
                                                 VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
     bool done = res == VK_SUCCESS && r[1] && r[3] && r[5] && r[7];
     if (!done && sl.frame + 60 > now) continue;
-    bool refit = sl.refit;
+    const int mode = sl.mode;
+    const bool moving = sl.moving;
     sl = Slot{};
     if (!done || r[6] < r[0]) continue;
     auto ms = [&](uint64_t a, uint64_t b) { return float(double(b - a) * g_ts_period * 1e-6); };
-    Acc& a = g_acc[refit ? 1 : 0];
+    Acc& a = g_acc[mode][moving ? 1 : 0];
     a.conv.push_back(ms(r[0], r[2]));
     a.blas.push_back(ms(r[2], r[4]));
     a.tlas.push_back(ms(r[4], r[6]));
+    a.total.push_back(ms(r[0], r[6]));
   }
   int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
   if (g_n_frames < uint32_t(every)) return;
-  auto med = [](std::vector<float>& v) {
+  auto pct = [](std::vector<float>& v, double q) {
     if (v.empty()) return 0.0f;
     std::sort(v.begin(), v.end());
-    return v[v.size() / 2];
+    return v[(std::min)(v.size() - 1, size_t(double(v.size()) * q))];
   };
-  for (int k = 0; k < 2; ++k) {
-    Acc& a = g_acc[k];
-    if (a.conv.empty()) continue;
-    size_t n = a.conv.size();
-    float c = med(a.conv), b = med(a.blas), t = med(a.tlas);
-    log("[rt] scene build GPU (%s, %zu samples, median): convert %.3f ms, BLAS %.3f ms, TLAS %.3f ms, total %.3f ms",
-        k ? "BLAS refit" : "BLAS rebuild", n, c, b, t, c + b + t);
-    a = Acc{};
-  }
-  log("[rt] last %u frames: %u rebuilds, %u refits, %.2fM triangles average (+%.3fM alpha-tested in %.1f draws), BLAS "
-      "capacity %u + %u",
-      g_n_frames, g_n_rebuild, g_n_refit, double(g_prims_sum) / g_n_frames * 1e-6, double(g_aprims_sum) / g_n_frames * 1e-6,
-      double(g_alpha_draws_sum) / g_n_frames, g_blas_capacity, g_alpha_capacity);
-  g_n_frames = g_n_rebuild = g_n_refit = 0;
-  g_prims_sum = g_aprims_sum = g_alpha_draws_sum = 0;
+  static const char* kMode[3] = {"legacy BLAS rebuild", "legacy BLAS refit", "split"};
+  static const char* kParts[3][3] = {{"convert", "BLAS", "TLAS"}, {"convert", "BLAS", "TLAS"},
+                                     {"convert+extract", "BLAS builds/refits", "TLAS"}};
+  for (int k = 0; k < 3; ++k)
+    for (int mv = 0; mv < 2; ++mv) {
+      Acc& a = g_acc[k][mv];
+      if (a.total.empty()) continue;
+      size_t n = a.total.size();
+      float c = pct(a.conv, 0.5), b = pct(a.blas, 0.5), t = pct(a.tlas, 0.5);
+      float tm = pct(a.total, 0.5), t99 = pct(a.total, 0.99), b99 = pct(a.blas, 0.99);
+      log("[rt] scene build GPU (%s, %s, %zu samples): median %s %.3f ms, %s %.3f ms (p99 %.3f), %s %.3f ms; total "
+          "median %.3f ms, p99 %.3f ms",
+          kMode[k], mv ? "camera moving" : "static", n, kParts[k][0], c, kParts[k][1], b, b99, kParts[k][2], t, tm, t99);
+      a = Acc{};
+    }
+  if (g_n_split)
+    log("[rt] last %u frames: %u split builds (%.0f TLAS instances, %.3fM static + %.3fM dynamic triangles average), "
+        "%u legacy rebuilds, %u refits",
+        g_n_frames, g_n_split, double(g_instances_sum) / g_n_split, double(g_static_tris_sum) / g_n_split * 1e-6,
+        double(g_prims_sum - g_static_tris_sum) / g_n_frames * 1e-6, g_n_rebuild, g_n_refit);
+  else
+    log("[rt] last %u frames: %u rebuilds, %u refits, %.2fM triangles average (%.3fM alpha-tested in %.1f draws), BLAS "
+        "capacity %u + %u",
+        g_n_frames, g_n_rebuild, g_n_refit, double(g_prims_sum) / g_n_frames * 1e-6,
+        double(g_aprims_sum) / g_n_frames * 1e-6, double(g_alpha_draws_sum) / g_n_frames, g_blas_capacity,
+        g_alpha_capacity);
+  g_n_frames = g_n_rebuild = g_n_refit = g_n_split = 0;
+  g_prims_sum = g_aprims_sum = g_alpha_draws_sum = g_static_tris_sum = g_instances_sum = 0;
 }
 
 // Diagnostic: who allocates memory with VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT

@@ -248,6 +248,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     geo_device_created(dd, geo_use != ci_orig);
     rt_device_created(dd, rt_on);
     if (rt_on && rt_enabled()) alpha_device_created(dd);
+    if (rt_on && rt_enabled()) bvh_device_created(dd);
   }
   sl_device_post(sl_scratch, dd, VK_SUCCESS);
   watchdog_start();
@@ -260,6 +261,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   sl_device_destroy(dd);
   if (dd == g_main) {
     core_shutdown();
+    bvh_device_destroyed(dd);
     alpha_device_destroyed(dd);
     rt_device_destroyed(dd);
     assetdb_device_destroyed();
@@ -366,6 +368,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
     cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
   if (trace_recording()) trace_on_submit(cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
+  bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   sl_note_submit(cmds);
   auto lock = queue_lock();
   return dd->vk.QueueSubmit(queue, count, submits, fence);
@@ -381,6 +384,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
       cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
   if (trace_recording()) trace_on_submit(cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
+  bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   sl_note_submit(cmds);
   auto lock = queue_lock();
   return dd->vk.QueueSubmit2(queue, count, submits, fence);

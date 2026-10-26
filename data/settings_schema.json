@@ -16,7 +16,7 @@
        {"id": "on", "label": "On", "caps": ["dlss"], "keys": {"rr": "1"}, "needs": {}}
      ]},
     {"id": "rt_geometry", "label": "Ray-traced geometry",
-     "description": "Builds the game's geometry into a ray-tracing scene every frame. Every ray-traced effect below needs it. Opaque leaves alpha-tested casters (grates, foliage, chains) out, which halves the scene update cost. Off frees about 2-4 ms on mid-range GPUs.",
+     "description": "Builds the game's geometry into a ray-tracing scene every frame. Every ray-traced effect below needs it. Static meshes are built once and cached, so the update costs about 0.5 ms on an RTX 5090, panning or not (it was 1.4-2.9 ms while the camera moved). Opaque leaves alpha-tested casters (grates, foliage, chains) out. Off frees that cost and the geometry capture.",
      "apply": "partial", "apply_note": "Opaque <-> Full: restart", "advanced": false,
      "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 2},
      "kind": "choice", "choices": [

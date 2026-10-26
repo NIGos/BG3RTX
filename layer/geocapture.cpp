@@ -68,19 +68,28 @@ uint32_t g_stride = 16;
 bool g_alpha_mode = false;
 std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the last G-buffer pass
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
+thread_local VsInstancing t_last_inst; // its instancing analysis (bvhsplit.cpp)
+thread_local uint64_t t_last_hash = 0;
 
 std::mutex g_mu;  // modules, pipelines, buffers
-std::unordered_map<VkShaderModule, int> g_patched;   // -> UV output location (-1 none)
+struct ModInfo {
+  int uv = -1;               // UV output location (-1 none)
+  VsInstancing inst;         // class-A position path (spirv_xfb.h)
+  uint64_t hash = 0;         // SPIR-V hash of the game's module
+};
+std::unordered_map<VkShaderModule, ModInfo> g_patched;
 struct PipeInfo {
   bool xfb;                  // VS patched, VS is the last pre-raster stage
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
   VkPrimitiveTopology topo;
   int uv = -1;               // VS output location captured as UV (stride 24)
   bool restart = true;       // primitive restart enabled, or dynamic (unknown)
+  InstPipe inst;             // instancing layout (Track D BVH split)
 };
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
-std::atomic<uint32_t> g_patch_count{0}, g_patch_skipped{0};
+std::unordered_map<VkBuffer, VkDeviceSize> g_buffer_size;
+std::atomic<uint32_t> g_patch_count{0}, g_patch_skipped{0}, g_inst_modules{0}, g_inst_pipes{0};
 
 // ---- buffers ----
 struct Buf {
@@ -165,6 +174,7 @@ struct Capture {
   // Per-frame capture for the acceleration structures (rt=1): only exactly
   // sized draws, so the soup is contiguous; the camera UBO of the first one.
   bool rt = false;
+  bool split = false;        // rt_bvh_split: cached instanced meshes are not captured (bvhsplit.cpp)
   VkBuffer rt_ubo = VK_NULL_HANDLE;
   VkDeviceSize rt_ubo_off = 0;
   uint64_t sig = 0;
@@ -205,8 +215,10 @@ VkQueryPool g_qp = VK_NULL_HANDLE;
 std::mutex g_ts_mu;
 uint64_t g_ts_frame[kTsSlots];        // frame the slot was written in (0 = free)
 bool g_ts_xfb[kTsSlots];
+bool g_ts_moving[kTsSlots];           // camera moving in that frame (rt_camera_moving)
+bool g_ts_split[kTsSlots];            // rt_bvh_split
 struct TsAcc { double sum = 0; uint32_t n = 0; std::vector<float> v; };
-TsAcc g_ts_acc[2];                    // [0] xfb inactive, [1] xfb active
+TsAcc g_ts_acc[2][2][2];              // [xfb inactive/active][static/moving][legacy/split]
 
 bool is_gbuffer(const Bg3PassInfo& p) {
   if (p.color_count != 5 || p.depth_format != VK_FORMAT_D24_UNORM_S8_UINT) return false;
@@ -241,14 +253,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateBuffer(VkDevice device, const VkBufferCreat
   if (r == VK_SUCCESS) {
     std::lock_guard<std::mutex> lock(g_mu);
     g_buffer_usage[*out] = ci->usage;
+    g_buffer_size[*out] = ci->size;
   }
   return r;
-}
-
-VKAPI_ATTR void VKAPI_CALL DestroyBuffer(VkDevice device, VkBuffer b, const VkAllocationCallbacks* alloc) {
-  device_of(device)->vk.DestroyBuffer(device, b, alloc);
-  std::lock_guard<std::mutex> lock(g_mu);
-  g_buffer_usage.erase(b);
 }
 
 // ---- recording helpers ----
@@ -329,6 +336,7 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.record_frame = frame_index();
   c.have_depth = c.have_normals = c.have_ubo = false;
   c.rt = false;
+  c.split = false;
   c.rt_ubo = VK_NULL_HANDLE;
   c.rt_ubo_off = 0;
   c.sig = 1469598103934665603ull;
@@ -941,9 +949,17 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
 
 bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>& out) {
   t_last_uv = -1;
+  t_last_inst = VsInstancing{};
+  t_last_hash = 0;
   if (!g_on) return false;
   bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv);
   if (!ok) return false;
+  // The instancing analysis runs on the game's original SPIR-V.
+  if (rt_enabled()) {
+    t_last_inst = analyze_vs_instancing(ci->pCode, ci->codeSize / 4, t_last_uv);
+    t_last_hash = hash64(ci->pCode, ci->codeSize);
+    if (t_last_inst.ok) ++g_inst_modules;
+  }
   // geo_patch_dump=N writes the first N patched modules next to the shader
   // dumps, for spirv-val.
   if (int(g_patch_count) < cfg_int("geo_patch_dump", 0)) {
@@ -958,13 +974,75 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
 void geo_note_module(VkShaderModule m, bool patched) {
   if (!patched) return;
   std::lock_guard<std::mutex> lock(g_mu);
-  g_patched[m] = t_last_uv;   // same thread, right after geo_patch_shader
+  g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash};   // same thread, right after geo_patch_shader
 }
 
 void geo_forget_module(VkShaderModule m) {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   g_patched.erase(m);
+}
+
+// The instancing layout of a class-A pipeline (Track D BVH split): its three
+// matrix rows must be R32G32B32A32_SFLOAT attributes of instance-rate bindings
+// (divisor 1) and its position an attribute of a per-vertex binding.
+static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const ModInfo& mod) {
+  InstPipe ip;
+  const VsInstancing& vi = mod.inst;
+  const VkPipelineVertexInputStateCreateInfo* vis = ci.pVertexInputState;
+  if (!vi.ok || !vis) return ip;
+  bool dyn_stride = false;
+  if (ci.pDynamicState)
+    for (uint32_t d = 0; d < ci.pDynamicState->dynamicStateCount; ++d) {
+      VkDynamicState s = ci.pDynamicState->pDynamicStates[d];
+      if (s == VK_DYNAMIC_STATE_VERTEX_INPUT_EXT) return ip;
+      if (s == VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE) dyn_stride = true;
+    }
+  for (auto p = static_cast<const VkBaseInStructure*>(vis->pNext); p; p = p->pNext)
+    if (p->sType == VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_KHR) return ip;
+  auto binding = [&](uint32_t b) -> const VkVertexInputBindingDescription* {
+    for (uint32_t i = 0; i < vis->vertexBindingDescriptionCount; ++i)
+      if (vis->pVertexBindingDescriptions[i].binding == b) return &vis->pVertexBindingDescriptions[i];
+    return nullptr;
+  };
+  auto attr = [&](int loc) -> const VkVertexInputAttributeDescription* {
+    for (uint32_t i = 0; i < vis->vertexAttributeDescriptionCount; ++i)
+      if (int(vis->pVertexAttributeDescriptions[i].location) == loc) return &vis->pVertexAttributeDescriptions[i];
+    return nullptr;
+  };
+  for (int k = 0; k < 3; ++k) {
+    const auto* a = attr(vi.row_location[k]);
+    const auto* b = a ? binding(a->binding) : nullptr;
+    if (!a || !b || a->format != VK_FORMAT_R32G32B32A32_SFLOAT || b->inputRate != VK_VERTEX_INPUT_RATE_INSTANCE ||
+        a->binding >= CmdState::kMaxVertexBindings)
+      return ip;
+    ip.row_binding[k] = uint8_t(a->binding);
+    ip.row_offset[k] = a->offset;
+    ip.row_stride[k] = dyn_stride ? 0 : b->stride;
+  }
+  const auto* pa = attr(vi.pos_location);
+  const auto* pb = pa ? binding(pa->binding) : nullptr;
+  if (!pa || !pb || pb->inputRate != VK_VERTEX_INPUT_RATE_VERTEX) return ip;
+  // The mesh is what the per-vertex inputs hold: the VS and their layout are part of its key.
+  uint64_t h = mod.hash ^ 0x9e3779b97f4a7c15ull;
+  auto mix = [&](uint64_t v) { h = (h ^ v) * 1099511628211ull; };
+  for (uint32_t i = 0; i < vis->vertexAttributeDescriptionCount; ++i) {
+    const auto& a = vis->pVertexAttributeDescriptions[i];
+    const auto* b = binding(a.binding);
+    if (!b || b->inputRate != VK_VERTEX_INPUT_RATE_VERTEX || a.binding >= CmdState::kMaxVertexBindings) continue;
+    mix(a.location);
+    mix(a.binding);
+    mix(a.format);
+    mix(a.offset);
+    mix(dyn_stride ? 0 : b->stride);
+    ip.vtx_bindings |= 1u << a.binding;
+  }
+  ip.vtx_sig = h;
+  const auto* ua = vi.uv_input_location >= 0 ? attr(vi.uv_input_location) : nullptr;
+  const auto* ub = ua ? binding(ua->binding) : nullptr;
+  ip.uv_ok = ub && ub->inputRate == VK_VERTEX_INPUT_RATE_VERTEX;
+  ip.ok = true;
+  return ip;
 }
 
 void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, const VkPipeline* out) {
@@ -979,7 +1057,11 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
       if (st.stage == VK_SHADER_STAGE_VERTEX_BIT) {
         auto it = st.module ? g_patched.find(st.module) : g_patched.end();
         vs_patched = it != g_patched.end();
-        if (vs_patched) pi.uv = it->second;
+        if (vs_patched) {
+          pi.uv = it->second.uv;
+          pi.inst = make_inst_pipe(cis[i], it->second);
+          if (pi.inst.ok) ++g_inst_pipes;
+        }
       } else if (st.stage != VK_SHADER_STAGE_FRAGMENT_BIT) {
         other = true;
       }
@@ -1042,9 +1124,11 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
       if (start_capture(g_scratch, false, s->pass.width, s->pass.height)) {
         g_scratch.cmd = cmd;
         g_scratch.rt = rt_src && rt_capture_wanted();
+        g_scratch.split = g_scratch.rt && bvh_split_wanted();
         s->geo = &g_scratch;
         // The previous frame's AS build read this buffer.
         if (g_scratch.rt) rt_before_capture(cmd);
+        if (g_scratch.split) bvh_begin_capture(cmd);
       }
     }
     xfb = s->geo != nullptr;
@@ -1056,6 +1140,8 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
     if (!g_ts_frame[slot]) {
       g_ts_frame[slot] = frame_index() + 1;
       g_ts_xfb[slot] = xfb;
+      g_ts_moving[slot] = false;
+      g_ts_split[slot] = false;
       s->geo_ts = int(slot);
       g_dd->vk.CmdResetQueryPool(cmd, g_qp, slot * 2, 2);
       g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, g_qp, slot * 2);
@@ -1130,9 +1216,10 @@ void rt_capture_stats(const Capture& c) {
   }
 }
 
-void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t count, uint32_t instances) {
+void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
+  const uint32_t kind = args.kind, count = args.count, instances = args.instances;
   DrawRec d{kind, s->pipe_id[0], s->vs, s->fs, count, instances, -1, 0, VK_NULL_HANDLE, 0, 0, 0};
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
   {
@@ -1189,27 +1276,50 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t coun
   bool capture = d.skip == 0 && d.reserved > 0;
   if (c->rt && d.skip == 0 && pi.topo != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST) ++c->strips, c->strip_tris += prims;
   // Track D phase 3: an alpha-tested draw (its fragment shader is in the
-  // table, the VS captured the UV it samples with) goes into the alpha region.
-  bool alpha = false, alpha_wanted = false;
-  if (c->rt && g_alpha_mode && d.skip != 1 && d.skip != 2 && d.skip != 4 && d.reserved > 0) {
-    AlphaFs a;
-    if (alpha_lookup(s->fs, &a) && a.uv == pi.uv && pi.uv >= 0 && cfg_int("rt_alpha_capture", 1)) {
-      alpha_wanted = true;
-      c->alpha_demand += d.reserved;
-      if (c->alpha_cursor + d.reserved > c->xfb.size) {
-        // Region full: the draw would silently turn opaque. Counted and logged.
-        ++c->alpha_overflow;
-        c->alpha_overflow_bytes += d.reserved;
-      } else if (alpha_add_draw(cmd, a, uint32_t((c->alpha_cursor - c->alpha_base) / tri_bytes), uint32_t(prims))) {
-        alpha = true;
-        capture = true;
-        d.offset = c->alpha_cursor;
-      }
+  // table, the VS captured the UV it samples with).
+  const bool capturable = c->rt && d.skip != 1 && d.skip != 2 && d.skip != 4 && d.reserved > 0;
+  AlphaFs a{};
+  const bool alpha_fs = capturable && g_alpha_mode && alpha_lookup(s->fs, &a) && a.uv == pi.uv && pi.uv >= 0 &&
+                        cfg_int("rt_alpha_capture", 1);
+  // Track D BVH split: a draw of a cached instanced mesh is not captured; its
+  // instances go into the TLAS with the matrices of the game's instance stream.
+  uint32_t token = UINT32_MAX;
+  bool audit = false;
+  if (c->split && capturable) {
+    const bool list = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && kind <= 1;
+    BvhDraw bd{list && pi.inst.ok && (!alpha_fs || pi.inst.uv_ok) ? &pi.inst : nullptr, s->vs, d.pipe_id, alpha_fs,
+               args, s};
+    uint32_t mesh_tris = 0;
+    BvhVerdict v = bvh_classify(cmd, bd, &token, &mesh_tris);
+    if (v != BVH_CAPTURE) {
+      uint32_t rec = UINT32_MAX;
+      if (alpha_fs && !alpha_add_draw(cmd, a, 0, mesh_tris, &rec)) rec = UINT32_MAX;
+      bvh_set_record(token, rec);
+      if (v == BVH_CACHED) return;
+      audit = true;   // also captured (opaque region), for the cache's position check
+    }
+  }
+  // Alpha-tested draws go into the alpha region.
+  bool alpha = false;
+  uint32_t rec = UINT32_MAX;
+  if (alpha_fs && !audit) {
+    c->alpha_demand += d.reserved;
+    if (c->alpha_cursor + d.reserved > c->xfb.size) {
+      // Region full: the draw would silently turn opaque. Counted and logged.
+      ++c->alpha_overflow;
+      c->alpha_overflow_bytes += d.reserved;
+    } else if (alpha_add_draw(cmd, a, uint32_t((c->alpha_cursor - c->alpha_base) / tri_bytes), uint32_t(prims), &rec)) {
+      alpha = true;
+      capture = true;
+      d.offset = c->alpha_cursor;
     }
   }
   if (c->rt && !alpha && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
     ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
-  (void)alpha_wanted;
+  if (token != UINT32_MAX) {
+    if (capture) bvh_captured(token, d.offset, uint32_t(prims), alpha, alpha ? rec : UINT32_MAX);
+    else bvh_note_skipped(token);
+  }
   if (capture && c->rt) {
     // Draw identity for the refit decision: same draws in the same order give
     // the same triangle order.
@@ -1250,8 +1360,20 @@ void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
 // After the game's vkCmdEndRenderPass (outside the pass).
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
   if (s->geo_ts >= 0 && g_qp) g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->geo_ts * 2 + 1);
+  const int ts_slot = s->geo_ts;
   s->geo_ts = -1;
   auto* c = static_cast<Capture*>(s->geo);
+  // The pass's timing sample is classified by camera motion once the scene build
+  // below has looked at the camera (static vs pan medians, TRACK_D_RT.md 11).
+  struct MotionTag {
+    int slot;
+    ~MotionTag() {
+      if (slot < 0) return;
+      std::lock_guard<std::mutex> lock(g_ts_mu);
+      g_ts_moving[slot] = rt_camera_moving();
+      g_ts_split[slot] = bvh_split_wanted();
+    }
+  } motion_tag{ts_slot};
   s->geo = nullptr;
   if (!c) return;
   if (!c->readback) {
@@ -1276,6 +1398,8 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
       rc.signature = c->sig;
       rc.draws = c->rt_draws;
       rc.alpha_draws = c->alpha_draws;
+      rc.split = c->split;
+      rc.xfb_size = c->xfb.size;
       rt_after_capture(cmd, rc);
     }
     // Next frame's capture into the same scratch memory comes after this one.
@@ -1404,21 +1528,25 @@ void geo_on_present(VkQueue queue) {
     g_ts_frame[s] = 0;
     if (!done || r[2] < r[0]) continue;
     float ms = float(double(r[2] - r[0]) * g_ts_period * 1e-6);
-    TsAcc& a = g_ts_acc[g_ts_xfb[s] ? 1 : 0];
+    TsAcc& a = g_ts_acc[g_ts_xfb[s] ? 1 : 0][g_ts_moving[s] ? 1 : 0][g_ts_split[s] ? 1 : 0];
     a.v.push_back(ms);
   }
   int every = (std::max)(cfg_int("geo_timing_frames", 300), 30);
-  for (int k = 0; k < 2; ++k) {
-    TsAcc& a = g_ts_acc[k];
-    if (int(a.v.size()) < every) continue;
-    std::sort(a.v.begin(), a.v.end());
-    double sum = 0;
-    for (float v : a.v) sum += v;
-    log("[geo] G-buffer pass GPU time (%s, %zu frames): median %.3f ms, mean %.3f, p10 %.3f, p90 %.3f",
-        k ? "XFB capture active" : g_on ? "shaders patched, XFB idle" : "unpatched", a.v.size(), a.v[a.v.size() / 2],
-        sum / a.v.size(), a.v[a.v.size() / 10], a.v[a.v.size() * 9 / 10]);
-    a.v.clear();
-  }
+  for (int k = 0; k < 2; ++k)
+    for (int mv = 0; mv < 2; ++mv)
+      for (int sp = 0; sp < 2; ++sp) {
+        TsAcc& a = g_ts_acc[k][mv][sp];
+        if (int(a.v.size()) < every) continue;
+        std::sort(a.v.begin(), a.v.end());
+        double sum = 0;
+        for (float v : a.v) sum += v;
+        log("[geo] %s pass GPU time (%s, %s%s, %zu frames): median %.3f ms, mean %.3f, p10 %.3f, p90 %.3f, p99 %.3f",
+            g_alpha_mode ? "depth prepass" : "G-buffer",
+            k ? "XFB capture active" : g_on ? "shaders patched, XFB idle" : "unpatched", mv ? "camera moving" : "static",
+            k ? (sp ? ", BVH split" : ", legacy BVH") : "", a.v.size(), a.v[a.v.size() / 2], sum / a.v.size(),
+            a.v[a.v.size() / 10], a.v[a.v.size() * 9 / 10], a.v[(std::min)(a.v.size() - 1, a.v.size() * 99 / 100)]);
+        a.v.clear();
+      }
 }
 
 void geo_device_destroyed(DeviceData* dd) {
@@ -1441,10 +1569,22 @@ void geo_device_destroyed(DeviceData* dd) {
   g_dd = nullptr;
 }
 
+// From the tracker's vkDestroyBuffer hook (the one hook for it).
+void geo_forget_buffer(VkBuffer b) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  g_buffer_usage.erase(b);
+  g_buffer_size.erase(b);
+}
+
+VkDeviceSize geo_buffer_size(VkBuffer b) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  auto it = g_buffer_size.find(b);
+  return it == g_buffer_size.end() ? 0 : it->second;
+}
+
 void register_geo_hooks(HookMap& m) {
   m["vkCmdSetViewport"] = reinterpret_cast<PFN_vkVoidFunction>(&CmdSetViewport);
   m["vkCreateBuffer"] = reinterpret_cast<PFN_vkVoidFunction>(&CreateBuffer);
-  m["vkDestroyBuffer"] = reinterpret_cast<PFN_vkVoidFunction>(&DestroyBuffer);
 }
 
 }  // namespace bg3

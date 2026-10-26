@@ -536,6 +536,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL BindBufferMemory2(VkDevice device, uint32_
 }
 
 static VKAPI_ATTR void VKAPI_CALL DestroyBuffer(VkDevice device, VkBuffer b, const VkAllocationCallbacks* a) {
+  // Our caches keyed by the buffer go first: the handle may be reused at once.
+  bvh_forget_buffer(b);
+  geo_forget_buffer(b);
   device_of(device)->vk.DestroyBuffer(device, b, a);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().buffer_mem.erase(b);
