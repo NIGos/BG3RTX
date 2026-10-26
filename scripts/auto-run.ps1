@@ -139,6 +139,13 @@ $mutex.ReleaseMutex()
 $new = Get-ChildItem $caps -Directory | Where-Object { $_.Name -ne "shaders" -and $_.LastWriteTime -ge $start -and (Test-Path (Join-Path $_.FullName "done.txt")) } | Sort-Object Name
 foreach ($c in $new) {
   py -3 (Join-Path $PSScriptRoot "analyze_trace.py") $c.FullName --disasm
+  $geo = Join-Path $c.FullName "geo\report.json"
+  if (Test-Path $geo) {
+    $g = Get-Content $geo -Raw | ConvertFrom-Json
+    Write-Host ("geo: {0}/{1} draws captured, {2} triangles, depth coverage {3:P2} (in front {4:P2}, behind {5:P2}, missing {6:P2}), normals |dot| median {7}" -f
+      $g.draws_captured, $g.draws, $g.triangles, $g.depth.coverage, ($g.depth.in_front / $g.depth.geometry),
+      ($g.depth.behind / $g.depth.geometry), ($g.depth.missing / $g.depth.geometry), $g.normals.abs_dot_median)
+  }
 }
 if (-not $new) {
   Write-Host "No completed capture. Last log lines:"
