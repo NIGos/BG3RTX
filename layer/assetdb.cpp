@@ -19,6 +19,7 @@
 #pragma comment(lib, "shell32.lib")
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -682,6 +683,12 @@ std::string save_info_level(const std::wstring& lsv) {
           if (disk > (16u << 20) || usize > (16u << 20)) break;
           std::vector<uint8_t> raw(disk), json;
           if (!rd(lo | (uint64_t(hi) << 32), raw.data(), disk)) break;
+          if ((flags & 15) == 3) {
+            // Patch 8 saves compress SaveInfo.json with zstd; the layer has no zstd decoder,
+            // so the level comes from the runtime lights instead.
+            log("[assetdb] the save's SaveInfo.json is zstd-compressed: level from runtime lights");
+            break;
+          }
           if ((flags & 15) == 0) json = raw;
           else if ((flags & 15) != 2 || !lz4_block(raw.data(), raw.size(), json, usize)) break;
           std::string s(json.begin(), json.end());
@@ -943,6 +950,12 @@ uint32_t nearest(const Db& d, const Grid& g, const float p[3], float tol, float*
   return best;
 }
 
+uint32_t n_ref_total(const std::vector<uint8_t>& ref) {
+  uint32_t n = 0;
+  for (uint8_t r : ref) n += r;
+  return n;
+}
+
 bool inv3(const float m[3][4], float inv[3][3]) {
   double a = m[0][0], b = m[0][1], c = m[0][2], d = m[1][0], e = m[1][1], f = m[1][2], g = m[2][0], h = m[2][1],
          i = m[2][2];
@@ -1010,8 +1023,32 @@ void join_check(Db& d, const Pending& p) {
               ref[i] != 0};
     rt.push_back(L);
   }
+  // Only the lights the froxel lists use this frame vote: slots outside them hold lights
+  // from other places and frames (Grymforge: 1182 valid-looking slots, 39 listed).
+  // Projector (box) lights vote too, by the near-face centre of their unit box (the anchor
+  // that matches the editor position, see the b29 statistics below): interiors such as the
+  // Water Queen's House list only a few point lights.
+  std::vector<std::array<float, 3>> voters;
+  const bool any_listed = n_ref_total(ref) > 0;
+  for (const RtLight& L : rt)
+    if (!any_listed || L.referenced) voters.push_back({L.w[0], L.w[1], L.w[2]});
+  const bool any_plisted = n_ref_total(pref) > 0;
+  for (uint32_t i = 0; i < pslots; ++i) {
+    if (any_plisted && !pref[i]) continue;
+    float m[3][4], inv[3][3];
+    memcpy(m, rb + kOffProj + size_t(i) * 128 + 48, 48);
+    bool ok = true;
+    for (auto& r : m)
+      for (float v : r) ok = ok && std::isfinite(v);
+    if (!ok || !inv3(m, inv)) continue;
+    float qv[3] = {0.5f - m[0][3], 0.5f - m[1][3], 0.0f - m[2][3]};
+    std::array<float, 3> w;
+    for (int r = 0; r < 3; ++r) w[r] = inv[r][0] * qv[0] + inv[r][1] * qv[1] + inv[r][2] * qv[2] + cam[r];
+    voters.push_back(w);
+  }
   std::unordered_map<int, uint32_t> votes;
-  for (const RtLight& L : rt) {
+  for (const auto& V : voters) {
+    struct { float w[3]; } L{{V[0], V[1], V[2]}};
     std::vector<int> seen;
     int x0 = g_vote_grid.c(L.w[0] - tol), x1 = g_vote_grid.c(L.w[0] + tol);
     int y0 = g_vote_grid.c(L.w[1] - tol), y1 = g_vote_grid.c(L.w[1] + tol);
@@ -1040,13 +1077,47 @@ void join_check(Db& d, const Pending& p) {
     cur = g_level;
   }
   uint32_t cur_votes = cur >= 0 && votes.count(cur) ? votes[cur] : 0;
-  if (best >= 0 && best != cur && bv >= 3 && bv > cur_votes) set_level(best, "lights");
+  // Switch on 3 votes; with no level yet, a level that is the only one voted for is enough
+  // (positions match to float precision, so one exact match is strong evidence).
+  if (best >= 0 && best != cur && bv > cur_votes && (bv >= 3 || (cur < 0 && votes.size() == 1)))
+    set_level(best, "lights");
   {
     std::shared_lock<std::shared_mutex> lock(g_level_mu);
     cur = g_level;
   }
   if (cur < 0) {
-    log("[assetdb] join: %zu runtime lights, no database level matches (best %d votes)", rt.size(), int(bv));
+    // Diagnose: nearest database light of any level for each runtime light (brute force, once per check).
+    std::string csv = "slot,referenced,x,y,z,inv_r,r,g,b,nearest_dist,nearest_level,nearest_name\n";
+    std::vector<float> nd;
+    std::unordered_map<int, uint32_t> near_levels;
+    for (const RtLight& L : rt) {
+      float bd = 1e30f;
+      uint32_t bi = kNone;
+      for (uint32_t i = 0; i < d.lights.n; ++i)
+        if (float q = dist2(L.w, d.lights[i].pos); q < bd) bd = q, bi = i;
+      bd = std::sqrt(bd);
+      nd.push_back(bd);
+      int lvn = bi == kNone ? -1 : d.light_level[bi];
+      if (bd < 1.0f) ++near_levels[lvn];
+      char line[384];
+      snprintf(line, sizeof line, "%u,%d,%.4f,%.4f,%.4f,%.6g,%.6g,%.6g,%.6g,%.4f,%s,%s\n", L.slot, int(L.referenced),
+               L.w[0], L.w[1], L.w[2], L.inv_r, L.col[0], L.col[1], L.col[2], bd,
+               lvn >= 0 ? d.str(d.levels[lvn].name) : "", bi == kNone ? "" : d.str(d.lights[bi].name));
+      csv += line;
+    }
+    std::sort(nd.begin(), nd.end());
+    std::string lv_s;
+    for (auto& [lvn, n] : near_levels) lv_s += std::string(" ") + (lvn >= 0 ? d.str(d.levels[lvn].name) : "?") + "=" + std::to_string(n);
+    log("[assetdb] join: %zu runtime lights (%u froxel-listed), no database level matches (best %d votes); camera "
+        "(%.1f, %.1f, %.1f); nearest database light: median %.2f m, min %.3f m; within 1 m by level:%s",
+        rt.size(), n_ref_total(ref), int(bv), cam[0], cam[1], cam[2], nd.empty() ? -1.0 : nd[nd.size() / 2],
+        nd.empty() ? -1.0 : nd[0], lv_s.c_str());
+    if (cfg_int("assetdb_join_csv", 1)) {
+      std::string dir = root_dir() + "\\captures";
+      make_dirs(dir);
+      std::string path = dir + "\\assetdb_join_" + now_stamp() + "_nomatch.csv";
+      write_file(path, csv.data(), csv.size());
+    }
     return;
   }
   // Match within the current level
@@ -1153,7 +1224,7 @@ void join_check(Db& d, const Pending& p) {
   api_current_level(&lname, &src);
   ++g_checks;
   log("[assetdb] join #%u frame %llu level %s (%s, %u/%zu votes): camera (%.1f, %.1f, %.1f), global scale %.6g",
-      g_checks, (unsigned long long)p.frame, lname, src, cur_votes ? cur_votes : bv, rt.size(), cam[0], cam[1],
+      g_checks, (unsigned long long)p.frame, lname, src, cur_votes ? cur_votes : bv, voters.size(), cam[0], cam[1],
       cam[2], scale);
   log("[assetdb] join lights b25: %zu valid of %u slots, %u in the froxel lists; matched %u (%.1f%%) within %.0f cm, "
       "froxel-listed matched %u/%u (%.1f%%); median distance %.2f mm, max %.2f mm; colour ok %u (%.1f%% of matched: "
