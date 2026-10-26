@@ -54,6 +54,7 @@ closed.
 Checkpoint routine: for each scene, a feature-off and a feature-on capture of
 the same frame (`scripts/live_phases.py` toggles live inside one run), the A/B
 sheet from `scripts/ab_compare.py`, GPU costs, and the non-finite and
-validation checks. The art-intent review looks at each A/B sheet. It asks
+validation checks. `python -m scripts.qa run --scenes ...` automates the
+captures and the objective checks ([QA.md](QA.md)). The art-intent review looks at each A/B sheet. It asks
 whether the change keeps the look the artists lit for (key lights, character
 readability, colour grade) as well as being physically better.

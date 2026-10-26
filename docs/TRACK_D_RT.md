@@ -1233,12 +1233,14 @@ The budget (QUALITY R7) is 0.5 ms for local-light shadows: met. All rt passes to
 - **Art intent.** Every unshadowed light is shadowed, including fill lights that may be
   meant to leak and the light that follows the active character (its wedge-shaped
   shadow on the floor). `ls_min_radius` and `ls_strength` exist as controls. A
-  per-channel exclusion was not needed here.
+  per-channel exclusion was not needed here. **Resolved for the character light
+  in 9.8.**
 - **Off-screen casters** are missing from the TLAS, so leaks through geometry the camera
   does not see remain (cascade-caster capture, 6.7 item 2, and D-EN3 retention).
 - **Exactness.** The transmittance and in-scatter are not replicated (they are why 9.3
   stops at a fit), and the delta is clamped at 0 for that reason.
 - **Light source radius.** BG3 gives none; 0.05 is a guess, to tune by eye.
+  **Now per fixture class (9.8)**; still not a measured size.
 - **`rr=0`**: hard shadows only (no SIGMA).
 
 Settings (`bg3rtx.ini`, all live): `rt_local_shadows`, `ls_shadowed`, `ls_source_radius`,
@@ -1247,6 +1249,136 @@ Settings (`bg3rtx.ini`, all live): `rt_local_shadows`, `ls_shadowed`, `ls_source
 `ls_stats`. The log reports `ls: first frame ...` (the bindings),
 `ls: local-light shadow pass GPU median ...` and, with `ls_stats=1`, `ls stats` and
 `ls validation fit`.
+
+### 9.8 Per-light data: the Script Extender bridge and the asset database (2026-10-26)
+
+Status: **on by default** (`ls_lights=1`, `ls_owners=15`, live).
+
+Code:
+- `core/ls_lights.cpp` (upload);
+- `shaders/gi/rt_local_shadows_match.hlsl` (join);
+- `rt_local_shadows.hlsl` (use);
+- the data comes from `Bg3AssetDbApi` v2 (`layer/assetdb.cpp`, `layer/sebridge.cpp`;
+  docs/SE_BRIDGE.md).
+
+**What it does.**
+1. **Upload.** Each frame the core uploads the runtime lights within
+   `ls_lights_radius` (80 m) of the camera into a host-visible ring: up to 1,024
+   records of 48 bytes. These are the bridge's lights merged with the database's placed
+   lights, or the database alone without the bridge.
+   - Each record holds the absolute position, the radius, the source radius, a match
+     tolerance, the flags, owner, type and channel.
+   - The list is re-queried every 8 frames and on each new export.
+   - **Camera position.** The join pass writes it (set 0 b2 `_m6`) back into the ring.
+     The core reads it kRing frames later to centre the next query. Before the first
+     readback, the controlled character's position from the bridge is used.
+2. **Join pass** (before D-LS, inside its timestamps). One thread per light array
+   slot: 4096 threads, with the records staged through group-shared memory.
+   - A slot matches the nearest record within its tolerance whose radius agrees with
+     1/`m0.w` within 2%.
+   - Tolerance: 5 cm + `MovementAmount` for lights that stay put, 0.5 m for item
+     lights, 4 m for character lights (they move between 4 Hz exports).
+   - The result goes to a 4096×1 RGBA32UI image: source radius, flags, owner | type,
+     and the record index.
+3. **D-LS** reads its slot for every light it would trace:
+   - the light's **source radius** replaces `ls_source_radius` for its soft-shadow
+     sphere (the fixture class, SE_BRIDGE.md "Source radius");
+   - a light whose **owner** bit is clear in `ls_owners` is left exactly as the game lit
+     it;
+   - unmatched lights keep `ls_source_radius` and are traced as before.
+
+**Art intent: the character light (the 9.7 question).**
+- **What the light is.** The light that follows the active character is the darkvision
+  pair:
+  - `Light_Player_Darkvision_Spot_Drow`: spot, radius 24, intensity 4000;
+  - `Light_Player_Darkvision_Point_Default`: point, radius 18, intensity 0, `FillLight`.
+
+  Both sit 2 m above the controlled character.
+- **The game's own flags.** Their templates set `Shadow = false` and
+  `CastShadow = false`. The game never shadows them.
+- **What it is for.** It is a readability light: it keeps the controlled character and
+  the ground around them visible in dark areas.
+- **What tracing did.** Traced, its own carrier occludes it. The character's head and
+  shoulders shadow the body, and a wedge falls on the floor. That darkens the character
+  the light exists to show.
+- **Decision.**
+  - Character-owned lights are **not shadowed** by default: `ls_owners=15` (unknown,
+    placed, item, scenery).
+  - This follows the game's own shadow-caster flag for this light.
+  - `ls_owners=31` traces them as before.
+  - Placed, item and scenery lights are still shadowed even though most of them also
+    have `Shadow = false`. Their leaks through walls are what D-LS exists to fix (9.4),
+    and the game's flag there means "no shadow map", not "meant to leak".
+
+A/B, same view, one run, live switch (`scripts/live_phases.py`, `scripts/ab_compare.py`):
+- [sebridge_charlight_crop.png](img/sebridge_charlight_crop.png): 1:1 crop of the
+  presented frame. Left is `ls_owners=31` (character light traced), middle the default,
+  right |diff| ×4.
+  - Traced, the character is visibly darker: the light above them is blocked by their
+    own head and hat.
+  - The default restores the game's look of the character.
+  - The full frames are [shadowed](img/sebridge_charlight_shadowed.png) and
+    [default](img/sebridge_charlight_default.png).
+  - Mean luminance +0.15%; 5.8% of pixels change by more than 2/255, almost all of them
+    on the character.
+- [sebridge_owner_view.png](img/sebridge_owner_view.png): `ls_debug=9`. The evaluated
+  light, luminance-weighted, coloured by owner:
+  - white: placed lights;
+  - orange: the glasshouse lamp items in the background right;
+  - magenta: around the character (the darkvision light);
+  - red: unmatched (none here).
+- [sebridge_radius_crop.png](img/sebridge_radius_crop.png): per-light data off
+  (`ls_lights=0`, 0.05 m for every light) against on, at the machinery on the left.
+  - The changes are small penumbra differences on rims lit by fill lights (0.6 m
+    instead of 0.05 m).
+  - Over the frame, 8.3% of pixels change by more than 2/255, and the character
+    accounts for most of it.
+
+**Numbers** (foundry, `ls_stats=1`, 120-frame windows):
+
+| | Value |
+|---|---|
+| Listed point/spot lights covered (join check) | database 26/40 (65%) → bridge + database 40/40 (100%) |
+| D-LS light evaluations with per-light data | 100% matched (2.49 per px) |
+| Evaluations not traced by owner (the character light) | 16.6%: it lights most of the walkway |
+| Light removed by D-LS, all owners / default | 16.5% / 15.9% of the lit luminance |
+| Non-finite values (every dumped image, four traces) | 0 |
+
+**Cost.** GPU timestamps around the join pass and D-LS together, medians of 300 frames,
+foundry, static, one run, live phases:
+
+| Configuration | ms |
+|---|---|
+| per-light data off (`ls_lights=0`: the 9.5 path) | 0.587-0.590 |
+| **bridge + database (default)** | **0.628** |
+| database only (`se_bridge=0`) | 0.68 |
+
+- **Bridge + database: +0.04 ms.** That covers the join pass, the larger penumbrae of
+  fill lights, and the character light no longer being traced.
+- **Database only: +0.09 ms.** The character light is still traced, and fill lights get
+  the larger radius.
+- **The base itself has risen** from 9.5's 0.345 ms to 0.59 ms on this branch (after
+  the RR and BVH-split merges). That is not caused by this change; the baseline run of
+  main before it logged 0.26-0.36 ms in a shorter window. It needs its own look against
+  the 0.5 ms budget (QUALITY R7).
+
+**Validation.**
+- `-Validation` on the foundry, against a baseline run of main without the bridge, gives
+  the same 7 message IDs (`10788`, `09600`, `StorageImage-FormatMismatch`,
+  `OutputNotWritten`, `non-acquired-swapchain-image-used`, `CopyBuffer-00118`, `08737`).
+  No new ID.
+  - After merging main's RR post chain, a re-run adds `vkDestroyImage-image-01000`.
+  - It comes with the `[rrpost] the game destroys an image our post steps read` log
+    line, so it is the RR branch's, not this change's. That was not confirmed with a
+    validation run of main alone.
+- Without the database and the bridge (no API v2, `ls_lights=0`, or a failed
+  allocation), the join pass does not run, and D-LS is unchanged from 9.2.
+
+**Not done.**
+- Projector (box) lights: the character's rim and fill lights are boxes, and D-LS still
+  ignores box lights.
+- A measured fixture size from the TLAS.
+- Other scenes with the bridge.
 
 ## 10. D-RF: ray-traced reflections (implemented, tiers (a) and (c))
 

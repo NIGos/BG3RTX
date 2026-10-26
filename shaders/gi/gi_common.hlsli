@@ -89,7 +89,7 @@ struct Push {
   uint ls_soft;            // 1 sample the sphere (RR on), 0 hard
   float ls_strength;
   uint ls_has_mask;
-  uint pad4;
+  uint ls_flags;            // bit 0 per-light data (ls_lights=1, rt_local_shadows_match.hlsl); bits 8-12 owners traced (ls_owners)
   // D-RF ray-traced reflections (rt_reflections.hlsl)
   float rf_max_rough;     // perceptual roughness at which reflections have faded to the probe
   float rf_mirror_rough;  // below it one deterministic mirror ray

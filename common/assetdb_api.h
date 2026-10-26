@@ -10,11 +10,13 @@
 //
 // Versioning: this table has its own version. Fields are only ever appended; check
 // `version` (or `struct_size`) before using anything newer than version 1.
+//   2: runtime lights (the Script Extender bridge merged with the placed lights,
+//      docs/SE_BRIDGE.md), se_info, se_environment.
 #pragma once
 #include <cstddef>
 #include <cstdint>
 
-#define BG3RTX_ASSETDB_API_VERSION 1
+#define BG3RTX_ASSETDB_API_VERSION 2
 
 // ---- lights (record layout of the file's LGHT section, 128 bytes) ----
 enum Bg3DbLightType : uint8_t { BG3_DB_LIGHT_POINT = 0, BG3_DB_LIGHT_SPOT = 1, BG3_DB_LIGHT_BOX = 2 };
@@ -148,6 +150,61 @@ struct Bg3DbProbeCapture { // PCAP record, 80 bytes: one bake per lighting prese
 };
 static_assert(sizeof(Bg3DbProbe) == 64 && sizeof(Bg3DbProbeCapture) == 80, "probe records");
 
+// ---- runtime lights (version 2, docs/SE_BRIDGE.md) ----
+// The lights the game has now: the Script Extender bridge's export (every light entity
+// near the controlled character: placed lights, item and scenery-visual lights, the
+// character lights) when it is running, merged with the placed lights of the database.
+// Without the bridge, the database's placed lights alone.
+enum Bg3RtLightOwner : uint8_t {
+  BG3_RTL_OWNER_UNKNOWN = 0,    // a visual's light whose owner was not found (treated as scenery)
+  BG3_RTL_OWNER_PLACED = 1,     // a placed level light (Lights/, CombinedLights/)
+  BG3_RTL_OWNER_ITEM = 2,       // a light of an item's visual (lamps, torches, braziers as items)
+  BG3_RTL_OWNER_SCENERY = 3,    // a light of a scenery visual
+  BG3_RTL_OWNER_CHARACTER = 4,  // character lights: the darkvision / active character light, rim and fill
+};
+enum Bg3RtLightFlags : uint32_t {
+  BG3_RTL_ENABLED = 1u << 0,
+  BG3_RTL_USE_TEMPERATURE = 1u << 1,
+  BG3_RTL_FILL = 1u << 2,           // LightFlags FillLight (bridge only)
+  BG3_RTL_FLICKER = 1u << 3,        // IsFlickering
+  BG3_RTL_MOVING = 1u << 4,         // IsMoving (jitters by move_amount)
+  BG3_RTL_SHADOW = 1u << 5,         // template Shadow: the game renders a shadow map for it
+  BG3_RTL_CAST_SHADOW = 1u << 6,    // template CastShadow
+  BG3_RTL_VOLUMETRIC_SHADOW = 1u << 7,
+  BG3_RTL_PLAYER_LIGHT = 1u << 8,   // Light_Player_* template (darkvision / active character light)
+  BG3_RTL_FROM_SE = 1u << 16,       // the bridge reported it (state is live)
+  BG3_RTL_FROM_DB = 1u << 17,       // the database has it (db_index is valid)
+};
+struct Bg3RtLight {      // 80 bytes
+  float pos[3];          // absolute world space
+  float radius;          // Radius (the range the lighting uses)
+  float color[3];        // Color as authored (0-1)
+  float intensity;
+  float kelvin;
+  float source_radius;   // emitter radius for soft shadows (m), from the fixture class (docs/SE_BRIDGE.md)
+  float flicker_speed, flicker_amount, move_speed, move_amount;
+  uint32_t flags;        // Bg3RtLightFlags
+  uint8_t type;          // Bg3DbLightType (0 point, 1 spot, 2 box)
+  uint8_t owner;         // Bg3RtLightOwner
+  uint8_t channel, pad;  // LightChannelFlag (low 8 bits)
+  uint32_t db_index;     // database light (UINT32_MAX: none)
+  const char* name;      // template name ("" if unknown); valid for the process lifetime
+};
+static_assert(sizeof(Bg3RtLight) == 80, "Bg3RtLight is 80 bytes");
+struct Bg3SeInfo {
+  uint32_t active;       // 1: a fresh bridge export (this game session, younger than se_stale_ms)
+  uint32_t seq;          // export sequence number
+  float age_s;           // age of the export
+  float host[3];         // the controlled character's position
+  const char* level;     // the controlled character's level (bridge)
+  const char* region;    // Osiris region (bridge, server context)
+  uint32_t lights_all;   // light entities the client has (all loaded levels)
+  uint32_t lights_out;   // exported (within 60 m of the character)
+  float lua_avg_us, lua_max_us;   // the export's Lua cost per period (4 Hz)
+  float lua_classify_us;          // one-off classification, total so far
+  uint32_t exports_read; // exports the layer has parsed
+};
+
 struct Bg3AssetDbApi {
   uint32_t version;        // BG3RTX_ASSETDB_API_VERSION
   uint32_t struct_size;
@@ -176,4 +233,16 @@ struct Bg3AssetDbApi {
   const Bg3DbProbe* (*probe)(uint32_t index);
   const Bg3DbProbeCapture* (*probe_capture)(uint32_t index);
   const char* (*string)(uint32_t ref);
+
+  // ---- version 2 ----
+  // Runtime lights within `radius` of `pos`, nearest first: the bridge's lights (when it
+  // is active) and the database's placed lights it did not report. Returns the total;
+  // writes up to `max`.
+  uint32_t (*runtime_lights)(const float pos[3], float radius, Bg3RtLight* out, uint32_t max);
+  // The bridge's state; false (and out->active = 0) when it is not running.
+  bool (*se_info)(Bg3SeInfo* out);
+  // The atmosphere and lighting resource (UUID) in force at `pos`: the database's trigger
+  // containing it, with the resource the bridge says story scripting set on that trigger
+  // (else the trigger's own). False when neither is known. BG3 has no time of day.
+  bool (*se_environment)(const float pos[3], const char** atmosphere, const char** lighting);
 };

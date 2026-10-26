@@ -384,6 +384,18 @@ can become a default.
   - temporal stability: the mean frame-to-frame difference on a static camera,
     and during `-Move`.
 
+**R6a Automated QA checkpoint (every scene sweep, [QA.md](QA.md)).**
+- Run `python -m scripts.qa run --scenes S1,S2,S3,... --full-res` after every change
+  to an effect and before a default changes. It is one game run per scene (live
+  toggles), so it costs about as much as a plain sweep.
+- Gates: `hard_dark`, `brightening`, `sun_extra_casters`, `nonfinite` and `flicker`
+  must pass on every scene, on the final frame and on the lighting buffer. A failure
+  is judged from its crop sheet, never from thumbnails; a justified exception is
+  written into the track doc with the crop.
+- `--reference` (FLIP against more rays) for any change to sampling or ray counts.
+- The report (`captures/qa/<stamp>/report.html`) and its one-line summaries go into
+  the review; the raw traces are pruned by the harness.
+
 **R7 Cost budget.**
 - RTX 5090, 2560x1067 render resolution, GPU timestamps, medians of 300 frames,
   static and moving camera, logged by the core.
@@ -440,6 +452,7 @@ can become a default.
 | RT audit 2. Back-lit translucency | **Done.** Skin, thin-translucency and hair pixels are traced for N·L ≤ 0 too (their transmission reads the sun mask); other back faces are left untouched. `rt_backlit`. | AUDIT_RT §4 #2: game mask lit on 66% of back-lit transmitting px at the docks, all of them zeroed before; `img/rtfix2_backlit_docks_*` |
 | RT audit 3. Material classes | **Done.** RT2.a & 7 and RT3 decoded as the game does. D-LS evaluates each light with the class's exact term, and the GI composite uses the class's diffuse colour (no albedo² on skin, none on unlit). `mat_classes`. | AUDIT_RT §4 #3: the recompute never exceeds the game on those px; `img/rtfix3_materials_*` |
 | RT audit 4 / Q3. AO on direct light | **Done.** `ao_direct=1`: no AO factor on ray-traced direct light (D-LS lights; the sun, recomputed exactly). The RT visibility stays on the ambient only, so no contact is darkened twice and direct light carries no 1-spp AO noise. `ao_direct=2`: the game's SSAO factor instead. | AUDIT_RT §4 #4: 1.9% of the locally lit luminance given back in the foundry; sun recompute = game − in-scatter at the docks |
+| D-LS per-light data (TRACK_D 9.8, SE_BRIDGE.md) | **Done.** Each light of the game's array is joined (GPU, by position and radius) to the runtime lights of the Script Extender bridge and the asset database. Its source radius comes from the fixture class instead of 0.05 for all. Character-owned lights (the darkvision light; the game sets `Shadow = false`) are left unshadowed by default (`ls_owners=15`): traced, their own carrier darkened the character they exist to light. Without the bridge, the database covers the placed lights; without both, nothing changes. R5: 0 non-finite values, `-Validation` IDs equal the baseline, `ls_debug=9` owner view, `ls_stats` coverage. R7: +0.04 ms. | `img/sebridge_charlight_crop.png`, `img/sebridge_owner_view.png`, `img/sebridge_radius_crop.png`; foundry coverage 65% → 100% of listed lights |
 | RT audit 5. Alpha region / textures | **Done.** Sized from demand, 4096 textures, overflow logged loudly. | AUDIT_RT §4 #5 |
 | RT audit 6 / Q10 bias. Ray origins | **Done.** Exact TLAS surface + Wächter & Binder offset along the geometric normal, in every RT pass. `rt_origin`. Q10 is now fully done (soft sun: fix 5; bias: this). | AUDIT_RT §4 #6; `img/rtfix6_origin_*` |
 | RT audit 10. Dropped draws | **Done.** Counted and logged; strips and fans captured. `rt_strips`. | 0 dropped in the foundry, the docks and the menu scene |

@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "core.h"
+#include "ls_lights.h"
 
 namespace {
 
@@ -77,7 +78,7 @@ struct Push {
   float ls_source_radius, ls_clear, ls_min_radius;
   uint32_t ls_samples, ls_shadowed, ls_debug, ls_stats, ls_pass, ls_soft;
   float ls_strength;
-  uint32_t ls_has_mask, pad4;
+  uint32_t ls_has_mask, ls_flags;   // ls_flags: bit 0 per-light data (ls_lights), bits 8-12 owners traced (ls_owners)
   float rf_max_rough, rf_mirror_rough, rf_tmax, rf_depth_tol, rf_edge, rf_strength;
   uint32_t rf_debug, rf_sample, rf_so, rf_validate, rf_models, rf_stats;
   // RT audit fixes (docs/AUDIT_RT.md)
@@ -110,6 +111,8 @@ constexpr ExtraBinding kExtras[] = {
     {42, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},      // SSS profiles, set 1 b28
     {43, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 7},      // set 0 b0 frame constants
     {44, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 7},       // gAux: .x the game's own AO before the fold (ao_direct)
+    {45, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},      // D-LS per-light data: runtime lights uploaded (core/ls_lights.cpp)
+    {46, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4},       // D-LS per-light data: one record per light array slot
 };
 VkSampler g_linear_clamp = VK_NULL_HANDLE;
 
@@ -136,6 +139,9 @@ VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_H
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
+Pipe g_ls_match;    // D-LS per-light data: joins the runtime lights to the light array (core/ls_lights.h)
+LslFrame g_lsl{};   // this frame's upload (bindings 45, 46)
+bool g_lsl_ok = false;
 bool g_ls_logged = false, g_ls_missing_logged = false;
 // D-RF: its pipeline is built against the game's set layout of the lighting's set 1
 // (bound as set 2), so it is rebuilt if that layout ever changes.
@@ -603,6 +609,10 @@ void bind_extras(Bound& b, const Snapshot& s) {
                         : VkDescriptorBufferInfo{s.cam.buffer, s.cam.offset, s.cam.range};
         break;
       case 44: b.ximg[i] = {VK_NULL_HANDLE, g_aux.view, G}; break;
+      // D-LS per-light data; without it (allocation failed) any valid descriptor of the
+      // type: the passes then never read them (ls_flags bit 0 clear, no match pass).
+      case 45: b.xbuf[i] = g_lsl_ok ? g_lsl.known : VkDescriptorBufferInfo{s.l_lights.buffer, s.l_lights.offset, s.l_lights.range}; break;
+      case 46: b.ximg[i] = {VK_NULL_HANDLE, g_lsl_ok ? g_lsl.slots_view : g_aux.view, G}; break;
     }
     const bool buf = kExtras[i].type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || kExtras[i].type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     b.xw[i].pImageInfo = buf ? nullptr : &b.ximg[i];
@@ -703,6 +713,13 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
     host->log("ls stats (%u frames): ao_direct %d gives back %.5f per px (%.2f%% of the lit luminance); the sun as "
               "recomputed: %.5f per px",
               g_stats_n, host->cfg_int("ao_direct", 1), t[74] / px / 256.0, 100.0 * t[74] / lit, t[75] / px / 256.0);
+    if (t[76] + t[79]) {   // per-light data (rt_local_shadows_match.hlsl), per light evaluation
+      double ev = double(t[76] + t[79]);
+      host->log("ls stats (%u frames): per-light data: %.2f light evaluations per px; matched %.1f%% (bridge %.1f%%, "
+                "database only %.1f%%), unmatched %.1f%%; not traced by owner (ls_owners=0x%X) %.2f%% of evaluations",
+                g_stats_n, ev / px, 100.0 * t[76] / ev, 100.0 * t[77] / ev, 100.0 * (t[76] - t[77]) / ev,
+                100.0 * t[79] / ev, host->cfg_int("ls_owners", 0x0F), 100.0 * t[78] / ev);
+    }
   }
   for (int c = 0; c < 2; ++c) {   // alpha-tested candidates (rt_common.hlsli alpha_stat)
     const uint64_t* a = t + 80 + 16 * c;
@@ -920,6 +937,10 @@ Push make_push() {
   int soft = host->cfg_int("ls_soft", -1);   // -1 follows rr
   pc.ls_soft = (soft < 0 ? host->rr_active() : soft != 0) ? 1u : 0u;
   pc.ls_strength = host->cfg_float("ls_strength", 1.0f);
+  // Per-light data (docs/SE_BRIDGE.md): bit 0 set in run_post when the join ran; bits 8-12
+  // the owners whose lights are traced (bit 8 + Bg3RtLightOwner). Default 0x0F: unknown,
+  // placed, item and scenery lights, not the character lights (TRACK_D 9.8).
+  pc.ls_flags = (uint32_t(host->cfg_int("ls_owners", 0x0F)) & 0x1Fu) << 8;
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;
   pc.mat_classes = host->cfg_int("mat_classes", 1) ? 1u : 0u;
   pc.ao_direct = uint32_t((std::min)((std::max)(host->cfg_int("ao_direct", 1), 0), 2));
@@ -983,15 +1004,16 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
   return set;
 }
 
-void ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet sun) {
+void ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet sun, VkPipeline pipe, uint32_t gx,
+                 uint32_t gy) {
   const VkDeviceFuncs& vk = *host->vk;
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls.pipeline);
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   VkWriteDescriptorSet w[kLsBindings + kNumExtras];
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls_layout, 0, gather_writes(b, kLsBindings, w), w);
   VkDescriptorSet sets[2] = {b.alpha, sun};
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls_layout, 1, 2, sets, 0, nullptr);
   vk.CmdPushConstants(cmd, g_ls_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
-  vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  vk.CmdDispatch(cmd, gx, gy, 1);
 }
 
 // D-RF: push set 0 (bindings 0-30), the host's set 1, the game's lighting set 1 as set 2.
@@ -1090,9 +1112,10 @@ void ls_timing_collect() {
   auto& v = g_ls_ms;
   std::sort(v.begin(), v.end());
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames; samples %d, soft %d, "
-            "shadowed mode %d, debug %d)",
+            "shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], v.size(), host->cfg_int("ls_samples", 0),
-            host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 0), host->cfg_int("ls_debug", 0));
+            host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 0), host->cfg_int("ls_debug", 0),
+            host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off", host->cfg_int("ls_owners", 0x0F));
   v.clear();
 }
 
@@ -1306,8 +1329,22 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if (s.shadow.view) image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     Push lp = pc;
     lp.ls_has_mask = s.shadow.view ? 1u : 0u;
-    ls_timestamp(cmd, 0);
-    ls_dispatch(cmd, lb, lp, write_sun_set(s));
+    const VkDescriptorSet sun = write_sun_set(s);
+    ls_timestamp(cmd, 0);   // the timing covers the join pass and the shadow pass
+    // Per-light data: the join pass writes one record per light array slot.
+    g_lsl_ok = lsl_begin(&g_lsl) && refresh(g_ls_match, "gi/rt_local_shadows_match.hlsl", g_ls_layout);
+    if (g_lsl_ok) {
+      if (g_lsl.needs_init) {
+        image_layout(cmd, g_lsl.slots_image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+                     VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, kCS);
+        lsl_initialized();
+      }
+      bind_extras(lb, s);
+      lp.ls_flags |= host->cfg_int("ls_lights", 1) ? 1u : 0u;
+      ls_dispatch(cmd, lb, lp, sun, g_ls_match.pipeline, kLslSlots / 64, 1);
+      memory_barrier(cmd, kCS, kCS);
+    }
+    ls_dispatch(cmd, lb, lp, sun, g_ls.pipeline, (g_w + 7) / 8, (g_h + 7) / 8);
     ls_timestamp(cmd, 1);
     if (s.shadow.view) image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kAll);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kAll);
@@ -1482,8 +1519,10 @@ void gi_on_frame(uint64_t) {}
 void gi_release() {
   std::lock_guard<std::mutex> lock(g_mu);
   release_images();
+  lsl_release();
+  g_lsl_ok = false;
   for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
-                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin}) {
+                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
     *p = Pipe{};
   }

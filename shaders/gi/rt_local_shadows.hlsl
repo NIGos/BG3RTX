@@ -26,6 +26,13 @@
 // ls_samples > 0 instead traces that many rays per pixel to lights chosen by
 // RIS over the unshadowed luminance (unbiased, noisier, cheaper with many lights).
 //
+// Per-light data (ls_lights=1, ls_flags bit 0; docs/SE_BRIDGE.md): lsSlots holds, per
+// light array slot, what rt_local_shadows_match.hlsl joined to it from the Script
+// Extender bridge or the asset database: the light's source radius (from its fixture
+// class) and its owner. Lights of an owner whose bit is clear in ls_flags bits 8-12
+// (ls_owners; default: not the character lights) are left as the game lit them.
+// Unmatched lights keep ls_source_radius and are traced as before.
+//
 // Validation (ls_debug=4/5/6): rt_local_shadows_prep.hlsl zeroes the game's AO and
 // sun mask before the lighting, so its output holds only direct local light (plus
 // projector lights and in-scatter, which are not recomputed).
@@ -34,7 +41,17 @@
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_sun.hlsli"
 
+[[vk::binding(46, 0)]] [[vk::image_format("rgba32ui")]] RWTexture2D<uint4> lsSlots;
+
 float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+
+// ls_debug=9: owner colours (unmatched red, placed white, item orange, scenery green,
+// character magenta, unknown visual light cyan).
+float3 owner_colour(uint owner, bool matched) {
+  if (!matched) return float3(1, 0, 0);
+  return owner == 1u ? float3(1, 1, 1) : owner == 2u ? float3(1, 0.5, 0) : owner == 3u ? float3(0, 1, 0)
+       : owner == 4u ? float3(1, 0, 1) : float3(0, 1, 1);
+}
 
 uint3 ls_rand(uint2 fp, uint key) { return pcg3d(uint3(fp, pc.frame * 1024u + (key & 1023u))); }
 float u01(uint x) { return float(x >> 8) * (1.0 / 16777216.0); }
@@ -54,11 +71,10 @@ float3 nan0(float3 v) { return any(isnan(v)) ? float3(0, 0, 0) : v; }
 // Visibility of the light from the surface: 1 ray, towards the centre or a
 // point of its sphere. `key` selects the random stream. `side` < 0: the light is
 // behind the surface (transmission, hair), so the ray starts on the back side.
-float trace_light(Bg3Surface sf, float3 lpos, uint2 fp, uint key, RtCone cone, float side) {
+float trace_light(Bg3Surface sf, float3 lpos, uint2 fp, uint key, RtCone cone, float side, float R) {
   float3 L = lpos - sf.P;
   float dist = length(L);
   float3 Ld = L / max(dist, 1e-6);
-  float R = pc.ls_source_radius;
   float3 dir = Ld;
   if (pc.ls_soft != 0 && R > 0.0) {
     uint3 r = ls_rand(fp, key);
@@ -131,11 +147,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 vd_all = 0;              // debug: traced-visible part
   float3 td = 0, ts = 0;          // direct light of the traced lights after our shadow (ao_direct)
   uint n_lights = 0, n_shadowed = 0, n_traced = 0, n_occ = 0;
+  uint n_matched = 0, n_se = 0, n_skipped = 0, n_unmatched = 0;   // per-light data (ls_stats)
+  float3 dbg_owner = 0;                                            // ls_debug=9
   // RIS reservoirs (ls_samples > 0)
   const uint ns = min(pc.ls_samples, 2u);
   float wsum = 0;
   float3 rd[2] = {float3(0, 0, 0), float3(0, 0, 0)}, rs[2] = {float3(0, 0, 0), float3(0, 0, 0)}, rp[2] = {float3(0, 0, 0), float3(0, 0, 0)};
-  float rw[2] = {0, 0}, rsh[2] = {1, 1}, rsel[2] = {0, 0}, rside[2] = {1, 1};
+  float rw[2] = {0, 0}, rsh[2] = {1, 1}, rsel[2] = {0, 0}, rside[2] = {1, 1}, rR[2] = {0, 0};
   uint rk[2] = {0, 0};
 
   for (uint i = cl.x; i < end_s; ++i) {
@@ -159,11 +177,30 @@ void main(uint3 tid : SV_DispatchThreadID) {
     // Hair replaces its self-shadow by the atlas term for lights with a shadow map
     // (3033c895:483), which bg3_light_eval_mat does not model: those stay the game's.
     bool traced = shadowed ? pc.ls_shadowed != 0 && cls != kMatHair : (1.0 / max(l.inv_r, 1e-12) >= pc.ls_min_radius);
+    // Per-light data: the source radius, and whether this owner's lights are shadowed.
+    float R = pc.ls_source_radius;
+    if ((pc.ls_flags & 1u) != 0u) {
+      uint4 si = lsSlots[uint2(min(li, 4095u), 0)];
+      bool matched = (si.z & 0x10000u) != 0u;
+      uint owner = si.z & 255u;
+      if (matched) {
+        ++n_matched;
+        n_se += (si.y & 0x10000u) != 0u ? 1u : 0u;
+        R = asfloat(si.x);
+        if (((pc.ls_flags >> (8u + min(owner, 4u))) & 1u) == 0u) {
+          n_skipped += traced ? 1u : 0u;
+          traced = false;
+        }
+      } else {
+        ++n_unmatched;
+      }
+      dbg_owner += lum(cd + cs) * owner_colour(owner, matched);
+    }
     if (!traced) continue;
     cd_all += cd;
     cs_all += cs;
     if (ns == 0) {
-      float v = trace_light(sf, l.pos, fp, li, cone, nol);
+      float v = trace_light(sf, l.pos, fp, li, cone, nol, R);
       ++n_traced;
       n_occ += v < 0.5 ? 1u : 0u;
       float t = shadowed && pc.ls_shadowed == 2 ? min(v, s) : v;
@@ -180,7 +217,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       [unroll] for (uint k = 0; k < 2; ++k) {
         if (k >= ns) break;
         if (u01(k == 0 ? rr.x : rr.y) * wsum < w) {
-          rd[k] = cd; rs[k] = cs; rp[k] = l.pos; rw[k] = w; rsh[k] = s; rk[k] = li; rside[k] = nol;
+          rd[k] = cd; rs[k] = cs; rp[k] = l.pos; rw[k] = w; rsh[k] = s; rk[k] = li; rside[k] = nol; rR[k] = R;
           rsel[k] = shadowed && pc.ls_shadowed == 2 ? 1.0 : 0.0;
         }
       }
@@ -189,7 +226,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (ns > 0 && wsum > 0.0) {
     [unroll] for (uint k = 0; k < 2; ++k) {
       if (k >= ns || !(rw[k] > 0.0)) continue;
-      float v = trace_light(sf, rp[k], fp, rk[k] ^ (0x300u + k), cone, rside[k]);
+      float v = trace_light(sf, rp[k], fp, rk[k] ^ (0x300u + k), cone, rside[k], rR[k]);
       ++n_traced;
       n_occ += v < 0.5 ? 1u : 0u;
       float t = rsel[k] > 0.5 ? min(v, rsh[k]) : v;
@@ -267,6 +304,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
     float c = lum(cd_all);
     od = (c > 1e-6 ? saturate(lum(vd_all) / c) : 1.0).xxx * 0.5;
     os = 0;
+  } else if (pc.ls_debug == 9) {   // the evaluated lights by owner (per-light data), luminance-weighted
+    od = dbg_owner * 4.0;
+    os = 0;
   } else if (pc.ls_debug == 8) {   // light given back by ao_direct (AO no longer on traced direct light), x4
     od = (xd + xs) * 4.0;
     os = 0;
@@ -321,7 +361,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_addv(20, validate && over > 1e-3 + 0.01 * lum(gd + gs) ? 1u : n_occ, bin);
     stat_addv(24, fx(-lum(dd * fdif + ds * fspec)), bin);
     stat_addv(74, fx(lum(xd + xs)), bin);   // light given back by ao_direct
-    stat_addv(75, fx(lum(sund * fdif + suns * fspec)), bin);   // the sun as recomputed (with the game's AO factor)
+    stat_addv(75, fx(lum(sund * fdif + suns * fspec)), bin);
+    // per-light data: evaluations matched (any source / the bridge), owner not traced, unmatched
+    stat_addv(76, n_matched, bin);
+    stat_addv(77, n_se, bin);
+    stat_addv(78, n_skipped, bin);
+    stat_addv(79, n_unmatched, bin);   // the sun as recomputed (with the game's AO factor)
     stat_addv(25, n_lights > 0 ? 1u : 0u, bin);
     stat_addv(26, cl.y + cl.z, bin);   // lights listed in the froxel
     stat_addv(31, bg3_cluster_projectors(fp, d), bin);   // projector lights listed (not handled)

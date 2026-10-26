@@ -4,6 +4,7 @@
 #include <vector>
 #include "host.h"
 #include "assetdb.h"
+#include "sebridge.h"
 #include "hookguard.h"
 
 #include <cstdio>
@@ -121,6 +122,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkA
   InstanceData* id = instance_of(instance);
   if (!id) return;
   id->DestroyInstance(instance, alloc);
+  se_stop();   // the bridge reader thread must not outlive the layer DLL
   std::unique_lock<std::shared_mutex> lock(g_mu);
   g_instances.erase(dkey(instance));
   delete id;
