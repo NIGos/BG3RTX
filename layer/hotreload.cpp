@@ -180,6 +180,8 @@ void core_init(DeviceData* dd) {
   g_host.rt_scene = &rt_scene;
   g_host.rt_alpha = &rt_alpha_set;
   g_host.alloc_host_buffer = &alloc_host_buffer;
+  g_host.query_set = &query_set;
+  g_host.set_spec_hit_distance = &ngx_set_spec_hit_distance;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);

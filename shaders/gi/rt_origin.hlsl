@@ -5,7 +5,7 @@
 //   xyz  the triangle's geometric normal, facing the camera;
 //   w    t_hit / |P| - 1, the exact surface along the pixel's view ray relative to
 //        the depth-buffer point (small, so fp16 keeps it precise),
-//        or kNoHit when no triangle matches the depth buffer within tolerance:
+//        or kOriginNoHit when no triangle matches the depth buffer within tolerance:
 //        then xyz is the geometric normal of the depth buffer (cross product of
 //        the position differences towards the flatter neighbours).
 // rt_ray_origin() (rt_common.hlsli) then offsets the exact hit point along the
@@ -39,7 +39,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (any(fp >= pc.full)) return;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) {
-    rtOrigin[fp] = float4(0, 0, 0, kNoHit);
+    rtOrigin[fp] = float4(0, 0, 0, kOriginNoHit);
     return;
   }
   float2 uv = (float2(fp) + 0.5) / float2(pc.full);
@@ -49,7 +49,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float pa = pixel_angle(uv);
   float3 Ns = to_lighting_space(decode_normal(gNormal.Load(int3(fp, 0)).xy));
 
-  float4 o = float4(depth_normal(int2(fp), P), kNoHit);
+  float4 o = float4(depth_normal(int2(fp), P), kOriginNoHit);
   // Only a short window around the depth-buffer point is searched (cheap: no
   // traversal of what lies in front, e.g. foliage), +-1% of the distance or 16
   // pixel footprints, whichever is larger.
@@ -71,12 +71,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
   }
   if (dot(o.xyz, o.xyz) < 0.5) o.xyz = Ns;   // degenerate: fall back to the shading normal
   else if (dot(o.xyz, V) < 0.0) o.xyz = -o.xyz;
-  if (!all(isfinite(o))) o = float4(Ns, kNoHit);
+  if (!all(isfinite(o))) o = float4(Ns, kOriginNoHit);
   rtOrigin[fp] = o;
   if (pc.rt_stats != 0) {
     uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
-    stat_add(55, true, bin);
-    stat_add(56, o.w != kNoHit, bin);
-    stat_add(57, dot(o.xyz, Ns) < 0.9, bin);
+    stat_add(71, true, bin);
+    stat_add(72, o.w != kOriginNoHit, bin);
+    stat_add(73, dot(o.xyz, Ns) < 0.9, bin);
   }
 }

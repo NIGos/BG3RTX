@@ -35,9 +35,9 @@ void stat_add(uint index, bool cond, uint bin) {
 // gAlphaRec's header (uint 1). For the geometric normal of a hit (rt_origin=1).
 [[vk::binding(6, 1)]] ByteAddressBuffer gOpaqueSoup;
 // Per pixel (written by gi/rt_origin.hlsl): xyz the geometric normal facing the
-// camera, w = t_hit / |P| - 1 of the TLAS surface under the pixel, or kNoHit.
+// camera, w = t_hit / |P| - 1 of the TLAS surface under the pixel, or kOriginNoHit.
 [[vk::binding(40, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> rtOrigin;
-static const float kNoHit = 1000.0;
+static const float kOriginNoHit = 1000.0;
 
 static const uint kRecBytes = 208;
 
@@ -248,14 +248,14 @@ float3 rt_offset_ray(float3 p, float3 n) {
 //     shadow terminator of coarse meshes) or no triangle matched the depth buffer,
 //     the offset is 2 footprints, along the shading normal resp. the depth normal.
 // `o`: rt_origin_at(fp), read once per pixel by passes that trace several rays.
-float4 rt_origin_at(uint2 fp) { return pc.rt_origin != 0u ? rtOrigin[fp] : float4(0, 0, 0, kNoHit); }
+float4 rt_origin_at(uint2 fp) { return pc.rt_origin != 0u ? rtOrigin[fp] : float4(0, 0, 0, kOriginNoHit); }
 float3 rt_ray_origin_o(float4 o, float3 P, float3 Ns, float foot, float3 dir) {
   float ss = dot(Ns, dir) < 0.0 ? -1.0 : 1.0;
   if (pc.rt_origin == 0u) return P + Ns * (length(P) * pc.rt_bias * ss);
   float3 r;
   float sg = dot(o.xyz, dir) < 0.0 ? -1.0 : 1.0;
   if (sg != ss) r = P + Ns * (2.0 * foot * ss);
-  else if (!(o.w < kNoHit)) r = P + o.xyz * (2.0 * foot * sg);
+  else if (!(o.w < kOriginNoHit)) r = P + o.xyz * (2.0 * foot * sg);
   else r = rt_offset_ray(P * (1.0 + o.w), o.xyz * sg);
   // A non-finite ray origin is undefined behaviour for ray queries.
   return all(isfinite(r)) ? r : P + Ns * (2.0 * foot * ss);

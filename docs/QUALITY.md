@@ -217,8 +217,9 @@ Evidence, all in game:
   frame is clean.
 - No non-finite values in 21 traces. The `-Validation` message IDs and counts
   are identical with v2 on and off.
-- Not done: specular hit distance (there is no specular ray yet; it belongs to
-  D-RF).
+- Specular hit distance: done with D-RF (2026-10-26, TRACK_D 10.3).
+  `DLSSD.SpecularHitDistance` is the reflection ray's hit distance for on-screen
+  hits and 65504 elsewhere; RR accepted it in every run, including `fg=2`.
 
 The original finding:
 - `rr_guides.hlsl:59` writes the decoded RT0. Track D proved those normals are
@@ -434,3 +435,4 @@ can become a default.
 | RT audit 5. Alpha region / textures | **Done.** Sized from demand, 4096 textures, overflow logged loudly. | AUDIT_RT §4 #5 |
 | RT audit 6 / Q10 bias. Ray origins | **Done.** Exact TLAS surface + Wächter & Binder offset along the geometric normal, in every RT pass. `rt_origin`. Q10 is now fully done (soft sun: fix 5; bias: this). | AUDIT_RT §4 #6; `img/rtfix6_origin_*` |
 | RT audit 10. Dropped draws | **Done.** Counted and logged; strips and fans captured. `rt_strips`. | 0 dropped in the foundry, the docks and the menu scene |
+| D-RF against the rules (TRACK_D 10) | R1: bounded GGX VNDF, pcg3d white noise on its own stream, mirror below a = 0.1. R2: RR only, no history or filter of ours; without RR deterministic mirror rays only (a < 0.3). R3: exact delta on the game's probe term (D-EN4, mean error 0.58%), TLAS miss keeps the probe, the game's DFG LUT as env BRDF, its SO kept for the probe and not re-applied to traced hits. R5: debug views 1-6, `rf_stats` tier fractions, non-finite guards, identical `-Validation` IDs, `-Move`, `fg=2`. R6: foundry A/B + crops; **reflective-scene A/B and stability metric not done**. R7: 0.33 ms. | `img/rf_foundry_*.png`, `img/rf_docks_*.png` |

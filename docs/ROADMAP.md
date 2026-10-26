@@ -51,8 +51,11 @@ Order by value/effort. IDs refer to `QUALITY.md` (Qn) and `TRACK_D_RT.md` sectio
    - Then unshadowed lights (to stop leaks).
    - v2: RIS 1-2 rays per pixel + RR.
 6. **D-EM (a): emissive/FX pre-lighting target into the bounce source** (with Q8: diffuse-only bounce).
-7. **D-RF ray-traced reflections.** Needs Q11 and D-EN4 (the exact specular-ambient delta).
-   - Tiers (a) on screen + (c) probe fallback first.
+7. **D-RF ray-traced reflections.** Tiers (a) + (c) done, on by default (TRACK_D 10): D-EN4
+   replicates the game's probe term from the lighting's own descriptor set (validated to
+   0.58% mean error), 1 GGX VNDF ray per pixel with RR, exact delta on the probe term, RR gets
+   the specular hit distance; 0.33 ms. Open: a reflective-scene A/B, tier (b).
+   - Tiers (a) on screen + (c) probe fallback first. Done.
    - Then tier (b) off screen with D-EN2 hit materials.
 8. **Cascade-caster capture** (planned, 6.7 item 2) **+ D-EN3 retention.** This closes interiors, adds off-screen casters, and is the prerequisite for D-GI2 and D-VOL.
 9. **D-GI2: screen-seeded SHaRC multi-bounce GI.** Replaces `gi_rt_fallback`; radius from 1 m to room scale.

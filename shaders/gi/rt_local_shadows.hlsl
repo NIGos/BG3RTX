@@ -297,13 +297,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_addv(23, vpx ? fx(over) : 0u, bin);
     // the same, on the non-standard material classes alone
     bool nstd = cls != kMatStandard;
-    stat_addv(53, nstd ? 1u : 0u, bin);
+    stat_addv(69, nstd ? 1u : 0u, bin);
     bool nv = validate && nstd && vpx && n_lights > 0;
-    stat_addv(48, nv ? 1u : 0u, bin);
-    stat_addv(49, nv ? fx(lum(gd + gs)) : 0u, bin);
-    stat_addv(50, nv ? fx(lum(md + ms)) : 0u, bin);
-    stat_addv(51, nv ? fx(over) : 0u, bin);
-    stat_addv(52, nv ? fx(lum(abs(gd - md) + abs(gs - ms))) : 0u, bin);
+    stat_addv(64, nv ? 1u : 0u, bin);
+    stat_addv(65, nv ? fx(lum(gd + gs)) : 0u, bin);
+    stat_addv(66, nv ? fx(lum(md + ms)) : 0u, bin);
+    stat_addv(67, nv ? fx(over) : 0u, bin);
+    stat_addv(68, nv ? fx(lum(abs(gd - md) + abs(gs - ms))) : 0u, bin);
     // Regression game = k * recomputed + r over lit pixels, and r where no local light
     // reaches (validation: k must be 1 and r the same in both if the recompute is exact).
     if (validate) {
@@ -320,8 +320,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
     }
     stat_addv(20, validate && over > 1e-3 + 0.01 * lum(gd + gs) ? 1u : n_occ, bin);
     stat_addv(24, fx(-lum(dd * fdif + ds * fspec)), bin);
-    stat_addv(58, fx(lum(xd + xs)), bin);   // light given back by ao_direct
-    stat_addv(59, fx(lum(sund * fdif + suns * fspec)), bin);   // the sun as recomputed (with the game's AO factor)
+    stat_addv(74, fx(lum(xd + xs)), bin);   // light given back by ao_direct
+    stat_addv(75, fx(lum(sund * fdif + suns * fspec)), bin);   // the sun as recomputed (with the game's AO factor)
     stat_addv(25, n_lights > 0 ? 1u : 0u, bin);
     stat_addv(26, cl.y + cl.z, bin);   // lights listed in the froxel
     stat_addv(31, bg3_cluster_projectors(fp, d), bin);   // projector lights listed (not handled)
@@ -331,7 +331,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       rtStats.Store((28 * 64) * 4, asuint(lFlags.m0.y));
       rtStats.Store((29 * 64) * 4, asuint(lFlags.m0.w));
       rtStats.Store((30 * 64) * 4, lScale.Load(0));
-      rtStats.Store((54 * 64) * 4, asuint((pc.mat_classes & 8u) != 0u ? gFrame.b.x : -1.0));   // set0/b0 _m4
+      rtStats.Store((70 * 64) * 4, asuint((pc.mat_classes & 8u) != 0u ? gFrame.b.x : -1.0));   // set0/b0 _m4
     }
   }
 }
