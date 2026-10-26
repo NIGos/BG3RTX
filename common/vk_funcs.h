@@ -116,7 +116,15 @@
   X(DestroyAccelerationStructureKHR)           \
   X(GetAccelerationStructureBuildSizesKHR)     \
   X(GetAccelerationStructureDeviceAddressKHR)  \
-  X(CmdBuildAccelerationStructuresKHR)
+  X(CmdBuildAccelerationStructuresKHR)         \
+  X(CmdBindVertexBuffers)                      \
+  X(CmdBindVertexBuffers2)                     \
+  X(CmdBindIndexBuffer)                        \
+  X(CmdCopyBuffer)                             \
+  X(CmdCopyBuffer2)                            \
+  X(CmdCopyAccelerationStructureKHR)           \
+  X(CmdWriteAccelerationStructuresPropertiesKHR) \
+  X(CmdCopyQueryPoolResults)
 
 struct VkDeviceFuncs {
 #define BG3RTX_DECL(name) PFN_vk##name name = nullptr;

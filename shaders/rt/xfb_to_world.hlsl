@@ -52,6 +52,8 @@ void main(uint3 id : SV_DispatchThreadID) {
       ok = ok && vok;
     }
     if (!ok) w[1] = w[2] = w[0];
-    [unroll] for (uint k = 0; k < 3; ++k) Verts.Store4((tri * 3 + k) * stride, asuint(float4(w[k], 1.0)));
+    // w = 0 marks a collapsed triangle (the BVH split never caches one, mesh_extract.hlsl);
+    // the BLAS reads xyz only.
+    [unroll] for (uint k = 0; k < 3; ++k) Verts.Store4((tri * 3 + k) * stride, asuint(float4(w[k], ok ? 1.0 : 0.0)));
   }
 }

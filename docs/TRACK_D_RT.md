@@ -506,11 +506,9 @@ Found and fixed along the way:
    then RT can only add detail where the cascades already say "lit". Next: XFB on
    the cascade passes (their depth-only VS are patched already) to capture the
    sun's view of the casters.
-3. **Static/dynamic split** (section 5, step 3). Today the whole soup is one BLAS:
-   every camera move that changes the culled set costs a 2.3 ms rebuild. Per-draw
-   BLAS keyed by draw identity, static ones in absolute world space and reused, a
-   refit only for skinned/wind draws, and a TLAS with the camera offset. That
-   brings motion down to roughly the static cost.
+3. **Static/dynamic split** (section 5, step 3). **Done, see [section 11](#11-static-dynamic-bvh-split-instanced-object-space-blas-rt_bvh_split1).**
+   The design differs from this plan: object-space BLAS per unique mesh with the
+   game's per-instance matrices, not world-space per-draw BLAS.
 4. **Conversion bandwidth** (0.27 ms): write a separate float3 buffer, or convert
    inside the BLAS build's vertex fetch by giving the BLAS clip positions plus a
    transform per geometry. That works once the split exists.
@@ -1370,3 +1368,200 @@ The log reports `rf: first frame ...` (the lighting's set and its layout),
 
 Tooling added with D-RF: `auto-run.ps1 -MoveSec N` (release the pan key after N s), and the
 `trace.request` file trigger now works (its path had a `\t`, a tab, so it never fired).
+
+## 11. Static/dynamic BVH split: instanced object-space BLAS (`rt_bvh_split=1`)
+
+AUDIT_SOTA rank 2, implemented 2026-10-26 (`layer/bvhsplit.cpp`, `shaders/rt/mesh_extract.hlsl`,
+`shaders/rt/rt_common.hlsli`). On by default and live: `rt_bvh_split=0` switches back to the
+single soup BLAS of sections 6-7 on the next frame (that path is unchanged).
+
+### 11.1 What was wrong
+
+The scene was one BLAS over the whole per-frame XFB soup: refit while the draw sequence held,
+rebuilt whenever it changed. BG3 culls on the CPU (AUDIT_ENGINE_DATA §0), so every camera
+pan changes the drawn set, and the BLAS was rebuilt every frame of a pan (2.3-3.4 ms). Static
+geometry was also captured, converted and refit every frame.
+
+### 11.2 Design
+
+**Which draws are instanced.** Class A (section 1) places a mesh with an affine
+per-instance matrix whose three rows are vertex inputs. `analyze_vs_instancing`
+(`layer/spirv_xfb.h`) proves this from the game's SPIR-V. It looks for
+`W = vec4(P, 1) * mat4(R0, R1, R2, (0,0,0,1))` with P and the rows plain input loads, and W
+reaching `gl_Position` only through `vec4(W.xyz, 1) * matrix`. Then W is exactly the 3x4
+row-major matrix `[R0; R1; R2]` applied to P, which is the `VkTransformMatrixKHR` layout.
+- Over the 2,418 dumped vertex shaders, 187 match. The foundry prepass ones are `e6fc6bf6`,
+  `689836de`, `31c4659f`, `646a930e` and `f4b35620`.
+- These are rejected: wind and cloth (`5f757332`: W gets a displacement), the variants that
+  add a per-draw UBO translation to the rows (`2ad8656b`, `106a0550`, `05d39f75`), and the
+  skinned and per-draw-matrix variants.
+- `make_inst_pipe` (`layer/geocapture.cpp`) checks the pipeline's vertex input. The rows must
+  be `R32G32B32A32_SFLOAT` attributes of instance-rate bindings with divisor 1, and the
+  position must come from a per-vertex binding. For alpha-tested draws, the captured UV must
+  be a copy of a per-vertex input.
+
+**Mesh key.** The VS hash and per-vertex input layout, the per-vertex vertex buffers and
+offsets, the index buffer, offset and type, the draw's count, first index and vertex offset,
+and the alpha test. New hooks provide the buffers: `vkCmdBindVertexBuffers(2)` and
+`vkCmdBindIndexBuffer`.
+
+**Building a mesh, once.** The first time a key is seen, its draw is captured as before.
+`mesh_extract.hlsl` maps the first instance's triangles back to object space with the
+inverse of that instance's matrix, into a mesh pool (with the UV, stride 24).
+- It checks the result against the draw's last instance (`M_last · P` against its captured
+  triangles).
+- A single-instance draw is checked again in a later frame instead: `M_now · P` against that
+  frame's capture.
+- Collapsed triangles (sky z override, NaN-parked vertices; `xfb_to_world` now marks them
+  `w = 0`) and singular or non-finite matrices reject the mesh.
+- Rejections back off and are retried later: 600 frames, doubling.
+- The mesh's BLAS is built from the pool (`PREFER_FAST_TRACE | ALLOW_COMPACTION`) and
+  compacted once its size is back.
+- Results come back through a host-visible status buffer that a transfer marks done after
+  the batch's jobs. A query's availability can still be a previous use's until the
+  GPU-side reset executes. The first version read stale availability and lost results.
+- Until a mesh is verified, its draws stay on the per-draw path below. New meshes are
+  budgeted at `rt_mesh_new_tris` triangles per build.
+
+**Every frame.** A draw of a verified mesh is not captured at all. Each of its instances
+becomes a TLAS instance whose matrix comes from the game's own instance stream, which is
+host-mapped.
+- The matrices are copied when the game **submits** the command buffer (`bvh_on_submit`),
+  which is exactly what the GPU will read.
+- Non-finite or singular matrices get mask 0.
+- The log counts draws whose instance data changed between record and submit. It was 0 in
+  every run.
+
+**Everything else** (skinned, wind/cloth, per-draw matrices, terrain, sky, meshes in
+probation) is captured and converted as before. Each draw gets its own BLAS, keyed by the
+draw's identity (pipeline, binding 0, index range, n-th occurrence in the frame).
+- It is refit while its triangle count and build flags hold.
+- It is rebuilt at least every `rt_rebuild_frames`, staggered per draw.
+- So a draw entering or leaving the view costs only its own build.
+
+**TLAS** over all instances (`PREFER_FAST_TRACE | ALLOW_UPDATE`).
+- Instance records live in a host-visible ring (8 regions).
+- The TLAS is refit while the instance list (count, BLAS and flags in order) holds, at
+  least every `rt_rebuild_frames`.
+
+**Eviction.**
+- A mesh is evicted when one of its game buffers is destroyed (the one `vkDestroyBuffer`
+  hook, in `tracker.cpp`; geocapture's duplicate hook used to shadow the tracker's), or
+  when a transfer writes its index or vertex range (`vkCmdCopyBuffer(2)`,
+  `vkCmdUpdateBuffer`, `vkCmdFillBuffer` hooks).
+- It is also evicted by LRU over `rt_mesh_budget_mb` and after `rt_mesh_lru_frames` unused.
+- A periodic **audit** catches any rewrite the hooks cannot see (host writes to mapped
+  vertex memory). Up to `rt_mesh_audits` cached draws per frame, each mesh at most every
+  `rt_mesh_audit_frames`, are captured once more and compared. A failure evicts the mesh
+  with a warning.
+
+**Ray queries** (`rt_common.hlsli`). One `InstInfo` per TLAS instance (set 1 binding 7)
+gives: where its vertices are (the mesh pool, binding 8, object space; or the soup, binding
+6), the stride, the alpha record, and the triangle count.
+- Alpha-tested candidates read their UVs and corners through it and transform them by
+  `CandidateObjectToWorld3x4` for the footprint.
+- `rt_origin`'s geometric normal uses `rt_hit_normal`, which applies the committed object
+  to world transform.
+- The legacy TLAS has one instance marked `kInfoLegacy` and keeps the old lookups (geometry
+  0/1, records by triangle index).
+- Opaque draws' instances are `FORCE_OPAQUE`. `rt_alpha_test=0` forces all instances
+  opaque, as before.
+
+### 11.3 Results (RTX 5090, 2560x1067, Steel Watch Foundry, `-Background`)
+
+**Geometry parity.** The same view, live A/B in one run, `rt_debug=3 rt_stats=1`:
+
+| | legacy soup | split |
+|---|---|---|
+| primary-ray match | 98.976-98.984% | 98.974-98.980% |
+| in front (opaque / vt cutouts) | 1.007-1.015% (0.95 / 0.060) | 1.011-1.017% (0.95 / 0.060) |
+| behind / miss | 0.009% / 0% | 0.009% / 0% |
+| triangles in the TLAS | 2.59M (0.68M alpha-tested) | 2.060M static (2,070 instances of 507 meshes) + 0.535M dynamic (182 draws) = 2.595M |
+| ray origins: TLAS surface found under | 98.3-99.3% | 98.3-99.3% |
+
+The 0.95% "opaque in front" is the screen-door dithered geometry of 7.1, present in both.
+- In the 3D main menu, before the save loads, the primary check reads 67-69% with the legacy
+  soup and 68-72% with the split (separate runs, same scene). That low figure belongs to the
+  menu scene, not to the split.
+- The static instance count follows the view. During a pan the cache grew to 627 meshes
+  (1.81M unique triangles) with 0 rejections for mismatch.
+
+**Cost.** GPU timestamps around the scene build (convert + extraction, BLAS builds/refits,
+TLAS). The medians are the medians of 300-frame windows; p99 is the worst window's p99.
+The depth prepass time with XFB active is separate (`geo_timing=1`).
+
+| | legacy | split |
+|---|---|---|
+| **camera panning** (`-Move`), scene build | median **1.37 ms**, p99 **2.91 ms** (every frame a rebuild: BLAS 1.47-2.55 ms) | median **0.45 ms**, p99 **0.83 ms** |
+| panning, depth prepass with XFB | 0.22 ms (0.16-0.37) | 0.17 ms (0.14-0.20) |
+| static foundry, scene build | 0.71-0.72 ms (p99 0.73-0.92); forced rebuild every 60 frames 2.8-2.9 ms | 0.49 ms (p99 0.75) before the TLAS refit; **0.29-0.35 ms (p99 0.57-0.74)** with it |
+| static foundry, depth prepass with XFB | 0.47-0.49 ms | 0.23-0.24 ms |
+| static, light view after the pan | 0.21 ms (refit of a small soup) | 0.34-0.37 ms (TLAS 0.14 ms, 60 small per-draw refits 0.17 ms) before the TLAS refit; TLAS 0.020 ms once refit (98% of static frames), total 0.25 ms in a comparable light view |
+| level load / first frames | rebuild 2.9 ms | up to 2.1 ms p99 while ~500 meshes are built once |
+
+- **Motion: −0.9 ms median and −2.1 ms p99** per frame on this machine.
+- **Static foundry: about −0.65 ms** (build −0.40, XFB −0.25), and no 2.8 ms rebuild every 60
+  frames.
+- In the light outdoor view after the pan, the split was 0.15 ms slower than a legacy refit:
+  the fixed TLAS cost plus many small refits. The TLAS refit (11.2) was added for this.
+- The forced legacy rebuild every 60 frames (2.9 ms, the 1% lows) is gone for static
+  geometry.
+
+**Memory** (foundry): mesh pool 87-124 MB (object-space position + UV, 72 B/triangle).
+Mesh BLAS after compaction 78-90 MB for 1.3-1.8M unique triangles. Compaction saved 22-44 MB
+per 100-500 meshes (about 25-35%).
+
+### 11.4 Validation layer and robustness
+
+- `auto-run.ps1 -Validation -Background` (Khronos validation below the layer): a baseline
+  was taken with the unmodified main first, then the split was run in gameplay with a 15 s
+  pan (8 minutes). **The message IDs are identical**: the game's own `09600`, `10788`,
+  `08737`, `CopyBuffer-00118`, and the headless `non-acquired-swapchain-image-used`.
+  - The first split run added two IDs of ours: `vkCmdFillBuffer-dstBuffer-00029` and
+    `vkCmdCopyQueryPoolResults-dstBuffer-00825`. The status buffer lacked
+    `TRANSFER_DST` usage; that is fixed.
+  - A third run covered the main menu only, also clean.
+- Non-finite values: 0 in every image dump of the 15 traces taken during this work (legacy
+  and split, static and panning).
+
+- Per run: 0 non-finite or singular instance matrices (about 600k read per 300 frames), 0
+  late instance writes, 0 commands recorded but never submitted, 0 validation results lost
+  after the fix, 0 audit failures over thousands of audits, and a maximum accepted error of
+  0.012 × tolerance. The one recurring "invalid" rejection is the sky dome (z = 0).
+- `-Move` runs: no device loss, no GPU page fault, no crash.
+- The alpha region "full" warning in the main menu (64 of 77 MB) predates this work (the
+  legacy capture shows it too).
+
+### 11.5 What does not work / next steps
+
+- **Not compared:** Campsite, Lower City and Water Queen's House (foliage, view distance) were not
+  run with the split; `fg>=2` with the split.
+- **UBO-offset class-A variants** (`2ad8656b`, `106a0550`, `05d39f75`; 45+ draws in the
+  foundry prepass) stay per-draw: their rows plus a per-draw translation from a UBO. The
+  matrix could take the UBO offset (read like the alpha constants).
+- **Skinned meshes** use XFB per draw (refit each frame), not the skinning SSBO b13 directly
+  (AUDIT_ENGINE_DATA 2.4); that would save their XFB.
+- **Wind foliage** (class D) is per-draw and rebuilds when its instance count changes;
+  outdoors it is the remaining motion cost. A rest-pose instanced BLAS plus a refit, or
+  CLAS, are the options.
+- **Opacity micromaps** (AUDIT_SOTA rank 4) can now attach to the cached mesh BLAS: the pool
+  holds the UVs, and OMMs survive compaction.
+- **Retention (EN3)**: meshes stay cached after leaving the view; keeping their instances in
+  the TLAS needs the last matrices and a policy.
+- `-Move -Background` posted one key-down every 2 s, which the game reads as taps, so the
+  pans of earlier docs were mostly static. `auto-run.ps1` now posts key-downs at about 30 Hz
+  with the repeat bit (to the game window only).
+
+Settings (`bg3rtx.ini`, all live):
+- `rt_bvh_split`; `rt_tlas_refit`; `rt_rebuild_frames`, which now paces the per-draw BLAS
+  and the TLAS;
+- `rt_mesh_compact`, `rt_mesh_compact_per_frame`, `rt_mesh_new_tris`;
+- `rt_mesh_pool_mb`, `rt_mesh_pool_max_mb`, `rt_mesh_chunk_mb`, `rt_mesh_budget_mb`,
+  `rt_mesh_lru_frames`;
+- `rt_mesh_audits`, `rt_mesh_audit_frames`, `rt_mesh_tol_abs`, `rt_mesh_tol_rel`.
+
+The log reports `[bvh] last N builds ...` (draws, instances, triangles, refits),
+`[bvh] mesh cache ...` (meshes, memory, verification, rejections, evictions, compaction),
+`[bvh] instance matrices read at submit ...`, and
+`[rt] scene build GPU (<mode>, static|camera moving, N samples): ... total median, p99`.
+`[geo] depth prepass pass GPU time (...)` now gives p99 and splits by motion and mode.

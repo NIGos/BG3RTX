@@ -4,6 +4,7 @@
 // new one loaded at the next present. A fault inside the core disables it
 // instead of taking the game down.
 #include "host.h"
+#include "assetdb.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -182,6 +183,7 @@ void core_init(DeviceData* dd) {
   g_host.alloc_host_buffer = &alloc_host_buffer;
   g_host.query_set = &query_set;
   g_host.set_spec_hit_distance = &ngx_set_spec_hit_distance;
+  g_host.assetdb = assetdb_api();
   g_host.rr_active = &ngx_rr_active;
 
   clean_hot_dir();
@@ -351,13 +353,13 @@ void defer_tick(bool flush_all) {
   {
     std::lock_guard<std::mutex> lock(g_def_mu);
     uint64_t now = frame_index();
-    auto it = g_deferred.begin();
-    while (it != g_deferred.end()) {
-      if (flush_all || now >= it->frame + 4) {
-        due.push_back(*it);
-        it = g_deferred.erase(it);
-      } else ++it;
+    // One pass (the BVH split can retire thousands of objects at a level change).
+    size_t w = 0;
+    for (size_t i = 0; i < g_deferred.size(); ++i) {
+      if (flush_all || now >= g_deferred[i].frame + 4) due.push_back(g_deferred[i]);
+      else g_deferred[w++] = g_deferred[i];
     }
+    g_deferred.resize(w);
   }
   if (flush_all && !due.empty()) dd->vk.DeviceWaitIdle(dd->device);
   VkDevice d = dd->device;

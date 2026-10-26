@@ -37,9 +37,12 @@ add_library(VkLayer_bg3rtx SHARED
   layer/geocapture.cpp
   layer/rtscene.cpp
   layer/alphatest.cpp
+  layer/bvhsplit.cpp
   layer/streamline.cpp
   layer/savefilter.cpp
   layer/background.cpp
+  layer/assetdb.cpp
+  layer/hookguard.cpp
   layer/framecap.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
@@ -92,6 +95,9 @@ add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
 add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/layer/VkLayer_bg3rtx.json ${BG3RTX_BIN}/VkLayer_bg3rtx.json)
 
+# Unit test of the inline-hook guard (layer/hookguard.cpp): mock Detours-style patches.
+add_executable(hookguard_test tools/hookguard_test.cpp layer/hookguard.cpp)
+
 # Track D tools: offline check of the XFB shader patch.
 add_executable(xfb_patch_test tools/xfb_patch_test.cpp)
 # Track D cost probe: BLAS/TLAS builds over a captured scene.bin on its own device.
@@ -111,6 +117,11 @@ enable_testing()
 add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
+# Asset database loader (layer/assetdb.cpp) against data/assetdb; skips when not built.
+add_executable(assetdb_test tests/assetdb_test.cpp layer/assetdb.cpp)
+target_include_directories(assetdb_test PRIVATE ${VULKAN_SDK}/Include)
+target_compile_definitions(assetdb_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME assetdb_test COMMAND assetdb_test)
 
 # Hot-reloadable core: rebuild while the game runs.
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp)

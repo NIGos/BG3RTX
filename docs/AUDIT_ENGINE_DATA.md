@@ -727,6 +727,7 @@ Rows are grouped by source.
   2. check the validation log for semaphore and queue errors;
   3. check that the SE console overlay appears.
 - Mitigation if it breaks: take an external-sync mutex on queue 0 in our submit path. Before present, call the next layer's function through our cached dispatch pointer, not through our patched export.
+- **Result (2026-10-26):** it breaks DLSS-G (displayed/rendered stays 1.00). Fixed by restoring our entry points after the extender's Detours patch (`layer/hookguard.cpp`, `se_unhook=1`). Root cause and test: `TRACK_B_FG.md`, "Script Extender".
 
 ### R2.3 Ranked list of new items
 

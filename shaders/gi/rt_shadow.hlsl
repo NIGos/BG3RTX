@@ -65,7 +65,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     bool front = check > 0.5 && check < 0.9, behind = check > 0.2 && check < 0.5;
     // Who is to blame: in front, the geometry hit (opaque, or an alpha-tested
     // draw of family 1/2); behind, the nearest alpha-tested candidate let through.
-    uint who = front ? (h.geom == 0 ? 3u : h.hit_kind) : behind ? h.near_kind : 0u;
+    uint who = front ? (h.alpha ? h.hit_kind : 3u) : behind ? h.near_kind : 0u;
     fam = float(who) / 3.0;
     if (pc.rt_stats != 0) {
       uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;

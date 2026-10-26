@@ -526,7 +526,7 @@ Changing any knob switches the preset combo to **Custom**. "Reset to preset" res
    - **The fix.** The host exposes "RR evaluated in the last 2 frames" (`ngx.cpp` already
      knows `last_mode`). The core uses that instead.
    - It is the prerequisite for AMD/Intel and for "game upscaler ≠ DLSS".
-   - **Done (2026-10-26).** Host API ABI 6 adds `rr_active()`: true while an
+   - **Done (2026-10-26).** Host API ABI 7 adds `rr_active()`: true while an
      RR evaluate succeeded in the last 3 frames (`ngx_rr_active`,
      `layer/ngx.cpp`). `gi_rr`, `ls_soft` and `rf_rr` at -1 follow it
      (`core/gi.cpp`). With FSR/TAA no evaluate happens, with an SR fallback or a

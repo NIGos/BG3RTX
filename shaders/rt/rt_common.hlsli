@@ -6,6 +6,9 @@
 // not opaque, so its triangles come back as candidates, and alpha_pass()
 // reproduces the game's test at the hit: UV interpolated from the captured
 // soup, the texture the game sampled, its cut-off. Set 1 is the host's.
+// With the BVH split (rt_bvh_split=1, layer/bvhsplit.cpp) the TLAS holds one
+// instance per draw instance instead, each BLAS with one geometry; InstInfo
+// (below) says where each instance's vertices and alpha record are.
 #pragma once
 
 [[vk::binding(18, 0)]] RaytracingAccelerationStructure gScene;
@@ -82,9 +85,50 @@ float tex_alpha(uint a, float2 uv, float g, uint tex, uint ch) {
   return ch == 0 ? v.x : ch == 1 ? v.y : ch == 2 ? v.z : v.w;
 }
 
-// True if the alpha-tested triangle `prim` of geometry 1 is solid at `bary`.
-// `footprint`: world-space width of the ray's footprint at the hit.
-// Byte address of the record of alpha-tested triangle `prim` (0 if none).
+// ---- per-instance data (Track D BVH split, layer/bvhsplit.cpp) ----
+// One 16-byte InstInfo per TLAS instance (set 1 binding 7, indexed by the
+// instance index):
+//   base  byte offset of the instance's first vertex: in the mesh pool (binding 8,
+//         object space) or in the soup (binding 6, camera-relative world);
+//   meta  bits 0-7 vertex stride (16, or 24 with the UV at +16); kInfoPool: the
+//         vertices are in the pool (apply the instance's object-to-world);
+//         kInfoAlpha: `rec` is the instance's alpha record; kInfoLegacy: the
+//         single soup BLAS of rt_bvh_split=0 (geometry 0 opaque, 1 alpha-tested,
+//         records found by triangle index);
+//   rec   byte address of the alpha record in gAlphaRec (0: none);
+//   tris  triangles of the instance's BLAS (bounds).
+[[vk::binding(7, 1)]] ByteAddressBuffer gInstInfo;
+[[vk::binding(8, 1)]] ByteAddressBuffer gMeshPool;
+static const uint kInfoPool = 1u << 8, kInfoLegacy = 1u << 9, kInfoAlpha = 1u << 10;
+struct InstInfo { uint base, meta, rec, tris; };
+
+InstInfo inst_info(uint inst) {
+  InstInfo r;
+  uint bytes;
+  gInstInfo.GetDimensions(bytes);
+  uint4 v = inst * 16u + 16u <= bytes ? gInstInfo.Load4(inst * 16u) : uint4(0, kInfoLegacy, 0, 0);
+  r.base = v.x;
+  r.meta = v.y;
+  r.rec = v.z;
+  r.tris = v.w;
+  return r;
+}
+
+// Vertex k of triangle `prim` of an instance, in the instance's object space
+// (pool) or camera-relative world (soup).
+float3 inst_pos(InstInfo ii, uint prim, uint k) {
+  uint stride = ii.meta & 0xffu;
+  uint a = ii.base + (prim * 3u + k) * stride;
+  return (ii.meta & kInfoPool) != 0u ? asfloat(gMeshPool.Load3(a)) : asfloat(gOpaqueSoup.Load3(a));
+}
+float2 inst_uv(InstInfo ii, uint prim, uint k) {
+  uint stride = ii.meta & 0xffu;
+  uint a = ii.base + (prim * 3u + k) * stride + 16u;
+  return (ii.meta & kInfoPool) != 0u ? asfloat(gMeshPool.Load2(a)) : asfloat(gOpaqueSoup.Load2(a));
+}
+
+// Byte address of the record of alpha-tested triangle `prim` (legacy: geometry 1's
+// triangle index; 0 if none).
 uint find_rec(uint prim) {
   uint n = gAlphaRec.Load(0);
   if (n == 0) return 0;
@@ -97,21 +141,12 @@ uint find_rec(uint prim) {
   return rec_addr(lo);
 }
 
-// Debug: the family of the draw (1 vt, 2 tex, 0 unknown).
-uint alpha_kind(uint prim) {
-  uint a = find_rec(prim);
-  return a ? gAlphaRec.Load(a + 8) : 0;
-}
-
-bool alpha_pass(uint prim, float2 bary, float footprint) {
-  uint a = find_rec(prim);
-  if (a == 0) return true;
+// The game's alpha test of record `a` at barycentrics `bary` of the triangle
+// (p: world-space corners, u: their UVs). `footprint`: world-space width of the
+// ray's footprint at the hit.
+bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, float2 u2, float2 bary, float footprint) {
   uint4 h0 = gAlphaRec.Load4(a);        // first_tri, tris, kind, tex
   uint4 h1 = gAlphaRec.Load4(a + 16);   // cache, channel, cut
-  if (prim < h0.x || prim - h0.x >= h0.y) return true;
-  uint vb = prim * 72;
-  float3 p0 = asfloat(gAlphaSoup.Load3(vb)), p1 = asfloat(gAlphaSoup.Load3(vb + 24)), p2 = asfloat(gAlphaSoup.Load3(vb + 48));
-  float2 u0 = asfloat(gAlphaSoup.Load2(vb + 16)), u1 = asfloat(gAlphaSoup.Load2(vb + 40)), u2 = asfloat(gAlphaSoup.Load2(vb + 64));
   float2 uv = u0 + (u1 - u0) * bary.x + (u2 - u0) * bary.y;
   float2 e1 = u1 - u0, e2 = u2 - u0;
   float area_uv = abs(e1.x * e2.y - e1.y * e2.x);
@@ -122,6 +157,53 @@ bool alpha_pass(uint prim, float2 bary, float footprint) {
   float alpha = h0.z == 1 ? vt_alpha(a, uv, g, tex, cache, min(h1.y, 3u)) : tex_alpha(a, uv, g, tex, h1.y);
   return alpha >= asfloat(h1.z);
 }
+
+// Legacy: true if the alpha-tested triangle `prim` of geometry 1 is solid at `bary`.
+bool alpha_pass(uint prim, float2 bary, float footprint) {
+  uint a = find_rec(prim);
+  if (a == 0) return true;
+  uint4 h0 = gAlphaRec.Load4(a);
+  if (prim < h0.x || prim - h0.x >= h0.y) return true;
+  uint vb = prim * 72;
+  float3 p0 = asfloat(gAlphaSoup.Load3(vb)), p1 = asfloat(gAlphaSoup.Load3(vb + 24)), p2 = asfloat(gAlphaSoup.Load3(vb + 48));
+  float2 u0 = asfloat(gAlphaSoup.Load2(vb + 16)), u1 = asfloat(gAlphaSoup.Load2(vb + 40)), u2 = asfloat(gAlphaSoup.Load2(vb + 64));
+  return alpha_eval(a, p0, p1, p2, u0, u1, u2, bary, footprint);
+}
+
+// A non-opaque candidate of any instance: solid at `bary`?
+bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprint, float3x4 o2w) {
+  InstInfo ii = inst_info(inst);
+  if ((ii.meta & kInfoLegacy) != 0u) return geom == 1u ? alpha_pass(prim, bary, footprint) : true;
+  if ((ii.meta & kInfoAlpha) == 0u || ii.rec == 0u || prim >= ii.tris || (ii.meta & 0xffu) < 24u) return true;
+  float3 p0 = inst_pos(ii, prim, 0), p1 = inst_pos(ii, prim, 1), p2 = inst_pos(ii, prim, 2);
+  if ((ii.meta & kInfoPool) != 0u) {
+    p0 = mul(o2w, float4(p0, 1.0));
+    p1 = mul(o2w, float4(p1, 1.0));
+    p2 = mul(o2w, float4(p2, 1.0));
+  }
+  return alpha_eval(ii.rec, p0, p1, p2, inst_uv(ii, prim, 0), inst_uv(ii, prim, 1), inst_uv(ii, prim, 2), bary, footprint);
+}
+
+// Debug: the family of the draw behind a hit (1 vt, 2 tex, 0 not alpha-tested).
+uint alpha_kind(uint prim) {
+  uint a = find_rec(prim);
+  return a ? gAlphaRec.Load(a + 8) : 0;
+}
+uint alpha_kind_hit(uint inst, uint geom, uint prim) {
+  InstInfo ii = inst_info(inst);
+  if ((ii.meta & kInfoLegacy) != 0u) return geom == 1u ? alpha_kind(prim) : 0u;
+  return (ii.meta & kInfoAlpha) != 0u && ii.rec != 0u ? gAlphaRec.Load(ii.rec + 8) : 0u;
+}
+bool alpha_instance(uint inst, uint geom) {
+  InstInfo ii = inst_info(inst);
+  return (ii.meta & kInfoLegacy) != 0u ? geom == 1u : (ii.meta & kInfoAlpha) != 0u;
+}
+
+// The candidate test every ray query loop runs.
+#define RT_ALPHA_CANDIDATE(q, cone)                                                                             \
+  alpha_pass_hit(q.CandidateInstanceIndex(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(),        \
+                 q.CandidateTriangleBarycentrics(), cone.f0 + cone.spread * q.CandidateTriangleRayT(),       \
+                 q.CandidateObjectToWorld3x4())
 
 // Ray footprint: width f0 at the origin, growing by `spread` per unit length.
 struct RtCone { float f0, spread; };
@@ -136,18 +218,15 @@ bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
   while (q.Proceed()) {
-    if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
-        alpha_pass(q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(),
-                   cone.f0 + cone.spread * q.CandidateTriangleRayT()))
-      q.CommitNonOpaqueTriangleHit();
+    if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
   return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
 }
 
-// Debug (rt_debug=3/5): the closest hit, its geometry (0 opaque, 1 alpha-tested),
+// Debug (rt_debug=3/5): the closest hit, whether it is alpha-tested geometry,
 // and the family of the nearest alpha-tested candidate along the ray, whether
 // it was let through or not.
-struct RtDebugHit { float t; uint geom; uint near_kind; uint hit_kind; };
+struct RtDebugHit { float t; bool alpha; uint near_kind; uint hit_kind; };
 RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
@@ -162,22 +241,22 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   while (q.Proceed()) {
     if (q.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) continue;
     float ct = q.CandidateTriangleRayT();
-    uint prim = q.CandidatePrimitiveIndex();
     if (ct < near_t) {
       near_t = ct;
-      h.near_kind = alpha_kind(prim);
+      h.near_kind = alpha_kind_hit(q.CandidateInstanceIndex(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex());
     }
-    if (alpha_pass(prim, q.CandidateTriangleBarycentrics(), cone.f0 + cone.spread * ct)) q.CommitNonOpaqueTriangleHit();
+    if (RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
   bool hit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
   h.t = hit ? q.CommittedRayT() : -1.0;
-  h.geom = hit ? q.CommittedGeometryIndex() : 0;
-  h.hit_kind = hit && h.geom == 1 ? alpha_kind(q.CommittedPrimitiveIndex()) : 0;
+  h.alpha = hit && alpha_instance(q.CommittedInstanceIndex(), q.CommittedGeometryIndex());
+  h.hit_kind = h.alpha ? alpha_kind_hit(q.CommittedInstanceIndex(), q.CommittedGeometryIndex(), q.CommittedPrimitiveIndex())
+                       : 0u;
   return h;
 }
 
-// Closest hit (alpha-tested): distance (-1 on a miss), geometry and primitive.
-struct RtHit { float t; uint geom; uint prim; };
+// Closest hit (alpha-tested): distance (-1 on a miss), the triangle and its instance.
+struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; };
 RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
@@ -187,21 +266,20 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
   while (q.Proceed()) {
-    if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
-        alpha_pass(q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(),
-                   cone.f0 + cone.spread * q.CandidateTriangleRayT()))
-      q.CommitNonOpaqueTriangleHit();
+    if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
   RtHit h;
   bool hit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
   h.t = hit ? q.CommittedRayT() : -1.0;
   h.geom = hit ? q.CommittedGeometryIndex() : 0u;
   h.prim = hit ? q.CommittedPrimitiveIndex() : 0u;
+  h.inst = hit ? q.CommittedInstanceIndex() : 0u;
+  h.o2w = hit ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
   return h;
 }
 
-// Unnormalised geometric normal of a TLAS triangle (the soups are camera-relative,
-// the lighting space).
+// Legacy: unnormalised geometric normal of a triangle of the soup BLAS (the soups
+// are camera-relative, the lighting space).
 float3 rt_tri_normal(uint geom, uint prim) {
   float3 p0, p1, p2;
   // Never read past the soups' descriptors (a hit is always inside them; this
@@ -222,6 +300,25 @@ float3 rt_tri_normal(uint geom, uint prim) {
     p0 = asfloat(gAlphaSoup.Load3(vb));
     p1 = asfloat(gAlphaSoup.Load3(vb + 24u));
     p2 = asfloat(gAlphaSoup.Load3(vb + 48u));
+  }
+  float3 n = cross(p1 - p0, p2 - p0);
+  return all(isfinite(n)) ? n : 0.0.xxx;
+}
+
+// Unnormalised geometric normal of the hit triangle in the lighting space
+// (camera-relative world), for any instance.
+float3 rt_hit_normal(RtHit h) {
+  InstInfo ii = inst_info(h.inst);
+  if ((ii.meta & kInfoLegacy) != 0u) return rt_tri_normal(h.geom, h.prim);
+  uint stride = ii.meta & 0xffu, bytes;
+  if ((ii.meta & kInfoPool) != 0u) gMeshPool.GetDimensions(bytes);
+  else gOpaqueSoup.GetDimensions(bytes);
+  if (stride < 16u || h.prim >= ii.tris || ii.base + (h.prim * 3u + 3u) * stride > bytes) return 0.0.xxx;
+  float3 p0 = inst_pos(ii, h.prim, 0), p1 = inst_pos(ii, h.prim, 1), p2 = inst_pos(ii, h.prim, 2);
+  if ((ii.meta & kInfoPool) != 0u) {
+    p0 = mul(h.o2w, float4(p0, 1.0));
+    p1 = mul(h.o2w, float4(p1, 1.0));
+    p2 = mul(h.o2w, float4(p2, 1.0));
   }
   float3 n = cross(p1 - p0, p2 - p0);
   return all(isfinite(n)) ? n : 0.0.xxx;
@@ -274,10 +371,7 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
   while (q.Proceed()) {
-    if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
-        alpha_pass(q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(),
-                   cone.f0 + cone.spread * q.CandidateTriangleRayT()))
-      q.CommitNonOpaqueTriangleHit();
+    if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
   return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? q.CommittedRayT() : -1.0;
 }

@@ -54,6 +54,9 @@ Img g_dummy2d, g_dummy_arr;
 bool g_dummy_ready = false;
 VkBuffer g_dummy_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_dummy_mem = VK_NULL_HANDLE;
+VkBuffer g_legacy_buf = VK_NULL_HANDLE;   // alpha_legacy_info
+VkDeviceMemory g_legacy_mem = VK_NULL_HANDLE;
+uint32_t g_legacy_stride = 0;
 uint32_t g_slot = 0;            // next ring slot
 uint32_t g_set_tex[kRing] = {};     // per set: texture slots holding real views (the rest: dummies)
 uint32_t g_set_cache[kRing] = {};
@@ -203,19 +206,21 @@ void alpha_device_created(DeviceData* dd) {
   bool ok = vk.CreateSampler(dd->device, &si, nullptr, &g_wrap) == VK_SUCCESS;
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   ok = ok && vk.CreateSampler(dd->device, &si, nullptr, &g_clamp) == VK_SUCCESS;
-  VkDescriptorSetLayoutBinding b[7] = {
+  VkDescriptorSetLayoutBinding b[9] = {
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+      {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},   // InstInfo per TLAS instance
+      {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},   // the split's mesh pool
       {2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kTextures, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kCaches, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {4, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_wrap},
       {5, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_clamp}};
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.bindingCount = 7;
+  dci.bindingCount = 9;
   dci.pBindings = b;
   ok = ok && vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) == VK_SUCCESS;
-  VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3 * kRing},
+  VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5 * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches) * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLER, 2 * kRing}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -256,12 +261,14 @@ void alpha_device_destroyed(DeviceData* dd) {
     if (i->mem) vk.FreeMemory(dd->device, i->mem, nullptr);
     *i = Img{};
   }
-  for (auto [b, m] : {std::pair{g_rec_buf, g_rec_mem}, std::pair{g_dummy_buf, g_dummy_mem}}) {
+  for (auto [b, m] : {std::pair{g_rec_buf, g_rec_mem}, std::pair{g_dummy_buf, g_dummy_mem},
+                      std::pair{g_legacy_buf, g_legacy_mem}}) {
     if (b) vk.DestroyBuffer(dd->device, b, nullptr);
     if (m) vk.FreeMemory(dd->device, m, nullptr);
   }
-  g_rec_buf = g_dummy_buf = VK_NULL_HANDLE;
-  g_rec_mem = g_dummy_mem = VK_NULL_HANDLE;
+  g_rec_buf = g_dummy_buf = g_legacy_buf = VK_NULL_HANDLE;
+  g_rec_mem = g_dummy_mem = g_legacy_mem = VK_NULL_HANDLE;
+  g_legacy_stride = 0;
   g_pool = VK_NULL_HANDLE;
   g_dsl = VK_NULL_HANDLE;
   g_wrap = g_clamp = VK_NULL_HANDLE;
@@ -286,7 +293,7 @@ void alpha_begin_capture() {
   g_cache.clear();
 }
 
-bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, uint32_t tris) {
+bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, uint32_t tris, uint32_t* rec_index) {
   AlphaRec r{};
   r.first_tri = first_tri;
   r.tris = tris;
@@ -346,7 +353,38 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
     }
     return false;
   }
+  if (rec_index) *rec_index = uint32_t(g_recs.size());
   g_recs.push_back(r);
+  return true;
+}
+
+// The legacy scene's InstInfo (shaders/rt/rt_common.hlsli): its one TLAS instance
+// is the 2-geometry soup BLAS, looked up the old way (kInfoLegacy).
+bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size) {
+  if (!g_on) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_legacy_buf) {
+    if (!make_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_legacy_buf, g_legacy_mem))
+      return false;
+    g_legacy_stride = 0;
+  }
+  if (g_legacy_stride != stride) {
+    const VkDeviceFuncs& vk = g_dd->vk;
+    uint32_t info[4] = {0, (stride & 0xffu) | (1u << 9), 0, 0};   // kInfoLegacy
+    VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0,
+                          nullptr);
+    vk.CmdUpdateBuffer(cmd, g_legacy_buf, 0, sizeof info, info);
+    mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr,
+                          0, nullptr);
+    g_legacy_stride = stride;
+  }
+  *buf = g_legacy_buf;
+  *size = 256;
   return true;
 }
 
@@ -355,9 +393,11 @@ uint32_t alpha_record_count() {
   return uint32_t(g_recs.size());
 }
 
-void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, VkDeviceSize alpha_bytes,
-                  VkDeviceSize opaque_bytes, uint32_t stride) {
+void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
   if (!g_on) return;
+  const VkBuffer soup = ab.soup;
+  const VkDeviceSize alpha_base = ab.alpha_base, alpha_bytes = ab.alpha_bytes, opaque_bytes = ab.opaque_bytes;
+  const uint32_t stride = ab.stride;
   const VkDeviceFuncs& vk = g_dd->vk;
   std::lock_guard<std::mutex> lock(g_mu);
   load_table();
@@ -424,6 +464,14 @@ void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, V
                                                      : VkDescriptorBufferInfo{g_dummy_buf, 0, 256};
   VkDescriptorBufferInfo opaquei = soup && opaque_bytes ? VkDescriptorBufferInfo{soup, 0, opaque_bytes}
                                                         : VkDescriptorBufferInfo{g_dummy_buf, 0, 256};
+  if (ab.split && soup && ab.soup_size) {
+    // Split: per-instance byte offsets into the whole soup (InstInfo.base).
+    soupi = opaquei = VkDescriptorBufferInfo{soup, 0, ab.soup_size};
+  }
+  VkDescriptorBufferInfo infoi = ab.info && ab.info_bytes ? VkDescriptorBufferInfo{ab.info, ab.info_off, ab.info_bytes}
+                                                          : VkDescriptorBufferInfo{g_dummy_buf, 0, 256};
+  VkDescriptorBufferInfo pooli = ab.pool && ab.pool_bytes ? VkDescriptorBufferInfo{ab.pool, 0, ab.pool_bytes}
+                                                          : VkDescriptorBufferInfo{g_dummy_buf, 0, 256};
   // Every slot must hold a live view: this frame's views, dummies after them.
   // Only the slots a set ever held real views in need rewriting (all of them the
   // first time a set is used): writing 4096 descriptors per frame is avoided.
@@ -440,18 +488,20 @@ void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, V
     cache[i] = i && i <= g_cache.size()
                    ? VkDescriptorImageInfo{VK_NULL_HANDLE, g_cache[i - 1].first, g_cache[i - 1].second}
                    : VkDescriptorImageInfo{VK_NULL_HANDLE, g_dummy_arr.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet w[5] = {};
-  for (int i = 0; i < 5; ++i) {
+  VkWriteDescriptorSet w[7] = {};
+  for (int i = 0; i < 7; ++i) {
     w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     w[i].dstSet = g_sets[slot];
-    w[i].dstBinding = i < 4 ? uint32_t(i) : 6u;
+    w[i].dstBinding = i < 4 ? uint32_t(i) : uint32_t(i + 2);   // 0-3, then 6, 7, 8
   }
   w[4].descriptorCount = 1, w[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[4].pBufferInfo = &opaquei;
+  w[5].descriptorCount = 1, w[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[5].pBufferInfo = &infoi;
+  w[6].descriptorCount = 1, w[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[6].pBufferInfo = &pooli;
   w[0].descriptorCount = 1, w[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[0].pBufferInfo = &rec;
   w[1].descriptorCount = 1, w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[1].pBufferInfo = &soupi;
   w[2].descriptorCount = ntex, w[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[2].pImageInfo = tex.data();
   w[3].descriptorCount = ncache, w[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[3].pImageInfo = cache.data();
-  vk.UpdateDescriptorSets(g_dd->device, 5, w, 0, nullptr);
+  vk.UpdateDescriptorSets(g_dd->device, 7, w, 0, nullptr);
   g_current = int(slot);
 
   ++g_frames;

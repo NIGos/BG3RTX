@@ -59,7 +59,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   RtHit h = rt_closest_hit(-V * t0, -V, dist + w - t0, cone);
   h.t = h.t >= 0.0 ? h.t + t0 : -1.0;
   if (h.t > 0.0) {
-    float3 Ng = rt_tri_normal(h.geom, h.prim);
+    float3 Ng = rt_hit_normal(h);
     float l = length(Ng);
     // The same surface as the depth buffer: within a few pixel footprints along the
     // view ray (more at grazing angles), and not a back-facing sliver.

@@ -6,8 +6,11 @@
 #include <cstddef>
 #include <cstdint>
 #include "vk_funcs.h"
+#include "assetdb_api.h"
 
-#define BG3RTX_ABI_VERSION 6
+// 6: Bg3HostApi::assetdb (appended).
+// 7: Bg3HostApi::rr_active (appended).
+#define BG3RTX_ABI_VERSION 7
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -156,7 +159,13 @@ struct Bg3HostApi {
   // resolution, GENERAL layout, written this frame). The core calls it every
   // frame it writes the image, and with VK_NULL_HANDLE before releasing it.
   void (*set_spec_hit_distance)(VkImage image, VkImageView view, VkFormat format, uint32_t width, uint32_t height);
-  // ABI 6: true while Ray Reconstruction actually denoises the frame (an RR
+
+  // ABI 6: the offline asset database (common/assetdb_api.h, docs/ASSET_DB.md): placed
+  // lights, shader -> material bindings, rooms/roofs, presets, probes. Never null; the
+  // table carries its own version and loads the data on first use.
+  const Bg3AssetDbApi* assetdb;
+
+  // ABI 7: true while Ray Reconstruction actually denoises the frame (an RR
   // evaluate succeeded in the last 3 frames). The core picks its 1-spp "RR
   // modes" (gi_rr, ls_soft, rf_rr = -1) from this, not from the rr key, so
   // FSR/TAA, an SR fallback or a failed RR creation get the non-RR modes.

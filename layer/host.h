@@ -189,6 +189,21 @@ struct CmdState {
   int geo_ts = -1;                     // timestamp slot of the current pass
   VkViewport viewport{};               // last vkCmdSetViewport(first = 0)
   bool has_viewport = false;
+  // Vertex and index buffer bindings (Track D BVH split: mesh keys, instance streams).
+  struct VertexBinding { VkBuffer buffer = VK_NULL_HANDLE; VkDeviceSize offset = 0, stride = 0; };   // stride 0: the pipeline's
+  static constexpr uint32_t kMaxVertexBindings = 16;
+  std::array<VertexBinding, kMaxVertexBindings> vb{};
+  VkBuffer ib = VK_NULL_HANDLE;
+  VkDeviceSize ib_offset = 0;
+  VkIndexType ib_type = VK_INDEX_TYPE_UINT16;
+};
+// The arguments of a draw (geo_pre_draw).
+struct DrawArgs {
+  uint32_t kind;             // 0 draw, 1 indexed, 2 indirect, 3 indexed indirect, 4/5 indirect count
+  uint32_t count, instances; // vertex/index count and instances (0 if indirect)
+  uint32_t first;            // first vertex / first index
+  int32_t vertex_offset;     // indexed draws
+  uint32_t first_instance;
 };
 CmdState* cmd_state(VkCommandBuffer cmd, bool create = false);
 void cmd_forget(VkCommandBuffer cmd);
@@ -281,7 +296,7 @@ void ngx_init();                       // hooks _nvngx.dll now or when it loads
 void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts, VkImageLayout depth_layout);
 void ngx_on_destroy_image(VkImage img);
 void ngx_on_present();
-// ABI 6: Ray Reconstruction evaluated in the last few frames (not the rr key):
+// ABI 7: Ray Reconstruction evaluated in the last few frames (not the rr key):
 // false with FSR/TAA, SR fallback, or a failed RR creation.
 bool ngx_rr_active();
 // RR's diffuse albedo guide (RGBA8, GENERAL) when it has this size.
@@ -323,10 +338,12 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
 void geo_forget_pipeline(VkPipeline p);
 void geo_pass_before(VkCommandBuffer cmd, CmdState* s);   // outside the pass, before the game's begin
 void geo_pass_begun(VkCommandBuffer cmd, CmdState* s);    // inside, right after it
-void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t count, uint32_t instances);
+void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s);
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right before the game's end
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right after the game's end
+void geo_forget_buffer(VkBuffer b);
+VkDeviceSize geo_buffer_size(VkBuffer b);                   // 0 if unknown
 bool geo_submit_wanted();
 void geo_on_submit(const std::vector<VkCommandBuffer>& cmds);
 void geo_on_present(VkQueue queue);
@@ -343,7 +360,10 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
 void rt_device_created(DeviceData* dd, bool enabled);
 void rt_device_destroyed(DeviceData* dd);
 bool rt_enabled();                         // AS + ray query are on the device
-bool rt_capture_wanted();                  // build the scene this frame (rt_build=1, not yet built)
+// Build the scene this frame: rt_build (after the settings layer resolves
+// rt_build=auto from the RT consumers, common/settings.h) and not yet built.
+bool rt_capture_wanted();
+bool rt_camera_moving();                   // the camera moved in the last scene build's frame
 VkBufferUsageFlags rt_xfb_usage();         // extra usage the per-frame XFB buffer needs
 bool rt_alloc_device_address();            // memory for BDA buffers needs VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
 void rt_before_capture(VkCommandBuffer cmd);   // outside the G-buffer pass, before it begins
@@ -360,10 +380,72 @@ struct RtCapture {
   VkDeviceSize ubo_offset;
   uint64_t signature;
   uint32_t draws, alpha_draws;
+  bool split;                // rt_bvh_split: the capture holds only the dynamic draws (bvhsplit.cpp)
+  VkDeviceSize xfb_size;
 };
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
 void rt_on_present();
+// Shared by the legacy build and the split (bvhsplit.cpp).
+VkDeviceAddress rt_buffer_address(VkBuffer b);
+VkDeviceSize rt_scratch_alignment();
+// The xfb_to_world conversion of the capture's opaque and alpha regions (in place).
+bool rt_convert(VkCommandBuffer cmd, const RtCapture& cap);
+// Reads `n` bytes of a game buffer at `offset` from its host mapping (false if not mapped).
+bool read_mapped(VkBuffer b, VkDeviceSize offset, void* dst, size_t n);
+const uint8_t* mapped_ptr(VkBuffer b, VkDeviceSize offset);   // nullptr if not host-mapped
+
+// ---- Track D BVH split (bvhsplit.cpp, docs/TRACK_D_RT.md 11) ----
+// Static instanced meshes get one object-space BLAS per unique mesh, built once
+// from the first transform-feedback capture of a draw (inverse instance
+// matrix), compacted and cached; every frame the TLAS holds one instance per
+// draw instance, with the matrix the game's instance stream gives the draw.
+// Everything else (skinned, wind, per-draw matrices, terrain) is captured as
+// before and gets a per-draw BLAS, refit while its triangle count holds.
+struct InstPipe {
+  bool ok = false;              // class-A position path and instance-rate float4 matrix rows
+  uint8_t row_binding[3] = {};
+  uint32_t row_offset[3] = {};
+  uint32_t row_stride[3] = {};  // binding strides (0: dynamic, from the bind call)
+  uint64_t vtx_sig = 0;         // VS + per-vertex input layout
+  uint32_t vtx_bindings = 0;    // mask of the per-vertex bindings the attributes read
+  bool uv_ok = false;           // the captured UV output is a copy of a per-vertex input
+};
+void bvh_device_created(DeviceData* dd);
+void bvh_device_destroyed(DeviceData* dd);
+bool bvh_split_wanted();                       // rt_bvh_split=1 and the split is usable
+void bvh_begin_capture(VkCommandBuffer cmd);
+// Per draw of the RT capture (split mode). `token` identifies the draw in later calls.
+struct BvhDraw {
+  const InstPipe* inst;         // nullptr: not instanceable
+  uint64_t vs;
+  uint32_t pipe_id;
+  bool alpha;                   // alpha-tested (its FS is in the table, UV captured)
+  DrawArgs args;
+  const CmdState* s;
+};
+enum BvhVerdict { BVH_CAPTURE = 0, BVH_CACHED = 1, BVH_CACHED_AUDIT = 2 };
+BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris);
+// The draw's alpha record (cached draws; UINT32_MAX: none, made opaque).
+void bvh_set_record(uint32_t token, uint32_t rec);
+// The draw was captured into the soup at `offset` (`prims` triangles, all instances).
+void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec);
+// Uncaptured draw that is not instanceable (counted only).
+void bvh_note_skipped(uint32_t token);
+// After the pass: object-space extraction, BLAS builds/refits, compaction, TLAS.
+// `stamp(i)` writes the timing timestamps 1..3.
+struct BvhResult {
+  VkAccelerationStructureKHR tlas;
+  uint32_t instances, static_instances, dynamic_draws, cached_draws, new_meshes;
+  uint64_t static_tris, dynamic_tris;
+  VkBuffer info; VkDeviceSize info_off, info_bytes;   // InstInfo of this TLAS (set 1 binding 7)
+  VkBuffer pool; VkDeviceSize pool_bytes;             // object-space vertices (binding 8)
+};
+bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), BvhResult* out);
+void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
+void bvh_on_present();
+void bvh_forget_buffer(VkBuffer b);
+void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size);
 
 // ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
 // One line of shaders/rt/alpha_fs.txt (scripts/alpha_table.py).
@@ -394,12 +476,28 @@ void alpha_device_created(DeviceData* dd);
 void alpha_device_destroyed(DeviceData* dd);
 bool alpha_lookup(uint64_t fs_hash, AlphaFs* out);   // copied: the table may be reloaded
 void alpha_begin_capture();
-bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, uint32_t tris);
+// `rec_index` (optional) receives the record's index (split mode: referenced per TLAS instance).
+bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, uint32_t tris,
+                    uint32_t* rec_index = nullptr);
 uint32_t alpha_record_count();
 // Outside the pass: uploads the capture's records and writes its descriptor set.
-// opaque_bytes/stride: geometry 0's soup at offset 0 (binding 6, geometric normals of hits).
-void alpha_commit(VkCommandBuffer cmd, VkBuffer soup, VkDeviceSize alpha_base, VkDeviceSize alpha_bytes,
-                  VkDeviceSize opaque_bytes, uint32_t stride);
+//   legacy (one BLAS, 2 geometries): binding 1 the alpha soup from alpha_base, binding 6
+//     geometry 0's soup at offset 0 (geometric normals of hits);
+//   split: bindings 1 and 6 cover the whole soup (per-instance offsets in InstInfo).
+// Binding 7: the TLAS's per-instance InstInfo; binding 8: the split's mesh pool.
+struct AlphaBindings {
+  VkBuffer soup;
+  VkDeviceSize alpha_base, alpha_bytes, opaque_bytes, soup_size;
+  uint32_t stride;
+  bool split;
+  VkBuffer info;
+  VkDeviceSize info_off, info_bytes;
+  VkBuffer pool;
+  VkDeviceSize pool_bytes;
+};
+void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& b);
+// The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).
+bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
 
 uint64_t frame_index();

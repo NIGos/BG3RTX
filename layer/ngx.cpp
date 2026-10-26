@@ -326,7 +326,7 @@ static NVSDK_NGX_Resource_VK g_shd_res{};
 static uint64_t g_shd_frame = 0;
 static bool g_shd_logged = false;
 
-// ABI 6: whether Ray Reconstruction actually denoises the frame. The core's
+// ABI 7: whether Ray Reconstruction actually denoises the frame. The core's
 // GI, local-light shadows and reflections pick their 1-spp RR modes from this,
 // not from the rr key: with FSR/TAA, an SR fallback or a failed RR creation
 // they must not leave raw 1-spp noise in the frame.
