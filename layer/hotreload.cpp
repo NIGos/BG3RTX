@@ -350,13 +350,13 @@ void defer_tick(bool flush_all) {
   {
     std::lock_guard<std::mutex> lock(g_def_mu);
     uint64_t now = frame_index();
-    auto it = g_deferred.begin();
-    while (it != g_deferred.end()) {
-      if (flush_all || now >= it->frame + 4) {
-        due.push_back(*it);
-        it = g_deferred.erase(it);
-      } else ++it;
+    // One pass (the BVH split can retire thousands of objects at a level change).
+    size_t w = 0;
+    for (size_t i = 0; i < g_deferred.size(); ++i) {
+      if (flush_all || now >= g_deferred[i].frame + 4) due.push_back(g_deferred[i]);
+      else g_deferred[w++] = g_deferred[i];
     }
+    g_deferred.resize(w);
   }
   if (flush_all && !due.empty()) dd->vk.DeviceWaitIdle(dd->device);
   VkDevice d = dd->device;

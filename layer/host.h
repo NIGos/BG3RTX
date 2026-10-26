@@ -330,10 +330,9 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
 void rt_device_created(DeviceData* dd, bool enabled);
 void rt_device_destroyed(DeviceData* dd);
 bool rt_enabled();                         // AS + ray query are on the device
-// Build the scene this frame: not yet built, and rt_build=2, or rt_build=1 and
-// a ray-traced effect is on (SETTINGS_DESIGN 7.3: rt_build follows need).
+// Build the scene this frame: rt_build (after the settings layer resolves
+// rt_build=auto from the RT consumers, common/settings.h) and not yet built.
 bool rt_capture_wanted();
-bool rt_effects_on();                      // any consumer of the TLAS is switched on
 bool rt_camera_moving();                   // the camera moved in the last scene build's frame
 VkBufferUsageFlags rt_xfb_usage();         // extra usage the per-frame XFB buffer needs
 bool rt_alloc_device_address();            // memory for BDA buffers needs VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
@@ -359,7 +358,6 @@ bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
 void rt_on_present();
 // Shared by the legacy build and the split (bvhsplit.cpp).
 VkDeviceAddress rt_buffer_address(VkBuffer b);
-bool rt_bda_alloc_flag();                  // our BDA allocations need VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
 VkDeviceSize rt_scratch_alignment();
 // The xfb_to_world conversion of the capture's opaque and alpha regions (in place).
 bool rt_convert(VkCommandBuffer cmd, const RtCapture& cap);
@@ -418,7 +416,6 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 void bvh_on_present();
 void bvh_forget_buffer(VkBuffer b);
 void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size);
-void register_bvh_hooks(std::unordered_map<std::string, PFN_vkVoidFunction>& m);
 
 // ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
 // One line of shaders/rt/alpha_fs.txt (scripts/alpha_table.py).

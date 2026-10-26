@@ -36,6 +36,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/geocapture.cpp
   layer/rtscene.cpp
   layer/alphatest.cpp
+  layer/bvhsplit.cpp
   layer/streamline.cpp
   layer/savefilter.cpp
   layer/background.cpp

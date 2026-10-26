@@ -123,7 +123,8 @@
   X(CmdCopyBuffer)                             \
   X(CmdCopyBuffer2)                            \
   X(CmdCopyAccelerationStructureKHR)           \
-  X(CmdWriteAccelerationStructuresPropertiesKHR)
+  X(CmdWriteAccelerationStructuresPropertiesKHR) \
+  X(CmdCopyQueryPoolResults)
 
 struct VkDeviceFuncs {
 #define BG3RTX_DECL(name) PFN_vk##name name = nullptr;

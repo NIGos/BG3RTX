@@ -194,8 +194,10 @@ inline constexpr Knob kKnobs[] = {
 inline constexpr int kKnobCount = int(sizeof kKnobs / sizeof kKnobs[0]);
 
 // Internal keys a preset sets besides its knobs (never shown in a UI).
-// Ultra: no forced periodic BVH rebuild (SETTINGS_DESIGN 5.4 #4; refit quality
-// over long pans still to be checked).
+// Ultra: rare forced BVH rebuilds (SETTINGS_DESIGN 5.4 #4). With the BVH split
+// (rt_bvh_split=1, TRACK_D_RT.md 11) rt_rebuild_frames only paces the per-draw
+// BLAS of the captured (skinned, wind, per-draw matrix) draws, staggered per draw;
+// static meshes are built once for trace speed and never refit.
 inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_frames", "600"}}};
 
 // What the code uses when a key is in no layer (the cfg_* fallbacks), for the
