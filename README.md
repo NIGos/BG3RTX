@@ -23,7 +23,7 @@ Use the **Vulkan** renderer (`bg3.exe`). The DX11 executable doesn't go through 
 | `.\scripts\build.ps1 -Watch` | rebuilds the core on every save; the game swaps it in at the next present |
 | edit anything under `shaders\` | the shader recompiles and its pipeline is rebuilt in game |
 | edit `bg3rtx.ini` | re-read within about a second |
-| `.\scriptsuto-run.ps1` | unattended loop: build, launch on the latest save, auto-capture, close, analyse (~1 min). Headless by default (display can be off); `-RealPresent` for real presentation, `-Move` to pan the camera during the capture, `-Set key=value` for ini overrides |
+| `.\scripts\auto-run.ps1` | unattended loop: build, launch on the latest save, auto-capture, close, analyse (~1 min). Headless by default (display can be off); `-RealPresent` for real presentation, `-Move` to pan the camera during the capture, `-Set key=value` for ini overrides |
 | check `bg3rtx.log` | output from the host, core and shader compiler; it can be read while the game runs |
 
 To check that the layer works without starting BG3, run any Vulkan program:
