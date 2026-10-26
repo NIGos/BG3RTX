@@ -424,6 +424,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     rt_on_present();
   }
   trace_on_present(queue, info);
+  framecap_on_present();
   if (g_headless) {
     std::vector<VkPipelineStageFlags> stages(info->waitSemaphoreCount, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
     VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
