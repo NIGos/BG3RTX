@@ -17,6 +17,49 @@ summarised in the sections below.
 | B, DLSS-G | **Done, merged.** Streamline DLSS-G 2x/3x/4x inside the host layer; shares the game's NGX instance. Verified with RR + GI on (10 min stable, no API errors). See `TRACK_B_FG.md`. Still unverified: motion-vector sign in motion, HDR10 output, UI during gameplay. These need the display on. |
 | C, GI | **v1 in main.** Ray-traced visibility folded into the game's AO, one-bounce GI, MV reprojection, sun contact shadows. About 0.3 ms GPU, validation-clean. See `TRACK_C_GI.md`. |
 | D, hardware RT | **Phase 2 done, off by default (`rt=1`).** AS + ray query on the game's device (instance API 1.3, the game's EXT BDA kept next to the core feature); per-frame BLAS refit 0.39 ms / rebuild 2.3 ms + TLAS from the XFB capture; ray-query sun shadows folded into the game's sun mask (0.1 ms) and ray-traced AO (0.13 ms); about 1.5 ms in total with a static camera. TLAS matches the depth buffer on 98.1% of pixels; validation-clean. Next: alpha test, cascade-pass casters, static/dynamic BLAS split. See `TRACK_D_RT.md` section 6. |
+| D, phase 3 | **Merged, off by default** (`rt_alpha=1`, `gi_rt=1`). Alpha-tested BVH geometry (the primary-ray match goes from 98.1% to 99.1%) and hybrid ray-traced GI (trace 0.175 ms). Not yet verified in motion or outdoors. See `TRACK_D_RT.md` section 7. |
+| Effect catalogue and quality audit | **Analysis done (2026-10-26).** The feasibility of the next RT effects, with enablers and a value/effort ranking, is in `TRACK_D_RT.md` section 8. The audit of the existing effects and the rules for new ones are in `QUALITY.md`. The prioritised list is below. |
+
+## Next, prioritised (2026-10-26)
+
+Order by value/effort. IDs refer to `QUALITY.md` (Qn) and `TRACK_D_RT.md` section 8 (D-…).
+
+1. **Quality P1 fixes.** These are cheap correctness fixes.
+   - [ ] Q1: reproject `prevRadiance` with the MVs, plus a depth check.
+   - [ ] Q2: RT visibility *replaces* the game's SSAO instead of multiplying it; `gi_ao=1`.
+   - [ ] Q11: RR normal guide in world space, true N·V, view/projection matrices passed to RR.
+2. **The RR path for the GI** (Q4 + Q5).
+   - With `rr=1`: full resolution, 1 ray per pixel, no checkerboard and no own temporal/upsample, a pcg3d/xxhash seed. This is cost-neutral.
+   - With `rr=0`: blue noise and the improved accumulator (Q6, Q7).
+3. **Soft sun shadows** (planned, refined in TRACK_D 8.5).
+   - Cone of 0.00459 rad, the game's own sun disc. RR or SIGMA denoises.
+   - Geometric-normal bias (Q10).
+4. **D-EN1 light-list snapshot.**
+   - Bind set 1 b13/b23/b24/b25/b29/b39/b40/b41.
+   - Write `bg3_lights.hlsli` with an exact re-evaluation, validated against b10/b11.
+   - Log `b0._m0.y` (Q3).
+5. **D-LS ray-traced local-light shadows.**
+   - v1: deterministic rays for shadowed lights.
+   - Then unshadowed lights (to stop leaks).
+   - v2: RIS 1-2 rays per pixel + RR.
+6. **D-EM (a): emissive/FX pre-lighting target into the bounce source** (with Q8: diffuse-only bounce).
+7. **D-RF ray-traced reflections.** Needs Q11 and D-EN4 (the exact specular-ambient delta).
+   - Tiers (a) on screen + (c) probe fallback first.
+   - Then tier (b) off screen with D-EN2 hit materials.
+8. **Cascade-caster capture** (planned, 6.7 item 2) **+ D-EN3 retention.** This closes interiors, adds off-screen casters, and is the prerequisite for D-GI2 and D-VOL.
+9. **D-GI2: screen-seeded SHaRC multi-bounce GI.** Replaces `gi_rt_fallback`; radius from 1 m to room scale.
+10. **Later:**
+    - D-DI (ReSTIR DI; fetch RTXDI);
+    - D-TR (thickness translucency);
+    - D-VOL (RT froxel sun visibility);
+    - D-EN5 (lighting-shader patch, as an optimisation of the deltas);
+    - Q6/Q7/Q9/Q12-Q15 polish.
+11. **Not recommended:**
+    - D-RFR refraction;
+    - RT transparents/particles;
+    - a full path-tracing replacement. D-PT is kept only as a reference/debug mode.
+
+Every item follows the `QUALITY.md` rules R1-R10: sampling, a single denoiser path, composition without double counting, validation, A/B images, and the cost budget of ≤ 2.5 ms for all Track D effects.
 
 ## Phase 0 — map the frame (blocks everything)
 - [ ] Trace one frame in an outdoor area and one in a dungeon. Run `analyze_trace.py --disasm`.
@@ -58,11 +101,21 @@ summarised in the sections below.
 - Capture world-space geometry by patching vertex shaders to write positions into a buffer. This covers skinning and instancing.
 - Build and refit BLAS/TLAS per frame; use any-hit for alpha-tested foliage.
 - Ray-query shadows, AO, GI and reflections. Shade hits from the screen or the radiance cache.
+- Effect catalogue (2026-10-26, `TRACK_D_RT.md` section 8):
+  - local-light shadows (D-LS), reflections (D-RF), screen-seeded SHaRC GI (D-GI2), emissive bounce (D-EM), ReSTIR DI (D-DI);
+  - translucency, volumetrics and refraction are low priority;
+  - full path tracing is a reference mode only.
+
+## Quality (cross-track, `QUALITY.md`)
+- An audit of RR inputs, sampling, temporal filtering, upsampling, composition/energy, the sun penumbra and alpha handling (Q1-Q15).
+- The binding rules R1-R10 for all new effects.
 
 ## Dependencies to fetch
 | What | For | From |
 |---|---|---|
 | DLSS SDK (NGX headers, RR guide) | Track A | github.com/NVIDIA/DLSS |
 | Streamline SDK | Track B | github.com/NVIDIA-RTX/Streamline |
-| NRD, SHaRC | Track C | github.com/NVIDIA-RTX/NRD, /SHARC |
+| NRD, SHaRC | Track C | github.com/NVIDIA-RTX/NRD, /SHARC (both already in `external/`) |
+| RTXDI | D-DI (later) | github.com/NVIDIA-RTX/RTXDI (not in `external/` yet) |
+| Spatiotemporal blue noise (STBN) textures | Q5, the `rr=0` path | NVIDIAGameWorks/SpatiotemporalBlueNoiseSDK |
 | RenderDoc | Phase 0 (optional) | renderdoc.org |
