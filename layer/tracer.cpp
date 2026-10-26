@@ -177,7 +177,7 @@ void trace_on_submit(const std::vector<VkCommandBuffer>& cmds) {
 void shader_dump(uint64_t hash, const void* code, size_t size) {
   static std::mutex mu;
   static std::unordered_set<uint64_t> done;
-  if (!cfg_int("dump_shaders", 1)) return;
+  if (!cfg_int("dump_shaders", 0)) return;   // 1 in the repository's bg3rtx.ini, 0 in release
   std::lock_guard<std::mutex> lock(mu);
   if (!done.insert(hash).second) return;
   static const std::string dir = [] {
@@ -285,7 +285,9 @@ void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info) {
   uint32_t passes = g_passes.exchange(0, std::memory_order_relaxed);
   uint32_t draws = g_draws.exchange(0, std::memory_order_relaxed);
   if (!g_recording) {
-    bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
+    // The hotkey is a developer tool (dev=1 in the repository's bg3rtx.ini, 0 in
+    // the release profile): a player could otherwise fill the disk with traces.
+    bool down = cfg_int("dev", 0) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
                 (GetAsyncKeyState(VK_F10) & 0x8000);
     bool key = down && !g_key_was_down;
     g_key_was_down = down;

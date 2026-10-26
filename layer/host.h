@@ -39,6 +39,10 @@ void cfg_poll();                       // re-reads bg3rtx.ini when it changes
 int cfg_int(const char* key, int fallback);
 float cfg_float(const char* key, float fallback);
 
+// ---- frame cap (framecap.cpp; fps_cap) ----
+void framecap_on_present();            // sleep limiter when Streamline's Reflex limiter is not active
+bool sl_limits_frames();               // streamline.cpp: Reflex options are set (fps_cap goes there)
+
 // ---- per-instance / per-device state (layer.cpp) ----
 struct InstanceData {
   VkInstance instance = VK_NULL_HANDLE;

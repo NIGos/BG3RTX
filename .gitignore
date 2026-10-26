@@ -7,3 +7,7 @@ __pycache__/
 /external/
 /sl_logs/
 /.claude/worktrees/
+/bg3rtx_user.ini
+/bg3rtx_user.ini.tmp
+/bg3rtx_launcher.ini
+/dist/
