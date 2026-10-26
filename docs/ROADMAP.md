@@ -34,11 +34,19 @@ Order by value/effort. IDs refer to `QUALITY.md` (Qn) and `TRACK_D_RT.md` sectio
 3. **Soft sun shadows** (planned, refined in TRACK_D 8.5).
    - Cone of 0.00459 rad, the game's own sun disc. RR or SIGMA denoises.
    - Geometric-normal bias (Q10).
-4. **D-EN1 light-list snapshot.**
+4. **D-EN1 light-list snapshot.** Done for points and spots (2026-10-26, `bg3_lights.hlsli`;
+   TRACK_D 9.1/9.3). Validated as a fit (slope 1.07, never above the game), not yet to < 1%.
+   `b0._m0.y` = 0.5. Done for points and spots (2026-10-26, `bg3_lights.hlsli`;
+   TRACK_D 9.1/9.3). Validated as a fit (slope 1.07, never above the game), not yet to < 1%.
+   `b0._m0.y` = 0.5.
    - Bind set 1 b13/b23/b24/b25/b29/b39/b40/b41.
    - Write `bg3_lights.hlsli` with an exact re-evaluation, validated against b10/b11.
    - Log `b0._m0.y` (Q3).
-5. **D-LS ray-traced local-light shadows.**
+5. **D-LS ray-traced local-light shadows.** Done, on by default (TRACK_D 9): unshadowed
+   points/spots, 1 soft ray per light with RR, 0.345 ms; shadowed lights kept (options
+   to replace/min). Open: projector lights, a scene with shadow-casting lights. Done, on by default (TRACK_D 9): unshadowed
+   points/spots, 1 soft ray per light with RR, 0.345 ms; shadowed lights kept (options
+   to replace/min). Open: projector lights, a scene with shadow-casting lights.
    - v1: deterministic rays for shadowed lights.
    - Then unshadowed lights (to stop leaks).
    - v2: RIS 1-2 rays per pixel + RR.

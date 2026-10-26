@@ -76,6 +76,19 @@ struct Push {
   float sun_radius;    // sun angular radius (rad); 0 = hard shadows
   uint res_shift;      // GI resolution: 1 half res (own denoise), 0 full res, 1 spp, for RR
   uint2 pad3;
+  // D-LS ray-traced local-light shadows (rt_local_shadows.hlsl)
+  float ls_source_radius;  // light sphere radius for soft shadows (world units)
+  float ls_clear;          // rays stop this short of the light (its own fixture)
+  float ls_min_radius;     // unshadowed lights with a smaller range are left alone
+  uint ls_samples;         // 0 one ray per light, 1-2 RIS-chosen rays per pixel
+  uint ls_shadowed;        // lights with a game shadow map: 0 keep, 1 replace, 2 min
+  uint ls_debug;
+  uint ls_stats;
+  uint ls_pass;            // reserved
+  uint ls_soft;            // 1 sample the sphere (RR on), 0 hard
+  float ls_strength;
+  uint ls_has_mask;
+  uint pad4;
 };
 [[vk::push_constant]] Push pc;
 

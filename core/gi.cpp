@@ -25,9 +25,13 @@ namespace {
 
 struct Snapshot {
   Bg3Binding cam, vp, nrm, alb, mat, dep, ao, shadow, dif, spe;
+  // D-LS: the lighting's light list (set 1 b0, b13, b23, b24, b25, b39, b40, b41; set 0 b2).
+  Bg3Binding l_flags, l_scale, l_clusters, l_index, l_lights, l_consts, l_shadows, l_atlas, l_cam2;
+  bool ls_ok;                        // all of them are bound
   VkAccelerationStructureKHR tlas;   // the TLAS the ray-traced passes used (Track D)
   VkDescriptorSet alpha;             // the host's set 1 for them (alpha-tested geometry, phase 3)
   bool gi;                           // the GI passes ran (gi=1); otherwise only the sun shadow work
+  bool ls;                           // D-LS runs after the lighting
 };
 
 struct Pipe {
@@ -56,19 +60,28 @@ struct Push {
   float sun_radius;
   uint32_t res_shift;
   uint32_t pad3[2];
+  float ls_source_radius, ls_clear, ls_min_radius;
+  uint32_t ls_samples, ls_shadowed, ls_debug, ls_stats, ls_pass, ls_soft;
+  float ls_strength;
+  uint32_t ls_has_mask, pad4;
 };
-static_assert(sizeof(Push) == 144, "Push must match gi_common.hlsli");
+static_assert(sizeof(Push) == 192, "Push must match gi_common.hlsli");
 
 constexpr uint32_t kBindings = 18;
 // The ray-traced passes add the TLAS (18), their visibility image (19) and a
 // statistics buffer (20, rt_stats=1).
 constexpr uint32_t kRtBindings = kBindings + 3;
+// D-LS adds the game's light list: 21 set1/b0 flags (UBO), 22 b13 scale, 23 b23
+// clusters, 24 b24 index list, 25 b25 lights (SSBOs), 26 b39 constants (UBO),
+// 27 b40 shadow views (SSBO), 28 b41 shadow atlas (sampled), 29 set0/b2 (UBO).
+constexpr uint32_t kLsBindings = kRtBindings + 9;
 
 std::mutex g_mu;
 std::unordered_map<VkCommandBuffer, Snapshot> g_pending;   // pre done, post owed
-VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_HANDLE;
-VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE;
-Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt;
+VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_HANDLE, g_ls_set_layout = VK_NULL_HANDLE;
+VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
+Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
+bool g_ls_logged = false, g_ls_missing_logged = false;
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
 uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0, g_shift = 1;
 
@@ -239,6 +252,11 @@ bool snapshot(VkCommandBuffer cmd, Snapshot& s) {
   if (!q(1, 6, s.ao) || s.ao.format != VK_FORMAT_A2B10G10R10_UNORM_PACK32) return false;
   if (!q(1, 7, s.shadow) || s.shadow.format != VK_FORMAT_R8_UNORM) s.shadow = Bg3Binding{};
   if (!q(0, 1, s.cam) || !s.cam.buffer || !q(0, 4, s.vp) || !s.vp.buffer) return false;
+  // D-LS: the light list (optional; the pass is skipped without it).
+  auto qb = [&](uint32_t set, uint32_t b, Bg3Binding& o) { return q(set, b, o) && o.buffer && o.range > 0; };
+  s.ls_ok = qb(1, 0, s.l_flags) && qb(1, 13, s.l_scale) && qb(1, 23, s.l_clusters) && qb(1, 24, s.l_index) &&
+            qb(1, 25, s.l_lights) && qb(1, 39, s.l_consts) && qb(1, 40, s.l_shadows) && qb(0, 2, s.l_cam2) &&
+            q(1, 41, s.l_atlas) && s.l_atlas.view;
   return s.nrm.width == s.dif.width && s.dep.width == s.dif.width && s.ao.width == s.dif.width && s.dif.width > 0;
 }
 
@@ -279,6 +297,10 @@ bool ensure_images(uint32_t w, uint32_t h) {
 }
 
 VkDescriptorType binding_type(uint32_t i) {
+  if (i >= kRtBindings)
+    return (i == 21 || i == 26 || i == 29) ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+           : i == 28                       ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
+                                           : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   return i <= 1                ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
          : (i <= 5 || i == 17) ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
          : i == 18             ? VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR
@@ -289,7 +311,7 @@ VkDescriptorType binding_type(uint32_t i) {
 // `set1`: the host's set layout for the ray-traced passes (alpha-tested geometry).
 bool make_layout(uint32_t count, VkDescriptorSetLayout* set_layout, VkPipelineLayout* layout,
                  VkDescriptorSetLayout set1 = VK_NULL_HANDLE) {
-  VkDescriptorSetLayoutBinding b[kRtBindings];
+  VkDescriptorSetLayoutBinding b[kLsBindings];
   for (uint32_t i = 0; i < count; ++i) b[i] = {i, binding_type(i), 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
   VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   sci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
@@ -319,6 +341,14 @@ bool ensure_rt_layout() {
   VkDescriptorSet unused;
   if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
   return make_layout(kRtBindings, &g_rt_set_layout, &g_rt_layout, host_layout);
+}
+
+bool ensure_ls_layout() {
+  if (g_ls_layout) return true;
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
+  return make_layout(kLsBindings, &g_ls_set_layout, &g_ls_layout, host_layout);
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
@@ -377,8 +407,10 @@ void image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImag
 // Everything the passes need, bound through one push-descriptor layout.
 struct Bound {
   VkDescriptorBufferInfo cam, vp, stats;
+  VkDescriptorBufferInfo ls_buf[8];
+  VkDescriptorImageInfo ls_atlas;
   VkDescriptorImageInfo img[kRtBindings - 2];
-  VkWriteDescriptorSet w[kRtBindings];
+  VkWriteDescriptorSet w[kLsBindings];
   VkWriteDescriptorSetAccelerationStructureKHR as;
   VkAccelerationStructureKHR tlas;
   VkDescriptorSet alpha;
@@ -393,13 +425,14 @@ struct Bound {
 //   screen but hidden, off screen.
 // Each counter has 64 bins (spread atomics); the slot holds 16 x 64 uints.
 constexpr uint32_t kStatsRing = 8;
-constexpr VkDeviceSize kStatsSlot = 16 * 64 * 4;
+constexpr VkDeviceSize kStatsSlot = 48 * 64 * 4;   // [16..31] D-LS (rt_local_shadows.hlsl)
 VkBuffer g_stats_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
 uint32_t* g_stats_map = nullptr;
 uint32_t g_stats_slot = 0;
 uint64_t g_stats_frame[kStatsRing] = {};
-uint64_t g_stats_sum[16] = {};
+uint64_t g_stats_sum[48] = {};
+float g_ls_raw[4] = {};   // set1/b0 m0.x, m0.y, m0.w, b13[0] as last written
 uint32_t g_stats_n = 0;
 
 bool stats_init() {
@@ -420,8 +453,10 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
   uint32_t slot = uint32_t(now % kStatsRing);
   if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
     const uint32_t* c = g_stats_map + slot * (kStatsSlot / 4);
-    for (int i = 0; i < 16; ++i)
-      for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
+    for (int i = 0; i < 48; ++i)
+      if (i < 27 || i > 30)
+        for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
+    for (int i = 27; i <= 30; ++i) std::memcpy(&g_ls_raw[i - 27], &c[i * 64], 4);   // raw floats (latest)
     ++g_stats_n;
   }
   g_stats_slot = slot;
@@ -444,8 +479,50 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
               "%.1f%% on screen but hidden, %.1f%% off screen",
               g_stats_n, r / g_stats_n * 1e-6, 100.0 * t[9] / r, 100.0 * t[10] / h, 100.0 * t[11] / h, 100.0 * t[12] / h);
   }
+  if (t[16]) {
+    double px = double(t[16]), n = double(g_stats_n);
+    host->log("ls stats (%u frames): %.2fM px/frame; lights per pixel: listed %.2f, evaluated %.2f (with a game shadow "
+              "%.2f), traced %.2f, occluded %.2f; %.1f%% of px lit by a local light; light removed %.2f%% of the lit "
+              "luminance (mean %.4f); validation (px without projector lights): game %.4f, recomputed %.4f, mean |diff| %.5f (%.3f%% of game), recompute above game %.5f (%.3f%%; %.3f%% of px); "
+              "set1/b0 m0.x %g m0.y (AO on direct) %g m0.w %g, b13[0] %g; projector lights listed %.2f/px (not handled)",
+              g_stats_n, px / n * 1e-6, t[26] / px, t[17] / px, t[18] / px, t[19] / px, t[20] / px, 100.0 * t[25] / px,
+              t[21] ? 100.0 * t[24] / double(t[21]) : 0.0, t[24] / px / 256.0, t[21] / px / 256.0, t[22] / px / 256.0,
+              t[15] / px / 256.0, t[21] ? 100.0 * t[15] / double(t[21]) : 0.0, t[23] / px / 256.0, t[21] ? 100.0 * t[23] / double(t[21]) : 0.0, 100.0 * t[20] / px, g_ls_raw[0], g_ls_raw[1], g_ls_raw[2],
+              g_ls_raw[3], t[31] / px);
+  }
+  if (t[32] > 100) {
+    double N = double(t[32]), sm = t[33] * 1e-5, sg = t[34] * 1e-5, smm = t[35] * 1e-7, smg = t[36] * 1e-7;
+    double k = (N * smg - sm * sg) / (std::max)(N * smm - sm * sm, 1e-30);
+    host->log("ls validation fit (px without projector lights): game = %.4f x recomputed + %.5f over %.2fM lit px "
+              "(mean recomputed %.5f, game %.5f); game where no local light reaches %.5f (%.2fM px)",
+              k, (sg - k * sm) / N, N / g_stats_n * 1e-6, sm / N, sg / N, t[37] ? t[38] * 1e-5 / double(t[37]) : 0.0,
+              double(t[37]) / g_stats_n * 1e-6);
+  }
   std::memset(g_stats_sum, 0, sizeof g_stats_sum);
   g_stats_n = 0;
+}
+
+// The light list for the D-LS pass (bindings 21-29).
+void bind_ls(Bound& b, const Snapshot& s) {
+  const Bg3Binding* src[9] = {&s.l_flags, &s.l_scale, &s.l_clusters, &s.l_index, &s.l_lights,
+                              &s.l_consts, &s.l_shadows, nullptr, &s.l_cam2};
+  uint32_t k = 0;
+  for (uint32_t i = 0; i < 9; ++i) {
+    uint32_t bind = kRtBindings + i;
+    b.w[bind] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    b.w[bind].dstBinding = bind;
+    b.w[bind].descriptorCount = 1;
+    b.w[bind].descriptorType = binding_type(bind);
+    if (!src[i]) {
+      b.ls_atlas = {VK_NULL_HANDLE, s.l_atlas.view, s.l_atlas.layout};
+      b.w[bind].pImageInfo = &b.ls_atlas;
+      continue;
+    }
+    VkDeviceSize range = src[i]->range;
+    if (b.w[bind].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) range = (std::min)(range, VkDeviceSize(65536));
+    b.ls_buf[k] = {src[i]->buffer, src[i]->offset, range};
+    b.w[bind].pBufferInfo = &b.ls_buf[k++];
+  }
 }
 
 // Adds the TLAS and the visibility image (bindings 18, 19) for the RT passes.
@@ -541,6 +618,17 @@ Push make_push() {
   pc.gi_rt_radius = (std::max)(host->cfg_float("gi_rt_radius", 1.0f), 0.01f);
   pc.gi_rt_tol = host->cfg_float("gi_rt_depth_tol", 0.03f);
   pc.gi_rt_fallback = uint32_t(host->cfg_int("gi_rt_fallback", 0));
+  // D-LS. Soft shadows only with RR (a denoiser for the 1-spp penumbra).
+  pc.ls_source_radius = (std::max)(host->cfg_float("ls_source_radius", 0.05f), 0.0f);
+  pc.ls_clear = (std::max)(host->cfg_float("ls_clear", 0.2f), 0.0f);
+  pc.ls_min_radius = host->cfg_float("ls_min_radius", 0.0f);
+  pc.ls_samples = uint32_t((std::min)((std::max)(host->cfg_int("ls_samples", 0), 0), 2));
+  pc.ls_shadowed = uint32_t((std::min)((std::max)(host->cfg_int("ls_shadowed", 0), 0), 2));
+  pc.ls_debug = uint32_t(host->cfg_int("ls_debug", 0));
+  pc.ls_stats = host->cfg_int("ls_stats", 0) ? 1u : 0u;
+  int soft = host->cfg_int("ls_soft", -1);   // -1 follows rr
+  pc.ls_soft = (soft < 0 ? host->cfg_int("rr", 1) != 0 : soft != 0) ? 1u : 0u;
+  pc.ls_strength = host->cfg_float("ls_strength", 1.0f);
   return pc;
 }
 
@@ -557,13 +645,66 @@ void dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w
 constexpr VkPipelineStageFlags kCS = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags kAll = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
+void ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc) {
+  const VkDeviceFuncs& vk = *host->vk;
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls.pipeline);
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls_layout, 0, kLsBindings, b.w);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls_layout, 1, 1, &b.alpha, 0, nullptr);
+  vk.CmdPushConstants(cmd, g_ls_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+}
+
+// D-LS pass alone, 2 timestamps per frame, medians over 300 frames.
+VkQueryPool g_ls_queries = VK_NULL_HANDLE;
+uint32_t g_ls_slot = 0;
+bool g_ls_written[kRing] = {};
+std::vector<float> g_ls_ms;
+
+void ls_timestamp(VkCommandBuffer cmd, uint32_t index) {
+  if (!g_ls_queries) {
+    VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    qi.queryCount = kRing * 2;
+    if (host->vk->CreateQueryPool(host->device, &qi, nullptr, &g_ls_queries) != VK_SUCCESS) return;
+  }
+  uint32_t q = g_ls_slot * 2 + index;
+  host->vk->CmdResetQueryPool(cmd, g_ls_queries, q, 1);
+  host->vk->CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_ls_queries, q);
+  if (index == 1) {
+    g_ls_written[g_ls_slot] = true;
+    g_ls_slot = (g_ls_slot + 1) % kRing;
+  }
+}
+
+void ls_timing_collect() {
+  if (!g_ls_queries) return;
+  uint32_t old = (g_ls_slot + 1) % kRing;
+  if (!g_ls_written[old]) return;
+  uint64_t t[2];
+  if (host->vk->GetQueryPoolResults(host->device, g_ls_queries, old * 2, 2, sizeof t, t, sizeof(uint64_t),
+                                    VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
+    return;
+  g_ls_written[old] = false;
+  double ms = double(t[1] - t[0]) * g_ns_per_tick * 1e-6;
+  if (ms >= 0 && ms < 1000) g_ls_ms.push_back(float(ms));
+  if (g_ls_ms.size() < 300) return;
+  auto& v = g_ls_ms;
+  std::sort(v.begin(), v.end());
+  host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames; samples %d, soft %d, "
+            "shadowed mode %d, debug %d)",
+            v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], v.size(), host->cfg_int("ls_samples", 0),
+            host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 0), host->cfg_int("ls_debug", 0));
+  v.clear();
+}
+
 // The frame's TLAS if ray-traced shadows or AO are on and the host built one
 // this frame or the previous one: the game records the G-buffer of a frame
 // before presenting the previous one and the lighting after, so the build is
 // usually stamped one frame earlier. The GPU still runs it first (submission
 // order), and the handle is the same object every frame.
 VkAccelerationStructureKHR rt_tlas(VkDescriptorSet* alpha) {
-  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 0) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 0)))
+  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 0) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 0) &&
+                          !host->cfg_int("rt_local_shadows", 0)))
     return VK_NULL_HANDLE;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
   VkDescriptorSetLayout layout;
@@ -624,6 +765,14 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   const bool gi_rt = tlas && s.gi && host->cfg_int("gi_rt", 0);
   const bool rt_ao = tlas && s.gi && !gi_rt && host->cfg_int("rt_ao", 0);
   const bool rt_shadows = tlas && s.shadow.view && host->cfg_int("rt_shadows", 0);
+  // D-LS runs after the lighting (run_post); it needs the TLAS and the light list.
+  s.ls = tlas && host->cfg_int("rt_local_shadows", 0) && s.ls_ok && ensure_ls_layout() &&
+         refresh(g_ls, "gi/rt_local_shadows.hlsl", g_ls_layout);
+  if (tlas && host->cfg_int("rt_local_shadows", 0) && !s.ls_ok && !g_ls_missing_logged) {
+    g_ls_missing_logged = true;
+    host->log("ls: the lighting dispatch lacks part of the light list (set1 b0/b13/b23/b24/b25/b39/b40/b41, set0 b2); "
+              "rt_local_shadows skipped");
+  }
   if (tlas) {
     if (!g_rt_queries) {
       VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
@@ -633,7 +782,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     rt_timing_collect();
     pc.rt_stats = host->cfg_int("rt_stats", 0) ? 1u : 0u;
-    if (pc.rt_stats) stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0);
+    if (pc.rt_stats || pc.ls_stats) stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0);
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
@@ -692,6 +841,16 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     dispatch(cmd, g_contact, b, pc, g_w, g_h);
     image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
   }
+  // D-LS validation (ls_debug=4/5): the lighting then computes only direct local light.
+  if (s.ls && pc.ls_debug >= 4 && pc.ls_debug <= 6 && refresh(g_ls_prep, "gi/rt_local_shadows_prep.hlsl")) {
+    Push vp = pc;
+    vp.ls_has_mask = s.shadow.view ? 1u : 0u;
+    image_layout(cmd, s.ao.image, s.ao.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
+    if (s.shadow.view) image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
+    dispatch(cmd, g_ls_prep, b, vp, g_w, g_h);
+    image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kCS);
+    if (s.shadow.view) image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
+  }
   if (rt_started) {
     rt_timestamp(cmd, 1);
     g_rt_written[g_rt_slot] = true;
@@ -709,6 +868,29 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   // The tiled lighting just wrote diffuse/specular from compute.
   memory_barrier(cmd, kCS, kCS);
   timestamp(cmd, 2);
+  // D-LS first: the GI composite keeps diffuse + specular as next frame's bounce source.
+  if (s.ls && s.tlas && g_ls.pipeline) {
+    Bound lb;
+    bind_all(lb, s);
+    bind_rt(lb, s.tlas, s.alpha);
+    bind_ls(lb, s);
+    ls_timing_collect();
+    image_layout(cmd, s.ao.image, s.ao.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);   // read as storage (binding 12)
+    ls_timestamp(cmd, 0);
+    ls_dispatch(cmd, lb, pc);
+    ls_timestamp(cmd, 1);
+    image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kAll);
+    memory_barrier(cmd, kCS, kCS);
+    if (!g_ls_logged) {
+      g_ls_logged = true;
+      host->log("ls: first frame at %ux%u; light array %llu bytes (%llu lights), clusters %llu bytes, index %llu bytes, "
+                "shadow views %llu bytes (%llu), atlas %ux%u fmt %d layout %d",
+                g_w, g_h, (unsigned long long)s.l_lights.range, (unsigned long long)(s.l_lights.range / 80),
+                (unsigned long long)s.l_clusters.range, (unsigned long long)s.l_index.range,
+                (unsigned long long)s.l_shadows.range, (unsigned long long)(s.l_shadows.range / 96), s.l_atlas.width,
+                s.l_atlas.height, s.l_atlas.format, s.l_atlas.layout);
+    }
+  }
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
   if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 5) {
     memory_barrier(cmd, kCS, kCS);
@@ -761,7 +943,8 @@ void flush(VkCommandBuffer cmd) {
 
 void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
   // GI, or just the ray-traced sun shadows (rt_shadows works with gi=0).
-  if (!d->indirect || (!host->cfg_int("gi", 0) && !host->cfg_int("rt_shadows", 0))) return;
+  if (!d->indirect || (!host->cfg_int("gi", 0) && !host->cfg_int("rt_shadows", 0) && !host->cfg_int("rt_local_shadows", 0)))
+    return;
   describe(cmd, d);
   std::lock_guard<std::mutex> lock(g_mu);
   uint64_t f = host->frame_index();
@@ -812,7 +995,7 @@ void gi_release() {
   std::lock_guard<std::mutex> lock(g_mu);
   release_images();
   for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
-                  &g_trace_rt}) {
+                  &g_trace_rt, &g_ls, &g_ls_prep}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
     *p = Pipe{};
   }
@@ -822,6 +1005,13 @@ void gi_release() {
   g_rt_queries = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_tr_queries);
   g_tr_queries = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_ls_queries);
+  g_ls_queries = VK_NULL_HANDLE;
+  g_ls_ms.clear();
+  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_layout);
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_ls_set_layout);
+  g_ls_layout = VK_NULL_HANDLE;
+  g_ls_set_layout = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_stats_buf);
   host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_stats_mem);
   g_stats_buf = VK_NULL_HANDLE;

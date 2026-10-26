@@ -56,7 +56,9 @@ Priority: **P1** do next (correctness or a large cheap gain), **P2** soon, **P3*
   (estimated 5-15% of ambient in creases), and gives a consistent energy balance
   with the bounce.
 
-**Q3 (P1, verify). The game multiplies *direct* light by AO.**
+**Q3 (P1, verify). The game multiplies *direct* light by AO.** Answered by D-LS
+(TRACK_D 9.1): `set1/b0 _m0.y = 0.5` in gameplay, so the AO fold darkens direct light
+by half its occlusion. Kept as the game's art intent.
 - `f469db78` line 1451/1452: local-light and sun diffuse are × `mix(1, AO, b0._m0.y)`,
   and specular × `mix(1, specOcc, b0._m0.y)`.
 - If `_m0.y > 0`, our AO fold also darkens sun-lit and torch-lit surfaces that
