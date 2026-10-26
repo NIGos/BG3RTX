@@ -41,6 +41,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/savefilter.cpp
   layer/background.cpp
   layer/assetdb.cpp
+  layer/sebridge.cpp
   layer/hookguard.cpp
   layer/framecap.cpp
   layer/layer.def)
@@ -117,13 +118,13 @@ add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
 # Asset database loader (layer/assetdb.cpp) against data/assetdb; skips when not built.
-add_executable(assetdb_test tests/assetdb_test.cpp layer/assetdb.cpp)
+add_executable(assetdb_test tests/assetdb_test.cpp layer/assetdb.cpp layer/sebridge.cpp)
 target_include_directories(assetdb_test PRIVATE ${VULKAN_SDK}/Include)
 target_compile_definitions(assetdb_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME assetdb_test COMMAND assetdb_test)
 
 # Hot-reloadable core: rebuild while the game runs.
-add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp)
+add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # A fixed PDB name would stay locked by a debugger attached to the old copy.
 set_target_properties(bg3rtx_core PROPERTIES PDB_NAME "bg3rtx_core_$<CONFIG>")

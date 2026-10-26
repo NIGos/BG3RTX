@@ -14,12 +14,14 @@
 //      array votes for the database levels that have a light within 5 cm of it, so a level
 //      change after a load (or a wrong hint) is picked up.
 #include "assetdb.h"
+#include "sebridge.h"
 
 #include <shellapi.h>  // CommandLineToArgvW
 #pragma comment(lib, "shell32.lib")
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -617,10 +619,219 @@ const char* api_string(uint32_t ref) {
   return d ? d->str(ref) : "";
 }
 
+// ---- runtime lights (API v2): the Script Extender bridge merged with the database ----
+
+// Emitter radius for soft shadows. BG3 authors no emitter size (no field in light
+// templates, placements or the runtime LightComponent), so it comes from the fixture
+// class, read from the template name (docs/SE_BRIDGE.md, "Source radius"). The first
+// matching keyword wins; `fallback` (ls_source_radius) otherwise.
+struct RadiusClass {
+  const char* key;
+  float r;
+};
+constexpr RadiusClass kRadiusClasses[] = {
+    {"candle", 0.015f},     {"darkvision", 0.0f},   {"player", 0.0f},     {"torch", 0.05f},
+    {"sconce", 0.05f},      {"glasshouse", 0.10f},  {"lantern", 0.08f},   {"lamp", 0.08f},
+    {"chandelier", 0.30f},  {"brazier", 0.20f},     {"campfire", 0.35f},  {"bonfire", 0.50f},
+    {"fireplace", 0.35f},   {"fire", 0.25f},        {"forge", 0.40f},     {"lava", 0.50f},
+    {"crystal", 0.08f},     {"window", 0.60f},      {"fill", 0.60f},      {"ambient", 0.80f},
+    {"bounce", 0.80f},      {"exterior", 0.60f},    {"sky", 0.80f},
+};
+
+float source_radius_for(const char* name, uint32_t flags, float fallback) {
+  if (flags & BG3_RTL_FILL) return 0.60f;
+  if (!name || !*name) return fallback;
+  char low[192];
+  size_t n = 0;
+  for (; name[n] && n + 1 < sizeof low; ++n) low[n] = char(tolower((unsigned char)name[n]));
+  low[n] = 0;
+  for (const RadiusClass& c : kRadiusClasses)
+    if (strstr(low, c.key)) return c.r > 0.0f ? c.r : fallback;
+  return fallback;
+}
+
+uint32_t db_flags_to_rtl(uint32_t f) {
+  uint32_t r = BG3_RTL_FROM_DB;
+  if (f & BG3_DB_LIGHT_ENABLED) r |= BG3_RTL_ENABLED;
+  if (f & BG3_DB_LIGHT_USE_TEMPERATURE) r |= BG3_RTL_USE_TEMPERATURE;
+  if (f & BG3_DB_LIGHT_FLICKER) r |= BG3_RTL_FLICKER;
+  if (f & BG3_DB_LIGHT_MOVING) r |= BG3_RTL_MOVING;
+  if (f & BG3_DB_LIGHT_SHADOW) r |= BG3_RTL_SHADOW;
+  if (f & BG3_DB_LIGHT_CAST_SHADOW) r |= BG3_RTL_CAST_SHADOW;
+  if (f & BG3_DB_LIGHT_VOLUMETRIC_SHADOW) r |= BG3_RTL_VOLUMETRIC_SHADOW;
+  return r;
+}
+
+// The bridge's level, when the database has it, becomes the current level.
+void level_from_se(Db* d, const SeSnapshot& s) {
+  if (!d || !*s.level) return;
+  {
+    std::shared_lock<std::shared_mutex> lock(g_level_mu);
+    if (g_level >= 0 && strcmp(d->str(d->levels[g_level].name), s.level) == 0) return;
+  }
+  auto it = d->level_by_name.find(s.level);
+  if (it != d->level_by_name.end()) set_level(it->second, "se");
+}
+
+uint32_t api_runtime_lights(const float pos[3], float radius, Bg3RtLight* out, uint32_t max) {
+  Db* d = db();
+  auto se = se_snapshot();
+  const float fallback = (std::max)(cfg_float("ls_source_radius", 0.05f), 0.0f);
+  std::vector<std::pair<float, Bg3RtLight>> hits;
+  std::vector<uint32_t> cand;
+  std::vector<uint8_t> taken;   // database lights the bridge reported
+  if (se && d) level_from_se(d, *se);
+  if (d) {
+    cand.resize(4096);
+    uint32_t n = api_lights_near(pos, radius, cand.data(), uint32_t(cand.size()));
+    cand.resize((std::min)(n, uint32_t(cand.size())));
+    taken.assign(cand.size(), 0);
+  }
+  if (se) {
+    const float r2 = radius * radius;
+    for (const SeLight& s : se->lights) {
+      float q = dist2(pos, s.pos);
+      if (q > r2) continue;
+      Bg3RtLight L{};
+      memcpy(L.pos, s.pos, sizeof L.pos);
+      L.radius = s.radius;
+      memcpy(L.color, s.color, sizeof L.color);
+      L.intensity = s.intensity;
+      L.kelvin = s.kelvin;
+      L.flicker_speed = s.flicker_speed;
+      L.flicker_amount = s.flicker_amount;
+      L.move_speed = s.move_speed;
+      L.move_amount = s.move_amount;
+      L.flags = (s.flags & 0xFFFFu) | BG3_RTL_FROM_SE;
+      L.type = s.type;
+      L.owner = s.owner;
+      L.channel = s.channel;
+      L.db_index = UINT32_MAX;
+      L.name = s.name;
+      // The database's record of a placed light: same position (5 cm + its jitter).
+      if (s.owner == BG3_RTL_OWNER_PLACED) {
+        float best = 0.05f + s.move_amount;
+        best *= best;
+        for (size_t k = 0; k < cand.size(); ++k) {
+          float e = dist2(s.pos, d->lights[cand[k]].pos);
+          if (e <= best) {
+            best = e;
+            L.db_index = cand[k];
+          }
+        }
+        if (L.db_index != UINT32_MAX) {
+          L.flags |= BG3_RTL_FROM_DB;
+          for (size_t k = 0; k < cand.size(); ++k)
+            if (cand[k] == L.db_index) taken[k] = 1;
+          if (!*L.name) L.name = d->str(d->lights[L.db_index].name);
+        }
+      }
+      L.source_radius = source_radius_for(L.name, L.flags, fallback);
+      hits.push_back({q, L});
+    }
+  }
+  if (d) {
+    for (size_t k = 0; k < cand.size(); ++k) {
+      if (taken[k]) continue;
+      const Bg3DbLight& D = d->lights[cand[k]];
+      // Within the bridge's range a placed light it did not report is not loaded now
+      // (a sub-level the story has not streamed in): leave it out.
+      if (se && dist2(D.pos, se->host) < 55.0f * 55.0f) continue;
+      Bg3RtLight L{};
+      memcpy(L.pos, D.pos, sizeof L.pos);
+      L.radius = D.range;
+      memcpy(L.color, D.color, sizeof L.color);
+      L.intensity = D.intensity;
+      L.kelvin = D.kelvin;
+      L.flicker_speed = D.flicker_speed;
+      L.flicker_amount = D.flicker_amount;
+      L.move_speed = D.move_speed;
+      L.move_amount = D.move_amount;
+      L.flags = db_flags_to_rtl(D.flags);
+      L.type = D.type;
+      L.owner = BG3_RTL_OWNER_PLACED;
+      L.channel = D.channel;
+      L.db_index = cand[k];
+      L.name = d->str(D.name);
+      L.source_radius = source_radius_for(L.name, L.flags, fallback);
+      hits.push_back({dist2(pos, D.pos), L});
+    }
+  }
+  std::sort(hits.begin(), hits.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+  for (uint32_t k = 0; k < max && k < hits.size(); ++k) out[k] = hits[k].second;
+  return uint32_t(hits.size());
+}
+
+bool api_se_info(Bg3SeInfo* out) {
+  Bg3SeInfo r{};
+  auto latest = se_latest();
+  auto s = se_snapshot();
+  r.exports_read = se_exports_read();
+  r.level = r.region = "";
+  if (latest) {
+    r.seq = latest->seq;
+    r.age_s = float(se_age_s(*latest));
+    memcpy(r.host, latest->host, sizeof r.host);
+    r.level = latest->level;
+    r.region = latest->region;
+    r.lights_all = latest->all;
+    r.lights_out = uint32_t(latest->lights.size());
+    r.lua_avg_us = latest->avg_us;
+    r.lua_max_us = latest->max_us;
+    r.lua_classify_us = latest->classify_us;
+  }
+  r.active = s ? 1u : 0u;
+  if (out) *out = r;
+  return s != nullptr;
+}
+
+bool api_se_environment(const float pos[3], const char** atmosphere, const char** lighting) {
+  const char* atm = "";
+  const char* lit = "";
+  Db* d = db();
+  auto s = se_snapshot();
+  if (d) {
+    std::shared_lock<std::shared_mutex> lock(g_level_mu);
+    if (g_level >= 0) {
+      const RLevel& l = d->levels[g_level];
+      int best[2] = {-1, -1};
+      float vol[2] = {1e30f, 1e30f};
+      for (uint32_t i = l.first_trig; i < l.first_trig + l.n_trig; ++i) {
+        const RTrig& t = d->trigs[i];
+        int k = t.kind == KIND_ATMOSPHERE ? 0 : t.kind == KIND_LIGHTING ? 1 : -1;
+        if (k < 0 || !inside_trigger(*d, t, pos)) continue;
+        float v = t.shape == 2 ? t.extents[0] * t.extents[1] * t.extents[2] : t.height + t.radius;
+        if (v < vol[k]) {
+          vol[k] = v;
+          best[k] = int(i);
+        }
+      }
+      for (int k = 0; k < 2; ++k) {
+        const char*& o = k == 0 ? atm : lit;
+        uint32_t preset = k == 0 ? l.atmosphere : l.lighting;
+        if (best[k] >= 0) {
+          const RTrig& t = d->trigs[best[k]];
+          if (t.ref_count) preset = d->tref[t.first_ref];
+          if (s) {
+            const char* name = d->str(t.name);
+            for (const SeTrigger& st : s->triggers)
+              if (st.kind == (k == 0 ? 'A' : 'L') && strcmp(st.name, name) == 0 && *st.current) o = st.current;
+          }
+        }
+        if (!*o && preset < d->presets.n) o = d->str(d->presets[preset].id);
+      }
+    }
+  }
+  if (atmosphere) *atmosphere = atm;
+  if (lighting) *lighting = lit;
+  return *atm || *lit;
+}
+
 const Bg3AssetDbApi g_api = {
     BG3RTX_ASSETDB_API_VERSION, uint32_t(sizeof(Bg3AssetDbApi)), &api_available, &api_current_level,
     &api_lights_near, &api_lights_in_box, &api_light, &api_material, &api_engine_shader, &api_room_at, &api_preset,
-    &api_probes_near, &api_probe, &api_probe_capture, &api_string,
+    &api_probes_near, &api_probe, &api_probe_capture, &api_string, &api_runtime_lights, &api_se_info,
+    &api_se_environment,
 };
 
 // ---- level from the save (LSPK v18 file list + SaveInfo.json) ----
@@ -1158,6 +1369,51 @@ void join_check(Db& d, const Pending& p) {
     csv += line;
   }
   std::sort(dists.begin(), dists.end());
+  // Coverage with the Script Extender bridge (docs/SE_BRIDGE.md): the froxel-listed point
+  // and spot lights that the bridge's export holds, by position (5 cm + jitter for lights
+  // that stay put; 3 m for character and item lights, which move between the 4 Hz
+  // exports) and radius (2%).
+  if (auto se = se_snapshot()) {
+    uint32_t c_db = 0, c_se = 0, c_any = 0, by_owner[5] = {}, se_dist_n = 0;
+    float se_dist_max = 0;
+    std::string miss;
+    for (const RtLight& L : rt) {
+      if (!L.referenced) continue;
+      const bool in_db = nearest(d, g_grid, L.w, tol, nullptr, [&](uint32_t) { return true; }) != kNone;
+      const float r = 1.0f / L.inv_r;
+      int best = -1;
+      float bq = 1e30f;
+      for (size_t k = 0; k < se->lights.size(); ++k) {
+        const SeLight& s = se->lights[k];
+        if (s.type == 2 || std::fabs(s.radius - r) > 0.02f * std::max(r, 0.1f)) continue;
+        const bool moves = s.owner == BG3_RTL_OWNER_CHARACTER || s.owner == BG3_RTL_OWNER_ITEM;
+        const float t = moves ? 3.0f : tol + s.move_amount;
+        float q = dist2(L.w, s.pos);
+        if (q <= t * t && q < bq) bq = q, best = int(k);
+      }
+      c_db += in_db;
+      if (best >= 0) {
+        ++c_se;
+        ++by_owner[std::min<uint32_t>(se->lights[best].owner, 4u)];
+        se_dist_max = std::max(se_dist_max, std::sqrt(bq));
+        ++se_dist_n;
+      } else if (!in_db && miss.size() < 400) {
+        char m[96];
+        snprintf(m, sizeof m, " (%.2f %.2f %.2f r %.1f)", L.w[0], L.w[1], L.w[2], r);
+        miss += m;
+      }
+      c_any += in_db || best >= 0;
+    }
+    const uint32_t n = n_ref_total(ref);
+    log("[se] join: %u froxel-listed point/spot lights: database %u (%.0f%%), bridge %u (%.0f%%), bridge + database %u "
+        "(%.0f%%); bridge matches by owner: placed %u, item %u, scenery %u, character %u, unknown %u; max distance "
+        "%.3f m; export %u, %.2f s old, %zu lights; not covered:%s",
+        n, c_db, n ? 100.0 * c_db / n : 0.0, c_se, n ? 100.0 * c_se / n : 0.0, c_any, n ? 100.0 * c_any / n : 0.0,
+        by_owner[1], by_owner[2], by_owner[3], by_owner[4], by_owner[0], se_dist_max, se->seq, se_age_s(*se),
+        se->lights.size(), miss.empty() ? " none" : miss.c_str());
+  } else {
+    log("[se] join: no fresh bridge export (database only)");
+  }
   // Projector (box) lights, b29: box space = M * (p - cam); try three anchor points of
   // the unit box for the authored position: the near-face centre, the centre, the far face.
   const float anchors[3][3] = {{0.5f, 0.5f, 0.0f}, {0.5f, 0.5f, 0.5f}, {0.5f, 0.5f, 1.0f}};
@@ -1264,6 +1520,12 @@ void join_check(Db& d, const Pending& p) {
 }  // namespace
 
 void assetdb_on_present(uint64_t frame) {
+  // The Script Extender bridge reader runs from the first present (its own thread).
+  static bool se_started = false;
+  if (!se_started) {
+    se_started = true;
+    se_latest();
+  }
   // Draw counting covers exactly one frame: the one the capture was recorded in.
   int join = cfg_int("assetdb_join", 0);
   if (!join) return;

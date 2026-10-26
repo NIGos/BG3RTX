@@ -1,0 +1,5 @@
+{
+    "RequiredVersion": 33,
+    "ModTable": "BG3RTX_Bridge",
+    "FeatureFlags": ["Lua"]
+}

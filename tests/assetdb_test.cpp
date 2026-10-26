@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../layer/assetdb.h"
+#include "../layer/sebridge.h"
 
 namespace bg3 {
 void log(const char* fmt, ...) {
@@ -129,6 +130,71 @@ int main() {
   if (np) {
     const Bg3DbProbe* p = a->probe(pr[0]);
     CHECK(p && p->capture_count > 0 && a->probe_capture(p->first_capture));
+  }
+
+  // ---- Script Extender bridge (API v2, layer/sebridge.cpp) ----
+  {
+    bg3::SeSnapshot s;
+    CHECK(!bg3::se_parse_lights("BG3RTX_SE 1\nseq 1 ms 0 level X host 0 0 0\nL 1 1 0 0 0 0 1 1 1 1 1 0 1 1 0 0 0 0 a\n", s));
+    CHECK(bg3::se_parse_lights("BG3RTX_SE 1\nseq 7 ms 0 level X host 1 2 3 avg_us 5\nL 9 2 1 1 2 3 4 1 1 1 10 0 9 191 4 0 0 0 Lamp\nEND\n", s));
+    CHECK(s.seq == 7 && s.lights.size() == 1 && s.lights[0].owner == 2 && s.lights[0].type == 1 &&
+          s.lights[0].flags == 9 && s.lights[0].channel == 191 && std::string(s.lights[0].name) == "Lamp" &&
+          s.host[2] == 3.0f && s.avg_us == 5.0f);
+    bg3::SeSnapshot w;
+    CHECK(bg3::se_parse_world("BG3RTX_SE_WORLD 1\nlevel L region R\nT A ATM_X 1234 5678\nEND\n", w));
+    CHECK(w.triggers.size() == 1 && w.triggers[0].kind == 'A' && std::string(w.triggers[0].current) == "1234" &&
+          std::string(w.region) == "R");
+
+    // Without an export: the database's placed lights alone.
+    Bg3RtLight rl[256];
+    Bg3SeInfo info;
+    CHECK(!a->se_info(&info) && !info.active);
+    uint32_t n_db = a->runtime_lights(cam, 40.0f, rl, 256);
+    uint32_t idx[256];
+    CHECK(n_db == a->lights_near(cam, 40.0f, idx, 256) && n_db > 0);
+    CHECK(n_db && (rl[0].flags & BG3_RTL_FROM_DB) && rl[0].owner == BG3_RTL_OWNER_PLACED && rl[0].db_index == idx[0]);
+
+    // With an export (written after the process started, so it counts as fresh): a
+    // placed light at a database light's position, an item lamp, the character light.
+    const Bg3DbLight* D = a->light(idx[0]);
+    char dir[MAX_PATH];
+    GetTempPathA(MAX_PATH, dir);
+    std::string se_dir = std::string(dir) + "bg3rtx_se_test";
+    CreateDirectoryA(se_dir.c_str(), nullptr);
+    char text[2048];
+    snprintf(text, sizeof text,
+             "BG3RTX_SE 1\nseq 3 ms 0 level CTY_Main_A host %.3f %.3f %.3f avg_us 1 max_us 2 all 3 out 3\n"
+             "L 11 1 0 %.4f %.4f %.4f %.3f 1 1 1 1000 0 1 191 0 0 0 0 %s\n"
+             "L 12 2 0 %.4f %.4f %.4f 6 1 1 1 30000 0 9 191 4 0 0 0 LightSources_GEN_Glasshouse_Lamp_A\n"
+             "L 13 4 1 %.4f %.4f %.4f 24 1 1 1 4000 0 257 129 0 0 0 0 Light_Player_Darkvision_Spot_Drow\nEND\n",
+             cam[0], cam[1], cam[2], D->pos[0], D->pos[1], D->pos[2], D->range, a->string(D->name), cam[0] + 1,
+             cam[1], cam[2], cam[0], cam[1] + 2, cam[2]);
+    FILE* f = fopen((se_dir + "\\lights.txt").c_str(), "wb");
+    fwrite(text, 1, strlen(text), f);
+    fclose(f);
+    SetEnvironmentVariableA("BG3RTX_SE_DIR", se_dir.c_str());
+    bg3::se_stop();   // restart the reader on the test folder
+    bg3::se_latest();
+    for (int i = 0; i < 50 && !a->se_info(&info); ++i) Sleep(50);
+    CHECK(info.active && info.seq == 3 && info.lights_out == 3);
+    uint32_t n_se = a->runtime_lights(cam, 40.0f, rl, 256);
+    CHECK(n_se == 3);   // database lights in the bridge's range that it did not report are not loaded
+    int placed = -1, item = -1, chr = -1;
+    for (uint32_t i = 0; i < n_se && i < 256; ++i) {
+      if (rl[i].owner == BG3_RTL_OWNER_PLACED) placed = int(i);
+      if (rl[i].owner == BG3_RTL_OWNER_ITEM) item = int(i);
+      if (rl[i].owner == BG3_RTL_OWNER_CHARACTER) chr = int(i);
+    }
+    CHECK(placed >= 0 && (rl[placed].flags & BG3_RTL_FROM_SE) && (rl[placed].flags & BG3_RTL_FROM_DB) &&
+          rl[placed].db_index == idx[0]);
+    CHECK(item >= 0 && std::fabs(rl[item].source_radius - 0.10f) < 1e-6f && (rl[item].flags & BG3_RTL_FLICKER));
+    CHECK(chr >= 0 && (rl[chr].flags & BG3_RTL_PLAYER_LIGHT) && rl[chr].type == 1);
+    const char *atm = nullptr, *lit = nullptr;
+    a->se_environment(cam, &atm, &lit);
+    printf("se: %u runtime lights; environment at the camera: atmosphere '%s', lighting '%s'\n", n_se, atm, lit);
+    bg3::se_stop();
+    DeleteFileA((se_dir + "\\lights.txt").c_str());
+    RemoveDirectoryA(se_dir.c_str());
   }
   printf("%s (%d failures)\n", g_fail ? "FAILED" : "OK", g_fail);
   return g_fail ? 1 : 0;
