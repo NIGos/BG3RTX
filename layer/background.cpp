@@ -8,11 +8,16 @@
 //   - GetForegroundWindow returns the game's own window;
 //   - SDL_RaiseWindow / SetForegroundWindow / SDL_MinimizeWindow do nothing,
 //     so the game never steals the foreground from the user.
+// Streamline and DLSS-G (sl.common, sl.pcl, nvngx_dlssg) also check
+// GetForegroundWindow and stop generating frames when the game is not in
+// front; their imports are patched as they load (a watcher thread).
 // Run borderless (auto-run sets Fullscreen=0, FakeFullscreenEnabled=1) so the
 // desktop mode never changes. Key input for -Move is posted to the window.
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
+#include <set>
+#include <psapi.h>
 #include "host.h"
 
 namespace {
@@ -78,7 +83,7 @@ HWND WINAPI hk_gfw() {
   return h ? h : real_gfw();
 }
 
-void patch(HMODULE mod) {
+void patch(HMODULE mod, bool foreground_only = false) {
   auto base = reinterpret_cast<uint8_t*>(mod);
   auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
   auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
@@ -92,7 +97,11 @@ void patch(HMODULE mod) {
       if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal)) continue;
       auto n = reinterpret_cast<const char*>(reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(base + names->u1.AddressOfData)->Name);
       void* hook = nullptr;
-      if (!strcmp(n, "SDL_PollEvent")) { real_poll = reinterpret_cast<PollEvent>(iat->u1.Function); hook = reinterpret_cast<void*>(&hk_poll); }
+      if (foreground_only) {
+        if (strcmp(n, "GetForegroundWindow")) continue;
+        if (!real_gfw) real_gfw = reinterpret_cast<decltype(real_gfw)>(iat->u1.Function);
+        hook = reinterpret_cast<void*>(&hk_gfw);
+      } else if (!strcmp(n, "SDL_PollEvent")) { real_poll = reinterpret_cast<PollEvent>(iat->u1.Function); hook = reinterpret_cast<void*>(&hk_poll); }
       else if (!strcmp(n, "SDL_GetWindowFlags")) { real_flags = reinterpret_cast<GetFlags>(iat->u1.Function); hook = reinterpret_cast<void*>(&hk_flags); }
       else if (!strcmp(n, "SDL_RaiseWindow") || !strcmp(n, "SDL_MinimizeWindow")) hook = reinterpret_cast<void*>(&hk_nop_win);
       else if (!strcmp(n, "SetForegroundWindow")) hook = reinterpret_cast<void*>(&hk_sfw);
@@ -111,6 +120,24 @@ struct Init {
     char v[8];
     if (!GetEnvironmentVariableA("BG3RTX_BACKGROUND", v, sizeof v) || v[0] != '1') return;
     patch(GetModuleHandleW(nullptr));
+    CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
+      std::set<HMODULE> done;
+      for (;;) {
+        HMODULE mods[1024];
+        DWORD need = 0;
+        if (K32EnumProcessModules(GetCurrentProcess(), mods, sizeof mods, &need)) {
+          for (DWORD i = 0; i < need / sizeof(HMODULE); ++i) {
+            char nm[MAX_PATH] = {};
+            K32GetModuleBaseNameA(GetCurrentProcess(), mods[i], nm, MAX_PATH);
+            if ((_strnicmp(nm, "sl.", 3) && _strnicmp(nm, "nvngx_dlssg", 11)) || done.count(mods[i])) continue;
+            done.insert(mods[i]);
+            patch(mods[i], true);
+            bg3::log("[bg] focus check patched in %s", nm);
+          }
+        }
+        Sleep(2000);
+      }
+    }, nullptr, 0, nullptr);
   }
 } g_init;
 
