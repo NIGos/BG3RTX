@@ -54,6 +54,19 @@ minutes, with more than 7 minutes of frame generation in the last one.
 | `sl_init_at` | auto | 0 = `slSetVulkanInfo` at the first `vkGetDeviceQueue`, 1 = at the first swapchain. The default is 0 when the NGX instance is shared |
 | `sl_veh` | 1 | log fatal exceptions (module+offset and stack) before the game's crash handler exits silently |
 
+## Verified with the display on (2026-10-26)
+All runs used real presentation and HDR10 output (swapchain RGB10A2), with RR, RT shadows, the alpha-tested BVH and ray-traced GI on.
+
+| mode | rendered fps | displayed fps | ratio | `numFramesActuallyPresented` |
+|---|---|---|---|---|
+| `fg=2` | about 103 | about 206 | 2.00 | 2 |
+| `fg=4` | about 66 | about 266 | 4.00 | 4 |
+
+- **Motion.** `auto-run -Move` pans the camera out over the docks. Four consecutive presented frames, rendered and generated alternating, are in `img/fg_pan_consecutive_frames.png`. The pier moves smoothly with no doubling or trails, which confirms the motion-vector sign and the camera matrices.
+- **UI.** The hotbar stays sharp and steady in every presented frame during the pan. There is no HUD ghosting.
+- **Stability.** 4-minute runs at 2x and 4x: status 0x0, no API errors.
+- `fg=2` is now the default in `bg3rtx.ini` for play. Headless test runs force `fg=0`.
+
 ## How it is wired
 
 ```

@@ -73,7 +73,7 @@ if ($ensure) { py -3 -I $ensure }
 # This run's settings: the repository's bg3rtx.ini plus auto-trace overrides.
 $ini = Join-Path $caps "auto.ini"
 $lines = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @("auto_trace=1", "auto_traces=$Traces") +
-         @(if (-not $RealPresent) { "headless=1" }) + $Set
+         @(if (-not $RealPresent) { "headless=1", "fg=0" }) + $Set   # headless test runs: no frame generation unless asked
 $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
 Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
