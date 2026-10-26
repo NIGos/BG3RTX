@@ -119,7 +119,13 @@ AlphaRead vt_alpha(uint a, float2 uv, float g, uint tex, uint cache, uint col) {
   float mip = floor(min(max(0.5 * l - aniso - 0.5, 0.0), P1.x) + 0.5);
   float2 dims = float2(vt_t(a, 0, 0, 3), vt_t(a, 0, 0, 3) * vt_t(a, 0, 1, 3));
   float2 ip = floor(u * dims * pow(0.5, mip));
-  uint e = asuint(gAlphaTex[NonUniformResourceIndex(tex)].Load(int3(int2(ip), int(mip))).x);
+  // Stay inside the indirection texture (constants from another tile set, or a
+  // mip it does not have, would fetch out of bounds).
+  uint iw, ih, ilevels;
+  gAlphaTex[NonUniformResourceIndex(tex)].GetDimensions(0, iw, ih, ilevels);
+  mip = min(mip, float(max(ilevels, 1u) - 1u));
+  int2 ipi = clamp(int2(ip), int2(0, 0), int2(max(iw >> uint(mip), 1u) - 1u, max(ih >> uint(mip), 1u) - 1u));
+  uint e = asuint(gAlphaTex[NonUniformResourceIndex(tex)].Load(int3(ipi, int(mip))).x);
   float sc = pow(2.0, float(e & 15u));
   // Pages across the tile set at the level the entry points to vs at mip 0.
   float used = max(log2(max(dims.x, 1.0)) - float(e & 15u), 0.0);
@@ -265,7 +271,12 @@ bool alpha_pass(uint prim, float2 bary, float footprint) {
     alpha_stat(1, true, prim);
     return alpha_unknown(alpha_flags());
   }
-  uint vb = prim * 72;
+  uint vb = prim * 72, sbytes;
+  gAlphaSoup.GetDimensions(sbytes);
+  if (vb + 72u > sbytes) {
+    alpha_stat(3, true, prim);
+    return alpha_unknown(alpha_flags());
+  }
   float3 p0 = asfloat(gAlphaSoup.Load3(vb)), p1 = asfloat(gAlphaSoup.Load3(vb + 24)), p2 = asfloat(gAlphaSoup.Load3(vb + 48));
   float2 u0 = asfloat(gAlphaSoup.Load2(vb + 16)), u1 = asfloat(gAlphaSoup.Load2(vb + 40)), u2 = asfloat(gAlphaSoup.Load2(vb + 64));
   return alpha_eval(a, p0, p1, p2, u0, u1, u2, bary, footprint, prim);
@@ -283,6 +294,16 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
       alpha_stat(2, !norec && (ii.meta & 0xffu) < 24u, prim);
       alpha_stat(3, !norec && (ii.meta & 0xffu) >= 24u, prim);
     }
+    return alpha_unknown(alpha_flags());
+  }
+  // Never read past the vertex buffer or the records (an InstInfo of another build
+  // during a capture change): no robust buffer access is guaranteed.
+  uint vbytes, rbytes;
+  if ((ii.meta & kInfoPool) != 0u) gMeshPool.GetDimensions(vbytes);
+  else gOpaqueSoup.GetDimensions(vbytes);
+  gAlphaRec.GetDimensions(rbytes);
+  if (ii.base + (prim * 3u + 3u) * (ii.meta & 0xffu) > vbytes || ii.rec + kRecBytes > rbytes) {
+    alpha_stat(3, true, prim);
     return alpha_unknown(alpha_flags());
   }
   float3 p0 = inst_pos(ii, prim, 0), p1 = inst_pos(ii, prim, 1), p2 = inst_pos(ii, prim, 2);
