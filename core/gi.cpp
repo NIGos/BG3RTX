@@ -218,9 +218,12 @@ void trace_timing_collect() {
     auto& v = g_tr_ms[k];
     if (v.size() < 300) continue;
     std::sort(v.begin(), v.end());
-    host->log("gi: trace pass (%s, %u rays/sample, half res) GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames)",
-              k ? "ray-traced, gi_rt=1" : "screen-space", uint32_t(host->cfg_int("gi_rays", 2)), v[v.size() / 2],
-              v[v.size() / 10], v[v.size() * 9 / 10], v.size());
+    bool rr_mode = g_shift == 0;
+    host->log("gi: trace pass (%s, %u rays/sample, %s) GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames)",
+              k ? "ray-traced, gi_rt=1" : "screen-space",
+              uint32_t(rr_mode ? host->cfg_int("gi_rr_rays", 1) : host->cfg_int("gi_rays", 2)),
+              rr_mode ? "full res, RR denoises" : "half res, own accumulation", v[v.size() / 2], v[v.size() / 10],
+              v[v.size() * 9 / 10], v.size());
     v.clear();
   }
 }
