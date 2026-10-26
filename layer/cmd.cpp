@@ -79,6 +79,7 @@ static void pass_ready(VkCommandBuffer cmd, CmdState* s) {
   for (int i = 0; i < 8; ++i) s->pass.color_layouts[i] = s->color_layouts[i];
   s->pass.depth_layout = s->depth_layout;
   core_on_pass_begin(cmd, &s->pass);
+  geo_pass_before(cmd, s);
 }
 
 static CmdState* describe_classic(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info) {
@@ -124,6 +125,7 @@ static void end_pass(VkCommandBuffer cmd) {
   s->in_pass = false;
   s->dispatches_since_pass = s->indirect_since_pass = 0;
   s->last_cs = 0;
+  if (s->geo || s->geo_ts >= 0) geo_pass_after(cmd, s);
   if (s->tracing) {
     trace_flush_segment(s);
     std::string dumps = trace_dump_pass(cmd, s);
@@ -267,6 +269,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->dumps.clear();
   s->seg_key.clear();
   s->seg_count = 0;
+  s->geo = nullptr;
+  s->geo_ts = -1;
+  s->has_viewport = false;
   return r;
 }
 
@@ -282,6 +287,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer cmd, const 
   diag(DIAG_BEGIN_PASS);
   CmdState* s = describe_classic(cmd, info);
   vk(cmd).CmdBeginRenderPass(cmd, info, contents);
+  if (s->geo) geo_pass_begun(cmd, s);
   if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
@@ -290,15 +296,18 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass2(VkCommandBuffer cmd, const
   diag(DIAG_BEGIN_PASS);
   CmdState* s = describe_classic(cmd, info);
   vk(cmd).CmdBeginRenderPass2(cmd, info, sbi);
+  if (s->geo) geo_pass_begun(cmd, s);
   if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass(VkCommandBuffer cmd) {
+  if (CmdState* gs = cmd_state(cmd); gs && gs->geo) geo_pass_ending(cmd, gs);
   vk(cmd).CmdEndRenderPass(cmd);
   end_pass(cmd);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass2(VkCommandBuffer cmd, const VkSubpassEndInfo* sei) {
+  if (CmdState* gs = cmd_state(cmd); gs && gs->geo) geo_pass_ending(cmd, gs);
   vk(cmd).CmdEndRenderPass2(cmd, sei);
   end_pass(cmd);
 }
@@ -318,10 +327,12 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cmd, const V
   }
   pass_ready(cmd, s);
   vk(cmd).CmdBeginRendering(cmd, info);
+  if (s->geo) geo_pass_begun(cmd, s);
   if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRendering(VkCommandBuffer cmd) {
+  if (CmdState* gs = cmd_state(cmd); gs && gs->geo) geo_pass_ending(cmd, gs);
   vk(cmd).CmdEndRendering(cmd);
   end_pass(cmd);
 }
@@ -390,37 +401,61 @@ static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate(VkCommandBuff
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cmd, uint32_t vc, uint32_t ic, uint32_t fv, uint32_t fi) {
+  CmdState* gs = cmd_state(cmd);
+  const bool geo = gs && gs->geo;
+  if (geo) geo_pre_draw(cmd, gs, 0, vc, ic);
   vk(cmd).CmdDraw(cmd, vc, ic, fv, fi);
+  if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw");
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cmd, uint32_t n, uint32_t ic, uint32_t fi, int32_t vo,
                                                  uint32_t fin) {
+  CmdState* gs = cmd_state(cmd);
+  const bool geo = gs && gs->geo;
+  if (geo) geo_pre_draw(cmd, gs, 1, n, ic);
   vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin);
+  if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw");
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o, uint32_t n,
                                                   uint32_t st) {
+  CmdState* gs = cmd_state(cmd);
+  const bool geo = gs && gs->geo;
+  if (geo) geo_pre_draw(cmd, gs, 2, 0, 0);
   vk(cmd).CmdDrawIndirect(cmd, b, o, n, st);
+  if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw_indirect");
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o, uint32_t n,
                                                          uint32_t st) {
+  CmdState* gs = cmd_state(cmd);
+  const bool geo = gs && gs->geo;
+  if (geo) geo_pre_draw(cmd, gs, 3, 0, 0);
   vk(cmd).CmdDrawIndexedIndirect(cmd, b, o, n, st);
+  if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw_indirect");
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectCount(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o, VkBuffer cb,
                                                        VkDeviceSize co, uint32_t mx, uint32_t st) {
+  CmdState* gs = cmd_state(cmd);
+  const bool geo = gs && gs->geo;
+  if (geo) geo_pre_draw(cmd, gs, 4, 0, 0);
   vk(cmd).CmdDrawIndirectCount(cmd, b, o, cb, co, mx, st);
+  if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw_indirect");
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o,
                                                               VkBuffer cb, VkDeviceSize co, uint32_t mx, uint32_t st) {
+  CmdState* gs = cmd_state(cmd);
+  const bool geo = gs && gs->geo;
+  if (geo) geo_pre_draw(cmd, gs, 5, 0, 0);
   vk(cmd).CmdDrawIndexedIndirectCount(cmd, b, o, cb, co, mx, st);
+  if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw_indirect");
 }
 

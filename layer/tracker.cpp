@@ -161,7 +161,23 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, co
 static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* ci,
                                                          const VkAllocationCallbacks* alloc, VkShaderModule* out) {
   diag(DIAG_SHADER_MODULES);
-  VkResult r = device_of(device)->vk.CreateShaderModule(device, ci, alloc, out);
+  // Track D: vertex shaders get transform feedback decorations on Position
+  // (geo_capture=1). Hashes and dumps stay those of the game's own SPIR-V.
+  std::vector<uint32_t> patched;
+  VkShaderModuleCreateInfo pci;
+  const bool geo = geo_patch_shader(ci, patched);
+  if (geo) {
+    pci = *ci;
+    pci.pCode = patched.data();
+    pci.codeSize = patched.size() * 4;
+  }
+  VkResult r = device_of(device)->vk.CreateShaderModule(device, geo ? &pci : ci, alloc, out);
+  if (r != VK_SUCCESS && geo) {
+    log("[geo] patched vertex shader rejected (%d); using the original", r);
+    r = device_of(device)->vk.CreateShaderModule(device, ci, alloc, out);
+  } else if (r == VK_SUCCESS) {
+    geo_note_module(*out, geo);
+  }
   if (r == VK_SUCCESS) {
     uint64_t h = hash64(ci->pCode, ci->codeSize);
     shader_dump(h, ci->pCode, ci->codeSize);
@@ -173,6 +189,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
 
 static VKAPI_ATTR void VKAPI_CALL DestroyShaderModule(VkDevice device, VkShaderModule m, const VkAllocationCallbacks* a) {
   device_of(device)->vk.DestroyShaderModule(device, m, a);
+  geo_forget_module(m);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().modules.erase(m);
 }
@@ -212,6 +229,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device, V
   QueryPerformanceFrequency(&f);
   diag(DIAG_PIPELINES, count);
   diag(DIAG_PIPELINE_US, uint64_t((t1.QuadPart - t0.QuadPart) * 1000000 / f.QuadPart));
+  geo_note_pipelines(count, cis, out);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   for (uint32_t i = 0; i < count; ++i) {
     if (!out[i]) continue;
@@ -257,6 +275,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device, Vk
 
 static VKAPI_ATTR void VKAPI_CALL DestroyPipeline(VkDevice device, VkPipeline p, const VkAllocationCallbacks* a) {
   device_of(device)->vk.DestroyPipeline(device, p, a);
+  geo_forget_pipeline(p);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().pipelines.erase(p);
 }

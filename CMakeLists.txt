@@ -33,6 +33,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/util.cpp
   layer/dump.cpp
   layer/ngx.cpp
+  layer/geocapture.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
 
@@ -51,6 +52,13 @@ endif()
 target_include_directories(VkLayer_bg3rtx PRIVATE ${BG3RTX_EXTERNAL}/DLSS/include)
 add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/layer/VkLayer_bg3rtx.json ${BG3RTX_BIN}/VkLayer_bg3rtx.json)
+
+# Track D tools: offline check of the XFB shader patch.
+add_executable(xfb_patch_test tools/xfb_patch_test.cpp)
+# Track D cost probe: BLAS/TLAS builds over a captured scene.bin on its own device.
+add_executable(geo_blas_bench tools/geo_blas_bench.cpp)
+target_include_directories(geo_blas_bench PRIVATE ${VULKAN_SDK}/Include)
+target_link_directories(geo_blas_bench PRIVATE ${VULKAN_SDK}/Lib)
 
 # Hot-reloadable core: rebuild while the game runs.
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp)

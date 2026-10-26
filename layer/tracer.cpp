@@ -56,6 +56,7 @@ void watchdog_start() {
 }
 
 bool trace_recording() { return g_recording.load(std::memory_order_relaxed); }
+uint64_t trace_start_frame() { return g_start; }
 
 static std::string hex64(uint64_t v) {
   char b[24];
@@ -304,6 +305,7 @@ void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info) {
     g_recording = false;
     std::string dir = write_trace(g_start + 1, info);
     dumps_finish(g_start + 1, dir, queue);
+    geo_finish(g_start + 1, dir, queue);
     write_file(dir + "\\done.txt", "ok\n", 3);
     if (cfg_int("auto_trace", 0) && ++g_auto_done >= uint32_t(cfg_int("auto_traces", 1))) {
       std::string marker = root_dir() + "\\captures\\auto.done";

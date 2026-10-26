@@ -10,6 +10,7 @@ namespace bg3 {
 using HookMap = std::unordered_map<std::string, PFN_vkVoidFunction>;
 void register_tracker_hooks(HookMap& m);
 void register_cmd_hooks(HookMap& m);
+void register_geo_hooks(HookMap& m);
 
 static std::shared_mutex g_mu;
 static std::unordered_map<void*, InstanceData*> g_instances;
@@ -87,6 +88,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkA
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
                                                    const VkAllocationCallbacks* alloc, VkDevice* out) {
+  const VkDeviceCreateInfo* const ci_orig = ci;
   auto* link = static_cast<VkLayerDeviceCreateInfo*>(const_cast<void*>(ci->pNext));
   while (link && !(link->sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO && link->function == VK_LAYER_LINK_INFO))
     link = static_cast<VkLayerDeviceCreateInfo*>(const_cast<void*>(link->pNext));
@@ -99,9 +101,18 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
 
   // Future: Streamline's DLSS-G device requirements (extensions, extra queues)
   // get merged into a copy of `ci` here.
+  // Track D: VK_EXT_transform_feedback for the geometry capture (geo_capture=1).
+  VkDeviceCreateInfo geo_ci;
+  const VkDeviceCreateInfo* use_ci = geo_device_create_info(id, phys, ci, &geo_ci);
   auto create = reinterpret_cast<PFN_vkCreateDevice>(gipa(id ? id->instance : VK_NULL_HANDLE, "vkCreateDevice"));
-  VkResult r = create(phys, ci, alloc, out);
+  VkResult r = create(phys, use_ci, alloc, out);
+  if (r != VK_SUCCESS && use_ci != ci) {
+    log("[layer] device creation with the geometry capture extensions failed (%d); retrying without", r);
+    use_ci = ci;
+    r = create(phys, ci, alloc, out);
+  }
   if (r != VK_SUCCESS) return r;
+  ci = use_ci;
 
   auto* dd = new DeviceData;
   dd->device = *out;
@@ -150,6 +161,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     g_devices[dkey(*out)] = dd;
     if (!g_main) g_main = dd;
   }
+  if (dd == g_main) geo_device_created(dd, use_ci != ci_orig);
   watchdog_start();
   return VK_SUCCESS;
 }
@@ -159,6 +171,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   if (!dd) return;
   if (dd == g_main) {
     core_shutdown();
+    geo_device_destroyed(dd);
     defer_tick(true);
     g_core_started = false;
   }
@@ -248,6 +261,12 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
       cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
     trace_on_submit(cmds);
   }
+  if (geo_submit_wanted()) {
+    std::vector<VkCommandBuffer> cmds;
+    for (uint32_t i = 0; i < count; ++i)
+      cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
+    geo_on_submit(cmds);
+  }
   auto lock = queue_lock();
   return dd->vk.QueueSubmit(queue, count, submits, fence);
 }
@@ -262,6 +281,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
       for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
         cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
     trace_on_submit(cmds);
+  }
+  if (geo_submit_wanted()) {
+    std::vector<VkCommandBuffer> cmds;
+    for (uint32_t i = 0; i < count; ++i)
+      for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
+        cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
+    geo_on_submit(cmds);
   }
   auto lock = queue_lock();
   return dd->vk.QueueSubmit2(queue, count, submits, fence);
@@ -292,6 +318,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     core_poll(queue);
     core_on_frame(frame);
     ngx_on_present();
+    geo_on_present(queue);
   }
   trace_on_present(queue, info);
   if (g_headless) {
@@ -332,6 +359,7 @@ static const HookMap& hooks() {
     register_device_hooks(h);
     register_tracker_hooks(h);
     register_cmd_hooks(h);
+    register_geo_hooks(h);
     return h;
   }();
   return m;

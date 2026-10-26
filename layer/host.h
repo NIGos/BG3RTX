@@ -162,6 +162,11 @@ struct CmdState {
   std::string seg_key;
   uint32_t seg_count = 0;
   std::string seg_json;
+  // Track D geometry capture (geocapture.cpp)
+  void* geo = nullptr;                 // capture active in the current pass
+  int geo_ts = -1;                     // timestamp slot of the current pass
+  VkViewport viewport{};               // last vkCmdSetViewport(first = 0)
+  bool has_viewport = false;
 };
 CmdState* cmd_state(VkCommandBuffer cmd, bool create = false);
 void cmd_forget(VkCommandBuffer cmd);
@@ -216,6 +221,29 @@ void ngx_init();                       // hooks _nvngx.dll now or when it loads
 void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts, VkImageLayout depth_layout);
 void ngx_on_destroy_image(VkImage img);
 void ngx_on_present();
+
+// ---- Track D: G-buffer geometry capture via transform feedback (geocapture.cpp) ----
+const VkDeviceCreateInfo* geo_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
+                                                 VkDeviceCreateInfo* scratch);
+void geo_device_created(DeviceData* dd, bool xfb_enabled);
+void geo_device_destroyed(DeviceData* dd);
+bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>& out);
+void geo_note_module(VkShaderModule m, bool patched);
+void geo_forget_module(VkShaderModule m);
+void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, const VkPipeline* out);
+void geo_forget_pipeline(VkPipeline p);
+void geo_pass_before(VkCommandBuffer cmd, CmdState* s);   // outside the pass, before the game's begin
+void geo_pass_begun(VkCommandBuffer cmd, CmdState* s);    // inside, right after it
+void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, uint32_t kind, uint32_t count, uint32_t instances);
+void geo_post_draw(VkCommandBuffer cmd, CmdState* s);
+void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right before the game's end
+void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right after the game's end
+bool geo_submit_wanted();
+void geo_on_submit(const std::vector<VkCommandBuffer>& cmds);
+void geo_on_present(VkQueue queue);
+void geo_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue);
+uint64_t trace_start_frame();
+bool write_png(const std::wstring& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb);  // dump.cpp
 
 uint64_t frame_index();
 void* persist(const char* key, size_t size);
