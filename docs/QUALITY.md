@@ -307,6 +307,30 @@ only by overriding the projection jitter, which we do not control. Diagnostic on
 Every new effect, and every change to an existing one, must satisfy these before it
 can become a default.
 
+**R0 Target: physically correct, not "same as the original".** (Set by the user on
+2026-10-26.) Ray tracing is there to improve on the game's approximations, not to
+reproduce them.
+- An effect may brighten as well as darken, wherever the game's own term is wrong:
+  - SSAO that is too dark;
+  - shadow-map acne, over-wide filtering or light leaks;
+  - probes that are too bright or too flat;
+  - missing bounce.
+- Brightening or darkening against the game is therefore not a defect by itself.
+  The question is only whether the result is physically right for the real scene.
+- **Real scene** means the full geometry, including what the camera hides. Roofs
+  cut away by the isometric camera still block the sun and the sky. Use the asset DB
+  rooms/roofs (`docs/ASSET_DB.md`) and off-screen data wherever possible. Where our
+  BVH is known to be incomplete (geometry culled or never captured), the game's term
+  stays the fallback, so a missing caster never turns into a light leak.
+- **Art intent** still applies where the game expresses it explicitly: authored
+  shadow-caster flags, light channels, the colour grade, and lights flagged not to
+  cast shadows.
+- The exact-delta and fold mechanics below (R3) remain the tool for removing the
+  game's term without double counting. They do not mean "never brighter than the
+  game".
+- QA (`docs/QA.md`) reports brightening for review, not as a failure, unless it is
+  physically implausible: energy gain, or light through geometry that exists.
+
 **R1 Sampling.**
 - Importance-sample the integrand:
   - cosine-weighted for diffuse;
@@ -375,6 +399,18 @@ can become a default.
     accumulated at 16× the rays, or D-PT within the captured geometry);
   - temporal stability: the mean frame-to-frame difference on a static camera,
     and during `-Move`.
+
+**R6a Automated QA checkpoint (every scene sweep, [QA.md](QA.md)).**
+- Run `python -m scripts.qa run --scenes S1,S2,S3,... --full-res` after every change
+  to an effect and before a default changes. It is one game run per scene (live
+  toggles), so it costs about as much as a plain sweep.
+- Gates: `hard_dark`, `brightening`, `sun_extra_casters`, `nonfinite` and `flicker`
+  must pass on every scene, on the final frame and on the lighting buffer. A failure
+  is judged from its crop sheet, never from thumbnails; a justified exception is
+  written into the track doc with the crop.
+- `--reference` (FLIP against more rays) for any change to sampling or ray counts.
+- The report (`captures/qa/<stamp>/report.html`) and its one-line summaries go into
+  the review; the raw traces are pruned by the harness.
 
 **R7 Cost budget.**
 - RTX 5090, 2560x1067 render resolution, GPU timestamps, medians of 300 frames,
