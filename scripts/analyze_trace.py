@@ -222,7 +222,7 @@ def main():
         lines += ["", "## Dumps (attachment contents after the pass)", "",
                   "| dump | unit | slot | image | fmt | min | max | mean | nonfinite | png |",
                   "|---|---|---|---|---|---|---|---|---|---|"]
-        g = lambda v: "[" + ", ".join(f"{x:.4g}" for x in v) + "]"
+        g = lambda v: "[" + ", ".join("-" if x is None else f"{x:.4g}" for x in v) + "]"
         for k in sorted(dumps, key=lambda d: int(d[1:])):
             d = dumps[k]
             lines.append(f"| {k} | {unit_of.get(k, '?')} | {d['slot']} | {d['image']} {d['w']}x{d['h']} | {d['fmt']} | "

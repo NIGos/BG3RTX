@@ -3,6 +3,7 @@
 // render passes and descriptor set contents.
 #include "host.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace bg3 {
@@ -25,8 +26,12 @@ static bool is_buffer_type(VkDescriptorType t) {
 
 static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& out) {
   for (uint32_t i = 0; i < w.descriptorCount; ++i) {
-    DescEntry e{w.dstBinding, w.dstArrayElement + i, w.descriptorType, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0};
-    if (is_image_type(w.descriptorType) && w.pImageInfo) e.view = w.pImageInfo[i].imageView;
+    DescEntry e{w.dstBinding, w.dstArrayElement + i, w.descriptorType, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0,
+                VK_IMAGE_LAYOUT_UNDEFINED};
+    if (is_image_type(w.descriptorType) && w.pImageInfo) {
+      e.view = w.pImageInfo[i].imageView;
+      e.layout = w.pImageInfo[i].imageLayout;
+    }
     else if (is_buffer_type(w.descriptorType) && w.pBufferInfo) {
       e.buffer = w.pBufferInfo[i].buffer;
       e.offset = w.pBufferInfo[i].offset;
@@ -36,8 +41,13 @@ static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& 
   }
 }
 
-static void merge(std::unordered_map<uint64_t, DescEntry>& dst, const std::vector<DescEntry>& src) {
-  for (const auto& e : src) dst[desc_key(e.binding, e.element)] = e;
+// Caller holds tracker().mu exclusively.
+static void merge(VkDescriptorSet set, const std::vector<DescEntry>& src) {
+  auto& dst = tracker().sets[set];
+  for (const auto& e : src) {
+    auto [it, inserted] = dst.insert_or_assign(desc_key(e.binding, e.element), e);
+    if (inserted && is_dynamic_type(e.type)) ++tracker().dynamic_counts[set];
+  }
 }
 
 void track_set_write(const VkWriteDescriptorSet& w) {
@@ -45,7 +55,7 @@ void track_set_write(const VkWriteDescriptorSet& w) {
   decode_write(w, entries);
   if (entries.empty()) return;
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
-  merge(tracker().sets[w.dstSet], entries);
+  merge(w.dstSet, entries);
 }
 
 static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate tpl, const void* data) {
@@ -56,8 +66,13 @@ static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate 
   for (const auto& t : it->second) {
     for (uint32_t i = 0; i < t.descriptorCount; ++i) {
       const uint8_t* p = base + t.offset + i * t.stride;
-      DescEntry e{t.dstBinding, t.dstArrayElement + i, t.descriptorType, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0};
-      if (is_image_type(t.descriptorType)) e.view = reinterpret_cast<const VkDescriptorImageInfo*>(p)->imageView;
+      DescEntry e{t.dstBinding, t.dstArrayElement + i, t.descriptorType, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0,
+                  VK_IMAGE_LAYOUT_UNDEFINED};
+      if (is_image_type(t.descriptorType)) {
+        auto ii = reinterpret_cast<const VkDescriptorImageInfo*>(p);
+        e.view = ii->imageView;
+        e.layout = ii->imageLayout;
+      }
       else if (is_buffer_type(t.descriptorType)) {
         auto b = reinterpret_cast<const VkDescriptorBufferInfo*>(p);
         e.buffer = b->buffer;
@@ -73,7 +88,7 @@ static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate 
 void track_set_template(VkDescriptorSet set, VkDescriptorUpdateTemplate tpl, const void* data) {
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   auto entries = decode_template_locked(tpl, data);
-  if (!entries.empty()) merge(tracker().sets[set], entries);
+  if (!entries.empty()) merge(set, entries);
 }
 
 std::vector<DescEntry> decode_push(const VkWriteDescriptorSet* writes, uint32_t count) {
@@ -87,7 +102,61 @@ std::vector<DescEntry> decode_push_template(VkDescriptorUpdateTemplate tpl, cons
   return decode_template_locked(tpl, data);
 }
 
+uint32_t set_dynamic_count_locked(VkDescriptorSet set) {
+  auto l = tracker().set_layouts.find(set);
+  if (l != tracker().set_layouts.end()) {
+    auto d = tracker().layout_dynamic.find(l->second);
+    if (d != tracker().layout_dynamic.end()) {
+      uint32_t n = 0;
+      for (auto& [b, c] : d->second) n += c;
+      return n;
+    }
+  }
+  auto it = tracker().dynamic_counts.find(set);
+  return it == tracker().dynamic_counts.end() ? 0 : it->second;
+}
+
+uint32_t set_dynamic_index_locked(VkDescriptorSet set, uint32_t binding, uint32_t element) {
+  auto l = tracker().set_layouts.find(set);
+  if (l == tracker().set_layouts.end()) return UINT32_MAX;
+  auto d = tracker().layout_dynamic.find(l->second);
+  if (d == tracker().layout_dynamic.end()) return UINT32_MAX;
+  uint32_t index = 0;
+  for (auto& [b, c] : d->second) {
+    if (b == binding) return element < c ? index + element : UINT32_MAX;
+    if (b > binding) break;
+    index += c;
+  }
+  return UINT32_MAX;
+}
+
 // ---- hooks ----
+
+static VKAPI_ATTR VkResult VKAPI_CALL CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo* ci,
+                                                                const VkAllocationCallbacks* alloc,
+                                                                VkDescriptorSetLayout* out) {
+  VkResult r = device_of(device)->vk.CreateDescriptorSetLayout(device, ci, alloc, out);
+  if (r == VK_SUCCESS) {
+    std::vector<std::pair<uint32_t, uint32_t>> dyn;
+    for (uint32_t i = 0; i < ci->bindingCount; ++i)
+      if (is_dynamic_type(ci->pBindings[i].descriptorType))
+        dyn.emplace_back(ci->pBindings[i].binding, ci->pBindings[i].descriptorCount);
+    std::sort(dyn.begin(), dyn.end());
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    tracker().layout_dynamic[*out] = std::move(dyn);
+  }
+  return r;
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo* ai,
+                                                             VkDescriptorSet* out) {
+  VkResult r = device_of(device)->vk.AllocateDescriptorSets(device, ai, out);
+  if (r == VK_SUCCESS) {
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i) tracker().set_layouts[out[i]] = ai->pSetLayouts[i];
+  }
+  return r;
+}
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* ci,
                                                          const VkAllocationCallbacks* alloc, VkShaderModule* out) {
@@ -201,6 +270,15 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
   if (force_src && (ci->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                                  VK_IMAGE_USAGE_STORAGE_BIT)))
     patched.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  // BG3's AO/SSR target (RGB10A2 render target) gets STORAGE so the GI can
+  // fold its visibility into the game's own ambient occlusion.
+  static const bool force_storage = cfg_int("force_storage_rgb10a2", 1) != 0;
+  if (force_storage && ci->format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 && (ci->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+    patched.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+  // Same for R8 render targets: the sun shadow mask, refined by contact shadows.
+  static const bool force_storage_r8 = cfg_int("force_storage_r8", 1) != 0;
+  if (force_storage_r8 && ci->format == VK_FORMAT_R8_UNORM && (ci->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+    patched.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
   VkResult r = device_of(device)->vk.CreateImage(device, &patched, alloc, out);
   if (r == VK_SUCCESS) {
     ImageRec rec{tracker().next_image_id++, patched, false};
@@ -214,7 +292,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
 
 static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAllocationCallbacks* a) {
   sl_note_image_destroyed(img);
+  ngx_on_destroy_image(img);  // our views of it go first
   device_of(device)->vk.DestroyImage(device, img, a);
+  ngx_forget_image(img);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().images.erase(img);
 }
@@ -323,7 +403,7 @@ static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t
         d.element = c[i].dstArrayElement + k;
         moved.push_back(d);
       }
-      merge(tracker().sets[c[i].dstSet], moved);
+      merge(c[i].dstSet, moved);
     }
   }
 }
@@ -361,6 +441,13 @@ static std::unordered_map<VkSwapchainKHR, VkSwapchainCreateInfoKHR> g_swapchains
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR* ci,
                                                          const VkAllocationCallbacks* alloc, VkSwapchainKHR* out) {
+  // force_present_mode: -1 leaves the game's choice. 0 (IMMEDIATE) decouples
+  // test runs from the display, which matters when it is asleep.
+  VkSwapchainCreateInfoKHR patched = *ci;
+  headless_on_swapchain();
+  int force = cfg_int("force_present_mode", -1);
+  if (force >= 0) patched.presentMode = VkPresentModeKHR(force);
+  ci = &patched;
   VkResult r;
   if (!sl_create_swapchain(device, ci, alloc, out, &r)) r = device_of(device)->vk.CreateSwapchainKHR(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
@@ -407,23 +494,6 @@ static VKAPI_ATTR void VKAPI_CALL DestroySwapchainKHR(VkDevice device, VkSwapcha
   if (!sl_destroy_swapchain(device, sc, a)) device_of(device)->vk.DestroySwapchainKHR(device, sc, a);
   std::lock_guard<std::mutex> lock(g_sc_mu);
   g_swapchains.erase(sc);
-}
-
-static VKAPI_ATTR VkResult VKAPI_CALL AcquireNextImageKHR(VkDevice device, VkSwapchainKHR sc, uint64_t timeout,
-                                                          VkSemaphore sem, VkFence fence, uint32_t* index) {
-  VkResult r;
-  if (sl_acquire(device, sc, timeout, sem, fence, index, &r)) return r;
-  return device_of(device)->vk.AcquireNextImageKHR(device, sc, timeout, sem, fence, index);
-}
-
-static VKAPI_ATTR VkResult VKAPI_CALL AcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR* info,
-                                                           uint32_t* index) {
-  static bool once = false;
-  if (!once) {
-    once = true;
-    log("[layer] the game uses vkAcquireNextImage2KHR, which Streamline does not hook; mapped to vkAcquireNextImageKHR");
-  }
-  return AcquireNextImageKHR(device, info->swapchain, info->timeout, info->semaphore, info->fence, index);
 }
 
 // ---- host-visible memory, so uniform buffers can be read on the CPU ----
@@ -499,14 +569,14 @@ void register_tracker_hooks(HookMap& m) {
   HOOK(CreateRenderPass2);
   HOOK(DestroyRenderPass);
   HOOK(UpdateDescriptorSets);
+  HOOK(CreateDescriptorSetLayout);
+  HOOK(AllocateDescriptorSets);
   HOOK(CreateDescriptorUpdateTemplate);
   HOOK(DestroyDescriptorUpdateTemplate);
   HOOK(UpdateDescriptorSetWithTemplate);
   m["vkCreateSwapchainKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&CreateSwapchainKHR);
   m["vkGetSwapchainImagesKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&GetSwapchainImagesKHR);
   m["vkDestroySwapchainKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&DestroySwapchainKHR);
-  m["vkAcquireNextImageKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&AcquireNextImageKHR);
-  m["vkAcquireNextImage2KHR"] = reinterpret_cast<PFN_vkVoidFunction>(&AcquireNextImage2KHR);
   HOOK(BindBufferMemory);
   HOOK(BindBufferMemory2);
   HOOK(DestroyBuffer);

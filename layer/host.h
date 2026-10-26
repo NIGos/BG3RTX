@@ -67,6 +67,7 @@ struct DeviceData {
   PFN_vkSetDeviceLoaderData set_loader_data = nullptr;
 };
 
+void headless_on_swapchain();
 DeviceData* main_device();             // the first device created; BG3 makes one
 DeviceData* device_of(const void* dispatchable);   // device, queue or command buffer
 InstanceData* instance_data(const void* dispatchable);   // instance or physical device
@@ -97,9 +98,13 @@ struct DescEntry {
   VkImageView view;                    // image descriptors
   VkBuffer buffer;                     // buffer descriptors
   VkDeviceSize offset, range;
+  VkImageLayout layout;                // image descriptors
 };
 
 inline uint64_t desc_key(uint32_t binding, uint32_t element) { return (uint64_t(binding) << 32) | element; }
+inline bool is_dynamic_type(VkDescriptorType t) {
+  return t == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC || t == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+}
 
 struct Tracker {
   std::shared_mutex mu;
@@ -111,6 +116,12 @@ struct Tracker {
   std::unordered_map<VkPipeline, PipelineRec> pipelines;
   // Keyed by (binding << 32 | element): BG3's bindless sets hold very large arrays.
   std::unordered_map<VkDescriptorSet, std::unordered_map<uint64_t, DescEntry>> sets;
+  std::unordered_map<VkDescriptorSet, uint32_t> dynamic_counts;  // fallback: dynamic descriptors written per set
+  // Dynamic-buffer bindings of each set layout as (binding, count), sorted by
+  // binding, and the layout every set was allocated with: dynamic offsets are
+  // consumed in this order.
+  std::unordered_map<VkDescriptorSetLayout, std::vector<std::pair<uint32_t, uint32_t>>> layout_dynamic;
+  std::unordered_map<VkDescriptorSet, VkDescriptorSetLayout> set_layouts;
   std::unordered_map<VkDescriptorUpdateTemplate, std::vector<VkDescriptorUpdateTemplateEntry>> templates;
   // Host-visible memory, so uniform buffer contents can be read on the CPU.
   std::unordered_map<VkBuffer, std::pair<VkDeviceMemory, VkDeviceSize>> buffer_mem;
@@ -118,6 +129,11 @@ struct Tracker {
   std::atomic<uint32_t> next_image_id{1}, next_pipeline_id{1};
 };
 Tracker& tracker();
+// Caller holds tracker().mu. Number of dynamic offsets a set consumes, and the
+// index of (binding, element) among them (UINT32_MAX if not dynamic/unknown).
+uint32_t set_dynamic_count_locked(VkDescriptorSet set);
+uint32_t set_dynamic_index_locked(VkDescriptorSet set, uint32_t binding, uint32_t element);
+void ngx_forget_image(VkImage image);
 
 void track_set_write(const VkWriteDescriptorSet& w);
 void track_set_template(VkDescriptorSet set, VkDescriptorUpdateTemplate tpl, const void* data);
@@ -136,13 +152,25 @@ struct CmdState {
   uint32_t pipe_id[2] = {};
   uint64_t vs = 0, fs = 0, cs = 0;     // stage hashes of the bound pipelines
   std::array<VkDescriptorSet, 8> sets[2] = {};
-  std::vector<uint32_t> dyn[8];        // graphics dynamic offsets of the call that bound set N first
+  std::vector<uint32_t> dyn[2][8];     // dynamic offsets of each bound set, in binding order
+  VkPipelineLayout set_layout[2][8] = {};
+  // The game's descriptor binds, replayed verbatim by restore_bindings.
+  struct BindCall {
+    VkPipelineLayout layout;
+    uint32_t first;
+    std::vector<VkDescriptorSet> sets;
+    std::vector<uint32_t> dyn;
+  };
+  std::vector<BindCall> calls[2];
   // Streamline bookkeeping: layouts the watched images end this buffer in, and
   // the camera constants read at the velocity pass (applied at submit).
   std::vector<std::pair<VkImage, VkImageLayout>> sl_layouts;
   bool sl_cam_valid = false;
   uint8_t sl_cam[2][256] = {};
   std::vector<DescEntry> push[2];
+  uint32_t push_set[2] = {UINT32_MAX, UINT32_MAX};
+  uint32_t dispatches_since_pass = 0, indirect_since_pass = 0;
+  uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
   bool game_alloc = false;             // allocated through this layer (not by Streamline below it)
   std::vector<std::string> events;     // pre-rendered JSON objects, one per event
@@ -215,11 +243,28 @@ void core_shutdown();
 void core_poll(VkQueue present_queue); // at present: reload if the DLL changed
 void core_on_frame(uint64_t frame);
 void core_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* pass);
+void core_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* pass);
+void core_on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* info);
+void core_on_cmd_end(VkCommandBuffer cmd);
+void core_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* info);
+bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
+                   Bg3Binding* out);
+bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out);
+void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp);
+bool ngx_motion_vectors(VkImage* image, VkImageView* view, VkFormat* format, float scale[2]);
+uint32_t find_memory_type(DeviceData* dd, uint32_t bits, VkMemoryPropertyFlags want);
 void defer_destroy(Bg3DeferKind kind, uint64_t handle);
 void defer_tick(bool flush_all);
 
 bool shader_get(const char* file, const char* entry, const char* profile, Bg3ShaderBlob* out);
 void shader_poll();
+
+// ---- NGX: SR -> Ray Reconstruction (ngx.cpp) ----
+void ngx_init();                       // hooks _nvngx.dll now or when it loads
+// G-buffer discovery; with rr=1 also records the RR guide dispatch into `cmd`.
+void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts, VkImageLayout depth_layout);
+void ngx_on_destroy_image(VkImage img);
+void ngx_on_present();
 
 uint64_t frame_index();
 void* persist(const char* key, size_t size);

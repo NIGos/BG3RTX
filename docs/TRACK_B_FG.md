@@ -233,6 +233,14 @@ The throttled presentation engine dropped the generated frames: DLSS-G logged "C
 
 All three caught loading screens: the "100%" screen before gameplay, and one shown during the area transition. Logo, text and spinner show no tearing or ghosting. No gameplay frame has been captured yet. `fg_snap_on=3` (the third enable), or a longer `fg_snap_after`, should land in gameplay.
 
+### After merging main (Track A RR, GI, headless mode)
+
+The merged build ran for 7 minutes with no crash (`fg=2`, main's defaults, display in standby again):
+
+- **Track A on the shared instance.** RR=1 and Track A's `_nvngx.dll` inline hooks work on Streamline's NGX instance. The game's SR feature is created there ("CreateFeature feature 1 -> Success"), and RR's guides are built.
+- **DLSS-G.** DLSS-G ran at status 0 with 2 frames presented per app frame.
+- **Headless mode.** Main's `auto-run.ps1` now defaults to `headless=1` (fake acquire/present), which crashes the game a few seconds in when Streamline owns the swapchain. The layer now ignores `headless` when `fg>=2`. Pass `-RealPresent` anyway, to make the intent explicit.
+
 ## Known issues
 
 - **Refresh-capped output.** DLSS-G paces to the 120 Hz refresh, so in this setup FG lowers the rendered rate instead of raising the displayed rate. To gain motion smoothness beyond 120 Hz, use a higher-refresh mode or VRR.

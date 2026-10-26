@@ -69,10 +69,21 @@ static void begin_pass(VkCommandBuffer cmd, CmdState* s, const VkRect2D& area) {
   s->pass.height = area.extent.height;
   for (auto& l : s->color_layouts) l = VK_IMAGE_LAYOUT_UNDEFINED;
   s->depth_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+  s->pass.dispatches_before = s->dispatches_since_pass;
+  s->pass.indirect_dispatches_before = s->indirect_since_pass;
+  s->pass.last_cs_hash_before = s->last_cs;
   count_pass();
 }
 
-static void begin_classic(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info) {
+// The pass is described before the game's begin is forwarded, so the core can
+// still record compute work ahead of it.
+static void pass_ready(VkCommandBuffer cmd, CmdState* s) {
+  for (int i = 0; i < 8; ++i) s->pass.color_layouts[i] = s->color_layouts[i];
+  s->pass.depth_layout = s->depth_layout;
+  core_on_pass_begin(cmd, &s->pass);
+}
+
+static CmdState* describe_classic(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info) {
   CmdState* s = cmd_state(cmd, true);
   begin_pass(cmd, s, info->renderArea);
 
@@ -105,18 +116,22 @@ static void begin_classic(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info
       if (d < rp.final_layouts.size()) s->depth_layout = rp.final_layouts[d];
     }
   }
-  if (s->tracing) trace_event(s, pass_json(s->pass));
+  pass_ready(cmd, s);
+  return s;
 }
 
 static void end_pass(VkCommandBuffer cmd) {
   CmdState* s = cmd_state(cmd);
   if (!s || !s->in_pass) return;
   s->in_pass = false;
+  s->dispatches_since_pass = s->indirect_since_pass = 0;
+  s->last_cs = 0;
   if (s->tracing) {
     trace_flush_segment(s);
     std::string dumps = trace_dump_pass(cmd, s);
     trace_event(s, "{\"op\":\"end\",\"draws\":" + std::to_string(s->pass.draw_count) + ",\"dumps\":[" + dumps + "]}");
   }
+  ngx_note_pass(cmd, s->pass, s->color_layouts, s->depth_layout);
   sl_note_pass_end(cmd, s);
   core_on_pass_end(cmd, &s->pass);
 }
@@ -134,6 +149,84 @@ static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra =
     s->pass.last_fs_hash = s->fs;
   }
   if (s->tracing) trace_note_draw(s, 0, kind, extra);
+}
+
+static void after_dispatch(VkCommandBuffer cmd, CmdState* s, bool indirect, uint32_t x, uint32_t y, uint32_t z) {
+  ++s->dispatches_since_pass;
+  if (indirect) ++s->indirect_since_pass;
+  s->last_cs = s->cs;
+  Bg3DispatchInfo info{s->cs, indirect, {x, y, z}};
+  core_on_dispatch(cmd, &info);
+}
+
+// What the game has bound right now: descriptor sets (with dynamic offsets
+// applied) or push descriptors.
+bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
+                   Bg3Binding* out) {
+  if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return false;
+  CmdState* s = cmd_state(cmd);
+  if (!s || set >= 8) return false;
+  int b = bp_index(bp);
+  DescEntry e{};
+  bool found = false;
+  std::shared_lock<std::shared_mutex> lock(tracker().mu);
+  if (s->push_set[b] == set) {
+    for (const auto& p : s->push[b])
+      if (p.binding == binding && p.element == element) { e = p; found = true; }
+  } else if (VkDescriptorSet ds = s->sets[b][set]) {
+    auto it = tracker().sets.find(ds);
+    if (it != tracker().sets.end()) {
+      auto ent = it->second.find(desc_key(binding, element));
+      if (ent != it->second.end()) {
+        e = ent->second;
+        found = true;
+        if (is_dynamic_type(e.type)) {
+          // Index of this descriptor among the set layout's dynamic ones, in binding order.
+          uint32_t index = set_dynamic_index_locked(ds, binding, element);
+          if (index == UINT32_MAX) {
+            index = 0;
+            for (const auto& [k, other] : it->second)
+              if (is_dynamic_type(other.type) && k < desc_key(binding, element)) ++index;
+          }
+          if (index < s->dyn[b][set].size()) e.offset += s->dyn[b][set][index];
+        }
+      }
+    }
+  }
+  if (!found) return false;
+  *out = Bg3Binding{};
+  out->type = e.type;
+  out->buffer = e.buffer;
+  out->offset = e.offset;
+  out->range = e.range;
+  out->view = e.view;
+  out->layout = e.layout;
+  if (e.view) {
+    auto v = tracker().views.find(e.view);
+    if (v != tracker().views.end()) {
+      out->image = v->second.image;
+      out->format = v->second.format;
+      auto im = tracker().images.find(v->second.image);
+      if (im != tracker().images.end()) {
+        out->width = im->second.ci.extent.width;
+        out->height = im->second.ci.extent.height;
+      }
+    }
+  }
+  return true;
+}
+
+void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp) {
+  if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return;
+  CmdState* s = cmd_state(cmd);
+  if (!s) return;
+  int b = bp_index(bp);
+  if (s->pipe[b]) vk(cmd).CmdBindPipeline(cmd, bp, s->pipe[b]);
+  // Replay the game's own bind calls in order: exact dynamic offsets, and
+  // later calls re-establish whatever an earlier, wider call disturbed.
+  for (const auto& c : s->calls[b])
+    vk(cmd).CmdBindDescriptorSets(cmd, bp, c.layout, c.first, uint32_t(c.sets.size()), c.sets.data(),
+                                  uint32_t(c.dyn.size()), c.dyn.data());
 }
 
 // ---- hooks ----
@@ -166,6 +259,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->sets[1].fill(VK_NULL_HANDLE);
   s->push[0].clear();
   s->push[1].clear();
+  s->push_set[0] = s->push_set[1] = UINT32_MAX;
+  s->calls[0].clear();
+  s->calls[1].clear();
+  for (auto& bp : s->dyn)
+    for (auto& v : bp) v.clear();
+  s->dispatches_since_pass = s->indirect_since_pass = 0;
+  s->last_cs = 0;
   s->tracing = trace_recording();
   s->events.clear();
   s->dumps.clear();
@@ -173,12 +273,12 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->seg_count = 0;
   s->sl_layouts.clear();
   s->sl_cam_valid = false;
-  for (auto& d : s->dyn) d.clear();
   return r;
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL EndCommandBuffer(VkCommandBuffer cmd) {
   CmdState* s = cmd_state(cmd);
+  if (s && !s->in_pass) core_on_cmd_end(cmd);
   if (s && s->tracing) trace_flush_segment(s);
   return vk(cmd).EndCommandBuffer(cmd);
 }
@@ -186,15 +286,17 @@ static VKAPI_ATTR VkResult VKAPI_CALL EndCommandBuffer(VkCommandBuffer cmd) {
 static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info,
                                                      VkSubpassContents contents) {
   diag(DIAG_BEGIN_PASS);
+  CmdState* s = describe_classic(cmd, info);
   vk(cmd).CmdBeginRenderPass(cmd, info, contents);
-  begin_classic(cmd, info);
+  if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass2(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info,
                                                       const VkSubpassBeginInfo* sbi) {
   diag(DIAG_BEGIN_PASS);
+  CmdState* s = describe_classic(cmd, info);
   vk(cmd).CmdBeginRenderPass2(cmd, info, sbi);
-  begin_classic(cmd, info);
+  if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass(VkCommandBuffer cmd) {
@@ -209,7 +311,6 @@ static VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass2(VkCommandBuffer cmd, const V
 
 static VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cmd, const VkRenderingInfo* info) {
   diag(DIAG_BEGIN_RENDERING);
-  vk(cmd).CmdBeginRendering(cmd, info);
   CmdState* s = cmd_state(cmd, true);
   begin_pass(cmd, s, info->renderArea);
   for (uint32_t i = 0; i < info->colorAttachmentCount; ++i) {
@@ -221,6 +322,8 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cmd, const V
     fill_attachment(s->pass, info->pDepthAttachment->imageView, true);
     s->depth_layout = info->pDepthAttachment->imageLayout;
   }
+  pass_ready(cmd, s);
+  vk(cmd).CmdBeginRendering(cmd, info);
   if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
@@ -254,13 +357,22 @@ static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(VkCommandBuffer cmd, VkP
   vk(cmd).CmdBindDescriptorSets(cmd, bp, layout, first, count, sets, dyn_count, dyn);
   if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return;
   CmdState* s = cmd_state(cmd, true);
-  for (uint32_t i = 0; i < count && first + i < 8; ++i) s->sets[bp_index(bp)][first + i] = sets[i];
-  // Dynamic offsets start at 0 for the first set of the call; later sets'
-  // slices would need their layouts, which are not tracked.
-  if (bp == VK_PIPELINE_BIND_POINT_GRAPHICS && first < 8) {
-    s->dyn[first].assign(dyn, dyn + dyn_count);
-    for (uint32_t i = 1; i < count && first + i < 8; ++i) s->dyn[first + i].clear();
+  int b = bp_index(bp);
+  // Dynamic offsets are consumed set by set, in binding order within a set.
+  uint32_t used = 0;
+  std::shared_lock<std::shared_mutex> lock(tracker().mu);
+  for (uint32_t i = 0; i < count && first + i < 8; ++i) {
+    s->sets[b][first + i] = sets[i];
+    s->set_layout[b][first + i] = layout;
+    auto& d = s->dyn[b][first + i];
+    d.clear();
+    uint32_t n = set_dynamic_count_locked(sets[i]);
+    for (uint32_t k = 0; k < n && used < dyn_count; ++k) d.push_back(dyn[used++]);
   }
+  auto& calls = s->calls[b];
+  if (calls.size() >= 32) calls.erase(calls.begin());
+  calls.push_back({layout, first, std::vector<VkDescriptorSet>(sets, sets + count),
+                   std::vector<uint32_t>(dyn, dyn + dyn_count)});
 }
 
 // Barriers recorded into command buffers the game did not allocate (Streamline
@@ -328,7 +440,9 @@ static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet(VkCommandBuffer cmd, VkPi
                                                        const VkWriteDescriptorSet* writes) {
   vk(cmd).CmdPushDescriptorSet(cmd, bp, layout, set, count, writes);
   CmdState* s = cmd_state(cmd, true);
-  if (s->tracing && bp != VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR) s->push[bp_index(bp)] = decode_push(writes, count);
+  if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return;
+  s->push[bp_index(bp)] = decode_push(writes, count);
+  s->push_set[bp_index(bp)] = set;
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate(VkCommandBuffer cmd, VkDescriptorUpdateTemplate tpl,
@@ -337,7 +451,8 @@ static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate(VkCommandBuff
   vk(cmd).CmdPushDescriptorSetWithTemplate(cmd, tpl, layout, set, data);
   CmdState* s = cmd_state(cmd, true);
   // The template carries the bind point; graphics is by far the common case.
-  if (s->tracing) s->push[0] = decode_push_template(tpl, data);
+  s->push[0] = decode_push_template(tpl, data);
+  s->push_set[0] = set;
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cmd, uint32_t vc, uint32_t ic, uint32_t fv, uint32_t fi) {
@@ -377,19 +492,32 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cm
 
 static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, uint32_t y, uint32_t z) {
   diag(DIAG_DISPATCH);
+  if (CmdState* pre = cmd_state(cmd)) {
+    Bg3DispatchInfo info{pre->cs, false, {x, y, z}};
+    core_on_dispatch_pre(cmd, &info);
+  }
   vk(cmd).CmdDispatch(cmd, x, y, z);
   CmdState* s = cmd_state(cmd);
-  if (s && s->tracing) {
+  if (!s) return;
+  if (s->tracing) {
     char dims[64];
     snprintf(dims, sizeof dims, "\"groups\":[%u,%u,%u]", x, y, z);
     trace_note_draw(s, 1, "dispatch", dims);
   }
+  after_dispatch(cmd, s, false, x, y, z);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o) {
+  diag(DIAG_DISPATCH);
+  if (CmdState* pre = cmd_state(cmd)) {
+    Bg3DispatchInfo info{pre->cs, true, {0, 0, 0}};
+    core_on_dispatch_pre(cmd, &info);
+  }
   vk(cmd).CmdDispatchIndirect(cmd, b, o);
   CmdState* s = cmd_state(cmd);
-  if (s && s->tracing) trace_note_draw(s, 1, "dispatch_indirect", nullptr);
+  if (!s) return;
+  if (s->tracing) trace_note_draw(s, 1, "dispatch_indirect", nullptr);
+  after_dispatch(cmd, s, true, 0, 0, 0);
 }
 
 static void note_transfer(VkCommandBuffer cmd, const char* op, VkImage src, VkImage dst) {

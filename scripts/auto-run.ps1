@@ -10,7 +10,16 @@ param(
   [int]$TimeoutSec = 480,
   [string[]]$Set = @(),
   [switch]$NoBuild,
-  [switch]$KeepRunning
+  [switch]$KeepRunning,
+  # Real presentation instead of headless (needed for frame generation and for
+  # anything that must reach the display).
+  [switch]$RealPresent,
+  # Hold a camera-pan key (default D) once gameplay is reached, so the
+  # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
+  [switch]$Move,
+  [byte]$MoveScan = 0x20,
+  # Run under the Khronos validation layer; messages go to captures/validation.log.
+  [switch]$Validation
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -29,7 +38,14 @@ Add-Type -Namespace BG3RTX -Name Win -MemberDefinition @"
 [DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int cmd);
 [DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, System.UIntPtr extra);
+[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
+[DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, System.UIntPtr extra);
 "@ -ErrorAction SilentlyContinue
+# With the display asleep Windows throttles presentation to a few frames per
+# second, which makes every measurement meaningless: keep it on (and wake it).
+[void][BG3RTX.Win]::SetThreadExecutionState([uint32]2147483651)   # CONTINUOUS | SYSTEM_REQUIRED | DISPLAY_REQUIRED
+[BG3RTX.Win]::mouse_event(0x0001, 1, 0, 0, [UIntPtr]::Zero)
+[BG3RTX.Win]::mouse_event(0x0001, -1, 0, 0, [UIntPtr]::Zero)
 # BG3 renders but stops presenting while its window is not in the foreground.
 function Focus-Game {
   $p = Get-Process bg3 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
@@ -48,32 +64,65 @@ Get-Process bg3 -ErrorAction SilentlyContinue | ForEach-Object {
   $_.WaitForExit(15000) | Out-Null
 }
 
+# Only once the game lock is held: a game that exited while we waited may have
+# rewritten graphicSettings.lsx without its DLSS entries.
+$ensure = @((Join-Path $PSScriptRoot "ensure-settings.py"),
+            (Join-Path $root "..\..\..\scripts\ensure-settings.py")) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($ensure) { py -3 -I $ensure }
+
 # This run's settings: the repository's bg3rtx.ini plus auto-trace overrides.
 $ini = Join-Path $caps "auto.ini"
-$lines = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @("auto_trace=1", "auto_traces=$Traces") + $Set
+$lines = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @("auto_trace=1", "auto_traces=$Traces") +
+         @(if (-not $RealPresent) { "headless=1" }) + $Set
 $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
 Remove-Item (Join-Path $caps "auto.done") -ErrorAction SilentlyContinue
 
+py -3 -I (Join-Path $PSScriptRoot "ensure-settings.py")
 $start = Get-Date
+if ($Validation) {
+  $vlog = Join-Path $caps "validation.log"
+  Remove-Item $vlog -ErrorAction SilentlyContinue
+  $settings = Join-Path $caps "vk_layer_settings.txt"
+  @("khronos_validation.log_filename = $($vlog.Replace('\','/'))",
+    "khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG",
+    "khronos_validation.report_flags = error,warn",
+    "khronos_validation.duplicate_message_limit = 3") | Set-Content $settings
+  $env:VK_LAYER_SETTINGS_PATH = $settings
+  & (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -Validation -GameArgs "-continueGame"
+} else {
 & (Join-Path $PSScriptRoot "launch-bg3.ps1") -Clean -GameArgs "-continueGame"
+}
 
 $log = Join-Path $root "bg3rtx.log"
 $deadline = $start.AddSeconds($TimeoutSec)
 $lastNote = Get-Date
 $result = "timeout"
+$moving = $false
 while ((Get-Date) -lt $deadline) {
   Start-Sleep -Seconds 2
   Focus-Game
+  if ($Move -and (Test-Path $log)) {
+    $last = Get-Content $log -Tail 40 | Select-String '(\d+) draws in the last frame' | Select-Object -Last 1
+    if ((Get-Item $log).LastWriteTime -lt $start) { $last = $null }
+    if ($last -and [int]$last.Matches[0].Groups[1].Value -gt 2000) {
+      if (-not $moving) { Write-Host "gameplay reached: holding scan code 0x$('{0:X2}' -f $MoveScan)" }
+      $moving = $true
+    }
+    if ($moving) { [BG3RTX.Win]::keybd_event(0, $MoveScan, 0x0008, [UIntPtr]::Zero) }   # KEYEVENTF_SCANCODE down
+  }
   if (Test-Path (Join-Path $caps "auto.done")) { $result = "done"; break }
   $p = Get-Process bg3 -ErrorAction SilentlyContinue
   if (-not $p -and ((Get-Date) - $start).TotalSeconds -gt 30) { $result = "game exited"; break }
   if (((Get-Date) - $lastNote).TotalSeconds -ge 30) {
     $lastNote = Get-Date
     $tail = if (Test-Path $log) { (Get-Content $log -Tail 1) } else { "(no log yet)" }
-    Write-Host "$([int]((Get-Date) - $start).TotalSeconds)s: $tail"
+    $fg = [BG3RTX.Win]::GetForegroundWindow()
+    $owner = Get-Process | Where-Object { $_.MainWindowHandle -eq $fg } | Select-Object -First 1 -ExpandProperty ProcessName
+    Write-Host "$([int]((Get-Date) - $start).TotalSeconds)s [foreground: $owner]: $tail"
   }
 }
+if ($moving) { [BG3RTX.Win]::keybd_event(0, $MoveScan, 0x000A, [UIntPtr]::Zero) }   # scan-code key up
 Write-Host "Run ended: $result after $([int]((Get-Date) - $start).TotalSeconds)s"
 
 if (-not $KeepRunning) {

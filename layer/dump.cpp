@@ -72,20 +72,23 @@ static bool has_stencil(VkFormat f) {
   return f == VK_FORMAT_D24_UNORM_S8_UINT || f == VK_FORMAT_D32_SFLOAT_S8_UINT || f == VK_FORMAT_D16_UNORM_S8_UINT;
 }
 
-static uint32_t host_memory_type(DeviceData* dd, uint32_t bits) {
+uint32_t find_memory_type(DeviceData* dd, uint32_t bits, VkMemoryPropertyFlags want) {
   static VkPhysicalDeviceMemoryProperties props{};
-  static bool have = false;
-  if (!have && dd->inst && dd->inst->GetPhysicalDeviceMemoryProperties) {
-    dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical, &props);
-    have = true;
-  }
-  const VkMemoryPropertyFlags want[] = {
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
-  for (auto w : want)
-    for (uint32_t i = 0; i < props.memoryTypeCount; ++i)
-      if ((bits & (1u << i)) && (props.memoryTypes[i].propertyFlags & w) == w) return i;
+  static std::once_flag once;
+  std::call_once(once, [&] {
+    if (dd->inst && dd->inst->GetPhysicalDeviceMemoryProperties)
+      dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical, &props);
+  });
+  for (uint32_t i = 0; i < props.memoryTypeCount; ++i)
+    if ((bits & (1u << i)) && (props.memoryTypes[i].propertyFlags & want) == want) return i;
   return UINT32_MAX;
+}
+
+static uint32_t host_memory_type(DeviceData* dd, uint32_t bits) {
+  uint32_t t = find_memory_type(dd, bits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                             VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+  return t != UINT32_MAX ? t : find_memory_type(dd, bits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
 static bool record_copy(VkCommandBuffer cmd, DeviceData* dd, VkImage image, VkImageLayout layout, const ImageRec& rec,
@@ -435,7 +438,9 @@ static std::string process(const Dump& d, const uint8_t* data, const std::string
   auto arr = [&](const char* name, auto get) {
     j += std::string(",\"") + name + "\":[";
     for (int c = 0; c < ch; ++c) {
-      snprintf(b, sizeof b, "%s%.6g", c ? "," : "", double(get(c)));
+      double v = double(get(c));
+      if (std::isfinite(v)) snprintf(b, sizeof b, "%s%.6g", c ? "," : "", v);
+      else snprintf(b, sizeof b, "%snull", c ? "," : "");  // JSON has no inf/nan
       j += b;
     }
     j += "]";

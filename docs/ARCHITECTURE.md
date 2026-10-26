@@ -10,7 +10,9 @@ bg3.exe ──► Vulkan loader ──► VK_LAYER_BG3RTX_host (bin/VkLayer_bg3r
                                  ├─ shaders   DXC at runtime: HLSL → SPIR-V, recompiles on save
                                  ├─ hotreload loads bin/hot/<copy of bg3rtx_core.dll>, swaps on rebuild,
                                  │            catches faults, deferred GPU-object destruction
-                                 └─ (next) ngx: game's DLSS SR evaluate → RR; streamline: DLSS-G
+                                 ├─ ngx       hooks _nvngx.dll's Vulkan entry points; game's DLSS SR
+                                 │            evaluate → Ray Reconstruction + G-buffer guides (TRACK_A_RR.md)
+                                 └─ (next) streamline: DLSS-G
                                  │
                                  ▼  Bg3HostApi / Bg3CoreApi (common/host_api.h, plain C ABI)
                            bg3rtx_core.dll   hot-reloadable: all lighting/RT/GI logic lives here

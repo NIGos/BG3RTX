@@ -17,6 +17,9 @@
   X(CreateSwapchainKHR)                        \
   X(DestroySwapchainKHR)                       \
   X(GetSwapchainImagesKHR)                     \
+  X(AcquireNextImageKHR)                       \
+  X(AcquireNextImage2KHR)                      \
+  X(WaitForPresentKHR)                         \
   X(CreateShaderModule)                        \
   X(DestroyShaderModule)                       \
   X(CreateGraphicsPipelines)                   \
@@ -94,13 +97,17 @@
   X(CmdPipelineBarrier)                        \
   X(CmdPipelineBarrier2)                       \
   X(CmdExecuteCommands)                        \
+  X(CreateQueryPool)                           \
+  X(DestroyQueryPool)                          \
+  X(CmdResetQueryPool)                         \
+  X(CmdWriteTimestamp)                         \
+  X(GetQueryPoolResults)                       \
   X(CreateFence)                               \
   X(DestroyFence)                              \
   X(WaitForFences)                             \
   X(ResetFences)                               \
   X(CreateSemaphore)                           \
   X(DestroySemaphore)                          \
-  X(AcquireNextImageKHR)                       \
   X(BindBufferMemory2)
 
 struct VkDeviceFuncs {

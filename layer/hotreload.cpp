@@ -66,6 +66,41 @@ static bool seh_pass(const Bg3CoreApi* c, VkCommandBuffer cmd, const Bg3PassInfo
   }
 }
 
+static bool seh_pass_begin(const Bg3CoreApi* c, VkCommandBuffer cmd, const Bg3PassInfo* p) {
+  __try {
+    c->on_pass_begin(cmd, p);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+static bool seh_dispatch(const Bg3CoreApi* c, VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
+  __try {
+    c->on_dispatch(cmd, d);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
+static bool seh_dispatch_pre(const Bg3CoreApi* c, VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
+  __try {
+    c->on_dispatch_pre(cmd, d);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
+static bool seh_cmd_end(const Bg3CoreApi* c, VkCommandBuffer cmd) {
+  __try {
+    c->on_cmd_end(cmd);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
 static void unload_locked() {
   if (!g_core) return;
   if (!seh_unload(g_core)) log("[hot] core faulted inside unload(); its GPU objects may leak");
@@ -138,6 +173,10 @@ void core_init(DeviceData* dd) {
   g_host.defer_destroy = &defer_destroy;
   g_host.frame_index = &host_frame_index;
   g_host.root_dir = root_dir().c_str();
+  g_host.query_binding = &query_binding;
+  g_host.alloc_image = &alloc_image;
+  g_host.restore_bindings = &restore_bindings;
+  g_host.dlss_motion_vectors = &ngx_motion_vectors;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);
@@ -196,6 +235,65 @@ void core_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* pass) {
   if (!seh_pass(g_core, cmd, pass)) fault("on_pass_end");
 }
 
+void core_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* pass) {
+  std::shared_lock<std::shared_mutex> lock(g_core_mu);
+  if (!g_core || g_faulted || !g_core->on_pass_begin) return;
+  if (!seh_pass_begin(g_core, cmd, pass)) fault("on_pass_begin");
+}
+
+void core_on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* info) {
+  std::shared_lock<std::shared_mutex> lock(g_core_mu);
+  if (!g_core || g_faulted || !g_core->on_dispatch) return;
+  if (!seh_dispatch(g_core, cmd, info)) fault("on_dispatch");
+}
+
+void core_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* info) {
+  std::shared_lock<std::shared_mutex> lock(g_core_mu);
+  if (!g_core || g_faulted || !g_core->on_dispatch_pre) return;
+  if (!seh_dispatch_pre(g_core, cmd, info)) fault("on_dispatch_pre");
+}
+
+void core_on_cmd_end(VkCommandBuffer cmd) {
+  std::shared_lock<std::shared_mutex> lock(g_core_mu);
+  if (!g_core || g_faulted || !g_core->on_cmd_end) return;
+  if (!seh_cmd_end(g_core, cmd)) fault("on_cmd_end");
+}
+
+bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out) {
+  DeviceData* dd = main_device();
+  *out = Bg3Image{};
+  VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+  ci.imageType = VK_IMAGE_TYPE_2D;
+  ci.format = format;
+  ci.extent = {w, h, 1};
+  ci.mipLevels = 1;
+  ci.arrayLayers = 1;
+  ci.samples = VK_SAMPLE_COUNT_1_BIT;
+  ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+  ci.usage = usage;
+  ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  if (dd->vk.CreateImage(dd->device, &ci, nullptr, &out->image) != VK_SUCCESS) return false;
+  VkMemoryRequirements req;
+  dd->vk.GetImageMemoryRequirements(dd->device, out->image, &req);
+  VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  mai.allocationSize = req.size;
+  mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &mai, nullptr, &out->memory) != VK_SUCCESS ||
+      dd->vk.BindImageMemory(dd->device, out->image, out->memory, 0) != VK_SUCCESS) {
+    dd->vk.DestroyImage(dd->device, out->image, nullptr);
+    if (out->memory) dd->vk.FreeMemory(dd->device, out->memory, nullptr);
+    *out = Bg3Image{};
+    return false;
+  }
+  VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+  vci.image = out->image;
+  vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  vci.format = format;
+  vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  dd->vk.CreateImageView(dd->device, &vci, nullptr, &out->view);
+  return true;
+}
+
 // ---- deferred destruction ----
 
 struct Deferred {
@@ -245,6 +343,7 @@ void defer_tick(bool flush_all) {
       case BG3_DEFER_COMMAND_POOL: vk.DestroyCommandPool(d, reinterpret_cast<VkCommandPool>(x.handle), nullptr); break;
       case BG3_DEFER_FENCE: vk.DestroyFence(d, reinterpret_cast<VkFence>(x.handle), nullptr); break;
       case BG3_DEFER_SEMAPHORE: vk.DestroySemaphore(d, reinterpret_cast<VkSemaphore>(x.handle), nullptr); break;
+      case BG3_DEFER_QUERY_POOL: vk.DestroyQueryPool(d, reinterpret_cast<VkQueryPool>(x.handle), nullptr); break;
     }
   }
 }

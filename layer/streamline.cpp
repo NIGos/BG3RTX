@@ -652,8 +652,8 @@ bool read_ubo(CmdState* s, uint32_t set, uint32_t binding, void* dst, size_t siz
       if ((o.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC || o.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) &&
           (o.binding < binding || (o.binding == binding && o.element < e.element)))
         ++idx;
-    if (idx >= s->dyn[set].size()) return err = "dynamic offset missing", false;
-    off += s->dyn[set][idx];
+    if (idx >= s->dyn[0][set].size()) return err = "dynamic offset missing", false;
+    off += s->dyn[0][set][idx];
   }
   auto bm = tracker().buffer_mem.find(e.buffer);
   if (bm == tracker().buffer_mem.end()) return err = "buffer memory unknown", false;
@@ -952,7 +952,11 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
   static std::vector<const char*> exts;
   static VkApplicationInfo app;
   out = *in;
-  if (g_in_sl_init || g_sl_instance) return;   // Streamline's probe instance, or a later instance
+  // Streamline's own probe instance, or an instance after the device exists.
+  // BG3 may create (and destroy) a probe instance of its own first: Streamline
+  // is initialised once, and binds to the last instance created before the device.
+  if (g_in_sl_init || g_dd) return;
+  if (!g_sl_init) {
   int fg = cfg_int("fg", 0);
   if (fg < 2 && !cfg_int("sl", 0)) {
     log("[sl] fg=%d: Streamline not loaded", fg);
@@ -1051,6 +1055,8 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
         q.osVersionDetected.build, s.c_str());
   }
 
+  }  // !g_sl_init
+  if (!g_sl_init) return;
   // instance: Streamline's extensions, API 1.3 (what the interposer does in its own vkCreateInstance)
   exts.assign(in->ppEnabledExtensionNames, in->ppEnabledExtensionNames + in->enabledExtensionCount);
   for (auto& e : g_req.inst_ext) {
@@ -1072,7 +1078,7 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
 }
 
 void sl_instance_post(VkInstance instance, VkResult r) {
-  if (g_in_sl_init || g_sl_instance || !g_sl_init) return;
+  if (g_in_sl_init || g_dd || !g_sl_init) return;
   if (r != VK_SUCCESS) {
     log("[sl] vkCreateInstance failed (%d) with Streamline's extensions", r);
     return;

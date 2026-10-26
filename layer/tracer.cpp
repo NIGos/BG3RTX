@@ -254,11 +254,17 @@ static bool auto_trigger(uint64_t frame, uint32_t passes, uint32_t draws) {
   if (int(g_auto_done) >= want) return false;
   // A present with no passes at all (a driver-inserted one) neither counts nor resets.
   // Draws tell gameplay (~3000/frame at 3840x1600) from the 3D main menu (~1300).
-  if (passes)
-    g_streak = passes >= uint32_t(cfg_int("auto_min_passes", 40)) && draws >= uint32_t(cfg_int("auto_min_draws", 2000))
-                   ? g_streak + 1
-                   : 0;
-  if (g_streak < uint32_t(cfg_int("auto_stable_frames", 600)) || frame < g_auto_next_allowed) return false;
+  // Stability is measured in time as well as frames: with the display asleep
+  // Windows throttles presentation to a few frames per second.
+  static ULONGLONG streak_start = 0;
+  if (passes) {
+    bool good = passes >= uint32_t(cfg_int("auto_min_passes", 40)) && draws >= uint32_t(cfg_int("auto_min_draws", 2000));
+    if (good && !g_streak) streak_start = GetTickCount64();
+    g_streak = good ? g_streak + 1 : 0;
+  }
+  bool stable = g_streak >= uint32_t(cfg_int("auto_stable_frames", 600)) ||
+                (g_streak >= 10 && GetTickCount64() - streak_start >= ULONGLONG(cfg_int("auto_stable_s", 8)) * 1000);
+  if (!stable || frame < g_auto_next_allowed) return false;
   g_auto_next_allowed = frame + uint64_t(cfg_int("auto_interval", 600));
   return true;
 }
