@@ -157,10 +157,19 @@ def scene_map():
                 r = json.loads(line)
             except Exception:
                 continue
+            # A run whose log shows the 3D menu but never a loading screen took its traces in
+            # the menu (the mod-warning diagnostics): they are not the scene.
+            lines = " ".join(r.get("lines") or [])
+            menu_only = "3D scene first seen" in lines and "loading screen after" not in lines
             for c in r.get("captures") or []:
-                if jobs.get(r.get("job")):
+                if menu_only:
+                    MENU_ONLY.add(Path(c).name)
+                elif jobs.get(r.get("job")):
                     m[Path(c).name] = jobs[r["job"]]
     return m
+
+
+MENU_ONLY = set()
 
 
 def scene_ids():
@@ -186,7 +195,24 @@ def scene_of(cap: Path, smap, sids):
     for sid, sub in sids.items():
         if sub in save or save in sub:
             return sid
+    # Different substrings of the same save ("che Yllek" vs "Yllek - 40h"): the folder.
+    for folder in _save_folders():
+        if save in folder:
+            for sid, sub in sids.items():
+                if sub in folder:
+                    return sid
     return save
+
+
+_FOLDERS = None
+
+
+def _save_folders():
+    global _FOLDERS
+    if _FOLDERS is None:
+        story = os.path.expandvars(r"%LOCALAPPDATA%\Larian Studios\Baldur's Gate 3\PlayerProfiles\Public\Savegames\Story")
+        _FOLDERS = sorted(os.listdir(story)) if os.path.isdir(story) else []
+    return _FOLDERS
 
 
 def load_frame(cap: Path):
@@ -398,6 +424,8 @@ def find_captures():
     for p in pats:
         for d in sorted(glob.glob(str(p))):
             d = Path(d)
+            if d.name in MENU_ONLY:
+                continue
             if (d / "frame.json").exists() or (d / "frame_on0.json").exists():
                 out.append(d)
     return out
@@ -492,8 +520,8 @@ def main():
     db = Db(a.db)
     if not db.ok:
         print(f"note: no asset DB at {a.db}: draws are not named (python -m tools.assets build)")
+    smap, sids = scene_map(), scene_ids()   # first: it fills MENU_ONLY for find_captures
     caps = [Path(c) for c in a.captures] or find_captures()
-    smap, sids = scene_map(), scene_ids()
     results = [r for r in (analyse(c, db, smap, sids) for c in caps) if r]
     # Pixel shares (slow: PNG decodes) for up to --measure captures per scene.
     by = defaultdict(list)

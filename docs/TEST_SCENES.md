@@ -139,6 +139,14 @@ S14 and S9 have none.
 
   Escape is never sent. The main-menu click is the only new kind of input: it starts a
   load, and loading writes nothing.
+- **If round 4 fails** (the main-menu load stays blocked), the alternatives:
+
+  | Option | Side effects |
+  |---|---|
+  | **Reinstall "Immersive World Textures" 1-5 (recommended)** | No dialog at all, so the existing `-loadSaveGame` path works unchanged for all 33 saves. Changes the player's mod list and install, which the player may want anyway, since the saves were made with it. The captures then show the modded textures: valid for RT coverage and QA, but not the vanilla look. |
+  | Foreground runs while the user is away | Real mouse and keyboard; takes over the PC and breaks the background rule; needs someone to start it. |
+  | A Script Extender call that starts the load from Lua | Needs bridge Lua work and a reinstall into the game's Data folder; unverified whether SE can load a save past the mod check. |
+  | New saves of those scenes, made without the mod | The player's time in game. It also does not fix the 33 existing saves. |
 - **Round 3 steps** (superseded), each only while no loading screen had been seen:
   1. a trace of the stuck state, before any input;
   2. after 4 s, the Continue click;
