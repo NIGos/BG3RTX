@@ -927,6 +927,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // Per-draw BLAS of the captured draws: refit while the triangle count holds.
   // One build per slot and frame: two builds into one BLAS in one call would race.
   std::unordered_set<uint64_t> dyn_this_frame;
+  const bool inplace_ok = cfg_int("rt_dyn_inplace", 0) != 0;
   for (auto& [di, key] : dyn) {
     FrameDraw& fd = g_draws[di];
     key = fd.dyn_key;
@@ -941,7 +942,16 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     bool refit = !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.flags == dyn_flags &&
                  rec_submitted(s.rec) &&
                  s.since_build < uint32_t(rebuild_frames);
-    if (!refit && (fresh || fd.prims > s.cap_prims || s.alpha != fd.cap_alpha || s.flags != dyn_flags)) {
+    // A full build never goes into the BLAS that TLASes in flight reference: a
+    // rebuild changes the BLAS's internal layout, and a TLAS built over the old one
+    // (an older scene slot still traced, or a TLAS *refit* whose signature, i.e.
+    // the BLAS address, did not change) would then follow stale node offsets: wild
+    // reads (fault_3f5fb8b_run1: read at a computed address after a burst of full
+    // per-draw rebuilds; d33fca6 run 1: TLAS refits right after 9 full rebuilds).
+    // A new range gives the BLAS a new address, so the TLAS signature changes and
+    // the TLAS is rebuilt; the old range is released once no live slot references it.
+    // Refits (UPDATE) keep the layout and stay in place. rt_dyn_inplace=1: old behaviour.
+    if (!refit && (fresh || !inplace_ok || fd.prims > s.cap_prims || s.alpha != fd.cap_alpha || s.flags != dyn_flags)) {
       if (s.as.as) as_destroy(s.as);
       uint32_t cap_prims = fd.prims + fd.prims / 4;
       VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(cap_prims, stride, !fd.cap_alpha, dyn_flags);

@@ -314,3 +314,38 @@ scripts\auto-run.ps1 -NoBuild -Background -NoAnalyze -Validation -Save "Campsite
 - **Remaining limit (pre-existing):** a destroy in the same frame as the submission,
   before any present fence covers it, cannot be waited on. `tracker.cpp` logs it as "no
   fence covers it yet".
+
+## 5. Fault `3f5fb8b` run 1 (`captures/fault_3f5fb8b_run1.log`) and the sixth commit
+
+- **Stale slots 4-7** (built 1399-1402, before the level load) referencing RELEASED
+  ranges are harmless. A slot is handed out only while `built + 1 >= now`
+  (`rtscene.cpp hand_out`). It is never the refit source either: that is always the
+  previous build's slot, and an instance-count change forces a full TLAS build.
+- **"Freed but not released" in slots 0-2 is the gate working.**
+  - Those are per-draw BLAS reallocated by the builds of 11155-11157 (88, 58 and 51
+    full builds, mostly growth after the load).
+  - Their old ranges stay allocated until every live slot was built after the free.
+- **Evictions after the load:** 0 meshes left. All 105 were evicted by the game's buffer
+  destroys at the level load, plus per-draw LRU over the 10,000 frames with no build.
+- **The IP cannot be mapped to a pipeline.**
+  - `VK_EXT_device_fault` gave no vendor records.
+  - The shader heap is not in the binding report.
+  - Pipeline executable properties carry no addresses.
+- **The read address** `0x1dcfb3cb40000` is a valid-looking VA (`0x1dcfb3cb400`, in the
+  driver's heap range) shifted left by 8 bits. That is consistent with a pointer stored
+  >> 8 in a driver-internal AS node, interpreted from a stale or other layout.
+- **The one hazard the code still had: per-draw BLAS were fully rebuilt *in place*.**
+  - This happened when the primitive count changed within capacity, on the staggered
+    forced rebuild, or on the refit refused after a dropped buffer.
+  - A rebuild changes the BLAS's internal layout at the same address, so the TLAS
+    signature did not change. The next TLAS was then *refit* (an UPDATE over a rebuilt
+    BLAS), and older slots still in flight referenced the rebuilt BLAS.
+  - Both runs fit this:
+    - d33fca6: 9 full per-draw builds at 765, then TLAS refits at 766 and 767, then the
+      loss;
+    - 3f5fb8b: a burst of 88/58/51 full per-draw builds just before the loss.
+- **Fix:** a full per-draw build now always goes into a *new* range.
+  - The BLAS address changes, so the signature changes and the TLAS is rebuilt.
+  - The old range is released through the slot gate.
+  - Refits (UPDATE: same layout) stay in place.
+  - `rt_dyn_inplace=1` restores the old behaviour for an A/B.
