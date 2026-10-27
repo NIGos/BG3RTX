@@ -1,7 +1,7 @@
-// Track D D-EM: emissive geometry capture (docs/TRACK_D_RT.md 12). The data side:
+// Track D D-EM: emissive geometry capture (docs/TRACK_D_RT.md 13). The data side:
 // which draws emit, their geometry in a TLAS of their own, a record per draw and a
 // light list. Effects that use it (emission in GI and reflections, light sampling) come
-// later; rt_debug=6/7/8 shows and checks the data.
+// later; rt_debug=16/17/18 shows and checks the data.
 //
 // Where emission is drawn (AUDIT_ENGINE_DATA 2.2): after the G-buffer, BG3 redraws its
 // emissive meshes, depth-tested, into the effects target, a B10G11R11 render-resolution

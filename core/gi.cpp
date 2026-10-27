@@ -21,6 +21,7 @@
 
 #include "core.h"
 #include "ls_lights.h"
+#include "sun_trust.h"
 
 namespace {
 
@@ -113,6 +114,8 @@ constexpr ExtraBinding kExtras[] = {
     {44, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 7},       // gAux: .x the game's own AO before the fold (ao_direct)
     {45, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},      // D-LS per-light data: runtime lights uploaded (core/ls_lights.cpp)
     {46, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4},       // D-LS per-light data: one record per light array slot
+    {47, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2},       // rt_sun_replace: trust parameters, roof volumes (core/sun_trust.h)
+    {48, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2},      // set 0 b2: the absolute camera (rt_sun_replace)
 };
 VkSampler g_linear_clamp = VK_NULL_HANDLE;
 
@@ -147,6 +150,9 @@ Pipe g_ls_match;    // D-LS per-light data: joins the runtime lights to the ligh
 Pipe g_ls_full, g_ls_ref, g_ls_check, g_ls_full_check;
 LslFrame g_lsl{};   // this frame's upload (bindings 45, 46)
 bool g_lsl_ok = false;
+SunTrustFrame g_sunt{};   // rt_sun_replace: this frame's trust slot (bindings 47, 48)
+bool g_sunt_ok = false;
+Pipe g_sun_resolve;       // rt_sun_replace: writes the trusted traced visibility (gi/rt_sun_resolve.hlsl)
 bool g_ls_logged = false, g_ls_missing_logged = false;
 // D-RF: its pipeline is built against the game's set layout of the lighting's set 1
 // (bound as set 2), so it is rebuilt if that layout ever changes.
@@ -333,6 +339,7 @@ bool snapshot(VkCommandBuffer cmd, Snapshot& s) {
   s.ls_ok = qb(1, 0, s.l_flags) && qb(1, 13, s.l_scale) && qb(1, 23, s.l_clusters) && qb(1, 24, s.l_index) &&
             qb(1, 25, s.l_lights) && qb(1, 39, s.l_consts) && qb(1, 40, s.l_shadows) && qb(0, 2, s.l_cam2) &&
             q(1, 41, s.l_atlas) && s.l_atlas.view;
+  if (!s.ls_ok && !qb(0, 2, s.l_cam2)) s.l_cam2 = Bg3Binding{};   // rt_sun_replace needs it alone
   // Optional (the passes fall back to class 0 without them).
   if (!q(1, 4, s.x_rt3) || !s.x_rt3.view || s.x_rt3.width != s.dif.width) s.x_rt3 = Bg3Binding{};
   if (!qb(1, 28, s.x_prof)) s.x_prof = Bg3Binding{};
@@ -621,6 +628,13 @@ void bind_extras(Bound& b, const Snapshot& s) {
       case 45: b.xbuf[i] = g_lsl_ok ? g_lsl.known : VkDescriptorBufferInfo{s.l_lights.buffer, s.l_lights.offset, s.l_lights.range}; break;
       // (a UINT view either way: VUID-vkCmdDispatch-format-07753 checks the static use)
       case 46: b.ximg[i] = {VK_NULL_HANDLE, g_lsl_ok ? g_lsl.slots_view : g_ls_nodata.view, G}; break;
+      // rt_sun_replace (R32_UINT); rt_shadow.hlsl only runs with the trust image (g_sunt_ok),
+      // the fallback keeps the other passes' descriptors valid.
+      case 47: b.ximg[i] = {VK_NULL_HANDLE, g_sunt_ok ? g_sunt.view : g_ls_nodata.view, G}; break;
+      case 48:
+        b.xbuf[i] = s.l_cam2.buffer ? VkDescriptorBufferInfo{s.l_cam2.buffer, s.l_cam2.offset, (std::min)(s.l_cam2.range, VkDeviceSize(65536))}
+                                    : VkDescriptorBufferInfo{s.cam.buffer, s.cam.offset, (std::min)(s.cam.range, VkDeviceSize(65536))};
+        break;
     }
     const bool buf = kExtras[i].type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || kExtras[i].type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     b.xw[i].pImageInfo = buf ? nullptr : &b.ximg[i];
@@ -1197,6 +1211,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
       g_mv_image = VK_NULL_HANDLE, g_mv_view = VK_NULL_HANDLE;
     }
   }
+  // rt_sun_replace: this frame's trust slot (binding 47), before the descriptors are gathered.
+  g_sunt_ok = host->cfg_int("rt_shadows", 0) && sunt_begin(cmd, &g_sunt, s.l_cam2.buffer != VK_NULL_HANDLE);
   Bound b;
   bind_all(b, s);
   Push pc = make_push();
@@ -1213,7 +1229,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // Hybrid GI: ray queries replace the screen-space march (and do the AO rays too).
   const bool gi_rt = tlas && s.gi && host->cfg_int("gi_rt", 0);
   const bool rt_ao = tlas && s.gi && !gi_rt && host->cfg_int("rt_ao", 0);
-  const bool rt_shadows = tlas && s.shadow.view && host->cfg_int("rt_shadows", 0);
+  const bool rt_shadows = tlas && s.shadow.view && host->cfg_int("rt_shadows", 0) && g_sunt_ok;
   // D-LS runs after the lighting (run_post); it needs the TLAS and the light list.
   s.ls = tlas && host->cfg_int("rt_local_shadows", 0) && s.ls_ok && ensure_ls_layout() &&
          refresh(g_ls, "gi/rt_local_shadows.hlsl", g_ls_layout);
@@ -1305,6 +1321,12 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     rt_begin();
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     dispatch(cmd, g_rt_shadow, b, pc, g_w, g_h, true);
+    if (g_sunt.replace && pc.rt_debug != 3 && pc.rt_debug != 5 &&
+        refresh(g_sun_resolve, "gi/rt_sun_resolve.hlsl", g_rt_layout)) {
+      memory_barrier(cmd, kCS, kCS);
+      dispatch(cmd, g_sun_resolve, b, pc, g_w, g_h, true);
+    }
+    sunt_end(cmd);
     image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
   } else if (s.shadow.view && host->cfg_int("contact_shadows", 1)) {
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
@@ -1434,13 +1456,15 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
   }
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
-  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 5) {
+  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 7) {
     memory_barrier(cmd, kCS, kCS);
     bind_rt(b, s.tlas, s.alpha);
     dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);
   }
-  if (pc.rt_debug >= 6 || em_check_due())
-    em_debug(cmd, s.cam, s.vp, s.dep, s.dif, s.spe, s.l_cam2, g_w, g_h, pc.rt_debug >= 6 ? pc.rt_debug : 0);   // D-EM (core/emissive.cpp)
+  // D-EM (core/emissive.cpp): rt_debug 16-18 are its views (its modes 6-8), else the check.
+  const bool em_view = pc.rt_debug >= 16 && pc.rt_debug <= 18;
+  if (em_view || em_check_due())
+    em_debug(cmd, s.cam, s.vp, s.dep, s.dif, s.spe, s.l_cam2, g_w, g_h, em_view ? pc.rt_debug - 10 : 0);
   timestamp(cmd, 3);
   g_slot_written[g_slot] = true;
   g_slot = (g_slot + 1) % kRing;
@@ -1565,8 +1589,11 @@ void gi_release() {
   release_images();
   lsl_release();
   g_lsl_ok = false;
+  sunt_release();
+  g_sunt_ok = false;
   for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
-                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check}) {
+                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check,
+                  &g_sun_resolve}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
     *p = Pipe{};
   }

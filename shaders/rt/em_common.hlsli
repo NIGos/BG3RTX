@@ -1,4 +1,4 @@
-// D-EM: the emissive scene (layer/emissive.cpp, docs/TRACK_D_RT.md 12).
+// D-EM: the emissive scene (layer/emissive.cpp, docs/TRACK_D_RT.md 13).
 //
 // BG3 redraws its emissive meshes, depth-tested, into the effects target before the
 // tiled lighting. The layer captures those draws (transform feedback) with one record per

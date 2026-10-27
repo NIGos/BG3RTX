@@ -827,11 +827,70 @@ bool api_se_environment(const float pos[3], const char** atmosphere, const char*
   return *atm || *lit;
 }
 
+// Roof volumes (API v3): oriented boxes of the roofed rooms, covered floors and roof floors.
+bool trigger_box(const Db& d, const RTrig& t, Bg3DbVolume& v) {
+  const float s = t.scale > 1e-6f ? t.scale : 1.0f;
+  float lc[3] = {0, 0, 0}, h[3];
+  if (t.shape == 2) {
+    for (int k = 0; k < 3; ++k) h[k] = 0.5f * t.extents[k];
+  } else if (t.shape == 1) {
+    h[0] = h[1] = h[2] = t.radius;
+  } else {
+    if (t.point_count < 3) return false;
+    const float* P = d.tpts.p + 2 * t.first_point;
+    float x0 = 1e30f, x1 = -1e30f, z0 = 1e30f, z1 = -1e30f;
+    for (uint32_t i = 0; i < t.point_count; ++i) {
+      x0 = (std::min)(x0, P[2 * i]), x1 = (std::max)(x1, P[2 * i]);
+      z0 = (std::min)(z0, P[2 * i + 1]), z1 = (std::max)(z1, P[2 * i + 1]);
+    }
+    lc[0] = 0.5f * (x0 + x1), lc[1] = 0.5f * t.height, lc[2] = 0.5f * (z0 + z1);
+    h[0] = 0.5f * (x1 - x0), h[1] = 0.5f * t.height, h[2] = 0.5f * (z1 - z0);
+  }
+  for (int k = 0; k < 3; ++k) {
+    lc[k] *= s;
+    v.half[k] = h[k] * s;
+    if (!std::isfinite(v.half[k]) || v.half[k] < 0.0f) return false;
+  }
+  const float conj[4] = {-t.rot[0], -t.rot[1], -t.rot[2], t.rot[3]};
+  float wc[3];
+  qrot_inv(conj, lc, wc);   // rotating by the conjugate's conjugate: local -> world
+  for (int k = 0; k < 3; ++k) v.center[k] = t.pos[k] + wc[k];
+  memcpy(v.rot, t.rot, sizeof v.rot);
+  return true;
+}
+
+uint32_t api_roof_volumes(const float pos[3], float radius, Bg3DbVolume* out, uint32_t max) {
+  Db* d = db();
+  if (!d) return 0;
+  std::shared_lock<std::shared_mutex> lock(g_level_mu);
+  if (g_level < 0) return 0;
+  const RLevel& l = d->levels[g_level];
+  std::vector<std::pair<float, Bg3DbVolume>> found;
+  for (uint32_t i = l.first_trig; i < l.first_trig + l.n_trig; ++i) {
+    const RTrig& t = d->trigs[i];
+    uint32_t kind = 0;
+    if (t.kind == KIND_ROOM && (t.flags & (TF_ROOM_HAS_ROOF | TF_ROOF))) kind |= BG3_DB_VOL_ROOFED_ROOM;
+    if (t.kind == KIND_FLOOR && (t.flags & TF_COVERED)) kind |= BG3_DB_VOL_COVERED_FLOOR;
+    if (t.kind == KIND_FLOOR && (t.flags & TF_ROOF)) kind |= BG3_DB_VOL_ROOF_FLOOR;
+    Bg3DbVolume v{};
+    if (!kind || !trigger_box(*d, t, v)) continue;
+    v.kind = kind;
+    v.trigger = i;
+    const float r = std::sqrt(v.half[0] * v.half[0] + v.half[1] * v.half[1] + v.half[2] * v.half[2]);
+    const float dc = std::sqrt(dist2(pos, v.center)) - r;
+    if (dc <= radius) found.push_back({dc, v});
+  }
+  std::sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+  const uint32_t n = uint32_t(found.size());
+  for (uint32_t i = 0; i < n && i < max; ++i) out[i] = found[i].second;
+  return n;
+}
+
 const Bg3AssetDbApi g_api = {
     BG3RTX_ASSETDB_API_VERSION, uint32_t(sizeof(Bg3AssetDbApi)), &api_available, &api_current_level,
     &api_lights_near, &api_lights_in_box, &api_light, &api_material, &api_engine_shader, &api_room_at, &api_preset,
     &api_probes_near, &api_probe, &api_probe_capture, &api_string, &api_runtime_lights, &api_se_info,
-    &api_se_environment,
+    &api_se_environment, &api_roof_volumes,
 };
 
 // ---- level from the save (LSPK v18 file list + SaveInfo.json) ----

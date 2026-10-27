@@ -27,6 +27,7 @@ def main():
     r.add_argument("--keep-raw", action="store_true", help="do not prune the raw captures")
     r.add_argument("--capture-only", action="store_true")
     r.add_argument("--out", help="output folder (default captures/qa/<stamp>)")
+    r.add_argument("--set", default="", help="extra bg3rtx.ini keys for every trace, e.g. rt_sun_top=0,rt_sun_near=1")
     r.add_argument("--parallel", type=int, default=1, choices=(1, 2),
                    help="scenes captured at once; 2 = shared background games (experimental)")
     r.add_argument("--exclusive", action="store_true",
@@ -60,7 +61,7 @@ def main():
                 capture.run_scene(sid, all_scenes[sid], out / sid, full_res=args.full_res,
                                   temporal=max(2, args.temporal), reference=args.reference,
                                   interval=args.interval, raw=args.raw, tag=tag, exclusive=args.exclusive,
-                                  shared=lanes > 1)
+                                  shared=lanes > 1, extra=[x for x in args.set.split(",") if x.strip()])
 
         if lanes > 1:
             # A holder keeps the exclusive lock for this whole process (scripts/gamelock.ps1),

@@ -1,4 +1,4 @@
-// D-EM debug views (rt_debug 6-8, docs/TRACK_D_RT.md 12): primary rays against the
+// D-EM debug views (rt_debug 16-18 (modes 6-8), docs/TRACK_D_RT.md 13): primary rays against the
 // host's emissive scene (Bg3HostApi::rt_emissive, shaders/rt/em_common.hlsli), written
 // over the lit diffuse at the end of the tiled lighting like the other rt_debug views,
 // and compared with the game's own effects target (shaders/rt/em_debug.hlsl):

@@ -1,4 +1,4 @@
-// D-EM debug views, rt_debug 6-8 (core/emissive.cpp). One primary ray per pixel against
+// D-EM debug views, rt_debug 16-18 (modes 6-8 here) (core/emissive.cpp). One primary ray per pixel against
 // the emissive TLAS (rt/em_common.hlsli): a hit within rt_em_tol of the pixel's depth is
 // a visible emissive surface, and its radiance is evaluated from the draw's record. The
 // game's effects target at the same pixel is the reference: both are in the effects

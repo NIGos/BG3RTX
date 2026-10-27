@@ -21,7 +21,11 @@ T = {
     "bright_ratio": {"rt_shadows": 1.5, "rt_local_shadows": 1.5, "gi": 2.0, "rt_reflections": 2.0, "all_rt": 2.0},
     "bright_fail_area": 0.05,
     "sun_extra_fail_area": 0.5,   # RT dark, game lit, and the sun term really darkened there
-    "sun_missing_warn_area": 2.0, # RT lit, game dark (casters missing from the TLAS): a warning, no image change
+    "sun_missing_warn_area": 2.0, # RT lit, game dark (casters missing from the TLAS): a warning
+    "sun_replaced_warn_area": 2.0, # ... and rt_sun_replace wrote it lit: brightened, for review
+    # rt_sun_replace in-frame A/B (rt_debug=7): brightened > 0.1 against min(game, traced)
+    "sun_check_far_warn": 0.5,     # ... farther than rt_sun_near / 2 from the game's lit mask: review every crop
+    "sun_check_darker_fail": 0.01, # darker than min: impossible with rt_sun_roof_mode=0
     "sun_min_core_px": 3,         # erosion radius: ignores thin edges and penumbrae
     "flicker_ratio": 1.5,         # mean temporal std on / off
     "flicker_fail_area": 1.0,     # regions with std_on > 2 std_off + 0.01 (PQ code values)
@@ -119,13 +123,15 @@ def brightening(y_on, y_off, sigma, effect, blur=1):
         regs.append({"bbox": bb, "area": area, "gain": round(gain, 3), "qualified": True, "rank": area * (gain - 1)})
     score = _permille(flagged, r.shape)
     regs.sort(key=lambda g: -g["rank"])
-    return {"score": round(score, 4), "threshold": T["bright_fail_area"], "pass": score <= T["bright_fail_area"],
-            "unit": "‰ of px", "metrics": {"bound": thr, "regions": len(regs),
+    # QUALITY.md R0: the game's image is not a reference for effect outputs, so brightening
+    # against it is for review (the crops), not a gate.
+    return {"score": round(score, 4), "threshold": T["bright_fail_area"], "gate": False,
+            "pass": score <= T["bright_fail_area"], "unit": "‰ of px", "metrics": {"bound": thr, "regions": len(regs),
                                             "px_over_bound_raw": round(_permille(int(((r > thr) & (a > floor)).sum()), r.shape), 3)},
             "regions": regs, "map": ("ratio", r)}
 
 
-def sun_disagreement(game, rt, sun_ratio, cls=None):
+def sun_disagreement(game, rt, sun_ratio, cls=None, applied=None):
     """rt_debug=2 trace: game mask (set 1 b7 before our fold) against the traced
     visibility (1 spp soft sun, box-filtered). rt_backlit=0 in that trace, so traced
     lit is always front-facing. Penumbrae and thin edges are removed by thresholds
@@ -141,8 +147,13 @@ def sun_disagreement(game, rt, sun_ratio, cls=None):
     extra = im.dilate(extra, k)
     missing = im.opening(im.erode((rt_b > 0.85) & (game_b < 0.1) & valid, k), 1)
     missing = im.dilate(missing, k)
+    masks = [("extra_casters", extra), ("missing_casters", missing)]
+    if applied is not None:
+        # rt_sun_replace (blue channel): written lit where the game's mask is dark.
+        rep = im.opening(im.erode((im.box(applied, 2) > 0.85) & (game_b < 0.1) & valid, k), 1)
+        masks.append(("replaced", im.dilate(rep, k)))
     out = {}
-    for name, m in (("extra_casters", extra), ("missing_casters", missing)):
+    for name, m in masks:
         lab, n = im.label(m)
         regs, tot, impact_px = [], 0, 0
         for i, area, bb in im.regions(lab, n, _min_area(m.shape)):
@@ -164,17 +175,30 @@ def sun_disagreement(game, rt, sun_ratio, cls=None):
                "missing_area": round(s_missing, 3),
                "agree_lit": round(float(((rt_b > 0.5) & lit_game).sum() / max(1, lit_game.sum())), 4),
                "game_lit_frac": round(float(lit_game.mean()), 4)}
-    return {
-        "extra": {"score": round(s_extra, 4), "threshold": T["sun_extra_fail_area"],
+    res = {
+        # R0: casters the game's mask lacks may be right (our BVH has geometry its cascades
+        # miss), so this is for review too.
+        "extra": {"score": round(s_extra, 4), "threshold": T["sun_extra_fail_area"], "gate": False,
                   "pass": s_extra <= T["sun_extra_fail_area"], "unit": "‰ of px (darkened by the sun term)",
                   "metrics": metrics, "regions": ex_regs},
-        # The fold only darkens (mask * vis): a missing caster cannot change the image, the
-        # game's own mask keeps that shadow. Off-screen casters (roofs, cut-away walls)
-        # are expected here, so this is a warning, not a gate.
+        # With min(game, traced) a missing caster cannot change the image. With
+        # rt_sun_replace only trusted pixels can (the "replaced" entry below); off-screen
+        # casters (roofs, cut-away walls) are expected here, so this is a warning, not a gate.
         "missing": {"score": round(s_missing, 4), "threshold": T["sun_missing_warn_area"], "gate": False,
                     "pass": s_missing <= T["sun_missing_warn_area"], "unit": "‰ of px", "metrics": metrics,
                     "regions": mi_regs},
     }
+    if "replaced" in out:
+        rp_regs, rp_tot, _ = out["replaced"]
+        s_rep = _permille(rp_tot, game.shape)
+        metrics["replaced_area"] = round(s_rep, 3)
+        metrics["replaced_of_missing"] = round(s_rep / max(s_missing, 1e-9), 3) if s_missing > 0 else 0.0
+        # Brightened against the game: physically right (over-wide filtering, acne) or a
+        # missing caster leaking. For review (the crops), not a gate.
+        res["replaced"] = {"score": round(s_rep, 4), "threshold": T["sun_replaced_warn_area"], "gate": False,
+                           "pass": s_rep <= T["sun_replaced_warn_area"], "unit": "‰ of px", "metrics": metrics,
+                           "regions": rp_regs}
+    return res
 
 
 def temporal(codes_on, codes_off):
@@ -205,3 +229,40 @@ def temporal(codes_on, codes_off):
                         "excess_area": round(area, 3), "excess_threshold": T["flicker_fail_area"],
                         "frames": [len(codes_on), len(codes_off)]},
             "regions": regs, "map": ("std", s_on)}
+
+
+def sun_check(view):
+    """rt_debug=7 trace (debug diffuse x 2): yellow = brightened by > 0.1 against
+    min(game, traced) at the game's shadow edge, red = brightened farther from it, blue =
+    darker than min. Everything else is dim grey (R = G = B <= 0.2)."""
+    r, g, b = view[..., 0], view[..., 1], view[..., 2]
+    edge = (r > 0.8) & (g > 0.8) & (b < 0.2)
+    far = (r > 0.8) & (g < 0.2) & (b < 0.2)
+    darker = (b > 0.8) & (r < 0.2) & (g < 0.2)
+
+    def regions(m):
+        lab, n = im.label(im.dilate(m, 2))
+        out = []
+        for i, area, bb in im.regions(lab, n, 8):
+            y0, y1, x0, x1 = bb
+            out.append({"bbox": bb, "area": area, "px": int(m[y0:y1, x0:x1].sum()), "qualified": True,
+                        "rank": area})
+        out.sort(key=lambda g_: -g_["rank"])
+        return out
+
+    def pm(m):
+        return round(_permille(int(m.sum()), view.shape), 4)
+
+    metrics = {"brightened_edge": pm(edge), "brightened_far": pm(far), "darker": pm(darker),
+               "brightened_total": pm(edge | far),
+               "far_share": round(float(far.sum()) / max(1, int((edge | far).sum())), 4)}
+    return {
+        "far": {"score": metrics["brightened_far"], "threshold": T["sun_check_far_warn"], "gate": False,
+                "pass": metrics["brightened_far"] <= T["sun_check_far_warn"], "unit": "‰ of px",
+                "metrics": metrics, "regions": regions(far)},
+        "edge": {"score": metrics["brightened_edge"], "threshold": None, "gate": False, "pass": True,
+                 "unit": "‰ of px", "metrics": metrics, "regions": regions(edge)},
+        "darker": {"score": metrics["darker"], "threshold": T["sun_check_darker_fail"],
+                   "pass": metrics["darker"] <= T["sun_check_darker_fail"], "unit": "‰ of px",
+                   "metrics": metrics, "regions": regions(darker)},
+    }
