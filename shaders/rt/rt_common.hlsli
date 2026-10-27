@@ -22,8 +22,25 @@
 // counter 118 a read of the game's light list (cluster, index, light, shadow view)
 // out of its buffer, 119 a set-1 read (InstInfo, vertices, alpha records) out of
 // range. The read is skipped (no light / a miss) instead of faulting.
-static const uint kGuardLightList = 118u, kGuardSet1 = 119u;
+static const uint kGuardLightList = 118u, kGuardSet1 = 119u, kGuardRay = 120u;
 void guard_count(uint k) { rtStats.InterlockedAdd((k * 64u) * 4u, 1u); }
+
+// A ray query must get a finite origin, a finite non-zero direction and
+// 0 <= TMin <= TMax, none NaN (VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06348..06352):
+// anything else is undefined, and on NVIDIA traversal then reads at garbage
+// addresses (the D-LS faults: rays built from game light data, a NaN or Inf
+// position or source radius gives a NaN/zero direction or a NaN TMax, which
+// "tmax <= 0" does not catch). Such a ray is not traced (a miss / not occluded) and
+// counts in guard counter 120. TMax is clamped to a finite 1e30.
+bool rt_ray_valid(float3 o, float3 d, inout float tmax) {
+  const bool ok = all(isfinite(o)) && all(isfinite(d)) && dot(d, d) > 1e-20 && tmax >= 0.0;   // false for NaN
+  if (!ok) {
+    guard_count(kGuardRay);
+    return false;
+  }
+  tmax = min(tmax, 1e30);
+  return true;
+}
 
 void stat_add(uint index, bool cond, uint bin) {
   uint n = WaveActiveCountBits(cond);
@@ -380,7 +397,7 @@ struct RtCone { float f0, spread; };
 // Any alpha-tested hit within [0, tmax] (shadow and occlusion rays).
 bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 1u;
-  if (!rt_scene_ok()) return false;
+  if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return false;
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;
@@ -402,7 +419,7 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
   RtDebugHit h;
   h.near_kind = 0;
-  if (!rt_scene_ok()) {
+  if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
     h.t = -1.0;
     h.alpha = false;
     h.hit_kind = 0u;
@@ -437,7 +454,7 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
 struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; };
 RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
-  if (!rt_scene_ok()) {
+  if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
     RtHit m;
     m.t = -1.0;
     m.geom = m.prim = m.inst = 0u;
@@ -554,7 +571,7 @@ float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
 // Closest alpha-tested hit distance, or -1.
 float rt_closest(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
-  if (!rt_scene_ok()) return -1.0;
+  if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return -1.0;
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;

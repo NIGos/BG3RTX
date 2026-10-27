@@ -607,3 +607,58 @@ and the TLAS are identical with split=0 and split=1.
   inconsistent.
 - The rest is timing: the split's build and its extra work change what runs
   concurrently.
+
+## 12. Second dump (51725f5): D-LS again, guards 0. Invalid rays (fourteenth commit)
+
+**Facts:**
+- Only `gi/rt_local_shadows.hlsl:main` is active.
+- Read at VA 0x24d856f4000, which no driver binding covers.
+- Guard counters 0: no light-list or set-1 read was out of range.
+
+So the bad read is not one of our loads. It happens in ray-query traversal itself.
+
+**1. Host-side use-after-free in the instances?**
+- The TLAS instances and InstInfo are written by the CPU into the slot's ring region at
+  record; the fixups write only the 48-byte transform and the mask byte at submit. The
+  memory is host-coherent, so the GPU reads exactly those bytes.
+- The fault-time audit reads the same bytes: every BLAS reference of every in-flight
+  slot was a live BLAS of ours.
+- Instance references come only from `AsAlloc::addr`
+  (`vkGetAccelerationStructureDeviceAddressKHR`). `g_meshes` / `g_dyn` are
+  `unordered_map`s, whose element references stay valid across inserts. Records are
+  copied by value; no span or pointer into a vector is kept across a reallocation.
+- So I found no stale pointer. A GPU-side compare of instance references would read
+  the very bytes the audit already checks; I did not add one.
+
+**2. What D-LS does that the sun pass does not: rays built from game light data.**
+In `trace_light` (and `ls_light_traced`) the light position comes from `lLights` and
+the source radius R from `lsSlots` (bridge / asset-database data written by the match
+pass).
+- A position at Inf or very large makes `length(L)` overflow to Inf, so Ld = L / Inf =
+  **0: a zero direction**.
+- A NaN position or NaN R gives a **NaN direction** (`sin_max = min(R / dist, 1)`).
+- NaN anywhere gives **NaN TMax**, which `if (tmax <= 0.0)` does not catch.
+
+A ray query with a non-finite origin or direction, a zero direction, or NaN TMin/TMax is
+undefined behaviour (VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06348..06352). On NVIDIA
+the traversal then computes garbage node addresses: an MMU fault with no resource at a
+nonsense VA, inside our compute shader. The sun pass traces a fixed, valid direction and
+never does this. D-LS also runs in legacy mode, which fits the main/legacy device loss
+at Grymforge.
+
+**Fix:**
+- `rt_ray_valid` in every trace helper (`rt_occluded`, `rt_closest`, `rt_closest_hit`,
+  `rt_closest_debug`, and the generated `ls_ref` copy) requires:
+  - finite origin and direction;
+  - |d|² > 1e-20;
+  - 0 <= TMax, not NaN (TMin is 0); TMax is clamped to 1e30.
+- Otherwise the ray is not traced (a miss / not occluded). Such rays count in guard
+  counter 120 and are logged in `[core] guard:` (also in the 3000-frame heartbeat).
+- Only the core and the shaders changed.
+
+**3. Legacy: can D-LS trace an incomplete TLAS?**
+- `rt_scene_set` hands out a slot only after its build was committed.
+- The scene stamp makes the passes skip a TLAS whose build has not executed.
+- Legacy rebuilds its one TLAS in place, ordered by the build's barriers (all on one
+  queue).
+- I found no path; the invalid-ray hypothesis covers the legacy fault as well.

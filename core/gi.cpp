@@ -652,10 +652,11 @@ constexpr uint32_t kStatsRing = 8;
 // (rt_reflections.hlsl), [64..75] RT audit fixes (D-LS per class, rt_origin, ao_direct),
 // [80..111] alpha-tested candidates of visibility / shadow rays (rt_common.hlsli alpha_stat),
 // [112..117] D-LS bit-exactness checks (ls_check=1): the pass, the join's kept slots.
-// [118, 119] out-of-range guards, always counted (rt_common.hlsli guard_count): reads of
-// the game's light list / of set 1 that were skipped; logged as "[core] guard:".
-constexpr uint32_t kStatsCounters = 120;
-uint64_t g_guard_sum[2] = {}, g_guard_total[2] = {};
+// [118..120] guards, always counted (rt_common.hlsli guard_count): reads of the game's
+// light list / of set 1 out of range, and rays not traced because their origin,
+// direction or extent was invalid (NaN, Inf, zero direction); logged as "[core] guard:".
+constexpr uint32_t kStatsCounters = 121;
+uint64_t g_guard_sum[3] = {}, g_guard_total[3] = {};
 uint32_t g_guard_frames = 0;
 uint64_t g_guard_folds = 0;   // frames whose counters were read back (heartbeat)
 constexpr VkDeviceSize kStatsSlot = kStatsCounters * 64 * 4;
@@ -687,28 +688,29 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   uint32_t slot = uint32_t(now % kStatsRing);
   if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
     const uint32_t* c = g_stats_map + slot * (kStatsSlot / 4);
-    uint64_t got[2] = {};
-    for (int g = 0; g < 2; ++g)
+    uint64_t got[3] = {};
+    for (int g = 0; g < 3; ++g)
       for (int b = 0; b < 64; ++b) got[g] += c[(118 + g) * 64 + b];
-    g_guard_sum[0] += got[0];
-    g_guard_sum[1] += got[1];
+    for (int g = 0; g < 3; ++g) g_guard_sum[g] += got[g];
     // Heartbeat: the first read-back and every 3000 frames, also when 0 (the counters
     // are read). The total includes this frame's values.
     if (g_guard_folds++ % 3000 == 0)
       host->log("[core] guard: counters read back (frame %llu, %llu frames read so far): light list %llu, set 1 %llu "
-                "out-of-range reads skipped in total",
+                "out-of-range reads skipped, %llu invalid rays not traced, in total",
                 (unsigned long long)now, (unsigned long long)g_guard_folds,
-                (unsigned long long)(g_guard_total[0] + g_guard_sum[0]), (unsigned long long)(g_guard_total[1] + g_guard_sum[1]));
+                (unsigned long long)(g_guard_total[0] + g_guard_sum[0]), (unsigned long long)(g_guard_total[1] + g_guard_sum[1]),
+                (unsigned long long)(g_guard_total[2] + g_guard_sum[2]));
     if (++g_guard_frames >= 300) {
-      if (g_guard_sum[0] || g_guard_sum[1]) {
-        g_guard_total[0] += g_guard_sum[0];
-        g_guard_total[1] += g_guard_sum[1];
+      if (g_guard_sum[0] || g_guard_sum[1] || g_guard_sum[2]) {
+        for (int g = 0; g < 3; ++g) g_guard_total[g] += g_guard_sum[g];
         host->log("[core] guard: in the last %u frames %llu reads of the game's light list and %llu set-1 reads were out "
-                  "of range and skipped (%llu / %llu so far)",
+                  "of range and skipped, %llu invalid rays (NaN/Inf/zero direction or extent) not traced "
+                  "(%llu / %llu / %llu so far)",
                   g_guard_frames, (unsigned long long)g_guard_sum[0], (unsigned long long)g_guard_sum[1],
-                  (unsigned long long)g_guard_total[0], (unsigned long long)g_guard_total[1]);
+                  (unsigned long long)g_guard_sum[2], (unsigned long long)g_guard_total[0],
+                  (unsigned long long)g_guard_total[1], (unsigned long long)g_guard_total[2]);
       }
-      g_guard_sum[0] = g_guard_sum[1] = 0;
+      g_guard_sum[0] = g_guard_sum[1] = g_guard_sum[2] = 0;
       g_guard_frames = 0;
     }
     for (int i = 0; i < int(kStatsCounters); ++i)
