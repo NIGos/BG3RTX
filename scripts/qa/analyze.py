@@ -309,10 +309,11 @@ def analyze_scene(d: Path, pool):
     # ---- temporal stability
     # Sets: on* (all on), off* (all RT off), nogi* (all on but the GI neutral: --temporal-gi).
     nogi_set = [n for n in data if n.startswith("nogi")]
+    nosun_set = [n for n in data if n.startswith("nosun")]   # --temporal-sun
     if len(on_set) >= 2 and len(off_set) >= 2:
         # Scene motion in any set (geometry or the game's own shadows moved) is excluded.
         shape = data["on0"]["code"].shape[:2]
-        sets = [s for s in (on_set, off_set, nogi_set) if len(s) >= 2]
+        sets = [s for s in (on_set, off_set, nogi_set, nosun_set) if len(s) >= 2]
         moving = np.zeros(shape, bool)
         for s in sets:
             moving |= det.animated([fr[n].albedo() for n in s], [fr[n].sun_mask() for n in s], shape,
@@ -320,6 +321,8 @@ def analyze_scene(d: Path, pool):
         pairs = [("all_rt", off_set, "all RT off")]
         if len(nogi_set) >= 2:
             pairs.append(("gi", nogi_set, "GI neutral (gi_strength=0 gi_ao=0)"))
+        if len(nosun_set) >= 2:
+            pairs.append(("rt_shadows", nosun_set, "RT sun off (rt_shadows=0)"))
         for eff, base, base_label in pairs:
             r = det.temporal([data[n]["code"] for n in on_set], [data[n]["code"] for n in base], moving)
             s_on = r.pop("map")[1]
