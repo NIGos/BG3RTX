@@ -638,10 +638,19 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "hitmat":
         hp = argparse.ArgumentParser(prog="python -m scripts.qa.coverage hitmat",
                                      description="EN2 hit-material coverage and on-screen self-check from layer logs")
-        hp.add_argument("logs", nargs="+", help="bg3rtx logs (captures/queue/logs/*.log), one scene each")
+        hp.add_argument("logs", nargs="*", help="bg3rtx logs (captures/queue/logs/*.log), one scene each")
+        hp.add_argument("--latest", action="append", default=[],
+                        help="a queue job's name: its newest run log (a job's \"post\": the run's own log)")
         hp.add_argument("--json")
         ha = hp.parse_args(sys.argv[2:])
-        rows = hitmat_report(ha.logs)
+        logs = list(ha.logs)
+        for job in ha.latest:
+            found = sorted((MAIN / "captures" / "queue" / "logs").glob(f"{job}.*.log"), key=lambda p: p.stat().st_mtime)
+            if found:
+                logs.append(str(found[-1]))
+            else:
+                print(f"no run log for job {job}")
+        rows = hitmat_report(logs)
         if ha.json:
             Path(ha.json).write_text(json.dumps(rows, indent=1), encoding="utf-8")
         return
