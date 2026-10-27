@@ -192,7 +192,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
           sharc_stat(kShRfEligible, wide);
           float3 Lc;
           bool near;
-          if (wide && sharc_ray_hit(hh, ph, dir, t, cam_abs, Lc, near)) {
+          SharcCell cell;
+          if (wide && sharc_ray_hit(hh, ph, dir, t, cam_abs, cone, Lc, near, cell)) {
             w = rough_w * saturate(pc.rf_strength);
             Lrt = Lc;
             hit_t = t;

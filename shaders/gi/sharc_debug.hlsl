@@ -8,6 +8,9 @@
 //     would get); dark magenta where the cache has nothing;
 //   4 the GI rays' tiers (gi_trace_rt_sharc.hlsl): red cache, green screen, blue no
 //     radiance (gi_rt_fallback), as fractions;
+//   6 the cache's GI contribution split by the leak test (gi_trace_rt_sharc.hlsl, needs
+//     sharc_leak_check=1): red from a cell occluded from the query point, green clean, blue
+//     from a cell larger than the surface's thickness; luminance, temporally accumulated;
 //   5 roofed-room mask for the QA leak gate (sharc_roof.hlsl when the roof volumes are
 //     bound); here, without them: blue, "not known".
 #include "gi_common.hlsli"
@@ -40,7 +43,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     } else if (shc.debug == 3u) {
       float3 L;
       c = sharc_lookup(cam_abs, P + cam_abs, N, L) ? L : float3(0.02, 0, 0.02);
-    } else if (shc.debug == 4u) {
+    } else if (shc.debug == 4u || shc.debug == 6u) {
       c = gather_history(fp, d).rgb * 0.5;
     }
   }

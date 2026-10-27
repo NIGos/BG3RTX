@@ -215,8 +215,10 @@ def roofed_brightening(y_with, y_base, y_off, roofed, sigma, blur=2, sun_lit_fra
                "with_cache_permille": round(_permille(int(m_with.sum()), roofed.shape), 4),
                "without_cache_permille": round(_permille(int(m_base.sum()), roofed.shape), 4),
                "bound": T["roof_ratio"], "applies": applies}
-    return {"score": round(score, 4), "threshold": T["roof_fail_area"],
-            "pass": (not applies) or score <= T["roof_fail_area"], "unit": "‰ of px added by the cache",
+    # Review only (user decision 2026-10-27): the 1.3 ratio and the 0.5 per mille area have no
+    # physical basis. The physical checks are sharc_reference and sharc_leak_cells below.
+    return {"score": round(score, 4), "threshold": T["roof_fail_area"], "gate": False,
+            "pass": (not applies) or score <= T["roof_fail_area"], "unit": "‰ of px added by the cache (review map)",
             "metrics": metrics, "regions": regs if applies else [], "map": ("ratio", r_with)}
 
 
@@ -500,3 +502,93 @@ def sun_check(view):
                    "pass": metrics["darker"] <= T["sun_check_darker_fail"], "unit": "‰ of px",
                    "metrics": metrics, "regions": regions(darker)},
     }
+
+def _corr_length(res, mask, max_lag=32):
+    """Spatial correlation length (px) of zero-mean residuals: the first lag at which the
+    autocorrelation along x and along y (within `mask`) falls below 1/e. Used to thin a pixel
+    test to independent samples: RR and the box filters correlate neighbours."""
+    m = mask.astype(bool)
+    r = np.where(m, res - float(res[m].mean()) if m.any() else 0.0, 0.0).astype(np.float64)
+    v = float((r[m] ** 2).mean()) if m.any() else 0.0
+    if v <= 0:
+        return 1
+    for lag in range(1, max_lag + 1):
+        cx = (r[:, lag:] * r[:, :-lag])[m[:, lag:] & m[:, :-lag]]
+        cy = (r[lag:, :] * r[:-lag, :])[m[lag:, :] & m[:-lag, :]]
+        c = np.concatenate([cx, cy])
+        if c.size == 0 or float(c.mean()) / v < np.exp(-1.0):
+            return lag
+    return max_lag
+
+
+def sharc_reference(ys_cache, ys_ref, mask):
+    """The cache's result against its physical reference (docs/QA.md "sharc_reference"):
+    `ys_cache` repeated traces with the cache, `ys_ref` repeated traces of the reference (no
+    cache, rays as long as the cache's, 8 per pixel). Every tolerance is measured:
+      - per pixel, the noise of the difference of the two means, sigma_d = sqrt(var_c / N_c +
+        var_r / N_r), from the traces' own per-pixel variance (unbiased, N - 1);
+      - a pixel is in excess where mean_c - mean_r > sigma_d, in deficit where mean_r -
+        mean_c > sigma_d. Under "no difference" both tails are equally likely, so the deficit
+        tail is the measured control for the excess tail;
+      - the counts are taken on a grid as wide as the measured correlation length, so the
+        samples are independent, and the excess fails only if it exceeds the deficit by more
+        than the binomial noise of that difference, sqrt(N_excess + N_deficit).
+    It fails only where the cache's result is brighter than the reference beyond the measured
+    noise of both estimates."""
+    c, r = np.stack(ys_cache).astype(np.float64), np.stack(ys_ref).astype(np.float64)
+    nc, nr = c.shape[0], r.shape[0]
+    mc, mr = c.mean(0), r.mean(0)
+    sd = np.sqrt(c.var(0, ddof=1) / nc + r.var(0, ddof=1) / nr)
+    d = mc - mr
+    m = mask & (sd > 0) & np.isfinite(d)
+    L = max(_corr_length(c[0] - mc, m), _corr_length(r[0] - mr, m))
+    grid = np.zeros_like(m)
+    grid[::L, ::L] = True
+    excess, deficit = m & (d > sd), m & (-d > sd)
+    ne, nd = int((excess & grid).sum()), int((deficit & grid).sum())
+    noise = float(np.sqrt(ne + nd))
+    score = ne - nd
+    tot = float(mr[m].sum()) if m.any() else 0.0
+    excess_energy = float((d - sd)[excess].sum()) / tot if tot > 0 else 0.0
+    lab, n = im.label(im.opening(excess, 1))
+    regs = []
+    for i, area, bb in im.regions(lab, n, _min_area(excess.shape)):
+        y0, y1, x0, x1 = bb
+        sub = lab[y0:y1, x0:x1] == i
+        z = float(np.median((d / np.maximum(sd, 1e-12))[y0:y1, x0:x1][sub]))
+        regs.append({"bbox": bb, "area": area, "excess_sigmas": round(z, 2), "qualified": True, "rank": area * z})
+    regs.sort(key=lambda g: -g["rank"])
+    return {"score": score, "threshold": round(noise, 2), "pass": score <= noise,
+            "unit": "independent px in excess minus in deficit (> sigma_d), against their binomial noise",
+            "metrics": {"traces": [nc, nr], "corr_length_px": L, "samples": int((m & grid).sum()),
+                        "excess_samples": ne, "deficit_samples": nd,
+                        "excess_permille": round(1000.0 * float(excess.sum()) / max(1, int(m.sum())), 3),
+                        "deficit_permille": round(1000.0 * float(deficit.sum()) / max(1, int(m.sum())), 3),
+                        "excess_energy_share": round(excess_energy, 5),
+                        "mean_change_pct": round(100.0 * (float(mc[m].sum()) / tot - 1.0), 3) if tot > 0 else None},
+            "regions": regs, "map": ("sigmas", np.where(m, d / np.maximum(sd, 1e-12), 0.0))}
+
+
+def sharc_leak_cells(view, mask=None):
+    """sharc_debug=6 trace (gi_trace_rt_sharc.hlsl): the cache's GI contribution per pixel split
+    by the geometric leak test, red from a cell occluded from the query point, green clean,
+    blue from a cell larger than the surface's thickness. Returns the shares of the
+    contribution (frame, and inside `mask`). No threshold: a non-zero occluded share means the
+    leak mechanism is active, and sharc_reject_occluded=1 (the default) removes exactly it."""
+    def shares(m):
+        r, g, b = (float(view[..., k][m].sum()) for k in range(3))
+        t = r + g + b
+        return {"occluded": round(r / t, 5) if t > 0 else 0.0, "thin": round(b / t, 5) if t > 0 else 0.0,
+                "contribution": round(t, 3), "px": int(m.sum())}
+    lit = view.sum(-1) > 0
+    out = {"frame": shares(lit)}
+    if mask is not None and mask.shape == lit.shape:
+        out["roofed"] = shares(lit & mask)
+    occ = (view[..., 0] > view[..., 1]) & (view[..., 0] > view[..., 2]) & lit
+    lab, n = im.label(im.opening(occ, 1))
+    regs = [{"bbox": bb, "area": area, "qualified": True, "rank": area} for _, area, bb in im.regions(lab, n, _min_area(occ.shape))]
+    regs.sort(key=lambda g: -g["rank"])
+    return {"score": out["frame"]["occluded"], "threshold": 0.0, "gate": False,
+            "pass": out["frame"]["occluded"] == 0.0,
+            "unit": "share of the cache's GI contribution from occluded cells (with the rejection off)",
+            "metrics": out, "regions": regs}

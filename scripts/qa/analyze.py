@@ -119,16 +119,33 @@ def analyze_scene(d: Path, pool):
     # correlation; the jitter moves it by < 1 px) shows another view (the camera moved), and every comparison
     # with it is void. The share of px changed beyond the jitter bound (scene motion, or a
     # rotation/zoom that has no single shift) is reported for review.
-    def view_change(n):
-        a, b = fr[n].albedo(), fr["on0"].albedo()
+    def view_change(n, anchor="on0"):
+        a, b = fr[n].albedo(), fr[anchor].albedo()
         if a is None or b is None or a.shape != b.shape:
             return n, (0.0, (0, 0))
         dy, dx, _, _ = det.view_shift(b, a)
         return n, (det.view_changed(b, a), (dy, dx))
-    vs = dict(pool.map(view_change, [n for n in fr if n != "on0"]))
-    view = {n: v[0] for n, v in vs.items()}
-    shift = {n: v[1] for n, v in vs.items()}
-    moved = sorted(n for n, s in shift.items() if max(abs(c) for c in s) >= th.JITTER_PX)
+
+    def views(anchor):
+        vs = dict(pool.map(lambda n: view_change(n, anchor), [n for n in fr if n != anchor]))
+        sh = {n: v[1] for n, v in vs.items()}
+        return {n: v[0] for n, v in vs.items()}, sh, sorted(n for n, s in sh.items() if max(abs(c) for c in s) >= th.JITTER_PX)
+    view, shift, moved = views("on0")
+    # The camera can settle after on0 (S7, 2026-10-27: every later trace shifted by the same
+    # amount): when most traces agree with each other and not with on0, they are the view.
+    if len(moved) * 2 > len(fr) - 1:
+        alt = next((n for n in fr if n != "on0" and n in moved), None)
+        if alt is not None:
+            v2, s2, m2 = views(alt)
+            if len(m2) < len(moved):
+                res["notes"].append(f"view anchored on {alt}: on0 differs from the {len(fr) - 1 - len(m2)} traces that agree")
+                view, shift, moved = v2, s2, m2
+                # on0 and the onN traces have the same settings: the first agreeing one takes on0's
+                # place (and leaves the on set, so it is not counted twice in the noise).
+                if alt.startswith("on") and "on0" in moved:
+                    moved.remove("on0")
+                    data["on0"], fr["on0"] = data.pop(alt), fr[alt]
+                    traces["on0"] = traces[alt]
     # The sun debug traces are evaluated each on its own (in-frame), so another view than
     # on0's does not void them. (Their crops show on0's lighting only when the view agrees.)
     self_contained = ("sun_dbg", "sun_check", "sun_trust")
@@ -195,7 +212,7 @@ def analyze_scene(d: Path, pool):
     # ---- per-effect contribution detectors (final frame and lighting buffer)
     jobs = []
     effects = dict(capture.EFFECTS)
-    if "sharc_on" in traces:   # a --sharc run
+    if "sharc_on0" in traces:   # a --sharc run
         effects.update(capture.SHARC_EFFECTS)
     for eff, (a, b) in effects.items():
         if a not in data or b not in data:
@@ -326,8 +343,9 @@ def analyze_scene(d: Path, pool):
                                          "effect": "rt_sun_replace", "buffer": "debug diffuse", "bbox": g["bbox"],
                                          "shape": list(view.shape[:2]), **info})
 
-    # ---- SHaRC leak gate (--sharc): GI brightening inside asset-DB roofed rooms whose exterior is
-    # sunlit (sharc_debug=5 mask), with the cache against without it, both over gi_off.
+    # ---- SHaRC (--sharc). roofed_brightening: a review map (GI brightening inside asset-DB roofed
+    # rooms, with the cache against without it); the physical checks follow it.
+    interior = None
     if "sharc_roof" in traces:
         dif, src = fr["sharc_roof"].diffuse()
         need = ("sharc_refl_off", "refl_off", "gi_off")
@@ -353,6 +371,7 @@ def analyze_scene(d: Path, pool):
                         sun_px = np.clip(2 * sd[..., 0], 0, 1) > 0.1
                         lit = float((np.clip(2 * sd[..., 0], 0, 1) > 0.5).mean())
                         roofed = roofed & ~im.dilate(sun_px, 2)
+                interior = roofed if lit is not None and lit > 0 else None
                 r = det.roofed_brightening(yw, yb, yo, roofed, sigma("Yc"), sun_lit_frac=lit)
                 ratio = r.pop("map")[1]
                 r["metrics"].update(outside_permille=round(1000.0 * outside.mean(), 2),
@@ -374,6 +393,81 @@ def analyze_scene(d: Path, pool):
                           f"{meta['scene']} roofed_brightening at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
                     res["crops"].append({"file": f"crops/{name}", "detector": "roofed_brightening", "effect": "gi_sharc",
                                          "buffer": "lighting", "bbox": g["bbox"], "shape": list(ratio.shape), **info})
+
+    # sharc_leak_cells: the share of the cache's GI contribution supplied by cells that lie behind
+    # an occluder from the query point (sharc_debug=6, the rejection off for the measurement).
+    if "sharc_leak" in traces:
+        dif, src = fr["sharc_leak"].diffuse()
+        if dif is None:
+            res["notes"].append("sharc_leak_cells: no debug diffuse dump in sharc_leak")
+        else:
+            r = det.sharc_leak_cells(dif, interior)
+            # The score comes from the GPU counters ("sharc stats ... leak test", the lines logged
+            # with the rejection off): the debug-diffuse preview's tone mapping mixes the view's
+            # channels (S7/S8, 2026-10-27: 63% "thin" in the view against 0.000% counted), so the
+            # view only locates the regions.
+            import re as _re
+            lines = [l for l in meta.get("log_tail", []) if "leak test" in l and "reject_occluded 0" in l]
+            if lines:
+                m_ = _re.search(r"occluded cells ([\d.]+)%, thin ([\d.]+)%", lines[-1])
+                h_ = _re.search(r"query point ([\d.]+)%", lines[-1])
+                if m_:
+                    r["metrics"]["view"] = {k: v for k, v in r["metrics"].items()}
+                    r["metrics"]["counters"] = {"occluded_contribution": float(m_.group(1)) / 100.0,
+                                                "thin_contribution": float(m_.group(2)) / 100.0,
+                                                "occluded_hits": float(h_.group(1)) / 100.0 if h_ else None,
+                                                "line": lines[-1][:200]}
+                    r["score"] = float(m_.group(1)) / 100.0
+                    r["pass"] = r["score"] == 0.0
+            res["checks"].append({"detector": "sharc_leak_cells", "effect": "sharc", "buffer": f"debug diffuse ({src})",
+                                  "on": "sharc_leak", "off": "sharc_leak", **{k: v for k, v in r.items() if k != "regions"},
+                                  "top": r["regions"][:6]})
+            for j, g in enumerate(r["regions"][:CROPS_PER_DETECTOR]):
+                y0, y1, x0, x1 = crop_window(g["bbox"], dif.shape[:2])
+                v = dif / max(float(np.percentile(dif.sum(-1), 99)), 1e-9)
+                tiles, labs = [np.clip(v[y0:y1, x0:x1], 0, 1)], ["cache contribution: red occluded cell, green clean, blue thin"]
+                if "sharc_leak" not in moved_self and "sharc_on0" in data:
+                    tiles.insert(0, dsp("sharc_on0", "compose")[y0:y1, x0:x1])
+                    labs.insert(0, "with the cache (lighting)")
+                name = f"sharc_leak_cells_{j}.png"
+                sheet(tiles, labs, f"{meta['scene']} sharc_leak_cells at x{x0}-{x1} y{y0}-{y1}: area {g['area']}", crops / name)
+                res["crops"].append({"file": f"crops/{name}", "detector": "sharc_leak_cells", "effect": "sharc",
+                                     "buffer": "debug diffuse", "bbox": g["bbox"], "shape": list(dif.shape[:2]), "area": g["area"]})
+
+    # sharc_reference: the cache's lighting against its physical reference (no cache, long rays,
+    # 8 per pixel), with tolerances from the traces' own per-pixel noise. The gate is on the roofed
+    # interior (sharc_roof mask, not lit by the game's sun); the whole frame is reported for review.
+    cs = sorted(n for n in data if n.startswith("sharc_on") and data[n]["Yc"] is not None)
+    rs = sorted(n for n in data if n.startswith("sref") and data[n]["Yc"] is not None)
+    if rs:
+        if len(cs) < 2 or len(rs) < 2:
+            res["notes"].append(f"sharc_reference: needs 2+ traces each (cache {len(cs)}, reference {len(rs)})")
+        else:
+            ys_c, ys_r = [data[n]["Yc"] for n in cs], [data[n]["Yc"] for n in rs]
+            whole = np.ones(ys_c[0].shape, bool)
+            for scope, m in (("interior", interior), ("frame", whole)):
+                if m is None or m.shape != whole.shape or not m.any():
+                    res["notes"].append(f"sharc_reference ({scope}): no roofed interior with a sunlit exterior in view")
+                    continue
+                r = det.sharc_reference(ys_c, ys_r, m)
+                z = r.pop("map")[1]
+                if scope == "frame":
+                    r["gate"] = False
+                res["checks"].append({"detector": "sharc_reference", "effect": f"sharc ({scope})", "buffer": "lighting",
+                                      "on": "+".join(cs), "off": "+".join(rs), **{k: v for k, v in r.items() if k != "regions"},
+                                      "top": r["regions"][:6]})
+                if scope != "interior" or r["pass"]:
+                    continue
+                for j, g in enumerate(r["regions"][:CROPS_PER_DETECTOR]):
+                    y0, y1, x0, x1 = crop_window(g["bbox"], z.shape)
+                    name = f"sharc_reference_{j}.png"
+                    sheet([dsp(rs[0], "compose")[y0:y1, x0:x1], dsp(cs[0], "compose")[y0:y1, x0:x1],
+                           heat_ratio(np.exp2(np.clip(z[y0:y1, x0:x1], -2, 2)))],
+                          ["reference (no cache, long rays, 8 spp)", "with the cache", "difference in sigma_d (blue: cache brighter)"],
+                          f"{meta['scene']} sharc_reference at x{x0}-{x1} y{y0}-{y1}: {g['area']} px, {g['excess_sigmas']} sigma",
+                          crops / name)
+                    res["crops"].append({"file": f"crops/{name}", "detector": "sharc_reference", "effect": "sharc",
+                                         "buffer": "lighting", "bbox": g["bbox"], "shape": list(z.shape), "area": g["area"]})
 
     # ---- non-finite values
     # A dump (pass, format) that holds non-finite values with every RT effect off too is the
