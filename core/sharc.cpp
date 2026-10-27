@@ -222,7 +222,10 @@ void stats_fold(uint64_t now) {
   for (uint32_t i = 0; i < kCounters; ++i)
     for (uint32_t b = 0; b < 64; ++b) g_sum[i] += c[i * 64 + b];
   g_rb_frame[slot] = 0;
-  if (++g_sum_n < 300) return;
+  // Window of the "sharc stats" lines (sharc_stats_frames): the QA's phases last 240 presents, so it
+  // uses a shorter window to get lines that cover one phase only (2026-10-27: the 300-frame window
+  // never closed inside the 6 s sharc_leak phase, so the fine-cell reference logged nothing).
+  if (++g_sum_n < uint32_t((std::max)(host->cfg_int("sharc_stats_frames", 300), 10))) return;
   const double n = g_sum_n, cap = double(1u << g_log2);
   const uint64_t* t = g_sum;
   const double gi = double(t[3] + t[4]), q = double(t[5] ? t[5] : 1), ask = double(t[5] + t[7] ? t[5] + t[7] : 1);

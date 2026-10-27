@@ -138,7 +138,9 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
     sets = [f"{k}={v}" for k, v in ALL_ON.items()]
     sets += [f"auto_interval={interval}", f"dump_png_width={3840 if full_res else 1280}"]
     if sharc:
-        sets += ["sharc=0", "sharc_debug=0", "sharc_stats=1"]   # on0 is the cache-off baseline
+        # on0 is the cache-off baseline; 60-frame stats windows close several times inside each
+        # 240-present phase, so the last line logged in a phase covers that phase alone.
+        sets += ["sharc=0", "sharc_debug=0", "sharc_stats=1", "sharc_stats_frames=60"]
     sets += list(extra)   # --set: keys for every trace of the run (e.g. rt_sun_top=0)
     if raw:
         # Exact float32 of the final frame (and RR/rr_post images): about 1 GB per trace
