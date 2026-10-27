@@ -215,8 +215,10 @@ def roofed_brightening(y_with, y_base, y_off, roofed, sigma, blur=2, sun_lit_fra
                "with_cache_permille": round(_permille(int(m_with.sum()), roofed.shape), 4),
                "without_cache_permille": round(_permille(int(m_base.sum()), roofed.shape), 4),
                "bound": T["roof_ratio"], "applies": applies}
-    return {"score": round(score, 4), "threshold": T["roof_fail_area"],
-            "pass": (not applies) or score <= T["roof_fail_area"], "unit": "‰ of px added by the cache",
+    # Review only (user decision 2026-10-27): the 1.3 ratio and the 0.5 per mille area have no
+    # physical basis. The physical checks are sharc_reference and sharc_leak_cells below.
+    return {"score": round(score, 4), "threshold": T["roof_fail_area"], "gate": False,
+            "pass": (not applies) or score <= T["roof_fail_area"], "unit": "‰ of px added by the cache (review map)",
             "metrics": metrics, "regions": regs if applies else [], "map": ("ratio", r_with)}
 
 
@@ -313,8 +315,23 @@ def animated(albedos, masks, shape, normals=()):
         if len(fields) < 2:
             return m
         bound = np.maximum.reduce([th.jitter_change(f, step) for f in fields])
+        lo = min(float(f.min()) for f in fields)
+        hi = max(float(f.max()) for f in fields)
         for f in fields[1:]:
-            m |= np.abs(f - fields[0]) > bound
+            d = np.abs(f - fields[0])
+            # Plus the input's own frame-to-frame noise, measured: the game's sun mask is a
+            # dithered PCF that differs on static pixels between any two frames (S3
+            # 20261027-174810: without this term 30% of on* and 99.6% of all sets marked).
+            # Most pixels are static, so the median |difference| is that noise
+            # (MAD x 1.4826 = sigma of the difference), tested at the buffer's k sigma.
+            # Measured on the pixels that can carry it: a dither cannot move a value clipped
+            # at its code range (a fully lit or fully shadowed mask), so pixels at the range
+            # end in both frames are left out. Over all pixels the median was 0 in S14 and
+            # S3 (2/3 of the mask saturated), and the shadow regions' dither still marked
+            # 27-31% of the frame; measured on the unsaturated third (sigma 0.06-0.09): 0.1-0.6%.
+            act = ((fields[0] > lo + step) & (fields[0] < hi - step)) | ((f > lo + step) & (f < hi - step))
+            sig = 1.4826 * float(np.median(d[act])) if act.any() else 0.0
+            m |= d > bound + th.k_sigma(shape, 1) * sig
         return m
     raw = [fit(a).mean(-1) for a in albedos if a is not None]
     if raw:
@@ -373,11 +390,18 @@ def temporal(codes_on, codes_off, moving=None):
     # Bonferroni over every region the frame could hold (a priori: independent px / min area).
     z = th.z_one_sided(s_on.size / min_a)
     b_on, b_off = im.box(s_on, R), im.box(s_off, R)
-    # Candidates: visible excess (one 10-bit PQ step of std); each is then tested as a region,
-    # its std pooled over its area: nu = (n - 1) x area x n_eff / box area independent samples.
+    # Candidates: boxes whose own excess is visible (one 10-bit PQ step of std) AND significant
+    # on its own (one-sided at ALPHA_FW, nu = (n - 1) x n_eff per box, no Bonferroni: a screen;
+    # the region test below controls the family). Without the per-box test, every box with a
+    # visible excess joined, and in S3 (20261027-173531) one 104,000-px region spanned the
+    # whole ground, its mean set by a grass patch. Each region is then tested with its std
+    # pooled over the minimum area (scan statistic, Bonferroni over the regions).
     visible = b_on - b_off > T["flicker_jnd"]
-    raw_area = _permille(im.opening(visible, R).sum(), visible.shape)
-    cand = im.opening(visible & static, R)
+    z_box = th.z_one_sided(1)
+    box_lim = z_box * np.sqrt(1.0 / (2 * (n_on - 1) * ne_on) + 1.0 / (2 * (n_off - 1) * ne_off))
+    box_sig = (np.log(b_on + q) - np.log(b_off + q)) > box_lim
+    raw_area = _permille(im.opening(visible & box_sig, R).sum(), visible.shape)
+    cand = im.opening(visible & box_sig & static, R)
     lab, n = im.label(cand)
     regs, tot = [], 0
     for i, area, bb in im.regions(lab, n, min_a):
@@ -500,3 +524,96 @@ def sun_check(view):
                    "pass": metrics["darker"] <= T["sun_check_darker_fail"], "unit": "‰ of px",
                    "metrics": metrics, "regions": regions(darker)},
     }
+
+def _corr_length(res, mask, max_lag=32):
+    """Spatial correlation length (px) of zero-mean residuals: the first lag at which the
+    autocorrelation along x and along y (within `mask`) falls below 1/e. Used to thin a pixel
+    test to independent samples: RR and the box filters correlate neighbours."""
+    m = mask.astype(bool)
+    r = np.where(m, res - float(res[m].mean()) if m.any() else 0.0, 0.0).astype(np.float64)
+    v = float((r[m] ** 2).mean()) if m.any() else 0.0
+    if v <= 0:
+        return 1
+    for lag in range(1, max_lag + 1):
+        cx = (r[:, lag:] * r[:, :-lag])[m[:, lag:] & m[:, :-lag]]
+        cy = (r[lag:, :] * r[:-lag, :])[m[lag:, :] & m[:-lag, :]]
+        c = np.concatenate([cx, cy])
+        if c.size == 0 or float(c.mean()) / v < np.exp(-1.0):
+            return lag
+    return max_lag
+
+
+def sharc_reference(ys_cache, ys_ref, mask, z=None):
+    """The cache's result against its physical reference (docs/QA.md "sharc_reference"):
+    `ys_cache` repeated traces with the cache, `ys_ref` repeated traces of the reference (no
+    cache, rays as long as the cache's, 8 per pixel). Every tolerance is measured:
+      - per pixel, the noise of the difference of the two means, sigma_d = sqrt(var_c / N_c +
+        var_r / N_r), from the traces' own per-pixel variance (unbiased, N - 1);
+      - a pixel is in excess where mean_c - mean_r > sigma_d, in deficit where mean_r -
+        mean_c > sigma_d. Under "no difference" both tails are equally likely, so the deficit
+        tail is the measured control for the excess tail;
+      - the counts are taken on a grid as wide as the measured correlation length, so the
+        samples are independent, and the excess fails only if it exceeds the deficit by more
+        than z times the binomial noise of that difference, sqrt(N_excess + N_deficit), with z
+        the one-sided quantile at ALPHA_FW (thresholds.z_one_sided; the caller passes the
+        Bonferroni share of its gate family). The sigma_d cut only defines the two symmetric tails.
+    It fails only where the cache's result is brighter than the reference beyond the measured
+    noise of both estimates."""
+    c, r = np.stack(ys_cache).astype(np.float64), np.stack(ys_ref).astype(np.float64)
+    nc, nr = c.shape[0], r.shape[0]
+    mc, mr = c.mean(0), r.mean(0)
+    sd = np.sqrt(c.var(0, ddof=1) / nc + r.var(0, ddof=1) / nr)
+    d = mc - mr
+    m = mask & (sd > 0) & np.isfinite(d)
+    L = max(_corr_length(c[0] - mc, m), _corr_length(r[0] - mr, m))
+    grid = np.zeros_like(m)
+    grid[::L, ::L] = True
+    excess, deficit = m & (d > sd), m & (-d > sd)
+    ne, nd = int((excess & grid).sum()), int((deficit & grid).sum())
+    zq = th.z_one_sided(1) if z is None else z
+    noise = zq * float(np.sqrt(ne + nd))
+    score = ne - nd
+    tot = float(mr[m].sum()) if m.any() else 0.0
+    excess_energy = float((d - sd)[excess].sum()) / tot if tot > 0 else 0.0
+    lab, n = im.label(im.opening(excess, 1))
+    regs = []
+    for i, area, bb in im.regions(lab, n, _min_area(excess.shape)):
+        y0, y1, x0, x1 = bb
+        sub = lab[y0:y1, x0:x1] == i
+        z = float(np.median((d / np.maximum(sd, 1e-12))[y0:y1, x0:x1][sub]))
+        regs.append({"bbox": bb, "area": area, "excess_sigmas": round(z, 2), "qualified": True, "rank": area * z})
+    regs.sort(key=lambda g: -g["rank"])
+    return {"score": score, "threshold": round(noise, 2), "pass": score <= noise,
+            "unit": "independent px in excess minus in deficit (> sigma_d), against z x their binomial noise",
+            "metrics": {"traces": [nc, nr], "z": round(zq, 3), "alpha_fw": th.ALPHA_FW, "corr_length_px": L, "samples": int((m & grid).sum()),
+                        "excess_samples": ne, "deficit_samples": nd,
+                        "excess_permille": round(1000.0 * float(excess.sum()) / max(1, int(m.sum())), 3),
+                        "deficit_permille": round(1000.0 * float(deficit.sum()) / max(1, int(m.sum())), 3),
+                        "excess_energy_share": round(excess_energy, 5),
+                        "mean_change_pct": round(100.0 * (float(mc[m].sum()) / tot - 1.0), 3) if tot > 0 else None},
+            "regions": regs, "map": ("sigmas", np.where(m, d / np.maximum(sd, 1e-12), 0.0))}
+
+
+def sharc_leak_cells(view, mask=None):
+    """sharc_debug=6 trace (gi_trace_rt_sharc.hlsl): the cache's GI contribution per pixel split
+    by the geometric leak test, red from a cell occluded from the query point, green clean,
+    blue from a cell larger than the surface's thickness. Returns the shares of the
+    contribution (frame, and inside `mask`). No threshold: a non-zero occluded share means the
+    leak mechanism is active, and sharc_reject_occluded=1 (the default) removes exactly it."""
+    def shares(m):
+        r, g, b = (float(view[..., k][m].sum()) for k in range(3))
+        t = r + g + b
+        return {"occluded": round(r / t, 5) if t > 0 else 0.0, "thin": round(b / t, 5) if t > 0 else 0.0,
+                "contribution": round(t, 3), "px": int(m.sum())}
+    lit = view.sum(-1) > 0
+    out = {"frame": shares(lit)}
+    if mask is not None and mask.shape == lit.shape:
+        out["roofed"] = shares(lit & mask)
+    occ = (view[..., 0] > view[..., 1]) & (view[..., 0] > view[..., 2]) & lit
+    lab, n = im.label(im.opening(occ, 1))
+    regs = [{"bbox": bb, "area": area, "qualified": True, "rank": area} for _, area, bb in im.regions(lab, n, _min_area(occ.shape))]
+    regs.sort(key=lambda g: -g["rank"])
+    return {"score": out["frame"]["occluded"], "threshold": 0.0, "gate": False,
+            "pass": out["frame"]["occluded"] == 0.0,
+            "unit": "share of the cache's GI contribution from occluded cells (with the rejection off)",
+            "metrics": out, "regions": regs}

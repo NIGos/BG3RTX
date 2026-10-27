@@ -214,6 +214,17 @@ float4 gather_history(uint2 fp, float d) {
   return wsum > 1e-4 ? acc / wsum : float4(0, 0, 0, 1);
 }
 
+// D-LS AO-on-direct give-back (ao_direct): the lighting wrote g >= direct x f_from (each
+// term non-negative), so giving the direct light f_to instead adds at most
+// g x (f_to - f_from) / f_from per channel. A recomputed direct term the game never had
+// (a sun colour read from a wrong or stale descriptor: the S6 green walls, ~14x and
+// green) can then not add more light than the game's own pixel implies.
+float3 ls_giveback_cap(float3 x, float3 g, float f_to, float f_from) {
+  if ((pc.ls_flags & (1u << 18)) == 0u) return x;   // ls_giveback_cap=0 (A/B, ls_check)
+  const float r = max(f_to - f_from, 0.0) / max(f_from, 1e-3);
+  return min(x, max(g, 0.0) * r);
+}
+
 float rand01(inout uint s) { s = hash(s); return float(s & 0x00ffffff) / 16777216.0; }
 
 float3 cosine_hemisphere(float3 n, float u1, float u2) {

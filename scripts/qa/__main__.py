@@ -24,6 +24,8 @@ def main():
     r.add_argument("--temporal", type=int, default=3, help="static-camera frames for the flicker metric (on and off)")
     r.add_argument("--temporal-gi", action="store_true",
                    help="add a temporal set with the GI neutral (gi_strength=0 gi_ao=0): flicker of the GI alone")
+    r.add_argument("--warmup", type=int, default=2,
+                   help="traces taken and ignored before on0 (the first seconds after a load are not steady)")
     r.add_argument("--temporal-sun", action="store_true",
                    help="add a temporal set with the RT sun shadows off: flicker of the RT sun alone")
     r.add_argument("--interval", type=int, default=240, help="presents between traces")
@@ -68,7 +70,7 @@ def main():
                                   temporal=max(2, args.temporal), reference=args.reference,
                                   interval=args.interval, raw=args.raw, tag=tag, exclusive=args.exclusive,
                                   shared=lanes > 1, extra=[x.strip() for x in args.set.split(",") if x.strip()],
-                                  split_gi=args.temporal_gi, split_sun=args.temporal_sun,
+                                  split_gi=args.temporal_gi, split_sun=args.temporal_sun, warmup=max(0, args.warmup),
                                   sharc=args.sharc)
 
         if lanes > 1:

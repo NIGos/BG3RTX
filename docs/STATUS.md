@@ -64,7 +64,14 @@ State of each branch at the pause, as reported:
 - **Bugfix pause:**
   - QA over all scenes (`scripts/scene-sweep.ps1`, `scripts/qa`);
   - which effect causes the flicker (2.5× in the foundry);
-  - the act-2, Rivington and Crèche saves don't load with `-loadSaveGame` (likely a dialog).
+  - the act-2, Rivington and Crèche saves don't load with `-loadSaveGame`. Cause: the
+    missing-mods dialog (texture-only mod; Crèche: its non-ASCII name). Fix:
+    `auto-run.ps1 -AcceptModWarning` (default auto), verification jobs pending
+    (TEST_SCENES.md, "Saves made with mods").
+- **Rendering coverage matrix and ranked gaps:** [COVERAGE.md](COVERAGE.md) (2026-10-27).
+  Top gaps: forward water (89% of the S1 docks view), box lights (36.6% of placed lights,
+  93% of the shadow-mapped ones, not traced), emission not bouncing in GI. Refresh with
+  `python -m scripts.qa.coverage --update-doc`.
 - **R0 follow-ups:**
   - the sun RT shadow replaces the game's mask where the BVH is complete, with the asset DB roofs for the cut-away roofs;
   - local-light shadows replace the game's shadow-mapped lights.

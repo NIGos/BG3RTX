@@ -29,7 +29,7 @@ EFFECTS = {
 # --sharc (plan below): the radiance cache against the same settings without it, in all and
 # with the reflections off (the GI's own share, against gi_off like "gi").
 SHARC_EFFECTS = {
-    "sharc": ("sharc_on", "on0"),
+    "sharc": ("sharc_on0", "on0"),
     "gi_sharc": ("sharc_refl_off", "gi_off"),
 }
 
@@ -45,16 +45,24 @@ def scenes():
 GI_NEUTRAL = {"gi_strength": "0", "gi_ao": "0"}
 
 
-def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun=False, sharc=False):
+def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun=False, sharc=False,
+         sharc_radius="4", warmup=0):
     """The ordered traces of one run: (name, settings applied before it).
     gi_restore: the gi_strength/gi_ao values to go back to after the nogi set.
     split_sun (--temporal-sun): a nosun set, all on but the RT sun shadows (the game's mask
     and its contact shadows), for the flicker of the RT sun alone.
     sharc (--sharc): after the sun traces, the SHaRC radiance cache (sharc=1, DESIGN_SOTA_NEXT
-    item 2) with everything on (sharc_on), with the reflections off (sharc_refl_off: the GI's
-    share), and its roof mask (sharc_roof, sharc_debug=5) for the leak gate roofed_brightening;
-    then sharc=0 again. Each comes interval presents after the switch, so the cache has converged."""
-    p = [("on0", {})]
+    item 2): `temporal` traces with everything on (sharc_on*: the cache's noise), one with the
+    reflections off (sharc_refl_off: the GI's share), its roof mask (sharc_roof, sharc_debug=5)
+    and its leak test (sharc_leak: sharc_debug=6, measured with the rejection off); then
+    sharc=0 again. With --reference also `temporal` traces of the cache's physical reference
+    (sref*): no cache, the GI rays as long as the cache's (sharc_radius), 8 rays per pixel.
+    Each comes interval presents after the switch, so the cache has converged."""
+    # warmup: traces before on0 that nothing reads. The first seconds after a load are not
+    # steady (S3: a burning camp in flicker4_split, a soft brightness drift over the dirt in
+    # 20261027-155410, both in the on* window only), and on* is the reference of every set.
+    p = [(f"warm{i}", {}) for i in range(warmup)]
+    p += [("on0", {})]
     p += [(f"on{i}", {}) for i in range(1, temporal)]
     restore = {}
     if split_gi:
@@ -80,15 +88,29 @@ def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun
           # game's lit mask, blue off-screen, green trusted).
           ("sun_trust", {"rt_debug": "6", "rt_backlit": "1"})]
     if sharc:
-        p += [("sharc_on", {"rt_debug": "0", "rt_backlit": "1", "sharc": "1"}),
-              ("sharc_refl_off", {"rt_reflections": "0"}),
-              ("sharc_roof", {"rt_reflections": "1", "sharc_debug": "5"})]
+        p += [("sharc_on0", {"rt_debug": "0", "rt_backlit": "1", "sharc": "1"})]
+        p += [(f"sharc_on{i}", {}) for i in range(1, temporal)]
+        p += [("sharc_refl_off", {"rt_reflections": "0"}),
+              ("sharc_roof", {"rt_reflections": "1", "sharc_debug": "5"}),
+              ("sharc_leak", {"sharc_debug": "6", "sharc_leak_check": "1", "sharc_reject_occluded": "0", "sharc_fine_check": "1"})]
+        if reference:
+            # The reference of the cache's GI: no cache, rays to the cache's radius, 8 per pixel
+            # (same denoiser, view and other effects). Hidden hits there have no radiance:
+            # gi_rt_fallback=1 leaves the game's ambient for them (docs/QA.md "sharc_reference").
+            p += [("sref0", {"sharc": "0", "sharc_debug": "0", "sharc_leak_check": "0", "sharc_reject_occluded": "1", "sharc_fine_check": "0",
+                             "gi_rt_radius": sharc_radius, "gi_rt_fallback": "1", "gi_rr_rays": "8"})]
+            p += [(f"sref{i}", {}) for i in range(1, temporal)]
     if reference:
         # More samples for the stochastic terms, same denoiser (RR) and view.
-        p += [("ref", {"rt_debug": "0", "rt_backlit": "1", "gi_rr_rays": "8", "ls_samples": "2"})]
+        r = {"rt_debug": "0", "rt_backlit": "1", "gi_rr_rays": "8", "ls_samples": "2"}
+        if sharc:   # back from the cache's sets
+            r.update(sharc="0", sharc_debug="0", sharc_leak_check="0", sharc_reject_occluded="1", sharc_fine_check="0",
+                     gi_rt_radius="1.0", gi_rt_fallback="0")
+        p += [("ref", r)]
     first_off = dict(ALL_OFF, rt_backlit="1", gi_rr_rays="1", ls_samples="0") if reference else dict(ALL_OFF, rt_backlit="1")
     if sharc:
-        first_off.update(sharc="0", sharc_debug="0")
+        first_off.update(sharc="0", sharc_debug="0", sharc_leak_check="0", sharc_reject_occluded="1", sharc_fine_check="0",
+                         gi_rt_radius="1.0", gi_rt_fallback="0")
     p += [("off0", first_off)]
     p += [(f"off{i}", {}) for i in range(1, temporal)]
     return p
@@ -96,7 +118,7 @@ def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun
 
 def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, reference=False,
               interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False, shared=False,
-              extra=(), split_gi=False, split_sun=False, sharc=False):
+              extra=(), split_gi=False, split_sun=False, sharc=False, warmup=0):
     """Runs the game once and moves each trace's dumps.json + img/ to out_dir/raw/<i>_<name>/.
 
     tag: auto-run.ps1 -Tag, so two scenes can run at once from this checkout (one tag per
@@ -104,7 +126,7 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
     says "exclusive": false); otherwise the run is exclusive and run_s is a timing."""
     keep = dict(x.split("=", 1) for x in extra if "=" in x)
     phases = plan(temporal, reference, split_gi, {k: keep[k].strip() for k in GI_NEUTRAL if k in keep},
-                  split_sun, sharc)
+                  split_sun, sharc, keep.get("sharc_gi_radius", "4").strip(), warmup)
     out_dir.mkdir(parents=True, exist_ok=True)
     spec = {"start": r"\[trace\] frame \d+ written", "phases": [], "timeout": timeout + 3600, "tag": tag,
             "after_trace": [{"name": n, "set": s} for n, s in phases[1:]]}
@@ -116,7 +138,9 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
     sets = [f"{k}={v}" for k, v in ALL_ON.items()]
     sets += [f"auto_interval={interval}", f"dump_png_width={3840 if full_res else 1280}"]
     if sharc:
-        sets += ["sharc=0", "sharc_debug=0", "sharc_stats=1"]   # on0 is the cache-off baseline
+        # on0 is the cache-off baseline; 60-frame stats windows close several times inside each
+        # 240-present phase, so the last line logged in a phase covers that phase alone.
+        sets += ["sharc=0", "sharc_debug=0", "sharc_stats=1", "sharc_stats_frames=60"]
     sets += list(extra)   # --set: keys for every trace of the run (e.g. rt_sun_top=0)
     if raw:
         # Exact float32 of the final frame (and RR/rr_post images): about 1 GB per trace

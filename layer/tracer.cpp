@@ -271,8 +271,15 @@ static bool auto_trigger(uint64_t frame, uint32_t passes, uint32_t draws) {
     // i.e. the 3D main menu has given way to the loaded save. Needed for scenes
     // that draw about as much as the menu (auto-run.ps1 -Save).
     static bool seen_scene = false, loaded = false;
-    if (passes >= 40) seen_scene = true;
-    else if (seen_scene && passes < 10) loaded = true;
+    // Both transitions are logged once: auto-run.ps1 -AcceptModWarning reads them to tell
+    // "3D main menu up, no load started" (the missing-mods dialog) from a load in progress.
+    if (passes >= 40) {
+      if (!seen_scene) log("[auto] 3D scene first seen at present %llu (%u passes, %u draws)", (unsigned long long)frame, passes, draws);
+      seen_scene = true;
+    } else if (seen_scene && passes < 10) {
+      if (!loaded) log("[auto] loading screen after the 3D scene at present %llu", (unsigned long long)frame);
+      loaded = true;
+    }
     if (cfg_int("auto_after_load", 0) && !loaded) good = false;
     if (good && !g_streak) streak_start = GetTickCount64();
     g_streak = good ? g_streak + 1 : 0;

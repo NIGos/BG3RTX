@@ -868,6 +868,8 @@ bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
     }
     xd = dir_d * (td_f - fdif);
     xs = dir_s * (ts_f - fspec);
+    xd = ls_giveback_cap(xd, gDiffuse[fp] + dd * (fdif * saturate(pc.ls_strength)), td_f, fdif);
+    xs = ls_giveback_cap(xs, gSpecular[fp] + ds * (fspec * saturate(pc.ls_strength)), ts_f, fspec);
   }
 
   float3 gd = gDiffuse[fp], gs = gSpecular[fp];
