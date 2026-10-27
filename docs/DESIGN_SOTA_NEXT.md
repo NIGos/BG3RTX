@@ -784,6 +784,36 @@ place (docs/QA.md):
   still cannot separate hidden-surface bounce from a leak, the next step is the v2 traced update
   (2.3): it gives the reference, and the cache, radiance at hidden hits.
 
+### 2.15 Corrected leak test (QA `captures/qa/20261027-175117`, S7 + S8, raw kept) and v2
+
+- **`sharc_leak_cells`** (counters, rejection off), with the test path half a cell above the
+  plane: occluded cells supply **4.7%** (S7) and **4.0%** (S8) of the cache's GI contribution
+  (6.8% / 8.9% of its hits), down from 19% / 18.5% with the grazing path. Thin: 0.000%. The
+  mechanism is active at a few per cent; `sharc_reject_occluded=1` (default) removes it.
+- **`sharc_reference`**: **S7 interior passes** (excess 5,919 against deficit 6,487 independent
+  samples, noise 111; mean −1.1%: in the closed tavern the cache is not brighter than the
+  reference). **S8 interior fails** as before (excess 211,985 against 43,453, noise 505; mean
+  +1.5%, 4.2% of the energy above σ_d), uniformly over shaded stone (crops), where the cache
+  replaces the probe ambient at hidden hits with cached radiance. The S8 "interior" is mostly
+  exterior shade inside the padded volumes. The reference stays indecisive there.
+- hard_dark: S7 `sharc` 0.43‰ final only, a character's arm that moved between traces; S8 0.
+  Non-finite: 0.
+- **v2 (traced update), started on branch `sharc-v2` from 67b1e44.** Its purpose here is a
+  decisive reference: radiance of its own at hidden hits. That radiance is albedo x incident
+  light, and the albedo at a hidden hit needs hit materials (STATUS #4, EN2: not done; D-EM not
+  merged either). The design's fallbacks for it ("injected radiance / injected irradiance", only
+  for voxels already seen; "else 0.5", an assumed albedo) do not give a physical value for a
+  surface never seen, and an assumed albedo is excluded by R0. So v2's traced update waits for
+  EN2. **What it starts with instead is an assumption-free reference for the leak question:**
+  `sharc_fine_check=1` injects every sample also into a grid with cells `sharc_fine_scale` (4)
+  times smaller (same table, keys 16 levels apart), and per cache hit logs coarse − fine
+  luminance with its standard error, for clean and for occluded cells. The finer grid is the
+  same estimator closer to its leak-free limit (cells 4-8 cm at 10-30 m, under a wall's
+  thickness); repeating at 8 shows whether 4 has converged. QA check `sharc_fine_reference`
+  (gate): the clean cells' mean excess must not exceed one measured standard error. Caveat,
+  written down: where the GI rays' hit density correlates with brightness inside a cell, coarse
+  and fine differ without a leak; the occluded cells against the clean ones separate the two.
+  Job `38-sharc7-qa-S7-S8`.
 ---
 
 ## 3. Opacity micromaps for alpha-tested foliage
