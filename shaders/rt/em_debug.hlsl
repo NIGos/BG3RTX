@@ -45,12 +45,23 @@ void add64(uint a, float lum) {
   emStats.InterlockedAdd(a, v, old);
   if (old + v < old) emStats.InterlockedAdd(a + 4, 1u);
 }
+// Per record (8 words): ours (0-1), the game's (2-3), pixels (4), hits where ours is exactly 0
+// (5), and ours without the maps (6-7): the record's radiance x the luminance scale only,
+// which separates a zero level from a map sampled where it is black (wrong UV or texture).
 void rec_stat(uint rec, float ours, float game) {
   if (rec >= 1024) return;
   uint base = (16 + rec * 8) * 4;
   add64(base, ours);
   add64(base + 8, game);
   emStats.InterlockedAdd(base + 16, 1u);
+  if (ours <= 0.0) emStats.InterlockedAdd(base + 20, 1u);
+  EmRec r = emRecs[rec];
+  float3 L = r.radiance;
+  if ((r.flags & kEmFlagLuminance) != 0 && r.glob != 0xFFFFFFFFu) {
+    const float k = asfloat(emGlobal.Load(r.glob * 4));
+    L *= k >= 0.0 && k < 1e6 ? k : 1.0;
+  }
+  add64(base + 24, all(L >= 0.0) && all(L < 1e6) ? em_lum(L) : 0.0);
 }
 
 [numthreads(8, 8, 1)]

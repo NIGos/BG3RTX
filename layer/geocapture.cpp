@@ -1250,7 +1250,8 @@ void rt_capture_stats(const Capture& c) {
 // are captured into the emissive soup (emissive.cpp decides).
 static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   auto* e = static_cast<EmPass*>(s->geo);
-  if (!e || !e->capture) return;
+  if (e && !e->capture) return em_note_draw(s);   // timed only (rt_emissive=0)
+  if (!e) return;
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
   {
     std::lock_guard<std::mutex> lock(g_mu);

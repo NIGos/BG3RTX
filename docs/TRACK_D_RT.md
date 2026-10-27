@@ -2570,3 +2570,52 @@ are flagged approximate and calibrated.
   and 18 (ratio). Sections 13.1-13.10 keep the old numbers 6-8.
 - **The `rt_emissive=0` cost** is now measured in its own session job, not as a live phase.
 
+### 13.12 em7 session runs (`61006ba`) and the fixes after it
+
+Water Queen's House (WQ) and Adamantine Forge (AF) ran without faults. Grymforge (GF) lost
+the device during the load (nv153 = 2).
+
+**Verdicts:**
+- **Decals by default:** pass.
+  - WQ coverage is 97.8-99.0%.
+  - The decal family `6a988967` reads 0.88-1.00 once calibrated. Its scale is about 0.02: the
+    projection box's radiance is about 50 times the game's mean.
+- **`159a6211`: the copied word is the right one.**
+  - The source's words 0-3 are s, 1/s, log2(1/s) and -8. For example 0.000406901, 2457.6,
+    11.26 and -8; s × 2457.6 = 1.
+  - So it is the game's pre-exposure. It varies with the scene and the view (3.0e-4 to
+    1.4e-3), and a luminance-emissive material's physical intensity is multiplied by it.
+  - Per checked pixel, the game's value is 0 in WQ (under 1/4096) and 0.0066 in AF. Ours is
+    0 in both. So the family is dim in the game too, but ours is lower still: in AF, under
+    3% of 0.0066.
+  - The fault is on our side of the scale, in the level, the map or the pulse. The next run's
+    record dump says which. It logs:
+    - the record (radiance, mode, texture, flags, slot);
+    - the share of hits where ours is exactly 0;
+    - ours without the maps (radiance × scale);
+    - the constant-buffer words, the time and the pulse.
+- **AF lava `1a81f41b`:** 1.047 at the end of the 90 s check (scale 0.73). Pass. The later
+  short jobs' windows are partial: 19 and 13 frames.
+- **`222986b8`:** AF 1.93 (432k px, the largest family), WQ 1.26. The 64-bit sums did not
+  change it, so the quantisation explanation is rejected. It is in the record dump.
+- **`304be1c7` Pulse_FX:** AF 0.59-0.67 (894 px). It fails as an exact family and is in the
+  record dump.
+- **Capture-off cost: not measured.**
+  - With capture off, a pass's draws returned before marking the pass as an effects pass, so
+    its time was dropped as "not an effects pass". No "without" sample existed, so no
+    window logged.
+  - Fixed: `em_note_draw` marks the pass.
+  - With capture, the effects passes cost 0.066 ms (WQ) and 0.096 ms (AF). The build is
+    0.39 / 0.43 ms.
+- **GF device loss:** it happened right after `[em] emissive soup grown to 128 MB` at the
+  load.
+  - The old soup was freed with the frame-based deferral only. The current descriptor set
+    (and the consumers that read `emSoup` a frame or more later), plus passes recorded into
+    it, could outlive that deferral.
+  - Old soups are now retired, and freed only after kRing + kOwn (16) further builds.
+  - A pass's conversion now runs on the soup its own draws captured into, not on the
+    current one.
+
+**Logs:** lists longer than the log's 2 KB line are split into parts. The cut-off per-family
+lines came from this limit.
+

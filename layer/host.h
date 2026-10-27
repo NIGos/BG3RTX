@@ -509,6 +509,7 @@ struct EmDrawIn {
   const InstPipe* inst;      // class-A instancing layout, or nullptr
   uint32_t stride;           // XFB bytes per vertex
 };
+void em_note_draw(const CmdState* s);   // an effects-pass draw while capture is off (timing only)
 bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const EmDrawIn& in, VkBuffer* soup,
              VkDeviceSize* off, VkDeviceSize* bytes, uint32_t* prims);
 // After the pass, outside it: the captured ranges (offset, triangles) to camera-relative
