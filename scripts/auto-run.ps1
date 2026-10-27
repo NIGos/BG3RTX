@@ -7,6 +7,15 @@
 #   .\scripts\auto-run.ps1 -Set preset=ultra        a settings preset (common/settings.h) for this run
 #   .\scripts\auto-run.ps1 -UserIni <file>          also layer a launcher-written bg3rtx_user.ini
 #   .\scripts\auto-run.ps1 -KeepRunning             leave the game open afterwards
+#   .\scripts\auto-run.ps1 -Session -Save X -WhilePid <pid>   keep the loaded game (test-queue.ps1)
+#
+# -Session (scripts/test-queue.ps1; docs/TEST_SCENES.md, "Test queue"): the layer takes no
+# trace by itself (auto_traces=0) and writes auto.done once the scene is stable. This
+# script then writes captures\session.ready ({"sec": launch to ready}) and keeps the game
+# running, still watching for stalls and exits, until captures\session.quit appears,
+# -WhilePid exits or -SessionMaxSec passes. Meanwhile the queue runner edits
+# captures\auto.ini live and requests traces through trace.request. Saves, locks and the
+# display settings are handled exactly as in a single run, once, at the end.
 #
 # Concurrency (docs/TEST_SCENES.md, "Concurrent runs"): runs are "exclusive" (nothing
 # else of ours runs meanwhile) unless -Shared: then a -Background -Save run may share the
@@ -53,7 +62,12 @@ param(
   [switch]$Shared,
   # Run files of this checkout carry this tag, so two runs can share the checkout.
   [ValidatePattern('^[A-Za-z0-9_]{0,16}$')]
-  [string]$Tag = ""
+  [string]$Tag = "",
+  # Keep the loaded game for a test-queue session (header); -Traces is ignored (0).
+  [switch]$Session,
+  [int]$SessionMaxSec = 7200,
+  # With -Session: end the session when this process (the queue runner) exits.
+  [int]$WhilePid = 0
 )
 $ErrorActionPreference = "Stop"
 # "powershell -File" passes "-Set a=1,b=2" as one string: split it.
@@ -74,6 +88,9 @@ $doneFile = Tagged $caps "auto" ".done"
 $log = Tagged $root "bg3rtx" ".log"
 $pidFile = Tagged $caps "game" ".pid"
 $saveLog = Tagged $caps "saves" ".txt"
+$readyFile = Tagged $caps "session" ".ready"
+$quitFile = Tagged $caps "session" ".quit"
+if ($Session) { $Traces = 0 }
 
 # One run per checkout and tag: two would share the files above.
 $sha = [System.Security.Cryptography.SHA1]::Create()
@@ -195,7 +212,7 @@ $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
 if ($UserIni) { $env:BG3RTX_USER_INI = (Resolve-Path $UserIni).Path } else { $env:BG3RTX_USER_INI = "none" }
 if ($Tag) { $env:BG3RTX_RUN_TAG = $Tag } else { Remove-Item Env:BG3RTX_RUN_TAG -ErrorAction SilentlyContinue }
-Remove-Item $doneFile -ErrorAction SilentlyContinue
+Remove-Item $doneFile, $readyFile, $quitFile -ErrorAction SilentlyContinue
 
 Remove-Item Env:BG3RTX_BACKGROUND -ErrorAction SilentlyContinue
 $displayUser = Join-Path $script:DisplayUsers "$PID.json"
@@ -283,6 +300,7 @@ $result = "timeout"
 $moving = $false
 $moveDone = $false
 $moveStart = Get-Date
+$sessionReady = $false
 while ((Get-Date) -lt $deadline) {
   if ($moving -and $Background) {
     # A posted key-down is a single press to the game; a held key is what
@@ -307,7 +325,17 @@ while ((Get-Date) -lt $deadline) {
     }
     if ($moving) { Send-MoveKey $true }
   }
-  if (Test-Path $doneFile) { $result = "done"; break }
+  if ($Session) {
+    if (-not $sessionReady -and (Test-Path $doneFile)) {
+      $sessionReady = $true
+      $readySec = [int]((Get-Date) - $start).TotalSeconds
+      @{ sec = $readySec; pid = $game.Id } | ConvertTo-Json -Compress | Set-Content $readyFile
+      Write-Host "Session ready after ${readySec}s (game pid $($game.Id))"
+      $deadline = (Get-Date).AddSeconds($SessionMaxSec)
+    }
+    if (Test-Path $quitFile) { $result = "session closed"; break }
+    if ($WhilePid -and -not (Get-Process -Id $WhilePid -ErrorAction SilentlyContinue)) { $result = "session owner exited"; break }
+  } elseif (Test-Path $doneFile) { $result = "done"; break }
   if ($game.HasExited) { $result = "game exited"; break }
   # Stall: the game is alive but has stopped rendering ("[watch] presents 0"
   # for 30 s). Seen in background runs, mostly with no foreground window
@@ -348,6 +376,7 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
       if (-not $game.WaitForExit(20000)) { $game | Stop-Process -Force; $game.WaitForExit(15000) | Out-Null }
     }
     Remove-Item $pidFile -ErrorAction SilentlyContinue
+    if ($readyFile) { Remove-Item $readyFile, $quitFile -ErrorAction SilentlyContinue }
     if (Get-Command Restore-Saves -ErrorAction SilentlyContinue) { Restore-Saves }
   } elseif ($Save) {
     Write-Host "KeepRunning: saves written during the run are not parked"
@@ -375,7 +404,7 @@ foreach ($c in $new) {
   }
 }
 if ($runMode -ne "exclusive" -and -not $NoAnalyze) { Write-Host "Note: shared run - frame timings above are not exclusive (another game may have used the GPU)" }
-if (-not $new) {
+if (-not $new -and -not $Session) {
   Write-Host "No completed capture. Last log lines:"
   if (Test-Path $log) { Get-Content $log -Tail 25 }
   exit 1
