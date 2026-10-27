@@ -60,7 +60,7 @@ constexpr uint32_t kMaxTex = 256;        // textures per build (slot 0: dummy)
 constexpr uint32_t kMaxCache = 16;       // VT tile caches per build (slot 0: dummy)
 constexpr uint32_t kMaxInst = 16384;     // emissive TLAS instances that get lights
 constexpr uint32_t kHeaderWords = 16 + 1024;
-constexpr uint32_t kStatWords = 16 + kMaxRecs * 12;   // per record (em_debug.hlsl rec_stat): ours, game, pixels, ...
+constexpr uint32_t kStatWords = 16 + kMaxRecs * 16;   // per record (em_debug.hlsl rec_stat): ours, game, pixels, ...
 constexpr VkDeviceSize up256(VkDeviceSize v) { return (v + 255) / 256 * 256; }
 constexpr VkDeviceSize kRecBytes = 256;
 constexpr VkDeviceSize kOffRecs = 0;
@@ -257,7 +257,7 @@ struct Window {
   std::vector<float> build_ms;
   std::map<uint64_t, double> fx_frame_ms[2];   // effects passes per frame: [no capture, capture]
   uint64_t nonfinite = 0, collapsed = 0;
-  struct Cmp { double ours = 0, game = 0, px = 0, zero = 0, nomap = 0, bright = 0; uint32_t flags = 0; };
+  struct Cmp { double ours = 0, game = 0, px = 0, zero = 0, nomap = 0, bright = 0, ours_b = 0, game_b = 0; uint32_t flags = 0; };
   struct Glob { uint32_t slot = UINT32_MAX, n = 0, missing = 0; float value = 0, vmin = 1e30f, vmax = 0; };
   std::map<uint64_t, Glob> glob;               // luminance-scale copies per fragment shader (read back)
   std::map<uint64_t, Cmp> cmp;                 // projected comparison per fragment shader
@@ -1700,7 +1700,7 @@ void em_on_present() {
       w.dbg_bright += st[7];
       w.dbg_front += st[4];
       for (uint32_t r = 0; r < si.rec_fs.size(); ++r) {
-        const uint32_t* q = st + 16 + r * 12;
+        const uint32_t* q = st + 16 + r * 16;
         if (!q[4]) continue;
         Window::Cmp& cmp = w.cmp[si.rec_fs[r]];
         cmp.ours += double((uint64_t(q[1]) << 32) | q[0]) / 4096.0;
@@ -1708,6 +1708,8 @@ void em_on_present() {
         cmp.px += q[4];
         cmp.zero += q[5];
         cmp.bright += q[8];
+        cmp.ours_b += double((uint64_t(q[10]) << 32) | q[9]) / 4096.0;
+        cmp.game_b += double((uint64_t(q[12]) << 32) | q[11]) / 4096.0;
         cmp.nomap += double((uint64_t(q[7]) << 32) | q[6]) / 4096.0;
         cmp.flags |= si.rec_flags[r];
       }
@@ -1855,13 +1857,18 @@ void em_on_present() {
         cal.scale = float((std::min)((std::max)(std::exp(-cal.log_u), 1.0 / 64), 64.0));
         ++cal.updates;
       }
-      char buf[260];
-      snprintf(buf, sizeof buf, "%08x %s %.3f (%.0f bright px of %.0f%s%s%s, scale %.3f)", unsigned(fs >> 32),
-               material(fs).name.c_str(), ratio, px, cm.px / double(w.dbg_frames), (cm.flags & kFlagApprox) ? ", approx" : "",
-               (cm.flags & kFlagForward) ? ", forward" : "", px < 200 ? ", under 200 bright px: not gated" : "", before);
+      // Two ratios: over every hit (the family's energy: what the light list carries and the
+      // calibration matches) and over its bright hits only (the emission the player sees,
+      // apart from dark texels and texels whose game pixel other emitters add to): the gate.
+      const double ratio_b = cm.game_b > 0 ? cm.ours_b / cm.game_b : 0.0;
+      char buf[300];
+      snprintf(buf, sizeof buf, "%08x %s %.3f, bright %.3f (%.0f bright px of %.0f%s%s%s, scale %.3f)", unsigned(fs >> 32),
+               material(fs).name.c_str(), ratio, ratio_b, px, cm.px / double(w.dbg_frames),
+               (cm.flags & kFlagApprox) ? ", approx" : "", (cm.flags & kFlagForward) ? ", forward" : "",
+               px < 200 ? ", under 200 bright px: not gated" : "", before);
       items.push_back(buf);
       // The record behind a luminance family or an exact family outside 0.8-1.25.
-      const bool off = !(cm.flags & kFlagApprox) && px >= 200 && (ratio < 0.8 || ratio > 1.25);
+      const bool off = !(cm.flags & kFlagApprox) && px >= 200 && (ratio_b < 0.8 || ratio_b > 1.25);
       if ((cm.flags & kFlagLuminance) || off) {
         const RecDbg& g = g_rec_dbg[fs];
         char d[520];
