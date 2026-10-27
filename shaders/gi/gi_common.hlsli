@@ -77,7 +77,8 @@ struct Push {
   // Quality pass (docs/QUALITY.md)
   float sun_radius;    // half-angle of the sun disc (rad; the game: 0.00459); 0 = hard shadows
   uint res_shift;      // GI resolution: 1 half res (own denoise), 0 full res, 1 spp, for RR
-  uint2 pad3;
+  uint qa_zero;      // QA light-off traces (docs/QA.md): bit 0 sun mask 0, bit 1 local-light visibility 0, bit 2 AO 0
+  uint pad3;
   // D-LS ray-traced local-light shadows (rt_local_shadows.hlsl)
   float ls_source_radius;  // light sphere radius for soft shadows (world units)
   float ls_clear;          // rays stop this short of the light (its own fixture)

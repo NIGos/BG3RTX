@@ -91,7 +91,8 @@ struct Push {
   uint32_t gi_rt_fallback, rt_stats;
   float sun_radius;
   uint32_t res_shift;
-  uint32_t pad3[2];
+  uint32_t qa_zero;   // QA light-off traces (docs/QA.md): bit 0 sun, 1 local lights, 2 ambient AO
+  uint32_t pad3;
   float ls_source_radius, ls_clear, ls_min_radius;
   uint32_t ls_samples, ls_shadowed, ls_debug, ls_stats, ls_pass, ls_soft;
   float ls_strength;
@@ -1050,6 +1051,7 @@ Push make_push() {
   pc.thickness = host->cfg_float("gi_thickness", 0.03f);
   pc.rays = uint32_t(host->cfg_int("gi_rays", 2));
   pc.res_shift = g_shift;
+  pc.qa_zero = uint32_t(host->cfg_int("qa_zero", 0));
   // Half-angle of the sun's disc (rad): the game's own sun specular clamps R into
   // a cone of sin = 0.0045900648 around L (f469db78:1428), i.e. 0.263 deg.
   pc.sun_radius = host->cfg_float("rt_sun_radius", 0.00459f);
