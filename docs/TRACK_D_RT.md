@@ -1630,6 +1630,73 @@ seem not to cast or receive RT shadows. Findings (offline):
   5). Forward-rendered surfaces (water, glass, particles, VFX) receive neither: they sample
   the game's cascades themselves and get no D-LS.
 
+**Policy (R0, coordinator 2026-10-27), implemented:**
+- **The owner is no reason to skip a light** (`ls_owners=31`). The only skip is art intent
+  from the game's own flags (`ls_noshadow`, `rt_local_shadows.hlsl` `ls_skip_light`).
+  - Data (asset DB, 19,572 placed lights): **98% of point lights and 70% of spots have
+    neither `Shadow` nor `CastShadow`** (only 0.8% / 0.4% of all lights set `CastShadow`).
+    So "skip whenever both are false" (`ls_noshadow=2`) would stop tracing almost every
+    placed lamp and bring back the leaks D-LS fixes (9.4); in BG3 the flag means "no shadow
+    map", not "meant to leak". `Light_Player_Fill_*` also have both false.
+  - Default `ls_noshadow=1`: a light is skipped only when both flags are false **and** it is
+    the darkvision light that follows the active character (`BG3_RTL_PLAYER_LIGHT`, now set
+    for `Light_Player_Darkvision_*` only). `ls_noshadow=0` traces it too.
+  - `Light_Player_Fill_*` are no longer character lights: `sebridge.cpp` re-tags them on
+    parse (owner unknown, no player flag), so this works with the installed v1 Lua. The Lua
+    now classifies them like any other visual light (`BootstrapClient.lua` 134); the
+    reinstall only refines their owner (item/scenery instead of unknown), it is not needed
+    for the behaviour.
+- **Lights with a game shadow map** (`ls_shadowed=3`, default; the High and Ultra presets):
+  the traced visibility replaces the atlas term where the segment surface → light lies in
+  the view frustum (the light projects on screen; the frustum is convex and the surface is
+  on screen, so every opaque caster on the segment was drawn and is in the TLAS). Elsewhere
+  `min(traced, atlas)`: the atlas has the off-screen casters. Not detectable: casters in the
+  atlas but not in our prepass (forward/transparent geometry, if the game renders them into
+  light shadow maps); they would be lost on screen. `ls_shadowed=1` replaces everywhere
+  (Full+), 2 is `min` everywhere, 0 the game's map. The default variant (`LS_FULL=0`) now
+  handles every mode, so mode 3 does not fall back to the 252-register pass. Hair keeps the
+  atlas term (its self-shadow model for shadowed lights is not replicated). Note: `ls_check`
+  / `ls_impl=0` compare against the frozen reference, which knows modes 0-2 only.
+  - Cost: to measure (jobs `10-casters-S6/S8`, phases `ls_shadowed` 0 vs 3). Budget: Ultra
+    at 3840x1600 on the 5090 needs a base frame of ≥ 65 fps (15.4 ms) under FG 2x to 120;
+    QUALITY R7 gives D-LS 0.5 ms. Proposal: keep 3 on High/Ultra if the S6/S8 delta is
+    ≤ 0.15 ms and the pass stays ≤ 0.5 ms; else 3 on Ultra only.
+
+**Box (projector) lights: the gap and the plan (not implemented).** They are the third loop
+of `f469db78` (set 1 b29, struct `_53`, about 128 bytes; lines 735-930 of
+`captures/20261026-165848/shaders/f469db7865d7c524.glsl`). A box light is a **directional
+light inside an oriented box**:
+- `uvw = _m6 · (P, 1)` (row-major 4x3, world → box), lit only for `|uvw − 0.5| < 0.5`;
+- direction to the light is the constant `_m9` (N·L = `dot(N, _m9)`, H from `V + _m9`);
+- falloff: along z, ramps below `_m2.x` (× `_m2.z`) and above `_m2.y` (× `_m2.w`); across x/y,
+  `(0.5 − |uv − 0.5|) · _m3` below 1; each ramp picks one of four curves by `_m4 >> 24`
+  (linear, square, smoothstep, smootherstep); `_m4 & 0xFFFFFF` is the channel mask;
+- colour `_m0`, optionally × a cookie texture `_m1 >> 1` (index − 1) at `uv`; `_m1 & 1`
+  scales by the global light scale b13[0];
+- shadow: `_m8 & 1` → atlas slot `_m8 >> 2`, the same 12-tap PCF as spots, × `min(_m5, fade)`;
+- BRDF: the same GGX/Burley as the point/spot loop (the class permutations add their terms).
+So the light eval allows it. Plan: (1) read the record offsets from the SPIR-V `Offset`
+decorations (as for b25) and bind b29 to D-LS (one more push-descriptor binding); (2) walk
+the froxel's projector entries (`bg3_cluster_projectors` already counts them) and build a
+`Bg3Light`-like record with a direction instead of a position, reusing
+`bg3_light_eval_mat` with `Ld = _m9` and the box falloff in place of the range falloff;
+(3) trace one ray along `_m9` (cone-sampled by a source angle) with `tmax` = the distance to
+the box's face on the light side (the box is the light's extent; casters outside it do not
+shadow it); (4) the same delta and `ls_shadowed` logic, the same art-intent rule (the rim
+and fill rigs come from `CharacterLight` lists, owner character, flags from their
+templates). Validation as 9.3: `ls_debug=4` with the projector pixels included.
+
+**Forward receivers: design note (later).** Water, glass, particles and VFX are drawn after
+the deferred lighting by the game's forward passes, which evaluate the sun with the cascades
+and the local lights with the atlas themselves. To make them receive: (a) sun — write the
+traced visibility into a screen-space image is not enough (they are not at the G-buffer
+depth); trace in a small compute pass over the forward pass's own depth (a prepass of the
+transparent surfaces does not exist; the refraction copy in step 13 gives the opaque depth
+only), or patch the forward shaders' shadow lookup to read a world-space visibility cache
+(SHaRC-like, STATUS backlog 5); (b) local lights — the same: a per-froxel visibility or a
+patched lookup. Water is the most visible case and also needs the forward capture of
+backlog item 12 to cast. Do it with item 12.
+
 ## 10. D-RF: ray-traced reflections (implemented, tiers (a) and (c))
 
 Status (2026-10-26): **implemented, on by default** (`rt_reflections=1`, live; needs `rt=1`

@@ -233,6 +233,16 @@ bool se_parse_lights(const std::string& text, SeSnapshot& out) {
       l.type = uint8_t(type);
       l.channel = uint8_t(channel);
       l.name = se_intern(n >= 19 && std::strcmp(name, "-") != 0 ? name : "");
+      // The bridge (v1 Lua) calls every Light_Player_* template a character light. Only the
+      // darkvision pair follows the controlled character; Light_Player_Fill_* are fill lights
+      // at fixed world positions (the same coordinates in every run of a save). Those keep
+      // owner "unknown" (a visual light) and lose the player-light flag, so that D-LS treats
+      // them like any other light (docs/TRACK_D_RT.md 9.10). The v2 Lua does this itself.
+      if (l.owner == BG3_RTL_OWNER_CHARACTER && (l.flags & BG3_RTL_PLAYER_LIGHT) &&
+          std::strncmp(name, "Light_Player_Darkvision", 23) != 0) {
+        l.owner = BG3_RTL_OWNER_UNKNOWN;
+        l.flags &= ~uint32_t(BG3_RTL_PLAYER_LIGHT);
+      }
       out.lights.push_back(l);
     }
   }
