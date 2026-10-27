@@ -98,6 +98,13 @@ void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds) {
   }
 }
 
+// Highest present number whose fence has signalled: all work submitted to the
+// present queue up to that present has finished on the GPU.
+uint64_t life_gpu_done() {
+  std::lock_guard<std::mutex> lock(g_life_mu);
+  return g_life_done;
+}
+
 uint64_t life_idle_begin() { return g_submit_seq.load(); }
 void life_idle_end(uint64_t seq_before) {
   uint64_t cur = g_idle_seq.load();

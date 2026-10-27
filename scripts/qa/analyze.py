@@ -425,7 +425,8 @@ def analyze_all(dirs, out: Path, keep_raw=False):
                 continue
             r = analyze_scene(d, pool)
             results.append(r)
-            print(r["summary"], flush=True)
+            # A scene whose run stalled or moved has no summary, only an error.
+            print(r.get("summary") or f"{d.name}: {r.get('error', r)}", flush=True)
             if not keep_raw:
                 prune(d)
     wall = time.time() - t0
