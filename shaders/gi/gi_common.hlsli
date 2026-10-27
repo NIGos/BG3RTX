@@ -220,6 +220,7 @@ float4 gather_history(uint2 fp, float d) {
 // (a sun colour read from a wrong or stale descriptor: the S6 green walls, ~14x and
 // green) can then not add more light than the game's own pixel implies.
 float3 ls_giveback_cap(float3 x, float3 g, float f_to, float f_from) {
+  if ((pc.ls_flags & (1u << 18)) == 0u) return x;   // ls_giveback_cap=0 (A/B, ls_check)
   const float r = max(f_to - f_from, 0.0) / max(f_from, 1e-3);
   return min(x, max(g, 0.0) * r);
 }

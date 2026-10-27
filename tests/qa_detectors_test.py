@@ -97,6 +97,16 @@ a = [y + patch * s for y, s in zip(a, (0.0, 0.02, -0.02))]
 t = det.temporal(codes(a), codes(b))
 check("flicker: a flickering 80x80 patch fails", not t["pass"] and t["metrics"]["excess_area"] > 0,
       f"excess {t['metrics']['excess_area']}‰")
+# The region stays bounded to the patch when the whole frame has a visible but insignificant
+# excess (S3 20261027-173531: one 104,000-px region over the ground, its mean set by whatever it
+# joined): the on set x1.4 noisier everywhere (above one PQ step, within the per-box spread).
+a = [y + correlated_noise(rng, base.shape, 2, 0.004) for y in frames(rng, base, 3, 0.004, r=2)]
+b = frames(rng, base, 3, 0.004, r=2)
+a = [y + patch * s for y, s in zip(a, (0.0, 0.02, -0.02))]
+t = det.temporal(codes(a), codes(b))
+big = max((g["area"] for g in t["regions"] if g["qualified"]), default=0)
+check("flicker: the patch region stays near its 6400 px under a frame-wide faint excess",
+      not t["pass"] and 0 < big < 2 * 6400, f"largest qualified region {big} px, {len(t['regions'])} regions")
 
 # ---- same view: a whole-pixel camera pan is a move, the sub-pixel jitter is not
 alb = np.clip(0.5 + 0.25 * np.sign(np.sin(xx / 7.0) * np.sin(yy / 11.0)) + 0.1 * rng.standard_normal((H, W)), 0, 1)
@@ -116,6 +126,36 @@ mot_j = det.animated([al3, jt3], [], (H, W))
 mot_m = det.animated([al3, mv], [], (H, W))
 check("animated: jitter marks < 1% of px", mot_j.mean() < 0.01, f"{100 * mot_j.mean():.2f}%")
 check("animated: a moved block is marked", mot_m[230, 630])
+# A dithered input (the game's PCF sun mask differs on static pixels between any two frames)
+# marks nothing by its noise alone; a shadow that moved still is.
+rs = np.random.default_rng(7)
+sm0 = np.clip(0.6 + rs.normal(0, 0.05, (H, W)), 0, 1).astype(np.float32)
+sm1 = np.clip(0.6 + rs.normal(0, 0.05, (H, W)), 0, 1).astype(np.float32)
+sm2 = sm1.copy()
+sm2[300:360, 300:360] = 0.0
+mot_d = det.animated([], [sm0, sm1], (H, W))
+mot_s = det.animated([], [sm0, sm2], (H, W))
+check("animated: a dithered sun mask marks < 1% of px", mot_d.mean() < 0.01, f"{100 * mot_d.mean():.2f}%")
+check("animated: a moved shadow on a dithered mask is marked", mot_s[330, 330])
+# As in the game (S3, S14 20261027-17*): 2/3 of the mask saturated (fully lit or in shadow,
+# exactly equal in every frame), the dither only in the penumbrae. The median |difference|
+# over all px is then 0; the noise must be measured where a dither can exist.
+yy2, xx2 = np.mgrid[0:H, 0:W]
+sat = np.where((xx2 // 160) % 3 == 0, 1.0, 0.0).astype(np.float32)        # lit / shadow bands
+pen = ((xx2 // 160) % 3 == 1)                                               # penumbra third
+def dmask(seed):
+    r = np.random.default_rng(seed)
+    v = sat.copy()
+    v[pen] = np.clip(0.5 + r.normal(0, 0.08, int(pen.sum())), 0, 1)
+    return np.round(v * 255) / 255
+sm0, sm1 = dmask(11), dmask(12)
+sm2 = sm1.copy()
+sm2[300:360, 20:80] = 0.0                                                   # a caster moved (lit band)
+mot_d = det.animated([], [sm0, sm1], (H, W))
+mot_s = det.animated([], [sm0, sm2], (H, W))
+check("animated: a mostly saturated mask with dithered penumbrae marks < 1% of px", mot_d.mean() < 0.01,
+      f"{100 * mot_d.mean():.2f}%")
+check("animated: a moved shadow on it is marked", mot_s[330, 50])
 
 print(f"\n{len(FAILS)} failure(s)" if FAILS else "\nall passed")
 sys.exit(1 if FAILS else 0)
