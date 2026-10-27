@@ -426,7 +426,7 @@ def write_report(results, out: Path, wall_s):
     rows = []
     for r in results:
         sc = r["scene"]
-        rows.append(f"<h2 id='{sc}'>{sc} {html.escape(r['save'])}</h2><p class='sum'>{html.escape(r['summary'])}</p>")
+        rows.append(f"<h2 id='{sc}'>{sc} {html.escape(r['save'])}</h2><p class='sum'>{html.escape(r.get('summary', 'RUN INCOMPLETE'))}</p>")
         rows.append(f"<p>Traces: {', '.join(r['traces'])}. Game run {r.get('run_s')} s{'' if r.get('exclusive', True) else ' (shared run: not a timing)'}, analysis {r.get('analysis_s')} s.</p>")
         if r.get("notes"):
             rows.append("<p>Notes: " + html.escape("; ".join(r["notes"])) + "</p>")
@@ -450,7 +450,7 @@ def write_report(results, out: Path, wall_s):
             info = {k: v for k, v in c.items() if k not in ("file", "shape")}
             rows.append(f"<p>{i + 1}. <code>{html.escape(json.dumps(info, default=_json))}</code></p>"
                         f"<img src='{sc}/{c['file']}' alt='crop'>")
-    sums = "\n".join(html.escape(r["summary"]) for r in results)
+    sums = "\n".join(html.escape(r.get("summary", "RUN INCOMPLETE")) for r in results)
     doc = (f"<!doctype html><html><head><meta charset='utf-8'><title>BG3RTX QA</title><style>{CSS}</style></head><body>"
            f"<h1>BG3RTX image-quality QA</h1><p>{time.strftime('%Y-%m-%d %H:%M')}, {len(results)} scene(s), "
            f"{wall_s:.0f} s analysis. Thresholds: <code>{html.escape(json.dumps(det.T))}</code>. "
@@ -487,5 +487,5 @@ def analyze_all(dirs, out: Path, keep_raw=False):
                 prune(d)
     wall = time.time() - t0
     write_report(results, out, wall)
-    (out / "summary.json").write_text(json.dumps([{"scene": r["scene"], "summary": r["summary"]} for r in results], indent=1))
+    (out / "summary.json").write_text(json.dumps([{"scene": r["scene"], "summary": r.get("summary", "RUN INCOMPLETE")} for r in results], indent=1))
     print(f"report: {out / 'report.html'} ({wall:.0f} s analysis)")
