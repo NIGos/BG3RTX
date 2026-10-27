@@ -2960,3 +2960,40 @@ Five runs, with no faults.
 - The `sharc_*` shaders compile with the layer's flags: `-enable-16bit-types` and the SDK
   path.
 
+### 13.15 Derived gates (QUALITY.md R0 addendum)
+
+The 0.8-1.25 ours/game band, the 200 px cut and the 0.6 ms build limit were not derived.
+
+**ours/game per family** (`scripts/qa/em_gate.py`): the tolerance comes from the ratio's own
+noise.
+- **Temporal noise:** the window-to-window std of ln r at the run's fixed view, measured.
+- **Counting noise:** 1/N over the N bright px per frame. N is an upper bound on the
+  independent ones, which errs toward failing.
+- **Exact families:** σ² = s_w²/W + 1/N on the mean over windows.
+- **Calibrated families:** σ² = s_w² + 1/N on the last window.
+- **Pass:** |ln r| ≤ z·σ, with z two-sided at ALPHA_FW / families (Bonferroni, as
+  `scripts/qa/thresholds.py`).
+
+**Applied to em9:**
+- **WQ:** pass.
+- **AF:**
+  - lava: pass;
+  - `222986b8` 1.93 and `304be1c7` 0.635: fail;
+  - the particles at 1.73 with N 42: fail.
+- **GF:**
+  - lava and particles: pass;
+  - `304be1c7` 1.038: **fail**. Over 12.8k bright px the counting noise is 0.9%, so a +3.8%
+    bias is real. Candidate causes: the mask filtering (our isotropic mip against the
+    hardware's anisotropic sampling) and the B10G11R11 effects target. The target is
+    unbiased per pixel, so the filtering is the more likely one.
+- em10 logs the bright-hit ratios.
+
+**Coverage (≥ 95%)** is review-only until a derivation exists.
+
+**Build cost:** there is no D-EM entry in SETTINGS_DESIGN's split.
+- Proposed: ≈ 0.7 ms (capture 0.044 + build and light list 0.44-0.62 ms, measured), out of
+  Ultra's static headroom (≈ 5 ms) and pan headroom (≈ 2.5 ms).
+- Until that entry exists, the cost is review-only.
+- The planned optimisation is a BLAS refit while the draw list and the triangle counts are
+  unchanged. Our command buffers are fenced and never dropped, unlike the game's.
+

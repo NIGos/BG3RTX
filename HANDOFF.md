@@ -23,15 +23,57 @@ Main is merged up to `8f8df1f`.
 - **Main merged with SHaRC:** `BG3RTX_HOST_HAS_RT_EMISSIVE` is defined, `sharc_em` is
   compiled in, and the `sharc_*` shaders compile.
 
-## Serial tests to rerun (em10 jobs in main's `captures/queue/pending/`)
+## Gates (derived, QUALITY.md R0; TRACK_D 13.15)
 
-- **`em10-af-check`** (session, 90 s warmup). Pass:
-  - `222986b8` and `304be1c7` with `bright` within 0.8-1.25 (the gate);
-  - lava within 0.8-1.25;
-  - coverage ≥ 95%.
-- **`em10-af-sharc`** (session, `sharc=1,sharc_em=1`). Pass:
-  - the log has `sharc: D-EM effects target injected`;
-  - no fault.
+**ours/game per family**, evaluated with `python -m scripts.qa.em_gate <run logs>`:
+- **Ratio:** `r_w` is the family's ratio in window `w`: the `bright` ratio when it is
+  logged, else the all-hit one.
+- **Measured temporal noise:** `s_w` is the std of ln r_w over the windows after the first,
+  at the run's fixed view.
+- **Counting noise:** N is the bright px per frame. It is an upper bound on the independent
+  ones, which errs toward failing.
+- **Exact families:** σ² = s_w²/W + 1/N on the mean of ln r_w.
+- **Approximate (calibrated) families:** σ² = s_w² + 1/N on the last window.
+- **Pass:** |ln r| ≤ z·σ, with z two-sided at ALPHA_FW / families (Bonferroni,
+  `scripts/qa/thresholds.py`).
+- **Replaced:** the old 0.8-1.25 band and the 200 px cut were not derived. Coverage (≥ 95%) is
+  review-only until it is derived.
+
+**Build cost:**
+- SETTINGS_DESIGN has no per-pass split entry for D-EM, so the 0.6 ms criterion is
+  review-only.
+- Proposed entry for §5.4 (Ultra):
+  - "D-EM data: effects-pass capture + emissive BLAS/TLAS + light list".
+  - Measured: capture +0.044 ms, build 0.44-0.62 ms median, so ≈ 0.7 ms.
+  - Taken from the static headroom (≈ 5 ms) and the pan headroom (≈ 2.5 ms). It is the input
+    of emissive lighting (sampling the game's emitters), which has no other source.
+- The allocation is the user's call. Independently, the build can be cut: the draw list and
+  triangle counts are stable between frames, and our own command buffers are never dropped,
+  so the emissive BLAS can be refit instead of rebuilt. That is planned after em10.
+
+**Applied to em9:**
+
+| Run | Family | Result | Derived verdict |
+|---|---|---|---|
+| WQ | all 5 gated families | | Pass |
+| AF | lava | 1.21 (band 0.68-1.47) | Pass |
+| AF | `4d3f7dab`, `8bcd0aff` | | Pass |
+| AF | `222986b8` (all-hit) | 1.93 (band 0.87-1.15, N 380) | Fail |
+| AF | `304be1c7` (all-hit) | 0.635 (band 0.84-1.19) | Fail |
+| AF | particles `10086377` | 1.73 (band 0.65-1.55, N 42) | Fail |
+| GF | lava | 1.035 | Pass |
+| GF | particles | 1.60 (s_w 0.37) | Pass |
+| GF | `304be1c7` | 1.038 (band 0.979-1.021, N 12.8k) | Fail |
+
+The GF `304be1c7` failure is a real +3.8% bias that the counting noise cannot explain at that
+N. em10 logs the bright ratios.
+
+## Serial tests to rerun (em10 jobs, already queued)
+
+- **`em10-af-check`:** every gated family passes `scripts.qa.em_gate`, using the bright
+  ratio. Coverage is review-only.
+- **`em10-af-sharc`:** the log has `sharc: D-EM effects target injected`, and there is no
+  fault.
 
 ### R4 (when a foundry save exists): S1
 
