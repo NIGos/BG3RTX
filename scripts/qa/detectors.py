@@ -29,6 +29,11 @@ T = {
     "sun_min_core_px": 3,         # erosion radius: ignores thin edges and penumbrae
     "flicker_ratio": 1.5,         # mean temporal std on / off
     "flicker_fail_area": 1.0,     # regions with std_on > 2 std_off + 0.01 (PQ code values)
+    # Scene motion excluded from the flicker gate (animated()): G-buffer albedo change
+    # (5x5 box), game sun mask change (3x3 box), dilated by this many px at 1280 wide.
+    "anim_albedo": 0.1,
+    "anim_sun_mask": 0.15,
+    "anim_dilate_px": 3,
     "flip_excess": 0.03,         # mean FLIP against the reference, above the on0/on1 noise floor
     "view_changed_frac": 0.05,    # G-buffer albedo differs (> 0.1) on more px than this: another view
     "min_area_frac": 2e-5,       # smallest region considered (of the buffer's pixels)
@@ -201,16 +206,49 @@ def sun_disagreement(game, rt, sun_ratio, cls=None, applied=None):
     return res
 
 
-def temporal(codes_on, codes_off):
+def animated(albedos, masks, shape):
+    """Pixels whose scene content changed across the traces of one temporal set: the
+    G-buffer albedo (geometry moved: idle animation, walking NPCs, wind in grass) or
+    the game's own sun mask (a caster moved: the shadow of an animated character or
+    frond on a static floor). Both are inputs of the lighting, independent of every
+    RT setting, so a change there is the scene's, not ours. albedos/masks: per trace,
+    (H, W, 3) / (H, W) or None; resampled (nearest) to `shape`."""
+    def fit(a):
+        if a.shape[:2] == tuple(shape):
+            return a
+        ys = (np.arange(shape[0]) * a.shape[0]) // shape[0]
+        xs = (np.arange(shape[1]) * a.shape[1]) // shape[1]
+        return a[ys][:, xs]
+    out = np.zeros(shape, bool)
+    alb = [im.box(fit(a).mean(-1), 2) for a in albedos if a is not None]
+    for a in alb[1:]:
+        out |= np.abs(a - alb[0]) > T["anim_albedo"]
+    msk = [im.box(fit(m), 1) for m in masks if m is not None]
+    for m in msk[1:]:
+        out |= np.abs(m - msk[0]) > T["anim_sun_mask"]
+    # The animated geometry also changes its own contact lighting nearby (AO, bounce).
+    return im.dilate(out, max(2, int(round(T["anim_dilate_px"] * shape[1] / 1280))))
+
+
+def temporal(codes_on, codes_off, moving=None):
     """Per-pixel temporal std of the final frame's PQ code value (perceptually
-    uniform), static camera, all-on against all-off (animation is in both)."""
+    uniform), static camera, all-on against all-off.
+
+    The two sets are captured about a minute apart, 240 presents between traces, so
+    their std holds the scene's own motion in each window (an NPC that walks or turns
+    in one window and idles in the other), not only our temporal noise. `moving`
+    (animated() of both sets) excludes the pixels whose geometry or game sun mask
+    changed; the gate is scored on the rest. The unmasked numbers stay in the metrics."""
     def std(stack):
         y = np.stack([c[..., 0] * 0.2627 + c[..., 1] * 0.678 + c[..., 2] * 0.0593 for c in stack])
         return y.std(axis=0)
     s_on, s_off = std(codes_on), std(codes_off)
-    ratio = float(s_on.mean() / max(s_off.mean(), 1e-6))
-    excess = im.box(s_on, 2) > 2.0 * im.box(s_off, 2) + 0.01
-    excess = im.opening(excess, 2)
+    static = ~moving if moving is not None and moving.shape == s_on.shape else np.ones(s_on.shape, bool)
+    raw_ratio = float(s_on.mean() / max(s_off.mean(), 1e-6))
+    ratio = float(s_on[static].mean() / max(s_off[static].mean(), 1e-6)) if static.any() else raw_ratio
+    excess_all = im.box(s_on, 2) > 2.0 * im.box(s_off, 2) + 0.01
+    raw_area = _permille(im.opening(excess_all, 2).sum(), excess_all.shape)
+    excess = im.opening(excess_all & static, 2)
     lab, n = im.label(excess)
     regs, tot = [], 0
     for i, area, bb in im.regions(lab, n, _min_area(excess.shape) * 4):
@@ -225,8 +263,11 @@ def temporal(codes_on, codes_off):
     area = _permille(tot, excess.shape)
     ok = ratio <= T["flicker_ratio"] and area <= T["flicker_fail_area"]
     return {"score": round(ratio, 3), "threshold": T["flicker_ratio"], "pass": ok, "unit": "std on / std off",
-            "metrics": {"std_on": round(float(s_on.mean()), 5), "std_off": round(float(s_off.mean()), 5),
+            "metrics": {"std_on": round(float(s_on[static].mean()), 5) if static.any() else 0.0,
+                        "std_off": round(float(s_off[static].mean()), 5) if static.any() else 0.0,
                         "excess_area": round(area, 3), "excess_threshold": T["flicker_fail_area"],
+                        "animated_frac": round(1.0 - float(static.mean()), 4),
+                        "unmasked": {"ratio": round(raw_ratio, 3), "excess_area": round(raw_area, 3)},
                         "frames": [len(codes_on), len(codes_off)]},
             "regions": regs, "map": ("std", s_on)}
 

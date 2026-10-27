@@ -22,6 +22,8 @@ def main():
     r.add_argument("--full-res", action="store_true", help="dump previews at native size (3840 wide)")
     r.add_argument("--reference", action="store_true", help="add a high-sample reference trace and a FLIP score")
     r.add_argument("--temporal", type=int, default=3, help="static-camera frames for the flicker metric (on and off)")
+    r.add_argument("--temporal-gi", action="store_true",
+                   help="add a temporal set with the GI neutral (gi_strength=0 gi_ao=0): flicker of the GI alone")
     r.add_argument("--interval", type=int, default=240, help="presents between traces")
     r.add_argument("--raw", action="store_true", help="also dump_raw=1 (float32 final frame; ~1 GB per trace)")
     r.add_argument("--keep-raw", action="store_true", help="do not prune the raw captures")
@@ -61,7 +63,8 @@ def main():
                 capture.run_scene(sid, all_scenes[sid], out / sid, full_res=args.full_res,
                                   temporal=max(2, args.temporal), reference=args.reference,
                                   interval=args.interval, raw=args.raw, tag=tag, exclusive=args.exclusive,
-                                  shared=lanes > 1, extra=[x for x in args.set.split(",") if x.strip()])
+                                  shared=lanes > 1, extra=[x.strip() for x in args.set.split(",") if x.strip()],
+                                  split_gi=args.temporal_gi)
 
         if lanes > 1:
             # A holder keeps the exclusive lock for this whole process (scripts/gamelock.ps1),

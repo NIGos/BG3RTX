@@ -33,7 +33,8 @@ presents later (240 by default, enough for RR's history to settle):
 | # | Trace | Settings changed before it | Used for |
 |---|---|---|---|
 | 0..N-1 | `on0`..`on{N-1}` | all on (`rt gi rt_reflections rt_shadows rt_local_shadows`) | baseline, noise σ, flicker |
-| N | `gi_off` | `gi=0 rt_reflections=0` (D-RF needs `gi=1`) | GI contribution (against `refl_off`) |
+| (opt) | `nogi0`..`nogi{N-1}` | `gi_strength=0 gi_ao=0` (`--temporal-gi`): all on, the GI's image contribution removed | flicker of the GI alone (on* against nogi*) |
+| N | `gi_off` | `gi=0 rt_reflections=0` (D-RF needs `gi=1`; restores `gi_strength`/`gi_ao` after nogi*) | GI contribution (against `refl_off`) |
 | N+1 | `refl_off` | `gi=1 rt_reflections=0` | reflection contribution (against `on0`) |
 | N+2 | `sun_off` | `rt_reflections=1 rt_shadows=0` | RT sun contribution |
 | N+3 | `local_off` | `rt_shadows=1 rt_local_shadows=0` | D-LS contribution |
@@ -43,7 +44,7 @@ presents later (240 by default, enough for RR's history to settle):
 | (opt) | `ref` | `rt_debug=0 gi_rr_rays=8 ls_samples=2` | `--reference` |
 | last N | `off0`..`off{N-1}` | all RT off (`rt=0` and every effect 0) | all-RT contribution, flicker baseline |
 
-`--temporal N` (default 3) sets N. With N = 3 and no reference that is 13 traces.
+`--temporal N` (default 3) sets N. With N = 3 and no reference that is 13 traces (16 with `--temporal-gi`).
 The sun debug traces (`sun_dbg`, `sun_check`, `sun_trust`) are each evaluated on their own,
 so another view than on0's does not void them. A trace-to-trace A/B cannot isolate
 `rt_sun_replace` in animated scenes (water, wind in foliage: 0.28-0.68 of the albedo
@@ -95,7 +96,7 @@ and physical bounds.
 | **sun_replaced** (warning, not a gate) | `rt_sun_replace` wrote the mask lit (> 0.85, 5×5 box) where the game's mask is dark (< 0.1), eroded like the casters detectors: the pixels the replace brightened. Review the crops (min, replace, mask overlay, replace/min ratio): over-dark filtering, acne or cascade transitions are right (R0); a missing caster or roof is wrong. The `rt_sun_replace` effect (`rep_on` vs `sun_min`) also runs the brightening detector with a ×1.15 bound, so its crops list every visible brightening | ‰ (2) |
 | **sun_check_far** (warning) / **sun_check_edge** (info) / **sun_check_darker** (gate) | `sun_check` trace (`rt_debug=7`): pixels where the written mask is brighter than min(game, traced) of the same pixel by > 0.1, split by distance to the game's lit mask: at its shadow edge (the game's own mask partly lit, or lit within `rt_sun_near`/2; yellow) and farther (red). Darker than min (blue) cannot happen with `rt_sun_roof_mode=0`. Every far crop is for review: right if it is the game's over-wide penumbra or acne, wrong if a caster or roof is missing. The log line `sun check (...)` gives the same split averaged over 600 frames | far ‰ (0.5), darker ‰ (0.01) |
 | **nonfinite** | NaN/Inf over every dump of every trace (`dumps.json`) | count (0) |
-| **flicker** | per-pixel temporal std of the final frame's PQ luminance over the `on*` traces against the `off*` traces; regions where std_on > 2·std_off + 0.01 | mean std ratio (1.5), excess area ‰ (1) |
+| **flicker** | per-pixel temporal std of the final frame's PQ luminance over the `on*` traces against the `off*` traces (effect `all_rt`), and against `nogi*` with `--temporal-gi` (effect `gi`); regions where std_on > 2·std_off + 0.01, on static pixels only: scene motion (G-buffer albedo or the game's own sun mask changed within any set, dilated 3 px) is excluded, because the sets are a minute apart and an NPC that walks in one window and idles in the other is not our flicker. `animated_frac` and the `unmasked` numbers are in the metrics; the crops show the excluded motion as a fourth tile | mean std ratio (1.5), excess area ‰ (1) |
 | **reference** (`--reference`) | FLIP of all-on against `gi_rr_rays=8 ls_samples=2` with the same view and RR, minus the noise floor (FLIP of `on0` against `on1`: RR noise and animation) | mean FLIP above the floor (0.03) |
 
 FLIP: `flip_evaluator` is used when installed. It is not installed here, and
@@ -217,6 +218,17 @@ off (![flicker](img/qa_s1_flicker.png)). Campsite: 1.46×, with 49‰ excess, al
 in the grass. The harness measures all-on against all-off, so the flicker is not
 attributed to one effect. Next step: a per-effect temporal set, or
 `--temporal 2` per effect.
+
+**Update 2026-10-27 (`captures/qa/sun_r0`, S3 17.2‰, S14 19.1‰ excess):** every
+cropped region was scene motion, not render noise. The excess is a sharp-edged,
+filled plateau in the shape of a character, a character's shadow or wind-blown grass,
+and the all-off std has the same outline. In S14 (`flicker_0`) a person-shaped shadow
+is present in the off window and absent from `on0`: the RT sun can only darken where
+the game's mask is dark (`rt_shadow.hlsl:168` folds `mask × vis`, and
+`rt_sun_resolve.hlsl:61` gives trust 0 there with `rt_sun_near=0`), so the game's own
+shadow had moved. The on window (08:24:05-08:24:26) and the off window
+(08:25:55-08:26:18) were 90 s apart. The detector now excludes that motion, and
+`--temporal-gi` measures the GI's own flicker against an all-on set captured next to it.
 
 **5. Sun disagreement in the foundry is expected.** The game's mask is 0
 everywhere in the foundry (`game_lit_frac` 0), while the trace finds the sun

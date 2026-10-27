@@ -307,23 +307,38 @@ def analyze_scene(d: Path, pool):
                           "metrics": {"per_trace": nf, "dumps": {n: t.nonfinite_by_dump() for n, t in traces.items() if nf[n]}}})
 
     # ---- temporal stability
+    # Sets: on* (all on), off* (all RT off), nogi* (all on but the GI neutral: --temporal-gi).
+    nogi_set = [n for n in data if n.startswith("nogi")]
     if len(on_set) >= 2 and len(off_set) >= 2:
-        r = det.temporal([data[n]["code"] for n in on_set], [data[n]["code"] for n in off_set])
-        s_on = r.pop("map")[1]
-        res["checks"].append({"detector": "flicker", "effect": "all_rt", "buffer": "final (PQ code)", "on": "+".join(on_set),
-                              "off": "+".join(off_set), **{k: v for k, v in r.items() if k != "regions"}, "top": r["regions"][:6]})
-        if not r["pass"]:
+        # Scene motion in any set (geometry or the game's own shadows moved) is excluded.
+        shape = data["on0"]["code"].shape[:2]
+        sets = [s for s in (on_set, off_set, nogi_set) if len(s) >= 2]
+        moving = np.zeros(shape, bool)
+        for s in sets:
+            moving |= det.animated([fr[n].albedo() for n in s], [fr[n].sun_mask() for n in s], shape)
+        pairs = [("all_rt", off_set, "all RT off")]
+        if len(nogi_set) >= 2:
+            pairs.append(("gi", nogi_set, "GI neutral (gi_strength=0 gi_ao=0)"))
+        for eff, base, base_label in pairs:
+            r = det.temporal([data[n]["code"] for n in on_set], [data[n]["code"] for n in base], moving)
+            s_on = r.pop("map")[1]
+            res["checks"].append({"detector": "flicker", "effect": eff, "buffer": "final (PQ code), static px",
+                                  "on": "+".join(on_set), "off": "+".join(base),
+                                  **{k: v for k, v in r.items() if k != "regions"}, "top": r["regions"][:6]})
+            if r["pass"]:
+                continue
             vmax = float(np.percentile(s_on, 99.5)) + 1e-6
-            codes_off = np.stack([lum2020(data[n]["code"]) for n in off_set]).std(axis=0)
+            s_base = np.stack([lum2020(data[n]["code"]) for n in base]).std(axis=0)
             for j, g in enumerate(r["regions"][:CROPS_PER_DETECTOR]):
                 y0, y1, x0, x1 = crop_window(g["bbox"], s_on.shape)
-                name = f"flicker_{j}.png"
+                name = f"flicker_{j}.png" if eff == "all_rt" else f"flicker_{eff}_{j}.png"
                 info = {k: v for k, v in g.items() if k not in ("bbox", "rank", "qualified", "focus")}
                 sheet([dsp("on0", "final")[y0:y1, x0:x1], heat_scalar(s_on[y0:y1, x0:x1], vmax),
-                       heat_scalar(codes_off[y0:y1, x0:x1], vmax)],
-                      ["all on", f"temporal std, all on ({len(on_set)} frames)", "temporal std, all RT off"],
-                      f"{meta['scene']} flicker at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
-                res["crops"].append({"file": f"crops/{name}", "detector": "flicker", "effect": "all_rt", "buffer": "final",
+                       heat_scalar(s_base[y0:y1, x0:x1], vmax), moving[y0:y1, x0:x1].astype(np.float32) * 0.5],
+                      ["all on", f"temporal std, all on ({len(on_set)} frames)", f"temporal std, {base_label}",
+                       "scene motion (excluded)"],
+                      f"{meta['scene']} flicker ({eff}) at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
+                res["crops"].append({"file": f"crops/{name}", "detector": "flicker", "effect": eff, "buffer": "final",
                                      "bbox": g["bbox"], "shape": list(s_on.shape), **info})
 
     # ---- reference (optional)
@@ -400,10 +415,12 @@ def summarize(res):
                 effs.setdefault(c["effect"], []).append(f"{c['buffer']} {c['score']}‰")
             parts.append(f"{kind.replace('_', '-')}: " + "; ".join(f"{e} ({', '.join(v)})" for e, v in effs.items()))
         elif kind == "flicker":
-            c = cs[0]
-            m = c["metrics"]
-            parts.append(f"flicker: std on/off {c['score']} (limit {c['threshold']}), excess area {m['excess_area']}‰ "
-                         f"(limit {m['excess_threshold']})")
+            for c in cs:
+                m = c["metrics"]
+                parts.append(f"flicker {c['effect']}: std on/off {c['score']} (limit {c['threshold']}), excess area "
+                             f"{m['excess_area']}‰ (limit {m['excess_threshold']}; scene motion "
+                             f"{100 * m.get('animated_frac', 0):.1f}% excluded, unmasked "
+                             f"{m.get('unmasked', {}).get('excess_area', '?')}‰)")
         else:
             c = cs[0]
             parts.append(f"{kind} {c['score']} (> {c['threshold']})")
