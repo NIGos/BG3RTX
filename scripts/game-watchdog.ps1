@@ -10,9 +10,10 @@ function W($m) { $l = "$(Get-Date -Format 'HH:mm:ss') $m"; Add-Content $log $l; 
 # Which checkout launched a game: the bin folder its VkLayer_bg3rtx.dll was
 # loaded from (exact); falls back to the newest bg3rtx.log written after its start.
 function Owner($start, $id) {
-  $m = (Get-Process -Id $id -ErrorAction SilentlyContinue).Modules | Where-Object ModuleName -eq "VkLayer_bg3rtx.dll" | Select-Object -First 1
+  $m = $null
+  try { $m = (Get-Process -Id $id -ErrorAction Stop).Modules | Where-Object ModuleName -eq "VkLayer_bg3rtx.dll" | Select-Object -First 1 } catch { }
   if ($m) {
-    $leaf = Split-Path (Split-Path (Split-Path $m.FileName)) -Leaf
+    $leaf = Split-Path (Split-Path $m.FileName) -Parent | Split-Path -Leaf   # <checkout>\bin\VkLayer_bg3rtx.dll -> <checkout>
     return $(if ($leaf -like "agent-*") { $leaf } else { "main" })
   }
   $logs = @(Get-ChildItem (Join-Path $root ".claude\worktrees\*\bg3rtx.log") -ErrorAction SilentlyContinue) + @(Get-Item (Join-Path $root "bg3rtx.log") -ErrorAction SilentlyContinue)
