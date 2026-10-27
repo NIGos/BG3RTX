@@ -45,9 +45,30 @@ struct Bg3Light {
   float strength;
 };
 
+// Guarded reads of the game's light list (rt_common.hlsli guard_count): an index
+// out of a buffer gives no light / no froxel record instead of a wild read (the
+// device has no robust buffer access).
+static const uint kMaxFroxelLights = 1024u;
+
+bool bg3_in(ByteAddressBuffer b, uint index, uint stride) {
+  uint bytes;
+  b.GetDimensions(bytes);
+  const bool ok_range = index < bytes / stride;
+  if (!ok_range) guard_count(kGuardLightList);
+  return ok_range;
+}
+// Light index i of the per-froxel list (b24); 0xffffffff when out of range.
+uint bg3_light_index(uint i) { return bg3_in(lIndex, i, 4u) ? lIndex.Load(i * 4u) : 0xffffffffu; }
+float3 bg3_light_pos(uint li) { return bg3_in(lLights, li, 80u) ? asfloat(lLights.Load3(li * 80u)) : float3(1e30, 1e30, 1e30); }
+
 Bg3Light load_light(uint i) {
+  Bg3Light l = (Bg3Light)0;
+  if (!bg3_in(lLights, i, 80u)) {   // no light: out of every range and channel
+    l = (Bg3Light)0;
+    l.inv_r = 1e30;
+    return l;
+  }
   uint a = i * 80u;
-  Bg3Light l;
   float4 v0 = asfloat(lLights.Load4(a)), v1 = asfloat(lLights.Load4(a + 16)), v2 = asfloat(lLights.Load4(a + 32));
   uint4 v3 = lLights.Load4(a + 48);
   l.pos = v0.xyz; l.inv_r = v0.w;
@@ -66,8 +87,21 @@ uint3 bg3_cluster(uint2 px, float depth) {
   float zmax = float(asuint(lConsts.c[31].y));
   float z = float(int(clamp(log2(depth * cam2.c[12].y) * lConsts.c[30].x + lConsts.c[30].y, 0.0, zmax)));
   uint idx = uint(int((z * lConsts.c[30].w + float(tile.y)) * lConsts.c[30].z + float(tile.x)));
+  if (!bg3_in(lClusters, idx, 16u)) return uint3(0, 0, 0);
   uint4 c = lClusters.Load4(idx * 16u);
-  return uint3(c.x, c.y & 4095u, (c.y >> 12) & 4095u);
+  // At most kMaxFroxelLights entries per pixel, and never a first index whose list
+  // would wrap a uint (counted, kGuardLoopCap): the passes loop over this list.
+  uint np = c.y & 4095u, ns = (c.y >> 12) & 4095u;
+  if (c.x > 0xffffffffu - 2u * 4096u) {
+    guard_count(kGuardLoopCap);
+    return uint3(0, 0, 0);
+  }
+  if (np + ns > kMaxFroxelLights) {
+    guard_count(kGuardLoopCap);
+    np = min(np, kMaxFroxelLights);
+    ns = min(ns, kMaxFroxelLights - np);
+  }
+  return uint3(c.x, np, ns);
 }
 
 // The pixel's froxel record as stored (b23): x first index, y point/spot/env-probe
@@ -78,7 +112,7 @@ uint4 bg3_cluster_raw(uint2 px, float depth) {
   float zmax = float(asuint(lConsts.c[31].y));
   float z = float(int(clamp(log2(depth * cam2.c[12].y) * lConsts.c[30].x + lConsts.c[30].y, 0.0, zmax)));
   uint idx = uint(int((z * lConsts.c[30].w + float(tile.y)) * lConsts.c[30].z + float(tile.x)));
-  return lClusters.Load4(idx * 16u);
+  return bg3_in(lClusters, idx, 16u) ? lClusters.Load4(idx * 16u) : uint4(0, 0, 0, 0);
 }
 
 uint bg3_cluster_projectors(uint2 px, float depth) {
@@ -87,7 +121,7 @@ uint bg3_cluster_projectors(uint2 px, float depth) {
   float zmax = float(asuint(lConsts.c[31].y));
   float z = float(int(clamp(log2(depth * cam2.c[12].y) * lConsts.c[30].x + lConsts.c[30].y, 0.0, zmax)));
   uint idx = uint(int((z * lConsts.c[30].w + float(tile.y)) * lConsts.c[30].z + float(tile.x)));
-  return lClusters.Load4(idx * 16u).z & 1023u;
+  return bg3_in(lClusters, idx, 16u) ? lClusters.Load4(idx * 16u).z & 1023u : 0u;
 }
 
 // Surface terms of f469db78 at one pixel.
@@ -167,6 +201,7 @@ float bg3_atlas_shadow(Bg3Light l, bool spot, Bg3Surface sf, float3 Ld, float d2
     slot += mx == f0 ? 0u : mx == f1 ? 1u : mx == f2 ? 2u : 3u;
   }
   float pcf = 0.0;
+  if (!bg3_in(lShadows, slot, 96u)) return 1.0;   // no shadow view: as the light without a shadow map
   if (nol > 0.0) {
     uint a = slot * 96u;
     float4 r0 = asfloat(lShadows.Load4(a)), r1 = asfloat(lShadows.Load4(a + 16));

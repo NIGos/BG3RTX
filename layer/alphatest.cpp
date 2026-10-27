@@ -34,7 +34,7 @@ namespace {
 // (logged at once, "views full").
 constexpr uint32_t kTextures = 4096;  // Texture2D slots (0 = dummy)
 constexpr uint32_t kCaches = 16;      // Texture2DArray slots (0 = dummy)
-constexpr uint32_t kRing = 8;         // descriptor sets / record regions in flight
+constexpr uint32_t kRing = kSceneSlots;   // descriptor sets / record regions: one per scene slot (rtscene.cpp)
 constexpr uint32_t kMaxRecords = 8192;
 constexpr VkDeviceSize kRegion = 16 + VkDeviceSize(kMaxRecords) * sizeof(AlphaRec);
 
@@ -55,13 +55,25 @@ Img g_dummy2d, g_dummy_arr;
 bool g_dummy_ready = false;
 VkBuffer g_dummy_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_dummy_mem = VK_NULL_HANDLE;
+// Scene stamps (set 1 binding 9, 16 bytes per slot, host-visible): uint 0 the
+// generation the CPU expects (written at commit), uint 1 the one the build's
+// command buffer wrote on the GPU after its TLAS. The ray queries trace only when
+// they match (rt_common.hlsli rt_scene_ok): a TLAS whose build never ran (its
+// command buffer dropped, or submitted after the pass) is not traced.
+VkBuffer g_stamp_buf = VK_NULL_HANDLE;
+VkDeviceMemory g_stamp_mem = VK_NULL_HANDLE;
+uint32_t* g_stamp_map = nullptr;
+uint32_t g_stamp_gen = 0;
 VkBuffer g_legacy_buf = VK_NULL_HANDLE;   // alpha_legacy_info
 VkDeviceMemory g_legacy_mem = VK_NULL_HANDLE;
 uint32_t g_legacy_stride = 0;
-uint32_t g_slot = 0;            // next ring slot
 uint32_t g_set_tex[kRing] = {};     // per set: texture slots holding real views (the rest: dummies)
 uint32_t g_set_cache[kRing] = {};
 bool g_set_init[kRing] = {};
+// The game's views (and their images) each set references, for the life system
+// whenever the set is handed out (alpha_slot_in_use).
+std::vector<uint64_t> g_set_handles[kRing];
+uint64_t g_set_extended[kRing] = {};
 bool g_full_logged = false;
 int g_current = -1;             // slot of the last commit
 bool g_logged = false;
@@ -73,15 +85,18 @@ std::vector<std::pair<VkImageView, VkImageLayout>> g_tex, g_cache;
 uint32_t g_fail[6] = {};
 uint64_t g_frames = 0, g_draws = 0, g_tris = 0;
 
-bool make_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& b, VkDeviceMemory& m) {
+bool make_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& b, VkDeviceMemory& m, bool address = false) {
   DeviceData* dd = g_dd;
   VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
   bci.size = size;
-  bci.usage = usage;
+  bci.usage = usage | (address ? VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT : 0u);
   if (dd->vk.CreateBuffer(dd->device, &bci, nullptr, &b) != VK_SUCCESS) return false;
   VkMemoryRequirements req;
   dd->vk.GetBufferMemoryRequirements(dd->device, b, &req);
+  VkMemoryAllocateFlagsInfo fi{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};
+  fi.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
   VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  if (address && rt_alloc_device_address()) mai.pNext = &fi;
   mai.allocationSize = req.size;
   mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &mai, nullptr, &m) != VK_SUCCESS) return false;
@@ -211,7 +226,8 @@ void alpha_device_created(DeviceData* dd) {
   bool ok = vk.CreateSampler(dd->device, &si, nullptr, &g_wrap) == VK_SUCCESS;
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   ok = ok && vk.CreateSampler(dd->device, &si, nullptr, &g_clamp) == VK_SUCCESS;
-  VkDescriptorSetLayoutBinding b[9] = {
+  VkDescriptorSetLayoutBinding b[10] = {
+      {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},   // scene stamp
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -222,10 +238,10 @@ void alpha_device_created(DeviceData* dd) {
       {4, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_wrap},
       {5, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_clamp}};
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.bindingCount = 9;
+  dci.bindingCount = 10;
   dci.pBindings = b;
   ok = ok && vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) == VK_SUCCESS;
-  VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5 * kRing},
+  VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6 * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches) * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLER, 2 * kRing}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -241,10 +257,31 @@ void alpha_device_created(DeviceData* dd) {
   ai.pSetLayouts = layouts;
   ok = ok && vk.AllocateDescriptorSets(dd->device, &ai, g_sets) == VK_SUCCESS;
   ok = ok && make_buffer(kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                         g_rec_buf, g_rec_mem);
+                         g_rec_buf, g_rec_mem, true);
+  if (ok) fault_track("alpha records (8 slot regions)", rt_buffer_address(g_rec_buf), kRegion * kRing);
   ok = ok && make_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_dummy_buf,
                          g_dummy_mem);
   ok = ok && make_image(false, g_dummy2d) && make_image(true, g_dummy_arr);
+  if (ok) {   // the scene stamps: host-visible, persistently mapped, zeroed
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size = 16 * kRing;
+    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    ok = vk.CreateBuffer(dd->device, &bci, nullptr, &g_stamp_buf) == VK_SUCCESS;
+    VkMemoryRequirements req{};
+    if (ok) vk.GetBufferMemoryRequirements(dd->device, g_stamp_buf, &req);
+    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = ok ? find_memory_type(dd, req.memoryTypeBits,
+                                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+                             : UINT32_MAX;
+    void* p = nullptr;
+    ok = ok && mai.memoryTypeIndex != UINT32_MAX &&
+         vk.AllocateMemory(dd->device, &mai, nullptr, &g_stamp_mem) == VK_SUCCESS &&
+         vk.BindBufferMemory(dd->device, g_stamp_buf, g_stamp_mem, 0) == VK_SUCCESS &&
+         vk.MapMemory(dd->device, g_stamp_mem, 0, VK_WHOLE_SIZE, 0, &p) == VK_SUCCESS;
+    g_stamp_map = static_cast<uint32_t*>(p);
+    if (ok) std::memset(g_stamp_map, 0, 16 * kRing);
+  }
   if (!ok) {
     log("[alpha] descriptor/resource setup failed: alpha testing off");
     return;
@@ -267,12 +304,13 @@ void alpha_device_destroyed(DeviceData* dd) {
     *i = Img{};
   }
   for (auto [b, m] : {std::pair{g_rec_buf, g_rec_mem}, std::pair{g_dummy_buf, g_dummy_mem},
-                      std::pair{g_legacy_buf, g_legacy_mem}}) {
+                      std::pair{g_legacy_buf, g_legacy_mem}, std::pair{g_stamp_buf, g_stamp_mem}}) {
     if (b) vk.DestroyBuffer(dd->device, b, nullptr);
     if (m) vk.FreeMemory(dd->device, m, nullptr);
   }
-  g_rec_buf = g_dummy_buf = g_legacy_buf = VK_NULL_HANDLE;
-  g_rec_mem = g_dummy_mem = g_legacy_mem = VK_NULL_HANDLE;
+  g_rec_buf = g_dummy_buf = g_legacy_buf = g_stamp_buf = VK_NULL_HANDLE;
+  g_rec_mem = g_dummy_mem = g_legacy_mem = g_stamp_mem = VK_NULL_HANDLE;
+  g_stamp_map = nullptr;
   g_legacy_stride = 0;
   g_pool = VK_NULL_HANDLE;
   g_dsl = VK_NULL_HANDLE;
@@ -401,8 +439,8 @@ uint32_t alpha_record_count() {
   return uint32_t(g_recs.size());
 }
 
-void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
-  if (!g_on) return;
+VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint32_t slot) {
+  if (!g_on || slot >= kRing) return VK_NULL_HANDLE;
   const VkBuffer soup = ab.soup;
   const VkDeviceSize alpha_base = ab.alpha_base, alpha_bytes = ab.alpha_bytes, opaque_bytes = ab.opaque_bytes;
   const uint32_t stride = ab.stride;
@@ -440,10 +478,9 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
                           nullptr, 2, ib);
     g_dummy_ready = true;
   }
-  const uint32_t slot = g_slot;
-  g_slot = (g_slot + 1) % kRing;
   // Records: a 16-byte header (count) and the records, in this slot's region.
-  // The slot was last read kRing frames ago; order the update after any reads anyway.
+  // The scene slot is retired: the GPU finished every frame that read it
+  // (rtscene.cpp). The update is still ordered after earlier reads.
   const VkDeviceSize base = VkDeviceSize(slot) * kRegion;
   // header: record count, the opaque soup's vertex stride (0: not bound), the
   // alpha-test policy bits (rt_common.hlsli kAlpha*; live switches)
@@ -453,8 +490,8 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr,
-                        0, nullptr);
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
   vk.CmdUpdateBuffer(cmd, g_rec_buf, base, sizeof header, header);
   const uint8_t* src = reinterpret_cast<const uint8_t*>(g_recs.data());
   VkDeviceSize left = VkDeviceSize(g_recs.size()) * sizeof(AlphaRec), off = 0;
@@ -464,6 +501,11 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
     off += n;
     left -= n;
   }
+  // The scene stamp: the CPU expects `gen`, the GPU confirms it once this command
+  // buffer runs (after the scene build recorded before this call).
+  if (++g_stamp_gen == 0) g_stamp_gen = 1;
+  g_stamp_map[slot * 4 + 0] = g_stamp_gen;
+  vk.CmdUpdateBuffer(cmd, g_stamp_buf, VkDeviceSize(slot) * 16 + 4, 4, &g_stamp_gen);
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
   vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr,
@@ -489,6 +531,18 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
   const uint32_t ntex = g_set_init[slot] ? (std::max)(g_set_tex[slot], uint32_t(g_tex.size())) + 1 : kTextures;
   const uint32_t ncache = g_set_init[slot] ? (std::max)(g_set_cache[slot], uint32_t(g_cache.size())) + 1 : kCaches;
   g_set_init[slot] = true;
+  {
+    std::vector<uint64_t>& hs = g_set_handles[slot];
+    hs.clear();
+    std::shared_lock<std::shared_mutex> tl(tracker().mu);
+    for (const auto* list : {&g_tex, &g_cache})
+      for (const auto& [v, l] : *list) {
+        hs.push_back(uint64_t(v));
+        auto it = tracker().views.find(v);
+        if (it != tracker().views.end()) hs.push_back(uint64_t(it->second.image));
+      }
+    g_set_extended[slot] = 0;
+  }
   g_set_tex[slot] = uint32_t(g_tex.size());
   g_set_cache[slot] = uint32_t(g_cache.size());
   std::vector<VkDescriptorImageInfo> tex(ntex), cache(ncache);
@@ -499,12 +553,14 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
     cache[i] = i && i <= g_cache.size()
                    ? VkDescriptorImageInfo{VK_NULL_HANDLE, g_cache[i - 1].first, g_cache[i - 1].second}
                    : VkDescriptorImageInfo{VK_NULL_HANDLE, g_dummy_arr.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet w[7] = {};
-  for (int i = 0; i < 7; ++i) {
+  VkDescriptorBufferInfo stampi{g_stamp_buf, VkDeviceSize(slot) * 16, 16};
+  VkWriteDescriptorSet w[8] = {};
+  for (int i = 0; i < 8; ++i) {
     w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     w[i].dstSet = g_sets[slot];
-    w[i].dstBinding = i < 4 ? uint32_t(i) : uint32_t(i + 2);   // 0-3, then 6, 7, 8
+    w[i].dstBinding = i < 4 ? uint32_t(i) : uint32_t(i + 2);   // 0-3, then 6, 7, 8, 9
   }
+  w[7].descriptorCount = 1, w[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[7].pBufferInfo = &stampi;
   w[4].descriptorCount = 1, w[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[4].pBufferInfo = &opaquei;
   w[5].descriptorCount = 1, w[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[5].pBufferInfo = &infoi;
   w[6].descriptorCount = 1, w[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[6].pBufferInfo = &pooli;
@@ -512,7 +568,7 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
   w[1].descriptorCount = 1, w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[1].pBufferInfo = &soupi;
   w[2].descriptorCount = ntex, w[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[2].pImageInfo = tex.data();
   w[3].descriptorCount = ncache, w[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[3].pImageInfo = cache.data();
-  vk.UpdateDescriptorSets(g_dd->device, 7, w, 0, nullptr);
+  vk.UpdateDescriptorSets(g_dd->device, 8, w, 0, nullptr);
   g_current = int(slot);
 
   ++g_frames;
@@ -555,15 +611,35 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
     g_frames = g_draws = g_tris = 0;
     std::memset(g_fail, 0, sizeof g_fail);
   }
+  return g_sets[slot];
+}
+
+// The scene slot `slot` was handed out in `frame`: the passes that bind its set are
+// recorded then, in other command buffers than the build's (which noted the views
+// for its own submission only). Noted as submitted in `frame`: a destroy waits for
+// that frame's present fence. (A destroy before any fence covers it cannot wait;
+// tracker.cpp counts it as "no fence yet".)
+void alpha_slot_in_use(uint32_t slot, uint64_t frame) {
+  if (!g_on || slot >= kRing) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (g_set_extended[slot] >= frame) return;
+  g_set_extended[slot] = frame;
+  for (uint64_t h : g_set_handles[slot]) life_extend(h, frame);
 }
 
 // The set layout is fixed for the device's lifetime; the set is the one of the
-// latest scene build (VK_NULL_HANDLE before the first).
+// latest scene build (VK_NULL_HANDLE before the first), from the same scene
+// slot as rt_scene's TLAS (rt_scene_set returns both as one pair).
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set) {
   if (!g_on) return false;
-  std::lock_guard<std::mutex> lock(g_mu);
-  *layout = g_dsl;
-  *set = g_current < 0 ? VK_NULL_HANDLE : g_sets[g_current];
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    *layout = g_dsl;
+  }
+  // rtscene's lock after ours is released (rt_after_capture takes it before ours).
+  VkAccelerationStructureKHR tlas;
+  uint64_t built;
+  if (!rt_scene_set(&tlas, set, &built)) *set = VK_NULL_HANDLE;
   return true;
 }
 

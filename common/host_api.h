@@ -10,7 +10,8 @@
 
 // 6: Bg3HostApi::assetdb (appended).
 // 7: Bg3HostApi::rr_active (appended).
-#define BG3RTX_ABI_VERSION 7
+// 8: Bg3HostApi::rt_scene_set (appended).
+#define BG3RTX_ABI_VERSION 8
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -186,6 +187,15 @@ struct Bg3HostApi {
   // modes" (gi_rr, ls_soft, rf_rr = -1) from this, not from the rr key, so
   // FSR/TAA, an SR fallback or a failed RR creation get the non-RR modes.
   bool (*rr_active)();
+
+  // ABI 8: the latest scene's TLAS and the set 1 built with it, as one pair (a
+  // TLAS traced with another build's set reads InstInfo, records and vertices
+  // that do not match its instances). Each build is a snapshot slot of the host;
+  // a slot is reused only after the GPU finished every frame it was handed out
+  // in, so call this in the frame that records the passes. False before the
+  // first build, when hardware RT is off, and once the last build is older than
+  // the previous frame.
+  bool (*rt_scene_set)(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame);
 };
 
 struct Bg3CoreApi {

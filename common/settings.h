@@ -142,14 +142,15 @@ inline constexpr Knob kKnobs[] = {
 
   {"local_shadows", "Local light shadows",
    "Ray-traced shadows for torches, lamps and spells, so lights without a shadow map stop leaking through "
-   "walls. Fast samples 1 light per pixel (noisier, needs Ray Reconstruction). Full+ also re-traces the lights "
-   "that have a game shadow map. About 0.2-0.35 ms.",
+   "walls. Fast samples 1 light per pixel (noisier, needs Ray Reconstruction). Full also traces the lights "
+   "that have a game shadow map, keeping the game's map only where a caster may be off screen. Full+ "
+   "replaces those maps everywhere (off-screen casters can be lost). About 0.2-0.4 ms.",
    Kind::Choice, Apply::Live, "", false,
    {{"off", "Off", 0, {{"rt_local_shadows", "0"}}, {}},
     {"fast", "Fast", kCapRayQuery, {{"rt_local_shadows", "1"}, {"ls_samples", "1"}, {"ls_shadowed", "0"}}, {{"rt_geometry", 1}}},
-    {"full", "Full", kCapRayQuery, {{"rt_local_shadows", "1"}, {"ls_samples", "0"}, {"ls_shadowed", "0"}}, {{"rt_geometry", 1}}},
-    {"full_plus", "Full + shadowed lights", kCapRayQuery, {{"rt_local_shadows", "1"}, {"ls_samples", "0"}, {"ls_shadowed", "2"}}, {{"rt_geometry", 1}}}},
-   {}, {0, 1, 2, 3}},
+    {"full", "Full", kCapRayQuery, {{"rt_local_shadows", "1"}, {"ls_samples", "0"}, {"ls_shadowed", "3"}}, {{"rt_geometry", 1}}},
+    {"full_plus", "Full + shadowed lights", kCapRayQuery, {{"rt_local_shadows", "1"}, {"ls_samples", "0"}, {"ls_shadowed", "1"}}, {{"rt_geometry", 1}}}},
+   {}, {0, 1, 2, 2}},
 
   {"reflections", "Reflections",
    "Ray-traced reflections replace the game's reflection probes where the reflected point is on screen. "
@@ -207,7 +208,7 @@ inline constexpr KV kCodeDefaults[] = {
     {"rr", "0"},           {"rt_build", "1"},          {"rt_alpha", "0"},      {"rt_shadows", "0"},
     {"contact_shadows", "1"}, {"gi", "0"},             {"gi_rt", "0"},         {"gi_rays", "2"},
     {"gi_steps", "12"},    {"gi_rr_rays", "1"},        {"rt_local_shadows", "0"}, {"ls_samples", "0"},
-    {"ls_shadowed", "0"},  {"rt_reflections", "0"},    {"rf_max_rough", "0.6"}, {"fg", "0"},
+    {"ls_shadowed", "3"},  {"rt_reflections", "0"},    {"rf_max_rough", "0.6"}, {"fg", "0"},
     {"gi_strength", "1.0"}, {"ls_strength", "1.0"},    {"rf_strength", "1.0"}, {"fps_cap", "0"},
     {"reflex", "1"},
 };

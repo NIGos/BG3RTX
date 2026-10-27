@@ -13,8 +13,9 @@ Copy-Item (Join-Path $PSScriptRoot "live_phases.py") (Join-Path $Out "scripts")
 '{"start": "\\[trace\\] frame \\d+ written", "after_trace": [{"name": "reflections off", "set": {"rt_reflections": "0"}}]}' |
   Set-Content (Join-Path $Out "captures\ab.json")
 
-$touchCore = '(Get-Item bin\bg3rtx_core.dll).LastWriteTime = Get-Date'
-$touchLayer = '(Get-Item bin\VkLayer_bg3rtx.dll).LastWriteTime = Get-Date'
+# "post" runs through cmd /c (test-queue.ps1): touch with copy's "+,," idiom, not PowerShell.
+$touchCore = 'copy /b bin\bg3rtx_core.dll +,, bin\bg3rtx_core.dll >nul'
+$touchLayer = 'copy /b bin\VkLayer_bg3rtx.dll +,, bin\VkLayer_bg3rtx.dll >nul'
 $guard = @('\[core\] guard:')
 $jobs = @(
   @{ name = "a-gi0"; save = "Campsite"; session = $true; set = "gi=0"; traces = 1; warmup = 1; patterns = $guard; post = $touchCore },

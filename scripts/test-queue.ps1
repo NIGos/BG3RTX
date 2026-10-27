@@ -50,6 +50,10 @@ $pending, $running, $done = "pending", "running", "done" | ForEach-Object { Join
 New-Item -ItemType Directory -Force $pending, $running, $done | Out-Null
 $jsonl = Join-Path $q "results.jsonl"
 $md = Join-Path $q "results.md"
+# Per-run logs; pruned after 3 days (docs: disk hygiene).
+$logs = Join-Path $q "logs"
+New-Item -ItemType Directory -Force $logs | Out-Null
+Get-ChildItem $logs -File -ErrorAction SilentlyContinue | Where-Object LastWriteTime -lt (Get-Date).AddDays(-3) | Remove-Item -ErrorAction SilentlyContinue
 $script:sess = $null
 
 function Stamp($tree) {
@@ -280,11 +284,9 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
   $dumps = Get-Dumps $tree $t0
   if (-not $fault -and $nv) { $fault = "nv153" }
   if (-not $fault -and $dumps) { $fault = "aftermath dump" }
-  $keptLog = $null
-  if ($fault) {
-    $keptLog = Join-Path $q "$name.$i.$($t0.ToString('HHmmss')).log"
-    [IO.File]::WriteAllText($keptLog, $slice)
-  }
+  # Every run's log slice is kept: later launches overwrite bg3rtx.log before agents read it.
+  $keptLog = Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).log"
+  [IO.File]::WriteAllText($keptLog, $slice)
   $sec = [int]((Get-Date) - $t0).TotalSeconds
   $tagText = "session $($s.id)#$k, core gen $($s.generation)"
   $outcome = if ($fault) { "Run ended: $fault after ${sec}s ($tagText)" } else { "Run ended: done after ${sec}s ($tagText)" }
@@ -331,8 +333,8 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
   $caps = @(Get-ChildItem (Join-Path $tree "captures") -Directory -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match '^\d{8}-\d{6}$' -and $_.LastWriteTime -gt $t0 } | Sort-Object Name | ForEach-Object FullName)
   $keptLog = $null
-  if ($log -and ($nv -gt 0 -or $dumps)) {
-    $keptLog = Join-Path $q "$name.$i.$($t0.ToString('HHmmss')).log"
+  if ($log -and $log.LastWriteTime -gt $t0) {
+    $keptLog = Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).log"
     Copy-Item $log.FullName $keptLog
   }
   @{ outcome = $outcome; nv = $nv; dumps = $dumps; keptLog = $keptLog; captures = $caps; lines = $lines

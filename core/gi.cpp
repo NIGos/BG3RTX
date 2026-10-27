@@ -24,10 +24,15 @@
 #include "sharc.h"
 #include "sun_trust.h"
 
-// D-EM (ABI 8, Bg3HostApi::rt_emissive): the SHaRC injection adds the game's effects-target
-// emission. Builds without D-EM (ABI < 8) leave it out; -DBG3RTX_SHARC_EM=0 forces that.
+// D-EM (Bg3HostApi::rt_emissive, Bg3EmissiveInfo): the SHaRC injection adds the game's effects-target
+// emission. It follows BG3RTX_HOST_HAS_RT_EMISSIVE, which the D-EM host_api.h is to define (an ABI
+// number cannot say it: main's ABI 8 is rt_scene_set); CMake BG3RTX_SHARC_EM=ON/OFF forces it.
 #ifndef BG3RTX_SHARC_EM
-#define BG3RTX_SHARC_EM (BG3RTX_ABI_VERSION >= 8)
+#ifdef BG3RTX_HOST_HAS_RT_EMISSIVE
+#define BG3RTX_SHARC_EM 1
+#else
+#define BG3RTX_SHARC_EM 0
+#endif
 #endif
 
 namespace {
@@ -141,10 +146,18 @@ uint32_t layout_mask(uint32_t count) {
   return count == kBindings ? 1u : count == kRtBindings ? 2u : count == kLsBindings ? 4u : 8u;
 }
 bool ls_uses(uint32_t i) { return i <= 7 || i == 12 || i == 16 || i == 18 || i >= 20; }
-constexpr uint32_t kSunRing = 8;
+// The set is rewritten on the host (vkUpdateDescriptorSets) when its turn comes; a
+// set a pending D-LS dispatch still binds must not be: the ring is deep (32) and a
+// slot used fewer than kSunMinAge frames ago is never rewritten. A fresh slot is
+// taken instead, and if all are that young D-LS is skipped this frame (counted and
+// logged: "ls: sun set ring").
+constexpr uint32_t kSunRing = 32;
+constexpr uint64_t kSunMinAge = 8;
 VkDescriptorSetLayout g_sun_dsl = VK_NULL_HANDLE;
 VkDescriptorPool g_sun_pool = VK_NULL_HANDLE;
 VkDescriptorSet g_sun_sets[kSunRing] = {};
+uint64_t g_sun_used[kSunRing] = {};
+uint64_t g_sun_full = 0;
 uint32_t g_sun_slot = 0;
 constexpr uint32_t kNumExtras = sizeof kExtras / sizeof kExtras[0];
 
@@ -722,7 +735,14 @@ constexpr uint32_t kStatsRing = 8;
 // (rt_reflections.hlsl), [64..75] RT audit fixes (D-LS per class, rt_origin, ao_direct),
 // [80..111] alpha-tested candidates of visibility / shadow rays (rt_common.hlsli alpha_stat),
 // [112..117] D-LS bit-exactness checks (ls_check=1): the pass, the join's kept slots.
-constexpr uint32_t kStatsCounters = 118;
+// [118..120] guards, always counted (rt_common.hlsli guard_count): reads of the game's
+// light list / of set 1 out of range, and rays not traced because their origin,
+// direction or extent was invalid (NaN, Inf, zero direction); logged as "[core] guard:".
+// [121] loop caps hit: a froxel list over 1024 entries or a ray with over 4096 candidates.
+constexpr uint32_t kStatsCounters = 122;
+uint64_t g_guard_sum[4] = {}, g_guard_total[4] = {};
+uint32_t g_guard_frames = 0;
+uint64_t g_guard_folds = 0;   // frames whose counters were read back (heartbeat)
 constexpr VkDeviceSize kStatsSlot = kStatsCounters * 64 * 4;
 VkBuffer g_stats_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
@@ -747,11 +767,36 @@ bool stats_init() {
 
 // Picks this frame's slot (cleared on the GPU) after folding in the one written
 // kStatsRing - 1 frames ago.
-void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
+void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   uint64_t now = host->frame_index();
   uint32_t slot = uint32_t(now % kStatsRing);
   if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
     const uint32_t* c = g_stats_map + slot * (kStatsSlot / 4);
+    uint64_t got[4] = {};
+    for (int g = 0; g < 4; ++g)
+      for (int b = 0; b < 64; ++b) got[g] += c[(118 + g) * 64 + b];
+    for (int g = 0; g < 4; ++g) g_guard_sum[g] += got[g];
+    // Heartbeat: the first read-back and every 3000 frames, also when 0 (the counters
+    // are read). The total includes this frame's values.
+    if (g_guard_folds++ % 3000 == 0)
+      host->log("[core] guard: counters read back (frame %llu, %llu frames read so far): light list %llu, set 1 %llu "
+                "out-of-range reads skipped, %llu invalid rays not traced, %llu loop caps hit, in total",
+                (unsigned long long)now, (unsigned long long)g_guard_folds,
+                (unsigned long long)(g_guard_total[0] + g_guard_sum[0]), (unsigned long long)(g_guard_total[1] + g_guard_sum[1]),
+                (unsigned long long)(g_guard_total[2] + g_guard_sum[2]), (unsigned long long)(g_guard_total[3] + g_guard_sum[3]));
+    if (++g_guard_frames >= 300) {
+      if (g_guard_sum[0] || g_guard_sum[1] || g_guard_sum[2] || g_guard_sum[3]) {
+        for (int g = 0; g < 4; ++g) g_guard_total[g] += g_guard_sum[g];
+        host->log("[core] guard: in the last %u frames %llu reads of the game's light list and %llu set-1 reads were out "
+                  "of range and skipped, %llu invalid rays (NaN/Inf/zero direction or extent) not traced, %llu loop caps "
+                  "hit (%llu / %llu / %llu / %llu so far)",
+                  g_guard_frames, (unsigned long long)g_guard_sum[0], (unsigned long long)g_guard_sum[1],
+                  (unsigned long long)g_guard_sum[2], (unsigned long long)g_guard_sum[3], (unsigned long long)g_guard_total[0],
+                  (unsigned long long)g_guard_total[1], (unsigned long long)g_guard_total[2], (unsigned long long)g_guard_total[3]);
+      }
+      g_guard_sum[0] = g_guard_sum[1] = g_guard_sum[2] = g_guard_sum[3] = 0;
+      g_guard_frames = 0;
+    }
     for (int i = 0; i < int(kStatsCounters); ++i)
       if ((i < 27 || i > 30) && i != 70)   // (70: a raw float)
         for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
@@ -763,6 +808,11 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
   g_stats_frame[slot] = now;
   host->vk->CmdFillBuffer(cmd, g_stats_buf, VkDeviceSize(slot) * kStatsSlot, kStatsSlot, 0);
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+  if (!full) {   // only the guards are wanted: the statistics report stays off
+    g_stats_n = 0;
+    std::memset(g_stats_sum, 0, sizeof g_stats_sum);
+    return;
+  }
   if (g_stats_n < 120) return;
   const uint64_t* t = g_stats_sum;
   if (t[0]) {
@@ -797,7 +847,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
       host->log("ls stats (%u frames): per-light data: %.2f light evaluations per px; matched %.1f%% (bridge %.1f%%, "
                 "database only %.1f%%), unmatched %.1f%%; not traced by owner (ls_owners=0x%X) %.2f%% of evaluations",
                 g_stats_n, ev / px, 100.0 * t[76] / ev, 100.0 * t[77] / ev, 100.0 * (t[76] - t[77]) / ev,
-                100.0 * t[79] / ev, host->cfg_int("ls_owners", 0x0F), 100.0 * t[78] / ev);
+                100.0 * t[79] / ev, host->cfg_int("ls_owners", 0x1F), 100.0 * t[78] / ev);
     }
   }
   if (t[112]) {   // ls_check=1: the reference D-LS (shaders/gi/ls_ref) against the live one, same frame and inputs
@@ -1019,16 +1069,18 @@ Push make_push() {
   pc.ls_clear = (std::max)(host->cfg_float("ls_clear", 0.2f), 0.0f);
   pc.ls_min_radius = host->cfg_float("ls_min_radius", 0.0f);
   pc.ls_samples = uint32_t((std::min)((std::max)(host->cfg_int("ls_samples", 0), 0), 2));
-  pc.ls_shadowed = uint32_t((std::min)((std::max)(host->cfg_int("ls_shadowed", 0), 0), 2));
+  pc.ls_shadowed = uint32_t((std::min)((std::max)(host->cfg_int("ls_shadowed", 3), 0), 3));
   pc.ls_debug = uint32_t(host->cfg_int("ls_debug", 0));
   pc.ls_stats = host->cfg_int("ls_stats", 0) ? 1u : 0u;
   int soft = host->cfg_int("ls_soft", -1);   // -1 follows rr
   pc.ls_soft = (soft < 0 ? host->rr_active() : soft != 0) ? 1u : 0u;
   pc.ls_strength = host->cfg_float("ls_strength", 1.0f);
   // Per-light data (docs/SE_BRIDGE.md): bit 0 set in run_post when the join ran; bits 8-12
-  // the owners whose lights are traced (bit 8 + Bg3RtLightOwner). Default 0x0F: unknown,
-  // placed, item and scenery lights, not the character lights (TRACK_D 9.8).
-  pc.ls_flags = (uint32_t(host->cfg_int("ls_owners", 0x0F)) & 0x1Fu) << 8;
+  // the owners whose lights are traced (bit 8 + Bg3RtLightOwner; default 0x1F, every owner:
+  // the owner is no reason to skip a light, TRACK_D 9.10); bits 16-17 the art-intent rule
+  // ls_noshadow (rt_local_shadows.hlsl ls_skip_light).
+  pc.ls_flags = (uint32_t(host->cfg_int("ls_owners", 0x1F)) & 0x1Fu) << 8;
+  pc.ls_flags |= uint32_t((std::min)((std::max)(host->cfg_int("ls_noshadow", 1), 0), 2)) << 16;
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;
   pc.mat_classes = host->cfg_int("mat_classes", 1) ? 1u : 0u;
   pc.ao_direct = uint32_t((std::min)((std::max)(host->cfg_int("ao_direct", 1), 0), 2));
@@ -1068,8 +1120,21 @@ constexpr VkPipelineStageFlags kAll = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
 // This frame's sun inputs into the next set of the ring (set 2 of the D-LS layout).
 VkDescriptorSet write_sun_set(const Snapshot& s) {
-  VkDescriptorSet set = g_sun_sets[g_sun_slot];
-  g_sun_slot = (g_sun_slot + 1) % kSunRing;
+  const uint64_t now = host->frame_index();
+  uint32_t pick = kSunRing;
+  for (uint32_t k = 0; k < kSunRing && pick == kSunRing; ++k) {
+    const uint32_t i = (g_sun_slot + k) % kSunRing;
+    if (!g_sun_used[i] || g_sun_used[i] + kSunMinAge <= now) pick = i;
+  }
+  if (pick == kSunRing) {
+    if (g_sun_full++ < 5 || (g_sun_full & 1023) == 0)
+      host->log("ls: sun set ring: every set was used in the last %llu frames (%llu times so far): D-LS skipped this frame",
+                (unsigned long long)kSunMinAge, (unsigned long long)g_sun_full);
+    return VK_NULL_HANDLE;
+  }
+  VkDescriptorSet set = g_sun_sets[pick];
+  g_sun_used[pick] = now;
+  g_sun_slot = (pick + 1) % kSunRing;
   VkDescriptorBufferInfo ubo = s.x_atmo.buffer ? VkDescriptorBufferInfo{s.x_atmo.buffer, s.x_atmo.offset, (std::min)(s.x_atmo.range, VkDeviceSize(65536))}
                                                : VkDescriptorBufferInfo{s.cam.buffer, s.cam.offset, s.cam.range};
   const Bg3Binding* src[5] = {&s.x_tlut, &s.x_ca0, &s.x_ca1, &s.x_cb0, &s.x_cb1};
@@ -1222,9 +1287,9 @@ void ls_timing_collect() {
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
             "samples %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
-            host->cfg_int("ls_samples", 0), host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 0),
+            host->cfg_int("ls_samples", 0), host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
             host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
-            host->cfg_int("ls_owners", 0x0F), host->cfg_int("ls_impl", 1));
+            host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1));
   v.clear();
   j.clear();
 }
@@ -1232,17 +1297,17 @@ void ls_timing_collect() {
 // The frame's TLAS if ray-traced shadows or AO are on and the host built one
 // this frame or the previous one: the game records the G-buffer of a frame
 // before presenting the previous one and the lighting after, so the build is
-// usually stamped one frame earlier. The GPU still runs it first (submission
-// order), and the handle is the same object every frame.
+// usually stamped one frame earlier. The TLAS and set 1 come as one pair from
+// the same host snapshot (rt_scene_set, ABI 8): the passes never trace one
+// build's TLAS with another's InstInfo, records, soup or pool.
 VkAccelerationStructureKHR rt_tlas(VkDescriptorSet* alpha) {
   if (!host->rt_scene || (!host->cfg_int("rt_shadows", 0) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 0) &&
                           !host->cfg_int("rt_local_shadows", 0) && !host->cfg_int("rt_reflections", 0)))
     return VK_NULL_HANDLE;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
-  VkDescriptorSetLayout layout;
   uint64_t built = 0, now = host->frame_index();
-  if (!host->rt_scene(&tlas, &built) || !tlas || built + 1 < now || !host->rt_alpha || !host->rt_alpha(&layout, alpha) ||
-      !*alpha) {
+  *alpha = VK_NULL_HANDLE;
+  if (!host->rt_scene_set || !host->rt_scene_set(&tlas, alpha, &built) || !tlas || built + 1 < now || !*alpha) {
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
   }
@@ -1357,7 +1422,9 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     rt_timing_collect();
     pc.rt_stats = host->cfg_int("rt_stats", 0) ? 1u : 0u;
-    if (pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0)) stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0);
+    // Every traced frame: the out-of-range guards are always counted.
+    stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0,
+                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0));
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
@@ -1484,7 +1551,7 @@ void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
     VkImage fx_image = VK_NULL_HANDLE;
     VkImageLayout fx_from = VK_IMAGE_LAYOUT_UNDEFINED, fx_in = VK_IMAGE_LAYOUT_UNDEFINED;
 #if BG3RTX_SHARC_EM
-    if (host->cfg_float("sharc_em", 1.0f) > 0.0f && host->abi_version >= 8 && host->rt_emissive) {
+    if (host->cfg_float("sharc_em", 1.0f) > 0.0f && host->rt_emissive) {
       VkDescriptorSetLayout el = VK_NULL_HANDLE;
       VkDescriptorSet es = VK_NULL_HANDLE;
       Bg3EmissiveInfo info{};
@@ -1509,7 +1576,7 @@ void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
 #else
     if (!g_sharc_em_logged) {
       g_sharc_em_logged = true;
-      host->log("sharc: built without D-EM (ABI %d): no emission injected beyond the lit diffuse", BG3RTX_ABI_VERSION);
+      host->log("sharc: built without D-EM (no Bg3HostApi::rt_emissive): no emission injected beyond the lit diffuse");
     }
 #endif
     if (fx_image && fx_in != fx_from) image_layout(cmd, fx_image, fx_from, fx_in, kAll, kCS);
@@ -1542,7 +1609,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   memory_barrier(cmd, kCS, kCS);
   timestamp(cmd, 2);
   // D-LS first: the GI composite keeps diffuse + specular as next frame's bounce source.
-  if (s.ls && s.tlas && g_ls.pipeline) {
+  // (the sun set first: none free means no D-LS this frame, before any transition)
+  const VkDescriptorSet sun_set = s.ls && s.tlas && g_ls.pipeline ? write_sun_set(s) : VK_NULL_HANDLE;
+  if (sun_set) {
     Bound lb;
     bind_all(lb, s);
     bind_rt(lb, s.tlas, s.alpha);
@@ -1553,7 +1622,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if (s.shadow.view) image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     Push lp = pc;
     lp.ls_has_mask = s.shadow.view ? 1u : 0u;
-    const VkDescriptorSet sun = write_sun_set(s);
+    const VkDescriptorSet sun = sun_set;
     ls_timestamp(cmd, 0);   // the timing covers the join pass and the shadow pass
     // Per-light data: the join pass writes one record per light array slot.
     g_lsl_ok = lsl_begin(&g_lsl) && refresh(g_ls_match, "gi/rt_local_shadows_match.hlsl", g_ls_layout);
@@ -1572,7 +1641,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
     ls_timestamp(cmd, 1);
     // The default-settings variant, or the one with every mode (more registers, docs/TRACK_D_RT.md 9.9).
-    const bool full = lp.ls_samples || lp.ls_shadowed || lp.ls_debug || lp.ls_stats;
+    const bool full = lp.ls_samples || lp.ls_debug || lp.ls_stats;
     VkPipeline lsp = g_ls.pipeline;
     lp.ls_pass = host->cfg_int("ls_check", 0) == 2 ? 2u : 0u;   // reference against itself
     if (host->cfg_int("ls_check", 0)) {

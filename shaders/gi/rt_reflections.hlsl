@@ -216,7 +216,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (validate) {
     uint end_p = cl.x + (cl.y & 4095u), end_s = end_p + ((cl.y >> 12) & 4095u);
     for (uint i = cl.x; i < end_s; ++i) {
-      uint li = lIndex.Load(i * 4u);
+      uint li = bg3_light_index(i);
       bool spot = i >= end_p;
       Bg3Light l = load_light(li);
       float3 cd, cs, Ld;

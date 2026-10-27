@@ -93,6 +93,79 @@ uint64_t g_pipe_gen = 0;
 VkAccelerationStructureKHR g_split_tlas = VK_NULL_HANDLE;
 bool g_split_valid = false;
 
+// Scene snapshots (host.h kSceneSlots). A slot holds one build: its TLAS (the
+// split's own per slot; the legacy one is shared), the bvhsplit ring region of
+// its instances and InstInfo, and its alpha set and record region (same index).
+// The RT passes get a slot's TLAS and set together (rt_scene_set), so a TLAS is
+// never traced with another build's InstInfo, records, soup or pool bindings.
+// A slot is overwritten only once the GPU finished every frame it was handed
+// out in: `last_use` is the latest frame_index() of its build or a hand-out;
+// work recorded then is submitted in that frame or the next, which the present
+// fence of last_use + 2 covers (life_gpu_done). The current slot is never
+// reused, and a slot is not handed out once stale (built + 1 < now, as
+// core/gi.cpp rt_tlas), so a retired slot cannot come back into use.
+struct SceneSlot {
+  bool used = false;
+  uint64_t built = 0, last_use = 0;
+  VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+  VkDescriptorSet set = VK_NULL_HANDLE;
+  bool split = false;
+  uint64_t rec = 0;   // build record of the command buffer it was recorded into (bvhsplit.cpp)
+};
+uint64_t g_legacy_rec = 0;   // the legacy BLAS's last build: refit only once it was submitted
+SceneSlot g_scene[kSceneSlots];
+int g_scene_cur = -1;
+uint32_t g_scene_next = 0;
+uint64_t g_scene_skipped = 0, g_scene_skip_logged = 0;
+std::atomic<uint64_t> g_oldest_live{UINT64_MAX};
+
+bool slot_retired(const SceneSlot& s, uint64_t gpu_done, uint64_t now) {
+  if (!s.used) return true;
+  if (gpu_done >= s.last_use + 2) return true;
+  // No present fence completed for 240 frames (as defer_tick's fallback).
+  return now >= s.last_use + 240;
+}
+
+// Caller holds g_mu.
+void update_oldest_live() {
+  const uint64_t gpu_done = life_gpu_done(), now = frame_index();
+  uint64_t oldest = UINT64_MAX;
+  for (uint32_t i = 0; i < kSceneSlots; ++i)
+    if (int(i) == g_scene_cur || !slot_retired(g_scene[i], gpu_done, now))
+      if (g_scene[i].used) oldest = (std::min)(oldest, g_scene[i].built);
+  g_oldest_live = oldest;
+}
+
+// A retired slot for this frame's build, or -1 (all in flight: the build is skipped).
+int pick_scene_slot() {
+  const uint64_t gpu_done = life_gpu_done(), now = frame_index();
+  for (uint32_t k = 0; k < kSceneSlots; ++k) {
+    const uint32_t i = (g_scene_next + k) % kSceneSlots;
+    if (int(i) == g_scene_cur || !slot_retired(g_scene[i], gpu_done, now)) continue;
+    g_scene_next = i + 1;
+    return int(i);
+  }
+  ++g_scene_skipped;
+  if (g_scene_skip_logged < 5 || (g_scene_skipped & 1023) == 0) {
+    ++g_scene_skip_logged;
+    log("[rt] frame %llu: every scene slot is still in flight on the GPU (presents done %llu): build skipped (%llu so far)",
+        (unsigned long long)now, (unsigned long long)gpu_done, (unsigned long long)g_scene_skipped);
+  }
+  return -1;
+}
+
+void commit_scene_slot(int slot, VkAccelerationStructureKHR tlas, VkDescriptorSet set, bool split, uint64_t rec) {
+  SceneSlot& s = g_scene[slot];
+  s.used = true;
+  s.rec = rec;
+  s.built = s.last_use = frame_index();
+  s.tlas = tlas;
+  s.set = set;
+  s.split = split;
+  g_scene_cur = slot;
+  update_oldest_live();
+}
+
 // GPU timing: 4 timestamps per build (start, converted, BLAS, TLAS) in a ring.
 constexpr uint32_t kRing = 16;
 VkQueryPool g_qp = VK_NULL_HANDLE;
@@ -110,7 +183,7 @@ const VkBaseInStructure* find_in(const void* chain, VkStructureType t) {
   return nullptr;
 }
 
-bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage) {
+bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* what) {
   DeviceData* dd = g_dd;
   out = Buf{};
   VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
@@ -135,10 +208,12 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage) {
   VkBufferDeviceAddressInfo ai{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
   ai.buffer = out.b;
   out.addr = p_bda(dd->device, &ai);
+  fault_track(what, out.addr, size);
   return true;
 }
 
 void free_buf(Buf& b) {
+  fault_untrack(b.addr);
   defer_destroy(BG3_DEFER_BUFFER, uint64_t(b.b));
   defer_destroy(BG3_DEFER_MEMORY, uint64_t(b.m));
   b = Buf{};
@@ -234,7 +309,7 @@ bool grow_scratch(VkDeviceSize need) {
   need += g_scratch_align;
   if (g_scratch.b && g_scratch.size >= need) return true;
   if (g_scratch.b) free_buf(g_scratch);
-  return make_buf(g_scratch, need + need / 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+  return make_buf(g_scratch, need + need / 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "legacy AS scratch");
 }
 
 VkDeviceAddress scratch_addr() { return (g_scratch.addr + g_scratch_align - 1) & ~(g_scratch_align - 1); }
@@ -263,7 +338,7 @@ bool ensure_blas(uint32_t prims, uint32_t aprims, uint32_t geoms, uint32_t strid
   g_blas = VK_NULL_HANDLE;
   g_blas_valid = false;
   if (g_blas_buf.b) free_buf(g_blas_buf);
-  if (!make_buf(g_blas_buf, sz.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) ||
+  if (!make_buf(g_blas_buf, sz.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, "legacy soup BLAS") ||
       !grow_scratch((std::max)(sz.buildScratchSize, sz.updateScratchSize))) {
     log("[rt] could not allocate the BLAS (%u primitives, %llu MB)", cap,
         (unsigned long long)(sz.accelerationStructureSize >> 20));
@@ -295,7 +370,8 @@ bool ensure_tlas() {
   if (g_tlas) return true;
   DeviceData* dd = g_dd;
   if (!make_buf(g_inst, sizeof(VkAccelerationStructureInstanceKHR),
-                VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT))
+                VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                "legacy TLAS instance"))
     return false;
   VkAccelerationStructureGeometryKHR g = tlas_geometry();
   VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
@@ -307,7 +383,7 @@ bool ensure_tlas() {
   uint32_t one = 1;
   VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
   dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, &one, &sz);
-  if (!make_buf(g_tlas_buf, sz.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) ||
+  if (!make_buf(g_tlas_buf, sz.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, "legacy TLAS") ||
       !grow_scratch(sz.buildScratchSize))
     return false;
   VkAccelerationStructureCreateInfoKHR ci{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
@@ -769,7 +845,12 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     return;
   }
   if (!ensure_pipeline()) return;
+  // The scene slot this build writes (retired on the GPU); none free: no build
+  // this frame, the previous scene stays current.
+  const int scene_slot = pick_scene_slot();
+  if (scene_slot < 0) return;
   note_camera(cap);
+  fault_track("soup (XFB capture)", buffer_address(xfb), cap.xfb_size);
   const DeviceData* dd = g_dd;
 
   // ---- Track D BVH split (bvhsplit.cpp) ----
@@ -794,7 +875,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     timestamp(cmd, slot, 0);
     g_stamp_slot = slot;
     BvhResult res{};
-    if (!bvh_build(cmd, cap, &stamp_cb, &res)) {
+    if (!bvh_build(cmd, cap, &stamp_cb, uint32_t(scene_slot), &res)) {
       if (slot >= 0) g_slots[slot] = Slot{};   // the timestamps were not all written
       restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
       return;
@@ -802,9 +883,11 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
     AlphaBindings ab{xfb, cap.alpha_base, aprims ? VkDeviceSize(aprims) * tri_bytes : 0, VkDeviceSize(prims) * tri_bytes,
                      cap.xfb_size, stride, true, res.info, res.info_off, res.info_bytes, res.pool, res.pool_bytes};
-    alpha_commit(cmd, ab);
+    const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
+    commit_scene_slot(scene_slot, res.tlas, set, true, res.rec);
+    fault_checkpoint(cmd, kCkSceneCommitted, uint32_t(scene_slot));
     ++g_n_frames;
     ++g_n_split;
     g_prims_sum += res.static_tris + res.dynamic_tris;
@@ -841,9 +924,12 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   alpha_legacy_info(cmd, stride, &info, &info_bytes);
   AlphaBindings ab{xfb, cap.alpha_base, geoms == 2 ? VkDeviceSize(aprims) * tri_bytes : 0, VkDeviceSize(prims) * tri_bytes,
                    cap.xfb_size, stride, false, info, 0, info_bytes, VK_NULL_HANDLE, 0};
-  alpha_commit(cmd, ab);
+  const VkDescriptorSet legacy_set = alpha_commit(cmd, ab, uint32_t(scene_slot));
   int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
-  bool refit = want_refit && g_blas_valid && prims == g_built_prims && aprims == g_built_aprims &&
+  // A refit reads the BLAS: only if its last build's command buffer was submitted.
+  const uint64_t legacy_rec = bvh_rec_register(cmd);
+  bool refit = want_refit && g_blas_valid && bvh_rec_state(g_legacy_rec) == 1 && prims == g_built_prims &&
+               aprims == g_built_aprims &&
                signature == g_built_sig && int(g_since_build) < rebuild_frames;
 
   int slot = -1;
@@ -860,6 +946,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   // The XFB writes are done; last frame's ray queries and builds are done with
   // the AS memory, scratch and instance buffer.
   barrier(cmd, kXFB | kAS | kCS, kCS | kAS | kXfer);
+  fault_checkpoint(cmd, kCkLegacyStart, uint32_t(legacy_rec));
   VkAccelerationStructureInstanceKHR inst{};
   inst.transform.matrix[0][0] = inst.transform.matrix[1][1] = inst.transform.matrix[2][2] = 1.0f;
   inst.mask = 0xFF;
@@ -914,6 +1001,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   }
   // Ray queries in later command buffers of this frame (submission order).
   barrier(cmd, kAS, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+  fault_checkpoint(cmd, kCkLegacyTlas, uint32_t(legacy_rec));
   timestamp(cmd, slot, 3);
   restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
 
@@ -929,7 +1017,9 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   g_aprims_sum += aprims;
   g_alpha_draws_sum += cap.alpha_draws;
   g_blas_valid = true;
+  g_legacy_rec = legacy_rec;
   g_split_valid = false;
+  commit_scene_slot(scene_slot, g_tlas, legacy_set, false, legacy_rec);
   g_built_prims = prims;
   g_built_aprims = aprims;
   g_built_sig = signature;
@@ -942,21 +1032,65 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   }
 }
 
+// Caller holds g_mu. The current slot, stamped as handed out in this frame;
+// false before the first build and once it is stale (it may be retired then).
+bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {
+  if (g_scene_cur < 0) return false;
+  SceneSlot& s = g_scene[g_scene_cur];
+  const uint64_t now = frame_index();
+  if (!s.used || !s.tlas || s.built + 1 < now) return false;
+  // Its command buffer was dropped without a submit: the TLAS was never built.
+  if (bvh_rec_state(s.rec) == 2) return false;
+  if (s.split ? !g_split_valid : !g_blas_valid) return false;
+  s.last_use = (std::max)(s.last_use, now);
+  alpha_slot_in_use(uint32_t(g_scene_cur), now);   // the set's game views live while it may be bound
+  *tlas = s.tlas;
+  if (set) *set = s.set;
+  *built_frame = s.built;
+  return true;
+}
+
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame) {
   if (!g_rt) return false;
   std::lock_guard<std::mutex> lock(g_mu);
-  if (g_split_valid && g_split_tlas) {
-    *tlas = g_split_tlas;
-  } else {
-    if (!g_tlas || !g_blas_valid) return false;
-    *tlas = g_tlas;
+  return hand_out(tlas, nullptr, built_frame);
+}
+
+bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {
+  if (!g_rt) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  *set = VK_NULL_HANDLE;
+  return hand_out(tlas, set, built_frame);
+}
+
+uint64_t rt_scene_oldest_live() { return g_oldest_live.load(); }
+
+void rt_log_state(const char* prefix) {
+  if (!g_rt) return;
+  std::unique_lock<std::mutex> lock(g_mu, std::try_to_lock);   // never block a device-loss report
+  if (!lock.owns_lock()) {
+    log("%s scene slots: busy (lock held)", prefix);
+    return;
   }
-  *built_frame = g_tlas_frame;
-  return true;
+  const uint64_t gpu_done = life_gpu_done(), now = frame_index();
+  for (uint32_t i = 0; i < kSceneSlots; ++i) {
+    const SceneSlot& s = g_scene[i];
+    if (!s.used) continue;
+    static const char* const kRec[] = {"unknown", "pending", "submitted", "DROPPED"};
+    log("%s scene slot %u%s: %s, built frame %llu, last handed out %llu, TLAS %p, set %p, %s, build record %llu %s", prefix,
+        i, int(i) == g_scene_cur ? " (current)" : "", s.split ? "split" : "legacy", (unsigned long long)s.built,
+        (unsigned long long)s.last_use, (void*)s.tlas, (void*)s.set, slot_retired(s, gpu_done, now) ? "retired" : "in flight",
+        (unsigned long long)s.rec, kRec[bvh_rec_state(s.rec) + 1]);
+  }
+  log("%s builds skipped for want of a retired slot: %llu", prefix, (unsigned long long)g_scene_skipped);
 }
 
 void rt_on_present() {
   if (!g_rt || !g_qp) return;
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    update_oldest_live();   // what bvh_on_present may release (rtscene before bvhsplit: the lock order)
+  }
   bvh_on_present();
   std::lock_guard<std::mutex> lock(g_mu);
   // Compile (and recompile after edits) on the present thread, not while
