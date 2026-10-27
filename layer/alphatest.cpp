@@ -70,6 +70,10 @@ uint32_t g_legacy_stride = 0;
 uint32_t g_set_tex[kRing] = {};     // per set: texture slots holding real views (the rest: dummies)
 uint32_t g_set_cache[kRing] = {};
 bool g_set_init[kRing] = {};
+// The game's views (and their images) each set references, for the life system
+// whenever the set is handed out (alpha_slot_in_use).
+std::vector<uint64_t> g_set_handles[kRing];
+uint64_t g_set_extended[kRing] = {};
 bool g_full_logged = false;
 int g_current = -1;             // slot of the last commit
 bool g_logged = false;
@@ -527,6 +531,18 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   const uint32_t ntex = g_set_init[slot] ? (std::max)(g_set_tex[slot], uint32_t(g_tex.size())) + 1 : kTextures;
   const uint32_t ncache = g_set_init[slot] ? (std::max)(g_set_cache[slot], uint32_t(g_cache.size())) + 1 : kCaches;
   g_set_init[slot] = true;
+  {
+    std::vector<uint64_t>& hs = g_set_handles[slot];
+    hs.clear();
+    std::shared_lock<std::shared_mutex> tl(tracker().mu);
+    for (const auto* list : {&g_tex, &g_cache})
+      for (const auto& [v, l] : *list) {
+        hs.push_back(uint64_t(v));
+        auto it = tracker().views.find(v);
+        if (it != tracker().views.end()) hs.push_back(uint64_t(it->second.image));
+      }
+    g_set_extended[slot] = 0;
+  }
   g_set_tex[slot] = uint32_t(g_tex.size());
   g_set_cache[slot] = uint32_t(g_cache.size());
   std::vector<VkDescriptorImageInfo> tex(ntex), cache(ncache);
@@ -596,6 +612,19 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
     std::memset(g_fail, 0, sizeof g_fail);
   }
   return g_sets[slot];
+}
+
+// The scene slot `slot` was handed out in `frame`: the passes that bind its set are
+// recorded then, in other command buffers than the build's (which noted the views
+// for its own submission only). Noted as submitted in `frame`: a destroy waits for
+// that frame's present fence. (A destroy before any fence covers it cannot wait;
+// tracker.cpp counts it as "no fence yet".)
+void alpha_slot_in_use(uint32_t slot, uint64_t frame) {
+  if (!g_on || slot >= kRing) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (g_set_extended[slot] >= frame) return;
+  g_set_extended[slot] = frame;
+  for (uint64_t h : g_set_handles[slot]) life_extend(h, frame);
 }
 
 // The set layout is fixed for the device's lifetime; the set is the one of the

@@ -921,6 +921,7 @@ bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* 
   if (bvh_rec_state(s.rec) == 2) return false;
   if (s.split ? !g_split_valid : !g_blas_valid) return false;
   s.last_use = (std::max)(s.last_use, now);
+  alpha_slot_in_use(uint32_t(g_scene_cur), now);   // the set's game views live while it may be bound
   *tlas = s.tlas;
   if (set) *set = s.set;
   *built_frame = s.built;

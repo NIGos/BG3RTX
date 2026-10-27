@@ -228,6 +228,8 @@ void cmd_forget(VkCommandBuffer cmd);
 // descriptors in the same command buffer) can touch freed memory.
 void life_note(CmdState* s, uint64_t handle);
 void life_note(VkCommandBuffer cmd, uint64_t handle);
+void life_extend(uint64_t handle, uint64_t frame);   // in use by work submitted up to `frame`
+void alpha_slot_in_use(uint32_t slot, uint64_t frame);   // alphatest.cpp: the slot's game views, life_extend
 void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
 void life_on_present(DeviceData* dd, VkQueue queue);   // after the present went down, queue still owned
 // Around the game's vkDeviceWaitIdle: submissions before begin are complete after it.

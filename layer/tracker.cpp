@@ -105,6 +105,20 @@ uint64_t life_gpu_done() {
   return g_life_done;
 }
 
+// `h` is in use by work of ours submitted in frame `frame` (e.g. a scene slot's
+// alpha set handed out to the RT passes, recorded in another command buffer than
+// the one that noted the views): a destroy waits for the present fence after it.
+void life_extend(uint64_t h, uint64_t frame) {
+  if (!h) return;
+  std::lock_guard<std::mutex> lock(g_life_mu);
+  if (!g_present_queue) return;   // no present fence yet: nothing to wait on anyway
+  LifeRef& r = g_life[h];
+  if (r.frame >= frame && r.queue == g_present_queue) return;
+  r.frame = (std::max)(r.frame, frame);
+  r.seq = g_submit_seq.load() + 1;   // a later device-idle wait still covers it
+  r.queue = g_present_queue;
+}
+
 // Status of our latest present fence (a 0-timeout wait), for the fault poll thread
 // (devfault.cpp): VK_ERROR_DEVICE_LOST once the device is lost, even if the game
 // never calls Vulkan again. VK_SUCCESS when there is nothing to poll.

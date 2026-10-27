@@ -292,3 +292,25 @@ scripts\auto-run.ps1 -NoBuild -Background -NoAnalyze -Validation -Save "Campsite
   (`prim >= tris`) should now be ~0 after scene changes (it was 0.6-2%).
 - One with `rt_bvh_split=0` to confirm the legacy path is unchanged (it uses the slots
   for its set only).
+
+## 4. Hypothesis check: stale alpha textures of cached meshes (fifth commit)
+
+- **Does not apply as stated.** Cached draws do *not* keep their first record.
+  - `geocapture.cpp` calls `alpha_add_draw` for every cached draw every frame
+    (`v != BVH_CAPTURE` branch). So the record, texture slot, tile cache and page-table
+    constants come from this frame's bindings, through `query_binding`.
+  - `query_binding` notes each view and its image on the recording command buffer.
+  - In `fault_d33fca6_run1.log` the life system logged no waited and no "no fence yet"
+    destroy. So no noted game view or image was destroyed while our work was in flight
+    (as far as the fences tell).
+- **Gap closed anyway.**
+  - The views were noted only on the command buffer that records the build.
+  - The RT passes bind the set from other command buffers, possibly a frame later
+    (`built + 1 == now`), and those never noted them.
+  - Each set now keeps its game views and images. Each hand-out (`rt_scene_set`/
+    `rt_scene`) extends their life to that frame (`life_extend`), so a game destroy
+    waits for the present fence after the last pass that can bind the set.
+  - A set held in a retired slot is never bound again, so it needs no life.
+- **Remaining limit (pre-existing):** a destroy in the same frame as the submission,
+  before any present fence covers it, cannot be waited on. `tracker.cpp` logs it as "no
+  fence covers it yet".
