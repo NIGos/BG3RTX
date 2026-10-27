@@ -231,6 +231,7 @@ so on projector pixels the difference is the box lights' direct light), then `ls
 | `75`/`76` `saveenc-S9` (ran) | utf8ansi loads the Crèche; wide stays in the menu. |
 | `80`-`85` `boxlights-S5/S6/S7` (ran) | The table above. |
 | `78-modwarn3-S2-rivington` (ran) | Round 3: the traces show the startup splash, then "Press any key", then the main menu; there is no dialog (TEST_SCENES.md). |
-| `79-modwarn4-S2-rivington` (queued) | Round 4: Enter twice to reach the main menu, click its Continue, then the verification dialog's Continue. Not a session; 360 s. |
+| `79-modwarn4-S2-rivington` (ran) | Round 4: the main-menu click came while the vista was still up, so it only advanced the vista (timing). |
+| `80-modwarn5-S2-rivington` (queued) | Round 5: 12 s per screen, a trace to confirm the menu, then its Continue click and the dialog's Continue. The last round (stop rule in TEST_SCENES.md). |
 
 After they run: `python -m scripts.qa.coverage --update-doc`.
