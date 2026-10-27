@@ -1206,8 +1206,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       scratch += (blas_sizes(m.tris, stride, !m.alpha, mesh_flags).buildScratchSize + al - 1) / al * al;
     }
     for (const DynBuild& db : dyn_builds) {
-      // The vertex range must lie in this frame's soup (logged; the capture guarantees it).
-      if (db.soup_off % stride || db.soup_off + VkDeviceSize(db.prims) * tri_bytes > cap.xfb_size) {
+      // The vertex range must lie in this frame's soup and its address be 4-byte aligned
+      // (the component size of R32G32B32_SFLOAT, VUID-...-vertexData-03711; logged, the
+      // capture guarantees it). Not a multiple of the stride: the alpha region starts at a
+      // 256-byte boundary, which 24 does not divide.
+      if (db.soup_off % 4u || db.soup_off + VkDeviceSize(db.prims) * tri_bytes > cap.xfb_size) {
         static uint32_t logged = 0;
         if (logged++ < 20)
           log("[bvh] WARNING frame %llu: per-draw BLAS vertices [%llu, +%llu) outside the soup (%llu bytes) or misaligned",
