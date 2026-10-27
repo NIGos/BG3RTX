@@ -16,7 +16,8 @@ function Owner($start, $id) {
     $leaf = Split-Path (Split-Path $m.FileName) -Parent | Split-Path -Leaf   # <checkout>\bin\VkLayer_bg3rtx.dll -> <checkout>
     return $(if ($leaf -like "agent-*") { $leaf } else { "main" })
   }
-  $logs = @(Get-ChildItem (Join-Path $root ".claude\worktrees\*\bg3rtx.log") -ErrorAction SilentlyContinue) + @(Get-Item (Join-Path $root "bg3rtx.log") -ErrorAction SilentlyContinue)
+  # bg3rtx.<tag>.log too: auto-run.ps1 -Tag runs (docs/TEST_SCENES.md, "Concurrent runs").
+  $logs = @(Get-ChildItem (Join-Path $root ".claude\worktrees\*\bg3rtx*.log") -ErrorAction SilentlyContinue) + @(Get-ChildItem (Join-Path $root "bg3rtx*.log") -ErrorAction SilentlyContinue)
   $c = $logs | Where-Object { $_.LastWriteTime -ge $start.AddSeconds(-5) } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $c) { return "?" }
   $leaf = Split-Path (Split-Path $c.FullName) -Leaf

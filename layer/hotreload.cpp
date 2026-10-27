@@ -153,7 +153,17 @@ static void clean_hot_dir() {
   HANDLE h = FindFirstFileA((dir + "*.*").c_str(), &fd);
   if (h == INVALID_HANDLE_VALUE) return;
   do {
-    if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) DeleteFileA((dir + fd.cFileName).c_str());  // fails if in use
+    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+    // bg3rtx_core.<pid>.<generation>.dll: another game running from this bin (a
+    // second test run) may have copied its core but not loaded it yet; leave it.
+    unsigned long pid = 0;
+    if (sscanf_s(fd.cFileName, "bg3rtx_core.%lu.", &pid) == 1 && pid != GetCurrentProcessId()) {
+      HANDLE p = OpenProcess(SYNCHRONIZE, FALSE, pid);
+      bool alive = p && WaitForSingleObject(p, 0) == WAIT_TIMEOUT;
+      if (p) CloseHandle(p);
+      if (alive) continue;
+    }
+    DeleteFileA((dir + fd.cFileName).c_str());  // fails if in use
   } while (FindNextFileA(h, &fd));
   FindClose(h);
 }

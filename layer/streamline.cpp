@@ -274,7 +274,7 @@ bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, V
         frame_index() < g_fg_on_frame + uint64_t(cfg_int("fg_snap_after", 60)))
       return false;
     g_snaps_left = n;
-    g_snap_dir = root_dir() + "\\captures\\fg_" + now_stamp();
+    g_snap_dir = root_dir() + "\\captures\\fg_" + capture_stamp();
     make_dirs(g_snap_dir);
     log("[sl] capturing %d presented frames to %s", n, g_snap_dir.c_str());
   }

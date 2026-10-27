@@ -190,7 +190,7 @@ void shader_dump(uint64_t hash, const void* code, size_t size) {
 }
 
 static std::string write_trace(uint64_t frame, const VkPresentInfoKHR* info) {
-  std::string dir = root_dir() + "\\captures\\" + now_stamp();
+  std::string dir = root_dir() + "\\captures\\" + capture_stamp();
   make_dirs(dir);
 
   std::string j = "{\n\"frame\":" + std::to_string(frame) + ",\n\"submits\":[\n";
@@ -291,7 +291,7 @@ void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info) {
                 (GetAsyncKeyState(VK_F10) & 0x8000);
     bool key = down && !g_key_was_down;
     g_key_was_down = down;
-    std::string req = root_dir() + "\\trace.request";   // (was "\t...": a tab, so the file never triggered)
+    std::string req = tagged(root_dir() + "\\trace", ".request");   // (was "\t...": a tab, so the file never triggered)
     bool file = file_mtime(req) != 0;
     if (file) DeleteFileA(req.c_str());
     bool automatic = auto_trigger(frame, passes, draws);
@@ -320,7 +320,7 @@ void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info) {
     geo_finish(g_start + 1, dir, queue);
     write_file(dir + "\\done.txt", "ok\n", 3);
     if (cfg_int("auto_trace", 0) && ++g_auto_done >= uint32_t(cfg_int("auto_traces", 1))) {
-      std::string marker = root_dir() + "\\captures\\auto.done";
+      std::string marker = tagged(root_dir() + "\\captures\\auto", ".done");
       write_file(marker, "done\n", 5);
       log("[auto] all %u traces taken", g_auto_done);
     }

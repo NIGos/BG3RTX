@@ -8,7 +8,8 @@ Run before each launch; it only touches the two entries and keeps a backup.
 
 Extra entries for one run (for example borderless for a background run):
   ensure-settings.py --set Fullscreen=0 FakeFullscreenEnabled=1 --prev prev.json
-  ensure-settings.py --restore prev.json     (puts the player's values back)
+  ensure-settings.py --restore prev.json     (puts the player's values back; an entry
+                                              that was absent, null in prev.json, is removed)
 """
 import json
 import re
@@ -34,6 +35,16 @@ def apply(text, want, changed, prev=None):
         m = pat.search(text)
         if prev is not None:
             prev[key] = int(m.group(2)) if m else None
+        if value is None:
+            # --restore of an entry the file did not have (the game drops some entries
+            # when it rewrites the file): remove the one --set added.
+            node = re.compile(r'[ \t]*<node id="ConfigEntry">\s*<attribute id="MapKey" type="FixedString" value="%s"/>'
+                              r'.*?</node>\r?\n' % key, re.S)
+            n = node.search(text)
+            if n:
+                text = text[:n.start()] + text[n.end():]
+                changed.append(f"{key} removed")
+            continue
         if m:
             if int(m.group(2)) != value:
                 text = text[:m.start(2)] + str(value) + text[m.end(2):]
@@ -54,7 +65,7 @@ def main():
     prev, prev_path = None, None
     if args[:1] == ["--restore"]:
         saved = json.loads(Path(args[1]).read_text())
-        want = {k: v for k, v in saved.items() if v is not None}
+        want = dict(saved)   # None: the entry was absent before the run
     elif "--set" in args:
         i = args.index("--set") + 1
         while i < len(args) and not args[i].startswith("--"):
