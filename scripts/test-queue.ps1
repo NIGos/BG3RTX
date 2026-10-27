@@ -413,13 +413,34 @@ function Run-Job($file) {
 $minimizer = Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass",
   "-File", "`"$(Join-Path $PSScriptRoot "game-minimizer.ps1")`"", "-WhilePid", $PID
 
-function Get-NextJob {
-  Get-ChildItem (Join-Path $pending "*.json") -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -First 1
+# Agents whose sandbox can't write the main queue drop jobs into their own worktree's
+# captures/queue/pending/; the runner collects those too (the job's "tree" names the worktree).
+function Get-InboxDirs {
+  @($pending) + @(if (-not $DryRun) {
+    Get-ChildItem -LiteralPath (Join-Path $root ".claude\worktrees") -Directory -Force -ErrorAction SilentlyContinue |
+      ForEach-Object { Join-Path $_.FullName "captures\queue\pending" } | Where-Object { Test-Path -LiteralPath $_ }
+  })
 }
+
+function Get-NextJob {
+  Get-InboxDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "*.json" -ErrorAction SilentlyContinue } |
+    Sort-Object LastWriteTime | Select-Object -First 1
+}
+
+# A changed test-queue.ps1 replaces this runner between jobs (no restart by hand).
+$selfPath = $PSCommandPath
+$selfStamp = (Get-Item -LiteralPath $selfPath).LastWriteTime
+function Test-SelfChanged { (Get-Item -LiteralPath $selfPath).LastWriteTime -ne $selfStamp }
 
 $idle = Get-Date
 try {
   while ($true) {
+    if (-not $DryRun -and -not $script:sess -and (Test-SelfChanged)) {
+      "- runner: test-queue.ps1 changed, restarting on the new version" | Add-Content $md
+      Start-Process powershell -WindowStyle Hidden -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", "`"$selfPath`"", "-IdleExitSec", $IdleExitSec
+      break
+    }
     $next = Get-NextJob
     if (-not $next) {
       Stop-Session "queue empty"

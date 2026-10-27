@@ -287,6 +287,13 @@ Rules that keep the queue fast and its results trustworthy:
   loaded). A run missing any is recorded INVALID, never a pass. Several jobs on 2026-10-27 were
   void without anyone noticing at first: no asset DB in a worktree, `shader_debug=1` failing the
   RT compile, statistics windows longer than the phase, and a camera still settling.
+- **Results without the coordinator:** `py -3 scripts/queue_results.py <job prefix> [--lines]`
+  lists every run with its outcome, validity, device-lost count and kept log. Agents read their
+  own results with it instead of waiting for a relay.
+- **Worktree inboxes:** a job file in a worktree's own `captures/queue/pending/` is collected too,
+  for agents whose sandbox can't write the main queue.
+- **The runner reloads itself:** when `scripts/test-queue.ps1` changes, the runner restarts on the
+  new version between jobs (never inside a session), with no restart by hand.
 - **Keep the raw captures until they are analysed** (`--keep-raw`). Pruning first forced reruns.
 - **Merge features early, off by default.** Once a feature builds, its tests pass and it changes
   nothing while switched off, it goes to main behind its setting. Long-lived branches that
