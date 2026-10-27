@@ -50,7 +50,7 @@ presents later (240 by default, enough for RR's history to settle):
 and `sharc_roof` (`sharc_debug=5`: the roof mask of `roofed_brightening`); `off0` sets
 `sharc=0` again. Effects `sharc` (`sharc_on` against `on0`) and `gi_sharc`
 (`sharc_refl_off` against `gi_off`) get the usual hard_dark and brightening detectors.
-`--temporal N` (default 3) sets N. With N = 3 and no reference that is 13 traces (16 with `--temporal-gi`; `--sharc` adds 3).
+`--temporal N` (default 3) sets N. With N = 3 and no reference that is 13 traces (16 with `--temporal-gi`, 19 with `--temporal-sun` too; `--sharc` adds 3), plus `--warmup` (default 2) traces before `on0` that are never analysed. The first seconds after a load are not steady, and the on* set is the reference of every comparison.
 The sun debug traces (`sun_dbg`, `sun_check`, `sun_trust`) are each evaluated on their own,
 so another view than on0's does not void them. A trace-to-trace A/B cannot isolate
 `rt_sun_replace` in animated scenes (water, wind in foliage: 0.28-0.68 of the albedo
@@ -405,3 +405,12 @@ D-LS samples stays within 0.012 (camp) and 0.008 (foundry) of the RR noise floor
   - When the recomputed sun is right, the cap never binds: the game's pixel holds direct × fdif plus non-negative ambient.
 - **Non-finite 6020:** the game's own D32F depth (`76433aef`; `2a6a525c` in other captures), non-finite with RT off as well: about 5000 per trace in off*. The detector now scores only dumps that are non-finite with RT on and never with RT off; the game's dumps are listed as `game_owned`.
 - **GI hard-dark 9.29‰:** the floor under the rims of the large platforms. The 1 m traced visibility sees the overhang that the game's SSAO misses: contact occlusion, review, with no black core (`black` 0.0).
+- **Re-run with the cap (`qa/20261027-155053`, main `253e437` not yet merged):**
+  - 0 green px in the all-on overview. Non-finite passes, with the game's D32F (`9aaa6d61`) listed as game-owned.
+  - The D-LS review brightening is 0.25‰, against 0.97-1.81‰ in the two runs before the cap.
+  - The GI hard-dark (8.1‰) and the all_rt flicker excess (7.1‰) are where they were before the cap (5.4-8.9‰).
+- **`ls_check=1` with the cap (`s6-lscheck-cap`):** live and reference differ on 1.5-20% of px, but that run had `ls_shadowed=3`, and the frozen reference knows modes 0-2 only (TRACK_D_RT 9.10). Bit-exactness needs `ls_shadowed=0`.
+
+**8. S3 grass attribution (`qa/20261027-155410`, `--temporal-gi --temporal-sun`).**
+- **Grass:** with the RT sun off, the moving-blade std drops from 0.050 to 0.0043 (`crops/flicker_rt_shadows_2.png`). The GI split does not flag the grass. The residual is therefore the RT sun's sharp per-blade shadows on wind-blown grass: physically expected (R0), though stochastic alpha noise on the moving blades cannot be separated at 240 presents.
+- **The two largest regions** (open dirt, std 0.022 vs 0.0013-0.0017) are a smooth brightness drift present in on* only, under every split. Together with the fire of `flicker4_split`, this is the first window after the load not being steady, hence `--warmup`.

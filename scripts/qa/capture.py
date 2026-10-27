@@ -45,7 +45,7 @@ def scenes():
 GI_NEUTRAL = {"gi_strength": "0", "gi_ao": "0"}
 
 
-def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun=False, sharc=False):
+def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun=False, sharc=False, warmup=0):
     """The ordered traces of one run: (name, settings applied before it).
     gi_restore: the gi_strength/gi_ao values to go back to after the nogi set.
     split_sun (--temporal-sun): a nosun set, all on but the RT sun shadows (the game's mask
@@ -54,7 +54,11 @@ def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun
     item 2) with everything on (sharc_on), with the reflections off (sharc_refl_off: the GI's
     share), and its roof mask (sharc_roof, sharc_debug=5) for the leak gate roofed_brightening;
     then sharc=0 again. Each comes interval presents after the switch, so the cache has converged."""
-    p = [("on0", {})]
+    # warmup: traces before on0 that nothing reads. The first seconds after a load are not
+    # steady (S3: a burning camp in flicker4_split, a soft brightness drift over the dirt in
+    # 20261027-155410, both in the on* window only), and on* is the reference of every set.
+    p = [(f"warm{i}", {}) for i in range(warmup)]
+    p += [("on0", {})]
     p += [(f"on{i}", {}) for i in range(1, temporal)]
     restore = {}
     if split_gi:
@@ -96,7 +100,7 @@ def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun
 
 def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, reference=False,
               interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False, shared=False,
-              extra=(), split_gi=False, split_sun=False, sharc=False):
+              extra=(), split_gi=False, split_sun=False, sharc=False, warmup=0):
     """Runs the game once and moves each trace's dumps.json + img/ to out_dir/raw/<i>_<name>/.
 
     tag: auto-run.ps1 -Tag, so two scenes can run at once from this checkout (one tag per
@@ -104,7 +108,7 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
     says "exclusive": false); otherwise the run is exclusive and run_s is a timing."""
     keep = dict(x.split("=", 1) for x in extra if "=" in x)
     phases = plan(temporal, reference, split_gi, {k: keep[k].strip() for k in GI_NEUTRAL if k in keep},
-                  split_sun, sharc)
+                  split_sun, sharc, warmup)
     out_dir.mkdir(parents=True, exist_ok=True)
     spec = {"start": r"\[trace\] frame \d+ written", "phases": [], "timeout": timeout + 3600, "tag": tag,
             "after_trace": [{"name": n, "set": s} for n, s in phases[1:]]}

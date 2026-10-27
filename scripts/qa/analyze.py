@@ -88,7 +88,9 @@ def analyze_scene(d: Path, pool):
     t0 = time.time()
     meta = json.loads((d / "run.json").read_text())
     raw = d / "raw"
-    traces = {name: Trace(raw / sub) for name, sub in meta["traces"].items() if (raw / sub / "dumps.json").exists()}
+    # warm* (--warmup) only let the scene settle after the load: never analysed.
+    traces = {name: Trace(raw / sub) for name, sub in meta["traces"].items()
+              if not name.startswith("warm") and (raw / sub / "dumps.json").exists()}
     fr = {n: Frame(t) for n, t in traces.items()}
     crops = d / "crops"
     if crops.exists():
