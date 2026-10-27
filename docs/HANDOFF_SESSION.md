@@ -42,7 +42,9 @@ Plan:
   itself when its script changes. Jobs without `tree` run on the test tree
   (`.claude/worktrees/test-main`, `scripts/test-tree.ps1`).
 - **Results:** `py -3 scripts/queue_results.py <job prefix> [--lines]`. Per-run logs are in
-  `captures/queue/logs/`. A run whose `expect` lines (`patterns`) are missing is INVALID.
+  `captures/queue/logs/`. `patterns` = log lines to keep; `expect` = lines that must appear, else
+  the run is INVALID (field list: header of `scripts/test-queue.ps1`). Give every job both.
+  Start the runner (only when the user allows): `.\scripts\test-queue.ps1 -IdleExitSec 300`.
   Never hold `captures/queue/results.md` open (`tail -f` included): a locked file stopped the
   runner once (writes now retry, fc4d818).
 - **Background frame rate:** the hidden game can run at about 0.5 fps. Statistic lines that need
@@ -57,6 +59,17 @@ Plan:
   - quality before frame rate on Ultra;
   - physically correct, not matching the game (R0);
   - never touch the user's saves.
+
+## Where everything is documented
+- Build, launch, hot reload, traces: `README.md` (Quick start).
+- Test queue, sessions, saves and scenes S1-S8, concurrent runs: `docs/TEST_SCENES.md`.
+- QA harness, detectors, derived thresholds and gates: `docs/QA.md`; principles R0-R6: `docs/QUALITY.md`.
+- Settings and presets: `docs/USER_SETTINGS.md`, `docs/SETTINGS_DESIGN.md`.
+- Architecture and frame: `docs/ARCHITECTURE.md`, `docs/FRAME_MAP.md`.
+- Per effect: `docs/TRACK_A_RR.md`, `TRACK_B_FG.md`, `TRACK_C_GI.md`, `TRACK_D_RT.md`.
+- Gaps and backlog: `docs/COVERAGE.md`, `docs/DESIGN_SOTA_NEXT.md`, `docs/ROADMAP.md`.
+- Engine data: `docs/ASSET_DB.md`, `docs/SE_BRIDGE.md`. Past crash: `docs/DEVICE_LOST_DLS.md`.
+- The root `HANDOFF.md` on each branch is that branch's own task state; on main it points here.
 
 ## Open branches (not in main), with what decides them
 
