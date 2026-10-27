@@ -282,6 +282,16 @@ Rules that keep the queue fast and its results trustworthy:
   game, so a rebuild mid-job mixes two builds; the record flags it (`BUILD CHANGED`). Agents
   build, commit, then enqueue. Between session jobs a core rebuild is fine: the next run
   waits for the new generation.
+- **Prove the run tested what it meant to.** Every job lists `expect` patterns: the log lines
+  that show its feature was active (the asset DB loaded, the effect compiled and ran, the level
+  loaded). A run missing any is recorded INVALID, never a pass. Several jobs on 2026-10-27 were
+  void without anyone noticing at first: no asset DB in a worktree, `shader_debug=1` failing the
+  RT compile, statistics windows longer than the phase, and a camera still settling.
+- **Keep the raw captures until they are analysed** (`--keep-raw`). Pruning first forced reruns.
+- **Merge features early, off by default.** Once a feature builds, its tests pass and it changes
+  nothing while switched off, it goes to main behind its setting. Long-lived branches that
+  touch the same files (push constants in `core/gi.cpp`, the QA scripts) made every merge a
+  conflict.
 - **Wait for results; never poll the game.** The runner writes them, and the coordinator
   reads `results.md`.
 

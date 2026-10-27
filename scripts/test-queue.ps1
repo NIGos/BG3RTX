@@ -16,6 +16,7 @@
 #     "phases": "captures/em_phases.json",   # optional live_phases spec (relative to tree)
 #     "patterns": ["\\[core\\] guard:", "\\[em\\] per build"],  # log lines to keep (last match each)
 #     "stop_on_dump": true,                  # stop repeating once an Aftermath dump appears
+#     "expect": ["\\[assetdb\\] loaded", "sharc: first frame"],  # must appear, else the run is INVALID
 #     "post": "py -3 scripts/qa/x.py {captures}",               # optional command after each run
 #     "command": "py -3 -m scripts.qa run --scenes S6",         # instead of auto-run, for tools
 #                                                               # that launch the game themselves
@@ -380,8 +381,21 @@ function Run-Job($file) {
       try { $lines += @(cmd /c "$($job.post.Replace("{captures}", ($caps -join ' '))) 2>&1" | ForEach-Object { "$_" } | Select-Object -Last 6) }
       finally { Pop-Location }
     }
+    # "expect": log lines that prove the run tested what it meant to (the feature switched on,
+    # the asset DB loaded, the level loaded). A run missing any is INVALID, never a pass.
+    $missing = @()
+    if ($job.expect -and $r.keptLog -and (Test-Path $r.keptLog)) {
+      foreach ($p in @($job.expect | Where-Object { $_ })) {
+        if (-not (Select-String -LiteralPath $r.keptLog -Pattern $p -Quiet)) { $missing += $p }
+      }
+    } elseif ($job.expect) { $missing = @($job.expect) }
+    if ($missing) {
+      $r.outcome = "INVALID (missing: $($missing -join ' | ')); $($r.outcome)"
+      $lines += "INVALID: expected log lines not found: $($missing -join ' | ')"
+    }
     $after = Stamp $tree
     $rec = [ordered]@{ job = $name; run = $i; start = $t0.ToString('s'); sec = [int]((Get-Date) - $t0).TotalSeconds
+                       valid = (-not $missing)
                        outcome = $r.outcome; nv153 = $r.nv; dumps = @($r.dumps); build = $before
                        build_changed = ($before -ne $after); log = $r.keptLog; captures = $caps; lines = $lines
                        session = $r.session; core_gen = $r.generation; saved_sec = $r.saved }
