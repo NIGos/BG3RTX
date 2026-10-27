@@ -1,5 +1,8 @@
+# One auto-run with live setting phases (scripts/live_phases.py), ended as soon as the phases are done.
+#   .\tools\lsref\run_phases.ps1 -Phases tools\lsref\ls_scene.json -Tag grym [-Save <save>] [-Validation] [-Move]
+# Then: py -3 tools\lsref\phase_times.py bg3rtx.log captures\phases_<Tag>.txt (per-phase D-LS medians and ls check counts).
 param([string]$Phases, [string]$Tag, [string]$Save = "", [switch]$Validation, [switch]$Move)
-$root = Split-Path $PSScriptRoot
+$root = Split-Path (Split-Path $PSScriptRoot)
 Set-Location $root
 $p = Start-Process -PassThru -NoNewWindow -FilePath py -ArgumentList "-3", "scripts\live_phases.py", $Phases -RedirectStandardOutput "captures\phases_$Tag.txt"
 $job = Start-Job -ScriptBlock { param($id, $done) Wait-Process -Id $id; New-Item -ItemType File $done -Force | Out-Null } -ArgumentList $p.Id, (Join-Path $root "captures\auto.done.pending")
