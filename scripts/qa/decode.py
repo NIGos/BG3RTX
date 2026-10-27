@@ -156,6 +156,13 @@ class Frame:
         k = self.t.find(g, "RGBA8", slot=1) if g else None
         return self.t.load(k)[..., :3] if k else None
 
+    def normal(self):
+        """G-buffer normal (RT0, RG16F stereographic, view space): moves with the geometry
+        even where the albedo does not change (a grass blade in front of grass)."""
+        g = self.t.gbuffer_fs()
+        k = self.t.find(g, "RG16F", slot=0) if g else None
+        return self.t.load(k)[..., :2] if k else None
+
     def material_class(self):
         g = self.t.gbuffer_fs()
         k = self.t.find(g, "RGBA8", slot=2) if g else None

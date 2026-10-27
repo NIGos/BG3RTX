@@ -61,7 +61,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       int2 qp = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
       float sd = gDepth.Load(int3(qp, 0));
       if (sd > 0.0 && abs(qd - sd) < sd * pc.gi_rt_tol) {
-        float3 L = prev_radiance_at(qp);
+        float3 L = prev_bounce_at(qp);
         if (all(isfinite(L))) {
           bounce += L * w;
           seen += L;

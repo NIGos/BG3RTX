@@ -315,7 +315,8 @@ def analyze_scene(d: Path, pool):
         sets = [s for s in (on_set, off_set, nogi_set) if len(s) >= 2]
         moving = np.zeros(shape, bool)
         for s in sets:
-            moving |= det.animated([fr[n].albedo() for n in s], [fr[n].sun_mask() for n in s], shape)
+            moving |= det.animated([fr[n].albedo() for n in s], [fr[n].sun_mask() for n in s], shape,
+                                   [fr[n].normal() for n in s])
         pairs = [("all_rt", off_set, "all RT off")]
         if len(nogi_set) >= 2:
             pairs.append(("gi", nogi_set, "GI neutral (gi_strength=0 gi_ao=0)"))

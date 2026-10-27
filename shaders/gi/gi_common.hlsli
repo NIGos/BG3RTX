@@ -59,7 +59,7 @@ struct Push {
   uint cs_steps;
   float2 mv_scale;
   uint has_mv;
-  uint pad;
+  uint bounce_spec; // 1: GI bounces diffuse + specular (old); 0: the diffuse only (QUALITY R3)
   // Track D ray-traced sun shadows (rt_shadow.hlsl)
   float rt_bias;      // ray origin offset along the normal, fraction of camera distance
   float rt_tmax;      // shadow ray length (world units)
@@ -156,12 +156,21 @@ bool project(float3x3 inv, float3 P, out float2 uv, out float d) {
 
 // Last frame's lit radiance at the surface now seen at pixel qp: follow the
 // motion vector back to where that surface was a frame ago.
-float3 prev_radiance_at(int2 qp) {
-  if (pc.has_mv == 0) return prevRadiance[qp].rgb;
+// rgb: diffuse + specular, what the camera saw (reflections need it); a: the diffuse's
+// share of its luminance (gi_composite.hlsl).
+int2 prev_radiance_px(int2 qp) {
+  if (pc.has_mv == 0) return qp;
   float2 mv = gVelocity.Load(int3(qp, 0)) * pc.mv_scale;
   int2 pq = int2(floor(float2(qp) + 0.5 + mv));
-  if (any(pq < 0) || any(pq >= int2(pc.full))) return prevRadiance[qp].rgb;
-  return prevRadiance[pq].rgb;
+  return any(pq < 0) || any(pq >= int2(pc.full)) ? qp : pq;
+}
+float3 prev_radiance_at(int2 qp) { return prevRadiance[prev_radiance_px(qp)].rgb; }
+// The GI's bounce source: view-independent radiance (QUALITY R3), i.e. the diffuse part.
+// The specular is what the surface sends towards the camera, not towards the GI's
+// shading point; its sun glints are the sparsest, brightest values on screen.
+float3 prev_bounce_at(int2 qp) {
+  float4 v = prevRadiance[prev_radiance_px(qp)];
+  return pc.bounce_spec != 0 ? v.rgb : v.rgb * saturate(v.a);
 }
 
 // pcg3d (Jarzynski & Olano 2020): decorrelated across pixels and frames,

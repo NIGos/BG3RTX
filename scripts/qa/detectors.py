@@ -33,6 +33,11 @@ T = {
     # (5x5 box), game sun mask change (3x3 box), dilated by this many px at 1280 wide.
     "anim_albedo": 0.1,
     "anim_sun_mask": 0.15,
+    "anim_normal": 0.03,
+    # The ratio gate compares mean stds on top of the previews' 8-bit PQ quantisation
+    # (half a code step): below it a ratio of two stds is a ratio of rounding noise
+    # (S14 gi: 0.00164 against 0.00098, both under one code step of 0.0039).
+    "flicker_quant": 0.5 / 255.0,
     "anim_dilate_px": 3,
     "flip_excess": 0.03,         # mean FLIP against the reference, above the on0/on1 noise floor
     "view_changed_frac": 0.05,    # G-buffer albedo differs (> 0.1) on more px than this: another view
@@ -206,7 +211,7 @@ def sun_disagreement(game, rt, sun_ratio, cls=None, applied=None):
     return res
 
 
-def animated(albedos, masks, shape):
+def animated(albedos, masks, shape, normals=()):
     """Pixels whose scene content changed across the traces of one temporal set: the
     G-buffer albedo (geometry moved: idle animation, walking NPCs, wind in grass) or
     the game's own sun mask (a caster moved: the shadow of an animated character or
@@ -223,6 +228,12 @@ def animated(albedos, masks, shape):
     alb = [im.box(fit(a).mean(-1), 2) for a in albedos if a is not None]
     for a in alb[1:]:
         out |= np.abs(a - alb[0]) > T["anim_albedo"]
+    # Normals: wind in grass moves blades in front of grass of the same colour, which the
+    # albedo misses (S3: the blade-streak std pattern of the all-off set, 39% masked).
+    # RG16F code (e = 3.5554 code - 1.7777, n.xy ~ 2e near the view axis): 0.03 is ~12 degrees.
+    nrm = [np.stack([im.box(fit(n)[..., c], 2) for c in range(2)], -1) for n in normals if n is not None]
+    for n in nrm[1:]:
+        out |= np.abs(n - nrm[0]).max(-1) > T["anim_normal"]
     msk = [im.box(fit(m), 1) for m in masks if m is not None]
     for m in msk[1:]:
         out |= np.abs(m - msk[0]) > T["anim_sun_mask"]
@@ -244,8 +255,9 @@ def temporal(codes_on, codes_off, moving=None):
         return y.std(axis=0)
     s_on, s_off = std(codes_on), std(codes_off)
     static = ~moving if moving is not None and moving.shape == s_on.shape else np.ones(s_on.shape, bool)
-    raw_ratio = float(s_on.mean() / max(s_off.mean(), 1e-6))
-    ratio = float(s_on[static].mean() / max(s_off[static].mean(), 1e-6)) if static.any() else raw_ratio
+    q = T["flicker_quant"]
+    raw_ratio = float((s_on.mean() + q) / (s_off.mean() + q))
+    ratio = float((s_on[static].mean() + q) / (s_off[static].mean() + q)) if static.any() else raw_ratio
     excess_all = im.box(s_on, 2) > 2.0 * im.box(s_off, 2) + 0.01
     raw_area = _permille(im.opening(excess_all, 2).sum(), excess_all.shape)
     excess = im.opening(excess_all & static, 2)

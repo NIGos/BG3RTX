@@ -64,7 +64,7 @@ struct Push {
   float cs_length, cs_strength;
   uint32_t cs_steps;
   float mv_scale[2];
-  uint32_t has_mv, pad;
+  uint32_t has_mv, bounce_spec;   // bounce_spec: gi_bounce_spec (1: the old diffuse + view-dependent specular source)
   float rt_bias, rt_tmax;
   uint32_t rt_debug;
   float rt_strength;
@@ -949,6 +949,10 @@ Push make_push() {
   pc.mv_scale[0] = g_mv_scale[0];
   pc.mv_scale[1] = g_mv_scale[1];
   pc.has_mv = g_mv_view && host->cfg_int("gi_reproject", 1) ? 1u : 0u;
+  // QUALITY R3: the bounce source is view-independent radiance (the diffuse), not the
+  // specular the camera sees (sun glints: sparse, very bright 1-spp hits that RR leaves
+  // as blotches). 1 restores diffuse + specular for an A/B.
+  pc.bounce_spec = host->cfg_int("gi_bounce_spec", 0) ? 1u : 0u;
   pc.rt_bias = host->cfg_float("rt_bias", 0.002f);
   pc.rt_tmax = host->cfg_float("rt_tmax", 300.0f);
   pc.rt_debug = uint32_t(host->cfg_int("rt_debug", 0));
