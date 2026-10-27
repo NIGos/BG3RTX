@@ -91,7 +91,12 @@ def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun
           # rt_debug=6: the trust of rt_sun_replace (red roof volume, magenta far from the
           # game's lit mask, blue off-screen, green trusted).
           ("sun_trust", {"rt_debug": "6", "rt_backlit": "1"})]
-    back = {}
+    # rt_debug=8: the TLAS hit in front of the depth buffer, in tolerances (detectors.tlas_front,
+    # the geometric gate for alpha-tested geometry the trace keeps solid). Repeated, so its
+    # per-pixel spread (jitter, stochastic alpha) is measured: max(2, temporal) traces.
+    p += [("tlas0", {"rt_debug": "8"})]
+    p += [(f"tlas{i}", {}) for i in range(1, max(2, temporal))]
+    back = {"rt_debug": "0"}
     if floors:   # FLOORS above; the next phase restores qa_zero=0 and the reflections
         p += [("sun_zero", {"rt_debug": "0", "rt_backlit": "1", "qa_zero": "1"}),
               ("ls_zero", {"qa_zero": "2"}),

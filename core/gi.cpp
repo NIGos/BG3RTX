@@ -1554,7 +1554,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     rt_begin();
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     dispatch(cmd, g_rt_shadow, b, pc, g_w, g_h, true);
-    if (g_sunt.replace && pc.rt_debug != 3 && pc.rt_debug != 5 &&
+    if (g_sunt.replace && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
         refresh(g_sun_resolve, "gi/rt_sun_resolve.hlsl", g_rt_layout)) {
       memory_barrier(cmd, kCS, kCS);
       dispatch(cmd, g_sun_resolve, b, pc, g_w, g_h, true);
@@ -1763,7 +1763,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   }
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
   if (s.sharc && s.tlas) sharc_post(cmd, s, pc);
-  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 7) {
+  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 8) {
     memory_barrier(cmd, kCS, kCS);
     bind_rt(b, s.tlas, s.alpha);
     dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);

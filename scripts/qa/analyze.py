@@ -130,8 +130,11 @@ def analyze_scene(d: Path, pool):
     # The sun debug traces are evaluated each on its own (in-frame), so another view than
     # on0's does not void them. (Their crops show on0's lighting only when the view agrees.)
     self_contained = ("sun_dbg", "sun_check", "sun_trust")
-    moved_self = [n for n in moved if n in self_contained]
-    moved = [n for n in moved if n not in self_contained]
+    tlas_set = sorted(n for n in fr if n.startswith("tlas"))
+    # The tlas* traces are compared with each other, not with on0: a view change between them
+    # voids the gate (below), one against on0 only hides the on0 tile of the crops.
+    moved_self = [n for n in moved if n in self_contained or n in tlas_set]
+    moved = [n for n in moved if n not in self_contained and n not in tlas_set]
     res["view_change"] = {n: round(v, 4) for n, v in view.items()}
     res["view_shift"] = {n: list(s) for n, s in shift.items()}
     if moved:
@@ -408,6 +411,39 @@ def analyze_scene(d: Path, pool):
                           f"{meta['scene']} roofed_brightening at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
                     res["crops"].append({"file": f"crops/{name}", "detector": "roofed_brightening", "effect": "gi_sharc",
                                          "buffer": "lighting", "bbox": g["bbox"], "shape": list(ratio.shape), **info})
+
+    # ---- geometry in front (rt_debug=8, tlas* traces): alpha-tested TLAS geometry in front of the
+    # raster surface beyond the derived depth tolerance and k sigma (detectors.tlas_front).
+    if len(tlas_set) >= 2:
+        views = []
+        for n in tlas_set:
+            dif, src = fr[n].diffuse()
+            if dif is not None:
+                views.append(np.clip(2 * dif, 0, 1))
+        shifts = [det.view_shift(fr[tlas_set[0]].albedo(), fr[n].albedo())[:2] for n in tlas_set[1:]
+                  if fr[n].albedo() is not None and fr[tlas_set[0]].albedo() is not None]
+        if any(max(abs(c) for c in s_) >= th.JITTER_PX for s_ in shifts):
+            res["notes"].append("tlas_front: the tlas traces show different views; not evaluated")
+        elif len(views) >= 2 and all(v.shape == views[0].shape for v in views):
+            raw_dump = any(fr[n].is_raw("compose") for n in tlas_set)
+            tf, lmean = det.tlas_front(views, preview=not raw_dump)
+            for sub, r in tf.items():
+                res["checks"].append({"detector": f"tlas_front_{sub}", "effect": "all_rt", "buffer": f"debug diffuse ({src})",
+                                      "on": "+".join(tlas_set), "off": "raster depth",
+                                      **{k: v for k, v in r.items() if k != "regions"}, "top": r["regions"][:6]})
+                for j, g in enumerate(r["regions"][:CROPS_PER_DETECTOR]):
+                    y0, y1, x0, x1 = crop_window(g["bbox"], lmean.shape)
+                    tiles = [heat_scalar(lmean[y0:y1, x0:x1], 8.0), views[0][y0:y1, x0:x1]]
+                    labs = ["log2(in front / tolerance), mean", "R in front, G 1 alpha / 0.5 opaque"]
+                    if "on0" in data and tlas_set[0] not in moved_self and data["on0"]["compose"] is not None \
+                            and data["on0"]["compose"].shape[:2] == lmean.shape:
+                        tiles.insert(0, dsp("on0", "compose")[y0:y1, x0:x1])
+                        labs.insert(0, "all on (lighting)")
+                    name = f"tlas_front_{sub}_{j}.png"
+                    info = {k: v for k, v in g.items() if k not in ("bbox", "rank", "qualified", "focus")}
+                    sheet(tiles, labs, f"{meta['scene']} tlas_front {sub} at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
+                    res["crops"].append({"file": f"crops/{name}", "detector": f"tlas_front_{sub}", "effect": "all_rt",
+                                         "buffer": "debug diffuse", "bbox": g["bbox"], "shape": list(lmean.shape), **info})
 
     # ---- non-finite values
     nf = {n: t.nonfinite() for n, t in traces.items()}

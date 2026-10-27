@@ -12,13 +12,15 @@
 #include "../rt/rt_common.hlsli"
 
 // r: traced sun visibility, g: the game's sun mask before the fold,
-// b: primary-ray check (1 match, 0.66 hit in front, 0.33 hit behind, 0 miss; rt_debug=3/5 only),
+// b: primary-ray check (1 match within depth_tol, 0.66 hit in front, 0.33 hit behind, 0 miss
+//    or aborted; rt_debug=3/5), the in-front distance log2(e)/8 in tolerances (rt_debug=8),
 //    else the visibility written into the mask;
 // a: which geometry an in-front/behind error comes from (x3: 1 alpha vt, 2 alpha tex, 3 opaque;
-//    rt_debug=3/5 only), else the trust from the geometry: 0 not traced (back face),
-//    0.25 under a roof volume, 0.5 + 0.5 x the off-screen trust (rt_sun_resolve.hlsl adds
-//    0.125: far from any pixel the game's mask has lit), kSunUnknownCode: the ray was
-//    aborted by the candidate cap (unknown), the game's mask is kept
+//    rt_debug=3/5), 1 alpha-tested / 0.5 opaque hit in front (rt_debug=8), else the trust from
+//    the geometry: 0 not traced (back face), 0.25 under a roof volume, 0.5 + 0.5 x the
+//    off-screen trust, kSunUnknownCode: the ray was aborted by the candidate cap (unknown),
+//    the game's mask is kept. (rt_sun_resolve.hlsl overwrites a with 0.40 / 0.45 for the
+//    pixels it brightened; there is no proximity code any more.)
 [[vk::binding(19, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> rtVis;
 // 8/255 in the RGBA8 image: 8 codes above "not traced" (0) and 7 below the 0.06 (15.3
 // codes) that rt_sun_resolve.hlsl reads as "traced", so it is untraced there, and
@@ -136,16 +138,27 @@ void main(uint3 tid : SV_DispatchThreadID) {
     vis = unknown ? mask : vs == kRtOccluded ? 0.0 : 1.0;
   }
   float check = 0.0, fam = 0.0;
-  if (pc.rt_debug == 3 || pc.rt_debug == 5) {
+  const bool primary_check = pc.rt_debug == 3 || pc.rt_debug == 5 || pc.rt_debug == 8;
+  if (primary_check) {
     RtCone cone = {0.0, pa};
     RtDebugHit h = rt_closest_debug(float3(0, 0, 0), P / dist, dist * 1.5 + 1.0, cone);
-    float rel = h.t / dist - 1.0;
-    check = h.t < 0.0 ? 0.0 : abs(rel) < 0.005 ? 1.0 : rel < 0.0 ? 0.66 : 0.33;
+    // Same surface or not: the derived tolerance (shaders/rt/depth_tol.hlsli; was a fixed
+    // 0.5%). The raster depth was sampled at the jittered position (<= kJitterPx from the
+    // centre this ray goes through), one depth-buffer rounding, plus the measured
+    // TLAS-against-raster error kTlasRel (no per-pixel TLAS reference here: this IS the
+    // check). N.V from the geometric normal: rtOrigin's (rt_origin=1), else the depth's.
+    const float4 org = rt_origin_at(fp);
+    const float3 ng = org.w < kOriginNoHit ? org.xyz : depth_geo_normal(int2(fp), P);
+    const float tol = depth_tol(dist, pa, dot(ng, P) / dist, kJitterPx, 1.0) + kTlasRel * dist;
+    const float diff = h.t - dist;   // < 0: the TLAS hit lies in front of the raster surface
+    check = h.t < 0.0 || h.aborted ? 0.0 : abs(diff) < tol ? 1.0 : diff < 0.0 ? 0.66 : 0.33;
     bool front = check > 0.5 && check < 0.9, behind = check > 0.2 && check < 0.5;
     // Who is to blame: in front, the geometry hit (opaque, or an alpha-tested
     // draw of family 1/2); behind, the nearest alpha-tested candidate let through.
     uint who = front ? (h.alpha ? h.hit_kind : 3u) : behind ? h.near_kind : 0u;
     fam = float(who) / 3.0;
+    const float e8 = front ? saturate(log2(max(-diff / tol, 1.0)) / 8.0) : 0.0;
+    const float f8 = front ? (h.alpha ? 1.0 : 0.5) : 0.0;
     if (pc.rt_stats != 0) {
       uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
       stat_add(0, true, bin);
@@ -158,6 +171,16 @@ void main(uint3 tid : SV_DispatchThreadID) {
       stat_add(7, front && who == 2, bin);   // in front: alpha-tested, plain texture
       stat_add(13, behind && who == 1, bin); // behind: passed through a vt cutout
       stat_add(14, behind && who == 2, bin); // behind: passed through a tex cutout
+    }
+    if (pc.rt_debug == 8) {
+      // QA view (scripts/qa tlas_front): how far in front, in units of the tolerance,
+      // log2-encoded so that 8 bits span e = 1..256 (one code = a factor 1.022):
+      // b = log2(-diff / tol) / 8 where in front, else 0. a: 1 alpha-tested hit (raster and
+      // trace run the same alpha test there, so a disagreement is an artifact: the gate),
+      // 0.5 opaque hit (cut-away walls, dithered LOD fades: the TLAS legitimately holds
+      // geometry the raster faded out; review), 0 not in front / no depth.
+      check = e8;
+      fam = f8;
     }
   }
   if (pc.rt_stats != 0) {
@@ -190,7 +213,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     if ((tflags & 2u) != 0) roof = sun_under_roof(P, L, cam_abs);
     if ((tflags & 4u) != 0) t_off = sun_offscreen_trust(P, L, cam_abs.y);
   }
-  if (pc.rt_debug != 3 && pc.rt_debug != 5) {
+  if (!primary_check) {
     check = fold;
     fam = unknown ? kSunUnknownCode : !traced ? 0.0 : roof ? 0.25 : 0.5 + 0.5 * t_off;
   }

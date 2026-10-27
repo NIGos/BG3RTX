@@ -458,7 +458,7 @@ reproduce them.
 - Run `python -m scripts.qa run --scenes S1,S2,S3,... --full-res` after every change
   to an effect and before a default changes. It is one game run per scene (live
   toggles), so it costs about as much as a plain sweep.
-- Gates: `hard_dark`, `nonfinite`, `flicker`, `sun_check_darker`, `same_view` and (with
+- Gates: `hard_dark` (energy, against the light-off floors), `tlas_front_alpha`, `nonfinite`, `flicker`, `sun_check_darker`, `same_view` and (with
   `--reference`) `reference` must pass on every scene, on the final frame and on the
   lighting buffer. `brightening` and the sun-mask comparisons are review (R0): their crops
   are judged, they have no threshold. A failure

@@ -1306,16 +1306,19 @@ Code:
    lights, or the database alone without the bridge.
    - Each record holds the absolute position, the radius, the source radius, a match
      tolerance, the flags, owner, type and channel.
-   - The list is re-queried every 8 frames and on each new export.
+   - The list is re-queried on each new export, else every 0.25 s (was every 8 frames).
    - **Camera position.** The join pass writes it (set 0 b2 `_m6`) back into the ring.
      The core reads it kRing frames later to centre the next query. Before the first
      readback, the controlled character's position from the bridge is used.
 2. **Join pass** (before D-LS, inside its timestamps). One thread per light array
    slot: 4096 threads, with the records staged through group-shared memory.
    - A slot matches the nearest record within its tolerance whose radius agrees with
-     1/`m0.w` within 2%.
-   - Tolerance: 5 cm + `MovementAmount` for placed lights, 4 m for character lights,
-     and `ls_dyn_tol` (1.5 m) + `MovementAmount` for every other light the bridge reports
+     1/`m0.w`: 0.5 mm + 4 relative ulp for placed lights, 2% + 1 cm (not derived, logged)
+     for moving ones. *Updated 2026-10-27, derivations in SE_BRIDGE.md "Join tolerances".*
+   - Tolerance (2026-10-27): √3 × (4 ulp at the position + 0.05 mm) + `MovementAmount` for
+     placed lights; that plus `ls_dyn_speed` (8 m/s) × the measured export age (≈ 3-4 m)
+     for character lights and every other light the bridge reports. (Before: 5 cm, 4 m and
+     `ls_dyn_tol` 1.5 m, replaced; the text below describes the lights it applies to)
      (items, and visual lights whose owner was not found, such as the VFX lights of
      carried weapons: `VFX_LightSources_WPN_DippedInFire`, owner 0). They move between
      the 4 Hz exports. Until 2026-10-27 items had 0.5 m and the rest 5 cm, so a carried
@@ -1906,7 +1909,7 @@ frame's lit radiance, reflections included, as next frame's `prevRadiance`), SSS
    - without RR: mirror rays only, up to `rf_max_rough_norr` (0.3). There is no denoiser for
      GGX noise there, so the fallback is deterministic and nothing of ours filters (R2).
 4. Tiers:
-   - **(a)** the hit projects on screen, the depth there is the hit itself (`rf_depth_tol`
+   - **(a)** the hit projects on screen, the depth there is the hit itself (`rf_depth_k` × the derived depth_tol; was `rf_depth_tol`
      3%) and that surface faces the ray: `L = prev_radiance_at(hit pixel)` (last frame's lit
      diffuse + specular, reprojected with the MVs, QUALITY Q1), weight `w = 1`, faded within
      `rf_edge` of the screen border and between 0.75 and 1 × `rf_max_rough` (0.6);
@@ -2018,7 +2021,7 @@ D-LS 0.35 ms, D-RF 0.33 ms, about 0.95 ms of the 2.5 ms.
 - `stats_begin` adds 3.8-4 ms when `rf_stats=1`, as for D-LS: measurement only.
 
 Settings (`bg3rtx.ini`, all live): `rt_reflections`, `rf_max_rough`, `rf_max_rough_norr`,
-`rf_mirror_rough`, `rf_rr`, `rf_tmax`, `rf_depth_tol`, `rf_edge`, `rf_strength`, `rf_so`,
+`rf_mirror_rough`, `rf_rr`, `rf_tmax`, `rf_depth_k` (was `rf_depth_tol`), `rf_edge`, `rf_strength`, `rf_so`,
 `rf_models`, `rf_debug` (1 tiers, 2 change ×4, 3 probe term, 4 probe term after D-RF,
 5 validation residual, 6 hit distance), `rf_stats`, `rf_validate`, `rr_spec_hit_distance`.
 The log reports `rf: first frame ...` (the lighting's set and its layout),

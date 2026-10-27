@@ -147,5 +147,47 @@ mot_m = det.animated([al3, mv], [], (H, W))
 check("animated: jitter marks < 1% of px", mot_j.mean() < 0.01, f"{100 * mot_j.mean():.2f}%")
 check("animated: a moved block is marked", mot_m[230, 630])
 
+# ---- tlas_front: alpha-tested TLAS geometry in front of the raster (rt_debug=8), through the
+# full code chain: RGBA8 code, x0.5 into the diffuse, the 8-bit Reinhard + gamma preview, x2.
+def view8(l, kind):
+    """l: log2(front / tolerance) (0 where not in front); kind 2 alpha, 1 opaque, 0 none."""
+    def chain(x):
+        x = np.round(np.clip(x, 0, 1) * 255) / 255                     # rtVis RGBA8
+        lin = 0.5 * x                                                 # rt_debug.hlsl writes c * 0.5
+        p = np.round(np.power(lin / (1 + lin), 1 / 2.2) * 255) / 255   # dump.cpp preview
+        t = np.clip(p ** 2.2, 0, 0.9995)
+        return 2 * (t / (1 - t))                                      # decode.py, then x 2 (analyze)
+    g = np.where(kind == 2, 1.0, np.where(kind == 1, 0.5, 0.0))
+    return np.stack([chain(l / 8.0), chain(g), chain(np.full_like(l, 0.25))], -1)
+
+
+rng = np.random.default_rng(7)
+card = (np.abs(xx - 300) < 20) & (np.abs(yy - 200) < 12)          # a grass card the trace keeps solid
+wall = (np.abs(xx - 900) < 40) & (np.abs(yy - 300) < 40)          # a cut-away wall (opaque)
+views = []
+for t in range(3):
+    l = np.zeros((H, W), np.float32)
+    kind = np.zeros((H, W), np.int32)
+    l[card] = 2.0 + 0.1 * rng.standard_normal(int(card.sum()))     # 4 tolerances in front, every trace
+    kind[card] = 2
+    l[wall] = 5.0
+    kind[wall] = 1
+    # Stochastic alpha at the cutout edges: in front in one trace of three, at random px.
+    flick = rng.random((H, W)) < 0.002
+    l[flick] = rng.uniform(0.1, 3.0, int(flick.sum()))
+    kind[flick] = 2
+    views.append(view8(l, kind))
+tf, lm = det.tlas_front(views)
+ag, op = tf["alpha"], tf["opaque"]
+check("tlas_front: the solid grass card fails the gate", not ag["pass"] and any(abs(cx(g) - 300) < 5 for g in ag["regions"]),
+      f"{ag['score']}‰, {len(ag['regions'])} region(s)")
+check("tlas_front: stochastic alpha flicker (1 of 3 traces) is not significant", len(ag["regions"]) == 1,
+      str([(g["bbox"], g["area"]) for g in ag["regions"]]))
+check("tlas_front: the opaque cut-away wall is review only", op.get("gate") is False and any(abs(cx(g) - 900) < 5 for g in op["regions"]))
+check("tlas_front: the front distance is recovered (about 4 tolerances)",
+      all(3.0 < g["front_tol"] < 5.0 for g in ag["regions"]), str([g["front_tol"] for g in ag["regions"]]))
+clean = [view8(np.zeros((H, W), np.float32), np.zeros((H, W), np.int32)) for _ in range(3)]
+check("tlas_front: nothing in front passes", det.tlas_front(clean)[0]["alpha"]["pass"])
+
 print(f"\n{len(FAILS)} failure(s)" if FAILS else "\nall passed")
 sys.exit(1 if FAILS else 0)

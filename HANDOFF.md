@@ -6,24 +6,26 @@ Branch `worktree-agent-aff062a21c1600fda`, main `51a2db9` merged. Design and res
 ## Implemented
 - `rt_sun_replace=1` (default, live): the traced sun visibility (soft, sun-disc sampled)
   **replaces** the game's sun mask where trusted. Untrusted pixels keep `min(game, traced)`.
-- Trust is the product of three tests:
+- Trust is the product of two geometric tests (2026-10-27: the third, **proximity** to the
+  game's lit mask via `rt_sun_near`, is removed per QUALITY R0; `rt_sun_near` now only
+  splits the `rt_debug=7` A/B classes into edge and far):
   - **roofs**: the sun ray passes through no roof volume (asset DB API v3 `roof_volumes`:
-    roofed rooms, covered floors, roof floors; padded 1 m sideways and 3 m up);
+    roofed rooms, covered floors, roof floors; padded 1 m sideways and 3 m up, not derived:
+    TRACK_D 12.4). The query radius is derived per frame (`rt_sun_roof_radius=0`: the
+    farthest roof-tested pixel + `rt_tmax`); volumes beyond 256 are logged, nearest kept;
   - **off-screen**: the ray stays in the view frustum until it is 6 m above the pixel
-    (`rt_sun_rise`) and, with `rt_sun_top=1` (default), above the highest visible point
-    + 2 m. Trust ramps in from 0.75 of that path;
-  - **proximity**: the game's mask is lit within 1.5 m (`rt_sun_near`) on a surface at a
-    similar depth (`gi/rt_sun_resolve.hlsl`).
+    (`rt_sun_rise`, not derived) and, with `rt_sun_top=1`, above the highest visible point
+    + 2 m (the ini default is `rt_sun_top=0`). Trust ramps in from 0.75 of that path.
 - Without a known asset-DB level, nothing is trusted (safe fallback).
 - Cloud shadows: unchanged. The lighting applies them after the mask.
 - **In-frame A/B (new):** `rt_sun_resolve.hlsl` compares each pixel's written mask with
   `min(game, traced)` of the same frame:
-  - brightened by > 0.1 at the game's shadow edge (its own mask > 0.1, or lit within
-    `rt_sun_near`/2);
+  - brightened by >= one R8 code (1/255; was > 0.1) at the game's shadow edge (its own
+    mask partly lit, or lit within `rt_sun_near`/2: a debug class only);
   - brightened farther from it;
-  - darker than min by > 0.1 (impossible with `rt_sun_roof_mode=0`).
+  - darker than min by >= one code (impossible with `rt_sun_roof_mode=0`).
   - Outputs:
-    - log line `sun check (N frames, replace R): brightened by > 0.1 against min(game, RT)
+    - log line `sun check (N frames, replace R): brightened by >= 1/255 against min(game, RT)
       on X% of px (... per frame): at the game's shadow edge E%, farther F% (far: Y% of
       px); darker than min Z% of px; mean gain ...`, every 600 frames;
     - debug view `rt_debug=7`: the changed pixels over the lit diffuse in grey; yellow =
@@ -121,7 +123,8 @@ change.
 - r1 S1 at ~00:43: the TLAS stopped after the first trace.
 
 ## Known limits
-- The scene top and the rise are heuristics. An off-screen caster taller than them, beyond
-  the screen edge facing the sun, could shift a shadow edge by up to `rt_sun_near`.
+- The scene top and the rise are heuristics (not derivable from the asset DB, which has no
+  meshes; TLAS experiment in TRACK_D 12.4). An off-screen caster taller than them, beyond the
+  screen edge facing the sun, could shift a shadow edge (there is no proximity limit now).
 - Roof volumes come from trigger shapes, not the game's actual roof fading. A roofed room
   whose roof is drawn keeps `min` too (no brightening there; harmless).

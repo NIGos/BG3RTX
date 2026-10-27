@@ -4,15 +4,20 @@
 //   2 game's sun mask in red, traced visibility in green (yellow: both lit), and in
 //     blue the visibility written into the mask (rt_sun_replace)
 //   3 primary-ray check of the TLAS against the depth buffer: green match
-//     (within 0.5%), red geometry in front, blue behind, magenta miss
+//     (within depth_tol + the measured 0.5% TLAS error, rt_shadow.hlsl), red geometry in
+//     front, blue behind, magenta miss or aborted
 //   4 accumulated ambient visibility as folded into the game's AO (ray-traced
 //     with rt_ao=1, screen-space otherwise)
-//   6 rt_sun_replace trust: red roof volume, magenta far from the game's lit mask, blue
-//     off-screen fallback, green trusted, grey not traced, yellow ray aborted by the
-//     candidate cap (unknown: the game's mask kept; force with rt_max_candidates)
+//   6 rt_sun_replace trust: red roof volume, blue off-screen fallback, green trusted, grey
+//     not traced, yellow ray aborted by the candidate cap (unknown: the game's mask kept;
+//     force with rt_max_candidates). (Magenta, "far from the game's lit mask", is gone with
+//     the proximity term: trust is roofs and frustum only.)
 //   7 rt_sun_replace in-frame A/B: brightened against min(game, traced) by >= 1 R8 code at
 //     the game's shadow edge yellow, farther red, darker blue, over the lit diffuse in grey
-// Views 1-3, 5, 6 need rt_shadows=1 (they read its visibility image).
+//   8 QA (scripts/qa tlas_front): the TLAS hit in front of the depth buffer, exact codes:
+//     R = log2(distance in front / tolerance) / 8, G = 1 alpha-tested hit / 0.5 opaque hit,
+//     B = 0.25 where the pixel has depth. Read back x2 from the R11G11B10F diffuse.
+// Views 1-3, 5, 6, 8 need rt_shadows=1 (they read its visibility image).
 #include "gi_common.hlsli"
 #include "../rt/rt_common.hlsli"
 
@@ -27,7 +32,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (pc.rt_debug == 1) c = v.rrr;
   else if (pc.rt_debug == 2) c = float3(v.g, v.r, v.b);   // blue: what was written into the mask
   else if (pc.rt_debug == 6) {
-    // rt_sun_replace trust: red under a roof volume, magenta far from any lit game mask,
+    // rt_sun_replace trust: red under a roof volume (magenta: a legacy code, unused),
     // blue off-screen fallback (the game's cascades), green trusted, grey not traced;
     // dim where the traced ray found an occluder.
     // (0.40 / 0.45: brightened pixels, rt_sun_resolve.hlsl; they were trusted: green)
@@ -57,6 +62,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
     else if (abs(v.a - 0.45) < 0.02) c = float3(1, 0, 0);
     else if (dc <= -1 && v.a > 0.06) c = float3(0, 0, 1);
     if (gDepth.Load(int3(fp, 0)) <= 0.0) c = 0.0;
+  }
+  else if (pc.rt_debug == 8) {
+    const bool has_depth = gDepth.Load(int3(fp, 0)) > 0.0;
+    c = has_depth ? float3(v.b, v.a, 0.25) : 0.0;
   }
   else if (pc.rt_debug == 5) {
     // The primary-ray check's errors by origin: in front on opaque geometry

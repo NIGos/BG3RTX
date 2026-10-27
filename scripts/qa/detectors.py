@@ -538,6 +538,88 @@ def view_changed(a, b):
     return float((np.abs(fa - fb) > bound).mean())
 
 
+def tlas_front_decode(v):
+    """rt_debug=8 view (debug diffuse x 2, rt_shadow.hlsl / rt_debug.hlsl): R = log2(e)/8 with
+    e the distance the TLAS hit lies in front of the depth buffer in units of the derived
+    tolerance (depth_tol.hlsli + the measured 0.5% TLAS error), G = 1 alpha-tested hit, 0.5
+    opaque hit, B = 0.25 where the pixel has depth. Returns (l = log2 e, kind, has_depth),
+    kind 2 alpha-tested, 1 opaque, 0 not in front."""
+    r, g, b = v[..., 0], v[..., 1], v[..., 2]
+    has_depth = b > 0.125                      # half-way between 0 and the 0.25 code
+    kind = np.where(g > 0.75, 2, np.where(g > 0.25, 1, 0))   # half-way between the 0/0.5/1 codes
+    return 8.0 * np.clip(r, 0, 1), kind, has_depth
+
+
+def tlas_code_sigma(l):
+    """Rounding of the l = log2 e code through its chain, per pixel (in l units): the RGBA8
+    rtVis (one code = 8/255 of l), the R11G11B10F diffuse (6-bit mantissa: half an ulp is 2^-7
+    relative, uniform: 2^-6 / sqrt(12)), the 8-bit preview (th.preview_quant_sigma). Static
+    per pixel, so it does not average out over the traces."""
+    b = np.clip(l / 8.0, 0, 1)
+    s_rgba8 = (8.0 / 255.0) / np.sqrt(12.0)
+    s_r11 = 8.0 * b * (2.0 ** -6) / np.sqrt(12.0)
+    s_prev = 8.0 * 2.0 * th.preview_quant_sigma((0.5 * b)[..., None], "hdr")[..., 0]
+    return np.sqrt(s_rgba8 ** 2 + s_r11 ** 2 + s_prev ** 2)
+
+
+def tlas_front(views, preview=True):
+    """Geometry the ray-traced scene has in front of the frame's own surfaces (QA finding 1:
+    grass cards whose alpha test returned "solid" occlude GI, sun and reflections as quads).
+
+    `views`: the rt_debug=8 view (x 2) of N >= 2 traces of the same view. Per pixel:
+      l = log2(e), e = (raster depth - TLAS hit) / tolerance, so l > 0 is in front beyond the
+      derived same-surface tolerance (shaders/rt/depth_tol.hlsli);
+      sigma of the mean = sqrt(s^2 / N + q^2): s the std over the traces (the jitter and the
+      stochastic alpha test change it; max-filtered over the 1 px the jitter moves), q the
+      code rounding (tlas_code_sigma; only with `preview`);
+      significant where mean l > k sigma, k = th.k_sigma(shape, 0) (Bonferroni over the px).
+    Gate: significant px whose hit is alpha-tested in most traces. The raster and the trace
+    run the same alpha test on that geometry, so a TLAS cutout in front of the raster
+    surface is the trace keeping texels the raster discarded: an artifact, none tolerated.
+    Review: the same with an opaque hit (cut-away walls, dithered LOD fades: geometry the
+    TLAS legitimately keeps; R0 says the real scene includes it)."""
+    ls, kinds, dep = zip(*[tlas_front_decode(v) for v in views])
+    L = np.stack(ls)
+    K = np.stack(kinds)
+    has_depth = np.logical_and.reduce(dep)
+    n = L.shape[0]
+    mean = L.mean(0)
+    s = im.maxf(L.std(0, ddof=1), 1) if n >= 2 else np.zeros_like(mean)
+    q = tlas_code_sigma(mean) if preview else 0.0
+    sig_mean = np.sqrt(s ** 2 / max(n, 1) + np.square(q))
+    k = th.k_sigma(mean.shape, 0)
+    signif = has_depth & (mean > k * sig_mean) & (mean > 0)
+    alpha = (K == 2).sum(0) * 2 > (K > 0).sum(0)    # alpha-tested in most of the traces in front
+    opaque = (K > 0).any(0) & ~alpha
+    min_a = _min_area(mean.shape, 0, 1)
+    out = {}
+    for name, m in (("alpha", signif & alpha), ("opaque", signif & opaque)):
+        m = im.opening(m, 1)
+        lab, nr = im.label(m)
+        regs, tot = [], 0
+        for i, area, bb in im.regions(lab, nr, min_a):
+            y0, y1, x0, x1 = bb
+            sub = lab[y0:y1, x0:x1] == i
+            e_med = float(2.0 ** np.median(mean[y0:y1, x0:x1][sub]))
+            tot += area
+            regs.append({"bbox": bb, "area": area, "front_tol": round(e_med, 2), "qualified": name == "alpha",
+                         "rank": area * np.log2(1 + e_med)})
+        regs.sort(key=lambda g: -g["rank"])
+        out[name] = (regs, _permille(tot, mean.shape))
+    metrics = {"traces": n, "k_sigma": round(k, 3), "min_area_px": min_a,
+               "alpha_front_permille": round(out["alpha"][1], 4), "opaque_front_permille": round(out["opaque"][1], 4),
+               "in_front_any_permille": round(_permille(int(((K > 0).any(0) & has_depth).sum()), mean.shape), 4),
+               "depth_px_frac": round(float(has_depth.mean()), 4)}
+    return {
+        "alpha": {"score": round(out["alpha"][1], 4), "threshold": 0.0, "pass": out["alpha"][1] <= 0.0,
+                  "unit": "‰ of px: alpha-tested TLAS geometry in front of the raster, beyond tolerance and k sigma",
+                  "metrics": metrics, "regions": out["alpha"][0]},
+        "opaque": {"score": round(out["opaque"][1], 4), "threshold": None, "gate": False, "pass": not out["opaque"][0],
+                   "unit": "‰ of px: opaque TLAS geometry in front (cut-aways, LOD fades: review)",
+                   "metrics": metrics, "regions": out["opaque"][0]},
+    }, mean
+
+
 def sun_check(view):
     """rt_debug=7 trace (debug diffuse x 2): yellow = brightened by > 0.1 against
     min(game, traced) at the game's shadow edge, red = brightened farther from it, blue =
