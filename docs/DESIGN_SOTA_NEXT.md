@@ -614,7 +614,7 @@ Off by default (`sharc=0`). Differences from the plan above:
 - **Keys** are `sharc` and `sharc_*` (bg3rtx.ini), not `gi_cache_*`: `sharc_log2` (22),
   `sharc_inject_stride` (2), `sharc_frames` (16), `sharc_stale` (128), `sharc_scene_scale`
   (50), `sharc_log_base` (2), `sharc_level_bias` (0), `sharc_query` (7: reflections on too),
-  `sharc_gi_radius` (8: replaces `gi_rt_radius` while the cache runs), `sharc_rf_rough`
+  `sharc_gi_radius` (4 since 2.11, was 8: replaces `gi_rt_radius` while the cache runs), `sharc_rf_rough`
   (0.2), `sharc_rf_cone` (1), `sharc_near` (1), `sharc_em` (1), `sharc_reset_jump` (50 m),
   `sharc_debug` (0-5; 5 is the QA roof mask), `sharc_stats`, `sharc_device` (restart).
 - **Injection** runs after the GI composite (so b10 includes this frame's GI: the
@@ -674,6 +674,28 @@ Measured on the 5090 at 2560x1067, RR on, static camera, timing runs without sta
   yet, the darkening fix is unmeasured, and the Campsite costs +0.6 ms (8 m alpha-tested rays
   through foliage), over the 0.6 ms AO + GI budget on its own. Next: the re-run QA
   (`32-sharc-*` jobs), and `sharc_gi_radius` 4 against 8 on S3.
+
+### 2.11 Second run (fixes of 2.10; QA `captures/qa/20261027-132732`, jobs `sharc2-*`)
+
+- **Radius** (S3, no statistics): GI trace 0.539 ms off, 0.998 at 8 m, 0.865 at 4 m; D-RF
+  0.230 → 0.243; resolve 0.033, inject 0.069. 4 m adds ≈ +0.44 ms on the Campsite (8 m
+  ≈ +0.57) and finds 37.5% of the non-screen hits (8 m: 30%). **`sharc_gi_radius` default 4.**
+- **Statistics**: binned counters cost 0.015 ms on the trace (0.865 → 0.880), not 3 ms.
+- **Leak gate S8**: now evaluated (73% of the frame roofed, the game's sun lights 4%): **fail,
+  0.74‰ > 0.5**. Every flagged region (24-64 px, gain 1.5-2.5x) is sunlit exterior rock and a
+  column capital inside the volumes' padding, RR speckle, not light through a wall. The mask
+  now excludes pixels the game's sun lights; to be re-run.
+- **S6 hard_dark** with the cache, reflections off: 24.4‰ final (39‰ in run 1), 1.2‰ in the
+  lighting buffer; the all-on `sharc` effect 0.05‰. The regions are the ground under large
+  overhangs: rays now reach the overhang and replace the probe's ambient with its (dark)
+  bounce. GI without the cache already removes 95-97% there (unqualified regions of 1.5k px);
+  sharp edges come from the overhang. Physically plausible large-scale occlusion, but it is a
+  gate failure until a reference says otherwise.
+- S3: no roofed pixels (gate not applicable); hard_dark 0.06‰ (`sharc`), 1.0‰ (`gi_sharc`)
+  on the same foliage regions plain GI flags.
+- **Default: still off** for every preset: the leak gate has not passed yet, S6 fails
+  hard_dark, and the Campsite cost (+0.44 ms) leaves no room in the 0.6 ms AO + GI budget
+  (plain GI there is already 0.54 ms).
 
 ---
 

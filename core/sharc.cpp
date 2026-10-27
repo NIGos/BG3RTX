@@ -206,7 +206,7 @@ void timing_collect() {
   host->log("sharc: resolve GPU median %.3f ms, p90 %.3f; inject median %.3f ms (%zu of %zu frames injected); "
             "2^%u entries, stride %d, GI radius %.1f m, query 0x%x",
             mr, g_ms_resolve[g_ms_resolve.size() * 9 / 10], mi, ni, g_ms_resolve.size(), g_log2,
-            host->cfg_int("sharc_inject_stride", 2), host->cfg_float("sharc_gi_radius", 8.0f), host->cfg_int("sharc_query", 7));
+            host->cfg_int("sharc_inject_stride", 2), host->cfg_float("sharc_gi_radius", 4.0f), host->cfg_int("sharc_query", 7));
   g_ms_resolve.clear();
   g_ms_inject.clear();
 }

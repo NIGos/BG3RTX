@@ -319,11 +319,17 @@ def analyze_scene(d: Path, pool):
                 res["notes"].append(f"roofed_brightening: mask {roofed.shape} and lighting {yw.shape} differ")
             else:
                 # Sunlit exterior: the game's sun mask (sun_dbg red = mask x 0.5) lit somewhere.
+                # Interior: roofed and not itself lit by the game's sun. The volumes are padded
+                # (1 m sideways, 3 m up) for the sun test, so they also cover sunlit exterior
+                # walls and rock next to a building: in the second run every S8 region flagged
+                # was such an exterior surface (RR speckle at 1.5-2.5x on 24-64 px).
                 lit = None
                 if "sun_dbg" in fr:
                     sd, _ = fr["sun_dbg"].diffuse()
-                    if sd is not None:
+                    if sd is not None and sd.shape[:2] == roofed.shape:
+                        sun_px = np.clip(2 * sd[..., 0], 0, 1) > 0.1
                         lit = float((np.clip(2 * sd[..., 0], 0, 1) > 0.5).mean())
+                        roofed = roofed & ~im.dilate(sun_px, 2)
                 r = det.roofed_brightening(yw, yb, yo, roofed, sigma("Yc"), sun_lit_frac=lit)
                 ratio = r.pop("map")[1]
                 r["metrics"].update(outside_permille=round(1000.0 * outside.mean(), 2),

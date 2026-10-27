@@ -1404,7 +1404,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
                  refresh(g_rf_sharc, "gi/rt_reflections_sharc.hlsl", g_rf_sharc_layout);
     if (s.sharc) {
       // Room-scale rays: hits beyond the screen now return the cache's radiance, not just occlusion.
-      pc.gi_rt_radius = (std::max)(host->cfg_float("sharc_gi_radius", 8.0f), 0.01f);
+      pc.gi_rt_radius = (std::max)(host->cfg_float("sharc_gi_radius", 4.0f), 0.01f);
       if (!g_sharc_logged) {
         g_sharc_logged = true;
         host->log("sharc: first frame (GI radius %.1f m, query 0x%x, reflections %d, inject stride %d)", pc.gi_rt_radius,
