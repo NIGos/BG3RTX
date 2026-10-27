@@ -39,6 +39,7 @@ T = {
     # (S14 gi: 0.00164 against 0.00098, both under one code step of 0.0039).
     "flicker_quant": 0.5 / 255.0,
     "anim_dilate_px": 3,
+    "flicker_max_animated": 0.6,   # more scene motion than this: the flicker gate is inconclusive (fails)
     "flip_excess": 0.03,         # mean FLIP against the reference, above the on0/on1 noise floor
     "view_changed_frac": 0.05,    # G-buffer albedo differs (> 0.1) on more px than this: another view
     "min_area_frac": 2e-5,       # smallest region considered (of the buffer's pixels)
@@ -273,12 +274,15 @@ def temporal(codes_on, codes_off, moving=None):
                      "rank": area * (so - sf)})
     regs.sort(key=lambda g: -g["rank"])
     area = _permille(tot, excess.shape)
-    ok = ratio <= T["flicker_ratio"] and area <= T["flicker_fail_area"]
+    # With most of the frame excluded the gate measures nothing: never a pass
+    # (gi_flicker2_*: a broken normal decode masked 100% of S3 and "passed").
+    inconclusive = float(static.mean()) < 1.0 - T["flicker_max_animated"]
+    ok = ratio <= T["flicker_ratio"] and area <= T["flicker_fail_area"] and not inconclusive
     return {"score": round(ratio, 3), "threshold": T["flicker_ratio"], "pass": ok, "unit": "std on / std off",
             "metrics": {"std_on": round(float(s_on[static].mean()), 5) if static.any() else 0.0,
                         "std_off": round(float(s_off[static].mean()), 5) if static.any() else 0.0,
                         "excess_area": round(area, 3), "excess_threshold": T["flicker_fail_area"],
-                        "animated_frac": round(1.0 - float(static.mean()), 4),
+                        "animated_frac": round(1.0 - float(static.mean()), 4), "inconclusive": inconclusive,
                         "unmasked": {"ratio": round(raw_ratio, 3), "excess_area": round(raw_area, 3)},
                         "frames": [len(codes_on), len(codes_off)]},
             "regions": regs, "map": ("std", s_on)}

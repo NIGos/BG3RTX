@@ -418,7 +418,7 @@ def summarize(res):
         elif kind == "flicker":
             for c in cs:
                 m = c["metrics"]
-                parts.append(f"flicker {c['effect']}: std on/off {c['score']} (limit {c['threshold']}), excess area "
+                parts.append(f"flicker {c['effect']}{' INCONCLUSIVE (too much scene motion)' if m.get('inconclusive') else ''}: std on/off {c['score']} (limit {c['threshold']}), excess area "
                              f"{m['excess_area']}‰ (limit {m['excess_threshold']}; scene motion "
                              f"{100 * m.get('animated_frac', 0):.1f}% excluded, unmasked "
                              f"{m.get('unmasked', {}).get('excess_area', '?')}‰)")
