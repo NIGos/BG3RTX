@@ -66,4 +66,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const bool ok = SharcUpdateHit(sp, st, h, L + dither, 0.0);
   sharc_stat(kShInjected, ok);
   sharc_stat(kShInsertFailed, !ok);
+  // sharc_fine_check: the same sample into the fine reference grid (sharc_grid_fine).
+  if ((shc.flags & 64u) != 0u) {
+    SharcParameters spf = sharc_params(cam_abs);
+    spf.hashGridParameters = sharc_grid_fine(cam_abs);
+    SharcState sf;
+    SharcInit(sf);
+    SharcUpdateHit(spf, sf, h, L + dither, 0.0);
+  }
 }
