@@ -20,7 +20,7 @@
   and GI sharpen per-blade lighting the wind moves, R0), contact occlusion under platform rims.
 - **Modded saves** (33 of 110: Act 2, Rivington) don't load in background runs: the game drops
   `-loadSaveGame` when mods are missing, and posted clicks don't press its menu buttons.
-  Decision pending (docs/TEST_SCENES.md, "Saves made with mods").
+  Set aside by the user (2026-10-27): not tested for now (docs/TEST_SCENES.md, "Saves made with mods").
 
 ## Test process
 `scripts/test-queue.ps1` (docs/TEST_SCENES.md, "Test queue"): one runner launches the game,
