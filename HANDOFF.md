@@ -705,3 +705,47 @@ D-LS fault.
 
 **PC mapping:** the queued `dls-shaderdebug-grym` job (`shader_debug=1`) should resolve
 the faulting line through the .nvdbg. It is the decisive next step.
+
+## 14. -Od makes the fault vanish (dls-shaderdebug-grym 4/4 clean). Sixteenth commit
+
+**Disassembly of the optimised D-LS module** (`captures/aftermath/shaders/ffc02df1ee7ca9b9.spv`,
+`spirv-dis`):
+- **No local arrays:** no Function-storage or Workgroup arrays at all. The only Function
+  variable is the one `rayQueryKHR`, reused by every inlined trace. So there is no
+  scratch-memory array that could be indexed out of bounds, and no groupshared memory.
+- **Dynamic `OpAccessChain`s:** all go into StorageBuffer ByteAddressBuffers (the light
+  list, InstInfo, alpha records, soup, pool, rtStats). All are behind the 53ab276 /
+  00ab836 guards. The constant-buffer arrays (`x[15]`, `c[34]`, `c[14]`) only take
+  constant indices.
+- **Loops (6 `OpLoopMerge`):** the froxel-list loops, `firstbitlow` mask loops
+  (bounded by 32 bits), the binary search in `find_rec` (bounded), and the ray-query
+  `Proceed` loops.
+- **HLSL 2021 (`-HV 2021`):** `?:` with a scalar condition short-circuits, so the guarded
+  loads stay conditional. `-O3` must not hoist them; `spirv-opt` does not speculate
+  storage loads.
+- **Wave ops:** `stat_add` / `alpha_stat` only run with `rt_stats`. In D-LS,
+  `WaveReadLaneAt(fp, WaveGetLaneIndex())` reads the lane's own value, which is active
+  by definition.
+
+So none of the UB patterns asked about (local-array OOB, groupshared, uninitialised index,
+data-dependent infinite loop) is present as such. Hardened anyway:
+- Every struct local in the RT helpers and D-LS is zero-initialised:
+  `InstInfo`, `AlphaRead`, `RtHit`, `RtDebugHit`, `RayDesc`, `LsLite`, `LsPixel`,
+  `Bg3Light`.
+- **Froxel lists:** `bg3_cluster` caps the per-pixel list at 1024 entries and rejects
+  a first index whose list would wrap a uint.
+- **Every ray-query `Proceed` loop** stops after 4096 candidates (`Abort`).
+- Both caps count into guard counter 121, logged in `[core] guard:` as "loop caps".
+- The guards for out-of-range reads, invalid rays and loop caps all keep the shader
+  from faulting or hanging and count the case.
+
+**What the -Od result points at, given no shader UB in the IR:** either an NVIDIA
+compiler or hardware issue in the optimised ray-query + alpha-test code, or timing.
+-Od D-LS is several times slower, which changes what overlaps on the GPU (our D-LS
+against the game's later work). If 818000d+this still faults optimised, the next step
+is to bisect the optimisation:
+- compile D-LS alone with `-O1`, or keep `-O3` with `[loop]` on the `Proceed` loops;
+- or turn off parts at run time: the alpha test in D-LS shadow rays
+  (`rt_alpha_test=0` makes instances opaque), and `ls_soft=0`.
+
+Each changes the code the driver compiles.

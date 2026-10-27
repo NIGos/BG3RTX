@@ -22,7 +22,10 @@
 // counter 118 a read of the game's light list (cluster, index, light, shadow view)
 // out of its buffer, 119 a set-1 read (InstInfo, vertices, alpha records) out of
 // range. The read is skipped (no light / a miss) instead of faulting.
-static const uint kGuardLightList = 118u, kGuardSet1 = 119u, kGuardRay = 120u;
+static const uint kGuardLightList = 118u, kGuardSet1 = 119u, kGuardRay = 120u, kGuardLoopCap = 121u;
+// Ray-query loops end after this many candidates (counted, kGuardLoopCap): a
+// corrupt or hostile scene can never keep a lane in traversal for seconds (TDR).
+static const uint kMaxCandidates = 4096u;
 void guard_count(uint k) { rtStats.InterlockedAdd((k * 64u) * 4u, 1u); }
 
 // A ray query must get a finite origin, a finite non-zero direction and
@@ -152,7 +155,7 @@ struct AlphaRead { float a; float lvl; bool ok; bool coarser; };
 // ancestor (its tile scale, e & 15, is then smaller): the read clamps itself to
 // the finest resident level, and `lvl` reports the level actually used.
 AlphaRead vt_alpha(uint a, float2 uv, float g, uint tex, uint cache, uint col) {
-  AlphaRead r;
+  AlphaRead r = (AlphaRead)0;
   r.a = 1.0;
   r.lvl = 0.0;
   r.coarser = false;
@@ -196,7 +199,7 @@ AlphaRead tex_alpha(uint a, float2 uv, float g, uint tex, uint ch) {
   gAlphaTex[NonUniformResourceIndex(tex)].GetDimensions(0, w, h, levels);
   float lod = clamp(log2(max(g * max(abs(sc.x), abs(sc.y)) * float(max(w, h)), 1e-8)), 0.0, float(levels) - 1.0);
   float4 v = gAlphaTex[NonUniformResourceIndex(tex)].SampleLevel(gAlphaWrap, uv * sc, lod);
-  AlphaRead r;
+  AlphaRead r = (AlphaRead)0;
   r.a = ch == 0 ? v.x : ch == 1 ? v.y : ch == 2 ? v.z : v.w;
   r.lvl = lod;
   r.ok = true;
@@ -222,7 +225,7 @@ static const uint kInfoPool = 1u << 8, kInfoLegacy = 1u << 9, kInfoAlpha = 1u <<
 struct InstInfo { uint base, meta, rec, tris; };
 
 InstInfo inst_info(uint inst) {
-  InstInfo r;
+  InstInfo r = (InstInfo)0;
   uint bytes;
   gInstInfo.GetDimensions(bytes);
   // Past the InstInfo of this TLAS: no vertices, no record (never the legacy lookup).
@@ -284,7 +287,7 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   }
   uint tex = min(h0.w, 4095u), cache = min(h1.x, 15u);
   const bool vt = h0.z == 1;
-  AlphaRead r;
+  AlphaRead r = (AlphaRead)0;
   if (vt) r = vt_alpha(a, uv, g, tex, cache, min(h1.y, 3u));
   else r = tex_alpha(a, uv, g, tex, h1.y);
   if (!r.ok) {
@@ -399,13 +402,19 @@ bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 1u;
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return false;
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
-  RayDesc r;
+  RayDesc r = (RayDesc)0;
   r.Origin = o;
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
+  uint cand_n = 0;
   while (q.Proceed()) {
+    if (++cand_n > kMaxCandidates) {
+      guard_count(kGuardLoopCap);
+      q.Abort();
+      break;
+    }
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
   return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
@@ -417,7 +426,7 @@ bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
 struct RtDebugHit { float t; bool alpha; uint near_kind; uint hit_kind; };
 RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
-  RtDebugHit h;
+  RtDebugHit h = (RtDebugHit)0;
   h.near_kind = 0;
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
     h.t = -1.0;
@@ -426,14 +435,20 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
     return h;
   }
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
-  RayDesc r;
+  RayDesc r = (RayDesc)0;
   r.Origin = o;
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
   float near_t = 1e30;
+  uint cand_n = 0;
   while (q.Proceed()) {
+    if (++cand_n > kMaxCandidates) {
+      guard_count(kGuardLoopCap);
+      q.Abort();
+      break;
+    }
     if (q.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) continue;
     float ct = q.CandidateTriangleRayT();
     if (ct < near_t) {
@@ -455,23 +470,29 @@ struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; };
 RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
-    RtHit m;
+    RtHit m = (RtHit)0;
     m.t = -1.0;
     m.geom = m.prim = m.inst = 0u;
     m.o2w = float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
     return m;
   }
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
-  RayDesc r;
+  RayDesc r = (RayDesc)0;
   r.Origin = o;
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
+  uint cand_n = 0;
   while (q.Proceed()) {
+    if (++cand_n > kMaxCandidates) {
+      guard_count(kGuardLoopCap);
+      q.Abort();
+      break;
+    }
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
-  RtHit h;
+  RtHit h = (RtHit)0;
   bool hit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
   h.t = hit ? q.CommittedRayT() : -1.0;
   h.geom = hit ? q.CommittedGeometryIndex() : 0u;
@@ -573,13 +594,19 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return -1.0;
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
-  RayDesc r;
+  RayDesc r = (RayDesc)0;
   r.Origin = o;
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
+  uint cand_n = 0;
   while (q.Proceed()) {
+    if (++cand_n > kMaxCandidates) {
+      guard_count(kGuardLoopCap);
+      q.Abort();
+      break;
+    }
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
   return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? q.CommittedRayT() : -1.0;

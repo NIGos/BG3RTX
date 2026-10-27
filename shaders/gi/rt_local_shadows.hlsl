@@ -160,7 +160,7 @@ bool ls_pixel(uint2 fp, out LsPixel px) {
   px = (LsPixel)0;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
-  LsLite s;
+  LsLite s = (LsLite)0;
   if (!ls_lite(fp, d, s)) return false;
   ls_surface(fp, s, px.sf, px.mt);
   px.cls = s.cls;
@@ -268,14 +268,14 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
-  LsLite s;
+  LsLite s = (LsLite)0;
   if (!ls_lite(fp, d, s)) return false;   // the lighting skips unlit pixels
 
   const uint3 cl = bg3_cluster(fp, d);
   const uint end_p = cl.x + cl.y, end_s = end_p + cl.z;
   float3 dd = 0, ds = 0;   // delta diffuse / specular
   float3 td = 0, ts = 0;   // direct light of the traced lights after our shadow (ao_direct)
-  LsPixel px;
+  LsPixel px = (LsPixel)0;
   uint base = cl.x;
   [loop] do {
     const uint n = min(end_s - base, 32u);
@@ -360,7 +360,7 @@ uint fx(float v) { return uint(clamp(v, 0.0, 64.0) * 256.0 + 0.5); }
 
 bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
-  LsPixel px;
+  LsPixel px = (LsPixel)0;
   if (!ls_pixel(fp, px)) return false;
   const float d = px.d;
   const Bg3Surface sf = px.sf;

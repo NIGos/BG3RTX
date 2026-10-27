@@ -48,6 +48,8 @@ struct Bg3Light {
 // Guarded reads of the game's light list (rt_common.hlsli guard_count): an index
 // out of a buffer gives no light / no froxel record instead of a wild read (the
 // device has no robust buffer access).
+static const uint kMaxFroxelLights = 1024u;
+
 bool bg3_in(ByteAddressBuffer b, uint index, uint stride) {
   uint bytes;
   b.GetDimensions(bytes);
@@ -60,7 +62,7 @@ uint bg3_light_index(uint i) { return bg3_in(lIndex, i, 4u) ? lIndex.Load(i * 4u
 float3 bg3_light_pos(uint li) { return bg3_in(lLights, li, 80u) ? asfloat(lLights.Load3(li * 80u)) : float3(1e30, 1e30, 1e30); }
 
 Bg3Light load_light(uint i) {
-  Bg3Light l;
+  Bg3Light l = (Bg3Light)0;
   if (!bg3_in(lLights, i, 80u)) {   // no light: out of every range and channel
     l = (Bg3Light)0;
     l.inv_r = 1e30;
@@ -87,7 +89,19 @@ uint3 bg3_cluster(uint2 px, float depth) {
   uint idx = uint(int((z * lConsts.c[30].w + float(tile.y)) * lConsts.c[30].z + float(tile.x)));
   if (!bg3_in(lClusters, idx, 16u)) return uint3(0, 0, 0);
   uint4 c = lClusters.Load4(idx * 16u);
-  return uint3(c.x, c.y & 4095u, (c.y >> 12) & 4095u);
+  // At most kMaxFroxelLights entries per pixel, and never a first index whose list
+  // would wrap a uint (counted, kGuardLoopCap): the passes loop over this list.
+  uint np = c.y & 4095u, ns = (c.y >> 12) & 4095u;
+  if (c.x > 0xffffffffu - 2u * 4096u) {
+    guard_count(kGuardLoopCap);
+    return uint3(0, 0, 0);
+  }
+  if (np + ns > kMaxFroxelLights) {
+    guard_count(kGuardLoopCap);
+    np = min(np, kMaxFroxelLights);
+    ns = min(ns, kMaxFroxelLights - np);
+  }
+  return uint3(c.x, np, ns);
 }
 
 // The pixel's froxel record as stored (b23): x first index, y point/spot/env-probe
