@@ -747,6 +747,38 @@ place (docs/QA.md):
 4. **Default:** off until `sharc_reference` passes on S7 and S8 and the cost fits 0.6 ms
    (jobs `36-sharc5-qa-S7-S8`).
 
+### 2.14 First run of the physical checks (QA `captures/qa/20261027-155820`, S7 + S8)
+
+- **S7 The Blushing Mermaid: void.** The camera settled after `on0`: every later trace is
+  shifted against it, so the same-view check voided all comparisons, the cache's included. The
+  QA now anchors the view on the traces that agree with each other (on0 is replaced by the
+  first agreeing `onN`, same settings). Its counters still ran: occupancy 1.6%, 10.7% of the
+  non-screen GI hits found, 19% of the cache's GI contribution from occluded cells.
+- **`sharc_leak_cells`** (GPU counters, rejection off): S7 19.0%, S8 18.5% of the cache's GI
+  contribution came from cells the test marked occluded; 0.000% from cells thicker than the
+  surface. With the rejection on, the sharc_on traces logged 27-34% of S8's cache hits as
+  occluded. That rate is too high for walls alone: the test's grazing ray (lifted by the ULP
+  offset only) also hit neighbouring triangles of curved and tessellated surfaces. **Fixed:**
+  the path now runs half a cell edge above the plane (the cell's own extent along the normal),
+  so only geometry crossing the cell's upper half counts. To be re-measured.
+  The debug view's channel split is not usable as a measure (the preview's tone mapping mixes
+  channels: 63% "thin" in the view against 0.000% counted); the QA now scores from the counters.
+- **`sharc_reference`, S8 interior: fail** (excess 209,475 against deficit 42,371 independent
+  samples, noise 502; the measured correlation length is 1 px). The cache is brighter than the
+  reference on 46% of the interior pixels, by +1.7% in the mean (4.0% of the reference's energy
+  above σ_d). This is the documented limit, now measured: the reference keeps the probe's
+  ambient for hidden hits, the cache replaces it with the hidden surfaces' cached radiance, and
+  occluded cells were already rejected in these traces. The comparison cannot tell legitimate
+  hidden-surface bounce from a leak while the reference has no radiance of its own at hidden
+  hits; that needs the traced update (v2: materials and lights at hidden hits).
+- **Cost** (S8, from the run's phases, statistics on): GI trace 0.152 → 0.322 ms (with the
+  rejection's shadow rays; 0.275 without them in 2.12), D-RF 0.361 → 0.455 ms, resolve 0.031 +
+  inject 0.071 ms: **+0.37 ms**, within the 0.6 ms derived in 2.13. Registers of both cache
+  variants: 128 (plain GI trace 96).
+- **Default: off, Ultra included.** The leak mechanism is real (≈ 19% of the contribution before
+  the rejection); the corrected test and its rejection must be re-measured, and S7 has no
+  valid comparison yet. Job `37-sharc6-qa-S7-S8` (`--sharc --reference --keep-raw`).
+
 ---
 
 ## 3. Opacity micromaps for alpha-tested foliage

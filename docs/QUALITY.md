@@ -363,6 +363,19 @@ reproduce them.
   - **Trust heuristics:** don't add ones whose only purpose is to stay close to the
     game, such as "within N m of a game-lit pixel". Prefer fixing the scene (missing
     casters: shadow-map fallback, offline world) over gating the effect.
+- **Every gate needs a derivation (2026-10-27).** A gate, threshold, tolerance or budget
+  comes from one of five sources, named next to it:
+  - physics (an energy bound: a shadow can only remove light);
+  - the measured noise (per-pixel variance of repeated traces, or the run-to-run spread);
+  - the display (a code step, a perceptual metric with a published threshold);
+  - the frame budget (base ≥ 65 fps: 15.4 ms, split per pass per SETTINGS_DESIGN);
+  - a documented, cited standard.
+
+  Without one, it is review-only: it may choose crops or rank regions, never fail a run
+  or block a default. A tuned-by-eye number is "arbitrary" until derived, and stays
+  visible in the [QA.md table](QA.md#thresholds-and-their-derivation) until then. The same
+  holds for runtime quality heuristics (trust gates, match tolerances, clamps): a new one
+  ships with its derivation or is listed there for a decision.
 - **First application: the sun** (`rt_sun_replace=1`, TRACK_D 12). The traced visibility
   replaces the game's sun mask where it is trusted: no roof volume of the asset DB on the
   sun ray, the ray stays in the captured view frustum until it is above the visible scene,
@@ -443,8 +456,10 @@ reproduce them.
 - Run `python -m scripts.qa run --scenes S1,S2,S3,... --full-res` after every change
   to an effect and before a default changes. It is one game run per scene (live
   toggles), so it costs about as much as a plain sweep.
-- Gates: `hard_dark`, `brightening`, `sun_extra_casters`, `nonfinite` and `flicker`
-  must pass on every scene, on the final frame and on the lighting buffer. A failure
+- Gates: `hard_dark`, `nonfinite`, `flicker`, `sun_check_darker`, `same_view` and (with
+  `--reference`) `reference` must pass on every scene, on the final frame and on the
+  lighting buffer. `brightening` and the sun-mask comparisons are review (R0): their crops
+  are judged, they have no threshold. A failure
   is judged from its crop sheet, never from thumbnails; a justified exception is
   written into the track doc with the crop.
 - `--reference` (FLIP against more rays) for any change to sampling or ray counts.

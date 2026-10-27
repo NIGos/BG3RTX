@@ -174,7 +174,7 @@ struct SharcCell {
 //     query surface itself never counts), is not visible from the query point along that
 //     plane: a wall, floor or ceiling crosses the cell between them (the typical case: the
 //     interior floor and the sunlit ground outside, both facing up, in one cell at the foot
-//     of a wall). Both ends are lifted off the surface by Wachter & Binder's ULP offset.
+//     of a wall). The path runs half a cell edge above the plane (the cell's extent).
 //   thin: a ray into the surface (along -n) leaves it again within one cell edge: the slab is
 //     thinner than the cell. Its far side has the opposite normal octant, so this is reported,
 //     not rejected.
@@ -184,8 +184,14 @@ SharcCell sharc_cell_test(float3 cam_abs, float3 p, float3 n, RtCone cone) {
   const float3 pa = p + cam_abs;
   const int4 g = HashGridCalculatePositionLogWithVoxelSize(pa, sharc_grid(cam_abs), vox);
   const float3 centre = (float3(g.xyz) + 0.5) * vox - cam_abs;   // camera-relative
+  // The test path runs half a cell edge above the plane: the cell's own extent along the normal,
+  // so a wall that crosses the cell's upper half blocks it, while the query surface's own
+  // curvature and tessellation within the cell do not. (The first in-game run lifted it by the
+  // ULP offset only: the grazing ray then hit neighbouring triangles of curved and tessellated
+  // surfaces, and 27-34% of the cache hits in Water Queen's House read as occluded.)
+  const float h = 0.5 * vox;
   const float3 inplane = centre - n * dot(centre - p, n);
-  const float3 o = rt_offset_ray(p, n), e = rt_offset_ray(inplane, n);
+  const float3 o = rt_offset_ray(p, n) + n * h, e = inplane + n * h;
   const float3 d = e - o;
   const float len = length(d);
   c.occluded = len > 0.0 && rt_occluded(o, d / len, len, cone);
