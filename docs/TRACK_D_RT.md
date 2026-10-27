@@ -1979,3 +1979,131 @@ The log reports `[bvh] last N builds ...` (draws, instances, triangles, refits),
 `[bvh] instance matrices read at submit ...`, and
 `[rt] scene build GPU (<mode>, static|camera moving, N samples): ... total median, p99`.
 `[geo] depth prepass pass GPU time (...)` now gives p99 and splits by motion and mode.
+
+## 12. D-EM data: emissive geometry capture (`rt_emissive=1`, 2026-10-27; data side only)
+
+The data the emissive effects (emission in GI and reflections, emissive light sampling)
+will consume. No effect reads it yet. Code: `layer/emissive.cpp` (pass/draw
+identification, records, build, light list, logs), the emissive scenes of
+`layer/bvhsplit.cpp`, `layer/geocapture.cpp` (effects-pass XFB), `shaders/rt/em_common.hlsli`
+(format and lookup helpers), `shaders/rt/em_lights.hlsl` (light list), `core/emissive.cpp`
++ `shaders/rt/em_debug.hlsl` (debug views), host ABI 8 `Bg3HostApi::rt_emissive`.
+
+### 12.1 Which passes and draws emit
+
+AUDIT_ENGINE_DATA 2.2: after the G-buffer, BG3 redraws its emissive meshes, depth-tested,
+into the effects target (B10G11R11, render resolution, the G-buffer's D24S8), which compose
+adds to the lit diffuse + specular. The sky (`c9f013fc`) and clouds (`68d5b764`) are drawn
+into it too.
+- **Pass:** 1 colour attachment B10G11R11_UFLOAT + D24S8 at render resolution. The SSS
+  passes (`6f535075`, `d1669194`) and the forward pass have the same signature, so a pass
+  only counts as an effects pass when one of its draws is an EMI variant, and the effects
+  target image is taken from those draws. (The first version took the last such pass and
+  sampled the lit diffuse as "the effects target"; validation flagged it.)
+- **Draw:** its fragment shader is, in the asset DB, a material variant with `pass == 2`
+  (EMI). Decal-class EMI draws (box volumes, e.g. `56d5eaaf`) and `*Skydome*` backdrops
+  (`f12c2004`) are counted, not captured. Engine shaders and the shaders the DB does not
+  know (`e0e3b441`, `f081b803`, `87ea6f1c`: blended VFX with alpha output, probably magic
+  effects) are counted.
+- **Constants** (one record per draw), from the roles of the DB's shader table, read from
+  the game's mapped constant buffer at record time: `GlowColour` (unlit helpers: their base
+  colour), `GlowMultiplier`, `Glowmap` (the view bound at the role's binding, `.r`).
+  Luminance-emissive materials (DB flag) are multiplied by the global scale at set 2 b0 [0],
+  as `159a6211` does. Two families are decoded exactly from the captures: `222986b8`
+  Base_GM_VT `mix(c·tex.r, tex.rgb, floor(m1))·m2`, and `159a6211` Base_GM_Pulse_VT (the
+  texture-colour switch at +24, the intensity at +28, the pulse
+  `mix(m2, m3, cos(time·m1)/2 + 1/2)` with time at set 0 b0 [0]). Families whose colour comes
+  from base-colour maps or vertex colour (`aab75fed` ENV_Tileset_..._BGM, HLOD `b86501b6`)
+  are flagged approximate.
+
+### 12.2 Geometry: the BVH split's emissive scenes, in a separate TLAS
+
+- Every VS is already XFB-patched. An emissive draw is classified by `bvh_classify` in an
+  emissive scene: a cached class-A mesh contributes its instances from the game's instance
+  stream (matrices read at submit); everything else is captured into the emissive soup
+  (`rt_em_xfb_mb`, 32 MB) and gets a per-draw BLAS. The mesh cache, AS storage, pool and
+  validation jobs are shared with the main scene; draws, per-draw BLAS, instance ring, TLAS
+  and statistics are per scene (`use_scene`).
+- The soup is converted to camera-relative world after each effects pass, in that pass's
+  command buffer, with its camera UBO (`rt_convert`).
+- **Build point:** the frame's first tiled-lighting dispatch (recognised by its light-list
+  bindings, as the asset DB join does).
+- **Generations.** BG3 records a frame's effects passes before the previous present, and
+  the next frame's ones before this frame's lighting: of the ~26 effects-pass draws per
+  build, ~16 were recorded during the build's own frame index. A build at frame index N
+  therefore takes only the draws recorded at N − 1. Two generations alternate by frame
+  parity (BVH scenes 1 and 2, each with its half of the soup).
+- **No refits and no compaction in emissive builds.** They are recorded in the lighting's
+  command buffer, which the game records and then drops around level loads. A refit of a
+  BLAS or TLAS whose build never ran lost the device at the first level load (bisected:
+  `rt_em_build=0` loaded; per-draw BLAS + TLAS with refits, without the light list and
+  without cached meshes, did not; the game's dialog read `DEVICE_LOST`). Emissive per-draw
+  BLAS and the TLAS are rebuilt every build (tens of small draws). With this, the foundry
+  save loaded and ran.
+- **A separate TLAS, not an instance mask in the main one.** The emissive draws redraw
+  meshes that are already in the main TLAS (coplanar duplicates). Mixed in, they would
+  z-fight with their own opaque copy, and every existing ray (sun, GI, D-LS, D-RF) would
+  have to change its mask. A ray that needs emission traces the main TLAS, then asks the
+  small emissive TLAS for a hit within ±eps of that distance (`em_lookup`); light sampling
+  uses the light list, which needs its own structure anyway.
+
+### 12.3 Data format (`shaders/rt/em_common.hlsli`, set 3 by default)
+
+| Binding | Content |
+|---|---|
+| 0 | emissive TLAS |
+| 1 | InstInfo per instance (16 B): base, stride \| `kEmInfoPool`, **record index**, triangles |
+| 2 / 3 | mesh pool (object space) / emissive soup (camera-relative world); uv at +16 |
+| 4 | `EmRec` per draw (64 B): radiance rgb (colour × intensity [× pulse × global]), mode (constant, × mask.r, × mask.rgb), mask texture slot, flags (luminance, approximate, pulse), FS hash, uv transform, material class |
+| 5 | `EmLight` per triangle (80 B): p0, e1, e2 (world), area, **mean radiance** (mask at the centroid, at the mip where one texel covers the triangle), **power π·area·lum(L)** (one-sided Lambertian), record, instance, primitive |
+| 6 / 7 | mask textures (256) / linear wrap sampler |
+| 8 | debug-view statistics (host-read) |
+| 9 | header: lights, triangles left out, instances, records, pre-exposure, frame; power sums per 256 triangles |
+
+Radiance is in the effects target's units (what the game's emissive shader writes into the
+pre-exposed HDR buffer); divide by the header's pre-exposure (lighting s1b13[0]) for the
+lighting's units. The list is capped at `rt_em_max_lights` (65,536) triangles per build;
+triangles past it are counted ("left out").
+
+### 12.4 Results so far (indicative: one gameplay window, foundry save, 2026-10-27 05:28)
+
+The in-game tests moved to a single serial gate before the per-scene runs; only one
+300-build window of real emissive data exists (the run then reached a view with no
+emissive draws). Per build:
+- 1 effects pass with 29.9 draws (engine 1.0, unknown VFX 6.1, decal 0.1, backdrop 0.9,
+  other materials 11.0); **10.8 emissive draws: 8.5 cached (21.2 instances) + 2.3 per-draw
+  BLAS**; 0 left out (no XFB, indirect, topology, soup or records full);
+- 36k triangles, 35.5k lights (429 over the cap), total power 1,586 (effects-target units ×
+  m²), 0 non-finite power sums;
+- families (draws per build): `159a6211` Base_GM_Pulse_VT 5.9, `aab75fed` ENV_Tileset_BGM
+  2.0, `20864dc6` CHAR_BASE_GM 1.3, `7085eee7` Base_BGM_MaskedShadows_VT 0.9, `48332370`
+  Helper 0.7;
+- **cost:** build (BLAS + TLAS + light list) median **0.31 ms** (p99 0.34) at 36k
+  triangles; 0.013-0.034 ms with 0-2 draws; effects passes with the capture 0.008-0.011 ms
+  per frame. The no-capture reference (live toggle) was not reached in gameplay;
+- **projected check** (`rt_debug=8`: our radiance at the primary hit against the game's
+  effects target at the same pixel): ours/game **1.21 for CHAR_BASE_GM**, 2.0
+  Base_BGM_MaskedShadows_VT, 5.9 ENV_Tileset_BGM (colour maps and vertex colour not
+  modelled), **3,318 for Base_GM_Pulse_VT** (the global scale or the pulse read is wrong);
+  29% of the hits where the game shows < 2% of ours; 10.6% of the effects-target pixels
+  brighter than 0.05 covered (the rest: VFX not in the DB, decals, sky pixels with depth).
+
+Main menu (several runs, 300+ builds each): 1 emissive draw (FlatColorShadowless, black),
+build 0.023 ms.
+
+### 12.5 Not done / unverified
+
+- Grymforge, Adamantine Forge and Water Queen's House were not run: **lava coverage is
+  unverified**. Any EMI material is captured; whether lava is EMI, forward or VFX is open.
+- The Base_GM_Pulse radiance and the colour-map families must be fixed against the
+  projected check before an effect uses the data.
+- `-Validation`: the one run (with a debug view) added only
+  `VUID-VkImageMemoryBarrier-oldLayout-01197` and `VUID-vkCmdDispatch-imageLayout-00344`,
+  both from the effects-target misidentification fixed since; not re-run. No `-Move` run.
+- Candles and fire are forward-pass particles (AUDIT_ENGINE_DATA R10), not captured.
+- Settings: `rt_emissive`, `rt_em_max_lights`, `rt_em_xfb_mb`, `rt_em_log`, `rt_em_tol`,
+  `rt_em_fx_thr`; bisection switches `rt_em_build`, `rt_em_lights`, `rt_em_cache` (default 1).
+  Logs: `[em] last N builds`, `[em] per build`, `[em] emissive families`, `[em] projected
+  check`, `[em] ours/game per family`, `[bvh] emissive scene`; `rt_em_log=1` adds a line per
+  build and per frame. Debug views: `rt_debug=6` our emission, `7` the game's effects target
+  alone, `8` ratio heatmap.
