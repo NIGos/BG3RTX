@@ -126,10 +126,18 @@ uint32_t layout_mask(uint32_t count) {
   return count == kBindings ? 1u : count == kRtBindings ? 2u : count == kLsBindings ? 4u : 8u;
 }
 bool ls_uses(uint32_t i) { return i <= 7 || i == 12 || i == 16 || i == 18 || i >= 20; }
-constexpr uint32_t kSunRing = 8;
+// The set is rewritten on the host (vkUpdateDescriptorSets) when its turn comes; a
+// set a pending D-LS dispatch still binds must not be: the ring is deep (32) and a
+// slot used fewer than kSunMinAge frames ago is never rewritten. A fresh slot is
+// taken instead, and if all are that young D-LS is skipped this frame (counted and
+// logged: "ls: sun set ring").
+constexpr uint32_t kSunRing = 32;
+constexpr uint64_t kSunMinAge = 8;
 VkDescriptorSetLayout g_sun_dsl = VK_NULL_HANDLE;
 VkDescriptorPool g_sun_pool = VK_NULL_HANDLE;
 VkDescriptorSet g_sun_sets[kSunRing] = {};
+uint64_t g_sun_used[kSunRing] = {};
+uint64_t g_sun_full = 0;
 uint32_t g_sun_slot = 0;
 constexpr uint32_t kNumExtras = sizeof kExtras / sizeof kExtras[0];
 
@@ -1034,8 +1042,21 @@ constexpr VkPipelineStageFlags kAll = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
 // This frame's sun inputs into the next set of the ring (set 2 of the D-LS layout).
 VkDescriptorSet write_sun_set(const Snapshot& s) {
-  VkDescriptorSet set = g_sun_sets[g_sun_slot];
-  g_sun_slot = (g_sun_slot + 1) % kSunRing;
+  const uint64_t now = host->frame_index();
+  uint32_t pick = kSunRing;
+  for (uint32_t k = 0; k < kSunRing && pick == kSunRing; ++k) {
+    const uint32_t i = (g_sun_slot + k) % kSunRing;
+    if (!g_sun_used[i] || g_sun_used[i] + kSunMinAge <= now) pick = i;
+  }
+  if (pick == kSunRing) {
+    if (g_sun_full++ < 5 || (g_sun_full & 1023) == 0)
+      host->log("ls: sun set ring: every set was used in the last %llu frames (%llu times so far): D-LS skipped this frame",
+                (unsigned long long)kSunMinAge, (unsigned long long)g_sun_full);
+    return VK_NULL_HANDLE;
+  }
+  VkDescriptorSet set = g_sun_sets[pick];
+  g_sun_used[pick] = now;
+  g_sun_slot = (pick + 1) % kSunRing;
   VkDescriptorBufferInfo ubo = s.x_atmo.buffer ? VkDescriptorBufferInfo{s.x_atmo.buffer, s.x_atmo.offset, (std::min)(s.x_atmo.range, VkDeviceSize(65536))}
                                                : VkDescriptorBufferInfo{s.cam.buffer, s.cam.offset, s.cam.range};
   const Bg3Binding* src[5] = {&s.x_tlut, &s.x_ca0, &s.x_ca1, &s.x_cb0, &s.x_cb1};
@@ -1381,7 +1402,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   memory_barrier(cmd, kCS, kCS);
   timestamp(cmd, 2);
   // D-LS first: the GI composite keeps diffuse + specular as next frame's bounce source.
-  if (s.ls && s.tlas && g_ls.pipeline) {
+  // (the sun set first: none free means no D-LS this frame, before any transition)
+  const VkDescriptorSet sun_set = s.ls && s.tlas && g_ls.pipeline ? write_sun_set(s) : VK_NULL_HANDLE;
+  if (sun_set) {
     Bound lb;
     bind_all(lb, s);
     bind_rt(lb, s.tlas, s.alpha);
@@ -1392,7 +1415,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if (s.shadow.view) image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     Push lp = pc;
     lp.ls_has_mask = s.shadow.view ? 1u : 0u;
-    const VkDescriptorSet sun = write_sun_set(s);
+    const VkDescriptorSet sun = sun_set;
     ls_timestamp(cmd, 0);   // the timing covers the join pass and the shadow pass
     // Per-light data: the join pass writes one record per light array slot.
     g_lsl_ok = lsl_begin(&g_lsl) && refresh(g_ls_match, "gi/rt_local_shadows_match.hlsl", g_ls_layout);

@@ -662,3 +662,46 @@ at Grymforge.
 - Legacy rebuilds its one TLAS in place, ordered by the build's barriers (all on one
   queue).
 - I found no path; the invalid-ray hypothesis covers the legacy fault as well.
+
+## 13. 3c9874e: five more dumps, all guards 0, legacy faults at Grymforge (fifteenth commit)
+
+Legacy faults too (Grymforge 2/2), so the cause is not the split. Every fault is in D-LS.
+
+**What D-LS reads that our guards don't cover:**
+- **ByteAddressBuffers:** all bounded now. That covers the light list, set 1 (InstInfo,
+  pool, soup, records), the SSS profiles, `lScale.Load(0)` and the stamp.
+- **Constant buffers:** only constant indices.
+- **Images:**
+  - The G-buffer, our images and the shadow atlas (read only with `ls_shadowed` or
+    validation; `Load` is clamped to the size).
+  - The alpha textures and tile caches through set 1 (`NonUniformResourceIndex`). Their
+    indices are clamped to the array, and every slot holds a live view: the frame's
+    views, dummies beyond.
+  - **Set 2, the "sun set":** the game's transmittance LUT and four cloud-shadow
+    textures, sampled per pixel by D-LS (`bg3_sun_colour`, `bg3_cloud_shadow`, for the
+    sun's AO-on-direct term). **The sun pass does not read any of it.**
+- **The TLAS:** ray inputs guarded since 3c9874e.
+
+**The sun set:**
+- The views are the lighting dispatch's own (`query_binding` in the snapshot, same
+  command buffer, noted for the life system).
+- But the set lived in a ring of 8 written with `vkUpdateDescriptorSets` *by frame
+  count*. A set rewritten while a pending D-LS dispatch still binds it is undefined: on
+  NVIDIA the GPU reads the new descriptors, possibly of views that are already freed. That
+  is a fault with no resource.
+- With the game running hundreds of presents ahead in headless mode around loads,
+  8 calls is not a guarantee.
+
+**Fix:**
+- A ring of 32. A slot is rewritten only once it is at least 8 frames old; otherwise
+  the next free one is taken.
+- With none free, D-LS is skipped that frame and logged: `ls: sun set ring: every set
+  was used in the last 8 frames`.
+- Only the core changed.
+
+**Grymforge:** the forge has many local lights, so D-LS traces far more rays per pixel
+and runs the sun-set sampling on every lit pixel. That raises the odds of any per-pixel
+D-LS fault.
+
+**PC mapping:** the queued `dls-shaderdebug-grym` job (`shader_debug=1`) should resolve
+the faulting line through the .nvdbg. It is the decisive next step.
