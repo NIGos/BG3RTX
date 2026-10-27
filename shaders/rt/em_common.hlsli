@@ -39,11 +39,14 @@ static const uint kEmMaxCaches = 16;
 static const uint kEmModeConst = 0;   // no mask
 static const uint kEmModeMaskR = 1;   // x mask.r (the game's glow maps)
 static const uint kEmModeMaskRGB = 2; // x mask.rgb (coloured glow maps)
+static const uint kEmModeBlackbody = 3; // x the blackbody LUT (tex) at u = uv.x + uv.y * uv.z (lava: uv.z the heat)
 static const uint kEmFlagLuminance = 1u << 0;   // x the global scale (emGlobal[0]; luminance-emissive materials)
 static const uint kEmFlagApprox = 1u << 1;      // the family's formula is not fully reproduced (e.g. vertex colour)
 static const uint kEmFlagPulse = 1u << 2;       // time-animated (sampled at record time)
 static const uint kEmFlagBaseMap = 1u << 3;     // x a base-colour texture (tex2, uv2) ("BGM" families)
 static const uint kEmFlagVtAlbedo = 1u << 4;    // x the virtual-texture albedo ("BGM_..._VT" families)
+static const uint kEmFlagForward = 1u << 5;     // drawn in the forward pass (not in the effects target)
+static const uint kEmFlagCalibrated = 1u << 6;  // radiance scaled by the on-screen calibration (approximate families)
 struct EmRec {
   float3 radiance; uint mode;      // colour x intensity [x pulse]
   uint tex; uint flags; uint fs_lo; uint fs_hi;
@@ -74,8 +77,8 @@ struct EmLight {
 [[vk::binding(7, EM_SET)]] SamplerState emSampler;      // linear, wrap
 [[vk::binding(8, EM_SET)]] RWByteAddressBuffer emStats; // debug views' statistics (host-read)
 // Header, 16 words: 0 lights, 1 triangles left out, 2 instances, 3 records, 4 pre-exposure
-// (float), 5 build frame (low 32 bits), 6 global scale bound (1), 8-10 the build camera's
-// absolute position (float3); words 16+: per-group power sums.
+// (float), 5 build frame (low 32 bits), 6 global scale bound (1), 7 triangles per light (k),
+// 8-10 the build camera's absolute position (float3); words 16+: per-group power sums.
 [[vk::binding(9, EM_SET)]] RWByteAddressBuffer emHeader;
 [[vk::binding(10, EM_SET)]] ByteAddressBuffer emGlobal;         // the game's set 2 b0 (float [0]: luminance scale)
 [[vk::binding(11, EM_SET)]] Texture2DArray<float4> emCache[kEmMaxCaches];   // VT tile caches
@@ -160,7 +163,9 @@ float3 em_vt_albedo(EmRec r, float2 uv, float g) {
 float3 em_radiance(EmRec r, float2 uv, float g) {
   float3 L = r.radiance;
   uint mode = r.mode & 0xffu;
-  if (mode != kEmModeConst && r.tex != 0 && r.tex < kEmMaxTextures) {
+  if (mode == kEmModeBlackbody && r.tex != 0 && r.tex < kEmMaxTextures) {
+    L *= emTex[NonUniformResourceIndex(r.tex)].SampleLevel(emSampler, float2(saturate(r.uv.x + r.uv.y * r.uv.z), 0.5), 0).rgb;
+  } else if (mode != kEmModeConst && r.tex != 0 && r.tex < kEmMaxTextures) {
     float4 m = emTex[NonUniformResourceIndex(r.tex)].SampleLevel(emSampler, uv * r.uv.xy + r.uv.zw,
                                                                  em_tex_lod(r.tex, g, r.uv.xy));
     L *= mode == kEmModeMaskRGB ? m.rgb : m.rrr;

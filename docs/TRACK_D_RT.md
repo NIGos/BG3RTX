@@ -2190,3 +2190,57 @@ shaders and the foundry capture `20261026-183925`. Its units 52-59 are:
 
 **Debug views:** `rt_debug=6` our emission, `7` the game's effects target alone, `8` a ratio
 heatmap.
+
+### 12.7 In-game round 2 (the gate, build `74b2338`, `rt_bvh_split=0`) and the fixes after it
+
+The coordinator ran T1-T3 with the per-submission build. No device was lost in any of the
+three scenes.
+
+- **S1 `QuickSave_3784`** now opens on a beach and docks view, not the foundry. It had 0
+  emissive draws (6 effects-pass draws: engine 1, unknown 3, backdrop 1, other 1), so it is
+  not a valid test of the foundry content. Another foundry save is needed.
+- **S5 Grymforge: the lava is not in the effects target.** The projected check counts 0
+  bright effects-target pixels. A census of the trace's B10G11R11 passes (asset DB names):
+  - effects target: `PPEmissiveSkydome`, clouds, `48332370` Helper, and 9 unknown VFX
+    draws (`e176c25a` ×6, `e0e3b441` ×2, `12e2531f`);
+  - **the forward pass** (55 draws): the lava is `56c5e5a0` **`Environment/ENV_Lava:
+    StaticInstancedForward`** (alpha-blend, emissive), next to the VFX particles, the
+    waterfall and the water.
+  - The decompiled forward shader emits `Glow_Colour × Glow_Intensity × (1 −
+    smoothstep(noise) + 0.2·…)`, plus lighting, with fog in alpha.
+  - **Fix:** forward-variant materials with the emissive flag that are not VFX, water or
+    decals are now captured ("forward" kind). They take the DB roles (colour × intensity:
+    the upper bound of the noise factor) and are flagged approximate and forward.
+  - Their reference is the forward-lit HDR target, not the effects target, so the projected
+    check does not validate them and they are not calibrated.
+- **S6 Adamantine Forge: the lava is in the effects target.** It is `1a81f41b`
+  `Fluids/FLUID_Lava_Plane_Flowmap` (EMI), and coverage was **98.5%**. Problems found:
+  - **Lava ×4.0 (731k px).** The decompiled shader is `blackbody(T) · m23 · (1, 2.5, 0)`, a
+    LUT at set 0 b11 at `u = (m0 + (m1 − m0)·h·m22) / 12000`. The heat h comes from two
+    flow-noise layers, vertex colour (z, w), distance and a rock mask, and is not
+    reproducible from XFB data. Our record had colour 1 × intensity 1.
+    - Now modelled as the blackbody LUT at a constant heat `rt_em_lava_heat` (0.5), × m23 ×
+      (1, 2.5, 0), which gives the right hue and the game's own temperature range.
+    - The scale is left to the **on-screen calibration**: the projected check runs without a
+      view every `rt_em_check_frames` (16) frames. For approximate families only, the
+      radiance is scaled by game/ours (√ per window, clamped to [1/64, 64]). Exact families
+      are never scaled: their ratio stays the validation.
+  - **`304be1c7` Base_GM_Pulse_FX ×0.049.** It has the Pulse_VT constant buffer and formula,
+    without the global scale, and the pulse fixup applied to `159a6211` only. It now applies
+    to every `_GM_Pulse` template.
+  - **`159a6211` Pulse_VT captured 0 of 3, and `soup full` 8 per build.** The lava's 152k
+    triangles (11 MB of XFB per frame) filled the 32 MB soup's per-frame third first.
+    - The soup now **grows to demand** at a build: 4× the frame's demand, up to
+      `rt_em_xfb_max_mb` (512), logged "[em] emissive soup grown".
+    - Draws captured into the replaced soup are dropped once and counted.
+  - **87,051 triangles over the 65,536-light cap.** The list no longer drops triangles.
+    Above the cap, k consecutive triangles of an instance share one light, with k chosen so
+    that everything fits:
+    - the light has their summed area and power;
+    - its radiance is the area-weighted mean;
+    - its shape is the largest triangle;
+    - `prim`, plus `flags >> 16`, gives the cluster's triangles, so a sampler can pick one
+      by area.
+
+    Total power is conserved. k is in header word 7 and in the log.
+  - Build 0.33 ms median at 152k triangles, 0 non-finite values.

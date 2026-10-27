@@ -88,6 +88,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       }
     }
   }
+  if (pc.mode == 0) return;   // statistics only (the calibration's check)
   gDiffuse[fp] = c;
   gSpecular[fp] = float3(0, 0, 0);
 }

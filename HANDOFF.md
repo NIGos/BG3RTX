@@ -1,60 +1,48 @@
 # HANDOFF: D-EM emissive geometry capture (branch `worktree-agent-a2212c228ec492214`)
 
-Design, data format and the analysis of the first gameplay data: `docs/TRACK_D_RT.md`
-section 12. Status row: `docs/QUALITY.md` ("D-EM data").
+The design, the data format and both rounds of in-game results are in `docs/TRACK_D_RT.md`
+section 12 (12.7 is the latest round). The status row is in `docs/QUALITY.md`
+("D-EM data").
 
-Main is merged in up to `8f8df1f`, which turns `rt_bvh_split=0` on by default. Build state:
-- the tree builds;
-- `settings_test` passes (120 checks);
-- `em_lights.hlsl` and `em_debug.hlsl` compile with DXC.
+The tree builds, `settings_test` passes (120 checks), and the shaders compile with DXC.
+Main is merged up to `8f8df1f`.
 
-**Nothing in this version has run in the game yet.**
+## State after round 2 (T1-T3 on `74b2338`, run by the coordinator)
 
-## What changed in this round (offline)
+- **No device loss** in any scene. The per-submission build works with `rt_bvh_split=0`.
+- **Adamantine Forge:** the lava (`1a81f41b` FLUID_Lava_Plane_Flowmap) is captured, with
+  98.5% coverage. The fixes for its ×4, for Pulse_FX ×0.05 (`304be1c7`), for Pulse_VT 0
+  captured (the soup was full) and for the 87k-light overflow are listed below.
+- **Grymforge:** its lava is `56c5e5a0` `ENV_Lava:StaticInstancedForward`, drawn in the
+  **forward pass**, not the effects target. Forward emissive surfaces are now captured too.
+- **`QuickSave_3784`** no longer opens in the foundry. S1 needs another foundry save.
 
-**1. Build per game submission** (`em_after_submit`, `layer/layer.cpp` after the game's
-`vkQueueSubmit(2)`):
-- Draws are kept per command buffer.
-- When the game submits the batch holding a frame's effects passes, the layer records its
-  own command buffer: one full BLAS per draw, the emissive TLAS and the light list. It
-  submits that buffer on the same queue right after the game's batch, fenced, in a ring of 8.
-- This groups exactly one frame's draws. The previous designs either mixed frames (the
-  DEVICE_LOST) or split each frame across two builds (most of the 10.6% coverage).
-- Consumers get the previous frame's scene. The header holds the build camera, and
-  `em_shift()` moves the current frame's points into the scene.
+## Fixes in this round (offline, not yet run)
 
-**2. Works with `rt_bvh_split=0`.**
-- There are no cached meshes, refits or compaction in the emissive scene.
-- `em_wanted()` needs only the split's machinery (`bvh_available()`), not `rt_bvh_split`.
+1. **Lava radiance.**
+   - The game's lava is `blackbody(T)·m23·(1, 2.5, 0)`, with T from a heat field that XFB
+     cannot reproduce (flow noise, vertex colour, distance).
+   - We now read the game's blackbody LUT (set 0 b11) at a constant heat
+     (`rt_em_lava_heat=0.5`), which gives the right hue.
+   - **On-screen calibration** sets the scale (`rt_em_calib=1`). A statistics-only projected
+     check runs every 16 frames, and approximate families are scaled by game/ours (damped).
+     Exact families are never scaled.
+2. **Pulse:** the `_GM_Pulse` fixup (pulse, texture-colour switch) now applies to every
+   Pulse template, so `304be1c7` gets it. Only luminance-emissive ones (`_VT`) get the
+   global scale.
+3. **Soup sized to demand:** at a build it grows to 4× the frame's demand
+   (`rt_em_xfb_max_mb=512`).
+4. **Light list without drops:** above `rt_em_max_lights`, k consecutive triangles share
+   one light. Area and power are summed, the radiance is area-weighted, and power is
+   conserved.
+5. **Forward-pass emissive surfaces** (FOR variants with the emissive flag, not VFX, water
+   or decals) are captured, flagged forward and approximate. They are not validated or
+   calibrated against the effects target, because they are not in it.
 
-**3. Radiance fixes** (TRACK_D 12.2 has the table):
-- **`159a6211` Base_GM_Pulse_VT (×3,318).** The luminance global scale (set 2 b0 [0]) is in
-  device memory. The CPU read failed and left the factor at 1. It is now bound as a buffer
-  and applied on the GPU, for every luminance-emissive material.
-- **`7085eee7` Base_BGM_MaskedShadows_VT (×2.0).** Its shader multiplies the glow by the
-  virtual-texture albedo (mean ≈ 0.5). That albedo is now reproduced: the record holds the
-  VT constants plus the indirection and cache views, and `em_vt_albedo()` does the Granite
-  lookup.
-- **`aab75fed` ENV_Tileset_BGM (×5.9).** Its colour is a blend of three base maps by vertex
-  colour, × glow × m3 × (1 − max(vc)). It is now modelled as base map b2 at uv·m0 × glow ×
-  m3, i.e. with vc = 0, the upper bound, flagged approximate. The vertex colour is not
-  captured.
-- **General rule:** "BGM" templates get the base colour (VT albedo for `_VT`, else the base
-  colour map).
+## Serial tests to rerun
 
-**4. Coverage analysis** (TRACK_D 12.5).
-- The main cause was the split build. Of the rest:
-  - the unit-58 VFX (`e0e3b441`, `f081b803`, `87ea6f1c`: alpha-blended planes, not in the
-    DB) and the unit-59 decal added nothing measurable in the foundry capture;
-  - the Skydome backdrop (`f12c2004`, excluded) can cover pixels with depth > 0.
-- `rt_em_backdrop=1` measures the backdrop's share.
-
-## Serial tests to run (the gate)
-
-Use main's `auto-run.ps1` for every step.
-
-**Live toggles.** Drive them with `scripts/live_phases.py <phases.json>`, started together
-with the run:
+The phases file is the same as before. Start it with `scripts/live_phases.py` together with
+the run:
 
 ```
 {"start": "\\[trace\\] frame \\d+ written", "timeout": 5400, "after_trace": [
@@ -62,96 +50,90 @@ with the run:
   {"set": {"rt_emissive": "0"}}, {"set": {"rt_emissive": "1"}}]}
 ```
 
-**Settings for every run:** `rt=1`, `rt_bvh_split=0` (main's default). Repeat T1 once with
-`rt_bvh_split=1` after the split's fix.
+Read the results in the `[em]` lines of `bg3rtx.log` (300-build windows):
+- `last N builds`: census, left out;
+- `soup ... MB, ... dropped by a soup resize; forward-pass emissive draws; triangles per light`;
+- `per build`;
+- `emissive families`;
+- `projected check`;
+- `ours/game per family` (ratio, px, approx/forward, current calibration scale).
 
-**Where to read results.** `bg3rtx.log`, the `[em]` lines, in windows of 300 builds:
-- `[em] last N builds`: the census;
-- `[em] per build`: triangles, lights, power, GPU;
-- `[em] emissive families`;
-- `[em] projected check` (only while `rt_debug` is 6-8): coverage and the overall ratio;
-- `[em] ours/game per family`.
+The calibration needs a few windows to settle, so judge the **last** window of each run. The
+first `rt_debug=8` phase is about 1-2 windows; to have more, raise the first
+`after_trace` interval, or add `auto_interval=1200` to `-Set`.
 
-### T1 to T3: per scene
+### R1: S6 Adamantine Forge
 
-**T1, S1 Steel Watch Foundry:**
-`scripts/auto-run.ps1 -Background -Save "QuickSave_3784" -Traces 5 -Set rt_debug=8,dump_png_width=1280`,
-with the phases above.
+`scripts/auto-run.ps1 -Background -Save "Adamantine Forge" -Traces 5 -Set rt_debug=8,dump_png_width=1280,auto_interval=1200`
 
-**T2, S5 Grymforge:** the same with `-Save "Grymforge - 32h 59m"`. Lava.
-
-**T3, S6 Adamantine Forge:** the same with `-Save "Adamantine Forge"`. Lava.
-
-Pass, for each of T1-T3:
-1. The level loads and runs: no DEVICE_LOST dialog and no stall.
-2. `[em] last N builds`: `left out` all 0.00, `builds skipped (busy)` 0, `global scale
-   conflicts` 0, `VT albedo missing` 0.
-3. `[em] per build`: `0 non-finite power sums`; `lights` > 0 wherever `emissive` > 0.
-4. `[em] ours/game per family`: **0.8-1.25** for every family with ≥ 500 px. This applies
-   to `20864dc6`, `159a6211`, `7085eee7`, `222986b8`, `48332370`, and to any new
-   non-approximate family. `aab75fed` passes at 0.8-1.6 (vertex colour not modelled; the
-   upper bound is expected).
-5. `[em] projected check`:
-   - **coverage ≥ 70%** in S1 (it was 10.6% with the split build);
-   - hits where the game shows < 2% of ours < 5%.
-6. **Lava (S5, S6):**
-   - the lava's fragment shader appears in `[em] emissive families` with captured = draws;
-   - coverage ≥ 70% while the lava is in view.
-
-   If it does not, report the `[em] last N builds` census (engine / unknown / decal /
-   other). Lava drawn as forward or VFX is outside this capture and needs a design change,
-   not a fix.
-7. Optional: rerun with `rt_em_backdrop=1` added to `-Set`. The coverage gain is the
-   backdrop's share.
-
-Images: the traces dump the frame with `rt_debug=8` (green: within 25%; red/blue: too
-bright/dark; yellow: ours only; magenta: the game's only), `6` (ours) and `7` (the game's
-alone).
-
-### T4: cost (S1)
-
-Read it from T1's later windows: `rt_debug=0`, then `rt_emissive=0`.
-
-- `[em] per build ... GPU: build median`. **Pass: ≤ 0.35 ms.**
-- `effects passes per frame median ... with capture` against `... without` (the
-  `rt_emissive=0` window). **Pass: difference ≤ 0.05 ms.**
-- Only valid when `captures/watchdog.log` shows a single game.
-
-### T5: validation (S1)
-
-`auto-run.ps1 -Background -Validation -Save "QuickSave_3784" -Traces 2 -Set rt_debug=8`
-
-**Pass:** `captures/validation.log` has no ID beyond the baseline (unmodified main):
-- `UNASSIGNED-non-acquired-swapchain-image-used`
-- `VkShaderModuleCreateInfo-pCode-08737`
-- `vkCmdCopyBuffer-srcBuffer-00118`
-- `vkCmdDraw-None-09600`
-- `vkCmdWaitEvents2-pEvents-10788`
-- `vkDestroyImage-image-01000` (that last one may be gone in current main)
-
-In particular, none of:
-- `VkImageMemoryBarrier-oldLayout-01197` or `vkCmdDispatch-imageLayout-00344` (the old
-  effects-target mistake);
-- an ID naming our command buffer or queue submission (`vkQueueSubmit-*`,
-  `vkCmdBuildAccelerationStructures*`).
-
-### T6: motion and load robustness (S1, then S8)
-
-1. `auto-run.ps1 -Background -Move -Save "QuickSave_3784" -Traces 3`
-2. `auto-run.ps1 -Background -Save "Water Queens House" -Traces 3 -Set rt_debug=8`
-
-**Pass:**
+Pass:
 - no device loss or stall;
-- 0 non-finite values in the dumps (`analyze_trace` table);
-- `[em] per build` non-finite 0;
-- S8: report the families and coverage. The ratio criteria are those of T1.
+- `soup full` 0.00 after the first window, with one "[em] emissive soup grown" line at
+  most;
+- `left out by rt_em_max_lights` 0, and `triangles per light` ≥ 2 is expected (152k
+  triangles);
+- `159a6211` captured = draws (3/3);
+- `ours/game per family`:
+  - `304be1c7` Pulse_FX and `159a6211` Pulse_VT within **0.8-1.25** (exact families);
+  - `1a81f41b` lava within **0.8-1.25 in the last window** (calibrated; its `scale` should
+    settle near 1/4);
+- coverage ≥ 95%;
+- 0 non-finite power sums;
+- build median ≤ 0.5 ms (152k triangles).
+
+Report the lava's `scale` value.
+
+### R2: S5 Grymforge
+
+`scripts/auto-run.ps1 -Background -Save "Grymforge - 32h 59m" -Traces 5 -Set rt_debug=8,dump_png_width=1280`
+
+Pass:
+- no device loss;
+- `56c5e5a0` ENV_Lava appears in `emissive families` with captured = draws, and
+  `forward-pass emissive draws` > 0;
+- `lights` > 0 and power > 0.
+
+Its `ours/game` is not a criterion: forward, not in the effects target, so expect
+"forward", a large ratio, scale 1. The `rt_debug=6` dump should show the lava lit by our
+data.
+
+### R3: S8 Water Queens House
+
+`scripts/auto-run.ps1 -Background -Save "Water Queens House" -Traces 5 -Set rt_debug=8,dump_png_width=1280`
+
+Pass:
+- no device loss;
+- coverage ≥ 70%;
+- every exact family (not "approx") with ≥ 500 px within 0.8-1.25;
+- approximate families within 0.8-1.25 in the last window;
+- left out 0.
+
+Report the family list.
+
+### R4 (when a foundry save exists): S1
+
+Same command and criteria as R3. The foundry families seen in round 1: `20864dc6` exact,
+`7085eee7` exact (VT albedo), `aab75fed` approximate (vertex colour), `159a6211` exact.
+
+### R5: cost, validation and motion (as before, on S6)
+
+- **Cost:** from R1's `rt_debug=0` and `rt_emissive=0` windows. Build ≤ 0.5 ms. Effects
+  passes with capture minus without ≤ 0.1 ms. The calibration's check (every 16 frames)
+  must not show in the frame pacing.
+- **Validation:** `auto-run.ps1 -Background -Validation -Save "Adamantine Forge" -Traces 2
+  -Set rt_debug=8`. Pass: no IDs beyond main's baseline. In particular, none naming our
+  queue submission or acceleration-structure builds, and no layout IDs on the effects
+  target.
+- **Motion:** `auto-run.ps1 -Background -Move -Save "Adamantine Forge" -Traces 3`. Pass: no
+  device loss, and 0 non-finite values in the dumps.
 
 ## Known gaps
 
-- The vertex colour of `aab75fed` and the HLOD family `b86501b6` (three VT layer channels)
-  are approximate.
-- Candles and fire are forward-pass particles, and unit-58 VFX planes are alpha-blended,
-  not surfaces. Neither is captured.
-- One frame of latency: consumers must apply `em_shift()`. Emitters that move get one frame
-  of lag.
-- The census's per-pass counter relies on a thread-local flag (cosmetic).
+- **Lava texture detail:** the calibration matches the mean per family only. The lava's
+  heat field (bright cracks, dark crust) is not in the data; the light list's power is right
+  on average.
+- **Grymforge's forward lava is not validated:** the reference would be the forward-lit
+  target before and after the lava's draw.
+- **`aab75fed`** vertex colour (approximate, now calibrated) and the HLOD family.
+- **Not captured:** candles and fire (forward particles), and the unit-58 VFX planes.
+- **One frame of latency.** Consumers apply `em_shift()`.

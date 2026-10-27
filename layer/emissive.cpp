@@ -87,8 +87,9 @@ struct EmRec {
   uint32_t cls, pad[3];
 };
 static_assert(sizeof(EmRec) == kRecBytes, "EmRec must match em_common.hlsli");
-enum : uint32_t { kModeConst = 0, kModeMaskR = 1, kModeMaskRGB = 2 };
-enum : uint32_t { kFlagLuminance = 1, kFlagApprox = 2, kFlagPulse = 4, kFlagBaseMap = 8, kFlagVtAlbedo = 16 };
+enum : uint32_t { kModeConst = 0, kModeMaskR = 1, kModeMaskRGB = 2, kModeBlackbody = 3 };
+enum : uint32_t { kFlagLuminance = 1, kFlagApprox = 2, kFlagPulse = 4, kFlagBaseMap = 8, kFlagVtAlbedo = 16,
+                  kFlagForward = 32, kFlagCalibrated = 64 };
 
 struct Buf {
   VkBuffer b = VK_NULL_HANDLE;
@@ -102,7 +103,9 @@ bool g_on = false;
 std::mutex g_mu;
 
 // ---- materials (asset DB), per fragment shader ----
-enum MatKind : uint8_t { kMatEngine, kMatUnknown, kMatEmissive, kMatDecal, kMatBackdrop, kMatOther, kMatKinds };
+// kMatForward: an emissive surface material drawn in the forward pass (FOR variant, not VFX,
+// water or decal), e.g. Grymforge's ENV_Lava; captured, its radiance from the DB roles.
+enum MatKind : uint8_t { kMatEngine, kMatUnknown, kMatEmissive, kMatDecal, kMatBackdrop, kMatOther, kMatForward, kMatKinds };
 struct Mat {
   MatKind kind = kMatUnknown;
   Bg3MaterialInfo info{};
@@ -138,6 +141,7 @@ struct PDraw {
   EmRec rec;
   View mask, base, vt_ind, vt_cache;
   VkDeviceSize off = 0;
+  VkBuffer soup = VK_NULL_HANDLE;     // the soup it was captured into (a grown soup replaces it)
   uint32_t prims = 0;
   DrawArgs args{};
   uint32_t pipe_id = 0;
@@ -160,6 +164,17 @@ thread_local bool t_pass_fx = false;   // the pass being recorded on this thread
 // written by its pass, read by the build and by consumers of the next frame).
 Buf g_soup;
 VkDeviceSize g_soup_head = 0, g_soup_since = 0;   // bytes allocated since the last build
+VkDeviceSize g_demand = 0;                        // bytes asked for since the last build (captured or not)
+uint32_t g_regrown = 0;                           // draws dropped because the soup was replaced
+uint32_t g_last_cluster = 1;                      // triangles per light of the latest build read back
+
+// Per-family calibration against the game's effects target (rt_em_calib): for families whose
+// formula is not fully reproduced (kFlagApprox), the radiance is scaled by game/ours as the
+// projected check measures it on screen (damped, clamped to [1/64, 64]); exact families are
+// never scaled (their ratio is the validation). Forward-pass families are not in the effects
+// target and are not calibrated.
+struct Calib { float scale = 1.0f; uint32_t updates = 0; };
+std::unordered_map<uint64_t, Calib> g_calib;
 uint32_t g_stride = 24;
 
 // ---- per build ----
@@ -189,7 +204,8 @@ uint32_t g_own_next = 0;
 struct SlotInfo {
   uint64_t frame = 0;                  // build frame + 1 (0: free)
   std::vector<uint64_t> rec_fs;        // fragment shader per record
-  uint32_t lights = 0, overflow = 0, instances = 0, groups = 0;
+  std::vector<uint32_t> rec_flags;     // its flags (kFlagApprox: calibrated)
+  uint32_t lights = 0, overflow = 0, instances = 0, groups = 0, cluster = 1;
   Census census;
   uint64_t tris = 0;
 };
@@ -211,7 +227,7 @@ struct Window {
   std::vector<float> build_ms;
   std::map<uint64_t, double> fx_frame_ms[2];   // effects passes per frame: [no capture, capture]
   uint64_t nonfinite = 0;
-  struct Cmp { double ours = 0, game = 0, px = 0; };
+  struct Cmp { double ours = 0, game = 0, px = 0; uint32_t flags = 0; };
   std::map<uint64_t, Cmp> cmp;                 // projected comparison per fragment shader
   uint64_t dbg_frames = 0, dbg_depth = 0, dbg_hit = 0, dbg_miss = 0, dbg_dark = 0, dbg_bright = 0;
   double last_power = 0;
@@ -295,7 +311,11 @@ const Mat& material(uint64_t fs) {
     if (db->material && db->material(fs, &m.info)) {
       m.name = m.info.template_name ? m.info.template_name : "?";
       const bool emi = m.info.pass == 2;   // the EMI variant: drawn into the effects target
-      if (!emi) m.kind = kMatOther;
+      const uint32_t f = m.info.flags;
+      const bool fwd_emissive = m.info.pass == 1 && (f & BG3_MAT_F_EMISSIVE) &&
+                                !(f & (BG3_MAT_F_VFX | BG3_MAT_F_WATER | BG3_MAT_F_DECAL)) && m.info.cls != BG3_MAT_CLASS_DECAL;
+      if (fwd_emissive) m.kind = kMatForward;
+      else if (!emi) m.kind = kMatOther;
       else if (m.info.cls == BG3_MAT_CLASS_DECAL || (m.info.flags & BG3_MAT_F_DECAL)) m.kind = kMatDecal;
       else if (m.name.find("Skydome") != std::string::npos) m.kind = kMatBackdrop;
       else m.kind = kMatEmissive;
@@ -316,15 +336,38 @@ const Mat& material(uint64_t fs) {
 //            mix(mix(b2(uv m0), b3(uv m1), vc.x), b4(uv m2), vc.y).rgb * glow.r * m3 * (1 - max(vc.x, vc.y))
 //            The vertex colour vc is not captured: vc = 0 (the base map b2 at uv * m0) is taken,
 //            the upper bound of the game's value (flagged approximate).
-void family_fixup(VkCommandBuffer cmd, uint64_t fs, EmRec& r) {
+//   GM_Pulse (159a6211 _VT, 304be1c7 _FX, their aliases): the same constant buffer; only
+//            the luminance-emissive ones (_VT) multiply by the global scale.
+//   1a81f41b FLUID_Lava_Plane_Flowmap: blackbody(T) * m23 * (1, 2.5, 0), the LUT at set 0
+//            b11 at u = (m0 + (m1 - m0) * h * m22) / 12000, h a heat field from flow noise,
+//            vertex colour and distance. h is not reproduced: a constant rt_em_lava_heat
+//            (0.5) is taken and the scale is left to the on-screen calibration.
+void family_fixup(VkCommandBuffer cmd, uint64_t fs, const std::string& name, EmRec& r, PDraw& d) {
   const uint32_t fam = uint32_t(fs >> 32);
   float m[6] = {};
+  const bool pulse = fam == 0x159a6211u || name.find("_GM_Pulse") != std::string::npos;
+  if (fam == 0x1a81f41bu) {
+    float lv[24] = {};
+    if (read_bound(cmd, 1, 0, 0, lv, 96) && finite(lv, 24)) {
+      d.mask = bound_view(cmd, 0, 11);   // the blackbody LUT
+      r.mode = d.mask.v ? kModeBlackbody : kModeConst;
+      r.uv[0] = lv[0] / 12000.0f;
+      r.uv[1] = (lv[1] - lv[0]) / 12000.0f * lv[22];
+      r.uv[2] = cfg_float("rt_em_lava_heat", 0.5f);
+      r.uv[3] = 0.0f;
+      r.radiance[0] = lv[23];
+      r.radiance[1] = 2.5f * lv[23];
+      r.radiance[2] = 0.0f;
+    }
+    r.flags |= kFlagApprox;
+    return;
+  }
   if (fam == 0x222986b8u && read_bound(cmd, 1, 0, 0, m, 24)) {
     if (std::floor(m[3]) >= 1.0f) {
       r.mode = kModeMaskRGB;
       r.radiance[0] = r.radiance[1] = r.radiance[2] = m[4];
     }
-  } else if (fam == 0x159a6211u && read_bound(cmd, 1, 0, 0, m, 24)) {
+  } else if (pulse && read_bound(cmd, 1, 0, 0, m, 24)) {
     float m45[2] = {}, time = 0.0f;
     read_bound(cmd, 1, 0, 24, m45, 8);
     if (std::floor(m45[0]) >= 1.0f) {
@@ -419,7 +462,8 @@ void make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDra
       else r.flags |= kFlagApprox;
     }
   }
-  family_fixup(cmd, fs, r);
+  family_fixup(cmd, fs, mat.name, r, d);
+  if (mat.kind == kMatForward) r.flags |= kFlagForward | kFlagApprox;
   if (!finite(r.radiance, 3) || r.radiance[0] < 0 || r.radiance[1] < 0 || r.radiance[2] < 0) {
     r.radiance[0] = r.radiance[1] = r.radiance[2] = 0.0f;
     r.flags |= kFlagApprox;
@@ -564,8 +608,19 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
         ++census.skip_recs;
         continue;
       }
+      if (d.soup != g_soup.b) {   // captured into a soup replaced since (it grew)
+        ++g_regrown;
+        continue;
+      }
       EmRec r = d.rec;
       r.draw = uint32_t(recs.size());
+      if (r.flags & kFlagApprox) {
+        auto cal = g_calib.find((uint64_t(r.fs_hi) << 32) | r.fs_lo);
+        if (cal != g_calib.end() && cal->second.updates) {
+          for (float& c : r.radiance) c *= cal->second.scale;
+          r.flags |= kFlagCalibrated;
+        }
+      }
       r.tex = slot_of(tex, kMaxTex, d.mask);
       if (d.mask.v && !r.tex) ++census.skip_tex, r.mode = kModeConst, r.flags |= kFlagApprox;
       r.tex2 = slot_of(tex, kMaxTex, d.base);
@@ -603,18 +658,29 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   const VkDeviceSize rbase = VkDeviceSize(slot) * kRegion;
   const uint32_t nrec = uint32_t(recs.size());
   if (nrec) std::memcpy(region + kOffRecs, recs.data(), size_t(nrec) * sizeof(EmRec));
-  // Light ranges per instance (bounded: rt_em_max_lights, allocated at device creation).
+  // Light ranges per instance, bounded by rt_em_max_lights (allocated at device creation):
+  // past it, k consecutive triangles of an instance share one light (their summed area and
+  // power, area-weighted radiance, the largest as the shape), so no emission is dropped.
   const uint32_t n = res.instances;
   uint32_t* prefix = reinterpret_cast<uint32_t*>(region + kOffPrefix);
   uint32_t total = 0, overflow = 0;
-  const uint32_t cap_lights = (std::min)(uint32_t((std::max)(cfg_int("rt_em_max_lights", 65536), 0)), g_max_lights);
+  const uint32_t cap_lights = (std::max)((std::min)(uint32_t((std::max)(cfg_int("rt_em_max_lights", 65536), 0)), g_max_lights), 1u);
+  uint64_t all_tris = 0;
+  for (uint32_t i = 0; i < n && i < kMaxInst; ++i) all_tris += res.info_host[i * 4 + 3];
+  uint32_t k = uint32_t((std::max)((all_tris + cap_lights - 1) / cap_lights, uint64_t(1)));
+  for (;;) {   // per-instance rounding may still overshoot: widen the clusters until it fits
+    uint64_t need = 0;
+    for (uint32_t i = 0; i < n && i < kMaxInst; ++i) need += (res.info_host[i * 4 + 3] + k - 1) / k;
+    if (need <= cap_lights || k > 4096) break;
+    ++k;
+  }
   for (uint32_t i = 0; i < n && i < kMaxInst; ++i) {
     uint32_t tris = res.info_host[i * 4 + 3];
-    uint32_t take = (std::min)(tris, cap_lights - total);
+    uint32_t take = (std::min)((tris + k - 1) / k, cap_lights - total);
     prefix[i * 2] = total;
     prefix[i * 2 + 1] = take;
     total += take;
-    overflow += tris - take;
+    overflow += tris - (std::min)(take * k, tris);
   }
   for (uint32_t i = kMaxInst; i < n; ++i) overflow += res.info_host[i * 4 + 3];
   const uint32_t ninst = (std::min)(n, kMaxInst);
@@ -628,6 +694,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   std::memcpy(&header[4], &pre, 4);
   header[5] = uint32_t(now);
   header[6] = global.buffer ? 1u : 0u;
+  header[7] = k;   // triangles per light
   std::memcpy(&header[8], cam, 12);
   std::memset(region + kOffStats, 0, size_t(kStatWords) * 4);
 
@@ -697,7 +764,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
     dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pipe);
     dd->vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pl, 0, 1, &set, 0, nullptr);
     dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pl, 1, 2, pw);
-    uint32_t pc[4] = {total, ninst, 0, 0};
+    uint32_t pc[4] = {total, ninst, k, 0};
     dd->vk.CmdPushConstants(cmd, g_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
     dd->vk.CmdDispatch(cmd, (total + 255) / 256, 1, 1);
   }
@@ -709,8 +776,13 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   SlotInfo& si = g_slots[slot];
   si.frame = now + 1;
   si.rec_fs.resize(nrec);
-  for (uint32_t i = 0; i < nrec; ++i) si.rec_fs[i] = (uint64_t(recs[i].fs_hi) << 32) | recs[i].fs_lo;
+  si.rec_flags.resize(nrec);
+  for (uint32_t i = 0; i < nrec; ++i) {
+    si.rec_fs[i] = (uint64_t(recs[i].fs_hi) << 32) | recs[i].fs_lo;
+    si.rec_flags[i] = recs[i].flags;
+  }
   si.lights = total;
+  si.cluster = k;
   si.overflow = overflow;
   si.instances = n;
   si.groups = (std::min)((total + 255) / 256, 1024u);
@@ -903,7 +975,7 @@ bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const Em
   // rt_em_backdrop=1 (a measurement): skydome backdrops are captured too, so the projected
   // check shows their share of the effects target.
   const bool backdrop = mat.kind == kMatBackdrop && cfg_int("rt_em_backdrop", 0) != 0;
-  if (mat.kind != kMatEmissive && !backdrop) return false;
+  if (mat.kind != kMatEmissive && mat.kind != kMatForward && !backdrop) return false;
   FsCount& fc = g_fs_window[s->fs];
   ++fc.draws;
   if (!in.xfb) return ++C.skip_xfb, false;
@@ -917,12 +989,14 @@ bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const Em
   prims *= a.instances;
   if (!prims) return false;
   const VkDeviceSize need = prims * 3 * in.stride;
+  g_demand += up256(need);   // what this frame asks for (the soup grows to it at the next build)
   // The ring: what the pending builds may still read stays (a third of the soup per build).
   if (g_soup_since + need > g_soup.size / 3) return ++C.skip_full, false;
   if (g_soup_head + need > g_soup.size) g_soup_head = 0;
   PDraw d;
   make_record(cmd, s->fs, mat, P, d);
   d.off = g_soup_head;
+  d.soup = g_soup.b;
   d.prims = uint32_t(prims);
   d.args = a;
   d.pipe_id = s->pipe_id[0];
@@ -1029,6 +1103,22 @@ void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandB
           VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
   build(o.cb, taken);
   g_soup_since = 0;
+  // Size the soup to the demand: three frames of it (a range lives about three frames).
+  const VkDeviceSize max_soup = VkDeviceSize((std::max)(cfg_int("rt_em_xfb_max_mb", 512), 8)) << 20;
+  if (g_demand * 3 > g_soup.size && g_soup.size < max_soup) {
+    VkDeviceSize want = g_soup.size;
+    while (want < g_demand * 4 && want < max_soup) want *= 2;
+    Buf nb;
+    if (make_buf(nb, want, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | rt_xfb_usage(),
+                 false)) {
+      log("[em] emissive soup grown to %llu MB (demand %.1f MB per frame)", (unsigned long long)(want >> 20),
+          double(g_demand) / 1048576.0);
+      free_buf(g_soup);   // deferred: command buffers in flight still write and read it
+      g_soup = nb;
+      g_soup_head = 0;
+    }
+  }
+  g_demand = 0;
   dd->vk.EndCommandBuffer(o.cb);
   // The game's images our build samples (masks, base maps, VT caches) stay alive until it
   // ran: register what the game's command buffers referenced on ours too (tracker.cpp).
@@ -1108,6 +1198,7 @@ void em_on_present() {
     w.last_power = power;
     w.last_draws = si.census.kinds[kMatEmissive];
     w.last_lights = si.lights;
+    g_last_cluster = si.cluster;
     const uint32_t* st = reinterpret_cast<const uint32_t*>(region + kOffStats);
     if (st[6]) {
       ++w.dbg_frames;
@@ -1123,6 +1214,7 @@ void em_on_present() {
         cmp.ours += q[0] / 16.0;
         cmp.game += q[1] / 16.0;
         cmp.px += q[2];
+        cmp.flags |= si.rec_flags[r];
       }
     }
     if (cfg_int("rt_em_log", 0))
@@ -1151,6 +1243,9 @@ void em_on_present() {
       c.kinds[kMatDecal] / nb, c.kinds[kMatBackdrop] / nb, c.kinds[kMatOther] / nb, c.kinds[kMatEmissive] / nb,
       c.captured / nb, c.skip_xfb / nb, c.skip_indirect / nb, c.skip_topo / nb, c.skip_full / nb, c.skip_recs / nb,
       c.skip_tex / nb, c.vt_missing / nb, c.global_conflicts / nb, g_stale, g_busy);
+  log("[em] soup %llu MB, %u draws dropped by a soup resize; forward-pass emissive draws %.1f per build; triangles per "
+      "light %u (last build)",
+      (unsigned long long)(g_soup.size >> 20), g_regrown, c.kinds[kMatForward] / nb, g_last_cluster);
   log("[em] per build: %.1f TLAS instances, %.0f triangles, %.0f lights (%.0f left out by rt_em_max_lights), total power "
       "%.4g (effects-target units x m^2; last build %.4g, %u draws, %u lights), %llu non-finite power sums; GPU: build "
       "median %.3f ms (p99 %.3f, %zu samples), effects passes per frame median %.3f ms with capture (%zu frames), %.3f ms "
@@ -1177,11 +1272,24 @@ void em_on_present() {
   if (w.dbg_frames) {
     double ours = 0, game = 0;
     std::string line;
+    const bool calib = cfg_int("rt_em_calib", 1) != 0;
     for (auto& [fs, cm] : w.cmp) {
       ours += cm.ours, game += cm.game;
-      char buf[200];
-      snprintf(buf, sizeof buf, "%s %08x %s %.3f (%.0f px)", line.empty() ? "" : ";", unsigned(fs >> 32),
-               material(fs).name.c_str(), cm.game > 0 ? cm.ours / cm.game : 0.0, cm.px / double(w.dbg_frames));
+      const double ratio = cm.game > 0 ? cm.ours / cm.game : 0.0;
+      const double px = cm.px / double(w.dbg_frames);
+      Calib& cal = g_calib[fs];
+      const float before = cal.updates ? cal.scale : 1.0f;
+      // Calibrate approximate families seen on enough pixels, in the effects target (a
+      // forward family's emission is not there: ours >> game).
+      if (calib && (cm.flags & kFlagApprox) && !(cm.flags & kFlagForward) && px >= 500 && ratio > 0.02 && ratio < 50.0) {
+        double step = std::sqrt((std::min)((std::max)(1.0 / ratio, 0.125), 8.0));
+        cal.scale = float((std::min)((std::max)(double(before) * step, 1.0 / 64), 64.0));
+        ++cal.updates;
+      }
+      char buf[260];
+      snprintf(buf, sizeof buf, "%s %08x %s %.3f (%.0f px%s%s, scale %.3f)", line.empty() ? "" : ";", unsigned(fs >> 32),
+               material(fs).name.c_str(), ratio, px, (cm.flags & kFlagApprox) ? ", approx" : "",
+               (cm.flags & kFlagForward) ? ", forward" : "", before);
       line += buf;
     }
     log("[em] projected check over %llu frames: emissive hits on %.3f%% of the depth pixels; ours/game radiance %.3f over "
@@ -1196,7 +1304,7 @@ void em_on_present() {
   }
   g_win = Window{};
   g_fs_window.clear();
-  g_stale = g_busy = 0;
+  g_stale = g_busy = g_regrown = 0;
 }
 
 }  // namespace bg3

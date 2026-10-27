@@ -111,7 +111,7 @@ void layout_barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkIm
 void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, const Bg3Binding& depth,
               const Bg3Binding& diffuse, const Bg3Binding& specular, const Bg3Binding& cam2, uint32_t w, uint32_t h,
               uint32_t mode) {
-  if (!host->rt_emissive || mode < 6 || mode > 8) return;
+  if (!host->rt_emissive || (mode != 0 && (mode < 6 || mode > 8))) return;
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
   VkDescriptorSet set = VK_NULL_HANDLE;
   Bg3EmissiveInfo info{};
@@ -170,6 +170,14 @@ void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, 
     host->log("em_debug: mode %u at %ux%u; %u records, %u instances, %u lights; effects target layout %d", mode, w, h,
               info.records, info.instances, info.lights, fx_from);
   }
+}
+
+// The projected check without a view (mode 0: statistics only), every rt_em_check_frames
+// frames, for the host's per-family calibration (rt_em_calib).
+bool em_check_due() {
+  if (!host->cfg_int("rt_em_calib", 1)) return false;
+  const int every = host->cfg_int("rt_em_check_frames", 16);
+  return every > 0 && host->frame_index() % uint64_t(every) == 0;
 }
 
 void em_release() {
