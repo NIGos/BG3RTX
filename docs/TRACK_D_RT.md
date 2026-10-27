@@ -2354,6 +2354,13 @@ AUDIT_ENGINE_DATA §2.1 route (a1), AUDIT_SOTA "Per-material data at secondary h
   type, count, first, vertex offset, instances. The n-th G-buffer draw with a key is the
   n-th prepass draw with it in this frame's split build (`bvh_join_frame`, published at
   the end of `bvh_build`), which names its TLAS instances (`inst_first`, `inst_count`).
+- **Ordering.** The prepass and the G-buffer are different command buffers recorded on
+  several threads: the G-buffer pass often *begins* before the prepass's build is recorded
+  (the first in-game runs joined 0 of 300 frames when the join was looked up at the
+  G-buffer's begin with `join.frame == frame_index()`). The G-buffer pass now waits (up to
+  `rt_hitmat_wait_ms`, default 4) for a build committed (`hitmat_on_commit`) that no
+  G-buffer pass has joined yet, stamped this frame or the previous one; the wait is logged
+  at the end of `[hitmat] last N frames` (passes, waits, mean ms, timeouts).
 - **UV.** The G-buffer VS's lowest vec2 output (already XFB-decorated, stride 24) is
   captured by transform feedback for the joined draws that need it, and
   `rt/uv_scatter.hlsl` copies it into the UV slots of the same triangles: the prepass soup

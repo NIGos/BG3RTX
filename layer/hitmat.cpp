@@ -25,6 +25,8 @@
 #include "assetdb.h"
 
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -120,7 +122,8 @@ struct ViewReq { VkImageView view; VkImageLayout layout; bool array; };
 struct PendingRec { MatRec r; int view_ind; int view_f[4]; };   // indices into g_views (-1 none)
 struct Job { uint32_t src, dst, verts, target; };
 struct Frame {
-  uint64_t frame = UINT64_MAX;
+  uint64_t frame = UINT64_MAX;   // the joined build's frame index
+  uint64_t begun = UINT64_MAX;   // frame index at the G-buffer pass's begin
   bool ok = false;
   BvhJoinFrame join;
   std::unordered_map<uint64_t, std::vector<uint32_t>> by_key;
@@ -140,10 +143,19 @@ struct Frame {
 };
 Frame g_fr;
 
+// Builds committed (hitmat_on_commit) and the last one a G-buffer pass joined. Command
+// buffers are recorded on several threads (ARCHITECTURE.md): the G-buffer's begins while
+// the prepass's (another command buffer) is still being recorded, before its build.
+std::condition_variable g_cv;
+uint64_t g_commit_seq = 0, g_commit_frame = 0, g_used_seq = 0;
+uint32_t g_commit_slot = 0;
+
 // Statistics (log every rt_timing_frames).
 struct Stats {
   uint64_t frames = 0, draws = 0, joined = 0, unjoined = 0, not_in_tlas = 0, indirect = 0, no_table = 0,
-           recs = 0, rec_fail[6] = {}, uv_prepass = 0, uv_cached = 0, uv_captured = 0, uv_fail[6] = {}, frames_joined = 0;
+           recs = 0, rec_fail[6] = {}, uv_prepass = 0, uv_cached = 0, uv_captured = 0, uv_fail[6] = {}, frames_joined = 0,
+           passes = 0, waits = 0, wait_timeouts = 0;
+  double wait_ms = 0;
   uint64_t fam[kFamCount][4] = {};
   uint64_t qa[kQaCount] = {};
 } g_st;
@@ -522,12 +534,13 @@ void log_stats() {
       "joined, %.1f not in the TLAS, %.1f indirect, %.1f FS not in material_fs.txt, %.1f records; record fields "
       "dropped: no view %.1f, UBO %.1f, SSBO %.1f, non-finite %.1f, records full %.1f, views full %.1f; UV: prepass "
       "(alpha) %.1f, cached mesh %.1f, captured %.1f, not captured: XFB %.1f, topology %.1f, UV location %.1f, count %.1f, "
-      "buffer %.1f, jobs %.1f",
+      "buffer %.1f, jobs %.1f; G-buffer passes %llu, waited for the build %llu (%.3f ms mean, %llu timed out)",
       (unsigned long long)st.frames, (unsigned long long)st.frames_joined, st.draws * f, st.joined * f, st.unjoined * f,
       st.not_in_tlas * f, st.indirect * f, st.no_table * f, st.recs * f, st.rec_fail[0] * f, st.rec_fail[1] * f,
       st.rec_fail[2] * f, st.rec_fail[3] * f, st.rec_fail[4] * f, st.rec_fail[5] * f, st.uv_prepass * f,
       st.uv_cached * f, st.uv_captured * f, st.uv_fail[0] * f, st.uv_fail[1] * f, st.uv_fail[2] * f, st.uv_fail[3] * f,
-      st.uv_fail[4] * f, st.uv_fail[5] * f);
+      st.uv_fail[4] * f, st.uv_fail[5] * f, (unsigned long long)st.passes, (unsigned long long)st.waits,
+      st.waits ? st.wait_ms / double(st.waits) : 0.0, (unsigned long long)st.wait_timeouts);
   // Hit coverage (sampled hits of the consumers, rt_hitmat_stats=1): per family.
   uint64_t hits = 0, kn[3] = {};
   std::vector<std::pair<uint64_t, uint32_t>> order;
@@ -590,6 +603,8 @@ void hitmat_device_destroyed(DeviceData* dd) {
   g_ready = g_failed = false;
   g_filled.clear();
   g_fr = Frame{};
+  g_commit_seq = g_used_seq = g_commit_frame = 0;
+  g_cv.notify_all();   // a G-buffer pass waiting for a build sees g_ready false
   g_dd = nullptr;
 }
 
@@ -609,7 +624,13 @@ bool hitmat_on_commit(uint32_t slot, HitmatSlotBufs* out) {
   // This build's instances: no material until the G-buffer pass joins them.
   BvhJoinFrame j;
   uint32_t n_inst = 0;
-  if (bvh_join_frame(&j) && j.slot == slot && j.frame == frame_index()) n_inst = (std::min)(j.n_inst, g_max_inst);
+  if (bvh_join_frame(&j) && j.slot == slot && j.frame == frame_index()) {
+    n_inst = (std::min)(j.n_inst, g_max_inst);
+    ++g_commit_seq;   // the G-buffer pass waiting for this build may join it now
+    g_commit_frame = j.frame;
+    g_commit_slot = slot;
+    g_cv.notify_all();
+  }
   uint32_t* hdr = reinterpret_cast<uint32_t*>(g_slots.map + off_rec(slot));
   hdr[0] = 0;
   hdr[1] = n_inst;
@@ -632,15 +653,31 @@ bool hitmat_on_commit(uint32_t slot, HitmatSlotBufs* out) {
 void hitmat_pass_before(VkCommandBuffer cmd, CmdState* s) {
   s->hm = nullptr;
   if (!g_dd || !geo_is_gbuffer_pass(s->pass) || !hitmat_wanted()) return;
-  std::lock_guard<std::mutex> lock(g_mu);
+  std::unique_lock<std::mutex> lock(g_mu);
   if (!g_ready) return;
+  ++g_st.passes;
   Frame& fr = g_fr;
   const uint64_t now = frame_index();
-  if (fr.frame != now) {
+  if (fr.begun != now) {
+    // This frame's split build, committed after the prepass. The prepass is another
+    // command buffer, possibly still being recorded on another thread: wait for a build
+    // no G-buffer pass has joined yet (recorded this frame or the previous one).
+    auto fresh = [now] { return !g_ready || (g_commit_seq != g_used_seq && g_commit_frame + 1 >= now); };
+    if (!fresh()) {
+      const auto t0 = std::chrono::steady_clock::now();
+      const int ms = cfg_int("rt_hitmat_wait_ms", 4);
+      const bool got = ms > 0 && g_cv.wait_for(lock, std::chrono::milliseconds(ms), fresh);
+      ++g_st.waits;
+      g_st.wait_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      if (!got) ++g_st.wait_timeouts;
+      if (!got || !g_ready) return;
+    }
+    g_used_seq = g_commit_seq;
     fr = Frame{};
-    fr.frame = now;
-    // This frame's split build (the G-buffer follows the prepass in the same frame).
-    fr.ok = bvh_join_frame(&fr.join) && fr.join.frame == now && fr.join.stride == 24;
+    fr.frame = g_commit_frame;
+    fr.begun = now;
+    fr.ok = bvh_join_frame(&fr.join) && fr.join.frame == g_commit_frame && fr.join.slot == g_commit_slot &&
+            fr.join.stride == 24;
     if (fr.ok) {
       for (uint32_t i = 0; i < fr.join.draws.size(); ++i) fr.by_key[fr.join.draws[i].geom_key].push_back(i);
       ++g_st.frames_joined;
