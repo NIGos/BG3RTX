@@ -1697,58 +1697,83 @@ only), or patch the forward shaders' shadow lookup to read a world-space visibil
 patched lookup. Water is the most visible case and also needs the forward capture of
 backlog item 12 to cast. Do it with item 12.
 
-### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, not yet measured in game)
+### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, off by default until re-measured)
 
-Why: Grymforge is over the 0.5 ms budget (0.63-0.72 ms; `ls stats`: 6.09 listed, 4.34
-evaluated, **3.49 traced** lights per pixel, against 2.1-2.3 in the foundry), and the
-policy of 9.10 (owners 31, `ls_shadowed=3`) traces more. The ray loop costs a wave its
-longest lane, so the cost follows the per-pixel maximum, not the mean.
+Why: Grymforge is over the 0.5 ms budget (0.73 ms with the 9.10 policy; `ls stats`: 6.09
+listed, 4.34 evaluated, **3.83 traced** lights per pixel, against 2.1-2.3 in the foundry).
 
 What (`shaders/gi/rt_local_shadows.hlsl` `ls_main_k`, both variants; `ls_k` > 0 with
 `ls_samples=0`, `ls_debug=0`):
 - **Phase 1**, one pass over the froxel list: the trace conditions and acceptance tests as
-  before (`ls_light_traced`), then a weight `w` per accepted light; a running top-`ls_k`
-  by `w` (registers, insertion) and, for each remainder sample, a streaming reservoir over
-  the lights that never enter the top-k or are pushed out of it.
-- **Phase 2**: at most `ls_k + ls_rest_samples` rays, same ray setup.
+  before (`ls_light_traced`), then the light's exact unshadowed `c` (`bg3_light_eval_mat`,
+  the surface loaded for phase 1 and reloaded in phase 3 as in 9.9) and `w = lum(c_d + c_s)`;
+  a running top-`ls_k` by `w` (registers, insertion) and, for each remainder sample, a
+  streaming reservoir over the lights that never enter the top-k or are pushed out of it.
+- **Phase 2**: at most `ls_k + ls_rest_samples` rays, same ray setup. The exact set is
+  traced in list order, not by rank, so that neighbours with the same set but another
+  ranking trace the same light in the same iteration (coherent rays, as the `ls_k=0` loop).
 - **Phase 3**: the exact terms of the selected lights only; the remainder sample's delta,
   and its share of the `ao_direct` sums, × `Σ_R w / (n·w_j)`.
 - Estimator `Σ_E c_i(t_i − s_i) + (1/n) Σ_samples c_j(t_j − s_j)/p_j`, `p_j = w_j/Σ_R w`:
   **unbiased** (the split is a deterministic function of the pixel; `w_j > 0` wherever
-  `c_j ≠ 0`). The variance is in visibility and in the remainder's selection only.
-- **The weight** is the unshadowed irradiance without the BRDF lobe: `lum(|colour|)` ×
-  the game's falloff × spot cone × the class's N·L (hair: its self-shadow term,
-  skin/translucent: max with the wrap) × `b13[0]`. It orders a pixel's diffuse terms
-  exactly (the albedo is common); specular-dominant lights are weighted by irradiance,
-  which costs variance, never bias. Not `lum(c_i)` as the design wrote: that needs the
-  full surface in phase 1, which 9.9 measured at 125 registers. Measured now
-  (`tools/pipeline_stats.py`): **128 registers with and without this path** (the policy
-  merge had already taken the default variant from 96 to 128), FULL 251 → 252.
-- **Noise for RR** (QUALITY R1/R2): the selection uniforms are pcg3d white noise per
-  (pixel, frame, list entry) from an input domain disjoint from the ray directions'
-  (`x | 2^20`), so the selection and the rays are independent; nothing is reused across
-  pixels or frames. The top-k split switches between neighbours as a change of noise
-  level, not a pattern (DESIGN 1.7).
-- **Known bias**: the final `max(…, 0)` clamp of the output. A remainder sample's
-  scaled delta can exceed what the pixel holds in one channel (a coloured or
-  specular-dominant light picked with a small `w`); the clamp then brightens. Rare
-  with `ls_k ≥ 2`; the QA brightening gate judges it.
+  `c_j ≠ 0`). A remainder sample's scaled term has the luminance of the whole remainder
+  (`Σ_R w`) at most: the variance is bounded.
+- **Noise for RR** (QUALITY R1/R2): one pcg3d draw per (pixel, frame) from an input domain
+  disjoint from the ray directions' (`x | 2^20`) drives both reservoirs (the uniform is
+  rescaled after each decision); nothing is reused across pixels or frames.
+- Registers (`tools/pipeline_stats.py`): **128 with and without this path** (the policy
+  merge had already taken the default variant from 96 to 128); FULL 251 → 252.
 - `ls_check=1` still compares the `ls_k=0` path (`ls_main`) with the frozen reference:
   it proves the shared tail (`ls_finish`, moved out of `ls_main`) bit-exact.
 
-Settings (live): `ls_k` (default 2; 0 = every light traced, 1-4), `ls_rest_samples`
-(default 1; 0 drops the remainder: biased, debug only; 2). Push: `ls_kmode`, the old spare
-word `pad` (bits 0-3 / 4-7).
+**First A/B (jobs `30-lsk-*`, 2026-10-27; optimised pass, no `shader_debug`, one session per
+scene; first version, irradiance weight, see below):**
+
+| Grymforge (S5) | ms (median, 300 frames) | rays/px |
+|---|---|---|
+| `ls_k=0` | 0.730, 0.731 (two sessions) | 3.83 |
+| `ls_k=2` | 0.643 (−12%) | 2.76 (exact 1.96 + remainder 0.80) |
+| `ls_k=1` | 0.528 (−28%) | ≈1.9 (estimated) |
+
+- Stats (`ls_k=2`): 80.1% of pixels over the cap, 2.33 remainder lights per capped pixel
+  carrying 13.9% of the weight; remainder rays occluded 32.7%.
+- Campsite (S3): `ls_k=0` 0.965 / 0.965, `ls_k=2` 0.955 (−1%); 1.26 traced lights/px,
+  15.1% of pixels over the cap.
+- **Not faster per ray.** A linear fit `ms = F + O + rays·c` over the three Grymforge runs
+  gives ≈0.135 ms per ray per pixel and a fixed **≈0.06-0.07 ms extra** for the exact-k
+  path (k1 and k2 alike, so not the top-k insertion, which grows with k). The candidates:
+  phase 1's extra work per light, and the remainder rays (0.8-1 per pixel at k1 and k2,
+  each to a different light per lane: incoherent traversal). Registers are not the cause
+  (128 either way). The follow-up jobs `31-lsk2-*` separate them (`ls_rest_samples=0`).
+- **Images: fireflies.** The `ls_k=2` Grymforge trace has blue fireflies on wall edges
+  (dumps saturated at 65,000 after the pass; mean luminance ×18). Cause: the first
+  version weighted by irradiance without the BRDF lobe; at grazing view angles the
+  specular term over the irradiance grows without bound (`vis ∝ 1/(N·L)` cancels the
+  irradiance's N·L), so `c_j / p_j` was unbounded. Unbiased, but infinite in practice.
+  Fixed by the exact `w = lum(c)` above (bounded by `Σ_R w`), at the cost of a BRDF
+  evaluation per traced light in phase 1. `ls_k=1` and the FULL-variant `ls_k=2` trace
+  happened to show none; their means are within the run-to-run spread of two `ls_k=0`
+  sessions (−1.3%), and the QA `hard_dark` regions flagged in them are moving characters
+  (crops checked), not shadows.
+
+Settings (live): `ls_k` (**default 0** until the follow-up passes; 1-4), `ls_rest_samples`
+(default 1; 0 drops the remainder: biased, timing and debug only; 2). Push: `ls_kmode`,
+the old spare word `pad` (bits 0-3 / 4-7).
 
 Statistics (`ls_stats=1`, line `ls exact-k stats`, counters 122-127): lights `ls_k=0` would
 trace, rays per pixel (exact / remainder), the share of pixels over the cap (k-hit), the
 remainder size, its rays' occlusion, and the remainder's share of the weight. In this path
-the `ls stats` line's "evaluated" count is 0 (the lights are not evaluated, only traced).
+the `ls stats` line's "evaluated" count is 0. `ls_stats=1` costs ≈3-4 ms (FULL variant):
+time only from runs without it.
 
-Expected cost (to be measured; `captures/queue` jobs `30-lsk-*`): the no-ray floor
-(≈0.14 ms) plus ≈0.1 ms per ray per pixel of the wave's longest lane. Grymforge today ≈5-6
-rays for the longest lanes, `ls_k=2` caps it at 3: ≈0.45-0.5 ms. `ls_k=1` (≤ 2 rays) is the
-fallback if the measurement exceeds 0.5 ms.
+**Follow-up (`31-lsk2-*`, queued) and the rule for the default:** Grymforge, one session:
+`ls_k=0`; `ls_k=0, ls_min_radius=1e5` (no rays: the floor F); `ls_k=2`; `ls_k=2,
+ls_rest_samples=0`; `ls_k=1`; `ls_k=1, ls_rest_samples=0`; `ls_k=0` again. Exact-ray cost
+and the fixed overhead from the two `rest=0` runs, the remainder-ray cost from `rest=1 −
+rest=0`. Campsite: `ls_k=0`, `ls_k=1`, `ls_k=2`, `ls_k=0` again, for images. Default
+becomes the largest `ls_k` with Grymforge ≤ 0.69 × `ls_k=0` (0.5 ms of 0.73) and no
+`hard_dark` or firefly region against `ls_k=0` (dump maxima after the pass within 2× of
+`ls_k=0`'s); `ls_k=1` is the likely result. If no `ls_k` meets it, 0 stays.
 
 ## 10. D-RF: ray-traced reflections (implemented, tiers (a) and (c))
 

@@ -26,7 +26,7 @@
 // (no denoiser), one deterministic ray to the light centre (hard shadows).
 // ls_samples > 0 instead traces that many rays per pixel to lights chosen by
 // RIS over the unshadowed luminance (unbiased, noisier, cheaper with many lights).
-// ls_k > 0 (default 2; both variants, see ls_main_k below): the ls_k strongest lights
+// ls_k > 0 (default 0 until measured; both variants, see ls_main_k below): the ls_k strongest lights
 // exactly, ls_rest_samples RIS rays for the rest (unbiased, at most ls_k + ls_rest_samples rays).
 //
 // Per-light data (ls_lights=1, ls_flags bit 0; docs/SE_BRIDGE.md): lsSlots holds, per
@@ -668,47 +668,29 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
 // The split depends only on the pixel's deterministic inputs, and p_j > 0 wherever c_j != 0,
 // so the estimator is unbiased; at most ls_k + ls_rest_samples rays per pixel.
 //
-// w is the light's unshadowed irradiance at the pixel without the BRDF lobe (colour x
-// falloff x cone x the class's N.L, transmission or hair term x b13[0]): exact for the
-// diffuse order of a pixel (its albedo is common to all its lights), computed from the
-// phase-1 terms only. The exact lum(c_i) would need the full surface in phase 1 (TRACK_D 9.9:
-// the same extra evaluation took the pass to 125 registers). w = 0 implies c = 0.
+// w = lum(c_d + c_s), the light's exact unshadowed contribution (bg3_light_eval_mat, the
+// surface evaluated in phase 1 and reloaded in phase 3 as above). With it a remainder
+// sample's scaled delta has the luminance of the whole remainder, sum_R w, at most: no
+// fireflies. (A first version used the irradiance without the BRDF lobe, which phase 1 has
+// for free; at grazing view angles the specular term c_s / irradiance grows without bound,
+// and the Grymforge A/B showed fireflies at 65,000 on wall edges: TRACK_D_RT.md 9.11.)
 //
-// Noise for RR (QUALITY R1): the selection uniforms are white noise per (pixel, frame, list
-// entry) from an input domain of pcg3d disjoint from ls_rand's, so independent of every ray
-// direction; no reuse across pixels or frames, nothing for RR to mistake for signal.
+// Noise for RR (QUALITY R1): one pcg3d white-noise draw per (pixel, frame), from an input
+// domain disjoint from ls_rand's (so independent of every ray direction), drives both
+// reservoirs (rescaled after each decision); no reuse across pixels or frames.
 static const uint kLsNone = 0xFFFFFFFFu;
 
 uint ls_k() { return min(pc.ls_kmode & 15u, 4u); }
 uint ls_rest_n() { return min((pc.ls_kmode >> 4) & 15u, 2u); }
 bool ls_k_active() { return ls_k() != 0u && pc.ls_samples == 0u && pc.ls_debug == 0u; }
 
-uint3 ls_rand_sel(uint2 fp, uint e) { return pcg3d(uint3(fp.x | 0x100000u, fp.y, pc.frame * 1024u + (e & 1023u))); }
+uint3 ls_rand_sel(uint2 fp) { return pcg3d(uint3(fp.x | 0x100000u, fp.y, pc.frame)); }
 
-// The weight of a light ls_light_traced accepted (its own arithmetic for the shared terms).
-float ls_light_weight(uint li, bool spot, LsLite s) {
-  Bg3Light l = load_light(li);
-  float3 L = l.pos - s.P;
-  float d2 = dot(L, L);
-  float3 Ld = L * rsqrt(max(d2, 1.0000000e-10));
-  float ir2 = l.inv_r * l.inv_r;
-  float x = d2 * ir2;
-  float g = pow(max(abs(saturate(1.0 - x * x)), 9.9999997e-05), l.m4);
-  float bias = abs(l.m5);
-  g *= l.m5 < 0.0 ? (4.0 * ir2 + bias) : (1.0 / max(d2, 9.9999997e-05) + bias);
-  float norm = 0.07957747;
-  if (spot) {
-    float c = dot(-Ld, normalize(l.dir));
-    float t = saturate((c - l.cos_outer) / max(l.cos_inner - l.cos_outer, 9.9999997e-05));
-    g *= t * t;
-    norm = 0.31830987;
-  }
-  float nol = dot(s.N, Ld);
-  float nl = s.cls == 5u ? saturate(2.0 * nol + 0.5) : saturate(nol);
-  if ((s.cls == 3u || s.cls == 4u) && s.trans) nl = max(nl, bg3_sss_wrap(nol));
-  const float sc = l.m3 < 0.0 ? asfloat(lScale.Load(0)) : 1.0;
-  float w = lum(abs(l.col)) * (norm * g * nl * sc);
-  return isfinite(w) ? w : 0.0;
+// One reservoir decision with the uniform u (rescaled to stay uniform for the next one).
+bool ls_pick(inout float u, float p) {
+  const bool take = u < p;
+  u = min(take ? u / p : (u - p) / max(1.0 - p, 1e-30), 0.99999994);
+  return take;
 }
 
 // Entry q of the pixel's selection: 0-3 the exact lights, 4-5 the remainder samples.
@@ -735,14 +717,21 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
   float2 rw = 0;              // ... and weights
   float rsum = 0;             // sum of w over R
   uint n_cand = 0;
+  const uint3 ru = ls_rand_sel(fp);
+  float2 u = float2(u01(ru.x), u01(ru.y));
+  LsPixel px = (LsPixel)0;
+  ls_surface(fp, s, px.sf, px.mt);
   for (uint i = cl.x; i < end_s; ++i) {
     const uint li = lIndex.Load(i * 4u);
     const bool spot = i >= end_p;
     float3 lpos;
     float R;
     if (!ls_light_traced(li, spot, s, lpos, R)) continue;
-    float cw = ls_light_weight(li, spot, s);
-    if (!(cw > 0.0)) continue;   // c = 0: no delta, no ray
+    float3 cd, ct, cs, Ld;
+    float d2, nol;
+    if (!bg3_light_eval_mat(load_light(li), spot, px.sf, px.mt, cd, ct, cs, Ld, d2, nol)) continue;
+    float cw = lum(cd + cs);
+    if (!(cw > 0.0) || !isfinite(cw)) continue;   // c = 0: no delta, no ray
     ++n_cand;
     uint ce = i;
     [unroll] for (uint k = 0; k < 4u; ++k) {
@@ -757,12 +746,12 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
     }
     if (cw > 0.0) {   // ce is (now) in R
       rsum += cw;
-      const uint3 r = ls_rand_sel(fp, ce);
-      if (u01(r.x) * rsum < cw) {
+      const float p = cw / rsum;
+      if (ls_pick(u.x, p)) {
         rs.x = ce;
         rw.x = cw;
       }
-      if (NR > 1u && u01(r.y) * rsum < cw) {
+      if (ls_pick(u.y, p) && NR > 1u) {
         rs.y = ce;
         rw.y = cw;
       }
@@ -770,6 +759,14 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
   }
   if (NR == 0u) rs = uint2(kLsNone, kLsNone);   // (debug: R dropped, biased)
   else if (NR == 1u) rs.y = kLsNone;
+  // The exact set in list order (empty slots last), not by weight: neighbouring pixels with the
+  // same set but another ranking then trace the same light in the same iteration, as the
+  // ls_k=0 loop does (coherent rays; the order of the sums does not matter).
+  ex.xy = uint2(min(ex.x, ex.y), max(ex.x, ex.y));
+  ex.zw = uint2(min(ex.z, ex.w), max(ex.z, ex.w));
+  ex.xz = uint2(min(ex.x, ex.z), max(ex.x, ex.z));
+  ex.yw = uint2(min(ex.y, ex.w), max(ex.y, ex.w));
+  ex.yz = uint2(min(ex.y, ex.z), max(ex.y, ex.z));
 
   // 2. the rays (at most K + NR per pixel)
   uint lit = 0;
@@ -785,7 +782,6 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
   }
 
   // 3. the surface (reloaded, as above), the exact terms of the selected lights
-  LsPixel px = (LsPixel)0;
   ls_surface(WaveReadLaneAt(fp, WaveGetLaneIndex()), s, px.sf, px.mt);
   float3 dd = 0, ds = 0, td = 0, ts = 0;
   for (uint q3 = 0; q3 < 6u; ++q3) {

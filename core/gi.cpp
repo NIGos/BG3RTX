@@ -790,7 +790,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
               "rays %.2f/px (exact %.2f, remainder %.2f), occluded %.2f/px; over the cap (k-hit) %.1f%% of px; "
               "remainder %.2f lights/px, %.2f per capped px; remainder rays occluded %.1f%%; remainder share of the "
               "irradiance weight on capped px %.1f%%",
-              g_stats_n, host->cfg_int("ls_k", 2), host->cfg_int("ls_rest_samples", 1), t[122] / px, t[19] / px,
+              g_stats_n, host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1), t[122] / px, t[19] / px,
               (t[19] - t[125]) / px, t[125] / px, t[20] / px, 100.0 * t[123] / px, t[124] / px, t[124] / hit,
               100.0 * t[126] / rr, 100.0 * t[127] / 256.0 / hit);
   }
@@ -984,7 +984,7 @@ Push make_push() {
   // Exact-k + RIS remainder (docs/DESIGN_SOTA_NEXT.md 1a, TRACK_D_RT.md 9.11): the ls_k
   // strongest traced lights per pixel exactly, ls_rest_samples rays to the rest (RIS);
   // ls_k=0 traces every light (the pass before). Ignored with ls_samples or ls_debug.
-  pc.ls_kmode = uint32_t((std::min)((std::max)(host->cfg_int("ls_k", 2), 0), 4)) |
+  pc.ls_kmode = uint32_t((std::min)((std::max)(host->cfg_int("ls_k", 0), 0), 4)) |
                 (uint32_t((std::min)((std::max)(host->cfg_int("ls_rest_samples", 1), 0), 2)) << 4);
   // Per-light data (docs/SE_BRIDGE.md): bit 0 set in run_post when the join ran; bits 8-12
   // the owners whose lights are traced (bit 8 + Bg3RtLightOwner; default 0x1F, every owner:
@@ -1170,7 +1170,7 @@ void ls_timing_collect() {
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
             "samples %d, exact-k %d + %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
-            host->cfg_int("ls_samples", 0), host->cfg_int("ls_k", 2), host->cfg_int("ls_rest_samples", 1),
+            host->cfg_int("ls_samples", 0), host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1),
             host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
             host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
             host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1));
