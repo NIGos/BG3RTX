@@ -1657,10 +1657,33 @@ seem not to cast or receive RT shadows. Findings (offline):
   handles every mode, so mode 3 does not fall back to the 252-register pass. Hair keeps the
   atlas term (its self-shadow model for shadowed lights is not replicated). Note: `ls_check`
   / `ls_impl=0` compare against the frozen reference, which knows modes 0-2 only.
-  - Cost: to measure (jobs `10-casters-S6/S8`, phases `ls_shadowed` 0 vs 3). Budget: Ultra
-    at 3840x1600 on the 5090 needs a base frame of ≥ 65 fps (15.4 ms) under FG 2x to 120;
-    QUALITY R7 gives D-LS 0.5 ms. Proposal: keep 3 on High/Ultra if the S6/S8 delta is
-    ≤ 0.15 ms and the pass stays ≤ 0.5 ms; else 3 on Ultra only.
+  - Cost. Budget: Ultra at 3840x1600 on the 5090 needs a base frame of ≥ 65 fps (15.4 ms)
+    under FG 2x to 120; QUALITY R7 gives D-LS 0.5 ms. Rule: keep 3 on High/Ultra if it adds
+    ≤ 0.15 ms over 0 and the pass stays ≤ 0.5 ms.
+  - **Measured (session jobs `casters-S6/S8-*`, 2026-10-27, medians of 300 frames):**
+
+    | Scene | `ls_shadowed=0` | `=3` | lights with a game shadow map |
+    |---|---|---|---|
+    | S6 Adamantine Forge | 0.372 ms | 0.375 ms | not measured (the stats job hit the open nv153 stall) |
+    | S8 Water Queens House | 0.120 ms | 0.120 ms | 0.00 of 0.41 evaluations per px |
+
+    No cost in either, but neither has shadow-mapped lights in view, so this does not yet
+    exercise mode 3. Grymforge (0.34 shadowed of 4.34 evaluations per px in another agent's
+    run) is queued (`32-casters-S5-*`: shares, then modes 0, 3, 1).
+- **Other results of the same jobs.**
+  - Coverage (S8, `rt_debug=3`): match 99.23%, miss 0.069%, in front 0.072%, behind 0.633%
+    of which 0.629% "through vt cutouts": the stochastic alpha test at blurred mips letting
+    primary rays through the edges of ferns and ivy (the debug frame shows them only there).
+    The characters are matched. Missing geometry is ≤ 0.07%.
+  - Skipped by art intent (`ls_noshadow=1`, owners 0x1F): 11.4% of light evaluations in S6,
+    86% in S8. That is the darkvision pair; in S8 most of it is the `Point_Default` half,
+    which has intensity 0 (it covers the view at r = 18 and adds nothing). The owner view
+    (`ls_debug=9`) shows the party's floor in S8 lit by an owner-unknown visual light (the
+    carried fire weapon), which is traced; little magenta (character) light anywhere.
+  - Join: unmatched 0.0% with `ls_dyn_tol` 0.05 and 1.5 alike: the carriers stood still in
+    both sessions. The benefit needs a moving carrier (`-Move`), not yet run.
+  - Non-finite values: 0 in S8; in S6 2.6-4.4k in every trace and mode, all in one D32F
+    depth image of pass `2a6a525c` (the game's), none in an image of ours.
 
 **Box (projector) lights: the gap and the plan (not implemented).** They are the third loop
 of `f469db78` (set 1 b29, struct `_53`, about 128 bytes; lines 735-930 of
