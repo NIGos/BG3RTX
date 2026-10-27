@@ -316,7 +316,14 @@ def animated(albedos, masks, shape, normals=()):
             return m
         bound = np.maximum.reduce([th.jitter_change(f, step) for f in fields])
         for f in fields[1:]:
-            m |= np.abs(f - fields[0]) > bound
+            d = np.abs(f - fields[0])
+            # Plus the input's own frame-to-frame noise, measured: the game's sun mask is a
+            # dithered PCF that differs on static pixels between any two frames (S3
+            # 20261027-174810: without this term 30% of on* and 99.6% of all sets marked).
+            # Most pixels are static, so the median |difference| is that noise
+            # (MAD x 1.4826 = sigma of the difference), tested at the buffer's k sigma.
+            sig = 1.4826 * float(np.median(d))
+            m |= d > bound + th.k_sigma(shape, 1) * sig
         return m
     raw = [fit(a).mean(-1) for a in albedos if a is not None]
     if raw:
