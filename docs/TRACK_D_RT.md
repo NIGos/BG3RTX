@@ -656,6 +656,20 @@ review, not confirmed errors; a run with `rt_alpha_stochastic=0` to separate
 the stochastic part did not complete (the game was closed by another session's
 run). S1 (foundry) with the fix: hard-dark GI 0.066‰, no baseline compared.
 
+**Regression checks (2026-10-27, after merging main).** `-Validation` in Campsite
+gameplay: same message IDs as the HEAD baseline. Non-finite: 0 in every capture,
+including a trace taken while panning (Goblin Camp, `-Move`). `QuickSave_3784`
+(old table + legacy switches vs new, same view): mean luminance -0.11%, no
+visible change on the piers, railings and boats. Goblin Camp foliage was not
+compared: that save enters a cutscene a few seconds after loading, at a varying
+time, so the two runs did not see the same view.
+
+**Not verified.** No `-Move` run reached its end: three runs (Goblin Camp,
+Campsite, and the QA run after the merge) stopped presenting a few seconds after
+gameplay or a trace (0 submits, GPU idle, process alive; a CPU-side stall, not a
+device loss). Another worktree's QA runs show the same stall in S3 and S7, so it
+is probably not this change, but this was not proven with a run of main alone.
+
 **Cost** (Campsite, 2560x1067, 300-frame averages, shared GPU, noise ~0.2 ms):
 4 x more alpha-tested draws (1.85M alpha triangles), visibility candidates
 2.0M → 7.1M/frame; GI 2.95-3.0 → 3.0-3.4 ms, RT passes 1.35-1.40 → 1.40-1.53 ms.
