@@ -741,7 +741,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
       host->log("ls stats (%u frames): per-light data: %.2f light evaluations per px; matched %.1f%% (bridge %.1f%%, "
                 "database only %.1f%%), unmatched %.1f%%; not traced by owner (ls_owners=0x%X) %.2f%% of evaluations",
                 g_stats_n, ev / px, 100.0 * t[76] / ev, 100.0 * t[77] / ev, 100.0 * (t[76] - t[77]) / ev,
-                100.0 * t[79] / ev, host->cfg_int("ls_owners", 0x0F), 100.0 * t[78] / ev);
+                100.0 * t[79] / ev, host->cfg_int("ls_owners", 0x1F), 100.0 * t[78] / ev);
     }
   }
   if (t[112]) {   // ls_check=1: the reference D-LS (shaders/gi/ls_ref) against the live one, same frame and inputs
@@ -963,16 +963,18 @@ Push make_push() {
   pc.ls_clear = (std::max)(host->cfg_float("ls_clear", 0.2f), 0.0f);
   pc.ls_min_radius = host->cfg_float("ls_min_radius", 0.0f);
   pc.ls_samples = uint32_t((std::min)((std::max)(host->cfg_int("ls_samples", 0), 0), 2));
-  pc.ls_shadowed = uint32_t((std::min)((std::max)(host->cfg_int("ls_shadowed", 0), 0), 2));
+  pc.ls_shadowed = uint32_t((std::min)((std::max)(host->cfg_int("ls_shadowed", 3), 0), 3));
   pc.ls_debug = uint32_t(host->cfg_int("ls_debug", 0));
   pc.ls_stats = host->cfg_int("ls_stats", 0) ? 1u : 0u;
   int soft = host->cfg_int("ls_soft", -1);   // -1 follows rr
   pc.ls_soft = (soft < 0 ? host->rr_active() : soft != 0) ? 1u : 0u;
   pc.ls_strength = host->cfg_float("ls_strength", 1.0f);
   // Per-light data (docs/SE_BRIDGE.md): bit 0 set in run_post when the join ran; bits 8-12
-  // the owners whose lights are traced (bit 8 + Bg3RtLightOwner). Default 0x0F: unknown,
-  // placed, item and scenery lights, not the character lights (TRACK_D 9.8).
-  pc.ls_flags = (uint32_t(host->cfg_int("ls_owners", 0x0F)) & 0x1Fu) << 8;
+  // the owners whose lights are traced (bit 8 + Bg3RtLightOwner; default 0x1F, every owner:
+  // the owner is no reason to skip a light, TRACK_D 9.10); bits 16-17 the art-intent rule
+  // ls_noshadow (rt_local_shadows.hlsl ls_skip_light).
+  pc.ls_flags = (uint32_t(host->cfg_int("ls_owners", 0x1F)) & 0x1Fu) << 8;
+  pc.ls_flags |= uint32_t((std::min)((std::max)(host->cfg_int("ls_noshadow", 1), 0), 2)) << 16;
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;
   pc.mat_classes = host->cfg_int("mat_classes", 1) ? 1u : 0u;
   pc.ao_direct = uint32_t((std::min)((std::max)(host->cfg_int("ao_direct", 1), 0), 2));
@@ -1151,9 +1153,9 @@ void ls_timing_collect() {
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
             "samples %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
-            host->cfg_int("ls_samples", 0), host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 0),
+            host->cfg_int("ls_samples", 0), host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
             host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
-            host->cfg_int("ls_owners", 0x0F), host->cfg_int("ls_impl", 1));
+            host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1));
   v.clear();
   j.clear();
 }
@@ -1395,7 +1397,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
     ls_timestamp(cmd, 1);
     // The default-settings variant, or the one with every mode (more registers, docs/TRACK_D_RT.md 9.9).
-    const bool full = lp.ls_samples || lp.ls_shadowed || lp.ls_debug || lp.ls_stats;
+    const bool full = lp.ls_samples || lp.ls_debug || lp.ls_stats;
     VkPipeline lsp = g_ls.pipeline;
     lp.ls_pass = host->cfg_int("ls_check", 0) == 2 ? 2u : 0u;   // reference against itself
     if (host->cfg_int("ls_check", 0)) {
