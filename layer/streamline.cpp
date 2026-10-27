@@ -1701,6 +1701,39 @@ void sl_note_submit(const std::vector<VkCommandBuffer>& cmds) {
   }
 }
 
+// Streamline does not keep tagged Vulkan images (or the views it was given)
+// alive: wait until DLSS-G has consumed the last presented frame's inputs (its
+// documented fence), so its queued work never touches a destroyed object.
+static void wait_inputs_consumed(const char* what, uint64_t handle) {
+  VkSemaphore fence;
+  uint64_t value;
+  {
+    std::lock_guard<std::mutex> lock(g_fence_mu);
+    fence = g_inputs_fence;
+    value = g_inputs_value;
+  }
+  if (!g_fg_running || !fence || !value || !g_wait_semaphores || !g_dd || t_in_sl) return;
+  VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
+  wi.semaphoreCount = 1;
+  wi.pSemaphores = &fence;
+  wi.pValues = &value;
+  VkResult r = g_wait_semaphores(g_dd->device, &wi, 1000000000ull);
+  log("[sl] tagged %s %p destroyed while frame generation runs: waited for DLSS-G inputs fence value %llu (%d)", what,
+      (void*)handle, (unsigned long long)value, r);
+}
+
+// The game usually destroys a view before its image; the tag hands DLSS-G
+// that view, so the wait must happen here already.
+void sl_note_view_destroyed(VkImageView view) {
+  if (!g_active || !view) return;
+  bool current = false;
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui}) current |= i->view == view;
+  }
+  if (current) wait_inputs_consumed("view", (uint64_t)view);
+}
+
 void sl_note_image_destroyed(VkImage image) {
   if (!g_active || !sl_watched(image)) return;
   bool current = false;
@@ -1712,27 +1745,7 @@ void sl_note_image_destroyed(VkImage image) {
   // loading screen -> gameplay switch, resolution changes): frame generation
   // goes off at the very next present and stays off for fg_stable_frames.
   g_last_tag_destroy = frame_index();
-  if (current) {
-    // Streamline does not keep tagged Vulkan images alive: wait until DLSS-G
-    // has consumed the last presented frame's inputs (its documented fence),
-    // so its queued work never touches the game's destroyed image.
-    VkSemaphore fence;
-    uint64_t value;
-    {
-      std::lock_guard<std::mutex> lock(g_fence_mu);
-      fence = g_inputs_fence;
-      value = g_inputs_value;
-    }
-    if (g_fg_running && fence && value && g_wait_semaphores && g_dd && !t_in_sl) {
-      VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
-      wi.semaphoreCount = 1;
-      wi.pSemaphores = &fence;
-      wi.pValues = &value;
-      VkResult r = g_wait_semaphores(g_dd->device, &wi, 1000000000ull);
-      log("[sl] tagged image %p destroyed while frame generation runs: waited for DLSS-G inputs fence value %llu (%d)",
-          (void*)image, (unsigned long long)value, r);
-    }
-  }
+  if (current) wait_inputs_consumed("image", (uint64_t)image);
   std::lock_guard<std::mutex> lock(g_mu);
   for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui})
     if (i->image == image) *i = Img{};

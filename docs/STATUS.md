@@ -47,9 +47,11 @@ State of each branch at the pause, as reported:
   - −31 to −37% (foundry 0.40 ms), bit-exact (`ls_check=1`).
   - To do: validation, `-Move`, the docs (draft in `tools/lsref/`).
   - Grymforge is still 0.72 ms because of its many torches.
-- **Image lifetime** (`2170b41`).
-  - The validation ID is gone in 3 scenes: the descriptor ring held stale bindings, and the destroy hooks now wait on our fence (0 ms stall measured).
-  - To do: one `-Move` run with a non-finite check, plus a doc fix.
+- **Image lifetime** (done).
+  - The validation ID is gone in 3 scenes: the descriptor ring held stale bindings.
+  - The destroy hooks now wait on our fence. No waits at level loads; 3 waits of 0.1 to 6.8 ms in 5 `-Move` runs.
+  - 0 non-finite values in the traced motion frame.
+  - Open for the alpha owner: QUALITY.md, "the alpha set's game texture views, one frame late".
 - **Two instances** (`91b50c3`).
   - Feasible: two instances ran for 150 s, using 26 GB of VRAM.
   - The slot locks, the PID-only control, the display-settings restore counted across runs and the per-instance Script Extender bridge are written.

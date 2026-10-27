@@ -113,6 +113,12 @@ struct Chain {
 std::mutex g_mu;
 Chain g_ch;
 Img g_xs, g_xr, g_ac, g_eb, g_check, g_cbt, g_z, g_sss_before, g_sss;
+// Fillers for every binding a step does not use: a reused ring set must never
+// keep a stale descriptor of a game image or buffer (see run()).
+Img g_dummy2d, g_dummy3d;
+VkBuffer g_dummy_buf = VK_NULL_HANDLE;
+VkDeviceMemory g_dummy_buf_mem = VK_NULL_HANDLE;
+void* g_dummy_buf_map = nullptr;
 uint64_t g_sss_before_frame = 0, g_sss_frame = 0;
 uint64_t g_cbt_frame = 0;
 VkDescriptorSetLayout g_dsl = VK_NULL_HANDLE;
@@ -180,11 +186,12 @@ void img_destroy(Img& g) {
 }
 
 // Device-local image, registered with the tracker so traces can dump it.
-bool img_ensure(DeviceData* dd, Img& g, VkFormat fmt, uint32_t w, uint32_t h, const char* name) {
+bool img_ensure(DeviceData* dd, Img& g, VkFormat fmt, uint32_t w, uint32_t h, const char* name,
+                VkImageType type = VK_IMAGE_TYPE_2D) {
   if (g.image && g.w == w && g.h == h && g.fmt == fmt) return true;
   img_destroy(g);
   VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-  ci.imageType = VK_IMAGE_TYPE_2D;
+  ci.imageType = type;
   ci.format = fmt;
   ci.extent = {w, h, 1};
   ci.mipLevels = 1;
@@ -207,7 +214,7 @@ bool img_ensure(DeviceData* dd, Img& g, VkFormat fmt, uint32_t w, uint32_t h, co
   dd->vk.BindImageMemory(dd->device, g.image, g.mem, 0);
   VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
   vi.image = g.image;
-  vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  vi.viewType = type == VK_IMAGE_TYPE_3D ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D;
   vi.format = fmt;
   vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
   dd->vk.CreateImageView(dd->device, &vi, nullptr, &g.view);
@@ -271,6 +278,10 @@ bool ensure_layout(DeviceData* dd) {
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   si.maxLod = 0.0f;
   if (dd->vk.CreateSampler(dd->device, &si, nullptr, &g_sampler) != VK_SUCCESS) return false;
+  if (!img_ensure(dd, g_dummy2d, VK_FORMAT_R16G16B16A16_SFLOAT, 1, 1, "dummy 2D (unused bindings)") ||
+      !img_ensure(dd, g_dummy3d, VK_FORMAT_R16G16B16A16_SFLOAT, 1, 1, "dummy 3D (unused bindings)", VK_IMAGE_TYPE_3D) ||
+      !alloc_host_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &g_dummy_buf, &g_dummy_buf_mem, &g_dummy_buf_map))
+    return false;
   if (dd->vk.CreateQueryPool) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
@@ -359,8 +370,10 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   VkDescriptorImageInfo ii[13] = {};
   VkWriteDescriptorSet w[15] = {};
   uint32_t n = 0, k = 0;
+  uint32_t written = 0;   // bindings this step writes
   auto img = [&](uint32_t binding, VkDescriptorType t, VkImageView v, VkImageLayout l) {
     if (!v) return;
+    written |= 1u << binding;
     ii[k] = {VK_NULL_HANDLE, v, l};
     w[n] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     w[n].dstSet = set;
@@ -389,6 +402,7 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   VkDescriptorBufferInfo bi[4];
   for (uint32_t i = 0; i < 3; ++i)
     if (b.has_buf[i]) {
+      written |= 1u << (9 + i);
       bi[i] = b.buf[i];
       w[n] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
       w[n].dstSet = set;
@@ -399,6 +413,7 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
       ++n;
     }
   if (b.probe) {
+    written |= 1u << 12;
     bi[3] = {g_probe_buf, 0, VK_WHOLE_SIZE};
     w[n] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     w[n].dstSet = set;
@@ -409,6 +424,32 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
     ++n;
   }
   dd->vk.UpdateDescriptorSets(dd->device, n, w, 0, nullptr);
+  // The sets are a ring reused every few dozen frames, and a step writes only
+  // the bindings it reads. Whatever a step leaves alone would keep the view or
+  // buffer an earlier step wrote there: a game image the game may have
+  // destroyed since. The validation layer then counts it as used by every
+  // pending command buffer that binds the set (VUID-vkDestroyImage-image-01000
+  // at level loads), and by the spec the game's destroy invalidates that
+  // command buffer. So every other binding gets a filler of ours.
+  {
+    VkDescriptorImageInfo fi[2] = {{VK_NULL_HANDLE, g_dummy2d.view, VK_IMAGE_LAYOUT_GENERAL},
+                                   {VK_NULL_HANDLE, g_dummy3d.view, VK_IMAGE_LAYOUT_GENERAL}};
+    VkDescriptorBufferInfo fb{g_dummy_buf, 0, VK_WHOLE_SIZE};
+    VkWriteDescriptorSet fw[15] = {};
+    uint32_t fn = 0;
+    for (uint32_t i = 0; i < 15; ++i) {
+      if (i == 5 || (written & (1u << i))) continue;   // 5: the sampler, always written
+      VkWriteDescriptorSet& x = fw[fn++];
+      x = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+      x.dstSet = set;
+      x.dstBinding = i;
+      x.descriptorCount = 1;
+      if (i <= 4) x.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, x.pImageInfo = &fi[i == 3 ? 1 : 0];
+      else if (i >= 9 && i <= 12) x.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, x.pBufferInfo = &fb;
+      else x.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, x.pImageInfo = &fi[0];
+    }
+    if (fn) dd->vk.UpdateDescriptorSets(dd->device, fn, fw, 0, nullptr);
+  }
 
   uint32_t slot = UINT32_MAX;
   if (g_qp && which != P_PROBE && which != P_CHECK) {
@@ -416,6 +457,15 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
     ts_harvest(dd, slot);
     dd->vk.CmdResetQueryPool(cmd, g_qp, slot * 2, 2);
     dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, g_qp, slot * 2);
+  }
+  {
+    // The fillers are never read; they only need a valid layout (contents discarded).
+    static uint64_t fill_rec = 0;
+    CmdState* cs = cmd_state(cmd);
+    if (cs && cs->recording != fill_rec) {
+      fill_rec = cs->recording;
+      to_general(dd, cmd, {&g_dummy2d, &g_dummy3d});
+    }
   }
   barrier(dd, cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_MEMORY_WRITE_BIT,
           VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
@@ -454,8 +504,13 @@ struct ViewKeyHash {
   size_t operator()(const ViewKey& k) const { return std::hash<uint64_t>()((uint64_t)k.image ^ (uint64_t(k.format) << 48)); }
 };
 std::unordered_map<ViewKey, VkImageView, ViewKeyHash> g_own_views;
+// The step that last read each game image through our view, for the log when
+// the game destroys it (docs/TRACK_A_RR.md, "Lifetime of the game's images").
+const char* g_step = "?";
+std::unordered_map<VkImage, std::pair<const char*, uint64_t>> g_view_use;   // step, frame
 
 VkImageView own_view(DeviceData* dd, VkImage image, VkFormat fmt) {
+  g_view_use[image] = {g_step, frame_index()};
   auto it = g_own_views.find({image, fmt});
   if (it != g_own_views.end()) return it->second;
   VkImageType type = VK_IMAGE_TYPE_2D;
@@ -589,6 +644,7 @@ bool start(DeviceData* dd, VkCommandBuffer cmd, VkImageView x, VkImageLayout xl,
 }
 
 void on_godrays(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
+  g_step = "god rays (X)";
   touch(cmd);
   if (g_ch.broken || g_ch.stage != 0) {
     if (g_ch.stage != 0) breaks("god rays after another post step");
@@ -601,6 +657,7 @@ void on_godrays(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
 }
 
 void on_dof(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
+  g_step = "dof (X, CoC)";
   touch(cmd);
   if (g_ch.broken) return;
   if (g_ch.stage == 0) {
@@ -631,6 +688,7 @@ void on_dof(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
 }
 
 void on_resolve(DeviceData* dd, VkCommandBuffer cmd) {
+  g_step = "resolve (U)";
   touch(cmd);
   if (g_ch.broken) return;
   VkImageView u;
@@ -697,6 +755,7 @@ void on_exposure(DeviceData* dd, VkCommandBuffer cmd) {
 }
 
 void on_bloom(DeviceData* dd, VkCommandBuffer cmd) {
+  g_step = "bloom";
   touch(cmd);
   if (g_ch.broken) return;
   if (g_ch.stage != 4) return breaks("bloom composite out of order");
@@ -711,6 +770,7 @@ void on_bloom(DeviceData* dd, VkCommandBuffer cmd) {
 }
 
 void on_grade(DeviceData* dd, VkCommandBuffer cmd) {
+  g_step = "grade (LUT)";
   touch(cmd);
   if (g_ch.broken) return;
   if (g_ch.stage != 4 && g_ch.stage != 5) return breaks("grade out of order");
@@ -753,6 +813,7 @@ void on_grade(DeviceData* dd, VkCommandBuffer cmd) {
 // SSS guide, step 1: the diffuse light before the SSS blur (set 1 b3 of the
 // first SSS pass 6f535075; that pass does not write it).
 void on_sss1(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
+  g_step = "sss1 (diffuse before)";
   if (!cfg_int("rr_sss", 1)) return;
   Binds b;
   if (!image_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 3, &b.in[0], &b.in_l[0])) return;
@@ -768,6 +829,7 @@ void on_sss1(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
 // SSS guide, step 2 (at the compose, which reads the diffuse light after SSS
 // at set 1 b2): lum(after - before * albedo), 0 where SSS did not run.
 void on_sss2(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
+  g_step = "sss2 (diffuse after)";
   if (!cfg_int("rr_sss", 1) || !g_sss_before.image || g_sss_before_frame + 1 < frame_index()) return;
   if (g_sss_before.w != p.width || g_sss_before.h != p.height) return;
   VkImageView albedo = VK_NULL_HANDLE;
@@ -940,13 +1002,18 @@ void rrpost_forget_image(VkImage image) {
   for (auto it = g_own_views.begin(); it != g_own_views.end();) {
     if (it->first.image == image) {
       static int logged = 0;
+      auto u = g_view_use.find(image);
       if (logged++ < 16)
-        log("[rrpost] the game destroys an image our post steps read (frame %llu; last chain recorded in frame %llu)",
-            (unsigned long long)frame_index(), (unsigned long long)g_ch.frame);
+        log("[rrpost] the game destroys image %p that our post step '%s' read in frame %llu (now frame %llu; last "
+            "chain recorded in frame %llu)",
+            (void*)image, u != g_view_use.end() ? u->second.first : "?",
+            (unsigned long long)(u != g_view_use.end() ? u->second.second : 0), (unsigned long long)frame_index(),
+            (unsigned long long)g_ch.frame);
       defer_destroy(BG3_DEFER_IMAGE_VIEW, (uint64_t)it->second);
       it = g_own_views.erase(it);
     } else ++it;
   }
+  g_view_use.erase(image);
 }
 
 // After the RR evaluate: grade(A * RR + C) into the game's DLSS output image.
@@ -954,8 +1021,10 @@ bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint
   std::lock_guard<std::mutex> lock(g_mu);
   DeviceData* dd = device_of(cmd);
   if (!dd || !out_image) return false;
+  g_step = "final (DLSS output)";
   VkImageView game_out = own_view(dd, out_image, out_fmt);
   if (!game_out) return false;
+  life_note(cmd, (uint64_t)out_image);   // the game's DLSS output, written through our view
   Binds b;
   b.in[0] = g_z.view;
   b.in_l[0] = VK_IMAGE_LAYOUT_GENERAL;
