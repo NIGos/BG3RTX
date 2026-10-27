@@ -26,7 +26,8 @@ struct Push {
   uint32_t mode;
   float tol;        // relative depth agreement of a visible emissive hit
   float thr;        // effects-target luminance counted as emission (rt_em_fx_thr)
-  float pad[3];
+  uint32_t has_cam2;   // binding 6 holds the lighting's set 0 b2 (absolute camera position)
+  float pad[2];
 };
 
 bool ensure(VkDescriptorSetLayout em_layout) {
@@ -39,16 +40,17 @@ bool ensure(VkDescriptorSetLayout em_layout) {
     g_layout = VK_NULL_HANDLE;
   }
   if (!g_push) {
-    VkDescriptorSetLayoutBinding b[6] = {
+    VkDescriptorSetLayoutBinding b[7] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+        {5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {6, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
     VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-    ci.bindingCount = 6;
+    ci.bindingCount = 7;
     ci.pBindings = b;
     if (vk.CreateDescriptorSetLayout(dev, &ci, nullptr, &g_push) != VK_SUCCESS) return false;
     VkDescriptorSetLayoutCreateInfo ei{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
@@ -107,13 +109,14 @@ void layout_barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkIm
 }  // namespace
 
 void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, const Bg3Binding& depth,
-              const Bg3Binding& diffuse, const Bg3Binding& specular, uint32_t w, uint32_t h, uint32_t mode) {
+              const Bg3Binding& diffuse, const Bg3Binding& specular, const Bg3Binding& cam2, uint32_t w, uint32_t h,
+              uint32_t mode) {
   if (!host->rt_emissive || mode < 6 || mode > 8) return;
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
   VkDescriptorSet set = VK_NULL_HANDLE;
   Bg3EmissiveInfo info{};
   if (!host->rt_emissive(&layout, &set, &info) || !set || !layout || !info.fx_view || !info.fx_image ||
-      info.fx_width != w || info.fx_height != h || info.built_frame != host->frame_index())
+      info.fx_width != w || info.fx_height != h || info.built_frame + 3 < host->frame_index())
     return;
   // The effects target is sampled, then left as its last pass left it (unknown: no view).
   const VkImageLayout fx_from = info.fx_layout;
@@ -129,27 +132,32 @@ void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, 
                                   {VK_NULL_HANDLE, diffuse.view, VK_IMAGE_LAYOUT_GENERAL},
                                   {VK_NULL_HANDLE, specular.view, VK_IMAGE_LAYOUT_GENERAL},
                                   {VK_NULL_HANDLE, info.fx_view, fx_in}};
-  VkWriteDescriptorSet wr[6];
-  for (uint32_t i = 0; i < 6; ++i) {
+  // The lighting's set 0 b2 (absolute camera position at byte 208), else the camera CB as a stand-in.
+  const bool has_cam2 = cam2.buffer && cam2.range >= 224;
+  VkDescriptorBufferInfo c2 = has_cam2 ? VkDescriptorBufferInfo{cam2.buffer, cam2.offset, 224} : cb;
+  VkWriteDescriptorSet wr[7];
+  for (uint32_t i = 0; i < 7; ++i) {
     wr[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     wr[i].dstBinding = i;
     wr[i].descriptorCount = 1;
-    if (i < 2) {
+    if (i < 2 || i == 6) {
       wr[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-      wr[i].pBufferInfo = i ? &vb : &cb;
+      wr[i].pBufferInfo = i == 6 ? &c2 : i ? &vb : &cb;
     } else {
       wr[i].descriptorType = (i == 3 || i == 4) ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
       wr[i].pImageInfo = &img[i - 2];
     }
   }
-  Push pc{{w, h}, mode, host->cfg_float("rt_em_tol", 0.01f), host->cfg_float("rt_em_fx_thr", 0.05f), {0, 0, 0}};
+  Push pc{{w, h}, mode, host->cfg_float("rt_em_tol", 0.01f), host->cfg_float("rt_em_fx_thr", 0.05f),
+          has_cam2 ? 1u : 0u, {0, 0}};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0,
-                        nullptr, 0, nullptr);
+  // The scene was built by the host's own submission after the previous frame's (AS builds, compute).
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pipe);
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 0, 6, wr);
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 0, 7, wr);
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 3, 1, &set, 0, nullptr);
   vk.CmdPushConstants(cmd, g_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);

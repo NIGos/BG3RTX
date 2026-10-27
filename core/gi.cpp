@@ -1439,7 +1439,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     bind_rt(b, s.tlas, s.alpha);
     dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);
   }
-  if (pc.rt_debug >= 6) em_debug(cmd, s.cam, s.vp, s.dep, s.dif, s.spe, g_w, g_h, pc.rt_debug);   // D-EM (core/emissive.cpp)
+  if (pc.rt_debug >= 6) em_debug(cmd, s.cam, s.vp, s.dep, s.dif, s.spe, s.l_cam2, g_w, g_h, pc.rt_debug);   // D-EM (core/emissive.cpp)
   timestamp(cmd, 3);
   g_slot_written[g_slot] = true;
   g_slot = (g_slot + 1) % kRing;

@@ -2,7 +2,8 @@
 // the emissive TLAS (rt/em_common.hlsli): a hit within rt_em_tol of the pixel's depth is
 // a visible emissive surface, and its radiance is evaluated from the draw's record. The
 // game's effects target at the same pixel is the reference: both are in the effects
-// target's (pre-exposed) units.
+// target's (pre-exposed) units. The scene is the previous submitted frame's, moved into
+// this frame's space by em_shift (exact for static emitters).
 //
 // Statistics (emStats, words): 0 pixels with depth, 1 visible emissive hits, 2 effects-
 // target pixels brighter than thr with no visible hit, 3 hits where the game shows less
@@ -16,14 +17,16 @@ struct CameraCB {
   float4 ray0, ray1, ray2;   // frustum rays at the viewport's (0,0), (1,0), (0,1) in ab space
 };
 struct ViewportCB { float2 scale; float2 bias; };
+struct Camera2 { float4 v[14]; };   // the lighting's set 0 b2: v[13].xyz = absolute camera position (_m6, byte 208)
 [[vk::binding(0, 0)]] ConstantBuffer<CameraCB> cam;
 [[vk::binding(1, 0)]] ConstantBuffer<ViewportCB> vp;
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;   // R32F linear depth
 [[vk::binding(3, 0)]] [[vk::image_format("r11g11b10f")]] RWTexture2D<float3> gDiffuse;
 [[vk::binding(4, 0)]] [[vk::image_format("r11g11b10f")]] RWTexture2D<float3> gSpecular;
 [[vk::binding(5, 0)]] Texture2D<float4> gFx;     // the game's effects target
+[[vk::binding(6, 0)]] ConstantBuffer<Camera2> cam2;
 
-struct Push { uint2 full; uint mode; float tol; float thr; float pad0, pad1, pad2; };
+struct Push { uint2 full; uint mode; float tol; float thr; uint has_cam2; float pad1, pad2; };
 [[vk::push_constant]] Push pc;
 
 float3 ray_at(float2 uv) {
@@ -50,34 +53,24 @@ void main(uint3 tid : SV_DispatchThreadID) {
     const float dist = length(P);
     const float3 dir = P / max(dist, 1e-20);
     const float px = length(ray_at(uv + float2(1.0 / float(pc.full.x), 0.0)) - r) / max(length(r), 1e-20) * dist;
+    const float3 shift = pc.has_cam2 != 0 ? em_shift(cam2.v[13].xyz) : float3(0, 0, 0);
     float3 L;
-    // The emissive surface at the pixel's own depth (the main TLAS is not needed for a
-    // primary ray: the depth buffer says where it stops).
+    uint rec;
+    // The emissive surface at the pixel's own depth (the depth buffer says where the
+    // primary ray stops; the main TLAS is not needed).
     const float eps = dist * pc.tol + 0.01;
-    const bool hit = em_lookup(float3(0, 0, 0), dir, dist, eps, px, L);
+    const bool hit = em_lookup(float3(0, 0, 0), dir, dist, eps, px, shift, L, rec);
     const float ours = em_lum(L), game = em_lum(fx);
     const bool bright = game > pc.thr;
     if (bright) stat(7);
     if (hit) {
       stat(1);
       if (game < 0.02 * ours) stat(3);
-      // The record of the hit, for the per-family comparison.
-      RayDesc ray;
-      ray.Origin = float3(0, 0, 0);
-      ray.Direction = dir;
-      ray.TMin = max(dist - eps, 0.0);
-      ray.TMax = dist + eps;
-      RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-      q.TraceRayInline(emTlas, RAY_FLAG_NONE, 0xFF, ray);
-      q.Proceed();
-      if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
-        uint rec = emInfo.Load(q.CommittedInstanceIndex() * 16 + 8);
-        if (rec < 1024) {
-          uint base = (16 + rec * 4) * 4;
-          emStats.InterlockedAdd(base, q16(ours));
-          emStats.InterlockedAdd(base + 4, q16(game));
-          emStats.InterlockedAdd(base + 8, 1u);
-        }
+      if (rec < 1024) {
+        uint base = (16 + rec * 4) * 4;
+        emStats.InterlockedAdd(base, q16(ours));
+        emStats.InterlockedAdd(base + 4, q16(game));
+        emStats.InterlockedAdd(base + 8, 1u);
       }
     } else if (bright) {
       stat(2);

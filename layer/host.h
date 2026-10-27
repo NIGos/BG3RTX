@@ -449,6 +449,7 @@ struct InstPipe {
 void bvh_device_created(DeviceData* dd);
 void bvh_device_destroyed(DeviceData* dd);
 bool bvh_split_wanted();                       // rt_bvh_split=1 and the split is usable
+bool bvh_available();                          // the split's machinery is usable (whatever rt_bvh_split says)
 void bvh_begin_capture(VkCommandBuffer cmd);
 void bvh_discard_scene(int scene);             // drops a scene's draws recorded so far (the emissive scene)
 // Per draw of the RT capture (split mode). `token` identifies the draw in later calls.
@@ -514,7 +515,12 @@ bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const Em
 // world with the pass's camera UBO.
 void em_pass_done(VkCommandBuffer cmd, const CmdState* s, VkBuffer ubo, VkDeviceSize ubo_off, uint32_t stride,
                   const std::vector<std::pair<VkDeviceSize, uint32_t>>& ranges, int ts);
-void em_dispatch_pre(VkCommandBuffer cmd, uint64_t cs, bool indirect);   // cmd.cpp: builds at the lighting
+// A command buffer is (re)begun: its unsubmitted draws are dropped (cmd.cpp).
+void em_forget_cmd(VkCommandBuffer cmd);
+// Right after the game's vkQueueSubmit(2) returned, the queue lock held (layer.cpp): if the
+// batch holds effects passes, builds the emissive scene from their draws in a command
+// buffer of ours and submits it on the same queue.
+void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
 void em_on_present();
 // ABI 8: the emissive scene for the core (host_api.h Bg3HostApi::rt_emissive).
 bool em_scene(VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);

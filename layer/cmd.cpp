@@ -315,6 +315,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->seg_count = 0;
   s->geo = nullptr;   // (an effects pass left open by a reset buffer leaks its small EmPass)
   s->geo_em = false;
+  em_forget_cmd(cmd);   // D-EM: draws of an earlier recording that was never submitted
   s->geo_ts = -1;
   s->vb.fill({});
   s->ib = VK_NULL_HANDLE;
@@ -646,7 +647,6 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, u
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, false, {x, y, z}};
     rrpost_dispatch_pre(cmd, pre->cs);
-    em_dispatch_pre(cmd, pre->cs, false);   // D-EM: the emissive scene, before the core's ray queries
     core_on_dispatch_pre(cmd, &info);
     assetdb_on_dispatch_pre(cmd);
   }
@@ -666,7 +666,6 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuf
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, true, {0, 0, 0}};
     rrpost_dispatch_pre(cmd, pre->cs);
-    em_dispatch_pre(cmd, pre->cs, true);    // D-EM: the emissive scene, before the core's ray queries
     core_on_dispatch_pre(cmd, &info);
     assetdb_on_dispatch_pre(cmd);
   }

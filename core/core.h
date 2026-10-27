@@ -15,5 +15,6 @@ void gi_release();
 
 // emissive.cpp (D-EM debug views, rt_debug 6-8): after the tiled lighting, in run_post.
 void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, const Bg3Binding& depth,
-              const Bg3Binding& diffuse, const Bg3Binding& specular, uint32_t w, uint32_t h, uint32_t mode);
+              const Bg3Binding& diffuse, const Bg3Binding& specular, const Bg3Binding& cam2, uint32_t w, uint32_t h,
+              uint32_t mode);
 void em_release();

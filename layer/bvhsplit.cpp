@@ -693,6 +693,7 @@ void bvh_device_destroyed(DeviceData* dd) {
 }
 
 bool bvh_split_wanted() { return g_on && !g_failed && cfg_int("rt_bvh_split", 1) != 0; }
+bool bvh_available() { return g_on && !g_failed; }
 
 void bvh_begin_capture(VkCommandBuffer) {
   std::lock_guard<std::mutex> lock(g_mu);

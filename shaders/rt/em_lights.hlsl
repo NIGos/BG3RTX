@@ -50,7 +50,7 @@ void main(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gi : SV_G
         float2 du = t.uv[1] - t.uv[0], dv = t.uv[2] - t.uv[0];
         float uv_area = 0.5 * abs(du.x * dv.y - du.y * dv.x);
         float2 uvc = (t.uv[0] + t.uv[1] + t.uv[2]) / 3.0;
-        float3 L = em_radiance(r, uvc, em_lod(r, uv_area, area, sqrt(area)));
+        float3 L = em_radiance(r, uvc, sqrt(uv_area));   // footprint: the whole triangle (its mean)
         l.p0 = t.p[0];
         l.e1 = e1;
         l.e2 = e2;
