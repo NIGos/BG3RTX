@@ -52,30 +52,60 @@ rng = np.random.default_rng(1)
 yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
 base = (0.4 + 0.3 * np.sin(xx / 97.0) * np.cos(yy / 53.0)).astype(np.float32)
 
-# ---- hard_dark: no false alarm on noise alone (on and off are the same setting)
-false_px = 0
-for seed in range(8):
-    r_ = np.random.default_rng(100 + seed)
-    on, off = frames(r_, base, 3, 0.03), frames(r_, base, 3, 0.03)
-    sig = sigma_from([on, off], 1)
-    res = det.hard_dark(on[0], off[0], sig, 1, "gi")
-    false_px += res["metrics"]["qualified"]
-check("hard_dark: no qualified region on pure noise (8 seeds)", false_px == 0, f"qualified {false_px}")
+# ---- hard_dark energy bound: the image = floor (everything but the effect's light) + the
+# effect's light x visibility. Any visibility in [0, 1] keeps every pixel at or above the floor.
+def cx(g):
+    return (g["bbox"][2] + g["bbox"][3]) / 2
 
-# ---- hard_dark: a black polygon with a sharp edge the off image does not have (the grass-card
-# artifact of QA.md finding 1) is caught; a wide soft shadow of the same depth is not.
+
 poly = (np.abs(xx - 400) + np.abs(yy - 260) < 30).astype(np.float32)
 d = np.hypot(xx - 900, yy - 260) - 60
 soft = np.clip(0.5 - d / 40.0, 0, 1)
-on = [f * (1 - 0.95 * poly) * (1 - 0.95 * soft) for f in frames(rng, base, 3, 0.01)]
-off = frames(rng, base, 3, 0.01)
+amb = 0.25 * base                 # the floor: the light the effect does not own
+own = base - amb                  # the effect's own light
+psf = 1.0                         # the pipeline's spread: white noise and edges boxed with radius 1
+
+
+def render(vis, extra=1.0, n=3, std=0.01):
+    return [np.maximum((amb * extra + own * vis) + correlated_noise(rng, base.shape, 1, std), 0) for _ in range(n)]
+
+
+vis = im.box((1 - poly) * (1 - soft), int(psf))   # a black polygon and a soft shadow, as rendered
+on, off, flo = render(vis), render(np.ones_like(base)), render(np.zeros_like(base))
 sig = sigma_from([on, off], 1)
-res = det.hard_dark(on[0], off[0], sig, 1, "gi")
-hits = [g for g in res["regions"] if g["qualified"]]
-check("hard_dark: sharp polygon flagged", any(abs((g["bbox"][2] + g["bbox"][3]) / 2 - 400) < 20 for g in hits),
+p_sig = th.psf_sigma([y - np.mean(on, 0) for y in on])
+res = det.hard_dark(on[0], off[0], sig, 1, "rt_shadows", floor=flo[0], psf_sigma=p_sig)
+check("psf_sigma: boxed (r=1) noise measured as a spread of 0.5-1.5 px", 0.5 < p_sig < 1.5, f"{p_sig:.2f} px")
+check("hard_dark gate: a physical umbra (all of its own light gone) passes", res["pass"] and res["gate"],
       f"score {res['score']}‰")
-check("hard_dark: 40-px soft shadow not flagged", not any(abs((g["bbox"][2] + g["bbox"][3]) / 2 - 900) < 40 for g in hits))
-check("hard_dark: gate fails on the artifact", not res["pass"])
+sigr = [g for g in res["regions"] if g["kind"] == "signature"]
+pg = [g for g in sigr if abs(cx(g) - 400) < 20]
+sg = [g for g in sigr if abs(cx(g) - 900) < 40]
+check("hard_dark review: the polygon is step-like and at its floor", bool(pg) and pg[0]["step_like"] and pg[0]["black"] > 0.5,
+      str(pg[:1]))
+check("hard_dark review: the 40-px soft shadow is not step-like", all(g["step_like"] is False for g in sg), str(sg[:1]))
+
+# An effect that also removes light it does not own (here the ambient under a patch) goes below
+# the floor: an energy violation, the gate fails there and only there.
+patch = ((np.abs(xx - 640) < 25) & (np.abs(yy - 120) < 25)).astype(np.float32)
+on_bad = [y * (1 - patch) + patch * 0.2 * amb for y in on]   # all its own light and 80% of the ambient
+res = det.hard_dark(on_bad[0], off[0], sig, 1, "rt_shadows", floor=flo[0], psf_sigma=p_sig)
+eg = [g for g in res["regions"] if g["kind"] == "energy"]
+check("hard_dark gate: light removed below the floor fails", not res["pass"] and any(abs(cx(g) - 640) <= 25 for g in eg),
+      f"score {res['score']}‰, {len(eg)} region(s)")
+check("hard_dark gate: nothing else below the floor", all(abs(cx(g) - 640) <= 25 for g in eg), str([(g["bbox"], g["area"]) for g in eg]))
+
+# No false alarm on noise alone: on and floor differ only by noise where vis = 0 everywhere.
+false_e = 0
+for seed in range(8):
+    rng = np.random.default_rng(100 + seed)
+    on0, fl0 = render(np.zeros_like(base), std=0.03), render(np.zeros_like(base), std=0.03)
+    s0 = sigma_from([on0, fl0], 1)
+    false_e += det.hard_dark(on0[0], render(np.ones_like(base))[0], s0, 1, "gi", floor=fl0[0])["metrics"]["energy_regions"]
+check("hard_dark gate: no energy region on pure noise (8 seeds)", false_e == 0, f"regions {false_e}")
+res = det.hard_dark(on[0], off[0], sig, 1, "gi")
+check("hard_dark without a floor is review only", res["gate"] is False and res["threshold"] is None)
+rng = np.random.default_rng(1)
 
 # ---- flicker: equal correlated noise in both sets passes; a flickering patch fails
 def codes(ys):

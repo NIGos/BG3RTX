@@ -120,6 +120,28 @@ def n_eff_box(residuals, mask, r):
     return float(np.clip(n ** 4 / max(s, 1e-12), 1.0, n * n))
 
 
+def psf_sigma(residuals):
+    """Width (Gaussian sigma, px) of the pipeline's point spread at the analysis resolution,
+    from the temporal residuals of repeated frames: white per-pixel noise (1 spp before RR)
+    leaves the reconstruction (RR, upscaling, preview resampling) correlated by the PSF
+    convolved with itself, rho(1) = exp(-1 / (4 sigma_p^2)) for a Gaussian PSF, so
+    sigma_p = 1 / (2 sqrt(-ln rho(1))). rho(1) is the mean lag-1 autocorrelation along x and
+    y. 0 when the noise is uncorrelated (rho <= 0)."""
+    num = den = 0.0
+    for x in residuals:
+        x = np.asarray(x, np.float64)
+        x = x - x.mean()
+        num += float((x[:, 1:] * x[:, :-1]).sum() + (x[1:, :] * x[:-1, :]).sum())
+        den += float((x[:, 1:] ** 2).sum() + (x[1:, :] ** 2).sum())
+    if den <= 0:
+        return 0.0
+    rho = num / den
+    if rho <= 0:
+        return 0.0
+    rho = min(rho, 0.999)
+    return 1.0 / (2.0 * math.sqrt(-math.log(rho)))
+
+
 def preview_quant_sigma(lin, kind):
     """Std of the rounding of an 8-bit preview, in the decoded linear units, per pixel and
     channel: step / sqrt(12) with step = decode(code + 1/255) - decode(code). `kind` "pq":
@@ -147,13 +169,15 @@ REGISTRY = {
     "alpha_fw": ("derived", "standard: 5% family-wise false alarm (Fisher), Bonferroni per family"),
     "k_sigma": ("derived", "measured noise: z(ALPHA_FW / independent px) x per-pixel sigma"),
     "min_area": ("derived", "filter support: (2 (blur + r_open) + 1)^2 px"),
-    "dark_fail_area": ("derived", "physics/definition: any qualified hard-dark region is an artifact -> 0"),
-    "edge_thr": ("derived", "edge_threshold(): the drop's own contrast through the detector's box"),
-    "dark_removed": ("signature", "artifact definition; proposed: ambient-floor trace (QA.md)"),
-    "dark_sharp": ("signature", "artifact definition; proposed: effect step response from silhouettes"),
-    "dark_unexplained": ("signature", "artifact definition (majority of the boundary)"),
-    "dark_black_shadows": ("signature", "artifact definition; proposed: ambient-floor trace"),
-    "dark_black_level": ("signature", "near-black = < 10% of the light left; proposed: ambient floor"),
+    "dark_fail_area": ("derived", "physics: any px below the light-off floor (energy) beyond k sigma -> 0"),
+    "hard_dark floor": ("derived", "physics: qa_zero light-off traces (capture.FLOORS)"),
+    "step_sharp": ("derived", "measured: the step response through psf_sigma() and the detector box"),
+    "edge_thr": ("review", "edge_threshold(): the drop's own contrast through the detector's box"),
+    "dark_removed": ("review", "dark-signature classifier: ranks crops"),
+    "dark_sharp": ("review", "used only without a measured PSF"),
+    "dark_unexplained": ("review", "no derivation (majority of the boundary): ranks crops"),
+    "dark_black_shadows": ("review", "share at the floor: ranks crops"),
+    "dark_black_level": ("review", "near-black without a floor trace: ranks crops"),
     "bright_ratio": ("review", "brightening is compared with the game's image (R0): crops only"),
     "sun_*": ("review", "sun mask vs game: crops only (R0)"),
     "sun_check_darker_fail": ("derived", "physics: darker than min(game, traced) is impossible -> 0"),

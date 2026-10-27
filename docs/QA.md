@@ -41,6 +41,7 @@ presents later (240 by default, enough for RR's history to settle):
 | N+4 | `sun_dbg` | `rt_local_shadows=1 rt_debug=2 rt_backlit=0` | sun mask against traced visibility and the written mask |
 | N+5 | `sun_check` | `rt_debug=7 rt_backlit=1` | `rt_sun_replace` in-frame A/B: the written mask against min(game, traced), same pixel and frame |
 | N+6 | `sun_trust` | `rt_debug=6` | the trust of `rt_sun_replace` (TRACK_D 12) |
+| N+7..N+10 | `sun_zero`, `ls_zero`, `all_zero`, `amb_zero` | `rt_debug=0 qa_zero=1`, `2`, `7`, then `4 rt_reflections=0` | the light-off floors of the hard_dark energy gate (`capture.FLOORS`): no direct sun, no D-LS lights, none of the three, no ambient (AO 0, with the GI on and the reflections off). `--no-floors` skips them |
 | (opt) | `ref` | `rt_debug=0 gi_rr_rays=8 ls_samples=2` | `--reference` |
 | last N | `off0`..`off{N-1}` | all RT off (`rt=0` and every effect 0) | all-RT contribution, flicker baseline |
 
@@ -50,7 +51,7 @@ presents later (240 by default, enough for RR's history to settle):
 and `sharc_roof` (`sharc_debug=5`: the roof mask of `roofed_brightening`); `off0` sets
 `sharc=0` again. Effects `sharc` (`sharc_on` against `on0`) and `gi_sharc`
 (`sharc_refl_off` against `gi_off`) get the usual hard_dark and brightening detectors.
-`--temporal N` (default 3) sets N. With N = 3 and no reference that is 13 traces (16 with `--temporal-gi`; `--sharc` adds 3).
+`--temporal N` (default 3) sets N. With N = 3 and no reference that is 17 traces with the four floors (20 with `--temporal-gi`; `--sharc` adds 3).
 The sun debug traces (`sun_dbg`, `sun_check`, `sun_trust`) are each evaluated on their own,
 so another view than on0's does not void them. A trace-to-trace A/B cannot isolate
 `rt_sun_replace` in animated scenes (water, wind in foliage: 0.28-0.68 of the albedo
@@ -99,7 +100,7 @@ bounds, and every gate constant is derived (QUALITY.md R0, "Every gate needs a d
 
 | Detector | Flags | Score (fail above) |
 |---|---|---|
-| **hard_dark** | the effect removes > 60% of the luminance beyond kσ, with ≥ 50% of the drop inside 3 px of the region edge (`sharp`), and ≥ 50% of the edge where the effect-off image has no edge as steep as the drop itself after the same box (`unexplained`: not an object silhouette; 0.31 in ln-luminance per px for a 3×3 box). `polygonal` (edge energy in 4 of 16 orientations) and `black` (share left with < 10% of the light) are reported. Shadow effects (sun, D-LS, all RT) may be legitimately sharp, so for them a region also needs `black` ≥ 0.25: no real shadow removes the ambient and every other light. The 60%, 50%, 50%, 10% and 0.25 define the artifact and are not derived yet (see the table) | qualified area, ‰ of the buffer (0: any qualified region) |
+| **hard_dark** | **Gate (energy bound):** the effect's trace against its light-off floor (`capture.FLOORS`: `sun_zero` for the RT sun, `ls_zero` for D-LS, `amb_zero` for GI and reflections, `all_zero` for all RT). An effect that only removes its own light cannot take a pixel below the image without that light, so floor − on > kσ is light removed that was not the effect's: any such region fails. Pixels whose albedo or normals moved between the two traces (jitter-derived) are excluded. Crops add the floor as a tile. Without its floor trace (`--no-floors`, or a moved view) the effect is review only. **Review (crops, ranking):** regions removing > 60% beyond kσ, with `sharp` (share of the drop across the 3-px edge bands) against the measured step response (`step_like`: sharp ≥ the `sharp` of an ideal step blurred by the pipeline's PSF, measured from the on* repeats, minus z·σ_sharp), `unexplained` (no effect-off edge as steep as the drop), `polygonal`, and `black` (share of the region at its floor: the effect removed all of its own light). `signature` marks the old artifact definition (finding 1); it never gates | ‰ of px below the floor (0) |
 | **brightening** (review, no threshold: R0) | the effect brightens beyond kσ and beyond a review bound: ×1.5 for sun and local shadows, ×2 for GI, reflections and all RT. The bounds only choose the crops | area ‰ |
 | **sun_extra_casters** (review, no threshold: R0) | RT visibility (5×5 box of the 1-spp soft sun) < 0.15 where the game mask > 0.9, after a 3-px erosion (no thin edges, no penumbrae; game mask between 0.1 and 0.9 never counts); unlit, skin, foliage and hair classes excluded (`rt_backlit=0` leaves their back faces untraced). Only pixels the sun term really darkened (lighting ratio `on0/sun_off` < 0.7) count | ‰ |
 | **sun_missing_casters** (review, no threshold) | RT visibility > 0.85 where the game mask < 0.1, eroded likewise. With `rt_backlit=0` traced-lit pixels are front-facing, so back faces never count. It cannot change the image (the fold only darkens: mask × visibility) but shows casters missing from the TLAS; off-screen roofs and cut-away walls are expected here | ‰ |
@@ -210,9 +211,11 @@ noise, artifacts, jitter and pans; no game).
 
 | Gate | Constant (old → new) | Class | Derivation |
 |---|---|---|---|
-| hard_dark | fail area 0.02‰ → **0** | derived (physics/definition) | A qualified region is an artifact by definition. False alarms are bounded by k and the minimum region (8 noise-only seeds: 0 qualified). |
-| hard_dark | edge strength 0.25 → **ln(1/(1 − 0.6))/(2·blur + 1)**: 0.31 (3×3), 0.18 (5×5) | derived | An off-image edge explains the boundary only if it is as steep as the drop it would explain, after the same box. |
-| hard_dark | removed 0.6, sharp 0.5, unexplained 0.5, near-black < 0.1, black ≥ 0.25 (shadows), bands 3/6–12 px | **arbitrary (signature)** | They define the artifact (finding 1, grass-card polygons) and stay in the gate until derived. Proposed: (1) an *ambient-floor* trace with the effect's light source off (sun, or local lights), so that "black" becomes "removes more light than the effect's own light contributed", a physical energy bound, which replaces removed, near-black and black; (2) `sharp` from the effect's measured step response (the sharpness of known silhouette edges in its contribution map: GI is half-res, then RR), so "sharp" means "as sharp as the effect can render a geometric edge". `unexplained` (majority of the boundary) has no derivation proposal. **Needs a decision.** |
+| hard_dark | gate: removed 0.6 + sharp + unexplained + black → **floor − on > kσ, any region** | derived (physics: energy) | The light-off floor (`qa_zero`, coordinator decision A, 2026-10-27). 8 noise-only seeds: 0 regions; an umbra at the floor passes; light removed below the floor fails (`tests/qa_detectors_test.py`). |
+| hard_dark | `black`: < 10% of the light left → **share of the region at its floor** (on − floor < kσ) | derived (physics) | "Removed all of its own light"; review metric. |
+| hard_dark | `sharp` ≥ 0.5 → **`step_like`: sharp ≥ step_sharpness(PSF) − z·σ_sharp** | derived (measured) | The PSF is measured from the on* residuals (lag-1 autocorrelation, Gaussian: σ_p = 1/(2√(−ln ρ₁))); the reference is the `sharp` of an ideal step through that PSF and the detector box; σ_sharp from the band medians' noise; z Bonferroni over the regions tested. Review metric. |
+| hard_dark | edge strength 0.25 → **ln(1/(1 − 0.6))/(2·blur + 1)** | derived (relative to the 0.6 review bound) | Review metric (`unexplained`). |
+| hard_dark | removed 0.6, unexplained 0.5, black share 0.25, bands 3/6–12 px | **review only** | Not derivable: they rank crops and mark the old `signature`, never gate. The grass-card class of finding 1 (opaque cards, visibility 0 where it should be 1) is energetically allowed, so only review and the geometric checks see it: a derived gate for it would compare the TLAS against the raster (`rt_debug=3`: a TLAS hit in front of the depth buffer is geometry the frame does not have). |
 | flicker | per-pixel `std_on > 2·std_off + 0.01` → **visible** (5×5 std excess > one 10-bit PQ step) **and significant per region** (ln-ratio > z·√(1/2ν_on + 1/2ν_off), ν = (n − 1)·81·n_eff/25) | derived (noise, display) | n_eff = 25²/Σρ²·w from the measured spatial autocorrelation of the residuals (Gaussian: Cov(e_i², e_j²) = 2ρ²σ⁴); z Bonferroni over the regions the frame can hold. Pooled at the minimum-area scale only: a larger region is chosen by the same data (scan statistic). 12 equal-noise seeds: 0 false fails. An 80×80 flickering patch: caught. |
 | flicker | mean std ratio 1.5 → **mean std excess ≤ one 10-bit PQ step** (0.00098) | derived (display) | Frame-wide flicker too faint to form a region. Past runs: S6 0.0002–0.0008 (pass), S14 gi 0.00066 (pass: the old 1.67 ratio was rounding), S3 0.0019 before the motion mask. |
 | flicker | excess area 1‰ → **0** | derived | Regions are already significance-tested. |
@@ -271,16 +274,20 @@ Not changed here (rendering defaults are the coordinator's). Agent inventory of 
 - *Fixed:* `rt_sun_near=0` did not switch the proximity test off (`near` started at the
   pixel's own game mask, trust `saturate(near·2 − 0.5)`). The proximity term is removed:
   trust = roofs and the frustum term only; `rt_sun_near` splits the A/B debug class only.
-- D-RF starts its rays at `P + N·dist·rt_bias` (`rt_reflections.hlsl`), not at
-  `rt_ray_origin`: the old 0.002 × distance offset (4 cm at 20 m) is still in the reflections.
-- A ray query that hits `kMaxCandidates` (4096) is aborted with nothing committed: a shadow
-  ray then counts as unoccluded (light leak). For visibility queries an abort should count
-  as occluded.
+- *Fixed:* D-RF started its rays at `P + N·dist·rt_bias`; it now uses `rt_ray_origin`
+  (binding 40 added to its push set, which is now at the 32-descriptor limit).
+- *Fixed:* a ray query that hit `kMaxCandidates` (4096) was aborted with nothing committed,
+  so a shadow ray counted as unoccluded. `rt_visibility()` is tri-state; an unknown query
+  takes the game's own term (sun mask; D-LS shadow map, or unshadowed where the game never
+  shadows; reflection probe), GI and AO count it as occluded. Counted per pass in the
+  `[core] guard:` line; `rt_max_candidates` forces aborts for tests (TRACK_D 13).
 - *Fixed (logged, not silent):* `kSunMaxVolumes` 256: volumes beyond it are dropped
   farthest first, logged once per level (`sun: WARNING N roof volumes ...`) and counted in
   `sun stats`. Measured: at most 183 within 600 m of any volume centre (TRACK_D 12.1).
-- Code defaults differ from the ini: `rt_sun_near` 1.5 vs 0, `rt_sun_top` 1 vs 0, `gi_rays`
-  2 vs 4, `gi_steps` 12 vs 16.
+- *Fixed:* code defaults differed from the ini (`rt_sun_near`, `rt_sun_top`, `gi_rays`,
+  `gi_steps` and 10 more). `common/settings.h` `kDefaults` is generated from `bg3rtx.ini`
+  (`scripts/gen_settings_defaults.py`), `cfg_*` fall back to it, a disagreeing call-site
+  literal is logged, and `settings_test` checks ini and table agree (SETTINGS_DESIGN 10).
 
 The arbitrary ones with the most effect on the image:
 
@@ -293,11 +300,11 @@ The arbitrary ones with the most effect on the image:
 | Roof padding 1 m sideways / 3 m up, `rt_sun_rise` 6 m, `rt_sun_roof_radius` 120 m (< `rt_tmax` 300 m) | ini, `sun_trust.cpp` | — | From the asset DB: roof mesh AABB minus trigger AABB per level; tallest caster in the ray's footprint; radius ≥ the farthest traced pixel's reach. *Radius done* (farthest roof-tested pixel + `rt_tmax`, per frame). Pad, up and rise: the DB has no meshes (`scripts/roof_stats.py`); TLAS experiment in TRACK_D 12.4. |
 | `ls_clear` | ini | 0.2 m | The fixture's own radius, or skip the first back-facing hit: today every occluder within 20 cm of a light is ignored. |
 | Source radii (0.05 m and the fixture table) | ini, `assetdb.cpp` | — | Measure the emitter mesh in the TLAS or asset DB ("typical sizes, not measured"). |
-| GI temporal depth reject 3%, bilateral σ 1% depth, SS offsets 0.003/0.002·dist, `gi_thickness` 0.03, `gi_rt_depth_tol`/`rf_depth_tol` 0.03 | `gi_temporal.hlsl`, `gi_common.hlsli`, ini | — | From the depth format's precision and the pixel footprint / \|N·V\| (plane distance), not a fixed fraction. |
-| TLAS↔depth match window max(1%·dist, 16 px) and tolerance | `rt_origin.hlsl` | — | Measured XFB error (TRACK_D 7.1: 99.09% within 0.5%) + depth precision. |
+| GI temporal depth reject 3%, bilateral σ 1% depth, `gi_rt_depth_tol`/`rf_depth_tol` 0.03 | `gi_temporal.hlsl`, `gi_common.hlsli`, ini | — | *Done* (`shaders/rt/depth_tol.hlsli`, TRACK_C): footprint × (tanθ + 1) + depth precision + jitter (+ the measured 0.5% TLAS error where no per-pixel reference exists); the keys are now multipliers `gi_rt_depth_k`/`rf_depth_k` = 1. Left: the temporal test's camera-translation term (3%) needs the previous camera position in that pass. SS offsets 0.003/0.002·dist and `gi_thickness` 0.03 not done. |
+| TLAS↔depth match window max(1%·dist, 16 px) and tolerance | `rt_origin.hlsl` | — | *Done:* the same helper with the measured 0.5% term. |
 | `sharc_frames` 16, `sharc_stale` 128, `sharc_rf_rough` 0.2 | ini | — | Cache lag as a time budget against the variance it removes; stale from measured occupancy. |
 | `rf_max_rough_norr` 0.3, `rf_edge` 0.05, `dot(n, dir) < 0.2`, `rf_tmax` 100 m, `rt_tmax` 300 m | ini, `rt_reflections.hlsl` | — | Roughness at which the mirror bias exceeds a JND; `< 0` plus the normal precision; the game's last cascade distance. |
-| Light-join tolerances (character 4 m, static 5 cm, radius 2% + 1 cm) | `ls_lights.cpp`, `assetdb.cpp` | — | Speed × the bridge's 0.25 s export period (as `ls_dyn_tol`); k·ulp of the position; float round-trip of 1/inv_r. |
+| Light-join tolerances (character 4 m, static 5 cm, radius 2% + 1 cm) | `ls_lights.cpp`, `assetdb.cpp` | — | *Done* (SE_BRIDGE "Join tolerances"): static √3·(4 ulp + 0.05 mm); moving = static + `ls_dyn_speed` (8 m/s, the game's commonest sprint/dash template) × the measured export age; radius (placed) 0.5 mm + 4 ulp; refresh on each export; stale after 4 periods; the 55 m sphere → the export's real coverage. Left: the radius of moving (VFX) lights stays 2% + 1 cm, now logged for measurement. |
 
 ## Findings (2026-10-26, main 36f3c6e)
 

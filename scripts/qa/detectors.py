@@ -15,16 +15,14 @@ from . import thresholds as th
 # computed by th from the traces. Values that are not derived only select crops for review
 # ("gate": False), or are marked "signature" in th.REGISTRY. Areas are per mille (‰) of px.
 T = {
-    # hard_dark artifact definition ("signature": not yet derived; QA.md has the proposals).
-    "dark_removed": 0.60,      # an effect removes more than 60% of the luminance ...
-    "dark_sharp": 0.50,        # ... with at least half of the drop inside 3 px of the edge ...
-    "dark_unexplained": 0.50,  # ... along an edge the effect-off image does not have
-    # Shadows may legitimately be sharp (small or distant lights): for them a region
-    # also needs a near-black core, at least this fraction left with < 10% of the light
-    # (ambient and other lights never vanish completely under a real shadow).
-    "dark_black_shadows": 0.25,
-    "dark_black_level": 0.10,
-    # Physics: a qualified region is an artifact by definition, so none is tolerated. False
+    # hard_dark review signature (not derivable: they rank crops, never gate; the gate is the
+    # light-off floor below). An effect removes more than 60% of the luminance ...
+    "dark_removed": 0.60,
+    "dark_sharp": 0.50,        # ... sharp (only without a measured PSF; else step_sharpness) ...
+    "dark_unexplained": 0.50,  # ... along an edge the effect-off image does not have ...
+    "dark_black_shadows": 0.25,  # ... and, for shadows, this share at the floor (umbra)
+    "dark_black_level": 0.10,  # near-black without a floor trace: < 10% of the light left
+    # Physics: no pixel may go below the effect's light-off floor beyond k sigma (energy). False
     # alarms are bounded by the k-sigma test (th.k_sigma) and the filters' support (th.min_area).
     "dark_fail_area": 0.0,
     # Review only (R0: the game's image is not a reference for effect outputs): these bounds
@@ -79,19 +77,89 @@ def ratio_map(y_on, y_off, blur=1):
 SHADOW_EFFECTS = ("rt_shadows", "rt_local_shadows", "all_rt")
 
 
-def hard_dark(y_on, y_off, sigma, blur=1, effect=""):
-    """Connected regions where the effect removes > 60% of the light with sharp,
-    unexplained edges: geometry artifacts rather than soft shadows.
+def _edge_profile(rr, sub):
+    """The `sharp` measurement of one region: the share of its drop (far ring 6-12 px out
+    against the core 3 px in) that happens across its edge (3-px bands either side).
+    Returns (sharp, step, full, n_in, n_out), or None without a ring."""
+    in3 = sub & ~im.erode(sub, 3)
+    core = im.erode(sub, 3)
+    out3 = im.dilate(sub, 3) & ~sub
+    far = im.dilate(sub, 12) & ~im.dilate(sub, 6)
+    if not out3.any() or not far.any() or not in3.any():
+        return None
+    inside = float(np.median(rr[core])) if core.any() else float(np.median(rr[sub]))
+    full = float(np.median(rr[far])) - inside
+    step = float(np.median(rr[out3])) - float(np.median(rr[in3]))
+    sharp = float(np.clip(step / full, 0, 1)) if full > 1e-3 else 0.0
+    return sharp, step, full, int(in3.sum()), int(out3.sum())
 
-    Derived parts (docs/QA.md "Thresholds and their derivation"): the drop must exceed
-    k sigma of the measured per-pixel noise (k: Bonferroni over the buffer's independent
-    samples), regions are at least the filters' support, an off-image edge "explains" the
-    boundary when it is as steep as the drop itself after the same box, and no qualified
-    region is tolerated."""
+
+_STEP_CACHE = {}
+
+
+def step_sharpness(psf_sigma, blur):
+    """`sharp` of an ideal geometric step as this pipeline renders it: a dark disk whose edge
+    is blurred by the measured point spread (th.psf_sigma: RR, upscaling and the preview
+    resampling) and then by the detector's own box. It is the largest `sharp` a real edge
+    can reach in this run, so the reference for "as sharp as a geometric edge"."""
+    key = (round(float(psf_sigma), 2), int(blur))
+    if key not in _STEP_CACHE:
+        H = 96
+        yy, xx = np.mgrid[0:H, 0:H].astype(np.float32)
+        t = (np.hypot(yy - H / 2, xx - H / 2) < 20).astype(np.float32)
+        t = im.gauss(t, float(psf_sigma)) if psf_sigma > 0.3 else t
+        r, _, _ = ratio_map(1.0 - 0.95 * t, np.ones_like(t), blur)
+        lab, n = im.label(im.opening(r < 0.5, 1))
+        best = 0.0
+        for i, area, bb in im.regions(lab, n, 1):
+            y0, y1, x0, x1 = im.window(bb, r.shape, 14)
+            p = _edge_profile(r[y0:y1, x0:x1], lab[y0:y1, x0:x1] == i)
+            if p:
+                best = max(best, p[0])
+        _STEP_CACHE[key] = best
+    return _STEP_CACHE[key]
+
+
+def hard_dark(y_on, y_off, sigma, blur=1, effect="", floor=None, moving=None, psf_sigma=None):
+    """Light an effect removes that was not its own (gate), and dark regions with sharp,
+    unexplained edges (review).
+
+    Gate, physics (docs/QA.md "Thresholds and their derivation"): `floor` is the trace with
+    the effect's own light removed (capture.FLOORS: sun mask, D-LS visibility or AO written
+    0), everything else as in `y_on`. An effect that only removes its own light can never
+    take a pixel below it, so pixels where floor - on > k sigma (k: Bonferroni over the
+    independent samples) are an energy violation; any region of them fails. Pixels whose
+    scene inputs moved between the traces (`moving`) are excluded. Without a floor the
+    detector is review only.
+
+    Review: regions where the effect removes > 60% of the light (beyond k sigma), ranked by
+    the old signature: `sharp`, compared with the measured step response (`step_like`:
+    sharp >= step_sharpness(psf) - z sigma_sharp, z Bonferroni over the regions tested),
+    `unexplained` (no effect-off edge as steep as the drop, th.edge_threshold), `polygonal`,
+    and `black`: with a floor, the share of the region the effect left at its floor (it
+    removed all of its own light: an umbra); without, the share left under 10%."""
     r, a, b = ratio_map(y_on, y_off, blur)
     k = th.k_sigma(r.shape, blur)
     sig = np.asarray(sigma, np.float32)
-    # (b - a) > k sigma also makes the denominator significant (b > k sigma): no luminance floor.
+    sig_px = np.broadcast_to(sig, r.shape)
+    min_a = _min_area(r.shape, blur)
+    static = ~moving if moving is not None and moving.shape == r.shape else np.ones(r.shape, bool)
+    fl = im.box(floor, blur) if floor is not None and floor.shape == r.shape else None
+
+    # ---- the gate: below the floor
+    eregs, e_px, emask = [], 0, None
+    if fl is not None:
+        emask = im.opening(((fl - a) > k * sig) & static, 1)
+        lab_e, n_e = im.label(emask)
+        for i, area, bb in im.regions(lab_e, n_e, min_a):
+            y0, y1, x0, x1 = bb
+            sub = lab_e[y0:y1, x0:x1] == i
+            deficit = float(np.median(((fl - a) / np.maximum(fl, 1e-9))[y0:y1, x0:x1][sub]))
+            e_px += area
+            eregs.append({"bbox": bb, "area": area, "below_floor": round(deficit, 3), "kind": "energy",
+                          "qualified": True, "rank": 1e9 + area * deficit})
+
+    # ---- review: the dark-region signature
     m = (r < 1.0 - T["dark_removed"]) & ((b - a) > k * sig)
     m = im.opening(m, 1)
     lab, n = im.label(m)
@@ -100,47 +168,56 @@ def hard_dark(y_on, y_off, sigma, blur=1, effect=""):
     # log of the effect-off image, clamped at its own noise (below it the log is noise).
     eoff, _, _ = im.grad_mag(np.log(np.maximum(b, np.maximum(sig, 1e-9))))
     edge_thr = th.edge_threshold(T["dark_removed"], blur)
-    regs, flagged = [], 0
-    for i, area, bb in im.regions(lab, n, _min_area(r.shape, blur)):
+    cands = im.regions(lab, n, min_a)
+    s0 = step_sharpness(psf_sigma, blur) if psf_sigma is not None else None
+    z_r = th.z_one_sided(max(1, len(cands)))
+    regs = []
+    for i, area, bb in cands:
         y0, y1, x0, x1 = im.window(bb, r.shape, 14)
         sub = lab[y0:y1, x0:x1] == i
         rr = r[y0:y1, x0:x1]
-        in3 = sub & ~im.erode(sub, 3)
-        core = im.erode(sub, 3)
-        d3 = im.dilate(sub, 3)
-        out3 = d3 & ~sub
-        far = im.dilate(sub, 12) & ~im.dilate(sub, 6)
-        if not out3.any() or not far.any():
+        prof = _edge_profile(rr, sub)
+        if prof is None:
             continue
-        inside = float(np.median(rr[core])) if core.any() else float(np.median(rr[sub]))
-        outside = float(np.median(rr[far]))
-        full = outside - inside
-        step = float(np.median(rr[out3])) - float(np.median(rr[in3]))
-        sharp = float(np.clip(step / full, 0, 1)) if full > 1e-3 else 0.0
-        boundary = d3 & ~im.erode(sub, 1) & ~(im.dilate(sub, 3) & ~im.dilate(sub, 1))   # a 2-px band on the edge
+        sharp, step, full, n_in, n_out = prof
+        step_like = None
+        if s0 is not None and full > 1e-3:
+            # Noise of the band medians (1.2533 sigma / sqrt(n) for a median) in ratio units.
+            s_r = float(np.median((sig_px[y0:y1, x0:x1] / np.maximum(b[y0:y1, x0:x1], 1e-9))[sub]))
+            s_sharp = 1.2533 * s_r * np.sqrt(1.0 / n_in + 1.0 / n_out) / full
+            step_like = bool(sharp >= s0 - z_r * s_sharp)
+        boundary = im.dilate(sub, 3) & ~im.erode(sub, 1) & ~(im.dilate(sub, 3) & ~im.dilate(sub, 1))   # 2-px band
         unexpl = float((eoff[y0:y1, x0:x1][boundary] < edge_thr).mean()) if boundary.any() else 0.0
         poly = im.polygonality(gx[y0:y1, x0:x1], gy[y0:y1, x0:x1], boundary)
         removed = float(1.0 - np.median(rr[sub]))
-        deep = sub & (rr < T["dark_black_level"])   # near-black: the effect leaves < 10% of the light
+        if fl is not None:   # umbra: the effect left the pixel at its floor (all of its own light gone)
+            deep = sub & ((a - fl)[y0:y1, x0:x1] < k * sig_px[y0:y1, x0:x1])
+        else:
+            deep = sub & (rr < T["dark_black_level"])
         black = float(deep.sum() / max(1, sub.sum()))
         fy, fx = (np.argwhere(deep).mean(axis=0) if deep.any() else np.argwhere(sub).mean(axis=0))
-        q = removed >= T["dark_removed"] and sharp >= T["dark_sharp"] and unexpl >= T["dark_unexplained"]
-        if effect in SHADOW_EFFECTS:
-            q = q and black >= T["dark_black_shadows"]
-        if q:
-            flagged += area
+        sig_ok = removed >= T["dark_removed"] and (step_like if step_like is not None else sharp >= T["dark_sharp"]) \
+            and unexpl >= T["dark_unexplained"] and (effect not in SHADOW_EFFECTS or black >= T["dark_black_shadows"])
         regs.append({"bbox": bb, "area": area, "removed": round(removed, 3), "sharp": round(sharp, 3),
-                     "unexplained": round(unexpl, 3), "polygonal": round(poly, 3), "black": round(black, 3),
-                     "focus": (int(y0 + fy), int(x0 + fx)), "qualified": q,
-                     "rank": area * removed * (0.25 + sharp) * (0.25 + unexpl) * (0.5 + black) * (1.0 if q else 0.1)})
-    score = _permille(flagged, r.shape)
+                     "step_like": step_like, "unexplained": round(unexpl, 3), "polygonal": round(poly, 3),
+                     "black": round(black, 3), "kind": "signature", "signature": bool(sig_ok),
+                     "focus": (int(y0 + fy), int(x0 + fx)), "qualified": False,
+                     "rank": area * removed * (0.25 + sharp) * (0.25 + unexpl) * (0.5 + black) * (1.0 if sig_ok else 0.1)})
     regs.sort(key=lambda g: -g["rank"])
-    return {"score": round(score, 4), "threshold": T["dark_fail_area"], "pass": score <= T["dark_fail_area"],
-            "unit": "‰ of px", "metrics": {"candidates": len(regs), "qualified": sum(g["qualified"] for g in regs),
-                                            "mean_ratio": round(float(np.mean(a) / max(np.mean(b), 1e-9)), 4),
-                                            "k_sigma": round(k, 3), "edge_thr": round(edge_thr, 4),
-                                            "min_area_px": _min_area(r.shape, blur)},
-            "regions": regs, "map": ("ratio", r)}
+    eregs.sort(key=lambda g: -g["rank"])
+    gate = fl is not None
+    score = _permille(e_px, r.shape)
+    sig_area = _permille(sum(g["area"] for g in regs if g["signature"]), r.shape)
+    return {"score": round(score if gate else sig_area, 4), "threshold": T["dark_fail_area"] if gate else None,
+            "gate": gate, "pass": (score <= T["dark_fail_area"]) if gate else not any(g["signature"] for g in regs),
+            "unit": "‰ of px below the light-off floor" if gate else "‰ of px with the dark signature (review)",
+            "metrics": {"candidates": len(regs), "signature": sum(g["signature"] for g in regs),
+                        "signature_permille": round(sig_area, 4), "energy_regions": len(eregs),
+                        "mean_ratio": round(float(np.mean(a) / max(np.mean(b), 1e-9)), 4),
+                        "k_sigma": round(k, 3), "edge_thr": round(edge_thr, 4), "min_area_px": min_a,
+                        "psf_sigma_px": None if psf_sigma is None else round(float(psf_sigma), 3),
+                        "step_sharp": None if s0 is None else round(s0, 3), "floor": gate},
+            "regions": eregs + regs, "map": ("ratio", r), "energy_mask": emask}
 
 
 def brightening(y_on, y_off, sigma, effect, blur=1):

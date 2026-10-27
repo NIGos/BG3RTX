@@ -28,6 +28,18 @@ EFFECTS = {
 }
 # --sharc (plan below): the radiance cache against the same settings without it, in all and
 # with the reflections off (the GI's own share, against gi_off like "gi").
+# The light-off floors of the hard_dark energy bound (docs/QA.md "Thresholds and their
+# derivation"): effect -> the trace with that effect's light removed (qa_zero), everything else
+# as in the effect's own trace. An effect that only removes its own light can never take a
+# pixel below that floor (beyond the noise): a darker pixel is light removed that was not its.
+#   sun_zero  all on, the sun mask written 0 (qa_zero bit 0): no direct sun;
+#   ls_zero   all on, every D-LS light's visibility 0 (bit 1);
+#   amb_zero  GI on, reflections off, the AO written 0 (bit 2): no diffuse or specular
+#             ambient, and the game's AO-on-direct factor halves the direct light, so this
+#             floor sits lower than "all but the ambient" (a weaker, still valid bound);
+#   all_zero  all on, bits 0-2.
+FLOORS = {"rt_shadows": "sun_zero", "rt_local_shadows": "ls_zero", "gi": "amb_zero",
+          "rt_reflections": "amb_zero", "all_rt": "all_zero"}
 SHARC_EFFECTS = {
     "sharc": ("sharc_on", "on0"),
     "gi_sharc": ("sharc_refl_off", "gi_off"),
@@ -45,7 +57,7 @@ def scenes():
 GI_NEUTRAL = {"gi_strength": "0", "gi_ao": "0"}
 
 
-def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun=False, sharc=False):
+def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun=False, sharc=False, floors=True):
     """The ordered traces of one run: (name, settings applied before it).
     gi_restore: the gi_strength/gi_ao values to go back to after the nogi set.
     split_sun (--temporal-sun): a nosun set, all on but the RT sun shadows (the game's mask
@@ -79,16 +91,25 @@ def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun
           # rt_debug=6: the trust of rt_sun_replace (red roof volume, magenta far from the
           # game's lit mask, blue off-screen, green trusted).
           ("sun_trust", {"rt_debug": "6", "rt_backlit": "1"})]
+    back = {}
+    if floors:   # FLOORS above; the next phase restores qa_zero=0 and the reflections
+        p += [("sun_zero", {"rt_debug": "0", "rt_backlit": "1", "qa_zero": "1"}),
+              ("ls_zero", {"qa_zero": "2"}),
+              ("all_zero", {"qa_zero": "7"}),
+              ("amb_zero", {"qa_zero": "4", "rt_reflections": "0"})]
+        back = {"qa_zero": "0", "rt_reflections": "1", "rt_debug": "0"}
     if sharc:
-        p += [("sharc_on", {"rt_debug": "0", "rt_backlit": "1", "sharc": "1"}),
+        p += [("sharc_on", {**back, "rt_debug": "0", "rt_backlit": "1", "sharc": "1"}),
               ("sharc_refl_off", {"rt_reflections": "0"}),
               ("sharc_roof", {"rt_reflections": "1", "sharc_debug": "5"})]
     if reference:
         # More samples for the stochastic terms, same denoiser (RR) and view.
-        p += [("ref", {"rt_debug": "0", "rt_backlit": "1", "gi_rr_rays": "8", "ls_samples": "2"})]
+        p += [("ref", {**(back if not sharc else {}), "rt_debug": "0", "rt_backlit": "1", "gi_rr_rays": "8",
+                       "ls_samples": "2"})]
     first_off = dict(ALL_OFF, rt_backlit="1", gi_rr_rays="1", ls_samples="0") if reference else dict(ALL_OFF, rt_backlit="1")
     if sharc:
         first_off.update(sharc="0", sharc_debug="0")
+    first_off.setdefault("qa_zero", "0")
     p += [("off0", first_off)]
     p += [(f"off{i}", {}) for i in range(1, temporal)]
     return p
@@ -96,7 +117,7 @@ def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun
 
 def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, reference=False,
               interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False, shared=False,
-              extra=(), split_gi=False, split_sun=False, sharc=False):
+              extra=(), split_gi=False, split_sun=False, sharc=False, floors=True):
     """Runs the game once and moves each trace's dumps.json + img/ to out_dir/raw/<i>_<name>/.
 
     tag: auto-run.ps1 -Tag, so two scenes can run at once from this checkout (one tag per
@@ -104,7 +125,7 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
     says "exclusive": false); otherwise the run is exclusive and run_s is a timing."""
     keep = dict(x.split("=", 1) for x in extra if "=" in x)
     phases = plan(temporal, reference, split_gi, {k: keep[k].strip() for k in GI_NEUTRAL if k in keep},
-                  split_sun, sharc)
+                  split_sun, sharc, floors)
     out_dir.mkdir(parents=True, exist_ok=True)
     spec = {"start": r"\[trace\] frame \d+ written", "phases": [], "timeout": timeout + 3600, "tag": tag,
             "after_trace": [{"name": n, "set": s} for n, s in phases[1:]]}

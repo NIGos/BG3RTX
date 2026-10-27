@@ -195,21 +195,46 @@ def analyze_scene(d: Path, pool):
     effects = dict(capture.EFFECTS)
     if "sharc_on" in traces:   # a --sharc run
         effects.update(capture.SHARC_EFFECTS)
+    # The pipeline's measured point spread per buffer (th.psf_sigma, from the all-on repeats):
+    # the reference for hard_dark's "as sharp as a geometric edge" (det.step_sharpness).
+    psf = {}
+    for key in ("Yf", "Yc"):
+        ys = [data[n][key] for n in on_set if data[n][key] is not None]
+        if len(ys) >= 2:
+            mean = np.mean(ys, axis=0)
+            psf[key] = th.psf_sigma([y - mean for y in ys])
+    res["psf_sigma_px"] = {k: round(v, 3) for k, v in psf.items()}
+    moving_cache = {}
+
+    def moved_between(a, f, shape):
+        # Scene inputs that changed between the effect's trace and its floor (jitter-derived).
+        if (a, f, shape) not in moving_cache:
+            moving_cache[(a, f, shape)] = det.animated([fr[a].albedo(), fr[f].albedo()], [], shape,
+                                                       [fr[a].normal(), fr[f].normal()])
+        return moving_cache[(a, f, shape)]
     for eff, (a, b) in effects.items():
         if a not in data or b not in data:
             res["notes"].append(f"{eff}: traces {a}/{b} missing")
             continue
+        fl = capture.FLOORS.get(eff)
+        if fl is not None and fl not in data:
+            res["notes"].append(f"{eff}: light-off floor {fl} missing: hard_dark is review only")
+            fl = None
         for buf, key, blur in (("final", "Yf", 1), ("lighting", "Yc", 2)):
             if data[a][key] is None or data[b][key] is None:
                 continue
             s = sigma(key)
-            jobs.append(("hard_dark", eff, buf, a, b, pool.submit(det.hard_dark, data[a][key], data[b][key], s, blur, eff)))
+            floor = data[fl][key] if fl is not None else None
+            mov = moved_between(a, fl, data[a][key].shape) if floor is not None else None
+            jobs.append(("hard_dark", eff, buf, a, b, pool.submit(det.hard_dark, data[a][key], data[b][key], s, blur, eff,
+                                                                  floor, mov, psf.get(key))))
             jobs.append(("brightening", eff, buf, a, b,
                          pool.submit(det.brightening, data[a][key], data[b][key], s, eff, blur)))
     contrib = {}
     for kind, eff, buf, a, b, fut in jobs:
         r = fut.result()
         ratio = r.pop("map")[1]
+        emask = r.pop("energy_mask", None)
         if buf == "final" and kind == "hard_dark":
             Ya, Yb = data[a]["Yf"], data[b]["Yf"]
             contrib[eff] = {"mean_change_pct": round(100 * (float(Ya.mean()) / max(float(Yb.mean()), 1e-9) - 1), 2),
@@ -220,19 +245,30 @@ def analyze_scene(d: Path, pool):
         res["checks"].append(chk)
         if not r["pass"]:
             key = "final" if buf == "final" else "compose"
-            for j, g in enumerate([g for g in r["regions"] if g["qualified"]][:CROPS_PER_DETECTOR - (buf != "final")]):
+            # Gate regions (below the floor) first, then the review signature regions.
+            shown = [g for g in r["regions"] if g["qualified"] or g.get("signature")]
+            fl = capture.FLOORS.get(eff) if kind == "hard_dark" else None
+            for j, g in enumerate(shown[:CROPS_PER_DETECTOR - (buf != "final")]):
                 y0, y1, x0, x1 = crop_window(g["bbox"], ratio.shape, focus=g.get("focus"))
                 m = np.zeros(ratio.shape, bool)
                 gy0, gy1, gx0, gx1 = g["bbox"]
                 m[gy0:gy1, gx0:gx1] = True
-                reg = (ratio < 1.0 - det.T["dark_removed"]) if kind == "hard_dark" else (ratio > det.T["bright_ratio"].get(eff, 2))
+                if kind == "hard_dark" and g.get("kind") == "energy" and emask is not None:
+                    reg = emask.copy()
+                elif kind == "hard_dark":
+                    reg = ratio < 1.0 - det.T["dark_removed"]
+                else:
+                    reg = ratio > det.T["bright_ratio"].get(eff, 2)
                 reg &= m
                 name = f"{kind}_{eff}_{buf}_{j}.png"
                 info = {k: v for k, v in g.items() if k not in ("bbox", "rank", "qualified", "focus")}
-                sheet([dsp(b, key)[y0:y1, x0:x1], dsp(a, key)[y0:y1, x0:x1], heat_ratio(ratio[y0:y1, x0:x1]),
-                       outline(dsp(a, key)[y0:y1, x0:x1], reg[y0:y1, x0:x1])],
-                      [f"{EFFECT_LABEL[eff]} off ({b})", f"on ({a})", "on/off (red darker, blue brighter)", "flagged"],
-                      f"{meta['scene']} {kind} {eff} [{buf}] at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
+                tiles = [dsp(b, key)[y0:y1, x0:x1], dsp(a, key)[y0:y1, x0:x1], heat_ratio(ratio[y0:y1, x0:x1]),
+                         outline(dsp(a, key)[y0:y1, x0:x1], reg[y0:y1, x0:x1])]
+                labs = [f"{EFFECT_LABEL[eff]} off ({b})", f"on ({a})", "on/off (red darker, blue brighter)", "flagged"]
+                if fl is not None and fl in data and data[fl][key if key == "final" else "compose"] is not None:
+                    tiles.insert(2, dsp(fl, key)[y0:y1, x0:x1])
+                    labs.insert(2, f"its light off ({fl}): the floor")
+                sheet(tiles, labs, f"{meta['scene']} {kind} {eff} [{buf}] at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
                 res["crops"].append({"file": f"crops/{name}", "detector": kind, "effect": eff, "buffer": buf,
                                      "bbox": g["bbox"], "shape": list(ratio.shape), **info})
     res["contribution"] = contrib
