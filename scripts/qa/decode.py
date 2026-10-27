@@ -163,15 +163,17 @@ class Frame:
         k = self.t.find(g, "RG16F", slot=0) if g else None
         if not k:
             return None
-        if not (self.t.path / self.t.dumps[k]["png"]).with_suffix(".f32").exists():
-            # The 8-bit preview scales each channel by its max |value|, and sky pixels hold
-            # the encoder's huge sentinel (gi_trace_rt.hlsl: |e|^2 > 5.4e10): one code step
-            # is then larger than any real normal change. Usable only with a sane range.
-            d = self.t.dumps[k]
-            am = max(max(abs(d["min"][c] or 0), abs(d["max"][c] or 0)) for c in range(2))
-            if 2.0 * am / 255.0 > 0.01:
-                return None
+        # The 8-bit preview scales each channel by its max |value|, and sky pixels hold the
+        # encoder's huge sentinel (gi_trace_rt.hlsl: |e|^2 > 5.4e10), so one code step can be
+        # larger than any real normal change. detectors.animated() measures the code step from
+        # the data and adds it to its bound, so such a preview simply marks nothing.
         return self.t.load(k)[..., :2]
+
+    def is_raw(self, which):
+        """True when the final frame ("final") or the lighting buffer ("compose") is read
+        from a float32 dump instead of an 8-bit preview (no preview rounding)."""
+        k = self.t.final_key() if which == "final" else self.t.find(PASS_COMPOSE, "R11G11B10F")
+        return bool(k) and (self.t.path / self.t.dumps[k]["png"]).with_suffix(".f32").exists()
 
     def material_class(self):
         g = self.t.gbuffer_fs()

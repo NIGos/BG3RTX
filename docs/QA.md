@@ -83,28 +83,32 @@ frame and the lighting buffer.
 Contribution map of an effect: luminance ratio `on / off` after a 3×3 box
 (5×5 on the lighting buffer, which is 1 spp before RR) so that sub-pixel jitter
 between traces does not show as edges. The noise σ per pixel is the temporal
-standard deviation of the `on*` and `off*` traces; a change counts only beyond
-3σ. Regions are 4-connected components after a morphological opening, of at
-least 2·10⁻⁵ of the buffer's pixels. All thresholds are in
-`scripts/qa/detectors.py` (`T`).
+standard deviation of the `on*` and `off*` traces, with the 8-bit preview's rounding
+added in quadrature; a change counts only beyond kσ, k from a Bonferroni bound over the
+buffer's independent samples (4.8 at 1280 wide, 5.3 at 3840). Regions are 4-connected
+components after a morphological opening, of at least the filters' own support (25 px
+for a 3×3 box). Every threshold, and where it comes from, is in
+[Thresholds and their derivation](#thresholds-and-their-derivation); the code is
+`scripts/qa/thresholds.py` and `T` in `scripts/qa/detectors.py`.
 
 Per QUALITY.md R0 the game's image is a reference only for engine inputs. Detectors that
 compare an effect's output with the game (brightening, extra or missing casters, the sun
-replace) only list crops for review. Gates are artifacts (hard dark, flicker, non-finite)
-and physical bounds.
+replace) only list crops for review, with no threshold: the report says "review" whenever
+they found a region. Gates are artifacts (hard dark, flicker, non-finite) and physical
+bounds, and every gate constant is derived (QUALITY.md R0, "Every gate needs a derivation").
 
 | Detector | Flags | Score (fail above) |
 |---|---|---|
-| **hard_dark** | the effect removes > 60% of the luminance, with ≥ 50% of the drop inside 3 px of the region edge (`sharp`), and ≥ 50% of the edge where the effect-off image has no edge (`unexplained`: not an object silhouette). `polygonal` (edge energy in 4 of 16 orientations) and `black` (share left with < 10% of the light) are reported. Shadow effects (sun, D-LS, all RT) may be legitimately sharp, so for them a region also needs `black` ≥ 0.25: no real shadow removes the ambient and every other light | qualified area, ‰ of the buffer (0.02) |
-| **brightening** (review, not a gate: R0) | the effect brightens beyond its bound: ×1.15 for sun and local shadows (they may only remove light), ×2 for GI, reflections and all RT | area ‰ (0.05) |
-| **sun_extra_casters** (review, not a gate: R0) | RT visibility (5×5 box of the 1-spp soft sun) < 0.15 where the game mask > 0.9, after a 3-px erosion (no thin edges, no penumbrae; game mask between 0.1 and 0.9 never counts); unlit, skin, foliage and hair classes excluded (`rt_backlit=0` leaves their back faces untraced). Only pixels the sun term really darkened (lighting ratio `on0/sun_off` < 0.7) count | ‰ (0.5) |
-| **sun_missing_casters** (warning, not a gate) | RT visibility > 0.85 where the game mask < 0.1, eroded likewise. With `rt_backlit=0` traced-lit pixels are front-facing, so back faces never count. It cannot change the image (the fold only darkens: mask × visibility) but shows casters missing from the TLAS; off-screen roofs and cut-away walls are expected here | ‰ (2) |
-| **sun_replaced** (warning, not a gate) | `rt_sun_replace` wrote the mask lit (> 0.85, 5×5 box) where the game's mask is dark (< 0.1), eroded like the casters detectors: the pixels the replace brightened. Review the crops (min, replace, mask overlay, replace/min ratio): over-dark filtering, acne or cascade transitions are right (R0); a missing caster or roof is wrong. The `rt_sun_replace` effect (`rep_on` vs `sun_min`) also runs the brightening detector with a ×1.15 bound, so its crops list every visible brightening | ‰ (2) |
-| **sun_check_far** (warning) / **sun_check_edge** (info) / **sun_check_darker** (gate) | `sun_check` trace (`rt_debug=7`): pixels where the written mask is brighter than min(game, traced) of the same pixel by > 0.1, split by distance to the game's lit mask: at its shadow edge (the game's own mask partly lit, or lit within `rt_sun_near`/2; yellow) and farther (red). Darker than min (blue) cannot happen with `rt_sun_roof_mode=0`. Every far crop is for review: right if it is the game's over-wide penumbra or acne, wrong if a caster or roof is missing. The log line `sun check (...)` gives the same split averaged over 600 frames | far ‰ (0.5), darker ‰ (0.01) |
+| **hard_dark** | the effect removes > 60% of the luminance beyond kσ, with ≥ 50% of the drop inside 3 px of the region edge (`sharp`), and ≥ 50% of the edge where the effect-off image has no edge as steep as the drop itself after the same box (`unexplained`: not an object silhouette; 0.31 in ln-luminance per px for a 3×3 box). `polygonal` (edge energy in 4 of 16 orientations) and `black` (share left with < 10% of the light) are reported. Shadow effects (sun, D-LS, all RT) may be legitimately sharp, so for them a region also needs `black` ≥ 0.25: no real shadow removes the ambient and every other light. The 60%, 50%, 50%, 10% and 0.25 define the artifact and are not derived yet (see the table) | qualified area, ‰ of the buffer (0: any qualified region) |
+| **brightening** (review, no threshold: R0) | the effect brightens beyond kσ and beyond a review bound: ×1.5 for sun and local shadows, ×2 for GI, reflections and all RT. The bounds only choose the crops | area ‰ |
+| **sun_extra_casters** (review, no threshold: R0) | RT visibility (5×5 box of the 1-spp soft sun) < 0.15 where the game mask > 0.9, after a 3-px erosion (no thin edges, no penumbrae; game mask between 0.1 and 0.9 never counts); unlit, skin, foliage and hair classes excluded (`rt_backlit=0` leaves their back faces untraced). Only pixels the sun term really darkened (lighting ratio `on0/sun_off` < 0.7) count | ‰ |
+| **sun_missing_casters** (review, no threshold) | RT visibility > 0.85 where the game mask < 0.1, eroded likewise. With `rt_backlit=0` traced-lit pixels are front-facing, so back faces never count. It cannot change the image (the fold only darkens: mask × visibility) but shows casters missing from the TLAS; off-screen roofs and cut-away walls are expected here | ‰ |
+| **sun_replaced** (review, no threshold) | `rt_sun_replace` wrote the mask lit (> 0.85, 5×5 box) where the game's mask is dark (< 0.1), eroded like the casters detectors: the pixels the replace brightened. Review the crops (min, replace, mask overlay, replace/min ratio): over-dark filtering, acne or cascade transitions are right (R0); a missing caster or roof is wrong. The `rt_sun_replace` effect (`rep_on` vs `sun_min`) also runs the brightening detector with a ×1.15 bound, so its crops list every visible brightening | ‰ (2) |
+| **sun_check_far** (review) / **sun_check_edge** (info) / **sun_check_darker** (gate) | `sun_check` trace (`rt_debug=7`): pixels where the written mask is brighter than min(game, traced) of the same pixel by > 0.1, split by distance to the game's lit mask: at its shadow edge (the game's own mask partly lit, or lit within `rt_sun_near`/2; yellow) and farther (red). Darker than min (blue) cannot happen with `rt_sun_roof_mode=0`. Every far crop is for review: right if it is the game's over-wide penumbra or acne, wrong if a caster or roof is missing. The log line `sun check (...)` gives the same split averaged over 600 frames | far ‰ (review), darker ‰ (0: impossible by construction) |
 | **roofed_brightening** (gate, `--sharc`) | The SHaRC leak test (DESIGN_SOTA_NEXT 2.7/2.8). Mask from the `sharc_roof` trace (`sharc_debug=5`, `gi/sharc_roof.hlsl`): pixels inside an asset-DB roof volume (roofed room, covered floor; padded as for the sun trust) that the game's own sun mask (`sun_dbg`) does not light (2-px margin), while the game's mask lights at least 1% of the view: interiors whose exterior is sunlit. (The padded volumes alone also cover sunlit exterior walls next to buildings.) On them, lighting-buffer GI brightening `sharc_refl_off / gi_off` > 1.3 (beyond 3σ) is light through geometry (R0) unless GI without the cache already brightens there (`refl_off / gi_off`: on-screen bounce, which cannot pass walls). Score: the roofed area the cache adds, dilated base excluded. Not applicable (pass, with a note) when fewer than 1% of the pixels are roofed with the sun up, or the level's roof volumes are unknown (mask blue). Crops: GI off, GI without and with the cache, ratio, mask | ‰ of the frame added by the cache (0.5) |
 | **nonfinite** | NaN/Inf over every dump of every trace (`dumps.json`) | count (0) |
-| **flicker** | per-pixel temporal std of the final frame's PQ luminance over the `on*` traces against the `off*` traces (effect `all_rt`), and against `nogi*` with `--temporal-gi` (effect `gi`); regions where std_on > 2·std_off + 0.01, on static pixels only: scene motion (G-buffer albedo or the game's own sun mask changed within any set, dilated 3 px) is excluded, because the sets are a minute apart and an NPC that walks in one window and idles in the other is not our flicker. `animated_frac` and the `unmasked` numbers are in the metrics; the crops show the excluded motion as a fourth tile | mean std ratio (1.5), excess area ‰ (1) |
-| **reference** (`--reference`) | FLIP of all-on against `gi_rr_rays=8 ls_samples=2` with the same view and RR, minus the noise floor (FLIP of `on0` against `on1`: RR noise and animation) | mean FLIP above the floor (0.03) |
+| **flicker** | per-pixel temporal std (unbiased) of the final frame's PQ luminance over the `on*` traces against the `off*` traces (effect `all_rt`), and against `nogi*` with `--temporal-gi` (effect `gi`). Candidate regions: static, std_on − std_off (5×5 box) above one 10-bit PQ step (visible), at least 81 px. A region counts when ln(std_on + q) − ln(std_off + q) over it exceeds z·√(1/2ν_on + 1/2ν_off), with ν = (n − 1) · 81 · n_eff / 25 and n_eff measured from the spatial correlation of the frames' residuals, z Bonferroni over the regions the frame can hold, q half a preview step. Scene motion is excluded: G-buffer albedo, normals or the game's own sun mask changed by more than the sub-pixel jitter can change them (\|∇\| × 1 px + one code step), dilated by the box radius, because the sets are a minute apart and an NPC that walks in one window and idles in the other is not our flicker. INCONCLUSIVE (a fail) when the static px cannot hold one region. `ratio`, `n_eff`, `animated_frac` and the `unmasked` numbers are in the metrics; the crops show the excluded motion as a fourth tile | mean std excess over the static px (one 10-bit PQ step, 0.00098), significant excess area ‰ (0) |
+| **reference** (`--reference`) | FLIP of the reference (`gi_rr_rays=8 ls_samples=2`, same view and RR) against every `on*` frame, and of every pair of `on*` frames (RR noise and animation). Rank test: if the reference were one more sample of the same image, all its FLIP values would exceed all the pair values with probability 1/C(n_t + n_n, n_t) = 0.05 for three `on*` frames. With fewer frames it is reported for review | min FLIP(ref, on) − max FLIP(on, on) (0) |
 
 FLIP: `flip_evaluator` is used when installed. It is not installed here, and
 nothing is downloaded, so the harness uses a simplified FLIP
@@ -156,10 +160,12 @@ The game runs dominate; waiting for the shared game mutex comes on top. Without
 ### Robustness checks built in
 
 - **Same view.** The G-buffer albedo does not depend on any lighting setting, so
-  each trace is compared with `on0`'s (3×3 box, |Δ| > 0.1). Wind in grass gives
-  0.3-0.7% of pixels; another view gives over 50%. Above 5% (`view_changed_frac`)
-  the trace's comparisons are void and a `same_view` failure says which traces
-  moved. A run in the foundry once had the camera move between `on0` and the
+  each trace is compared with `on0`'s by phase correlation (sub-pixel peak). The jitter
+  moves it by less than 1 px per axis, so a shift of 1 px or more is a camera move: the
+  trace's comparisons are void and a `same_view` failure says which traces moved. The
+  share of px changed beyond the jitter bound is reported for review (`view_change`):
+  wind in grass gives 0.3-0.7%, the S7 harbour 8% in every trace including `on1`,
+  which the old fixed 5% limit had called a camera move (`sun_r0/S7`). A run in the foundry once had the camera move between `on0` and the
   later traces; without this check it reported 140‰ of "brightening".
 - **G-buffer by signature.** A pass's hash is its first draw's fragment shader,
   which changes with the scene (`aa4efa4d` in the foundry, `181045cc` at camp),
@@ -167,7 +173,131 @@ The game runs dominate; waiting for the shared game mutex comes on top. Without
   slots 1-3.
 - **Noise.** The σ that a change has to beat is the temporal std of the static
   view (RR noise, wind, idle animation), the larger of the all-on and all-off
-  sets, max-filtered over 2 px so that a moving edge covers both positions.
+  sets, with the preview's rounding (step/√12 at the pixel's level) in quadrature,
+  max-filtered over the box radius + 1 px (the jitter) so that a moving edge covers
+  both positions, ×√2 for a difference of two frames.
+
+## Thresholds and their derivation
+
+Rule (QUALITY.md R0, "Every gate needs a derivation"): a gate, threshold, tolerance or
+budget comes from **physics**, the **measured noise** (per-pixel variance of repeated
+traces, run-to-run spread), the **display** (a code step, a published perceptual
+threshold), the **frame budget** (15.4 ms at a base ≥ 65 fps, split per pass by
+SETTINGS_DESIGN) or a **cited standard**. Anything else is review-only: it may choose
+crops, never fail a run. Classes below: **derived** (the source is named), **derivable**
+(a derivation is proposed, not yet implemented), **arbitrary** (no basis yet).
+Inventory of 2026-10-27; the code is `scripts/qa/thresholds.py` and `T` in
+`scripts/qa/detectors.py`, checked by `python tests/qa_detectors_test.py` (synthetic
+noise, artifacts, jitter and pans; no game).
+
+### Shared statistics
+
+| Constant | Value | Class | Derivation |
+|---|---|---|---|
+| `ALPHA_FW` | 0.05 | derived (standard) | Family-wise false-alarm probability per test family: the conventional 5% significance level, split over the family's tests (Bonferroni). Every statistical gate below uses it. |
+| k (was 3σ) | 4.84 (1280×533, 3×3 box) … 5.26 (3840×1600) | derived (noise) | z(1 − α/n), n = the buffer's independent samples = px / (2·blur + 1)². One expected false pixel per 20 buffers. |
+| σ per pixel | temporal std, max of the on*/off* sets | derived (noise) | The run's own repeats; × √2 for a difference of two frames. |
+| preview rounding (new) | step/√12 per pixel | derived (display) | 8-bit preview: a static pixel rounds the same way in every frame of one setting, so its temporal std is 0; the rounding of the two settings still differs. Step = decode(code + 1/255) − decode(code) at the pixel's level (PQ for the final frame, Reinhard + γ for the lighting buffer). Skipped for `--raw` float dumps. |
+| σ max-filter (was 2 px) | box radius + 1 px | derived (jitter) | A moving edge must cover both positions: the box's own reach plus the jitter (< 1 px). |
+| contribution box | 3×3 final, 5×5 lighting | derived (self-consistent) | σ is measured with the same box, so the test stays calibrated whatever the box; 3×3 is the smallest box that absorbs the < 1 px jitter. |
+| minimum region (was max(24 px, 2·10⁻⁵ of the frame)) | (2·(blur + r_open) + 1)²: 25 px (3×3, radius-1 opening), 81 px (flicker) | derived (filter support) | A smaller component is the footprint of the filters, not a measured shape. It no longer grows with the resolution, so `--full-res` resolves 9× smaller regions than before. |
+| luminance floor (was 5% / 2% of the median) | removed: b > kσ | derived (noise) | A ratio is meaningful where its denominator is significant. |
+| ratio ε | 10⁻⁴ × median | derived (numerical) | Below any code step; only avoids 0/0. |
+| jitter | 1 px | derived (DLSS/TAA) | Halton offsets within ±0.5 px: two frames differ by < 1 px per axis. |
+| one 10-bit PQ step | 1/1023 | derived (display, standard) | ST 2084 places 10-bit steps at about the Barten threshold (Miller, Nezamabadi, Daly 2013). Below it a temporal std is not visible on HDR10. |
+
+### Gates
+
+| Gate | Constant (old → new) | Class | Derivation |
+|---|---|---|---|
+| hard_dark | fail area 0.02‰ → **0** | derived (physics/definition) | A qualified region is an artifact by definition. False alarms are bounded by k and the minimum region (8 noise-only seeds: 0 qualified). |
+| hard_dark | edge strength 0.25 → **ln(1/(1 − 0.6))/(2·blur + 1)**: 0.31 (3×3), 0.18 (5×5) | derived | An off-image edge explains the boundary only if it is as steep as the drop it would explain, after the same box. |
+| hard_dark | removed 0.6, sharp 0.5, unexplained 0.5, near-black < 0.1, black ≥ 0.25 (shadows), bands 3/6–12 px | **arbitrary (signature)** | They define the artifact (finding 1, grass-card polygons) and stay in the gate until derived. Proposed: (1) an *ambient-floor* trace with the effect's light source off (sun, or local lights), so that "black" becomes "removes more light than the effect's own light contributed", a physical energy bound, which replaces removed, near-black and black; (2) `sharp` from the effect's measured step response (the sharpness of known silhouette edges in its contribution map: GI is half-res, then RR), so "sharp" means "as sharp as the effect can render a geometric edge". `unexplained` (majority of the boundary) has no derivation proposal. **Needs a decision.** |
+| flicker | per-pixel `std_on > 2·std_off + 0.01` → **visible** (5×5 std excess > one 10-bit PQ step) **and significant per region** (ln-ratio > z·√(1/2ν_on + 1/2ν_off), ν = (n − 1)·81·n_eff/25) | derived (noise, display) | n_eff = 25²/Σρ²·w from the measured spatial autocorrelation of the residuals (Gaussian: Cov(e_i², e_j²) = 2ρ²σ⁴); z Bonferroni over the regions the frame can hold. Pooled at the minimum-area scale only: a larger region is chosen by the same data (scan statistic). 12 equal-noise seeds: 0 false fails. An 80×80 flickering patch: caught. |
+| flicker | mean std ratio 1.5 → **mean std excess ≤ one 10-bit PQ step** (0.00098) | derived (display) | Frame-wide flicker too faint to form a region. Past runs: S6 0.0002–0.0008 (pass), S14 gi 0.00066 (pass: the old 1.67 ratio was rounding), S3 0.0019 before the motion mask. |
+| flicker | excess area 1‰ → **0** | derived | Regions are already significance-tested. |
+| flicker | INCONCLUSIVE above 60% motion → **when the static px cannot hold one minimum region** | derived | Below that the gate measures nothing. |
+| scene motion | albedo 0.1, sun mask 0.15, normal 0.03 → **\|∇ boxed field\| × 1 px + one code step** | derived (jitter, display) | The largest change a static input can show between two jittered frames. The code step is measured from the decoded data, so a preview scaled by the sky sentinel marks nothing (the 0.01 code-step guard in `decode.py` is gone). |
+| scene motion | dilation 3 px at 1280 → **the flicker box radius (2 px)** | derived (filter) | A moving pixel's std reaches the box radius into its neighbours. Not covered: the contact lighting (AO, bounce) that moving geometry changes farther out; derivable from the depth and `gi_rt_radius` projected to px. |
+| same_view | albedo \|Δ\| > 0.1 on > 5% of px → **global shift ≥ 1 px** (sub-pixel phase correlation of the albedo) | derived (jitter) | A camera move shifts everything; the jitter < 1 px. The changed share is reported for review: S7 had 8% in every trace including `on1` (water), which the 5% limit called a camera move. A rotation or zoom about the centre has no single shift; it shows in the changed share. |
+| reference | mean FLIP − FLIP(on0, on1) ≤ 0.03 → **rank test**: min FLIP(ref, on_i) ≤ max FLIP(on_i, on_j) | derived (noise) | Exchangeable values: P = 1/C(n_t + n_n, n_t) = 0.05 with 3 on-frames; with 2 it is reported only. So `--temporal 3` is the minimum for this gate (derived). |
+| sun_check_darker | 0.01‰ → **0** | derived (physics) | Darker than min(game, traced) is impossible with `rt_sun_roof_mode=0`. The 0.8/0.2 levels decode the debug colours, not tolerances. |
+| nonfinite | 0 | derived (correctness) | |
+| roofed_brightening (`--sharc`) | ratio 1.3, area 0.5‰, roofed ≥ 1%, sun-lit ≥ 1% | arbitrary | **Not changed here**: the SHaRC branch replaces it with `sharc_reference` (per-pixel σ of repeated cache and reference traces, binomial test on independent samples) and a geometric leak report. |
+
+### Review only (no threshold)
+
+| Detector | Constants | Why review |
+|---|---|---|
+| brightening | ×1.5 (sun, D-LS), ×2 (GI, reflections, all RT); area 0.05‰ removed | Compared with the game's image (R0). The bounds only pick crops; every significant region is listed. |
+| sun_extra / missing / replaced | RT < 0.15 or > 0.85, game > 0.9 or < 0.1, sun ratio < 0.7, erosion 3 px; areas 0.5/2/2‰ removed | Compared with the game's mask (R0). |
+| sun_check_far | 0.5‰ removed | Brightening against min(game, traced) is often right (R0); every crop is reviewed. |
+| hard_dark `polygonal`, region ranks, crop windows, crops per detector, heat-map ±2 stops, reference crops (FLIP > 0.35, ≥ 400 px), contribution table (> 50% darker, > 2× brighter) | — | Display and ordering. |
+
+### Capture protocol (derivable)
+
+| Constant | Value | Proposal |
+|---|---|---|
+| `--interval` | 240 presents | Measure RR's convergence: the FLIP of `on_i` against `on_{i+1}` as a function of the interval; the smallest interval at which it stops falling. |
+| `--temporal` | 3 | Now derived as the minimum for the reference rank test (α = 0.05); more frames raise the flicker test's power (ν grows with n − 1). |
+| preview width | 1280 (3840 `--full-res`) | The smallest artifact of interest at the display: 25 px at 1280 is 225 px at 3840 (0.06% of the frame). |
+
+### Pass criteria in the other docs
+
+Agent inventory of QUALITY.md, TRACK_*, DESIGN_SOTA_NEXT, SETTINGS_DESIGN, TEST_SCENES,
+ROADMAP and the HANDOFF files: 52 numeric criteria, 10 derived, 20 derivable, 22 arbitrary.
+Not changed here (other tracks own them); the ones that gate decisions:
+
+| Criterion | Where | Class | Proposal |
+|---|---|---|---|
+| Per-effect budgets 0.15 / 0.6 / 0.5 / 1.0 ms, Track D total ≤ 2.5 ms, build ≤ 1.5/2.0 ms | QUALITY R7, ROADMAP, DSN, TRACK_D | derivable (frame budget) | 15.4 ms − the measured pan frame without Track D (vanilla + RR + build), split by value per ms; write the split down. TRACK_D says 0.5–1.0 ms for reflections, QUALITY 1.0. |
+| A regression > 10% needs a justification | QUALITY R7 | arbitrary | > k·σ of the run-to-run spread of exclusive-run medians (TRACK_D measured ±10% between shared runs, the same size as the limit). |
+| flicker ≤ current + 1‰; FLIP ≤ +0.01 above the floor | DSN (1a, SHaRC, OMM plans) | arbitrary | The gates above (significant region count 0; FLIP rank test). |
+| `rt_sun_near` 1.5 m (QUALITY R0 text, HANDOFF) | QUALITY R0, HANDOFF | arbitrary | It contradicts R0's own "no game-proximity trust" and is 0 in `bg3rtx.ini`; see the runtime list. |
+| Sun-replace cost < 0.1 ms | HANDOFF | arbitrary | 0.15 ms sun budget − the measured sun-shadow cost (0.08–0.11 ms): the two limits overlap today. |
+| Interior brightened < 0.5‰ | HANDOFF | arbitrary | The detector's null rate in an `rt_sun_replace=0` run of the same scenes. |
+| Per-preset budgets (Low ≤ 1.5, Medium ≤ 4, High ≤ 5/7.5 ms) | SETTINGS_DESIGN | arbitrary | Each GPU class's target frame time − its measured vanilla frame. |
+| Emissive ratio 0.8–1.25, coverage ≥ 95%, build ≤ 0.5 vs 0.6 ms | HANDOFF (D-EM worktree) | arbitrary | An engine-input parity check (legitimate under R0): band from the measured per-window spread; build from the budget split. |
+| Light calibration within 5%; light-tree failed descents < 5%; LBVH variance ≤ 1.3× SAOH | DSN | arbitrary | 5%: the standard error of the per-scene median. Descents: review only (efficiency). 1.3×: convert the variance ratio to extra rays and compare in ms. |
+| CPU oracle within 5.5σ (900 tests) | DSN | derivable | Bonferroni at α = 0.05 over 900 one-sided tests gives z = 3.9 (two-sided 4.0); state the α used. |
+| Exact-delta replication < 1% mean error | QUALITY R3, TRACK_D | derivable | The target format's quantisation (R11G11B10: 6-bit mantissa, about 1.6%) or two identical runs. |
+
+### Runtime heuristics that need a decision
+
+Not changed here (rendering defaults are the coordinator's). Agent inventory of `core/`,
+`shaders/`, `layer/` and `bg3rtx.ini`: 86 quality decisions, 32 derived, 26 derivable,
+28 arbitrary. Defects found on the way (verified in the code):
+
+- `rt_sun_near=0` does not switch the proximity test off: `rt_sun_resolve.hlsl` starts
+  `near` at the pixel's own game mask and trusts `saturate(near·2 − 0.5)`, so a pixel the
+  game holds below 0.25 is never replaced. The replace can only brighten pixels the game
+  already has partly lit: the R0 "proximity" gate is still on in the shipped ini.
+- D-RF starts its rays at `P + N·dist·rt_bias` (`rt_reflections.hlsl`), not at
+  `rt_ray_origin`: the old 0.002 × distance offset (4 cm at 20 m) is still in the reflections.
+- A ray query that hits `kMaxCandidates` (4096) is aborted with nothing committed: a shadow
+  ray then counts as unoccluded (light leak). For visibility queries an abort should count
+  as occluded.
+- `kSunMaxVolumes` 256: roof volumes beyond it are dropped silently, and their pixels
+  become trusted (leak).
+- Code defaults differ from the ini: `rt_sun_near` 1.5 vs 0, `rt_sun_top` 1 vs 0, `gi_rays`
+  2 vs 4, `gi_steps` 12 vs 16.
+
+The arbitrary ones with the most effect on the image:
+
+| Heuristic | Where | Value | Proposed derivation |
+|---|---|---|---|
+| Sun trust from the game mask, `saturate(near·2 − 0.5)`, `rt_sun_near`, ring weights 1/1/0.66/0.33, R clamp 2..96 px | `rt_sun_resolve.hlsl`, ini | 0.25..0.75, 1.5 m | Remove (R0): trust = the geometric terms only (roofs, frustum). |
+| A/B classes in the shader: brightened / darker by > 0.1 | `rt_sun_resolve.hlsl` | 0.1 | One R8 code step of the mask (1/255) plus the fp16 rounding of the written value. |
+| GI distance falloff `1 − (t/R)²` on occlusion *and* bounce | `gi_trace_rt.hlsl`, `rt_ao.hlsl` | — | No physical basis for the bounce; keep it unfaded and account for the truncation with the IBL remainder. |
+| `gi_rt_radius` | ini | 1 m | From the measured tier mix once the cache or fallback exists (DSN A/B planned). |
+| Roof padding 1 m sideways / 3 m up, `rt_sun_rise` 6 m, `rt_sun_roof_radius` 120 m (< `rt_tmax` 300 m) | ini, `sun_trust.cpp` | — | From the asset DB: roof mesh AABB minus trigger AABB per level; tallest caster in the ray's footprint; radius ≥ the farthest traced pixel's reach. |
+| `ls_clear` | ini | 0.2 m | The fixture's own radius, or skip the first back-facing hit: today every occluder within 20 cm of a light is ignored. |
+| Source radii (0.05 m and the fixture table) | ini, `assetdb.cpp` | — | Measure the emitter mesh in the TLAS or asset DB ("typical sizes, not measured"). |
+| GI temporal depth reject 3%, bilateral σ 1% depth, SS offsets 0.003/0.002·dist, `gi_thickness` 0.03, `gi_rt_depth_tol`/`rf_depth_tol` 0.03 | `gi_temporal.hlsl`, `gi_common.hlsli`, ini | — | From the depth format's precision and the pixel footprint / \|N·V\| (plane distance), not a fixed fraction. |
+| TLAS↔depth match window max(1%·dist, 16 px) and tolerance | `rt_origin.hlsl` | — | Measured XFB error (TRACK_D 7.1: 99.09% within 0.5%) + depth precision. |
+| `sharc_frames` 16, `sharc_stale` 128, `sharc_rf_rough` 0.2 | ini | — | Cache lag as a time budget against the variance it removes; stale from measured occupancy. |
+| `rf_max_rough_norr` 0.3, `rf_edge` 0.05, `dot(n, dir) < 0.2`, `rf_tmax` 100 m, `rt_tmax` 300 m | ini, `rt_reflections.hlsl` | — | Roughness at which the mirror bias exceeds a JND; `< 0` plus the normal precision; the game's last cascade distance. |
+| Light-join tolerances (character 4 m, static 5 cm, radius 2% + 1 cm) | `ls_lights.cpp`, `assetdb.cpp` | — | Speed × the bridge's 0.25 s export period (as `ls_dyn_tol`); k·ulp of the position; float round-trip of 1/inv_r. |
 
 ## Findings (2026-10-26, main 36f3c6e)
 
