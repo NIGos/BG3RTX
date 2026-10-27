@@ -349,3 +349,49 @@ scripts\auto-run.ps1 -NoBuild -Background -NoAnalyze -Validation -Save "Campsite
   - The old range is released through the slot gate.
   - Refits (UPDATE: same layout) stay in place.
   - `rt_dyn_inplace=1` restores the old behaviour for an A/B.
+
+## 6. Bisection on e4368ab (compaction off: 0 faults) and the seventh commit
+
+Your five checks against the code, all clean:
+1. **Scratch:** one `vkCmdBuildAccelerationStructuresKHR` for all BLAS. Each build has
+   its own range: build or update size per mode, mesh sizes from `buildScratchSize`,
+   offsets aligned to `minAccelerationStructureScratchOffsetAlignment` (from
+   `rt_scratch_alignment`). The TLAS reuses scratch from 0 only after an AS_WRITE to
+   AS_READ|WRITE barrier, and every build starts with a barrier on the previous
+   frame's AS, compute and XFB work.
+2. **Barriers:**
+   - BLAS build, then the compacted-size query (an AS barrier);
+   - copies, then an AS_WRITE to AS_READ barrier, then builds and TLAS;
+   - the copy source was built in an earlier, finished batch (its size comes from that
+     batch's done word).
+3. **Copy destination:** sized from this generation's query, rounded to 256; the swap
+   waits for the copy's batch.
+4. **Soup:** `rt_before_capture` makes the next capture wait for AS and compute reads.
+5. **Flags:** a refit needs the same alpha (opaque vs no-duplicate) and the same build
+   flags.
+
+**What was wrong: the mesh BLAS was built from pool memory the extraction may never have
+written.**
+- `mesh_extract.hlsl` *returned early* on an invalid or singular instance matrix, and
+  wrote non-finite or huge positions as they came.
+- The mesh's BLAS is built from that pool range in the same command buffer, before the
+  host sees the result. Its input was then uninitialised device memory or Inf/NaN.
+  Vulkan leaves such a build undefined (NaN only in x marks an inactive triangle).
+- Rejected meshes were evicted later, but:
+  - a batch that ran without the job's marker went to `kNeedCheck` with that BLAS;
+  - **compaction took any mesh whose size had come back**, verified or not. A compaction
+    copy walks the BLAS's nodes, so a corrupt BLAS sends it to wild addresses (an IP
+    fault in a driver shader, a computed read address).
+- **Fixes:**
+  - The extraction now writes every vertex of the range in extract mode, finite and
+    bounded (|p| < 1e7, else 0 and counted invalid), including when the matrix is
+    invalid.
+  - Only `kReady` meshes are compacted.
+  - A batch that ran without the job's marker evicts the mesh instead of keeping its
+    BLAS.
+
+**For the emissive capture:** it doesn't call these helpers. The shared lesson is to
+build only from sanitised vertices: `rt_convert` / `shaders/rt/xfb_to_world.hlsl` already
+guarantee finite, bounded positions (collapsed triangles at a point). A builder that reads
+raw XFB output, or any buffer region not fully written that frame, gets the same
+undefined builds.

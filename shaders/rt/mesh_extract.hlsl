@@ -52,18 +52,25 @@ void main(uint3 id : SV_DispatchThreadID) {
   float3x4 m0 = load_mat(pc.mat0);
   float3x3 a = float3x3(m0[0].xyz, m0[1].xyz, m0[2].xyz);
   float det = determinant(a);
-  if (!finite_mat(m0) || !(abs(det) > 1e-12)) {
+  // The mesh's BLAS is built from the pool range right after this job, in the same
+  // command buffer, before the host sees the result: in extract mode every vertex
+  // of the range is written, and always finite and bounded (an AS build with NaN
+  // outside x or Inf in its input is undefined: a corrupt BLAS, which a later
+  // compaction copy or trace walks into wild addresses). A rejected mesh is then
+  // just a degenerate one until the host evicts it.
+  const bool bad_m0 = !finite_mat(m0) || !(abs(det) > 1e-12);
+  if (bad_m0) {
     if (id.x == 0) Status.InterlockedAdd(pc.status_off + 4, 1);
-    return;
+    if (pc.mode != 0) return;
   }
   // Inverse of the 3x3 part (adjugate / determinant).
-  float3x3 inv = transpose(float3x3(cross(a[1], a[2]), cross(a[2], a[0]), cross(a[0], a[1]))) / det;
+  float3x3 inv = bad_m0 ? (float3x3)0 : transpose(float3x3(cross(a[1], a[2]), cross(a[2], a[0]), cross(a[0], a[1]))) / det;
   float3 t = float3(m0[0].w, m0[1].w, m0[2].w);
-  const bool cross_check = pc.mode == 0 && pc.matc != kNone;
+  bool cross_check = pc.mode == 0 && pc.matc != kNone && !bad_m0;
   float3x4 mc = cross_check ? load_mat(pc.matc) : m0;
   if (cross_check && !finite_mat(mc)) {
     if (id.x == 0) Status.InterlockedAdd(pc.status_off + 4, 1);
-    return;
+    cross_check = false;
   }
   float emax = 0.0;
   uint invalid = 0;
@@ -74,7 +81,11 @@ void main(uint3 id : SV_DispatchThreadID) {
       if (pc.mode == 0) {
         float4 c = asfloat(Soup.Load4(pc.soup_base + v));
         if (c.w == 0.0 || !all(isfinite(c.xyz))) ++invalid;   // a collapsed triangle cannot be cached
-        p = mul(inv, c.xyz - t);
+        p = bad_m0 ? float3(0, 0, 0) : mul(inv, c.xyz - t);
+        if (!all(abs(p) < 1e7)) {   // also false for NaN / Inf
+          ++invalid;
+          p = float3(0, 0, 0);
+        }
         Pool.Store4(pc.pool_base + v, asuint(float4(p, 1.0)));
         if (pc.stride >= 24) Pool.Store2(pc.pool_base + v + 16, Soup.Load2(pc.soup_base + v + 16));
         if (cross_check) emax = max(emax, err_of(xform(mc, p), asfloat(Soup.Load4(pc.check_base + v))));

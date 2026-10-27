@@ -1117,7 +1117,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     bool any = false;
     for (auto& [key, m] : g_meshes) {
       if (!budget) break;
-      if (m.compacted || !m.compact_size || new_keys.count(key)) continue;
+      // Only verified meshes: a mesh still in probation may have a BLAS built from pool
+      // data its extraction never wrote, and a compaction copy walks the BLAS's nodes.
+      if (m.compacted || !m.compact_size || m.state != kReady || new_keys.count(key)) continue;
       AsAlloc c;
       if (m.compact_size >= m.as.size || !as_create(m.compact_size, c)) {
         m.compacted = true;   // nothing to gain, or no memory: keep the original
@@ -1621,7 +1623,10 @@ void bvh_on_present() {
             evict(j.key);
             continue;
           }
-          m.state = kNeedCheck;   // the batch ran, the job did not report: built, verified by a check
+          // The batch ran but the job did not report: its pool range may never have been
+          // written, so the BLAS was built from whatever the memory held. Evicted.
+          evict(j.key);
+          continue;
         }
         continue;
       }
