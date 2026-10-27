@@ -92,6 +92,20 @@ Same command and criteria as R3. The foundry families seen in round 1: `20864dc6
 - **Motion:** `auto-run.ps1 -Background -Move -Save "Adamantine Forge" -Traces 3`. Pass: no
   device loss, and 0 non-finite values in the dumps.
 
+## em10 filtering A/B (queued, TRACK_D 13.16)
+
+The jobs:
+- `14-em10-af-filt1` and `14-em10-af-filt2`: in the AF session after `em10-af-check`
+  (filter 0).
+- `15-em10-gf-filt0`, `15-em10-gf-filt1` and `15-em10-gf-filt2`: a GF session.
+
+What to read: `python -m scripts.qa.em_gate` on each job's log. The mode under which
+`222986b8` and `304be1c7` pass the derived gate in both scenes becomes the default. If no
+mode does, the filtering hypothesis is rejected.
+
+**Budget:** SETTINGS_DESIGN §5.4 row #8, 0.7 ms from the pan headroom. The ledger leaves
+0.7 ms after SHaRC (0.6) and D-EM.
+
 ## Known gaps
 
 - **Lava texture detail:** the calibration matches the mean per family only. The lava's
