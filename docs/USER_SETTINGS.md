@@ -20,6 +20,14 @@ Gate 3 (Vulkan renderer). You set it up with `bin\BG3RTX.exe`, the settings wind
 In the game's own Graphics options, set the upscaler to **DLSS** (Quality recommended). Ray
 Reconstruction replaces the game's DLSS; it cannot run with FSR, XeSS or TAA.
 
+## Comparing with the original image
+
+Press **Ctrl+Shift+F9** while playing to switch every ray-traced effect off, and again to switch
+it back on: sun and local shadows, GI, reflections, emissive light, the radiance cache. You then
+see the game's own lighting in the same frame and view. DLSS and frame generation are not
+touched, so the comparison is lighting only. Each press is logged in `bg3rtx.log` as `[ab]`.
+`ab_hotkey=0` in `bg3rtx_user.ini` turns the hotkey off.
+
 ## Presets
 
 The window opens on your GPU and suggests a preset:

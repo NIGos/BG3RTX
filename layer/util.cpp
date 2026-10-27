@@ -2,10 +2,12 @@
 
 #include "../common/settings.h"
 
+#include <atomic>
 #include <cctype>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <memory>
 #include <share.h>
@@ -193,7 +195,36 @@ static void cfg_log_effective(const settings::Map& raw, bool derived) {
   log("[cfg] keys:%s%s", keys.c_str(), derived ? " (rt_build from auto)" : "");
 }
 
+// A/B hotkey (ab_hotkey=1, the default): Ctrl+Shift+F9 switches every ray-traced effect
+// off and on while playing, so the game's own image can be compared with ours live. It only
+// overrides the settings the QA's all-off set uses (rt, gi, rt_reflections, rt_shadows,
+// rt_local_shadows, rt_emissive, sharc); everything else (DLSS, frame generation) is untouched.
+static std::atomic<bool> g_ab_off{false};
+static const char* const kAbOffKeys[] = {"rt", "gi", "rt_reflections", "rt_shadows",
+                                         "rt_local_shadows", "rt_emissive", "sharc"};
+
+static bool ab_overridden(const char* key) {
+  if (!g_ab_off.load(std::memory_order_relaxed)) return false;
+  for (const char* k : kAbOffKeys)
+    if (std::strcmp(k, key) == 0) return true;
+  return false;
+}
+
+static void ab_poll_hotkey() {
+  static bool was_down = false;
+  bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
+              (GetAsyncKeyState(VK_F9) & 0x8000);
+  if (down && !was_down && cfg_int("ab_hotkey", 1)) {
+    bool off = !g_ab_off.load();
+    g_ab_off.store(off);
+    log("[ab] Ctrl+Shift+F9: ray tracing %s (the game's own image %s)", off ? "OFF" : "ON",
+        off ? "shown" : "replaced again");
+  }
+  was_down = down;
+}
+
 void cfg_poll() {
+  ab_poll_hotkey();
   std::lock_guard<std::mutex> poll_lock(g_cfg_poll_mu);
   std::string user = env_str("BG3RTX_USER_INI");
   if (user.empty()) user = root_dir() + "\\bg3rtx_user.ini";
@@ -236,6 +267,10 @@ void cfg_poll() {
 }
 
 static bool cfg_raw(const char* key, std::string& out) {
+  if (ab_overridden(key)) {
+    out = "0";
+    return true;
+  }
   std::lock_guard<std::mutex> lock(g_cfg_mu);
   auto it = g_cfg.find(key);
   if (it == g_cfg.end()) return false;
