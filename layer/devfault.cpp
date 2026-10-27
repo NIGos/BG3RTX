@@ -10,8 +10,10 @@
 // freed, and the vendor records. The next fault, if any, names the buffer.
 #include "host.h"
 
+#include <algorithm>
 #include <cstring>
 #include <deque>
+#include <thread>
 
 namespace bg3 {
 
@@ -128,6 +130,7 @@ void fault_device_created(DeviceData* dd, bool enabled) {
   p_fault_info = g_enabled ? reinterpret_cast<PFN_vkGetDeviceFaultInfoEXT>(dd->gdpa(dd->device, "vkGetDeviceFaultInfoEXT"))
                            : nullptr;
   if (g_enabled) log("[fault] device fault reporting %s", p_fault_info ? "ready" : "UNAVAILABLE (no entry point)");
+  if (cfg_int("fault_poll_ms", 1000) > 0) fault_poll_start(dd);
 }
 
 void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size) {
@@ -160,11 +163,9 @@ void fault_untrack(VkDeviceAddress addr) {
     }
 }
 
-void fault_on_result(DeviceData* dd, VkResult r, const char* where) {
-  if (r != VK_ERROR_DEVICE_LOST || !dd || g_reported.exchange(true)) return;
-  log("[fault] VK_ERROR_DEVICE_LOST from %s in frame %llu (presents completed on the GPU: %llu)", where,
-      (unsigned long long)frame_index(), (unsigned long long)life_gpu_done());
-  rt_log_state("[fault]");
+// vkGetDeviceFaultInfoEXT: addresses mapped to our ranges, vendor records.
+// `quiet`: a query on a device that may not be lost (a stall): one line if empty.
+static void fault_details(DeviceData* dd, bool quiet) {
   if (!p_fault_info) {
     log("[fault] no VK_EXT_device_fault on this device: no fault addresses");
     return;
@@ -173,6 +174,10 @@ void fault_on_result(DeviceData* dd, VkResult r, const char* where) {
   VkResult q = p_fault_info(dd->device, &counts, nullptr);
   if (q != VK_SUCCESS && q != VK_INCOMPLETE) {
     log("[fault] vkGetDeviceFaultInfoEXT (counts) failed: %d", q);
+    return;
+  }
+  if (quiet && !counts.addressInfoCount && !counts.vendorInfoCount) {
+    log("[fault] vkGetDeviceFaultInfoEXT: no fault recorded (%d)", q);
     return;
   }
   std::vector<VkDeviceFaultAddressInfoEXT> addrs(counts.addressInfoCount);
@@ -197,6 +202,57 @@ void fault_on_result(DeviceData* dd, VkResult r, const char* where) {
     log("[fault]   vendor: \"%s\" code 0x%llx data 0x%llx", vendor[i].description,
         (unsigned long long)vendor[i].vendorFaultCode, (unsigned long long)vendor[i].vendorFaultData);
   log("[fault] %zu live and %zu recently freed ranges of ours were registered", g_live.size(), g_freed.size());
+}
+
+void fault_on_result(DeviceData* dd, VkResult r, const char* where) {
+  if (r != VK_ERROR_DEVICE_LOST || !dd || g_reported.exchange(true)) return;
+  log("[fault] VK_ERROR_DEVICE_LOST from %s in frame %llu (presents completed on the GPU: %llu)", where,
+      (unsigned long long)frame_index(), (unsigned long long)life_gpu_done());
+  rt_log_state("[fault]");
+  bvh_log_state("[fault]");
+  fault_details(dd, false);
+}
+
+// Active detection: once the device is lost the game stops calling Vulkan, so the
+// submit/present hooks never see VK_ERROR_DEVICE_LOST. This thread polls our latest
+// present fence every second (fault_poll_ms), and when presents stop for 5 s it logs
+// the state once per stall and asks the driver for a fault record.
+void fault_poll_start(DeviceData* dd) {
+  static std::once_flag once;
+  std::call_once(once, [dd] {
+    std::thread([dd] {
+      uint64_t last_frame = frame_index();
+      ULONGLONG last_change = GetTickCount64();
+      bool stall_logged = false;
+      for (;;) {
+        Sleep(DWORD((std::max)(cfg_int("fault_poll_ms", 1000), 100)));
+        if (g_reported.load()) return;
+        const VkResult r = life_poll_fence(dd);
+        if (r == VK_ERROR_INITIALIZATION_FAILED) return;   // device destroyed
+        if (r == VK_ERROR_DEVICE_LOST) {
+          fault_on_result(dd, r, "the fault poll (our present fence)");
+          return;
+        }
+        const uint64_t f = frame_index();
+        const ULONGLONG now = GetTickCount64();
+        if (f != last_frame) {
+          if (stall_logged) log("[fault] presents resumed at frame %llu", (unsigned long long)f);
+          last_frame = f;
+          last_change = now;
+          stall_logged = false;
+        } else if (!stall_logged && f > 0 && now - last_change >= 5000) {
+          stall_logged = true;
+          log("[fault] no present for %llu s (frame %llu, presents done on the GPU %llu, %zu present fences pending, "
+              "latest fence %d)",
+              (unsigned long long)((now - last_change) / 1000), (unsigned long long)f,
+              (unsigned long long)life_gpu_done(), life_pending_fences(), int(r));
+          rt_log_state("[fault] stall:");
+          bvh_log_state("[fault] stall:");
+          fault_details(dd, true);
+        }
+      }
+    }).detach();
+  });
 }
 
 }  // namespace bg3

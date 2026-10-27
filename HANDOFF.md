@@ -134,6 +134,23 @@ agent; not covered by the first commit).
   (UVs and normals of cached meshes read as zeros: wrong alpha and normals, no fault,
   since the reads are bounded).
 
+**Active fault detection** (third commit; `devfault.cpp`, `tracker.cpp`, `bvhsplit.cpp`):
+- After the loss the game stops calling Vulkan, so the hooks never saw
+  `VK_ERROR_DEVICE_LOST`. The `00ab836` test ran 5 of 5 stalled, with no fault block.
+- A layer thread now polls our latest present fence every `fault_poll_ms` (default 1000;
+  0 turns it off).
+- On `VK_ERROR_DEVICE_LOST` it logs the full report:
+  - the scene slots, with their build records (pending, submitted or DROPPED);
+  - `bvh_log_state`: meshes, pending batches and compaction copies not yet swapped in,
+    ranges awaiting release, pending and dropped build records, and the last 20 `[bvh]`
+    events (each build's slot, record, command buffer, new meshes, compaction copies,
+    full builds, TLAS build or refit, pool growth; batches done, dropped or timed out;
+    dropped buffers);
+  - `vkGetDeviceFaultInfoEXT` with the addresses mapped to our buffers.
+- If presents stop for 5 s without a loss, it logs `[fault] no present for N s` with the
+  same state once per stall, and queries the fault info (one line if nothing is
+  recorded).
+
 **First commit:**
 
 **Scene snapshot slots** (`layer/host.h` `kSceneSlots = 8`, `layer/rtscene.cpp`)

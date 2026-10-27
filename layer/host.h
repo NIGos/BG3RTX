@@ -496,6 +496,10 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 uint64_t bvh_rec_register(VkCommandBuffer cmd);
 int bvh_rec_state(uint64_t id);
 void bvh_cmd_reset(VkCommandBuffer cmd);
+void bvh_log_state(const char* prefix);   // device-loss / stall report (devfault.cpp)
+VkResult life_poll_fence(DeviceData* dd);  // our latest present fence (0-timeout); INITIALIZATION_FAILED: device gone
+size_t life_pending_fences();
+void fault_poll_start(DeviceData* dd);    // devfault.cpp: active device-loss detection
 void bvh_on_present();
 void bvh_forget_buffer(VkBuffer b);
 std::string bvh_describe_address(VkDeviceAddress a);   // device-fault reports ("" if not the split's)

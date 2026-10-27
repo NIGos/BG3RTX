@@ -105,6 +105,21 @@ uint64_t life_gpu_done() {
   return g_life_done;
 }
 
+// Status of our latest present fence (a 0-timeout wait), for the fault poll thread
+// (devfault.cpp): VK_ERROR_DEVICE_LOST once the device is lost, even if the game
+// never calls Vulkan again. VK_SUCCESS when there is nothing to poll.
+bool g_life_stopped = false;
+VkResult life_poll_fence(DeviceData* dd) {
+  std::lock_guard<std::mutex> lock(g_life_mu);
+  if (g_life_stopped || !dd) return VK_ERROR_INITIALIZATION_FAILED;   // the device is gone: stop polling
+  if (g_fences.empty()) return VK_SUCCESS;
+  return dd->vk.WaitForFences(dd->device, 1, &g_fences.back().fence, VK_TRUE, 0);
+}
+size_t life_pending_fences() {
+  std::lock_guard<std::mutex> lock(g_life_mu);
+  return g_fences.size();
+}
+
 uint64_t life_idle_begin() { return g_submit_seq.load(); }
 void life_idle_end(uint64_t seq_before) {
   uint64_t cur = g_idle_seq.load();
@@ -183,6 +198,7 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
 
 void life_device_destroyed(DeviceData* dd) {
   std::lock_guard<std::mutex> lock(g_life_mu);
+  g_life_stopped = true;
   if (!g_fences.empty()) dd->vk.DeviceWaitIdle(dd->device);
   for (const FrameFence& f : g_fences) dd->vk.DestroyFence(dd->device, f.fence, nullptr);
   for (VkFence f : g_free_fences) dd->vk.DestroyFence(dd->device, f, nullptr);

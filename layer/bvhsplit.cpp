@@ -38,6 +38,8 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <cstdarg>
+#include <deque>
 #include <unordered_set>
 
 namespace bg3 {
@@ -357,6 +359,20 @@ uint64_t g_rec_next = 0;
 std::unordered_map<VkCommandBuffer, std::vector<uint64_t>> g_rec_cmd;   // not yet submitted
 std::unordered_map<uint64_t, RecState> g_rec_state;
 uint64_t g_rec_dropped = 0, g_rec_dropped_logged = 0;
+
+// The last scene-build events, for a device-loss or stall report (bvh_log_state).
+std::mutex g_ev_mu;
+std::deque<std::string> g_events;
+void bvh_event(const char* fmt, ...) {
+  char b[320];
+  va_list a;
+  va_start(a, fmt);
+  vsnprintf(b, sizeof b, fmt, a);
+  va_end(a);
+  std::lock_guard<std::mutex> l(g_ev_mu);
+  g_events.emplace_back(b);
+  if (g_events.size() > 20) g_events.pop_front();
+}
 
 int rec_state(uint64_t id) {   // -1: unknown (0, or pruned: never trusted)
   std::lock_guard<std::mutex> fl(g_fix_mu);
@@ -1225,8 +1241,17 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   barrier(cmd, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
   stamp(cmd, 3);
+  const size_t batch_swaps = batch.swaps.size();
   if (n_status || !batch.swaps.empty()) g_batches.push_back(std::move(batch));
 
+  {
+    uint32_t n_new_dyn = 0;
+    for (const DynBuild& db : dyn_builds) n_new_dyn += db.refit ? 0u : 1u;
+    bvh_event("frame %llu: build into slot %u, record %llu, cmd %p: %u instances (%u static), %zu new meshes, %zu "
+              "compaction copies, %zu per-draw BLAS (%u full builds), TLAS %s%s",
+              (unsigned long long)now, slot, (unsigned long long)rec, (void*)cmd, n, n_static_written, mesh_builds.size(),
+              batch_swaps, dyn_builds.size(), n_new_dyn, g_tlas_since ? "refit" : "build", g_pool_grew ? ", mesh pool GREW" : "");
+  }
   ++g_st.builds;
   out->tlas = g_tlas[slot].as;
   out->instances = n;
@@ -1272,6 +1297,8 @@ void bvh_cmd_reset(VkCommandBuffer cmd) {
     if (s != g_rec_state.end() && s->second == kRecPending) {
       s->second = kRecDropped;
       ++g_rec_dropped;
+      bvh_event("frame %llu: command buffer %p dropped without a submit: build record %llu", (unsigned long long)frame_index(),
+                (void*)cmd, (unsigned long long)id);
       if (g_rec_dropped_logged < 10) {
         ++g_rec_dropped_logged;
         log("[bvh] frame %llu: a command buffer holding scene build %llu was dropped without a submit (%llu so far): "
@@ -1365,6 +1392,38 @@ void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size) {
     evict(k);
     ++g_st.evict_write;
   }
+}
+
+// The split's state for a device-loss or stall report (never blocks on g_mu).
+void bvh_log_state(const char* prefix) {
+  {
+    std::unique_lock<std::mutex> lock(g_mu, std::try_to_lock);
+    if (!lock.owns_lock()) {
+      log("%s bvh: state busy (lock held)", prefix);
+    } else {
+      size_t swaps = 0, jobs = 0;
+      for (const JobBatch& b : g_batches) swaps += b.swaps.size(), jobs += b.jobs.size();
+      size_t ready = 0;
+      for (const auto& [k, m] : g_meshes) ready += m.state == kReady;
+      log("%s bvh: %zu meshes (%zu ready), %zu per-draw BLAS, %zu chunks, pool %llu MB, %zu batches pending (%zu jobs, %zu "
+          "compaction copies not yet swapped in), %zu ranges awaiting release, last TLAS slot %d (record %llu), "
+          "oldest live scene slot built in frame %llu, now %llu",
+          prefix, g_meshes.size(), ready, g_dyn.size(), g_chunks.size(), (unsigned long long)(g_pool.size >> 20),
+          g_batches.size(), jobs, swaps, g_pending_free.size(), g_tlas_prev, (unsigned long long)g_tlas_prev_rec,
+          (unsigned long long)rt_scene_oldest_live(), (unsigned long long)frame_index());
+    }
+  }
+  {
+    std::lock_guard<std::mutex> fl(g_fix_mu);
+    size_t pending = 0;
+    for (const auto& [id, s] : g_rec_state) pending += s == kRecPending;
+    log("%s bvh: build records: %zu pending (recorded, not submitted), %llu dropped so far, %zu command buffers with "
+        "unsubmitted fixups",
+        prefix, pending, (unsigned long long)g_rec_dropped, g_fixups.size());
+  }
+  std::lock_guard<std::mutex> l(g_ev_mu);
+  log("%s bvh: the last %zu events:", prefix, g_events.size());
+  for (const std::string& e : g_events) log("%s   %s", prefix, e.c_str());
 }
 
 // What of ours lies at device address `a` (device-fault reports, devfault.cpp).
@@ -1529,6 +1588,11 @@ void bvh_on_present() {
         as_destroy(s.c);             // never written (or the mesh is gone)
       }
     }
+    if (!b.swaps.empty() || (!done && !b.jobs.empty()))
+      bvh_event("frame %llu: batch of frame %llu (record %llu) %s: %zu jobs, %zu compaction copies %s",
+                (unsigned long long)now, (unsigned long long)b.frame, (unsigned long long)b.rec,
+                done ? "done" : dropped ? "DROPPED" : "TIMED OUT", b.jobs.size(), b.swaps.size(),
+                done ? "swapped in" : "discarded");
     if (!done && !b.swaps.empty() && g_st.lost_logged < 6) {
       ++g_st.lost_logged;
       log("[bvh] batch of frame %llu %s: %zu compaction copies discarded, the meshes keep their original BLAS",
