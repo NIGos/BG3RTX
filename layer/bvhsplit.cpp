@@ -928,6 +928,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // One build per slot and frame: two builds into one BLAS in one call would race.
   std::unordered_set<uint64_t> dyn_this_frame;
   const bool inplace_ok = cfg_int("rt_dyn_inplace", 0) != 0;
+  // A/B: rt_dyn_refit=0 never updates a per-draw BLAS (a full build into a new range
+  // every frame); rt_build_serial=1 issues one build command per BLAS with a barrier
+  // between them instead of one batched call.
+  const bool dyn_refit_ok = cfg_int("rt_dyn_refit", 1) != 0;
   for (auto& [di, key] : dyn) {
     FrameDraw& fd = g_draws[di];
     key = fd.dyn_key;
@@ -939,7 +943,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     bool fresh = !s.as.as;
     // A refit (UPDATE) needs the source built: its last build must have been submitted
     // (a dropped command buffer left the BLAS unbuilt; a full build does not read it).
-    bool refit = !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.flags == dyn_flags &&
+    bool refit = dyn_refit_ok && !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.flags == dyn_flags &&
                  rec_submitted(s.rec) &&
                  s.since_build < uint32_t(rebuild_frames);
     // A full build never goes into the BLAS that TLASes in flight reference: a
@@ -1057,7 +1061,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
 
   // ---- 3. GPU: convert, extract/check, compaction, builds, TLAS ----
   // XFB writes done; last frame's ray queries and builds are done with what we reuse.
-  barrier(cmd, kXFB | kAS | kCS, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS | kXfer, kRW);
+  // (HOST: the instance/InstInfo writes made at record; vkQueueSubmit already makes
+  // them visible, the explicit dependency costs nothing.)
+  barrier(cmd, kXFB | kAS | kCS | kXfer | VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT,
+          kCS | kAS | kXfer, kRW);
   rt_convert(cmd, cap);
   // The in-place conversion before everything that reads the soup: the extraction
   // jobs (compute) AND the per-draw BLAS builds (AS build stage). The AS stage was
@@ -1210,10 +1217,18 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if (!infos.empty()) {
       std::vector<const VkAccelerationStructureBuildRangeInfoKHR*> rp(ranges.size());
       for (size_t i = 0; i < ranges.size(); ++i) rp[i] = &ranges[i];
-      dd->vk.CmdBuildAccelerationStructuresKHR(cmd, uint32_t(infos.size()), infos.data(), rp.data());
+      if (cfg_int("rt_build_serial", 0)) {
+        for (size_t i = 0; i < infos.size(); ++i) {
+          if (i) barrier(cmd, kAS, VK_ACCESS_MEMORY_WRITE_BIT, kAS, kRW);
+          dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &infos[i], &rp[i]);
+        }
+      } else {
+        dd->vk.CmdBuildAccelerationStructuresKHR(cmd, uint32_t(infos.size()), infos.data(), rp.data());
+      }
     }
-    barrier(cmd, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kAS,
-            VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
+    // BLAS builds (and the copies before them) -> the size queries, the TLAS build
+    // and its scratch reuse: as broad as the legacy build's barrier.
+    barrier(cmd, kAS | kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kAS | kXfer, kRW);
     // The compacted size of each new mesh: written, then copied into the batch's
     // status slots in order (a query's host-visible availability may still be a
     // previous use's until the reset executes, so the host never reads the pool).
@@ -1277,8 +1292,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &tbi, &trp);
   }
   // Ray queries in later command buffers of this frame (submission order).
-  barrier(cmd, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-          VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
+  // Everything this build wrote (TLAS, BLAS, the converted soup and the pool the
+  // ray queries read through set 1) -> the RT passes in later command buffers.
+  barrier(cmd, kAS | kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+          VK_ACCESS_MEMORY_READ_BIT);
   stamp(cmd, 3);
   const size_t batch_swaps = batch.swaps.size();
   if (n_status || !batch.swaps.empty()) g_batches.push_back(std::move(batch));

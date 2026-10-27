@@ -434,3 +434,30 @@ undefined builds.
 (conversion, extraction) needs `VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR`
 (access `SHADER_READ` / `MEMORY_READ`) in the dst of its barrier before
 `vkCmdBuildAccelerationStructuresKHR`. A COMPUTE-only dst does not order the AS build.
+
+## 8. d19c76d: 1 fault in 8 runs. Barrier audit and the ninth commit
+
+The split's dependencies, against the legacy build (`rtscene.cpp`):
+
+| dependency | split before | now |
+|---|---|---|
+| XFB capture -> conversion / builds | `rt_before_capture` (AS+CS -> XFB, WAR) before the pass; after it `XFB\|AS\|CS -> CS\|AS\|XFER`, MEMORY_WRITE -> R/W | + HOST stage and HOST_WRITE (explicit; `vkQueueSubmit` already covers host writes) |
+| conversion -> per-draw builds | fixed in d19c76d (`CS -> CS\|AS`) | unchanged |
+| extraction -> mesh builds / copies | `CS -> AS\|XFER` (only with jobs; mesh builds only exist then) | unchanged |
+| copies / BLAS builds -> queries, TLAS, scratch reuse | `AS -> AS`, AS_WRITE -> AS_R/W | `AS\|CS\|XFER -> AS\|XFER`, MEMORY_WRITE -> R/W (as legacy) |
+| TLAS build -> RT passes (other command buffers) | `AS -> CS\|FS`, AS_WRITE -> AS_READ | `AS\|CS\|XFER -> CS\|FS`, MEMORY_WRITE -> MEMORY_READ. Also makes the compute-written soup and pool visible to the ray queries' set-1 reads, which the old one did not. |
+| host ring (instances, InstInfo at record; matrices at submit) -> TLAS build | implicit at `vkQueueSubmit` (coherent memory, written before the submit) | + the explicit HOST barrier above |
+| alpha records / stamp (vkCmdUpdateBuffer) -> RT passes | `TRANSFER -> COMPUTE` in `alpha_commit` | unchanged |
+
+- All our work runs on one queue, so every one of these also orders the previous frame's
+  passes before this frame's writes. The log shows one queue.
+- None of the old masks was clearly too narrow for an AS read; the residual is not
+  explained by a missing dependency I can see.
+- **Two A/B switches** to localise it:
+  - `rt_dyn_refit=0`: never update a per-draw BLAS. Each one gets a full build into a
+    new range every frame, so no BLAS is ever rewritten while anything may read it.
+  - `rt_build_serial=1`: one build command per BLAS, with a barrier between them,
+    instead of one batched call of about 500 builds. This tests the driver's batched
+    build.
+- Suggested runs: 8 default, then 8 each with `rt_dyn_refit=0` and with
+  `rt_build_serial=1`, all with the same `-Set` as before.
