@@ -257,7 +257,7 @@ struct Window {
   std::vector<float> build_ms;
   std::map<uint64_t, double> fx_frame_ms[2];   // effects passes per frame: [no capture, capture]
   uint64_t nonfinite = 0, collapsed = 0;
-  struct Cmp { double ours = 0, game = 0, px = 0, zero = 0, nomap = 0, bright = 0, ours_b = 0, game_b = 0; uint32_t flags = 0; };
+  struct Cmp { double ours = 0, game = 0, px = 0, zero = 0, nomap = 0, bright = 0, ours_b = 0, game_b = 0, overlap = 0; uint32_t flags = 0; };
   struct Glob { uint32_t slot = UINT32_MAX, n = 0, missing = 0; float value = 0, vmin = 1e30f, vmax = 0; };
   std::map<uint64_t, Glob> glob;               // luminance-scale copies per fragment shader (read back)
   std::map<uint64_t, Cmp> cmp;                 // projected comparison per fragment shader
@@ -681,8 +681,13 @@ struct AsSlot {
   VkAccelerationStructureKHR blas = VK_NULL_HANDLE, tlas = VK_NULL_HANDLE;
   VkDeviceSize blas_size = 0, tlas_off = 0, tlas_size = 0;
   VkDeviceAddress blas_addr = 0;
+  // The last BLAS build of this slot: its geometries' keys (a refit needs the same meshes in
+  // the same order with the same triangle counts) and refits since its full build.
+  std::vector<uint64_t> sig;
+  uint32_t refits = 0;
 };
 AsSlot g_as[kRing];
+uint64_t g_as_refits = 0, g_as_builds = 0;
 uint64_t g_as_grown = 0;
 
 void as_slot_release(AsSlot& a) {
@@ -705,8 +710,15 @@ VkAccelerationStructureKHR as_make(VkBuffer b, VkDeviceSize off, VkDeviceSize si
 
 // Records the builds of ring slot `slot` from `ranges` (soup offset, triangles; sanitized)
 // into `cmd`; the TLAS, or VK_NULL_HANDLE (nothing recorded).
+// A slot whose last build had the same geometries (keys) is refit in place instead of rebuilt
+// (rt_em_refit, default 1): the same meshes, only their camera-relative positions moved (and
+// skinned or animated vertices). Every rt_em_rebuild-th use of the slot rebuilds, so a BVH
+// never keeps a stale topology for long. Our command buffers are fenced and always submitted,
+// so the source of a refit has always been built (the hazard of the game's dropped buffers,
+// TRACK_D 13.3, does not apply).
 VkAccelerationStructureKHR em_as_build(VkCommandBuffer cmd, uint32_t slot,
-                                       const std::vector<std::pair<VkDeviceSize, uint32_t>>& ranges) {
+                                       const std::vector<std::pair<VkDeviceSize, uint32_t>>& ranges,
+                                       const std::vector<uint64_t>& keys) {
   DeviceData* dd = g_dd;
   AsSlot& a = g_as[slot];
   const uint32_t ngeo = uint32_t(ranges.size());
@@ -733,7 +745,7 @@ VkAccelerationStructureKHR em_as_build(VkCommandBuffer cmd, uint32_t slot,
   }
   VkAccelerationStructureBuildGeometryInfoKHR bb{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
   bb.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-  bb.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+  bb.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
   bb.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
   bb.geometryCount = ngeo;
   bb.pGeometries = geo.data();
@@ -759,6 +771,7 @@ VkAccelerationStructureKHR em_as_build(VkCommandBuffer cmd, uint32_t slot,
   // The slot's storage: grown (to 1.5x the need) only when this build does not fit.
   const VkDeviceSize need_blas = up256(bs.accelerationStructureSize);
   if (!a.buf.b || need_blas > a.blas_size || ts.accelerationStructureSize > a.tlas_size) {
+    a.sig.clear();
     const VkDeviceSize blas_cap = up256((std::max)(need_blas + need_blas / 2, VkDeviceSize(1) << 20));
     const VkDeviceSize tlas_cap = up256((std::max)(ts.accelerationStructureSize, VkDeviceSize(4096)));
     as_slot_release(a);
@@ -782,7 +795,7 @@ VkAccelerationStructureKHR em_as_build(VkCommandBuffer cmd, uint32_t slot,
   // Scratch: shared by every slot (our command buffers run in submission order on one
   // queue and each begins with a full barrier).
   const VkDeviceSize al = (std::max)(rt_scratch_alignment(), VkDeviceSize(256));
-  const VkDeviceSize need_scratch = (std::max)(bs.buildScratchSize, ts.buildScratchSize) + al;
+  const VkDeviceSize need_scratch = (std::max)({bs.buildScratchSize, bs.updateScratchSize, ts.buildScratchSize}) + al;
   if (g_as_scratch.size < need_scratch) {
     free_buf(g_as_scratch);
     if (!make_buf(g_as_scratch, up256(need_scratch + need_scratch / 2),
@@ -800,9 +813,18 @@ VkAccelerationStructureKHR em_as_build(VkCommandBuffer cmd, uint32_t slot,
   ti.accelerationStructureReference = a.blas_addr;
   std::memcpy(g_inst.map + VkDeviceSize(slot) * kInstRegion + kInstOffTlas, &ti, sizeof ti);
 
+  const int rebuild_every = (std::max)(cfg_int("rt_em_rebuild", 30), 1);
+  const bool refit = ngeo && cfg_int("rt_em_refit", 1) != 0 && a.sig == keys && a.refits + 1 < uint32_t(rebuild_every);
+  a.refits = refit ? a.refits + 1 : 0;
+  a.sig = keys;
+  ++(refit ? g_as_refits : g_as_builds);
   if (ngeo) {
     bb.dstAccelerationStructure = a.blas;
     bb.scratchData.deviceAddress = scratch;
+    if (refit) {
+      bb.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;
+      bb.srcAccelerationStructure = a.blas;
+    }
     const VkAccelerationStructureBuildRangeInfoKHR* pr = rng.data();
     dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &bb, &pr);
     barrier(cmd, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kAS,
@@ -927,6 +949,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   std::vector<EmRec> recs;
   std::vector<View> tex, cache;
   std::vector<std::pair<VkDeviceSize, uint32_t>> ranges;   // soup ranges the BLAS builds read
+  std::vector<uint64_t> keys;                                // per range: which mesh it is (the refit's signature)
   Bg3Binding global{};
   float cam[3] = {0, 0, 0};
   bool have_cam = false;
@@ -963,6 +986,11 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
         ++census.skip_tex, r.flags = (r.flags & ~kFlagVtAlbedo) | kFlagApprox;
       recs.push_back(r);
       ranges.push_back({d.off, d.prims});
+      uint64_t key = 1469598103934665603ull;
+      for (uint64_t v : {uint64_t(r.fs_hi) << 32 | r.fs_lo, (uint64_t)d.vb0, uint64_t(d.vb0_off), (uint64_t)d.ib,
+                         uint64_t(d.ib_off), uint64_t(d.prims), uint64_t(d.args.first), uint64_t(uint32_t(d.args.vertex_offset)), uint64_t(d.args.count), uint64_t(d.args.instances)})
+        key = (key ^ v) * 1099511628211ull;
+      keys.push_back(key);
     }
   }
   // This build's host region (records, header, statistics); the header is cleared before
@@ -1012,7 +1040,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
     in.mask = 0xFF;
     std::memcpy(ireg + kInstOffFake + VkDeviceSize(i) * 64, &in, 64);
   }
-  VkAccelerationStructureKHR tlas = em_as_build(cmd, slot, ranges);
+  VkAccelerationStructureKHR tlas = em_as_build(cmd, slot, ranges, keys);
   if (!tlas) {
     ts_end(cmd, tsp);
     return;
@@ -1710,6 +1738,7 @@ void em_on_present() {
         cmp.bright += q[8];
         cmp.ours_b += double((uint64_t(q[10]) << 32) | q[9]) / 4096.0;
         cmp.game_b += double((uint64_t(q[12]) << 32) | q[11]) / 4096.0;
+        cmp.overlap += q[13];
         cmp.nomap += double((uint64_t(q[7]) << 32) | q[6]) / 4096.0;
         cmp.flags |= si.rec_flags[r];
       }
@@ -1818,6 +1847,10 @@ void em_on_present() {
       w.instances / nb, w.tris / nb, w.lights / nb, w.overflow / nb, w.power / nb, w.last_power, w.last_draws,
       w.last_lights, (unsigned long long)w.nonfinite, pct(w.build_ms, 0.5), pct(w.build_ms, 0.99), w.build_ms.size(),
       pct(fx[1], 0.5), fx[1].size(), pct(fx[0], 0.5), fx[0].size());
+  log("[em] BLAS: %llu refits, %llu full builds since the last line (rt_em_refit, rt_em_rebuild); slot storage grown %llu "
+      "times in all",
+      (unsigned long long)g_as_refits, (unsigned long long)g_as_builds, (unsigned long long)g_as_grown);
+  g_as_refits = g_as_builds = 0;
   {
     std::string line;
     int shown = 0;
@@ -1862,8 +1895,9 @@ void em_on_present() {
       // apart from dark texels and texels whose game pixel other emitters add to): the gate.
       const double ratio_b = cm.game_b > 0 ? cm.ours_b / cm.game_b : 0.0;
       char buf[300];
-      snprintf(buf, sizeof buf, "%08x %s %.3f, bright %.3f (%.0f bright px of %.0f%s%s%s, scale %.3f)", unsigned(fs >> 32),
-               material(fs).name.c_str(), ratio, ratio_b, px, cm.px / double(w.dbg_frames),
+      snprintf(buf, sizeof buf, "%08x %s %.3f, bright %.3f (%.0f bright px of %.0f, %.0f overlapped%s%s%s, scale %.3f)",
+               unsigned(fs >> 32), material(fs).name.c_str(), ratio, ratio_b, px, cm.px / double(w.dbg_frames),
+               cm.overlap / double(w.dbg_frames),
                (cm.flags & kFlagApprox) ? ", approx" : "", (cm.flags & kFlagForward) ? ", forward" : "",
                px < 200 ? ", under 200 bright px: not gated" : "", before);
       items.push_back(buf);

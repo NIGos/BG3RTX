@@ -48,14 +48,19 @@ void add64(uint a, float lum) {
 // Per record (8 words): ours (0-1), the game's (2-3), pixels (4), hits where ours is exactly 0
 // (5), and ours without the maps (6-7): the record's radiance x the luminance scale only,
 // which separates a zero level from a map sampled where it is black (wrong UV or texture).
-void rec_stat(uint rec, float ours, float game) {
+// Word 13: bright hits left out of the bright sums because another captured emitter lies in
+// front on the same ray (an alpha-blended glow, particles): the game's pixel holds both, ours
+// only the surface at the depth, so those pixels do not measure this family.
+void rec_stat(uint rec, float ours, float game, bool overlapped) {
   if (rec >= 1024) return;
   uint base = (16 + rec * 16) * 4;
   add64(base, ours);
   add64(base + 8, game);
   emStats.InterlockedAdd(base + 16, 1u);
   if (ours <= 0.0) emStats.InterlockedAdd(base + 20, 1u);
-  if (game > pc.thr) {
+  if (game > pc.thr && overlapped) {
+    emStats.InterlockedAdd(base + 52, 1u);
+  } else if (game > pc.thr) {
     // Bright hits (word 8) and their own sums (9-10 ours, 11-12 the game's): the ratio of
     // the emission the player sees, apart from a family's dark texels.
     emStats.InterlockedAdd(base + 32, 1u);
@@ -109,7 +114,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
         stat(5);
         if (bright) {
           stat(4);
-          rec_stat(recf, em_lum(Lf), game);
+          rec_stat(recf, em_lum(Lf), game, false);
         }
         if (pc.mode == 6) c = Lf;
         bright = false;   // covered, by the emitter in front
@@ -118,7 +123,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
     if (hit) {
       stat(1);
       if (game < 0.02 * ours) stat(3);
-      rec_stat(rec, ours, game);
+      // Another emitter in front of this one on the same ray (see rec_stat).
+      float3 Lo;
+      uint reco;
+      const float front = 0.5 * max(dist - eps, 0.0);
+      const bool over = bright && front > 0.0 && em_lookup(float3(0, 0, 0), dir, front, front, px, shift, Lo, reco) &&
+                        em_lum(Lo) > 0.0;
+      rec_stat(rec, ours, game, over);
     } else if (bright) {
       stat(2);
     }

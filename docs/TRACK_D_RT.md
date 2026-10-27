@@ -3038,3 +3038,46 @@ pan headroom.
   `em_lookup` consumer. If none does, the hypothesis is rejected and the next candidate is
   the B10G11R11 target and the alpha blending of the overlapping emitters.
 
+### 13.17 em10: the filtering test, overlap and the refit
+
+Scored with `scripts/qa/em_gate.py`.
+- **Exact families** are gated on the `bright` ratio: their per-pixel radiance is modelled.
+- **Calibrated families** are gated on the all-hit (energy) ratio: only their mean is
+  modelled, and it is what the light list carries.
+
+**Filtering hypothesis: rejected.**
+
+| Family | Scene | filter 0 | filter 1 | filter 2 |
+|---|---|---|---|---|
+| `304be1c7` (bright ratio) | GF | 0.998 | 0.861 (fails) | 0.992 |
+| `304be1c7` (bright ratio) | AF | 0.417 | | 0.424 |
+| `222986b8` (bright ratio) | AF | 1.005 | | 1.006 |
+
+- The GF +3.8% and the AF 1.93 of `222986b8` were the all-hit metric, which includes the dark
+  texels. On bright pixels both match.
+- **The filter stays 0** (the ray-cone LOD). Filters 1 and 2 remain as diagnostics.
+
+**AF `304be1c7` at 0.42 is independent of filtering.**
+- The candidate: other emitters on the same ray, such as alpha-blended glows or particles
+  over the pulse lights near the lava. The game's pixel holds both emitters; ours holds only
+  the surface at the depth.
+- The check now looks for a captured emitter in front of each bright hit (the front half of
+  the ray). It leaves those pixels out of the bright sums and counts them (`overlapped`).
+- Emitters that are not captured cannot be detected this way.
+
+**Statistics.**
+- With W windows the temporal spread rests on W - 1 differences. σ's degrees of freedom are
+  now Welch-Satterthwaite, and the band uses the Student t quantile.
+- Runs with fewer than 2 windows after the first are not evaluated. The AF jobs had only 2
+  windows in 90 s.
+
+**BLAS refit (the optimisation toward the 0.7 ms target).**
+- A ring slot whose last build had the same geometries (keys: material, vertex and index
+  buffers and offsets, draw arguments, triangles) is refit in place (`MODE_UPDATE`,
+  `ALLOW_UPDATE`).
+- Every `rt_em_rebuild` (30) uses of a slot it rebuilds instead.
+- Our command buffers are fenced and always submitted, so the refit source is always built.
+- Logged as `[em] BLAS: N refits, M full builds`.
+
+**SHaRC with D-EM:** `sharc: D-EM effects target injected`, no fault (em10-af-sharc).
+

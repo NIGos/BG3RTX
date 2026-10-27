@@ -106,6 +106,24 @@ mode does, the filtering hypothesis is rejected.
 **Budget:** SETTINGS_DESIGN §5.4 row #8, 0.7 ms from the pan headroom. It is an optimisation target, not a gate. Only the derived ours/game gate decides the merge. The ledger leaves
 0.7 ms after SHaRC (0.6) and D-EM.
 
+## em11 (queued): refit, overlap, longer windows (TRACK_D 13.17)
+
+| Job | Mode | Warmup |
+|---|---|---|
+| `16-em11-af-check` | session | 240 s |
+| `16-em11-gf-check` | session | 150 s |
+| `16-em11-wq-check` | session | 150 s |
+| `16-em11-af-validation` | non-session, `-Validation` | |
+
+Pass criteria:
+- **Gate:** every gated family passes `python -m scripts.qa.em_gate` (exact families on the
+  bright ratio without the overlapped pixels; calibrated families on the energy ratio).
+- **Refit:** `[em] BLAS` shows refits, and there are no faults.
+- **Validation:** no IDs beyond main's baseline. In particular, none for acceleration-structure
+  updates.
+
+The build median falls toward the 0.7 ms target. That is not a gate.
+
 ## Known gaps
 
 - **Lava texture detail:** the calibration matches the mean per family only. The lava's
