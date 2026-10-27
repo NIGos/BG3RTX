@@ -229,6 +229,7 @@ so on projector pixels the difference is the box lights' direct light), then `ls
 | `70`-`74` `modwarn-S2/S10-S13`, `77-modwarn2-S2` (ran) | Rounds 1-2 of the mod dialog: dismissed, no load (TEST_SCENES.md). |
 | `75`/`76` `saveenc-S9` (ran) | utf8ansi loads the Crèche; wide stays in the menu. |
 | `80`-`85` `boxlights-S5/S6/S7` (ran) | The table above. |
-| `78-modwarn3-S2-rivington` (queued) | Round 3: a trace of the stuck state, the Continue click, Enter, Enter on the main menu's Continue, the click again, with a trace after each input. Not a session; 360 s. |
+| `78-modwarn3-S2-rivington` (ran) | Round 3: the traces show the startup splash, then "Press any key", then the main menu; there is no dialog (TEST_SCENES.md). |
+| `79-modwarn4-S2-rivington` (queued) | Round 4: Enter twice to reach the main menu, click its Continue, then the verification dialog's Continue. Not a session; 360 s. |
 
 After they run: `python -m scripts.qa.coverage --update-doc`.

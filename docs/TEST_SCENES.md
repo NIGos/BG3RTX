@@ -107,7 +107,39 @@ S14 and S9 have none.
     Continue.
   - Reading of rounds 1-2: the first input closes the verification (Continue in round 1),
     but the command-line load does not resume; the game stays in the main menu.
-- **Round 3 steps** (`$mwSteps`), each only while no loading screen has been seen:
+- **Round 3 (`modwarn3-S2`, 17:22): no load, but the traces explain the whole flow.**
+  These are the swapchain dumps in this worktree's `captures/`:
+
+  | Trace | When | Screen |
+  |---|---|---|
+  | `20261027-172252` | before any input | the startup splash (key art, "100%"), no dialog |
+  | `172303` | after the first click | a 3D vista with "Press any key to continue" |
+  | `172311` | after Enter | the main menu, Continue focused |
+  | `172325` | after the second Enter | the main menu (Enter on its Continue does nothing) |
+  | `172336` | after the second click | the main menu |
+
+  So there is no mod dialog at startup. With a save made with missing mods, the game drops
+  the `-loadSaveGame` request, so the run waits on the normal startup flow, where each
+  screen needs an input. Saves without mods load straight from the splash; S9 showed its
+  loading screen 9 s after the menu. Rounds 1-2 "dismissed a dialog" only in the sense of
+  advancing these screens.
+- **Round 4 (current `$mwSteps`):**
+  1. a trace;
+  2. Enter (splash → "Press any key");
+  3. Enter (→ main menu);
+  4. a trace;
+  5. a click on the main menu's Continue, at (567, 715) of the 3840x1600 output, measured
+     in the dumps (left-anchored, scaled from the top-left). It loads the newest visible
+     save, this one under `BG3RTX_SAVE_ONLY`;
+  6. a trace, which should show the mod-verification dialog;
+  7. a click on the dialog's Continue;
+  8. a trace;
+  9. Enter, for a follow-up dialog;
+  10. a trace.
+
+  Escape is never sent. The main-menu click is the only new kind of input: it starts a
+  load, and loading writes nothing.
+- **Round 3 steps** (superseded), each only while no loading screen had been seen:
   1. a trace of the stuck state, before any input;
   2. after 4 s, the Continue click;
   3. after 6 s, a trace;

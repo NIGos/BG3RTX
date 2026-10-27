@@ -416,24 +416,53 @@ $mw = @{ done = $false; menuAt = $null; clicks = 0; lastClick = [datetime]::MinV
 # The mod-warning steps (TEST_SCENES.md, "Saves made with mods"). Keyboard map
 # (Engine.pak PlayerProfiles/Eoc/keyboard_1.json): UIAccept = Enter, UICancel = Escape.
 # ModVerification.xaml binds only UICancel (never sent), so its Continue needs the click.
-# Rounds 1-2 (2026-10-27): the first input (round 1 the Continue click, round 2 Enter)
-# turned the stuck state (54 passes, ~1,100 draws) into the plain main menu with its
-# Continue focused (round 2's trace) and no load: the command-line load does not resume
-# after the verification. Round 3 records the stuck state first, clicks Continue, then
-# Enter, and Enter on the main menu's focused Continue (with BG3RTX_SAVE_ONLY the newest
-# visible save is this one), which should reopen the verification, then the click again.
-# A trace after each input records the screen. Count the traces in $ModWarnDiagTraces.
+# Round 3's traces (2026-10-27 17:22) showed what the stuck state is. There is no dialog:
+# with a modded save the game drops the -loadSaveGame request and runs its normal startup,
+# which waits for input in the background run:
+#   1. the startup splash (key art, "100%"), the state rounds 1-2 took for a dialog;
+#   2. after one input, a 3D vista with "Press any key to continue";
+#   3. after another, the main menu, Continue focused. Enter there does nothing.
+# Round 4: advance 1-2 with Enter, click the main menu's Continue (it loads the newest
+# visible save, this one under BG3RTX_SAVE_ONLY), which should bring the verification
+# dialog, then click that dialog's Continue. A trace after each step records the screen.
+# Count the traces in $ModWarnDiagTraces.
 $mwSteps = @(
-  @{ what = "trace"; wait = 0 },   # the stuck state, before any input
-  @{ what = "click"; wait = 4 },   # ModVerification: Continue
+  @{ what = "trace"; wait = 0 },       # the splash
+  @{ what = "enter"; wait = 2 },       # splash -> "Press any key"
+  @{ what = "enter"; wait = 6 },       # -> main menu
   @{ what = "trace"; wait = 6 },
-  @{ what = "enter"; wait = 2 },   # UIAccept, for whatever dialog is up
-  @{ what = "trace"; wait = 6 },
-  @{ what = "enter"; wait = 2 },   # the main menu's focused Continue
-  @{ what = "trace"; wait = 12 },
-  @{ what = "click"; wait = 2 },   # the verification again
-  @{ what = "trace"; wait = 8 }
+  @{ what = "menuclick"; wait = 2 },   # main menu: Continue
+  @{ what = "trace"; wait = 10 },      # the verification dialog, or a load
+  @{ what = "click"; wait = 2 },       # ModVerification: Continue
+  @{ what = "trace"; wait = 8 },
+  @{ what = "enter"; wait = 2 },       # a follow-up dialog's UIAccept, if any
+  @{ what = "trace"; wait = 10 }
 )
+# The main menu's "Continue" button. It is left-anchored, not centred: measured in round
+# 2-3's dumps at (567, 715) of the 3840x1600 output (UI target d175, swapchain d110), i.e.
+# (765, 965) in the 2160-high design, scaled by uh/2160 from the top-left, then mapped
+# to the window like the dialog click. With BG3RTX_SAVE_ONLY the newest visible save, the
+# one Continue loads, is this run's.
+function Send-MenuContinueClick {
+  $h = Get-GameWindow
+  if ($h -eq [IntPtr]::Zero) { return $false }
+  $r = New-Object BG3RTX.Win2+RECT
+  if (-not [BG3RTX.Win2]::GetClientRect($h, [ref]$r)) { return $false }
+  $w = $r.Right - $r.Left; $hh = $r.Bottom - $r.Top
+  $uw = if ($mw.uiW) { $mw.uiW } else { $w }; $uh = if ($mw.uiH) { $mw.uiH } else { $hh }
+  $s = [Math]::Min($uw / 3840.0, $uh / 2160.0)
+  $x = [int](765 * $s * $w / $uw); $y = [int](965 * $s * $hh / $uh)
+  $l = [IntPtr](([int64]$y -shl 16) -bor ($x -band 0xFFFF))
+  Write-Host "mod warning: clicking the main menu's Continue at client ($x, $y) of ${w}x$hh"
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)
+  Start-Sleep -Milliseconds 150
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)
+  Start-Sleep -Milliseconds 100
+  [void][BG3RTX.Win]::PostMessage($h, 0x0201, [IntPtr]1, $l)
+  Start-Sleep -Milliseconds 120
+  [void][BG3RTX.Win]::PostMessage($h, 0x0202, [IntPtr]0, $l)
+  $true
+}
 # A UI key (press and release) posted to this run's game window only, as the -Move key.
 function Send-UiKey([int]$vk, [int]$scan) {
   $h = Get-GameWindow
@@ -471,6 +500,7 @@ while ((Get-Date) -lt $deadline) {
       switch ($st.what) {
         "enter" { Send-UiKey 0x0D 0x1C; Write-Host "mod warning: Enter (UIAccept) posted" }
         "click" { [void](Send-ModWarningClick 1.0) }
+        "menuclick" { [void](Send-MenuContinueClick) }
         "trace" { Set-Content (Tagged $root "trace" ".request") "mod warning $(Get-Date -Format o)"; Write-Host "mod warning: diagnostic trace requested (the screen after the steps so far)" }
       }
       $mw.clicks++; $mw.lastClick = Get-Date
