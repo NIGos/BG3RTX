@@ -12,7 +12,7 @@
 // `version` (or `struct_size`) before using anything newer than version 1.
 //   2: runtime lights (the Script Extender bridge merged with the placed lights,
 //      docs/SE_BRIDGE.md), se_info, se_environment.
-//   3: roof_volumes (the RT sun's trust test, docs/TRACK_D_RT.md 6.8).
+//   3: roof_volumes (the RT sun's trust test, docs/TRACK_D_RT.md 12).
 #pragma once
 #include <cstddef>
 #include <cstdint>

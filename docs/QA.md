@@ -37,11 +37,17 @@ presents later (240 by default, enough for RR's history to settle):
 | N+1 | `refl_off` | `gi=1 rt_reflections=0` | reflection contribution (against `on0`) |
 | N+2 | `sun_off` | `rt_reflections=1 rt_shadows=0` | RT sun contribution |
 | N+3 | `local_off` | `rt_shadows=1 rt_local_shadows=0` | D-LS contribution |
-| N+4 | `sun_dbg` | `rt_local_shadows=1 rt_debug=2 rt_backlit=0` | sun mask against traced visibility |
+| N+4 | `rep_on` | `rt_local_shadows=1` (all on again) | `rt_sun_replace` A/B, with effect |
+| N+5 | `sun_min` | `rt_sun_replace=0` | `rt_sun_replace` A/B: min(game, traced) |
+| N+6 | `sun_dbg` | `rt_sun_replace=1 rt_debug=2 rt_backlit=0` | sun mask against traced visibility and the written mask |
+| N+7 | `sun_trust` | `rt_debug=6 rt_backlit=1` | the trust of `rt_sun_replace` (TRACK_D 12) |
 | (opt) | `ref` | `rt_debug=0 gi_rr_rays=8 ls_samples=2` | `--reference` |
 | last N | `off0`..`off{N-1}` | all RT off (`rt=0` and every effect 0) | all-RT contribution, flicker baseline |
 
-`--temporal N` (default 3) sets N. With N = 3 and no reference that is 11 traces.
+`--temporal N` (default 3) sets N. With N = 3 and no reference that is 14 traces.
+The `rep_on`/`sun_min`/`sun_dbg` trio is compared within itself (`view_change_sun_trio`):
+the first traces of a run can still see streaming and a settling camera, so the trio is
+kept even when on0 shows another view.
 `--full-res` dumps every preview at native size (`dump_png_width=3840`: the
 output-res frame at 3840, render-res buffers at 2560); without it previews are
 1280 wide, which is enough for regions larger than a few pixels. `--raw` adds
@@ -57,7 +63,7 @@ Each trace's `dumps.json` and `img/` move to `captures/qa/<stamp>/<scene>/raw/<i
 |---|---|---|
 | final | `d25b8086` RGB10A2 at output size: the tonemapped frame before the UI | HDR10: PQ code → nits; BT.2020 luminance. The flicker metric stays on PQ code values, which are perceptually uniform |
 | lighting | `5c3fdabc` R11G11B10F at render size: lit HDR (diffuse + specular + emissive) before transparents and post | preview Reinhard + gamma inverted |
-| debug diffuse | `d1669194` (else `7b44a567`) R11G11B10F: the lit diffuse b10 after the tiled lighting, where `rt_debug` writes | `rt_debug=2`: R = game mask × 0.5, G = traced visibility × 0.5 |
+| debug diffuse | `d1669194` (else `7b44a567`) R11G11B10F: the lit diffuse b10 after the tiled lighting, where `rt_debug` writes | `rt_debug=2`: R = game mask × 0.5, G = traced visibility × 0.5, B = visibility written into the mask × 0.5 |
 | game sun mask | `0687fa32` R8 (set 1 b7) before our fold | min..max stretch inverted |
 | material class | G-buffer RT2 alpha (`aa4efa4d`/`288876d1`) & 7 | |
 
@@ -81,6 +87,7 @@ least 2·10⁻⁵ of the buffer's pixels. All thresholds are in
 | **brightening** | the effect brightens beyond its bound: ×1.15 for sun and local shadows (they may only remove light), ×2 for GI, reflections and all RT | area ‰ (0.05) |
 | **sun_extra_casters** | RT visibility (5×5 box of the 1-spp soft sun) < 0.15 where the game mask > 0.9, after a 3-px erosion (no thin edges, no penumbrae; game mask between 0.1 and 0.9 never counts); unlit, skin, foliage and hair classes excluded (`rt_backlit=0` leaves their back faces untraced). Only pixels the sun term really darkened (lighting ratio `on0/sun_off` < 0.7) count | ‰ (0.5) |
 | **sun_missing_casters** (warning, not a gate) | RT visibility > 0.85 where the game mask < 0.1, eroded likewise. With `rt_backlit=0` traced-lit pixels are front-facing, so back faces never count. It cannot change the image (the fold only darkens: mask × visibility) but shows casters missing from the TLAS; off-screen roofs and cut-away walls are expected here | ‰ (2) |
+| **sun_replaced** (warning, not a gate) | `rt_sun_replace` wrote the mask lit (> 0.85, 5×5 box) where the game's mask is dark (< 0.1), eroded like the casters detectors: the pixels the replace brightened. Review the crops (min, replace, mask overlay, replace/min ratio): over-dark filtering, acne or cascade transitions are right (R0); a missing caster or roof is wrong. The `rt_sun_replace` effect (`rep_on` vs `sun_min`) also runs the brightening detector with a ×1.15 bound, so its crops list every visible brightening | ‰ (2) |
 | **nonfinite** | NaN/Inf over every dump of every trace (`dumps.json`) | count (0) |
 | **flicker** | per-pixel temporal std of the final frame's PQ luminance over the `on*` traces against the `off*` traces; regions where std_on > 2·std_off + 0.01 | mean std ratio (1.5), excess area ‰ (1) |
 | **reference** (`--reference`) | FLIP of all-on against `gi_rr_rays=8 ls_samples=2` with the same view and RR, minus the noise floor (FLIP of `on0` against `on1`: RR noise and animation) | mean FLIP above the floor (0.03) |

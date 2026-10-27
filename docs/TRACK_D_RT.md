@@ -1979,3 +1979,95 @@ The log reports `[bvh] last N builds ...` (draws, instances, triangles, refits),
 `[bvh] instance matrices read at submit ...`, and
 `[rt] scene build GPU (<mode>, static|camera moving, N samples): ... total median, p99`.
 `[geo] depth prepass pass GPU time (...)` now gives p99 and splits by motion and mode.
+
+## 12. Sun replace: the traced visibility replaces the game's sun mask (`rt_sun_replace`, QUALITY R0)
+
+Until now the RT sun was folded into the game's sun mask (`set1/b7`) as `min(game, traced)`:
+it could add contact detail and shadows, never remove a shadow. R0 asks for the physically
+correct result, so the traced visibility now **replaces** the mask wherever every caster that
+could shadow the pixel is in our BVH. Elsewhere `min(game, traced)` stays the fallback, so a
+missing caster never becomes a light leak.
+
+### 12.1 Design
+
+Two passes in the pre-lighting hook (`core/gi.cpp`, a few lines around the sun dispatch):
+1. `gi/rt_shadow.hlsl` traces as before (soft, sun-disc sampled), writes `min(game, traced)`,
+   and computes the **geometric trust** per pixel along the sun's centre direction:
+   - **Roofs** (`rt_sun_roofs`): the sun ray is tested against oriented boxes of the asset
+     DB's roof volumes (`Bg3AssetDbApi` v3 `roof_volumes`: roofed RoomTriggers, covered
+     floors, roof floors; box triggers as is, prism triggers as polygon bounds × Height),
+     padded by `rt_sun_roof_pad` (1 m) sideways and `rt_sun_roof_up` (3 m) upwards, the
+     ones within `rt_sun_roof_radius` (120 m) of the camera, at most 256. A ray that starts
+     in or passes through one is untrusted: the camera may have cut that roof away (it is
+     then missing from the TLAS but still in the game's cascades). This covers "inside a
+     roofed room", "under a floor with a higher floor" and "in the shadow of a roof".
+     Under them `rt_sun_roof_mode` keeps `min(game, traced)` (0, default), the game's mask
+     (1) or forces shadow (2).
+   - **Off-screen casters** (`rt_sun_offscreen`): the sun ray must stay inside the view
+     frustum (+ `rt_sun_margin` in uv) until it has risen above the **scene top** (the
+     highest visible point within `rt_tmax`, read back from the GPU, + `rt_sun_top_pad`)
+     and at least `rt_sun_rise` (6 m) above the pixel. The frustum sides are linear in the
+     ray parameter in the `frustum_inverse()` space, so this is four divisions. Trust ramps
+     from 0 to 1 as the inside part goes from `rt_sun_ramp` (0.75) to 1 of the needed path.
+2. `gi/rt_sun_resolve.hlsl` (only when replace is active) multiplies the geometric trust by
+   **proximity to the game's lit mask**: the most lit game mask among 32 taps on four rings
+   out to `rt_sun_near` (1.5 m, in pixels from the footprint; same-depth taps only), mapped
+   so that a fully lit neighbour within ~0.75 `rt_sun_near` gives full trust. The errors R0
+   wants corrected (over-wide PCF, acne, cascade transitions) lie next to lit pixels; a
+   whole area the game holds dark (an interior, a cave, the shadow of a roof or of geometry
+   never captured) keeps `min(game, traced)` even without a roof volume. It then writes
+   `lerp(keep, traced, trust)` into the mask.
+
+Without the asset DB level (no database, the level unknown, no camera read back yet, or
+no set 0 b2 at the lighting dispatch) nothing is trusted unless `rt_sun_roofs=0`.
+
+**Cloud shadows** are kept: the mask pass (`0687fa32`) binds only the cascades and the far
+cache (no set 5, no cloud textures); the lighting multiplies the mask by both cloud-shadow
+terms afterwards (`f469db78:1384-1421`, `bg3_sun.hlsli`). Replacing b7 leaves them applied.
+
+**Data path.** The core writes a host-visible ring slot (header + volumes,
+`core/sun_trust.cpp`) and stages it with `vkCmdCopyBufferToImage` into a device-local
+`R32_UINT` image (binding 47, one texel per 4 bytes). The shaders read it and count into it;
+the counters, the scene top and the camera are copied back (`sunt_end`) and read 8 frames
+later. The first version read the volumes and did its per-wave atomics directly on the
+host-visible buffer: **14-16 ms per frame** of `rt passes`. Through the device-local image
+the `rt passes` total is back to 0.5-0.7 ms (S7, below), the level it had before.
+
+Debug: `rt_debug=2` now shows the written visibility in blue (white = game, traced and
+written all lit); `rt_debug=6` shows the trust (red roof volume, magenta far from the game's
+lit mask, blue off-screen fallback, green trusted, dim where the traced ray hit).
+The log prints every 600 frames `sun stats (...)`: traced/lit pixels, the share of
+"game dark & traced lit" pixels that were replaced, partly replaced, kept by roofs, kept
+off screen, kept far from the game's lit mask, and the mean brightening.
+
+### 12.2 Results (QA harness, 2026-10-27; partial)
+
+| Scene | Game dark & traced lit (of traced px) | Replaced | Kept by roofs | Kept off screen | Kept far from game-lit |
+|---|---|---|---|---|---|
+| S7 Blushing Mermaid (interior, roof cut away) | 10.7-25.4% | 0.0% | 98.2-98.9% | 1.1-1.8% | 0.0% |
+| S1 foundry view (interior) | 10.2% | 0.0% | 82.9% | 16.8% | 0.1% |
+| S1 docks view (outdoor) | 0.06% | 0.6% (+53.5% partly) | 0% | 0.2% | 45.8% |
+
+- **Interiors stay dark.** In S7 the traced sun sees the sky through the cut-away roof on
+  43‰ of the frame (`sun_missing_casters`), and the written mask is lit on **0‰** of it
+  (`sun_replaced`): every such pixel is under a roof volume
+  ([sun_replace_s7_interior.png](img/sun_replace_s7_interior.png): lighting | red game
+  mask, green traced, blue written; green without blue = kept). The foundry behaves the same.
+- **Outdoors the disagreement is small.** On the docks only 0.06% of traced pixels are
+  game-dark and traced-lit; about half of those are replaced, at shadow edges.
+- Non-finite values: 0 in every dump of S7 and S1.
+- Campsite (S3), Lower City (S14) and Water Queens House (S8) have **no A/B yet**: their runs
+  stalled (the game stops presenting; seen on other branches too, before this change), or
+  ran without the Script Extender bridge, so the level was unknown and replace stayed off,
+  as designed.
+
+### 12.3 Not done / to verify (HANDOFF.md has the commands)
+- A/B (`rt_sun_replace` 1 vs 0) on S3, S14, S8: the brightened regions (`sun_replaced`
+  crops, `brightening rt_sun_replace` crops) still have to be classified as the game's
+  over-dark filtering (right) or a missing caster (wrong).
+- Cost of the two sun passes in isolation (only the `rt passes` total was measured).
+- `-Validation` against the baseline (`captures/validation_baseline_S1.log` on c604311:
+  VUIDs 10788, 09600, 08114, 07988, 01000, 00118, 08737) and a `-Move` run.
+- The scene top is a heuristic: off-screen casters taller than the visible scene + 2 m
+  could still leak at the screen edge facing the sun (the proximity test limits it to
+  shadow edges).

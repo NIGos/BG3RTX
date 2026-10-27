@@ -1,4 +1,4 @@
-// RT sun replace: where the traced sun visibility is trusted (docs/TRACK_D_RT.md 6.8).
+// RT sun replace: where the traced sun visibility is trusted (docs/TRACK_D_RT.md 12).
 //
 // With rt_sun_replace=1, gi/rt_shadow.hlsl writes the traced visibility into the game's
 // sun mask instead of min(game, traced) wherever the geometry that could shadow the pixel

@@ -1,4 +1,4 @@
-// rt_sun_replace, second pass (docs/TRACK_D_RT.md 6.8, core/sun_trust.h): writes the traced
+// rt_sun_replace, second pass (docs/TRACK_D_RT.md 12, core/sun_trust.h): writes the traced
 // sun visibility into the game's sun mask where it is trusted, after gi/rt_shadow.hlsl has
 // traced every pixel and folded min(game, traced) into the mask.
 //
