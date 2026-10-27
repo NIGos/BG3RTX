@@ -426,11 +426,16 @@ $mw = @{ done = $false; menuAt = $null; clicks = 0; lastClick = [datetime]::MinV
 # visible save, this one under BG3RTX_SAVE_ONLY), which should bring the verification
 # dialog, then click that dialog's Continue. A trace after each step records the screen.
 # Count the traces in $ModWarnDiagTraces.
+# Round 4 (18:20): the second Enter, 6 s after the first, came before the "Press any key"
+# vista accepted input, so the main-menu click only advanced the vista (trace 182054:
+# the vista; 182107: the menu) and never reached the menu. Each screen gets 12 s now,
+# and a third Enter (a no-op on the menu) covers a slow vista.
 $mwSteps = @(
   @{ what = "trace"; wait = 0 },       # the splash
   @{ what = "enter"; wait = 2 },       # splash -> "Press any key"
-  @{ what = "enter"; wait = 6 },       # -> main menu
-  @{ what = "trace"; wait = 6 },
+  @{ what = "enter"; wait = 12 },      # -> main menu
+  @{ what = "enter"; wait = 12 },      # (a slow vista; nothing on the menu)
+  @{ what = "trace"; wait = 10 },      # must show the main menu
   @{ what = "menuclick"; wait = 2 },   # main menu: Continue
   @{ what = "trace"; wait = 10 },      # the verification dialog, or a load
   @{ what = "click"; wait = 2 },       # ModVerification: Continue

@@ -139,7 +139,19 @@ S14 and S9 have none.
 
   Escape is never sent. The main-menu click is the only new kind of input: it starts a
   load, and loading writes nothing.
-- **If round 4 fails** (the main-menu load stays blocked), the alternatives:
+- **Round 4 (`modwarn4-S2`, 18:20): a timing failure, not a failed mechanism.** Traces:
+  - `182040`: the splash.
+  - `182054`, after two Enters 6 s apart: still the "Press any key" vista. The second Enter
+    came before the vista accepted input.
+  - `182107`, after the main-menu click: the main menu. The click only advanced the vista.
+  - `182117` and `182129`: the menu, unchanged by the dialog click and the Enter.
+
+  So posted input does reach the game: a click or Enter advances the splash and the vista
+  in rounds 1-4. But no click has yet been delivered while the main menu was up. Round 5
+  (`80-modwarn5-S2`) gives each screen 12 s and checks with a trace that the menu is up
+  before the Continue click. **Stop rule:** if round 5's trace after the click still shows
+  the main menu, posted clicks do not press Noesis buttons; take an alternative below.
+- **If round 5 fails**, the alternatives:
 
   | Option | Side effects |
   |---|---|
