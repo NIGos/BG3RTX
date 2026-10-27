@@ -54,6 +54,45 @@ closed.
 | S13 | `Mind Flayer Colony` | SCL_Main_A | organic, emissive pods | emissive surfaces, wet-looking materials |
 | S14 | `Lower City - 91h` | CTY_Main_A | city day, stairs and walls | sun shadows on architecture, large view distance |
 
+### Saves made with mods, and the Crèche save (2026-10-27)
+
+S2 and every act 2 save (S10-S13) never loaded through `-loadSaveGame`: the game stayed in
+the 3D main menu. **Cause:** they were made with the texture-only mod "Immersive World
+Textures" (parts 1-5), which is no longer installed. The save's `meta.lsf`
+(`ModuleSettings/Mods`) lists it, so the game opens its mod-verification dialog
+(`Mods/ModBrowser/GUI/Pages/ModVerification.xaml`, `Patch8_HotFix9.pak`) and waits for a
+click. `python scripts/save_mods.py` lists every save's extra modules and which are missing
+(read-only): 33 of 110 saves, all from 51 h to 74 h of play, have the five parts. S1, S3-S8,
+S14 and S9 have none.
+
+**Fix (`auto-run.ps1 -AcceptModWarning auto`, the default):**
+- Armed only when `save_mods.py` reports missing mods for the `-Save` folder (`on` arms it
+  always, `off` never).
+- Detection from the layer log, which now logs both transitions once:
+  `[auto] 3D scene first seen` and `[auto] loading screen after the 3D scene`. The click is
+  sent only if the 3D menu has been up for `-ModWarningAfterSec` (15 s) with no loading
+  screen, scene-ready line or trace.
+- The click: `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, `WM_LBUTTONUP` posted to this run's game
+  window (by its process's handle, as the `-Move` key is), never typed globally, no focus
+  change. The target is the dialog's "Continue" button (`StartGameButton`), from the XAML:
+  a 2576x1930 panel centred on a 3840x2160 design; Continue is 428x80 at centre-relative
+  x −438..−10, y +791..+871, Cancel to the right of the centre. We click at (−130, +831) ×
+  `min(w/3840, h/2160)`: inside Continue for any label width and never on Cancel. Up to 3
+  attempts 10 s apart, with UI-scale guesses 1.0, 0.85 and 0.7; a miss lands on the
+  dialog's modal backdrop.
+- **No saving:** loading does not write a save, nothing sends a save key, and any save the
+  game writes is parked as before. `modsettings.lsx` is read before the launch and written
+  back after the game exits if the game changed it.
+- The run prints `mod warning: ...` lines (click position, the load starting after N clicks).
+
+**S9 Crèche has no mods.** Its folder name has a non-ASCII `è`. Two encodings are involved:
+- `test-queue.ps1` reads job files with Windows PowerShell's `Get-Content -Raw`, which
+  decodes UTF-8 without a BOM as ANSI, so a job's `"save": "Crèche Yllek"` does not match.
+  Use an ASCII substring: `"Yllek - 40h"`.
+- The game appears to read `-loadSaveGame` through the ANSI code page. `auto-run.ps1` now
+  passes a non-ASCII name's UTF-8 bytes as ANSI characters (`-SaveArgEncoding auto`;
+  `wide` passes it unchanged). Unverified: the queued jobs test both.
+
 Checkpoint routine: for each scene, a feature-off and a feature-on capture of
 the same frame (`scripts/live_phases.py` toggles live inside one run), the A/B
 sheet from `scripts/ab_compare.py`, GPU costs, and the non-finite and
@@ -220,7 +259,7 @@ Per captured scene, the shared sweep was slower (189 s against 80 s), so there i
 speed-up yet. That is why shared runs stay opt-in.
 - S2 (`Rivington - 74h`) does not load through `-loadSaveGame` even alone. The game
   shows the 3D main menu for the whole run. Main's sweep of 2026-10-26 did not include
-  it either.
+  it either. (Cause: the missing-mods dialog, see "Saves made with mods" above.)
 - A second instance first stayed in the main menu, because of its empty
   `Debug_Client_Profile_1`. With the save copied there, it loaded S3 and S8, but S5
   hung during its loading screen.
