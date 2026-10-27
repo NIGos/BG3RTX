@@ -740,12 +740,15 @@ place (docs/QA.md):
    share of the contribution such cells would supply ("sharc stats ... leak test", view 6).
 3. **Cost tolerance from the frame budget:** 15.4 ms at 65 fps; SETTINGS_DESIGN (Ultra, ranked
    spend list) puts Ultra at ≈ 13.4 ms in pans (2.0 ms headroom) and reserves 0.4-0.6 ms of it
-   for this item (row 6, D-GI2). The cache's added cost must stay ≤ 0.6 ms in every scene; measured +0.17 (S6) to
+   for this item (row 6, D-GI2). **Superseded by the user's directive of 2026-10-27:** cost does not
+   gate the default on Ultra (quality is not traded for frame rate); 0.6 ms is the optimisation
+   target for the cache's added cost, nothing more. Measured so far: measured +0.17 (S6) to
    +0.44 ms (S3) at 4 m before the leak rays (≤ one shadow ray per cache hit: 0.02-0.23 M
    rays/frame, ≈ 0.01 ms by TRACK_D 8.3's 0.04-0.07 ms per M rays). Register count of the GI
    trace variant rose 113 → 128 (two more inlined ray queries): to be measured, not assumed.
-4. **Default:** off until `sharc_reference` passes on S7 and S8 and the cost fits 0.6 ms
-   (jobs `36-sharc5-qa-S7-S8`).
+4. **Default:** decided by quality only: on for Ultra once the leak test and the reference
+   comparison pass on S7 and S8 (the latter possibly only with the v2 traced update, which gives
+   the reference radiance at hidden hits). Cost is optimised separately.
 
 ### 2.14 First run of the physical checks (QA `captures/qa/20261027-155820`, S7 + S8)
 
@@ -773,11 +776,13 @@ place (docs/QA.md):
   hits; that needs the traced update (v2: materials and lights at hidden hits).
 - **Cost** (S8, from the run's phases, statistics on): GI trace 0.152 → 0.322 ms (with the
   rejection's shadow rays; 0.275 without them in 2.12), D-RF 0.361 → 0.455 ms, resolve 0.031 +
-  inject 0.071 ms: **+0.37 ms**, within the 0.6 ms derived in 2.13. Registers of both cache
+  inject 0.071 ms: **+0.37 ms** (under the 0.6 ms optimisation target; not a gate). Registers of both cache
   variants: 128 (plain GI trace 96).
-- **Default: off, Ultra included.** The leak mechanism is real (≈ 19% of the contribution before
+- **Default: off, Ultra included, on quality grounds only** (cost is no reason either way). The leak mechanism is real (≈ 19% of the contribution before
   the rejection); the corrected test and its rejection must be re-measured, and S7 has no
-  valid comparison yet. Job `37-sharc6-qa-S7-S8` (`--sharc --reference --keep-raw`).
+  valid comparison yet. Job `37-sharc6-qa-S7-S8` (`--sharc --reference --keep-raw`). If the reference
+  still cannot separate hidden-surface bounce from a leak, the next step is the v2 traced update
+  (2.3): it gives the reference, and the cache, radiance at hidden hits.
 
 ---
 
