@@ -217,6 +217,21 @@ while ((Get-Date) -lt $deadline) {
   if (Test-Path (Join-Path $caps "auto.done")) { $result = "done"; break }
   $p = Get-Process bg3 -ErrorAction SilentlyContinue
   if (-not $p -and ((Get-Date) - $start).TotalSeconds -gt 30) { $result = "game exited"; break }
+  # Stall: the game is alive but has stopped rendering ("[watch] presents 0"
+  # for 30 s). Seen in background runs, mostly with no foreground window
+  # (display off or session locked). End the run early instead of waiting
+  # for the timeout, and log the session state for diagnosis.
+  if ((Test-Path $log) -and ((Get-Date) - $start).TotalSeconds -gt 60) {
+    $w = @(Get-Content $log -Tail 30 | Select-String '\[watch\] presents (\d+)' | Select-Object -Last 6)
+    if ($w.Count -ge 6 -and -not ($w | Where-Object { [int]$_.Matches[0].Groups[1].Value -gt 0 })) {
+      $fgw = [BG3RTX.Win]::GetForegroundWindow()
+      $locked = [bool](Get-Process LogonUI -ErrorAction SilentlyContinue)
+      Write-Host "STALL: no presents for 30 s (foreground window $fgw, LogonUI running: $locked)"
+      Add-Content (Join-Path $caps "stalls.log") "$(Get-Date -Format s) $root save='$Save' foreground=$fgw logonui=$locked"
+      $result = "stalled"
+      break
+    }
+  }
   if (((Get-Date) - $lastNote).TotalSeconds -ge 30) {
     $lastNote = Get-Date
     $tail = if (Test-Path $log) { (Get-Content $log -Tail 1) } else { "(no log yet)" }
