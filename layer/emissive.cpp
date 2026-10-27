@@ -198,6 +198,9 @@ constexpr uint32_t kGlobSlots = 4096;   // luminance-scale copies (a ring, ~100 
 Buf g_globals;
 uint32_t g_glob_next = 0;
 std::atomic<uint32_t> g_copies_recorded{0}, g_copies_skipped{0};   // em_copy dispatches recorded / owed but not recorded
+// Diagnostics: the latest copy's source (the game's buffer, offset with the dynamic offset
+// applied, range); em_copy.hlsl also writes the source's first 4 words after the slots.
+std::atomic<uint64_t> g_copy_src_off{0}, g_copy_src_range{0};
 // em_copy.hlsl: push descriptors src (the game's buffer) + dst (g_globals).
 VkDescriptorSetLayout g_cp_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_cp_pl = VK_NULL_HANDLE;
@@ -514,7 +517,11 @@ void make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDra
   if (mat.kind == kMatForward) r.flags |= kFlagForward | kFlagApprox;
   // E: vertex-colour-cut templates (VertCut) gate their emission by a vertex-colour mask that
   // is not captured; decals are box volumes, not the surfaces they light.
-  if (mat.name.find("VertCut") != std::string::npos || mat.kind == kMatDecal) r.flags |= kFlagApprox;
+  // Fresnel templates (7123ab1d Base_Fresnel_GM_VT) scale their emission by a view-angle
+  // term that the records do not model.
+  if (mat.name.find("VertCut") != std::string::npos || mat.name.find("Fresnel") != std::string::npos ||
+      mat.kind == kMatDecal)
+    r.flags |= kFlagApprox;
   P.census.pulse_no_time += d.pulse_no_time;
   if (!finite(r.radiance, 3) || r.radiance[0] < 0 || r.radiance[1] < 0 || r.radiance[2] < 0) {
     r.radiance[0] = r.radiance[1] = r.radiance[2] = 0.0f;
@@ -1052,7 +1059,7 @@ void em_device_created(DeviceData* dd) {
   ok = ok && make_buf(g_host, kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_host.map;
   ok = ok && make_buf(g_dummy, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false);
   // Host-visible: the log reads back what the copies wrote (a few KB).
-  ok = ok && make_buf(g_globals, VkDeviceSize(kGlobSlots) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_globals.map;
+  ok = ok && make_buf(g_globals, VkDeviceSize(kGlobSlots + 4) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_globals.map;
   ok = ok && make_image(false, g_dimg) && make_image(true, g_darr);
   // Our own command buffers (one build per game submission of effects passes).
   VkCommandPoolCreateInfo cpi{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -1253,7 +1260,10 @@ void em_pass_done(VkCommandBuffer cmd, const CmdState* s, VkBuffer ubo, VkDevice
         w[i].pBufferInfo = i ? &dst : &src;
       }
       g_dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cp_pl, 0, 2, w);
-      uint32_t pc[4] = {slot, 0, 0, 0};
+      // [1]: where the source's first 4 words go; [2]: the source's bound bytes (up to 16)
+      uint32_t pc[4] = {slot, kGlobSlots, uint32_t(src.range), 0};
+      g_copy_src_off = g.offset;
+      g_copy_src_range = g.range;
       g_dd->vk.CmdPushConstants(cmd, g_cp_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
       g_dd->vk.CmdDispatch(cmd, 1, 1, 1);
     }
@@ -1528,16 +1538,28 @@ void em_on_present() {
   {
     std::string line;
     for (auto& [fs, gl] : w.glob) {
-      char buf[220];
-      snprintf(buf, sizeof buf, "%s %08x %s slot %u value %.6g (min %.6g, max %.6g, %u read, %u without a slot)",
+      char buf[400];
+      // Mean luminance per checked pixel, ours (with the scale) and the game's: ours / value is
+      // the record's level before the scale, to compare with the game's.
+      const auto it = w.cmp.find(fs);
+      const double px = it != w.cmp.end() ? it->second.px : 0.0;
+      const double mo = px ? it->second.ours / px : 0.0, mg = px ? it->second.game / px : 0.0;
+      snprintf(buf, sizeof buf,
+               "%s %08x %s slot %u value %.6g (min %.6g, max %.6g, %u read, %u without a slot); per checked px "
+               "ours %.5g, game %.5g, ours before the scale %.5g",
                line.empty() ? "" : ";", unsigned(fs >> 32), material(fs).name.c_str(), gl.slot, double(gl.value),
-               double(gl.n ? gl.vmin : 0.0f), double(gl.vmax), gl.n, gl.missing);
+               double(gl.n ? gl.vmin : 0.0f), double(gl.vmax), gl.n, gl.missing, mo, mg,
+               gl.value > 0.0f ? mo / double(gl.value) : 0.0);
       line += buf;
     }
+    float src[4] = {};
+    std::memcpy(src, g_globals.map + VkDeviceSize(kGlobSlots) * 4, 16);
     log("[em] luminance scale copies: %u dispatched, %u owed but not recorded (pipeline missing); pulse time not "
-        "host-readable %.2f per build (its mean used);%s",
+        "host-readable %.2f per build (its mean used); latest source offset %llu range %llu, words 0-3 %.6g %.6g "
+        "%.6g %.6g;%s",
         g_copies_recorded.exchange(0), g_copies_skipped.exchange(0), c.pulse_no_time / nb,
-        line.empty() ? " no luminance-emissive records" : line.c_str());
+        (unsigned long long)g_copy_src_off.load(), (unsigned long long)g_copy_src_range.load(), double(src[0]),
+        double(src[1]), double(src[2]), double(src[3]), line.empty() ? " no luminance-emissive records" : line.c_str());
   }
   log("[em] per build: %.1f TLAS instances, %.0f triangles, %.0f lights (%.0f left out by rt_em_max_lights), total power "
       "%.4g (effects-target units x m^2; last build %.4g, %u draws, %u lights), %llu non-finite power sums; GPU: build "
