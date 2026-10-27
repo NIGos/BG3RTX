@@ -509,6 +509,15 @@ evaluate itself is unchanged (2.5-2.7 ms).
   (Two earlier `-Move` attempts ended early: one game exit at the loading
   screen before RR or our post steps had run, and one exit after 108 s with no
   fault logged; neither is explained, and the 480 s rerun was clean.)
+- **`-Move` after the lifetime fix** (2026-10-27, merged with main):
+  - 5 runs, foundry: four of 8 minutes of pan then hold, and one `-Save`
+    run that traced during the pan. No exits, no `RR evaluate failed`, no
+    faults.
+  - The traced frame (`captures/20261027-014238`): **0 non-finite values in
+    91 dumps**.
+  - There are no BG3 crash events in the Windows Application log for the
+    earlier exits either. The `nvlddmkm` event 153 pairs in the System log
+    coincide with each game launch.
 
 ### Lifetime of the game's images (2026-10-26)
 
@@ -561,13 +570,25 @@ descriptor bookkeeping:
    image, and the tag hands DLSS-G the view, so the existing wait on DLSS-G's
    inputs fence now also runs when a current tag's view is destroyed.
 
-**Stall cost.** It was 0 in every run. Across 3 validation runs (foundry,
-Water Queens House, Grymforge) and 3 `-Move` runs, the safety net never had to
-wait. Every destroy of a noted object found its frame's fence already
-signalled (BG3 defers its destroys by about 4 frames), and no destroy came
-within the frame of its submission. The bookkeeping costs one empty submit
-per present, plus the merge of the notes at submit (`[life] bookkeeping`, see
-below).
+**Stall cost.** Measured over 3 validation runs (foundry, Water Queens House,
+Grymforge) and 5 `-Move` runs (4 of 8 min each and 1 traced run; foundry, panning):
+- **Level-load transitions:** no waits. Every destroy of a noted object found
+  its frame's fence already signalled, since BG3 defers these destroys by
+  about 4 frames.
+- **During gameplay:** the safety net fired three times, in two of the five
+  `-Move` runs.
+  - Two image views and one buffer were destroyed one frame after our work
+    last used them, with that frame's fence still pending.
+  - The waits were 6.754 ms and 0.135 ms (views) and 0.609 ms (buffer), all
+    "complete" (`[life] the game destroys ...`).
+  - Without the wait, those destroys would have raced our recorded work on the
+    GPU. This is the use-after-free class the brief suspected, and it is real
+    though rare.
+- **No destroy came within the frame of its submission**, which would have
+  been logged as "no fence covers it yet".
+- **Bookkeeping:** one empty submit per present, plus the merge of the notes
+  at submit. In gameplay that is 375 to 700 references and 0.007 to 0.016 ms
+  of CPU per frame (`[life] bookkeeping`, every 60 s).
 
 **Validation, before and after.** Same build except for the fix, `-Validation
 -Background -Save`, one run per scene, each through a main-menu-to-level load:
