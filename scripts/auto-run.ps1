@@ -90,6 +90,7 @@ param(
   [int]$WhilePid = 0
 )
 $ErrorActionPreference = "Stop"
+$ModWarnDiagTraces = 5   # "trace" steps in $mwSteps (below)
 # "powershell -File" passes "-Set a=1,b=2" as one string: split it.
 $Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $root = Split-Path $PSScriptRoot
@@ -210,9 +211,12 @@ Add-Type -Namespace BG3RTX -Name Win2 -MemberDefinition @"
 # 1840-high inner grid's end. So Continue spans x 1482-1910, y 1871-1951 (centre-relative
 # x -438..-10, y +791..+871), Cancel x 1930-2358. We click at centre-relative (-130, +831):
 # inside Continue for any text width, and never on Cancel, which is right of the centre
-# at every UI scale. Noesis scales the design by min(w/3840, h/2160) around the centre;
-# $uiScale also tries a smaller in-game UI scale. A click that misses lands on the
-# dialog's own full-screen backdrop (modal), so it does nothing.
+# at every UI scale. Noesis scales the design by min(uw/3840, uh/2160) around the centre,
+# where uw x uh is the game's OUTPUT size (3840x1600 for the player's settings), not the
+# window. Background runs use a borderless 3840x2160 window, and the final composite
+# stretches the 3840x1600 frame and UI over all of it (round 2's swapchain dump d110), so
+# a window point maps to the UI by (w/uw, hh/uh). Rounds 1-2 used s = 1: by luck the same
+# y (1911), and x 1790 instead of 1824, still inside Continue. A miss lands on the backdrop.
 function Send-ModWarningClick([double]$uiScale) {
   $h = Get-GameWindow
   if ($h -eq [IntPtr]::Zero) { return $false }
@@ -220,10 +224,11 @@ function Send-ModWarningClick([double]$uiScale) {
   if (-not [BG3RTX.Win2]::GetClientRect($h, [ref]$r)) { return $false }
   $w = $r.Right - $r.Left; $hh = $r.Bottom - $r.Top
   if ($w -le 0 -or $hh -le 0) { return $false }
-  $s = [Math]::Min($w / 3840.0, $hh / 2160.0) * $uiScale
-  $x = [int]($w / 2 - 130 * $s); $y = [int]($hh / 2 + 831 * $s)
+  $uw = if ($mw.uiW) { $mw.uiW } else { $w }; $uh = if ($mw.uiH) { $mw.uiH } else { $hh }
+  $s = [Math]::Min($uw / 3840.0, $uh / 2160.0) * $uiScale
+  $x = [int](($uw / 2 - 130 * $s) * $w / $uw); $y = [int](($uh / 2 + 831 * $s) * $hh / $uh)
   $l = [IntPtr](([int64]$y -shl 16) -bor ($x -band 0xFFFF))
-  Write-Host "mod warning: clicking Continue at client ($x, $y) of ${w}x$hh (UI scale guess $uiScale)"
+  Write-Host "mod warning: clicking Continue at client ($x, $y) of ${w}x$hh (UI ${uw}x$uh, scale $([Math]::Round($s, 4)))"
   # Only this run's window, by its handle: a move (hover), then the press and release.
   [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)   # WM_MOUSEMOVE
   Start-Sleep -Milliseconds 150
@@ -335,7 +340,13 @@ if ($Save) {
     if (-not $rec) { $modWarn = $true; Write-Host "save_mods.py gave no answer: mod-warning click armed (it only acts on a stuck menu)" }
     elseif (@($rec.missing).Count) { $modWarn = $true; Write-Host "Save made with mods not installed now ($(@($rec.missing).Count)): $(@($rec.missing) -join '; ')" }
   }
-  if ($modWarn) { Write-Host "Mod-verification dialog: Continue is clicked if the menu stays up ${ModWarningAfterSec}s with no load" }
+  if ($modWarn) {
+    Write-Host "Mod-verification dialog: the accept steps run if the menu stays up ${ModWarningAfterSec}s with no load"
+    # The layer counts every trace, the steps' diagnostic ones too, against auto_traces.
+    if (-not $Session) {
+      (Get-Content $ini) -replace '^auto_traces=\d+$', "auto_traces=$($Traces + $ModWarnDiagTraces)" | Set-Content $ini
+    }
+  }
 }
 # Shared runs: this game's Script Extender bridge files go to bg3rtx\slot<N>\
 # (layer/sebridge.cpp se_token, mods/BG3RTX_Bridge), so two games never mix.
@@ -401,21 +412,27 @@ $moving = $false
 $moveDone = $false
 $moveStart = Get-Date
 $sessionReady = $false
-$mw = @{ done = $false; menuAt = $null; clicks = 0; lastClick = [datetime]::MinValue; modSettingsBytes = $modSettingsBefore }
+$mw = @{ done = $false; menuAt = $null; clicks = 0; lastClick = [datetime]::MinValue; modSettingsBytes = $modSettingsBefore; uiW = 0; uiH = 0 }
 # The mod-warning steps (TEST_SCENES.md, "Saves made with mods"). Keyboard map
 # (Engine.pak PlayerProfiles/Eoc/keyboard_1.json): UIAccept = Enter, UICancel = Escape.
-# ModVerification.xaml binds only UICancel (never sent), so its Continue needs the click;
-# in the 2026-10-27 runs that click changed the menu every time (54 -> 68 passes, 1100 ->
-# 2000 draws) without a load: a second dialog, presumably a MessageBox, whose buttons
-# carry BoundEvent bindings, so Enter (UIAccept) presses its accept action.
-# Enter is harmless where nothing binds UIAccept. Traces record what is on screen.
+# ModVerification.xaml binds only UICancel (never sent), so its Continue needs the click.
+# Rounds 1-2 (2026-10-27): the first input (round 1 the Continue click, round 2 Enter)
+# turned the stuck state (54 passes, ~1,100 draws) into the plain main menu with its
+# Continue focused (round 2's trace) and no load: the command-line load does not resume
+# after the verification. Round 3 records the stuck state first, clicks Continue, then
+# Enter, and Enter on the main menu's focused Continue (with BG3RTX_SAVE_ONLY the newest
+# visible save is this one), which should reopen the verification, then the click again.
+# A trace after each input records the screen. Count the traces in $ModWarnDiagTraces.
 $mwSteps = @(
-  @{ what = "enter"; wait = 0 },   # a dialog that binds UIAccept
-  @{ what = "click"; wait = 8 },   # ModVerification: Continue
-  @{ what = "trace"; wait = 4 },
-  @{ what = "enter"; wait = 2 },   # the follow-up dialog's UIAccept
-  @{ what = "enter"; wait = 8 },
-  @{ what = "trace"; wait = 10 }
+  @{ what = "trace"; wait = 0 },   # the stuck state, before any input
+  @{ what = "click"; wait = 4 },   # ModVerification: Continue
+  @{ what = "trace"; wait = 6 },
+  @{ what = "enter"; wait = 2 },   # UIAccept, for whatever dialog is up
+  @{ what = "trace"; wait = 6 },
+  @{ what = "enter"; wait = 2 },   # the main menu's focused Continue
+  @{ what = "trace"; wait = 12 },
+  @{ what = "click"; wait = 2 },   # the verification again
+  @{ what = "trace"; wait = 8 }
 )
 # A UI key (press and release) posted to this run's game window only, as the -Move key.
 function Send-UiKey([int]$vk, [int]$scan) {
@@ -438,6 +455,8 @@ while ((Get-Date) -lt $deadline) {
   if ($modWarn -and -not $mw.done) {
     foreach ($ln in (Read-NewLog)) {
       if (-not $mw.menuAt -and $ln -match '\[auto\] 3D scene first seen') { $mw.menuAt = Get-Date }
+      # The game's output size (the UI's viewport): the DLSS create logged by layer/ngx.cpp.
+      if (-not $mw.uiH -and $ln -match 'created \d+x\d+ -> (\d+)x(\d+)') { $mw.uiW = [int]$Matches[1]; $mw.uiH = [int]$Matches[2] }
       if ($ln -match '\[auto\] loading screen after the 3D scene' -or $ln -match '\[auto\] scene ready') {
         $mw.done = $true
         if ($mw.clicks) { Write-Host "mod warning: the load started after step $($mw.clicks) ($($mwSteps[$mw.clicks - 1].what))" }

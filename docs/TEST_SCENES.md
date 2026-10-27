@@ -93,15 +93,40 @@ S14 and S9 have none.
     dialog has no keyboard accept, and Tab-navigation could land on Cancel.
   - `MessageBox.xaml`'s buttons carry `BoundEvent="{Binding BoundEvent}"`, so a
     MessageBox's accept action reacts to `UIAccept`.
-- **Round 2 steps** (`$mwSteps`), each only while the menu is up with no load:
-  1. Enter;
-  2. after 8 s, the Continue click;
-  3. after 4 s, a diagnostic trace (`trace.request`): the dumps show the screen and UI;
+- **Round 2 (`modwarn2-S2`, 16:51): no load.**
+  - The state changed at 16:51:56, after the Enter at about +15 s and before the click at
+    16:52:01, so Enter alone dismissed the stuck state.
+  - The diagnostic trace (`captures/20261027-165206` in this worktree) shows the plain
+    main menu, Continue focused, no dialog: UI target `d175`, swapchain `d110`.
+  - That trace also ended the run after 59 s: the layer counts every trace against
+    `auto_traces`. Fixed: with the mod warning armed, `auto_traces` is raised by the
+    number of diagnostic traces.
+  - The swapchain dump shows the 3840x1600 frame and UI stretched over the 3840x2160
+    window (no letterbox). The click is now mapped through the output size, which the
+    layer logs at the DLSS create. Round 1's click (y 1911, x 1790) was in fact inside
+    Continue.
+  - Reading of rounds 1-2: the first input closes the verification (Continue in round 1),
+    but the command-line load does not resume; the game stays in the main menu.
+- **Round 3 steps** (`$mwSteps`), each only while no loading screen has been seen:
+  1. a trace of the stuck state, before any input;
+  2. after 4 s, the Continue click;
+  3. after 6 s, a trace;
   4. after 2 s, Enter;
-  5. after 8 s, Enter;
-  6. after 10 s, a final trace.
+  5. after 6 s, a trace;
+  6. after 2 s, Enter: the main menu's focused Continue, which loads the newest visible
+     save, ours under `BG3RTX_SAVE_ONLY`;
+  7. after 12 s, a trace;
+  8. after 2 s, the Continue click again, for the verification dialog this load should
+     open;
+  9. after 8 s, a trace.
 
   Escape is never sent.
+- **Crèche: fixed by the save-name encoding.** `saveenc-S9-creche-utf8ansi` showed a
+  loading screen 9 s after the menu, and the bridge exported `level CRE_Main_A`. Its trace
+  `captures/20261027-165255` is gameplay (291 G-buffer draws). With the name passed
+  unchanged (`-SaveArgEncoding wide`) the game stayed in the menu for 421 s. That run's
+  nv153 event (16:57:29) is not in the game's log: no device-lost or fault line, and
+  presents continued to the end.
 - **No saving:** loading does not write a save, nothing sends a save key, and any save the
   game writes is parked as before. `modsettings.lsx` is read before the launch and written
   back after the game exits if the game changed it.
@@ -111,9 +136,9 @@ S14 and S9 have none.
 - `test-queue.ps1` reads job files with Windows PowerShell's `Get-Content -Raw`, which
   decodes UTF-8 without a BOM as ANSI, so a job's `"save": "Crèche Yllek"` does not match.
   Use an ASCII substring: `"Yllek - 40h"`.
-- The game appears to read `-loadSaveGame` through the ANSI code page. `auto-run.ps1` now
+- The game reads `-loadSaveGame` through the ANSI code page. `auto-run.ps1` now
   passes a non-ASCII name's UTF-8 bytes as ANSI characters (`-SaveArgEncoding auto`;
-  `wide` passes it unchanged). Unverified: the queued jobs test both.
+  `wide` passes it unchanged). Verified 2026-10-27: utf8ansi loads, wide stays in the menu (above).
 
 Checkpoint routine: for each scene, a feature-off and a feature-on capture of
 the same frame (`scripts/live_phases.py` toggles live inside one run), the A/B

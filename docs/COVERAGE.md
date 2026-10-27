@@ -154,7 +154,7 @@ Effort: L ≤ 3 days, M 1-2 weeks, H ≥ 3 weeks. "Data" says where the inputs a
 | # | Gap | Evidence (pixels) | How wrong | Effort | Data |
 |---|---|---|---|---|---|
 | 1 | **Forward water: not in the TLAS, receives no RT effect** | S1 docks: the forward pass (1 draw, `FLUID_Water_Plane_flowmap_huge_PixelLighting`) changes **89%** of the screen, where the G-buffer is empty; S8 5 draws, S5 23, S3 6, S4 12 | High: probe-only reflections of a world the probe does not see; no RT sun/local shadows on it; rays pass through it, so GI, AO and D-RF see the bed or nothing | M (forward XFB into the TLAS, AUDIT_ENGINE_DATA 2.9) + H (receivers: RT reflection and shadows on water pixels after the forward pass, normals from the XFB, `Roughness_Base` etc. from the DB) | have: forward-pass XFB mechanism, FLUID params in the DB (A8), water FS in `captures/shaders` |
-| 2 | **Box (projector) lights not traced** | 36.6% of placed lights; 93% of the shadow-mapped ones; dungeons and character rigs. Pixel share not yet measured (jobs below) | High in interiors: atlas shadows stay (not R0), and the 3,329 unshadowed ones leak through walls | M (plan in TRACK_D 9.10: b29 record, direction `_m9`, box falloff, cookie `_m1`) | have: record layout from the SPIR-V in `captures/shaders`, box sizes and cookies in the DB |
+| 2 | **Box (projector) lights not traced** | 36.6% of placed lights; 93% of the shadow-mapped ones; dungeons and character rigs. **Measured** (box-light jobs, below): 2.1 (S5), 2.6 (S6), 2.8 (S7) box lights listed per pixel against 4.3-7.1 point/spot; direct light about 8% (S5), 15% (S6), 8% (S7) of the lit luminance, above 20% of a pixel's light on 8%, 29%, 4% of the screen: S7's characters (Rim/Key/Fill rigs) and S6's light shafts | High in interiors: atlas shadows stay (not R0), and the 3,329 unshadowed ones leak through walls | M (plan in TRACK_D 9.10: b29 record, direction `_m9`, box falloff, cookie `_m1`) | have: record layout from the SPIR-V in `captures/shaders`, box sizes and cookies in the DB |
 | 3 | **Emission does not bounce** (GI hits read the lit diffuse/specular b10/b11 only; the effects target and the forward lava are not in it) | S6 effects target 1.0% median, 26.7% in the lava view `20261027-072936` (D-EM branch); S5 8.3% effects + 3.5-12.3% forward (forward lava); S1, S7, S8 0.4-0.7% | High near lava, magic and candles: no glow on nearby walls beyond the game's placed fake lights | L (first step: GI hits also read the effects target) + M (D-EM consumers: `em_lookup` at GI/D-RF hits, emissive light sampling) | have: D-EM branch data (TRACK_D 13) |
 | 4 | **TLAS incomplete: cut-away roofs, off-screen and culled casters** | QA `sun_missing_casters`: S7 tavern **73.8‰**, S14 24.3‰ (sun_r0); D-LS coverage: S8 missing ≤ 0.07% | Medium-high in roofed interiors: the fold keeps the game's mask (no leak), so RT cannot improve; GI and reflections see sky through cut roofs | M (R1: the game's shadow maps as a fallback occluder) / H (offline static world, STATUS backlog 9) | have: rooms and roofs in the DB, cascades and atlas at runtime; **new** only for the offline world geometry (level placements → GR2) |
 | 5 | **Alpha-tested families missing from the alpha table** (solid cards in the TLAS) | `CHAR_Hair` (`5a03e5b6`, `0527bb14`), `CHAR_Pubes`, `CHAR_Scalp`: about 4k draws over all scenes; `ENV_Base_TileBlend_Test_Alphatest_2s_Translucency` (S3), `ENV_Tileset_MultipleTextures_AlphaTest` (S1), `ENV_Lava_AlphaTest_Flowmap_Bounce_VT` (S5), VFX alpha-test particles `2204752e` (S5, S6), wind banners `f3b2c375` (S3, S7), waterfall foam (S4) | Medium: card-shaped RT shadows and AO from hair on faces and shoulders (hair is 0.1-0.3% of pixels but the focus of the image); square foliage shadows in S3 | L: extend `scripts/alpha_table.py`; also check the 14 "discards only" FS (`Base/Base` `7937fb79`, `IP_Base_VT`, tilesets). They are probably LOD dither, not alpha | have: `captures/shaders/*.spv` |
@@ -162,7 +162,7 @@ Effort: L ≤ 3 days, M 1-2 weeks, H ≥ 3 weeks. "Data" says where the inputs a
 | 7 | **Forward VFX and particles**: emission not captured; not lit by us | S8 5.2% (the forward pass is mostly VFX); S4 6.6% forward (waterfall and VFX); S5 | Low-medium: their light reaches the scene only through the effect lights the VFX carry (which D-LS traces) | M (AUDIT R10: clustered virtual lights; keep them out of the TLAS) | have |
 | 8 | **Glass and other forward transparents** (`Base_Glass_Simple` S1/S3, `Base_Glass` S6, character lashes and tearlines, Myrmidon VFX) | < 0.1% measured | Low: probe reflections on glass; no refraction (D-RFR) | M-H | have |
 | 9 | **Decals at secondary hits; emissive decals** | Decal pass: 9.3% of the S1 foundry, 4.3% S5, 3.9% S4, ≤ 1.1% elsewhere | Low: primary pixels are correct (decals are in the G-buffer); only off-screen hits miss them | M (AUDIT R9) | have (runtime decal UBO) |
-| 10 | **Scenes never captured** (unknown coverage) | S2 Rivington, S9 Crèche, S10-S13 act 2: no capture at all | Unknown: act 2 darkness, magic light shafts and fog, the Colony's emissive pods (D-EM families never checked), the Crèche's gilded metal (D-RF) | jobs queued (below) | have, once the saves load |
+| 10 | **Scenes never captured** (unknown coverage) | S2 Rivington, S10-S13 act 2: no capture (the mod dialog); S9 Crèche now captured (`captures/20261027-165255` in this worktree) | Unknown: act 2 darkness, magic light shafts and fog, the Colony's emissive pods (D-EM families never checked), the Crèche's gilded metal (D-RF) | jobs queued (below) | have, once the saves load |
 
 Also noted, not ranked:
 - Hair keeps the atlas term for shadow-mapped lights (D-LS "partial").
@@ -185,24 +185,50 @@ which the queued jobs provide.
 | Gauntlet of Shar | `Gauntlet of Shar - 57h` (S11) | SCL_Main_A | missing-mods dialog |
 | Moonrise Towers | `Moonrise Towers Main Floor - 65h` (S12) | SCL_Main_A | missing-mods dialog |
 | Mind Flayer Colony | `Mind Flayer Colony` (S13) | SCL_Main_A | missing-mods dialog |
-| Crèche Y'llek | `Yllek - 40h` (S9) | CRE_Main_A | the non-ASCII `è` (no mods) |
+| Crèche Y'llek | `Yllek - 40h` (S9) | CRE_Main_A | the non-ASCII `è` (no mods); **fixed**, loads since 2026-10-27 |
 | Wyrm's Rock, Stormshore Tabernacle | `Wyrms Rock Fortress - 83h`, `Stormshore Tabernacle - 93h` | BGO / CTY | never in the test list (optional, no mods) |
 | "Upper City" | none | none | not a loadable area in BG3; Act 3's levels are BGO_Main_A (Rivington, Wyrm's Crossing, Wyrm's Rock) and CTY_Main_A (Lower City), both covered above |
 
 Why the saves did not load, and the fix, are in [TEST_SCENES.md](TEST_SCENES.md) ("Saves
 made with mods, and the Crèche save"): 33 of 110 saves were made with the texture-only
 "Immersive World Textures" mod (parts 1-5), which is no longer installed. The game shows its
-mod-verification dialog, and `auto-run.ps1 -AcceptModWarning` now clicks its Continue
-button.
+mod-verification dialog. `auto-run.ps1 -AcceptModWarning` dismisses it, but in rounds 1-2
+the command-line load did not resume afterwards; round 3 also re-starts the load from the
+main menu (TEST_SCENES.md).
+
+## Box-light measurement (jobs `boxlights-S5/S6/S7`, 2026-10-27)
+
+Per scene, one session with two traces: `ls_debug=4` (the D-LS validation view: lighting
+= |game − recompute| × 4 with the AO and sun zeroed; the recompute has no projector lights,
+so on projector pixels the difference is the box lights' direct light), then `ls_debug=0`.
+
+| Scene | Box lights listed/px | Point/spot listed/px | Box direct light / lit luminance | Pixels where box > 5% / > 20% of the light |
+|---|---|---|---|---|
+| S5 Grymforge | 2.10-2.17 | 6.09 | about 8% | 81% / 8% |
+| S6 Adamantine Forge | 2.61-2.62 | 4.28 | about 15% | 95% / 29% |
+| S7 Blushing Mermaid | 2.76-2.77 | 7.09 | about 8% | 58% / 4% |
+
+- **Method:** the traces' compose dump minus the effects target, the val trace's difference
+  divided by 4 against the base trace's lit luminance, from the Reinhard previews inverted.
+- **These are upper bounds.** Compose also carries fog in-scatter, which the val view does
+  not zero. S7's validation is off even without projectors (game = 0.87 × recompute + 0.0095
+  on the lit pixels), and S5's val trace is from an earlier session than its base.
+- **What the box lights light:**
+  - S7: the characters, through their Rim/Key/Fill rigs, the image the art direction cares
+    about most;
+  - S6: the volumetric light shafts and their floor pools;
+  - S5: a broad low fill.
+- **Conclusion:** gap 2 stays second. The box lights are a third of the listed lights and
+  up to 15% of the light, concentrated on characters and shafts, all with game shadows
+  only.
 
 ## Jobs (job files in the worktree's `captures/queue/pending/`, for the coordinator to move)
 
 | Job | What for |
 |---|---|
-| `70-modwarn-S2-rivington` | Verify the mod-dialog fix on Rivington (session false, 1 trace with dumps; also the S2 coverage capture). |
-| `71`-`74` `modwarn-S10/S11/S12/S13` | The same for the act 2 saves (coverage captures for S10-S13). |
-| `75-saveenc-S9-creche-utf8ansi` | Crèche with the ANSI-safe save name (default). |
-| `76-saveenc-S9-creche-wide` | Crèche with the name passed unchanged. Only needed if 75 stays in the menu. |
-| `80`-`85` `boxlights-S5/S6/S7` (session) | Gap 2's pixel share. Per scene, `ls_debug=4,ls_stats=1`, then `ls_debug=0`. In the validation view, light the recompute lacks (box lights) shows as the game-minus-recompute difference on the projector pixels; `ls stats` logs `projector lights listed/px`. |
+| `70`-`74` `modwarn-S2/S10-S13`, `77-modwarn2-S2` (ran) | Rounds 1-2 of the mod dialog: dismissed, no load (TEST_SCENES.md). |
+| `75`/`76` `saveenc-S9` (ran) | utf8ansi loads the Crèche; wide stays in the menu. |
+| `80`-`85` `boxlights-S5/S6/S7` (ran) | The table above. |
+| `78-modwarn3-S2-rivington` (queued) | Round 3: a trace of the stuck state, the Continue click, Enter, Enter on the main menu's Continue, the click again, with a trace after each input. Not a session; 360 s. |
 
 After they run: `python -m scripts.qa.coverage --update-doc`.
