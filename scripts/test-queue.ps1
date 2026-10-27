@@ -104,6 +104,10 @@ function Run-Job($file) {
   }
 }
 
+# Our games stay minimised while the queue runs (scripts/game-minimizer.ps1).
+$minimizer = Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass",
+  "-File", (Join-Path $PSScriptRoot "game-minimizer.ps1"), "-WhilePid", $PID
+
 $idle = Get-Date
 while ($true) {
   $next = Get-ChildItem (Join-Path $pending "*.json") -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -First 1
