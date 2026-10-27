@@ -196,6 +196,7 @@ void core_init(DeviceData* dd) {
   g_host.assetdb = assetdb_api();
   g_host.rr_active = &ngx_rr_active;
   g_host.rt_emissive = &em_scene;
+  g_host.rt_scene_set = &rt_scene_set;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);
@@ -251,31 +252,41 @@ void core_on_frame(uint64_t frame) {
 void core_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* pass) {
   std::shared_lock<std::shared_mutex> lock(g_core_mu);
   if (!g_core || g_faulted || !g_core->on_pass_end) return;
+  fault_checkpoint(cmd, kCkPassEndPre, uint32_t(pass->first_fs_hash));
   if (!seh_pass(g_core, cmd, pass)) fault("on_pass_end");
+  fault_checkpoint(cmd, kCkPassEndPost, uint32_t(pass->first_fs_hash));
 }
 
 void core_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* pass) {
   std::shared_lock<std::shared_mutex> lock(g_core_mu);
   if (!g_core || g_faulted || !g_core->on_pass_begin) return;
+  fault_checkpoint(cmd, kCkPassBeginPre, uint32_t(pass->first_fs_hash));
   if (!seh_pass_begin(g_core, cmd, pass)) fault("on_pass_begin");
+  fault_checkpoint(cmd, kCkPassBeginPost, uint32_t(pass->first_fs_hash));
 }
 
 void core_on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* info) {
   std::shared_lock<std::shared_mutex> lock(g_core_mu);
   if (!g_core || g_faulted || !g_core->on_dispatch) return;
+  fault_checkpoint(cmd, kCkDispPre, uint32_t(info->cs_hash));
   if (!seh_dispatch(g_core, cmd, info)) fault("on_dispatch");
+  fault_checkpoint(cmd, kCkDispPost, uint32_t(info->cs_hash));
 }
 
 void core_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* info) {
   std::shared_lock<std::shared_mutex> lock(g_core_mu);
   if (!g_core || g_faulted || !g_core->on_dispatch_pre) return;
+  fault_checkpoint(cmd, kCkDispPrePre, uint32_t(info->cs_hash));
   if (!seh_dispatch_pre(g_core, cmd, info)) fault("on_dispatch_pre");
+  fault_checkpoint(cmd, kCkDispPrePost, uint32_t(info->cs_hash));
 }
 
 void core_on_cmd_end(VkCommandBuffer cmd) {
   std::shared_lock<std::shared_mutex> lock(g_core_mu);
   if (!g_core || g_faulted || !g_core->on_cmd_end) return;
+  fault_checkpoint(cmd, kCkCmdEndPre, 0);
   if (!seh_cmd_end(g_core, cmd)) fault("on_cmd_end");
+  fault_checkpoint(cmd, kCkCmdEndPost, 0);
 }
 
 bool alloc_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer, VkDeviceMemory* memory,

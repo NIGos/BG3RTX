@@ -105,6 +105,35 @@ uint64_t life_gpu_done() {
   return g_life_done;
 }
 
+// `h` is in use by work of ours submitted in frame `frame` (e.g. a scene slot's
+// alpha set handed out to the RT passes, recorded in another command buffer than
+// the one that noted the views): a destroy waits for the present fence after it.
+void life_extend(uint64_t h, uint64_t frame) {
+  if (!h) return;
+  std::lock_guard<std::mutex> lock(g_life_mu);
+  if (!g_present_queue) return;   // no present fence yet: nothing to wait on anyway
+  LifeRef& r = g_life[h];
+  if (r.frame >= frame && r.queue == g_present_queue) return;
+  r.frame = (std::max)(r.frame, frame);
+  r.seq = g_submit_seq.load() + 1;   // a later device-idle wait still covers it
+  r.queue = g_present_queue;
+}
+
+// Status of our latest present fence (a 0-timeout wait), for the fault poll thread
+// (devfault.cpp): VK_ERROR_DEVICE_LOST once the device is lost, even if the game
+// never calls Vulkan again. VK_SUCCESS when there is nothing to poll.
+bool g_life_stopped = false;
+VkResult life_poll_fence(DeviceData* dd) {
+  std::lock_guard<std::mutex> lock(g_life_mu);
+  if (g_life_stopped || !dd) return VK_ERROR_INITIALIZATION_FAILED;   // the device is gone: stop polling
+  if (g_fences.empty()) return VK_SUCCESS;
+  return dd->vk.WaitForFences(dd->device, 1, &g_fences.back().fence, VK_TRUE, 0);
+}
+size_t life_pending_fences() {
+  std::lock_guard<std::mutex> lock(g_life_mu);
+  return g_fences.size();
+}
+
 uint64_t life_idle_begin() { return g_submit_seq.load(); }
 void life_idle_end(uint64_t seq_before) {
   uint64_t cur = g_idle_seq.load();
@@ -114,11 +143,14 @@ void life_idle_end(uint64_t seq_before) {
 
 void life_on_present(DeviceData* dd, VkQueue queue) {
   const uint64_t frame = frame_index();
-  std::lock_guard<std::mutex> lock(g_life_mu);
+  std::unique_lock<std::mutex> lock(g_life_mu);
+  bool lost = false;   // reported after the lock (devfault.cpp reads life_gpu_done)
   // Retire completed presents (in order; one with a waiter stays until it leaves).
   while (!g_fences.empty()) {
     FrameFence& f = g_fences.front();
-    if (dd->vk.WaitForFences(dd->device, 1, &f.fence, VK_TRUE, 0) != VK_SUCCESS) break;   // a status poll
+    const VkResult fr = dd->vk.WaitForFences(dd->device, 1, &f.fence, VK_TRUE, 0);   // a status poll
+    lost = lost || fr == VK_ERROR_DEVICE_LOST;
+    if (fr != VK_SUCCESS) break;
     g_life_done = (std::max)(g_life_done, f.frame);
     g_present_queue = f.queue;
     if (f.waiters) break;
@@ -174,10 +206,13 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
         (unsigned long long)g_life_waits, g_life_wait_ms, g_life_wait_max, (unsigned long long)g_life_timeouts,
         (unsigned long long)g_life_noop, (unsigned long long)g_life_unfenced, g_life.size());
   }
+  lock.unlock();
+  if (lost) fault_on_result(dd, VK_ERROR_DEVICE_LOST, "the present fence poll");
 }
 
 void life_device_destroyed(DeviceData* dd) {
   std::lock_guard<std::mutex> lock(g_life_mu);
+  g_life_stopped = true;
   if (!g_fences.empty()) dd->vk.DeviceWaitIdle(dd->device);
   for (const FrameFence& f : g_fences) dd->vk.DestroyFence(dd->device, f.fence, nullptr);
   for (VkFence f : g_free_fences) dd->vk.DestroyFence(dd->device, f, nullptr);
@@ -407,6 +442,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
     pci.codeSize = patched.size() * 4;
   }
   VkResult r = device_of(device)->vk.CreateShaderModule(device, geo ? &pci : ci, alloc, out);
+  bool used_patched = geo && r == VK_SUCCESS;
   if (r != VK_SUCCESS && geo) {
     log("[geo] patched vertex shader rejected (%d); using the original", r);
     r = device_of(device)->vk.CreateShaderModule(device, ci, alloc, out);
@@ -416,6 +452,18 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
   if (r == VK_SUCCESS) {
     uint64_t h = hash64(ci->pCode, ci->codeSize);
     shader_dump(h, ci->pCode, ci->codeSize);
+    if (aftermath_enabled()) {
+      // The driver sees the patched module when the capture patched it.
+      char what[48];
+      snprintf(what, sizeof what, "game %016llx%s", (unsigned long long)h, used_patched ? " (XFB-patched)" : "");
+      const std::string dumped = root_dir() + "\\captures\\shaders\\" + [&] {
+        char b[24];
+        snprintf(b, sizeof b, "%016llx.spv", (unsigned long long)h);
+        return std::string(b);
+      }();
+      if (used_patched) aftermath_note_spirv(what, pci.pCode, pci.codeSize, nullptr);
+      else aftermath_note_spirv(what, ci->pCode, ci->codeSize, cfg_int("dump_shaders", 0) ? dumped.c_str() : nullptr);
+    }
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().modules[*out] = h;
   }

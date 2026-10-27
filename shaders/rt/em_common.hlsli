@@ -201,7 +201,9 @@ bool em_lookup(float3 o, float3 d, float t, float eps, float px, float3 shift, o
   q.TraceRayInline(emTlas, RAY_FLAG_NONE, 0xFF, ray);
   q.Proceed();
   if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT) return false;
-  EmTri tri = em_triangle(q.CommittedInstanceIndex(), q.CommittedPrimitiveIndex(), q.CommittedObjectToWorld3x4());
+  // One BLAS, one geometry per draw (layer/emissive.cpp em_as_build): the geometry index
+  // is the draw's entry in emInfo.
+  EmTri tri = em_triangle(q.CommittedGeometryIndex(), q.CommittedPrimitiveIndex(), q.CommittedObjectToWorld3x4());
   if (!tri.ok) return false;
   float2 b = q.CommittedTriangleBarycentrics();
   float2 uv = tri.uv[0] * (1.0 - b.x - b.y) + tri.uv[1] * b.x + tri.uv[2] * b.y;

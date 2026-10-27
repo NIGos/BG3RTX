@@ -7,45 +7,44 @@ section 12 (12.7 is the latest round). The status row is in `docs/QUALITY.md`
 The tree builds, `settings_test` passes (120 checks), and the shaders compile with DXC.
 Main is merged up to `8f8df1f`.
 
-## State after em7 (`61006ba`), with fixes (offline, TRACK_D 13.12)
+## State after em8 and the merge with main (TRACK_D 13.13)
 
 - **Pass:**
-  - decals by default: WQ coverage 97.8-99.0%;
-  - AF lava 1.047 calibrated;
-  - build 0.39 / 0.43 ms;
-  - effects passes with capture 0.066 / 0.096 ms.
-- **`159a6211`:** the copied word is right. It is the game's pre-exposure: words s, 1/s,
-  log2(1/s), -8. The game's per-pixel value is 0 (WQ) / 0.0066 (AF), ours 0 in both. The
-  fault is in our level, map or pulse. A new `[em] record dump` line logs radiance, mode,
-  texture, flags, slot, the share of zero hits, ours without the maps, the constant-buffer
-  words, the time and the pulse.
-- **Fail, now in the record dump:** `222986b8` AF 1.93 / WQ 1.26 (the 64-bit sums did not
-  change it) and `304be1c7` AF 0.63.
-- **Capture-off timing:** the pass was never marked as an effects pass when capture was off.
-  Fixed.
-- **GF device loss** right after "soup grown" at the load. The old soup was freed while sets
-  and passes still bound it. It is now retired for 16 builds, and conversions use the
-  pass's own soup.
-- Log lists are split into parts under the 2 KB line limit.
+  - capture-off cost: +0.044 ms (WQ, 0.021 without, 0.065 with);
+  - GF load with a soup resize, 2 of 2 runs;
+  - `304be1c7`: 0.84 (AF) and 1.04 (GF);
+  - AF lava 1.005.
+- **`159a6211`** is dark in the game too: its intensity is 0 in AF and GF, and its glow map
+  is black at our hits in WQ. That is no model error, and it is now ungated (0 bright px).
+- **`222986b8`:** AF is dark (1.5e-4 per hit). WQ moves with the view (1.02-1.28), a mask
+  filtering residual.
+- **Fixed:**
+  - `f298bf4d`: its intensity is now read from CB +16;
+  - first calibration after 4 checks (decals were 35× in the first window after a load);
+  - EMA weight 1/2 (GF lava 0.75-0.78 while converging);
+  - gate on bright hits.
+- **Main merged** (`eb54bca`). The emissive scene now has its own acceleration structures
+  (`em_as_build`: one BLAS with one geometry per draw, one TLAS, per-slot reuse).
+  `bvhsplit.cpp` is main's, unchanged. ABI 9.
 
-## Serial tests to rerun (em8 jobs in main's `captures/queue/pending/`)
+## Serial tests to rerun (em9 jobs in main's `captures/queue/pending/`)
 
-- **`em8-gf-load`** (non-session, 2 runs, `stop_on_dump`). Pass:
-  - nv153 = 0 and no stall in both;
-  - at most one `soup grown` line per run;
-  - `56c5e5a0` captured = draws.
-- **`em8-wq-check` / `em8-wq-off` / `em8-wq-on`** (session). Pass:
-  - `em8-wq-off` logs `[em] no builds ... without capture (N frames)` with N > 0;
-  - with capture minus without ≤ 0.1 ms;
+- **`em9-gf-check`** (session, the first job of a GF session: a fresh load). Pass:
+  - no fault;
+  - `1a81f41b` within 0.8-1.25 in the last window;
+  - decals and other approximate families calibrated within about 64 frames (no window
+    above 3× after the first);
+  - build median ≤ 0.6 ms.
+- **`em9-wq-check` / `em9-wq-on`** (session; `wq-check` is the session's first job). Pass:
+  - coverage ≥ 95%;
+  - total ours/game within 0.8-1.25 in every window after the first ~64 frames. The decal
+    family had been 35× in the first window of `em8-wq-on`;
+  - every exact family with ≥ 200 bright px within 0.8-1.25.
+- **`em9-af-check`** (session). Pass:
+  - lava and `f298bf4d` within 0.8-1.25 (`f298bf4d` is now non-zero);
   - coverage ≥ 95%.
-
-  Report the `[em] record dump` lines.
-- **`em8-af-check`** (session, 90 s warmup). Pass:
-  - lava within 0.8-1.25;
-  - coverage ≥ 95%.
-
-  Report the `[em] record dump` lines (`159a6211`, `222986b8`, `304be1c7`). They decide the
-  next fix.
+- **`em9-af-validation`** (non-session, `-Validation`, 2 traces). Pass: no validation IDs
+  beyond main's baseline, in particular none on our AS builds (`em_as_build`).
 
 ### R4 (when a foundry save exists): S1
 

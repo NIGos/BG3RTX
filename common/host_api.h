@@ -10,8 +10,9 @@
 
 // 6: Bg3HostApi::assetdb (appended).
 // 7: Bg3HostApi::rr_active (appended).
-// 8: Bg3HostApi::rt_emissive (appended; D-EM).
-#define BG3RTX_ABI_VERSION 8
+// 8: Bg3HostApi::rt_scene_set (appended).
+// 9: Bg3HostApi::rt_emissive (appended; D-EM).
+#define BG3RTX_ABI_VERSION 9
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -190,7 +191,16 @@ struct Bg3HostApi {
   // FSR/TAA, an SR fallback or a failed RR creation get the non-RR modes.
   bool (*rr_active)();
 
-  // ABI 8 (D-EM): the emissive scene (set 3 of shaders/rt/em_common.hlsli) of the latest
+  // ABI 8: the latest scene's TLAS and the set 1 built with it, as one pair (a
+  // TLAS traced with another build's set reads InstInfo, records and vertices
+  // that do not match its instances). Each build is a snapshot slot of the host;
+  // a slot is reused only after the GPU finished every frame it was handed out
+  // in, so call this in the frame that records the passes. False before the
+  // first build, when hardware RT is off, and once the last build is older than
+  // the previous frame.
+  bool (*rt_scene_set)(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame);
+
+  // ABI 9 (D-EM): the emissive scene (set 3 of shaders/rt/em_common.hlsli) of the latest
   // build (the previous submitted frame). False when RT or the capture is off; `set` is
   // VK_NULL_HANDLE before the first build. Pass the command buffer the set will be bound in:
   // the game images and buffers it reads (glow maps, the effects target) are then kept

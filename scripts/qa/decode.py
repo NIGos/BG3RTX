@@ -156,6 +156,23 @@ class Frame:
         k = self.t.find(g, "RGBA8", slot=1) if g else None
         return self.t.load(k)[..., :3] if k else None
 
+    def normal(self):
+        """G-buffer normal (RT0, RG16F stereographic, view space): moves with the geometry
+        even where the albedo does not change (a grass blade in front of grass)."""
+        g = self.t.gbuffer_fs()
+        k = self.t.find(g, "RG16F", slot=0) if g else None
+        if not k:
+            return None
+        if not (self.t.path / self.t.dumps[k]["png"]).with_suffix(".f32").exists():
+            # The 8-bit preview scales each channel by its max |value|, and sky pixels hold
+            # the encoder's huge sentinel (gi_trace_rt.hlsl: |e|^2 > 5.4e10): one code step
+            # is then larger than any real normal change. Usable only with a sane range.
+            d = self.t.dumps[k]
+            am = max(max(abs(d["min"][c] or 0), abs(d["max"][c] or 0)) for c in range(2))
+            if 2.0 * am / 255.0 > 0.01:
+                return None
+        return self.t.load(k)[..., :2]
+
     def material_class(self):
         g = self.t.gbuffer_fs()
         k = self.t.find(g, "RGBA8", slot=2) if g else None

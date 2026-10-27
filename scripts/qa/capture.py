@@ -34,11 +34,28 @@ def scenes():
     return dict(re.findall(r'(S\d+) = "([^"]+)"', text))
 
 
-def plan(temporal=3, reference=False):
-    """The ordered traces of one run: (name, settings applied before it)."""
+# --temporal-gi: the all-on set again with the GI's image contribution removed (no bounce,
+# the game's own AO), so the flicker of the GI is measured against everything else on.
+GI_NEUTRAL = {"gi_strength": "0", "gi_ao": "0"}
+
+
+def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun=False):
+    """The ordered traces of one run: (name, settings applied before it).
+    gi_restore: the gi_strength/gi_ao values to go back to after the nogi set.
+    split_sun (--temporal-sun): a nosun set, all on but the RT sun shadows (the game's mask
+    and its contact shadows), for the flicker of the RT sun alone."""
     p = [("on0", {})]
     p += [(f"on{i}", {}) for i in range(1, temporal)]
-    p += [("gi_off", {"gi": "0", "rt_reflections": "0"}),
+    restore = {}
+    if split_gi:
+        p += [("nogi0", dict(GI_NEUTRAL))]
+        p += [(f"nogi{i}", {}) for i in range(1, temporal)]
+        restore = dict({"gi_strength": "1.0", "gi_ao": "1.0"}, **(gi_restore or {}))
+    if split_sun:
+        p += [("nosun0", dict(restore, rt_shadows="0"))]
+        p += [(f"nosun{i}", {}) for i in range(1, temporal)]
+        restore = {"rt_shadows": "1"}
+    p += [("gi_off", {"gi": "0", "rt_reflections": "0", **restore}),
           ("refl_off", {"gi": "1", "rt_reflections": "0"}),
           ("sun_off", {"rt_reflections": "1", "rt_shadows": "0"}),
           ("local_off", {"rt_shadows": "1", "rt_local_shadows": "0"}),
@@ -63,13 +80,15 @@ def plan(temporal=3, reference=False):
 
 def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, reference=False,
               interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False, shared=False,
-              extra=()):
+              extra=(), split_gi=False, split_sun=False):
     """Runs the game once and moves each trace's dumps.json + img/ to out_dir/raw/<i>_<name>/.
 
     tag: auto-run.ps1 -Tag, so two scenes can run at once from this checkout (one tag per
     lane). shared: auto-run.ps1 -Shared (another game may share the GPU; run.json then
     says "exclusive": false); otherwise the run is exclusive and run_s is a timing."""
-    phases = plan(temporal, reference)
+    keep = dict(x.split("=", 1) for x in extra if "=" in x)
+    phases = plan(temporal, reference, split_gi, {k: keep[k].strip() for k in GI_NEUTRAL if k in keep},
+                  split_sun)
     out_dir.mkdir(parents=True, exist_ok=True)
     spec = {"start": r"\[trace\] frame \d+ written", "phases": [], "timeout": timeout + 3600, "tag": tag,
             "after_trace": [{"name": n, "set": s} for n, s in phases[1:]]}

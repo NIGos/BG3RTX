@@ -39,6 +39,8 @@ add_library(VkLayer_bg3rtx SHARED
   layer/alphatest.cpp
   layer/bvhsplit.cpp
   layer/emissive.cpp
+  layer/devfault.cpp
+  layer/aftermath.cpp
   layer/streamline.cpp
   layer/savefilter.cpp
   layer/background.cpp
@@ -48,6 +50,24 @@ add_library(VkLayer_bg3rtx SHARED
   layer/framecap.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
+
+# NVIDIA Nsight Aftermath SDK (optional, aftermath=1 in bg3rtx.ini): headers at build
+# time; GFSDK_Aftermath_Lib.x64.dll is copied into bin/ for development and loaded at
+# run time (scripts/package.ps1 copies an explicit file list, so it is never packaged).
+set(BG3RTX_AFTERMATH_SDK "D:/BG3_Tools/nsight-aftermath-sdk-2026.3" CACHE PATH "Nsight Aftermath SDK (include/, lib/x64/)")
+if(EXISTS "${BG3RTX_AFTERMATH_SDK}/include/GFSDK_Aftermath.h")
+  message(STATUS "Nsight Aftermath SDK: ${BG3RTX_AFTERMATH_SDK}")
+  target_include_directories(VkLayer_bg3rtx PRIVATE ${BG3RTX_AFTERMATH_SDK}/include)
+  target_compile_definitions(VkLayer_bg3rtx PRIVATE BG3RTX_AFTERMATH=1)
+  add_custom_command(TARGET VkLayer_bg3rtx POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BG3RTX_AFTERMATH_SDK}/lib/x64/GFSDK_Aftermath_Lib.x64.dll
+            ${BG3RTX_BIN}/GFSDK_Aftermath_Lib.x64.dll)
+  add_executable(aftermath_decode tools/aftermath_decode.cpp)
+  target_include_directories(aftermath_decode PRIVATE ${BG3RTX_AFTERMATH_SDK}/include ${VULKAN_SDK}/Include)
+  target_link_libraries(aftermath_decode PRIVATE ${BG3RTX_AFTERMATH_SDK}/lib/x64/GFSDK_Aftermath_Lib.x64.lib)
+else()
+  message(STATUS "Nsight Aftermath SDK not found (BG3RTX_AFTERMATH_SDK): aftermath=1 is unavailable")
+endif()
 
 # NVIDIA SDKs (DLSS headers only: NGX is reached through the driver's
 # _nvngx.dll at run time, nothing is linked). external/ is not versioned; a

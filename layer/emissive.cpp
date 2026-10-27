@@ -660,7 +660,164 @@ void ts_end(VkCommandBuffer cmd, uint32_t p) {
   if (p != UINT32_MAX) g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, p * 2 + 1);
 }
 
-void noop_stamp(VkCommandBuffer, uint32_t) {}
+// ---- the emissive scene's acceleration structures (own builder) ----
+// One BLAS per build with one geometry per draw (the soup's camera-relative world
+// triangles, no index buffer), and a TLAS with that BLAS as its one identity instance;
+// em_common.hlsli reads the geometry index as the "instance" of emInfo. Each ring slot
+// keeps its BLAS and TLAS objects and reuses them while they are large enough: no
+// acceleration-structure objects are created or destroyed per frame (the split's fault
+// analysis ties device faults to run-time AS object destruction), only on growth. It
+// shares nothing with the BVH split (bvhsplit.cpp), so rt_bvh_split and the split's
+// changes do not affect it.
+constexpr uint32_t kInfoEmissive = 1u << 11;   // rt_common.hlsli / em_common.hlsli
+constexpr VkDeviceSize kInstOffTlas = 0;                       // the TLAS's one instance (64 B)
+constexpr VkDeviceSize kInstOffFake = 256;                     // per geometry: identity instances for em_lights
+constexpr VkDeviceSize kInstOffInfo = kInstOffFake + VkDeviceSize(kMaxRecs) * 64;   // per geometry: info (16 B)
+constexpr VkDeviceSize kInstRegion = up256(kInstOffInfo + VkDeviceSize(kMaxRecs) * 16);
+Buf g_inst;           // host-visible, kRing regions (TLAS build input, emInfo, em_lights instances)
+Buf g_as_scratch;
+struct AsSlot {
+  Buf buf;            // BLAS at 0, TLAS at tlas_off
+  VkAccelerationStructureKHR blas = VK_NULL_HANDLE, tlas = VK_NULL_HANDLE;
+  VkDeviceSize blas_size = 0, tlas_off = 0, tlas_size = 0;
+  VkDeviceAddress blas_addr = 0;
+};
+AsSlot g_as[kRing];
+uint64_t g_as_grown = 0;
+
+void as_slot_release(AsSlot& a) {
+  if (a.blas) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a.blas));
+  if (a.tlas) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a.tlas));
+  free_buf(a.buf);
+  a = AsSlot{};
+}
+
+VkAccelerationStructureKHR as_make(VkBuffer b, VkDeviceSize off, VkDeviceSize size, VkAccelerationStructureTypeKHR type) {
+  VkAccelerationStructureCreateInfoKHR ci{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+  ci.buffer = b;
+  ci.offset = off;
+  ci.size = size;
+  ci.type = type;
+  VkAccelerationStructureKHR as = VK_NULL_HANDLE;
+  if (g_dd->vk.CreateAccelerationStructureKHR(g_dd->device, &ci, nullptr, &as) != VK_SUCCESS) return VK_NULL_HANDLE;
+  return as;
+}
+
+// Records the builds of ring slot `slot` from `ranges` (soup offset, triangles; sanitized)
+// into `cmd`; the TLAS, or VK_NULL_HANDLE (nothing recorded).
+VkAccelerationStructureKHR em_as_build(VkCommandBuffer cmd, uint32_t slot,
+                                       const std::vector<std::pair<VkDeviceSize, uint32_t>>& ranges) {
+  DeviceData* dd = g_dd;
+  AsSlot& a = g_as[slot];
+  const uint32_t ngeo = uint32_t(ranges.size());
+  const VkDeviceAddress soup = rt_buffer_address(g_soup.b);
+  const VkDeviceAddress inst = rt_buffer_address(g_inst.b) + VkDeviceSize(slot) * kInstRegion;
+  if (!soup || !inst) return VK_NULL_HANDLE;
+  std::vector<VkAccelerationStructureGeometryKHR> geo(ngeo);
+  std::vector<VkAccelerationStructureBuildRangeInfoKHR> rng(ngeo);
+  std::vector<uint32_t> counts(ngeo);
+  for (uint32_t i = 0; i < ngeo; ++i) {
+    VkAccelerationStructureGeometryKHR& g = geo[i];
+    g = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+    g.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+    g.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    auto& t = g.geometry.triangles;
+    t.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+    t.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+    t.vertexData.deviceAddress = soup + ranges[i].first;
+    t.vertexStride = g_stride;
+    t.maxVertex = ranges[i].second * 3 - 1;
+    t.indexType = VK_INDEX_TYPE_NONE_KHR;
+    counts[i] = ranges[i].second;
+    rng[i] = {ranges[i].second, 0, 0, 0};
+  }
+  VkAccelerationStructureBuildGeometryInfoKHR bb{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+  bb.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+  bb.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+  bb.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+  bb.geometryCount = ngeo;
+  bb.pGeometries = geo.data();
+  VkAccelerationStructureBuildSizesInfoKHR bs{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+  if (ngeo)
+    dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bb,
+                                                 counts.data(), &bs);
+
+  VkAccelerationStructureGeometryKHR tg{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+  tg.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+  tg.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+  tg.geometry.instances.data.deviceAddress = inst + kInstOffTlas;
+  VkAccelerationStructureBuildGeometryInfoKHR tb{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+  tb.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+  tb.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+  tb.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+  tb.geometryCount = 1;
+  tb.pGeometries = &tg;
+  const uint32_t one = 1;
+  VkAccelerationStructureBuildSizesInfoKHR ts{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+  dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tb, &one, &ts);
+
+  // The slot's storage: grown (to 1.5x the need) only when this build does not fit.
+  const VkDeviceSize need_blas = up256(bs.accelerationStructureSize);
+  if (!a.buf.b || need_blas > a.blas_size || ts.accelerationStructureSize > a.tlas_size) {
+    const VkDeviceSize blas_cap = up256((std::max)(need_blas + need_blas / 2, VkDeviceSize(1) << 20));
+    const VkDeviceSize tlas_cap = up256((std::max)(ts.accelerationStructureSize, VkDeviceSize(4096)));
+    as_slot_release(a);
+    if (!make_buf(a.buf, blas_cap + tlas_cap,
+                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, false))
+      return VK_NULL_HANDLE;
+    a.blas_size = blas_cap;
+    a.tlas_off = blas_cap;
+    a.tlas_size = tlas_cap;
+    a.blas = as_make(a.buf.b, 0, blas_cap, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR);
+    a.tlas = as_make(a.buf.b, a.tlas_off, tlas_cap, VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR);
+    if (!a.blas || !a.tlas) {
+      as_slot_release(a);
+      return VK_NULL_HANDLE;
+    }
+    VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+    ai.accelerationStructure = a.blas;
+    a.blas_addr = dd->vk.GetAccelerationStructureDeviceAddressKHR(dd->device, &ai);
+    ++g_as_grown;
+  }
+  // Scratch: shared by every slot (our command buffers run in submission order on one
+  // queue and each begins with a full barrier).
+  const VkDeviceSize al = (std::max)(rt_scratch_alignment(), VkDeviceSize(256));
+  const VkDeviceSize need_scratch = (std::max)(bs.buildScratchSize, ts.buildScratchSize) + al;
+  if (g_as_scratch.size < need_scratch) {
+    free_buf(g_as_scratch);
+    if (!make_buf(g_as_scratch, up256(need_scratch + need_scratch / 2),
+                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, false))
+      return VK_NULL_HANDLE;
+  }
+  const VkDeviceAddress sbase = rt_buffer_address(g_as_scratch.b);
+  const VkDeviceAddress scratch = (sbase + al - 1) / al * al;
+
+  // The TLAS's one instance: the BLAS, identity, every ray mask (none when empty).
+  VkAccelerationStructureInstanceKHR ti{};
+  ti.transform.matrix[0][0] = ti.transform.matrix[1][1] = ti.transform.matrix[2][2] = 1.0f;
+  ti.mask = ngeo ? 0xFF : 0x00;
+  ti.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+  ti.accelerationStructureReference = a.blas_addr;
+  std::memcpy(g_inst.map + VkDeviceSize(slot) * kInstRegion + kInstOffTlas, &ti, sizeof ti);
+
+  if (ngeo) {
+    bb.dstAccelerationStructure = a.blas;
+    bb.scratchData.deviceAddress = scratch;
+    const VkAccelerationStructureBuildRangeInfoKHR* pr = rng.data();
+    dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &bb, &pr);
+    barrier(cmd, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kAS,
+            VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
+  }
+  // No geometry: the TLAS gets zero instances (an empty scene, every ray misses).
+  tb.dstAccelerationStructure = a.tlas;
+  tb.scratchData.deviceAddress = scratch;
+  VkAccelerationStructureBuildRangeInfoKHR tr{ngeo ? 1u : 0u, 0, 0, 0};
+  const VkAccelerationStructureBuildRangeInfoKHR* ptr = &tr;
+  dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &tb, &ptr);
+  barrier(cmd, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kCS | kAS,
+          VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_SHADER_READ_BIT);
+  return a.tlas;
+}
 
 // The sanitize pipeline (shaders/rt/em_sanitize.hlsl): push descriptors soup + header.
 VkDescriptorSetLayout g_san_dsl = VK_NULL_HANDLE;
@@ -773,8 +930,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   Bg3Binding global{};
   float cam[3] = {0, 0, 0};
   bool have_cam = false;
-  // The scene's draws: one BLAS each (no cached meshes: nothing persists between builds).
-  bvh_discard_scene(1);
+  // The scene's draws: one geometry each of the build's single BLAS (em_as_build).
   for (PCmd& P : taken) {
     census.add(P.census);
     if (!global.buffer && P.global.buffer) global = P.global;
@@ -805,15 +961,6 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
       r.vt_cache = slot_of(cache, kMaxCache, d.vt_cache);
       if ((r.flags & kFlagVtAlbedo) && (!r.vt_tex || !r.vt_cache))
         ++census.skip_tex, r.flags = (r.flags & ~kFlagVtAlbedo) | kFlagApprox;
-      CmdState cs;
-      cs.vb[0] = {d.vb0, d.vb0_off, 0};
-      cs.ib = d.ib;
-      cs.ib_offset = d.ib_off;
-      BvhDraw bd{nullptr, d.vs, d.pipe_id, false, d.args, &cs, 1};
-      uint32_t token = 0, mesh_tris = 0;
-      bvh_classify(cmd, bd, &token, &mesh_tris);
-      bvh_captured(token, d.off, d.prims, false, UINT32_MAX);
-      bvh_set_record(token, uint32_t(recs.size()));
       recs.push_back(r);
       ranges.push_back({d.off, d.prims});
     }
@@ -850,15 +997,23 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
     log_once_sanitize();
     return;
   }
-  RtCapture cap{};
-  cap.xfb = g_soup.b;
-  cap.stride = g_stride;
-  cap.split = true;
-  cap.xfb_size = g_soup.size;
-  cap.scene = 1;
-  cap.converted = true;
-  BvhResult res{};
-  if (!bvh_build(cmd, cap, &noop_stamp, &res) || !res.tlas) {
+  // Info (16 B per geometry: soup offset, stride | flags, record, triangles) and identity
+  // instances (64 B per geometry, for em_lights) in this slot's region of g_inst.
+  const uint32_t ngeo = uint32_t(ranges.size());
+  uint8_t* ireg = g_inst.map + VkDeviceSize(slot) * kInstRegion;
+  uint32_t* info_host = reinterpret_cast<uint32_t*>(ireg + kInstOffInfo);
+  for (uint32_t i = 0; i < ngeo; ++i) {
+    info_host[i * 4 + 0] = uint32_t(ranges[i].first);
+    info_host[i * 4 + 1] = (g_stride & 0xffu) | kInfoEmissive;
+    info_host[i * 4 + 2] = i;
+    info_host[i * 4 + 3] = ranges[i].second;
+    VkAccelerationStructureInstanceKHR in{};
+    in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
+    in.mask = 0xFF;
+    std::memcpy(ireg + kInstOffFake + VkDeviceSize(i) * 64, &in, 64);
+  }
+  VkAccelerationStructureKHR tlas = em_as_build(cmd, slot, ranges);
+  if (!tlas) {
     ts_end(cmd, tsp);
     return;
   }
@@ -867,28 +1022,28 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   // Light ranges per instance, bounded by rt_em_max_lights (allocated at device creation):
   // past it, k consecutive triangles of an instance share one light (their summed area and
   // power, area-weighted radiance, the largest as the shape), so no emission is dropped.
-  const uint32_t n = res.instances;
+  const uint32_t n = ngeo;
   uint32_t* prefix = reinterpret_cast<uint32_t*>(region + kOffPrefix);
   uint32_t total = 0, overflow = 0;
   const uint32_t cap_lights = (std::max)((std::min)(uint32_t((std::max)(cfg_int("rt_em_max_lights", 65536), 0)), g_max_lights), 1u);
   uint64_t all_tris = 0;
-  for (uint32_t i = 0; i < n && i < kMaxInst; ++i) all_tris += res.info_host[i * 4 + 3];
+  for (uint32_t i = 0; i < n && i < kMaxInst; ++i) all_tris += info_host[i * 4 + 3];
   uint32_t k = uint32_t((std::max)((all_tris + cap_lights - 1) / cap_lights, uint64_t(1)));
   for (;;) {   // per-instance rounding may still overshoot: widen the clusters until it fits
     uint64_t need = 0;
-    for (uint32_t i = 0; i < n && i < kMaxInst; ++i) need += (res.info_host[i * 4 + 3] + k - 1) / k;
+    for (uint32_t i = 0; i < n && i < kMaxInst; ++i) need += (info_host[i * 4 + 3] + k - 1) / k;
     if (need <= cap_lights || k > 4096) break;
     ++k;
   }
   for (uint32_t i = 0; i < n && i < kMaxInst; ++i) {
-    uint32_t tris = res.info_host[i * 4 + 3];
+    uint32_t tris = info_host[i * 4 + 3];
     uint32_t take = (std::min)((tris + k - 1) / k, cap_lights - total);
     prefix[i * 2] = total;
     prefix[i * 2 + 1] = take;
     total += take;
     overflow += tris - (std::min)(take * k, tris);
   }
-  for (uint32_t i = kMaxInst; i < n; ++i) overflow += res.info_host[i * 4 + 3];
+  for (uint32_t i = kMaxInst; i < n; ++i) overflow += info_host[i * 4 + 3];
   const uint32_t ninst = (std::min)(n, kMaxInst);
   const float pre = rrpost_pre_exposure();
   header[0] = total;
@@ -905,10 +1060,9 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   VkDescriptorSet set = g_sets[slot];
   VkWriteDescriptorSetAccelerationStructureKHR wa{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
   wa.accelerationStructureCount = 1;
-  wa.pAccelerationStructures = &res.tlas;
-  VkDescriptorBufferInfo info{res.info ? res.info : g_dummy.b, res.info ? res.info_off : 0, res.info ? res.info_bytes : 256};
-  VkDescriptorBufferInfo pool = res.pool && res.pool_bytes ? VkDescriptorBufferInfo{res.pool, 0, res.pool_bytes}
-                                                           : VkDescriptorBufferInfo{g_dummy.b, 0, 256};
+  wa.pAccelerationStructures = &tlas;
+  VkDescriptorBufferInfo info{g_inst.b, VkDeviceSize(slot) * kInstRegion + kInstOffInfo, VkDeviceSize(kMaxRecs) * 16};
+  VkDescriptorBufferInfo pool{g_dummy.b, 0, 256};   // (no pool: every vertex is in the soup)
   VkDescriptorBufferInfo soup{g_soup.b, 0, g_soup.size};
   VkDescriptorBufferInfo recb{g_host.b, rbase + kOffRecs, VkDeviceSize(kMaxRecs) * kRecBytes};
   VkDescriptorBufferInfo lights{g_lights.b, 0, g_lights.size};
@@ -951,7 +1105,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   // The light list (bvh_build ends with AS build -> compute).
   barrier(cmd, kCS, VK_ACCESS_SHADER_READ_BIT, kCS, VK_ACCESS_SHADER_WRITE_BIT);
   if (total && cfg_int("rt_em_lights", 1)) {
-    VkDescriptorBufferInfo instb{res.ring, res.inst_off, VkDeviceSize((std::max)(ninst, 1u)) * 64};
+    VkDescriptorBufferInfo instb{g_inst.b, VkDeviceSize(slot) * kInstRegion + kInstOffFake, VkDeviceSize(kMaxRecs) * 64};
     VkDescriptorBufferInfo prefb{g_host.b, rbase + kOffPrefix, VkDeviceSize((std::max)(ninst, 1u)) * 8};
     VkWriteDescriptorSet pw[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
     pw[0].dstBinding = 0;
@@ -1004,7 +1158,8 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   si.instances = n;
   si.groups = (std::min)((total + 255) / 256, 1024u);
   si.census = census;
-  si.tris = res.static_tris + res.dynamic_tris;
+  si.tris = 0;
+  for (const auto& r : ranges) si.tris += r.second;
   g_current = int(slot);
   g_info = Bg3EmissiveInfo{now, n, nrec, total, pre, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED, 0, 0};
   if (cfg_int("rt_em_log", 0))
@@ -1088,6 +1243,10 @@ void em_device_created(DeviceData* dd) {
   ok = ok && make_buf(g_host, kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_host.map;
   ok = ok && make_buf(g_dummy, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false);
   // Host-visible: the log reads back what the copies wrote (a few KB).
+  ok = ok && make_buf(g_inst, kInstRegion * kRing,
+                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                      true) && g_inst.map;
   ok = ok && make_buf(g_globals, VkDeviceSize(kGlobSlots + 4) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_globals.map;
   ok = ok && make_image(false, g_dimg) && make_image(true, g_darr);
   // Our own command buffers (one build per game submission of effects passes).
@@ -1128,7 +1287,8 @@ void em_device_destroyed(DeviceData* dd) {
     }
   if (g_cmd_pool) vk.DestroyCommandPool(dd->device, g_cmd_pool, nullptr);
   g_cmd_pool = VK_NULL_HANDLE;
-  for (Buf* b : {&g_soup, &g_lights, &g_host, &g_dummy, &g_globals}) free_buf(*b);
+  for (Buf* b : {&g_soup, &g_lights, &g_host, &g_dummy, &g_globals, &g_inst, &g_as_scratch}) free_buf(*b);
+  for (AsSlot& a : g_as) as_slot_release(a);
   for (Retired& r : g_soup_retired) free_buf(r.b);
   g_soup_retired.clear();
   defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_cp_pipe));
@@ -1168,9 +1328,8 @@ void em_device_destroyed(DeviceData* dd) {
   g_dd = nullptr;
 }
 
-// Needs RT and the BVH split's machinery (bvhsplit.cpp), not rt_bvh_split itself: the
-// emissive scene keeps no cached meshes and rebuilds all its BLAS every build.
-bool em_wanted() { return g_on && rt_enabled() && bvh_available() && cfg_int("rt_emissive", 1) != 0; }
+// Needs RT only: the emissive scene has its own acceleration structures (em_as_build).
+bool em_wanted() { return g_on && rt_enabled() && cfg_int("rt_emissive", 1) != 0; }
 
 bool em_is_fx_pass(const Bg3PassInfo& p, uint32_t gw, uint32_t gh) {
   return g_on && p.color_count == 1 && p.color_formats[0] == VK_FORMAT_B10G11R11_UFLOAT_PACK32 &&
@@ -1422,7 +1581,6 @@ void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandB
   // ran: register what the game's command buffers referenced on ours too (tracker.cpp).
   if (CmdState* ms = cmd_state(o.cb, true)) ms->refs = std::move(refs);
   std::vector<VkCommandBuffer> mine{o.cb};
-  bvh_on_submit(mine);
   life_on_submit(queue, mine);
   VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
   si.commandBufferCount = 1;

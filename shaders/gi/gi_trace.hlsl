@@ -57,7 +57,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       int2 qp = int2(quv * float2(pc.full));
       float sd = gDepth.Load(int3(qp, 0));
       if (sd > 0.0 && qd > sd * 1.0015 && qd < sd * (1.0 + pc.thickness)) {
-        bounce += prev_radiance_at(qp);
+        bounce += prev_bounce_at(qp);
         hits += 1.0;
         break;
       }

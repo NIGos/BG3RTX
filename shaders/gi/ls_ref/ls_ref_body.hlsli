@@ -4,6 +4,7 @@
 // ---- rt_common.hlsli (ray origin and occlusion) ----
 struct lsref_RtCone { float f0, spread; };
 bool lsref_rt_occluded(float3 o, float3 d, float tmax, lsref_RtCone cone) {
+  if (!rt_ray_valid(o, d, tmax)) return false;   // (hand edit: the ray guard of rt_common.hlsli)
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;

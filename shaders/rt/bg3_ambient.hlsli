@@ -53,7 +53,8 @@ float3 bg3_spec_ambient(float3 P, float3 N, float3 V, float3 f0, float a, uint4 
   uint first = (cl.z & 1023u) + ((cl.y >> 12) & 4095u) + (cl.y & 4095u) + cl.x;
   uint end = first + (cl.y >> 24);
   [loop] for (uint k = first; k < end; ++k) {
-    uint pi = lIndex.Load(k * 4u);
+    uint pi = bg3_light_index(k);
+    if (!bg3_in(lgProbes, pi, 144u)) continue;   // guarded (rt_common.hlsli guard_count)
     uint b = pi * 144u;
     float4 m0 = asfloat(lgProbes.Load4(b));
     float4 r0 = asfloat(lgProbes.Load4(b + 16u)), r1 = asfloat(lgProbes.Load4(b + 32u)), r2 = asfloat(lgProbes.Load4(b + 48u));
