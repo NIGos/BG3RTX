@@ -1147,17 +1147,17 @@ void ls_timing_collect() {
 // The frame's TLAS if ray-traced shadows or AO are on and the host built one
 // this frame or the previous one: the game records the G-buffer of a frame
 // before presenting the previous one and the lighting after, so the build is
-// usually stamped one frame earlier. The GPU still runs it first (submission
-// order), and the handle is the same object every frame.
+// usually stamped one frame earlier. The TLAS and set 1 come as one pair from
+// the same host snapshot (rt_scene_set, ABI 8): the passes never trace one
+// build's TLAS with another's InstInfo, records, soup or pool.
 VkAccelerationStructureKHR rt_tlas(VkDescriptorSet* alpha) {
   if (!host->rt_scene || (!host->cfg_int("rt_shadows", 0) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 0) &&
                           !host->cfg_int("rt_local_shadows", 0) && !host->cfg_int("rt_reflections", 0)))
     return VK_NULL_HANDLE;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
-  VkDescriptorSetLayout layout;
   uint64_t built = 0, now = host->frame_index();
-  if (!host->rt_scene(&tlas, &built) || !tlas || built + 1 < now || !host->rt_alpha || !host->rt_alpha(&layout, alpha) ||
-      !*alpha) {
+  *alpha = VK_NULL_HANDLE;
+  if (!host->rt_scene_set || !host->rt_scene_set(&tlas, alpha, &built) || !tlas || built + 1 < now || !*alpha) {
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
   }

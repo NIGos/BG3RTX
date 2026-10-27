@@ -114,11 +114,14 @@ void life_idle_end(uint64_t seq_before) {
 
 void life_on_present(DeviceData* dd, VkQueue queue) {
   const uint64_t frame = frame_index();
-  std::lock_guard<std::mutex> lock(g_life_mu);
+  std::unique_lock<std::mutex> lock(g_life_mu);
+  bool lost = false;   // reported after the lock (devfault.cpp reads life_gpu_done)
   // Retire completed presents (in order; one with a waiter stays until it leaves).
   while (!g_fences.empty()) {
     FrameFence& f = g_fences.front();
-    if (dd->vk.WaitForFences(dd->device, 1, &f.fence, VK_TRUE, 0) != VK_SUCCESS) break;   // a status poll
+    const VkResult fr = dd->vk.WaitForFences(dd->device, 1, &f.fence, VK_TRUE, 0);   // a status poll
+    lost = lost || fr == VK_ERROR_DEVICE_LOST;
+    if (fr != VK_SUCCESS) break;
     g_life_done = (std::max)(g_life_done, f.frame);
     g_present_queue = f.queue;
     if (f.waiters) break;
@@ -174,6 +177,8 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
         (unsigned long long)g_life_waits, g_life_wait_ms, g_life_wait_max, (unsigned long long)g_life_timeouts,
         (unsigned long long)g_life_noop, (unsigned long long)g_life_unfenced, g_life.size());
   }
+  lock.unlock();
+  if (lost) fault_on_result(dd, VK_ERROR_DEVICE_LOST, "the present fence poll");
 }
 
 void life_device_destroyed(DeviceData* dd) {

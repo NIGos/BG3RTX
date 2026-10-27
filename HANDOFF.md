@@ -1,0 +1,191 @@
+# HANDOFF: split-BVH device lost (rt_bvh_split=1)
+
+Branch: `worktree-agent-a9ea45fdd00455d7d`, on top of `7178631` (GPU-fenced retirement).
+Built with `scripts/build.ps1` (layer, core, tests: 120 checks, 0 failed). All the RT
+shaders that include `rt_common.hlsli` compile offline with the SDK's DXC
+(`cs_6_6`, the runtime flags). **Nothing was run in game.**
+
+## 1. Root cause analysis (from the code)
+
+Every way an RT pass could read set-1 data that does not belong to the TLAS it traces,
+plus the GPU-memory hazards found on the way. Items A to C are the likely faults.
+D to F made them reachable or are smaller holes.
+
+**A. Compaction sized from another mesh's query. This corrupts BLAS memory.** (`bvhsplit.cpp`)
+- `JobBatch::compact` stored only the mesh *key*. A mesh can be evicted and created again
+  under the same key while its batch is still pending:
+  - `bvh_forget_buffer`: the game destroys a buffer, and the new buffer gets the same
+    handle value;
+  - `bvh_buffer_written`: a transfer writes into the mesh's range.
+- `bvh_on_present` then copied the *old* BLAS's compacted size into the *new* mesh
+  (`it->second.compact_size = size`, with only `!compacted` checked).
+- The next build ran `as_create(m.compact_size)` and then
+  `CmdCopyAccelerationStructureKHR(COMPACT)` into a range of that size. The compacted size
+  depends on the BVH built over the new vertices, not only on the triangle count. If the
+  new size is larger, the copy writes past its range into the neighbouring BLAS of the
+  same 64 MB chunk. Traversal of that BLAS then fetches garbage nodes and child pointers.
+  The result is an MMU fault or a hang, i.e. device lost / event 153.
+- This matches the evidence:
+  - split only;
+  - a few seconds into gameplay, while many new meshes enter the cache (streaming
+    recreates buffers);
+  - independent of RR;
+  - not fixed by GPU-fenced range retirement.
+- Stale extraction/check/audit results were applied to the new mesh the same way (state
+  `kReady` without its own check).
+
+**B. TLAS and set 1 came from different builds.** (`rtscene.cpp`, `alphatest.cpp`, `core/gi.cpp`)
+- The core took `rt_scene()` (one split TLAS object, rebuilt or refit *in place* every
+  frame) and `rt_alpha()` separately. `rt_alpha()` returned the set of the *latest commit
+  at record time*.
+- The game records the next frame's G-buffer (which holds our build) on another thread,
+  interleaved with the lighting. So a pass could bind the set of build N+1 and trace the
+  TLAS contents of build N, or the reverse.
+- InstInfo, records, soup and pool offsets then do not match the instances. This is the
+  0.6-2% `prim >= ii.tris` the earlier agent saw.
+- Most reads were bounds-checked, but not all:
+  - `alpha_kind_hit` read `gAlphaRec[ii.rec + 8]` unchecked;
+  - `find_rec` trusted the record count in the header;
+  - the range checks `base + (prim*3+3)*stride > bytes` can wrap in 32 bits;
+  - an instance past the InstInfo fell back to the *legacy* lookup.
+- The device does not necessarily have robust buffer access (now logged, see 3). So an
+  out-of-range ByteAddressBuffer read is undefined and can fault.
+- In-place rebuilds also meant that a build could rewrite the very TLAS an earlier frame's
+  pass was tracing, if the submission order ever differed from the assumed order.
+
+**C. BLAS ranges and AS handles were released while an older TLAS could still be traced.**
+- Pending frees waited for `gpu_done >= frame + 2` of the free.
+- But a TLAS built in frame F is handed out up to frame F+1 (`built + 1 >= now`), and its
+  pass may be submitted a frame after recording.
+- A mesh evicted in frame F, after that frame's build had written its instance, could
+  therefore get its chunk range (and `vkDestroyAccelerationStructureKHR`) released while a
+  TLAS that references it was still in flight.
+
+**D. Host ring regions and alpha sets were retired by frame count, not by GPU completion.**
+- `bvhsplit` used `g_ring_next++ % 8` for the region of instances, InstInfo and matrices,
+  written by the CPU at record and at submit.
+- `alphatest` used `g_slot++ % 8` for the set and record region. `vkUpdateDescriptorSets`
+  on a set that a pending command buffer still binds is undefined; on NVIDIA the GPU then
+  reads the new descriptors.
+- Safe only while fewer than 8 frames are in flight. Headless or loading can run more
+  presents ahead of the GPU.
+
+**E. Duplicate per-draw BLAS key in one frame.**
+- The 64-bit `dyn_key` hash of two draws could collide. Two builds would then target one
+  destination in one `vkCmdBuildAccelerationStructuresKHR`: a GPU race on the BLAS.
+- Rare, but cheap to exclude.
+
+**F. Not changed (noted):**
+- The soup (the XFB buffer) is one buffer, rewritten by every frame's capture. With the
+  pairing above and the queue order (G-buffer N, lighting N, G-buffer N+1) a pass reads
+  the soup of its own build. A pass that executed after the next capture would read moved
+  vertices, which is bounded and therefore wrong values but no fault.
+- The mesh pool only grows (by copy into a new buffer, old one deferred), and its live
+  ranges are never rewritten.
+
+## 2. What changed
+
+**Scene snapshot slots** (`layer/host.h` `kSceneSlots = 8`, `layer/rtscene.cpp`)
+- Each build writes one slot. The slot holds:
+  - its own split TLAS;
+  - the bvhsplit ring region with its instances, InstInfo and matrices;
+  - its alpha set and record region (`alpha_commit(cmd, ab, slot)` returns the set).
+- `pick_scene_slot()` takes only slots whose every hand-out the GPU has finished:
+  `life_gpu_done() >= last_use + 2`, with a 240-frame fallback as in `defer_tick`.
+- The current slot is never reused. A stale slot (`built + 1 < now`) is never handed out
+  again. If no slot is free, the build is skipped and the previous scene stays current.
+  This is logged as `[rt] ... every scene slot is still in flight ... build skipped`.
+- `rt_scene_set()` (**ABI 8**, `common/host_api.h`) returns the TLAS and set of one slot
+  atomically and stamps `last_use`.
+- `core/gi.cpp rt_tlas` uses it. `rt_scene` and `rt_alpha` return the same slot's data.
+
+**bvhsplit.cpp**
+- **Per-slot TLAS.** The refit is now an UPDATE with src = the previous slot's TLAS and
+  dst = this slot's (only when both have the same storage size). All slots are grown to
+  the newest size, so the refit keeps working after a growth.
+- **Ring region = slot index.** No more `g_ring_next`.
+- **Mesh generations.**
+  - Each created `Mesh` gets a unique `gen`. `Job` and `CompactRead` carry it.
+  - A result applies only to the same generation. This fixes A.
+- **Releases wait for the oldest live slot.**
+  - `PendingFree` also carries the BLAS handle; its destroy is deferred to the range's
+    release.
+  - A freed range is released only once every scene slot that may still be read was built
+    *after* the free (`rt_scene_oldest_live()`), in addition to the existing fence rule.
+    This fixes C.
+- **Duplicate keys.** A `dyn_key` seen twice in a frame is skipped. This fixes E.
+
+**Shaders** (`shaders/rt/rt_common.hlsli`)
+- `rec_in_range` and `tri_in_range` are overflow-safe and based on `GetDimensions`.
+- They are used in `alpha_pass_hit`, `alpha_kind_hit` and `rt_hit_normal`.
+- `find_rec` clamps the record count to the buffer.
+- An instance past the InstInfo yields an empty InstInfo, which means an "unknown" alpha
+  and no normal, instead of the legacy lookup.
+
+**Device-fault diagnostics** (new `layer/devfault.cpp`, `layer/layer.cpp`, `layer/tracker.cpp`)
+- With `rt=1`, `VK_EXT_device_fault` (`deviceFault`) is added to device creation
+  additively, after the RT patch. If creation fails with it, it is retried without.
+  `dev_fault=0` turns this off.
+- Logged at device creation: `[fault] the game's device: robustBufferAccess ON/off`
+  (answers the question; we do not change the game's choice).
+- Buffers register their device-address ranges, and frees are remembered (last 1024):
+  - soup;
+  - mesh pool;
+  - BLAS chunks;
+  - split TLAS slots;
+  - instance/InstInfo ring;
+  - alpha records (now created with a device address);
+  - scratch, status, and the legacy BLAS/TLAS.
+- On the first `VK_ERROR_DEVICE_LOST` from `vkQueueSubmit`, `vkQueueSubmit2`,
+  `vkQueuePresentKHR` or our present-fence poll, the layer logs:
+  - the scene slots;
+  - `vkGetDeviceFaultInfoEXT`: description, each address with its type and precision,
+    the registered ranges it falls in (live, or FREED in frame X), and the bvh detail
+    (`bvh_describe_address`). The bvh detail is "BLAS of mesh K (gen, compacted)", a
+    per-draw BLAS, a freed-but-unreleased range, "no BLAS allocated there", pool mesh,
+    ring slot and part, or TLAS slot;
+  - the vendor records.
+
+## 3. Tests for you to run (in game)
+
+Build first: `scripts\build.ps1` (ABI 8: the layer and the core must both be new;
+restart the game).
+
+**A. Fault rate, the default split** (6 runs, Campsite). Run this 6 times:
+
+```
+scripts\auto-run.ps1 -NoBuild -Background -NoAnalyze -Save "Campsite - 27h" -Traces 2 -TimeoutSec 300 -Set "fg=0,auto_interval=900"
+```
+
+- **Pass:** 0 stalls (no `stalled` result, nothing new in `captures\stalls.log`), and
+  0 nvlddmkm System event 153 during the runs. Ignore the pair the notes say comes with
+  each launch; compare timestamps against the run windows.
+- Check in each run's `bg3rtx.log`:
+  - `[fault] + VK_EXT_device_fault` and `[fault] device fault reporting ready`;
+  - `[fault] the game's device: robustBufferAccess ...` (report the value);
+  - no `[rt] ... build skipped` (if it appears, the GPU fell 8 slots behind: report the
+    count);
+  - `[bvh] TLAS storage of slot N` lines: 8 slots, then nothing more after the first
+    growth;
+  - `[bvh] last N builds ... refit` still shows TLAS refits (static views).
+- If a device loss still happens, send the `[fault]` block. It names the buffer, and for
+  the BLAS chunks the mesh/BLAS and whether the range was freed.
+
+**B. Validation** (1 run):
+
+```
+scripts\auto-run.ps1 -NoBuild -Background -NoAnalyze -Validation -Save "Campsite - 27h" -Traces 1 -TimeoutSec 480 -Set "fg=0,auto_interval=900"
+```
+
+- **Pass:** compared to the baseline IDs in `docs/TRACK_D_RT.md` 11.4, no new IDs.
+- Watch especially:
+  - `vkCmdBuildAccelerationStructuresKHR` (the TLAS UPDATE with src != dst),
+  - `vkUpdateDescriptorSets` / `-None-03047` (set updated while in use),
+  - `vkCmdCopyAccelerationStructureKHR`,
+  - anything on `VK_EXT_device_fault` at device creation.
+
+**C. Optional checks:**
+- One run with `-Set "fg=0,auto_interval=900,rt_stats=1"`. Alpha counter 3
+  (`prim >= tris`) should now be ~0 after scene changes (it was 0.6-2%).
+- One with `rt_bvh_split=0` to confirm the legacy path is unchanged (it uses the slots
+  for its set only).

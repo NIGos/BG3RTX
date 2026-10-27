@@ -168,14 +168,25 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
   // ray query), then Streamline's DLSS-G requirements (extensions, features,
   // extra queues including a dedicated optical-flow family). If the driver
   // refuses, RT is dropped first, then the geometry capture.
-  VkDeviceCreateInfo geo_ci, rt_ci;
+  VkDeviceCreateInfo geo_ci, rt_ci, fault_ci;
   const VkDeviceCreateInfo* geo_use = geo_device_create_info(id, phys, ci, &geo_ci);
-  const VkDeviceCreateInfo* use_ci = rt_device_create_info(id, phys, geo_use, &rt_ci);
-  bool rt_on = use_ci != geo_use;
+  const VkDeviceCreateInfo* rt_use = rt_device_create_info(id, phys, geo_use, &rt_ci);
+  bool rt_on = rt_use != geo_use;
+  // VK_EXT_device_fault (devfault.cpp): fault addresses on a device loss.
+  const VkDeviceCreateInfo* use_ci = rt_on ? fault_device_create_info(id, phys, rt_use, &fault_ci) : rt_use;
+  bool fault_on = use_ci != rt_use;
   VkDeviceCreateInfo patched;
   SlDeviceScratch* sl_scratch = sl_device_pre(id, phys, use_ci, patched);
   auto create = reinterpret_cast<PFN_vkCreateDevice>(gipa(id ? id->instance : VK_NULL_HANDLE, "vkCreateDevice"));
   VkResult r = create(phys, &patched, alloc, out);
+  if (r != VK_SUCCESS && fault_on) {
+    log("[layer] device creation with VK_EXT_device_fault failed (%d); retrying without", r);
+    sl_device_post(sl_scratch, nullptr, r);
+    fault_on = false;
+    use_ci = rt_use;
+    sl_scratch = sl_device_pre(id, phys, use_ci, patched);
+    r = create(phys, &patched, alloc, out);
+  }
   if (r != VK_SUCCESS && rt_on) {
     log("[layer] device creation with the ray tracing extensions failed (%d); retrying without", r);
     sl_device_post(sl_scratch, nullptr, r);
@@ -249,6 +260,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
   if (dd == g_main) {
     geo_device_created(dd, geo_use != ci_orig);
     rt_device_created(dd, rt_on);
+    fault_device_created(dd, rt_on && fault_on);
     if (rt_on && rt_enabled()) alpha_device_created(dd);
     if (rt_on && rt_enabled()) bvh_device_created(dd);
   }
@@ -375,7 +387,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   sl_note_submit(cmds);
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   auto lock = queue_lock();
-  return dd->vk.QueueSubmit(queue, count, submits, fence);
+  VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
+  fault_on_result(dd, r, "vkQueueSubmit");
+  return r;
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count, const VkSubmitInfo2* submits,
@@ -392,7 +406,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   sl_note_submit(cmds);
   life_on_submit(queue, cmds);
   auto lock = queue_lock();
-  return dd->vk.QueueSubmit2(queue, count, submits, fence);
+  VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
+  fault_on_result(dd, r, "vkQueueSubmit2");
+  return r;
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
@@ -455,6 +471,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     si.pWaitDstStageMask = stages.data();
     std::lock_guard<std::mutex> lock(g_queue_mu);
     VkResult r = dd->vk.QueueSubmit(queue, 1, &si, VK_NULL_HANDLE);
+    fault_on_result(dd, r, "vkQueuePresentKHR (headless)");
     if (dd == g_main) life_on_present(dd, queue);
     if (info->pResults)
       for (uint32_t i = 0; i < info->swapchainCount; ++i) info->pResults[i] = r;
@@ -462,6 +479,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
   }
   auto lock = queue_lock();
   VkResult r = sl_present(dd, queue, info);   // through Streamline's proxy when DLSS-G is set up
+  fault_on_result(dd, r, "vkQueuePresentKHR");
   // Still inside the game's present call, so the queue is ours to submit to:
   // the fence that tells the destroy hooks when this frame's work is done.
   if (dd == g_main) life_on_present(dd, queue);

@@ -46,6 +46,22 @@ static const uint kRecBytes = 208;
 
 uint rec_addr(uint i) { return 16 + i * kRecBytes; }
 
+// Bounds (defence in depth; the device need not have robust buffer access, and
+// an out-of-range descriptor read can fault). A TLAS is traced with its own
+// build's set 1 (rtscene.cpp scene slots), so these should never trigger; they
+// turn a mismatch into a miss or an "unknown" alpha instead of a wild read.
+// Record at byte address `a` lies inside gAlphaRec (overflow-safe).
+bool rec_in_range(uint a) {
+  uint rbytes;
+  gAlphaRec.GetDimensions(rbytes);
+  return a >= 16u && rbytes >= kRecBytes && a <= rbytes - kRecBytes;
+}
+// Triangle `prim` (3 vertices of `stride` bytes from byte `base`) lies inside a
+// buffer of `bytes` bytes (overflow-safe).
+bool tri_in_range(uint base, uint prim, uint stride, uint bytes) {
+  return stride != 0u && base <= bytes && prim < (bytes - base) / (3u * stride);
+}
+
 // Tile-set constant: matrix m (0/1), column c, row r of the SSBO entry (row-major mat4).
 float vt_t(uint a, uint m, uint c, uint r) { return asfloat(gAlphaRec.Load(a + 80 + 4 * (m * 16 + r * 4 + c))); }
 
@@ -175,7 +191,8 @@ InstInfo inst_info(uint inst) {
   InstInfo r;
   uint bytes;
   gInstInfo.GetDimensions(bytes);
-  uint4 v = inst * 16u + 16u <= bytes ? gInstInfo.Load4(inst * 16u) : uint4(0, kInfoLegacy, 0, 0);
+  // Past the InstInfo of this TLAS: no vertices, no record (never the legacy lookup).
+  uint4 v = inst < bytes / 16u ? gInstInfo.Load4(inst * 16u) : uint4(0, 0, 0, 0);
   r.base = v.x;
   r.meta = v.y;
   r.rec = v.z;
@@ -199,7 +216,9 @@ float2 inst_uv(InstInfo ii, uint prim, uint k) {
 // Byte address of the record of alpha-tested triangle `prim` (legacy: geometry 1's
 // triangle index; 0 if none).
 uint find_rec(uint prim) {
-  uint n = gAlphaRec.Load(0);
+  uint rbytes;
+  gAlphaRec.GetDimensions(rbytes);
+  uint n = min(gAlphaRec.Load(0), rbytes >= 16u ? (rbytes - 16u) / kRecBytes : 0u);
   if (n == 0) return 0;
   uint lo = 0, hi = n;   // last record with first_tri <= prim
   while (hi - lo > 1) {
@@ -296,13 +315,11 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
     }
     return alpha_unknown(alpha_flags());
   }
-  // Never read past the vertex buffer or the records (an InstInfo of another build
-  // during a capture change): no robust buffer access is guaranteed.
-  uint vbytes, rbytes;
+  // Never read past the vertex buffer or the records: no robust buffer access is guaranteed.
+  uint vbytes;
   if ((ii.meta & kInfoPool) != 0u) gMeshPool.GetDimensions(vbytes);
   else gOpaqueSoup.GetDimensions(vbytes);
-  gAlphaRec.GetDimensions(rbytes);
-  if (ii.base + (prim * 3u + 3u) * (ii.meta & 0xffu) > vbytes || ii.rec + kRecBytes > rbytes) {
+  if (!tri_in_range(ii.base, prim, ii.meta & 0xffu, vbytes) || !rec_in_range(ii.rec)) {
     alpha_stat(3, true, prim);
     return alpha_unknown(alpha_flags());
   }
@@ -324,7 +341,7 @@ uint alpha_kind(uint prim) {
 uint alpha_kind_hit(uint inst, uint geom, uint prim) {
   InstInfo ii = inst_info(inst);
   if ((ii.meta & kInfoLegacy) != 0u) return geom == 1u ? alpha_kind(prim) : 0u;
-  return (ii.meta & kInfoAlpha) != 0u && ii.rec != 0u ? gAlphaRec.Load(ii.rec + 8) : 0u;
+  return (ii.meta & kInfoAlpha) != 0u && rec_in_range(ii.rec) ? gAlphaRec.Load(ii.rec + 8) : 0u;
 }
 bool alpha_instance(uint inst, uint geom) {
   InstInfo ii = inst_info(inst);
@@ -448,7 +465,7 @@ float3 rt_hit_normal(RtHit h) {
   uint stride = ii.meta & 0xffu, bytes;
   if ((ii.meta & kInfoPool) != 0u) gMeshPool.GetDimensions(bytes);
   else gOpaqueSoup.GetDimensions(bytes);
-  if (stride < 16u || h.prim >= ii.tris || ii.base + (h.prim * 3u + 3u) * stride > bytes) return 0.0.xxx;
+  if (stride < 16u || h.prim >= ii.tris || !tri_in_range(ii.base, h.prim, stride, bytes)) return 0.0.xxx;
   float3 p0 = inst_pos(ii, h.prim, 0), p1 = inst_pos(ii, h.prim, 1), p2 = inst_pos(ii, h.prim, 2);
   if ((ii.meta & kInfoPool) != 0u) {
     p0 = mul(h.o2w, float4(p0, 1.0));

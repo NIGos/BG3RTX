@@ -34,7 +34,7 @@ namespace {
 // (logged at once, "views full").
 constexpr uint32_t kTextures = 4096;  // Texture2D slots (0 = dummy)
 constexpr uint32_t kCaches = 16;      // Texture2DArray slots (0 = dummy)
-constexpr uint32_t kRing = 8;         // descriptor sets / record regions in flight
+constexpr uint32_t kRing = kSceneSlots;   // descriptor sets / record regions: one per scene slot (rtscene.cpp)
 constexpr uint32_t kMaxRecords = 8192;
 constexpr VkDeviceSize kRegion = 16 + VkDeviceSize(kMaxRecords) * sizeof(AlphaRec);
 
@@ -58,7 +58,6 @@ VkDeviceMemory g_dummy_mem = VK_NULL_HANDLE;
 VkBuffer g_legacy_buf = VK_NULL_HANDLE;   // alpha_legacy_info
 VkDeviceMemory g_legacy_mem = VK_NULL_HANDLE;
 uint32_t g_legacy_stride = 0;
-uint32_t g_slot = 0;            // next ring slot
 uint32_t g_set_tex[kRing] = {};     // per set: texture slots holding real views (the rest: dummies)
 uint32_t g_set_cache[kRing] = {};
 bool g_set_init[kRing] = {};
@@ -73,15 +72,18 @@ std::vector<std::pair<VkImageView, VkImageLayout>> g_tex, g_cache;
 uint32_t g_fail[6] = {};
 uint64_t g_frames = 0, g_draws = 0, g_tris = 0;
 
-bool make_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& b, VkDeviceMemory& m) {
+bool make_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& b, VkDeviceMemory& m, bool address = false) {
   DeviceData* dd = g_dd;
   VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
   bci.size = size;
-  bci.usage = usage;
+  bci.usage = usage | (address ? VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT : 0u);
   if (dd->vk.CreateBuffer(dd->device, &bci, nullptr, &b) != VK_SUCCESS) return false;
   VkMemoryRequirements req;
   dd->vk.GetBufferMemoryRequirements(dd->device, b, &req);
+  VkMemoryAllocateFlagsInfo fi{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};
+  fi.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
   VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  if (address && rt_alloc_device_address()) mai.pNext = &fi;
   mai.allocationSize = req.size;
   mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &mai, nullptr, &m) != VK_SUCCESS) return false;
@@ -241,7 +243,8 @@ void alpha_device_created(DeviceData* dd) {
   ai.pSetLayouts = layouts;
   ok = ok && vk.AllocateDescriptorSets(dd->device, &ai, g_sets) == VK_SUCCESS;
   ok = ok && make_buffer(kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                         g_rec_buf, g_rec_mem);
+                         g_rec_buf, g_rec_mem, true);
+  if (ok) fault_track("alpha records (8 slot regions)", rt_buffer_address(g_rec_buf), kRegion * kRing);
   ok = ok && make_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_dummy_buf,
                          g_dummy_mem);
   ok = ok && make_image(false, g_dummy2d) && make_image(true, g_dummy_arr);
@@ -401,8 +404,8 @@ uint32_t alpha_record_count() {
   return uint32_t(g_recs.size());
 }
 
-void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
-  if (!g_on) return;
+VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint32_t slot) {
+  if (!g_on || slot >= kRing) return VK_NULL_HANDLE;
   const VkBuffer soup = ab.soup;
   const VkDeviceSize alpha_base = ab.alpha_base, alpha_bytes = ab.alpha_bytes, opaque_bytes = ab.opaque_bytes;
   const uint32_t stride = ab.stride;
@@ -440,10 +443,9 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
                           nullptr, 2, ib);
     g_dummy_ready = true;
   }
-  const uint32_t slot = g_slot;
-  g_slot = (g_slot + 1) % kRing;
   // Records: a 16-byte header (count) and the records, in this slot's region.
-  // The slot was last read kRing frames ago; order the update after any reads anyway.
+  // The scene slot is retired: the GPU finished every frame that read it
+  // (rtscene.cpp). The update is still ordered after earlier reads.
   const VkDeviceSize base = VkDeviceSize(slot) * kRegion;
   // header: record count, the opaque soup's vertex stride (0: not bound), the
   // alpha-test policy bits (rt_common.hlsli kAlpha*; live switches)
@@ -453,8 +455,8 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr,
-                        0, nullptr);
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
   vk.CmdUpdateBuffer(cmd, g_rec_buf, base, sizeof header, header);
   const uint8_t* src = reinterpret_cast<const uint8_t*>(g_recs.data());
   VkDeviceSize left = VkDeviceSize(g_recs.size()) * sizeof(AlphaRec), off = 0;
@@ -555,15 +557,22 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
     g_frames = g_draws = g_tris = 0;
     std::memset(g_fail, 0, sizeof g_fail);
   }
+  return g_sets[slot];
 }
 
 // The set layout is fixed for the device's lifetime; the set is the one of the
-// latest scene build (VK_NULL_HANDLE before the first).
+// latest scene build (VK_NULL_HANDLE before the first), from the same scene
+// slot as rt_scene's TLAS (rt_scene_set returns both as one pair).
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set) {
   if (!g_on) return false;
-  std::lock_guard<std::mutex> lock(g_mu);
-  *layout = g_dsl;
-  *set = g_current < 0 ? VK_NULL_HANDLE : g_sets[g_current];
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    *layout = g_dsl;
+  }
+  // rtscene's lock after ours is released (rt_after_capture takes it before ours).
+  VkAccelerationStructureKHR tlas;
+  uint64_t built;
+  if (!rt_scene_set(&tlas, set, &built)) *set = VK_NULL_HANDLE;
   return true;
 }
 

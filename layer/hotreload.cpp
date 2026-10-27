@@ -195,6 +195,7 @@ void core_init(DeviceData* dd) {
   g_host.set_spec_hit_distance = &ngx_set_spec_hit_distance;
   g_host.assetdb = assetdb_api();
   g_host.rr_active = &ngx_rr_active;
+  g_host.rt_scene_set = &rt_scene_set;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);

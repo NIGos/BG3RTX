@@ -416,7 +416,18 @@ struct RtCapture {
   VkDeviceSize xfb_size;
 };
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
+// Scene snapshots: each build writes one slot (its own TLAS for the split, its
+// InstInfo region of the bvhsplit ring, its alpha set and record region), and a
+// slot is reused only once the GPU finished every frame it was handed out in
+// (life_gpu_done). The RT passes get a TLAS and the set of the same slot.
+constexpr uint32_t kSceneSlots = 8;
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
+// ABI 8: the latest scene's TLAS and its own set 1, as one versioned pair.
+bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame);
+// Oldest build frame among the slots the GPU may still read (UINT64_MAX: none).
+// A BVH range freed in frame F is released only once this is > F.
+uint64_t rt_scene_oldest_live();
+void rt_log_state(const char* prefix);     // the slots, for a device-loss report
 void rt_on_present();
 // Shared by the legacy build and the split (bvhsplit.cpp).
 VkDeviceAddress rt_buffer_address(VkBuffer b);
@@ -473,10 +484,13 @@ struct BvhResult {
   VkBuffer info; VkDeviceSize info_off, info_bytes;   // InstInfo of this TLAS (set 1 binding 7)
   VkBuffer pool; VkDeviceSize pool_bytes;             // object-space vertices (binding 8)
 };
-bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), BvhResult* out);
+// `slot` (< kSceneSlots, retired on the GPU): the ring region and TLAS it writes.
+bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), uint32_t slot,
+               BvhResult* out);
 void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 void bvh_on_present();
 void bvh_forget_buffer(VkBuffer b);
+std::string bvh_describe_address(VkDeviceAddress a);   // device-fault reports ("" if not the split's)
 void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size);
 
 // ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
@@ -530,10 +544,22 @@ struct AlphaBindings {
   VkBuffer pool;
   VkDeviceSize pool_bytes;
 };
-void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& b);
+// Writes set `slot` (< kSceneSlots, retired on the GPU) and its record region;
+// returns that set (VK_NULL_HANDLE when alpha testing is off).
+VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& b, uint32_t slot);
 // The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).
 bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
+
+// ---- device-fault diagnostics (devfault.cpp, VK_EXT_device_fault) ----
+const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
+                                                   VkDeviceCreateInfo* scratch);
+void fault_device_created(DeviceData* dd, bool enabled);
+// Device-address ranges of our buffers, named in a fault report (live or freed).
+void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size);
+void fault_untrack(VkDeviceAddress addr);
+// A submit's or present's result: VK_ERROR_DEVICE_LOST logs the fault once.
+void fault_on_result(DeviceData* dd, VkResult r, const char* where);
 
 uint64_t frame_index();
 void* persist(const char* key, size_t size);
