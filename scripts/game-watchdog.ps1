@@ -35,8 +35,12 @@ while ((Get-Date) -lt $end) {
       W "START pid $id (running now: $($now.Count))"
       if ($now.Count -gt 1) { W "  OVERLAP: $($now.Count) games running: $(($now.Keys | Sort-Object) -join ', ')" }
     } elseif (-not $known[$id].Owner -and ((Get-Date) - $known[$id].Start).TotalSeconds -gt 20) {
-      $known[$id].Owner = Owner $known[$id].Start $id
-      W "  pid $id owner: $($known[$id].Owner)"
+      $o = Owner $known[$id].Start $id
+      # The layer can load after 20 s (main menu first): retry until it is seen.
+      if ($o -ne "?" -or ((Get-Date) - $known[$id].Start).TotalSeconds -gt 180) {
+        $known[$id].Owner = $o
+        W "  pid $id owner: $o"
+      }
     }
   }
   foreach ($id in @($known.Keys)) {
