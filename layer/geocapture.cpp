@@ -70,8 +70,16 @@ std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
 thread_local VsInstancing t_last_inst; // its instancing analysis (bvhsplit.cpp)
 thread_local uint64_t t_last_hash = 0;
+thread_local std::vector<StageIo> t_last_io;   // the module's user interface (stage_io)
+thread_local int t_last_model = -1;
 
 std::mutex g_mu;  // modules, pipelines, buffers
+// Interface of every module (the UV-slot check): execution model, user inputs/outputs, hash.
+struct ModIo { int model = -1; std::vector<StageIo> io; uint64_t hash = 0; };
+std::unordered_map<VkShaderModule, ModIo> g_mod_io;
+// UV-slot verdicts over every pipeline created, and the distinct mismatching VS/FS pairs.
+std::atomic<uint32_t> g_uv_count[5];
+std::unordered_map<uint64_t, uint32_t> g_uv_bad_pairs;   // hash(vs, fs) -> count
 struct ModInfo {
   int uv = -1;               // UV output location (-1 none)
   VsInstancing inst;         // class-A position path (spirv_xfb.h)
@@ -83,6 +91,9 @@ struct PipeInfo {
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
   VkPrimitiveTopology topo;
   int uv = -1;               // VS output location captured as UV (stride 24)
+  uint8_t uv_match = 0;      // UvMatch of the VS/FS pair (spirv_xfb.h)
+  int8_t uv_fs = -1;         // the FS's float2 input location
+  uint8_t uv_vs_comps = 0;   // components the VS writes there
   bool restart = true;       // primitive restart enabled, or dynamic (unknown)
   InstPipe inst;             // instancing layout (Track D BVH split)
 };
@@ -962,7 +973,12 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   t_last_uv = -1;
   t_last_inst = VsInstancing{};
   t_last_hash = 0;
+  t_last_io.clear();
+  t_last_model = -1;
   if (!g_on) return false;
+  // Every module's interface (vertex and fragment): the UV-slot check at pipeline creation.
+  t_last_model = stage_io(ci->pCode, ci->codeSize / 4, t_last_io);
+  t_last_hash = hash64(ci->pCode, ci->codeSize);
   bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv);
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
@@ -983,8 +999,10 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
 }
 
 void geo_note_module(VkShaderModule m, bool patched) {
-  if (!patched) return;
+  if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
+  if (t_last_model == 0 || t_last_model == 4) g_mod_io[m] = ModIo{t_last_model, std::move(t_last_io), t_last_hash};
+  if (!patched) return;
   g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash};   // same thread, right after geo_patch_shader
 }
 
@@ -992,6 +1010,7 @@ void geo_forget_module(VkShaderModule m) {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   g_patched.erase(m);
+  g_mod_io.erase(m);
 }
 
 // The instancing layout of a class-A pipeline (Track D BVH split): its three
@@ -1056,6 +1075,19 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   return ip;
 }
 
+void geo_uv_summary() {
+  if (!g_on || g_stride < 24) return;
+  size_t pairs;
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    pairs = g_uv_bad_pairs.size();
+  }
+  log("[geo] UV slots of the patched pipelines so far: %u match the FS, %u the FS's UV is a wider VS output, %u the FS "
+      "reads its UV elsewhere, %u FS without a float2 input, %u unknown (libraries); %zu distinct mismatching VS/FS pairs",
+      g_uv_count[UV_OK].load(), g_uv_count[UV_VS_WIDER].load(), g_uv_count[UV_FS_ELSEWHERE].load(),
+      g_uv_count[UV_FS_NONE].load(), g_uv_count[UV_UNKNOWN].load(), pairs);
+}
+
 void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, const VkPipeline* out) {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
@@ -1063,8 +1095,11 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     if (!out[i]) continue;
     PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
     bool vs_patched = false, other = false;
+    const ModIo *vio = nullptr, *fio = nullptr;
     for (uint32_t s = 0; s < cis[i].stageCount; ++s) {
       const auto& st = cis[i].pStages[s];
+      auto io = st.module ? g_mod_io.find(st.module) : g_mod_io.end();
+      if (io != g_mod_io.end()) (st.stage == VK_SHADER_STAGE_VERTEX_BIT ? vio : fio) = &io->second;
       if (st.stage == VK_SHADER_STAGE_VERTEX_BIT) {
         auto it = st.module ? g_patched.find(st.module) : g_patched.end();
         vs_patched = it != g_patched.end();
@@ -1078,6 +1113,26 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
       }
     }
     pi.xfb = vs_patched && !other;
+    // The UV-slot check: does the fragment shader read its texture coordinate where the
+    // captured UV came from (TRACK_D 13.19)? Every pipeline, for every user of captured UVs.
+    if (pi.xfb && g_stride >= 24 && vio && fio) {
+      int fs_uv = -1;
+      uint32_t comps = 0;
+      const UvMatch m = uv_match(pi.uv, vio->io, fio->io, &fs_uv, &comps);
+      pi.uv_match = m;
+      pi.uv_fs = int8_t(fs_uv);
+      pi.uv_vs_comps = uint8_t(comps);
+      ++g_uv_count[m];
+      if (m == UV_VS_WIDER || m == UV_FS_ELSEWHERE) {
+        const uint64_t key = vio->hash * 1099511628211ull ^ fio->hash;
+        if (g_uv_bad_pairs[key]++ == 0 && g_uv_bad_pairs.size() <= 64)
+          log("[geo] UV slot mismatch: VS %016llx captures location %d as UV, FS %016llx reads its float2 at location "
+              "%d (the VS writes %u components there)",
+              (unsigned long long)vio->hash, pi.uv, (unsigned long long)fio->hash, fs_uv, comps);
+      }
+    } else if (pi.xfb && g_stride >= 24) {
+      ++g_uv_count[UV_UNKNOWN];
+    }
     bool dyn_topo = false;
     if (cis[i].pDynamicState)
       for (uint32_t d = 0; d < cis[i].pDynamicState->dynamicStateCount; ++d)
@@ -1267,7 +1322,8 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
       e->ubo_off = b.offset;
     }
   }
-  EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride};
+  EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
+              pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
   VkBuffer soup = VK_NULL_HANDLE;
   VkDeviceSize off = 0, bytes = 0;
   uint32_t prims = 0;

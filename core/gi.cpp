@@ -1731,7 +1731,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);
   }
   // D-EM (core/emissive.cpp): rt_debug 16-18 are its views (its modes 6-8), else the check.
-  const bool em_view = pc.rt_debug >= 16 && pc.rt_debug <= 18;
+  const bool em_view = pc.rt_debug >= 16 && pc.rt_debug <= 20;
   if (em_view || em_check_due())
     em_debug(cmd, s.cam, s.vp, s.dep, s.dif, s.spe, s.l_cam2, g_w, g_h, em_view ? pc.rt_debug - 10 : 0);
   timestamp(cmd, 3);

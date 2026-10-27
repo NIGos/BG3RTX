@@ -537,7 +537,12 @@ struct EmDrawIn {
   bool restart;
   const InstPipe* inst;      // class-A instancing layout, or nullptr
   uint32_t stride;           // XFB bytes per vertex
+  uint8_t uv_match = 0;      // UvMatch of the VS/FS pair (spirv_xfb.h): 1 ok, 2/3 the wrong UV captured
+  int uv = -1;               // captured VS output location
+  int uv_fs = -1;            // the FS's float2 input location
+  uint32_t uv_vs_comps = 0;  // components the VS writes at uv_fs
 };
+void geo_uv_summary();       // logs the UV-slot verdicts over all pipelines (geocapture.cpp)
 void em_note_draw(const CmdState* s);   // an effects-pass draw while capture is off (timing only)
 bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const EmDrawIn& in, VkBuffer* soup,
              VkDeviceSize* off, VkDeviceSize* bytes, uint32_t* prims);

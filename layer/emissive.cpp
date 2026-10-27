@@ -126,7 +126,12 @@ struct Census {
     vt_missing += o.vt_missing, cb_unreadable += o.cb_unreadable, pulse_no_time += o.pulse_no_time;
   }
 };
-struct FsCount { uint32_t draws = 0, captured = 0; };
+struct FsCount {
+  uint32_t draws = 0, captured = 0;
+  uint32_t uv[5] = {};              // draws per UvMatch (spirv_xfb.h)
+  int uv_loc = -1, uv_fs = -1;      // the last draw's captured location and the FS's UV location
+  uint32_t uv_vs_comps = 0;
+};
 std::map<uint64_t, FsCount> g_fs_window;   // per fragment shader over the log window
 uint32_t g_stale = 0;                      // command buffers re-recorded before submission
 uint32_t g_busy = 0;                       // builds skipped: no free command buffer of our own
@@ -1420,6 +1425,10 @@ bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const Em
   if (mat.kind != kMatEmissive && mat.kind != kMatForward && !backdrop && !decal) return false;
   FsCount& fc = g_fs_window[s->fs];
   ++fc.draws;
+  ++fc.uv[in.uv_match < 5 ? in.uv_match : 0];
+  fc.uv_loc = in.uv;
+  fc.uv_fs = in.uv_fs;
+  fc.uv_vs_comps = in.uv_vs_comps;
   if (!in.xfb) return ++C.skip_xfb, false;
   if (a.kind > 1) return ++C.skip_indirect, false;
   const bool list = in.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -1856,20 +1865,27 @@ void em_on_present() {
       (unsigned long long)g_as_refits, (unsigned long long)g_as_builds, (unsigned long long)g_as_grown);
   g_as_refits = g_as_builds = 0;
   {
-    std::string line;
-    int shown = 0;
+    // Every family, with its UV-slot verdict (TRACK_D 13.19): whether the captured UV is the
+    // one its fragment shader reads.
+    std::vector<std::string> items;
     std::vector<std::pair<uint32_t, uint64_t>> order;
     for (auto& [fs, fc] : g_fs_window) order.push_back({fc.draws, fs});
     std::sort(order.rbegin(), order.rend());
+    static const char* kUv[5] = {"uv unknown", "uv ok", "UV WRONG: the FS's UV is a wider VS output",
+                                 "UV WRONG: the FS reads its UV elsewhere", "no FS uv"};
     for (auto& [d, fs] : order) {
-      if (shown++ >= 16) break;
       const FsCount& fc = g_fs_window[fs];
-      char buf[256];
-      snprintf(buf, sizeof buf, "%s %08x %s %.1f/%.1f", line.empty() ? "" : ";", unsigned(fs >> 32),
-               material(fs).name.c_str(), fc.draws / nb, fc.captured / nb);
-      line += buf;
+      int worst = 0;
+      for (int k = 0; k < 5; ++k)
+        if (fc.uv[k] && (worst == 0 || k == 2 || k == 3)) worst = k;
+      char buf[320];
+      snprintf(buf, sizeof buf, "%08x %s %.1f/%.1f, %s (captured location %d, FS location %d, VS writes %u there)",
+               unsigned(fs >> 32), material(fs).name.c_str(), fc.draws / nb, fc.captured / nb, kUv[worst], fc.uv_loc,
+               fc.uv_fs, fc.uv_vs_comps);
+      items.push_back(buf);
     }
-    if (!line.empty()) log("[em] emissive families (draws/captured per build):%s", line.c_str());
+    if (!items.empty()) log_list("[em] emissive families (draws/captured per build)", items);
+    geo_uv_summary();
   }
   if (w.dbg_frames) {
     double ours = 0, game = 0;

@@ -28,6 +28,8 @@ struct Push {
   float thr;        // effects-target luminance counted as emission (rt_em_fx_thr)
   uint32_t has_cam2;   // binding 6 holds the lighting's set 0 b2 (absolute camera position)
   float pad[2];
+  uint32_t fam;      // rt_em_dbg_fam: views 19/20 (modes 9/10)
+  uint32_t pad2[3];
 };
 
 bool ensure(VkDescriptorSetLayout em_layout) {
@@ -111,7 +113,7 @@ void layout_barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkIm
 void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, const Bg3Binding& depth,
               const Bg3Binding& diffuse, const Bg3Binding& specular, const Bg3Binding& cam2, uint32_t w, uint32_t h,
               uint32_t mode) {
-  if (!host->rt_emissive || (mode != 0 && (mode < 6 || mode > 8))) return;
+  if (!host->rt_emissive || (mode != 0 && (mode < 6 || mode > 10))) return;
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
   VkDescriptorSet set = VK_NULL_HANDLE;
   Bg3EmissiveInfo info{};
@@ -149,7 +151,11 @@ void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, 
     }
   }
   Push pc{{w, h}, mode, host->cfg_float("rt_em_tol", 0.01f), host->cfg_float("rt_em_fx_thr", 0.05f),
-          has_cam2 ? 1u : 0u, {float(host->cfg_int("rt_em_filter", 0)), host->cfg_float("rt_em_aniso", 16.0f)}};
+          has_cam2 ? 1u : 0u, {float(host->cfg_int("rt_em_filter", 0)), host->cfg_float("rt_em_aniso", 16.0f)},
+          // The family's FS hash, top 32 bits, as two 16-bit decimal keys (cfg_int is decimal):
+          // 304be1c7 is rt_em_dbg_fam_hi=12363 (0x304b), rt_em_dbg_fam_lo=57799 (0xe1c7).
+          (uint32_t(host->cfg_int("rt_em_dbg_fam_hi", 0) & 0xffff) << 16) | uint32_t(host->cfg_int("rt_em_dbg_fam_lo", 0) & 0xffff),
+          {0, 0, 0}};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;

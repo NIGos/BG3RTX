@@ -123,6 +123,83 @@ inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& 
   return true;
 }
 
+// ---- Stage interface (the UV-slot check, docs/TRACK_D_RT.md 13.19) ----
+// The user-defined Input and Output variables of a module's first entry point: Location,
+// Component, component count of a 32-bit float scalar/vector (0 for anything else: ints,
+// matrices, arrays, structs). Returns the execution model (0 vertex, 4 fragment) or -1.
+struct StageIo {
+  uint32_t loc = 0, comp = 0, comps = 0;
+  bool output = false;
+};
+inline int stage_io(const uint32_t* code, size_t words, std::vector<StageIo>& io) {
+  io.clear();
+  if (words < 5 || code[0] != 0x07230203) return -1;
+  int model = -1;
+  std::vector<uint32_t> f32;
+  std::vector<std::pair<uint32_t, uint32_t>> vec;    // type id, components (f32 vectors)
+  std::vector<std::pair<uint32_t, uint32_t>> ptr;    // pointer id, pointee
+  struct Var { uint32_t id, type; bool output; };
+  std::vector<Var> vars;
+  std::vector<std::pair<uint32_t, uint32_t>> loc, cmp;   // id, value
+  std::vector<uint32_t> builtin;
+  for (size_t p = 5; p < words;) {
+    const uint32_t n = code[p] >> 16, op = code[p] & 0xffff;
+    if (!n || p + n > words) return -1;
+    const uint32_t* a = code + p;
+    if (op == 15 && n >= 3 && model < 0) model = int(a[1]);
+    if (op == 22 && n >= 3 && a[2] == 32) f32.push_back(a[1]);
+    if (op == 23 && n >= 4 && std::find(f32.begin(), f32.end(), a[2]) != f32.end()) vec.push_back({a[1], a[3]});
+    if (op == 32 && n >= 4 && (a[2] == 1 || a[2] == 3)) ptr.push_back({a[1], a[3]});
+    if (op == 59 && n >= 4 && (a[3] == 1 || a[3] == 3)) vars.push_back({a[2], a[1], a[3] == 3});
+    if (op == 71 && n >= 4 && a[2] == 30) loc.push_back({a[1], a[3]});
+    if (op == 71 && n >= 4 && a[2] == 31) cmp.push_back({a[1], a[3]});
+    if (op == 71 && n >= 3 && a[2] == 11) builtin.push_back(a[1]);
+    p += n;
+  }
+  for (const Var& v : vars) {
+    if (std::find(builtin.begin(), builtin.end(), v.id) != builtin.end()) continue;
+    auto l = std::find_if(loc.begin(), loc.end(), [&](auto& x) { return x.first == v.id; });
+    if (l == loc.end()) continue;
+    StageIo s;
+    s.loc = l->second;
+    s.output = v.output;
+    auto c = std::find_if(cmp.begin(), cmp.end(), [&](auto& x) { return x.first == v.id; });
+    if (c != cmp.end()) s.comp = c->second;
+    auto pt = std::find_if(ptr.begin(), ptr.end(), [&](auto& x) { return x.first == v.type; });
+    if (pt != ptr.end()) {
+      if (std::find(f32.begin(), f32.end(), pt->second) != f32.end()) s.comps = 1;
+      auto vv = std::find_if(vec.begin(), vec.end(), [&](auto& x) { return x.first == pt->second; });
+      if (vv != vec.end()) s.comps = vv->second;
+    }
+    io.push_back(s);
+  }
+  return model;
+}
+
+// The UV-slot verdict of a VS/FS pair, from the VS output captured as UV (`uv`, -1 none)
+// and the fragment shader's inputs. The game's FS reads its texture coordinate as a float
+// 2-vector; its lowest such input is taken as "the" UV.
+enum UvMatch : uint8_t {
+  UV_UNKNOWN = 0,      // no FS seen (pipeline libraries) or nothing captured
+  UV_OK = 1,           // the FS reads a float2 at the captured location
+  UV_VS_WIDER = 2,     // the FS's UV location is a wider VS output (vec3/vec4): a different output was captured
+  UV_FS_ELSEWHERE = 3, // the FS reads its float2 at another location than the captured one
+  UV_FS_NONE = 4,      // the FS reads no float2 input (no UV to compare)
+};
+inline UvMatch uv_match(int uv, const std::vector<StageIo>& vs, const std::vector<StageIo>& fs, int* fs_uv,
+                        uint32_t* vs_comps_at_fs_uv) {
+  *fs_uv = -1;
+  *vs_comps_at_fs_uv = 0;
+  for (const StageIo& s : fs)
+    if (!s.output && s.comps == 2 && s.comp == 0 && (*fs_uv < 0 || int(s.loc) < *fs_uv)) *fs_uv = int(s.loc);
+  if (*fs_uv < 0) return UV_FS_NONE;
+  for (const StageIo& s : vs)
+    if (s.output && int(s.loc) == *fs_uv && s.comp == 0) *vs_comps_at_fs_uv = s.comps;
+  if (uv < 0) return UV_UNKNOWN;
+  if (*fs_uv == uv) return UV_OK;
+  return *vs_comps_at_fs_uv > 2 ? UV_VS_WIDER : UV_FS_ELSEWHERE;
+}
+
 // ---- Instancing analysis (Track D BVH split, layer/bvhsplit.cpp) ----
 // BG3's class-A vertex shaders (docs/TRACK_D_RT.md 1) place a mesh with a
 // per-instance affine matrix whose three rows are vertex inputs:

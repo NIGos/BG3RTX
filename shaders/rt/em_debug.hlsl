@@ -29,7 +29,7 @@ struct Camera2 { float4 v[14]; };   // the lighting's set 0 b2: v[13].xyz = abso
 [[vk::binding(5, 0)]] Texture2D<float4> gFx;     // the game's effects target
 [[vk::binding(6, 0)]] ConstantBuffer<Camera2> cam2;
 
-struct Push { uint2 full; uint mode; float tol; float thr; uint has_cam2; float filt; float aniso; };   // filt: rt_em_filter
+struct Push { uint2 full; uint mode; float tol; float thr; uint has_cam2; float filt; float aniso; uint fam; uint pad[3]; };   // filt: rt_em_filter; fam: rt_em_dbg_fam
 [[vk::push_constant]] Push pc;
 
 float3 ray_at(float2 uv) {
@@ -144,6 +144,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
       } else if (bright) {
         c = float3(100, 0, 100);   // the game's only (magenta)
       }
+    } else if (pc.mode == 9 || pc.mode == 10) {
+      // One family (rt_em_dbg_fam, the top 32 bits of its FS hash) alone: ours (9) or the
+      // game's effects target (10) at its hits, black elsewhere; a pair of traces compares
+      // them pixel by pixel offline.
+      const bool mine = hit && rec < 1024 && emRecs[rec].fs_hi == pc.fam;
+      c = mine ? (pc.mode == 9 ? L : fx) : float3(0, 0, 0);
     }
   }
   if (pc.mode == 0) return;   // statistics only (the calibration's check)
