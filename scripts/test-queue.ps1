@@ -51,6 +51,20 @@ $pending, $running, $done = "pending", "running", "done" | ForEach-Object { Join
 New-Item -ItemType Directory -Force $pending, $running, $done | Out-Null
 $jsonl = Join-Path $q "results.jsonl"
 $md = Join-Path $q "results.md"
+
+# Appends to a results file, retrying while a reader holds it open (an editor, an agent's
+# Select-String): a locked file must never stop the queue.
+function Write-Record {
+  param([Parameter(Mandatory = $true)][string]$Path, [Parameter(ValueFromPipeline = $true)]$Line)
+  begin { $buf = New-Object System.Collections.Generic.List[string] }
+  process { if ($null -ne $Line) { $buf.Add([string]$Line) } }
+  end {
+    for ($try = 0; $try -lt 40; $try++) {
+      try { [IO.File]::AppendAllLines($Path, $buf); return } catch { Start-Sleep -Milliseconds 250 }
+    }
+    Write-Warning "could not write $Path after 10 s"
+  }
+}
 # Per-run logs; pruned after 3 days (docs: disk hygiene).
 $logs = Join-Path $q "logs"
 New-Item -ItemType Directory -Force $logs | Out-Null
@@ -200,7 +214,7 @@ function Start-Session($job, $tree, [int]$timeout) {
       if (-not $proc.WaitForExit(120000)) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
     }
     $why = Get-RunEnded $out
-    "- session $id did not become ready: $why" | Add-Content $md
+    "- session $id did not become ready: $why" | Write-Record $md
     return @{ failed = $why }
   }
   $log = Join-Path $tree "bg3rtx.log"
@@ -210,7 +224,7 @@ function Start-Session($job, $tree, [int]$timeout) {
           coreMtime = (Get-Item (Join-Path $tree "bin\bg3rtx_core.dll")).LastWriteTimeUtc
           generation = (Get-LastGeneration $log); scanPos = (Get-LogSize $log) }
   $s.base = [IO.File]::ReadAllText($s.ini)
-  "- session ${id}: ready after $($s.readySec)s (core generation $($s.generation), $($job.save))" | Add-Content $md
+  "- session ${id}: ready after $($s.readySec)s (core generation $($s.generation), $($job.save))" | Write-Record $md
   $script:sess = $s
   $s
 }
@@ -227,7 +241,7 @@ function Stop-Session([string]$reason) {
   Remove-Item $s.request -ErrorAction SilentlyContinue
   $saved = $s.readySec * [Math]::Max(0, $s.runs - 1)
   "- session $($s.id) closed ($reason): $($s.runs) run(s), launch to ready $($s.readySec)s, about ${saved}s saved; $(Get-RunEnded $s.out)" |
-    Add-Content $md
+    Write-Record $md
 }
 
 # One run inside the session: settings, warm-up, traces, slice of the log.
@@ -356,7 +370,7 @@ function Run-Job($file) {
   $timeout = if ($job.timeout) { [int]$job.timeout } else { 300 }
   $key = Get-SessionKey $job
   if ($script:sess -and $script:sess.key -ne $key) { Stop-Session "next job differs" }
-  "## $name ($(Get-Date -Format 'HH:mm'), $repeat run(s), $($job.save), $(@($job.set) -join ','))$(if ($key) { ' [session]' })" | Add-Content $md
+  "## $name ($(Get-Date -Format 'HH:mm'), $repeat run(s), $($job.save), $(@($job.set) -join ','))$(if ($key) { ' [session]' })" | Write-Record $md
   for ($i = 1; $i -le $repeat; $i++) {
     $t0 = Get-Date
     $before = Stamp $tree
@@ -373,7 +387,7 @@ function Run-Job($file) {
           $r = @{ outcome = "Run ended: session did not start: $($s.failed)"; nv = (Get-Nv153 $tree $t0); dumps = (Get-Dumps $tree $t0)
                   keptLog = $null; captures = @(); lines = @(); session = "failed"; generation = $null; saved = 0 }
         } elseif (-not $s) {
-          "- (layer in this tree has no session support: run alone)" | Add-Content $md
+          "- (layer in this tree has no session support: run alone)" | Write-Record $md
         }
       }
       if (-not $r -and $script:sess) { $r = Invoke-SessionRun $job $name $i $tree $traces }
@@ -404,11 +418,11 @@ function Run-Job($file) {
                        outcome = $r.outcome; nv153 = $r.nv; dumps = @($r.dumps); build = $before
                        build_changed = ($before -ne $after); log = $r.keptLog; captures = $caps; lines = $lines
                        session = $r.session; core_gen = $r.generation; saved_sec = $r.saved }
-    ($rec | ConvertTo-Json -Compress -Depth 4) | Add-Content $jsonl
+    ($rec | ConvertTo-Json -Compress -Depth 4) | Write-Record $jsonl
     $flag = if ($before -ne $after) { " BUILD CHANGED" } else { "" }
     $sessText = if ($r.session) { " session=$($r.session) gen=$($r.generation) saved~$($r.saved)s" } else { "" }
-    "- run ${i}: $($r.outcome) nv153=$($r.nv)$(if ($r.dumps) { " dump=$($r.dumps -join ',')" })$sessText$flag" | Add-Content $md
-    $lines | ForEach-Object { "  - ``$_``" } | Add-Content $md
+    "- run ${i}: $($r.outcome) nv153=$($r.nv)$(if ($r.dumps) { " dump=$($r.dumps -join ',')" })$sessText$flag" | Write-Record $md
+    $lines | ForEach-Object { "  - ``$_``" } | Write-Record $md
     if ($r.fault) { Stop-Session "fault: $($r.fault)" }
     if ($job.stop_on_dump -and $r.dumps) { break }
   }
@@ -441,7 +455,7 @@ $idle = Get-Date
 try {
   while ($true) {
     if (-not $DryRun -and -not $script:sess -and (Test-SelfChanged)) {
-      "- runner: test-queue.ps1 changed, restarting on the new version" | Add-Content $md
+      "- runner: test-queue.ps1 changed, restarting on the new version" | Write-Record $md
       Start-Process powershell -WindowStyle Hidden -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass",
         "-File", "`"$selfPath`"", "-IdleExitSec", $IdleExitSec
       break
@@ -456,7 +470,7 @@ try {
     $file = Move-Item $next.FullName (Join-Path $running $next.Name) -PassThru
     try { Run-Job $file }
     catch {
-      "- job error: $($_.Exception.Message)" | Add-Content $md
+      "- job error: $($_.Exception.Message)" | Write-Record $md
       Stop-Session "job error"
     }
     Move-Item $file.FullName (Join-Path $done $file.Name) -Force
