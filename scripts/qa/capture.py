@@ -67,15 +67,19 @@ def plan(temporal=3, reference=False):
 
 
 def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, reference=False,
-              interval=240, timeout=900, raw=False, log=print):
-    """Runs the game once and moves each trace's dumps.json + img/ to out_dir/raw/<i>_<name>/."""
+              interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False, shared=False):
+    """Runs the game once and moves each trace's dumps.json + img/ to out_dir/raw/<i>_<name>/.
+
+    tag: auto-run.ps1 -Tag, so two scenes can run at once from this checkout (one tag per
+    lane). shared: auto-run.ps1 -Shared (another game may share the GPU; run.json then
+    says "exclusive": false); otherwise the run is exclusive and run_s is a timing."""
     phases = plan(temporal, reference)
     out_dir.mkdir(parents=True, exist_ok=True)
-    spec = {"start": r"\[trace\] frame \d+ written", "phases": [], "timeout": timeout + 3600,
+    spec = {"start": r"\[trace\] frame \d+ written", "phases": [], "timeout": timeout + 3600, "tag": tag,
             "after_trace": [{"name": n, "set": s} for n, s in phases[1:]]}
     spec_path = out_dir / "phases.json"
     spec_path.write_text(json.dumps(spec, indent=1))
-    marks = CAPS / "phases.log"
+    marks = CAPS / (f"phases.{tag}.log" if tag else "phases.log")
     marks.unlink(missing_ok=True)
 
     sets = [f"{k}={v}" for k, v in ALL_ON.items()]
@@ -91,17 +95,26 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
         cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / "scripts" / "auto-run.ps1"),
                "-NoBuild", "-NoAnalyze", "-Background", "-Save", save, "-Traces", str(len(phases)),
                "-TimeoutSec", str(timeout), "-Set", ",".join(sets)]
+        if tag:
+            cmd += ["-Tag", tag]
+        if exclusive:
+            cmd += ["-Exclusive"]
+        elif shared:
+            cmd += ["-Shared"]
         log(f"[{scene_id}] game run: {len(phases)} traces ({', '.join(n for n, _ in phases)})")
         r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
         (out_dir / "auto-run.out").write_text(r.stdout + r.stderr)
     finally:
         lp.terminate()
     ok = "Run ended: done" in r.stdout
-    caps = sorted(p for p in CAPS.iterdir() if re.fullmatch(r"\d{8}-\d{6}", p.name) and p.stat().st_mtime >= t0 - 1
+    m = re.search(r"Run mode: (\w+)", r.stdout)
+    mode = m.group(1) if m else "?"
+    cap_re = rf"\d{{8}}-\d{{6}}-{re.escape(tag)}" if tag else r"\d{8}-\d{6}"
+    caps = sorted(p for p in CAPS.iterdir() if re.fullmatch(cap_re, p.name) and p.stat().st_mtime >= t0 - 1
                   and (p / "done.txt").exists())
     if marks.exists():
         shutil.copy(marks, out_dir / "phases.log")
-    log(f"[{scene_id}] run {'done' if ok else 'INCOMPLETE'} in {time.time() - t0:.0f} s, {len(caps)} traces")
+    log(f"[{scene_id}] run {'done' if ok else 'INCOMPLETE'} in {time.time() - t0:.0f} s, {len(caps)} traces ({mode})")
     traces = {}
     raw = out_dir / "raw"
     raw.mkdir(exist_ok=True)
@@ -118,14 +131,14 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
         shutil.rmtree(cap, ignore_errors=True)
     meta = {"scene": scene_id, "save": save, "ok": ok and len(caps) == len(phases), "full_res": full_res,
             "phases": [[n, s] for n, s in phases], "traces": traces, "run_s": round(time.time() - t0, 1),
-            "log_tail": _log_lines()}
+            "run_mode": mode, "exclusive": mode == "exclusive", "log_tail": _log_lines(tag)}
     (out_dir / "run.json").write_text(json.dumps(meta, indent=1))
     return meta
 
 
-def _log_lines():
+def _log_lines(tag=""):
     """Warnings from the layer log worth keeping next to the report."""
-    log = ROOT / "bg3rtx.log"
+    log = ROOT / (f"bg3rtx.{tag}.log" if tag else "bg3rtx.log")
     if not log.exists():
         return []
     keep = []

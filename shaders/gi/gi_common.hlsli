@@ -85,7 +85,7 @@ struct Push {
   uint ls_shadowed;        // lights with a game shadow map: 0 keep, 1 replace, 2 min
   uint ls_debug;
   uint ls_stats;
-  uint ls_pass;            // reserved
+  uint ls_pass;            // ls_check: bit 0 the join's own check, bit 1 the reference against itself (check pass)
   uint ls_soft;            // 1 sample the sphere (RR on), 0 hard
   float ls_strength;
   uint ls_has_mask;

@@ -41,5 +41,7 @@ if (-not $Exe) {
 }
 $wd = Split-Path $Exe
 Write-Host "Launching $Exe $GameArgs with $($env:VK_INSTANCE_LAYERS)"
-if ($GameArgs.Count) { Start-Process -FilePath $Exe -WorkingDirectory $wd -ArgumentList $GameArgs }
-else { Start-Process -FilePath $Exe -WorkingDirectory $wd }
+# Returns the started process: auto-run.ps1 tracks only its own game, by this PID
+# (with SteamAppId set the game does not relaunch itself through Steam).
+if ($GameArgs.Count) { Start-Process -FilePath $Exe -WorkingDirectory $wd -ArgumentList $GameArgs -PassThru }
+else { Start-Process -FilePath $Exe -WorkingDirectory $wd -PassThru }

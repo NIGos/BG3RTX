@@ -3,7 +3,7 @@
 // The runtime lights near the camera (the Script Extender bridge merged with the asset
 // database, Bg3AssetDbApi v2) are uploaded every frame into a host-visible ring.
 // rt_local_shadows_match.hlsl joins them to the lighting's light array (b25) by absolute
-// position and radius and writes one record per array slot into a 4096 x 1 RGBA32UI
+// position and radius and writes one record per array slot into row 0 of a 4096 x 3 RGBA32UI
 // image: the light's source radius, flags, owner and type. rt_local_shadows.hlsl reads
 // it for each light it shadows.
 #pragma once

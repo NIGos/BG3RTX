@@ -93,6 +93,7 @@ def analyze_scene(d: Path, pool):
         shutil.rmtree(crops)
     crops.mkdir()
     res = {"scene": meta["scene"], "save": meta["save"], "run_ok": meta["ok"], "run_s": meta.get("run_s"),
+           "exclusive": meta.get("exclusive", True),
            "traces": list(traces), "checks": [], "crops": [], "notes": [],
            # Layer counters that explain RT geometry artifacts (alpha-test fallbacks, dropped draws).
            "log": [l for l in meta.get("log_tail", []) if "[alpha]" in l or "RT capture" in l][-2:]}
@@ -402,7 +403,7 @@ def write_report(results, out: Path, wall_s):
     for r in results:
         sc = r["scene"]
         rows.append(f"<h2 id='{sc}'>{sc} {html.escape(r['save'])}</h2><p class='sum'>{html.escape(r['summary'])}</p>")
-        rows.append(f"<p>Traces: {', '.join(r['traces'])}. Game run {r.get('run_s')} s, analysis {r.get('analysis_s')} s.</p>")
+        rows.append(f"<p>Traces: {', '.join(r['traces'])}. Game run {r.get('run_s')} s{'' if r.get('exclusive', True) else ' (shared run: not a timing)'}, analysis {r.get('analysis_s')} s.</p>")
         if r.get("notes"):
             rows.append("<p>Notes: " + html.escape("; ".join(r["notes"])) + "</p>")
         for l in r.get("log", []):

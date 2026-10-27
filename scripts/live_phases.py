@@ -2,7 +2,7 @@
 
     py -3 scripts/live_phases.py <phases.json>
 
-phases.json: {"start": "<log regex that starts the clock>",
+phases.json: {"start": "<log regex that starts the clock>", "tag": "<auto-run -Tag, optional>",
               "phases": [{"at": seconds, "set": {"key": "value", ...}, "name": "..."}, ...],
               "after_trace": [{"set": {...}, "name": "..."}, ...]}
 `at` is relative to the first log line matching `start` (searched only in lines
@@ -18,10 +18,12 @@ import time
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
-ini = root / "captures" / "auto.ini"
-log = root / "bg3rtx.log"
 spec = json.loads(Path(sys.argv[1]).read_text())
-marks = root / "captures" / "phases.log"
+# "tag": the auto-run.ps1 -Tag of the run this drives (two runs can share a checkout).
+tag = "." + spec["tag"] if spec.get("tag") else ""
+ini = root / "captures" / f"auto{tag}.ini"
+log = root / f"bg3rtx{tag}.log"
+marks = root / "captures" / f"phases{tag}.log"
 
 
 def apply(settings, name):

@@ -578,6 +578,106 @@ RTX 5090, 2560x1067, GPU timestamps, 300-frame medians/averages).
   + 0.83–0.93M alpha triangles, refit 0.88 ms (convert 0.40 at stride 24),
   rebuild 3.4 ms; XFB buffer 384 MB, alpha region 64 MB.
 
+### 7.1b Alpha test at secondary hits: grass fix (2026-10-26)
+
+**Symptom.** Campsite: black, sharp-edged polygons on the ground under grass
+(GI visibility 0; gone only with `gi=0`), the same under a twig in reflections,
+and sun RT shadows of grass shaped like the card, not the blades.
+
+**Root cause.** The grass and ground-cover family (`73849471`, 148 prepass draws
+in Campsite; also `2f1b0ffd`, `b2d72ea7` and 21 other shaders, 24 in all) was
+**not in `alpha_fs.txt`**, so its draws went into the TLAS as opaque geometry.
+Its Granite alpha test keeps the selected sample in a `vec4` and reads `.w` from
+it in the next statement (`_225 = mix(textureGrad(...), vec4(1,0,0,1), bvec4(... != 2202.0)); _226 = _225.w`);
+`alpha_table.py` only recognised the inline `...2202.0)).w`. Flat cards lying
+on the ground then blocked every GI ray from the pixels under them at t ~ 0.
+Evidence (same view, `rt_debug=5`): the patches are "in front, opaque
+geometry" (purple), not alpha-tested hits; `rt_debug=4` shows visibility 0 in
+the same polygons; with `rt_stats=1` the alpha path itself returned solid only
+by evaluation (no record 0%, no UV 0%, prim out of range 0% in steady state,
+tile set not resident 0%, page from a coarser level ~1%), so none of the
+fallbacks was the cause. Alpha-tested draws per frame went 108 → 412 once the
+family was recognised. This is in the TLAS build, so it fixed every ray type
+(GI, AO, sun and local shadows, reflections) at once.
+
+**Second table bug (fixed, not the Campsite cause).** 76 vt shaders discard
+twice: an early-out `alpha * mask < 0.001` (or 0.01), then
+`fade * alpha * mask < 0.5`. The table took the first test's cut-off, so every
+texel with any coverage was solid (whole cards solid at a filtered mip).
+`effective_cut()` now takes the strictest constant cut-off of the tests that
+keep the alpha as a factor (through `mix` only when both operands carry it,
+`bvec` selects of the Granite sample allowed; UBO cut-offs and
+`gl_FragCoord` screen-door dithers skipped). Line format: `cut=<effective>
+cut0=<first>`; `rt_alpha_cut=0` (live) restores the first.
+
+[img/alpha_campsite_crop0.png](img/alpha_campsite_crop0.png) (before | after | diff x4, render-res compose),
+[img/alpha_campsite_crop1.png](img/alpha_campsite_crop1.png) (sun shadow of a twig clump: a rectangle before, the twigs after),
+[img/alpha_campsite_vis_crop0.png](img/alpha_campsite_vis_crop0.png) (`rt_debug=4`),
+[img/alpha_campsite_primary_crop0.png](img/alpha_campsite_primary_crop0.png) (`rt_debug=5`: purple opaque-in-front gone).
+
+**Evaluation changes in `rt_common.hlsli`** (live switches, all on by default):
+- `rt_alpha_stochastic=1`: the mip comes from the ray cone with the game's own
+  Granite formula; the indirection entry already points at the finest resident
+  ancestor of a missing page (its tile scale `e & 15` is smaller), and the read
+  reports that level. Where the read is blurred (level > 1 above mip 0), the
+  hard cut-off blends over one level into a hashed threshold (pcg3d of the hit's
+  uv bits, the triangle and the frame), so P(solid) tends to the filtered alpha,
+  i.e. the coverage: partial coverage of distant grass is unbiased under RR
+  instead of all-solid or all-clear. Levels 0-1 keep the game's exact cut-off.
+- `rt_alpha_unknown=1`: a candidate whose alpha cannot be read (no record, no
+  UV, prim out of range, non-finite, non-resident tile set) lets visibility rays
+  (GI, AO, reflections) through and stops shadow rays. Evidence: these cases
+  are 0% in steady state and 0.6-2% of visibility candidates for a frame after
+  a capture change (prim >= tris: an InstInfo/BLAS mismatch, not
+  investigated further); a false "solid" there gives a hard black polygon in
+  GI (the artefact class above), a false "clear" in a shadow gives a light
+  leak, which is the worse error for shadows.
+- `rt_stats=1` logs per ray class (`alpha candidates of visibility/shadow
+  rays`): each fallback, vt/tex solid/clear, records with a loose first
+  cut-off, blur level >= 2 / >= 4, stochastic share, pages from a coarser level.
+
+**QA harness** (`python -m scripts.qa run --scenes S3`, Campsite; "before" is the
+same build with the old table and `rt_alpha_cut/stochastic/unknown=0`):
+
+| detector (‰ of the frame) | before | after |
+|---|---|---|
+| hard-dark, GI (final / lighting) | 10.9 / 2.35 | **0 / 0** |
+| hard-dark, all RT (final) | 20.4 | **0** |
+| sun extra casters | 15.8 | 3.3 |
+| flicker excess area (std on/off) | 76.4 (1.73) | 15.6 (1.28) |
+| brightening, GI (final) | 2.26 | 7.86 |
+| brightening, sun RT shadows (final) | 0.53 | 4.40 |
+
+Brightening rose where the grass no longer blocks light: under the log at the
+bottom right the traced visibility now replaces the game's SSAO (which treats the
+grass as solid) with ×2.8 more ambient, and the RT sun now passes between twig
+blades where the game's shadow map is a blurred mass. These are flagged for
+review, not confirmed errors; a run with `rt_alpha_stochastic=0` to separate
+the stochastic part did not complete (the game was closed by another session's
+run). S1 (foundry) with the fix: hard-dark GI 0.066‰, no baseline compared.
+
+**Regression checks (2026-10-27, after merging main).** `-Validation` in Campsite
+gameplay: same message IDs as the HEAD baseline. Non-finite: 0 in every capture,
+including a trace taken while panning (Goblin Camp, `-Move`). `QuickSave_3784`
+(old table + legacy switches vs new, same view): mean luminance -0.11%, no
+visible change on the piers, railings and boats. Goblin Camp foliage was not
+compared: that save enters a cutscene a few seconds after loading, at a varying
+time, so the two runs did not see the same view.
+
+**Not verified.** No `-Move` run reached its end: three runs (Goblin Camp,
+Campsite, and the QA run after the merge) stopped presenting a few seconds after
+gameplay or a trace (0 submits, GPU idle, process alive; a CPU-side stall, not a
+device loss). Another worktree's QA runs show the same stall in S3 and S7, so it
+is probably not this change, but this was not proven with a run of main alone.
+
+**Cost** (Campsite, 2560x1067, 300-frame averages, shared GPU, noise ~0.2 ms):
+4 x more alpha-tested draws (1.85M alpha triangles), visibility candidates
+2.0M → 7.1M/frame; GI 2.95-3.0 → 3.0-3.4 ms, RT passes 1.35-1.40 → 1.40-1.53 ms.
+
+**Not done.** 20 vt shaders keep a loose first cut-off (their 0.5 test reads
+the alpha through `mix(1.0, alpha, ubo)` or a UBO cut-off; reading the UBO at
+the draw would settle them). Blended-texture `tex` shaders (`42507cb4`) stay opaque.
+
 ### 7.2 Hybrid RT GI (`gi_rt=1`, live; see TRACK_C_GI.md)
 
 `shaders/gi/gi_trace_rt.hlsl` replaces `gi_trace` (+`rt_ao`): same samples and
@@ -1137,6 +1237,10 @@ Not done from R6:
 The budget (QUALITY R7) is 0.5 ms for local-light shadows: met. All rt passes together
 (sun shadows + RT GI 0.26-0.28 ms, D-LS 0.35 ms) stay well inside the 2.5 ms Track D total.
 
+These are the numbers when D-LS shipped. Later merges (per-class terms, ray origins, the
+BVH split, per-light data) took it to 0.59-0.77 ms; 9.9 has the profile and the optimised
+pass (0.39-0.42 ms in the foundry, same image).
+
 ### 9.6 Validation layer and robustness (R5, R8)
 
 - `auto-run.ps1 -Validation`, `rt_local_shadows=0` against `1` with every mode toggled
@@ -1292,9 +1396,8 @@ foundry, static, one run, live phases:
 - **Database only: +0.09 ms.** The character light is still traced, and fill lights get
   the larger radius.
 - **The base itself has risen** from 9.5's 0.345 ms to 0.59 ms on this branch (after
-  the RR and BVH-split merges). That is not caused by this change; the baseline run of
-  main before it logged 0.26-0.36 ms in a shorter window. It needs its own look against
-  the 0.5 ms budget (QUALITY R7).
+  the RR and BVH-split merges). That is not caused by this change. See 9.9 for where the
+  time went and the optimised pass.
 
 **Validation.**
 - `-Validation` on the foundry, against a baseline run of main without the bridge, gives
@@ -1313,6 +1416,185 @@ foundry, static, one run, live phases:
   ignores box lights.
 - A measured fixture size from the TLAS.
 - Other scenes with the bridge.
+
+### 9.9 Cost: where the time went, and the optimised pass (2026-10-26)
+
+Status: **on by default**, no setting to choose. The output is **bit-identical** to the
+pass before (proof below). Code:
+- `shaders/gi/rt_local_shadows.hlsl`: the default-settings variant (`LS_FULL=0`) in three
+  phases, and the old single loop as `LS_FULL=1` (`rt_local_shadows_full.hlsl`), which
+  `core/gi.cpp` runs only for `ls_samples`, `ls_shadowed`, `ls_debug` or `ls_stats`;
+- `shaders/gi/rt_local_shadows_match.hlsl`: the join keeps unchanged slots;
+- A/B tooling: `shaders/gi/ls_ref/` (the pass of `f5e9eab`, frozen by
+  `tools/lsref/make_ls_ref.py`), `rt_local_shadows_ref.hlsl` (`ls_impl=0` runs it),
+  `rt_local_shadows_check.hlsl` (`ls_check=1/2`), `tools/pipeline_stats.py` (driver
+  register counts, no game needed).
+
+All numbers: RTX 5090, 2560x1067, GPU timestamps around the join and the shadow pass
+(the core now logs the join separately), medians of 300 frames, `-Background` runs with
+live setting phases (`scripts/live_phases.py`), the first window after each switch
+dropped. The GPU was shared with the user's desktop (another game at times), and the
+foundry ran at 24 fps with `rt_bvh_split=1`: absolute values drift by about ±10% between
+runs (the old pass measured 0.55-0.77 ms in the same save), so every comparison below is
+within one run.
+
+**Where the time went (old pass, foundry, one run; each switch from the default; shared GPU):**
+
+| Configuration | ms | vs default |
+|---|---|---|
+| default | 0.77 | |
+| no rays at all (`ls_min_radius=1e5`) | 0.37 | rays −0.40 |
+| `rt_origin=0` | 0.70 | −0.065 |
+| `ao_direct=0` (no sun recompute, no AO give-back) | 0.70 | −0.07 |
+| `rt_bvh_split=0` (the frame then ran at 130 fps) | 0.69 | −0.08 |
+| `ls_soft=0` | 0.73 | −0.035 |
+| `ls_lights=0` (no join; the character light traced again) | 0.77 | 0.00 (join −0.011, character light +0.01..0.07) |
+| `mat_classes=0` | 0.77 | **0.00** |
+| `ls_owners=31` (character light traced) | 0.84 | +0.07 |
+| `ls_samples=1` | 0.57 | |
+| `ls_lights`, `mat_classes`, `rt_origin`, `ao_direct` all 0 | 0.64-0.66 | −0.12 |
+| ... and `rt_bvh_split=0` | 0.59 | |
+| `rt_alpha_test=0` (another run, default 0.59) | 0.535 | −0.06 |
+
+- **The per-feature switches explain only part of it.** `mat_classes=0` costs nothing to
+  turn off, although the per-class terms were the largest audit change: the price of
+  the per-class code is paid in **registers**, whether a class is used or not.
+- **Registers** (`tools/pipeline_stats.py`, the driver's own count): the old pass used
+  **252 registers and 16 bytes of local memory** per thread, so 8 warps per SM (of 48).
+  The ray queries, the alpha test at their candidates and the generic per-class BRDF
+  were all live in one loop. A pure ray pass (`rt_shadow.hlsl`) needs 72.
+- The rays themselves (about 0.25 ms after the optimisation) did not get cheaper: 2.08
+  per pixel, the ray origins (`rt_origin`) and the BVH split's instance lookups at alpha
+  candidates make them longer, and exactness forbids shortening them.
+
+**What changed (all exact):**
+1. **Two variants.** Every debug view, statistic, the RIS reservoirs and the
+   shadow-map modes live only in `LS_FULL=1`. Nothing but the four sums the output needs
+   is live in the default variant's loops.
+2. **Three phases per 32 list entries** instead of one loop:
+   1. *Which entries are traced*: the trace conditions first (no game shadow map,
+      `ls_min_radius`, owner from the join), then `bg3_light_eval_mat`'s own acceptance
+      tests (channel, range, cone, N·L or the class's transmission/hair test), from the
+      few surface terms they need. The BRDF is no longer evaluated for the lights that
+      are not traced (the character light alone was 16.6% of the evaluations).
+   2. *The rays*, the k-th traced light of every lane together, with only the ray
+      inputs live.
+   3. *The rest of the surface* (reloaded at an index the compiler cannot prove equal to
+      the pixel, so it is not kept across the rays), each traced light's exact
+      unshadowed diffuse and specular, and the sums in list order with the old
+      expressions.
+
+   Result: **96 registers, no local memory, 21 warps per SM.**
+3. **The sun is not recomputed where it cannot matter.** With `ao_direct=1` it only
+   enters as `(1 − fdif)·sun`; where both AO factors are exactly 1 that is 0. Where the
+   sun mask is 0 the cloud-shadow lookups are skipped (0 × a finite factor).
+4. **The specular-AA neighbours**: the pixel's own normal is reused (2 normal loads instead
+   of 4; the clamp at the odd last row behaves as before). `gAux` is read only in mode 2.
+5. **The join keeps unchanged slots.** Each slot caches the inputs of its result (absolute
+   position and radius bits, and a generation the core bumps when the uploaded records
+   change); a group whose slots are all unchanged skips the search. 0.011 → 0.005-0.007 ms.
+
+**Tried and dropped (measured, not kept):**
+- Rays to the wave's union of list positions (rays to the same light together): +0.007 ms.
+- The rays of the first 32 entries as their own dispatch (72 registers there): +0.07 ms;
+  the second pass reads the G-buffer and the list again.
+- No ray for lights of colour 0: exact, but no such light is traced here; no change.
+- Skipping rays to lights whose unshadowed term stays below 1/256 or 1/64 of the
+  pixel's (not exact): no measurable gain, and the extra evaluation raised the default
+  variant to 125 registers (+0.03 ms).
+
+**Not tried, or not applicable:**
+- Wave-scalarised light loops and packed per-light caches. A wave's pixels mostly share one
+  froxel list, the light records are read from L1, and the no-ray time is now 0.14 ms in
+  all; the registers were the limit, not these loads.
+- Ray flags: `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH` was already set, and `tmax`
+  already stops `max(R, ls_clear)` short of the light. Back-face culling would change the
+  image (back faces occlude too).
+
+**Result (foundry, same runs, new / old; shared GPU):**
+
+| Run | new | old (`ls_impl=0`) |
+|---|---|---|
+| A/B 2 (4 + 4 alternating phases) | 0.388-0.401 | 0.566-0.595 |
+| A/B 6 | 0.409-0.417 | 0.59-0.65 |
+| A/B 6, `rt_bvh_split=0` | 0.377 | 0.563 |
+| no rays (`ls_min_radius=1e5`) | 0.143 | 0.372 |
+| join alone | 0.005-0.007 | 0.011-0.013 |
+
+- **−0.18 to −0.23 ms (−31 to −37%)** at the same image.
+- **The 0.35 ms target is not reached** under these conditions: 0.39-0.42 ms against an
+  old pass of 0.57-0.65 ms in the same runs. Scaled to the 0.59-0.63 ms the old pass logged
+  when this work started, that is about 0.40 ms. The remaining time is the rays
+  (≈0.25 ms) and the G-buffer traffic of a full-resolution pass (≈0.14 ms with no ray at
+  all). Reaching 0.35 needs fewer or shorter rays, which changes the image (for example
+  `ls_samples=1`, or a lower resolution for the visibility).
+- Under the 0.5 ms budget (QUALITY R7) again.
+- Per feature, new pass (A/B 6): `rt_origin` +0.045, `ao_direct` +0.026, `rt_alpha_test`
+  +0.015, `ls_soft` +0.012, `mat_classes` 0, the join + owner skip −0.04 (`ls_lights=0`
+  traces the character light), `ls_owners=31` +0.056.
+
+**Other scenes** (shared GPU; `-Save`, same tooling: a check phase, then new and old alternating,
+three phases each):
+
+| Scene | new | old | change | `ls_check=1` |
+|---|---|---|---|---|
+| Steel Watch Foundry (default save) | 0.39-0.42 | 0.57-0.65 | −31 to −37% | 0 px differ |
+| Grymforge (`Grymforge - 32h 59m`, torches and lava) | 0.71-0.73 | 0.97-0.98 | −26% | 0 px differ (2.29·10⁹ px) |
+| Water Queens House | 0.114 | 0.169 | −33% | 0 px differ (6.23·10⁹ px) |
+
+Grymforge is above the 0.5 ms budget in both: it has many more traced lights (torches
+along every wall). That is a ray count, not a regression of this change.
+
+**Image equality.**
+- `ls_check=1` runs the frozen old pass and the live one on the same pixel, frame and
+  inputs in one dispatch, compares the float outputs bit for bit, and logs the counts per
+  120 frames (`ls check`). It also searches every join slot and compares the kept results.
+- Foundry, default settings: **0 pixels differing in any bit** over every window of every
+  run since the last change (for example 2.62·10⁹ pixel evaluations in A/B 3, 1.97·10⁹ in
+  A/B 6), and **0 kept join slots differing** from a new search.
+- Also 0 with `ls_owners=31`, `ao_direct=2`, `rt_origin=0`, `ls_soft=0`,
+  `mat_classes=0`, and for the `LS_FULL` variant with `ls_samples=1` and `ls_debug=2`.
+- `ls_check=2` compares the old pass with itself (a second evaluation the compiler
+  cannot merge): 0 over 16 windows. So the inputs do not change under the pass, and 0
+  means equal.
+- The `LS_FULL` check showed one window with differences in three runs, each time the
+  window in which a setting switched variant (`ls_samples` or `ls_check`); the following
+  windows are 0.
+- A first version was not exact: it wrote the `ao_direct=1` give-back as
+  `dir·(1 − fdif)` with a constant 1, and 2.1% of pixels differed in the last bits
+  (17 px per 120 frames above 1e-5 relative). Keeping the old expression
+  `dir·(td_f − fdif)` made it exact. The check is what found it.
+
+**Validation layer and robustness.**
+- Baseline: `-Validation` on `f5e9eab` (the commit before this work), foundry. 8 message
+  IDs, all seen before: `10788`, `09600`, `StorageImage-FormatMismatch`,
+  `OutputNotWritten`, `non-acquired-swapchain-image-used`, `vkDestroyImage-image-01000`,
+  `CopyBuffer-00118`, `08737`.
+- `-Validation` with this work, after merging main (`c604311`), foundry. Live phases:
+  check, self-check, the `LS_FULL` check with `ls_samples=2 ls_shadowed=1`,
+  `ls_debug=4` with `ls_stats=1`, the old pass, `ls_lights=0`, pass off and on.
+  - The same 8 IDs, plus **`VUID-vkCmdDispatch-format-07753`**.
+  - Cause: when the join does not run (`ls_lights=0`, or no per-light data), binding 46
+    was given the RGBA16F `gAux` view as a placeholder. The shaders declare it RGBA32UI
+    and use it statically.
+  - This is older than this work: the 9.8 code binds the same placeholder. The baseline
+    never turned `ls_lights` off, so it did not show the ID.
+  - Fixed: a 1×1 RGBA32UI placeholder (`g_ls_nodata`).
+  - Not re-confirmed: two later validation runs stayed in the main menu. The save did not
+    load under the validation layer with `-Save`, and the newest save had changed under
+    `-continueGame`. The menu-only run shows the 8 baseline IDs and no 07753.
+- In that run, `ls_check=1` still found **0 differing pixels** after the merge with main
+  (6.55·10⁸ px), as did the `LS_FULL` check (9.8·10⁸ px). Kept join slots: 0 differ.
+- `-Move` (pan from the foundry): 2 traces in motion, **0 non-finite values** in 183
+  dumps. No `nvlddmkm` event during the run.
+  - An earlier `-Move` attempt ended with the game exiting 5 s after its first trace,
+    with `nvlddmkm` 153 events. One A/B run also ended early that way.
+  - `nvlddmkm` 153 pairs are logged on this machine at almost every game exit, including
+    runs of the baseline code and other branches, so the cause was not identified.
+  - The repeat `-Move` run was clean.
+
+Settings (all live): `ls_impl` (1 the optimised pass, 0 the frozen old one), `ls_check`
+(0 off, 1 old against new, 2 old against itself; measurement only, about 1.5 ms).
 
 ## 10. D-RF: ray-traced reflections (implemented, tiers (a) and (c))
 

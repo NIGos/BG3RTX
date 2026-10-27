@@ -2,6 +2,7 @@
 
 #include "../common/settings.h"
 
+#include <cctype>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -33,6 +34,25 @@ const std::string& root_dir() {
   }();
   return dir;
 }
+
+const std::string& run_tag() {
+  static const std::string tag = [] {
+    char buf[64] = {};
+    DWORD n = GetEnvironmentVariableA("BG3RTX_RUN_TAG", buf, sizeof buf);
+    std::string t;
+    if (n && n < sizeof buf)
+      for (const char* c = buf; *c && t.size() < 24; ++c)
+        if (isalnum(static_cast<unsigned char>(*c)) || *c == '_' || *c == '-') t += *c;
+    return t;
+  }();
+  return tag;
+}
+
+std::string tagged(const std::string& base, const std::string& ext) {
+  return run_tag().empty() ? base + ext : base + "." + run_tag() + ext;
+}
+
+std::string capture_stamp() { return run_tag().empty() ? now_stamp() : now_stamp() + "-" + run_tag(); }
 
 std::string now_stamp() {
   std::time_t t = std::time(nullptr);
@@ -88,7 +108,7 @@ void log(const char* fmt, ...) {
   snprintf(line, sizeof line, "%02d:%02d:%02d.%03d  %s\n", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, msg);
 
   std::lock_guard<std::mutex> lock(g_log_mu);
-  if (!g_log) g_log = _fsopen((root_dir() + "\\bg3rtx.log").c_str(), "w", _SH_DENYNO);  // readable while running
+  if (!g_log) g_log = _fsopen(tagged(root_dir() + "\\bg3rtx", ".log").c_str(), "w", _SH_DENYNO);  // readable while running
   if (g_log) {
     fputs(line, g_log);
     fflush(g_log);

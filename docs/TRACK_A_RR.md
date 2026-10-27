@@ -485,16 +485,11 @@ evaluate itself is unchanged (2.5-2.7 ms).
 - **`-Validation`** against the baseline taken first on the unmodified branch
   (`captures/validation_baseline.log`: 7 IDs) and a merged-build run with
   `rr_post=0` (the same 7): `rr_post=1` adds **one** ID, once per run,
-  `VUID-vkDestroyImage-image-01000` (`0xf2d29b5a`). The new
-  `[rrpost] the game destroys an image our post steps read` log shows when: at
-  the level-load transitions only (the frame after the last chain, where the
-  game recreates its render targets). The game itself reads those images in
-  the same, still-pending command buffer, but through push descriptors, which
-  the validation layer does not track; our descriptor sets make the reference
-  visible. Earlier builds reported it as `VUID-vkDestroyImageView-01026` on the
-  game's own views; our steps now use views of their own (destroyed deferred),
-  so only the image destruction remains. It is the game's lifetime, not a new
-  hazard of ours, but it is a new message ID.
+  `VUID-vkDestroyImage-image-01000` (`0xf2d29b5a`) at level-load
+  transitions. The explanation first given here (the game destroying images
+  of a still-pending frame) was wrong: the cause was stale descriptors in our
+  own descriptor ring. It is **fixed**; see "Lifetime of the game's images"
+  below.
 - **Fallback test** (`rr_test_fail=1`): RR creation refused, the game's SR
   runs, `rr_active()` stays false, and the core switches to its non-RR modes:
   `gi: resources ... (GI at 1280x534)`, "half res, own accumulation", and
@@ -514,6 +509,114 @@ evaluate itself is unchanged (2.5-2.7 ms).
   (Two earlier `-Move` attempts ended early: one game exit at the loading
   screen before RR or our post steps had run, and one exit after 108 s with no
   fault logged; neither is explained, and the 480 s rerun was clean.)
+- **`-Move` after the lifetime fix** (2026-10-27, merged with main):
+  - 5 runs, foundry: four of 8 minutes of pan then hold, and one `-Save`
+    run that traced during the pan. No exits, no `RR evaluate failed`, no
+    faults.
+  - The traced frame (`captures/20261027-014238`): **0 non-finite values in
+    91 dumps**.
+  - There are no BG3 crash events in the Windows Application log for the
+    earlier exits either. The `nvlddmkm` event 153 pairs in the System log
+    coincide with each game launch.
+
+### Lifetime of the game's images (2026-10-26)
+
+**Root cause of `VUID-vkDestroyImage-image-01000`.** The game's lifetime is
+correct, and our GPU work never read a freed image. The message came from our
+descriptor bookkeeping:
+- `rrpost.cpp` records each step from a ring of 256 descriptor sets, and each
+  step wrote only the bindings it reads. A reused set kept whatever an earlier
+  step had written in the other bindings: our own views of game images (the
+  `sss2` diffuse light, the `7401d785` input U, bloom, god-ray input, the DLSS
+  output).
+- At a level-load transition, the game destroys those images 4 frames after
+  their last use. Instrumented runs (`life_log=1`) show this every time: our
+  present fence for that frame had already signalled at the destroy.
+- By then, though, a later step (exposure, resolve, ...) of the frame still in
+  flight had bound a recycled set that still held the stale view in a binding
+  it does not read. The validation layer counts every descriptor of a bound
+  set, so it reported the image as used by that pending command buffer.
+- The GPU never read the stale descriptor, because the binding is not
+  statically used by that step. But by the spec, destroying an image that a
+  bound set references invalidates the command buffer. So this was a real
+  correctness bug of ours, not only a validation-layer artefact.
+- The earlier explanation ("the game reads them through push descriptors in
+  the pending buffer") did not hold: the game's last use was 4 frames earlier
+  and complete.
+
+**Fix.**
+1. `rrpost.cpp` `run()` writes **every** binding of the set on each use. Those
+   the step does not read get fillers of ours: a 1x1 RGBA16F 2D image, a 1x1x1
+   3D image for the LUT slot, and a 256-byte buffer. These go into the GENERAL
+   layout once per recording. A ring set can therefore no longer hold a game
+   object beyond the step that wrote it.
+2. **Safety net for real in-flight use** (`tracker.cpp`, `life_*`):
+   - Every game image, view and buffer that our recorded work references is
+     noted on the command buffer's recording. The notes come from
+     `query_binding` results (the GI/RT passes, RR before post, the alpha
+     records), every pass's attachments (the RR guides, the CBT copy) and the
+     DLSS output that `rrpost_final` writes.
+   - At submit, each note becomes "last submitted in frame F on queue Q".
+   - Every present appends an empty submit carrying a fence of ours to the
+     present queue, while it is still inside the game's present call.
+   - `vkDestroyImage`, `vkDestroyImageView` and `vkDestroyBuffer` look the
+     handle up first. If the fence of present F+1 has not signalled, they wait
+     for it (bounded at 2 s, logged) before anything is released. This
+     includes `ngx_on_destroy_image`, which destroys its views at once.
+   - A game `vkDeviceWaitIdle` retires everything submitted before it.
+   - A destroy of an object submitted in the current frame (no present since)
+     cannot be fenced and is logged as "no fence covers it yet".
+3. **DLSS-G:** `sl_note_view_destroyed`. The game destroys a view before its
+   image, and the tag hands DLSS-G the view, so the existing wait on DLSS-G's
+   inputs fence now also runs when a current tag's view is destroyed.
+
+**Stall cost.** Measured over 3 validation runs (foundry, Water Queens House,
+Grymforge) and 5 `-Move` runs (4 of 8 min each and 1 traced run; foundry, panning):
+- **Level-load transitions:** no waits. Every destroy of a noted object found
+  its frame's fence already signalled, since BG3 defers these destroys by
+  about 4 frames.
+- **During gameplay:** the safety net fired three times, in two of the five
+  `-Move` runs.
+  - Two image views and one buffer were destroyed one frame after our work
+    last used them, with that frame's fence still pending.
+  - The waits were 6.754 ms and 0.135 ms (views) and 0.609 ms (buffer), all
+    "complete" (`[life] the game destroys ...`).
+  - Without the wait, those destroys would have raced our recorded work on the
+    GPU. This is the use-after-free class the brief suspected, and it is real
+    though rare.
+- **No destroy came within the frame of its submission**, which would have
+  been logged as "no fence covers it yet".
+- **Bookkeeping:** one empty submit per present, plus the merge of the notes
+  at submit. In gameplay that is 375 to 700 references and 0.007 to 0.016 ms
+  of CPU per frame (`[life] bookkeeping`, every 60 s).
+
+**Validation, before and after.** Same build except for the fix, `-Validation
+-Background -Save`, one run per scene, each through a main-menu-to-level load:
+
+| Scene | Baseline IDs | With the fix |
+|---|---|---|
+| Foundry (`QuickSave_3784`) | 8, including `0xf2d29b5a` (2x) | 7: the same minus `0xf2d29b5a` |
+| Water Queens House | 8, including `0xf2d29b5a` | 7: the same minus `0xf2d29b5a` |
+| Grymforge | 7, including `0xf2d29b5a` | 6: the same minus `0xf2d29b5a` |
+
+Grymforge has no `vkCmdCopyBuffer-srcBuffer-00118` in either run. No new IDs.
+
+**Same class elsewhere (checked):**
+- GI/RT, reflections and local shadows (`core/gi.cpp`): they use push
+  descriptors, rewritten on every dispatch. The sun-scattering ring writes all
+  7 bindings on every use. Their in-flight references are covered by the
+  safety net (via `query_binding`).
+- RR guides (`ngx.cpp`): sets are cached per image tuple, fully written, and
+  dropped from the cache when one of their images is destroyed.
+- Alpha records (`alphatest.cpp`): every slot a set ever held is rewritten
+  (dummies after this frame's views).
+- BVH split: reads game vertex and instance buffers only on the CPU, and
+  evicts on destroy. The GPU sees them only inside the game's own draws.
+- **Not fixed, small:** the core's RT passes accept a scene up to one frame
+  old (`built + 1 >= now`). They may therefore bind the previous frame's alpha
+  set, whose texture views the game could have destroyed in between. BG3's
+  roughly 4-frame destroy deferral makes this unlikely, but `alphatest.cpp`
+  (owned by another track) should drop views of destroyed images.
 
 ### Preset and snippet
 
@@ -545,8 +648,9 @@ player's `fg=2` setup can run different RR versions.
   history reset at each switch. Modelling them (the tint is per-channel
   affine; the aberration needs an output-resolution intermediate) would remove
   those switches.
-- **A once-per-run validation message** (`VUID-vkDestroyImage-image-01000`) at
-  level-load transitions; see "Robustness checks".
+- **Fixed:** the once-per-run `VUID-vkDestroyImage-image-01000` at level-load
+  transitions (stale descriptors in our set ring); see "Lifetime of the game's
+  images".
 
 - **Done (v2):** world-space normals, per-pixel N·V and the
   WorldToView/ViewToClip matrices. See "Guides v2".
