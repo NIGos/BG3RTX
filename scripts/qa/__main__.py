@@ -31,6 +31,8 @@ def main():
     r.add_argument("--keep-raw", action="store_true", help="do not prune the raw captures")
     r.add_argument("--capture-only", action="store_true")
     r.add_argument("--out", help="output folder (default captures/qa/<stamp>)")
+    r.add_argument("--sharc", action="store_true",
+                   help="add the SHaRC radiance cache traces (sharc_on, sharc_refl_off, sharc_roof) and its leak gate")
     r.add_argument("--set", default="", help="extra bg3rtx.ini keys for every trace, e.g. rt_sun_top=0,rt_sun_near=1")
     r.add_argument("--parallel", type=int, default=1, choices=(1, 2),
                    help="scenes captured at once; 2 = shared background games (experimental)")
@@ -66,7 +68,8 @@ def main():
                                   temporal=max(2, args.temporal), reference=args.reference,
                                   interval=args.interval, raw=args.raw, tag=tag, exclusive=args.exclusive,
                                   shared=lanes > 1, extra=[x.strip() for x in args.set.split(",") if x.strip()],
-                                  split_gi=args.temporal_gi, split_sun=args.temporal_sun)
+                                  split_gi=args.temporal_gi, split_sun=args.temporal_sun,
+                                  sharc=args.sharc)
 
         if lanes > 1:
             # A holder keeps the exclusive lock for this whole process (scripts/gamelock.ps1),

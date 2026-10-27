@@ -153,7 +153,16 @@ add_executable(light_tree_test tests/light_tree_test.cpp)
 add_test(NAME light_tree_test COMMAND light_tree_test)
 
 # Hot-reloadable core: rebuild while the game runs.
-add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/emissive.cpp)
+add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
+# SHaRC radiance cache: inject the D-EM effects-target emission. AUTO follows whether
+# common/host_api.h defines BG3RTX_HOST_HAS_RT_EMISSIVE (D-EM's Bg3HostApi::rt_emissive);
+# ON forces it (needs D-EM), OFF builds without it.
+set(BG3RTX_SHARC_EM "AUTO" CACHE STRING "SHaRC injection of the D-EM emission: AUTO, ON or OFF")
+if(BG3RTX_SHARC_EM STREQUAL "OFF")
+  target_compile_definitions(bg3rtx_core PRIVATE BG3RTX_SHARC_EM=0)
+elseif(BG3RTX_SHARC_EM STREQUAL "ON")
+  target_compile_definitions(bg3rtx_core PRIVATE BG3RTX_SHARC_EM=1)
+endif()
 # A fixed PDB name would stay locked by a debugger attached to the old copy.
 set_target_properties(bg3rtx_core PROPERTIES PDB_NAME "bg3rtx_core_$<CONFIG>")

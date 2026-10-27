@@ -67,7 +67,8 @@ struct Push {
   float rt_strength;  // how strongly traced visibility darkens the game's sun shadow mask
   float rt_ao_radius; // ray-traced AO ray length (world units, rt_ao.hlsl)
   uint rt_ao_rays;
-  uint2 pad2;
+  uint ls_kmode;            // D-LS exact-k (DESIGN_SOTA_NEXT 1a): bits 0-3 ls_k (0 trace every light), bits 4-7 ls_rest_samples
+  uint sharc_fx;           // sharc_inject.hlsl: 1 the D-EM effects target is bound at 49 (emission)
   // Hybrid ray-traced GI (gi_trace_rt.hlsl)
   float gi_rt_radius;   // ray length and falloff radius (world units)
   float gi_rt_tol;      // relative depth agreement for an on-screen hit

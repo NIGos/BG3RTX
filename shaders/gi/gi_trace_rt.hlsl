@@ -18,8 +18,18 @@
 //     hits (a cheap estimate; nothing if it has none).
 // Each hit weighs 1 - (t / gi_rt_radius)^2 for both its occlusion and its
 // bounce, so rays fade out smoothly at the radius.
+//
+// SHARC_QUERY_PASS (gi_trace_rt_sharc.hlsl, sharc=1): a hidden or off-screen hit first
+// reads the radiance cache (sharc_common.hlsli) at the hit's position and geometric normal;
+// found, it is a bounce like an on-screen hit. Not found, or nearer than the voxel, the
+// gi_rt_fallback rule above applies. sharc_debug=4 writes the tiers instead of the bounce
+// (r cache, g screen, b no radiance: fallback), as fractions of the rays.
 #include "gi_common.hlsli"
 #include "../rt/rt_common.hlsli"
+#if SHARC_QUERY_PASS
+#define SHARC_RT_QUERY 1
+#include "sharc_common.hlsli"
+#endif
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -47,10 +57,25 @@ void main(uint3 tid : SV_DispatchThreadID) {
   uint seed = pixel_seed(fp, 0u);
   float3 bounce = 0, seen = 0;
   float occ = 0, nseen = 0, wfall = 0;
+#if SHARC_QUERY_PASS
+  const float3 cam_abs = sharc_cam();
+  float3 tiers = 0;   // rays: cache, screen, fallback
+  sharc_bin = (id.x >> 3) * 7u + (id.y >> 3) * 13u;
+  // Rays reach sharc_gi_radius (R) for radiance only: a hit without radiance (no cache entry)
+  // occludes with the fade of the base radius, as without the cache, so the longer rays add
+  // bounce but never unexplained darkening (the first in-game run: 1.6% of the Adamantine
+  // Forge's hidden hits are in the cache, and the 8 m occlusion darkened 47 per mille).
+  const float R0 = max(shc.gi_base_radius, 0.01);
+#endif
   for (uint r = 0; r < pc.rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
     float3 o = rt_ray_origin_o(org, P, N, dist * pa, dir);
+#if SHARC_QUERY_PASS
+    RtHit hh = rt_closest_hit(o, dir, R, cone);
+    float t = hh.t;
+#else
     float t = rt_closest(o, dir, R, cone);
+#endif
     float k = saturate(t / R);
     float w = 1.0 - k * k;
     float2 quv;
@@ -79,6 +104,31 @@ void main(uint3 tid : SV_DispatchThreadID) {
       stat_add(12, t >= 0.0 && !onscreen, bin);
     }
     if (t < 0.0) continue;
+#if SHARC_QUERY_PASS
+    if (visible) {
+      tiers.y += 1.0;
+    } else {
+      sharc_stat(kShGiHidden, onscreen);
+      sharc_stat(kShGiOffscreen, !onscreen);
+      float3 Lc;
+      bool near;
+      const bool ask = (shc.flags & (onscreen ? 1u : 2u)) != 0u;
+      const bool found = ask && sharc_ray_hit(hh, o + dir * t, dir, t, cam_abs, Lc, near);
+      sharc_stat(kShGiQueried, ask && !near);
+      sharc_stat(kShGiNear, ask && near);
+      sharc_stat(kShGiFound, found);
+      if (found) {
+        bounce += Lc * w;
+        occ += w;
+        tiers.x += 1.0;
+        continue;
+      }
+      tiers.z += 1.0;
+      const float k0 = saturate(t / R0);
+      w = 1.0 - k0 * k0;
+      if (w <= 0.0) continue;   // beyond the base radius: a miss, as before
+    }
+#endif
     if (visible) occ += w;
     else if (pc.gi_rt_fallback != 1) {
       occ += w;
@@ -87,6 +137,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
   }
   if (pc.gi_rt_fallback == 2 && nseen > 0.0) bounce += seen / nseen * wfall;
   float n = float(max(pc.rays, 1u));
+#if SHARC_QUERY_PASS
+  if (shc.debug == 4u) bounce = tiers;
+#endif
   giRaw[id] = float4(bounce / n, saturate(1.0 - occ / n));
   giRawDepth[id] = d;
 }

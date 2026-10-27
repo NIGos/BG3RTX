@@ -317,8 +317,8 @@ whose two children both have importance 0 (smallest probability sum 0.001 in sce
 
 | Key | Default | Meaning |
 |---|---|---|
-| `ls_exact_k` | 0 (then 4 after A/B) | Lights traced exactly per pixel; 0 = all (today) |
-| `ls_remainder` | 1 | 0 drop R (biased, debug only), 1 RIS 1 ray, 2 ReSTIR temporal, 3 + spatial |
+| `ls_k` (implemented; was `ls_exact_k`, TRACK_D 9.11) | 0 (measured: k1 −22%, k2 −8% at Grymforge, over budget either way) | Lights traced exactly per pixel; 0 = all (the pass before) |
+| `ls_rest_samples` (implemented; was `ls_remainder`) | 1 | 0 drop R (biased, debug only), 1-2 RIS rays; ReSTIR (1b) would be a separate key |
 | `ls_restir_m_max` | 20 | Temporal M cap |
 | `ls_restir_visreuse` | 0 | Bitterli visibility reuse (biased A/B) |
 | `lt_build` | 0 | Build the light BVH every frame |
@@ -607,6 +607,95 @@ allocation. It is shared by `gi_trace_rt`, `rt_reflections`, `sharc_inject` and
 
 **Cost:** the `gi:` trace median plus the new `sharc:` timestamps ≤ 0.6 ms for AO + GI on
 S1 and S6.
+
+### 2.9 v1 as implemented (2026-10-27; built and compiled, not run in game yet)
+
+Off by default (`sharc=0`). Differences from the plan above:
+- **Keys** are `sharc` and `sharc_*` (bg3rtx.ini), not `gi_cache_*`: `sharc_log2` (22),
+  `sharc_inject_stride` (2), `sharc_frames` (16), `sharc_stale` (128), `sharc_scene_scale`
+  (50), `sharc_log_base` (2), `sharc_level_bias` (0), `sharc_query` (7: reflections on too),
+  `sharc_gi_radius` (4 since 2.11, was 8: replaces `gi_rt_radius` while the cache runs), `sharc_rf_rough`
+  (0.2), `sharc_rf_cone` (1), `sharc_near` (1), `sharc_em` (1), `sharc_reset_jump` (50 m),
+  `sharc_debug` (0-5; 5 is the QA roof mask), `sharc_stats`, `sharc_device` (restart).
+- **Injection** runs after the GI composite (so b10 includes this frame's GI: the
+  multi-bounce feedback of 2.3 step 3), not before it. It pauses while `gi_debug`, `rf_debug`,
+  `ls_debug` or `rf_validate` rewrite the lit diffuse. Stochastic rounding of the fixed-point
+  accumulation keeps dim interiors unbiased; injected radiance is clamped at 256.
+- **Normals**: the injection uses `rt_origin.hlsl`'s geometric normal (else the shading
+  normal), facing the camera; queries the hit triangle's geometric normal facing the ray.
+- **Binding**: set 4 with empty sets 2-3 (D-RF: the game's set 2). The trace and D-RF have
+  `_sharc` variants (`gi_trace_rt_sharc.hlsl`, `rt_reflections_sharc.hlsl`), so `sharc=0`
+  runs the unchanged pipelines. The D-EM effects target goes in push binding 49.
+- **D-EM guard**: `BG3RTX_SHARC_EM` (CMake `AUTO`/`OFF`) follows `BG3RTX_ABI_VERSION >= 8`;
+  this branch is ABI 7, so it builds and runs without the emission term.
+- **Device** (`layer/rtscene.cpp`): shaderInt64, shaderBufferInt64Atomics, shaderFloat16 and
+  storageBuffer16BitAccess where supported, in the game's own structs where it chains them
+  (it chains Features2, Float16Int8 and 16BitStorage), logged `[rt] SHaRC device features`;
+  one retry without them before dropping RT. The core reads them, and the memory types for
+  its device-local buffers, from `persist(BG3_DEVICE_INFO_KEY)` (no ABI change). Without
+  64-bit atomics the injection inserts through the lock buffer (`sharc_inject_lock.hlsl`).
+- **Clears**: on allocation, when the cache was not updated for 8 frames (re-enabled, a load
+  screen) and on a camera jump over `sharc_reset_jump` (in the resolve).
+- **Registers** (`tools/pipeline_stats.py`, RTX 5090): GI trace 96 → 113 in the `_sharc`
+  variant, D-RF 96 → 96, injection 24, resolve 31.
+- **QA**: `python -m scripts.qa run --sharc` (docs/QA.md); `roofed_brightening` scores the
+  roofed area the cache adds over GI without it.
+
+### 2.10 First in-game run (2026-10-27, queue jobs `30-sharc-*`, QA `captures/qa/20261027-123953`)
+
+Measured on the 5090 at 2560x1067, RR on, static camera, timing runs without statistics:
+
+| | S8 Water Queen's House | S3 Campsite | S6 Adamantine Forge |
+|---|---|---|---|
+| GI trace off → on (8 m) | 0.156 → 0.354 ms | 0.536 → 1.002 ms | 0.163 → 0.249 ms |
+| D-RF off → on | 0.369 → 0.399 ms | 0.261 → (n/a) | 0.224 → 0.259 ms |
+| resolve / inject | 0.030 / 0.061 ms | 0.033 / 0.071 ms | 0.028 / 0.050 ms |
+| **total added** | **≈ +0.32 ms** | **≈ +0.6 ms** | **≈ +0.20 ms** |
+| occupancy (2²²) | 1.3% | 2.7% | 0.9% |
+| GI hits not on screen found in the cache | 17% | 30% | 1.6% |
+| reflection fallbacks found | 13% | 16% | 1.6% |
+
+- Compiles, device features (`0xf` on the device, one field set in the game's structs), no
+  insert failures, no faults or non-finite values from the cache (S6's non-finite values are the
+  game's D32F depth `76433aef`, in every trace including all-RT-off).
+- Debug view 3 finds every visible surface (keys of injection and query agree); the low S6
+  rate is the scene: 88% of its non-screen hits are hidden surfaces the static camera never saw.
+- **Fixed after the run:**
+  - Hits without radiance occluded over the whole 8 m: in S6 that is 98% of the hidden hits,
+    and `hard_dark` flagged 47‰ (sharc) / 39‰ (gi_sharc). They now occlude only within
+    `gi_rt_radius` (the fade of the base radius), so the longer rays add bounce and never
+    unexplained darkening.
+  - The roof mask tested `cam.v0.y` for "sun up" and marked S8 and S3, both in daylight,
+    unknown, so `roofed_brightening` was never evaluated. The mask is now volumes only; the QA
+    takes "sunlit exterior" from the game's sun mask (`sun_dbg`).
+  - `sharc_stats` counters hit one address per counter: the GI trace took 3.6 ms with them.
+    They are now spread over 64 bins.
+- **Default: stays off** (High and Ultra unchanged). The leak gate has not been evaluated
+  yet, the darkening fix is unmeasured, and the Campsite costs +0.6 ms (8 m alpha-tested rays
+  through foliage), over the 0.6 ms AO + GI budget on its own. Next: the re-run QA
+  (`32-sharc-*` jobs), and `sharc_gi_radius` 4 against 8 on S3.
+
+### 2.11 Second run (fixes of 2.10; QA `captures/qa/20261027-132732`, jobs `sharc2-*`)
+
+- **Radius** (S3, no statistics): GI trace 0.539 ms off, 0.998 at 8 m, 0.865 at 4 m; D-RF
+  0.230 → 0.243; resolve 0.033, inject 0.069. 4 m adds ≈ +0.44 ms on the Campsite (8 m
+  ≈ +0.57) and finds 37.5% of the non-screen hits (8 m: 30%). **`sharc_gi_radius` default 4.**
+- **Statistics**: binned counters cost 0.015 ms on the trace (0.865 → 0.880), not 3 ms.
+- **Leak gate S8**: now evaluated (73% of the frame roofed, the game's sun lights 4%): **fail,
+  0.74‰ > 0.5**. Every flagged region (24-64 px, gain 1.5-2.5x) is sunlit exterior rock and a
+  column capital inside the volumes' padding, RR speckle, not light through a wall. The mask
+  now excludes pixels the game's sun lights; to be re-run.
+- **S6 hard_dark** with the cache, reflections off: 24.4‰ final (39‰ in run 1), 1.2‰ in the
+  lighting buffer; the all-on `sharc` effect 0.05‰. The regions are the ground under large
+  overhangs: rays now reach the overhang and replace the probe's ambient with its (dark)
+  bounce. GI without the cache already removes 95-97% there (unqualified regions of 1.5k px);
+  sharp edges come from the overhang. Physically plausible large-scale occlusion, but it is a
+  gate failure until a reference says otherwise.
+- S3: no roofed pixels (gate not applicable); hard_dark 0.06‰ (`sharc`), 1.0‰ (`gi_sharc`)
+  on the same foliage regions plain GI flags.
+- **Default: still off** for every preset: the leak gate has not passed yet, S6 fails
+  hard_dark, and the Campsite cost (+0.44 ms) leaves no room in the 0.6 ms AO + GI budget
+  (plain GI there is already 0.54 ms).
 
 ---
 

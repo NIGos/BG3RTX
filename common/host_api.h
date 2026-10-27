@@ -13,6 +13,9 @@
 // 8: Bg3HostApi::rt_scene_set (appended).
 // 9: Bg3HostApi::rt_emissive (appended; D-EM).
 #define BG3RTX_ABI_VERSION 9
+// D-EM is in this host: Bg3HostApi::rt_emissive (ABI 9) and Bg3EmissiveInfo exist. The core's
+// SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
+#define BG3RTX_HOST_HAS_RT_EMISSIVE 1
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -80,7 +83,23 @@ struct Bg3ShaderBlob {
   uint64_t generation;         // bumps every successful recompile of this entry
 };
 
-// D-EM (ABI 8): the emissive scene of the latest build (docs/TRACK_D_RT.md 12). The
+// What the game's device was created with, published by the layer through
+// persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)) when the device is created (no ABI
+// change: the core reads the same key). All zero before that, or without rt=1.
+#define BG3_DEVICE_INFO_KEY "bg3rtx.device_info"
+enum Bg3DeviceFeatureBits : uint32_t {
+  BG3_DEV_INT64 = 1u << 0,           // shaderInt64
+  BG3_DEV_INT64_ATOMICS = 1u << 1,   // shaderBufferInt64Atomics
+  BG3_DEV_FLOAT16 = 1u << 2,         // shaderFloat16
+  BG3_DEV_STORAGE16 = 1u << 3,       // storageBuffer16BitAccess
+};
+struct Bg3DeviceInfo {
+  uint32_t version;                  // 1
+  uint32_t features;                 // Bg3DeviceFeatureBits enabled on the device by the layer (SHaRC)
+  VkPhysicalDeviceMemoryProperties memory;   // for the core's own device-local buffers
+};
+
+// D-EM (ABI 9): the emissive scene of the latest build (docs/TRACK_D_RT.md 13). The
 // descriptor set's layout is in shaders/rt/em_common.hlsli: the emissive TLAS, its
 // per-instance InstInfo, the mesh pool and emissive soup, the per-draw records, the
 // light list, the mask textures and a statistics buffer for debug views.

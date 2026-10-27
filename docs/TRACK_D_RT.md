@@ -1729,6 +1729,118 @@ only), or patch the forward shaders' shadow lookup to read a world-space visibil
 patched lookup. Water is the most visible case and also needs the forward capture of
 backlog item 12 to cast. Do it with item 12.
 
+### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, measured, off by default)
+
+Why: Grymforge is over the 0.5 ms budget (0.73 ms with the 9.10 policy; `ls stats`: 6.09
+listed, 4.34 evaluated, **3.83 traced** lights per pixel, against 2.1-2.3 in the foundry).
+
+What (`shaders/gi/rt_local_shadows.hlsl` `ls_main_k`, both variants; `ls_k` > 0 with
+`ls_samples=0`, `ls_debug=0`):
+- **Phase 1**, one pass over the froxel list: the trace conditions and acceptance tests as
+  before (`ls_light_traced`), then the light's exact unshadowed `c` (`bg3_light_eval_mat`,
+  the surface loaded for phase 1 and reloaded in phase 3 as in 9.9) and `w = lum(c_d + c_s)`;
+  a running top-`ls_k` by `w` (registers, insertion) and, for each remainder sample, a
+  streaming reservoir over the lights that never enter the top-k or are pushed out of it.
+- **Phase 2**: at most `ls_k + ls_rest_samples` rays, same ray setup. The exact set is
+  traced in list order, not by rank, so that neighbours with the same set but another
+  ranking trace the same light in the same iteration (coherent rays, as the `ls_k=0` loop).
+- **Phase 3**: the exact terms of the selected lights only; the remainder sample's delta,
+  and its share of the `ao_direct` sums, × `Σ_R w / (n·w_j)`.
+- Estimator `Σ_E c_i(t_i − s_i) + (1/n) Σ_samples c_j(t_j − s_j)/p_j`, `p_j = w_j/Σ_R w`:
+  **unbiased** (the split is a deterministic function of the pixel; `w_j > 0` wherever
+  `c_j ≠ 0`). A remainder sample's scaled term has the luminance of the whole remainder
+  (`Σ_R w`) at most: the variance is bounded.
+- **Noise for RR** (QUALITY R1/R2): one pcg3d draw per (pixel, frame) from an input domain
+  disjoint from the ray directions' (`x | 2^20`) drives both reservoirs (the uniform is
+  rescaled after each decision); nothing is reused across pixels or frames.
+- Registers (`tools/pipeline_stats.py`): **128 with and without this path** (the policy
+  merge had already taken the default variant from 96 to 128); FULL 251 → 252.
+- `ls_check=1` still compares the `ls_k=0` path (`ls_main`) with the frozen reference:
+  it proves the shared tail (`ls_finish`, moved out of `ls_main`) bit-exact.
+
+**First A/B (jobs `30-lsk-*`, 2026-10-27; optimised pass, no `shader_debug`, one session per
+scene; first version, irradiance weight, see below):**
+
+| Grymforge (S5) | ms (median, 300 frames) | rays/px |
+|---|---|---|
+| `ls_k=0` | 0.730, 0.731 (two sessions) | 3.83 |
+| `ls_k=2` | 0.643 (−12%) | 2.76 (exact 1.96 + remainder 0.80) |
+| `ls_k=1` | 0.528 (−28%) | ≈1.9 (estimated) |
+
+- Stats (`ls_k=2`): 80.1% of pixels over the cap, 2.33 remainder lights per capped pixel
+  carrying 13.9% of the weight; remainder rays occluded 32.7%.
+- Campsite (S3): `ls_k=0` 0.965 / 0.965, `ls_k=2` 0.955 (−1%); 1.26 traced lights/px,
+  15.1% of pixels over the cap.
+- **Not faster per ray.** A linear fit `ms = F + O + rays·c` over the three Grymforge runs
+  gives ≈0.135 ms per ray per pixel and a fixed **≈0.06-0.07 ms extra** for the exact-k
+  path (k1 and k2 alike, so not the top-k insertion, which grows with k). The candidates:
+  phase 1's extra work per light, and the remainder rays (0.8-1 per pixel at k1 and k2,
+  each to a different light per lane: incoherent traversal). Registers are not the cause
+  (128 either way). The follow-up jobs `31-lsk2-*` separate them (`ls_rest_samples=0`).
+- **Images: fireflies.** The `ls_k=2` Grymforge trace has blue fireflies on wall edges
+  (dumps saturated at 65,000 after the pass; mean luminance ×18). Cause: the first
+  version weighted by irradiance without the BRDF lobe; at grazing view angles the
+  specular term over the irradiance grows without bound (`vis ∝ 1/(N·L)` cancels the
+  irradiance's N·L), so `c_j / p_j` was unbounded. Unbiased, but infinite in practice.
+  Fixed by the exact `w = lum(c)` above (bounded by `Σ_R w`), at the cost of a BRDF
+  evaluation per traced light in phase 1. `ls_k=1` and the FULL-variant `ls_k=2` trace
+  happened to show none; their means are within the run-to-run spread of two `ls_k=0`
+  sessions (−1.3%), and the QA `hard_dark` regions flagged in them are moving characters
+  (crops checked), not shadows.
+
+Settings (live): `ls_k` (**default 0**: the follow-up below did not pass; 1-4), `ls_rest_samples`
+(default 1; 0 drops the remainder: biased, timing and debug only; 2). Push: `ls_kmode`,
+the old spare word `pad` (bits 0-3 / 4-7).
+
+Statistics (`ls_stats=1`, line `ls exact-k stats`, counters 122-127): lights `ls_k=0` would
+trace, rays per pixel (exact / remainder), the share of pixels over the cap (k-hit), the
+remainder size, its rays' occlusion, and the remainder's share of the weight. In this path
+the `ls stats` line's "evaluated" count is 0. `ls_stats=1` costs ≈3-4 ms (FULL variant):
+time only from runs without it.
+
+**Follow-up (`31-lsk2-*`, exact weights, 2026-10-27).** Rule set before the run: the default
+becomes the largest `ls_k` with Grymforge ≤ 0.69 × `ls_k=0` (0.5 ms of 0.73) and no
+`hard_dark` or firefly region against `ls_k=0` (dump maxima after the pass within 2× of
+`ls_k=0`'s); otherwise 0 stays.
+
+| Grymforge (S5), one session | ms | vs `ls_k=0` |
+|---|---|---|
+| `ls_k=0` (again, next session) | 0.780 (0.774) | |
+| no rays (`ls_min_radius=1e5`): the floor F | 0.197 | |
+| `ls_k=2` | 0.718 | 0.92: **fails** |
+| `ls_k=2, ls_rest_samples=0` (biased) | 0.582 | |
+| `ls_k=1` | 0.606 | 0.78: **fails** |
+| `ls_k=1, ls_rest_samples=0` (biased) | 0.447 | |
+
+Campsite (S3): `ls_k=0` 1.024 / 1.029, `ls_k=1` 0.929 (−9.5%), `ls_k=2` 1.017 (−1%).
+
+- **Where the time goes** (exact rays 1.96 / 0.99 per px at k2 / k1, remainder 0.80, from
+  the stats of the first A/B): an exact ray costs **0.139 ms per ray per px** (the two
+  `rest=0` runs), against 0.152 in the `ls_k=0` loop (which includes each light's
+  evaluation); a remainder ray **≈0.17** (`rest=1 − rest=0` at both k): +22%, from its
+  incoherent target (a different light per lane) and its evaluation; and a **fixed
+  0.11 ms** over the floor (`0.447 − 0.197 − 0.99·0.139`): phase 1's surface load and the
+  exact BRDF of every traced light, which `ls_k=0` evaluates once and this path twice
+  (≈0.06 ms with the first version's irradiance weight). Registers are not the cause
+  (128 in both paths). That overhead takes most of the saved rays: Grymforge's floor is
+  already 0.197 ms, and even 2 rays per pixel (k1) cost 0.41 ms above it.
+- **Images pass.** No fireflies: the maxima after the pass are 39.5 (k2) and 47 (k1)
+  against 51 / 45 for the two `ls_k=0` runs (the first version: 65,000). Mean of the lit
+  HDR (compose) −3.6% (k2), +0.2% (k1) against +1.4% between the two `ls_k=0` runs. Every
+  `hard_dark` region flagged on the final frame (S5 k1 3, k2 1; S3 k1 2) is a moving
+  character or the animated lava, as two `ls_k=0` frames also differ there (crops
+  checked). Pre-RR noise (high-pass of the compose): k1 +13% at Grymforge, k2 +1%;
+  unchanged at Campsite; the final frames are within run-to-run spread.
+- **Verdict: `ls_k` stays 0.** Neither k meets the budget rule. `ls_k=1` is a valid,
+  unbiased cost option (−22% Grymforge, −9.5% Campsite, more pre-RR noise) for a lower
+  preset; that is a preset decision, not made here.
+- **What would make it pay:** a weight as cheap as the first version's but bounded, so
+  that phase 1 needs no full BRDF (e.g. irradiance × a per-pixel bound of the specular
+  lobe, the bound evaluated once per pixel); at most ≈−0.05 ms, so k1 ≈0.55 ms: still
+  over 0.5. Grymforge's budget miss is the floor and the 3.8 traced lights per pixel;
+  1b (ReSTIR) does not remove either. A lower-resolution visibility or a per-froxel
+  light cull (lights fully occluded for the whole froxel) are the levers left.
+
 ## 10. D-RF: ray-traced reflections (implemented, tiers (a) and (c))
 
 Status (2026-10-26): **implemented, on by default** (`rt_reflections=1`, live; needs `rt=1`
@@ -2802,4 +2914,49 @@ the replaced soups holds.
 - `em_lookup` reads the geometry index as the draw's `emInfo` entry. `em_lights` reads
   identity per-geometry instances.
 - The host ABI goes to **9**: `rt_scene_set` took 8 on main.
+
+### 13.14 em9 runs (`6786dd6`, own acceleration structures) and the merge with main (`253e437`)
+
+Five runs, with no faults.
+
+**Verdicts:**
+- **Validation:** pass.
+  - `em9-af-validation` gives `VkShaderModuleCreateInfo-pCode-08737` ×2,
+    `vkCmdDraw-None-09600` ×6 and `vkCmdWaitEvents2-pEvents-10788` ×6. All three are in main's
+    baseline (`captures/validation.log`).
+  - None names our acceleration-structure builds or our queue submission.
+- **WQ:** pass.
+  - Coverage 98.5% / 99.8%.
+  - Total ours/game, window by window from a fresh load: 0.80, 0.93, 0.95, 0.96, 0.95, 1.03,
+    1.05. The first-window 35× is gone (calibration after 4 checks).
+  - `222986b8` 1.02-1.05 (≥ 200 bright px); decals 1.03-1.09.
+- **GF:**
+  - Lava `1a81f41b`: 1.23, 0.91, 0.89, 1.08, 0.91, 0.99, last 1.035. Pass.
+  - `304be1c7` 1.04 (12.8k bright px). Coverage 100%.
+  - **Build median 0.616 ms**, against my 0.6 ms criterion. It was 0.53 ms with the split's
+    per-draw BLAS. The cause is 519k triangles in one BLAS with `PREFER_FAST_BUILD`. Marginal.
+- **AF:**
+  - Lava 1.02, 0.92, 1.14, 1.21. Pass. Coverage 100%.
+  - `f298bf4d` is dark in the game (8 bright px of 1.68M) and ours is 0, since its intensity
+    at CB +16 is 0. Consistent.
+  - **`222986b8` 1.93 (381 bright px) and `304be1c7` 0.64 (237 bright px) fail as exact
+    families.**
+  - The same shaders pass elsewhere: `304be1c7` 1.04 over 12.8k bright px in GF, and
+    `222986b8` 1.02 in WQ. In AF they are a few hundred bright pixels inside large dark
+    families: 99.6% of `222986b8`'s 432k hits are black. Their game pixels also take the
+    additive glow of other emitters (lava, particles).
+  - The all-hit ratio mixes those effects. A ratio over bright hits only is now logged
+    beside it (`bright`) and is the gate. The calibration keeps the all-hit energy ratio.
+    This needs an AF run.
+  - In the validation run (a fresh load, slowed by the layers) the lava's last window read
+    0.74 while its average was still converging. Informational.
+
+**Merge with main (`253e437`, SHaRC):**
+- `common/host_api.h` defines `BG3RTX_HOST_HAS_RT_EMISSIVE`, so core/gi.cpp's SHaRC
+  emission injection (`BG3RTX_SHARC_EM=AUTO`) compiles in. The core DLL carries
+  "D-EM effects target", not "built without D-EM".
+- The injection reads `Bg3EmissiveInfo::fx_view/fx_image/fx_layout/fx_width/fx_height`, which
+  `em_scene` fills from the effects target seen this frame (fresh within 2 frames).
+- The `sharc_*` shaders compile with the layer's flags: `-enable-16bit-types` and the SDK
+  path.
 

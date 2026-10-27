@@ -7,6 +7,7 @@
 #include <dxc/dxcapi.h>
 
 #include <cstdlib>
+#include <cstring>
 
 namespace bg3 {
 
@@ -59,6 +60,47 @@ static bool init_dxc() {
   return true;
 }
 
+// The SHaRC SDK headers (docs/DESIGN_SOTA_NEXT.md item 2): external/sharc-1.8.3/include of
+// this checkout or, for a worktree under .claude/worktrees/, of the main checkout (external/
+// is not versioned). Empty when absent: the cache's shaders then fail to compile and the
+// core keeps it off.
+static const std::wstring& sharc_include() {
+  static std::wstring dir;
+  static bool done = false;
+  if (done) return dir;
+  done = true;
+  for (const std::string& c : {root_dir() + "\\external\\sharc-1.8.3\\include",
+                               root_dir() + "\\..\\..\\..\\external\\sharc-1.8.3\\include"}) {
+    if (GetFileAttributesA((c + "\\SharcCommon.h").c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+    dir = widen(c);
+    log("[shaders] SHaRC headers: %s", c.c_str());
+    return dir;
+  }
+  log("[shaders] SHaRC headers not found (external/sharc-1.8.3/include): the radiance cache is unavailable");
+  return dir;
+}
+
+// A file whose first line is "// dxc: <arguments>" gets those DXC arguments (the SHaRC
+// passes: -enable-16bit-types, which its headers require). Other files compile as before.
+static std::vector<std::wstring> first_line_args(IDxcBlobEncoding* src) {
+  std::vector<std::wstring> out;
+  const char* p = static_cast<const char*>(src->GetBufferPointer());
+  size_t n = src->GetBufferSize();
+  static const char kTag[] = "// dxc:";
+  if (n < sizeof kTag - 1 || std::strncmp(p, kTag, sizeof kTag - 1) != 0) return out;
+  std::string line(p + sizeof kTag - 1, p + n);
+  line = line.substr(0, line.find_first_of("\r\n"));
+  size_t i = 0;
+  while (i < line.size()) {
+    size_t a = line.find_first_not_of(" \t", i);
+    if (a == std::string::npos) break;
+    size_t b = line.find_first_of(" \t", a);
+    out.push_back(widen(line.substr(a, b == std::string::npos ? std::string::npos : b - a)));
+    i = b == std::string::npos ? line.size() : b;
+  }
+  return out;
+}
+
 static bool compile(ShaderEntry& e) {
   if (!init_dxc()) return false;
   std::wstring path = widen(shaders_dir() + "\\" + e.file);
@@ -71,6 +113,15 @@ static bool compile(ShaderEntry& e) {
   std::vector<LPCWSTR> args = {path.c_str(), L"-spirv", L"-fspv-target-env=vulkan1.3", L"-HV", L"2021",
                                L"-T", profile.c_str(), L"-E", entry.c_str(), L"-I", inc.c_str(),
                                L"-D", L"BG3RTX=1"};
+  const std::wstring& sharc = sharc_include();
+  if (!sharc.empty()) {
+    args.push_back(L"-I");
+    args.push_back(sharc.c_str());
+    args.push_back(L"-D");
+    args.push_back(L"BG3RTX_SHARC_SDK=1");
+  }
+  const std::vector<std::wstring> extra = first_line_args(src);
+  for (const std::wstring& a : extra) args.push_back(a.c_str());
   // shader_debug=1: unoptimised with NonSemantic debug info and the source (DXC rejects
   // it for the RT passes: a DebugLine column past the RT_ALPHA_CANDIDATE macro line).
   // shader_debug=2: optimised (-O3) with OpLine line info only: the same code as the

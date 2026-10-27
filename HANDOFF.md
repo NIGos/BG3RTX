@@ -7,44 +7,31 @@ section 12 (12.7 is the latest round). The status row is in `docs/QUALITY.md`
 The tree builds, `settings_test` passes (120 checks), and the shaders compile with DXC.
 Main is merged up to `8f8df1f`.
 
-## State after em8 and the merge with main (TRACK_D 13.13)
+## State after em9 and the merge with main `253e437` (TRACK_D 13.14)
 
 - **Pass:**
-  - capture-off cost: +0.044 ms (WQ, 0.021 without, 0.065 with);
-  - GF load with a soup resize, 2 of 2 runs;
-  - `304be1c7`: 0.84 (AF) and 1.04 (GF);
-  - AF lava 1.005.
-- **`159a6211`** is dark in the game too: its intensity is 0 in AF and GF, and its glow map
-  is black at our hits in WQ. That is no model error, and it is now ungated (0 bright px).
-- **`222986b8`:** AF is dark (1.5e-4 per hit). WQ moves with the view (1.02-1.28), a mask
-  filtering residual.
-- **Fixed:**
-  - `f298bf4d`: its intensity is now read from CB +16;
-  - first calibration after 4 checks (decals were 35× in the first window after a load);
-  - EMA weight 1/2 (GF lava 0.75-0.78 while converging);
-  - gate on bright hits.
-- **Main merged** (`eb54bca`). The emissive scene now has its own acceleration structures
-  (`em_as_build`: one BLAS with one geometry per draw, one TLAS, per-slot reuse).
-  `bvhsplit.cpp` is main's, unchanged. ABI 9.
+  - validation (no IDs beyond main's baseline);
+  - WQ (coverage 98.5-99.8%, totals 0.80-1.05 from a fresh load, `222986b8` 1.02);
+  - GF lava 1.035 and `304be1c7` 1.04;
+  - AF lava 1.02-1.21;
+  - no faults in 5 runs.
+- **Open:**
+  - AF `222986b8` 1.93 and `304be1c7` 0.64: a few hundred bright px inside dark families,
+    with other emitters' glow on the same pixels. The gate is now the bright-hit ratio
+    (logged as `bright`) and needs one AF run;
+  - GF build median 0.616 ms (criterion 0.6).
+- **Main merged with SHaRC:** `BG3RTX_HOST_HAS_RT_EMISSIVE` is defined, `sharc_em` is
+  compiled in, and the `sharc_*` shaders compile.
 
-## Serial tests to rerun (em9 jobs in main's `captures/queue/pending/`)
+## Serial tests to rerun (em10 jobs in main's `captures/queue/pending/`)
 
-- **`em9-gf-check`** (session, the first job of a GF session: a fresh load). Pass:
-  - no fault;
-  - `1a81f41b` within 0.8-1.25 in the last window;
-  - decals and other approximate families calibrated within about 64 frames (no window
-    above 3× after the first);
-  - build median ≤ 0.6 ms.
-- **`em9-wq-check` / `em9-wq-on`** (session; `wq-check` is the session's first job). Pass:
-  - coverage ≥ 95%;
-  - total ours/game within 0.8-1.25 in every window after the first ~64 frames. The decal
-    family had been 35× in the first window of `em8-wq-on`;
-  - every exact family with ≥ 200 bright px within 0.8-1.25.
-- **`em9-af-check`** (session). Pass:
-  - lava and `f298bf4d` within 0.8-1.25 (`f298bf4d` is now non-zero);
+- **`em10-af-check`** (session, 90 s warmup). Pass:
+  - `222986b8` and `304be1c7` with `bright` within 0.8-1.25 (the gate);
+  - lava within 0.8-1.25;
   - coverage ≥ 95%.
-- **`em9-af-validation`** (non-session, `-Validation`, 2 traces). Pass: no validation IDs
-  beyond main's baseline, in particular none on our AS builds (`em_as_build`).
+- **`em10-af-sharc`** (session, `sharc=1,sharc_em=1`). Pass:
+  - the log has `sharc: D-EM effects target injected`;
+  - no fault.
 
 ### R4 (when a foundry save exists): S1
 

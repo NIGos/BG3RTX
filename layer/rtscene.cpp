@@ -49,6 +49,14 @@ VkPhysicalDeviceAccelerationStructureFeaturesKHR g_f_as{VK_STRUCTURE_TYPE_PHYSIC
 VkPhysicalDeviceRayQueryFeaturesKHR g_f_rq{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
 VkPhysicalDeviceBufferDeviceAddressFeatures g_f_bda{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES};
 VkPhysicalDeviceBufferDeviceAddressFeaturesEXT g_f_bda_ext{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT};
+// SHaRC radiance cache (core/sharc.cpp): 64-bit integers and buffer atomics, float16 and 16-bit storage.
+VkPhysicalDeviceShaderAtomicInt64Features g_f_i64{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES};
+VkPhysicalDeviceShaderFloat16Int8Features g_f_f16{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES};
+VkPhysicalDevice16BitStorageFeatures g_f_s16{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES};
+VkPhysicalDeviceFeatures g_f_core{};
+uint32_t g_sharc_bits = 0;   // Bg3DeviceInfo::features of the create info last built
+// Fields we set to VK_TRUE inside the game's own feature structs, to undo before a retry.
+std::vector<std::pair<VkBool32*, VkBool32>> g_feature_edits;
 
 struct Buf {
   VkBuffer b = VK_NULL_HANDLE;
@@ -416,8 +424,105 @@ uint32_t rt_instance_api(uint32_t requested) {
   return (std::max)(requested, uint32_t(VK_API_VERSION_1_3));
 }
 
+// The SHaRC radiance cache's device features (core/sharc.cpp, docs/DESIGN_SOTA_NEXT.md 2.3):
+// shaderInt64 + shaderBufferInt64Atomics for its 64-bit hash keys, shaderFloat16 +
+// storageBuffer16BitAccess for its packed radiance (DXC -enable-16bit-types). Each one only
+// if the physical device supports it; set in the game's own struct when it chains one (the
+// game chains VkPhysicalDeviceFeatures2, ...Float16Int8 and ...16BitStorage), otherwise in a
+// struct of ours in front. Returns the new chain head; *core_features is set when the core
+// 1.0 features must come from g_f_core (pEnabledFeatures). Bits: Bg3DeviceInfo::features.
+static const void* sharc_features(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
+                                  const void* next, bool* core_features) {
+  *core_features = false;
+  g_sharc_bits = 0;
+  if (!id->GetPhysicalDeviceFeatures2) {
+    log("[rt] SHaRC device features: vkGetPhysicalDeviceFeatures2 missing; not enabled");
+    return next;
+  }
+  VkPhysicalDeviceShaderAtomicInt64Features si64{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES};
+  VkPhysicalDeviceShaderFloat16Int8Features sf16{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES, &si64};
+  VkPhysicalDevice16BitStorageFeatures ss16{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES, &sf16};
+  VkPhysicalDeviceFeatures2 sup{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &ss16};
+  id->GetPhysicalDeviceFeatures2(phys, &sup);
+  // The game's VkPhysicalDeviceVulkan11/12Features would forbid the individual structs (VUID 02829/02830).
+  auto* v11 = reinterpret_cast<const VkPhysicalDeviceVulkan11Features*>(find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES));
+  auto* v12 = reinterpret_cast<const VkPhysicalDeviceVulkan12Features*>(find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES));
+  auto set = [](const VkBool32* field) {
+    auto* f = const_cast<VkBool32*>(field);
+    if (*f) return;
+    g_feature_edits.emplace_back(f, *f);
+    *f = VK_TRUE;
+  };
+  // shaderInt64 (core 1.0): the game's VkPhysicalDeviceFeatures2, else pEnabledFeatures (copied).
+  if (sup.features.shaderInt64) {
+    if (auto* f2 = reinterpret_cast<const VkPhysicalDeviceFeatures2*>(find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2))) {
+      set(&f2->features.shaderInt64);
+    } else {
+      g_f_core = ci->pEnabledFeatures ? *ci->pEnabledFeatures : VkPhysicalDeviceFeatures{};
+      g_f_core.shaderInt64 = VK_TRUE;
+      *core_features = true;
+    }
+    g_sharc_bits |= BG3_DEV_INT64;
+  }
+  if (si64.shaderBufferInt64Atomics) {
+    if (v12) set(&v12->shaderBufferInt64Atomics);
+    else if (auto* e = reinterpret_cast<const VkPhysicalDeviceShaderAtomicInt64Features*>(
+                 find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES)))
+      set(&e->shaderBufferInt64Atomics);
+    else {
+      g_f_i64 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES};
+      g_f_i64.shaderBufferInt64Atomics = VK_TRUE;
+      g_f_i64.pNext = const_cast<void*>(next);
+      next = &g_f_i64;
+    }
+    g_sharc_bits |= BG3_DEV_INT64_ATOMICS;
+  }
+  if (sf16.shaderFloat16) {
+    if (v12) set(&v12->shaderFloat16);
+    else if (auto* e = reinterpret_cast<const VkPhysicalDeviceShaderFloat16Int8Features*>(
+                 find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES)))
+      set(&e->shaderFloat16);
+    else {
+      g_f_f16 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES};
+      g_f_f16.shaderFloat16 = VK_TRUE;
+      g_f_f16.pNext = const_cast<void*>(next);
+      next = &g_f_f16;
+    }
+    g_sharc_bits |= BG3_DEV_FLOAT16;
+  }
+  if (ss16.storageBuffer16BitAccess) {
+    if (v11) set(&v11->storageBuffer16BitAccess);
+    else if (auto* e = reinterpret_cast<const VkPhysicalDevice16BitStorageFeatures*>(
+                 find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES)))
+      set(&e->storageBuffer16BitAccess);
+    else {
+      g_f_s16 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES};
+      g_f_s16.storageBuffer16BitAccess = VK_TRUE;
+      g_f_s16.pNext = const_cast<void*>(next);
+      next = &g_f_s16;
+    }
+    g_sharc_bits |= BG3_DEV_STORAGE16;
+  }
+  log("[rt] SHaRC device features (supported -> enabled): shaderInt64 %d, shaderBufferInt64Atomics %d, shaderFloat16 %d, "
+      "storageBuffer16BitAccess %d; %zu set in the game's own structs%s%s",
+      sup.features.shaderInt64, si64.shaderBufferInt64Atomics, sf16.shaderFloat16, ss16.storageBuffer16BitAccess,
+      g_feature_edits.size(), v11 || v12 ? " (through its VkPhysicalDeviceVulkan11/12Features)" : "",
+      *core_features ? "; shaderInt64 through pEnabledFeatures" : "");
+  return next;
+}
+
+bool rt_device_features_added() { return g_sharc_bits != 0; }
+
+void rt_device_features_undo() {
+  for (auto& [field, old] : g_feature_edits) *field = old;
+  if (!g_feature_edits.empty()) log("[rt] restored %zu feature fields of the game's create info", g_feature_edits.size());
+  g_feature_edits.clear();
+  g_sharc_bits = 0;
+}
+
 const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
-                                                VkDeviceCreateInfo* scratch) {
+                                                VkDeviceCreateInfo* scratch, bool sharc) {
+  g_sharc_bits = 0;
   if (!cfg_int("rt", 0) || !id) return ci;
   VkPhysicalDeviceProperties props{};
   id->GetPhysicalDeviceProperties(phys, &props);
@@ -527,6 +632,9 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   }
   for (const char* e : need)
     if (!listed(e)) g_ext_names.push_back(e);
+  bool core_features = false;
+  if (sharc && cfg_int("sharc_device", 1)) next = sharc_features(id, phys, ci, next, &core_features);
+  else log("[rt] SHaRC device features not requested (%s)", sharc ? "sharc_device=0" : "retry without them");
   g_f_rq = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
   g_f_rq.rayQuery = VK_TRUE;
   g_f_rq.pNext = const_cast<void*>(next);
@@ -535,6 +643,7 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   g_f_as.pNext = &g_f_rq;
   *scratch = *ci;
   scratch->pNext = &g_f_as;
+  if (core_features) scratch->pEnabledFeatures = &g_f_core;
   scratch->enabledExtensionCount = uint32_t(g_ext_names.size());
   scratch->ppEnabledExtensionNames = g_ext_names.data();
   log("[rt] + VK_KHR_acceleration_structure, VK_KHR_ray_query, VK_KHR_deferred_host_operations");
@@ -544,6 +653,16 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
 void rt_device_created(DeviceData* dd, bool enabled) {
   if (g_dd) return;
   g_dd = dd;
+  // For the core (no ABI change): what the device was created with, through persist().
+  if (auto* info = static_cast<Bg3DeviceInfo*>(persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)))) {
+    *info = Bg3DeviceInfo{};
+    info->version = 1;
+    info->features = enabled ? g_sharc_bits : 0u;
+    if (dd->inst && dd->inst->GetPhysicalDeviceMemoryProperties)
+      dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical, &info->memory);
+    if (enabled && g_sharc_bits) log("[rt] SHaRC device features on the device: 0x%x", g_sharc_bits);
+  }
+  g_feature_edits.clear();   // the device exists: nothing to undo any more
   if (!enabled) {
     if (cfg_int("rt", 0)) log("[rt] ray tracing is NOT enabled on the device");
     return;

@@ -34,6 +34,16 @@
 #include "../rt/rt_common.hlsli"
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_ambient.hlsli"
+// SHARC_QUERY_PASS (rt_reflections_sharc.hlsl, sharc=1 with sharc_query bit 2): a hidden or
+// off-screen hit on a surface at least sharc_rf_rough rough, whose ray cone at the hit is
+// wider than sharc_rf_cone voxels (SHaRC's glossy rule: the cache's blur is then below the
+// lobe's), takes the radiance cache's (diffuse) radiance there with the tier (a) weight
+// instead of keeping the probe. Mirrors and narrow cones keep the probe; misses always do.
+#if SHARC_QUERY_PASS
+#define SHARC_RT_QUERY 1
+#define SHARC_CAM_FROM_LIGHTS 1
+#include "sharc_common.hlsli"
+#endif
 
 [[vk::binding(30, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> rfHitDist;
 
@@ -121,6 +131,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   uint tier = 0;   // 0 not traced, 1 on-screen hit (a), 2 hidden on screen, 3 off screen, 4 miss, 5 below horizon
   float w = 0.0, hit_t = kNoHit;
   float3 Lrt = 0;
+  bool cached = false;   // tier 2/3 shaded from the radiance cache (SHARC_QUERY_PASS)
   if (eligible) {
     float3 Nn = normalize(sf.N);
     float3 dir = reflect(-sf.V, Nn);
@@ -141,7 +152,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
       float pa = pixel_angle(uv);
       RtCone cone = {sf.dist * pa, pa + sf.a * sf.a};
       float3 o = sf.P + Nn * (sf.dist * pc.rt_bias);
+#if SHARC_QUERY_PASS
+      RtHit hh = rt_closest_hit(o, dir, pc.rf_tmax, cone);
+      float t = hh.t;
+#else
       float t = rt_closest(o, dir, pc.rf_tmax, cone);
+#endif
       if (t < 0.0) {
         tier = 4;
       } else {
@@ -167,6 +183,24 @@ void main(uint3 tid : SV_DispatchThreadID) {
             }
           }
         }
+#if SHARC_QUERY_PASS
+        if (tier != 1 && (shc.flags & 4u) != 0u && sf.a >= shc.rf_rough) {
+          const float3 cam_abs = sharc_cam();
+          const float3 ph = o + dir * t;
+          sharc_bin = (fp.x >> 3) * 7u + (fp.y >> 3) * 13u;
+          const bool wide = cone.f0 + cone.spread * t >= sharc_voxel_size(cam_abs, ph + cam_abs) * shc.rf_cone;
+          sharc_stat(kShRfEligible, wide);
+          float3 Lc;
+          bool near;
+          if (wide && sharc_ray_hit(hh, ph, dir, t, cam_abs, Lc, near)) {
+            w = rough_w * saturate(pc.rf_strength);
+            Lrt = Lc;
+            hit_t = t;
+            cached = true;
+          }
+          sharc_stat(kShRfFound, cached);
+        }
+#endif
       }
     }
   }
@@ -195,7 +229,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   }
 
   if (pc.rf_debug == 1) {   // tier: green on-screen hit, red hidden, orange off screen, blue miss, grey not traced
-    float3 c = tier == 1 ? float3(0, 1, 0) : tier == 2 ? float3(1, 0, 0) : tier == 3 ? float3(1, 0.5, 0)
+    float3 c = cached ? float3(0, 1, 1) : tier == 1 ? float3(0, 1, 0) : tier == 2 ? float3(1, 0, 0) : tier == 3 ? float3(1, 0.5, 0)
              : tier == 4 ? float3(0, 0, 1) : tier == 5 ? float3(1, 0, 1) : float3(0.2, 0.2, 0.2);
     od = c * 0.25;
     os = 0;
@@ -214,7 +248,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     od = over > 1e-3 + 0.01 * lum(gs) ? float3(1, 0, 0) : abs(res) * 4.0;
     os = 0;
   } else if (pc.rf_debug == 6) {   // hit distance / 10 (tier a only)
-    od = (tier == 1 ? saturate(hit_t / 10.0) : 0.0).xxx * 0.5;
+    od = (tier == 1 || cached ? saturate(hit_t / 10.0) : 0.0).xxx * 0.5;
     os = 0;
   }
   // Never hand the game a non-finite value.
@@ -222,7 +256,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (any(!isfinite(od))) od = gd;
   gSpecular[fp] = os;
   if (pc.rf_debug != 0) gDiffuse[fp] = od;
-  rfHitDist[fp] = tier == 1 && w > 0.0 ? min(hit_t, kNoHit) : kNoHit;
+  rfHitDist[fp] = (tier == 1 || cached) && w > 0.0 ? min(hit_t, kNoHit) : kNoHit;
 
   if (pc.rf_stats != 0) {
     uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
