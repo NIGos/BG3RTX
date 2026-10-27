@@ -816,6 +816,30 @@ place (docs/QA.md):
   written down: where the GI rays' hit density correlates with brightness inside a cell, coarse
   and fine differ without a leak; the occluded cells against the clean ones separate the two.
   Job `38-sharc7-qa-S7-S8`. Hit materials (EN2) are the blocker for the traced update itself.
+### 2.16 sharc7 (QA `captures/qa/20261027-183526`) and the plan with EN2
+
+- **`sharc_fine_reference`: not measured.** The QA phases last 240 presents (about 6 s); the
+  300-frame "sharc stats" window never closed inside the `sharc_leak` phase before `sref0` turned
+  the cache off, so no fine-cell line was logged (and the leak-test line scored for that phase
+  covered mostly the phase before it). Fixed: `sharc_stats_frames`, 60 in the QA, so several
+  windows close inside each phase and the last line of a phase covers it alone.
+- `sharc_leak_cells` (counters): 6.0% (S7) and 4.1% (S8) of the cache's GI contribution from
+  occluded cells (same windowing caveat). Rejected by default.
+- `sharc_reference` with z = 1.96: **S7 interior passes** (excess 24,638 against deficit 25,650;
+  limit 440), **S8 interior fails** (217,427 against 42,592; limit 999; mean +1.9%), as in
+  2.14-2.15: indecisive there for the reason given.
+- hard_dark: S7 `sharc` 0.42‰ final only (the moving character again); non-finite 0.
+- **Default: off.** The fine-cell gate has not produced a measurement; job `39-sharc8-qa-S7-S8`.
+- **EN2 (branch `worktree-agent-a94065fdd50bc8494`) and SHaRC in D-RF.** EN2 adds
+  `rt_reflections_hm.hlsl` (HITMAT_PASS) with the lighting's sun set as set 3; SHaRC's variant
+  binds the cache at set 4 with set 3 empty, so the two layouts nest. When both land: one shader
+  `rt_reflections_hm.hlsl` with both HITMAT_PASS and SHARC_QUERY_PASS, layout {D-RF push, host,
+  game set 1, sun set, cache set}, replacing `rt_reflections_sharc.hlsl`; `rf_dispatch` keeps
+  plain / cache-only / material(+cache) pipelines. Per hidden or off-screen hit: EN2's tier (b)
+  (material x direct light at the hit) where it applies, the cache where tier (b) has no
+  material, the probe otherwise; the cache's diffuse-only radiance never adds to tier (b)'s
+  direct term (double counting). EN2 also unblocks v2's traced update: its hit albedo is
+  exactly the missing input (2.15).
 ---
 
 ## 3. Opacity micromaps for alpha-tested foliage
