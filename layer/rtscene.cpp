@@ -768,6 +768,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
     commit_scene_slot(scene_slot, res.tlas, set, true, res.rec);
+    fault_checkpoint(cmd, kCkSceneCommitted, uint32_t(scene_slot));
     ++g_n_frames;
     ++g_n_split;
     g_prims_sum += res.static_tris + res.dynamic_tris;
@@ -826,6 +827,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   // The XFB writes are done; last frame's ray queries and builds are done with
   // the AS memory, scratch and instance buffer.
   barrier(cmd, kXFB | kAS | kCS, kCS | kAS | kXfer);
+  fault_checkpoint(cmd, kCkLegacyStart, uint32_t(legacy_rec));
   VkAccelerationStructureInstanceKHR inst{};
   inst.transform.matrix[0][0] = inst.transform.matrix[1][1] = inst.transform.matrix[2][2] = 1.0f;
   inst.mask = 0xFF;
@@ -880,6 +882,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   }
   // Ray queries in later command buffers of this frame (submission order).
   barrier(cmd, kAS, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+  fault_checkpoint(cmd, kCkLegacyTlas, uint32_t(legacy_rec));
   timestamp(cmd, slot, 3);
   restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
 

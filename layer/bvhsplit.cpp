@@ -195,6 +195,29 @@ struct AsAlloc {
 // (a TLAS of a slot in flight may still reference it).
 struct PendingFree { uint64_t frame; int chunk; VkDeviceSize off, size; VkAccelerationStructureKHR as = VK_NULL_HANDLE; };
 std::vector<PendingFree> g_pending_free;
+// rt_as_keep=1 (default): a released BLAS's VkAccelerationStructureKHR is kept, not
+// destroyed, while the device runs (its range is reused by new AS objects). Every
+// fault log of the split had the faulting page within 70 KB of one of our AS
+// handles (host heap: the driver's AS objects), and every configuration that faults
+// destroys AS objects at run time (compaction, new-range builds, the emissive
+// capture), while the legacy build, which never does, never faults. Kept handles
+// are destroyed at device destruction; above rt_as_keep_max the oldest go.
+std::deque<VkAccelerationStructureKHR> g_kept_as;
+uint64_t g_kept_dropped = 0;
+void retire_as(VkAccelerationStructureKHR as) {
+  if (!as) return;
+  if (!cfg_int("rt_as_keep", 1)) {
+    defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(as));
+    return;
+  }
+  g_kept_as.push_back(as);
+  const size_t cap = size_t((std::max)(cfg_int("rt_as_keep_max", 200000), 1000));
+  while (g_kept_as.size() > cap) {
+    defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_kept_as.front()));
+    g_kept_as.pop_front();
+    if (g_kept_dropped++ == 0) log("[bvh] more than %zu released BLAS handles kept: the oldest are destroyed", cap);
+  }
+}
 
 bool as_create(VkDeviceSize size, AsAlloc& out) {
   out = AsAlloc{};
@@ -661,6 +684,8 @@ void bvh_device_destroyed(DeviceData* dd) {
   for (const PendingFree& p : g_pending_free)
     if (p.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(p.as));
   g_pending_free.clear();
+  for (VkAccelerationStructureKHR a : g_kept_as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a));
+  g_kept_as.clear();
   g_meshes.clear();
   g_dyn.clear();
   g_buf_meshes.clear();
@@ -1065,6 +1090,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // them visible, the explicit dependency costs nothing.)
   barrier(cmd, kXFB | kAS | kCS | kXfer | VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT,
           kCS | kAS | kXfer, kRW);
+  fault_checkpoint(cmd, kCkBvhStart, uint32_t(rec));
   rt_convert(cmd, cap);
   // The in-place conversion before everything that reads the soup: the extraction
   // jobs (compute) AND the per-draw BLAS builds (AS build stage). The AS stage was
@@ -1075,6 +1101,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // f9fac2a faults: per-draw builds only). The legacy build has always had
   // kCS -> kAS here (rtscene.cpp), and never faulted.
   barrier(cmd, kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS, kRW);
+  fault_checkpoint(cmd, kCkBvhConverted, uint32_t(rec));
   JobBatch batch{now, 0, {}, {}, {}, rec};
   // Status slots: one per job, one per new mesh's compacted size, then the batch's
   // done word (written by a transfer after all of them).
@@ -1179,6 +1206,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       scratch += (blas_sizes(m.tris, stride, !m.alpha, mesh_flags).buildScratchSize + al - 1) / al * al;
     }
     for (const DynBuild& db : dyn_builds) {
+      // The vertex range must lie in this frame's soup (logged; the capture guarantees it).
+      if (db.soup_off % stride || db.soup_off + VkDeviceSize(db.prims) * tri_bytes > cap.xfb_size) {
+        static uint32_t logged = 0;
+        if (logged++ < 20)
+          log("[bvh] WARNING frame %llu: per-draw BLAS vertices [%llu, +%llu) outside the soup (%llu bytes) or misaligned",
+              (unsigned long long)now, (unsigned long long)db.soup_off,
+              (unsigned long long)(VkDeviceSize(db.prims) * tri_bytes), (unsigned long long)cap.xfb_size);
+      }
       geo.push_back(tri_geometry(soup_addr + db.soup_off, db.prims, stride, !db.slot->alpha));
       ranges.push_back({db.prims, 0, 0, 0});
       VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
@@ -1229,6 +1264,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // BLAS builds (and the copies before them) -> the size queries, the TLAS build
     // and its scratch reuse: as broad as the legacy build's barrier.
     barrier(cmd, kAS | kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kAS | kXfer, kRW);
+    fault_checkpoint(cmd, kCkBvhBlas, uint32_t(rec));
     // The compacted size of each new mesh: written, then copied into the batch's
     // status slots in order (a query's host-visible availability may still be a
     // previous use's until the reset executes, so the host never reads the pool).
@@ -1296,6 +1332,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // ray queries read through set 1) -> the RT passes in later command buffers.
   barrier(cmd, kAS | kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           VK_ACCESS_MEMORY_READ_BIT);
+  fault_checkpoint(cmd, kCkBvhTlas, uint32_t(rec));
   stamp(cmd, 3);
   const size_t batch_swaps = batch.swaps.size();
   if (n_status || !batch.swaps.empty()) g_batches.push_back(std::move(batch));
@@ -1463,6 +1500,8 @@ void bvh_log_state(const char* prefix) {
       for (const JobBatch& b : g_batches) swaps += b.swaps.size(), jobs += b.jobs.size();
       size_t ready = 0;
       for (const auto& [k, m] : g_meshes) ready += m.state == kReady;
+      log("%s bvh: %zu released BLAS handles kept alive (rt_as_keep), %llu destroyed over the cap", prefix, g_kept_as.size(),
+          (unsigned long long)g_kept_dropped);
       log("%s bvh: %zu meshes (%zu ready), %zu per-draw BLAS, %zu chunks, pool %llu MB, %zu batches pending (%zu jobs, %zu "
           "compaction copies not yet swapped in), %zu ranges awaiting release, last TLAS slot %d (record %llu), "
           "oldest live scene slot built in frame %llu, now %llu",
@@ -1602,7 +1641,7 @@ void bvh_on_present() {
         g_pending_free[w++] = p;
         continue;
       }
-      if (p.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(p.as));
+      retire_as(p.as);
       if (p.chunk < 0) g_pool_ra.release(p.off, p.size);
       else if (size_t(p.chunk) < g_chunks.size()) g_chunks[p.chunk].ra.release(p.off, p.size);
     }

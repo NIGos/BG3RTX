@@ -580,6 +580,14 @@ void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size);
 void fault_untrack(VkDeviceAddress addr);
 // A submit's or present's result: VK_ERROR_DEVICE_LOST logs the fault once.
 void fault_on_result(DeviceData* dd, VkResult r, const char* where);
+// VK_NV_device_diagnostic_checkpoints markers (no-ops without the extension).
+enum CheckpointSite : uint32_t {
+  kCkCmdBegin = 1, kCkPassBeginPre, kCkPassBeginPost, kCkPassEndPre, kCkPassEndPost, kCkDispPrePre, kCkDispPrePost,
+  kCkDispPre, kCkDispPost, kCkCmdEndPre, kCkCmdEndPost,
+  kCkBvhStart = 20, kCkBvhConverted, kCkBvhBlas, kCkBvhTlas, kCkSceneCommitted, kCkLegacyStart, kCkLegacyTlas,
+};
+void fault_checkpoint(VkCommandBuffer cmd, uint32_t site, uint32_t arg);
+void fault_note_queue(VkQueue q);   // a queue the game submits to (checkpoints are per queue)
 
 uint64_t frame_index();
 void* persist(const char* key, size_t size);

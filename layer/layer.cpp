@@ -396,6 +396,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   sl_note_submit(cmds);
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
+  fault_note_queue(queue);
   auto lock = queue_lock();
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit");
@@ -415,6 +416,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   sl_note_submit(cmds);
   life_on_submit(queue, cmds);
+  fault_note_queue(queue);
   auto lock = queue_lock();
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit2");

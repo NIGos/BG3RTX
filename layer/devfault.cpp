@@ -24,6 +24,13 @@ std::vector<const char*> g_ext_names;
 VkPhysicalDeviceFaultFeaturesEXT g_f_fault{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT};
 bool g_enabled = false;
 PFN_vkGetDeviceFaultInfoEXT p_fault_info = nullptr;
+// VK_NV_device_diagnostic_checkpoints: markers in the command stream; after a loss
+// each queue reports the last marker every pipeline stage reached.
+bool g_ckpt_dev = false;
+PFN_vkCmdSetCheckpointNV p_set_ckpt = nullptr;
+PFN_vkGetQueueCheckpointDataNV p_get_ckpt = nullptr;
+std::mutex g_q_mu;
+std::vector<VkQueue> g_queues;   // queues the game submitted to
 std::atomic<bool> g_reported{false};
 
 struct Range {
@@ -223,6 +230,14 @@ const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalD
     log("[fault] address binding reports off (instance messenger %d, offered %d, feature %d)", int(g_bind_inst),
         int(offered(VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME)), int(bf.reportAddressBinding));
   }
+  g_ckpt_dev = false;
+  if (cfg_int("fault_checkpoints", 1) && offered(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)) {
+    if (!listed(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME))
+      g_ext_names.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
+    g_ckpt_dev = changed = true;
+    log("[fault] + %s (markers in our recorded work, read back after a loss)",
+        VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
+  }
   if (!changed) return ci;
   *scratch = *ci;
   scratch->pNext = next;
@@ -289,6 +304,12 @@ void fault_instance_destroyed(VkInstance inst) {
   if (inst == g_messenger_inst) g_messenger = VK_NULL_HANDLE, g_messenger_inst = VK_NULL_HANDLE;
 }
 void fault_device_created(DeviceData* dd, bool enabled) {
+  if (enabled && g_ckpt_dev) {
+    p_set_ckpt = reinterpret_cast<PFN_vkCmdSetCheckpointNV>(dd->gdpa(dd->device, "vkCmdSetCheckpointNV"));
+    p_get_ckpt = reinterpret_cast<PFN_vkGetQueueCheckpointDataNV>(dd->gdpa(dd->device, "vkGetQueueCheckpointDataNV"));
+    if (!p_set_ckpt || !p_get_ckpt) p_set_ckpt = nullptr, p_get_ckpt = nullptr;
+    log("[fault] checkpoints %s", p_set_ckpt ? "ready" : "UNAVAILABLE (no entry points)");
+  }
   g_enabled = enabled && g_enabled;
   p_fault_info = g_enabled ? reinterpret_cast<PFN_vkGetDeviceFaultInfoEXT>(dd->gdpa(dd->device, "vkGetDeviceFaultInfoEXT"))
                            : nullptr;
@@ -378,6 +399,66 @@ static void fault_details(DeviceData* dd, bool quiet) {
   }
 }
 
+// ---- checkpoints ----
+static const char* ckpt_site(uint32_t s) {
+  switch (s) {
+    case kCkCmdBegin: return "game command buffer begins";
+    case kCkPassBeginPre: return "before core on_pass_begin";
+    case kCkPassBeginPost: return "after core on_pass_begin";
+    case kCkPassEndPre: return "before core on_pass_end";
+    case kCkPassEndPost: return "after core on_pass_end";
+    case kCkDispPrePre: return "before core on_dispatch_pre";
+    case kCkDispPrePost: return "after core on_dispatch_pre";
+    case kCkDispPre: return "before core on_dispatch";
+    case kCkDispPost: return "after core on_dispatch";
+    case kCkCmdEndPre: return "before core on_cmd_end";
+    case kCkCmdEndPost: return "after core on_cmd_end";
+    case kCkBvhStart: return "bvh build: start";
+    case kCkBvhConverted: return "bvh build: soup converted";
+    case kCkBvhBlas: return "bvh build: BLAS builds/refits done";
+    case kCkBvhTlas: return "bvh build: TLAS built";
+    case kCkSceneCommitted: return "scene slot committed (alpha set written)";
+    case kCkLegacyStart: return "legacy build: start";
+    case kCkLegacyTlas: return "legacy build: TLAS built";
+    default: return "?";
+  }
+}
+
+void fault_checkpoint(VkCommandBuffer cmd, uint32_t site, uint32_t arg) {
+  if (!p_set_ckpt || !cmd) return;
+  const uint64_t m = (uint64_t(site & 0xff) << 56) | (uint64_t(frame_index() & 0xffffff) << 32) | arg;
+  p_set_ckpt(cmd, reinterpret_cast<const void*>(uintptr_t(m)));
+}
+
+void fault_note_queue(VkQueue q) {
+  if (!p_get_ckpt || !q) return;
+  std::lock_guard<std::mutex> lock(g_q_mu);
+  for (VkQueue x : g_queues)
+    if (x == q) return;
+  g_queues.push_back(q);
+}
+
+static void dump_checkpoints() {
+  if (!p_get_ckpt) return;
+  std::vector<VkQueue> qs;
+  {
+    std::lock_guard<std::mutex> lock(g_q_mu);
+    qs = g_queues;
+  }
+  for (VkQueue q : qs) {
+    uint32_t n = 0;
+    p_get_ckpt(q, &n, nullptr);
+    std::vector<VkCheckpointDataNV> d(n, VkCheckpointDataNV{VK_STRUCTURE_TYPE_CHECKPOINT_DATA_NV});
+    if (n) p_get_ckpt(q, &n, d.data());
+    log("[fault] checkpoints of queue %p: %u", (void*)q, n);
+    for (uint32_t i = 0; i < n; ++i) {
+      const uint64_t m = uint64_t(uintptr_t(d[i].pCheckpointMarker));
+      log("[fault]   stage 0x%x: last marker \"%s\", frame %llu, arg 0x%08x", d[i].stage, ckpt_site(uint32_t(m >> 56)),
+          (unsigned long long)((m >> 32) & 0xffffff), uint32_t(m));
+    }
+  }
+}
+
 void fault_on_result(DeviceData* dd, VkResult r, const char* where) {
   if (r != VK_ERROR_DEVICE_LOST || !dd || g_reported.exchange(true)) return;
   log("[fault] VK_ERROR_DEVICE_LOST from %s in frame %llu (presents completed on the GPU: %llu)", where,
@@ -385,6 +466,7 @@ void fault_on_result(DeviceData* dd, VkResult r, const char* where) {
   rt_log_state("[fault]");
   bvh_log_state("[fault]");
   fault_details(dd, false);
+  dump_checkpoints();
 }
 
 // Active detection: once the device is lost the game stops calling Vulkan, so the

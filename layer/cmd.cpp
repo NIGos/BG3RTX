@@ -299,6 +299,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
   s->recording = ++recordings;
+  if (r == VK_SUCCESS) fault_checkpoint(cmd, kCkCmdBegin, uint32_t(s->recording));
   s->in_pass = false;
   s->pass_ordinal = 0;
   s->pipe[0] = s->pipe[1] = VK_NULL_HANDLE;
