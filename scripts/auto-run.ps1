@@ -402,6 +402,30 @@ $moveDone = $false
 $moveStart = Get-Date
 $sessionReady = $false
 $mw = @{ done = $false; menuAt = $null; clicks = 0; lastClick = [datetime]::MinValue; modSettingsBytes = $modSettingsBefore }
+# The mod-warning steps (TEST_SCENES.md, "Saves made with mods"). Keyboard map
+# (Engine.pak PlayerProfiles/Eoc/keyboard_1.json): UIAccept = Enter, UICancel = Escape.
+# ModVerification.xaml binds only UICancel (never sent), so its Continue needs the click;
+# in the 2026-10-27 runs that click changed the menu every time (54 -> 68 passes, 1100 ->
+# 2000 draws) without a load: a second dialog, presumably a MessageBox, whose buttons
+# carry BoundEvent bindings, so Enter (UIAccept) presses its accept action.
+# Enter is harmless where nothing binds UIAccept. Traces record what is on screen.
+$mwSteps = @(
+  @{ what = "enter"; wait = 0 },   # a dialog that binds UIAccept
+  @{ what = "click"; wait = 8 },   # ModVerification: Continue
+  @{ what = "trace"; wait = 4 },
+  @{ what = "enter"; wait = 2 },   # the follow-up dialog's UIAccept
+  @{ what = "enter"; wait = 8 },
+  @{ what = "trace"; wait = 10 }
+)
+# A UI key (press and release) posted to this run's game window only, as the -Move key.
+function Send-UiKey([int]$vk, [int]$scan) {
+  $h = Get-GameWindow
+  if ($h -eq [IntPtr]::Zero) { return }
+  $l = 1 -bor ([int64]$scan -shl 16)
+  [void][BG3RTX.Win]::PostMessage($h, 0x0100, [IntPtr]$vk, [IntPtr]$l)
+  Start-Sleep -Milliseconds 80
+  [void][BG3RTX.Win]::PostMessage($h, 0x0101, [IntPtr]$vk, [IntPtr]($l -bor 0xC0000000))
+}
 while ((Get-Date) -lt $deadline) {
   if ($moving -and $Background) {
     # A posted key-down is a single press to the game; a held key is what
@@ -414,19 +438,24 @@ while ((Get-Date) -lt $deadline) {
   if ($modWarn -and -not $mw.done) {
     foreach ($ln in (Read-NewLog)) {
       if (-not $mw.menuAt -and $ln -match '\[auto\] 3D scene first seen') { $mw.menuAt = Get-Date }
-      if ($ln -match '\[auto\] loading screen after the 3D scene' -or $ln -match '\[auto\] scene ready' -or $ln -match '\[trace\] frame \d+ written') {
+      if ($ln -match '\[auto\] loading screen after the 3D scene' -or $ln -match '\[auto\] scene ready') {
         $mw.done = $true
-        if ($mw.clicks) { Write-Host "mod warning: the load started after $($mw.clicks) click(s)" }
+        if ($mw.clicks) { Write-Host "mod warning: the load started after step $($mw.clicks) ($($mwSteps[$mw.clicks - 1].what))" }
         break
       }
     }
-    # Only while the 3D menu is up and no load has started: the dialog, as the save has
-    # missing mods. Up to 3 attempts, 10 s apart, with smaller UI-scale guesses.
-    $scales = @(1.0, 0.85, 0.7)
+    # Only while the 3D menu is up and no load has started (the dialog, as the save has
+    # missing mods): the steps below, each after the previous one's delay.
     if (-not $mw.done -and $mw.menuAt -and ((Get-Date) - $mw.menuAt).TotalSeconds -ge $ModWarningAfterSec -and
-        $mw.clicks -lt $scales.Count -and ((Get-Date) - $mw.lastClick).TotalSeconds -ge 10) {
-      if (Send-ModWarningClick $scales[$mw.clicks]) { $mw.clicks++; $mw.lastClick = Get-Date }
-      if ($mw.clicks -ge $scales.Count) { Write-Host "mod warning: $($scales.Count) clicks sent, waiting for a load (none started yet)" }
+        $mw.clicks -lt $mwSteps.Count -and ((Get-Date) - $mw.lastClick).TotalSeconds -ge $mwSteps[$mw.clicks].wait) {
+      $st = $mwSteps[$mw.clicks]
+      switch ($st.what) {
+        "enter" { Send-UiKey 0x0D 0x1C; Write-Host "mod warning: Enter (UIAccept) posted" }
+        "click" { [void](Send-ModWarningClick 1.0) }
+        "trace" { Set-Content (Tagged $root "trace" ".request") "mod warning $(Get-Date -Format o)"; Write-Host "mod warning: diagnostic trace requested (the screen after the steps so far)" }
+      }
+      $mw.clicks++; $mw.lastClick = Get-Date
+      if ($mw.clicks -ge $mwSteps.Count) { Write-Host "mod warning: all steps sent, no load started" }
     }
   }
   if ($Move -and (Test-Path $log)) {

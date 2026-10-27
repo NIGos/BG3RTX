@@ -77,9 +77,31 @@ S14 and S9 have none.
   change. The target is the dialog's "Continue" button (`StartGameButton`), from the XAML:
   a 2576x1930 panel centred on a 3840x2160 design; Continue is 428x80 at centre-relative
   x −438..−10, y +791..+871, Cancel to the right of the centre. We click at (−130, +831) ×
-  `min(w/3840, h/2160)`: inside Continue for any label width and never on Cancel. Up to 3
-  attempts 10 s apart, with UI-scale guesses 1.0, 0.85 and 0.7; a miss lands on the
-  dialog's modal backdrop.
+  `min(w/3840, h/2160)`: inside Continue for any label width and never on Cancel. A miss
+  lands on the dialog's modal backdrop. (Round 1 sent 3 clicks with UI-scale guesses 1.0,
+  0.85 and 0.7; round 2 sends one click at 1.0, then Enter.)
+- **Round 1 (jobs `modwarn-S2/S10/S11/S12`, 2026-10-27 16:15-16:44): no level loaded.**
+  The click does reach the UI: in every run, the frame changes right after the first
+  click, from 54 passes / about 1,100 draws to 68 passes / about 2,000 draws, and SDL
+  reports the posted mouse leaving the window (`[bg] dropped SDL window event 11`). The
+  later clicks change nothing. So Continue opens a second state, most likely a
+  confirmation MessageBox, and nothing accepted it.
+- **The keyboard path** (`Engine.pak` `PlayerProfiles/Eoc/keyboard_1.json`):
+  - `UIAccept` is Enter and keypad Enter, and `UICancel` is Escape.
+  - In keyboard mode, `ModVerification.xaml` binds only `UICancel` (`EscButton`). Nothing
+    in it binds `UIAccept`, it has no `IsDefault` button and no focus set. So the first
+    dialog has no keyboard accept, and Tab-navigation could land on Cancel.
+  - `MessageBox.xaml`'s buttons carry `BoundEvent="{Binding BoundEvent}"`, so a
+    MessageBox's accept action reacts to `UIAccept`.
+- **Round 2 steps** (`$mwSteps`), each only while the menu is up with no load:
+  1. Enter;
+  2. after 8 s, the Continue click;
+  3. after 4 s, a diagnostic trace (`trace.request`): the dumps show the screen and UI;
+  4. after 2 s, Enter;
+  5. after 8 s, Enter;
+  6. after 10 s, a final trace.
+
+  Escape is never sent.
 - **No saving:** loading does not write a save, nothing sends a save key, and any save the
   game writes is parked as before. `modsettings.lsx` is read before the launch and written
   back after the game exits if the game changed it.
