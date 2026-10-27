@@ -134,6 +134,13 @@ static void end_pass(VkCommandBuffer cmd) {
     std::string dumps = trace_dump_pass(cmd, s);
     trace_event(s, "{\"op\":\"end\",\"draws\":" + std::to_string(s->pass.draw_count) + ",\"dumps\":[" + dumps + "]}");
   }
+  // The hooks below may record work that reads this pass's attachments.
+  for (uint32_t i = 0; i < s->pass.color_count; ++i) {
+    life_note(s, (uint64_t)s->pass.color_images[i]);
+    life_note(s, (uint64_t)s->pass.color_views[i]);
+  }
+  life_note(s, (uint64_t)s->pass.depth_image);
+  life_note(s, (uint64_t)s->pass.depth_view);
   ngx_note_pass(cmd, s->pass, s->color_layouts, s->depth_layout);
   rrpost_pass_end(cmd, s->pass, s->color_layouts);
   sl_note_pass_end(cmd, s);
@@ -199,6 +206,10 @@ bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, ui
     }
   }
   if (!found) return false;
+  // Whoever asked is about to record work that uses it (the core's GI/RT
+  // passes, RR before post, the alpha-test records).
+  life_note(s, (uint64_t)e.view);
+  life_note(s, (uint64_t)e.buffer);
   *out = Bg3Binding{};
   out->type = e.type;
   out->buffer = e.buffer;
@@ -211,6 +222,7 @@ bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, ui
     if (v != tracker().views.end()) {
       out->image = v->second.image;
       out->format = v->second.format;
+      life_note(s, (uint64_t)v->second.image);
       auto im = tracker().images.find(v->second.image);
       if (im != tracker().images.end()) {
         out->width = im->second.ci.extent.width;
@@ -309,6 +321,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->has_viewport = false;
   s->sl_layouts.clear();
   s->sl_cam_valid = false;
+  s->refs.clear();
   return r;
 }
 
@@ -712,6 +725,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
   for (uint32_t i = 0; i < n; ++i) {
     CmdState* sec = cmd_state(cmds[i]);
     if (!sec) continue;
+    s->refs.insert(s->refs.end(), sec->refs.begin(), sec->refs.end());   // submitted with the primary
     for (auto& [img, lay] : sec->sl_layouts) sl_note_barrier(s, img, lay);
     if (sec->sl_cam_valid) {
       memcpy(s->sl_cam, sec->sl_cam, sizeof s->sl_cam);

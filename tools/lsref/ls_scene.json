@@ -1,0 +1,10 @@
+{"start": "\\[trace\\] frame \\d+ written", "timeout": 1500,
+ "phases": [
+  {"at": 1, "name": "A check", "set": {"ls_check": "1"}},
+  {"at": 35, "name": "B new", "set": {"ls_check": "0", "ls_impl": "1"}},
+  {"at": 70, "name": "C ref", "set": {"ls_impl": "0"}},
+  {"at": 105, "name": "D new", "set": {"ls_impl": "1"}},
+  {"at": 140, "name": "E ref", "set": {"ls_impl": "0"}},
+  {"at": 175, "name": "F new", "set": {"ls_impl": "1"}},
+  {"at": 210, "name": "end", "set": {}}
+ ]}

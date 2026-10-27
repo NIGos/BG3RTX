@@ -202,6 +202,10 @@ struct CmdState {
   VkBuffer ib = VK_NULL_HANDLE;
   VkDeviceSize ib_offset = 0;
   VkIndexType ib_type = VK_INDEX_TYPE_UINT16;
+  // Game images, views and buffers this recording's work (ours or the game's
+  // passes our hooks read) references; merged into the lifetime registry at
+  // submit (tracker.cpp, life_*).
+  std::vector<uint64_t> refs;
 };
 // The arguments of a draw (geo_pre_draw).
 struct DrawArgs {
@@ -213,6 +217,26 @@ struct DrawArgs {
 };
 CmdState* cmd_state(VkCommandBuffer cmd, bool create = false);
 void cmd_forget(VkCommandBuffer cmd);
+
+// ---- lifetime of game objects our GPU work references (tracker.cpp) ----
+// Every game image, view or buffer that our recorded work reads or writes is
+// noted on the recording (query_binding results, pass attachments, explicit
+// notes). At submit the notes become "submitted in frame F on queue Q"; every
+// present appends a fence of ours to the present queue. When the game destroys
+// a noted object, the destroy hook first waits for the fence that covers its
+// last submission, so no pending work of ours (or of the game's own push
+// descriptors in the same command buffer) can touch freed memory.
+void life_note(CmdState* s, uint64_t handle);
+void life_note(VkCommandBuffer cmd, uint64_t handle);
+void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
+void life_on_present(DeviceData* dd, VkQueue queue);   // after the present went down, queue still owned
+// Around the game's vkDeviceWaitIdle: submissions before begin are complete after it.
+uint64_t life_idle_begin();
+void life_idle_end(uint64_t seq_before);
+// In the destroy hooks, before anything is released: waits (bounded) for the
+// last submission that referenced `handle`. `what` names it in the log.
+void life_before_destroy(uint64_t handle, const char* what);
+void life_device_destroyed(DeviceData* dd);
 
 // ---- tracer (tracer.cpp) ----
 bool trace_recording();
@@ -267,6 +291,7 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s);
 void sl_note_barrier(CmdState* s, VkImage image, VkImageLayout layout);
 void sl_note_submit(const std::vector<VkCommandBuffer>& cmds);
 void sl_note_image_destroyed(VkImage image);
+void sl_note_view_destroyed(VkImageView view);   // a tag's view: DLSS-G may still read it
 bool sl_watched(VkImage image);
 
 // ---- hot reload + shader compiler (hotreload.cpp, shaders.cpp) ----
