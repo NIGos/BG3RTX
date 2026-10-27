@@ -607,7 +607,9 @@ def hitmat_report(logs):
                     r[label] = (qa[i], d, b)
                     gates[f"{label}: mean |d| <= mean |nb| + LSB/4"] = d <= b + LSB / 4
             r["gates"] = gates
+            conclusive = se_y <= LSB / z
             r["pass"] = all(gates.values())
+            r["verdict"] = "PASS" if r["pass"] else "FAIL" if conclusive else "INCONCLUSIVE"
         rows.append(r)
     for r in rows:
         print(f"== {r['log']}: {r['windows']} log windows")
@@ -629,7 +631,7 @@ def hitmat_report(logs):
               f"median |dY| {r['median_dy']:.4f} vs |nbY| {r['median_nby']:.4f}")
         for g, ok in r["gates"].items():
             print(f"    {'PASS' if ok else 'FAIL'}  {g}")
-        print(f"  verdict: {'PASS' if r['pass'] else 'FAIL'}")
+        print(f"  verdict: {r['verdict']}")
     return rows
 
 
