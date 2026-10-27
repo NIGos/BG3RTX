@@ -3129,3 +3129,54 @@ structure update.
   - A refit of another mesh with the same counts stays correct; only its BVH is worse, and
     the rebuild every 30 uses bounds that.
 
+### 13.19 The UV-slot check
+
+**Question.** Is the captured UV the one the fragment shader reads? The XFB patch
+(`layer/spirv_xfb.h` `patch_vs`) captures the vertex shader's lowest-location float2
+output. The fragment shader reads its texture coordinate at its own Location, which
+can be a wider vector.
+
+**In-game check (every pipeline).**
+- `stage_io` parses every module's user interface: Location, Component and float component
+  count.
+- `uv_match` gives each VS/FS pair a verdict:
+  - **ok:** the FS's lowest float2 input is at the captured location;
+  - **VS wider:** the FS's UV location is a vec3/vec4 output of the VS;
+  - **FS elsewhere:** the FS reads its float2 at another location;
+  - **no FS float2**;
+  - **unknown:** pipeline libraries.
+- Logged as:
+  - `[geo] UV slots ...`: totals over all patched pipelines, for every user of captured UVs,
+    including EN2's hit materials;
+  - `[geo] UV slot mismatch`: each mismatching VS/FS pair, the first 64;
+  - a verdict per family in `[em] emissive families`.
+
+**Offline, over every traced pair** (`scripts/qa/uv_slots.py`: 510 distinct VS/FS pairs from
+all traces, all modules dumped):
+
+| Verdict | Pairs |
+|---|---|
+| ok | 433 |
+| FS without a float2 input | 77 |
+| mismatch | 0 |
+
+- In those 77 pairs the FS reads location 0 as vec4 or vec3, the VS writes the same width,
+  and the VS has no float2 output. So nothing is captured as UV: a gap, not a wrong UV.
+- **The capture's UV choice is never wrong in the traced scenes.**
+- The `304be1c7` draws use VS `f4b35620d54abc6c` in both AF and GF. That VS stores its float2
+  input straight into its only float2 output, location 0, and the FS reads `in vec2` at
+  location 0. **The UV hypothesis is rejected for `304be1c7`.**
+
+**What else is known about AF `304be1c7`.**
+- It shares its glow texture (`s1b1`) with `159a6211`, uses the same VS, and draws 3
+  instanced meshes.
+- Coverage is 100%, so the geometry matches the depth.
+- No captured emitter overlaps it.
+- Its pulse phase matches.
+
+**Next: per-pixel comparison.**
+- `rt_debug` 19 and 20 show one family alone (`rt_em_dbg_fam_hi/_lo`): ours (19) or the
+  game's effects target (20) at its hits, black elsewhere.
+- The em12 jobs `af-view19/20` trace both for `304be1c7`. The images show whether the
+  mismatch is a pattern (mask, UV transform, texture) or a level (constants).
+

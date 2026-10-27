@@ -139,6 +139,18 @@ The build median falls toward the 0.7 ms target. That is not a gate.
 - `17-em12-af-check` (session, 240 s) and `17-em12-gf-check` (session, 150 s): the refit share
   and build median with the new key, and the gate again.
 
+## UV-slot check (TRACK_D 13.19)
+
+- **Offline:** 510 traced VS/FS pairs, 433 ok, 0 mismatched. The other 77 have no float2
+  UV at all (the FS reads vec4/vec3), so nothing is captured.
+- **Rejected:** the UV hypothesis for `304be1c7`.
+- **In game:** `[geo] UV slots` / `[geo] UV slot mismatch` and the per-family verdict check
+  every pipeline.
+- **em12:**
+  - `af-check` and `gf-check` carry the new patterns;
+  - `af-view19` and `af-view20` trace `304be1c7` alone (ours / the game's) for a per-pixel
+    comparison.
+
 ## Known gaps
 
 - **Lava texture detail:** the calibration matches the mean per family only. The lava's
