@@ -352,6 +352,17 @@ reproduce them.
   game".
 - QA (`docs/QA.md`) reports brightening for review, not as a failure, unless it is
   physically implausible: energy gain, or light through geometry that exists.
+- **Where parity with the game applies (2026-10-27, so it doesn't slow the work):**
+  - **Inputs read from the engine: yes.** Light positions, colours and radii, material
+    parameters, emissive radiance, camera, exposure and grade must match the game.
+    Ratio and parity checks there are data-correctness tests.
+  - **Outputs of our effects: no.** Shadows, GI, AO, reflections and the final image are
+    judged only by artifact and physics gates: non-finite values, hard-edged black
+    patches, energy gain, light leaking into closed or roofed spaces, flicker. Never by
+    closeness to the game's image.
+  - **Trust heuristics:** don't add ones whose only purpose is to stay close to the
+    game, such as "within N m of a game-lit pixel". Prefer fixing the scene (missing
+    casters: shadow-map fallback, offline world) over gating the effect.
 - **First application: the sun** (`rt_sun_replace=1`, TRACK_D 12). The traced visibility
   replaces the game's sun mask where it is trusted: no roof volume of the asset DB on the
   sun ray, the ray stays in the captured view frustum until it is above the visible scene,
