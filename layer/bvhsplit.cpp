@@ -1074,11 +1074,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // XFB writes done; last frame's ray queries and builds are done with what we reuse.
   barrier(cmd, kXFB | kAS | kCS, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS | kXfer, kRW);
   if (!cap.converted) rt_convert(cmd, cap);
-  // The conversion's writes before the extraction jobs (compute) AND the per-draw BLAS
-  // builds that read the soup directly. Without the AS stage here (and no job this frame,
-  // the usual case), the builds could read vertices still being converted (the legacy
-  // build has this barrier: rtscene.cpp, after rt_convert).
-  barrier(cmd, kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS, kRW | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
+  barrier(cmd, kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS, kRW);
   JobBatch batch{now, 0, {}, {}};
   // Status slots: one per job, one per new mesh's compacted size, then the batch's
   // done word (written by a transfer after all of them).
