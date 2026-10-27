@@ -312,7 +312,8 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
   Push-Location $tree
   try {
     # "command" replaces auto-run for tools that launch the game themselves (python -m scripts.qa run ...).
-    $out = if ($job.command) { Invoke-Expression "$($job.command) 2>&1" | ForEach-Object { "$_" } }
+    # Through cmd: a native tool's stderr must not become a terminating PowerShell error.
+    $out = if ($job.command) { cmd /c "$($job.command) 2>&1" | ForEach-Object { "$_" } }
            else { & powershell @runArgs 2>&1 | ForEach-Object { "$_" } }
     if ($job.command) { $lines += @($out | Select-Object -Last 8) }
   } finally { Pop-Location }
@@ -374,7 +375,7 @@ function Run-Job($file) {
     $lines = @($r.lines)
     if ($job.post) {
       Push-Location $tree
-      try { $lines += @(Invoke-Expression ($job.post.Replace("{captures}", ($caps -join ' '))) 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 6) }
+      try { $lines += @(cmd /c "$($job.post.Replace("{captures}", ($caps -join ' '))) 2>&1" | ForEach-Object { "$_" } | Select-Object -Last 6) }
       finally { Pop-Location }
     }
     $after = Stamp $tree
