@@ -461,3 +461,51 @@ The split's dependencies, against the legacy build (`rtscene.cpp`):
     build.
 - Suggested runs: 8 default, then 8 each with `rt_dyn_refit=0` and with
   `rt_build_serial=1`, all with the same `-Set` as before.
+
+## 9. c9297e3 bisection and Nsight Aftermath (tenth and eleventh commits)
+
+**Evidence (all 9 fault logs of c9297e3):**
+- The faulting page lies 16-70 KB *below* one of our `VkAccelerationStructureKHR` handle
+  values. These are host-heap pointers of the driver's AS objects, not GPU
+  allocations: no driver binding covers them.
+- Every in-flight slot references only held or freed-not-released BLAS. Released ranges
+  appear only in retired slots.
+- Every configuration that faults destroys AS objects at run time: compaction,
+  new-range builds, `rt_dyn_refit=0`, and the emissive capture. The legacy build, which
+  never faults, almost never does.
+
+**`f7867a9`:**
+- `rt_as_keep=1` (default): a released BLAS's handle is kept until device destruction.
+- `VK_NV_device_diagnostic_checkpoints` markers around every core callback, at every
+  game command-buffer begin and at the BVH build stages, read back after a loss.
+- A per-draw vertex-range check.
+- The coordinator's `auto-run.ps1 -VSet` edit.
+
+**Eleventh commit: Nsight Aftermath (`aftermath=1`, default 0).**
+- Built when the SDK is at `BG3RTX_AFTERMATH_SDK` (default
+  `D:/BG3_Tools/nsight-aftermath-sdk-2026.3`). The DLL is copied into `bin/`, loaded at
+  run time and never packaged.
+- **Before the driver's `vkCreateDevice`:** `GFSDK_Aftermath_EnableGpuCrashDumps` (Vulkan)
+  with callbacks that write `captures/aftermath/<time>-<n>.nv-gpudmp`,
+  `<id0>-<id1>.nvdbg` and a description (frame, presents done).
+- **Device:** `VK_NV_device_diagnostics_config` with SHADER_DEBUG_INFO |
+  RESOURCE_TRACKING | AUTOMATIC_CHECKPOINTS | SHADER_ERROR_REPORTING. A creation failure
+  retries without it.
+- **Shader map:** each SPIR-V module the device compiles is mapped by its Aftermath hash
+  in `captures/aftermath/shader_map.txt`.
+  - Ours are named `file:entry`.
+  - The game's are named `game <hash>`. Their SPIR-V is in `captures/shaders/`
+    (`dump_shaders=1`), or in `captures/aftermath/shaders/` when the capture patched
+    them.
+- **On a loss:** every thread that sees `VK_ERROR_DEVICE_LOST` (submit, present, the
+  fault poll) waits up to 10 s for `GFSDK_Aftermath_GetCrashDumpStatus` to finish.
+- **Decoder:** `bin\aftermath_decode.exe <dump> [out.json]` prints:
+  - the page fault (VA, type, access, engine, client);
+  - every resource Aftermath tracked at that VA, including destroyed ones, with their
+    Vulkan handles and ticks;
+  - the active shaders with our names.
+
+  It writes the full JSON (ALL_INFO, with shader mapping through the map and the .nvdbg
+  files).
+- **Source lines:** for a second run, add `shader_debug=1`. Our shaders are then built
+  `-Od` with embedded source, which changes timing.

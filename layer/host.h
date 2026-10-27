@@ -587,6 +587,15 @@ enum CheckpointSite : uint32_t {
   kCkBvhStart = 20, kCkBvhConverted, kCkBvhBlas, kCkBvhTlas, kCkSceneCommitted, kCkLegacyStart, kCkLegacyTlas,
 };
 void fault_checkpoint(VkCommandBuffer cmd, uint32_t site, uint32_t arg);
+// ---- Nsight Aftermath GPU crash dumps (aftermath.cpp, aftermath=1; optional SDK) ----
+void aftermath_pre_device();   // before the driver's vkCreateDevice
+const VkDeviceCreateInfo* aftermath_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
+                                                       VkDeviceCreateInfo* scratch);   // + VK_NV_device_diagnostics_config
+// A SPIR-V module the device compiles: its Aftermath hash into the shader map
+// (`saved_path`: where the bytes already are; nullptr: written by Aftermath's side).
+void aftermath_note_spirv(const char* what, const void* code, size_t size, const char* saved_path);
+void aftermath_wait();         // after a device loss: up to 10 s for the dump
+bool aftermath_enabled();
 void fault_note_queue(VkQueue q);   // a queue the game submits to (checkpoints are per queue)
 
 uint64_t frame_index();

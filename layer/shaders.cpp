@@ -98,6 +98,7 @@ static bool compile(ShaderEntry& e) {
       auto words = static_cast<const uint32_t*>(obj->GetBufferPointer());
       e.code.assign(words, words + obj->GetBufferSize() / 4);
       ++e.generation;
+      aftermath_note_spirv((e.file + ":" + e.entry).c_str(), e.code.data(), e.code.size() * 4, nullptr);
       ok = true;
       obj->Release();
     }

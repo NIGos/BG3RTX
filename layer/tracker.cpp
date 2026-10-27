@@ -442,6 +442,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
     pci.codeSize = patched.size() * 4;
   }
   VkResult r = device_of(device)->vk.CreateShaderModule(device, geo ? &pci : ci, alloc, out);
+  bool used_patched = geo && r == VK_SUCCESS;
   if (r != VK_SUCCESS && geo) {
     log("[geo] patched vertex shader rejected (%d); using the original", r);
     r = device_of(device)->vk.CreateShaderModule(device, ci, alloc, out);
@@ -451,6 +452,18 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
   if (r == VK_SUCCESS) {
     uint64_t h = hash64(ci->pCode, ci->codeSize);
     shader_dump(h, ci->pCode, ci->codeSize);
+    if (aftermath_enabled()) {
+      // The driver sees the patched module when the capture patched it.
+      char what[48];
+      snprintf(what, sizeof what, "game %016llx%s", (unsigned long long)h, used_patched ? " (XFB-patched)" : "");
+      const std::string dumped = root_dir() + "\\captures\\shaders\\" + [&] {
+        char b[24];
+        snprintf(b, sizeof b, "%016llx.spv", (unsigned long long)h);
+        return std::string(b);
+      }();
+      if (used_patched) aftermath_note_spirv(what, pci.pCode, pci.codeSize, nullptr);
+      else aftermath_note_spirv(what, ci->pCode, ci->codeSize, cfg_int("dump_shaders", 0) ? dumped.c_str() : nullptr);
+    }
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().modules[*out] = h;
   }

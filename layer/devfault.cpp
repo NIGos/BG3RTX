@@ -460,13 +460,18 @@ static void dump_checkpoints() {
 }
 
 void fault_on_result(DeviceData* dd, VkResult r, const char* where) {
-  if (r != VK_ERROR_DEVICE_LOST || !dd || g_reported.exchange(true)) return;
+  if (r != VK_ERROR_DEVICE_LOST || !dd) return;
+  if (g_reported.exchange(true)) {
+    aftermath_wait();   // another thread reports; this one still holds the game until the dump is out
+    return;
+  }
   log("[fault] VK_ERROR_DEVICE_LOST from %s in frame %llu (presents completed on the GPU: %llu)", where,
       (unsigned long long)frame_index(), (unsigned long long)life_gpu_done());
   rt_log_state("[fault]");
   bvh_log_state("[fault]");
   fault_details(dd, false);
   dump_checkpoints();
+  aftermath_wait();
 }
 
 // Active detection: once the device is lost the game stops calling Vulkan, so the

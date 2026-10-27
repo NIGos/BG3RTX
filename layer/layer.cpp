@@ -178,17 +178,27 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
   // ray query), then Streamline's DLSS-G requirements (extensions, features,
   // extra queues including a dedicated optical-flow family). If the driver
   // refuses, RT is dropped first, then the geometry capture.
-  VkDeviceCreateInfo geo_ci, rt_ci, fault_ci;
+  aftermath_pre_device();   // aftermath=1: crash dumps must be on before the driver creates the device
+  VkDeviceCreateInfo geo_ci, rt_ci, fault_ci, am_ci;
   const VkDeviceCreateInfo* geo_use = geo_device_create_info(id, phys, ci, &geo_ci);
   const VkDeviceCreateInfo* rt_use = rt_device_create_info(id, phys, geo_use, &rt_ci);
   bool rt_on = rt_use != geo_use;
   // VK_EXT_device_fault (devfault.cpp): fault addresses on a device loss.
-  const VkDeviceCreateInfo* use_ci = rt_on ? fault_device_create_info(id, phys, rt_use, &fault_ci) : rt_use;
-  bool fault_on = use_ci != rt_use;
+  const VkDeviceCreateInfo* fault_use = rt_on ? fault_device_create_info(id, phys, rt_use, &fault_ci) : rt_use;
+  bool fault_on = fault_use != rt_use;
+  // Nsight Aftermath (aftermath=1): VK_NV_device_diagnostics_config on top.
+  const VkDeviceCreateInfo* use_ci = aftermath_device_create_info(id, phys, fault_use, &am_ci);
   VkDeviceCreateInfo patched;
   SlDeviceScratch* sl_scratch = sl_device_pre(id, phys, use_ci, patched);
   auto create = reinterpret_cast<PFN_vkCreateDevice>(gipa(id ? id->instance : VK_NULL_HANDLE, "vkCreateDevice"));
   VkResult r = create(phys, &patched, alloc, out);
+  if (r != VK_SUCCESS && use_ci != fault_use) {
+    log("[layer] device creation with VK_NV_device_diagnostics_config failed (%d); retrying without", r);
+    sl_device_post(sl_scratch, nullptr, r);
+    use_ci = fault_use;
+    sl_scratch = sl_device_pre(id, phys, use_ci, patched);
+    r = create(phys, &patched, alloc, out);
+  }
   if (r != VK_SUCCESS && fault_on) {
     log("[layer] device creation with VK_EXT_device_fault failed (%d); retrying without", r);
     sl_device_post(sl_scratch, nullptr, r);
