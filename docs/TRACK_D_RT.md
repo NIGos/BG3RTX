@@ -2308,3 +2308,72 @@ after the game drew with those glow maps and that effects target.
   - the backdrop (`rt_em_backdrop=1` measures it);
   - characters' glowing parts at their silhouettes: the scene is the previous frame's,
     shifted for the camera but not for the character's own motion.
+
+### 12.9 In-game round 4 (`502aa29`) and the fixes after it
+
+No device was lost in any of the three scenes (`nv153=0`).
+
+| Scene | Run | Coverage | Build median | Passing | Failing |
+|---|---|---|---|---|---|
+| S8 Water Queen's House | 135 s | 63.5% | 0.40 ms | `20864dc6` 1.02, `9228b9cb` 1.03 | `222986b8` 1.27; `159a6211` 0.000; `38e91cf3` 0.000; `5d837ba1` 0.000 |
+| S6 Adamantine | 248 s | 99.8% | 0.43 ms | — | see below |
+| S5 Grymforge | 129 s | 100% | 0.53 ms | lava 1.04 | VFX `10086377` unstable at 0.95-1.36 |
+
+In S6 Adamantine:
+- the whole lava pool is **`f298bf4d` `ENV_Base_MutipleUV`**, which reads 0.000 over 1.68M px;
+- `1a81f41b` Lava_Plane reads 1.55 at scale 0.68, so it was still converging;
+- `222986b8` reads 1.92 over 432k px;
+- `159a6211` reads 0.000.
+
+**1. Luminance-emissive families read 0** (`159a6211` and `f298bf4d`).
+- Both multiply by the game's set 2 b0 [0], and the game rewrites that buffer later in the
+  same batch.
+- Neither binding it in the build (12.2) nor copying it in the light-list pass (12.8) saw the
+  draw's value.
+- **Fix:** the value is copied on the GPU right after the effects pass, in the pass's own
+  command buffer (`shaders/rt/em_copy.hlsl`), into a slot of our own buffer (a ring of 4096).
+  The record carries the slot (`EmRec.glob`).
+
+**2. The lava calibration stayed at 1.0 in Adamantine.**
+- The lava that covers the screen there is `f298bf4d`. It read 0 (cause 1), and a ratio
+  that low is taken for a forward family and never calibrated.
+- `1a81f41b` did calibrate (0.68 in the last window), but at most ×√ per window, and only
+  over windows with ≥ 500 px.
+- **Fix:** the full correction per window (clamped to ×4), with ≥ 200 px.
+- **`f298bf4d` itself:** `glow(uv1).rgb · noise(scrolled uv0)·1.5 · m2 · global`. Its glow map
+  reads the **second** UV, which XFB does not capture (the captured UV is the VS's
+  lowest-location vec2 output, the first). It is now modelled as a constant (intensity ×
+  0.75 × global, the noise's mean), and the map's mean is left to the calibration
+  (approximate).
+
+**3. The 0.000 character families** (`38e91cf3` 76 px, `5d837ba1` 25 px).
+- The census reports **0 material constants that are not host-readable**, so the constants
+  are read.
+- `38e91cf3` is exactly `c · glow.r · k` (CHAR_BASE_GM, instanced). It is on moving
+  characters, and the scene is one frame old and shifted for the camera only, so its few
+  hits land on other texels of a mostly dark glow map.
+- `5d837ba1` VertCut_VT also cuts by a vertex-colour mask, which is not captured.
+- Both are under 0.01% of the screen: not fixed, reported.
+
+**4. Water Queen's House coverage.**
+- No emitter in front of the depth was found (0.0%).
+- **Captured:** the census has 4 emissive decals and 1 skydome backdrop per build, neither
+  captured. The trace's unit 10 holds every effects-target pixel.
+- **Two measurement switches** split the remaining 36.5% between those sources:
+  - `rt_em_backdrop=1` captures the backdrop;
+  - `rt_em_decal=1` (new) captures the decals' boxes. Their front faces count as covered
+    "in front".
+
+  Both are measurements only: a decal's box is not the surface it lights, and the backdrop
+  stands in for the sky.
+- The rest are the moving characters of point 3.
+
+**`222986b8` at 1.27 and 1.92** is not explained.
+- It is an exact family by its decompiled shader (`mix(c·glow.r, glow.rgb, floor(m1))·m2`, no
+  discard, UV at location 0).
+- The ratio depends on the scene.
+- The `rt_debug=6` and `rt_debug=7` dumps of the same view would show whether it is the
+  pattern (mip or UV) or the level.
+
+**Merge note:** my conversion-barrier change in `bvhsplit.cpp` (`502aa29`) is reverted
+(`dd70778`), so the split agent's barrier audit (`c9297e3`) applies alone when merged.

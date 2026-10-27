@@ -7,38 +7,31 @@ section 12 (12.7 is the latest round). The status row is in `docs/QUALITY.md`
 The tree builds, `settings_test` passes (120 checks), and the shaders compile with DXC.
 Main is merged up to `8f8df1f`.
 
-## State after round 3 (`b74c5ab`, run by the coordinator)
+## State after round 4 (`502aa29`, run by the coordinator)
 
-- **S6 Adamantine** (81 s) and **S5 Grymforge** (169 s) lost the device. The cause, traced
-  by the split agent, is BLAS builds over unwritten or non-finite vertex data.
-- **S8 Water Queens** ran clean:
-  - the exact families pass (1.03-1.05);
-  - the Pulse families read 0.000;
-  - coverage was 31% of 2,548 bright pixels.
+No device loss in any scene.
+- **S8 Water Queens:** CHAR_BASE_GM 1.02 and Base_GM_VT `9228b9cb` 1.03 pass. `222986b8` is
+  at 1.27, the Pulse_VT and two character families read 0.000, and coverage is 63.5%.
+- **S6 Adamantine:** coverage 99.8%, but the lava pool (`f298bf4d` ENV_Base_MutipleUV) and
+  Pulse_VT read 0.000. The calibration of `1a81f41b` only reached 0.68.
+- **S5 Grymforge:** the forward lava passes (1.04), with coverage 100%.
 
-## Fixes in this round (offline, not yet run; TRACK_D 12.8)
+## Fixes in this round (offline, not yet run; TRACK_D 12.9)
 
-1. **Sanitize pass before every build** (`shaders/rt/em_sanitize.hlsl`, in our command
-   buffer).
-   - It runs over exactly the soup ranges the BLAS builds read.
-   - Any triangle whose vertices are non-finite, beyond 1e6, or not marked converted this
-     frame (w is not 0 or 1) is collapsed to 0 and counted.
-   - Without the pipeline, the build is skipped.
-   - A grown soup is zero-filled before first use.
-2. **Lifetime of what consumers read.**
-   - `rt_emissive(cmd, …)` notes the set's game views, images, effects target and global
-     buffer on the consumer's command buffer, so the image-lifetime tracker keeps them alive.
-   - Before this, a texture the game freed could be read a frame later.
-3. **Pulse 0.000.**
-   - `a201d825`: its material constants sit at set 1 b1, and the fixup read set 1 b0. Fixed
-     with the DB's binding and layout.
-   - `159a6211`: the per-frame global-scale buffer was read a frame late. Consumers now use
-     the copy the build took (header word 11).
-4. **Coverage.**
-   - The check now counts an emitter in front of the depth (alpha-blended glow cards, not in
-     the depth buffer) as covered, and logs its share.
-   - The remaining misses: the Skydome backdrop, and moving characters' edges (one frame of
-     latency).
+1. **Luminance families read 0** (Pulse_VT `159a6211`, lava pool `f298bf4d`). The game
+   rewrites its luminance-scale buffer later in the same batch.
+   - The value is now copied on the GPU right after each effects pass
+     (`shaders/rt/em_copy.hlsl`) into our own slot buffer. Records refer to the slot.
+2. **Calibration**: the full correction per window (clamped to ×4), with ≥ 200 px.
+   - `f298bf4d`: its glow map reads the second UV, which isn't captured. It is now a
+     constant × the noise mean × global, flagged approximate, so it gets calibrated.
+3. **Character 0.000 families**: their constants are host-readable (counter 0). The cause
+   is moving characters (one frame of latency) and, for VertCut, a vertex-colour mask.
+   Under 0.01% of the screen; reported, not fixed.
+4. **Coverage measurement**: `rt_em_decal=1` (new) and `rt_em_backdrop=1` capture the
+   emissive decals and the backdrop, for measurement only.
+5. **Merge:** my `bvhsplit` barrier change is reverted (`dd70778`). Use the split agent's
+   `c9297e3`.
 
 ## Serial tests to rerun
 
@@ -78,8 +71,10 @@ Pass:
 - `159a6211` captured = draws (3/3);
 - `ours/game per family`:
   - `304be1c7` Pulse_FX and `159a6211` Pulse_VT within **0.8-1.25** (exact families);
-  - `1a81f41b` lava within **0.8-1.25 in the last window** (calibrated; its `scale` should
-    settle near 1/4);
+  - `1a81f41b` lava within **0.8-1.25 in the last window** (calibrated);
+  - `f298bf4d` ENV_Base_MutipleUV (the lava pool, 1.7M px) within 0.8-1.25 in the last
+    window (calibrated; it read 0.000 before);
+  - `222986b8`: report the ratio (1.92 last time, not yet explained);
 - coverage ≥ 95%;
 - 0 non-finite power sums;
 - build median ≤ 0.5 ms (152k triangles).
@@ -100,7 +95,7 @@ Its `ours/game` is not a criterion: forward, not in the effects target, so expec
 "forward", a large ratio, scale 1. The `rt_debug=6` dump should show the lava lit by our
 data.
 
-### R3: S8 Water Queens House (run first: it ran clean last time)
+### R3: S8 Water Queens House (run first)
 
 `scripts/auto-run.ps1 -Background -Save "Water Queens House" -Traces 5 -Set rt_debug=8,dump_png_width=1280`
 
@@ -108,6 +103,8 @@ Pass:
 - no device loss;
 - coverage ≥ 70%, and report the "by an emitter in front of the depth" share;
 - `159a6211` and `a201d825` within 0.8-1.25 (they read 0.000 before);
+- then two short reruns with `-Set rt_debug=8,rt_em_decal=1` and `-Set rt_debug=8,rt_em_backdrop=1`:
+  the coverage gain of each is that source's share (report both);
 - every exact family (not "approx") with ≥ 500 px within 0.8-1.25;
 - report `material constants not host-readable` (> 0 explains `38e91cf3` / `5d837ba1`);
 - approximate families within 0.8-1.25 in the last window;

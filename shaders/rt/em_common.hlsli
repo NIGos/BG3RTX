@@ -55,7 +55,7 @@ struct EmRec {
   float4 uv2;                      // base map uv
   float4 vt_p0; float4 vt_p1;      // VT uv transform (engine CB s1b0 +0, +16)
   float vt_t[32];                  // VT tile-set constants: two row-major mat4 (SSBO s0b12 entry)
-  uint cls; uint pad0, pad1, pad2;
+  uint cls; uint glob; uint pad1, pad2;   // glob: slot of the luminance scale in emGlobal (0xFFFFFFFF: none)
 };
 
 // One per emissive triangle (80 bytes), in the scene's camera-relative world.
@@ -78,12 +78,11 @@ struct EmLight {
 [[vk::binding(8, EM_SET)]] RWByteAddressBuffer emStats; // debug views' statistics (host-read)
 // Header, 16 words: 0 lights, 1 triangles left out, 2 instances, 3 records, 4 pre-exposure
 // (float), 5 build frame (low 32 bits), 6 global scale bound (1), 7 triangles per light (k),
-// 8-10 the build camera's absolute position (float3), 11 the global scale as the build read
-// it (float; the game's buffer is per frame, so consumers in later frames use this copy),
-// 12 soup triangles collapsed by the sanitize pass, 13 word 11 written (1);
+// 8-10 the build camera's absolute position (float3), 12 soup triangles collapsed by the
+// sanitize pass;
 // words 16+: per-group power sums.
 [[vk::binding(9, EM_SET)]] RWByteAddressBuffer emHeader;
-[[vk::binding(10, EM_SET)]] ByteAddressBuffer emGlobal;         // the game's set 2 b0 (float [0]: luminance scale)
+[[vk::binding(10, EM_SET)]] ByteAddressBuffer emGlobal;         // our copies of the game's luminance scale (set 2 b0 [0]), per slot
 [[vk::binding(11, EM_SET)]] Texture2DArray<float4> emCache[kEmMaxCaches];   // VT tile caches
 
 float em_lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
@@ -177,13 +176,11 @@ float3 em_radiance(EmRec r, float2 uv, float g) {
     L *= emTex[NonUniformResourceIndex(r.tex2)].SampleLevel(emSampler, uv * r.uv2.xy + r.uv2.zw,
                                                             em_tex_lod(r.tex2, g, r.uv2.xy)).rgb;
   if ((r.flags & kEmFlagVtAlbedo) != 0) L *= em_vt_albedo(r, uv, g);
-  if ((r.flags & kEmFlagLuminance) != 0 && emHeader.Load(6 * 4) != 0) {
-#ifdef EM_BUILDER
-    float k = asfloat(emGlobal.Load(0));   // the build reads the game's buffer of that frame
-#else
-    float k = emHeader.Load(13 * 4) != 0 ? asfloat(emHeader.Load(11 * 4)) : 1.0;   // its copy
-#endif
-    L *= k > 0.0 && k < 1e6 ? k : 1.0;
+  if ((r.flags & kEmFlagLuminance) != 0 && r.glob != 0xFFFFFFFFu) {
+    // Copied right after the draw's pass (em_copy.hlsl): the game rewrites its buffer later
+    // in the same batch, so a later read is another value.
+    float k = asfloat(emGlobal.Load(r.glob * 4));
+    L *= k >= 0.0 && k < 1e6 ? k : 1.0;
   }
   return all(L >= 0.0) && all(L < 1e6) ? L : float3(0, 0, 0);
 }

@@ -84,7 +84,7 @@ struct EmRec {
   float uv2[4];
   float vt_p0[4], vt_p1[4];
   float vt_t[32];
-  uint32_t cls, pad[3];
+  uint32_t cls, glob, pad[2];   // glob: luminance-scale slot in g_globals (UINT32_MAX: none)
 };
 static_assert(sizeof(EmRec) == kRecBytes, "EmRec must match em_common.hlsli");
 enum : uint32_t { kModeConst = 0, kModeMaskR = 1, kModeMaskRGB = 2, kModeBlackbody = 3 };
@@ -155,7 +155,8 @@ struct PCmd {
   Census census;
   VkBuffer ubo = VK_NULL_HANDLE;       // a pass's camera UBO (absolute position at byte 208)
   VkDeviceSize ubo_off = 0;
-  Bg3Binding global{};                 // set 2 b0 of a luminance-emissive draw
+  Bg3Binding global{};                 // (unused)
+  std::vector<std::pair<Bg3Binding, uint32_t>> copies;   // luminance-scale copies owed at the pass end
 };
 std::unordered_map<VkCommandBuffer, PCmd> g_pending;
 thread_local bool t_pass_fx = false;   // the pass being recorded on this thread drew an EMI material
@@ -191,6 +192,14 @@ Buf g_host;                 // kRing regions: records, prefix, header, statistic
 Buf g_lights;               // EmLight[g_max_lights]
 Buf g_dummy;
 uint32_t g_max_lights = 0;
+constexpr uint32_t kGlobSlots = 4096;   // luminance-scale copies (a ring, ~100 frames)
+Buf g_globals;
+uint32_t g_glob_next = 0;
+// em_copy.hlsl: push descriptors src (the game's buffer) + dst (g_globals).
+VkDescriptorSetLayout g_cp_dsl = VK_NULL_HANDLE;
+VkPipelineLayout g_cp_pl = VK_NULL_HANDLE;
+VkPipeline g_cp_pipe = VK_NULL_HANDLE;
+uint64_t g_cp_gen = 0;
 struct Img { VkImage image = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; VkDeviceMemory mem = VK_NULL_HANDLE; };
 Img g_dimg, g_darr;
 bool g_dummy_ready = false;
@@ -390,6 +399,14 @@ void family_fixup(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, EmRec& r, PD
         r.flags |= kFlagPulse;
       }
     }
+  } else if (name.find("MutipleUV") != std::string::npos || name.find("MultipleUV") != std::string::npos) {
+    // f298bf4d ENV_Base_MutipleUV: glow(uv1).rgb * noise(scrolled uv0) * 1.5 * m2 * global. The
+    // glow map reads the second UV, which XFB does not capture: the map is dropped (its mean
+    // and the noise's (0.5 x 1.5) go to the calibration).
+    r.mode = kModeConst;
+    for (float& c : r.radiance) c *= 0.75f;
+    d.mask = View{};
+    r.flags |= kFlagApprox;
   } else if (fam == 0xaab75fedu && read_bound(cmd, 1, 0, 0, m, 4) && std::isfinite(m[0])) {
     r.uv2[0] = r.uv2[1] = m[0];
     r.flags |= kFlagApprox;   // vertex colour
@@ -431,14 +448,24 @@ void make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDra
     if (d.mask.v) r.mode = kModeMaskR;
     else r.flags |= kFlagApprox;
   }
-  // The game's global scale (set 2 b0, a storage buffer in device memory): bound as a
-  // buffer in the build, one per build (the first luminance draw's; conflicts counted).
+  // The game's luminance scale (set 2 b0 [0], a storage buffer in device memory). The game
+  // rewrites that buffer later in the same batch, so the value is copied on the GPU right
+  // after this draw's pass (em_pass_done, em_copy.hlsl) into a slot of our own buffer.
+  r.glob = UINT32_MAX;
   if (mi.flags & BG3_MAT_F_LUMINANCE_EMISSIVE) {
     r.flags |= kFlagLuminance;
     Bg3Binding g{};
     if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 2, 0, 0, &g) && g.buffer) {
-      if (!P.global.buffer) P.global = g;
-      else if (P.global.buffer != g.buffer || P.global.offset != g.offset) ++P.census.global_conflicts;
+      // One slot per distinct binding in the pass.
+      uint32_t slot = UINT32_MAX;
+      for (const auto& c : P.copies)
+        if (c.first.buffer == g.buffer && c.first.offset == g.offset) slot = c.second;
+      if (slot == UINT32_MAX) {
+        slot = g_glob_next++ % kGlobSlots;
+        P.copies.push_back({g, slot});
+        if (P.copies.size() > 1) ++P.census.global_conflicts;   // (several bindings: counted, handled)
+      }
+      r.glob = slot;
     } else {
       r.flags |= kFlagApprox;
     }
@@ -626,6 +653,45 @@ bool ensure_sanitize() {
   g_san_gen = blob.generation;
   return true;
 }
+bool ensure_copy() {
+  DeviceData* dd = g_dd;
+  if (!g_cp_dsl) {
+    VkDescriptorSetLayoutBinding b[2] = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+    ci.bindingCount = 2;
+    ci.pBindings = b;
+    if (dd->vk.CreateDescriptorSetLayout(dd->device, &ci, nullptr, &g_cp_dsl) != VK_SUCCESS) return false;
+    VkPushConstantRange pcr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 16};
+    VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    li.setLayoutCount = 1;
+    li.pSetLayouts = &g_cp_dsl;
+    li.pushConstantRangeCount = 1;
+    li.pPushConstantRanges = &pcr;
+    if (dd->vk.CreatePipelineLayout(dd->device, &li, nullptr, &g_cp_pl) != VK_SUCCESS) return false;
+  }
+  Bg3ShaderBlob blob{};
+  if (!shader_get("rt/em_copy.hlsl", "main", "cs_6_6", &blob)) return g_cp_pipe != VK_NULL_HANDLE;
+  if (g_cp_pipe && blob.generation == g_cp_gen) return true;
+  VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+  mci.codeSize = blob.size_bytes;
+  mci.pCode = blob.code;
+  VkShaderModule mod = VK_NULL_HANDLE;
+  if (dd->vk.CreateShaderModule(dd->device, &mci, nullptr, &mod) != VK_SUCCESS) return g_cp_pipe != VK_NULL_HANDLE;
+  VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main"};
+  pci.layout = g_cp_pl;
+  VkPipeline p = VK_NULL_HANDLE;
+  VkResult r = dd->vk.CreateComputePipelines(dd->device, VK_NULL_HANDLE, 1, &pci, nullptr, &p);
+  dd->vk.DestroyShaderModule(dd->device, mod, nullptr);
+  if (r != VK_SUCCESS) return g_cp_pipe != VK_NULL_HANDLE;
+  if (g_cp_pipe) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_cp_pipe));
+  g_cp_pipe = p;
+  g_cp_gen = blob.generation;
+  return true;
+}
+
 void log_once_sanitize() {
   static bool done = false;
   if (!done) done = true, log("[em] WARNING the sanitize pipeline is unavailable: emissive builds are skipped");
@@ -796,10 +862,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   VkDescriptorBufferInfo lights{g_lights.b, 0, g_lights.size};
   VkDescriptorBufferInfo stats{g_host.b, rbase + kOffStats, VkDeviceSize(kStatWords) * 4};
   VkDescriptorBufferInfo head{g_host.b, rbase + kOffHeader, VkDeviceSize(kHeaderWords) * 4};
-  VkDescriptorBufferInfo glob = global.buffer
-                                    ? VkDescriptorBufferInfo{global.buffer, global.offset,
-                                                             global.range && global.range != VK_WHOLE_SIZE ? global.range : 16}
-                                    : VkDescriptorBufferInfo{g_dummy.b, 0, 256};
+  VkDescriptorBufferInfo glob{g_globals.b, 0, g_globals.size};
   const uint32_t ntex = g_set_init[slot] ? (std::max)(g_set_tex[slot], uint32_t(tex.size())) + 1 : kMaxTex;
   const uint32_t ncache = g_set_init[slot] ? (std::max)(g_set_cache[slot], uint32_t(cache.size())) + 1 : kMaxCache;
   g_set_init[slot] = true;
@@ -874,7 +937,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
     note(g_fx.view);
     if (g_fx.image) si.handles.push_back(uint64_t(g_fx.image));
   }
-  if (global.buffer) si.handles.push_back(uint64_t(global.buffer));
+  (void)global;
   si.rec_fs.resize(nrec);
   si.rec_flags.resize(nrec);
   for (uint32_t i = 0; i < nrec; ++i) {
@@ -970,6 +1033,7 @@ void em_device_created(DeviceData* dd) {
   ok = ok && make_buf(g_lights, VkDeviceSize(g_max_lights) * 80, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
   ok = ok && make_buf(g_host, kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_host.map;
   ok = ok && make_buf(g_dummy, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false);
+  ok = ok && make_buf(g_globals, VkDeviceSize(kGlobSlots) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
   ok = ok && make_image(false, g_dimg) && make_image(true, g_darr);
   // Our own command buffers (one build per game submission of effects passes).
   VkCommandPoolCreateInfo cpi{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -1009,7 +1073,13 @@ void em_device_destroyed(DeviceData* dd) {
     }
   if (g_cmd_pool) vk.DestroyCommandPool(dd->device, g_cmd_pool, nullptr);
   g_cmd_pool = VK_NULL_HANDLE;
-  for (Buf* b : {&g_soup, &g_lights, &g_host, &g_dummy}) free_buf(*b);
+  for (Buf* b : {&g_soup, &g_lights, &g_host, &g_dummy, &g_globals}) free_buf(*b);
+  defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_cp_pipe));
+  defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_cp_pl));
+  defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_cp_dsl));
+  g_cp_pipe = VK_NULL_HANDLE;
+  g_cp_pl = VK_NULL_HANDLE;
+  g_cp_dsl = VK_NULL_HANDLE;
   defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_pipe));
   defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
   defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, uint64_t(g_pool));
@@ -1083,7 +1153,10 @@ bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const Em
   // rt_em_backdrop=1 (a measurement): skydome backdrops are captured too, so the projected
   // check shows their share of the effects target.
   const bool backdrop = mat.kind == kMatBackdrop && cfg_int("rt_em_backdrop", 0) != 0;
-  if (mat.kind != kMatEmissive && mat.kind != kMatForward && !backdrop) return false;
+  // rt_em_decal=1 (a measurement only: a decal's box is not the surface it lights): emissive
+  // decals are captured, so the check counts the pixels they light as covered "in front".
+  const bool decal = mat.kind == kMatDecal && cfg_int("rt_em_decal", 0) != 0;
+  if (mat.kind != kMatEmissive && mat.kind != kMatForward && !backdrop && !decal) return false;
   FsCount& fc = g_fs_window[s->fs];
   ++fc.draws;
   if (!in.xfb) return ++C.skip_xfb, false;
@@ -1132,12 +1205,37 @@ void em_pass_done(VkCommandBuffer cmd, const CmdState* s, VkBuffer ubo, VkDevice
   (void)s;
   const bool fx = t_pass_fx;
   t_pass_fx = false;
+  std::vector<std::pair<Bg3Binding, uint32_t>> copies;
   if (fx || !ranges.empty()) {
     std::lock_guard<std::mutex> lock(g_mu);
     PCmd& P = g_pending[cmd];
     if (fx) ++P.census.passes;
     if (!P.ubo && ubo) P.ubo = ubo, P.ubo_off = ubo_off;
     if (!ranges.empty() && !ubo) ++P.census.no_ubo;
+    copies.swap(P.copies);
+  }
+  // The luminance scales the pass's draws read, as they read them (the game rewrites the
+  // buffer later in the batch).
+  if (!copies.empty() && ensure_copy()) {
+    barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, kCS, VK_ACCESS_SHADER_READ_BIT);
+    g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cp_pipe);
+    for (const auto& [g, slot] : copies) {
+      VkDescriptorBufferInfo src{g.buffer, g.offset, g.range && g.range != VK_WHOLE_SIZE ? (std::min)(g.range, VkDeviceSize(16)) : 16};
+      VkDescriptorBufferInfo dst{g_globals.b, 0, g_globals.size};
+      VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+      for (int i = 0; i < 2; ++i) {
+        w[i].dstBinding = uint32_t(i);
+        w[i].descriptorCount = 1;
+        w[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w[i].pBufferInfo = i ? &dst : &src;
+      }
+      g_dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cp_pl, 0, 2, w);
+      uint32_t pc[4] = {slot, 0, 0, 0};
+      g_dd->vk.CmdPushConstants(cmd, g_cp_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
+      g_dd->vk.CmdDispatch(cmd, 1, 1, 1);
+    }
+    barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kCS | kAS, VK_ACCESS_SHADER_READ_BIT);
+    if (ranges.empty()) restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   }
   if (!ranges.empty()) {
     barrier(cmd, kXFB, VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT, kCS | VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -1400,8 +1498,8 @@ void em_on_present() {
       const float before = cal.updates ? cal.scale : 1.0f;
       // Calibrate approximate families seen on enough pixels, in the effects target (a
       // forward family's emission is not there: ours >> game).
-      if (calib && (cm.flags & kFlagApprox) && !(cm.flags & kFlagForward) && px >= 500 && ratio > 0.02 && ratio < 50.0) {
-        double step = std::sqrt((std::min)((std::max)(1.0 / ratio, 0.125), 8.0));
+      if (calib && (cm.flags & kFlagApprox) && !(cm.flags & kFlagForward) && px >= 200 && ratio > 0.02 && ratio < 50.0) {
+        double step = (std::min)((std::max)(1.0 / ratio, 0.25), 4.0);   // the full correction, at most 4x per window
         cal.scale = float((std::min)((std::max)(double(before) * step, 1.0 / 64), 64.0));
         ++cal.updates;
       }
