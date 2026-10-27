@@ -9,7 +9,7 @@
 // target pixels brighter than thr with no visible hit, 3 hits where the game shows less
 // than 2% of ours, 4 of the bright pixels without a hit at the depth, those with an emissive
 // surface in front of it (alpha-blended emitters: not in the depth buffer), 5 such front hits
-// in all, 6 ran, 7 effects-target pixels brighter than thr; from 16, 8 words per record:
+// in all, 6 ran, 7 effects-target pixels brighter than thr; from 16, 12 words per record:
 // ours and game luminance x 4096 as 64-bit sums (lo, hi; dim emitters, e.g. a lava pool at
 // 0.01, are kept), pixels.
 #include "em_common.hlsli"
@@ -50,11 +50,12 @@ void add64(uint a, float lum) {
 // which separates a zero level from a map sampled where it is black (wrong UV or texture).
 void rec_stat(uint rec, float ours, float game) {
   if (rec >= 1024) return;
-  uint base = (16 + rec * 8) * 4;
+  uint base = (16 + rec * 12) * 4;
   add64(base, ours);
   add64(base + 8, game);
   emStats.InterlockedAdd(base + 16, 1u);
   if (ours <= 0.0) emStats.InterlockedAdd(base + 20, 1u);
+  if (game > pc.thr) emStats.InterlockedAdd(base + 32, 1u);   // word 8: bright hits (the gate)
   EmRec r = emRecs[rec];
   float3 L = r.radiance;
   if ((r.flags & kEmFlagLuminance) != 0 && r.glob != 0xFFFFFFFFu) {

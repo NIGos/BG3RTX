@@ -60,7 +60,7 @@ constexpr uint32_t kMaxTex = 256;        // textures per build (slot 0: dummy)
 constexpr uint32_t kMaxCache = 16;       // VT tile caches per build (slot 0: dummy)
 constexpr uint32_t kMaxInst = 16384;     // emissive TLAS instances that get lights
 constexpr uint32_t kHeaderWords = 16 + 1024;
-constexpr uint32_t kStatWords = 16 + kMaxRecs * 8;   // per record: ours, game (64-bit, lum x 4096), pixels
+constexpr uint32_t kStatWords = 16 + kMaxRecs * 12;   // per record (em_debug.hlsl rec_stat): ours, game, pixels, ...
 constexpr VkDeviceSize up256(VkDeviceSize v) { return (v + 255) / 256 * 256; }
 constexpr VkDeviceSize kRecBytes = 256;
 constexpr VkDeviceSize kOffRecs = 0;
@@ -257,7 +257,7 @@ struct Window {
   std::vector<float> build_ms;
   std::map<uint64_t, double> fx_frame_ms[2];   // effects passes per frame: [no capture, capture]
   uint64_t nonfinite = 0, collapsed = 0;
-  struct Cmp { double ours = 0, game = 0, px = 0, zero = 0, nomap = 0; uint32_t flags = 0; };
+  struct Cmp { double ours = 0, game = 0, px = 0, zero = 0, nomap = 0, bright = 0; uint32_t flags = 0; };
   struct Glob { uint32_t slot = UINT32_MAX, n = 0, missing = 0; float value = 0, vmin = 1e30f, vmax = 0; };
   std::map<uint64_t, Glob> glob;               // luminance-scale copies per fragment shader (read back)
   std::map<uint64_t, Cmp> cmp;                 // projected comparison per fragment shader
@@ -440,8 +440,14 @@ void family_fixup(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, EmRec& r, PD
     // f298bf4d ENV_Base_MutipleUV: glow(uv1).rgb * noise(scrolled uv0) * 1.5 * m2 * global. The
     // glow map reads the second UV, which XFB does not capture: the map is dropped (its mean
     // and the noise's (0.5 x 1.5) go to the calibration).
+    // Its intensity is the material CB's +16 (_m2; the DB's slot read 0: em8 dump), its
+    // colour the glow map alone.
+    float k2 = 0.0f;
+    if (read_bound(cmd, cb_ok ? cbs : 1, cb_ok ? cbb : 0, 16, &k2, 4) && std::isfinite(k2) && k2 >= 0.0f)
+      for (float& c : r.radiance) c = 0.75f * k2;
+    else
+      for (float& c : r.radiance) c *= 0.75f;
     r.mode = kModeConst;
-    for (float& c : r.radiance) c *= 0.75f;
     d.mask = View{};
     r.flags |= kFlagApprox;
   } else if (fam == 0xaab75fedu && read_bound(cmd, 1, 0, 0, m, 4) && std::isfinite(m[0])) {
@@ -1536,15 +1542,36 @@ void em_on_present() {
       w.dbg_bright += st[7];
       w.dbg_front += st[4];
       for (uint32_t r = 0; r < si.rec_fs.size(); ++r) {
-        const uint32_t* q = st + 16 + r * 8;
+        const uint32_t* q = st + 16 + r * 12;
         if (!q[4]) continue;
         Window::Cmp& cmp = w.cmp[si.rec_fs[r]];
         cmp.ours += double((uint64_t(q[1]) << 32) | q[0]) / 4096.0;
         cmp.game += double((uint64_t(q[3]) << 32) | q[2]) / 4096.0;
         cmp.px += q[4];
         cmp.zero += q[5];
+        cmp.bright += q[8];
         cmp.nomap += double((uint64_t(q[7]) << 32) | q[6]) / 4096.0;
         cmp.flags |= si.rec_flags[r];
+      }
+      // A family never calibrated is calibrated as soon as 4 checks have seen it on enough
+      // bright pixels, not at the end of its first 300-present window: uncalibrated, the
+      // decals' boxes lit Water Queen's House 35x too bright for the first seconds after a
+      // load (em8-wq-on). The family's window sums restart at the new scale.
+      if (cfg_int("rt_em_calib", 1) != 0) {
+        for (auto it = w.cmp.begin(); it != w.cmp.end();) {
+          const Window::Cmp& cm = it->second;
+          Calib& cal = g_calib[it->first];
+          const double ratio = cm.game > 0 ? cm.ours / cm.game : 0.0;
+          if (!cal.updates && (cm.flags & kFlagApprox) && !(cm.flags & kFlagForward) && w.dbg_frames >= 4 &&
+              cm.bright >= 200.0 * 4 && ratio > 0.02 && ratio < 50.0) {
+            cal.log_u = std::log(ratio);
+            cal.scale = float((std::min)((std::max)(std::exp(-cal.log_u), 1.0 / 64), 64.0));
+            cal.updates = 1;
+            it = w.cmp.erase(it);
+          } else {
+            ++it;
+          }
+        }
       }
     }
     if (cfg_int("rt_em_log", 0))
@@ -1654,7 +1681,7 @@ void em_on_present() {
     for (auto& [fs, cm] : w.cmp) {
       ours += cm.ours, game += cm.game;
       const double ratio = cm.game > 0 ? cm.ours / cm.game : 0.0;
-      const double px = cm.px / double(w.dbg_frames);
+      const double px = cm.bright / double(w.dbg_frames);   // bright hits per frame: the gate
       Calib& cal = g_calib[fs];
       const float before = cal.updates ? cal.scale : 1.0f;
       // Calibrate approximate families seen on enough pixels, in the effects target (a
@@ -1666,14 +1693,14 @@ void em_on_present() {
       // window sets it), i.e. it matches the time average.
       if (calib && (cm.flags & kFlagApprox) && !(cm.flags & kFlagForward) && px >= 200 && ratio > 0.02 && ratio < 50.0) {
         const double lu = std::log(ratio / double(before));
-        cal.log_u = cal.updates ? cal.log_u + 0.25 * (lu - cal.log_u) : lu;
+        cal.log_u = cal.updates ? cal.log_u + 0.5 * (lu - cal.log_u) : lu;
         cal.scale = float((std::min)((std::max)(std::exp(-cal.log_u), 1.0 / 64), 64.0));
         ++cal.updates;
       }
       char buf[260];
-      snprintf(buf, sizeof buf, "%08x %s %.3f (%.0f px%s%s%s, scale %.3f)", unsigned(fs >> 32),
-               material(fs).name.c_str(), ratio, px, (cm.flags & kFlagApprox) ? ", approx" : "",
-               (cm.flags & kFlagForward) ? ", forward" : "", px < 200 ? ", under 200 px: not gated" : "", before);
+      snprintf(buf, sizeof buf, "%08x %s %.3f (%.0f bright px of %.0f%s%s%s, scale %.3f)", unsigned(fs >> 32),
+               material(fs).name.c_str(), ratio, px, cm.px / double(w.dbg_frames), (cm.flags & kFlagApprox) ? ", approx" : "",
+               (cm.flags & kFlagForward) ? ", forward" : "", px < 200 ? ", under 200 bright px: not gated" : "", before);
       items.push_back(buf);
       // The record behind a luminance family or an exact family outside 0.8-1.25.
       const bool off = !(cm.flags & kFlagApprox) && px >= 200 && (ratio < 0.8 || ratio > 1.25);
