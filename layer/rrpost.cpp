@@ -162,6 +162,20 @@ Bg3Binding g_adapt_out{};
 std::atomic<float> g_pre_exposure{0.0f};   // lighting s1b13[0], read back a few frames late
 uint64_t g_probe_logged = 0;
 bool g_ids_logged = false;
+// QA exposure hold (qa_exposure_hold=1, docs/QA.md "Exposure hold"): cross-trace comparisons
+// (hard_dark's light-off floors above all) need one exposure for every trace, but the game's
+// eye adaptation re-exposes a darker trace within the 240 presents before it is captured
+// (QA 20261027-173531: the ambient-off floor brighter than the image with the ambient). The
+// adaptation pass bd9db92d writes [0] = 0.8333/2^EV, [1] = 1.2*2^EV, [2] = EV, ... into one of
+// two buffers that swap each frame (TRACK_A_RR "Pre-exposure"); with the hold on, its output is
+// overwritten right after it runs with the values the lighting used when the hold was switched
+// on (the probe's b0), so from two frames later the pre-exposure (s1b13) and the exposure
+// pass's re-exposure (b0[1] * b1[0] = 1) stay fixed. Needs rr_post (the probe and these hooks).
+float g_last_b0[6] = {};
+bool g_last_valid = false;
+float g_hold[6] = {};
+bool g_hold_on = false;
+uint64_t g_hold_writes = 0;
 
 uint32_t mem_type(DeviceData* dd, uint32_t bits) {
   VkPhysicalDeviceMemoryProperties props{};
@@ -955,6 +969,7 @@ void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs) {
   if (cs == kCsAdapt) {
     Bg3Binding b{};
     if (query_binding(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, 1, 1, 0, &b) && b.buffer) g_adapt_out = b;
+    else g_adapt_out = {};
     return;
   }
   if (!ensure_layout(dd)) return;
@@ -1055,6 +1070,26 @@ int rrpost_trace_images(VkImage* out, int max) {
 
 float rrpost_pre_exposure() { return g_pre_exposure.load(); }
 
+// After the game's adaptation dispatch: with the exposure hold on, overwrite what it wrote.
+void rrpost_dispatch_post(VkCommandBuffer cmd, uint64_t cs) {
+  if (cs != kCsAdapt) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_hold_on || !g_adapt_out.buffer) return;
+  DeviceData* dd = device_of(cmd);
+  if (!dd) return;
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0,
+                            nullptr, 0, nullptr);
+  dd->vk.CmdUpdateBuffer(cmd, g_adapt_out.buffer, g_adapt_out.offset, sizeof g_hold, g_hold);
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb, 0,
+                            nullptr, 0, nullptr);
+  ++g_hold_writes;
+}
+
 void rrpost_on_present() {
   std::lock_guard<std::mutex> lock(g_mu);
   // Exposure probe: the latest write (a frame or two old; a diagnostic).
@@ -1062,6 +1097,10 @@ void rrpost_on_present() {
     float v[kProbeFloats];
     memcpy(v, g_probe_map, sizeof v);
     if (std::isfinite(v[12]) && v[12] > 0.0f) g_pre_exposure.store(v[12]);
+    if (std::isfinite(v[2]) && v[0] > 0.0f) {   // b0: the buffer the lighting used (s1b13)
+      memcpy(g_last_b0, v, sizeof g_last_b0);
+      g_last_valid = true;
+    }
     if (v[0] != 0.0f && (g_probe_logged < 3 || trace_recording() || frame_index() % 1800 == 0)) {
       ++g_probe_logged;
       log("[rrpost] exposure probe (frame %llu): 2cdd9f08 b0 = [%g %g %g %g %g %g], b1 = [%g %g %g %g %g %g], "
@@ -1069,6 +1108,23 @@ void rrpost_on_present() {
           (unsigned long long)frame_index(), v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11],
           v[12], v[13], v[14], v[15], v[1] * v[6], 0.8333333f / std::exp2(v[2]), 0.8333333f / std::exp2(v[8]));
     }
+  }
+  // QA exposure hold: latch on the switch, release when it goes off.
+  const bool want = cfg_int("qa_exposure_hold", 0) != 0;
+  if (want && !g_hold_on && g_last_valid) {
+    memcpy(g_hold, g_last_b0, sizeof g_hold);
+    g_hold_on = true;
+    g_hold_writes = 0;
+    log("[rrpost] exposure held (qa_exposure_hold=1) at EV %g: [%g %g %g %g %g %g] (frame %llu)", g_hold[2], g_hold[0],
+        g_hold[1], g_hold[2], g_hold[3], g_hold[4], g_hold[5], (unsigned long long)frame_index());
+  } else if (want && !g_hold_on && frame_index() % 600 == 0) {
+    log("[rrpost] exposure hold requested but no exposure read back yet (needs rr=1, rr_post=1)");
+  } else if (!want && g_hold_on) {
+    g_hold_on = false;
+    log("[rrpost] exposure hold released after %llu writes", (unsigned long long)g_hold_writes);
+  } else if (g_hold_on && frame_index() % 600 == 0) {
+    log("[rrpost] exposure held at EV %g: %llu writes so far; probe b0 EV %g, b1 EV %g", g_hold[2],
+        (unsigned long long)g_hold_writes, g_last_b0[2], g_probe_map ? g_probe_map[8] : 0.0f);
   }
   ULONGLONG now = GetTickCount64();
   if (!g_ts_tick) g_ts_tick = now;

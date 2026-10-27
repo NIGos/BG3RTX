@@ -38,7 +38,7 @@ if ($dxc) {
   $bad = @()
   foreach ($f in Get-ChildItem shaders -Recurse -Filter *.hlsl) {
     if (-not (Select-String -LiteralPath $f.FullName -Pattern '\bmain\s*\(' -Quiet)) { continue }
-    $extra = if (Select-String -LiteralPath $f.FullName -Pattern '^// dxc: -enable-16bit-types' -Quiet) { @("-enable-16bit-types") } else { @() }
+    $extra = @(if (Select-String -LiteralPath $f.FullName -Pattern '^// dxc: -enable-16bit-types' -Quiet) { "-enable-16bit-types" })
     $inc = @("-I", "shaders", "-I", "shaders\gi", "-I", "shaders\rt", "-I", "external\sharc-1.8.3\include", "-D", "BG3RTX_SHARC_SDK=1")
     & $dxc.FullName -T cs_6_6 -E main -spirv '-fspv-target-env=vulkan1.3' -HV 2021 @extra @inc $f.FullName -Fo "$env:TEMP\mg.spv" 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { $bad += $f.FullName.Replace("$root\", "") }

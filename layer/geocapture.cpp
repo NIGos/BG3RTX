@@ -874,7 +874,7 @@ void release(Capture& c) {
 const VkDeviceCreateInfo* geo_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
                                                  VkDeviceCreateInfo* scratch) {
   g_timing = cfg_int("geo_timing", 0) != 0;
-  if ((!cfg_int("geo_capture", 0) && !cfg_int("rt", 0)) || !id) return ci;
+  if ((!cfg_int("geo_capture", 0) && !cfg_int("rt", 1)) || !id) return ci;
   uint32_t n = 0;
   id->EnumerateDeviceExtensionProperties(phys, nullptr, &n, nullptr);
   std::vector<VkExtensionProperties> props(n);
@@ -932,7 +932,7 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
     g_on = p_bind_xfb && p_begin_xfb && p_end_xfb && p_begin_query && p_end_query;
     // Track D phase 3: the UV goes along with the position, and the scene
     // comes from the depth prepass (rt_alpha needs rt=1; both are read here, once).
-    g_alpha_mode = cfg_int("rt", 0) && cfg_int("rt_alpha", 0);
+    g_alpha_mode = cfg_int("rt", 1) && cfg_int("rt_alpha", 1);
     g_stride = g_alpha_mode ? 24 : 16;
     log("[geo] transform feedback %s: vertex shaders get Position%s XFB decorations (stride %u)%s",
         g_on ? "enabled" : "FAILED to load", g_alpha_mode ? " + UV" : "", g_stride,

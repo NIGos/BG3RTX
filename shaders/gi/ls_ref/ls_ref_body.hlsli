@@ -3,8 +3,10 @@
 // prefix lsref_, so the reference pass is lsref_ls_ref(fp, o_d, o_s).
 // ---- rt_common.hlsli (ray origin and occlusion) ----
 struct lsref_RtCone { float f0, spread; };
-bool lsref_rt_occluded(float3 o, float3 d, float tmax, lsref_RtCone cone) {
-  if (!rt_ray_valid(o, d, tmax)) return false;   // (hand edit: the ray guard of rt_common.hlsli)
+// (hand edit: the candidate cap and tri-state of rt_common.hlsli rt_visibility, so that the
+// reference treats an aborted query as the live pass does: kRtLit / kRtOccluded / kRtUnknown)
+uint lsref_rt_occluded(float3 o, float3 d, float tmax, lsref_RtCone cone) {
+  if (!rt_ray_valid(o, d, tmax)) return kRtLit;   // (hand edit: the ray guard of rt_common.hlsli)
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;
@@ -12,10 +14,24 @@ bool lsref_rt_occluded(float3 o, float3 d, float tmax, lsref_RtCone cone) {
   r.TMin = 0.0;
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
+  const uint cap = rt_max_candidates();
+  uint cand_n = 0;
+  bool aborted = false;
   while (q.Proceed()) {
+    if (++cand_n > cap) {
+      guard_count(kGuardLoopCap);
+      aborted = true;
+      q.Abort();
+      break;
+    }
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
-  return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+  if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) return kRtOccluded;
+  if (aborted) {
+    rt_count_unknown(asuint(o.x) ^ asuint(o.z));
+    return kRtUnknown;
+  }
+  return kRtLit;
 }
 float3 lsref_rt_offset_ray(float3 p, float3 n) {
   const float origin = 1.0 / 32.0, float_scale = 1.0 / 65536.0, int_scale = 256.0;
@@ -661,7 +677,8 @@ float3 lsref_nan0(float3 v) { return any(isnan(v)) ? float3(0, 0, 0) : v; }
 // Visibility of the light from the surface: 1 ray, towards the centre or a
 // point of its sphere. `key` selects the random stream. `side` < 0: the light is
 // behind the surface (transmission, hair), so the ray starts on the back side.
-float lsref_trace_light(lsref_Bg3Surface sf, float3 lpos, uint2 fp, uint key, lsref_RtCone cone, float side, float R) {
+// (hand edit: returns the tri-state of lsref_rt_occluded)
+uint lsref_trace_light(lsref_Bg3Surface sf, float3 lpos, uint2 fp, uint key, lsref_RtCone cone, float side, float R) {
   float3 L = lpos - sf.P;
   float dist = length(L);
   float3 Ld = L / max(dist, 1e-6);
@@ -680,13 +697,16 @@ float lsref_trace_light(lsref_Bg3Surface sf, float3 lpos, uint2 fp, uint key, ls
   // (`side` < 0 gives the ray a direction below the surface: the origin follows it.)
   float3 o = lsref_rt_ray_origin_o(sf.org, sf.P, sf.N, cone.f0, dir);
   float tmax = length(lpos - o) - max(R, pc.ls_clear);
-  if (tmax <= 0.0) return 1.0;
-  return lsref_rt_occluded(o, dir, tmax, cone) ? 0.0 : 1.0;
+  if (tmax <= 0.0) return kRtLit;
+  return lsref_rt_occluded(o, dir, tmax, cone);
 }
 
 
 bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
+  g_rt_pass = kRtPassLocal;   // (hand edit: unknown-query count)
+  // (hand edit: the QA ambient floor, qa_zero bit 1, as rt_local_shadows.hlsl does it)
+  const bool qa = (pc.qa_zero & 2u) != 0u;
   float d = gDepth.Load(int3(fp, 0));
 
   if (d <= 0.0) return false;
@@ -739,7 +759,7 @@ bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
   uint n_matched = 0, n_se = 0, n_skipped = 0, n_unmatched = 0;   // per-light data (ls_stats)
   float3 dbg_owner = 0;                                            // ls_debug=9
   // RIS reservoirs (ls_samples > 0)
-  const uint ns = min(pc.ls_samples, 2u);
+  const uint ns = qa ? 0u : min(pc.ls_samples, 2u);
   float wsum = 0;
   float3 rd[2] = {float3(0, 0, 0), float3(0, 0, 0)}, rs[2] = {float3(0, 0, 0), float3(0, 0, 0)}, rp[2] = {float3(0, 0, 0), float3(0, 0, 0)};
   float rw[2] = {0, 0}, rsh[2] = {1, 1}, rsel[2] = {0, 0}, rside[2] = {1, 1}, rR[2] = {0, 0};
@@ -756,7 +776,7 @@ bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
     ++n_lights;
     bool shadowed = (l.flags & 1u) != 0u;
     float s = 1.0;
-    if (shadowed && (validate || pc.ls_shadowed != 0)) s = lsref_bg3_atlas_shadow(l, spot, sf, Ld, d2, saturate(nol));
+    if (shadowed && (validate || pc.ls_shadowed != 0 || qa)) s = lsref_bg3_atlas_shadow(l, spot, sf, Ld, d2, saturate(nol));
     n_shadowed += shadowed ? 1u : 0u;
     if (validate) {
       md += cd * s + ct;
@@ -765,7 +785,7 @@ bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
     }
     // Hair replaces its self-shadow by the atlas term for lights with a shadow map
     // (3033c895:483), which lsref_bg3_light_eval_mat does not model: those stay the game's.
-    bool traced = shadowed ? pc.ls_shadowed != 0 && cls != kMatHair : (1.0 / max(l.inv_r, 1e-12) >= pc.ls_min_radius);
+    bool traced = shadowed ? (pc.ls_shadowed != 0 || qa) && cls != kMatHair : (qa || 1.0 / max(l.inv_r, 1e-12) >= pc.ls_min_radius);
     // Per-light data: the source radius, and whether this owner's lights are shadowed.
     float R = pc.ls_source_radius;
     if ((pc.ls_flags & 1u) != 0u) {
@@ -776,7 +796,7 @@ bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
         ++n_matched;
         n_se += (si.y & 0x10000u) != 0u ? 1u : 0u;
         R = asfloat(si.x);
-        if (((pc.ls_flags >> (8u + min(owner, 4u))) & 1u) == 0u) {
+        if (!qa && ((pc.ls_flags >> (8u + min(owner, 4u))) & 1u) == 0u) {
           n_skipped += traced ? 1u : 0u;
           traced = false;
         }
@@ -789,10 +809,16 @@ bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
     cd_all += cd;
     cs_all += cs;
     if (ns == 0) {
-      float v = lsref_trace_light(sf, l.pos, fp, li, cone, nol, R);
-      ++n_traced;
-      n_occ += v < 0.5 ? 1u : 0u;
+      const uint vs = qa ? kRtOccluded : lsref_trace_light(sf, l.pos, fp, li, cone, nol, R);
+      float v = vs == kRtLit ? 1.0 : 0.0;
+      n_traced += qa ? 0u : 1u;
+      n_occ += vs == kRtOccluded && !qa ? 1u : 0u;
       float t = shadowed && pc.ls_shadowed == 2 ? min(v, s) : v;
+      if (vs == kRtUnknown) v = t = s;   // (hand edit: unknown ray, the game's own term)
+      if (qa) {                          // (hand edit: QA ambient floor)
+        t = 0.0;
+        dd -= ct;
+      }
       dd += cd * (t - s);
       ds += cs * (t - s);
       td += cd * t;
@@ -815,10 +841,12 @@ bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (ns > 0 && wsum > 0.0) {
     [unroll] for (uint k = 0; k < 2; ++k) {
       if (k >= ns || !(rw[k] > 0.0)) continue;
-      float v = lsref_trace_light(sf, rp[k], fp, rk[k] ^ (0x300u + k), cone, rside[k], rR[k]);
+      const uint vs = lsref_trace_light(sf, rp[k], fp, rk[k] ^ (0x300u + k), cone, rside[k], rR[k]);
+      float v = vs == kRtLit ? 1.0 : 0.0;
       ++n_traced;
-      n_occ += v < 0.5 ? 1u : 0u;
+      n_occ += vs == kRtOccluded ? 1u : 0u;
       float t = rsel[k] > 0.5 ? min(v, rsh[k]) : v;
+      if (vs == kRtUnknown) v = t = rsh[k];   // (hand edit: unknown ray, the game's own term)
       float inv_p = wsum / (rw[k] * float(ns));
       dd += rd[k] * ((t - rsh[k]) * inv_p);
       ds += rs[k] * ((t - rsh[k]) * inv_p);

@@ -11,6 +11,9 @@ namespace bg3 {
 
 // The table handed to the core (host_api.h, ABI 6).
 const Bg3AssetDbApi* assetdb_api();
+// The database file the layer loads: %BG3RTX_ASSETDB%, else this checkout's data/assetdb, else
+// (a git worktree without one) the main checkout's, resolved through the git common dir.
+std::string assetdb_file();
 
 // Join check (assetdb_join=1): reads the lighting pass's light list at one tiled-lighting
 // dispatch every assetdb_join_interval presents and matches it against the database.

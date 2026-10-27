@@ -1040,7 +1040,7 @@ static bool rr_create(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f) {
     log("[ngx] RR: AllocateParameters failed");
     return false;
   }
-  unsigned preset = unsigned(cfg_int("rr_preset", 0));
+  unsigned preset = unsigned(cfg_int("rr_preset", 6));
   p->Set(NVSDK_NGX_Parameter_CreationNodeMask, 1u);
   p->Set(NVSDK_NGX_Parameter_VisibilityNodeMask, 1u);
   p->Set(NVSDK_NGX_Parameter_Width, f.w);

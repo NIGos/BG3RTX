@@ -12,6 +12,7 @@
 void main(uint3 tid : SV_DispatchThreadID) {
   uint2 id = tid.xy;
   if (any(id >= pc.half)) return;
+  g_rt_pass = kRtPassAO;
   // The same full-resolution sample gi_trace used.
   uint2 fp = gi_fp(id);
   float d = gDepth.Load(int3(fp, 0));
@@ -31,8 +32,16 @@ void main(uint3 tid : SV_DispatchThreadID) {
   for (uint r = 0; r < pc.rt_ao_rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
     float3 o = rt_ray_origin_o(org, P, N, dist * pa, dir);
-    float t = rt_closest(o, dir, pc.rt_ao_radius, cone);
-    if (t >= 0.0) {
+    bool aborted;
+    float t = rt_closest(o, dir, pc.rt_ao_radius, cone, aborted);
+    if (aborted) {
+      // Unknown (the candidate cap ended the query, rt_common.hlsli): counted as an
+      // occluder at distance 0, weight 1 (conservative, never a light leak). An abort
+      // means over rt_max_candidates alpha-tested candidates within rt_ao_radius, i.e.
+      // dense foliage, where an occluder is the likely answer. Per ray, not per pixel:
+      // the pixel's other rays keep their traced answer.
+      occ += 1.0;
+    } else if (t >= 0.0) {
       // Closer occluders count more: a smooth falloff to zero at the radius.
       float k = t / pc.rt_ao_radius;
       occ += 1.0 - k * k;

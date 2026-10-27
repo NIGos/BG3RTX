@@ -202,16 +202,215 @@ inline constexpr int kKnobCount = int(sizeof kKnobs / sizeof kKnobs[0]);
 // static meshes are built once for trace speed and never refit.
 inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_frames", "600"}}};
 
-// What the code uses when a key is in no layer (the cfg_* fallbacks), for the
-// keys the knobs drive. Used to show the current choice.
-inline constexpr KV kCodeDefaults[] = {
-    {"rr", "0"},           {"rt_build", "1"},          {"rt_alpha", "0"},      {"rt_shadows", "0"},
-    {"contact_shadows", "1"}, {"gi", "0"},             {"gi_rt", "0"},         {"gi_rays", "2"},
-    {"gi_steps", "12"},    {"gi_rr_rays", "1"},        {"rt_local_shadows", "0"}, {"ls_samples", "0"},
-    {"ls_shadowed", "3"},  {"rt_reflections", "0"},    {"rf_max_rough", "0.6"}, {"fg", "0"},
-    {"gi_strength", "1.0"}, {"ls_strength", "1.0"},    {"rf_strength", "1.0"}, {"fps_cap", "0"},
+// ---- defaults: one source (docs/SETTINGS_DESIGN.md "Defaults: one source") ----
+// kDefaults is every key bg3rtx.ini sets, with its value; kReleaseDefaults the developer
+// keys data/release.ini switches off. tests/settings_test.cpp asserts that both files and
+// both tables agree exactly. The layer's cfg_int/cfg_float (layer/util.cpp) use
+// code_default() for a key no ini layer has: kDefaults with the release profile on top, so
+// a missing developer key is off. A call site's fallback literal is used only for keys in
+// neither table, and the layer logs once when a literal disagrees with the table.
+// clang-format off
+// BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
+// 155 keys of bg3rtx.ini, in file order.
+inline constexpr KV kDefaults[] = {
+    {"dev", "1"},
+    {"ab_hotkey", "1"},
+    {"core", "1"},
+    {"dump_shaders", "1"},
+    {"shader_debug", "0"},
+    {"census_dump", "0"},
+    {"rr", "1"},
+    {"rr_preset", "6"},
+    {"rr_post", "1"},
+    {"rr_cbt", "1"},
+    {"rr_post_quantise", "1"},
+    {"rr_pre_exposure", "0"},
+    {"rr_post_check", "0"},
+    {"rr_test_fail", "0"},
+    {"rr_show", "0"},
+    {"rr_guides_v2", "1"},
+    {"rr_nov", "0.5"},
+    {"rr_guides_at", "1"},
+    {"rr_dump_gbuffer", "0"},
+    {"dump_raw", "0"},
+    {"ngx_hook", "1"},
+    {"gi", "1"},
+    {"gi_rays", "4"},
+    {"gi_rr_rays", "1"},
+    {"gi_steps", "16"},
+    {"gi_radius", "0.15"},
+    {"gi_thickness", "0.03"},
+    {"gi_strength", "1.0"},
+    {"gi_ao", "1.0"},
+    {"gi_history", "0.1"},
+    {"gi_debug", "0"},
+    {"geo_capture", "0"},
+    {"geo_timing", "0"},
+    {"geo_xfb_always", "0"},
+    {"rt", "1"},
+    {"rt_build", "auto"},
+    {"rt_refit", "1"},
+    {"rt_rebuild_frames", "60"},
+    {"rt_bvh_split", "1"},
+    {"rt_tlas_refit", "1"},
+    {"rt_mesh_compact", "1"},
+    {"rt_mesh_new_tris", "4000000"},
+    {"rt_mesh_budget_mb", "2048"},
+    {"rt_mesh_audits", "2"},
+    {"rt_mesh_audit_frames", "600"},
+    {"rt_fast_trace", "0"},
+    {"rt_shadows", "1"},
+    {"contact_shadows", "1"},
+    {"rt_strength", "1.0"},
+    {"rt_origin", "1"},
+    {"rt_bias", "0.002"},
+    {"rt_backlit", "1"},
+    {"rt_tmax", "300"},
+    {"rt_sun_radius", "0.00459"},
+    {"rt_sun_replace", "1"},
+    {"rt_sun_roofs", "1"},
+    {"rt_sun_roof_mode", "0"},
+    {"rt_sun_roof_pad", "1.0"},
+    {"rt_sun_roof_up", "3.0"},
+    {"rt_sun_roof_radius", "0"},
+    {"rt_sun_offscreen", "1"},
+    {"rt_sun_rise", "6.0"},
+    {"rt_sun_top_pad", "2.0"},
+    {"rt_sun_top", "0"},
+    {"rt_sun_margin", "0.0"},
+    {"rt_sun_ramp", "0.75"},
+    {"rt_sun_near", "0"},
+    {"rt_ao", "0"},
+    {"rt_ao_rays", "2"},
+    {"rt_ao_radius", "1.0"},
+    {"rt_debug", "0"},
+    {"rt_stats", "0"},
+    {"qa_zero", "0"},
+    {"qa_exposure_hold", "0"},
+    {"rt_max_candidates", "0"},
+    {"rt_alpha", "1"},
+    {"rt_alpha_test", "1"},
+    {"rt_alpha_cut", "1"},
+    {"rt_alpha_stochastic", "1"},
+    {"rt_alpha_unknown", "1"},
+    {"rt_alpha_auto", "1"},
+    {"rt_alpha_max_pct", "60"},
+    {"rt_strips", "1"},
+    {"gi_rt", "1"},
+    {"gi_rt_radius", "1.0"},
+    {"gi_rt_depth_k", "1.0"},
+    {"gi_rt_fallback", "0"},
+    {"gi_bounce_spec", "0"},
+    {"sharc", "0"},
+    {"sharc_log2", "22"},
+    {"sharc_inject_stride", "2"},
+    {"sharc_frames", "16"},
+    {"sharc_stale", "128"},
+    {"sharc_scene_scale", "50"},
+    {"sharc_log_base", "2"},
+    {"sharc_level_bias", "0"},
+    {"sharc_query", "7"},
+    {"sharc_gi_radius", "4"},
+    {"sharc_rf_rough", "0.2"},
+    {"sharc_rf_cone", "1"},
+    {"sharc_near", "1"},
+    {"sharc_em", "1"},
+    {"sharc_reset_jump", "50"},
+    {"sharc_reject_occluded", "1"},
+    {"sharc_leak_check", "0"},
+    {"sharc_fine_check", "0"},
+    {"sharc_fine_scale", "4"},
+    {"sharc_debug", "0"},
+    {"sharc_stats", "0"},
+    {"sharc_stats_frames", "300"},
+    {"sharc_device", "1"},
+    {"rt_local_shadows", "1"},
+    {"ls_shadowed", "3"},
+    {"ls_source_radius", "0.05"},
+    {"ls_soft", "-1"},
+    {"ls_clear", "0.2"},
+    {"ls_min_radius", "0"},
+    {"ls_samples", "0"},
+    {"ls_k", "0"},
+    {"ls_rest_samples", "1"},
+    {"ls_strength", "1.0"},
+    {"ls_debug", "0"},
+    {"ls_stats", "0"},
+    {"ls_lights", "1"},
+    {"ls_owners", "31"},
+    {"ls_noshadow", "1"},
+    {"ls_giveback_cap", "1"},
+    {"ls_lights_radius", "80"},
+    {"ls_dyn_speed", "8"},
+    {"ls_impl", "1"},
+    {"ls_check", "0"},
+    {"se_bridge", "1"},
+    {"se_stale_periods", "4"},
+    {"se_stale_ms", "0"},
+    {"mat_classes", "1"},
+    {"ao_direct", "1"},
+    {"rt_reflections", "1"},
+    {"rf_max_rough", "0.6"},
+    {"rf_max_rough_norr", "0.3"},
+    {"rf_mirror_rough", "0.1"},
+    {"rf_rr", "-1"},
+    {"rf_tmax", "100"},
+    {"rf_depth_k", "1.0"},
+    {"rf_edge", "0.05"},
+    {"rf_strength", "1.0"},
+    {"rf_so", "0"},
+    {"rf_models", "3"},
+    {"rf_debug", "0"},
+    {"rf_stats", "0"},
+    {"rf_validate", "0"},
+    {"rr_spec_hit_distance", "1"},
+    {"fg", "2"},
     {"reflex", "1"},
+    {"fps_cap", "0"},
+    {"se_unhook", "1"},
 };
+// 20 keys of data/release.ini, in file order.
+inline constexpr KV kReleaseDefaults[] = {
+    {"dev", "0"},
+    {"dump_shaders", "0"},
+    {"shader_debug", "0"},
+    {"census_dump", "0"},
+    {"geo_capture", "0"},
+    {"geo_timing", "0"},
+    {"geo_xfb_always", "0"},
+    {"rr_show", "0"},
+    {"rr_dump_gbuffer", "0"},
+    {"gi_debug", "0"},
+    {"rt_debug", "0"},
+    {"rt_stats", "0"},
+    {"ls_debug", "0"},
+    {"ls_stats", "0"},
+    {"rf_debug", "0"},
+    {"rf_stats", "0"},
+    {"rf_validate", "0"},
+    {"rr_post_check", "0"},
+    {"dump_raw", "0"},
+    {"rr_test_fail", "0"},
+};
+// END GENERATED DEFAULTS
+// clang-format on
+
+// The value a key has when no ini layer sets it, or nullptr for a key in neither table.
+inline const char* code_default(const std::string& key) {
+  for (const KV& kv : kReleaseDefaults)
+    if (key == kv.key) return kv.value;
+  for (const KV& kv : kDefaults)
+    if (key == kv.key) return kv.value;
+  return nullptr;
+}
+
+// Every key with its code_default(): the layer the ini files go on top of.
+inline Map code_defaults() {
+  Map m;
+  for (const KV& kv : kDefaults) m[kv.key] = kv.value;
+  for (const KV& kv : kReleaseDefaults) m[kv.key] = kv.value;
+  return m;
+}
 
 // Keys read only at instance/device creation (or by static initialisers).
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
@@ -390,9 +589,8 @@ inline Map merge_layers(const std::vector<const Map*>& layers, std::vector<std::
 inline std::string lookup(const Map& m, const std::string& key) {
   auto it = m.find(key);
   if (it != m.end()) return it->second;
-  for (const KV& kv : kCodeDefaults)
-    if (key == kv.key) return kv.value;
-  return "";
+  const char* d = code_default(key);
+  return d ? d : "";
 }
 
 // `want` is the choice's value; "auto" also matches an explicit "1".

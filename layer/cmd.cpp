@@ -684,6 +684,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, u
   vk(cmd).CmdDispatch(cmd, x, y, z);
   CmdState* s = cmd_state(cmd);
   if (!s) return;
+  rrpost_dispatch_post(cmd, s->cs);
   if (s->tracing) {
     char dims[64];
     snprintf(dims, sizeof dims, "\"groups\":[%u,%u,%u]", x, y, z);
@@ -703,6 +704,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuf
   vk(cmd).CmdDispatchIndirect(cmd, b, o);
   CmdState* s = cmd_state(cmd);
   if (!s) return;
+  rrpost_dispatch_post(cmd, s->cs);
   if (s->tracing) trace_note_draw(s, 1, "dispatch_indirect", nullptr);
   after_dispatch(cmd, s, true, 0, 0, 0);
 }

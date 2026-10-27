@@ -278,3 +278,35 @@ Steel Watch Foundry (S1), steady gameplay, every check of three runs:
 - **Multiplayer clients** (`ReservedUserID == 1` picks the local player).
 - **A torch-lit scene with shadow-mapped lights.** In the foundry no point or spot
   light casts a game shadow.
+
+## Join tolerances (2026-10-27)
+
+Every tolerance of the light join is derived from the bridge's own behaviour, the float
+format and measured game data (docs/QUALITY.md R0). Code: `layer/sebridge.h` (constants and
+`se_static_tol` / `se_static_radius_tol` / `se_covers` / `se_stale_ms`), `core/ls_lights.cpp`
+(the D-LS upload, which writes both tolerances into each record),
+`shaders/gi/rt_local_shadows_match.hlsl` (reads them), `layer/assetdb.cpp` (`runtime_lights`
+and the `[se] join` check use the same rules).
+
+| What | Was | Now | Derivation |
+|---|---|---|---|
+| Position, lights that stay put (placed, database) | 5 cm + jitter | √3·(4 ulp(\|p\|max + 80 m) + 0.05 mm) + jitter: 0.5 mm at Campsite, 6.9 mm at 8.5 km | Per coordinate: the game's camera-relative position and the shader's + camera (2 roundings), the bridge's float parse (1), the engine's transform composition (1: the array was within 2.9 ulp of the database in the 93 joins of `captures/assetdb_join_20261026-*.csv`, \|p\| ≤ 1570 m); the bridge writes `%.4f` (0.05 mm). Database lights reach \|p\| = 8497 m. |
+| Position, moving lights (character, item, visual) | character 4 m, others `ls_dyn_tol` 1.5 m | static + `ls_dyn_speed` (8 m/s) × T_age, ≈ 3.3 m before any measurement, ≈ 4 m measured | T_age = longest export interval + longest age at arrival + 2 frame times (last 16 samples each). Measured interval: 0.289 s and 0.330 s mean (97 and 186 exports, `bg3rtx.log` / `bg3rtx.a.log` 2026-10-27; the Lua exports on the first tick after 250 ms). Age at arrival ≤ the reader's 100 ms poll + parse. v_max: 8 m/s is the `MovementSpeedSprint`/`Dash` most root templates set (Shared `_merged.lsf`: 13 and 11 of them; up to 12 m/s for a Cloaker or the Hellsphere); humanoids inherit the engine default (no template states it), so it is measured in game (below). |
+| Radius, lights that stay put | 2% + 1 cm | 0.5 mm + 4 relative ulp | The bridge writes `%.3f`; 1/r in the game (0.5 ulp), the shader's 1/inv_r (OpFDiv, 2.5 ulp in Vulkan), the parse (0.5). The database's range matched 1/inv_r to 1e-6 in the same captures. |
+| Radius, moving lights | 2% + 1 cm | unchanged | **Not derived**: a VFX light's radius may be animated between exports, and no capture holds both values of a moving light. The `[se] join` line now logs the largest relative disagreement it accepted for placed and for moving lights; a run with carried torches and weapon VFX lights (S3, S8, S14) measures it. |
+| Database lights the bridge did not report | dropped within 55 m of the host | dropped where the export covers them (`se_covers`): within 60 m of the host and in the Lua's vertical cell rows (cy ± 2 of 16 m) | The Lua's `RANGE` and its grid scan; the host's `%.3f` as margin. The 55 m sphere also dropped lights 32-55 m above or below the character, which the Lua never scans. |
+| Upload refresh | every 8 frames | on every export, else every 0.25 s | Nothing the bridge reports changes faster than its export period; 8 frames was 4 refreshes per export at 120 fps. |
+| Staleness | `se_stale_ms` 3000 | `se_stale_periods` (4) × the longest of the last 16 export intervals + 100 ms poll: 1.1 s nominal, ≈ 1.4 s measured | k = 4: one export is in use, 3 in a row may go missing (a hitch, a failed Lua tick) before the lights fall back to the database. `se_stale_ms` > 0 still sets a fixed limit. |
+
+**Measurements in game** (each logged, no extra setting):
+- `[se] motion (120 exports): ... fastest X m/s (owner, name), N above 8.0 m/s; export
+  interval max Y s`, every 30 s: the fastest moving light between consecutive exports (a
+  teleport or level change also counts). It checks `ls_dyn_speed`.
+- `ls: per-light data: ... moving-light tolerance T m = 8.0 m/s x A s (export interval I +
+  age at arrival G + 2 frames of F s)`: the derived tolerance and its inputs.
+- `[se] join: ... radius disagreement max a (placed) / b (moving, relative); moving
+  tolerance T m (D s between export and frame)`: with `assetdb_join=1`.
+
+**Known gap.** The Lua classifies at most 100 new light entities per tick. Until it has
+classified a level's lights (about a second after a load), a database light inside the
+export's coverage that the bridge has not classified yet is dropped too.

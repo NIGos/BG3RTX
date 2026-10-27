@@ -173,7 +173,7 @@ const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalD
                                                    VkDeviceCreateInfo* scratch) {
   g_enabled = false;
   g_bind_dev = false;
-  if (!cfg_int("rt", 0) || !cfg_int("dev_fault", 1) || !id || !id->GetPhysicalDeviceFeatures2) return ci;
+  if (!cfg_int("rt", 1) || !cfg_int("dev_fault", 1) || !id || !id->GetPhysicalDeviceFeatures2) return ci;
   // Robust buffer access (the game's choice; we do not change it): out-of-range
   // descriptor reads are only defined with it. Our shaders clamp their own.
   VkBool32 robust = ci->pEnabledFeatures ? ci->pEnabledFeatures->robustBufferAccess : VK_FALSE;
@@ -250,7 +250,7 @@ const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalD
 const VkInstanceCreateInfo* fault_instance_create_info(PFN_vkGetInstanceProcAddr next, const VkInstanceCreateInfo* ci,
                                                        VkInstanceCreateInfo* scratch) {
   g_bind_inst = false;
-  if (!next || !ci || !cfg_int("rt", 0) || !cfg_int("dev_fault", 1) || !cfg_int("dev_fault_bindings", 0)) return ci;
+  if (!next || !ci || !cfg_int("rt", 1) || !cfg_int("dev_fault", 1) || !cfg_int("dev_fault_bindings", 0)) return ci;
   auto enumerate = reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(
       next(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties"));
   bool have = false;

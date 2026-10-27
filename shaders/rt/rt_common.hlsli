@@ -25,8 +25,26 @@
 static const uint kGuardLightList = 118u, kGuardSet1 = 119u, kGuardRay = 120u, kGuardLoopCap = 121u;
 // Ray-query loops end after this many candidates (counted, kGuardLoopCap): a
 // corrupt or hostile scene can never keep a lane in traversal for seconds (TDR).
+// Such a query is aborted with nothing (or not the closest hit) committed: its answer
+// is UNKNOWN (kRtUnknown below), never "lit" or "miss".
 static const uint kMaxCandidates = 4096u;
 void guard_count(uint k) { rtStats.InterlockedAdd((k * 64u) * 4u, 1u); }
+// QA (rt_max_candidates, Push::rt_max_cand): a lower cap, to force aborts in game and
+// check every pass's fallback. 0 (the default) means kMaxCandidates; never above it.
+uint rt_max_candidates() { return pc.rt_max_cand != 0u ? min(pc.rt_max_cand, kMaxCandidates) : kMaxCandidates; }
+
+// Tri-state visibility of a shadow / occlusion ray (rt_visibility). kRtUnknown: the
+// query hit the candidate cap before it found an occluder; the caller must use the
+// game's own visibility for that pixel and light, or count it as occluded.
+static const uint kRtLit = 0u, kRtOccluded = 1u, kRtUnknown = 2u;
+
+// Which pass is tracing (a pass sets g_rt_pass once at the top of its main), for the
+// per-pass count of unknown (aborted) queries: rtStats counter kStatUnknown + pass,
+// always counted like the guards and logged by core/gi.cpp in its "[core] guard:" lines.
+static const uint kRtPassOther = 0u, kRtPassSun = 1u, kRtPassLocal = 2u, kRtPassRefl = 3u, kRtPassAO = 4u,
+                  kRtPassGI = 5u;
+static const uint kStatUnknown = 128u;   // counters 128..133 (core/gi.cpp kStatsCounters)
+static uint g_rt_pass = kRtPassOther;
 
 // A ray query must get a finite origin, a finite non-zero direction and
 // 0 <= TMin <= TMax, none NaN (VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06348..06352):
@@ -50,6 +68,10 @@ void stat_add(uint index, bool cond, uint bin) {
   uint b = WaveReadLaneFirst(bin) & 63u;
   if (WaveIsFirstLane() && n) rtStats.InterlockedAdd((index * 64 + b) * 4, n);
 }
+
+// One query ended by the candidate cap with its answer unknown (wave-reduced: under a
+// forced low cap whole waves abort at once).
+void rt_count_unknown(uint bin) { stat_add(kStatUnknown + min(g_rt_pass, kRtPassGI), true, bin); }
 
 // Per-draw records: 16-byte header (uint count), then 208 bytes per draw,
 // sorted by first_tri (layer/host.h AlphaRec).
@@ -397,10 +419,14 @@ bool alpha_instance(uint inst, uint geom) {
 // Ray footprint: width f0 at the origin, growing by `spread` per unit length.
 struct RtCone { float f0, spread; };
 
-// Any alpha-tested hit within [0, tmax] (shadow and occlusion rays).
-bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
+// Visibility along [0, tmax] (shadow and occlusion rays): kRtOccluded if an
+// alpha-tested hit was committed, kRtLit if traversal finished without one, kRtUnknown
+// if the candidate cap aborted the query first (a hit committed before the abort is a
+// real occluder: kRtOccluded). Invalid rays and an unbuilt scene stay kRtLit as before
+// (rt_ray_valid / rt_scene_ok, counted guards).
+uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 1u;
-  if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return false;
+  if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return kRtLit;
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
@@ -408,26 +434,40 @@ bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMin = 0.0;
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
+  const uint cap = rt_max_candidates();
   uint cand_n = 0;
+  bool aborted = false;
   while (q.Proceed()) {
-    if (++cand_n > kMaxCandidates) {
+    if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
+      aborted = true;
       q.Abort();
       break;
     }
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
-  return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+  if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) return kRtOccluded;
+  if (aborted) {
+    rt_count_unknown(asuint(o.x) ^ asuint(o.z));
+    return kRtUnknown;
+  }
+  return kRtLit;
 }
+
+// Any alpha-tested hit within [0, tmax]. An unknown (aborted) query counts as occluded,
+// never as a light leak; callers that have the game's own visibility use rt_visibility.
+bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) { return rt_visibility(o, d, tmax, cone) != kRtLit; }
 
 // Debug (rt_debug=3/5): the closest hit, whether it is alpha-tested geometry,
 // and the family of the nearest alpha-tested candidate along the ray, whether
 // it was let through or not.
-struct RtDebugHit { float t; bool alpha; uint near_kind; uint hit_kind; };
+// aborted: the candidate cap ended the query; t, alpha and hit_kind are then unreliable.
+struct RtDebugHit { float t; bool alpha; uint near_kind; uint hit_kind; bool aborted; };
 RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
   RtDebugHit h = (RtDebugHit)0;
   h.near_kind = 0;
+  h.aborted = false;
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
     h.t = -1.0;
     h.alpha = false;
@@ -442,10 +482,12 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
   float near_t = 1e30;
+  const uint cap = rt_max_candidates();
   uint cand_n = 0;
   while (q.Proceed()) {
-    if (++cand_n > kMaxCandidates) {
+    if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
+      h.aborted = true;
       q.Abort();
       break;
     }
@@ -462,11 +504,16 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   h.alpha = hit && alpha_instance(q.CommittedInstanceIndex(), q.CommittedGeometryIndex());
   h.hit_kind = h.alpha ? alpha_kind_hit(q.CommittedInstanceIndex(), q.CommittedGeometryIndex(), q.CommittedPrimitiveIndex())
                        : 0u;
+  if (h.aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
   return h;
 }
 
 // Closest hit (alpha-tested): distance (-1 on a miss), the triangle and its instance.
-struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; };
+// aborted: the candidate cap ended the query, so the closest hit is UNKNOWN: t may be -1
+// (nothing committed yet) or a hit farther than the true closest one, and geom / prim /
+// inst / o2w are that hit's. Treat it like a hidden / off-screen hit (the game's own
+// term for the pixel), never as a miss or as the closest surface.
+struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; bool aborted; };
 RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
@@ -474,6 +521,7 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
     m.t = -1.0;
     m.geom = m.prim = m.inst = 0u;
     m.o2w = float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+    m.aborted = false;
     return m;
   }
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
@@ -483,16 +531,21 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMin = 0.0;
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
+  const uint cap = rt_max_candidates();
   uint cand_n = 0;
+  bool aborted = false;
   while (q.Proceed()) {
-    if (++cand_n > kMaxCandidates) {
+    if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
+      aborted = true;
       q.Abort();
       break;
     }
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+  if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
   RtHit h = (RtHit)0;
+  h.aborted = aborted;
   bool hit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
   h.t = hit ? q.CommittedRayT() : -1.0;
   h.geom = hit ? q.CommittedGeometryIndex() : 0u;
@@ -589,9 +642,11 @@ float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
   return rt_ray_origin_o(rt_origin_at(fp), P, Ns, foot, dir);
 }
 
-// Closest alpha-tested hit distance, or -1.
-float rt_closest(float3 o, float3 d, float tmax, RtCone cone) {
+// Closest alpha-tested hit distance, or -1. `aborted`: the candidate cap ended the
+// query; the distance is then unknown (-1, or a hit farther than the closest one).
+float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) {
   g_rt_class = 0u;
+  aborted = false;
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return -1.0;
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r = (RayDesc)0;
@@ -600,14 +655,22 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMin = 0.0;
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
+  const uint cap = rt_max_candidates();
   uint cand_n = 0;
   while (q.Proceed()) {
-    if (++cand_n > kMaxCandidates) {
+    if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
+      aborted = true;
       q.Abort();
       break;
     }
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+  if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
   return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? q.CommittedRayT() : -1.0;
+}
+// (For callers that cannot act on an abort: the aborted query reads as above.)
+float rt_closest(float3 o, float3 d, float tmax, RtCone cone) {
+  bool aborted;
+  return rt_closest(o, d, tmax, cone, aborted);
 }

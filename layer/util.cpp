@@ -250,7 +250,9 @@ void cfg_poll() {
   }
   if (!changed) return;
 
-  settings::Map raw;
+  // Layer 0: the defaults of common/settings.h, so a key no file sets has its table value
+  // (and rt_build=auto resolves) exactly as if bg3rtx.ini had it.
+  settings::Map raw = settings::code_defaults();
   std::vector<std::string> notes;
   for (CfgFile& f : g_cfg_files) {
     std::string n = settings::apply_layer(raw, f.keys);
@@ -266,26 +268,84 @@ void cfg_poll() {
   cfg_log_effective(raw, derived);
 }
 
-static bool cfg_raw(const char* key, std::string& out) {
-  if (ab_overridden(key)) {
+// The defaults of common/settings.h (settings::code_default) by key, parsed once.
+struct CfgDefault {
+  const char* text;
+  int i;          // std::atoi(text): what cfg_int returns
+  float f;        // float(std::atof(text)): what cfg_float returns
+  bool numeric;   // text is a number (not "auto")
+};
+
+static const std::unordered_map<std::string, CfgDefault>& cfg_defaults() {
+  static const std::unordered_map<std::string, CfgDefault> m = [] {
+    std::unordered_map<std::string, CfgDefault> r;
+    for (auto& kv : settings::code_defaults()) {
+      const char* t = settings::code_default(kv.first);   // static storage, unlike kv.second
+      char* end = nullptr;
+      std::strtod(t, &end);
+      r[kv.first] = {t, std::atoi(t), float(std::atof(t)), end != t && *end == 0};
+    }
+    return r;
+  }();
+  return m;
+}
+
+// A call site's fallback literal that disagrees with settings.h is stale: it is never used
+// for a key the table has, so it only misleads the reader. Logged once per key and literal.
+static void cfg_check_literal(const char* key, const CfgDefault& d, const std::string& lit) {
+  static std::mutex mu;
+  static std::unordered_map<std::string, std::vector<std::string>> logged;
+  {
+    std::lock_guard<std::mutex> lock(mu);
+    auto& seen = logged[key];
+    if (std::find(seen.begin(), seen.end(), lit) != seen.end()) return;
+    seen.push_back(lit);
+  }
+  log("[cfg] code default for %s (%s) differs from settings.h (%s)", key, lit.c_str(), d.text);
+}
+
+// The merged value of `key`, else its settings.h default (before the first cfg_poll, or a
+// key no layer has), else false (a key in no table: the caller's literal applies).
+static bool cfg_raw(const char* key, std::string& out, const CfgDefault** def) {
+  if (ab_overridden(key)) {   // the A/B hotkey: every ray-traced effect off
+    *def = nullptr;
     out = "0";
     return true;
   }
-  std::lock_guard<std::mutex> lock(g_cfg_mu);
-  auto it = g_cfg.find(key);
-  if (it == g_cfg.end()) return false;
-  out = it->second;
+  const auto& defs = cfg_defaults();
+  auto d = defs.find(key);
+  *def = d == defs.end() ? nullptr : &d->second;
+  {
+    std::lock_guard<std::mutex> lock(g_cfg_mu);
+    auto it = g_cfg.find(d == defs.end() ? std::string(key) : d->first);
+    if (it != g_cfg.end()) {
+      out = it->second;
+      return true;
+    }
+  }
+  if (!*def) return false;
+  out = (*def)->text;
   return true;
 }
 
 int cfg_int(const char* key, int fallback) {
   std::string v;
-  return cfg_raw(key, v) ? std::atoi(v.c_str()) : fallback;
+  const CfgDefault* d = nullptr;
+  bool have = cfg_raw(key, v, &d);
+  if (d && d->numeric && d->i != fallback) cfg_check_literal(key, *d, std::to_string(fallback));
+  return have ? std::atoi(v.c_str()) : fallback;
 }
 
 float cfg_float(const char* key, float fallback) {
   std::string v;
-  return cfg_raw(key, v) ? float(std::atof(v.c_str())) : fallback;
+  const CfgDefault* d = nullptr;
+  bool have = cfg_raw(key, v, &d);
+  if (d && d->numeric && d->f != fallback) {
+    char lit[32];
+    snprintf(lit, sizeof lit, "%g", double(fallback));
+    cfg_check_literal(key, *d, lit);
+  }
+  return have ? float(std::atof(v.c_str())) : fallback;
 }
 
 // ---- memory that outlives core reloads ----

@@ -91,6 +91,12 @@ levels are included, and shared sub-levels appear once per world.
 
 ## Format and why binary
 
+The layer loads `%BG3RTX_ASSETDB%`, else this checkout's `data/assetdb/bg3rtx_assetdb.bin`,
+else, in a git worktree without one (the folder is not versioned), the main checkout's: the
+worktree's `.git` file names its git dir, whose `commondir` names the common `.git`, whose parent
+is the main checkout (`layer/assetdb.cpp` `db_path`). The `[assetdb] loaded ... (from ...)` line
+says which; `bin/assetdb_test.exe` uses the same lookup.
+
 One little-endian container, `data/assetdb/bg3rtx_assetdb.bin`, format version 1, laid
 out as follows:
 - A 64-byte header, a table of contents, and sections of fixed-size records, each

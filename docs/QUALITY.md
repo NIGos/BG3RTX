@@ -384,9 +384,11 @@ reproduce them.
   decide whether an effect is on.
 - **First application: the sun** (`rt_sun_replace=1`, TRACK_D 12). The traced visibility
   replaces the game's sun mask where it is trusted: no roof volume of the asset DB on the
-  sun ray, the ray stays in the captured view frustum until it is above the visible scene,
-  and the game's mask is lit within `rt_sun_near` (1.5 m), so only shadow-map errors next
-  to lit areas (filtering, acne, cascade transitions) are corrected. Untrusted pixels keep
+  sun ray, and the ray stays in the captured view frustum until it has risen above the
+  visible scene (or `rt_sun_rise`). Those geometric terms are the whole trust: the former
+  proximity term (the game's mask lit within `rt_sun_near`) is gone, since it trusted the
+  game's mask it was meant to correct; `rt_sun_near` now only splits the in-frame A/B debug
+  class (`rt_debug=7`) into "at the game's shadow edge" and "farther". Untrusted pixels keep
   `min(game, traced)`. Cloud shadows are applied by the lighting after the mask and stay.
 
 **R1 Sampling.**
@@ -462,7 +464,7 @@ reproduce them.
 - Run `python -m scripts.qa run --scenes S1,S2,S3,... --full-res` after every change
   to an effect and before a default changes. It is one game run per scene (live
   toggles), so it costs about as much as a plain sweep.
-- Gates: `hard_dark`, `nonfinite`, `flicker`, `sun_check_darker`, `same_view` and (with
+- Gates: `hard_dark` (energy, against the light-off floors), `tlas_front_alpha`, `nonfinite`, `flicker`, `sun_check_darker`, `same_view` and (with
   `--reference`) `reference` must pass on every scene, on the final frame and on the
   lighting buffer. `brightening` and the sun-mask comparisons are review (R0): their crops
   are judged, they have no threshold. A failure

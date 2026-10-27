@@ -14,7 +14,8 @@
 //            last frame's lit radiance, reprojected with the motion vectors
 //            (prev_radiance_at); w = 1, faded at the screen edge and towards
 //            rf_max_rough;
-//   tier (c) a miss, a hit off screen or hidden on screen: w = 0, the game's probe
+//   tier (c) a miss, a hit off screen or hidden on screen, or a query the candidate cap
+//            aborted (closest hit unknown, rt_common.hlsli): w = 0, the game's probe
 //            stays exactly as it was (a TLAS miss is not sky: roofs are cut away).
 // Tier (b), shading off-screen hits, needs the hit material (D-EN2) and is not done.
 // The game's specular occlusion is not applied to traced hits (rf_so=0): the ray
@@ -83,6 +84,7 @@ float3 sample_vndf_bounded(float3 wi, float alpha, float2 u) {
 void main(uint3 tid : SV_DispatchThreadID) {
   uint2 fp = tid.xy;
   if (any(fp >= pc.full)) return;
+  g_rt_pass = kRtPassRefl;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) {
     rfHitDist[fp] = kNoHit;
@@ -128,7 +130,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // ---- one reflection ray ----
   float rough_w = 1.0 - smoothstep(pc.rf_max_rough * 0.75, pc.rf_max_rough, sf.a);
   bool eligible = model_ok && rough_w > 0.0 && !validate;
-  uint tier = 0;   // 0 not traced, 1 on-screen hit (a), 2 hidden on screen, 3 off screen, 4 miss, 5 below horizon
+  // 0 not traced, 1 on-screen hit (a), 2 hidden on screen, 3 off screen, 4 miss, 5 below horizon,
+  // 6 unknown (aborted by the candidate cap: the probe is kept)
+  uint tier = 0;
   float w = 0.0, hit_t = kNoHit;
   float3 Lrt = 0;
   bool cached = false;   // tier 2/3 shaded from the radiance cache (SHARC_QUERY_PASS)
@@ -151,14 +155,25 @@ void main(uint3 tid : SV_DispatchThreadID) {
     } else {
       float pa = pixel_angle(uv);
       RtCone cone = {sf.dist * pa, pa + sf.a * sf.a};
-      float3 o = sf.P + Nn * (sf.dist * pc.rt_bias);
+      // The shared ray origin (rt_common.hlsli rt_ray_origin; rt_origin=0 the old rt_bias
+      // offset): dir leaves on Nn's side (dot(Nn, dir) > 0 above), and the origin is pushed
+      // to that side of the geometric normal (or, where the geometric and the shading
+      // normal disagree, 2 footprints along Nn).
+      float3 o = rt_ray_origin(fp, sf.P, Nn, sf.dist * pa, dir);
+      bool aborted;
 #if SHARC_QUERY_PASS
       RtHit hh = rt_closest_hit(o, dir, pc.rf_tmax, cone);
       float t = hh.t;
+      aborted = hh.aborted;
 #else
-      float t = rt_closest(o, dir, pc.rf_tmax, cone);
+      float t = rt_closest(o, dir, pc.rf_tmax, cone, aborted);
 #endif
-      if (t < 0.0) {
+      if (aborted) {
+        // Unknown (the candidate cap ended the query): the closest hit is not known, so the
+        // game's probe stays exactly as it was (w = 0), as for a hidden / off-screen hit,
+        // and the radiance cache is not asked either (its hit point would be a guess).
+        tier = 6;
+      } else if (t < 0.0) {
         tier = 4;
       } else {
         float3x3 inv = frustum_inverse();
@@ -171,8 +186,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
           int2 qp = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
           float sd = gDepth.Load(int3(qp, 0));
           float3 nq = n_world(decode_normal(gNormal.Load(int3(qp, 0)).xy));
-          // The camera must see the same point, from the side the ray arrives at.
-          if (sd > 0.0 && abs(qd - sd) < sd * pc.rf_depth_tol && dot(nq, dir) < 0.2) {
+          // The camera must see the same point, from the side the ray arrives at. Same point:
+          // rt/depth_tol.hlsli depth_same_surface, x rf_depth_k, as the GI trace: rtOrigin's
+          // geometric normal and TLAS surface at qp (rt_origin=1), else the depth buffer's
+          // own normal and the measured TLAS-raster error.
+          const float4 oq = rt_origin_at(uint2(qp));
+          const bool has_tlas = pc.rt_origin != 0u && oq.w < kOriginNoHit;
+          const float3 ngq = pc.rt_origin != 0u ? oq.xyz : depth_geo_normal(qp, ray_at((float2(qp) + 0.5) / float2(pc.full)) * sd);
+          if (sd > 0.0 && depth_same_surface(qp, qd, sd, ngq, has_tlas, oq.w, pc.rf_depth_tol) && dot(nq, dir) < 0.2) {
             float3 L = prev_radiance_at(qp);
             if (all(isfinite(L))) {
               float2 e = min(quv, 1.0 - quv) / max(pc.rf_edge, 1e-4);
@@ -229,9 +250,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
     os = gs;
   }
 
-  if (pc.rf_debug == 1) {   // tier: green on-screen hit, red hidden, orange off screen, blue miss, grey not traced
+  if (pc.rf_debug == 1) {   // tier: green on-screen hit, red hidden, orange off screen, blue miss, grey not traced, yellow aborted
     float3 c = cached ? float3(0, 1, 1) : tier == 1 ? float3(0, 1, 0) : tier == 2 ? float3(1, 0, 0) : tier == 3 ? float3(1, 0.5, 0)
-             : tier == 4 ? float3(0, 0, 1) : tier == 5 ? float3(1, 0, 1) : float3(0.2, 0.2, 0.2);
+             : tier == 4 ? float3(0, 0, 1) : tier == 5 ? float3(1, 0, 1) : tier == 6 ? float3(1, 1, 0) : float3(0.2, 0.2, 0.2);
     od = c * 0.25;
     os = 0;
   } else if (pc.rf_debug == 2) {   // specular change x4: green added, red removed

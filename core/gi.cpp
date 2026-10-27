@@ -91,7 +91,8 @@ struct Push {
   uint32_t gi_rt_fallback, rt_stats;
   float sun_radius;
   uint32_t res_shift;
-  uint32_t pad3[2];
+  uint32_t qa_zero;   // QA light-off traces (docs/QA.md): bit 0 sun, 1 local lights, 2 ambient AO
+  uint32_t rt_max_cand;   // QA (rt_max_candidates): ray-query candidate cap, 0 = 4096 (rt_common.hlsli)
   float ls_source_radius, ls_clear, ls_min_radius;
   uint32_t ls_samples, ls_shadowed, ls_debug, ls_stats, ls_pass, ls_soft;
   float ls_strength;
@@ -123,7 +124,10 @@ struct ExtraBinding {
   uint32_t layouts;
 };
 constexpr ExtraBinding kExtras[] = {
-    {40, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2 | 4},   // rtOrigin: geometric normal + surface offset (rt_origin=1)
+    // rtOrigin: geometric normal + surface offset (rt_origin=1). Also D-RF (8): its push set
+    // is then 31 + 1 = 32 descriptors, exactly the RTX 5090's maxPushDescriptors (and the
+    // minimum VK_KHR_push_descriptor guarantees), so D-RF can take no further extra.
+    {40, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2 | 4 | 8},
     {41, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 4},       // RT3, set 1 b4 (class parameters)
     {42, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},      // SSS profiles, set 1 b28
     {43, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 7},      // set 0 b0 frame constants
@@ -347,7 +351,7 @@ void trace_timing_collect() {
     bool rr_mode = g_shift == 0;
     host->log("gi: trace pass (%s, %u rays/sample, %s) GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames)",
               k ? "ray-traced, gi_rt=1" : "screen-space",
-              uint32_t(rr_mode ? host->cfg_int("gi_rr_rays", 1) : host->cfg_int("gi_rays", 2)),
+              uint32_t(rr_mode ? host->cfg_int("gi_rr_rays", 1) : host->cfg_int("gi_rays", 4)),
               rr_mode ? "full res, RR denoises" : "half res, own accumulation", v[v.size() / 2], v[v.size() / 10],
               v[v.size() * 9 / 10], v.size());
     v.clear();
@@ -741,7 +745,14 @@ constexpr uint32_t kStatsRing = 8;
 // [121] loop caps hit: a froxel list over 1024 entries or a ray with over 4096 candidates.
 // [122..127] D-LS exact-k (ls_k, ls_stats=1): candidates, px over the cap, remainder lights,
 // remainder rays, their occluded ones, the remainder's weight share (x256).
-constexpr uint32_t kStatsCounters = 128;
+// [128..133] ray queries aborted by the candidate cap with their answer unknown, per pass
+// (rt_common.hlsli kStatUnknown + g_rt_pass): other (origins, debug), sun, D-LS, D-RF, RT AO,
+// hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
+// such query fell back to the game's own term (or counted as occluded): not a leak.
+constexpr uint32_t kStatsCounters = 136;
+constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
+const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
+uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
 uint64_t g_guard_sum[4] = {}, g_guard_total[4] = {};
 uint32_t g_guard_frames = 0;
 uint64_t g_guard_folds = 0;   // frames whose counters were read back (heartbeat)
@@ -778,25 +789,46 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
     for (int g = 0; g < 4; ++g)
       for (int b = 0; b < 64; ++b) got[g] += c[(118 + g) * 64 + b];
     for (int g = 0; g < 4; ++g) g_guard_sum[g] += got[g];
+    for (uint32_t u = 0; u < kUnknownPasses; ++u)
+      for (int b = 0; b < 64; ++b) g_unk_sum[u] += c[(kUnknownFirst + u) * 64 + b];
+    // "unknown (aborted by the candidate cap) queries: sun a, D-LS b, ..." (this window / so far)
+    auto unk_text = [](char* out, size_t n, const uint64_t* a, const uint64_t* b) {
+      size_t k = 0;
+      for (uint32_t u = 0; u < kUnknownPasses && k < n; ++u)
+        k += (size_t)std::snprintf(out + k, n - k, "%s%s %llu", u ? ", " : "", kUnknownName[u],
+                                   (unsigned long long)(a[u] + (b ? b[u] : 0)));
+    };
+    char unk[256] = {};
     // Heartbeat: the first read-back and every 3000 frames, also when 0 (the counters
     // are read). The total includes this frame's values.
-    if (g_guard_folds++ % 3000 == 0)
+    if (g_guard_folds++ % 3000 == 0) {
+      unk_text(unk, sizeof unk, g_unk_total, g_unk_sum);
       host->log("[core] guard: counters read back (frame %llu, %llu frames read so far): light list %llu, set 1 %llu "
-                "out-of-range reads skipped, %llu invalid rays not traced, %llu loop caps hit, in total",
+                "out-of-range reads skipped, %llu invalid rays not traced, %llu loop caps hit, in total; "
+                "unknown (candidate cap) queries: %s",
                 (unsigned long long)now, (unsigned long long)g_guard_folds,
                 (unsigned long long)(g_guard_total[0] + g_guard_sum[0]), (unsigned long long)(g_guard_total[1] + g_guard_sum[1]),
-                (unsigned long long)(g_guard_total[2] + g_guard_sum[2]), (unsigned long long)(g_guard_total[3] + g_guard_sum[3]));
+                (unsigned long long)(g_guard_total[2] + g_guard_sum[2]), (unsigned long long)(g_guard_total[3] + g_guard_sum[3]),
+                unk);
+    }
     if (++g_guard_frames >= 300) {
-      if (g_guard_sum[0] || g_guard_sum[1] || g_guard_sum[2] || g_guard_sum[3]) {
+      bool any_unk = false;
+      for (uint32_t u = 0; u < kUnknownPasses; ++u) any_unk = any_unk || g_unk_sum[u] != 0;
+      if (g_guard_sum[0] || g_guard_sum[1] || g_guard_sum[2] || g_guard_sum[3] || any_unk) {
         for (int g = 0; g < 4; ++g) g_guard_total[g] += g_guard_sum[g];
+        for (uint32_t u = 0; u < kUnknownPasses; ++u) g_unk_total[u] += g_unk_sum[u];
+        unk_text(unk, sizeof unk, g_unk_sum, nullptr);
         host->log("[core] guard: in the last %u frames %llu reads of the game's light list and %llu set-1 reads were out "
                   "of range and skipped, %llu invalid rays (NaN/Inf/zero direction or extent) not traced, %llu loop caps "
-                  "hit (%llu / %llu / %llu / %llu so far)",
+                  "hit (%llu / %llu / %llu / %llu so far); unknown (candidate cap) queries, fallen back to the "
+                  "game's term or occluded: %s",
                   g_guard_frames, (unsigned long long)g_guard_sum[0], (unsigned long long)g_guard_sum[1],
                   (unsigned long long)g_guard_sum[2], (unsigned long long)g_guard_sum[3], (unsigned long long)g_guard_total[0],
-                  (unsigned long long)g_guard_total[1], (unsigned long long)g_guard_total[2], (unsigned long long)g_guard_total[3]);
+                  (unsigned long long)g_guard_total[1], (unsigned long long)g_guard_total[2], (unsigned long long)g_guard_total[3],
+                  unk);
       }
       g_guard_sum[0] = g_guard_sum[1] = g_guard_sum[2] = g_guard_sum[3] = 0;
+      for (uint32_t u = 0; u < kUnknownPasses; ++u) g_unk_sum[u] = 0;
       g_guard_frames = 0;
     }
     for (int i = 0; i < int(kStatsCounters); ++i)
@@ -1048,12 +1080,15 @@ Push make_push() {
   pc.strength = host->cfg_float("gi_strength", 1.0f);
   pc.radius = host->cfg_float("gi_radius", 0.15f);
   pc.thickness = host->cfg_float("gi_thickness", 0.03f);
-  pc.rays = uint32_t(host->cfg_int("gi_rays", 2));
+  pc.rays = uint32_t(host->cfg_int("gi_rays", 4));
   pc.res_shift = g_shift;
+  pc.qa_zero = uint32_t(host->cfg_int("qa_zero", 0));
+  // QA: a lower candidate cap for every ray query (forces the "unknown" fallbacks; 0 = 4096).
+  pc.rt_max_cand = uint32_t((std::max)(host->cfg_int("rt_max_candidates", 0), 0));
   // Half-angle of the sun's disc (rad): the game's own sun specular clamps R into
   // a cone of sin = 0.0045900648 around L (f469db78:1428), i.e. 0.263 deg.
   pc.sun_radius = host->cfg_float("rt_sun_radius", 0.00459f);
-  pc.steps = uint32_t(host->cfg_int("gi_steps", 12));
+  pc.steps = uint32_t(host->cfg_int("gi_steps", 16));
   pc.debug = uint32_t(host->cfg_int("gi_debug", 0));
   pc.history = host->cfg_float("gi_history", 0.1f);
   pc.ao = host->cfg_float("gi_ao", 1.0f);
@@ -1078,7 +1113,9 @@ Push make_push() {
   pc.rt_ao_radius = host->cfg_float("rt_ao_radius", 1.0f);
   pc.rt_ao_rays = uint32_t((std::max)(host->cfg_int("rt_ao_rays", 2), 1));
   pc.gi_rt_radius = (std::max)(host->cfg_float("gi_rt_radius", 1.0f), 0.01f);
-  pc.gi_rt_tol = host->cfg_float("gi_rt_depth_tol", 0.03f);
+  // Multiplier on the derived on-screen-hit depth tolerance (rt/depth_tol.hlsli), 1 = as
+  // derived. New key: an old gi_rt_depth_tol=0.03 read as k would reject nearly every hit.
+  pc.gi_rt_tol = host->cfg_float("gi_rt_depth_k", 1.0f);
   pc.gi_rt_fallback = uint32_t(host->cfg_int("gi_rt_fallback", 0));
   // D-LS. Soft shadows only with RR (a denoiser for the 1-spp penumbra).
   pc.ls_source_radius = (std::max)(host->cfg_float("ls_source_radius", 0.05f), 0.0f);
@@ -1116,7 +1153,7 @@ Push make_push() {
   pc.rf_max_rough = rf_noisy ? host->cfg_float("rf_max_rough", 0.6f) : host->cfg_float("rf_max_rough_norr", 0.3f);
   pc.rf_mirror_rough = host->cfg_float("rf_mirror_rough", 0.1f);
   pc.rf_tmax = (std::max)(host->cfg_float("rf_tmax", 100.0f), 0.01f);
-  pc.rf_depth_tol = host->cfg_float("rf_depth_tol", 0.03f);
+  pc.rf_depth_tol = host->cfg_float("rf_depth_k", 1.0f);   // as gi_rt_depth_k, for D-RF
   pc.rf_edge = host->cfg_float("rf_edge", 0.05f);
   pc.rf_strength = host->cfg_float("rf_strength", 1.0f);
   pc.rf_debug = uint32_t(host->cfg_int("rf_debug", 0));
@@ -1198,7 +1235,8 @@ void rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
   const VkDeviceFuncs& vk = *host->vk;
   const VkPipelineLayout layout = s.rf_sharc ? g_rf_sharc_layout : g_rf_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.rf_sharc ? g_rf_sharc.pipeline : g_rf.pipeline);
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, kRfBindings, b.w);
+  VkWriteDescriptorSet w[kRfBindings + kNumExtras];   // bindings 0-30 and the D-RF extras (40)
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, kRfBindings, w), w);
   VkDescriptorSet sets[2] = {b.alpha, s.game_set1};
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 2, sets, s.game_set1_ndyn,
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
@@ -1325,8 +1363,8 @@ void ls_timing_collect() {
 // the same host snapshot (rt_scene_set, ABI 8): the passes never trace one
 // build's TLAS with another's InstInfo, records, soup or pool.
 VkAccelerationStructureKHR rt_tlas(VkDescriptorSet* alpha) {
-  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 0) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 0) &&
-                          !host->cfg_int("rt_local_shadows", 0) && !host->cfg_int("rt_reflections", 0)))
+  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 1) &&
+                          !host->cfg_int("rt_local_shadows", 1) && !host->cfg_int("rt_reflections", 1)))
     return VK_NULL_HANDLE;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
   uint64_t built = 0, now = host->frame_index();
@@ -1372,7 +1410,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
   }
   // rt_sun_replace: this frame's trust slot (binding 47), before the descriptors are gathered.
-  g_sunt_ok = host->cfg_int("rt_shadows", 0) && sunt_begin(cmd, &g_sunt, s.l_cam2.buffer != VK_NULL_HANDLE);
+  g_sunt_ok = host->cfg_int("rt_shadows", 1) && sunt_begin(cmd, &g_sunt, s.l_cam2.buffer != VK_NULL_HANDLE);
   Bound b;
   bind_all(b, s);
   Push pc = make_push();
@@ -1385,15 +1423,15 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
                !refresh(g_trace_rt, "gi/gi_trace_rt.hlsl", g_rt_layout) ||
                !refresh(g_rt_origin, "gi/rt_origin.hlsl", g_rt_layout) || !stats_init()))
     tlas = VK_NULL_HANDLE;   // (the statistics buffer is binding 20 and must exist)
-  s.gi = host->cfg_int("gi", 0) != 0;
+  s.gi = host->cfg_int("gi", 1) != 0;
   // Hybrid GI: ray queries replace the screen-space march (and do the AO rays too).
-  const bool gi_rt = tlas && s.gi && host->cfg_int("gi_rt", 0);
+  const bool gi_rt = tlas && s.gi && host->cfg_int("gi_rt", 1);
   const bool rt_ao = tlas && s.gi && !gi_rt && host->cfg_int("rt_ao", 0);
-  const bool rt_shadows = tlas && s.shadow.view && host->cfg_int("rt_shadows", 0) && g_sunt_ok;
+  const bool rt_shadows = tlas && s.shadow.view && host->cfg_int("rt_shadows", 1) && g_sunt_ok;
   // D-LS runs after the lighting (run_post); it needs the TLAS and the light list.
-  s.ls = tlas && host->cfg_int("rt_local_shadows", 0) && s.ls_ok && ensure_ls_layout() &&
+  s.ls = tlas && host->cfg_int("rt_local_shadows", 1) && s.ls_ok && ensure_ls_layout() &&
          refresh(g_ls, "gi/rt_local_shadows.hlsl", g_ls_layout);
-  if (tlas && host->cfg_int("rt_local_shadows", 0) && !s.ls_ok && !g_ls_missing_logged) {
+  if (tlas && host->cfg_int("rt_local_shadows", 1) && !s.ls_ok && !g_ls_missing_logged) {
     g_ls_missing_logged = true;
     host->log("ls: the lighting dispatch lacks part of the light list (set1 b0/b13/b23/b24/b25/b39/b40/b41, set0 b2); "
               "rt_local_shadows skipped");
@@ -1401,7 +1439,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // D-RF runs after the lighting too: the TLAS, the light list (froxels, constants),
   // the lighting's own set 1 (probes) and last frame's radiance (written by the GI
   // composite, so gi=1).
-  const bool rf_want = tlas && host->cfg_int("rt_reflections", 0);
+  const bool rf_want = tlas && host->cfg_int("rt_reflections", 1);
   s.rf = rf_want && s.ls_ok && s.game_set1 && s.gi && ensure_rf_layout(s.game_set1_layout) &&
          refresh(g_rf, "gi/rt_reflections.hlsl", g_rf_layout);
   if (rf_want && !s.rf && !g_rf_missing_logged) {
@@ -1502,7 +1540,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     dispatch(cmd, g_temporal, b, pc, g_hw, g_hh);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
-    if (pc.ao > 0.0f || pc.debug == 3) {
+    if (pc.ao > 0.0f || pc.debug == 3 || (pc.qa_zero & 4u)) {   // qa_zero bit 2: gi_ao_apply writes AO 0
       s.aux_ao = true;
       image_layout(cmd, s.ao.image, s.ao.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
       dispatch(cmd, g_ao_apply, b, pc, g_w, g_h);
@@ -1518,7 +1556,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     rt_begin();
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     dispatch(cmd, g_rt_shadow, b, pc, g_w, g_h, true);
-    if (g_sunt.replace && pc.rt_debug != 3 && pc.rt_debug != 5 &&
+    if (g_sunt.replace && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
         refresh(g_sun_resolve, "gi/rt_sun_resolve.hlsl", g_rt_layout)) {
       memory_barrier(cmd, kCS, kCS);
       dispatch(cmd, g_sun_resolve, b, pc, g_w, g_h, true);
@@ -1727,7 +1765,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   }
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
   if (s.sharc && s.tlas) sharc_post(cmd, s, pc);
-  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 7) {
+  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 8) {
     memory_barrier(cmd, kCS, kCS);
     bind_rt(b, s.tlas, s.alpha);
     dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);
@@ -1778,8 +1816,8 @@ void flush(VkCommandBuffer cmd) {
 
 void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
   // GI, or just the ray-traced sun shadows (rt_shadows works with gi=0).
-  if (!d->indirect || (!host->cfg_int("gi", 0) && !host->cfg_int("rt_shadows", 0) && !host->cfg_int("rt_local_shadows", 0) &&
-                       !host->cfg_int("rt_reflections", 0)))
+  if (!d->indirect || (!host->cfg_int("gi", 1) && !host->cfg_int("rt_shadows", 1) && !host->cfg_int("rt_local_shadows", 1) &&
+                       !host->cfg_int("rt_reflections", 1)))
     return;
   describe(cmd, d);
   std::lock_guard<std::mutex> lock(g_mu);

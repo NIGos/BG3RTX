@@ -101,3 +101,42 @@ and status: DESIGN_SOTA_NEXT.md 2.9 (`core/sharc.cpp`, `shaders/gi/sharc_*.hlsl`
 - QA and defaults for the radiance cache (above); its traced update (v2).
 - ReSTIR-style reuse.
 - Screen-space contact shadows for the direct lights. Real RT shadows belong to Track D.
+
+## Derived depth tolerances (2026-10-27)
+Every same-surface depth test now comes from one helper, `shaders/rt/depth_tol.hlsli`
+(QUALITY R0). Two depth values of one surface, `lat` render pixels apart on screen, differ
+along the view ray by at most
+
+    depth_tol = lat · f · (tan θ + 1) + n · prec(dist)
+
+- `f = dist · pixel angle` (0.835 mrad at 2560x1067, vertical FOV 0.838 rad): 4.17 mm at 5 m,
+  25.0 mm at 30 m. `tan θ` is the plane's depth slope (θ between the GEOMETRIC normal and V);
+  the `+1` bounds curvature (the sag of any circle over a chord s is ≤ s).
+- `prec`: the game rasterises D24, reversed Z, infinite far, near 0.1: one rounding moves z by
+  z²/0.1·2⁻²⁵ (+ the R32F's z·2⁻²⁴): 7.7 µm at 5 m, 0.27 mm at 30 m.
+- `|N·V|` is moved towards grazing by its own error ε = max(fp16 storage √3·2⁻¹², depth-normal
+  2·prec/f): 0.0037 at 5 m, 0.022 at 30 m; floored there (tan θ ≤ 1/ε).
+- Jitter (Halton ±0.5 px per axis) adds 0.71 px per jittered depth sample.
+- Measured, not derived: TLAS against raster, 0.5% of the distance (TRACK_D_RT 7.1: 99.09% of
+  primary rays within the 0.5% bin; the rest is other geometry). Only where no per-pixel TLAS
+  reference exists; `rtOrigin.w` is that reference (rt_origin=1).
+
+| Test | lat (px), n | Old | New, 5 m, N·V 1 / 0.2 | New, 30 m, N·V 1 / 0.2 |
+|---|---|---|---|---|
+| GI on-screen hit, rtOrigin reference | 1.41, 1 | 3% (150 / 900 mm) | 6.4 / 35 mm | 43 / 231 mm |
+| same, no reference (rt_origin=0) | + 0.5% | 3% | 31 / 60 mm | 193 / 381 mm |
+| rt_origin match (and search window) | 0.71, 1, + 0.5% | 17 / 83 mm (window 67) | 28 / 43 mm | 172 / 266 mm (window was 401) |
+| GI temporal, derived part (typ.) | 2.4-3.5, 2 | 3% of z | 11-16 / 60-89 mm | 74-108 / 394-577 mm |
+| bilateral σ at 0.71 / 2 / 3.3 px | as is, 2 | 1% (50 / 300 mm) | 3.2 / 9.1 / 15 mm; 18 / 50 / 83 mm | 22 / 61 / 101 mm; 116 / 327 / 543 mm |
+
+- The temporal and bilateral tests compare camera distances (rotation invariant), not view z.
+- The temporal test keeps the old 3% as a separate camera-translation term: not derivable in
+  that pass (no previous camera position bound). Open: pass |Δcam| per frame.
+- The bilateral's centre ×2 is the denoise kernel's shape, unchanged.
+- `gi_rt_depth_tol` / `rf_depth_tol` are gone; `gi_rt_depth_k` / `rf_depth_k` (1) multiply the
+  derived tolerance, for A/B only (new names so an old 0.03 is not read as a multiplier).
+- An aborted GI ray query (candidate cap, `RtHit.aborted`) is a hidden hit under
+  `gi_rt_fallback`, weighted by the fade's mean over its unknown distance, never a miss.
+- `qa_zero` bit 2 (gi_ao_apply.hlsl) writes the AO 0: the diffuse AND the specular ambient go
+  (SO = 0 at AO 0); direct light keeps 1 − m0.y = half (traced local lights get it back with
+  ao_direct=1); the GI bounce and rf_so=0 reflections stay.

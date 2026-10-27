@@ -15,23 +15,7 @@
 #include "gi_common.hlsli"
 #include "../rt/rt_common.hlsli"
 
-float3 pos_at(int2 p) {
-  p = clamp(p, int2(0, 0), int2(pc.full) - 1);
-  float d = gDepth.Load(int3(p, 0));
-  return ray_at((float2(p) + 0.5) / float2(pc.full)) * d;
-}
-
-// Geometric normal from the depth buffer: per axis the neighbour whose depth
-// continues the surface best (smaller difference), so silhouettes do not bend it.
-float3 depth_normal(int2 p, float3 P) {
-  float3 xl = pos_at(p - int2(1, 0)), xr = pos_at(p + int2(1, 0));
-  float3 yu = pos_at(p - int2(0, 1)), yd = pos_at(p + int2(0, 1));
-  float3 dx = abs(length(xr) - length(P)) < abs(length(P) - length(xl)) ? xr - P : P - xl;
-  float3 dy = abs(length(yd) - length(P)) < abs(length(P) - length(yu)) ? yd - P : P - yu;
-  float3 n = cross(dy, dx);
-  float l = length(n);
-  return l > 1e-20 ? n / l : 0.0.xxx;
-}
+// The depth buffer's geometric normal: depth_geo_normal (rt/depth_tol.hlsli).
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -49,11 +33,17 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float pa = pixel_angle(uv);
   float3 Ns = to_lighting_space(decode_normal(gNormal.Load(int3(fp, 0)).xy));
 
-  float4 o = float4(depth_normal(int2(fp), P), kOriginNoHit);
-  // Only a short window around the depth-buffer point is searched (cheap: no
-  // traversal of what lies in front, e.g. foliage), +-1% of the distance or 16
-  // pixel footprints, whichever is larger.
-  float w = max(0.01 * dist, 16.0 * pa * dist);
+  float4 o = float4(depth_geo_normal(int2(fp), P), kOriginNoHit);
+  // The TLAS surface is the depth buffer's when they differ along this pixel's ray by no
+  // more than (rt/depth_tol.hlsli) the slope + curvature over the jitter (the raster depth
+  // is the jittered sample's, the primary ray goes through the pixel centre: kJitterPx),
+  // one depth rounding, and the measured TLAS-raster error kTlasRel (the 0.5% bin of the
+  // rt_debug=3 check, TRACK_D_RT 7.1). The slope: the hit triangle's own normal for the
+  // match; the depth buffer's normal for the search window (before the hit is known).
+  // Only that window around the depth-buffer point is searched (cheap: no traversal of
+  // what lies in front, e.g. foliage). Was: window max(1% dist, 16 footprints), match
+  // max(4 footprints / max(|N.V|, 0.05), 2e-4 dist).
+  float w = depth_tol(dist, pa, dot(o.xyz, V), kJitterPx, 1.0) + kTlasRel * dist;
   float t0 = max(dist - w, 0.0);
   RtCone cone = {t0 * pa, pa};
   RtHit h = rt_closest_hit(-V * t0, -V, dist + w - t0, cone);
@@ -61,10 +51,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (h.t > 0.0) {
     float3 Ng = rt_hit_normal(h);
     float l = length(Ng);
-    // The same surface as the depth buffer: within a few pixel footprints along the
-    // view ray (more at grazing angles), and not a back-facing sliver.
-    float tol = max(4.0 * pa * dist / max(abs(dot(Ng / max(l, 1e-30), V)), 0.05), 2e-4 * dist);
-    if (l > 0.0 && abs(h.t - dist) < tol) {
+    // The same surface as the depth buffer (see the window above); an aborted query's hit
+    // is not known to be the closest one, so it never matches (the depth normal stays).
+    float tol = depth_tol(dist, pa, dot(Ng / max(l, 1e-30), V), kJitterPx, 1.0) + kTlasRel * dist;
+    if (l > 0.0 && !h.aborted && abs(h.t - dist) < tol) {
       Ng /= l;
       o = float4(dot(Ng, V) < 0.0 ? -Ng : Ng, h.t / dist - 1.0);
     }

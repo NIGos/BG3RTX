@@ -356,6 +356,7 @@ struct RrPostInputs {
 };
 void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts);
 void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs);
+void rrpost_dispatch_post(VkCommandBuffer cmd, uint64_t cs);   // QA exposure hold
 bool rrpost_take(VkCommandBuffer cmd, uint32_t w, uint32_t h, uint32_t ow, uint32_t oh, RrPostInputs* out);
 bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint32_t ow, uint32_t oh);
 void rrpost_forget_image(VkImage image);   // the game destroys an image

@@ -2,8 +2,10 @@
 // into a device-local R32_UINT image, one texel per 4 bytes of the host slot.
 // Header (bytes): 0 volume count, 4 flags (1 replace, 2 roof volumes known, 4 off-screen
 // test, 8 counters), 8 rise (m), 12 scene top (absolute y), 16 frustum margin (uv),
-// 20 ramp start, 24 roof mode, 28 rt_sun_near (m). Written here: 32 scene top (ordered
-// uint), 36 camera (absolute), 64.. counters. Volumes from byte 192 (counters 64-191), 48 bytes each
+// 20 ramp start, 24 roof mode, 28 rt_sun_near (m; the A/B debug split only, never trust).
+// Written here: 32 scene top (ordered uint), 36 camera (absolute), 48 the farthest pixel
+// that needs the roof test (m, float bits; sizes the roof query), 64.. counters.
+// Volumes from byte 192 (counters 64-191), 48 bytes each
 // (Bg3DbVolume: centre, kind, rotation quaternion, half extents, trigger; absolute world).
 #pragma once
 

@@ -1306,16 +1306,19 @@ Code:
    lights, or the database alone without the bridge.
    - Each record holds the absolute position, the radius, the source radius, a match
      tolerance, the flags, owner, type and channel.
-   - The list is re-queried every 8 frames and on each new export.
+   - The list is re-queried on each new export, else every 0.25 s (was every 8 frames).
    - **Camera position.** The join pass writes it (set 0 b2 `_m6`) back into the ring.
      The core reads it kRing frames later to centre the next query. Before the first
      readback, the controlled character's position from the bridge is used.
 2. **Join pass** (before D-LS, inside its timestamps). One thread per light array
    slot: 4096 threads, with the records staged through group-shared memory.
    - A slot matches the nearest record within its tolerance whose radius agrees with
-     1/`m0.w` within 2%.
-   - Tolerance: 5 cm + `MovementAmount` for placed lights, 4 m for character lights,
-     and `ls_dyn_tol` (1.5 m) + `MovementAmount` for every other light the bridge reports
+     1/`m0.w`: 0.5 mm + 4 relative ulp for placed lights, 2% + 1 cm (not derived, logged)
+     for moving ones. *Updated 2026-10-27, derivations in SE_BRIDGE.md "Join tolerances".*
+   - Tolerance (2026-10-27): √3 × (4 ulp at the position + 0.05 mm) + `MovementAmount` for
+     placed lights; that plus `ls_dyn_speed` (8 m/s) × the measured export age (≈ 3-4 m)
+     for character lights and every other light the bridge reports. (Before: 5 cm, 4 m and
+     `ls_dyn_tol` 1.5 m, replaced; the text below describes the lights it applies to)
      (items, and visual lights whose owner was not found, such as the VFX lights of
      carried weapons: `VFX_LightSources_WPN_DippedInFire`, owner 0). They move between
      the 4 Hz exports. Until 2026-10-27 items had 0.5 m and the rest 5 cm, so a carried
@@ -1906,7 +1909,7 @@ frame's lit radiance, reflections included, as next frame's `prevRadiance`), SSS
    - without RR: mirror rays only, up to `rf_max_rough_norr` (0.3). There is no denoiser for
      GGX noise there, so the fallback is deterministic and nothing of ours filters (R2).
 4. Tiers:
-   - **(a)** the hit projects on screen, the depth there is the hit itself (`rf_depth_tol`
+   - **(a)** the hit projects on screen, the depth there is the hit itself (`rf_depth_k` × the derived depth_tol; was `rf_depth_tol`
      3%) and that surface faces the ray: `L = prev_radiance_at(hit pixel)` (last frame's lit
      diffuse + specular, reprojected with the MVs, QUALITY Q1), weight `w = 1`, faded within
      `rf_edge` of the screen border and between 0.75 and 1 × `rf_max_rough` (0.6);
@@ -2018,7 +2021,7 @@ D-LS 0.35 ms, D-RF 0.33 ms, about 0.95 ms of the 2.5 ms.
 - `stats_begin` adds 3.8-4 ms when `rf_stats=1`, as for D-LS: measurement only.
 
 Settings (`bg3rtx.ini`, all live): `rt_reflections`, `rf_max_rough`, `rf_max_rough_norr`,
-`rf_mirror_rough`, `rf_rr`, `rf_tmax`, `rf_depth_tol`, `rf_edge`, `rf_strength`, `rf_so`,
+`rf_mirror_rough`, `rf_rr`, `rf_tmax`, `rf_depth_k` (was `rf_depth_tol`), `rf_edge`, `rf_strength`, `rf_so`,
 `rf_models`, `rf_debug` (1 tiers, 2 change ×4, 3 probe term, 4 probe term after D-RF,
 5 validation residual, 6 hit distance), `rf_stats`, `rf_validate`, `rr_spec_hit_distance`.
 The log reports `rf: first frame ...` (the lighting's set and its layout),
@@ -2241,8 +2244,17 @@ Two passes in the pre-lighting hook (`core/gi.cpp`, a few lines around the sun d
    - **Roofs** (`rt_sun_roofs`): the sun ray is tested against oriented boxes of the asset
      DB's roof volumes (`Bg3AssetDbApi` v3 `roof_volumes`: roofed RoomTriggers, covered
      floors, roof floors; box triggers as is, prism triggers as polygon bounds × Height),
-     padded by `rt_sun_roof_pad` (1 m) sideways and `rt_sun_roof_up` (3 m) upwards, the
-     ones within `rt_sun_roof_radius` (120 m) of the camera, at most 256. A ray that starts
+     padded by `rt_sun_roof_pad` (1 m) sideways and `rt_sun_roof_up` (3 m) upwards (not
+     derived yet: the DB holds no roof meshes, see 12.4), the ones within the roof query
+     radius of the camera, nearest first, at most `kSunMaxVolumes` (256). The radius is
+     derived per frame (`core/sun_trust.cpp roof_radius`): the farthest pixel whose trust
+     still depends on the roof test (read back from `rt_sun_resolve.hlsl`, header byte 48)
+     + `rt_tmax` (the ray's reach), so every volume a counted ray can meet is in the query;
+     `rt_sun_roof_radius` > 0 overrides it. Volumes beyond 256 are dropped farthest first,
+     logged once per level (`sun: WARNING N roof volumes ...`) and counted in `sun stats`
+     (`over kSunMaxVolumes on N frames`). `scripts/roof_stats.py` (asset DB): at most 398
+     volumes in a level (CTY_Main_A), at most 183 within 300 or 600 m of any volume centre
+     and 287 within 1000 m, so 256 holds for a radius up to 600 m. A ray that starts
      in or passes through one is untrusted: the camera may have cut that roof away (it is
      then missing from the TLAS but still in the game's cascades). This covers "inside a
      roofed room", "under a floor with a higher floor" and "in the shadow of a roof".
@@ -2254,14 +2266,16 @@ Two passes in the pre-lighting hook (`core/gi.cpp`, a few lines around the sun d
      and at least `rt_sun_rise` (6 m) above the pixel. The frustum sides are linear in the
      ray parameter in the `frustum_inverse()` space, so this is four divisions. Trust ramps
      from 0 to 1 as the inside part goes from `rt_sun_ramp` (0.75) to 1 of the needed path.
-2. `gi/rt_sun_resolve.hlsl` (only when replace is active) multiplies the geometric trust by
-   **proximity to the game's lit mask**: the most lit game mask among 32 taps on four rings
-   out to `rt_sun_near` (1.5 m, in pixels from the footprint; same-depth taps only), mapped
-   so that a fully lit neighbour within ~0.75 `rt_sun_near` gives full trust. The errors R0
-   wants corrected (over-wide PCF, acne, cascade transitions) lie next to lit pixels; a
-   whole area the game holds dark (an interior, a cave, the shadow of a roof or of geometry
-   never captured) keeps `min(game, traced)` even without a roof volume. It then writes
-   `lerp(keep, traced, trust)` into the mask.
+2. `gi/rt_sun_resolve.hlsl` (only when replace is active) writes `lerp(keep, traced, trust)`
+   into the mask with trust = the geometric trust alone (0 under a roof volume, else the
+   off-screen trust). The former **proximity to the game's lit mask** term (taps on rings
+   out to `rt_sun_near`, trust `saturate(near·2 − 0.5)`) is **removed** (QUALITY R0): it
+   started from the pixel's own game mask, so even `rt_sun_near=0` never replaced a pixel
+   the game held below 0.25, and it made the game's mask the judge of its own errors.
+   Interiors and cut-away roofs are held by the roof volumes; geometry never captured is
+   the off-screen term's job. The ring search remains only for the A/B debug class
+   (12.2) when `rt_sun_near` > 0. `qa_zero` bit 0 (QA ambient floor) writes 0 into the
+   mask here and in `rt_shadow.hlsl`, so it holds with `rt_sun_replace` on and off.
 
 Without the asset DB level (no database, the level unknown, no camera read back yet, or
 no set 0 b2 at the lighting dispatch) nothing is trusted unless `rt_sun_roofs=0`.
@@ -2279,11 +2293,12 @@ host-visible buffer: **14-16 ms per frame** of `rt passes`. Through the device-l
 the `rt passes` total is back to 0.5-0.7 ms (S7, below), the level it had before.
 
 Debug: `rt_debug=2` now shows the written visibility in blue (white = game, traced and
-written all lit); `rt_debug=6` shows the trust (red roof volume, magenta far from the game's
-lit mask, blue off-screen fallback, green trusted, dim where the traced ray hit).
-The log prints every 600 frames `sun stats (...)`: traced/lit pixels, the share of
-"game dark & traced lit" pixels that were replaced, partly replaced, kept by roofs, kept
-off screen, kept far from the game's lit mask, and the mean brightening.
+written all lit); `rt_debug=6` shows the trust (red roof volume, blue off-screen fallback,
+green trusted, dim where the traced ray hit; magenta, "far from the game's lit mask", no
+longer occurs). The log prints every 600 frames `sun stats (...)`: traced/lit pixels, the
+share of "game dark & traced lit" pixels that were replaced, partly replaced, kept by
+roofs, kept off screen, the mean brightening, the roof query radius with the farthest
+roof-tested pixel, and the frames over `kSunMaxVolumes`.
 
 ### 12.2 In-frame A/B (`rt_debug=7`, `sun check` log line)
 
@@ -2291,10 +2306,14 @@ A trace-to-trace A/B (`rt_sun_replace` 1 vs 0) does not isolate the effect: wate
 in foliage change 28-68% of the albedo between consecutive traces (QA run
 `captures/qa/sunrep`, coordinator, `rt_bvh_split=0`). `rt_sun_resolve.hlsl` therefore
 compares, per pixel and frame, the written mask with `min(game, traced)`:
-- **brightened**: written > min + 0.1, split into **at the game's shadow edge** (the game's
-  own mask partly lit, > 0.1, or lit (> 0.5) on the inner two rings, within
-  `rt_sun_near`/2) and **farther**;
-- **darker**: written < min - 0.1 (only `rt_sun_roof_mode=2` can do that).
+- **brightened**: the written R8 code above min's by at least one code (1/255). Both are
+  R8 UNORM codes (`rtVis` is RGBA8, the game's mask R8), so one step is the smallest
+  difference that reaches the game and there is no fp16 stage in between. Split into
+  **at the game's shadow edge** (the game's own mask partly lit, code > 0, or lit (> 0.5,
+  the geometric edge of a symmetric filter) on the inner two rings, within
+  `rt_sun_near`/2; with `rt_sun_near=0` only the own mask counts) and **farther**. The split
+  is a debug class only;
+- **darker**: written below min by at least one code (only `rt_sun_roof_mode=2` can do that).
 
 Counters 16-20 of the trust image, logged every 600 frames as `sun check (...)`: brightened
 share of all pixels, its edge/far split, darker share, and the mean gain (and its share at
@@ -2335,5 +2354,74 @@ and what the trust did with them (`sun stats`, 600-frame windows):
   brightened crops must be the game's over-wide penumbrae or acne, not missing casters.
 - Cost of the two sun passes in isolation.
 - `-Validation` against a main baseline, and a `-Move` run.
-- The scene top and the rise are heuristics: an off-screen caster taller than either could
-  shift a shadow edge by up to `rt_sun_near` near the screen edge facing the sun.
+- The scene top and the rise are heuristics: an off-screen caster taller than either is
+  missed near the screen edge facing the sun (since the proximity term is gone, nothing
+  else bounds that leak).
+- **Not derivable from the asset DB** (`scripts/roof_stats.py`; the DB has triggers, no
+  scenery meshes): `rt_sun_roof_pad` 1 m, `rt_sun_roof_up` 3 m and `rt_sun_rise` 6 m. What
+  it does measure: roof-volume heights p50 6.5 m / p95 41 m; FloorTriggers of one building
+  span p50 8.3 m / p95 77 m (max 180 m: giant floor boxes, not buildings); consecutive
+  floors touch (gap p50 0.00 m), and floor triggers reach p50 22 m beyond their attached
+  room sideways, so neither tells the roof overhang. Experiments: (a) roof pad/up: with
+  the camera outside a roofed building (roof drawn, in the TLAS), trace up/outwards from
+  the volume's top face and sides and record the hit extents per volume (a one-off
+  `rt_debug` pass or offline TLAS dump) in S7, S14, S8: pad = p100 lateral overhang,
+  up = p100 roof height above the trigger top; (b) rise: per level, the p100 height of
+  TLAS instances above the ground under them near the frustum edge facing the sun, or
+  `rt_sun_top=1` with the scene top once the off-screen ramp is fixed.
+
+## 13. Unknown ray queries, shared reflection origin, QA local-light knob (2026-10-27)
+
+**Candidate cap = unknown, never lit.** A ray query that passes `kMaxCandidates` (4096)
+alpha-tested candidates is aborted (counted in guard 121, as before). Its answer is now
+*unknown*: `rt_visibility()` (rt_common.hlsli) returns `kRtLit` / `kRtOccluded` /
+`kRtUnknown` (a hit committed before the abort is still `kRtOccluded`); `rt_occluded()` keeps
+its signature and returns `rt_visibility() != kRtLit`, so unknown counts as occluded wherever a
+caller has nothing better. `RtHit.aborted`, `RtDebugHit.aborted` and
+`rt_closest(o, d, tmax, cone, out bool aborted)` say the closest hit is unknown (its fields are
+then unreliable). Invalid rays and an unbuilt scene are unchanged (`kRtLit`, guards 120 / scene
+stamp). Per caller:
+
+| pass | on unknown |
+|---|---|
+| sun (rt_shadow.hlsl) | the game's mask value for the pixel (one ray per pixel: per ray = per pixel); `rtVis.a = 8/255` marks it, so the fold and rt_sun_resolve keep the mask exactly; `rt_debug=6` shows it yellow |
+| D-LS (rt_local_shadows*.hlsl, ls_ref) | `ls_debug=10` yellow; `t = s` for that pixel and light: the atlas PCF for a light with a game shadow map, 1 for one without (the game never shadows those: its own visibility is unshadowed, this is the game's term, not "lit by default"). Same in every path (default, LS_FULL, RIS, exact-k) and in the frozen reference (hand edit), so ls_check stays comparable |
+| D-RF (rt_reflections*.hlsl) | tier 6: w = 0, the game's probe stays, SHaRC is not asked; `rf_debug=1` yellow |
+| RT AO (rt_ao.hlsl) | per ray, an occluder at distance 0 (weight 1): conservative; an abort means > cap alpha candidates within `rt_ao_radius`, i.e. dense foliage |
+| GI (gi_trace_rt*.hlsl) | not changed here (separate change); counted as "GI" if it sets `g_rt_pass = kRtPassGI`, else "other" |
+
+Unknown queries are counted per pass (rtStats 128..133, always on, like the guards) and logged
+in the `[core] guard:` lines: `... unknown (candidate cap) queries ...: other N, sun N, D-LS N,
+D-RF N, AO N, GI N`. **QA knob** `rt_max_candidates` (live, Push `rt_max_cand`, 0 = 4096, never
+above): 1-4 forces aborts wherever a ray crosses more alpha-tested candidates (foliage).
+
+**Reflections use the shared origin.** rt_reflections.hlsl starts its ray at
+`rt_ray_origin(fp, P, Nn, foot, dir)` (rt_origin=1: TLAS surface point, geometric normal,
+Wachter-Binder offset to the side `dir` leaves on; rt_origin=0: the old rt_bias offset) instead
+of `P + Nn * dist * rt_bias`. The D-RF push set now also binds rtOrigin (40): 32 push
+descriptors, the RTX 5090's limit (core/gi.cpp kExtras).
+
+**QA ambient floor, `qa_zero` bit 1** (rt_local_shadows*.hlsl, ls_ref): every point/spot light
+the tiled lighting evaluated at the pixel gets t = 0 and its unshadowed transmission ct is
+removed too, so D-LS subtracts exactly what the game added for it (no rays; exact-k / RIS
+bypassed). It includes the lights D-LS normally leaves alone (ls_shadowed=0, below
+ls_min_radius, ls_owners / ls_noshadow). It cannot remove: shadow-mapped lights on hair pixels
+(the game's hair self-shadow is not modelled), projector lights, anything outside the froxel
+light list (forward draws, fog in-scatter, emissives), and nothing when D-LS does not run
+(rt_local_shadows=0, no TLAS, sun-set ring full) or in ls_debug=4-7. No cleaner single point:
+the light buffer is the game's (read-only to us), and the prep pass runs without the light list.
+
+**To verify in game** (S3 Campsite, S8, S14 Lower City; `-Background`):
+1. Baseline: `rt_max_candidates=0`; the `[core] guard:` heartbeat must show unknown 0 everywhere
+   (or the real count: any non-zero here is a scene that needed the fallback).
+2. `rt_max_candidates=1`, `rt_debug=6`: yellow pixels in foliage = aborted sun rays; with
+   `rt_debug=2` their blue (written) must equal red (game mask). `rf_debug=1`: yellow
+   reflection pixels keep the probe (`rf_debug=2` black there). `ls_debug=10`: yellow
+   pixels had a D-LS ray aborted (that light kept the game's term; `ls_debug=2` removes
+   nothing there that the game's own shadow did not). The
+   300-frame `[core] guard:` line must list non-zero sun / D-LS / D-RF / AO counts.
+   No pixel may get brighter than with `rt_max_candidates=0` where the game's term is dark.
+3. `qa_zero=2`: the local lights vanish (torches, braziers in S3; street lamps in S14); what
+   stays lit is sun, ambient, projector lights, fog and emissives. `ls_debug=1` counts the
+   lights per pixel for comparison. `ls_check=1` with `qa_zero=2`: rtStats 81 (differing px)
+   must stay at its usual floor.

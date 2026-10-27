@@ -50,7 +50,9 @@ static int g_fail = 0;
   } while (0)
 
 int main() {
-  std::string path = std::string(BG3RTX_SOURCE_DIR) + "/data/assetdb/bg3rtx_assetdb.bin";
+  // Through the layer's own lookup: a worktree without data/assetdb uses the main checkout's.
+  std::string path = bg3::assetdb_file();
+  printf("database: %s\n", path.c_str());
   if (FILE* f = fopen(path.c_str(), "rb")) {
     fclose(f);
   } else {
