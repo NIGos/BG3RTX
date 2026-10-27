@@ -395,3 +395,42 @@ build only from sanitised vertices: `rt_convert` / `shaders/rt/xfb_to_world.hlsl
 guarantee finite, bounded positions (collapsed triangles at a point). A builder that reads
 raw XFB output, or any buffer region not fully written that frame, gets the same
 undefined builds.
+
+## 7. f9fac2a: per-draw builds alone fault. The eighth commit (likely root cause)
+
+**Root cause: a missing barrier between the soup conversion and the per-draw BLAS builds**
+(`bvhsplit.cpp`, after `rt_convert`).
+- `xfb_to_world.hlsl` rewrites the XFB soup *in place*, from clip space to
+  camera-relative world. The split's barrier after it had dst stage COMPUTE only.
+- The only compute-to-AS-build barrier came after the extraction jobs, inside
+  `if (!ext.empty())`.
+- So in a frame with no new mesh, check or audit (the f9fac2a faulting frames: 0 new
+  meshes, 503 per-draw builds), the per-draw BLAS builds and refits raced the
+  conversion. They could read clip-space vertices, including those the game parks at
+  NaN. That makes the build undefined: a corrupt BLAS, then traversal at computed
+  addresses (IP fault plus "read invalid").
+- The legacy build has always had `barrier(kCS | kXfer -> kAS)` there
+  (`rtscene.cpp:842`), which is why it never faulted from the same soup.
+- This also explains the earlier bisection:
+  - frames with new meshes or audits had the barrier by accident;
+  - more full builds and more refits meant more racing builds;
+  - compaction off probably only shifted timing (or removed the separate unverified-copy
+    problem fixed in f9fac2a).
+- **Fix:** dst = COMPUTE | AS_BUILD.
+
+**Your other checks against the code (no change needed):**
+- `maxVertex = prims * 3 - 1` with `firstVertex` and `primitiveOffset` 0, non-indexed
+  (`VK_INDEX_TYPE_NONE_KHR`).
+- The vertex address is soup base plus a multiple of 48 or 72 bytes (4-byte aligned),
+  stride 16 or 24.
+- `primitiveCount` is the reserved count, exact for lists and strips. Anything XFB did
+  not write is the previous contents, which the conversion makes finite and bounded
+  (once it is ordered before the build).
+- The soup is not a ring: a BLAS reads its soup range only while it is built.
+- A refit uses the same `primitiveCount`, `maxVertex`, stride, flags and opaque flag as
+  its source build.
+
+**For the emissive capture:** any compute pass that writes a build's vertex input
+(conversion, extraction) needs `VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR`
+(access `SHADER_READ` / `MEMORY_READ`) in the dst of its barrier before
+`vkCmdBuildAccelerationStructuresKHR`. A COMPUTE-only dst does not order the AS build.

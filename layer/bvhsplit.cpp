@@ -1059,7 +1059,15 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // XFB writes done; last frame's ray queries and builds are done with what we reuse.
   barrier(cmd, kXFB | kAS | kCS, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS | kXfer, kRW);
   rt_convert(cmd, cap);
-  barrier(cmd, kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS, kRW);
+  // The in-place conversion before everything that reads the soup: the extraction
+  // jobs (compute) AND the per-draw BLAS builds (AS build stage). The AS stage was
+  // missing here: the only compute -> AS barrier came after the extraction jobs, so
+  // in a frame without jobs (no new mesh, check or audit) the per-draw builds raced
+  // the conversion and could read clip-space data, with the game's NaN-parked
+  // vertices: an undefined build, a corrupt BLAS, wild reads in traversal (the
+  // f9fac2a faults: per-draw builds only). The legacy build has always had
+  // kCS -> kAS here (rtscene.cpp), and never faulted.
+  barrier(cmd, kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS, kRW);
   JobBatch batch{now, 0, {}, {}, {}, rec};
   // Status slots: one per job, one per new mesh's compacted size, then the batch's
   // done word (written by a transfer after all of them).
