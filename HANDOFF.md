@@ -103,7 +103,7 @@ What to read: `python -m scripts.qa.em_gate` on each job's log. The mode under w
 `222986b8` and `304be1c7` pass the derived gate in both scenes becomes the default. If no
 mode does, the filtering hypothesis is rejected.
 
-**Budget:** SETTINGS_DESIGN §5.4 row #8, 0.7 ms from the pan headroom. The ledger leaves
+**Budget:** SETTINGS_DESIGN §5.4 row #8, 0.7 ms from the pan headroom. It is an optimisation target, not a gate. Only the derived ours/game gate decides the merge. The ledger leaves
 0.7 ms after SHaRC (0.6) and D-EM.
 
 ## Known gaps

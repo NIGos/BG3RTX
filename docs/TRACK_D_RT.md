@@ -3012,6 +3012,8 @@ pan headroom.
 
 - The static frame is ≈ 12.2 ms.
 - The BLAS refit planned after em10 lowers the D-EM claim.
+- The 0.7 ms is an optimisation target, not a gate (user directive: budgets never degrade a
+  physically better result on Ultra). The derived ours/game gate decides the merge.
 
 **Is the mask's filtering the bias** (AF `222986b8` 1.93 and `304be1c7` 0.64, GF `304be1c7`
 +3.8%)?
