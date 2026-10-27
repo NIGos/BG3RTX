@@ -33,7 +33,8 @@ presents later (240 by default, enough for RR's history to settle):
 | # | Trace | Settings changed before it | Used for |
 |---|---|---|---|
 | 0..N-1 | `on0`..`on{N-1}` | all on (`rt gi rt_reflections rt_shadows rt_local_shadows`) | baseline, noise σ, flicker |
-| N | `gi_off` | `gi=0 rt_reflections=0` (D-RF needs `gi=1`) | GI contribution (against `refl_off`) |
+| (opt) | `nogi0`..`nogi{N-1}` | `gi_strength=0 gi_ao=0` (`--temporal-gi`): all on, the GI's image contribution removed | flicker of the GI alone (on* against nogi*) |
+| N | `gi_off` | `gi=0 rt_reflections=0` (D-RF needs `gi=1`; restores `gi_strength`/`gi_ao` after nogi*) | GI contribution (against `refl_off`) |
 | N+1 | `refl_off` | `gi=1 rt_reflections=0` | reflection contribution (against `on0`) |
 | N+2 | `sun_off` | `rt_reflections=1 rt_shadows=0` | RT sun contribution |
 | N+3 | `local_off` | `rt_shadows=1 rt_local_shadows=0` | D-LS contribution |
@@ -49,7 +50,7 @@ presents later (240 by default, enough for RR's history to settle):
 and `sharc_roof` (`sharc_debug=5`: the roof mask of `roofed_brightening`); `off0` sets
 `sharc=0` again. Effects `sharc` (`sharc_on` against `on0`) and `gi_sharc`
 (`sharc_refl_off` against `gi_off`) get the usual hard_dark and brightening detectors.
-`--temporal N` (default 3) sets N. With N = 3 and no reference that is 13 traces.
+`--temporal N` (default 3) sets N. With N = 3 and no reference that is 13 traces (16 with `--temporal-gi`; `--sharc` adds 3).
 The sun debug traces (`sun_dbg`, `sun_check`, `sun_trust`) are each evaluated on their own,
 so another view than on0's does not void them. A trace-to-trace A/B cannot isolate
 `rt_sun_replace` in animated scenes (water, wind in foliage: 0.28-0.68 of the albedo
@@ -102,7 +103,7 @@ and physical bounds.
 | **sun_check_far** (warning) / **sun_check_edge** (info) / **sun_check_darker** (gate) | `sun_check` trace (`rt_debug=7`): pixels where the written mask is brighter than min(game, traced) of the same pixel by > 0.1, split by distance to the game's lit mask: at its shadow edge (the game's own mask partly lit, or lit within `rt_sun_near`/2; yellow) and farther (red). Darker than min (blue) cannot happen with `rt_sun_roof_mode=0`. Every far crop is for review: right if it is the game's over-wide penumbra or acne, wrong if a caster or roof is missing. The log line `sun check (...)` gives the same split averaged over 600 frames | far ‰ (0.5), darker ‰ (0.01) |
 | **roofed_brightening** (gate, `--sharc`) | The SHaRC leak test (DESIGN_SOTA_NEXT 2.7/2.8). Mask from the `sharc_roof` trace (`sharc_debug=5`, `gi/sharc_roof.hlsl`): pixels inside an asset-DB roof volume (roofed room, covered floor; padded as for the sun trust) that the game's own sun mask (`sun_dbg`) does not light (2-px margin), while the game's mask lights at least 1% of the view: interiors whose exterior is sunlit. (The padded volumes alone also cover sunlit exterior walls next to buildings.) On them, lighting-buffer GI brightening `sharc_refl_off / gi_off` > 1.3 (beyond 3σ) is light through geometry (R0) unless GI without the cache already brightens there (`refl_off / gi_off`: on-screen bounce, which cannot pass walls). Score: the roofed area the cache adds, dilated base excluded. Not applicable (pass, with a note) when fewer than 1% of the pixels are roofed with the sun up, or the level's roof volumes are unknown (mask blue). Crops: GI off, GI without and with the cache, ratio, mask | ‰ of the frame added by the cache (0.5) |
 | **nonfinite** | NaN/Inf over every dump of every trace (`dumps.json`) | count (0) |
-| **flicker** | per-pixel temporal std of the final frame's PQ luminance over the `on*` traces against the `off*` traces; regions where std_on > 2·std_off + 0.01 | mean std ratio (1.5), excess area ‰ (1) |
+| **flicker** | per-pixel temporal std of the final frame's PQ luminance over the `on*` traces against the `off*` traces (effect `all_rt`), and against `nogi*` with `--temporal-gi` (effect `gi`); regions where std_on > 2·std_off + 0.01, on static pixels only: scene motion (G-buffer albedo or the game's own sun mask changed within any set, dilated 3 px) is excluded, because the sets are a minute apart and an NPC that walks in one window and idles in the other is not our flicker. `animated_frac` and the `unmasked` numbers are in the metrics; the crops show the excluded motion as a fourth tile | mean std ratio (1.5), excess area ‰ (1) |
 | **reference** (`--reference`) | FLIP of all-on against `gi_rr_rays=8 ls_samples=2` with the same view and RR, minus the noise floor (FLIP of `on0` against `on1`: RR noise and animation) | mean FLIP above the floor (0.03) |
 
 FLIP: `flip_evaluator` is used when installed. It is not installed here, and
@@ -224,6 +225,27 @@ off (![flicker](img/qa_s1_flicker.png)). Campsite: 1.46×, with 49‰ excess, al
 in the grass. The harness measures all-on against all-off, so the flicker is not
 attributed to one effect. Next step: a per-effect temporal set, or
 `--temporal 2` per effect.
+
+**Update 2026-10-27 (`captures/qa/sun_r0`, S3 17.2‰, S14 19.1‰ excess):** every
+cropped region was scene motion, not render noise. The excess is a sharp-edged,
+filled plateau in the shape of a character, a character's shadow or wind-blown grass,
+and the all-off std has the same outline. In S14 (`flicker_0`) a person-shaped shadow
+is present in the off window and absent from `on0`: the RT sun can only darken where
+the game's mask is dark (`rt_shadow.hlsl:168` folds `mask × vis`, and
+`rt_sun_resolve.hlsl:61` gives trust 0 there with `rt_sun_near=0`), so the game's own
+shadow had moved. The on window (08:24:05-08:24:26) and the off window
+(08:25:55-08:26:18) were 90 s apart. The detector now excludes that motion, and
+`--temporal-gi` measures the GI's own flicker against an all-on set captured next to it.
+
+**Run `20261027-112818` (`--temporal-gi`):**
+- **S3 `all_rt`, 17.7‰ masked:** all of it in wind-blown grass. The std has the blade-streak pattern of the all-off set, and the static dirt next to it has no speckle. The albedo misses a blade moving in front of grass of the same colour, so a G-buffer normal change now also counts as motion (`anim_normal`). This gate cannot see flicker on moving geometry: 240 presents apart, motion and noise are inseparable there.
+- **S3 `gi`, 2.3‰:** isolated hot spots in dark areas (forest at the top), present in on* and absent from nogi*. Those are rare, very bright 1-spp bounce hits. The bounce source held the specular the camera saw (sun glints), against R3. It is now the diffuse part only (`gi_bounce_spec=0`; D-RF still reads diffuse + specular).
+- **S14 `gi` ratio 1.67 with 0‰ excess:** 0.00164 against 0.00098 PQ, both below one 8-bit code step (0.0039). The ratio now adds half a step to both sides (`flicker_quant`).
+- **Follow-up runs `gi_flicker2_diffuse` / `gi_flicker2_spec` were void for the flicker gate:** the normal criterion masked 100% of S3 (98% of S14 spec). The 8-bit preview of the RG16F normals scales by the channel's max |value|, which is the sky sentinel (`|e|² > 5.4e10`), so one code step exceeds any real change. Normals are now used only from `.f32` dumps or a preview whose code step is ≤ 0.01, and a flicker check with more than 60% of the frame excluded fails as INCONCLUSIVE instead of passing. Unmasked, the two bounce sources are within run-to-run spread (S3 gi 16.1‰ diffuse vs 17.5‰ spec, S14 13.8‰ vs 19.7‰; the earlier spec run gave 11.1‰ and 12.8‰). `gi_bounce_spec=0` stays for R3; its flicker benefit is unproven.
+- **Runs `gi_flicker3_diffuse` / `gi_flicker3_spec` (valid masks, 29-38% motion):**
+  - **GI flicker:** with the diffuse source, S3 0.57‰ and S14 0‰ (pass). With the old specular source, S14 is 2.84‰ (fail): a soft halo on the sand next to an armoured character (`gi_flicker3_spec/S14/crops/flicker_gi_0.png`). Its moving highlights were being bounced, and the S14 `all_rt` failure of that run (2.38‰) is the same two regions. **Verdict:** keep `gi_bounce_spec=0`.
+  - **S3 `all_rt`, 2.0-2.1‰ in both runs, GI not involved:** blade streaks in wind-blown grass with the all-off pattern, the motion the albedo cannot see and the preview normals cannot give. `--temporal-sun` (a `nosun` set) attributes it.
+- **S14 GI brightening, 58‰ final (review):** shaded sandstone faces next to sunlit stone and sand get 3-4× the sky ambient from the bounce. This is plausible for a sunlit canyon, and not an artifact.
 
 **5. Sun disagreement in the foundry is expected.** The game's mask is 0
 everywhere in the foundry (`game_lit_frac` 0), while the trace finds the sun

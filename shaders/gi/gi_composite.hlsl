@@ -33,5 +33,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // Next frame's bounce source is radiance: on white-shaded skin that is the
   // diffuse times the albedo the SSS pass will apply.
   float3 rad = cls == kMatSkin && skin_white() ? diffuse * alb.rgb : diffuse;
-  prevRadiance[fp] = float4(rad + gSpecular[fp], 1.0);
+  // a: the diffuse's share of the luminance, so the GI can bounce the view-independent
+  // part only (prev_bounce_at) while the reflections read the whole radiance.
+  float3 tot = rad + gSpecular[fp];
+  const float3 kY = float3(0.2126, 0.7152, 0.0722);
+  float share = dot(tot, kY) > 1e-8 ? saturate(dot(max(rad, 0.0), kY) / dot(tot, kY)) : 1.0;
+  prevRadiance[fp] = float4(tot, share);
 }
