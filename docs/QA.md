@@ -184,6 +184,21 @@ The game runs dominate; waiting for the shared game mutex comes on top. Without
   max-filtered over the box radius + 1 px (the jitter) so that a moving edge covers
   both positions, ×√2 for a difference of two frames.
 
+### Exposure hold
+
+Every comparison between traces assumes one exposure, but the game's eye adaptation re-exposes
+a trace within the 240 presents before it is captured. Run `20261027-173531` showed it: the
+ambient-off floor (`amb_zero`) came out brighter on sunlit ground than the image with the
+ambient (S3 GI 320‰, S14 GI 428‰ "below the floor"), which removing light cannot do. The
+lighting is pre-exposed (`s1b13[0] = 0.8333/2^EV`, TRACK_A_RR "Pre-exposure"), so the lighting
+buffer moves with it too. `qa_exposure_hold=1` (`layer/rrpost.cpp`) latches the exposure the
+lighting uses when it is switched on and overwrites the adaptation pass's output with it after
+every dispatch, so the pre-exposure and the re-exposure stay fixed from two frames later. The
+plan switches it on with `on0` (after the warm-up traces), for the whole run. Log lines:
+`[rrpost] exposure held ... at EV`, and every 600 frames the held EV with the probe's. It needs
+`rr=1` and `rr_post=1`. Until a run with the hold validates the light-off floors, `hard_dark`'s
+energy test is review only (`detectors.T["dark_energy_gate"]`).
+
 ## Thresholds and their derivation
 
 Rule (QUALITY.md R0, "Every gate needs a derivation"): a gate, threshold, tolerance or
@@ -217,7 +232,7 @@ noise, artifacts, jitter and pans; no game).
 
 | Gate | Constant (old → new) | Class | Derivation |
 |---|---|---|---|
-| hard_dark | gate: removed 0.6 + sharp + unexplained + black → **floor − on > kσ, any region** | derived (physics: energy) | The light-off floor (`qa_zero`, coordinator decision A, 2026-10-27). 8 noise-only seeds: 0 regions; an umbra at the floor passes; light removed below the floor fails (`tests/qa_detectors_test.py`). |
+| hard_dark | gate: removed 0.6 + sharp + unexplained + black → **floor − on > kσ, any region** (review until the exposure-held run validates it, "Exposure hold") | derived (physics: energy) | The light-off floor (`qa_zero`, coordinator decision A, 2026-10-27). 8 noise-only seeds: 0 regions; an umbra at the floor passes; light removed below the floor fails (`tests/qa_detectors_test.py`). |
 | hard_dark | `black`: < 10% of the light left → **share of the region at its floor** (on − floor < kσ) | derived (physics) | "Removed all of its own light"; review metric. |
 | hard_dark | `sharp` ≥ 0.5 → **`step_like`: sharp ≥ step_sharpness(PSF) − z·σ_sharp** | derived (measured) | The PSF is measured from the on* residuals (lag-1 autocorrelation, Gaussian: σ_p = 1/(2√(−ln ρ₁))); the reference is the `sharp` of an ideal step through that PSF and the detector box; σ_sharp from the band medians' noise; z Bonferroni over the regions tested. Review metric. |
 | hard_dark | edge strength 0.25 → **ln(1/(1 − 0.6))/(2·blur + 1)** | derived (relative to the 0.6 review bound) | Review metric (`unexplained`). |

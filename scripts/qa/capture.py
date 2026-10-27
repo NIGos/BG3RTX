@@ -58,7 +58,7 @@ GI_NEUTRAL = {"gi_strength": "0", "gi_ao": "0"}
 
 
 def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun=False, sharc=False,
-         sharc_radius="4", warmup=0, floors=True):
+         sharc_radius="4", warmup=0, floors=True, exposure_hold=True):
     """The ordered traces of one run: (name, settings applied before it).
     gi_restore: the gi_strength/gi_ao values to go back to after the nogi set.
     split_sun (--temporal-sun): a nosun set, all on but the RT sun shadows (the game's mask
@@ -74,7 +74,10 @@ def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun
     # steady (S3: a burning camp in flicker4_split, a soft brightness drift over the dirt in
     # 20261027-155410, both in the on* window only), and on* is the reference of every set.
     p = [(f"warm{i}", {}) for i in range(warmup)]
-    p += [("on0", {})]
+    # qa_exposure_hold (docs/QA.md "Exposure hold"): every trace from on0 on is captured at the
+    # exposure in use when on0's settings are applied (after the warm-up), so cross-trace
+    # comparisons, the light-off floors above all, are not re-exposed by the eye adaptation.
+    p += [("on0", {"qa_exposure_hold": "1"} if exposure_hold else {})]
     p += [(f"on{i}", {}) for i in range(1, temporal)]
     restore = {}
     if split_gi:

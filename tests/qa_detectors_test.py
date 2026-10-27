@@ -71,6 +71,10 @@ def render(vis, extra=1.0, n=3, std=0.01):
 
 
 vis = im.box((1 - poly) * (1 - soft), int(psf))   # a black polygon and a soft shadow, as rendered
+# The energy gate is review only until the exposure-held run validates it (detectors.T
+# "dark_energy_gate"); its logic is tested here with the gate switched on.
+check("hard_dark energy gate is review only by default", det.T["dark_energy_gate"] is False)
+det.T["dark_energy_gate"] = True
 on, off, flo = render(vis), render(np.ones_like(base)), render(np.zeros_like(base))
 sig = sigma_from([on, off], 1)
 p_sig = th.psf_sigma([y - np.mean(on, 0) for y in on])
@@ -103,6 +107,7 @@ for seed in range(8):
     s0 = sigma_from([on0, fl0], 1)
     false_e += det.hard_dark(on0[0], render(np.ones_like(base))[0], s0, 1, "gi", floor=fl0[0])["metrics"]["energy_regions"]
 check("hard_dark gate: no energy region on pure noise (8 seeds)", false_e == 0, f"regions {false_e}")
+det.T["dark_energy_gate"] = False
 res = det.hard_dark(on[0], off[0], sig, 1, "gi")
 check("hard_dark without a floor is review only", res["gate"] is False and res["threshold"] is None)
 rng = np.random.default_rng(1)

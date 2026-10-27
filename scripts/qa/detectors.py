@@ -25,6 +25,11 @@ T = {
     # Physics: no pixel may go below the effect's light-off floor beyond k sigma (energy). False
     # alarms are bounded by the k-sigma test (th.k_sigma) and the filters' support (th.min_area).
     "dark_fail_area": 0.0,
+    # The energy gate is review only until a run with the exposure held (qa_exposure_hold,
+    # capture.plan) validates it: without the hold, the eye adaptation re-exposed the darker
+    # light-off traces and the floors came out brighter than the images they bound (QA
+    # 20261027-173531: S3 GI 320 permille, S14 GI 428 permille "below the floor").
+    "dark_energy_gate": False,
     # Review only (R0: the game's image is not a reference for effect outputs): these bounds
     # select the brightening regions whose crops are listed.
     "bright_ratio": {"rt_shadows": 1.5, "rt_local_shadows": 1.5, "gi": 2.0, "rt_reflections": 2.0, "all_rt": 2.0,
@@ -205,18 +210,20 @@ def hard_dark(y_on, y_off, sigma, blur=1, effect="", floor=None, moving=None, ps
                      "rank": area * removed * (0.25 + sharp) * (0.25 + unexpl) * (0.5 + black) * (1.0 if sig_ok else 0.1)})
     regs.sort(key=lambda g: -g["rank"])
     eregs.sort(key=lambda g: -g["rank"])
-    gate = fl is not None
+    gate = fl is not None and T["dark_energy_gate"]
     score = _permille(e_px, r.shape)
     sig_area = _permille(sum(g["area"] for g in regs if g["signature"]), r.shape)
-    return {"score": round(score if gate else sig_area, 4), "threshold": T["dark_fail_area"] if gate else None,
-            "gate": gate, "pass": (score <= T["dark_fail_area"]) if gate else not any(g["signature"] for g in regs),
-            "unit": "‰ of px below the light-off floor" if gate else "‰ of px with the dark signature (review)",
+    has_floor = fl is not None
+    return {"score": round(score if has_floor else sig_area, 4), "threshold": T["dark_fail_area"] if gate else None,
+            "gate": gate, "pass": (score <= T["dark_fail_area"]) if gate else (not eregs and not any(g["signature"] for g in regs)),
+            "unit": ("‰ of px below the light-off floor" + ("" if gate else " (review until the exposure-held run validates it)"))
+            if has_floor else "‰ of px with the dark signature (review)",
             "metrics": {"candidates": len(regs), "signature": sum(g["signature"] for g in regs),
                         "signature_permille": round(sig_area, 4), "energy_regions": len(eregs),
                         "mean_ratio": round(float(np.mean(a) / max(np.mean(b), 1e-9)), 4),
                         "k_sigma": round(k, 3), "edge_thr": round(edge_thr, 4), "min_area_px": min_a,
                         "psf_sigma_px": None if psf_sigma is None else round(float(psf_sigma), 3),
-                        "step_sharp": None if s0 is None else round(s0, 3), "floor": gate},
+                        "step_sharp": None if s0 is None else round(s0, 3), "floor": has_floor},
             "regions": eregs + regs, "map": ("ratio", r), "energy_mask": emask}
 
 
