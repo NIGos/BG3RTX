@@ -209,6 +209,17 @@ Capture g_cap;                 // the readback capture (one per trace)
 Capture g_scratch;             // geo_xfb_always
 std::atomic<bool> g_submit_wanted{false};
 
+// An effects pass of the emissive capture (D-EM, emissive.cpp): CmdState::geo points
+// to one while CmdState::geo_em is set. Passes are recorded on several threads.
+struct EmPass {
+  bool capture = false;      // rt_emissive: draws are captured (otherwise only timed)
+  bool xfb_active = false;
+  int ts = -1;
+  VkBuffer ubo = VK_NULL_HANDLE;   // the pass's camera UBO (set 0 binding 2)
+  VkDeviceSize ubo_off = 0;
+  std::vector<std::pair<VkDeviceSize, uint32_t>> ranges;   // captured (offset, triangles)
+};
+
 // ---- timing ----
 constexpr uint32_t kTsSlots = 64;
 VkQueryPool g_qp = VK_NULL_HANDLE;
@@ -1096,9 +1107,22 @@ void geo_forget_pipeline(VkPipeline p) {
 // Before the game's vkCmdBeginRenderPass (outside the pass).
 void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
   s->geo = nullptr;
+  s->geo_em = false;
   s->geo_ts = -1;
   if (!g_dd) return;
   const bool gbuf = is_gbuffer(s->pass);
+  // D-EM: an effects pass (the game's emissive draws, emissive.cpp).
+  if (g_on && !gbuf && em_is_fx_pass(s->pass, g_gbuf_w, g_gbuf_h)) {
+    auto* e = new EmPass;
+    e->capture = em_pass_begin(cmd, s, &e->ts);
+    if (e->capture || e->ts >= 0) {
+      s->geo = e;
+      s->geo_em = true;
+    } else {
+      delete e;
+    }
+    return;
+  }
   if (gbuf) g_gbuf_w = s->pass.width, g_gbuf_h = s->pass.height;
   // The ray tracing scene's source pass: with rt_alpha the depth prepass
   // (depth-only D24S8 at render resolution), otherwise the G-buffer.
@@ -1151,6 +1175,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
 
 // Right after the game's vkCmdBeginRenderPass (inside the pass).
 void geo_pass_begun(VkCommandBuffer cmd, CmdState* s) {
+  if (s->geo_em) return;
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
   // Buffers are bound per draw (geo_pre_draw).
@@ -1159,6 +1184,11 @@ void geo_pass_begun(VkCommandBuffer cmd, CmdState* s) {
 
 // Right before the game's vkCmdEndRenderPass / vkCmdEndRendering (inside the pass).
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s) {
+  if (s->geo_em) {
+    auto* e = static_cast<EmPass*>(s->geo);
+    if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
+    return;
+  }
   auto* c = static_cast<Capture*>(s->geo);
   if (!c || !c->xfb_active) return;
   p_end_xfb(cmd, 0, 0, nullptr, nullptr);
@@ -1216,7 +1246,39 @@ void rt_capture_stats(const Capture& c) {
   }
 }
 
+// D-EM: a draw of an effects pass. Emissive material draws that are not cached meshes
+// are captured into the emissive soup (emissive.cpp decides).
+static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+  auto* e = static_cast<EmPass*>(s->geo);
+  if (!e || !e->capture) return;
+  PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    auto it = g_pipes.find(s->pipe[0]);
+    if (it != g_pipes.end()) pi = it->second;
+  }
+  if (!e->ubo) {
+    Bg3Binding b;
+    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+        (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
+        b.offset % g_ubo_align == 0) {
+      e->ubo = b.buffer;
+      e->ubo_off = b.offset;
+    }
+  }
+  EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride};
+  VkBuffer soup = VK_NULL_HANDLE;
+  VkDeviceSize off = 0, bytes = 0;
+  uint32_t prims = 0;
+  if (!em_draw(cmd, s, args, in, &soup, &off, &bytes, &prims)) return;
+  p_bind_xfb(cmd, 0, 1, &soup, &off, &bytes);
+  p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
+  e->xfb_active = true;
+  e->ranges.push_back({off, prims});
+}
+
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+  if (s->geo_em) return em_pre_draw(cmd, s, args);
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
   const uint32_t kind = args.kind, count = args.count, instances = args.instances;
@@ -1344,6 +1406,11 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
 }
 
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
+  if (s->geo_em) {
+    auto* e = static_cast<EmPass*>(s->geo);
+    if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
+    return;
+  }
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
   if (c->active_slot >= 0) {
@@ -1359,6 +1426,14 @@ void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
 
 // After the game's vkCmdEndRenderPass (outside the pass).
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
+  if (s->geo_em) {
+    auto* e = static_cast<EmPass*>(s->geo);
+    s->geo = nullptr;
+    s->geo_em = false;
+    if (e) em_pass_done(cmd, s, e->ubo, e->ubo_off, g_stride, e->ranges, e->ts);
+    delete e;
+    return;
+  }
   if (s->geo_ts >= 0 && g_qp) g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->geo_ts * 2 + 1);
   const int ts_slot = s->geo_ts;
   s->geo_ts = -1;

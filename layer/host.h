@@ -186,6 +186,7 @@ struct CmdState {
   std::string seg_json;
   // Track D geometry capture (geocapture.cpp)
   void* geo = nullptr;                 // capture active in the current pass
+  bool geo_em = false;                 // ... and it is an effects pass of the emissive capture (D-EM)
   int geo_ts = -1;                     // timestamp slot of the current pass
   VkViewport viewport{};               // last vkCmdSetViewport(first = 0)
   bool has_viewport = false;
@@ -382,6 +383,8 @@ struct RtCapture {
   uint32_t draws, alpha_draws;
   bool split;                // rt_bvh_split: the capture holds only the dynamic draws (bvhsplit.cpp)
   VkDeviceSize xfb_size;
+  int scene = 0;             // bvhsplit scene: 0 main, 1/2 emissive (D-EM, emissive.cpp)
+  bool converted = false;    // the soup is already camera-relative world (the emissive scene)
 };
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
@@ -415,6 +418,7 @@ void bvh_device_created(DeviceData* dd);
 void bvh_device_destroyed(DeviceData* dd);
 bool bvh_split_wanted();                       // rt_bvh_split=1 and the split is usable
 void bvh_begin_capture(VkCommandBuffer cmd);
+void bvh_discard_scene(int scene);             // drops a scene's draws recorded so far (the emissive scene)
 // Per draw of the RT capture (split mode). `token` identifies the draw in later calls.
 struct BvhDraw {
   const InstPipe* inst;         // nullptr: not instanceable
@@ -423,6 +427,7 @@ struct BvhDraw {
   bool alpha;                   // alpha-tested (its FS is in the table, UV captured)
   DrawArgs args;
   const CmdState* s;
+  int scene = 0;                // 0 main scene, 1/2 the emissive scene of even/odd frames (D-EM)
 };
 enum BvhVerdict { BVH_CAPTURE = 0, BVH_CACHED = 1, BVH_CACHED_AUDIT = 2 };
 BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris);
@@ -440,12 +445,47 @@ struct BvhResult {
   uint64_t static_tris, dynamic_tris;
   VkBuffer info; VkDeviceSize info_off, info_bytes;   // InstInfo of this TLAS (set 1 binding 7)
   VkBuffer pool; VkDeviceSize pool_bytes;             // object-space vertices (binding 8)
+  VkBuffer ring; VkDeviceSize inst_off;               // the TLAS's VkAccelerationStructureInstanceKHR array
+  const uint32_t* info_host;                          // InstInfo, host-visible (4 words per instance)
 };
 bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), BvhResult* out);
 void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 void bvh_on_present();
 void bvh_forget_buffer(VkBuffer b);
 void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size);
+
+// ---- Track D D-EM: emissive geometry (emissive.cpp, docs/TRACK_D_RT.md 12) ----
+// The game redraws its emissive meshes into the effects target (B10G11R11 + the
+// G-buffer depth, before the tiled lighting). Those draws are captured (XFB, the
+// BVH split's emissive scene), with a per-draw record (radiance, mask texture); at
+// the first tiled-lighting dispatch the emissive TLAS and the light list are built.
+void em_device_created(DeviceData* dd);
+void em_device_destroyed(DeviceData* dd);
+bool em_wanted();                                    // rt_emissive=1, RT and the split available
+bool em_is_fx_pass(const Bg3PassInfo& p, uint32_t gbuf_w, uint32_t gbuf_h);
+// Outside an effects pass, before it begins: notes the target, times it; false: no capture.
+bool em_pass_begin(VkCommandBuffer cmd, const CmdState* s, int* ts);   // ts: timestamp pair (-1 none)
+// Per draw of an effects pass. Not an emissive material draw (sky, clouds, decals...),
+// a cached mesh (its instances come from the instance stream) or no room: false.
+// Otherwise the draw is to be captured into the soup at [*off, *off + *bytes).
+struct EmDrawIn {
+  bool xfb;                  // the pipeline's VS is patched and last before rasterisation
+  bool triangles;
+  VkPrimitiveTopology topo;
+  bool restart;
+  const InstPipe* inst;      // class-A instancing layout, or nullptr
+  uint32_t stride;           // XFB bytes per vertex
+};
+bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const EmDrawIn& in, VkBuffer* soup,
+             VkDeviceSize* off, VkDeviceSize* bytes, uint32_t* prims);
+// After the pass, outside it: the captured ranges (offset, triangles) to camera-relative
+// world with the pass's camera UBO.
+void em_pass_done(VkCommandBuffer cmd, const CmdState* s, VkBuffer ubo, VkDeviceSize ubo_off, uint32_t stride,
+                  const std::vector<std::pair<VkDeviceSize, uint32_t>>& ranges, int ts);
+void em_dispatch_pre(VkCommandBuffer cmd, uint64_t cs, bool indirect);   // cmd.cpp: builds at the lighting
+void em_on_present();
+// ABI 8: the emissive scene for the core (host_api.h Bg3HostApi::rt_emissive).
+bool em_scene(VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
 
 // ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
 // One line of shaders/rt/alpha_fs.txt (scripts/alpha_table.py).

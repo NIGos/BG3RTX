@@ -10,7 +10,8 @@
 
 // 6: Bg3HostApi::assetdb (appended).
 // 7: Bg3HostApi::rr_active (appended).
-#define BG3RTX_ABI_VERSION 7
+// 8: Bg3HostApi::rt_emissive (appended; D-EM).
+#define BG3RTX_ABI_VERSION 8
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -76,6 +77,24 @@ struct Bg3ShaderBlob {
   const uint32_t* code;        // SPIR-V, owned by the host, valid until next compile
   size_t size_bytes;
   uint64_t generation;         // bumps every successful recompile of this entry
+};
+
+// D-EM (ABI 8): the emissive scene of the latest build (docs/TRACK_D_RT.md 12). The
+// descriptor set's layout is in shaders/rt/em_common.hlsli: the emissive TLAS, its
+// per-instance InstInfo, the mesh pool and emissive soup, the per-draw records, the
+// light list, the mask textures and a statistics buffer for debug views.
+struct Bg3EmissiveInfo {
+  uint64_t built_frame;        // frame_index of the build the set belongs to
+  uint32_t instances;          // TLAS instances
+  uint32_t records;            // emissive draws (records)
+  uint32_t lights;             // triangles in the light list (capped by rt_em_max_lights)
+  float pre_exposure;          // lighting s1b13[0] when known (0 otherwise): radiance / pre_exposure = lighting units
+  // The game's effects target of the frame (sky, clouds, emissive draws; B10G11R11, render
+  // resolution), for comparisons; image null when not seen this frame.
+  VkImage fx_image;
+  VkImageView fx_view;
+  VkImageLayout fx_layout;     // the layout its last pass left it in
+  uint32_t fx_width, fx_height;
 };
 
 struct Bg3HostApi {
@@ -170,6 +189,11 @@ struct Bg3HostApi {
   // modes" (gi_rr, ls_soft, rf_rr = -1) from this, not from the rr key, so
   // FSR/TAA, an SR fallback or a failed RR creation get the non-RR modes.
   bool (*rr_active)();
+
+  // ABI 8 (D-EM): the emissive scene (set 3 of shaders/rt/em_common.hlsli). False when
+  // RT or the capture is off; `set` is VK_NULL_HANDLE before the first build. The core
+  // binds it in passes recorded after the frame's first tiled-lighting dispatch.
+  bool (*rt_emissive)(VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
 };
 
 struct Bg3CoreApi {

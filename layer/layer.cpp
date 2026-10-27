@@ -251,6 +251,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     rt_device_created(dd, rt_on);
     if (rt_on && rt_enabled()) alpha_device_created(dd);
     if (rt_on && rt_enabled()) bvh_device_created(dd);
+    if (rt_on && rt_enabled()) em_device_created(dd);
   }
   sl_device_post(sl_scratch, dd, VK_SUCCESS);
   watchdog_start();
@@ -263,6 +264,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   sl_device_destroy(dd);
   if (dd == g_main) {
     core_shutdown();
+    em_device_destroyed(dd);
     bvh_device_destroyed(dd);
     alpha_device_destroyed(dd);
     rt_device_destroyed(dd);
@@ -440,6 +442,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     ngx_on_present();
     geo_on_present(queue);
     rt_on_present();
+    em_on_present();
     assetdb_on_present(frame);
   }
   trace_on_present(queue, info);

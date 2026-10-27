@@ -100,6 +100,9 @@ float tex_alpha(uint a, float2 uv, float g, uint tex, uint ch) {
 [[vk::binding(7, 1)]] ByteAddressBuffer gInstInfo;
 [[vk::binding(8, 1)]] ByteAddressBuffer gMeshPool;
 static const uint kInfoPool = 1u << 8, kInfoLegacy = 1u << 9, kInfoAlpha = 1u << 10;
+// kInfoEmissive: an instance of the emissive scene (D-EM, rt/em_common.hlsli: its own
+// TLAS and InstInfo; `rec` is then the emissive record's index). Never set in this TLAS.
+static const uint kInfoEmissive = 1u << 11;
 struct InstInfo { uint base, meta, rec, tris; };
 
 InstInfo inst_info(uint inst) {

@@ -38,6 +38,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rtscene.cpp
   layer/alphatest.cpp
   layer/bvhsplit.cpp
+  layer/emissive.cpp
   layer/streamline.cpp
   layer/savefilter.cpp
   layer/background.cpp
@@ -125,7 +126,7 @@ target_compile_definitions(assetdb_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURC
 add_test(NAME assetdb_test COMMAND assetdb_test)
 
 # Hot-reloadable core: rebuild while the game runs.
-add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp)
+add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/emissive.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # A fixed PDB name would stay locked by a debugger attached to the old copy.
 set_target_properties(bg3rtx_core PROPERTIES PDB_NAME "bg3rtx_core_$<CONFIG>")

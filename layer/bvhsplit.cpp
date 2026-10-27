@@ -45,6 +45,7 @@ namespace bg3 {
 namespace {
 
 constexpr uint32_t kInfoPool = 1u << 8, kInfoLegacy = 1u << 9, kInfoAlpha = 1u << 10;   // rt_common.hlsli
+constexpr uint32_t kInfoEmissive = 1u << 11;   // the emissive scene (D-EM): word 2 is the EmRec index
 constexpr uint32_t kRecBytes = 208;                // AlphaRec, rt_common.hlsli
 constexpr uint32_t kRingSlots = 8;                 // per-build regions of the host ring
 constexpr uint32_t kStatusSlots = 16384;           // validation results (16 B each)
@@ -339,7 +340,10 @@ struct Fixup {
   uint8_t sample[48];         // instance 0's rows at record time (late-write diagnostic)
 };
 std::mutex g_fix_mu;
-std::unordered_map<VkCommandBuffer, std::vector<Fixup>> g_fixups;
+// Keyed by command buffer and scene (fix_key): the emissive scene (D-EM) is built in
+// another command buffer than the main one, but must not replace its fixups if not.
+std::unordered_map<uint64_t, std::vector<Fixup>> g_fixups;
+uint64_t fix_key(VkCommandBuffer cmd, int scene) { return uint64_t(cmd) ^ (uint64_t(scene) << 62); }
 
 // ---- GPU-side bookkeeping ----
 Buf g_status;                 // host-visible validation results
@@ -378,11 +382,84 @@ struct Stats {
   uint64_t evict_destroy = 0, evict_write = 0, evict_lru = 0, compactions = 0, compact_saved = 0;
   uint64_t dyn_refit = 0, dyn_rebuild = 0, dyn_new = 0, budget_deferred = 0, tlas_refit = 0;
   uint64_t not_inst_pattern = 0, not_inst_stream = 0, not_inst_count = 0;
-  uint64_t fix_applied = 0, fix_late = 0, fix_bad = 0, fix_stale = 0;
+  uint64_t fix_stale = 0;
   float err_max_ok = 0;
 };
 Stats g_st;
 std::mutex g_st_mu;   // fixup counters (submit thread)
+struct FixStats { uint64_t applied = 0, late = 0, bad = 0; };
+FixStats g_fx;        // under g_st_mu (the submit thread never takes g_mu)
+
+// ---- scenes (D-EM, docs/TRACK_D_RT.md 12) ----
+// Scene 0 is the main RT scene (the depth prepass); scene 1 the emissive scene (the
+// game's emissive draws into its effects target, layer/emissive.cpp). They share the
+// mesh cache, the AS storage, the mesh pool and the validation jobs; each has its own
+// draws, per-draw BLAS, instance ring, TLAS and statistics. The globals above hold the
+// active scene; use_scene swaps the other one in (callers hold g_mu).
+uint32_t g_gen = 0;   // the scene's capture generation (tokens of older ones are ignored)
+struct SceneState {
+  std::vector<FrameDraw> draws;
+  std::unordered_map<uint64_t, uint32_t> dyn_seen;
+  uint32_t audits = 0, gen = 0;
+  std::unordered_map<uint64_t, DynSlot> dyn;
+  Buf ring;
+  uint32_t ring_inst = 0, ring_mats = 0, ring_next = 0;
+  VkDeviceSize region_bytes = 0, info_off = 0, mat_off = 0;
+  Buf tlas_buf, scratch;
+  VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+  uint32_t tlas_cap = 0, tlas_n = 0, tlas_since = 0;
+  uint64_t tlas_sig = 0;
+  bool tlas_valid = false;
+  Stats st;
+};
+constexpr int kScenes = 3;   // 0 main; 1 and 2 the emissive scene of even and odd frames (emissive.cpp)
+int g_active = 0;
+SceneState g_saved[kScenes];   // every scene but the active one; g_saved[g_active] is an empty placeholder
+
+void swap_globals(SceneState& o) {
+  std::swap(g_draws, o.draws);
+  std::swap(g_dyn_seen, o.dyn_seen);
+  std::swap(g_audits_this_frame, o.audits);
+  std::swap(g_gen, o.gen);
+  std::swap(g_dyn, o.dyn);
+  std::swap(g_ring, o.ring);
+  std::swap(g_ring_inst, o.ring_inst);
+  std::swap(g_ring_mats, o.ring_mats);
+  std::swap(g_ring_next, o.ring_next);
+  std::swap(g_region_bytes, o.region_bytes);
+  std::swap(g_info_off, o.info_off);
+  std::swap(g_mat_off, o.mat_off);
+  std::swap(g_tlas_buf, o.tlas_buf);
+  std::swap(g_scratch, o.scratch);
+  std::swap(g_tlas, o.tlas);
+  std::swap(g_tlas_cap, o.tlas_cap);
+  std::swap(g_tlas_n, o.tlas_n);
+  std::swap(g_tlas_since, o.tlas_since);
+  std::swap(g_tlas_sig, o.tlas_sig);
+  std::swap(g_tlas_valid, o.tlas_valid);
+  std::swap(g_st, o.st);
+}
+
+void use_scene(int scene) {
+  if (scene == g_active || scene < 0 || scene >= kScenes) return;
+  swap_globals(g_saved[g_active]);   // the active scene goes back to its slot
+  swap_globals(g_saved[scene]);      // ... and the wanted one comes out of its own
+  g_active = scene;
+}
+
+// Tokens: bits 30-31 the scene, bits 20-29 the generation, bits 0-19 the draw.
+constexpr uint32_t kTokIndex = (1u << 20) - 1;
+uint32_t make_token(int scene, uint32_t index) {
+  return (uint32_t(scene) << 30) | ((g_gen & 0x3FFu) << 20) | (index & kTokIndex);
+}
+// Activates the token's scene; false if the token belongs to an older capture.
+bool token_draw(uint32_t token, FrameDraw** fd) {
+  use_scene(int(token >> 30));
+  const uint32_t i = token & kTokIndex;
+  if (((token >> 20) & 0x3FFu) != (g_gen & 0x3FFu) || i >= g_draws.size()) return false;
+  *fd = &g_draws[i];
+  return true;
+}
 
 bool ensure_pipeline() {
   Bg3ShaderBlob blob{};
@@ -585,17 +662,23 @@ void bvh_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   std::lock_guard<std::mutex> lock(g_mu);
   for (auto& [k, m] : g_meshes) as_destroy(m.as);
-  for (auto& [k, s] : g_dyn) as_destroy(s.as);
+  for (int scene : {2, 1, 0}) {
+    use_scene(scene);
+    for (auto& [k, s] : g_dyn) as_destroy(s.as);
+    g_dyn.clear();
+    for (Buf* b : {&g_ring, &g_tlas_buf, &g_scratch})
+      if (b->b) free_buf(*b);
+    if (g_tlas) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_tlas));
+    g_tlas = VK_NULL_HANDLE;
+  }
   g_meshes.clear();
-  g_dyn.clear();
   g_buf_meshes.clear();
   g_any_mesh = false;
   for (auto& c : g_chunks)
     if (c.buf.b) free_buf(c.buf);
   g_chunks.clear();
-  for (Buf* b : {&g_pool, &g_ring, &g_status, &g_tlas_buf, &g_scratch})
+  for (Buf* b : {&g_pool, &g_status})
     if (b->b) free_buf(*b);
-  if (g_tlas) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_tlas));
   defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(g_compact_qp));
   defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_pipe));
   defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
@@ -613,14 +696,26 @@ bool bvh_split_wanted() { return g_on && !g_failed && cfg_int("rt_bvh_split", 1)
 
 void bvh_begin_capture(VkCommandBuffer) {
   std::lock_guard<std::mutex> lock(g_mu);
+  use_scene(0);
   g_draws.clear();
   g_dyn_seen.clear();
   g_audits_this_frame = 0;
+  ++g_gen;
+}
+
+void bvh_discard_scene(int scene) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  use_scene(scene);
+  g_draws.clear();
+  g_dyn_seen.clear();
+  g_audits_this_frame = 0;
+  ++g_gen;
 }
 
 BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris) {
   std::lock_guard<std::mutex> lock(g_mu);
-  *token = uint32_t(g_draws.size());
+  use_scene(d.scene);
+  *token = make_token(d.scene, uint32_t(g_draws.size()));
   g_draws.emplace_back();
   FrameDraw& fd = g_draws.back();
   fd.alpha = d.alpha;
@@ -715,13 +810,15 @@ BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint
 
 void bvh_set_record(uint32_t token, uint32_t rec) {
   std::lock_guard<std::mutex> lock(g_mu);
-  if (token < g_draws.size()) g_draws[token].rec = rec;
+  FrameDraw* fd;
+  if (token_draw(token, &fd)) fd->rec = rec;
 }
 
 void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec) {
   std::lock_guard<std::mutex> lock(g_mu);
-  if (token >= g_draws.size()) return;
-  FrameDraw& fd = g_draws[token];
+  FrameDraw* p;
+  if (!token_draw(token, &p)) return;
+  FrameDraw& fd = *p;
   fd.captured = true;
   fd.soup_off = offset;
   fd.prims = prims;
@@ -731,13 +828,29 @@ void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alph
 
 void bvh_note_skipped(uint32_t token) {
   std::lock_guard<std::mutex> lock(g_mu);
-  if (token < g_draws.size()) g_draws[token].captured = false;
+  FrameDraw* fd;
+  if (token_draw(token, &fd)) fd->captured = false;
 }
 
-// After the RT source pass, outside it, in the game's command buffer.
+// After the RT source pass, outside it, in the game's command buffer. The emissive
+// scene (cap.scene 1) is built where its consumer runs, from what the effects passes
+// captured since its last build (layer/emissive.cpp); its soup is already converted.
 bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), BvhResult* out) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_on || g_failed || !ensure_pipeline()) return false;
+  use_scene(cap.scene);
+  const bool emissive = cap.scene != 0;
+  // The emissive scene consumes its draws: draws classified from now on are the next build's.
+  struct Consume {
+    bool on;
+    ~Consume() {
+      if (!on) return;
+      g_draws.clear();
+      g_dyn_seen.clear();
+      g_audits_this_frame = 0;
+      ++g_gen;
+    }
+  } consume{emissive};
   const DeviceData* dd = g_dd;
   const uint64_t now = frame_index();
   const uint32_t stride = cap.stride, tri_bytes = 3 * stride;
@@ -828,6 +941,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   for (uint32_t i : cached) n_static += g_draws[i].instances;
   const uint32_t n_inst = n_static + uint32_t(dyn.size());
   if (!ensure_ring(n_inst, n_mats) || !ensure_tlas((std::max)(n_inst, 1u))) {
+    if (emissive) {   // the main scene keeps working
+      log("[bvh] emissive scene: allocation failed (%u instances)", n_inst);
+      return false;
+    }
     g_failed = true;
     log("[bvh] allocation failed (%u instances); the split is off, the legacy build takes over", n_inst);
     return false;
@@ -844,7 +961,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     key = fd.dyn_key;
     DynSlot& s = g_dyn[key];
     bool fresh = !s.as.as;
-    bool refit = !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.flags == dyn_flags &&
+    // The emissive scene is built in the lighting's command buffer, which the game may
+    // record and then drop (level loads): a refit of a BLAS whose build never ran loses
+    // the device, so its per-draw BLAS are always rebuilt (tens of small draws).
+    bool refit = !emissive && !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.flags == dyn_flags &&
                  s.since_build < uint32_t(rebuild_frames);
     if (!refit && (fresh || fd.prims > s.cap_prims || s.alpha != fd.cap_alpha || s.flags != dyn_flags)) {
       if (s.as.as) as_destroy(s.as);
@@ -897,8 +1017,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       in.accelerationStructureReference = m.as.addr;
       uint32_t* inf = info_out + n * 4;
       inf[0] = uint32_t(m.pool_off);
-      inf[1] = (stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u);
-      inf[2] = alpha ? 16 + fd.rec * kRecBytes : 0;
+      inf[1] = (stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u) | (emissive ? kInfoEmissive : 0u);
+      inf[2] = emissive ? fd.rec : alpha ? 16 + fd.rec * kRecBytes : 0;
       inf[3] = m.tris;
     }
     static_tris += uint64_t(m.tris) * fd.instances;
@@ -922,8 +1042,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     in.accelerationStructureReference = s.as.addr;
     uint32_t* inf = info_out + n * 4;
     inf[0] = uint32_t(fd.soup_off);
-    inf[1] = (stride & 0xffu) | (alpha ? kInfoAlpha : 0u);
-    inf[2] = alpha ? 16 + fd.rec * kRecBytes : 0;
+    inf[1] = (stride & 0xffu) | (alpha ? kInfoAlpha : 0u) | (emissive ? kInfoEmissive : 0u);
+    inf[2] = emissive ? fd.rec : alpha ? 16 + fd.rec * kRecBytes : 0;
     inf[3] = fd.prims;
     ++n;
     dyn_tris += fd.prims;
@@ -944,7 +1064,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   }
   {
     std::lock_guard<std::mutex> fl(g_fix_mu);
-    auto& v = g_fixups[cmd];
+    auto& v = g_fixups[fix_key(cmd, cap.scene)];
     if (!v.empty()) ++g_st.fix_stale;   // recorded again before it was submitted
     v = std::move(fix);
   }
@@ -952,7 +1072,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // ---- 3. GPU: convert, extract/check, compaction, builds, TLAS ----
   // XFB writes done; last frame's ray queries and builds are done with what we reuse.
   barrier(cmd, kXFB | kAS | kCS, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS | kXfer, kRW);
-  rt_convert(cmd, cap);
+  if (!cap.converted) rt_convert(cmd, cap);
   barrier(cmd, kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS, kRW);
   JobBatch batch{now, 0, {}, {}};
   // Status slots: one per job, one per new mesh's compacted size, then the batch's
@@ -1005,7 +1125,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
 
   // Compaction of meshes whose compacted size came back (copies read BLAS of earlier frames).
   {
-    uint32_t budget = uint32_t((std::max)(cfg_int("rt_mesh_compact_per_frame", 256), 0));
+    // Not in the emissive scene's command buffer (see the refit above): a dropped compaction
+    // copy would leave the shared mesh with an unbuilt BLAS.
+    uint32_t budget = emissive ? 0u : uint32_t((std::max)(cfg_int("rt_mesh_compact_per_frame", 256), 0));
     bool any = false;
     for (auto& [key, m] : g_meshes) {
       if (!budget) break;
@@ -1081,6 +1203,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tbi, &cap_inst,
                                                  &tsz);
     if (!ensure_scratch((std::max)({scratch, tsz.buildScratchSize, tsz.updateScratchSize}))) {
+      if (emissive) return false;
       g_failed = true;
       log("[bvh] scratch allocation failed (%llu MB); the split is off", (unsigned long long)(scratch >> 20));
       return false;
@@ -1121,7 +1244,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     tg.geometry.instances.data.deviceAddress = g_ring.addr + rbase;
     uint64_t sig = 1469598103934665603ull;
     for (uint32_t i = 0; i < n; ++i) sig = mix(mix(sig, inst_out[i].accelerationStructureReference), inst_out[i].flags);
-    const bool tlas_refit = g_tlas_valid && n == g_tlas_n && sig == g_tlas_sig &&
+    const bool tlas_refit = !emissive && g_tlas_valid && n == g_tlas_n && sig == g_tlas_sig &&
                             g_tlas_since < uint32_t(rebuild_frames) && cfg_int("rt_tlas_refit", 1) != 0;
     g_tlas_since = tlas_refit ? g_tlas_since + 1 : 0;
     g_tlas_sig = sig;
@@ -1156,6 +1279,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->info_bytes = VkDeviceSize((std::max)(n, 1u)) * 16;
   out->pool = g_pool.b;
   out->pool_bytes = g_pool.size;
+  out->ring = g_ring.b;
+  out->inst_off = rbase;
+  out->info_host = info_out;
   return true;
 }
 
@@ -1165,8 +1291,9 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
   std::lock_guard<std::mutex> fl(g_fix_mu);
   if (g_fixups.empty()) return;
   uint64_t applied = 0, late = 0, bad = 0;
-  for (VkCommandBuffer c : cmds) {
-    auto it = g_fixups.find(c);
+  for (VkCommandBuffer c : cmds)
+    for (int scene = 0; scene < kScenes; ++scene) {
+    auto it = g_fixups.find(fix_key(c, scene));
     if (it == g_fixups.end()) continue;
     for (const Fixup& f : it->second) {
       if (f.instance && std::memcmp(f.sample, f.src[0], 16) | std::memcmp(f.sample + 16, f.src[1], 16) |
@@ -1195,11 +1322,11 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
       applied += f.count;
     }
     g_fixups.erase(it);
-  }
+    }
   std::lock_guard<std::mutex> sl(g_st_mu);
-  g_st.fix_applied += applied;
-  g_st.fix_late += late;
-  g_st.fix_bad += bad;
+  g_fx.applied += applied;
+  g_fx.late += late;
+  g_fx.bad += bad;
 }
 
 void bvh_forget_buffer(VkBuffer b) {
@@ -1239,6 +1366,7 @@ void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size) {
 void bvh_on_present() {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
+  use_scene(0);   // the mesh cache's counters go to the main scene's statistics
   const uint64_t now = frame_index();
   // Ranges of evicted meshes and slots, once no frame in flight can use them.
   {
@@ -1321,13 +1449,16 @@ void bvh_on_present() {
       }
     g_batches.erase(g_batches.begin() + bi);
   }
-  // Per-draw BLAS not seen for a while; the mesh cache over its memory budget (LRU).
-  for (auto it = g_dyn.begin(); it != g_dyn.end();) {
-    if (now > it->second.last_used + 120) {
-      as_destroy(it->second.as);
-      it = g_dyn.erase(it);
-    } else {
-      ++it;
+  // Per-draw BLAS not seen for a while (both scenes); the mesh cache over its memory budget (LRU).
+  for (int scene : {2, 1, 0}) {
+    use_scene(scene);
+    for (auto it = g_dyn.begin(); it != g_dyn.end();) {
+      if (now > it->second.last_used + 120) {
+        as_destroy(it->second.as);
+        it = g_dyn.erase(it);
+      } else {
+        ++it;
+      }
     }
   }
   const VkDeviceSize budget = VkDeviceSize((std::max)(cfg_int("rt_mesh_budget_mb", 2048), 64)) << 20;
@@ -1351,12 +1482,30 @@ void bvh_on_present() {
     it = now > it->second.until + 72000 ? g_rejected.erase(it) : std::next(it);
 
   int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  // The emissive scene's builds (D-EM): its own line.
+  // (both parity scenes: their statistics are added up)
+  Stats e1 = g_saved[1].st, &e2 = g_saved[2].st;
+  for (uint64_t* a = &e1.builds, *b = &e2.builds; a <= &e1.not_inst_count; ++a, ++b) *a += *b;
+  if (e1.builds >= uint64_t(every)) {
+    const Stats& e = e1;
+    const double nb = double(e.builds);
+    log("[bvh] emissive scene, last %llu builds, per build: %.1f cached draws -> %.1f static instances (%.0f triangles), "
+        "%.1f captured draws (%.0f triangles; per-draw BLAS: %.1f refits, %.1f rebuilds, %.2f new), %.2f new meshes; TLAS "
+        "refit %.0f%%; not instanceable per build: pattern %.1f, stream %.1f, count %.1f",
+        (unsigned long long)e.builds, e.cached_draws / nb, e.static_inst / nb, e.static_tris / nb, e.dyn_draws / nb,
+        e.dyn_tris / nb, e.dyn_refit / nb, e.dyn_rebuild / nb, e.dyn_new / nb, e.new_meshes / nb, 100.0 * e.tlas_refit / nb,
+        e.not_inst_pattern / nb, e.not_inst_stream / nb, e.not_inst_count / nb);
+    g_saved[1].st = Stats{};
+    g_saved[2].st = Stats{};
+  }
   if (g_st.builds < uint64_t(every)) return;
-  Stats s;
+  Stats s = g_st;
+  g_st = Stats{};
+  FixStats fx;
   {
     std::lock_guard<std::mutex> sl(g_st_mu);
-    s = g_st;
-    g_st = Stats{};
+    fx = g_fx;
+    g_fx = FixStats{};
   }
   const double nb = double(s.builds);
   uint64_t mesh_tris = 0, ready = 0;
@@ -1384,7 +1533,7 @@ void bvh_on_present() {
       double(s.compact_saved) / 1048576.0);
   log("[bvh] instance matrices read at submit: %llu, non-finite/singular %llu; draws whose instance data changed "
       "between record and submit %llu; recorded but never submitted %llu",
-      (unsigned long long)s.fix_applied, (unsigned long long)s.fix_bad, (unsigned long long)s.fix_late,
+      (unsigned long long)fx.applied, (unsigned long long)fx.bad, (unsigned long long)fx.late,
       (unsigned long long)s.fix_stale);
 }
 
