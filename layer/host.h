@@ -27,6 +27,12 @@ namespace bg3 {
 void log(const char* fmt, ...);
 const std::string& root_dir();        // repository root (parent of bin/)
 const std::string& bin_dir();
+// %BG3RTX_RUN_TAG% (scripts/auto-run.ps1 -Tag): lets two games run from one checkout.
+// Empty when unset; otherwise the log, the auto.done marker, trace.request and the
+// capture folders carry it (bg3rtx.<tag>.log, captures/<stamp>-<tag>, ...).
+const std::string& run_tag();
+std::string tagged(const std::string& base, const std::string& ext);   // base + ".<tag>" + ext
+std::string capture_stamp();          // now_stamp(), plus "-<tag>" when tagged
 std::string now_stamp();              // 20261025-224512
 uint64_t file_mtime(const std::string& path);   // 0 if missing
 bool write_file(const std::string& path, const void* data, size_t size);
@@ -197,6 +203,10 @@ struct CmdState {
   VkBuffer ib = VK_NULL_HANDLE;
   VkDeviceSize ib_offset = 0;
   VkIndexType ib_type = VK_INDEX_TYPE_UINT16;
+  // Game images, views and buffers this recording's work (ours or the game's
+  // passes our hooks read) references; merged into the lifetime registry at
+  // submit (tracker.cpp, life_*).
+  std::vector<uint64_t> refs;
 };
 // The arguments of a draw (geo_pre_draw).
 struct DrawArgs {
@@ -208,6 +218,26 @@ struct DrawArgs {
 };
 CmdState* cmd_state(VkCommandBuffer cmd, bool create = false);
 void cmd_forget(VkCommandBuffer cmd);
+
+// ---- lifetime of game objects our GPU work references (tracker.cpp) ----
+// Every game image, view or buffer that our recorded work reads or writes is
+// noted on the recording (query_binding results, pass attachments, explicit
+// notes). At submit the notes become "submitted in frame F on queue Q"; every
+// present appends a fence of ours to the present queue. When the game destroys
+// a noted object, the destroy hook first waits for the fence that covers its
+// last submission, so no pending work of ours (or of the game's own push
+// descriptors in the same command buffer) can touch freed memory.
+void life_note(CmdState* s, uint64_t handle);
+void life_note(VkCommandBuffer cmd, uint64_t handle);
+void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
+void life_on_present(DeviceData* dd, VkQueue queue);   // after the present went down, queue still owned
+// Around the game's vkDeviceWaitIdle: submissions before begin are complete after it.
+uint64_t life_idle_begin();
+void life_idle_end(uint64_t seq_before);
+// In the destroy hooks, before anything is released: waits (bounded) for the
+// last submission that referenced `handle`. `what` names it in the log.
+void life_before_destroy(uint64_t handle, const char* what);
+void life_device_destroyed(DeviceData* dd);
 
 // ---- tracer (tracer.cpp) ----
 bool trace_recording();
@@ -262,6 +292,7 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s);
 void sl_note_barrier(CmdState* s, VkImage image, VkImageLayout layout);
 void sl_note_submit(const std::vector<VkCommandBuffer>& cmds);
 void sl_note_image_destroyed(VkImage image);
+void sl_note_view_destroyed(VkImageView view);   // a tag's view: DLSS-G may still read it
 bool sl_watched(VkImage image);
 
 // ---- hot reload + shader compiler (hotreload.cpp, shaders.cpp) ----
@@ -492,7 +523,9 @@ bool em_scene(VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveIn
 struct AlphaFs {
   uint8_t kind;              // 1 virtual texture, 2 plain texture
   int8_t uv;                 // FS input location of the texture coordinate
-  float cut;                 // discard below this alpha
+  float cut;                 // discard below this alpha (the strictest constant test on it)
+  float cut_first;           // the shader's first test (an early-out where lower; rt_alpha_cut=0)
+  uint64_t hash;             // the fragment shader
   uint8_t ubo_set, ubo_bind; // material UBO
   bool has_ubo, has_scale;
   uint32_t p0, idx, scale;   // UBO offsets: uv transform vec4[2], tile-set index (vt); uv scale vec2 (tex)
@@ -506,8 +539,9 @@ struct AlphaFs {
 struct AlphaRec {
   uint32_t first_tri, tris, kind, tex;   // triangles in the alpha geometry; kind; texture slot
   uint32_t cache, channel;               // tile cache slot; column / component
-  float cut, pad0;
-  float scale[2], pad1[2];
+  float cut, cut_first;                  // effective cut-off; the first test's (rt_alpha_cut=0)
+  float scale[2];
+  uint32_t fs_lo, fs_hi;                 // fragment shader hash (diagnostics)
   float p0[4], p1[4];                    // vt: uv transform
   float t[32];                           // vt: the SSBO entry, two row-major mat4
 };

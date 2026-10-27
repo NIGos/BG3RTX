@@ -8,7 +8,9 @@
 namespace {
 
 constexpr uint32_t kRing = 8;   // frames in flight are far fewer
-constexpr VkDeviceSize kHeader = 16;
+// Header: uint count, float3 camera (written by the match pass), uint generation of the records,
+// uint force (the slot image is new: recompute every slot). rt_local_shadows_match.hlsl kKnownHeader.
+constexpr VkDeviceSize kHeader = 32;
 constexpr VkDeviceSize kSlotBytes = 65536;   // header + kLslMaxKnown records, 64 KiB aligned
 static_assert(kHeader + kLslMaxKnown * kLslRecord <= kSlotBytes, "upload slot too small");
 
@@ -23,6 +25,7 @@ bool g_have_cam = false;
 float g_cam[3] = {};
 std::vector<uint8_t> g_records;   // the current list, kLslRecord bytes each
 uint32_t g_count = 0, g_se_seq = ~0u, g_total = 0;
+uint32_t g_gen = 1;   // changes whenever the uploaded records do (the match pass keeps unchanged slots)
 uint32_t g_n_se = 0, g_n_db = 0, g_n_owner[5] = {};
 
 const Bg3AssetDbApi* api() {
@@ -35,7 +38,7 @@ bool ensure() {
   if (g_failed) return false;
   void* m = nullptr;
   if (!host->alloc_host_buffer || !host->alloc_host_buffer(kSlotBytes * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &g_buf, &g_mem, &m) ||
-      !host->alloc_image(kLslSlots, 1, VK_FORMAT_R32G32B32A32_UINT, VK_IMAGE_USAGE_STORAGE_BIT, &g_slots)) {
+      !host->alloc_image(kLslSlots, 3, VK_FORMAT_R32G32B32A32_UINT, VK_IMAGE_USAGE_STORAGE_BIT, &g_slots)) {
     host->log("ls: per-light data allocation failed; every light uses ls_source_radius");
     g_failed = true;
     lsl_release();
@@ -63,6 +66,8 @@ void refresh(const Bg3AssetDbApi* a) {
   } else if (info.active) {
     memcpy(center, info.host, sizeof center);
   } else {
+    if (!g_records.empty()) ++g_gen;
+    g_records.clear();
     g_count = 0;
     return;
   }
@@ -70,6 +75,8 @@ void refresh(const Bg3AssetDbApi* a) {
   static std::vector<Bg3RtLight> L(kLslMaxKnown);
   g_total = a->runtime_lights(center, radius, L.data(), kLslMaxKnown);
   g_count = g_total < kLslMaxKnown ? g_total : kLslMaxKnown;
+  std::vector<uint8_t> prev;
+  prev.swap(g_records);
   g_records.assign(size_t(g_count) * kLslRecord, 0);
   g_n_se = g_n_db = 0;
   memset(g_n_owner, 0, sizeof g_n_owner);
@@ -90,6 +97,7 @@ void refresh(const Bg3AssetDbApi* a) {
     g_n_db += (l.flags & BG3_RTL_FROM_DB) ? 1u : 0u;
     ++g_n_owner[l.owner < 5 ? l.owner : 0];
   }
+  if (g_records != prev) ++g_gen;
   if (g_count && (!g_logged || g_calls % 1200 < 8)) {
     g_logged = true;
     host->log("ls: per-light data: %u runtime lights within %.0f m of (%.1f, %.1f, %.1f) [%s]: bridge %u, database %u; "
@@ -124,6 +132,8 @@ bool lsl_begin(LslFrame* f) {
   uint32_t n = g_count;
   memcpy(head, &n, 4);
   memcpy(slot, head, sizeof head);
+  const uint32_t tail[4] = {g_gen, g_slots_init ? 0u : 1u, 0u, 0u};
+  memcpy(slot + 16, tail, sizeof tail);
   if (g_count) memcpy(slot + kHeader, g_records.data(), g_records.size());
   f->known = {g_buf, VkDeviceSize(g_ring) * kSlotBytes, kSlotBytes};
   f->slots_image = g_slots.image;

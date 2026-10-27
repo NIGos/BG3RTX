@@ -1,5 +1,9 @@
 import argparse
+import os
+import queue
+import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -23,6 +27,10 @@ def main():
     r.add_argument("--keep-raw", action="store_true", help="do not prune the raw captures")
     r.add_argument("--capture-only", action="store_true")
     r.add_argument("--out", help="output folder (default captures/qa/<stamp>)")
+    r.add_argument("--parallel", type=int, default=1, choices=(1, 2),
+                   help="scenes captured at once; 2 = shared background games (experimental)")
+    r.add_argument("--exclusive", action="store_true",
+                   help="one scene at a time, alone on the GPU (the default; overrides --parallel)")
     a = sub.add_parser("analyze", help="analyse existing scene folders (with raw/) again")
     a.add_argument("dirs", nargs="+")
     a.add_argument("--keep-raw", action="store_true")
@@ -32,16 +40,48 @@ def main():
         out = Path(args.out) if args.out else capture.CAPS / "qa" / time.strftime("%Y%m%d-%H%M%S")
         all_scenes = capture.scenes()
         ids = [s.strip().upper() for s in args.scenes.split(",") if s.strip()]
-        dirs = []
-        t0 = time.time()
         for sid in ids:
             if sid not in all_scenes:
                 raise SystemExit(f"unknown scene {sid}; known: {', '.join(all_scenes)}")
-            d = out / sid
-            capture.run_scene(sid, all_scenes[sid], d, full_res=args.full_res, temporal=max(2, args.temporal),
-                              reference=args.reference, interval=args.interval, raw=args.raw)
-            dirs.append(d)
-        print(f"captures done in {time.time() - t0:.0f} s")
+        dirs = [out / sid for sid in ids]
+        t0 = time.time()
+        lanes = 1 if args.exclusive else args.parallel
+        # One lane per concurrent game (auto-run -Tag a / b); each takes the next scene.
+        todo = queue.Queue()
+        for sid in ids:
+            todo.put(sid)
+
+        def lane(tag):
+            while True:
+                try:
+                    sid = todo.get_nowait()
+                except queue.Empty:
+                    return
+                capture.run_scene(sid, all_scenes[sid], out / sid, full_res=args.full_res,
+                                  temporal=max(2, args.temporal), reference=args.reference,
+                                  interval=args.interval, raw=args.raw, tag=tag, exclusive=args.exclusive,
+                                  shared=lanes > 1)
+
+        if lanes > 1:
+            # A holder keeps the exclusive lock for this whole process (scripts/gamelock.ps1),
+            # so older auto-run.ps1 copies, which close every bg3.exe, wait for it.
+            flag = Path(os.environ["TEMP"]) / f"bg3rtx_session_{os.getpid()}.ready"
+            subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                              "-File", str(capture.ROOT / "scripts" / "gamelock.ps1"), "-Holder",
+                              "-WhilePid", str(os.getpid())], creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            print("waiting for the exclusive lock for this session...", flush=True)
+            while not flag.exists():
+                time.sleep(0.5)
+            flag.unlink(missing_ok=True)
+        threads = [threading.Thread(target=lane, args=(t,)) for t in ("a", "b")[:lanes]]
+        for i, th in enumerate(threads):
+            th.start()
+            if i + 1 < len(threads):
+                time.sleep(3)
+        for th in threads:
+            th.join()
+        print(f"captures done in {time.time() - t0:.0f} s, {lanes} at a time"
+              f"{' (shared runs: run_s are not exclusive timings)' if lanes > 1 else ''}")
         if args.capture_only:
             return
         from . import analyze

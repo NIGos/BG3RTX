@@ -259,6 +259,14 @@ only by overriding the projection jitter, which we do not control. Diagnostic on
 
 ### Alpha handling (Track D phase 3)
 
+**Q16 (P1, done 2026-10-26). Grass opaque in the TLAS; loose cut-offs.** Black
+polygons under grass in GI and reflections, card-shaped grass shadows: the grass
+family's alpha test was not recognised (opaque BLAS geometry), and 76 shaders
+took their 0.001 early-out as the cut-off. Fixed in `alpha_table.py`; the
+per-hit test now blends to a hashed threshold where the read is blurred
+(unbiased coverage under RR) and lets unreadable cutouts through for visibility
+rays only. TRACK_D_RT 7.1b, `img/alpha_campsite_*`.
+
 **Q14 (P3). Dithered LOD cross-fades and unrecognised cutouts.**
 - The 0.73% "opaque in front" is screen-door dithered geometry. During a LOD
   cross-fade both LODs are in the BLAS, solid, which can self-shadow (acne between
@@ -270,6 +278,20 @@ only by overriding the projection jitter, which we do not control. Diagnostic on
     instance's fade value captured per draw), or keep only the incoming LOD;
   - add opacity micromaps later, for cost.
 - **Expected gain:** small. Removes rare acne during LOD transitions.
+
+**Open: the alpha set's game texture views, one frame late (robustness).**
+- The core's RT passes accept a scene up to one frame old (`built + 1 >= now`,
+  `core/gi.cpp`), so they can bind the previous capture's alpha set.
+- That set holds the game's texture views from that capture
+  (`alphatest.cpp`, `slot_of`). If the game destroys one of those textures in
+  between, our dispatch binds, and indexes, a destroyed view.
+- The destroy-hook fence wait (TRACK_A_RR "Lifetime of the game's images") does
+  not cover this case. It protects work already submitted, not work recorded
+  after the destroy.
+- BG3 defers its destroys by about 4 frames after last use, so this has not
+  been observed.
+- **Fix (alpha owner):** drop or replace with the dummy the views of destroyed
+  images in every alpha set, or refuse an alpha set older than this frame.
 
 ### Coverage
 
@@ -415,6 +437,11 @@ reproduce them.
 **R7 Cost budget.**
 - RTX 5090, 2560x1067 render resolution, GPU timestamps, medians of 300 frames,
   static and moving camera, logged by the core.
+- Measured only in exclusive runs, the default of `auto-run.ps1`, `scene-sweep.ps1`
+  and `python -m scripts.qa run`: no other game shares the GPU. Shared runs
+  (`-Shared`, `-Parallel 2`, `--parallel 2`: two background games at once) are for
+  images only. Their captures carry `run.json` with `"exclusive": false`, and their
+  timings are not budget evidence: RR cost 3.6-5.3 ms there against 2.6 ms alone.
 - Budgets, excluding RR's 2.6 ms and the scene build:
 
   | Effect | Budget |
@@ -469,9 +496,11 @@ reproduce them.
 | RT audit 3. Material classes | **Done.** RT2.a & 7 and RT3 decoded as the game does. D-LS evaluates each light with the class's exact term, and the GI composite uses the class's diffuse colour (no albedo² on skin, none on unlit). `mat_classes`. | AUDIT_RT §4 #3: the recompute never exceeds the game on those px; `img/rtfix3_materials_*` |
 | RT audit 4 / Q3. AO on direct light | **Done.** `ao_direct=1`: no AO factor on ray-traced direct light (D-LS lights; the sun, recomputed exactly). The RT visibility stays on the ambient only, so no contact is darkened twice and direct light carries no 1-spp AO noise. `ao_direct=2`: the game's SSAO factor instead. | AUDIT_RT §4 #4: 1.9% of the locally lit luminance given back in the foundry; sun recompute = game − in-scatter at the docks |
 | D-LS per-light data (TRACK_D 9.8, SE_BRIDGE.md) | **Done.** Each light of the game's array is joined (GPU, by position and radius) to the runtime lights of the Script Extender bridge and the asset database. Its source radius comes from the fixture class instead of 0.05 for all. Character-owned lights (the darkvision light; the game sets `Shadow = false`) are left unshadowed by default (`ls_owners=15`): traced, their own carrier darkened the character they exist to light. Without the bridge, the database covers the placed lights; without both, nothing changes. R5: 0 non-finite values, `-Validation` IDs equal the baseline, `ls_debug=9` owner view, `ls_stats` coverage. R7: +0.04 ms. | `img/sebridge_charlight_crop.png`, `img/sebridge_owner_view.png`, `img/sebridge_radius_crop.png`; foundry coverage 65% → 100% of listed lights |
+| D-LS cost (TRACK_D 9.9) | **Done, target not fully met.** The pass had grown from 0.345 ms to 0.59-0.77 ms in the foundry. The cause was 252 registers (8 warps/SM): the per-class BRDF, the ray queries and the debug state were live in one loop. The default settings now run a three-phase variant (light tests, rays, exact terms in the old order) at 96 registers. The sun is not recomputed where it cannot matter. The join keeps unchanged slots. Debug, stats and RIS stay in an `LS_FULL` variant. R3: bit-identical, proven per pixel by `ls_check=1` against the frozen old pass in the same frame (0 differing pixels in the foundry, Grymforge and Water Queens House). R7 (shared GPU, same-run A/B): foundry 0.39-0.42 ms vs 0.57-0.65 (−31 to −37%), Water Queens House 0.114 vs 0.169. **Grymforge 0.71-0.73 vs 0.97: over the 0.5 ms budget** (many torch lights). The 0.35 ms goal was not reached: the rest is rays (≈0.25 ms) and G-buffer traffic. R5: `-Validation` shows the baseline IDs plus `vkCmdDispatch-format-07753`: a pre-existing placeholder format on binding 46 when the join is off, now fixed, but the fix is not re-confirmed by a validation run. `-Move`: 0 non-finite values. | TRACK_D 9.9; `tools/pipeline_stats.py`; `ls_impl`, `ls_check` |
 | RT audit 5. Alpha region / textures | **Done.** Sized from demand, 4096 textures, overflow logged loudly. | AUDIT_RT §4 #5 |
 | RT audit 6 / Q10 bias. Ray origins | **Done.** Exact TLAS surface + Wächter & Binder offset along the geometric normal, in every RT pass. `rt_origin`. Q10 is now fully done (soft sun: fix 5; bias: this). | AUDIT_RT §4 #6; `img/rtfix6_origin_*` |
 | RT audit 10. Dropped draws | **Done.** Counted and logged; strips and fans captured. `rt_strips`. | 0 dropped in the foundry, the docks and the menu scene |
-| RR before post (AUDIT_SOTA #1) | RR denoises the pre-DoF, pre-grade scene colour; the game's post chain (DoF weights, exposure, bloom, grade UBO + LUT) is replayed at output resolution. R3: bit-exact replication at render resolution (100.00% identical texels, foundry and Goblin Camp; a DoF frame not re-checked on the final build). R5: non-finite 0, fallback per frame on unmodelled post effects, `-Move` clean, `-Validation` one new ID at load transitions (the game destroys images of a pending frame; TRACK_A). R6: foundry A/B, difference at the frame-to-frame floor; motion/dark-scene metric not done. R7: about +0.2 ms. Effective RR (SETTINGS_DESIGN 7.3.1): the core's RR modes follow `rr_active()`, not the key. | `img/rrpost_foundry_*.png` |
+| Q16. Grass / cutouts at secondary hits | **Done.** Grass family recognised (24 shaders, 108 → 412 alpha-tested draws in Campsite), effective cut-offs (76 shaders), stochastic alpha where the read is blurred, unknown cutouts clear for visibility rays. `rt_alpha_cut`, `rt_alpha_stochastic`, `rt_alpha_unknown` (live). R7: GI + RT passes about +0.1-0.4 ms in Campsite (noise ~0.2). | `img/alpha_campsite_*`; TRACK_D_RT 7.1b |
+| RR before post (AUDIT_SOTA #1) | RR denoises the pre-DoF, pre-grade scene colour; the game's post chain (DoF weights, exposure, bloom, grade UBO + LUT) is replayed at output resolution. R3: bit-exact replication at render resolution (100.00% identical texels, foundry and Goblin Camp; a DoF frame not re-checked on the final build). R5: non-finite 0, fallback per frame on unmodelled post effects, `-Move` clean, `-Validation` no new IDs (the earlier `vkDestroyImage-01000` at load transitions was stale descriptors in our set ring, fixed; a fence-backed wait in the destroy hooks guards real in-flight use: none at level loads, 3 waits of 0.1 to 6.8 ms in 5 `-Move` runs, 0 non-finite in the traced motion frame; TRACK_A "Lifetime of the game's images"). R6: foundry A/B, difference at the frame-to-frame floor; motion/dark-scene metric not done. R7: about +0.2 ms. Effective RR (SETTINGS_DESIGN 7.3.1): the core's RR modes follow `rr_active()`, not the key. | `img/rrpost_foundry_*.png` |
 | D-RF against the rules (TRACK_D 10) | R1: bounded GGX VNDF, pcg3d white noise on its own stream, mirror below a = 0.1. R2: RR only, no history or filter of ours; without RR deterministic mirror rays only (a < 0.3). R3: exact delta on the game's probe term (D-EN4, mean error 0.58%), TLAS miss keeps the probe, the game's DFG LUT as env BRDF, its SO kept for the probe and not re-applied to traced hits. R5: debug views 1-6, `rf_stats` tier fractions, non-finite guards, identical `-Validation` IDs, `-Move`, `fg=2`. R6: foundry A/B + crops; **reflective-scene A/B and stability metric not done**. R7: 0.33 ms. | `img/rf_foundry_*.png`, `img/rf_docks_*.png` |
 | AUDIT_SOTA 2. Static/dynamic BVH split (TRACK_D 11) | **Done.** Class-A meshes get one object-space BLAS each, built once from their first XFB capture (the inverse instance matrix), verified against another instance or a later frame, compacted and cached. The TLAS takes every instance with the game's matrices, read at submit. The rest is captured with a BLAS per draw, refit while its triangle count holds. `rt_bvh_split` (live; 0 = the old soup). R3: the primary-ray check and triangle count match the soup in the same view. R5: audits recapture cached draws and evict on mismatch; non-finite matrices are masked; `-Move` and `-Validation` runs (TRACK_D 11.4). R7: pan 1.37 → 0.45 ms median, 2.91 → 0.83 ms p99. | Foundry A/B: match 98.98% / 98.98%, 2.59M / 2.595M triangles; foliage scenes and the main menu not compared |

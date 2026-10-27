@@ -106,6 +106,10 @@ add_executable(xfb_patch_test tools/xfb_patch_test.cpp)
 add_executable(geo_blas_bench tools/geo_blas_bench.cpp)
 target_include_directories(geo_blas_bench PRIVATE ${VULKAN_SDK}/Include)
 target_link_directories(geo_blas_bench PRIVATE ${VULKAN_SDK}/Lib)
+# Driver statistics (registers) of a compute shader on its own device: tools/pipeline_stats.py.
+add_executable(pipeline_stats tools/pipeline_stats.cpp)
+target_include_directories(pipeline_stats PRIVATE ${VULKAN_SDK}/Include)
+target_link_directories(pipeline_stats PRIVATE ${VULKAN_SDK}/Lib)
 
 # Player settings and launcher: bin/BG3RTX.exe (tools/launcher, docs/USER_SETTINGS.md).
 add_executable(bg3rtx_launcher WIN32 tools/launcher/main.cpp tools/launcher/launch.cpp tools/launcher/gpu.cpp)

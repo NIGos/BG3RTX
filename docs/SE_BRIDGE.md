@@ -24,6 +24,18 @@ Code:
 Without the Script Extender, without the mod, or with `se_bridge=0`, everything works as
 before. The database alone then supplies the placed lights.
 
+## Two games at once
+
+Shared test runs (`scripts/auto-run.ps1`, docs/TEST_SCENES.md "Concurrent runs") can
+have two games running, and both would read and write the same `bg3rtx\` files. Each
+shared run therefore adds `bg3rtxse=slot<N>` to its game's command line. The layer reads
+it from its own process (`GetCommandLineW`, `se_token()`), the Lua from
+`Ext.Utils.GetCommandLineParams()`, and both use `bg3rtx\slot<N>\` (heartbeat
+`active.txt`, `lights.txt`, `world.txt`, error files). Without the argument (exclusive
+runs, the player's launcher) the folder is `bg3rtx\` as before, and an older Lua that
+does not know the argument simply sees no heartbeat there and stays idle. The slot
+number is unique among running games because each holds its slot's lock.
+
 ## Install
 
 ```

@@ -140,6 +140,11 @@ VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_l
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
 Pipe g_ls_match;    // D-LS per-light data: joins the runtime lights to the light array (core/ls_lights.h)
+// D-LS variants (docs/TRACK_D_RT.md 9.9): g_ls serves the default settings only, g_ls_full every
+// mode (ls_samples, ls_shadowed, ls_debug, ls_stats). A/B: ls_impl=0 runs the frozen pre-optimisation
+// pass (shaders/gi/ls_ref, tools/lsref); ls_check=1 runs it and the live variant on the same pixels
+// and counts those whose outputs differ (stats 80-83).
+Pipe g_ls_full, g_ls_ref, g_ls_check, g_ls_full_check;
 LslFrame g_lsl{};   // this frame's upload (bindings 45, 46)
 bool g_lsl_ok = false;
 bool g_ls_logged = false, g_ls_missing_logged = false;
@@ -152,6 +157,7 @@ bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
 Bg3Image g_origin{}, g_aux{};   // extras 40 and 44 (full resolution, RGBA16F)
+Bg3Image g_ls_nodata{};          // extra 46 when there is no per-light data: 1x1 RGBA32UI (the shaders' type)
 bool g_x_logged = false;
 uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0, g_shift = 1;
 
@@ -221,7 +227,7 @@ void timing_collect() {
 }
 
 Bg3Image* const all_images[] = {&g_raw, &g_hist[0], &g_hist[1], &g_raw_depth, &g_hist_depth[0], &g_hist_depth[1],
-                                &g_prev_radiance, &g_rt_vis, &g_rf_hit, &g_origin, &g_aux};
+                                &g_prev_radiance, &g_rt_vis, &g_rf_hit, &g_origin, &g_aux, &g_ls_nodata};
 
 // Track D: GPU time of the ray-traced shadow pass, 2 timestamps per frame.
 VkQueryPool g_rt_queries = VK_NULL_HANDLE;
@@ -382,6 +388,7 @@ bool ensure_images(uint32_t w, uint32_t h) {
             host->alloc_image(w, h, VK_FORMAT_R8G8B8A8_UNORM, use, &g_rt_vis) &&
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_origin) &&
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_aux) &&
+            host->alloc_image(1, 1, VK_FORMAT_R32G32B32A32_UINT, use, &g_ls_nodata) &&
             host->alloc_image(w, h, VK_FORMAT_R16_SFLOAT, use | VK_IMAGE_USAGE_SAMPLED_BIT, &g_rf_hit);
   if (!ok) {
     host->log("gi: image allocation failed");
@@ -612,7 +619,8 @@ void bind_extras(Bound& b, const Snapshot& s) {
       // D-LS per-light data; without it (allocation failed) any valid descriptor of the
       // type: the passes then never read them (ls_flags bit 0 clear, no match pass).
       case 45: b.xbuf[i] = g_lsl_ok ? g_lsl.known : VkDescriptorBufferInfo{s.l_lights.buffer, s.l_lights.offset, s.l_lights.range}; break;
-      case 46: b.ximg[i] = {VK_NULL_HANDLE, g_lsl_ok ? g_lsl.slots_view : g_aux.view, G}; break;
+      // (a UINT view either way: VUID-vkCmdDispatch-format-07753 checks the static use)
+      case 46: b.ximg[i] = {VK_NULL_HANDLE, g_lsl_ok ? g_lsl.slots_view : g_ls_nodata.view, G}; break;
     }
     const bool buf = kExtras[i].type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || kExtras[i].type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     b.xw[i].pImageInfo = buf ? nullptr : &b.ximg[i];
@@ -641,8 +649,10 @@ uint32_t gather_writes(const Bound& b, uint32_t count, VkWriteDescriptorSet* out
 // Each counter has 64 bins (spread atomics); the slot holds 16 x 64 uints.
 constexpr uint32_t kStatsRing = 8;
 // [16..38] D-LS (rt_local_shadows.hlsl), [39..47] materials (rt_shadow.hlsl), [48..63] D-RF
-// (rt_reflections.hlsl), [64..75] RT audit fixes (D-LS per class, rt_origin, ao_direct).
-constexpr uint32_t kStatsCounters = 80;
+// (rt_reflections.hlsl), [64..75] RT audit fixes (D-LS per class, rt_origin, ao_direct),
+// [80..111] alpha-tested candidates of visibility / shadow rays (rt_common.hlsli alpha_stat),
+// [112..117] D-LS bit-exactness checks (ls_check=1): the pass, the join's kept slots.
+constexpr uint32_t kStatsCounters = 118;
 constexpr VkDeviceSize kStatsSlot = kStatsCounters * 64 * 4;
 VkBuffer g_stats_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
@@ -719,6 +729,28 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
                 g_stats_n, ev / px, 100.0 * t[76] / ev, 100.0 * t[77] / ev, 100.0 * (t[76] - t[77]) / ev,
                 100.0 * t[79] / ev, host->cfg_int("ls_owners", 0x0F), 100.0 * t[78] / ev);
     }
+  }
+  if (t[112]) {   // ls_check=1: the reference D-LS (shaders/gi/ls_ref) against the live one, same frame and inputs
+    host->log("ls check (%u frames): %llu px written by the reference; outputs differ in any bit on %llu px, by more "
+              "than 1e-5 relative on %llu, written by only one of them on %llu",
+              g_stats_n, (unsigned long long)t[112], (unsigned long long)t[113], (unsigned long long)t[114],
+              (unsigned long long)t[115]);
+    host->log("ls check (%u frames): join: %llu slot results kept from the previous frame, %llu of them differ from "
+              "a new search",
+              g_stats_n, (unsigned long long)t[116], (unsigned long long)t[117]);
+  }
+  for (int c = 0; c < 2; ++c) {   // alpha-tested candidates (rt_common.hlsli alpha_stat)
+    const uint64_t* a = t + 80 + 16 * c;
+    if (!a[0]) continue;
+    double n = double(a[0]), e = double(a[6] + a[7] + a[8] + a[9] ? a[6] + a[7] + a[8] + a[9] : 1);
+    host->log("rt stats (%u frames): alpha candidates of %s rays %.3fM/frame; solid unevaluated: no record %.3f%%, no "
+              "UV %.3f%%, prim out of range %.3f%%, non-finite %.3f%%, vt tile set not resident %.3f%%; evaluated: vt "
+              "solid %.2f%% clear %.2f%%, tex solid %.2f%% clear %.2f%%; first cut-off < 0.1: %.2f%% of evaluated (solid "
+              "%.2f%% of those); blur level >= 2 %.2f%%, >= 4 %.2f%%; stochastic %.2f%%; vt page from a coarser level %.2f%%",
+              g_stats_n, c ? "shadow" : "visibility", n / g_stats_n * 1e-6, 100.0 * a[1] / n, 100.0 * a[2] / n,
+              100.0 * a[3] / n, 100.0 * a[4] / n, 100.0 * a[5] / n, 100.0 * a[6] / e, 100.0 * a[7] / e,
+              100.0 * a[8] / e, 100.0 * a[9] / e, 100.0 * a[10] / e, a[10] ? 100.0 * a[11] / double(a[10]) : 0.0,
+              100.0 * a[12] / e, 100.0 * a[13] / e, 100.0 * a[14] / e, 100.0 * a[15] / e);
   }
   if (t[71]) {   // rt_origin.hlsl (AUDIT_RT fix 6)
     host->log("rt stats (%u frames): ray origins: TLAS surface found under %.2f%% of px (else depth normal); "
@@ -1061,23 +1093,23 @@ void rf_timing_collect() {
   v.clear();
 }
 
-// D-LS pass alone, 2 timestamps per frame, medians over 300 frames.
+// D-LS: 3 timestamps per frame (start, after the join pass, end), medians over 300 frames.
 VkQueryPool g_ls_queries = VK_NULL_HANDLE;
 uint32_t g_ls_slot = 0;
 bool g_ls_written[kRing] = {};
-std::vector<float> g_ls_ms;
+std::vector<float> g_ls_ms, g_ls_join_ms;
 
 void ls_timestamp(VkCommandBuffer cmd, uint32_t index) {
   if (!g_ls_queries) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
-    qi.queryCount = kRing * 2;
+    qi.queryCount = kRing * 3;
     if (host->vk->CreateQueryPool(host->device, &qi, nullptr, &g_ls_queries) != VK_SUCCESS) return;
   }
-  uint32_t q = g_ls_slot * 2 + index;
+  uint32_t q = g_ls_slot * 3 + index;
   host->vk->CmdResetQueryPool(cmd, g_ls_queries, q, 1);
   host->vk->CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_ls_queries, q);
-  if (index == 1) {
+  if (index == 2) {
     g_ls_written[g_ls_slot] = true;
     g_ls_slot = (g_ls_slot + 1) % kRing;
   }
@@ -1087,22 +1119,29 @@ void ls_timing_collect() {
   if (!g_ls_queries) return;
   uint32_t old = (g_ls_slot + 1) % kRing;
   if (!g_ls_written[old]) return;
-  uint64_t t[2];
-  if (host->vk->GetQueryPoolResults(host->device, g_ls_queries, old * 2, 2, sizeof t, t, sizeof(uint64_t),
+  uint64_t t[3];
+  if (host->vk->GetQueryPoolResults(host->device, g_ls_queries, old * 3, 3, sizeof t, t, sizeof(uint64_t),
                                     VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
     return;
   g_ls_written[old] = false;
-  double ms = double(t[1] - t[0]) * g_ns_per_tick * 1e-6;
-  if (ms >= 0 && ms < 1000) g_ls_ms.push_back(float(ms));
+  double ms = double(t[2] - t[0]) * g_ns_per_tick * 1e-6, join = double(t[1] - t[0]) * g_ns_per_tick * 1e-6;
+  if (ms >= 0 && ms < 1000 && join >= 0 && join <= ms) {
+    g_ls_ms.push_back(float(ms));
+    g_ls_join_ms.push_back(float(join));
+  }
   if (g_ls_ms.size() < 300) return;
   auto& v = g_ls_ms;
+  auto& j = g_ls_join_ms;
   std::sort(v.begin(), v.end());
-  host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames; samples %d, soft %d, "
-            "shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X)",
-            v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], v.size(), host->cfg_int("ls_samples", 0),
-            host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 0), host->cfg_int("ls_debug", 0),
-            host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off", host->cfg_int("ls_owners", 0x0F));
+  std::sort(j.begin(), j.end());
+  host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
+            "samples %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d)",
+            v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
+            host->cfg_int("ls_samples", 0), host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 0),
+            host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
+            host->cfg_int("ls_owners", 0x0F), host->cfg_int("ls_impl", 1));
   v.clear();
+  j.clear();
 }
 
 // The frame's TLAS if ray-traced shadows or AO are on and the host built one
@@ -1205,7 +1244,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     rt_timing_collect();
     pc.rt_stats = host->cfg_int("rt_stats", 0) ? 1u : 0u;
-    if (pc.rt_stats || pc.ls_stats || pc.rf_stats) stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0);
+    if (pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0)) stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0);
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
@@ -1327,11 +1366,28 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       }
       bind_extras(lb, s);
       lp.ls_flags |= host->cfg_int("ls_lights", 1) ? 1u : 0u;
-      ls_dispatch(cmd, lb, lp, sun, g_ls_match.pipeline, kLslSlots / 64, 1);
+      Push mp = lp;
+      mp.ls_pass = host->cfg_int("ls_check", 0) ? 1u : 0u;   // the join's own check (rtStats 84-85)
+      ls_dispatch(cmd, lb, mp, sun, g_ls_match.pipeline, kLslSlots / 64, 1);
       memory_barrier(cmd, kCS, kCS);
     }
-    ls_dispatch(cmd, lb, lp, sun, g_ls.pipeline, (g_w + 7) / 8, (g_h + 7) / 8);
     ls_timestamp(cmd, 1);
+    // The default-settings variant, or the one with every mode (more registers, docs/TRACK_D_RT.md 9.9).
+    const bool full = lp.ls_samples || lp.ls_shadowed || lp.ls_debug || lp.ls_stats;
+    VkPipeline lsp = g_ls.pipeline;
+    lp.ls_pass = host->cfg_int("ls_check", 0) == 2 ? 2u : 0u;   // reference against itself
+    if (host->cfg_int("ls_check", 0)) {
+      Pipe& c = full ? g_ls_full_check : g_ls_check;
+      if (refresh(c, full ? "gi/rt_local_shadows_full_check.hlsl" : "gi/rt_local_shadows_check.hlsl", g_ls_layout))
+        lsp = c.pipeline;
+    } else if (!host->cfg_int("ls_impl", 1)) {
+      if (refresh(g_ls_ref, "gi/rt_local_shadows_ref.hlsl", g_ls_layout)) lsp = g_ls_ref.pipeline;
+    } else if (full) {
+      // Not before the first frame that needs it: an unused pipeline is not compiled.
+      if (refresh(g_ls_full, "gi/rt_local_shadows_full.hlsl", g_ls_layout)) lsp = g_ls_full.pipeline;
+    }
+    ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8);
+    ls_timestamp(cmd, 2);
     if (s.shadow.view) image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kAll);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
@@ -1509,7 +1565,7 @@ void gi_release() {
   lsl_release();
   g_lsl_ok = false;
   for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
-                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match}) {
+                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
     *p = Pipe{};
   }

@@ -20,6 +20,7 @@
 // Every view in a set was bound by the game in the frame the set was written.
 #include "host.h"
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -115,7 +116,7 @@ bool make_image(bool array, Img& out) {
   return dd->vk.CreateImageView(dd->device, &vci, nullptr, &out.view) == VK_SUCCESS;
 }
 
-// "<hash> vt uv=0 cut=0.5 ubo=1.0 p0=0 idx=32 ssbo=0.12 ind=1.3 cache=1.4 col=0"
+// "<hash> vt uv=0 cut=0.5 [cut0=0.001] ubo=1.0 p0=0 idx=32 ssbo=0.12 ind=1.3 cache=1.4 col=0"
 void load_table() {
   std::string path = root_dir() + "\\shaders\\rt\\alpha_fs.txt";
   uint64_t mt = file_mtime(path);
@@ -132,7 +133,9 @@ void load_table() {
     AlphaFs a{};
     a.kind = kind == "vt" ? 1 : kind == "tex" ? 2 : 0;
     a.cut = 0.5f;
+    a.cut_first = -1.0f;
     a.k = 1.0f;
+    a.hash = std::stoull(hash, nullptr, 16);
     if (!a.kind) continue;
     auto sb = [](const std::string& v, uint8_t& s, uint8_t& b) {
       size_t d = v.find('.');
@@ -145,6 +148,7 @@ void load_table() {
       std::string k = kv.substr(0, e), v = kv.substr(e + 1);
       if (k == "uv") a.uv = int8_t(std::stoi(v));
       else if (k == "cut") a.cut = std::stof(v);
+      else if (k == "cut0") a.cut_first = std::stof(v);
       else if (k == "ubo") sb(v, a.ubo_set, a.ubo_bind), a.has_ubo = true;
       else if (k == "p0") a.p0 = uint32_t(std::stoul(v));
       else if (k == "idx") a.idx = uint32_t(std::stoul(v));
@@ -155,7 +159,8 @@ void load_table() {
       else if (k == "scale") a.scale = uint32_t(std::stoul(v)), a.has_scale = true;
       else if (k == "k") a.k = std::stof(v);
     }
-    t[std::stoull(hash, nullptr, 16)] = a;
+    if (a.cut_first < 0.0f) a.cut_first = a.cut;
+    t[a.hash] = a;
   }
   g_table.swap(t);
   log("[alpha] %zu alpha-tested fragment shaders in %s", g_table.size(), path.c_str());
@@ -300,6 +305,9 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
   r.kind = a.kind;
   r.channel = a.channel;
   r.cut = a.cut;
+  r.cut_first = a.cut_first;
+  r.fs_lo = uint32_t(a.hash);
+  r.fs_hi = uint32_t(a.hash >> 32);
   r.scale[0] = r.scale[1] = a.k;
   Bg3Binding t;
   if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, a.tex_set, a.tex_bind, 0, &t) || !t.view) {
@@ -437,8 +445,11 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
   // Records: a 16-byte header (count) and the records, in this slot's region.
   // The slot was last read kRing frames ago; order the update after any reads anyway.
   const VkDeviceSize base = VkDeviceSize(slot) * kRegion;
-  // header: record count, the opaque soup's vertex stride (0: not bound)
-  uint32_t header[4] = {uint32_t(g_recs.size()), soup && opaque_bytes ? stride : 0u, 0, 0};
+  // header: record count, the opaque soup's vertex stride (0: not bound), the
+  // alpha-test policy bits (rt_common.hlsli kAlpha*; live switches)
+  const uint32_t policy = (cfg_int("rt_alpha_cut", 1) ? 1u : 0u) | (cfg_int("rt_alpha_stochastic", 1) ? 2u : 0u) |
+                          (cfg_int("rt_alpha_unknown", 1) ? 4u : 0u);
+  uint32_t header[4] = {uint32_t(g_recs.size()), soup && opaque_bytes ? stride : 0u, policy, 0};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -520,6 +531,27 @@ void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab) {
         (unsigned long long)g_frames, double(g_draws) / g_frames, double(g_tris) / g_frames, g_tex.size(),
         g_cache.size(), kTextures - 1, kCaches - 1, kMaxRecords, g_fail[0], g_fail[1], g_fail[2], g_fail[3], g_fail[4],
         g_fail[5]);
+    // The alpha-tested fragment shaders of this frame by triangles, with their
+    // cut-offs (identifies the families on screen: grass, foliage, chains).
+    std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> per;
+    for (const auto& r : g_recs) {
+      auto& e = per[(uint64_t(r.fs_hi) << 32) | r.fs_lo];
+      ++e.first;
+      e.second += r.tris;
+    }
+    std::vector<std::pair<uint64_t, std::pair<uint32_t, uint32_t>>> top(per.begin(), per.end());
+    std::sort(top.begin(), top.end(), [](const auto& x, const auto& y) { return x.second.second > y.second.second; });
+    std::string list;
+    for (size_t i = 0; i < top.size() && i < 12; ++i) {
+      AlphaFs f{};
+      auto it = g_table.find(top[i].first);
+      if (it != g_table.end()) f = it->second;
+      char b[96];
+      snprintf(b, sizeof b, "%s%016llx %s cut %g/%g: %u draws %u tris", i ? "; " : "", (unsigned long long)top[i].first,
+               f.kind == 1 ? "vt" : "tex", f.cut_first, f.cut, top[i].second.first, top[i].second.second);
+      list += b;
+    }
+    log("[alpha] this frame's shaders by triangles (cut first/effective): %s", list.c_str());
     g_frames = g_draws = g_tris = 0;
     std::memset(g_fail, 0, sizeof g_fail);
   }

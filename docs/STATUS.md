@@ -47,9 +47,11 @@ State of each branch at the pause, as reported:
   - −31 to −37% (foundry 0.40 ms), bit-exact (`ls_check=1`).
   - To do: validation, `-Move`, the docs (draft in `tools/lsref/`).
   - Grymforge is still 0.72 ms because of its many torches.
-- **Image lifetime** (`2170b41`).
-  - The validation ID is gone in 3 scenes: the descriptor ring held stale bindings, and the destroy hooks now wait on our fence (0 ms stall measured).
-  - To do: one `-Move` run with a non-finite check, plus a doc fix.
+- **Image lifetime** (done).
+  - The validation ID is gone in 3 scenes: the descriptor ring held stale bindings.
+  - The destroy hooks now wait on our fence. No waits at level loads; 3 waits of 0.1 to 6.8 ms in 5 `-Move` runs.
+  - 0 non-finite values in the traced motion frame.
+  - Open for the alpha owner: QUALITY.md, "the alpha set's game texture views, one frame late".
 - **Two instances** (`91b50c3`).
   - Feasible: two instances ran for 150 s, using 26 GB of VRAM.
   - The slot locks, the PID-only control, the display-settings restore counted across runs and the per-instance Script Extender bridge are written.
@@ -74,6 +76,29 @@ State of each branch at the pause, as reported:
   - the game's sky and cloud shadows for misses;
   - a ray-count sweep for Ultra.
 - **Foreground-only checks** (when the PC is free): the frame-gen real present with all merges, and the Ultra pacing pan.
+
+## State-of-the-art backlog (ordered; from AUDIT_SOTA, AUDIT_ENGINE_DATA rounds 1-2, SETTINGS_DESIGN)
+
+Each item goes through the usual loop: QUALITY R0-R6 gates, QA harness A/B, and
+exclusive runs for timings.
+
+| # | Upgrade | Unlocks | Status |
+|---|---|---|---|
+| 1 | RR before post (grade replayed after RR), CBT/SSS guides, Preset F | unbiased denoising | **done** |
+| 2 | Static/dynamic BVH split | −2/−3 ms in motion | **done** (todo: skinning output, wind foliage, class-A UBO variants) |
+| 3 | Emissive geometry capture, then emissive in GI/reflections + an emissive light list (RIS/ReSTIR DI for emissives) | lava/magic/candle bounce, glowing reflections | data side in progress |
+| 4 | Hit materials: shader → material table plus VT page table, albedo/emission at secondary hits | correct bounce colour, off-screen reflections | next |
+| 5 | SHaRC world-space radiance cache, fed on screen | GI from 1 m to room scale, multi-bounce, reflection misses | after 3-4 |
+| 6 | Opacity micromaps for alpha-tested meshes (needs 2) | faster foliage traversal (−0.3 to −1 ms) | after the alpha fix |
+| 7 | The game's sky/atmosphere LUTs and cloud shadows for ray misses | correct miss radiance, cloud-shadowed RT sun | partly in the sun R0 task |
+| 8 | Shadow-map atlas and cascades as fallback occluders for off-screen casters | no leaks from culled geometry | after the sun R0 task |
+| 9 | Offline static world (level placements → GR2 meshes, HLOD proxies, roof data) | closed interiors, off-screen casters and reflections behind the camera | large; after 4-5 |
+| 10 | Local-light shadows replace the game's shadow-mapped lights (R0) | physically correct local shadows | after the D-LS performance task |
+| 11 | Ray-count sweep (QA/FLIP) for Ultra; ReSTIR GI if 5 isn't enough | evidence-based quality per ms | QA harness ready |
+| 12 | Forward pass capture: water and glass in the BVH; refraction (D-RFR) | reflections/refraction on water | later |
+| 13 | Reflex markers from `SDL_PollEvent`, `frameLimitUs` cap with DLSS-G | latency, pacing at 120 Hz | after the two-instance work |
+| 14 | In-game settings overlay (SETTINGS_DESIGN phase 2) | per-user tuning | after the presets are validated |
+| 15 | NRD fallback for non-RR GPUs; presets validated on 30/40-series | distribution | later |
 
 ## Environment notes
 - **Script Extender:** v33 is installed (`bin\DWrite.dll`); remove that file to uninstall, and a copy is in `D:\BG3_Tools`. The bridge mod is in `Data\Mods\GustavX\ScriptExtender` (`scripts/install-se-bridge.ps1 -Uninstall`).

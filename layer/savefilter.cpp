@@ -10,6 +10,12 @@
 // bg3.exe imports FindFirstFileExW / FindFirstFileW / FindNextFileW from
 // KERNEL32; those IAT slots are patched when this DLL loads. MSVCP140 is
 // patched as well in case the listing goes through std::filesystem.
+//
+// With BG3RTX_SAVE_LOG=<file> set (scripts/auto-run.ps1), every save folder this
+// game creates in Savegames\Story (CreateDirectoryW, or MoveFileExW into it) is
+// appended to that file, one folder name per line. auto-run.ps1 parks exactly
+// those afterwards, so with two games running it never moves a save another
+// game, or the player, wrote.
 #include <windows.h>
 #include <cwctype>
 #include <mutex>
@@ -28,6 +34,9 @@ decltype(&FindFirstFileExW) real_ffex = nullptr;
 decltype(&FindFirstFileW) real_ff = nullptr;
 decltype(&FindNextFileW) real_fn = nullptr;
 decltype(&FindClose) real_fc = nullptr;
+decltype(&CreateDirectoryW) real_cd = nullptr;
+decltype(&MoveFileExW) real_mv = nullptr;
+std::wstring g_save_log;          // BG3RTX_SAVE_LOG
 
 std::wstring lower(std::wstring s) {
   for (auto& c : s) c = static_cast<wchar_t>(towlower(c));
@@ -106,6 +115,44 @@ BOOL WINAPI hk_fn(HANDLE h, LPWIN32_FIND_DATAW d) {
   return FALSE;
 }
 
+// A save folder itself ("...\Savegames\Story\<name>"): its name, else empty.
+std::wstring story_child(LPCWSTR path) {
+  if (!path) return {};
+  std::wstring p = path;
+  for (auto& c : p) if (c == L'/') c = L'\\';
+  while (!p.empty() && p.back() == L'\\') p.pop_back();
+  std::wstring l = lower(p);
+  auto at = l.rfind(L"\\savegames\\story\\");
+  if (at == std::wstring::npos || l.find(L'\\', at + 17) != std::wstring::npos) return {};
+  return p.substr(at + 17);
+}
+
+void record_save(LPCWSTR path) {
+  std::wstring name = story_child(path);
+  if (name.empty() || g_save_log.empty()) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  FILE* f = nullptr;
+  if (_wfopen_s(&f, g_save_log.c_str(), L"ab") != 0 || !f) return;
+  int n = WideCharToMultiByte(CP_UTF8, 0, name.c_str(), int(name.size()), nullptr, 0, nullptr, nullptr);
+  std::string u(size_t(n), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, name.c_str(), int(name.size()), u.data(), n, nullptr, nullptr);
+  u += "\n";
+  fwrite(u.data(), 1, u.size(), f);
+  fclose(f);
+}
+
+BOOL WINAPI hk_cd(LPCWSTR path, LPSECURITY_ATTRIBUTES sa) {
+  BOOL ok = real_cd(path, sa);
+  if (ok) record_save(path);
+  return ok;
+}
+
+BOOL WINAPI hk_mv(LPCWSTR from, LPCWSTR to, DWORD flags) {
+  BOOL ok = real_mv(from, to, flags);
+  if (ok) record_save(to);
+  return ok;
+}
+
 int patch_module(HMODULE mod) {
   if (!mod) return 0;
   auto base = reinterpret_cast<uint8_t*>(mod);
@@ -122,10 +169,13 @@ int patch_module(HMODULE mod) {
     for (; names->u1.AddressOfData; ++names, ++iat) {
       if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal)) continue;
       auto n = reinterpret_cast<const char*>(reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(base + names->u1.AddressOfData)->Name);
-      void* hook = !strcmp(n, "FindFirstFileExW") ? reinterpret_cast<void*>(&hk_ffex)
-                 : !strcmp(n, "FindFirstFileW")   ? reinterpret_cast<void*>(&hk_ff)
-                 : !strcmp(n, "FindNextFileW")    ? reinterpret_cast<void*>(&hk_fn)
-                 : !strcmp(n, "FindClose")        ? reinterpret_cast<void*>(&hk_fc) : nullptr;
+      bool filter = !g_only.empty(), track = !g_save_log.empty();
+      void* hook = filter && !strcmp(n, "FindFirstFileExW") ? reinterpret_cast<void*>(&hk_ffex)
+                 : filter && !strcmp(n, "FindFirstFileW")   ? reinterpret_cast<void*>(&hk_ff)
+                 : filter && !strcmp(n, "FindNextFileW")    ? reinterpret_cast<void*>(&hk_fn)
+                 : filter && !strcmp(n, "FindClose")        ? reinterpret_cast<void*>(&hk_fc)
+                 : track && !strcmp(n, "CreateDirectoryW")  ? reinterpret_cast<void*>(&hk_cd)
+                 : track && !strcmp(n, "MoveFileExW")       ? reinterpret_cast<void*>(&hk_mv) : nullptr;
       if (!hook) continue;
       DWORD old = 0;
       VirtualProtect(&iat->u1.Function, sizeof(void*), PAGE_READWRITE, &old);
@@ -141,9 +191,13 @@ struct Init {
   Init() {
     wchar_t buf[512];
     DWORD n = GetEnvironmentVariableW(L"BG3RTX_SAVE_ONLY", buf, 512);
-    if (!n || n >= 512) return;
-    g_only = buf;
+    if (n && n < 512) g_only = buf;
+    n = GetEnvironmentVariableW(L"BG3RTX_SAVE_LOG", buf, 512);
+    if (n && n < 512) g_save_log = buf;
+    if (g_only.empty() && g_save_log.empty()) return;
     HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
+    real_cd = reinterpret_cast<decltype(real_cd)>(GetProcAddress(k32, "CreateDirectoryW"));
+    real_mv = reinterpret_cast<decltype(real_mv)>(GetProcAddress(k32, "MoveFileExW"));
     real_ffex = reinterpret_cast<decltype(real_ffex)>(GetProcAddress(k32, "FindFirstFileExW"));
     real_ff = reinterpret_cast<decltype(real_ff)>(GetProcAddress(k32, "FindFirstFileW"));
     real_fn = reinterpret_cast<decltype(real_fn)>(GetProcAddress(k32, "FindNextFileW"));
