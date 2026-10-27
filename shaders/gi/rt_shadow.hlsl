@@ -36,7 +36,7 @@ float3 qrot_inv(float4 q, float3 v) {   // rotate by the conjugate of q (world -
 bool sun_under_roof(float3 o, float3 d, float3 cam_abs) {
   const uint n = min(st_u(0), 256u);
   for (uint i = 0; i < n; ++i) {
-    const uint a = 128u + i * 48u;
+    const uint a = 192u + i * 48u;   // kSunHeader
     float4 c = st_f4(a);
     float4 q = st_f4(a + 16u);
     float3 h = st_f4(a + 32u).xyz;

@@ -14,7 +14,7 @@ from .decode import Frame, Trace, lum709, lum2020
 
 CROPS_PER_DETECTOR = 3   # per detector, effect and buffer (2 on the lighting buffer)
 EFFECT_LABEL = {"gi": "GI (hybrid RT GI + RT AO fold)", "rt_reflections": "RT reflections (D-RF)",
-                "rt_shadows": "RT sun shadows", "rt_sun_replace": "RT sun replacing the game's mask (vs min)",
+                "rt_shadows": "RT sun shadows", "rt_sun_replace": "RT sun replacing the game's mask (in-frame vs min)",
                 "rt_local_shadows": "RT local-light shadows (D-LS)",
                 "all_rt": "all RT effects"}
 
@@ -121,19 +121,11 @@ def analyze_scene(d: Path, pool):
         return n, float((da > 0.1).mean())
     view = dict(pool.map(view_change, [n for n in fr if n != "on0"]))
     moved = sorted(n for n, v in view.items() if v > det.T["view_changed_frac"])
-    # The rt_sun_replace trio (rep_on, sun_min, sun_dbg) is compared within itself: it is
-    # kept when its traces show one view, even if that is not on0's.
-    trio = [n for n in ("rep_on", "sun_min", "sun_dbg") if n in fr]
-    if "rep_on" in trio and len(trio) > 1:
-        def pair_change(n):
-            a, b = fr[n].albedo(), fr["rep_on"].albedo()
-            if a is None or b is None or a.shape != b.shape:
-                return 0.0
-            return float((np.abs(im.box(a.mean(-1), 2) - im.box(b.mean(-1), 2)) > 0.1).mean())
-        pc = {n: pair_change(n) for n in trio if n != "rep_on"}
-        res["view_change_sun_trio"] = {n: round(v, 4) for n, v in pc.items()}
-        if all(v <= det.T["view_changed_frac"] for v in pc.values()):
-            moved = [n for n in moved if n not in trio]
+    # The sun debug traces are evaluated each on its own (in-frame), so another view than
+    # on0's does not void them. (Their crops show on0's lighting only when the view agrees.)
+    self_contained = ("sun_dbg", "sun_check", "sun_trust")
+    moved_self = [n for n in moved if n in self_contained]
+    moved = [n for n in moved if n not in self_contained]
     res["view_change"] = {n: round(v, 4) for n, v in view.items()}
     if moved:
         res["notes"].append(f"camera moved: {', '.join(moved)} show another view than on0 (albedo differs on "
@@ -239,9 +231,9 @@ def analyze_scene(d: Path, pool):
             gm = fr["off0"].sun_mask() if "off0" in data else None
             if gm is not None and gm.shape == game.shape:
                 sd["extra"]["metrics"]["game_mask_vs_alloff_mad"] = round(float(np.abs(gm - game).mean()), 4)
-            rep_ratio = None
-            if "sun_min" in data and "rep_on" in data and data["rep_on"]["Yc"] is not None                     and data["sun_min"]["Yc"] is not None:
-                rep_ratio = det.ratio_map(data["rep_on"]["Yc"], data["sun_min"]["Yc"], 2)[0]
+            same = "sun_dbg" not in moved_self   # on0's lighting and ratios match this view
+            if not same:
+                sun_ratio = None
             for sub, r in sd.items():
                 dname = "sun_replaced" if sub == "replaced" else f"sun_{sub}_casters"
                 res["checks"].append({"detector": dname, "effect": "rt_sun_replace" if sub == "replaced" else "rt_shadows",
@@ -254,27 +246,58 @@ def analyze_scene(d: Path, pool):
                     blue = applied if applied is not None else np.zeros_like(game)
                     ov = np.stack([game, im.box(rt, 2), blue], -1)
                     name = f"sun_{sub}_{j}.png"
-                    tiles = [dsp("on0", "compose")[y0:y1, x0:x1], ov[y0:y1, x0:x1]]
-                    labs = ["all on (lighting)", "red game mask, green RT, blue written (white all lit)"]
-                    if sub == "replaced" and rep_ratio is not None:
-                        tiles[0] = dsp("rep_on", "compose")[y0:y1, x0:x1]
-                        labs[0] = "replace (lighting)"
-                        tiles.insert(0, dsp("sun_min", "compose")[y0:y1, x0:x1])
-                        labs.insert(0, "min(game, RT) (lighting)")
-                        tiles.append(heat_ratio(rep_ratio[y0:y1, x0:x1]))
-                        labs.append("replace / min")
-                    else:
-                        if sun_ratio is not None:
-                            tiles.append(heat_ratio(sun_ratio[y0:y1, x0:x1]))
-                            labs.append("sun term on/off")
-                        if "sun_off" in data:
-                            tiles.insert(0, dsp("sun_off", "compose")[y0:y1, x0:x1])
-                            labs.insert(0, "RT sun off (lighting)")
+                    tiles = [ov[y0:y1, x0:x1]]
+                    labs = ["red game mask, green RT, blue written (white all lit)"]
+                    if same:
+                        tiles.insert(0, dsp("on0", "compose")[y0:y1, x0:x1])
+                        labs.insert(0, "all on (lighting)")
+                        if sub != "replaced":
+                            if sun_ratio is not None:
+                                tiles.append(heat_ratio(sun_ratio[y0:y1, x0:x1]))
+                                labs.append("sun term on/off")
+                            if "sun_off" in data:
+                                tiles.insert(0, dsp("sun_off", "compose")[y0:y1, x0:x1])
+                                labs.insert(0, "RT sun off (lighting)")
                     info = {k: v for k, v in g.items() if k not in ("bbox", "rank", "qualified", "focus")}
                     sheet(tiles, labs, f"{meta['scene']} {dname} at x{x0}-{x1} y{y0}-{y1}: {info}"
                           + ("" if not r["pass"] else " (largest, below threshold)"), crops / name)
                     res["crops"].append({"file": f"crops/{name}", "detector": dname, "effect": "rt_shadows",
                                          "buffer": "sun mask", "bbox": g["bbox"], "shape": list(game.shape), **info})
+
+    # ---- rt_sun_replace in-frame A/B (rt_debug=7 trace): the written mask against
+    # min(game, traced) of the same pixel and frame; animation cannot fake it.
+    if "sun_check" in data:
+        dif, src = fr["sun_check"].diffuse()
+        if dif is not None:
+            view = np.clip(2 * dif, 0, 1)
+            sc = det.sun_check(view)
+            over = None
+            if "sun_dbg" in data:
+                dd, _ = fr["sun_dbg"].diffuse()
+                if dd is not None and dd.shape == dif.shape:
+                    over = np.clip(2 * dd, 0, 1)
+            for sub, r in sc.items():
+                res["checks"].append({"detector": f"sun_check_{sub}", "effect": "rt_sun_replace",
+                                      "buffer": f"debug diffuse ({src})", "on": "sun_check", "off": "sun_check",
+                                      **{k: v for k, v in r.items() if k != "regions"}, "top": r["regions"][:6]})
+                # Every far region is for review; the edge ones are expected (largest two).
+                regs = r["regions"][:CROPS_PER_DETECTOR] if sub != "edge" else r["regions"][:2]
+                for j, g in enumerate(regs):
+                    y0, y1, x0, x1 = crop_window(g["bbox"], view.shape[:2])
+                    tiles = [view[y0:y1, x0:x1]]
+                    labs = ["changed by the replace (yellow edge, red far, blue darker)"]
+                    if over is not None:
+                        tiles.append(over[y0:y1, x0:x1])
+                        labs.append("next trace: red game, green RT, blue written")
+                    if "sun_check" not in moved_self:
+                        tiles.insert(0, dsp("on0", "compose")[y0:y1, x0:x1])
+                        labs.insert(0, "all on (lighting)")
+                    name = f"sun_check_{sub}_{j}.png"
+                    info = {k: v for k, v in g.items() if k not in ("bbox", "rank", "qualified", "focus")}
+                    sheet(tiles, labs, f"{meta['scene']} sun_check {sub} at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
+                    res["crops"].append({"file": f"crops/{name}", "detector": f"sun_check_{sub}",
+                                         "effect": "rt_sun_replace", "buffer": "debug diffuse", "bbox": g["bbox"],
+                                         "shape": list(view.shape[:2]), **info})
 
     # ---- non-finite values
     nf = {n: t.nonfinite() for n, t in traces.items()}

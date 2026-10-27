@@ -1456,7 +1456,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
   }
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
-  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 6) {
+  if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 7) {
     memory_barrier(cmd, kCS, kCS);
     bind_rt(b, s.tlas, s.alpha);
     dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);

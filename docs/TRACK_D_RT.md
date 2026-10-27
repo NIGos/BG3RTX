@@ -2040,34 +2040,55 @@ The log prints every 600 frames `sun stats (...)`: traced/lit pixels, the share 
 "game dark & traced lit" pixels that were replaced, partly replaced, kept by roofs, kept
 off screen, kept far from the game's lit mask, and the mean brightening.
 
-### 12.2 Results (QA harness, 2026-10-27; partial)
+### 12.2 In-frame A/B (`rt_debug=7`, `sun check` log line)
 
-| Scene | Game dark & traced lit (of traced px) | Replaced | Kept by roofs | Kept off screen | Kept far from game-lit |
+A trace-to-trace A/B (`rt_sun_replace` 1 vs 0) does not isolate the effect: water and wind
+in foliage change 28-68% of the albedo between consecutive traces (QA run
+`captures/qa/sunrep`, coordinator, `rt_bvh_split=0`). `rt_sun_resolve.hlsl` therefore
+compares, per pixel and frame, the written mask with `min(game, traced)`:
+- **brightened**: written > min + 0.1, split into **at the game's shadow edge** (the game's
+  own mask partly lit, > 0.1, or lit (> 0.5) on the inner two rings, within
+  `rt_sun_near`/2) and **farther**;
+- **darker**: written < min - 0.1 (only `rt_sun_roof_mode=2` can do that).
+
+Counters 16-20 of the trust image, logged every 600 frames as `sun check (...)`: brightened
+share of all pixels, its edge/far split, darker share, and the mean gain (and its share at
+the edge). `rt_debug=7` shows the changed pixels over the frame's lit diffuse in grey
+(yellow edge, red far, blue darker); the QA `sun_check` trace decodes it.
+
+### 12.3 Results (QA harness, 2026-10-27; trace-to-trace phases, before the in-frame A/B)
+
+Coordinator's run `captures/qa/sunrep` (S3, S14, S8, S7, S1; merged main, `rt_bvh_split=0`)
+and earlier runs of mine. Shares of the traced pixels that are game-dark and traced-lit,
+and what the trust did with them (`sun stats`, 600-frame windows):
+
+| Scene | Game dark & traced lit | Replaced (fully + partly) | Kept by roofs | Kept off screen | Kept far from game-lit |
 |---|---|---|---|---|---|
-| S7 Blushing Mermaid (interior, roof cut away) | 10.7-25.4% | 0.0% | 98.2-98.9% | 1.1-1.8% | 0.0% |
-| S1 foundry view (interior) | 10.2% | 0.0% | 82.9% | 16.8% | 0.1% |
-| S1 docks view (outdoor) | 0.06% | 0.6% (+53.5% partly) | 0% | 0.2% | 45.8% |
+| S7 Blushing Mermaid (roof cut away) | 15.9-26.6% | 0-0.5% | 93.7-96.8% | 3.2-5.8% | 0% |
+| S14 Lower City | 3.1-11.7% | 0-0.2% | 85-94% | 6-15% | 0% |
+| S8 Water Queens House | 0.16-0.50% | 1-2.4% | 1-43% | 57-97% | 0% |
+| S3 Campsite | 5.7-9.9% | 2-5.9% | 0% | 94-98% | 0% |
+| S1 foundry / docks | 23.8% / 0.5% | 0% / 9.4% | 97.5% / 81% | 2.5% / 1.6% | 0% / 7.9% |
 
-- **Interiors stay dark.** In S7 the traced sun sees the sky through the cut-away roof on
-  43‰ of the frame (`sun_missing_casters`), and the written mask is lit on **0‰** of it
-  (`sun_replaced`): every such pixel is under a roof volume
+- **No leaks.** `sun_replaced` (written lit where the game's mask is < 0.1) is **0‰ in all
+  five scenes**, against `sun_missing_casters` (traced lit, game dark) of 42.9‰ (S7), 5.1‰
+  (S14), 4.9‰ (S3): the roof volumes hold every interior and the cut-away roofs
   ([sun_replace_s7_interior.png](img/sun_replace_s7_interior.png): lighting | red game
-  mask, green traced, blue written; green without blue = kept). The foundry behaves the same.
-- **Outdoors the disagreement is small.** On the docks only 0.06% of traced pixels are
-  game-dark and traced-lit; about half of those are replaced, at shadow edges.
-- Non-finite values: 0 in every dump of S7 and S1.
-- Campsite (S3), Lower City (S14) and Water Queens House (S8) have **no A/B yet**: their runs
-  stalled (the game stops presenting; seen on other branches too, before this change), or
-  ran without the Script Extender bridge, so the level was unknown and replace stayed off,
-  as designed.
+  mask, green traced, blue written; green without blue = kept). Non-finite: 0 everywhere.
+- **The replace is too conservative outdoors.** In Campsite 94-98% of the disagreeing
+  pixels fail the off-screen test: the scene top is the highest visible point (the tree
+  tops, 13.6 m), and a sun ray from the ground leaves the frustum before it gets there.
+  `rt_sun_top=0` (new) drops the scene top and asks only for `rt_sun_rise` above the pixel;
+  the proximity test (`rt_sun_near`) still limits any leak to bands at the game's shadow
+  edges. Which default is right needs the in-frame A/B (HANDOFF.md).
+- The `brightening rt_sun_replace` crops of that run were animation (waves in S8, swaying
+  foliage in S3), which is why that comparison is gone.
+- Cost: `rt passes` 0.5-0.7 ms in total in S7 (the sun passes are not timed on their own).
 
-### 12.3 Not done / to verify (HANDOFF.md has the commands)
-- A/B (`rt_sun_replace` 1 vs 0) on S3, S14, S8: the brightened regions (`sun_replaced`
-  crops, `brightening rt_sun_replace` crops) still have to be classified as the game's
-  over-dark filtering (right) or a missing caster (wrong).
-- Cost of the two sun passes in isolation (only the `rt passes` total was measured).
-- `-Validation` against the baseline (`captures/validation_baseline_S1.log` on c604311:
-  VUIDs 10788, 09600, 08114, 07988, 01000, 00118, 08737) and a `-Move` run.
-- The scene top is a heuristic: off-screen casters taller than the visible scene + 2 m
-  could still leak at the screen edge facing the sun (the proximity test limits it to
-  shadow edges).
+### 12.4 Not done / to verify (HANDOFF.md has the commands)
+- The in-frame A/B in S3, S14, S8, S7, S1 with `rt_sun_top=1` and `rt_sun_top=0`: the far
+  brightened crops must be the game's over-wide penumbrae or acne, not missing casters.
+- Cost of the two sun passes in isolation.
+- `-Validation` against a main baseline, and a `-Move` run.
+- The scene top and the rise are heuristics: an off-screen caster taller than either could
+  shift a shadow edge by up to `rt_sun_near` near the screen edge facing the sun.

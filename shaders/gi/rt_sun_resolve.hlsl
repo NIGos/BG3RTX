@@ -31,6 +31,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // Proximity: the most lit game mask among taps on four rings out to rt_sun_near metres
   // (on surfaces at a similar depth), weighted down towards the outer ring.
   float near = mask;
+  // The innermost ring with a lit game mask (> 0.5): 0 the pixel's own mask is partly lit
+  // (a penumbra of the game's), 1-4 the ring, 5 none. Rings 0-2 (within half of
+  // rt_sun_near) count as "at the game's shadow edge" in the in-frame A/B below.
+  uint lit_ring = mask > 0.1 ? 0u : 5u;
   const float D = st_f(28);
   if (traced && !roof && t_off > 0.0 && mask < 0.999 && D > 0.0) {
     const float2 uv = (float2(fp) + 0.5) / float2(pc.full);
@@ -48,7 +52,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
         if (any(q < 0) || any(q >= int2(pc.full))) continue;
         const float dq = gDepth.Load(int3(q, 0));
         if (dq <= 0.0 || abs(dq - d) > dtol) continue;
-        near = max(near, rtVis[q].g * w);
+        const float gq = rtVis[q].g;
+        near = max(near, gq * w);
+        if (gq > 0.5) lit_ring = min(lit_ring, ring);
       }
     }
   }
@@ -58,7 +64,16 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const float keep = roof && mode == 1u ? mask : roof && mode == 2u ? 0.0 : fold;
   const float out_vis = lerp(mask, lerp(keep, vis, trust), saturate(pc.rt_strength));
   const bool far = traced && !roof && t_off > 0.0 && trust <= 0.0;
-  rtVis[fp] = float4(vis, mask, out_vis, far ? 0.125 : code);
+  // In-frame A/B (like ls_check): this pixel's replaced value against min(game, traced),
+  // both from the same frame, so animation and camera motion cannot fake a difference.
+  const float diff = out_vis - fold;
+  const bool bright = diff > 0.1;
+  const bool at_edge = lit_ring <= 2u;
+  const bool darker = diff < -0.1;   // only rt_sun_roof_mode 2 should produce these
+  // rtVis.a codes for the debug views: 0.40 brightened at the game's shadow edge,
+  // 0.45 brightened farther from it; otherwise the trust code.
+  const float a_out = bright ? (at_edge ? 0.40 : 0.45) : far ? 0.125 : code;
+  rtVis[fp] = float4(vis, mask, out_vis, a_out);
   if (pc.rt_debug == 0) gSunShadow[fp] = out_vis;
 
   if ((st_u(4) & 8u) != 0) {
@@ -69,6 +84,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
     trust_add(5, dis && roof);
     trust_add(6, dis && !roof && t_off <= 0.0);
     trust_add(11, dis && far);
-    trust_add_n(10, uint(round(saturate(out_vis - fold) * 255.0)));
+    trust_add_n(10, uint(round(saturate(diff) * 255.0)));
+    trust_add(16, bright);
+    trust_add(17, bright && at_edge);
+    trust_add(18, bright && !at_edge);
+    trust_add(19, darker);
+    trust_add_n(20, at_edge ? uint(round(saturate(diff) * 255.0)) : 0u);
   }
 }

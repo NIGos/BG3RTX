@@ -16,13 +16,13 @@ static_assert(kSunHeader + kSunMaxVolumes * sizeof(Bg3DbVolume) <= kSlotBytes, "
 // (uv), 20 ramp start (fraction of the needed path inside the frustum at which trust starts),
 // 24 rt_sun_roof_mode (0 min(game, RT), 1 game mask, 2 shadow), 28 rt_sun_near (m; 0 off).
 // GPU-written: 32 scene top this frame (order-preserving uint), 36 camera position
-// (absolute, 3 floats), 64-127 counters (16 uints, see rt_shadow.hlsl).
+// (absolute, 3 floats), 64-191 counters (32 uints: rt_shadow.hlsl, rt_sun_resolve.hlsl).
 enum : uint32_t { kFReplace = 1, kFRoofs = 2, kFOffscreen = 4, kFStats = 8 };
-constexpr uint32_t kCounters = 16;
+constexpr uint32_t kCounters = 32;   // bytes 64-191
 
 // The host ring is only staged through: the shaders read and count in a device-local
 // R32_UINT image (one texel per 4 header bytes), copied from the slot before the sun
-// passes and back into it (bytes 32-127) after them. Per-pixel reads and atomics on
+// passes and back into it (bytes 32-191) after them. Per-pixel reads and atomics on
 // host-visible memory cost 14 ms a frame.
 constexpr uint32_t kSlotTexels = uint32_t(kSlotBytes / 4);
 VkBuffer g_buf = VK_NULL_HANDLE;
@@ -141,7 +141,10 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
                    (host->cfg_int("rt_sun_offscreen", 1) ? kFOffscreen : 0u) | kFStats;
   const uint32_t n = uint32_t(g_vol.size());
   const float pad_top = host->cfg_float("rt_sun_top_pad", 2.0f);
-  float hf[6] = {host->cfg_float("rt_sun_rise", 6.0f), g_top > -1e29f ? g_top + pad_top : -1e30f,
+  // rt_sun_top=0: the ray need only rise rt_sun_rise above the pixel (the scene top, the
+  // highest visible point, keeps nearly every outdoor pixel off screen behind tree tops).
+  const bool use_top = host->cfg_int("rt_sun_top", 1) != 0;
+  float hf[6] = {host->cfg_float("rt_sun_rise", 6.0f), use_top && g_top > -1e29f ? g_top + pad_top : -1e30f,
                  host->cfg_float("rt_sun_margin", 0.0f), host->cfg_float("rt_sun_ramp", 0.75f), 0.0f, 0.0f};
   uint32_t mode = uint32_t(host->cfg_int("rt_sun_roof_mode", 0));
   const float near_m = host->cfg_float("rt_sun_near", 1.5f);
@@ -153,7 +156,7 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
   memset(slot + 32, 0, 4);
   float nan[3] = {NAN, NAN, NAN};
   memcpy(slot + 36, nan, sizeof nan);
-  memset(slot + 64, 0, 64);
+  memset(slot + 64, 0, kCounters * 4);
   if (n) memcpy(slot + kSunHeader, g_vol.data(), n * sizeof(Bg3DbVolume));
   // Stage into the device-local image (header + this frame's volumes).
   const VkDeviceFuncs& vk = *host->vk;
@@ -191,6 +194,16 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
               100.0 * g_sum[1] / px, 100.0 * g_sum[2] / px, 100.0 * g_sum[3] / dis, 100.0 * g_sum[4] / dis,
               100.0 * g_sum[5] / dis, 100.0 * g_sum[6] / dis, 100.0 * g_sum[11] / dis, 100.0 * g_sum[7] / px,
               100.0 * g_sum[8] / px, 100.0 * g_sum[9] / px, g_sum[10] / 255.0 / px);
+    // In-frame A/B (rt_sun_resolve.hlsl): the written mask against min(game, traced) of the
+    // same pixel and frame. "At the edge": the game's own mask is partly lit there, or lit
+    // within half of rt_sun_near.
+    const double all = double(g_sum[15] ? g_sum[15] : 1), br = double(g_sum[16] ? g_sum[16] : 1);
+    host->log("sun check (%u frames, replace %d): brightened by > 0.1 against min(game, RT) on %.3f%% of px (%.0f "
+              "per frame): at the game's shadow edge %.1f%%, farther %.1f%% (far: %.3f%% of px); darker than min "
+              "%.4f%% of px; mean gain %.5f per px (%.1f%% of it at the edge)",
+              g_sum_n, int(active), 100.0 * g_sum[16] / all, double(g_sum[16]) / g_sum_n, 100.0 * g_sum[17] / br,
+              100.0 * g_sum[18] / br, 100.0 * g_sum[18] / all, 100.0 * g_sum[19] / all, g_sum[10] / 255.0 / all,
+              100.0 * g_sum[20] / double(g_sum[10] ? g_sum[10] : 1));
     memset(g_sum, 0, sizeof g_sum);
     g_sum_n = 0;
   }
@@ -209,11 +222,11 @@ void sunt_end(VkCommandBuffer cmd) {
   ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
   vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
                         nullptr, 1, &ib);
-  VkBufferImageCopy r{};   // bytes 32-127: scene top, camera, counters
+  VkBufferImageCopy r{};   // bytes 32-191: scene top, camera, counters
   r.bufferOffset = VkDeviceSize(g_ring) * kSlotBytes + 32;
   r.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
   r.imageOffset = {8, 0, 0};
-  r.imageExtent = {24, 1, 1};
+  r.imageExtent = {8 + kCounters, 1, 1};   // texels 8 .. 16 + kCounters
   vk.CmdCopyImageToBuffer(cmd, g_dev.image, VK_IMAGE_LAYOUT_GENERAL, g_buf, 1, &r);
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;

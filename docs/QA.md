@@ -37,17 +37,17 @@ presents later (240 by default, enough for RR's history to settle):
 | N+1 | `refl_off` | `gi=1 rt_reflections=0` | reflection contribution (against `on0`) |
 | N+2 | `sun_off` | `rt_reflections=1 rt_shadows=0` | RT sun contribution |
 | N+3 | `local_off` | `rt_shadows=1 rt_local_shadows=0` | D-LS contribution |
-| N+4 | `rep_on` | `rt_local_shadows=1` (all on again) | `rt_sun_replace` A/B, with effect |
-| N+5 | `sun_min` | `rt_sun_replace=0` | `rt_sun_replace` A/B: min(game, traced) |
-| N+6 | `sun_dbg` | `rt_sun_replace=1 rt_debug=2 rt_backlit=0` | sun mask against traced visibility and the written mask |
-| N+7 | `sun_trust` | `rt_debug=6 rt_backlit=1` | the trust of `rt_sun_replace` (TRACK_D 12) |
+| N+4 | `sun_dbg` | `rt_local_shadows=1 rt_debug=2 rt_backlit=0` | sun mask against traced visibility and the written mask |
+| N+5 | `sun_check` | `rt_debug=7 rt_backlit=1` | `rt_sun_replace` in-frame A/B: the written mask against min(game, traced), same pixel and frame |
+| N+6 | `sun_trust` | `rt_debug=6` | the trust of `rt_sun_replace` (TRACK_D 12) |
 | (opt) | `ref` | `rt_debug=0 gi_rr_rays=8 ls_samples=2` | `--reference` |
 | last N | `off0`..`off{N-1}` | all RT off (`rt=0` and every effect 0) | all-RT contribution, flicker baseline |
 
-`--temporal N` (default 3) sets N. With N = 3 and no reference that is 14 traces.
-The `rep_on`/`sun_min`/`sun_dbg` trio is compared within itself (`view_change_sun_trio`):
-the first traces of a run can still see streaming and a settling camera, so the trio is
-kept even when on0 shows another view.
+`--temporal N` (default 3) sets N. With N = 3 and no reference that is 13 traces.
+The sun debug traces (`sun_dbg`, `sun_check`, `sun_trust`) are each evaluated on their own,
+so another view than on0's does not void them. A trace-to-trace A/B cannot isolate
+`rt_sun_replace` in animated scenes (water, wind in foliage: 0.28-0.68 of the albedo
+changes between traces), so it is measured in one frame instead.
 `--full-res` dumps every preview at native size (`dump_png_width=3840`: the
 output-res frame at 3840, render-res buffers at 2560); without it previews are
 1280 wide, which is enough for regions larger than a few pixels. `--raw` adds
@@ -88,6 +88,7 @@ least 2·10⁻⁵ of the buffer's pixels. All thresholds are in
 | **sun_extra_casters** | RT visibility (5×5 box of the 1-spp soft sun) < 0.15 where the game mask > 0.9, after a 3-px erosion (no thin edges, no penumbrae; game mask between 0.1 and 0.9 never counts); unlit, skin, foliage and hair classes excluded (`rt_backlit=0` leaves their back faces untraced). Only pixels the sun term really darkened (lighting ratio `on0/sun_off` < 0.7) count | ‰ (0.5) |
 | **sun_missing_casters** (warning, not a gate) | RT visibility > 0.85 where the game mask < 0.1, eroded likewise. With `rt_backlit=0` traced-lit pixels are front-facing, so back faces never count. It cannot change the image (the fold only darkens: mask × visibility) but shows casters missing from the TLAS; off-screen roofs and cut-away walls are expected here | ‰ (2) |
 | **sun_replaced** (warning, not a gate) | `rt_sun_replace` wrote the mask lit (> 0.85, 5×5 box) where the game's mask is dark (< 0.1), eroded like the casters detectors: the pixels the replace brightened. Review the crops (min, replace, mask overlay, replace/min ratio): over-dark filtering, acne or cascade transitions are right (R0); a missing caster or roof is wrong. The `rt_sun_replace` effect (`rep_on` vs `sun_min`) also runs the brightening detector with a ×1.15 bound, so its crops list every visible brightening | ‰ (2) |
+| **sun_check_far** (warning) / **sun_check_edge** (info) / **sun_check_darker** (gate) | `sun_check` trace (`rt_debug=7`): pixels where the written mask is brighter than min(game, traced) of the same pixel by > 0.1, split by distance to the game's lit mask: at its shadow edge (the game's own mask partly lit, or lit within `rt_sun_near`/2; yellow) and farther (red). Darker than min (blue) cannot happen with `rt_sun_roof_mode=0`. Every far crop is for review: right if it is the game's over-wide penumbra or acne, wrong if a caster or roof is missing. The log line `sun check (...)` gives the same split averaged over 600 frames | far ‰ (0.5), darker ‰ (0.01) |
 | **nonfinite** | NaN/Inf over every dump of every trace (`dumps.json`) | count (0) |
 | **flicker** | per-pixel temporal std of the final frame's PQ luminance over the `on*` traces against the `off*` traces; regions where std_on > 2·std_off + 0.01 | mean std ratio (1.5), excess area ‰ (1) |
 | **reference** (`--reference`) | FLIP of all-on against `gi_rr_rays=8 ls_samples=2` with the same view and RR, minus the noise floor (FLIP of `on0` against `on1`: RR noise and animation) | mean FLIP above the floor (0.03) |

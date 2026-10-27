@@ -18,13 +18,14 @@ T = {
     # also needs a near-black core, at least this fraction left with < 10% of the light
     # (ambient and other lights never vanish completely under a real shadow).
     "dark_black_shadows": 0.25,
-    # rt_sun_replace brightens by design (R0): its regions are listed for review.
-    "bright_ratio": {"rt_shadows": 1.5, "rt_sun_replace": 1.15, "rt_local_shadows": 1.5, "gi": 2.0,
-                     "rt_reflections": 2.0, "all_rt": 2.0},
+    "bright_ratio": {"rt_shadows": 1.5, "rt_local_shadows": 1.5, "gi": 2.0, "rt_reflections": 2.0, "all_rt": 2.0},
     "bright_fail_area": 0.05,
     "sun_extra_fail_area": 0.5,   # RT dark, game lit, and the sun term really darkened there
     "sun_missing_warn_area": 2.0, # RT lit, game dark (casters missing from the TLAS): a warning
     "sun_replaced_warn_area": 2.0, # ... and rt_sun_replace wrote it lit: brightened, for review
+    # rt_sun_replace in-frame A/B (rt_debug=7): brightened > 0.1 against min(game, traced)
+    "sun_check_far_warn": 0.5,     # ... farther than rt_sun_near / 2 from the game's lit mask: review every crop
+    "sun_check_darker_fail": 0.01, # darker than min: impossible with rt_sun_roof_mode=0
     "sun_min_core_px": 3,         # erosion radius: ignores thin edges and penumbrae
     "flicker_ratio": 1.5,         # mean temporal std on / off
     "flicker_fail_area": 1.0,     # regions with std_on > 2 std_off + 0.01 (PQ code values)
@@ -224,3 +225,40 @@ def temporal(codes_on, codes_off):
                         "excess_area": round(area, 3), "excess_threshold": T["flicker_fail_area"],
                         "frames": [len(codes_on), len(codes_off)]},
             "regions": regs, "map": ("std", s_on)}
+
+
+def sun_check(view):
+    """rt_debug=7 trace (debug diffuse x 2): yellow = brightened by > 0.1 against
+    min(game, traced) at the game's shadow edge, red = brightened farther from it, blue =
+    darker than min. Everything else is dim grey (R = G = B <= 0.2)."""
+    r, g, b = view[..., 0], view[..., 1], view[..., 2]
+    edge = (r > 0.8) & (g > 0.8) & (b < 0.2)
+    far = (r > 0.8) & (g < 0.2) & (b < 0.2)
+    darker = (b > 0.8) & (r < 0.2) & (g < 0.2)
+
+    def regions(m):
+        lab, n = im.label(im.dilate(m, 2))
+        out = []
+        for i, area, bb in im.regions(lab, n, 8):
+            y0, y1, x0, x1 = bb
+            out.append({"bbox": bb, "area": area, "px": int(m[y0:y1, x0:x1].sum()), "qualified": True,
+                        "rank": area})
+        out.sort(key=lambda g_: -g_["rank"])
+        return out
+
+    def pm(m):
+        return round(_permille(int(m.sum()), view.shape), 4)
+
+    metrics = {"brightened_edge": pm(edge), "brightened_far": pm(far), "darker": pm(darker),
+               "brightened_total": pm(edge | far),
+               "far_share": round(float(far.sum()) / max(1, int((edge | far).sum())), 4)}
+    return {
+        "far": {"score": metrics["brightened_far"], "threshold": T["sun_check_far_warn"], "gate": False,
+                "pass": metrics["brightened_far"] <= T["sun_check_far_warn"], "unit": "‰ of px",
+                "metrics": metrics, "regions": regions(far)},
+        "edge": {"score": metrics["brightened_edge"], "threshold": None, "gate": False, "pass": True,
+                 "unit": "‰ of px", "metrics": metrics, "regions": regions(edge)},
+        "darker": {"score": metrics["darker"], "threshold": T["sun_check_darker_fail"],
+                   "pass": metrics["darker"] <= T["sun_check_darker_fail"], "unit": "‰ of px",
+                   "metrics": metrics, "regions": regions(darker)},
+    }

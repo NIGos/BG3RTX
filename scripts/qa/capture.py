@@ -23,8 +23,6 @@ EFFECTS = {
     "gi": ("refl_off", "gi_off"),
     "rt_reflections": ("on0", "refl_off"),
     "rt_shadows": ("on0", "sun_off"),
-    # The traced sun replacing the game's mask where trusted, against min(game, traced).
-    "rt_sun_replace": ("rep_on", "sun_min"),
     "rt_local_shadows": ("on0", "local_off"),
     "all_rt": ("on0", "off0"),
 }
@@ -44,16 +42,13 @@ def plan(temporal=3, reference=False):
           ("refl_off", {"gi": "1", "rt_reflections": "0"}),
           ("sun_off", {"rt_reflections": "1", "rt_shadows": "0"}),
           ("local_off", {"rt_shadows": "1", "rt_local_shadows": "0"}),
-          # rt_sun_replace against min(game, traced): three consecutive traces late in the
-          # run (the first traces can still see streaming and a settling camera), compared
-          # with each other rather than with on0 (analyze.py).
-          ("rep_on", {"rt_local_shadows": "1"}),
-          ("sun_min", {"rt_sun_replace": "0"}),
-          # rt_debug=2: game mask in red, traced sun visibility in green, the visibility
-          # written into the mask (rt_sun_replace) in blue, over the lit diffuse.
-          # rt_backlit=0 leaves untraced (back-facing) pixels at visibility 0, so
-          # "traced lit" always means front-facing and really unoccluded.
-          ("sun_dbg", {"rt_sun_replace": "1", "rt_debug": "2", "rt_backlit": "0"}),
+          # rt_sun_replace is measured in-frame (sun_check below), not across traces:
+          # animation (water, wind in foliage) defeats a trace-to-trace A/B.
+          ("sun_dbg", {"rt_local_shadows": "1", "rt_sun_replace": "1", "rt_debug": "2", "rt_backlit": "0"}),
+          # rt_debug=7: the in-frame A/B of rt_sun_replace, the written mask against
+          # min(game, traced) of the same pixel and frame (yellow brightened at the game's
+          # shadow edge, red brightened farther from it, blue darker).
+          ("sun_check", {"rt_debug": "7", "rt_backlit": "1"}),
           # rt_debug=6: the trust of rt_sun_replace (red roof volume, magenta far from the
           # game's lit mask, blue off-screen, green trusted).
           ("sun_trust", {"rt_debug": "6", "rt_backlit": "1"})]
@@ -67,7 +62,8 @@ def plan(temporal=3, reference=False):
 
 
 def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, reference=False,
-              interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False, shared=False):
+              interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False, shared=False,
+              extra=()):
     """Runs the game once and moves each trace's dumps.json + img/ to out_dir/raw/<i>_<name>/.
 
     tag: auto-run.ps1 -Tag, so two scenes can run at once from this checkout (one tag per
@@ -84,6 +80,7 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
 
     sets = [f"{k}={v}" for k, v in ALL_ON.items()]
     sets += [f"auto_interval={interval}", f"dump_png_width={3840 if full_res else 1280}"]
+    sets += list(extra)   # --set: keys for every trace of the run (e.g. rt_sun_top=0)
     if raw:
         # Exact float32 of the final frame (and RR/rr_post images): about 1 GB per trace
         # at 3840x1600, and slower traces. The 8-bit PQ previews suffice for the detectors.

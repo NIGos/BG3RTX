@@ -19,7 +19,7 @@
 #include "core.h"
 
 constexpr uint32_t kSunMaxVolumes = 256;
-constexpr uint32_t kSunHeader = 128;   // bytes before the 48-byte volume records
+constexpr uint32_t kSunHeader = 192;   // bytes before the 48-byte volume records
 
 struct SunTrustFrame {
   VkImageView view;   // binding 47 (GENERAL)
