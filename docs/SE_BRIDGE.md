@@ -130,7 +130,7 @@ entities.
 | Owner | How it is decided |
 |---|---|
 | placed | template file under `Levels/*/Lights/` or `CombinedLights/` |
-| character | the entity is in a `CharacterLight.Lights` list (`ecl::CharacterLightComponent`: the timeline rim and fill lights, boxes attached to `Head_M`), or the template name starts with `Light_Player` (the darkvision point and spot that follow the active character) |
+| character | the entity is in a `CharacterLight.Lights` list (`ecl::CharacterLightComponent`: the timeline rim and fill lights, boxes attached to `Head_M`), or the template name starts with `Light_Player_Darkvision` (the darkvision point and spot that follow the active character; flag `player light`). `Light_Player_Fill_*` are fill lights at fixed world positions and are classified like other visual lights (the layer re-tags them when an older Lua reports them as character lights) |
 | item | a root-template light with an `ecl::Item` entity within 1 m (`Ext.Entity.GetEntitiesAroundPosition`) |
 | scenery | a root-template light with a scenery entity within 1 m |
 | unknown | a root-template light with neither within 1 m; D-LS treats it like scenery |

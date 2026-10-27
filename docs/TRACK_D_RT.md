@@ -1314,8 +1314,13 @@ Code:
    slot: 4096 threads, with the records staged through group-shared memory.
    - A slot matches the nearest record within its tolerance whose radius agrees with
      1/`m0.w` within 2%.
-   - Tolerance: 5 cm + `MovementAmount` for lights that stay put, 0.5 m for item
-     lights, 4 m for character lights (they move between 4 Hz exports).
+   - Tolerance: 5 cm + `MovementAmount` for placed lights, 4 m for character lights,
+     and `ls_dyn_tol` (1.5 m) + `MovementAmount` for every other light the bridge reports
+     (items, and visual lights whose owner was not found, such as the VFX lights of
+     carried weapons: `VFX_LightSources_WPN_DippedInFire`, owner 0). They move between
+     the 4 Hz exports. Until 2026-10-27 items had 0.5 m and the rest 5 cm, so a carried
+     weapon's light went unmatched while its carrier walked and lost its fixture radius
+     (the ray's end clearance at the hand).
    - The result goes to a 4096×1 RGBA32UI image: source radius, flags, owner | type,
      and the record index.
 3. **D-LS** reads its slot for every light it would trace:
@@ -1595,6 +1600,134 @@ along every wall). That is a ray count, not a regression of this change.
 
 Settings (all live): `ls_impl` (1 the optimised pass, 0 the frozen old one), `ls_check`
 (0 off, 1 old against new, 2 old against itself; measurement only, about 1.5 ms).
+
+### 9.10 Who casts and who receives (audit 2026-10-27)
+
+Question: in the on/off compares (`captures/compare`), characters and the lights they carry
+seem not to cast or receive RT shadows. Findings (offline):
+- **Casters.** Every instance has mask 0xFF (`bvhsplit.cpp` 893/918/1189, `rtscene.cpp` 746)
+  and every ray traces 0xFF (`rt_common.hlsli`), in both `rt_bvh_split` modes. The TLAS is the
+  big depth prepass (`geocapture.cpp` 1108; passes under 64 draws are skipped, 1382), direct
+  triangle-list draws only (0 dropped in the logs). Skinned characters are in it: Campsite
+  `captures/20261027-062830` has 14 draws of the skinned VS `1cf36b97` in the prepass (82
+  class-B draws in the G-buffer, 14-23 in each cascade). Not in it: forward/transparent
+  geometry (water, glass, particles, VFX flames), decals, off-screen and cut-away geometry.
+  No class is excluded as a caster, and no game "does not cast" flag is applied either.
+- **Sun.** Characters cast traced sun shadows (Lower City compare, the NPC on the sand: a
+  crisp traced silhouette inside the game's soft one). Outside `rt_sun_replace`'s trusted
+  pixels the fold is `min(game, traced)` (`rt_shadow.hlsl` 168), and the game's cascades
+  already hold the characters, so on/off differ only at the shadow's edges.
+- **Local lights.** Not traced, by rule: lights with a game shadow map (`ls_shadowed=0`,
+  `rt_local_shadows.hlsl` 212), owner "character" (`ls_owners=15`, 218: the darkvision pair,
+  which the game flags `Shadow = CastShadow = false`, and every `Light_Player_*` template,
+  including world-fixed `Light_Player_Fill_*` lights; `BootstrapClient.lua` 134), and all
+  box/projector lights (the characters' rim and fill rigs). In dark interiors (Adamantine
+  Forge) these are most of the light on and around the party, hence no character shadows.
+  Carried weapon lights (`VFX_..._WPN_DippedInFire`, owner 0) are traced; their join tolerance
+  was the defect fixed above.
+- **Receivers.** The sun fold edits the mask b7 and D-LS edits b10/b11, both read only by
+  the deferred lighting. Every G-buffer class receives except unlit (hair is deferred, class
+  5). Forward-rendered surfaces (water, glass, particles, VFX) receive neither: they sample
+  the game's cascades themselves and get no D-LS.
+
+**Policy (R0, coordinator 2026-10-27), implemented:**
+- **The owner is no reason to skip a light** (`ls_owners=31`). The only skip is art intent
+  from the game's own flags (`ls_noshadow`, `rt_local_shadows.hlsl` `ls_skip_light`).
+  - Data (asset DB, 19,572 placed lights): **98% of point lights and 70% of spots have
+    neither `Shadow` nor `CastShadow`** (only 0.8% / 0.4% of all lights set `CastShadow`).
+    So "skip whenever both are false" (`ls_noshadow=2`) would stop tracing almost every
+    placed lamp and bring back the leaks D-LS fixes (9.4); in BG3 the flag means "no shadow
+    map", not "meant to leak". `Light_Player_Fill_*` also have both false.
+  - Default `ls_noshadow=1`: a light is skipped only when both flags are false **and** it is
+    the darkvision light that follows the active character (`BG3_RTL_PLAYER_LIGHT`, now set
+    for `Light_Player_Darkvision_*` only). `ls_noshadow=0` traces it too.
+  - `Light_Player_Fill_*` are no longer character lights: `sebridge.cpp` re-tags them on
+    parse (owner unknown, no player flag), so this works with the installed v1 Lua. The Lua
+    now classifies them like any other visual light (`BootstrapClient.lua` 134); the
+    reinstall only refines their owner (item/scenery instead of unknown), it is not needed
+    for the behaviour.
+- **Lights with a game shadow map** (`ls_shadowed=3`, default; the High and Ultra presets):
+  the traced visibility replaces the atlas term where the segment surface → light lies in
+  the view frustum (the light projects on screen; the frustum is convex and the surface is
+  on screen, so every opaque caster on the segment was drawn and is in the TLAS). Elsewhere
+  `min(traced, atlas)`: the atlas has the off-screen casters. Not detectable: casters in the
+  atlas but not in our prepass (forward/transparent geometry, if the game renders them into
+  light shadow maps); they would be lost on screen. `ls_shadowed=1` replaces everywhere
+  (Full+), 2 is `min` everywhere, 0 the game's map. The default variant (`LS_FULL=0`) now
+  handles every mode, so mode 3 does not fall back to the 252-register pass. Hair keeps the
+  atlas term (its self-shadow model for shadowed lights is not replicated). Note: `ls_check`
+  / `ls_impl=0` compare against the frozen reference, which knows modes 0-2 only.
+  - Cost. Budget: Ultra at 3840x1600 on the 5090 needs a base frame of ≥ 65 fps (15.4 ms)
+    under FG 2x to 120; QUALITY R7 gives D-LS 0.5 ms. Rule: keep 3 on High/Ultra if it adds
+    ≤ 0.15 ms over 0 and the pass stays ≤ 0.5 ms.
+  - **Measured (session jobs `casters-S6/S8-*`, 2026-10-27, medians of 300 frames):**
+
+    | Scene | `ls_shadowed=0` | `=3` | lights with a game shadow map |
+    |---|---|---|---|
+    | S6 Adamantine Forge | 0.372 ms | 0.375 ms | not measured (the stats job hit the open nv153 stall) |
+    | S8 Water Queens House | 0.120 ms | 0.120 ms | 0.00 of 0.41 evaluations per px |
+
+    | S5 Grymforge | 0.629 ms | **0.690 ms** (mode 1: 0.688) | 0.34 of 4.34 evaluations per px (7.8%) |
+
+    S6 and S8 have no shadow-mapped lights in view. **Grymforge** (`32-casters-S5-*`, one
+    session, no faults): replacing the 0.34 shadow-mapped evaluations per px costs
+    **+0.061 ms** (traced 3.83 per px, occluded 1.13; light removed 18.0% of the lit
+    luminance), within the +0.15 ms rule, and the on-screen test of mode 3 is free
+    (mode 1 = 0.688 ms). **Default kept: `ls_shadowed=3` on High and Ultra.** The pass
+    itself is over its 0.5 ms budget in Grymforge in every mode (0.63 ms at mode 0, the
+    D-LS performance task of STATUS). The traces of the three modes cannot be compared
+    frame to frame: their mean luminance swings 1772 / 419 / 77 nits with large bright
+    VFX blobs in all three (mode 0 included), so a dedicated in-frame A/B (as `rt_debug=7`
+    for the sun) is needed to judge the replaced shadows' look.
+- **Other results of the same jobs.**
+  - Coverage (S8, `rt_debug=3`): match 99.23%, miss 0.069%, in front 0.072%, behind 0.633%
+    of which 0.629% "through vt cutouts": the stochastic alpha test at blurred mips letting
+    primary rays through the edges of ferns and ivy (the debug frame shows them only there).
+    The characters are matched. Missing geometry is ≤ 0.07%.
+  - Skipped by art intent (`ls_noshadow=1`, owners 0x1F): 11.4% of light evaluations in S6,
+    86% in S8, 11.8% in S5. That is the darkvision pair; in S8 most of it is the `Point_Default` half,
+    which has intensity 0 (it covers the view at r = 18 and adds nothing). The owner view
+    (`ls_debug=9`) shows the party's floor in S8 lit by an owner-unknown visual light (the
+    carried fire weapon), which is traced; little magenta (character) light anywhere.
+  - Join: unmatched 0.0% with `ls_dyn_tol` 0.05 and 1.5 alike: the carriers stood still in
+    both sessions. The benefit needs a moving carrier (`-Move`), not yet run.
+  - Non-finite values: 0 in S8; in S6 2.6-4.4k in every trace and mode, all in one D32F
+    depth image of pass `2a6a525c` (the game's), none in an image of ours.
+
+**Box (projector) lights: the gap and the plan (not implemented).** They are the third loop
+of `f469db78` (set 1 b29, struct `_53`, about 128 bytes; lines 735-930 of
+`captures/20261026-165848/shaders/f469db7865d7c524.glsl`). A box light is a **directional
+light inside an oriented box**:
+- `uvw = _m6 · (P, 1)` (row-major 4x3, world → box), lit only for `|uvw − 0.5| < 0.5`;
+- direction to the light is the constant `_m9` (N·L = `dot(N, _m9)`, H from `V + _m9`);
+- falloff: along z, ramps below `_m2.x` (× `_m2.z`) and above `_m2.y` (× `_m2.w`); across x/y,
+  `(0.5 − |uv − 0.5|) · _m3` below 1; each ramp picks one of four curves by `_m4 >> 24`
+  (linear, square, smoothstep, smootherstep); `_m4 & 0xFFFFFF` is the channel mask;
+- colour `_m0`, optionally × a cookie texture `_m1 >> 1` (index − 1) at `uv`; `_m1 & 1`
+  scales by the global light scale b13[0];
+- shadow: `_m8 & 1` → atlas slot `_m8 >> 2`, the same 12-tap PCF as spots, × `min(_m5, fade)`;
+- BRDF: the same GGX/Burley as the point/spot loop (the class permutations add their terms).
+So the light eval allows it. Plan: (1) read the record offsets from the SPIR-V `Offset`
+decorations (as for b25) and bind b29 to D-LS (one more push-descriptor binding); (2) walk
+the froxel's projector entries (`bg3_cluster_projectors` already counts them) and build a
+`Bg3Light`-like record with a direction instead of a position, reusing
+`bg3_light_eval_mat` with `Ld = _m9` and the box falloff in place of the range falloff;
+(3) trace one ray along `_m9` (cone-sampled by a source angle) with `tmax` = the distance to
+the box's face on the light side (the box is the light's extent; casters outside it do not
+shadow it); (4) the same delta and `ls_shadowed` logic, the same art-intent rule (the rim
+and fill rigs come from `CharacterLight` lists, owner character, flags from their
+templates). Validation as 9.3: `ls_debug=4` with the projector pixels included.
+
+**Forward receivers: design note (later).** Water, glass, particles and VFX are drawn after
+the deferred lighting by the game's forward passes, which evaluate the sun with the cascades
+and the local lights with the atlas themselves. To make them receive: (a) sun — write the
+traced visibility into a screen-space image is not enough (they are not at the G-buffer
+depth); trace in a small compute pass over the forward pass's own depth (a prepass of the
+transparent surfaces does not exist; the refraction copy in step 13 gives the opaque depth
+only), or patch the forward shaders' shadow lookup to read a world-space visibility cache
+(SHaRC-like, STATUS backlog 5); (b) local lights — the same: a per-froxel visibility or a
+patched lookup. Water is the most visible case and also needs the forward capture of
+backlog item 12 to cast. Do it with item 12.
 
 ## 10. D-RF: ray-traced reflections (implemented, tiers (a) and (c))
 
