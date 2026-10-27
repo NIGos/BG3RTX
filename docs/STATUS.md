@@ -1,6 +1,34 @@
-# Project status (paused 2026-10-26, about 21:00)
+# Project status (stable snapshot 2026-10-27, about 19:45)
 
-Main is buildable and verified up to `1e87553`.
+## Stable build: how to play and compare
+- **Main is stable.** The intermittent device lost was D-LS reading a destroyed SSS-profile
+  buffer of the game (docs/DEVICE_LOST_DLS.md). After the fix (`query_binding`): 0 faults in
+  more than 60 runs, including 8/8 in the stability check of 19:17-19:27 (Campsite, Grymforge),
+  with `rt_bvh_split=1`.
+- **Start:** `bin\BG3RTX.exe`, then a preset, then "Save and launch"; or the launcher as the
+  Steam launch option (docs/USER_SETTINGS.md).
+- **A/B:** **Ctrl+Shift+F9** while playing switches every ray-traced effect off and on (the
+  game's own lighting in the same frame; DLSS and frame generation unchanged). Logged as `[ab]`.
+  Not yet tried by hand: background runs can't press real keys.
+- **On by default:** RT sun shadows (with the roof-based replace), RT local shadows (all lights
+  except darkvision; traced visibility replaces the game's shadow maps on screen), GI (diffuse
+  bounce), RT reflections, DLSS RR, BVH split.
+- **Off by default until their gates pass:** SHaRC (`sharc`), exact-k light sampling (`ls_k`).
+  On branches, not in main: D-EM emissive capture (one material open in AF), EN2 hit materials
+  (in test), the runtime-heuristic fixes and exposure hold (in test).
+- **Known QA failures that are not defects:** flicker in wind-blown grass and foliage (the RT sun
+  and GI sharpen per-blade lighting the wind moves, R0), contact occlusion under platform rims.
+- **Modded saves** (33 of 110: Act 2, Rivington) don't load in background runs: the game drops
+  `-loadSaveGame` when mods are missing, and posted clicks don't press its menu buttons.
+  Decision pending (docs/TEST_SCENES.md, "Saves made with mods").
+
+## Test process
+`scripts/test-queue.ps1` (docs/TEST_SCENES.md, "Test queue"): one runner launches the game,
+serially, hidden and click-through; agents enqueue JSON jobs; shared sessions per save; results in
+`captures/queue/results.md`, per-run logs in `captures/queue/logs/`. Thresholds: every gate
+derived (QUALITY R0 addendum, docs/QA.md). Quality before frame rate on Ultra (QUALITY.md).
+
+## Earlier snapshot (2026-10-26)
 
 ## In main
 - **RR:**
