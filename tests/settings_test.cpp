@@ -89,7 +89,7 @@ static void test_preset_expansion() {
   Map ultra;
   for (auto& kv : expand_preset(kUltra)) ultra[kv.first] = kv.second;
   CHECK_EQ(get(ultra, "gi_rr_rays"), "2");
-  CHECK_EQ(get(ultra, "ls_shadowed"), "2");
+  CHECK_EQ(get(ultra, "ls_shadowed"), "3");   // shadow maps replaced where every caster is on screen
   CHECK_EQ(get(ultra, "rf_max_rough"), "0.8");
   CHECK_EQ(get(ultra, "fps_cap"), "58");
   CHECK_EQ(get(ultra, "fg"), "2");

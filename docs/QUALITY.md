@@ -352,6 +352,23 @@ reproduce them.
   game".
 - QA (`docs/QA.md`) reports brightening for review, not as a failure, unless it is
   physically implausible: energy gain, or light through geometry that exists.
+- **Where parity with the game applies (2026-10-27, so it doesn't slow the work):**
+  - **Inputs read from the engine: yes.** Light positions, colours and radii, material
+    parameters, emissive radiance, camera, exposure and grade must match the game.
+    Ratio and parity checks there are data-correctness tests.
+  - **Outputs of our effects: no.** Shadows, GI, AO, reflections and the final image are
+    judged only by artifact and physics gates: non-finite values, hard-edged black
+    patches, energy gain, light leaking into closed or roofed spaces, flicker. Never by
+    closeness to the game's image.
+  - **Trust heuristics:** don't add ones whose only purpose is to stay close to the
+    game, such as "within N m of a game-lit pixel". Prefer fixing the scene (missing
+    casters: shadow-map fallback, offline world) over gating the effect.
+- **First application: the sun** (`rt_sun_replace=1`, TRACK_D 12). The traced visibility
+  replaces the game's sun mask where it is trusted: no roof volume of the asset DB on the
+  sun ray, the ray stays in the captured view frustum until it is above the visible scene,
+  and the game's mask is lit within `rt_sun_near` (1.5 m), so only shadow-map errors next
+  to lit areas (filtering, acne, cascade transitions) are corrected. Untrusted pixels keep
+  `min(game, traced)`. Cloud shadows are applied by the lighting after the mask and stay.
 
 **R1 Sampling.**
 - Importance-sample the integrand:
@@ -504,3 +521,4 @@ reproduce them.
 | RR before post (AUDIT_SOTA #1) | RR denoises the pre-DoF, pre-grade scene colour; the game's post chain (DoF weights, exposure, bloom, grade UBO + LUT) is replayed at output resolution. R3: bit-exact replication at render resolution (100.00% identical texels, foundry and Goblin Camp; a DoF frame not re-checked on the final build). R5: non-finite 0, fallback per frame on unmodelled post effects, `-Move` clean, `-Validation` no new IDs (the earlier `vkDestroyImage-01000` at load transitions was stale descriptors in our set ring, fixed; a fence-backed wait in the destroy hooks guards real in-flight use: none at level loads, 3 waits of 0.1 to 6.8 ms in 5 `-Move` runs, 0 non-finite in the traced motion frame; TRACK_A "Lifetime of the game's images"). R6: foundry A/B, difference at the frame-to-frame floor; motion/dark-scene metric not done. R7: about +0.2 ms. Effective RR (SETTINGS_DESIGN 7.3.1): the core's RR modes follow `rr_active()`, not the key. | `img/rrpost_foundry_*.png` |
 | D-RF against the rules (TRACK_D 10) | R1: bounded GGX VNDF, pcg3d white noise on its own stream, mirror below a = 0.1. R2: RR only, no history or filter of ours; without RR deterministic mirror rays only (a < 0.3). R3: exact delta on the game's probe term (D-EN4, mean error 0.58%), TLAS miss keeps the probe, the game's DFG LUT as env BRDF, its SO kept for the probe and not re-applied to traced hits. R5: debug views 1-6, `rf_stats` tier fractions, non-finite guards, identical `-Validation` IDs, `-Move`, `fg=2`. R6: foundry A/B + crops; **reflective-scene A/B and stability metric not done**. R7: 0.33 ms. | `img/rf_foundry_*.png`, `img/rf_docks_*.png` |
 | AUDIT_SOTA 2. Static/dynamic BVH split (TRACK_D 11) | **Done.** Class-A meshes get one object-space BLAS each, built once from their first XFB capture (the inverse instance matrix), verified against another instance or a later frame, compacted and cached. The TLAS takes every instance with the game's matrices, read at submit. The rest is captured with a BLAS per draw, refit while its triangle count holds. `rt_bvh_split` (live; 0 = the old soup). R3: the primary-ray check and triangle count match the soup in the same view. R5: audits recapture cached draws and evict on mismatch; non-finite matrices are masked; `-Move` and `-Validation` runs (TRACK_D 11.4). R7: pan 1.37 → 0.45 ms median, 2.91 → 0.83 ms p99. | Foundry A/B: match 98.98% / 98.98%, 2.59M / 2.595M triangles; foliage scenes and the main menu not compared |
+| R0 sun replace (TRACK_D 12) | **Implemented, partly verified.** `rt_sun_replace` (live): the traced sun replaces the game's mask where trusted (roof volumes from the asset DB, off-screen frustum test, proximity to the game's lit mask); otherwise `min(game, traced)`. In-frame A/B against min (`rt_debug=7`, `sun check` log, QA `sun_check`). R5: non-finite 0 in S1, S3, S7, S8, S14. | No leaks: written lit where the game is dark on 0‰ in all five scenes (S7: traced sun through the cut-away roof on 43‰, all kept by roof volumes, `img/sun_replace_s7_interior.png`). Too conservative outdoors: 94-98% of Campsite's disagreeing pixels fail the off-screen test (`rt_sun_top=0` to try). In-frame A/B, `-Validation`, `-Move` and the isolated cost are still to run (HANDOFF.md) |

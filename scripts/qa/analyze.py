@@ -14,7 +14,8 @@ from .decode import Frame, Trace, lum709, lum2020
 
 CROPS_PER_DETECTOR = 3   # per detector, effect and buffer (2 on the lighting buffer)
 EFFECT_LABEL = {"gi": "GI (hybrid RT GI + RT AO fold)", "rt_reflections": "RT reflections (D-RF)",
-                "rt_shadows": "RT sun shadows", "rt_local_shadows": "RT local-light shadows (D-LS)",
+                "rt_shadows": "RT sun shadows", "rt_sun_replace": "RT sun replacing the game's mask (in-frame vs min)",
+                "rt_local_shadows": "RT local-light shadows (D-LS)",
                 "all_rt": "all RT effects"}
 
 
@@ -120,6 +121,11 @@ def analyze_scene(d: Path, pool):
         return n, float((da > 0.1).mean())
     view = dict(pool.map(view_change, [n for n in fr if n != "on0"]))
     moved = sorted(n for n, v in view.items() if v > det.T["view_changed_frac"])
+    # The sun debug traces are evaluated each on its own (in-frame), so another view than
+    # on0's does not void them. (Their crops show on0's lighting only when the view agrees.)
+    self_contained = ("sun_dbg", "sun_check", "sun_trust")
+    moved_self = [n for n in moved if n in self_contained]
+    moved = [n for n in moved if n not in self_contained]
     res["view_change"] = {n: round(v, 4) for n, v in view.items()}
     if moved:
         res["notes"].append(f"camera moved: {', '.join(moved)} show another view than on0 (albedo differs on "
@@ -211,38 +217,87 @@ def analyze_scene(d: Path, pool):
         dif, src = fr["sun_dbg"].diffuse()
         if dif is not None:
             game, rt = np.clip(2 * dif[..., 0], 0, 1), np.clip(2 * dif[..., 1], 0, 1)
+            # Blue: the visibility written into the mask (rt_sun_replace; older builds write 0).
+            applied = np.clip(2 * dif[..., 2], 0, 1)
+            if float(applied.max()) <= 0.0:
+                applied = None
             sun_ratio = None
             if data["on0"]["Yc"] is not None and "sun_off" in data:
                 sun_ratio = det.ratio_map(data["on0"]["Yc"], data["sun_off"]["Yc"], 2)[0]
             cls = fr["sun_dbg"].material_class()
             if cls is not None and cls.shape != game.shape:
                 cls = None
-            sd = det.sun_disagreement(game, rt, sun_ratio, cls)
+            sd = det.sun_disagreement(game, rt, sun_ratio, cls, applied)
             gm = fr["off0"].sun_mask() if "off0" in data else None
             if gm is not None and gm.shape == game.shape:
                 sd["extra"]["metrics"]["game_mask_vs_alloff_mad"] = round(float(np.abs(gm - game).mean()), 4)
+            same = "sun_dbg" not in moved_self   # on0's lighting and ratios match this view
+            if not same:
+                sun_ratio = None
             for sub, r in sd.items():
-                res["checks"].append({"detector": f"sun_{sub}_casters", "effect": "rt_shadows", "buffer": f"sun mask ({src})",
+                dname = "sun_replaced" if sub == "replaced" else f"sun_{sub}_casters"
+                res["checks"].append({"detector": dname, "effect": "rt_sun_replace" if sub == "replaced" else "rt_shadows",
+                                      "buffer": f"sun mask ({src})",
                                       "on": "sun_dbg", "off": "sun_dbg", **{k: v for k, v in r.items() if k != "regions"},
                                       "top": r["regions"][:6]})
                 regs = r["regions"] if not r["pass"] else r["regions"][:1]
                 for j, g in enumerate(regs[:CROPS_PER_DETECTOR]):
                     y0, y1, x0, x1 = crop_window(g["bbox"], game.shape)
-                    ov = np.stack([game, im.box(rt, 2), np.zeros_like(game)], -1)
+                    blue = applied if applied is not None else np.zeros_like(game)
+                    ov = np.stack([game, im.box(rt, 2), blue], -1)
                     name = f"sun_{sub}_{j}.png"
-                    tiles = [dsp("on0", "compose")[y0:y1, x0:x1], ov[y0:y1, x0:x1]]
-                    labs = ["all on (lighting)", "red game mask, green RT (yellow both lit)"]
-                    if sun_ratio is not None:
-                        tiles.append(heat_ratio(sun_ratio[y0:y1, x0:x1]))
-                        labs.append("sun term on/off")
-                    if "sun_off" in data:
-                        tiles.insert(0, dsp("sun_off", "compose")[y0:y1, x0:x1])
-                        labs.insert(0, "RT sun off (lighting)")
+                    tiles = [ov[y0:y1, x0:x1]]
+                    labs = ["red game mask, green RT, blue written (white all lit)"]
+                    if same:
+                        tiles.insert(0, dsp("on0", "compose")[y0:y1, x0:x1])
+                        labs.insert(0, "all on (lighting)")
+                        if sub != "replaced":
+                            if sun_ratio is not None:
+                                tiles.append(heat_ratio(sun_ratio[y0:y1, x0:x1]))
+                                labs.append("sun term on/off")
+                            if "sun_off" in data:
+                                tiles.insert(0, dsp("sun_off", "compose")[y0:y1, x0:x1])
+                                labs.insert(0, "RT sun off (lighting)")
                     info = {k: v for k, v in g.items() if k not in ("bbox", "rank", "qualified", "focus")}
-                    sheet(tiles, labs, f"{meta['scene']} sun {sub} casters at x{x0}-{x1} y{y0}-{y1}: {info}"
+                    sheet(tiles, labs, f"{meta['scene']} {dname} at x{x0}-{x1} y{y0}-{y1}: {info}"
                           + ("" if not r["pass"] else " (largest, below threshold)"), crops / name)
-                    res["crops"].append({"file": f"crops/{name}", "detector": f"sun_{sub}_casters", "effect": "rt_shadows",
+                    res["crops"].append({"file": f"crops/{name}", "detector": dname, "effect": "rt_shadows",
                                          "buffer": "sun mask", "bbox": g["bbox"], "shape": list(game.shape), **info})
+
+    # ---- rt_sun_replace in-frame A/B (rt_debug=7 trace): the written mask against
+    # min(game, traced) of the same pixel and frame; animation cannot fake it.
+    if "sun_check" in data:
+        dif, src = fr["sun_check"].diffuse()
+        if dif is not None:
+            view = np.clip(2 * dif, 0, 1)
+            sc = det.sun_check(view)
+            over = None
+            if "sun_dbg" in data:
+                dd, _ = fr["sun_dbg"].diffuse()
+                if dd is not None and dd.shape == dif.shape:
+                    over = np.clip(2 * dd, 0, 1)
+            for sub, r in sc.items():
+                res["checks"].append({"detector": f"sun_check_{sub}", "effect": "rt_sun_replace",
+                                      "buffer": f"debug diffuse ({src})", "on": "sun_check", "off": "sun_check",
+                                      **{k: v for k, v in r.items() if k != "regions"}, "top": r["regions"][:6]})
+                # Every far region is for review; the edge ones are expected (largest two).
+                regs = r["regions"][:CROPS_PER_DETECTOR] if sub != "edge" else r["regions"][:2]
+                for j, g in enumerate(regs):
+                    y0, y1, x0, x1 = crop_window(g["bbox"], view.shape[:2])
+                    tiles = [view[y0:y1, x0:x1]]
+                    labs = ["changed by the replace (yellow edge, red far, blue darker)"]
+                    if over is not None:
+                        tiles.append(over[y0:y1, x0:x1])
+                        labs.append("next trace: red game, green RT, blue written")
+                    if "sun_check" not in moved_self:
+                        tiles.insert(0, dsp("on0", "compose")[y0:y1, x0:x1])
+                        labs.insert(0, "all on (lighting)")
+                    name = f"sun_check_{sub}_{j}.png"
+                    info = {k: v for k, v in g.items() if k not in ("bbox", "rank", "qualified", "focus")}
+                    sheet(tiles, labs, f"{meta['scene']} sun_check {sub} at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
+                    res["crops"].append({"file": f"crops/{name}", "detector": f"sun_check_{sub}",
+                                         "effect": "rt_sun_replace", "buffer": "debug diffuse", "bbox": g["bbox"],
+                                         "shape": list(view.shape[:2]), **info})
 
     # ---- non-finite values
     nf = {n: t.nonfinite() for n, t in traces.items()}
@@ -353,7 +408,8 @@ def summarize(res):
             c = cs[0]
             parts.append(f"{kind} {c['score']} (> {c['threshold']})")
     for c in warns:
-        parts.append(f"warn {c['detector']} {c['score']} (> {c['threshold']})")
+        eff = f" {c['effect']}" if c.get("effect") else ""
+        parts.append(f"review {c['detector']}{eff} {c['score']} (> {c['threshold']})")
     passes = [c["detector"] for c in res["checks"] if c["pass"]]
     tail = f" | ok: {', '.join(sorted(set(passes) - set(by)))}" if passes else ""
     return f"{res['scene']} {res['save']}: {head}" + (" - " + " | ".join(parts) if parts else "") + tail
@@ -370,7 +426,7 @@ def write_report(results, out: Path, wall_s):
     rows = []
     for r in results:
         sc = r["scene"]
-        rows.append(f"<h2 id='{sc}'>{sc} {html.escape(r['save'])}</h2><p class='sum'>{html.escape(r['summary'])}</p>")
+        rows.append(f"<h2 id='{sc}'>{sc} {html.escape(r['save'])}</h2><p class='sum'>{html.escape(r.get('summary', 'RUN INCOMPLETE'))}</p>")
         rows.append(f"<p>Traces: {', '.join(r['traces'])}. Game run {r.get('run_s')} s{'' if r.get('exclusive', True) else ' (shared run: not a timing)'}, analysis {r.get('analysis_s')} s.</p>")
         if r.get("notes"):
             rows.append("<p>Notes: " + html.escape("; ".join(r["notes"])) + "</p>")
@@ -394,7 +450,7 @@ def write_report(results, out: Path, wall_s):
             info = {k: v for k, v in c.items() if k not in ("file", "shape")}
             rows.append(f"<p>{i + 1}. <code>{html.escape(json.dumps(info, default=_json))}</code></p>"
                         f"<img src='{sc}/{c['file']}' alt='crop'>")
-    sums = "\n".join(html.escape(r["summary"]) for r in results)
+    sums = "\n".join(html.escape(r.get("summary", "RUN INCOMPLETE")) for r in results)
     doc = (f"<!doctype html><html><head><meta charset='utf-8'><title>BG3RTX QA</title><style>{CSS}</style></head><body>"
            f"<h1>BG3RTX image-quality QA</h1><p>{time.strftime('%Y-%m-%d %H:%M')}, {len(results)} scene(s), "
            f"{wall_s:.0f} s analysis. Thresholds: <code>{html.escape(json.dumps(det.T))}</code>. "
@@ -431,5 +487,5 @@ def analyze_all(dirs, out: Path, keep_raw=False):
                 prune(d)
     wall = time.time() - t0
     write_report(results, out, wall)
-    (out / "summary.json").write_text(json.dumps([{"scene": r["scene"], "summary": r["summary"]} for r in results], indent=1))
+    (out / "summary.json").write_text(json.dumps([{"scene": r["scene"], "summary": r.get("summary", "RUN INCOMPLETE")} for r in results], indent=1))
     print(f"report: {out / 'report.html'} ({wall:.0f} s analysis)")

@@ -62,6 +62,91 @@ captures and the objective checks ([QA.md](QA.md)). The art-intent review looks 
 whether the change keeps the look the artists lit for (key lights, character
 readability, colour grade) as well as being physically better.
 
+## Test queue (how in-game tests are run)
+
+Only one process starts the game: `scripts/test-queue.ps1`, run by the coordinating
+session. Agents and sessions never launch the game themselves. They add a job, a JSON
+file in `captures/queue/pending/`, and the runner executes the jobs oldest first, one game
+at a time. The file header lists the fields (`tree`, `save`, `set`, `traces`, `repeat`,
+`args`, `phases`, `patterns`, `stop_on_dump`, `post`, `command`, and for sessions
+`session`, `warmup`, `trace_gap`, `hold`).
+
+Each run gets a standard record in `captures/queue/results.jsonl` and `results.md`:
+- the outcome and its duration;
+- the NVIDIA device-lost events (System log, nvlddmkm id 153);
+- new Aftermath dumps;
+- the last log line matching each of the job's `patterns`;
+- the build stamp, flagged when the build changed during the run.
+
+A run's log is kept when it faulted.
+
+### Sessions: one game for many jobs
+
+A launch and load costs about 55-60 s of a 90 s run (core loaded at +4 s, 31k pipelines
+created, the level ready at about +55 s). Most jobs need none of it: A/B toggles,
+emissive calibration, QA effect toggles and guard or counter checks only need other
+settings, which the layer reads live, a rebuilt core, which hot-reloads, and traces.
+
+A job with `"session": true` can share a running game. Consecutive session jobs with the
+same `tree`, `save` and `args` use one game, started by `auto-run.ps1 -Session`. Each run
+of such a job:
+1. waits for a rebuilt `bin\bg3rtx_core.dll` to load (`[hot] core generation N loaded`),
+   and records the generation (`core_gen`);
+2. writes its `set` keys into `captures\auto.ini` and waits for `[cfg] settings read`;
+3. starts its `phases` (live_phases `--offset`: only lines of this run count);
+4. waits `warmup` seconds (default 10);
+5. takes `traces` traces on demand, `trace_gap` seconds apart (default 8), by creating
+   `trace.request`, which the layer polls once per present by mtime. `traces: 0` is valid;
+6. waits `hold` seconds (default 0), for counter or guard lines;
+7. restores the session's `auto.ini`;
+8. matches `patterns` in its own slice of `bg3rtx.log` (byte offsets), not the whole log.
+
+The game is closed when:
+- the next job cannot use it;
+- the queue is empty;
+- a fault occurs: nv153, a new Aftermath dump, a stall or exit, a trace not written
+  within 60 s, or settings not re-read. The faulted run's log slice is kept, and later
+  jobs relaunch;
+- the tree's `VkLayer_bg3rtx.dll` changes, because a layer needs a new process.
+
+The session starts once the scene is stable: with `auto_traces=0` the layer takes no
+trace and writes `auto.done` with `[auto] scene ready`. A tree whose layer predates this
+runs its jobs alone, as before.
+
+Records gain `session` (`s<hhmmss>#<run>`), `core_gen` and `saved_sec`, which is the
+session's launch-to-ready time for every run but the first. `results.md` notes each
+session's start and close, with the total saved.
+
+The game is not reloaded between runs, so the state carries over: time of day, camera,
+streaming and temporal history. Keys that act only at startup (`rt`, `headless`,
+`fg`/DLSS setup, `aftermath`) and fault-rate tests belong in non-session jobs. A pass with
+a fresh game is still the reference before a result is final.
+
+Offline test (no game): `.\scripts\test-queue-dryrun.ps1` runs ten jobs through
+`test-queue.ps1 -DryRun`. `test-queue-fake.ps1` plays the game and the layer: a fake log,
+a hot reload, traces, and nv153, stall and layer-rebuild faults.
+
+Example: three toggles on one save, about 2 minutes instead of about 4.5:
+
+```json
+{"name": "gi-off",   "save": "Campsite - 27h", "session": true, "set": "gi=0", "traces": 1, "patterns": ["\\[core\\] guard:"]}
+{"name": "gi-on",    "save": "Campsite - 27h", "session": true, "set": "gi=1", "traces": 1, "patterns": ["\\[core\\] guard:"]}
+{"name": "refl-off", "save": "Campsite - 27h", "session": true, "set": "rt_reflections=0", "traces": 1, "patterns": ["\\[core\\] guard:"]}
+```
+
+Rules that keep the queue fast and its results trustworthy:
+- **One load, many measurements.** Put A/B toggles in a `live_phases` spec (`phases`),
+  or in consecutive session jobs, not in separate fresh runs. A load costs 40-60 s, a
+  toggle about 10 s.
+- **Restarts only when the load is the subject.** Fault-rate tests (`repeat`) restart the
+  game because the faults cluster in the first minute after a load. Don't mark them `session`.
+- **Don't rebuild a `tree` while its job runs.** The core DLL hot-reloads into a running
+  game, so a rebuild mid-job mixes two builds; the record flags it (`BUILD CHANGED`). Agents
+  build, commit, then enqueue. Between session jobs a core rebuild is fine: the next run
+  waits for the new generation.
+- **Wait for results; never poll the game.** The runner writes them, and the coordinator
+  reads `results.md`.
+
 ## Concurrent runs
 
 **Status: experimental, off by default.** Every run is exclusive unless it asks

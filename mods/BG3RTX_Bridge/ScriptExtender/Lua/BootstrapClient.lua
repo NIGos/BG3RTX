@@ -42,7 +42,7 @@ local CELL = 16.0
 
 local FLAG_ENABLED, FLAG_USE_TEMPERATURE, FLAG_FILL, FLAG_FLICKER = 1, 2, 4, 8
 local FLAG_MOVING, FLAG_SHADOW, FLAG_CAST_SHADOW, FLAG_VOLUMETRIC = 16, 32, 64, 128
-local FLAG_PLAYER_LIGHT = 256   -- Light_Player_* (darkvision / active character light)
+local FLAG_PLAYER_LIGHT = 256   -- Light_Player_Darkvision_* (the light that follows the active character)
 local OWNER_UNKNOWN, OWNER_PLACED, OWNER_ITEM, OWNER_SCENERY, OWNER_CHARACTER = 0, 1, 2, 3, 4
 local TYPES = {Point = 0, Spot = 1, Direction = 2}
 
@@ -131,7 +131,9 @@ local function classify(e)
   r.s2 = string.format("%.0f", l.Kelvin)
   if charlights[e] then
     r.owner = OWNER_CHARACTER
-  elseif name:find("^Light_Player") then
+  elseif name:find("^Light_Player_Darkvision") then
+    -- only the darkvision pair follows the controlled character; Light_Player_Fill_* are
+    -- fill lights at fixed world positions and are classified like any other light below
     r.owner = OWNER_CHARACTER
     r.static = r.static | FLAG_PLAYER_LIGHT
   elseif file:find("/Levels/", 1, true) and (file:find("/Lights/", 1, true) or file:find("/CombinedLights/", 1, true)) then

@@ -12,11 +12,12 @@
 // `version` (or `struct_size`) before using anything newer than version 1.
 //   2: runtime lights (the Script Extender bridge merged with the placed lights,
 //      docs/SE_BRIDGE.md), se_info, se_environment.
+//   3: roof_volumes (the RT sun's trust test, docs/TRACK_D_RT.md 12).
 #pragma once
 #include <cstddef>
 #include <cstdint>
 
-#define BG3RTX_ASSETDB_API_VERSION 2
+#define BG3RTX_ASSETDB_API_VERSION 3
 
 // ---- lights (record layout of the file's LGHT section, 128 bytes) ----
 enum Bg3DbLightType : uint8_t { BG3_DB_LIGHT_POINT = 0, BG3_DB_LIGHT_SPOT = 1, BG3_DB_LIGHT_BOX = 2 };
@@ -150,6 +151,25 @@ struct Bg3DbProbeCapture { // PCAP record, 80 bytes: one bake per lighting prese
 };
 static_assert(sizeof(Bg3DbProbe) == 64 && sizeof(Bg3DbProbeCapture) == 80, "probe records");
 
+// ---- roof volumes (version 3) ----
+// The volumes under a roof the camera may cut away: roofed RoomTriggers, covered floors
+// (a FloorTrigger of a building with a higher floor) and roof floors. Each is an oriented
+// box: a box trigger as is, a prism trigger's local x/z polygon bounds x [0, Height],
+// a sphere trigger's cube.
+enum Bg3DbVolumeKind : uint32_t {
+  BG3_DB_VOL_ROOFED_ROOM = 1u << 0,
+  BG3_DB_VOL_COVERED_FLOOR = 1u << 1,
+  BG3_DB_VOL_ROOF_FLOOR = 1u << 2,
+};
+struct Bg3DbVolume {     // 48 bytes, absolute world space
+  float center[3];
+  uint32_t kind;         // Bg3DbVolumeKind
+  float rot[4];          // quaternion x, y, z, w: box (local) -> world
+  float half[3];         // half extents along the local axes (scale applied)
+  uint32_t trigger;      // trigger index (Bg3RoomInfo::room numbering)
+};
+static_assert(sizeof(Bg3DbVolume) == 48, "Bg3DbVolume is 48 bytes");
+
 // ---- runtime lights (version 2, docs/SE_BRIDGE.md) ----
 // The lights the game has now: the Script Extender bridge's export (every light entity
 // near the controlled character: placed lights, item and scenery-visual lights, the
@@ -245,4 +265,9 @@ struct Bg3AssetDbApi {
   // containing it, with the resource the bridge says story scripting set on that trigger
   // (else the trigger's own). False when neither is known. BG3 has no time of day.
   bool (*se_environment)(const float pos[3], const char** atmosphere, const char** lighting);
+
+  // ---- version 3 ----
+  // Roof volumes of the current level whose bounding sphere comes within `radius` of
+  // `pos`, nearest first. Returns the total; writes up to `max`.
+  uint32_t (*roof_volumes)(const float pos[3], float radius, Bg3DbVolume* out, uint32_t max);
 };

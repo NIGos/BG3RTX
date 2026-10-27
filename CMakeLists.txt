@@ -147,9 +147,12 @@ add_executable(assetdb_test tests/assetdb_test.cpp layer/assetdb.cpp layer/sebri
 target_include_directories(assetdb_test PRIVATE ${VULKAN_SDK}/Include)
 target_compile_definitions(assetdb_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME assetdb_test COMMAND assetdb_test)
+# Light BVH for many-light sampling (common/light_tree.h, docs/DESIGN_SOTA_NEXT.md item 1).
+add_executable(light_tree_test tests/light_tree_test.cpp)
+add_test(NAME light_tree_test COMMAND light_tree_test)
 
 # Hot-reloadable core: rebuild while the game runs.
-add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp)
+add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # A fixed PDB name would stay locked by a debugger attached to the old copy.
 set_target_properties(bg3rtx_core PROPERTIES PDB_NAME "bg3rtx_core_$<CONFIG>")

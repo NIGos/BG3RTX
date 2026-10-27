@@ -195,7 +195,7 @@ struct AsAlloc {
 // (a TLAS of a slot in flight may still reference it).
 struct PendingFree { uint64_t frame; int chunk; VkDeviceSize off, size; VkAccelerationStructureKHR as = VK_NULL_HANDLE; };
 std::vector<PendingFree> g_pending_free;
-// rt_as_keep=1 (default): a released BLAS's VkAccelerationStructureKHR is kept, not
+// rt_as_keep=1 (diagnostic, default 0): a released BLAS's VkAccelerationStructureKHR is kept, not
 // destroyed, while the device runs (its range is reused by new AS objects). Every
 // fault log of the split had the faulting page within 70 KB of one of our AS
 // handles (host heap: the driver's AS objects), and every configuration that faults
@@ -206,7 +206,7 @@ std::deque<VkAccelerationStructureKHR> g_kept_as;
 uint64_t g_kept_dropped = 0;
 void retire_as(VkAccelerationStructureKHR as) {
   if (!as) return;
-  if (!cfg_int("rt_as_keep", 1)) {
+  if (!cfg_int("rt_as_keep", 0)) {
     defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(as));
     return;
   }

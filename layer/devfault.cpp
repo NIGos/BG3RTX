@@ -231,7 +231,7 @@ const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalD
         int(offered(VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME)), int(bf.reportAddressBinding));
   }
   g_ckpt_dev = false;
-  if (cfg_int("fault_checkpoints", 1) && offered(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)) {
+  if (cfg_int("fault_checkpoints", 0) && offered(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)) {
     if (!listed(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME))
       g_ext_names.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
     g_ckpt_dev = changed = true;
@@ -250,7 +250,7 @@ const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalD
 const VkInstanceCreateInfo* fault_instance_create_info(PFN_vkGetInstanceProcAddr next, const VkInstanceCreateInfo* ci,
                                                        VkInstanceCreateInfo* scratch) {
   g_bind_inst = false;
-  if (!next || !ci || !cfg_int("rt", 0) || !cfg_int("dev_fault", 1) || !cfg_int("dev_fault_bindings", 1)) return ci;
+  if (!next || !ci || !cfg_int("rt", 0) || !cfg_int("dev_fault", 1) || !cfg_int("dev_fault_bindings", 0)) return ci;
   auto enumerate = reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(
       next(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties"));
   bool have = false;
