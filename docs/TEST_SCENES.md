@@ -62,6 +62,34 @@ captures and the objective checks ([QA.md](QA.md)). The art-intent review looks 
 whether the change keeps the look the artists lit for (key lights, character
 readability, colour grade) as well as being physically better.
 
+## Test queue (how in-game tests are run)
+
+Only one process starts the game: `scripts/test-queue.ps1`, run by the coordinating
+session. Agents and sessions never launch the game themselves. They add a job, a JSON
+file in `captures/queue/pending/`, and the runner executes the jobs oldest first, one game
+at a time. The file header lists the fields (`tree`, `save`, `set`, `traces`, `repeat`,
+`args`, `phases`, `patterns`, `stop_on_dump`, `post`, `command`).
+
+Each run gets a standard record in `captures/queue/results.jsonl` and `results.md`:
+- the outcome and its duration;
+- the NVIDIA device-lost events (System log, nvlddmkm id 153);
+- new Aftermath dumps;
+- the last log line matching each of the job's `patterns`;
+- the build stamp, flagged when the build changed during the run.
+
+A run's log is kept when it faulted.
+
+Rules that keep the queue fast and its results trustworthy:
+- **One load, many measurements.** Put A/B toggles in a `live_phases` spec (`phases`),
+  not in separate runs. A load costs 40-60 s, a toggle about 10 s.
+- **Restarts only when the load is the subject.** Fault-rate tests (`repeat`) restart the
+  game because the faults cluster in the first minute after a load.
+- **Don't rebuild a `tree` while its job runs.** The core DLL hot-reloads into a running
+  game, so a rebuild mid-job mixes two builds; the record flags it (`BUILD CHANGED`). Agents
+  build, commit, then enqueue.
+- **Wait for results; never poll the game.** The runner writes them, and the coordinator
+  reads `results.md`.
+
 ## Concurrent runs
 
 **Status: experimental, off by default.** Every run is exclusive unless it asks
