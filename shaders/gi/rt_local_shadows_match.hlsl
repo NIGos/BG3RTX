@@ -91,8 +91,8 @@ void main(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   }
   if (check) {
     const bool same = all(lsSlots[uint2(li, 0)] == best);
-    stat_add(84, keep, 0u);
-    stat_add(85, keep && !same, 0u);
+    stat_add(116, keep, 0u);
+    stat_add(117, keep && !same, 0u);
   }
   if (need) {
     lsSlots[uint2(li, 0)] = best;

@@ -578,6 +578,106 @@ RTX 5090, 2560x1067, GPU timestamps, 300-frame medians/averages).
   + 0.83–0.93M alpha triangles, refit 0.88 ms (convert 0.40 at stride 24),
   rebuild 3.4 ms; XFB buffer 384 MB, alpha region 64 MB.
 
+### 7.1b Alpha test at secondary hits: grass fix (2026-10-26)
+
+**Symptom.** Campsite: black, sharp-edged polygons on the ground under grass
+(GI visibility 0; gone only with `gi=0`), the same under a twig in reflections,
+and sun RT shadows of grass shaped like the card, not the blades.
+
+**Root cause.** The grass and ground-cover family (`73849471`, 148 prepass draws
+in Campsite; also `2f1b0ffd`, `b2d72ea7` and 21 other shaders, 24 in all) was
+**not in `alpha_fs.txt`**, so its draws went into the TLAS as opaque geometry.
+Its Granite alpha test keeps the selected sample in a `vec4` and reads `.w` from
+it in the next statement (`_225 = mix(textureGrad(...), vec4(1,0,0,1), bvec4(... != 2202.0)); _226 = _225.w`);
+`alpha_table.py` only recognised the inline `...2202.0)).w`. Flat cards lying
+on the ground then blocked every GI ray from the pixels under them at t ~ 0.
+Evidence (same view, `rt_debug=5`): the patches are "in front, opaque
+geometry" (purple), not alpha-tested hits; `rt_debug=4` shows visibility 0 in
+the same polygons; with `rt_stats=1` the alpha path itself returned solid only
+by evaluation (no record 0%, no UV 0%, prim out of range 0% in steady state,
+tile set not resident 0%, page from a coarser level ~1%), so none of the
+fallbacks was the cause. Alpha-tested draws per frame went 108 → 412 once the
+family was recognised. This is in the TLAS build, so it fixed every ray type
+(GI, AO, sun and local shadows, reflections) at once.
+
+**Second table bug (fixed, not the Campsite cause).** 76 vt shaders discard
+twice: an early-out `alpha * mask < 0.001` (or 0.01), then
+`fade * alpha * mask < 0.5`. The table took the first test's cut-off, so every
+texel with any coverage was solid (whole cards solid at a filtered mip).
+`effective_cut()` now takes the strictest constant cut-off of the tests that
+keep the alpha as a factor (through `mix` only when both operands carry it,
+`bvec` selects of the Granite sample allowed; UBO cut-offs and
+`gl_FragCoord` screen-door dithers skipped). Line format: `cut=<effective>
+cut0=<first>`; `rt_alpha_cut=0` (live) restores the first.
+
+[img/alpha_campsite_crop0.png](img/alpha_campsite_crop0.png) (before | after | diff x4, render-res compose),
+[img/alpha_campsite_crop1.png](img/alpha_campsite_crop1.png) (sun shadow of a twig clump: a rectangle before, the twigs after),
+[img/alpha_campsite_vis_crop0.png](img/alpha_campsite_vis_crop0.png) (`rt_debug=4`),
+[img/alpha_campsite_primary_crop0.png](img/alpha_campsite_primary_crop0.png) (`rt_debug=5`: purple opaque-in-front gone).
+
+**Evaluation changes in `rt_common.hlsli`** (live switches, all on by default):
+- `rt_alpha_stochastic=1`: the mip comes from the ray cone with the game's own
+  Granite formula; the indirection entry already points at the finest resident
+  ancestor of a missing page (its tile scale `e & 15` is smaller), and the read
+  reports that level. Where the read is blurred (level > 1 above mip 0), the
+  hard cut-off blends over one level into a hashed threshold (pcg3d of the hit's
+  uv bits, the triangle and the frame), so P(solid) tends to the filtered alpha,
+  i.e. the coverage: partial coverage of distant grass is unbiased under RR
+  instead of all-solid or all-clear. Levels 0-1 keep the game's exact cut-off.
+- `rt_alpha_unknown=1`: a candidate whose alpha cannot be read (no record, no
+  UV, prim out of range, non-finite, non-resident tile set) lets visibility rays
+  (GI, AO, reflections) through and stops shadow rays. Evidence: these cases
+  are 0% in steady state and 0.6-2% of visibility candidates for a frame after
+  a capture change (prim >= tris: an InstInfo/BLAS mismatch, not
+  investigated further); a false "solid" there gives a hard black polygon in
+  GI (the artefact class above), a false "clear" in a shadow gives a light
+  leak, which is the worse error for shadows.
+- `rt_stats=1` logs per ray class (`alpha candidates of visibility/shadow
+  rays`): each fallback, vt/tex solid/clear, records with a loose first
+  cut-off, blur level >= 2 / >= 4, stochastic share, pages from a coarser level.
+
+**QA harness** (`python -m scripts.qa run --scenes S3`, Campsite; "before" is the
+same build with the old table and `rt_alpha_cut/stochastic/unknown=0`):
+
+| detector (‰ of the frame) | before | after |
+|---|---|---|
+| hard-dark, GI (final / lighting) | 10.9 / 2.35 | **0 / 0** |
+| hard-dark, all RT (final) | 20.4 | **0** |
+| sun extra casters | 15.8 | 3.3 |
+| flicker excess area (std on/off) | 76.4 (1.73) | 15.6 (1.28) |
+| brightening, GI (final) | 2.26 | 7.86 |
+| brightening, sun RT shadows (final) | 0.53 | 4.40 |
+
+Brightening rose where the grass no longer blocks light: under the log at the
+bottom right the traced visibility now replaces the game's SSAO (which treats the
+grass as solid) with ×2.8 more ambient, and the RT sun now passes between twig
+blades where the game's shadow map is a blurred mass. These are flagged for
+review, not confirmed errors; a run with `rt_alpha_stochastic=0` to separate
+the stochastic part did not complete (the game was closed by another session's
+run). S1 (foundry) with the fix: hard-dark GI 0.066‰, no baseline compared.
+
+**Regression checks (2026-10-27, after merging main).** `-Validation` in Campsite
+gameplay: same message IDs as the HEAD baseline. Non-finite: 0 in every capture,
+including a trace taken while panning (Goblin Camp, `-Move`). `QuickSave_3784`
+(old table + legacy switches vs new, same view): mean luminance -0.11%, no
+visible change on the piers, railings and boats. Goblin Camp foliage was not
+compared: that save enters a cutscene a few seconds after loading, at a varying
+time, so the two runs did not see the same view.
+
+**Not verified.** No `-Move` run reached its end: three runs (Goblin Camp,
+Campsite, and the QA run after the merge) stopped presenting a few seconds after
+gameplay or a trace (0 submits, GPU idle, process alive; a CPU-side stall, not a
+device loss). Another worktree's QA runs show the same stall in S3 and S7, so it
+is probably not this change, but this was not proven with a run of main alone.
+
+**Cost** (Campsite, 2560x1067, 300-frame averages, shared GPU, noise ~0.2 ms):
+4 x more alpha-tested draws (1.85M alpha triangles), visibility candidates
+2.0M → 7.1M/frame; GI 2.95-3.0 → 3.0-3.4 ms, RT passes 1.35-1.40 → 1.40-1.53 ms.
+
+**Not done.** 20 vt shaders keep a loose first cut-off (their 0.5 test reads
+the alpha through `mix(1.0, alpha, ubo)` or a UBO cut-off; reading the UBO at
+the draw would settle them). Blended-texture `tex` shaders (`42507cb4`) stay opaque.
+
 ### 7.2 Hybrid RT GI (`gi_rt=1`, live; see TRACK_C_GI.md)
 
 `shaders/gi/gi_trace_rt.hlsl` replaces `gi_trace` (+`rt_ao`): same samples and

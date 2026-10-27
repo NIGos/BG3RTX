@@ -649,9 +649,10 @@ uint32_t gather_writes(const Bound& b, uint32_t count, VkWriteDescriptorSet* out
 // Each counter has 64 bins (spread atomics); the slot holds 16 x 64 uints.
 constexpr uint32_t kStatsRing = 8;
 // [16..38] D-LS (rt_local_shadows.hlsl), [39..47] materials (rt_shadow.hlsl), [48..63] D-RF
-// (rt_reflections.hlsl), [64..75] RT audit fixes (D-LS per class, rt_origin, ao_direct).
-// [80..85] D-LS bit-exactness checks (ls_check=1): the pass, the join's kept slots.
-constexpr uint32_t kStatsCounters = 86;
+// (rt_reflections.hlsl), [64..75] RT audit fixes (D-LS per class, rt_origin, ao_direct),
+// [80..111] alpha-tested candidates of visibility / shadow rays (rt_common.hlsli alpha_stat),
+// [112..117] D-LS bit-exactness checks (ls_check=1): the pass, the join's kept slots.
+constexpr uint32_t kStatsCounters = 118;
 constexpr VkDeviceSize kStatsSlot = kStatsCounters * 64 * 4;
 VkBuffer g_stats_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
@@ -729,14 +730,27 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
                 100.0 * t[79] / ev, host->cfg_int("ls_owners", 0x0F), 100.0 * t[78] / ev);
     }
   }
-  if (t[80]) {   // ls_check=1: the reference D-LS (shaders/gi/ls_ref) against the live one, same frame and inputs
+  if (t[112]) {   // ls_check=1: the reference D-LS (shaders/gi/ls_ref) against the live one, same frame and inputs
     host->log("ls check (%u frames): %llu px written by the reference; outputs differ in any bit on %llu px, by more "
               "than 1e-5 relative on %llu, written by only one of them on %llu",
-              g_stats_n, (unsigned long long)t[80], (unsigned long long)t[81], (unsigned long long)t[82],
-              (unsigned long long)t[83]);
+              g_stats_n, (unsigned long long)t[112], (unsigned long long)t[113], (unsigned long long)t[114],
+              (unsigned long long)t[115]);
     host->log("ls check (%u frames): join: %llu slot results kept from the previous frame, %llu of them differ from "
               "a new search",
-              g_stats_n, (unsigned long long)t[84], (unsigned long long)t[85]);
+              g_stats_n, (unsigned long long)t[116], (unsigned long long)t[117]);
+  }
+  for (int c = 0; c < 2; ++c) {   // alpha-tested candidates (rt_common.hlsli alpha_stat)
+    const uint64_t* a = t + 80 + 16 * c;
+    if (!a[0]) continue;
+    double n = double(a[0]), e = double(a[6] + a[7] + a[8] + a[9] ? a[6] + a[7] + a[8] + a[9] : 1);
+    host->log("rt stats (%u frames): alpha candidates of %s rays %.3fM/frame; solid unevaluated: no record %.3f%%, no "
+              "UV %.3f%%, prim out of range %.3f%%, non-finite %.3f%%, vt tile set not resident %.3f%%; evaluated: vt "
+              "solid %.2f%% clear %.2f%%, tex solid %.2f%% clear %.2f%%; first cut-off < 0.1: %.2f%% of evaluated (solid "
+              "%.2f%% of those); blur level >= 2 %.2f%%, >= 4 %.2f%%; stochastic %.2f%%; vt page from a coarser level %.2f%%",
+              g_stats_n, c ? "shadow" : "visibility", n / g_stats_n * 1e-6, 100.0 * a[1] / n, 100.0 * a[2] / n,
+              100.0 * a[3] / n, 100.0 * a[4] / n, 100.0 * a[5] / n, 100.0 * a[6] / e, 100.0 * a[7] / e,
+              100.0 * a[8] / e, 100.0 * a[9] / e, 100.0 * a[10] / e, a[10] ? 100.0 * a[11] / double(a[10]) : 0.0,
+              100.0 * a[12] / e, 100.0 * a[13] / e, 100.0 * a[14] / e, 100.0 * a[15] / e);
   }
   if (t[71]) {   // rt_origin.hlsl (AUDIT_RT fix 6)
     host->log("rt stats (%u frames): ray origins: TLAS surface found under %.2f%% of px (else depth normal); "

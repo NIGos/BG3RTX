@@ -26,10 +26,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const bool bits = wa && wb && (any(asuint(ad) != asuint(bd)) || any(asuint(as_) != asuint(bs)));
   const bool rel = bits && max(ls_rel(ad, bd), ls_rel(as_, bs)) > 1e-5;
   const uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
-  stat_add(80, wa, bin);
-  stat_add(81, bits || wa != wb, bin);
-  stat_add(82, rel, bin);
-  stat_add(83, wa != wb, bin);
+  stat_add(112, wa, bin);
+  stat_add(113, bits || wa != wb, bin);
+  stat_add(114, rel, bin);
+  stat_add(115, wa != wb, bin);
   if (wb) {
     gDiffuse[fp] = bd;
     gSpecular[fp] = bs;
