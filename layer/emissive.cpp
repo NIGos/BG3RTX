@@ -987,8 +987,12 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
       recs.push_back(r);
       ranges.push_back({d.off, d.prims});
       uint64_t key = 1469598103934665603ull;
-      for (uint64_t v : {uint64_t(r.fs_hi) << 32 | r.fs_lo, (uint64_t)d.vb0, uint64_t(d.vb0_off), (uint64_t)d.ib,
-                         uint64_t(d.ib_off), uint64_t(d.prims), uint64_t(d.args.first), uint64_t(uint32_t(d.args.vertex_offset)), uint64_t(d.args.count), uint64_t(d.args.instances)})
+      // Not the vertex/index buffer offsets: the game streams dynamic and instanced geometry
+      // through per-frame ring offsets, so the same mesh moves between frames (em11: 12% refits
+      // in AF, 30% in GF, 95% in WQ). A refit of a different mesh with the same counts stays
+      // correct (only its BVH is worse) and the rt_em_rebuild cadence bounds that.
+      for (uint64_t v : {uint64_t(r.fs_hi) << 32 | r.fs_lo, (uint64_t)d.ib, uint64_t(d.prims), uint64_t(d.args.count),
+                         uint64_t(d.args.instances), uint64_t(d.args.kind)})
         key = (key ^ v) * 1099511628211ull;
       keys.push_back(key);
     }

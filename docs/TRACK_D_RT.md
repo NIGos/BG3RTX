@@ -3081,3 +3081,51 @@ Scored with `scripts/qa/em_gate.py`.
 
 **SHaRC with D-EM:** `sharc: D-EM effects target injected`, no fault (em10-af-sharc).
 
+### 13.18 em11 (`0e57c99`)
+
+There were no faults.
+
+**Validation:** pass. `pCode-08737` ×2, `vkCmdDraw-None-09600` ×6 and
+`vkCmdWaitEvents2-10788` ×6, all in main's baseline. None of them is on the acceleration
+structure update.
+
+**Derived gate (`em_gate`):**
+
+| Scene | Windows | Result |
+|---|---|---|
+| WQ | 15 | all 5 families pass |
+| GF | 11 | all 3 families pass: lava 1.055, `304be1c7` 0.999, particles 0.79 |
+| AF | 8 | 5 of 6 families pass: lava 1.006, `222986b8` 1.005, `4d3f7dab` 1.006, `8bcd0aff` 1.014, particles 1.13 |
+
+**AF `304be1c7` fails at 0.360** (bright ratio, 236 bright px; all-hit 0.632).
+- **0 overlapped:** no captured emitter lies in front of its bright pixels, so the overlap
+  explanation is rejected for captured emitters.
+- **s_w 0.006:** steady across windows, while the pulse varies by ±18% over 6.3 s. The pulse
+  phase therefore matches.
+- **The pattern:** ours is relatively high where the game is dark (all-hit 0.63) and low
+  where it is bright (0.36). That points to the glow mask being sampled in the wrong place,
+  not to a wrong level.
+- **The candidate:**
+  - The fragment shader reads its UV at location 0 (vec2).
+  - The XFB patch captures the vertex shader's lowest-location **vec2** output
+    (`layer/spirv_xfb.h`).
+  - If AF's vertex shader for these draws writes location 0 as a vec4 (packed UVs), a
+    different vec2 is captured.
+  - GF's draws of the same fragment shader pass at 0.999, so their vertex shader differs.
+  - The next step is to log the captured UV location per family, against the fragment
+    shader's UV input location.
+- **Other unconfirmed candidates:**
+  - the 16 unclassified ("unknown") effects-pass draws per build in AF, which can add to the
+    same pixels;
+  - coplanar overlays, which the front-half test cannot see.
+
+**Refit** (`[em] BLAS` per 300 builds):
+- WQ: 292 refits / 8 builds. Build median **0.095 ms**, from 0.39.
+- GF: 96 / 204, 0.61 ms.
+- AF: 35 / 265, 0.50 ms.
+- The geometry key included the vertex and index buffer offsets. The game streams dynamic
+  and instanced geometry through per-frame ring offsets, so the key changed every frame.
+  - The key is now the material, index buffer, triangles, draw count, instances and kind.
+  - A refit of another mesh with the same counts stays correct; only its BVH is worse, and
+    the rebuild every 30 uses bounds that.
+

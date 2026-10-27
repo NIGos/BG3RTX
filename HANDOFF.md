@@ -124,6 +124,21 @@ Pass criteria:
 
 The build median falls toward the 0.7 ms target. That is not a gate.
 
+## em11 result (TRACK_D 13.18)
+
+- **Gate:** every family passes except AF `304be1c7`, at 0.36 over 236 bright px. Its
+  overlap is 0 and its pulse phase matches. The suspected cause is the captured UV output
+  (the lowest-location vec2) differing from the fragment shader's location-0 UV in AF's
+  vertex shader.
+- **Validation:** pass.
+- **Refit:** WQ build median 0.095 ms. The AF and GF keys changed every frame, because they
+  included ring offsets; that is fixed.
+
+## em12 (queued)
+
+- `17-em12-af-check` (session, 240 s) and `17-em12-gf-check` (session, 150 s): the refit share
+  and build median with the new key, and the gate again.
+
 ## Known gaps
 
 - **Lava texture detail:** the calibration matches the mean per family only. The lava's
