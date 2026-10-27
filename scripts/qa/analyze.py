@@ -408,7 +408,8 @@ def summarize(res):
             c = cs[0]
             parts.append(f"{kind} {c['score']} (> {c['threshold']})")
     for c in warns:
-        parts.append(f"warn {c['detector']} {c['score']} (> {c['threshold']})")
+        eff = f" {c['effect']}" if c.get("effect") else ""
+        parts.append(f"review {c['detector']}{eff} {c['score']} (> {c['threshold']})")
     passes = [c["detector"] for c in res["checks"] if c["pass"]]
     tail = f" | ok: {', '.join(sorted(set(passes) - set(by)))}" if passes else ""
     return f"{res['scene']} {res['save']}: {head}" + (" - " + " | ".join(parts) if parts else "") + tail

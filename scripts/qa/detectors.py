@@ -123,8 +123,10 @@ def brightening(y_on, y_off, sigma, effect, blur=1):
         regs.append({"bbox": bb, "area": area, "gain": round(gain, 3), "qualified": True, "rank": area * (gain - 1)})
     score = _permille(flagged, r.shape)
     regs.sort(key=lambda g: -g["rank"])
-    return {"score": round(score, 4), "threshold": T["bright_fail_area"], "pass": score <= T["bright_fail_area"],
-            "unit": "‰ of px", "metrics": {"bound": thr, "regions": len(regs),
+    # QUALITY.md R0: the game's image is not a reference for effect outputs, so brightening
+    # against it is for review (the crops), not a gate.
+    return {"score": round(score, 4), "threshold": T["bright_fail_area"], "gate": False,
+            "pass": score <= T["bright_fail_area"], "unit": "‰ of px", "metrics": {"bound": thr, "regions": len(regs),
                                             "px_over_bound_raw": round(_permille(int(((r > thr) & (a > floor)).sum()), r.shape), 3)},
             "regions": regs, "map": ("ratio", r)}
 
@@ -174,7 +176,9 @@ def sun_disagreement(game, rt, sun_ratio, cls=None, applied=None):
                "agree_lit": round(float(((rt_b > 0.5) & lit_game).sum() / max(1, lit_game.sum())), 4),
                "game_lit_frac": round(float(lit_game.mean()), 4)}
     res = {
-        "extra": {"score": round(s_extra, 4), "threshold": T["sun_extra_fail_area"],
+        # R0: casters the game's mask lacks may be right (our BVH has geometry its cascades
+        # miss), so this is for review too.
+        "extra": {"score": round(s_extra, 4), "threshold": T["sun_extra_fail_area"], "gate": False,
                   "pass": s_extra <= T["sun_extra_fail_area"], "unit": "‰ of px (darkened by the sun term)",
                   "metrics": metrics, "regions": ex_regs},
         # With min(game, traced) a missing caster cannot change the image. With
