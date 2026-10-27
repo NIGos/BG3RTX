@@ -27,6 +27,7 @@ std::vector<uint8_t> g_records;   // the current list, kLslRecord bytes each
 uint32_t g_count = 0, g_se_seq = ~0u, g_total = 0;
 uint32_t g_gen = 1;   // changes whenever the uploaded records do (the match pass keeps unchanged slots)
 uint32_t g_n_se = 0, g_n_db = 0, g_n_owner[5] = {};
+float g_dyn_tol = 1.5f;   // ls_dyn_tol: join tolerance of moving non-character bridge lights (m)
 
 const Bg3AssetDbApi* api() {
   const Bg3AssetDbApi* a = host->abi_version >= 6 ? host->assetdb : nullptr;
@@ -72,6 +73,8 @@ void refresh(const Bg3AssetDbApi* a) {
     return;
   }
   const float radius = host->cfg_float("ls_lights_radius", 80.0f);
+  g_dyn_tol = host->cfg_float("ls_dyn_tol", 1.5f);
+  if (!(g_dyn_tol >= 0.05f)) g_dyn_tol = 0.05f;
   static std::vector<Bg3RtLight> L(kLslMaxKnown);
   g_total = a->runtime_lights(center, radius, L.data(), kLslMaxKnown);
   g_count = g_total < kLslMaxKnown ? g_total : kLslMaxKnown;
@@ -83,11 +86,17 @@ void refresh(const Bg3AssetDbApi* a) {
   for (uint32_t i = 0; i < g_count; ++i) {
     const Bg3RtLight& l = L[i];
     // Position tolerance of the join: lights that stay put match to float precision;
-    // item and character lights move between the bridge's 4 Hz exports.
+    // every other light the bridge reports moves between its 4 Hz exports: item lights,
+    // and the visual lights it could not attach to an item (owner unknown or scenery), which
+    // include the VFX lights of carried weapons (VFX_LightSources_WPN_DippedInFire,
+    // ..._BloodOfLathander: owner 0). At 5 cm those went unmatched as soon as their carrier
+    // walked, and lost their fixture radius (the ray's end clearance at the carrier's hand).
+    // ls_dyn_tol (1.5 m): a running carrier covers ~1 m between exports; the 2% radius test
+    // and the nearest-wins search keep static lamps on their own record.
     float tol = 0.05f + l.move_amount;
     if (l.flags & BG3_RTL_FROM_SE) {
       if (l.owner == BG3_RTL_OWNER_CHARACTER) tol = 4.0f;
-      else if (l.owner == BG3_RTL_OWNER_ITEM) tol = 0.5f + l.move_amount;
+      else if (l.owner != BG3_RTL_OWNER_PLACED) tol = g_dyn_tol + l.move_amount;
     }
     float f[8] = {l.pos[0], l.pos[1], l.pos[2], l.radius, l.source_radius, tol, l.intensity, 0.0f};
     uint32_t u[4] = {l.flags, uint32_t(l.owner) | (uint32_t(l.type) << 8) | (uint32_t(l.channel) << 16), l.db_index, i};

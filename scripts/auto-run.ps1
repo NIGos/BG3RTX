@@ -42,6 +42,9 @@ param(
   [int]$MoveSec = 0,
   # Run under the Khronos validation layer; messages go to captures/validation.log.
   [switch]$Validation,
+  # With -Validation: extra validation-layer settings, "key=value" pairs separated by
+  # commas, without the "khronos_validation." prefix (e.g. "validate_sync=true,gpuav_enable=true").
+  [string]$VSet = "",
   # Load this save instead of the newest: a substring of its folder name, for
   # example "Rivington - 74h". See docs/TEST_SCENES.md.
   [string]$Save = "",
@@ -284,7 +287,9 @@ if ($Validation) {
   @("khronos_validation.log_filename = $($vlog.Replace('\','/'))",
     "khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG",
     "khronos_validation.report_flags = error,warn",
-    "khronos_validation.duplicate_message_limit = 3") | Set-Content $settings
+    "khronos_validation.duplicate_message_limit = 3") +
+    @($VSet -split ',' | Where-Object { $_ } | ForEach-Object { $k, $v = $_ -split '=', 2; "khronos_validation.$($k.Trim()) = $($v.Trim())" }) |
+    Set-Content $settings
   $env:VK_LAYER_SETTINGS_PATH = $settings
   $launchArgs.Validation = $true
 }

@@ -154,6 +154,9 @@ std::vector<DescEntry> decode_push_template(VkDescriptorUpdateTemplate tpl, cons
 // ---- command buffer state (cmd.cpp) ----
 struct CmdState {
   bool in_pass = false;
+  // Work of ours (rrpost steps) recorded since the game's last vkCmdSetEvent: the
+  // game's vkCmdWaitEvents does not cover it (cmd.cpp inserts a barrier first).
+  bool ours_since_event = false;
   Bg3PassInfo pass{};
   VkImageLayout color_layouts[8] = {};  // layout each attachment is left in when the pass ends
   VkImageLayout depth_layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -228,6 +231,8 @@ void cmd_forget(VkCommandBuffer cmd);
 // descriptors in the same command buffer) can touch freed memory.
 void life_note(CmdState* s, uint64_t handle);
 void life_note(VkCommandBuffer cmd, uint64_t handle);
+void life_extend(uint64_t handle, uint64_t frame);   // in use by work submitted up to `frame`
+void alpha_slot_in_use(uint32_t slot, uint64_t frame);   // alphatest.cpp: the slot's game views, life_extend
 void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
 void life_on_present(DeviceData* dd, VkQueue queue);   // after the present went down, queue still owned
 // Around the game's vkDeviceWaitIdle: submissions before begin are complete after it.
@@ -416,7 +421,18 @@ struct RtCapture {
   VkDeviceSize xfb_size;
 };
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
+// Scene snapshots: each build writes one slot (its own TLAS for the split, its
+// InstInfo region of the bvhsplit ring, its alpha set and record region), and a
+// slot is reused only once the GPU finished every frame it was handed out in
+// (life_gpu_done). The RT passes get a TLAS and the set of the same slot.
+constexpr uint32_t kSceneSlots = 8;
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
+// ABI 8: the latest scene's TLAS and its own set 1, as one versioned pair.
+bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame);
+// Oldest build frame among the slots the GPU may still read (UINT64_MAX: none).
+// A BVH range freed in frame F is released only once this is > F.
+uint64_t rt_scene_oldest_live();
+void rt_log_state(const char* prefix);     // the slots, for a device-loss report
 void rt_on_present();
 // Shared by the legacy build and the split (bvhsplit.cpp).
 VkDeviceAddress rt_buffer_address(VkBuffer b);
@@ -472,11 +488,26 @@ struct BvhResult {
   uint64_t static_tris, dynamic_tris;
   VkBuffer info; VkDeviceSize info_off, info_bytes;   // InstInfo of this TLAS (set 1 binding 7)
   VkBuffer pool; VkDeviceSize pool_bytes;             // object-space vertices (binding 8)
+  uint64_t rec;                                       // build record of the command buffer (bvh_rec_state)
 };
-bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), BvhResult* out);
+// `slot` (< kSceneSlots, retired on the GPU): the ring region and TLAS it writes.
+bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), uint32_t slot,
+               BvhResult* out);
 void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
+// Build records: work of ours recorded into a game command buffer counts only once
+// that buffer is submitted. The game can drop a recorded buffer (vkBeginCommandBuffer
+// again, or vkFreeCommandBuffers) without a submit; bvh_cmd_reset marks its records
+// dropped. States: 0 pending, 1 submitted, 2 dropped, -1 unknown (never trusted).
+uint64_t bvh_rec_register(VkCommandBuffer cmd);
+int bvh_rec_state(uint64_t id);
+void bvh_cmd_reset(VkCommandBuffer cmd);
+void bvh_log_state(const char* prefix);   // device-loss / stall report (devfault.cpp)
+VkResult life_poll_fence(DeviceData* dd);  // our latest present fence (0-timeout); INITIALIZATION_FAILED: device gone
+size_t life_pending_fences();
+void fault_poll_start(DeviceData* dd);    // devfault.cpp: active device-loss detection
 void bvh_on_present();
 void bvh_forget_buffer(VkBuffer b);
+std::string bvh_describe_address(VkDeviceAddress a);   // device-fault reports ("" if not the split's)
 void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size);
 
 // ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
@@ -530,10 +561,45 @@ struct AlphaBindings {
   VkBuffer pool;
   VkDeviceSize pool_bytes;
 };
-void alpha_commit(VkCommandBuffer cmd, const AlphaBindings& b);
+// Writes set `slot` (< kSceneSlots, retired on the GPU) and its record region;
+// returns that set (VK_NULL_HANDLE when alpha testing is off).
+VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& b, uint32_t slot);
 // The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).
 bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
+
+// ---- device-fault diagnostics (devfault.cpp, VK_EXT_device_fault) ----
+const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
+                                                   VkDeviceCreateInfo* scratch);
+void fault_device_created(DeviceData* dd, bool enabled);
+// VK_EXT_debug_utils + a messenger for VK_EXT_device_address_binding_report (the
+// driver's bindings, the game's included, to name a fault address).
+const VkInstanceCreateInfo* fault_instance_create_info(PFN_vkGetInstanceProcAddr next, const VkInstanceCreateInfo* ci,
+                                                       VkInstanceCreateInfo* scratch);
+void fault_instance_created(VkInstance inst, PFN_vkGetInstanceProcAddr next);
+void fault_instance_destroyed(VkInstance inst);
+// Device-address ranges of our buffers, named in a fault report (live or freed).
+void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size);
+void fault_untrack(VkDeviceAddress addr);
+// A submit's or present's result: VK_ERROR_DEVICE_LOST logs the fault once.
+void fault_on_result(DeviceData* dd, VkResult r, const char* where);
+// VK_NV_device_diagnostic_checkpoints markers (no-ops without the extension).
+enum CheckpointSite : uint32_t {
+  kCkCmdBegin = 1, kCkPassBeginPre, kCkPassBeginPost, kCkPassEndPre, kCkPassEndPost, kCkDispPrePre, kCkDispPrePost,
+  kCkDispPre, kCkDispPost, kCkCmdEndPre, kCkCmdEndPost,
+  kCkBvhStart = 20, kCkBvhConverted, kCkBvhBlas, kCkBvhTlas, kCkSceneCommitted, kCkLegacyStart, kCkLegacyTlas,
+};
+void fault_checkpoint(VkCommandBuffer cmd, uint32_t site, uint32_t arg);
+// ---- Nsight Aftermath GPU crash dumps (aftermath.cpp, aftermath=1; optional SDK) ----
+void aftermath_pre_device();   // before the driver's vkCreateDevice
+const VkDeviceCreateInfo* aftermath_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
+                                                       VkDeviceCreateInfo* scratch);   // + VK_NV_device_diagnostics_config
+// A SPIR-V module the device compiles: its Aftermath hash into the shader map
+// (`saved_path`: where the bytes already are; nullptr: written by Aftermath's side).
+void aftermath_note_spirv(const char* what, const void* code, size_t size, const char* saved_path);
+void aftermath_wait();         // after a device loss: up to 10 s for the dump
+bool aftermath_enabled();
+void fault_note_queue(VkQueue q);   // a queue the game submits to (checkpoints are per queue)
 
 uint64_t frame_index();
 void* persist(const char* key, size_t size);

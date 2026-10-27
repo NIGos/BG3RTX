@@ -13,11 +13,12 @@
 // can then only lose light (leaks through walls and floors), never gain any.
 //
 // Lights that have a game shadow map (ls_shadowed):
-//   0 (default) left alone: the atlas also holds casters that are not on screen,
-//     which the TLAS lacks (cut-away roofs, culled walls), so replacing it could
-//     un-shadow them;
+//   0 left alone (the game's atlas term);
 //   1 replace the atlas with the ray-traced visibility;
-//   2 min(traced, atlas).
+//   2 min(traced, atlas);
+//   3 (default) replace it where the segment to the light lies in the view frustum (every
+//     caster on it is in the TLAS), min(traced, atlas) elsewhere (ls_atlas_fallback).
+// The default variant (LS_FULL=0) handles every ls_shadowed mode.
 //
 // Sampling: with RR (rr=1) and ls_source_radius > 0, one ray per light and pixel
 // towards a uniform point of the light's sphere (solid angle), white noise from
@@ -29,13 +30,12 @@
 // Per-light data (ls_lights=1, ls_flags bit 0; docs/SE_BRIDGE.md): lsSlots holds, per
 // light array slot, what rt_local_shadows_match.hlsl joined to it from the Script
 // Extender bridge or the asset database: the light's source radius (from its fixture
-// class) and its owner. Lights of an owner whose bit is clear in ls_flags bits 8-12
-// (ls_owners; default: not the character lights) are left as the game lit them.
+// class), its owner and its game flags. ls_skip_light() says which are left as the game
+// lit them (ls_owners, now every owner by default, and the art-intent rule ls_noshadow).
 // Unmatched lights keep ls_source_radius and are traced as before.
 //
 // Two variants of this file (docs/TRACK_D_RT.md 9.9; core/gi.cpp picks one per frame):
-//   LS_FULL=0 (this file): the default settings only (ls_shadowed=0, ls_samples=0,
-//     ls_debug=0, ls_stats=0), in three phases per 32 list entries (tests, rays, terms;
+//   LS_FULL=0 (this file): ls_samples=0, ls_debug=0, ls_stats=0 (any ls_shadowed), in three phases per 32 list entries (tests, rays, terms;
 //     see below): 96 registers instead of 252.
 //   LS_FULL=1 (rt_local_shadows_full.hlsl): every mode, debug view and statistic, in
 //     the single loop of before.
@@ -57,6 +57,35 @@
 [[vk::binding(46, 0)]] [[vk::image_format("rgba32ui")]] RWTexture2D<uint4> lsSlots;
 
 float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+
+// ---- which lights are traced (docs/TRACK_D_RT.md 9.10) ----
+// Bg3RtLightFlags (common/assetdb_api.h), in lsSlots .y of a matched light.
+static const uint kRtlShadow = 32u, kRtlCastShadow = 64u, kRtlPlayer = 256u;
+// A matched light left exactly as the game lit it: its owner's bit is clear in ls_owners
+// (ls_flags bits 8-12), or the art-intent rule ls_noshadow (bits 16-17) applies: the game's
+// template sets neither Shadow nor CastShadow and the light is (1) the darkvision light that
+// follows the active character, or (2) any light (strict; 98% of placed point lights).
+bool ls_skip_light(uint4 si) {
+  if (((pc.ls_flags >> (8u + min(si.z & 255u, 4u))) & 1u) == 0u) return true;
+  const uint rule = (pc.ls_flags >> 16) & 3u;
+  const bool noshadow = (si.y & (kRtlShadow | kRtlCastShadow)) == 0u;
+  return noshadow && (rule == 2u || (rule == 1u && (si.y & kRtlPlayer) != 0u));
+}
+
+// Lights with a game shadow map (ls_shadowed): the visibility that replaces the atlas term s.
+//   1 the traced visibility; 2 min(traced, atlas);
+//   3 the traced visibility where the whole segment surface -> light is inside the view
+//     frustum (the light projects on screen: the frustum is convex and the surface is on
+//     screen), so every caster along it was drawn and is in the TLAS; elsewhere
+//     min(traced, atlas), since the atlas has the off-screen casters the TLAS lacks.
+bool ls_light_on_screen(float3 lpos) {
+  float2 uv;
+  float d;
+  return project(frustum_inverse(), lpos, uv, d) && all(uv >= 0.0) && all(uv <= 1.0);
+}
+bool ls_atlas_fallback(float3 lpos) {
+  return pc.ls_shadowed == 2u || (pc.ls_shadowed == 3u && !ls_light_on_screen(lpos));
+}
 
 uint3 ls_rand(uint2 fp, uint key) { return pcg3d(uint3(fp, pc.frame * 1024u + (key & 1023u))); }
 float u01(uint x) { return float(x >> 8) * (1.0 / 16777216.0); }
@@ -160,7 +189,7 @@ bool ls_pixel(uint2 fp, out LsPixel px) {
   px = (LsPixel)0;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
-  LsLite s;
+  LsLite s = (LsLite)0;
   if (!ls_lite(fp, d, s)) return false;
   ls_surface(fp, s, px.sf, px.mt);
   px.cls = s.cls;
@@ -208,14 +237,18 @@ bool ls_light_traced(uint li, bool spot, LsLite s, out float3 lpos, out float R)
   R = pc.ls_source_radius;
   Bg3Light l = load_light(li);
   lpos = l.pos;
-  // ls_shadowed=0: lights with a game shadow map keep the game's term.
-  if ((l.flags & 1u) != 0u) return false;
-  if (!(1.0 / max(l.inv_r, 1e-12) >= pc.ls_min_radius)) return false;
+  // Lights with a game shadow map: ls_shadowed=0 keeps the game's term; hair replaces its
+  // self-shadow by the atlas term for them (3033c895:483), which is not modelled: the game's.
+  if ((l.flags & 1u) != 0u) {
+    if (pc.ls_shadowed == 0u || s.cls == kMatHair) return false;
+  } else if (!(1.0 / max(l.inv_r, 1e-12) >= pc.ls_min_radius)) {
+    return false;
+  }
   if ((pc.ls_flags & 1u) != 0u) {
     uint4 si = lsSlots[uint2(min(li, 4095u), 0)];
     if ((si.z & 0x10000u) != 0u) {
       R = asfloat(si.x);
-      if (((pc.ls_flags >> (8u + min(si.z & 255u, 4u))) & 1u) == 0u) return false;
+      if (ls_skip_light(si)) return false;
     }
   }
   // bg3_light_eval_mat's "the game adds nothing for this light" tests, in its order and arithmetic.
@@ -234,7 +267,7 @@ bool ls_light_traced(uint li, bool spot, LsLite s, out float3 lpos, out float R)
 
 // Phase 2: what the ray to a traced light needs (as ls_light_traced found it).
 void ls_light_ray(uint li, out float3 lpos, out float R) {
-  lpos = asfloat(lLights.Load3(li * 80u));
+  lpos = bg3_light_pos(li);
   R = pc.ls_source_radius;
   if ((pc.ls_flags & 1u) != 0u) {
     uint4 si = lsSlots[uint2(min(li, 4095u), 0)];
@@ -249,13 +282,13 @@ uint2 ls_trace_chunk(uint2 fp, LsLite s, uint base, uint n, uint end_p) {
   for (uint j = 0; j < n; ++j) {
     float3 lpos;
     float R;
-    if (ls_light_traced(lIndex.Load((base + j) * 4u), base + j >= end_p, s, lpos, R)) traced |= 1u << j;
+    if (ls_light_traced(bg3_light_index(base + j), base + j >= end_p, s, lpos, R)) traced |= 1u << j;
   }
   // the k-th traced light of every lane together
   uint lit = 0;
   for (uint m = traced; m != 0u; m &= m - 1u) {
     const uint j = firstbitlow(m);
-    const uint li = lIndex.Load((base + j) * 4u);
+    const uint li = bg3_light_index(base + j);
     float3 lpos;
     float R;
     ls_light_ray(li, lpos, R);
@@ -268,14 +301,14 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
-  LsLite s;
+  LsLite s = (LsLite)0;
   if (!ls_lite(fp, d, s)) return false;   // the lighting skips unlit pixels
 
   const uint3 cl = bg3_cluster(fp, d);
   const uint end_p = cl.x + cl.y, end_s = end_p + cl.z;
   float3 dd = 0, ds = 0;   // delta diffuse / specular
   float3 td = 0, ts = 0;   // direct light of the traced lights after our shadow (ao_direct)
-  LsPixel px;
+  LsPixel px = (LsPixel)0;
   uint base = cl.x;
   [loop] do {
     const uint n = min(end_s - base, 32u);
@@ -287,15 +320,22 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     ls_surface(WaveReadLaneAt(fp, WaveGetLaneIndex()), s, px.sf, px.mt);
     for (uint m3 = traced; m3 != 0u; m3 &= m3 - 1u) {
       const uint j = firstbitlow(m3);
-      Bg3Light l = load_light(lIndex.Load((base + j) * 4u));
+      Bg3Light l = load_light(bg3_light_index(base + j));
       float3 cd, ct, cs, Ld;
       float d2, nol;
-      if (!bg3_light_eval_mat(l, base + j >= end_p, px.sf, px.mt, cd, ct, cs, Ld, d2, nol)) continue;
+      const bool spot = base + j >= end_p;
+      if (!bg3_light_eval_mat(l, spot, px.sf, px.mt, cd, ct, cs, Ld, d2, nol)) continue;
       const float v = (lit >> j) & 1u ? 1.0 : 0.0;
-      dd += cd * (v - 1.0);
-      ds += cs * (v - 1.0);
-      td += cd * v;
-      ts += cs * v;
+      // s: the game's own shadow term, which the delta replaces (1 without a shadow map).
+      float s = 1.0, t = v;
+      if ((l.flags & 1u) != 0u) {
+        s = bg3_atlas_shadow(l, spot, px.sf, Ld, d2, saturate(nol));
+        if (ls_atlas_fallback(l.pos)) t = min(v, s);
+      }
+      dd += cd * (t - s);
+      ds += cs * (t - s);
+      td += cd * t;
+      ts += cs * t;
     }
     base += n;
   } while (base < end_s);
@@ -360,7 +400,7 @@ uint fx(float v) { return uint(clamp(v, 0.0, 64.0) * 256.0 + 0.5); }
 
 bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
-  LsPixel px;
+  LsPixel px = (LsPixel)0;
   if (!ls_pixel(fp, px)) return false;
   const float d = px.d;
   const Bg3Surface sf = px.sf;
@@ -387,7 +427,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   uint rk[2] = {0, 0};
 
   for (uint i = cl.x; i < end_s; ++i) {
-    uint li = lIndex.Load(i * 4u);
+    uint li = bg3_light_index(i);
     bool spot = i >= end_p;
     Bg3Light l = load_light(li);
     // cd: diffuse the shadow multiplies, ct: transmission it does not (thickness profiles).
@@ -417,7 +457,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
         ++n_matched;
         n_se += (si.y & 0x10000u) != 0u ? 1u : 0u;
         R = asfloat(si.x);
-        if (((pc.ls_flags >> (8u + min(owner, 4u))) & 1u) == 0u) {
+        if (ls_skip_light(si)) {
           n_skipped += traced ? 1u : 0u;
           traced = false;
         }
@@ -433,7 +473,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       float v = trace_light(sf.P, sf.N, sf.org, l.pos, fp, li, cone, R);
       ++n_traced;
       n_occ += v < 0.5 ? 1u : 0u;
-      float t = shadowed && pc.ls_shadowed == 2 ? min(v, s) : v;
+      float t = shadowed && ls_atlas_fallback(l.pos) ? min(v, s) : v;
       dd += cd * (t - s);
       ds += cs * (t - s);
       td += cd * t;
@@ -448,7 +488,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
         if (k >= ns) break;
         if (u01(k == 0 ? rr.x : rr.y) * wsum < w) {
           rd[k] = cd; rs[k] = cs; rp[k] = l.pos; rw[k] = w; rsh[k] = s; rk[k] = li; rR[k] = R;
-          rsel[k] = shadowed && pc.ls_shadowed == 2 ? 1.0 : 0.0;
+          rsel[k] = shadowed && ls_atlas_fallback(l.pos) ? 1.0 : 0.0;
         }
       }
     }

@@ -71,9 +71,20 @@ static bool compile(ShaderEntry& e) {
   std::vector<LPCWSTR> args = {path.c_str(), L"-spirv", L"-fspv-target-env=vulkan1.3", L"-HV", L"2021",
                                L"-T", profile.c_str(), L"-E", entry.c_str(), L"-I", inc.c_str(),
                                L"-D", L"BG3RTX=1"};
-  if (cfg_int("shader_debug", 0)) {
+  // shader_debug=1: unoptimised with NonSemantic debug info and the source (DXC rejects
+  // it for the RT passes: a DebugLine column past the RT_ALPHA_CANDIDATE macro line).
+  // shader_debug=2: optimised (-O3) with OpLine line info only: the same code as the
+  // release build, mapped to file:line by Aftermath (.nvdbg).
+  const int dbg = cfg_int("shader_debug", 0);
+  if (dbg == 1) {
     args.push_back(L"-Od");
     args.push_back(L"-fspv-debug=vulkan-with-source");
+  } else if (dbg == 2) {
+    args.push_back(L"-O3");
+    args.push_back(L"-Zi");
+    args.push_back(L"-fspv-debug=file");
+    args.push_back(L"-fspv-debug=source");
+    args.push_back(L"-fspv-debug=line");
   } else {
     args.push_back(L"-O3");
   }
@@ -98,6 +109,7 @@ static bool compile(ShaderEntry& e) {
       auto words = static_cast<const uint32_t*>(obj->GetBufferPointer());
       e.code.assign(words, words + obj->GetBufferSize() / 4);
       ++e.generation;
+      aftermath_note_spirv((e.file + ":" + e.entry).c_str(), e.code.data(), e.code.size() * 4, nullptr);
       ok = true;
       obj->Release();
     }
