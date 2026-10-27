@@ -211,7 +211,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 147 keys of bg3rtx.ini, in file order.
+// 150 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"core", "1"},
@@ -314,6 +314,8 @@ inline constexpr KV kDefaults[] = {
     {"sharc_near", "1"},
     {"sharc_em", "1"},
     {"sharc_reset_jump", "50"},
+    {"sharc_reject_occluded", "1"},
+    {"sharc_leak_check", "0"},
     {"sharc_debug", "0"},
     {"sharc_stats", "0"},
     {"sharc_device", "1"},
@@ -332,6 +334,7 @@ inline constexpr KV kDefaults[] = {
     {"ls_lights", "1"},
     {"ls_owners", "31"},
     {"ls_noshadow", "1"},
+    {"ls_giveback_cap", "1"},
     {"ls_lights_radius", "80"},
     {"ls_dyn_speed", "8"},
     {"ls_impl", "1"},

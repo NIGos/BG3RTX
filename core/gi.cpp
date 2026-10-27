@@ -1139,6 +1139,8 @@ Push make_push() {
   // ls_noshadow (rt_local_shadows.hlsl ls_skip_light).
   pc.ls_flags = (uint32_t(host->cfg_int("ls_owners", 0x1F)) & 0x1Fu) << 8;
   pc.ls_flags |= uint32_t((std::min)((std::max)(host->cfg_int("ls_noshadow", 1), 0), 2)) << 16;
+  // Bit 18: ls_giveback_cap (gi_common.hlsli): the AO-on-direct give-back bounded by the game's pixel.
+  pc.ls_flags |= host->cfg_int("ls_giveback_cap", 1) ? (1u << 18) : 0u;
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;
   pc.mat_classes = host->cfg_int("mat_classes", 1) ? 1u : 0u;
   pc.ao_direct = uint32_t((std::min)((std::max)(host->cfg_int("ao_direct", 1), 0), 2));
@@ -1648,8 +1650,8 @@ void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
     if (fx_image && fx_in != fx_from) image_layout(cmd, fx_image, fx_in, fx_from, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
   }
-  // Views (sharc_debug 1-5); 5, the QA roof mask, needs rt_sun_replace's roof volumes (binding 47).
-  if (s.sh.debug >= 1 && s.sh.debug <= 5) {
+  // Views (sharc_debug 1-6); 5, the QA roof mask, needs rt_sun_replace's roof volumes (binding 47).
+  if (s.sh.debug >= 1 && s.sh.debug <= 6) {
     if (s.sh.debug == 5 && g_sunt_ok && refresh(g_sharc_roof, "gi/sharc_roof.hlsl", g_rt_layout)) {
       dispatch(cmd, g_sharc_roof, b, pc, g_w, g_h, true);
     } else if (refresh(g_sharc_debug, "gi/sharc_debug.hlsl", g_rt_sharc_layout)) {

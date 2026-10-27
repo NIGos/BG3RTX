@@ -66,6 +66,23 @@ param(
   # Run files of this checkout carry this tag, so two runs can share the checkout.
   [ValidatePattern('^[A-Za-z0-9_]{0,16}$')]
   [string]$Tag = "",
+  # Saves made with mods that are not installed (scripts/save_mods.py; the act 2 and
+  # Rivington saves carry the texture-only "Immersive World Textures" parts 1-5) open the
+  # game's mod-verification dialog (ModBrowser ModVerification.xaml) instead of loading.
+  # auto: accept it when save_mods.py reports missing mods; on: always arm; off: never.
+  # It clicks "Continue" (StartGameButton) by posting mouse messages to this run's game
+  # window only, and only while the 3D menu is up with no load started after
+  # -ModWarningAfterSec seconds. Nothing is saved; modsettings.lsx is restored if the
+  # game changed it. See docs/TEST_SCENES.md, "Saves made with mods".
+  [ValidateSet("auto", "on", "off")]
+  [string]$AcceptModWarning = "auto",
+  [int]$ModWarningAfterSec = 15,
+  # How a non-ASCII save folder name (the Crèche save) reaches -loadSaveGame. "utf8ansi"
+  # passes its UTF-8 bytes as ANSI characters, for a game that reads its command line
+  # through the ANSI code page and treats it as UTF-8; "wide" passes it unchanged.
+  # auto = utf8ansi when the name is not ASCII.
+  [ValidateSet("auto", "wide", "utf8ansi")]
+  [string]$SaveArgEncoding = "auto",
   # Keep the loaded game for a test-queue session (header); -Traces is ignored (0).
   [switch]$Session,
   [int]$SessionMaxSec = 7200,
@@ -73,6 +90,7 @@ param(
   [int]$WhilePid = 0
 )
 $ErrorActionPreference = "Stop"
+$ModWarnDiagTraces = 5   # "trace" steps in $mwSteps (below)
 # "powershell -File" passes "-Set a=1,b=2" as one string: split it.
 $Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $root = Split-Path $PSScriptRoot
@@ -181,6 +199,66 @@ function Send-MoveKey([bool]$down, [bool]$repeat = $false) {
   [void][BG3RTX.Win]::PostMessage($h, $(if ($down) { 0x0100 } else { 0x0101 }), [IntPtr]$moveVk, [IntPtr]$l)
 }
 
+Add-Type -Namespace BG3RTX -Name Win2 -MemberDefinition @"
+[StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+[DllImport("user32.dll")] public static extern bool GetClientRect(System.IntPtr h, out RECT r);
+"@ -ErrorAction SilentlyContinue
+
+# The mod-verification dialog's "Continue" button (Mods/ModBrowser/GUI/Pages/
+# ModVerification.xaml, Patch8_HotFix9.pak; designed at 3840x2160): a 2576x1930 panel
+# centred on screen; at its bottom, centred, "Continue" (StartGameButton) then "Cancel",
+# BigBrownButtonStyle 428x80 each with 10 px margins, the row's bottom 52 px above the
+# 1840-high inner grid's end. So Continue spans x 1482-1910, y 1871-1951 (centre-relative
+# x -438..-10, y +791..+871), Cancel x 1930-2358. We click at centre-relative (-130, +831):
+# inside Continue for any text width, and never on Cancel, which is right of the centre
+# at every UI scale. Noesis scales the design by min(uw/3840, uh/2160) around the centre,
+# where uw x uh is the game's OUTPUT size (3840x1600 for the player's settings), not the
+# window. Background runs use a borderless 3840x2160 window, and the final composite
+# stretches the 3840x1600 frame and UI over all of it (round 2's swapchain dump d110), so
+# a window point maps to the UI by (w/uw, hh/uh). Rounds 1-2 used s = 1: by luck the same
+# y (1911), and x 1790 instead of 1824, still inside Continue. A miss lands on the backdrop.
+function Send-ModWarningClick([double]$uiScale) {
+  $h = Get-GameWindow
+  if ($h -eq [IntPtr]::Zero) { return $false }
+  $r = New-Object BG3RTX.Win2+RECT
+  if (-not [BG3RTX.Win2]::GetClientRect($h, [ref]$r)) { return $false }
+  $w = $r.Right - $r.Left; $hh = $r.Bottom - $r.Top
+  if ($w -le 0 -or $hh -le 0) { return $false }
+  $uw = if ($mw.uiW) { $mw.uiW } else { $w }; $uh = if ($mw.uiH) { $mw.uiH } else { $hh }
+  $s = [Math]::Min($uw / 3840.0, $uh / 2160.0) * $uiScale
+  $x = [int](($uw / 2 - 130 * $s) * $w / $uw); $y = [int](($uh / 2 + 831 * $s) * $hh / $uh)
+  $l = [IntPtr](([int64]$y -shl 16) -bor ($x -band 0xFFFF))
+  Write-Host "mod warning: clicking Continue at client ($x, $y) of ${w}x$hh (UI ${uw}x$uh, scale $([Math]::Round($s, 4)))"
+  # Only this run's window, by its handle: a move (hover), then the press and release.
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)   # WM_MOUSEMOVE
+  Start-Sleep -Milliseconds 150
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)
+  Start-Sleep -Milliseconds 100
+  [void][BG3RTX.Win]::PostMessage($h, 0x0201, [IntPtr]1, $l)   # WM_LBUTTONDOWN, MK_LBUTTON
+  Start-Sleep -Milliseconds 120
+  [void][BG3RTX.Win]::PostMessage($h, 0x0202, [IntPtr]0, $l)   # WM_LBUTTONUP
+  $true
+}
+
+# New lines of this run's layer log since the last call (the layer truncates it at start).
+$script:logPos = 0
+function Read-NewLog {
+  if (-not (Test-Path $log) -or (Get-Item $log).LastWriteTime -lt $start) { return @() }
+  try {
+    $fs = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite,Delete')
+    try {
+      if ($fs.Length -lt $script:logPos) { $script:logPos = 0 }
+      [void]$fs.Seek($script:logPos, 'Begin')
+      $buf = New-Object byte[] ($fs.Length - $script:logPos)
+      $n = $fs.Read($buf, 0, $buf.Length)
+      $end = [Array]::LastIndexOf($buf, [byte]10, [Math]::Max($n - 1, 0))   # whole lines only
+      if ($n -le 0 -or $end -lt 0) { return @() }
+      $script:logPos += $end + 1
+      return @([Text.Encoding]::UTF8.GetString($buf, 0, $end) -split "`n")
+    } finally { $fs.Dispose() }
+  } catch { return @() }
+}
+
 # A game this checkout (and tag) left running: an earlier run with -KeepRunning, or
 # one whose script was killed. Other games, other agents' and the player's, stay.
 if (Test-Path $pidFile) {
@@ -238,13 +316,37 @@ $savesBefore = @(Get-ChildItem $saveRoot -Directory | ForEach-Object Name)
 Remove-Item $saveLog -ErrorAction SilentlyContinue
 $env:BG3RTX_SAVE_LOG = $saveLog
 $gameArgs = @("-continueGame")
+$modWarn = $false
 Remove-Item Env:BG3RTX_SAVE_ONLY -ErrorAction SilentlyContinue
 if ($Save) {
   $sd = Get-ChildItem $saveRoot -Directory | Where-Object { $_.Name -like "*__*$Save*" } | Select-Object -First 1
   if (-not $sd) { throw "No save matching '$Save'" }
   Write-Host "Save: $($sd.Name)"
   $env:BG3RTX_SAVE_ONLY = $sd.Name
-  $gameArgs = @("-loadSaveGame", "`"$($sd.Name)`"")
+  $saveArg = $sd.Name
+  $nonAscii = $saveArg -match '[^\x00-\x7F]'
+  if ($nonAscii -and $SaveArgEncoding -ne "wide") {
+    $ansi = try { [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.ANSICodePage) } catch { [Text.Encoding]::GetEncoding(28591) }
+    $saveArg = $ansi.GetString([Text.Encoding]::UTF8.GetBytes($saveArg))
+    Write-Host "Save name is not ASCII: passing its UTF-8 bytes as ANSI (-SaveArgEncoding wide to pass it unchanged)"
+  }
+  $gameArgs = @("-loadSaveGame", "`"$saveArg`"")
+  # The mod-verification dialog (see the parameter): arm the click only for saves that need it.
+  $modWarn = $false
+  if ($AcceptModWarning -eq "on") { $modWarn = $true }
+  elseif ($AcceptModWarning -eq "auto") {
+    $sm = try { & py -3 (Join-Path $PSScriptRoot "save_mods.py") $sd.Name --json 2>$null | ConvertFrom-Json } catch { $null }
+    $rec = @($sm | Where-Object { $_.folder -eq $sd.Name }) | Select-Object -First 1
+    if (-not $rec) { $modWarn = $true; Write-Host "save_mods.py gave no answer: mod-warning click armed (it only acts on a stuck menu)" }
+    elseif (@($rec.missing).Count) { $modWarn = $true; Write-Host "Save made with mods not installed now ($(@($rec.missing).Count)): $(@($rec.missing) -join '; ')" }
+  }
+  if ($modWarn) {
+    Write-Host "Mod-verification dialog: the accept steps run if the menu stays up ${ModWarningAfterSec}s with no load"
+    # The layer counts every trace, the steps' diagnostic ones too, against auto_traces.
+    if (-not $Session) {
+      (Get-Content $ini) -replace '^auto_traces=\d+$', "auto_traces=$($Traces + $ModWarnDiagTraces)" | Set-Content $ini
+    }
+  }
 }
 # Shared runs: this game's Script Extender bridge files go to bg3rtx\slot<N>\
 # (layer/sebridge.cpp se_token, mods/BG3RTX_Bridge), so two games never mix.
@@ -278,6 +380,10 @@ function Restore-Saves {
   if ($foreign.Count) { Write-Host "New saves not written by this run's game (left in place): $(($foreign | ForEach-Object Name) -join ', ')" }
 }
 
+# The player's mod list before the launch: put back at the end if the game rewrote it
+# while it ran a save made with other mods.
+$modSettings = Join-Path $env:LOCALAPPDATA "Larian Studios\Baldur's Gate 3\PlayerProfiles\Public\modsettings.lsx"
+$modSettingsBefore = if ($modWarn -and (Test-Path -LiteralPath $modSettings)) { [IO.File]::ReadAllBytes($modSettings) } else { $null }
 $start = Get-Date
 $launchArgs = @{ Clean = $true; GameArgs = $gameArgs }
 if ($Validation) {
@@ -306,6 +412,66 @@ $moving = $false
 $moveDone = $false
 $moveStart = Get-Date
 $sessionReady = $false
+$mw = @{ done = $false; menuAt = $null; clicks = 0; lastClick = [datetime]::MinValue; modSettingsBytes = $modSettingsBefore; uiW = 0; uiH = 0 }
+# The mod-warning steps (TEST_SCENES.md, "Saves made with mods"). Keyboard map
+# (Engine.pak PlayerProfiles/Eoc/keyboard_1.json): UIAccept = Enter, UICancel = Escape.
+# ModVerification.xaml binds only UICancel (never sent), so its Continue needs the click.
+# Round 3's traces (2026-10-27 17:22) showed what the stuck state is. There is no dialog:
+# with a modded save the game drops the -loadSaveGame request and runs its normal startup,
+# which waits for input in the background run:
+#   1. the startup splash (key art, "100%"), the state rounds 1-2 took for a dialog;
+#   2. after one input, a 3D vista with "Press any key to continue";
+#   3. after another, the main menu, Continue focused. Enter there does nothing.
+# Round 4: advance 1-2 with Enter, click the main menu's Continue (it loads the newest
+# visible save, this one under BG3RTX_SAVE_ONLY), which should bring the verification
+# dialog, then click that dialog's Continue. A trace after each step records the screen.
+# Count the traces in $ModWarnDiagTraces.
+$mwSteps = @(
+  @{ what = "trace"; wait = 0 },       # the splash
+  @{ what = "enter"; wait = 2 },       # splash -> "Press any key"
+  @{ what = "enter"; wait = 6 },       # -> main menu
+  @{ what = "trace"; wait = 6 },
+  @{ what = "menuclick"; wait = 2 },   # main menu: Continue
+  @{ what = "trace"; wait = 10 },      # the verification dialog, or a load
+  @{ what = "click"; wait = 2 },       # ModVerification: Continue
+  @{ what = "trace"; wait = 8 },
+  @{ what = "enter"; wait = 2 },       # a follow-up dialog's UIAccept, if any
+  @{ what = "trace"; wait = 10 }
+)
+# The main menu's "Continue" button. It is left-anchored, not centred: measured in round
+# 2-3's dumps at (567, 715) of the 3840x1600 output (UI target d175, swapchain d110), i.e.
+# (765, 965) in the 2160-high design, scaled by uh/2160 from the top-left, then mapped
+# to the window like the dialog click. With BG3RTX_SAVE_ONLY the newest visible save, the
+# one Continue loads, is this run's.
+function Send-MenuContinueClick {
+  $h = Get-GameWindow
+  if ($h -eq [IntPtr]::Zero) { return $false }
+  $r = New-Object BG3RTX.Win2+RECT
+  if (-not [BG3RTX.Win2]::GetClientRect($h, [ref]$r)) { return $false }
+  $w = $r.Right - $r.Left; $hh = $r.Bottom - $r.Top
+  $uw = if ($mw.uiW) { $mw.uiW } else { $w }; $uh = if ($mw.uiH) { $mw.uiH } else { $hh }
+  $s = [Math]::Min($uw / 3840.0, $uh / 2160.0)
+  $x = [int](765 * $s * $w / $uw); $y = [int](965 * $s * $hh / $uh)
+  $l = [IntPtr](([int64]$y -shl 16) -bor ($x -band 0xFFFF))
+  Write-Host "mod warning: clicking the main menu's Continue at client ($x, $y) of ${w}x$hh"
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)
+  Start-Sleep -Milliseconds 150
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)
+  Start-Sleep -Milliseconds 100
+  [void][BG3RTX.Win]::PostMessage($h, 0x0201, [IntPtr]1, $l)
+  Start-Sleep -Milliseconds 120
+  [void][BG3RTX.Win]::PostMessage($h, 0x0202, [IntPtr]0, $l)
+  $true
+}
+# A UI key (press and release) posted to this run's game window only, as the -Move key.
+function Send-UiKey([int]$vk, [int]$scan) {
+  $h = Get-GameWindow
+  if ($h -eq [IntPtr]::Zero) { return }
+  $l = 1 -bor ([int64]$scan -shl 16)
+  [void][BG3RTX.Win]::PostMessage($h, 0x0100, [IntPtr]$vk, [IntPtr]$l)
+  Start-Sleep -Milliseconds 80
+  [void][BG3RTX.Win]::PostMessage($h, 0x0101, [IntPtr]$vk, [IntPtr]($l -bor 0xC0000000))
+}
 while ((Get-Date) -lt $deadline) {
   if ($moving -and $Background) {
     # A posted key-down is a single press to the game; a held key is what
@@ -315,6 +481,32 @@ while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 2
   }
   Focus-Game
+  if ($modWarn -and -not $mw.done) {
+    foreach ($ln in (Read-NewLog)) {
+      if (-not $mw.menuAt -and $ln -match '\[auto\] 3D scene first seen') { $mw.menuAt = Get-Date }
+      # The game's output size (the UI's viewport): the DLSS create logged by layer/ngx.cpp.
+      if (-not $mw.uiH -and $ln -match 'created \d+x\d+ -> (\d+)x(\d+)') { $mw.uiW = [int]$Matches[1]; $mw.uiH = [int]$Matches[2] }
+      if ($ln -match '\[auto\] loading screen after the 3D scene' -or $ln -match '\[auto\] scene ready') {
+        $mw.done = $true
+        if ($mw.clicks) { Write-Host "mod warning: the load started after step $($mw.clicks) ($($mwSteps[$mw.clicks - 1].what))" }
+        break
+      }
+    }
+    # Only while the 3D menu is up and no load has started (the dialog, as the save has
+    # missing mods): the steps below, each after the previous one's delay.
+    if (-not $mw.done -and $mw.menuAt -and ((Get-Date) - $mw.menuAt).TotalSeconds -ge $ModWarningAfterSec -and
+        $mw.clicks -lt $mwSteps.Count -and ((Get-Date) - $mw.lastClick).TotalSeconds -ge $mwSteps[$mw.clicks].wait) {
+      $st = $mwSteps[$mw.clicks]
+      switch ($st.what) {
+        "enter" { Send-UiKey 0x0D 0x1C; Write-Host "mod warning: Enter (UIAccept) posted" }
+        "click" { [void](Send-ModWarningClick 1.0) }
+        "menuclick" { [void](Send-MenuContinueClick) }
+        "trace" { Set-Content (Tagged $root "trace" ".request") "mod warning $(Get-Date -Format o)"; Write-Host "mod warning: diagnostic trace requested (the screen after the steps so far)" }
+      }
+      $mw.clicks++; $mw.lastClick = Get-Date
+      if ($mw.clicks -ge $mwSteps.Count) { Write-Host "mod warning: all steps sent, no load started" }
+    }
+  }
   if ($Move -and (Test-Path $log)) {
     $last = Get-Content $log -Tail 40 | Select-String '(\d+) draws in the last frame' | Select-Object -Last 1
     if ((Get-Item $log).LastWriteTime -lt $start) { $last = $null }
@@ -382,6 +574,14 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
     }
     Remove-Item $pidFile -ErrorAction SilentlyContinue
     if ($readyFile) { Remove-Item $readyFile, $quitFile -ErrorAction SilentlyContinue }
+    # Accepting the mod-verification dialog must leave the player's mod list as it was.
+    if ($mw -and $mw.modSettingsBytes -and $game -and $game.HasExited) {
+      $now = if (Test-Path -LiteralPath $modSettings) { [IO.File]::ReadAllBytes($modSettings) } else { $null }
+      if (-not $now -or [Convert]::ToBase64String($now) -ne [Convert]::ToBase64String($mw.modSettingsBytes)) {
+        [IO.File]::WriteAllBytes($modSettings, $mw.modSettingsBytes)
+        Write-Host "mod warning: the game changed modsettings.lsx; restored the player's version"
+      } else { Write-Host "mod warning: modsettings.lsx unchanged" }
+    }
     if (Get-Command Restore-Saves -ErrorAction SilentlyContinue) { Restore-Saves }
   } elseif ($Save) {
     Write-Host "KeepRunning: saves written during the run are not parked"

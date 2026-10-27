@@ -376,6 +376,12 @@ reproduce them.
   visible in the [QA.md table](QA.md#thresholds-and-their-derivation) until then. The same
   holds for runtime quality heuristics (trust gates, match tolerances, clamps): a new one
   ships with its derivation or is listed there for a decision.
+- **Quality before frame rate on Ultra (2026-10-27, user).** The frame budget guides
+  optimisation; it never gates a physically better result on Ultra. A cost overrun is
+  answered by optimising the implementation (refit, OMM, better sampling with the same
+  expected value), not by switching the effect off or degrading it. Quality-for-speed
+  trades belong to the lower presets. Quality gates (artifacts, physics, leaks) still
+  decide whether an effect is on.
 - **First application: the sun** (`rt_sun_replace=1`, TRACK_D 12). The traced visibility
   replaces the game's sun mask where it is trusted: no roof volume of the asset DB on the
   sun ray, and the ray stays in the captured view frustum until it has risen above the

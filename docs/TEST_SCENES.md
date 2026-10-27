@@ -54,6 +54,132 @@ closed.
 | S13 | `Mind Flayer Colony` | SCL_Main_A | organic, emissive pods | emissive surfaces, wet-looking materials |
 | S14 | `Lower City - 91h` | CTY_Main_A | city day, stairs and walls | sun shadows on architecture, large view distance |
 
+### Saves made with mods, and the Crèche save (2026-10-27)
+
+S2 and every act 2 save (S10-S13) never loaded through `-loadSaveGame`: the game stayed in
+the 3D main menu. **Cause:** they were made with the texture-only mod "Immersive World
+Textures" (parts 1-5), which is no longer installed. The save's `meta.lsf`
+(`ModuleSettings/Mods`) lists it, so the game opens its mod-verification dialog
+(`Mods/ModBrowser/GUI/Pages/ModVerification.xaml`, `Patch8_HotFix9.pak`) and waits for a
+click. `python scripts/save_mods.py` lists every save's extra modules and which are missing
+(read-only): 33 of 110 saves, all from 51 h to 74 h of play, have the five parts. S1, S3-S8,
+S14 and S9 have none.
+
+**Fix (`auto-run.ps1 -AcceptModWarning auto`, the default):**
+- Armed only when `save_mods.py` reports missing mods for the `-Save` folder (`on` arms it
+  always, `off` never).
+- Detection from the layer log, which now logs both transitions once:
+  `[auto] 3D scene first seen` and `[auto] loading screen after the 3D scene`. The click is
+  sent only if the 3D menu has been up for `-ModWarningAfterSec` (15 s) with no loading
+  screen, scene-ready line or trace.
+- The click: `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, `WM_LBUTTONUP` posted to this run's game
+  window (by its process's handle, as the `-Move` key is), never typed globally, no focus
+  change. The target is the dialog's "Continue" button (`StartGameButton`), from the XAML:
+  a 2576x1930 panel centred on a 3840x2160 design; Continue is 428x80 at centre-relative
+  x −438..−10, y +791..+871, Cancel to the right of the centre. We click at (−130, +831) ×
+  `min(w/3840, h/2160)`: inside Continue for any label width and never on Cancel. A miss
+  lands on the dialog's modal backdrop. (Round 1 sent 3 clicks with UI-scale guesses 1.0,
+  0.85 and 0.7; round 2 sends one click at 1.0, then Enter.)
+- **Round 1 (jobs `modwarn-S2/S10/S11/S12`, 2026-10-27 16:15-16:44): no level loaded.**
+  The click does reach the UI: in every run, the frame changes right after the first
+  click, from 54 passes / about 1,100 draws to 68 passes / about 2,000 draws, and SDL
+  reports the posted mouse leaving the window (`[bg] dropped SDL window event 11`). The
+  later clicks change nothing. So Continue opens a second state, most likely a
+  confirmation MessageBox, and nothing accepted it.
+- **The keyboard path** (`Engine.pak` `PlayerProfiles/Eoc/keyboard_1.json`):
+  - `UIAccept` is Enter and keypad Enter, and `UICancel` is Escape.
+  - In keyboard mode, `ModVerification.xaml` binds only `UICancel` (`EscButton`). Nothing
+    in it binds `UIAccept`, it has no `IsDefault` button and no focus set. So the first
+    dialog has no keyboard accept, and Tab-navigation could land on Cancel.
+  - `MessageBox.xaml`'s buttons carry `BoundEvent="{Binding BoundEvent}"`, so a
+    MessageBox's accept action reacts to `UIAccept`.
+- **Round 2 (`modwarn2-S2`, 16:51): no load.**
+  - The state changed at 16:51:56, after the Enter at about +15 s and before the click at
+    16:52:01, so Enter alone dismissed the stuck state.
+  - The diagnostic trace (`captures/20261027-165206` in this worktree) shows the plain
+    main menu, Continue focused, no dialog: UI target `d175`, swapchain `d110`.
+  - That trace also ended the run after 59 s: the layer counts every trace against
+    `auto_traces`. Fixed: with the mod warning armed, `auto_traces` is raised by the
+    number of diagnostic traces.
+  - The swapchain dump shows the 3840x1600 frame and UI stretched over the 3840x2160
+    window (no letterbox). The click is now mapped through the output size, which the
+    layer logs at the DLSS create. Round 1's click (y 1911, x 1790) was in fact inside
+    Continue.
+  - Reading of rounds 1-2: the first input closes the verification (Continue in round 1),
+    but the command-line load does not resume; the game stays in the main menu.
+- **Round 3 (`modwarn3-S2`, 17:22): no load, but the traces explain the whole flow.**
+  These are the swapchain dumps in this worktree's `captures/`:
+
+  | Trace | When | Screen |
+  |---|---|---|
+  | `20261027-172252` | before any input | the startup splash (key art, "100%"), no dialog |
+  | `172303` | after the first click | a 3D vista with "Press any key to continue" |
+  | `172311` | after Enter | the main menu, Continue focused |
+  | `172325` | after the second Enter | the main menu (Enter on its Continue does nothing) |
+  | `172336` | after the second click | the main menu |
+
+  So there is no mod dialog at startup. With a save made with missing mods, the game drops
+  the `-loadSaveGame` request, so the run waits on the normal startup flow, where each
+  screen needs an input. Saves without mods load straight from the splash; S9 showed its
+  loading screen 9 s after the menu. Rounds 1-2 "dismissed a dialog" only in the sense of
+  advancing these screens.
+- **Round 4 (current `$mwSteps`):**
+  1. a trace;
+  2. Enter (splash → "Press any key");
+  3. Enter (→ main menu);
+  4. a trace;
+  5. a click on the main menu's Continue, at (567, 715) of the 3840x1600 output, measured
+     in the dumps (left-anchored, scaled from the top-left). It loads the newest visible
+     save, this one under `BG3RTX_SAVE_ONLY`;
+  6. a trace, which should show the mod-verification dialog;
+  7. a click on the dialog's Continue;
+  8. a trace;
+  9. Enter, for a follow-up dialog;
+  10. a trace.
+
+  Escape is never sent. The main-menu click is the only new kind of input: it starts a
+  load, and loading writes nothing.
+- **If round 4 fails** (the main-menu load stays blocked), the alternatives:
+
+  | Option | Side effects |
+  |---|---|
+  | **Reinstall "Immersive World Textures" 1-5 (recommended)** | No dialog at all, so the existing `-loadSaveGame` path works unchanged for all 33 saves. Changes the player's mod list and install, which the player may want anyway, since the saves were made with it. The captures then show the modded textures: valid for RT coverage and QA, but not the vanilla look. |
+  | Foreground runs while the user is away | Real mouse and keyboard; takes over the PC and breaks the background rule; needs someone to start it. |
+  | A Script Extender call that starts the load from Lua | Needs bridge Lua work and a reinstall into the game's Data folder; unverified whether SE can load a save past the mod check. |
+  | New saves of those scenes, made without the mod | The player's time in game. It also does not fix the 33 existing saves. |
+- **Round 3 steps** (superseded), each only while no loading screen had been seen:
+  1. a trace of the stuck state, before any input;
+  2. after 4 s, the Continue click;
+  3. after 6 s, a trace;
+  4. after 2 s, Enter;
+  5. after 6 s, a trace;
+  6. after 2 s, Enter: the main menu's focused Continue, which loads the newest visible
+     save, ours under `BG3RTX_SAVE_ONLY`;
+  7. after 12 s, a trace;
+  8. after 2 s, the Continue click again, for the verification dialog this load should
+     open;
+  9. after 8 s, a trace.
+
+  Escape is never sent.
+- **Crèche: fixed by the save-name encoding.** `saveenc-S9-creche-utf8ansi` showed a
+  loading screen 9 s after the menu, and the bridge exported `level CRE_Main_A`. Its trace
+  `captures/20261027-165255` is gameplay (291 G-buffer draws). With the name passed
+  unchanged (`-SaveArgEncoding wide`) the game stayed in the menu for 421 s. That run's
+  nv153 event (16:57:29) is not in the game's log: no device-lost or fault line, and
+  presents continued to the end.
+- **No saving:** loading does not write a save, nothing sends a save key, and any save the
+  game writes is parked as before. `modsettings.lsx` is read before the launch and written
+  back after the game exits if the game changed it.
+- The run prints `mod warning: ...` lines (click position, the load starting after N clicks).
+
+**S9 Crèche has no mods.** Its folder name has a non-ASCII `è`. Two encodings are involved:
+- `test-queue.ps1` reads job files with Windows PowerShell's `Get-Content -Raw`, which
+  decodes UTF-8 without a BOM as ANSI, so a job's `"save": "Crèche Yllek"` does not match.
+  Use an ASCII substring: `"Yllek - 40h"`.
+- The game reads `-loadSaveGame` through the ANSI code page. `auto-run.ps1` now
+  passes a non-ASCII name's UTF-8 bytes as ANSI characters (`-SaveArgEncoding auto`;
+  `wide` passes it unchanged). Verified 2026-10-27: utf8ansi loads, wide stays in the menu (above).
+
 Checkpoint routine: for each scene, a feature-off and a feature-on capture of
 the same frame (`scripts/live_phases.py` toggles live inside one run), the A/B
 sheet from `scripts/ab_compare.py`, GPU costs, and the non-finite and
@@ -220,7 +346,7 @@ Per captured scene, the shared sweep was slower (189 s against 80 s), so there i
 speed-up yet. That is why shared runs stay opt-in.
 - S2 (`Rivington - 74h`) does not load through `-loadSaveGame` even alone. The game
   shows the 3D main menu for the whole run. Main's sweep of 2026-10-26 did not include
-  it either.
+  it either. (Cause: the missing-mods dialog, see "Saves made with mods" above.)
 - A second instance first stayed in the main menu, because of its empty
   `Debug_Client_Profile_1`. With the save copied there, it loaded S3 and S8, but S5
   hung during its loading screen.
