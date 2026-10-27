@@ -521,7 +521,7 @@ def _corr_length(res, mask, max_lag=32):
     return max_lag
 
 
-def sharc_reference(ys_cache, ys_ref, mask):
+def sharc_reference(ys_cache, ys_ref, mask, z=None):
     """The cache's result against its physical reference (docs/QA.md "sharc_reference"):
     `ys_cache` repeated traces with the cache, `ys_ref` repeated traces of the reference (no
     cache, rays as long as the cache's, 8 per pixel). Every tolerance is measured:
@@ -532,7 +532,9 @@ def sharc_reference(ys_cache, ys_ref, mask):
         tail is the measured control for the excess tail;
       - the counts are taken on a grid as wide as the measured correlation length, so the
         samples are independent, and the excess fails only if it exceeds the deficit by more
-        than the binomial noise of that difference, sqrt(N_excess + N_deficit).
+        than z times the binomial noise of that difference, sqrt(N_excess + N_deficit), with z
+        the one-sided quantile at ALPHA_FW (thresholds.z_one_sided; the caller passes the
+        Bonferroni share of its gate family). The sigma_d cut only defines the two symmetric tails.
     It fails only where the cache's result is brighter than the reference beyond the measured
     noise of both estimates."""
     c, r = np.stack(ys_cache).astype(np.float64), np.stack(ys_ref).astype(np.float64)
@@ -546,7 +548,8 @@ def sharc_reference(ys_cache, ys_ref, mask):
     grid[::L, ::L] = True
     excess, deficit = m & (d > sd), m & (-d > sd)
     ne, nd = int((excess & grid).sum()), int((deficit & grid).sum())
-    noise = float(np.sqrt(ne + nd))
+    zq = th.z_one_sided(1) if z is None else z
+    noise = zq * float(np.sqrt(ne + nd))
     score = ne - nd
     tot = float(mr[m].sum()) if m.any() else 0.0
     excess_energy = float((d - sd)[excess].sum()) / tot if tot > 0 else 0.0
@@ -559,8 +562,8 @@ def sharc_reference(ys_cache, ys_ref, mask):
         regs.append({"bbox": bb, "area": area, "excess_sigmas": round(z, 2), "qualified": True, "rank": area * z})
     regs.sort(key=lambda g: -g["rank"])
     return {"score": score, "threshold": round(noise, 2), "pass": score <= noise,
-            "unit": "independent px in excess minus in deficit (> sigma_d), against their binomial noise",
-            "metrics": {"traces": [nc, nr], "corr_length_px": L, "samples": int((m & grid).sum()),
+            "unit": "independent px in excess minus in deficit (> sigma_d), against z x their binomial noise",
+            "metrics": {"traces": [nc, nr], "z": round(zq, 3), "alpha_fw": th.ALPHA_FW, "corr_length_px": L, "samples": int((m & grid).sum()),
                         "excess_samples": ne, "deficit_samples": nd,
                         "excess_permille": round(1000.0 * float(excess.sum()) / max(1, int(m.sum())), 3),
                         "deficit_permille": round(1000.0 * float(deficit.sum()) / max(1, int(m.sum())), 3),

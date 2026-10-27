@@ -810,10 +810,12 @@ place (docs/QA.md):
   luminance with its standard error, for clean and for occluded cells. The finer grid is the
   same estimator closer to its leak-free limit (cells 4-8 cm at 10-30 m, under a wall's
   thickness); repeating at 8 shows whether 4 has converged. QA check `sharc_fine_reference`
-  (gate): the clean cells' mean excess must not exceed one measured standard error. Caveat,
+  (gate): the clean cells' mean excess must not exceed z x its measured standard error, z = 1.96 =
+  `thresholds.z_one_sided(2)` (ALPHA_FW 5% over the scene's two SHaRC gates; corrected from k = 1,
+  which would false-alarm 16% of the time). Caveat,
   written down: where the GI rays' hit density correlates with brightness inside a cell, coarse
   and fine differ without a leak; the occluded cells against the clean ones separate the two.
-  Job `38-sharc7-qa-S7-S8`.
+  Job `38-sharc7-qa-S7-S8`. Hit materials (EN2) are the blocker for the traced update itself.
 ---
 
 ## 3. Opacity micromaps for alpha-tested foliage

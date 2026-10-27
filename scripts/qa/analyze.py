@@ -439,6 +439,9 @@ def analyze_scene(d: Path, pool):
     # sharc_fine_check=1). Per cache hit with both entries: coarse - fine luminance; the GPU logs
     # the mean and its standard error over 300 frames. Production uses the clean cells (occluded
     # ones are rejected): it fails if their mean excess is above one measured standard error.
+    # The SHaRC gates of one scene form one test family (sharc_fine_reference, sharc_reference on the
+    # interior): each runs at ALPHA_FW / 2 (Bonferroni), z = thresholds.z_one_sided(2).
+    z_sharc = th.z_one_sided(2)
     if "sharc_leak" in traces:
         import re as _re
         fine = {}
@@ -452,10 +455,11 @@ def analyze_scene(d: Path, pool):
         if "clean" in fine:
             c = fine["clean"]
             res["checks"].append({"detector": "sharc_fine_reference", "effect": "sharc", "buffer": "GPU counters (sharc_leak)",
-                                  "on": "sharc_leak", "off": "sharc_leak", "score": c["mean"], "threshold": c["se"],
-                                  "pass": c["mean"] <= c["se"],
-                                  "unit": "coarse - fine luminance per cache hit (clean cells) against 1 standard error",
-                                  "metrics": fine})
+                                  "on": "sharc_leak", "off": "sharc_leak", "score": c["mean"], "threshold": round(z_sharc * c["se"], 6),
+                                  "pass": c["mean"] <= z_sharc * c["se"],
+                                  "unit": f"coarse - fine luminance per cache hit (clean cells) against z x SE (z {z_sharc:.3f}, "
+                                          f"ALPHA_FW {th.ALPHA_FW} / 2)",
+                                  "metrics": dict(fine, z=round(z_sharc, 3))})
         else:
             res["notes"].append("sharc_fine_reference: no 'fine-cell reference' line in the log (sharc_fine_check did not run)")
 
@@ -474,7 +478,7 @@ def analyze_scene(d: Path, pool):
                 if m is None or m.shape != whole.shape or not m.any():
                     res["notes"].append(f"sharc_reference ({scope}): no roofed interior with a sunlit exterior in view")
                     continue
-                r = det.sharc_reference(ys_c, ys_r, m)
+                r = det.sharc_reference(ys_c, ys_r, m, z=z_sharc)
                 z = r.pop("map")[1]
                 if scope == "frame":
                     r["gate"] = False
