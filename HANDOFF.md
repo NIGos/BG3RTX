@@ -83,7 +83,58 @@ D to F made them reachable or are smaller holes.
 - The mesh pool only grows (by copy into a new buffer, old one deferred), and its live
   ranges are never rewritten.
 
+**G. Builds recorded into a command buffer the game dropped** (lead from the emissive
+agent; not covered by the first commit).
+- Around level loads the game records a command buffer and then frees it or begins it
+  again without submitting it. Our build work in it never runs, but the host state
+  advanced as if it had.
+- **Compaction:** `m.as = c` at record. If the copy is dropped, every later TLAS
+  references an uninitialised BLAS, which faults. This is a direct path to the
+  level-load device lost.
+- **Per-draw BLAS:** a fresh or rebuilt slot whose build was dropped is *refit*
+  (UPDATE from an unbuilt source) the next frame.
+- **TLAS:** the refit source is the previous slot's TLAS, which may never have been
+  built; the slot is also handed out and traced.
+- **Legacy BLAS:** refit after a dropped build.
+- **New meshes:** the extraction batch of a dropped buffer timed out after 240 frames as
+  "lost" and the mesh went to `kNeedCheck`. Its BLAS was never built, and a check job
+  that happened to match would have made it `kReady`.
+- **Fixups:** fixups of a dropped buffer stayed keyed by its handle. If the handle was
+  reused they were applied into a ring slot of a later build.
+
 ## 2. What changed
+
+**Build records** (second commit; `bvhsplit.cpp`, `cmd.cpp`, `rtscene.cpp`, `alphatest.cpp`, shaders):
+- Every scene build registers a record for the command buffer it is recorded into
+  (`bvh_rec_register`). `bvh_on_submit` marks it submitted.
+- `vkBeginCommandBuffer`, `vkFreeCommandBuffers` and `vkAllocateCommandBuffers` (a
+  handle reused) call `bvh_cmd_reset`. That marks a still-pending record *dropped*
+  (logged: `[bvh] ... dropped without a submit`) and discards the buffer's fixups.
+- Refit only from a source whose build was submitted: per-draw BLAS, split TLAS (the
+  previous slot), legacy BLAS. Otherwise a full build, which does not read the old
+  contents.
+- **Compaction is deferred.** The mesh switches to the compacted BLAS only when its
+  batch's done word shows the copy ran (every batch now has a done word). A dropped or
+  timed-out batch discards the copy, and the mesh keeps its original.
+- A batch of a dropped buffer is handled as lost at once (no 240-frame wait). A lost
+  *extraction* (batch never ran) evicts the mesh, to be extracted again, instead of
+  `kNeedCheck`. Meshes still become `kReady` only from a done batch, i.e. GPU-executed.
+- A scene slot whose build record is dropped is not handed out.
+- **GPU guard** (set 1 binding 9, `gSceneStamp`):
+  - per slot, the host writes the generation it expects at commit;
+  - the build's command buffer writes the same value with `vkCmdUpdateBuffer` when it
+    runs;
+  - `rt_occluded`, `rt_closest`, `rt_closest_hit` and `rt_closest_debug` trace only if
+    the two match, otherwise every ray misses.
+
+  So a TLAS whose build was dropped, or submitted after the pass, is never traced. Not
+  guarded: the generated debug reference `shaders/gi/ls_ref/ls_ref_body.hlsli`
+  (`ls_debug` only).
+- Not covered: a pool growth whose copy was dropped loses the pool's earlier vertex data
+  (UVs and normals of cached meshes read as zeros: wrong alpha and normals, no fault,
+  since the reads are bounded).
+
+**First commit:**
 
 **Scene snapshot slots** (`layer/host.h` `kSceneSlots = 8`, `layer/rtscene.cpp`)
 - Each build writes one slot. The slot holds:
@@ -149,7 +200,12 @@ D to F made them reachable or are smaller holes.
 ## 3. Tests for you to run (in game)
 
 Build first: `scripts\build.ps1` (ABI 8: the layer and the core must both be new;
-restart the game).
+restart the game). The second commit changes the set-1 layout (binding 9), so
+`shaders/rt/rt_common.hlsli` from that commit needs the new layer. A new shader with an
+old layer fails pipeline creation, and the old pipeline is kept.
+
+In the logs, look for `[bvh] ... dropped without a submit` around level loads (how often
+it happened) and `[bvh] batch ... compaction copies discarded`.
 
 **A. Fault rate, the default split** (6 runs, Campsite). Run this 6 times:
 

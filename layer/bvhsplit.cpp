@@ -309,6 +309,7 @@ struct DynSlot {
   uint64_t last_used = 0;
   uint32_t since_build = 0;
   VkDeviceSize build_scratch = 0, update_scratch = 0;
+  uint64_t rec = 0;             // build record of its last build/refit (refit only once that was submitted)
 };
 std::unordered_map<uint64_t, DynSlot> g_dyn;
 
@@ -347,6 +348,23 @@ struct Fixup {
 std::mutex g_fix_mu;
 std::unordered_map<VkCommandBuffer, std::vector<Fixup>> g_fixups;
 
+// ---- build records: was the command buffer a build was recorded into submitted? ----
+// The game sometimes records a command buffer and drops it (frees it, or begins it
+// again) without submitting it, around level loads. Work of ours recorded there
+// never runs: nothing it builds may be used later. Under g_fix_mu.
+enum RecState : uint8_t { kRecPending, kRecSubmitted, kRecDropped };
+uint64_t g_rec_next = 0;
+std::unordered_map<VkCommandBuffer, std::vector<uint64_t>> g_rec_cmd;   // not yet submitted
+std::unordered_map<uint64_t, RecState> g_rec_state;
+uint64_t g_rec_dropped = 0, g_rec_dropped_logged = 0;
+
+int rec_state(uint64_t id) {   // -1: unknown (0, or pruned: never trusted)
+  std::lock_guard<std::mutex> fl(g_fix_mu);
+  auto it = g_rec_state.find(id);
+  return it == g_rec_state.end() ? -1 : int(it->second);
+}
+bool rec_submitted(uint64_t id) { return rec_state(id) == kRecSubmitted; }
+
 // ---- GPU-side bookkeeping ----
 Buf g_status;                 // host-visible validation results
 uint32_t g_status_next = 0;
@@ -358,7 +376,17 @@ enum JobKind : uint8_t { kJobExtract, kJobCheck, kJobAudit };
 // too small range overwrites the neighbouring BLAS in the chunk).
 struct Job { uint64_t key, gen; uint32_t status; JobKind kind; bool cross_instance; };
 struct CompactRead { uint64_t key, gen; uint32_t slot; };
-struct JobBatch { uint64_t frame; uint32_t done_slot; std::vector<Job> jobs; std::vector<CompactRead> compact; };
+// A compaction copy: the mesh switches to `c` only once the batch's done word shows
+// the copy executed (a dropped command buffer never wrote it).
+struct Swap { uint64_t key, gen; AsAlloc c; };
+struct JobBatch {
+  uint64_t frame;
+  uint32_t done_slot;
+  std::vector<Job> jobs;
+  std::vector<CompactRead> compact;
+  std::vector<Swap> swaps;
+  uint64_t rec = 0;   // build record of the command buffer (dropped: the batch is lost at once)
+};
 constexpr uint32_t kDoneMagic = 0x42564844u;   // the batch's done word
 std::vector<JobBatch> g_batches;
 
@@ -371,6 +399,7 @@ struct TlasSlot { Buf buf; VkAccelerationStructureKHR as = VK_NULL_HANDLE; uint3
 TlasSlot g_tlas[kSceneSlots];
 uint32_t g_tlas_cap_hint = 0;   // instances the newest TLAS storage was sized for
 int g_tlas_prev = -1;           // slot of the last TLAS build (the refit source)
+uint64_t g_tlas_prev_rec = 0;   // its build record (refit only once submitted)
 constexpr VkBuildAccelerationStructureFlagsKHR kTlasFlags =
     VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
 // The TLAS is refit while its instance list (count, BLAS and flags in order) holds:
@@ -608,6 +637,9 @@ void bvh_device_destroyed(DeviceData* dd) {
   std::lock_guard<std::mutex> lock(g_mu);
   for (auto& [k, m] : g_meshes) as_destroy(m.as);
   for (auto& [k, s] : g_dyn) as_destroy(s.as);
+  for (JobBatch& b : g_batches)
+    for (Swap& s : b.swaps) as_destroy(s.c);
+  g_batches.clear();
   for (const PendingFree& p : g_pending_free)
     if (p.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(p.as));
   g_pending_free.clear();
@@ -775,6 +807,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const VkDeviceAddress soup_addr = rt_buffer_address(cap.xfb);
   const bool alpha_test = cfg_int("rt_alpha_test", 1) != 0;
   const int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
+  // This command buffer's build record (bvh_on_submit marks it submitted).
+  const uint64_t rec = bvh_rec_register(cmd);
   const VkBuildAccelerationStructureFlagsKHR dyn_flags =
       (cfg_int("rt_fast_trace", 0) ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
                                    : VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR) |
@@ -884,7 +918,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     DynSlot& s = g_dyn[key];
     bool fresh = !s.as.as;
+    // A refit (UPDATE) needs the source built: its last build must have been submitted
+    // (a dropped command buffer left the BLAS unbuilt; a full build does not read it).
     bool refit = !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.flags == dyn_flags &&
+                 rec_submitted(s.rec) &&
                  s.since_build < uint32_t(rebuild_frames);
     if (!refit && (fresh || fd.prims > s.cap_prims || s.alpha != fd.cap_alpha || s.flags != dyn_flags)) {
       if (s.as.as) as_destroy(s.as);
@@ -911,6 +948,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // Staggered forced rebuilds: a slot's first rebuild comes at a key-dependent frame.
     if (!refit && fresh) s.since_build = uint32_t(key % uint64_t(rebuild_frames));
     dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit});
+    s.rec = rec;
     refit ? ++g_st.dyn_refit : ++g_st.dyn_rebuild;
   }
 
@@ -994,13 +1032,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   barrier(cmd, kXFB | kAS | kCS, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS | kXfer, kRW);
   rt_convert(cmd, cap);
   barrier(cmd, kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS, kRW);
-  JobBatch batch{now, 0, {}, {}};
+  JobBatch batch{now, 0, {}, {}, {}, rec};
   // Status slots: one per job, one per new mesh's compacted size, then the batch's
   // done word (written by a transfer after all of them).
   const bool compact = cfg_int("rt_mesh_compact", 1) != 0;
   const uint32_t n_cq = compact ? uint32_t((std::min)(mesh_builds.size(), size_t(kCompactSlots))) : 0;
   const uint32_t n_status = uint32_t(ext.size()) + n_cq;
-  const uint32_t st0 = n_status ? status_slots(n_status + 1) : 0;
+  // The done word always exists: compaction swaps (decided below) wait for it too.
+  const uint32_t st0 = status_slots(n_status + 1);
   batch.done_slot = st0 + n_status;
   if (!ext.empty()) {
     VkDescriptorBufferInfo soup{cap.xfb, 0, cap.xfb_size}, pool{g_pool.b, 0, g_pool.size},
@@ -1062,8 +1101,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       ci.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
       dd->vk.CmdCopyAccelerationStructureKHR(cmd, &ci);
       g_st.compact_saved += m.as.size - c.size;
-      as_destroy(m.as);
-      m.as = c;
+      // The mesh keeps its original BLAS until the batch is done (bvh_on_present).
+      batch.swaps.push_back({key, m.gen, c});
       m.compacted = true;
       ++g_st.compactions;
       --budget;
@@ -1151,7 +1190,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       batch.compact.push_back({mesh_builds[k].key, m.gen, sslot});
     }
     g_compact_next = (g_compact_next + n_cq) % kCompactSlots;
-    if (n_status) {
+    {   // the done word, after every job, compaction copy and BLAS build of this batch
       barrier(cmd, kCS | kXfer | kAS, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, kXfer,
               VK_ACCESS_TRANSFER_WRITE_BIT);
       dd->vk.CmdFillBuffer(cmd, g_status.b, VkDeviceSize(batch.done_slot) * 16, 16, kDoneMagic);
@@ -1164,6 +1203,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     for (uint32_t i = 0; i < n; ++i) sig = mix(mix(sig, inst_out[i].accelerationStructureReference), inst_out[i].flags);
     // Refit: the previous slot's TLAS into this slot's (src != dst, same storage size).
     const bool tlas_refit = g_tlas_valid && g_tlas_prev >= 0 && g_tlas_prev != int(slot) && g_tlas[g_tlas_prev].as &&
+                            rec_submitted(g_tlas_prev_rec) &&
                             g_tlas[g_tlas_prev].cap == g_tlas[slot].cap && n == g_tlas_n && sig == g_tlas_sig &&
                             g_tlas_since < uint32_t(rebuild_frames) && cfg_int("rt_tlas_refit", 1) != 0;
     g_tlas_since = tlas_refit ? g_tlas_since + 1 : 0;
@@ -1175,6 +1215,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     tbi.srcAccelerationStructure = tlas_refit ? g_tlas[g_tlas_prev].as : VK_NULL_HANDLE;
     tbi.dstAccelerationStructure = g_tlas[slot].as;
     g_tlas_prev = int(slot);
+    g_tlas_prev_rec = rec;
     tbi.scratchData.deviceAddress = scratch_at(0);
     VkAccelerationStructureBuildRangeInfoKHR tr{n, 0, 0, 0};
     const VkAccelerationStructureBuildRangeInfoKHR* trp = &tr;
@@ -1184,7 +1225,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   barrier(cmd, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
   stamp(cmd, 3);
-  if (n_status) g_batches.push_back(std::move(batch));
+  if (n_status || !batch.swaps.empty()) g_batches.push_back(std::move(batch));
 
   ++g_st.builds;
   out->tlas = g_tlas[slot].as;
@@ -1200,13 +1241,59 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->info_bytes = VkDeviceSize((std::max)(n, 1u)) * 16;
   out->pool = g_pool.b;
   out->pool_bytes = g_pool.size;
+  out->rec = rec;
   return true;
 }
 
 // The matrices of this frame's TLAS instances and jobs, read from the game's
 // instance stream as it submits the command buffer that draws with them.
+uint64_t bvh_rec_register(VkCommandBuffer cmd) {
+  std::lock_guard<std::mutex> fl(g_fix_mu);
+  const uint64_t id = ++g_rec_next;
+  g_rec_cmd[cmd].push_back(id);
+  g_rec_state[id] = kRecPending;
+  if (g_rec_state.size() > 8192)   // forget old records (an unknown one is never trusted)
+    for (auto it = g_rec_state.begin(); it != g_rec_state.end();)
+      it = it->first + 4096 < g_rec_next ? g_rec_state.erase(it) : std::next(it);
+  return id;
+}
+
+int bvh_rec_state(uint64_t id) { return rec_state(id); }
+
+// The game begins `cmd` again or frees it: whatever we recorded into it and did not
+// see submitted never runs.
+void bvh_cmd_reset(VkCommandBuffer cmd) {
+  std::lock_guard<std::mutex> fl(g_fix_mu);
+  g_fixups.erase(cmd);   // matrices for a recording that will never run (the ring slot may be reused)
+  auto it = g_rec_cmd.find(cmd);
+  if (it == g_rec_cmd.end()) return;
+  for (uint64_t id : it->second) {
+    auto s = g_rec_state.find(id);
+    if (s != g_rec_state.end() && s->second == kRecPending) {
+      s->second = kRecDropped;
+      ++g_rec_dropped;
+      if (g_rec_dropped_logged < 10) {
+        ++g_rec_dropped_logged;
+        log("[bvh] frame %llu: a command buffer holding scene build %llu was dropped without a submit (%llu so far): "
+            "its builds are not used",
+            (unsigned long long)frame_index(), (unsigned long long)id, (unsigned long long)g_rec_dropped);
+      }
+    }
+  }
+  g_rec_cmd.erase(it);
+}
+
 void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
   std::lock_guard<std::mutex> fl(g_fix_mu);
+  for (VkCommandBuffer c : cmds) {
+    auto it = g_rec_cmd.find(c);
+    if (it == g_rec_cmd.end()) continue;
+    for (uint64_t id : it->second) {
+      auto s = g_rec_state.find(id);
+      if (s != g_rec_state.end() && s->second == kRecPending) s->second = kRecSubmitted;
+    }
+    g_rec_cmd.erase(it);
+  }
   if (g_fixups.empty()) return;
   uint64_t applied = 0, late = 0, bad = 0;
   for (VkCommandBuffer c : cmds) {
@@ -1372,7 +1459,9 @@ void bvh_on_present() {
     // unlike a query's availability, it cannot be a previous use's.
     const bool done = *reinterpret_cast<const volatile uint32_t*>(g_status.map + VkDeviceSize(b.done_slot) * 16) == kDoneMagic;
     const int res = 0;
-    if (!done && now < b.frame + 240) {
+    // Its command buffer dropped without a submit: nothing of it ran, lost at once.
+    const bool dropped = !done && rec_state(b.rec) == kRecDropped;
+    if (!done && !dropped && now < b.frame + 240) {
       ++bi;
       continue;
     }
@@ -1395,7 +1484,15 @@ void bvh_on_present() {
               int(j.kind), (unsigned long long)b.frame, (unsigned long long)now, int(done), res, magic);
         }
         m.check_pending = false;
-        if (j.kind == kJobExtract) m.state = kNeedCheck;
+        if (j.kind == kJobExtract) {
+          if (!done) {
+            // The batch never ran (dropped, or not within 240 frames): the mesh's BLAS was
+            // never built and its pool range never written. Evicted; extracted again later.
+            evict(j.key);
+            continue;
+          }
+          m.state = kNeedCheck;   // the batch ran, the job did not report: built, verified by a check
+        }
         continue;
       }
       const bool ok = invalid == 0 && err <= tol_ok;
@@ -1421,6 +1518,21 @@ void bvh_on_present() {
           }
           break;
       }
+    }
+    // Compaction copies: the mesh takes the compacted BLAS only once the copy ran.
+    for (Swap& s : b.swaps) {
+      auto it = g_meshes.find(s.key);
+      if (done && it != g_meshes.end() && it->second.gen == s.gen) {
+        as_destroy(it->second.as);   // the original: released once no live slot can reference it
+        it->second.as = s.c;
+      } else {
+        as_destroy(s.c);             // never written (or the mesh is gone)
+      }
+    }
+    if (!done && !b.swaps.empty() && g_st.lost_logged < 6) {
+      ++g_st.lost_logged;
+      log("[bvh] batch of frame %llu %s: %zu compaction copies discarded, the meshes keep their original BLAS",
+          (unsigned long long)b.frame, dropped ? "dropped without a submit" : "not done in 240 frames", b.swaps.size());
     }
     if (done)
       for (const CompactRead& c : b.compact) {

@@ -42,6 +42,16 @@ void stat_add(uint index, bool cond, uint bin) {
 [[vk::binding(40, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> rtOrigin;
 static const float kOriginNoHit = 1000.0;
 
+// The scene stamp of this set's build (layer/alphatest.cpp): uint 0 the generation
+// the host expects, uint 1 the one the build's command buffer wrote when it ran.
+// Different: that build never ran before this pass (its command buffer dropped
+// without a submit, or submitted later): its TLAS is not traced (every ray misses).
+[[vk::binding(9, 1)]] ByteAddressBuffer gSceneStamp;
+bool rt_scene_ok() {
+  uint2 s = gSceneStamp.Load2(0);
+  return s.x != 0u && s.x == s.y;
+}
+
 static const uint kRecBytes = 208;
 
 uint rec_addr(uint i) { return 16 + i * kRecBytes; }
@@ -360,6 +370,7 @@ struct RtCone { float f0, spread; };
 // Any alpha-tested hit within [0, tmax] (shadow and occlusion rays).
 bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 1u;
+  if (!rt_scene_ok()) return false;
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;
@@ -379,6 +390,14 @@ bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) {
 struct RtDebugHit { float t; bool alpha; uint near_kind; uint hit_kind; };
 RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
+  RtDebugHit h;
+  h.near_kind = 0;
+  if (!rt_scene_ok()) {
+    h.t = -1.0;
+    h.alpha = false;
+    h.hit_kind = 0u;
+    return h;
+  }
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;
@@ -386,8 +405,6 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMin = 0.0;
   r.TMax = tmax;
   q.TraceRayInline(gScene, 0, 0xFF, r);
-  RtDebugHit h;
-  h.near_kind = 0;
   float near_t = 1e30;
   while (q.Proceed()) {
     if (q.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) continue;
@@ -410,6 +427,13 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
 struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; };
 RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
+  if (!rt_scene_ok()) {
+    RtHit m;
+    m.t = -1.0;
+    m.geom = m.prim = m.inst = 0u;
+    m.o2w = float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+    return m;
+  }
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;
@@ -516,6 +540,7 @@ float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
 // Closest alpha-tested hit distance, or -1.
 float rt_closest(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 0u;
+  if (!rt_scene_ok()) return -1.0;
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r;
   r.Origin = o;

@@ -275,7 +275,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateCommandBuffers(VkDevice device, co
                                                              VkCommandBuffer* out) {
   VkResult r = device_of(device)->vk.AllocateCommandBuffers(device, ai, out);
   if (r == VK_SUCCESS)
-    for (uint32_t i = 0; i < ai->commandBufferCount; ++i) cmd_state(out[i], true)->game_alloc = true;
+    for (uint32_t i = 0; i < ai->commandBufferCount; ++i) {
+      bvh_cmd_reset(out[i]);   // a handle reused after its pool was destroyed: old records are dropped
+      cmd_state(out[i], true)->game_alloc = true;
+    }
   return r;
 }
 
@@ -283,11 +286,15 @@ static VKAPI_ATTR void VKAPI_CALL FreeCommandBuffers(VkDevice device, VkCommandP
                                                      const VkCommandBuffer* cmds) {
   device_of(device)->vk.FreeCommandBuffers(device, pool, n, cmds);
   for (uint32_t i = 0; i < n; ++i)
-    if (cmds[i]) cmd_forget(cmds[i]);
+    if (cmds[i]) {
+      bvh_cmd_reset(cmds[i]);   // freed without (another) submit: our builds in it never run
+      cmd_forget(cmds[i]);
+    }
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, const VkCommandBufferBeginInfo* bi) {
   diag(DIAG_BEGIN_CMD);
+  bvh_cmd_reset(cmd);   // recorded again: a previous recording not submitted is dropped
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};

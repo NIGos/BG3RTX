@@ -483,11 +483,19 @@ struct BvhResult {
   uint64_t static_tris, dynamic_tris;
   VkBuffer info; VkDeviceSize info_off, info_bytes;   // InstInfo of this TLAS (set 1 binding 7)
   VkBuffer pool; VkDeviceSize pool_bytes;             // object-space vertices (binding 8)
+  uint64_t rec;                                       // build record of the command buffer (bvh_rec_state)
 };
 // `slot` (< kSceneSlots, retired on the GPU): the ring region and TLAS it writes.
 bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), uint32_t slot,
                BvhResult* out);
 void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
+// Build records: work of ours recorded into a game command buffer counts only once
+// that buffer is submitted. The game can drop a recorded buffer (vkBeginCommandBuffer
+// again, or vkFreeCommandBuffers) without a submit; bvh_cmd_reset marks its records
+// dropped. States: 0 pending, 1 submitted, 2 dropped, -1 unknown (never trusted).
+uint64_t bvh_rec_register(VkCommandBuffer cmd);
+int bvh_rec_state(uint64_t id);
+void bvh_cmd_reset(VkCommandBuffer cmd);
 void bvh_on_present();
 void bvh_forget_buffer(VkBuffer b);
 std::string bvh_describe_address(VkDeviceAddress a);   // device-fault reports ("" if not the split's)

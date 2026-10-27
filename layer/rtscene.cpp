@@ -102,7 +102,9 @@ struct SceneSlot {
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
   VkDescriptorSet set = VK_NULL_HANDLE;
   bool split = false;
+  uint64_t rec = 0;   // build record of the command buffer it was recorded into (bvhsplit.cpp)
 };
+uint64_t g_legacy_rec = 0;   // the legacy BLAS's last build: refit only once it was submitted
 SceneSlot g_scene[kSceneSlots];
 int g_scene_cur = -1;
 uint32_t g_scene_next = 0;
@@ -144,9 +146,10 @@ int pick_scene_slot() {
   return -1;
 }
 
-void commit_scene_slot(int slot, VkAccelerationStructureKHR tlas, VkDescriptorSet set, bool split) {
+void commit_scene_slot(int slot, VkAccelerationStructureKHR tlas, VkDescriptorSet set, bool split, uint64_t rec) {
   SceneSlot& s = g_scene[slot];
   s.used = true;
+  s.rec = rec;
   s.built = s.last_use = frame_index();
   s.tlas = tlas;
   s.set = set;
@@ -764,7 +767,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
-    commit_scene_slot(scene_slot, res.tlas, set, true);
+    commit_scene_slot(scene_slot, res.tlas, set, true, res.rec);
     ++g_n_frames;
     ++g_n_split;
     g_prims_sum += res.static_tris + res.dynamic_tris;
@@ -803,7 +806,10 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
                    cap.xfb_size, stride, false, info, 0, info_bytes, VK_NULL_HANDLE, 0};
   const VkDescriptorSet legacy_set = alpha_commit(cmd, ab, uint32_t(scene_slot));
   int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
-  bool refit = want_refit && g_blas_valid && prims == g_built_prims && aprims == g_built_aprims &&
+  // A refit reads the BLAS: only if its last build's command buffer was submitted.
+  const uint64_t legacy_rec = bvh_rec_register(cmd);
+  bool refit = want_refit && g_blas_valid && bvh_rec_state(g_legacy_rec) == 1 && prims == g_built_prims &&
+               aprims == g_built_aprims &&
                signature == g_built_sig && int(g_since_build) < rebuild_frames;
 
   int slot = -1;
@@ -889,8 +895,9 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   g_aprims_sum += aprims;
   g_alpha_draws_sum += cap.alpha_draws;
   g_blas_valid = true;
+  g_legacy_rec = legacy_rec;
   g_split_valid = false;
-  commit_scene_slot(scene_slot, g_tlas, legacy_set, false);
+  commit_scene_slot(scene_slot, g_tlas, legacy_set, false, legacy_rec);
   g_built_prims = prims;
   g_built_aprims = aprims;
   g_built_sig = signature;
@@ -910,6 +917,8 @@ bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* 
   SceneSlot& s = g_scene[g_scene_cur];
   const uint64_t now = frame_index();
   if (!s.used || !s.tlas || s.built + 1 < now) return false;
+  // Its command buffer was dropped without a submit: the TLAS was never built.
+  if (bvh_rec_state(s.rec) == 2) return false;
   if (s.split ? !g_split_valid : !g_blas_valid) return false;
   s.last_use = (std::max)(s.last_use, now);
   *tlas = s.tlas;
@@ -944,10 +953,11 @@ void rt_log_state(const char* prefix) {
   for (uint32_t i = 0; i < kSceneSlots; ++i) {
     const SceneSlot& s = g_scene[i];
     if (!s.used) continue;
-    log("%s scene slot %u%s: %s, built frame %llu, last handed out %llu, TLAS %p, set %p, %s", prefix, i,
-        int(i) == g_scene_cur ? " (current)" : "", s.split ? "split" : "legacy", (unsigned long long)s.built,
-        (unsigned long long)s.last_use, (void*)s.tlas, (void*)s.set,
-        slot_retired(s, gpu_done, now) ? "retired" : "in flight");
+    static const char* const kRec[] = {"unknown", "pending", "submitted", "DROPPED"};
+    log("%s scene slot %u%s: %s, built frame %llu, last handed out %llu, TLAS %p, set %p, %s, build record %llu %s", prefix,
+        i, int(i) == g_scene_cur ? " (current)" : "", s.split ? "split" : "legacy", (unsigned long long)s.built,
+        (unsigned long long)s.last_use, (void*)s.tlas, (void*)s.set, slot_retired(s, gpu_done, now) ? "retired" : "in flight",
+        (unsigned long long)s.rec, kRec[bvh_rec_state(s.rec) + 1]);
   }
   log("%s builds skipped for want of a retired slot: %llu", prefix, (unsigned long long)g_scene_skipped);
 }
