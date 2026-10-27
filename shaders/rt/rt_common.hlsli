@@ -18,6 +18,13 @@
 // Adds the number of lanes with `cond` to counter `index` (wave-reduced, and
 // spread over 64 bins picked by `bin` so the atomics do not serialise; the core
 // sums the bins).
+// Out-of-range guards (always counted, logged by core/gi.cpp "[core] guard:"):
+// counter 118 a read of the game's light list (cluster, index, light, shadow view)
+// out of its buffer, 119 a set-1 read (InstInfo, vertices, alpha records) out of
+// range. The read is skipped (no light / a miss) instead of faulting.
+static const uint kGuardLightList = 118u, kGuardSet1 = 119u;
+void guard_count(uint k) { rtStats.InterlockedAdd((k * 64u) * 4u, 1u); }
+
 void stat_add(uint index, bool cond, uint bin) {
   uint n = WaveActiveCountBits(cond);
   uint b = WaveReadLaneFirst(bin) & 63u;
@@ -202,7 +209,9 @@ InstInfo inst_info(uint inst) {
   uint bytes;
   gInstInfo.GetDimensions(bytes);
   // Past the InstInfo of this TLAS: no vertices, no record (never the legacy lookup).
-  uint4 v = inst < bytes / 16u ? gInstInfo.Load4(inst * 16u) : uint4(0, 0, 0, 0);
+  const bool ok_range = inst < bytes / 16u;
+  if (!ok_range) guard_count(kGuardSet1);
+  uint4 v = ok_range ? gInstInfo.Load4(inst * 16u) : uint4(0, 0, 0, 0);
   r.base = v.x;
   r.meta = v.y;
   r.rec = v.z;
@@ -330,6 +339,7 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
   if ((ii.meta & kInfoPool) != 0u) gMeshPool.GetDimensions(vbytes);
   else gOpaqueSoup.GetDimensions(vbytes);
   if (!tri_in_range(ii.base, prim, ii.meta & 0xffu, vbytes) || !rec_in_range(ii.rec)) {
+    guard_count(kGuardSet1);
     alpha_stat(3, true, prim);
     return alpha_unknown(alpha_flags());
   }
@@ -489,7 +499,11 @@ float3 rt_hit_normal(RtHit h) {
   uint stride = ii.meta & 0xffu, bytes;
   if ((ii.meta & kInfoPool) != 0u) gMeshPool.GetDimensions(bytes);
   else gOpaqueSoup.GetDimensions(bytes);
-  if (stride < 16u || h.prim >= ii.tris || !tri_in_range(ii.base, h.prim, stride, bytes)) return 0.0.xxx;
+  if (stride < 16u || h.prim >= ii.tris) return 0.0.xxx;
+  if (!tri_in_range(ii.base, h.prim, stride, bytes)) {
+    guard_count(kGuardSet1);
+    return 0.0.xxx;
+  }
   float3 p0 = inst_pos(ii, h.prim, 0), p1 = inst_pos(ii, h.prim, 1), p2 = inst_pos(ii, h.prim, 2);
   if ((ii.meta & kInfoPool) != 0u) {
     p0 = mul(h.o2w, float4(p0, 1.0));

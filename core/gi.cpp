@@ -652,7 +652,11 @@ constexpr uint32_t kStatsRing = 8;
 // (rt_reflections.hlsl), [64..75] RT audit fixes (D-LS per class, rt_origin, ao_direct),
 // [80..111] alpha-tested candidates of visibility / shadow rays (rt_common.hlsli alpha_stat),
 // [112..117] D-LS bit-exactness checks (ls_check=1): the pass, the join's kept slots.
-constexpr uint32_t kStatsCounters = 118;
+// [118, 119] out-of-range guards, always counted (rt_common.hlsli guard_count): reads of
+// the game's light list / of set 1 that were skipped; logged as "[core] guard:".
+constexpr uint32_t kStatsCounters = 120;
+uint64_t g_guard_sum[2] = {}, g_guard_total[2] = {};
+uint32_t g_guard_frames = 0;
 constexpr VkDeviceSize kStatsSlot = kStatsCounters * 64 * 4;
 VkBuffer g_stats_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
@@ -677,11 +681,25 @@ bool stats_init() {
 
 // Picks this frame's slot (cleared on the GPU) after folding in the one written
 // kStatsRing - 1 frames ago.
-void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
+void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   uint64_t now = host->frame_index();
   uint32_t slot = uint32_t(now % kStatsRing);
   if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
     const uint32_t* c = g_stats_map + slot * (kStatsSlot / 4);
+    for (int g = 0; g < 2; ++g)
+      for (int b = 0; b < 64; ++b) g_guard_sum[g] += c[(118 + g) * 64 + b];
+    if (++g_guard_frames >= 300) {
+      if (g_guard_sum[0] || g_guard_sum[1]) {
+        g_guard_total[0] += g_guard_sum[0];
+        g_guard_total[1] += g_guard_sum[1];
+        host->log("[core] guard: in the last %u frames %llu reads of the game's light list and %llu set-1 reads were out "
+                  "of range and skipped (%llu / %llu so far)",
+                  g_guard_frames, (unsigned long long)g_guard_sum[0], (unsigned long long)g_guard_sum[1],
+                  (unsigned long long)g_guard_total[0], (unsigned long long)g_guard_total[1]);
+      }
+      g_guard_sum[0] = g_guard_sum[1] = 0;
+      g_guard_frames = 0;
+    }
     for (int i = 0; i < int(kStatsCounters); ++i)
       if ((i < 27 || i > 30) && i != 70)   // (70: a raw float)
         for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
@@ -693,6 +711,11 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
   g_stats_frame[slot] = now;
   host->vk->CmdFillBuffer(cmd, g_stats_buf, VkDeviceSize(slot) * kStatsSlot, kStatsSlot, 0);
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+  if (!full) {   // only the guards are wanted: the statistics report stays off
+    g_stats_n = 0;
+    std::memset(g_stats_sum, 0, sizeof g_stats_sum);
+    return;
+  }
   if (g_stats_n < 120) return;
   const uint64_t* t = g_stats_sum;
   if (t[0]) {
@@ -1244,7 +1267,9 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     rt_timing_collect();
     pc.rt_stats = host->cfg_int("rt_stats", 0) ? 1u : 0u;
-    if (pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0)) stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0);
+    // Every traced frame: the out-of-range guards are always counted.
+    stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0,
+                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0));
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;

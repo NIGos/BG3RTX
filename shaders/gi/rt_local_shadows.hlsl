@@ -234,7 +234,7 @@ bool ls_light_traced(uint li, bool spot, LsLite s, out float3 lpos, out float R)
 
 // Phase 2: what the ray to a traced light needs (as ls_light_traced found it).
 void ls_light_ray(uint li, out float3 lpos, out float R) {
-  lpos = asfloat(lLights.Load3(li * 80u));
+  lpos = bg3_light_pos(li);
   R = pc.ls_source_radius;
   if ((pc.ls_flags & 1u) != 0u) {
     uint4 si = lsSlots[uint2(min(li, 4095u), 0)];
@@ -249,13 +249,13 @@ uint2 ls_trace_chunk(uint2 fp, LsLite s, uint base, uint n, uint end_p) {
   for (uint j = 0; j < n; ++j) {
     float3 lpos;
     float R;
-    if (ls_light_traced(lIndex.Load((base + j) * 4u), base + j >= end_p, s, lpos, R)) traced |= 1u << j;
+    if (ls_light_traced(bg3_light_index(base + j), base + j >= end_p, s, lpos, R)) traced |= 1u << j;
   }
   // the k-th traced light of every lane together
   uint lit = 0;
   for (uint m = traced; m != 0u; m &= m - 1u) {
     const uint j = firstbitlow(m);
-    const uint li = lIndex.Load((base + j) * 4u);
+    const uint li = bg3_light_index(base + j);
     float3 lpos;
     float R;
     ls_light_ray(li, lpos, R);
@@ -287,7 +287,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     ls_surface(WaveReadLaneAt(fp, WaveGetLaneIndex()), s, px.sf, px.mt);
     for (uint m3 = traced; m3 != 0u; m3 &= m3 - 1u) {
       const uint j = firstbitlow(m3);
-      Bg3Light l = load_light(lIndex.Load((base + j) * 4u));
+      Bg3Light l = load_light(bg3_light_index(base + j));
       float3 cd, ct, cs, Ld;
       float d2, nol;
       if (!bg3_light_eval_mat(l, base + j >= end_p, px.sf, px.mt, cd, ct, cs, Ld, d2, nol)) continue;
@@ -387,7 +387,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   uint rk[2] = {0, 0};
 
   for (uint i = cl.x; i < end_s; ++i) {
-    uint li = lIndex.Load(i * 4u);
+    uint li = bg3_light_index(i);
     bool spot = i >= end_p;
     Bg3Light l = load_light(li);
     // cd: diffuse the shadow multiplies, ct: transmission it does not (thickness profiles).

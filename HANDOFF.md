@@ -509,3 +509,50 @@ The split's dependencies, against the legacy build (`rtscene.cpp`):
   files).
 - **Source lines:** for a second run, add `shader_debug=1`. Our shaders are then built
   `-Od` with embedded source, which changes timing.
+
+## 10. Aftermath dump: the fault is in D-LS (`gi/rt_local_shadows.hlsl`). Twelfth commit
+
+**The dump** (`captures/aftermath/20261027-093716-0.nv-gpudmp`): an MMU fault (read) in
+our D-LS compute shader, at PC 0x91f0. The shader mapping is null because the shader
+was built optimised, and the page-fault VA is reported as 0. No BLAS build and no game
+shader is involved.
+
+**Every read in D-LS and its includes:**
+- **Set 1 / ray-query candidate path** (`rt_common.hlsli`: InstInfo, pool/soup
+  vertices, alpha records, textures): bounded since 00ab836/6e7f8bb (`GetDimensions`,
+  overflow-safe). Texture indices are clamped to the array sizes, and every array slot
+  holds a live view.
+- **The TLAS** is the scene slot's own. Every BLAS reference in every in-flight slot was
+  audited as held (c9297e3 logs). Instance references come only from
+  `vkGetAccelerationStructureDeviceAddressKHR`; no handle and no zero is ever written.
+  InstInfo holds offsets, not addresses.
+- **G-buffer images:** `Load` at the pixel (in range), or clamped.
+- **The game's light list, read with indices taken from game data: UNGUARDED.**
+  - `lClusters` at the froxel index (computed from the lighting constants and depth).
+  - `lIndex` at `cluster.x + n` for up to 3 × 4095 entries.
+  - `lLights` at `index * 80`.
+  - `lShadows` at `(flags >> 2) + face) * 96`.
+  - In D-RF, also `lgProbes` at `index * 144`.
+
+  Without robust buffer access, any index past a buffer's end is a wild read: an MMU
+  fault with no resource, exactly what the dump shows.
+- **Why the sun shadow pass never faults on the same TLAS slot:** `rt_shadow.hlsl` traces
+  the same scene slot with the same `rt_occluded` and the same alpha path. But it reads
+  none of the light-list buffers. D-LS walks the per-froxel lists and loads lights and
+  shadow views by game-provided indices. That difference points at those loads.
+- **Not proven:** which value goes out of range, and why only with the split. The
+  split's build changes the frame's timing and the work recorded around the lighting;
+  the guard counter will show whether light-list indices go out of range at all.
+
+**Fix and guard:**
+- Every light-list load (`bg3_lights.hlsli` / `bg3_ambient.hlsli`, used by D-LS, D-RF
+  and the match pass) is checked against `GetDimensions`. Out of range means no light /
+  no froxel record / no shadow view (lit).
+- The set-1 out-of-range branches count too.
+- The counters (rtStats 118: light list, 119: set 1) are always folded. The core logs
+  `[core] guard: ... out of range and skipped` every 300 frames when nonzero. A wrong
+  value then shows in the log instead of faulting. Only the core and the shaders
+  changed; the layer DLL is the same.
+- **PC mapping:** rerun with `aftermath=1,shader_debug=1`. Our shaders are then built
+  `-Od` with embedded source and the .nvdbg resolves lines. The generated
+  `ls_ref/ls_ref_body.hlsli` (debug reference pass only) is not guarded.
