@@ -22,7 +22,7 @@ struct SharcConsts {
 static_assert(sizeof(SharcConsts) == 80, "SharcConsts must match sharc_common.hlsli");
 
 constexpr uint32_t kRing = 8;
-constexpr uint32_t kCounters = 16;              // sharc_common.hlsli kSh*
+constexpr uint32_t kCounters = 24;              // sharc_common.hlsli kSh*
 constexpr uint32_t kCounterWords = kCounters * 64;   // x 64 bins (kShBins)
 constexpr VkDeviceSize kStateCounters = 16;     // byte offset of the counters in the state buffer
 constexpr VkDeviceSize kStateBytes = kStateCounters + kCounterWords * 4;
@@ -232,8 +232,15 @@ void stats_fold(uint64_t now) {
             g_sum_n, gi / n * 1e-6, gi ? 100.0 * t[3] / gi : 0.0, gi ? 100.0 * t[4] / gi : 0.0,
             gi ? 100.0 * (t[5] + t[7]) / gi : 0.0, 100.0 * t[7] / ask, 100.0 * t[6] / q, t[8] / n * 1e-6,
             t[8] ? 100.0 * t[9] / double(t[8]) : 0.0);
-  std::memset(g_sum, 0, sizeof g_sum);
-  g_sum_n = 0;
+  if (t[16]) {   // the leak test ran (sharc_leak_check=1)
+    host->log("sharc stats (%u frames): leak test: cache hits from a cell occluded from the query point %.2f%% (%.0f/frame), "
+              "from a cell thicker than the surface %.2f%%; of the cache's GI contribution: occluded cells %.3f%%, thin %.3f%% "
+              "(reject_occluded %d)",
+              g_sum_n, t[6] + t[14] ? 100.0 * t[14] / double(t[6] + t[14]) : 0.0, t[14] / n,
+              t[6] ? 100.0 * t[15] / double(t[6]) : 0.0, 100.0 * t[17] / double(t[16]), 100.0 * t[18] / double(t[16]),
+              host->cfg_int("sharc_reject_occluded", 1));
+  }
+  std::memset(g_sum, 0, sizeof g_sum);  g_sum_n = 0;
 }
 
 }  // namespace
@@ -314,7 +321,10 @@ bool sharc_begin(VkCommandBuffer cmd, SharcFrame* out) {
   c.accum_frames = uint32_t((std::max)(host->cfg_int("sharc_frames", 16), 1));
   c.stale_frames = uint32_t((std::max)(host->cfg_int("sharc_stale", 128), 1));
   const uint32_t query = uint32_t(host->cfg_int("sharc_query", 7)) & 7u;
-  c.flags = query | (host->cfg_int("sharc_stats", 0) ? 8u : 0u);
+  // Leak test (sharc_common.hlsli sharc_cell_test): bit 4 measures, bit 5 rejects occluded cells.
+  const bool leak_check = host->cfg_int("sharc_leak_check", 0) != 0 || host->cfg_int("sharc_debug", 0) == 6;
+  c.flags = query | (host->cfg_int("sharc_stats", 0) ? 8u : 0u) | (leak_check ? 16u : 0u) |
+            (host->cfg_int("sharc_reject_occluded", 1) ? 32u : 0u);
   c.stride = uint32_t((std::min)((std::max)(host->cfg_int("sharc_inject_stride", 2), 1), 16));
   c.debug = uint32_t((std::max)(host->cfg_int("sharc_debug", 0), 0));
   c.stats_off = uint32_t(kStateCounters);

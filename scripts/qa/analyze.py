@@ -1,6 +1,7 @@
 """Per-scene analysis: contribution maps, detectors, crops, report; then pruning."""
 import html
 import json
+import math
 import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -9,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
-from . import capture, detectors as det, flipmetric, imgops as im
+from . import capture, detectors as det, flipmetric, imgops as im, thresholds as th
 from .decode import Frame, Trace, lum709, lum2020
 
 CROPS_PER_DETECTOR = 3   # per detector, effect and buffer (2 on the lighting buffer)
@@ -87,7 +88,9 @@ def analyze_scene(d: Path, pool):
     t0 = time.time()
     meta = json.loads((d / "run.json").read_text())
     raw = d / "raw"
-    traces = {name: Trace(raw / sub) for name, sub in meta["traces"].items() if (raw / sub / "dumps.json").exists()}
+    # warm* (--warmup) only let the scene settle after the load: never analysed.
+    traces = {name: Trace(raw / sub) for name, sub in meta["traces"].items()
+              if not name.startswith("warm") and (raw / sub / "dumps.json").exists()}
     fr = {n: Frame(t) for n, t in traces.items()}
     crops = d / "crops"
     if crops.exists():
@@ -111,30 +114,54 @@ def analyze_scene(d: Path, pool):
         v["Yf"] = lum2020(v["final"])
         v["Yc"] = lum709(v["compose"]) if v["compose"] is not None else None
 
-    # ---- same view? The G-buffer albedo does not depend on any lighting setting:
-    # a trace whose albedo differs from on0's beyond jitter and foliage motion shows
-    # another view (the camera moved), and every comparison with it is void.
-    def view_change(n):
-        a, b = fr[n].albedo(), fr["on0"].albedo()
+    # ---- same view? The G-buffer albedo does not depend on any lighting setting: a trace
+    # whose albedo is shifted against on0's by 1 px or more on an axis (sub-pixel phase
+    # correlation; the jitter moves it by < 1 px) shows another view (the camera moved), and every comparison
+    # with it is void. The share of px changed beyond the jitter bound (scene motion, or a
+    # rotation/zoom that has no single shift) is reported for review.
+    def view_change(n, anchor="on0"):
+        a, b = fr[n].albedo(), fr[anchor].albedo()
         if a is None or b is None or a.shape != b.shape:
-            return n, 0.0
-        da = np.abs(im.box(a.mean(-1), 2) - im.box(b.mean(-1), 2))
-        return n, float((da > 0.1).mean())
-    view = dict(pool.map(view_change, [n for n in fr if n != "on0"]))
-    moved = sorted(n for n, v in view.items() if v > det.T["view_changed_frac"])
+            return n, (0.0, (0, 0))
+        dy, dx, _, _ = det.view_shift(b, a)
+        return n, (det.view_changed(b, a), (dy, dx))
+
+    def views(anchor):
+        vs = dict(pool.map(lambda n: view_change(n, anchor), [n for n in fr if n != anchor]))
+        sh = {n: v[1] for n, v in vs.items()}
+        return {n: v[0] for n, v in vs.items()}, sh, sorted(n for n, s in sh.items() if max(abs(c) for c in s) >= th.JITTER_PX)
+    view, shift, moved = views("on0")
+    # The camera can settle after on0 (S7, 2026-10-27: every later trace shifted by the same
+    # amount): when most traces agree with each other and not with on0, they are the view.
+    if len(moved) * 2 > len(fr) - 1:
+        alt = next((n for n in fr if n != "on0" and n in moved), None)
+        if alt is not None:
+            v2, s2, m2 = views(alt)
+            if len(m2) < len(moved):
+                res["notes"].append(f"view anchored on {alt}: on0 differs from the {len(fr) - 1 - len(m2)} traces that agree")
+                view, shift, moved = v2, s2, m2
+                # on0 and the onN traces have the same settings: the first agreeing one takes on0's
+                # place (and leaves the on set, so it is not counted twice in the noise).
+                if alt.startswith("on") and "on0" in moved:
+                    moved.remove("on0")
+                    data["on0"], fr["on0"] = data.pop(alt), fr[alt]
+                    traces["on0"] = traces[alt]
     # The sun debug traces are evaluated each on its own (in-frame), so another view than
     # on0's does not void them. (Their crops show on0's lighting only when the view agrees.)
     self_contained = ("sun_dbg", "sun_check", "sun_trust")
     moved_self = [n for n in moved if n in self_contained]
     moved = [n for n in moved if n not in self_contained]
     res["view_change"] = {n: round(v, 4) for n, v in view.items()}
+    res["view_shift"] = {n: list(s) for n, s in shift.items()}
     if moved:
-        res["notes"].append(f"camera moved: {', '.join(moved)} show another view than on0 (albedo differs on "
+        res["notes"].append(f"camera moved: {', '.join(moved)} show another view than on0 (shifted by "
+                            f"{', '.join(f'{shift[n]}' for n in moved)} px; albedo differs on "
                             f"{', '.join(f'{100 * view[n]:.0f}%' for n in moved)} of px); their comparisons are void")
         res["checks"].append({"detector": "same_view", "effect": "all", "buffer": "G-buffer albedo", "on": "on0",
-                              "off": ",".join(moved), "score": round(max(view[n] for n in moved), 4),
-                              "threshold": det.T["view_changed_frac"], "pass": False, "unit": "fraction of px changed",
-                              "metrics": res["view_change"]})
+                              "off": ",".join(moved), "score": max(max(abs(c) for c in shift[n]) for n in moved),
+                              "threshold": th.JITTER_PX, "pass": False,
+                              "unit": "px of global shift (the jitter moves < 1 px)",
+                              "metrics": {"changed_frac": res["view_change"], "shift_px": res["view_shift"]}})
         for n in moved:
             data.pop(n)
     on_set = [n for n in data if n.startswith("on")]
@@ -147,13 +174,26 @@ def analyze_scene(d: Path, pool):
         return np.stack(ys).std(axis=0)
 
     def sigma_of(key, blur):
-        # Temporal std of the static view (RR noise, wind in foliage, idle animation),
-        # the larger of the all-on and all-off sets, spread over 2 px so a moving edge
-        # covers both of its positions; x sqrt(2) for the difference of two frames.
+        # Per-pixel noise of a difference of two frames (docs/QA.md "Thresholds and their
+        # derivation"): the temporal std of the static view (RR noise, wind in foliage, idle
+        # animation), the larger of the all-on and all-off sets; with the rounding of the 8-bit
+        # preview (step / sqrt(12), in linear units at the pixel's level) added in quadrature,
+        # since a static pixel rounds the same way in every frame of one setting and its std is
+        # then 0; max-filtered over the box radius + 1 px (the jitter) so a moving edge covers
+        # both of its positions; x sqrt(2) for the difference of two frames.
         s = [x for x in (noise(on_set, key, blur), noise(off_set, key, blur)) if x is not None]
-        if not s:
+        src, kind, which = ("final", "pq", "final") if key == "Yf" else ("compose", "hdr", "compose")
+        base = data["on0"][src]
+        q = None
+        if base is not None and not fr["on0"].is_raw(which):
+            w = (0.2627, 0.678, 0.0593) if key == "Yf" else (0.2126, 0.7152, 0.0722)
+            qc = th.preview_quant_sigma(base, kind)
+            q = np.sqrt(sum((w[c] * qc[..., c]) ** 2 for c in range(3)))
+        if not s and q is None:
             return 0.0
-        return im.maxf(np.maximum.reduce(s), 2) * np.sqrt(2.0)
+        t = np.maximum.reduce(s) if s else 0.0
+        tot = np.sqrt(np.square(t) + (np.square(q) if q is not None else 0.0))
+        return im.maxf(np.asarray(tot, np.float32), blur + 1) * np.sqrt(2.0)
     sig = {k: sigma_of(k, b) for k, b in (("Yf", 1), ("Yc", 2))}
 
     def sigma(key):
@@ -172,7 +212,7 @@ def analyze_scene(d: Path, pool):
     # ---- per-effect contribution detectors (final frame and lighting buffer)
     jobs = []
     effects = dict(capture.EFFECTS)
-    if "sharc_on" in traces:   # a --sharc run
+    if "sharc_on0" in traces:   # a --sharc run
         effects.update(capture.SHARC_EFFECTS)
     for eff, (a, b) in effects.items():
         if a not in data or b not in data:
@@ -303,8 +343,9 @@ def analyze_scene(d: Path, pool):
                                          "effect": "rt_sun_replace", "buffer": "debug diffuse", "bbox": g["bbox"],
                                          "shape": list(view.shape[:2]), **info})
 
-    # ---- SHaRC leak gate (--sharc): GI brightening inside asset-DB roofed rooms whose exterior is
-    # sunlit (sharc_debug=5 mask), with the cache against without it, both over gi_off.
+    # ---- SHaRC (--sharc). roofed_brightening: a review map (GI brightening inside asset-DB roofed
+    # rooms, with the cache against without it); the physical checks follow it.
+    interior = None
     if "sharc_roof" in traces:
         dif, src = fr["sharc_roof"].diffuse()
         need = ("sharc_refl_off", "refl_off", "gi_off")
@@ -330,6 +371,7 @@ def analyze_scene(d: Path, pool):
                         sun_px = np.clip(2 * sd[..., 0], 0, 1) > 0.1
                         lit = float((np.clip(2 * sd[..., 0], 0, 1) > 0.5).mean())
                         roofed = roofed & ~im.dilate(sun_px, 2)
+                interior = roofed if lit is not None and lit > 0 else None
                 r = det.roofed_brightening(yw, yb, yo, roofed, sigma("Yc"), sun_lit_frac=lit)
                 ratio = r.pop("map")[1]
                 r["metrics"].update(outside_permille=round(1000.0 * outside.mean(), 2),
@@ -352,12 +394,95 @@ def analyze_scene(d: Path, pool):
                     res["crops"].append({"file": f"crops/{name}", "detector": "roofed_brightening", "effect": "gi_sharc",
                                          "buffer": "lighting", "bbox": g["bbox"], "shape": list(ratio.shape), **info})
 
+    # sharc_leak_cells: the share of the cache's GI contribution supplied by cells that lie behind
+    # an occluder from the query point (sharc_debug=6, the rejection off for the measurement).
+    if "sharc_leak" in traces:
+        dif, src = fr["sharc_leak"].diffuse()
+        if dif is None:
+            res["notes"].append("sharc_leak_cells: no debug diffuse dump in sharc_leak")
+        else:
+            r = det.sharc_leak_cells(dif, interior)
+            # The score comes from the GPU counters ("sharc stats ... leak test", the lines logged
+            # with the rejection off): the debug-diffuse preview's tone mapping mixes the view's
+            # channels (S7/S8, 2026-10-27: 63% "thin" in the view against 0.000% counted), so the
+            # view only locates the regions.
+            import re as _re
+            lines = [l for l in meta.get("log_tail", []) if "leak test" in l and "reject_occluded 0" in l]
+            if lines:
+                m_ = _re.search(r"occluded cells ([\d.]+)%, thin ([\d.]+)%", lines[-1])
+                h_ = _re.search(r"query point ([\d.]+)%", lines[-1])
+                if m_:
+                    r["metrics"]["view"] = {k: v for k, v in r["metrics"].items()}
+                    r["metrics"]["counters"] = {"occluded_contribution": float(m_.group(1)) / 100.0,
+                                                "thin_contribution": float(m_.group(2)) / 100.0,
+                                                "occluded_hits": float(h_.group(1)) / 100.0 if h_ else None,
+                                                "line": lines[-1][:200]}
+                    r["score"] = float(m_.group(1)) / 100.0
+                    r["pass"] = r["score"] == 0.0
+            res["checks"].append({"detector": "sharc_leak_cells", "effect": "sharc", "buffer": f"debug diffuse ({src})",
+                                  "on": "sharc_leak", "off": "sharc_leak", **{k: v for k, v in r.items() if k != "regions"},
+                                  "top": r["regions"][:6]})
+            for j, g in enumerate(r["regions"][:CROPS_PER_DETECTOR]):
+                y0, y1, x0, x1 = crop_window(g["bbox"], dif.shape[:2])
+                v = dif / max(float(np.percentile(dif.sum(-1), 99)), 1e-9)
+                tiles, labs = [np.clip(v[y0:y1, x0:x1], 0, 1)], ["cache contribution: red occluded cell, green clean, blue thin"]
+                if "sharc_leak" not in moved_self and "sharc_on0" in data:
+                    tiles.insert(0, dsp("sharc_on0", "compose")[y0:y1, x0:x1])
+                    labs.insert(0, "with the cache (lighting)")
+                name = f"sharc_leak_cells_{j}.png"
+                sheet(tiles, labs, f"{meta['scene']} sharc_leak_cells at x{x0}-{x1} y{y0}-{y1}: area {g['area']}", crops / name)
+                res["crops"].append({"file": f"crops/{name}", "detector": "sharc_leak_cells", "effect": "sharc",
+                                     "buffer": "debug diffuse", "bbox": g["bbox"], "shape": list(dif.shape[:2]), "area": g["area"]})
+
+    # sharc_reference: the cache's lighting against its physical reference (no cache, long rays,
+    # 8 per pixel), with tolerances from the traces' own per-pixel noise. The gate is on the roofed
+    # interior (sharc_roof mask, not lit by the game's sun); the whole frame is reported for review.
+    cs = sorted(n for n in data if n.startswith("sharc_on") and data[n]["Yc"] is not None)
+    rs = sorted(n for n in data if n.startswith("sref") and data[n]["Yc"] is not None)
+    if rs:
+        if len(cs) < 2 or len(rs) < 2:
+            res["notes"].append(f"sharc_reference: needs 2+ traces each (cache {len(cs)}, reference {len(rs)})")
+        else:
+            ys_c, ys_r = [data[n]["Yc"] for n in cs], [data[n]["Yc"] for n in rs]
+            whole = np.ones(ys_c[0].shape, bool)
+            for scope, m in (("interior", interior), ("frame", whole)):
+                if m is None or m.shape != whole.shape or not m.any():
+                    res["notes"].append(f"sharc_reference ({scope}): no roofed interior with a sunlit exterior in view")
+                    continue
+                r = det.sharc_reference(ys_c, ys_r, m)
+                z = r.pop("map")[1]
+                if scope == "frame":
+                    r["gate"] = False
+                res["checks"].append({"detector": "sharc_reference", "effect": f"sharc ({scope})", "buffer": "lighting",
+                                      "on": "+".join(cs), "off": "+".join(rs), **{k: v for k, v in r.items() if k != "regions"},
+                                      "top": r["regions"][:6]})
+                if scope != "interior" or r["pass"]:
+                    continue
+                for j, g in enumerate(r["regions"][:CROPS_PER_DETECTOR]):
+                    y0, y1, x0, x1 = crop_window(g["bbox"], z.shape)
+                    name = f"sharc_reference_{j}.png"
+                    sheet([dsp(rs[0], "compose")[y0:y1, x0:x1], dsp(cs[0], "compose")[y0:y1, x0:x1],
+                           heat_ratio(np.exp2(np.clip(z[y0:y1, x0:x1], -2, 2)))],
+                          ["reference (no cache, long rays, 8 spp)", "with the cache", "difference in sigma_d (blue: cache brighter)"],
+                          f"{meta['scene']} sharc_reference at x{x0}-{x1} y{y0}-{y1}: {g['area']} px, {g['excess_sigmas']} sigma",
+                          crops / name)
+                    res["crops"].append({"file": f"crops/{name}", "detector": "sharc_reference", "effect": "sharc",
+                                         "buffer": "lighting", "bbox": g["bbox"], "shape": list(z.shape), "area": g["area"]})
+
     # ---- non-finite values
+    # A dump (pass, format) that holds non-finite values with every RT effect off too is the
+    # game's own (S6: the D32F depth of 76433aef, ~5000 per trace in on* and off* alike):
+    # reported, not scored. Scored: those only seen with RT on.
     nf = {n: t.nonfinite() for n, t in traces.items()}
-    worst = max(nf.values()) if nf else 0
+    by = {n: t.nonfinite_by_dump() for n, t in traces.items() if nf[n]}
+    game_sigs = {(v[0], v[1]) for n, d in by.items() if n.startswith("off") for v in d.values()}
+    ours = {n: sum(v[2] for v in d.values() if (v[0], v[1]) not in game_sigs) for n, d in by.items()}
+    worst = max(ours.values()) if ours else 0
     res["checks"].append({"detector": "nonfinite", "effect": "all", "buffer": "every dump", "on": "*", "off": "*",
-                          "score": worst, "threshold": 0, "pass": worst == 0, "unit": "values (max over traces)",
-                          "metrics": {"per_trace": nf, "dumps": {n: t.nonfinite_by_dump() for n, t in traces.items() if nf[n]}}})
+                          "score": worst, "threshold": 0, "pass": worst == 0,
+                          "unit": "values (max over traces), excluding dumps non-finite with RT off",
+                          "metrics": {"per_trace": nf, "game_owned": sorted(f"{p} {f}" for f, p in game_sigs),
+                                      "dumps": by}})
 
     # ---- temporal stability
     # Sets: on* (all on), off* (all RT off), nogi* (all on but the GI neutral: --temporal-gi).
@@ -401,19 +526,38 @@ def analyze_scene(d: Path, pool):
     # ---- reference (optional)
     if "ref" in data:
         a, ref = dsp("on0", "final"), dsp("ref", "final")
-        fmap = flipmetric.flip(ref, a)
-        floor = flipmetric.flip(dsp("on0", "final"), dsp("on1", "final")) if "on1" in data else None
+        # Rank test against the measured noise (docs/QA.md "Thresholds and their derivation"):
+        # FLIP of the reference against every all-on frame, and of every pair of all-on frames
+        # (RR noise and animation). If the reference were just another sample of the same image,
+        # the test values would be the largest of all with probability 1 / C(n_t + n_n, n_t)
+        # (exchangeable values; 0.05 = ALPHA_FW with three all-on frames, and conservative since
+        # the reference is less noisy). It fails only when every test value exceeds every null
+        # value and that probability is <= ALPHA_FW; with fewer frames it is reported, not gated.
+        ons = sorted(n for n in on_set if data[n]["final"] is not None)
+        pairs = [(x, y) for i, x in enumerate(ons) for y in ons[i + 1:]]
+        jobs_f = {("ref", n): pool.submit(flipmetric.flip, ref, dsp(n, "final")) for n in ons}
+        jobs_f.update({p: pool.submit(flipmetric.flip, dsp(p[0], "final"), dsp(p[1], "final")) for p in pairs})
+        fm = {k: f.result() for k, f in jobs_f.items()}
+        fmap = fm[("ref", "on0")] if ("ref", "on0") in fm else flipmetric.flip(ref, a)
+        test = [float(fm[("ref", n)].mean()) for n in ons]
+        null = [float(fm[p].mean()) for p in pairs]
         mean = float(fmap.mean())
-        # Scored above the noise floor (two all-on frames of the same view differ by RR
-        # noise and animation as well).
-        excess = mean - (float(floor.mean()) if floor is not None else 0.0)
-        r = {"detector": "reference", "effect": "all_rt", "buffer": "final", "on": "on0", "off": "ref",
-             "score": round(excess, 4), "threshold": det.T["flip_excess"], "pass": excess <= det.T["flip_excess"],
-             "unit": flipmetric.NAME + ", mean above the on0/on1 floor",
+        alpha = 1.0 / math.comb(len(test) + len(null), len(test)) if test and null else 1.0
+        score = (min(test) - max(null)) if test and null else 0.0
+        gated = alpha <= th.ALPHA_FW
+        r = {"detector": "reference", "effect": "all_rt", "buffer": "final", "on": "+".join(ons), "off": "ref",
+             "score": round(score, 4), "threshold": 0.0, "gate": gated, "pass": score <= 0.0,
+             "unit": flipmetric.NAME + ": min FLIP(ref, on_i) - max FLIP(on_i, on_j)",
              "metrics": {"mean": round(mean, 4), "p99": round(float(np.percentile(fmap, 99)), 4),
-                         "noise_floor_on0_vs_on1": round(float(floor.mean()), 4) if floor is not None else None,
+                         "flip_ref_on": [round(v, 4) for v in test], "flip_on_on": [round(v, 4) for v in null],
+                         "false_alarm_p": round(alpha, 4),
+                         "noise_floor_on0_vs_on1": round(null[0], 4) if null else None,
                          "psnr_db": round(float(-10 * np.log10(max(np.mean((a - ref) ** 2), 1e-12))), 2),
                          "reference": "gi_rr_rays=8, ls_samples=2, RR on, same view"}}
+        if not gated:
+            res["notes"].append(f"reference: {len(ons)} all-on frames give a false-alarm probability of {alpha:.2f} "
+                                f"> {th.ALPHA_FW}; reported for review (use --temporal 3 or more)")
+        # Crops (review): the largest regions of high FLIP error.
         m = im.opening(im.box(fmap, 2) > 0.35, 2)
         lab, n = im.label(m)
         regs = sorted(im.regions(lab, n, 400), key=lambda t: -t[1])[:2]
@@ -474,7 +618,8 @@ def summarize(res):
         elif kind == "flicker":
             for c in cs:
                 m = c["metrics"]
-                parts.append(f"flicker {c['effect']}{' INCONCLUSIVE (too much scene motion)' if m.get('inconclusive') else ''}: std on/off {c['score']} (limit {c['threshold']}), excess area "
+                parts.append(f"flicker {c['effect']}{' INCONCLUSIVE (too much scene motion)' if m.get('inconclusive') else ''}: mean std excess {c['score']} PQ "
+                             f"(limit {c['threshold']}: one 10-bit step; ratio {m.get('ratio')}), excess area "
                              f"{m['excess_area']}‰ (limit {m['excess_threshold']}; scene motion "
                              f"{100 * m.get('animated_frac', 0):.1f}% excluded, unmasked "
                              f"{m.get('unmasked', {}).get('excess_area', '?')}‰)")
@@ -483,7 +628,8 @@ def summarize(res):
             parts.append(f"{kind} {c['score']} (> {c['threshold']})")
     for c in warns:
         eff = f" {c['effect']}" if c.get("effect") else ""
-        parts.append(f"review {c['detector']}{eff} {c['score']} (> {c['threshold']})")
+        lim = f" (> {c['threshold']})" if c.get("threshold") is not None else ""
+        parts.append(f"review {c['detector']}{eff} {c['score']}{lim}")
     passes = [c["detector"] for c in res["checks"] if c["pass"]]
     tail = f" | ok: {', '.join(sorted(set(passes) - set(by)))}" if passes else ""
     return f"{res['scene']} {res['save']}: {head}" + (" - " + " | ".join(parts) if parts else "") + tail
@@ -518,7 +664,8 @@ def write_report(results, out: Path, wall_s):
                   else "<span class='w'>warn</span>")
             met = html.escape(json.dumps(c.get("metrics", {}), default=_json))[:400]
             rows.append(f"<tr><td>{c['detector']}</td><td>{c['effect']}</td><td>{html.escape(c['buffer'])}</td><td>{c['score']} "
-                        f"{html.escape(c.get('unit', ''))}</td><td>{c['threshold']}</td><td>{ok}</td><td>{met}</td></tr>")
+                        f"{html.escape(c.get('unit', ''))}</td><td>{'review' if c.get('threshold') is None else c['threshold']}</td>"
+                        f"<td>{ok}</td><td>{met}</td></tr>")
         rows.append("</table>")
         for i, c in enumerate(r["crops"]):
             info = {k: v for k, v in c.items() if k not in ("file", "shape")}
