@@ -25,7 +25,8 @@ T = {
     "roof_ratio": 1.3,
     "roof_fail_area": 0.5,       # ... a fail when the cache adds more than this (‰ of the frame) to the
                                  # roofed area GI without the cache already brightens that much
-    "roof_min_px_frac": 0.01,    # roofed (sunlit exterior) px needed for the gate to apply
+    "roof_min_px_frac": 0.01,    # roofed px needed for the gate to apply ...
+    "roof_sun_lit_frac": 0.01,   # ... and px the game's sun mask lights (the exterior is sunlit)
     "bright_fail_area": 0.05,
     "sun_extra_fail_area": 0.5,   # RT dark, game lit, and the sun term really darkened there
     "sun_missing_warn_area": 2.0, # RT lit, game dark (casters missing from the TLAS): a warning
@@ -140,8 +141,8 @@ def brightening(y_on, y_off, sigma, effect, blur=1):
 
 def roof_mask(view):
     """sharc_debug=5 trace (debug diffuse, gi/sharc_roof.hlsl): green = inside an asset-DB roof
-    volume while the sun is up, red = outside every volume, blue = not known (no volumes for
-    the level, or the sun is down), black = sky. Returns (roofed, outside, unknown) masks."""
+    volume, red = outside every volume, blue = not known (no volumes for the level), black =
+    sky. Returns (roofed, outside, unknown) masks."""
     r, g, b = view[..., 0], view[..., 1], view[..., 2]
     lit = (r + g + b) > 0.05
     roofed = lit & (g > 2 * r) & (g > 2 * b)
@@ -150,7 +151,7 @@ def roof_mask(view):
     return roofed, outside, unknown
 
 
-def roofed_brightening(y_with, y_base, y_off, roofed, sigma, blur=2):
+def roofed_brightening(y_with, y_base, y_off, roofed, sigma, blur=2, sun_lit_frac=None):
     """SHaRC leak gate (docs/QA.md): GI brightening y/y_off > roof_ratio on roofed pixels
     (a room whose exterior is sunlit). Light through geometry that exists is physically
     implausible (QUALITY R0); the bounce of lit surfaces inside the room is not. GI without
@@ -174,8 +175,11 @@ def roofed_brightening(y_with, y_base, y_off, roofed, sigma, blur=2):
     regs.sort(key=lambda g: -g["rank"])
     score = _permille(sum(g["area"] for g in regs), added.shape)
     roof_px = int(roofed.sum())
-    applies = roof_px >= T["roof_min_px_frac"] * roofed.size
+    # The exterior is sunlit: the game's own sun mask is lit somewhere in the view (sun_dbg).
+    sunlit = sun_lit_frac is None or sun_lit_frac >= T["roof_sun_lit_frac"]
+    applies = roof_px >= T["roof_min_px_frac"] * roofed.size and sunlit
     metrics = {"roofed_px_permille": round(_permille(roof_px, roofed.shape), 2),
+               "sun_lit_frac": None if sun_lit_frac is None else round(float(sun_lit_frac), 4),
                "with_cache_permille": round(_permille(int(m_with.sum()), roofed.shape), 4),
                "without_cache_permille": round(_permille(int(m_base.sum()), roofed.shape), 4),
                "bound": T["roof_ratio"], "applies": applies}

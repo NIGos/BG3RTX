@@ -24,6 +24,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const float3 cam_abs = sharc_cam();
   // The camera of this injection, for the next resolve (SHaRC's previous camera).
   if (all(tid.xy == 0)) shState.Store4(0, asuint(float4(cam_abs, 1.0)));
+  sharc_bin = (tid.x >> 3) * 7u + (tid.y >> 3) * 13u;
   const uint s = max(shc.stride, 1u);
   const uint2 blocks = (pc.full + s - 1u) / s;
   if (any(tid.xy >= blocks)) return;

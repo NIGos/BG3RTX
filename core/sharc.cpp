@@ -17,14 +17,15 @@ struct SharcConsts {
   uint32_t groups_x;
   float rf_rough, rf_cone, near_voxels;
   float max_radiance, reset_jump, em_scale;
-  uint32_t pad;
+  float gi_base_radius;   // gi_rt_radius: the occlusion range of hits without radiance
 };
 static_assert(sizeof(SharcConsts) == 80, "SharcConsts must match sharc_common.hlsli");
 
 constexpr uint32_t kRing = 8;
 constexpr uint32_t kCounters = 16;              // sharc_common.hlsli kSh*
+constexpr uint32_t kCounterWords = kCounters * 64;   // x 64 bins (kShBins)
 constexpr VkDeviceSize kStateCounters = 16;     // byte offset of the counters in the state buffer
-constexpr VkDeviceSize kStateBytes = kStateCounters + kCounters * 4;
+constexpr VkDeviceSize kStateBytes = kStateCounters + kCounterWords * 4;
 
 struct Buf {
   VkBuffer b = VK_NULL_HANDLE;
@@ -214,8 +215,9 @@ void stats_fold(uint64_t now) {
   if (!g_rb_map) return;
   const uint32_t slot = uint32_t(now % kRing);
   if (!g_rb_frame[slot] || g_rb_frame[slot] + kRing - 1 > now) return;
-  const uint32_t* c = g_rb_map + slot * kCounters;
-  for (uint32_t i = 0; i < kCounters; ++i) g_sum[i] += c[i];
+  const uint32_t* c = g_rb_map + slot * kCounterWords;
+  for (uint32_t i = 0; i < kCounters; ++i)
+    for (uint32_t b = 0; b < 64; ++b) g_sum[i] += c[i * 64 + b];
   g_rb_frame[slot] = 0;
   if (++g_sum_n < 300) return;
   const double n = g_sum_n, cap = double(1u << g_log2);
@@ -276,7 +278,7 @@ bool sharc_begin(VkCommandBuffer cmd, SharcFrame* out) {
   if (!g_rb) {
     void* m = nullptr;
     if (host->alloc_host_buffer &&
-        host->alloc_host_buffer(kRing * kCounters * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &g_rb, &g_rb_mem, &m)) {
+        host->alloc_host_buffer(kRing * kCounterWords * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &g_rb, &g_rb_mem, &m)) {
       g_rb_map = static_cast<uint32_t*>(m);
       std::memset(g_rb_frame, 0, sizeof g_rb_frame);
     }
@@ -298,7 +300,7 @@ bool sharc_begin(VkCommandBuffer cmd, SharcFrame* out) {
     if (!cleared) host->log("sharc: cache cleared (not updated for %llu frames)", (unsigned long long)(now - g_last_frame));
   } else {
     barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);   // last frame's reads first
-    vk.CmdFillBuffer(cmd, g_state.b, kStateCounters, kCounters * 4, 0);
+    vk.CmdFillBuffer(cmd, g_state.b, kStateCounters, kCounterWords * 4, 0);
   }
   g_last_frame = now;
 
@@ -326,6 +328,7 @@ bool sharc_begin(VkCommandBuffer cmd, SharcFrame* out) {
   c.max_radiance = host->cfg_float("sharc_max_radiance", 256.0f);
   c.reset_jump = host->cfg_float("sharc_reset_jump", 50.0f);
   c.em_scale = host->cfg_float("sharc_em", 1.0f);
+  c.gi_base_radius = (std::max)(host->cfg_float("gi_rt_radius", 1.0f), 0.01f);
   vk.CmdUpdateBuffer(cmd, g_consts.b, 0, sizeof c, &c);
   barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
@@ -343,7 +346,7 @@ void sharc_end(VkCommandBuffer cmd) {
     const uint64_t now = host->frame_index();
     const uint32_t slot = uint32_t(now % kRing);
     barrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-    VkBufferCopy r{kStateCounters, VkDeviceSize(slot) * kCounters * 4, kCounters * 4};
+    VkBufferCopy r{kStateCounters, VkDeviceSize(slot) * kCounterWords * 4, kCounterWords * 4};
     host->vk->CmdCopyBuffer(cmd, g_state.b, g_rb, 1, &r);
     if (host->cfg_int("sharc_stats", 0)) g_rb_frame[slot] = now;
   }

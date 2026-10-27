@@ -187,6 +187,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
         if (tier != 1 && (shc.flags & 4u) != 0u && sf.a >= shc.rf_rough) {
           const float3 cam_abs = sharc_cam();
           const float3 ph = o + dir * t;
+          sharc_bin = (fp.x >> 3) * 7u + (fp.y >> 3) * 13u;
           const bool wide = cone.f0 + cone.spread * t >= sharc_voxel_size(cam_abs, ph + cam_abs) * shc.rf_cone;
           sharc_stat(kShRfEligible, wide);
           float3 Lc;

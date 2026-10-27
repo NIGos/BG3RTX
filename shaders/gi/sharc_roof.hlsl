@@ -2,10 +2,9 @@
 // mask of the QA gate roofed_brightening (docs/QA.md, scripts/qa/detectors.py). Written over
 // the lit diffuse (the "debug diffuse" dump), per pixel with depth:
 //   green 0.5  inside an asset-DB roof volume (roofed room, covered floor; padded like the
-//              sun trust: rt_sun_roof_pad sideways, rt_sun_roof_up above) while the sun is
-//              up: an interior whose exterior is sunlit;
+//              sun trust: rt_sun_roof_pad sideways, rt_sun_roof_up above);
 //   red 0.5    outside every roof volume;
-//   blue 0.5   not known: the level's volumes are not loaded, or the sun is down.
+//   blue 0.5   not known: the level's volumes are not loaded.
 // Sky stays black. No SHaRC headers needed.
 #include "gi_common.hlsli"
 #include "sun_trust.hlsli"
@@ -26,9 +25,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const float d = gDepth.Load(int3(fp, 0));
   float3 c = 0;
   if (d > 0.0) {
+    // Whether the exterior is sunlit is decided by the QA from the game's sun mask (the
+    // sun_dbg trace): a test of cam.v0 here marked Water Queen's House and the Campsite,
+    // both in daylight, as "sun down" in the first in-game run.
     const bool known = (st_u(4) & 2u) != 0u;
-    const bool sun_up = cam.v0.y > 0.02 && dot(cam.v1.xyz, 1.0.xxx) > 0.0;
-    if (!known || !sun_up) {
+    if (!known) {
       c = float3(0, 0, 0.5);
     } else {
       const float3 P = ray_at((float2(fp) + 0.5) / float2(pc.full)) * d;

@@ -11,6 +11,7 @@
 void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex) {
   const uint e = (gid.y * shc.groups_x + gid.x) * 256u + gi;
   if (e >= shc.capacity) return;
+  sharc_bin = e >> 8;
   const float3 cam = sharc_cam();
   const float4 prev = asfloat(shState.Load4(0));
   const float3 cprev = prev.w > 0.5 ? prev.xyz : cam;

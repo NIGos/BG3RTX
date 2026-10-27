@@ -641,6 +641,40 @@ Off by default (`sharc=0`). Differences from the plan above:
 - **QA**: `python -m scripts.qa run --sharc` (docs/QA.md); `roofed_brightening` scores the
   roofed area the cache adds over GI without it.
 
+### 2.10 First in-game run (2026-10-27, queue jobs `30-sharc-*`, QA `captures/qa/20261027-123953`)
+
+Measured on the 5090 at 2560x1067, RR on, static camera, timing runs without statistics:
+
+| | S8 Water Queen's House | S3 Campsite | S6 Adamantine Forge |
+|---|---|---|---|
+| GI trace off → on (8 m) | 0.156 → 0.354 ms | 0.536 → 1.002 ms | 0.163 → 0.249 ms |
+| D-RF off → on | 0.369 → 0.399 ms | 0.261 → (n/a) | 0.224 → 0.259 ms |
+| resolve / inject | 0.030 / 0.061 ms | 0.033 / 0.071 ms | 0.028 / 0.050 ms |
+| **total added** | **≈ +0.32 ms** | **≈ +0.6 ms** | **≈ +0.20 ms** |
+| occupancy (2²²) | 1.3% | 2.7% | 0.9% |
+| GI hits not on screen found in the cache | 17% | 30% | 1.6% |
+| reflection fallbacks found | 13% | 16% | 1.6% |
+
+- Compiles, device features (`0xf` on the device, one field set in the game's structs), no
+  insert failures, no faults or non-finite values from the cache (S6's non-finite values are the
+  game's D32F depth `76433aef`, in every trace including all-RT-off).
+- Debug view 3 finds every visible surface (keys of injection and query agree); the low S6
+  rate is the scene: 88% of its non-screen hits are hidden surfaces the static camera never saw.
+- **Fixed after the run:**
+  - Hits without radiance occluded over the whole 8 m: in S6 that is 98% of the hidden hits,
+    and `hard_dark` flagged 47‰ (sharc) / 39‰ (gi_sharc). They now occlude only within
+    `gi_rt_radius` (the fade of the base radius), so the longer rays add bounce and never
+    unexplained darkening.
+  - The roof mask tested `cam.v0.y` for "sun up" and marked S8 and S3, both in daylight,
+    unknown, so `roofed_brightening` was never evaluated. The mask is now volumes only; the QA
+    takes "sunlit exterior" from the game's sun mask (`sun_dbg`).
+  - `sharc_stats` counters hit one address per counter: the GI trace took 3.6 ms with them.
+    They are now spread over 64 bins.
+- **Default: stays off** (High and Ultra unchanged). The leak gate has not been evaluated
+  yet, the darkening fix is unmeasured, and the Campsite costs +0.6 ms (8 m alpha-tested rays
+  through foliage), over the 0.6 ms AO + GI budget on its own. Next: the re-run QA
+  (`32-sharc-*` jobs), and `sharc_gi_radius` 4 against 8 on S3.
+
 ---
 
 ## 3. Opacity micromaps for alpha-tested foliage

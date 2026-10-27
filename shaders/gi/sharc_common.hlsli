@@ -58,11 +58,12 @@ struct SharcConsts {
   float max_radiance;     // injected radiance is clamped to it (accumulation overflow)
   float reset_jump;       // camera moved farther in one frame: the cache is cleared (m)
   float em_scale;         // weight of the D-EM effects-target emission (sharc_em)
-  uint pad;
+  float gi_base_radius;   // gi_rt_radius: hits without radiance occlude only within it (not to sharc_gi_radius)
 };
 [[vk::binding(3, 4)]] ConstantBuffer<SharcConsts> shc;
 // Device local: bytes 0-15 the camera (absolute) of the last injection, w = 1 once written;
-// from 16 this frame's 16 counters (zeroed per frame, copied into a host ring by core/sharc.cpp).
+// from 16 this frame's 16 counters x 64 bins (zeroed per frame, copied into a host ring and
+// summed by core/sharc.cpp).
 [[vk::binding(4, 4)]] RWByteAddressBuffer shState;
 #if !HASH_GRID_ENABLE_64_BIT_ATOMICS
 [[vk::binding(5, 4)]] RWStructuredBuffer<uint> shLock;                        // 4 B per entry
@@ -72,11 +73,17 @@ static const uint kShInjected = 0, kShInsertFailed = 1, kShEmissive = 2, kShGiHi
                   kShGiQueried = 5, kShGiFound = 6, kShGiNear = 7, kShRfEligible = 8, kShRfFound = 9,
                   kShLive = 10, kShEvicted = 11, kShReset = 12, kShInjectSkipped = 13;
 
-// Lanes with `cond` added to counter i of this frame's slot (sharc_stats=1).
+// Lanes with `cond` added to counter i of this frame's slot (sharc_stats=1), spread over 64
+// bins by the wave's first lane (one address per counter serialises the whole frame's waves:
+// 3.6 ms instead of 0.25 for the GI trace in the first in-game run).
+// Each pass sets sharc_bin to something that varies across its waves (the thread's position).
+static const uint kShBins = 64;
+static uint sharc_bin = 0;
 void sharc_stat(uint i, bool cond) {
   if ((shc.flags & 8u) == 0u) return;
   uint n = WaveActiveCountBits(cond);
-  if (WaveIsFirstLane() && n) shState.InterlockedAdd(shc.stats_off + i * 4u, n);
+  uint b = (WaveReadLaneFirst(sharc_bin) * 0x9E3779B9u) >> 26;   // 0..63
+  if (WaveIsFirstLane() && n) shState.InterlockedAdd(shc.stats_off + (i * kShBins + b) * 4u, n);
 }
 
 // The absolute camera position: the lighting's set 0 b2, _m6 at byte 208. Bound at 48 in the

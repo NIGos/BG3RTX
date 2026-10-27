@@ -318,13 +318,19 @@ def analyze_scene(d: Path, pool):
             if roofed.shape != yw.shape:
                 res["notes"].append(f"roofed_brightening: mask {roofed.shape} and lighting {yw.shape} differ")
             else:
-                r = det.roofed_brightening(yw, yb, yo, roofed, sigma("Yc"))
+                # Sunlit exterior: the game's sun mask (sun_dbg red = mask x 0.5) lit somewhere.
+                lit = None
+                if "sun_dbg" in fr:
+                    sd, _ = fr["sun_dbg"].diffuse()
+                    if sd is not None:
+                        lit = float((np.clip(2 * sd[..., 0], 0, 1) > 0.5).mean())
+                r = det.roofed_brightening(yw, yb, yo, roofed, sigma("Yc"), sun_lit_frac=lit)
                 ratio = r.pop("map")[1]
                 r["metrics"].update(outside_permille=round(1000.0 * outside.mean(), 2),
                                     unknown_permille=round(1000.0 * unknown.mean(), 2))
                 if not r["metrics"]["applies"]:
-                    res["notes"].append("roofed_brightening: not applicable (too few roofed px with the sun up, or "
-                                        "the level's roof volumes are unknown)")
+                    res["notes"].append("roofed_brightening: not applicable (too few roofed px, no sunlit px in the "
+                                        "game's sun mask, or the level's roof volumes are unknown)")
                 res["checks"].append({"detector": "roofed_brightening", "effect": "gi_sharc", "buffer": f"lighting ({src} mask)",
                                       "on": "sharc_refl_off", "off": "gi_off", **{k: v for k, v in r.items() if k != "regions"},
                                       "top": r["regions"][:6]})

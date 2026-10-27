@@ -60,6 +60,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #if SHARC_QUERY_PASS
   const float3 cam_abs = sharc_cam();
   float3 tiers = 0;   // rays: cache, screen, fallback
+  sharc_bin = (id.x >> 3) * 7u + (id.y >> 3) * 13u;
+  // Rays reach sharc_gi_radius (R) for radiance only: a hit without radiance (no cache entry)
+  // occludes with the fade of the base radius, as without the cache, so the longer rays add
+  // bounce but never unexplained darkening (the first in-game run: 1.6% of the Adamantine
+  // Forge's hidden hits are in the cache, and the 8 m occlusion darkened 47 per mille).
+  const float R0 = max(shc.gi_base_radius, 0.01);
 #endif
   for (uint r = 0; r < pc.rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
@@ -118,6 +124,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
         continue;
       }
       tiers.z += 1.0;
+      const float k0 = saturate(t / R0);
+      w = 1.0 - k0 * k0;
+      if (w <= 0.0) continue;   // beyond the base radius: a miss, as before
     }
 #endif
     if (visible) occ += w;
