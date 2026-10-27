@@ -415,11 +415,11 @@ reproduce them.
 **R7 Cost budget.**
 - RTX 5090, 2560x1067 render resolution, GPU timestamps, medians of 300 frames,
   static and moving camera, logged by the core.
-- Measured only in exclusive runs (`auto-run.ps1 -Exclusive` or `-RealPresent`,
-  `scene-sweep.ps1 -Exclusive`, `python -m scripts.qa run --exclusive`): no other game
-  shares the GPU. Shared runs (two background games at once, the default for sweeps
-  and QA) are for images only; their captures carry `run.json` with
-  `"exclusive": false` and their timings are not budget evidence.
+- Measured only in exclusive runs, the default of `auto-run.ps1`, `scene-sweep.ps1`
+  and `python -m scripts.qa run`: no other game shares the GPU. Shared runs
+  (`-Shared`, `-Parallel 2`, `--parallel 2`: two background games at once) are for
+  images only. Their captures carry `run.json` with `"exclusive": false`, and their
+  timings are not budget evidence: RR cost 3.6-5.3 ms there against 2.6 ms alone.
 - Budgets, excluding RR's 2.6 ms and the scene build:
 
   | Effect | Budget |

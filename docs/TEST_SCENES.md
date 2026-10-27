@@ -23,8 +23,8 @@ could look like a deletion to it.
 
 Runs with `-Save` set `auto_after_load=1`: the trace waits for a loading screen
 after the 3D main menu, since other scenes draw about as much as the menu.
-`scripts/scene-sweep.ps1` runs every scene, two at a time (see below), and writes
-`captures/scene-sweep.json`. `-Exclusive` runs them one at a time.
+`scripts/scene-sweep.ps1` runs every scene in turn and writes
+`captures/scene-sweep.json` (`-Parallel 2`: two at a time, see "Concurrent runs").
 
 Saves this run's game writes (the layer records the folders it creates,
 `BG3RTX_SAVE_LOG`, `layer/savefilter.cpp`) are parked in `Savegames\_bg3rtx_parked`
@@ -61,3 +61,86 @@ validation checks. `python -m scripts.qa run --scenes ...` automates the
 captures and the objective checks ([QA.md](QA.md)). The art-intent review looks at each A/B sheet. It asks
 whether the change keeps the look the artists lit for (key lights, character
 readability, colour grade) as well as being physically better.
+
+## Concurrent runs
+
+**Status: experimental, off by default.** Every run is exclusive unless it asks
+for `-Shared` (`auto-run.ps1 -Shared`, `scene-sweep.ps1 -Parallel 2`,
+`python -m scripts.qa run --parallel 2`). Two instances do run side by side: RTX 5090,
+32 GB, about 17-26 GB used with two headless games, no crash, no input interaction.
+But scenes did not load reliably in pairs (see "Findings" below).
+
+**Shared and exclusive runs.** A `-Shared -Background -Save` run is *shared*. Every
+other run is *exclusive*, including `-RealPresent` (frame generation needs the
+foreground) and `-Exclusive` (timing and performance runs). An exclusive run has
+the GPU to itself. Shared runs' timings are contended:
+RR cost 3.6-5.3 ms against 2.6 ms alone. They print `Run mode: shared (slot N):
+timings are not exclusive`, and each capture gets a `run.json` with
+`"exclusive": false`. Performance numbers come only from exclusive runs
+([QUALITY.md](QUALITY.md) R7).
+
+**Locks** (`scripts/gamelock.ps1`; named mutexes, so a crashed run releases them):
+
+| Name | Role |
+|---|---|
+| `Global\BG3RTX_game_run` | The exclusive lock. Older copies of `auto-run.ps1` take only this one, and close *every* `bg3.exe` when they start, so it is held whenever any game of ours runs. |
+| `Global\BG3RTX_game_slot0` / `slot1` | One per concurrent game. |
+| `Global\BG3RTX_game_excl_wait` | An exclusive run waiting for its turn; shared runs start no new game meanwhile. |
+| `Global\BG3RTX_game_holder`, `_admin`, event `_shared_open` | The holder hand-over (below). |
+| `Global\BG3RTX_checkout_<hash>_<tag>` | One run per checkout and tag. |
+
+An exclusive run takes `excl_wait`, then the exclusive lock, then both slots.
+
+Two shared games cannot both own the exclusive lock, because a mutex belongs to one
+thread. A small hidden process, the holder (`gamelock.ps1 -Holder`), owns it on their
+behalf: a shared run takes a free slot only while the holder owns the exclusive lock.
+A sweep or QA run starts its own holder with `-WhilePid <its pid>`, so the lock stays
+held for the whole sweep, including the gaps between scenes. A holder started by a
+lone shared run releases the lock about 6 s after the last slot became free.
+
+**What each run touches.**
+- Only its own game, by PID: `captures\game[.<tag>].pid`. At start a run closes only
+  a game left behind by the same checkout and tag, never anyone else's.
+- `-Tag a|b` gives a lane its own files: `captures\auto.<tag>.ini`,
+  `captures\auto.<tag>.done`, `bg3rtx.<tag>.log` and `captures\<stamp>-<tag>\`. The layer
+  reads `BG3RTX_RUN_TAG`.
+- **Display settings.** The player's `Fullscreen` and `FakeFullscreenEnabled` are saved
+  once, to `%LOCALAPPDATA%\BG3RTX\display_prev.json`, by the first background run. The
+  last one to finish restores them (reference count in `display_users\`). A run that
+  finds no live user and a leftover `display_prev.json` restores it first (crash
+  recovery). Every background run re-applies borderless before its launch, because the
+  game sometimes rewrites `graphicSettings.lsx` without these two entries. An entry
+  that was absent is saved as `null` and removed again on restore
+  (`ensure-settings.py`), so the file comes back byte-identical. Older copies of the
+  script left the borderless values in that case.
+- **Saves.** Only the save folders the layer saw its own game create
+  (`BG3RTX_SAVE_LOG`) are parked.
+- **Second instance profile.** A game started while another BG3 runs becomes a local
+  "debug client": it uses `PlayerProfiles\Debug_Client_Profile_1`, which has no saves,
+  so `-loadSaveGame` leaves it in the main menu. Shared runs therefore copy the save
+  folder there first; the player's folder is only read.
+- **Script Extender bridge.** Each shared game gets `bg3rtxse=slot<N>` and uses
+  `Script Extender\bg3rtx\slot<N>\` ([SE_BRIDGE.md](SE_BRIDGE.md)).
+
+**Findings** (2026-10-27, measured as game-lock time with the lock waits behind other
+agents excluded; 4 scenes S2, S3, S5, S8; 240 s timeout):
+
+| | Shared (`-Parallel 2`) | Exclusive (default) |
+|---|---|---|
+| Wall clock, first launch to last exit | 378 s | 486 s (sum of the 4 runs' lock time) |
+| Scenes captured | 2 of 4 (S3 125 s, S8 67 s) | 3 of 4 (S3 67 s, S5 81 s, S8 89 s) |
+| Failures | S2 stayed in the main menu; S5 (the second instance) stopped presenting while loading | S2 stayed in the main menu (so it is not caused by concurrency) |
+
+Per captured scene, the shared sweep was slower (189 s against 80 s), so there is no
+speed-up yet. That is why shared runs stay opt-in.
+- S2 (`Rivington - 74h`) does not load through `-loadSaveGame` even alone. The game
+  shows the 3D main menu for the whole run. Main's sweep of 2026-10-26 did not include
+  it either.
+- A second instance first stayed in the main menu, because of its empty
+  `Debug_Client_Profile_1`. With the save copied there, it loaded S3 and S8, but S5
+  hung during its loading screen.
+- The two runs were also slower than one run each (GPU at 98%, RR 3.6-5.3 ms).
+
+Worth revisiting only if loading in the debug-client profile proves reliable. That
+needs a repeat of `-Parallel 2` on several scenes, run while no old-style
+`auto-run.ps1` copies are active.

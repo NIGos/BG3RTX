@@ -21,7 +21,10 @@
 # own the exclusive lock, so a small separate process (the holder) takes it for them:
 # the first shared run starts it; it releases the lock a few seconds after the last
 # slot became free (or at once when an exclusive run is waiting and no slot is in use).
-param([switch]$Holder)
+# -Holder -WhilePid <pid>: a session holder (scene-sweep.ps1, scripts/qa) keeps the
+# exclusive lock for as long as that process lives, so every game of the session runs
+# under it, plus the usual idle time afterwards.
+param([switch]$Holder, [int]$WhilePid = 0)
 
 # BG3RTX_LOCK_PREFIX: other names, only for testing this file without touching real runs.
 $script:LockPrefix = if ($env:BG3RTX_LOCK_PREFIX) { $env:BG3RTX_LOCK_PREFIX } else { "Global\BG3RTX_game" }
@@ -93,6 +96,19 @@ function Enter-SharedLock([string]$holderScript) {
   }
 }
 
+# For a sweep: starts a holder that keeps the exclusive lock while this process lives,
+# and returns once that holder has it. Every game of the sweep then runs under the
+# exclusive lock, and no older script's run can start (and kill games) meanwhile.
+function Start-SharedSession([string]$holderScript) {
+  Start-Process powershell -WindowStyle Hidden -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+    "`"$holderScript`"", "-Holder", "-WhilePid", $PID) | Out-Null
+  Write-Host "Waiting for the exclusive lock for this session..."
+  $flag = Join-Path $env:TEMP "bg3rtx_session_$PID.ready"
+  while (-not (Test-Path $flag)) { Start-Sleep -Milliseconds 500 }
+  Remove-Item $flag -ErrorAction SilentlyContinue
+  Write-Host "Session holder has the exclusive lock"
+}
+
 function Exit-GameLock($lock) {
   if (-not $lock) { return }
   # Slots first, the exclusive lock last.
@@ -104,7 +120,9 @@ function Exit-GameLock($lock) {
 if ($Holder) {
   $n = $script:LockNames
   $holderM = New-NamedMutex $n.Holder
-  if (-not (Lock-Mutex $holderM 0)) { return }   # another holder runs
+  if ($WhilePid) { [void](Lock-Mutex $holderM) }      # once any other holder has gone
+  elseif (-not (Lock-Mutex $holderM 0)) { return }   # another holder runs
+  $owner = if ($WhilePid) { Get-Process -Id $WhilePid -ErrorAction SilentlyContinue } else { $null }
   $excl = New-NamedMutex $n.Excl
   $wait = New-NamedMutex $n.ExclWait
   $admin = New-NamedMutex $n.Admin
@@ -112,6 +130,7 @@ if ($Holder) {
   $slots = @($n.Slots | ForEach-Object { New-NamedMutex $_ })
   [void](Lock-Mutex $excl)   # waits for older scripts' runs and exclusive runs
   [void](Lock-Mutex $admin); $open.Set() | Out-Null; $admin.ReleaseMutex()
+  if ($WhilePid) { Set-Content (Join-Path $env:TEMP "bg3rtx_session_$WhilePid.ready") "ok" }
   $idle = 0
   while ($true) {
     Start-Sleep -Milliseconds 1500
@@ -119,6 +138,7 @@ if ($Holder) {
     $free = @($slots | Where-Object { Test-MutexFree $_ }).Count -eq $slots.Count
     $idle = if ($free) { $idle + 1 } else { 0 }
     $exclWaiting = -not (Test-MutexFree $wait)
+    if ($owner -and -not $owner.HasExited) { $idle = 0; $exclWaiting = $false }   # the session still runs
     # ~6 s of no shared game: long enough for a sweep to start its next scene.
     if ($free -and ($exclWaiting -or $idle -ge 4)) {
       $open.Reset() | Out-Null

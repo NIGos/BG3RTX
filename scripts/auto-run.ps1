@@ -8,9 +8,9 @@
 #   .\scripts\auto-run.ps1 -UserIni <file>          also layer a launcher-written bg3rtx_user.ini
 #   .\scripts\auto-run.ps1 -KeepRunning             leave the game open afterwards
 #
-# Concurrency (docs/TEST_SCENES.md, "Concurrent runs"): -Background headless runs are
-# "shared": up to two games of ours run at once, from any checkouts. -RealPresent,
-# -Exclusive and foreground runs are "exclusive": nothing else of ours runs meanwhile.
+# Concurrency (docs/TEST_SCENES.md, "Concurrent runs"): runs are "exclusive" (nothing
+# else of ours runs meanwhile) unless -Shared: then a -Background -Save run may share the
+# GPU with one other such game, from any checkout.
 # Timings are only meaningful from exclusive runs; the run mode is printed and written
 # to each capture's run.json. -Tag lets two runs share one checkout (scene-sweep.ps1,
 # scripts/qa): their files get the tag (captures\auto.<tag>.ini, bg3rtx.<tag>.log,
@@ -45,8 +45,12 @@ param(
   [string]$UserIni = "",
   # Skip analyze_trace.py on the new captures (the QA harness reads dumps.json only).
   [switch]$NoAnalyze,
-  # Timing / performance runs: no other game of ours runs at the same time.
+  # Timing / performance runs: no other game of ours runs at the same time (the default
+  # unless -Shared).
   [switch]$Exclusive,
+  # Opt in to a shared run: up to two -Background -Save games of ours at once (docs/
+  # TEST_SCENES.md, "Concurrent runs"; experimental: scenes failed to load in pairs).
+  [switch]$Shared,
   # Run files of this checkout carry this tag, so two runs can share the checkout.
   [ValidatePattern('^[A-Za-z0-9_]{0,16}$')]
   [string]$Tag = ""
@@ -82,12 +86,15 @@ if (-not (Lock-Mutex $checkoutMutex 0)) {
 
 # Exclusive: frame generation and anything presented for real needs the foreground,
 # foreground runs move the focus, and timings must not share the GPU.
-$isExclusive = $Exclusive -or $RealPresent -or -not $Background
+# Shared runs need -Save: -continueGame would pick the newest save of whichever
+# profile the game gets (see the Debug_Client_Profile_1 note below).
+$isExclusive = -not $Shared -or $Exclusive -or $RealPresent -or -not $Background -or -not $Save
 Write-Host "Waiting for the game lock ($(if ($isExclusive) { 'exclusive' } else { 'shared' }))..."
 $lock = if ($isExclusive) { Enter-ExclusiveLock } else { Enter-SharedLock (Join-Path $PSScriptRoot "gamelock.ps1") }
 $runMode = $lock.Mode
 $slot = $lock.Slot
-Write-Host "Run mode: $runMode$(if ($slot -ge 0) { " (slot $slot): timings are not exclusive" })"
+$lockedAt = Get-Date
+Write-Host "Run mode: $runMode$(if ($slot -ge 0) { " (slot $slot): timings are not exclusive" }) (lock at $($lockedAt.ToString("o")))"
 $game = $null
 $cleanedUp = $false
 try {
@@ -222,6 +229,21 @@ if ($Save) {
 # Shared runs: this game's Script Extender bridge files go to bg3rtx\slot<N>\
 # (layer/sebridge.cpp se_token, mods/BG3RTX_Bridge), so two games never mix.
 if ($slot -ge 0) { $gameArgs += "bg3rtxse=slot$slot" }
+# A game started while another BG3 runs becomes a local "debug client": it uses the
+# profile PlayerProfiles\Debug_Client_Profile_1, which has no saves, so it stays in
+# the main menu. Shared runs therefore also put a copy of the save there (once; it is
+# refreshed when the player's save is newer). The player's own folder is only read.
+if ($slot -ge 0) {
+  $dbgStory = Join-Path (Split-Path (Split-Path (Split-Path $saveRoot))) "Debug_Client_Profile_1\Savegames\Story"
+  $dst = Join-Path $dbgStory $sd.Name
+  $srcLsv = Get-ChildItem -LiteralPath $sd.FullName -Filter *.lsv | Select-Object -First 1
+  $dstLsv = if (Test-Path -LiteralPath $dst) { Get-ChildItem -LiteralPath $dst -Filter *.lsv | Select-Object -First 1 }
+  if (-not $dstLsv -or $dstLsv.Length -ne $srcLsv.Length -or $dstLsv.LastWriteTimeUtc -lt $srcLsv.LastWriteTimeUtc) {
+    New-Item -ItemType Directory -Force $dst | Out-Null
+    Get-ChildItem -LiteralPath $sd.FullName -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dst -Force }
+    Write-Host "Save copied for a second game instance: $dst"
+  }
+}
 function Restore-Saves {
   $parked = Join-Path (Split-Path $saveRoot) "_bg3rtx_parked"
   $mine = @(if (Test-Path $saveLog) { Get-Content $saveLog -Encoding UTF8 | Where-Object { $_ } | Sort-Object -Unique })
@@ -318,6 +340,7 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
   if ($Background -and $displayUser) { Exit-BackgroundDisplay $ensureHere $displayUser ([bool]$KeepRunning) }
   Exit-GameLock $lock
   $checkoutMutex.ReleaseMutex()
+  Write-Host "Game lock held $([int]((Get-Date) - $lockedAt).TotalSeconds)s (released at $((Get-Date).ToString("o")))"
 }
 
 $capRe = if ($Tag) { "^\d{8}-\d{6}-$Tag$" } else { '^\d{8}-\d{6}$' }

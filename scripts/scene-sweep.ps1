@@ -1,8 +1,8 @@
-﻿# Runs auto-run.ps1 once per test scene (docs/TEST_SCENES.md) and writes a
+# Runs auto-run.ps1 once per test scene (docs/TEST_SCENES.md) and writes a
 # summary of which scenes loaded and where their captures are.
-#   .\scripts\scene-sweep.ps1                      all scenes, two at a time
+#   .\scripts\scene-sweep.ps1                      all scenes, one at a time (exclusive runs)
+#   .\scripts\scene-sweep.ps1 -Parallel 2          two at a time (shared runs; experimental)
 #   .\scripts\scene-sweep.ps1 -Only S2,S8 -Set rt_reflections=0
-#   .\scripts\scene-sweep.ps1 -Exclusive           one at a time, alone on the GPU (timings)
 # Two lanes (auto-run.ps1 -Tag a / -Tag b) run shared background games side by side;
 # each lane's output is in captures\sweep_<id>.out.
 param(
@@ -11,7 +11,7 @@ param(
   [int]$TimeoutSec = 240,
   [switch]$Move,
   [ValidateRange(1, 2)]
-  [int]$Parallel = 2,
+  [int]$Parallel = 1,
   [switch]$Exclusive
 )
 # Continue: auto-run.ps1 writes native stderr (build, game) that must not abort the sweep.
@@ -32,6 +32,12 @@ $scenes = [ordered]@{
 $queue = [System.Collections.Generic.Queue[string]]::new()
 foreach ($id in $scenes.Keys) { if (-not $Only.Count -or $Only -contains $id) { $queue.Enqueue($id) } }
 $lanes = @("a", "b")[0..($Parallel - 1)]
+if ($Parallel -gt 1) {
+  # The exclusive lock stays held for the whole sweep (gamelock.ps1), so older copies
+  # of auto-run.ps1 (which close every bg3.exe when they start) wait for it.
+  . (Join-Path $PSScriptRoot "gamelock.ps1")
+  Start-SharedSession (Join-Path $PSScriptRoot "gamelock.ps1")
+}
 $running = @{}   # lane -> @{ Id; Proc; Before; Out }
 $summary = @()
 $sweepStart = Get-Date
@@ -56,7 +62,7 @@ while ($queue.Count -or $running.Count) {
     $runArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$(Join-Path $PSScriptRoot 'auto-run.ps1')`"",
                  "-NoBuild", "-Background", "-Save", "`"$($scenes[$id])`"", "-TimeoutSec", $TimeoutSec, "-Tag", $lane)
     if ($Move) { $runArgs += "-Move" }
-    if ($Exclusive) { $runArgs += "-Exclusive" }
+    if ($Parallel -gt 1) { $runArgs += "-Shared" }
     if ($Set.Count) { $runArgs += @("-Set", ($Set -join ",")) }
     $out = Join-Path $caps "sweep_$id.out"
     Write-Host "$(Get-Date -f T) ==== $id $($scenes[$id]) (lane $lane)"

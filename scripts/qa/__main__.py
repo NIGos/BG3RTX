@@ -1,5 +1,7 @@
 import argparse
+import os
 import queue
+import subprocess
 import sys
 import threading
 import time
@@ -25,10 +27,10 @@ def main():
     r.add_argument("--keep-raw", action="store_true", help="do not prune the raw captures")
     r.add_argument("--capture-only", action="store_true")
     r.add_argument("--out", help="output folder (default captures/qa/<stamp>)")
-    r.add_argument("--parallel", type=int, default=2, choices=(1, 2),
-                   help="scenes captured at once, as shared background games (default 2)")
+    r.add_argument("--parallel", type=int, default=1, choices=(1, 2),
+                   help="scenes captured at once; 2 = shared background games (experimental)")
     r.add_argument("--exclusive", action="store_true",
-                   help="one scene at a time, alone on the GPU (needed for timings)")
+                   help="one scene at a time, alone on the GPU (the default; overrides --parallel)")
     a = sub.add_parser("analyze", help="analyse existing scene folders (with raw/) again")
     a.add_argument("dirs", nargs="+")
     a.add_argument("--keep-raw", action="store_true")
@@ -57,8 +59,20 @@ def main():
                     return
                 capture.run_scene(sid, all_scenes[sid], out / sid, full_res=args.full_res,
                                   temporal=max(2, args.temporal), reference=args.reference,
-                                  interval=args.interval, raw=args.raw, tag=tag, exclusive=args.exclusive)
+                                  interval=args.interval, raw=args.raw, tag=tag, exclusive=args.exclusive,
+                                  shared=lanes > 1)
 
+        if lanes > 1:
+            # A holder keeps the exclusive lock for this whole process (scripts/gamelock.ps1),
+            # so older auto-run.ps1 copies, which close every bg3.exe, wait for it.
+            flag = Path(os.environ["TEMP"]) / f"bg3rtx_session_{os.getpid()}.ready"
+            subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                              "-File", str(capture.ROOT / "scripts" / "gamelock.ps1"), "-Holder",
+                              "-WhilePid", str(os.getpid())], creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            print("waiting for the exclusive lock for this session...", flush=True)
+            while not flag.exists():
+                time.sleep(0.5)
+            flag.unlink(missing_ok=True)
         threads = [threading.Thread(target=lane, args=(t,)) for t in ("a", "b")[:lanes]]
         for i, th in enumerate(threads):
             th.start()
@@ -67,7 +81,7 @@ def main():
         for th in threads:
             th.join()
         print(f"captures done in {time.time() - t0:.0f} s, {lanes} at a time"
-              f"{'' if args.exclusive else ' (shared runs: run_s are not exclusive timings)'}")
+              f"{' (shared runs: run_s are not exclusive timings)' if lanes > 1 else ''}")
         if args.capture_only:
             return
         from . import analyze

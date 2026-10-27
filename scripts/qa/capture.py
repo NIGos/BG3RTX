@@ -56,12 +56,12 @@ def plan(temporal=3, reference=False):
 
 
 def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, reference=False,
-              interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False):
+              interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False, shared=False):
     """Runs the game once and moves each trace's dumps.json + img/ to out_dir/raw/<i>_<name>/.
 
     tag: auto-run.ps1 -Tag, so two scenes can run at once from this checkout (one tag per
-    lane). exclusive: auto-run.ps1 -Exclusive (alone on the GPU, so run_s is a timing);
-    otherwise run.json says "exclusive": false."""
+    lane). shared: auto-run.ps1 -Shared (another game may share the GPU; run.json then
+    says "exclusive": false); otherwise the run is exclusive and run_s is a timing."""
     phases = plan(temporal, reference)
     out_dir.mkdir(parents=True, exist_ok=True)
     spec = {"start": r"\[trace\] frame \d+ written", "phases": [], "timeout": timeout + 3600, "tag": tag,
@@ -88,6 +88,8 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
             cmd += ["-Tag", tag]
         if exclusive:
             cmd += ["-Exclusive"]
+        elif shared:
+            cmd += ["-Shared"]
         log(f"[{scene_id}] game run: {len(phases)} traces ({', '.join(n for n, _ in phases)})")
         r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
         (out_dir / "auto-run.out").write_text(r.stdout + r.stderr)
