@@ -230,6 +230,12 @@ shadow had moved. The on window (08:24:05-08:24:26) and the off window
 (08:25:55-08:26:18) were 90 s apart. The detector now excludes that motion, and
 `--temporal-gi` measures the GI's own flicker against an all-on set captured next to it.
 
+**Run `20261027-112818` (`--temporal-gi`):**
+- **S3 `all_rt`, 17.7‰ masked:** all of it in wind-blown grass. The std has the blade-streak pattern of the all-off set, and the static dirt next to it has no speckle. The albedo misses a blade moving in front of grass of the same colour, so a G-buffer normal change now also counts as motion (`anim_normal`). This gate cannot see flicker on moving geometry: 240 presents apart, motion and noise are inseparable there.
+- **S3 `gi`, 2.3‰:** isolated hot spots in dark areas (forest at the top), present in on* and absent from nogi*. Those are rare, very bright 1-spp bounce hits. The bounce source held the specular the camera saw (sun glints), against R3. It is now the diffuse part only (`gi_bounce_spec=0`; D-RF still reads diffuse + specular).
+- **S14 `gi` ratio 1.67 with 0‰ excess:** 0.00164 against 0.00098 PQ, both below one 8-bit code step (0.0039). The ratio now adds half a step to both sides (`flicker_quant`).
+- **S14 GI brightening, 58‰ final (review):** shaded sandstone faces next to sunlit stone and sand get 3-4× the sky ambient from the bounce. This is plausible for a sunlit canyon, and not an artifact.
+
 **5. Sun disagreement in the foundry is expected.** The game's mask is 0
 everywhere in the foundry (`game_lit_frac` 0), while the trace finds the sun
 through the missing or cut-away roof on 242‰. The fold only darkens, so the
