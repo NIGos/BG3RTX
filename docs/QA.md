@@ -238,6 +238,9 @@ shadow had moved. The on window (08:24:05-08:24:26) and the off window
 - **Runs `gi_flicker3_diffuse` / `gi_flicker3_spec` (valid masks, 29-38% motion):**
   - **GI flicker:** with the diffuse source, S3 0.57‰ and S14 0‰ (pass). With the old specular source, S14 is 2.84‰ (fail): a soft halo on the sand next to an armoured character (`gi_flicker3_spec/S14/crops/flicker_gi_0.png`). Its moving highlights were being bounced, and the S14 `all_rt` failure of that run (2.38‰) is the same two regions. **Verdict:** keep `gi_bounce_spec=0`.
   - **S3 `all_rt`, 2.0-2.1‰ in both runs, GI not involved:** blade streaks in wind-blown grass with the all-off pattern, the motion the albedo cannot see and the preview normals cannot give. `--temporal-sun` (a `nosun` set) attributes it.
+- **Run `flicker4_split` (`--temporal-gi --temporal-sun`):**
+  - **S14 passes every flicker check** (all_rt 0‰, gi 0‰, rt_shadows 0‰, 29% motion excluded).
+  - **S3 is void.** During the on window (the first 15 s after the load), fire FX burned across the camp: flame sprites with embers on the rocks, the tents and the log. The overview shows them, and the std inside them is 0.07-0.26 PQ. They were gone by the nogi, nosun and off windows, whose std there is low. Burning transparents are not in the G-buffer, so the motion mask cannot see them. All three S3 failures (all_rt 24‰, gi 33‰, rt_shadows 30‰) are in those regions. **Re-run S3.**
 - **S14 GI brightening, 58‰ final (review):** shaded sandstone faces next to sunlit stone and sand get 3-4× the sky ambient from the bounce. This is plausible for a sunlit canyon, and not an artifact.
 
 **5. Sun disagreement in the foundry is expected.** The game's mask is 0
