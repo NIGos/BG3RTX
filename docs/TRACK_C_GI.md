@@ -92,7 +92,12 @@ hidden or off-screen hits count as occlusion with no bounce (`gi_rt_fallback`).
 Trace pass 0.175 ms vs 0.248 ms screen-space (4 rays, half res); see
 TRACK_D_RT.md section 7.2 for numbers and comparison images.
 
+## SHaRC radiance cache (`sharc=1`, off by default)
+A screen-injected world-space hash grid gives hidden and off-screen GI hits (and glossy
+reflection fallbacks) a bounce, and lengthens the GI rays to `sharc_gi_radius` (8 m). Design
+and status: DESIGN_SOTA_NEXT.md 2.9 (`core/sharc.cpp`, `shaders/gi/sharc_*.hlsl`).
+
 ## Next
-- A world-space radiance cache (SHaRC-style) for rays that leave the screen.
+- QA and defaults for the radiance cache (above); its traced update (v2).
 - ReSTIR-style reuse.
 - Screen-space contact shadows for the direct lights. Real RT shadows belong to Track D.

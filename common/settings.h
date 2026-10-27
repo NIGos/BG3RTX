@@ -215,7 +215,8 @@ inline constexpr KV kCodeDefaults[] = {
 // Keys read only at instance/device creation (or by static initialisers).
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
-  static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb"};
+  static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
+                                         "sharc_device"};
   for (const char* k : kRestart)
     if (key == k) return from != to;
   return false;

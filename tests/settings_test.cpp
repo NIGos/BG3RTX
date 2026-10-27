@@ -281,6 +281,9 @@ static void test_dependencies_and_caps() {
   CHECK(!key_change_needs_restart("fg", "2", "4"));
   CHECK(key_change_needs_restart("rt_alpha", "0", "1"));
   CHECK(!key_change_needs_restart("rf_max_rough", "0.6", "0.8"));
+  CHECK(key_change_needs_restart("sharc_device", "1", "0"));   // device features at creation
+  CHECK(!key_change_needs_restart("sharc", "0", "1"));          // the cache itself is live
+  CHECK(!key_change_needs_restart("sharc_log2", "22", "21"));   // reallocated by the core
 }
 
 static void test_schema_file() {

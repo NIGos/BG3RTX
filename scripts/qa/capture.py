@@ -26,6 +26,12 @@ EFFECTS = {
     "rt_local_shadows": ("on0", "local_off"),
     "all_rt": ("on0", "off0"),
 }
+# --sharc (plan below): the radiance cache against the same settings without it, in all and
+# with the reflections off (the GI's own share, against gi_off like "gi").
+SHARC_EFFECTS = {
+    "sharc": ("sharc_on", "on0"),
+    "gi_sharc": ("sharc_refl_off", "gi_off"),
+}
 
 
 def scenes():
@@ -34,8 +40,13 @@ def scenes():
     return dict(re.findall(r'(S\d+) = "([^"]+)"', text))
 
 
-def plan(temporal=3, reference=False):
-    """The ordered traces of one run: (name, settings applied before it)."""
+def plan(temporal=3, reference=False, sharc=False):
+    """The ordered traces of one run: (name, settings applied before it).
+
+    sharc: after the sun traces, the SHaRC radiance cache (sharc=1, DESIGN_SOTA_NEXT item 2)
+    with everything on (sharc_on), with the reflections off (sharc_refl_off: the GI's share),
+    and its roof mask (sharc_roof, sharc_debug=5) for the leak gate roofed_brightening; then
+    sharc=0 again. Each comes interval presents after the switch, so the cache has converged."""
     p = [("on0", {})]
     p += [(f"on{i}", {}) for i in range(1, temporal)]
     p += [("gi_off", {"gi": "0", "rt_reflections": "0"}),
@@ -52,10 +63,16 @@ def plan(temporal=3, reference=False):
           # rt_debug=6: the trust of rt_sun_replace (red roof volume, magenta far from the
           # game's lit mask, blue off-screen, green trusted).
           ("sun_trust", {"rt_debug": "6", "rt_backlit": "1"})]
+    if sharc:
+        p += [("sharc_on", {"rt_debug": "0", "rt_backlit": "1", "sharc": "1"}),
+              ("sharc_refl_off", {"rt_reflections": "0"}),
+              ("sharc_roof", {"rt_reflections": "1", "sharc_debug": "5"})]
     if reference:
         # More samples for the stochastic terms, same denoiser (RR) and view.
         p += [("ref", {"rt_debug": "0", "rt_backlit": "1", "gi_rr_rays": "8", "ls_samples": "2"})]
     first_off = dict(ALL_OFF, rt_backlit="1", gi_rr_rays="1", ls_samples="0") if reference else dict(ALL_OFF, rt_backlit="1")
+    if sharc:
+        first_off.update(sharc="0", sharc_debug="0")
     p += [("off0", first_off)]
     p += [(f"off{i}", {}) for i in range(1, temporal)]
     return p
@@ -63,13 +80,13 @@ def plan(temporal=3, reference=False):
 
 def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, reference=False,
               interval=240, timeout=900, raw=False, log=print, tag="", exclusive=False, shared=False,
-              extra=()):
+              extra=(), sharc=False):
     """Runs the game once and moves each trace's dumps.json + img/ to out_dir/raw/<i>_<name>/.
 
     tag: auto-run.ps1 -Tag, so two scenes can run at once from this checkout (one tag per
     lane). shared: auto-run.ps1 -Shared (another game may share the GPU; run.json then
     says "exclusive": false); otherwise the run is exclusive and run_s is a timing."""
-    phases = plan(temporal, reference)
+    phases = plan(temporal, reference, sharc)
     out_dir.mkdir(parents=True, exist_ok=True)
     spec = {"start": r"\[trace\] frame \d+ written", "phases": [], "timeout": timeout + 3600, "tag": tag,
             "after_trace": [{"name": n, "set": s} for n, s in phases[1:]]}
@@ -80,6 +97,8 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
 
     sets = [f"{k}={v}" for k, v in ALL_ON.items()]
     sets += [f"auto_interval={interval}", f"dump_png_width={3840 if full_res else 1280}"]
+    if sharc:
+        sets += ["sharc=0", "sharc_debug=0", "sharc_stats=1"]   # on0 is the cache-off baseline
     sets += list(extra)   # --set: keys for every trace of the run (e.g. rt_sun_top=0)
     if raw:
         # Exact float32 of the final frame (and RR/rr_post images): about 1 GB per trace
@@ -140,6 +159,7 @@ def _log_lines(tag=""):
         return []
     keep = []
     for line in log.read_text(errors="replace").splitlines():
-        if re.search(r"WARNING|error|non-finite|\[geo\] RT capture|alpha|\[phase\]|sun stats|^\S+\s+sun:|rt passes|trace pass", line, re.I):
+        if re.search(r"WARNING|error|non-finite|\[geo\] RT capture|alpha|\[phase\]|sun stats|^\S+\s+sun:|rt passes|trace pass|sharc",
+                     line, re.I):
             keep.append(line.strip()[:300])
     return keep[-60:]

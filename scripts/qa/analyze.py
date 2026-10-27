@@ -16,7 +16,8 @@ CROPS_PER_DETECTOR = 3   # per detector, effect and buffer (2 on the lighting bu
 EFFECT_LABEL = {"gi": "GI (hybrid RT GI + RT AO fold)", "rt_reflections": "RT reflections (D-RF)",
                 "rt_shadows": "RT sun shadows", "rt_sun_replace": "RT sun replacing the game's mask (in-frame vs min)",
                 "rt_local_shadows": "RT local-light shadows (D-LS)",
-                "all_rt": "all RT effects"}
+                "all_rt": "all RT effects", "sharc": "SHaRC radiance cache (all on)",
+                "gi_sharc": "GI with the SHaRC radiance cache (reflections off)"}
 
 
 # ---------------------------------------------------------------- display helpers
@@ -170,7 +171,10 @@ def analyze_scene(d: Path, pool):
 
     # ---- per-effect contribution detectors (final frame and lighting buffer)
     jobs = []
-    for eff, (a, b) in capture.EFFECTS.items():
+    effects = dict(capture.EFFECTS)
+    if "sharc_on" in traces:   # a --sharc run
+        effects.update(capture.SHARC_EFFECTS)
+    for eff, (a, b) in effects.items():
         if a not in data or b not in data:
             res["notes"].append(f"{eff}: traces {a}/{b} missing")
             continue
@@ -298,6 +302,43 @@ def analyze_scene(d: Path, pool):
                     res["crops"].append({"file": f"crops/{name}", "detector": f"sun_check_{sub}",
                                          "effect": "rt_sun_replace", "buffer": "debug diffuse", "bbox": g["bbox"],
                                          "shape": list(view.shape[:2]), **info})
+
+    # ---- SHaRC leak gate (--sharc): GI brightening inside asset-DB roofed rooms whose exterior is
+    # sunlit (sharc_debug=5 mask), with the cache against without it, both over gi_off.
+    if "sharc_roof" in traces:
+        dif, src = fr["sharc_roof"].diffuse()
+        need = ("sharc_refl_off", "refl_off", "gi_off")
+        if dif is None:
+            res["notes"].append("roofed_brightening: no debug diffuse dump in sharc_roof")
+        elif any(n not in data or data[n]["Yc"] is None for n in need) or "sharc_roof" not in data:
+            res["notes"].append("roofed_brightening: traces sharc_refl_off/refl_off/gi_off/sharc_roof missing or moved")
+        else:
+            roofed, outside, unknown = det.roof_mask(dif)
+            yw, yb, yo = data["sharc_refl_off"]["Yc"], data["refl_off"]["Yc"], data["gi_off"]["Yc"]
+            if roofed.shape != yw.shape:
+                res["notes"].append(f"roofed_brightening: mask {roofed.shape} and lighting {yw.shape} differ")
+            else:
+                r = det.roofed_brightening(yw, yb, yo, roofed, sigma("Yc"))
+                ratio = r.pop("map")[1]
+                r["metrics"].update(outside_permille=round(1000.0 * outside.mean(), 2),
+                                    unknown_permille=round(1000.0 * unknown.mean(), 2))
+                if not r["metrics"]["applies"]:
+                    res["notes"].append("roofed_brightening: not applicable (too few roofed px with the sun up, or "
+                                        "the level's roof volumes are unknown)")
+                res["checks"].append({"detector": "roofed_brightening", "effect": "gi_sharc", "buffer": f"lighting ({src} mask)",
+                                      "on": "sharc_refl_off", "off": "gi_off", **{k: v for k, v in r.items() if k != "regions"},
+                                      "top": r["regions"][:6]})
+                for j, g in enumerate(r["regions"][:CROPS_PER_DETECTOR]):
+                    y0, y1, x0, x1 = crop_window(g["bbox"], ratio.shape)
+                    mk = np.stack([outside, roofed, unknown], -1).astype(np.float32) * 0.6
+                    name = f"roofed_brightening_{j}.png"
+                    info = {k: v for k, v in g.items() if k not in ("bbox", "rank", "qualified", "focus")}
+                    sheet([dsp("gi_off", "compose")[y0:y1, x0:x1], dsp("refl_off", "compose")[y0:y1, x0:x1],
+                           dsp("sharc_refl_off", "compose")[y0:y1, x0:x1], heat_ratio(ratio[y0:y1, x0:x1]), mk[y0:y1, x0:x1]],
+                          ["GI off", "GI, no cache", "GI with the cache", "with cache / GI off", "roofed (green)"],
+                          f"{meta['scene']} roofed_brightening at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
+                    res["crops"].append({"file": f"crops/{name}", "detector": "roofed_brightening", "effect": "gi_sharc",
+                                         "buffer": "lighting", "bbox": g["bbox"], "shape": list(ratio.shape), **info})
 
     # ---- non-finite values
     nf = {n: t.nonfinite() for n, t in traces.items()}

@@ -43,6 +43,12 @@ presents later (240 by default, enough for RR's history to settle):
 | (opt) | `ref` | `rt_debug=0 gi_rr_rays=8 ls_samples=2` | `--reference` |
 | last N | `off0`..`off{N-1}` | all RT off (`rt=0` and every effect 0) | all-RT contribution, flicker baseline |
 
+`--sharc` (the SHaRC radiance cache, `sharc=1`) adds three traces after `sun_trust`, with
+`sharc=0` as the base of the run (`on0` is the cache-off baseline) and `sharc_stats=1`:
+`sharc_on` (`sharc=1`, all on), `sharc_refl_off` (`rt_reflections=0`: the GI's own share)
+and `sharc_roof` (`sharc_debug=5`: the roof mask of `roofed_brightening`); `off0` sets
+`sharc=0` again. Effects `sharc` (`sharc_on` against `on0`) and `gi_sharc`
+(`sharc_refl_off` against `gi_off`) get the usual hard_dark and brightening detectors.
 `--temporal N` (default 3) sets N. With N = 3 and no reference that is 13 traces.
 The sun debug traces (`sun_dbg`, `sun_check`, `sun_trust`) are each evaluated on their own,
 so another view than on0's does not void them. A trace-to-trace A/B cannot isolate
@@ -94,6 +100,7 @@ and physical bounds.
 | **sun_missing_casters** (warning, not a gate) | RT visibility > 0.85 where the game mask < 0.1, eroded likewise. With `rt_backlit=0` traced-lit pixels are front-facing, so back faces never count. It cannot change the image (the fold only darkens: mask × visibility) but shows casters missing from the TLAS; off-screen roofs and cut-away walls are expected here | ‰ (2) |
 | **sun_replaced** (warning, not a gate) | `rt_sun_replace` wrote the mask lit (> 0.85, 5×5 box) where the game's mask is dark (< 0.1), eroded like the casters detectors: the pixels the replace brightened. Review the crops (min, replace, mask overlay, replace/min ratio): over-dark filtering, acne or cascade transitions are right (R0); a missing caster or roof is wrong. The `rt_sun_replace` effect (`rep_on` vs `sun_min`) also runs the brightening detector with a ×1.15 bound, so its crops list every visible brightening | ‰ (2) |
 | **sun_check_far** (warning) / **sun_check_edge** (info) / **sun_check_darker** (gate) | `sun_check` trace (`rt_debug=7`): pixels where the written mask is brighter than min(game, traced) of the same pixel by > 0.1, split by distance to the game's lit mask: at its shadow edge (the game's own mask partly lit, or lit within `rt_sun_near`/2; yellow) and farther (red). Darker than min (blue) cannot happen with `rt_sun_roof_mode=0`. Every far crop is for review: right if it is the game's over-wide penumbra or acne, wrong if a caster or roof is missing. The log line `sun check (...)` gives the same split averaged over 600 frames | far ‰ (0.5), darker ‰ (0.01) |
+| **roofed_brightening** (gate, `--sharc`) | The SHaRC leak test (DESIGN_SOTA_NEXT 2.7/2.8). Mask from the `sharc_roof` trace (`sharc_debug=5`, `gi/sharc_roof.hlsl`): pixels inside an asset-DB roof volume (roofed room, covered floor; padded as for the sun trust) while the sun is up, i.e. interiors whose exterior is sunlit. On them, lighting-buffer GI brightening `sharc_refl_off / gi_off` > 1.3 (beyond 3σ) is light through geometry (R0) unless GI without the cache already brightens there (`refl_off / gi_off`: on-screen bounce, which cannot pass walls). Score: the roofed area the cache adds, dilated base excluded. Not applicable (pass, with a note) when fewer than 1% of the pixels are roofed with the sun up, or the level's roof volumes are unknown (mask blue). Crops: GI off, GI without and with the cache, ratio, mask | ‰ of the frame added by the cache (0.5) |
 | **nonfinite** | NaN/Inf over every dump of every trace (`dumps.json`) | count (0) |
 | **flicker** | per-pixel temporal std of the final frame's PQ luminance over the `on*` traces against the `off*` traces; regions where std_on > 2·std_off + 0.01 | mean std ratio (1.5), excess area ‰ (1) |
 | **reference** (`--reference`) | FLIP of all-on against `gi_rr_rays=8 ls_samples=2` with the same view and RR, minus the noise floor (FLIP of `on0` against `on1`: RR noise and animation) | mean FLIP above the floor (0.03) |

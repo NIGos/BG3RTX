@@ -78,6 +78,22 @@ struct Bg3ShaderBlob {
   uint64_t generation;         // bumps every successful recompile of this entry
 };
 
+// What the game's device was created with, published by the layer through
+// persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)) when the device is created (no ABI
+// change: the core reads the same key). All zero before that, or without rt=1.
+#define BG3_DEVICE_INFO_KEY "bg3rtx.device_info"
+enum Bg3DeviceFeatureBits : uint32_t {
+  BG3_DEV_INT64 = 1u << 0,           // shaderInt64
+  BG3_DEV_INT64_ATOMICS = 1u << 1,   // shaderBufferInt64Atomics
+  BG3_DEV_FLOAT16 = 1u << 2,         // shaderFloat16
+  BG3_DEV_STORAGE16 = 1u << 3,       // storageBuffer16BitAccess
+};
+struct Bg3DeviceInfo {
+  uint32_t version;                  // 1
+  uint32_t features;                 // Bg3DeviceFeatureBits enabled on the device by the layer (SHaRC)
+  VkPhysicalDeviceMemoryProperties memory;   // for the core's own device-local buffers
+};
+
 struct Bg3HostApi {
   uint32_t abi_version;
   void (*log)(const char* fmt, ...);

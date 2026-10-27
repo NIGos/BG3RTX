@@ -387,8 +387,13 @@ bool write_png(const std::wstring& path, uint32_t w, uint32_t h, const std::vect
 // Instance API version the layer asks for (rt=1 needs 1.2+ for the AS/ray query
 // dependencies; the game asks for 1.1).
 uint32_t rt_instance_api(uint32_t requested);
+// `sharc`: also the SHaRC radiance cache's device features (64-bit integers and buffer
+// atomics, float16, 16-bit storage) where the physical device supports them. The
+// layer retries without them (rt_device_features_undo first) if the driver refuses.
 const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
-                                                VkDeviceCreateInfo* scratch);
+                                                VkDeviceCreateInfo* scratch, bool sharc = true);
+bool rt_device_features_added();           // the last create info has SHaRC features of ours
+void rt_device_features_undo();            // restores the game's feature structs we edited
 void rt_device_created(DeviceData* dd, bool enabled);
 void rt_device_destroyed(DeviceData* dd);
 bool rt_enabled();                         // AS + ray query are on the device

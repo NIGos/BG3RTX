@@ -176,9 +176,20 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
   SlDeviceScratch* sl_scratch = sl_device_pre(id, phys, use_ci, patched);
   auto create = reinterpret_cast<PFN_vkCreateDevice>(gipa(id ? id->instance : VK_NULL_HANDLE, "vkCreateDevice"));
   VkResult r = create(phys, &patched, alloc, out);
+  if (r != VK_SUCCESS && rt_on && rt_device_features_added()) {
+    // The SHaRC features (64-bit atomics, float16, 16-bit storage) first; ray tracing stays.
+    log("[layer] device creation with the SHaRC device features failed (%d); retrying without them", r);
+    sl_device_post(sl_scratch, nullptr, r);
+    rt_device_features_undo();
+    use_ci = rt_device_create_info(id, phys, geo_use, &rt_ci, false);
+    rt_on = use_ci != geo_use;
+    sl_scratch = sl_device_pre(id, phys, use_ci, patched);
+    r = create(phys, &patched, alloc, out);
+  }
   if (r != VK_SUCCESS && rt_on) {
     log("[layer] device creation with the ray tracing extensions failed (%d); retrying without", r);
     sl_device_post(sl_scratch, nullptr, r);
+    rt_device_features_undo();
     rt_on = false;
     use_ci = geo_use;
     sl_scratch = sl_device_pre(id, phys, use_ci, patched);

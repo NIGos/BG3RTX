@@ -22,13 +22,22 @@ if args[:1] == ["--shaders"]:
 # VkDescriptorType numbers
 kind = {"separate_images": 2, "separate_samplers": 0, "images": 3, "ssbos": 7, "ubos": 6,
         "acceleration_structures": 1000150000}
+# As layer/shaders.cpp: the SHaRC headers (this checkout's external/, else the main checkout's)
+# and a first line "// dxc: <arguments>".
+sharc = []
+for c in (root / "external" / "sharc-1.8.3" / "include", root.parents[2] / "external" / "sharc-1.8.3" / "include"):
+    if (c / "SharcCommon.h").exists():
+        sharc = ["-I", str(c), "-D", "BG3RTX_SHARC_SDK=1"]
+        break
 rc = 0
 with tempfile.TemporaryDirectory() as tmp:
     for f in args:
         spv = Path(tmp) / (Path(f).stem + ".spv")
+        first = (shaders / f).read_text(errors="replace").split("\n", 1)[0].strip()
+        extra = first[len("// dxc:"):].split() if first.startswith("// dxc:") else []
         r = subprocess.run([str(sdk / "dxc.exe"), str(shaders / f), "-spirv", "-fspv-target-env=vulkan1.3", "-HV", "2021",
-                            "-T", "cs_6_6", "-E", "main", "-I", str(shaders), "-D", "BG3RTX=1", "-O3", "-Fo", str(spv)],
-                           capture_output=True, text=True)
+                            "-T", "cs_6_6", "-E", "main", "-I", str(shaders), "-D", "BG3RTX=1", "-O3"] + sharc + extra +
+                           ["-Fo", str(spv)], capture_output=True, text=True)
         if r.returncode:
             print(f"{f}: compile failed\n{r.stdout}{r.stderr}")
             rc = 1

@@ -21,7 +21,14 @@
 
 #include "core.h"
 #include "ls_lights.h"
+#include "sharc.h"
 #include "sun_trust.h"
+
+// D-EM (ABI 8, Bg3HostApi::rt_emissive): the SHaRC injection adds the game's effects-target
+// emission. Builds without D-EM (ABI < 8) leave it out; -DBG3RTX_SHARC_EM=0 forces that.
+#ifndef BG3RTX_SHARC_EM
+#define BG3RTX_SHARC_EM (BG3RTX_ABI_VERSION >= 8)
+#endif
 
 namespace {
 
@@ -48,6 +55,10 @@ struct Snapshot {
   Bg3Binding x_atmo, x_tlut, x_ca0, x_ca1, x_cb0, x_cb1;
   bool rt_sun;   // the RT sun shadows were folded into the mask this frame
   bool aux_ao;   // gi_ao_apply kept the game's AO in gAux.x this frame
+  // SHaRC radiance cache (sharc=1, core/sharc.h): resolved and queried by the GI trace in
+  // run_pre; D-RF queries it (rf_sharc) and the injection writes it in run_post.
+  bool sharc, rf_sharc;
+  SharcFrame sh;
 };
 
 struct Pipe {
@@ -64,7 +75,7 @@ struct Push {
   float cs_length, cs_strength;
   uint32_t cs_steps;
   float mv_scale[2];
-  uint32_t has_mv, pad;
+  uint32_t has_mv, sharc_fx;   // sharc_fx: sharc_inject.hlsl, the D-EM effects target is bound (49)
   float rt_bias, rt_tmax;
   uint32_t rt_debug;
   float rt_strength;
@@ -115,7 +126,8 @@ constexpr ExtraBinding kExtras[] = {
     {45, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},      // D-LS per-light data: runtime lights uploaded (core/ls_lights.cpp)
     {46, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4},       // D-LS per-light data: one record per light array slot
     {47, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2},       // rt_sun_replace: trust parameters, roof volumes (core/sun_trust.h)
-    {48, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2},      // set 0 b2: the absolute camera (rt_sun_replace)
+    {48, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2},      // set 0 b2: the absolute camera (rt_sun_replace, SHaRC)
+    {49, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 2},       // SHaRC injection: the D-EM effects target (else the albedo)
 };
 VkSampler g_linear_clamp = VK_NULL_HANDLE;
 
@@ -153,6 +165,12 @@ bool g_lsl_ok = false;
 SunTrustFrame g_sunt{};   // rt_sun_replace: this frame's trust slot (bindings 47, 48)
 bool g_sunt_ok = false;
 Pipe g_sun_resolve;       // rt_sun_replace: writes the trusted traced visibility (gi/rt_sun_resolve.hlsl)
+// SHaRC (sharc=1, core/sharc.h): the ray-traced push set, the host's set 1, empty sets 2-3 (D-RF: the
+// game's set 2) and the cache's set 4.
+VkDescriptorSetLayout g_empty_dsl = VK_NULL_HANDLE;
+VkPipelineLayout g_rt_sharc_layout = VK_NULL_HANDLE, g_rf_sharc_layout = VK_NULL_HANDLE;
+Pipe g_trace_rt_sharc, g_rf_sharc, g_sharc_resolve, g_sharc_inject, g_sharc_inject_lock, g_sharc_debug, g_sharc_roof;
+bool g_sharc_logged = false, g_sharc_missing_logged = false, g_sharc_paused_logged = false, g_sharc_em_logged = false;
 bool g_ls_logged = false, g_ls_missing_logged = false;
 // D-RF: its pipeline is built against the game's set layout of the lighting's set 1
 // (bound as set 2), so it is rebuilt if that layout ever changes.
@@ -474,6 +492,10 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
     g_rf = Pipe{};
     g_rf_layout = VK_NULL_HANDLE;
     g_rf_set_layout = VK_NULL_HANDLE;
+    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_rf_sharc.pipeline);
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_sharc_layout);
+    g_rf_sharc = Pipe{};
+    g_rf_sharc_layout = VK_NULL_HANDLE;
     host->log("rf: the lighting's set 1 layout changed (%p -> %p); rebuilding", (void*)g_rf_game_layout, (void*)game);
   }
   if (!make_layout(kRfBindings, &g_rf_set_layout, &g_rf_layout, host_layout, game)) {
@@ -482,6 +504,39 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
   }
   g_rf_game_layout = game;
   return true;
+}
+
+// SHaRC: a pipeline layout over existing set layouts, set 4 the cache's, the gaps empty sets.
+bool make_sharc_layout(VkDescriptorSetLayout s0, VkDescriptorSetLayout s1, VkDescriptorSetLayout s2, VkPipelineLayout* out) {
+  if (*out) return true;
+  if (!g_empty_dsl) {
+    VkDescriptorSetLayoutCreateInfo ei{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    if (host->vk->CreateDescriptorSetLayout(host->device, &ei, nullptr, &g_empty_dsl) != VK_SUCCESS) return false;
+  }
+  VkDescriptorSetLayout sh = sharc_set_layout();
+  if (!s0 || !s1 || !sh) return false;
+  VkDescriptorSetLayout sets[5] = {s0, s1, s2 ? s2 : g_empty_dsl, g_empty_dsl, sh};
+  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
+  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  lci.setLayoutCount = 5;
+  lci.pSetLayouts = sets;
+  lci.pushConstantRangeCount = 1;
+  lci.pPushConstantRanges = &pc;
+  return host->vk->CreatePipelineLayout(host->device, &lci, nullptr, out) == VK_SUCCESS;
+}
+
+bool ensure_rt_sharc_layout() {
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!g_rt_set_layout || !host->rt_alpha || !host->rt_alpha(&host_layout, &unused)) return false;
+  return make_sharc_layout(g_rt_set_layout, host_layout, VK_NULL_HANDLE, &g_rt_sharc_layout);
+}
+
+bool ensure_rf_sharc_layout() {
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!g_rf_set_layout || !g_rf_game_layout || !host->rt_alpha || !host->rt_alpha(&host_layout, &unused)) return false;
+  return make_sharc_layout(g_rf_set_layout, host_layout, g_rf_game_layout, &g_rf_sharc_layout);
 }
 
 bool ensure_ls_layout() {
@@ -635,6 +690,7 @@ void bind_extras(Bound& b, const Snapshot& s) {
         b.xbuf[i] = s.l_cam2.buffer ? VkDescriptorBufferInfo{s.l_cam2.buffer, s.l_cam2.offset, (std::min)(s.l_cam2.range, VkDeviceSize(65536))}
                                     : VkDescriptorBufferInfo{s.cam.buffer, s.cam.offset, (std::min)(s.cam.range, VkDeviceSize(65536))};
         break;
+      case 49: b.ximg[i] = {VK_NULL_HANDLE, s.alb.view, s.alb.layout}; break;
     }
     const bool buf = kExtras[i].type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || kExtras[i].type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     b.xw[i].pImageInfo = buf ? nullptr : &b.ximg[i];
@@ -1049,15 +1105,30 @@ void ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
 }
 
 // D-RF: push set 0 (bindings 0-30), the host's set 1, the game's lighting set 1 as set 2.
+// With rf_sharc: the variant reading the radiance cache, its layout adding set 4.
 void rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& pc) {
   const VkDeviceFuncs& vk = *host->vk;
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_rf.pipeline);
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_rf_layout, 0, kRfBindings, b.w);
+  const VkPipelineLayout layout = s.rf_sharc ? g_rf_sharc_layout : g_rf_layout;
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.rf_sharc ? g_rf_sharc.pipeline : g_rf.pipeline);
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, kRfBindings, b.w);
   VkDescriptorSet sets[2] = {b.alpha, s.game_set1};
-  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_rf_layout, 1, 2, sets, s.game_set1_ndyn,
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 2, sets, s.game_set1_ndyn,
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
-  vk.CmdPushConstants(cmd, g_rf_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  if (s.rf_sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
+  vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+}
+
+// SHaRC passes: the ray-traced push set 0, the host's set 1, the cache's set 4; `gx`, `gy` groups.
+void sharc_dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, VkDescriptorSet set, uint32_t gx, uint32_t gy) {
+  const VkDeviceFuncs& vk = *host->vk;
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p.pipeline);
+  VkWriteDescriptorSet wr[kLsBindings + kNumExtras];
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_rt_sharc_layout, 0, gather_writes(b, kRtBindings, wr), wr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_rt_sharc_layout, 1, 1, &b.alpha, 0, nullptr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_rt_sharc_layout, 4, 1, &set, 0, nullptr);
+  vk.CmdPushConstants(cmd, g_rt_sharc_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  vk.CmdDispatch(cmd, gx, gy, 1);
 }
 
 // D-RF pass alone, 2 timestamps per frame, medians over 300 frames.
@@ -1250,6 +1321,32 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
               (void*)s.game_set1, (void*)s.game_set1_layout, s.gi, g_rf.pipeline != VK_NULL_HANDLE);
   }
   s.rf_validate = s.rf && host->cfg_int("rf_validate", 0) != 0 && s.ls_ok;
+  // SHaRC radiance cache (sharc=1, core/sharc.h): with the hybrid RT GI and the absolute camera.
+  s.sharc = false;
+  s.rf_sharc = false;
+  if (gi_rt && host->cfg_int("sharc", 0)) {
+    s.sharc = s.l_cam2.buffer && s.l_cam2.range >= 224 && ensure_rt_sharc_layout() &&
+              refresh(g_sharc_resolve, "gi/sharc_resolve.hlsl", g_rt_sharc_layout) &&
+              refresh(g_trace_rt_sharc, "gi/gi_trace_rt_sharc.hlsl", g_rt_sharc_layout) && sharc_begin(cmd, &s.sh);
+    if (!s.sharc && !g_sharc_missing_logged) {
+      g_sharc_missing_logged = true;
+      host->log("sharc: off this frame: absolute camera (set0 b2) %d, layout %d, pipelines resolve %d trace %d "
+                "(SHaRC headers and -enable-16bit-types: see [shaders])",
+                s.l_cam2.buffer != VK_NULL_HANDLE, g_rt_sharc_layout != VK_NULL_HANDLE,
+                g_sharc_resolve.pipeline != VK_NULL_HANDLE, g_trace_rt_sharc.pipeline != VK_NULL_HANDLE);
+    }
+    s.rf_sharc = s.sharc && s.rf && (s.sh.query & 4u) && ensure_rf_sharc_layout() &&
+                 refresh(g_rf_sharc, "gi/rt_reflections_sharc.hlsl", g_rf_sharc_layout);
+    if (s.sharc) {
+      // Room-scale rays: hits beyond the screen now return the cache's radiance, not just occlusion.
+      pc.gi_rt_radius = (std::max)(host->cfg_float("sharc_gi_radius", 8.0f), 0.01f);
+      if (!g_sharc_logged) {
+        g_sharc_logged = true;
+        host->log("sharc: first frame (GI radius %.1f m, query 0x%x, reflections %d, inject stride %d)", pc.gi_rt_radius,
+                  s.sh.query, s.rf_sharc, host->cfg_int("sharc_inject_stride", 2));
+      }
+    }
+  }
   if (s.rf_validate) s.ls = false;   // the game's own specular must reach D-RF untouched
   if (tlas) {
     if (!g_rt_queries) {
@@ -1281,6 +1378,14 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     dispatch(cmd, g_rt_origin, b, pc, g_w, g_h, true);
     memory_barrier(cmd, kCS, kCS);
   }
+  // SHaRC: last frame's injections into the cache before this frame's GI rays read it.
+  if (s.sharc) {
+    rt_begin();
+    sharc_timestamp(cmd, 0);
+    sharc_dispatch(cmd, g_sharc_resolve, b, pc, s.sh.set, s.sh.resolve_groups[0], s.sh.resolve_groups[1]);
+    sharc_timestamp(cmd, 1);
+    memory_barrier(cmd, kCS, kCS);
+  }
   if (s.gi) {
     // The MVs are sampled in SHADER_READ_ONLY by the traces (bounce
     // reprojection) and the temporal pass; their pass may leave them elsewhere.
@@ -1290,7 +1395,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     trace_timestamp(cmd, 0);
     if (gi_rt) {
       rt_begin();
-      dispatch(cmd, g_trace_rt, b, pc, g_hw, g_hh, true);
+      if (s.sharc) sharc_dispatch(cmd, g_trace_rt_sharc, b, pc, s.sh.set, (g_hw + 7) / 8, (g_hh + 7) / 8);
+      else dispatch(cmd, g_trace_rt, b, pc, g_hw, g_hh, true);
     } else {
       dispatch(cmd, g_trace, b, pc, g_hw, g_hh);
     }
@@ -1354,6 +1460,77 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   timestamp(cmd, 1);
   host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   return true;
+}
+
+// SHaRC after the GI composite: inject this frame's lit diffuse (+ the D-EM emission) into the
+// cache, then the cache's debug views over the lit diffuse (sharc_debug).
+void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
+  Bound b;
+  bind_all(b, s);
+  bind_rt(b, s.tlas, s.alpha);
+  Push pc = base;
+  pc.sharc_fx = 0;
+  memory_barrier(cmd, kCS, kCS);   // the composite wrote the lit diffuse
+  // Debug views and validation passes that rewrite the lit diffuse (or the lighting's inputs)
+  // would be injected as radiance: the cache keeps what it has meanwhile.
+  const bool paused = pc.debug != 0 || pc.rf_debug != 0 || pc.ls_debug != 0 || s.rf_validate;
+  if (paused && !g_sharc_paused_logged) {
+    g_sharc_paused_logged = true;
+    host->log("sharc: injection paused while gi_debug/rf_debug/ls_debug/rf_validate rewrite the lit diffuse");
+  }
+  Pipe& inj = s.sh.lock ? g_sharc_inject_lock : g_sharc_inject;
+  if (!paused && refresh(inj, s.sh.lock ? "gi/sharc_inject_lock.hlsl" : "gi/sharc_inject.hlsl", g_rt_sharc_layout)) {
+    // D-EM: the game's effects target of this frame (its emissive draws), at render resolution.
+    VkImage fx_image = VK_NULL_HANDLE;
+    VkImageLayout fx_from = VK_IMAGE_LAYOUT_UNDEFINED, fx_in = VK_IMAGE_LAYOUT_UNDEFINED;
+#if BG3RTX_SHARC_EM
+    if (host->cfg_float("sharc_em", 1.0f) > 0.0f && host->abi_version >= 8 && host->rt_emissive) {
+      VkDescriptorSetLayout el = VK_NULL_HANDLE;
+      VkDescriptorSet es = VK_NULL_HANDLE;
+      Bg3EmissiveInfo info{};
+      if (host->rt_emissive(cmd, &el, &es, &info) && info.fx_view && info.fx_image && info.fx_width == g_w &&
+          info.fx_height == g_h && info.fx_layout != VK_IMAGE_LAYOUT_UNDEFINED && info.built_frame + 3 >= host->frame_index() &&
+          info.fx_image != s.dif.image && info.fx_image != s.spe.image) {
+        fx_image = info.fx_image;
+        fx_from = info.fx_layout;
+        fx_in = (fx_from == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL || fx_from == VK_IMAGE_LAYOUT_GENERAL)
+                    ? fx_from
+                    : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        for (uint32_t i = 0; i < kNumExtras; ++i)
+          if (kExtras[i].binding == 49) b.ximg[i] = {VK_NULL_HANDLE, info.fx_view, fx_in};
+        pc.sharc_fx = 1;
+      }
+      if (!g_sharc_em_logged) {
+        g_sharc_em_logged = true;
+        host->log("sharc: D-EM effects target %s (layout %d, %ux%u)", pc.sharc_fx ? "injected" : "not available",
+                  info.fx_layout, info.fx_width, info.fx_height);
+      }
+    }
+#else
+    if (!g_sharc_em_logged) {
+      g_sharc_em_logged = true;
+      host->log("sharc: built without D-EM (ABI %d): no emission injected beyond the lit diffuse", BG3RTX_ABI_VERSION);
+    }
+#endif
+    if (fx_image && fx_in != fx_from) image_layout(cmd, fx_image, fx_from, fx_in, kAll, kCS);
+    const uint32_t st = (std::max)(uint32_t(host->cfg_int("sharc_inject_stride", 2)), 1u);
+    const uint32_t bw = (g_w + st - 1) / st, bh = (g_h + st - 1) / st;
+    sharc_timestamp(cmd, 2);
+    sharc_dispatch(cmd, inj, b, pc, s.sh.set, (bw + 7) / 8, (bh + 7) / 8);
+    sharc_timestamp(cmd, 3);
+    if (fx_image && fx_in != fx_from) image_layout(cmd, fx_image, fx_in, fx_from, kCS, kAll);
+    memory_barrier(cmd, kCS, kCS);
+  }
+  // Views (sharc_debug 1-5); 5, the QA roof mask, needs rt_sun_replace's roof volumes (binding 47).
+  if (s.sh.debug >= 1 && s.sh.debug <= 5) {
+    if (s.sh.debug == 5 && g_sunt_ok && refresh(g_sharc_roof, "gi/sharc_roof.hlsl", g_rt_layout)) {
+      dispatch(cmd, g_sharc_roof, b, pc, g_w, g_h, true);
+    } else if (refresh(g_sharc_debug, "gi/sharc_debug.hlsl", g_rt_sharc_layout)) {
+      sharc_dispatch(cmd, g_sharc_debug, b, pc, s.sh.set, (g_w + 7) / 8, (g_h + 7) / 8);
+    }
+    memory_barrier(cmd, kCS, kCS);
+  }
+  sharc_end(cmd);
 }
 
 void run_post(VkCommandBuffer cmd, const Snapshot& s) {
@@ -1456,6 +1633,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
   }
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
+  if (s.sharc && s.tlas) sharc_post(cmd, s, pc);
   if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 7) {
     memory_barrier(cmd, kCS, kCS);
     bind_rt(b, s.tlas, s.alpha);
@@ -1589,7 +1767,8 @@ void gi_release() {
   g_sunt_ok = false;
   for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check,
-                  &g_sun_resolve}) {
+                  &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
+                  &g_sharc_debug, &g_sharc_roof}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
     *p = Pipe{};
   }
@@ -1635,5 +1814,13 @@ void gi_release() {
   g_set_layout = VK_NULL_HANDLE;
   g_rt_layout = VK_NULL_HANDLE;
   g_rt_set_layout = VK_NULL_HANDLE;
+  for (VkPipelineLayout* l : {&g_rt_sharc_layout, &g_rf_sharc_layout}) {
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
+    *l = VK_NULL_HANDLE;
+  }
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_empty_dsl);
+  g_empty_dsl = VK_NULL_HANDLE;
+  sharc_release();
+  g_sharc_logged = g_sharc_missing_logged = g_sharc_paused_logged = g_sharc_em_logged = false;
   g_pending.clear();
 }

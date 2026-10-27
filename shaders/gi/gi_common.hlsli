@@ -59,7 +59,7 @@ struct Push {
   uint cs_steps;
   float2 mv_scale;
   uint has_mv;
-  uint pad;
+  uint sharc_fx;    // sharc_inject.hlsl: 1 the D-EM effects target is bound at 49 (emission)
   // Track D ray-traced sun shadows (rt_shadow.hlsl)
   float rt_bias;      // ray origin offset along the normal, fraction of camera distance
   float rt_tmax;      // shadow ray length (world units)

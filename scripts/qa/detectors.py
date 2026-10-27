@@ -18,7 +18,14 @@ T = {
     # also needs a near-black core, at least this fraction left with < 10% of the light
     # (ambient and other lights never vanish completely under a real shadow).
     "dark_black_shadows": 0.25,
-    "bright_ratio": {"rt_shadows": 1.5, "rt_local_shadows": 1.5, "gi": 2.0, "rt_reflections": 2.0, "all_rt": 2.0},
+    "bright_ratio": {"rt_shadows": 1.5, "rt_local_shadows": 1.5, "gi": 2.0, "rt_reflections": 2.0, "all_rt": 2.0,
+                     "sharc": 2.0, "gi_sharc": 2.0},
+    # SHaRC leak gate (roofed_brightening): GI brightening on/gi_off above this ratio inside an
+    # asset-DB roofed room while the sun is up is light through geometry (DESIGN_SOTA_NEXT 2.8) ...
+    "roof_ratio": 1.3,
+    "roof_fail_area": 0.5,       # ... a fail when the cache adds more than this (‰ of the frame) to the
+                                 # roofed area GI without the cache already brightens that much
+    "roof_min_px_frac": 0.01,    # roofed (sunlit exterior) px needed for the gate to apply
     "bright_fail_area": 0.05,
     "sun_extra_fail_area": 0.5,   # RT dark, game lit, and the sun term really darkened there
     "sun_missing_warn_area": 2.0, # RT lit, game dark (casters missing from the TLAS): a warning
@@ -129,6 +136,52 @@ def brightening(y_on, y_off, sigma, effect, blur=1):
             "pass": score <= T["bright_fail_area"], "unit": "‰ of px", "metrics": {"bound": thr, "regions": len(regs),
                                             "px_over_bound_raw": round(_permille(int(((r > thr) & (a > floor)).sum()), r.shape), 3)},
             "regions": regs, "map": ("ratio", r)}
+
+
+def roof_mask(view):
+    """sharc_debug=5 trace (debug diffuse, gi/sharc_roof.hlsl): green = inside an asset-DB roof
+    volume while the sun is up, red = outside every volume, blue = not known (no volumes for
+    the level, or the sun is down), black = sky. Returns (roofed, outside, unknown) masks."""
+    r, g, b = view[..., 0], view[..., 1], view[..., 2]
+    lit = (r + g + b) > 0.05
+    roofed = lit & (g > 2 * r) & (g > 2 * b)
+    outside = lit & (r > 2 * g) & (r > 2 * b)
+    unknown = lit & (b > 2 * r) & (b > 2 * g)
+    return roofed, outside, unknown
+
+
+def roofed_brightening(y_with, y_base, y_off, roofed, sigma, blur=2):
+    """SHaRC leak gate (docs/QA.md): GI brightening y/y_off > roof_ratio on roofed pixels
+    (a room whose exterior is sunlit). Light through geometry that exists is physically
+    implausible (QUALITY R0); the bounce of lit surfaces inside the room is not. GI without
+    the cache (y_base, on-screen bounce only, cannot pass through walls) measures the second,
+    so the score is the roofed area the cache adds on top of it."""
+    def bright(y_on):
+        r, a, b = ratio_map(y_on, y_off, blur)
+        floor = 0.02 * float(np.median(b))
+        m = roofed & (r > T["roof_ratio"]) & (a > floor) & ((a - b) > 3.0 * sigma)
+        return im.opening(m, 1), r
+    m_with, r_with = bright(y_with)
+    m_base, _ = bright(y_base)
+    added = m_with & ~im.dilate(m_base, 2)
+    lab, n = im.label(added)
+    regs = []
+    for i, area, bb in im.regions(lab, n, _min_area(added.shape)):
+        y0, y1, x0, x1 = bb
+        sub = lab[y0:y1, x0:x1] == i
+        gain = float(np.median(r_with[y0:y1, x0:x1][sub]))
+        regs.append({"bbox": bb, "area": area, "gain": round(gain, 3), "qualified": True, "rank": area * (gain - 1)})
+    regs.sort(key=lambda g: -g["rank"])
+    score = _permille(sum(g["area"] for g in regs), added.shape)
+    roof_px = int(roofed.sum())
+    applies = roof_px >= T["roof_min_px_frac"] * roofed.size
+    metrics = {"roofed_px_permille": round(_permille(roof_px, roofed.shape), 2),
+               "with_cache_permille": round(_permille(int(m_with.sum()), roofed.shape), 4),
+               "without_cache_permille": round(_permille(int(m_base.sum()), roofed.shape), 4),
+               "bound": T["roof_ratio"], "applies": applies}
+    return {"score": round(score, 4), "threshold": T["roof_fail_area"],
+            "pass": (not applies) or score <= T["roof_fail_area"], "unit": "‰ of px added by the cache",
+            "metrics": metrics, "regions": regs if applies else [], "map": ("ratio", r_with)}
 
 
 def sun_disagreement(game, rt, sun_ratio, cls=None, applied=None):
