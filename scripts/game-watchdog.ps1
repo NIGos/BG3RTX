@@ -7,8 +7,14 @@ $log = Join-Path $root "captures\watchdog.log"
 New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
 function W($m) { $l = "$(Get-Date -Format 'HH:mm:ss') $m"; Add-Content $log $l; Write-Host $l }
 
-# Which checkout launched a game: the newest bg3rtx.log written after its start.
-function Owner($start) {
+# Which checkout launched a game: the bin folder its VkLayer_bg3rtx.dll was
+# loaded from (exact); falls back to the newest bg3rtx.log written after its start.
+function Owner($start, $id) {
+  $m = (Get-Process -Id $id -ErrorAction SilentlyContinue).Modules | Where-Object ModuleName -eq "VkLayer_bg3rtx.dll" | Select-Object -First 1
+  if ($m) {
+    $leaf = Split-Path (Split-Path (Split-Path $m.FileName)) -Leaf
+    return $(if ($leaf -like "agent-*") { $leaf } else { "main" })
+  }
   $logs = @(Get-ChildItem (Join-Path $root ".claude\worktrees\*\bg3rtx.log") -ErrorAction SilentlyContinue) + @(Get-Item (Join-Path $root "bg3rtx.log") -ErrorAction SilentlyContinue)
   $c = $logs | Where-Object { $_.LastWriteTime -ge $start.AddSeconds(-5) } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $c) { return "?" }
@@ -28,7 +34,7 @@ while ((Get-Date) -lt $end) {
       W "START pid $id (running now: $($now.Count))"
       if ($now.Count -gt 1) { W "  OVERLAP: $($now.Count) games running: $(($now.Keys | Sort-Object) -join ', ')" }
     } elseif (-not $known[$id].Owner -and ((Get-Date) - $known[$id].Start).TotalSeconds -gt 20) {
-      $known[$id].Owner = Owner $known[$id].Start
+      $known[$id].Owner = Owner $known[$id].Start $id
       W "  pid $id owner: $($known[$id].Owner)"
     }
   }
