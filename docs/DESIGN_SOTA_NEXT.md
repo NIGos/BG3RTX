@@ -848,14 +848,16 @@ No NRC download: it was rejected (2.2).
 
 ## 6. Queued now (baseline measurements for the estimates above)
 
-These run today's code (this branch = main + a header-only library and a test, so no
-runtime change). They give the baselines the plans need:
-- `captures/queue/pending/20-baseline-alpha-S3.json`: Campsite, `rt_stats=1`: alpha
-  candidates per ray class (visibility and shadow), the scene build, the GI trace and
-  D-LS timings. This is the OMM baseline.
-- `captures/queue/pending/20-baseline-ls-S5.json`: Grymforge, `ls_stats=1`, then
-  `ls_stats=0`: listed, evaluated and traced lights per pixel and the D-LS cost. This is
-  the 1a baseline.
+These run the main checkout's build, with no `tree`. This branch adds no runtime change,
+and its worktree has no `data/assetdb`, which would turn the per-light data off. They give
+the baselines the plans need:
+- `20-baseline-alpha-S3.json`: Campsite, `rt_stats=1`. It gives the alpha candidates per
+  ray class (visibility and shadow) and the hybrid GI hit tiers. This is the OMM baseline.
+- `20-baseline-ls-S5.json`: Grymforge, default settings. It gives the D-LS cost, the GI
+  trace and the scene build without the statistics' overhead. This is the 1a cost
+  baseline.
+- `20-baseline-ls-stats-S5.json`: Grymforge, `ls_stats=1`. It gives the listed, evaluated
+  and traced lights per pixel. This is the 1a load baseline.
 
 ## References
 
