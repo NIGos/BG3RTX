@@ -353,11 +353,19 @@ def analyze_scene(d: Path, pool):
                                          "buffer": "lighting", "bbox": g["bbox"], "shape": list(ratio.shape), **info})
 
     # ---- non-finite values
+    # A dump (pass, format) that holds non-finite values with every RT effect off too is the
+    # game's own (S6: the D32F depth of 76433aef, ~5000 per trace in on* and off* alike):
+    # reported, not scored. Scored: those only seen with RT on.
     nf = {n: t.nonfinite() for n, t in traces.items()}
-    worst = max(nf.values()) if nf else 0
+    by = {n: t.nonfinite_by_dump() for n, t in traces.items() if nf[n]}
+    game_sigs = {(v[0], v[1]) for n, d in by.items() if n.startswith("off") for v in d.values()}
+    ours = {n: sum(v[2] for v in d.values() if (v[0], v[1]) not in game_sigs) for n, d in by.items()}
+    worst = max(ours.values()) if ours else 0
     res["checks"].append({"detector": "nonfinite", "effect": "all", "buffer": "every dump", "on": "*", "off": "*",
-                          "score": worst, "threshold": 0, "pass": worst == 0, "unit": "values (max over traces)",
-                          "metrics": {"per_trace": nf, "dumps": {n: t.nonfinite_by_dump() for n, t in traces.items() if nf[n]}}})
+                          "score": worst, "threshold": 0, "pass": worst == 0,
+                          "unit": "values (max over traces), excluding dumps non-finite with RT off",
+                          "metrics": {"per_trace": nf, "game_owned": sorted(f"{p} {f}" for f, p in game_sigs),
+                                      "dumps": by}})
 
     # ---- temporal stability
     # Sets: on* (all on), off* (all RT off), nogi* (all on but the GI neutral: --temporal-gi).

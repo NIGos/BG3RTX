@@ -254,3 +254,21 @@ image does not change. This is a warning, not a gate.
 
 **6. Clean:** no NaN/Inf in any dump of any trace. FLIP against 8 GI rays + 2
 D-LS samples stays within 0.012 (camp) and 0.008 (foundry) of the RR noise floor.
+
+**7. S6 Adamantine Forge, green walls (2026-10-27).**
+- **Symptom:** `captures/compare/Adamantine_Forge_on.png` (10:17, main at about `51725f5`). 40k px of the far, lava-lit walls are pure green. Median 80/283/21 nits against 22/13/6 with RT off: G ×25, R ×4, B ×3, luminance ×14.
+- **Not reproduced on the same view in any later run:**
+  - `qa/20261027-111341` (11:13; main after `818000d`, 10:57);
+  - `qa/20261027-150845`;
+  - `qa/20261027-153326` (13 traces with per-effect toggles).
+
+  The all-on overviews have 0 green px.
+- **Mechanism:**
+  - Only one pass adds light of its own colour onto those walls: D-LS's AO-on-direct give-back (`ao_direct=1`). It adds `(traced lights + the sun's direct light) × (1 − fdif)`, with the sun recomputed from set 2 (the game's transmittance LUT and cloud maps).
+  - Before `818000d`, that set was rewritten by frame count while dispatches could still bind it, so D-LS could sample a freed or reused view as the transmittance LUT: a wrong sun colour, scaled by (1 − AO). That fits the green following the carvings and creases.
+  - No debug path is on by default. The non-finite guards cover every write. A stored half-float overflow (R11G11B10F) cannot give G ×25 with R and B up too.
+- **Fix in depth:**
+  - `ls_giveback_cap` (`gi_common.hlsli`, used by D-LS, its full variant and `ls_ref`) bounds the give-back per channel by what the game's pixel implies: `g × (f_to − f_from) / f_from`, with g the lighting's output after the D-LS delta.
+  - When the recomputed sun is right, the cap never binds: the game's pixel holds direct × fdif plus non-negative ambient.
+- **Non-finite 6020:** the game's own D32F depth (`76433aef`; `2a6a525c` in other captures), non-finite with RT off as well: about 5000 per trace in off*. The detector now scores only dumps that are non-finite with RT on and never with RT off; the game's dumps are listed as `game_owned`.
+- **GI hard-dark 9.29‰:** the floor under the rims of the large platforms. The 1 m traced visibility sees the overhang that the game's SSAO misses: contact occlusion, review, with no black core (`black` 0.0).
