@@ -177,10 +177,65 @@ bool g_vote_ready = false;
 
 // ---- loading ----
 
+static bool file_exists(const std::string& p) {
+  const DWORD a = GetFileAttributesA(p.c_str());
+  return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static std::string read_first_line(const std::string& p) {
+  FILE* f = nullptr;
+  if (fopen_s(&f, p.c_str(), "rb") != 0 || !f) return {};
+  char buf[1024] = {};
+  const size_t n = fread(buf, 1, sizeof buf - 1, f);
+  fclose(f);
+  std::string s(buf, n);
+  s = s.substr(0, s.find_first_of("\r\n"));
+  return s;
+}
+
+// The main checkout of a git worktree (data/assetdb/ is not versioned, so a worktree has none):
+// <root>/.git is a file "gitdir: <common>/worktrees/<name>", whose `commondir` file names the
+// common .git directory (relative to it); the main checkout is that directory's parent. Empty
+// when root is not a linked worktree.
+static std::string main_checkout(const std::string& root) {
+  std::string g = read_first_line(root + "\\.git");
+  static const char kTag[] = "gitdir:";
+  if (g.compare(0, sizeof kTag - 1, kTag) != 0) return {};
+  g = g.substr(sizeof kTag - 1);
+  g.erase(0, g.find_first_not_of(" \t"));
+  std::string common = read_first_line(g + "\\commondir");
+  if (common.empty()) return {};
+  const bool absolute = common.size() > 1 && (common[1] == ':' || common[0] == '\\' || common[0] == '/');
+  std::string dir = absolute ? common : g + "\\" + common;
+  char full[MAX_PATH] = {};
+  if (!GetFullPathNameA(dir.c_str(), MAX_PATH, full, nullptr)) return {};
+  std::string c = full;
+  while (!c.empty() && (c.back() == '\\' || c.back() == '/')) c.pop_back();
+  const size_t s = c.find_last_of("\\/");
+  return s == std::string::npos ? std::string() : c.substr(0, s);   // parent of the common .git
+}
+
+const char* g_db_source = "?";   // logged with the load ("[assetdb] loaded ... (source)")
+
 std::string db_path() {
   char env[MAX_PATH] = {};
-  if (GetEnvironmentVariableA("BG3RTX_ASSETDB", env, MAX_PATH)) return env;
-  return root_dir() + "\\data\\assetdb\\bg3rtx_assetdb.bin";
+  if (GetEnvironmentVariableA("BG3RTX_ASSETDB", env, MAX_PATH)) {
+    g_db_source = "BG3RTX_ASSETDB";
+    return env;
+  }
+  const std::string own = root_dir() + "\\data\\assetdb\\bg3rtx_assetdb.bin";
+  if (file_exists(own)) {
+    g_db_source = "this checkout";
+    return own;
+  }
+  // A worktree without its own database uses the main checkout's (as external/ for SHaRC).
+  const std::string main = main_checkout(root_dir());
+  if (!main.empty() && file_exists(main + "\\data\\assetdb\\bg3rtx_assetdb.bin")) {
+    g_db_source = "the main checkout (this worktree has no data/assetdb)";
+    return main + "\\data\\assetdb\\bg3rtx_assetdb.bin";
+  }
+  g_db_source = "this checkout";
+  return own;
 }
 
 template <class T>
@@ -281,10 +336,10 @@ std::unique_ptr<Db> load(std::string& err) {
     const RAlias& a = db->alias[i];
     if (a.level < db->levels.n) db->world_of_sublevel.emplace(db->str(a.name), int(a.level));
   }
-  log("[assetdb] loaded %s: %.1f MB, %u levels, %u lights, %u triggers, %u probes, %u material shaders, %u engine "
-      "shaders",
-      path.c_str(), double(db->bytes.size()) / 1e6, db->levels.n, db->lights.n, db->trigs.n, db->probes.n, db->shd.n,
-      db->esh.n);
+  log("[assetdb] loaded %s (from %s): %.1f MB, %u levels, %u lights, %u triggers, %u probes, %u material shaders, "
+      "%u engine shaders",
+      path.c_str(), g_db_source, double(db->bytes.size()) / 1e6, db->levels.n, db->lights.n, db->trigs.n, db->probes.n,
+      db->shd.n, db->esh.n);
   return db;
 }
 
@@ -1068,6 +1123,7 @@ bool readback_ready(DeviceData* dd) {
 }  // namespace
 
 const Bg3AssetDbApi* assetdb_api() { return &g_api; }
+std::string assetdb_file() { return db_path(); }
 
 bool assetdb_select_level(const char* name, const char* source) {
   Db* d = db();
