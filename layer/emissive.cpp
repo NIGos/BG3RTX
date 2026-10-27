@@ -60,7 +60,7 @@ constexpr uint32_t kMaxTex = 256;        // textures per build (slot 0: dummy)
 constexpr uint32_t kMaxCache = 16;       // VT tile caches per build (slot 0: dummy)
 constexpr uint32_t kMaxInst = 16384;     // emissive TLAS instances that get lights
 constexpr uint32_t kHeaderWords = 16 + 1024;
-constexpr uint32_t kStatWords = 16 + kMaxRecs * 4;
+constexpr uint32_t kStatWords = 16 + kMaxRecs * 8;   // per record: ours, game (64-bit, lum x 4096), pixels
 constexpr VkDeviceSize up256(VkDeviceSize v) { return (v + 255) / 256 * 256; }
 constexpr VkDeviceSize kRecBytes = 256;
 constexpr VkDeviceSize kOffRecs = 0;
@@ -116,14 +116,14 @@ std::unordered_map<uint64_t, Mat> g_mats;
 struct Census {
   uint32_t passes = 0, draws = 0, kinds[kMatKinds] = {}, captured = 0;
   uint32_t skip_xfb = 0, skip_indirect = 0, skip_topo = 0, skip_full = 0, skip_recs = 0, skip_tex = 0, no_ubo = 0;
-  uint32_t global_conflicts = 0, vt_missing = 0, cb_unreadable = 0;
+  uint32_t global_conflicts = 0, vt_missing = 0, cb_unreadable = 0, pulse_no_time = 0;
   uint64_t captured_tris = 0;
   void add(const Census& o) {
     passes += o.passes, draws += o.draws, captured += o.captured, captured_tris += o.captured_tris;
     for (int i = 0; i < kMatKinds; ++i) kinds[i] += o.kinds[i];
     skip_xfb += o.skip_xfb, skip_indirect += o.skip_indirect, skip_topo += o.skip_topo, skip_full += o.skip_full;
     skip_recs += o.skip_recs, skip_tex += o.skip_tex, no_ubo += o.no_ubo, global_conflicts += o.global_conflicts;
-    vt_missing += o.vt_missing, cb_unreadable += o.cb_unreadable;
+    vt_missing += o.vt_missing, cb_unreadable += o.cb_unreadable, pulse_no_time += o.pulse_no_time;
   }
 };
 struct FsCount { uint32_t draws = 0, captured = 0; };
@@ -142,6 +142,7 @@ struct PDraw {
   View mask, base, vt_ind, vt_cache;
   VkDeviceSize off = 0;
   VkBuffer soup = VK_NULL_HANDLE;     // the soup it was captured into (a grown soup replaces it)
+  uint32_t pulse_no_time = 0;         // the pulse's time was not host-readable (its mean was used)
   uint32_t prims = 0;
   DrawArgs args{};
   uint32_t pipe_id = 0;
@@ -168,13 +169,14 @@ VkDeviceSize g_soup_head = 0, g_soup_since = 0;   // bytes allocated since the l
 VkDeviceSize g_demand = 0;                        // bytes asked for since the last build (captured or not)
 uint32_t g_regrown = 0;                           // draws dropped because the soup was replaced
 uint32_t g_last_cluster = 1;                      // triangles per light of the latest build read back
+uint32_t g_win_frames = 0;                        // presents in the log window
 
 // Per-family calibration against the game's effects target (rt_em_calib): for families whose
 // formula is not fully reproduced (kFlagApprox), the radiance is scaled by game/ours as the
 // projected check measures it on screen (damped, clamped to [1/64, 64]); exact families are
 // never scaled (their ratio is the validation). Forward-pass families are not in the effects
 // target and are not calibrated.
-struct Calib { float scale = 1.0f; uint32_t updates = 0; };
+struct Calib { float scale = 1.0f; uint32_t updates = 0; double log_u = 0.0; };
 std::unordered_map<uint64_t, Calib> g_calib;
 uint32_t g_stride = 24;
 
@@ -195,6 +197,7 @@ uint32_t g_max_lights = 0;
 constexpr uint32_t kGlobSlots = 4096;   // luminance-scale copies (a ring, ~100 frames)
 Buf g_globals;
 uint32_t g_glob_next = 0;
+std::atomic<uint32_t> g_copies_recorded{0}, g_copies_skipped{0};   // em_copy dispatches recorded / owed but not recorded
 // em_copy.hlsl: push descriptors src (the game's buffer) + dst (g_globals).
 VkDescriptorSetLayout g_cp_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_cp_pl = VK_NULL_HANDLE;
@@ -214,6 +217,7 @@ struct SlotInfo {
   uint64_t frame = 0;                  // build frame + 1 (0: free)
   std::vector<uint64_t> rec_fs;        // fragment shader per record
   std::vector<uint32_t> rec_flags;     // its flags (kFlagApprox: calibrated)
+  std::vector<uint32_t> rec_glob;      // its luminance-scale slot
   std::vector<uint64_t> handles;       // game views, images and buffers the set reads (lifetime)
   uint32_t lights = 0, overflow = 0, instances = 0, groups = 0, cluster = 1;
   Census census;
@@ -238,6 +242,8 @@ struct Window {
   std::map<uint64_t, double> fx_frame_ms[2];   // effects passes per frame: [no capture, capture]
   uint64_t nonfinite = 0, collapsed = 0;
   struct Cmp { double ours = 0, game = 0, px = 0; uint32_t flags = 0; };
+  struct Glob { uint32_t slot = UINT32_MAX, n = 0, missing = 0; float value = 0, vmin = 1e30f, vmax = 0; };
+  std::map<uint64_t, Glob> glob;               // luminance-scale copies per fragment shader (read back)
   std::map<uint64_t, Cmp> cmp;                 // projected comparison per fragment shader
   uint64_t dbg_frames = 0, dbg_depth = 0, dbg_hit = 0, dbg_miss = 0, dbg_dark = 0, dbg_bright = 0, dbg_front = 0;
   double last_power = 0;
@@ -392,12 +398,18 @@ void family_fixup(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, EmRec& r, PD
       r.mode = kModeMaskRGB;
       for (float& c : r.radiance) c = m45[1];
     }
+    // The pulse at the draw's time (set 0 b0 [0]); when that constant buffer is not
+    // host-readable, its time average (m2 + m3) / 2: without it the radiance missed the
+    // factor altogether (a201d825 read a stable 1.41).
+    float pulse = 0.5f * (m[4] + m[5]);
     if (read_bound(cmd, 0, 0, 0, &time, 4) && std::isfinite(time)) {
-      float pulse = m[4] + (m[5] - m[4]) * (std::cos(time * m[3]) * 0.5f + 0.5f);
-      if (std::isfinite(pulse) && pulse >= 0.0f) {
-        for (float& c : r.radiance) c *= pulse;
-        r.flags |= kFlagPulse;
-      }
+      pulse = m[4] + (m[5] - m[4]) * (std::cos(time * m[3]) * 0.5f + 0.5f);
+    } else {
+      ++d.pulse_no_time;
+    }
+    if (std::isfinite(pulse) && pulse >= 0.0f) {
+      for (float& c : r.radiance) c *= pulse;
+      r.flags |= kFlagPulse;
     }
   } else if (name.find("MutipleUV") != std::string::npos || name.find("MultipleUV") != std::string::npos) {
     // f298bf4d ENV_Base_MutipleUV: glow(uv1).rgb * noise(scrolled uv0) * 1.5 * m2 * global. The
@@ -500,6 +512,10 @@ void make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDra
   }
   family_fixup(cmd, fs, mat, r, d);
   if (mat.kind == kMatForward) r.flags |= kFlagForward | kFlagApprox;
+  // E: vertex-colour-cut templates (VertCut) gate their emission by a vertex-colour mask that
+  // is not captured; decals are box volumes, not the surfaces they light.
+  if (mat.name.find("VertCut") != std::string::npos || mat.kind == kMatDecal) r.flags |= kFlagApprox;
+  P.census.pulse_no_time += d.pulse_no_time;
   if (!finite(r.radiance, 3) || r.radiance[0] < 0 || r.radiance[1] < 0 || r.radiance[2] < 0) {
     r.radiance[0] = r.radiance[1] = r.radiance[2] = 0.0f;
     r.flags |= kFlagApprox;
@@ -940,7 +956,9 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
   (void)global;
   si.rec_fs.resize(nrec);
   si.rec_flags.resize(nrec);
+  si.rec_glob.resize(nrec);
   for (uint32_t i = 0; i < nrec; ++i) {
+    si.rec_glob[i] = recs[i].glob;
     si.rec_fs[i] = (uint64_t(recs[i].fs_hi) << 32) | recs[i].fs_lo;
     si.rec_flags[i] = recs[i].flags;
   }
@@ -1033,7 +1051,8 @@ void em_device_created(DeviceData* dd) {
   ok = ok && make_buf(g_lights, VkDeviceSize(g_max_lights) * 80, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
   ok = ok && make_buf(g_host, kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_host.map;
   ok = ok && make_buf(g_dummy, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false);
-  ok = ok && make_buf(g_globals, VkDeviceSize(kGlobSlots) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
+  // Host-visible: the log reads back what the copies wrote (a few KB).
+  ok = ok && make_buf(g_globals, VkDeviceSize(kGlobSlots) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_globals.map;
   ok = ok && make_image(false, g_dimg) && make_image(true, g_darr);
   // Our own command buffers (one build per game submission of effects passes).
   VkCommandPoolCreateInfo cpi{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -1153,9 +1172,12 @@ bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const Em
   // rt_em_backdrop=1 (a measurement): skydome backdrops are captured too, so the projected
   // check shows their share of the effects target.
   const bool backdrop = mat.kind == kMatBackdrop && cfg_int("rt_em_backdrop", 0) != 0;
-  // rt_em_decal=1 (a measurement only: a decal's box is not the surface it lights): emissive
-  // decals are captured, so the check counts the pixels they light as covered "in front".
-  const bool decal = mat.kind == kMatDecal && cfg_int("rt_em_decal", 0) != 0;
+  // rt_em_decal=1 (default): emissive deferred decals are captured too. Their geometry is
+  // the projection box, not the surface they light, so they are flagged approximate (the
+  // calibration sets their level) and the check counts the pixels they light as covered by
+  // an emitter in front of the depth. In Water Queen's House they are 55% of the effects
+  // target's bright pixels.
+  const bool decal = mat.kind == kMatDecal && cfg_int("rt_em_decal", 1) != 0;
   if (mat.kind != kMatEmissive && mat.kind != kMatForward && !backdrop && !decal) return false;
   FsCount& fc = g_fs_window[s->fs];
   ++fc.draws;
@@ -1216,6 +1238,7 @@ void em_pass_done(VkCommandBuffer cmd, const CmdState* s, VkBuffer ubo, VkDevice
   }
   // The luminance scales the pass's draws read, as they read them (the game rewrites the
   // buffer later in the batch).
+  if (!copies.empty() && !ensure_copy()) g_copies_skipped += uint32_t(copies.size());
   if (!copies.empty() && ensure_copy()) {
     barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, kCS, VK_ACCESS_SHADER_READ_BIT);
     g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cp_pipe);
@@ -1234,7 +1257,9 @@ void em_pass_done(VkCommandBuffer cmd, const CmdState* s, VkBuffer ubo, VkDevice
       g_dd->vk.CmdPushConstants(cmd, g_cp_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
       g_dd->vk.CmdDispatch(cmd, 1, 1, 1);
     }
-    barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kCS | kAS, VK_ACCESS_SHADER_READ_BIT);
+    g_copies_recorded += uint32_t(copies.size());
+    barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kCS | kAS | VK_PIPELINE_STAGE_HOST_BIT,
+            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_HOST_READ_BIT);
     if (ranges.empty()) restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   }
   if (!ranges.empty()) {
@@ -1413,6 +1438,23 @@ void em_on_present() {
     w.last_draws = si.census.kinds[kMatEmissive];
     w.last_lights = si.lights;
     g_last_cluster = si.cluster;
+    // The luminance-scale copies the records used (em_copy.hlsl), as written on the GPU.
+    for (uint32_t r = 0; r < si.rec_glob.size(); ++r) {
+      if (!(si.rec_flags[r] & kFlagLuminance)) continue;
+      Window::Glob& gl = w.glob[si.rec_fs[r]];
+      const uint32_t slot = si.rec_glob[r];
+      if (slot == UINT32_MAX || slot >= kGlobSlots) {
+        ++gl.missing;
+        continue;
+      }
+      float v;
+      std::memcpy(&v, g_globals.map + VkDeviceSize(slot) * 4, 4);
+      gl.slot = slot;
+      gl.value = v;
+      gl.vmin = (std::min)(gl.vmin, v);
+      gl.vmax = (std::max)(gl.vmax, v);
+      ++gl.n;
+    }
     const uint32_t* st = reinterpret_cast<const uint32_t*>(region + kOffStats);
     if (st[6]) {
       ++w.dbg_frames;
@@ -1423,12 +1465,12 @@ void em_on_present() {
       w.dbg_bright += st[7];
       w.dbg_front += st[4];
       for (uint32_t r = 0; r < si.rec_fs.size(); ++r) {
-        const uint32_t* q = st + 16 + r * 4;
-        if (!q[2]) continue;
+        const uint32_t* q = st + 16 + r * 8;
+        if (!q[4]) continue;
         Window::Cmp& cmp = w.cmp[si.rec_fs[r]];
-        cmp.ours += q[0] / 16.0;
-        cmp.game += q[1] / 16.0;
-        cmp.px += q[2];
+        cmp.ours += double((uint64_t(q[1]) << 32) | q[0]) / 4096.0;
+        cmp.game += double((uint64_t(q[3]) << 32) | q[2]) / 4096.0;
+        cmp.px += q[4];
         cmp.flags |= si.rec_flags[r];
       }
     }
@@ -1437,9 +1479,29 @@ void em_on_present() {
           (unsigned long long)(si.frame - 1), si.census.kinds[kMatEmissive], double(si.tris), si.lights, power);
     si.frame = 0;
   }
+  // Windows of rt_timing_frames presents, not builds: with rt_emissive=0 nothing is built,
+  // and the effects passes' cost without the capture must still be logged.
   const int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
   Window& w = g_win;
-  if (w.builds < uint64_t(every)) return;
+  if (++g_win_frames < uint32_t(every)) return;
+  g_win_frames = 0;
+  if (!w.builds) {
+    std::vector<float> fx[2];
+    for (int k = 0; k < 2; ++k)
+      for (auto& [f, ms] : w.fx_frame_ms[k]) fx[k].push_back(float(ms));
+    auto med = [](std::vector<float>& v) {
+      if (v.empty()) return 0.0f;
+      std::sort(v.begin(), v.end());
+      return v[v.size() / 2];
+    };
+    if (!fx[0].empty() || !fx[1].empty())
+      log("[em] no builds in the last %d presents (rt_emissive=0 or no effects pass): effects passes per frame median "
+          "%.3f ms without capture (%zu frames), %.3f ms with (%zu frames)",
+          every, med(fx[0]), fx[0].size(), med(fx[1]), fx[1].size());
+    g_win = Window{};
+    g_fs_window.clear();
+    return;
+  }
   const double nb = double(w.builds);
   const Census& c = w.c;
   auto pct = [](std::vector<float>& v, double q) {
@@ -1463,6 +1525,20 @@ void em_on_present() {
       "not host-readable %.2f per build",
       (unsigned long long)(g_soup.size >> 20), g_regrown, c.kinds[kMatForward] / nb, g_last_cluster,
       double(w.collapsed) / nb, c.cb_unreadable / nb);
+  {
+    std::string line;
+    for (auto& [fs, gl] : w.glob) {
+      char buf[220];
+      snprintf(buf, sizeof buf, "%s %08x %s slot %u value %.6g (min %.6g, max %.6g, %u read, %u without a slot)",
+               line.empty() ? "" : ";", unsigned(fs >> 32), material(fs).name.c_str(), gl.slot, double(gl.value),
+               double(gl.n ? gl.vmin : 0.0f), double(gl.vmax), gl.n, gl.missing);
+      line += buf;
+    }
+    log("[em] luminance scale copies: %u dispatched, %u owed but not recorded (pipeline missing); pulse time not "
+        "host-readable %.2f per build (its mean used);%s",
+        g_copies_recorded.exchange(0), g_copies_skipped.exchange(0), c.pulse_no_time / nb,
+        line.empty() ? " no luminance-emissive records" : line.c_str());
+  }
   log("[em] per build: %.1f TLAS instances, %.0f triangles, %.0f lights (%.0f left out by rt_em_max_lights), total power "
       "%.4g (effects-target units x m^2; last build %.4g, %u draws, %u lights), %llu non-finite power sums; GPU: build "
       "median %.3f ms (p99 %.3f, %zu samples), effects passes per frame median %.3f ms with capture (%zu frames), %.3f ms "
@@ -1498,15 +1574,21 @@ void em_on_present() {
       const float before = cal.updates ? cal.scale : 1.0f;
       // Calibrate approximate families seen on enough pixels, in the effects target (a
       // forward family's emission is not there: ours >> game).
+      // The family's own ratio at scale 1 is ratio / scale (ours scales with it). Animated
+      // emitters (the lava's heat flow) swing it 1.0-2.1 between 300-build windows, so a
+      // full step chased the animation (the scale rose while the ratio was > 1). The scale
+      // is 1 / the exponential average of that ratio in log space (weight 1/4; the first
+      // window sets it), i.e. it matches the time average.
       if (calib && (cm.flags & kFlagApprox) && !(cm.flags & kFlagForward) && px >= 200 && ratio > 0.02 && ratio < 50.0) {
-        double step = (std::min)((std::max)(1.0 / ratio, 0.25), 4.0);   // the full correction, at most 4x per window
-        cal.scale = float((std::min)((std::max)(double(before) * step, 1.0 / 64), 64.0));
+        const double lu = std::log(ratio / double(before));
+        cal.log_u = cal.updates ? cal.log_u + 0.25 * (lu - cal.log_u) : lu;
+        cal.scale = float((std::min)((std::max)(std::exp(-cal.log_u), 1.0 / 64), 64.0));
         ++cal.updates;
       }
       char buf[260];
-      snprintf(buf, sizeof buf, "%s %08x %s %.3f (%.0f px%s%s, scale %.3f)", line.empty() ? "" : ";", unsigned(fs >> 32),
+      snprintf(buf, sizeof buf, "%s %08x %s %.3f (%.0f px%s%s%s, scale %.3f)", line.empty() ? "" : ";", unsigned(fs >> 32),
                material(fs).name.c_str(), ratio, px, (cm.flags & kFlagApprox) ? ", approx" : "",
-               (cm.flags & kFlagForward) ? ", forward" : "", before);
+               (cm.flags & kFlagForward) ? ", forward" : "", px < 200 ? ", under 200 px: not gated" : "", before);
       line += buf;
     }
     log("[em] projected check over %llu frames: emissive hits on %.3f%% of the depth pixels; ours/game radiance %.3f over "

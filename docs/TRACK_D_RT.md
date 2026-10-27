@@ -2377,3 +2377,63 @@ In S6 Adamantine:
 
 **Merge note:** my conversion-barrier change in `bvhsplit.cpp` (`502aa29`) is reverted
 (`dd70778`), so the split agent's barrier audit (`c9297e3`) applies alone when merged.
+
+### 12.10 Round 5 (`db5808a` results), offline fixes
+
+**Decals are captured by default** (`rt_em_decal=1`). They were 55% of Water Queen's House's
+bright effects pixels (coverage 63.5% to 99.6%). Their geometry is the projection box, so they
+are flagged approximate and calibrated.
+
+**1. `159a6211` Pulse_VT and `f298bf4d` still read 0.000.**
+- The projected check's per-family sums were 32-bit, at 1/16 per pixel. Two failures follow:
+  - a family's sum wraps past 2^32 / 16 (2.7e8): `f298bf4d` covers 1.7M px, so a mean
+    luminance above about 160 wraps;
+  - pixels under 1/32 round to 0.
+- The sums are now 64-bit (a carry word) at 1/4096 per pixel.
+- The copy pass is now checked in the log, not assumed. Every 300 presents,
+  `[em] luminance scale copies` prints:
+  - the copies dispatched and the copies owed but not recorded (the pipeline is missing);
+  - per luminance family, the slot index its records use;
+  - the value the GPU copy wrote, read back from our host-visible slot buffer, with min and
+    max;
+  - the records without a slot (no set 2 b0 bound at the draw).
+
+  If the value is 0 while the game's pixels are bright, the copy reads the wrong buffer or
+  offset. If it is non-zero while the ratio is still 0, the fault is downstream (the record's
+  `glob` index or the shader).
+- The copy's barrier now also makes the result visible to the host.
+- Pulse templates: when set 0 b0 (the time) is not host-readable, the pulse factor is its time
+  average, (m2 + m3) / 2. Before, the factor was missing altogether. This is counted as `pulse
+  time not host-readable`.
+
+**2. `222986b8`: 1.92 in Adamantine Forge, 1.03 in Water Queen's House.**
+- The shader is exact.
+- The scene-dependent part is the measurement. Adamantine Forge is the bright scene, so the
+  32-bit game-side sum is the one most likely to wrap. That would make the ratio too large.
+- Fixed by the 64-bit sums. Not yet verified.
+
+**3. `a201d825` 1.41 and `a7caa456` 1.42.**
+- `a201d825` (GM_Pulse_AlphaBlend) lost its pulse factor whenever the time was unreadable. A
+  stable ratio of about 1.4 is the inverse of a mean pulse of about 0.7. It now uses the
+  average.
+- `a7caa456` is a VertCut template. Its emission is gated by a vertex-colour mask that XFB does
+  not capture, so ours is an upper bound (a ratio above 1, as measured).
+- VertCut templates are now flagged approximate, so they are calibrated rather than gated as
+  exact.
+
+**4. The lava calibration moved the wrong way.**
+- The lava's heat flow swings its own ratio between 1.0 and 2.1 from one window to the next.
+- A full step per window chased that animation.
+- The scale is now 1 / the exponential average, in log space, of the family's ratio at scale 1:
+  weight 1/4, with the first window setting it. That converges to the time average.
+
+**5. Families under 200 px** are marked "under 200 px: not gated" in `ours/game per family`.
+
+**6. The missing `rt_emissive=0` window** ("0.000 ms without (0 frames)").
+- The log window counted builds. With `rt_emissive=0` there are none, so it never closed, and
+  the next window mixed both phases.
+- Windows are now `rt_timing_frames` presents. A window without builds logs `no builds in the
+  last N presents`, with the effects passes' median with and without capture.
+- The runs also need each live phase to last at least one window: `auto_interval=1200` and
+  `-Traces 6`.
+

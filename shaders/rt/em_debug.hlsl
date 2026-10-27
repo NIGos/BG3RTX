@@ -9,8 +9,9 @@
 // target pixels brighter than thr with no visible hit, 3 hits where the game shows less
 // than 2% of ours, 4 of the bright pixels without a hit at the depth, those with an emissive
 // surface in front of it (alpha-blended emitters: not in the depth buffer), 5 such front hits
-// in all, 6 ran, 7 effects-target pixels brighter than thr; from 16, per record: ours x 16,
-// game x 16 (luminance, clamped at 4096), pixels, -.
+// in all, 6 ran, 7 effects-target pixels brighter than thr; from 16, 8 words per record:
+// ours and game luminance x 4096 as 64-bit sums (lo, hi; dim emitters, e.g. a lava pool at
+// 0.01, are kept), pixels.
 #include "em_common.hlsli"
 
 struct CameraCB {
@@ -37,7 +38,20 @@ float3 ray_at(float2 uv) {
 }
 
 void stat(uint word) { emStats.InterlockedAdd(word * 4, 1u); }
-uint q16(float v) { return uint(clamp(v, 0.0, 4096.0) * 16.0 + 0.5); }
+// 64-bit sum of luminance x 4096 at byte `a` (lo, hi): the carry from the returned old value.
+void add64(uint a, float lum) {
+  uint v = uint(clamp(lum, 0.0, 1e5) * 4096.0 + 0.5);
+  uint old;
+  emStats.InterlockedAdd(a, v, old);
+  if (old + v < old) emStats.InterlockedAdd(a + 4, 1u);
+}
+void rec_stat(uint rec, float ours, float game) {
+  if (rec >= 1024) return;
+  uint base = (16 + rec * 8) * 4;
+  add64(base, ours);
+  add64(base + 8, game);
+  emStats.InterlockedAdd(base + 16, 1u);
+}
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -74,12 +88,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
         stat(5);
         if (bright) {
           stat(4);
-          if (recf < 1024) {
-            uint base = (16 + recf * 4) * 4;
-            emStats.InterlockedAdd(base, q16(em_lum(Lf)));
-            emStats.InterlockedAdd(base + 4, q16(game));
-            emStats.InterlockedAdd(base + 8, 1u);
-          }
+          rec_stat(recf, em_lum(Lf), game);
         }
         if (pc.mode == 6) c = Lf;
         bright = false;   // covered, by the emitter in front
@@ -88,12 +97,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     if (hit) {
       stat(1);
       if (game < 0.02 * ours) stat(3);
-      if (rec < 1024) {
-        uint base = (16 + rec * 4) * 4;
-        emStats.InterlockedAdd(base, q16(ours));
-        emStats.InterlockedAdd(base + 4, q16(game));
-        emStats.InterlockedAdd(base + 8, 1u);
-      }
+      rec_stat(rec, ours, game);
     } else if (bright) {
       stat(2);
     }

@@ -7,31 +7,36 @@ section 12 (12.7 is the latest round). The status row is in `docs/QUALITY.md`
 The tree builds, `settings_test` passes (120 checks), and the shaders compile with DXC.
 Main is merged up to `8f8df1f`.
 
-## State after round 4 (`502aa29`, run by the coordinator)
+## State after round 5 (`db5808a`, run by the coordinator)
 
-No device loss in any scene.
-- **S8 Water Queens:** CHAR_BASE_GM 1.02 and Base_GM_VT `9228b9cb` 1.03 pass. `222986b8` is
-  at 1.27, the Pulse_VT and two character families read 0.000, and coverage is 63.5%.
-- **S6 Adamantine:** coverage 99.8%, but the lava pool (`f298bf4d` ENV_Base_MutipleUV) and
-  Pulse_VT read 0.000. The calibration of `1a81f41b` only reached 0.68.
-- **S5 Grymforge:** the forward lava passes (1.04), with coverage 100%.
+- No device loss.
+- With decals, Water Queen's House coverage is 99.6%.
+- Still open:
+  - `159a6211` and `f298bf4d` read 0.000;
+  - `222986b8` is 1.92 in Adamantine Forge and 1.03 in Water Queen's House;
+  - `a201d825` reads 1.41 and `a7caa456` 1.42;
+  - the lava calibration moved the wrong way;
+  - Water Queen's House had no `rt_emissive=0` window.
 
-## Fixes in this round (offline, not yet run; TRACK_D 12.9)
+## Fixes in this round (offline, not yet run; TRACK_D 12.10)
 
-1. **Luminance families read 0** (Pulse_VT `159a6211`, lava pool `f298bf4d`). The game
-   rewrites its luminance-scale buffer later in the same batch.
-   - The value is now copied on the GPU right after each effects pass
-     (`shaders/rt/em_copy.hlsl`) into our own slot buffer. Records refer to the slot.
-2. **Calibration**: the full correction per window (clamped to ×4), with ≥ 200 px.
-   - `f298bf4d`: its glow map reads the second UV, which isn't captured. It is now a
-     constant × the noise mean × global, flagged approximate, so it gets calibrated.
-3. **Character 0.000 families**: their constants are host-readable (counter 0). The cause
-   is moving characters (one frame of latency) and, for VertCut, a vertex-colour mask.
-   Under 0.01% of the screen; reported, not fixed.
-4. **Coverage measurement**: `rt_em_decal=1` (new) and `rt_em_backdrop=1` capture the
-   emissive decals and the backdrop, for measurement only.
-5. **Merge:** my `bvhsplit` barrier change is reverted (`dd70778`). Use the split agent's
-   `c9297e3`.
+1. **Decals are captured by default** (`rt_em_decal=1`). They are approximate and
+   calibrated.
+2. **Check sums**: 64-bit at 1/4096 per pixel. The 32-bit sums at 1/16 could wrap, which is
+   the likely cause of the 0.000 values and of `222986b8`'s scene dependence.
+3. **New log line, `[em] luminance scale copies`**:
+   - copies dispatched and copies owed but not recorded;
+   - per family: the slot, the value written on the GPU (min/max), and the records without a
+     slot.
+4. **Pulse**: the time-average factor when the time is not host-readable (`a201d825`). It is
+   counted as `pulse time not host-readable`.
+5. **VertCut templates (`a7caa456`)** are flagged approximate, since their vertex-colour mask
+   is not captured.
+6. **Calibration**: an exponential average in log space of the ratio (weight 1/4), not a full
+   step.
+7. **Families under 200 px** are marked "not gated".
+8. **Log windows** are `rt_timing_frames` presents, not builds. A capture-off window now logs
+   `no builds in the last N presents ... ms without capture`.
 
 ## Serial tests to rerun
 
@@ -52,13 +57,21 @@ Read the results in the `[em]` lines of `bg3rtx.log` (300-build windows):
 - `projected check`;
 - `ours/game per family` (ratio, px, approx/forward, current calibration scale).
 
-The calibration needs a few windows to settle, so judge the **last** window of each run. The
-first `rt_debug=8` phase is about 1-2 windows; to have more, raise the first
-`after_trace` interval, or add `auto_interval=1200` to `-Set`.
+The calibration needs a few windows to settle, so judge the **last** window of each run. Use
+`auto_interval=1200` and `-Traces 6` on every run. Each live phase, `rt_emissive=0` included,
+then spans at least one 300-present window. Check that the live_phases log reaches the
+`rt_emissive=1` step before the run ends.
+
+On every run, also report the `[em] luminance scale copies` line:
+- a value of 0 for `159a6211` / `f298bf4d` while their game pixels are bright means the copy
+  reads the wrong buffer or offset;
+- `owed but not recorded` must be 0.
+
+Families marked "under 200 px: not gated" are not pass criteria.
 
 ### R1: S6 Adamantine Forge
 
-`scripts/auto-run.ps1 -Background -Save "Adamantine Forge" -Traces 5 -Set rt_debug=8,dump_png_width=1280,auto_interval=1200`
+`scripts/auto-run.ps1 -Background -Save "Adamantine Forge" -Traces 6 -Set rt_debug=8,dump_png_width=1280,auto_interval=1200`
 
 Pass:
 - no device loss or stall;
@@ -74,7 +87,7 @@ Pass:
   - `1a81f41b` lava within **0.8-1.25 in the last window** (calibrated);
   - `f298bf4d` ENV_Base_MutipleUV (the lava pool, 1.7M px) within 0.8-1.25 in the last
     window (calibrated; it read 0.000 before);
-  - `222986b8`: report the ratio (1.92 last time, not yet explained);
+  - `222986b8` within 0.8-1.25 (1.92 last time; expected fixed by the 64-bit sums);
 - coverage ≥ 95%;
 - 0 non-finite power sums;
 - build median ≤ 0.5 ms (152k triangles).
@@ -83,7 +96,7 @@ Report the lava's `scale` value.
 
 ### R2: S5 Grymforge
 
-`scripts/auto-run.ps1 -Background -Save "Grymforge - 32h 59m" -Traces 5 -Set rt_debug=8,dump_png_width=1280`
+`scripts/auto-run.ps1 -Background -Save "Grymforge - 32h 59m" -Traces 6 -Set rt_debug=8,dump_png_width=1280,auto_interval=1200`
 
 Pass:
 - no device loss;
@@ -97,14 +110,14 @@ data.
 
 ### R3: S8 Water Queens House (run first)
 
-`scripts/auto-run.ps1 -Background -Save "Water Queens House" -Traces 5 -Set rt_debug=8,dump_png_width=1280`
+`scripts/auto-run.ps1 -Background -Save "Water Queens House" -Traces 6 -Set rt_debug=8,dump_png_width=1280,auto_interval=1200`
 
 Pass:
 - no device loss;
 - coverage ≥ 70%, and report the "by an emitter in front of the depth" share;
 - `159a6211` and `a201d825` within 0.8-1.25 (they read 0.000 before);
-- then two short reruns with `-Set rt_debug=8,rt_em_decal=1` and `-Set rt_debug=8,rt_em_backdrop=1`:
-  the coverage gain of each is that source's share (report both);
+- decals are now on by default, so coverage ≥ 95% is expected;
+- the `rt_emissive=0` window logs a non-zero "without capture" time;
 - every exact family (not "approx") with ≥ 500 px within 0.8-1.25;
 - report `material constants not host-readable` (> 0 explains `38e91cf3` / `5d837ba1`);
 - approximate families within 0.8-1.25 in the last window;
