@@ -53,3 +53,6 @@ git commit -q --no-edit -m "Merge $Ref (merge-green: build, unit tests, shaders,
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Write-Host "MERGED $Ref onto $head -> $((git rev-parse --short HEAD).Trim())"
+
+# Move the test tree to the new main (refuses, harmlessly, while a job runs on it).
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "test-tree.ps1")

@@ -77,8 +77,13 @@ function Get-Dumps($tree, [datetime]$since) {
     Where-Object LastWriteTime -gt $since | ForEach-Object Name)
 }
 
+# Jobs without a "tree" run on the test tree (scripts/test-tree.ps1: a checkout of main kept
+# apart, so merges and builds in the main checkout never touch a build under a running game);
+# without one, on the main checkout as before.
 function Get-JobTree($job) {
-  [IO.Path]::GetFullPath($(if ($job.tree) { Join-Path $root $job.tree } else { $root }))
+  $default = Join-Path $root ".claude\worktrees\test-main"
+  if ($DryRun -or -not (Test-Path (Join-Path $default "bin\VkLayer_bg3rtx.dll"))) { $default = $root }
+  [IO.Path]::GetFullPath($(if ($job.tree) { Join-Path $root $job.tree } else { $default }))
 }
 
 # Jobs that may share a running game: same tree, save and launch arguments.

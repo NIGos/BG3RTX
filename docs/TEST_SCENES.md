@@ -292,6 +292,10 @@ Rules that keep the queue fast and its results trustworthy:
   own results with it instead of waiting for a relay.
 - **Worktree inboxes:** a job file in a worktree's own `captures/queue/pending/` is collected too,
   for agents whose sandbox can't write the main queue.
+- **The test tree:** jobs without a `tree` run on `.claude/worktrees/test-main`, a checkout of
+  main kept apart (`scripts/test-tree.ps1` creates it or moves it to main's HEAD and builds it;
+  `merge-green.ps1` calls it after a merge). Merges and builds in the main checkout then never
+  hot-reload a build under a running game.
 - **The runner reloads itself:** when `scripts/test-queue.ps1` changes, the runner restarts on the
   new version between jobs (never inside a session), with no restart by hand.
 - **Keep the raw captures until they are analysed** (`--keep-raw`). Pruning first forced reruns.
