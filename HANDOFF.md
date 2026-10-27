@@ -151,6 +151,36 @@ agent; not covered by the first commit).
   same state once per stall, and queries the fault info (one line if nothing is
   recorded).
 
+**Fault `d33fca6` run 1** (`captures/fault_d33fca6_run1.log`) and the fourth commit:
+- **What the log shows:**
+  - The loss is about 15 frames after the first RT frame. The GPU completed frame 765;
+    the poll found the loss at 768.
+  - All slots were submitted; there were no dropped records and no pending compactions.
+  - The read fault at 0xff93000000 (4 KB page) and the IP fault are in none of our 19
+    registered ranges. These were all our BVH buffers: 5 BLAS chunks, the pool, the ring,
+    status, scratch, 8 TLAS slots, the alpha records and the soup.
+- **What the code says:**
+  - Every BLAS address we write into an instance comes from
+    `vkGetAccelerationStructureDeviceAddressKHR` on an AS inside a chunk.
+  - Chunks are never freed while the split runs, so a stale BLAS reference would still
+    point inside a chunk.
+  - So the faulting page is not a BLAS reference of ours. The IP fault says a shader
+    did the read.
+  - Not registered: the alpha dummy/legacy buffers (256 B), our images (core GI,
+    rrpost, NGX: image VAs are not queryable), and all of the game's memory.
+- **New: `VK_EXT_device_address_binding_report`** (instance `VK_EXT_debug_utils` plus a
+  messenger; `dev_fault_bindings=0` turns it off).
+  - Every bind and unbind of the driver, the game's included, is recorded: object type,
+    handle, range, frame, and the last 16k unbinds.
+  - The fault block now names the object for each fault address ("driver bindings: image
+    0x... [base, +size) ... LIVE / UNBOUND in frame N").
+- Every range of ours is logged at registration and listed in the fault block.
+- **Record-time guard:** each TLAS instance's BLAS reference must lie in a chunk; a
+  mismatch is logged and kept as an event.
+- **Fault-time audit:** for every slot's ring region, each instance's BLAS reference is
+  counted as held, freed-but-unreleased, released, or outside our chunks, with the first
+  offenders.
+
 **First commit:**
 
 **Scene snapshot slots** (`layer/host.h` `kSceneSlots = 8`, `layer/rtscene.cpp`)

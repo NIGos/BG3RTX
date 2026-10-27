@@ -567,6 +567,12 @@ bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
 const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
                                                    VkDeviceCreateInfo* scratch);
 void fault_device_created(DeviceData* dd, bool enabled);
+// VK_EXT_debug_utils + a messenger for VK_EXT_device_address_binding_report (the
+// driver's bindings, the game's included, to name a fault address).
+const VkInstanceCreateInfo* fault_instance_create_info(PFN_vkGetInstanceProcAddr next, const VkInstanceCreateInfo* ci,
+                                                       VkInstanceCreateInfo* scratch);
+void fault_instance_created(VkInstance inst, PFN_vkGetInstanceProcAddr next);
+void fault_instance_destroyed(VkInstance inst);
 // Device-address ranges of our buffers, named in a fault report (live or freed).
 void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size);
 void fault_untrack(VkDeviceAddress addr);

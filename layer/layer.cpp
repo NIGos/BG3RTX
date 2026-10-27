@@ -83,11 +83,20 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
         VK_API_VERSION_MAJOR(want_api), VK_API_VERSION_MINOR(want_api));
     api = want_api;
   }
-  VkResult r = create(&patched, alloc, out);
+  // VK_EXT_debug_utils for the device-address binding reports (devfault.cpp).
+  VkInstanceCreateInfo fault_ci;
+  const VkInstanceCreateInfo* use_ci = fault_instance_create_info(next, &patched, &fault_ci);
+  VkResult r = create(use_ci, alloc, out);
+  if (r != VK_SUCCESS && use_ci != &patched) {
+    log("[layer] instance creation with VK_EXT_debug_utils failed (%d); retrying without", r);
+    fault_instance_create_info(nullptr, nullptr, nullptr);   // off
+    r = create(&patched, alloc, out);
+  }
   if (r != VK_SUCCESS) {
     sl_instance_post(VK_NULL_HANDLE, r);
     return r;
   }
+  fault_instance_created(*out, next);
 
   auto* id = new InstanceData;
   id->instance = *out;
@@ -121,6 +130,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
 static VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkAllocationCallbacks* alloc) {
   InstanceData* id = instance_of(instance);
   if (!id) return;
+  fault_instance_destroyed(instance);
   id->DestroyInstance(instance, alloc);
   se_stop();   // the bridge reader thread must not outlive the layer DLL
   std::unique_lock<std::shared_mutex> lock(g_mu);

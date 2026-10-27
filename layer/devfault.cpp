@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstring>
 #include <deque>
+#include <map>
 #include <thread>
 
 namespace bg3 {
@@ -74,11 +75,97 @@ std::string name_range(VkDeviceAddress lo, VkDeviceAddress hi) {
   return out.empty() ? "no buffer of ours (the game's, or an unregistered one)" : out;
 }
 
+// ---- VK_EXT_device_address_binding_report: every address range the driver binds ----
+bool g_bind_inst = false, g_bind_dev = false;
+std::vector<const char*> g_inst_ext;
+VkPhysicalDeviceAddressBindingReportFeaturesEXT g_f_bind{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT};
+VkDebugUtilsMessengerEXT g_messenger = VK_NULL_HANDLE;
+VkInstance g_messenger_inst = VK_NULL_HANDLE;
+PFN_vkDestroyDebugUtilsMessengerEXT p_destroy_messenger = nullptr;
+struct Bound { VkDeviceSize size; VkObjectType type; uint64_t handle; uint64_t frame; bool internal; };
+std::mutex g_bind_mu;
+std::multimap<VkDeviceAddress, Bound> g_bound;   // live bindings by base address
+struct Unbound { VkDeviceAddress base; Bound b; uint64_t frame; };
+std::deque<Unbound> g_unbound;                    // the most recent unbinds
+constexpr size_t kUnboundKeep = 16384;
+uint64_t g_bind_count = 0, g_unbind_count = 0;
+
+VKAPI_ATTR VkBool32 VKAPI_CALL on_binding(VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT types,
+                                          const VkDebugUtilsMessengerCallbackDataEXT* d, void*) {
+  if (!(types & VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT) || !d) return VK_FALSE;
+  auto* a = reinterpret_cast<const VkDeviceAddressBindingCallbackDataEXT*>(
+      find_in(d->pNext, VK_STRUCTURE_TYPE_DEVICE_ADDRESS_BINDING_CALLBACK_DATA_EXT));
+  if (!a) return VK_FALSE;
+  const VkObjectType ot = d->objectCount ? d->pObjects[0].objectType : VK_OBJECT_TYPE_UNKNOWN;
+  const uint64_t h = d->objectCount ? d->pObjects[0].objectHandle : 0;
+  const uint64_t f = frame_index();
+  std::lock_guard<std::mutex> lock(g_bind_mu);
+  if (a->bindingType == VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT) {
+    g_bound.emplace(a->baseAddress, Bound{a->size, ot, h, f, (a->flags & VK_DEVICE_ADDRESS_BINDING_INTERNAL_OBJECT_BIT_EXT) != 0});
+    ++g_bind_count;
+  } else {
+    Bound b{a->size, ot, h, 0, false};
+    auto range = g_bound.equal_range(a->baseAddress);
+    for (auto it = range.first; it != range.second; ++it)
+      if (it->second.handle == h) {
+        b = it->second;
+        g_bound.erase(it);
+        break;
+      }
+    g_unbound.push_back({a->baseAddress, b, f});
+    if (g_unbound.size() > kUnboundKeep) g_unbound.pop_front();
+    ++g_unbind_count;
+  }
+  return VK_FALSE;
+}
+
+const char* object_name(VkObjectType t) {
+  switch (t) {
+    case VK_OBJECT_TYPE_DEVICE_MEMORY: return "memory";
+    case VK_OBJECT_TYPE_BUFFER: return "buffer";
+    case VK_OBJECT_TYPE_IMAGE: return "image";
+    case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR: return "acceleration structure";
+    case VK_OBJECT_TYPE_QUEUE: return "queue";
+    case VK_OBJECT_TYPE_DEVICE: return "device";
+    default: return "object";
+  }
+}
+
+// Every live or recently unbound driver binding overlapping [lo, hi).
+std::string name_binding(VkDeviceAddress lo, VkDeviceAddress hi) {
+  std::lock_guard<std::mutex> lock(g_bind_mu);
+  if (!g_bind_count) return "";
+  std::string out;
+  char b[256];
+  int n = 0;
+  for (const auto& [base, x] : g_bound)
+    if (base < hi && base + x.size > lo && n++ < 8) {
+      snprintf(b, sizeof b, "%s%s 0x%llx [0x%llx, +%llu) at +%lld, bound frame %llu%s, LIVE", out.empty() ? "" : "; ",
+               object_name(x.type), (unsigned long long)x.handle, (unsigned long long)base, (unsigned long long)x.size,
+               (long long)(lo - base), (unsigned long long)x.frame, x.internal ? " (driver-internal)" : "");
+      out += b;
+    }
+  for (auto it = g_unbound.rbegin(); it != g_unbound.rend(); ++it)
+    if (it->base < hi && it->base + it->b.size > lo && n++ < 12) {
+      snprintf(b, sizeof b, "%s%s 0x%llx [0x%llx, +%llu) at +%lld, bound frame %llu, UNBOUND in frame %llu",
+               out.empty() ? "" : "; ", object_name(it->b.type), (unsigned long long)it->b.handle,
+               (unsigned long long)it->base, (unsigned long long)it->b.size, (long long)(lo - it->base),
+               (unsigned long long)it->b.frame, (unsigned long long)it->frame);
+      out += b;
+    }
+  if (out.empty()) {
+    snprintf(b, sizeof b, "no driver binding (%zu live, %zu recent unbinds recorded)", g_bound.size(), g_unbound.size());
+    out = b;
+  }
+  return out;
+}
+
 }  // namespace
 
 const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
                                                    VkDeviceCreateInfo* scratch) {
   g_enabled = false;
+  g_bind_dev = false;
   if (!cfg_int("rt", 0) || !cfg_int("dev_fault", 1) || !id || !id->GetPhysicalDeviceFeatures2) return ci;
   // Robust buffer access (the game's choice; we do not change it): out-of-range
   // descriptor reads are only defined with it. Our shaders clamp their own.
@@ -90,41 +177,117 @@ const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalD
   id->EnumerateDeviceExtensionProperties(phys, nullptr, &n, nullptr);
   std::vector<VkExtensionProperties> avail(n);
   id->EnumerateDeviceExtensionProperties(phys, nullptr, &n, avail.data());
-  bool have = false;
-  for (auto& a : avail) have = have || !strcmp(a.extensionName, VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
-  if (!have) {
-    log("[fault] %s not offered by the driver: no fault details on a device loss", VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
-    return ci;
-  }
-  VkPhysicalDeviceFaultFeaturesEXT ff{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT};
-  VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &ff};
-  id->GetPhysicalDeviceFeatures2(phys, &f2);
-  if (!ff.deviceFault) {
-    log("[fault] deviceFault feature not supported");
-    return ci;
-  }
+  auto offered = [&](const char* e) {
+    for (auto& a : avail)
+      if (!strcmp(a.extensionName, e)) return true;
+    return false;
+  };
   g_ext_names.assign(ci->ppEnabledExtensionNames, ci->ppEnabledExtensionNames + ci->enabledExtensionCount);
-  bool listed = false;
-  for (auto e : g_ext_names) listed = listed || !strcmp(e, VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
-  if (find_in(ci->pNext, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT)) {
-    // Already asked for by someone else: use it as it is.
-    g_enabled = listed;
-    return ci;
+  auto listed = [&](const char* e) {
+    for (auto x : g_ext_names)
+      if (!strcmp(x, e)) return true;
+    return false;
+  };
+  VkPhysicalDeviceFaultFeaturesEXT ff{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT};
+  VkPhysicalDeviceAddressBindingReportFeaturesEXT bf{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT, &ff};
+  VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &bf};
+  id->GetPhysicalDeviceFeatures2(phys, &f2);
+  const void* next = ci->pNext;
+  bool changed = false;
+  if (!offered(VK_EXT_DEVICE_FAULT_EXTENSION_NAME) || !ff.deviceFault) {
+    log("[fault] %s not usable: no fault details on a device loss", VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
+  } else if (find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT)) {
+    g_enabled = listed(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);   // asked for by someone else: as it is
+  } else {
+    if (!listed(VK_EXT_DEVICE_FAULT_EXTENSION_NAME)) g_ext_names.push_back(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
+    g_f_fault = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT};
+    g_f_fault.deviceFault = VK_TRUE;
+    g_f_fault.pNext = const_cast<void*>(next);
+    next = &g_f_fault;
+    g_enabled = changed = true;
+    log("[fault] + %s (deviceFault)", VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
   }
-  if (!listed) g_ext_names.push_back(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
-  g_f_fault = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT};
-  g_f_fault.deviceFault = VK_TRUE;
-  g_f_fault.deviceFaultVendorBinary = VK_FALSE;
-  g_f_fault.pNext = const_cast<void*>(ci->pNext);
+  // Every device-address range the driver binds or unbinds (the game's too), so a
+  // fault address outside our buffers is still named (needs the instance messenger).
+  if (g_bind_inst && offered(VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME) && bf.reportAddressBinding &&
+      !find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT)) {
+    if (!listed(VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME))
+      g_ext_names.push_back(VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME);
+    g_f_bind = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT};
+    g_f_bind.reportAddressBinding = VK_TRUE;
+    g_f_bind.pNext = const_cast<void*>(next);
+    next = &g_f_bind;
+    g_bind_dev = changed = true;
+    log("[fault] + %s (every address binding is recorded)", VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME);
+  } else {
+    log("[fault] address binding reports off (instance messenger %d, offered %d, feature %d)", int(g_bind_inst),
+        int(offered(VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME)), int(bf.reportAddressBinding));
+  }
+  if (!changed) return ci;
   *scratch = *ci;
-  scratch->pNext = &g_f_fault;
+  scratch->pNext = next;
   scratch->enabledExtensionCount = uint32_t(g_ext_names.size());
   scratch->ppEnabledExtensionNames = g_ext_names.data();
-  g_enabled = true;
-  log("[fault] + %s (deviceFault)", VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
   return scratch;
 }
 
+// ---- instance: a debug-utils messenger for the address binding reports ----
+const VkInstanceCreateInfo* fault_instance_create_info(PFN_vkGetInstanceProcAddr next, const VkInstanceCreateInfo* ci,
+                                                       VkInstanceCreateInfo* scratch) {
+  g_bind_inst = false;
+  if (!next || !ci || !cfg_int("rt", 0) || !cfg_int("dev_fault", 1) || !cfg_int("dev_fault_bindings", 1)) return ci;
+  auto enumerate = reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(
+      next(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties"));
+  bool have = false;
+  if (enumerate) {
+    uint32_t n = 0;
+    enumerate(nullptr, &n, nullptr);
+    std::vector<VkExtensionProperties> avail(n);
+    enumerate(nullptr, &n, avail.data());
+    for (auto& a : avail) have = have || !strcmp(a.extensionName, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  }
+  if (!have) {
+    log("[fault] %s not offered: no address binding reports", VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    return ci;
+  }
+  g_inst_ext.assign(ci->ppEnabledExtensionNames, ci->ppEnabledExtensionNames + ci->enabledExtensionCount);
+  bool listed = false;
+  for (auto e : g_inst_ext) listed = listed || !strcmp(e, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  g_bind_inst = true;
+  if (listed) return ci;
+  g_inst_ext.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  *scratch = *ci;
+  scratch->enabledExtensionCount = uint32_t(g_inst_ext.size());
+  scratch->ppEnabledExtensionNames = g_inst_ext.data();
+  log("[fault] + %s (instance, for the address binding reports)", VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  return scratch;
+}
+
+void fault_instance_created(VkInstance inst, PFN_vkGetInstanceProcAddr next) {
+  if (!g_bind_inst || g_messenger) return;
+  auto create = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(next(inst, "vkCreateDebugUtilsMessengerEXT"));
+  p_destroy_messenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(next(inst, "vkDestroyDebugUtilsMessengerEXT"));
+  if (!create) {
+    g_bind_inst = false;
+    return;
+  }
+  VkDebugUtilsMessengerCreateInfoEXT mi{VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+  mi.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+  mi.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT;
+  mi.pfnUserCallback = &on_binding;
+  if (create(inst, &mi, nullptr, &g_messenger) != VK_SUCCESS) {
+    g_messenger = VK_NULL_HANDLE;
+    g_bind_inst = false;
+    return;
+  }
+  g_messenger_inst = inst;
+}
+
+void fault_instance_destroyed(VkInstance inst) {
+  if (g_messenger && inst == g_messenger_inst && p_destroy_messenger) p_destroy_messenger(inst, g_messenger, nullptr);
+  if (inst == g_messenger_inst) g_messenger = VK_NULL_HANDLE, g_messenger_inst = VK_NULL_HANDLE;
+}
 void fault_device_created(DeviceData* dd, bool enabled) {
   g_enabled = enabled && g_enabled;
   p_fault_info = g_enabled ? reinterpret_cast<PFN_vkGetDeviceFaultInfoEXT>(dd->gdpa(dd->device, "vkGetDeviceFaultInfoEXT"))
@@ -147,6 +310,7 @@ void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size) {
   r.lo = addr;
   r.hi = addr + size;
   r.created = frame_index();
+  log("[fault] range of ours: %s [0x%llx, +%llu)", what, (unsigned long long)addr, (unsigned long long)size);
   g_live.push_back(std::move(r));
 }
 
@@ -197,11 +361,21 @@ static void fault_details(DeviceData* dd, bool quiet) {
     const std::string bvh = bvh_describe_address(a.reportedAddress);
     log("[fault]   %s at 0x%llx (precision %llu): %s%s%s", type_name(a.addressType), (unsigned long long)a.reportedAddress,
         (unsigned long long)a.addressPrecision, name_range(lo, hi).c_str(), bvh.empty() ? "" : "; ", bvh.c_str());
+    const std::string drv = name_binding(lo, hi);
+    if (!drv.empty()) log("[fault]     driver bindings: %s", drv.c_str());
   }
   for (uint32_t i = 0; i < counts.vendorInfoCount && i < vendor.size(); ++i)
     log("[fault]   vendor: \"%s\" code 0x%llx data 0x%llx", vendor[i].description,
         (unsigned long long)vendor[i].vendorFaultCode, (unsigned long long)vendor[i].vendorFaultData);
-  log("[fault] %zu live and %zu recently freed ranges of ours were registered", g_live.size(), g_freed.size());
+  log("[fault] %zu live and %zu recently freed ranges of ours were registered:", g_live.size(), g_freed.size());
+  for (const Range& r : g_live)
+    log("[fault]   ours: %s [0x%llx, 0x%llx) created frame %llu", r.what.c_str(), (unsigned long long)r.lo,
+        (unsigned long long)r.hi, (unsigned long long)r.created);
+  {
+    std::lock_guard<std::mutex> bl(g_bind_mu);
+    log("[fault] driver address bindings: %s; %llu binds, %llu unbinds, %zu live", g_bind_dev ? "recorded" : "OFF",
+        (unsigned long long)g_bind_count, (unsigned long long)g_unbind_count, g_bound.size());
+  }
 }
 
 void fault_on_result(DeviceData* dd, VkResult r, const char* where) {

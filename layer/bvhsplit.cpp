@@ -416,6 +416,8 @@ TlasSlot g_tlas[kSceneSlots];
 uint32_t g_tlas_cap_hint = 0;   // instances the newest TLAS storage was sized for
 int g_tlas_prev = -1;           // slot of the last TLAS build (the refit source)
 uint64_t g_tlas_prev_rec = 0;   // its build record (refit only once submitted)
+uint32_t g_slot_n[kSceneSlots] = {};   // instances each slot's ring region holds (fault reports)
+uint64_t g_slot_frame[kSceneSlots] = {};
 constexpr VkBuildAccelerationStructureFlagsKHR kTlasFlags =
     VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
 // The TLAS is refit while its instance list (count, BLAS and flags in order) holds:
@@ -1217,6 +1219,23 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     tg.geometry.instances.data.deviceAddress = g_ring.addr + rbase;
     uint64_t sig = 1469598103934665603ull;
     for (uint32_t i = 0; i < n; ++i) sig = mix(mix(sig, inst_out[i].accelerationStructureReference), inst_out[i].flags);
+    // Every BLAS reference must lie in one of our chunks (a cheap guard; the fault
+    // report checks each against the BLAS we hold).
+    {
+      static uint32_t bad_logged = 0;
+      for (uint32_t i = 0; i < n; ++i) {
+        const uint64_t r = inst_out[i].accelerationStructureReference;
+        bool in = false;
+        for (const AsChunk& c : g_chunks) in = in || (r >= c.buf.addr && r < c.buf.addr + c.buf.size);
+        if (!in && bad_logged < 20) {
+          ++bad_logged;
+          log("[bvh] WARNING frame %llu slot %u: TLAS instance %u references 0x%llx, outside every BLAS chunk",
+              (unsigned long long)now, slot, i, (unsigned long long)r);
+          bvh_event("frame %llu: instance %u of slot %u references 0x%llx OUTSIDE our chunks", (unsigned long long)now, i,
+                    slot, (unsigned long long)r);
+        }
+      }
+    }
     // Refit: the previous slot's TLAS into this slot's (src != dst, same storage size).
     const bool tlas_refit = g_tlas_valid && g_tlas_prev >= 0 && g_tlas_prev != int(slot) && g_tlas[g_tlas_prev].as &&
                             rec_submitted(g_tlas_prev_rec) &&
@@ -1252,6 +1271,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
               (unsigned long long)now, slot, (unsigned long long)rec, (void*)cmd, n, n_static_written, mesh_builds.size(),
               batch_swaps, dyn_builds.size(), n_new_dyn, g_tlas_since ? "refit" : "build", g_pool_grew ? ", mesh pool GREW" : "");
   }
+  g_slot_n[slot] = n;
+  g_slot_frame[slot] = now;
   ++g_st.builds;
   out->tlas = g_tlas[slot].as;
   out->instances = n;
@@ -1411,6 +1432,46 @@ void bvh_log_state(const char* prefix) {
           prefix, g_meshes.size(), ready, g_dyn.size(), g_chunks.size(), (unsigned long long)(g_pool.size >> 20),
           g_batches.size(), jobs, swaps, g_pending_free.size(), g_tlas_prev, (unsigned long long)g_tlas_prev_rec,
           (unsigned long long)rt_scene_oldest_live(), (unsigned long long)frame_index());
+      // Every slot's TLAS instances: is each BLAS reference one we hold?
+      std::unordered_map<VkDeviceAddress, const char*> live;
+      for (const auto& [k, m] : g_meshes)
+        if (m.as.addr) live[m.as.addr] = "mesh";
+      for (const auto& [k, s] : g_dyn)
+        if (s.as.addr) live[s.as.addr] = "per-draw";
+      for (const JobBatch& b : g_batches)
+        for (const Swap& s : b.swaps)
+          if (s.c.addr) live[s.c.addr] = "pending compaction";
+      std::unordered_map<VkDeviceAddress, uint64_t> pending;
+      for (const PendingFree& p : g_pending_free)
+        if (p.chunk >= 0 && size_t(p.chunk) < g_chunks.size()) pending[g_chunks[p.chunk].buf.addr + p.off] = p.frame;
+      for (uint32_t s = 0; s < kSceneSlots; ++s) {
+        if (!g_slot_n[s] || !g_ring.map || g_slot_n[s] > g_ring_inst) continue;
+        const auto* inst = reinterpret_cast<const VkAccelerationStructureInstanceKHR*>(g_ring.map + VkDeviceSize(s) * g_region_bytes);
+        uint32_t ok = 0, freed = 0, released = 0, foreign = 0, masked = 0;
+        std::string first;
+        for (uint32_t i = 0; i < g_slot_n[s]; ++i) {
+          const uint64_t r = inst[i].accelerationStructureReference;
+          masked += inst[i].mask == 0;
+          if (live.count(r)) {
+            ++ok;
+            continue;
+          }
+          auto pf = pending.find(r);
+          bool in_chunk = false;
+          for (const AsChunk& c : g_chunks) in_chunk = in_chunk || (r >= c.buf.addr && r < c.buf.addr + c.buf.size);
+          (pf != pending.end() ? freed : in_chunk ? released : foreign)++;
+          if (first.size() < 300) {
+            char b[96];
+            snprintf(b, sizeof b, " #%u 0x%llx (%s)", i, (unsigned long long)r,
+                     pf != pending.end() ? "freed, unreleased" : in_chunk ? "RELEASED range" : "NOT OURS");
+            first += b;
+          }
+        }
+        log("%s bvh: slot %u (built frame %llu): %u instances, %u masked; BLAS references: %u held, %u freed but not "
+            "released, %u released, %u outside our chunks%s%s",
+            prefix, s, (unsigned long long)g_slot_frame[s], g_slot_n[s], masked, ok, freed, released, foreign,
+            first.empty() ? "" : ":", first.c_str());
+      }
     }
   }
   {
