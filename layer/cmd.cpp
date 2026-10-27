@@ -230,6 +230,30 @@ bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, ui
       }
     }
   }
+  lock.unlock();   // (geo_buffer_size takes the capture's lock)
+  if (out->buffer) {
+    // A buffer descriptor we build from this must lie inside a live buffer. A set can
+    // hold a destroyed buffer in a binding the game's pipeline does not use, and a
+    // dynamic offset or VK_WHOLE_SIZE can run past the end: either is a wild read
+    // (no robust buffer access). Every vkCreateBuffer is seen (geocapture.cpp), so an
+    // unknown size means a destroyed buffer.
+    static std::atomic<uint32_t> logged{0};
+    const VkDeviceSize size = geo_buffer_size(out->buffer);
+    if (!size || out->offset >= size) {
+      if (logged++ < 20)
+        log("[query] set %u binding %u: buffer %p %s (offset %llu, size %llu): not used", set, binding, (void*)out->buffer,
+            size ? "offset past its end" : "destroyed or unknown", (unsigned long long)out->offset,
+            (unsigned long long)size);
+      *out = Bg3Binding{};
+      return false;
+    }
+    if (out->range == VK_WHOLE_SIZE || out->range > size - out->offset) {
+      if (out->range != VK_WHOLE_SIZE && logged++ < 20)
+        log("[query] set %u binding %u: buffer %p range %llu at %llu exceeds its size %llu: clamped", set, binding,
+            (void*)out->buffer, (unsigned long long)out->range, (unsigned long long)out->offset, (unsigned long long)size);
+      out->range = size - out->offset;
+    }
+  }
   return true;
 }
 

@@ -166,7 +166,8 @@ void aftermath_note_spirv(const char* what, const void* code, size_t size, const
     path = g_dir + "\\shaders\\" + hx + ".spv";
     if (!file_mtime(path)) write_file(path, code, size);
   }
-  const std::string line = std::string(hx) + " " + path + " " + what + "\n";
+  // Tab-separated: the path has spaces ("Code Projects").
+  const std::string line = std::string(hx) + "\t" + path + "\t" + what + "\n";
   FILE* f = nullptr;
   if (fopen_s(&f, (g_dir + "\\shader_map.txt").c_str(), "ab") == 0 && f) {
     fwrite(line.data(), 1, line.size(), f);

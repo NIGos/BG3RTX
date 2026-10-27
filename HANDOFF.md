@@ -798,3 +798,64 @@ the cap):
   records D-LS before those later dispatches have contributed RT3 / SSS profiles to the
   snapshot. D-LS then shades those classes with the fallbacks; to be checked in a visual
   run if this happens.
+
+## 16. Dump 20261027-115759 mapped to an instruction: the SSS profile read (eighteenth commit)
+
+**Same signature as before:** D-LS only, MMU fault, read, "failed to translate", VA 0,
+no resource.
+
+**The PC mapping had never worked.** `shader_map.txt` was space-separated and the path
+has spaces ("Code Projects"), so the decoder never found the SPIR-V. The map is now
+tab-separated and the decoder reads both formats. Re-decoded:
+- faulted warp at PC 0x9e80 -> `comp.10000.spv:4442`;
+- active warps at 0xa010 / 0xa060 -> 4524 / 4532.
+
+In `spirv-dis` of that module (`captures/aftermath/shaders/27f2eff5f9e83320.spv`):
+- **Line 4442** is `%3248 = OpLoad %uint %3247`, the 4th word of
+  `lSssProfiles.Load4(a)` in `bg3_mat_setup`: the skin / translucency profile read.
+- Lines 4524 / 4532 are the SSS transmittance math right after it.
+
+The index is clamped to `GetDimensions`, so the read can only fault if the *descriptor*
+points outside live memory.
+- `lSssProfiles` is the game's set 1 binding 28, captured with `query_binding`
+  (`snapshot`, or the later-permutation path in `gi_on_dispatch_pre`).
+- A set may legally hold a **destroyed buffer** in a binding the game's pipeline does
+  not use.
+- A dynamic offset (or the heuristic index when the set layout is unknown), or
+  VK_WHOLE_SIZE, can make offset + range run past the buffer.
+- Our push descriptor then makes D-LS read unmapped memory: no resource for Aftermath to
+  name.
+- The sun pass reads no game set-1 buffer, and the SSS path runs only for skin and
+  translucent pixels: party members at the Grymforge forge.
+
+**Fix, in the layer, for every game buffer we bind** (`query_binding`; light list, SSS
+profiles, frame constants, alpha UBOs):
+- the buffer must be live and the offset inside it, else the binding is reported
+  missing (the core then uses its fallbacks);
+- the range is clamped to the buffer's end.
+
+Each case is logged (`[query] set S binding B: buffer ... destroyed or unknown / offset
+past its end / range clamped`), at most 20 times. Every `vkCreateBuffer` is hooked
+(`geocapture.cpp`), so an unknown size means a destroyed buffer.
+
+**`shader_debug=2`:** `-O3 -Zi -fspv-debug=file,source,line`, which gives OpLine line
+info on the optimised code. All RT shaders pass DXC and `spirv-val` offline with it.
+`shader_debug=1` (NonSemantic) still fails at the `RT_ALPHA_CANDIDATE` macro.
+
+**Queued** (Grymforge, legacy, `aftermath=1`, `stop_on_dump`, `session: false`):
+- `shaderdebug2-legacy-grym` (`shader_debug=2`, repeat 6): the baseline of this build and
+  the line mapping.
+- One ablation each, repeat 4:
+
+| job | switch | what it removes |
+|---|---|---|
+| `abl-norays-grym` | `ls_min_radius=1e9` | every D-LS ray; surface, SSS and sun evaluation still run |
+| `abl-nosoft-grym` | `ls_soft=0` | sphere sampling (rays to the centre) |
+| `abl-nolightdata-grym` | `ls_lights=0` | per-light data (match pass, `lsSlots`, R) |
+| `abl-nosun-grym` | `ao_direct=0` | the sun term and set 2 (LUT, cloud textures) |
+| `abl-nomatclasses-grym` | `mat_classes=0` | the material classes: no `lSssProfiles` / RT3 reads |
+
+`ls_shadowed` is already 0 by default (no atlas reads), so it is not in the list. If the
+`query_binding` fix holds, the baseline is clean and the ablations then only confirm it.
+If the baseline still faults, the job whose switch clears the fault points at the
+culprit; `mat_classes=0` is the prediction.

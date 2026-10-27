@@ -78,11 +78,22 @@ int main(int argc, char** argv) {
     std::ifstream m(c.dir + "\\shader_map.txt");
     std::string line;
     while (std::getline(m, line)) {
-      std::istringstream in(line);
+      // "hash<TAB>path<TAB>what"; older maps used spaces (paths with spaces: split at ".spv ").
       std::string hx, path, what;
-      in >> hx >> path;
-      std::getline(in, what);
-      if (!what.empty() && what[0] == ' ') what.erase(0, 1);
+      const size_t t1 = line.find('\t');
+      if (t1 != std::string::npos) {
+        const size_t t2 = line.find('\t', t1 + 1);
+        hx = line.substr(0, t1);
+        path = line.substr(t1 + 1, t2 == std::string::npos ? std::string::npos : t2 - t1 - 1);
+        what = t2 == std::string::npos ? "" : line.substr(t2 + 1);
+      } else {
+        const size_t s1 = line.find(' '), e = line.find(".spv ");
+        if (s1 == std::string::npos || e == std::string::npos) continue;
+        hx = line.substr(0, s1);
+        path = line.substr(s1 + 1, e + 4 - s1 - 1);
+        what = line.substr(e + 5);
+      }
+      if (!what.empty() && what.back() == '\r') what.pop_back();
       if (!hx.empty()) c.shaders[std::stoull(hx, nullptr, 16)] = {path, what};
     }
   }
