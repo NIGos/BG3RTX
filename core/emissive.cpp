@@ -149,7 +149,7 @@ void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, 
     }
   }
   Push pc{{w, h}, mode, host->cfg_float("rt_em_tol", 0.01f), host->cfg_float("rt_em_fx_thr", 0.05f),
-          has_cam2 ? 1u : 0u, {0, 0}};
+          has_cam2 ? 1u : 0u, {float(host->cfg_int("rt_em_filter", 0)), host->cfg_float("rt_em_aniso", 16.0f)}};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;

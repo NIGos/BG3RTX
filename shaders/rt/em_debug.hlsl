@@ -29,7 +29,7 @@ struct Camera2 { float4 v[14]; };   // the lighting's set 0 b2: v[13].xyz = abso
 [[vk::binding(5, 0)]] Texture2D<float4> gFx;     // the game's effects target
 [[vk::binding(6, 0)]] ConstantBuffer<Camera2> cam2;
 
-struct Push { uint2 full; uint mode; float tol; float thr; uint has_cam2; float pad1, pad2; };
+struct Push { uint2 full; uint mode; float tol; float thr; uint has_cam2; float filt; float aniso; };   // filt: rt_em_filter
 [[vk::push_constant]] Push pc;
 
 float3 ray_at(float2 uv) {
@@ -93,7 +93,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
     // The emissive surface at the pixel's own depth (the depth buffer says where the
     // primary ray stops; the main TLAS is not needed).
     const float eps = dist * pc.tol + 0.01;
-    const bool hit = em_lookup(float3(0, 0, 0), dir, dist, eps, px, shift, L, rec);
+    // The rays through the next pixel in x and y: the game's UV derivatives (rt_em_filter 1/2).
+    const float3 dxd = normalize(ray_at(uv + float2(1.0 / float(pc.full.x), 0.0)));
+    const float3 dyd = normalize(ray_at(uv + float2(0.0, 1.0 / float(pc.full.y))));
+    const bool hit = em_lookup_g(float3(0, 0, 0), dir, dist, eps, px, shift, dxd, dyd, uint(pc.filt + 0.5), pc.aniso, L, rec);
     const float ours = em_lum(L), game = em_lum(fx);
     bool bright = game > pc.thr;
     if (bright) stat(7);

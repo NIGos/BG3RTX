@@ -2997,3 +2997,42 @@ noise.
 - The planned optimisation is a BLAS refit while the draw list and the triangle counts are
   unchanged. Our command buffers are fenced and never dropped, unlike the game's.
 
+### 13.16 Budget entry and the filtering hypothesis
+
+**Budget (approved).** SETTINGS_DESIGN §5.4, row #8: "D-EM data" at 0.7 ms, taken from the
+pan headroom.
+- It is measured: 0.044 ms of capture plus the largest build, 0.62 ms in GF.
+- The pan ledger, against the 15.4 ms line:
+
+  | Item | Claim | Headroom left |
+  |---|---|---|
+  | Ultra pan | 13.4 ms | 2.0 ms |
+  | SHaRC | ≤ 0.6 ms | 1.4 ms |
+  | D-EM | 0.7 ms | **0.7 ms** |
+
+- The static frame is ≈ 12.2 ms.
+- The BLAS refit planned after em10 lowers the D-EM claim.
+
+**Is the mask's filtering the bias** (AF `222986b8` 1.93 and `304be1c7` 0.64, GF `304be1c7`
++3.8%)?
+- The game samples its glow maps with implicit derivatives: hardware LOD and anisotropic
+  filtering. Our check samples at an isotropic ray-cone LOD.
+- Replicating that offline needs the glow textures and UVs dumped and a BC decoder. Neither
+  exists here, and the game's paks are not extracted.
+- The replica therefore runs on the GPU instead, over the game's own bound texture,
+  live-switchable in the check (`rt_em_filter`):
+  - **The derivatives:** the UV's change per screen pixel, as the game's fragment shader
+    has it. Each comes from the rays through the next pixel in x and in y, met with the hit
+    triangle's plane (ray differentials, `em_uv_on_plane`).
+  - **1:** the hardware's isotropic LOD, log2(max |dx|, |dy| in texels).
+  - **2:** anisotropic filtering as the Vulkan spec's reference describes it: up to
+    `rt_em_aniso` (16) trilinear probes along the footprint's major axis, at the LOD of
+    major / probes (`em_sample_grad`).
+  - **0 (default):** unchanged.
+- The game's sampler state (its anisotropy level, any LOD bias) is not tracked. 16× is
+  assumed: BG3's default, and graphicSettings.lsx has no override.
+- The em10 jobs `af-filt1/2` and `gf-filt0/1/2` measure the three modes per family with
+  `scripts/qa/em_gate.py`. Whichever mode removes the biases becomes the default for every
+  `em_lookup` consumer. If none does, the hypothesis is rejected and the next candidate is
+  the B10G11R11 target and the alpha blending of the overlapping emitters.
+
