@@ -3,9 +3,11 @@
 // core/ls_lights.cpp) to the lighting's light array b25, one thread per array slot.
 //
 // A slot matches the nearest uploaded light whose absolute position is within that
-// light's tolerance (5 cm + its jitter for lights that stay put, more for item and
-// character lights, which move between the bridge's 4 Hz exports) and whose radius
-// agrees with 1/m0.w within 2%. The result, per slot, in lsSlots row 0 (4096 x 3):
+// light's position tolerance and whose radius agrees with 1/m0.w within that light's radius
+// tolerance (both per record, derived in core/ls_lights.cpp: float precision and the
+// bridge's rounding for lights that stay put, speed x export age for item, character and
+// visual lights, which move between the bridge's 4 Hz exports). The result, per slot, in
+// lsSlots row 0 (4096 x 3):
 //   x source radius (asfloat; 0xFFFFFFFF = no match), y Bg3RtLightFlags,
 //   z owner | type << 8 | 1 << 16 (matched), w the uploaded light's index.
 // Rows 1-2 cache what that result was computed from: the slot's absolute position and
@@ -27,7 +29,7 @@
 [[vk::binding(46, 0)]] [[vk::image_format("rgba32ui")]] RWTexture2D<uint4> lsSlots;
 
 groupshared float4 sPos[64];   // xyz absolute position, w radius
-groupshared float4 sAux[64];   // x source radius, y tolerance
+groupshared float4 sAux[64];   // x source radius, y position tolerance, z intensity, w radius tolerance
 groupshared uint4 sU[64];      // flags, owner | type << 8 | channel << 16, db index, index
 groupshared uint sAny;         // a slot of this group needs the search
 
@@ -81,7 +83,10 @@ void main(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
         float3 d = w - sPos[j].xyz;
         float q = dot(d, d);
         float tol = sAux[j].y;
-        if (q <= tol * tol && q < bq && abs(sPos[j].w - r) <= 0.02 * max(r, 0.1) + 0.01) {
+        // Both tolerances come with the record (core/ls_lights.cpp, where they are derived):
+        // y position (float ulps at its magnitude + the bridge's %.4f, or for moving lights
+        // their speed x the export's age), w radius (%.3f + float ulps of 1/inv_r).
+        if (q <= tol * tol && q < bq && abs(sPos[j].w - r) <= sAux[j].w) {
           bq = q;
           best = uint4(asuint(sAux[j].x), sU[j].x, (sU[j].y & 0xFFFFu) | 0x10000u, base + j);
         }

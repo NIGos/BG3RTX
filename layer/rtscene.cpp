@@ -417,7 +417,7 @@ void timestamp(VkCommandBuffer cmd, int slot, uint32_t i) {
 // ================= host-facing entry points =================
 
 uint32_t rt_instance_api(uint32_t requested) {
-  if (!cfg_int("rt", 0)) return requested;
+  if (!cfg_int("rt", 1)) return requested;
   // 1.2 is what the AS/ray query dependencies need; 1.3 also makes our own
   // shaders (DXC -fspv-target-env=vulkan1.3, SPIR-V 1.6) valid for the device,
   // and is what Streamline asks for anyway (fg>=2).
@@ -523,7 +523,7 @@ void rt_device_features_undo() {
 const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
                                                 VkDeviceCreateInfo* scratch, bool sharc) {
   g_sharc_bits = 0;
-  if (!cfg_int("rt", 0) || !id) return ci;
+  if (!cfg_int("rt", 1) || !id) return ci;
   VkPhysicalDeviceProperties props{};
   id->GetPhysicalDeviceProperties(phys, &props);
   if (id->api_version < VK_API_VERSION_1_2 || props.apiVersion < VK_API_VERSION_1_2) {
@@ -664,7 +664,7 @@ void rt_device_created(DeviceData* dd, bool enabled) {
   }
   g_feature_edits.clear();   // the device exists: nothing to undo any more
   if (!enabled) {
-    if (cfg_int("rt", 0)) log("[rt] ray tracing is NOT enabled on the device");
+    if (cfg_int("rt", 1)) log("[rt] ray tracing is NOT enabled on the device");
     return;
   }
   p_bda = dd->vk.GetBufferDeviceAddress;

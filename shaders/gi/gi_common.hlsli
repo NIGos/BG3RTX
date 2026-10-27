@@ -71,14 +71,14 @@ struct Push {
   uint sharc_fx;           // sharc_inject.hlsl: 1 the D-EM effects target is bound at 49 (emission)
   // Hybrid ray-traced GI (gi_trace_rt.hlsl)
   float gi_rt_radius;   // ray length and falloff radius (world units)
-  float gi_rt_tol;      // relative depth agreement for an on-screen hit
+  float gi_rt_tol;      // gi_rt_depth_k: multiplier on the derived on-screen-hit depth tolerance (1; rt/depth_tol.hlsli)
   uint gi_rt_fallback;  // 0 occlude, no bounce; 1 ignore; 2 occlude + mean on-screen radiance
   uint rt_stats;       // 1: count into rtStats (rt_common.hlsli)
   // Quality pass (docs/QUALITY.md)
   float sun_radius;    // half-angle of the sun disc (rad; the game: 0.00459); 0 = hard shadows
   uint res_shift;      // GI resolution: 1 half res (own denoise), 0 full res, 1 spp, for RR
   uint qa_zero;      // QA light-off traces (docs/QA.md): bit 0 sun mask 0, bit 1 local-light visibility 0, bit 2 AO 0
-  uint pad3;
+  uint rt_max_cand;  // QA (rt_max_candidates): ray-query candidate cap, 0 = kMaxCandidates (rt_common.hlsli)
   // D-LS ray-traced local-light shadows (rt_local_shadows.hlsl)
   float ls_source_radius;  // light sphere radius for soft shadows (world units)
   float ls_clear;          // rays stop this short of the light (its own fixture)
@@ -96,7 +96,7 @@ struct Push {
   float rf_max_rough;     // perceptual roughness at which reflections have faded to the probe
   float rf_mirror_rough;  // below it one deterministic mirror ray
   float rf_tmax;          // reflection ray length (world units)
-  float rf_depth_tol;     // relative depth agreement of an on-screen hit
+  float rf_depth_tol;     // rf_depth_k: multiplier on the derived on-screen-hit depth tolerance (1; rt/depth_tol.hlsli)
   float rf_edge;          // screen-edge fade width (uv)
   float rf_strength;
   uint rf_debug;
@@ -197,18 +197,45 @@ uint hash(uint x) {
   x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16;
   return x;
 }
-// Depth-aware 3x3 gather of the accumulated half-resolution history.
+
+#include "../rt/depth_tol.hlsli"
+
+// This frame's full-resolution sample of half-res texel q (gi_fp), whose depth giRawDepth /
+// giHistDepthOut hold; pixel centre, render pixels.
+float2 gi_sample_px(int2 q) {
+  if (pc.res_shift == 0) return float2(q) + 0.5;
+  return float2(min(uint2(q) * 2u + uint2(pc.frame & 1u, (pc.frame >> 1) & 1u), pc.full - 1u)) + 0.5;
+}
+
+// Depth-aware 3x3 gather of the accumulated half-resolution history (joint bilateral
+// upsample). Depth weight exp(-|dr| / sigma), dr the difference of camera distances (rotation
+// invariant; view z would differ by the rays' own length change off axis), sigma =
+// depth_tol: the largest difference two samples of the same surface show at their actual
+// offset on screen (|q's sample - fp|, render pixels; both from this frame, so the same
+// jitter: no jitter term), both values from the depth buffer (2 roundings). The slope is the
+// depth buffer's own geometric normal at fp. Was: sigma = 1% of the depth.
+// The centre's x2 is the spatial kernel of the half-res denoise (not a depth tolerance),
+// unchanged; exact bilinear weights would drop most of that denoise.
 float4 gather_history(uint2 fp, float d) {
   // Full res (RR mode): RR denoises; no spatial filter of our own.
   if (pc.res_shift == 0) return giHistOut[min(fp, pc.half - 1)];
   int2 hp = int2(fp >> pc.res_shift);
+  const float2 px = float2(fp) + 0.5;
+  const float2 inv_full = 1.0 / float2(pc.full);
+  const float3 P = ray_at(px * inv_full) * d;
+  const float r = length(P);
+  const float pa = pixel_angle(px * inv_full);
+  const float ndv = r > 0.0 ? dot(depth_geo_normal(int2(fp), P), P) / r : 0.0;
   float4 acc = 0;
   float wsum = 0;
   for (int y = -1; y <= 1; ++y)
     for (int x = -1; x <= 1; ++x) {
       int2 q = clamp(hp + int2(x, y), int2(0, 0), int2(pc.half) - 1);
       float hd = giHistDepthOut[q];
-      float w = hd > 0.0 ? exp(-abs(hd - d) / (d * 0.01)) * (x == 0 && y == 0 ? 2.0 : 1.0) : 0.0;
+      float2 qs = gi_sample_px(q);
+      float rq = hd * length(ray_at(qs * inv_full));
+      float sigma = depth_tol(r, pa, ndv, length(qs - px), 2.0);
+      float w = hd > 0.0 ? exp(-abs(rq - r) / sigma) * (x == 0 && y == 0 ? 2.0 : 1.0) : 0.0;
       acc += giHistOut[q] * w;
       wsum += w;
     }

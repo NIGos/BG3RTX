@@ -361,7 +361,7 @@ static std::unique_lock<std::mutex> queue_lock() {
 void headless_on_swapchain() {
   bool on = cfg_int("headless", 0) != 0;
   // Streamline owns the swapchain and presentation with frame generation on.
-  if (on && cfg_int("fg", 0) >= 2) {
+  if (on && cfg_int("fg", 2) >= 2) {
     log("[layer] headless ignored: frame generation (fg>=2) needs real presentation");
     on = false;
   }

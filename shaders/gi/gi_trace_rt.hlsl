@@ -7,9 +7,14 @@
 // and alpha-tested geometry lets light through (rt_common.hlsli).
 //
 // Radiance at a hit: if the hit projects on screen and the depth buffer there
-// is the hit itself (within gi_rt_depth_tol), it is last frame's lit radiance
+// is the hit itself (rt/depth_tol.hlsli depth_same_surface: the footprint, slope,
+// jitter and depth precision at that pixel, against rtOrigin's TLAS surface there when
+// rt_origin=1, times gi_rt_depth_k), it is last frame's lit radiance
 // at that pixel (prevRadiance), as in the screen-space trace. Otherwise the
-// hit point is not visible in any image we have. gi_rt_fallback chooses:
+// hit point is not visible in any image we have. A query the candidate cap aborted
+// (RtHit.aborted, rt_common.hlsli: its closest hit is unknown) is such a hit too, never
+// a miss: it occludes under the same gi_rt_fallback rule, and is never shaded from the
+// screen or the radiance cache (its hit point would be a guess). gi_rt_fallback chooses:
 //   0 (default) it occludes the game's ambient but adds no bounce: the game's
 //     IBL is what the hidden surface would mostly reflect, and that is exactly
 //     the term the occlusion removes, so this is a slight darkening bias;
@@ -33,6 +38,7 @@
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
+  g_rt_pass = kRtPassGI;   // aborted queries count as this pass's unknowns (rt_common.hlsli)
   uint2 id = tid.xy;
   if (any(id >= pc.half)) return;
   uint2 fp = gi_fp(id);
@@ -73,19 +79,30 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #if SHARC_QUERY_PASS
     RtHit hh = rt_closest_hit(o, dir, R, cone);
     float t = hh.t;
+    const bool aborted = hh.aborted;
 #else
-    float t = rt_closest(o, dir, R, cone);
+    bool aborted;
+    float t = rt_closest(o, dir, R, cone, aborted);
 #endif
+    // Aborted: the closest hit is somewhere in [0, min(t, R)] (t: a committed hit, possibly
+    // farther than the true one; -1: none yet). Its occlusion weight is then the fade's mean
+    // over a uniform distance in that range, 1 - u^2 / 3 with u = min(t, R) / R (u = 1: 2/3).
+    const float u = aborted ? (t >= 0.0 ? saturate(t / R) : 1.0) : 0.0;
     float k = saturate(t / R);
-    float w = 1.0 - k * k;
+    float w = aborted ? 1.0 - u * u / 3.0 : 1.0 - k * k;
     float2 quv;
     float qd;
-    bool onscreen = t >= 0.0 && project(inv, o + dir * t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
+    bool onscreen = !aborted && t >= 0.0 && project(inv, o + dir * t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
     bool visible = false;
     if (onscreen) {
       int2 qp = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
       float sd = gDepth.Load(int3(qp, 0));
-      if (sd > 0.0 && abs(qd - sd) < sd * pc.gi_rt_tol) {
+      // The surface at qp: rtOrigin's geometric normal (TLAS, else the depth buffer's) and
+      // its TLAS surface along qp's ray; without rt_origin the depth buffer's own normal.
+      const float4 oq = rt_origin_at(uint2(qp));
+      const bool has_tlas = pc.rt_origin != 0u && oq.w < kOriginNoHit;
+      const float3 ngq = pc.rt_origin != 0u ? oq.xyz : depth_geo_normal(qp, ray_at((float2(qp) + 0.5) / float2(pc.full)) * sd);
+      if (sd > 0.0 && depth_same_surface(qp, qd, sd, ngq, has_tlas, oq.w, pc.gi_rt_tol)) {
         float3 L = prev_bounce_at(qp);
         if (all(isfinite(L))) {
           bounce += L * w;
@@ -96,16 +113,27 @@ void main(uint3 tid : SV_DispatchThreadID) {
       }
     }
     if (pc.rt_stats != 0) {
+      // An aborted query counts as a hit (not a miss) in none of the three tiers: the
+      // logged screen / hidden / off-screen shares then sum to 100% minus the unknowns
+      // (also counted per pass by rt_count_unknown).
       uint bin = (id.x >> 3) * 7 + (id.y >> 3) * 13;
       stat_add(8, true, bin);
-      stat_add(9, t >= 0.0, bin);
+      stat_add(9, t >= 0.0 || aborted, bin);
       stat_add(10, visible, bin);
       stat_add(11, onscreen && !visible, bin);
-      stat_add(12, t >= 0.0 && !onscreen, bin);
+      stat_add(12, t >= 0.0 && !aborted && !onscreen, bin);
     }
-    if (t < 0.0) continue;
+    if (t < 0.0 && !aborted) continue;
 #if SHARC_QUERY_PASS
-    if (visible) {
+    if (aborted) {
+      // Unknown: never the cache (the hit point is not known), straight to the fallback with
+      // the base radius's fade, as a hidden hit there would get: its mean over a uniform
+      // distance in [0, T], T = min(t, R) (R with nothing committed), of max(0, 1 - (x/R0)^2):
+      // 1 - (T/R0)^2 / 3 for T <= R0, else (2/3) R0 / T.
+      const float T = t >= 0.0 ? min(t, R) : R;
+      tiers.z += 1.0;
+      w = T <= R0 ? 1.0 - (T / R0) * (T / R0) / 3.0 : (2.0 / 3.0) * R0 / max(T, 1e-6);
+    } else if (visible) {
       tiers.y += 1.0;
     } else {
       sharc_stat(kShGiHidden, onscreen);

@@ -44,6 +44,25 @@
 // Both give bit-identical output to the pre-optimisation pass (ls_check=1 compares them
 // per pixel against its frozen copy, shaders/gi/ls_ref).
 //
+// Unknown rays (rt_common.hlsli rt_visibility: the candidate cap aborted the query): that
+// light keeps the game's own term at that pixel, t = s, so its delta is 0: the atlas PCF
+// for a light with a game shadow map, 1 for a light without one. For the latter the game's
+// own visibility IS unshadowed (it never shadows those lights): this is the game's
+// behaviour for that light, not a "lit by default" for the ray.
+//
+// QA ambient floor (qa_zero bit 1, docs/QA.md; ls_qa_off below): every point/spot light the
+// game's tiled lighting evaluated at the pixel gets t = 0 and its transmission term ct is
+// removed too, so the pass subtracts exactly what the game added for that light; no rays are
+// traced. This includes the lights D-LS normally leaves alone (ls_shadowed=0, ranges below
+// ls_min_radius, owners off in ls_owners, ls_noshadow). It cannot remove: a light with a game
+// shadow map on a hair pixel (the game's hair self-shadow is not modelled, so c*s is not
+// what it added), projector lights (cluster z, not recomputed), anything outside the tiled
+// lighting's froxel list (forward-shaded draws, fog in-scatter, emissives), and nothing at
+// all on frames D-LS does not run (rt_local_shadows=0, no TLAS, sun-set ring full) or in
+// the validation views ls_debug=4-7. Exact-k / RIS sampling (ls_k, ls_samples) is bypassed
+// under it: the exact sum, no noise.
+// ls_debug=10 (LS_FULL): pixels where any light's ray was unknown, in yellow.
+//
 // Validation (ls_debug=4/5/6): rt_local_shadows_prep.hlsl zeroes the game's AO and
 // sun mask before the lighting, so its output holds only direct local light (plus
 // projector lights and in-scatter, which are not recomputed).
@@ -89,6 +108,9 @@ bool ls_atlas_fallback(float3 lpos) {
   return pc.ls_shadowed == 2u || (pc.ls_shadowed == 3u && !ls_light_on_screen(lpos));
 }
 
+// QA ambient floor (qa_zero bit 1): every light this pass can remove gets visibility 0.
+bool ls_qa_off() { return (pc.qa_zero & 2u) != 0u; }
+
 uint3 ls_rand(uint2 fp, uint key) { return pcg3d(uint3(fp, pc.frame * 1024u + (key & 1023u))); }
 float u01(uint x) { return float(x >> 8) * (1.0 / 16777216.0); }
 
@@ -96,10 +118,10 @@ float3 n_world(float3 nv) { return nv.x * cam.m6_r0.xyz + nv.y * cam.m6_r1.xyz +
 float3 n_view_at(int2 p) { return decode_normal(gNormal.Load(int3(clamp(p, int2(0, 0), int2(pc.full) - 1), 0)).xy); }
 float3 nan0(float3 v) { return any(isnan(v)) ? float3(0, 0, 0) : v; }
 
-// Visibility of the light from the surface: 1 ray, towards the centre or a
-// point of its sphere. `key` selects the random stream. The ray starts on the side
-// of the surface its direction leaves on (back-lit transmission, hair).
-float trace_light(float3 P, float3 N, float4 org, float3 lpos, uint2 fp, uint key, RtCone cone, float R) {
+// Visibility of the light from the surface (kRtLit / kRtOccluded / kRtUnknown): 1 ray,
+// towards the centre or a point of its sphere. `key` selects the random stream. The ray
+// starts on the side of the surface its direction leaves on (back-lit transmission, hair).
+uint trace_light(float3 P, float3 N, float4 org, float3 lpos, uint2 fp, uint key, RtCone cone, float R) {
   float3 L = lpos - P;
   float dist = length(L);
   float3 Ld = L / max(dist, 1e-6);
@@ -117,8 +139,8 @@ float trace_light(float3 P, float3 N, float4 org, float3 lpos, uint2 fp, uint ke
   }
   float3 o = rt_ray_origin_o(org, P, N, cone.f0, dir);
   float tmax = length(lpos - o) - max(R, pc.ls_clear);
-  if (tmax <= 0.0) return 1.0;
-  return rt_occluded(o, dir, tmax, cone) ? 0.0 : 1.0;
+  if (tmax <= 0.0) return kRtLit;
+  return rt_visibility(o, dir, tmax, cone);
 }
 
 // The pixel as f469db78 sets it up, in two parts: what the light tests and the rays need
@@ -280,18 +302,19 @@ bool ls_light_traced(uint li, bool spot, LsLite s, out float3 lpos, out float R)
   R = pc.ls_source_radius;
   Bg3Light l = load_light(li);
   lpos = l.pos;
+  const bool qa = ls_qa_off();   // QA: every light but hair x shadow map (see the top)
   // Lights with a game shadow map: ls_shadowed=0 keeps the game's term; hair replaces its
   // self-shadow by the atlas term for them (3033c895:483), which is not modelled: the game's.
   if ((l.flags & 1u) != 0u) {
-    if (pc.ls_shadowed == 0u || s.cls == kMatHair) return false;
-  } else if (!(1.0 / max(l.inv_r, 1e-12) >= pc.ls_min_radius)) {
+    if ((pc.ls_shadowed == 0u && !qa) || s.cls == kMatHair) return false;
+  } else if (!qa && !(1.0 / max(l.inv_r, 1e-12) >= pc.ls_min_radius)) {
     return false;
   }
   if ((pc.ls_flags & 1u) != 0u) {
     uint4 si = lsSlots[uint2(min(li, 4095u), 0)];
     if ((si.z & 0x10000u) != 0u) {
       R = asfloat(si.x);
-      if (ls_skip_light(si)) return false;
+      if (!qa && ls_skip_light(si)) return false;
     }
   }
   // bg3_light_eval_mat's "the game adds nothing for this light" tests, in its order and arithmetic.
@@ -320,8 +343,9 @@ void ls_light_ray(uint li, out float3 lpos, out float R) {
 
 #if !LS_FULL
 // Phases 1 and 2 for the list entries [base, base + n), n <= 32: x the entries traced,
-// y those of them whose ray found no occluder.
-uint2 ls_trace_chunk(uint2 fp, LsLite s, uint base, uint n, uint end_p) {
+// y those of them whose ray found no occluder, z those whose ray was aborted (unknown).
+// QA (ls_qa_off): no rays, y = z = 0.
+uint3 ls_trace_chunk(uint2 fp, LsLite s, uint base, uint n, uint end_p) {
   uint traced = 0;
   for (uint j = 0; j < n; ++j) {
     float3 lpos;
@@ -329,24 +353,28 @@ uint2 ls_trace_chunk(uint2 fp, LsLite s, uint base, uint n, uint end_p) {
     if (ls_light_traced(bg3_light_index(base + j), base + j >= end_p, s, lpos, R)) traced |= 1u << j;
   }
   // the k-th traced light of every lane together
-  uint lit = 0;
-  for (uint m = traced; m != 0u; m &= m - 1u) {
+  uint lit = 0, unk = 0;
+  for (uint m = ls_qa_off() ? 0u : traced; m != 0u; m &= m - 1u) {
     const uint j = firstbitlow(m);
     const uint li = bg3_light_index(base + j);
     float3 lpos;
     float R;
     ls_light_ray(li, lpos, R);
-    if (trace_light(s.P, s.N, s.org, lpos, fp, li, s.cone, R) > 0.5) lit |= 1u << j;
+    const uint vs = trace_light(s.P, s.N, s.org, lpos, fp, li, s.cone, R);
+    if (vs == kRtLit) lit |= 1u << j;
+    if (vs == kRtUnknown) unk |= 1u << j;
   }
-  return uint2(traced, lit);
+  return uint3(traced, lit, unk);
 }
 
 bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
+  g_rt_pass = kRtPassLocal;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
   LsLite s = (LsLite)0;
   if (!ls_lite(fp, d, s)) return false;   // the lighting skips unlit pixels
+  const bool qa = ls_qa_off();
 
   const uint3 cl = bg3_cluster(fp, d);
   const uint end_p = cl.x + cl.y, end_s = end_p + cl.z;
@@ -357,8 +385,8 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   [loop] do {
     const uint n = min(end_s - base, 32u);
     // 1-2. the entries this pass traces, and their rays
-    const uint2 tl = ls_trace_chunk(fp, s, base, n, end_p);
-    const uint traced = tl.x, lit = tl.y;
+    const uint3 tl = ls_trace_chunk(fp, s, base, n, end_p);
+    const uint traced = tl.x, lit = tl.y, unk = tl.z;
     // 3. the rest of the surface (at an index the compiler cannot prove equal to fp, so that
     // it reloads it here instead of keeping it live across the rays), the exact terms
     ls_surface(WaveReadLaneAt(fp, WaveGetLaneIndex()), s, px.sf, px.mt);
@@ -375,6 +403,11 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       if ((l.flags & 1u) != 0u) {
         s = bg3_atlas_shadow(l, spot, px.sf, Ld, d2, saturate(nol));
         if (ls_atlas_fallback(l.pos)) t = min(v, s);
+      }
+      if ((unk >> j) & 1u) t = s;   // unknown ray: the game's own term (see the top)
+      if (qa) {                     // QA ambient floor: none of this light (see the top)
+        t = 0.0;
+        dd -= ct;
       }
       dd += cd * (t - s);
       ds += cs * (t - s);
@@ -409,8 +442,10 @@ uint fx(float v) { return uint(clamp(v, 0.0, 64.0) * 256.0 + 0.5); }
 
 bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
+  g_rt_pass = kRtPassLocal;
   LsPixel px = (LsPixel)0;
   if (!ls_pixel(fp, px)) return false;
+  const bool qa = ls_qa_off();
   const float d = px.d;
   const Bg3Surface sf = px.sf;
   const Bg3Mat mt = px.mt;
@@ -426,10 +461,11 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   float3 vd_all = 0;              // debug: traced-visible part
   float3 td = 0, ts = 0;          // direct light of the traced lights after our shadow (ao_direct)
   uint n_lights = 0, n_shadowed = 0, n_traced = 0, n_occ = 0;
+  uint n_unk = 0;                 // rays aborted by the candidate cap (unknown; ls_debug=10)
   uint n_matched = 0, n_se = 0, n_skipped = 0, n_unmatched = 0;   // per-light data (ls_stats)
   float3 dbg_owner = 0;                                            // ls_debug=9
   // RIS reservoirs (ls_samples > 0)
-  const uint ns = min(pc.ls_samples, 2u);
+  const uint ns = qa ? 0u : min(pc.ls_samples, 2u);   // (QA: the exact sum)
   float wsum = 0;
   float3 rd[2] = {float3(0, 0, 0), float3(0, 0, 0)}, rs[2] = {float3(0, 0, 0), float3(0, 0, 0)}, rp[2] = {float3(0, 0, 0), float3(0, 0, 0)};
   float rw[2] = {0, 0}, rsh[2] = {1, 1}, rsel[2] = {0, 0}, rR[2] = {0, 0};
@@ -446,7 +482,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     ++n_lights;
     bool shadowed = (l.flags & 1u) != 0u;
     float s = 1.0;
-    if (shadowed && (validate || pc.ls_shadowed != 0)) s = bg3_atlas_shadow(l, spot, sf, Ld, d2, saturate(nol));
+    if (shadowed && (validate || pc.ls_shadowed != 0 || qa)) s = bg3_atlas_shadow(l, spot, sf, Ld, d2, saturate(nol));
     n_shadowed += shadowed ? 1u : 0u;
     if (validate) {
       md += cd * s + ct;
@@ -455,7 +491,8 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     }
     // Hair replaces its self-shadow by the atlas term for lights with a shadow map
     // (3033c895:483), which bg3_light_eval_mat does not model: those stay the game's.
-    bool traced = shadowed ? pc.ls_shadowed != 0 && cls != kMatHair : (1.0 / max(l.inv_r, 1e-12) >= pc.ls_min_radius);
+    // (QA ambient floor: every light but hair x shadow map, see the top.)
+    bool traced = shadowed ? (pc.ls_shadowed != 0 || qa) && cls != kMatHair : (qa || 1.0 / max(l.inv_r, 1e-12) >= pc.ls_min_radius);
     // Per-light data: the source radius, and whether this owner's lights are shadowed.
     float R = pc.ls_source_radius;
     if ((pc.ls_flags & 1u) != 0u) {
@@ -466,7 +503,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
         ++n_matched;
         n_se += (si.y & 0x10000u) != 0u ? 1u : 0u;
         R = asfloat(si.x);
-        if (ls_skip_light(si)) {
+        if (!qa && ls_skip_light(si)) {
           n_skipped += traced ? 1u : 0u;
           traced = false;
         }
@@ -479,10 +516,17 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     cd_all += cd;
     cs_all += cs;
     if (ns == 0) {
-      float v = trace_light(sf.P, sf.N, sf.org, l.pos, fp, li, cone, R);
-      ++n_traced;
-      n_occ += v < 0.5 ? 1u : 0u;
+      const uint vs = qa ? kRtOccluded : trace_light(sf.P, sf.N, sf.org, l.pos, fp, li, cone, R);
+      float v = vs == kRtLit ? 1.0 : 0.0;
+      n_traced += qa ? 0u : 1u;
+      n_occ += vs == kRtOccluded && !qa ? 1u : 0u;
       float t = shadowed && ls_atlas_fallback(l.pos) ? min(v, s) : v;
+      if (vs == kRtUnknown) v = t = s;   // unknown ray: the game's own term (see the top)
+      n_unk += vs == kRtUnknown ? 1u : 0u;
+      if (qa) {                          // QA ambient floor: none of this light
+        t = 0.0;
+        dd -= ct;
+      }
       dd += cd * (t - s);
       ds += cs * (t - s);
       td += cd * t;
@@ -505,10 +549,13 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (ns > 0 && wsum > 0.0) {
     [unroll] for (uint k = 0; k < 2; ++k) {
       if (k >= ns || !(rw[k] > 0.0)) continue;
-      float v = trace_light(sf.P, sf.N, sf.org, rp[k], fp, rk[k] ^ (0x300u + k), cone, rR[k]);
+      const uint vs = trace_light(sf.P, sf.N, sf.org, rp[k], fp, rk[k] ^ (0x300u + k), cone, rR[k]);
+      float v = vs == kRtLit ? 1.0 : 0.0;
       ++n_traced;
-      n_occ += v < 0.5 ? 1u : 0u;
+      n_occ += vs == kRtOccluded ? 1u : 0u;
       float t = rsel[k] > 0.5 ? min(v, rsh[k]) : v;
+      if (vs == kRtUnknown) v = t = rsh[k];   // unknown ray: the game's own term
+      n_unk += vs == kRtUnknown ? 1u : 0u;
       float inv_p = wsum / (rw[k] * float(ns));
       dd += rd[k] * ((t - rsh[k]) * inv_p);
       ds += rs[k] * ((t - rsh[k]) * inv_p);
@@ -584,6 +631,13 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     os = 0;
   } else if (pc.ls_debug == 8) {   // light given back by ao_direct (AO no longer on traced direct light), x4
     od = (xd + xs) * 4.0;
+    os = 0;
+  } else if (pc.ls_debug == 10) {   // in-frame A/B of the unknown fallback: yellow where a light's ray
+    // was aborted by the candidate cap (that light kept the game's term), over this pixel's
+    // final output in grey (luminance x 0.2). Force with rt_max_candidates.
+    float k = saturate(pc.ls_strength);
+    float3 fo = max(gd + dd * (fdif * k) + xd, 0.0) + max(gs + ds * (fspec * k) + xs, 0.0);
+    od = n_unk > 0u ? float3(0.5, 0.5, 0.0) : min(lum(fo), 1.0).xxx * 0.2;
     os = 0;
   } else {
     float k = saturate(pc.ls_strength);
@@ -682,7 +736,8 @@ static const uint kLsNone = 0xFFFFFFFFu;
 
 uint ls_k() { return min(pc.ls_kmode & 15u, 4u); }
 uint ls_rest_n() { return min((pc.ls_kmode >> 4) & 15u, 2u); }
-bool ls_k_active() { return ls_k() != 0u && pc.ls_samples == 0u && pc.ls_debug == 0u; }
+// (QA ambient floor: off, the exact sum of ls_main.)
+bool ls_k_active() { return ls_k() != 0u && pc.ls_samples == 0u && pc.ls_debug == 0u && !ls_qa_off(); }
 
 uint3 ls_rand_sel(uint2 fp) { return pcg3d(uint3(fp.x | 0x100000u, fp.y, pc.frame)); }
 
@@ -700,6 +755,7 @@ uint ls_sel(uint q, uint4 ex, uint2 rs) {
 
 bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
+  g_rt_pass = kRtPassLocal;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
   LsLite s = (LsLite)0;
@@ -768,8 +824,8 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
   ex.yw = uint2(min(ex.y, ex.w), max(ex.y, ex.w));
   ex.yz = uint2(min(ex.y, ex.z), max(ex.y, ex.z));
 
-  // 2. the rays (at most K + NR per pixel)
-  uint lit = 0;
+  // 2. the rays (at most K + NR per pixel); unk: aborted (unknown) ones
+  uint lit = 0, unk = 0;
   for (uint q = 0; q < 6u; ++q) {
     const uint e = ls_sel(q, ex, rs);
     if (e == kLsNone) continue;
@@ -778,7 +834,9 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
     float R;
     ls_light_ray(li, lpos, R);
     // the second remainder sample may repeat the first light: its own random stream
-    if (trace_light(s.P, s.N, s.org, lpos, fp, q == 5u ? li ^ 0x155u : li, s.cone, R) > 0.5) lit |= 1u << q;
+    const uint vs = trace_light(s.P, s.N, s.org, lpos, fp, q == 5u ? li ^ 0x155u : li, s.cone, R);
+    if (vs == kRtLit) lit |= 1u << q;
+    if (vs == kRtUnknown) unk |= 1u << q;
   }
 
   // 3. the surface (reloaded, as above), the exact terms of the selected lights
@@ -798,6 +856,7 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
       sh = bg3_atlas_shadow(l, spot, px.sf, Ld, d2, saturate(nol));
       if (ls_atlas_fallback(l.pos)) t = min(v, sh);
     }
+    if ((unk >> q3) & 1u) t = sh;   // unknown ray: the game's own term (see the top)
     // 1 for the exact lights, 1 / (n p_j) for a remainder sample
     const float f = q3 < 4u ? 1.0 : rsum / ((q3 == 4u ? rw.x : rw.y) * float(NR));
     dd += cd * ((t - sh) * f);
@@ -813,7 +872,7 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
     uint n_rays = 0, n_occ = 0, n_rr = 0, n_rocc = 0;
     for (uint q4 = 0; q4 < 6u; ++q4) {
       if (ls_sel(q4, ex, rs) == kLsNone) continue;
-      const bool occ = ((lit >> q4) & 1u) == 0u;
+      const bool occ = ((lit >> q4) & 1u) == 0u && ((unk >> q4) & 1u) == 0u;
       ++n_rays;
       n_occ += occ ? 1u : 0u;
       n_rr += q4 >= 4u ? 1u : 0u;

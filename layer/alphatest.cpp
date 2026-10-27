@@ -215,7 +215,7 @@ bool finite(const float* f, size_t n) {
 }  // namespace
 
 void alpha_device_created(DeviceData* dd) {
-  if (g_dd || !cfg_int("rt", 0)) return;
+  if (g_dd || !cfg_int("rt", 1)) return;
   g_dd = dd;
   const VkDeviceFuncs& vk = dd->vk;
   VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};

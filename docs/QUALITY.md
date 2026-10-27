@@ -378,9 +378,11 @@ reproduce them.
   ships with its derivation or is listed there for a decision.
 - **First application: the sun** (`rt_sun_replace=1`, TRACK_D 12). The traced visibility
   replaces the game's sun mask where it is trusted: no roof volume of the asset DB on the
-  sun ray, the ray stays in the captured view frustum until it is above the visible scene,
-  and the game's mask is lit within `rt_sun_near` (1.5 m), so only shadow-map errors next
-  to lit areas (filtering, acne, cascade transitions) are corrected. Untrusted pixels keep
+  sun ray, and the ray stays in the captured view frustum until it has risen above the
+  visible scene (or `rt_sun_rise`). Those geometric terms are the whole trust: the former
+  proximity term (the game's mask lit within `rt_sun_near`) is gone, since it trusted the
+  game's mask it was meant to correct; `rt_sun_near` now only splits the in-frame A/B debug
+  class (`rt_debug=7`) into "at the game's shadow edge" and "farther". Untrusted pixels keep
   `min(game, traced)`. Cloud shadows are applied by the lighting after the mask and stay.
 
 **R1 Sampling.**

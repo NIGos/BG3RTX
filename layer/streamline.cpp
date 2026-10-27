@@ -981,7 +981,7 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
   // is initialised once, and binds to the last instance created before the device.
   if (g_in_sl_init || g_dd) return;
   if (!g_sl_init) {
-  int fg = cfg_int("fg", 0);
+  int fg = cfg_int("fg", 2);
   if (fg < 2 && !cfg_int("sl", 0)) {
     log("[sl] fg=%d: Streamline not loaded", fg);
     return;
@@ -1764,7 +1764,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     return dd->vk.QueuePresentKHR(queue, info);
   }
   uint64_t frame = frame_index();
-  int fg = cfg_int("fg", 0);
+  int fg = cfg_int("fg", 2);
   uint32_t gen = fg >= 2 ? uint32_t(std::min(fg, 4) - 1) : 0;
 
   bool ready = false;

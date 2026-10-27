@@ -207,6 +207,69 @@ static void test_dev_ini_is_high() {
       CHECK_EQ(kv.first + "=" + get(m, kv.first.c_str()), kv.first + "=" + kv.second);
 }
 
+// common/settings.h is the one source of every default: kDefaults must hold exactly the keys
+// and values of bg3rtx.ini, kReleaseDefaults those of data/release.ini
+// (python scripts/gen_settings_defaults.py regenerates both after an ini edit).
+static void check_table_equals_ini(const KV* table, size_t n, const char* file) {
+  Map ini = parse_ini(read_file(std::string(BG3RTX_SOURCE_DIR "/") + file));
+  CHECK(!ini.empty());
+  Map tab;
+  for (size_t i = 0; i < n; ++i) {
+    if (tab.count(table[i].key)) CHECK_EQ(std::string(file) + ": duplicate " + table[i].key, "");
+    tab[table[i].key] = table[i].value;
+  }
+  bool same = true;
+  for (auto& kv : ini)
+    if (get(tab, kv.first.c_str()) != kv.second) {
+      same = false;
+      CHECK_EQ(std::string(file) + " " + kv.first + "=" + get(tab, kv.first.c_str()),
+               std::string(file) + " " + kv.first + "=" + kv.second);
+    }
+  for (auto& kv : tab)
+    if (!ini.count(kv.first)) {
+      same = false;
+      CHECK_EQ(std::string("settings.h has ") + kv.first + ", " + file + " does not", "");
+    }
+  CHECK(ini.size() == tab.size());
+  if (!same) std::printf("common/settings.h defaults are stale: run python scripts/gen_settings_defaults.py\n");
+}
+
+static void test_defaults_one_source() {
+  check_table_equals_ini(kDefaults, sizeof kDefaults / sizeof kDefaults[0], "bg3rtx.ini");
+  check_table_equals_ini(kReleaseDefaults, sizeof kReleaseDefaults / sizeof kReleaseDefaults[0], "data/release.ini");
+  // Every release key is a key of bg3rtx.ini (the profile only switches developer keys off).
+  for (const KV& kv : kReleaseDefaults) {
+    bool found = false;
+    for (const KV& d : kDefaults) found = found || std::string(d.key) == kv.key;
+    CHECK(found);
+  }
+
+  // The fallback: kDefaults with the release profile on top.
+  CHECK(code_default("gi_rays") && std::string(code_default("gi_rays")) == get(parse_ini(read_file(BG3RTX_SOURCE_DIR "/bg3rtx.ini")), "gi_rays"));
+  CHECK_EQ(code_default("dump_shaders"), "0");
+  CHECK_EQ(code_default("dev"), "0");
+  CHECK(code_default("no_such_key") == nullptr);
+  CHECK_EQ(lookup(Map{}, "rr"), code_default("rr"));
+
+  // "High = the developer defaults": the High preset writes the table's value for every key
+  // it sets, and the defaults alone (no ini at all) read back as High.
+  for (auto& kv : expand_preset(kHigh)) {
+    const char* d = code_default(kv.first);
+    CHECK(d != nullptr);
+    if (d && !same_value(d, kv.second)) CHECK_EQ(kv.first + "=" + d, kv.first + "=" + kv.second);
+  }
+  Map defaults = code_defaults();
+  CHECK(matching_preset(knob_values(defaults)) == kHigh);
+  Map resolved = merge_layers({&defaults});
+  CHECK_EQ(get(resolved, "rt_build"), "1");   // auto with the RT effects on
+  // A user preset over the defaults still expands and overrides them.
+  Map user = parse_ini("preset=low\n");
+  Map m = merge_layers({&defaults, &user});
+  CHECK_EQ(get(m, "rt_build"), "0");
+  CHECK_EQ(get(m, "gi_rays"), "2");
+  CHECK(matching_preset(knob_values(m)) == kLow);
+}
+
 static void test_user_ini_writer() {
   std::vector<int> v = preset_values(kHigh);
   v[knob_index("reflections")] = 3;   // Rough
@@ -311,6 +374,7 @@ int main(int argc, char** argv) {
   test_derived_rt_build();
   test_read_back();
   test_dev_ini_is_high();
+  test_defaults_one_source();
   test_user_ini_writer();
   test_dependencies_and_caps();
   test_schema_file();

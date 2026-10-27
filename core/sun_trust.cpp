@@ -14,9 +14,11 @@ static_assert(kSunHeader + kSunMaxVolumes * sizeof(Bg3DbVolume) <= kSlotBytes, "
 // Header (bytes): 0 volume count, 4 flags (bit 0 replace, 1 roof volumes known, 2 off-screen
 // test, 3 counters), 8 rise (m), 12 scene top (absolute y; -1e30 none), 16 frustum margin
 // (uv), 20 ramp start (fraction of the needed path inside the frustum at which trust starts),
-// 24 rt_sun_roof_mode (0 min(game, RT), 1 game mask, 2 shadow), 28 rt_sun_near (m; 0 off).
+// 24 rt_sun_roof_mode (0 min(game, RT), 1 game mask, 2 shadow), 28 rt_sun_near (m; 0 off;
+// only the edge/far split of the in-frame A/B debug class, never trust).
 // GPU-written: 32 scene top this frame (order-preserving uint), 36 camera position
-// (absolute, 3 floats), 64-191 counters (32 uints: rt_shadow.hlsl, rt_sun_resolve.hlsl).
+// (absolute, 3 floats), 48 the farthest pixel that needs the roof test (m, float bits;
+// rt_sun_resolve.hlsl), 64-191 counters (32 uints: rt_shadow.hlsl, rt_sun_resolve.hlsl).
 enum : uint32_t { kFReplace = 1, kFRoofs = 2, kFOffscreen = 4, kFStats = 8 };
 constexpr uint32_t kCounters = 32;   // bytes 64-191
 
@@ -36,6 +38,11 @@ uint64_t g_calls = 0;
 bool g_have_cam = false;
 float g_cam[3] = {}, g_last_query[3] = {1e30f, 1e30f, 1e30f};
 float g_top = -1e30f;   // absolute y of the highest visible point (latest readback)
+float g_dmax = -1.0f;   // farthest pixel needing the roof test (m, latest readback; < 0 none yet)
+float g_radius = 0.0f;  // roof query radius of the latest refresh
+int32_t g_over_logged = -2;   // the level of the last roof-overflow log line
+uint64_t g_over_frames = 0, g_over_dropped = 0;   // stats window: frames over kSunMaxVolumes, volumes dropped
+uint32_t g_over_max = 0;
 std::vector<Bg3DbVolume> g_vol;
 uint32_t g_total = 0;
 int32_t g_level = -2;
@@ -79,12 +86,39 @@ bool ensure() {
   return true;
 }
 
-// Re-reads the roof volumes around the camera.
+// The roof query radius. A roof volume matters to a pixel only if that pixel's sun ray
+// meets it. The pixel is at most g_dmax from the camera (the farthest pixel whose trust
+// still depends on the roof test, measured on the GPU), and its ray counts for rt_tmax
+// (the trace's own reach, at which the off-screen test also stops), so every volume that
+// matters has a point within g_dmax + rt_tmax of the camera and passes api_roof_volumes'
+// test (centre distance minus bounding radius <= radius). Before the first readback the
+// pixels are taken to be within rt_tmax (the scene-top readback's own range): 2 rt_tmax.
+// rt_sun_roof_radius > 0 overrides it (manual experiments only).
+float roof_radius() {
+  const float manual = host->cfg_float("rt_sun_roof_radius", 0.0f);
+  if (manual > 0.0f) return manual;
+  const float tmax = host->cfg_float("rt_tmax", 300.0f);
+  return (g_dmax >= 0.0f ? g_dmax : tmax) + tmax;
+}
+
+// Re-reads the roof volumes around the camera, nearest first (api_roof_volumes sorts by
+// distance). Beyond kSunMaxVolumes the farthest are dropped: logged once per level with
+// the count, and counted in the "sun stats" line.
 void refresh(const Bg3AssetDbApi* a, float pad_xz, float pad_y) {
-  const float radius = host->cfg_float("rt_sun_roof_radius", 120.0f);
+  const float radius = roof_radius();
+  g_radius = radius;
   g_vol.resize(kSunMaxVolumes);
   g_total = a->roof_volumes(g_cam, radius, g_vol.data(), kSunMaxVolumes);
   g_vol.resize(g_total < kSunMaxVolumes ? g_total : kSunMaxVolumes);
+  if (g_total > kSunMaxVolumes) {
+    const int32_t level = a->current_level(nullptr, nullptr);
+    if (level != g_over_logged) {
+      g_over_logged = level;
+      host->log("sun: WARNING %u roof volumes within %.0f m of the camera, only the nearest %u uploaded "
+                "(kSunMaxVolumes): %u dropped, pixels under them can be trusted (leak)",
+                g_total, radius, kSunMaxVolumes, g_total - kSunMaxVolumes);
+    }
+  }
   for (Bg3DbVolume& v : g_vol) {   // padding: eaves overhang the trigger, the roof sits above it
     float up[3];
     const float q[4] = {v.rot[0], v.rot[1], v.rot[2], v.rot[3]};
@@ -112,6 +146,9 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
     uint32_t top;
     memcpy(&top, slot + 32, 4);
     if (top != 0) g_top = from_ordered(top);
+    float dmax;   // 0: the resolve pass did not run (rt_sun_replace=0) or no pixel needed roofs
+    memcpy(&dmax, slot + 48, 4);
+    if (std::isfinite(dmax) && dmax > 0.0f) g_dmax = dmax;
     const uint32_t* c = reinterpret_cast<const uint32_t*>(slot + 64);
     for (uint32_t i = 0; i < kCounters; ++i) g_sum[i] += c[i];
     ++g_sum_n;
@@ -128,8 +165,13 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
       refresh(a, host->cfg_float("rt_sun_roof_pad", 1.0f), host->cfg_float("rt_sun_roof_up", 3.0f));
     if (level != g_level)
       host->log("sun: rt_sun_replace %d: level %s, %u roof volumes within %.0f m of the camera (%zu uploaded)", replace,
-                lname, g_total, host->cfg_float("rt_sun_roof_radius", 120.0f), g_vol.size());
+                lname, g_total, g_radius, g_vol.size());
     g_level = level;
+    if (g_total > kSunMaxVolumes) {
+      ++g_over_frames;
+      g_over_dropped += g_total - kSunMaxVolumes;
+      if (g_total > g_over_max) g_over_max = g_total;
+    }
   } else {
     g_vol.clear();
   }
@@ -143,11 +185,11 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
   const float pad_top = host->cfg_float("rt_sun_top_pad", 2.0f);
   // rt_sun_top=0: the ray need only rise rt_sun_rise above the pixel (the scene top, the
   // highest visible point, keeps nearly every outdoor pixel off screen behind tree tops).
-  const bool use_top = host->cfg_int("rt_sun_top", 1) != 0;
+  const bool use_top = host->cfg_int("rt_sun_top", 0) != 0;
   float hf[6] = {host->cfg_float("rt_sun_rise", 6.0f), use_top && g_top > -1e29f ? g_top + pad_top : -1e30f,
                  host->cfg_float("rt_sun_margin", 0.0f), host->cfg_float("rt_sun_ramp", 0.75f), 0.0f, 0.0f};
   uint32_t mode = uint32_t(host->cfg_int("rt_sun_roof_mode", 0));
-  const float near_m = host->cfg_float("rt_sun_near", 1.5f);
+  const float near_m = host->cfg_float("rt_sun_near", 0.0f);   // A/B debug split only
   memcpy(slot + 0, &n, 4);
   memcpy(slot + 4, &flags, 4);
   memcpy(slot + 8, hf, 16);
@@ -156,6 +198,7 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
   memset(slot + 32, 0, 4);
   float nan[3] = {NAN, NAN, NAN};
   memcpy(slot + 36, nan, sizeof nan);
+  memset(slot + 48, 0, 4);
   memset(slot + 64, 0, kCounters * 4);
   if (n) memcpy(slot + kSunHeader, g_vol.data(), n * sizeof(Bg3DbVolume));
   // Stage into the device-local image (header + this frame's volumes).
@@ -188,17 +231,19 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
     const double px = double(g_sum[0] ? g_sum[0] : 1), dis = double(g_sum[2] ? g_sum[2] : 1);
     host->log("sun stats (%u frames, replace %d, %zu roof volumes, scene top %.1f): traced %.1f%% of px, lit %.1f%%; "
               "game dark & RT lit %.2f%% of traced px: replaced (lit) %.1f%%, partly %.1f%%, kept by roofs %.1f%%, "
-              "kept off screen %.1f%%, kept far from the game's lit mask %.1f%%; px under roofs %.1f%%, off-screen "
-              "ramp %.1f%%; game lit & RT shadowed %.2f%%; mean brightening %.4f per traced px",
+              "kept off screen %.1f%%; px under roofs %.1f%%, off-screen ramp %.1f%%; game lit & RT shadowed %.2f%%; "
+              "mean brightening %.4f per traced px; roof query %.0f m (farthest roof-tested px %.0f m), over "
+              "kSunMaxVolumes on %llu frames (max %u volumes, %.1f dropped per such frame)",
               g_sum_n, int(active), g_vol.size(), g_top, 100.0 * g_sum[0] / double(g_sum[15] ? g_sum[15] : 1),
               100.0 * g_sum[1] / px, 100.0 * g_sum[2] / px, 100.0 * g_sum[3] / dis, 100.0 * g_sum[4] / dis,
-              100.0 * g_sum[5] / dis, 100.0 * g_sum[6] / dis, 100.0 * g_sum[11] / dis, 100.0 * g_sum[7] / px,
-              100.0 * g_sum[8] / px, 100.0 * g_sum[9] / px, g_sum[10] / 255.0 / px);
+              100.0 * g_sum[5] / dis, 100.0 * g_sum[6] / dis, 100.0 * g_sum[7] / px, 100.0 * g_sum[8] / px,
+              100.0 * g_sum[9] / px, g_sum[10] / 255.0 / px, g_radius, g_dmax, (unsigned long long)g_over_frames,
+              g_over_max, g_over_frames ? double(g_over_dropped) / double(g_over_frames) : 0.0);
     // In-frame A/B (rt_sun_resolve.hlsl): the written mask against min(game, traced) of the
-    // same pixel and frame. "At the edge": the game's own mask is partly lit there, or lit
-    // within half of rt_sun_near.
+    // same pixel and frame, by at least one R8 code (1/255). "At the edge": the game's own
+    // mask is partly lit there, or lit within half of rt_sun_near (a debug split only).
     const double all = double(g_sum[15] ? g_sum[15] : 1), br = double(g_sum[16] ? g_sum[16] : 1);
-    host->log("sun check (%u frames, replace %d): brightened by > 0.1 against min(game, RT) on %.3f%% of px (%.0f "
+    host->log("sun check (%u frames, replace %d): brightened by >= 1/255 against min(game, RT) on %.3f%% of px (%.0f "
               "per frame): at the game's shadow edge %.1f%%, farther %.1f%% (far: %.3f%% of px); darker than min "
               "%.4f%% of px; mean gain %.5f per px (%.1f%% of it at the edge)",
               g_sum_n, int(active), 100.0 * g_sum[16] / all, double(g_sum[16]) / g_sum_n, 100.0 * g_sum[17] / br,
@@ -206,6 +251,8 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
               100.0 * g_sum[20] / double(g_sum[10] ? g_sum[10] : 1));
     memset(g_sum, 0, sizeof g_sum);
     g_sum_n = 0;
+    g_over_frames = g_over_dropped = 0;
+    g_over_max = 0;
   }
   return true;
 }
@@ -255,6 +302,11 @@ void sunt_release() {
   g_total = 0;
   g_level = -2;
   g_top = -1e30f;
+  g_dmax = -1.0f;
+  g_radius = 0.0f;
+  g_over_logged = -2;
+  g_over_frames = g_over_dropped = 0;
+  g_over_max = 0;
   memset(g_sum, 0, sizeof g_sum);
   g_sum_n = 0;
 }

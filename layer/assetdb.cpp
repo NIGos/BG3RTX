@@ -708,9 +708,10 @@ uint32_t api_runtime_lights(const float pos[3], float radius, Bg3RtLight* out, u
       L.channel = s.channel;
       L.db_index = UINT32_MAX;
       L.name = s.name;
-      // The database's record of a placed light: same position (5 cm + its jitter).
+      // The database's record of a placed light: the same position, to float precision and
+      // the export's rounding, + its jitter (se_static_tol; no camera in this comparison).
       if (s.owner == BG3_RTL_OWNER_PLACED) {
-        float best = 0.05f + s.move_amount;
+        float best = se_static_tol(s.pos, 0.0f, s.move_amount);
         best *= best;
         for (size_t k = 0; k < cand.size(); ++k) {
           float e = dist2(s.pos, d->lights[cand[k]].pos);
@@ -734,9 +735,10 @@ uint32_t api_runtime_lights(const float pos[3], float radius, Bg3RtLight* out, u
     for (size_t k = 0; k < cand.size(); ++k) {
       if (taken[k]) continue;
       const Bg3DbLight& D = d->lights[cand[k]];
-      // Within the bridge's range a placed light it did not report is not loaded now
-      // (a sub-level the story has not streamed in): leave it out.
-      if (se && dist2(D.pos, se->host) < 55.0f * 55.0f) continue;
+      // Where the bridge's export covers (its 60 m around the host, within the Lua's vertical
+      // cell range; se_covers) a placed light it did not report is not loaded now (a
+      // sub-level the story has not streamed in): leave it out.
+      if (se && se_covers(*se, D.pos)) continue;
       Bg3RtLight L{};
       memcpy(L.pos, D.pos, sizeof L.pos);
       L.radius = D.range;
@@ -1041,6 +1043,7 @@ struct Pending {
   uint64_t frame = 0;
   VkDeviceSize lights = 0, proj = 0, heads = 0, index = 0;   // bytes copied
   bool recorded = false;
+  double wall = 0;   // se_now_s() when the copy was recorded (the "[se] join" moving-light tolerance)
 };
 Pending g_pending;
 uint64_t g_next_check = 0;
@@ -1124,6 +1127,7 @@ void assetdb_dispatch_pre(VkCommandBuffer cmd) {
                             nullptr);
   p.frame = frame_index();
   p.recorded = true;
+  p.wall = se_now_s();
   g_pending = p;
 }
 
@@ -1429,13 +1433,18 @@ void join_check(Db& d, const Pending& p) {
   }
   std::sort(dists.begin(), dists.end());
   // Coverage with the Script Extender bridge (docs/SE_BRIDGE.md): the froxel-listed point
-  // and spot lights that the bridge's export holds, by position (5 cm + jitter for lights
-  // that stay put; 3 m for character and item lights, which move between the 4 Hz
-  // exports) and radius (2%).
+  // and spot lights that the bridge's export holds, by the rules of the D-LS join
+  // (core/ls_lights.cpp): lights that stay put (placed) by position to float precision and
+  // the export's rounding + jitter (se_static_tol) and radius (se_static_radius_tol); the
+  // lights that move (every other owner) within ls_dyn_speed x the time between the export
+  // and the frame these light positions were copied from, and by se_moving_radius_tol.
   if (auto se = se_snapshot()) {
     uint32_t c_db = 0, c_se = 0, c_any = 0, by_owner[5] = {}, se_dist_n = 0;
-    float se_dist_max = 0;
+    float se_dist_max = 0, rad_dev_static = 0, rad_dev_moving = 0;
     std::string miss;
+    const float reach = (std::max)(cfg_float("ls_lights_radius", 80.0f), 0.0f);
+    const float dt = float(std::fabs(p.wall - se->time));
+    const float moving_tol = (std::max)(cfg_float("ls_dyn_speed", kSeMoveSpeedMax), 0.0f) * dt;
     for (const RtLight& L : rt) {
       if (!L.referenced) continue;
       const bool in_db = nearest(d, g_grid, L.w, tol, nullptr, [&](uint32_t) { return true; }) != kNone;
@@ -1444,16 +1453,20 @@ void join_check(Db& d, const Pending& p) {
       float bq = 1e30f;
       for (size_t k = 0; k < se->lights.size(); ++k) {
         const SeLight& s = se->lights[k];
-        if (s.type == 2 || std::fabs(s.radius - r) > 0.02f * std::max(r, 0.1f)) continue;
-        const bool moves = s.owner == BG3_RTL_OWNER_CHARACTER || s.owner == BG3_RTL_OWNER_ITEM;
-        const float t = moves ? 3.0f : tol + s.move_amount;
+        const bool moves = s.owner != BG3_RTL_OWNER_PLACED;
+        if (s.type == 2 || std::fabs(s.radius - r) > (moves ? se_moving_radius_tol(r) : se_static_radius_tol(r)))
+          continue;
+        const float t = se_static_tol(s.pos, reach, s.move_amount) + (moves ? moving_tol : 0.0f);
         float q = dist2(L.w, s.pos);
         if (q <= t * t && q < bq) bq = q, best = int(k);
       }
       c_db += in_db;
       if (best >= 0) {
         ++c_se;
-        ++by_owner[std::min<uint32_t>(se->lights[best].owner, 4u)];
+        const SeLight& s = se->lights[best];
+        float& dev = s.owner != BG3_RTL_OWNER_PLACED ? rad_dev_moving : rad_dev_static;
+        dev = (std::max)(dev, std::fabs(s.radius - r) / (std::max)(r, 0.1f));
+        ++by_owner[std::min<uint32_t>(s.owner, 4u)];
         se_dist_max = std::max(se_dist_max, std::sqrt(bq));
         ++se_dist_n;
       } else if (!in_db && miss.size() < 400) {
@@ -1466,10 +1479,11 @@ void join_check(Db& d, const Pending& p) {
     const uint32_t n = n_ref_total(ref);
     log("[se] join: %u froxel-listed point/spot lights: database %u (%.0f%%), bridge %u (%.0f%%), bridge + database %u "
         "(%.0f%%); bridge matches by owner: placed %u, item %u, scenery %u, character %u, unknown %u; max distance "
-        "%.3f m; export %u, %.2f s old, %zu lights; not covered:%s",
+        "%.3f m; radius disagreement max %.2e (placed) / %.2e (moving, relative); moving tolerance %.2f m (%.3f s "
+        "between export and frame); export %u, %.2f s old, %zu lights; not covered:%s",
         n, c_db, n ? 100.0 * c_db / n : 0.0, c_se, n ? 100.0 * c_se / n : 0.0, c_any, n ? 100.0 * c_any / n : 0.0,
-        by_owner[1], by_owner[2], by_owner[3], by_owner[4], by_owner[0], se_dist_max, se->seq, se_age_s(*se),
-        se->lights.size(), miss.empty() ? " none" : miss.c_str());
+        by_owner[1], by_owner[2], by_owner[3], by_owner[4], by_owner[0], se_dist_max, rad_dev_static, rad_dev_moving,
+        moving_tol, dt, se->seq, se_age_s(*se), se->lights.size(), miss.empty() ? " none" : miss.c_str());
   } else {
     log("[se] join: no fresh bridge export (database only)");
   }

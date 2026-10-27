@@ -17,8 +17,13 @@
 // a: which geometry an in-front/behind error comes from (x3: 1 alpha vt, 2 alpha tex, 3 opaque;
 //    rt_debug=3/5 only), else the trust from the geometry: 0 not traced (back face),
 //    0.25 under a roof volume, 0.5 + 0.5 x the off-screen trust (rt_sun_resolve.hlsl adds
-//    0.125: far from any pixel the game's mask has lit)
+//    0.125: far from any pixel the game's mask has lit), kSunUnknownCode: the ray was
+//    aborted by the candidate cap (unknown), the game's mask is kept
 [[vk::binding(19, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> rtVis;
+// 8/255 in the RGBA8 image: 8 codes above "not traced" (0) and 7 below the 0.06 (15.3
+// codes) that rt_sun_resolve.hlsl reads as "traced", so it is untraced there, and
+// rt_debug=6 tells it apart from 0 by v.a > 4/255 (half-way between the two codes).
+static const float kSunUnknownCode = 8.0 / 255.0;
 
 // ---- rt_sun_replace: where the traced visibility replaces the game's mask (core/sun_trust.h,
 // docs/TRACK_D_RT.md 12; the header layout is in sun_trust.hlsli).
@@ -80,6 +85,7 @@ float sun_offscreen_trust(float3 P, float3 L, float cam_y) {
 void main(uint3 tid : SV_DispatchThreadID) {
   uint2 fp = tid.xy;
   if (any(fp >= pc.full)) return;
+  g_rt_pass = kRtPassSun;
   if (all(fp == 0u)) {   // read back by the core
     const uint3 c = asuint(sunCam2.c[13].xyz);
     st_store(36u, c.x);
@@ -107,6 +113,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const uint cls = mat_class(gMaterial.Load(int3(fp, 0)));
   const bool backlit = pc.rt_backlit != 0 && nl <= 0.0 && mat_transmits(cls);
   float vis = pc.rt_backlit != 0 ? 1.0 : 0.0;   // (legacy: back faces were zeroed)
+  bool unknown = false;
   if (nl > 0.0 || backlit) {
     RtCone cone = {dist * pa, pa};
     float3 dir = L;
@@ -120,7 +127,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
     }
     // From the side the light comes from (the back side for transmission).
     float3 o = rt_ray_origin(fp, P, N, dist * pa, dir);
-    vis = rt_occluded(o, dir, pc.rt_tmax, cone) ? 0.0 : 1.0;
+    const uint vs = rt_visibility(o, dir, pc.rt_tmax, cone);
+    // Unknown (the candidate cap aborted the query, rt_common.hlsli): the game's own sun
+    // visibility for this pixel, its mask value. One ray per pixel, so the decision is per
+    // ray and per pixel at once; the pixel is marked (rtVis.a kSunUnknownCode below) so that
+    // the fold, the trust and rt_sun_resolve all keep the game's mask there.
+    unknown = vs == kRtUnknown;
+    vis = unknown ? mask : vs == kRtOccluded ? 0.0 : 1.0;
   }
   float check = 0.0, fam = 0.0;
   if (pc.rt_debug == 3 || pc.rt_debug == 5) {
@@ -165,9 +178,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // The fold: min(game, traced), so off-screen casters come from the game's cascades.
   // rt_sun_replace: gi/rt_sun_resolve.hlsl then writes the traced visibility itself where
   // it is trusted; this pass leaves the trust from the geometry in rtVis.a (see the top).
-  const float fold = mask * lerp(1.0, vis, saturate(pc.rt_strength));
+  // An unknown pixel keeps the game's mask exactly (vis = mask would give mask^2 here).
+  const float fold = unknown ? mask : mask * lerp(1.0, vis, saturate(pc.rt_strength));
   const uint tflags = st_u(4);
-  const bool traced = nl > 0.0 || backlit;
+  // (An unknown pixel counts as not traced: rt_sun_resolve.hlsl then keeps `fold`, the mask.)
+  const bool traced = (nl > 0.0 || backlit) && !unknown;
   bool roof = false;
   float t_off = 1.0;
   if (traced && ((tflags & 1u) != 0 || pc.rt_debug == 6)) {
@@ -177,7 +192,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   }
   if (pc.rt_debug != 3 && pc.rt_debug != 5) {
     check = fold;
-    fam = !traced ? 0.0 : roof ? 0.25 : 0.5 + 0.5 * t_off;
+    fam = unknown ? kSunUnknownCode : !traced ? 0.0 : roof ? 0.25 : 0.5 + 0.5 * t_off;
   }
   rtVis[fp] = float4(vis, mask, check, fam);
   if ((tflags & 8u) != 0) {
@@ -195,4 +210,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     if (WaveIsFirstLane()) InterlockedMax(sunTrust[uint2(8, 0)], ym);
   }
   if (mask > 0.0 && pc.rt_debug == 0) gSunShadow[fp] = fold;
+
+  // QA ambient floor (docs/QA.md, qa_zero bit 0): no direct sun (rt_sun_resolve.hlsl repeats it).
+  if ((pc.qa_zero & 1u) != 0u) gSunShadow[fp] = 0.0;
 }

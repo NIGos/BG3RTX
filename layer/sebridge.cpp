@@ -9,10 +9,14 @@
 // next poll then gets the complete one).
 //
 // Freshness: an export counts only when it was written after this process started and
-// is younger than se_stale_ms (default 3000). Without the extender, the mod, or with
+// is younger than se_stale_ms() (se_stale_periods = 4 measured export periods + the poll,
+// about 1.1-1.5 s). Without the extender, the mod, or with
 // se_bridge=0, se_snapshot() returns nullptr and everything falls back to the database.
 #include "sebridge.h"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
@@ -22,6 +26,7 @@
 #include <set>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 
 #include "host.h"
 
@@ -37,6 +42,50 @@ std::condition_variable g_stop_cv;
 bool g_stop = false;
 std::atomic<uint32_t> g_reads{0};
 double g_process_start = 0;   // FILETIME seconds
+
+// Export intervals (file write times of consecutive exports), the last kIntervals.
+constexpr int kIntervals = 16;   // 4 s of exports: a hitch counts for that long, then drops out
+std::mutex g_period_mu;
+double g_interval[kIntervals] = {};
+int g_n_interval = 0, g_interval_at = 0;
+
+// "[se] motion": the speeds of the bridge's moving lights between consecutive exports (the
+// measurement behind kSeMoveSpeedMax), logged every kMotionExports exports.
+constexpr uint32_t kMotionExports = 120;   // 30 s at 4 Hz
+struct Motion {
+  std::unordered_map<uint64_t, std::array<float, 3>> last;   // id -> position in the previous export
+  uint32_t exports = 0, samples = 0, over = 0;
+  float v_max = 0;
+  const char* name = "";
+  uint8_t owner = 0;
+};
+
+void note_motion(Motion& m, const SeSnapshot& prev, const SeSnapshot& cur) {
+  const double dt = cur.time - prev.time;
+  const bool consecutive = cur.seq == prev.seq + 1 && dt > 0.05 && dt < 2.0;
+  std::unordered_map<uint64_t, std::array<float, 3>> next;
+  for (const SeLight& l : cur.lights) {
+    if (l.owner == BG3_RTL_OWNER_PLACED) continue;
+    next[l.id] = {l.pos[0], l.pos[1], l.pos[2]};
+    auto it = m.last.find(l.id);
+    if (!consecutive || it == m.last.end()) continue;
+    float d2 = 0;
+    for (int k = 0; k < 3; ++k) d2 += (l.pos[k] - it->second[k]) * (l.pos[k] - it->second[k]);
+    const float v = float(std::sqrt(double(d2)) / dt);
+    ++m.samples;
+    m.over += v > kSeMoveSpeedMax;
+    if (v > m.v_max) m.v_max = v, m.name = l.name, m.owner = l.owner;
+  }
+  m.last.swap(next);
+  if (++m.exports < kMotionExports) return;
+  if (m.samples)
+    log("[se] motion (%u exports): %u moving-light steps, fastest %.2f m/s (owner %u, %s), %u above %.1f m/s "
+        "(a teleport or level change counts too); export interval max %.3f s",
+        m.exports, m.samples, m.v_max, unsigned(m.owner), *m.name ? m.name : "-", m.over, kSeMoveSpeedMax,
+        se_period_s());
+  m.exports = m.samples = m.over = 0;
+  m.v_max = 0;
+}
 
 double ft_seconds(const FILETIME& f) {
   ULARGE_INTEGER u;
@@ -84,6 +133,7 @@ void reader() {
   const std::string lights_path = dir + "\\lights.txt", world_path = dir + "\\world.txt";
   double t_lights = -1, t_world = -1;
   SeSnapshot cur;   // the merged state being built
+  Motion motion;
   bool logged_first = false, logged_bad = false;
   for (;;) {
     {
@@ -108,6 +158,13 @@ void reader() {
       if (read_text(lights_path, text) && se_parse_lights(text, s)) {
         t_lights = t;
         s.time = t;
+        if (cur.time > 0 && s.seq == cur.seq + 1 && t > cur.time) {
+          std::lock_guard<std::mutex> lk(g_period_mu);
+          g_interval[g_interval_at] = t - cur.time;
+          g_interval_at = (g_interval_at + 1) % kIntervals;
+          g_n_interval = (std::min)(g_n_interval + 1, kIntervals);
+        }
+        if (cur.time > 0) note_motion(motion, cur, s);
         s.region = cur.region;
         s.triggers = std::move(cur.triggers);
         cur = std::move(s);
@@ -282,12 +339,60 @@ std::shared_ptr<const SeSnapshot> se_latest() {
 
 double se_age_s(const SeSnapshot& s) { return now_seconds() - s.time; }
 
+double se_now_s() { return now_seconds(); }
+
 std::shared_ptr<const SeSnapshot> se_snapshot() {
   auto s = se_latest();
   if (!s || !cfg_int("se_bridge", 1)) return nullptr;
   if (s->time < g_process_start) return nullptr;   // an export of an earlier game session
-  if (se_age_s(*s) * 1000.0 > double(cfg_int("se_stale_ms", 3000))) return nullptr;
+  if (se_age_s(*s) * 1000.0 > se_stale_ms()) return nullptr;
   return s;
+}
+
+double se_period_s() {
+  std::lock_guard<std::mutex> lk(g_period_mu);
+  double p = kSeExportPeriodS;
+  for (int i = 0; i < g_n_interval; ++i) p = (std::max)(p, g_interval[i]);
+  return p;
+}
+
+// Staleness: an export is in use until the next one arrives, at most one period plus the
+// reader's poll later. se_stale_periods (k, default 4) periods tolerate k-1 exports in a row
+// that did not arrive (a hitch, a Lua tick that failed) before the bridge counts as gone and
+// the lights fall back to the database. Measured periods: 0.289 s and 0.330 s mean over
+// 97 and 186 exports (bg3rtx.log, bg3rtx.a.log, 2026-10-27), so k=4 gives 1.4-1.5 s.
+double se_stale_ms() {
+  const int fixed = cfg_int("se_stale_ms", 0);
+  if (fixed > 0) return double(fixed);
+  const int k = (std::max)(cfg_int("se_stale_periods", 4), 1);
+  return (k * se_period_s() + kSePollS) * 1000.0;
+}
+
+float se_ulp(float m) {
+  int e = 0;
+  std::frexp((std::max)(std::fabs(m), 1e-30f), &e);   // m = f * 2^e, f in [0.5, 1)
+  return std::ldexp(1.0f, e - 24);
+}
+
+float se_static_tol(const float p[3], float reach, float move_amount) {
+  float m = (std::max)((std::max)(std::fabs(p[0]), std::fabs(p[1])), std::fabs(p[2])) + (std::max)(reach, 0.0f);
+  // Per coordinate 4 ulp + the %.4f rounding; sqrt(3) of that for the 3D distance.
+  return 1.7320508f * (4.0f * se_ulp(m) + kSePosQuant) + (std::max)(move_amount, 0.0f);
+}
+
+float se_static_radius_tol(float r) { return kSeRadiusQuant + 4.0f * se_ulp(r); }
+
+float se_moving_radius_tol(float r) { return 0.02f * (std::max)(r, 0.1f) + 0.01f; }
+
+bool se_covers(const SeSnapshot& s, const float p[3]) {
+  const float e = kSeHostQuant;
+  float d2 = 0;
+  for (int k = 0; k < 3; ++k) d2 += (p[k] - s.host[k]) * (p[k] - s.host[k]);
+  if (std::sqrt(d2) + e > kSeRange) return false;
+  // The Lua scans cells cy-2..cy+2 (cy = floor(host.y / 16)); both cell rows must be certain.
+  const int h0 = int(std::floor((s.host[1] - e) / kSeCell)), h1 = int(std::floor((s.host[1] + e) / kSeCell));
+  const int p0 = int(std::floor((p[1] - e) / kSeCell)), p1 = int(std::floor((p[1] + e) / kSeCell));
+  return (std::max)(std::abs(p1 - h0), std::abs(p0 - h1)) <= kSeCellsY;
 }
 
 uint32_t se_exports_read() { return g_reads.load(std::memory_order_relaxed); }

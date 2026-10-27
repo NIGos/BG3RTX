@@ -1,6 +1,8 @@
 // D-LS per-light data: the upload side (core/ls_lights.h, docs/SE_BRIDGE.md).
 #include "ls_lights.h"
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -27,7 +29,71 @@ std::vector<uint8_t> g_records;   // the current list, kLslRecord bytes each
 uint32_t g_count = 0, g_se_seq = ~0u, g_total = 0;
 uint32_t g_gen = 1;   // changes whenever the uploaded records do (the match pass keeps unchanged slots)
 uint32_t g_n_se = 0, g_n_db = 0, g_n_owner[5] = {};
-float g_dyn_tol = 1.5f;   // ls_dyn_tol: join tolerance of moving non-character bridge lights (m)
+
+// ---- join tolerances (docs/SE_BRIDGE.md "Join tolerances") ----
+// The bridge's constants, as in layer/sebridge.h (the core does not include the layer):
+constexpr double kSePeriodS = 0.25;      // Lua PERIOD_US: an export every 250 ms (the next tick after)
+constexpr double kSePollS = 0.1;         // layer/sebridge.cpp reader: polls the export every 100 ms
+constexpr float kSePosQuant = 0.5e-4f;   // positions written "%.4f"
+constexpr float kSeRadiusQuant = 0.5e-3f;   // radius written "%.3f"
+constexpr float kMoveSpeedMax = 8.0f;    // ls_dyn_speed default: layer/sebridge.h kSeMoveSpeedMax
+
+// Float ulp at magnitude m: for m in [2^(e-1), 2^e), 2^(e-24).
+float ulp(float m) {
+  int e = 0;
+  std::frexp(std::max(std::fabs(m), 1e-30f), &e);
+  return std::ldexp(1.0f, e - 24);
+}
+
+// Lights that stay put (layer/sebridge.h se_static_tol): per coordinate 4 ulp at the largest
+// coordinate (the light's, + ls_lights_radius for the camera the shader adds) - the game's
+// camera-relative position and the shader's + camera (2), the bridge's parse (1), the
+// engine's transform composition (1; measured 2.9 ulp, captures/assetdb_join_20261026-*) -
+// + the export's %.4f rounding, sqrt(3) of that for the distance, + the authored jitter.
+float static_tol(const float p[3], float reach, float move_amount) {
+  float m = std::max(std::max(std::fabs(p[0]), std::fabs(p[1])), std::fabs(p[2])) + std::max(reach, 0.0f);
+  return 1.7320508f * (4.0f * ulp(m) + kSePosQuant) + std::max(move_amount, 0.0f);
+}
+
+// Radius, lights that stay put: the export's %.3f + 4 relative ulp (the game's 1/r 0.5, the
+// shader's 1/inv_r division 2.5 by Vulkan's OpFDiv precision, the parse 0.5, rounded up).
+float static_radius_tol(float r) { return kSeRadiusQuant + 4.0f * ulp(r); }
+// Radius, lights that move: not derived (a VFX light's radius may be animated between
+// exports); the old 2% + 1 cm. "[se] join" logs the largest disagreement it accepts.
+float moving_radius_tol(float r) { return 0.02f * std::max(r, 0.1f) + 0.01f; }
+
+// Moving lights: displacement <= v_max x (age of the export when its records are last used).
+// An export's records are in use from its arrival until the next arrival; its position was
+// sampled age0 before its arrival (info.age_s there: the poll + the parse). The frame that
+// uses them renders the game's lights of that frame, up to 2 frame times from the refresh
+// (the refresh is at the frame's start; the game's render thread trails its simulation, on
+// which the Lua's tick runs, by about a frame). So
+//   T_age = max arrival interval + max age0 + 2 x max frame time,
+// each the largest of the last kWin samples, before any sample the nominal kSePeriodS,
+// kSePollS and 1/30 s.
+constexpr int kWin = 16;   // 4 s of exports
+struct WinMax {
+  double v[kWin] = {};
+  int n = 0, at = 0;
+  void add(double x) {
+    v[at] = x;
+    at = (at + 1) % kWin;
+    n = std::min(n + 1, kWin);
+  }
+  double max(double nominal) const {
+    if (!n) return nominal;
+    double m = 0;
+    for (int i = 0; i < n; ++i) m = std::max(m, v[i]);
+    return m;
+  }
+};
+WinMax g_arrival, g_age0, g_frame;
+std::chrono::steady_clock::time_point g_t_call{}, g_t_arrival{}, g_t_refresh{};
+bool g_was_active = false;
+
+double age_window_s() {
+  return g_arrival.max(kSePeriodS) + g_age0.max(kSePollS) + 2.0 * g_frame.max(1.0 / 30.0);
+}
 
 const Bg3AssetDbApi* api() {
   const Bg3AssetDbApi* a = host->abi_version >= 6 ? host->assetdb : nullptr;
@@ -73,8 +139,8 @@ void refresh(const Bg3AssetDbApi* a) {
     return;
   }
   const float radius = host->cfg_float("ls_lights_radius", 80.0f);
-  g_dyn_tol = host->cfg_float("ls_dyn_tol", 1.5f);
-  if (!(g_dyn_tol >= 0.05f)) g_dyn_tol = 0.05f;
+  const float speed = std::max(host->cfg_float("ls_dyn_speed", kMoveSpeedMax), 0.0f);
+  const float moving_tol = float(speed * age_window_s());
   static std::vector<Bg3RtLight> L(kLslMaxKnown);
   g_total = a->runtime_lights(center, radius, L.data(), kLslMaxKnown);
   g_count = g_total < kLslMaxKnown ? g_total : kLslMaxKnown;
@@ -85,20 +151,18 @@ void refresh(const Bg3AssetDbApi* a) {
   memset(g_n_owner, 0, sizeof g_n_owner);
   for (uint32_t i = 0; i < g_count; ++i) {
     const Bg3RtLight& l = L[i];
-    // Position tolerance of the join: lights that stay put match to float precision;
-    // every other light the bridge reports moves between its 4 Hz exports: item lights,
-    // and the visual lights it could not attach to an item (owner unknown or scenery), which
-    // include the VFX lights of carried weapons (VFX_LightSources_WPN_DippedInFire,
-    // ..._BloodOfLathander: owner 0). At 5 cm those went unmatched as soon as their carrier
-    // walked, and lost their fixture radius (the ray's end clearance at the carrier's hand).
-    // ls_dyn_tol (1.5 m): a running carrier covers ~1 m between exports; the 2% radius test
-    // and the nearest-wins search keep static lamps on their own record.
-    float tol = 0.05f + l.move_amount;
-    if (l.flags & BG3_RTL_FROM_SE) {
-      if (l.owner == BG3_RTL_OWNER_CHARACTER) tol = 4.0f;
-      else if (l.owner != BG3_RTL_OWNER_PLACED) tol = g_dyn_tol + l.move_amount;
-    }
-    float f[8] = {l.pos[0], l.pos[1], l.pos[2], l.radius, l.source_radius, tol, l.intensity, 0.0f};
+    // Tolerances of the join (rt_local_shadows_match.hlsl reads both from the record).
+    // Placed lights and the database's lights stay put: float precision and the export's
+    // rounding. Every other light the bridge reports moves between its exports: character
+    // lights, item lights, and the visual lights it could not attach to an item (owner
+    // unknown or scenery), which include the VFX lights of carried weapons
+    // (VFX_LightSources_WPN_DippedInFire, ..._BloodOfLathander: owner 0). Those get
+    // ls_dyn_speed x T_age on top (age_window_s); the radius test and the nearest-wins search
+    // keep static lamps on their own record.
+    const bool moves = (l.flags & BG3_RTL_FROM_SE) && l.owner != BG3_RTL_OWNER_PLACED;
+    const float tol = static_tol(l.pos, radius, l.move_amount) + (moves ? moving_tol : 0.0f);
+    const float rtol = moves ? moving_radius_tol(l.radius) : static_radius_tol(l.radius);
+    float f[8] = {l.pos[0], l.pos[1], l.pos[2], l.radius, l.source_radius, tol, l.intensity, rtol};
     uint32_t u[4] = {l.flags, uint32_t(l.owner) | (uint32_t(l.type) << 8) | (uint32_t(l.channel) << 16), l.db_index, i};
     memcpy(&g_records[size_t(i) * kLslRecord], f, 32);
     memcpy(&g_records[size_t(i) * kLslRecord + 32], u, 16);
@@ -110,10 +174,13 @@ void refresh(const Bg3AssetDbApi* a) {
   if (g_count && (!g_logged || g_calls % 1200 < 8)) {
     g_logged = true;
     host->log("ls: per-light data: %u runtime lights within %.0f m of (%.1f, %.1f, %.1f) [%s]: bridge %u, database %u; "
-              "owners placed %u, item %u, scenery %u, character %u, unknown %u; bridge %s (export %u, level %s)",
+              "owners placed %u, item %u, scenery %u, character %u, unknown %u; bridge %s (export %u, level %s); "
+              "moving-light tolerance %.2f m = %.1f m/s x %.3f s (export interval %.3f + age at arrival %.3f + 2 "
+              "frames of %.4f s)",
               g_count, radius, center[0], center[1], center[2], g_have_cam ? "camera" : "character", g_n_se, g_n_db,
               g_n_owner[1], g_n_owner[2], g_n_owner[3], g_n_owner[4], g_n_owner[0], info.active ? "active" : "off",
-              info.seq, info.level ? info.level : "");
+              info.seq, info.level ? info.level : "", moving_tol, speed, age_window_s(), g_arrival.max(kSePeriodS),
+              g_age0.max(kSePollS), g_frame.max(1.0 / 30.0));
   }
 }
 
@@ -133,8 +200,26 @@ bool lsl_begin(LslFrame* f) {
   }
   Bg3SeInfo info{};
   a->se_info(&info);
-  if (g_calls++ % 8 == 0 || (info.active && info.seq != g_se_seq)) {
+  const auto now = std::chrono::steady_clock::now();
+  auto secs = [&](std::chrono::steady_clock::time_point t) { return std::chrono::duration<double>(now - t).count(); };
+  const bool first = g_calls++ == 0;
+  if (!first) g_frame.add(secs(g_t_call));
+  g_t_call = now;
+  const bool arrival = info.active && info.seq != g_se_seq;
+  if (arrival) {
+    // Intervals only between exports of a running bridge (one that was fresh in the previous
+    // frame too): a pause or a level load is not an export period.
+    if (g_was_active && g_se_seq != ~0u) g_arrival.add(secs(g_t_arrival));
+    g_age0.add(std::max(double(info.age_s), 0.0));
+    g_t_arrival = now;
+  }
+  g_was_active = info.active != 0;
+  // Refresh on every export, and otherwise once per export period (kSePeriodS: nothing the
+  // bridge reports changes faster; the camera-centred query and the database-only case
+  // follow at the same rate). It was every 8 frames: 4 times per export at 120 fps.
+  if (first || arrival || secs(g_t_refresh) >= kSePeriodS) {
     g_se_seq = info.active ? info.seq : ~0u;
+    g_t_refresh = now;
     refresh(a);
   }
   float head[4] = {0, NAN, NAN, NAN};
@@ -172,4 +257,5 @@ void lsl_release() {
   g_records.clear();
   g_count = 0;
   g_se_seq = ~0u;
+  g_t_refresh = {};   // the next lsl_begin refreshes
 }
