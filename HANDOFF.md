@@ -556,3 +556,54 @@ shader is involved.
 - **PC mapping:** rerun with `aftermath=1,shader_debug=1`. Our shaders are then built
   `-Od` with embedded source and the .nvdbg resolves lines. The generated
   `ls_ref/ls_ref_body.hlsli` (debug reference pass only) is not guarded.
+
+## 11. 53ab276: 0 faults in 8, no guard line. Counter path and split question (thirteenth commit)
+
+**1. The counter path, end to end:**
+- `guard_count` adds to `rtStats` at `(118|119) * 64 * 4`. rtStats is binding 20, which
+  `bind_rt` fills for every RT pass (main passes, D-LS via `lb`, D-RF via `rb`) with this
+  frame's ring slot.
+- `stats_begin` now runs on *every* traced frame. Before 53ab276 it ran only with
+  `rt_stats`/`ls_stats`/`rf_stats`/`ls_check`; now the full report is just skipped
+  without them.
+- It clears the slot with `vkCmdFillBuffer` and reads back the slot written 7 frames
+  earlier (host-visible buffer). The report sat behind a "nonzero" check, so no line
+  meant no out-of-range read, not a broken path.
+- **New heartbeat:** `[core] guard: counters read back (frame F, N frames read so far):
+  light list X, set 1 Y` on the first read-back and every 3000 read-backs, also when
+  0.
+- The core was rebuilt into `bin/` (hot-reloaded by a running game).
+
+**2. Does the guard change anything for in-range values?** No read is removed and none
+is added, apart from `GetDimensions` (a descriptor query, not a memory read).
+- `load_light`, the cluster reads, `bg3_light_index` and `bg3_light_pos` read the same
+  bytes as before when in range.
+- `bg3_atlas_shadow` still reads `lShadows` only when N·L > 0; for N·L <= 0 the result
+  is unchanged (`lerp(1, 0, ...)`). Only an out-of-range slot now returns 1.0 early.
+- The froxel index is not clamped, only checked.
+- What does change is the compiled code: extra instructions, other register allocation
+  and scheduling, and a new fetch of each buffer's size. A fault that depends on timing,
+  or on a value read too early, can move or vanish with that. So 0/8 with no guard hit
+  is consistent with "the guard never fired". The rate change alone does not prove the
+  light list was the cause; P(0 of 8) at a 25 % rate is about 10 %.
+
+**3. Why would the split matter to D-LS?** From the code: D-LS's inputs other than set 1
+and the TLAS are identical with split=0 and split=1.
+- The light-list buffers, ranges and offsets are the lighting dispatch's own, read with
+  `query_binding` in `gi_on_dispatch_pre` (`snapshot`).
+- D-LS is recorded into the *same* command buffer, after the lighting
+  (`g_pending[cmd]`, run at that buffer's flush). So it cannot see another frame's
+  light list through a different command buffer. The scene build lives in the prepass
+  command buffer, whatever the mode.
+- What differs is the ray-query side.
+  - Split: about 940 instances with per-instance InstInfo, `alpha_pass_hit` reading
+    pool/soup vertices (object-space, transformed by `CandidateObjectToWorld3x4`) and
+    per-draw records.
+  - Legacy: one instance, `alpha_pass` with `find_rec` and the alpha soup.
+  - D-LS fires many short shadow rays per pixel to local lights. At the Campsite these
+    go through foliage, so it runs the alpha path far more often than the sun pass.
+- All those set-1 reads are bounded. Counter 119 now counts any that are out of range.
+  The 119 count from these runs will tell whether the split's set-1 data is ever
+  inconsistent.
+- The rest is timing: the split's build and its extra work change what runs
+  concurrently.

@@ -657,6 +657,7 @@ constexpr uint32_t kStatsRing = 8;
 constexpr uint32_t kStatsCounters = 120;
 uint64_t g_guard_sum[2] = {}, g_guard_total[2] = {};
 uint32_t g_guard_frames = 0;
+uint64_t g_guard_folds = 0;   // frames whose counters were read back (heartbeat)
 constexpr VkDeviceSize kStatsSlot = kStatsCounters * 64 * 4;
 VkBuffer g_stats_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
@@ -686,8 +687,18 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   uint32_t slot = uint32_t(now % kStatsRing);
   if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
     const uint32_t* c = g_stats_map + slot * (kStatsSlot / 4);
+    uint64_t got[2] = {};
     for (int g = 0; g < 2; ++g)
-      for (int b = 0; b < 64; ++b) g_guard_sum[g] += c[(118 + g) * 64 + b];
+      for (int b = 0; b < 64; ++b) got[g] += c[(118 + g) * 64 + b];
+    g_guard_sum[0] += got[0];
+    g_guard_sum[1] += got[1];
+    // Heartbeat: the first read-back and every 3000 frames, also when 0 (the counters
+    // are read). The total includes this frame's values.
+    if (g_guard_folds++ % 3000 == 0)
+      host->log("[core] guard: counters read back (frame %llu, %llu frames read so far): light list %llu, set 1 %llu "
+                "out-of-range reads skipped in total",
+                (unsigned long long)now, (unsigned long long)g_guard_folds,
+                (unsigned long long)(g_guard_total[0] + g_guard_sum[0]), (unsigned long long)(g_guard_total[1] + g_guard_sum[1]));
     if (++g_guard_frames >= 300) {
       if (g_guard_sum[0] || g_guard_sum[1]) {
         g_guard_total[0] += g_guard_sum[0];
