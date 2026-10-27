@@ -13,7 +13,7 @@ CAPS = ROOT / "captures"
 # Everything an all-on trace has; each phase below changes keys relative to the
 # previous one (live_phases applies them cumulatively to captures/auto.ini).
 ALL_ON = {"rt": "1", "gi": "1", "rt_reflections": "1", "rt_shadows": "1", "rt_local_shadows": "1",
-          "rt_debug": "0", "rt_backlit": "1"}
+          "rt_debug": "0", "rt_backlit": "1", "rt_sun_replace": "1"}
 ALL_OFF = {"rt": "0", "gi": "0", "rt_reflections": "0", "rt_shadows": "0", "rt_local_shadows": "0",
            "rt_debug": "0"}
 
@@ -23,6 +23,8 @@ EFFECTS = {
     "gi": ("refl_off", "gi_off"),
     "rt_reflections": ("on0", "refl_off"),
     "rt_shadows": ("on0", "sun_off"),
+    # The traced sun replacing the game's mask where trusted, against min(game, traced).
+    "rt_sun_replace": ("rep_on", "sun_min"),
     "rt_local_shadows": ("on0", "local_off"),
     "all_rt": ("on0", "off0"),
 }
@@ -42,10 +44,19 @@ def plan(temporal=3, reference=False):
           ("refl_off", {"gi": "1", "rt_reflections": "0"}),
           ("sun_off", {"rt_reflections": "1", "rt_shadows": "0"}),
           ("local_off", {"rt_shadows": "1", "rt_local_shadows": "0"}),
-          # rt_debug=2: game mask in red, traced sun visibility in green, over the lit
-          # diffuse. rt_backlit=0 leaves untraced (back-facing) pixels at visibility 0,
-          # so "traced lit" always means front-facing and really unoccluded.
-          ("sun_dbg", {"rt_local_shadows": "1", "rt_debug": "2", "rt_backlit": "0"})]
+          # rt_sun_replace against min(game, traced): three consecutive traces late in the
+          # run (the first traces can still see streaming and a settling camera), compared
+          # with each other rather than with on0 (analyze.py).
+          ("rep_on", {"rt_local_shadows": "1"}),
+          ("sun_min", {"rt_sun_replace": "0"}),
+          # rt_debug=2: game mask in red, traced sun visibility in green, the visibility
+          # written into the mask (rt_sun_replace) in blue, over the lit diffuse.
+          # rt_backlit=0 leaves untraced (back-facing) pixels at visibility 0, so
+          # "traced lit" always means front-facing and really unoccluded.
+          ("sun_dbg", {"rt_sun_replace": "1", "rt_debug": "2", "rt_backlit": "0"}),
+          # rt_debug=6: the trust of rt_sun_replace (red roof volume, magenta far from the
+          # game's lit mask, blue off-screen, green trusted).
+          ("sun_trust", {"rt_debug": "6", "rt_backlit": "1"})]
     if reference:
         # More samples for the stochastic terms, same denoiser (RR) and view.
         p += [("ref", {"rt_debug": "0", "rt_backlit": "1", "gi_rr_rays": "8", "ls_samples": "2"})]
@@ -119,6 +130,6 @@ def _log_lines():
         return []
     keep = []
     for line in log.read_text(errors="replace").splitlines():
-        if re.search(r"WARNING|error|non-finite|\[geo\] RT capture|alpha|\[phase\]", line, re.I):
+        if re.search(r"WARNING|error|non-finite|\[geo\] RT capture|alpha|\[phase\]|sun stats|^\S+\s+sun:|rt passes|trace pass", line, re.I):
             keep.append(line.strip()[:300])
     return keep[-60:]

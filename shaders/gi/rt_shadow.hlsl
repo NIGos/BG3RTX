@@ -12,14 +12,80 @@
 #include "../rt/rt_common.hlsli"
 
 // r: traced sun visibility, g: the game's sun mask before the fold,
-// b: primary-ray check (1 match, 0.66 hit in front, 0.33 hit behind, 0 miss; rt_debug=3/5 only)
-// a: which geometry an in-front/behind error comes from (x3: 1 alpha vt, 2 alpha tex, 3 opaque)
+// b: primary-ray check (1 match, 0.66 hit in front, 0.33 hit behind, 0 miss; rt_debug=3/5 only),
+//    else the visibility written into the mask;
+// a: which geometry an in-front/behind error comes from (x3: 1 alpha vt, 2 alpha tex, 3 opaque;
+//    rt_debug=3/5 only), else the trust from the geometry: 0 not traced (back face),
+//    0.25 under a roof volume, 0.5 + 0.5 x the off-screen trust (rt_sun_resolve.hlsl adds
+//    0.125: far from any pixel the game's mask has lit)
 [[vk::binding(19, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> rtVis;
+
+// ---- rt_sun_replace: where the traced visibility replaces the game's mask (core/sun_trust.h,
+// docs/TRACK_D_RT.md 12; the header layout is in sun_trust.hlsli).
+#include "sun_trust.hlsli"
+struct SunCam2CB { float4 c[14]; };
+[[vk::binding(48, 0)]] ConstantBuffer<SunCam2CB> sunCam2;   // set 0 b2: c[13].xyz camera, absolute
+
+float3 qrot_inv(float4 q, float3 v) {   // rotate by the conjugate of q (world -> local)
+  float3 u = -q.xyz;
+  float3 t = 2.0 * cross(u, v);
+  return v + q.w * t + cross(u, t);
+}
+
+// Does the ray o + t d, t >= 0, pass through a roof volume (camera-relative o)?
+bool sun_under_roof(float3 o, float3 d, float3 cam_abs) {
+  const uint n = min(st_u(0), 256u);
+  for (uint i = 0; i < n; ++i) {
+    const uint a = 128u + i * 48u;
+    float4 c = st_f4(a);
+    float4 q = st_f4(a + 16u);
+    float3 h = st_f4(a + 32u).xyz;
+    float3 lo = qrot_inv(q, o - (c.xyz - cam_abs));
+    float3 ld = qrot_inv(q, d);
+    float3 inv = 1.0 / select(abs(ld) > 1e-8, ld, select(ld >= 0.0, 1e-8, -1e-8));
+    float3 t1 = (-h - lo) * inv, t2 = (h - lo) * inv;
+    float3 tn = min(t1, t2), tf = max(t1, t2);
+    float t0 = max(max(tn.x, tn.y), tn.z), t3 = min(min(tf.x, tf.y), tf.z);
+    if (t3 >= max(t0, 0.0)) return true;
+  }
+  return false;
+}
+
+// Off-screen trust: 1 when the sun ray stays inside the view frustum (the captured
+// region, + margin) until it has risen above the scene top, or `rise` above P;
+// ramps to 0 as the inside part shrinks below `ramp` of that path.
+float sun_offscreen_trust(float3 P, float3 L, float cam_y) {
+  const float rise = st_f(8);
+  const float top = st_f(12) - cam_y;   // camera-relative
+  const float m = st_f(16);
+  const float ramp = saturate(st_f(20));
+  if (L.y < 0.01) return 0.0;
+  const float t_need = min((max(top, P.y + rise) - P.y) / L.y, pc.rt_tmax);
+  // x(t) = (d, d a, d b) of P + t L: linear in t, so each frustum side is a linear test.
+  float3x3 inv = frustum_inverse();
+  float3 x0 = mul(inv, P), x1 = mul(inv, L);
+  float2 abA = uv_to_ab(float2(-m, -m)), abB = uv_to_ab(float2(1.0 + m, 1.0 + m));
+  float2 lo = min(abA, abB), hi = max(abA, abB);
+  float4 f0 = float4(x0.y - lo.x * x0.x, hi.x * x0.x - x0.y, x0.z - lo.y * x0.x, hi.y * x0.x - x0.z);
+  float4 f1 = float4(x1.y - lo.x * x1.x, hi.x * x1.x - x1.y, x1.z - lo.y * x1.x, hi.y * x1.x - x1.z);
+  float t_exit = 1e30;
+  [unroll] for (int k = 0; k < 4; ++k)
+    if (f1[k] < 0.0) t_exit = min(t_exit, max(f0[k], 0.0) / -f1[k]);
+  if (x1.x < 0.0) t_exit = min(t_exit, max(x0.x, 0.0) / -x1.x);   // behind the camera
+  const float frac_in = t_exit / max(t_need, 1e-3);
+  return saturate((frac_in - ramp) / max(1.0 - ramp, 1e-3));
+}
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
   uint2 fp = tid.xy;
   if (any(fp >= pc.full)) return;
+  if (all(fp == 0u)) {   // read back by the core
+    const uint3 c = asuint(sunCam2.c[13].xyz);
+    st_store(36u, c.x);
+    st_store(40u, c.y);
+    st_store(44u, c.z);
+  }
   float d = gDepth.Load(int3(fp, 0));
   float mask = gSunShadow[fp];
   if (d <= 0.0) {
@@ -96,7 +162,37 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_add(46, cls == kMatHair, bin);
     stat_add(47, cls != kMatStandard, bin);
   }
+  // The fold: min(game, traced), so off-screen casters come from the game's cascades.
+  // rt_sun_replace: gi/rt_sun_resolve.hlsl then writes the traced visibility itself where
+  // it is trusted; this pass leaves the trust from the geometry in rtVis.a (see the top).
+  const float fold = mask * lerp(1.0, vis, saturate(pc.rt_strength));
+  const uint tflags = st_u(4);
+  const bool traced = nl > 0.0 || backlit;
+  bool roof = false;
+  float t_off = 1.0;
+  if (traced && ((tflags & 1u) != 0 || pc.rt_debug == 6)) {
+    const float3 cam_abs = sunCam2.c[13].xyz;
+    if ((tflags & 2u) != 0) roof = sun_under_roof(P, L, cam_abs);
+    if ((tflags & 4u) != 0) t_off = sun_offscreen_trust(P, L, cam_abs.y);
+  }
+  if (pc.rt_debug != 3 && pc.rt_debug != 5) {
+    check = fold;
+    fam = !traced ? 0.0 : roof ? 0.25 : 0.5 + 0.5 * t_off;
+  }
   rtVis[fp] = float4(vis, mask, check, fam);
-  // Only ever darkens: off-screen casters still come from the game's cascades.
-  if (mask > 0.0 && pc.rt_debug == 0) gSunShadow[fp] = mask * lerp(1.0, vis, saturate(pc.rt_strength));
+  if ((tflags & 8u) != 0) {
+    trust_add(15, true);
+    trust_add(0, traced);
+    trust_add(1, traced && vis > 0.5);
+    trust_add(7, traced && roof);
+    trust_add(8, traced && !roof && t_off < 0.999);
+    trust_add(9, traced && mask > 0.5 && vis < 0.5);
+    // The highest visible point (absolute y) within the ray length, read back by the core:
+    // the scene top. (Sky domes and distant backdrops are depth-written far away.)
+    uint yu = asuint(P.y + sunCam2.c[13].y);
+    yu = dist > pc.rt_tmax ? 0u : (yu & 0x80000000u) != 0 ? ~yu : yu | 0x80000000u;
+    uint ym = WaveActiveMax(yu);
+    if (WaveIsFirstLane()) InterlockedMax(sunTrust[uint2(8, 0)], ym);
+  }
+  if (mask > 0.0 && pc.rt_debug == 0) gSunShadow[fp] = fold;
 }

@@ -110,6 +110,29 @@ int main() {
   printf("room_at foundry floor: flags %u floor %d building '%s' lighting %u atmosphere %u\n", fl, r.floor, r.building,
          r.lighting, r.atmosphere);
 
+  // Roof volumes (v3, the RT sun's trust test): sorted by distance, and the foundry floor
+  // point lies inside one of the oriented boxes (they contain their triggers).
+  {
+    std::vector<Bg3DbVolume> v(256);
+    uint32_t nv = a->roof_volumes(floor0, 120.0f, v.data(), 256);
+    CHECK(nv > 0);
+    bool inside = false;
+    uint32_t kinds = 0;
+    for (uint32_t i = 0; i < nv && i < 256; ++i) {
+      const Bg3DbVolume& b = v[i];
+      kinds |= b.kind;
+      float rel[3] = {floor0[0] - b.center[0], floor0[1] - b.center[1], floor0[2] - b.center[2]};
+      const float x = -b.rot[0], y = -b.rot[1], z = -b.rot[2], w = b.rot[3];   // world -> local (conjugate)
+      float tx = 2 * (y * rel[2] - z * rel[1]), ty = 2 * (z * rel[0] - x * rel[2]), tz = 2 * (x * rel[1] - y * rel[0]);
+      float l[3] = {rel[0] + w * tx + (y * tz - z * ty), rel[1] + w * ty + (z * tx - x * tz),
+                    rel[2] + w * tz + (x * ty - y * tx)};
+      if (std::fabs(l[0]) <= b.half[0] && std::fabs(l[1]) <= b.half[1] && std::fabs(l[2]) <= b.half[2]) inside = true;
+    }
+    CHECK(inside);
+    printf("roof volumes within 120 m of the foundry floor: %u (kinds 0x%x), the floor point inside one: %d\n", nv,
+           kinds, int(inside));
+  }
+
   // Materials: the deferred FS of Base_VT (AUDIT_ENGINE_DATA 2.1)
   Bg3MaterialInfo m{};
   CHECK(a->material(0x14678345c10aefbcull, &m));

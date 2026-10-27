@@ -14,7 +14,8 @@ from .decode import Frame, Trace, lum709, lum2020
 
 CROPS_PER_DETECTOR = 3   # per detector, effect and buffer (2 on the lighting buffer)
 EFFECT_LABEL = {"gi": "GI (hybrid RT GI + RT AO fold)", "rt_reflections": "RT reflections (D-RF)",
-                "rt_shadows": "RT sun shadows", "rt_local_shadows": "RT local-light shadows (D-LS)",
+                "rt_shadows": "RT sun shadows", "rt_sun_replace": "RT sun replacing the game's mask (vs min)",
+                "rt_local_shadows": "RT local-light shadows (D-LS)",
                 "all_rt": "all RT effects"}
 
 
@@ -119,6 +120,19 @@ def analyze_scene(d: Path, pool):
         return n, float((da > 0.1).mean())
     view = dict(pool.map(view_change, [n for n in fr if n != "on0"]))
     moved = sorted(n for n, v in view.items() if v > det.T["view_changed_frac"])
+    # The rt_sun_replace trio (rep_on, sun_min, sun_dbg) is compared within itself: it is
+    # kept when its traces show one view, even if that is not on0's.
+    trio = [n for n in ("rep_on", "sun_min", "sun_dbg") if n in fr]
+    if "rep_on" in trio and len(trio) > 1:
+        def pair_change(n):
+            a, b = fr[n].albedo(), fr["rep_on"].albedo()
+            if a is None or b is None or a.shape != b.shape:
+                return 0.0
+            return float((np.abs(im.box(a.mean(-1), 2) - im.box(b.mean(-1), 2)) > 0.1).mean())
+        pc = {n: pair_change(n) for n in trio if n != "rep_on"}
+        res["view_change_sun_trio"] = {n: round(v, 4) for n, v in pc.items()}
+        if all(v <= det.T["view_changed_frac"] for v in pc.values()):
+            moved = [n for n in moved if n not in trio]
     res["view_change"] = {n: round(v, 4) for n, v in view.items()}
     if moved:
         res["notes"].append(f"camera moved: {', '.join(moved)} show another view than on0 (albedo differs on "
@@ -210,37 +224,55 @@ def analyze_scene(d: Path, pool):
         dif, src = fr["sun_dbg"].diffuse()
         if dif is not None:
             game, rt = np.clip(2 * dif[..., 0], 0, 1), np.clip(2 * dif[..., 1], 0, 1)
+            # Blue: the visibility written into the mask (rt_sun_replace; older builds write 0).
+            applied = np.clip(2 * dif[..., 2], 0, 1)
+            if float(applied.max()) <= 0.0:
+                applied = None
             sun_ratio = None
             if data["on0"]["Yc"] is not None and "sun_off" in data:
                 sun_ratio = det.ratio_map(data["on0"]["Yc"], data["sun_off"]["Yc"], 2)[0]
             cls = fr["sun_dbg"].material_class()
             if cls is not None and cls.shape != game.shape:
                 cls = None
-            sd = det.sun_disagreement(game, rt, sun_ratio, cls)
+            sd = det.sun_disagreement(game, rt, sun_ratio, cls, applied)
             gm = fr["off0"].sun_mask() if "off0" in data else None
             if gm is not None and gm.shape == game.shape:
                 sd["extra"]["metrics"]["game_mask_vs_alloff_mad"] = round(float(np.abs(gm - game).mean()), 4)
+            rep_ratio = None
+            if "sun_min" in data and "rep_on" in data and data["rep_on"]["Yc"] is not None                     and data["sun_min"]["Yc"] is not None:
+                rep_ratio = det.ratio_map(data["rep_on"]["Yc"], data["sun_min"]["Yc"], 2)[0]
             for sub, r in sd.items():
-                res["checks"].append({"detector": f"sun_{sub}_casters", "effect": "rt_shadows", "buffer": f"sun mask ({src})",
+                dname = "sun_replaced" if sub == "replaced" else f"sun_{sub}_casters"
+                res["checks"].append({"detector": dname, "effect": "rt_sun_replace" if sub == "replaced" else "rt_shadows",
+                                      "buffer": f"sun mask ({src})",
                                       "on": "sun_dbg", "off": "sun_dbg", **{k: v for k, v in r.items() if k != "regions"},
                                       "top": r["regions"][:6]})
                 regs = r["regions"] if not r["pass"] else r["regions"][:1]
                 for j, g in enumerate(regs[:CROPS_PER_DETECTOR]):
                     y0, y1, x0, x1 = crop_window(g["bbox"], game.shape)
-                    ov = np.stack([game, im.box(rt, 2), np.zeros_like(game)], -1)
+                    blue = applied if applied is not None else np.zeros_like(game)
+                    ov = np.stack([game, im.box(rt, 2), blue], -1)
                     name = f"sun_{sub}_{j}.png"
                     tiles = [dsp("on0", "compose")[y0:y1, x0:x1], ov[y0:y1, x0:x1]]
-                    labs = ["all on (lighting)", "red game mask, green RT (yellow both lit)"]
-                    if sun_ratio is not None:
-                        tiles.append(heat_ratio(sun_ratio[y0:y1, x0:x1]))
-                        labs.append("sun term on/off")
-                    if "sun_off" in data:
-                        tiles.insert(0, dsp("sun_off", "compose")[y0:y1, x0:x1])
-                        labs.insert(0, "RT sun off (lighting)")
+                    labs = ["all on (lighting)", "red game mask, green RT, blue written (white all lit)"]
+                    if sub == "replaced" and rep_ratio is not None:
+                        tiles[0] = dsp("rep_on", "compose")[y0:y1, x0:x1]
+                        labs[0] = "replace (lighting)"
+                        tiles.insert(0, dsp("sun_min", "compose")[y0:y1, x0:x1])
+                        labs.insert(0, "min(game, RT) (lighting)")
+                        tiles.append(heat_ratio(rep_ratio[y0:y1, x0:x1]))
+                        labs.append("replace / min")
+                    else:
+                        if sun_ratio is not None:
+                            tiles.append(heat_ratio(sun_ratio[y0:y1, x0:x1]))
+                            labs.append("sun term on/off")
+                        if "sun_off" in data:
+                            tiles.insert(0, dsp("sun_off", "compose")[y0:y1, x0:x1])
+                            labs.insert(0, "RT sun off (lighting)")
                     info = {k: v for k, v in g.items() if k not in ("bbox", "rank", "qualified", "focus")}
-                    sheet(tiles, labs, f"{meta['scene']} sun {sub} casters at x{x0}-{x1} y{y0}-{y1}: {info}"
+                    sheet(tiles, labs, f"{meta['scene']} {dname} at x{x0}-{x1} y{y0}-{y1}: {info}"
                           + ("" if not r["pass"] else " (largest, below threshold)"), crops / name)
-                    res["crops"].append({"file": f"crops/{name}", "detector": f"sun_{sub}_casters", "effect": "rt_shadows",
+                    res["crops"].append({"file": f"crops/{name}", "detector": dname, "effect": "rt_shadows",
                                          "buffer": "sun mask", "bbox": g["bbox"], "shape": list(game.shape), **info})
 
     # ---- non-finite values

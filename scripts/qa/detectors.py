@@ -18,10 +18,13 @@ T = {
     # also needs a near-black core, at least this fraction left with < 10% of the light
     # (ambient and other lights never vanish completely under a real shadow).
     "dark_black_shadows": 0.25,
-    "bright_ratio": {"rt_shadows": 1.5, "rt_local_shadows": 1.5, "gi": 2.0, "rt_reflections": 2.0, "all_rt": 2.0},
+    # rt_sun_replace brightens by design (R0): its regions are listed for review.
+    "bright_ratio": {"rt_shadows": 1.5, "rt_sun_replace": 1.15, "rt_local_shadows": 1.5, "gi": 2.0,
+                     "rt_reflections": 2.0, "all_rt": 2.0},
     "bright_fail_area": 0.05,
     "sun_extra_fail_area": 0.5,   # RT dark, game lit, and the sun term really darkened there
-    "sun_missing_warn_area": 2.0, # RT lit, game dark (casters missing from the TLAS): a warning, no image change
+    "sun_missing_warn_area": 2.0, # RT lit, game dark (casters missing from the TLAS): a warning
+    "sun_replaced_warn_area": 2.0, # ... and rt_sun_replace wrote it lit: brightened, for review
     "sun_min_core_px": 3,         # erosion radius: ignores thin edges and penumbrae
     "flicker_ratio": 1.5,         # mean temporal std on / off
     "flicker_fail_area": 1.0,     # regions with std_on > 2 std_off + 0.01 (PQ code values)
@@ -125,7 +128,7 @@ def brightening(y_on, y_off, sigma, effect, blur=1):
             "regions": regs, "map": ("ratio", r)}
 
 
-def sun_disagreement(game, rt, sun_ratio, cls=None):
+def sun_disagreement(game, rt, sun_ratio, cls=None, applied=None):
     """rt_debug=2 trace: game mask (set 1 b7 before our fold) against the traced
     visibility (1 spp soft sun, box-filtered). rt_backlit=0 in that trace, so traced
     lit is always front-facing. Penumbrae and thin edges are removed by thresholds
@@ -141,8 +144,13 @@ def sun_disagreement(game, rt, sun_ratio, cls=None):
     extra = im.dilate(extra, k)
     missing = im.opening(im.erode((rt_b > 0.85) & (game_b < 0.1) & valid, k), 1)
     missing = im.dilate(missing, k)
+    masks = [("extra_casters", extra), ("missing_casters", missing)]
+    if applied is not None:
+        # rt_sun_replace (blue channel): written lit where the game's mask is dark.
+        rep = im.opening(im.erode((im.box(applied, 2) > 0.85) & (game_b < 0.1) & valid, k), 1)
+        masks.append(("replaced", im.dilate(rep, k)))
     out = {}
-    for name, m in (("extra_casters", extra), ("missing_casters", missing)):
+    for name, m in masks:
         lab, n = im.label(m)
         regs, tot, impact_px = [], 0, 0
         for i, area, bb in im.regions(lab, n, _min_area(m.shape)):
@@ -164,17 +172,28 @@ def sun_disagreement(game, rt, sun_ratio, cls=None):
                "missing_area": round(s_missing, 3),
                "agree_lit": round(float(((rt_b > 0.5) & lit_game).sum() / max(1, lit_game.sum())), 4),
                "game_lit_frac": round(float(lit_game.mean()), 4)}
-    return {
+    res = {
         "extra": {"score": round(s_extra, 4), "threshold": T["sun_extra_fail_area"],
                   "pass": s_extra <= T["sun_extra_fail_area"], "unit": "‰ of px (darkened by the sun term)",
                   "metrics": metrics, "regions": ex_regs},
-        # The fold only darkens (mask * vis): a missing caster cannot change the image, the
-        # game's own mask keeps that shadow. Off-screen casters (roofs, cut-away walls)
-        # are expected here, so this is a warning, not a gate.
+        # With min(game, traced) a missing caster cannot change the image. With
+        # rt_sun_replace only trusted pixels can (the "replaced" entry below); off-screen
+        # casters (roofs, cut-away walls) are expected here, so this is a warning, not a gate.
         "missing": {"score": round(s_missing, 4), "threshold": T["sun_missing_warn_area"], "gate": False,
                     "pass": s_missing <= T["sun_missing_warn_area"], "unit": "‰ of px", "metrics": metrics,
                     "regions": mi_regs},
     }
+    if "replaced" in out:
+        rp_regs, rp_tot, _ = out["replaced"]
+        s_rep = _permille(rp_tot, game.shape)
+        metrics["replaced_area"] = round(s_rep, 3)
+        metrics["replaced_of_missing"] = round(s_rep / max(s_missing, 1e-9), 3) if s_missing > 0 else 0.0
+        # Brightened against the game: physically right (over-wide filtering, acne) or a
+        # missing caster leaking. For review (the crops), not a gate.
+        res["replaced"] = {"score": round(s_rep, 4), "threshold": T["sun_replaced_warn_area"], "gate": False,
+                           "pass": s_rep <= T["sun_replaced_warn_area"], "unit": "‰ of px", "metrics": metrics,
+                           "regions": rp_regs}
+    return res
 
 
 def temporal(codes_on, codes_off):
