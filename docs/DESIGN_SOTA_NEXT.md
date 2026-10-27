@@ -784,6 +784,62 @@ place (docs/QA.md):
   still cannot separate hidden-surface bounce from a leak, the next step is the v2 traced update
   (2.3): it gives the reference, and the cache, radiance at hidden hits.
 
+### 2.15 Corrected leak test (QA `captures/qa/20261027-175117`, S7 + S8, raw kept) and v2
+
+- **`sharc_leak_cells`** (counters, rejection off), with the test path half a cell above the
+  plane: occluded cells supply **4.7%** (S7) and **4.0%** (S8) of the cache's GI contribution
+  (6.8% / 8.9% of its hits), down from 19% / 18.5% with the grazing path. Thin: 0.000%. The
+  mechanism is active at a few per cent; `sharc_reject_occluded=1` (default) removes it.
+- **`sharc_reference`**: **S7 interior passes** (excess 5,919 against deficit 6,487 independent
+  samples, noise 111; mean −1.1%: in the closed tavern the cache is not brighter than the
+  reference). **S8 interior fails** as before (excess 211,985 against 43,453, noise 505; mean
+  +1.5%, 4.2% of the energy above σ_d), uniformly over shaded stone (crops), where the cache
+  replaces the probe ambient at hidden hits with cached radiance. The S8 "interior" is mostly
+  exterior shade inside the padded volumes. The reference stays indecisive there.
+- hard_dark: S7 `sharc` 0.43‰ final only, a character's arm that moved between traces; S8 0.
+  Non-finite: 0.
+- **v2 (traced update), started on branch `sharc-v2` from 67b1e44.** Its purpose here is a
+  decisive reference: radiance of its own at hidden hits. That radiance is albedo x incident
+  light, and the albedo at a hidden hit needs hit materials (STATUS #4, EN2: not done; D-EM not
+  merged either). The design's fallbacks for it ("injected radiance / injected irradiance", only
+  for voxels already seen; "else 0.5", an assumed albedo) do not give a physical value for a
+  surface never seen, and an assumed albedo is excluded by R0. So v2's traced update waits for
+  EN2. **What it starts with instead is an assumption-free reference for the leak question:**
+  `sharc_fine_check=1` injects every sample also into a grid with cells `sharc_fine_scale` (4)
+  times smaller (same table, keys 16 levels apart), and per cache hit logs coarse − fine
+  luminance with its standard error, for clean and for occluded cells. The finer grid is the
+  same estimator closer to its leak-free limit (cells 4-8 cm at 10-30 m, under a wall's
+  thickness); repeating at 8 shows whether 4 has converged. QA check `sharc_fine_reference`
+  (gate): the clean cells' mean excess must not exceed z x its measured standard error, z = 1.96 =
+  `thresholds.z_one_sided(2)` (ALPHA_FW 5% over the scene's two SHaRC gates; corrected from k = 1,
+  which would false-alarm 16% of the time). Caveat,
+  written down: where the GI rays' hit density correlates with brightness inside a cell, coarse
+  and fine differ without a leak; the occluded cells against the clean ones separate the two.
+  Job `38-sharc7-qa-S7-S8`. Hit materials (EN2) are the blocker for the traced update itself.
+### 2.16 sharc7 (QA `captures/qa/20261027-183526`) and the plan with EN2
+
+- **`sharc_fine_reference`: not measured.** The QA phases last 240 presents (about 6 s); the
+  300-frame "sharc stats" window never closed inside the `sharc_leak` phase before `sref0` turned
+  the cache off, so no fine-cell line was logged (and the leak-test line scored for that phase
+  covered mostly the phase before it). Fixed: `sharc_stats_frames`, 60 in the QA, so several
+  windows close inside each phase and the last line of a phase covers it alone.
+- `sharc_leak_cells` (counters): 6.0% (S7) and 4.1% (S8) of the cache's GI contribution from
+  occluded cells (same windowing caveat). Rejected by default.
+- `sharc_reference` with z = 1.96: **S7 interior passes** (excess 24,638 against deficit 25,650;
+  limit 440), **S8 interior fails** (217,427 against 42,592; limit 999; mean +1.9%), as in
+  2.14-2.15: indecisive there for the reason given.
+- hard_dark: S7 `sharc` 0.42‰ final only (the moving character again); non-finite 0.
+- **Default: off.** The fine-cell gate has not produced a measurement; job `39-sharc8-qa-S7-S8`.
+- **EN2 (branch `worktree-agent-a94065fdd50bc8494`) and SHaRC in D-RF.** EN2 adds
+  `rt_reflections_hm.hlsl` (HITMAT_PASS) with the lighting's sun set as set 3; SHaRC's variant
+  binds the cache at set 4 with set 3 empty, so the two layouts nest. When both land: one shader
+  `rt_reflections_hm.hlsl` with both HITMAT_PASS and SHARC_QUERY_PASS, layout {D-RF push, host,
+  game set 1, sun set, cache set}, replacing `rt_reflections_sharc.hlsl`; `rf_dispatch` keeps
+  plain / cache-only / material(+cache) pipelines. Per hidden or off-screen hit: EN2's tier (b)
+  (material x direct light at the hit) where it applies, the cache where tier (b) has no
+  material, the probe otherwise; the cache's diffuse-only radiance never adds to tier (b)'s
+  direct term (double counting). EN2 also unblocks v2's traced update: its hit albedo is
+  exactly the missing input (2.15).
 ---
 
 ## 3. Opacity micromaps for alpha-tested foliage

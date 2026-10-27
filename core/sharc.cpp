@@ -2,6 +2,7 @@
 #include "sharc.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -18,11 +19,13 @@ struct SharcConsts {
   float rf_rough, rf_cone, near_voxels;
   float max_radiance, reset_jump, em_scale;
   float gi_base_radius;   // gi_rt_radius: the occlusion range of hits without radiance
+  float fine_scale;       // sharc_fine_check: cells of the reference grid this many times smaller
+  float pad[3];
 };
-static_assert(sizeof(SharcConsts) == 80, "SharcConsts must match sharc_common.hlsli");
+static_assert(sizeof(SharcConsts) == 96, "SharcConsts must match sharc_common.hlsli");
 
 constexpr uint32_t kRing = 8;
-constexpr uint32_t kCounters = 24;              // sharc_common.hlsli kSh*
+constexpr uint32_t kCounters = 32;              // sharc_common.hlsli kSh*
 constexpr uint32_t kCounterWords = kCounters * 64;   // x 64 bins (kShBins)
 constexpr VkDeviceSize kStateCounters = 16;     // byte offset of the counters in the state buffer
 constexpr VkDeviceSize kStateBytes = kStateCounters + kCounterWords * 4;
@@ -219,7 +222,10 @@ void stats_fold(uint64_t now) {
   for (uint32_t i = 0; i < kCounters; ++i)
     for (uint32_t b = 0; b < 64; ++b) g_sum[i] += c[i * 64 + b];
   g_rb_frame[slot] = 0;
-  if (++g_sum_n < 300) return;
+  // Window of the "sharc stats" lines (sharc_stats_frames): the QA's phases last 240 presents, so it
+  // uses a shorter window to get lines that cover one phase only (2026-10-27: the 300-frame window
+  // never closed inside the 6 s sharc_leak phase, so the fine-cell reference logged nothing).
+  if (++g_sum_n < uint32_t((std::max)(host->cfg_int("sharc_stats_frames", 300), 10))) return;
   const double n = g_sum_n, cap = double(1u << g_log2);
   const uint64_t* t = g_sum;
   const double gi = double(t[3] + t[4]), q = double(t[5] ? t[5] : 1), ask = double(t[5] + t[7] ? t[5] + t[7] : 1);
@@ -324,7 +330,7 @@ bool sharc_begin(VkCommandBuffer cmd, SharcFrame* out) {
   // Leak test (sharc_common.hlsli sharc_cell_test): bit 4 measures, bit 5 rejects occluded cells.
   const bool leak_check = host->cfg_int("sharc_leak_check", 0) != 0 || host->cfg_int("sharc_debug", 0) == 6;
   c.flags = query | (host->cfg_int("sharc_stats", 0) ? 8u : 0u) | (leak_check ? 16u : 0u) |
-            (host->cfg_int("sharc_reject_occluded", 1) ? 32u : 0u);
+            (host->cfg_int("sharc_reject_occluded", 1) ? 32u : 0u) | (host->cfg_int("sharc_fine_check", 0) ? 64u : 0u);
   c.stride = uint32_t((std::min)((std::max)(host->cfg_int("sharc_inject_stride", 2), 1), 16));
   c.debug = uint32_t((std::max)(host->cfg_int("sharc_debug", 0), 0));
   c.stats_off = uint32_t(kStateCounters);
@@ -339,6 +345,7 @@ bool sharc_begin(VkCommandBuffer cmd, SharcFrame* out) {
   c.reset_jump = host->cfg_float("sharc_reset_jump", 50.0f);
   c.em_scale = host->cfg_float("sharc_em", 1.0f);
   c.gi_base_radius = (std::max)(host->cfg_float("gi_rt_radius", 1.0f), 0.01f);
+  c.fine_scale = (std::max)(host->cfg_float("sharc_fine_scale", 4.0f), 1.0f);
   vk.CmdUpdateBuffer(cmd, g_consts.b, 0, sizeof c, &c);
   barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 

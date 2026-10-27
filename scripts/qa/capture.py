@@ -92,24 +92,24 @@ def plan(temporal=3, reference=False, split_gi=False, gi_restore=None, split_sun
         p += [(f"sharc_on{i}", {}) for i in range(1, temporal)]
         p += [("sharc_refl_off", {"rt_reflections": "0"}),
               ("sharc_roof", {"rt_reflections": "1", "sharc_debug": "5"}),
-              ("sharc_leak", {"sharc_debug": "6", "sharc_leak_check": "1", "sharc_reject_occluded": "0"})]
+              ("sharc_leak", {"sharc_debug": "6", "sharc_leak_check": "1", "sharc_reject_occluded": "0", "sharc_fine_check": "1"})]
         if reference:
             # The reference of the cache's GI: no cache, rays to the cache's radius, 8 per pixel
             # (same denoiser, view and other effects). Hidden hits there have no radiance:
             # gi_rt_fallback=1 leaves the game's ambient for them (docs/QA.md "sharc_reference").
-            p += [("sref0", {"sharc": "0", "sharc_debug": "0", "sharc_leak_check": "0", "sharc_reject_occluded": "1",
+            p += [("sref0", {"sharc": "0", "sharc_debug": "0", "sharc_leak_check": "0", "sharc_reject_occluded": "1", "sharc_fine_check": "0",
                              "gi_rt_radius": sharc_radius, "gi_rt_fallback": "1", "gi_rr_rays": "8"})]
             p += [(f"sref{i}", {}) for i in range(1, temporal)]
     if reference:
         # More samples for the stochastic terms, same denoiser (RR) and view.
         r = {"rt_debug": "0", "rt_backlit": "1", "gi_rr_rays": "8", "ls_samples": "2"}
         if sharc:   # back from the cache's sets
-            r.update(sharc="0", sharc_debug="0", sharc_leak_check="0", sharc_reject_occluded="1",
+            r.update(sharc="0", sharc_debug="0", sharc_leak_check="0", sharc_reject_occluded="1", sharc_fine_check="0",
                      gi_rt_radius="1.0", gi_rt_fallback="0")
         p += [("ref", r)]
     first_off = dict(ALL_OFF, rt_backlit="1", gi_rr_rays="1", ls_samples="0") if reference else dict(ALL_OFF, rt_backlit="1")
     if sharc:
-        first_off.update(sharc="0", sharc_debug="0", sharc_leak_check="0", sharc_reject_occluded="1",
+        first_off.update(sharc="0", sharc_debug="0", sharc_leak_check="0", sharc_reject_occluded="1", sharc_fine_check="0",
                          gi_rt_radius="1.0", gi_rt_fallback="0")
     p += [("off0", first_off)]
     p += [(f"off{i}", {}) for i in range(1, temporal)]
@@ -138,7 +138,9 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
     sets = [f"{k}={v}" for k, v in ALL_ON.items()]
     sets += [f"auto_interval={interval}", f"dump_png_width={3840 if full_res else 1280}"]
     if sharc:
-        sets += ["sharc=0", "sharc_debug=0", "sharc_stats=1"]   # on0 is the cache-off baseline
+        # on0 is the cache-off baseline; 60-frame stats windows close several times inside each
+        # 240-present phase, so the last line logged in a phase covers that phase alone.
+        sets += ["sharc=0", "sharc_debug=0", "sharc_stats=1", "sharc_stats_frames=60"]
     sets += list(extra)   # --set: keys for every trace of the run (e.g. rt_sun_top=0)
     if raw:
         # Exact float32 of the final frame (and RR/rr_post images): about 1 GB per trace

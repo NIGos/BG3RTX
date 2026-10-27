@@ -434,6 +434,35 @@ def analyze_scene(d: Path, pool):
                 res["crops"].append({"file": f"crops/{name}", "detector": "sharc_leak_cells", "effect": "sharc",
                                      "buffer": "debug diffuse", "bbox": g["bbox"], "shape": list(dif.shape[:2]), "area": g["area"]})
 
+    # sharc_fine_reference: the cache's coarse cells against its own leak-free limit, a grid with
+    # cells sharc_fine_scale times smaller fed by the same injection (the sharc_leak trace,
+    # sharc_fine_check=1). Per cache hit with both entries: coarse - fine luminance; the GPU logs
+    # the mean and its standard error over 300 frames. Production uses the clean cells (occluded
+    # ones are rejected): it fails if their mean excess is above one measured standard error.
+    # The SHaRC gates of one scene form one test family (sharc_fine_reference, sharc_reference on the
+    # interior): each runs at ALPHA_FW / 2 (Bonferroni), z = thresholds.z_one_sided(2).
+    z_sharc = th.z_one_sided(2)
+    if "sharc_leak" in traces:
+        import re as _re
+        fine = {}
+        for l in meta.get("log_tail", []):
+            m_ = _re.search(r"fine-cell reference \(cells ([\d.]+)x smaller\), (clean|occluded) cells: ([\d.]+) pairs/frame, "
+                            r"coarse - fine luminance ([+-][\d.]+) \+- ([\d.]+) \(1 SE; ([+-][\d.]+)% of the fine ([\d.]+)\)", l)
+            if m_:
+                fine[m_.group(2)] = {"scale": float(m_.group(1)), "pairs_per_frame": float(m_.group(3)),
+                                     "mean": float(m_.group(4)), "se": float(m_.group(5)),
+                                     "mean_pct_of_fine": float(m_.group(6)), "fine_mean": float(m_.group(7))}
+        if "clean" in fine:
+            c = fine["clean"]
+            res["checks"].append({"detector": "sharc_fine_reference", "effect": "sharc", "buffer": "GPU counters (sharc_leak)",
+                                  "on": "sharc_leak", "off": "sharc_leak", "score": c["mean"], "threshold": round(z_sharc * c["se"], 6),
+                                  "pass": c["mean"] <= z_sharc * c["se"],
+                                  "unit": f"coarse - fine luminance per cache hit (clean cells) against z x SE (z {z_sharc:.3f}, "
+                                          f"ALPHA_FW {th.ALPHA_FW} / 2)",
+                                  "metrics": dict(fine, z=round(z_sharc, 3))})
+        else:
+            res["notes"].append("sharc_fine_reference: no 'fine-cell reference' line in the log (sharc_fine_check did not run)")
+
     # sharc_reference: the cache's lighting against its physical reference (no cache, long rays,
     # 8 per pixel), with tolerances from the traces' own per-pixel noise. The gate is on the roofed
     # interior (sharc_roof mask, not lit by the game's sun); the whole frame is reported for review.
@@ -449,7 +478,7 @@ def analyze_scene(d: Path, pool):
                 if m is None or m.shape != whole.shape or not m.any():
                     res["notes"].append(f"sharc_reference ({scope}): no roofed interior with a sunlit exterior in view")
                     continue
-                r = det.sharc_reference(ys_c, ys_r, m)
+                r = det.sharc_reference(ys_c, ys_r, m, z=z_sharc)
                 z = r.pop("map")[1]
                 if scope == "frame":
                     r["gate"] = False
