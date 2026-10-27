@@ -1667,16 +1667,25 @@ seem not to cast or receive RT shadows. Findings (offline):
     | S6 Adamantine Forge | 0.372 ms | 0.375 ms | not measured (the stats job hit the open nv153 stall) |
     | S8 Water Queens House | 0.120 ms | 0.120 ms | 0.00 of 0.41 evaluations per px |
 
-    No cost in either, but neither has shadow-mapped lights in view, so this does not yet
-    exercise mode 3. Grymforge (0.34 shadowed of 4.34 evaluations per px in another agent's
-    run) is queued (`32-casters-S5-*`: shares, then modes 0, 3, 1).
+    | S5 Grymforge | 0.629 ms | **0.690 ms** (mode 1: 0.688) | 0.34 of 4.34 evaluations per px (7.8%) |
+
+    S6 and S8 have no shadow-mapped lights in view. **Grymforge** (`32-casters-S5-*`, one
+    session, no faults): replacing the 0.34 shadow-mapped evaluations per px costs
+    **+0.061 ms** (traced 3.83 per px, occluded 1.13; light removed 18.0% of the lit
+    luminance), within the +0.15 ms rule, and the on-screen test of mode 3 is free
+    (mode 1 = 0.688 ms). **Default kept: `ls_shadowed=3` on High and Ultra.** The pass
+    itself is over its 0.5 ms budget in Grymforge in every mode (0.63 ms at mode 0, the
+    D-LS performance task of STATUS). The traces of the three modes cannot be compared
+    frame to frame: their mean luminance swings 1772 / 419 / 77 nits with large bright
+    VFX blobs in all three (mode 0 included), so a dedicated in-frame A/B (as `rt_debug=7`
+    for the sun) is needed to judge the replaced shadows' look.
 - **Other results of the same jobs.**
   - Coverage (S8, `rt_debug=3`): match 99.23%, miss 0.069%, in front 0.072%, behind 0.633%
     of which 0.629% "through vt cutouts": the stochastic alpha test at blurred mips letting
     primary rays through the edges of ferns and ivy (the debug frame shows them only there).
     The characters are matched. Missing geometry is ≤ 0.07%.
   - Skipped by art intent (`ls_noshadow=1`, owners 0x1F): 11.4% of light evaluations in S6,
-    86% in S8. That is the darkvision pair; in S8 most of it is the `Point_Default` half,
+    86% in S8, 11.8% in S5. That is the darkvision pair; in S8 most of it is the `Point_Default` half,
     which has intensity 0 (it covers the view at r = 18 and adds nothing). The owner view
     (`ls_debug=9`) shows the party's floor in S8 lit by an owner-unknown visual light (the
     carried fire weapon), which is traced; little magenta (character) light anywhere.
