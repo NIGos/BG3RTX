@@ -229,6 +229,19 @@ noise, artifacts, jitter and pans; no game).
 | nonfinite | 0 | derived (correctness) | |
 | roofed_brightening (`--sharc`) | ratio 1.3, area 0.5‰, roofed ≥ 1%, sun-lit ≥ 1% | arbitrary | **Not changed here**: the SHaRC branch replaces it with `sharc_reference` (per-pixel σ of repeated cache and reference traces, binomial test on independent samples) and a geometric leak report. |
 
+### EN2 hit-material self-check (`python -m scripts.qa.coverage hitmat <log>`, TRACK_D_RT 13.3)
+
+On-screen reflection hits: d = the hit material - the G-buffer at the hit's pixel; nb = the
+G-buffer's difference to the neighbouring pixel on the same surface (same frames).
+
+| Gate | Value | Class | Derivation |
+|---|---|---|---|
+| accuracy (base colour) | median \|dY\| ≤ median \|nbY\| + LSB/4 | derived (noise, display) | The hit lies inside the pixel's footprint and is read with the ray cone's wider filter: it may differ from the pixel's sample by the texture's variation over one pixel, which nb measures. LSB/4 = mean \|rounding error\| of RGBA8 (1/255 steps). Medians: decals (RT1 after the G-buffer pass) and silhouettes are outliers. |
+| accuracy per channel, roughness, metalness | mean \|d\| ≤ mean \|nb\| + LSB/4 (+ z·SE for the colour) | derived (noise, display) | As above, on the means. |
+| bias | \|mean dY\| ≤ z·SE + LSB/2 | derived (noise, display) | Half a step: the most a rounding convention can shift a mean. |
+| conclusive | SE(mean dY) ≤ LSB/z | derived (display) | A one-step bias must be detectable. |
+| z | z_one_sided(5) at `ALPHA_FW` (2.33) | derived (standard) | Bonferroni over the bias test (two-sided) and the three channel means. |
+
 ### Review only (no threshold)
 
 | Detector | Constants | Why review |

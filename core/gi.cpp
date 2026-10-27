@@ -64,6 +64,8 @@ struct Snapshot {
   // run_pre; D-RF queries it (rf_sharc) and the injection writes it in run_post.
   bool sharc, rf_sharc;
   SharcFrame sh;
+  // EN2 (rt_hitmat=1): D-RF reads the material at its hits (rt_reflections_hm.hlsl; the sun set as set 3).
+  bool rf_hm;
 };
 
 struct Pipe {
@@ -190,6 +192,10 @@ bool g_ls_logged = false, g_ls_missing_logged = false;
 VkDescriptorSetLayout g_rf_set_layout = VK_NULL_HANDLE, g_rf_game_layout = VK_NULL_HANDLE;
 VkPipelineLayout g_rf_layout = VK_NULL_HANDLE;
 Pipe g_rf;
+// EN2: D-RF with hit materials (rt_reflections_hm.hlsl): the D-RF layout plus the sun set as set 3.
+VkPipelineLayout g_rf_hm_layout = VK_NULL_HANDLE;
+Pipe g_rf_hm;
+bool g_rf_hm_logged = false;
 bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
@@ -509,6 +515,10 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
     host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_sharc_layout);
     g_rf_sharc = Pipe{};
     g_rf_sharc_layout = VK_NULL_HANDLE;
+    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_rf_hm.pipeline);
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_hm_layout);
+    g_rf_hm = Pipe{};
+    g_rf_hm_layout = VK_NULL_HANDLE;
     host->log("rf: the lighting's set 1 layout changed (%p -> %p); rebuilding", (void*)g_rf_game_layout, (void*)game);
   }
   if (!make_layout(kRfBindings, &g_rf_set_layout, &g_rf_layout, host_layout, game)) {
@@ -552,8 +562,8 @@ bool ensure_rf_sharc_layout() {
   return make_sharc_layout(g_rf_set_layout, host_layout, g_rf_game_layout, &g_rf_sharc_layout);
 }
 
-bool ensure_ls_layout() {
-  if (g_ls_layout) return true;
+// The sun set (set 2 of D-LS, set 3 of the EN2 D-RF variant): layout, pool, ring, sampler.
+bool ensure_sun_sets() {
   if (!g_linear_clamp) {
     VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     si.magFilter = si.minFilter = VK_FILTER_LINEAR;
@@ -587,10 +597,34 @@ bool ensure_ls_layout() {
     ai.pSetLayouts = ls;
     if (host->vk->AllocateDescriptorSets(host->device, &ai, g_sun_sets) != VK_SUCCESS) return false;
   }
+  return true;
+}
+
+bool ensure_ls_layout() {
+  if (g_ls_layout) return true;
+  if (!ensure_sun_sets()) return false;
   VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
   VkDescriptorSet unused;
   if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
   return make_layout(kLsBindings, &g_ls_set_layout, &g_ls_layout, host_layout, g_sun_dsl);
+}
+
+// EN2: the D-RF layout's sets (push set 0, the host's set 1, the game's set 2) and the sun set as set 3.
+bool ensure_rf_hm_layout() {
+  if (g_rf_hm_layout) return true;
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!g_rf_set_layout || !g_rf_game_layout || !ensure_sun_sets() || !host->rt_alpha ||
+      !host->rt_alpha(&host_layout, &unused) || !host_layout)
+    return false;
+  VkDescriptorSetLayout sets[4] = {g_rf_set_layout, host_layout, g_rf_game_layout, g_sun_dsl};
+  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
+  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  lci.setLayoutCount = 4;
+  lci.pSetLayouts = sets;
+  lci.pushConstantRangeCount = 1;
+  lci.pPushConstantRanges = &pc;
+  return host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &g_rf_hm_layout) == VK_SUCCESS;
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
@@ -1194,15 +1228,20 @@ void ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
 
 // D-RF: push set 0 (bindings 0-30), the host's set 1, the game's lighting set 1 as set 2.
 // With rf_sharc: the variant reading the radiance cache, its layout adding set 4.
-void rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& pc) {
+// EN2 (s.rf_hm and a sun set): the hit-material variant, the sun set as set 3; it takes the
+// place of the SHaRC variant when both are on.
+void rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& pc, VkDescriptorSet sun = VK_NULL_HANDLE) {
   const VkDeviceFuncs& vk = *host->vk;
-  const VkPipelineLayout layout = s.rf_sharc ? g_rf_sharc_layout : g_rf_layout;
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.rf_sharc ? g_rf_sharc.pipeline : g_rf.pipeline);
+  const bool hm = s.rf_hm && sun;
+  const bool sh = s.rf_sharc && !hm;
+  const VkPipelineLayout layout = hm ? g_rf_hm_layout : sh ? g_rf_sharc_layout : g_rf_layout;
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, hm ? g_rf_hm.pipeline : sh ? g_rf_sharc.pipeline : g_rf.pipeline);
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, kRfBindings, b.w);
   VkDescriptorSet sets[2] = {b.alpha, s.game_set1};
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 2, sets, s.game_set1_ndyn,
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
-  if (s.rf_sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
+  if (hm) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 3, 1, &sun, 0, nullptr);
+  if (sh) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
 }
@@ -1410,6 +1449,14 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
               (void*)s.game_set1, (void*)s.game_set1_layout, s.gi, g_rf.pipeline != VK_NULL_HANDLE);
   }
   s.rf_validate = s.rf && host->cfg_int("rf_validate", 0) != 0 && s.ls_ok;
+  // EN2: hit materials in D-RF (rt_hitmat=1): coverage, self-check, rf_debug=7, tier (b) with rf_hitmat=1.
+  s.rf_hm = s.rf && host->cfg_int("rt_hitmat", 0) != 0 && ensure_rf_hm_layout() &&
+            refresh(g_rf_hm, "gi/rt_reflections_hm.hlsl", g_rf_hm_layout);
+  if (s.rf && host->cfg_int("rt_hitmat", 0) && !g_rf_hm_logged) {
+    g_rf_hm_logged = true;
+    host->log("rf: hit materials (EN2) %s; tier (b) %d, statistics %d", s.rf_hm ? "on" : "UNAVAILABLE (layout or shader)",
+              host->cfg_int("rf_hitmat", 0), host->cfg_int("rt_hitmat_stats", 1));
+  }
   // SHaRC radiance cache (sharc=1, core/sharc.h): with the hybrid RT GI and the absolute camera.
   s.sharc = false;
   s.rf_sharc = false;
@@ -1634,8 +1681,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   timestamp(cmd, 2);
   // D-LS first: the GI composite keeps diffuse + specular as next frame's bounce source.
   // (the sun set first: none free means no D-LS this frame, before any transition)
-  const VkDescriptorSet sun_set = s.ls && s.tlas && g_ls.pipeline ? write_sun_set(s) : VK_NULL_HANDLE;
-  if (sun_set) {
+  const bool ls_go = s.ls && s.tlas && g_ls.pipeline;
+  const VkDescriptorSet sun_set = ls_go || (s.rf_hm && s.tlas) ? write_sun_set(s) : VK_NULL_HANDLE;
+  if (sun_set && ls_go) {
     Bound lb;
     bind_all(lb, s);
     bind_rt(lb, s.tlas, s.alpha);
@@ -1708,12 +1756,16 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     rb.w[kLsBindings].pImageInfo = &rb.rf_hit;
     Push rp = pc;
     rp.rf_validate = s.rf_validate ? 1u : 0u;
+    // EN2 bits (rt_reflections.hlsl HITMAT_PASS): 8 read, 9 tier (b), 10 statistics, 11 sun set bound.
+    if (s.rf_hm && sun_set)
+      rp.rf_models |= (1u << 8) | (host->cfg_int("rf_hitmat", 0) ? 1u << 9 : 0u) |
+                      (host->cfg_int("rt_hitmat_stats", 1) ? 1u << 10 : 0u) | (1u << 11);
     rf_timing_collect();
     // The reprojection samples the MVs in SHADER_READ_ONLY (as the GI traces do).
     bool mv_move = rp.has_mv && g_mv_image && g_mv_layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     if (mv_move) image_layout(cmd, g_mv_image, g_mv_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, kAll, kCS);
     rf_timestamp(cmd, 0);
-    rf_dispatch(cmd, rb, s, rp);
+    rf_dispatch(cmd, rb, s, rp, sun_set);
     rf_timestamp(cmd, 1);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
@@ -1861,7 +1913,7 @@ void gi_release() {
   for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
-                  &g_sharc_debug, &g_sharc_roof}) {
+                  &g_sharc_debug, &g_sharc_roof, &g_rf_hm}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
     *p = Pipe{};
   }
@@ -1907,7 +1959,7 @@ void gi_release() {
   g_set_layout = VK_NULL_HANDLE;
   g_rt_layout = VK_NULL_HANDLE;
   g_rt_set_layout = VK_NULL_HANDLE;
-  for (VkPipelineLayout* l : {&g_rt_sharc_layout, &g_rf_sharc_layout}) {
+  for (VkPipelineLayout* l : {&g_rt_sharc_layout, &g_rf_sharc_layout, &g_rf_hm_layout}) {
     host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
     *l = VK_NULL_HANDLE;
   }

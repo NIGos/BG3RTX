@@ -4,6 +4,7 @@ our ray tracing handles (docs/COVERAGE.md).
     python -m scripts.qa.coverage                       every capture found (main + worktrees + QA)
     python -m scripts.qa.coverage captures/2026...      these captures (folders with frame.json)
     python -m scripts.qa.coverage --md out.md --json out.json
+    python -m scripts.qa.coverage hitmat captures/queue/logs/<run>.log ...   EN2 hit materials (below)
 
 Per capture (frame.json, plus dumps.json and img/ when present):
 - each render pass is classified (depth prepass, G-buffer, decals, motion vectors, shadow
@@ -506,8 +507,144 @@ def to_markdown(results):
     return "\n".join(lines + caps) + "\n"
 
 
+# ---- EN2 hit materials (layer/hitmat.cpp, shaders/gi/rt_reflections.hlsl HITMAT_PASS) ----
+# "[hitmat] selfcheck" lists the on-screen self-check sums of one log window (kQa*, x 4096);
+# "[hitmat] coverage" / "coverage by family" the sampled hits per shader family.
+QA_SCALE = 4096.0
+LSB = 1.0 / 255.0   # the G-buffer's RGBA8 UNORM step
+
+
+def _hist_median(h):
+    """Median of |x| from the 16-bin log histogram (bin 0 < 1/1024, bin k [2^(k-1), 2^k)/1024),
+    interpolated geometrically inside its bin."""
+    n = sum(h)
+    if not n:
+        return None
+    half, acc = n / 2.0, 0
+    for k, c in enumerate(h):
+        if acc + c >= half:
+            lo = 0.0 if k == 0 else 2.0 ** (k - 1) / 1024.0
+            hi = 2.0 ** k / 1024.0 if k else 1.0 / 1024.0
+            f = (half - acc) / c if c else 0.0
+            return lo + (hi - lo) * f if k == 0 else lo * (hi / lo) ** f
+        acc += c
+    return None
+
+
+def hitmat_report(logs):
+    """The coverage and the on-screen self-check of EN2 from layer logs (one scene per log).
+
+    Self-check (on-screen reflection hits, where the G-buffer is ground truth for the same
+    surface): d = hit material - G-buffer at the hit's pixel; nb = G-buffer at that pixel -
+    G-buffer at its neighbour on the same surface. Every gate is derived (QUALITY.md thresholds):
+      - accuracy: median |dY| <= median |nbY| + LSB/4. The hit lies somewhere inside the
+        pixel's footprint and is read through the ray cone's (wider) filter, so it can differ
+        from the pixel's own sample by the texture's variation over one pixel, which nb
+        measures on the same frames; LSB/4 is the mean |rounding error| of the RGBA8 target.
+        Medians: decals (written into RT1 after the G-buffer pass, absent from the hit
+        material) and silhouettes are outliers, not noise.
+      - bias: |mean dY| <= z SE(mean dY) + LSB/2 (half a step: the most a rounding
+        convention can shift a mean);
+      - the same accuracy gate per channel on the means (|d| vs |nb|, + LSB/4 + z SE) and for
+        roughness and metalness (RT2.x, RT2.z) where those are known;
+      - conclusive only with SE(mean dY) <= LSB/z (a one-step bias would be seen).
+    z = z_one_sided(5) at ALPHA_FW (thresholds.py): the bias test is two-sided (2) and the
+    three channel means one-sided (3), Bonferroni over the five."""
+    from scripts.qa.thresholds import z_one_sided
+    z = z_one_sided(5)
+    rows = []
+    for path in logs:
+        txt = Path(path).read_text(encoding="utf-8", errors="ignore")
+        qa = [0] * 64
+        windows = 0
+        for m in re.finditer(r"\[hitmat\] selfcheck ([\d ]+)", txt):
+            v = [int(x) for x in m.group(1).split()]
+            for i, x in enumerate(v[:64]):
+                qa[i] += x
+            windows += 1
+        hits, known = 0, Counter()
+        for m in re.finditer(r"\[hitmat\] coverage: hits (\d+), known albedo ([\d.]+)%, roughness ([\d.]+)%, "
+                             r"metalness ([\d.]+)%", txt):
+            h = int(m.group(1))
+            hits += h
+            for k, g in (("albedo", 2), ("rough", 3), ("metal", 4)):
+                known[k] += h * float(m.group(g)) / 100.0
+        fam = defaultdict(lambda: [0.0, 0.0, 0.0, 0.0])
+        for m in re.finditer(r"\[hitmat\] coverage by family \([^)]*\): (.*)", txt):
+            for item in m.group(1).split("; "):
+                mm = re.match(r"([0-9a-f]{16}) (.*) (\d+) ([\d.]+)/([\d.]+)/([\d.]+)$", item.strip())
+                if not mm:
+                    continue
+                key = mm.group(2) + " " + mm.group(1)[:8]
+                h = int(mm.group(3))
+                f = fam[key]
+                f[0] += h
+                for i in range(3):
+                    f[i + 1] += h * float(mm.group(4 + i)) / 100.0
+        r = {"log": str(path), "windows": windows, "hits": hits, "known": dict(known), "families": dict(fam)}
+        n = qa[0]
+        r["n"] = n
+        r["tier_a_hits"], r["tier_a_known"], r["hidden_hits"], r["hidden_known"], r["tier_b"] = qa[20:25]
+        if n:
+            mae = [qa[1 + c] / QA_SCALE / n for c in range(3)]
+            nb = [qa[10 + c] / QA_SCALE / n for c in range(3)]
+            bias_c = [(qa[4 + c] - qa[7 + c]) / QA_SCALE / n for c in range(3)]
+            bias_y = 0.2126 * bias_c[0] + 0.7152 * bias_c[1] + 0.0722 * bias_c[2]
+            var_y = max(qa[13] / QA_SCALE / n - bias_y * bias_y, 0.0)
+            se_y = (var_y / n) ** 0.5
+            med_d, med_nb = _hist_median(qa[26:42]), _hist_median(qa[42:58])
+            r.update(mae=mae, nb=nb, bias_rgb=bias_c, bias_y=bias_y, se_y=se_y, median_dy=med_d, median_nby=med_nb)
+            gates = {
+                f"conclusive (SE <= LSB/z, z={z:.2f})": se_y <= LSB / z,
+                "median |dY| <= median |nbY| + LSB/4": med_d is not None and med_nb is not None and med_d <= med_nb + LSB / 4,
+                "|bias Y| <= z SE + LSB/2": abs(bias_y) <= z * se_y + LSB / 2,
+            }
+            for c, name in enumerate("rgb"):
+                gates[f"mean |d{name}| <= mean |nb{name}| + LSB/4 + z SE"] = mae[c] <= nb[c] + LSB / 4 + z * se_y
+            for label, i in (("roughness", 14), ("metalness", 17)):
+                if qa[i]:
+                    d, b = qa[i + 1] / QA_SCALE / qa[i], qa[i + 2] / QA_SCALE / qa[i]
+                    r[label] = (qa[i], d, b)
+                    gates[f"{label}: mean |d| <= mean |nb| + LSB/4"] = d <= b + LSB / 4
+            r["gates"] = gates
+            r["pass"] = all(gates.values())
+        rows.append(r)
+    for r in rows:
+        print(f"== {r['log']}: {r['windows']} log windows")
+        if r["hits"]:
+            k = r["known"]
+            print(f"  coverage: {r['hits']} sampled hits, known albedo {100 * k.get('albedo', 0) / r['hits']:.1f}%, "
+                  f"roughness {100 * k.get('rough', 0) / r['hits']:.1f}%, metalness {100 * k.get('metal', 0) / r['hits']:.1f}%")
+            print(f"  {'family (template fs)':56s} {'hits':>8s} {'albedo':>7s} {'rough':>7s} {'metal':>7s}")
+            for name, f in sorted(r["families"].items(), key=lambda kv: -kv[1][0])[:25]:
+                print(f"  {name[:56]:56s} {int(f[0]):8d} {100 * f[1] / f[0]:6.1f}% {100 * f[2] / f[0]:6.1f}% "
+                      f"{100 * f[3] / f[0]:6.1f}%")
+        print(f"  tier (a) hits {r['tier_a_hits']} (known {r['tier_a_known']}), hidden/off-screen {r['hidden_hits']} "
+              f"(known {r['hidden_known']}), tier (b) shaded {r['tier_b']}")
+        if not r["n"]:
+            print("  self-check: no comparisons (rt_hitmat=1, rt_hitmat_stats=1, reflections on screen?)")
+            continue
+        print(f"  self-check: n {r['n']}, mean |d| rgb {', '.join(f'{x:.4f}' for x in r['mae'])} vs |nb| "
+              f"{', '.join(f'{x:.4f}' for x in r['nb'])}; bias Y {r['bias_y']:+.4f} (SE {r['se_y']:.4f}); "
+              f"median |dY| {r['median_dy']:.4f} vs |nbY| {r['median_nby']:.4f}")
+        for g, ok in r["gates"].items():
+            print(f"    {'PASS' if ok else 'FAIL'}  {g}")
+        print(f"  verdict: {'PASS' if r['pass'] else 'FAIL'}")
+    return rows
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    if len(sys.argv) > 1 and sys.argv[1] == "hitmat":
+        hp = argparse.ArgumentParser(prog="python -m scripts.qa.coverage hitmat",
+                                     description="EN2 hit-material coverage and on-screen self-check from layer logs")
+        hp.add_argument("logs", nargs="+", help="bg3rtx logs (captures/queue/logs/*.log), one scene each")
+        hp.add_argument("--json")
+        ha = hp.parse_args(sys.argv[2:])
+        rows = hitmat_report(ha.logs)
+        if ha.json:
+            Path(ha.json).write_text(json.dumps(rows, indent=1), encoding="utf-8")
+        return
     ap = argparse.ArgumentParser(prog="python -m scripts.qa.coverage")
     ap.add_argument("captures", nargs="*")
     ap.add_argument("--db", default=str(MAIN / "data" / "assetdb" / "bg3rtx_assetdb.bin"))

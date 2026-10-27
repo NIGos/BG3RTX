@@ -83,6 +83,7 @@ static void pass_ready(VkCommandBuffer cmd, CmdState* s) {
   s->pass.depth_layout = s->depth_layout;
   core_on_pass_begin(cmd, &s->pass);
   geo_pass_before(cmd, s);
+  hitmat_pass_before(cmd, s);
 }
 
 static CmdState* describe_classic(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info) {
@@ -129,6 +130,7 @@ static void end_pass(VkCommandBuffer cmd) {
   s->dispatches_since_pass = s->indirect_since_pass = 0;
   s->last_cs = 0;
   if (s->geo || s->geo_ts >= 0) geo_pass_after(cmd, s);
+  if (s->hm) hitmat_pass_after(cmd, s);
   if (s->tracing) {
     trace_flush_segment(s);
     std::string dumps = trace_dump_pass(cmd, s);
@@ -385,12 +387,14 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass2(VkCommandBuffer cmd, const
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass(VkCommandBuffer cmd) {
   if (CmdState* gs = cmd_state(cmd); gs && gs->geo) geo_pass_ending(cmd, gs);
+  if (CmdState* gs = cmd_state(cmd); gs && gs->hm) hitmat_pass_ending(cmd, gs);
   vk(cmd).CmdEndRenderPass(cmd);
   end_pass(cmd);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass2(VkCommandBuffer cmd, const VkSubpassEndInfo* sei) {
   if (CmdState* gs = cmd_state(cmd); gs && gs->geo) geo_pass_ending(cmd, gs);
+  if (CmdState* gs = cmd_state(cmd); gs && gs->hm) hitmat_pass_ending(cmd, gs);
   vk(cmd).CmdEndRenderPass2(cmd, sei);
   end_pass(cmd);
 }
@@ -416,6 +420,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cmd, const V
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRendering(VkCommandBuffer cmd) {
   if (CmdState* gs = cmd_state(cmd); gs && gs->geo) geo_pass_ending(cmd, gs);
+  if (CmdState* gs = cmd_state(cmd); gs && gs->hm) hitmat_pass_ending(cmd, gs);
   vk(cmd).CmdEndRendering(cmd);
   end_pass(cmd);
 }
@@ -547,7 +552,9 @@ static VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cmd, uint32_t vc, uint
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
   if (geo) geo_pre_draw(cmd, gs, DrawArgs{0, vc, ic, fv, 0, fi});
+  if (gs && gs->hm) hitmat_pre_draw(cmd, gs, DrawArgs{0, vc, ic, fv, 0, fi});
   vk(cmd).CmdDraw(cmd, vc, ic, fv, fi);
+  if (gs && gs->hm) hitmat_post_draw(cmd, gs);
   if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw");
 }
@@ -557,7 +564,9 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cmd, uint32_t n
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
   if (geo) geo_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin});
+  if (gs && gs->hm) hitmat_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin});
   vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin);
+  if (gs && gs->hm) hitmat_post_draw(cmd, gs);
   if (geo) geo_post_draw(cmd, gs);
   note_draw(cmd, "draw");
 }

@@ -9,15 +9,21 @@
 #pragma once
 #include "bg3_materials.hlsli"
 
+// The set these bindings live in: 2 in the D-LS layout; a pass whose set 2 is taken
+// (D-RF: the game's lighting set) defines BG3_SUN_SET before including this file.
+#ifndef BG3_SUN_SET
+#define BG3_SUN_SET 2
+#endif
+
 struct AtmoCB { float4 a; };   // set 5 b0 (scalar): .x planet radius, .y atmosphere top radius
 // Set 2 of the D-LS layout (an ordinary descriptor set, core/gi.cpp write_sun_set).
-[[vk::binding(0, 2)]] ConstantBuffer<AtmoCB> lAtmo;
-[[vk::binding(1, 2)]] Texture2D<float4> lTransLut;   // set 5 b1: transmittance LUT
-[[vk::binding(2, 2)]] Texture2D<float4> lCloudA0;    // set 5 b4: cloud shadow layer A (two maps blended by _m16)
-[[vk::binding(3, 2)]] Texture2D<float4> lCloudA1;    // set 5 b5
-[[vk::binding(4, 2)]] Texture2D<float4> lCloudB0;    // set 1 b42: cloud shadow layer B
-[[vk::binding(5, 2)]] Texture2D<float4> lCloudB1;    // set 1 b43
-[[vk::binding(6, 2)]] SamplerState lLinearClamp;     // ours (the game's set 1 b16 is not readable)
+[[vk::binding(0, BG3_SUN_SET)]] ConstantBuffer<AtmoCB> lAtmo;
+[[vk::binding(1, BG3_SUN_SET)]] Texture2D<float4> lTransLut;   // set 5 b1: transmittance LUT
+[[vk::binding(2, BG3_SUN_SET)]] Texture2D<float4> lCloudA0;    // set 5 b4: cloud shadow layer A (two maps blended by _m16)
+[[vk::binding(3, BG3_SUN_SET)]] Texture2D<float4> lCloudA1;    // set 5 b5
+[[vk::binding(4, BG3_SUN_SET)]] Texture2D<float4> lCloudB0;    // set 1 b42: cloud shadow layer B
+[[vk::binding(5, BG3_SUN_SET)]] Texture2D<float4> lCloudB1;    // set 1 b43
+[[vk::binding(6, BG3_SUN_SET)]] SamplerState lLinearClamp;     // ours (the game's set 1 b16 is not readable)
 
 // The camera CB (set 0 b1, std140) fields past _m7: cam.x[i] = bytes 160 + 16 i.
 //   x[0] _m8, x[1] _m9, x[2] _m10-_m13, x[3] _m14-_m17, x[4] _m18, x[5] _m19-_m22, x[6] _m23,

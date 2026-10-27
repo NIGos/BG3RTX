@@ -295,6 +295,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     fault_device_created(dd, rt_on && fault_on);
     if (rt_on && rt_enabled()) alpha_device_created(dd);
     if (rt_on && rt_enabled()) bvh_device_created(dd);
+    if (rt_on && rt_enabled()) hitmat_device_created(dd);
   }
   sl_device_post(sl_scratch, dd, VK_SUCCESS);
   watchdog_start();
@@ -307,6 +308,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   sl_device_destroy(dd);
   if (dd == g_main) {
     core_shutdown();
+    hitmat_device_destroyed(dd);
     bvh_device_destroyed(dd);
     alpha_device_destroyed(dd);
     rt_device_destroyed(dd);

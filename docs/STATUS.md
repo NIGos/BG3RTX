@@ -101,7 +101,7 @@ micromaps are in [DESIGN_SOTA_NEXT.md](DESIGN_SOTA_NEXT.md) (2026-10-27).
 | 1 | RR before post (grade replayed after RR), CBT/SSS guides, Preset F | unbiased denoising | **done** |
 | 2 | Static/dynamic BVH split | −2/−3 ms in motion | **done** (todo: skinning output, wind foliage, class-A UBO variants) |
 | 3 | Emissive geometry capture, then emissive in GI/reflections + an emissive light list (RIS/ReSTIR DI for emissives) | lava/magic/candle bounce, glowing reflections | data side in progress |
-| 4 | Hit materials: shader → material table plus VT page table, albedo/emission at secondary hits | correct bounce colour, off-screen reflections | next |
+| 4 | Hit materials: shader → material table plus VT page table, albedo/emission at secondary hits | correct bounce colour, off-screen reflections | data path + D-RF consumer written, off by default (`rt_hitmat`, `rf_hitmat`; TRACK_D_RT 13); in-game verification queued (`en2-*`) |
 | 5 | SHaRC world-space radiance cache, fed on screen | GI from 1 m to room scale, multi-bounce, reflection misses | after 3-4 |
 | 6 | Opacity micromaps for alpha-tested meshes (needs 2) | faster foliage traversal (−0.3 to −1 ms) | after the alpha fix |
 | 7 | The game's sky/atmosphere LUTs and cloud shadows for ray misses | correct miss radiance, cloud-shadowed RT sun | partly in the sun R0 task |

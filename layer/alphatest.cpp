@@ -226,8 +226,12 @@ void alpha_device_created(DeviceData* dd) {
   bool ok = vk.CreateSampler(dd->device, &si, nullptr, &g_wrap) == VK_SUCCESS;
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   ok = ok && vk.CreateSampler(dd->device, &si, nullptr, &g_clamp) == VK_SUCCESS;
-  VkDescriptorSetLayoutBinding b[10] = {
+  VkDescriptorSetLayoutBinding b[13] = {
       {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},   // scene stamp
+      // EN2 hit materials (hitmat.cpp, rt/rt_hitmat.hlsli): records, instance entries, statistics
+      {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+      {11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+      {12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -238,10 +242,10 @@ void alpha_device_created(DeviceData* dd) {
       {4, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_wrap},
       {5, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_clamp}};
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.bindingCount = 10;
+  dci.bindingCount = 13;
   dci.pBindings = b;
   ok = ok && vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) == VK_SUCCESS;
-  VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6 * kRing},
+  VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 9 * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches) * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLER, 2 * kRing}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -554,12 +558,23 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
                    ? VkDescriptorImageInfo{VK_NULL_HANDLE, g_cache[i - 1].first, g_cache[i - 1].second}
                    : VkDescriptorImageInfo{VK_NULL_HANDLE, g_dummy_arr.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorBufferInfo stampi{g_stamp_buf, VkDeviceSize(slot) * 16, 16};
-  VkWriteDescriptorSet w[8] = {};
-  for (int i = 0; i < 8; ++i) {
+  // EN2 (hitmat.cpp): the slot's material records, instance entries and hit statistics,
+  // cleared for this build; the dummy (no records, no instances) while rt_hitmat is off.
+  HitmatSlotBufs hb{};
+  VkDescriptorBufferInfo hmi[3] = {{g_dummy_buf, 0, 256}, {g_dummy_buf, 0, 256}, {g_dummy_buf, 0, 256}};
+  if (hitmat_on_commit(slot, &hb)) {
+    hmi[0] = {hb.buf, hb.rec_off, hb.rec_bytes};
+    hmi[1] = {hb.buf, hb.inst_off, hb.inst_bytes};
+    hmi[2] = {hb.buf, hb.stats_off, hb.stats_bytes};
+  }
+  VkWriteDescriptorSet w[11] = {};
+  for (int i = 0; i < 11; ++i) {
     w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     w[i].dstSet = g_sets[slot];
-    w[i].dstBinding = i < 4 ? uint32_t(i) : uint32_t(i + 2);   // 0-3, then 6, 7, 8, 9
+    w[i].dstBinding = i < 4 ? uint32_t(i) : uint32_t(i + 2);   // 0-3, then 6-12
   }
+  for (int i = 8; i < 11; ++i)
+    w[i].descriptorCount = 1, w[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[i].pBufferInfo = &hmi[i - 8];
   w[7].descriptorCount = 1, w[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[7].pBufferInfo = &stampi;
   w[4].descriptorCount = 1, w[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[4].pBufferInfo = &opaquei;
   w[5].descriptorCount = 1, w[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[5].pBufferInfo = &infoi;
@@ -568,7 +583,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   w[1].descriptorCount = 1, w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[1].pBufferInfo = &soupi;
   w[2].descriptorCount = ntex, w[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[2].pImageInfo = tex.data();
   w[3].descriptorCount = ncache, w[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[3].pImageInfo = cache.data();
-  vk.UpdateDescriptorSets(g_dd->device, 8, w, 0, nullptr);
+  vk.UpdateDescriptorSets(g_dd->device, 11, w, 0, nullptr);
   g_current = int(slot);
 
   ++g_frames;
@@ -612,6 +627,50 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
     std::memset(g_fail, 0, sizeof g_fail);
   }
   return g_sets[slot];
+}
+
+// EN2: views a G-buffer draw's material reads (hitmat.cpp), after this slot's own. The set
+// was written at this frame's commit and is not bound before the lighting (the G-buffer
+// pass comes between), so the new descriptors are written now; the slot's lists keep them
+// for the next commit's reset to dummies and for the life system.
+bool alpha_append_views(uint32_t slot, const std::vector<AlphaViewReq>& req, std::vector<uint32_t>* idx) {
+  if (!g_on || slot >= kRing) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (g_current != int(slot)) return false;
+  idx->assign(req.size(), 0);
+  std::vector<VkDescriptorImageInfo> infos;
+  std::vector<uint32_t> elems, binds;
+  infos.reserve(req.size());
+  for (size_t i = 0; i < req.size(); ++i) {
+    auto& list = req[i].array ? g_cache : g_tex;
+    const uint32_t cap = req[i].array ? kCaches : kTextures;
+    const size_t before = list.size();
+    const uint32_t k = slot_of(list, cap, req[i].view, req[i].layout);
+    (*idx)[i] = k;
+    if (!k || list.size() == before) continue;   // full, or already in the set
+    infos.push_back({VK_NULL_HANDLE, req[i].view, req[i].layout});
+    elems.push_back(k);
+    binds.push_back(req[i].array ? 3u : 2u);
+    std::shared_lock<std::shared_mutex> tl(tracker().mu);
+    g_set_handles[slot].push_back(uint64_t(req[i].view));
+    auto it = tracker().views.find(req[i].view);
+    if (it != tracker().views.end()) g_set_handles[slot].push_back(uint64_t(it->second.image));
+  }
+  std::vector<VkWriteDescriptorSet> w(infos.size());
+  for (size_t i = 0; i < infos.size(); ++i) {
+    w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    w[i].dstSet = g_sets[slot];
+    w[i].dstBinding = binds[i];
+    w[i].dstArrayElement = elems[i];
+    w[i].descriptorCount = 1;
+    w[i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    w[i].pImageInfo = &infos[i];
+  }
+  if (!w.empty()) g_dd->vk.UpdateDescriptorSets(g_dd->device, uint32_t(w.size()), w.data(), 0, nullptr);
+  g_set_tex[slot] = (std::max)(g_set_tex[slot], uint32_t(g_tex.size()));
+  g_set_cache[slot] = (std::max)(g_set_cache[slot], uint32_t(g_cache.size()));
+  g_set_extended[slot] = 0;   // the next hand-out extends the new views' lives too
+  return true;
 }
 
 // The scene slot `slot` was handed out in `frame`: the passes that bind its set are

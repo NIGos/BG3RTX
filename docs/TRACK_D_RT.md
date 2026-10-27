@@ -2337,3 +2337,79 @@ and what the trust did with them (`sun stats`, 600-frame windows):
 - `-Validation` against a main baseline, and a `-Move` run.
 - The scene top and the rise are heuristics: an off-screen caster taller than either could
   shift a shadow edge by up to `rt_sun_near` near the screen edge facing the sun.
+
+## 13. EN2: material data at secondary hits (`rt_hitmat`, off by default)
+
+`rt_hit_material(hit, dir, cone) -> {albedo, N, rough, metal, refl, known, family}`
+(`shaders/rt/rt_hitmat.hlsli`), for GI bounces, reflection tier (b) and the SHaRC v2 traced
+update. First consumer: D-RF (`gi/rt_reflections_hm.hlsl`). Backlog #4 (STATUS.md),
+AUDIT_ENGINE_DATA §2.1 route (a1), AUDIT_SOTA "Per-material data at secondary hits".
+
+### 13.1 Why the G-buffer pass, and the join
+- The RT scene comes from the depth prepass (`rt_alpha=1`). Its opaque draws have no
+  material bindings and **no UV**: in `captures/20261027-113838`, 193 of 285 prepass draws
+  have a vertex shader without any vec2 output. So the material and the UV come from the
+  G-buffer pass, which draws the same meshes later in the same frame.
+- **Join.** `draw_geom_key` (host.h): vertex buffer 0 + offset, index buffer + offset +
+  type, count, first, vertex offset, instances. The n-th G-buffer draw with a key is the
+  n-th prepass draw with it in this frame's split build (`bvh_join_frame`, published at
+  the end of `bvh_build`), which names its TLAS instances (`inst_first`, `inst_count`).
+- **UV.** The G-buffer VS's lowest vec2 output (already XFB-decorated, stride 24) is
+  captured by transform feedback for the joined draws that need it, and
+  `rt/uv_scatter.hlsl` copies it into the UV slots of the same triangles: the prepass soup
+  for a per-draw BLAS (every frame), the mesh pool for a cached mesh (once per mesh and
+  generation; re-filled if its command buffer was dropped). Alpha-tested draws keep the
+  prepass UV. The table requires the FS's UV input location to equal the captured one.
+- Per scene slot (set 1 bindings 10-12, host-visible): 256-byte records, 8 bytes per
+  TLAS instance (record, family, "UV valid"), hit statistics. Cleared at the slot's commit,
+  so a TLAS never reads another build's entries. The views go into the slot's set after
+  the alpha path's (`alpha_append_views`), before the lighting binds it.
+
+### 13.2 Data sources per field
+
+| Field | Source | Notes |
+|---|---|---|
+| base colour | the G-buffer FS's RT1.rgb traced back (`scripts/material_table.py`) to one Granite VT sample (tile cache, indirection channel, tile-set column) or one plain-texture sample at the UV, optionally x one UBO vec3/scalar or literal | read per draw: the bound views, the UBO uv transform + tile-set index, the SSBO tile-set entry (as `vt_alpha()`), UBO factors from mapped memory. Cross-check: the VT albedo binding of all 87 VT base-colour shaders equals the asset DB template's VT albedo slot (A1 join) |
+| roughness | RT2.x traced back the same way: a VT/texture component, a literal, or a UBO float | |
+| metalness | RT2.z, same | |
+| reflectance | RT2.y, same (mostly the material UBO's `Reflectance`) | F0 = 0.16 refl² for dielectrics (FRAME_MAP) |
+| N | the geometric normal of the hit triangle, facing the ray | the normal map is **not** read: the capture has no tangent frame (VS outputs), and a UV-derived frame's sign convention is not verified |
+| anything else | unknown: `known` bit 0, value 0, counted per family | vertex colours, detail/gradient maps, layer blends, branches, other varyings: never a constant (R0) |
+
+Offline (shader dump, 483 G-buffer FS, 450 with a known field): base colour 116
+(87 VT, 29 texture), roughness 235, metalness 349, reflectance 434. Draw-weighted in
+`20261027-113838`: base colour known for 39% of the G-buffer draws. Unknown base colours
+are mostly `mix(...)` blends (264 shaders: detail maps, vertex-colour masks, gradient
+maps); a bytecode interpreter of the FS slice would add about 5-8 points there (UV-only
+slices), the rest needs more varyings at the hit (XFB stride 48+).
+
+### 13.3 Verification (rt_hitmat=1, rt_hitmat_stats=1)
+- **Coverage**: `[hitmat] coverage` / `coverage by family` (1 pixel in 64 of the
+  reflection hits, per G-buffer FS, named from the asset DB): share with a known base
+  colour, roughness, metalness; `[hitmat] last N frames` the join and capture counters.
+- **Debug view** `rf_debug=7`: the reflected hits' base colour (dark magenta unknown, dark
+  red unjoined, dark yellow legacy BVH).
+- **On-screen self-check** (`[hitmat] selfcheck`, `python -m scripts.qa.coverage hitmat
+  <log>`): at tier (a) hits the G-buffer pixel is ground truth for the same surface.
+  d = hit material - RT1 (RT2) there; the noise reference nb = the G-buffer's own
+  difference to the neighbouring pixel on the same surface (same frames). Gates (QA.md):
+  median |dY| <= median |nbY| + LSB/4; |bias Y| <= z SE + LSB/2; per channel mean |d| <=
+  mean |nb| + LSB/4 + z SE; roughness/metalness the same; conclusive when SE <= LSB/z.
+  z = z_one_sided(5) at ALPHA_FW. Decals write RT1 after the G-buffer pass and are not in
+  the hit material: they are outliers, hence the median gate.
+
+### 13.4 Tier (b) reflections (`rf_hitmat=1`, off)
+Hidden and off-screen hits with a known base colour and metalness get the game's class-0
+lighting at the hit from what exists off screen: the sun (`bg3_sun_eval_mat`, the colour,
+clouds and b13[0] of the lighting, visibility traced) and the global probes (irradiance
+b34/b36 x DFG.z, specular b35/b37 x env BRDF, x b13[0]·100). Missing: local lights and
+local probes (froxel lists exist on screen only), AO at the hit, emission, decals. So it is
+a lower bound indoors; a sun ray through a cut-away roof can leak (no roof volumes in
+D-RF). Specular terms need roughness and reflectance, else they are left out. The SHaRC
+D-RF variant is not combined: with both on, the hit-material variant runs.
+
+### 13.5 Not done
+- In-game runs (jobs `en2-*` in the queue): coverage per scene, the self-check verdict,
+  the cost (`rf: reflection pass GPU median`, the G-buffer pass time with the UV capture).
+- Normal maps at hits; the FS-slice interpreter; GI and SHaRC v2 consumers; indirect and
+  non-list G-buffer draws (counted, unknown); the legacy BVH (`rt_bvh_split=0`, unknown).

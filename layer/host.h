@@ -195,6 +195,7 @@ struct CmdState {
   std::string seg_json;
   // Track D geometry capture (geocapture.cpp)
   void* geo = nullptr;                 // capture active in the current pass
+  void* hm = nullptr;                  // EN2 (hitmat.cpp): the G-buffer pass's material join
   int geo_ts = -1;                     // timestamp slot of the current pass
   VkViewport viewport{};               // last vkCmdSetViewport(first = 0)
   bool has_viewport = false;
@@ -572,6 +573,69 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& b, uint32
 // The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).
 bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
+// EN2 (hitmat.cpp): views a G-buffer draw's material reads, appended to scene slot `slot`'s
+// set after the alpha path's own (bindings 2/3); `idx` gets each one's array index (0: no
+// room). False if `slot` is not the latest commit.
+struct AlphaViewReq { VkImageView view; VkImageLayout layout; bool array; };
+bool alpha_append_views(uint32_t slot, const std::vector<AlphaViewReq>& req, std::vector<uint32_t>* idx);
+
+// ---- EN2: material data at secondary hits (hitmat.cpp, docs/TRACK_D_RT.md 13) ----
+// A draw's geometry across passes (the depth prepass and the G-buffer pass draw the same
+// meshes with different pipelines): vertex buffer 0 (positions in every BG3 layout), the
+// index range, the counts and instances.
+inline uint64_t draw_geom_key(const CmdState* s, const DrawArgs& a) {
+  uint64_t h = 1469598103934665603ull;
+  auto mx = [&h](uint64_t v) { h = (h ^ v) * 1099511628211ull; };
+  mx(a.kind & 1u);
+  mx(a.count);
+  mx(a.first);
+  mx(uint64_t(int64_t(a.vertex_offset)));
+  mx(a.instances);
+  mx(uint64_t(s->vb[0].buffer));
+  mx(s->vb[0].offset);
+  if (a.kind == 1) {
+    mx(uint64_t(s->ib));
+    mx(s->ib_offset);
+    mx(uint64_t(s->ib_type));
+  }
+  return h;
+}
+// One prepass draw of the latest split build and the TLAS instances it became.
+struct BvhJoinDraw {
+  uint64_t geom_key;
+  uint32_t inst_first, inst_count;   // count 0: not in the TLAS
+  bool cached;                       // a cached mesh (vertices in the pool) or a per-draw BLAS (soup)
+  bool alpha;                        // alpha-tested: its prepass capture holds the UV
+  uint64_t mesh_key, mesh_gen;
+  VkDeviceSize pool_off, soup_off;
+  uint32_t prims, tris_per_instance, instances;
+};
+struct BvhJoinFrame {
+  uint64_t frame = 0;
+  uint32_t slot = 0, n_inst = 0, stride = 0;
+  VkBuffer soup = VK_NULL_HANDLE, pool = VK_NULL_HANDLE;
+  VkDeviceSize soup_size = 0, pool_size = 0;
+  std::vector<BvhJoinDraw> draws;
+};
+bool bvh_join_frame(BvhJoinFrame* out);   // a copy of the latest split build's (false: none)
+bool geo_is_gbuffer_pass(const Bg3PassInfo& p);
+// A pipeline whose VS is patched for transform feedback: its UV output location and topology.
+bool geo_pipe_capture(VkPipeline p, int* uv_location, VkPrimitiveTopology* topo);
+void hitmat_device_created(DeviceData* dd);
+void hitmat_device_destroyed(DeviceData* dd);
+bool hitmat_wanted();   // rt_hitmat=1 (with rt_alpha=1)
+// Set 1 bindings 10-12 of a scene slot (one buffer, per-slot regions); clears the slot's
+// records and instance entries for the new build. False: hit materials are off (dummies).
+struct HitmatSlotBufs {
+  VkBuffer buf;
+  VkDeviceSize rec_off, rec_bytes, inst_off, inst_bytes, stats_off, stats_bytes;
+};
+bool hitmat_on_commit(uint32_t slot, HitmatSlotBufs* out);
+void hitmat_pass_before(VkCommandBuffer cmd, CmdState* s);   // every pass; acts on the G-buffer pass
+void hitmat_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
+void hitmat_post_draw(VkCommandBuffer cmd, CmdState* s);
+void hitmat_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, before the game's end
+void hitmat_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, after the game's end
 
 // ---- device-fault diagnostics (devfault.cpp, VK_EXT_device_fault) ----
 const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,

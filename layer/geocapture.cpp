@@ -1093,6 +1093,19 @@ void geo_forget_pipeline(VkPipeline p) {
   g_pipes.erase(p);
 }
 
+// EN2 (hitmat.cpp): the G-buffer pass, and a pipeline's transform-feedback capture.
+bool geo_is_gbuffer_pass(const Bg3PassInfo& p) { return is_gbuffer(p); }
+
+bool geo_pipe_capture(VkPipeline p, int* uv_location, VkPrimitiveTopology* topo) {
+  if (!g_on || !g_alpha_mode) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  auto it = g_pipes.find(p);
+  if (it == g_pipes.end() || !it->second.xfb || !it->second.triangles) return false;
+  *uv_location = it->second.uv;
+  *topo = it->second.topo;
+  return true;
+}
+
 // Before the game's vkCmdBeginRenderPass (outside the pass).
 void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
   s->geo = nullptr;

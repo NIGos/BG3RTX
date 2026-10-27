@@ -352,8 +352,13 @@ struct FrameDraw {
   uint32_t prims = 0;
   uint32_t rec = kNone;
   std::vector<Range> ranges;
+  uint64_t geom_key = 0;                // draw_geom_key (EN2: the G-buffer pass's join, hitmat.cpp)
+  uint32_t inst_first = 0, inst_count = 0;   // its TLAS instances in this build
 };
 std::vector<FrameDraw> g_draws;
+// EN2: the latest build's draws with their TLAS instances (bvh_join_frame).
+std::mutex g_join_mu;
+BvhJoinFrame g_join;
 std::unordered_map<uint64_t, uint32_t> g_dyn_seen;   // dyn key -> occurrences this capture
 uint32_t g_audits_this_frame = 0;
 
@@ -690,6 +695,10 @@ void bvh_device_destroyed(DeviceData* dd) {
   g_dyn.clear();
   g_buf_meshes.clear();
   g_any_mesh = false;
+  {
+    std::lock_guard<std::mutex> jl(g_join_mu);
+    g_join = BvhJoinFrame{};
+  }
   for (auto& c : g_chunks)
     if (c.buf.b) free_buf(c.buf);
   g_chunks.clear();
@@ -731,6 +740,7 @@ BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint
   fd.alpha = d.alpha;
   fd.instances = d.args.instances;
   const CmdState* s = d.s;
+  fd.geom_key = draw_geom_key(s, d.args);
   const bool indexed = d.args.kind == 1;
   // The draw's identity across frames (per-draw BLAS of captured draws). The
   // instance-rate bindings change offset every frame (the game's upload ring),
@@ -1021,6 +1031,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
             {fd.rows[0], fd.rows[1], fd.rows[2]}, {fd.row_stride[0], fd.row_stride[1], fd.row_stride[2]}, true, {}};
     for (int k = 0; k < 3; ++k) std::memcpy(f.sample + 16 * k, fd.rows[k], 16);
     fix.push_back(f);
+    g_draws[di].inst_first = n;
+    g_draws[di].inst_count = fd.instances;
     for (uint32_t i = 0; i < fd.instances; ++i, ++n) {
       VkAccelerationStructureInstanceKHR& in = inst_out[n];
       std::memset(&in.transform, 0, sizeof in.transform);
@@ -1043,9 +1055,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const uint32_t n_static_written = n;
   for (auto& [di, key] : dyn) {
     if (!key) continue;
-    const FrameDraw& fd = g_draws[di];
+    FrameDraw& fd = g_draws[di];
     const DynSlot& s = g_dyn[key];
     const bool alpha = fd.cap_alpha && fd.rec != kNone;
+    fd.inst_first = n;
+    fd.inst_count = 1;
     VkAccelerationStructureInstanceKHR& in = inst_out[n];
     std::memset(&in.transform, 0, sizeof in.transform);
     in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
@@ -1351,6 +1365,40 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   g_slot_n[slot] = n;
   g_slot_frame[slot] = now;
   ++g_st.builds;
+  {
+    // EN2: this build's draws and their instances, for the G-buffer pass's join (hitmat.cpp).
+    BvhJoinFrame j;
+    j.frame = now;
+    j.slot = slot;
+    j.n_inst = n;
+    j.stride = stride;
+    j.soup = cap.xfb;
+    j.soup_size = cap.xfb_size;
+    j.pool = g_pool.b;
+    j.pool_size = g_pool.size;
+    j.draws.reserve(g_draws.size());
+    for (const FrameDraw& fd : g_draws) {
+      BvhJoinDraw d{};
+      d.geom_key = fd.geom_key;
+      d.inst_first = fd.inst_first;
+      d.inst_count = fd.inst_count;
+      d.cached = fd.cached;
+      d.instances = fd.instances;
+      d.tris_per_instance = fd.tris_per_instance;
+      d.prims = fd.prims;
+      d.soup_off = fd.soup_off;
+      if (fd.cached) {
+        auto it = g_meshes.find(fd.mesh_key);
+        if (it == g_meshes.end()) d.inst_count = 0;
+        else d.mesh_key = fd.mesh_key, d.mesh_gen = it->second.gen, d.pool_off = it->second.pool_off, d.alpha = it->second.alpha;
+      } else {
+        d.alpha = fd.cap_alpha && fd.rec != kNone;
+      }
+      j.draws.push_back(d);
+    }
+    std::lock_guard<std::mutex> jl(g_join_mu);
+    g_join = std::move(j);
+  }
   out->tlas = g_tlas[slot].as;
   out->instances = n;
   out->static_instances = n_static_written;
@@ -1365,6 +1413,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->pool = g_pool.b;
   out->pool_bytes = g_pool.size;
   out->rec = rec;
+  return true;
+}
+
+bool bvh_join_frame(BvhJoinFrame* out) {
+  std::lock_guard<std::mutex> jl(g_join_mu);
+  if (!g_join.frame) return false;
+  *out = g_join;
   return true;
 }
 

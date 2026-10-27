@@ -38,6 +38,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rtscene.cpp
   layer/alphatest.cpp
   layer/bvhsplit.cpp
+  layer/hitmat.cpp
   layer/devfault.cpp
   layer/aftermath.cpp
   layer/streamline.cpp
