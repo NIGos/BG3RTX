@@ -82,6 +82,13 @@ State of each branch at the pause, as reported:
 Each item goes through the usual loop: QUALITY R0-R6 gates, QA harness A/B, and
 exclusive runs for timings.
 
+**Implementation-ready plans** for many-light sampling (D-LS exact-k + RIS remainder,
+a GPU light BVH, ReSTIR DI on evidence), a screen-injected SHaRC cache, and opacity
+micromaps are in [DESIGN_SOTA_NEXT.md](DESIGN_SOTA_NEXT.md) (2026-10-27).
+- Recommended order: 1a → 2 v1 → 3 → 1c → 2 v2 → 1b.
+- Downloads needed: SHaRC, the OMM SDK, and RTXDI (optional).
+- Done there: the CPU light-tree oracle (`common/light_tree.h`, `light_tree_test`).
+
 | # | Upgrade | Unlocks | Status |
 |---|---|---|---|
 | 1 | RR before post (grade replayed after RR), CBT/SSS guides, Preset F | unbiased denoising | **done** |
