@@ -95,3 +95,8 @@ Plan:
 - Downloads already approved and done: Aftermath SDK (D:\BG3_Tools), SHaRC 1.8.3, OMM SDK 1.10.0
   (external/, backed up in D:\BG3_Tools\external_backup).
 - Replies to the user in Italian, terse.
+
+## Safety snapshot (2026-10-28, before handing over)
+Tags `snapshot-20261027/<branch>` on GitHub (one per branch) and a full copy in
+`D:\BG3_Tools\snapshot-20261028` (git bundle, working `bin\`, ini files, logs, queue; restore steps
+in its README.txt). Don't move or delete these tags.
