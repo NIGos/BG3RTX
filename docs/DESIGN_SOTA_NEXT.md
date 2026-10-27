@@ -718,6 +718,35 @@ Measured on the 5090 at 2560x1067, RR on, static camera, timing runs without sta
   has been measured. Ultra would also pay +0.2-0.45 ms. Flip after S7 passes `roofed_brightening`
   (job `35-sharc4-qa-S7`), with S8 kept as a review.
 
+### 2.13 Physical checks instead of thresholds (user decision 2026-10-27)
+
+`roofed_brightening` (ratio 1.3, 0.5‰) is retired as a gate and kept as a review map. In its
+place (docs/QA.md):
+1. **`sharc_reference`**, the gate: the cache's lighting against a reference without the cache
+   (rays as long as the cache's, 8 per pixel), on the roofed interior. The tolerance is the
+   measured per-pixel noise of the difference of the two means, σ_d = √(var_c/N_c + var_r/N_r);
+   the decision compares the excess tail with the deficit tail (the null's own control) on
+   pixels thinned to the measured correlation length, against the binomial noise √(N_e + N_d).
+   Its limit is written down: the reference has no radiance at hidden hits (`gi_rt_fallback=1`
+   keeps the game's ambient there), so legitimate hidden-surface bounce can show as excess. A
+   fail is then attributed with check 2.
+2. **`sharc_leak_cells`** and the fix of the mechanism: per cache hit, the cell centre is
+   projected into the hit's plane and a ray tests whether it is visible from the hit point
+   (`sharc_cell_test`, `sharc_common.hlsli`); a second ray into the surface reports slabs
+   thinner than the cell (their far side has the opposite normal octant, so they cannot mix
+   and are only reported). `sharc_reject_occluded=1` (default) drops entries from occluded
+   cells: rejecting entries from behind an occluder, one shadow ray per cache hit, no tolerance
+   (both ray ends are lifted by `rt_offset_ray`'s ULP offset). `sharc_leak_check=1` measures the
+   share of the contribution such cells would supply ("sharc stats ... leak test", view 6).
+3. **Cost tolerance from the frame budget:** 15.4 ms at 65 fps; SETTINGS_DESIGN (Ultra, ranked
+   spend list) puts Ultra at ≈ 13.4 ms in pans (2.0 ms headroom) and reserves 0.4-0.6 ms of it
+   for this item (row 6, D-GI2). The cache's added cost must stay ≤ 0.6 ms in every scene; measured +0.17 (S6) to
+   +0.44 ms (S3) at 4 m before the leak rays (≤ one shadow ray per cache hit: 0.02-0.23 M
+   rays/frame, ≈ 0.01 ms by TRACK_D 8.3's 0.04-0.07 ms per M rays). Register count of the GI
+   trace variant rose 113 → 128 (two more inlined ray queries): to be measured, not assumed.
+4. **Default:** off until `sharc_reference` passes on S7 and S8 and the cost fits 0.6 ms
+   (jobs `36-sharc5-qa-S7-S8`).
+
 ---
 
 ## 3. Opacity micromaps for alpha-tested foliage

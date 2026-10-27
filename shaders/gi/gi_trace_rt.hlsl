@@ -23,7 +23,8 @@
 // reads the radiance cache (sharc_common.hlsli) at the hit's position and geometric normal;
 // found, it is a bounce like an on-screen hit. Not found, or nearer than the voxel, the
 // gi_rt_fallback rule above applies. sharc_debug=4 writes the tiers instead of the bounce
-// (r cache, g screen, b no radiance: fallback), as fractions of the rays.
+// (r cache, g screen, b no radiance: fallback), as fractions of the rays; sharc_debug=6 the
+// cache's contribution split by the leak test (r occluded cell, g clean, b thin surface).
 #include "gi_common.hlsli"
 #include "../rt/rt_common.hlsli"
 #if SHARC_QUERY_PASS
@@ -60,6 +61,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #if SHARC_QUERY_PASS
   const float3 cam_abs = sharc_cam();
   float3 tiers = 0;   // rays: cache, screen, fallback
+  float3 leak = 0;    // cache contribution (luminance): r occluded cell, g clean, b thin (sharc_debug=6)
   sharc_bin = (id.x >> 3) * 7u + (id.y >> 3) * 13u;
   // Rays reach sharc_gi_radius (R) for radiance only: a hit without radiance (no cache entry)
   // occludes with the fade of the base radius, as without the cache, so the longer rays add
@@ -110,13 +112,24 @@ void main(uint3 tid : SV_DispatchThreadID) {
     } else {
       sharc_stat(kShGiHidden, onscreen);
       sharc_stat(kShGiOffscreen, !onscreen);
-      float3 Lc;
-      bool near;
+      float3 Lc = 0;
+      bool near = false;
+      SharcCell cell;
+      cell.occluded = false;
+      cell.thin = false;
       const bool ask = (shc.flags & (onscreen ? 1u : 2u)) != 0u;
-      const bool found = ask && sharc_ray_hit(hh, o + dir * t, dir, t, cam_abs, Lc, near);
+      const bool found = ask && sharc_ray_hit(hh, o + dir * t, dir, t, cam_abs, cone, Lc, near, cell);
       sharc_stat(kShGiQueried, ask && !near);
       sharc_stat(kShGiNear, ask && near);
       sharc_stat(kShGiFound, found);
+      // The leak test's share of the cache's GI contribution (luminance of L x w), counted
+      // whether or not sharc_reject_occluded then dropped the entry; per pixel for view 6.
+      const float lc = (found || cell.occluded) ? dot(Lc * w, float3(0.2126, 0.7152, 0.0722)) : 0.0;
+      const uint lq = uint(clamp(lc, 0.0, 1e5) * 256.0 + 0.5);
+      sharc_stat_sum(kShContrib, lq);
+      sharc_stat_sum(kShContribOccluded, cell.occluded ? lq : 0u);
+      sharc_stat_sum(kShContribThin, cell.thin && !cell.occluded ? lq : 0u);
+      leak += cell.occluded ? float3(lc, 0, 0) : cell.thin ? float3(0, 0, lc) : float3(0, lc, 0);
       if (found) {
         bounce += Lc * w;
         occ += w;
@@ -139,6 +152,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float n = float(max(pc.rays, 1u));
 #if SHARC_QUERY_PASS
   if (shc.debug == 4u) bounce = tiers;
+  if (shc.debug == 6u) bounce = leak;
 #endif
   giRaw[id] = float4(bounce / n, saturate(1.0 - occ / n));
   giRawDepth[id] = d;

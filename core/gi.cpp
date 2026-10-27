@@ -1610,8 +1610,8 @@ void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
     if (fx_image && fx_in != fx_from) image_layout(cmd, fx_image, fx_in, fx_from, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
   }
-  // Views (sharc_debug 1-5); 5, the QA roof mask, needs rt_sun_replace's roof volumes (binding 47).
-  if (s.sh.debug >= 1 && s.sh.debug <= 5) {
+  // Views (sharc_debug 1-6); 5, the QA roof mask, needs rt_sun_replace's roof volumes (binding 47).
+  if (s.sh.debug >= 1 && s.sh.debug <= 6) {
     if (s.sh.debug == 5 && g_sunt_ok && refresh(g_sharc_roof, "gi/sharc_roof.hlsl", g_rt_layout)) {
       dispatch(cmd, g_sharc_roof, b, pc, g_w, g_h, true);
     } else if (refresh(g_sharc_debug, "gi/sharc_debug.hlsl", g_rt_sharc_layout)) {

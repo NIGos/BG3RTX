@@ -46,7 +46,8 @@ struct SharcConsts {
   float radiance_scale;   // fixed-point scale of the accumulation (SDK 1e3)
   uint accum_frames;      // sharc_frames
   uint stale_frames;      // sharc_stale
-  uint flags;             // bit 0 GI hidden hits query, 1 GI off-screen, 2 reflections, 3 statistics
+  uint flags;             // bit 0 GI hidden hits query, 1 GI off-screen, 2 reflections, 3 statistics,
+                          // 4 leak test (sharc_leak_check), 5 reject occluded cells (sharc_reject_occluded)
   uint stride;            // sharc_inject_stride
   uint debug;             // sharc_debug
   uint stats_off;         // byte offset of this frame's counters in shState
@@ -71,7 +72,11 @@ struct SharcConsts {
 
 static const uint kShInjected = 0, kShInsertFailed = 1, kShEmissive = 2, kShGiHidden = 3, kShGiOffscreen = 4,
                   kShGiQueried = 5, kShGiFound = 6, kShGiNear = 7, kShRfEligible = 8, kShRfFound = 9,
-                  kShLive = 10, kShEvicted = 11, kShReset = 12, kShInjectSkipped = 13;
+                  kShLive = 10, kShEvicted = 11, kShReset = 12, kShInjectSkipped = 13,
+                  // leak test (sharc_cell_test): cache hits whose cell is occluded / thin, and the
+                  // GI contribution (luminance x 256 of L x w) in all, from occluded cells, from thin ones
+                  kShCellOccluded = 14, kShCellThin = 15, kShContrib = 16, kShContribOccluded = 17,
+                  kShContribThin = 18;
 
 // Lanes with `cond` added to counter i of this frame's slot (sharc_stats=1), spread over 64
 // bins by the wave's first lane (one address per counter serialises the whole frame's waves:
@@ -83,6 +88,13 @@ void sharc_stat(uint i, bool cond) {
   if ((shc.flags & 8u) == 0u) return;
   uint n = WaveActiveCountBits(cond);
   uint b = (WaveReadLaneFirst(sharc_bin) * 0x9E3779B9u) >> 26;   // 0..63
+  if (WaveIsFirstLane() && n) shState.InterlockedAdd(shc.stats_off + (i * kShBins + b) * 4u, n);
+}
+// The lanes' sum of v added to counter i.
+void sharc_stat_sum(uint i, uint v) {
+  if ((shc.flags & 8u) == 0u) return;
+  uint n = WaveActiveSum(v);
+  uint b = (WaveReadLaneFirst(sharc_bin) * 0x9E3779B9u) >> 26;
   if (WaveIsFirstLane() && n) shState.InterlockedAdd(shc.stats_off + (i * kShBins + b) * 4u, n);
 }
 
@@ -148,17 +160,61 @@ bool sharc_lookup(float3 cam_abs, float3 p_abs, float3 n, out float3 L) {
 }
 
 #ifdef SHARC_RT_QUERY
+// What the leak test found for the cell that supplied a cache hit (sharc_leak_check=1 or
+// sharc_reject_occluded=1).
+struct SharcCell {
+  bool occluded;   // geometry lies between the query point and the cell (see sharc_cell_test)
+  bool thin;       // the surface is thinner than the cell: its far side lies inside the cell
+};
+
+// The leak mechanism of a spatial cache: one cell averages every injected surface of the same
+// normal octant inside it, so a cell that straddles a wall carries the far side's radiance to
+// the near side. Two geometric tests, no tolerances:
+//   occluded: the cell centre, projected into the plane of the query surface (so that the
+//     query surface itself never counts), is not visible from the query point along that
+//     plane: a wall, floor or ceiling crosses the cell between them (the typical case: the
+//     interior floor and the sunlit ground outside, both facing up, in one cell at the foot
+//     of a wall). Both ends are lifted off the surface by Wachter & Binder's ULP offset.
+//   thin: a ray into the surface (along -n) leaves it again within one cell edge: the slab is
+//     thinner than the cell. Its far side has the opposite normal octant, so this is reported,
+//     not rejected.
+SharcCell sharc_cell_test(float3 cam_abs, float3 p, float3 n, RtCone cone) {
+  SharcCell c;
+  float vox;
+  const float3 pa = p + cam_abs;
+  const int4 g = HashGridCalculatePositionLogWithVoxelSize(pa, sharc_grid(cam_abs), vox);
+  const float3 centre = (float3(g.xyz) + 0.5) * vox - cam_abs;   // camera-relative
+  const float3 inplane = centre - n * dot(centre - p, n);
+  const float3 o = rt_offset_ray(p, n), e = rt_offset_ray(inplane, n);
+  const float3 d = e - o;
+  const float len = length(d);
+  c.occluded = len > 0.0 && rt_occluded(o, d / len, len, cone);
+  c.thin = (shc.flags & 16u) != 0u && rt_occluded(rt_offset_ray(p, -n), -n, vox, cone);
+  return c;
+}
+
 // A ray's hit at distance t (camera-relative point p) that no screen pixel shades: the
 // cache's radiance there, unless the hit is closer than near_voxels voxels (the voxel would
 // average the ray's own origin surface in: the old rule stays) or its normal is unknown.
-bool sharc_ray_hit(RtHit h, float3 p, float3 dir, float t, float3 cam_abs, out float3 L, out bool near) {
+// With sharc_reject_occluded=1 (flags bit 5) an entry whose cell is occluded (sharc_cell_test)
+// is not used. `cell` says what the test found (all false when it did not run).
+bool sharc_ray_hit(RtHit h, float3 p, float3 dir, float t, float3 cam_abs, RtCone cone, out float3 L, out bool near,
+                   out SharcCell cell) {
   L = 0.0.xxx;
   near = false;
+  cell.occluded = false;
+  cell.thin = false;
   float3 ng = rt_hit_normal(h);
   if (!(dot(ng, ng) > 1e-30)) return false;
   const float3 pa = p + cam_abs;
   near = t < sharc_voxel_size(cam_abs, pa) * shc.near_voxels;
   if (near) return false;
-  return sharc_lookup(cam_abs, pa, sharc_face(ng, dir), L);
+  const float3 n = sharc_face(ng, dir);
+  if (!sharc_lookup(cam_abs, pa, n, L)) return false;
+  if ((shc.flags & (16u | 32u)) == 0u) return true;
+  cell = sharc_cell_test(cam_abs, p, n, cone);
+  sharc_stat(kShCellOccluded, cell.occluded);
+  sharc_stat(kShCellThin, cell.thin);
+  return !(cell.occluded && (shc.flags & 32u) != 0u);
 }
 #endif

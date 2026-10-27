@@ -172,7 +172,7 @@ def analyze_scene(d: Path, pool):
     # ---- per-effect contribution detectors (final frame and lighting buffer)
     jobs = []
     effects = dict(capture.EFFECTS)
-    if "sharc_on" in traces:   # a --sharc run
+    if "sharc_on0" in traces:   # a --sharc run
         effects.update(capture.SHARC_EFFECTS)
     for eff, (a, b) in effects.items():
         if a not in data or b not in data:
@@ -303,8 +303,9 @@ def analyze_scene(d: Path, pool):
                                          "effect": "rt_sun_replace", "buffer": "debug diffuse", "bbox": g["bbox"],
                                          "shape": list(view.shape[:2]), **info})
 
-    # ---- SHaRC leak gate (--sharc): GI brightening inside asset-DB roofed rooms whose exterior is
-    # sunlit (sharc_debug=5 mask), with the cache against without it, both over gi_off.
+    # ---- SHaRC (--sharc). roofed_brightening: a review map (GI brightening inside asset-DB roofed
+    # rooms, with the cache against without it); the physical checks follow it.
+    interior = None
     if "sharc_roof" in traces:
         dif, src = fr["sharc_roof"].diffuse()
         need = ("sharc_refl_off", "refl_off", "gi_off")
@@ -330,6 +331,7 @@ def analyze_scene(d: Path, pool):
                         sun_px = np.clip(2 * sd[..., 0], 0, 1) > 0.1
                         lit = float((np.clip(2 * sd[..., 0], 0, 1) > 0.5).mean())
                         roofed = roofed & ~im.dilate(sun_px, 2)
+                interior = roofed if lit is not None and lit > 0 else None
                 r = det.roofed_brightening(yw, yb, yo, roofed, sigma("Yc"), sun_lit_frac=lit)
                 ratio = r.pop("map")[1]
                 r["metrics"].update(outside_permille=round(1000.0 * outside.mean(), 2),
@@ -351,6 +353,64 @@ def analyze_scene(d: Path, pool):
                           f"{meta['scene']} roofed_brightening at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
                     res["crops"].append({"file": f"crops/{name}", "detector": "roofed_brightening", "effect": "gi_sharc",
                                          "buffer": "lighting", "bbox": g["bbox"], "shape": list(ratio.shape), **info})
+
+    # sharc_leak_cells: the share of the cache's GI contribution supplied by cells that lie behind
+    # an occluder from the query point (sharc_debug=6, the rejection off for the measurement).
+    if "sharc_leak" in traces:
+        dif, src = fr["sharc_leak"].diffuse()
+        if dif is None:
+            res["notes"].append("sharc_leak_cells: no debug diffuse dump in sharc_leak")
+        else:
+            r = det.sharc_leak_cells(dif, interior)
+            res["checks"].append({"detector": "sharc_leak_cells", "effect": "sharc", "buffer": f"debug diffuse ({src})",
+                                  "on": "sharc_leak", "off": "sharc_leak", **{k: v for k, v in r.items() if k != "regions"},
+                                  "top": r["regions"][:6]})
+            for j, g in enumerate(r["regions"][:CROPS_PER_DETECTOR]):
+                y0, y1, x0, x1 = crop_window(g["bbox"], dif.shape[:2])
+                v = dif / max(float(np.percentile(dif.sum(-1), 99)), 1e-9)
+                tiles, labs = [np.clip(v[y0:y1, x0:x1], 0, 1)], ["cache contribution: red occluded cell, green clean, blue thin"]
+                if "sharc_leak" not in moved_self and "sharc_on0" in data:
+                    tiles.insert(0, dsp("sharc_on0", "compose")[y0:y1, x0:x1])
+                    labs.insert(0, "with the cache (lighting)")
+                name = f"sharc_leak_cells_{j}.png"
+                sheet(tiles, labs, f"{meta['scene']} sharc_leak_cells at x{x0}-{x1} y{y0}-{y1}: area {g['area']}", crops / name)
+                res["crops"].append({"file": f"crops/{name}", "detector": "sharc_leak_cells", "effect": "sharc",
+                                     "buffer": "debug diffuse", "bbox": g["bbox"], "shape": list(dif.shape[:2]), "area": g["area"]})
+
+    # sharc_reference: the cache's lighting against its physical reference (no cache, long rays,
+    # 8 per pixel), with tolerances from the traces' own per-pixel noise. The gate is on the roofed
+    # interior (sharc_roof mask, not lit by the game's sun); the whole frame is reported for review.
+    cs = sorted(n for n in data if n.startswith("sharc_on") and data[n]["Yc"] is not None)
+    rs = sorted(n for n in data if n.startswith("sref") and data[n]["Yc"] is not None)
+    if rs:
+        if len(cs) < 2 or len(rs) < 2:
+            res["notes"].append(f"sharc_reference: needs 2+ traces each (cache {len(cs)}, reference {len(rs)})")
+        else:
+            ys_c, ys_r = [data[n]["Yc"] for n in cs], [data[n]["Yc"] for n in rs]
+            whole = np.ones(ys_c[0].shape, bool)
+            for scope, m in (("interior", interior), ("frame", whole)):
+                if m is None or m.shape != whole.shape or not m.any():
+                    res["notes"].append(f"sharc_reference ({scope}): no roofed interior with a sunlit exterior in view")
+                    continue
+                r = det.sharc_reference(ys_c, ys_r, m)
+                z = r.pop("map")[1]
+                if scope == "frame":
+                    r["gate"] = False
+                res["checks"].append({"detector": "sharc_reference", "effect": f"sharc ({scope})", "buffer": "lighting",
+                                      "on": "+".join(cs), "off": "+".join(rs), **{k: v for k, v in r.items() if k != "regions"},
+                                      "top": r["regions"][:6]})
+                if scope != "interior" or r["pass"]:
+                    continue
+                for j, g in enumerate(r["regions"][:CROPS_PER_DETECTOR]):
+                    y0, y1, x0, x1 = crop_window(g["bbox"], z.shape)
+                    name = f"sharc_reference_{j}.png"
+                    sheet([dsp(rs[0], "compose")[y0:y1, x0:x1], dsp(cs[0], "compose")[y0:y1, x0:x1],
+                           heat_ratio(np.exp2(np.clip(z[y0:y1, x0:x1], -2, 2)))],
+                          ["reference (no cache, long rays, 8 spp)", "with the cache", "difference in sigma_d (blue: cache brighter)"],
+                          f"{meta['scene']} sharc_reference at x{x0}-{x1} y{y0}-{y1}: {g['area']} px, {g['excess_sigmas']} sigma",
+                          crops / name)
+                    res["crops"].append({"file": f"crops/{name}", "detector": "sharc_reference", "effect": "sharc",
+                                         "buffer": "lighting", "bbox": g["bbox"], "shape": list(z.shape), "area": g["area"]})
 
     # ---- non-finite values
     nf = {n: t.nonfinite() for n, t in traces.items()}
