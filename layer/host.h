@@ -231,6 +231,7 @@ void life_note(VkCommandBuffer cmd, uint64_t handle);
 void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
 void life_on_present(DeviceData* dd, VkQueue queue);   // after the present went down, queue still owned
 // Around the game's vkDeviceWaitIdle: submissions before begin are complete after it.
+uint64_t life_gpu_done();   // presents <= this have completed on the GPU (life_on_present fences)
 uint64_t life_idle_begin();
 void life_idle_end(uint64_t seq_before);
 // In the destroy hooks, before anything is released: waits (bounded) for the

@@ -363,10 +363,18 @@ void defer_tick(bool flush_all) {
   {
     std::lock_guard<std::mutex> lock(g_def_mu);
     uint64_t now = frame_index();
+    // Retire only once the GPU has finished every frame that could still use the
+    // object: frame counting alone is not enough, since the CPU can run many
+    // presents ahead of the GPU (loading, headless), and a freed acceleration
+    // structure still read by a trace is a GPU page fault (device lost). Covered
+    // by the present fence of frame + 2 (the RT passes use the previous frame's
+    // TLAS); 240 frames is a fallback if no present fence is being tracked.
+    const uint64_t gpu_done = life_gpu_done();
     // One pass (the BVH split can retire thousands of objects at a level change).
     size_t w = 0;
     for (size_t i = 0; i < g_deferred.size(); ++i) {
-      if (flush_all || now >= g_deferred[i].frame + 4) due.push_back(g_deferred[i]);
+      const uint64_t f = g_deferred[i].frame;
+      if (flush_all || (now >= f + 4 && (f + 2 <= gpu_done || now >= f + 240))) due.push_back(g_deferred[i]);
       else g_deferred[w++] = g_deferred[i];
     }
     g_deferred.resize(w);

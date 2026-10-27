@@ -1240,12 +1240,16 @@ void bvh_on_present() {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   const uint64_t now = frame_index();
-  // Ranges of evicted meshes and slots, once no frame in flight can use them.
+  // Ranges of evicted meshes and slots, once no frame in flight can use them:
+  // the GPU must have finished frame + 2 (as defer_tick), not just 6 presents
+  // passed. Reusing a range a trace still reads was the intermittent device
+  // lost a few seconds into gameplay (docs/STATUS.md, "render stall").
   {
+    const uint64_t gpu_done = life_gpu_done();
     size_t w = 0;
     for (size_t i = 0; i < g_pending_free.size(); ++i) {
       const PendingFree& p = g_pending_free[i];
-      if (now < p.frame + 6) {
+      if (now < p.frame + 6 || (p.frame + 2 > gpu_done && now < p.frame + 240)) {
         g_pending_free[w++] = p;
         continue;
       }
