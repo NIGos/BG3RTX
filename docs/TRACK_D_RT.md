@@ -1314,8 +1314,13 @@ Code:
    slot: 4096 threads, with the records staged through group-shared memory.
    - A slot matches the nearest record within its tolerance whose radius agrees with
      1/`m0.w` within 2%.
-   - Tolerance: 5 cm + `MovementAmount` for lights that stay put, 0.5 m for item
-     lights, 4 m for character lights (they move between 4 Hz exports).
+   - Tolerance: 5 cm + `MovementAmount` for placed lights, 4 m for character lights,
+     and `ls_dyn_tol` (1.5 m) + `MovementAmount` for every other light the bridge reports
+     (items, and visual lights whose owner was not found, such as the VFX lights of
+     carried weapons: `VFX_LightSources_WPN_DippedInFire`, owner 0). They move between
+     the 4 Hz exports. Until 2026-10-27 items had 0.5 m and the rest 5 cm, so a carried
+     weapon's light went unmatched while its carrier walked and lost its fixture radius
+     (the ray's end clearance at the hand).
    - The result goes to a 4096×1 RGBA32UI image: source radius, flags, owner | type,
      and the record index.
 3. **D-LS** reads its slot for every light it would trace:
@@ -1595,6 +1600,35 @@ along every wall). That is a ray count, not a regression of this change.
 
 Settings (all live): `ls_impl` (1 the optimised pass, 0 the frozen old one), `ls_check`
 (0 off, 1 old against new, 2 old against itself; measurement only, about 1.5 ms).
+
+### 9.10 Who casts and who receives (audit 2026-10-27)
+
+Question: in the on/off compares (`captures/compare`), characters and the lights they carry
+seem not to cast or receive RT shadows. Findings (offline):
+- **Casters.** Every instance has mask 0xFF (`bvhsplit.cpp` 893/918/1189, `rtscene.cpp` 746)
+  and every ray traces 0xFF (`rt_common.hlsli`), in both `rt_bvh_split` modes. The TLAS is the
+  big depth prepass (`geocapture.cpp` 1108; passes under 64 draws are skipped, 1382), direct
+  triangle-list draws only (0 dropped in the logs). Skinned characters are in it: Campsite
+  `captures/20261027-062830` has 14 draws of the skinned VS `1cf36b97` in the prepass (82
+  class-B draws in the G-buffer, 14-23 in each cascade). Not in it: forward/transparent
+  geometry (water, glass, particles, VFX flames), decals, off-screen and cut-away geometry.
+  No class is excluded as a caster, and no game "does not cast" flag is applied either.
+- **Sun.** Characters cast traced sun shadows (Lower City compare, the NPC on the sand: a
+  crisp traced silhouette inside the game's soft one). Outside `rt_sun_replace`'s trusted
+  pixels the fold is `min(game, traced)` (`rt_shadow.hlsl` 168), and the game's cascades
+  already hold the characters, so on/off differ only at the shadow's edges.
+- **Local lights.** Not traced, by rule: lights with a game shadow map (`ls_shadowed=0`,
+  `rt_local_shadows.hlsl` 212), owner "character" (`ls_owners=15`, 218: the darkvision pair,
+  which the game flags `Shadow = CastShadow = false`, and every `Light_Player_*` template,
+  including world-fixed `Light_Player_Fill_*` lights; `BootstrapClient.lua` 134), and all
+  box/projector lights (the characters' rim and fill rigs). In dark interiors (Adamantine
+  Forge) these are most of the light on and around the party, hence no character shadows.
+  Carried weapon lights (`VFX_..._WPN_DippedInFire`, owner 0) are traced; their join tolerance
+  was the defect fixed above.
+- **Receivers.** The sun fold edits the mask b7 and D-LS edits b10/b11, both read only by
+  the deferred lighting. Every G-buffer class receives except unlit (hair is deferred, class
+  5). Forward-rendered surfaces (water, glass, particles, VFX) receive neither: they sample
+  the game's cascades themselves and get no D-LS.
 
 ## 10. D-RF: ray-traced reflections (implemented, tiers (a) and (c))
 
