@@ -116,6 +116,17 @@ mot_j = det.animated([al3, jt3], [], (H, W))
 mot_m = det.animated([al3, mv], [], (H, W))
 check("animated: jitter marks < 1% of px", mot_j.mean() < 0.01, f"{100 * mot_j.mean():.2f}%")
 check("animated: a moved block is marked", mot_m[230, 630])
+# A dithered input (the game's PCF sun mask differs on static pixels between any two frames)
+# marks nothing by its noise alone; a shadow that moved still is.
+rs = np.random.default_rng(7)
+sm0 = np.clip(0.6 + rs.normal(0, 0.05, (H, W)), 0, 1).astype(np.float32)
+sm1 = np.clip(0.6 + rs.normal(0, 0.05, (H, W)), 0, 1).astype(np.float32)
+sm2 = sm1.copy()
+sm2[300:360, 300:360] = 0.0
+mot_d = det.animated([], [sm0, sm1], (H, W))
+mot_s = det.animated([], [sm0, sm2], (H, W))
+check("animated: a dithered sun mask marks < 1% of px", mot_d.mean() < 0.01, f"{100 * mot_d.mean():.2f}%")
+check("animated: a moved shadow on a dithered mask is marked", mot_s[330, 330])
 
 print(f"\n{len(FAILS)} failure(s)" if FAILS else "\nall passed")
 sys.exit(1 if FAILS else 0)
