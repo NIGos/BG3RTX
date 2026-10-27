@@ -697,6 +697,27 @@ Measured on the 5090 at 2560x1067, RR on, static camera, timing runs without sta
   hard_dark, and the Campsite cost (+0.44 ms) leaves no room in the 0.6 ms AO + GI budget
   (plain GI there is already 0.54 ms).
 
+### 2.12 Third run (main 2653f76, 4 m, new leak mask; QA `captures/qa/20261027-153639`)
+
+- **Leak gate, S8: fail, 0.506‰ > 0.5** (roofed and not sunlit by the game: 67% of the frame;
+  the cache brightens 2.77‰ of it beyond 1.3x, plain GI 1.43‰). The flagged regions (27-84 px,
+  1.3-2.5x) are ivy on a wall, a column and a roof slope in shade, not lit by the game's sun
+  but open to the sky; the gain is RR-level speckle of the added bounce. No region shows light
+  through a wall, but the asset-DB volumes (padded 1 m / 3 m) cover most of this view, so S8 is
+  not a discriminating interior. The gate stays as specified; the deciding scene is a closed
+  room with a cut-away roof (S7 The Blushing Mermaid), not run yet.
+- **S6 hard_dark at 4 m: pass relative to plain GI.** GI with the cache: 6.4‰ final / 0.9‰
+  lighting, against plain GI's 13.1‰ / 1.8‰ in the same run; all-on `sharc` 0. The cache halves
+  what the GI's AO fold flags. Cache hits stay at 1.5% of the non-screen hits (hidden machinery).
+- **Cost at 4 m** (from the QA's own log, `sharc_stats=1`): S8 GI trace 0.154 → 0.275 ms, resolve
+  + inject 0.157 ms (0.09 without statistics), ≈ +0.21-0.28 ms; S6 0.163 → 0.230 ms + 0.096 ms,
+  ≈ +0.17 ms; Campsite (2.11) ≈ +0.44 ms.
+- Cache found: S8 22%, S6 1.5%; reflections 13-14% / 1.6%. Occupancy ≤ 1.3% at 2²².
+- **Default: off for every preset, Ultra included.** The leak gate is a gate (R0, QA.md) and
+  has not passed: S8 is marginal for reasons unrelated to leaks, and no closed roofed interior
+  has been measured. Ultra would also pay +0.2-0.45 ms. Flip after S7 passes `roofed_brightening`
+  (job `35-sharc4-qa-S7`), with S8 kept as a review.
+
 ---
 
 ## 3. Opacity micromaps for alpha-tested foliage
