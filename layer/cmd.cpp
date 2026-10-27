@@ -230,6 +230,30 @@ bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, ui
       }
     }
   }
+  lock.unlock();   // (geo_buffer_size takes the capture's lock)
+  if (out->buffer) {
+    // A buffer descriptor we build from this must lie inside a live buffer. A set can
+    // hold a destroyed buffer in a binding the game's pipeline does not use, and a
+    // dynamic offset or VK_WHOLE_SIZE can run past the end: either is a wild read
+    // (no robust buffer access). Every vkCreateBuffer is seen (geocapture.cpp), so an
+    // unknown size means a destroyed buffer.
+    static std::atomic<uint32_t> logged{0};
+    const VkDeviceSize size = geo_buffer_size(out->buffer);
+    if (!size || out->offset >= size) {
+      if (logged++ < 20)
+        log("[query] set %u binding %u: buffer %p %s (offset %llu, size %llu): not used", set, binding, (void*)out->buffer,
+            size ? "offset past its end" : "destroyed or unknown", (unsigned long long)out->offset,
+            (unsigned long long)size);
+      *out = Bg3Binding{};
+      return false;
+    }
+    if (out->range == VK_WHOLE_SIZE || out->range > size - out->offset) {
+      if (out->range != VK_WHOLE_SIZE && logged++ < 20)
+        log("[query] set %u binding %u: buffer %p range %llu at %llu exceeds its size %llu: clamped", set, binding,
+            (void*)out->buffer, (unsigned long long)out->range, (unsigned long long)out->offset, (unsigned long long)size);
+      out->range = size - out->offset;
+    }
+  }
   return true;
 }
 
@@ -275,7 +299,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateCommandBuffers(VkDevice device, co
                                                              VkCommandBuffer* out) {
   VkResult r = device_of(device)->vk.AllocateCommandBuffers(device, ai, out);
   if (r == VK_SUCCESS)
-    for (uint32_t i = 0; i < ai->commandBufferCount; ++i) cmd_state(out[i], true)->game_alloc = true;
+    for (uint32_t i = 0; i < ai->commandBufferCount; ++i) {
+      bvh_cmd_reset(out[i]);   // a handle reused after its pool was destroyed: old records are dropped
+      cmd_state(out[i], true)->game_alloc = true;
+    }
   return r;
 }
 
@@ -283,15 +310,21 @@ static VKAPI_ATTR void VKAPI_CALL FreeCommandBuffers(VkDevice device, VkCommandP
                                                      const VkCommandBuffer* cmds) {
   device_of(device)->vk.FreeCommandBuffers(device, pool, n, cmds);
   for (uint32_t i = 0; i < n; ++i)
-    if (cmds[i]) cmd_forget(cmds[i]);
+    if (cmds[i]) {
+      bvh_cmd_reset(cmds[i]);   // freed without (another) submit: our builds in it never run
+      cmd_forget(cmds[i]);
+    }
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, const VkCommandBufferBeginInfo* bi) {
   diag(DIAG_BEGIN_CMD);
+  bvh_cmd_reset(cmd);   // recorded again: a previous recording not submitted is dropped
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
   s->recording = ++recordings;
+  s->ours_since_event = false;
+  if (r == VK_SUCCESS) fault_checkpoint(cmd, kCkCmdBegin, uint32_t(s->recording));
   s->in_pass = false;
   s->pass_ordinal = 0;
   s->pipe[0] = s->pipe[1] = VK_NULL_HANDLE;
@@ -749,6 +782,59 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
   }
 }
 
+// ---- the game's events ----
+// BG3 orders its frame with vkCmdSetEvent2 / vkCmdWaitEvents2, several with image layout
+// transitions. An event only covers what was recorded before vkCmdSetEvent, so work of
+// ours recorded between the game's SetEvent and WaitEvents (the post-lighting passes:
+// D-LS, D-RF, the GI composite; rrpost steps) raced the transitions and the game's
+// later writes: syncval reported vkCmdWaitEvents2KHR layout transitions of images "previously
+// read/written by vkCmdDispatch" (204 of the 600 hazards), and D-LS (which runs after the
+// lighting, unlike the sun pass, which runs before it) was the only shader that faulted.
+//   - vkCmdSetEvent(2): the core's pending post-lighting work is recorded first (core
+//     on_cmd_end = gi flush), inside the event's first synchronization scope.
+//   - vkCmdWaitEvents(2): if work of ours was recorded since (rrpost), a barrier from
+//     every stage we use orders it before the wait and its transitions.
+static void flush_ours_before_event(VkCommandBuffer cmd) {
+  CmdState* s = cmd_state(cmd);
+  if (s && !s->in_pass && cfg_int("rt_event_flush", 1)) core_on_cmd_end(cmd);
+}
+
+static void barrier_ours_before_wait(VkCommandBuffer cmd) {
+  CmdState* s = cmd_state(cmd);
+  if (!s || !s->ours_since_event || !cfg_int("rt_event_flush", 1)) return;
+  s->ours_since_event = false;
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+  mb.dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+  vk(cmd).CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT |
+                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdSetEvent(VkCommandBuffer cmd, VkEvent e, VkPipelineStageFlags mask) {
+  flush_ours_before_event(cmd);
+  vk(cmd).CmdSetEvent(cmd, e, mask);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdSetEvent2(VkCommandBuffer cmd, VkEvent e, const VkDependencyInfo* dep) {
+  flush_ours_before_event(cmd);
+  vk(cmd).CmdSetEvent2(cmd, e, dep);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents(VkCommandBuffer cmd, uint32_t n, const VkEvent* ev, VkPipelineStageFlags src,
+                                                VkPipelineStageFlags dst, uint32_t mbc, const VkMemoryBarrier* mb,
+                                                uint32_t bbc, const VkBufferMemoryBarrier* bb, uint32_t ibc,
+                                                const VkImageMemoryBarrier* ib) {
+  barrier_ours_before_wait(cmd);
+  vk(cmd).CmdWaitEvents(cmd, n, ev, src, dst, mbc, mb, bbc, bb, ibc, ib);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents2(VkCommandBuffer cmd, uint32_t n, const VkEvent* ev,
+                                                 const VkDependencyInfo* deps) {
+  barrier_ours_before_wait(cmd);
+  vk(cmd).CmdWaitEvents2(cmd, n, ev, deps);
+}
+
 void register_cmd_hooks(HookMap& m) {
   auto add = [&](const char* name, PFN_vkVoidFunction fn) {
     m[std::string("vk") + name] = fn;
@@ -792,6 +878,10 @@ void register_cmd_hooks(HookMap& m) {
   HOOK(CmdCopyBuffer2);
   HOOK(CmdUpdateBuffer);
   HOOK(CmdFillBuffer);
+  HOOK(CmdSetEvent);
+  HOOK(CmdSetEvent2);
+  HOOK(CmdWaitEvents);
+  HOOK(CmdWaitEvents2);
   m["vkCmdBindVertexBuffers2EXT"] = reinterpret_cast<PFN_vkVoidFunction>(&CmdBindVertexBuffers2EXT);
 #undef HOOK
 }

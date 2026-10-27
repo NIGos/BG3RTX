@@ -1657,10 +1657,42 @@ seem not to cast or receive RT shadows. Findings (offline):
   handles every mode, so mode 3 does not fall back to the 252-register pass. Hair keeps the
   atlas term (its self-shadow model for shadowed lights is not replicated). Note: `ls_check`
   / `ls_impl=0` compare against the frozen reference, which knows modes 0-2 only.
-  - Cost: to measure (jobs `10-casters-S6/S8`, phases `ls_shadowed` 0 vs 3). Budget: Ultra
-    at 3840x1600 on the 5090 needs a base frame of ≥ 65 fps (15.4 ms) under FG 2x to 120;
-    QUALITY R7 gives D-LS 0.5 ms. Proposal: keep 3 on High/Ultra if the S6/S8 delta is
-    ≤ 0.15 ms and the pass stays ≤ 0.5 ms; else 3 on Ultra only.
+  - Cost. Budget: Ultra at 3840x1600 on the 5090 needs a base frame of ≥ 65 fps (15.4 ms)
+    under FG 2x to 120; QUALITY R7 gives D-LS 0.5 ms. Rule: keep 3 on High/Ultra if it adds
+    ≤ 0.15 ms over 0 and the pass stays ≤ 0.5 ms.
+  - **Measured (session jobs `casters-S6/S8-*`, 2026-10-27, medians of 300 frames):**
+
+    | Scene | `ls_shadowed=0` | `=3` | lights with a game shadow map |
+    |---|---|---|---|
+    | S6 Adamantine Forge | 0.372 ms | 0.375 ms | not measured (the stats job hit the open nv153 stall) |
+    | S8 Water Queens House | 0.120 ms | 0.120 ms | 0.00 of 0.41 evaluations per px |
+
+    | S5 Grymforge | 0.629 ms | **0.690 ms** (mode 1: 0.688) | 0.34 of 4.34 evaluations per px (7.8%) |
+
+    S6 and S8 have no shadow-mapped lights in view. **Grymforge** (`32-casters-S5-*`, one
+    session, no faults): replacing the 0.34 shadow-mapped evaluations per px costs
+    **+0.061 ms** (traced 3.83 per px, occluded 1.13; light removed 18.0% of the lit
+    luminance), within the +0.15 ms rule, and the on-screen test of mode 3 is free
+    (mode 1 = 0.688 ms). **Default kept: `ls_shadowed=3` on High and Ultra.** The pass
+    itself is over its 0.5 ms budget in Grymforge in every mode (0.63 ms at mode 0, the
+    D-LS performance task of STATUS). The traces of the three modes cannot be compared
+    frame to frame: their mean luminance swings 1772 / 419 / 77 nits with large bright
+    VFX blobs in all three (mode 0 included), so a dedicated in-frame A/B (as `rt_debug=7`
+    for the sun) is needed to judge the replaced shadows' look.
+- **Other results of the same jobs.**
+  - Coverage (S8, `rt_debug=3`): match 99.23%, miss 0.069%, in front 0.072%, behind 0.633%
+    of which 0.629% "through vt cutouts": the stochastic alpha test at blurred mips letting
+    primary rays through the edges of ferns and ivy (the debug frame shows them only there).
+    The characters are matched. Missing geometry is ≤ 0.07%.
+  - Skipped by art intent (`ls_noshadow=1`, owners 0x1F): 11.4% of light evaluations in S6,
+    86% in S8, 11.8% in S5. That is the darkvision pair; in S8 most of it is the `Point_Default` half,
+    which has intensity 0 (it covers the view at r = 18 and adds nothing). The owner view
+    (`ls_debug=9`) shows the party's floor in S8 lit by an owner-unknown visual light (the
+    carried fire weapon), which is traced; little magenta (character) light anywhere.
+  - Join: unmatched 0.0% with `ls_dyn_tol` 0.05 and 1.5 alike: the carriers stood still in
+    both sessions. The benefit needs a moving carrier (`-Move`), not yet run.
+  - Non-finite values: 0 in S8; in S6 2.6-4.4k in every trace and mode, all in one D32F
+    depth image of pass `2a6a525c` (the game's), none in an image of ours.
 
 **Box (projector) lights: the gap and the plan (not implemented).** They are the third loop
 of `f469db78` (set 1 b29, struct `_53`, about 128 bytes; lines 735-930 of
@@ -1697,7 +1729,7 @@ only), or patch the forward shaders' shadow lookup to read a world-space visibil
 patched lookup. Water is the most visible case and also needs the forward capture of
 backlog item 12 to cast. Do it with item 12.
 
-### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, off by default until re-measured)
+### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, measured, off by default)
 
 Why: Grymforge is over the 0.5 ms budget (0.73 ms with the 9.10 policy; `ls stats`: 6.09
 listed, 4.34 evaluated, **3.83 traced** lights per pixel, against 2.1-2.3 in the foundry).
@@ -1756,7 +1788,7 @@ scene; first version, irradiance weight, see below):**
   sessions (−1.3%), and the QA `hard_dark` regions flagged in them are moving characters
   (crops checked), not shadows.
 
-Settings (live): `ls_k` (**default 0** until the follow-up passes; 1-4), `ls_rest_samples`
+Settings (live): `ls_k` (**default 0**: the follow-up below did not pass; 1-4), `ls_rest_samples`
 (default 1; 0 drops the remainder: biased, timing and debug only; 2). Push: `ls_kmode`,
 the old spare word `pad` (bits 0-3 / 4-7).
 
@@ -1766,14 +1798,48 @@ remainder size, its rays' occlusion, and the remainder's share of the weight. In
 the `ls stats` line's "evaluated" count is 0. `ls_stats=1` costs ≈3-4 ms (FULL variant):
 time only from runs without it.
 
-**Follow-up (`31-lsk2-*`, queued) and the rule for the default:** Grymforge, one session:
-`ls_k=0`; `ls_k=0, ls_min_radius=1e5` (no rays: the floor F); `ls_k=2`; `ls_k=2,
-ls_rest_samples=0`; `ls_k=1`; `ls_k=1, ls_rest_samples=0`; `ls_k=0` again. Exact-ray cost
-and the fixed overhead from the two `rest=0` runs, the remainder-ray cost from `rest=1 −
-rest=0`. Campsite: `ls_k=0`, `ls_k=1`, `ls_k=2`, `ls_k=0` again, for images. Default
+**Follow-up (`31-lsk2-*`, exact weights, 2026-10-27).** Rule set before the run: the default
 becomes the largest `ls_k` with Grymforge ≤ 0.69 × `ls_k=0` (0.5 ms of 0.73) and no
 `hard_dark` or firefly region against `ls_k=0` (dump maxima after the pass within 2× of
-`ls_k=0`'s); `ls_k=1` is the likely result. If no `ls_k` meets it, 0 stays.
+`ls_k=0`'s); otherwise 0 stays.
+
+| Grymforge (S5), one session | ms | vs `ls_k=0` |
+|---|---|---|
+| `ls_k=0` (again, next session) | 0.780 (0.774) | |
+| no rays (`ls_min_radius=1e5`): the floor F | 0.197 | |
+| `ls_k=2` | 0.718 | 0.92: **fails** |
+| `ls_k=2, ls_rest_samples=0` (biased) | 0.582 | |
+| `ls_k=1` | 0.606 | 0.78: **fails** |
+| `ls_k=1, ls_rest_samples=0` (biased) | 0.447 | |
+
+Campsite (S3): `ls_k=0` 1.024 / 1.029, `ls_k=1` 0.929 (−9.5%), `ls_k=2` 1.017 (−1%).
+
+- **Where the time goes** (exact rays 1.96 / 0.99 per px at k2 / k1, remainder 0.80, from
+  the stats of the first A/B): an exact ray costs **0.139 ms per ray per px** (the two
+  `rest=0` runs), against 0.152 in the `ls_k=0` loop (which includes each light's
+  evaluation); a remainder ray **≈0.17** (`rest=1 − rest=0` at both k): +22%, from its
+  incoherent target (a different light per lane) and its evaluation; and a **fixed
+  0.11 ms** over the floor (`0.447 − 0.197 − 0.99·0.139`): phase 1's surface load and the
+  exact BRDF of every traced light, which `ls_k=0` evaluates once and this path twice
+  (≈0.06 ms with the first version's irradiance weight). Registers are not the cause
+  (128 in both paths). That overhead takes most of the saved rays: Grymforge's floor is
+  already 0.197 ms, and even 2 rays per pixel (k1) cost 0.41 ms above it.
+- **Images pass.** No fireflies: the maxima after the pass are 39.5 (k2) and 47 (k1)
+  against 51 / 45 for the two `ls_k=0` runs (the first version: 65,000). Mean of the lit
+  HDR (compose) −3.6% (k2), +0.2% (k1) against +1.4% between the two `ls_k=0` runs. Every
+  `hard_dark` region flagged on the final frame (S5 k1 3, k2 1; S3 k1 2) is a moving
+  character or the animated lava, as two `ls_k=0` frames also differ there (crops
+  checked). Pre-RR noise (high-pass of the compose): k1 +13% at Grymforge, k2 +1%;
+  unchanged at Campsite; the final frames are within run-to-run spread.
+- **Verdict: `ls_k` stays 0.** Neither k meets the budget rule. `ls_k=1` is a valid,
+  unbiased cost option (−22% Grymforge, −9.5% Campsite, more pre-RR noise) for a lower
+  preset; that is a preset decision, not made here.
+- **What would make it pay:** a weight as cheap as the first version's but bounded, so
+  that phase 1 needs no full BRDF (e.g. irradiance × a per-pixel bound of the specular
+  lobe, the bound evaluated once per pixel); at most ≈−0.05 ms, so k1 ≈0.55 ms: still
+  over 0.5. Grymforge's budget miss is the floor and the 3.8 traced lights per pixel;
+  1b (ReSTIR) does not remove either. A lower-resolution visibility or a per-froxel
+  light cull (lights fully occluded for the whole froxel) are the levers left.
 
 ## 10. D-RF: ray-traced reflections (implemented, tiers (a) and (c))
 

@@ -26,7 +26,7 @@
 // (no denoiser), one deterministic ray to the light centre (hard shadows).
 // ls_samples > 0 instead traces that many rays per pixel to lights chosen by
 // RIS over the unshadowed luminance (unbiased, noisier, cheaper with many lights).
-// ls_k > 0 (default 0 until measured; both variants, see ls_main_k below): the ls_k strongest lights
+// ls_k > 0 (default 0, TRACK_D 9.11; both variants, see ls_main_k below): the ls_k strongest lights
 // exactly, ls_rest_samples RIS rays for the rest (unbiased, at most ls_k + ls_rest_samples rays).
 //
 // Per-light data (ls_lights=1, ls_flags bit 0; docs/SE_BRIDGE.md): lsSlots holds, per
@@ -191,7 +191,7 @@ bool ls_pixel(uint2 fp, out LsPixel px) {
   px = (LsPixel)0;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
-  LsLite s;
+  LsLite s = (LsLite)0;
   if (!ls_lite(fp, d, s)) return false;
   ls_surface(fp, s, px.sf, px.mt);
   px.cls = s.cls;
@@ -310,7 +310,7 @@ bool ls_light_traced(uint li, bool spot, LsLite s, out float3 lpos, out float R)
 
 // Phase 2: what the ray to a traced light needs (as ls_light_traced found it).
 void ls_light_ray(uint li, out float3 lpos, out float R) {
-  lpos = asfloat(lLights.Load3(li * 80u));
+  lpos = bg3_light_pos(li);
   R = pc.ls_source_radius;
   if ((pc.ls_flags & 1u) != 0u) {
     uint4 si = lsSlots[uint2(min(li, 4095u), 0)];
@@ -326,13 +326,13 @@ uint2 ls_trace_chunk(uint2 fp, LsLite s, uint base, uint n, uint end_p) {
   for (uint j = 0; j < n; ++j) {
     float3 lpos;
     float R;
-    if (ls_light_traced(lIndex.Load((base + j) * 4u), base + j >= end_p, s, lpos, R)) traced |= 1u << j;
+    if (ls_light_traced(bg3_light_index(base + j), base + j >= end_p, s, lpos, R)) traced |= 1u << j;
   }
   // the k-th traced light of every lane together
   uint lit = 0;
   for (uint m = traced; m != 0u; m &= m - 1u) {
     const uint j = firstbitlow(m);
-    const uint li = lIndex.Load((base + j) * 4u);
+    const uint li = bg3_light_index(base + j);
     float3 lpos;
     float R;
     ls_light_ray(li, lpos, R);
@@ -345,14 +345,14 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
-  LsLite s;
+  LsLite s = (LsLite)0;
   if (!ls_lite(fp, d, s)) return false;   // the lighting skips unlit pixels
 
   const uint3 cl = bg3_cluster(fp, d);
   const uint end_p = cl.x + cl.y, end_s = end_p + cl.z;
   float3 dd = 0, ds = 0;   // delta diffuse / specular
   float3 td = 0, ts = 0;   // direct light of the traced lights after our shadow (ao_direct)
-  LsPixel px;
+  LsPixel px = (LsPixel)0;
   uint base = cl.x;
   [loop] do {
     const uint n = min(end_s - base, 32u);
@@ -364,7 +364,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     ls_surface(WaveReadLaneAt(fp, WaveGetLaneIndex()), s, px.sf, px.mt);
     for (uint m3 = traced; m3 != 0u; m3 &= m3 - 1u) {
       const uint j = firstbitlow(m3);
-      Bg3Light l = load_light(lIndex.Load((base + j) * 4u));
+      Bg3Light l = load_light(bg3_light_index(base + j));
       float3 cd, ct, cs, Ld;
       float d2, nol;
       const bool spot = base + j >= end_p;
@@ -409,7 +409,7 @@ uint fx(float v) { return uint(clamp(v, 0.0, 64.0) * 256.0 + 0.5); }
 
 bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
-  LsPixel px;
+  LsPixel px = (LsPixel)0;
   if (!ls_pixel(fp, px)) return false;
   const float d = px.d;
   const Bg3Surface sf = px.sf;
@@ -436,7 +436,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   uint rk[2] = {0, 0};
 
   for (uint i = cl.x; i < end_s; ++i) {
-    uint li = lIndex.Load(i * 4u);
+    uint li = bg3_light_index(i);
     bool spot = i >= end_p;
     Bg3Light l = load_light(li);
     // cd: diffuse the shadow multiplies, ct: transmission it does not (thickness profiles).
@@ -722,7 +722,7 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
   LsPixel px = (LsPixel)0;
   ls_surface(fp, s, px.sf, px.mt);
   for (uint i = cl.x; i < end_s; ++i) {
-    const uint li = lIndex.Load(i * 4u);
+    const uint li = bg3_light_index(i);
     const bool spot = i >= end_p;
     float3 lpos;
     float R;
@@ -773,7 +773,7 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
   for (uint q = 0; q < 6u; ++q) {
     const uint e = ls_sel(q, ex, rs);
     if (e == kLsNone) continue;
-    const uint li = lIndex.Load(e * 4u);
+    const uint li = bg3_light_index(e);
     float3 lpos;
     float R;
     ls_light_ray(li, lpos, R);
@@ -787,7 +787,7 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
   for (uint q3 = 0; q3 < 6u; ++q3) {
     const uint e = ls_sel(q3, ex, rs);
     if (e == kLsNone) continue;
-    Bg3Light l = load_light(lIndex.Load(e * 4u));
+    Bg3Light l = load_light(bg3_light_index(e));
     float3 cd, ct, cs, Ld;
     float d2, nol;
     const bool spot = e >= end_p;

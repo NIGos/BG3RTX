@@ -317,7 +317,7 @@ whose two children both have importance 0 (smallest probability sum 0.001 in sce
 
 | Key | Default | Meaning |
 |---|---|---|
-| `ls_k` (implemented; was `ls_exact_k`, TRACK_D 9.11) | 0 until the 9.11 follow-up (1 likely) | Lights traced exactly per pixel; 0 = all (the pass before) |
+| `ls_k` (implemented; was `ls_exact_k`, TRACK_D 9.11) | 0 (measured: k1 −22%, k2 −8% at Grymforge, over budget either way) | Lights traced exactly per pixel; 0 = all (the pass before) |
 | `ls_rest_samples` (implemented; was `ls_remainder`) | 1 | 0 drop R (biased, debug only), 1-2 RIS rays; ReSTIR (1b) would be a separate key |
 | `ls_restir_m_max` | 20 | Temporal M cap |
 | `ls_restir_visreuse` | 0 | Bitterli visibility reuse (biased A/B) |
