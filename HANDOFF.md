@@ -1,130 +1,54 @@
-# HANDOFF: R0 sun replace (`rt_sun_replace`)
+# HANDOFF: D-LS box (projector) light shadows (`ls_box`), PAUSED (WIP)
 
-Branch `worktree-agent-aff062a21c1600fda`, main `51a2db9` merged. Design and results:
-`docs/TRACK_D_RT.md` section 12. QA additions: `docs/QA.md`.
+Branch `worktree-agent-a814985dd663a9b89`. Paused on request mid-implementation. The previous
+HANDOFF (R0 sun replace) is in git history (`git show HEAD~1:HANDOFF.md`).
 
-## Implemented
-- `rt_sun_replace=1` (default, live): the traced sun visibility (soft, sun-disc sampled)
-  **replaces** the game's sun mask where trusted. Untrusted pixels keep `min(game, traced)`.
-- Trust is the product of two geometric tests (2026-10-27: the third, **proximity** to the
-  game's lit mask via `rt_sun_near`, is removed per QUALITY R0; `rt_sun_near` now only
-  splits the `rt_debug=7` A/B classes into edge and far):
-  - **roofs**: the sun ray passes through no roof volume (asset DB API v3 `roof_volumes`:
-    roofed rooms, covered floors, roof floors; padded 1 m sideways and 3 m up, not derived:
-    TRACK_D 12.4). The query radius is derived per frame (`rt_sun_roof_radius=0`: the
-    farthest roof-tested pixel + `rt_tmax`); volumes beyond 256 are logged, nearest kept;
-  - **off-screen**: the ray stays in the view frustum until it is 6 m above the pixel
-    (`rt_sun_rise`, not derived) and, with `rt_sun_top=1`, above the highest visible point
-    + 2 m (the ini default is `rt_sun_top=0`). Trust ramps in from 0.75 of that path.
-- Without a known asset-DB level, nothing is trusted (safe fallback).
-- Cloud shadows: unchanged. The lighting applies them after the mask.
-- **In-frame A/B (new):** `rt_sun_resolve.hlsl` compares each pixel's written mask with
-  `min(game, traced)` of the same frame:
-  - brightened by >= one R8 code (1/255; was > 0.1) at the game's shadow edge (its own
-    mask partly lit, or lit within `rt_sun_near`/2: a debug class only);
-  - brightened farther from it;
-  - darker than min by >= one code (impossible with `rt_sun_roof_mode=0`).
-  - Outputs:
-    - log line `sun check (N frames, replace R): brightened by >= 1/255 against min(game, RT)
-      on X% of px (... per frame): at the game's shadow edge E%, farther F% (far: Y% of
-      px); darker than min Z% of px; mean gain ...`, every 600 frames;
-    - debug view `rt_debug=7`: the changed pixels over the lit diffuse in grey; yellow =
-      edge, red = far, blue = darker;
-    - the QA trace `sun_check` and the detectors `sun_check_far` (warning, 0.5‰),
-      `sun_check_edge` (info) and `sun_check_darker` (gate, 0.01‰), with crops.
-- QA phases (13 traces): the trace-to-trace `rep_on`/`sun_min` pair is gone.
-  - `sun_dbg` (`rt_debug=2`; blue = the written mask), `sun_check` (`rt_debug=7`) and
-    `sun_trust` (`rt_debug=6`) are each evaluated on their own, so `same_view` no longer
-    voids them.
-  - `python -m scripts.qa run` takes `--set k=v,...` (keys for every trace).
-- Files:
-  - `core/sun_trust.{h,cpp}`: upload ring, staged into a device-local `R32_UINT` image,
-    counters 0-20 read back, `sun stats` and `sun check` log lines;
-  - `shaders/gi/sun_trust.hlsli`, `shaders/gi/rt_sun_resolve.hlsl`;
-  - `shaders/gi/rt_shadow.hlsl`: roof and off-screen trust;
-  - `shaders/gi/rt_debug.hlsl`: views 6 and 7, and the blue channel of view 2;
-  - `core/gi.cpp` (small): extras 47/48, `sunt_begin`/`sunt_end`, the resolve dispatch,
-    `rt_debug` up to 7;
-  - `common/assetdb_api.h` + `layer/assetdb.cpp`: API v3, tested in `tests/assetdb_test.cpp`;
-  - `bg3rtx.ini`: `rt_sun_*`;
-  - `scripts/qa`.
-- Stats: none of the shared `rtStats` counters (0..117) are used; the counters live in the
-  trust image.
+## State
+- **Shaders: done, compile, not run in game.**
+  - `shaders/rt/bg3_boxes.hlsli` (new): b29 record `_53` (offsets checked against the SPIR-V
+    decorations of `captures/shaders/f469db7865d7c524.spv`: stride 128; `_m6` row-major rows at
+    48/64/80; `_m8` 108; `_m9` 112), box uvw/inside test, box falloff (4 curves by `_m4 >> 24`),
+    cookie colour (b45 bindless, SampleGrad with the quad uv differences, zeroed > 1/64 as the
+    game), class terms `bg3_box_eval_mat` (copy of `bg3_light_eval_mat`'s tail: Ld = `_m9`,
+    norm 1, `_m1 & 1` → b13[0]), the box atlas term (orthographic: bias 3.5·`_m4`, ref
+    `((z − m5.y)/m5.x)/m6`), and `bg3_box_exit` (ray tmax = exit of the box on the light side).
+    It reads the game's set 1 as **set 3** (b29, b16 sampler, b45 cookies).
+  - `shaders/gi/rt_local_shadows.hlsl`: everything under `#if LS_BOX`. Default variant and
+    exact-k: `ls_box_all` (3 phases like the point/spot loop). LS_FULL: inline loop with
+    validation (`md/ms` include box lights), debug views, stats counters 136-150 (box evals,
+    shadow-mapped, traced, occluded, unknown, game box light, light removed, cookie, projector-px
+    validation 144-148, box share 150). `vpx` = all pixels with LS_BOX. Counters 144-148 are
+    also counted with LS_BOX=0 (baseline for the comparison).
+  - Wrappers `rt_local_shadows_box.hlsl`, `rt_local_shadows_full_box.hlsl`.
+  - **Verified: the LS_BOX=0 default shader's SPIR-V is byte-identical to HEAD's** (so ls_check
+    for point/spot is unaffected); all 7 D-LS shaders compile with DXC (merge-green flags).
+- **Host (`core/gi.cpp`): started.** Added globals `g_ls_box`, `g_ls_full_box`,
+  `g_ls_box_layout`, `g_ls_box_game` and `ensure_ls_box_layout(game)` (sets: push 0, host alpha
+  1, sun 2, game set 1 as 3). Nothing calls them yet: **ls_box has no effect yet.** Build passes.
 
-## Verified (numbers)
-- Build clean; `assetdb_test` OK (26 roof volumes within 120 m of the foundry floor, and
-  the floor point lies inside one).
-- Cost: the host-visible first version cost 14-16 ms/frame of `rt passes`. With the
-  device-local image, `rt passes` is 0.5-0.7 ms total (S7). The sun passes are not timed
-  alone.
-- Coordinator run `captures/qa/sunrep` (S3, S14, S8, S7, S1; `rt_bvh_split=0`):
-  - **no leaks**: `sun_replaced` (written lit where the game's mask is < 0.1) is 0‰ in all
-    five scenes, against `sun_missing_casters` of 42.9‰ (S7), 5.1‰ (S14) and 4.9‰ (S3);
-  - non-finite: 0 everywhere;
-  - roof volumes keep 85-97% of the game-dark & traced-lit pixels in S7, S14 and the S1
-    foundry;
-  - **too conservative outdoors**: in S3, 94-98% of those pixels fail the off-screen test,
-    because the scene top is at the tree tops. Fully plus partly replaced: 0-6%;
-  - the `brightening rt_sun_replace` crops of that run were animation, so that A/B is
-    removed.
-- The in-frame A/B (`sun check`, `rt_debug=7`, `sun_check`) is new and compiled only: not
-  run in game yet.
+## What's left
+1. `run_post` (≈ line 1745): if `cfg ls_box` and `s.game_set1` and not `ls_check`/`ls_impl=0`
+   and `ensure_ls_box_layout(s.game_set1_layout)`: refresh `g_ls_box` / `g_ls_full_box`
+   (`gi/rt_local_shadows_box.hlsl` / `_full_box.hlsl`) with `g_ls_box_layout`; dispatch with
+   that layout and also bind `s.game_set1` at set 3 with `s.game_set1_dyn` (as `rf_dispatch`).
+   Fall back to the normal pipeline otherwise; log once on (and once when set 1 is missing).
+2. `kStatsCounters` 136 → 152; an `ls box stats` log line (box listed/evaluated/shadow-mapped/
+   traced/occluded/unknown/cookie per px; game box light and removed light as % of t[21]; the
+   projector-pixel validation 144-148 and 150); add `ls_box` to the GPU-median timing line.
+3. `gi_release`: destroy `g_ls_box`, `g_ls_full_box`, `g_ls_box_layout`; reset `g_ls_box_game`.
+4. `bg3rtx.ini` / settings defaults: `ls_box=0` (check `scripts/gen_settings_defaults.py`,
+   `docs/USER_SETTINGS.md`).
+5. Docs: TRACK_D_RT.md 9.12 (design, results), COVERAGE gap 2 update, QA.md if needed.
+6. Unit tests + `merge-green` checks locally; queue jobs (none enqueued yet): per scene S6, S7,
+   S5 a session with `ls_box=0` / `ls_box=1` × (`ls_stats=1`, `ls_debug=4` + `ls_stats=1`,
+   `ls_check=1` with ls_box=0), `hold` ≥ 90, patterns `ls stats`, `ls box stats`,
+   `ls validation fit`, `ls check`, `local-light shadow pass GPU median`.
 
-## In-game tests still needed (serial, `-Background`)
-Build first: `.\scripts\build.ps1`. Needed: `data\assetdb\` (copied from main) and the
-Script Extender bridge installed, otherwise the level is unknown and replace stays off. The
-`sun stats` line shows `replace 0` and `0 roof volumes` in that case.
+## Open questions / design notes
+- No source angle for box lights (directional, hard shadows): no derivation for one exists.
+- Box faces embedded in walls would occlude the whole light: watch per-scene occlusion share.
+- Box lights have no per-light data (join covers b25 only); `ls_noshadow=2` cannot apply.
+- Cookie LOD uses neighbour-pixel uv differences, not the game's exact quad lanes.
 
-1. **In-frame A/B, default trust:**
-   `python -m scripts.qa run --scenes S3,S14,S8,S7,S1 --out captures\qa\suncheck`
-   - Read `sun_check_*` in each scene's `result.json` / report, and the `sun check` lines
-     in `run.json` `log_tail`.
-   - Pass:
-     - `sun_check_darker` 0;
-     - `nonfinite` 0;
-     - interiors (S7, S8, the S1 foundry view): brightened total < 0.5‰;
-     - every `crops/sun_check_far_*.png` shows the game's over-wide penumbra or acne
-       (right per R0), not a missing caster.
-   - Fail:
-     - any blue (darker);
-     - a far (red) region on a floor under a roof or balcony, or across a whole surface;
-     - red in the shadow of something beyond the screen edge facing the sun.
-   - `sun_check_edge` is expected (the game's PCF is wider than the 0.263° sun).
-2. **In-frame A/B, `rt_sun_top=0`** (the outdoor fix to decide on):
-   `python -m scripts.qa run --scenes S3,S14,S8 --set rt_sun_top=0 --out captures\qa\suncheck_top0`
-   - Compare against test 1: brightened share and far share.
-   - Pass: far crops still at shadow edges (right per R0), interiors unchanged.
-   - If it passes, set `rt_sun_top=0` as the default in `bg3rtx.ini` and
-     `core/sun_trust.cpp`.
-   - Then copy 2-3 crops per scene to `docs/img/sun_replace_*` and fill in TRACK_D 12.3.
-3. **Validation:**
-   `.\scripts\auto-run.ps1 -NoBuild -NoAnalyze -Background -Validation -Save "QuickSave_3784" -Traces 1 -TimeoutSec 900 -Set "rt=1,gi=1,rt_shadows=1,rt_local_shadows=1,rt_reflections=1,rt_sun_replace=1"`
-   - Compare the VUIDs against the same command with `rt_sun_replace=0`, and with
-     `rt_shadows=0`, on the same build.
-   - Pass: no IDs that only appear with the replace.
-   - Places that could show:
-     - the binding 47 image (`r32ui`; the fallback view is RGBA32UI, used only if the
-       trust image failed to allocate);
-     - the copies in `sunt_begin`/`sunt_end`.
-4. **Motion:**
-   `.\scripts\auto-run.ps1 -NoBuild -NoAnalyze -Background -Move -Save "Lower City - 91h" -Traces 3 -TimeoutSec 900`
-   - Pass: `sun stats` and `sun check` lines present, `darker` 0, no non-finite values.
-   - Watch for interiors briefly lit after a teleport: the camera readback lags 8 frames,
-     and the volumes are re-queried when the camera moves more than 5 m.
-5. **Cost:** S14 twice, `-Set rt_sun_replace=0` vs `=1`; compare the `rt passes: GPU cost`
-   lines. Expected: < 0.1 ms difference (32 taps per pixel plus up to 256 boxes; S7 has 79).
-
-## Stalls seen in my runs
-The game stopped presenting with the process alive. None of these is attributed to this
-change.
-- r2 S7 at 02:22:56;
-- r3 S3 at 03:57:32;
-- r4 S3 at 05:27:05, with the replace inactive (bridge uninstalled, level unknown);
-- r1 S1 at ~00:43: the TLAS stopped after the first trace.
-
-## Known limits
-- The scene top and the rise are heuristics (not derivable from the asset DB, which has no
-  meshes; TLAS experiment in TRACK_D 12.4). An off-screen caster taller than them, beyond the
-  screen edge facing the sun, could shift a shadow edge (there is no proximity limit now).
-- Roof volumes come from trigger shapes, not the game's actual roof fading. A roofed room
-  whose roof is drawn keeps `min` too (no brightening there; harmless).
+## Jobs enqueued
+None.
