@@ -7,37 +7,38 @@ section 12 (12.7 is the latest round). The status row is in `docs/QUALITY.md`
 The tree builds, `settings_test` passes (120 checks), and the shaders compile with DXC.
 Main is merged up to `8f8df1f`.
 
-## State after round 2 (T1-T3 on `74b2338`, run by the coordinator)
+## State after round 3 (`b74c5ab`, run by the coordinator)
 
-- **No device loss** in any scene. The per-submission build works with `rt_bvh_split=0`.
-- **Adamantine Forge:** the lava (`1a81f41b` FLUID_Lava_Plane_Flowmap) is captured, with
-  98.5% coverage. The fixes for its ×4, for Pulse_FX ×0.05 (`304be1c7`), for Pulse_VT 0
-  captured (the soup was full) and for the 87k-light overflow are listed below.
-- **Grymforge:** its lava is `56c5e5a0` `ENV_Lava:StaticInstancedForward`, drawn in the
-  **forward pass**, not the effects target. Forward emissive surfaces are now captured too.
-- **`QuickSave_3784`** no longer opens in the foundry. S1 needs another foundry save.
+- **S6 Adamantine** (81 s) and **S5 Grymforge** (169 s) lost the device. The cause, traced
+  by the split agent, is BLAS builds over unwritten or non-finite vertex data.
+- **S8 Water Queens** ran clean:
+  - the exact families pass (1.03-1.05);
+  - the Pulse families read 0.000;
+  - coverage was 31% of 2,548 bright pixels.
 
-## Fixes in this round (offline, not yet run)
+## Fixes in this round (offline, not yet run; TRACK_D 12.8)
 
-1. **Lava radiance.**
-   - The game's lava is `blackbody(T)·m23·(1, 2.5, 0)`, with T from a heat field that XFB
-     cannot reproduce (flow noise, vertex colour, distance).
-   - We now read the game's blackbody LUT (set 0 b11) at a constant heat
-     (`rt_em_lava_heat=0.5`), which gives the right hue.
-   - **On-screen calibration** sets the scale (`rt_em_calib=1`). A statistics-only projected
-     check runs every 16 frames, and approximate families are scaled by game/ours (damped).
-     Exact families are never scaled.
-2. **Pulse:** the `_GM_Pulse` fixup (pulse, texture-colour switch) now applies to every
-   Pulse template, so `304be1c7` gets it. Only luminance-emissive ones (`_VT`) get the
-   global scale.
-3. **Soup sized to demand:** at a build it grows to 4× the frame's demand
-   (`rt_em_xfb_max_mb=512`).
-4. **Light list without drops:** above `rt_em_max_lights`, k consecutive triangles share
-   one light. Area and power are summed, the radiance is area-weighted, and power is
-   conserved.
-5. **Forward-pass emissive surfaces** (FOR variants with the emissive flag, not VFX, water
-   or decals) are captured, flagged forward and approximate. They are not validated or
-   calibrated against the effects target, because they are not in it.
+1. **Sanitize pass before every build** (`shaders/rt/em_sanitize.hlsl`, in our command
+   buffer).
+   - It runs over exactly the soup ranges the BLAS builds read.
+   - Any triangle whose vertices are non-finite, beyond 1e6, or not marked converted this
+     frame (w is not 0 or 1) is collapsed to 0 and counted.
+   - Without the pipeline, the build is skipped.
+   - A grown soup is zero-filled before first use.
+2. **Lifetime of what consumers read.**
+   - `rt_emissive(cmd, …)` notes the set's game views, images, effects target and global
+     buffer on the consumer's command buffer, so the image-lifetime tracker keeps them alive.
+   - Before this, a texture the game freed could be read a frame later.
+3. **Pulse 0.000.**
+   - `a201d825`: its material constants sit at set 1 b1, and the fixup read set 1 b0. Fixed
+     with the DB's binding and layout.
+   - `159a6211`: the per-frame global-scale buffer was read a frame late. Consumers now use
+     the copy the build took (header word 11).
+4. **Coverage.**
+   - The check now counts an emitter in front of the depth (alpha-blended glow cards, not in
+     the depth buffer) as covered, and logs its share.
+   - The remaining misses: the Skydome backdrop, and moving characters' edges (one frame of
+     latency).
 
 ## Serial tests to rerun
 
@@ -70,6 +71,8 @@ Pass:
 - no device loss or stall;
 - `soup full` 0.00 after the first window, with one "[em] emissive soup grown" line at
   most;
+- `invalid soup triangles collapsed by the sanitize pass`: report the value. A non-zero
+  value is handled, not a failure, but tell me the families;
 - `left out by rt_em_max_lights` 0, and `triangles per light` ≥ 2 is expected (152k
   triangles);
 - `159a6211` captured = draws (3/3);
@@ -97,14 +100,16 @@ Its `ours/game` is not a criterion: forward, not in the effects target, so expec
 "forward", a large ratio, scale 1. The `rt_debug=6` dump should show the lava lit by our
 data.
 
-### R3: S8 Water Queens House
+### R3: S8 Water Queens House (run first: it ran clean last time)
 
 `scripts/auto-run.ps1 -Background -Save "Water Queens House" -Traces 5 -Set rt_debug=8,dump_png_width=1280`
 
 Pass:
 - no device loss;
-- coverage ≥ 70%;
+- coverage ≥ 70%, and report the "by an emitter in front of the depth" share;
+- `159a6211` and `a201d825` within 0.8-1.25 (they read 0.000 before);
 - every exact family (not "approx") with ≥ 500 px within 0.8-1.25;
+- report `material constants not host-readable` (> 0 explains `38e91cf3` / `5d837ba1`);
 - approximate families within 0.8-1.25 in the last window;
 - left out 0.
 

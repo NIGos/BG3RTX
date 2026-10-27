@@ -115,7 +115,7 @@ void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, 
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
   VkDescriptorSet set = VK_NULL_HANDLE;
   Bg3EmissiveInfo info{};
-  if (!host->rt_emissive(&layout, &set, &info) || !set || !layout || !info.fx_view || !info.fx_image ||
+  if (!host->rt_emissive(cmd, &layout, &set, &info) || !set || !layout || !info.fx_view || !info.fx_image ||
       info.fx_width != w || info.fx_height != h || info.built_frame + 3 < host->frame_index())
     return;
   // The effects target is sampled, then left as its last pass left it (unknown: no view).

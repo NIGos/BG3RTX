@@ -2244,3 +2244,67 @@ three scenes.
 
     Total power is conserved. k is in header word 7 and in the log.
   - Build 0.33 ms median at 152k triangles, 0 non-finite values.
+
+### 12.8 In-game round 3 (`b74c5ab`) and the fixes after it
+
+**Results:**
+- **S6 Adamantine** lost the device after 81 s, with only the main menu's Helper draw.
+- **S5 Grymforge** lost the device after 169 s. Before that, everything was captured:
+  - the forward lava and the Pulse families: 35 draws, 519k triangles, 64.9k lights;
+  - coverage 100%, overall ratio 1.13, build 0.52 ms;
+  - the calibrated VFX family `10086377` at about 1.0.
+- **S8 Water Queen's House** ran clean: 37 draws, 171k triangles, build 0.38 ms. The exact
+  families pass: CHAR_BASE_GM `20864dc6` 1.03-1.05, `9228b9cb` and `222986b8` Base_GM_VT
+  1.04, VertCut `a7caa456` 1.31. Pulse families read 0. Coverage was 31% (2,548 bright
+  pixels, 0.1% of the screen).
+
+**1. Device loss: never build from unchecked vertex data.** The split's fault was traced to
+BLAS builds over garbage, unwritten or non-finite vertices, which Vulkan leaves undefined.
+- Every captured vertex already goes through `xfb_to_world`, which writes finite positions
+  within 1e7 and marks each one w = 1 (valid) or w = 0 (collapsed).
+- A new **sanitize pass** (`shaders/rt/em_sanitize.hlsl`) now runs in our command buffer
+  over exactly the soup ranges the BLAS builds will read, before them.
+- It collapses any triangle with a vertex that is non-finite, beyond 1e6, or not marked (not
+  converted this frame) to the origin, and counts it ("invalid soup triangles collapsed").
+- If its pipeline is unavailable, the build is skipped.
+- A grown soup is zero-filled before its first use, and the effects passes' barrier now also
+  waits for that fill.
+- Only ranges captured by the draws of the submitted batch are built (as before).
+
+**Images read a frame later.** Consumers read the set in the next frame's lighting, a frame
+after the game drew with those glow maps and that effects target.
+- `Bg3HostApi::rt_emissive` now takes the consumer's command buffer.
+- The layer adds the set's game views, images and buffers to that command buffer's lifetime
+  references, so the image-lifetime tracker keeps them alive until it has run. Before this,
+  a texture the game freed after its own last use could still be read by our consumer.
+
+**2. The Pulse families read 0.000.** Two causes:
+- **`a201d825` Base_GM_Pulse_AlphaBlend** has its material constants at set 1 b1 (intensity
+  +24, no texture-colour switch). The fixup read set 1 b0 (the engine constants). It now
+  uses the DB's material-CB binding, and the intensity offset says which layout applies
+  (+28: with the switch at +24).
+- **`159a6211` Pulse_VT** (luminance-emissive) gets the global scale from set 2 b0, a
+  per-frame buffer. The build reads it right after the game's batch, but the check (and any
+  consumer) reads it a frame later, when that region holds other data.
+  - The light-list pass now copies the value into the header (word 11).
+  - Consumers use the copy.
+- The census now counts material constants that are not host-readable. Possible causes of
+  the two small 0.000 families (`38e91cf3` 80 px, `5d837ba1` 23 px) will show there.
+
+**3. Where Water Queen's House's uncovered 69% comes from.**
+- **The census of the trace** (`20261027-074655`):
+  - all the effects-target content is unit 10's 34 EMI draws;
+  - unit 11 (`f081b803`, a VFX plane) adds nothing measurable (same dump statistics).
+  - Unit 10 includes the **Skydome mountains backdrop** (`f12c2004`, excluded) and two
+    **alpha-blended** glow cards (`a201d825` Pulse_AlphaBlend).
+- **Alpha-blended emitters are not in the depth buffer.** The check accepts a hit only at
+  the pixel's depth, so such a card in front of a surface counted as a miss, and its own
+  hits read 0 (the layout bug above). The check now also looks for an emitter in front of
+  the depth.
+  - Such pixels count as covered.
+  - They are compared per family and their share is logged ("of which ... by an emitter in
+    front of the depth").
+- **The remaining misses** are:
+  - the backdrop (`rt_em_backdrop=1` measures it);
+  - characters' glowing parts at their silhouettes: the scene is the previous frame's,
+    shifted for the camera but not for the character's own motion.

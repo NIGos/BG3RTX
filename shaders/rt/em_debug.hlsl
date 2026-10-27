@@ -7,8 +7,10 @@
 //
 // Statistics (emStats, words): 0 pixels with depth, 1 visible emissive hits, 2 effects-
 // target pixels brighter than thr with no visible hit, 3 hits where the game shows less
-// than 2% of ours, 6 ran, 7 effects-target pixels brighter than thr; from 16, per record:
-// ours x 16, game x 16 (luminance, clamped at 4096), pixels, -.
+// than 2% of ours, 4 of the bright pixels without a hit at the depth, those with an emissive
+// surface in front of it (alpha-blended emitters: not in the depth buffer), 5 such front hits
+// in all, 6 ran, 7 effects-target pixels brighter than thr; from 16, per record: ours x 16,
+// game x 16 (luminance, clamped at 4096), pixels, -.
 #include "em_common.hlsli"
 
 struct CameraCB {
@@ -61,8 +63,28 @@ void main(uint3 tid : SV_DispatchThreadID) {
     const float eps = dist * pc.tol + 0.01;
     const bool hit = em_lookup(float3(0, 0, 0), dir, dist, eps, px, shift, L, rec);
     const float ours = em_lum(L), game = em_lum(fx);
-    const bool bright = game > pc.thr;
+    bool bright = game > pc.thr;
     if (bright) stat(7);
+    if (!hit) {
+      // An emitter in front of the depth: an alpha-blended glow card or halo is drawn into
+      // the effects target but not into the depth buffer. Counted apart (not a miss).
+      float3 Lf;
+      uint recf;
+      if (em_lookup(float3(0, 0, 0), dir, 0.5 * max(dist - eps, 0.0), 0.5 * max(dist - eps, 0.0), px, shift, Lf, recf)) {
+        stat(5);
+        if (bright) {
+          stat(4);
+          if (recf < 1024) {
+            uint base = (16 + recf * 4) * 4;
+            emStats.InterlockedAdd(base, q16(em_lum(Lf)));
+            emStats.InterlockedAdd(base + 4, q16(game));
+            emStats.InterlockedAdd(base + 8, 1u);
+          }
+        }
+        if (pc.mode == 6) c = Lf;
+        bright = false;   // covered, by the emitter in front
+      }
+    }
     if (hit) {
       stat(1);
       if (game < 0.02 * ours) stat(3);
@@ -76,7 +98,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       stat(2);
     }
     if (pc.mode == 6) {
-      c = hit ? L : float3(0, 0, 0);
+      c = hit ? L : c;
     } else if (pc.mode == 8) {
       if (hit && bright) {
         float k = ours / max(game, 1e-6);

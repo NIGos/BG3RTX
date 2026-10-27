@@ -9,6 +9,7 @@
 // pi * area * luminance (a one-sided Lambertian emitter). Invalid triangles add nothing.
 // Positions: the scene's camera-relative world (em_common.hlsli em_shift).
 #define EM_SET 0
+#define EM_BUILDER 1
 #include "em_common.hlsli"
 
 // Builder-only inputs (push descriptors, set 1).
@@ -26,6 +27,11 @@ bool finite3(float3 v) { return all(abs(v) < 1e30); }
 void main(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gi : SV_GroupIndex) {
   const uint j = id.x;
   float power = 0.0;
+  // The game's global scale buffer is per frame: keep the value this build used.
+  if (j == 0 && emHeader.Load(6 * 4) != 0) {
+    emHeader.Store(11 * 4, emGlobal.Load(0));
+    emHeader.Store(13 * 4, 1u);
+  }
   if (j < pc.lights && pc.instances > 0) {
     // The instance whose range holds j (prefix is sorted by first light).
     uint lo = 0, hi = pc.instances - 1;

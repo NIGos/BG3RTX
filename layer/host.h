@@ -523,7 +523,7 @@ void em_forget_cmd(VkCommandBuffer cmd);
 void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
 void em_on_present();
 // ABI 8: the emissive scene for the core (host_api.h Bg3HostApi::rt_emissive).
-bool em_scene(VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
+bool em_scene(VkCommandBuffer cmd, VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
 
 // ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
 // One line of shaders/rt/alpha_fs.txt (scripts/alpha_table.py).

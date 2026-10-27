@@ -78,7 +78,10 @@ struct EmLight {
 [[vk::binding(8, EM_SET)]] RWByteAddressBuffer emStats; // debug views' statistics (host-read)
 // Header, 16 words: 0 lights, 1 triangles left out, 2 instances, 3 records, 4 pre-exposure
 // (float), 5 build frame (low 32 bits), 6 global scale bound (1), 7 triangles per light (k),
-// 8-10 the build camera's absolute position (float3); words 16+: per-group power sums.
+// 8-10 the build camera's absolute position (float3), 11 the global scale as the build read
+// it (float; the game's buffer is per frame, so consumers in later frames use this copy),
+// 12 soup triangles collapsed by the sanitize pass, 13 word 11 written (1);
+// words 16+: per-group power sums.
 [[vk::binding(9, EM_SET)]] RWByteAddressBuffer emHeader;
 [[vk::binding(10, EM_SET)]] ByteAddressBuffer emGlobal;         // the game's set 2 b0 (float [0]: luminance scale)
 [[vk::binding(11, EM_SET)]] Texture2DArray<float4> emCache[kEmMaxCaches];   // VT tile caches
@@ -175,7 +178,11 @@ float3 em_radiance(EmRec r, float2 uv, float g) {
                                                             em_tex_lod(r.tex2, g, r.uv2.xy)).rgb;
   if ((r.flags & kEmFlagVtAlbedo) != 0) L *= em_vt_albedo(r, uv, g);
   if ((r.flags & kEmFlagLuminance) != 0 && emHeader.Load(6 * 4) != 0) {
-    float k = asfloat(emGlobal.Load(0));
+#ifdef EM_BUILDER
+    float k = asfloat(emGlobal.Load(0));   // the build reads the game's buffer of that frame
+#else
+    float k = emHeader.Load(13 * 4) != 0 ? asfloat(emHeader.Load(11 * 4)) : 1.0;   // its copy
+#endif
     L *= k > 0.0 && k < 1e6 ? k : 1.0;
   }
   return all(L >= 0.0) && all(L < 1e6) ? L : float3(0, 0, 0);

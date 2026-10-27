@@ -190,10 +190,12 @@ struct Bg3HostApi {
   // FSR/TAA, an SR fallback or a failed RR creation get the non-RR modes.
   bool (*rr_active)();
 
-  // ABI 8 (D-EM): the emissive scene (set 3 of shaders/rt/em_common.hlsli). False when
-  // RT or the capture is off; `set` is VK_NULL_HANDLE before the first build. The core
-  // binds it in passes recorded after the frame's first tiled-lighting dispatch.
-  bool (*rt_emissive)(VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
+  // ABI 8 (D-EM): the emissive scene (set 3 of shaders/rt/em_common.hlsli) of the latest
+  // build (the previous submitted frame). False when RT or the capture is off; `set` is
+  // VK_NULL_HANDLE before the first build. Pass the command buffer the set will be bound in:
+  // the game images and buffers it reads (glow maps, the effects target) are then kept
+  // alive until that command buffer has run (the layer's image lifetime tracking).
+  bool (*rt_emissive)(VkCommandBuffer cmd, VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
 };
 
 struct Bg3CoreApi {
