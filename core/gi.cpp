@@ -64,7 +64,7 @@ struct Push {
   float cs_length, cs_strength;
   uint32_t cs_steps;
   float mv_scale[2];
-  uint32_t has_mv, pad;
+  uint32_t has_mv, ls_kmode;   // ls_kmode: D-LS exact-k, bits 0-3 ls_k, bits 4-7 ls_rest_samples
   float rt_bias, rt_tmax;
   uint32_t rt_debug;
   float rt_strength;
@@ -665,8 +665,10 @@ constexpr uint32_t kStatsRing = 8;
 // [16..38] D-LS (rt_local_shadows.hlsl), [39..47] materials (rt_shadow.hlsl), [48..63] D-RF
 // (rt_reflections.hlsl), [64..75] RT audit fixes (D-LS per class, rt_origin, ao_direct),
 // [80..111] alpha-tested candidates of visibility / shadow rays (rt_common.hlsli alpha_stat),
-// [112..117] D-LS bit-exactness checks (ls_check=1): the pass, the join's kept slots.
-constexpr uint32_t kStatsCounters = 118;
+// [112..117] D-LS bit-exactness checks (ls_check=1): the pass, the join's kept slots,
+// [122..127] D-LS exact-k (ls_k, ls_stats=1): candidates, px over the cap, remainder lights,
+// remainder rays, their occluded ones, the remainder's weight share (x256).
+constexpr uint32_t kStatsCounters = 128;
 constexpr VkDeviceSize kStatsSlot = kStatsCounters * 64 * 4;
 VkBuffer g_stats_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
@@ -781,6 +783,16 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test) {
               t[21] ? 100.0 * t[24] / double(t[21]) : 0.0, t[24] / px / 256.0, t[21] / px / 256.0, t[22] / px / 256.0,
               t[15] / px / 256.0, t[21] ? 100.0 * t[15] / double(t[21]) : 0.0, t[23] / px / 256.0, t[21] ? 100.0 * t[23] / double(t[21]) : 0.0, 100.0 * t[20] / px, g_ls_raw[0], g_ls_raw[1], g_ls_raw[2],
               g_ls_raw[3], t[31] / px);
+  }
+  if (t[16] && t[122]) {   // D-LS exact-k (rt_local_shadows.hlsl ls_main_k; TRACK_D_RT.md 9.11)
+    double px = double(t[16]), hit = double(t[123] ? t[123] : 1), rr = double(t[125] ? t[125] : 1);
+    host->log("ls exact-k stats (%u frames): ls_k %d, ls_rest_samples %d: traced lights (ls_k=0 would trace) %.2f/px; "
+              "rays %.2f/px (exact %.2f, remainder %.2f), occluded %.2f/px; over the cap (k-hit) %.1f%% of px; "
+              "remainder %.2f lights/px, %.2f per capped px; remainder rays occluded %.1f%%; remainder share of the "
+              "irradiance weight on capped px %.1f%%",
+              g_stats_n, host->cfg_int("ls_k", 2), host->cfg_int("ls_rest_samples", 1), t[122] / px, t[19] / px,
+              (t[19] - t[125]) / px, t[125] / px, t[20] / px, 100.0 * t[123] / px, t[124] / px, t[124] / hit,
+              100.0 * t[126] / rr, 100.0 * t[127] / 256.0 / hit);
   }
   if (t[69]) {   // D-LS on non-standard material classes (rt_local_shadows.hlsl, AUDIT_RT fix 3)
     host->log("ls stats (%u frames): non-standard material px %.4fM/frame; validation on them (lit, no projector "
@@ -969,6 +981,11 @@ Push make_push() {
   int soft = host->cfg_int("ls_soft", -1);   // -1 follows rr
   pc.ls_soft = (soft < 0 ? host->rr_active() : soft != 0) ? 1u : 0u;
   pc.ls_strength = host->cfg_float("ls_strength", 1.0f);
+  // Exact-k + RIS remainder (docs/DESIGN_SOTA_NEXT.md 1a, TRACK_D_RT.md 9.11): the ls_k
+  // strongest traced lights per pixel exactly, ls_rest_samples rays to the rest (RIS);
+  // ls_k=0 traces every light (the pass before). Ignored with ls_samples or ls_debug.
+  pc.ls_kmode = uint32_t((std::min)((std::max)(host->cfg_int("ls_k", 2), 0), 4)) |
+                (uint32_t((std::min)((std::max)(host->cfg_int("ls_rest_samples", 1), 0), 2)) << 4);
   // Per-light data (docs/SE_BRIDGE.md): bit 0 set in run_post when the join ran; bits 8-12
   // the owners whose lights are traced (bit 8 + Bg3RtLightOwner; default 0x1F, every owner:
   // the owner is no reason to skip a light, TRACK_D 9.10); bits 16-17 the art-intent rule
@@ -1151,9 +1168,10 @@ void ls_timing_collect() {
   std::sort(v.begin(), v.end());
   std::sort(j.begin(), j.end());
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
-            "samples %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d)",
+            "samples %d, exact-k %d + %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
-            host->cfg_int("ls_samples", 0), host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
+            host->cfg_int("ls_samples", 0), host->cfg_int("ls_k", 2), host->cfg_int("ls_rest_samples", 1),
+            host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
             host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
             host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1));
   v.clear();

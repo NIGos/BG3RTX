@@ -317,8 +317,8 @@ whose two children both have importance 0 (smallest probability sum 0.001 in sce
 
 | Key | Default | Meaning |
 |---|---|---|
-| `ls_exact_k` | 0 (then 4 after A/B) | Lights traced exactly per pixel; 0 = all (today) |
-| `ls_remainder` | 1 | 0 drop R (biased, debug only), 1 RIS 1 ray, 2 ReSTIR temporal, 3 + spatial |
+| `ls_k` (implemented; was `ls_exact_k`, TRACK_D 9.11) | 2 | Lights traced exactly per pixel; 0 = all (the pass before) |
+| `ls_rest_samples` (implemented; was `ls_remainder`) | 1 | 0 drop R (biased, debug only), 1-2 RIS rays; ReSTIR (1b) would be a separate key |
 | `ls_restir_m_max` | 20 | Temporal M cap |
 | `ls_restir_visreuse` | 0 | Bitterli visibility reuse (biased A/B) |
 | `lt_build` | 0 | Build the light BVH every frame |

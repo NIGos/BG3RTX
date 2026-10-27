@@ -59,7 +59,7 @@ struct Push {
   uint cs_steps;
   float2 mv_scale;
   uint has_mv;
-  uint pad;
+  uint ls_kmode;            // D-LS exact-k (DESIGN_SOTA_NEXT 1a): bits 0-3 ls_k (0 trace every light), bits 4-7 ls_rest_samples
   // Track D ray-traced sun shadows (rt_shadow.hlsl)
   float rt_bias;      // ray origin offset along the normal, fraction of camera distance
   float rt_tmax;      // shadow ray length (world units)
