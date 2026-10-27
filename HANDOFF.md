@@ -749,3 +749,52 @@ is to bisect the optimisation:
   (`rt_alpha_test=0` makes instances opaque), and `ls_soft=0`.
 
 Each changes the code the driver compiles.
+
+## 15. Syncval: our post-lighting work races the game's events (seventeenth commit)
+
+**Correction:** `shader_debug=1` never ran the RT passes (DXC debug-info build fails at
+`RT_ALPHA_CANDIDATE`), so the "-Od fixes it" reasoning of section 14 is void.
+`rt_alpha_test=0` still faults, so the alpha test is ruled out.
+
+**Syncval** (`captures/validation.log`, syncval-split-full, 600 hazards, 200 per type at
+the cap):
+
+| count | hazard | whose |
+|---|---|---|
+| 200 + 4 | `vkCmdWaitEvents2KHR` image layout transition after a `vkCmdDispatch` read (WAR) / write (WAW) of the same image | **ours** (see below) |
+| 116 | `vkCmdBeginRenderPass` loadOp LOAD after a `vkCmdPipelineBarrier2` transition (RAW) | the game's own barriers |
+| 104 | `vkCmdDispatchIndirect` vs `vkCmdDispatchIndirect`, set 1 b10/b11 storage images (WAW) | the game's (we issue no indirect dispatches) |
+| 90 / 40 / 41 | `vkCmdDispatch` storage-buffer WAW/RAW on set 1 b4 / b0 / b2, after a dispatch / `vkCmdFillBuffer` | the game's descriptor sets and pipelines (our set 1 has no storage buffer at b2/b4) |
+| 3, 2 | draw after barrier (submit time); clear after barrier | the game's |
+
+**The WaitEvents hazards:**
+- Two of the images are named in our log: `0xbc49` and `0xc23e` are the game's SSS
+  diffuse images that rrpost's `sss2` step reads.
+- The barriers in those transitions are compute-write -> fragment/compute-read on
+  lighting outputs. D-LS reads and writes the game's diffuse and specular images.
+- **Mechanism:** an event only covers commands recorded *before* `vkCmdSetEvent`. The
+  core records D-LS, D-RF and the GI composite after the lighting dispatch, at the next
+  pass begin or at the end of the command buffer, i.e. *after* the game's `SetEvent2`.
+  So the game's `WaitEvents2` layout transition (and its later writes) race our post
+  work.
+- The sun pass runs in `run_pre`, before the lighting, inside the scope. That is the
+  D-LS-only, scene-independent signature. A layout transition racing shader access to
+  the same image can corrupt compressed image data and fault.
+- Grymforge (many lights, long D-LS) widens the window.
+- The light-list buffers are not written by an async queue in the frame: all our work
+  is on one queue (`[life]`), and syncval found no hazard on them.
+
+**Fix (layer):**
+- `vkCmdSetEvent` / `vkCmdSetEvent2` are hooked. Before the game's event is set, the
+  core's pending post-lighting work is recorded (`core_on_cmd_end` = the gi flush). It is
+  then inside the event's first scope.
+- `vkCmdWaitEvents` / `vkCmdWaitEvents2` are hooked. If rrpost recorded a dispatch since
+  (`CmdState::ours_since_event`), a barrier (compute | transfer | fragment ->
+  all commands, memory) is inserted before the wait.
+- `rt_event_flush=0` turns both off for an A/B.
+- `VkDeviceFuncs` gains `CmdSetEvent(2)` and `CmdWaitEvents(2)` (appended); the layer
+  and the core are rebuilt together, so the game must be restarted.
+- **Side effect:** a SetEvent between the first lighting permutation and later ones
+  records D-LS before those later dispatches have contributed RT3 / SSS profiles to the
+  snapshot. D-LS then shades those classes with the fallbacks; to be checked in a visual
+  run if this happens.

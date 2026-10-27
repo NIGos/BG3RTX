@@ -154,6 +154,9 @@ std::vector<DescEntry> decode_push_template(VkDescriptorUpdateTemplate tpl, cons
 // ---- command buffer state (cmd.cpp) ----
 struct CmdState {
   bool in_pass = false;
+  // Work of ours (rrpost steps) recorded since the game's last vkCmdSetEvent: the
+  // game's vkCmdWaitEvents does not cover it (cmd.cpp inserts a barrier first).
+  bool ours_since_event = false;
   Bg3PassInfo pass{};
   VkImageLayout color_layouts[8] = {};  // layout each attachment is left in when the pass ends
   VkImageLayout depth_layout = VK_IMAGE_LAYOUT_UNDEFINED;

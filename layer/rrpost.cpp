@@ -473,6 +473,7 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   dd->vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pl, 0, 1, &set, 0, nullptr);
   dd->vk.CmdPushConstants(cmd, g_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   dd->vk.CmdDispatch(cmd, gx, gy, 1);
+  if (CmdState* cs = cmd_state(cmd)) cs->ours_since_event = true;   // (cmd.cpp CmdWaitEvents)
   barrier(dd, cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_SHADER_WRITE_BIT,
           VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
   if (slot != UINT32_MAX) {

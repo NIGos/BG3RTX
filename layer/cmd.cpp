@@ -299,6 +299,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
   s->recording = ++recordings;
+  s->ours_since_event = false;
   if (r == VK_SUCCESS) fault_checkpoint(cmd, kCkCmdBegin, uint32_t(s->recording));
   s->in_pass = false;
   s->pass_ordinal = 0;
@@ -757,6 +758,59 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
   }
 }
 
+// ---- the game's events ----
+// BG3 orders its frame with vkCmdSetEvent2 / vkCmdWaitEvents2, several with image layout
+// transitions. An event only covers what was recorded before vkCmdSetEvent, so work of
+// ours recorded between the game's SetEvent and WaitEvents (the post-lighting passes:
+// D-LS, D-RF, the GI composite; rrpost steps) raced the transitions and the game's
+// later writes: syncval reported vkCmdWaitEvents2KHR layout transitions of images "previously
+// read/written by vkCmdDispatch" (204 of the 600 hazards), and D-LS (which runs after the
+// lighting, unlike the sun pass, which runs before it) was the only shader that faulted.
+//   - vkCmdSetEvent(2): the core's pending post-lighting work is recorded first (core
+//     on_cmd_end = gi flush), inside the event's first synchronization scope.
+//   - vkCmdWaitEvents(2): if work of ours was recorded since (rrpost), a barrier from
+//     every stage we use orders it before the wait and its transitions.
+static void flush_ours_before_event(VkCommandBuffer cmd) {
+  CmdState* s = cmd_state(cmd);
+  if (s && !s->in_pass && cfg_int("rt_event_flush", 1)) core_on_cmd_end(cmd);
+}
+
+static void barrier_ours_before_wait(VkCommandBuffer cmd) {
+  CmdState* s = cmd_state(cmd);
+  if (!s || !s->ours_since_event || !cfg_int("rt_event_flush", 1)) return;
+  s->ours_since_event = false;
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+  mb.dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+  vk(cmd).CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT |
+                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdSetEvent(VkCommandBuffer cmd, VkEvent e, VkPipelineStageFlags mask) {
+  flush_ours_before_event(cmd);
+  vk(cmd).CmdSetEvent(cmd, e, mask);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdSetEvent2(VkCommandBuffer cmd, VkEvent e, const VkDependencyInfo* dep) {
+  flush_ours_before_event(cmd);
+  vk(cmd).CmdSetEvent2(cmd, e, dep);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents(VkCommandBuffer cmd, uint32_t n, const VkEvent* ev, VkPipelineStageFlags src,
+                                                VkPipelineStageFlags dst, uint32_t mbc, const VkMemoryBarrier* mb,
+                                                uint32_t bbc, const VkBufferMemoryBarrier* bb, uint32_t ibc,
+                                                const VkImageMemoryBarrier* ib) {
+  barrier_ours_before_wait(cmd);
+  vk(cmd).CmdWaitEvents(cmd, n, ev, src, dst, mbc, mb, bbc, bb, ibc, ib);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents2(VkCommandBuffer cmd, uint32_t n, const VkEvent* ev,
+                                                 const VkDependencyInfo* deps) {
+  barrier_ours_before_wait(cmd);
+  vk(cmd).CmdWaitEvents2(cmd, n, ev, deps);
+}
+
 void register_cmd_hooks(HookMap& m) {
   auto add = [&](const char* name, PFN_vkVoidFunction fn) {
     m[std::string("vk") + name] = fn;
@@ -800,6 +854,10 @@ void register_cmd_hooks(HookMap& m) {
   HOOK(CmdCopyBuffer2);
   HOOK(CmdUpdateBuffer);
   HOOK(CmdFillBuffer);
+  HOOK(CmdSetEvent);
+  HOOK(CmdSetEvent2);
+  HOOK(CmdWaitEvents);
+  HOOK(CmdWaitEvents2);
   m["vkCmdBindVertexBuffers2EXT"] = reinterpret_cast<PFN_vkVoidFunction>(&CmdBindVertexBuffers2EXT);
 #undef HOOK
 }
