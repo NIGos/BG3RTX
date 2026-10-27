@@ -241,6 +241,9 @@ static std::string write_trace(uint64_t frame, const VkPresentInfoKHR* info) {
 // auto_min_passes render passes for auto_stable_frames presents in a row (the
 // game is past loading screens), take auto_traces traces auto_interval
 // presents apart, then write captures/auto.done.
+// auto_traces=0 takes no trace: auto.done is written as soon as the scene is
+// stable ("[auto] scene ready"), for test-queue.ps1 sessions, which then take
+// their traces on demand through trace.request.
 static bool auto_trigger(uint64_t frame, uint32_t passes, uint32_t draws) {
   if (frame % 300 == 0) {
     uint64_t d[DIAG_COUNT];
@@ -252,7 +255,8 @@ static bool auto_trigger(uint64_t frame, uint32_t passes, uint32_t draws) {
   }
   if (!cfg_int("auto_trace", 0)) return false;
   int want = cfg_int("auto_traces", 1);
-  if (int(g_auto_done) >= want) return false;
+  static bool ready_marked = false;
+  if (int(g_auto_done) >= want && (want > 0 || ready_marked)) return false;
   // A present with no passes at all (a driver-inserted one) neither counts nor resets.
   // Draws tell gameplay (~3000/frame at 3840x1600) from the 3D main menu (~1300).
   // Stability is measured in time as well as frames: with the display asleep
@@ -275,6 +279,14 @@ static bool auto_trigger(uint64_t frame, uint32_t passes, uint32_t draws) {
   }
   bool stable = g_streak >= uint32_t(cfg_int("auto_stable_frames", 600)) ||
                 (g_streak >= 10 && GetTickCount64() - streak_start >= ULONGLONG(cfg_int("auto_stable_s", 8)) * 1000);
+  if (want <= 0) {
+    if (stable) {
+      ready_marked = true;
+      write_file(tagged(root_dir() + "\\captures\\auto", ".done"), "ready\n", 6);
+      log("[auto] scene ready at present %llu (auto_traces=0: no trace)", (unsigned long long)frame);
+    }
+    return false;
+  }
   if (!stable || frame < g_auto_next_allowed) return false;
   g_auto_next_allowed = frame + uint64_t(cfg_int("auto_interval", 600));
   return true;
@@ -319,7 +331,8 @@ void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info) {
     dumps_finish(g_start + 1, dir, queue);
     geo_finish(g_start + 1, dir, queue);
     write_file(dir + "\\done.txt", "ok\n", 3);
-    if (cfg_int("auto_trace", 0) && ++g_auto_done >= uint32_t(cfg_int("auto_traces", 1))) {
+    int want = cfg_int("auto_traces", 1);
+    if (cfg_int("auto_trace", 0) && want > 0 && ++g_auto_done >= uint32_t(want)) {
       std::string marker = tagged(root_dir() + "\\captures\\auto", ".done");
       write_file(marker, "done\n", 5);
       log("[auto] all %u traces taken", g_auto_done);
