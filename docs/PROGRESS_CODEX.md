@@ -1,17 +1,17 @@
 # BG3RTX progress
 
-## Evening summary — 2026-10-28, 22:15 Europe/Rome
+## Evening summary — 2026-10-28, 22:20 Europe/Rome
 
 1. Main 6dba0a8 adds the corrected local-light reference and complete merge checks; P1 is not merged.
-2. P1 is open: the fixed-camera S3 candidate measured GI excess area 172.938 per mille and fails that temporal gate.
-3. Fixed-camera GI mean excess is 0.001258 PQ against 0.000978; no pan reduction is verified.
-4. GPU tests confirm fresh-sample fallback for offscreen, NaN and infinite owned motion inputs.
-5. Paired radiance and full-resolution depth match the exact game depth in the captured writer executions.
-6. Camera transport works in static and moving captures; additional native camera reads are still disabled.
-7. An introduced diagnostic metadata write hazard was fixed: 2,159 / 2,155 messages became zero in the two repeats.
-8. P3 box-light host integration is prepared and pushed, default off; 3 CTests and 34 shaders pass, runtime pending.
+2. P1 remains open; history rejection is parked on its branch, default off, after decisive same-frame energy loss.
+3. P1 uses one moving run with live toggles and per-run reprojection; independent trajectories are not image comparisons.
+4. The point-footprint correction removes unused-neighbour rejection; pan coverage is 13.4% off / 7.15% on.
+5. Paired point-gate raw bounce loses 70.7% / 88.0% energy, while captured alpha matches exactly; no quality win.
+6. Latest checks: 36 helper checks, 6 surface shaders, 20 ABI checks; 7 ordinary shaders remain byte-identical.
+7. P3 box-light reference job 250 is running, hold90; default-off integration passes offline build/3 CTests/34 shaders.
+8. P4 OMM and P5 SHaRC/material consumers remain unapproved; EN2 and emissive failures are documented.
 9. P2 reference merged after two fresh hold-90 passes; EN2 and one D-EM family still fail and remain excluded.
-10. Point-footprint pan covers 13.4%/7.15% off/on, but residual/energy/cohort limits still prevent a P1 quality claim; P6 water design merged 441904a.
+10. P6 water minimum design is merged at 441904a; forward-water rendering and coverage gap 1 remain open.
 
 ## Operating plan
 
@@ -29,6 +29,18 @@ imports useful old work selectively. New features remain off by default until
 their quality gates pass.
 
 ## P1 — Pan instability
+
+P1 temporarily parked, not completed: phase head 1a57286 has PAUSED.md with
+evidence and next intervention; all research keys remain off, no main merge.
+Run 249 is valid, 217 s, zero driver events/dumps/build changes. In the two
+same-frame ordinary/point-gated raw pairs, GI Y falls 70.66% / 87.96%:
+0.013646539 -> 0.004004193 and 0.016753490 -> 0.002016792. Alpha bits match
+over 2,731,520 pixels per pair, all finite, pose valid and eleven GPU cases pass.
+Normal rejects 52.35% and depth 22.46% of reported queries (startup included);
+these counts are not an energy attribution. The low pan residual is not a
+quality result. Next return: a physically valid fresh-source fallback on
+rejection, plus spatial normal-footprint handling; no tuned match threshold.
+P3 now receives its first runtime checks while the overall goal remains active.
 
 Point-footprint run 248 / 409ffe1 is valid: 403 s total (344 s loading), 57 s
 single moving session, zero driver events/dumps/build changes. Off/on residual

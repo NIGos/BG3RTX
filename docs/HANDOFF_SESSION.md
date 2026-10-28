@@ -52,7 +52,7 @@ Already established in research:
 - An introduced private metadata write hazard was fixed by nonoverlapping ranges.
 - Static/moving repeats on 929be7a pass their queue checks (116 / 126 s), with no faults and zero messages naming 3,255 / 3,345 logged private handles.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now d8b204f, pushed. It excludes
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 1a57286, pushed. It excludes
 unrelated FG work. Current-radiance 3c7b411 is default-off, paired ABI14; scope
 and old static evidence: phase docs/CURRENT_RADIANCE.md and main PROGRESS_CODEX.
 c428cde fixes a recursive tracker shared-lock. Smoke proves GPU-valid pose,
@@ -77,17 +77,10 @@ gi_pan_metric=0 now measures RR GI against paired previous GI with native B2/B5
 camera reprojection, round-trip validation, static-compatible depth/normal/MV
 filtering and a rotating 4x4 diagnostic grid. GPU buckets separate off/on even
 across a reporting window. Spec: phase docs/GI_HISTORY_SURFACE_GATE.md.
-Job 245 (bc15dd3 DLLs) is valid: 149 s total, 65 s single moving session, key
-alternated every four seconds, zero events/dumps/build changes. Residual off/on
-0.123120933 / 0.044079878 (-64.20%); sample mean GI Y 0.019496607 / 0.008939488
-(-54.15%). Eligible samples 29,136 / 59,473, coverage 0.07653% / 0.07900%.
-Motion also differs (119.41 / 260.65 render px): these are limited cohorts,
-NOT a verified visual improvement. AO counters also differ off: 11.14% / 9.37%.
-Evidence: phase docs/evidence/p1-surface-pan-live-245.json; all new keys remain off.
-Production 247 (AO diagnostic off) is valid, 130 s total/56 s session, zero faults:
-residual 0.127412/0.046099 (-63.8%), sample GI Y 0.019353/0.005472 (-71.7%).
-Coverage 0.11889%/0.02111%; no quality win. 246 invalid: >2000-draw fixture blocked
-pan in lighter gameplay. b5e0e93 uses post-load stability; 36 helper checks pass.
+First pan 245 and production 247 lower residual but lose sample GI energy with
+tiny coverage; no quality win. Phase docs/evidence preserves every deciding log.
+246 invalid: >2000-draw fixture blocked pan in lighter gameplay. b5e0e93 now
+uses post-load stability; 36 helper checks pass.
 409ffe1 validates only the actual integer-loaded colour texel, removing four
 unused neighbours. Bounds unchanged; 6 surface shaders/20 ABI checks pass and
 7 ordinary shaders byte-identical. 248 valid: 403 s total/57 s moving session,
@@ -95,9 +88,14 @@ zero faults; off/on residual 0.151384/0.064525, GI Y 0.321177/0.008690,
 coverage 13.3877%/7.1512%. Unequal cohorts/energy: still no quality win.
 Same-frame legacy/gated raw pairs in 242/243 confirm the OLD five-texel gate
 removes 71.8–99.9% of bounce energy; alpha identical in all four captures.
-Job 249 is LIVE on frozen d8b204f: paired same-frame energy on point-footprint
-code, diagnostic/private headless capture. It is not another pan-quality gate.
-Read actual process/job state before more work. No P1 merge; all keys stay off.
+249 VALID, 217 s, zero faults/dumps/build changes. Point-footprint paired raw
+bounce Y falls 70.66%/87.96%; alpha identical over 2,731,520 px per pair, finite,
+pose valid, eleven GPU predicate cases pass. Normal/depth reject 52.35%/22.46%
+of reported queries (startup included). No P1 quality win or merge; all keys off.
+P1 is temporarily parked in phase PAUSED.md while P3 gets runtime checks.
+Next: energy-preserving fresh hit shade/current-lighting or supported cache on
+rejection; distinguish spatial normal variation from disocclusion. Do not tune
+a normal-dot threshold or add camera transport without evidence. Goal stays active.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
 footprint and GPU-ordered availability, not a CPU epoch certificate.
@@ -128,7 +126,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 box lights: codex/p3-box at 907857c, pushed; managed p2-pending/BG3RTX checkout. Shader foundation from a28a4c7, host selection/binding/cleanup and default-off ls_box now implemented. Build, 3 CTests, defaults and 34 shader files pass. No runtime or merge. Its docs/P3_BOX_LIGHTS.md lists S6/S7/S5 gates; P1 tests retain priority.
+- P3 box lights: codex/p3-box 8d40fdc, pushed; managed p2-pending/BG3RTX. Default-off ls_box host/shaders implemented; build, 3 CTests, defaults, 34 shaders pass. Job 250 is LIVE, S6 reference hold90 with boxes off. Source/binaries frozen. Next: read every reference window, then one-session projector recompute off/on fixture; S7/S5 and visual gates follow. No merge.
 - P4 OMM foliage: worktree-agent-a8b7cb486c1434ebd, its HANDOFF.md. Conservative design; unknown falls back to alpha testing.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.
