@@ -1,0 +1,13 @@
+{
+  "name": "p3-box-s6-reference-h90",
+  "tree": "../../../.codex/worktrees/p2-pending/BG3RTX",
+  "session": true,
+  "save": "Adamantine Forge",
+  "traces": 1,
+  "warmup": 10,
+  "hold": 90,
+  "timeout": 420,
+  "set": "ls_box=0,ls_check=1,ls_shadowed=0,ls_noshadow=0,ls_giveback_cap=1,ls_debug=0,ls_stats=1,fg=0",
+  "patterns": ["ls check \\(\\d+ frames\\):", "\\[core\\] ls:"],
+  "expect": ["ls check \\(120 frames\\): [1-9]\\d* px written by the reference; outputs differ in any bit on 0 px, by more than 1e-5 relative on 0, written by only one of them on 0"]
+}

@@ -54,3 +54,13 @@ reading the deciding numbers, then push main and this branch.
 The cookie gradients approximate neighboring quad samples; verify their
 agreement. Box lights have no fixture/owner join. No source-angle parameter is
 invented for these directional emitters. The water and OMM phases are separate.
+
+Queue specifications are saved in tests/fixtures/p3_box_s6_reference.json and
+p3_box_s6_validation.json. Run the reference first and inspect every hold-90
+window. The second job uses p3_box_validation_phases.json: one session with
+100 s key-off then 100 s key-on, ls_debug=4 throughout. Inspect only pure
+120-frame windows, identified by the mode switch and configuration markers;
+discard a window spanning the change. Nonzero projector coverage and actual
+activation are required. The expect patterns prove execution only: they do not
+certify recomputation accuracy. Do not enqueue these behind an active P1 game;
+recheck user-playing, actual processes and the queue before each launch.
