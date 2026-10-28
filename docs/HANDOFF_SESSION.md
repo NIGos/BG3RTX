@@ -47,6 +47,9 @@ per mille. Latest production candidate 03679ed: GI 172.938 per mille, mean
 The 356 s queue run is valid, with no faults/dumps/build changes. FAIL, no merge.
 This is not a controlled same-build A/B against the old baseline; no reduction
 or regression is established. Details and log numbers are in PROGRESS_CODEX.
+QA coverage gap: --temporal-gi uses a fixed camera; same_view rejects movement.
+Those numbers are a temporal anti-regression gate, not a direct pan result.
+Also capture -Move off/on with observed camera motion before claiming P1 progress.
 
 Already established in research:
 - Offscreen/NaN/Inf owned-motion GPU tests fall back to fresh GI samples exactly.

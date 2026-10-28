@@ -42,6 +42,12 @@ mille, mean 0.002334 PQ; 24.0% common scene motion is excluded. This fails and
 does not establish a reduction. The older baseline is not a controlled same-build
 A/B, so these numbers do not prove a regression either. No merge was made.
 
+Coverage gap confirmed from scripts/qa/capture.py: --temporal-gi does not request
+-Move, and the same_view gate rejects moved views. These S3 numbers measure
+fixed-camera temporal instability, not a direct pan comparison. Keep this as an
+anti-regression gate, then require separate moving-camera off/on captures with
+actual camera-motion evidence before claiming a pan improvement or closing P1.
+
 Owned velocity joined 6,485 copies, with 5,066 late resolutions and no recorded
 late-path rejection reasons. The last GI window reserved 300/300 descriptors,
 with zero unreserved frames. Correct transport alone did not resolve the failure.
