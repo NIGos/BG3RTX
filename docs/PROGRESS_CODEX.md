@@ -11,7 +11,7 @@
 7. An introduced diagnostic metadata write hazard was fixed: 2,159 / 2,155 messages became zero in the two repeats.
 8. P3 box-light host integration is prepared and pushed, default off; 3 CTests and 34 shaders pass, runtime pending.
 9. P2 reference merged after two fresh hold-90 passes; EN2 and one D-EM family still fail and remain excluded.
-10. Previous-depth/normal GI rejection is implemented off by default; GPU predicate tests pass, with an AO-counter discrepancy under investigation.
+10. One-run surface-gate pan residual falls 64.2%, but sample GI energy falls 54.1% with only ~0.08% coverage; no quality win or merge.
 
 ## Operating plan
 
@@ -29,6 +29,28 @@ imports useful old work selectively. New features remain off by default until
 their quality gates pass.
 
 ## P1 — Pan instability
+
+Latest user steering: stop cross-run image comparisons. Use per-run GI
+reprojection residual or live off/on alternation within one moving run. The AO
+counter discrepancy is noted and compared with the same-build key-off control;
+it does not block the first pan measurement.
+
+First pan number: job 245 on bc15dd3 DLLs, valid, 149 s including startup / 65 s
+session, key alternated every four seconds in ONE hidden moving game; zero
+driver events, dumps or build changes. Sample-weighted normalized GI luminance
+reprojection residual off/on is 0.123120933 / 0.044079878 (-64.20%); RMS is
+0.347363809 / 0.209209448. Sample mean GI Y is 0.019496607 / 0.008939488 (-54.15%).
+Only 29,136 / 59,473 samples pass the static-compatible/moving-surface filters,
+0.07653% / 0.07900% of tested grid samples. Mean displacement differs too,
+119.41 / 260.65 render pixels. This is a limited cohort and lower GI energy,
+not an established visual improvement: keep the candidate off, do not merge.
+AO counter differences occur in BOTH modes, 11.14% off / 9.37% on. The next
+step is a production-metric repeat without the diagnostic, then investigate
+normal-footprint overrejection and energy loss. No additional camera transport.
+Branch codex/p1-pan e8ff955 is pushed. The metric uses native B2/B5 projection,
+verified camera round-trip, paired previous GI, GPU mode buckets and a rotating
+4x4 diagnostic grid; GI rendering stays full-resolution. Evidence and the
+repeatable phase plan are committed under phase docs/evidence/ and tests/fixtures/.
 
 Moving A/B now captures actual motion in both configurations. Jobs 240/241 use
 identical d431702 host/core DLLs, gi_current_radiance off/on, headless=0: valid
@@ -54,8 +76,10 @@ Smoke 242 completed in 210 s without events/dumps, but is INVALID: aggregate AO
 counters report 8–10% differences. Both exported same-frame alpha pairs instead
 match exactly over 2,731,520 pixels each; both GPU predicate tests pass eleven
 cases. Unlimited VVL names no logged private handles or the metadata buffer.
-The discrepancy is unresolved. P1 eed52ff retains ordinary native geometry math;
-repeat 243 is running. Production moving A/B follows only after diagnostic review.
+The discrepancy also occurs in repeat 243 with native geometry math (92 s,
+zero events/dumps). Job 244 ended before the old 120-frame report window;
+its invalid contract also expected a startup marker outside the session slice.
+Job 245 uses short windows and the corrected session contract; see numbers above.
 Details: phase docs/GI_HISTORY_SURFACE_GATE.md and build/surface-smoke.json.
 
 The last production S3 result predates the temporal sample-coordinate safety
