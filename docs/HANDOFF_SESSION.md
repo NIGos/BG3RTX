@@ -1,4 +1,4 @@
-# Session handoff — 2026-10-28, 18:33 Europe/Rome
+# Session handoff — 2026-10-28, 18:48 Europe/Rome
 
 Read this first, then the top of docs/STATUS.md and docs/PROGRESS_CODEX.md.
 STATUS describes the stable code; PROGRESS_CODEX is the current work log.
@@ -25,8 +25,8 @@ PROGRESS_CODEX and keep working on a conservative option or another phase.
 
 ## Main and research state
 
-Stable main rendering code is 6bd6967 (device-lost fix, earlier stability runs).
-No P1 research feature is in main yet. Documentation updates do not change that.
+Main 6dba0a8 adds the corrected frozen local-light reference and merge checks
+to the stable 6bd6967 rendering base. No P1 research feature is in main yet.
 Remote: origin, private NIGos/BG3RTX. Preserve all snapshot tags and backups.
 Old pre-rewrite SHAs can be translated with
 D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history again.
@@ -56,8 +56,10 @@ Already established in research:
 - An introduced private metadata write hazard was fixed by nonoverlapping ranges.
 - Static/moving repeats on 929be7a pass their queue checks (116 / 126 s), with no faults and zero messages naming 3,255 / 3,345 logged private handles.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, HEAD 03679ed, clean after that run;
-all eight CTests passed. It excludes unrelated FG work. Owned/current/late motion
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, tested at 03679ed, followed by
+build-gate fix bf170f8. Current-radiance implementation is now in progress there;
+do not launch a game or commit its files while the owner is editing/building.
+All eight CTests passed before those new changes. It excludes unrelated FG work. Owned/current/late motion
 is active in the tested candidate, with 300/300 descriptor reservations.
 Next: assess current-frame diffuse bounce after native lighting, preserving PRE
 visibility and frozen camera/settings. Camera branch 53f0925 offers diagnostic
@@ -76,11 +78,15 @@ Read each branch's HANDOFF.md and inspect its latest deciding logs/jobs.
 |---|---|---|
 | worktree-agent-a94065fdd50bc8494 | EN2 hit materials | 170-en2fix-S8-cov: joined > 0, coverage self-check, CPU wait |
 | worktree-agent-a2212c228ec492214 | D-EM emissive | em12-af-check and af-view19/20: resolve AF 304be1c7 ratio around 0.36 |
-| lscheck-fix | Frozen local-light reference | 94-s6-lscheck-ref-cap0/1-h, hold 90: differ in any bit on 0 px |
+| codex/p2-pending | Frozen local-light reference | Merged at 6dba0a8; fresh cap0/cap1 hold-90 repeats valid, zero differences |
 
-Merge what passes; one line in PROGRESS_CODEX for anything that does not.
-The current merge-green script runs only settings_test through build.ps1 -Test.
-Fix that gate to run all CTests before relying on its all-tests claim.
+P2 reference and gate changes are merged and pushed, with the phase branch.
+Fresh deciding logs end 184221 / 184404: 25 windows each, 8,172,707,324 /
+8,172,707,294 pixels and zero differences. Full build, all 3 CTests, 32 shader
+files and QA pass. EN2 still fails blue/metalness/bias; D-EM AF family 304be1c7
+still fails at 0.361 / 0.362. Both remain off. See docs/P2_PENDING_MERGES.md.
+merge-green now runs all CTests and shader entries, checks main/playing/merge
+state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 

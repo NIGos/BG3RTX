@@ -1,8 +1,8 @@
 # BG3RTX progress
 
-## Working summary — 2026-10-28, 18:33 Europe/Rome
+## Working summary — 2026-10-28, 18:48 Europe/Rome
 
-1. Main still has the stable rendering code at 6bd6967; no research feature has been merged.
+1. Main 6dba0a8 adds the corrected local-light reference and complete merge checks; P1 is not merged.
 2. P1 is open: the latest S3 candidate measured GI excess area 172.938 per mille and fails its temporal gate.
 3. GI mean temporal excess is 0.001258 PQ against 0.000978; no visual reduction is verified.
 4. GPU tests confirm fresh-sample fallback for offscreen, NaN and infinite owned motion inputs.
@@ -10,8 +10,8 @@
 6. Camera transport works in static and moving captures; additional native camera reads are still disabled.
 7. An introduced diagnostic metadata write hazard was fixed: 2,159 / 2,155 messages became zero in the two repeats.
 8. The latest repeats cover 3,255 / 3,345 logged private handles; this is scoped validation, not universal safety.
-9. P2 evidence review: the frozen local-light reference passes; EN2 and one D-EM family still fail.
-10. The next P1 hypothesis is current-frame diffuse bounce radiance; no P1 feature is approved for main.
+9. P2 reference merged after two fresh hold-90 passes; EN2 and one D-EM family still fail and remain excluded.
+10. P1 current-frame diffuse bounce radiance is being implemented behind a default-off key; runtime proof is pending.
 
 ## Operating plan
 
@@ -48,7 +48,7 @@ with zero unreserved frames. Correct transport alone did not resolve the failure
 Next hypothesis: previous-frame bounce radiance still carries previous visibility
 and feedback. Assess a default-off current-frame diffuse source after native
 lighting, preserving pre-lighting visibility and freezing its camera/settings.
-This is a proposed correction, not an implemented or validated improvement.
+Implementation is in progress on the P1 branch. It is not a validated improvement.
 
 Owned-motion tests reject offscreen and nonfinite coordinates on the GPU.
 In four NaN/Inf captures, temporal output equals the fresh sample exactly and
@@ -77,7 +77,8 @@ or use all-RT-off as a claimed fix. No new user-facing candidate key is ready ye
 
 ## Next phases
 
-- P2: hold-90 lscheck runs pass with zero differing pixels across 7.845 / 8.173 billion reference-written pixels. Port only its useful shader fix. EN2 pure S8 windows join 300/300 without waits but still fail blue/metalness and luminance bias. D-EM family 304be1c7 fails AF at ratio 0.361 / 0.362 (band 0.842–1.187); GF passes at 0.999. Neither feature is ready to merge.
+- P2: the useful lscheck fix is merged at 6dba0a8 and pushed with codex/p2-pending. Fresh valid S6 hold-90 runs have 25 windows each and zero any-bit, relative or one-writer differences across 8,172,707,324 / 8,172,707,294 pixels; no faults, dumps or build changes. The first refresh pair was invalid because a startup-only expectation was incorrectly applied to session slices; valid repeats supersede it. Full startup independently confirms the real 8.0 MB asset DB. Details: docs/P2_PENDING_MERGES.md.
+- EN2 pure S8 windows join 300/300 without waits but still fail blue/metalness and luminance bias. D-EM family 304be1c7 fails AF at ratio 0.361 / 0.362 (band 0.842–1.187); GF passes at 0.999. Both remain excluded.
 - P3: finish box-light host integration and run S6 / S7 / S5 checks.
 - P4: implement and validate the conservative OMM foliage design.
 - P5: SHaRC v2 after EN2, then the light tree and EN2 consumers.
@@ -91,7 +92,7 @@ rule to later phases. Do not substitute more instrumentation for deciding tests.
 
 - Resolution checks now use actual source and preview dimensions; changes make comparisons inconclusive and retain captures.
 - The window hider checks PID plus process start time and retains a process handle through UI use; 13 policy checks pass on PowerShell 5 and 7. The latest live queue game also verified matching ownership, hidden style and alpha zero.
-- The old merge-green script delegates to build.ps1 -Test, which runs only settings_test. Its all-tests gate must be corrected before feature merges.
+- Fixed the incomplete merge gate: build.ps1 -Test runs all CTests and rejects an empty suite; merge-green checks the main branch, playing state and merge result, compiles all shader entries through the shared compiler, and aborts its own failed merge. Real disposable Git fixtures pass invalid-ref, build/shader/QA failure, successful merge and already-merged cases. Integration passed 3/3 CTests, 32/32 shader files and QA detector tests. The P1 branch separately passes 8/8 CTests before the in-progress GI changes.
 
 Research evidence remains in the managed pan-motion-vectors worktree and main's
 ignored queue logs. Snapshot tags and backups are unchanged.
