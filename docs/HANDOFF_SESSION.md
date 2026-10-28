@@ -81,8 +81,12 @@ Jobs 227/228 both completed validly (142/80 s), three moving traces each, zero
 events/dumps/build changes. Camera movement is observed, but trajectories are
 unmatched, so quality comparison is inconclusive. a8c5db5 starts -Move only after
 the baseline trace; 32 policy / six capture tests pass, renderer DLLs unchanged.
-Synchronized off repeat 229 is running, PID 35440 from 18:49:23 UTC; on follows.
-Check actual process/result state before any launch; do not duplicate the job.
+Synchronized jobs 229/230 both completed validly (82/84 s), zero events/dumps,
+but albedo shifts remain below 0.1 preview pixel: both cameras stayed static.
+They cannot decide pan quality. P1 c0627cb keeps SDL's own foreground check
+consistent with the background facade and logs delivered D events. Build and
+all 10 CTests pass. Off repeat 231 started 19:03:12 UTC (runner 49524); check
+actual process/result state before launching its same-build on partner.
 After moving A/B, test default-off GI disocclusion rejection from previous depth
 AND normal mismatch at the reprojected pixel, before further transport work.
 Keep this checkout's source and binaries frozen while its queued job is active.

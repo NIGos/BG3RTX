@@ -30,6 +30,14 @@ their quality gates pass.
 
 ## P1 — Pan instability
 
+Moving-camera control: synchronized jobs 229/230 completed validly in 82/84 s
+with zero driver events or dumps, but both stayed static (albedo shifts under
+0.1 preview pixel). No pan improvement is established. P1 c0627cb addresses
+SDL's internal keyboard-focus loss in background mode; all 10 CTests pass.
+Off repeat 231 is running; its on partner must use the identical DLL pair.
+The next GI experiment remains default-off previous-depth AND normal rejection
+at the reprojected history pixel, after a useful moving A/B.
+
 The last production S3 result predates the temporal sample-coordinate safety
 correction. It measured temporal excess areas of GI 118.672, local 55.052,
 sun 42.088 and reflections 34.557 per mille, with 23.0% common motion excluded.
