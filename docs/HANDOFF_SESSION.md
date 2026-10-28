@@ -24,8 +24,8 @@ Put future questions atop PROGRESS_CODEX and continue conservative/offline work.
 
 ## Main and research state
 
-Main 6dba0a8 adds the corrected frozen local-light reference and merge checks
-to the stable 6bd6967 rendering base. No P1 research feature is in main yet.
+Main 441904a includes the P6 water design; rendering remains 6dba0a8 (corrected
+local-light reference/merge checks). No P1 research feature is in main yet.
 Remote: origin, private NIGos/BG3RTX. Preserve all snapshot tags and backups.
 Old pre-rewrite SHAs can be translated with
 D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history again.
@@ -58,7 +58,7 @@ Already established in research:
 - An introduced private metadata write hazard was fixed by nonoverlapping ranges.
 - Static/moving repeats on 929be7a pass their queue checks (116 / 126 s), with no faults and zero messages naming 3,255 / 3,345 logged private handles.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now e8ff955, pushed. It excludes
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 409ffe1, pushed. It excludes
 unrelated FG work. Current-radiance candidate 3c7b411 adds default-off
 gi_current_radiance and paired host/core ABI 14. Full build, 10 CTests, 39 shaders
 and 14 ABI/SPIR-V checks pass; docs/CURRENT_RADIANCE.md defines its scope.
@@ -97,11 +97,17 @@ alternated every four seconds, zero events/dumps/build changes. Residual off/on
 Motion also differs (119.41 / 260.65 render px): these are limited cohorts,
 NOT a verified visual improvement. AO counters also differ off: 11.14% / 9.37%.
 Evidence: phase docs/evidence/p1-surface-pan-live-245.json; all new keys remain off.
-No live game/runner after 245. Next: production metric with diagnostic off;
-investigate strict normal-footprint rejection/energy loss, before more transport.
+Production 247 (AO diagnostic off) is valid, 130 s total/56 s session, zero faults:
+residual 0.127412/0.046099 (-63.8%), sample GI Y 0.019353/0.005472 (-71.7%).
+Coverage 0.11889%/0.02111%; no quality win. 246 invalid: >2000-draw fixture blocked
+pan in lighter gameplay. b5e0e93 uses post-load stability; 36 helper checks pass.
+409ffe1 validates only the actual integer-loaded colour texel, removing four
+unused neighbours. Bounds unchanged; 6 surface shaders/20 ABI checks pass and
+7 ordinary shaders byte-identical. Job 248 is LIVE on frozen 409ffe1, one-run
+toggle, AO diagnostic off. Read its actual process/job state before doing more.
 Keep this checkout's source and binaries frozen while its queued job is active.
-Use existing B2/B5 camera data, derived footprint/precision bounds, conservative
-footprint intersection and GPU-ordered availability, not a CPU epoch certificate.
+Use existing B2/B5 camera data, derived bounds, the actual contributing colour
+footprint and GPU-ordered availability, not a CPU epoch certificate.
 Fixed-camera scores cannot close P1. Default VVL limit 3 weakens the smoke count.
 Do not close P1 from diagnostic passes alone. The phase is done when each
 effect meets its derived gate, or is clearly reduced with its cause explained.
@@ -132,7 +138,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 - P3 box lights: codex/p3-box at 907857c, pushed; managed p2-pending/BG3RTX checkout. Shader foundation from a28a4c7, host selection/binding/cleanup and default-off ls_box now implemented. Build, 3 CTests, defaults and 34 shader files pass. No runtime or merge. Its docs/P3_BOX_LIGHTS.md lists S6/S7/S5 gates; P1 tests retain priority.
 - P4 OMM foliage: worktree-agent-a8b7cb486c1434ebd, its HANDOFF.md. Conservative design; unknown falls back to alpha testing.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
-- P6 water: at least a design covering COVERAGE gap 1, especially the docks.
+- P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.
 
 ## Test and reporting workflow
 

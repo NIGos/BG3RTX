@@ -11,7 +11,7 @@
 7. An introduced diagnostic metadata write hazard was fixed: 2,159 / 2,155 messages became zero in the two repeats.
 8. P3 box-light host integration is prepared and pushed, default off; 3 CTests and 34 shaders pass, runtime pending.
 9. P2 reference merged after two fresh hold-90 passes; EN2 and one D-EM family still fail and remain excluded.
-10. One-run surface-gate pan residual falls 64.2%, but sample GI energy falls 54.1% with only ~0.08% coverage; no quality win or merge.
+10. Production single-run surface gate: residual -63.8%, sample GI energy -71.7%, very low coverage; no P1 quality win. P6 water design merged at 441904a.
 
 ## Operating plan
 
@@ -29,6 +29,28 @@ imports useful old work selectively. New features remain off by default until
 their quality gates pass.
 
 ## P1 — Pan instability
+
+Production repeat 247 (b5e0e93, diagnostic AO comparison off) is queue-valid:
+130 s total, 56 s one moving session, zero driver events/dumps/build changes.
+Residual off/on 0.127411757 / 0.046098715 (-63.82%); sample GI Y 0.019353448 /
+0.005471711 (-71.73%). Coverage 0.11889% / 0.02111%, motion 88.65 / 41.56
+render px. These unequal cohorts and lower energy do not establish quality.
+Evidence: P1 branch docs/evidence/p1-surface-pan-production-247.json.
+
+Job 246 is INVALID: no pan activation in the lighter loaded scene (876–1413
+draws). The helper incorrectly required >2000 draws even after authoritative
+post-load stability. b5e0e93 uses the layer's scene-ready or automatic-capture
+signal, requires the saved-load transition and completed baseline, and retains
+the no-Save fallback. All 36 offline helper checks pass; 247 proves actual pan
+activation. No desktop-resolution or scene draw-count threshold for saved runs.
+
+P1 409ffe1 corrects another concrete overrejection: all colour/history reads are
+integer point loads, but the candidate validated four additional unused texels.
+It now requires depth AND normal on the actual fetched texel, with no neighbour
+rescue and unchanged tolerances. Six surface shaders and all 20 ABI/SPIR-V checks
+pass; seven ordinary GI/RF binaries remain byte-identical to ac77150.
+Job 248 is running on frozen 409ffe1 with the same one-session production toggle
+protocol. No new camera transport, AO diagnostics or cross-run image comparison.
 
 Latest user steering: stop cross-run image comparisons. Use per-run GI
 reprojection residual or live off/on alternation within one moving run. The AO
