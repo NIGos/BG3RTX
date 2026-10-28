@@ -72,12 +72,19 @@ alpha in two captures; all nine writers complete, finite. One NV153 is unresolve
 A 79 s production repeat is valid with zero events, 1,200 accepted / zero rejected.
 The first static off A/B has GI 144.405 per mille / 0.001571 PQ but INVALID queue
 status from a misplaced stdout expectation. Repeat 226 checks the game-log marker,
-job p1-current-radiance-ab-off-S3-r2, runner PID 49520 started 18:29:37 UTC.
+job p1-current-radiance-ab-off-S3-r2 completed validly: GI 150.059 per mille,
+mean 0.000988 PQ (limit 0.000978), one NV153 also with the candidate off.
+User steering: moving-camera same-build off/on comes FIRST. QA --move now
+forwards -Move, captures a constant configuration and requires --capture-only;
+static analysis refuses moving captures. P1 HEAD 3ff190f (same c428cde DLL pair).
+Job 227 p1-moving-current-off-S3 is running, runner PID 26264 from 18:38:21 UTC.
 Check actual process/result state before any launch; do not duplicate the job.
+After moving A/B, test default-off GI disocclusion rejection from previous depth
+AND normal mismatch at the reprojected pixel, before further transport work.
 Keep this checkout's source and binaries frozen while its queued job is active.
-Next: require a valid startup, then GPU pose-valid/RGB-write/alpha-preservation
-evidence with higher VVL duplicate limit if needed, static A/B and moving off/on
-captures. Default VVL limit 3 weakens the smoke's zero-private-handle message count.
+Next: finish moving off/on, prove actual movement and compare matched scene
+surfaces; then the history-rejection hypothesis. Fixed-camera scores cannot close
+P1. Default VVL limit 3 weakens the smoke's zero-private-handle message count.
 Do not close P1 from diagnostic passes alone. The phase is done when each
 effect meets its derived gate, or is clearly reduced with its cause explained.
 Record the candidate key and user check in PROGRESS_CODEX: static building/ground

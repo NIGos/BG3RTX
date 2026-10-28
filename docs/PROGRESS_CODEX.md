@@ -91,7 +91,18 @@ all RT 210.329 / 0.002801 PQ. Its queue status is INVALID because the expectatio
 incorrectly searched for QA stdout in the kept game log, although all 28 traces
 and result.json completed. Do not use it as the deciding queue pass. The repeat
 checks the actual game-log completion marker and is queued/running as
-p1-current-radiance-ab-off-S3-r2; an on run and moving captures still follow.
+p1-current-radiance-ab-off-S3-r2. It completes validly in 338 s, with GI excess
+150.059 per mille / mean 0.000988 PQ (limit 0.000978), all RT 226.224 / 0.002580.
+It also has one NV153 while the candidate is off; that still does not identify
+the event's cause. No further fixed-camera on run is scheduled ahead of motion.
+
+User steering: moving-camera off/on on the SAME build takes priority, and static
+scores cannot close P1. QA --move is implemented at 3ff190f: it forwards -Move,
+keeps each trajectory's settings constant, retains frame provenance/dimensions,
+requires --capture-only and rejects static analysis. Six resolution/capture and
+five temporal-plan tests pass. Moving off job 227 is running before the matching
+on run. The next GI hypothesis is a default-off depth AND normal history
+rejection at the reprojected previous pixel, before any more transport work.
 
 Owned-motion tests reject offscreen and nonfinite coordinates on the GPU.
 In four NaN/Inf captures, temporal output equals the fresh sample exactly and
