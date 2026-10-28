@@ -104,6 +104,10 @@ launcher keeps them when it saves. Delete the file to go back to the defaults.
 
 ## Command line (advanced)
 
+The experimental `ls_box=0` key remains off until box-light recompute and shadow
+checks pass. Development branches can compare `ls_box=1` with `0`; it is not
+an approved player setting yet. See `docs/P3_BOX_LIGHTS.md` for validation status.
+
 ```
 BG3RTX.exe --preset ultra          write bg3rtx_user.ini with a preset (limited to your GPU)
 BG3RTX.exe --launch                start the game with your saved settings, no window

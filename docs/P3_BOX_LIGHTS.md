@@ -1,0 +1,52 @@
+# Box lights — integration candidate
+
+Branch codex/p3-box starts at main ee7dc56. Checkout currently lives at the
+managed p2-pending/BG3RTX path; the completed P2 branch and evidence are retained.
+This is offline preparation while P1 remains the active rendering priority.
+
+## Implemented, not yet approved
+
+Selectively ported the shader foundation from a28a4c7 as d088cdd, preserving
+main's handoff and the corrected point/spot reference. Host wiring is 385d1fe.
+The ls_box key defaults to 0 in development, generated defaults and release.
+It selects separate default/full pipelines, binding the exact native lighting
+descriptor set as set 3 with its recorded dynamic offsets. Missing box buffer,
+set, layout or pipeline retains the existing point/spot path. ls_check and
+ls_impl=0 also retain their existing reference paths.
+
+Layout changes rebuild the box pipelines; release defers their destruction.
+The stats allocation is 152 counters, covering shader indices 136–150, including
+projector-only validation counters that also run in the ls_box=0 baseline.
+The inherited 136-counter allocation was too small for those extra writes.
+Logs report actual box activation, evaluations, shadows, unknown queries,
+cookies and projector-pixel recompute errors. GPU timing identifies box mode.
+
+Build, all 3 CTests, generated-default agreement and 34 shader files pass.
+These checks do not prove native descriptor compatibility, physical agreement
+or visual quality in game. No box-light runtime was started and nothing here
+has been merged into main.
+
+## Deciding queue work
+
+After P1's runnable candidate has priority, use serial S6, S7 and S5 sessions:
+
+1. ls_box=0, ls_check=1, hold 90: every reference window must have zero any-bit,
+   relative and one-writer differences. Keep current point/spot behavior.
+2. ls_box=0 and 1 with ls_debug=4, ls_stats=1, hold 90 each: inspect complete
+   pure windows, projector coverage, game/recomputed mean and errors. Derive
+   accuracy gates from the same input/recompute contract, not an arbitrary
+   brightness allowance. A missing projector population is inconclusive.
+3. ls_debug=0 off/on: inspect geometry, shadow edges, leaks, finite output and
+   temporal behavior. Compare the selected native shadow policy; unknown rays
+   retain the game's atlas term. Quality has priority over frame rate.
+
+Require activation and complete log windows, not only a requested key. Do not
+waive failures because the rest of the frame agrees or because cost is low.
+Before every runner/game start, check USER_PLAYING and actual BG3 processes.
+Use the shared queue with expect patterns. Source and paired binaries stay
+frozen while a job runs on this checkout. Merge only through merge-green after
+reading the deciding numbers, then push main and this branch.
+
+The cookie gradients approximate neighboring quad samples; verify their
+agreement. Box lights have no fixture/owner join. No source-angle parameter is
+invented for these directional emitters. The water and OMM phases are separate.
