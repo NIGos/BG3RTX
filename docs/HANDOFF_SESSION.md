@@ -1,4 +1,4 @@
-# Session handoff — 2026-10-28, 17:40 Europe/Rome
+# Session handoff — 2026-10-28, 18:33 Europe/Rome
 
 Read this first, then the top of docs/STATUS.md and docs/PROGRESS_CODEX.md.
 STATUS describes the stable code; PROGRESS_CODEX is the current work log.
@@ -41,9 +41,12 @@ motion-jitter/BG3RTX, branch codex/camera-native. Import only what P1 needs.
 
 User report: RT lighting/shadows seem to detach from objects during pans;
 Ctrl+Shift+F9 (all RT off) restores the normal appearance.
-Last production S3 excess areas: GI 118.672, local 55.052, sun 42.088,
-reflections 34.557 per mille. That result predates the temporal sample-coordinate
-safety fix. There is no verified later visual reduction yet.
+Older S3 excess areas: GI 118.672, local 55.052, sun 42.088, reflections 34.557
+per mille. Latest production candidate 03679ed: GI 172.938 per mille, mean
+0.001258 PQ against limit 0.000978; all RT 219.062, mean 0.002334 PQ.
+The 356 s queue run is valid, with no faults/dumps/build changes. FAIL, no merge.
+This is not a controlled same-build A/B against the old baseline; no reduction
+or regression is established. Details and log numbers are in PROGRESS_CODEX.
 
 Already established in research:
 - Offscreen/NaN/Inf owned-motion GPU tests fall back to fresh GI samples exactly.
@@ -53,9 +56,13 @@ Already established in research:
 - An introduced private metadata write hazard was fixed by nonoverlapping ranges.
 - Static/moving repeats on 929be7a pass their queue checks (116 / 126 s), with no faults and zero messages naming 3,255 / 3,345 logged private handles.
 
-Next: establish a fresh codex/p1-pan branch from current main, selectively port
-useful GI/motion fixes, and obtain a production GI A/B result with diagnostics
-off. Do not close P1 from diagnostic passes alone. The phase is done when each
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, HEAD 03679ed, clean after that run;
+all eight CTests passed. It excludes unrelated FG work. Owned/current/late motion
+is active in the tested candidate, with 300/300 descriptor reservations.
+Next: assess current-frame diffuse bounce after native lighting, preserving PRE
+visibility and frozen camera/settings. Camera branch 53f0925 offers diagnostic
+building blocks, not a production-ready pose service. No new key is ready yet.
+Do not close P1 from diagnostic passes alone. The phase is done when each
 effect meets its derived gate, or is clearly reduced with its cause explained.
 Record the candidate key and user check in PROGRESS_CODEX: static building/ground
 edges while panning, candidate off/on, plus Ctrl+Shift+F9 as the all-RT reference.
