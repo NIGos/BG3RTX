@@ -30,16 +30,23 @@ their quality gates pass.
 
 ## P1 — Pan instability
 
-Moving-camera control: synchronized jobs 229/230 completed validly in 82/84 s
-with zero driver events or dumps, but both stayed static (albedo shifts under
-0.1 preview pixel). Jobs 231–235 also stayed static, all valid with zero events
-or dumps. Delivered D events have window ID 1 and no Alt/Ctrl/Shift modifier.
-The SDL mouse-focus experiment was reverted after no effect. Q rotation and
-posted activation were also insufficient. P1 87a034f tests an SDL application
-FOCUS_GAINED before the first movement key; all 10 CTests pass. Job 236 is
-running. No pan improvement is established; the on partner needs identical DLLs.
-The next GI experiment remains default-off previous-depth AND normal rejection
-at the reprojected history pixel, after a useful moving A/B.
+Moving A/B now captures actual motion in both configurations. Jobs 240/241 use
+identical d431702 host/core DLLs, gi_current_radiance off/on, headless=0: valid
+85/74 s, zero driver events, dumps or build changes. In the last interval albedo
+changes 83.38% / 79.68%; both cameras move. Their final views differ by 80.54%,
+so this is not a matched-surface quality comparison: no GI improvement is
+established and P1 remains open. P1 build/moving-current-ab-r11.json keeps numbers.
+The -Move fixture isolates physical desktop input with a virtual pointer and
+consistent SDL motion events, using the actual game client dimensions. This
+addresses desktop-resolution dependence; normal play is unchanged. Moving QA
+defaults to real presentation while remaining hidden by the serial queue.
+All 10 CTests, six capture/resolution tests and 32 log-policy checks pass.
+Earlier focus experiments had no effect and were reverted. Real presentation
+alone was insufficient (237 moved off, 238 stayed static); do not blame headless
+mode from those confounded controls. Branch codex/p1-pan ac77150 is pushed.
+Next implement gi_history_surface_gate=0: reject previous GI bounce history on
+previous-depth AND world-normal mismatch at the reprojected pixel, before any
+more transport work. This hypothesis is not implemented yet.
 
 The last production S3 result predates the temporal sample-coordinate safety
 correction. It measured temporal excess areas of GI 118.672, local 55.052,

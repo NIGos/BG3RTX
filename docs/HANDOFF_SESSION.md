@@ -83,18 +83,25 @@ unmatched, so quality comparison is inconclusive. a8c5db5 starts -Move only afte
 the baseline trace; 32 policy / six capture tests pass, renderer DLLs unchanged.
 Synchronized jobs 229/230 both completed validly (82/84 s), zero events/dumps,
 but albedo shifts remain below 0.1 preview pixel: both cameras stayed static.
-They cannot decide pan quality. Jobs 231–235 also stayed static, all queue-valid
-with zero events/dumps. SDL receives D with window ID 1 and no Alt/Ctrl/Shift;
-its mouse-focus facade had no effect and was reverted. Q rotation and posted
-window activation also stayed static. P1 87a034f adds one SDL FOCUS_GAINED before
-the first QA movement key (preserving that key); 10 CTests pass. Job 236 off
-started 19:19:05 UTC, runner 43188. Inspect actual state before the on partner.
-After moving A/B, test default-off GI disocclusion rejection from previous depth
-AND normal mismatch at the reprojected pixel, before further transport work.
+Jobs 231–236 stayed static; ineffective SDL/Win32 focus changes were reverted.
+Real-present jobs 237/238 moved only off, so that pair was also inconclusive.
+P1 ac77150, pushed, now isolates -Move with a client-relative virtual pointer:
+centre before baseline, right edge while held, coherent SDL events/polled data.
+No physical cursor/focus changes. Ordinary play and non-Move runs are unchanged.
+Jobs 240/241 use identical d431702 DLLs: valid 85/74 s, zero events/dumps/build
+changes; both actually move in the last interval (83.38% / 79.68% albedo change).
+Final off/on views differ (80.54% albedo change), so GI quality is INCONCLUSIVE.
+Report: P1 build/moving-current-ab-r11.json. No live game/runner after job 241.
+10 CTests, six capture/resolution tests and 32 log-policy checks pass. Moving QA
+now defaults to headless=0, still hidden by the queue. Do not infer a headless bug
+from the earlier confounded controls. Next: implement gi_history_surface_gate=0,
+previous depth AND world-normal rejection at the reprojected pixel, before more
+transport. Gate try_prev_bounce_at before its colour fetch (RR history=1 makes an
+EMA-only gate ineffective); pair metadata with the actual radiance writer.
 Keep this checkout's source and binaries frozen while its queued job is active.
-Next: finish moving off/on, prove actual movement and compare matched scene
-surfaces; then the history-rejection hypothesis. Fixed-camera scores cannot close
-P1. Default VVL limit 3 weakens the smoke's zero-private-handle message count.
+Use existing B2/B5 camera data, derived footprint/precision bounds, conservative
+footprint intersection and GPU-ordered availability, not a CPU epoch certificate.
+Fixed-camera scores cannot close P1. Default VVL limit 3 weakens the smoke count.
 Do not close P1 from diagnostic passes alone. The phase is done when each
 effect meets its derived gate, or is clearly reduced with its cause explained.
 Record the candidate key and user check in PROGRESS_CODEX: static building/ground
