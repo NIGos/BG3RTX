@@ -1,4 +1,4 @@
-# Session handoff — 2026-10-28, 19:30 Europe/Rome
+# Session handoff — 2026-10-28, evening
 
 Read this first, then the top of docs/STATUS.md and docs/PROGRESS_CODEX.md.
 STATUS describes the stable code; PROGRESS_CODEX is the current work log.
@@ -19,9 +19,8 @@ push main and the work branches, then stop. Work autonomously in the meantime.
 - Prefer fixes and short A/B loops. No FG/HDR-UI/swapchain work unless a phase needs it.
 - Do not use Ponytail, its skills, hooks or instructions.
 
-The older handoff's user pause is superseded by this goal and its live playing checks.
-No user decision is currently required. Put any future question at the top of
-PROGRESS_CODEX and keep working on a conservative option or another phase.
+No user decision is currently required; the active goal supersedes the old pause.
+Put future questions atop PROGRESS_CODEX and continue conservative/offline work.
 
 ## Main and research state
 
@@ -95,8 +94,8 @@ Report: P1 build/moving-current-ab-r11.json. No live game/runner after job 241.
 10 CTests, six capture/resolution tests and 32 log-policy checks pass. Moving QA
 now defaults to headless=0, still hidden by the queue. Do not infer a headless bug
 from the earlier confounded controls. Next: implement gi_history_surface_gate=0,
-previous depth AND world-normal rejection at the reprojected pixel, before more
-transport. Gate try_prev_bounce_at before its colour fetch (RR history=1 makes an
+accept history only when both previous depth and world normal match at the
+reprojected pixel. Gate try_prev_bounce_at before colour fetch (RR history=1 makes an
 EMA-only gate ineffective); pair metadata with the actual radiance writer.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived footprint/precision bounds, conservative
