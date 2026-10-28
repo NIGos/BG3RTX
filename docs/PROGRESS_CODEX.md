@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Evening summary — 2026-10-28, 19:30 Europe/Rome
+## Evening summary — 2026-10-28, 22:15 Europe/Rome
 
 1. Main 6dba0a8 adds the corrected local-light reference and complete merge checks; P1 is not merged.
 2. P1 is open: the fixed-camera S3 candidate measured GI excess area 172.938 per mille and fails that temporal gate.
@@ -11,7 +11,7 @@
 7. An introduced diagnostic metadata write hazard was fixed: 2,159 / 2,155 messages became zero in the two repeats.
 8. P3 box-light host integration is prepared and pushed, default off; 3 CTests and 34 shaders pass, runtime pending.
 9. P2 reference merged after two fresh hold-90 passes; EN2 and one D-EM family still fail and remain excluded.
-10. Production single-run surface gate: residual -63.8%, sample GI energy -71.7%, very low coverage; no P1 quality win. P6 water design merged at 441904a.
+10. Point-footprint pan covers 13.4%/7.15% off/on, but residual/energy/cohort limits still prevent a P1 quality claim; P6 water design merged 441904a.
 
 ## Operating plan
 
@@ -29,6 +29,26 @@ imports useful old work selectively. New features remain off by default until
 their quality gates pass.
 
 ## P1 — Pan instability
+
+Point-footprint run 248 / 409ffe1 is valid: 403 s total (344 s loading), 57 s
+single moving session, zero driver events/dumps/build changes. Off/on residual
+0.151383524 / 0.064525116 (-57.38%); sample GI Y 0.321177270 / 0.008689996
+(-97.29%). Grid coverage 13.3877% / 7.1512%, or 14.5655% / 10.1579% of the
+static-compatible moving samples. Motion 98.73 / 51.33 render px. Broader
+coverage makes the measurement more useful; unequal cohorts and lower sample
+energy still prevent a visual-quality claim. No cross-run image comparison.
+
+Offline paired exports from jobs 242/243 answer the earlier energy concern:
+within each individual frame, raw legacy/gated bounce Y falls 71.81%, 99.83%,
+99.88%, 99.86% over the four captures. Alpha bits match exactly over 2,731,520
+pixels each, both outputs finite, no brighter gated pixel. This is causal
+same-frame evidence against the OLD five-texel candidate, not final-image
+brightness or a comparison between runs. Phase evidence JSONs preserve inputs.
+
+P1 head d8b204f is pushed. Job 249 is running: repeat the existing paired
+private capture on the corrected point-footprint code, headless diagnostic,
+two same-frame legacy/gated pairs. AO counter zero is not required. This test
+isolates energy loss; it cannot close the moving-camera quality requirement.
 
 Production repeat 247 (b5e0e93, diagnostic AO comparison off) is queue-valid:
 130 s total, 56 s one moving session, zero driver events/dumps/build changes.
@@ -49,8 +69,8 @@ integer point loads, but the candidate validated four additional unused texels.
 It now requires depth AND normal on the actual fetched texel, with no neighbour
 rescue and unchanged tolerances. Six surface shaders and all 20 ABI/SPIR-V checks
 pass; seven ordinary GI/RF binaries remain byte-identical to ac77150.
-Job 248 is running on frozen 409ffe1 with the same one-session production toggle
-protocol. No new camera transport, AO diagnostics or cross-run image comparison.
+Job 248 finished with the one-session production toggle protocol above. No new
+camera transport, AO diagnostics or cross-run image comparison in that pan.
 
 Latest user steering: stop cross-run image comparisons. Use per-run GI
 reprojection residual or live off/on alternation within one moving run. The AO

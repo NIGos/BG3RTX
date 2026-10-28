@@ -40,15 +40,9 @@ motion-jitter/BG3RTX, branch codex/camera-native. Import only what P1 needs.
 
 User report: RT lighting/shadows seem to detach from objects during pans;
 Ctrl+Shift+F9 (all RT off) restores the normal appearance.
-Older S3 excess areas: GI 118.672, local 55.052, sun 42.088, reflections 34.557
-per mille. Latest production candidate 03679ed: GI 172.938 per mille, mean
-0.001258 PQ against limit 0.000978; all RT 219.062, mean 0.002334 PQ.
-The 356 s queue run is valid, with no faults/dumps/build changes. FAIL, no merge.
-This is not a controlled same-build A/B against the old baseline; no reduction
-or regression is established. Details and log numbers are in PROGRESS_CODEX.
-QA coverage gap: --temporal-gi uses a fixed camera; same_view rejects movement.
-Those numbers are a temporal anti-regression gate, not a direct pan result.
-Also capture -Move off/on with observed camera motion before claiming P1 progress.
+Old static S3 candidate 03679ed fails: GI 172.938 per mille, mean 0.001258 PQ
+against 0.000978. Details in PROGRESS_CODEX. Those fixed-camera scores and
+independent moving trajectories cannot establish a P1 improvement.
 
 Already established in research:
 - Offscreen/NaN/Inf owned-motion GPU tests fall back to fresh GI samples exactly.
@@ -58,21 +52,14 @@ Already established in research:
 - An introduced private metadata write hazard was fixed by nonoverlapping ranges.
 - Static/moving repeats on 929be7a pass their queue checks (116 / 126 s), with no faults and zero messages naming 3,255 / 3,345 logged private handles.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 409ffe1, pushed. It excludes
-unrelated FG work. Current-radiance candidate 3c7b411 adds default-off
-gi_current_radiance and paired host/core ABI 14. Full build, 10 CTests, 39 shaders
-and 14 ABI/SPIR-V checks pass; docs/CURRENT_RADIANCE.md defines its scope.
-9c68f9e preserves seven ordinary GI/RT shader binaries byte-identical to bf170f8.
-Initial on/off startup controls both stalled before gameplay (82 s, no faults
-or dumps), so neither proves anything about GI quality. c428cde fixes a concrete
-recursive tracker shared-lock at the native descriptor-bind callsite; off control
-then passes in 85 s. Smoke-r2 proves GPU-valid pose, changed RGB and exact PRE
-alpha in two captures; all nine writers complete, finite. One NV153 is unresolved.
-A 79 s production repeat is valid with zero events, 1,200 accepted / zero rejected.
-The first static off A/B has GI 144.405 per mille / 0.001571 PQ but INVALID queue
-status from a misplaced stdout expectation. Repeat 226 checks the game-log marker,
-job p1-current-radiance-ab-off-S3-r2 completed validly: GI 150.059 per mille,
-mean 0.000988 PQ (limit 0.000978), one NV153 also with the candidate off.
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now d8b204f, pushed. It excludes
+unrelated FG work. Current-radiance 3c7b411 is default-off, paired ABI14; scope
+and old static evidence: phase docs/CURRENT_RADIANCE.md and main PROGRESS_CODEX.
+c428cde fixes a recursive tracker shared-lock. Smoke proves GPU-valid pose,
+changed RGB, exact PRE alpha, nine complete finite writers. Production repeat:
+79 s, zero events, 1,200 accepted/zero rejected. Static off control 226:
+GI 150.059 per mille, mean 0.000988 PQ (limit 0.000978), one NV153 also with
+candidate off. No moving quality improvement is established for that hypothesis.
 Latest user steering: STOP cross-run image comparisons. Use a per-run reprojection
 residual or alternate the key within ONE moving run. Do not block on AO counters;
 compare their key-off control on the same build and obtain the pan number.
@@ -103,8 +90,14 @@ Coverage 0.11889%/0.02111%; no quality win. 246 invalid: >2000-draw fixture bloc
 pan in lighter gameplay. b5e0e93 uses post-load stability; 36 helper checks pass.
 409ffe1 validates only the actual integer-loaded colour texel, removing four
 unused neighbours. Bounds unchanged; 6 surface shaders/20 ABI checks pass and
-7 ordinary shaders byte-identical. Job 248 is LIVE on frozen 409ffe1, one-run
-toggle, AO diagnostic off. Read its actual process/job state before doing more.
+7 ordinary shaders byte-identical. 248 valid: 403 s total/57 s moving session,
+zero faults; off/on residual 0.151384/0.064525, GI Y 0.321177/0.008690,
+coverage 13.3877%/7.1512%. Unequal cohorts/energy: still no quality win.
+Same-frame legacy/gated raw pairs in 242/243 confirm the OLD five-texel gate
+removes 71.8–99.9% of bounce energy; alpha identical in all four captures.
+Job 249 is LIVE on frozen d8b204f: paired same-frame energy on point-footprint
+code, diagnostic/private headless capture. It is not another pan-quality gate.
+Read actual process/job state before more work. No P1 merge; all keys stay off.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
 footprint and GPU-ordered availability, not a CPU epoch certificate.
