@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Working summary — 2026-10-28, 18:48 Europe/Rome
+## Evening summary — 2026-10-28, 19:01 Europe/Rome
 
 1. Main 6dba0a8 adds the corrected local-light reference and complete merge checks; P1 is not merged.
 2. P1 is open: the latest S3 candidate measured GI excess area 172.938 per mille and fails its temporal gate.
@@ -9,7 +9,7 @@
 5. Paired radiance and full-resolution depth match the exact game depth in the captured writer executions.
 6. Camera transport works in static and moving captures; additional native camera reads are still disabled.
 7. An introduced diagnostic metadata write hazard was fixed: 2,159 / 2,155 messages became zero in the two repeats.
-8. The latest repeats cover 3,255 / 3,345 logged private handles; this is scoped validation, not universal safety.
+8. P3 box-light host integration is prepared and pushed, default off; 3 CTests and 34 shaders pass, runtime pending.
 9. P2 reference merged after two fresh hold-90 passes; EN2 and one D-EM family still fail and remain excluded.
 10. P1 current-frame diffuse bounce radiance is being implemented behind a default-off key; runtime proof is pending.
 
