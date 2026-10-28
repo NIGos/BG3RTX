@@ -11,7 +11,7 @@
 7. An introduced diagnostic metadata write hazard was fixed: 2,159 / 2,155 messages became zero in the two repeats.
 8. P3 box-light host integration is prepared and pushed, default off; 3 CTests and 34 shaders pass, runtime pending.
 9. P2 reference merged after two fresh hold-90 passes; EN2 and one D-EM family still fail and remain excluded.
-10. P1 current-frame diffuse bounce radiance is being implemented behind a default-off key; runtime proof is pending.
+10. P1 default-off current-frame bounce candidate is built; startup regression fixed, repeat control and GPU proof pending.
 
 ## Operating plan
 
@@ -54,7 +54,20 @@ with zero unreserved frames. Correct transport alone did not resolve the failure
 Next hypothesis: previous-frame bounce radiance still carries previous visibility
 and feedback. Assess a default-off current-frame diffuse source after native
 lighting, preserving pre-lighting visibility and freezing its camera/settings.
-Implementation is in progress on the P1 branch. It is not a validated improvement.
+The candidate is implemented at 3c7b411 with paired host/core ABI 14 and default
+gi_current_radiance=0. Full build, 10 CTests, 39 shader files and 14 ABI/SPIR-V
+checks pass. A follow-up at 9c68f9e keeps seven ordinary GI/RT shader binaries
+byte-identical to bf170f8; P3's default/check local-light shaders are also
+byte-identical to main with boxes off. These are compatibility checks, not proof
+of visual improvement.
+
+The first current-radiance smoke and same-build off control both stalled before
+gameplay (82 s each, zero device-loss events/dumps, no build changes). No GPU
+candidate evidence was produced. A concrete porting error held tracker.mu across
+a helper that reacquired it: c428cde releases the lock before the metadata bind
+observation, as the tested research branch did. All 10 CTests pass after the fix.
+The direct-helper unit test missed this native callsite; a fresh queue startup
+control is required before attributing the stalls or proceeding to GI A/B.
 
 Owned-motion tests reject offscreen and nonfinite coordinates on the GPU.
 In four NaN/Inf captures, temporal output equals the fresh sample exactly and
@@ -85,7 +98,7 @@ or use all-RT-off as a claimed fix. No new user-facing candidate key is ready ye
 
 - P2: the useful lscheck fix is merged at 6dba0a8 and pushed with codex/p2-pending. Fresh valid S6 hold-90 runs have 25 windows each and zero any-bit, relative or one-writer differences across 8,172,707,324 / 8,172,707,294 pixels; no faults, dumps or build changes. The first refresh pair was invalid because a startup-only expectation was incorrectly applied to session slices; valid repeats supersede it. Full startup independently confirms the real 8.0 MB asset DB. Details: docs/P2_PENDING_MERGES.md.
 - EN2 pure S8 windows join 300/300 without waits but still fail blue/metalness and luminance bias. D-EM family 304be1c7 fails AF at ratio 0.361 / 0.362 (band 0.842–1.187); GF passes at 0.999. Both remain excluded.
-- P3 offline preparation: codex/p3-box at 69dc5ef is pushed, using the managed p2-pending checkout. The useful shader foundation is ported onto current main; host pipeline selection, native descriptor replay, cleanup, default-off ls_box key and projector validation logging are implemented. The stats allocation now covers added counters 136–150; the inherited 136-counter allocation was insufficient. Full build, 3/3 CTests, default agreement and 34/34 shader files pass. No runtime or merge yet; S6 / S7 / S5 recompute and shadow checks follow P1's runnable candidate. See that branch's docs/P3_BOX_LIGHTS.md.
+- P3 offline preparation: codex/p3-box at 907857c is pushed, using the managed p2-pending checkout. The useful shader foundation is ported onto current main; host pipeline selection, native descriptor replay, cleanup, default-off ls_box key and projector validation logging are implemented. The stats allocation now covers added counters 136–150; the inherited 136-counter allocation was insufficient. Full build, 3/3 CTests, default agreement and 34/34 shader files pass. No runtime or merge yet; S6 / S7 / S5 recompute and shadow checks follow P1's runnable candidate. See that branch's docs/P3_BOX_LIGHTS.md.
 - P4: implement and validate the conservative OMM foliage design.
 - P5: SHaRC v2 after EN2, then the light tree and EN2 consumers.
 - P6: at least a water design covering the docks gap.

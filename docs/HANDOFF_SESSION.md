@@ -59,14 +59,18 @@ Already established in research:
 - An introduced private metadata write hazard was fixed by nonoverlapping ranges.
 - Static/moving repeats on 929be7a pass their queue checks (116 / 126 s), with no faults and zero messages naming 3,255 / 3,345 logged private handles.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, tested at 03679ed, followed by
-build-gate fix bf170f8. Current-radiance implementation is now in progress there;
-do not launch a game or commit its files while the owner is editing/building.
-All eight CTests passed before those new changes. It excludes unrelated FG work. Owned/current/late motion
-is active in the tested candidate, with 300/300 descriptor reservations.
-Next: assess current-frame diffuse bounce after native lighting, preserving PRE
-visibility and frozen camera/settings. Camera branch 53f0925 offers diagnostic
-building blocks, not a production-ready pose service. No new key is ready yet.
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now c428cde, pushed. It excludes
+unrelated FG work. Current-radiance candidate 3c7b411 adds default-off
+gi_current_radiance and paired host/core ABI 14. Full build, 10 CTests, 39 shaders
+and 14 ABI/SPIR-V checks pass; docs/CURRENT_RADIANCE.md defines its scope.
+9c68f9e preserves seven ordinary GI/RT shader binaries byte-identical to bf170f8.
+Initial on/off startup controls both stalled before gameplay (82 s, no faults
+or dumps), so neither proves anything about GI quality. c428cde fixes a concrete
+recursive tracker shared-lock at the native descriptor-bind callsite. A fresh
+off control is queued/running; check actual processes/results before any launch.
+Keep this checkout's source and binaries frozen while its queued job is active.
+Next: require a valid startup, then GPU pose-valid/RGB-write/alpha-preservation
+evidence, static anti-regression A/B and separate moving-camera off/on captures.
 Do not close P1 from diagnostic passes alone. The phase is done when each
 effect meets its derived gate, or is clearly reduced with its cause explained.
 Record the candidate key and user check in PROGRESS_CODEX: static building/ground
@@ -93,7 +97,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 box lights: codex/p3-box at 69dc5ef, pushed; managed p2-pending/BG3RTX checkout. Shader foundation from a28a4c7, host selection/binding/cleanup and default-off ls_box now implemented. Build, 3 CTests, defaults and 34 shader files pass. No runtime or merge. Its docs/P3_BOX_LIGHTS.md lists S6/S7/S5 gates; P1 tests retain priority.
+- P3 box lights: codex/p3-box at 907857c, pushed; managed p2-pending/BG3RTX checkout. Shader foundation from a28a4c7, host selection/binding/cleanup and default-off ls_box now implemented. Build, 3 CTests, defaults and 34 shader files pass. No runtime or merge. Its docs/P3_BOX_LIGHTS.md lists S6/S7/S5 gates; P1 tests retain priority.
 - P4 OMM foliage: worktree-agent-a8b7cb486c1434ebd, its HANDOFF.md. Conservative design; unknown falls back to alpha testing.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 water: at least a design covering COVERAGE gap 1, especially the docks.
