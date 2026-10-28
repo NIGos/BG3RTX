@@ -58,7 +58,7 @@ Already established in research:
 - An introduced private metadata write hazard was fixed by nonoverlapping ranges.
 - Static/moving repeats on 929be7a pass their queue checks (116 / 126 s), with no faults and zero messages naming 3,255 / 3,345 logged private handles.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now c428cde, pushed. It excludes
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now eed52ff, pushed. It excludes
 unrelated FG work. Current-radiance candidate 3c7b411 adds default-off
 gi_current_radiance and paired host/core ABI 14. Full build, 10 CTests, 39 shaders
 and 14 ABI/SPIR-V checks pass; docs/CURRENT_RADIANCE.md defines its scope.
@@ -75,14 +75,8 @@ job p1-current-radiance-ab-off-S3-r2 completed validly: GI 150.059 per mille,
 mean 0.000988 PQ (limit 0.000978), one NV153 also with the candidate off.
 User steering: moving-camera same-build off/on comes FIRST. QA --move now
 forwards -Move, captures a constant configuration and requires --capture-only;
-static analysis refuses moving captures. P1 HEAD 3ff190f (same c428cde DLL pair).
-Jobs 227/228 both completed validly (142/80 s), three moving traces each, zero
-events/dumps/build changes. Camera movement is observed, but trajectories are
-unmatched, so quality comparison is inconclusive. a8c5db5 starts -Move only after
-the baseline trace; 32 policy / six capture tests pass, renderer DLLs unchanged.
-Synchronized jobs 229/230 both completed validly (82/84 s), zero events/dumps,
-but albedo shifts remain below 0.1 preview pixel: both cameras stayed static.
-Jobs 231–236 stayed static; ineffective SDL/Win32 focus changes were reverted.
+static analysis refuses moving captures. Jobs 227/228 moved on unmatched paths;
+229–236 stayed static. Ineffective SDL/Win32 focus changes were reverted.
 Real-present jobs 237/238 moved only off, so that pair was also inconclusive.
 P1 ac77150, pushed, now isolates -Move with a client-relative virtual pointer:
 centre before baseline, right edge while held, coherent SDL events/polled data.
@@ -93,10 +87,20 @@ Final off/on views differ (80.54% albedo change), so GI quality is INCONCLUSIVE.
 Report: P1 build/moving-current-ab-r11.json. No live game/runner after job 241.
 10 CTests, six capture/resolution tests and 32 log-policy checks pass. Moving QA
 now defaults to headless=0, still hidden by the queue. Do not infer a headless bug
-from the earlier confounded controls. Next: implement gi_history_surface_gate=0,
-accept history only when both previous depth and world normal match at the
-reprojected pixel. Gate try_prev_bounce_at before colour fetch (RR history=1 makes an
-EMA-only gate ineffective); pair metadata with the actual radiance writer.
+from the earlier confounded controls. gi_history_surface_gate=0 is now implemented:
+previous depth AND world-normal acceptance at the reprojected pixel, before bounce
+reuse, paired with the radiance writer. Metadata52 is a coherent buffer with a
+CPU-zero initial token, consumed by GPU PRE and republished only by paired POST.
+Existing ABI14 pose service pins resources; geometry math remains native.
+11 CTests, 45 shader files, 20 ABI checks and seven identical ordinary shaders pass.
+Diagnostic gi_history_surface_test=0 also defaults off. Job 242 (210 s) is INVALID:
+aggregate AO counters differ by 8–10%, although both captured alpha images match
+exactly (2,731,520 pixels each) and both GPU predicate tests pass all eleven cases.
+No driver events/dumps; unlimited VVL names no logged private/metadata handles.
+Report P1 build/surface-smoke.json. eed52ff removes frozen geometry math; repeat
+243 started 20:13:12 UTC, runner 532. Inspect actual process/result before launch.
+Next finish that diagnostic, then moving gate off/on on identical DLLs, current
+radiance replay off, diagnostic off. Do not claim quality from the smoke.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived footprint/precision bounds, conservative
 footprint intersection and GPU-ordered availability, not a CPU epoch certificate.

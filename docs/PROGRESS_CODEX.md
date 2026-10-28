@@ -11,7 +11,7 @@
 7. An introduced diagnostic metadata write hazard was fixed: 2,159 / 2,155 messages became zero in the two repeats.
 8. P3 box-light host integration is prepared and pushed, default off; 3 CTests and 34 shaders pass, runtime pending.
 9. P2 reference merged after two fresh hold-90 passes; EN2 and one D-EM family still fail and remain excluded.
-10. Same-build moving off/on now both move, with zero events/dumps; unmatched final views cannot establish GI improvement.
+10. Previous-depth/normal GI rejection is implemented off by default; GPU predicate tests pass, with an AO-counter discrepancy under investigation.
 
 ## Operating plan
 
@@ -44,9 +44,19 @@ All 10 CTests, six capture/resolution tests and 32 log-policy checks pass.
 Earlier focus experiments had no effect and were reverted. Real presentation
 alone was insufficient (237 moved off, 238 stayed static); do not blame headless
 mode from those confounded controls. Branch codex/p1-pan ac77150 is pushed.
-Next implement gi_history_surface_gate=0: accept previous GI bounce history only
-when both previous depth and world normal match at the reprojected pixel, before any
-more transport work. This hypothesis is not implemented yet.
+Implemented gi_history_surface_gate=0 on P1, independently of current-radiance
+replay: accept bounce history only when previous depth AND world normal match.
+Paired GPU metadata, conservative footprint intersection and derived precision
+bounds apply to bounce RGB and half-res RGB accumulation; visibility keeps its
+legacy predicate. 11 CTests, 45 shader files and 20 ABI checks pass; seven ordinary
+GI/RF shader binaries are identical with the key off. No new camera transport.
+Smoke 242 completed in 210 s without events/dumps, but is INVALID: aggregate AO
+counters report 8–10% differences. Both exported same-frame alpha pairs instead
+match exactly over 2,731,520 pixels each; both GPU predicate tests pass eleven
+cases. Unlimited VVL names no logged private handles or the metadata buffer.
+The discrepancy is unresolved. P1 eed52ff retains ordinary native geometry math;
+repeat 243 is running. Production moving A/B follows only after diagnostic review.
+Details: phase docs/GI_HISTORY_SURFACE_GATE.md and build/surface-smoke.json.
 
 The last production S3 result predates the temporal sample-coordinate safety
 correction. It measured temporal excess areas of GI 118.672, local 55.052,
