@@ -46,6 +46,7 @@ struct Snapshot {
   VkDescriptorSet game_set1;
   VkDescriptorSetLayout game_set1_layout;
   uint32_t game_set1_dyn[16], game_set1_ndyn;
+  bool box_ready;                     // native box-light storage buffer is bound
   VkAccelerationStructureKHR tlas;   // the TLAS the ray-traced passes used (Track D)
   VkDescriptorSet alpha;             // the host's set 1 for them (alpha-tested geometry, phase 3)
   bool gi;                           // the GI passes ran (gi=1); otherwise only the sun shadow work
@@ -183,7 +184,7 @@ Pipe g_ls_full, g_ls_ref, g_ls_check, g_ls_full_check;
 Pipe g_ls_box, g_ls_full_box;
 VkPipelineLayout g_ls_box_layout = VK_NULL_HANDLE;
 VkDescriptorSetLayout g_ls_box_game = VK_NULL_HANDLE;
-bool g_ls_box_logged = false, g_ls_box_missing_logged = false;
+bool g_ls_box_missing_logged = false, g_ls_box_active = false;
 LslFrame g_lsl{};   // this frame's upload (bindings 45, 46)
 bool g_lsl_ok = false;
 SunTrustFrame g_sunt{};   // rt_sun_replace: this frame's trust slot (bindings 47, 48)
@@ -404,6 +405,9 @@ bool snapshot(VkCommandBuffer cmd, Snapshot& s) {
     s.game_set1_layout = VK_NULL_HANDLE;
     s.game_set1_ndyn = 0;
   }
+  Bg3Binding boxes{};
+  s.box_ready = host->cfg_int("ls_box", 0) && s.game_set1 && q(1, 29, boxes) &&
+                boxes.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && boxes.buffer && boxes.range >= 128;
   return s.nrm.width == s.dif.width && s.dep.width == s.dif.width && s.ao.width == s.dif.width && s.dif.width > 0;
 }
 
@@ -973,6 +977,18 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               (t[19] - t[125]) / px, t[125] / px, t[20] / px, 100.0 * t[123] / px, t[124] / px, t[124] / hit,
               100.0 * t[126] / rr, 100.0 * t[127] / 256.0 / hit);
   }
+  if (t[16] && (t[136] || t[144])) {
+    const double px = double(t[16]);
+    host->log("ls box stats (%u frames): evaluated %.3f/px, shadow-mapped %.3f/px, traced %.3f/px, "
+              "occluded %.3f/px, unknown %.3f/px, cookie %.3f/px; game box light %.3f%% of lit luminance, "
+              "removed %.3f%%; projector validation px %llu: game %.6f, recomputed %.6f, mean |diff| %.6f, "
+              "recompute above game %.6f, box share %.3f%%",
+              g_stats_n, t[136]/px, t[137]/px, t[138]/px, t[139]/px, t[140]/px, t[143]/px,
+              t[21] ? 100.0*t[141]/double(t[21]) : 0.0, t[21] ? 100.0*t[142]/double(t[21]) : 0.0,
+              (unsigned long long)t[144], t[144] ? t[145]/double(t[144])/256.0 : 0.0,
+              t[144] ? t[146]/double(t[144])/256.0 : 0.0, t[144] ? t[147]/double(t[144])/256.0 : 0.0,
+              t[144] ? t[148]/double(t[144])/256.0 : 0.0, t[146] ? 100.0*t[150]/double(t[146]) : 0.0);
+  }
   if (t[69]) {   // D-LS on non-standard material classes (rt_local_shadows.hlsl, AUDIT_RT fix 3)
     host->log("ls stats (%u frames): non-standard material px %.4fM/frame; validation on them (lit, no projector "
               "lights; ls_debug=4): %.4fM px, game %.4f, recomputed %.4f, mean |diff| %.5f, recompute above game %.5f; "
@@ -1259,14 +1275,17 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
 }
 
 void ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet sun, VkPipeline pipe, uint32_t gx,
-                 uint32_t gy) {
+                 uint32_t gy, const Snapshot* box = nullptr) {
   const VkDeviceFuncs& vk = *host->vk;
+  const VkPipelineLayout layout = box ? g_ls_box_layout : g_ls_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   VkWriteDescriptorSet w[kLsBindings + kNumExtras];
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls_layout, 0, gather_writes(b, kLsBindings, w), w);
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, kLsBindings, w), w);
   VkDescriptorSet sets[2] = {b.alpha, sun};
-  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls_layout, 1, 2, sets, 0, nullptr);
-  vk.CmdPushConstants(cmd, g_ls_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 2, sets, 0, nullptr);
+  if (box) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 3, 1, &box->game_set1,
+                                   box->game_set1_ndyn, box->game_set1_ndyn ? box->game_set1_dyn : nullptr);
+  vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, gx, gy, 1);
 }
 
@@ -1387,12 +1406,12 @@ void ls_timing_collect() {
   std::sort(v.begin(), v.end());
   std::sort(j.begin(), j.end());
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
-            "samples %d, exact-k %d + %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d)",
+            "samples %d, exact-k %d + %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d, box %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
             host->cfg_int("ls_samples", 0), host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1),
             host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
             host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
-            host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1));
+            host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1), int(g_ls_box_active));
   v.clear();
   j.clear();
 }
@@ -1746,6 +1765,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     // The default-settings variant, or the one with every mode (more registers, docs/TRACK_D_RT.md 9.9).
     const bool full = lp.ls_samples || lp.ls_debug || lp.ls_stats;
     VkPipeline lsp = g_ls.pipeline;
+    bool box = false;
     lp.ls_pass = host->cfg_int("ls_check", 0) == 2 ? 2u : 0u;   // reference against itself
     if (host->cfg_int("ls_check", 0)) {
       Pipe& c = full ? g_ls_full_check : g_ls_check;
@@ -1753,11 +1773,28 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
         lsp = c.pipeline;
     } else if (!host->cfg_int("ls_impl", 1)) {
       if (refresh(g_ls_ref, "gi/rt_local_shadows_ref.hlsl", g_ls_layout)) lsp = g_ls_ref.pipeline;
-    } else if (full) {
-      // Not before the first frame that needs it: an unused pipeline is not compiled.
-      if (refresh(g_ls_full, "gi/rt_local_shadows_full.hlsl", g_ls_layout)) lsp = g_ls_full.pipeline;
+    } else {
+      if (host->cfg_int("ls_box", 0)) {
+        if (s.box_ready && ensure_ls_box_layout(s.game_set1_layout)) {
+          Pipe& variant = full ? g_ls_full_box : g_ls_box;
+          if (refresh(variant, full ? "gi/rt_local_shadows_full_box.hlsl" : "gi/rt_local_shadows_box.hlsl", g_ls_box_layout)) {
+            lsp = variant.pipeline;
+            box = true;
+          }
+        }
+        if (!box && !g_ls_box_missing_logged) {
+          host->log("ls box: requested but native set/layout or pipeline unavailable; retaining point/spot pass");
+          g_ls_box_missing_logged = true;
+        }
+      }
+      if (!box && full && refresh(g_ls_full, "gi/rt_local_shadows_full.hlsl", g_ls_layout)) lsp = g_ls_full.pipeline;
     }
-    ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8);
+    if (box != g_ls_box_active) {
+      g_ls_box_active = box;
+      host->log("ls box: %s (native lighting set %p, dynamic offsets %u)", box ? "active" : "inactive", (void*)s.game_set1, s.game_set1_ndyn);
+      g_ls_ms.clear();g_ls_join_ms.clear();
+    }
+    ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8, box ? &s : nullptr);
     ls_timestamp(cmd, 2);
     if (s.shadow.view) image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kAll);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kAll);
@@ -1938,7 +1975,7 @@ void gi_release() {
   sunt_release();
   g_sunt_ok = false;
   for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
-                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check,
+                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
@@ -1965,6 +2002,10 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_ls_set_layout);
   g_ls_layout = VK_NULL_HANDLE;
   g_ls_set_layout = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_box_layout);
+  g_ls_box_layout = VK_NULL_HANDLE;
+  g_ls_box_game = VK_NULL_HANDLE;
+  g_ls_box_active = g_ls_box_missing_logged = false;
   host->defer_destroy(BG3_DEFER_SAMPLER, (uint64_t)g_linear_clamp);
   g_linear_clamp = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, (uint64_t)g_sun_pool);   // frees the sets
