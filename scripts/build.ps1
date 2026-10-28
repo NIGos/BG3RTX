@@ -3,7 +3,7 @@
 #   .\scripts\build.ps1 -Core         rebuild only the hot-reloadable core
 #   .\scripts\build.ps1 -Watch        rebuild the core on every save under core/
 #   .\scripts\build.ps1 -Launcher     build only the player launcher, bin\BG3RTX.exe
-#   .\scripts\build.ps1 -Test         build everything, then run the settings unit tests
+#   .\scripts\build.ps1 -Test         build everything, then run every registered CTest
 param([switch]$Core, [switch]$Watch, [switch]$Launcher, [switch]$Test, [string]$Config = "RelWithDebInfo")
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -33,8 +33,10 @@ Enter-VsShell
 if (-not $Watch) {
   Invoke-Build $(if ($Core) { "bg3rtx_core" } elseif ($Launcher) { "bg3rtx_launcher" } else { "" })
   if ($Test) {
-    & (Join-Path $root "bin\settings_test.exe")
-    if ($LASTEXITCODE) { throw "settings tests failed" }
+    # merge-green relies on this being the complete configured suite. An empty
+    # test registry is a configuration failure, not a successful validation.
+    ctest --test-dir $build --output-on-failure --no-tests=error
+    if ($LASTEXITCODE) { throw "unit tests failed" }
   }
   return
 }
