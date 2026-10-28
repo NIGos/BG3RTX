@@ -177,6 +177,13 @@ Pipe g_ls_match;    // D-LS per-light data: joins the runtime lights to the ligh
 // pass (shaders/gi/ls_ref, tools/lsref); ls_check=1 runs it and the live variant on the same pixels
 // and counts those whose outputs differ (stats 80-83).
 Pipe g_ls_full, g_ls_ref, g_ls_check, g_ls_full_check;
+// D-LS box (projector) lights (ls_box=1, docs/TRACK_D_RT.md 9.12): the same pass compiled with
+// LS_BOX=1, which also reads the lighting's own set 1 (b29 box records, b45 cookies, b16 sampler)
+// bound as set 3. Its pipeline layout holds the game's set layout, so it is rebuilt if that changes.
+Pipe g_ls_box, g_ls_full_box;
+VkPipelineLayout g_ls_box_layout = VK_NULL_HANDLE;
+VkDescriptorSetLayout g_ls_box_game = VK_NULL_HANDLE;
+bool g_ls_box_logged = false, g_ls_box_missing_logged = false;
 LslFrame g_lsl{};   // this frame's upload (bindings 45, 46)
 bool g_lsl_ok = false;
 SunTrustFrame g_sunt{};   // rt_sun_replace: this frame's trust slot (bindings 47, 48)
@@ -597,6 +604,39 @@ bool ensure_ls_layout() {
   return make_layout(kLsBindings, &g_ls_set_layout, &g_ls_layout, host_layout, g_sun_dsl);
 }
 
+// ls_box: D-LS's push set 0, the host's set 1, the sun set 2, and the game's layout of the
+// lighting's set 1 as set 3. A different game layout rebuilds the box pipelines.
+bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
+  if (!game || !ensure_ls_layout()) return false;
+  if (g_ls_box_layout && g_ls_box_game == game) return true;
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
+  if (g_ls_box_layout) {
+    for (Pipe* p : {&g_ls_box, &g_ls_full_box}) {
+      host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
+      *p = Pipe{};
+    }
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_box_layout);
+    g_ls_box_layout = VK_NULL_HANDLE;
+    host->log("ls: the lighting's set 1 layout changed (%p -> %p); rebuilding the box-light pipelines",
+              (void*)g_ls_box_game, (void*)game);
+  }
+  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
+  VkDescriptorSetLayout sets[4] = {g_ls_set_layout, host_layout, g_sun_dsl, game};
+  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  lci.setLayoutCount = 4;
+  lci.pSetLayouts = sets;
+  lci.pushConstantRangeCount = 1;
+  lci.pPushConstantRanges = &pc;
+  if (host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &g_ls_box_layout) != VK_SUCCESS) {
+    g_ls_box_layout = VK_NULL_HANDLE;
+    return false;
+  }
+  g_ls_box_game = game;
+  return true;
+}
+
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
   Bg3ShaderBlob blob{};
   if (!host->get_shader(file, "main", "cs_6_6", &blob)) return p.pipeline != VK_NULL_HANDLE;
@@ -749,7 +789,8 @@ constexpr uint32_t kStatsRing = 8;
 // (rt_common.hlsli kStatUnknown + g_rt_pass): other (origins, debug), sun, D-LS, D-RF, RT AO,
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
-constexpr uint32_t kStatsCounters = 136;
+// Box diagnostics also write projector-only baseline counters when ls_box=0.
+constexpr uint32_t kStatsCounters = 152;
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
