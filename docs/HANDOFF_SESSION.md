@@ -77,7 +77,11 @@ mean 0.000988 PQ (limit 0.000978), one NV153 also with the candidate off.
 User steering: moving-camera same-build off/on comes FIRST. QA --move now
 forwards -Move, captures a constant configuration and requires --capture-only;
 static analysis refuses moving captures. P1 HEAD 3ff190f (same c428cde DLL pair).
-Job 227 p1-moving-current-off-S3 is running, runner PID 26264 from 18:38:21 UTC.
+Jobs 227/228 both completed validly (142/80 s), three moving traces each, zero
+events/dumps/build changes. Camera movement is observed, but trajectories are
+unmatched, so quality comparison is inconclusive. a8c5db5 starts -Move only after
+the baseline trace; 32 policy / six capture tests pass, renderer DLLs unchanged.
+Synchronized off repeat 229 is running, PID 35440 from 18:49:23 UTC; on follows.
 Check actual process/result state before any launch; do not duplicate the job.
 After moving A/B, test default-off GI disocclusion rejection from previous depth
 AND normal mismatch at the reprojected pixel, before further transport work.

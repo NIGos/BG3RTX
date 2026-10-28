@@ -104,6 +104,23 @@ five temporal-plan tests pass. Moving off job 227 is running before the matching
 on run. The next GI hypothesis is a default-off depth AND normal history
 rejection at the reprojected previous pixel, before any more transport work.
 
+The first moving pair is queue-valid on the same 3ff190f build (142 / 80 s),
+three traces each, zero NV events/dumps/build changes. Actual albedo movement
+is observed, but the trajectories do not match: off shifts about (-40,49) then
+(-2,81) preview pixels; on shifts (-2.87,-2.20) then nearly zero near the scene
+boundary. No numerical quality improvement is claimed from this pair.
+a8c5db5 starts the pan only after a saved-view baseline trace, retaining the
+gameplay-ready guard. All 32 log-policy and six capture/resolution checks pass.
+Renderer DLLs are unchanged; their hashes are saved before the synchronized
+repeat. Job 229 p1-moving-current-off-S3-r2 is running, followed by its on pair.
+
+Next implementation proposal is gi_history_surface_gate=0: previous depth and
+world normal metadata paired with the radiance writer, using existing B2/B5
+camera data, with conservative precision/footprint checks. It must gate the GI
+bounce source as well as temporal accumulation, since RR uses history weight 1.
+It is not implemented yet. Missing/invalid writer data must reject, and any
+dimming or excessive rejection must be measured rather than called a pan fix.
+
 Owned-motion tests reject offscreen and nonfinite coordinates on the GPU.
 In four NaN/Inf captures, temporal output equals the fresh sample exactly and
 all ordinary outputs remain finite. This establishes numeric fallback safety;
