@@ -960,12 +960,13 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
     double px = double(t[16]), n = double(g_stats_n);
     host->log("ls stats (%u frames): %.2fM px/frame; lights per pixel: listed %.2f, evaluated %.2f (with a game shadow "
               "%.2f), traced %.2f, occluded %.2f; %.1f%% of px lit by a local light; light removed %.2f%% of the lit "
-              "luminance (mean %.4f); validation (px without projector lights): game %.4f, recomputed %.4f, mean |diff| %.5f (%.3f%% of game), recompute above game %.5f (%.3f%%; %.3f%% of px); "
-              "set1/b0 m0.x %g m0.y (AO on direct) %g m0.w %g, b13[0] %g; projector lights listed %.2f/px (not handled)",
+              "luminance (mean %.4f); validation (%s): game %.4f, recomputed %.4f, mean |diff| %.5f (%.3f%% of game), recompute above game %.5f (%.3f%%; %.3f%% of px); "
+              "set1/b0 m0.x %g m0.y (AO on direct) %g m0.w %g, b13[0] %g; projector lights listed %.2f/px (box active %d)",
               g_stats_n, px / n * 1e-6, t[26] / px, t[17] / px, t[18] / px, t[19] / px, t[20] / px, 100.0 * t[25] / px,
-              t[21] ? 100.0 * t[24] / double(t[21]) : 0.0, t[24] / px / 256.0, t[21] / px / 256.0, t[22] / px / 256.0,
+              t[21] ? 100.0 * t[24] / double(t[21]) : 0.0, t[24] / px / 256.0,
+              g_ls_box_active ? "all pixels including projectors" : "px without projector lights", t[21] / px / 256.0, t[22] / px / 256.0,
               t[15] / px / 256.0, t[21] ? 100.0 * t[15] / double(t[21]) : 0.0, t[23] / px / 256.0, t[21] ? 100.0 * t[23] / double(t[21]) : 0.0, 100.0 * t[20] / px, g_ls_raw[0], g_ls_raw[1], g_ls_raw[2],
-              g_ls_raw[3], t[31] / px);
+              g_ls_raw[3], t[31] / px, int(g_ls_box_active));
   }
   if (t[16] && t[122]) {   // D-LS exact-k (rt_local_shadows.hlsl ls_main_k; TRACK_D_RT.md 9.11)
     double px = double(t[16]), hit = double(t[123] ? t[123] : 1), rr = double(t[125] ? t[125] : 1);
@@ -1000,8 +1001,9 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   if (t[32] > 100) {
     double N = double(t[32]), sm = t[33] * 1e-5, sg = t[34] * 1e-5, smm = t[35] * 1e-7, smg = t[36] * 1e-7;
     double k = (N * smg - sm * sg) / (std::max)(N * smm - sm * sm, 1e-30);
-    host->log("ls validation fit (px without projector lights): game = %.4f x recomputed + %.5f over %.2fM lit px "
+    host->log("ls validation fit (%s): game = %.4f x recomputed + %.5f over %.2fM lit px "
               "(mean recomputed %.5f, game %.5f); game where no local light reaches %.5f (%.2fM px)",
+              g_ls_box_active ? "all pixels including projectors" : "px without projector lights",
               k, (sg - k * sm) / N, N / g_stats_n * 1e-6, sm / N, sg / N, t[37] ? t[38] * 1e-5 / double(t[37]) : 0.0,
               double(t[37]) / g_stats_n * 1e-6);
   }

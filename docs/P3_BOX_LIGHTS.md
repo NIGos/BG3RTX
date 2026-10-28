@@ -18,6 +18,10 @@ Layout changes rebuild the box pipelines; release defers their destruction.
 The stats allocation is 152 counters, covering shader indices 136–150, including
 projector-only validation counters that also run in the ls_box=0 baseline.
 The inherited 136-counter allocation was too small for those extra writes.
+Projector validation selects every pixel whose froxel lists a projector in both
+off/on modes; requiring an evaluated light would exclude box-only pixels from
+the off baseline and compare different populations. Ordinary default and check
+shader binaries are byte-identical to main with boxes disabled (DXC SHA-256).
 Logs report actual box activation, evaluations, shadows, unknown queries,
 cookies and projector-pixel recompute errors. GPU timing identifies box mode.
 

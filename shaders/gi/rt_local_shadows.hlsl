@@ -886,7 +886,9 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       }
     }
     {   // (also with ls_box=0: there the recompute lacks the box lights, the comparison's baseline)
-      const bool pv = validate && n_proj > 0u && n_lights > 0u;
+      // Keep the same raster population with boxes off/on. Requiring a
+      // recomputed light would drop box-only pixels from the off baseline.
+      const bool pv = validate && n_proj > 0u;
       const float pover = lum(max(md - gd, 0.0) + max(ms - gs, 0.0));
       stat_addv(144, pv ? 1u : 0u, bin);
       stat_addv(145, pv ? fx(lum(gd + gs)) : 0u, bin);
