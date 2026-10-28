@@ -1,4 +1,4 @@
-# Session handoff — 2026-10-28, 18:48 Europe/Rome
+# Session handoff — 2026-10-28, 19:30 Europe/Rome
 
 Read this first, then the top of docs/STATUS.md and docs/PROGRESS_CODEX.md.
 STATUS describes the stable code; PROGRESS_CODEX is the current work log.
@@ -66,11 +66,18 @@ and 14 ABI/SPIR-V checks pass; docs/CURRENT_RADIANCE.md defines its scope.
 9c68f9e preserves seven ordinary GI/RT shader binaries byte-identical to bf170f8.
 Initial on/off startup controls both stalled before gameplay (82 s, no faults
 or dumps), so neither proves anything about GI quality. c428cde fixes a concrete
-recursive tracker shared-lock at the native descriptor-bind callsite. A fresh
-off control is queued/running; check actual processes/results before any launch.
+recursive tracker shared-lock at the native descriptor-bind callsite; off control
+then passes in 85 s. Smoke-r2 proves GPU-valid pose, changed RGB and exact PRE
+alpha in two captures; all nine writers complete, finite. One NV153 is unresolved.
+A 79 s production repeat is valid with zero events, 1,200 accepted / zero rejected.
+The first static off A/B has GI 144.405 per mille / 0.001571 PQ but INVALID queue
+status from a misplaced stdout expectation. Repeat 226 checks the game-log marker,
+job p1-current-radiance-ab-off-S3-r2, runner PID 49520 started 18:29:37 UTC.
+Check actual process/result state before any launch; do not duplicate the job.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Next: require a valid startup, then GPU pose-valid/RGB-write/alpha-preservation
-evidence, static anti-regression A/B and separate moving-camera off/on captures.
+evidence with higher VVL duplicate limit if needed, static A/B and moving off/on
+captures. Default VVL limit 3 weakens the smoke's zero-private-handle message count.
 Do not close P1 from diagnostic passes alone. The phase is done when each
 effect meets its derived gate, or is clearly reduced with its cause explained.
 Record the candidate key and user check in PROGRESS_CODEX: static building/ground

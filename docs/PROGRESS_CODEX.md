@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Evening summary — 2026-10-28, 19:01 Europe/Rome
+## Evening summary — 2026-10-28, 19:30 Europe/Rome
 
 1. Main 6dba0a8 adds the corrected local-light reference and complete merge checks; P1 is not merged.
 2. P1 is open: the latest S3 candidate measured GI excess area 172.938 per mille and fails its temporal gate.
@@ -11,7 +11,7 @@
 7. An introduced diagnostic metadata write hazard was fixed: 2,159 / 2,155 messages became zero in the two repeats.
 8. P3 box-light host integration is prepared and pushed, default off; 3 CTests and 34 shaders pass, runtime pending.
 9. P2 reference merged after two fresh hold-90 passes; EN2 and one D-EM family still fail and remain excluded.
-10. P1 default-off current-frame bounce candidate is built; startup regression fixed, repeat control and GPU proof pending.
+10. P1 current-frame bounce works on GPU and preserves alpha; visual A/B is pending and one driver event remains unattributed.
 
 ## Operating plan
 
@@ -66,8 +66,32 @@ gameplay (82 s each, zero device-loss events/dumps, no build changes). No GPU
 candidate evidence was produced. A concrete porting error held tracker.mu across
 a helper that reacquired it: c428cde releases the lock before the metadata bind
 observation, as the tested research branch did. All 10 CTests pass after the fix.
-The direct-helper unit test missed this native callsite; a fresh queue startup
-control is required before attributing the stalls or proceeding to GI A/B.
+The direct-helper unit test missed this native callsite. The fresh off control
+now completes validly in 85 s, with zero device-loss events/dumps/build changes.
+
+Current-radiance smoke-r2 completes two captures in 89 s. Both export all nine
+private writers and a GPU-valid pose header. Actual RGB changes on 323,905 /
+326,814 pixels, with mean absolute differences 0.0079245 / 0.0078829; raw and
+temporal alpha match PRE exactly and all outputs are finite. No VVL messages
+name the 57 exported private handles, but the validation duplicate limit was
+the default 3: suppressed IDs can hide later messages, so this is not a full
+hazard clearance. Evidence: the P1 branch build/current-smoke-r2.json and saved
+validation log, captures 20261028-191549 / 191600.
+
+That smoke has one nvlddmkm event 153 at 19:16:02.671, before decode finishes;
+rendering continues afterwards, with no VK_ERROR/device-fault log or dump. Its
+cause is unresolved; do not attribute it to teardown or declare stability.
+A production repeat without validation/private readback completes validly in
+79 s with zero events/dumps/build changes, 1,200 accepted captures and no reject.
+This proves execution, not visual improvement. No P1 merge has been made.
+
+Same-build static A/B started at c428cde with diagnostics off. The first off
+measurement is GI 144.405 per mille / mean 0.001571 PQ, still outside the gate;
+all RT 210.329 / 0.002801 PQ. Its queue status is INVALID because the expectation
+incorrectly searched for QA stdout in the kept game log, although all 28 traces
+and result.json completed. Do not use it as the deciding queue pass. The repeat
+checks the actual game-log completion marker and is queued/running as
+p1-current-radiance-ab-off-S3-r2; an on run and moving captures still follow.
 
 Owned-motion tests reject offscreen and nonfinite coordinates on the GPU.
 In four NaN/Inf captures, temporal output equals the fresh sample exactly and
@@ -100,6 +124,7 @@ or use all-RT-off as a claimed fix. No new user-facing candidate key is ready ye
 - EN2 pure S8 windows join 300/300 without waits but still fail blue/metalness and luminance bias. D-EM family 304be1c7 fails AF at ratio 0.361 / 0.362 (band 0.842–1.187); GF passes at 0.999. Both remain excluded.
 - P3 offline preparation: codex/p3-box at 907857c is pushed, using the managed p2-pending checkout. The useful shader foundation is ported onto current main; host pipeline selection, native descriptor replay, cleanup, default-off ls_box key and projector validation logging are implemented. The stats allocation now covers added counters 136–150; the inherited 136-counter allocation was insufficient. Full build, 3/3 CTests, default agreement and 34/34 shader files pass. No runtime or merge yet; S6 / S7 / S5 recompute and shadow checks follow P1's runnable candidate. See that branch's docs/P3_BOX_LIGHTS.md.
 - P4: implement and validate the conservative OMM foliage design.
+- P4 design review found a correctness gap before implementation: the old mip-0/1 hard-cut bake can mark constant alpha 0.75 opaque, while alpha_eval at LOD 2 uses a stochastic threshold and accepts only about 75% of rays. This is bias, not equivalent noise. Known micromap states must respect all supported runtime thresholds/mips or remain unknown; the ignored P3 build/P4-alpha-review.md records the counterexamples and endpoint issue. No OMM source was changed.
 - P5: SHaRC v2 after EN2, then the light tree and EN2 consumers.
 - P6: at least a water design covering the docks gap.
 
