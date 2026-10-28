@@ -32,9 +32,12 @@ their quality gates pass.
 
 Moving-camera control: synchronized jobs 229/230 completed validly in 82/84 s
 with zero driver events or dumps, but both stayed static (albedo shifts under
-0.1 preview pixel). No pan improvement is established. P1 c0627cb addresses
-SDL's internal keyboard-focus loss in background mode; all 10 CTests pass.
-Off repeat 231 is running; its on partner must use the identical DLL pair.
+0.1 preview pixel). Jobs 231–235 also stayed static, all valid with zero events
+or dumps. Delivered D events have window ID 1 and no Alt/Ctrl/Shift modifier.
+The SDL mouse-focus experiment was reverted after no effect. Q rotation and
+posted activation were also insufficient. P1 87a034f tests an SDL application
+FOCUS_GAINED before the first movement key; all 10 CTests pass. Job 236 is
+running. No pan improvement is established; the on partner needs identical DLLs.
 The next GI experiment remains default-off previous-depth AND normal rejection
 at the reprojected history pixel, after a useful moving A/B.
 

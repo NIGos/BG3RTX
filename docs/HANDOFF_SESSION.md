@@ -83,10 +83,12 @@ unmatched, so quality comparison is inconclusive. a8c5db5 starts -Move only afte
 the baseline trace; 32 policy / six capture tests pass, renderer DLLs unchanged.
 Synchronized jobs 229/230 both completed validly (82/84 s), zero events/dumps,
 but albedo shifts remain below 0.1 preview pixel: both cameras stayed static.
-They cannot decide pan quality. P1 c0627cb keeps SDL's own foreground check
-consistent with the background facade and logs delivered D events. Build and
-all 10 CTests pass. Off repeat 231 started 19:03:12 UTC (runner 49524); check
-actual process/result state before launching its same-build on partner.
+They cannot decide pan quality. Jobs 231–235 also stayed static, all queue-valid
+with zero events/dumps. SDL receives D with window ID 1 and no Alt/Ctrl/Shift;
+its mouse-focus facade had no effect and was reverted. Q rotation and posted
+window activation also stayed static. P1 87a034f adds one SDL FOCUS_GAINED before
+the first QA movement key (preserving that key); 10 CTests pass. Job 236 off
+started 19:19:05 UTC, runner 43188. Inspect actual state before the on partner.
 After moving A/B, test default-off GI disocclusion rejection from previous depth
 AND normal mismatch at the reprojected pixel, before further transport work.
 Keep this checkout's source and binaries frozen while its queued job is active.
