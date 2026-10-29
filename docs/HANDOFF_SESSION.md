@@ -1,130 +1,113 @@
-# Session handoff — P1 bounded turn stopped at failed gate, 2026-10-29
+# Session handoff — P1 rotation gate prepared, 2026-10-29
 
-The user explicitly resumed P1 for a bounded origin-rebasing fix and ONE
-presented pan A/B. Stop at a clear gate result or approximately two hours.
-No Ponytail ever. Read the top of PROGRESS_CODEX.md for the current outcome.
+Read AGENTS.md, then the top of PROGRESS_CODEX.md. No Ponytail. No subagents.
+Latest user instruction: ROTATION is the main gate. Foreground real-present
+jobs require captures/queue/USER_AWAY. It is absent at preparation time.
+USER_PLAYING or an existing user game blocks execution. Never create USER_AWAY.
+The older permission to test while the user works no longer applies.
 
-Bounded result: implementation 314840d, ONE foreground presented FG-off job
-p1-origin-rebase-ab. The game exited after 242 seconds before slow/fast phases.
-Automatic gate FAIL / incomplete; no moving key-on evidence, no merge. Static
-control drifted with the cursor near the window edge. Later off 99.164-99.177%,
-on 99.157-99.177%, active RT / zero missing in interior windows. Median cadence
-17.60 / 17.50 fps. RT-query on cost 15.040 ms, off 15.592 ms confounded by drift.
-Exit cause unknown; no NVIDIA/Aftermath/Application fault found. Cleanup finished;
-no game, runner or queued work remains. Display settings restored. Do not repeat
-the run in this bounded turn. Evidence: docs/evidence/p1-origin-rebase-314840d.json.
-Next hypothesis, not established: native instance rows may use another G-buffer
-epoch than the GPU conversion camera. Compare native GPU rows and TLAS rows with
-the same draw/command identity after fixing static control and premature exit.
-
-Current implementation adds default-off rt_scene_rebase, all four rt_common
-query entry points, scene-specific GPU camera snapshots in the stamped set,
-and cached normal/rebase pipeline variants. Ordinary 21 SPIR-V binaries are
-byte-identical; 19 variants validate. Paired ABI remains 16. Prepared fixtures:
-tests/fixtures/p1_rebase_job.json and p1_rebase_plan.json. Runtime gate incomplete.
-scripts/qa/rebase_gate.py reads retained runner phase clocks and primary/RT/fps
-windows. Missing RT cannot pass. Do not launch a second experiment after a
-clear failure; state the next evidence-based hypothesis. No merge.
-
-## Checkout
+## Checkout and current state
 
 Use C:/Users/quali/Documents/Code Projects/BG3RTX explicitly.
-Branch codex/p1-pan-flashes; implementation commit f6b7ad9, pushed.
-Main remains 58b06b4. Experimental changes have NOT been merged.
-Host and core are paired ABI 16. Five CTests pass.
-Read AGENTS.md and the top of docs/PROGRESS_CODEX.md before resuming.
+Branch codex/p1-pan-flashes; main remains 58b06b4. No experimental merge.
+314840d implements default-off rt_scene_rebase. 5c0057a records its incomplete
+pan gate. The following rotation preparation is kept on this branch only.
+Host/core remain paired ABI 16; rebuild both for the FG-independent crash logger.
+Six CTests pass. Ordinary 21 shader binaries remain byte-identical to baseline;
+20 rebase variants validate. Diagnostic keys default off.
 
-## Latest user steering: the actual P1 gate
+No live game was launched during rotation preparation. Two queue jobs are
+prepared: p1-rotation-preflight, then p1-rotation-origin-ab. They must stay
+pending until USER_AWAY exists. Start only through scripts/test-queue.ps1.
+No display settings were changed during preparation.
 
-Continue the thread Risolvi i flash d’ombra durante il pan
-(01a186cc-2243-7521-a2f5-19ba41b4b6c7).
-The user explicitly says STOP polishing the burst tool. Existing primary-ray
-check evidence is the accepted positive control: real presentation, FG off,
-about 21 fps; static 99.53-99.57%, slow pan 89.25%, fast pan 31.40%
-(in front 36.1%, behind 27.9%). It shows RT/G-buffer displacement during pan.
-Fix the camera/TLAS frame alignment behind a default-off key. A/B within ONE
-presented moving run. Gate: moving primary-ray match reaches the static level,
-approximately 99.5%, with RT active. Missing RT is NEVER a passing result.
-Burst images are optional illustration, not a gate. Ask for in-game confirmation
-only after the automatic primary-match gate passes.
+## Next: qualify the job, then ONE rotation A/B
 
-## What was tried, and what is NOT fixed
+Both fixtures use QuickSave_3784, visible foreground real presentation, FG off,
+Ultra, no frame cap, and normal rendered colour. Do not change source, binaries
+or HEAD during a live job. Every job has patterns, expect and runner expectations.
 
-rt_scene_camera_match defaults to 0. The existing scene selector normally hands
-out the latest global TLAS/set pair. Experiments tried selecting another scene:
+1. tests/fixtures/p1_rotation_preflight_job.json: four static 90-second windows,
+   production / primary+epoch / primary+epoch+rebase / production. Timeout 700 s.
+   Must finish, avoid exceptions, keep a genuinely static GPU pose, active RT
+   and at least 18 fps. Retains process exit status and arms crash_dump=1.
+   Reports diagnostic overhead and rebase cost within the same static run.
+2. tests/fixtures/p1_rotation_job.json: sixteen 90-second windows, timeout 1800 s.
+   Static off/on, rotation 60/120/240 px/s in both directions with rebase off/on
+   at each speed/direction, then static off/on again. This job requires a valid,
+   successful preflight from the SAME build. A failed prerequisite blocks it.
 
-- 0edf4ed: native UBO buffer/offset matching. All 1,800 queries redirected but
-  the old present-age guard rejected the selected scene; RT was disabled.
-- 0dff159: permit exact camera selection while the GPU slot remains live,
-  independent of present age. Address matching still chose an old upload-ring
-  epoch: built 2446, present 2449. Cancelled INVALID, not a quality improvement.
-- f6b7ad9: match actual absolute origin and view rotation, ignoring projection
-  jitter and unused metadata. Static off/on stays around 99.55%, with RT active.
-  During slow motion there is NO exact matching scene. Example lighting origin
-  (-342.220398, 17.340019, -155.492493), latest source snapshot
-  (-342.220520, 17.340019, -155.463211). Key-on accumulates 962 unmatched frames
-  and disables RT. This hypothesis is rejected as a fix; cancelled INVALID.
+Rotation uses the existing window-targeted PostMessage input path, middle mouse
+plus horizontal movement. Native inputconfig confirms mouse:middle is the
+camera rotation toggle. Real-time bounded drags have released-button reset
+gaps. Pointer is centred once in the owned foreground game while USER_AWAY exists.
+Delivery is NOT runtime-verified yet: the gate requires actual GPU camera
+rotation, opposite signed yaw and increasing measured speeds, not just input logs.
 
-Source camera poses are CPU snapshots read from the capture's native UBO at
-rt_after_capture. Lighting pose is read from its native compute UBO in the
-callback. Native static instance rows are read from each recorded draw's mapped
-instance stream at bvh_on_submit. Current data does not yet prove the CPU pose
-is exactly the coordinate origin used by every GPU geometry path.
+Gate: primary match with rebase on while rotating reaches the measured static
+level, approximately 99.2%. The threshold comes from static repeat variability.
+Key-off must reproduce mismatch. Missing RT, absent GPU pose, low cadence,
+ignored rotation or an incomplete plan NEVER pass. Stop after a clear gate result.
+Do not add another selector. Merge only through scripts/merge-green.ps1 if the
+quality gate passes; then document key, save and what the user should inspect.
 
-NEXT IMPLEMENTATION IDEA, NOT IMPLEMENTED: consistently rebase ray origins
-between lighting space and the actual TLAS camera-relative space, using the
-measured scene origin, instead of searching for a nonexistent identical pose.
-The translation sign is lighting_absolute_origin minus scene_absolute_origin.
-Confirm the source origin used by native instance matrices and dynamic XFB
-conversion; CPU snapshots and GPU UBO observations need not be interchangeable.
-Apply consistently to all four query entry points in rt_common.hlsli (sun,
-local lights, GI, AO/reflections), preserving lighting-space returned positions.
-Keep off-by-default shader variants byte-identical to the existing ordinary
-SPIR-V. No compensation shader or new rebase key has been written yet.
+Reports, written only by actual queued runs:
 
-## Existing measurement and saved evidence
+- captures/p1-pan-flashes/rotation-preflight-result.json
+- captures/p1-pan-flashes/rotation-gate-result.json
+- captures/queue/logs/: full game log, runner transcript and status JSON
+- captures/crash/: first-chance fatal minidump when enabled and captured
 
-rt_primary_check=1 reuses gi/pan_primary.hlsl for GPU primary counters every
-frame, WITHOUT burst readbacks or a debug-colour overlay. Default 0.
-The existing tests/fixtures/p1_camera_match_job.json and _plan.json alternate
-static, slow and fast off/on phases in ONE run, real presentation, FG off,
-QuickSave_3784. It still tests the failed selector; update it for the next fix.
-Do not use rt_debug=3 for normal-colour quality runs: it overwrites the image.
+## Exit at 242 seconds: unresolved cause, observation gap repaired
 
-Full preserved logs in captures/p1-pan-flashes/:
-- 08a0256-positive-full.log: accepted primary positive-control evidence.
-- 0edf4ed-camera-match-full.log: first selector, missing RT.
-- 0dff159-camera-epoch-full.log: upload-ring address aliasing.
-- f6b7ad9-camera-pose-full.log: exact pose has no moving match, missing RT.
-Queue kept logs are also under captures/queue/logs/.
-The 21 ordinary shader baseline binaries were compiled before any rebase edit:
-captures/p1-pan-flashes/rebase-spv-before/. No HLSL source has changed yet.
+Old p1-origin-rebase-ab had timeout 750 s; it reported game exited at 242 s
+before runner cleanup. It was not that deadline or the normal CloseMainWindow
+cleanup initiating the exit. No matching WER/Application/NVIDIA/Aftermath dump
+was found. An external close or engine/process termination remains possible.
+The exception logger was installed only after Streamline loading, so FG off
+skipped it. It now installs independently of FG, with default-off crash_dump.
+The runner logs signed/hex exit code, remaining deadline, phase, and its own
+close requests. Unexpected exit now invalidates queue results. No claim that
+the original crash/exit itself has been fixed; preflight must establish stability.
 
-Burst work is stopped. Earlier capture fixes are committed but final images
-remain incomplete at normal rate. Do not spend more time repairing this before
-the renderer fix. Old burst reports marked INVALID are not absence-of-flash proof.
+## Current hypothesis and measurements
 
-## Execution rules and permissions
+All four rt_common query entries translate origins by C_lighting - C_scene.
+Directions/t stay unchanged; returned transforms translate back. Native pool
+instance rows and dynamic XFB use camera-relative world axes. The stamped scene
+snapshot reads the actual conversion camera UBO on GPU. This establishes the
+coordinate convention, not the epoch of every captured native instance row.
 
-Only scripts/test-queue.ps1 launches games; every job needs patterns/expect.
-Check USER_PLAYING, actual bg3/bg3_dx11 processes, runners and pending/running
-before any launch. Never kill a user game. Cancelled probes above were verified
-owned test processes; their runners completed cleanup. Display helpers restore
-the user's settings. Latest standing permission allows visible second-plane
-real presentation while the user uses the PC, without stealing focus or
-requiring USER_AWAY. The latest request also refers to a foreground pan job.
-Never headless for this gate. No source/binary/HEAD changes during a live job.
-Never hold captures/queue/results.md open; use results.jsonl and kept logs.
-Never touch saves, snapshot tags, read-only backups D:/BG3_Tools or shared
-junction targets. Do not archive a checkout with external/data junctions.
-No subagents without new user authorization. One reset was already consumed;
-no new credit or reset authorization is assumed.
+rt_primary_epoch=1 adds GPU source/lighting pose separation, actual lighting
+camera motion, and nearest-hit pool versus dynamic-soup primary cohorts.
+It reuses the primary ray; misses stay in global primary match. Snapshot data
+is collected with rebase off as well as on. Compare cohorts and pose separation
+in the ONE rotation run. These counters alone cannot prove native GPU instance
+rows came from an older frame; persistent pool-specific error after rebasing
+would motivate same-draw GPU row/TLAS-row evidence next, not another selector.
 
-## Preserved broader work
+Old incomplete job: late static off 99.164-99.177%, on 99.157-99.177%, RT active
+and no missing scenes in interior windows; median 17.60 / 17.50 fps. Initial
+cursor edge drift invalidated calibration. No moving rebase-on result exists.
+Evidence: docs/evidence/p1-origin-rebase-314840d.json. Full log:
+captures/queue/logs/p1-origin-rebase-ab.1.123412.log and .runner.txt.
 
-The P1-P6 overall goal remains unfinished and paused. Older GI experiment
-(en2-selfcheck, dbd320c, ABI 14) failed its energy/quality gate; do not substitute
-its slow duplicate pipeline for this pan test. P2 emissive 7a87ba7, P3 box,
-P4 OMM and P6 water work remain separate; see historical progress. FG toggle
-and base performance follow the explicit current P1. Merge only through
-scripts/merge-green.ps1 after reading the deciding numbers.
+RT interval off/on medians 15.592 / 15.040 ms are not isolated sun costs. The
+interval includes origin, primary diagnostics, GI/temporal/AO and sun resolve;
+local lights/reflections are separate. Historical 4.269 ms was a different
+WLD_Main_A/configuration, RR GI 1 versus 2 rays, rebuild 60 versus 600, and even
+44 missing scenes in that sample. This does not quantitatively explain the
+remaining difference. Preflight measures production versus diagnostics directly.
+
+## Preserved evidence and rules
+
+Accepted older pan positive control: about 21 fps, static 99.53-99.57%, slow
+89.25%, fast 31.40%. captures/p1-pan-flashes/08a0256-positive-full.log.
+Rejected selectors: 0edf4ed address match, 0dff159 ring epoch alias, f6b7ad9
+exact pose selection disables RT during movement. rt_scene_camera_match stays 0.
+Ordinary shader baseline: captures/p1-pan-flashes/rebase-spv-before/.
+Rotation preparation evidence: docs/evidence/p1-rotation-preparation.json.
+Do not resume burst tooling, FG toggles or base-rate work before this P1 gate.
+Never touch saves or backups, rewrite history, move snapshot tags, or clean a
+checkout with junctions. Never hold captures/queue/results.md open. Display
+settings must restore after queued runs. Broader P1-P6 work remains unfinished.

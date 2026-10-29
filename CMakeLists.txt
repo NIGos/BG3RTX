@@ -154,6 +154,8 @@ add_executable(pan_epoch_test tests/pan_epoch_test.cpp)
 add_test(NAME pan_epoch_test COMMAND pan_epoch_test)
 add_executable(camera_epoch_test tests/camera_epoch_test.cpp)
 add_test(NAME camera_epoch_test COMMAND camera_epoch_test)
+add_executable(camera_motion_test tests/camera_motion_test.cpp)
+add_test(NAME camera_motion_test COMMAND camera_motion_test)
 
 # Hot-reloadable core: rebuild while the game runs.
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp)

@@ -26,6 +26,7 @@
 #include "host.h"
 
 #include <psapi.h>
+#include <dbghelp.h>
 
 #include <cmath>
 #include <cstring>
@@ -944,6 +945,9 @@ std::string where(void* addr) {
 }
 
 std::atomic<int> g_veh_logged{0};
+using WriteMiniDump = decltype(&MiniDumpWriteDump);
+WriteMiniDump g_write_minidump = nullptr;
+std::string g_crash_dir;
 
 LONG CALLBACK veh(EXCEPTION_POINTERS* ep) {
   DWORD code = ep->ExceptionRecord->ExceptionCode;
@@ -951,7 +955,9 @@ LONG CALLBACK veh(EXCEPTION_POINTERS* ep) {
                code == EXCEPTION_STACK_OVERFLOW || code == EXCEPTION_INT_DIVIDE_BY_ZERO ||
                code == EXCEPTION_PRIV_INSTRUCTION || code == 0xC0000409 /* fast fail / GS */ ||
                code == 0xC0000374 /* heap corruption */ || code == 0x40000015 /* abort */;
-  if (!fatal || g_veh_logged++ >= cfg_int("sl_veh_max", 8)) return EXCEPTION_CONTINUE_SEARCH;
+  if (!fatal) return EXCEPTION_CONTINUE_SEARCH;
+  const int ordinal = g_veh_logged.fetch_add(1);
+  if (ordinal >= cfg_int("sl_veh_max", 8)) return EXCEPTION_CONTINUE_SEARCH;
   void* frames[24];
   USHORT n = CaptureStackBackTrace(0, 24, frames, nullptr);
   std::string st;
@@ -961,7 +967,37 @@ LONG CALLBACK veh(EXCEPTION_POINTERS* ep) {
   log("[crash] exception 0x%08lx at %s (thread %lu, info %llu %p) stack:%s", code,
       where(ep->ExceptionRecord->ExceptionAddress).c_str(), GetCurrentThreadId(), (unsigned long long)info0,
       (void*)info1, st.c_str());
+  if (g_write_minidump && ordinal == 0) {
+    const std::string path = g_crash_dir + "\\bg3-" + std::to_string(GetCurrentProcessId()) + "-" +
+                             std::to_string(GetTickCount64()) + ".dmp";
+    HANDLE file = CreateFileA(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file != INVALID_HANDLE_VALUE) {
+      MINIDUMP_EXCEPTION_INFORMATION exception{GetCurrentThreadId(), ep, FALSE};
+      const BOOL saved = g_write_minidump(GetCurrentProcess(), GetCurrentProcessId(), file, MiniDumpNormal,
+                                        &exception, nullptr, nullptr);
+      const DWORD error = saved ? 0 : GetLastError();
+      CloseHandle(file);
+      log("[crash] first-chance fatal minidump %s: %s (error %lu); a dump alone does not prove an unhandled crash",
+          saved ? "saved" : "FAILED", path.c_str(), error);
+    }
+  }
   return EXCEPTION_CONTINUE_SEARCH;
+}
+
+void install_exception_diagnostics() {
+  static std::once_flag once;
+  std::call_once(once, [] {
+    if (!cfg_int("sl_veh", 1)) return;
+    if (cfg_int("crash_dump", 0)) {
+      g_crash_dir = root_dir() + "\\captures\\crash";
+      make_dirs(g_crash_dir);
+      // Load outside the exception path; do not acquire the loader lock there.
+      HMODULE dbghelp = LoadLibraryW(L"dbghelp.dll");
+      if (dbghelp) g_write_minidump = reinterpret_cast<WriteMiniDump>(GetProcAddress(dbghelp, "MiniDumpWriteDump"));
+    }
+    AddVectoredExceptionHandler(1, veh);
+    log("[crash] exception diagnostics active independently of FG; minidump %s", g_write_minidump ? "armed" : "off");
+  });
 }
 }  // namespace
 
@@ -980,6 +1016,7 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
   // BG3 may create (and destroy) a probe instance of its own first: Streamline
   // is initialised once, and binds to the last instance created before the device.
   if (g_in_sl_init || g_dd) return;
+  install_exception_diagnostics();
   if (!g_sl_init) {
   int fg = cfg_int("fg", 2);
   if (fg < 2 && !cfg_int("sl", 0)) {
@@ -995,7 +1032,6 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
     return;
   }
   patch_modules();
-  if (cfg_int("sl_veh", 1)) AddVectoredExceptionHandler(1, veh);
   if (cfg_int("fg_watch_game_ngx", 1)) patch_iat(GetModuleHandleA(nullptr), "bg3.exe", reinterpret_cast<void*>(&hk_GetProcAddress_game));
 #define SLF(n) g_sl.n = reinterpret_cast<PFun_sl##n*>(GetProcAddress(g_interposer, "sl" #n))
   SLF(Init);

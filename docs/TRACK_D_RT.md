@@ -1,5 +1,39 @@
 # Track D: hardware ray tracing
 
+## P1 rotation qualification and epoch diagnostics — 2026-10-29, pending
+
+Rotation is now the main primary-match gate, approximately static 99.2% with
+active RT. Default-off `rt_scene_rebase=0` remains unchanged. New default-off
+`rt_primary_epoch=0` selects a diagnostic primary variant: it uses the same
+single closest ray, reports nearest-hit pool versus dynamic-soup cohorts, and
+keeps misses in the global denominator. Ordinary shaders remain byte-identical.
+GPU scene snapshot is enabled for this diagnostic even with rebasing off.
+
+rtStats 136..143 hold cohort counts; 144..150 store source/lighting translation,
+rotation separation and lighting forward; 151 validates the stamped snapshot,
+152 marks diagnostic presence, and 155..157 hold native absolute camera origin.
+CPU aggregation measures actual angular speed/signed yaw and static translation
+with FP32 precision bounds. It does not infer motion from requested inputs.
+These source-pose observations do not establish the frame of every native
+instance matrix. If pool mismatch persists after origin correction, compare
+actual same-draw GPU native rows to TLAS rows before asserting an older epoch.
+
+Prepared foreground real-present FG-off QuickSave_3784 jobs: four static
+90-second qualification windows, then sixteen 90-second static/rotation
+off/on windows at 60/120/240 px/s, both directions. Strict USER_AWAY required.
+No runtime result yet. Failed qualification blocks the A/B on the same build.
+Expected reports: captures/p1-pan-flashes/rotation-{preflight,gate}-result.json.
+Missing RT, ignored input, insufficient cadence or early exit invalidate it.
+
+Old exit at 242 s was not the 750 s deadline or cleanup. Cause remains unknown.
+FG off skipped VEH installation: fixed, with optional crash_dump and retained
+process status. No crash fix claim before runtime qualification.
+Old RT interval 15.592/15.040 ms off/on includes primary/GI/AO/sun; historical
+4.269 ms had different scene/settings and missing RT. Residual remains flagged;
+preflight isolates diagnostic overhead and static rebase delta in one run.
+Six CTests, 14 Python gates, 18 input/policy checks, 21 ordinary shader identity
+checks and 20 variant validations pass. No promotion or merge.
+
 ## P1 lighting-to-scene translation — 2026-10-29, gate incomplete
 
 314840d: one real-present foreground FG-off job exited before slow/fast windows.

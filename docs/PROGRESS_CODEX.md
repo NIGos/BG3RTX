@@ -1,5 +1,46 @@
 # BG3RTX progress
 
+## P1 rotation gate prepared; waiting for USER_AWAY — 2026-10-29
+
+No live game jobs ran in this continuation. `USER_AWAY` is absent. Two jobs are
+prepared for the queue: `p1-rotation-preflight`, then `p1-rotation-origin-ab`.
+The latter requires a successful preflight from the same build. Foreground
+authorization fields cannot bypass the marker; `USER_PLAYING` blocks launch.
+Rotation result: NOT MEASURED. No merge, promotion or in-game check request.
+
+The main A/B uses QuickSave_3784, real presentation, FG off, static windows and
+mouse rotation at 60 / 120 / 240 px/s in both directions, key off/on in ONE run.
+The gate requires actual GPU rotation, opposite yaw directions, increasing
+measured speeds, active RT, at least 18 fps, and key-on primary match near the
+static level (about 99.2%). Key-off must reproduce mismatch. Missing RT fails.
+`rt_primary_epoch=0` adds optional GPU camera/source-pose and pool/soup hit
+cohorts without another primary ray. Native instance-row epoch remains unproven.
+
+The old exit at 242 s was before its 750 s deadline and before runner cleanup;
+no matching crash dump or fault event was found. Cause remains UNKNOWN. Fixed
+the observation gap: FG off previously skipped exception logger installation.
+New default-off `crash_dump=0`, retained exit code/status, completion checks,
+and post-analysis gates prevent interrupted jobs being called valid. The
+360-second static preflight must establish stability before the 1,440-second A/B.
+
+Previous static match off/on: 99.164-99.177% / 99.157-99.177%; cadence
+17.60 / 17.50 fps. Previous moving rebase-on result is absent. RT interval cost
+15.592 / 15.040 ms includes primary diagnostics plus GI/AO/sun work. Historical
+4.269 ms used WLD_Main_A, RR GI 1 ray and rebuild 60 (new run: 2 rays, rebuild
+600); that sample also had 44 missing scenes. The residual cost increase is
+UNEXPLAINED, not attributed to rebasing. Preflight compares diagnostic off/on
+and rebasing within the same static run.
+
+Validation: six CTests, 14 Python gate tests, 18 input/permission checks, all
+55 shaders compile, 21 ordinary SPIR-V binaries byte-identical, 20 rebase
+variants validate. Offline queue: 13 jobs / 14 runs, including early exit,
+failed analysis and forbidden-fault rejection; QA detectors and five merge-gate
+scenarios pass. `rt_scene_rebase=0` stays default-off on the branch; ABI 16.
+Evidence: `docs/evidence/p1-rotation-preparation.json`. Runtime reports will be
+`captures/p1-pan-flashes/rotation-preflight-result.json` and
+`captures/p1-pan-flashes/rotation-gate-result.json`. No new contact sheets:
+the accepted primary-match gate takes priority over burst tooling.
+
 ## P1 rebasing gate FAIL / incomplete — 2026-10-29 12:38 Europe/Rome
 
 Implementation 314840d is kept on the branch, default-off `rt_scene_rebase=0`.

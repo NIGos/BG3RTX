@@ -46,6 +46,14 @@ param([int]$IdleExitSec = 0, [switch]$DryRun, [string]$Root = "")
 $ErrorActionPreference = "Stop"
 if ($DryRun -and -not $Root) { throw "-DryRun needs -Root <scratch dir> (never the real captures)" }
 $root = if ($Root) { (Resolve-Path $Root).Path } else { Split-Path $PSScriptRoot -Parent }
+. (Join-Path $PSScriptRoot 'queue-permission.ps1')
+if (-not $DryRun -and (Test-Path -LiteralPath (Join-Path $root 'captures\queue\USER_PLAYING'))) {
+  throw 'USER_PLAYING exists; runner must not start'
+}
+$env:BG3RTX_QUEUE_ROOT = $root
+if (-not $DryRun -and (Get-Process bg3,bg3_dx11 -ErrorAction SilentlyContinue)) {
+  throw 'An existing BG3 process is active; do not start another runner'
+}
 $q = Join-Path $root "captures\queue"
 $pending, $running, $done = "pending", "running", "done" | ForEach-Object { Join-Path $q $_ }
 New-Item -ItemType Directory -Force $pending, $running, $done | Out-Null
@@ -74,7 +82,8 @@ $script:sess = $null
 function Stamp($tree) {
   $commit = try { (git -C $tree log --oneline -1 2>$null) -join "" } catch { "" }   # (no git: a dry run's scratch tree)
   $core = Get-Item (Join-Path $tree "bin\bg3rtx_core.dll") -ErrorAction SilentlyContinue
-  "$commit | core $(if ($core) { $core.LastWriteTime.ToString('HH:mm:ss') } else { '?' })"
+  $layer = Get-Item (Join-Path $tree "bin\VkLayer_bg3rtx.dll") -ErrorAction SilentlyContinue
+  "$commit | core $(if ($core) { $core.LastWriteTimeUtc.Ticks } else { '?' }) | layer $(if ($layer) { $layer.LastWriteTimeUtc.Ticks } else { '?' })"
 }
 
 function Get-Nv153($tree, [datetime]$since) {
@@ -87,7 +96,7 @@ function Get-Nv153($tree, [datetime]$since) {
 }
 
 function Get-Dumps($tree, [datetime]$since) {
-  @(Get-ChildItem (Join-Path $tree "captures\aftermath\*.nv-gpudmp") -ErrorAction SilentlyContinue |
+  @(Get-ChildItem -Path (Join-Path $tree "captures\aftermath\*.nv-gpudmp"), (Join-Path $tree 'captures\crash\*.dmp') -ErrorAction SilentlyContinue |
     Where-Object LastWriteTime -gt $since | ForEach-Object Name)
 }
 
@@ -188,6 +197,10 @@ function Get-LastGeneration([string]$log, [long]$from = 0) {
 # Launches auto-run.ps1 -Session for this job's tree and save; returns once the scene is
 # ready. $null: the tree's layer predates sessions (no "scene ready" marker), run it alone.
 function Start-Session($job, $tree, [int]$timeout) {
+  if (-not $DryRun) {
+    $blocked = Get-QueuePermissionBlock $job $root
+    if ($blocked) { throw $blocked }
+  }
   $caps = Join-Path $tree "captures"
   $layer = Join-Path $tree "bin\VkLayer_bg3rtx.dll"
   if (-not (Select-String -Path $layer -Pattern 'scene ready at present' -SimpleMatch -Quiet)) { return $null }
@@ -323,11 +336,12 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
     if (Test-Path (Join-Path $root 'captures\queue\USER_PLAYING')) { throw 'User is playing; no launch' }
     if (Get-Process bg3,bg3_dx11 -ErrorAction SilentlyContinue) { throw 'An existing game is active; no launch' }
     if (@($job.args) -contains '-Foreground') {
-      if (-not $job.foreground_authorized -and -not (Test-Path (Join-Path $root 'captures\queue\USER_AWAY'))) {
-        throw 'Foreground test needs USER_AWAY or explicit authorization recorded in this job'
+      if (-not (Test-Path (Join-Path $root 'captures\queue\USER_AWAY'))) {
+        throw 'Foreground test needs USER_AWAY; job authorization fields cannot bypass it'
       }
     }
   }
+  $env:BG3RTX_QUEUE_ROOT = $root
   $runner = if ($DryRun) { Join-Path $PSScriptRoot "test-queue-fake.ps1" } else { Join-Path $tree "scripts\auto-run.ps1" }
   $runArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runner,
                "-NoBuild", "-Background", "-NoAnalyze", "-Traces", $traces, "-TimeoutSec", $timeout)
@@ -352,7 +366,19 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
   # Retain phase timestamps and the actual presentation/focus mode for A/B
   # analysis. The ordinary pattern summary keeps only the last matching line.
   $out | Set-Content -LiteralPath (Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).runner.txt")
+  $runnerLog = Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).runner.txt"
   $outcome = ($out | Select-String 'Run ended|STALL' | Select-Object -First 1).Line
+  $runnerMissing = @()
+  foreach ($pattern in @($job.expect_runner | Where-Object { $_ })) {
+    if (-not ($out | Select-String -Pattern $pattern -Quiet)) { $runnerMissing += $pattern }
+  }
+  $completed = if ($job.command) { $LASTEXITCODE -eq 0 } else { $outcome -match '^Run ended: done\b' }
+  $statusFile = Join-Path $tree 'captures\run-status.json'
+  $statusCopy = $null
+  if ((Test-Path -LiteralPath $statusFile) -and (Get-Item -LiteralPath $statusFile).LastWriteTime -ge $t0) {
+    $statusCopy = Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).status.json"
+    Copy-Item -LiteralPath $statusFile -Destination $statusCopy
+  }
   $nv = Get-Nv153 $tree $t0
   $log = Get-ChildItem (Join-Path $tree "bg3rtx*.log") -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
   if ($log -and $job.patterns) {
@@ -370,7 +396,8 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
     Copy-Item $log.FullName $keptLog
   }
   @{ outcome = $outcome; nv = $nv; dumps = $dumps; keptLog = $keptLog; captures = $caps; lines = $lines
-     session = ""; generation = $null; saved = 0 }
+     session = ""; generation = $null; saved = 0; completed = $completed;
+     runner_missing = $runnerMissing; status = $statusCopy; runner_log = $runnerLog }
 }
 
 function Run-Job($file) {
@@ -409,17 +436,28 @@ function Run-Job($file) {
     $lines = @($r.lines)
     if ($job.post) {
       Push-Location $tree
-      try { $lines += @(cmd /c "$($job.post.Replace("{captures}", ($caps -join ' '))) 2>&1" | ForEach-Object { "$_" } | Select-Object -Last 6) }
+      try {
+        $postCommand = $job.post.Replace('{captures}',($caps -join ' ')).Replace('{log}',[string]$r.keptLog).Replace('{runner}',[string]$r.runner_log).Replace('{status}',[string]$r.status)
+        $lines += @(cmd /c "$postCommand 2>&1" | ForEach-Object { "$_" } | Select-Object -Last 6)
+        if ($job.post_gate -and $LASTEXITCODE -ne 0) { $r.completed=$false; $r.runner_missing+=@('post-analysis gate passed') }
+      }
       finally { Pop-Location }
     }
     # "expect": log lines that prove the run tested what it meant to (the feature switched on,
     # the asset DB loaded, the level loaded). A run missing any is INVALID, never a pass.
     $missing = @()
+    if ($r.ContainsKey('completed') -and -not $r.completed) { $missing += 'successful terminal state' }
+    if ($r.runner_missing) { $missing += @($r.runner_missing) }
     if ($job.expect -and $r.keptLog -and (Test-Path $r.keptLog)) {
       foreach ($p in @($job.expect | Where-Object { $_ })) {
         if (-not (Select-String -LiteralPath $r.keptLog -Pattern $p -Quiet)) { $missing += $p }
       }
-    } elseif ($job.expect) { $missing = @($job.expect) }
+    } elseif ($job.expect) { $missing += @($job.expect) }
+    if ($job.forbid -and $r.keptLog -and (Test-Path -LiteralPath $r.keptLog)) {
+      foreach ($pattern in @($job.forbid)) {
+        if (Select-String -LiteralPath $r.keptLog -Pattern $pattern -Quiet) { $missing += "forbidden log pattern: $pattern" }
+      }
+    }
     if ($missing) {
       $r.outcome = "INVALID (missing: $($missing -join ' | ')); $($r.outcome)"
       $lines += "INVALID: expected log lines not found: $($missing -join ' | ')"
@@ -429,7 +467,8 @@ function Run-Job($file) {
                        valid = (-not $missing)
                        outcome = $r.outcome; nv153 = $r.nv; dumps = @($r.dumps); build = $before
                        build_changed = ($before -ne $after); log = $r.keptLog; captures = $caps; lines = $lines
-                       session = $r.session; core_gen = $r.generation; saved_sec = $r.saved }
+                       session = $r.session; core_gen = $r.generation; saved_sec = $r.saved;
+                       process_status = $r.status; runner_log = $r.runner_log }
     ($rec | ConvertTo-Json -Compress -Depth 4) | Write-Record $jsonl
     $flag = if ($before -ne $after) { " BUILD CHANGED" } else { "" }
     $sessText = if ($r.session) { " session=$($r.session) gen=$($r.generation) saved~$($r.saved)s" } else { "" }
@@ -454,8 +493,15 @@ function Get-InboxDirs {
 }
 
 function Get-NextJob {
-  Get-InboxDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "*.json" -ErrorAction SilentlyContinue } |
+  $next = Get-InboxDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "*.json" -ErrorAction SilentlyContinue } |
     Sort-Object LastWriteTime | Select-Object -First 1
+  if ($next -and -not $DryRun) {
+    $job = Get-Content -LiteralPath $next.FullName -Raw | ConvertFrom-Json
+    $blocked = Get-QueuePermissionBlock $job $root
+    if (-not $blocked) { $blocked = Get-QueueDependencyBlock $job $root (Stamp (Get-JobTree $job)) }
+    if ($blocked) { Write-Host "Queued, not launched: $($next.Name): $blocked"; return $null }
+  }
+  $next
 }
 
 # A changed test-queue.ps1 replaces this runner between jobs (no restart by hand).

@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-29",
+  "branch": "codex/p1-pan-flashes",
+  "implementation_base": "314840d",
+  "main_unchanged": "58b06b4",
+  "abi": 16,
+  "runtime": {
+    "live_jobs_this_continuation": 0,
+    "user_away_at_preparation": false,
+    "rotation_gate": "NOT MEASURED",
+    "policy": "Foreground requires USER_AWAY; USER_PLAYING or existing user game blocks launch. No override.",
+    "display_changed": false
+  },
+  "old_exit": {
+    "job": "p1-origin-rebase-ab",
+    "elapsed_seconds": 242,
+    "configured_timeout_seconds": 750,
+    "cause": "UNKNOWN; game exit observed before normal cleanup, not configured deadline",
+    "fault_or_dump_found": false,
+    "diagnostic_gap": "FG off returned before exception handler installation",
+    "repaired": ["FG-independent exception handler", "optional first-chance fatal minidump", "signed and hex process exit code", "structured retained process status", "incomplete and failed-analysis queue rejection"],
+    "game_log": "captures/queue/logs/p1-origin-rebase-ab.1.123412.log",
+    "runner_log": "captures/queue/logs/p1-origin-rebase-ab.1.123412.runner.txt"
+  },
+  "previous_measurements": {
+    "static_off_primary_percent": [99.164, 99.177],
+    "static_on_primary_percent": [99.157, 99.177],
+    "static_off_on_fps": [17.60, 17.50],
+    "off_on_rt_interval_ms": [15.592, 15.040],
+    "moving_rebase_on": null,
+    "caveat": "Initial edge-pan drift and premature exit invalidate the old gate"
+  },
+  "cost": {
+    "historical_ms": 4.269,
+    "historical_log": "captures/queue/logs/p1-current-radiance-production-repeat.1.191945.log",
+    "historical_time": "19:20:51.434",
+    "historical_level": "WLD_Main_A",
+    "historical_rr_gi_rays": 1,
+    "historical_rebuild_frames": 60,
+    "historical_missing_scenes": 44,
+    "recent_rr_gi_rays": 2,
+    "recent_rebuild_frames": 600,
+    "interval_scope": "First RT pre-pass through GI trace/temporal/AO and sun resolve; includes primary diagnostics when enabled; local lights and reflections separate",
+    "conclusion": "Confounded comparison; residual cost increase unexplained. No evidence that rebasing caused it. Same-run diagnostic off/on measurement prepared."
+  },
+  "prepared_jobs": [
+    {"name": "p1-rotation-preflight", "fixture": "tests/fixtures/p1_rotation_preflight_job.json", "plan": "tests/fixtures/p1_rotation_preflight_plan.json", "phases": 4, "plan_seconds": 360, "timeout_seconds": 700},
+    {"name": "p1-rotation-origin-ab", "fixture": "tests/fixtures/p1_rotation_job.json", "plan": "tests/fixtures/p1_rotation_plan.json", "phases": 16, "plan_seconds": 1440, "timeout_seconds": 1800, "requires_same_build_success": "p1-rotation-preflight", "speeds_px_s": [60,120,240], "directions": [-1,1]}
+  ],
+  "gate": {
+    "save": "QuickSave_3784",
+    "mode": "foreground real presentation, FG off, Ultra",
+    "key": "rt_scene_rebase",
+    "default": 0,
+    "target": "Rotation key-on primary match reaches static repeat-derived floor, about 99.2%",
+    "minimum_fps": 18,
+    "requires": ["key-off mismatch reproduces", "RT active without missing scenes", "GPU scene snapshots", "actual GPU rotation", "opposite measured directions", "increasing measured speeds", "completed plan"],
+    "epoch_evidence_limit": "GPU camera separation and nearest-hit cohorts alone do not prove native GPU instance-row epoch"
+  },
+  "validation": {
+    "ctests": "6/6",
+    "python_gate_tests": "14/14",
+    "input_and_permission_checks": "18/18",
+    "all_shader_compile": "55/55",
+    "ordinary_spirv_byte_identical": "21/21",
+    "rebase_spirv_valid": "20/20",
+    "offline_queue": "13 jobs, 14 runs; early-exit, failed post gate and forbidden fault rejected",
+    "qa_detectors": "PASS",
+    "merge_gate_scenarios": "5/5"
+  },
+  "decision": "Keep default-off implementation and diagnostics on branch; no merge or promotion. Leave prepared jobs queued while USER_AWAY is absent."
+}

@@ -44,7 +44,7 @@ def main():
         with ThreadPoolExecutor(8) as pool:
             normals = list(pool.map(ordinary,sorted(args.baseline.glob('*.spv'))))
             variants = list(pool.map(variant,sorted((ROOT/'shaders/gi/rebase').glob('*.hlsl'))))
-    ok = len(normals)==21 and all(x['byte_identical'] for x in normals) and len(variants)==19 and all(x['valid'] for x in variants)
+    ok = len(normals)==21 and all(x['byte_identical'] for x in normals) and len(variants)==20 and all(x['valid'] for x in variants)
     report = {'pass':ok,'ordinary':normals,'variants':variants}
     args.out.parent.mkdir(parents=True,exist_ok=True)
     args.out.write_text(json.dumps(report,indent=2))

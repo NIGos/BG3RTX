@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "core.h"
+#include "../common/camera_motion.h"
 #include "ls_lights.h"
 #include "sharc.h"
 #include "sun_trust.h"
@@ -72,6 +73,7 @@ struct Pipe {
   uint64_t generation = 0;
   VkPipeline variants[2] = {};
   uint64_t variant_generations[2] = {};
+  std::string variant_files[2];
   bool rebased = false;
 };
 
@@ -604,7 +606,7 @@ bool ensure_ls_layout() {
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
   static const char* const rebased_files[] = {
-      "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_local.hlsl",
+      "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl", "gi/pan_local.hlsl",
       "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
       "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
       "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
@@ -616,8 +618,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const std::string selected = rebase ? std::string("gi/rebase/") + (file + 3) : file;
   const unsigned variant = rebase ? 1u : 0u;
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.rebased == rebase;
-  if (p.variants[variant] && p.variant_generations[variant] == blob.generation) {
+  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
+  if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
     p.pipeline = p.variants[variant]; p.generation = blob.generation; p.rebased = rebase;
     return true;
   }
@@ -629,7 +631,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   VkShaderModule mod = VK_NULL_HANDLE;
   if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
     host->log("gi: %s shader module creation failed; keeping the previous pipeline", file);
-    return p.pipeline && p.rebased == rebase;
+    return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
   }
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
@@ -640,11 +642,12 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
   if (pr != VK_SUCCESS) {
     host->log("gi: %s pipeline creation failed; keeping the previous one", file);
-    return p.pipeline && p.rebased == rebase;
+    return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
   }
   host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.variants[variant]);
   p.variants[variant] = np;
   p.variant_generations[variant] = blob.generation;
+  p.variant_files[variant] = selected;
   p.rebased = rebase;
   p.pipeline = np;
   p.generation = blob.generation;
@@ -772,7 +775,9 @@ constexpr uint32_t kStatsRing = 8;
 // (rt_common.hlsli kStatUnknown + g_rt_pass): other (origins, debug), sun, D-LS, D-RF, RT AO,
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
-constexpr uint32_t kStatsCounters = 136;
+// 136..143 primary pool/soup hit cohorts; 144..150 raw GPU pose floats,
+// 151 snapshot valid, 152 diagnostic present. No extra ray is dispatched.
+constexpr uint32_t kStatsCounters = 160;
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -789,6 +794,7 @@ uint64_t g_stats_sum[kStatsCounters] = {};
 float g_ls_raw[4] = {};   // set1/b0 m0.x, m0.y, m0.w, b13[0] as last written
 float g_frame_m4 = 0;     // set0/b0 _m4 (skin shaded white), raw counter 54
 uint32_t g_stats_n = 0;
+CameraMotionWindow g_epoch_motion;
 
 bool stats_init() {
   if (g_stats_buf) return true;
@@ -855,10 +861,17 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
       g_guard_frames = 0;
     }
     for (int i = 0; i < int(kStatsCounters); ++i)
-      if ((i < 27 || i > 30) && i != 70)   // (70: a raw float)
+      if ((i < 27 || i > 30) && i != 70 && (i < 144 || i > 150) && (i < 155 || i > 157))
         for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
     for (int i = 27; i <= 30; ++i) std::memcpy(&g_ls_raw[i - 27], &c[i * 64], 4);   // raw floats (latest)
     std::memcpy(&g_frame_m4, &c[70 * 64], 4);
+    if (c[152 * 64]) {
+      float pose[7];
+      float origin[3];
+      for (int i = 0; i < 7; ++i) std::memcpy(pose+i,&c[(144+i)*64],4);
+      for (int i = 0; i < 3; ++i) std::memcpy(origin+i,&c[(155+i)*64],4);
+      g_epoch_motion.add(pose,c[151*64] != 0,origin);
+    } else { g_epoch_motion.have_previous = false; g_epoch_motion.have_origin = false; }
     ++g_stats_n;
   }
   g_stats_slot = slot;
@@ -866,6 +879,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   host->vk->CmdFillBuffer(cmd, g_stats_buf, VkDeviceSize(slot) * kStatsSlot, kStatsSlot, 0);
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   if (!full) {   // only the guards are wanted: the statistics report stays off
+    g_epoch_motion.reset_window();
     g_stats_n = 0;
     std::memset(g_stats_sum, 0, sizeof g_stats_sum);
     return;
@@ -879,6 +893,20 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_stats_n, alpha_test ? "on" : "off", 100.0 * t[1] / px, 100.0 * t[2] / px, 100.0 * t[5] / px,
               100.0 * t[6] / px, 100.0 * t[7] / px, 100.0 * t[3] / px, 100.0 * t[13] / px, 100.0 * t[14] / px,
               100.0 * t[4] / px);
+  }
+  if (g_epoch_motion.frames) {
+    constexpr double to_deg = 57.29577951308232;
+    const double steps = double(g_epoch_motion.steps ? g_epoch_motion.steps : 1);
+    host->log("rt epoch (%u frames): GPU camera frames %u, scene snapshots %u; camera motion mean %.6f deg/frame, "
+              "max %.6f deg/frame, signed yaw %.6f deg/frame; scene rotation max %.6f deg, translation max %.6f m; "
+              "pool hit match %.3f%% of %llu, soup hit match %.3f%% of %llu; camera translation motion max %.6f m/frame, "
+              "precision bound %.6f m/frame; misses remain in the global primary check",
+              g_stats_n,g_epoch_motion.frames,g_epoch_motion.scene_frames,g_epoch_motion.angle_sum*to_deg/steps,
+              g_epoch_motion.angle_max*to_deg,g_epoch_motion.yaw_sum*to_deg/steps,
+              g_epoch_motion.scene_angle_max*to_deg,g_epoch_motion.translation_max,
+              t[136] ? 100.0*t[137]/double(t[136]) : 0.0,(unsigned long long)t[136],
+              t[140] ? 100.0*t[141]/double(t[140]) : 0.0,(unsigned long long)t[140],
+              g_epoch_motion.origin_motion_max,g_epoch_motion.origin_precision_bound);
   }
   if (t[8]) {
     double r = double(t[8]), h = double(t[9] ? t[9] : 1);
@@ -992,6 +1020,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   }
   std::memset(g_stats_sum, 0, sizeof g_stats_sum);
   g_stats_n = 0;
+  g_epoch_motion.reset_window();
 }
 
 // The light list for the D-LS pass (bindings 21-29).
@@ -1525,6 +1554,14 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
   }
   bool rt_started = false;
+  static int previous_primary_mode = -1;
+  const int primary_mode = host->cfg_int("rt_primary_check",0) ? (host->cfg_int("rt_primary_epoch",0) ? 2 : 1) : 0;
+  if (primary_mode != previous_primary_mode) {
+    host->log("rt cost scope: primary_check=%d epoch=%d rt_origin=%u; interval starts at first RT pre-pass and "
+              "ends after GI trace/temporal/AO and sun resolve; local-light and reflection passes are timed separately",
+              primary_mode != 0,primary_mode == 2,pc.rt_origin);
+    previous_primary_mode = primary_mode;
+  }
   auto rt_begin = [&] {
     if (!rt_started) rt_timestamp(cmd, 0);
     rt_started = true;
@@ -1544,7 +1581,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     memory_barrier(cmd, kCS, kCS);
   }
   if ((s.pan || host->cfg_int("rt_primary_check", 0)) && tlas &&
-      refresh(g_pan_primary, "gi/pan_primary.hlsl", g_rt_layout)) {
+      refresh(g_pan_primary, host->cfg_int("rt_primary_epoch",0) ? "gi/pan_primary_epoch.hlsl" : "gi/pan_primary.hlsl", g_rt_layout)) {
     dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true);
     Bg3Binding im{};
     im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;

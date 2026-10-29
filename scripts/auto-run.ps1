@@ -100,9 +100,15 @@ $ModWarnDiagTraces = 5   # "trace" steps in $mwSteps (below)
 # "powershell -File" passes "-Set a=1,b=2" as one string: split it.
 $Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $root = Split-Path $PSScriptRoot
+$markerRoot = if ($env:BG3RTX_QUEUE_ROOT) { $env:BG3RTX_QUEUE_ROOT } else { $root }
+$playingMarker = Join-Path $markerRoot 'captures\queue\USER_PLAYING'
+$awayMarker = Join-Path $markerRoot 'captures\queue\USER_AWAY'
+if (Test-Path -LiteralPath $playingMarker) { throw 'USER_PLAYING exists; no launch' }
+if ($Foreground -and -not (Test-Path -LiteralPath $awayMarker)) { throw 'Foreground requires USER_AWAY; no launch' }
 $caps = Join-Path $root "captures"
 New-Item -ItemType Directory -Force $caps | Out-Null
 . (Join-Path $PSScriptRoot "gamelock.ps1")
+. (Join-Path $PSScriptRoot 'camera-plan.ps1')
 
 if (-not $NoBuild) { & (Join-Path $PSScriptRoot "build.ps1") }
 
@@ -141,6 +147,12 @@ $lockedAt = Get-Date
 Write-Host "Run mode: $runMode$(if ($slot -ge 0) { " (slot $slot): timings are not exclusive" }) (lock at $($lockedAt.ToString("o")))"
 $game = $null
 $cleanedUp = $false
+$scriptCloseRequested = $false
+$observedExitCode = $null
+$planCompleted = $false
+$exceptionText = $null
+$runStatusPath = Join-Path $caps 'run-status.json'
+Remove-Item -LiteralPath $runStatusPath -ErrorAction SilentlyContinue
 try {
 
 Add-Type -Namespace BG3RTX -Name Win -MemberDefinition @"
@@ -151,6 +163,9 @@ Add-Type -Namespace BG3RTX -Name Win -MemberDefinition @"
 [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
 [DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, System.UIntPtr extra);
 [DllImport("user32.dll")] public static extern bool PostMessage(System.IntPtr h, uint msg, System.IntPtr w, System.IntPtr l);
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern bool ClientToScreen(System.IntPtr h, ref POINT p);
+[StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
 "@ -ErrorAction SilentlyContinue
 # With the display asleep Windows throttles presentation to a few frames per
 # second, which makes every measurement meaningless: keep it on (and wake it).
@@ -407,6 +422,9 @@ if ($Validation) {
 }
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
+$game.EnableRaisingEvents = $true
+# Keep the process handle so ExitCode survives a quick game/crash-handler exit.
+[void]$game.Handle
 @{ pid = $game.Id; start = (Get-ProcStart $game); tag = $Tag; mode = $runMode; slot = $slot;
    visible_present = [bool]$RealPresent; foreground = [bool]$Foreground } | ConvertTo-Json | Set-Content $pidFile
 if ($Background) { Set-DisplayUserGame $displayUser $game }
@@ -487,20 +505,64 @@ function Send-UiKey([int]$vk, [int]$scan) {
 $panPlan = if ($MovePlan) { @(Get-Content -LiteralPath $MovePlan -Raw | ConvertFrom-Json) } else { @() }
 if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
 $panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue
+$rotateHeld = $false; $rotateSegment = -1; $rotateX = 0; $rotateY = 0
+$planClock = [System.Diagnostics.Stopwatch]::StartNew(); $phaseStartMs = 0.0
+$pointerCentred = $false
+$nextOwnershipCheck = [datetime]::MinValue
+function Send-PlanMouse([int]$message, [int]$buttons, [int]$x, [int]$y) {
+  $h = Get-GameWindow
+  if ($h -eq [IntPtr]::Zero) { return }
+  $packed = (($y -band 0xffff) -shl 16) -bor ($x -band 0xffff)
+  [void][BG3RTX.Win]::PostMessage($h, [uint32]$message, [IntPtr]$buttons, [IntPtr]$packed)
+}
+function Release-Rotation {
+  if ($script:rotateHeld) {
+    Send-PlanMouse 0x0208 0 $script:rotateX $script:rotateY
+    $script:rotateHeld = $false
+  }
+}
 while ((Get-Date) -lt $deadline) {
-  if (Test-Path (Join-Path $root 'captures\queue\USER_PLAYING')) {
+  if (Test-Path -LiteralPath $playingMarker) {
     $result = 'user playing marker; test stopped'; break
   }
+  if ($Foreground -and -not (Test-Path -LiteralPath $awayMarker)) {
+    $result = 'USER_AWAY removed; test stopped'; break
+  }
+  if ((Get-Date) -ge $nextOwnershipCheck) {
+    $nextOwnershipCheck = (Get-Date).AddSeconds(1)
+    $otherGames = @(Get-Process bg3,bg3_dx11 -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $game.Id })
+    if ($otherGames.Count) { $result='another game appeared; owned test stopped'; break }
+  }
   if ($MovePlan) {
-    if ($panIndex -lt 0 -and (Test-Path $doneFile)) { $panIndex = 0; $panAt = Get-Date }
+    if ($panIndex -lt 0 -and (Test-Path $doneFile)) {
+      $panIndex = 0; $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
+      # A foreground test must not start with the user's pointer at a screen edge.
+      if ($Foreground -and (Test-Path -LiteralPath $awayMarker)) {
+        Focus-Game
+        $h = Get-GameWindow; $rect = New-Object BG3RTX.Win2+RECT
+        [void][BG3RTX.Win2]::GetClientRect($h, [ref]$rect)
+        $point = New-Object BG3RTX.Win+POINT
+        $point.X = [int](($rect.Right-$rect.Left)/2); $point.Y = [int](($rect.Bottom-$rect.Top)/2)
+        [void][BG3RTX.Win]::ClientToScreen($h,[ref]$point)
+        [void][BG3RTX.Win]::SetCursorPos($point.X,$point.Y)
+        $pointerCentred = $true
+        Write-Host "[motion-plan] pointer centred in owned foreground game"
+      }
+    }
     if ($panIndex -ge 0) {
       $step = $panPlan[$panIndex]
-      $elapsed = ((Get-Date) - $panAt).TotalSeconds
+      $elapsed = ($planClock.Elapsed.TotalMilliseconds-$phaseStartMs)/1000.0
       if ($elapsed -ge $step.seconds) {
         if ($moving) { Send-MoveKey $false; $moving = $false }
+        Release-Rotation
         $panIndex++
-        if ($panIndex -ge $panPlan.Count) { $result = 'done'; break }
-        $panAt = Get-Date; $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]
+        if ($panIndex -ge $panPlan.Count) {
+          $planCompleted = $true
+          Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-plan] complete phases=$($panPlan.Count)"
+          $result = 'done'; break
+        }
+        $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
+        $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1
       }
       if (-not $panCaptureSent -and $elapsed -ge $step.capture_at) {
         $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
@@ -515,16 +577,37 @@ while ((Get-Date) -lt $deadline) {
           }
         }
         $iniLines | Set-Content -LiteralPath $ini
-        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) set=$($step.set) foreground=$Foreground real_present=$RealPresent"
+        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) set=$($step.set) foreground=$Foreground real_present=$RealPresent"
         $panCaptureSent = $true
       }
-      $panInMotion = $step.repeat_ms -gt 0 -and $elapsed -ge $step.motion_start -and $elapsed -lt $step.motion_end
+      $h = Get-GameWindow; $rect = New-Object BG3RTX.Win2+RECT
+      if ($h -ne [IntPtr]::Zero) { [void][BG3RTX.Win2]::GetClientRect($h,[ref]$rect) }
+      $sample = Get-CameraPlanSample $step $elapsed ([Math]::Max(32,$rect.Right-$rect.Left)) ([Math]::Max(32,$rect.Bottom-$rect.Top))
+      $panInMotion = $sample.kind -eq 'pan' -and $sample.active
       if (-not $panInMotion -and $moving) { Send-MoveKey $false; $moving = $false }
       if ($panInMotion -and (Get-Date) -ge $panNextKey) {
         $MoveScan = [byte]$step.scan
         $moveVk = if ($MoveScan -eq 0x1e) { 0x41 } else { 0x44 }
         Send-MoveKey $true $moving; $moving = $true
         $panNextKey = (Get-Date).AddMilliseconds($step.repeat_ms)
+      }
+      if ($sample.kind -eq 'rotate' -and $sample.active) {
+        if (-not $rotateHeld -or $rotateSegment -ne $sample.segment) {
+          Release-Rotation
+          Send-PlanMouse 0x0200 0 $sample.x $sample.y
+          Send-PlanMouse 0x0207 0x10 $sample.x $sample.y
+          $rotateHeld = $true; $rotateSegment = $sample.segment
+          Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [rotation-input] phase=$panIndex segment=$rotateSegment direction=$($sample.direction) speed_px_s=$($step.pixels_per_second)"
+        }
+        if ($rotateX -ne $sample.x -or $rotateY -ne $sample.y) {
+          Send-PlanMouse 0x0200 0x10 $sample.x $sample.y
+          $rotateX = $sample.x; $rotateY = $sample.y
+        }
+      } else {
+        if ($rotateHeld -and $sample.kind -eq 'rotate') {
+          Release-Rotation
+          Send-PlanMouse 0x0200 0 $sample.x $sample.y
+        } else { Release-Rotation }
       }
     }
     Start-Sleep -Milliseconds 10
@@ -588,7 +671,13 @@ while ((Get-Date) -lt $deadline) {
     if (Test-Path $quitFile) { $result = "session closed"; break }
     if ($WhilePid -and -not (Get-Process -Id $WhilePid -ErrorAction SilentlyContinue)) { $result = "session owner exited"; break }
   } elseif (-not $MovePlan -and (Test-Path $doneFile)) { $result = "done"; break }
-  if ($game.HasExited) { $result = "game exited"; break }
+  if ($game.HasExited) {
+    $game.WaitForExit()
+    $observedExitCode = $game.ExitCode
+    $exitHex = '{0:X8}' -f ([long]$observedExitCode -band 0xffffffffL)
+    Write-Host "[exit] process=$($game.Id) code=$observedExitCode hex=0x$exitHex deadline_remaining=$([int](($deadline-(Get-Date)).TotalSeconds)) phase=$panIndex/$($panPlan.Count)"
+    $result = "game exited code=$observedExitCode hex=0x$exitHex"; break
+  }
   # Stall: the game is alive but has stopped rendering ("[watch] presents 0"
   # for 30 s). Seen in background runs, mostly with no foreground window
   # (display off or session locked). End the run early instead of waiting
@@ -613,10 +702,15 @@ while ((Get-Date) -lt $deadline) {
   }
 }
 if ($moving) { Send-MoveKey $false }
+Release-Rotation
 $end = Get-Date
 Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($runMode)"
 
+} catch {
+  $exceptionText = $_.Exception.ToString()
+  throw
 } finally {
+  if (Get-Command Release-Rotation -ErrorAction SilentlyContinue) { Release-Rotation }
   # Also on errors and Ctrl+C. A killed script skips this: its locks are released by
   # Windows, the next run of this checkout closes its game (game.pid), and the next
   # background run restores the display settings once no run of ours is alive.
@@ -624,6 +718,8 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
     # Ask nicely first so the game can save its pipeline cache; a killed game
     # recompiles ~30k pipelines on the next start.
     if ($game -and -not $game.HasExited) {
+      $scriptCloseRequested = $true
+      Write-Host "[exit] script requests CloseMainWindow: result=$result phase=$panIndex/$($panPlan.Count)"
       [void]$game.CloseMainWindow()
       if (-not $game.WaitForExit(20000)) { $game | Stop-Process -Force; $game.WaitForExit(15000) | Out-Null }
     }
@@ -642,6 +738,11 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
     Write-Host "KeepRunning: saves written during the run are not parked"
   }
   if ($Background -and $displayUser) { Exit-BackgroundDisplay $ensureHere $displayUser ([bool]$KeepRunning) }
+  @{ result=$result; game_pid=$(if($game){$game.Id}else{0}); observed_exit_code=$observedExitCode;
+     plan_completed=$planCompleted; last_phase=$panIndex; expected_phases=$panPlan.Count;
+     script_close_requested=$scriptCloseRequested; exception=$exceptionText;
+     timeout_seconds=$TimeoutSec; foreground=[bool]$Foreground; real_present=[bool]$RealPresent;
+     ended=(Get-Date).ToString('o') } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $runStatusPath
   Exit-GameLock $lock
   $checkoutMutex.ReleaseMutex()
   Write-Host "Game lock held $([int]((Get-Date) - $lockedAt).TotalSeconds)s (released at $((Get-Date).ToString("o")))"
