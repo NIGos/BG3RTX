@@ -1399,6 +1399,59 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->pool_bytes = g_pool.size;
   out->rec = rec;
   bvh_cpu_mark(-1);
+  {
+    // Static-camera scene stability (user report: small polygonal shadow patches flicker with
+    // the camera still). With the camera static the game should draw the same set every frame;
+    // count frames where the TLAS content changes anyway.
+    static uint32_t p_static = 0, p_dyn = 0; static uint64_t p_dtris = 0, p_stris = 0;
+    static uint64_t frames = 0, ch_static = 0, ch_dyn = 0, ch_dtris = 0, ch_stris = 0, newm = 0;
+    static uint32_t s_min = UINT32_MAX, s_max = 0, d_min = UINT32_MAX, d_max = 0;
+    const uint32_t ns = n_static_written, nd = n - n_static_written;
+    if (!rt_camera_moving()) {
+      ++frames;
+      ch_static += ns != p_static; ch_dyn += nd != p_dyn; ch_dtris += dyn_tris != p_dtris; ch_stris += static_tris != p_stris;
+      newm += mesh_builds.size();
+      if ((ns != p_static || nd != p_dyn || dyn_tris != p_dtris) && cfg_int("rt_stability_log", 0))
+        log("[bvh] static-camera change frame %llu: static instances %u -> %u, dynamic draws %u -> %u, dynamic triangles %llu -> %llu, "
+            "new meshes %zu, cached draws %zu",
+            (unsigned long long)now, p_static, ns, p_dyn, nd, (unsigned long long)p_dtris, (unsigned long long)dyn_tris,
+            mesh_builds.size(), cached.size());
+      s_min = (std::min)(s_min, ns); s_max = (std::max)(s_max, ns); d_min = (std::min)(d_min, nd); d_max = (std::max)(d_max, nd);
+    }
+    if (cfg_int("rt_stability_log", 0)) {
+      // Which draws appear/disappear between consecutive builds (static camera only).
+      static std::map<uint64_t, uint32_t> prev_dyn, prev_inst;
+      std::map<uint64_t, uint32_t> cur_dyn, cur_inst;
+      for (auto& [di, key] : dyn) if (key) cur_dyn[g_draws[di].dyn_key ^ (uint64_t(g_draws[di].audit) << 63)] += g_draws[di].prims;
+      for (uint32_t di : cached) cur_inst[g_draws[di].mesh_key] += g_draws[di].instances;
+      if (!rt_camera_moving() && !prev_dyn.empty()) {
+        std::string d; int shown = 0;
+        auto diff = [&](const std::map<uint64_t, uint32_t>& a, const std::map<uint64_t, uint32_t>& b, const char* what) {
+          for (auto& [k, v] : b) {
+            auto it = a.find(k);
+            const uint32_t old_v = it == a.end() ? 0 : it->second;
+            if (old_v != v && shown++ < 8) { char t[96]; snprintf(t, sizeof t, " %s %016llx %u->%u;", what, (unsigned long long)k, old_v, v); d += t; }
+          }
+          for (auto& [k, v] : a)
+            if (!b.count(k) && shown++ < 8) { char t[96]; snprintf(t, sizeof t, " %s %016llx %u->0;", what, (unsigned long long)k, v); d += t; }
+        };
+        diff(prev_dyn, cur_dyn, "dyn(prims)");
+        diff(prev_inst, cur_inst, "mesh(instances)");
+        if (!d.empty()) log("[bvh] static-camera draw diff frame %llu:%s", (unsigned long long)now, d.c_str());
+      }
+      prev_dyn.swap(cur_dyn); prev_inst.swap(cur_inst);
+    }
+    p_static = ns; p_dyn = nd; p_dtris = dyn_tris; p_stris = static_tris;
+    if (frames >= 300) {
+      log("[bvh] static-camera stability over %llu frames: static instances changed in %llu (min %u max %u), "
+          "dynamic draws changed in %llu (min %u max %u), static triangles changed in %llu, dynamic triangles changed in %llu, "
+          "new meshes %llu",
+          (unsigned long long)frames, (unsigned long long)ch_static, s_min, s_max, (unsigned long long)ch_dyn, d_min, d_max,
+          (unsigned long long)ch_stris, (unsigned long long)ch_dtris, (unsigned long long)newm);
+      frames = ch_static = ch_dyn = ch_dtris = ch_stris = newm = 0;
+      s_min = d_min = UINT32_MAX; s_max = d_max = 0;
+    }
+  }
   if (++g_phase_n >= 300) {
     if (cfg_int("cpu_timing", 0))
       log("[cpu] bvh_build phases, ms/build over %llu: decide %.3f, per-draw BLAS keys %.3f, TLAS instances %.3f, "
