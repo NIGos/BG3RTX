@@ -373,7 +373,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_scene_camera_match", "0"},
     {"rt_scene_rebase", "0"},
     {"rt_order_trace", "0"},
-    {"rt_scene_wait", "0"},
+    {"rt_scene_wait", "1"},
     {"cpu_timing", "0"},
     {"rt_scene_wait_ms", "8"},
     {"rt_primary_check", "0"},

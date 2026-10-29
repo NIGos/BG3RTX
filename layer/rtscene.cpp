@@ -1171,7 +1171,7 @@ bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64
   if (!g_rt) return false;
   std::unique_lock<std::mutex> lock(g_mu);
   *set = VK_NULL_HANDLE;
-  if (cfg_int("rt_scene_wait", 0)) {
+  if (cfg_int("rt_scene_wait", 1)) {
     static uint64_t last_frame = 0;   // the first RT query of a frame waits; later ones reuse its result
     if (last_frame != frame_index()) {
       last_frame = frame_index();
