@@ -40,7 +40,7 @@ files/all QA detectors PASS), main/QA branch pushed. No P1/P3/P4 feature merged.
 294 stable-tree smoke PASS129/61s,388 writes, matching held probes EV13.0581/k1,
 no hold refusal/usage/layout/push/write errors, all dumps finite. Other VVL
 unresolved. Raw evidence preserved main captures/qa-exposure-hold-294; fixture
-defaults to stable test tree. Temporary QA worktree archival requested.
+defaults to stable test tree. Temporary QA worktree archival confirmed.
 293 P1 legal hold executes210/142s:0 hold errors/refusals, EV13.0522, all dumps
 finite/alpha exact/static<=0.54px, SIX off controls RGB-exact. Original PRE still
 FAILS+0.595469%,95%Y CI[+2.62039e-5,+1.85806e-4]. Paired on/off-0.0694% has

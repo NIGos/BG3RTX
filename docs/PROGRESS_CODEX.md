@@ -23,8 +23,8 @@ changes. Other VVL categories unresolved; no global-clean claim. Merge gate
 passes full build/3 CTests/32 shader files/all QA detectors. Main and isolated
 codex/qa-exposure-hold9612419 pushed; no P1/P3/P4 rendering feature merged.
 Reusable smoke fixture defaults to stable test tree. Logs/VVL/captures copied
-under main captures/qa-exposure-hold-294 before requesting temporary checkout
-archival. Original/current source math remains unchanged with hold0. P1 research
+under main captures/qa-exposure-hold-294 before temporary checkout
+archival (confirmed). Original/current source math remains unchanged with hold0. P1 research
 stays off: legal held exposure still fails original PRE energy in293. Shared
 queue idle after294; next launch needs fresh user/process/queue checks.
 
