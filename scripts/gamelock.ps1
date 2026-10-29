@@ -203,7 +203,7 @@ function Repair-DisplaySettings([string]$ensure, [string]$legacyPrev) {
   }
 }
 
-function Enter-BackgroundDisplay([string]$ensure, [string]$userFile) {
+function Enter-BackgroundDisplay([string]$ensure, [string]$userFile, [switch]$Windowed) {
   Invoke-DisplayLocked {
     New-Item -ItemType Directory -Force $script:DisplayDir | Out-Null
     $live = @(Get-LiveDisplayUsers)
@@ -212,8 +212,12 @@ function Enter-BackgroundDisplay([string]$ensure, [string]$userFile) {
       py -3 -I $ensure --restore $script:DisplayPrev
       Remove-Item $script:DisplayPrev
     }
-    if (Test-Path $script:DisplayPrev) { py -3 -I $ensure --set Fullscreen=0 FakeFullscreenEnabled=1 }
-    else { py -3 -I $ensure --set Fullscreen=0 FakeFullscreenEnabled=1 --prev $script:DisplayPrev }
+    # In an unfocused real-present FG run, desktop-sized borderless can make
+    # the swapchain 3840x2160 while native UI/hudless stay 3840x1600. Windowed
+    # keeps the game's requested output extent; both settings still restore.
+    $displayArgs=@('Fullscreen=0',"FakeFullscreenEnabled=$(if($Windowed){0}else{1})")
+    if (Test-Path $script:DisplayPrev) { py -3 -I $ensure --set @displayArgs }
+    else { py -3 -I $ensure --set @displayArgs --prev $script:DisplayPrev }
     $me = Get-Process -Id $PID
     @{ script_pid = $PID; script_start = (Get-ProcStart $me); game_pid = 0; game_start = "" } | ConvertTo-Json | Set-Content $userFile
   }

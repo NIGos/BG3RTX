@@ -361,7 +361,7 @@ $displayUser = Join-Path $script:DisplayUsers "$PID.json"
 if ($Background) {
   # Borderless at the desktop resolution; the player's values come back after the
   # last background run (gamelock.ps1, Enter-/Exit-BackgroundDisplay).
-  Enter-BackgroundDisplay $ensureHere $displayUser
+  Enter-BackgroundDisplay $ensureHere $displayUser -Windowed:$UnfocusedFG
   if (-not $Foreground) { $env:BG3RTX_BACKGROUND = "1" }
 }
 

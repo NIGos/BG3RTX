@@ -1,5 +1,16 @@
 # BG3RTX progress
 
+## FG setup extent mismatch confirmed — 2026-10-29 14:56
+
+Second static attempt was stopped as a setup probe after FG never enabled.
+Trace captures/20261029-145417/frame.json proves UI compositor 046c6949 samples
+s1b1 i11700 RGB10A2 and s1b2 i11701 RGBA8 at 3840x1600, while swapchain i11/i13
+are 3840x2160. The existing FG classifier requires matching extents and misses
+UI/hudless entirely. Scene static primary was 99.55-99.57%, but SDK presented 1,
+displayed/rendered 1.00: INVALID FG-on evidence. This is not a renderer fix.
+Authorized unfocused FG runs now use reversible windowed display settings to
+keep the native output extent. Default background/foreground behavior is unchanged.
+
 ## Live setup retry — 2026-10-29 14:50
 
 First authorized static job was INVALID before its first phase: runner policy
