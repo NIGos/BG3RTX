@@ -1,0 +1,23 @@
+{
+  "name": "p3-box-ao-one-ab",
+  "tree": "../../../.codex/worktrees/p2-pending/BG3RTX",
+  "session": true,
+  "save": "Adamantine Forge",
+  "traces": 1,
+  "warmup": 10,
+  "hold": 205,
+  "timeout": 420,
+  "phases": "tests/fixtures/p3_box_validation_phases.json",
+  "set": "ls_box=0,ls_check=0,ls_shadowed=3,ls_noshadow=0,ls_giveback_cap=1,ls_debug=6,ls_stats=1,rt_stats=1,fg=0,gi=0",
+  "patterns": [
+    "ls box:",
+    "ls box stats",
+    "ls stats \\(\\d+ frames\\):",
+    "ls validation fit",
+    "ls box precise"
+  ],
+  "expect": [
+    "ls box: active",
+    "ls box precise \\(120 frames\\): px [1-9]\\d* native nonzero [1-9]\\d* recomputed nonzero [1-9]\\d* invalid 0; raw game"
+  ]
+}

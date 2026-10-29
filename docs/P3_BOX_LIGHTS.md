@@ -138,3 +138,13 @@ Next existing debug6 forces AO1 and removes the sun; it should reveal positive
 native/recomputed values, but native ambient is also present. Therefore it is
 ONLY a positive-signal/one-sided overshoot control, never total recompute parity.
 No new rendering code or counter is necessary to distinguish this hypothesis.
+
+275 AO1/debug6 positive control PASS: valid110s/48s session, no faults/dumps/
+build changes. Native and recompute inputs are positive in every120-frame
+window; invalid0. Last nativeY0.038576367, recompute0.029535810,
+absolute difference0.009043053, overshoot0.000001248, boxY0.018699073.
+This supports debug4's AO0/direct-suppression explanation and proves the fine
+counters carry real signal. Native ambient remains, so the difference is not
+pure direct-light error. No total-parity, shadow-ray or quality pass follows.
+Next short ONE-run AO1 box0/1 control measures the marginal projector term
+against its positive native+ambient envelope; no cross-run image comparison.
