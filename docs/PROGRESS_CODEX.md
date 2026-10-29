@@ -15,6 +15,19 @@
 
 ## Resumed — 2026-10-29
 
+Archive incident and recovery: the managed-worktree archival tool followed the
+qa-exposure-hold checkout's NTFS junctions for external and data/assetdb, emptying
+the shared targets. It was caught by immediate existence checks. No game was
+launched afterward. Restored all SDKs from D:/BG3_Tools/external_backup and the
+asset DB from snapshot-20261028/files/data/assetdb, reading backups only. All992
+SDK file SHA256 hashes and both DB/manifest hashes match those backups exactly;
+DB7,961,840 bytes, SHA25617af233f58e552fbe28e78738d9c3153dab954ea39cca3eece9fb4bed93e637a.
+Sources/pushed branches and user saves were outside the removed target paths.
+NEVER archive another checkout while shared dependency/data junctions remain.
+Recovery manifest is docs/evidence/qa-archive-shared-dependencies-recovery.json.
+Build/3 CTests/32 shader files rechecked after restoration. No feature promotion.
+
+
 QA exposure-hold fix MERGED7a98949 through merge-green after actual stable-tree
 294 PASS129s/61s session.388 successful writes, held EV13.0581 matches both
 exposure buffers/native lighting scale, re-exposure k1. No hold refusal/usage/

@@ -1,0 +1,39 @@
+{
+  "incident": "Archiving managed qa-exposure-hold checkout unexpectedly followed its NTFS external and data/assetdb junctions and emptied shared targets. No source/save paths were removed.",
+  "recovery": "Restored copies from pre-existing D:/BG3_Tools/external_backup and snapshot-20261028/files/data/assetdb; backup paths were only read.",
+  "sdks": [
+    {
+      "sdk": "DLSS",
+      "files": 465,
+      "all_sha256_match": true
+    },
+    {
+      "sdk": "omm-sdk-1.10.0",
+      "files": 4,
+      "all_sha256_match": true
+    },
+    {
+      "sdk": "sharc-1.8.3",
+      "files": 22,
+      "all_sha256_match": true
+    },
+    {
+      "sdk": "streamline-sdk-v2.14.16",
+      "files": 501,
+      "all_sha256_match": true
+    }
+  ],
+  "assetdb": [
+    {
+      "file": "bg3rtx_assetdb.bin",
+      "bytes": 7961840,
+      "sha256": "17af233f58e552fbe28e78738d9c3153dab954ea39cca3eece9fb4bed93e637a"
+    },
+    {
+      "file": "manifest.json",
+      "bytes": 7552,
+      "sha256": "83f3eb7c5bccd843dced36f2c18f8892f5516d557a1d5041f0b5f4e2cee4b61a"
+    }
+  ],
+  "policy": "Do not archive a managed checkout with dependency/data junctions still present. Never let a recursive cleanup traverse shared targets."
+}

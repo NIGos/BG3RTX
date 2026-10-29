@@ -15,6 +15,7 @@ The user resumed on Oct29; the overall goal remains ACTIVE.
 - Merge only through scripts/merge-green.ps1 after inspecting deciding numbers; push both branches.
 - QUALITY R0: derived gates, quality before speed on Ultra; research defaults stay off.
 - No FG/HDR-UI/swapchain work unless needed by the active phase.
+- NEVER archive a checkout with live shared-data/dependency junctions: cleanup traversed them.
 The ONE user-authorized reset was CONSUMED at weekly100% on Oct29.
 Tool outcome reset; idempotencyKey8ce84295-c9a8-4ba8-bbfb-cf1f81dd0af7.
 Reset credit balance is0. Never redeem another without fresh user authorization.
@@ -40,7 +41,7 @@ files/all QA detectors PASS), main/QA branch pushed. No P1/P3/P4 feature merged.
 294 stable-tree smoke PASS129/61s,388 writes, matching held probes EV13.0581/k1,
 no hold refusal/usage/layout/push/write errors, all dumps finite. Other VVL
 unresolved. Raw evidence preserved main captures/qa-exposure-hold-294; fixture
-defaults to stable test tree. Temporary QA worktree archival confirmed.
+defaults to stable test tree. QA checkout archived; its junction cleanup incident was recovered from exact backups.
 293 P1 legal hold executes210/142s:0 hold errors/refusals, EV13.0522, all dumps
 finite/alpha exact/static<=0.54px, SIX off controls RGB-exact. Original PRE still
 FAILS+0.595469%,95%Y CI[+2.62039e-5,+1.85806e-4]. Paired on/off-0.0694% has
@@ -49,6 +50,8 @@ FAILS+0.595469%,95%Y CI[+2.62039e-5,+1.85806e-4]. Paired on/off-0.0694% has
 P1 source-epoch/conditional mismatch remains; no new camera/exposure transport
 justified. P3 291:0.0999107% format-incompatible over2.950B receivers, sparse rim/
 detail points; cause/native accuracy/cookie/unknown-pair/moving quality OPEN.
+Archive recovery: external_backup992 SDK files and snapshot DB restored, SHA256
+all match backups; backups read-only. See recovery evidence. No new game needed.
 One reset consumed at weekly100%; fresh quota0% confirmed, credits0.
 
 ## P1 - pan instability remains OPEN
