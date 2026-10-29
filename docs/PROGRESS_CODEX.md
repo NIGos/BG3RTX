@@ -2,7 +2,7 @@
 
 ## P1 same-frame scene + P3 CPU fix (supervisor) — 2026-10-29 17:25
 
-Ready for the user's in-game check (FG on, QuickSave_3784 or any save): set rt_scene_wait=1,
+rt_scene_wait=1 is now the default (user decision 17:35). In-game check: FG on, any save,
 rotate the camera with the mouse or Q/E. Shadows should stay attached and walls should not flash.
 
 P1 cause: BG3 records the lighting command buffer (our RT passes) on a worker thread before
