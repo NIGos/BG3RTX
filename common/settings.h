@@ -231,7 +231,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 197 keys of bg3rtx.ini, in file order.
+// 198 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -303,9 +303,9 @@ inline constexpr KV kDefaults[] = {
     {"rt_cascade_casters", "0"},
     {"rt_cascade_index", "2"},
     {"rt_cascade_mb", "160"},
-    {"rt_cascade_roofs_trust", "1"},
+    {"rt_cascade_roofs_trust", "0"},
     {"rt_cascade_origin", "1"},
-    {"rt_cascade_alpha", "1"},
+    {"rt_cascade_alpha", "0"},
     {"rt_cascade_alpha_dedupe", "1"},
     {"rt_ao", "0"},
     {"rt_ao_rays", "2"},
@@ -335,6 +335,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_em_backdrop", "0"},
     {"rt_em_decal", "1"},
     {"rt_alpha", "1"},
+    {"rt_prepass_by_ordinal", "0"},
     {"rt_alpha_test", "1"},
     {"rt_alpha_cut", "1"},
     {"rt_alpha_stochastic", "1"},
@@ -425,7 +426,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_stability_log", "0"},
     {"rt_dyn_hold", "4"},
     {"rt_dyn_hold_max_prims", "8192"},
-    {"rt_scene_wait_ms", "8"},
+    {"rt_scene_wait_ms", "12"},
     {"rt_primary_check", "0"},
     {"rt_primary_epoch", "0"},
     {"crash_dump", "0"},

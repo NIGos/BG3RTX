@@ -1,5 +1,44 @@
 # BG3RTX progress
 
+## Night 2026-10-29/30 (supervisor, offline): in-world UI flicker, layer fixes (branch sup/scene-pass-robust)
+
+Ready for the user's in-game check once a live test confirms (layer change: restart the game).
+Save: The Blushing Mermaid - 96h 39m. Look at cypresses, flags and curtains while dialogue or
+overhead text appears; the Tab party screen portrait. Log lines to read: '[geo] scene prepass
+moved', '[rt] scene wait' (timeouts, skipped), '[alpha] ... held records dropped'.
+- User: foliage and cloth flicker starts when in-world UI (dialogue, overhead text) appears; RR
+  off shows saturated red square blocks on cypresses. Static job sup-redsq-inn-fg2 (no in-world
+  UI): no red blocks, no flicker. So: a capture problem triggered by in-world UI.
+- Fix 1 (b10e434): the RT scene's depth prepass was found by its learned position in the command
+  buffer. Small depth-only passes before it come and go with what is on screen, so a shift froze
+  the RT scene for 8 frames, or made a small pass the RT source (clearing the frame's draw and
+  alpha lists). Now: the first non-minor depth-only pass on the G-buffer depth each frame
+  (rt_prepass_by_ordinal=0; 1 = old behaviour).
+- Fix 2 (b10e434): held alpha-tested draws (rt_dyn_hold) drop when a sampled view was destroyed
+  and its handle reused (e.g. by a glyph texture); counted in the '[alpha]' line.
+- Fix 3 (65f5fb5): a smaller pass with the G-buffer formats (party screen portrait) replaced the
+  main G-buffer: RR refused frames and the RT capture lost its render size. The main G-buffer is
+  now the largest seen in the last 4 frames.
+- Fix 4 (c09dff9): after 8 rt_scene_wait timeouts the wait paused up to 64 frames, so the RT
+  passes traced the previous frame's scene for about a second. Static inn job: 16 timeouts and
+  96 skipped per 600 frames, previous-frame TLAS in 50 of 300. A recent build now ends the pause.
+- Live (user away, 00:30-00:55), sun buffer: 'leak' = applied lit where the game is dark,
+  'dark' = applied dark where the game is lit. Roof sun shadows (rt_cascade_casters=1):
+  * Black squares / false sun shadows: solid alpha-tested cascade casters (tree and vine
+    cards). View over the inn roof: dark 17.5% (alpha 1) -> 2.7% (alpha 0); casters off 2.6%.
+    rt_cascade_alpha default 0.
+  * Sun leaking into the inn (window-shaped patches): trust 1 dropped the roof volumes and the
+    shutters/glass are alpha-tested (skipped). Leak 4.5% (trust 1) -> 0.14% (trust 0); casters
+    off 0.12%. rt_cascade_roofs_trust default 0 (roof volumes stay, cascade adds occluders).
+  * rt_scene_wait: 0 skipped after fix 4; timeouts 4-6 per 600 frames at 8 ms (max wait 10 ms):
+    rt_scene_wait_ms default 12.
+- Tree flicker with in-world UI: Shift-held labels do not raise foliage frame-to-frame change
+  (final, static: 1.5-1.8% with labels, 2.4-4.3% without); gi_rt=0 and rt_shadows=0 do not
+  lower it. Static runs vary 1.8-6.1% with nothing changed (wind). Open: needs motion runs.
+- Cost noted: with 'Full + shadowed lights' the local-light pass is 9-10 ms GPU in the inn's upper
+  floor (S7 view 1.3-3.4 ms); stats say local shadows remove 85% of lit luminance there (S7 6%).
+  To check: few very bright lights inside their fixtures?
+
 ## Late Thursday 2026-10-29 22:40 (supervisor, user away)
 
 - Roof sun shadows leak with FG off: fixed (main 52bb6cd). With fg=0 the game records frame F's

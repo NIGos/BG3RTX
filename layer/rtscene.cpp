@@ -1257,6 +1257,11 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
   auto current = [&] { return g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built >= now; };
   ++g_wait.calls;
   if (!current()) {
+    // Captures that resumed (a scene built in the last 2 frames) end the pause at once:
+    // a pause of up to 64 frames after a short gap (8 frames without the scene pass)
+    // traced the previous frame's scene for about a second.
+    const bool recent = g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built + 2 >= now;
+    if (recent) g_wait_misses = (std::min)(g_wait_misses, 7u);
     if (g_wait_misses >= 8 && now % 64 != 0) {
       ++g_wait.skipped;   // no capture lately (menus, loading): probe once every 64 frames
     } else {

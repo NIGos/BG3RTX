@@ -392,6 +392,20 @@ void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayou
       p.color_formats[2] != VK_FORMAT_R8G8B8A8_UNORM || p.color_formats[3] != VK_FORMAT_R8G8B8A8_UNORM)
     return;
   if (p.depth_format != VK_FORMAT_D24_UNORM_S8_UINT) return;
+  {
+    // A smaller pass with the G-buffer's formats (UI portraits: the party screen) is not
+    // the scene's: it must not replace the main G-buffer (RR would refuse the frame) or
+    // record the guides. The main one is the largest seen in the last few frames.
+    std::lock_guard<std::mutex> lock(g_gbuf_mu);
+    if (g_gbuf.rt[0] && uint64_t(p.width) * p.height < uint64_t(g_gbuf.w) * g_gbuf.h &&
+        frame_index() <= g_gbuf.seen_frame + 4) {
+      static int said = 0;
+      if (said++ < 4)
+        log("[ngx] %ux%u pass with the G-buffer formats ignored (the scene's is %ux%u)", p.width, p.height, g_gbuf.w,
+            g_gbuf.h);
+      return;
+    }
+  }
   record_guides_at_gbuffer(cmd, p, layouts, depth_layout);
   std::lock_guard<std::mutex> lock(g_gbuf_mu);
   bool changed = g_gbuf.rt[0] != p.color_images[0] || g_gbuf.w != p.width;

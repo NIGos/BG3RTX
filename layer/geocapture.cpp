@@ -68,6 +68,7 @@ VkPhysicalDeviceTransformFeedbackFeaturesEXT g_xfb_features{VK_STRUCTURE_TYPE_PH
 uint32_t g_stride = 16;
 bool g_alpha_mode = false;
 std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the last G-buffer pass
+std::atomic<uint64_t> g_gbuf_depth{0};            // the last G-buffer pass's depth image (the prepass writes it)
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
 thread_local VsInstancing t_last_inst; // its instancing analysis (bvhsplit.cpp)
 thread_local uint64_t t_last_hash = 0;
@@ -268,11 +269,15 @@ bool is_gbuffer(const Bg3PassInfo& p) {
 // Depth-only D24S8 at render resolution (rt_alpha's source pass).
 bool is_prepass(const Bg3PassInfo& p) {
   return g_alpha_mode && p.color_count == 0 && p.depth_format == VK_FORMAT_D24_UNORM_S8_UINT && g_gbuf_w &&
-         p.width == g_gbuf_w && p.height == g_gbuf_h;
+         p.width == g_gbuf_w && p.height == g_gbuf_h &&
+         (!g_gbuf_depth || uint64_t(p.depth_image) == g_gbuf_depth);
 }
 constexpr uint32_t kPrepassMinDraws = 64;
 std::atomic<int> g_prepass_ordinal{-1};   // learned: ordinal of the depth-only pass with the scene
 std::atomic<uint64_t> g_prepass_frame{0}; // frame it was last captured in (relearned when it goes missing)
+std::atomic<uint64_t> g_scene_frame1{0};   // frame_index()+1 of the last non-minor prepass capture
+std::atomic<int> g_scene_ordinal{-1};      // its ordinal (logged when it moves)
+std::atomic<uint32_t> g_scene_moves{0}, g_minor_dropped{0};
 
 // ---- hooks of our own ----
 VKAPI_ATTR void VKAPI_CALL CmdSetViewport(VkCommandBuffer cmd, uint32_t first, uint32_t n, const VkViewport* vps) {
@@ -1574,7 +1579,14 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
       return;
     }
   }
-  const bool gbuf = is_gbuffer(s->pass);
+  // The main G-buffer is the largest one seen recently: a smaller pass with its formats
+  // (UI portraits) must not move the render resolution or the prepass depth image.
+  static std::atomic<uint64_t> main_seen{0};
+  bool gbuf = is_gbuffer(s->pass);
+  if (gbuf && g_gbuf_w && uint64_t(s->pass.width) * s->pass.height < uint64_t(g_gbuf_w) * g_gbuf_h &&
+      frame_index() <= main_seen.load() + 4)
+    gbuf = false;
+  if (gbuf) main_seen = frame_index();
   // D-EM: an effects pass (the game's emissive draws, emissive.cpp).
   if (g_on && !gbuf && em_is_fx_pass(s->pass, g_gbuf_w, g_gbuf_h)) {
     auto* e = new EmPass;
@@ -1587,13 +1599,23 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
     }
     return;
   }
-  if (gbuf) g_gbuf_w = s->pass.width, g_gbuf_h = s->pass.height;
+  if (gbuf) g_gbuf_w = s->pass.width, g_gbuf_h = s->pass.height, g_gbuf_depth = uint64_t(s->pass.depth_image);
   // The ray tracing scene's source pass: with rt_alpha the depth prepass
   // (depth-only D24S8 at render resolution), otherwise the G-buffer.
   // BG3 draws a few small depth-only passes before the big one: once seen, only
   // the big one's ordinal (its position in the command buffer) is captured.
+  // rt_prepass_by_ordinal=0 (default): the scene's prepass is the first non-minor
+  // depth-only pass of the frame, wherever it sits. The learned ordinal is fragile:
+  // the small passes before the big one come and go with what is on screen (in-world
+  // UI, highlights), and a shifted ordinal froze the RT scene for 8 frames, or made a
+  // small pass the RT source (its capture clears the frame's draw and alpha lists).
+  // Minor passes are still captured and dropped at their end (as while learning).
+  static const bool by_ordinal = cfg_int("rt_prepass_by_ordinal", 0) != 0;
   if (g_prepass_ordinal >= 0 && frame_index() > g_prepass_frame + 8) g_prepass_ordinal = -1;
-  const bool prepass = is_prepass(s->pass) && (g_prepass_ordinal < 0 || int(s->pass.ordinal) == g_prepass_ordinal);
+  const bool prepass =
+      is_prepass(s->pass) &&
+      (by_ordinal ? (g_prepass_ordinal < 0 || int(s->pass.ordinal) == g_prepass_ordinal)
+                  : g_scene_frame1.load() != frame_index() + 1);
   const bool rt_src = g_alpha_mode ? prepass : gbuf;
   if (!gbuf && !rt_src) return;
   bool xfb = false;
@@ -1625,7 +1647,8 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
     xfb = s->geo != nullptr;
   }
   // Timed: the ray tracing source pass (the G-buffer without rt_alpha).
-  if (g_timing && g_qp && rt_src) {
+  // (the small passes before the scene's are captured too: time the usual scene ordinal only)
+  if (g_timing && g_qp && rt_src && (!g_alpha_mode || g_scene_ordinal < 0 || int(s->pass.ordinal) == g_scene_ordinal)) {
     std::lock_guard<std::mutex> lock(g_ts_mu);
     uint32_t slot = uint32_t(frame_index() % kTsSlots);
     if (!g_ts_frame[slot]) {
@@ -1949,6 +1972,16 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
     if (g_alpha_mode && !minor_pass) {
       g_prepass_ordinal = int(s->pass.ordinal);
       g_prepass_frame = frame_index();
+      g_scene_frame1 = frame_index() + 1;
+      const int was = g_scene_ordinal.exchange(int(s->pass.ordinal));
+      if (was >= 0 && was != int(s->pass.ordinal)) {
+        const uint32_t n = ++g_scene_moves;
+        if (n <= 20 || n % 100 == 0)
+          log("[geo] scene prepass moved: ordinal %d -> %d (frame %llu, %u moves so far, %u minor passes dropped)", was,
+              int(s->pass.ordinal), (unsigned long long)frame_index(), n, g_minor_dropped.load());
+      }
+    } else if (minor_pass) {
+      ++g_minor_dropped;
     }
     if (c->rt && !minor_pass) {
       rt_capture_stats(*c);

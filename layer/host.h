@@ -635,6 +635,9 @@ struct AlphaSnapshot {
   AlphaRec rec{};
   VkImageView tex = VK_NULL_HANDLE, cache = VK_NULL_HANDLE;
   VkImageLayout tex_layout{}, cache_layout{};
+  // Identity of each view when snapshotted (tracker image id, 0 = unknown): the game may
+  // destroy a view during a hold and the driver reuse its handle for another image.
+  uint32_t tex_id = 0, cache_id = 0;
 };
 bool alpha_snapshot(uint32_t index, AlphaSnapshot* out);
 uint32_t alpha_restore(const AlphaSnapshot& saved);   // UINT32_MAX on failure

@@ -1,0 +1,52 @@
+[
+ {
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 130,
+  "motion_start": 12,
+  "motion_end": 12,
+  "set": "rt=1,gi=1,rt_reflections=1,rt_shadows=1,rt_local_shadows=1"
+ },
+ {
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 131,
+  "motion_start": 12,
+  "motion_end": 12,
+  "set": "rt=0,gi=0,rt_reflections=0,rt_shadows=0,rt_local_shadows=0"
+ },
+ {
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 132,
+  "motion_start": 12,
+  "motion_end": 12,
+  "set": "rt=1,gi=1,rt_reflections=1,rt_shadows=1,rt_local_shadows=1"
+ },
+ {
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 133,
+  "motion_start": 12,
+  "motion_end": 12,
+  "set": "rt=0,gi=0,rt_reflections=0,rt_shadows=0,rt_local_shadows=0"
+ },
+ {
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 134,
+  "motion_start": 12,
+  "motion_end": 12,
+  "set": "rt=1,gi=1,rt_reflections=1,rt_shadows=1,rt_local_shadows=1"
+ }
+]

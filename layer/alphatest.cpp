@@ -40,6 +40,7 @@ constexpr VkDeviceSize kRegion = 16 + VkDeviceSize(kMaxRecords) * sizeof(AlphaRe
 
 DeviceData* g_dd = nullptr;
 bool g_on = false;
+std::atomic<uint32_t> g_stale_views{0};   // held alpha records dropped: a view was destroyed/reused
 std::mutex g_mu;
 std::unordered_map<uint64_t, AlphaFs> g_table;
 uint64_t g_table_mtime = 0;
@@ -205,6 +206,16 @@ uint32_t slot_of(std::vector<std::pair<VkImageView, VkImageLayout>>& list, uint3
   if (list.size() + 1 >= cap) return 0;
   list.push_back({v, l});
   return uint32_t(list.size());
+}
+
+// Tracker id of the image behind `v` (0 if the view or image is unknown). Caller holds no tracker lock.
+uint32_t view_image_id(VkImageView v) {
+  if (!v) return 0;
+  std::shared_lock<std::shared_mutex> tl(tracker().mu);
+  auto it = tracker().views.find(v);
+  if (it == tracker().views.end()) return 0;
+  auto im = tracker().images.find(it->second.image);
+  return im == tracker().images.end() ? 0 : im->second.id;
 }
 
 bool finite(const float* f, size_t n) {
@@ -462,12 +473,21 @@ bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
       if (it != tracker().views.end()) handles.push_back(uint64_t(it->second.image));
     }
   }
+  out->tex_id = view_image_id(out->tex);
+  out->cache_id = view_image_id(out->cache);
   const uint64_t until = frame_index() + uint64_t((std::clamp)(cfg_int("rt_dyn_hold", 0), 0, 120));
   for (uint64_t h : handles) life_extend(h, until);
   return true;
 }
 
 uint32_t alpha_restore(const AlphaSnapshot& saved) {
+  // A view destroyed during the hold (its handle possibly reused for another image,
+  // e.g. a glyph or UI texture) must not be bound: the held draw is dropped instead.
+  if (view_image_id(saved.tex) != saved.tex_id || !saved.tex_id ||
+      (saved.rec.kind == 1 && (view_image_id(saved.cache) != saved.cache_id || !saved.cache_id))) {
+    ++g_stale_views;
+    return UINT32_MAX;
+  }
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_recs.size() >= kMaxRecords) return UINT32_MAX;
   AlphaRec r = saved.rec;
@@ -630,10 +650,10 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   if (g_frames >= uint64_t(every)) {
     log("[alpha] last %llu frames: %.1f alpha-tested draws, %.0f triangles, %zu textures, %zu tile caches per frame "
         "(capacity %u, %u, %u records); opaque fallbacks: no view %u, UBO %u, SSBO %u, non-finite %u, records full %u, "
-        "views full %u",
+        "views full %u; held records dropped (view destroyed/reused) %u",
         (unsigned long long)g_frames, double(g_draws) / g_frames, double(g_tris) / g_frames, g_tex.size(),
         g_cache.size(), kTextures - 1, kCaches - 1, kMaxRecords, g_fail[0], g_fail[1], g_fail[2], g_fail[3], g_fail[4],
-        g_fail[5]);
+        g_fail[5], g_stale_views.load());
     // The alpha-tested fragment shaders of this frame by triangles, with their
     // cut-offs (identifies the families on screen: grass, foliage, chains).
     std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> per;
