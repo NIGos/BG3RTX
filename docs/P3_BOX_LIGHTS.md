@@ -198,3 +198,12 @@ unknown/cookie/shadow-mapped0.000/px. Native box light3.351% of lit luminance,
 removed0.664%. Final finite; raw dump nonfinite records retained in evidence.
 This adds actual ray coverage in the lava scene, not cookie or native-accuracy
 proof. S7 needs one bounded startup retry after runnable P1 attribution.
+
+285 bounded S7 retry executes successfully: valid116s/48s session, no driver
+faults/dumps/build changes. Actual scene-ready/layer log proves startup;281
+remains a separate early failure, not box rendering evidence. Last evaluated/
+traced0.295/px, occluded0.092/px, cookie0.004/px, unknown0.000/px. Cookie
+sampling is exercised, not yet proved accurate against the native filter.
+Final finite; retained dump nonfinite records distinguish depth from lighting.
+Next report integer ray/cookie/unknown populations: three-decimal rates alone
+cannot prove an unknown count is zero. No new shader/counter is needed.
