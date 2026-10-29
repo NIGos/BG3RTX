@@ -97,3 +97,16 @@ the native scale is0.00136865. Zero counters do NOT prove black rendering.
 Upgrade projector-only sum precision or inspect existing raw data before deriving
 accuracy; keep default off. Validation log/evidence retained. Debug4 does not
 trace shadow rays, so actual shadowing/quality is still untested.
+
+Projector QA now also uses exact uint64 sums with24 fractional bits, preserving
+raw-radiance signals below the old1/256 quantum. Counts distinguish true zero
+from quantized zero. New stats152..164 cover native/recomputed/error/overshoot/
+box sums, nonzero populations and invalid values;165 counters are allocated.
+The8x8 group's bin hash has coprime7/13 steps over64 bins, yielding an explicit
+maximum bin population from ACTUAL render dimensions. A half-capacity uint64
+bound rejects nonfinite/negative/overflow-risk values; it never silently clips.
+Mean fixed-point rounding uncertainty is at most2^-25 raw units. No exposure
+normalization or image-output expression changes. Default/check SPIRV remain
+byte-identical to main; full build/3 CTests and affected shader variants pass.
+Next repeat267 and inspect pure off/on windows with nonzero signal and invalid0;
+keep old FULL bit differences and unresolved validation categories visible.

@@ -595,6 +595,30 @@ void stat_addv(uint index, uint v, uint bin) {
   if (WaveIsFirstLane() && n) rtStats.InterlockedAdd((index * 64 + b) * 4, n);
 }
 uint fx(float v) { return uint(clamp(v, 0.0, 64.0) * 256.0 + 0.5); }
+// Projector QA: exact integer sum with24 fractional bits, not fx's1/256.
+// Bin is constant over each8x8 group;7 and13 are coprime to64, so a bin
+// receives at most64*ceil(width/512)*ceil(height/8) invocations per dispatch.
+// Half the uint64 capacity leaves rounding/carry headroom. Never silently cap.
+void ls_sum24(uint index,float value,uint bin) {
+  float group_bound=64.0*float((pc.full.x+511u)/512u)*float((pc.full.y+7u)/8u);
+  float safe_max=549755813888.0/max(group_bound,1.0); //2^39 / bin population
+  bool valid=isfinite(value) && value>=0.0 && value<safe_max;
+  stat_addv(162,valid?0u:1u,bin);
+  float q=round((valid?value:0.0)*16777216.0);
+  uint hi=uint(floor(q/4294967296.0));
+  uint lo=uint(q-float(hi)*4294967296.0);
+  uint low16=WaveActiveSum(lo&65535u);
+  uint high16=WaveActiveSum(lo>>16u)+(low16>>16u);
+  uint sum_lo=(high16<<16u)|(low16&65535u);
+  uint sum_hi=WaveActiveSum(hi)+(high16>>16u);
+  uint b=WaveReadLaneFirst(bin)&63u;
+  if(WaveIsFirstLane()) {
+    uint old;rtStats.InterlockedAdd((index*64u+b)*4u,sum_lo,old);
+    sum_hi+=old>0xffffffffu-sum_lo?1u:0u;
+    if(sum_hi)rtStats.InterlockedAdd(((index+1u)*64u+b)*4u,sum_hi);
+  }
+}
+
 
 bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
@@ -896,6 +920,14 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       stat_addv(147, pv ? fx(lum(abs(gd - md) + abs(gs - ms))) : 0u, bin);
       stat_addv(148, pv ? fx(pover) : 0u, bin);
       stat_addv(150, pv ? fx(lum(bgd * fdif + bgs * fspec)) : 0u, bin);   // the box share of the recompute
+      float game_y=pv?lum(gd+gs):0.0,recomputed_y=pv?lum(md+ms):0.0;
+      ls_sum24(152,game_y,bin);
+      ls_sum24(154,recomputed_y,bin);
+      ls_sum24(156,pv?lum(abs(gd-md)+abs(gs-ms)):0.0,bin);
+      ls_sum24(158,pv?pover:0.0,bin);
+      ls_sum24(160,pv?lum(bgd*fdif+bgs*fspec):0.0,bin);
+      stat_addv(163,pv && isfinite(game_y) && game_y>0.0?1u:0u,bin);
+      stat_addv(164,pv && isfinite(recomputed_y) && recomputed_y>0.0?1u:0u,bin);
     }
     stat_addv(21, vpx ? fx(lum(gd + gs)) : 0u, bin);
     stat_addv(22, vpx ? fx(lum((md + ms))) : 0u, bin);

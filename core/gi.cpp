@@ -794,7 +794,7 @@ constexpr uint32_t kStatsRing = 8;
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
 // Box diagnostics also write projector-only baseline counters when ls_box=0.
-constexpr uint32_t kStatsCounters = 152;
+constexpr uint32_t kStatsCounters = 165;
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -989,6 +989,16 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               (unsigned long long)t[144], t[144] ? t[145]/double(t[144])/256.0 : 0.0,
               t[144] ? t[146]/double(t[144])/256.0 : 0.0, t[144] ? t[147]/double(t[144])/256.0 : 0.0,
               t[144] ? t[148]/double(t[144])/256.0 : 0.0, t[146] ? 100.0*t[150]/double(t[146]) : 0.0);
+  }
+  if(t[144]) {
+    auto mean24=[&](uint32_t i) {
+      return (double(t[i])+4294967296.0*double(t[i+1]))/16777216.0/double(t[144]);
+    };
+    host->log("ls box precise (%u frames): px %llu native nonzero %llu recomputed nonzero %llu invalid %llu; "
+              "raw game %.9g recomputed %.9g abs_diff %.9g over %.9g box %.9g; mean quantization <= %.9g",
+              g_stats_n,(unsigned long long)t[144],(unsigned long long)t[163],(unsigned long long)t[164],
+              (unsigned long long)t[162],mean24(152),mean24(154),mean24(156),mean24(158),mean24(160),
+              0.5/16777216.0);
   }
   if (t[69]) {   // D-LS on non-standard material classes (rt_local_shadows.hlsl, AUDIT_RT fix 3)
     host->log("ls stats (%u frames): non-standard material px %.4fM/frame; validation on them (lit, no projector "
