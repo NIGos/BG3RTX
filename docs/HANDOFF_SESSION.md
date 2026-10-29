@@ -26,7 +26,8 @@ Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains6dba0a8; P6 design441904a and QA-only hold fix7a98949 merged.
 No P1/P3/P4 rendering feature merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan d9cb628, pushed, paired ABI14.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 2914bde, pushed, paired ABI14.
+- P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, codex/p2-emissive ca1959b, paired D-EM ABI9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b913e8e, paired ABI9, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
@@ -35,24 +36,23 @@ D:/BG3_Tools/git_backup/commit-map-old-to-new.txt. No unrelated FG imports.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Current checkpoint and next action
-Queue IDLE after294; repeat fresh playing/process/pending checks before launch.
-Legal QA exposure hold merged7a98949 via merge-green (build/3 CTests/32 shader
-files/all QA detectors PASS), main/QA branch pushed. No P1/P3/P4 feature merged.
-294 stable-tree smoke PASS129/61s,388 writes, matching held probes EV13.0581/k1,
-no hold refusal/usage/layout/push/write errors, all dumps finite. Other VVL
-unresolved. Raw evidence preserved main captures/qa-exposure-hold-294; fixture
-defaults to stable test tree. QA checkout archived; its junction cleanup incident was recovered from exact backups.
-293 P1 legal hold executes210/142s:0 hold errors/refusals, EV13.0522, all dumps
-finite/alpha exact/static<=0.54px, SIX off controls RGB-exact. Original PRE still
-FAILS+0.595469%,95%Y CI[+2.62039e-5,+1.85806e-4]. Paired on/off-0.0694% has
-4.26%-of-off CI half width: NOT equivalence. Exposure alone is insufficient.
-292 INVALID transfer-write evidence retained. No brightness tuning/GI promotion.
-P1 source-epoch/conditional mismatch remains; no new camera/exposure transport
-justified. P3 291:0.0999107% format-incompatible over2.950B receivers, sparse rim/
-detail points; cause/native accuracy/cookie/unknown-pair/moving quality OPEN.
-Archive recovery: external_backup992 SDK files and snapshot DB restored, SHA256
-all match backups; backups read-only. See recovery evidence. No new game needed.
-One reset consumed at weekly100%; fresh quota0% confirmed, credits0.
+295 LIVE frozen P2 D-EM ca1959b, runner2692 started07:11:07 after fresh idle checks.
+New codex/p2-emissive starts main6514a13, cherry-picks consolidated D-EM source
+through9f4d17d; original old branch/history unchanged. Feature/research defaults0;
+no emissive allocation when disabled at startup. Enabling requires restart.
+Diagnostic counts same-family coincident candidate/distinct-draw geometry in
+existing interval; does NOT change emission/calibration/light list. Actual native
+draw logs blend/cull/depth state; dynamic state is inconclusive. A multiplicity
+count alone does not prove additive/copolanar contribution. Target304be1c7 AF.
+Debug0 normal output, legal exposure hold only after scene-ready. Check whole
+native-state log, positive probe/no invalid/overflow/missing, full VVL/captures.
+Build/3 CTests/36 shader files PASS; seven ordinary GI/LS/sun/RF binaries identical
+main. SDKs use explicit paths/owned small copy, asset DB owned copy; NO junctions.
+Paired ABI9 is D-EM-specific; never reuse P3 ABI9 process. Freeze tree until terminal.
+P1 candidate parked2914bde after293 still fails PRE energy+0.595469%; no promotion.
+QA hold fix merged7a98949 after294; other VVL remains unresolved. Archive incident
+recovered992 SDK files + DB/manifest from backups, hashes match; no recursive
+cleanup through shared junctions again. One reset consumed, credit balance0.
 
 ## P1 - pan instability remains OPEN
 User sees lighting/shadows detach while panning; Ctrl+Shift+F9 restores native.

@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 06:48 Europe/Rome
+## Current checkpoint - 2026-10-29 07:11 Europe/Rome
 
 - Main rendering remains6dba0a8; P6 water design and QA-only exposure-hold fix7a98949 are merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -14,6 +14,28 @@
 - The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
 
 ## Resumed — 2026-10-29
+
+Previous goal turn made progress: merged a valid legal QA exposure-hold fix,
+rejected P1 source consistency again with valid held data293, narrowed native
+box residual291 and recovered the archival junction incident. No rendering
+candidate was promoted. P1 park file2914bde now preserves293 and next constraints.
+
+P2 D-EM next hypothesis: nearest-hit-only emissive lookup may miss coincident
+native additive/ordered draws. AF family304be1c7 still fails0.361/0.362 while GF
+passes0.999; UV/pulse hypotheses already checked, no coefficient or gate tuning.
+New codex/p2-emissive from main6514a13 selectively cherry-picks consolidated D-EM
+work through9f4d17d (69b4eaa), preserving original branches/history. Defaults/release
+rt_emissive0, no scene allocated while disabled; startup required to enable.
+ca1959b adds default-off observer using reserved push/stats words: same-family
+triangle candidates vs distinct draw geometry, explicit invalid/overflow/missing.
+It changes NO emission/calibration/light list. Actual native draw blend/cull/depth
+state logged separately; dynamic state/multiplicity alone cannot prove addition.
+Build/3 CTests/36 shaders pass, seven ordinary GI/LS/sun/RF binaries identical main.
+SDKs use explicit paths and owned small SDK/DB copies; no shared junctions.
+295 LIVE frozen ca1959b, runner2692 at07:11:07 after fresh idle/playing checks:
+AF debug0 with scene-only legal hold; inspect actual full native-state log,
+post-ready probe populations, complete VVL/captures before interpreting results.
+
 
 Archive incident and recovery: the managed-worktree archival tool followed the
 qa-exposure-hold checkout's NTFS junctions for external and data/assetdb, emptying
