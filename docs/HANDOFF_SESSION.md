@@ -52,14 +52,27 @@ includes zero narrowly; this cannot waive the paired failure. All samples stay,
 including two original-PRE spikes in the on cohort. Evidence is on P1 in
 docs/evidence/p1-normal-footprint-static-297.json. No pan quality pass.
 
-298 is live on frozen 6e5a553, runner 29724 started at 08:05:46.
-The same rendering now uses a prespecified shuffled order of nine AB and nine
-BA pairs (seed 297), eliminating the periodic ABBA state schedule. There are
-still 36 captures, 30-second warmup, 4-second gaps and a 90-second hold. No
-sample deletion, brightness scaling, threshold tuning or exposure change.
-All eight energy unit tests pass. Inspect actual terminal state before editing
-P1 or launching another game. Preserve validation.log, audit all raw data and
-VVL tags, and report interval width and GPU cost. Static parity precedes pan.
+298 is terminal and execution-valid on 6e5a553. Shuffled pairing still FAILS:
+on/off +0.8243%, CI [+0.00005181, +0.00023276] Y; original-PRE +0.3690%,
+CI [+0.00003676, +0.00009067] Y. Both exclude zero. All 36 captures are finite,
+alpha-exact and pass 20 GPU predicates; max static shift 0.44 pixels. Normal
+rejection is 14.22%. Full evidence: P1 docs/evidence/p1-normal-footprint-static-298.json.
+No scoped layout/push/write errors, but other VVL errors remain. Latest trace
+median 1.734 ms; whole GI 53.658 ms under diagnostic validation.
+
+A concrete early return was corrected after 298: missing/nonfinite legacy
+colour now reaches the fresh current-frame fallback with the surface gate on.
+The control remains original. This supersedes the old availability-cohort
+restriction. Unsupported current sources remain unavailable. It does not claim
+to explain the positive bias. No source components, weights or thresholds change.
+All 12 CTests, eight energy tests and 24 shader ABI checks pass. Both changed
+fresh shaders compile; seven ordinary shaders remain byte-identical to d9cb628.
+
+299 is LIVE on frozen 4e11688, runner 4056 started at 08:18:39. Same shuffled
+36-capture fixture, 30-second warmup, 4-second gap and 90-second hold. Inspect
+the actual terminal result before editing P1 or launching another game. Archive
+validation.log, check energy intervals, raw finite/alpha/pose, counters and GPU
+cost. No pan quality pass or promotion until static parity is established.
 
 The default-off normal footprint derives spatial support from the real sample
 cell and reprojection rounding, bounded to same-plane TLAS neighbours. The
@@ -76,7 +89,7 @@ and duplicated experimental passes, not a release performance measurement.
 Use explicit paths. The app may select a different managed checkout.
 
 - Main: C:/Users/quali/Documents/Code Projects/BG3RTX, branch main, pushed.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 6e5a553.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 4e11688.
 - P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, ca1959b, D-EM ABI 9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box, b913e8e, ABI 9.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm, 8d902d5.

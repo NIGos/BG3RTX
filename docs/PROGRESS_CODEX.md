@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 08:06 Europe/Rome
+## Current checkpoint - 2026-10-29 08:19 Europe/Rome
 
 - Main rendering remains 6dba0a8; the water design and legal QA exposure hold are merged.
 - P1 is active again by explicit user instruction. No more attribution or exposure research.
@@ -9,7 +9,8 @@
 - Static off/on energy is the first gate, followed by a single-run moving residual.
 - Static 296 is inconclusive: preserve its baseline spike; original-PRE check fails (+0.350%).
 - Static 297 fails on/off parity (+2.142%); 36 finite captures, exact alpha, normal rejects 14.70%.
-- Repeat 298 is live on 6e5a553 with a prespecified shuffled balanced order and a 90-second hold.
+- Shuffled static 298 also fails: on/off +0.8243%, original-PRE +0.3690%; both outside noise.
+- Fixed a missing-history early zero return; static 299 is live on frozen 4e11688.
 - All 12 CTests and 24 shader ABI checks pass; seven ordinary shaders are byte-identical.
 - P2 test 295 has finished. P2/P3/P4 research will not displace the required P1 measurement.
 - Main, research branches and evidence are pushed. All research defaults remain off.
@@ -44,10 +45,20 @@ this cannot waive the paired failure. Keep every sample, including two high
 original-PRE values in the on cohort. Trace median 1.273 ms; whole GI 54.986 ms
 under validation. No scoped layout/push/write VVL tags; other errors remain.
 
-Repeat 298 started at 08:05:46 on frozen 6e5a553. The rendering is unchanged;
-only the nine AB and nine BA pairs are shuffled with prespecified seed 297.
-This removes the periodic state schedule without trimming or rescaling data.
-There are 36 captures and a 90-second final hold. Eight energy unit tests pass.
+Shuffled static 298 finished execution-valid but still fails energy parity:
+on/off +0.8243%, CI [+0.00005181, +0.00023276] Y; original-PRE +0.3690%,
+CI [+0.00003676, +0.00009067] Y. All 36 samples retained, finite, alpha-exact,
+20 GPU predicates pass, max static shift 0.44 pixels. Normal rejection 14.22%.
+Trace median 1.734 ms; whole GI 53.658 ms under diagnostic validation.
+No scoped layout/push/write VVL tags; other VVL errors remain. No pan pass.
+
+4e11688 fixes a concrete early zero return: absent/nonfinite previous colour
+now attempts the same complete fresh fallback when rejection is enabled. The
+old availability-cohort restriction is superseded; control behavior is unchanged.
+Unsupported current sources remain unavailable. This is not a claimed explanation
+of the positive bias. All 12 CTests, eight energy tests and 24 shader ABI checks
+pass; seven ordinary shaders are byte-identical. Static 299 started at 08:18:39
+on that frozen commit, using the same shuffled fixture and a 90-second hold.
 Specs: docs/GI_NORMAL_FOOTPRINT.md. P1 remains active; static parity precedes pan.
 
 
