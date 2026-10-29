@@ -1,5 +1,29 @@
 # BG3RTX progress
 
+## P1 same-frame scene + P3 CPU fix (supervisor) — 2026-10-29 17:25
+
+Ready for the user's in-game check (FG on, QuickSave_3784 or any save): set rt_scene_wait=1,
+rotate the camera with the mouse or Q/E. Shadows should stay attached and walls should not flash.
+
+P1 cause: BG3 records the lighting command buffer (our RT passes) on a worker thread before
+another thread ends the G-buffer pass of the same frame, where the scene is captured and built.
+Both go down in one vkQueueSubmit, G-buffer first (rt_order_trace=3 logs it). So the RT passes
+traced the previous frame's camera-relative scene. rt_scene_wait=1 (default off) makes the first
+RT query of a frame wait for that frame's scene commit (bounded by rt_scene_wait_ms=8).
+Rotation, FG 2, ~2.6 deg/frame, one run (perf-sup-cpu4-fg2): off 33-35%, rt_scene_rebase 95.2%,
+rt_scene_wait 97.4% primary match; static 99.5%. Wait: 600/600 frames got their scene,
+0 timeouts, mean 3.4-3.8 ms. Residual ~2% while rotating is in instanced (pool) hits; not solved.
+
+P3 cause (base frame rate): the scene build read mapped (write-combined) memory with ordinary
+loads: TLAS instances assembled with bit-field stores in the mapped ring (7.6 ms), read back for
+the signature/chunk guard (6.3 ms), and 2,500 instance matrices read at submit (28 ms on the
+submit thread). Now built locally and copied whole, and read with SSE4.1 streaming loads.
+CPU per frame: capture "pass after" 14.1 -> 0.66 ms, submit copies 28.5 -> 1.3 ms.
+Static FG 2, same run: build on 30.0 fps vs build off 30.0-30.1 fps (before: 19.1 vs 30.0).
+30 fps looks like a cap in this hidden/unfocused mode (the user saw GPU clocks at ~2200 MHz there),
+so real-display fps must be checked by the user. RT pass GPU cost 0.84-0.87 ms.
+cpu_timing=1 logs the [cpu] split. User reports occasional static shadow flicker: separate issue.
+
 ## P1 rotation: rt_scene_rebase lifts the rotating primary match from 33% to 94% (supervisor) — 2026-10-29 16:50
 
 Root cause, measured: every RT pass traces the TLAS built in the previous frame index
