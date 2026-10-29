@@ -11,7 +11,11 @@
 // 6: Bg3HostApi::assetdb (appended).
 // 7: Bg3HostApi::rr_active (appended).
 // 8: Bg3HostApi::rt_scene_set (appended).
-#define BG3RTX_ABI_VERSION 8
+// 9: Bg3HostApi::rt_emissive (appended; D-EM).
+#define BG3RTX_ABI_VERSION 9
+// D-EM is in this host: Bg3HostApi::rt_emissive (ABI 9) and Bg3EmissiveInfo exist. The core's
+// SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
+#define BG3RTX_HOST_HAS_RT_EMISSIVE 1
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -93,6 +97,24 @@ struct Bg3DeviceInfo {
   uint32_t version;                  // 1
   uint32_t features;                 // Bg3DeviceFeatureBits enabled on the device by the layer (SHaRC)
   VkPhysicalDeviceMemoryProperties memory;   // for the core's own device-local buffers
+};
+
+// D-EM (ABI 9): the emissive scene of the latest build (docs/TRACK_D_RT.md 13). The
+// descriptor set's layout is in shaders/rt/em_common.hlsli: the emissive TLAS, its
+// per-instance InstInfo, the mesh pool and emissive soup, the per-draw records, the
+// light list, the mask textures and a statistics buffer for debug views.
+struct Bg3EmissiveInfo {
+  uint64_t built_frame;        // frame_index of the build the set belongs to
+  uint32_t instances;          // TLAS instances
+  uint32_t records;            // emissive draws (records)
+  uint32_t lights;             // triangles in the light list (capped by rt_em_max_lights)
+  float pre_exposure;          // lighting s1b13[0] when known (0 otherwise): radiance / pre_exposure = lighting units
+  // The game's effects target of the frame (sky, clouds, emissive draws; B10G11R11, render
+  // resolution), for comparisons; image null when not seen this frame.
+  VkImage fx_image;
+  VkImageView fx_view;
+  VkImageLayout fx_layout;     // the layout its last pass left it in
+  uint32_t fx_width, fx_height;
 };
 
 struct Bg3HostApi {
@@ -196,6 +218,13 @@ struct Bg3HostApi {
   // first build, when hardware RT is off, and once the last build is older than
   // the previous frame.
   bool (*rt_scene_set)(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame);
+
+  // ABI 9 (D-EM): the emissive scene (set 3 of shaders/rt/em_common.hlsli) of the latest
+  // build (the previous submitted frame). False when RT or the capture is off; `set` is
+  // VK_NULL_HANDLE before the first build. Pass the command buffer the set will be bound in:
+  // the game images and buffers it reads (glow maps, the effects target) are then kept
+  // alive until that command buffer has run (the layer's image lifetime tracking).
+  bool (*rt_emissive)(VkCommandBuffer cmd, VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
 };
 
 struct Bg3CoreApi {
