@@ -22,7 +22,8 @@ Fresh limits confirmed0% used/ordinary usage allowed. Never retry the successful
 
 ## Stable code and checkouts
 Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
-Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
+Rendering remains6dba0a8; P6 design441904a and QA-only hold fix7a98949 merged.
+No P1/P3/P4 rendering feature merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
 - P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan d9cb628, pushed, paired ABI14.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b913e8e, paired ABI9, pushed.
@@ -32,22 +33,22 @@ Old research/provenance is preserved in PROGRESS_CODEX and
 D:/BG3_Tools/git_backup/commit-map-old-to-new.txt. No unrelated FG imports.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
-## Live job and immediate next action
-294 LIVE frozen isolated QA tree qa-exposure-hold/BG3RTX, codex/qa-exposure-hold
-6523aaa, paired stable ABI8. Runner17296 started06:44:18 after fresh idle checks.
-It contains ONLY legal QA-hold fix4941657 (cherry-pick5f84d9b) + smoke fixture;
-no P1/P3 features. Full build/3 CTests/32 shaders/QA pass. Two scene-only held
-captures/full VVL must prove no refusal/usage error, held probes and finite output.
-If those scoped gates pass, merge ONLY this branch through merge-green; push
-main/branch and archive this temporary worktree (preserve needed ignored files).
-293 P1 corrected hold executes210/142s:0 hold usage errors/refusals, held probes
-EV13.0522, all dumps finite/alpha exact/static<=0.54px, SIX off controls RGB-exact.
-Original PRE still FAILS+0.595469%,95%Y CI[+2.62039e-5,+1.85806e-4]. Paired
-on/off-0.0694% CI spans0 with4.26%-of-off half width, NOT equivalence.
-Exposure alone is insufficient; no compensation/brightness tuning/GI promotion.
-Other VVL unresolved; full layout/push/write categories absent. Evidence293 on P1.
-292 INVALID transfer write evidence retained. No valid statistical pass from292.
-P3 291:0.0999107% format-incompatible over2.950B receivers; cause/quality open.
+## Current checkpoint and next action
+Queue IDLE after294; repeat fresh playing/process/pending checks before launch.
+Legal QA exposure hold merged7a98949 via merge-green (build/3 CTests/32 shader
+files/all QA detectors PASS), main/QA branch pushed. No P1/P3/P4 feature merged.
+294 stable-tree smoke PASS129/61s,388 writes, matching held probes EV13.0581/k1,
+no hold refusal/usage/layout/push/write errors, all dumps finite. Other VVL
+unresolved. Raw evidence preserved main captures/qa-exposure-hold-294; fixture
+defaults to stable test tree. Temporary QA worktree archival requested.
+293 P1 legal hold executes210/142s:0 hold errors/refusals, EV13.0522, all dumps
+finite/alpha exact/static<=0.54px, SIX off controls RGB-exact. Original PRE still
+FAILS+0.595469%,95%Y CI[+2.62039e-5,+1.85806e-4]. Paired on/off-0.0694% has
+4.26%-of-off CI half width: NOT equivalence. Exposure alone is insufficient.
+292 INVALID transfer-write evidence retained. No brightness tuning/GI promotion.
+P1 source-epoch/conditional mismatch remains; no new camera/exposure transport
+justified. P3 291:0.0999107% format-incompatible over2.950B receivers, sparse rim/
+detail points; cause/native accuracy/cookie/unknown-pair/moving quality OPEN.
 One reset consumed at weekly100%; fresh quota0% confirmed, credits0.
 
 ## P1 - pan instability remains OPEN

@@ -1,19 +1,33 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 06:45 Europe/Rome
+## Current checkpoint - 2026-10-29 06:48 Europe/Rome
 
-- Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
+- Main rendering remains6dba0a8; P6 water design and QA-only exposure-hold fix7a98949 are merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
 - Invalid geometry runs 265/266 are excluded; corrected bindings pass scoped runtime audits.
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P1 held exposure293 still fails PRE energy; isolated legal QA-hold fix is under validation294.
+- P1 held exposure293 still fails PRE energy; QA-hold fix passes294 and is merged, queue idle.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
 - The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
 
 ## Resumed — 2026-10-29
+
+QA exposure-hold fix MERGED7a98949 through merge-green after actual stable-tree
+294 PASS129s/61s session.388 successful writes, held EV13.0581 matches both
+exposure buffers/native lighting scale, re-exposure k1. No hold refusal/usage/
+layout/push/write errors, both captures/ALL dumps finite, no faults/dumps/build
+changes. Other VVL categories unresolved; no global-clean claim. Merge gate
+passes full build/3 CTests/32 shader files/all QA detectors. Main and isolated
+codex/qa-exposure-hold9612419 pushed; no P1/P3/P4 rendering feature merged.
+Reusable smoke fixture defaults to stable test tree. Logs/VVL/captures copied
+under main captures/qa-exposure-hold-294 before requesting temporary checkout
+archival. Original/current source math remains unchanged with hold0. P1 research
+stays off: legal held exposure still fails original PRE energy in293. Shared
+queue idle after294; next launch needs fresh user/process/queue checks.
+
 
 293 valid execution210s/142s scene session confirms legal exposure writes:
 0 hold usage errors/refusals; held EV13.0522 matches both probes after472/1072

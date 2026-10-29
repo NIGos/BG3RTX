@@ -214,6 +214,19 @@ All ten pre-existing post shader entries are binary-identical after stripping
 debug/compacting IDs; the new hold validates in cs_6_0 and cs_6_6. Runtime must
 confirm no refusal/update-usage errors, matching held probes and full VVL audit.
 
+Corrected stable-tree smoke294 PASS (129s total/61s session):388 successful
+writes, held EV13.0581 matches both exposure buffers and lighting s1b13; applied
+re-exposure k1. No hold REFUSED or transfer-usage/layout/push/write errors.
+Both captures/all dumps finite, no driver faults/dumps/build changes. Other VVL
+categories remain unresolved, not globally clean validation. Exact log counts
+are in evidence/qa-exposure-hold-storage-294.json; raw ignored evidence is
+preserved under main captures/qa-exposure-hold-294. Integrated through merge-green
+as7a98949 (build/3 CTests/32 shader files/all QA detector tests pass).
+The reusable fixture defaults to the queue's stable test tree; override tree
+explicitly for a work branch. The hold stays off by default. This scoped QA fix
+does not approve P1 GI energy or moving quality.
+
+
 ## Thresholds and their derivation
 
 Rule (QUALITY.md R0, "Every gate needs a derivation"): a gate, threshold, tolerance or
