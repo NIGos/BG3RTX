@@ -1,13 +1,17 @@
 # BG3RTX progress
 
-## Cascade casters (branch sup/roof-casters, not merged) — 2026-10-29
+## Cascade casters: ready for the user's in-game check (off by default) — 2026-10-29 21:00
 
-New `rt_cascade_casters=0` (with `rt_cascade_index=1`, `rt_cascade_mb=64`,
-`rt_cascade_roofs_trust=1`): one sun cascade is captured by XFB minus the camera pass's draws,
-converted with its own set 0 binding 2 `_m2` (orthographic), and added to the next frame's TLAS
-as instance mask 0x02 (rebased by the camera move). Only the sun traces it; with it, roof volumes
-no longer block the RT replace. Default SPIR-V byte-identical (66/66). Not run in game yet: gate
-and cost in TRACK_D_RT.md 8.5 "Cascade casters as implemented". Needs one game restart (layer).
+`rt_cascade_casters=1` (needs a game restart once, then live): the sun's cascade 2 is captured
+and added to the RT scene for sun rays only, so cut-away roofs cast RT shadows and the roof
+volumes no longer block the RT sun. Fix found in game: the cascade's positions are relative to
+its own UBO origin (92 m from the camera), and alpha-tested casters must be included.
+S7, static, one run A/B: key off game dark & RT lit 30% of traced px (kept by roofs), mean
+brightening 0.0004/px; key on 0.45%, kept by roofs 0%, brightening 0.0010/px. Cost +1.7 ms GPU
+(scene build 1.42 -> 2.72 ms, cascade pass 0.43 ms). User check: Blushing Mermaid save, inside,
+roof cut away, sun through windows: toggle rt_cascade_casters 0/1; look for light through the
+roof (bad), sharper roof shadow edges (good), solid foliage shadows (artefact).
+Details: TRACK_D_RT.md 8.5 "Cascade casters as implemented".
 
 ## P1 pan residual explained, not a lag (supervisor) — 2026-10-29 19:00
 

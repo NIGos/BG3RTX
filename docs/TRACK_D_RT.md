@@ -1041,8 +1041,14 @@ cut-away roofs, so the RT sun can replace the game's mask under roofs too.
 - **Next frame** (`rtscene.cpp`, `bvhsplit.cpp`; split builds only). The build of frame F
   takes F-1's soup (its command buffer submitted) and adds one BLAS (new each build; the
   old one is released once no live scene slot uses it) and one instance: translation
-  `cam(F-1) - cam(F)` (camera UBO +208, the camera-relative origin), mask 0x02, custom
-  index 0xFFFFFF, not opaque.
+  `origin_cascade(F-1) - cam(F)`, mask 0x02, custom index 0xFFFFFF, not opaque. The cascade
+  VS's world position is relative to the cascade UBO's own origin (byte 208), which is
+  92-96 m from the camera's in S7 (`rt_cascade_origin=1`; 0 = the first version's
+  `cam(F-1) - cam(F)`, which put the casters 92 m off and leaked).
+- **Alpha-tested casters** (`rt_cascade_alpha=1`): 435 of 694 cascade-2 draws in S7 are
+  alpha-tested; they go in as opaque (cutouts solid). Without them the RT still saw
+  "game dark & RT lit" on 9.5% of traced px; with them 0.47%. `rt_cascade_mb=160`: cascade 2
+  with alpha holds 1.47M triangles (~100 MB); cascade 3 overflows (340 draws dropped).
 - **Shaders.** `RT_VIS_MASK` / `RT_HIT_MASK` in `rt_common.hlsli` are the literal 0xFF in
   ordinary builds (SPIR-V of all 66 existing outputs byte-identical). The core picks
   `gi/cascade/` (`gi/cascade_rebase/` with `rt_scene_rebase`) variants with the key on:
@@ -1057,7 +1063,16 @@ cut-away roofs, so the RT sun can replace the game's mask under roofs too.
   (w column error, det, extents of every cascade, UBO origin vs camera in m: the
   inversion's premises). `sun: roof volumes TRUSTED` on toggle; `sun stats` ends with
   `roof volumes trusted (cascade casters) 1`.
-- **Gate (to run).** Interior with the roof cut away, sun through windows: live A/B of
+- **Gate result 2026-10-29 (S7 Blushing Mermaid, static, FG 2, live A/B in one run,
+  sup-cascade2/3/4-s7-fg2).** Sun stats per 600 frames: key off (roof volumes): game dark &
+  RT lit 29-31% of traced px, kept by roofs 99%, mean brightening 0.0004-0.0005/px. Key on
+  (index 2, alpha 1, origin 1): game dark & RT lit 0.42-0.47%, kept by roofs 0%, replaced
+  (lit) 13-15% of those, mean brightening 0.0010/px; game lit & RT shadowed 0.95% -> 1.2%.
+  Origin 0: 0.0296/px (the leak). Cost: scene build 1.42 -> 2.72 ms GPU, cascade pass +0.43
+  ms; rendered rate unchanged (30.0 fps cap in unfocused runs). Pending: the user's visual
+  check (sharper roof shadow edges; no light through cut roofs; solid foliage cutouts in
+  shadows would be the artefact to look for).
+- **Gate (first plan).** Interior with the roof cut away, sun through windows: live A/B of
   `rt_cascade_casters`. Pass: matrix line orthographic, origin ~0 m; builds with the
   instance ~100%; with the key on `kept by roofs` 0% and no new light under the roof
   (sun check: brightened px not above key-off); outdoors, mean brightening equal within
