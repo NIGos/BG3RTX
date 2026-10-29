@@ -1,5 +1,15 @@
 # BG3RTX progress
 
+## P1 pan residual explained, not a lag (supervisor) — 2026-10-29 19:00
+
+Job sup-panmiss-cap-fg2 (FG 2, defaults, A/D pans, 16-frame primary captures): pan windows
+match 90-92% vs static 99.5%. The gap is not the RT scene lagging: (1) misses (~5%) are the far
+backdrop at 1.5-1.8 km (not in the TLAS, no shadow role); (2) "in front" (~3%) is one near opaque
+object that the game hides while the camera passes (a ~7% wide band sweeping across the screen,
+140 tolerances in front), present in the TLAS as in the world. Nothing to fix for P1.
+Note: in visible-unfocused runs the rendered rate is exactly 30.0 fps (displayed 60, monitor
+120 Hz), a cap; the real base frame rate needs the user's focused play.
+
 ## P2 FG toggling: fg_current_destroy_only=1 on by default (supervisor) — 2026-10-29 18:15
 
 Cause: our FG stability guard turned DLSS-G off for ~1 s whenever the game destroyed any image
