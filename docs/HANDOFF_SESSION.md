@@ -51,13 +51,21 @@ docs/AGENTS and the already verified local-light reference fix arrived; GI code
 and paired binaries are unchanged. All 12 CTests, 49 shader files, QA detectors,
 eight energy tests and five merge-gate scenarios pass. No phase was merged to main.
 
-302 is LIVE on frozen d836c09, runner PID 45184 started at 08:47:17 after fresh
-playing/process/queue checks. ONE corrected-precision pan, 24 balanced four-second
-live-toggle blocks, direction reversals and a 96-second hold. Private/self-test
-production diagnostics off. Preserve static 301's original-energy failure.
-Do not edit P1 or change HEAD until actual terminal state. Report residual,
-cohort energy, coverage and motion together; no quality promotion or cross-run
-image comparison. Full VVL from 301 is already archived before this non-VVL pan.
+302 is terminal and execution-valid on d836c09. Within ONE run, off/on residual
+0.1393289 / 0.1372433 (-1.497%), cohort GI Y -17.904%, motion 68.07 / 81.61 pixels
+(+19.888%). No quality gain: energy, motion and compatible populations differ.
+Samples 34,379,240 / 25,885,465; grid coverage 29.75% / 23.01%. Trace median
+0.551 ms; whole GI 65.059 ms under the experimental duplicated pipeline.
+No VVL in the moving run; full 301 log remains archived. Evidence is on P1.
+
+303 is LIVE on frozen 8fe00de, runner PID 30240 started at 08:54:05 after fresh
+playing/process/queue checks. Existing balanced 96-second pan fixture, now with
+fps_cap=8 in BOTH modes to test the roughly 20% per-frame motion confound.
+A common 125 ms cadence is above logged average whole-GI cost; this is a test
+condition, not a quality gate. Require the actual framecap/watch logs and report
+motion, energy and coverage; never infer a win merely from a lower residual.
+No GI/camera/source/threshold/ray changes. Static 301's original-energy gate
+still FAILS. Do not edit P1 or launch another game until actual terminal 303.
 
 The complete fresh fallback now also tries current radiance for absent/nonfinite
 previous colour (4e11688). The disabled control remains original. Unsupported
@@ -97,7 +105,7 @@ promotion. A weak interval or lower-energy residual cannot close P1.
 Use explicit paths. The app may select a different managed checkout.
 
 - Main: C:/Users/quali/Documents/Code Projects/BG3RTX, branch main, pushed.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, d836c09.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 8fe00de.
 - P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, ca1959b, D-EM ABI 9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box, b913e8e, ABI 9.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm, 8d902d5.

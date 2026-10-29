@@ -1,14 +1,14 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 08:48 Europe/Rome
+## Current checkpoint - 2026-10-29 08:55 Europe/Rome
 
 - Main rendering remains 6dba0a8; water design and legal QA exposure hold are merged.
 - P1 remains active. No new attribution or exposure research; research defaults stay off.
 - Rejected history tries complete current radiance, including missing previous colour.
 - Normal bounds now cover both permitted FP16 conversion neighbours and the spatial footprint.
 - Static 297/298 failed parity; 299 includes zero with low power and does not prove equivalence.
-- ONE pan 300 shows no gain: residual +1.84%, cohort energy -15.44%, motion +18.20%.
-- Pan coverage is 18.67% / 25.01%, with 21.2 / 28.6 million accepted samples.
+- Corrected pan 302 shows no gain: residual -1.50%, cohort energy -17.90%, motion +19.89%.
+- Pan 302 coverage is 23.01% / 29.75%, with 25.9 / 34.4 million accepted samples.
 - Static 301: on/off +0.646% within noise; original-PRE +0.460% still fails. All 23 GPU cases pass.
 - All 12 CTests and 24 shader ABI checks pass; seven ordinary shaders are byte-identical.
 - Evidence and branches are pushed. P2-P6 status remains below; reset used and backup safety rules apply.
@@ -107,6 +107,19 @@ gate scenarios pass. No experimental phase was integrated into main.
 Corrected-precision pan 302 started at 08:47:17 on frozen d836c09, one session
 with 24 balanced four-second blocks and a 96-second hold. It is diagnostic only,
 given static 301's original-energy failure. Preserve all evidence and defaults.
+
+
+Corrected-precision pan 302 completed execution-valid on d836c09. Off/on residual
+0.1393289 / 0.1372433 (-1.497%), cohort energy -17.904%, motion +19.888%.
+No quality gain. Samples 34.4 / 25.9 million, grid coverage 29.75% / 23.01%.
+Trace median 0.551 ms; whole GI 65.059 ms under the experimental duplicated
+pipeline. No VVL in this moving run; full 301 validation remains preserved.
+
+Test 303 started at 08:54:05 on frozen 8fe00de. Only the existing fixture changes:
+fps_cap=8 in both modes, same balanced 96-second pan. The common cadence tests
+the mode-dependent camera step confound without new GI or camera logic. Require
+actual framecap/watch logs and report energy, motion and coverage with residual.
+Static 301's original-PRE gate still fails; no promotion is permitted.
 
 
 
