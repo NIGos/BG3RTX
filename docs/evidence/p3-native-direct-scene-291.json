@@ -1,0 +1,372 @@
+{
+  "job": {
+    "job": "p3-native-direct-validation",
+    "run": 1,
+    "start": "2026-10-29T06:26:41",
+    "sec": 139,
+    "valid": true,
+    "outcome": "Run ended: done after 48s (session s062641#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "9beb1e1 Locate remaining native-light format violations by material class | core 06:25:39",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-native-direct-validation.1.062811.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-062822"
+    ],
+    "lines": [
+      "06:28:59.154  [core] ls box stats (120 frames): evaluated 1.323/px, shadow-mapped 0.013/px, traced 0.000/px, occluded 0.000/px, unknown 0.000/px, cookie 0.000/px; game box light 0.000% of lit luminance, removed 0.000%; projector validation px 325786960: game 0.029336, recomputed 0.029512, mean |diff| 0.000009, recompute above game 0.000008, box share 63.267%; counts traced 0 occluded 0 unknown 0 cookie 50429",
+      "06:28:59.154  [core] ls stats (120 frames): non-standard material px 0.1351M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.1306M px, game 0.0504, recomputed 0.0507, mean |diff| 0.00003, recompute above game 0.00003; set0/b0 _m4 (skin shaded white) 1",
+      "06:28:59.154  [core] ls validation fit (all pixels including projectors): game = 0.9961 x recomputed + -0.00006 over 2.53M lit px (mean recomputed 0.02896, game 0.02879); game where no local light reaches 0.00000 (0.06M px)",
+      "06:28:59.154  [core] ls box precise (120 frames): px 325786960 native nonzero 318356927 recomputed nonzero 318593284 invalid 0; raw game 0.0293495403 recomputed 0.0295254617 abs_diff 0.000177180775 over 0.000176551125 box 0.0186895087; mean quantization <= 2.98023224e-08",
+      "06:28:59.154  [core] ls native format (120 frames): px 327782400 invalid 0 unbounded 0 failing 327677; bounded channels 1966694400 violating 1753839; mean excess outside UFLOAT interval 3.49934441e-06 (Q24 half-step 2.98023224e-08)",
+      "06:28:59.154  [core] ls native classes (120 frames): population 311575915 0 0 101899 15875235 154001 12530 62820; failing 324461 0 0 2999 161 4 0 52",
+      "06:28:51.574  [core] [ls-native-direct] active frame 2560 cs f469db7865d7c524 matched native module; AO0/direct1/sun0 validation"
+    ],
+    "session": "s062641#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "quality_verdict": "Execution validity is separate from quality: residual format violations remain OPEN; no native accuracy/default/merge approval.",
+  "scene_windows": 9,
+  "pixels": 2932082520.0,
+  "weighted_means": {
+    "native_y": 0.029359078022200707,
+    "recomputed_y": 0.02953505997775615,
+    "abs_diff": 0.0001772446487775534,
+    "over": 0.00017661330499983057,
+    "box_y": 0.018698417766614604
+  },
+  "relative_y_excess": 0.005994124046482918,
+  "invalid": 0.0,
+  "format_windows": [
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 327390.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1752045.0,
+      "mean_excess": 3.50197375e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 327233.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1752021.0,
+      "mean_excess": 3.49335209e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 327616.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1753326.0,
+      "mean_excess": 3.53515437e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 327448.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1752609.0,
+      "mean_excess": 3.50078767e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 327241.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1752060.0,
+      "mean_excess": 3.49698654e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 327529.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1753326.0,
+      "mean_excess": 3.49321507e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 327642.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1752743.0,
+      "mean_excess": 3.53373218e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 327631.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1753153.0,
+      "mean_excess": 3.47990918e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 327677.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1753839.0,
+      "mean_excess": 3.49934441e-06
+    }
+  ],
+  "format_totals": {
+    "pixels": 2950041600.0,
+    "invalid": 0.0,
+    "unbounded": 0.0,
+    "failing": 2947407.0,
+    "bounded_channels": 17700249600.0,
+    "violating_channels": 15775122.0,
+    "failing_fraction": 0.0009991069278480684,
+    "mean_excess": 3.5038283622222225e-06
+  },
+  "class_windows": [
+    {
+      "population": [
+        311585060,
+        0,
+        0,
+        105589,
+        15857910,
+        148655,
+        20203,
+        64983
+      ],
+      "failing": [
+        324226,
+        0,
+        0,
+        2956,
+        157,
+        2,
+        1,
+        48
+      ]
+    },
+    {
+      "population": [
+        311585582,
+        0,
+        0,
+        105102,
+        15871537,
+        148290,
+        9563,
+        62326
+      ],
+      "failing": [
+        324130,
+        0,
+        0,
+        2887,
+        162,
+        1,
+        0,
+        53
+      ]
+    },
+    {
+      "population": [
+        311598598,
+        0,
+        0,
+        105869,
+        15878802,
+        143356,
+        1160,
+        54615
+      ],
+      "failing": [
+        324266,
+        0,
+        0,
+        3141,
+        161,
+        0,
+        0,
+        48
+      ]
+    },
+    {
+      "population": [
+        311527511,
+        0,
+        0,
+        105540,
+        15874655,
+        148659,
+        47175,
+        78860
+      ],
+      "failing": [
+        324293,
+        0,
+        0,
+        2951,
+        157,
+        3,
+        1,
+        43
+      ]
+    },
+    {
+      "population": [
+        311577115,
+        0,
+        0,
+        105670,
+        15874367,
+        147849,
+        12770,
+        64629
+      ],
+      "failing": [
+        324066,
+        0,
+        0,
+        2957,
+        162,
+        4,
+        0,
+        52
+      ]
+    },
+    {
+      "population": [
+        311566504,
+        0,
+        0,
+        105080,
+        15879701,
+        149489,
+        13000,
+        68626
+      ],
+      "failing": [
+        324246,
+        0,
+        0,
+        3070,
+        161,
+        3,
+        0,
+        49
+      ]
+    },
+    {
+      "population": [
+        311556806,
+        0,
+        0,
+        105696,
+        15874104,
+        148644,
+        23533,
+        73617
+      ],
+      "failing": [
+        324421,
+        0,
+        0,
+        3008,
+        157,
+        2,
+        0,
+        54
+      ]
+    },
+    {
+      "population": [
+        311550879,
+        0,
+        0,
+        107080,
+        15875081,
+        143771,
+        27945,
+        77644
+      ],
+      "failing": [
+        324462,
+        0,
+        0,
+        2957,
+        162,
+        0,
+        0,
+        50
+      ]
+    },
+    {
+      "population": [
+        311575915,
+        0,
+        0,
+        101899,
+        15875235,
+        154001,
+        12530,
+        62820
+      ],
+      "failing": [
+        324461,
+        0,
+        0,
+        2999,
+        161,
+        4,
+        0,
+        52
+      ]
+    }
+  ],
+  "full_log_refused": [],
+  "module_controls": 62,
+  "validation_tags": {
+    "UNASSIGNED-non-acquired-swapchain-image-used": 5608,
+    "VUID-VkShaderModuleCreateInfo-pCode-08737": 1,
+    "Undefined-Value-StorageImage-FormatMismatch-ImageView": 25673,
+    "Undefined-Value-OutputNotWritten": 53,
+    "SYNC-HAZARD-READ-AFTER-WRITE": 8102,
+    "SYNC-HAZARD-WRITE-AFTER-WRITE": 2,
+    "VUID-vkCmdDraw-None-09600": 3,
+    "VUID-vkCmdWaitEvents2-pEvents-10788": 48051,
+    "VUID-vkGetDeviceFaultInfoEXT-device-07336": 1
+  },
+  "scoped_validation_tags": {},
+  "captures": [
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-062822",
+      "final_key": "d222",
+      "final_nonfinite": 0,
+      "nonfinite_dumps": {
+        "d153": [
+          "D32F",
+          "9aaa6d61",
+          6402
+        ]
+      }
+    }
+  ]
+}

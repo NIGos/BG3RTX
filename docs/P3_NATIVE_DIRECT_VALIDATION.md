@@ -105,3 +105,20 @@ with GI disabled in its fixture; no new resource, ABI, capture transport or
 production light model is added. Counts identify the material cohort and the
 map locates it before considering any BRDF correction. Five CTests/two diagnostic
 shader compiles pass; six ordinary binaries remain identical to56bcc06.
+
+291 execution PASS (139s/48s session) confirms the small residual: nine windows,
+2,950,041,600 shaded receivers,2,947,407 failures (0.0999107%), invalid0/unbounded0,
+17,700,249,600 bounded channels and15,775,122 violations. Mean outside-interval
+excess3.50382836e-6Y; raw projector cohort+0.599412%. Failure/population by class:
+0 standard2,918,571/2,804,123,970;3 skin26,926/947,525;4 thin1,440/142,861,392;
+5 hair19/1,332,714;6 cloth2/167,879;7 blend449/608,120. Classes1/2 absent.
+The diagnostic diffuse dump d156 (captures/20261029-062822) shows sparse red
+points on metallic platform rims/details and characters. Final d222 is not a
+raw mask: later SSS/composition/RR obscure tiny points. This is a same-capture
+localization, not image comparison across independent trajectories or a proof
+of the cause. Shadow filtering, fine normal/specular math and material classes
+remain hypotheses; do not weaken intervals or tune brightness.
+62 controlled modules, no whole-log refusals, faults, dumps or build changes.
+Final finite; native D32F d153 has6402 nonfinite retained. Full scoped layout/
+push/write categories absent; other VVL unresolved. Native accuracy, per-query
+unknown-delta identity, cookie filtering and moving quality remain OPEN.
