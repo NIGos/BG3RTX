@@ -1,0 +1,58 @@
+{
+  "job": {
+    "job": "qa-exposure-hold-storage",
+    "run": 1,
+    "start": "2026-10-29T06:44:19",
+    "sec": 129,
+    "valid": true,
+    "outcome": "Run ended: done after 61s (session s064419#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "6523aaa Add serial scene-only validation for corrected exposure hold | core 06:42:52",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\qa-exposure-hold-storage.1.064526.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\qa-exposure-hold\\BG3RTX\\captures\\20261029-064539",
+      "C:\\Users\\quali\\.codex\\worktrees\\qa-exposure-hold\\BG3RTX\\captures\\20261029-064550"
+    ],
+    "lines": [
+      "06:45:58.455  [rrpost] exposure held at EV 13.0581: 388 writes so far; probe b0 EV 13.0581, b1 EV 13.0581",
+      "06:45:58.455  [rrpost] exposure probe (frame 1800): 2cdd9f08 b0 = [9.77093e-05 10234.4 13.0581 -8 26 0.0384615], b1 = [9.77093e-05 10234.4 13.0581 -8 26 0.0384615], lighting s1b13 = [9.77093e-05 10234.4 13.0581 -8]; applied k = b0[1]*b1[0] = 1; 0.8333/2^b0[2] = 9.77093e-05, 0.8333/2^b1[2] = 9.77093e-05"
+    ],
+    "session": "s064419#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "hold_refused": [],
+  "held_probes": [
+    "06:45:27.060  [rrpost] exposure held (qa_exposure_hold=1) at EV 13.0581: [9.77093e-05 10234.4 13.0581 -8 26 0.0384615] (frame 1412)",
+    "06:45:58.455  [rrpost] exposure held at EV 13.0581: 388 writes so far; probe b0 EV 13.0581, b1 EV 13.0581"
+  ],
+  "validation_tags": {
+    "UNASSIGNED-non-acquired-swapchain-image-used": 4488,
+    "VUID-VkShaderModuleCreateInfo-pCode-08737": 1,
+    "Undefined-Value-StorageImage-FormatMismatch-ImageView": 15901,
+    "Undefined-Value-OutputNotWritten": 53,
+    "SYNC-HAZARD-READ-AFTER-WRITE": 6343,
+    "SYNC-HAZARD-WRITE-AFTER-WRITE": 23,
+    "VUID-vkCmdDraw-None-09600": 3,
+    "VUID-vkCmdWaitEvents2-pEvents-10788": 31629
+  },
+  "scoped_validation_tags": {},
+  "captures": [
+    {
+      "capture": "C:\\Users\\quali\\.codex\\worktrees\\qa-exposure-hold\\BG3RTX\\captures\\20261029-064539",
+      "final_key": "d183",
+      "final_nonfinite": 0,
+      "nonfinite_dumps": {}
+    },
+    {
+      "capture": "C:\\Users\\quali\\.codex\\worktrees\\qa-exposure-hold\\BG3RTX\\captures\\20261029-064550",
+      "final_key": "d362",
+      "final_nonfinite": 0,
+      "nonfinite_dumps": {}
+    }
+  ],
+  "preserved_ignored_evidence": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\qa-exposure-hold-294",
+  "quality_scope": "QA hold storage legality and finite output only; other VVL categories unresolved; not a GI quality result."
+}
