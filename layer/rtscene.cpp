@@ -889,22 +889,30 @@ void attach_cascade(RtCapture& cap, const float* cam, uint64_t now) {
     geo_cascade_note_build(4, 0);
     return;
   }
+  // The newest converted soup of F-1 or F-2: with frame generation off the game may record
+  // frame F's build before F-1's cascade pass (user, 2026-10-29: 294 of 297 builds had no
+  // F-1 soup, the roofs leaked). Static casters: the rebase from the soup's own origin holds.
   CascadeSoup soup{};
-  const int why = geo_cascade_soup(now - 1, &soup);
+  int why = 1;
+  uint64_t from = 0;
+  for (uint64_t back = 1; back <= 2 && why; ++back) {
+    why = geo_cascade_soup(now - back, &soup);
+    from = now - back;
+  }
   if (why) {
     geo_cascade_note_build(why, 0);
     return;
   }
+  const bool own = cfg_int("rt_cascade_origin", 1) != 0 && soup.has_origin;
   const CamHist* prev = nullptr;
   for (const CamHist& h : g_cam_hist)
-    if (h.frame == now - 1) prev = &h;
-  if (!prev || !cam) {
+    if (h.frame == from) prev = &h;
+  if ((!own && !prev) || !cam) {
     geo_cascade_note_build(3, 0);
     return;
   }
   // rt_cascade_origin=1: the soup is relative to the cascade UBO's own origin (byte 208);
-  // 0: to the previous frame's camera (the first version's premise, kept for the A/B).
-  const bool own = cfg_int("rt_cascade_origin", 1) != 0 && soup.has_origin;
+  // 0: to that frame's camera (the first version's premise, kept for the A/B).
   cascade::rebase(own ? soup.origin : prev->pos, cam, cap.cascade_t);
   cap.cascade_xfb = soup.xfb;
   cap.cascade_tris = soup.tris;
