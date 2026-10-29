@@ -2,6 +2,22 @@
 
 ## Resumed — 2026-10-29
 
+Run255 completed valid in 200 s: all twelve captures stationary (maximum shift
+0.16 render px), finite GI, valid GPU pose, unchanged PRE alpha and zero driver
+faults/dumps/build changes. Direct-only off/on parity was -0.807%, paired 95%
+CI [-0.000601951, +0.000329959] Y. This is PARTIAL evidence: both controls used
+a different integrand than the original complete composite source.
+
+P1 d53f3e1 restores original complete history in the control/accepted branch;
+rejection now combines fresh native diffuse with the immutable PRE GI at the
+source, matching material/strength/skin conventions. No dropped weight/count.
+The energy gate additionally checks same-frame POST versus original PRE; equal
+loss in both modes cannot pass. Five regressions, 11 CTests, four changed shaders
+and 24 ABI checks pass. Metadata shrinks to surface/optional metric records.
+Job256 is running twelve stationary captures on this frozen candidate. Only a
+pass of both energy checks permits the next ONE-run moving toggle measurement.
+All research keys stay off; no P1 main merge or pan-quality claim.
+
 Static fixture254 / 8ec52c4 now proves stationary capture: albedo shifts only
 -0.04 / 0.0200 render px, GI finite, pose valid, PRE/POST alpha identical;
 99 s, zero driver events/dumps/build changes. The fix initializes the engine's
@@ -10,8 +26,7 @@ after it so event batches terminate. 253 still moved despite polling/input
 neutralization; keep it INVALID. Only SDL_GetGlobalMouseState is statically
 imported by the game; event/poll consistency is necessary, not just coordinates.
 254 off/on Y 0.017001871 / 0.016828934; two captures do not pass the noise gate.
-P1 head7b6e82a pushed. Job255 is running the full twelve-capture static repeat;
-source/binaries frozen. No main rendering merge, no production pan verdict yet.
+Historical fixture proof at 7b6e82a is preserved; job255 results are above.
 
 Static energy run252 execution-valid189s with zero driver events/dumps/build
 changes, but the quality check correctly rejects it: camera moves from camp

@@ -46,7 +46,7 @@ Old research proves owned-motion nonfinite fallback, paired depth/radiance and
 observed camera motion. A private metadata overlap hazard was fixed. It does
 not prove pan quality or the unavailable additional native camera payload.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 7b6e82a, pushed. It excludes
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now d53f3e1, pushed. It excludes
 unrelated FG work. Old current-radiance replay is default-off, paired ABI14;
 scope/evidence: phase docs/CURRENT_RADIANCE.md. No pan-quality win established.
 Latest user steering: STOP cross-run image comparisons. Use a per-run reprojection
@@ -82,23 +82,21 @@ pose valid, eleven GPU predicate cases pass. Normal/depth reject 52.35%/22.46%
 of reported queries (startup included). No P1 quality win or merge; all keys off.
 User steering: rejected history must use a fresh sample of the same expected
 value; key-on static mean must match key-off within measured noise. P1 resumed.
-d2173c7 adds default-off gi_history_fresh: POST frozen-pose replay reuses paired
-DIRECT source or fresh current native lighting on rejection, fixed ray weights/
-denominator, preserved PRE AO. Both gate modes use the same one-bounce source;
-PRE legacy recursive-source energy is also reported. RR full-res, diffuse-only.
-Metadata stride3; previous token consumed after POST readers. No new transport.
-11 CTests, 49 shaders, 24 ABI checks, 4 energy tests and 36 helper checks pass;
-7 ordinary shaders remain byte-identical. StaticCamera owns a client-centred pointer.
-Smoke251 valid113s, zero driver events/dumps/build changes, finite, pose valid,
-identical alpha: off/on Y 0.0166252/0.0170019. Two samples are NOT a noise pass.
-Unlimited VVL: existing renderpass/NGX categories, no dispatch sync hazard or
-message naming 21 private exported handles/new metadata. Scoped evidence only.
-252/253 static QA INVALID: camera really moved. Global polling alone did not
-initialise the engine's event-owned cursor. 8ec52c4 supplies centred SDL motion
-per present with a forced empty poll (no endless loop). All isolation is QA-only.
-254 valid99s: static shift -0.04/0.0200 render px, finite, pose/AO pass, no faults.
-255 LIVE on frozen 7b6e82a: twelve static captures/six AB/BA pairs, then noise CI;
-only after that passes, production off/on within ONE moving run.
+d53f3e1 adds default-off gi_history_fresh: POST frozen-pose replay keeps original
+complete history or uses fresh native diffuse PLUS immutable PRE GI at the source
+on rejection, with material/strength/skin conventions and unchanged ray weights.
+PRE AO is preserved. RR full-res/diffuse-only. Metadata stride1/2; token consumed
+after POST readers; no new transport. 11 CTests, 49 shaders, 24 ABI checks,
+5 energy regressions and 36 helper checks pass; ordinary shaders unchanged.
+251 direct-only smoke valid113s, finite/pose/alpha pass, zero faults. Unlimited
+VVL has existing renderpass/NGX categories, no dispatch/private-handle hazard;
+scoped evidence only. 252/253 camera moved: INVALID static QA. SDL cursor event
+initialization fixed this; 254 static shift -0.04/0.0200 render px in99s.
+255 valid200s, twelve stationary captures, max shift0.16px, alpha exact, no faults.
+Direct-only internal parity -0.807%, CI [-0.000601951,+0.000329959]Y. PARTIAL:
+both modes changed integrand, so it does NOT prove original estimator parity.
+256 LIVE on frozen d53f3e1 complete source. Require BOTH off/on noise parity AND
+same-frame original PRE parity; only then ONE balanced moving toggle run.
 Spec: phase docs/GI_FRESH_FALLBACK.md. Never report moving captures as static pass.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
