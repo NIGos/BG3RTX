@@ -2,6 +2,16 @@
 
 ## Resumed — 2026-10-29
 
+Static energy run252 execution-valid189s with zero driver events/dumps/build
+changes, but the quality check correctly rejects it: camera moves from camp
+to woods, about -318 render pixels x / -42 y between the first two captures.
+No noise/energy pass is claimed. The initial fixture neutralized global mouse
+state but left local/relative mouse and keyboard paths live. P1 e33f356 now
+uses SDL's own window coordinate space consistently, blocks physical keyboard,
+buttons/wheel and relative motion only in opt-in StaticCamera, and logs hooked
+APIs. Job253 is running to prove stationary captures before another full run.
+The frozen normal-error bound also now uses the same frozen basis as its normals.
+
 User resumed and made P1 energy preservation first priority. The rejection
 branch drops L*w then divides by the unchanged ray count: lost bounce, not a
 quality improvement. New default-off gi_history_fresh (P1 d2173c7, current
