@@ -1,5 +1,29 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## Live FG matrix — 2026-10-29, no promotion
+
+Static same-view parity PASS: 30 debug traces, FG 2 primary 99.5195-99.5215%,
+18.7-18.8 rendered fps, displayed/rendered 2.00; FG 0 99.516%, 18.2 fps, 1.00.
+All effects have dispatch/timing evidence; GI debug is black in both modes, so
+nonzero GI energy is not proved. Sheets: captures/p1-fg/static-effects-sheets/.
+Visible non-activating native-windowed real presentation worked without observed
+activation; window coverage was 100%. Latest user authorization waives USER_AWAY
+only for explicit visible_unfocused_fg. Default visible_unfocused remains FG 0.
+
+Motion qualification INVALID: stopped after 13/56 complete phases plus partial
+phase 13. Posted 60 px/s rotation has stationary periods and up to 98.58 deg/frame
+jumps. Baseline FG 2 median ratio 1.00; rebase 1.163, guard 1.412. Corresponding
+primary medians 21.299 / 85.984 / 20.5465%, required 99.501%. RT remained active.
+No quality success or renderer attribution from these confounded paths/views.
+6,106 retired-only destructions reset stability with guard off; 3,279 did not
+with it on. First deciding interior mode changes 0 baseline vs 0 guard, so the
+required reduction is unproved. Key stays default-off; no merge. No SDK focus
+disable/crash exception; invalid-handle teardown followed deliberate game close.
+Next qualify relative background rotation, then repeat sustained FG-on A/B.
+Source logs p1-fg-{static-effects.1.152122,motion-matrix.1.153616}; details and
+phase numbers in docs/evidence/p1-fg-live-20261029.json and PROGRESS_CODEX.md.
+
+
 ## P1 FG-on deciding matrix — 2026-10-29, queued preparation
 
 The user's current symptom occurs with FG on. FG 2 is now the deciding P1

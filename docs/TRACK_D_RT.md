@@ -1,5 +1,30 @@
 # Track D: hardware ray tracing
 
+## Live FG-on primary gate — 2026-10-29, NOT passed
+
+Static parity PASS at primary 99.5195-99.5215%, 18.7-18.8 fps and actual FG 2.00.
+Motion matrix deliberately stopped after 13 complete phases plus partial phase 13:
+posted 60 px/s input produces stationary periods and up to 98.58 deg/frame jumps;
+baseline generated-presentation ratio falls to 1.00. It is INVALID qualification.
+First negative FG 2 rotation primary median baseline/rebase/destroy-only:
+21.299 / 85.984 / 20.5465%, versus static floor 99.501%. All sampled RT 120/120,
+none 0. No visible-flash certification; different paths/views confound attribution.
+Both keys remain off; no merge. See docs/evidence/p1-fg-live-20261029.json.
+
+Translation rebasing alone is insufficient. Residual pool/soup mismatch and
+scene/lighting pose separation support investigating older instance/dynamic
+geometry or camera-buffer epochs, after qualifying no-focus relative rotation.
+They do not prove a native matrix frame index or a Reflex cause. No new selector.
+
+Cost evidence: in the same FG-2 static debug phase, disabling full per-ray stats
+raises 15.5 to 19-20 fps, GI ~6.8 -> 0.379 ms and LS ~5.25 -> 0.530 ms. Source
+p1-fg-static-effects.1.145628.log, 15:02:53-15:03:18. RT 2.872 ms is a mixed
+300-frame interval. Historical 15.040 vs 4.269 ms remain confounded by settings,
+scene/presentation; RR on in both. No isolated rebase performance regression.
+Lightweight primary/epoch producer now counts with full stats off, with no
+lighting change: 21 ordinary SPIR-V byte identities, 20 variants validate.
+
+
 ## P1 deciding configuration is FG ON — 2026-10-29
 
 Latest steering supersedes the FG-off-only gate below: the visible symptom is

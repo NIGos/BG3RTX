@@ -1,5 +1,78 @@
 # BG3RTX progress
 
+## P1 NOT ready: static parity passes, motion qualification fails — 2026-10-29 15:56
+
+Read D:/BG3_Tools/USER_STEERING.md (both 13:57 entries and 14:29 authorization).
+Ran the queue without USER_AWAY, visible/non-activating, real windowed presentation,
+QuickSave_3784, FG 2 cold-loaded. No observed activation or focus setter; the window
+was covered by other apps throughout. Actual generated presentation was measured.
+No user game/USER_PLAYING, save writes, merge or default promotion. Display restored.
+
+Static: PASS, all 13 phases / 30 traces. FG 2 normal primary 99.5195-99.5215%,
+18.7-18.8 rendered fps, displayed/rendered 2.00; FG 0 99.516%, 18.2 fps, ratio 1.00.
+No interior host toggles. All five effects have dispatch/timing evidence; no persistent
+FG-dependent debug difference exceeded repeated-noise/encoding/jitter bounds.
+GI debug was black in BOTH modes: this proves parity only, not nonzero GI contribution.
+The composite feeds debug diffuse into previous radiance; app dumps also do not
+certify generated-frame correctness. Sheets:
+- captures/p1-fg/static-effects-sheets/sun-fg-static.png
+- captures/p1-fg/static-effects-sheets/local-fg-static.png
+- captures/p1-fg/static-effects-sheets/GI-fg-static.png
+- captures/p1-fg/static-effects-sheets/reflections-fg-static.png
+- captures/p1-fg/static-effects-sheets/RR-fg-static.png
+
+Motion: FAIL / INVALID qualification. Stopped the 56-phase job after 13 complete
+phases plus part of phase 13, because posted 60 px/s rotation alternated between
+stationary windows and camera jumps up to 98.58 degrees/frame; normal speed/direction
+fidelity was not proved. Baseline FG 2 rotating displayed/rendered median 1.00,
+so sustained FG generation was absent. Missing unrun phases are not observed RT loss:
+all sampled windows retain RT 120/120, none 0, plus sun/local/GI/reflection/RR evidence.
+The analyzer's primary-mismatch reproduction flag does not certify visible flashes.
+
+| First negative rotation | FG 2 match | Rendered fps | Displayed/rendered | Options calls / interior mode toggles |
+| --- | ---: | ---: | ---: | ---: |
+| baseline | 21.299% | 26.0 | 1.000 | 5 / 0 |
+| rt_scene_rebase=1 | 85.984% | 25.3 | 1.163 | 3 / 1 |
+| fg_current_destroy_only=1 | 20.5465% | 26.6 | 1.412 | 1 / 0 |
+
+FG 0 reference matches: 17.434 / 75.819 / 15.887%, ratios 1.00, 26.2 / 26.4 /
+25.7 fps. These paths/views differ after earlier rotations: do not treat the median
+change as an isolated fix benefit. Required FG-on static floor was 99.501%.
+Both candidates stay default-off. Promotion and a "ready for user check" claim are
+REJECTED; the code remains experimental. No merge-green invocation or main change.
+
+New evidence: 6,106 retired-only destructions reset stability with the guard off;
+3,279 did not with it on (current roles 0x0). Three current-role destructions still
+reset with it off. No SDK focus-disable or crash exception was logged in this run.
+The guard targets real unnecessary resets, but interior toggles were 0 vs 0 in the
+first deciding pair, and it does not restore moving primary match. Its gate did not pass.
+
+Next hypothesis: translation rebasing alone is insufficient. Remaining pool/soup
+mismatch and sampled scene/lighting pose separation are consistent with older instance
+or dynamic-geometry data, or a camera-buffer epoch mismatch; exact frame lag and a
+Reflex/FG cause remain unproved. First repair/qualify no-focus relative rotation input.
+PostMessage reaches BG3 but is NOT yet validated for controlled background rotation;
+no global input or focus forcing will substitute for that check. No new selector.
+
+Logs: captures/queue/logs/p1-fg-static-effects.1.152122.{log,runner.txt,status.json}
+and p1-fg-motion-matrix.1.153616.{log,runner.txt,status.json}. Results:
+captures/p1-fg/{static-effects-result,motion-gate-result}.json. Curated evidence:
+docs/evidence/p1-fg-live-20261029.json. Stop was deliberate CloseMainWindow; the
+subsequent "Invalid window handle" runner exception was a teardown race, not a
+proven game crash/timeout. Earlier 242 s exit remains unattributed.
+
+Cost: same-phase full per-ray stats off raised 15.5 to 19-20 fps; GI ~6.8 ->
+0.379 ms, local ~5.25 -> 0.530 ms (15:02:53-15:03:18 retained log). This exposes
+a large diagnostic cost, not a rebase regression. Historical 15.040 vs 4.269 ms
+remain confounded by scene/settings/presentation; RR was enabled in both.
+RT 2.872 ms was a mixed 300-frame interval, not an isolated key-off pass cost.
+
+Kept tool changes: 92cc6ad, fe17233, 0a6a8cf, b5a2e87, c5a909c (pushed).
+Checks: 20 matrix/static/plan tests, 26 window-policy/geometry and 18 camera/policy
+checks pass; prior 7 CTests, 21 ordinary SPIR-V identities, 20 shader variants pass.
+No further game jobs queued after the invalid verdict. Fixtures remain for repair.
+
+
 ## Static capture budget corrected — 2026-10-29 15:21
 
 The first lightweight attempt met cadence/FG/primary requirements but its 1 GB

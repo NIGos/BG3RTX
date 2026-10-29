@@ -1,5 +1,23 @@
 # P1 transient shadow flashes: positive control first
 
+## Latest FG-on verdict — 2026-10-29
+
+FG 2 is decisive; FG 0 is reference only. Latest authorized mode is visible,
+non-activating native-windowed real presentation without USER_AWAY, blocked by
+USER_PLAYING or an unowned game. Never force focus. ABI is now 16.
+Static parity PASS (13 phases, 30 traces), primary ~99.52%, 18.7-18.8 fps,
+FG ratio 2.00. Five PNG sheets: captures/p1-fg/static-effects-sheets/.
+GI debug black in both modes is only parity evidence, not proof of visible GI.
+Motion qualification INVALID: 13 complete of 56 phases, then partial phase 13;
+posted rotation fidelity and sustained baseline FG generation failed. First
+negative FG 2 primary baseline/rebase/destroy-only 21.299/85.984/20.5465%,
+static floor 99.501%. RT active in every sampled window. This does not certify
+transient final-image flashes or exact TLAS frame lag. Both fixes default-off;
+no merge/readiness claim. Repair relative background rotation before renderer
+work. Reports/logs and limitations: docs/evidence/p1-fg-live-20261029.json.
+The older evidence below is historical and does not supersede this FG-on gate.
+
+
 The user reports new, brief dark wall/shadow regions during camera motion,
 clearing when the camera stops. The current task supersedes the older P2 slot.
 Do not change renderer timing until the hands-off test reproduces the symptom.
