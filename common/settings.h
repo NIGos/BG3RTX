@@ -303,7 +303,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_cascade_casters", "0"},
     {"rt_cascade_index", "2"},
     {"rt_cascade_mb", "160"},
-    {"rt_cascade_roofs_trust", "1"},
+    {"rt_cascade_roofs_trust", "0"},
     {"rt_cascade_origin", "1"},
     {"rt_cascade_alpha", "0"},
     {"rt_cascade_alpha_dedupe", "1"},
