@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint — 2026-10-29 05:10 Europe/Rome
+## Current checkpoint — 2026-10-29 05:15 Europe/Rome
 
 - Main rendering remains 6dba0a8; the P6 water design is merged.
 - P1 corrected geometric gate pan276 demonstrates no gain; all variants stay off and static energy remains failed.
@@ -14,6 +14,24 @@
 - One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
 
 ## Resumed — 2026-10-29
+
+282 weighted attribution is execution/expect INVALID:9 fresh failures among
+9,094,425 replacements, invalid sums0; reason totals close exactly. The mixed
+window old/fresh weighted Y0.004275577/0.004360368 (delta+0.000084791).
+Full layout/push/write VVL categories absent; other categories remain unresolved.
+Raw finite/pose/alpha pass; off capture has53 RGB differences/2.732M pixels
+(+0.00353% mean), so no exact diagnostic-control parity claim. On+1.908% PRE.
+P1 c3b924f keeps the original selection condition and adds failed legacy-energy,
+strict failed-positive counts, and unlit/other failure classes (201 counters).
+No return value, fallback, source or output changed to meet an expect. Next
+four captures allow pure windows; require invalid0 and ZERO failed-positive
+energy, rather than assuming nine failed samples either matter or do not.
+Build12 CTests/24ABI pass; candidate ready after current P3 job.
+283 P3 S5 normal shadow coverage LIVE on frozene56cf88. S7 startup281 remains
+unverified; try one bounded retry later, without touching saves/mods.
+Usage checked:93% weekly used, one reset available but NOT consumed. User
+condition is exhaustion; preserve that authorization for one use at the limit.
+
 
 280 native-AO isolation FAIL: valid188s/185s exclusive, static<=0.16px,
 finite/pose/actual alpha pass; all six off captures match PRE RGB exactly.

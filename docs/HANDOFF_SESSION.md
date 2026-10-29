@@ -31,7 +31,7 @@ Fixed-camera scores and cross-run moving images cannot close P1. Use exact
 reprojection residuals or live off/on in ONE moving session. Do not block on
 AO counters: saved PRE alpha and same-build key-off controls are authoritative.
 
-codex/p1-pan: en2-selfcheck/BG3RTX aaa3754, pushed, paired ABI14. All research
+codex/p1-pan: en2-selfcheck/BG3RTX c3b924f, pushed, paired ABI14. All research
 keys0. Main has no P1 feature. Existing B2/B5 and PRE pose pins through actual
 submission are reused; no new camera transport. Metadata GPU token, depth AND
 world-normal checks guard actual integer colour texel, not unused neighbours.
@@ -108,10 +108,15 @@ inspect native direct-AO/capped give-back at visibility0 using existing data/key
 277 valid150s: ONE AO1 box0/1 reduces difference67.3994%,7/9 pure windows;
 ambient and nonzero overshoot retained.278 actual shadow smoke PASS1.319 rays/px;
 279 unknown-coverage INVALID (cap1 still0.000/px).280 gi_ao0 static12 stillFAILS (+1.17% gate/+0.80% PRE, both CIs exclude0).
-282 LIVE frozenaaa3754: mode4 old/fresh weighted energy on actual rejected
-rays,196 counters, no transport/output changes.12 CTests/24ABI/seven ordinary
-shaders identical. Inspect full VVL plus invalid/failed/reason-count closure.
-281 S7 exits2s before layer/scene; no rendering evidence. Next S5, bounded S7 retry.
+282 attribution INVALID:9 fresh failures/9.094M replacements, sums invalid0,
+reasons close. Mixed weighted old/freshY0.004275577/0.004360368. VVL layout/
+push/write categories absent; other categories unresolved. Off53 RGB differences
+(+0.00353% mean): no exact control parity claim. c3b924f ready: four captures,
+original selection condition restored;201 counters include failed-old energy,
+strict positive count and unlit/other failure classes. No source/output change.
+283 LIVE frozenP3 e56cf88 S5 shadow coverage. S7 startup281 failed2s beforelayer;
+no rendering result; bounded retry later without save/mod changes. Next P1
+weighted failure/closure validation. Weekly usage93% used, reset not consumed.
 Keep active checkout source/binaries frozen. Recheck user-playing/processes/queue
 before every launch. Next runnable P1 experiment keeps priority; consult PAUSED.md.
 
@@ -140,7 +145,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 codex/p3-box 3075e38 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. 273 GI0 still zero because debug4 forces AO0;275 AO1 positive3.236B/invalid0.277 marginal A/B reduces difference67.40%; ambient/overshoot prevent total-accuracy claim. 278 actual shadow rays PASS;279 unknown coverage INVALID. S7/S5 coverage prepared; native accuracy/cookies/quality remain open; no merge.
+- P3 codex/p3-box e56cf88 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. 273 GI0 still zero because debug4 forces AO0;275 AO1 positive3.236B/invalid0.277 marginal A/B reduces difference67.40%; ambient/overshoot prevent total-accuracy claim. 278 actual shadow rays PASS;279 unknown coverage INVALID. S7/S5 coverage prepared; native accuracy/cookies/quality remain open; no merge.
 - P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.
