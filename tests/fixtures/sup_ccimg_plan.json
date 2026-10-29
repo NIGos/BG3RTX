@@ -1,0 +1,68 @@
+[
+ {
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 20,
+  "motion_end": 20,
+  "set": "rt_cascade_casters=0,rt_debug=0"
+ },
+ {
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "set": "rt_cascade_casters=1,rt_debug=7",
+  "trace_at": [
+   15
+  ],
+  "label": "on-dbg7"
+ },
+ {
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "set": "rt_cascade_casters=1,rt_debug=0",
+  "trace_at": [
+   15
+  ],
+  "label": "on"
+ },
+ {
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "set": "rt_cascade_casters=0,rt_debug=7",
+  "trace_at": [
+   15
+  ],
+  "label": "off-dbg7"
+ },
+ {
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "set": "rt_cascade_casters=0,rt_debug=0",
+  "trace_at": [
+   15
+  ],
+  "label": "off"
+ }
+]

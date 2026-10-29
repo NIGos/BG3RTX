@@ -915,9 +915,9 @@ void release(Capture& c) {
 std::mutex g_cc_mu;                 // everything below
 cascade::KeySets g_cc_keys;         // the camera source pass's draw keys (this frame and the last)
 cascade::KeySets g_cc_mesh_keys;    // its mesh keys (alpha-tested cascade draws drawn by it are skipped)
-Capture g_ccap[2];                  // the captured cascade pass of frame F is g_ccap[F & 1]
+Capture g_ccap[3];                  // the captured cascade pass of frame F is g_ccap[F % 3] (a build may use F-1 or F-2)
 struct CcMeta { uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0; bool has_origin = false; float origin[3] = {}; };
-CcMeta g_cc_meta[2];                // what g_ccap[i] holds, converted (frame 0: nothing)
+CcMeta g_cc_meta[3];                // what g_ccap[i] holds, converted (frame 0: nothing)
 constexpr int kCcLayers = 8;
 Capture g_cprobe[kCcLayers];        // the other cascades: their matrix is read, nothing captured
 struct CcMat { uint64_t frame = 0; float v[56] = {}; };
@@ -987,7 +987,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
     }
     return;
   }
-  Capture& c = g_ccap[f & 1];
+  Capture& c = g_ccap[f % 3];
   if (c.state == 1 && c.record_frame == f) return;   // one such pass per frame: never expected
   // (state 1 from an older frame: that recording never ended its pass; start over)
   const VkDeviceSize bytes = VkDeviceSize((std::clamp)(cfg_int("rt_cascade_mb", 64), 4, 1024)) << 20;
@@ -1013,7 +1013,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.c_seen = c.c_dup = c.c_alpha = c.c_drop = c.c_ubo = c.c_full = c.c_added = 0;
   c.c_tris = 0;
   c.rec = bvh_rec_register(cmd);
-  g_cc_meta[f & 1] = CcMeta{};
+  g_cc_meta[f % 3] = CcMeta{};
   // The build two frames ago (BLAS input) and this buffer's last conversion are done with
   // it before the XFB writes (both earlier in submission order).
   barrier(cmd,
@@ -1141,7 +1141,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     // which is not the camera's (92 m away in S7): the rebase starts from it.
     if (mat_ok) { meta.has_origin = true; for (int k = 0; k < 3; ++k) meta.origin[k] = m.v[52 + k]; }
   }
-  g_cc_meta[f & 1] = meta;
+  g_cc_meta[f % 3] = meta;
   CcStats& st = g_cc_st;
   ++st.frames;
   st.seen += c->c_seen, st.dup += c->c_dup, st.alpha += c->c_alpha, st.drop += c->c_drop, st.ubo += c->c_ubo;
@@ -1192,7 +1192,7 @@ void cascade_on_present() {
       g_cc_ms.clear();
     }
     const uint64_t f = frame_index();
-    layer = g_ccap[(f - 1) & 1].layer >= 0 ? g_ccap[(f - 1) & 1].layer : g_ccap[f & 1].layer;
+    layer = g_ccap[(f - 1) % 3].layer >= 0 ? g_ccap[(f - 1) % 3].layer : g_ccap[f % 3].layer;
   }
   const double n = double(st.frames), mb = 1.0 / (1 << 20);
   uint64_t builds = 0;
@@ -2034,8 +2034,8 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
 
 int geo_cascade_soup(uint64_t frame, CascadeSoup* out) {
   std::lock_guard<std::mutex> lock(g_cc_mu);
-  const CcMeta& m = g_cc_meta[frame & 1];
-  const Capture& c = g_ccap[frame & 1];
+  const CcMeta& m = g_cc_meta[frame % 3];
+  const Capture& c = g_ccap[frame % 3];
   if (m.frame != frame || !m.tris || !c.xfb.b) return 1;
   if (bvh_rec_state(m.rec) != 1) return 2;   // its conversion has not run (yet) or never will
   *out = CascadeSoup{c.xfb.b, m.tris, g_stride, m.has_origin, {m.origin[0], m.origin[1], m.origin[2]}};
