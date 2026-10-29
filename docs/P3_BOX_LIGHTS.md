@@ -2,7 +2,8 @@
 
 Branch codex/p3-box starts at main ee7dc56. Checkout currently lives at the
 managed p2-pending/BG3RTX path; the completed P2 branch and evidence are retained.
-This is offline preparation while P1 remains the active rendering priority.
+P1 remains the first priority; this branch now has scoped runtime signal evidence,
+with accuracy and production shadow gates still open.
 
 ## Implemented, not yet approved
 
@@ -27,7 +28,8 @@ cookies and projector-pixel recompute errors. GPU timing identifies box mode.
 
 Build, all 3 CTests, generated-default agreement and 34 shader files pass.
 These checks do not prove native descriptor compatibility, physical agreement
-or visual quality in game. Baseline250 has run (details below); no box-on runtime or main merge yet.
+or visual quality in game. Runtime details below distinguish default reference, activation, signal and
+accuracy evidence. No main merge or default activation is approved.
 
 ## Deciding queue work
 
@@ -148,3 +150,14 @@ counters carry real signal. Native ambient remains, so the difference is not
 pure direct-light error. No total-parity, shadow-ray or quality pass follows.
 Next short ONE-run AO1 box0/1 control measures the marginal projector term
 against its positive native+ambient envelope; no cross-run image comparison.
+
+277 ONE AO1 box0/1 comparison valid150s/88s session, no faults/dumps/build
+changes. Excluding warmup/configuration-straddling/first mixed activation
+windows leaves7 pure off and9 pure on windows (see exact weighted evidence).
+Absolute native/recomputed difference falls about67.4% when boxes are included;
+the missing source contribution is now exercised with real positive signal.
+Native ambient/in-scatter remains in the comparison; nonzero overshoot is
+retained, not waived against an invented tolerance. This is marginal-light
+coverage evidence, not total recompute parity. Default/FULL compatibility,
+shadow rays/unknown fallback, S7/S5 cookies and temporal/visual quality remain
+independent requirements. Keep ls_box0 in both development and release.
