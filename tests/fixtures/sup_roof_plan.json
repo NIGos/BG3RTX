@@ -1,0 +1,52 @@
+[
+ {
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 20,
+  "motion_end": 20,
+  "set": "rt_sun_roof_up=3,rt_sun_roof_pad=1"
+ },
+ {
+  "seconds": 30,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 30,
+  "motion_end": 30,
+  "set": "rt_sun_roof_up=3,rt_sun_roof_pad=1"
+ },
+ {
+  "seconds": 30,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 30,
+  "motion_end": 30,
+  "set": "rt_sun_roof_up=50,rt_sun_roof_pad=3"
+ },
+ {
+  "seconds": 30,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 30,
+  "motion_end": 30,
+  "set": "rt_sun_roof_up=3,rt_sun_roof_pad=1"
+ },
+ {
+  "seconds": 30,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 30,
+  "motion_end": 30,
+  "set": "rt_sun_roof_up=50,rt_sun_roof_pad=3"
+ }
+]

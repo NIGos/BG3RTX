@@ -259,6 +259,15 @@ function Send-MoveKey([bool]$down, [bool]$repeat = $false) {
   [void][BG3RTX.Win]::PostMessage($h, $(if ($down) { 0x0100 } else { 0x0101 }), [IntPtr]$moveVk, [IntPtr]$l)
 }
 
+# Left Shift (VK 0x10, scan 0x2A) posted to the window, held with the plan's pan ("shift": 1).
+function Send-ShiftKey([bool]$down, [bool]$repeat = $false) {
+  $h = Get-GameWindow
+  if ($h -eq [IntPtr]::Zero) { return }
+  $l = 1 -bor (0x2A -shl 16)
+  if (-not $down) { $l = $l -bor 0xC0000000 } elseif ($repeat) { $l = $l -bor 0x40000000 }
+  [void][BG3RTX.Win]::PostMessage($h, $(if ($down) { 0x0100 } else { 0x0101 }), [IntPtr]0x10, [IntPtr]$l)
+}
+
 Add-Type -Namespace BG3RTX -Name Win2 -MemberDefinition @"
 [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
 [DllImport("user32.dll")] public static extern bool GetClientRect(System.IntPtr h, out RECT r);
@@ -644,8 +653,9 @@ while ((Get-Date) -lt $deadline) {
       if ($h -ne [IntPtr]::Zero) { [void][BG3RTX.Win2]::GetClientRect($h,[ref]$rect) }
       $sample = Get-CameraPlanSample $step $elapsed ([Math]::Max(32,$rect.Right-$rect.Left)) ([Math]::Max(32,$rect.Bottom-$rect.Top))
       $panInMotion = $sample.kind -eq 'pan' -and $sample.active
-      if (-not $panInMotion -and $moving) { Send-MoveKey $false; $moving = $false }
+      if (-not $panInMotion -and $moving) { Send-MoveKey $false; $moving = $false; if ($step.shift) { Send-ShiftKey $false } }
       if ($panInMotion -and (Get-Date) -ge $panNextKey) {
+        if ($step.shift) { Send-ShiftKey $true $moving }   # BG3 shows the movement-path UI while Shift is held
         $MoveScan = [byte]$step.scan
         $moveVk = switch ([int]$MoveScan) { 0x1e { 0x41 } 0x10 { 0x51 } 0x12 { 0x45 } default { 0x44 } }   # A, Q (rotate left), E (rotate right), D
         Send-MoveKey $true $moving; $moving = $true
