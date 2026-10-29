@@ -1,5 +1,21 @@
 # BG3RTX progress
 
+## P1 match camera pose, not upload-ring address — 2026-10-29
+
+The address-only selection is rejected: upload-ring offsets recur, so it found
+a retired camera epoch (built 2446 versus present 2449) rather than the frame
+being shaded. Second probe cancelled INVALID; full log preserved at
+captures/p1-pan-flashes/0dff159-camera-epoch-full.log. Static key-off primary
+match is 99.537-99.565%; moving key-off samples fall to 88.943-91.373%.
+The keyed selector now compares the actual native camera pose: absolute xyz
+and the view rotation, with exact finite equality. Projection jitter and unused
+metadata do not identify the pose. Scene pose snapshots are taken from the
+capture camera; the RT callback reads the lighting camera. Only live scene
+slots qualify; newest matching build wins. Instance transforms still come from
+that captured draw stream at submit. Key remains off, ABI 16. Five CTests pass,
+including camera rotation/translation changes versus projection jitter.
+Next: the same-run primary-counter A/B with normal rendered colour.
+
 ## P1 exact camera versus present age — 2026-10-29
 
 First camera-selection probe: 1,800 / 1,800 queries redirected to another

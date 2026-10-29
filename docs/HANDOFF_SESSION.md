@@ -25,6 +25,12 @@ FG toggle issues and the roughly 18 fps base rate follow this explicit P1 task.
 
 ## Current checkpoint and next action
 
+LATEST FIX: upload-ring address matching was rejected (retired epoch). The key
+now matches actual camera origin and view rotation, ignoring projection jitter.
+Both native poses come from the source capture and the lighting callback. Only
+live slots qualify. Five CTests pass; ABI 16. Run the existing same-run fixture.
+Primary match is the gate; burst images are optional and no longer block work.
+
 Camera identity probe redirects 1,800 / 1,800 selections, zero unmatched.
 Old age guards disabled RT for exact matches, so that run was cancelled INVALID.
 Now exact matches are guarded by GPU slot retirement, not present age, in host
