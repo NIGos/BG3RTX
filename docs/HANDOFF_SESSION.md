@@ -31,7 +31,7 @@ Fixed-camera scores and cross-run moving images cannot close P1. Use exact
 reprojection residuals or live off/on in ONE moving session. Do not block on
 AO counters: saved PRE alpha and same-build key-off controls are authoritative.
 
-codex/p1-pan: en2-selfcheck/BG3RTX 82b8528, pushed, paired ABI14. All research
+codex/p1-pan: en2-selfcheck/BG3RTX bc71cb3, pushed, paired ABI14. All research
 keys0. Main has no P1 feature. Existing B2/B5 and PRE pose pins through actual
 submission are reused; no new camera transport. Metadata GPU token, depth AND
 world-normal checks guard actual integer colour texel, not unused neighbours.
@@ -86,10 +86,13 @@ Full build/11 CTests,49 shaders/24 ABI,7 ordinary byte-identical pass.265 valid1
 GPU15/15 pass in both captures, static0.06px/AO/finite/no faults. Off45/2.73M RGB
 pixels differ; on versusPRE+0.926%, NOT a two-capture noise pass. VVL2667 existing
 hazards, zero dispatch/private-source/new-metadata messages (scoped, not clean).
-266 LIVE frozen82b8528, twelve non-self-test captures. Spec GI_GEOMETRIC_NORMAL.md.
+266 static12 valid204s/no faults but off/on+0.46644% CI excludes0: FAIL; PRE CI
+includes0 does not override. Spec GI_GEOMETRIC_NORMAL.md.
 Then ONE moving test only as evidence permits; no execution-only quality pass.
-If depth bias persists, compare plain ray_at position against the pan metric's
-existing native-camera round-trip correction; no new payload or arbitrary bound.
+bc71cb3 diagnostic self-test2 measures ray/projection offsets versus current/old
+jitter in reserved row12, PRE/POST, existing bindings only.268 LIVE frozen3 static
+captures/gate0. Packed24-bit fields exact in float export. Check whether matrices
+intentionally differ in jitter BEFORE changing positions; no offset-only inference.
 Keep active checkout source/binaries frozen. Recheck user-playing/processes/queue
 before every launch. P1 active offline while P3 ran; next runnable P1 gets priority.
 
@@ -118,7 +121,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 codex/p3-box c039f87 (p2-pending/BG3RTX), default off.264 default reference PASS:24 windows/7.845B pixels, zero any-bit/relative/one-writer/join differences, no faults.250 FULL-variant tiny bit differences remain open. No box-on run/merge; P1 runnable tests have priority.
+- P3 codex/p3-box f63da03 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL recorded, no clean certificate. Shadow rays/quality untested; no merge.
 - P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.

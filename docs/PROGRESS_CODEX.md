@@ -2,6 +2,27 @@
 
 ## Resumed — 2026-10-29
 
+266 geometric static12 FAILS off/on noise parity: +0.46644%, CI
+[+0.000041845,+0.000119520]Y. Pooled PRE target includes0 but cannot override
+that failure. Valid204s, maxshift0.08px, finite/pose/alpha pass, no faults/dumps/
+build changes. No reconstruction or threshold change is justified yet.
+P1 bc71cb3 adds diagnostic self-test mode2: reserved pose row12 measures frozen
+B1-ray versus native B2 projection at two render-relative pixels and classifies
+agreement with known current/previous jitter. PRE AND POST checkpoints compare
+the same frame; packed24-bit integers survive float exports exactly. Existing
+bindings5/48/50/51, Push256, actual-submit pins, no new camera payload or image
+change. Build11 CTests, shader/24 ABI checks pass.268 LIVE three static captures,
+gate0; do not infer which matrix is jittered or MV sign from an offset alone.
+
+267 first P3 activation valid291s/219s session, zero driver faults/dumps/build
+changes; native set3 binds with2 dynamic offsets, projector evaluations nonzero
+(last1.319/px). Accuracy INCONCLUSIVE: reported game/recompute means0, while fx
+quantizes raw radiance at1/256 and native scale0.00136865. Zero counters do not
+prove black rendering or agreement. VVL full log retained; contains native/SDK
+format/event/layout categories, no set3-naming message; no clean certificate.
+Debug4 did not exercise shadow rays. P3 f63da03 pushed/default off; next recover
+sufficient projector-stat precision or raw signal before assessing accuracy.
+
 265 geometric-normal smoke valid111s, no driver faults/dumps/build changes.
 BOTH GPU self-test rows[32767,32767,15,1]:15/15 pass. Static shift0.06px,
 finite GI, PRE alpha exact. Off Y0.017494613 vsPRE0.017495760;45/2,731,520
