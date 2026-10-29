@@ -86,15 +86,9 @@ variants compile; seven ordinary shaders remain byte-identical to d9cb628.
 The 301 terminal audit passed finite/alpha/pose checks and reason-count closure.
 Retain its original-energy failure when interpreting the next pan diagnostic.
 
-Recent evidence on P1:
-- 296 inconclusive; 297/298 fail energy parity, including shuffled order.
-- 299 on 4e11688 includes zero in both intervals, but LOW POWER: on/off +2.651%,
-  relative CI about [-1.093%, +6.395%]. Original-PRE +0.2126%. No equivalence claim.
-- 300 is terminal and execution-valid on the same renderer: ONE live-toggle pan,
-  residual 0.1359554 / 0.1384546 (+1.838%), cohort GI Y -15.445%, motion +18.197%.
-  No quality gain. Samples 28,648,686 / 21,195,860, grid coverage 25.01% / 18.67%.
-  Trace median 0.550 ms; whole GI 65.771 ms under experimental duplicated passes.
-  Validation was off in 300; preceding full 299 VVL is retained separately.
+Earlier runs 297/298 fail energy parity; 299 is low power. Moving run 300 also
+establishes no gain. Preserve their complete evidence rather than reusing a
+favourable interval or comparing independent pans.
 
 Raw/analysed evidence is in docs/evidence on P1. Scoped layout/push/write errors
 were absent in 299; other VVL categories remain unresolved. No default/main
