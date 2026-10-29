@@ -2,6 +2,17 @@
 
 ## Resumed — 2026-10-29
 
+Complete-source run256 execution valid149s, stationary max0.06 render px,
+finite/pose/alpha pass, zero driver faults/dumps/build changes. Energy checks
+FAIL: on/off +1.0583%, paired CI [0.000003457,+0.000362817]Y; POST versus
+original PRE +0.5418%, CI [0.000011949,+0.000175550]Y. The large darkening is
+gone, but this is not noise parity or a P1 quality pass.
+P1 ccb1f65 additionally mirrors original composite spectral diffuse-share
+reconstruction and fp16 storage; fresh replay now follows RF so its specular
+source is complete. No empirical energy multiplier. Full build/11 CTests and
+two changed trace shaders pass. Job257 repeats twelve static captures frozen
+on that revision. Balanced moving fixture is ready; keep all keys off.
+
 Run255 completed valid in 200 s: all twelve captures stationary (maximum shift
 0.16 render px), finite GI, valid GPU pose, unchanged PRE alpha and zero driver
 faults/dumps/build changes. Direct-only off/on parity was -0.807%, paired 95%
@@ -14,8 +25,8 @@ source, matching material/strength/skin conventions. No dropped weight/count.
 The energy gate additionally checks same-frame POST versus original PRE; equal
 loss in both modes cannot pass. Five regressions, 11 CTests, four changed shaders
 and 24 ABI checks pass. Metadata shrinks to surface/optional metric records.
-Job256 is running twelve stationary captures on this frozen candidate. Only a
-pass of both energy checks permits the next ONE-run moving toggle measurement.
+Job256 results are above. Only a pass of both energy checks permits the next
+ONE-run moving toggle measurement.
 All research keys stay off; no P1 main merge or pan-quality claim.
 
 Static fixture254 / 8ec52c4 now proves stationary capture: albedo shifts only

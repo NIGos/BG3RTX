@@ -25,8 +25,7 @@ Put future questions atop PROGRESS_CODEX and continue conservative/offline work.
 
 ## Main and research state
 
-Main 441904a includes the P6 water design; rendering remains 6dba0a8 (corrected
-local-light reference/merge checks). No P1 research feature is in main yet.
+Main includes P6 water design; rendering remains 6dba0a8. No P1 feature merged.
 Remote: origin, private NIGos/BG3RTX. Preserve all snapshot tags and backups.
 Old pre-rewrite SHAs can be translated with
 D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history again.
@@ -46,7 +45,7 @@ Old research proves owned-motion nonfinite fallback, paired depth/radiance and
 observed camera motion. A private metadata overlap hazard was fixed. It does
 not prove pan quality or the unavailable additional native camera payload.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now d53f3e1, pushed. It excludes
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now ccb1f65, pushed. It excludes
 unrelated FG work. Old current-radiance replay is default-off, paired ABI14;
 scope/evidence: phase docs/CURRENT_RADIANCE.md. No pan-quality win established.
 Latest user steering: STOP cross-run image comparisons. Use a per-run reprojection
@@ -95,8 +94,11 @@ initialization fixed this; 254 static shift -0.04/0.0200 render px in99s.
 255 valid200s, twelve stationary captures, max shift0.16px, alpha exact, no faults.
 Direct-only internal parity -0.807%, CI [-0.000601951,+0.000329959]Y. PARTIAL:
 both modes changed integrand, so it does NOT prove original estimator parity.
-256 LIVE on frozen d53f3e1 complete source. Require BOTH off/on noise parity AND
-same-frame original PRE parity; only then ONE balanced moving toggle run.
+256 valid149s/no faults, static0.06px/alpha pass; energy FAIL: on/off+1.0583%,
+POST/PRE+0.5418%, both CIs exclude zero. Large darkening gone, no quality pass.
+ccb1f65 mirrors original spectral share/fp16 rounding after RF. Job257 LIVE,
+frozen twelve captures. Require BOTH off/on and original PRE noise parity;
+then ONE moving toggle run (new balanced gi_fresh_pan_phases.json ready).
 Spec: phase docs/GI_FRESH_FALLBACK.md. Never report moving captures as static pass.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
