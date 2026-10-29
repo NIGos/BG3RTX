@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 05:37 Europe/Rome
+## Current checkpoint - 2026-10-29 05:59 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -8,12 +8,30 @@
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P3 S7 exercises 7.638 million actual unknown queries and 10.084 million cookies; native accuracy and moving quality remain open.
+- P3 native-direct diagnostic288 is live on matched ABI9; ordinary shaders remain byte-identical and native accuracy is still unproved.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
-- One reset is authorized at exhaustion and unused; latest weekly usage read was 93%.
+- One reset is authorized at exhaustion and unused; latest weekly usage read is 99%, ordinary usage still allowed.
 
 ## Resumed — 2026-10-29
+
+P3 7adc91d adds startup-only native-direct validation (default/release off).
+Recognized native compute scalar reads of set1/b0 flags become AO enabled,
+direct-AO coefficient0 and sun-mask enabled. Native UBOs/descriptors/BRDF/cookie
+code are untouched. Actual successful variant follows module -> pipeline ->
+command state -> dispatch; core refuses missing/mixed controls and unsupported
+modes. Separate owned validation full/full-box variants use matching direct
+factors1; all six ordinary/default/FULL/check/box shader binaries are identical
+to56bcc06. Paired host/core ABI9; no reuse of P1's ABI14 process.
+Offline semantic/foreign-interface/unsupported/malformed tests pass with release
+assertions enabled. All62 captured native lighting modules transform exactly
+three scalar loads/components11 and pass spirv-val. Full build/4 CTests and both
+new owned shaders compile. These are not native-accuracy or quality passes.
+288 LIVE frozen7adc91d, standalone S6 two traces with full unlimited VVL. Runner
+37748 started05:58:38. Require actual applied modules, positive signals, no REFUSED
+lines and full layout/push/write audit before interpreting error numbers. Atmosphere
+in-scatter/transmittance remains a possible residual, not a blanket waiver.
+
 
 287 S7 cap1 exact-population control PASS: valid 115 s / 49 s session, seven
 complete windows total 640,149,005 traced queries, 192,085,618 occlusions,

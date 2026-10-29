@@ -16,14 +16,14 @@ The user resumed on Oct29; the overall goal remains ACTIVE.
 - QUALITY R0: derived gates, quality before speed on Ultra; research defaults stay off.
 - No FG/HDR-UI/swapchain work unless needed by the active phase.
 One usage reset is authorized AT EXHAUSTION, not used yet. Latest read: weekly
-usage 93%, one reset available. Do not consume merely because it is eligible.
+usage 99%, one reset available. Do not consume merely because it is eligible.
 
 ## Stable code and checkouts
 Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
 - P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 725955f, pushed, paired ABI14.
-- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box 56bcc06, pushed.
+- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box 7adc91d, paired ABI9, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
 Old research: pan-motion-vectors/BG3RTX 929be7a; motion-jitter/BG3RTX 53f0925.
@@ -32,14 +32,14 @@ D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Live job and immediate next action
-Queue IDLE; no game or runner should be assumed live from an old state file.
-P1 725955f and P3 56bcc06 are clean/pushed.287 S7 cap1 PASS actual coverage:
-7.638M unknowns/10.084M cookies over seven complete windows; all dumps finite.
-Native accuracy and moving quality remain open. More uncontrolled AO1 smoke
-cannot close them: inspect a native-direct isolation that avoids ambient AND
-AO0/direct suppression, checking native binding ownership before any override.
-P1 source-epoch/conditional mismatch and unsupported unlit shading remain open;
-no transport, brightness or lighting-model reduction is justified by failed controls.
+288 LIVE frozen P3 7adc91d, paired ABI9: standalone S6 native-direct validation,
+two traces/full unlimited VVL. Runner37748 started05:58:38; verify actual handles
+and terminal queue result. No restart from observation timeout; freeze P3 tree.
+Native scalar controls AO1/directAO0/sunMask1 avoid shared-buffer mutation.
+Actual variant follows module/pipeline/command/dispatch; reject every REFUSED log.
+62 native modules/4 CTests pass; six ordinary shaders byte-identical. Accuracy
+still unproved; in-scatter/transmittance is retained as a possible residual.
+Weekly usage99%, ordinary allowed, reset available but not consumed; use at exhaustion.
 
 ## P1 - pan instability remains OPEN
 User sees lighting/shadows detach while panning; Ctrl+Shift+F9 restores native.
@@ -126,7 +126,8 @@ Sampling is exercised, not yet native-filter accuracy or unknown-pair proof.
 283 S5 PASS: ten windows,0.079 rays/px,0.029 occluded/px; final finite.
 S6/S5 cookie rates0;287 S7 exact counts prove7.638M unknown and10.084M cookie
 evaluations. Native accuracy/per-query delta and moving/visual quality stay open.
-See docs/P3_BOX_LIGHTS.md and evidence278-287. Do not modify saves or reinstall mods.
+Native-direct control: docs/P3_NATIVE_DIRECT_VALIDATION.md (new ABI9); runtime288
+is live, ordinary key0 unchanged. See docs/P3_BOX_LIGHTS.md and evidence278-287. Do not modify saves or reinstall mods.
 
 ## P4-P6
 P4 has a conservative CPU interval classifier and corrected stochastic-alpha
