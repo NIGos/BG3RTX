@@ -1,0 +1,62 @@
+[
+ {
+  "seconds": 14,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 13,
+  "serial": 0,
+  "motion_start": 14,
+  "motion_end": 14,
+  "set": "ls_shadowed=1,ls_k=0"
+ },
+ {
+  "seconds": 14,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 13,
+  "serial": 0,
+  "motion_start": 14,
+  "motion_end": 14,
+  "set": "ls_shadowed=3"
+ },
+ {
+  "seconds": 14,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 13,
+  "serial": 0,
+  "motion_start": 14,
+  "motion_end": 14,
+  "set": "ls_shadowed=3,ls_k=1"
+ },
+ {
+  "seconds": 14,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 13,
+  "serial": 0,
+  "motion_start": 14,
+  "motion_end": 14,
+  "set": "ls_k=0,rt_alpha_test=0"
+ },
+ {
+  "seconds": 14,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 13,
+  "serial": 0,
+  "motion_start": 14,
+  "motion_end": 14,
+  "set": "rt_alpha_test=1,ls_box=0"
+ },
+ {
+  "seconds": 14,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 13,
+  "serial": 0,
+  "motion_start": 14,
+  "motion_end": 14,
+  "set": "ls_box=1"
+ }
+]
