@@ -200,6 +200,20 @@ plan switches it on with `on0` (after the warm-up traces), for the whole run. Lo
 `rr=1` and `rr_post=1`. Until a run with the hold validates the light-off floors, `hard_dark`'s
 energy test is review only (`detectors.T["dark_energy_gate"]`).
 
+The Oct29 P1 isolation292 exposed a pre-existing invalid write: the native
+adaptation output has STORAGE_BUFFER usage, without TRANSFER_DST, so the old
+CmdUpdateBuffer hold caused VUID-vkCmdUpdateBuffer-dstBuffer-00034. Its apparent
+hold/noise result is not valid evidence. The correction writes the six float
+values with a one-thread storage shader using the actual dispatch's binding1/1
+(including dynamic offset), checks its storage type and24-byte range, and reuses
+the existing binding12/ring/push layout. Compute write dependencies and original
+compute bindings are restored by the existing run helper. No native allocation,
+usage flag, host/core ABI or production exposure behaviour changes. Missing
+target/pipeline is REFUSED and does not increment successful-write counts.
+All ten pre-existing post shader entries are binary-identical after stripping
+debug/compacting IDs; the new hold validates in cs_6_0 and cs_6_6. Runtime must
+confirm no refusal/update-usage errors, matching held probes and full VVL audit.
+
 ## Thresholds and their derivation
 
 Rule (QUALITY.md R0, "Every gate needs a derivation"): a gate, threshold, tolerance or

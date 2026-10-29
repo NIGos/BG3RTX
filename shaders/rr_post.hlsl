@@ -264,3 +264,15 @@ void sss(uint3 id : SV_DispatchThreadID) {
   }
   OutR16[id.xy] = isfinite(g) ? g : 0.0;
 }
+
+// QA-only: the adaptation output is a writable storage buffer without transfer
+// destination usage. Values use existing push fields; only these 24 bytes change.
+[numthreads(1, 1, 1)]
+void hold(uint3 id : SV_DispatchThreadID) {
+  Probe[0] = pc.uvmap.x;
+  Probe[1] = pc.uvmap.y;
+  Probe[2] = pc.uvmap.z;
+  Probe[3] = pc.uvmap.w;
+  Probe[4] = pc.uvclamp.x;
+  Probe[5] = pc.uvclamp.y;
+}
