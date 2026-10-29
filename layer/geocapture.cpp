@@ -1579,7 +1579,14 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
       return;
     }
   }
-  const bool gbuf = is_gbuffer(s->pass);
+  // The main G-buffer is the largest one seen recently: a smaller pass with its formats
+  // (UI portraits) must not move the render resolution or the prepass depth image.
+  static std::atomic<uint64_t> main_seen{0};
+  bool gbuf = is_gbuffer(s->pass);
+  if (gbuf && g_gbuf_w && uint64_t(s->pass.width) * s->pass.height < uint64_t(g_gbuf_w) * g_gbuf_h &&
+      frame_index() <= main_seen.load() + 4)
+    gbuf = false;
+  if (gbuf) main_seen = frame_index();
   // D-EM: an effects pass (the game's emissive draws, emissive.cpp).
   if (g_on && !gbuf && em_is_fx_pass(s->pass, g_gbuf_w, g_gbuf_h)) {
     auto* e = new EmPass;
