@@ -1,112 +1,108 @@
-# Session handoff — P1 shadow flashes, 2026-10-29
+# Session handoff — PAUSED by user, 2026-10-29
 
-Read AGENTS.md, docs/P1_PAN_FLASHES.md and the top of docs/PROGRESS_CODEX.md.
-The user explicitly resumed this conversation and asked to continue the thread
-Risolvi i flash d’ombra durante il pan (01a186cc-2243-7521-a2f5-19ba41b4b6c7).
-Its newer P1 request supersedes the old pause and P2 priority recorded below in
-historical progress. No new renderer synchronization fix has been applied.
+The user paused all activity to continue from CLI Codex. Do not launch jobs or
+resume development until their next explicit go-ahead. No game or queue runner
+remains active; pending/running queues are empty. No Ponytail ever.
 
-## Workspace and permissions
+## Checkout
 
-Use C:/Users/quali/Documents/Code Projects/BG3RTX explicitly. This checkout is
-currently on codex/p1-pan-flashes, NOT main. Main ref is 58b06b4. Keep experimental
-work on this branch; only scripts/merge-green.ps1 may integrate into main.
-Paired ABI 16: host and core must match. Do not reuse other branch processes.
+Use C:/Users/quali/Documents/Code Projects/BG3RTX explicitly.
+Branch codex/p1-pan-flashes; implementation commit f6b7ad9, pushed.
+Main remains 58b06b4. Experimental changes have NOT been merged.
+Host and core are paired ABI 16. Five CTests pass.
+Read AGENTS.md and the top of docs/PROGRESS_CODEX.md before resuming.
 
-The latest user permission allows the game visible in the background while they
-use the PC. Do not require USER_AWAY or force focus. Always use real presentation.
-Never launch if USER_PLAYING exists, a user game runs, or the queue/runner is busy.
-Every game uses scripts/test-queue.ps1 with patterns/expect. Freeze source, binaries
-and HEAD until the actual job is terminal. Observation timeout is not completion.
-Never touch saves, backups, snapshot tags or junction targets. No Ponytail ever.
-Restore display settings through the existing auto-run helpers. Do not spawn agents
-without new user authorization. The original overall project scope remains P1-P6;
-FG toggle issues and the roughly 18 fps base rate follow this explicit P1 task.
+## Latest user steering: the actual P1 gate
 
-## Current checkpoint and next action
+Continue the thread Risolvi i flash d’ombra durante il pan
+(01a186cc-2243-7521-a2f5-19ba41b4b6c7).
+The user explicitly says STOP polishing the burst tool. Existing primary-ray
+check evidence is the accepted positive control: real presentation, FG off,
+about 21 fps; static 99.53-99.57%, slow pan 89.25%, fast pan 31.40%
+(in front 36.1%, behind 27.9%). It shows RT/G-buffer displacement during pan.
+Fix the camera/TLAS frame alignment behind a default-off key. A/B within ONE
+presented moving run. Gate: moving primary-ray match reaches the static level,
+approximately 99.5%, with RT active. Missing RT is NEVER a passing result.
+Burst images are optional illustration, not a gate. Ask for in-game confirmation
+only after the automatic primary-match gate passes.
 
-LATEST FIX: upload-ring address matching was rejected (retired epoch). The key
-now matches actual camera origin and view rotation, ignoring projection jitter.
-Both native poses come from the source capture and the lighting callback. Only
-live slots qualify. Five CTests pass; ABI 16. Run the existing same-run fixture.
-Primary match is the gate; burst images are optional and no longer block work.
+## What was tried, and what is NOT fixed
 
-Camera identity probe redirects 1,800 / 1,800 selections, zero unmatched.
-Old age guards disabled RT for exact matches, so that run was cancelled INVALID.
-Now exact matches are guarded by GPU slot retirement, not present age, in host
-and core. rt_primary_check=1 supplies the existing GPU primary counters without
-bursts or debug colour; the A/B fixture enables it throughout. Four CTests pass.
-Run the corrected p1_camera_match_job.json; quality gate is still OPEN.
+rt_scene_camera_match defaults to 0. The existing scene selector normally hands
+out the latest global TLAS/set pair. Experiments tried selecting another scene:
 
-LATEST USER STEERING: stop burst-tool work. Existing primary-ray evidence is
-the accepted positive control (99.53-99.57% static, 89.25% slow, 31.40% fast).
-Fix renderer alignment behind a key; A/B within one presented pan run. Gate
-is moving primary match near the static 99.5% level; images are optional.
-Current experiment rt_scene_camera_match defaults to 0 and matches the native
-lighting-camera UBO identity to its scene. Paired ABI is now 16, not 15 below.
-Fixture tests/fixtures/p1_camera_match_job.json alternates off/on in ONE run.
-No renderer quality result yet. Do not confuse missing RT with a passing gate.
+- 0edf4ed: native UBO buffer/offset matching. All 1,800 queries redirected but
+  the old present-age guard rejected the selected scene; RT was disabled.
+- 0dff159: permit exact camera selection while the GPU slot remains live,
+  independent of present age. Address matching still chose an old upload-ring
+  epoch: built 2446, present 2449. Cancelled INVALID, not a quality improvement.
+- f6b7ad9: match actual absolute origin and view rotation, ignoring projection
+  jitter and unused metadata. Static off/on stays around 99.55%, with RT active.
+  During slow motion there is NO exact matching scene. Example lighting origin
+  (-342.220398, 17.340019, -155.492493), latest source snapshot
+  (-342.220520, 17.340019, -155.463211). Key-on accumulates 962 unmatched frames
+  and disables RT. This hypothesis is rejected as a fix; cancelled INVALID.
 
-The first normal-rate final-colour positive run (08a0256) is INVALID: only
-6 / 4 / 7 / 8 final samples across the four bursts, with all other channels
-complete. The present counter advances during recording. Capture now binds
-all channels to the depth command-buffer recording and checks that identity
-at submit and analysis. Four CTests and 14 analyzer tests pass. No renderer fix
-or ABI change. Repeat the same positive fixture on this corrected capture.
-Evidence: docs/evidence/p1-pan-08a0256-positive.json.
+Source camera poses are CPU snapshots read from the capture's native UBO at
+rt_after_capture. Lighting pose is read from its native compute UBO in the
+callback. Native static instance rows are read from each recorded draw's mapped
+instance stream at bvh_on_submit. Current data does not yet prove the CPU pose
+is exactly the coordinate origin used by every GPU geometry path.
 
-Prior positive-control job a0bb416 completed on the same frozen build, with no
-new driver event/dump. All three bursts lack final colour, so quality is INVALID.
-Static/slow/fast captured record cadence: 18.82 / 16.84 / 18.82 fps. Primary match
-99.534% / 88.044% / 30.922%. GPU conversion-camera origins in the fast burst
-match lighting origins at offset +1 for all ten tested centres. This is evidence,
-not proof of instance-transform timing or a final-image flash. No lag fix yet.
-Evidence: docs/evidence/p1-pan-a0bb416-positive.json. Full prior log retained.
+NEXT IMPLEMENTATION IDEA, NOT IMPLEMENTED: consistently rebase ray origins
+between lighting space and the actual TLAS camera-relative space, using the
+measured scene origin, instead of searching for a nonexistent identical pose.
+The translation sign is lighting_absolute_origin minus scene_absolute_origin.
+Confirm the source origin used by native instance matrices and dynamic XFB
+conversion; CPU snapshots and GPU UBO observations need not be interchangeable.
+Apply consistently to all four query entry points in rt_common.hlsli (sun,
+local lights, GI, AO/reflections), preserving lighting-space returned positions.
+Keep off-by-default shader variants byte-identical to the existing ordinary
+SPIR-V. No compensation shader or new rebase key has been written yet.
 
-The final-colour capture now uses native hudless tonemap output, matching the
-existing tracer/Streamline signature. Validation burst pan-20261029-102059-10
-contains all 176 samples for 16 frames, including final RGB10A2 3840x1600 and
-G-buffer 2560x1067. Dimensions are read from resources. Image values are finite.
-Native UBO word 55 is unused metadata, not a camera-origin float or colour.
-No copy-image VVL tags; other errors remain, including one unattributed invalid
-source-buffer copy. Full VVL: captures/p1-pan-flashes/08a9c39-final-validation.log.
-Capture rate 11.86 fps under validation is NOT a positive-control result.
+## Existing measurement and saved evidence
 
-Analyzer fixes: actual image format precision, correct Inf/NaN decoding, camera
-jitter classification, footprint-bounded textured-surface matching, per-world
-static noise instead of a scene-wide maximum, independent static evaluation.
-13 synthetic tests and all three CTests pass. No rendering logic/lag correction.
-The largest static noise must not disable every binary-mask detection.
+rt_primary_check=1 reuses gi/pan_primary.hlsl for GPU primary counters every
+frame, WITHOUT burst readbacks or a debug-colour overlay. Default 0.
+The existing tests/fixtures/p1_camera_match_job.json and _plan.json alternate
+static, slow and fast off/on phases in ONE run, real presentation, FG off,
+QuickSave_3784. It still tests the failed selector; update it for the next fix.
+Do not use rt_debug=3 for normal-colour quality runs: it overwrites the image.
 
-Next queue tests/fixtures/p1_pan_positive_job.json, after fresh idle/playing checks.
-It uses QuickSave_3784, Ultra, FG off, real presentation, no renderer fixes.
-Plan: static calibration 11, independent static 12, slow pan 13, faster opposite
-pan 14; each capture is K=16. The existing runner restores display settings.
-Analyze only those new burst directories from the job's full log with
-python -m scripts.qa.pan_artifacts ... --out captures/p1-pan-flashes/positive-analysis.
-Report actual capture cadence, coverage, events/area, mask attribution, primary
-match, offset evidence and contact sheets. If not reproduced at comparable
-cadence, fix the test setup (FG on is authorized as a second case) before changing
-the renderer. No independent moving-run image comparisons or guessed camera lag.
+Full preserved logs in captures/p1-pan-flashes/:
+- 08a0256-positive-full.log: accepted primary positive-control evidence.
+- 0edf4ed-camera-match-full.log: first selector, missing RT.
+- 0dff159-camera-epoch-full.log: upload-ring address aliasing.
+- f6b7ad9-camera-pose-full.log: exact pose has no moving match, missing RT.
+Queue kept logs are also under captures/queue/logs/.
+The 21 ordinary shader baseline binaries were compiled before any rebase edit:
+captures/p1-pan-flashes/rebase-spv-before/. No HLSL source has changed yet.
 
-After reproduction, confirm TLAS/camera data correspond to the G-buffer epoch.
-Check rt_after_capture/g_last_frame deduplication and scene-slot reuse against
-GPU pose evidence; counters alone do not prove geometry lag. Add a default-off
-fix only when justified, then require static-level flash and mismatch rates.
-Ask the user only for final in-game confirmation after the automatic gate passes.
+Burst work is stopped. Earlier capture fixes are committed but final images
+remain incomplete at normal rate. Do not spend more time repairing this before
+the renderer fix. Old burst reports marked INVALID are not absence-of-flash proof.
 
-## Tools and preserved work
+## Execution rules and permissions
 
-Build: scripts/build.ps1 -Test. Analysis tests: py -3 -m unittest tests.pan_artifacts_test.
-Runtime shaders: tools/compile_shaders.py. Vulkan SDK: C:/VulkanSDK/1.4.357.0/Bin.
-Authoritative queue records: captures/queue/results.jsonl and full log paths.
-Never hold captures/queue/results.md open. Preserve validation.log before overwriting.
-User source log: captures/p1-pan-flashes/source-logs/user-0929-0934.log.
+Only scripts/test-queue.ps1 launches games; every job needs patterns/expect.
+Check USER_PLAYING, actual bg3/bg3_dx11 processes, runners and pending/running
+before any launch. Never kill a user game. Cancelled probes above were verified
+owned test processes; their runners completed cleanup. Display helpers restore
+the user's settings. Latest standing permission allows visible second-plane
+real presentation while the user uses the PC, without stealing focus or
+requiring USER_AWAY. The latest request also refers to a foreground pan job.
+Never headless for this gate. No source/binary/HEAD changes during a live job.
+Never hold captures/queue/results.md open; use results.jsonl and kept logs.
+Never touch saves, snapshot tags, read-only backups D:/BG3_Tools or shared
+junction targets. Do not archive a checkout with external/data junctions.
+No subagents without new user authorization. One reset was already consumed;
+no new credit or reset authorization is assumed.
 
-Old P1 GI branch: en2-selfcheck/BG3RTX, dbd320c, ABI 14; failed original energy and
-no resolved-image quality gain. Do not substitute its slow duplicated GI pipeline
-for the user's normal-rate flash reproduction. Old P2 emissive branch 7a87ba7,
-ABI 9, remains off; overlap hypothesis rejected and facing probe only planned.
-P3 box ABI 9 differs from P2; gates open. P4 CPU classifier only. P5 depends on
-EN2. P6 water design minimum done; runtime open. Backups D:/BG3_Tools read-only.
-The one authorized reset was consumed; no new reset authorization/credit assumed.
+## Preserved broader work
+
+The P1-P6 overall goal remains unfinished and paused. Older GI experiment
+(en2-selfcheck, dbd320c, ABI 14) failed its energy/quality gate; do not substitute
+its slow duplicate pipeline for this pan test. P2 emissive 7a87ba7, P3 box,
+P4 OMM and P6 water work remain separate; see historical progress. FG toggle
+and base performance follow the explicit current P1. Merge only through
+scripts/merge-green.ps1 after reading the deciding numbers.

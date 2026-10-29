@@ -1,5 +1,17 @@
 # BG3RTX progress
 
+## PAUSED by user for CLI continuation — 2026-10-29
+
+All activities paused; no owned game/runner active and no pending/running job.
+Implementation f6b7ad9 is pushed on codex/p1-pan-flashes, paired ABI 16.
+The camera-pose selector is NOT a fix: static off/on is about 99.55%, but
+moving poses have no exact matching live scene, causing missing RT. Cancelled
+INVALID. Both experimental keys remain off by default. Next idea is consistent
+lighting-to-TLAS ray-origin rebasing; NOT implemented. Five CTests pass.
+User gate remains moving primary match near static 99.5%, in ONE presented A/B
+run with RT active. Burst images are optional; stop burst-tool work.
+Read docs/HANDOFF_SESSION.md for exact logs, failed attempts and next steps.
+
 ## P1 match camera pose, not upload-ring address — 2026-10-29
 
 The address-only selection is rejected: upload-ring offsets recur, so it found
