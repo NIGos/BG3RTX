@@ -983,12 +983,13 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
     host->log("ls box stats (%u frames): evaluated %.3f/px, shadow-mapped %.3f/px, traced %.3f/px, "
               "occluded %.3f/px, unknown %.3f/px, cookie %.3f/px; game box light %.3f%% of lit luminance, "
               "removed %.3f%%; projector validation px %llu: game %.6f, recomputed %.6f, mean |diff| %.6f, "
-              "recompute above game %.6f, box share %.3f%%",
+              "recompute above game %.6f, box share %.3f%%; counts traced %llu occluded %llu unknown %llu cookie %llu",
               g_stats_n, t[136]/px, t[137]/px, t[138]/px, t[139]/px, t[140]/px, t[143]/px,
               t[21] ? 100.0*t[141]/double(t[21]) : 0.0, t[21] ? 100.0*t[142]/double(t[21]) : 0.0,
               (unsigned long long)t[144], t[144] ? t[145]/double(t[144])/256.0 : 0.0,
               t[144] ? t[146]/double(t[144])/256.0 : 0.0, t[144] ? t[147]/double(t[144])/256.0 : 0.0,
-              t[144] ? t[148]/double(t[144])/256.0 : 0.0, t[146] ? 100.0*t[150]/double(t[146]) : 0.0);
+              t[144] ? t[148]/double(t[144])/256.0 : 0.0, t[146] ? 100.0*t[150]/double(t[146]) : 0.0,
+              (unsigned long long)t[138],(unsigned long long)t[139],(unsigned long long)t[140],(unsigned long long)t[143]);
   }
   if(t[144]) {
     auto mean24=[&](uint32_t i) {

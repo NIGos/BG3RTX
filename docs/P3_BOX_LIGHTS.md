@@ -207,3 +207,11 @@ sampling is exercised, not yet proved accurate against the native filter.
 Final finite; retained dump nonfinite records distinguish depth from lighting.
 Next report integer ray/cookie/unknown populations: three-decimal rates alone
 cannot prove an unknown count is zero. No new shader/counter is needed.
+
+Diagnostics now append EXACT integer traced/occluded/unknown/cookie populations
+from existing counters138/139/140/143. Three-decimal rates may display0.000
+while a positive rare population exists, so they cannot prove count0. No shader,
+allocation, ray, output or settings-default change. Full build/3 CTests pass.
+Next S7 candidate-cap1 requires actual positive integer unknown AND cookie
+counts; a rounded rate alone cannot pass or fail that coverage requirement.
+This does not certify cookie-specific unknown pairs or native filter accuracy.
