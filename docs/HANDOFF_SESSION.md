@@ -18,14 +18,14 @@ The user resumed on Oct29; the overall goal remains ACTIVE.
 The ONE user-authorized reset was CONSUMED at weekly100% on Oct29.
 Tool outcome reset; idempotencyKey8ce84295-c9a8-4ba8-bbfb-cf1f81dd0af7.
 Reset credit balance is0. Never redeem another without fresh user authorization.
-Initial usage refresh lagged; verify limits rather than retrying a successful reset.
+Fresh limits confirmed0% used/ordinary usage allowed. Never retry the successful reset.
 
 ## Stable code and checkouts
 Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
 - P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 725955f, pushed, paired ABI14.
-- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box 7adc91d, paired ABI9, pushed.
+- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box 8ec56ab, paired ABI9, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
 Old research: pan-motion-vectors/BG3RTX 929be7a; motion-jitter/BG3RTX 53f0925.
@@ -34,14 +34,19 @@ D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Live job and immediate next action
-288 LIVE frozen P3 7adc91d, paired ABI9: standalone S6 native-direct validation,
-two traces/full unlimited VVL. Runner37748 started05:58:38; verify actual handles
-and terminal queue result. No restart from observation timeout; freeze P3 tree.
-Native scalar controls AO1/directAO0/sunMask1 avoid shared-buffer mutation.
-Actual variant follows module/pipeline/command/dispatch; reject every REFUSED log.
-62 native modules/4 CTests pass; six ordinary shaders byte-identical. Accuracy
-still unproved; in-scatter/transmittance is retained as a possible residual.
-One authorized reset consumed at weekly100%; do not redeem again.
+290 LIVE frozen P3 8ec56ab, paired ABI9. Runner33888 started06:21:53.
+Fresh launch checks found no user marker, game/runner or pending/running jobs.
+289 terminal: queue INVALID (one-time startup box-active message outside scene
+slice), nine matched scene windows/2.932B pixels, no full-log refusals, invalid0.
+Native Y0.0292808848 versus recompute0.0294563717 (+0.599322%); cause unproved.
+290 adds per-channel format-derived intervals, not a tuned error tolerance:
+Vulkan permits either adjacent UFLOAT value; maxima inconclusive, invalid values
+reported separately. All shaded receivers/six channels; 5 CTests and2 shaders
+pass; six ordinary shaders byte-identical56bcc06. Freeze P3 until terminal;
+then audit scene statistics, whole-log refusals and FULL VVL before interpretation.
+289 scoped layout/push/write categories absent; other VVL unresolved. Final finite,
+native D32F d130 has2604 nonfinite. Evidence/spec preserve exact provenance.
+One reset was consumed at weekly100%; fresh quota0% confirmed, credits0.
 
 ## P1 - pan instability remains OPEN
 User sees lighting/shadows detach while panning; Ctrl+Shift+F9 restores native.
@@ -128,8 +133,8 @@ Sampling is exercised, not yet native-filter accuracy or unknown-pair proof.
 283 S5 PASS: ten windows,0.079 rays/px,0.029 occluded/px; final finite.
 S6/S5 cookie rates0;287 S7 exact counts prove7.638M unknown and10.084M cookie
 evaluations. Native accuracy/per-query delta and moving/visual quality stay open.
-Native-direct control: docs/P3_NATIVE_DIRECT_VALIDATION.md (new ABI9); runtime288
-is live, ordinary key0 unchanged. See docs/P3_BOX_LIGHTS.md and evidence278-287. Do not modify saves or reinstall mods.
+Native-direct control: docs/P3_NATIVE_DIRECT_VALIDATION.md (ABI9); runtime290
+is live with format intervals, ordinary key0 unchanged. See docs/P3_BOX_LIGHTS.md and evidence278-287. Do not modify saves or reinstall mods.
 
 ## P4-P6
 P4 has a conservative CPU interval classifier and corrected stochastic-alpha
