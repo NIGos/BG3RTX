@@ -70,6 +70,9 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
+  VkPipeline variants[2] = {};
+  uint64_t variant_generations[2] = {};
+  bool rebased = false;
 };
 
 struct Push {
@@ -600,9 +603,24 @@ bool ensure_ls_layout() {
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
+  static const char* const rebased_files[] = {
+      "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_local.hlsl",
+      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
+      "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
+      "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
+      "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
+      "gi/rt_sun_resolve.hlsl", "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl"};
+  bool rebase = false;
+  if (host->cfg_int("rt_scene_rebase", 0))
+    for (const char* candidate : rebased_files) rebase |= std::strcmp(file, candidate) == 0;
+  const std::string selected = rebase ? std::string("gi/rebase/") + (file + 3) : file;
+  const unsigned variant = rebase ? 1u : 0u;
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(file, "main", "cs_6_6", &blob)) return p.pipeline != VK_NULL_HANDLE;
-  if (p.pipeline && blob.generation == p.generation) return true;
+  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.rebased == rebase;
+  if (p.variants[variant] && p.variant_generations[variant] == blob.generation) {
+    p.pipeline = p.variants[variant]; p.generation = blob.generation; p.rebased = rebase;
+    return true;
+  }
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
   mci.pCode = blob.code;
@@ -611,7 +629,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   VkShaderModule mod = VK_NULL_HANDLE;
   if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
     host->log("gi: %s shader module creation failed; keeping the previous pipeline", file);
-    return p.pipeline != VK_NULL_HANDLE;
+    return p.pipeline && p.rebased == rebase;
   }
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
@@ -622,12 +640,15 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
   if (pr != VK_SUCCESS) {
     host->log("gi: %s pipeline creation failed; keeping the previous one", file);
-    return p.pipeline != VK_NULL_HANDLE;
+    return p.pipeline && p.rebased == rebase;
   }
-  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.pipeline);
+  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.variants[variant]);
+  p.variants[variant] = np;
+  p.variant_generations[variant] = blob.generation;
+  p.rebased = rebase;
   p.pipeline = np;
   p.generation = blob.generation;
-  host->log("gi: %s generation %llu", file, (unsigned long long)blob.generation);
+  host->log("gi: %s generation %llu", selected.c_str(), (unsigned long long)blob.generation);
   return true;
 }
 
@@ -1944,7 +1965,7 @@ void gi_release() {
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
+    for (VkPipeline variant : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant);
     *p = Pipe{};
   }
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_rf_queries);

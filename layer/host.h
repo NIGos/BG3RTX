@@ -272,7 +272,8 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* resour
 void pan_on_submit(const std::vector<VkCommandBuffer>& cmds);
 void pan_on_present(VkQueue queue);
 void pan_pass_end(VkCommandBuffer cmd, CmdState* s);
-bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination);
+bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,
+                     VkDeviceSize destination_offset = 0);
 VkBuffer rt_scene_pose();
 
 // ---- Streamline DLSS-G (streamline.cpp) ----
@@ -576,6 +577,8 @@ struct AlphaBindings {
   VkDeviceSize info_off, info_bytes;
   VkBuffer pool;
   VkDeviceSize pool_bytes;
+  VkBuffer camera = VK_NULL_HANDLE;
+  VkDeviceSize camera_offset = 0;
 };
 // Writes set `slot` (< kSceneSlots, retired on the GPU) and its record region;
 // returns that set (VK_NULL_HANDLE when alpha testing is off).

@@ -33,6 +33,9 @@ param(
   # Real presentation instead of headless (needed for frame generation and for
   # anything that must reach the display). Always exclusive.
   [switch]$RealPresent,
+  # Real focused presentation. The queue controls authorization/USER_AWAY.
+  # Background still selects posted keys and reversible borderless settings.
+  [switch]$Foreground,
   # Hold a camera-pan key (default D) once gameplay is reached, so the
   # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
   [switch]$Move,
@@ -171,7 +174,7 @@ $userFg = [BG3RTX.Win]::GetForegroundWindow()
 function Focus-Game {
   $h = Get-GameWindow
   if ($h -eq [IntPtr]::Zero) { return }
-  if ($Background) {
+  if ($Background -and -not $Foreground) {
     if ([BG3RTX.Win]::GetForegroundWindow() -eq $h -and $userFg -ne [IntPtr]::Zero) {
       [BG3RTX.Win]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)   # Alt tap lifts the foreground lock
       [BG3RTX.Win]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
@@ -304,7 +307,7 @@ if ($Background) {
   # Borderless at the desktop resolution; the player's values come back after the
   # last background run (gamelock.ps1, Enter-/Exit-BackgroundDisplay).
   Enter-BackgroundDisplay $ensureHere $displayUser
-  $env:BG3RTX_BACKGROUND = "1"
+  if (-not $Foreground) { $env:BG3RTX_BACKGROUND = "1" }
 }
 
 # -continueGame loads the newest save, by the save time stored inside each
@@ -404,7 +407,8 @@ if ($Validation) {
 }
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
-@{ pid = $game.Id; start = (Get-ProcStart $game); tag = $Tag; mode = $runMode; slot = $slot } | ConvertTo-Json | Set-Content $pidFile
+@{ pid = $game.Id; start = (Get-ProcStart $game); tag = $Tag; mode = $runMode; slot = $slot;
+   visible_present = [bool]$RealPresent; foreground = [bool]$Foreground } | ConvertTo-Json | Set-Content $pidFile
 if ($Background) { Set-DisplayUserGame $displayUser $game }
 Write-Host "Game pid $($game.Id)"
 
@@ -484,6 +488,9 @@ $panPlan = if ($MovePlan) { @(Get-Content -LiteralPath $MovePlan -Raw | ConvertF
 if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
 $panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue
 while ((Get-Date) -lt $deadline) {
+  if (Test-Path (Join-Path $root 'captures\queue\USER_PLAYING')) {
+    $result = 'user playing marker; test stopped'; break
+  }
   if ($MovePlan) {
     if ($panIndex -lt 0 -and (Test-Path $doneFile)) { $panIndex = 0; $panAt = Get-Date }
     if ($panIndex -ge 0) {
@@ -508,7 +515,7 @@ while ((Get-Date) -lt $deadline) {
           }
         }
         $iniLines | Set-Content -LiteralPath $ini
-        Write-Host "[pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) set=$($step.set)"
+        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) set=$($step.set) foreground=$Foreground real_present=$RealPresent"
         $panCaptureSent = $true
       }
       $panInMotion = $step.repeat_ms -gt 0 -and $elapsed -ge $step.motion_start -and $elapsed -lt $step.motion_end

@@ -1,0 +1,62 @@
+[
+  {
+    "seconds": 90,
+    "repeat_ms": 0,
+    "scan": 32,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 85,
+    "set": "rt_scene_rebase=0"
+  },
+  {
+    "seconds": 90,
+    "repeat_ms": 0,
+    "scan": 32,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 85,
+    "set": "rt_scene_rebase=1"
+  },
+  {
+    "seconds": 90,
+    "repeat_ms": 100,
+    "scan": 32,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 85,
+    "set": "rt_scene_rebase=0"
+  },
+  {
+    "seconds": 90,
+    "repeat_ms": 100,
+    "scan": 32,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 85,
+    "set": "rt_scene_rebase=1"
+  },
+  {
+    "seconds": 90,
+    "repeat_ms": 33,
+    "scan": 30,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 85,
+    "set": "rt_scene_rebase=0"
+  },
+  {
+    "seconds": 90,
+    "repeat_ms": 33,
+    "scan": 30,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 85,
+    "set": "rt_scene_rebase=1"
+  }
+]

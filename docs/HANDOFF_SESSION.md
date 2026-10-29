@@ -1,8 +1,17 @@
-# Session handoff — PAUSED by user, 2026-10-29
+# Session handoff — P1 rebasing active, 2026-10-29
 
-The user paused all activity to continue from CLI Codex. Do not launch jobs or
-resume development until their next explicit go-ahead. No game or queue runner
-remains active; pending/running queues are empty. No Ponytail ever.
+The user explicitly resumed P1 for a bounded origin-rebasing fix and ONE
+presented pan A/B. Stop at a clear gate result or approximately two hours.
+No Ponytail ever. Read the top of PROGRESS_CODEX.md for the current outcome.
+
+Current implementation adds default-off rt_scene_rebase, all four rt_common
+query entry points, scene-specific GPU camera snapshots in the stamped set,
+and cached normal/rebase pipeline variants. Ordinary 21 SPIR-V binaries are
+byte-identical; 19 variants validate. Paired ABI remains 16. Prepared fixtures:
+tests/fixtures/p1_rebase_job.json and p1_rebase_plan.json. Runtime gate pending.
+scripts/qa/rebase_gate.py reads retained runner phase clocks and primary/RT/fps
+windows. Missing RT cannot pass. Do not launch a second experiment after a
+clear failure; state the next evidence-based hypothesis. No merge yet.
 
 ## Checkout
 

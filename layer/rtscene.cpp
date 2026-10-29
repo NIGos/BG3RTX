@@ -906,6 +906,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
     AlphaBindings ab{xfb, cap.alpha_base, aprims ? VkDeviceSize(aprims) * tri_bytes : 0, VkDeviceSize(prims) * tri_bytes,
                      cap.xfb_size, stride, true, res.info, res.info_off, res.info_bytes, res.pool, res.pool_bytes};
+    ab.camera = cap.ubo;
+    ab.camera_offset = cap.ubo_offset;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
@@ -951,6 +953,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   alpha_legacy_info(cmd, stride, &info, &info_bytes);
   AlphaBindings ab{xfb, cap.alpha_base, geoms == 2 ? VkDeviceSize(aprims) * tri_bytes : 0, VkDeviceSize(prims) * tri_bytes,
                    cap.xfb_size, stride, false, info, 0, info_bytes, VK_NULL_HANDLE, 0};
+  ab.camera = cap.ubo;
+  ab.camera_offset = cap.ubo_offset;
   const VkDescriptorSet legacy_set = alpha_commit(cmd, ab, uint32_t(scene_slot));
   int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
   // A refit reads the BLAS: only if its last build's command buffer was submitted.

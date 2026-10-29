@@ -319,6 +319,15 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
 function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeout) {
   $t0 = Get-Date
   $lines = @()
+  if (-not $DryRun) {
+    if (Test-Path (Join-Path $root 'captures\queue\USER_PLAYING')) { throw 'User is playing; no launch' }
+    if (Get-Process bg3,bg3_dx11 -ErrorAction SilentlyContinue) { throw 'An existing game is active; no launch' }
+    if (@($job.args) -contains '-Foreground') {
+      if (-not $job.foreground_authorized -and -not (Test-Path (Join-Path $root 'captures\queue\USER_AWAY'))) {
+        throw 'Foreground test needs USER_AWAY or explicit authorization recorded in this job'
+      }
+    }
+  }
   $runner = if ($DryRun) { Join-Path $PSScriptRoot "test-queue-fake.ps1" } else { Join-Path $tree "scripts\auto-run.ps1" }
   $runArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runner,
                "-NoBuild", "-Background", "-NoAnalyze", "-Traces", $traces, "-TimeoutSec", $timeout)
@@ -340,6 +349,9 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
     if ($job.command) { $lines += @($out | Select-Object -Last 8) }
   } finally { Pop-Location }
   if ($phase) { Stop-Process -Id $phase.Id -ErrorAction SilentlyContinue }
+  # Retain phase timestamps and the actual presentation/focus mode for A/B
+  # analysis. The ordinary pattern summary keeps only the last matching line.
+  $out | Set-Content -LiteralPath (Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).runner.txt")
   $outcome = ($out | Select-String 'Run ended|STALL' | Select-Object -First 1).Line
   $nv = Get-Nv153 $tree $t0
   $log = Get-ChildItem (Join-Path $tree "bg3rtx*.log") -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1

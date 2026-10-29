@@ -1,5 +1,29 @@
 # Track D: hardware ray tracing
 
+## P1 lighting-to-scene translation — 2026-10-29, pending runtime gate
+
+Key: `rt_scene_rebase=0` by default; selector `rt_scene_camera_match=0` stays off.
+All four query producers in rt_common translate ray origins by `C_lighting -
+C_scene`. Their directions and t values are invariant. Closest-hit object
+transforms have that delta removed before returning to lighting-space callers.
+Alpha candidates remain entirely in scene space, including ray cone footprints.
+The frozen local-light reference applies the same infrastructure translation.
+
+The instance analyzer proves native `W=M_instance*object` reaches clip space only
+through the camera-relative `_m2`. Dynamic XFB inverts that same `_m2`; the existing
+mesh extraction and audit compare `M*object` with converted XFB. Both paths thus
+use the source G-buffer camera origin and world axes, not a camera-view rotation.
+Native instance rows are still read at submit. GPU camera snapshots are read from
+the actual conversion UBO in the build command buffer, into offset 256 of that
+scene slot's expanded stamp buffer. No CPU pose is used to compute the shader
+translation. A matching pose generation is required when rebasing is active.
+
+The layouts reuse native camera binding 48 (RT) or 29 (D-LS/D-RF), preserving the
+32-descriptor reflection limit. Small wrappers compile the experiment separately.
+21 ordinary SPIR-V binaries are byte-identical; 19 variants validate. Runtime
+cost, moving primary-match gate and in-game instructions follow the single A/B.
+
+
 ## P1 transient flashes — 2026-10-29, experimental
 
 `pan_capture` is a positive request serial, default 0. Each new serial records

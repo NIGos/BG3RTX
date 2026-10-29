@@ -869,9 +869,10 @@ void release(Capture& c) {
 
 }  // namespace
 
-bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination) {
+bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,
+                     VkDeviceSize destination_offset) {
   if (!source || !destination || !ubo_pipeline()) return false;
-  VkDescriptorBufferInfo in{source, offset, 224}, out{destination, 0, 256};
+  VkDescriptorBufferInfo in{source, offset, 224}, out{destination, destination_offset, 256};
   VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
   w[0].dstBinding = 0; w[0].descriptorCount = 1;
   w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; w[0].pBufferInfo = &in;

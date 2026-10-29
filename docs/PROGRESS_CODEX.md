@@ -1,5 +1,27 @@
 # BG3RTX progress
 
+## P1 origin rebasing resumed — 2026-10-29
+
+The user lifted the pause for one bounded fix and one presented A/B run.
+`rt_scene_rebase=0` is a new default-off shader variant. It adds
+lighting absolute origin minus scene absolute origin to all four query origins.
+Ray distances stay unchanged; returned object transforms stay in lighting space.
+The frozen local-light reference also uses the shared rebasing infrastructure.
+
+Native static instance rows map object positions into the G-buffer camera-relative
+world axes. Dynamic XFB recovers that same space using the native `_m2`. Existing
+GPU extraction/audits compare the two paths. The new scene snapshot reads the
+actual conversion camera UBO on the GPU into that scene's stamped set, avoiding
+the failed CPU-pose selector. No new host/core ABI: paired ABI remains 16.
+
+Five CTests pass. All 21 ordinary shader binaries are byte-identical to the
+preserved baseline, and all 19 rebase variants pass SPIR-V validation. Four gate
+tests reject missing RT, insufficient improvement and absent positive control.
+One foreground static/slow/fast off/on fixture is prepared. Runtime gate pending.
+The queue's hiding helper now leaves real-present windows visible. Display
+settings still restore after the run. No merge or quality claim yet.
+
+
 ## PAUSED by user for CLI continuation — 2026-10-29
 
 All activities paused; no owned game/runner active and no pending/running job.

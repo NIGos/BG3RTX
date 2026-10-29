@@ -1,0 +1,33 @@
+{
+  "set": "preset=ultra,fg=0,headless=0,fps_cap=0,rt_stats=1,ls_stats=1,ls_k=0,ls_shadowed=1,rt_debug=0,ls_debug=0,pan_capture=0,pan_prepare=0,rt_scene_camera_match=0,rt_scene_rebase=0,rt_primary_check=1",
+  "save": "QuickSave_3784",
+  "tree": ".",
+  "name": "p1-origin-rebase-ab",
+  "traces": 0,
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tests/fixtures/p1_rebase_plan.json",
+    "-Foreground"
+  ],
+  "expect": [
+    "primary-ray check",
+    "gi/rebase/pan_primary.hlsl generation",
+    "gi/rebase/rt_local_shadows_full.hlsl generation",
+    "gi/rebase/rt_reflections.hlsl generation",
+    "\\[auto\\] scene ready",
+    "rt passes"
+  ],
+  "hold": 90,
+  "patterns": [
+    "primary-ray check",
+    "camera scene identity",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes"
+  ],
+  "timeout": 750,
+  "foreground_authorized": true,
+  "authorization": "Current user request explicitly authorizes one foreground presented P1 A/B job; USER_PLAYING remains a hard stop."
+}
