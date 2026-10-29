@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 08:19 Europe/Rome
+## Current checkpoint - 2026-10-29 08:29 Europe/Rome
 
 - Main rendering remains 6dba0a8; the water design and legal QA exposure hold are merged.
 - P1 is active again by explicit user instruction. No more attribution or exposure research.
@@ -10,7 +10,8 @@
 - Static 296 is inconclusive: preserve its baseline spike; original-PRE check fails (+0.350%).
 - Static 297 fails on/off parity (+2.142%); 36 finite captures, exact alpha, normal rejects 14.70%.
 - Shuffled static 298 also fails: on/off +0.8243%, original-PRE +0.3690%; both outside noise.
-- Fixed a missing-history early zero return; static 299 is live on frozen 4e11688.
+- Static 299 includes zero in both energy intervals, but power is low; no equivalence claim.
+- ONE footprint pan diagnostic 300 is live on the same renderer, with balanced live toggles.
 - All 12 CTests and 24 shader ABI checks pass; seven ordinary shaders are byte-identical.
 - P2 test 295 has finished. P2/P3/P4 research will not displace the required P1 measurement.
 - Main, research branches and evidence are pushed. All research defaults remain off.
@@ -59,7 +60,20 @@ Unsupported current sources remain unavailable. This is not a claimed explanatio
 of the positive bias. All 12 CTests, eight energy tests and 24 shader ABI checks
 pass; seven ordinary shaders are byte-identical. Static 299 started at 08:18:39
 on that frozen commit, using the same shuffled fixture and a 90-second hold.
-Specs: docs/GI_NORMAL_FOOTPRINT.md. P1 remains active; static parity precedes pan.
+299 completed on 4e11688. All 36 samples are finite, alpha-exact and pass all
+20 GPU predicates. Max static shift 0.621 pixels, normal rejects 14.03%.
+Both energy intervals include zero, but power is LOW: on/off +2.651%, relative
+interval about [-1.093%, +6.395%]; original-PRE +0.2126%. This does not erase
+297/298 or establish equivalence. Trace median 1.242 ms; whole GI 52.880 ms
+under validation. No scoped layout/push/write tags; other VVL errors remain.
+
+ONE moving diagnostic 300 started at 08:28:17 on 45a275f, identical renderer
+to 299. It uses 24 balanced four-second blocks and a 96-second hold, private/
+self-test diagnostics off. Report residual with energy, coverage and motion;
+no quality promotion follows from the weak static result. Next concrete normal
+fix: the half-step FP16 bound underestimates conversion error permitted by
+Vulkan. Replace it with exact neighbour intervals after 300 is terminal.
+Specs: docs/GI_NORMAL_FOOTPRINT.md. P1 remains active.
 
 
 Previous goal turn made progress: merged a valid legal QA exposure-hold fix,

@@ -68,11 +68,28 @@ to explain the positive bias. No source components, weights or thresholds change
 All 12 CTests, eight energy tests and 24 shader ABI checks pass. Both changed
 fresh shaders compile; seven ordinary shaders remain byte-identical to d9cb628.
 
-299 is LIVE on frozen 4e11688, runner 4056 started at 08:18:39. Same shuffled
-36-capture fixture, 30-second warmup, 4-second gap and 90-second hold. Inspect
-the actual terminal result before editing P1 or launching another game. Archive
-validation.log, check energy intervals, raw finite/alpha/pose, counters and GPU
-cost. No pan quality pass or promotion until static parity is established.
+299 is terminal and execution-valid on 4e11688. All 36 captures pass finite GI,
+exact alpha and 20 GPU predicates; max shift 0.621 pixels. Normal rejects 14.03%.
+Both intervals include zero, but LOW POWER: on/off +2.651%, relative interval
+about [-1.093%, +6.395%]. Original-PRE +0.2126%. This does not erase 297/298,
+prove equivalence or permit promotion. Full evidence is on P1 under run 299.
+Trace median 1.242 ms; whole GI 52.880 ms under diagnostic validation.
+
+300 is LIVE on frozen 45a275f, runner 28868 started at 08:28:17. The renderer
+is unchanged from 299; only QA fixtures/docs changed. ONE moving diagnostic,
+24 balanced four-second gate blocks and direction reversals, 96-second hold,
+private/self-test diagnostics off. Never compare it with independent pan images.
+Report residual, energy, coverage and motion together. Given the weak static
+interval, this is diagnostic evidence only, not a quality gate or promotion.
+
+After actual terminal 300, preserve its results and correct a separate verified
+normal-precision bug. Native FP16 format rounding can choose either neighbour
+(Vulkan Fundamentals, Floating-Point Format Conversions). The existing half-step
+bound can be too small by factor 2. A CPU endpoint sweep covers 31,743 positive
+finite intervals. Use exact adjacent representable values, including zero and
+bin boundaries; reject overflow/nonfinite intervals. Do not tune an angle.
+Then rerun offline checks and static/pan on the corrected normal precision.
+No P1 edits or new launches while 300 is live.
 
 The default-off normal footprint derives spatial support from the real sample
 cell and reprojection rounding, bounded to same-plane TLAS neighbours. The
@@ -89,7 +106,7 @@ and duplicated experimental passes, not a release performance measurement.
 Use explicit paths. The app may select a different managed checkout.
 
 - Main: C:/Users/quali/Documents/Code Projects/BG3RTX, branch main, pushed.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 4e11688.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 45a275f.
 - P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, ca1959b, D-EM ABI 9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box, b913e8e, ABI 9.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm, 8d902d5.
