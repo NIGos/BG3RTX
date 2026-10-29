@@ -796,7 +796,7 @@ constexpr uint32_t kStatsRing = 8;
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
 // Box diagnostics also write projector-only baseline counters when ls_box=0.
-constexpr uint32_t kStatsCounters = 165;
+constexpr uint32_t kStatsCounters = 173;
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -1001,6 +1001,14 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               "raw game %.9g recomputed %.9g abs_diff %.9g over %.9g box %.9g; mean quantization <= %.9g",
               g_stats_n,(unsigned long long)t[144],(unsigned long long)t[163],(unsigned long long)t[164],
               (unsigned long long)t[162],mean24(152),mean24(154),mean24(156),mean24(158),mean24(160),
+              0.5/16777216.0);
+  }
+  if(t[165]) {
+    double excess=(double(t[171])+4294967296.0*double(t[172]))/16777216.0/double(t[165]);
+    host->log("ls native format (%u frames): px %llu invalid %llu unbounded %llu failing %llu; "
+              "bounded channels %llu violating %llu; mean excess outside UFLOAT interval %.9g (Q24 half-step %.9g)",
+              g_stats_n,(unsigned long long)t[165],(unsigned long long)t[166],(unsigned long long)t[167],
+              (unsigned long long)t[168],(unsigned long long)t[169],(unsigned long long)t[170],excess,
               0.5/16777216.0);
   }
   if (t[69]) {   // D-LS on non-standard material classes (rt_local_shadows.hlsl, AUDIT_RT fix 3)

@@ -70,6 +70,9 @@
 #include "../rt/rt_common.hlsli"
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_sun.hlsli"
+#if LS_NATIVE_DIRECT_VALIDATION
+#include "../../common/ufloat_interval.h"
+#endif
 
 #ifndef LS_FULL
 #define LS_FULL 0
@@ -932,6 +935,42 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       stat_addv(163,pv && isfinite(game_y) && game_y>0.0?1u:0u,bin);
       stat_addv(164,pv && isfinite(recomputed_y) && recomputed_y>0.0?1u:0u,bin);
     }
+#if LS_NATIVE_DIRECT_VALIDATION
+    // Independent diffuse/specular RGB channels, BEFORE output write conversion.
+    // Actual queried native formats are B10G11R11_UFLOAT_PACK32 (snapshot gate).
+    // Measure every shaded validation receiver, not only projector-list pixels.
+    {
+      bool sample = validate && (pc.ls_flags & (1u << 19)) != 0u;
+      bool invalid = false, unbounded = false, failed = false;
+      uint bounded_channels = 0u, failed_channels = 0u;
+      float3 excess = 0.0;
+      [unroll] for (uint lobe = 0u; lobe < 2u; ++lobe) {
+        float3 native_rgb = lobe == 0u ? gd : gs;
+        float3 estimate_rgb = lobe == 0u ? md : ms;
+        [unroll] for (uint channel = 0u; channel < 3u; ++channel) {
+          UfInterval interval = uf_interval(native_rgb[channel], channel == 2u ? 5u : 6u);
+          float estimate = estimate_rgb[channel];
+          bool bad = interval.status == 0u || !isfinite(estimate) || estimate < 0.0;
+          invalid = invalid || bad;
+          unbounded = unbounded || interval.status == 2u;
+          if (!bad && interval.status == 1u) {
+            ++bounded_channels;
+            bool mismatch = !uf_contains(interval, native_rgb[channel], estimate);
+            failed = failed || mismatch;
+            failed_channels += mismatch ? 1u : 0u;
+            excess[channel] += max(max(interval.lower - estimate, estimate - interval.upper), 0.0);
+          }
+        }
+      }
+      stat_addv(165, sample ? 1u : 0u, bin);
+      stat_addv(166, sample && invalid ? 1u : 0u, bin);
+      stat_addv(167, sample && unbounded ? 1u : 0u, bin);
+      stat_addv(168, sample && failed ? 1u : 0u, bin);
+      stat_addv(169, sample ? bounded_channels : 0u, bin);
+      stat_addv(170, sample ? failed_channels : 0u, bin);
+      ls_sum24(171, sample ? lum(excess) : 0.0, bin);
+    }
+#endif
     stat_addv(21, vpx ? fx(lum(gd + gs)) : 0u, bin);
     stat_addv(22, vpx ? fx(lum((md + ms))) : 0u, bin);
     stat_addv(15, vpx ? fx(lum(abs(gd - md) + abs(gs - ms))) : 0u, bin);

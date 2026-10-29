@@ -51,3 +51,38 @@ Fixture now uses a session with -Set in startup args AND the same live set:
 modules are transformed before creation, expects/statistics use the post-ready
 scene slice. Full startup log/VVL still needs separate audit. This prevents menu
 lighting from masquerading as positive scene-reference data.
+
+289 on 8fa0c0c has 62 controlled modules, NO full-log refusals and nine loaded
+scene windows (2,932,082,331 projector receivers). Native mean Y0.0292808848,
+recompute0.0294563717 (+0.599322%), absolute error0.0001767432, invalid0.
+Queue verdict remains INVALID because its one-time box activation expectation
+was emitted before the scene slice. The replacement expectation checks recurring
+scene stats' actual box-active flag; no old result is relabelled as a pass.
+Final output is finite; native D32F dump d130 has2604 nonfinite values retained.
+Full layout/push/write categories absent; other VVL categories remain unresolved
+(see evidence/p3-native-direct-scene-289.json). No native-accuracy approval.
+
+### Format-derived diagnostic (still default-off)
+
+Native diffuse/specular bindings are queried as B10G11R11_UFLOAT_PACK32 before
+the snapshot is accepted. The comparison previously subtracted full-precision
+recompute from those reduced-precision stored values. The +0.60% mostly-positive
+residual motivates checking storage rounding; it does NOT establish its cause.
+[Vulkan Floating-Point Format Conversions](https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#fundamentals-fp-conversion)
+allows either adjacent representable finite value. Thus each loaded native RGB
+component defines an OPEN interval between its representable neighbours. Zero
+includes0, excludes the smallest positive codeword. Finite maxima have no finite
+upper bound and are reported INCONCLUSIVE, never passed. Negative/nonfinite
+estimates and nonrepresentable native values are separately INVALID.
+
+common/ufloat_interval.h is shared by the diagnostic HLSL and an exhaustive CPU
+test against an independent mathematical decoder (both finite codebooks,
+subnormals, powers of two, immediate boundary neighbours, nonfinite and maxima).
+Only dedicated native-validation shaders collect counters165..172: all shaded
+receivers, invalid/unbounded/failing pixels, bounded/violating channels and Q24
+mean excess outside these intervals. Six channels are checked separately, before
+owned output conversion; no diffuse/specular cancellation or tuned percentage.
+No allowance is made for BRDF, atmosphere, material or cookie error. A sample
+inside the interval is compatible with storage rounding, not proof of exact math.
+Q24 half-step2^-25 describes statistic quantization, NOT a quality tolerance.
+All six ordinary shader variants remain byte-identical to56bcc06.

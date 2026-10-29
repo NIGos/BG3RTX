@@ -12,10 +12,12 @@
     "ls stats \\(\\d+ frames\\):",
     "ls validation fit",
     "ls box precise",
+    "ls native format",
     "\\[ls-native-direct\\]"
   ],
   "expect": [
-    "ls box: active",
+    "projector lights listed .*\\(box active 1\\)",
+    "ls native format \\(120 frames\\): px [1-9]\\d* invalid 0 unbounded 0",
     "ls box precise \\(120 frames\\): px [1-9]\\d* native nonzero [1-9]\\d* recomputed nonzero [1-9]\\d* invalid 0; raw game",
     "\\[ls-native-direct\\] active frame .* matched native module"
   ],
