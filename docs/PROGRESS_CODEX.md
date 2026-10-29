@@ -2,6 +2,17 @@
 
 ## Resumed — 2026-10-29
 
+Static fixture254 / 8ec52c4 now proves stationary capture: albedo shifts only
+-0.04 / 0.0200 render px, GI finite, pose valid, PRE/POST alpha identical;
+99 s, zero driver events/dumps/build changes. The fix initializes the engine's
+event-owned cursor with a centred SDL event per present, forcing an empty poll
+after it so event batches terminate. 253 still moved despite polling/input
+neutralization; keep it INVALID. Only SDL_GetGlobalMouseState is statically
+imported by the game; event/poll consistency is necessary, not just coordinates.
+254 off/on Y 0.017001871 / 0.016828934; two captures do not pass the noise gate.
+P1 head7b6e82a pushed. Job255 is running the full twelve-capture static repeat;
+source/binaries frozen. No main rendering merge, no production pan verdict yet.
+
 Static energy run252 execution-valid189s with zero driver events/dumps/build
 changes, but the quality check correctly rejects it: camera moves from camp
 to woods, about -318 render pixels x / -42 y between the first two captures.

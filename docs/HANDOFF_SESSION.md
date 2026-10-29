@@ -46,7 +46,7 @@ Old research proves owned-motion nonfinite fallback, paired depth/radiance and
 observed camera motion. A private metadata overlap hazard was fixed. It does
 not prove pan quality or the unavailable additional native camera payload.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now e33f356, pushed. It excludes
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 7b6e82a, pushed. It excludes
 unrelated FG work. Old current-radiance replay is default-off, paired ABI14;
 scope/evidence: phase docs/CURRENT_RADIANCE.md. No pan-quality win established.
 Latest user steering: STOP cross-run image comparisons. Use a per-run reprojection
@@ -93,11 +93,12 @@ Smoke251 valid113s, zero driver events/dumps/build changes, finite, pose valid,
 identical alpha: off/on Y 0.0166252/0.0170019. Two samples are NOT a noise pass.
 Unlimited VVL: existing renderpass/NGX categories, no dispatch sync hazard or
 message naming 21 private exported handles/new metadata. Scoped evidence only.
-252 execution-valid189s/zero faults, but static QA INVALID: camera really moved
-camp -> woods. Only global mouse state had been neutralized. e33f356 aligns
-local/global/event SDL coordinates and blocks polled/event keyboard, buttons and
-wheel ONLY in opt-in StaticCamera. Job253 LIVE, two-capture stationarity proof;
-then twelve captures/six AB/BA pairs and Student-t noise CI, then ONE moving pan.
+252/253 static QA INVALID: camera really moved. Global polling alone did not
+initialise the engine's event-owned cursor. 8ec52c4 supplies centred SDL motion
+per present with a forced empty poll (no endless loop). All isolation is QA-only.
+254 valid99s: static shift -0.04/0.0200 render px, finite, pose/AO pass, no faults.
+255 LIVE on frozen 7b6e82a: twelve static captures/six AB/BA pairs, then noise CI;
+only after that passes, production off/on within ONE moving run.
 Spec: phase docs/GI_FRESH_FALLBACK.md. Never report moving captures as static pass.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
