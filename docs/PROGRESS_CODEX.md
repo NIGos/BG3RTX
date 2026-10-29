@@ -1,19 +1,31 @@
 # BG3RTX progress
 
-## Current checkpoint — 2026-10-29 05:15 Europe/Rome
+## Current checkpoint - 2026-10-29 05:17 Europe/Rome
 
-- Main rendering remains 6dba0a8; the P6 water design is merged.
-- P1 corrected geometric gate pan276 demonstrates no gain; all variants stay off and static energy remains failed.
-- Geometry runs 265–266 are INVALID because base passes lacked origin binding 40.
-- The shared layout/write fix passes 12 CTests and 24 ABI checks; runtime 269 has no layout/push/write errors.
-- Probes 268–269 measure zero current ray/projection offset PRE and POST; native positions stay unchanged.
-- Corrected-interface271/272 and native-AO isolation280 FAIL energy parity; weighted rejected-source attribution282 is running.
-- P3 default reference passes: 24 windows, 7.845 billion pixels, zero differences.
-- P3 shadow smoke278 exercises1.319 rays/px; cap1 run279 did not exercise unknowns, so fallback remains unverified.
-- EN2/D-EM stay off; P4 has a tested CPU classifier, while GPU integration and P5 remain open.
-- One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
+- Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
+- P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
+- Invalid geometry runs 265/266 are excluded; corrected bindings pass scoped runtime audits.
+- P1 weighted source attribution 284 is live on frozen c3b924f; it measures actual failed-old energy.
+- Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
+- P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
+- P3 native accuracy, cookies, unknown-query coverage and moving quality remain unverified.
+- P2 local-light reference is merged; EN2/D-EM failures keep those features off.
+- P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
+- One reset is authorized at exhaustion and unused; latest weekly usage read was 93%.
 
 ## Resumed — 2026-10-29
+
+283 S5 shadow coverage PASS: valid 113 s total / 49 s session, ten complete
+windows, evaluated/traced 0.079 per pixel and occluded 0.029. Final nonfinite 0;
+a D32F dump reports 2,015, retained without a global finite-output claim. No
+faults, dumps or build changes; cookies, shadow-mapped and unknown rates remain
+0.000, so those cases are not proved. P3 b97f4d4 is pushed.
+284 LIVE on frozen P1 c3b924f, four static off/on/on/off captures and full VVL.
+Require reason/count closure, invalid 0 and no failed POSITIVE old energy;
+inspect every window, actual alpha and off-control parity before interpreting
+the weighted means. Main handoff is condensed to 144 lines with exact live-job
+ownership and the remaining quality limits. Next bounded S7 startup retry.
+
 
 282 weighted attribution is execution/expect INVALID:9 fresh failures among
 9,094,425 replacements, invalid sums0; reason totals close exactly. The mixed
