@@ -654,6 +654,10 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   o_d = od;
   o_s = os;
 
+#ifdef PAN_CAPTURE
+  gAux[fp].z = lum(cd_all) > 1e-6 ? saturate(lum(vd_all) / lum(cd_all)) : 1.0;
+  gAux[fp].w = 1.0;
+#endif
   if (pc.ls_stats != 0) {
     uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
     stat_addv(16, 1u, bin);
@@ -911,6 +915,10 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
 #ifndef LS_NO_MAIN
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
+#ifdef PAN_CAPTURE
+  if (any(tid.xy >= pc.full)) return;
+  gAux[tid.xy].zw = float2(1, 0);
+#endif
   float3 od = 0, os = 0;
   if (ls_k_active() ? ls_main_k(tid.xy, od, os) : ls_main(tid.xy, od, os)) {
     gDiffuse[tid.xy] = od;

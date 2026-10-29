@@ -13,6 +13,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include "../common/pan_epoch.h"
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -43,6 +44,9 @@ uint64_t hash64(const void* data, size_t size);   // FNV-1a 64
 // ---- config (util.cpp) ----
 void cfg_poll();                       // re-reads bg3rtx.ini when it changes
 int cfg_int(const char* key, int fallback);
+// rt_order_trace=N: log record/submit order of the scene build and the RT passes for N
+// frames every 600 frames (P1 frame-lag diagnosis).
+bool order_trace_active();
 float cfg_float(const char* key, float fallback);
 
 // ---- frame cap (framecap.cpp; fps_cap) ----
@@ -187,6 +191,7 @@ struct CmdState {
   uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
   uint64_t recording = 0;              // unique per vkBeginCommandBuffer (rrpost chains)
+  PanEpoch pan_epoch{};                // depth-to-tonemap identity within this recording
   bool game_alloc = false;             // allocated through this layer (not by Streamline below it)
   std::vector<std::string> events;     // pre-rendered JSON objects, one per event
   // segment aggregation for the trace
@@ -266,6 +271,13 @@ void watchdog_start();                     // passes per frame feed the auto tri
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
 void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue);
 bool write_png_rgb(const std::string& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb);
+bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* resource);
+void pan_on_submit(const std::vector<VkCommandBuffer>& cmds);
+void pan_on_present(VkQueue queue);
+void pan_pass_end(VkCommandBuffer cmd, CmdState* s);
+bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,
+                     VkDeviceSize destination_offset = 0);
+VkBuffer rt_scene_pose();
 
 // ---- Streamline DLSS-G (streamline.cpp) ----
 // Instance/device creation: merge Streamline's requirements into the game's.
@@ -435,6 +447,8 @@ constexpr uint32_t kSceneSlots = 8;
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
 // ABI 8: the latest scene's TLAS and its own set 1, as one versioned pair.
 bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame);
+bool rt_scene_camera(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas, VkDescriptorSet* set,
+                     uint64_t* built_frame);
 // Oldest build frame among the slots the GPU may still read (UINT64_MAX: none).
 // A BVH range freed in frame F is released only once this is > F.
 uint64_t rt_scene_oldest_live();
@@ -566,6 +580,8 @@ struct AlphaBindings {
   VkDeviceSize info_off, info_bytes;
   VkBuffer pool;
   VkDeviceSize pool_bytes;
+  VkBuffer camera = VK_NULL_HANDLE;
+  VkDeviceSize camera_offset = 0;
 };
 // Writes set `slot` (< kSceneSlots, retired on the GPU) and its record region;
 // returns that set (VK_NULL_HANDLE when alpha testing is off).

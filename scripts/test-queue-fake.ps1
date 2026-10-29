@@ -11,7 +11,8 @@
 # fake_fault=exit (the game exits).
 # -Session follows auto-run's protocol: captures\session.ready, captures\session.quit, -WhilePid.
 param([string]$Root, [int]$Traces = 1, [int]$TimeoutSec = 300, [string[]]$Set = @(), [string]$Save = "",
-      [switch]$Session, [int]$SessionMaxSec = 7200, [int]$WhilePid = 0)
+      [switch]$Session, [int]$SessionMaxSec = 7200, [int]$WhilePid = 0,
+      [switch]$NoActivate, [switch]$RealPresent, [switch]$Foreground)
 $ErrorActionPreference = "Stop"
 if (-not $Root) { throw "-Root required" }
 $Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ })
@@ -38,6 +39,7 @@ function Read-Keys {
 
 $start = Get-Date
 Write-Host "Fake game (dry run): save '$Save', session $([bool]$Session)"
+if ($NoActivate) { Write-Host "[fake-window-mode] no_activate=$NoActivate real_present=$RealPresent foreground=$Foreground session=$Session" }
 L "[hot] core generation 1 loaded"
 $gen = 1
 $coreSeen = (Get-Item $core).LastWriteTimeUtc

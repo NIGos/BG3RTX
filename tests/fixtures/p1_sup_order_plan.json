@@ -1,0 +1,22 @@
+[
+ {
+  "seconds": 15,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 15,
+  "motion_end": 15,
+  "set": "rt_scene_rebase=1"
+ },
+ {
+  "seconds": 20,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 2,
+  "motion_end": 19,
+  "set": "rt_scene_rebase=1"
+ }
+]

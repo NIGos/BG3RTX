@@ -1,0 +1,45 @@
+{
+  "job": {
+    "job": "p1-pan-final-validation",
+    "run": 1,
+    "start": "2026-10-29T10:19:08",
+    "sec": 171,
+    "valid": true,
+    "outcome": "Run ended: done after 169s (exclusive)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "08a9c39 Capture native final colour in pan bursts and reject nonfinite HDR input | core 10:01:42",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p1-pan-final-validation.1.101909.log",
+    "captures": [],
+    "lines": [
+      "10:21:01.385  [pan] burst 10 complete: 16 frames, 176 samples, transport ok -> C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\pan-20261029-102059-10",
+      "10:21:08.618  [core] rt stats (120 frames, alpha test on): primary-ray check match 99.564%, in front 0.426% (opaque geometry 0.000, vt cutouts 0.000, tex cutouts 0.000), behind 0.009% (through vt 0.000, tex 0.000), miss 0.000%",
+      "10:21:58.733  [watch] presents 65 (displayed 65) | pipelines 18 (4 ms in driver) | shader modules 10 | descriptor writes 9 | submits 261 | draws 181003",
+      "10:21:55.924  [ngx] gpu RR: guides 0.001 ms + evaluate 2.506 ms = 2.507 ms (avg of 64)"
+    ],
+    "session": "",
+    "core_gen": null,
+    "saved_sec": 0
+  },
+  "burst": "captures/pan-20261029-102059-10",
+  "samples": 176,
+  "all_required_images_finite": true,
+  "scene_pose_note": "Native word 55 is unused metadata and has 0xffffffff bits; only matrix/origin fields are floating-point pose inputs.",
+  "validation_tags": {
+    "UNASSIGNED-non-acquired-swapchain-image-used": 8,
+    "VUID-VkShaderModuleCreateInfo-pCode-08737": 1,
+    "Undefined-Value-StorageImage-FormatMismatch-ImageView": 40367,
+    "VUID-vkQueueSubmit2-semaphore-03868": 59,
+    "SYNC-HAZARD-WRITE-AFTER-WRITE": 493,
+    "Undefined-Value-OutputNotWritten": 53,
+    "SYNC-HAZARD-READ-AFTER-WRITE": 5316,
+    "VUID-vkCmdDraw-None-09600": 3,
+    "VUID-vkCmdWaitEvents2-pEvents-10788": 37900,
+    "VUID-vkCmdCopyBuffer-srcBuffer-00118": 1
+  },
+  "copy_image_tags": {},
+  "scope": "Complete final-colour transport verified. Other VVL errors remain, including one unattributed native buffer copy missing TRANSFER_SRC. No globally clean validation or positive-control claim.",
+  "burst_fps": 11.857707509881424,
+  "quality": "Validation mode is below requested cadence and is not the positive control."
+}

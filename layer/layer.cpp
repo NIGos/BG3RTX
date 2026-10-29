@@ -34,6 +34,20 @@ static void guard_check(const char* where, bool safe);
 
 DeviceData* main_device() { return g_main; }
 uint64_t frame_index() { return g_frame.load(); }
+void cmd_cpu_report(uint64_t frames);
+
+bool order_trace_active() {
+  const int n = cfg_int("rt_order_trace", 0);
+  return n > 0 && frame_index() > 600 && frame_index() % 600 < uint64_t(n);
+}
+
+static void order_log_submit(const char* what, const std::vector<VkCommandBuffer>& cmds) {
+  if (!order_trace_active()) return;
+  std::string s;
+  char b[24];
+  for (VkCommandBuffer c : cmds) { snprintf(b, sizeof b, " %p", (void*)c); s += b; }
+  log("[order] %s frame %llu tid %lu cmds%s", what, (unsigned long long)frame_index(), GetCurrentThreadId(), s.c_str());
+}
 
 static InstanceData* instance_of(const void* handle) {
   std::shared_lock<std::shared_mutex> lock(g_mu);
@@ -414,8 +428,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   for (uint32_t i = 0; i < count; ++i)
     cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
   if (trace_recording()) trace_on_submit(cmds);
+  order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
+  pan_on_submit(cmds);
   sl_note_submit(cmds);
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
@@ -434,8 +450,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
     for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
       cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
   if (trace_recording()) trace_on_submit(cmds);
+  order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
+  pan_on_submit(cmds);
   sl_note_submit(cmds);
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
@@ -448,6 +466,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
 static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
   DeviceData* dd = device_of(queue);
   uint64_t frame = ++g_frame;
+  cmd_cpu_report(frame);
   if (frame <= 4 || (frame & 63) == 0) guard_check("vkQueuePresentKHR", true);   // on the presenting thread
   diag(DIAG_PRESENT);
   static int presents_logged = 0;
@@ -496,6 +515,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     assetdb_on_present(frame);
   }
   trace_on_present(queue, info);
+  pan_on_present(queue);
   framecap_on_present();
   if (g_headless) {
     std::vector<VkPipelineStageFlags> stages(info->waitSemaphoreCount, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);

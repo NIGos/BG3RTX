@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "core.h"
+#include "../common/camera_motion.h"
 #include "ls_lights.h"
 #include "sharc.h"
 #include "sun_trust.h"
@@ -49,6 +50,7 @@ struct Snapshot {
   VkAccelerationStructureKHR tlas;   // the TLAS the ray-traced passes used (Track D)
   VkDescriptorSet alpha;             // the host's set 1 for them (alpha-tested geometry, phase 3)
   bool gi;                           // the GI passes ran (gi=1); otherwise only the sun shadow work
+  bool rt_gi_applied = false;         // diagnostic: RT GI commands actually recorded in run_pre
   bool ls;                           // D-LS runs after the lighting
   bool rf;                           // D-RF runs after the lighting
   bool rf_validate;                  // D-RF EN4 check: the prep pass ran (AO 1, no sun), D-LS skipped
@@ -60,6 +62,7 @@ struct Snapshot {
   Bg3Binding x_atmo, x_tlut, x_ca0, x_ca1, x_cb0, x_cb1;
   bool rt_sun;   // the RT sun shadows were folded into the mask this frame
   bool aux_ao;   // gi_ao_apply kept the game's AO in gAux.x this frame
+  bool pan = false;
   // SHaRC radiance cache (sharc=1, core/sharc.h): resolved and queried by the GI trace in
   // run_pre; D-RF queries it (rf_sharc) and the injection writes it in run_post.
   bool sharc, rf_sharc;
@@ -69,6 +72,10 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
+  VkPipeline variants[2] = {};
+  uint64_t variant_generations[2] = {};
+  std::string variant_files[2];
+  bool rebased = false;
 };
 
 struct Push {
@@ -170,6 +177,7 @@ std::unordered_map<VkCommandBuffer, Snapshot> g_pending;   // pre done, post owe
 VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_HANDLE, g_ls_set_layout = VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
+Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
 Pipe g_ls_match;    // D-LS per-light data: joins the runtime lights to the light array (core/ls_lights.h)
 // D-LS variants (docs/TRACK_D_RT.md 9.9): g_ls serves the default settings only, g_ls_full every
@@ -598,9 +606,24 @@ bool ensure_ls_layout() {
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
+  static const char* const rebased_files[] = {
+      "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl", "gi/pan_local.hlsl",
+      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
+      "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
+      "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
+      "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
+      "gi/rt_sun_resolve.hlsl", "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl"};
+  bool rebase = false;
+  if (host->cfg_int("rt_scene_rebase", 0))
+    for (const char* candidate : rebased_files) rebase |= std::strcmp(file, candidate) == 0;
+  const std::string selected = rebase ? std::string("gi/rebase/") + (file + 3) : file;
+  const unsigned variant = rebase ? 1u : 0u;
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(file, "main", "cs_6_6", &blob)) return p.pipeline != VK_NULL_HANDLE;
-  if (p.pipeline && blob.generation == p.generation) return true;
+  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
+  if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
+    p.pipeline = p.variants[variant]; p.generation = blob.generation; p.rebased = rebase;
+    return true;
+  }
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
   mci.pCode = blob.code;
@@ -609,7 +632,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   VkShaderModule mod = VK_NULL_HANDLE;
   if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
     host->log("gi: %s shader module creation failed; keeping the previous pipeline", file);
-    return p.pipeline != VK_NULL_HANDLE;
+    return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
   }
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
@@ -620,12 +643,16 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
   if (pr != VK_SUCCESS) {
     host->log("gi: %s pipeline creation failed; keeping the previous one", file);
-    return p.pipeline != VK_NULL_HANDLE;
+    return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
   }
-  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.pipeline);
+  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.variants[variant]);
+  p.variants[variant] = np;
+  p.variant_generations[variant] = blob.generation;
+  p.variant_files[variant] = selected;
+  p.rebased = rebase;
   p.pipeline = np;
   p.generation = blob.generation;
-  host->log("gi: %s generation %llu", file, (unsigned long long)blob.generation);
+  host->log("gi: %s generation %llu", selected.c_str(), (unsigned long long)blob.generation);
   return true;
 }
 
@@ -749,7 +776,9 @@ constexpr uint32_t kStatsRing = 8;
 // (rt_common.hlsli kStatUnknown + g_rt_pass): other (origins, debug), sun, D-LS, D-RF, RT AO,
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
-constexpr uint32_t kStatsCounters = 136;
+// 136..143 primary pool/soup hit cohorts; 144..150 raw GPU pose floats,
+// 151 snapshot valid, 152 diagnostic present. No extra ray is dispatched.
+constexpr uint32_t kStatsCounters = 160;
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -766,6 +795,7 @@ uint64_t g_stats_sum[kStatsCounters] = {};
 float g_ls_raw[4] = {};   // set1/b0 m0.x, m0.y, m0.w, b13[0] as last written
 float g_frame_m4 = 0;     // set0/b0 _m4 (skin shaded white), raw counter 54
 uint32_t g_stats_n = 0;
+CameraMotionWindow g_epoch_motion;
 
 bool stats_init() {
   if (g_stats_buf) return true;
@@ -832,10 +862,17 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
       g_guard_frames = 0;
     }
     for (int i = 0; i < int(kStatsCounters); ++i)
-      if ((i < 27 || i > 30) && i != 70)   // (70: a raw float)
+      if ((i < 27 || i > 30) && i != 70 && (i < 144 || i > 150) && (i < 155 || i > 157))
         for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
     for (int i = 27; i <= 30; ++i) std::memcpy(&g_ls_raw[i - 27], &c[i * 64], 4);   // raw floats (latest)
     std::memcpy(&g_frame_m4, &c[70 * 64], 4);
+    if (c[152 * 64]) {
+      float pose[7];
+      float origin[3];
+      for (int i = 0; i < 7; ++i) std::memcpy(pose+i,&c[(144+i)*64],4);
+      for (int i = 0; i < 3; ++i) std::memcpy(origin+i,&c[(155+i)*64],4);
+      g_epoch_motion.add(pose,c[151*64] != 0,origin);
+    } else { g_epoch_motion.have_previous = false; g_epoch_motion.have_origin = false; }
     ++g_stats_n;
   }
   g_stats_slot = slot;
@@ -843,6 +880,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   host->vk->CmdFillBuffer(cmd, g_stats_buf, VkDeviceSize(slot) * kStatsSlot, kStatsSlot, 0);
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   if (!full) {   // only the guards are wanted: the statistics report stays off
+    g_epoch_motion.reset_window();
     g_stats_n = 0;
     std::memset(g_stats_sum, 0, sizeof g_stats_sum);
     return;
@@ -856,6 +894,23 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_stats_n, alpha_test ? "on" : "off", 100.0 * t[1] / px, 100.0 * t[2] / px, 100.0 * t[5] / px,
               100.0 * t[6] / px, 100.0 * t[7] / px, 100.0 * t[3] / px, 100.0 * t[13] / px, 100.0 * t[14] / px,
               100.0 * t[4] / px);
+  }
+  if (g_epoch_motion.frames) {
+    constexpr double to_deg = 57.29577951308232;
+    const double steps = double(g_epoch_motion.steps ? g_epoch_motion.steps : 1);
+    host->log("rt epoch (%u frames): GPU camera frames %u, scene snapshots %u; camera motion mean %.6f deg/frame, "
+              "max %.6f deg/frame, signed yaw %.6f deg/frame; scene rotation max %.6f deg, translation max %.6f m; "
+              "pool hit match %.3f%% of %llu, soup hit match %.3f%% of %llu; camera translation motion max %.6f m/frame, "
+              "precision bound %.6f m/frame; lighting forward [%.9g, %.9g, %.9g], origin [%.9g, %.9g, %.9g]; "
+              "misses remain in the global primary check",
+              g_stats_n,g_epoch_motion.frames,g_epoch_motion.scene_frames,g_epoch_motion.angle_sum*to_deg/steps,
+              g_epoch_motion.angle_max*to_deg,g_epoch_motion.yaw_sum*to_deg/steps,
+              g_epoch_motion.scene_angle_max*to_deg,g_epoch_motion.translation_max,
+              t[136] ? 100.0*t[137]/double(t[136]) : 0.0,(unsigned long long)t[136],
+              t[140] ? 100.0*t[141]/double(t[140]) : 0.0,(unsigned long long)t[140],
+              g_epoch_motion.origin_motion_max,g_epoch_motion.origin_precision_bound,
+              g_epoch_motion.previous[0],g_epoch_motion.previous[1],g_epoch_motion.previous[2],
+              g_epoch_motion.previous_origin[0],g_epoch_motion.previous_origin[1],g_epoch_motion.previous_origin[2]);
   }
   if (t[8]) {
     double r = double(t[8]), h = double(t[9] ? t[9] : 1);
@@ -969,6 +1024,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   }
   std::memset(g_stats_sum, 0, sizeof g_stats_sum);
   g_stats_n = 0;
+  g_epoch_motion.reset_window();
 }
 
 // The light list for the D-LS pass (bindings 21-29).
@@ -1362,27 +1418,38 @@ void ls_timing_collect() {
 // usually stamped one frame earlier. The TLAS and set 1 come as one pair from
 // the same host snapshot (rt_scene_set, ABI 8): the passes never trace one
 // build's TLAS with another's InstInfo, records, soup or pool.
-VkAccelerationStructureKHR rt_tlas(VkDescriptorSet* alpha) {
+VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha) {
   if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 1) &&
                           !host->cfg_int("rt_local_shadows", 1) && !host->cfg_int("rt_reflections", 1)))
     return VK_NULL_HANDLE;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
   uint64_t built = 0, now = host->frame_index();
   *alpha = VK_NULL_HANDLE;
-  if (!host->rt_scene_set || !host->rt_scene_set(&tlas, alpha, &built) || !tlas || built + 1 < now || !*alpha) {
+  const bool matched = host->cfg_int("rt_scene_camera_match", 0) != 0;
+  bool scene_ok = matched ? host->rt_scene_camera && host->rt_scene_camera(cmd, &tlas, alpha, &built)
+                          : host->rt_scene_set && host->rt_scene_set(&tlas, alpha, &built);
+  if (!scene_ok || !tlas || (!matched && built + 1 < now) || !*alpha) {
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
   }
   ++(built == now ? g_rt_frames_traced : g_rt_frames_stale);
+  if (host->cfg_int("rt_order_trace", 0) > 0 && now > 600 && now % 600 < uint64_t(host->cfg_int("rt_order_trace", 0)))
+    host->log("[order] rt passes cmd %p frame %llu scene built %llu", (void*)cmd, (unsigned long long)now,
+              (unsigned long long)built);
   return tlas;
 }
 
 bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
+  s.rt_gi_applied=false;
   if (!ensure_layout() || !ensure_images(s.dif.width, s.dif.height)) return false;
   bool ok = refresh(g_trace, "gi/gi_trace.hlsl") & refresh(g_temporal, "gi/gi_temporal.hlsl") &
             refresh(g_ao_apply, "gi/gi_ao_apply.hlsl") & refresh(g_composite, "gi/gi_composite.hlsl") &
             refresh(g_contact, "gi/gi_contact.hlsl");
   if (!ok) return false;
+  if (host->cfg_int("pan_prepare", 0) && g_rt_layout) {
+    refresh(g_pan_primary, "gi/pan_primary.hlsl", g_rt_layout);
+    if (g_ls_layout) refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout);
+  }
   if (!g_images_ready) {
     for (Bg3Image* im : all_images)
       image_layout(cmd, im->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -1417,7 +1484,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   mat_bits(pc, s, false);
   // Track D: the frame's TLAS for the ray-traced passes.
   VkDescriptorSet alpha = VK_NULL_HANDLE;
-  VkAccelerationStructureKHR tlas = rt_tlas(&alpha);
+  VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha);
   if (tlas && (!ensure_rt_layout() || !refresh(g_rt_shadow, "gi/rt_shadow.hlsl", g_rt_layout) ||
                !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) || !refresh(g_rt_ao, "gi/rt_ao.hlsl", g_rt_layout) ||
                !refresh(g_trace_rt, "gi/gi_trace_rt.hlsl", g_rt_layout) ||
@@ -1486,7 +1553,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     pc.rt_stats = host->cfg_int("rt_stats", 0) ? 1u : 0u;
     // Every traced frame: the out-of-range guards are always counted.
     stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0,
-                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0));
+                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0) || host->cfg_int("rt_primary_epoch",0));
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
@@ -1495,17 +1562,40 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
   }
   bool rt_started = false;
+  static int previous_primary_mode = -1;
+  const int primary_mode = host->cfg_int("rt_primary_check",0) ? (host->cfg_int("rt_primary_epoch",0) ? 2 : 1) : 0;
+  if (primary_mode != previous_primary_mode) {
+    host->log("rt cost scope: primary_check=%d epoch=%d rt_origin=%u; interval starts at first RT pre-pass and "
+              "ends after GI trace/temporal/AO and sun resolve; local-light and reflection passes are timed separately",
+              primary_mode != 0,primary_mode == 2,pc.rt_origin);
+    previous_primary_mode = primary_mode;
+  }
   auto rt_begin = [&] {
     if (!rt_started) rt_timestamp(cmd, 0);
     rt_started = true;
   };
   // Depth, normals and AO come from earlier graphics passes.
   memory_barrier(cmd, kAll, kCS);
+  s.pan = host->pan_capture && host->pan_capture(cmd, "depth", &s.dep);
+  if (s.pan) {
+    host->pan_capture(cmd, "normal", &s.nrm);
+    host->pan_capture(cmd, "albedo", &s.alb);
+    host->pan_capture(cmd, "material", &s.mat);
+  }
   // Robust ray origins first: every ray-traced pass (and D-LS after the lighting) reads them.
   if (tlas && pc.rt_origin != 0) {
     rt_begin();
     dispatch(cmd, g_rt_origin, b, pc, g_w, g_h, true);
     memory_barrier(cmd, kCS, kCS);
+  }
+  if ((s.pan || host->cfg_int("rt_primary_check", 0)) && tlas &&
+      refresh(g_pan_primary, host->cfg_int("rt_primary_epoch",0) ? "gi/pan_primary_epoch.hlsl" : "gi/pan_primary.hlsl", g_rt_layout)) {
+    dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true);
+    Bg3Binding im{};
+    im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
+    if (s.pan) host->pan_capture(cmd, "primary", &im);
+    memory_barrier(cmd, kAll, kCS);
   }
   // SHaRC: last frame's injections into the cache before this frame's GI rays read it.
   if (s.sharc) {
@@ -1526,6 +1616,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
       rt_begin();
       if (s.sharc) sharc_dispatch(cmd, g_trace_rt_sharc, b, pc, s.sh.set, (g_hw + 7) / 8, (g_hh + 7) / 8);
       else dispatch(cmd, g_trace_rt, b, pc, g_hw, g_hh, true);
+      s.rt_gi_applied = true;
     } else {
       dispatch(cmd, g_trace, b, pc, g_hw, g_hh);
     }
@@ -1563,6 +1654,12 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     sunt_end(cmd);
     image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
+    if (s.pan) {
+      Bg3Binding im{};
+      im.image = g_rt_vis.image; im.format = VK_FORMAT_R8G8B8A8_UNORM;
+      im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
+      host->pan_capture(cmd, "sun", &im);
+    }
   } else if (s.shadow.view && host->cfg_int("contact_shadows", 1)) {
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     dispatch(cmd, g_contact, b, pc, g_w, g_h);
@@ -1663,6 +1760,7 @@ void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
 }
 
 void run_post(VkCommandBuffer cmd, const Snapshot& s) {
+  bool local_applied=false, reflection_applied=false;
   Bound b;
   bind_all(b, s);
   Push pc = make_push();
@@ -1716,7 +1814,15 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       // Not before the first frame that needs it: an unused pipeline is not compiled.
       if (refresh(g_ls_full, "gi/rt_local_shadows_full.hlsl", g_ls_layout)) lsp = g_ls_full.pipeline;
     }
+    if (s.pan && refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout)) lsp = g_pan_ls.pipeline;
     ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8);
+    local_applied=true;
+    if (s.pan) {
+      Bg3Binding im{};
+      im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+      im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
+      host->pan_capture(cmd, "local", &im);
+    }
     ls_timestamp(cmd, 2);
     if (s.shadow.view) image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kAll);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kAll);
@@ -1752,6 +1858,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if (mv_move) image_layout(cmd, g_mv_image, g_mv_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, kAll, kCS);
     rf_timestamp(cmd, 0);
     rf_dispatch(cmd, rb, s, rp);
+    reflection_applied=true;
     rf_timestamp(cmd, 1);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
@@ -1764,6 +1871,24 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
   }
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
+  if (host->cfg_int("rt_primary_epoch",0)) {
+    // Command-application counts, not expensive per-ray atomics. Existing GPU
+    // timestamps and static debug captures independently prove execution/output.
+    static uint32_t frames=0, sun=0, gi=0, local=0, reflection=0;
+    sun+=s.rt_sun; gi+=s.rt_gi_applied; local+=local_applied; reflection+=reflection_applied;
+    if (++frames>=120) {
+      host->log("rt applied (%u frames): sun %u GI %u local %u reflections %u (recorded dispatches; GPU timings separate)",
+                frames,sun,gi,local,reflection);
+      frames=sun=gi=local=reflection=0;
+    }
+  }
+  if (s.pan) {
+    Bg3Binding im{};
+    im.image = g_hist[g_parity ^ 1].image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_hw; im.height = g_hh;
+    if (s.gi) host->pan_capture(cmd, "gi", &im);
+    host->pan_capture(cmd, "diffuse", &s.dif);
+  }
   if (s.sharc && s.tlas) sharc_post(cmd, s, pc);
   if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 8) {
     memory_barrier(cmd, kCS, kCS);
@@ -1896,11 +2021,11 @@ void gi_release() {
   g_lsl_ok = false;
   sunt_release();
   g_sunt_ok = false;
-  for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
+  for (Pipe* p : {&g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
+    for (VkPipeline variant : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant);
     *p = Pipe{};
   }
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_rf_queries);

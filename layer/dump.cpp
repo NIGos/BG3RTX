@@ -522,4 +522,189 @@ void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue)
   }
 }
 
+// Pan bursts retain readbacks until all 16 frames have been submitted. There
+// is no QueueWaitIdle, PNG encoding or disk write between captured frames.
+// Record and submit indices are both retained: a present index is not a pose.
+namespace {
+struct PanSample {
+  Dump dump{};
+  std::string name;
+  uint64_t recorded = 0, submitted = UINT64_MAX, built = UINT64_MAX;
+  uint64_t time_ms = 0;
+  uint64_t recording = 0;
+};
+std::mutex pan_mu;
+std::vector<PanSample> pan_samples;
+int pan_serial = 0;
+uint32_t pan_frames = 0;
+uint64_t pan_first = 0, pan_last = 0, pan_bytes = 0;
+bool pan_finished = true, pan_invalid = false;
+std::string pan_dir;
+}
+
+bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
+  if (cfg_int("pan_capture", 0) <= 0 || !r || !r->image) return false;
+  std::lock_guard<std::mutex> lock(pan_mu);
+  CmdState* state = cmd_state(cmd);
+  if (!state) return false;
+  uint64_t now = frame_index();
+  const int serial = cfg_int("pan_capture", 0);
+  if (std::strcmp(name, "depth") == 0) {
+    state->pan_epoch.clear();
+    if (serial != pan_serial && pan_finished) {
+      pan_serial = serial;
+      pan_frames = 0;
+      pan_bytes = 0;
+      pan_first = now;
+      pan_finished = pan_invalid = false;
+      pan_dir = root_dir() + "\\captures\\pan-" + capture_stamp() + "-" + std::to_string(serial);
+      log("[pan] burst %d armed at record frame %llu, K=16", serial, (unsigned long long)now);
+    }
+    if (pan_finished || pan_frames >= 16) return false;
+    if (pan_frames && now != pan_last + 1) pan_invalid = true;
+    pan_last = now;
+    ++pan_frames;
+    state->pan_epoch.bind(state->recording, now, serial);
+  } else {
+    if (!state->pan_epoch.matches(state->recording, serial)) return false;
+    now = state->pan_epoch.frame;
+  }
+  if (pan_finished || !pan_frames || now < pan_first || now > pan_last) return false;
+  PanSample p;
+  p.name = name;
+  p.recorded = now;
+  p.recording = state->recording;
+  p.time_ms = GetTickCount64();
+  p.dump.cmd = cmd;
+  p.dump.format = r->format;
+  p.dump.depth = is_depth_format(r->format);
+  VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+  rt_scene(&tlas, &p.built);
+  ImageRec rec{};
+  rec.ci.format = r->format;
+  rec.ci.extent = {r->width, r->height, 1};
+  const uint64_t bytes = uint64_t(r->width) * r->height * texel_size(r->format, p.dump.depth);
+  if (!bytes || pan_bytes + bytes > (uint64_t(6) << 30)) {
+    pan_invalid = true;
+    return false;
+  }
+  if (!record_copy(cmd, device_of(cmd), r->image, r->layout, rec, p.dump.depth, p.dump)) {
+    pan_invalid = true;
+    return false;
+  }
+  pan_bytes += bytes;
+  pan_samples.push_back(std::move(p));
+  if (std::strcmp(name, "depth") == 0) {
+    VkBuffer source = rt_scene_pose();
+    if (source) {
+      PanSample pose;
+      pose.name = "scene_pose"; pose.recorded = now; pose.time_ms = GetTickCount64();
+      pose.recording = state->recording;
+      pose.built = pan_samples.back().built;
+      Dump& d = pose.dump;
+      d.cmd = cmd; d.w = 56; d.h = 1; d.texel = 4; d.size = 224; d.format = VK_FORMAT_R32_SFLOAT;
+      DeviceData* dd = device_of(cmd);
+      VkBufferCreateInfo ci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+      ci.size = d.size; ci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+      bool ok = dd->vk.CreateBuffer(dd->device, &ci, nullptr, &d.buffer) == VK_SUCCESS;
+      if (ok) {
+        VkMemoryRequirements req{}; dd->vk.GetBufferMemoryRequirements(dd->device, d.buffer, &req);
+        VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        ai.allocationSize = req.size; ai.memoryTypeIndex = host_memory_type(dd, req.memoryTypeBits);
+        ok = ai.memoryTypeIndex != UINT32_MAX && dd->vk.AllocateMemory(dd->device, &ai, nullptr, &d.memory) == VK_SUCCESS;
+        if (ok) ok = dd->vk.BindBufferMemory(dd->device, d.buffer, d.memory, 0) == VK_SUCCESS;
+      }
+      if (ok) {
+        VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+        barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                  0, 1, &barrier, 0, nullptr, 0, nullptr);
+        VkBufferCopy copy{0,0,224}; dd->vk.CmdCopyBuffer(cmd,source,d.buffer,1,&copy);
+        pan_samples.push_back(std::move(pose));
+      } else {
+        pan_invalid = true;
+        defer_destroy(BG3_DEFER_BUFFER,uint64_t(d.buffer));
+        defer_destroy(BG3_DEFER_MEMORY,uint64_t(d.memory));
+      }
+    }
+  }
+  return true;
+}
+
+void pan_pass_end(VkCommandBuffer cmd, CmdState* s) {
+  if (cfg_int("pan_capture", 0) <= 0) return;
+  // The game's final, hudless HDR image is the tonemap output (FRAME_MAP
+  // step 16), before the UI composite. Streamline can present through an
+  // interposed image which is never a native render-pass attachment.
+  // Reuse the same signature as the existing tracer/Streamline fallback.
+  if (s->pass.first_fs_hash != 0xd25b8086de1734d5ull || s->pass.draw_count == 0) return;
+  for (uint32_t i = 0; i < s->pass.color_count; ++i) {
+    ImageRec rec{};
+    {
+      std::shared_lock<std::shared_mutex> lock(tracker().mu);
+      auto it = tracker().images.find(s->pass.color_images[i]);
+      if (it == tracker().images.end()) continue;
+      rec = it->second;
+    }
+    Bg3Binding b{};
+    b.image = s->pass.color_images[i];
+    b.format = rec.ci.format;
+    b.width = rec.ci.extent.width;
+    b.height = rec.ci.extent.height;
+    b.layout = s->color_layouts[i];
+    if (b.layout != VK_IMAGE_LAYOUT_UNDEFINED) pan_capture(cmd, "final", &b);
+  }
+}
+
+void pan_on_submit(const std::vector<VkCommandBuffer>& cmds) {
+  std::lock_guard<std::mutex> lock(pan_mu);
+  for (auto& p : pan_samples)
+    if (p.submitted == UINT64_MAX && std::find(cmds.begin(), cmds.end(), p.dump.cmd) != cmds.end()) {
+      CmdState* state = cmd_state(p.dump.cmd);
+      if (!state || state->recording != p.recording) pan_invalid = true;
+      else p.submitted = frame_index();
+    }
+}
+
+void pan_on_present(VkQueue queue) {
+  std::lock_guard<std::mutex> lock(pan_mu);
+  if (pan_finished || pan_frames < 16 || frame_index() < pan_last + 3) return;
+  DeviceData* dd = main_device();
+  // The waits occur after the entire burst, never inside its measurement.
+  if (dd->vk.QueueWaitIdle(queue) != VK_SUCCESS) pan_invalid = true;
+  if (dd->graphics_queue != queue && dd->vk.QueueWaitIdle(dd->graphics_queue) != VK_SUCCESS) pan_invalid = true;
+  make_dirs(pan_dir);
+  std::string manifest = "{\"version\":1,\"serial\":" + std::to_string(pan_serial) +
+      ",\"K\":16,\"final_stage\":\"native_tonemap_hudless\",\"samples\":[";
+  bool first = true;
+  unsigned ordinal = 0;
+  for (auto& p : pan_samples) {
+    Dump& d = p.dump;
+    const std::string file = "f" + std::to_string(p.recorded) + "-" + p.name + "-" + std::to_string(ordinal++) + ".raw";
+    void* ptr = nullptr;
+    bool saved = p.submitted != UINT64_MAX && dd->vk.MapMemory(dd->device, d.memory, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS;
+    if (saved) {
+      write_file(pan_dir + "\\" + file, ptr, size_t(d.size));
+      dd->vk.UnmapMemory(dd->device, d.memory);
+      saved = file_mtime(pan_dir + "\\" + file) != 0;
+    }
+    if (!saved) pan_invalid = true;
+    manifest += (first ? "" : ",") + std::string("{\"name\":\"") + p.name + "\",\"file\":\"" + file +
+        "\",\"record_frame\":" + std::to_string(p.recorded) + ",\"submit_frame\":" + std::to_string(p.submitted) +
+        ",\"command_recording\":" + std::to_string(p.recording) +
+        ",\"tlas_record_frame\":" + std::to_string(p.built) + ",\"format\":" + std::to_string(d.format) +
+        ",\"time_ms\":" + std::to_string(p.time_ms) +
+        ",\"width\":" + std::to_string(d.w) + ",\"height\":" + std::to_string(d.h) + "}";
+    first = false;
+    defer_destroy(BG3_DEFER_BUFFER, uint64_t(d.buffer));
+    defer_destroy(BG3_DEFER_MEMORY, uint64_t(d.memory));
+  }
+  manifest += std::string("],\"valid_transport\":") + (pan_invalid ? "false" : "true") + "}\n";
+  write_file(pan_dir + "\\burst.json", manifest.data(), manifest.size());
+  log("[pan] burst %d complete: %u frames, %zu samples, transport %s -> %s", pan_serial, pan_frames,
+      pan_samples.size(), pan_invalid ? "INVALID" : "ok", pan_dir.c_str());
+  pan_samples.clear();
+  pan_finished = true;
+}
+
 }  // namespace bg3

@@ -25,10 +25,13 @@
 //   3. a one-instance TLAS (identity transform: the space is already camera-relative).
 // The core traces against the TLAS in the tiled lighting (rt_shadow.hlsl).
 #include "host.h"
+#include "../common/camera_epoch.h"
 
 #include <intrin.h>
 
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
 #include <cmath>
 #include <cstring>
 
@@ -111,10 +114,31 @@ struct SceneSlot {
   VkDescriptorSet set = VK_NULL_HANDLE;
   bool split = false;
   uint64_t rec = 0;   // build record of the command buffer it was recorded into (bvhsplit.cpp)
+  VkBuffer pose = VK_NULL_HANDLE;
+  VkDeviceMemory pose_memory = VK_NULL_HANDLE;
+  bool pose_valid = false;
+  VkBuffer camera = VK_NULL_HANDLE;
+  VkDeviceSize camera_offset = 0;
+  float camera_pose[56] = {};
+  bool camera_pose_valid = false;
 };
 uint64_t g_legacy_rec = 0;   // the legacy BLAS's last build: refit only once it was submitted
 SceneSlot g_scene[kSceneSlots];
 int g_scene_cur = -1;
+// rt_scene_wait=1 (P1, docs/TRACK_D_RT.md): BG3 records the lighting command buffer, where the
+// RT passes go, on a worker thread 1-5 ms before another thread ends the G-buffer pass of the
+// same frame (where the scene is captured and built). Both go down in one vkQueueSubmit with the
+// G-buffer first, so the RT passes can trace this frame's TLAS if their recording waits for it.
+// Without the wait they trace the previous frame's scene: a camera-relative scene one frame
+// old, which detaches shadows while the camera moves.
+std::condition_variable g_scene_cv;
+// cpu_timing=1: CPU split of the scene build recording (P3 base frame rate).
+struct BuildCpu { double total = 0, bvh = 0, alpha = 0; uint64_t n = 0; };
+BuildCpu g_bcpu;
+double qpc_ms() { LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f); return double(t.QuadPart) * 1000.0 / double(f.QuadPart); }
+struct WaitStats { uint64_t calls = 0, waited = 0, got = 0, timeouts = 0, skipped = 0; double ms = 0, ms_max = 0; };
+WaitStats g_wait;
+uint32_t g_wait_misses = 0;   // consecutive timeouts: stop waiting after a few (no capture this frame)
 uint32_t g_scene_next = 0;
 uint64_t g_scene_skipped = 0, g_scene_skip_logged = 0;
 std::atomic<uint64_t> g_oldest_live{UINT64_MAX};
@@ -164,6 +188,7 @@ void commit_scene_slot(int slot, VkAccelerationStructureKHR tlas, VkDescriptorSe
   s.split = split;
   g_scene_cur = slot;
   update_oldest_live();
+  g_scene_cv.notify_all();
 }
 
 // GPU timing: 4 timestamps per build (start, converted, BLAS, TLAS) in a ring.
@@ -703,6 +728,11 @@ void rt_device_destroyed(DeviceData* dd) {
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();
+    for (auto& s : g_scene) {
+      defer_destroy(BG3_DEFER_BUFFER, uint64_t(s.pose));
+      defer_destroy(BG3_DEFER_MEMORY, uint64_t(s.pose_memory));
+      s.pose = VK_NULL_HANDLE; s.pose_memory = VK_NULL_HANDLE; s.pose_valid = false;
+    }
     defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_pipe));
     defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
     defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_dsl));
@@ -828,6 +858,9 @@ bool rt_camera_moving() { return g_moving.load(); }
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   if (!g_rt) return;
   std::lock_guard<std::mutex> lock(g_mu);
+  if (order_trace_active())
+    log("[order] capture end cmd %p frame %llu tid %lu%s", (void*)cmd, (unsigned long long)frame_index(),
+        GetCurrentThreadId(), g_last_frame == frame_index() ? " (second capture this frame: no build)" : "");
   if (g_last_frame == frame_index()) return;
   const VkBuffer xfb = cap.xfb, ubo = cap.ubo;
   const VkDeviceSize ubo_offset = cap.ubo_offset;
@@ -849,6 +882,16 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   // this frame, the previous scene stays current.
   const int scene_slot = pick_scene_slot();
   if (scene_slot < 0) return;
+  SceneSlot& scene = g_scene[scene_slot];
+  float source_camera[56]{};
+  const bool source_camera_valid = read_mapped(cap.ubo, cap.ubo_offset, source_camera, sizeof source_camera);
+  scene.pose_valid = false;
+  if (cfg_int("pan_capture", 0) > 0 || cfg_int("pan_prepare", 0)) {
+    void* mapped = nullptr;
+    if (!scene.pose) alloc_host_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                      &scene.pose, &scene.pose_memory, &mapped);
+    scene.pose_valid = geo_copy_camera(cmd, ubo, ubo_offset, scene.pose);
+  }
   note_camera(cap);
   fault_track("soup (XFB capture)", buffer_address(xfb), cap.xfb_size);
   const DeviceData* dd = g_dd;
@@ -875,7 +918,11 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     timestamp(cmd, slot, 0);
     g_stamp_slot = slot;
     BvhResult res{};
-    if (!bvh_build(cmd, cap, &stamp_cb, uint32_t(scene_slot), &res)) {
+    const bool cpu_t = cfg_int("cpu_timing", 0) != 0;
+    const double t_bvh0 = cpu_t ? qpc_ms() : 0;
+    const bool bvh_ok = bvh_build(cmd, cap, &stamp_cb, uint32_t(scene_slot), &res);
+    const double t_bvh1 = cpu_t ? qpc_ms() : 0;
+    if (!bvh_ok) {
       if (slot >= 0) g_slots[slot] = Slot{};   // the timestamps were not all written
       restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
       return;
@@ -883,10 +930,26 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
     AlphaBindings ab{xfb, cap.alpha_base, aprims ? VkDeviceSize(aprims) * tri_bytes : 0, VkDeviceSize(prims) * tri_bytes,
                      cap.xfb_size, stride, true, res.info, res.info_off, res.info_bytes, res.pool, res.pool_bytes};
+    ab.camera = cap.ubo;
+    ab.camera_offset = cap.ubo_offset;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
+    if (cpu_t) {
+      const double t2 = qpc_ms();
+      g_bcpu.bvh += t_bvh1 - t_bvh0;
+      g_bcpu.alpha += t2 - t_bvh1;
+      if (++g_bcpu.n >= 300) {
+        log("[cpu] scene build recording, ms/build over %llu: bvh_build %.3f, alpha_commit (records, set) %.3f",
+            (unsigned long long)g_bcpu.n, g_bcpu.bvh / g_bcpu.n, g_bcpu.alpha / g_bcpu.n);
+        g_bcpu = BuildCpu{};
+      }
+    }
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
     commit_scene_slot(scene_slot, res.tlas, set, true, res.rec);
+    scene.camera = cap.ubo;
+    scene.camera_offset = cap.ubo_offset;
+    std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
+    scene.camera_pose_valid = source_camera_valid;
     fault_checkpoint(cmd, kCkSceneCommitted, uint32_t(scene_slot));
     ++g_n_frames;
     ++g_n_split;
@@ -924,6 +987,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   alpha_legacy_info(cmd, stride, &info, &info_bytes);
   AlphaBindings ab{xfb, cap.alpha_base, geoms == 2 ? VkDeviceSize(aprims) * tri_bytes : 0, VkDeviceSize(prims) * tri_bytes,
                    cap.xfb_size, stride, false, info, 0, info_bytes, VK_NULL_HANDLE, 0};
+  ab.camera = cap.ubo;
+  ab.camera_offset = cap.ubo_offset;
   const VkDescriptorSet legacy_set = alpha_commit(cmd, ab, uint32_t(scene_slot));
   int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
   // A refit reads the BLAS: only if its last build's command buffer was submitted.
@@ -1020,6 +1085,10 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   g_legacy_rec = legacy_rec;
   g_split_valid = false;
   commit_scene_slot(scene_slot, g_tlas, legacy_set, false, legacy_rec);
+  scene.camera = cap.ubo;
+  scene.camera_offset = cap.ubo_offset;
+  std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
+  scene.camera_pose_valid = source_camera_valid;
   g_built_prims = prims;
   g_built_aprims = aprims;
   g_built_sig = signature;
@@ -1034,16 +1103,24 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
 
 // Caller holds g_mu. The current slot, stamped as handed out in this frame;
 // false before the first build and once it is stale (it may be retired then).
-bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {
-  if (g_scene_cur < 0) return false;
-  SceneSlot& s = g_scene[g_scene_cur];
+bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame,
+              int slot = -1, bool exact_camera = false) {
+  if (slot < 0) slot = g_scene_cur;
+  if (slot < 0) return false;
+  SceneSlot& s = g_scene[slot];
   const uint64_t now = frame_index();
-  if (!s.used || !s.tlas || s.built + 1 < now) return false;
+  if (!s.used || !s.tlas) return false;
+  // Exact camera selection can legitimately refer to a build stamped two
+  // presents earlier. A present on another thread is not a camera epoch.
+  if (exact_camera ? slot_retired(s, life_gpu_done(), now) : s.built + 1 < now) return false;
   // Its command buffer was dropped without a submit: the TLAS was never built.
   if (bvh_rec_state(s.rec) == 2) return false;
   if (s.split ? !g_split_valid : !g_blas_valid) return false;
   s.last_use = (std::max)(s.last_use, now);
-  alpha_slot_in_use(uint32_t(g_scene_cur), now);   // the set's game views live while it may be bound
+  if (order_trace_active())
+    log("[order] hand out slot %d built %llu now %llu tid %lu", slot, (unsigned long long)s.built,
+        (unsigned long long)now, GetCurrentThreadId());
+  alpha_slot_in_use(uint32_t(slot), now);   // the set's game views live while it may be bound
   *tlas = s.tlas;
   if (set) *set = s.set;
   *built_frame = s.built;
@@ -1056,11 +1133,87 @@ bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame) {
   return hand_out(tlas, nullptr, built_frame);
 }
 
+VkBuffer rt_scene_pose() {
+  std::lock_guard<std::mutex> lock(g_mu);
+  return g_scene_cur >= 0 && g_scene[g_scene_cur].pose_valid ? g_scene[g_scene_cur].pose : VK_NULL_HANDLE;
+}
+
+// Caller holds `lock` (g_mu). Waits (bounded) for this frame's scene commit; see g_scene_cv.
+void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
+  const int ms = cfg_int("rt_scene_wait_ms", 8);
+  const uint64_t now = frame_index();
+  auto current = [&] { return g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built >= now; };
+  ++g_wait.calls;
+  if (!current()) {
+    if (g_wait_misses >= 8 && now % 64 != 0) {
+      ++g_wait.skipped;   // no capture lately (menus, loading): probe once every 64 frames
+    } else {
+      const auto t0 = std::chrono::steady_clock::now();
+      const bool ok = g_scene_cv.wait_for(lock, std::chrono::milliseconds(ms > 0 ? ms : 1), current);
+      const double dt = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      ++g_wait.waited;
+      g_wait.ms += dt;
+      g_wait.ms_max = (std::max)(g_wait.ms_max, dt);
+      if (ok) { ++g_wait.got; g_wait_misses = 0; } else { ++g_wait.timeouts; ++g_wait_misses; }
+    }
+  }
+  if (g_wait.calls >= 600) {
+    log("[rt] scene wait: %llu frames, %llu waited (%llu got this frame's scene, %llu timeouts, %llu skipped), "
+        "wait mean %.3f ms, max %.3f ms",
+        (unsigned long long)g_wait.calls, (unsigned long long)g_wait.waited, (unsigned long long)g_wait.got,
+        (unsigned long long)g_wait.timeouts, (unsigned long long)g_wait.skipped,
+        g_wait.waited ? g_wait.ms / double(g_wait.waited) : 0.0, g_wait.ms_max);
+    g_wait = WaitStats{};
+  }
+}
+
 bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {
   if (!g_rt) return false;
-  std::lock_guard<std::mutex> lock(g_mu);
+  std::unique_lock<std::mutex> lock(g_mu);
   *set = VK_NULL_HANDLE;
+  if (cfg_int("rt_scene_wait", 0)) {
+    static uint64_t last_frame = 0;   // the first RT query of a frame waits; later ones reuse its result
+    if (last_frame != frame_index()) {
+      last_frame = frame_index();
+      wait_for_frame_scene(lock);
+    }
+  }
   return hand_out(tlas, set, built_frame);
+}
+
+bool rt_scene_camera(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas, VkDescriptorSet* set,
+                     uint64_t* built_frame) {
+  if (!g_rt) return false;
+  Bg3Binding camera{};
+  if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, 0, 2, 0, &camera) || !camera.buffer) return false;
+  float lighting_camera[56]{};
+  if (!read_mapped(camera.buffer, camera.offset, lighting_camera, sizeof lighting_camera)) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  int matched = -1;
+  for (uint32_t i = 0; i < kSceneSlots; ++i) {
+    const SceneSlot& s = g_scene[i];
+    if (s.used && s.camera_pose_valid && !slot_retired(s, life_gpu_done(), frame_index()) &&
+        same_camera_pose(s.camera_pose, lighting_camera) &&
+        (matched < 0 || s.rec > g_scene[matched].rec)) matched = int(i);
+  }
+  static uint64_t count = 0, redirected = 0, missing = 0;
+  ++count;
+  redirected += matched >= 0 && matched != g_scene_cur;
+  missing += matched < 0;
+  if (count % 300 == 0) {
+    log("[rt] camera scene identity: %llu queries, %llu redirected, %llu no match; lighting %p+%llu, latest %p+%llu; matched built %llu, present %llu; origin %.6f %.6f %.6f, latest origin %.6f %.6f %.6f",
+        (unsigned long long)count, (unsigned long long)redirected, (unsigned long long)missing,
+        (void*)camera.buffer, (unsigned long long)camera.offset,
+        g_scene_cur >= 0 ? (void*)g_scene[g_scene_cur].camera : nullptr,
+        g_scene_cur >= 0 ? (unsigned long long)g_scene[g_scene_cur].camera_offset : 0,
+        matched >= 0 ? (unsigned long long)g_scene[matched].built : 0,
+        (unsigned long long)frame_index(), lighting_camera[52], lighting_camera[53], lighting_camera[54],
+        g_scene_cur >= 0 ? g_scene[g_scene_cur].camera_pose[52] : 0,
+        g_scene_cur >= 0 ? g_scene[g_scene_cur].camera_pose[53] : 0,
+        g_scene_cur >= 0 ? g_scene[g_scene_cur].camera_pose[54] : 0);
+  }
+  *set = VK_NULL_HANDLE;
+  return matched >= 0 && hand_out(tlas, set, built_frame, matched, true);
 }
 
 uint64_t rt_scene_oldest_live() { return g_oldest_live.load(); }

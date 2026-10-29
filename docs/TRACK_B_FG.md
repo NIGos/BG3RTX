@@ -1,5 +1,86 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## Live FG matrix — 2026-10-29, no promotion
+
+Static same-view parity PASS: 30 debug traces, FG 2 primary 99.5195-99.5215%,
+18.7-18.8 rendered fps, displayed/rendered 2.00; FG 0 99.516%, 18.2 fps, 1.00.
+All effects have dispatch/timing evidence; GI debug is black in both modes, so
+nonzero GI energy is not proved. Sheets: captures/p1-fg/static-effects-sheets/.
+Visible non-activating native-windowed real presentation worked without observed
+activation; window coverage was 100%. Latest user authorization waives USER_AWAY
+only for explicit visible_unfocused_fg. Default visible_unfocused remains FG 0.
+
+Motion qualification INVALID: stopped after 13/56 complete phases plus partial
+phase 13. Posted 60 px/s rotation has stationary periods and up to 98.58 deg/frame
+jumps. Baseline FG 2 median ratio 1.00; rebase 1.163, guard 1.412. Corresponding
+primary medians 21.299 / 85.984 / 20.5465%, required 99.501%. RT remained active.
+No quality success or renderer attribution from these confounded paths/views.
+6,106 retired-only destructions reset stability with guard off; 3,279 did not
+with it on. First deciding interior mode changes 0 baseline vs 0 guard, so the
+required reduction is unproved. Key stays default-off; no merge. No SDK focus
+disable/crash exception; invalid-handle teardown followed deliberate game close.
+Next qualify relative background rotation, then repeat sustained FG-on A/B.
+Source logs p1-fg-{static-effects.1.152122,motion-matrix.1.153616}; details and
+phase numbers in docs/evidence/p1-fg-live-20261029.json and PROGRESS_CODEX.md.
+
+
+## P1 FG-on deciding matrix — 2026-10-29, queued preparation
+
+The user's current symptom occurs with FG on. FG 2 is now the deciding P1
+configuration; FG 0 is reference only. Both run focused/real in one moving
+session, with Streamline cold-loaded at FG 2. Unfocused launch remains FG-off
+only and is not a deciding test. No game launched or runtime pass established.
+
+fg_current_destroy_only is compared against baseline and rebase-only, separately.
+Retain it only if actual FG generation stays active, moving primary match
+reaches the FG-on static level, and interior host toggles decrease. Report both
+all options calls and mode changes; planned switches at phase boundaries do
+not count as interior instability. SDK state and actual displayed/rendered
+are required: requesting FG on is insufficient. A static same-view job first
+checks sun/local/GI/reflection/RR parity through debug captures and counters.
+Both keys stay default-off until deciding evidence exists. Reflex/TLAS timing
+causation is unproved; no Reflex path change was made. Details and expected
+report paths are at the top of PROGRESS_CODEX.md.
+
+## P2 watched-image retirement candidate — 2026-10-29, unmeasured
+
+Log-only review: retained user excerpt 09:29-09:34 has 27 host on/off changes,
+peak 16 per 60 seconds. All 13 host offs follow image destruction by 2-63 ms.
+The SDK also explicitly disables interpolation three times because the window
+is not focused while requested mode remains on. Focus loss is not invalid input.
+Legacy logs do not name the destroyed image/role; exact input attribution is
+unavailable. A changed hudless/UI handle alone does not establish invalidity.
+
+Queue readiness diagnostics provide stronger attribution: of 20 host offs,
+17 have current inputs ready, gate 0x80 (destruction cooldown). Three have
+gate 0x40, UI age 4 during swapchain recreation. These stale UI shutdowns remain
+necessary. Current-ready state does not establish the retired/current role of
+the image destroyed in the preceding frame. Full per-off source lines are in
+docs/evidence/p2-fg-and-rt-log-review.json.
+
+`fg_current_destroy_only=0` is a new live, default-off candidate. Legacy behavior
+resets stability for any image in the 32-entry historical layout watch list.
+With the key on, only destruction of a currently selected depth/MV/hudless/UI
+image resets stability. Rotated-out images still wait for the DLSS-G inputs
+consumption fence before their views/images are destroyed, and layout/watch
+cleanup still occurs. Missing/stale current inputs and real target recreation
+keep the existing off/cooldown behavior. No change to the legacy cooldown when
+the key is off. No shader or ABI change; CPU/GPU cost is unmeasured.
+
+Every host options decision logs reason, missing/stale role masks (depth=1,
+MV=2, hudless=4, UI=8), handles/views, extent, age, layout, tag/constants API
+results, and last destruction/current roles plus cooldown reset frame. These
+logs distinguish actual current-input loss from a historical-image reset and
+flags-only options calls. SDK focus messages distinguish independent gating.
+
+Seven CTests pass, including CPU cooldown/retirement scenarios; four audit
+tests reject conflating flags or SDK focus with input failure. Evidence:
+docs/evidence/p2-fg-and-rt-log-review.json. No game launched and no runtime pass.
+Candidate remains off. The two P1 rotation jobs remain unchanged and queued.
+Next P2 gate: within one real-present FG run, observe key off/on and current
+role per toggle, keep genuine invalid-input shutdowns/fence safety, and reduce
+retired-only cooldowns without API/fence faults. No promotion before evidence.
+
 `layer/streamline.cpp` runs NVIDIA DLSS-G in BG3's Vulkan renderer, including
 multi frame generation on RTX 50. It uses Streamline 2.14.16 with manual
 hooking from inside the host layer. NVIDIA Smooth Motion is not involved:

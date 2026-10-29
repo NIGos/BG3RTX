@@ -1,0 +1,470 @@
+{
+  "implementation_commit": "314840d",
+  "gate": "FAIL_INCOMPLETE",
+  "renderer_quality_result": "UNDETERMINED: no moving key-on samples",
+  "run": {
+    "job": "p1-origin-rebase-ab",
+    "run": 1,
+    "start": "2026-10-29T12:34:12",
+    "sec": 244,
+    "valid": true,
+    "outcome": "Run ended: game exited after 242s (exclusive)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "314840d Rebase all ray-query origins to the scene GPU camera behind rt_scene_rebase | core 12:27:25",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p1-origin-rebase-ab.1.123412.log",
+    "captures": [],
+    "lines": [
+      "12:38:13.026  [core] rt stats (120 frames, alpha test on): primary-ray check match 99.173%, in front 0.814% (opaque geometry 0.000, vt cutouts 0.000, tex cutouts 0.000), behind 0.013% (through vt 0.000, tex 0.000), miss 0.000%",
+      "12:38:12.682  [pace] rendered frame time over 600 frames: median 56.70 ms (17.6 fps), p99 64.53 ms, 1% low 15.3 fps, max 65.82 ms",
+      "12:38:12.793  [watch] presents 87 (displayed 87) | pipelines 17 (1 ms in driver) | shader modules 9 | descriptor writes 120 | submits 352 | draws 268050",
+      "12:37:59.150  [core] rt passes: GPU cost 15.106 ms/frame (average of 300 frames); TLAS this frame 0, previous frame 300, none 0"
+    ],
+    "session": "",
+    "core_gen": null,
+    "saved_sec": 0
+  },
+  "automatic_gate": {
+    "gate": "FAIL",
+    "static_derived_floor_percent": 77.37700000000001,
+    "reasons": [
+      "phase 0: cadence below 18 fps or absent",
+      "phase 1: cadence below 18 fps or absent",
+      "phase 2: missing phase marker",
+      "phase 2: fewer than 3 complete primary windows",
+      "phase 2: missing RT or no active-RT proof",
+      "phase 2: cadence below 18 fps or absent",
+      "phase 3: missing phase marker",
+      "phase 3: fewer than 3 complete primary windows",
+      "phase 3: missing RT or no active-RT proof",
+      "phase 3: cadence below 18 fps or absent",
+      "phase 4: missing phase marker",
+      "phase 4: fewer than 3 complete primary windows",
+      "phase 4: missing RT or no active-RT proof",
+      "phase 4: cadence below 18 fps or absent",
+      "phase 5: missing phase marker",
+      "phase 5: fewer than 3 complete primary windows",
+      "phase 5: missing RT or no active-RT proof",
+      "phase 5: cadence below 18 fps or absent",
+      "static control does not reach the established approximately 99.5% level",
+      "slow: key-off positive control did not reproduce mismatch",
+      "fast: key-off positive control did not reproduce mismatch"
+    ],
+    "phases": [
+      {
+        "index": 0,
+        "mode": "static",
+        "on": false,
+        "primary_match": [
+          93.161,
+          88.653,
+          90.342,
+          99.928,
+          95.12,
+          99.164,
+          99.176,
+          99.173,
+          99.176,
+          99.174
+        ],
+        "miss": [
+          0.356,
+          0.586,
+          0.486,
+          0.0,
+          0.24,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rt_missing": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "rt_active": [
+          300,
+          300,
+          300,
+          300
+        ],
+        "fps": [
+          18.39264294282137,
+          18.4,
+          18.0,
+          18.4,
+          17.4,
+          17.396520695872773,
+          17.196560687849217,
+          17.196560687874236,
+          17.196560687849217,
+          17.6,
+          17.59648070387131,
+          17.59648070384571
+        ],
+        "gpu_ms": [
+          15.018,
+          15.55,
+          15.633,
+          15.813
+        ]
+      },
+      {
+        "index": 1,
+        "mode": "static",
+        "on": true,
+        "primary_match": [
+          99.174,
+          99.168,
+          99.165,
+          99.165,
+          99.157,
+          99.161,
+          99.177,
+          99.173
+        ],
+        "miss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rt_missing": [
+          0,
+          0,
+          0
+        ],
+        "rt_active": [
+          300,
+          300,
+          300
+        ],
+        "fps": [
+          17.6,
+          17.6,
+          17.6,
+          17.396520695872773,
+          17.59648070384571,
+          17.6,
+          17.4,
+          17.19312275089824,
+          17.4,
+          17.396520695872773
+        ],
+        "gpu_ms": [
+          15.036,
+          15.04,
+          15.106
+        ]
+      },
+      {
+        "index": 2,
+        "mode": "slow",
+        "on": false,
+        "primary_match": [],
+        "miss": [],
+        "rt_missing": [],
+        "rt_active": [],
+        "fps": [],
+        "gpu_ms": [],
+        "error": "missing phase marker"
+      },
+      {
+        "index": 3,
+        "mode": "slow",
+        "on": true,
+        "primary_match": [],
+        "miss": [],
+        "rt_missing": [],
+        "rt_active": [],
+        "fps": [],
+        "gpu_ms": [],
+        "error": "missing phase marker"
+      },
+      {
+        "index": 4,
+        "mode": "fast",
+        "on": false,
+        "primary_match": [],
+        "miss": [],
+        "rt_missing": [],
+        "rt_active": [],
+        "fps": [],
+        "gpu_ms": [],
+        "error": "missing phase marker"
+      },
+      {
+        "index": 5,
+        "mode": "fast",
+        "on": true,
+        "primary_match": [],
+        "miss": [],
+        "rt_missing": [],
+        "rt_active": [],
+        "fps": [],
+        "gpu_ms": [],
+        "error": "missing phase marker"
+      }
+    ],
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p1-origin-rebase-ab.1.123412.log",
+    "runner": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p1-origin-rebase-ab.1.123412.runner.txt",
+    "plan": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\tests\\fixtures\\p1_rebase_plan.json"
+  },
+  "shader_validation": {
+    "pass": true,
+    "ordinary": [
+      {
+        "shader": "gi_trace_rt",
+        "sha256": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+        "byte_identical": true
+      },
+      {
+        "shader": "gi_trace_rt_sharc",
+        "sha256": "ef7067cddf1c46b61962639b6b129192bc3023362d40a05c56da7aefb7c8940b",
+        "byte_identical": true
+      },
+      {
+        "shader": "pan_local",
+        "sha256": "58d8345884ea2d705096ee00ce9f326c1f10a53ff55cd39351d315f7c0099c39",
+        "byte_identical": true
+      },
+      {
+        "shader": "pan_primary",
+        "sha256": "105eeed85eb535c14d5e2ae6a77e062ec530e1a649eb4c9b9c8fdddfc4834a54",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_ao",
+        "sha256": "e3c057cb55b0243d12042a7ea1924f7faf59c1573464c8841604a919afaec080",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_debug",
+        "sha256": "6078f8736b994f4567d94da959bf1324c711acce2de9893cc0b1cdb58fe5f305",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_local_shadows",
+        "sha256": "1f96d88691c3ec284cee057c100cea11d8acf2552ba117c45febf34e373f5d39",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_local_shadows_check",
+        "sha256": "05f99db27761943cb0a60ba49087a8e3e62e0b5f0e4f08b1b0d32ef1982865e3",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_local_shadows_full",
+        "sha256": "218feeb03cab31c449ae0792345daae7a1b2fbdae5c18384276e2d8e8fe6f26d",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_local_shadows_full_check",
+        "sha256": "c3ccd74948ffbcb2e059a0a87cd4f6b16b45771a5b2489094c725e5aee8f274c",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_local_shadows_match",
+        "sha256": "2c36e83e4952182f6241f0a814fcde0864640f95bbce42332c31cd49ac08f141",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_local_shadows_prep",
+        "sha256": "db290bcd698c5ad374a2ff41c4d0c9e5444dbe687fa00995f4eb6b2b553c59b4",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_local_shadows_ref",
+        "sha256": "e63edfaa92def12b18f24f96af5f50c70c2bd82ceb02acfd3cd003d179114afb",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_origin",
+        "sha256": "9c6721758fba7a3047b69b6e65bd2cdc2213f001f5c5c9cca69433e0eb249df1",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_reflections",
+        "sha256": "934614ea091231a5efddca365ad5aa1f22f3de7e7ce7384c780159f2aef7375c",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_reflections_sharc",
+        "sha256": "84e967da2f33052ab5907f00a39afa24210fdddbc8f17494652a470b80dfc021",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_shadow",
+        "sha256": "01fb8eddcf26e3fa835275e7306ea486138aa408da48af2fe19eeaffb62e888b",
+        "byte_identical": true
+      },
+      {
+        "shader": "rt_sun_resolve",
+        "sha256": "2030c5b3e18a21ed3c9a01621ee5200f21173ab6737cb28baa6dcd84956e9ce2",
+        "byte_identical": true
+      },
+      {
+        "shader": "sharc_debug",
+        "sha256": "fa7f4fac0c13025b6e6c0ec2eb9dae1e4bad7452508377c75a03f7b3612e423d",
+        "byte_identical": true
+      },
+      {
+        "shader": "sharc_inject",
+        "sha256": "9c2803434097b204d1f0daa49eb752653021f09b96649b79f22940a036d07b44",
+        "byte_identical": true
+      },
+      {
+        "shader": "sharc_inject_lock",
+        "sha256": "b71adfb12aade7c2505ac07b7085d699a603a195c18539163b7c239d8bd96fe2",
+        "byte_identical": true
+      }
+    ],
+    "variants": [
+      {
+        "shader": "gi_trace_rt",
+        "sha256": "b32dbd30d23d46887bf160cdf82d6623b9f4441fd9540158378da408d0a1cefa",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "gi_trace_rt_sharc",
+        "sha256": "cf116fdcd2cab71118caf76373b3869cac98c77d1a21c831bba329403689e97c",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "pan_local",
+        "sha256": "b4bf61bb664d11037c766b6c51e449ebb6c01e6c393dd9f74fb69013bf253081",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "pan_primary",
+        "sha256": "d6ced992f7a0bf35d4318e493a63e7c95fb9d77dddd6a6eeee541c35d49c4b18",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_ao",
+        "sha256": "903d82f04977787cee651a606518963a6b36979d0e0028ab28b2b85acaac80b4",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_debug",
+        "sha256": "6078f8736b994f4567d94da959bf1324c711acce2de9893cc0b1cdb58fe5f305",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_local_shadows",
+        "sha256": "27d016cd8fd120e1d15fec663ca6422a8fb7193618da5368f14526ea0f4928c8",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_local_shadows_check",
+        "sha256": "551dc9afefebbf7f2f325e8620aa02815a9908e99ed80aebab84a69094b59cda",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_local_shadows_full",
+        "sha256": "11e553a112ea697fdc9a544729104e6c55c2475d03d63f033c505b6989d8b21d",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_local_shadows_full_check",
+        "sha256": "b711a12cf96f12413b3f8354c44f56961d9a73a085222aa5a8239006750fbdfb",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_local_shadows_ref",
+        "sha256": "638f22c0fd81fbf11b833c2760dab30d5c138b7c01ddd509eacf8abbc33c4b4b",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_origin",
+        "sha256": "6a35fcba711b555600c81bac895335104873c1d365246b4c1271376d680fd67d",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_reflections",
+        "sha256": "e162a134183ac91d3fe45ba5c97f021addb3edd4293aac401e7828184b578149",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_reflections_sharc",
+        "sha256": "a366fcc6a2cadcb62cd0054dc6699f6b1d51a332b659476a486bd6cc4547aabe",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_shadow",
+        "sha256": "6402c1cc8a591bdafcad95b8c79b12d6a2409d1bc1fbd8904d308090d17cbe68",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "rt_sun_resolve",
+        "sha256": "2030c5b3e18a21ed3c9a01621ee5200f21173ab6737cb28baa6dcd84956e9ce2",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "sharc_debug",
+        "sha256": "103dfdcfec7fe52003e61707b40d7960f14da5da77f1474fc5bce4134d9ef00f",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "sharc_inject",
+        "sha256": "ddcf857082f8276b4f9ff13ccfc878f0c3b6b5ca2f8e6236c34109d70fa0f207",
+        "valid": true,
+        "diagnostics": ""
+      },
+      {
+        "shader": "sharc_inject_lock",
+        "sha256": "f312f02c939e3dedfb5d51d8356f5d30e6a55550bd1d1738f6238417072a741a",
+        "valid": true,
+        "diagnostics": ""
+      }
+    ]
+  },
+  "observed_late_static_off_match_percent": [
+    99.164,
+    99.176,
+    99.173,
+    99.176,
+    99.174,
+    99.177
+  ],
+  "notes": [
+    "Initial static window drifted; cursor was near the lower game-window edge. Pointer centred at 12:37:38.551.",
+    "Process exited before slow/fast phases; unknown cause. No NVIDIA 153/Aftermath or matching Application error found.",
+    "Foreground and real presentation enabled; foreground status varied in runner notes. Display-state backup and user registration were removed by cleanup.",
+    "Static-off median 17.596 fps; static-on median 17.498 fps. Cadence/static calibration fail the prepared gate.",
+    "The derived 77.377% floor is rejected with its invalid static calibration and is not a promotion threshold.",
+    "Static-on median RT-query cost 15.040 ms. Off median 15.5915 ms is confounded by initial camera drift; no performance improvement claimed.",
+    "Coordinate convention is established by the native affine shader path and existing mesh audits. Native-instance/GPU-camera epoch agreement is unproven.",
+    "No second runtime job. No merge. rt_scene_rebase remains 0 by default."
+  ],
+  "next_hypothesis": "If displacement persists after uniform origin rebasing, native instance rows may belong to another G-buffer epoch. Compare actual GPU native-instance inputs with committed TLAS rows, retaining the same draw/command identity; do not add another selector.",
+  "log_sha256": {
+    "captures/queue/logs/p1-origin-rebase-ab.1.123412.log": "0b4f8fb217061dc8b71ebb0a05e2e08ac874af2d5e80f0be3b7464dacbc4c0b6",
+    "captures/queue/logs/p1-origin-rebase-ab.1.123412.runner.txt": "5abb199d707c05fcfcd50b6e9dd89d4356b29a9e7e5c4fa48fb359bb56fe5a6f"
+  }
+}

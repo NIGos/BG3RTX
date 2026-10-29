@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-29",
+  "base_commit": "6207338",
+  "branch": "codex/p1-pan-flashes",
+  "main_unchanged": "58b06b4",
+  "steering": {
+    "requested_entries": "USER_STEERING.md, two entries dated 2026-10-29 13:57",
+    "file_found": false,
+    "search": ["current checkout including ignored files", "C:/Users/quali/Documents/Code Projects", "C:/Users/quali/.codex/worktrees"],
+    "applied_source": "Explicit current user message; exact file entries unread",
+    "deciding_fg": 2,
+    "reference_fg": 0,
+    "symptom": "User sees visible bug only with FG on"
+  },
+  "runtime": {"live_jobs": 0, "USER_AWAY": false, "result": "NOT MEASURED", "merge": false,
+    "pending": ["captures/queue/pending/001-p1-fg-static-effects.json", "captures/queue/pending/002-p1-fg-motion-matrix.json"],
+    "superseded_FG_0_jobs_preserved": "captures/queue/held/fg0-superseded-20261029-1435/"},
+  "jobs": [
+    {"name": "p1-fg-static-effects", "fixture": "tests/fixtures/p1_fg_static_job.json", "plan": "tests/fixtures/p1_fg_static_plan.json", "phases": 13, "plan_seconds": 820, "timeout_seconds": 1120, "captures_requested": 30},
+    {"name": "p1-fg-motion-matrix", "fixture": "tests/fixtures/p1_fg_motion_job.json", "plan": "tests/fixtures/p1_fg_motion_plan.json", "phases": 56, "plan_seconds": 3360, "timeout_seconds": 3660, "requires_same_build_success": "p1-fg-static-effects"}
+  ],
+  "mode": {"save": "QuickSave_3784", "presentation": "foreground, real, FG 2 cold-loaded", "FG_0_reference": "Streamline and Reflex remain initialized", "unfocused": "FG 0 only, optional fixtures not queued"},
+  "variants": {"baseline": "rt_scene_rebase=0,fg_current_destroy_only=0", "rebase": "rt_scene_rebase=1,fg_current_destroy_only=0", "current_destroy_only": "rt_scene_rebase=0,fg_current_destroy_only=1"},
+  "deciding_gate": ["FG-on mismatch reproduced", "actual generated presentation", "active RT without missing scenes", "actual GPU camera rotation/translation", "at least 18 rendered fps with FG on", "candidate moving match reaches FG-on static repeat-derived level near 99.2%", "current_destroy_only additionally reduces interior toggles"],
+  "static_effects": {"effects": ["sun", "local shadows", "GI", "reflections", "RR"], "repeats_per_debug_view_and_fg": 3, "pose": "sampled GPU origin/forward within FP32/log precision", "difference_bound": "repeated preview variance with existing Bonferroni threshold, encoding step and native jitter footprint", "limits": "App-frame debug dumps do not independently prove generated-frame correctness; no current visual evidence exists"},
+  "present_audit": {
+    "app_frame": "layer/layer.cpp QueuePresentKHR increments g_frame once",
+    "generated_frame": "layer/streamline.cpp w_QueuePresentKHR updates displayed counters and calls dd->vk.QueuePresentKHR directly",
+    "Reflex": "new_frame obtains next token and calls ReflexSleep after app present",
+    "conclusion": "No observed double frame-counter increment in code. Scheduling/TLAS epoch and toggle causation remain unproved. No Reflex change."
+  },
+  "validation": {"ctests": "7/7", "new_matrix_static_plan_tests": "19/19", "unfocused_commit": "6207338", "unfocused_policy_geometry_checks": "22/22", "unfocused_offline_queue": "14 jobs, 15 fake runs", "shader_edits": 0, "ABI": 16},
+  "reports_after_actual_runs": ["captures/p1-fg/static-effects-result.json", "captures/p1-fg/motion-gate-result.json", "captures/p1-fg/static-effects-sheets/"],
+  "decision": "Keep both fixes default-off. Queue paired FG configurations; no promotion or in-game confirmation before the FG-on gate."
+}

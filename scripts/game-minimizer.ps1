@@ -31,7 +31,12 @@ function Our-Pids {
             ForEach-Object { Join-Path $_.FullName "captures" })
   $files = foreach ($d in $dirs) { Get-ChildItem -LiteralPath $d -Filter "game*.pid" -Force -ErrorAction SilentlyContinue }
   foreach ($f in $files) {
-    try { [int](Get-Content $f.FullName -Raw | ConvertFrom-Json).pid } catch { }
+    try {
+      $run = Get-Content $f.FullName -Raw | ConvertFrom-Json
+      # Real-present timing/quality jobs must stay visible. In particular,
+      # do not apply transparency or z-order changes to a foreground A/B.
+      if (-not $run.visible_present) { [int]$run.pid }
+    } catch { }
   }
 }
 

@@ -1,5 +1,567 @@
 # BG3RTX progress
 
+## P1 same-frame scene + P3 CPU fix (supervisor) — 2026-10-29 17:25
+
+Ready for the user's in-game check (FG on, QuickSave_3784 or any save): set rt_scene_wait=1,
+rotate the camera with the mouse or Q/E. Shadows should stay attached and walls should not flash.
+
+P1 cause: BG3 records the lighting command buffer (our RT passes) on a worker thread before
+another thread ends the G-buffer pass of the same frame, where the scene is captured and built.
+Both go down in one vkQueueSubmit, G-buffer first (rt_order_trace=3 logs it). So the RT passes
+traced the previous frame's camera-relative scene. rt_scene_wait=1 (default off) makes the first
+RT query of a frame wait for that frame's scene commit (bounded by rt_scene_wait_ms=8).
+Rotation, FG 2, ~2.6 deg/frame, one run (perf-sup-cpu4-fg2): off 33-35%, rt_scene_rebase 95.2%,
+rt_scene_wait 97.4% primary match; static 99.5%. Wait: 600/600 frames got their scene,
+0 timeouts, mean 3.4-3.8 ms. Residual ~2% while rotating is in instanced (pool) hits; not solved.
+
+P3 cause (base frame rate): the scene build read mapped (write-combined) memory with ordinary
+loads: TLAS instances assembled with bit-field stores in the mapped ring (7.6 ms), read back for
+the signature/chunk guard (6.3 ms), and 2,500 instance matrices read at submit (28 ms on the
+submit thread). Now built locally and copied whole, and read with SSE4.1 streaming loads.
+CPU per frame: capture "pass after" 14.1 -> 0.66 ms, submit copies 28.5 -> 1.3 ms.
+Static FG 2, same run: build on 30.0 fps vs build off 30.0-30.1 fps (before: 19.1 vs 30.0).
+30 fps looks like a cap in this hidden/unfocused mode (the user saw GPU clocks at ~2200 MHz there),
+so real-display fps must be checked by the user. RT pass GPU cost 0.84-0.87 ms.
+cpu_timing=1 logs the [cpu] split. User reports occasional static shadow flicker: separate issue.
+
+## P1 rotation: rt_scene_rebase lifts the rotating primary match from 33% to 94% (supervisor) — 2026-10-29 16:50
+
+Root cause, measured: every RT pass traces the TLAS built in the previous frame index
+("TLAS this frame 0, previous frame 300" in every rt passes line). BG3 renders camera-relative,
+so the traced scene is offset by the camera translation between the two frames. Orbiting moves
+the camera origin most, which is why rotation shows it far more than panning.
+Fix: rt_scene_rebase=1 (Codex 314840d) shifts every ray origin by one per-frame constant: the
+lighting camera origin minus the scene build's camera origin (snapshotted on the GPU).
+
+Job p1-sup-rebase-rot-fg2-b (QuickSave_3784, FG 2, visible unfocused, real presentation,
+keyboard rotation Q/E at a steady ~2.55 deg/frame, live A/B in one run):
+| window | rebase=0 | rebase=1 |
+| --- | ---: | ---: |
+| static | 99.52% | 99.52% |
+| rotate left (two windows) | 33.0-35.0% | 94.3-94.8% |
+| rotate right | 33.1-38.7% | 94.0-94.4% |
+RT pass GPU cost 3.87-3.90 ms off, 4.04-4.29 ms on (with the epoch counters on; ~1.1 ms
+without them in the earlier run). Static identical, so brightness is unchanged.
+Residual 5-6%: pool hits 95%, soup hits ~74%. The scene camera trails the lighting camera by up
+to 5.1 deg (more than one frame), so the edge band that enters the view during rotation is
+missing from the older, CPU-culled scene. The real fix for that is tracing the TLAS of the
+same frame as the G-buffer (next step). Kept; gate (match ~99.5% while rotating) not passed yet.
+Input: scripts/auto-run.ps1 now maps scan codes 0x10/0x12 to Q/E, BG3's camera-rotate keys,
+posted to the window (no focus needed); tests/fixtures/p1_sup_rebase_rot_plan.json.
+
+## P1 NOT ready: static parity passes, motion qualification fails — 2026-10-29 15:56
+
+Read D:/BG3_Tools/USER_STEERING.md (both 13:57 entries and 14:29 authorization).
+Ran the queue without USER_AWAY, visible/non-activating, real windowed presentation,
+QuickSave_3784, FG 2 cold-loaded. No observed activation or focus setter; the window
+was covered by other apps throughout. Actual generated presentation was measured.
+No user game/USER_PLAYING, save writes, merge or default promotion. Display restored.
+
+Static: PASS, all 13 phases / 30 traces. FG 2 normal primary 99.5195-99.5215%,
+18.7-18.8 rendered fps, displayed/rendered 2.00; FG 0 99.516%, 18.2 fps, ratio 1.00.
+No interior host toggles. All five effects have dispatch/timing evidence; no persistent
+FG-dependent debug difference exceeded repeated-noise/encoding/jitter bounds.
+GI debug was black in BOTH modes: this proves parity only, not nonzero GI contribution.
+The composite feeds debug diffuse into previous radiance; app dumps also do not
+certify generated-frame correctness. Sheets:
+- captures/p1-fg/static-effects-sheets/sun-fg-static.png
+- captures/p1-fg/static-effects-sheets/local-fg-static.png
+- captures/p1-fg/static-effects-sheets/GI-fg-static.png
+- captures/p1-fg/static-effects-sheets/reflections-fg-static.png
+- captures/p1-fg/static-effects-sheets/RR-fg-static.png
+
+Motion: FAIL / INVALID qualification. Stopped the 56-phase job after 13 complete
+phases plus part of phase 13, because posted 60 px/s rotation alternated between
+stationary windows and camera jumps up to 98.58 degrees/frame; normal speed/direction
+fidelity was not proved. Baseline FG 2 rotating displayed/rendered median 1.00,
+so sustained FG generation was absent. Missing unrun phases are not observed RT loss:
+all sampled windows retain RT 120/120, none 0, plus sun/local/GI/reflection/RR evidence.
+The analyzer's primary-mismatch reproduction flag does not certify visible flashes.
+
+| First negative rotation | FG 2 match | Rendered fps | Displayed/rendered | Options calls / interior mode toggles |
+| --- | ---: | ---: | ---: | ---: |
+| baseline | 21.299% | 26.0 | 1.000 | 5 / 0 |
+| rt_scene_rebase=1 | 85.984% | 25.3 | 1.163 | 3 / 1 |
+| fg_current_destroy_only=1 | 20.5465% | 26.6 | 1.412 | 1 / 0 |
+
+FG 0 reference matches: 17.434 / 75.819 / 15.887%, ratios 1.00, 26.2 / 26.4 /
+25.7 fps. These paths/views differ after earlier rotations: do not treat the median
+change as an isolated fix benefit. Required FG-on static floor was 99.501%.
+Both candidates stay default-off. Promotion and a "ready for user check" claim are
+REJECTED; the code remains experimental. No merge-green invocation or main change.
+
+New evidence: 6,106 retired-only destructions reset stability with the guard off;
+3,279 did not with it on (current roles 0x0). Three current-role destructions still
+reset with it off. No SDK focus-disable or crash exception was logged in this run.
+The guard targets real unnecessary resets, but interior toggles were 0 vs 0 in the
+first deciding pair, and it does not restore moving primary match. Its gate did not pass.
+
+Next hypothesis: translation rebasing alone is insufficient. Remaining pool/soup
+mismatch and sampled scene/lighting pose separation are consistent with older instance
+or dynamic-geometry data, or a camera-buffer epoch mismatch; exact frame lag and a
+Reflex/FG cause remain unproved. First repair/qualify no-focus relative rotation input.
+PostMessage reaches BG3 but is NOT yet validated for controlled background rotation;
+no global input or focus forcing will substitute for that check. No new selector.
+
+Logs: captures/queue/logs/p1-fg-static-effects.1.152122.{log,runner.txt,status.json}
+and p1-fg-motion-matrix.1.153616.{log,runner.txt,status.json}. Results:
+captures/p1-fg/{static-effects-result,motion-gate-result}.json. Curated evidence:
+docs/evidence/p1-fg-live-20261029.json. Stop was deliberate CloseMainWindow; the
+subsequent "Invalid window handle" runner exception was a teardown race, not a
+proven game crash/timeout. Earlier 242 s exit remains unattributed.
+
+Cost: same-phase full per-ray stats off raised 15.5 to 19-20 fps; GI ~6.8 ->
+0.379 ms, local ~5.25 -> 0.530 ms (15:02:53-15:03:18 retained log). This exposes
+a large diagnostic cost, not a rebase regression. Historical 15.040 vs 4.269 ms
+remain confounded by scene/settings/presentation; RR was enabled in both.
+RT 2.872 ms was a mixed 300-frame interval, not an isolated key-off pass cost.
+
+Kept tool changes: 92cc6ad, fe17233, 0a6a8cf, b5a2e87, c5a909c (pushed).
+Checks: 20 matrix/static/plan tests, 26 window-policy/geometry and 18 camera/policy
+checks pass; prior 7 CTests, 21 ordinary SPIR-V identities, 20 shader variants pass.
+No further game jobs queued after the invalid verdict. Fixtures remain for repair.
+
+
+## Static capture budget corrected — 2026-10-29 15:21
+
+The first lightweight attempt met cadence/FG/primary requirements but its 1 GB
+capture budget omitted G-buffer and debug diffuse. It was stopped as INVALID.
+Restoring the established QA budget of 6 GB produced both buffers, confirmed
+in captures/20261029-151939 and 151949. The complete static check is requeued
+with that budget; no threshold or lighting change. Earlier partial captures
+are not a parity pass. The 56-phase motion gate still awaits a valid static run.
+
+## FG-on cadence setup isolated — 2026-10-29 15:08
+
+Windowed/native extent enables actual FG: SDK status 0, two presented frames,
+displayed/rendered ~2.00. Static primary ~99.52%, but full per-ray RT/LS/RF
+statistics cost ~15.5 fps. Within the SAME FG-2/static sun-debug phase, turning
+only those statistics off raised cadence to 19-20 fps: GI median ~6.8 -> 0.379 ms,
+local shadows ~5.25 -> 0.530 ms. RT interval 2.872 ms at 15:03:08 includes a mixed
+300-frame window; do not subtract it as an isolated pass cost. Evidence:
+captures/queue/logs/p1-fg-static-effects.1.145628.log, 15:02:53-15:03:18.
+
+That setup probe was deliberately ended, INVALID, before completing parity.
+The retry keeps full-resolution primary/epoch GPU counters with rt_stats=0;
+ordinary shaders remain byte-identical (21/21), all 20 variants validate.
+Only the diagnostic epoch producer counts primary checks independently of full
+alpha/light statistics. Lightweight recorded-dispatch counts plus existing GPU
+timers/debug captures prove sun/GI/local/reflection application; RR still uses
+its GPU timer. Lighting and both fix defaults are unchanged. Seven CTests and
+20 matrix/static/plan tests pass. The >=18 fps gate is unchanged.
+
+## FG setup extent mismatch confirmed — 2026-10-29 14:56
+
+Second static attempt was stopped as a setup probe after FG never enabled.
+Trace captures/20261029-145417/frame.json proves UI compositor 046c6949 samples
+s1b1 i11700 RGB10A2 and s1b2 i11701 RGBA8 at 3840x1600, while swapchain i11/i13
+are 3840x2160. The existing FG classifier requires matching extents and misses
+UI/hudless entirely. Scene static primary was 99.55-99.57%, but SDK presented 1,
+displayed/rendered 1.00: INVALID FG-on evidence. This is not a renderer fix.
+Authorized unfocused FG runs now use reversible windowed display settings to
+keep the native output extent. Default background/foreground behavior is unchanged.
+
+## Live setup retry — 2026-10-29 14:50
+
+First authorized static job was INVALID before its first phase: runner policy
+closed the game after 71 s because exposed client area reached zero. This was
+not a crash or its 1120 s timeout. No deciding FG/match/effect data was collected.
+For the explicitly authorized visible_unfocused_fg mode, coverage and observed
+foreground are now logged instead of aborting; the runner still never sets focus.
+Other apps can cover the shown game. Native presentation, actual FG generation
+and >=18 fps remain required. USER_PLAYING/unowned games still stop execution.
+
+## Authorized live FG matrix, no focus forcing — 2026-10-29 14:46
+
+Read `D:/BG3_Tools/USER_STEERING.md`, including both 13:57 entries and the
+14:29 authorization. The current user instruction supersedes USER_AWAY waiting:
+run the queued pair now unless USER_PLAYING or an unowned game exists. Neither
+is present. `visible_unfocused_fg` preserves the planned FG 2/0 values with real
+presentation and non-activating startup/placement. It never calls a focus setter.
+The default `visible_unfocused` mode still forces FG off; the new explicit mode
+does not. Actual generated presentation is still required for a quality pass.
+Twenty-six policy/geometry checks pass. No renderer/default-key change.
+
+## P1 now decided by FG ON; paired jobs prepared — 2026-10-29
+
+FG `2` with real focused presentation is the MAIN deciding configuration.
+FG `0` is reference only; its match does not decide whether a fix passes.
+The user reports the visible bug only with FG on. No game launched in this
+continuation; USER_AWAY is absent. No renderer fix was promoted or merged.
+`USER_STEERING.md` was not found in this checkout or the other project/worktree
+locations searched. The two 13:57 entries could not be read; the explicit
+requirements restated in the user's message are applied here.
+
+First completed: visible-unfocused launch mode committed/pushed as `6207338`.
+It forces FG off and remains opt-in. The focused FG-on matrix does not use it.
+Unfocused rotation acceptance and startup focus behavior remain unverified.
+
+Pending replacement queue pair (QuickSave_3784, foreground, real presentation,
+FG 2 loaded at startup so Streamline is available for both live configurations):
+
+- `p1-fg-static-effects`: 820 s of one stationary view. Normal FG 2 / FG 0 /
+  FG 2 windows prove sun, local shadows, GI, reflections and RR via per-pass
+  counters/timers. Sun/visibility, local visibility, GI, reflection tier and RR
+  normal-guide debug views each have three captures in both configurations.
+  Sampled GPU camera origin/forward must match at native FP32 precision.
+  Differences beyond repeated noise, preview precision and jitter are a parity
+  failure that blocks the moving job. No difference has yet been measured.
+- `p1-fg-motion-matrix`: 56 paired 60-second phases, 3,360 s total. Rotation
+  60/120/240 px/s in both directions, slow/fast pans and static windows. Both FG
+  configurations test baseline, `rt_scene_rebase=1`, and
+  `fg_current_destroy_only=1` separately, not combined. It requires a successful
+  static check from the SAME build. Combined job timeouts total 4,780 s.
+
+Each phase reports moving primary match, rendered fps, actual displayed/rendered
+ratio, SDK presented frames/status, all slDLSSGSetOptions calls, full-phase mode
+toggles and interior toggles. Planned FG changes are separated from instability.
+FG 2 must really generate frames (watch ratio above 1 plus SDK presented >= 2),
+keep active RT and at least 18 rendered fps. FG 0 must really stop generating.
+FG-on baseline must reproduce mismatch; a candidate must restore all FG-on
+moving windows to the FG-on static repeat-derived level (about 99.2%). Missing
+RT, ignored input, focus loss or incomplete evidence cannot pass. The destruction
+candidate also needs a measured reduction in interior FG toggles to be retained.
+
+Present-path code audit: the app present increments `g_frame` once; Streamline's
+real/generated presents call the next driver's present and increment displayed
+counters, not the app frame. `new_frame()` obtains a token and calls ReflexSleep
+after the app present. The FG 0 reference retains this initialized Streamline/
+Reflex path, so this is not a cold-no-Streamline comparison. There is no demonstrated
+double frame-counter increment. Toggle/primary-window association is reported;
+causation by Reflex or older native TLAS matrices remains UNPROVEN. No speculative
+Reflex or renderer change was made. Existing FG-on logs lack this deciding
+moving primary evidence; earlier FG-off positive controls are now reference only.
+
+Seven CTests and 19 new matrix/static/plan tests pass, including midnight rollover.
+No shader/ABI change;
+only keyed epoch logging adds sampled GPU pose values. The old FG-off-only pair
+is preserved in `captures/queue/held/fg0-superseded-20261029-1435/`. The new paired
+jobs are pending until USER_AWAY under `captures/queue/pending/001-p1-fg-static-effects.json`
+and `002-p1-fg-motion-matrix.json`.
+Expected reports: `captures/p1-fg/static-effects-result.json` and
+`captures/p1-fg/motion-gate-result.json`. Debug contact sheets will be under
+`captures/p1-fg/static-effects-sheets/`; none have been captured yet.
+
+## Answer: visible background queue mode is opt-in — 2026-10-29
+
+Use job field `"window_mode": "visible_unfocused"` for FG-off tests only.
+Default launch behavior is unchanged. The queue forces `fg=0`, `headless=0`,
+real presentation and window-targeted PostMessage input. Native startup uses
+SW_SHOWNOACTIVATE; the owned window gets WS_EX_NOACTIVATE and HWND_BOTTOM with
+SWP_NOACTIVATE, without topmost or SetForegroundWindow calls. This mode does
+not move the user's physical cursor or send global keys. Existing background
+SDL hooks keep the game rendering; frame generation is deliberately off.
+
+Limits: background rotation delivery and startup focus behavior are NOT verified
+in BG3. The runner aborts if it observes the game taking focus, minimization,
+off-screen placement or complete occlusion. If another app covers the entire
+game, this cannot guarantee visible presentation without moving that app; it
+fails instead. The rectangular visibility check is conservative for translucent
+or shaped windows. It does not prove uninterrupted visibility between polls.
+There is no synthetic WM_INPUT or focus-stealing fallback. Actual GPU camera
+rotation and at least 18 fps still have to pass the P1 gate.
+
+USER_AWAY remains required, and USER_PLAYING/user games still block launch.
+No game/window-control calls ran during these checks. Passed: 22 policy/geometry
+checks, six preflight tests and the offline queue (14 jobs / 15 fake runs).
+Unfocused rotation fixtures are prepared in tests/fixtures/p1_rotation_unfocused*
+but are NOT queued. The two existing foreground jobs remain pending unchanged.
+No runtime pass or merge. FG-on P1 tests must use focused real presentation.
+
+## P2 FG toggle candidate; RT cost log review — 2026-10-29
+
+Code/log-only continuation: no game launch, no display changes. The two P1
+rotation jobs remain queued and unchanged; foreground still requires USER_AWAY.
+New `fg_current_destroy_only=0` stays off by default. No merge or runtime pass.
+
+Retained user log 09:29-09:34: 27 host on/off transitions, peak 16 per 60 s;
+all 13 host offs follow a watched-image destruction by 2-63 ms. This is the
+available excerpt, not proof of the reported whole-session 30 toggles/min.
+It also records 31 SDK interpolation transitions: 12 offs requested by our
+host, three offs explicitly caused by `window not focused` while mode stays on.
+Those three are not invalid inputs. Thirteen FG queue logs contain 50 host
+transitions. Their same-timestamp readiness lines identify all 20 offs: 17 have
+no missing/stale current input (`ready=1`, gate 0x80: destruction cooldown),
+three have stale UI (`age=4`, gate 0x40) during swapchain recreation. These three
+real stale-input shutdowns stay protected. Current-ready cooldowns do not alone
+prove whether the previously destroyed image was current or retired.
+
+The user excerpt's destruction log omits handle/current role, so its exact input
+at each host off is UNKNOWN. Do not call hudless/UI invalid just because their
+handles changed. Code does expose a concrete overbroad guard: destruction of
+any historical watched image resets stability, even if all current inputs have
+live replacements. With the key on, only destruction of a current depth/MV/
+hudless/UI image resets it. Retired-image/view consumption-fence waits and
+cleanup remain active. Missing/stale inputs still turn FG off. Each host options
+decision now logs its reason, missing/stale role masks, all four handles/views,
+extents, ages/layouts, API results and the destruction that set the cooldown.
+Candidate benefit and CPU/GPU cost remain UNMEASURED; no shader or ABI change.
+
+Existing GPU log samples, separate timing scopes:
+
+| Sample | RT interval average | GI trace median | Local shadows median | RR evaluation + guides |
+|---|---:|---:|---:|---:|
+| Historical 19:20:51 | 4.269 ms | 0.466 ms | 0.378 ms | 2.590 ms nearby |
+| Rebase-on 12:37:42 | 15.040 ms | 6.212 ms | 5.271 ms | 2.337 ms nearby |
+| User CTY 09:30:56 | 0.937 ms | 0.359 ms | 0.534 ms | 2.708 ms nearby |
+
+RR was on in both compared jobs; FG was off. The historical log explicitly has
+headless presentation ON, versus real foreground presentation in the new job.
+Both identify a 2560x1067 G-buffer. Scene changes WLD to CTY; GI 1 to 2 rays,
+shadowed mode 3 to 1, roughness 0.6 to 0.8, rebuild 60 to 600. The new job also
+enables full RT/LS statistics and primary checking. The 4.269 ms window contains
+44 missing RT observations and GI p90 7.195 ms; later that same log is 1.943 ms.
+The user CTY sample has the newer ray/LS/roughness settings yet costs 0.937 ms:
+settings alone do not explain 15 ms. GI and LS are measurably slower, while RR
+is not. No isolated primary/statistics timer exists in these logs, so the causal
+split remains UNKNOWN. Do not add pass medians to interval averages or attribute
+the difference to rebasing. The queued preflight compares primary/epoch off/on
+with full RT/LS statistics enabled throughout; it is not a statistics-off benchmark.
+
+Seven CTests and four log-audit tests pass. The CPU tests cover legacy cooldown
+boundaries, retired-tag churn, every current role, missing inputs and recovery.
+Evidence with source line numbers and every user off:
+`docs/evidence/p2-fg-and-rt-log-review.json`; full audit:
+`captures/p2-fg/retained-log-audit.json`. Kept: default-off candidate and diagnostics.
+Rejected: inventing missing roles in the user excerpt, a confirmed FG fix or an isolated
+15 ms regression from these logs. Next P2 evidence needs the logged role at an
+actual toggle before any promotion; the P1 rotation gate remains pending.
+
+## P1 rotation gate prepared; waiting for USER_AWAY — 2026-10-29
+
+Implementation `da4b64d` is committed and pushed. No live game jobs ran in this
+continuation. `USER_AWAY` is absent. Two jobs are pending under
+`captures/queue/pending/`: `001-p1-rotation-preflight.json`, then
+`002-p1-rotation-origin-ab.json`.
+The latter requires a successful preflight from the same build. Foreground
+authorization fields cannot bypass the marker; `USER_PLAYING` blocks launch.
+Rotation result: NOT MEASURED. No merge, promotion or in-game check request.
+
+The main A/B uses QuickSave_3784, real presentation, FG off, static windows and
+mouse rotation at 60 / 120 / 240 px/s in both directions, key off/on in ONE run.
+The gate requires actual GPU rotation, opposite yaw directions, increasing
+measured speeds, active RT, at least 18 fps, and key-on primary match near the
+static level (about 99.2%). Key-off must reproduce mismatch. Missing RT fails.
+`rt_primary_epoch=0` adds optional GPU camera/source-pose and pool/soup hit
+cohorts without another primary ray. Native instance-row epoch remains unproven.
+
+The old exit at 242 s was before its 750 s deadline and before runner cleanup;
+no matching crash dump or fault event was found. Cause remains UNKNOWN. Fixed
+the observation gap: FG off previously skipped exception logger installation.
+New default-off `crash_dump=0`, retained exit code/status, completion checks,
+and post-analysis gates prevent interrupted jobs being called valid. The
+360-second static preflight must establish stability before the 1,440-second A/B.
+
+Previous static match off/on: 99.164-99.177% / 99.157-99.177%; cadence
+17.60 / 17.50 fps. Previous moving rebase-on result is absent. RT interval cost
+15.592 / 15.040 ms includes primary diagnostics plus GI/AO/sun work. Historical
+4.269 ms used WLD_Main_A, RR GI 1 ray and rebuild 60 (new run: 2 rays, rebuild
+600); that sample also had 44 missing scenes. The residual cost increase is
+UNEXPLAINED, not attributed to rebasing. Preflight compares diagnostic off/on
+and rebasing within the same static run.
+
+Validation: six CTests, 14 Python gate tests, 18 input/permission checks, all
+55 shaders compile, 21 ordinary SPIR-V binaries byte-identical, 20 rebase
+variants validate. Offline queue: 13 jobs / 14 runs, including early exit,
+failed analysis and forbidden-fault rejection; QA detectors and five merge-gate
+scenarios pass. `rt_scene_rebase=0` stays default-off on the branch; ABI 16.
+Evidence: `docs/evidence/p1-rotation-preparation.json`. Runtime reports will be
+`captures/p1-pan-flashes/rotation-preflight-result.json` and
+`captures/p1-pan-flashes/rotation-gate-result.json`. No new contact sheets:
+the accepted primary-match gate takes priority over burst tooling.
+
+## P1 rebasing gate FAIL / incomplete — 2026-10-29 12:38 Europe/Rome
+
+Implementation 314840d is kept on the branch, default-off `rt_scene_rebase=0`.
+No merge and no in-game confirmation request. ONE job `p1-origin-rebase-ab`
+ran with foreground focus, real presentation, FG off and QuickSave_3784. It
+exited after 242 seconds, before all four slow/fast windows. Exit cause unknown;
+no NVIDIA 153, Aftermath dump or matching Application error was found. Queue
+execution validity is not a quality pass. Automatic gate: FAIL / incomplete.
+
+The initial static window drifted. The cursor was near the lower window edge;
+it was centred in the owned game at 12:37:38.551. Later static off matches
+99.164-99.177%; static on 99.157-99.177%, RT active with zero missing scenes in
+the interior timing windows. Moving on/off: NOT MEASURED. Static median cadence
+17.60 / 17.50 fps also misses the prepared 18 fps floor. The contaminated static
+calibration is rejected, never relaxed into a passing threshold.
+
+Static RT-query cost off/on median 15.592 / 15.040 ms; the off window includes
+camera drift, so this is not a performance win. Five CTests, 21 unchanged normal
+SPIR-V binaries, 19 validated variants, four gate tests, the QA detectors, all
+five merge-gate scenarios and the offline queue scenarios pass.
+Evidence: docs/evidence/p1-origin-rebase-314840d.json. Full log and runner clocks:
+captures/queue/logs/p1-origin-rebase-ab.1.123412.log and .runner.txt.
+
+Stop this bounded turn; do not run a second job. The rebasing hypothesis remains
+unresolved. Next: fix the static/exit control before another quality measurement.
+If displacement persists with rebasing, test whether native instance rows and
+the GPU conversion camera belong to different G-buffer epochs. Record the same
+draw/command identity and compare actual native GPU instance inputs with TLAS
+rows; matching coordinate conventions or CPU record/submit values do not prove
+matching epochs. Do not add another scene selector.
+
+
+## P1 origin rebasing resumed — 2026-10-29
+
+The user lifted the pause for one bounded fix and one presented A/B run.
+`rt_scene_rebase=0` is a new default-off shader variant. It adds
+lighting absolute origin minus scene absolute origin to all four query origins.
+Ray distances stay unchanged; returned object transforms stay in lighting space.
+The frozen local-light reference also uses the shared rebasing infrastructure.
+
+Native static instance rows map object positions into the G-buffer camera-relative
+world axes. Dynamic XFB recovers that same space using the native `_m2`. Existing
+GPU extraction/audits compare the two paths. The new scene snapshot reads the
+actual conversion camera UBO on the GPU into that scene's stamped set, avoiding
+the failed CPU-pose selector. No new host/core ABI: paired ABI remains 16.
+
+Five CTests pass. All 21 ordinary shader binaries are byte-identical to the
+preserved baseline, and all 19 rebase variants pass SPIR-V validation. Four gate
+tests reject missing RT, insufficient improvement and absent positive control.
+One foreground static/slow/fast off/on fixture is prepared. Runtime gate pending.
+The queue's hiding helper now leaves real-present windows visible. Display
+settings still restore after the run. No merge or quality claim yet.
+
+
+## PAUSED by user for CLI continuation — 2026-10-29
+
+All activities paused; no owned game/runner active and no pending/running job.
+Implementation f6b7ad9 is pushed on codex/p1-pan-flashes, paired ABI 16.
+The camera-pose selector is NOT a fix: static off/on is about 99.55%, but
+moving poses have no exact matching live scene, causing missing RT. Cancelled
+INVALID. Both experimental keys remain off by default. Next idea is consistent
+lighting-to-TLAS ray-origin rebasing; NOT implemented. Five CTests pass.
+User gate remains moving primary match near static 99.5%, in ONE presented A/B
+run with RT active. Burst images are optional; stop burst-tool work.
+Read docs/HANDOFF_SESSION.md for exact logs, failed attempts and next steps.
+
+## P1 match camera pose, not upload-ring address — 2026-10-29
+
+The address-only selection is rejected: upload-ring offsets recur, so it found
+a retired camera epoch (built 2446 versus present 2449) rather than the frame
+being shaded. Second probe cancelled INVALID; full log preserved at
+captures/p1-pan-flashes/0dff159-camera-epoch-full.log. Static key-off primary
+match is 99.537-99.565%; moving key-off samples fall to 88.943-91.373%.
+The keyed selector now compares the actual native camera pose: absolute xyz
+and the view rotation, with exact finite equality. Projection jitter and unused
+metadata do not identify the pose. Scene pose snapshots are taken from the
+capture camera; the RT callback reads the lighting camera. Only live scene
+slots qualify; newest matching build wins. Instance transforms still come from
+that captured draw stream at submit. Key remains off, ABI 16. Five CTests pass,
+including camera rotation/translation changes versus projection jitter.
+Next: the same-run primary-counter A/B with normal rendered colour.
+
+## P1 exact camera versus present age — 2026-10-29
+
+First camera-selection probe: 1,800 / 1,800 queries redirected to another
+scene, zero missing camera identities. The old age guard rejected the matched
+scene, producing 1,046 missing-RT frames in the first logged window. Probe
+cancelled as INVALID; missing RT is never quality improvement. Full log:
+captures/p1-pan-flashes/0edf4ed-camera-match-full.log.
+Exact camera selection now uses live-slot retirement instead of present age;
+the core no longer rejects an exact match solely because it was recorded two
+presents earlier. Dropped builds and retired slots remain rejected. Camera
+identity is assigned only after a successful scene commit. ABI remains 16.
+rt_primary_check=1 reuses the existing GPU primary-check producer for counters
+without burst capture or a debug-colour overlay. Default 0; no shader changes.
+The same-run off/on fixture enables this counter in every phase. Four CTests
+pass. Moving primary-match gate remains open until this corrected A/B runs.
+
+## P1 renderer alignment takes priority — 2026-10-29
+
+User accepts the real-present FG-off primary-ray evidence as the positive
+control: static 99.53-99.57%, slow 89.25%, fast 31.40% (36.1% in front,
+27.9% behind). Burst images are optional and no longer block a renderer fix.
+First fix hypothesis: latest-global scene selection can pick another camera
+epoch. rt_scene_camera_match=1 selects the live TLAS/set pair by the lighting
+camera UBO buffer and offset; default 0 preserves the ordinary selection.
+Host/core are paired ABI 16. Native instance rows still come from the recorded
+draw stream at submit; no guessed frame offset or shader-space shift.
+Build and four CTests pass. Next: ONE real-present job with static and slow/fast
+pan phases alternating the key. Gate: moving primary match reaches the static
+level, approximately 99.5%, with RT active. Missing scenes are not a pass.
+No burst-tool work or default promotion before this measurement.
+
+## P1 presentation-counter capture race — 2026-10-29
+
+The normal-rate positive run is INVALID: final colour was captured in only
+6 / 4 / 7 / 8 of the 16 frames in static/static/slow/fast bursts. All other
+channels have 16 samples. No flash absence or renderer quality claim follows.
+The depth-to-tonemap association now follows the same command-buffer recording,
+not a present counter that can advance during recording. The manifest retains
+the recording identity and the analyzer rejects mixed recordings. No renderer
+fix, ABI change or GPU-copy change. Four CTests and 14 analysis tests pass.
+Repeat the positive control on this build before considering a lag correction.
+Evidence: docs/evidence/p1-pan-08a0256-positive.json.
+
+## P1 complete-burst transport and analyzer correction — 2026-10-29
+
+Final capture now contains 176 samples / 16 frames. All required image channels
+are finite; unused native camera metadata is preserved as bytes, with matrix/
+origin fields validated separately. No copy-image VVL errors, but other errors
+remain, including one unattributed buffer-usage error. Validation cadence is
+11.86 fps and is not the positive control. Evidence: p1-pan-final-transport.json;
+full log: captures/p1-pan-flashes/08a9c39-final-validation.log.
+
+Corrected jitter/static classification and footprint-bounded texture matching;
+static common coverage rises from 604 to 766,671 pixels on the same data. Noise
+is calibrated per matching world sample, with native format precision, rather
+than taking a global maximum that made binary-mask detection impossible. A
+second static burst is independent evaluation. 13 analysis tests pass; no lag
+fix or default promotion. Next: one real-present FG-off positive run, serials
+11/12 static and 13/14 moving. Contact sheets pending that complete run.
+
+## P1 capture continuation — 2026-10-29
+
+Resumed from the interrupted pan-flashes conversation at a0bb416. Its owned
+positive-control process finished without a build change or driver event.
+All three bursts lack final colour and are quality-INVALID despite successful
+transport. Static/slow/fast burst rates are 18.82 / 16.84 / 18.82 fps. Primary
+match windows are 99.534% / 88.044% / 30.922%. GPU conversion-camera origins in
+the fast burst match lighting origins at offset +1 throughout the ten tested
+centres; this does not prove instance-transform timing or a visible flash.
+Evidence: docs/evidence/p1-pan-a0bb416-positive.json. No renderer fix applied.
+
+The capture now reads native hudless tonemap output, using the existing tracer/
+Streamline signature. Swapchain attachments alone missed the interposed final
+path. Missing final data remains invalid. Packed HDR Inf/NaN decoding is fixed.
+All six analyzer tests and three CTests pass. First verify complete transport
+with validation, then repeat the same-run positive control at comparable fps.
+The latest user permission allows visible second-plane presentation without
+USER_AWAY; never steal focus, run with USER_PLAYING or interfere with a user game.
+FG stays off first. The automated plan restores display settings on exit.
+
+## P1 transient shadow flashes resumed — 2026-10-29
+
+Positive control is mandatory before any renderer fix. User permits a visible
+second-plane window while using the PC; USER_AWAY is not required by the latest
+instruction. Never run with USER_PLAYING or a user-owned game. Use real present,
+normal frame rate, FG off first and FG on if reproduction fails. Restore display
+settings. Report mode and measured burst fps, not just the uncaptured baseline.
+
+Transport smoke 56d0d4a: real presentation, FG off, background focus protection,
+static camera, roughly 20 fps outside capture. Primary match 99.563%. The analyzer
+correctly rejects all 16 frames because the final image is missing. No symptom
+reproduced yet; no lag fix. First-burst shader compilation also confounds cadence.
+Next test fixes swapchain-image classification, prewarms diagnostic pipelines and
+captures the conversion camera on the GPU alongside its scene slot. The normal
+renderer remains uncorrected for the required positive control.
+
+The user explicitly resumed P1 with transient dark walls while panning. This
+supersedes the old pause and P2 priority below. FG toggle errors and the roughly
+18 fps base rate follow P1. Branch: `codex/p1-pan-flashes`.
+
+Experimental 16-frame burst producer and automatic flash analyzer added.
+`pan_capture=0` remains the default. ABI 15 adds the host readback callback;
+both DLLs are rebuilt together. No lag fix or default promotion yet. Runtime
+transport and the gate are pending. Contact sheets: not generated yet.
+User log: `captures/p1-pan-flashes/source-logs/user-0929-0934.log`.
+Three CTests, four synthetic analysis tests and existing QA detectors pass.
+All 34 shaders compile; seven ordinary shader binaries are byte-identical.
+Record/submit age alone is not camera-pose lag.
+
+
 ## User pause and model handoff — 2026-10-29
 
 The user paused game activities for a live test and requested a handoff for a

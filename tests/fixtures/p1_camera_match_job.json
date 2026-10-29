@@ -1,0 +1,27 @@
+{
+  "set": "preset=ultra,fg=0,headless=0,fps_cap=0,rt_stats=1,ls_stats=1,ls_k=0,ls_shadowed=1,rt_debug=0,ls_debug=0,pan_capture=0,pan_prepare=1,rt_scene_camera_match=0,pan_prepare=0,rt_primary_check=1",
+  "save": "QuickSave_3784",
+  "tree": ".",
+  "name": "p1-camera-match-ab",
+  "traces": 0,
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tests/fixtures/p1_camera_match_plan.json"
+  ],
+  "expect": [
+    "primary-ray check",
+    "camera scene identity",
+    "\\[auto\\] scene ready"
+  ],
+  "hold": 90,
+  "patterns": [
+    "primary-ray check",
+    "camera scene identity",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes"
+  ],
+  "timeout": 540
+}

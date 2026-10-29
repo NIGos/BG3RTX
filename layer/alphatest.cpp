@@ -55,7 +55,7 @@ Img g_dummy2d, g_dummy_arr;
 bool g_dummy_ready = false;
 VkBuffer g_dummy_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_dummy_mem = VK_NULL_HANDLE;
-// Scene stamps (set 1 binding 9, 16 bytes per slot, host-visible): uint 0 the
+// Scene stamps (set 1 binding 9, 512 bytes per slot, host-visible): uint 0 the
 // generation the CPU expects (written at commit), uint 1 the one the build's
 // command buffer wrote on the GPU after its TLAS. The ray queries trace only when
 // they match (rt_common.hlsli rt_scene_ok): a TLAS whose build never ran (its
@@ -64,6 +64,7 @@ VkBuffer g_stamp_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_stamp_mem = VK_NULL_HANDLE;
 uint32_t* g_stamp_map = nullptr;
 uint32_t g_stamp_gen = 0;
+constexpr VkDeviceSize kStampStride = 512, kStampCameraOffset = 256;
 VkBuffer g_legacy_buf = VK_NULL_HANDLE;   // alpha_legacy_info
 VkDeviceMemory g_legacy_mem = VK_NULL_HANDLE;
 uint32_t g_legacy_stride = 0;
@@ -264,7 +265,7 @@ void alpha_device_created(DeviceData* dd) {
   ok = ok && make_image(false, g_dummy2d) && make_image(true, g_dummy_arr);
   if (ok) {   // the scene stamps: host-visible, persistently mapped, zeroed
     VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bci.size = 16 * kRing;
+    bci.size = kStampStride * kRing;
     bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     ok = vk.CreateBuffer(dd->device, &bci, nullptr, &g_stamp_buf) == VK_SUCCESS;
     VkMemoryRequirements req{};
@@ -280,7 +281,7 @@ void alpha_device_created(DeviceData* dd) {
          vk.BindBufferMemory(dd->device, g_stamp_buf, g_stamp_mem, 0) == VK_SUCCESS &&
          vk.MapMemory(dd->device, g_stamp_mem, 0, VK_WHOLE_SIZE, 0, &p) == VK_SUCCESS;
     g_stamp_map = static_cast<uint32_t*>(p);
-    if (ok) std::memset(g_stamp_map, 0, 16 * kRing);
+    if (ok) std::memset(g_stamp_map, 0, size_t(kStampStride * kRing));
   }
   if (!ok) {
     log("[alpha] descriptor/resource setup failed: alpha testing off");
@@ -504,11 +505,18 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   // The scene stamp: the CPU expects `gen`, the GPU confirms it once this command
   // buffer runs (after the scene build recorded before this call).
   if (++g_stamp_gen == 0) g_stamp_gen = 1;
-  g_stamp_map[slot * 4 + 0] = g_stamp_gen;
-  vk.CmdUpdateBuffer(cmd, g_stamp_buf, VkDeviceSize(slot) * 16 + 4, 4, &g_stamp_gen);
-  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  const VkDeviceSize stamp_base = VkDeviceSize(slot) * kStampStride;
+  g_stamp_map[stamp_base / 4] = g_stamp_gen;
+  // Snapshot the very same native UBO used by XFB conversion. This read is
+  // executed on the GPU with the build, not a CPU observation at record time.
+  const bool rebase = cfg_int("rt_scene_rebase", 0) != 0 || cfg_int("rt_primary_epoch", 0) != 0;
+  const bool pose_ok = rebase && geo_copy_camera(cmd, ab.camera, ab.camera_offset, g_stamp_buf,
+                                               stamp_base + kStampCameraOffset);
+  const uint32_t gpu_stamp[2] = {g_stamp_gen, pose_ok ? g_stamp_gen : 0};
+  vk.CmdUpdateBuffer(cmd, g_stamp_buf, stamp_base + 4, sizeof gpu_stamp, gpu_stamp);
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr,
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr,
                         0, nullptr);
 
   // The set: records, UV soup, views (unused slots: the dummies).
@@ -553,7 +561,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
     cache[i] = i && i <= g_cache.size()
                    ? VkDescriptorImageInfo{VK_NULL_HANDLE, g_cache[i - 1].first, g_cache[i - 1].second}
                    : VkDescriptorImageInfo{VK_NULL_HANDLE, g_dummy_arr.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkDescriptorBufferInfo stampi{g_stamp_buf, VkDeviceSize(slot) * 16, 16};
+  VkDescriptorBufferInfo stampi{g_stamp_buf, stamp_base, kStampStride};
   VkWriteDescriptorSet w[8] = {};
   for (int i = 0; i < 8; ++i) {
     w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};

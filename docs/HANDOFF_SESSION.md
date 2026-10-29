@@ -1,149 +1,100 @@
-# Session handoff - 2026-10-29
+# Session handoff — P1 static PASS, motion INVALID, 2026-10-29
 
-Read this first, then the top of docs/PROGRESS_CODEX.md and AGENTS.md.
-## Current state: USER-REQUESTED PAUSE
+Read AGENTS.md, then the top of PROGRESS_CODEX.md. No Ponytail or subagents.
+Read D:/BG3_Tools/USER_STEERING.md (two 13:57 entries and 14:29 authorization).
+FG 2 decides P1; FG 0 is reference only. The user sees the bug only with FG on.
 
-The user paused game activities for a live test, then requested this handoff to
-change model in a new conversation. The thread goal is PAUSED, not complete.
-Do not resume development/tests merely because this handoff was read.
-Wait for explicit user permission to resume. Keep captures/queue/USER_PLAYING.
-The latest read found no BG3/runner or pending/running job, but absence of a
-process does NOT cancel the pause or authorize clearing the marker.
-Preparing this handoff did not modify game code, binaries, settings or saves.
+## Permission and checkout
 
-The original horizon is Saturday 2026-10-31 at 20:00 Europe/Rome. On explicit
-resume, retain the full objective below; do not silently extend the deadline.
+Latest user instruction authorizes visible/non-activating real-present FG jobs
+without USER_AWAY. Never force focus; skip USER_PLAYING or an unowned game.
+Never create USER_AWAY. Launch only scripts/test-queue.ps1; never hold results.md
+open. No source/binary/HEAD edits while a game job runs. Restore display settings.
+No saves, backups, snapshot tags, force-push or junction cleanup.
 
-## Hard rules
+Branch codex/p1-pan-flashes in the main workspace. Main still 58b06b4; no merge.
+Tested build c5a909c, ABI 16. Both fix defaults remain 0:
+- rt_scene_rebase (314840d): consistent translation between lighting and TLAS space
+  at all four ray-query entries. Native pool and dynamic XFB use camera-relative
+  world axes. The frame epoch of each instance row is not established.
+- fg_current_destroy_only (9bc8e70): historical-tag destruction no longer resets
+  FG stability; current input destruction still does. Fence retirement unchanged.
 
-- Never modify user saves, force-push, rewrite history or alter snapshot tags.
-- Never use Ponytail, its skills, hooks or instructions.
-- Before every launch check USER_PLAYING, actual BG3/runner processes and pending/running jobs.
-- Games run only through the serial hidden queue, with patterns and expect checks.
-- Freeze an active job's source, binaries and HEAD until actual terminal state.
-- Merge features into main only through scripts/merge-green.ps1 after inspecting numbers.
-- Push main and phase branches after integrations. Research defaults stay off.
-- Never archive or clean a checkout with junctions to shared SDK/data folders.
-- Backups in D:/BG3_Tools are read-only. Never touch backup files or snapshot tags.
-- Background 120-frame statistics require hold of at least 90 seconds.
-- Write short English sentences with normal spacing between numbers and words.
+Tool commits this continuation, pushed:
+92cc6ad authorized no-Away FG mode; fe17233 observe coverage in authorized mode;
+0a6a8cf native windowed extent; b5a2e87 cheap primary/epoch checks and recorded
+RT dispatch counts; c5a909c restore 6 GB trace budget.
 
-The one authorized usage reset was consumed at weekly 100% on October 29.
-A fresh reading confirmed success. Reset credits: 0. No second reset without
-fresh user authorization. The overall goal is currently paused by the user.
+## Actual queue results — stopped after invalid motion verdict
 
-## Next priority after explicit resume: P2
+QuickSave_3784, real presentation, window_mode=visible_unfocused_fg, FG 2 cold-load.
+No observed activation, client fully covered throughout, native windowed 3840x1600.
+Game closed, display restored, queue empty. Do not relaunch unchanged motion input.
 
-The user's explicit P1 resume was carried out: complete fresh fallback, missing-
-history correction, spatial and exact FP16 normal bounds, static energy and
-same-run moving measurements. No attribution/exposure research displaced them.
-There is no demonstrated quality gain. Under the goal's stalled-phase rule,
-the priority slot advances to pending integrations. P1 remains incomplete and
-its candidate stays off. That phase decision preceded the later user pause;
-it is not a claim of success.
+Static p1-fg-static-effects.1.152122: PASS, 13 phases / 30 traces.
+FG 2 normal primary 99.5195-99.5215%, 18.7-18.8 rendered fps, ratio 2.00;
+FG 0 99.516%, 18.2 fps, ratio 1.00. No interior toggles. Sun/local/GI/reflection
+recorded 120/120 and RR GPU timing; no persistent debug parity differences.
+GI debug is black in both modes: parity only, not proof of visible GI energy.
+Composite writes debug diffuse into previous radiance; app dumps do not certify
+DLSS-G generated images. All five sheets under captures/p1-fg/static-effects-sheets.
 
-P1 checkpoint: codex/p1-pan dbd320c. PAUSED.md records evidence and a concrete
-return point. Static 301 on/off +0.646% is within noise, but original-PRE
-+0.460% excludes zero. All 36 captures pass finite GI, exact alpha and 23 GPU
-predicates. Normal rejection is 13.24%. Full VVL is preserved; other errors remain.
-Pan 303 verifies 8 fps (19 complete windows of 40 frames per 5 seconds).
-Within ONE run, motion differs only +1.162%, but raw residual rises 21.951%
-and cohort GI Y rises 11.193%. Samples 20.96 / 14.45 million; grid coverage
-31.49% / 22.16%. No quality promotion. Trace median 0.548 ms; whole experimental
-GI 64.288 ms. Raw fresh noise is not resolved-RR image quality. Resume with
-same-run resolved-image evidence and a valid fresh source for unsupported inputs.
-Never compare independent pan images or repeat unchanged tests until one passes.
+Motion p1-fg-motion-matrix.1.153616: analyzer FAIL, qualification INVALID.
+56-phase job deliberately stopped after 13 complete phases plus partial phase 13.
+Posted 60 px/s rotation has stationary windows and jumps up to 98.58 deg/frame.
+Baseline FG 2 median displayed/rendered 1.00, so sustained generation was absent.
+All sampled phases have active RT 120/120, none 0; missing unrun phase evidence
+is expected after stop, not an observed RT outage. No visible-flash certification.
+First negative FG 2 rotation, baseline / rebase / destroy-only:
+- match medians 21.299 / 85.984 / 20.5465%; static floor 99.501%
+- fps 26.0 / 25.3 / 26.6; displayed/rendered 1.000 / 1.163 / 1.412
+- options calls 5 / 3 / 1; interior mode changes 0 / 1 / 0
+FG 0 reference matches 17.434 / 75.819 / 15.887%, ratio 1.00.
+Different prior paths/views confound cross-variant median attribution.
 
-## P2 next action: emissive facing hypothesis
+6,106 retired-only destructions reset FG with guard off; 3,279 do not with guard on.
+Three current-role destructions still reset with guard off. No SDK focus-disable
+or crash exception. Guard policy does suppress real unnecessary resets, but neither
+candidate passes P1 and interior-toggle reduction is unproved. Defaults stay off.
+No merge and NOT ready for user check. Only merge-green if future valid gates pass.
 
-No queued test remains active. After explicit resume, first check actual game/
-runner processes and pending/running jobs; clear USER_PLAYING only when authorized
-and idle. All launches still go through the queue. P2 branch codex/p2-emissive is at 7a87ba7, updated from current main. The merge
-changed only AGENTS/docs; source and binaries are unchanged. It has owned
-SDK/data copies, no shared junctions.
-Paired D-EM ABI 9 differs from P3 ABI 9: never reuse their game processes.
+Retained sources: captures/queue/logs/<job names above>.{log,runner.txt,status.json}.
+Reports: captures/p1-fg/{static-effects-result,motion-gate-result}.json.
+Curated: docs/evidence/p1-fg-live-20261029.json, with 14 measured phase summaries.
+CloseMainWindow was deliberate; Invalid window handle followed during runner
+teardown, not a game crash/timeout. Earlier origin-rebase 242 s exit still unknown.
 
-Preserved diagnostic 295 was fully audited after the required P1 measurements.
-Ten scene windows: 67,031 target receivers, 71,754 triangle candidates, zero
-multi-draw receivers; distinct-draw sum equals receiver count. Invalid IDs,
-overflow and missing candidates are zero. Nine actual native draw records show
-blend disabled, back-face culling, EQUAL depth test, no depth write/dynamic state.
-The coincident additive-draw hypothesis is rejected for that observed cohort.
+## Next, bounded
 
-Exact AF family 304be1c7 still FAILS: ratio 0.362 against 0.842-1.188, N 237.
-Other five evaluated families pass this short diagnostic. Final captures report
-zero nonfinite values; native D32F reports 2,764 / 2,587 and is preserved.
-No scoped layout/push/write VVL tags, but other errors remain. Build median
-0.496 ms; effects passes 0.118 ms with capture. No without-capture baseline.
-295 used hold 45 before the new rule: not a complete promotion gate.
-Full evidence: P2 docs/evidence/p2-emissive-overlap-295.json; full VVL archived.
+First repair or qualify background relative rotation input, without moving the
+physical cursor or forcing focus. PostMessage reaches the game, but controlled
+speed/direction is not established. Check relative mouse/warp semantics before
+changing renderer code. Preserve actual FG generation and >=18 fps requirements.
+Then run controlled FG-on static/rotation A/B; FG 0 remains reference only.
+The 56-phase fixtures/generator remain; jobs are not requeued after the verdict.
 
-Native SPIR-V confirms raw UV, colour/mask/intensity and pulse; prior UV/pulse
-checks remain. A concrete mismatch to test: native back-face culling versus
-two-sided emissive lookup with facing culling disabled. Multiple triangles from
-one draw can still differ in facing. Reuse existing debug stats to count nearest
-hit facing in AF and passing GF. Log native front-face state; respect captured
-winding. No guessed sign, brightness scale, new resource or ABI. Sampler address
-state is unrecorded; filtering tests do not prove repeat/clamp equivalence.
-Read docs/P2_EMISSIVE_OVERLAP.md and TRACK_D_RT section 13 before implementing.
-The existing rt_em_overlap_check push currently collapses nonzero to 1; mode 2
-can report facing using debug words 8-14. Unused global word 15 can mark the
-probe mode, so mixed in-flight windows cannot be mislabelled. Native state logs
-need frontFace as well as cullMode. This probe is a PLAN, not implemented: the
-current key supports the overlap probe only. Keep emission/ordinary shaders unchanged.
+New hypothesis: translation rebasing alone is insufficient. Residual pool/soup
+mismatch and scene/lighting pose separation are consistent with older native
+instance/dynamic geometry data or camera-buffer epoch mismatch. Exact frame lag
+and Reflex/FG causation remain unproved. Do not add another camera selector.
+App QueuePresent increments g_frame once; SL generated presents call next layer
+and update displayed counters, no app increment. New token/ReflexSleep follows
+app present; initialized FG 0 retains that path. No speculative Reflex fix.
 
-## Workspaces and stable state
+## Cost and checks
 
-Use explicit paths; the app may select another checkout.
-- Main: C:/Users/quali/Documents/Code Projects/BG3RTX, main, pushed.
-  Before handoff documentation: eb70825. All inspected trees were clean.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, dbd320c, ABI 14.
-- P2: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, 7a87ba7, D-EM ABI 9.
-- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, b913e8e, box ABI 9.
-- P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, 8d902d5.
-- P6: p6-water/BG3RTX, cd04c63.
+Same FG-2 static debug phase, full per-ray stats off at 15:02:53 until 15:03:18:
+15.5 -> 19-20 fps, GI ~6.8 -> 0.379 ms, LS ~5.25 -> 0.530 ms. Full statistics
+have major cost; historical 15.040 vs 4.269 ms are not matched settings/scene/
+presentation. RR on in both. RT 2.872 ms is a mixed 300-frame interval.
+Source p1-fg-static-effects.1.145628.log. No isolated renderer regression claim.
+Primary/epoch checks now work with rt_stats/ls_stats/rf_stats=0, while ordinary
+shaders remain byte-identical. Recorded counts are commands, not per-ray totals.
+20 matrix/static/plan tests, 26 policy/geometry, 18 camera/permission checks pass.
+Prior build 7 CTests, 21 ordinary shader identities, 20 variants passed.
 
-Main rendering remains 6dba0a8. Water design 441904a and legal QA exposure-hold
-fix 7a98949 are merged. Local-light reference was accepted after two hold-90
-repeats with zero differences. No GI, EN2, D-EM, box-light or OMM candidate is promoted.
-EN2 fails blue/metalness/luminance gates; SHaRC v2 depends on it. Keep off.
-P3 run 291 has 0.09991% format-incompatible receivers among 2.950 billion;
-native accuracy, cookie/unknown and moving gates remain open. No promotion.
-P4 CPU classifier passes 197,621 oracle checks and four CTests; provider/GPU
-bake/backend remain unimplemented. P6 minimum design is done, runtime water open.
-
-## Remaining objective and working tools
-
-Keep the original scope after resume:
-1. P1: GI, local-light, sun and reflection pan instability. Each must meet its
-   derived temporal gate or clearly improve with an explained cause. Write the
-   in-game key/save/check instructions. P1 is NOT done.
-2. P2: merge only passing EN2, D-EM and local-light reference work. The reference
-   is merged; EN2/D-EM are not. Preserve failed gates instead of tuning scales.
-3. P3: finish box-light native accuracy, shadows/cookies/unknown and motion gates.
-4. P4: finish OMM beyond the CPU classifier: provider, GPU bake and backend.
-5. P5: SHaRC v2, light tree and EN2 consumers, after EN2 is validated.
-6. P6: water design minimum is done; runtime remains open.
-Use stalled-phase checkpoints rather than calling unfinished phases complete.
-After explicit resume, work autonomously; record meaningful results and evening summaries.
-At the Saturday stop time, write the final progress summary, push all work and stop.
-
-Use explicit workdirs. Runtime tests: scripts/test-queue.ps1 with Root set to main.
-Main captures/queue/results.jsonl and its logs are authoritative; never hold
-results.md open. Build/checks: scripts/build.ps1 -Test, tools/compile_shaders.py,
-tests/qa_detectors_test.py. P1 has scripts/qa/gi_energy.py and
-tools/validate_owned_motion_shaders.py; P2 has scripts/qa/em_gate.py.
-DXC/spirv-cross/spirv-val: C:/VulkanSDK/1.4.357.0/Bin. Python: py -3.
-Read each branch's design and preserved evidence before changing code. Do not
-automatically resume old listed agents or background tasks.
-Do not spawn sub-agents unless newly authorized by the user or applicable rules.
-
-## Validation and cleanup
-
-Preserve full validation.log before each new validation run. Inspect all layout,
-push and descriptor-write categories including VUID 07988. Scoped absence is
-not globally clean validation. Never keep queue/results.md open.
-The archive tool once followed junctions and emptied shared SDK/data targets.
-They were restored from read-only backups; all 992 SDK hashes and DB/manifest
-hashes match. Recovery evidence is committed. Never repeat shared-junction cleanup.
-At the Saturday stop time, write the final summary, push all work and stop.
+Default visible_unfocused stays FG 0 only and requires USER_AWAY. Explicit
+visible_unfocused_fg preserves FG 2/0 and follows latest no-Away authorization;
+it uses SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE and HWND_BOTTOM, no focus setter.
+Native windowed extent avoids UI/hudless 3840x1600 vs borderless swapchain
+3840x2160 mismatch. Coverage/foreground are observed, not aborted in that mode.

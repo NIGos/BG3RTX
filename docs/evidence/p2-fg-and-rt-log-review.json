@@ -1,0 +1,776 @@
+{
+  "date": "2026-10-29",
+  "mode": "code/log-only; no game launch",
+  "abi": 16,
+  "key": {
+    "name": "fg_current_destroy_only",
+    "default": 0,
+    "runtime_gate": "NOT MEASURED",
+    "fix": "Only current-input destruction resets FG stability; retired watched images retain consumption-fence waits and layout cleanup",
+    "evidence_limit": "Known unconditional historical-watch reset in code. Legacy logs do not prove which destroyed images were retired versus current."
+  },
+  "user_log": {
+    "path": "captures/p1-pan-flashes/source-logs/user-0929-0934.log",
+    "options_calls": 32,
+    "mode_transitions": 27,
+    "peak_transitions_per_60_seconds": 16,
+    "off_transitions": 13,
+    "offs_preceded_by_destroy": 13,
+    "SDK_transitions": 31,
+    "SDK_off_reasons": {
+      "host requested off": 12,
+      "window not focused": 3
+    },
+    "SDK_focus_messages": 9,
+    "SDK_offs": [
+      {
+        "line": 803,
+        "time": "09:30:00.421",
+        "text": "09:30:00.421  [sl] [09-30-00][streamline][info][tid:44208][32s:245ms:108us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34200.421,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 834,
+        "time": "09:30:02.036",
+        "text": "09:30:02.036  [sl] [09-30-02][streamline][info][tid:44208][33s:860ms:159us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34202.036,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 891,
+        "time": "09:30:05.338",
+        "text": "09:30:05.338  [sl] [09-30-05][streamline][info][tid:44208][37s:161ms:496us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34205.338,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1035,
+        "time": "09:30:47.645",
+        "text": "09:30:47.645  [sl] [09-30-47][streamline][info][tid:44208][79s:469ms:165us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34247.645,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1090,
+        "time": "09:31:01.016",
+        "text": "09:31:01.016  [sl] [09-31-01][streamline][info][tid:44208][92s:840ms:742us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34261.016,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1125,
+        "time": "09:31:05.412",
+        "text": "09:31:05.412  [sl] [09-31-05][streamline][info][tid:44208][97s:236ms:388us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34265.412,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1162,
+        "time": "09:31:08.426",
+        "text": "09:31:08.426  [sl] [09-31-08][streamline][info][tid:44208][100s:249ms:953us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34268.426,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1195,
+        "time": "09:31:13.192",
+        "text": "09:31:13.192  [sl] [09-31-13][streamline][info][tid:44208][105s:016ms:347us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34273.192,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1251,
+        "time": "09:31:31.875",
+        "text": "09:31:31.875  [sl] [09-31-31][streamline][info][tid:44208][123s:698ms:954us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34291.875,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1287,
+        "time": "09:31:39.129",
+        "text": "09:31:39.129  [sl] [09-31-39][streamline][info][tid:44208][130s:952ms:977us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34299.129,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1334,
+        "time": "09:31:57.461",
+        "text": "09:31:57.461  [sl] [09-31-57][streamline][info][tid:44208][149s:284ms:997us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOn, numFramesToGenerate=1, SyncInterval=1)",
+        "seconds": 34317.461,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOn",
+        "reason": "window not focused"
+      },
+      {
+        "line": 1399,
+        "time": "09:32:22.895",
+        "text": "09:32:22.895  [sl] [09-32-22][streamline][info][tid:44208][174s:719ms:351us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34342.895,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1483,
+        "time": "09:32:57.504",
+        "text": "09:32:57.504  [sl] [09-32-57][streamline][info][tid:44208][209s:328ms:268us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOn, numFramesToGenerate=1, SyncInterval=1)",
+        "seconds": 34377.504,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOn",
+        "reason": "window not focused"
+      },
+      {
+        "line": 1509,
+        "time": "09:33:03.948",
+        "text": "09:33:03.948  [sl] [09-33-03][streamline][info][tid:44208][215s:772ms:086us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOff, numFramesToGenerate=0, SyncInterval=1)",
+        "seconds": 34383.948,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOff",
+        "reason": "host requested off"
+      },
+      {
+        "line": 1535,
+        "time": "09:33:12.439",
+        "text": "09:33:12.439  [sl] [09-33-12][streamline][info][tid:44208][224s:263ms:207us]dlfgPresent.cpp:1220[presentCommon] DLSS-G interpolation state changed from enabled to disabled (mode=sl::DLSSGMode::eOn, numFramesToGenerate=1, SyncInterval=1)",
+        "seconds": 34392.439,
+        "before": "enabled",
+        "after": "disabled",
+        "mode": "eOn",
+        "reason": "window not focused"
+      }
+    ],
+    "all_offs": [
+      {
+        "time": "09:30:00.421",
+        "line": 802,
+        "last_destroy_line": 800,
+        "last_destroy_time": "09:30:00.413",
+        "delay_ms": 8,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:30:02.036",
+        "line": 833,
+        "last_destroy_line": 832,
+        "last_destroy_time": "09:30:02.034",
+        "delay_ms": 2,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:30:05.338",
+        "line": 890,
+        "last_destroy_line": 888,
+        "last_destroy_time": "09:30:05.322",
+        "delay_ms": 16,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:30:47.645",
+        "line": 1034,
+        "last_destroy_line": 1033,
+        "last_destroy_time": "09:30:47.595",
+        "delay_ms": 50,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:30:55.930",
+        "line": 1070,
+        "last_destroy_line": 1060,
+        "last_destroy_time": "09:30:55.876",
+        "delay_ms": 54,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:31:01.016",
+        "line": 1089,
+        "last_destroy_line": 1088,
+        "last_destroy_time": "09:31:00.969",
+        "delay_ms": 47,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:31:05.412",
+        "line": 1124,
+        "last_destroy_line": 1123,
+        "last_destroy_time": "09:31:05.396",
+        "delay_ms": 16,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:31:08.426",
+        "line": 1161,
+        "last_destroy_line": 1160,
+        "last_destroy_time": "09:31:08.381",
+        "delay_ms": 45,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:31:13.192",
+        "line": 1194,
+        "last_destroy_line": 1192,
+        "last_destroy_time": "09:31:13.162",
+        "delay_ms": 30,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:31:31.875",
+        "line": 1250,
+        "last_destroy_line": 1249,
+        "last_destroy_time": "09:31:31.821",
+        "delay_ms": 54,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:31:39.129",
+        "line": 1286,
+        "last_destroy_line": 1285,
+        "last_destroy_time": "09:31:39.066",
+        "delay_ms": 63,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:32:22.895",
+        "line": 1398,
+        "last_destroy_line": 1397,
+        "last_destroy_time": "09:32:22.838",
+        "delay_ms": 57,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      },
+      {
+        "time": "09:33:03.948",
+        "line": 1508,
+        "last_destroy_line": 1507,
+        "last_destroy_time": "09:33:03.890",
+        "delay_ms": 58,
+        "invalid_input": "UNKNOWN: destroyed handle/role and per-toggle input state not logged"
+      }
+    ],
+    "note": "Flags-only options calls excluded; retained source is 09:29-09:34, not the entire reported session."
+  },
+  "queue_logs": {
+    "files": 13,
+    "mode_transitions": 50,
+    "off_transitions": 20,
+    "offs_preceded_by_destroy": 17,
+    "off_input_classification": {
+      "NONE missing/stale: current inputs ready; recent-destruction cooldown": 17,
+      "UI stale": 3
+    },
+    "all_offs": [
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-geometry-snap.1.135616.log",
+        "line": 849,
+        "time": "13:57:01.096",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 848,
+          "time": "13:57:01.096",
+          "text": "13:57:01.096  [sl] readiness frame 756: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000001C50B82CCD0 2560x1067 mv 000001C511B560D0 2560x1067 age 1 hudless 000001C518A954D0 3840x1600 ui 000001C518A95AD0 3840x1600 age 1; last tag destroy 755 stable from 0 required 30",
+          "frame": 756,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-geometry-snap.1.135616.log",
+        "line": 1082,
+        "time": "13:57:20.259",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 1081,
+          "time": "13:57:20.259",
+          "text": "13:57:20.259  [sl] readiness frame 1252: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000001C506A74ED0 2560x1067 mv 000001C52194F0D0 2560x1067 age 1 hudless 000001C51E326CD0 3840x1600 ui 000001C51E3272D0 3840x1600 age 1; last tag destroy 1251 stable from 0 required 30",
+          "frame": 1252,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-owned-cold-diag.1.103955.log",
+        "line": 851,
+        "time": "10:40:35.909",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 850,
+          "time": "10:40:35.909",
+          "text": "10:40:35.909  [sl] readiness frame 846: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 0000023CC9C3D8D0 2560x1067 mv 0000023CD39584D0 2560x1067 age 1 hudless 0000023CD9EC7ED0 3840x1600 ui 0000023CD9EC84D0 3840x1600 age 1; last tag destroy 845 stable from 0 required 30",
+          "frame": 846,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-owned-cold-diag.1.103955.log",
+        "line": 1084,
+        "time": "10:40:55.242",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 1083,
+          "time": "10:40:55.242",
+          "text": "10:40:55.242  [sl] readiness frame 1341: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 0000023CC72E66D0 2560x1067 mv 0000023CDEECB4D0 2560x1067 age 1 hudless 0000023CDE951ED0 3840x1600 ui 0000023CDE9524D0 3840x1600 age 1; last tag destroy 1340 stable from 0 required 30",
+          "frame": 1341,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-owned-cold-diag.1.103955.log",
+        "line": 1160,
+        "time": "10:41:08.203",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 1159,
+          "time": "10:41:08.203",
+          "text": "10:41:08.203  [sl] readiness frame 1530: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 0000023CC72E66D0 2560x1067 mv 0000023CDE134ED0 2560x1067 age 1 hudless 0000023CDE951ED0 3840x1600 ui 0000023CDE9524D0 3840x1600 age 1; last tag destroy 1529 stable from 0 required 30",
+          "frame": 1530,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-owned-cold-repeat.1.105624.log",
+        "line": 845,
+        "time": "10:57:16.813",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 844,
+          "time": "10:57:16.813",
+          "text": "10:57:16.813  [sl] readiness frame 798: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000001CB4378CCD0 2560x1067 mv 000001CB478C96D0 2560x1067 age 1 hudless 000001CB534B06D0 3840x1600 ui 000001CB534B0CD0 3840x1600 age 1; last tag destroy 797 stable from 0 required 30",
+          "frame": 798,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-owned-cold-repeat.1.105624.log",
+        "line": 1072,
+        "time": "10:57:34.642",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 1071,
+          "time": "10:57:34.642",
+          "text": "10:57:34.642  [sl] readiness frame 1253: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000001CB46903CD0 2560x1067 mv 000001CB5A29EAD0 2560x1067 age 1 hudless 000001CB5B3612D0 3840x1600 ui 000001CB5B3618D0 3840x1600 age 1; last tag destroy 1252 stable from 0 required 30",
+          "frame": 1253,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-owned-cold-repeat.2.105829.log",
+        "line": 844,
+        "time": "10:59:25.999",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 843,
+          "time": "10:59:25.999",
+          "text": "10:59:25.999  [sl] readiness frame 756: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000002754012CCD0 2560x1067 mv 000002754D387ED0 2560x1067 age 1 hudless 00000275516B12D0 3840x1600 ui 00000275516B18D0 3840x1600 age 1; last tag destroy 755 stable from 0 required 30",
+          "frame": 756,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-owned-cold-repeat.2.105829.log",
+        "line": 1070,
+        "time": "10:59:45.125",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 1069,
+          "time": "10:59:45.125",
+          "text": "10:59:45.125  [sl] readiness frame 1252: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 00000275577F42D0 2560x1067 mv 00000275590EBAD0 2560x1067 age 1 hudless 000002754505F6D0 3840x1600 ui 0000027558EB00D0 3840x1600 age 1; last tag destroy 1251 stable from 0 required 30",
+          "frame": 1252,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-queue-base-full.1.093043.log",
+        "line": 831,
+        "time": "09:31:32.727",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 830,
+          "time": "09:31:32.727",
+          "text": "09:31:32.727  [sl] readiness frame 843: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 0000012CB1D4CCD0 2560x1067 mv 0000012CC7361ED0 2560x1067 age 1 hudless 0000012CC736AED0 3840x1600 ui 0000012CC736B4D0 3840x1600 age 1; last tag destroy 842 stable from 0 required 30",
+          "frame": 843,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-resize-diag.1.133632.log",
+        "line": 853,
+        "time": "13:37:15.468",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 852,
+          "time": "13:37:15.468",
+          "text": "13:37:15.468  [sl] readiness frame 841: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000002B9A0F3D8D0 2560x1067 mv 000002B9B42600D0 2560x1067 age 1 hudless 000002B9B42690D0 3840x1600 ui 000002B9B42696D0 3840x1600 age 1; last tag destroy 840 stable from 0 required 30",
+          "frame": 841,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-resize-diag.1.133632.log",
+        "line": 1089,
+        "time": "13:37:34.764",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 1088,
+          "time": "13:37:34.764",
+          "text": "13:37:34.764  [sl] readiness frame 1341: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000002B9B5FB48D0 2560x1067 mv 000002B9B7D76CD0 2560x1067 age 1 hudless 000002B9B78B66D0 3840x1600 ui 000002B9B78B6CD0 3840x1600 age 1; last tag destroy 1340 stable from 0 required 30",
+          "frame": 1341,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-resize-diag.1.133632.log",
+        "line": 1166,
+        "time": "13:37:43.910",
+        "input_classification": "UI stale",
+        "readiness": {
+          "line": 1165,
+          "time": "13:37:43.910",
+          "text": "13:37:43.910  [sl] readiness frame 1526: requested 2 last option 2 host running 1 ready 0 stable 0 gate 0x40; depth 000002B9B5FB48D0 2560x1067 mv 000002B9B7D76CD0 2560x1067 age 1 hudless 000002B9B78B66D0 3840x1600 ui 000002B9B78B6CD0 3840x1600 age 4; last tag destroy 1340 stable from 0 required 30",
+          "frame": 1526,
+          "ready": false,
+          "stable": false,
+          "gate": 64,
+          "reasons": [
+            "UI stale"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-resize-owned.1.121742.log",
+        "line": 846,
+        "time": "12:18:18.804",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 845,
+          "time": "12:18:18.804",
+          "text": "12:18:18.804  [sl] readiness frame 756: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000001D08AD7D8D0 2560x1067 mv 000001D08DDF66D0 2560x1067 age 1 hudless 000001D08E69C0D0 3840x1600 ui 000001D08E69B4D0 3840x1600 age 1; last tag destroy 755 stable from 0 required 30",
+          "frame": 756,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-resize-owned.1.121742.log",
+        "line": 1459,
+        "time": "12:20:40.440",
+        "input_classification": "UI stale",
+        "readiness": {
+          "line": 1458,
+          "time": "12:20:40.440",
+          "text": "12:20:40.440  [sl] readiness frame 3670: requested 2 last option 2 host running 1 ready 0 stable 0 gate 0x40; depth 000001D08B230CD0 2560x1067 mv 000001D09FC4C6D0 2560x1067 age 1 hudless 000001D0A013F0D0 3840x1600 ui 000001D0A013F6D0 3840x1600 age 4; last tag destroy 1083 stable from 0 required 30",
+          "frame": 3670,
+          "ready": false,
+          "stable": false,
+          "gate": 64,
+          "reasons": [
+            "UI stale"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-resize-registry.1.134745.log",
+        "line": 848,
+        "time": "13:48:43.196",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 847,
+          "time": "13:48:43.196",
+          "text": "13:48:43.196  [sl] readiness frame 795: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000002C80A07CCD0 2560x1067 mv 000002C81DB436D0 2560x1067 age 1 hudless 000002C81DB4C6D0 3840x1600 ui 000002C81DB4CCD0 3840x1600 age 1; last tag destroy 794 stable from 0 required 30",
+          "frame": 795,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-resize-registry.1.134745.log",
+        "line": 1080,
+        "time": "13:49:03.289",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 1079,
+          "time": "13:49:03.289",
+          "text": "13:49:03.289  [sl] readiness frame 1314: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 000002C81DBEEAD0 2560x1067 mv 000002C80D32A8D0 2560x1067 age 1 hudless 000002C81B8CE4D0 3840x1600 ui 000002C81B8CEAD0 3840x1600 age 1; last tag destroy 1313 stable from 0 required 30",
+          "frame": 1314,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-resize-registry.1.134745.log",
+        "line": 1158,
+        "time": "13:49:15.090",
+        "input_classification": "UI stale",
+        "readiness": {
+          "line": 1157,
+          "time": "13:49:15.090",
+          "text": "13:49:15.090  [sl] readiness frame 1548: requested 2 last option 2 host running 1 ready 0 stable 0 gate 0x40; depth 000002C81DBEEAD0 2560x1067 mv 000002C80D32A8D0 2560x1067 age 1 hudless 000002C81B8CE4D0 3840x1600 ui 000002C81B8CEAD0 3840x1600 age 4; last tag destroy 1313 stable from 0 required 30",
+          "frame": 1548,
+          "ready": false,
+          "stable": false,
+          "gate": 64,
+          "reasons": [
+            "UI stale"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-sync-base.1.111714.log",
+        "line": 38124,
+        "time": "11:18:17.104",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 38123,
+          "time": "11:18:17.104",
+          "text": "11:18:17.104  [sl] readiness frame 890: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 00B7D1000000B7D1 2560x1067 mv 00D646000000D646 2560x1067 age 1 hudless 00D67A000000D67A 3840x1600 ui 00D67C000000D67C 3840x1600 age 1; last tag destroy 889 stable from 0 required 30",
+          "frame": 890,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      },
+      {
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pan-p1-fg-sync-owned.1.112026.log",
+        "line": 37742,
+        "time": "11:21:34.353",
+        "input_classification": "NONE missing/stale: current inputs ready; recent-destruction cooldown",
+        "readiness": {
+          "line": 37741,
+          "time": "11:21:34.353",
+          "text": "11:21:34.353  [sl] readiness frame 882: requested 2 last option 2 host running 1 ready 1 stable 0 gate 0x80; depth 00B7F2000000B7F2 2560x1067 mv 00E654000000E654 2560x1067 age 1 hudless 00E688000000E688 3840x1600 ui 00E68A000000E68A 3840x1600 age 1; last tag destroy 881 stable from 0 required 30",
+          "frame": 882,
+          "ready": true,
+          "stable": false,
+          "gate": 128,
+          "reasons": [
+            "recent-destruction cooldown"
+          ]
+        }
+      }
+    ]
+  },
+  "audit_command": "py -3 -m scripts.qa.fg_log_audit --logs <retained log paths> --out captures/p2-fg/retained-log-audit.json",
+  "full_audit": "captures/p2-fg/retained-log-audit.json",
+  "gpu_log_samples": [
+    {
+      "source": "captures/queue/logs/p1-current-radiance-production-repeat.1.191945.log",
+      "rt_interval": {
+        "line": 1511,
+        "text": "19:20:51.434  [core] rt passes: GPU cost 4.269 ms/frame (average of 300 frames); TLAS this frame 95, previous frame 205, none 44"
+      },
+      "pass_lines": [
+        {
+          "line": 1512,
+          "text": "19:20:51.435  [core] gi: trace pass (ray-traced, gi_rt=1, 1 rays/sample, full res, RR denoises) GPU median 0.466 ms, p10 0.427, p90 7.195 (300 frames)"
+        },
+        {
+          "line": 1514,
+          "text": "19:20:51.435  [core] ls: local-light shadow pass GPU median 0.378 ms, p10 0.134, p90 3.832, of which join 0.007 (300 frames; samples 0, exact-k 0 + 1, soft -1, shadowed mode 3, debug 0, per-light data 1 (join ran), owners 0x1F, impl 1)"
+        },
+        {
+          "line": 1515,
+          "text": "19:20:51.435  [core] rf: reflection pass GPU median 0.260 ms, p10 0.230, p90 1.100 (300 frames; GGX VNDF, RR denoises, max roughness 0.60, debug 0, validate 0)"
+        }
+      ],
+      "nearest_RR": {
+        "line": 1643,
+        "text": "19:20:53.613  [ngx] gpu RR: guides 0.001 ms + evaluate 2.589 ms = 2.590 ms (avg of 280)",
+        "caveat": "Separate averaging interval; not summed with RT interval"
+      }
+    },
+    {
+      "source": "captures/queue/logs/p1-origin-rebase-ab.1.123412.log",
+      "rt_interval": {
+        "line": 871,
+        "text": "12:37:42.003  [core] rt passes: GPU cost 15.040 ms/frame (average of 300 frames); TLAS this frame 0, previous frame 300, none 0"
+      },
+      "pass_lines": [
+        {
+          "line": 872,
+          "text": "12:37:42.004  [core] gi: trace pass (ray-traced, gi_rt=1, 2 rays/sample, full res, RR denoises) GPU median 6.212 ms, p10 6.027, p90 7.958 (300 frames)"
+        },
+        {
+          "line": 873,
+          "text": "12:37:42.004  [core] ls: local-light shadow pass GPU median 5.271 ms, p10 5.126, p90 6.078, of which join 0.005 (300 frames; samples 0, exact-k 0 + 1, soft -1, shadowed mode 1, debug 0, per-light data 1 (join ran), owners 0x1F, impl 1)"
+        },
+        {
+          "line": 874,
+          "text": "12:37:42.004  [core] rf: reflection pass GPU median 0.508 ms, p10 0.485, p90 0.529 (300 frames; GGX VNDF, RR denoises, max roughness 0.80, debug 0, validate 0)"
+        }
+      ],
+      "nearest_RR": {
+        "line": 862,
+        "text": "12:37:41.205  [ngx] gpu RR: guides 0.001 ms + evaluate 2.335 ms = 2.337 ms (avg of 88)",
+        "caveat": "Separate averaging interval; not summed with RT interval"
+      }
+    },
+    {
+      "source": "captures/p1-pan-flashes/source-logs/user-0929-0934.log",
+      "rt_interval": {
+        "line": 1072,
+        "text": "09:30:56.269  [core] rt passes: GPU cost 0.937 ms/frame (average of 300 frames); TLAS this frame 0, previous frame 300, none 0"
+      },
+      "pass_lines": [
+        {
+          "line": 1073,
+          "text": "09:30:56.270  [core] gi: trace pass (ray-traced, gi_rt=1, 2 rays/sample, full res, RR denoises) GPU median 0.359 ms, p10 0.342, p90 0.393 (300 frames)"
+        },
+        {
+          "line": 1074,
+          "text": "09:30:56.270  [core] ls: local-light shadow pass GPU median 0.534 ms, p10 0.507, p90 0.583, of which join 0.007 (300 frames; samples 0, exact-k 0 + 1, soft -1, shadowed mode 1, debug 0, per-light data 1 (join ran), owners 0x1F, impl 1)"
+        },
+        {
+          "line": 1075,
+          "text": "09:30:56.270  [core] rf: reflection pass GPU median 0.618 ms, p10 0.586, p90 0.665 (300 frames; GGX VNDF, RR denoises, max roughness 0.80, debug 0, validate 0)"
+        }
+      ],
+      "nearest_RR": {
+        "line": 1051,
+        "text": "09:30:54.069  [ngx] gpu RR: guides 0.001 ms + evaluate 2.707 ms = 2.708 ms (avg of 92)",
+        "caveat": "Separate averaging interval; not summed with RT interval"
+      }
+    }
+  ],
+  "gpu_comparison": {
+    "old_new_rt_interval_ms": [
+      4.269,
+      15.04
+    ],
+    "old_new_GI_trace_median_ms": [
+      0.466,
+      6.212
+    ],
+    "old_new_LS_median_ms": [
+      0.378,
+      5.271
+    ],
+    "old_new_RF_median_ms": [
+      0.26,
+      0.508
+    ],
+    "old_new_RR_nearest_total_ms": [
+      2.59,
+      2.337
+    ],
+    "RR": "On in both; not a newly enabled feature in the 15 ms run",
+    "FG": "Off in both compared jobs",
+    "presentation": "Historical log explicitly says headless presentation ON; new job is foreground real-present",
+    "render_extent": "Both logs identify G-buffer 2560x1067; swapchains 3840x2160",
+    "scene": "Historical WLD_Main_A / Campsite - 27h; new CTY_Main_A / QuickSave_3784",
+    "settings": "GI 1 -> 2 rays, shadowed mode 3 -> 1, reflection roughness 0.6 -> 0.8, rebuild 60 -> 600; new primary and full RT/LS statistics enabled",
+    "historical_quality": "4.269 ms window has 44 missing RT observations and GI p90 7.195 ms; later same log RT interval 1.943 ms",
+    "counterexample": "Retained CTY user log, RR on, GI 2 rays, shadowed 1, roughness 0.8: RT interval 0.937 ms, GI median 0.359 ms, LS median 0.534 ms. These settings alone do not explain 15 ms.",
+    "attribution": "No isolated primary or statistics-overhead GPU timer in these logs. Scene, diagnostics, build and presentation are confounded. The full causal split remains UNKNOWN; do not sum medians and interval averages."
+  },
+  "validation": {
+    "ctests": "7/7",
+    "log_audit_tests": "4/4",
+    "shader_edits": 0
+  },
+  "decision": "Keep candidate off by default on branch; no runtime success claim or merge. Rotation jobs remain pending and unchanged."
+}

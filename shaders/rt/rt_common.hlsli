@@ -96,9 +96,28 @@ static const float kOriginNoHit = 1000.0;
 // Different: that build never ran before this pass (its command buffer dropped
 // without a submit, or submitted later): its TLAS is not traced (every ray misses).
 [[vk::binding(9, 1)]] ByteAddressBuffer gSceneStamp;
+#ifdef RT_SCENE_REBASE
+// The native camera is already bound at 29 in D-LS/D-RF and at 48 in
+// the other RT layouts. Descriptor aliases have the same 14-float4 layout.
+struct RtRebaseCameraCB { float4 c[14]; };
+#ifdef RT_REBASE_LIGHT_CAMERA
+[[vk::binding(29, 0)]] ConstantBuffer<RtRebaseCameraCB> rtRebaseCamera;
+#else
+[[vk::binding(48, 0)]] ConstantBuffer<RtRebaseCameraCB> rtRebaseCamera;
+#endif
+float3 rt_scene_translation() {
+  // Stamp bytes 256..479 snapshot the build's native camera on the GPU.
+  return rtRebaseCamera.c[13].xyz - asfloat(gSceneStamp.Load3(256u + 208u));
+}
+float3 rt_scene_ray_origin(float3 lighting_origin) { return lighting_origin + rt_scene_translation(); }
+#endif
 bool rt_scene_ok() {
   uint2 s = gSceneStamp.Load2(0);
+#ifdef RT_SCENE_REBASE
+  return s.x != 0u && s.x == s.y && s.x == gSceneStamp.Load(8) && all(isfinite(rt_scene_translation()));
+#else
   return s.x != 0u && s.x == s.y;
+#endif
 }
 
 static const uint kRecBytes = 208;
@@ -430,6 +449,9 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
+#ifdef RT_SCENE_REBASE
+  r.Origin = rt_scene_ray_origin(o);
+#endif
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
@@ -477,6 +499,9 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
+#ifdef RT_SCENE_REBASE
+  r.Origin = rt_scene_ray_origin(o);
+#endif
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
@@ -527,6 +552,9 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
+#ifdef RT_SCENE_REBASE
+  r.Origin = rt_scene_ray_origin(o);
+#endif
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
@@ -552,6 +580,16 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   h.prim = hit ? q.CommittedPrimitiveIndex() : 0u;
   h.inst = hit ? q.CommittedInstanceIndex() : 0u;
   h.o2w = hit ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+#ifdef RT_SCENE_REBASE
+  // Ray t is translation-invariant. Return transforms in lighting space so
+  // callers reconstruct lighting-relative hit positions as before.
+  if (hit) {
+    float3 delta = rt_scene_translation();
+    h.o2w[0][3] -= delta.x;
+    h.o2w[1][3] -= delta.y;
+    h.o2w[2][3] -= delta.z;
+  }
+#endif
   return h;
 }
 
@@ -651,6 +689,9 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
+#ifdef RT_SCENE_REBASE
+  r.Origin = rt_scene_ray_origin(o);
+#endif
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;

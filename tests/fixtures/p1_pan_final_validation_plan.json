@@ -1,0 +1,11 @@
+[
+  {
+    "seconds": 90,
+    "repeat_ms": 0,
+    "scan": 32,
+    "capture_at": 30,
+    "serial": 10,
+    "motion_start": 25,
+    "motion_end": 40
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "capture_at": 20,
+    "serial": 11,
+    "repeat_ms": 0,
+    "motion_end": 40,
+    "motion_start": 25,
+    "seconds": 45,
+    "scan": 32
+  },
+  {
+    "capture_at": 20,
+    "serial": 12,
+    "repeat_ms": 0,
+    "motion_end": 40,
+    "motion_start": 25,
+    "seconds": 45,
+    "scan": 32
+  },
+  {
+    "capture_at": 30,
+    "serial": 13,
+    "repeat_ms": 100,
+    "motion_end": 40,
+    "motion_start": 25,
+    "seconds": 90,
+    "scan": 32
+  },
+  {
+    "capture_at": 30,
+    "serial": 14,
+    "repeat_ms": 33,
+    "motion_end": 40,
+    "motion_start": 25,
+    "seconds": 90,
+    "scan": 30
+  }
+]

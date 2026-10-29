@@ -1,0 +1,234 @@
+{
+  "job": {
+    "job": "p1-pan-positive-fg-off",
+    "run": 1,
+    "start": "2026-10-29T10:04:14",
+    "sec": 344,
+    "valid": true,
+    "outcome": "Run ended: done after 342s (exclusive)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "a0bb416 Repair pan transport and capture GPU scene pose for positive control | core 10:01:42",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p1-pan-positive-fg-off.1.100414.log",
+    "captures": [],
+    "lines": [
+      "10:08:59.495  [pan] burst 4 complete: 16 frames, 160 samples, transport ok -> C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\pan-20261029-100857-4",
+      "10:09:01.454  [core] rt stats (120 frames, alpha test on): primary-ray check match 30.922%, in front 37.565% (opaque geometry 0.000, vt cutouts 0.000, tex cutouts 0.000), behind 27.051% (through vt 0.000, tex 0.000), miss 4.462%",
+      "10:09:54.532  [watch] presents 104 (displayed 104) | pipelines 0 (0 ms in driver) | shader modules 0 | descriptor writes 49 | submits 417 | draws 296671",
+      "10:09:53.729  [ngx] gpu RR: guides 0.001 ms + evaluate 2.415 ms = 2.416 ms (avg of 103)"
+    ],
+    "session": "",
+    "core_gen": null,
+    "saved_sec": 0
+  },
+  "quality_status": "INVALID: final image missing in all three bursts; no absence-of-flashes claim",
+  "bursts": [
+    {
+      "directory": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\pan-20261029-100557-2",
+      "serial": 2,
+      "counts": {
+        "depth": 16,
+        "scene_pose": 16,
+        "normal": 16,
+        "albedo": 16,
+        "material": 16,
+        "primary": 16,
+        "sun": 16,
+        "local": 16,
+        "gi": 16,
+        "diffuse": 16
+      },
+      "fps": 18.820577164366373,
+      "conversion_camera_offset_candidates": [
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          -3,
+          -2,
+          -1,
+          0,
+          1,
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "directory": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\pan-20261029-100727-3",
+      "serial": 3,
+      "counts": {
+        "depth": 16,
+        "scene_pose": 16,
+        "normal": 16,
+        "albedo": 16,
+        "material": 16,
+        "primary": 16,
+        "sun": 16,
+        "local": 16,
+        "gi": 16,
+        "diffuse": 16
+      },
+      "fps": 16.835016835016834,
+      "conversion_camera_offset_candidates": [
+        [
+          1
+        ],
+        [],
+        [
+          0,
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "directory": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\pan-20261029-100857-4",
+      "serial": 4,
+      "counts": {
+        "depth": 16,
+        "scene_pose": 16,
+        "normal": 16,
+        "albedo": 16,
+        "material": 16,
+        "primary": 16,
+        "sun": 16,
+        "local": 16,
+        "gi": 16,
+        "diffuse": 16
+      },
+      "fps": 18.820577164366373,
+      "conversion_camera_offset_candidates": [
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ],
+        [
+          1
+        ]
+      ]
+    }
+  ]
+}

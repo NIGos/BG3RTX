@@ -186,6 +186,7 @@ void core_init(DeviceData* dd) {
   g_host.root_dir = root_dir().c_str();
   g_host.query_binding = &query_binding;
   g_host.alloc_image = &alloc_image;
+  g_host.pan_capture = &pan_capture;
   g_host.restore_bindings = &restore_bindings;
   g_host.dlss_motion_vectors = &ngx_motion_vectors;
   g_host.rt_scene = &rt_scene;
@@ -196,6 +197,7 @@ void core_init(DeviceData* dd) {
   g_host.assetdb = assetdb_api();
   g_host.rr_active = &ngx_rr_active;
   g_host.rt_scene_set = &rt_scene_set;
+  g_host.rt_scene_camera = &rt_scene_camera;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);
