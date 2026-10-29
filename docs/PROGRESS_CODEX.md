@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 06:33 Europe/Rome
+## Current checkpoint - 2026-10-29 06:40 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -8,12 +8,33 @@
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P3 format/map291 confirms0.09991% incompatible receivers; P1 scene-only exposure control292 is live.
+- P3 map291 confirms0.09991% incompatible receivers; corrected P1 exposure control293 is live.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
 - The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
 
 ## Resumed — 2026-10-29
+
+P1 292 is INVALID despite a superficial statistical pass. The pre-existing
+qa_exposure_hold used CmdUpdateBuffer on a native STORAGE_BUFFER without
+TRANSFER_DST: full VVL reports1262 dstBuffer-00034 errors. Never interpret its
+apparent+1.4378% paired/+0.4944% original-PRE intervals (both broad/include0) as
+valid exposure isolation. Six off controls were RGB-exact, saved alpha/raw/pose
+passed, static<=0.4px and all dumps finite; these do not waive invalid usage.
+Queue also missed a startup-only mouse line outside the scene slice; full log
+proves actual SDL3840x2160/client centre1920,1080/static1. Evidence292 retained.
+
+Separate fix5f84d9b uses a one-thread storage shader on the ACTUAL adaptation
+dispatch binding1/1, including dynamic offset, storage type/24-byte range checks,
+existing descriptor12/push/ring, compute dependencies and restored native bindings.
+Missing input/pipeline REFUSED, successful writes only counted on dispatch. No
+new native allocation/usage/ABI/transport or production exposure change.12 CTests
+and11 post shader entries compile; ten previous entry binaries identical3d411aa.
+bfb723b records invalid evidence and replaces the session's startup-only expect
+with recurring PRE metadata.293 LIVE frozen P1 bfb723b, runner308 at06:40:14 after
+fresh idle/playing checks. Require no hold refusal/usage error plus full audits
+before interpreting the repeated12 static AB/BA captures; moving gate still open.
+
 
 291 execution PASS139s/48s session, nine loaded-scene windows:2,950,041,600
 receivers,2,947,407 failing (0.0999107%),17,700,249,600 bounded channels with

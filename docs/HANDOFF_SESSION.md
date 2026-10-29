@@ -24,30 +24,30 @@ Fresh limits confirmed0% used/ordinary usage allowed. Never retry the successful
 Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 3d411aa, pushed, paired ABI14.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan bfb723b, pushed, paired ABI14.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b913e8e, paired ABI9, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
-Old research: pan-motion-vectors/BG3RTX 929be7a; motion-jitter/BG3RTX 53f0925.
-Import only needed work, no unrelated FG. Old-SHA map is preserved under
-D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history.
+Old research/provenance is preserved in PROGRESS_CODEX and
+D:/BG3_Tools/git_backup/commit-map-old-to-new.txt. No unrelated FG imports.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Live job and immediate next action
-292 LIVE frozen P1 3d411aa, paired ABI14. Runner3980 started06:32:25.
+293 LIVE frozen P1 bfb723b, paired ABI14. Runner308 started06:40:14.
 Fresh launch checks found no user marker, game/runner or pending/running jobs.
-Existing qa_exposure_hold1 applied after scene-ready session only; warmup15s,
-12 static AB/BA traces, production strength1/AO1/shared stream/geometric gate.
-Require actual held writes, static/raw finite/saved alpha, both paired/original-PRE
-noise intervals and full VVL audit. No new exposure transport or compensation.
-Freeze P1 until terminal. This can isolate a cause, NEVER close moving quality.
-P3 291 PASS execution139/48s:2.950B receivers,0.0999107% format-incompatible,
-mean outside-interval excess3.50383e-6Y;0 invalid/unbounded. Standard class2.919M
-failures/2.804B, skin26926/947525; tiny other classes. Raw map d156 has sparse red
-points on platform rims/details/characters. Cause remains unproved; native
-accuracy, cookie/unknown-pair/moving gates OPEN.62 modules/no refusals/faults.
-Final finite; D32F6402 nonfinite retained, scoped layout/push/write absent,
-other VVL unresolved. P3 b913e8e records evidence; ordinary shaders unchanged.
+292 INVALID: pre-existing exposure hold used CmdUpdateBuffer on STORAGE-only
+native buffer (1262 dstBuffer-00034 violations). Apparent statistical pass is NOT
+valid; broad CIs and exact off controls cannot waive an invalid write.
+5f84d9b fixes the QA hold with a1-thread storage shader on ACTUAL dispatch target,
+24-byte/type checks, existing descriptor12/push/ring and compute barriers/restore.
+No new ABI/resource/transport; key0 unchanged.12 CTests, all11 post entries compile,
+10 previous entry binaries identical3d411aa. Separate fix/evidence commits pushed.
+293 repeats12 static AB/BA captures, scene-only hold/15s warmup, production GI/AO1.
+Require no hold REFUSED/update-usage errors, actual held probes, static/finite/
+saved alpha and paired/original-PRE intervals. Freeze P1 until terminal.
+P3 291 terminal:0.0999107% format-incompatible over2.950B receivers, mean outside
+excess3.50383e-6Y. Mostly standard/skin, sparse red rim/detail points; cause open.
+Native accuracy, cookie/unknown-pair/moving gates OPEN. Other VVL unresolved.
 One reset consumed at weekly100%; fresh quota0% confirmed, credits0.
 
 ## P1 - pan instability remains OPEN
@@ -124,8 +124,7 @@ layer/hitmat.cpp / shaders/rt/rt_hitmat.hlsli. See docs/P2_PENDING_MERGES.md.
 250 FULL variant bit differences remain open, never waived by DEFAULT success.
 267 activates native set3/two offsets; precision upgrade uses Q24/165 counters.
 270 has no positive signal.273 GI0 still zero because debug4 prep forces AO0;
-native direct flag1 suppresses direct terms too.275 debug6/AO1 confirms positive
-inputs over3.236B samples, invalid0, but native ambient/in-scatter remains.
+native direct flag1 suppresses direct terms too.275 debug6/AO1 has positive inputs but retains ambient/in-scatter.
 277 ONE AO1 box0/1: seven/nine pure windows, absolute difference falls67.3994%.
 Ambient and nonzero overshoot1.258e-6 prevent a total native-accuracy claim.
 278 S6 debug0 normal GI: ten windows,1.319 rays/px,0.738 occluded/px; final finite.
