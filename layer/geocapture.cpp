@@ -869,6 +869,23 @@ void release(Capture& c) {
 
 }  // namespace
 
+bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination) {
+  if (!source || !destination || !ubo_pipeline()) return false;
+  VkDescriptorBufferInfo in{source, offset, 224}, out{destination, 0, 256};
+  VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+  w[0].dstBinding = 0; w[0].descriptorCount = 1;
+  w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; w[0].pBufferInfo = &in;
+  w[1].dstBinding = 1; w[1].descriptorCount = 1;
+  w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; w[1].pBufferInfo = &out;
+  g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ubo_pipe);
+  g_dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ubo_pl, 0, 2, w);
+  p_dispatch(cmd, 1, 1, 1);
+  barrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+          VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+  restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
+  return true;
+}
+
 // ================= host-facing entry points =================
 
 const VkDeviceCreateInfo* geo_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,

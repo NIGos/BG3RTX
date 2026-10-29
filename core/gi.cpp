@@ -1385,6 +1385,10 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
             refresh(g_ao_apply, "gi/gi_ao_apply.hlsl") & refresh(g_composite, "gi/gi_composite.hlsl") &
             refresh(g_contact, "gi/gi_contact.hlsl");
   if (!ok) return false;
+  if (host->cfg_int("pan_prepare", 0) && g_rt_layout) {
+    refresh(g_pan_primary, "gi/pan_primary.hlsl", g_rt_layout);
+    if (g_ls_layout) refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout);
+  }
   if (!g_images_ready) {
     for (Bg3Image* im : all_images)
       image_layout(cmd, im->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,

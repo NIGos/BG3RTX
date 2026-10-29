@@ -780,7 +780,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL GetSwapchainImagesKHR(VkDevice device, VkS
     }
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     for (uint32_t i = 0; i < *count; ++i) {
-      if (tracker().images.count(images[i])) continue;
+      auto known = tracker().images.find(images[i]);
+      if (known != tracker().images.end()) {
+        // Interposed swapchain images may already have passed CreateImage.
+        // They still are presentation images, not ordinary offscreen targets.
+        known->second.swapchain = true;
+        continue;
+      }
       ImageRec rec{tracker().next_image_id++, {}, true};
       rec.ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
       rec.ci.imageType = VK_IMAGE_TYPE_2D;

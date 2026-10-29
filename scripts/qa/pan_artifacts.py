@@ -47,6 +47,16 @@ def camera(primary):
     return matrix, values[12:14], values[14:16], values[16:19]
 
 
+def world_normals(encoded, primary):
+    values = np.frombuffer(np.rint(primary[0,:48]).astype('u1').tobytes(),'<f4')
+    rotation = values[20:36].reshape(4,4)[:3,:3]
+    e = encoded*3.5554-1.7777
+    s = 2/(np.sum(e*e,axis=-1)+1)
+    n = np.concatenate([e*s[...,None],(1-s)[...,None]],axis=-1) @ rotation
+    n /= np.maximum(np.linalg.norm(n,axis=-1,keepdims=True),1e-20)
+    return n
+
+
 def reproject(depth, source_camera, target_camera):
     """Source pixels -> target pixels and expected target linear depth."""
     h, w = depth.shape
@@ -78,14 +88,13 @@ def stable_samples(anchor, target):
     good &= (depth > 0) & (np.abs(td[iy,ix]-z) <= bound[iy,ix])
     good &= np.max(np.abs(anchor['albedo']-target['albedo'][iy,ix]), axis=-1) <= 1/255
     good &= np.all(anchor['material'] == target['material'][iy,ix], axis=-1)
-    # Normals are view-space. Compare their encoded values only for unchanged
-    # orientation; rotating-camera support must transform them before acceptance.
-    if not np.allclose(anchor['camera'][0], target['camera'][0], rtol=0, atol=1e-6):
-        good[:] = False
-    else:
-        na, nt = anchor['normal'], target['normal'][iy,ix]
-        normal_bound = np.maximum(np.abs(na), np.abs(nt))*2**-10 + 2**-14
-        good &= np.max(np.abs(na-nt)-normal_bound, axis=-1) <= 0
+    na, nt = anchor['world_normal'], target['world_normal'][iy,ix]
+    # Stereographic decoding has derivative <= 2; the encoding scale is 3.5554.
+    # FP16 may choose either adjacent value. Add half-pixel normal variation.
+    ny,nx = np.gradient(target['world_normal'],axis=(0,1))
+    footprint = (np.linalg.norm(nx,axis=-1)+np.linalg.norm(ny,axis=-1))*.5
+    rounding = 2*3.5554*np.sqrt(2)*2**-10*2
+    good &= np.linalg.norm(na-nt,axis=-1) <= rounding + footprint[iy,ix]
     good[0] = False
     return iy, ix, good, motion
 
@@ -118,21 +127,22 @@ def load_burst(directory):
         # The last swapchain write in this record frame is the final candidate.
         f[e['name']] = decode(directory/e['file'], e)
         f.setdefault('submits', {})[e['name']] = e['submit_frame']
+        if e['name'] == 'depth': f['time_ms'] = e.get('time_ms')
     indices = sorted(frames)
     if len(indices) != 16 or np.any(np.diff(indices) != 1):
         raise ValueError('burst is not 16 consecutive frames')
-    required = {'depth','normal','albedo','material','primary','sun','local','gi','final'}
+    required = {'depth','normal','albedo','material','primary','sun','local','gi','final','scene_pose'}
     for i in indices:
         f = frames[i]
         missing = required-f.keys()
         if missing:
             raise ValueError(f'frame {i}: missing {sorted(missing)}')
         f['camera'] = camera(f['primary'])
+        f['world_normal'] = world_normals(f['normal'],f['primary'])
         if not all(np.isfinite(f[k]).all() for k in required):
             raise ValueError(f'frame {i}: nonfinite capture')
         h,w = f['depth'].shape[:2]
         final = f['final'][...,:3]
-        f['final_small'] = np.asarray(Image.fromarray((np.clip(final,0,1)*65535).astype('u2')[...,0], mode='I;16').resize((w,h)), dtype='f4')/65535
         # Resize RGB channels separately, preserving final encoded luminance.
         f['luma'] = sum(np.asarray(Image.fromarray(final[...,c],mode='F').resize((w,h)),dtype='f4')*weight
                         for c,weight in enumerate((.2126,.7152,.0722)))
@@ -168,6 +178,23 @@ def analyze(directory, out):
               'rt_gbuffer_pose_offset_frames':None,
               'pose_offset_status':'not established: record/submit indices are not pose identity',
               'gate':'INCOMPLETE: requires independent static calibration and pose alignment evidence'}
+    times = [frames[i]['time_ms'] for i in ids]
+    if all(t is not None for t in times) and times[-1] > times[0]:
+        report['burst_fps'] = 15000/(times[-1]-times[0])
+        report['frame_intervals_ms'] = np.diff(times).tolist()
+    offsets = []
+    for index in range(3,13):
+        light_origin = frames[ids[index]]['camera'][3]
+        candidates = []
+        for delta in range(-3,4):
+            scene = frames[ids[index+delta]]['scene_pose'].reshape(-1)[52:55]
+            if np.array_equal(scene,light_origin.astype('f4')): candidates.append(delta)
+        offsets.append(candidates)
+    report['conversion_camera_offset_candidates'] = offsets
+    unique = [x[0] for x in offsets if len(x)==1]
+    if len(unique)==10 and len(set(unique))==1:
+        report['rt_gbuffer_pose_offset_frames'] = unique[0]
+        report['pose_offset_status'] = 'exact GPU conversion-camera origin match; instance-transform timing not yet proven'
     # A conservative exploratory threshold: largest adjacent static-repeat
     # difference, plus the storage quantum. With no static samples, do not score.
     is_static = max(m for m in movements if m is not None) < .5 if any(m is not None for m in movements) else False
@@ -217,7 +244,10 @@ def main():
                 for column,index in enumerate(chosen):
                     rgb = np.clip(frames[ids[index]]['final'][...,:3],0,1)
                     im = Image.fromarray((rgb*255).astype('u1')).resize((640,360))
-                    mask = flagged[index]
+                    anchor = frames[ids[7]]
+                    iy,ix,_,_,_ = reproject(anchor['depth'][...,0],anchor['camera'],frames[ids[index]]['camera'])
+                    mask = np.zeros_like(flagged[index])
+                    mask[iy[flagged[index]],ix[flagged[index]]] = True
                     # Outline every flagged region using the binary four-neighbour boundary.
                     inside = mask.copy()
                     inside[1:] &= mask[:-1]; inside[:-1] &= mask[1:]

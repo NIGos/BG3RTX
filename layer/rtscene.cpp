@@ -111,6 +111,9 @@ struct SceneSlot {
   VkDescriptorSet set = VK_NULL_HANDLE;
   bool split = false;
   uint64_t rec = 0;   // build record of the command buffer it was recorded into (bvhsplit.cpp)
+  VkBuffer pose = VK_NULL_HANDLE;
+  VkDeviceMemory pose_memory = VK_NULL_HANDLE;
+  bool pose_valid = false;
 };
 uint64_t g_legacy_rec = 0;   // the legacy BLAS's last build: refit only once it was submitted
 SceneSlot g_scene[kSceneSlots];
@@ -703,6 +706,11 @@ void rt_device_destroyed(DeviceData* dd) {
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();
+    for (auto& s : g_scene) {
+      defer_destroy(BG3_DEFER_BUFFER, uint64_t(s.pose));
+      defer_destroy(BG3_DEFER_MEMORY, uint64_t(s.pose_memory));
+      s.pose = VK_NULL_HANDLE; s.pose_memory = VK_NULL_HANDLE; s.pose_valid = false;
+    }
     defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_pipe));
     defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
     defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_dsl));
@@ -849,6 +857,14 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   // this frame, the previous scene stays current.
   const int scene_slot = pick_scene_slot();
   if (scene_slot < 0) return;
+  SceneSlot& scene = g_scene[scene_slot];
+  scene.pose_valid = false;
+  if (cfg_int("pan_capture", 0) > 0 || cfg_int("pan_prepare", 0)) {
+    void* mapped = nullptr;
+    if (!scene.pose) alloc_host_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                      &scene.pose, &scene.pose_memory, &mapped);
+    scene.pose_valid = geo_copy_camera(cmd, ubo, ubo_offset, scene.pose);
+  }
   note_camera(cap);
   fault_track("soup (XFB capture)", buffer_address(xfb), cap.xfb_size);
   const DeviceData* dd = g_dd;
@@ -1054,6 +1070,11 @@ bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame) {
   if (!g_rt) return false;
   std::lock_guard<std::mutex> lock(g_mu);
   return hand_out(tlas, nullptr, built_frame);
+}
+
+VkBuffer rt_scene_pose() {
+  std::lock_guard<std::mutex> lock(g_mu);
+  return g_scene_cur >= 0 && g_scene[g_scene_cur].pose_valid ? g_scene[g_scene_cur].pose : VK_NULL_HANDLE;
 }
 
 bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {

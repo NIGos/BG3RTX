@@ -502,7 +502,9 @@ while ((Get-Date) -lt $deadline) {
         Write-Host "[pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms)"
         $panCaptureSent = $true
       }
-      if ($step.repeat_ms -gt 0 -and (Get-Date) -ge $panNextKey) {
+      $panInMotion = $step.repeat_ms -gt 0 -and $elapsed -ge $step.motion_start -and $elapsed -lt $step.motion_end
+      if (-not $panInMotion -and $moving) { Send-MoveKey $false; $moving = $false }
+      if ($panInMotion -and (Get-Date) -ge $panNextKey) {
         $MoveScan = [byte]$step.scan
         $moveVk = if ($MoveScan -eq 0x1e) { 0x41 } else { 0x44 }
         Send-MoveKey $true $moving; $moving = $true

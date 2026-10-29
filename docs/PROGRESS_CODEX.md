@@ -2,6 +2,20 @@
 
 ## P1 transient shadow flashes resumed — 2026-10-29
 
+Positive control is mandatory before any renderer fix. User permits a visible
+second-plane window while using the PC; USER_AWAY is not required by the latest
+instruction. Never run with USER_PLAYING or a user-owned game. Use real present,
+normal frame rate, FG off first and FG on if reproduction fails. Restore display
+settings. Report mode and measured burst fps, not just the uncaptured baseline.
+
+Transport smoke 56d0d4a: real presentation, FG off, background focus protection,
+static camera, roughly 20 fps outside capture. Primary match 99.563%. The analyzer
+correctly rejects all 16 frames because the final image is missing. No symptom
+reproduced yet; no lag fix. First-burst shader compilation also confounds cadence.
+Next test fixes swapchain-image classification, prewarms diagnostic pipelines and
+captures the conversion camera on the GPU alongside its scene slot. The normal
+renderer remains uncorrected for the required positive control.
+
 The user explicitly resumed P1 with transient dark walls while panning. This
 supersedes the old pause and P2 priority below. FG toggle errors and the roughly
 18 fps base rate follow P1. Branch: `codex/p1-pan-flashes`.

@@ -530,6 +530,7 @@ struct PanSample {
   Dump dump{};
   std::string name;
   uint64_t recorded = 0, submitted = UINT64_MAX, built = UINT64_MAX;
+  uint64_t time_ms = 0;
 };
 std::mutex pan_mu;
 std::vector<PanSample> pan_samples;
@@ -564,6 +565,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   PanSample p;
   p.name = name;
   p.recorded = now;
+  p.time_ms = GetTickCount64();
   p.dump.cmd = cmd;
   p.dump.format = r->format;
   p.dump.depth = is_depth_format(r->format);
@@ -583,6 +585,39 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   }
   pan_bytes += bytes;
   pan_samples.push_back(std::move(p));
+  if (std::strcmp(name, "depth") == 0) {
+    VkBuffer source = rt_scene_pose();
+    if (source) {
+      PanSample pose;
+      pose.name = "scene_pose"; pose.recorded = now; pose.time_ms = GetTickCount64();
+      pose.built = pan_samples.back().built;
+      Dump& d = pose.dump;
+      d.cmd = cmd; d.w = 56; d.h = 1; d.texel = 4; d.size = 224; d.format = VK_FORMAT_R32_SFLOAT;
+      DeviceData* dd = device_of(cmd);
+      VkBufferCreateInfo ci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+      ci.size = d.size; ci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+      bool ok = dd->vk.CreateBuffer(dd->device, &ci, nullptr, &d.buffer) == VK_SUCCESS;
+      if (ok) {
+        VkMemoryRequirements req{}; dd->vk.GetBufferMemoryRequirements(dd->device, d.buffer, &req);
+        VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        ai.allocationSize = req.size; ai.memoryTypeIndex = host_memory_type(dd, req.memoryTypeBits);
+        ok = ai.memoryTypeIndex != UINT32_MAX && dd->vk.AllocateMemory(dd->device, &ai, nullptr, &d.memory) == VK_SUCCESS;
+        if (ok) ok = dd->vk.BindBufferMemory(dd->device, d.buffer, d.memory, 0) == VK_SUCCESS;
+      }
+      if (ok) {
+        VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+        barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                  0, 1, &barrier, 0, nullptr, 0, nullptr);
+        VkBufferCopy copy{0,0,224}; dd->vk.CmdCopyBuffer(cmd,source,d.buffer,1,&copy);
+        pan_samples.push_back(std::move(pose));
+      } else {
+        pan_invalid = true;
+        defer_destroy(BG3_DEFER_BUFFER,uint64_t(d.buffer));
+        defer_destroy(BG3_DEFER_MEMORY,uint64_t(d.memory));
+      }
+    }
+  }
   return true;
 }
 
@@ -639,6 +674,7 @@ void pan_on_present(VkQueue queue) {
     manifest += (first ? "" : ",") + std::string("{\"name\":\"") + p.name + "\",\"file\":\"" + file +
         "\",\"record_frame\":" + std::to_string(p.recorded) + ",\"submit_frame\":" + std::to_string(p.submitted) +
         ",\"tlas_record_frame\":" + std::to_string(p.built) + ",\"format\":" + std::to_string(d.format) +
+        ",\"time_ms\":" + std::to_string(p.time_ms) +
         ",\"width\":" + std::to_string(d.w) + ",\"height\":" + std::to_string(d.h) + "}";
     first = false;
     defer_destroy(BG3_DEFER_BUFFER, uint64_t(d.buffer));

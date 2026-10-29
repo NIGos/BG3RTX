@@ -270,6 +270,8 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* resour
 void pan_on_submit(const std::vector<VkCommandBuffer>& cmds);
 void pan_on_present(VkQueue queue);
 void pan_pass_end(VkCommandBuffer cmd, CmdState* s);
+bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination);
+VkBuffer rt_scene_pose();
 
 // ---- Streamline DLSS-G (streamline.cpp) ----
 // Instance/device creation: merge Streamline's requirements into the game's.
