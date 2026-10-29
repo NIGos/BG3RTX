@@ -16,7 +16,6 @@ push main and the work branches, then stop. Work autonomously in the meantime.
 - Do not use Ponytail, its skills, hooks or instructions.
 User explicitly resumed on Oct29. P1 energy preservation has first priority.
 One usage reset is authorized if needed at the limit; not used yet.
-Put future questions atop PROGRESS_CODEX and continue conservative/offline work.
 ## Main and research state
 Main includes P6 water design; rendering remains 6dba0a8. No P1 feature merged.
 Remote: origin, private NIGos/BG3RTX. Preserve all snapshot tags and backups.
@@ -34,9 +33,8 @@ moving trajectories cannot establish a P1 improvement.
 Old research proves finite fallback/paired depth/radiance and observed motion;
 metadata overlap fixed. No pan-quality or additional camera-payload proof.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now bd4215c, pushed. It excludes
-unrelated FG work. Old current-radiance replay is default-off, paired ABI14;
-scope/evidence: phase docs/CURRENT_RADIANCE.md. No pan-quality win established.
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 066e59b, pushed. It excludes
+unrelated FG. Current-radiance replay stays off, ABI14; docs/CURRENT_RADIANCE.md.
 Latest user steering: STOP cross-run image comparisons. Use a per-run reprojection
 residual or alternate the key within ONE moving run. Do not block on AO counters;
 compare their key-off control on the same build and obtain the pan number.
@@ -61,8 +59,7 @@ unused neighbours. Bounds unchanged; 6 surface shaders/20 ABI checks pass and
 7 ordinary shaders byte-identical. 248 valid: 403 s total/57 s moving session,
 zero faults; off/on residual 0.151384/0.064525, GI Y 0.321177/0.008690,
 coverage 13.3877%/7.1512%. Unequal cohorts/energy: still no quality win.
-Same-frame legacy/gated raw pairs in 242/243 confirm the OLD five-texel gate
-removes 71.8–99.9% of bounce energy; alpha identical in all four captures.
+242/243 old five-texel gate loses71.8–99.9% energy; saved alpha identical.
 249 VALID, 217 s, zero faults/dumps/build changes. Point-footprint paired raw
 bounce Y falls 70.66%/87.96%; alpha identical over 2,731,520 px per pair, finite,
 pose valid, eleven GPU predicate cases pass. Normal/depth reject 52.35%/22.46%
@@ -95,8 +92,11 @@ bd4215c independent gi_history_diffuse_exact=0 stores complete diffuse RGB,
 removing legacy reflected-colour mixture; original complete RF source retained.
 Requires fresh1; gate0 isolates. Metric2 selects exact-source key, adds RGB
 residual on same cohort. Fixed metadata3 across toggles; no new transport.
-11 CTests/8 shaders/24 ABI/5 energy checks/7 ordinary identical pass. 261 LIVE
-unlimited-sync two-capture smoke; then static12 and ONE moving source toggle.
+11 CTests/8 shaders/24 ABI/5 energy checks/7 ordinary identical pass.
+261 smoke valid117s/static0.12px/AO pass/no faults; VVL existing2647 hazards,
+zero dispatch/private-handle/new-metadata messages (scoped, not clean).
+066e59b gate0 now retains original unavailable-source policy; gate1 still fresh.
+262 LIVE twelve static exact-source captures, gate0. Then ONE source-toggle pan.
 Spec docs/GI_DIFFUSE_EXACT.md. All keys0; no quality/default/main approval.
 Spec: phase docs/GI_FRESH_FALLBACK.md. Never report moving captures as static pass.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
@@ -127,7 +127,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 codex/p3-box 8d40fdc (p2-pending/BG3RTX), default off. 250 INVALID: 21 windows/6.862B pixels, 12,304 any-bit differences, zero >1e-5/one-writer differences, no driver faults. ls_stats=1 selects full variant, unlike earlier golden control. No activation-on run or merge; defer to P1.
+- P3 codex/p3-box ec68966 (p2-pending/BG3RTX), default off. 250 INVALID: 21 windows/6.862B pixels, 12,304 any-bit differences, zero >1e-5/one-writer differences, no driver faults. ls_stats=1 selects full variant, unlike earlier golden control. Fixture now pins stats0/samples0 default path like golden P2; FULL differences remain open. No box-on run/merge; defer to P1.
 - P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.

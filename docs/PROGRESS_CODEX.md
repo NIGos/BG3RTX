@@ -2,6 +2,21 @@
 
 ## Resumed — 2026-10-29
 
+261 exact-diffuse smoke valid117s: zero driver faults/dumps/build changes,
+finite/GPU-pose/PRE-alpha pass, static shift0.12px. Off/on Y0.017292882/
+0.017589541, PRE0.017282156/0.017571717; two samples are not an energy pass.
+Unlimited sync validation reports2647 existing renderpass/NGX-category hazards,
+zero dispatch hazards or messages naming21 private source handles/new metadata.
+Scoped evidence, not a clean VVL certificate; raw log retained on P1.
+066e59b fixes a control confound: gate0 no longer substitutes fresh lighting
+when original history is unavailable; gate1 still tries fresh on every rejection.
+Exact-source key can now be isolated without adding edge samples. Static exports
+also report PRE/POST RGB bit differences. 262 is the frozen twelve-capture
+exact-source static run, surface gate0, original-PRE target retained.
+P3 ec68966 (offline): reference fixture now explicitly selects default path
+(ls_stats=0,ls_samples=0,ls_debug=0), matching accepted P2 controls. FULL-variant
+bit differences from250 remain open; no threshold relaxed/runtime pass claimed.
+
 260 four-ray diagnostic: valid118s/52s session, zero faults/dumps/build changes.
 Within-run off/on residual0.281396/0.260002 (-7.60%), but cohort GI Y0.155257/
 0.015238 (-90.19%), motion74.61/80.65px; off has strong radiance spikes. No
