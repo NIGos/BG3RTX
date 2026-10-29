@@ -123,7 +123,18 @@ black final rendering or an accepted recompute. Keep quality/shadow gates open.
 
 The next isolated signal probe is prepared in
  tests/fixtures/p3_box_s6_native_ao_probe.json: box1/debug4, GI off, native AO
-untouched, 35 s hold. It still requires actual activation, positive native AND
+requested (but debug4 prep itself forces AO0), 35 s hold. It still requires actual activation, positive native AND
 recomputed populations and invalid0. This is a native-lighting recompute control,
 not a GI-off quality workaround or approval of production GI/box interaction.
 Run it only after runnable P1 tests have had queue priority.
+
+273 GI-off signal control: INVALID positive-signal gate,108s total/48s session,
+no faults/dumps/build changes. Positive native/recompute counts remain0;
+GI folding is not required to produce the zero-signal comparison. Code audit
+finds validation prep itself forces AO0 for debug4, independently of GI. Native
+flags m0.x=1,m0.y=1 then suppress direct diffuse/specular too. The earlier phrase
+native AO untouched was wrong for this fixture; preserve273 as negative evidence.
+Next existing debug6 forces AO1 and removes the sun; it should reveal positive
+native/recomputed values, but native ambient is also present. Therefore it is
+ONLY a positive-signal/one-sided overshoot control, never total recompute parity.
+No new rendering code or counter is necessary to distinguish this hypothesis.
