@@ -1,6 +1,31 @@
 # BG3RTX progress
 
+## Current checkpoint — 2026-10-29 03:42 Europe/Rome
+
+- Main rendering remains 6dba0a8; the P6 water design is merged.
+- P1 source-key pan tests have not demonstrated a quality gain; all variants stay off.
+- Geometry runs 265–266 are INVALID because base passes lacked origin binding 40.
+- P1 7e91e6d fixes layout and writes together; 12 CTests and 24 ABI checks pass.
+- Probe 268 measures zero current ray/projection offset PRE and POST; positions stay native.
+- Job 269 is checking the corrected binding with unlimited validation before more quality runs.
+- P3 default reference passes: 24 windows, 7.845 billion pixels, zero differences.
+- P3 activation works; accuracy remains inconclusive. Higher-precision projector sums await runtime.
+- EN2/D-EM stay off; P4 has a tested CPU classifier, while GPU integration and P5 remain open.
+- One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
+
 ## Resumed — 2026-10-29
+
+Full validation audit invalidates geometry runs 265 and 266: base surface passes
+lacked declared/bound origin image 40 (VUID 07988). Their energy/rejection numbers
+are retained as INVALID observations, not algorithm evidence. The separate 15-case
+math kernel and four-binding projection kernel do not use image 40. P1 7e91e6d
+shares the base layout/write contract (20/40/48), with a compiled pointer/type test
+and reflection derived from that header. All 12 CTests and 24 ABI checks pass.
+269 is the frozen unlimited-VVL repeat; inspect ALL layout/binding/pipeline errors.
+268 isolated probe: all three captures have zero B1/B2 offset within arithmetic
+error, PRE equals POST despite nonzero jitter. No position correction is justified.
+P3 8cb61f0 adds bounded exact uint64 projector sums with 24 fractional bits and
+nonzero/invalid counts; default/check shaders stay byte-identical. Runtime pending.
 
 266 geometric static12 FAILS off/on noise parity: +0.46644%, CI
 [+0.000041845,+0.000119520]Y. Pooled PRE target includes0 but cannot override
@@ -18,7 +43,7 @@ gate0; do not infer which matrix is jittered or MV sign from an offset alone.
 changes; native set3 binds with2 dynamic offsets, projector evaluations nonzero
 (last1.319/px). Accuracy INCONCLUSIVE: reported game/recompute means0, while fx
 quantizes raw radiance at1/256 and native scale0.00136865. Zero counters do not
-prove black rendering or agreement. VVL full log retained; contains native/SDK
+prove black rendering or agreement. VVL full log retained; contains unresolved
 format/event/layout categories, no set3-naming message; no clean certificate.
 Debug4 did not exercise shadow rays. P3 f63da03 pushed/default off; next recover
 sufficient projector-stat precision or raw signal before assessing accuracy.
