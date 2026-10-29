@@ -1,0 +1,52 @@
+[
+ {
+  "seconds": 30,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 30,
+  "motion_end": 30,
+  "set": "rt_build=auto,rt_dyn_hold=0,rt_primary_check=1,rt_primary_epoch=1"
+ },
+ {
+  "seconds": 40,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 40,
+  "motion_end": 40,
+  "set": "rt_build=auto,rt_dyn_hold=0,rt_primary_check=1,rt_primary_epoch=1"
+ },
+ {
+  "seconds": 40,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 40,
+  "motion_end": 40,
+  "set": "rt_build=auto,rt_dyn_hold=4,rt_primary_check=1,rt_primary_epoch=1"
+ },
+ {
+  "seconds": 40,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 40,
+  "motion_end": 40,
+  "set": "rt_build=auto,rt_dyn_hold=0,rt_primary_check=1,rt_primary_epoch=1"
+ },
+ {
+  "seconds": 40,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 40,
+  "motion_end": 40,
+  "set": "rt_build=auto,rt_dyn_hold=4,rt_primary_check=1,rt_primary_epoch=1"
+ }
+]

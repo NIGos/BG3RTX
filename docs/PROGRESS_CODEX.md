@@ -1,5 +1,18 @@
 # BG3RTX progress
 
+## Static shadow flicker: rt_dyn_hold=4 on by default (supervisor) — 2026-10-29 18:00
+
+User report: small polygonal RT shadow patches flicker now and then with the camera still.
+Cause (rt_stability_log=1, "[bvh] static-camera draw diff"): BG3 LOD swaps replace a captured
+draw by its other LOD in one frame (e.g. 154 <-> 310, 784 -> 1570 triangles), sometimes
+alternating every 2 frames; RT shadows follow the swap. rt_dyn_hold=4 keeps a vanished captured
+draw (up to rt_dyn_hold_max_prims=8192 triangles, GPU snapshot of its soup) in the TLAS for 4
+frames while the camera is static; all holds drop when it moves.
+Job sup-dyn-hold3-fg2 (FG 2, static, live A/B): same-frame swaps off 1/4/7 per 40 s window,
+on 0/0 (46/42 holds); static primary match 99.524-99.525% both; scene build GPU 0.22 -> 0.41 ms.
+User check: static camera, any save, watch small shadows for a minute.
+Codex wrote the first version (f7dacc4); the supervisor added the reason counters and the size cap.
+
 ## P1 same-frame scene + P3 CPU fix (supervisor) — 2026-10-29 17:25
 
 rt_scene_wait=1 is now the default (user decision 17:35). In-game check: FG on, any save,

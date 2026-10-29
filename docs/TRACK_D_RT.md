@@ -2264,6 +2264,21 @@ gives: where its vertices are (the mesh pool, binding 8, object space; or the so
 - Opaque draws' instances are `FORCE_OPAQUE`. `rt_alpha_test=0` forces all instances
   opaque, as before.
 
+### Static-camera LOD retention (`rt_dyn_hold`, 2026-10-29)
+
+BG3 alternates captured LOD draws every two frames even with the camera still
+(sup-static-flicker3-fg2: 380 / 764 and 310 / 154 primitives). `rt_dyn_hold=N`
+keeps a missing captured draw for N frames since its last actual capture (max 120).
+Movement clears all holds. The last submitted BLAS is reused; a GPU copy of all
+positions and UVs lives in the persistent mesh pool, with an identity transform
+and the existing pool InstInfo flag. No shader or host/core ABI change is needed.
+Alpha records retain actual views and material constants, remapped to the current
+scene's descriptor indices. Views and images are protected through the hold window.
+Dropped command buffers cannot supply holds. Pool ranges retire through the existing
+GPU/scene lifetime guard. Held draws never refresh their own expiry.
+Gate pending: QuickSave_3784, FG 2, static camera, live hold 0 / 4 for 40 seconds each;
+alternations within 8 frames, primary match, RT GPU cost. Default remains 0 pending gate.
+
 ### 11.3 Results (RTX 5090, 2560x1067, Steel Watch Foundry, `-Background`)
 
 **Geometry parity.** The same view, live A/B in one run, `rt_debug=3 rt_stats=1`:

@@ -156,6 +156,8 @@ add_executable(camera_epoch_test tests/camera_epoch_test.cpp)
 add_test(NAME camera_epoch_test COMMAND camera_epoch_test)
 add_executable(camera_motion_test tests/camera_motion_test.cpp)
 add_test(NAME camera_motion_test COMMAND camera_motion_test)
+add_executable(dyn_hold_test tests/dyn_hold_test.cpp)
+add_test(NAME dyn_hold_test COMMAND dyn_hold_test)
 add_executable(fg_stability_test tests/fg_stability_test.cpp)
 add_test(NAME fg_stability_test COMMAND fg_stability_test)
 
