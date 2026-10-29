@@ -1,6 +1,14 @@
 # Track D: hardware ray tracing
 
-## P1 lighting-to-scene translation — 2026-10-29, pending runtime gate
+## P1 lighting-to-scene translation — 2026-10-29, gate incomplete
+
+314840d: one real-present foreground FG-off job exited before slow/fast windows.
+Late static primary match off 99.164-99.177%, on 99.157-99.177%, RT active and no
+missing scene in interior windows. Median cadence 17.60 / 17.50 fps. Initial
+static camera drift and early exit invalidate the quality gate. Moving result
+is unknown. No merge; key stays off. On RT-query cost 15.040 ms; off 15.592 ms
+includes camera drift and cannot establish a cost delta. Evidence and next epoch
+hypothesis: docs/evidence/p1-origin-rebase-314840d.json. No further job this turn.
 
 Key: `rt_scene_rebase=0` by default; selector `rt_scene_camera_match=0` stays off.
 All four query producers in rt_common translate ray origins by `C_lighting -
@@ -13,6 +21,7 @@ The instance analyzer proves native `W=M_instance*object` reaches clip space onl
 through the camera-relative `_m2`. Dynamic XFB inverts that same `_m2`; the existing
 mesh extraction and audit compare `M*object` with converted XFB. Both paths thus
 use the source G-buffer camera origin and world axes, not a camera-view rotation.
+This establishes the coordinate convention, not the epoch of the native rows.
 Native instance rows are still read at submit. GPU camera snapshots are read from
 the actual conversion UBO in the build command buffer, into offset 256 of that
 scene slot's expanded stamp buffer. No CPU pose is used to compute the shader

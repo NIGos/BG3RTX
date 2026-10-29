@@ -1,17 +1,30 @@
-# Session handoff — P1 rebasing active, 2026-10-29
+# Session handoff — P1 bounded turn stopped at failed gate, 2026-10-29
 
 The user explicitly resumed P1 for a bounded origin-rebasing fix and ONE
 presented pan A/B. Stop at a clear gate result or approximately two hours.
 No Ponytail ever. Read the top of PROGRESS_CODEX.md for the current outcome.
 
+Bounded result: implementation 314840d, ONE foreground presented FG-off job
+p1-origin-rebase-ab. The game exited after 242 seconds before slow/fast phases.
+Automatic gate FAIL / incomplete; no moving key-on evidence, no merge. Static
+control drifted with the cursor near the window edge. Later off 99.164-99.177%,
+on 99.157-99.177%, active RT / zero missing in interior windows. Median cadence
+17.60 / 17.50 fps. RT-query on cost 15.040 ms, off 15.592 ms confounded by drift.
+Exit cause unknown; no NVIDIA/Aftermath/Application fault found. Cleanup finished;
+no game, runner or queued work remains. Display settings restored. Do not repeat
+the run in this bounded turn. Evidence: docs/evidence/p1-origin-rebase-314840d.json.
+Next hypothesis, not established: native instance rows may use another G-buffer
+epoch than the GPU conversion camera. Compare native GPU rows and TLAS rows with
+the same draw/command identity after fixing static control and premature exit.
+
 Current implementation adds default-off rt_scene_rebase, all four rt_common
 query entry points, scene-specific GPU camera snapshots in the stamped set,
 and cached normal/rebase pipeline variants. Ordinary 21 SPIR-V binaries are
 byte-identical; 19 variants validate. Paired ABI remains 16. Prepared fixtures:
-tests/fixtures/p1_rebase_job.json and p1_rebase_plan.json. Runtime gate pending.
+tests/fixtures/p1_rebase_job.json and p1_rebase_plan.json. Runtime gate incomplete.
 scripts/qa/rebase_gate.py reads retained runner phase clocks and primary/RT/fps
 windows. Missing RT cannot pass. Do not launch a second experiment after a
-clear failure; state the next evidence-based hypothesis. No merge yet.
+clear failure; state the next evidence-based hypothesis. No merge.
 
 ## Checkout
 

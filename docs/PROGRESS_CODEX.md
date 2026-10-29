@@ -1,5 +1,37 @@
 # BG3RTX progress
 
+## P1 rebasing gate FAIL / incomplete — 2026-10-29 12:38 Europe/Rome
+
+Implementation 314840d is kept on the branch, default-off `rt_scene_rebase=0`.
+No merge and no in-game confirmation request. ONE job `p1-origin-rebase-ab`
+ran with foreground focus, real presentation, FG off and QuickSave_3784. It
+exited after 242 seconds, before all four slow/fast windows. Exit cause unknown;
+no NVIDIA 153, Aftermath dump or matching Application error was found. Queue
+execution validity is not a quality pass. Automatic gate: FAIL / incomplete.
+
+The initial static window drifted. The cursor was near the lower window edge;
+it was centred in the owned game at 12:37:38.551. Later static off matches
+99.164-99.177%; static on 99.157-99.177%, RT active with zero missing scenes in
+the interior timing windows. Moving on/off: NOT MEASURED. Static median cadence
+17.60 / 17.50 fps also misses the prepared 18 fps floor. The contaminated static
+calibration is rejected, never relaxed into a passing threshold.
+
+Static RT-query cost off/on median 15.592 / 15.040 ms; the off window includes
+camera drift, so this is not a performance win. Five CTests, 21 unchanged normal
+SPIR-V binaries, 19 validated variants, four gate tests, the QA detectors, all
+five merge-gate scenarios and the offline queue scenarios pass.
+Evidence: docs/evidence/p1-origin-rebase-314840d.json. Full log and runner clocks:
+captures/queue/logs/p1-origin-rebase-ab.1.123412.log and .runner.txt.
+
+Stop this bounded turn; do not run a second job. The rebasing hypothesis remains
+unresolved. Next: fix the static/exit control before another quality measurement.
+If displacement persists with rebasing, test whether native instance rows and
+the GPU conversion camera belong to different G-buffer epochs. Record the same
+draw/command identity and compare actual native GPU instance inputs with TLAS
+rows; matching coordinate conventions or CPU record/submit values do not prove
+matching epochs. Do not add another scene selector.
+
+
 ## P1 origin rebasing resumed — 2026-10-29
 
 The user lifted the pause for one bounded fix and one presented A/B run.
