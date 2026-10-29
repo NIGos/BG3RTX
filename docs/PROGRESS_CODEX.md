@@ -1,5 +1,14 @@
 # BG3RTX progress
 
+## Cascade casters (branch sup/roof-casters, not merged) — 2026-10-29
+
+New `rt_cascade_casters=0` (with `rt_cascade_index=1`, `rt_cascade_mb=64`,
+`rt_cascade_roofs_trust=1`): one sun cascade is captured by XFB minus the camera pass's draws,
+converted with its own set 0 binding 2 `_m2` (orthographic), and added to the next frame's TLAS
+as instance mask 0x02 (rebased by the camera move). Only the sun traces it; with it, roof volumes
+no longer block the RT replace. Default SPIR-V byte-identical (66/66). Not run in game yet: gate
+and cost in TRACK_D_RT.md 8.5 "Cascade casters as implemented". Needs one game restart (layer).
+
 ## P1 pan residual explained, not a lag (supervisor) — 2026-10-29 19:00
 
 Job sup-panmiss-cap-fg2 (FG 2, defaults, A/D pans, 16-frame primary captures): pan windows

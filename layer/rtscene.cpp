@@ -95,6 +95,10 @@ uint64_t g_pipe_gen = 0;
 // rt_cascade_casters: the same layout, xfb_to_world_ortho.hlsl (built on present, when the key is on).
 VkPipeline g_ortho_pipe = VK_NULL_HANDLE;
 uint64_t g_ortho_gen = 0;
+// Read without g_mu by the cascade's recording thread (a build may hold g_mu for milliseconds);
+// replaced only on present, after a shader edit (as g_pipe for the split's conversion).
+std::atomic<VkPipeline> g_ortho_live{VK_NULL_HANDLE};
+std::atomic<VkPipelineLayout> g_pl_live{VK_NULL_HANDLE};
 // The camera position (UBO byte 208) of the last builds, by frame: the cascade soup of frame F
 // is camera-relative to F's camera (rt_build_camera).
 struct CamHist { uint64_t frame = 0; float pos[3] = {}; };
@@ -747,6 +751,8 @@ void rt_device_destroyed(DeviceData* dd) {
     defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_pipe));
     defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_ortho_pipe));
     g_ortho_pipe = VK_NULL_HANDLE;
+    g_ortho_live = VK_NULL_HANDLE;
+    g_pl_live = VK_NULL_HANDLE;
     defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
     defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_dsl));
     defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(g_qp));
@@ -839,9 +845,10 @@ bool rt_convert(VkCommandBuffer cmd, const RtCapture& cap) {
 bool rt_cascade_convert(VkCommandBuffer cmd, VkBuffer xfb, uint32_t tris, uint32_t stride, VkBuffer ubo,
                         VkDeviceSize ubo_offset) {
   if (!g_rt || !tris || !xfb || !ubo) return false;
+  const VkPipeline pipe = g_ortho_live.load();
+  const VkPipelineLayout layout = g_pl_live.load();
+  if (!pipe || !layout) return false;
   {
-    std::lock_guard<std::mutex> lock(g_mu);
-    if (!g_ortho_pipe || !g_pl) return false;
     const DeviceData* dd = g_dd;
     VkDescriptorBufferInfo in{ubo, ubo_offset, 224}, out{xfb, 0, VkDeviceSize(tris) * 3 * stride};
     VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
@@ -855,9 +862,9 @@ bool rt_cascade_convert(VkCommandBuffer cmd, VkBuffer xfb, uint32_t tris, uint32
     w[1].pBufferInfo = &out;
     const uint32_t groups = (std::min)((tris + 255) / 256, 65535u);
     const uint32_t pc[4] = {tris, groups * 256, stride, 0};
-    dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ortho_pipe);
-    dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_pl, 0, 2, w);
-    dd->vk.CmdPushConstants(cmd, g_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
+    dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
+    dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 2, w);
+    dd->vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
     dd->vk.CmdDispatch(cmd, groups, 1, 1);
   }
   restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -1343,7 +1350,11 @@ void rt_on_present() {
   // Compile (and recompile after edits) on the present thread, not while
   // the game records.
   if (!g_failed && cfg_int("rt_build", 1)) ensure_pipeline();
-  if (!g_failed && cfg_int("rt_cascade_casters", 0)) ensure_pipeline_file("rt/xfb_to_world_ortho.hlsl", g_ortho_pipe, g_ortho_gen);
+  if (!g_failed && cfg_int("rt_cascade_casters", 0) &&
+      ensure_pipeline_file("rt/xfb_to_world_ortho.hlsl", g_ortho_pipe, g_ortho_gen)) {
+    g_pl_live = g_pl;
+    g_ortho_live = g_ortho_pipe;
+  }
   uint64_t now = frame_index();
   for (uint32_t s = 0; s < kRing; ++s) {
     Slot& sl = g_slots[s];
