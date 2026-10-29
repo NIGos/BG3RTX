@@ -2,6 +2,19 @@
 
 ## Resumed — 2026-10-29
 
+259 ONE-run balanced moving test: valid112s/52s session, zero faults/dumps/
+build changes. Off/on residual0.134896214/0.144665732 (+7.242%); mean GI
+Y0.015967731/0.016094788 (+0.796%); motion68.822/71.812 render px. Cohort
+3,532,908/4,600,302 samples, grid coverage4.869%/6.822%; compatible-moving
+coverage7.461%/8.514%. The fresh complete source avoids massive darkening,
+but increases raw residual: NO pan-quality win, main merge or default change.
+Unequal cohorts/motion and fresh sample noise limit interpretation; raw GI
+is not resolved RR output. The small static conditional bias remains open;
+run258's wide CI does not erase run256 or its other +0.50..2.06% samples.
+All evidence committed/pushed on P1; queue terminal. Next separate fresh noise
+from resolved-image instability using same-run evidence, no new transport or
+cross-run picture comparison. One authorized usage reset remains unused.
+
 258 / af093ae completed valid149s: all twelve exports, stationary max0.18px,
 finite/pose/AO pass and zero faults/dumps/build changes. Both energy CIs include
 zero: POST/PRE -0.0292%, CI [-0.000282538,+0.000272094]Y; off/on +6.975%, CI
@@ -9,9 +22,8 @@ zero: POST/PRE -0.0292%, CI [-0.000282538,+0.000272094]Y; off/on +6.975%, CI
 relative CI to roughly [-7.56%,+21.51%]. Other on captures remain +0.50..2.06%
 versus PRE; do not claim the smaller bias is solved. 257 was incomplete (five
 late POST exports exceeded 2048MiB), not an energy pass; fixture now4096MiB.
-Job259 is one moving run on frozen2ff8b88 with balanced AB/BA toggles and camera
-directions every4s, no private/AO diagnostic. This is a diagnostic next step,
-not approval for defaults/merge. Full evidence remains on the P1 branch.
+Job259 results are above: balanced AB/BA toggles/directions every4s, private/AO
+diagnostics off; no defaults/merge approval. Full evidence remains on the P1 branch.
 
 Complete-source run256 execution valid149s, stationary max0.06 render px,
 finite/pose/alpha pass, zero driver faults/dumps/build changes. Energy checks

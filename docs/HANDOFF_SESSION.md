@@ -1,14 +1,10 @@
 # Session handoff — 2026-10-29
-
 Read this first, then the top of docs/STATUS.md and docs/PROGRESS_CODEX.md.
 STATUS describes the stable code; PROGRESS_CODEX is the current work log.
-
 ## Goal and hard rules
-
 Advance through P1 to P6, in order, until Saturday 2026-10-31 evening.
 The stop target is 20:00 Europe/Rome: update the final progress summary,
 push main and the work branches, then stop. Work autonomously in the meantime.
-
 - Never modify user saves, force-push, rewrite history, or move/delete snapshot-20261027/* tags.
 - Before any runner/game launch, check captures/queue/USER_PLAYING and live BG3 processes.
 - The marker or an unowned BG3 process means the user is playing: do offline work only.
@@ -18,18 +14,14 @@ push main and the work branches, then stop. Work autonomously in the meantime.
 - QUALITY R0, derived gates, quality before frame rate on Ultra. New features off by default until their gates pass.
 - Prefer fixes and short A/B loops. No FG/HDR-UI/swapchain work unless a phase needs it.
 - Do not use Ponytail, its skills, hooks or instructions.
-
 User explicitly resumed on Oct29. P1 energy preservation has first priority.
 One usage reset is authorized if needed at the limit; not used yet.
 Put future questions atop PROGRESS_CODEX and continue conservative/offline work.
-
 ## Main and research state
-
 Main includes P6 water design; rendering remains 6dba0a8. No P1 feature merged.
 Remote: origin, private NIGos/BG3RTX. Preserve all snapshot tags and backups.
 Old pre-rewrite SHAs can be translated with
 D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history again.
-
 Old research is preserved at pan-motion-vectors/BG3RTX 929be7a; camera-native
 53f0925 is in motion-jitter/BG3RTX. Import only needed work, no unrelated FG.
 
@@ -55,7 +47,6 @@ gi_history_surface_gate=0 implements previous-depth AND world-normal acceptance
 before bounce reuse. Metadata52 is paired with radiance; a CPU-zero initial token
 is consumed by PRE and republished only by paired POST. Existing ABI14 pins
 private resources; geometry math remains native. No new camera transport.
-11 CTests, 45 shaders, 20 ABI checks and seven byte-identical ordinary shaders pass.
 242/243: eleven GPU cases pass, saved alpha matches, aggregate AO counters differ;
 native geometry repeat confirms it. Zero driver events/dumps; do not block the pan.
 gi_pan_metric=0 now measures RR GI against paired previous GI with native B2/B5
@@ -98,12 +89,15 @@ ccb1f65 mirrors original share/fp16 after RF. 257 incomplete: readback budget.
 258 valid149s/all12/static0.18px/AO/no faults; both CIs include0, LOW POWER:
 POST/PRE -0.0292%; off/on+6.975%, relativeCI[-7.56%,+21.51%] from light pulse.
 Other on captures still+0.50..2.06% vsPRE; smaller bias NOT proved solved.
-259 LIVE frozen2ff8b88: ONE moving run, balanced AB/BA/directions4s; no promotion.
+259 valid112s/52s moving, no faults. Off/on residual0.134896/0.144666 (+7.24%),
+GI Y0.0159677/0.0160948 (+0.80%), motion68.82/71.81px, samples3.53M/4.60M,
+grid coverage4.87%/6.82%. NO pan win. Queue terminal, P1 evidence pushed.
+Next separate fresh stochastic noise from resolved RR instability; small static
+bias still open. No new transport/cross-run pictures/brightness compensation.
 Spec: phase docs/GI_FRESH_FALLBACK.md. Never report moving captures as static pass.
-Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
 footprint and GPU-ordered availability, not a CPU epoch certificate.
-Fixed-camera scores cannot close P1. Default VVL limit 3 weakens the smoke count.
+Default VVL limit3 weakens smoke counts.
 Do not close P1 from diagnostic passes alone. The phase is done when each
 effect meets its derived gate, or is clearly reduced with its cause explained.
 Record the candidate key and user check in PROGRESS_CODEX: static building/ground
