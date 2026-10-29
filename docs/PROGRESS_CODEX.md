@@ -1,5 +1,13 @@
 # BG3RTX progress
 
+## Status Thursday 2026-10-29 evening (supervisor)
+
+- P1 (shadows detach / walls flash while rotating): fixed in main (rt_scene_wait, default on); rotation match 33% -> 97%; the pan residual is far backdrop and game-hidden geometry, not lag.
+- P2 FG toggling fixed (fg_current_destroy_only=1): 0 toggles, displayed/rendered 2.00. Static LOD shadow flicker fixed (rt_dyn_hold=4).
+- Roof sun leak fixed (rt_sun_roof_up 50 m). New, off by default: rt_cascade_casters=1 (cut-away roofs cast RT sun shadows); waits for the user's visual check (+1.7 ms).
+- P3 base frame rate: unfocused runs sit at a 30.0 fps cap; the real focused rate needs the user's play.
+- Next: face/skin flicker (P4), then box lights (P3 phase), OMM, EN2/SHaRC, water.
+
 ## Cascade casters: ready for the user's in-game check (off by default) — 2026-10-29 21:00
 
 `rt_cascade_casters=1` (needs a game restart once, then live): the sun's cascade 2 is captured
