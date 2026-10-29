@@ -1,5 +1,15 @@
 # BG3RTX progress
 
+## User pause and model handoff — 2026-10-29
+
+The user paused game activities for a live test and requested a handoff for a
+new conversation/model. The thread goal is PAUSED. USER_PLAYING remains present;
+no test/runner or pending job is active in the latest check. Do not restart work
+or remove the marker until explicit resume. Read docs/HANDOFF_SESSION.md first.
+P1 and P2 trees are clean and pushed (dbd320c / 7a87ba7). No rendering or game
+settings changed while preparing this handoff. Earlier active-state entries
+below are historical and do not override this pause.
+
 ## Current checkpoint - 2026-10-29 09:03 Europe/Rome
 
 - Main rendering remains 6dba0a8; local-light reference, water design and legal QA hold are merged.
@@ -7,7 +17,7 @@
 - Static 301 fails original-PRE energy (+0.460%); all 23 GPU cases and raw safety checks pass.
 - Cadence-controlled pan 303 has motion +1.162%, raw residual +21.951%, cohort energy +11.193%.
 - Keep the GI candidate off. PAUSED.md preserves its evidence and resolved-image return point.
-- Under the goal's stalled-phase rule, continue P2 pending integrations; the overall goal stays active.
+- After explicit resume, P2 is next under the stalled-phase rule; the goal is currently paused.
 - D-EM 295 rejects additive overlap: 67,031 receivers, zero multi-draw; native blend is disabled.
 - AF emissive family still fails 0.362 against 0.842-1.188. Next smallest probe is native facing.
 - No GI, EN2, D-EM, box-light or OMM candidate is promoted. P3-P6 gaps remain documented.

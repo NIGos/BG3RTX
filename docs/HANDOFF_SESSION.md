@@ -1,7 +1,18 @@
 # Session handoff - 2026-10-29
 
 Read this first, then the top of docs/PROGRESS_CODEX.md and AGENTS.md.
-The overall goal remains active until Saturday 2026-10-31 at 20:00 Europe/Rome.
+## Current state: USER-REQUESTED PAUSE
+
+The user paused game activities for a live test, then requested this handoff to
+change model in a new conversation. The thread goal is PAUSED, not complete.
+Do not resume development/tests merely because this handoff was read.
+Wait for explicit user permission to resume. Keep captures/queue/USER_PLAYING.
+The latest read found no BG3/runner or pending/running job, but absence of a
+process does NOT cancel the pause or authorize clearing the marker.
+Preparing this handoff did not modify game code, binaries, settings or saves.
+
+The original horizon is Saturday 2026-10-31 at 20:00 Europe/Rome. On explicit
+resume, retain the full objective below; do not silently extend the deadline.
 
 ## Hard rules
 
@@ -19,16 +30,17 @@ The overall goal remains active until Saturday 2026-10-31 at 20:00 Europe/Rome.
 
 The one authorized usage reset was consumed at weekly 100% on October 29.
 A fresh reading confirmed success. Reset credits: 0. No second reset without
-fresh user authorization. The overall goal is not paused or complete.
+fresh user authorization. The overall goal is currently paused by the user.
 
-## Current priority: P2 after the required P1 measurements
+## Next priority after explicit resume: P2
 
 The user's explicit P1 resume was carried out: complete fresh fallback, missing-
 history correction, spatial and exact FP16 normal bounds, static energy and
 same-run moving measurements. No attribution/exposure research displaced them.
 There is no demonstrated quality gain. Under the goal's stalled-phase rule,
 the priority slot advances to pending integrations. P1 remains incomplete and
-its candidate stays off; this is not a global goal pause or a claim of success.
+its candidate stays off. That phase decision preceded the later user pause;
+it is not a claim of success.
 
 P1 checkpoint: codex/p1-pan dbd320c. PAUSED.md records evidence and a concrete
 return point. Static 301 on/off +0.646% is within noise, but original-PRE
@@ -44,8 +56,9 @@ Never compare independent pan images or repeat unchanged tests until one passes.
 
 ## P2 next action: emissive facing hypothesis
 
-No game/runner is active as of the terminal 303 audit. Repeat fresh checks before
-any launch. P2 branch codex/p2-emissive is at 7a87ba7, updated from current main. The merge
+No queued test remains active. After explicit resume, first check actual game/
+runner processes and pending/running jobs; clear USER_PLAYING only when authorized
+and idle. All launches still go through the queue. P2 branch codex/p2-emissive is at 7a87ba7, updated from current main. The merge
 changed only AGENTS/docs; source and binaries are unchanged. It has owned
 SDK/data copies, no shared junctions.
 Paired D-EM ABI 9 differs from P3 ABI 9: never reuse their game processes.
@@ -76,12 +89,14 @@ Read docs/P2_EMISSIVE_OVERLAP.md and TRACK_D_RT section 13 before implementing.
 The existing rt_em_overlap_check push currently collapses nonzero to 1; mode 2
 can report facing using debug words 8-14. Unused global word 15 can mark the
 probe mode, so mixed in-flight windows cannot be mislabelled. Native state logs
-need frontFace as well as cullMode. Keep emission and ordinary shaders unchanged.
+need frontFace as well as cullMode. This probe is a PLAN, not implemented: the
+current key supports the overlap probe only. Keep emission/ordinary shaders unchanged.
 
 ## Workspaces and stable state
 
 Use explicit paths; the app may select another checkout.
 - Main: C:/Users/quali/Documents/Code Projects/BG3RTX, main, pushed.
+  Before handoff documentation: eb70825. All inspected trees were clean.
 - P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, dbd320c, ABI 14.
 - P2: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, 7a87ba7, D-EM ABI 9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, b913e8e, box ABI 9.
@@ -96,6 +111,32 @@ P3 run 291 has 0.09991% format-incompatible receivers among 2.950 billion;
 native accuracy, cookie/unknown and moving gates remain open. No promotion.
 P4 CPU classifier passes 197,621 oracle checks and four CTests; provider/GPU
 bake/backend remain unimplemented. P6 minimum design is done, runtime water open.
+
+## Remaining objective and working tools
+
+Keep the original scope after resume:
+1. P1: GI, local-light, sun and reflection pan instability. Each must meet its
+   derived temporal gate or clearly improve with an explained cause. Write the
+   in-game key/save/check instructions. P1 is NOT done.
+2. P2: merge only passing EN2, D-EM and local-light reference work. The reference
+   is merged; EN2/D-EM are not. Preserve failed gates instead of tuning scales.
+3. P3: finish box-light native accuracy, shadows/cookies/unknown and motion gates.
+4. P4: finish OMM beyond the CPU classifier: provider, GPU bake and backend.
+5. P5: SHaRC v2, light tree and EN2 consumers, after EN2 is validated.
+6. P6: water design minimum is done; runtime remains open.
+Use stalled-phase checkpoints rather than calling unfinished phases complete.
+After explicit resume, work autonomously; record meaningful results and evening summaries.
+At the Saturday stop time, write the final progress summary, push all work and stop.
+
+Use explicit workdirs. Runtime tests: scripts/test-queue.ps1 with Root set to main.
+Main captures/queue/results.jsonl and its logs are authoritative; never hold
+results.md open. Build/checks: scripts/build.ps1 -Test, tools/compile_shaders.py,
+tests/qa_detectors_test.py. P1 has scripts/qa/gi_energy.py and
+tools/validate_owned_motion_shaders.py; P2 has scripts/qa/em_gate.py.
+DXC/spirv-cross/spirv-val: C:/VulkanSDK/1.4.357.0/Bin. Python: py -3.
+Read each branch's design and preserved evidence before changing code. Do not
+automatically resume old listed agents or background tasks.
+Do not spawn sub-agents unless newly authorized by the user or applicable rules.
 
 ## Validation and cleanup
 
