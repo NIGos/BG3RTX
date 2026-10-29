@@ -137,6 +137,7 @@ static void on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) { gi_
 
 static void unload() {
   gi_release();
+  em_release();
   compute_release(g_probe);
   host->log("core unloading");
 }

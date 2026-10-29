@@ -203,6 +203,7 @@ struct CmdState {
   std::string seg_json;
   // Track D geometry capture (geocapture.cpp)
   void* geo = nullptr;                 // capture active in the current pass
+  bool geo_em = false;                 // ... and it is an effects pass of the emissive capture (D-EM)
   int geo_ts = -1;                     // timestamp slot of the current pass
   VkViewport viewport{};               // last vkCmdSetViewport(first = 0)
   bool has_viewport = false;
@@ -556,6 +557,50 @@ void bvh_on_present();
 void bvh_forget_buffer(VkBuffer b);
 std::string bvh_describe_address(VkDeviceAddress a);   // device-fault reports ("" if not the split's)
 void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size);
+
+// ---- Track D D-EM: emissive geometry (emissive.cpp, docs/TRACK_D_RT.md 12) ----
+// The game redraws its emissive meshes into the effects target (B10G11R11 + the
+// G-buffer depth, before the tiled lighting). Those draws are captured (XFB) with a per-draw
+// record (radiance, mask texture); at
+// the first tiled-lighting dispatch the emissive TLAS and the light list are built.
+void em_device_created(DeviceData* dd);
+void em_device_destroyed(DeviceData* dd);
+bool em_wanted();                                    // rt_emissive=1, RT and the split available
+bool em_is_fx_pass(const Bg3PassInfo& p, uint32_t gbuf_w, uint32_t gbuf_h);
+// Outside an effects pass, before it begins: notes the target, times it; false: no capture.
+bool em_pass_begin(VkCommandBuffer cmd, const CmdState* s, int* ts);   // ts: timestamp pair (-1 none)
+// Per draw of an effects pass. Not an emissive material draw (sky, clouds, decals...),
+// a cached mesh (its instances come from the instance stream) or no room: false.
+// Otherwise the draw is to be captured into the soup at [*off, *off + *bytes).
+struct EmDrawIn {
+  bool xfb;                  // the pipeline's VS is patched and last before rasterisation
+  bool triangles;
+  VkPrimitiveTopology topo;
+  bool restart;
+  const InstPipe* inst;      // class-A instancing layout, or nullptr
+  uint32_t stride;           // XFB bytes per vertex
+  uint8_t uv_match = 0;      // UvMatch of the VS/FS pair (spirv_xfb.h): 1 ok, 2/3 the wrong UV captured
+  int uv = -1;               // captured VS output location
+  int uv_fs = -1;            // the FS's float2 input location
+  uint32_t uv_vs_comps = 0;  // components the VS writes at uv_fs
+};
+void geo_uv_summary();       // logs the UV-slot verdicts over all pipelines (geocapture.cpp)
+void em_note_draw(const CmdState* s);   // an effects-pass draw while capture is off (timing only)
+bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const EmDrawIn& in, VkBuffer* soup,
+             VkDeviceSize* off, VkDeviceSize* bytes, uint32_t* prims);
+// After the pass, outside it: the captured ranges (offset, triangles) to camera-relative
+// world with the pass's camera UBO.
+void em_pass_done(VkCommandBuffer cmd, const CmdState* s, VkBuffer ubo, VkDeviceSize ubo_off, uint32_t stride,
+                  const std::vector<std::pair<VkDeviceSize, uint32_t>>& ranges, int ts);
+// A command buffer is (re)begun: its unsubmitted draws are dropped (cmd.cpp).
+void em_forget_cmd(VkCommandBuffer cmd);
+// Right after the game's vkQueueSubmit(2) returned, the queue lock held (layer.cpp): if the
+// batch holds effects passes, builds the emissive scene from their draws in a command
+// buffer of ours and submits it on the same queue.
+void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
+void em_on_present();
+// ABI 9: the emissive scene for the core (host_api.h Bg3HostApi::rt_emissive).
+bool em_scene(VkCommandBuffer cmd, VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
 
 // ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
 // One line of shaders/rt/alpha_fs.txt (scripts/alpha_table.py).

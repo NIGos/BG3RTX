@@ -1,0 +1,95 @@
+{
+  "job": {
+    "job": "p2-emissive-overlap-af",
+    "run": 1,
+    "start": "2026-10-29T07:11:08",
+    "sec": 162,
+    "valid": true,
+    "outcome": "Run ended: done after 71s (session s071108#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "ca1959b Probe coincident emissive draws without changing nearest-hit emission | core 07:05:17",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p2-emissive-overlap-af.1.071238.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-emissive\\BG3RTX\\captures\\20261029-071251",
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-emissive\\BG3RTX\\captures\\20261029-071302"
+    ],
+    "lines": [
+      "07:13:43.927  [em-overlap] receivers 6261 candidates 6702 multi-draw 0 distinct-draw sum 6261 invalid 0 overflow 0 missing 0",
+      "07:13:43.927  [em] ours/game per family: 159a6211 Base/Base_GM_Pulse_VT 0.000, bright 0.000 (138 bright px of 4375, 0 overlapped, under 200 bright px: not gated, scale 1.000); 1a81f41b Fluids/FLUID_Lava_Plane_Flowmap 1.210, bright 0.464 (8458 bright px of 26340, 0 overlapped, approx, scale 0.748); 222986b8 Base/Base_GM_VT 1.927, bright 1.007 (380 bright px of 432374, 0 overlapped, scale 1.000); 304be1c7 Base/Base_GM_Pulse_FX 0.615, bright 0.350 (235 bright px of 894, 0 overlapped, scale 1.000); 48eedb24 Characters/CHAR_Eye_Parallax_Creature 3150.769, bright 0.000 (0 bright px of 3, 0 overlappe",
+      "07:13:43.927  [em] projected check over 7 frames: emissive hits on 78.758% of the depth pixels; ours/game radiance 1.121 over them; effects-target pixels brighter than rt_em_fx_thr with no emissive hit 0.007% of 10246 (coverage 100.0%, of which 0.0% by an emitter in front of the depth: alpha-blended); hits where the game shows < 2% of ours 0.226% of the hits",
+      "07:13:19.973  [rrpost] exposure held at EV 9.25: 695 writes so far; probe b0 EV 9.25, b1 EV 9.25"
+    ],
+    "session": "s071108#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "overlap_windows": 10,
+  "overlap_totals": {
+    "receivers": 67031,
+    "candidates": 71754,
+    "multi_draw": 0,
+    "distinct_draw_sum": 67031,
+    "invalid": 0,
+    "overflow": 0,
+    "missing": 0
+  },
+  "native_draw_states": {
+    "pipe 34445 FS 304be1c71df194cb blend/src/dst/op/mask 0/1/0/0/15 cull 2 depth test/write/compare 1/0/2 dynamic 0": 9
+  },
+  "gate_pass": false,
+  "gate_report": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p2-emissive-overlap-af.1.071238.log: 10 windows, 6 families gated, z = 2.64\n  10086377 Effects/ParticleSystem/VFX_ParticleSyste approx ratio 0.700 s_w 0.569 N 82 sigma 0.579 dof 5.4 band 0.096-10.386 PASS\n  1a81f41b Fluids/FLUID_Lava_Plane_Flowmap          approx ratio 1.210 s_w 0.188 N 8778 sigma 0.189 dof 8.1 band 0.520-1.923 PASS\n  222986b8 Base/Base_GM_VT                          exact  ratio 1.006 s_w 0.001 N 378 sigma 0.051 dof 12414355804.2 band 0.873-1.145 PASS\n  304be1c7 Base/Base_GM_Pulse_FX                    exact  ratio 0.362 s_w 0.018 N 237 sigma 0.065 dof 111024.0 band 0.842-1.188 FAIL\n  4d3f7dab Base/Base_GM_Pulse_AlphaTest_VT          exact  ratio 1.006 s_w 0.001 N 926 sigma 0.033 dof 1379253228.9 band 0.917-1.091 PASS\n  8bcd0aff Base/Base_GradientMapping_2G_GM_VT       exact  ratio 0.995 s_w 0.058 N 97 sigma 0.103 dof 6707.0 band 0.762-1.313 PASS\n",
+  "captures": [
+    {
+      "capture": "C:\\Users\\quali\\.codex\\worktrees\\p2-emissive\\BG3RTX\\captures\\20261029-071251",
+      "final_key": "d222",
+      "final_reported_nonfinite": 0,
+      "reported_nonfinite_dumps": {
+        "d140": [
+          "D32F",
+          "2a6a525c",
+          2764
+        ]
+      },
+      "raw_nonfinite_dumps": {}
+    },
+    {
+      "capture": "C:\\Users\\quali\\.codex\\worktrees\\p2-emissive\\BG3RTX\\captures\\20261029-071302",
+      "final_key": "d444",
+      "final_reported_nonfinite": 0,
+      "reported_nonfinite_dumps": {
+        "d364": [
+          "D32F",
+          "2a6a525c",
+          2587
+        ]
+      },
+      "raw_nonfinite_dumps": {}
+    }
+  ],
+  "validation_tags": {
+    "UNASSIGNED-non-acquired-swapchain-image-used": 6054,
+    "VUID-VkShaderModuleCreateInfo-pCode-08737": 1,
+    "Undefined-Value-StorageImage-FormatMismatch-ImageView": 26133,
+    "Undefined-Value-OutputNotWritten": 53,
+    "SYNC-HAZARD-READ-AFTER-WRITE": 8756,
+    "SYNC-HAZARD-WRITE-AFTER-WRITE": 216,
+    "VUID-vkCmdDraw-None-09600": 3,
+    "VUID-vkCmdWaitEvents2-pEvents-10788": 51979
+  },
+  "scoped_validation_tags": {},
+  "cost_lines": [
+    "07:12:44.048  [em] per build: 27.5 TLAS instances, 310031 triangles, 62015 lights (0 left out by rt_em_max_lights), total power 2571 (effects-target units x m^2; last build 2580, 26 draws, 62011 lights), 0 non-finite power sums; GPU: build median 0.501 ms (p99 0.727, 120 samples), effects passes per frame median 0.117 ms with capture (120 frames), 0.000 ms without (0 frames)",
+    "07:12:50.150  [em] per build: 25.7 TLAS instances, 309903 triangles, 61989 lights (0 left out by rt_em_max_lights), total power 2868 (effects-target units x m^2; last build 2878, 25 draws, 61985 lights), 0 non-finite power sums; GPU: build median 0.491 ms (p99 0.811, 120 samples), effects passes per frame median 0.118 ms with capture (120 frames), 0.000 ms without (0 frames)",
+    "07:12:59.012  [em] per build: 26.5 TLAS instances, 309975 triangles, 62004 lights (0 left out by rt_em_max_lights), total power 2402 (effects-target units x m^2; last build 2407, 30 draws, 62058 lights), 0 non-finite power sums; GPU: build median 0.502 ms (p99 0.813, 120 samples), effects passes per frame median 0.118 ms with capture (120 frames), 0.000 ms without (0 frames)",
+    "07:13:08.048  [em] per build: 26.6 TLAS instances, 310006 triangles, 62010 lights (0 left out by rt_em_max_lights), total power 2528 (effects-target units x m^2; last build 2519, 25 draws, 61978 lights), 0 non-finite power sums; GPU: build median 0.501 ms (p99 0.733, 120 samples), effects passes per frame median 0.117 ms with capture (120 frames), 0.000 ms without (0 frames)",
+    "07:13:14.029  [em] per build: 25.4 TLAS instances, 309886 triangles, 61986 lights (0 left out by rt_em_max_lights), total power 2368 (effects-target units x m^2; last build 2356, 28 draws, 62025 lights), 0 non-finite power sums; GPU: build median 0.496 ms (p99 0.841, 120 samples), effects passes per frame median 0.118 ms with capture (120 frames), 0.000 ms without (0 frames)",
+    "07:13:19.973  [em] per build: 26.9 TLAS instances, 309969 triangles, 62003 lights (0 left out by rt_em_max_lights), total power 2197 (effects-target units x m^2; last build 2178, 27 draws, 62018 lights), 0 non-finite power sums; GPU: build median 0.499 ms (p99 0.723, 120 samples), effects passes per frame median 0.118 ms with capture (120 frames), 0.000 ms without (0 frames)",
+    "07:13:25.835  [em] per build: 25.8 TLAS instances, 309929 triangles, 61994 lights (0 left out by rt_em_max_lights), total power 2082 (effects-target units x m^2; last build 2078, 25 draws, 61991 lights), 0 non-finite power sums; GPU: build median 0.495 ms (p99 0.714, 120 samples), effects passes per frame median 0.118 ms with capture (120 frames), 0.000 ms without (0 frames)",
+    "07:13:32.044  [em] per build: 25.4 TLAS instances, 309907 triangles, 61990 lights (0 left out by rt_em_max_lights), total power 2068 (effects-target units x m^2; last build 2070, 26 draws, 61998 lights), 0 non-finite power sums; GPU: build median 0.501 ms (p99 0.720, 120 samples), effects passes per frame median 0.118 ms with capture (120 frames), 0.000 ms without (0 frames)",
+    "07:13:38.152  [em] per build: 27.9 TLAS instances, 310095 triangles, 62028 lights (0 left out by rt_em_max_lights), total power 2151 (effects-target units x m^2; last build 2157, 26 draws, 62004 lights), 0 non-finite power sums; GPU: build median 0.499 ms (p99 0.728, 120 samples), effects passes per frame median 0.118 ms with capture (120 frames), 0.000 ms without (0 frames)",
+    "07:13:43.927  [em] per build: 25.7 TLAS instances, 309956 triangles, 61999 lights (0 left out by rt_em_max_lights), total power 2401 (effects-target units x m^2; last build 2422, 27 draws, 62005 lights), 0 non-finite power sums; GPU: build median 0.496 ms (p99 0.756, 120 samples), effects passes per frame median 0.118 ms with capture (120 frames), 0.000 ms without (0 frames)"
+  ],
+  "verdict": "Coincident additive-draw hypothesis rejected for the observed AF target cohort: no multi-draw receivers, native blend disabled and no dynamic state. Exact-family radiance gate still FAILS; keep rt_emissive=0. This short diagnostic predates the hold-90 rule and is not a complete promotion gate."
+}

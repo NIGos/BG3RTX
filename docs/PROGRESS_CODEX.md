@@ -1,5 +1,21 @@
 # BG3RTX progress
 
+## Launcher "Experimental" section; cascade casters fixes from the user's play — 2026-10-29 21:50
+
+- Launcher: knobs with `experimental=true` (off in every preset) sit under "Experimental (being
+  tested)": Roof sun shadows (`rt_cascade_casters`), Box light shadows (`ls_box`). New features
+  to try go there.
+- User play (focused, FG 2): 57-60 fps rendered, FG 2.00 (FG pauses only while unfocused,
+  Streamline "window not focused"). Roof disocclusion gone; box lights look right.
+- Cascade casters: distant shadows that vanished on approach (coarse cascade LODs shading their
+  own surface) -> guard max(0.5 m, 2% of camera distance); polygonal leaf shadows (solid cascade
+  copies of visible foliage) -> `rt_cascade_alpha_dedupe=1` skips alpha-tested cascade draws whose
+  mesh the camera pass drew (S7: 306 of 680 draws skipped; game lit & RT shadowed 1.19% -> 0.94%,
+  mean brightening 0.0010 -> 0.0011/px, unchanged within noise).
+- D-EM data work (codex/p2-emissive) merged, ABI 18, off.
+- Open: tree shadow flicker / blue dots the user ties to white in-world text (item labels, barks);
+  a Shift-hold trace showed no extra pass (Shift may not reach the game through PostMessage).
+
 ## Status Thursday 2026-10-29 evening (supervisor)
 
 - P1 (shadows detach / walls flash while rotating): fixed in main (rt_scene_wait, default on); rotation match 33% -> 97%; the pan residual is far backdrop and game-hidden geometry, not lag.

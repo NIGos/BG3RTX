@@ -554,7 +554,7 @@ function Send-UiKey([int]$vk, [int]$scan) {
 }
 $panPlan = if ($MovePlan) { @(Get-Content -LiteralPath $MovePlan -Raw | ConvertFrom-Json) } else { @() }
 if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
-$panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue
+$panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue; $shiftHeld = $false; $shiftNext = [datetime]::MinValue
 $phaseTraceIndex=0
 $rotateHeld = $false; $rotateSegment = -1; $rotateX = 0; $rotateY = 0
 $planClock = [System.Diagnostics.Stopwatch]::StartNew(); $phaseStartMs = 0.0
@@ -649,6 +649,10 @@ while ((Get-Date) -lt $deadline) {
           $phaseTraceIndex++
         }
       }
+      # "shift_hold": 1 holds Shift for the whole step (BG3's world-space item labels), no motion.
+      if ($step.shift_hold -and (Get-Date) -ge $shiftNext) {
+        Send-ShiftKey $true $shiftHeld; $shiftHeld = $true; $shiftNext = (Get-Date).AddMilliseconds(100)
+      } elseif (-not $step.shift_hold -and $shiftHeld) { Send-ShiftKey $false; $shiftHeld = $false }
       $h = Get-GameWindow; $rect = New-Object BG3RTX.Win2+RECT
       if ($h -ne [IntPtr]::Zero) { [void][BG3RTX.Win2]::GetClientRect($h,[ref]$rect) }
       $sample = Get-CameraPlanSample $step $elapsed ([Math]::Max(32,$rect.Right-$rect.Left)) ([Math]::Max(32,$rect.Bottom-$rect.Top))

@@ -98,6 +98,7 @@ struct Knob {
   Choice choices[4];        // Kind::Choice (id == nullptr ends the list)
   Slider slider;            // Kind::Slider
   int preset[kPresetCount]; // choice index or slider value per preset
+  bool experimental = false; // shown under "Experimental": off in every preset, being tested
 };
 
 // clang-format off
@@ -191,6 +192,25 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", 0, {{"reflex", "1"}}, {}},
     {"boost", "On + Boost", 0, {{"reflex", "2"}}, {}}},
    {}, {1, 1, 1, 1}},
+
+  // Experimental: features being tested, off in every preset (docs/PROGRESS_CODEX.md says
+  // what to look at). Live: toggling them in game takes effect at once.
+  {"exp_roof_shadows", "Roof sun shadows",
+   "Captures the roofs the camera cuts away (from the game's sun shadow map) into the ray-traced scene, "
+   "so ray-traced sun shadows also work under them. Look for: light through cut roofs (bad), sharper roof "
+   "shadow edges (good). About +1.7 ms.",
+   Kind::Choice, Apply::Live, "experimental", true,
+   {{"off", "Off", 0, {{"rt_cascade_casters", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_cascade_casters", "1"}}, {{"rt_geometry", 1}, {"sun_shadows", 1}}}},
+   {}, {0, 0, 0, 0}, true},
+
+  {"exp_box_lights", "Box light shadows",
+   "Ray-traced shadows for the game's box (projector) lights, 37% of its placed lights. Look at lit "
+   "interiors: shadows of furniture and characters from these lights. About +0.25 ms.",
+   Kind::Choice, Apply::Live, "experimental", true,
+   {{"off", "Off", 0, {{"ls_box", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}}},
+   {}, {0, 0, 0, 0}, true},
 };
 // clang-format on
 inline constexpr int kKnobCount = int(sizeof kKnobs / sizeof kKnobs[0]);
@@ -211,7 +231,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 178 keys of bg3rtx.ini, in file order.
+// 196 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -286,6 +306,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_cascade_roofs_trust", "1"},
     {"rt_cascade_origin", "1"},
     {"rt_cascade_alpha", "1"},
+    {"rt_cascade_alpha_dedupe", "1"},
     {"rt_ao", "0"},
     {"rt_ao_rays", "2"},
     {"rt_ao_radius", "1.0"},
@@ -296,6 +317,23 @@ inline constexpr KV kDefaults[] = {
     {"qa_zero", "0"},
     {"qa_exposure_hold", "0"},
     {"rt_max_candidates", "0"},
+    {"rt_emissive", "0"},
+    {"rt_em_overlap_check", "0"},
+    {"rt_em_max_lights", "65536"},
+    {"rt_em_xfb_mb", "32"},
+    {"rt_em_xfb_max_mb", "512"},
+    {"rt_em_calib", "1"},
+    {"rt_em_check_frames", "16"},
+    {"rt_em_lava_heat", "0.5"},
+    {"rt_em_log", "0"},
+    {"rt_em_dbg_fam_hi", "0"},
+    {"rt_em_dbg_fam_lo", "0"},
+    {"rt_em_tol", "0.01"},
+    {"rt_em_filter", "0"},
+    {"rt_em_aniso", "16"},
+    {"rt_em_fx_thr", "0.05"},
+    {"rt_em_backdrop", "0"},
+    {"rt_em_decal", "1"},
     {"rt_alpha", "1"},
     {"rt_alpha_test", "1"},
     {"rt_alpha_cut", "1"},
@@ -392,7 +430,7 @@ inline constexpr KV kDefaults[] = {
     {"crash_dump", "0"},
     {"fg_current_destroy_only", "1"},
 };
-// 22 keys of data/release.ini, in file order.
+// 24 keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {
     {"dev", "0"},
     {"dump_shaders", "0"},
@@ -416,6 +454,8 @@ inline constexpr KV kReleaseDefaults[] = {
     {"rr_post_check", "0"},
     {"dump_raw", "0"},
     {"rr_test_fail", "0"},
+    {"rt_emissive", "0"},
+    {"rt_em_overlap_check", "0"},
 };
 // END GENERATED DEFAULTS
 // clang-format on

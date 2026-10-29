@@ -90,6 +90,22 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"reflex": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": [], "keys": {"reflex": "1"}, "needs": {}},
        {"id": "boost", "label": "On + Boost", "caps": [], "keys": {"reflex": "2"}, "needs": {}}
+     ]},
+    {"id": "exp_roof_shadows", "label": "Roof sun shadows",
+     "description": "Captures the roofs the camera cuts away (from the game's sun shadow map) into the ray-traced scene, so ray-traced sun shadows also work under them. Look for: light through cut roofs (bad), sharper roof shadow edges (good). About +1.7 ms.",
+     "apply": "live", "apply_note": "experimental", "advanced": true,
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_cascade_casters": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_cascade_casters": "1"}, "needs": {"rt_geometry": 1, "sun_shadows": 1}}
+     ]},
+    {"id": "exp_box_lights", "label": "Box light shadows",
+     "description": "Ray-traced shadows for the game's box (projector) lights, 37% of its placed lights. Look at lit interiors: shadows of furniture and characters from these lights. About +0.25 ms.",
+     "apply": "live", "apply_note": "experimental", "advanced": true,
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"ls_box": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}}
      ]}
   ]
 }

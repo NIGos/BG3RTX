@@ -38,6 +38,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rtscene.cpp
   layer/alphatest.cpp
   layer/bvhsplit.cpp
+  layer/emissive.cpp
   layer/devfault.cpp
   layer/aftermath.cpp
   layer/streamline.cpp
@@ -170,7 +171,7 @@ add_executable(ufloat_interval_test tests/ufloat_interval_test.cpp)
 add_test(NAME ufloat_interval_test COMMAND ufloat_interval_test)
 
 # Hot-reloadable core: rebuild while the game runs.
-add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp)
+add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # SHaRC radiance cache: inject the D-EM effects-target emission. AUTO follows whether
 # common/host_api.h defines BG3RTX_HOST_HAS_RT_EMISSIVE (D-EM's Bg3HostApi::rt_emissive);

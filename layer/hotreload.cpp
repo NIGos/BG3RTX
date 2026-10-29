@@ -196,6 +196,7 @@ void core_init(DeviceData* dd) {
   g_host.set_spec_hit_distance = &ngx_set_spec_hit_distance;
   g_host.assetdb = assetdb_api();
   g_host.rr_active = &ngx_rr_active;
+  g_host.rt_emissive = &em_scene;
   g_host.rt_scene_set = &rt_scene_set;
   g_host.rt_scene_camera = &rt_scene_camera;
 
