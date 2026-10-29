@@ -40,6 +40,9 @@ param(
   # With -Move: release the key after this many seconds (0 = hold until the end),
   # so later traces see a static camera at the end of the pan (A/B at a new view).
   [int]$MoveSec = 0,
+  # Automated static/pan windows. Each has seconds, repeat_ms (0 = static),
+  # scan, capture_at, serial. Requires -Move -Background. Never sends global keys.
+  [string]$MovePlan = "",
   # Run under the Khronos validation layer; messages go to captures/validation.log.
   [switch]$Validation,
   # With -Validation: extra validation-layer settings, "key=value" pairs separated by
@@ -477,8 +480,37 @@ function Send-UiKey([int]$vk, [int]$scan) {
   Start-Sleep -Milliseconds 80
   [void][BG3RTX.Win]::PostMessage($h, 0x0101, [IntPtr]$vk, [IntPtr]($l -bor 0xC0000000))
 }
+$panPlan = if ($MovePlan) { @(Get-Content -LiteralPath $MovePlan -Raw | ConvertFrom-Json) } else { @() }
+if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
+$panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue
 while ((Get-Date) -lt $deadline) {
-  if ($moving -and $Background) {
+  if ($MovePlan) {
+    if ($panIndex -lt 0 -and (Test-Path $doneFile)) { $panIndex = 0; $panAt = Get-Date }
+    if ($panIndex -ge 0) {
+      $step = $panPlan[$panIndex]
+      $elapsed = ((Get-Date) - $panAt).TotalSeconds
+      if ($elapsed -ge $step.seconds) {
+        if ($moving) { Send-MoveKey $false; $moving = $false }
+        $panIndex++
+        if ($panIndex -ge $panPlan.Count) { $result = 'done'; break }
+        $panAt = Get-Date; $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]
+      }
+      if (-not $panCaptureSent -and $elapsed -ge $step.capture_at) {
+        $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
+        $iniLines += "pan_capture=$($step.serial)"
+        $iniLines | Set-Content -LiteralPath $ini
+        Write-Host "[pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms)"
+        $panCaptureSent = $true
+      }
+      if ($step.repeat_ms -gt 0 -and (Get-Date) -ge $panNextKey) {
+        $MoveScan = [byte]$step.scan
+        $moveVk = if ($MoveScan -eq 0x1e) { 0x41 } else { 0x44 }
+        Send-MoveKey $true $moving; $moving = $true
+        $panNextKey = (Get-Date).AddMilliseconds($step.repeat_ms)
+      }
+    }
+    Start-Sleep -Milliseconds 10
+  } elseif ($moving -and $Background) {
     # A posted key-down is a single press to the game; a held key is what
     # keyboard auto-repeat delivers: key-downs at ~30 Hz with the repeat bit.
     for ($i = 0; $i -lt 60; ++$i) { Send-MoveKey $true $true; Start-Sleep -Milliseconds 33 }
@@ -512,7 +544,7 @@ while ((Get-Date) -lt $deadline) {
       if ($mw.clicks -ge $mwSteps.Count) { Write-Host "mod warning: all steps sent, no load started" }
     }
   }
-  if ($Move -and (Test-Path $log)) {
+  if ($Move -and -not $MovePlan -and (Test-Path $log)) {
     $last = Get-Content $log -Tail 40 | Select-String '(\d+) draws in the last frame' | Select-Object -Last 1
     if ((Get-Item $log).LastWriteTime -lt $start) { $last = $null }
     if (-not $moveDone -and $last -and [int]$last.Matches[0].Groups[1].Value -gt 2000) {
@@ -537,7 +569,7 @@ while ((Get-Date) -lt $deadline) {
     }
     if (Test-Path $quitFile) { $result = "session closed"; break }
     if ($WhilePid -and -not (Get-Process -Id $WhilePid -ErrorAction SilentlyContinue)) { $result = "session owner exited"; break }
-  } elseif (Test-Path $doneFile) { $result = "done"; break }
+  } elseif (-not $MovePlan -and (Test-Path $doneFile)) { $result = "done"; break }
   if ($game.HasExited) { $result = "game exited"; break }
   # Stall: the game is alive but has stopped rendering ("[watch] presents 0"
   # for 30 s). Seen in background runs, mostly with no foreground window

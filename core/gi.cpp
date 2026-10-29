@@ -60,6 +60,7 @@ struct Snapshot {
   Bg3Binding x_atmo, x_tlut, x_ca0, x_ca1, x_cb0, x_cb1;
   bool rt_sun;   // the RT sun shadows were folded into the mask this frame
   bool aux_ao;   // gi_ao_apply kept the game's AO in gAux.x this frame
+  bool pan = false;
   // SHaRC radiance cache (sharc=1, core/sharc.h): resolved and queried by the GI trace in
   // run_pre; D-RF queries it (rf_sharc) and the injection writes it in run_post.
   bool sharc, rf_sharc;
@@ -170,6 +171,7 @@ std::unordered_map<VkCommandBuffer, Snapshot> g_pending;   // pre done, post owe
 VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_HANDLE, g_ls_set_layout = VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
+Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
 Pipe g_ls_match;    // D-LS per-light data: joins the runtime lights to the light array (core/ls_lights.h)
 // D-LS variants (docs/TRACK_D_RT.md 9.9): g_ls serves the default settings only, g_ls_full every
@@ -1501,11 +1503,25 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   };
   // Depth, normals and AO come from earlier graphics passes.
   memory_barrier(cmd, kAll, kCS);
+  s.pan = host->pan_capture && host->pan_capture(cmd, "depth", &s.dep);
+  if (s.pan) {
+    host->pan_capture(cmd, "normal", &s.nrm);
+    host->pan_capture(cmd, "albedo", &s.alb);
+    host->pan_capture(cmd, "material", &s.mat);
+  }
   // Robust ray origins first: every ray-traced pass (and D-LS after the lighting) reads them.
   if (tlas && pc.rt_origin != 0) {
     rt_begin();
     dispatch(cmd, g_rt_origin, b, pc, g_w, g_h, true);
     memory_barrier(cmd, kCS, kCS);
+  }
+  if (s.pan && tlas && refresh(g_pan_primary, "gi/pan_primary.hlsl", g_rt_layout)) {
+    dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true);
+    Bg3Binding im{};
+    im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
+    host->pan_capture(cmd, "primary", &im);
+    memory_barrier(cmd, kAll, kCS);
   }
   // SHaRC: last frame's injections into the cache before this frame's GI rays read it.
   if (s.sharc) {
@@ -1563,6 +1579,12 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     sunt_end(cmd);
     image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
+    if (s.pan) {
+      Bg3Binding im{};
+      im.image = g_rt_vis.image; im.format = VK_FORMAT_R8G8B8A8_UNORM;
+      im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
+      host->pan_capture(cmd, "sun", &im);
+    }
   } else if (s.shadow.view && host->cfg_int("contact_shadows", 1)) {
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     dispatch(cmd, g_contact, b, pc, g_w, g_h);
@@ -1716,7 +1738,14 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       // Not before the first frame that needs it: an unused pipeline is not compiled.
       if (refresh(g_ls_full, "gi/rt_local_shadows_full.hlsl", g_ls_layout)) lsp = g_ls_full.pipeline;
     }
+    if (s.pan && refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout)) lsp = g_pan_ls.pipeline;
     ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8);
+    if (s.pan) {
+      Bg3Binding im{};
+      im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+      im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
+      host->pan_capture(cmd, "local", &im);
+    }
     ls_timestamp(cmd, 2);
     if (s.shadow.view) image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kAll);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kAll);
@@ -1764,6 +1793,13 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
   }
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
+  if (s.pan) {
+    Bg3Binding im{};
+    im.image = g_hist[g_parity ^ 1].image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_hw; im.height = g_hh;
+    if (s.gi) host->pan_capture(cmd, "gi", &im);
+    host->pan_capture(cmd, "diffuse", &s.dif);
+  }
   if (s.sharc && s.tlas) sharc_post(cmd, s, pc);
   if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 8) {
     memory_barrier(cmd, kCS, kCS);
@@ -1896,7 +1932,7 @@ void gi_release() {
   g_lsl_ok = false;
   sunt_release();
   g_sunt_ok = false;
-  for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
+  for (Pipe* p : {&g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {

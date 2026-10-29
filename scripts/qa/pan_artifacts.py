@@ -1,0 +1,238 @@
+"""Strict, same-run analysis of 16-frame pan bursts. Never treats missing data as zero.
+
+py -3 -m scripts.qa.pan_artifacts <burst directories> --out <report directory>
+GPU camera headers drive reprojection. No image registration or human labels.
+"""
+from __future__ import annotations
+import argparse
+import json
+from pathlib import Path
+import numpy as np
+from PIL import Image, ImageDraw
+
+
+def decode(path, entry):
+    w, h, fmt = entry['width'], entry['height'], entry['format']
+    data = path.read_bytes()
+    if fmt in (97, 83):  # RGBA16F, RG16F
+        return np.frombuffer(data, '<f2').reshape(h, w, 4 if fmt == 97 else 2).astype('f4')
+    if fmt == 100:
+        return np.frombuffer(data, '<f4').reshape(h, w, 1)
+    if fmt in (37, 43, 44, 50):
+        a = np.frombuffer(data, 'u1').reshape(h, w, 4).astype('f4') / 255
+        return a[..., [2, 1, 0, 3]] if fmt in (44, 50) else a
+    if fmt in (64, 58):
+        v = np.frombuffer(data, '<u4').reshape(h, w)
+        a = np.stack([(v >> s) & 1023 for s in (0, 10, 20)], -1).astype('f4') / 1023
+        return a if fmt == 64 else a[..., ::-1]
+    if fmt == 122:
+        v = np.frombuffer(data, '<u4').reshape(h, w)
+        channels = []
+        for shift, bits in ((0, 6), (11, 6), (22, 5)):
+            c = (v >> shift) & ((1 << (bits + 5)) - 1)
+            e, m = c >> bits, c & ((1 << bits) - 1)
+            channels.append(np.where(e == 0, np.ldexp(m.astype('f4'), -14-bits),
+                                     np.ldexp(1 + m.astype('f4') / (1 << bits), e.astype('i4') - 15)))
+        return np.stack(channels, -1)
+    raise ValueError(f'unsupported format {fmt}')
+
+
+def camera(primary):
+    raw = np.rint(primary[0, :48]).astype('u1').tobytes()
+    values = np.frombuffer(raw, '<f4').astype('f8')
+    if not np.isfinite(values).all():
+        raise ValueError('nonfinite GPU camera header')
+    rays = values[:12].reshape(3, 4)[:, :3]
+    matrix = np.stack([rays[0], rays[1]-rays[0], rays[2]-rays[0]], axis=1)
+    return matrix, values[12:14], values[14:16], values[16:19]
+
+
+def reproject(depth, source_camera, target_camera):
+    """Source pixels -> target pixels and expected target linear depth."""
+    h, w = depth.shape
+    y, x = np.indices((h, w), dtype='f8')
+    matrix, scale, bias, origin = source_camera
+    ab = (np.stack([(x+.5)/w, (y+.5)/h], -1) - bias) / scale * .5
+    rays = np.einsum('ij,hwj->hwi', matrix, np.concatenate([np.ones((h,w,1)), ab], -1))
+    target, ts, tb, to = target_camera
+    relative = rays * depth[..., None] + origin - to
+    coeff = np.einsum('ij,hwj->hwi', np.linalg.inv(target), relative)
+    z = coeff[..., 0]
+    uv = coeff[..., 1:] / np.where(z[...,None] != 0, z[...,None], np.nan) * (2*ts) + tb
+    xx, yy = uv[...,0]*w-.5, uv[...,1]*h-.5
+    good = np.isfinite(xx) & np.isfinite(yy) & (z > 0)
+    ix = np.rint(np.nan_to_num(xx)).astype('i4').clip(0,w-1)
+    iy = np.rint(np.nan_to_num(yy)).astype('i4').clip(0,h-1)
+    good &= (xx >= 0) & (xx <= w-1) & (yy >= 1) & (yy <= h-1)
+    return iy, ix, z, good, np.hypot(xx-x, yy-y)
+
+
+def stable_samples(anchor, target):
+    depth = anchor['depth'][...,0]
+    iy, ix, z, good, motion = reproject(depth, anchor['camera'], target['camera'])
+    td = target['depth'][...,0]
+    # Nearest sampling covers half a pixel per axis. Local depth range bounds
+    # that footprint; float32 roundoff is added. Silhouettes fail albedo/material.
+    dy, dx = np.gradient(td)
+    bound = (np.abs(dx) + np.abs(dy))*.5 + np.abs(td)*np.finfo('f4').eps*8
+    good &= (depth > 0) & (np.abs(td[iy,ix]-z) <= bound[iy,ix])
+    good &= np.max(np.abs(anchor['albedo']-target['albedo'][iy,ix]), axis=-1) <= 1/255
+    good &= np.all(anchor['material'] == target['material'][iy,ix], axis=-1)
+    # Normals are view-space. Compare their encoded values only for unchanged
+    # orientation; rotating-camera support must transform them before acceptance.
+    if not np.allclose(anchor['camera'][0], target['camera'][0], rtol=0, atol=1e-6):
+        good[:] = False
+    else:
+        na, nt = anchor['normal'], target['normal'][iy,ix]
+        normal_bound = np.maximum(np.abs(na), np.abs(nt))*2**-10 + 2**-14
+        good &= np.max(np.abs(na-nt)-normal_bound, axis=-1) <= 0
+    good[0] = False
+    return iy, ix, good, motion
+
+
+def transient(sequence, valid, threshold):
+    """1-3-frame valleys bracketed by recovery; sustained shadows are excluded."""
+    t, h, w = sequence.shape
+    flags = np.zeros((t,h,w), bool)
+    events = 0
+    for duration in (1,2,3):
+        for start in range(1, t-duration):
+            before, after = sequence[start-1], sequence[start+duration]
+            low = sequence[start:start+duration]
+            mask = np.all(valid[start-1:start+duration+1], axis=0)
+            mask &= np.abs(before-after) <= threshold
+            mask &= np.all(np.minimum(before,after)[None]-low > threshold, axis=0)
+            new = mask & ~np.any(flags[start:start+duration], axis=0)
+            events += int(new.sum())
+            flags[start:start+duration] |= mask
+    return flags, events
+
+
+def load_burst(directory):
+    meta = json.loads((directory/'burst.json').read_text())
+    if not meta['valid_transport']:
+        raise ValueError('transport invalid')
+    frames = {}
+    for e in meta['samples']:
+        f = frames.setdefault(e['record_frame'], {})
+        # The last swapchain write in this record frame is the final candidate.
+        f[e['name']] = decode(directory/e['file'], e)
+        f.setdefault('submits', {})[e['name']] = e['submit_frame']
+    indices = sorted(frames)
+    if len(indices) != 16 or np.any(np.diff(indices) != 1):
+        raise ValueError('burst is not 16 consecutive frames')
+    required = {'depth','normal','albedo','material','primary','sun','local','gi','final'}
+    for i in indices:
+        f = frames[i]
+        missing = required-f.keys()
+        if missing:
+            raise ValueError(f'frame {i}: missing {sorted(missing)}')
+        f['camera'] = camera(f['primary'])
+        if not all(np.isfinite(f[k]).all() for k in required):
+            raise ValueError(f'frame {i}: nonfinite capture')
+        h,w = f['depth'].shape[:2]
+        final = f['final'][...,:3]
+        f['final_small'] = np.asarray(Image.fromarray((np.clip(final,0,1)*65535).astype('u2')[...,0], mode='I;16').resize((w,h)), dtype='f4')/65535
+        # Resize RGB channels separately, preserving final encoded luminance.
+        f['luma'] = sum(np.asarray(Image.fromarray(final[...,c],mode='F').resize((w,h)),dtype='f4')*weight
+                        for c,weight in enumerate((.2126,.7152,.0722)))
+        f['sun_mask'] = f['sun'][...,0]
+        f['local_mask'] = f['local'][...,2]
+        gi = f['gi'][...,:3] @ np.array([.2126,.7152,.0722],dtype='f4')
+        f['gi_luma'] = np.asarray(Image.fromarray(gi,mode='F').resize((w,h)),dtype='f4')
+    return meta, indices, frames
+
+
+def analyze(directory, out):
+    meta, ids, frames = load_burst(directory)
+    anchor = frames[ids[7]]
+    keys = ('luma','sun_mask','local_mask','gi_luma')
+    stacks = {key: [] for key in keys}
+    valid, movements, primary = [], [], []
+    for i in ids:
+        f = frames[i]
+        iy, ix, good, movement = stable_samples(anchor, f)
+        valid.append(good)
+        movements.append(float(np.median(movement[good])) if good.any() else None)
+        for key in keys:
+            stacks[key].append(f[key][iy,ix])
+        p = f['primary'][1:]
+        receivers = p[...,3] != 0
+        matched = (p[...,3] > 0) & (np.abs(p[...,0]) < 1)
+        primary.append(float(matched[receivers].mean()) if receivers.any() else None)
+    valid = np.stack(valid)
+    common = np.all(valid,axis=0)
+    report = {'directory':str(directory.resolve()), 'serial':meta['serial'], 'frames':ids,
+              'stable_pixels':int(common.sum()), 'median_motion_pixels':movements,
+              'primary_match_fraction':primary, 'effects':{},
+              'rt_gbuffer_pose_offset_frames':None,
+              'pose_offset_status':'not established: record/submit indices are not pose identity',
+              'gate':'INCOMPLETE: requires independent static calibration and pose alignment evidence'}
+    # A conservative exploratory threshold: largest adjacent static-repeat
+    # difference, plus the storage quantum. With no static samples, do not score.
+    is_static = max(m for m in movements if m is not None) < .5 if any(m is not None for m in movements) else False
+    arrays = {key:np.stack(value) for key,value in stacks.items()}
+    report['static'] = is_static
+    return report, arrays, valid, frames, ids
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('bursts',nargs='+',type=Path)
+    ap.add_argument('--out',required=True,type=Path)
+    args = ap.parse_args()
+    args.out.mkdir(parents=True,exist_ok=True)
+    results, loaded = [], []
+    for directory in args.bursts:
+        try:
+            item = analyze(directory,args.out)
+            loaded.append(item)
+            results.append(item[0])
+        except (ValueError,KeyError,OSError,np.linalg.LinAlgError) as e:
+            results.append({'directory':str(directory),'gate':'INVALID','error':str(e)})
+    static = [item for item in loaded if item[0]['static'] and item[0]['stable_pixels']]
+    if static:
+        thresholds = {}
+        for key, quantum in (('luma',1/255),('sun_mask',1/255),('local_mask',2**-10),('gi_luma',2**-10)):
+            noise = []
+            for _, arrays, valid, _, _ in static:
+                good = valid[1:] & valid[:-1]
+                noise.append(float(np.max(np.abs(np.diff(arrays[key],axis=0))[good])) if good.any() else 0)
+            thresholds[key] = max(noise)+quantum
+        for report, arrays, valid, frames, ids in loaded:
+            masks = {}
+            for key, seq in arrays.items():
+                flags, count = transient(seq, valid, thresholds[key])
+                masks[key] = flags
+                report['effects'][key] = {'pixel_events':count,'pixel_frames':int(flags.sum()),
+                    'unique_area_pixels':int(flags.any(axis=0).sum()),'threshold':thresholds[key]}
+            report['attribution_pixel_frames'] = {
+                key:int((masks['luma'] & masks[key]).sum()) for key in ('sun_mask','local_mask','gi_luma')}
+            flagged = np.any(np.stack(list(masks.values())),axis=0)
+            selected = np.flatnonzero(flagged.any(axis=(1,2)))
+            report['contact_sheets'] = []
+            for chunk in range(0,len(selected),4):
+                chosen = selected[chunk:chunk+4]
+                sheet = Image.new('RGB',(640*len(chosen),390),'#202020')
+                for column,index in enumerate(chosen):
+                    rgb = np.clip(frames[ids[index]]['final'][...,:3],0,1)
+                    im = Image.fromarray((rgb*255).astype('u1')).resize((640,360))
+                    mask = flagged[index]
+                    # Outline every flagged region using the binary four-neighbour boundary.
+                    inside = mask.copy()
+                    inside[1:] &= mask[:-1]; inside[:-1] &= mask[1:]
+                    inside[:,1:] &= mask[:,:-1]; inside[:,:-1] &= mask[:,1:]
+                    edge = Image.fromarray(((mask & ~inside)*255).astype('u1')).resize((640,360),Image.Resampling.NEAREST)
+                    im.paste((255,0,0),(0,0,640,360),edge)
+                    sheet.paste(im,(column*640,30))
+                    ImageDraw.Draw(sheet).text((column*640+8,8),f'frame {ids[index]}',fill='white')
+                dest = args.out/f'burst-{report["serial"]}-strip-{chunk//4}.png'
+                sheet.save(dest)
+                report['contact_sheets'].append(str(dest.resolve()))
+    result = {'gate':'INCOMPLETE','calibrated_static_bursts':len(static),'bursts':results}
+    (args.out/'report.json').write_text(json.dumps(result,indent=2))
+    print(json.dumps(result,indent=2))
+
+
+if __name__ == '__main__':
+    main()

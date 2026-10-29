@@ -186,6 +186,7 @@ void core_init(DeviceData* dd) {
   g_host.root_dir = root_dir().c_str();
   g_host.query_binding = &query_binding;
   g_host.alloc_image = &alloc_image;
+  g_host.pan_capture = &pan_capture;
   g_host.restore_bindings = &restore_bindings;
   g_host.dlss_motion_vectors = &ngx_motion_vectors;
   g_host.rt_scene = &rt_scene;

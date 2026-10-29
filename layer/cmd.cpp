@@ -145,6 +145,7 @@ static void end_pass(VkCommandBuffer cmd) {
   rrpost_pass_end(cmd, s->pass, s->color_layouts);
   sl_note_pass_end(cmd, s);
   core_on_pass_end(cmd, &s->pass);
+  pan_pass_end(cmd, s);
 }
 
 static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra = nullptr) {

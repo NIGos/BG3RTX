@@ -1,5 +1,24 @@
 # Track D: hardware ray tracing
 
+## P1 transient flashes — 2026-10-29, experimental
+
+`pan_capture` is a positive request serial, default 0. Each new serial records
+16 consecutive lighting frames. Named raw images retain recording and submit
+indices. Readbacks remain in memory until the burst ends; no disk/PNG work or
+queue idle wait occurs between those frames. ABI 15 exposes the core's private
+images to this bounded host readback path. Both DLLs must match.
+
+`pan_primary.hlsl` writes a separate primary-hit residual normalized by the
+existing geometric depth bound. Its header preserves exact GPU camera float
+bits in FP16 byte lanes. The ordinary sun shader and final image remain intact.
+`pan_local.hlsl` exports ls_debug=3 visibility without replacing the diffuse.
+It requires the non-k full path for valid masks. All normal variants are unchanged.
+The analyzer must reject missing channels, gaps and invalid transport. Pose
+offset remains unproven until scene-camera evidence is connected; a one-present
+recording age must never be treated as a demonstrated lag. No rendering fix
+is promoted. Runtime tests and contact sheets are pending.
+
+
 **Phase 2 (2026-10-26): ray-traced sun shadows and AO run on the game's own Vulkan
 device**, against acceleration structures rebuilt or refit every frame from the
 captured G-buffer geometry. Off by default (`rt=0`). Results, costs and next steps

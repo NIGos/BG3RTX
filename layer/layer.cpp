@@ -416,6 +416,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   if (trace_recording()) trace_on_submit(cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
+  pan_on_submit(cmds);
   sl_note_submit(cmds);
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
@@ -436,6 +437,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   if (trace_recording()) trace_on_submit(cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
+  pan_on_submit(cmds);
   sl_note_submit(cmds);
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
@@ -496,6 +498,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     assetdb_on_present(frame);
   }
   trace_on_present(queue, info);
+  pan_on_present(queue);
   framecap_on_present();
   if (g_headless) {
     std::vector<VkPipelineStageFlags> stages(info->waitSemaphoreCount, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);

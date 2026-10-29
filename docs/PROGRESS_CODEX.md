@@ -1,5 +1,21 @@
 # BG3RTX progress
 
+## P1 transient shadow flashes resumed — 2026-10-29
+
+The user explicitly resumed P1 with transient dark walls while panning. This
+supersedes the old pause and P2 priority below. FG toggle errors and the roughly
+18 fps base rate follow P1. Branch: `codex/p1-pan-flashes`.
+
+Experimental 16-frame burst producer and automatic flash analyzer added.
+`pan_capture=0` remains the default. ABI 15 adds the host readback callback;
+both DLLs are rebuilt together. No lag fix or default promotion yet. Runtime
+transport and the gate are pending. Contact sheets: not generated yet.
+User log: `captures/p1-pan-flashes/source-logs/user-0929-0934.log`.
+Three CTests, four synthetic analysis tests and existing QA detectors pass.
+All 34 shaders compile; seven ordinary shader binaries are byte-identical.
+Record/submit age alone is not camera-pose lag.
+
+
 ## User pause and model handoff — 2026-10-29
 
 The user paused game activities for a live test and requested a handoff for a
