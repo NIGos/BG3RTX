@@ -39,8 +39,8 @@ Repeat 297 started at 07:53:29 on frozen b6165ce. It uses 36 captures in nine
 ABBA blocks, a 30-second warmup, a 4-second gap and a 90-second hold. Rendering
 is unchanged. Existing energy QA now scales to larger cohorts; eight tests pass.
 Full 296 evidence and the repeat fixture are on P1; no samples were removed.
-Specs: docs/GI_NORMAL_FOOTPRINT.md.
-checked; the current fresh runtime prototype still requires full-resolution RR.
+Specs: docs/GI_NORMAL_FOOTPRINT.md. The current fresh runtime prototype still
+requires full-resolution RR; half-resolution support is derived and unit checked.
 
 
 Previous goal turn made progress: merged a valid legal QA exposure-hold fix,
