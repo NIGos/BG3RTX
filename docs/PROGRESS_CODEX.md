@@ -2,6 +2,17 @@
 
 ## Resumed — 2026-10-29
 
+258 / af093ae completed valid149s: all twelve exports, stationary max0.18px,
+finite/pose/AO pass and zero faults/dumps/build changes. Both energy CIs include
+zero: POST/PRE -0.0292%, CI [-0.000282538,+0.000272094]Y; off/on +6.975%, CI
+[-0.001305235,+0.003713217]Y. POWER IS LOW: one true light pulse broadens off/on
+relative CI to roughly [-7.56%,+21.51%]. Other on captures remain +0.50..2.06%
+versus PRE; do not claim the smaller bias is solved. 257 was incomplete (five
+late POST exports exceeded 2048MiB), not an energy pass; fixture now4096MiB.
+Job259 is one moving run on frozen2ff8b88 with balanced AB/BA toggles and camera
+directions every4s, no private/AO diagnostic. This is a diagnostic next step,
+not approval for defaults/merge. Full evidence remains on the P1 branch.
+
 Complete-source run256 execution valid149s, stationary max0.06 render px,
 finite/pose/alpha pass, zero driver faults/dumps/build changes. Energy checks
 FAIL: on/off +1.0583%, paired CI [0.000003457,+0.000362817]Y; POST versus
@@ -10,8 +21,7 @@ gone, but this is not noise parity or a P1 quality pass.
 P1 ccb1f65 additionally mirrors original composite spectral diffuse-share
 reconstruction and fp16 storage; fresh replay now follows RF so its specular
 source is complete. No empirical energy multiplier. Full build/11 CTests and
-two changed trace shaders pass. Job257 repeats twelve static captures frozen
-on that revision. Balanced moving fixture is ready; keep all keys off.
+two changed trace shaders pass. Job257/258 results are above. Balanced moving fixture is ready; keep all keys off.
 
 Run255 completed valid in 200 s: all twelve captures stationary (maximum shift
 0.16 render px), finite GI, valid GPU pose, unchanged PRE alpha and zero driver

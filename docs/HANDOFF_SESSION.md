@@ -37,15 +37,13 @@ Old research is preserved at pan-motion-vectors/BG3RTX 929be7a; camera-native
 
 User report: RT lighting/shadows seem to detach from objects during pans;
 Ctrl+Shift+F9 (all RT off) restores the normal appearance.
-Old static S3 candidate 03679ed fails: GI 172.938 per mille, mean 0.001258 PQ
-against 0.000978. Details in PROGRESS_CODEX. Those fixed-camera scores and
-independent moving trajectories cannot establish a P1 improvement.
+Old static S3 fails (details in PROGRESS_CODEX); fixed scores and independent
+moving trajectories cannot establish a P1 improvement.
 
-Old research proves owned-motion nonfinite fallback, paired depth/radiance and
-observed camera motion. A private metadata overlap hazard was fixed. It does
-not prove pan quality or the unavailable additional native camera payload.
+Old research proves finite fallback/paired depth/radiance and observed motion;
+metadata overlap fixed. No pan-quality or additional camera-payload proof.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now ccb1f65, pushed. It excludes
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 2ff8b88, pushed. It excludes
 unrelated FG work. Old current-radiance replay is default-off, paired ABI14;
 scope/evidence: phase docs/CURRENT_RADIANCE.md. No pan-quality win established.
 Latest user steering: STOP cross-run image comparisons. Use a per-run reprojection
@@ -96,9 +94,11 @@ Direct-only internal parity -0.807%, CI [-0.000601951,+0.000329959]Y. PARTIAL:
 both modes changed integrand, so it does NOT prove original estimator parity.
 256 valid149s/no faults, static0.06px/alpha pass; energy FAIL: on/off+1.0583%,
 POST/PRE+0.5418%, both CIs exclude zero. Large darkening gone, no quality pass.
-ccb1f65 mirrors original spectral share/fp16 rounding after RF. Job257 LIVE,
-frozen twelve captures. Require BOTH off/on and original PRE noise parity;
-then ONE moving toggle run (new balanced gi_fresh_pan_phases.json ready).
+ccb1f65 mirrors original share/fp16 after RF. 257 incomplete: readback budget.
+258 valid149s/all12/static0.18px/AO/no faults; both CIs include0, LOW POWER:
+POST/PRE -0.0292%; off/on+6.975%, relativeCI[-7.56%,+21.51%] from light pulse.
+Other on captures still+0.50..2.06% vsPRE; smaller bias NOT proved solved.
+259 LIVE frozen2ff8b88: ONE moving run, balanced AB/BA/directions4s; no promotion.
 Spec: phase docs/GI_FRESH_FALLBACK.md. Never report moving captures as static pass.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
