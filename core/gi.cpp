@@ -72,9 +72,10 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
-  VkPipeline variants[2] = {};
-  uint64_t variant_generations[2] = {};
-  std::string variant_files[2];
+  // Variant bits: 1 rt_scene_rebase (gi/rebase/), 2 rt_cascade_casters (gi/cascade*/).
+  VkPipeline variants[4] = {};
+  uint64_t variant_generations[4] = {};
+  std::string variant_files[4];
   bool rebased = false;
 };
 
@@ -613,11 +614,18 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
       "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
       "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
       "gi/rt_sun_resolve.hlsl", "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl"};
-  bool rebase = false;
-  if (host->cfg_int("rt_scene_rebase", 0))
-    for (const char* candidate : rebased_files) rebase |= std::strcmp(file, candidate) == 0;
-  const std::string selected = rebase ? std::string("gi/rebase/") + (file + 3) : file;
-  const unsigned variant = rebase ? 1u : 0u;
+  bool listed = false;
+  for (const char* candidate : rebased_files) listed |= std::strcmp(file, candidate) == 0;
+  const bool rebase = listed && host->cfg_int("rt_scene_rebase", 0) != 0;
+  // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
+  // casters as instance mask 0x02; these variants trace 0x01 except the sun ray
+  // (gi/cascade*/, shaders/rt/rt_common.hlsli). rt_sun_resolve traces nothing.
+  const bool cascade = listed && host->cfg_int("rt_cascade_casters", 0) != 0 &&
+                       std::strcmp(file, "gi/rt_sun_resolve.hlsl") != 0;
+  const std::string selected = cascade ? std::string(rebase ? "gi/cascade_rebase/" : "gi/cascade/") + (file + 3)
+                               : rebase ? std::string("gi/rebase/") + (file + 3)
+                                        : std::string(file);
+  const unsigned variant = (rebase ? 1u : 0u) | (cascade ? 2u : 0u);
   Bg3ShaderBlob blob{};
   if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
   if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
