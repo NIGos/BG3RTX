@@ -26,8 +26,8 @@ Shared queue is idle. Further uncontrolled AO1 smoke repeats cannot close native
 accuracy: the next P3 intervention must isolate native direct lighting without
 both ambient contamination (debug6) and direct suppression (debug4/native flag1).
 Inspect native flags/binding ownership before any replay/override implementation;
-no native buffer mutation or blanket validation waiver is authorized by these
-numbers. P1 source-epoch/conditional mismatch and unsupported unlit shading
+use owned inputs and actual-submit lifetime for any replay, and preserve the
+unresolved validation categories. P1 source-epoch/conditional mismatch and unsupported unlit shading
 remain unresolved; no candidate promotion, denominator or brightness tuning.
 
 
