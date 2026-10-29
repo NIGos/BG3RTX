@@ -34,6 +34,7 @@
 #include "host.h"
 
 #include <algorithm>
+#include <smmintrin.h>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -45,6 +46,26 @@
 namespace bg3 {
 
 namespace {
+// cpu_timing=1: CPU time of bvh_build's phases (logged with the [cpu] scene build line).
+double g_phase_ms[6] = {}, g_phase_t0 = 0; int g_phase_cur = -1; uint64_t g_phase_n = 0;
+double now_ms() { LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f); return double(t.QuadPart) * 1000.0 / double(f.QuadPart); }
+// The game's instance streams live in mapped memory that is usually write-combined (or
+// uncached): ordinary loads from it are uncached, ~4 us per 16 bytes (P3: 28 ms per frame
+// for 2,500 matrices). SSE4.1 streaming loads read such memory a full line at a time.
+void load_mapped16(float* dst, const uint8_t* src) {
+  if ((reinterpret_cast<uintptr_t>(src) & 15) == 0) {
+    _mm_storeu_si128(reinterpret_cast<__m128i*>(dst),
+                     _mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<uint8_t*>(src))));
+  } else {
+    std::memcpy(dst, src, 16);
+  }
+}
+
+void bvh_cpu_mark(int phase) {   // phase -1 closes the build
+  const double t = now_ms();
+  if (g_phase_cur >= 0) g_phase_ms[g_phase_cur] += t - g_phase_t0;
+  g_phase_cur = phase; g_phase_t0 = t;
+}
 
 constexpr uint32_t kInfoPool = 1u << 8, kInfoLegacy = 1u << 9, kInfoAlpha = 1u << 10;   // rt_common.hlsli
 constexpr uint32_t kRecBytes = 208;                // AlphaRec, rt_common.hlsli
@@ -862,6 +883,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const uint64_t new_budget = uint64_t((std::max)(cfg_int("rt_mesh_new_tris", 4000000), 1000));
   g_pool_grew = false;
 
+  bvh_cpu_mark(0);
   // ---- 1. decide: new meshes, checks, per-draw BLAS, instances ----
   struct Ext { uint64_t key; VkDeviceSize soup, soup_n, pool; uint32_t tris, mat0, matn, status; JobKind kind; uint32_t draw; };
   std::vector<Ext> ext;
@@ -949,6 +971,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   auto* info_out = reinterpret_cast<uint32_t*>(g_ring.map + rbase + g_info_off);
   uint8_t* mat_out = g_ring.map + rbase + g_mat_off;
 
+  bvh_cpu_mark(1);
   // Per-draw BLAS of the captured draws: refit while the triangle count holds.
   // One build per slot and frame: two builds into one BLAS in one call would race.
   std::unordered_set<uint64_t> dyn_this_frame;
@@ -1009,9 +1032,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     refit ? ++g_st.dyn_refit : ++g_st.dyn_rebuild;
   }
 
+  bvh_cpu_mark(2);
   // ---- 2. TLAS instances and InstInfo (static matrices at submit) ----
   std::vector<Fixup> fix;
   uint32_t n = 0;
+  // Local copies of each instance's BLAS reference and flags for the TLAS signature and
+  // the chunk guard below: reading them back from the mapped ring is uncached (P3).
+  std::vector<uint64_t> inst_ref;
+  std::vector<uint32_t> inst_flags;
   uint64_t static_tris = 0, dyn_tris = 0;
   for (uint32_t di : cached) {
     const FrameDraw& fd = g_draws[di];
@@ -1019,22 +1047,25 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     const bool alpha = fd.alpha && fd.rec != kNone;
     Fixup f{reinterpret_cast<uint8_t*>(inst_out + n), fd.instances, uint32_t(sizeof(VkAccelerationStructureInstanceKHR)),
             {fd.rows[0], fd.rows[1], fd.rows[2]}, {fd.row_stride[0], fd.row_stride[1], fd.row_stride[2]}, true, {}};
-    for (int k = 0; k < 3; ++k) std::memcpy(f.sample + 16 * k, fd.rows[k], 16);
+    for (int k = 0; k < 3; ++k) load_mapped16(reinterpret_cast<float*>(f.sample + 16 * k), fd.rows[k]);
     fix.push_back(f);
+    // Built in local memory and copied whole: inst_out/info_out are mapped (often
+    // write-combined) memory, where the bit-field stores below would read back
+    // uncached memory (read-modify-write), ~2.5 us each (P3: 7.6 ms per build).
+    VkAccelerationStructureInstanceKHR in{};
+    in.mask = 0;   // enabled at submit, with a finite matrix
+    in.instanceShaderBindingTableRecordOffset = 0;
+    in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
+               (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
+    in.accelerationStructureReference = m.as.addr;
+    const uint32_t inf[4] = {uint32_t(m.pool_off), (stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u),
+                             alpha ? 16 + fd.rec * kRecBytes : 0, m.tris};
     for (uint32_t i = 0; i < fd.instances; ++i, ++n) {
-      VkAccelerationStructureInstanceKHR& in = inst_out[n];
-      std::memset(&in.transform, 0, sizeof in.transform);
       in.instanceCustomIndex = n;
-      in.mask = 0;   // enabled at submit, with a finite matrix
-      in.instanceShaderBindingTableRecordOffset = 0;
-      in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
-                 (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
-      in.accelerationStructureReference = m.as.addr;
-      uint32_t* inf = info_out + n * 4;
-      inf[0] = uint32_t(m.pool_off);
-      inf[1] = (stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u);
-      inf[2] = alpha ? 16 + fd.rec * kRecBytes : 0;
-      inf[3] = m.tris;
+      std::memcpy(inst_out + n, &in, sizeof in);
+      std::memcpy(info_out + n * 4, inf, sizeof inf);
+      inst_ref.push_back(in.accelerationStructureReference);
+      inst_flags.push_back(in.flags);
     }
     static_tris += uint64_t(m.tris) * fd.instances;
     ++g_st.cached_draws;
@@ -1046,8 +1077,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     const FrameDraw& fd = g_draws[di];
     const DynSlot& s = g_dyn[key];
     const bool alpha = fd.cap_alpha && fd.rec != kNone;
-    VkAccelerationStructureInstanceKHR& in = inst_out[n];
-    std::memset(&in.transform, 0, sizeof in.transform);
+    VkAccelerationStructureInstanceKHR in{};   // local, then copied whole (see above)
     in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
     in.instanceCustomIndex = n;
     in.mask = 0xFF;
@@ -1055,11 +1085,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
                (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
     in.accelerationStructureReference = s.as.addr;
-    uint32_t* inf = info_out + n * 4;
-    inf[0] = uint32_t(fd.soup_off);
-    inf[1] = (stride & 0xffu) | (alpha ? kInfoAlpha : 0u);
-    inf[2] = alpha ? 16 + fd.rec * kRecBytes : 0;
-    inf[3] = fd.prims;
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (alpha ? kInfoAlpha : 0u),
+                             alpha ? 16 + fd.rec * kRecBytes : 0, fd.prims};
+    std::memcpy(inst_out + n, &in, sizeof in);
+    std::memcpy(info_out + n * 4, inf, sizeof inf);
+    inst_ref.push_back(in.accelerationStructureReference);
+    inst_flags.push_back(in.flags);
     ++n;
     dyn_tris += fd.prims;
     ++g_st.dyn_draws;
@@ -1084,6 +1115,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     v = std::move(fix);
   }
 
+  bvh_cpu_mark(3);
   // ---- 3. GPU: convert, extract/check, compaction, builds, TLAS ----
   // XFB writes done; last frame's ray queries and builds are done with what we reuse.
   // (HOST: the instance/InstInfo writes made at record; vkQueueSubmit already makes
@@ -1183,6 +1215,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if (any) barrier(cmd, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
   }
 
+  bvh_cpu_mark(4);
   // BLAS builds: new meshes (object space, from the pool) and the per-draw BLAS (from the soup).
   {
     std::vector<VkAccelerationStructureGeometryKHR> geo;
@@ -1292,13 +1325,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // TLAS over this frame's instances.
     tg.geometry.instances.data.deviceAddress = g_ring.addr + rbase;
     uint64_t sig = 1469598103934665603ull;
-    for (uint32_t i = 0; i < n; ++i) sig = mix(mix(sig, inst_out[i].accelerationStructureReference), inst_out[i].flags);
+    for (uint32_t i = 0; i < n; ++i) sig = mix(mix(sig, inst_ref[i]), inst_flags[i]);
     // Every BLAS reference must lie in one of our chunks (a cheap guard; the fault
     // report checks each against the BLAS we hold).
     {
       static uint32_t bad_logged = 0;
       for (uint32_t i = 0; i < n; ++i) {
-        const uint64_t r = inst_out[i].accelerationStructureReference;
+        const uint64_t r = inst_ref[i];
         bool in = false;
         for (const AsChunk& c : g_chunks) in = in || (r >= c.buf.addr && r < c.buf.addr + c.buf.size);
         if (!in && bad_logged < 20) {
@@ -1365,6 +1398,16 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->pool = g_pool.b;
   out->pool_bytes = g_pool.size;
   out->rec = rec;
+  bvh_cpu_mark(-1);
+  if (++g_phase_n >= 300) {
+    if (cfg_int("cpu_timing", 0))
+      log("[cpu] bvh_build phases, ms/build over %llu: decide %.3f, per-draw BLAS keys %.3f, TLAS instances %.3f, "
+          "GPU convert/extract/compaction %.3f, BLAS/TLAS build recording %.3f",
+          (unsigned long long)g_phase_n, g_phase_ms[0] / g_phase_n, g_phase_ms[1] / g_phase_n, g_phase_ms[2] / g_phase_n,
+          g_phase_ms[3] / g_phase_n, g_phase_ms[4] / g_phase_n);
+    for (double& v : g_phase_ms) v = 0;
+    g_phase_n = 0;
+  }
   return true;
 }
 
@@ -1420,18 +1463,17 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
     g_rec_cmd.erase(it);
   }
   if (g_fixups.empty()) return;
+  const double t_fix0 = now_ms();
   uint64_t applied = 0, late = 0, bad = 0;
   for (VkCommandBuffer c : cmds) {
     auto it = g_fixups.find(c);
     if (it == g_fixups.end()) continue;
     for (const Fixup& f : it->second) {
-      if (f.instance && std::memcmp(f.sample, f.src[0], 16) | std::memcmp(f.sample + 16, f.src[1], 16) |
-                            std::memcmp(f.sample + 32, f.src[2], 16))
-        ++late;
       for (uint32_t i = 0; i < f.count; ++i) {
         uint8_t* d = f.dst + VkDeviceSize(i) * f.dst_stride;
         float m[12];
-        for (int k = 0; k < 3; ++k) std::memcpy(m + 4 * k, f.src[k] + VkDeviceSize(i) * f.src_stride[k], 16);
+        for (int k = 0; k < 3; ++k) load_mapped16(m + 4 * k, f.src[k] + VkDeviceSize(i) * f.src_stride[k]);
+        if (i == 0 && f.instance && std::memcmp(f.sample, m, 48)) ++late;
         bool ok = true;
         for (float v : m) ok = ok && v > -1e7f && v < 1e7f;
         if (ok) {
@@ -1451,6 +1493,15 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
       applied += f.count;
     }
     g_fixups.erase(it);
+  }
+  if (applied) {   // cpu_timing: the submit-time matrix copies read the game's mapped instance stream
+    static double ms = 0; static uint64_t calls = 0, mats = 0;
+    ms += now_ms() - t_fix0; mats += applied;
+    if (++calls >= 300) {
+      if (cfg_int("cpu_timing", 0))
+        log("[cpu] submit-time instance matrix copies: %.3f ms per build (%.0f matrices)", ms / calls, double(mats) / calls);
+      ms = 0; calls = mats = 0;
+    }
   }
   std::lock_guard<std::mutex> sl(g_st_mu);
   g_st.fix_applied += applied;

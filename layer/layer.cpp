@@ -34,6 +34,7 @@ static void guard_check(const char* where, bool safe);
 
 DeviceData* main_device() { return g_main; }
 uint64_t frame_index() { return g_frame.load(); }
+void cmd_cpu_report(uint64_t frames);
 
 bool order_trace_active() {
   const int n = cfg_int("rt_order_trace", 0);
@@ -465,6 +466,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
 static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
   DeviceData* dd = device_of(queue);
   uint64_t frame = ++g_frame;
+  cmd_cpu_report(frame);
   if (frame <= 4 || (frame & 63) == 0) guard_check("vkQueuePresentKHR", true);   // on the presenting thread
   diag(DIAG_PRESENT);
   static int presents_logged = 0;

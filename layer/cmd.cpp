@@ -6,6 +6,33 @@
 #include <cstring>
 
 namespace bg3 {
+// cpu_timing=1: CPU time our geometry-capture hooks add while recording (P3 base frame rate).
+// Slots: pass begin, pre-draw, the driver's draw call itself on captured draws, post-draw, pass end.
+std::atomic<bool> g_cpu_timing{false};
+std::atomic<uint64_t> g_cpu_ticks[6], g_cpu_draws{0};
+static const char* const kCpuSlot[6] = {"pass before/begun", "pre-draw", "driver draw (XFB)", "post-draw", "pass ending", "pass after"};
+struct CpuTimer {
+  int slot; LARGE_INTEGER t0;
+  explicit CpuTimer(int s) : slot(s) { if (g_cpu_timing.load(std::memory_order_relaxed)) QueryPerformanceCounter(&t0); else slot = -1; }
+  ~CpuTimer() { if (slot >= 0) { LARGE_INTEGER t1; QueryPerformanceCounter(&t1); g_cpu_ticks[slot].fetch_add(uint64_t(t1.QuadPart - t0.QuadPart), std::memory_order_relaxed); } }
+};
+void cmd_cpu_report(uint64_t frames) {
+  g_cpu_timing.store(cfg_int("cpu_timing", 0) != 0, std::memory_order_relaxed);
+  static uint64_t last = 0;
+  if (!g_cpu_timing.load() || frames - last < 300) return;
+  const uint64_t n = frames - last; last = frames;
+  LARGE_INTEGER f; QueryPerformanceFrequency(&f);
+  std::string o; double total = 0; char b[96];
+  for (int i = 0; i < 6; ++i) {
+    const double ms = double(g_cpu_ticks[i].exchange(0)) * 1000.0 / double(f.QuadPart) / double(n);
+    total += ms; snprintf(b, sizeof b, "%s%s %.3f", i ? ", " : "", kCpuSlot[i], ms); o += b;
+  }
+  log("[cpu] capture hooks over %llu frames, ms/frame (all threads): total %.3f; %s; captured draws %.1f/frame",
+      (unsigned long long)n, total, o.c_str(), double(g_cpu_draws.exchange(0)) / double(n));
+}
+}  // namespace bg3
+
+namespace bg3 {
 
 using HookMap = std::unordered_map<std::string, PFN_vkVoidFunction>;
 
@@ -82,7 +109,7 @@ static void pass_ready(VkCommandBuffer cmd, CmdState* s) {
   for (int i = 0; i < 8; ++i) s->pass.color_layouts[i] = s->color_layouts[i];
   s->pass.depth_layout = s->depth_layout;
   core_on_pass_begin(cmd, &s->pass);
-  geo_pass_before(cmd, s);
+  { CpuTimer t(0); geo_pass_before(cmd, s); }
 }
 
 static CmdState* describe_classic(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info) {
@@ -128,7 +155,7 @@ static void end_pass(VkCommandBuffer cmd) {
   s->in_pass = false;
   s->dispatches_since_pass = s->indirect_since_pass = 0;
   s->last_cs = 0;
-  if (s->geo || s->geo_ts >= 0) geo_pass_after(cmd, s);
+  if (s->geo || s->geo_ts >= 0) { CpuTimer t(5); geo_pass_after(cmd, s); }
   if (s->tracing) {
     trace_flush_segment(s);
     std::string dumps = trace_dump_pass(cmd, s);
@@ -371,7 +398,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer cmd, const 
   diag(DIAG_BEGIN_PASS);
   CmdState* s = describe_classic(cmd, info);
   vk(cmd).CmdBeginRenderPass(cmd, info, contents);
-  if (s->geo) geo_pass_begun(cmd, s);
+  if (s->geo) { CpuTimer t(0); geo_pass_begun(cmd, s); }
   if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
@@ -380,18 +407,18 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass2(VkCommandBuffer cmd, const
   diag(DIAG_BEGIN_PASS);
   CmdState* s = describe_classic(cmd, info);
   vk(cmd).CmdBeginRenderPass2(cmd, info, sbi);
-  if (s->geo) geo_pass_begun(cmd, s);
+  if (s->geo) { CpuTimer t(0); geo_pass_begun(cmd, s); }
   if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass(VkCommandBuffer cmd) {
-  if (CmdState* gs = cmd_state(cmd); gs && gs->geo) geo_pass_ending(cmd, gs);
+  if (CmdState* gs = cmd_state(cmd); gs && gs->geo) { CpuTimer t(4); geo_pass_ending(cmd, gs); }
   vk(cmd).CmdEndRenderPass(cmd);
   end_pass(cmd);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass2(VkCommandBuffer cmd, const VkSubpassEndInfo* sei) {
-  if (CmdState* gs = cmd_state(cmd); gs && gs->geo) geo_pass_ending(cmd, gs);
+  if (CmdState* gs = cmd_state(cmd); gs && gs->geo) { CpuTimer t(4); geo_pass_ending(cmd, gs); }
   vk(cmd).CmdEndRenderPass2(cmd, sei);
   end_pass(cmd);
 }
@@ -411,12 +438,12 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cmd, const V
   }
   pass_ready(cmd, s);
   vk(cmd).CmdBeginRendering(cmd, info);
-  if (s->geo) geo_pass_begun(cmd, s);
+  if (s->geo) { CpuTimer t(0); geo_pass_begun(cmd, s); }
   if (s->tracing) trace_event(s, pass_json(s->pass));
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdEndRendering(VkCommandBuffer cmd) {
-  if (CmdState* gs = cmd_state(cmd); gs && gs->geo) geo_pass_ending(cmd, gs);
+  if (CmdState* gs = cmd_state(cmd); gs && gs->geo) { CpuTimer t(4); geo_pass_ending(cmd, gs); }
   vk(cmd).CmdEndRendering(cmd);
   end_pass(cmd);
 }
@@ -547,9 +574,9 @@ static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate(VkCommandBuff
 static VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cmd, uint32_t vc, uint32_t ic, uint32_t fv, uint32_t fi) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, DrawArgs{0, vc, ic, fv, 0, fi});
-  vk(cmd).CmdDraw(cmd, vc, ic, fv, fi);
-  if (geo) geo_post_draw(cmd, gs);
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{0, vc, ic, fv, 0, fi}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(2); vk(cmd).CmdDraw(cmd, vc, ic, fv, fi); } else vk(cmd).CmdDraw(cmd, vc, ic, fv, fi);
+  if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw");
 }
 
@@ -557,9 +584,9 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cmd, uint32_t n
                                                  uint32_t fin) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin});
-  vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin);
-  if (geo) geo_post_draw(cmd, gs);
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin); } else vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin);
+  if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw");
 }
 
@@ -638,9 +665,9 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(VkCommandBuffer cmd, VkBuffer 
                                                   uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, DrawArgs{2, 0, 0, 0, 0, 0});
-  vk(cmd).CmdDrawIndirect(cmd, b, o, n, st);
-  if (geo) geo_post_draw(cmd, gs);
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{2, 0, 0, 0, 0, 0}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndirect(cmd, b, o, n, st); } else vk(cmd).CmdDrawIndirect(cmd, b, o, n, st);
+  if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw_indirect");
 }
 
@@ -648,9 +675,9 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(VkCommandBuffer cmd, Vk
                                                          uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, DrawArgs{3, 0, 0, 0, 0, 0});
-  vk(cmd).CmdDrawIndexedIndirect(cmd, b, o, n, st);
-  if (geo) geo_post_draw(cmd, gs);
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{3, 0, 0, 0, 0, 0}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexedIndirect(cmd, b, o, n, st); } else vk(cmd).CmdDrawIndexedIndirect(cmd, b, o, n, st);
+  if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw_indirect");
 }
 
@@ -658,9 +685,9 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectCount(VkCommandBuffer cmd, VkBu
                                                        VkDeviceSize co, uint32_t mx, uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, DrawArgs{4, 0, 0, 0, 0, 0});
-  vk(cmd).CmdDrawIndirectCount(cmd, b, o, cb, co, mx, st);
-  if (geo) geo_post_draw(cmd, gs);
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{4, 0, 0, 0, 0, 0}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndirectCount(cmd, b, o, cb, co, mx, st); } else vk(cmd).CmdDrawIndirectCount(cmd, b, o, cb, co, mx, st);
+  if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw_indirect");
 }
 
@@ -668,9 +695,9 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cm
                                                               VkBuffer cb, VkDeviceSize co, uint32_t mx, uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) geo_pre_draw(cmd, gs, DrawArgs{5, 0, 0, 0, 0, 0});
-  vk(cmd).CmdDrawIndexedIndirectCount(cmd, b, o, cb, co, mx, st);
-  if (geo) geo_post_draw(cmd, gs);
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{5, 0, 0, 0, 0, 0}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexedIndirectCount(cmd, b, o, cb, co, mx, st); } else vk(cmd).CmdDrawIndexedIndirectCount(cmd, b, o, cb, co, mx, st);
+  if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw_indirect");
 }
 

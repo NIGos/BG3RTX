@@ -132,6 +132,10 @@ int g_scene_cur = -1;
 // Without the wait they trace the previous frame's scene: a camera-relative scene one frame
 // old, which detaches shadows while the camera moves.
 std::condition_variable g_scene_cv;
+// cpu_timing=1: CPU split of the scene build recording (P3 base frame rate).
+struct BuildCpu { double total = 0, bvh = 0, alpha = 0; uint64_t n = 0; };
+BuildCpu g_bcpu;
+double qpc_ms() { LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f); return double(t.QuadPart) * 1000.0 / double(f.QuadPart); }
 struct WaitStats { uint64_t calls = 0, waited = 0, got = 0, timeouts = 0, skipped = 0; double ms = 0, ms_max = 0; };
 WaitStats g_wait;
 uint32_t g_wait_misses = 0;   // consecutive timeouts: stop waiting after a few (no capture this frame)
@@ -914,7 +918,11 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     timestamp(cmd, slot, 0);
     g_stamp_slot = slot;
     BvhResult res{};
-    if (!bvh_build(cmd, cap, &stamp_cb, uint32_t(scene_slot), &res)) {
+    const bool cpu_t = cfg_int("cpu_timing", 0) != 0;
+    const double t_bvh0 = cpu_t ? qpc_ms() : 0;
+    const bool bvh_ok = bvh_build(cmd, cap, &stamp_cb, uint32_t(scene_slot), &res);
+    const double t_bvh1 = cpu_t ? qpc_ms() : 0;
+    if (!bvh_ok) {
       if (slot >= 0) g_slots[slot] = Slot{};   // the timestamps were not all written
       restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
       return;
@@ -925,6 +933,16 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     ab.camera = cap.ubo;
     ab.camera_offset = cap.ubo_offset;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
+    if (cpu_t) {
+      const double t2 = qpc_ms();
+      g_bcpu.bvh += t_bvh1 - t_bvh0;
+      g_bcpu.alpha += t2 - t_bvh1;
+      if (++g_bcpu.n >= 300) {
+        log("[cpu] scene build recording, ms/build over %llu: bvh_build %.3f, alpha_commit (records, set) %.3f",
+            (unsigned long long)g_bcpu.n, g_bcpu.bvh / g_bcpu.n, g_bcpu.alpha / g_bcpu.n);
+        g_bcpu = BuildCpu{};
+      }
+    }
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
     commit_scene_slot(scene_slot, res.tlas, set, true, res.rec);
