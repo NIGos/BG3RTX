@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 05:23 Europe/Rome
+## Current checkpoint - 2026-10-29 05:26 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -8,12 +8,25 @@
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P3 native accuracy, cookies, unknown-query coverage and moving quality remain unverified.
+- P3 S7 exercises cookie sampling; native accuracy, exact unknown-query coverage and moving quality remain unverified.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
 - One reset is authorized at exhaustion and unused; latest weekly usage read was 93%.
 
 ## Resumed — 2026-10-29
+
+285 bounded S7 retry PASS for ray/cookie coverage: valid116s/48s session,
+seven complete windows; last traced0.295/px, occluded0.092/px, cookie0.004/px.
+Final nonfinite0 and all captured dumps report0; no faults/dumps/build changes.
+281 remains a separate startup failure, not evidence against the box shader.
+Native cookie filtering accuracy and unknown fallback are not proved by this
+smoke. P3 now appends exact traced/occluded/unknown/cookie counts from existing
+counters:0.000 rates cannot prove count0. Host-only change, build/3 CTests pass;
+S7 cap1 fixture requires positive integer unknown and cookie populations.
+286 LIVE frozenP1 7bb43b5: gi_strength0 static12 isolates recursive-source
+coupling. This changes the lighting composition and is not a production fix,
+energy waiver, quality pass or permission to drop multibounce lighting.
+
 
 284 strict positive-old-loss gate FAILS: stable 135 s / 133 s exclusive,
 no driver faults, dumps or build changes. All fresh failures are unlit; up to

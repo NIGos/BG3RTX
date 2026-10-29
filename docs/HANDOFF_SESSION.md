@@ -23,7 +23,7 @@ Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
 - P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 7bb43b5, pushed, paired ABI14.
-- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b97f4d4, pushed.
+- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box 50b5dff, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
 Old research: pan-motion-vectors/BG3RTX 929be7a; motion-jitter/BG3RTX 53f0925.
@@ -32,15 +32,14 @@ D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Live job and immediate next action
-285 LIVE frozen P3 b97f4d4: bounded S7 startup retry. Actual runner39080
-started05:21:59, game37436 at05:22:01; fresh layer log confirms startup/loading.
-Check actual handles and terminal queue result; no restart from an observation timeout.
-P3 source/binaries/HEAD stay FROZEN. P1 7bb43b5 is clean/pushed; next runnable
-control is gi_recursive_source_isolation_static_job.json (gi_strength0, static12).
-284 strict loss gate FAILS: unlit failures have positive old energy up to6.73e-9
-weighted Y; total positive source delta1.40e-4 is over20000 times larger.
-No waiver or fallback/source change. Full audit and exact evidence below.
-After285 terminal, inspect S7 rays/cookies, record/push; P1 gets queue priority.
+286 LIVE frozen P1 7bb43b5: gi_strength0 static12 recursive-source isolation.
+Runner30160 started05:24:51. Verify actual process/session and terminal result;
+do not restart from observation timeout. P1 source/binaries/HEAD stay FROZEN.
+Changed lighting composition means diagnostic-only, never a production fix.
+285 bounded S7 retry PASS: actual rays and cookie sampling, final/all dumps
+finite, no driver faults. P3 appends integer query counts (host only;3 CTests).
+Next S7 cap1 requires exact positive unknown AND cookie counts, because0.000
+rates cannot prove count0. Native accuracy and cookie-specific unknowns stay open.
 
 ## P1 - pan instability remains OPEN
 User sees lighting/shadows detach while panning; Ctrl+Shift+F9 restores native.
@@ -121,8 +120,8 @@ inputs over3.236B samples, invalid0, but native ambient/in-scatter remains.
 Ambient and nonzero overshoot1.258e-6 prevent a total native-accuracy claim.
 278 S6 debug0 normal GI: ten windows,1.319 rays/px,0.738 occluded/px; final finite.
 279 cap1 did NOT exercise unknown boxes (0.000/px): coverage INVALID, no fallback proof.
-281 S7 exits2s BEFORE new layer log/scene-ready; no rendering evidence. Historical
-scene-sweep loadability does not prove current startup. One bounded retry next.
+281 S7 exits2s before layer/scene; bounded retry285 succeeds, actual cookie0.004/px.
+Sampling is exercised, not yet native-filter accuracy or unknown-pair proof.
 283 S5 PASS: ten windows,0.079 rays/px,0.029 occluded/px; final finite.
 S6/S5 cookie rates0; native accuracy, cookies, unknown coverage and moving/visual
 quality remain open. D32F nonfinite dumps are retained, not a global finite pass.
