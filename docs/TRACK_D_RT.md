@@ -1,5 +1,29 @@
 # Track D: hardware ray tracing
 
+## P1 deciding configuration is FG ON — 2026-10-29
+
+Latest steering supersedes the FG-off-only gate below: the visible symptom is
+reported only with FG on. Paired fg=0/2 jobs use real foreground presentation;
+FG 2 decides, FG 0 is reference. No runtime matrix has run. rt_scene_rebase and
+fg_current_destroy_only remain default-off; no merge or renderer promotion.
+
+The static job compares one GPU-verified view in both configurations: sun,
+local shadows, GI, reflections and RR per-pass counters plus three repeats of
+each debug view. Noise/preview/jitter-derived differences block the motion job.
+The motion matrix tests rotation at three speeds/both directions and slow/fast
+pans, with baseline/rebase-only/destroy-only in both FG configurations. Actual
+generation, active effects/RT, GPU motion and >=18 rendered fps are required
+with FG on; candidate primary match must reach the FG-on static level ~99.2%.
+The destroy candidate additionally needs fewer interior FG toggles. See
+tests/fixtures/p1_fg_{static,motion}_job.json and PROGRESS_CODEX.md.
+
+The diagnostics record primary/FG-toggle association and sampled lighting pose.
+Code audit finds app g_frame incremented once; generated presents go directly
+to the next layer and update displayed counters. ReflexSleep/new token runs
+after app present, including the initialized FG-off reference. This does not
+prove causation or native instance-row epoch. No speculative Reflex change.
+Seven CTests and 19 new matrix/static/fixture tests pass; no HLSL/ABI changes.
+
 ## P1 rotation qualification and epoch diagnostics — 2026-10-29, pending
 
 Rotation is now the main primary-match gate, approximately static 99.2% with

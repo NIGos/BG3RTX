@@ -540,6 +540,7 @@ function Send-UiKey([int]$vk, [int]$scan) {
 $panPlan = if ($MovePlan) { @(Get-Content -LiteralPath $MovePlan -Raw | ConvertFrom-Json) } else { @() }
 if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
 $panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue
+$phaseTraceIndex=0
 $rotateHeld = $false; $rotateSegment = -1; $rotateX = 0; $rotateY = 0
 $planClock = [System.Diagnostics.Stopwatch]::StartNew(); $phaseStartMs = 0.0
 $pointerCentred = $false
@@ -603,7 +604,7 @@ while ((Get-Date) -lt $deadline) {
           $result = 'done'; break
         }
         $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
-        $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1
+        $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1; $phaseTraceIndex=0
       }
       if (-not $panCaptureSent -and $elapsed -ge $step.capture_at) {
         $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
@@ -621,6 +622,17 @@ while ((Get-Date) -lt $deadline) {
         $iniLines | Set-Content -LiteralPath $ini
         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) set=$($step.set) foreground=$Foreground real_present=$RealPresent visible_unfocused=$NoActivate"
         $panCaptureSent = $true
+      }
+      # Optional static-view diagnostics use the existing trace path, never a
+      # second game launch. Requests and resulting capture paths retain clocks.
+      if ($step.trace_at -and $phaseTraceIndex -lt @($step.trace_at).Count -and
+          $elapsed -ge @($step.trace_at)[$phaseTraceIndex]) {
+        $request=Tagged $root 'trace' '.request'
+        if (-not (Test-Path -LiteralPath $request)) {
+          Set-Content -LiteralPath $request "phase=$panIndex label=$($step.label) repeat=$phaseTraceIndex"
+          Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-trace] phase=$panIndex label=$($step.label) repeat=$phaseTraceIndex"
+          $phaseTraceIndex++
+        }
       }
       $h = Get-GameWindow; $rect = New-Object BG3RTX.Win2+RECT
       if ($h -ne [IntPtr]::Zero) { [void][BG3RTX.Win2]::GetClientRect($h,[ref]$rect) }

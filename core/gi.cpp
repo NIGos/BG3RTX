@@ -900,13 +900,16 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
     host->log("rt epoch (%u frames): GPU camera frames %u, scene snapshots %u; camera motion mean %.6f deg/frame, "
               "max %.6f deg/frame, signed yaw %.6f deg/frame; scene rotation max %.6f deg, translation max %.6f m; "
               "pool hit match %.3f%% of %llu, soup hit match %.3f%% of %llu; camera translation motion max %.6f m/frame, "
-              "precision bound %.6f m/frame; misses remain in the global primary check",
+              "precision bound %.6f m/frame; lighting forward [%.9g, %.9g, %.9g], origin [%.9g, %.9g, %.9g]; "
+              "misses remain in the global primary check",
               g_stats_n,g_epoch_motion.frames,g_epoch_motion.scene_frames,g_epoch_motion.angle_sum*to_deg/steps,
               g_epoch_motion.angle_max*to_deg,g_epoch_motion.yaw_sum*to_deg/steps,
               g_epoch_motion.scene_angle_max*to_deg,g_epoch_motion.translation_max,
               t[136] ? 100.0*t[137]/double(t[136]) : 0.0,(unsigned long long)t[136],
               t[140] ? 100.0*t[141]/double(t[140]) : 0.0,(unsigned long long)t[140],
-              g_epoch_motion.origin_motion_max,g_epoch_motion.origin_precision_bound);
+              g_epoch_motion.origin_motion_max,g_epoch_motion.origin_precision_bound,
+              g_epoch_motion.previous[0],g_epoch_motion.previous[1],g_epoch_motion.previous[2],
+              g_epoch_motion.previous_origin[0],g_epoch_motion.previous_origin[1],g_epoch_motion.previous_origin[2]);
   }
   if (t[8]) {
     double r = double(t[8]), h = double(t[9] ? t[9] : 1);

@@ -1,5 +1,23 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## P1 FG-on deciding matrix — 2026-10-29, queued preparation
+
+The user's current symptom occurs with FG on. FG 2 is now the deciding P1
+configuration; FG 0 is reference only. Both run focused/real in one moving
+session, with Streamline cold-loaded at FG 2. Unfocused launch remains FG-off
+only and is not a deciding test. No game launched or runtime pass established.
+
+fg_current_destroy_only is compared against baseline and rebase-only, separately.
+Retain it only if actual FG generation stays active, moving primary match
+reaches the FG-on static level, and interior host toggles decrease. Report both
+all options calls and mode changes; planned switches at phase boundaries do
+not count as interior instability. SDK state and actual displayed/rendered
+are required: requesting FG on is insufficient. A static same-view job first
+checks sun/local/GI/reflection/RR parity through debug captures and counters.
+Both keys stay default-off until deciding evidence exists. Reflex/TLAS timing
+causation is unproved; no Reflex path change was made. Details and expected
+report paths are at the top of PROGRESS_CODEX.md.
+
 ## P2 watched-image retirement candidate — 2026-10-29, unmeasured
 
 Log-only review: retained user excerpt 09:29-09:34 has 27 host on/off changes,

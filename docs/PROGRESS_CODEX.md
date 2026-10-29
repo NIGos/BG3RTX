@@ -1,5 +1,65 @@
 # BG3RTX progress
 
+## P1 now decided by FG ON; paired jobs prepared — 2026-10-29
+
+FG `2` with real focused presentation is the MAIN deciding configuration.
+FG `0` is reference only; its match does not decide whether a fix passes.
+The user reports the visible bug only with FG on. No game launched in this
+continuation; USER_AWAY is absent. No renderer fix was promoted or merged.
+`USER_STEERING.md` was not found in this checkout or the other project/worktree
+locations searched. The two 13:57 entries could not be read; the explicit
+requirements restated in the user's message are applied here.
+
+First completed: visible-unfocused launch mode committed/pushed as `6207338`.
+It forces FG off and remains opt-in. The focused FG-on matrix does not use it.
+Unfocused rotation acceptance and startup focus behavior remain unverified.
+
+Pending replacement queue pair (QuickSave_3784, foreground, real presentation,
+FG 2 loaded at startup so Streamline is available for both live configurations):
+
+- `p1-fg-static-effects`: 820 s of one stationary view. Normal FG 2 / FG 0 /
+  FG 2 windows prove sun, local shadows, GI, reflections and RR via per-pass
+  counters/timers. Sun/visibility, local visibility, GI, reflection tier and RR
+  normal-guide debug views each have three captures in both configurations.
+  Sampled GPU camera origin/forward must match at native FP32 precision.
+  Differences beyond repeated noise, preview precision and jitter are a parity
+  failure that blocks the moving job. No difference has yet been measured.
+- `p1-fg-motion-matrix`: 56 paired 60-second phases, 3,360 s total. Rotation
+  60/120/240 px/s in both directions, slow/fast pans and static windows. Both FG
+  configurations test baseline, `rt_scene_rebase=1`, and
+  `fg_current_destroy_only=1` separately, not combined. It requires a successful
+  static check from the SAME build. Combined job timeouts total 4,780 s.
+
+Each phase reports moving primary match, rendered fps, actual displayed/rendered
+ratio, SDK presented frames/status, all slDLSSGSetOptions calls, full-phase mode
+toggles and interior toggles. Planned FG changes are separated from instability.
+FG 2 must really generate frames (watch ratio above 1 plus SDK presented >= 2),
+keep active RT and at least 18 rendered fps. FG 0 must really stop generating.
+FG-on baseline must reproduce mismatch; a candidate must restore all FG-on
+moving windows to the FG-on static repeat-derived level (about 99.2%). Missing
+RT, ignored input, focus loss or incomplete evidence cannot pass. The destruction
+candidate also needs a measured reduction in interior FG toggles to be retained.
+
+Present-path code audit: the app present increments `g_frame` once; Streamline's
+real/generated presents call the next driver's present and increment displayed
+counters, not the app frame. `new_frame()` obtains a token and calls ReflexSleep
+after the app present. The FG 0 reference retains this initialized Streamline/
+Reflex path, so this is not a cold-no-Streamline comparison. There is no demonstrated
+double frame-counter increment. Toggle/primary-window association is reported;
+causation by Reflex or older native TLAS matrices remains UNPROVEN. No speculative
+Reflex or renderer change was made. Existing FG-on logs lack this deciding
+moving primary evidence; earlier FG-off positive controls are now reference only.
+
+Seven CTests and 19 new matrix/static/plan tests pass, including midnight rollover.
+No shader/ABI change;
+only keyed epoch logging adds sampled GPU pose values. The old FG-off-only pair
+is preserved in `captures/queue/held/fg0-superseded-20261029-1435/`. The new paired
+jobs are pending until USER_AWAY under `captures/queue/pending/001-p1-fg-static-effects.json`
+and `002-p1-fg-motion-matrix.json`.
+Expected reports: `captures/p1-fg/static-effects-result.json` and
+`captures/p1-fg/motion-gate-result.json`. Debug contact sheets will be under
+`captures/p1-fg/static-effects-sheets/`; none have been captured yet.
+
 ## Answer: visible background queue mode is opt-in — 2026-10-29
 
 Use job field `"window_mode": "visible_unfocused"` for FG-off tests only.
