@@ -1,4 +1,4 @@
-# Session handoff — 2026-10-28, evening
+# Session handoff — 2026-10-29
 
 Read this first, then the top of docs/STATUS.md and docs/PROGRESS_CODEX.md.
 STATUS describes the stable code; PROGRESS_CODEX is the current work log.
@@ -19,7 +19,8 @@ push main and the work branches, then stop. Work autonomously in the meantime.
 - Prefer fixes and short A/B loops. No FG/HDR-UI/swapchain work unless a phase needs it.
 - Do not use Ponytail, its skills, hooks or instructions.
 
-No user decision is currently required; the active goal supersedes the old pause.
+User explicitly resumed on Oct29. P1 energy preservation has first priority.
+One usage reset is authorized if needed at the limit; not used yet.
 Put future questions atop PROGRESS_CODEX and continue conservative/offline work.
 
 ## Main and research state
@@ -52,7 +53,7 @@ Already established in research:
 - An introduced private metadata write hazard was fixed by nonoverlapping ranges.
 - Static/moving repeats on 929be7a pass their queue checks (116 / 126 s), with no faults and zero messages naming 3,255 / 3,345 logged private handles.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 1a57286, pushed. It excludes
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now bc8cea0, pushed. It excludes
 unrelated FG work. Current-radiance 3c7b411 is default-off, paired ABI14; scope
 and old static evidence: phase docs/CURRENT_RADIANCE.md and main PROGRESS_CODEX.
 c428cde fixes a recursive tracker shared-lock. Smoke proves GPU-valid pose,
@@ -92,10 +93,23 @@ removes 71.8–99.9% of bounce energy; alpha identical in all four captures.
 bounce Y falls 70.66%/87.96%; alpha identical over 2,731,520 px per pair, finite,
 pose valid, eleven GPU predicate cases pass. Normal/depth reject 52.35%/22.46%
 of reported queries (startup included). No P1 quality win or merge; all keys off.
-P1 is temporarily parked in phase PAUSED.md while P3 gets runtime checks.
-Next: energy-preserving fresh hit shade/current-lighting or supported cache on
-rejection; distinguish spatial normal variation from disocclusion. Do not tune
-a normal-dot threshold or add camera transport without evidence. Goal stays active.
+User steering: rejected history must use a fresh sample of the same expected
+value; key-on static mean must match key-off within measured noise. P1 resumed.
+d2173c7 adds default-off gi_history_fresh: POST frozen-pose replay reuses paired
+DIRECT source or fresh current native lighting on rejection, fixed ray weights/
+denominator, preserved PRE AO. Both gate modes use the same one-bounce source;
+PRE legacy recursive-source energy is also reported. RR full-res, diffuse-only.
+Metadata stride3; previous token consumed after POST readers. No new transport.
+11 CTests, 49 shaders, 24 ABI checks, 4 energy tests and 36 helper checks pass;
+7 ordinary shaders remain byte-identical. StaticCamera owns a client-centred pointer.
+Smoke251 valid113s, zero driver events/dumps/build changes, finite, pose valid,
+identical alpha: off/on Y 0.0166252/0.0170019. Two samples are NOT a noise pass.
+Unlimited VVL: existing renderpass/NGX categories, no dispatch sync hazard or
+message naming 21 private exported handles/new metadata. Scoped evidence only.
+Job252 is LIVE on frozen bc8cea0: twelve static captures in ONE run, six AB/BA
+pairs; scripts.qa.gi_energy checks finite/positive signal, pose, camera, AO and
+paired Student-t noise CI. Read actual process/job status; then production pan
+off/on in ONE moving run if static passes. Spec: phase docs/GI_FRESH_FALLBACK.md.
 Keep this checkout's source and binaries frozen while its queued job is active.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
 footprint and GPU-ordered availability, not a CPU epoch certificate.
@@ -126,8 +140,8 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 box lights: codex/p3-box 8d40fdc, pushed; managed p2-pending/BG3RTX. Default-off ls_box host/shaders implemented; build, 3 CTests, defaults, 34 shaders pass. Job 250 is LIVE, S6 reference hold90 with boxes off. Source/binaries frozen. Next: read every reference window, then one-session projector recompute off/on fixture; S7/S5 and visual gates follow. No merge.
-- P4 OMM foliage: worktree-agent-a8b7cb486c1434ebd, its HANDOFF.md. Conservative design; unknown falls back to alpha testing.
+- P3 codex/p3-box 8d40fdc (p2-pending/BG3RTX), default off. 250 INVALID: 21 windows/6.862B pixels, 12,304 any-bit differences, zero >1e-5/one-writer differences, no driver faults. ls_stats=1 selects full variant, unlike earlier golden control. No activation-on run or merge; defer to P1.
+- P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.
 

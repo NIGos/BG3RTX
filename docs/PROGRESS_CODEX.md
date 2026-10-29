@@ -1,5 +1,47 @@
 # BG3RTX progress
 
+## Resumed — 2026-10-29
+
+User resumed and made P1 energy preservation first priority. The rejection
+branch drops L*w then divides by the unchanged ray count: lost bounce, not a
+quality improvement. New default-off gi_history_fresh (P1 d2173c7, current
+evidence head bc8cea0) replays RGB after native lighting with existing frozen
+PRE pose. Both gate modes use paired direct native source, with fresh current
+source on rejection. It preserves PRE visibility and fixed ray weights/counts;
+it does not compare recursive composite radiance to a different fresh integrand.
+Legacy PRE energy is reported separately. Initial scope RR full-res/diffuse-only.
+
+Offline: 11 CTests, 49 shaders, 24 ABI checks, 4 energy-check regressions and
+36 script checks pass; seven ordinary GI/RF binaries remain byte-identical.
+Smoke251 valid113s, no driver events/dumps/build changes. Off/on raw Y
+0.016625201 / 0.017001902, PRE legacy 0.017214335 / 0.017579911; finite, GPU
+pose valid, identical PRE/POST alpha, static albedo within raster jitter.
+One source window proves 27,078,193 cached and 12,110,691 fresh reads, only 3
+unavailable. Two captures are not enough for the measured-noise energy gate.
+
+Unlimited VVL reports 2,723 sync hazards in existing renderpass/NGX categories;
+no dispatch sync hazard or message naming 21 private exported handles/new
+metadata. Earlier gate-only smoke has the same three categories. This is
+scoped evidence, not a clean validation certificate. Raw VVL log and evidence
+JSON retained on P1; docs/GI_FRESH_FALLBACK.md explains bounds and limitations.
+
+Job252 running: twelve static captures in ONE run, six balanced AB/BA pairs,
+owned centred pointer, raw checkpoints for actual gate mode and unchanged AO.
+The check compares mean GI with its paired Student-t 95% noise interval and
+rejects black output, invalid pose, camera motion or missing pairs. Report CI
+width/power; only after this passes repeat the production moving pan. The
+residual cohort already widened to 13.4%/7.15% in run248; no cross-run images.
+
+P3 baseline250 completed INVALID: 21 windows, 6,861,577,296 reference pixels,
+12,304 any-bit differences (41–1533/window), zero >1e-5-relative or one-writer
+differences; zero driver events/dumps. ls_stats=1 chooses the full variant,
+unlike the old golden default control. No new box-light activation or merge.
+P4 8d902d5 adds the conservative interval classifier and corrected alpha-domain
+contract; full build/4 CTests, 197,621 independent-oracle checks pass. GPU bake,
+domain provider and hardware attachment remain unimplemented; no main merge.
+P6 minimum water design remains in main. One usage reset is authorized if we
+reach the limit; that authorization has not been consumed.
+
 ## Evening summary — 2026-10-28, 22:20 Europe/Rome
 
 1. Main 6dba0a8 adds the corrected local-light reference and complete merge checks; P1 is not merged.
