@@ -1,0 +1,148 @@
+{
+  "job": {
+    "job": "p3-box-s6-shadow-smoke",
+    "run": 1,
+    "start": "2026-10-29T04:49:47",
+    "sec": 111,
+    "valid": true,
+    "outcome": "Run ended: done after 49s (session s044947#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "64a3765 Exercise actual box shadow rays with normal lighting and production GI | core 03:26:21",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-box-s6-shadow-smoke.1.045048.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-045059"
+    ],
+    "lines": [
+      "04:50:50.849  [core] ls box: active (native lighting set 0000022FFEA12BC0, dynamic offsets 2)",
+      "04:51:33.681  [core] ls box stats (120 frames): evaluated 1.319/px, shadow-mapped 0.013/px, traced 1.319/px, occluded 0.738/px, unknown 0.000/px, cookie 0.000/px; game box light 46.054% of lit luminance, removed 19.789%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+      "04:51:33.681  [core] ls stats (120 frames): non-standard material px 0.1347M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.0000M px, game 0.0000, recomputed 0.0000, mean |diff| 0.00000, recompute above game 0.00000; set0/b0 _m4 (skin shaded white) 1"
+    ],
+    "session": "s044947#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "windows": [
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.738,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.052,
+      "removed_percent": 19.789
+    },
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.738,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.052,
+      "removed_percent": 19.797
+    },
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.739,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.057,
+      "removed_percent": 19.797
+    },
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.738,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.067,
+      "removed_percent": 19.801
+    },
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.738,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.058,
+      "removed_percent": 19.795
+    },
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.738,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.059,
+      "removed_percent": 19.791
+    },
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.738,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.057,
+      "removed_percent": 19.799
+    },
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.739,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.046,
+      "removed_percent": 19.815
+    },
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.738,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.057,
+      "removed_percent": 19.797
+    },
+    {
+      "frames": 120,
+      "evaluated": 1.319,
+      "shadow_mapped": 0.013,
+      "traced": 1.319,
+      "occluded": 0.738,
+      "unknown": 0.0,
+      "cookie": 0.0,
+      "native_share_percent": 46.054,
+      "removed_percent": 19.789
+    }
+  ],
+  "nonfinite_dumps": {
+    "d117": [
+      "D32F",
+      "76433aef",
+      4590
+    ]
+  },
+  "final_key": "d222",
+  "final_nonfinite": 0,
+  "interpretation": "Actual shadow execution PASS. Nonfinite D32F depth dump retained; final/composed lighting finite. Not a native-energy, cookie or temporal-quality pass."
+}

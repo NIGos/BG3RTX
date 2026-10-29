@@ -1,0 +1,36 @@
+{
+  "job": {
+    "job": "p3-box-s6-unknown-smoke",
+    "run": 1,
+    "start": "2026-10-29T04:53:28",
+    "sec": 117,
+    "valid": false,
+    "outcome": "INVALID (missing: ls box stats \\(120 frames\\): evaluated (?!0\\.000)\\d+\\.\\d+/px, shadow-mapped \\d+\\.\\d+/px, traced (?!0\\.000)\\d+\\.\\d+/px, occluded \\d+\\.\\d+/px, unknown (?!0\\.000)\\d+\\.\\d+/px); Run ended: done after 49s (session s045328#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "1a0c1ed Confirm actual box shadow execution and prepare forced unknown-query control | core 03:26:21",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-box-s6-unknown-smoke.1.045436.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-045447"
+    ],
+    "lines": [
+      "04:54:39.200  [core] ls box: active (native lighting set 0000018A2C6490D0, dynamic offsets 2)",
+      "04:55:21.806  [core] ls box stats (120 frames): evaluated 1.319/px, shadow-mapped 0.013/px, traced 1.319/px, occluded 0.738/px, unknown 0.000/px, cookie 0.000/px; game box light 46.037% of lit luminance, removed 19.766%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+      "04:55:21.806  [core] ls stats (120 frames): non-standard material px 0.1347M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.0000M px, game 0.0000, recomputed 0.0000, mean |diff| 0.00000, recompute above game 0.00000; set0/b0 _m4 (skin shaded white) 1",
+      "INVALID: expected log lines not found: ls box stats \\(120 frames\\): evaluated (?!0\\.000)\\d+\\.\\d+/px, shadow-mapped \\d+\\.\\d+/px, traced (?!0\\.000)\\d+\\.\\d+/px, occluded \\d+\\.\\d+/px, unknown (?!0\\.000)\\d+\\.\\d+/px"
+    ],
+    "session": "s045328#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "nonfinite_dumps": {
+    "d126": [
+      "D32F",
+      "76433aef",
+      4261
+    ]
+  },
+  "final_nonfinite": 0,
+  "interpretation": "Unknown-branch coverage INVALID: candidate cap1 did not produce a reported positive unknown box population. Ordinary ray execution continued; no claim of fallback verification. Opaque committed shadow hits can end traversal before candidate-cap aborts."
+}

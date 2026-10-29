@@ -1,0 +1,151 @@
+{
+  "job": {
+    "job": "p3-ao-one-projector-signal",
+    "run": 1,
+    "start": "2026-10-29T04:38:11",
+    "sec": 110,
+    "valid": true,
+    "outcome": "Run ended: done after 48s (session s043811#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "e9a73d5 Identify validation AO-zero suppression and prepare existing AO-one signal control | core 03:26:21",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-ao-one-projector-signal.1.043913.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-043923"
+    ],
+    "lines": [
+      "04:39:15.086  [core] ls box: active (native lighting set 000001EC0AEFBBC0, dynamic offsets 2)",
+      "04:39:57.183  [core] ls box stats (120 frames): evaluated 1.323/px, shadow-mapped 0.013/px, traced 0.000/px, occluded 0.000/px, unknown 0.000/px, cookie 0.000/px; game box light 0.000% of lit luminance, removed 0.000%; projector validation px 325786937: game 0.038577, recomputed 0.029522, mean |diff| 0.009000, recompute above game 0.000001, box share 63.277%",
+      "04:39:57.183  [core] ls stats (120 frames): non-standard material px 0.1349M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.1305M px, game 0.0589, recomputed 0.0509, mean |diff| 0.00808, recompute above game 0.00000; set0/b0 _m4 (skin shaded white) 1",
+      "04:39:57.183  [core] ls validation fit (all pixels including projectors): game = 1.0579 x recomputed + 0.00743 over 2.53M lit px (mean recomputed 0.02896, game 0.03807); game where no local light reaches 0.00989 (0.06M px)",
+      "04:39:57.183  [core] ls box precise (120 frames): px 325786937 native nonzero 325786937 recomputed nonzero 318592901 invalid 0; raw game 0.038576367 recomputed 0.0295358099 abs_diff 0.00904305267 over 1.24774138e-06 box 0.0186990728; mean quantization <= 2.98023224e-08"
+    ],
+    "session": "s043811#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "windows": [
+    {
+      "frames": 120,
+      "pixels": 304067799,
+      "native_positive": 304067799,
+      "recompute_positive": 297353554,
+      "invalid": 0,
+      "native_Y": 0.0385696617,
+      "recompute_Y": 0.0295296169,
+      "absolute_error": 0.00904253055,
+      "overshoot": 1.24286058e-06,
+      "box_Y": 0.0186931528
+    },
+    {
+      "frames": 120,
+      "pixels": 325786944,
+      "native_positive": 325786944,
+      "recompute_positive": 318592550,
+      "invalid": 0,
+      "native_Y": 0.0385751717,
+      "recompute_Y": 0.0295342839,
+      "absolute_error": 0.00904340308,
+      "overshoot": 1.25762708e-06,
+      "box_Y": 0.0186971805
+    },
+    {
+      "frames": 120,
+      "pixels": 325786959,
+      "native_positive": 325786959,
+      "recompute_positive": 318592695,
+      "invalid": 0,
+      "native_Y": 0.0385761453,
+      "recompute_Y": 0.0295350815,
+      "absolute_error": 0.00904352403,
+      "overshoot": 1.23010675e-06,
+      "box_Y": 0.0186989727
+    },
+    {
+      "frames": 120,
+      "pixels": 325786937,
+      "native_positive": 325786937,
+      "recompute_positive": 318593706,
+      "invalid": 0,
+      "native_Y": 0.0385711022,
+      "recompute_Y": 0.0295310408,
+      "absolute_error": 0.00904260779,
+      "overshoot": 1.27322193e-06,
+      "box_Y": 0.0186993842
+    },
+    {
+      "frames": 120,
+      "pixels": 325786944,
+      "native_positive": 325786944,
+      "recompute_positive": 318593858,
+      "invalid": 0,
+      "native_Y": 0.0385746167,
+      "recompute_Y": 0.0295345442,
+      "absolute_error": 0.00904265193,
+      "overshoot": 1.28966218e-06,
+      "box_Y": 0.0186989003
+    },
+    {
+      "frames": 120,
+      "pixels": 325786959,
+      "native_positive": 325786959,
+      "recompute_positive": 318593455,
+      "invalid": 0,
+      "native_Y": 0.0385793787,
+      "recompute_Y": 0.0295385302,
+      "absolute_error": 0.00904333235,
+      "overshoot": 1.24189923e-06,
+      "box_Y": 0.0187024222
+    },
+    {
+      "frames": 120,
+      "pixels": 325786937,
+      "native_positive": 325786937,
+      "recompute_positive": 318592321,
+      "invalid": 0,
+      "native_Y": 0.0385783283,
+      "recompute_Y": 0.0295370499,
+      "absolute_error": 0.00904375172,
+      "overshoot": 1.23665784e-06,
+      "box_Y": 0.0187005812
+    },
+    {
+      "frames": 120,
+      "pixels": 325786944,
+      "native_positive": 325786944,
+      "recompute_positive": 318593120,
+      "invalid": 0,
+      "native_Y": 0.0385906272,
+      "recompute_Y": 0.0295488022,
+      "absolute_error": 0.0090443542,
+      "overshoot": 1.26459658e-06,
+      "box_Y": 0.0187130007
+    },
+    {
+      "frames": 120,
+      "pixels": 325786959,
+      "native_positive": 325786959,
+      "recompute_positive": 318594077,
+      "invalid": 0,
+      "native_Y": 0.0385803612,
+      "recompute_Y": 0.0295393425,
+      "absolute_error": 0.00904355479,
+      "overshoot": 1.26804843e-06,
+      "box_Y": 0.01870157
+    },
+    {
+      "frames": 120,
+      "pixels": 325786937,
+      "native_positive": 325786937,
+      "recompute_positive": 318592901,
+      "invalid": 0,
+      "native_Y": 0.038576367,
+      "recompute_Y": 0.0295358099,
+      "absolute_error": 0.00904305267,
+      "overshoot": 1.24774138e-06,
+      "box_Y": 0.0186990728
+    }
+  ],
+  "interpretation": "Positive-signal control PASS; debug6 forces AO1, native ambient remains. Not a total accuracy/parity or shadow-quality pass."
+}

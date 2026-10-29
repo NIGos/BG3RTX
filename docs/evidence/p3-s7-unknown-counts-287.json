@@ -1,0 +1,86 @@
+{
+  "job": {
+    "job": "p3-box-s7-unknown-counts",
+    "run": 1,
+    "start": "2026-10-29T05:31:48",
+    "sec": 115,
+    "valid": true,
+    "outcome": "Run ended: done after 49s (session s053148#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "b97477b Report exact box query populations instead of hiding rare unknowns in rounded rates | core 05:25:11",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-box-s7-unknown-counts.1.053255.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-053306"
+    ],
+    "lines": [
+      "05:32:57.552  [core] ls box: active (native lighting set 000001E023E654D0, dynamic offsets 2)",
+      "05:33:39.016  [core] ls box stats (120 frames): evaluated 0.294/px, shadow-mapped 0.000/px, traced 0.294/px, occluded 0.087/px, unknown 0.004/px, cookie 0.004/px; game box light 9.285% of lit luminance, removed 1.858%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%; counts traced 96109807 occluded 28582602 unknown 1161493 cookie 1454367",
+      "05:33:39.016  [core] ls stats (120 frames): non-standard material px 0.1626M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.0000M px, game 0.0000, recomputed 0.0000, mean |diff| 0.00000, recompute above game 0.00000; set0/b0 _m4 (skin shaded white) 1"
+    ],
+    "session": "s053148#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "windows": [
+    {
+      "frames": 120,
+      "traced": 54600492,
+      "occluded": 18027165,
+      "unknown": 213537,
+      "cookie": 1357463
+    },
+    {
+      "frames": 120,
+      "traced": 105349574,
+      "occluded": 29977960,
+      "unknown": 1481393,
+      "cookie": 1454285
+    },
+    {
+      "frames": 120,
+      "traced": 96084600,
+      "occluded": 28803651,
+      "unknown": 1140000,
+      "cookie": 1454426
+    },
+    {
+      "frames": 120,
+      "traced": 96123155,
+      "occluded": 29666377,
+      "unknown": 1203341,
+      "cookie": 1454367
+    },
+    {
+      "frames": 120,
+      "traced": 95787875,
+      "occluded": 28535681,
+      "unknown": 1231149,
+      "cookie": 1454347
+    },
+    {
+      "frames": 120,
+      "traced": 96093502,
+      "occluded": 28492182,
+      "unknown": 1206749,
+      "cookie": 1454426
+    },
+    {
+      "frames": 120,
+      "traced": 96109807,
+      "occluded": 28582602,
+      "unknown": 1161493,
+      "cookie": 1454367
+    }
+  ],
+  "totals": {
+    "traced": 640149005,
+    "occluded": 192085618,
+    "unknown": 7637662,
+    "cookie": 10083681
+  },
+  "nonfinite_dumps": {},
+  "final_nonfinite": 0,
+  "interpretation": "Actual unknown and cookie coverage PASS. Common source code uses t=sh on unknown, but this smoke does not independently prove per-query shadow-delta identity, cookie accuracy or final temporal quality."
+}

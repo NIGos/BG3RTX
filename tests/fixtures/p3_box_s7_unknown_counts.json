@@ -1,0 +1,22 @@
+{
+  "name": "p3-box-s7-unknown-counts",
+  "tree": "../../../.codex/worktrees/p2-pending/BG3RTX",
+  "session": true,
+  "save": "The Blushing Mermaid - 96h",
+  "traces": 1,
+  "warmup": 10,
+  "hold": 35,
+  "timeout": 420,
+  "set": "ls_box=1,ls_check=0,ls_shadowed=3,ls_noshadow=0,ls_giveback_cap=1,ls_debug=0,ls_stats=1,rt_stats=1,fg=0,gi=1,rt_max_candidates=1",
+  "patterns": [
+    "ls box:",
+    "ls box stats",
+    "ls stats \\(\\d+ frames\\):",
+    "ls validation fit",
+    "ls box precise"
+  ],
+  "expect": [
+    "ls box: active",
+    "ls box stats \\(120 frames\\): .*counts traced [1-9]\\d* occluded \\d+ unknown [1-9]\\d* cookie [1-9]\\d*"
+  ]
+}

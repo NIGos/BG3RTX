@@ -1,0 +1,47 @@
+{
+  "job": {
+    "job": "p3-box-s5-shadow-coverage",
+    "run": 1,
+    "start": "2026-10-29T05:13:43",
+    "sec": 113,
+    "valid": true,
+    "outcome": "Run ended: done after 49s (session s051344#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "e56cf88 Retain early S7 startup failure without attributing it to unexecuted box rendering | core 03:26:21",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-box-s5-shadow-coverage.1.051447.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-051458"
+    ],
+    "lines": [
+      "05:14:50.330  [core] ls box: active (native lighting set 000001C9BD998BC0, dynamic offsets 2)",
+      "05:15:33.119  [core] ls box stats (120 frames): evaluated 0.079/px, shadow-mapped 0.000/px, traced 0.079/px, occluded 0.029/px, unknown 0.000/px, cookie 0.000/px; game box light 3.351% of lit luminance, removed 0.664%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+      "05:15:33.119  [core] ls stats (120 frames): non-standard material px 0.8657M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.0000M px, game 0.0000, recomputed 0.0000, mean |diff| 0.00000, recompute above game 0.00000; set0/b0 _m4 (skin shaded white) 1"
+    ],
+    "session": "s051344#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "box_windows": [
+    "05:14:54.271  [core] ls box stats (120 frames): evaluated 0.084/px, shadow-mapped 0.000/px, traced 0.084/px, occluded 0.030/px, unknown 0.000/px, cookie 0.000/px; game box light 3.680% of lit luminance, removed 0.757%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:15:00.924  [core] ls box stats (120 frames): evaluated 0.085/px, shadow-mapped 0.000/px, traced 0.085/px, occluded 0.030/px, unknown 0.000/px, cookie 0.000/px; game box light 3.527% of lit luminance, removed 0.709%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:15:05.118  [core] ls box stats (120 frames): evaluated 0.084/px, shadow-mapped 0.000/px, traced 0.084/px, occluded 0.030/px, unknown 0.000/px, cookie 0.000/px; game box light 3.481% of lit luminance, removed 0.697%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:15:09.119  [core] ls box stats (120 frames): evaluated 0.084/px, shadow-mapped 0.000/px, traced 0.084/px, occluded 0.030/px, unknown 0.000/px, cookie 0.000/px; game box light 3.498% of lit luminance, removed 0.689%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:15:13.119  [core] ls box stats (120 frames): evaluated 0.085/px, shadow-mapped 0.000/px, traced 0.085/px, occluded 0.030/px, unknown 0.000/px, cookie 0.000/px; game box light 3.486% of lit luminance, removed 0.688%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:15:17.119  [core] ls box stats (120 frames): evaluated 0.083/px, shadow-mapped 0.000/px, traced 0.083/px, occluded 0.029/px, unknown 0.000/px, cookie 0.000/px; game box light 3.345% of lit luminance, removed 0.666%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:15:21.119  [core] ls box stats (120 frames): evaluated 0.084/px, shadow-mapped 0.000/px, traced 0.084/px, occluded 0.029/px, unknown 0.000/px, cookie 0.000/px; game box light 3.313% of lit luminance, removed 0.667%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:15:25.119  [core] ls box stats (120 frames): evaluated 0.083/px, shadow-mapped 0.000/px, traced 0.083/px, occluded 0.030/px, unknown 0.000/px, cookie 0.000/px; game box light 3.283% of lit luminance, removed 0.647%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:15:29.119  [core] ls box stats (120 frames): evaluated 0.081/px, shadow-mapped 0.000/px, traced 0.081/px, occluded 0.029/px, unknown 0.000/px, cookie 0.000/px; game box light 3.406% of lit luminance, removed 0.648%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:15:33.119  [core] ls box stats (120 frames): evaluated 0.079/px, shadow-mapped 0.000/px, traced 0.079/px, occluded 0.029/px, unknown 0.000/px, cookie 0.000/px; game box light 3.351% of lit luminance, removed 0.664%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%"
+  ],
+  "nonfinite_dumps": {
+    "d121": [
+      "D32F",
+      "3bf08819",
+      2015
+    ]
+  },
+  "final_nonfinite": 0,
+  "interpretation": "S5 actual box shadow coverage PASS; no reported cookie/shadow-mapped/unknown population, so those cases remain unverified. Not native accuracy or temporal-quality approval."
+}

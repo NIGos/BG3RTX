@@ -211,7 +211,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 176 keys of bg3rtx.ini, in file order.
+// 178 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -344,6 +344,8 @@ inline constexpr KV kDefaults[] = {
     {"ls_strength", "1.0"},
     {"ls_debug", "0"},
     {"ls_stats", "0"},
+    {"ls_box", "0"},
+    {"ls_native_direct_validate", "0"},
     {"ls_lights", "1"},
     {"ls_owners", "31"},
     {"ls_noshadow", "1"},
@@ -390,7 +392,7 @@ inline constexpr KV kDefaults[] = {
     {"crash_dump", "0"},
     {"fg_current_destroy_only", "1"},
 };
-// 20 keys of data/release.ini, in file order.
+// 22 keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {
     {"dev", "0"},
     {"dump_shaders", "0"},
@@ -406,6 +408,8 @@ inline constexpr KV kReleaseDefaults[] = {
     {"rt_stats", "0"},
     {"ls_debug", "0"},
     {"ls_stats", "0"},
+    {"ls_box", "0"},
+    {"ls_native_direct_validate", "0"},
     {"rf_debug", "0"},
     {"rf_stats", "0"},
     {"rf_validate", "0"},

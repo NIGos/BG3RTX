@@ -163,6 +163,11 @@ add_test(NAME fg_stability_test COMMAND fg_stability_test)
 # rt_cascade_casters (common/cascade_casters.h, docs/TRACK_D_RT.md 6.7 item 2).
 add_executable(cascade_casters_test tests/cascade_casters_test.cpp)
 add_test(NAME cascade_casters_test COMMAND cascade_casters_test)
+add_executable(native_light_validation_test tests/native_light_validation_test.cpp)
+target_include_directories(native_light_validation_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME native_light_validation_test COMMAND native_light_validation_test)
+add_executable(ufloat_interval_test tests/ufloat_interval_test.cpp)
+add_test(NAME ufloat_interval_test COMMAND ufloat_interval_test)
 
 # Hot-reloadable core: rebuild while the game runs.
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp)

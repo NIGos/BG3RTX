@@ -1,0 +1,162 @@
+{
+  "job": {
+    "job": "p3-native-direct-validation",
+    "run": 1,
+    "start": "2026-10-29T06:21:54",
+    "sec": 145,
+    "valid": true,
+    "outcome": "Run ended: done after 49s (session s062154#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "8ec56ab Separate native HDR storage rounding from direct-light residuals | core 06:20:36",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-native-direct-validation.1.062330.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-062340"
+    ],
+    "lines": [
+      "06:24:12.940  [core] ls box stats (120 frames): evaluated 1.323/px, shadow-mapped 0.013/px, traced 0.000/px, occluded 0.000/px, unknown 0.000/px, cookie 0.000/px; game box light 0.000% of lit luminance, removed 0.000%; projector validation px 325786972: game 0.029341, recomputed 0.029517, mean |diff| 0.000009, recompute above game 0.000008, box share 63.271%; counts traced 0 occluded 0 unknown 0 cookie 50326",
+      "06:24:12.940  [core] ls stats (120 frames): non-standard material px 0.1350M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.1306M px, game 0.0505, recomputed 0.0508, mean |diff| 0.00003, recompute above game 0.00003; set0/b0 _m4 (skin shaded white) 1",
+      "06:24:12.940  [core] ls validation fit (all pixels including projectors): game = 0.9961 x recomputed + -0.00006 over 2.53M lit px (mean recomputed 0.02896, game 0.02879); game where no local light reaches 0.00000 (0.06M px)",
+      "06:24:12.940  [core] ls box precise (120 frames): px 325786972 native nonzero 318358745 recomputed nonzero 318593649 invalid 0; raw game 0.0293548112 recomputed 0.0295307489 abs_diff 0.000177197068 over 0.000176567406 box 0.0186939485; mean quantization <= 2.98023224e-08",
+      "06:24:12.940  [core] ls native format (120 frames): px 327782400 invalid 0 unbounded 0 failing 325596; bounded channels 1966694400 violating 1748638; mean excess outside UFLOAT interval 3.4879809e-06 (Q24 half-step 2.98023224e-08)",
+      "06:24:14.644  [core] [ls-native-direct] active frame 2601 cs f469db7865d7c524 matched native module; AO0/direct1/sun0 validation"
+    ],
+    "session": "s062154#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "quality_verdict": "Execution validity is separate from quality: residual format violations remain OPEN; no native accuracy/default/merge approval.",
+  "scene_windows": 8,
+  "pixels": 2606295596.0,
+  "weighted_means": {
+    "native_y": 0.02935919124999407,
+    "recomputed_y": 0.029535154762494353,
+    "abs_diff": 0.00017722343925048807,
+    "over": 0.00017659348162538726,
+    "box_y": 0.018699530249964867
+  },
+  "relative_y_excess": 0.005993472742554573,
+  "invalid": 0.0,
+  "format_windows": [
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 325421.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1747440.0,
+      "mean_excess": 3.47894237e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 325423.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1747799.0,
+      "mean_excess": 3.51082149e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 325238.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1746621.0,
+      "mean_excess": 3.4763141e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 325474.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1748196.0,
+      "mean_excess": 3.48820805e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 326560.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1751063.0,
+      "mean_excess": 3.49335257e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 325889.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1748606.0,
+      "mean_excess": 3.47267333e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 325704.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1748170.0,
+      "mean_excess": 3.48911816e-06
+    },
+    {
+      "frames": 120.0,
+      "pixels": 327782400.0,
+      "invalid": 0.0,
+      "unbounded": 0.0,
+      "failing": 325596.0,
+      "bounded_channels": 1966694400.0,
+      "violating_channels": 1748638.0,
+      "mean_excess": 3.4879809e-06
+    }
+  ],
+  "format_totals": {
+    "pixels": 2622259200.0,
+    "invalid": 0.0,
+    "unbounded": 0.0,
+    "failing": 2605305.0,
+    "bounded_channels": 15733555200.0,
+    "violating_channels": 13986533.0,
+    "failing_fraction": 0.0009935345064286552,
+    "mean_excess": 3.48717637125e-06
+  },
+  "class_windows": [],
+  "full_log_refused": [],
+  "module_controls": 62,
+  "validation_tags": {
+    "UNASSIGNED-non-acquired-swapchain-image-used": 5430,
+    "VUID-VkShaderModuleCreateInfo-pCode-08737": 1,
+    "Undefined-Value-StorageImage-FormatMismatch-ImageView": 24059,
+    "Undefined-Value-OutputNotWritten": 53,
+    "SYNC-HAZARD-READ-AFTER-WRITE": 7563,
+    "SYNC-HAZARD-WRITE-AFTER-WRITE": 2,
+    "VUID-vkCmdDraw-None-09600": 3,
+    "VUID-vkCmdWaitEvents2-pEvents-10788": 44927,
+    "VUID-vkGetDeviceFaultInfoEXT-device-07336": 1
+  },
+  "scoped_validation_tags": {},
+  "captures": [
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-062340",
+      "final_key": "d222",
+      "final_nonfinite": 0,
+      "nonfinite_dumps": {
+        "d132": [
+          "D32F",
+          "9aaa6d61",
+          2481
+        ]
+      }
+    }
+  ]
+}

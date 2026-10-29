@@ -1,0 +1,20 @@
+{
+  "start": "\\[trace\\] frame \\d+ written",
+  "timeout": 600,
+  "phases": [
+    {
+      "at": 0,
+      "name": "projector-recompute-off",
+      "set": {
+        "ls_box": "0"
+      }
+    },
+    {
+      "at": 35,
+      "name": "projector-recompute-on",
+      "set": {
+        "ls_box": "1"
+      }
+    }
+  ]
+}
