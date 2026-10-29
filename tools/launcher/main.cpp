@@ -72,7 +72,7 @@ static std::wstring gpu_line(const State& s, const std::wstring& err) {
 
 enum : int {
   IDC_GPU = 10, IDC_PRESET, IDC_SUGGEST, IDC_PRESET_NOTE, IDC_DESC_TITLE, IDC_DESC, IDC_GAMEDIR, IDC_BROWSE,
-  IDC_CLEAN, IDC_RESET, IDC_SAVE, IDC_LAUNCH, IDC_CLOSE, IDC_STATUS, IDC_ADVANCED,
+  IDC_CLEAN, IDC_RESET, IDC_SAVE, IDC_LAUNCH, IDC_CLOSE, IDC_STATUS, IDC_ADVANCED, IDC_EXPERIMENTAL,
   IDC_KNOB = 1000,    // + knob index: combo box or trackbar
   IDC_VALUE = 1100,   // slider value text
   IDC_BADGE = 1200,
@@ -205,13 +205,19 @@ static void build_window() {
   y += 34;
   int desc_top = y;
 
-  bool adv_done = false;
+  bool adv_done = false, exp_done = false;
   for (int i = 0; i < st::kKnobCount; ++i) {
     const st::Knob& k = st::kKnobs[i];
     if (k.advanced && !adv_done) {
       adv_done = true;
       y += 8;
       add(L"STATIC", L"Advanced", SS_LEFT, L, y, 190, 20, IDC_ADVANCED, true);
+      y += 26;
+    }
+    if (k.experimental && !exp_done) {
+      exp_done = true;
+      y += 8;
+      add(L"STATIC", L"Experimental (being tested)", SS_LEFT, L, y, 300, 20, IDC_EXPERIMENTAL, true);
       y += 26;
     }
     add(L"STATIC", widen(k.label).c_str(), SS_LEFT, L, y + 4, 196, 20, IDC_LABEL + i);

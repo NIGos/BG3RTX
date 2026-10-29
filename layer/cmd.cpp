@@ -374,7 +374,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->dumps.clear();
   s->seg_key.clear();
   s->seg_count = 0;
-  s->geo = nullptr;
+  s->geo = nullptr;   // (an effects pass left open by a reset buffer leaks its small EmPass)
+  s->geo_em = false;
+  em_forget_cmd(cmd);   // D-EM: draws of an earlier recording that was never submitted
   s->geo_ts = -1;
   s->vb.fill({});
   s->ib = VK_NULL_HANDLE;

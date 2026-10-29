@@ -72,8 +72,16 @@ thread_local int t_last_uv = -1;       // UV location of the module patched last
 thread_local VsInstancing t_last_inst; // its instancing analysis (bvhsplit.cpp)
 thread_local uint64_t t_last_hash = 0;
 thread_local bool t_last_discard = false;   // the module last scanned on this thread is a fragment shader that discards
+thread_local std::vector<StageIo> t_last_io;   // the module's user interface (stage_io)
+thread_local int t_last_model = -1;
 
 std::mutex g_mu;  // modules, pipelines, buffers
+// Interface of every module (the UV-slot check): execution model, user inputs/outputs, hash.
+struct ModIo { int model = -1; std::vector<StageIo> io; uint64_t hash = 0; };
+std::unordered_map<VkShaderModule, ModIo> g_mod_io;
+// UV-slot verdicts over every pipeline created, and the distinct mismatching VS/FS pairs.
+std::atomic<uint32_t> g_uv_count[5];
+std::unordered_map<uint64_t, uint32_t> g_uv_bad_pairs;   // hash(vs, fs) -> count
 struct ModInfo {
   int uv = -1;               // UV output location (-1 none)
   VsInstancing inst;         // class-A position path (spirv_xfb.h)
@@ -86,9 +94,14 @@ struct PipeInfo {
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
   VkPrimitiveTopology topo;
   int uv = -1;               // VS output location captured as UV (stride 24)
+  uint8_t uv_match = 0;      // UvMatch of the VS/FS pair (spirv_xfb.h)
+  int8_t uv_fs = -1;         // the FS's float2 input location
+  uint8_t uv_vs_comps = 0;   // components the VS writes there
   bool restart = true;       // primitive restart enabled, or dynamic (unknown)
   InstPipe inst;             // instancing layout (Track D BVH split)
   bool discard = false;      // its fragment shader can discard (rt_cascade_casters skips it: no alpha test)
+  bool em_state = false, em_dynamic = false;
+  uint32_t em_raster[9] = {}; // blend/src/dst/op/mask/cull/depth-test/write/compare
 };
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
@@ -221,6 +234,17 @@ std::mutex g_cap_mu;
 Capture g_cap;                 // the readback capture (one per trace)
 Capture g_scratch;             // geo_xfb_always
 std::atomic<bool> g_submit_wanted{false};
+
+// An effects pass of the emissive capture (D-EM, emissive.cpp): CmdState::geo points
+// to one while CmdState::geo_em is set. Passes are recorded on several threads.
+struct EmPass {
+  bool capture = false;      // rt_emissive: draws are captured (otherwise only timed)
+  bool xfb_active = false;
+  int ts = -1;
+  VkBuffer ubo = VK_NULL_HANDLE;   // the pass's camera UBO (set 0 binding 2)
+  VkDeviceSize ubo_off = 0;
+  std::vector<std::pair<VkDeviceSize, uint32_t>> ranges;   // captured (offset, triangles)
+};
 
 // ---- timing ----
 constexpr uint32_t kTsSlots = 64;
@@ -1312,8 +1336,13 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   t_last_inst = VsInstancing{};
   t_last_hash = 0;
   t_last_discard = false;
+  t_last_io.clear();
+  t_last_model = -1;
   if (!g_on) return false;
   t_last_discard = cascade::spirv_fragment_discards(ci->pCode, ci->codeSize / 4);
+  // Every module's interface (vertex and fragment): the UV-slot check at pipeline creation.
+  t_last_model = stage_io(ci->pCode, ci->codeSize / 4, t_last_io);
+  t_last_hash = hash64(ci->pCode, ci->codeSize);
   bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv);
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
@@ -1334,12 +1363,14 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
 }
 
 void geo_note_module(VkShaderModule m, bool patched) {
+  if (!g_on) return;
   if (t_last_discard && !patched) {
     std::lock_guard<std::mutex> lock(g_mu);
     g_discard_mods.insert(m);
   }
-  if (!patched) return;
   std::lock_guard<std::mutex> lock(g_mu);
+  if (t_last_model == 0 || t_last_model == 4) g_mod_io[m] = ModIo{t_last_model, std::move(t_last_io), t_last_hash};
+  if (!patched) return;
   g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash};   // same thread, right after geo_patch_shader
 }
 
@@ -1348,6 +1379,7 @@ void geo_forget_module(VkShaderModule m) {
   std::lock_guard<std::mutex> lock(g_mu);
   g_patched.erase(m);
   g_discard_mods.erase(m);
+  g_mod_io.erase(m);
 }
 
 // The instancing layout of a class-A pipeline (Track D BVH split): its three
@@ -1412,6 +1444,19 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   return ip;
 }
 
+void geo_uv_summary() {
+  if (!g_on || g_stride < 24) return;
+  size_t pairs;
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    pairs = g_uv_bad_pairs.size();
+  }
+  log("[geo] UV slots of the patched pipelines so far: %u match the FS, %u the FS's UV is a wider VS output, %u the FS "
+      "reads its UV elsewhere, %u FS without a float2 input, %u unknown (libraries); %zu distinct mismatching VS/FS pairs",
+      g_uv_count[UV_OK].load(), g_uv_count[UV_VS_WIDER].load(), g_uv_count[UV_FS_ELSEWHERE].load(),
+      g_uv_count[UV_FS_NONE].load(), g_uv_count[UV_UNKNOWN].load(), pairs);
+}
+
 void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, const VkPipeline* out) {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
@@ -1419,8 +1464,11 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     if (!out[i]) continue;
     PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
     bool vs_patched = false, other = false;
+    const ModIo *vio = nullptr, *fio = nullptr;
     for (uint32_t s = 0; s < cis[i].stageCount; ++s) {
       const auto& st = cis[i].pStages[s];
+      auto io = st.module ? g_mod_io.find(st.module) : g_mod_io.end();
+      if (io != g_mod_io.end()) (st.stage == VK_SHADER_STAGE_VERTEX_BIT ? vio : fio) = &io->second;
       if (st.stage == VK_SHADER_STAGE_VERTEX_BIT) {
         auto it = st.module ? g_patched.find(st.module) : g_patched.end();
         vs_patched = it != g_patched.end();
@@ -1436,6 +1484,47 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
       }
     }
     pi.xfb = vs_patched && !other;
+    const uint32_t overlap_family = (uint32_t(cfg_int("rt_em_dbg_fam_hi", 0) & 0xffff) << 16) |
+                                     uint32_t(cfg_int("rt_em_dbg_fam_lo", 0) & 0xffff);
+    if (cfg_int("rt_em_overlap_check", 0) && fio && uint32_t(fio->hash >> 32) == overlap_family &&
+        cis[i].pColorBlendState && cis[i].pColorBlendState->attachmentCount &&
+        cis[i].pRasterizationState && cis[i].pDepthStencilState) {
+      const auto& b = cis[i].pColorBlendState->pAttachments[0];
+      const auto& r = *cis[i].pRasterizationState;
+      const auto& d = *cis[i].pDepthStencilState;
+      pi.em_state = true;
+      const uint32_t values[9] = {b.blendEnable, uint32_t(b.srcColorBlendFactor), uint32_t(b.dstColorBlendFactor), uint32_t(b.colorBlendOp),
+                                  b.colorWriteMask, r.cullMode, d.depthTestEnable, d.depthWriteEnable, uint32_t(d.depthCompareOp)};
+      std::copy(std::begin(values), std::end(values), pi.em_raster);
+      if (cis[i].pDynamicState)
+        for (uint32_t k = 0; k < cis[i].pDynamicState->dynamicStateCount; ++k) {
+          const auto state = cis[i].pDynamicState->pDynamicStates[k];
+          pi.em_dynamic |= state == VK_DYNAMIC_STATE_CULL_MODE || state == VK_DYNAMIC_STATE_FRONT_FACE ||
+              state == VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE || state == VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE ||
+              state == VK_DYNAMIC_STATE_DEPTH_COMPARE_OP || state == VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT ||
+              state == VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT || state == VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT;
+        }
+    }
+    // The UV-slot check: does the fragment shader read its texture coordinate where the
+    // captured UV came from (TRACK_D 13.19)? Every pipeline, for every user of captured UVs.
+    if (pi.xfb && g_stride >= 24 && vio && fio) {
+      int fs_uv = -1;
+      uint32_t comps = 0;
+      const UvMatch m = uv_match(pi.uv, vio->io, fio->io, &fs_uv, &comps);
+      pi.uv_match = m;
+      pi.uv_fs = int8_t(fs_uv);
+      pi.uv_vs_comps = uint8_t(comps);
+      ++g_uv_count[m];
+      if (m == UV_VS_WIDER || m == UV_FS_ELSEWHERE) {
+        const uint64_t key = vio->hash * 1099511628211ull ^ fio->hash;
+        if (g_uv_bad_pairs[key]++ == 0 && g_uv_bad_pairs.size() <= 64)
+          log("[geo] UV slot mismatch: VS %016llx captures location %d as UV, FS %016llx reads its float2 at location "
+              "%d (the VS writes %u components there)",
+              (unsigned long long)vio->hash, pi.uv, (unsigned long long)fio->hash, fs_uv, comps);
+      }
+    } else if (pi.xfb && g_stride >= 24) {
+      ++g_uv_count[UV_UNKNOWN];
+    }
     bool dyn_topo = false;
     if (cis[i].pDynamicState)
       for (uint32_t d = 0; d < cis[i].pDynamicState->dynamicStateCount; ++d)
@@ -1465,6 +1554,7 @@ void geo_forget_pipeline(VkPipeline p) {
 // Before the game's vkCmdBeginRenderPass (outside the pass).
 void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
   s->geo = nullptr;
+  s->geo_em = false;
   s->geo_ts = -1;
   if (!g_dd) return;
   // rt_cascade_casters: a sun shadow cascade pass (a depth-only D16 layer of the cascade array).
@@ -1477,6 +1567,18 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
     }
   }
   const bool gbuf = is_gbuffer(s->pass);
+  // D-EM: an effects pass (the game's emissive draws, emissive.cpp).
+  if (g_on && !gbuf && em_is_fx_pass(s->pass, g_gbuf_w, g_gbuf_h)) {
+    auto* e = new EmPass;
+    e->capture = em_pass_begin(cmd, s, &e->ts);
+    if (e->capture || e->ts >= 0) {
+      s->geo = e;
+      s->geo_em = true;
+    } else {
+      delete e;
+    }
+    return;
+  }
   if (gbuf) g_gbuf_w = s->pass.width, g_gbuf_h = s->pass.height;
   // The ray tracing scene's source pass: with rt_alpha the depth prepass
   // (depth-only D24S8 at render resolution), otherwise the G-buffer.
@@ -1532,6 +1634,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
 
 // Right after the game's vkCmdBeginRenderPass (inside the pass).
 void geo_pass_begun(VkCommandBuffer cmd, CmdState* s) {
+  if (s->geo_em) return;
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
   // Buffers are bound per draw (geo_pre_draw).
@@ -1540,6 +1643,11 @@ void geo_pass_begun(VkCommandBuffer cmd, CmdState* s) {
 
 // Right before the game's vkCmdEndRenderPass / vkCmdEndRendering (inside the pass).
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s) {
+  if (s->geo_em) {
+    auto* e = static_cast<EmPass*>(s->geo);
+    if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
+    return;
+  }
   auto* c = static_cast<Capture*>(s->geo);
   if (!c || !c->xfb_active) return;
   p_end_xfb(cmd, 0, 0, nullptr, nullptr);
@@ -1597,7 +1705,49 @@ void rt_capture_stats(const Capture& c) {
   }
 }
 
+// D-EM: a draw of an effects pass. Emissive material draws that are not cached meshes
+// are captured into the emissive soup (emissive.cpp decides).
+static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+  auto* e = static_cast<EmPass*>(s->geo);
+  if (e && !e->capture) return em_note_draw(s);   // timed only (rt_emissive=0)
+  if (!e) return;
+  PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    auto it = g_pipes.find(s->pipe[0]);
+    if (it != g_pipes.end()) pi = it->second;
+  }
+  if (pi.em_state && cfg_int("rt_em_overlap_check", 0)) {
+    static thread_local std::unordered_set<uint64_t> seen;
+    if (seen.insert(s->pipe_id[0]).second && seen.size() <= 16)
+      log("[em-overlap] native draw pipe %llu FS %016llx blend/src/dst/op/mask %u/%u/%u/%u/%u cull %u depth test/write/compare %u/%u/%u dynamic %u",
+          (unsigned long long)s->pipe_id[0], (unsigned long long)s->fs,
+          pi.em_raster[0], pi.em_raster[1], pi.em_raster[2], pi.em_raster[3], pi.em_raster[4],
+          pi.em_raster[5], pi.em_raster[6], pi.em_raster[7], pi.em_raster[8], unsigned(pi.em_dynamic));
+  }
+  if (!e->ubo) {
+    Bg3Binding b;
+    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+        (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
+        b.offset % g_ubo_align == 0) {
+      e->ubo = b.buffer;
+      e->ubo_off = b.offset;
+    }
+  }
+  EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
+              pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
+  VkBuffer soup = VK_NULL_HANDLE;
+  VkDeviceSize off = 0, bytes = 0;
+  uint32_t prims = 0;
+  if (!em_draw(cmd, s, args, in, &soup, &off, &bytes, &prims)) return;
+  p_bind_xfb(cmd, 0, 1, &soup, &off, &bytes);
+  p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
+  e->xfb_active = true;
+  e->ranges.push_back({off, prims});
+}
+
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+  if (s->geo_em) return em_pre_draw(cmd, s, args);
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
   const uint32_t kind = args.kind, count = args.count, instances = args.instances;
@@ -1737,6 +1887,11 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
 }
 
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
+  if (s->geo_em) {
+    auto* e = static_cast<EmPass*>(s->geo);
+    if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
+    return;
+  }
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
   if (c->active_slot >= 0) {
@@ -1752,6 +1907,14 @@ void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
 
 // After the game's vkCmdEndRenderPass (outside the pass).
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
+  if (s->geo_em) {
+    auto* e = static_cast<EmPass*>(s->geo);
+    s->geo = nullptr;
+    s->geo_em = false;
+    if (e) em_pass_done(cmd, s, e->ubo, e->ubo_off, g_stride, e->ranges, e->ts);
+    delete e;
+    return;
+  }
   if (s->geo_ts >= 0 && g_qp) g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->geo_ts * 2 + 1);
   const int ts_slot = s->geo_ts;
   s->geo_ts = -1;

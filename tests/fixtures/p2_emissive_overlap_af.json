@@ -1,0 +1,30 @@
+{
+  "name": "p2-emissive-overlap-af",
+  "tree": "../../../.codex/worktrees/p2-emissive/BG3RTX",
+  "session": true,
+  "save": "Adamantine Forge",
+  "traces": 2,
+  "warmup": 12,
+  "trace_gap": 8,
+  "hold": 45,
+  "timeout": 420,
+  "set": "rt_emissive=1,rt_em_overlap_check=1,rt_em_dbg_fam_hi=12363,rt_em_dbg_fam_lo=57799,rt_em_check_frames=16,rt_timing_frames=120,rt_debug=0,sharc=0,fg=0,auto_interval=120,auto_stable_s=20,auto_stable_frames=1000000,qa_exposure_hold=1",
+  "args": [
+    "-Validation",
+    "-VSet",
+    "validate_sync=true,enable_message_limit=false",
+    "-Set",
+    "rt_emissive=1,rt_em_overlap_check=1,rt_em_dbg_fam_hi=12363,rt_em_dbg_fam_lo=57799,rt_em_check_frames=16,rt_timing_frames=120,rt_debug=0,sharc=0,fg=0,auto_interval=120,auto_stable_s=20,auto_stable_frames=1000000"
+  ],
+  "patterns": [
+    "\\[em-overlap\\]",
+    "\\[em\\] ours/game per family",
+    "\\[em\\] projected check",
+    "\\[rrpost\\] exposure held"
+  ],
+  "expect": [
+    "\\[em-overlap\\] receivers [1-9]\\d* candidates [1-9]\\d* .* invalid 0 overflow 0 missing 0",
+    "\\[rrpost\\] exposure held .*: [1-9]\\d* writes so far",
+    "304be1c7 Base/Base_GM_Pulse_FX"
+  ]
+}
