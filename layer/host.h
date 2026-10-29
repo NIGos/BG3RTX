@@ -450,7 +450,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
 // converts it in place after the pass; the next frame's split build adds it as one
 // instance (mask 0x02). The soup converted in `frame`: 0 found, 1 none, 2 its command
 // buffer not (yet) submitted (the geo_cascade_note_build reasons).
-struct CascadeSoup { VkBuffer xfb; uint32_t tris, stride; };
+struct CascadeSoup { VkBuffer xfb; uint32_t tris, stride; bool has_origin; float origin[3]; };
 int geo_cascade_soup(uint64_t frame, CascadeSoup* out);
 // Why a build has or lacks the cascade instance (the [cascade] log line): 0 added, 1 no soup
 // of the previous frame, 2 its command buffer not submitted, 3 no camera of that frame,

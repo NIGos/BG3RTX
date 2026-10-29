@@ -902,7 +902,10 @@ void attach_cascade(RtCapture& cap, const float* cam, uint64_t now) {
     geo_cascade_note_build(3, 0);
     return;
   }
-  cascade::rebase(prev->pos, cam, cap.cascade_t);
+  // rt_cascade_origin=1: the soup is relative to the cascade UBO's own origin (byte 208);
+  // 0: to the previous frame's camera (the first version's premise, kept for the A/B).
+  const bool own = cfg_int("rt_cascade_origin", 1) != 0 && soup.has_origin;
+  cascade::rebase(own ? soup.origin : prev->pos, cam, cap.cascade_t);
   cap.cascade_xfb = soup.xfb;
   cap.cascade_tris = soup.tris;
   cap.cascade_stride = soup.stride;

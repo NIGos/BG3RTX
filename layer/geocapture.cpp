@@ -891,7 +891,7 @@ void release(Capture& c) {
 std::mutex g_cc_mu;                 // everything below
 cascade::KeySets g_cc_keys;         // the camera source pass's draw keys (this frame and the last)
 Capture g_ccap[2];                  // the captured cascade pass of frame F is g_ccap[F & 1]
-struct CcMeta { uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0; };
+struct CcMeta { uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0; bool has_origin = false; float origin[3] = {}; };
 CcMeta g_cc_meta[2];                // what g_ccap[i] holds, converted (frame 0: nothing)
 constexpr int kCcLayers = 8;
 Capture g_cprobe[kCcLayers];        // the other cascades: their matrix is read, nothing captured
@@ -1101,7 +1101,14 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     m.frame = f;
     g_cc_mat[c->layer] = m;
   }
-  g_cc_meta[f & 1] = converted ? CcMeta{f, tris, c->rec} : CcMeta{};
+  CcMeta meta{};
+  if (converted) {
+    meta.frame = f; meta.tris = tris; meta.rec = c->rec;
+    // The cascade VS's world position is relative to its own UBO's origin (byte 208),
+    // which is not the camera's (92 m away in S7): the rebase starts from it.
+    if (mat_ok) { meta.has_origin = true; for (int k = 0; k < 3; ++k) meta.origin[k] = m.v[52 + k]; }
+  }
+  g_cc_meta[f & 1] = meta;
   CcStats& st = g_cc_st;
   ++st.frames;
   st.seen += c->c_seen, st.dup += c->c_dup, st.alpha += c->c_alpha, st.drop += c->c_drop, st.ubo += c->c_ubo;
@@ -1861,7 +1868,7 @@ int geo_cascade_soup(uint64_t frame, CascadeSoup* out) {
   const Capture& c = g_ccap[frame & 1];
   if (m.frame != frame || !m.tris || !c.xfb.b) return 1;
   if (bvh_rec_state(m.rec) != 1) return 2;   // its conversion has not run (yet) or never will
-  *out = CascadeSoup{c.xfb.b, m.tris, g_stride};
+  *out = CascadeSoup{c.xfb.b, m.tris, g_stride, m.has_origin, {m.origin[0], m.origin[1], m.origin[2]}};
   return 0;
 }
 
