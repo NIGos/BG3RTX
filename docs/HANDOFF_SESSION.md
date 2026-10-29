@@ -24,8 +24,8 @@ Fresh limits confirmed0% used/ordinary usage allowed. Never retry the successful
 Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 725955f, pushed, paired ABI14.
-- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box 9beb1e1, paired ABI9, pushed.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 3d411aa, pushed, paired ABI14.
+- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b913e8e, paired ABI9, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
 Old research: pan-motion-vectors/BG3RTX 929be7a; motion-jitter/BG3RTX 53f0925.
@@ -34,19 +34,20 @@ D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Live job and immediate next action
-291 LIVE frozen P3 9beb1e1, paired ABI9. Runner37908 started06:26:41.
+292 LIVE frozen P1 3d411aa, paired ABI14. Runner3980 started06:32:25.
 Fresh launch checks found no user marker, game/runner or pending/running jobs.
-290 execution PASS: 8 scene windows,2.622B receivers/15.733B bounded channels;
-invalid0/unbounded0. Format-incompatible pixels0.0993535%, mean excess3.48718e-6Y.
-Raw projector-only residual+0.599347%; DIFFERENT cohorts, no exact explained ratio.
-62 native modules controlled, NO full-log refusals/faults/dumps/build changes.
-Final finite; native D32F d132 has2481 nonfinite. Full scoped layout/push/write
-categories absent; other VVL unresolved. Native accuracy remains OPEN.
-291 adds class0..7 population/failure counts and diagnostic debug4 colour map
-through existing diffuse output: red above, blue below, magenta both, green
-invalid, cyan unbounded; passing pixels grey. No ABI/resource/transport change.
-Five CTests/two shaders pass, six ordinary shaders byte-identical56bcc06.
-Freeze P3 until terminal; then audit classes/map, whole-log refusals and FULL VVL.
+Existing qa_exposure_hold1 applied after scene-ready session only; warmup15s,
+12 static AB/BA traces, production strength1/AO1/shared stream/geometric gate.
+Require actual held writes, static/raw finite/saved alpha, both paired/original-PRE
+noise intervals and full VVL audit. No new exposure transport or compensation.
+Freeze P1 until terminal. This can isolate a cause, NEVER close moving quality.
+P3 291 PASS execution139/48s:2.950B receivers,0.0999107% format-incompatible,
+mean outside-interval excess3.50383e-6Y;0 invalid/unbounded. Standard class2.919M
+failures/2.804B, skin26926/947525; tiny other classes. Raw map d156 has sparse red
+points on platform rims/details/characters. Cause remains unproved; native
+accuracy, cookie/unknown-pair/moving gates OPEN.62 modules/no refusals/faults.
+Final finite; D32F6402 nonfinite retained, scoped layout/push/write absent,
+other VVL unresolved. P3 b913e8e records evidence; ordinary shaders unchanged.
 One reset consumed at weekly100%; fresh quota0% confirmed, credits0.
 
 ## P1 - pan instability remains OPEN
@@ -135,7 +136,7 @@ Sampling is exercised, not yet native-filter accuracy or unknown-pair proof.
 S6/S5 cookie rates0;287 S7 exact counts prove7.638M unknown and10.084M cookie
 evaluations. Native accuracy/per-query delta and moving/visual quality stay open.
 Native-direct control: docs/P3_NATIVE_DIRECT_VALIDATION.md (ABI9); runtime291
-is live with format intervals, ordinary key0 unchanged. See docs/P3_BOX_LIGHTS.md and evidence278-287. Do not modify saves or reinstall mods.
+is terminal with format intervals, ordinary key0 unchanged. See docs/P3_BOX_LIGHTS.md and evidence278-287. Do not modify saves or reinstall mods.
 
 ## P4-P6
 P4 has a conservative CPU interval classifier and corrected stochastic-alpha

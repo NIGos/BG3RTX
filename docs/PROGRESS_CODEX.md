@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 06:27 Europe/Rome
+## Current checkpoint - 2026-10-29 06:33 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -8,12 +8,32 @@
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P3 format diagnostic290 narrows incompatible pixels to0.09935%; material-map291 is live, accuracy open.
+- P3 format/map291 confirms0.09991% incompatible receivers; P1 scene-only exposure control292 is live.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
 - The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
 
 ## Resumed — 2026-10-29
+
+291 execution PASS139s/48s session, nine loaded-scene windows:2,950,041,600
+receivers,2,947,407 failing (0.0999107%),17,700,249,600 bounded channels with
+15,775,122 violations; invalid0/unbounded0. Mean outside-interval excess3.50383e-6Y.
+Standard class2,918,571 failures/2,804,123,970 receivers, skin26,926/947,525;
+remaining classes small. Raw diffuse diagnostic d156 shows sparse red points on
+metallic rims/details and characters, not a cause proof. Raw projector residual
++0.599412% has a different cohort.62 modules/no refusals/faults/dumps/build changes.
+Final finite; native D32F6402 nonfinite retained. Full scoped layout/push/write
+categories absent, other VVL unresolved. Evidence291 and spec committed b913e8e.
+Native accuracy, per-query unknown delta, cookie filtering/moving quality OPEN.
+
+Return to P1 source-epoch isolation using EXISTING qa_exposure_hold1:3d411aa adds
+only a fixture/spec, no rendering change or exposure payload. The hold is applied
+after loaded-scene session readiness (not menu), with15s warmup,12 static AB/BA
+traces, production gi_strength1/gi_ao1/shared stream/geometric gate. Require actual
+held writes, finite/static/saved alpha and paired/original-PRE noise intervals.
+292 LIVE runner3980 at06:32:25 after fresh idle/playing checks; P1 frozen until
+terminal. A static isolation result cannot close P1's required moving gate.
+
 
 P3 290 execution PASS,145s/49s session, eight scene windows. All shaded receiver
 cohort2,622,259,200 pixels/15,733,555,200 bounded channels: invalid0/unbounded0,
