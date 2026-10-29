@@ -1,0 +1,76 @@
+{
+  "commit": "08a0256",
+  "renderer_fix": false,
+  "bursts": [
+    {
+      "directory": "captures\\pan-20261029-105256-11",
+      "samples": {
+        "depth": 16,
+        "scene_pose": 16,
+        "final": 6,
+        "normal": 16,
+        "albedo": 16,
+        "material": 16,
+        "primary": 16,
+        "sun": 16,
+        "local": 16,
+        "gi": 16,
+        "diffuse": 16
+      },
+      "quality": "INVALID: incomplete final colour"
+    },
+    {
+      "directory": "captures\\pan-20261029-105341-12",
+      "samples": {
+        "depth": 16,
+        "scene_pose": 16,
+        "normal": 16,
+        "albedo": 16,
+        "material": 16,
+        "primary": 16,
+        "sun": 16,
+        "local": 16,
+        "gi": 16,
+        "diffuse": 16,
+        "final": 4
+      },
+      "quality": "INVALID: incomplete final colour"
+    },
+    {
+      "directory": "captures\\pan-20261029-105436-13",
+      "samples": {
+        "depth": 16,
+        "scene_pose": 16,
+        "normal": 16,
+        "albedo": 16,
+        "material": 16,
+        "primary": 16,
+        "sun": 16,
+        "local": 16,
+        "gi": 16,
+        "diffuse": 16,
+        "final": 7
+      },
+      "quality": "INVALID: incomplete final colour"
+    },
+    {
+      "directory": "captures\\pan-20261029-105606-14",
+      "samples": {
+        "depth": 16,
+        "scene_pose": 16,
+        "normal": 16,
+        "albedo": 16,
+        "material": 16,
+        "primary": 16,
+        "sun": 16,
+        "final": 8,
+        "local": 16,
+        "gi": 16,
+        "diffuse": 16
+      },
+      "quality": "INVALID: incomplete final colour"
+    }
+  ],
+  "analysis": "captures/p1-pan-flashes/positive-analysis/report.json",
+  "full_log": "captures/p1-pan-flashes/08a0256-positive-full.log"
+}

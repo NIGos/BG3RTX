@@ -531,6 +531,7 @@ struct PanSample {
   std::string name;
   uint64_t recorded = 0, submitted = UINT64_MAX, built = UINT64_MAX;
   uint64_t time_ms = 0;
+  uint64_t recording = 0;
 };
 std::mutex pan_mu;
 std::vector<PanSample> pan_samples;
@@ -544,9 +545,12 @@ std::string pan_dir;
 bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   if (cfg_int("pan_capture", 0) <= 0 || !r || !r->image) return false;
   std::lock_guard<std::mutex> lock(pan_mu);
-  const uint64_t now = frame_index();
+  CmdState* state = cmd_state(cmd);
+  if (!state) return false;
+  uint64_t now = frame_index();
   const int serial = cfg_int("pan_capture", 0);
   if (std::strcmp(name, "depth") == 0) {
+    state->pan_epoch.clear();
     if (serial != pan_serial && pan_finished) {
       pan_serial = serial;
       pan_frames = 0;
@@ -560,11 +564,16 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
     if (pan_frames && now != pan_last + 1) pan_invalid = true;
     pan_last = now;
     ++pan_frames;
+    state->pan_epoch.bind(state->recording, now, serial);
+  } else {
+    if (!state->pan_epoch.matches(state->recording, serial)) return false;
+    now = state->pan_epoch.frame;
   }
   if (pan_finished || !pan_frames || now < pan_first || now > pan_last) return false;
   PanSample p;
   p.name = name;
   p.recorded = now;
+  p.recording = state->recording;
   p.time_ms = GetTickCount64();
   p.dump.cmd = cmd;
   p.dump.format = r->format;
@@ -590,6 +599,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
     if (source) {
       PanSample pose;
       pose.name = "scene_pose"; pose.recorded = now; pose.time_ms = GetTickCount64();
+      pose.recording = state->recording;
       pose.built = pan_samples.back().built;
       Dump& d = pose.dump;
       d.cmd = cmd; d.w = 56; d.h = 1; d.texel = 4; d.size = 224; d.format = VK_FORMAT_R32_SFLOAT;
@@ -649,8 +659,11 @@ void pan_pass_end(VkCommandBuffer cmd, CmdState* s) {
 void pan_on_submit(const std::vector<VkCommandBuffer>& cmds) {
   std::lock_guard<std::mutex> lock(pan_mu);
   for (auto& p : pan_samples)
-    if (p.submitted == UINT64_MAX && std::find(cmds.begin(), cmds.end(), p.dump.cmd) != cmds.end())
-      p.submitted = frame_index();
+    if (p.submitted == UINT64_MAX && std::find(cmds.begin(), cmds.end(), p.dump.cmd) != cmds.end()) {
+      CmdState* state = cmd_state(p.dump.cmd);
+      if (!state || state->recording != p.recording) pan_invalid = true;
+      else p.submitted = frame_index();
+    }
 }
 
 void pan_on_present(VkQueue queue) {
@@ -678,6 +691,7 @@ void pan_on_present(VkQueue queue) {
     if (!saved) pan_invalid = true;
     manifest += (first ? "" : ",") + std::string("{\"name\":\"") + p.name + "\",\"file\":\"" + file +
         "\",\"record_frame\":" + std::to_string(p.recorded) + ",\"submit_frame\":" + std::to_string(p.submitted) +
+        ",\"command_recording\":" + std::to_string(p.recording) +
         ",\"tlas_record_frame\":" + std::to_string(p.built) + ",\"format\":" + std::to_string(d.format) +
         ",\"time_ms\":" + std::to_string(p.time_ms) +
         ",\"width\":" + std::to_string(d.w) + ",\"height\":" + std::to_string(d.h) + "}";

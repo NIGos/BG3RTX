@@ -1,5 +1,17 @@
 # BG3RTX progress
 
+## P1 presentation-counter capture race — 2026-10-29
+
+The normal-rate positive run is INVALID: final colour was captured in only
+6 / 4 / 7 / 8 of the 16 frames in static/static/slow/fast bursts. All other
+channels have 16 samples. No flash absence or renderer quality claim follows.
+The depth-to-tonemap association now follows the same command-buffer recording,
+not a present counter that can advance during recording. The manifest retains
+the recording identity and the analyzer rejects mixed recordings. No renderer
+fix, ABI change or GPU-copy change. Four CTests and 14 analysis tests pass.
+Repeat the positive control on this build before considering a lag correction.
+Evidence: docs/evidence/p1-pan-08a0256-positive.json.
+
 ## P1 complete-burst transport and analyzer correction — 2026-10-29
 
 Final capture now contains 176 samples / 16 frames. All required image channels

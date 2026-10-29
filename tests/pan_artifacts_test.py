@@ -10,6 +10,18 @@ from scripts.qa.pan_artifacts import (transient, reproject, camera, decode, load
 
 
 class PanTests(unittest.TestCase):
+    def test_mixed_command_recordings_are_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            np.ones((2, 3), dtype='<f4').tofile(root/'image.raw')
+            samples = [dict(name=name, file='image.raw', record_frame=9,
+                            command_recording=rec, submit_frame=10,
+                            width=3, height=2, format=100)
+                       for name, rec in [('depth', 100), ('final', 101)]]
+            (root/'burst.json').write_text(json.dumps(dict(valid_transport=True, samples=samples)))
+            with self.assertRaisesRegex(ValueError, 'mixed command recordings'):
+                load_burst(root)
+
     def test_positive_control_needs_both_symptoms_and_comparable_cadence(self):
         control = dict(role='static-evaluation', calibrated_pixel_frames=1000,
                        primary_match_fraction=[.995], effects=dict(luma=dict(pixel_frames=1)))

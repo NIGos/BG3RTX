@@ -209,7 +209,11 @@ def load_burst(directory):
         if e['name'] not in REQUIRED:
             continue
         f = frames.setdefault(e['record_frame'], {})
-        # The last swapchain write in this record frame is the final candidate.
+        generation = e.get('command_recording')
+        if generation is not None:
+            if not generation or f.setdefault('command_recording', generation) != generation:
+                raise ValueError('mixed command recordings in one captured frame')
+        # Native tonemap output, associated with the depth command recording.
         f[e['name']] = decode(directory/e['file'], e)
         f.setdefault('formats', {})[e['name']] = e['format']
         f.setdefault('submits', {})[e['name']] = e['submit_frame']

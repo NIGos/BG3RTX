@@ -25,6 +25,14 @@ FG toggle issues and the roughly 18 fps base rate follow this explicit P1 task.
 
 ## Current checkpoint and next action
 
+The first normal-rate final-colour positive run (08a0256) is INVALID: only
+6 / 4 / 7 / 8 final samples across the four bursts, with all other channels
+complete. The present counter advances during recording. Capture now binds
+all channels to the depth command-buffer recording and checks that identity
+at submit and analysis. Four CTests and 14 analyzer tests pass. No renderer fix
+or ABI change. Repeat the same positive fixture on this corrected capture.
+Evidence: docs/evidence/p1-pan-08a0256-positive.json.
+
 Prior positive-control job a0bb416 completed on the same frozen build, with no
 new driver event/dump. All three bursts lack final colour, so quality is INVALID.
 Static/slow/fast captured record cadence: 18.82 / 16.84 / 18.82 fps. Primary match

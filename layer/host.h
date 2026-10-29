@@ -13,6 +13,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include "../common/pan_epoch.h"
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -187,6 +188,7 @@ struct CmdState {
   uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
   uint64_t recording = 0;              // unique per vkBeginCommandBuffer (rrpost chains)
+  PanEpoch pan_epoch{};                // depth-to-tonemap identity within this recording
   bool game_alloc = false;             // allocated through this layer (not by Streamline below it)
   std::vector<std::string> events;     // pre-rendered JSON objects, one per event
   // segment aggregation for the trace
