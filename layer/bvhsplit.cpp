@@ -32,6 +32,7 @@
 // where the instance's vertices are (pool or soup), its stride, and its alpha
 // record (shaders/rt/rt_common.hlsli).
 #include "host.h"
+#include "../common/dyn_hold.h"
 
 #include <algorithm>
 #include <smmintrin.h>
@@ -356,8 +357,14 @@ struct DynSlot {
   uint32_t since_build = 0;
   VkDeviceSize build_scratch = 0, update_scratch = 0;
   uint64_t rec = 0;             // build record of its last build/refit (refit only once that was submitted)
+  VkDeviceSize hold_off = 0, hold_size = 0;
+  uint64_t hold_epoch = 0, hold_rec = 0;
+  uint32_t hold_stride = 0;
+  AlphaSnapshot hold_alpha{};
+  bool hold_has_alpha = false;
 };
 std::unordered_map<uint64_t, DynSlot> g_dyn;
+uint64_t g_hold_epoch = 1;
 
 // ---- this capture's draws ----
 struct FrameDraw {
@@ -369,6 +376,7 @@ struct FrameDraw {
   bool alpha = false;
   bool cached = false, audit = false, extract = false, check = false;
   bool captured = false, cap_alpha = false;
+  bool held = false;
   VkDeviceSize soup_off = 0;
   uint32_t prims = 0;
   uint32_t rec = kNone;
@@ -868,6 +876,16 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const DeviceData* dd = g_dd;
   const uint64_t now = frame_index();
   const uint32_t stride = cap.stride, tri_bytes = 3 * stride;
+  const uint32_t hold_frames = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 0), 0, 120));
+  const bool moving = rt_camera_moving();
+  if (moving || !hold_frames) {
+    ++g_hold_epoch;
+    for (auto& [key, s] : g_dyn) if (s.hold_size) {
+      g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
+      s.hold_size = 0;
+      s.hold_rec = 0;
+    }
+  }
   const VkDeviceAddress soup_addr = rt_buffer_address(cap.xfb);
   const bool alpha_test = cfg_int("rt_alpha_test", 1) != 0;
   const int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
@@ -954,6 +972,31 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
     }
   }
+  // Absent draws retain their submitted BLAS and a GPU snapshot of the complete
+  // soup (position + UV). The pool path uses an identity transform, so its
+  // camera-relative coordinates retain exactly the same interpretation.
+  if (hold_frames && !moving) {
+    std::unordered_set<uint64_t> present;
+    for (const FrameDraw& fd : g_draws) present.insert(fd.dyn_key);
+    for (auto& [key, s] : g_dyn) {
+      if (present.count(key) || !s.hold_size || s.hold_stride != stride ||
+          !dyn_hold_alive(now, s.last_used, hold_frames, moving,
+                          rec_submitted(s.hold_rec) && s.hold_rec == s.rec, s.hold_epoch == g_hold_epoch)) continue;
+      FrameDraw fd;
+      fd.dyn_key = key; fd.held = true; fd.prims = s.prims;
+      fd.soup_off = s.hold_off; fd.cap_alpha = s.alpha;
+      if (s.hold_has_alpha) {
+        fd.rec = alpha_restore(s.hold_alpha);
+        if (fd.rec == kNone) continue;   // never substitute an opaque alpha hold
+      }
+      dyn.push_back({uint32_t(g_draws.size()), key});
+      g_draws.push_back(fd);
+    }
+    // Stable instance order also allows TLAS refits when the union is unchanged.
+    std::sort(dyn.begin(), dyn.end(), [](const auto& a, const auto& b) {
+      return g_draws[a.first].dyn_key < g_draws[b.first].dyn_key;
+    });
+  }
   // Instance count: every instance of a cached draw, one per captured draw.
   uint32_t n_static = 0;
   for (uint32_t i : cached) n_static += g_draws[i].instances;
@@ -980,8 +1023,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // every frame); rt_build_serial=1 issues one build command per BLAS with a barrier
   // between them instead of one batched call.
   const bool dyn_refit_ok = cfg_int("rt_dyn_refit", 1) != 0;
+  struct HoldCopy { VkDeviceSize src, dst, bytes; };
+  std::vector<HoldCopy> hold_copies;
   for (auto& [di, key] : dyn) {
     FrameDraw& fd = g_draws[di];
+    if (fd.held) continue;
     key = fd.dyn_key;
     if (!dyn_this_frame.insert(key).second) {
       key = 0;
@@ -1008,6 +1054,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       uint32_t cap_prims = fd.prims + fd.prims / 4;
       VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(cap_prims, stride, !fd.cap_alpha, dyn_flags);
       if (!as_create(sz.accelerationStructureSize, s.as)) {
+        if (s.hold_size) g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
         g_dyn.erase(key);
         key = 0;
         continue;
@@ -1029,6 +1076,22 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if (!refit && fresh) s.since_build = uint32_t(key % uint64_t(rebuild_frames));
     dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit});
     s.rec = rec;
+    if (hold_frames && !moving) {
+      const VkDeviceSize bytes = VkDeviceSize(fd.prims) * tri_bytes;
+      if (s.hold_size && (s.hold_size != bytes || s.hold_stride != stride)) {
+        g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
+        s.hold_size = 0;
+      }
+      s.hold_rec = 0;
+      s.hold_has_alpha = fd.cap_alpha && fd.rec != kNone;
+      const bool material_ok = !s.hold_has_alpha || alpha_snapshot(fd.rec, &s.hold_alpha);
+      if (material_ok && fd.soup_off + bytes <= cap.xfb_size &&
+          (s.hold_size || pool_alloc(cmd, bytes, &s.hold_off))) {
+        s.hold_size = bytes; s.hold_stride = stride; s.hold_epoch = g_hold_epoch;
+        s.hold_rec = rec;
+        hold_copies.push_back({fd.soup_off, s.hold_off, bytes});
+      }
+    }
     refit ? ++g_st.dyn_refit : ++g_st.dyn_rebuild;
   }
 
@@ -1085,7 +1148,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
                (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
     in.accelerationStructureReference = s.as.addr;
-    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (alpha ? kInfoAlpha : 0u),
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool : 0u) | (alpha ? kInfoAlpha : 0u),
                              alpha ? 16 + fd.rec * kRecBytes : 0, fd.prims};
     std::memcpy(inst_out + n, &in, sizeof in);
     std::memcpy(info_out + n * 4, inf, sizeof inf);
@@ -1133,6 +1196,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // f9fac2a faults: per-draw builds only). The legacy build has always had
   // kCS -> kAS here (rtscene.cpp), and never faulted.
   barrier(cmd, kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS, kRW);
+  if (!hold_copies.empty()) {
+    // Conversion -> copy source; prior frame's shader reads -> snapshot writes.
+    barrier(cmd, kCS | kXfer, kRW, kXfer, kRW);
+    std::vector<VkBufferCopy> copies;
+    for (const HoldCopy& c : hold_copies) copies.push_back({c.src, c.dst, c.bytes});
+    dd->vk.CmdCopyBuffer(cmd, cap.xfb, g_pool.b, uint32_t(copies.size()), copies.data());
+    barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, kCS | kAS, kRW);
+  }
   fault_checkpoint(cmd, kCkBvhConverted, uint32_t(rec));
   JobBatch batch{now, 0, {}, {}, {}, rec};
   // Status slots: one per job, one per new mesh's compacted size, then the batch's
@@ -1398,6 +1469,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->pool = g_pool.b;
   out->pool_bytes = g_pool.size;
   out->rec = rec;
+  if (cfg_int("rt_stability_log", 0) && now % 300 == 0) {
+    uint32_t held = 0;
+    for (const auto& [di, key] : dyn) held += key && g_draws[di].held;
+    log("[bvh] dyn hold frame %llu: key %u, moving %u, held %u, copied %zu draws",
+        (unsigned long long)now, hold_frames, moving ? 1u : 0u, held, hold_copies.size());
+  }
   bvh_cpu_mark(-1);
   {
     // Static-camera scene stability (user report: small polygonal shadow patches flicker with
@@ -1859,6 +1936,8 @@ void bvh_on_present() {
   for (auto it = g_dyn.begin(); it != g_dyn.end();) {
     if (now > it->second.last_used + 120) {
       as_destroy(it->second.as);
+      if (it->second.hold_size)
+        g_pending_free.push_back({now, -1, it->second.hold_off, it->second.hold_size});
       it = g_dyn.erase(it);
     } else {
       ++it;

@@ -440,6 +440,45 @@ uint32_t alpha_record_count() {
   return uint32_t(g_recs.size());
 }
 
+bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (index >= g_recs.size()) return false;
+  const AlphaRec& r = g_recs[index];
+  if (!r.tex || r.tex > g_tex.size() || (r.kind == 1 && (!r.cache || r.cache > g_cache.size()))) return false;
+  out->rec = r;
+  const auto t = g_tex[r.tex - 1];
+  out->tex = t.first; out->tex_layout = t.second;
+  if (r.kind == 1) {
+    const auto c = g_cache[r.cache - 1];
+    out->cache = c.first; out->cache_layout = c.second;
+  }
+  // Keep both the view and its image alive until the last possible held use.
+  std::vector<uint64_t> handles;
+  {
+    std::shared_lock<std::shared_mutex> tl(tracker().mu);
+    for (VkImageView v : {out->tex, out->cache}) if (v) {
+      handles.push_back(uint64_t(v));
+      auto it = tracker().views.find(v);
+      if (it != tracker().views.end()) handles.push_back(uint64_t(it->second.image));
+    }
+  }
+  const uint64_t until = frame_index() + uint64_t((std::clamp)(cfg_int("rt_dyn_hold", 0), 0, 120));
+  for (uint64_t h : handles) life_extend(h, until);
+  return true;
+}
+
+uint32_t alpha_restore(const AlphaSnapshot& saved) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (g_recs.size() >= kMaxRecords) return UINT32_MAX;
+  AlphaRec r = saved.rec;
+  r.tex = slot_of(g_tex, kTextures, saved.tex, saved.tex_layout);
+  r.cache = r.kind == 1 ? slot_of(g_cache, kCaches, saved.cache, saved.cache_layout) : 0;
+  if (!r.tex || (r.kind == 1 && !r.cache)) return UINT32_MAX;
+  const uint32_t index = uint32_t(g_recs.size());
+  g_recs.push_back(r);
+  return index;
+}
+
 VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint32_t slot) {
   if (!g_on || slot >= kRing) return VK_NULL_HANDLE;
   const VkBuffer soup = ab.soup;

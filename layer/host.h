@@ -558,6 +558,14 @@ struct AlphaRec {
   float t[32];                           // vt: the SSBO entry, two row-major mat4
 };
 static_assert(sizeof(AlphaRec) == 208, "AlphaRec must match rt_common.hlsli");
+// Captured material plus actual views; descriptor indices are local to a frame.
+struct AlphaSnapshot {
+  AlphaRec rec{};
+  VkImageView tex = VK_NULL_HANDLE, cache = VK_NULL_HANDLE;
+  VkImageLayout tex_layout{}, cache_layout{};
+};
+bool alpha_snapshot(uint32_t index, AlphaSnapshot* out);
+uint32_t alpha_restore(const AlphaSnapshot& saved);   // UINT32_MAX on failure
 void alpha_device_created(DeviceData* dd);
 void alpha_device_destroyed(DeviceData* dd);
 bool alpha_lookup(uint64_t fs_hash, AlphaFs* out);   // copied: the table may be reloaded

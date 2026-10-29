@@ -756,7 +756,7 @@ bool rt_capture_wanted() {
 
 VkBufferUsageFlags rt_xfb_usage() {
   return VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
-         VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
+         VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 }
 
 bool rt_alloc_device_address() { return g_bda_core; }
@@ -766,7 +766,7 @@ void rt_before_capture(VkCommandBuffer cmd) {
   // Last frame's BLAS build read the XFB buffer this pass is about to overwrite.
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.dstAccessMask = VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT;
-  g_dd->vk.CmdPipelineBarrier(cmd, kAS | kCS, kXFB, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  g_dd->vk.CmdPipelineBarrier(cmd, kAS | kCS | kXfer, kXFB, 0, 1, &mb, 0, nullptr, 0, nullptr);
 }
 
 // ---- helpers shared with the split (bvhsplit.cpp) ----
