@@ -2,6 +2,32 @@
 
 ## Resumed — 2026-10-29
 
+264 P3 DEFAULT-path baseline PASS: valid165s/104s session,24 complete windows,
+7,844,924,963 reference pixels, ZERO any-bit/relative/one-writer/join differences,
+no faults/dumps/build changes. c039f87 evidence pushed; FULL-variant250 still
+open, no box-on run or merge. Queue was used while preparing the next GI fix.
+
+262 exact-source static: valid203s, maxshift0.0601px, finite/pose/AO pass. ALL
+six off frames have zero PRE/POST RGB differences (2,731,520px each). Off/on
+mean-0.20675% is within paired noise, but original-PRE reference FAILS pooled
++0.015598%, CI[+0.0000009073,+0.0000044876]Y; on consistently+0.0311..0.0314%.
+No brightness correction or gate relaxation. Exploratory263 source-toggle pan
+valid112s/52s, no faults: Y residual+2.596%, RGB+2.539%, sampleY+3.942%, motion
+76.57/79.55px, coverage5.033%/6.675%; no gain or exact-source promotion.
+
+P1 caae9b0 fixes the original availability cohort in BOTH modes: fresh fallback
+replaces existing colour rejected by surface checks, without adding edge samples
+where the original had no finite colour. b6a1c84 adds default-off geometric
+normal identity using the existing owned rtOrigin image40, only matched TLAS
+hits. Shading detail can vary on static geometry below a point footprint; depth
+AND geometric normal still must match, with propagated fp16/oct16/fp32 bounds,
+no angular fudge/neighbour rescue/new camera data. Metadata certifies normal
+mode on the GPU. Full build/11 CTests, nine shaders/24 ABI checks, ordinary
+seven shaders identical;15 GPU cases await runtime proof. 265 LIVE unlimited
+validation smoke with self-test and static gate off/on; all other knobs isolated.
+Specs/evidence on P1, keys0, no main rendering merge. Next runnable GI test keeps
+queue priority; P3 box-on validation is ready after its passing baseline.
+
 261 exact-diffuse smoke valid117s: zero driver faults/dumps/build changes,
 finite/GPU-pose/PRE-alpha pass, static shift0.12px. Off/on Y0.017292882/
 0.017589541, PRE0.017282156/0.017571717; two samples are not an energy pass.

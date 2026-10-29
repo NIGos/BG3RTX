@@ -27,85 +27,72 @@ Old research is preserved at pan-motion-vectors/BG3RTX 929be7a; camera-native
 ## P1 — Pan instability
 
 User: RT lighting/shadows detach during pans; Ctrl+Shift+F9 restores normal.
-Old static S3 fails (details in PROGRESS_CODEX); fixed scores and independent
-moving trajectories cannot establish a P1 improvement.
+Fixed-camera scores and cross-run moving images cannot close P1. Use exact
+reprojection residuals or live off/on in ONE moving session. Do not block on
+AO counters: saved PRE alpha and same-build key-off controls are authoritative.
 
-Old research proves finite fallback/paired depth/radiance and observed motion;
-metadata overlap fixed. No pan-quality or additional camera-payload proof.
+codex/p1-pan: en2-selfcheck/BG3RTX b6a1c84, pushed, paired ABI14. All research
+keys0. Main has no P1 feature. Existing B2/B5 and PRE pose pins through actual
+submission are reused; no new camera transport. Metadata GPU token, depth AND
+world-normal checks guard actual integer colour texel, not unused neighbours.
+Camera fixture uses SDL client units; StaticCamera initializes event-owned cursor.
+Normal play/physical input untouched; queue hides the real-present moving game.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 066e59b, pushed. It excludes
-unrelated FG. Current-radiance replay stays off, ABI14; docs/CURRENT_RADIANCE.md.
-Latest user steering: STOP cross-run image comparisons. Use a per-run reprojection
-residual or alternate the key within ONE moving run. Do not block on AO counters;
-compare their key-off control on the same build and obtain the pan number.
-The -Move fixture isolates physical input with a client-relative virtual pointer;
-real presentation stays hidden by the queue. Earlier focus experiments reverted.
-gi_history_surface_gate=0 implements previous-depth AND world-normal acceptance
-before bounce reuse. Metadata52 is paired with radiance; a CPU-zero initial token
-is consumed by PRE and republished only by paired POST. Existing ABI14 pins
-private resources; geometry math remains native. No new camera transport.
-242/243: eleven GPU cases pass, saved alpha matches, aggregate AO counters differ;
-native geometry repeat confirms it. Zero driver events/dumps; do not block the pan.
-gi_pan_metric=0 now measures RR GI against paired previous GI with native B2/B5
-camera reprojection, round-trip validation, static-compatible depth/normal/MV
-filtering and a rotating 4x4 diagnostic grid. GPU buckets separate off/on even
-across a reporting window. Spec: phase docs/GI_HISTORY_SURFACE_GATE.md.
-First pan 245 and production 247 lower residual but lose sample GI energy with
-tiny coverage; no quality win. Phase docs/evidence preserves every deciding log.
-246 invalid: >2000-draw fixture blocked pan in lighter gameplay. b5e0e93 now
-uses post-load stability; 36 helper checks pass.
-409ffe1 validates only the actual integer-loaded colour texel, removing four
-unused neighbours. Bounds unchanged; 6 surface shaders/20 ABI checks pass and
-7 ordinary shaders byte-identical. 248 valid: 403 s total/57 s moving session,
-zero faults; off/on residual 0.151384/0.064525, GI Y 0.321177/0.008690,
-coverage 13.3877%/7.1512%. Unequal cohorts/energy: still no quality win.
-242/243 old five-texel gate loses71.8–99.9% energy; saved alpha identical.
-249 VALID, 217 s, zero faults/dumps/build changes. Point-footprint paired raw
-bounce Y falls 70.66%/87.96%; alpha identical over 2,731,520 px per pair, finite,
-pose valid, eleven GPU predicate cases pass. Normal/depth reject 52.35%/22.46%
-of reported queries (startup included). No P1 quality win or merge; all keys off.
-User steering: rejected history must use a fresh sample of the same expected
-value; key-on static mean must match key-off within measured noise. P1 resumed.
-d53f3e1 adds default-off gi_history_fresh: POST frozen-pose replay keeps original
-complete history or uses fresh native diffuse PLUS immutable PRE GI at the source
-on rejection, with material/strength/skin conventions and unchanged ray weights.
-PRE AO is preserved. RR full-res/diffuse-only. Metadata stride1/2; token consumed
-after POST readers; no new transport. 11 CTests, 49 shaders, 24 ABI checks,
-5 energy regressions and 36 helper checks pass; ordinary shaders unchanged.
-251 smoke valid; VVL only existing categories (scoped). 252/253 camera moved:
-INVALID static QA. SDL cursor event fixed; 254 static0.04px,99s/no faults.
-255 valid200s, twelve stationary captures, max shift0.16px, alpha exact, no faults.
-Direct-only internal parity -0.807%, CI [-0.000601951,+0.000329959]Y. PARTIAL:
-both modes changed integrand, so it does NOT prove original estimator parity.
-256 valid149s/no faults, static0.06px/alpha pass; energy FAIL: on/off+1.0583%,
-POST/PRE+0.5418%, both CIs exclude zero. Large darkening gone, no quality pass.
-ccb1f65 mirrors original share/fp16 after RF. 257 incomplete: readback budget.
-258 valid149s/all12/static0.18px/AO/no faults; both CIs include0, LOW POWER:
-POST/PRE -0.0292%; off/on+6.975%, relativeCI[-7.56%,+21.51%] from light pulse.
-Other on captures still+0.50..2.06% vsPRE; smaller bias NOT proved solved.
-259 valid112s/52s moving, no faults. Off/on residual0.134896/0.144666 (+7.24%),
-GI Y0.0159677/0.0160948 (+0.80%), motion68.82/71.81px, samples3.53M/4.60M,
-grid coverage4.87%/6.82%. NO pan win. Queue terminal, P1 evidence pushed.
-260 four-ray diagnostic valid118s/no faults: residual-7.60% but cohortY-90.19%
-with off radiance spikes: no win/variance inference. Small static bias open.
-bd4215c independent gi_history_diffuse_exact=0 stores complete diffuse RGB,
-removing legacy reflected-colour mixture; original complete RF source retained.
-Requires fresh1; gate0 isolates. Metric2 selects exact-source key, adds RGB
-residual on same cohort. Fixed metadata3 across toggles; no new transport.
-11 CTests/8 shaders/24 ABI/5 energy checks/7 ordinary identical pass.
-261 smoke valid117s/static0.12px/AO pass/no faults; VVL existing2647 hazards,
-zero dispatch/private-handle/new-metadata messages (scoped, not clean).
-066e59b gate0 now retains original unavailable-source policy; gate1 still fresh.
-262 LIVE twelve static exact-source captures, gate0. Then ONE source-toggle pan.
-Spec docs/GI_DIFFUSE_EXACT.md. All keys0; no quality/default/main approval.
-Spec: phase docs/GI_FRESH_FALLBACK.md. Never report moving captures as static pass.
-Use existing B2/B5 camera data, derived bounds, the actual contributing colour
-footprint and GPU-ordered availability, not a CPU epoch certificate.
-Do not close P1 from diagnostic passes alone. The phase is done when each
-effect meets its derived gate, or is clearly reduced with its cause explained.
-Record the candidate key and user check in PROGRESS_CODEX: static building/ground
-edges while panning, candidate off/on, plus Ctrl+Shift+F9 as the all-RT reference.
-If progress stalls, write PAUSED.md with evidence/next idea, move on, return later.
+Old current-radiance replay remains off; docs/CURRENT_RADIANCE.md. Surface-gate
+history and point-footprint evidence: docs/GI_HISTORY_SURFACE_GATE.md. Old242/243
+loses71.8–99.9% bounce energy;249 point-load still-70.66%/-87.96%, alpha identical.
+248 moving residual improves but cohortY-97.29%: no win. Do not reuse these as
+quality passes. Cohort grew from0.08% to13.4%/7.15%; no arbitrary threshold added.
+
+gi_history_fresh=0 is POST frozen-pose complete-source replay: accepted/control
+uses original complete radiance; rejected available samples use fresh native
+lighting PLUS immutable PRE GI at the source, material/strength/skin convention.
+Original ray PDF/weight/count and PRE visibility remain. RR full-res/diffuse-only.
+caae9b0 fixes BOTH-mode original missing-colour cohort;
+no fresh samples added where original had no finite source. Gate0 control is
+bit-identical in all six262 captures. Existing missing-lighting epoch limits remain.
+Metadata stride3 in fresh mode holds surface/optional pan GI/exact diffuse RGB;
+128MiB range guard and typed pins apply. Both source modes publish exact diffuse
+so a source toggle never reallocates. Other surface modes use stride1/2.
+
+GI_FRESH_FALLBACK.md preserves251–260. Highlights:252/253 static INVALID (~300px
+camera motion); SDL event fix254/255 proves static. Direct-only255 internal parity
+is PARTIAL (changed integrand). Complete-source256 original/noise energy FAILS;
+258 both CIs include0 but a light pulse makes power LOW; bias not proved solved.
+259 ONE moving run: residual+7.24%, Y+0.80%, coverage4.87%/6.82%, no pan gain.
+260 four-ray: residual-7.60% but Y-90.19% with off spikes; no quality/variance claim.
+Raw normalized residual includes stochastic noise and both-zero=0; not final RR.
+
+Independent gi_history_diffuse_exact=0 removes legacy reflected-colour mixture
+from GI, retaining complete RF radiance. Requires fresh1; surface gate0 isolates.
+Metric2 buckets this source key; metric1 buckets surface gate. Both report Y/RGB
+residual on same camera/MV/depth/normal-compatible moving grid4 cohort; GPU mode
+excludes toggle frames. Source labels identify actual captured key state.
+261 smoke valid117s, finite/pose/AO/static0.12px. VVL existing2647 hazards,
+zero dispatch/private-handle/new-metadata messages: scoped, NOT clean VVL.
+262 static12: off/on-0.20675% within noise; stricter PRE target FAILS pooled
++0.015598% (on+0.0311..0.0314%); control RGB exactly matches PRE. No scale/waiver.
+263 exploratory ONE-run source pan: Y residual+2.596%, RGB+2.539%, cohortY+3.942%,
+motion76.57/79.55px, coverage5.033%/6.675%. No gain/default/main promotion.
+Spec docs/GI_DIFFUSE_EXACT.md; keep source exact0 for the next surface hypothesis.
+
+New gi_history_geometric_normal=0 tests geometric identity instead of shading
+normal detail at different raster sample centres. Requires fresh RT GI/rt_origin1;
+ONLY matched non-aborted TLAS normals from existing owned image40 are accepted.
+Missing/degenerate/nonfinite stays unavailable, no neighbour/shading rescue.
+Depth AND world geometric normal must match with fp16/normalization/oct16/fp32
+precision bounds, no angular fudge or new camera data. GPU metadata records mode.
+Full build/11 CTests,9 shaders/24 ABI,7 ordinary byte-identical pass. GPU15-case
+self-test expected row12[32767,32767,15,1];265 LIVE frozen b6a1c84 unlimited-sync
+smoke, gate off/on static. Spec docs/GI_GEOMETRIC_NORMAL.md. Then static12 and
+ONE moving test only as evidence permits; no quality pass from execution alone.
+Keep active checkout source/binaries frozen. Recheck user-playing/processes/queue
+before every launch. P1 active offline while P3 ran; next runnable P1 gets priority.
+
+For a future approved candidate build: inspect static building/ground edges while
+panning; toggle candidate key, plus Ctrl+Shift+F9 as all-RT/native reference.
+Do not close P1 until each effect meets its derived temporal gate or is clearly
+reduced with cause explained. If stalled, PAUSED.md preserves evidence/next idea.
 
 ## P2 — Pending merges
 
@@ -127,7 +114,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 codex/p3-box ec68966 (p2-pending/BG3RTX), default off. 250 INVALID: 21 windows/6.862B pixels, 12,304 any-bit differences, zero >1e-5/one-writer differences, no driver faults. ls_stats=1 selects full variant, unlike earlier golden control. Fixture now pins stats0/samples0 default path like golden P2; FULL differences remain open. No box-on run/merge; defer to P1.
+- P3 codex/p3-box c039f87 (p2-pending/BG3RTX), default off.264 default reference PASS:24 windows/7.845B pixels, zero any-bit/relative/one-writer/join differences, no faults.250 FULL-variant tiny bit differences remain open. No box-on run/merge; P1 runnable tests have priority.
 - P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.
