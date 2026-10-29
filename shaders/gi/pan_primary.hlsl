@@ -74,7 +74,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
   gAux[p] = float4(valid ? clamp((hit.t-dist)/tol,-65000.0,65000.0) : 0,
                    dist,tol,valid ? (hit_alpha ? 2 : 1) : -1);
   uint bin = (p.x >> 3)*7+(p.y >> 3)*13;
+#ifdef RT_PRIMARY_EPOCH
+  { // Keep primary/epoch checks with full per-ray alpha/light statistics off.
+#else
   if (pc.rt_stats != 0) {
+#endif
     stat_add(0,true,bin);
     stat_add(1,valid && abs(hit.t-dist)<tol,bin);
     stat_add(2,valid && hit.t-dist <= -tol,bin);

@@ -10,7 +10,7 @@ VARIANTS=('baseline','rebase','current_destroy_only')
 def settings(fg,variant='baseline',view='normal',static=False):
     values=dict(fg=fg,rt_scene_rebase=int(variant=='rebase'),fg_current_destroy_only=int(variant=='current_destroy_only'),
         rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,
-        rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=int(static))
+        rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=int(static))
     for name,key,value in (('sun','rt_debug',2),('local','ls_debug',3),('GI','gi_debug',1),('reflections','rf_debug',1),('RR','rr_show',3)):
         if view==name: values[key]=value
     return ','.join(f'{k}={v}' for k,v in values.items())
@@ -42,14 +42,14 @@ def plans():
 
 def job(name,plan,seconds,post):
     return dict(name=name,tree='.',save='QuickSave_3784',session=False,traces=0,hold=90,timeout=seconds+300,
-        set='preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,rt_stats=1,ls_stats=1,rf_stats=1,ls_k=0,ls_shadowed=1,'
+        set='preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,rt_stats=0,ls_stats=0,rf_stats=0,ls_k=0,ls_shadowed=1,'
             'rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,pan_capture=0,pan_prepare=0,rt_scene_camera_match=0,'
             'rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,crash_dump=1,'
             'fg_state_every=30,rt_timing_frames=120,dump_images=1,dump_png_width=1280,dump_raw=0,dump_max_mb=1024',
         window_mode='visible_unfocused_fg',
         args=['-RealPresent','-Move','-MovePlan','tests/fixtures/'+plan],
         patterns=['primary-ray check','rt epoch','rt passes','rt cost scope',r'\[watch\]',r'\[sl\]',r'\[trace\]','gpu RR:',
-            'hybrid GI','ls stats','rf stats','material classes',r'\[crash\]'],
+            'hybrid GI','ls stats','rf stats','material classes','rt applied',r'\[crash\]'],
         expect=[r'\[auto\] scene ready',r'\[crash\] exception diagnostics active independently of FG; minidump armed',
             'DLSS-G supported on this adapter: ok','slDLSSGSetOptions\\(mode on','slDLSSGSetOptions\\(mode off','rt epoch','primary-ray check'],
         forbid=[r'\[crash\] exception 0x','VK_ERROR_DEVICE_LOST'],
@@ -63,7 +63,7 @@ def main():
         (FIX/name).write_text(json.dumps(plan,indent=2)+'\n')
     pre=job('p1-fg-static-effects','p1_fg_static_plan.json',sum(s['seconds'] for s in static),
         'py -3 -m scripts.qa.fg_static_effects --log "{log}" --runner "{runner}" --plan tests/fixtures/p1_fg_static_plan.json --out captures/p1-fg/static-effects-result.json')
-    pre['expect'] += ['hybrid GI','ls stats','rf stats','material classes','gpu RR:']
+    pre['expect'] += ['rt applied','gpu RR:']
     pre['expect_runner'] += [r'\[motion-trace\]']
     run=job('p1-fg-motion-matrix','p1_fg_motion_plan.json',sum(s['seconds'] for s in motion),
         'py -3 -m scripts.qa.fg_motion_gate --log "{log}" --runner "{runner}" --plan tests/fixtures/p1_fg_motion_plan.json --out captures/p1-fg/motion-gate-result.json')

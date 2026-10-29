@@ -15,7 +15,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "static-static-0-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "static",
@@ -33,7 +33,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "static-static-0-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "static",
@@ -51,7 +51,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "static-static-0-rebase-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "static",
@@ -69,7 +69,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "static-static-0-rebase-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "static",
@@ -87,7 +87,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "static-static-0-current_destroy_only-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "static",
@@ -105,7 +105,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "static-static-0-current_destroy_only-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -123,7 +123,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow--1-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -141,7 +141,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow--1-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -159,7 +159,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow--1-rebase-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -177,7 +177,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow--1-rebase-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -195,7 +195,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow--1-current_destroy_only-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -213,7 +213,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow--1-current_destroy_only-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -231,7 +231,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow-1-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -249,7 +249,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow-1-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -267,7 +267,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow-1-rebase-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -285,7 +285,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow-1-rebase-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -303,7 +303,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow-1-current_destroy_only-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -321,7 +321,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-slow-1-current_destroy_only-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -339,7 +339,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium--1-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -357,7 +357,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium--1-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -375,7 +375,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium--1-rebase-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -393,7 +393,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium--1-rebase-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -411,7 +411,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium--1-current_destroy_only-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -429,7 +429,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium--1-current_destroy_only-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -447,7 +447,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium-1-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -465,7 +465,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium-1-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -483,7 +483,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium-1-rebase-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -501,7 +501,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium-1-rebase-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -519,7 +519,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium-1-current_destroy_only-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -537,7 +537,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-medium-1-current_destroy_only-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -555,7 +555,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast--1-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -573,7 +573,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast--1-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -591,7 +591,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast--1-rebase-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -609,7 +609,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast--1-rebase-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -627,7 +627,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast--1-current_destroy_only-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -645,7 +645,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast--1-current_destroy_only-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -663,7 +663,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast-1-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -681,7 +681,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast-1-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -699,7 +699,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast-1-rebase-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -717,7 +717,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast-1-rebase-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -735,7 +735,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast-1-current_destroy_only-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "rotate",
@@ -753,7 +753,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "rotate-fast-1-current_destroy_only-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -771,7 +771,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-slow-1-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -789,7 +789,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-slow-1-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -807,7 +807,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-slow-1-rebase-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -825,7 +825,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-slow-1-rebase-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -843,7 +843,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-slow-1-current_destroy_only-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -861,7 +861,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-slow-1-current_destroy_only-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -879,7 +879,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-fast-1-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -897,7 +897,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-fast-1-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -915,7 +915,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-fast-1-rebase-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -933,7 +933,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-fast-1-rebase-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=1,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -951,7 +951,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-fast-1-current_destroy_only-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "pan",
@@ -969,7 +969,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "pan-fast-1-current_destroy_only-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "static",
@@ -987,7 +987,7 @@
     "capture_at": 0,
     "serial": 0,
     "label": "static-static-0-baseline-fg2-normal",
-    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=2,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   },
   {
     "kind": "static",
@@ -1005,6 +1005,6 @@
     "capture_at": 0,
     "serial": 0,
     "label": "static-static-0-baseline-fg0-normal",
-    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=1,ls_stats=1,rf_stats=1,qa_exposure_hold=0"
+    "set": "fg=0,rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,ls_stats=0,rf_stats=0,qa_exposure_hold=0"
   }
 ]

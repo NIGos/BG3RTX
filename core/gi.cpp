@@ -50,6 +50,7 @@ struct Snapshot {
   VkAccelerationStructureKHR tlas;   // the TLAS the ray-traced passes used (Track D)
   VkDescriptorSet alpha;             // the host's set 1 for them (alpha-tested geometry, phase 3)
   bool gi;                           // the GI passes ran (gi=1); otherwise only the sun shadow work
+  bool rt_gi_applied = false;         // diagnostic: RT GI commands actually recorded in run_pre
   bool ls;                           // D-LS runs after the lighting
   bool rf;                           // D-RF runs after the lighting
   bool rf_validate;                  // D-RF EN4 check: the prep pass ran (AO 1, no sun), D-LS skipped
@@ -1436,6 +1437,7 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha) 
 }
 
 bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
+  s.rt_gi_applied=false;
   if (!ensure_layout() || !ensure_images(s.dif.width, s.dif.height)) return false;
   bool ok = refresh(g_trace, "gi/gi_trace.hlsl") & refresh(g_temporal, "gi/gi_temporal.hlsl") &
             refresh(g_ao_apply, "gi/gi_ao_apply.hlsl") & refresh(g_composite, "gi/gi_composite.hlsl") &
@@ -1548,7 +1550,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     pc.rt_stats = host->cfg_int("rt_stats", 0) ? 1u : 0u;
     // Every traced frame: the out-of-range guards are always counted.
     stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0,
-                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0));
+                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0) || host->cfg_int("rt_primary_epoch",0));
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
@@ -1611,6 +1613,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
       rt_begin();
       if (s.sharc) sharc_dispatch(cmd, g_trace_rt_sharc, b, pc, s.sh.set, (g_hw + 7) / 8, (g_hh + 7) / 8);
       else dispatch(cmd, g_trace_rt, b, pc, g_hw, g_hh, true);
+      s.rt_gi_applied = true;
     } else {
       dispatch(cmd, g_trace, b, pc, g_hw, g_hh);
     }
@@ -1754,6 +1757,7 @@ void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
 }
 
 void run_post(VkCommandBuffer cmd, const Snapshot& s) {
+  bool local_applied=false, reflection_applied=false;
   Bound b;
   bind_all(b, s);
   Push pc = make_push();
@@ -1809,6 +1813,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
     if (s.pan && refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout)) lsp = g_pan_ls.pipeline;
     ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8);
+    local_applied=true;
     if (s.pan) {
       Bg3Binding im{};
       im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -1850,6 +1855,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if (mv_move) image_layout(cmd, g_mv_image, g_mv_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, kAll, kCS);
     rf_timestamp(cmd, 0);
     rf_dispatch(cmd, rb, s, rp);
+    reflection_applied=true;
     rf_timestamp(cmd, 1);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
@@ -1862,6 +1868,17 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
   }
   if (s.gi) dispatch(cmd, g_composite, b, pc, g_w, g_h);
+  if (host->cfg_int("rt_primary_epoch",0)) {
+    // Command-application counts, not expensive per-ray atomics. Existing GPU
+    // timestamps and static debug captures independently prove execution/output.
+    static uint32_t frames=0, sun=0, gi=0, local=0, reflection=0;
+    sun+=s.rt_sun; gi+=s.rt_gi_applied; local+=local_applied; reflection+=reflection_applied;
+    if (++frames>=120) {
+      host->log("rt applied (%u frames): sun %u GI %u local %u reflections %u (recorded dispatches; GPU timings separate)",
+                frames,sun,gi,local,reflection);
+      frames=sun=gi=local=reflection=0;
+    }
+  }
   if (s.pan) {
     Bg3Binding im{};
     im.image = g_hist[g_parity ^ 1].image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;

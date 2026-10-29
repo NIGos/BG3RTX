@@ -34,6 +34,8 @@ class FGPlanTest(unittest.TestCase):
             self.assertEqual(int(values['fg']),s['fg'])
             self.assertEqual(int(values['rt_scene_rebase']),int(s['variant']=='rebase'))
             self.assertEqual(int(values['fg_current_destroy_only']),int(s['variant']=='current_destroy_only'))
+            self.assertEqual(values['rt_stats'],'0')
+            self.assertEqual(values['ls_stats'],'0')
         for view in ('sun','local','GI','reflections','RR'):
             views=[s for s in static if s['view']==view]
             self.assertEqual({s['fg'] for s in views},{0,2})

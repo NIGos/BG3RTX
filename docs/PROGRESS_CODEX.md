@@ -1,5 +1,24 @@
 # BG3RTX progress
 
+## FG-on cadence setup isolated — 2026-10-29 15:08
+
+Windowed/native extent enables actual FG: SDK status 0, two presented frames,
+displayed/rendered ~2.00. Static primary ~99.52%, but full per-ray RT/LS/RF
+statistics cost ~15.5 fps. Within the SAME FG-2/static sun-debug phase, turning
+only those statistics off raised cadence to 19-20 fps: GI median ~6.8 -> 0.379 ms,
+local shadows ~5.25 -> 0.530 ms. RT interval 2.872 ms at 15:03:08 includes a mixed
+300-frame window; do not subtract it as an isolated pass cost. Evidence:
+captures/queue/logs/p1-fg-static-effects.1.145628.log, 15:02:53-15:03:18.
+
+That setup probe was deliberately ended, INVALID, before completing parity.
+The retry keeps full-resolution primary/epoch GPU counters with rt_stats=0;
+ordinary shaders remain byte-identical (21/21), all 20 variants validate.
+Only the diagnostic epoch producer counts primary checks independently of full
+alpha/light statistics. Lightweight recorded-dispatch counts plus existing GPU
+timers/debug captures prove sun/GI/local/reflection application; RR still uses
+its GPU timer. Lighting and both fix defaults are unchanged. Seven CTests and
+20 matrix/static/plan tests pass. The >=18 fps gate is unchanged.
+
 ## FG setup extent mismatch confirmed — 2026-10-29 14:56
 
 Second static attempt was stopped as a setup probe after FG never enabled.

@@ -39,7 +39,7 @@ def phase_metrics(log,runner,plan):
         row.update(watch_ratios=[],sdk=[],effect_evidence={k:[] for k in ('sun','local','GI','reflections','RR')},
                    fps_median=None,match_median=None,displayed_rendered_median=None,
                    host_toggles_interior=0,host_toggles_per_minute=0,options_calls_full_phase=0,host_toggles_full_phase=0,
-                   sdk_focus_disable_messages=[],sdk_transitions_interior=[],lighting_pose=[],faults=[])
+                   sdk_focus_disable_messages=[],sdk_transitions_interior=[],lighting_pose=[],faults=[],applied_counts=[],pass_gpu_timings=[])
         if row['index'] not in times: continue
         start=times[row['index']]; begin=start+15; end=start+step['seconds']-10
         row['begin']=begin; row['end']=end
@@ -47,6 +47,12 @@ def phase_metrics(log,runner,plan):
             t=clock(line)
             if t is None or not begin<=t<=end: continue
             if re.search(r'RR evaluate failed|\[crash\] exception 0x|VK_ERROR_DEVICE_LOST|slDLSSGSetOptions.*: eError',line): row['faults'].append(line)
+            m=re.search(r'rt applied \((\d+) frames\): sun (\d+) GI (\d+) local (\d+) reflections (\d+)',line)
+            if m:
+                frames,*counts=map(int,m.groups()); row['applied_counts'].append({'frames':frames,'counts':counts})
+                for effect,count in zip(('sun','GI','local','reflections'),counts):
+                    if frames>=120 and count>=frames: row['effect_evidence'][effect].append(line)
+            if re.search(r'gi: trace pass .*GPU median|ls: local-light shadow pass GPU|rf: reflection pass GPU',line): row['pass_gpu_timings'].append(line)
             m=re.search(r'\[watch\] presents (\d+) \(displayed (\d+)\)',line)
             if m and int(m[1]): row['watch_ratios'].append(int(m[2])/int(m[1]))
             m=re.search(r'DLSS-G frame (\d+): status (0x[\da-f]+), presented per app frame (\d+), displayed/rendered over the last (\d+) frames ([\d.]+)',line)

@@ -80,6 +80,16 @@ class FGMotionTest(unittest.TestCase):
             return re.sub(r'(\d\d):(\d\d):(\d\d)\.000',stamp,text)
         r=quality(shift(log),shift(runner),plan)
         self.assertEqual(r['gate'],'PASS',r['invalid'])
+    def test_lightweight_dispatch_counts_preserve_primary_gate(self):
+        log,runner,plan=fixture()
+        lines=[]
+        for line in log.splitlines():
+            if any(tag in line for tag in ('material classes:','ls stats','hybrid GI','rf stats')): continue
+            lines.append(line)
+            if 'primary-ray check' in line:
+                lines.append(line[:12]+' rt applied (120 frames): sun 120 GI 120 local 120 reflections 120 (recorded dispatches; GPU timings separate)')
+        self.assertEqual(quality('\n'.join(lines),runner,plan)['gate'],'PASS')
+        self.assertEqual(quality('\n'.join(lines).replace('reflections 120','reflections 0'),runner,plan)['gate'],'FAIL')
 
 
 if __name__=='__main__': unittest.main()
