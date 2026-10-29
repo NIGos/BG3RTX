@@ -11,9 +11,15 @@
 - P3 native-direct diagnostic288 is live on matched ABI9; ordinary shaders remain byte-identical and native accuracy is still unproved.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
-- One reset is authorized at exhaustion and unused; latest weekly usage read is 99%, ordinary usage still allowed.
+- The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
 
 ## Resumed — 2026-10-29
+
+Usage reset consumed once after fresh weekly100% reading, per explicit user
+authorization. Tool outcome reset, credit balance0; idempotency key
+8ce84295-c9a8-4ba8-bbfb-cf1f81dd0af7. Initial quota refresh lagged; do not retry
+a successful logical reset or redeem another without fresh authorization.
+
 
 P3 7adc91d adds startup-only native-direct validation (default/release off).
 Recognized native compute scalar reads of set1/b0 flags become AO enabled,

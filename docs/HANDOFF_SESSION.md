@@ -15,8 +15,10 @@ The user resumed on Oct29; the overall goal remains ACTIVE.
 - Merge only through scripts/merge-green.ps1 after inspecting deciding numbers; push both branches.
 - QUALITY R0: derived gates, quality before speed on Ultra; research defaults stay off.
 - No FG/HDR-UI/swapchain work unless needed by the active phase.
-One usage reset is authorized AT EXHAUSTION, not used yet. Latest read: weekly
-usage 99%, one reset available. Do not consume merely because it is eligible.
+The ONE user-authorized reset was CONSUMED at weekly100% on Oct29.
+Tool outcome reset; idempotencyKey8ce84295-c9a8-4ba8-bbfb-cf1f81dd0af7.
+Reset credit balance is0. Never redeem another without fresh user authorization.
+Initial usage refresh lagged; verify limits rather than retrying a successful reset.
 
 ## Stable code and checkouts
 Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
@@ -39,7 +41,7 @@ Native scalar controls AO1/directAO0/sunMask1 avoid shared-buffer mutation.
 Actual variant follows module/pipeline/command/dispatch; reject every REFUSED log.
 62 native modules/4 CTests pass; six ordinary shaders byte-identical. Accuracy
 still unproved; in-scatter/transmittance is retained as a possible residual.
-Weekly usage99%, ordinary allowed, reset available but not consumed; use at exhaustion.
+One authorized reset consumed at weekly100%; do not redeem again.
 
 ## P1 - pan instability remains OPEN
 User sees lighting/shadows detach while panning; Ctrl+Shift+F9 restores native.
