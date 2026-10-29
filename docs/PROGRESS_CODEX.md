@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 08:44 Europe/Rome
+## Current checkpoint - 2026-10-29 08:48 Europe/Rome
 
 - Main rendering remains 6dba0a8; water design and legal QA exposure hold are merged.
 - P1 remains active. No new attribution or exposure research; research defaults stay off.
@@ -98,6 +98,15 @@ energy-parity or quality claim. Trace median 1.250 ms; whole GI 52.621 ms under
 validation. No scoped layout/push/write tags; other VVL errors remain. Retain
 full evidence on P1, update the branch from main, then one corrected-precision
 pan diagnostic. No repeated unchanged static runs seeking a favourable interval.
+
+
+P1 updated from main as d836c09 while no game was active. AGENTS.md and shared
+QA/reference fixes are present; GI source and paired binaries are unchanged.
+All 12 CTests, 49 shader files, QA detectors, eight energy tests and five merge
+gate scenarios pass. No experimental phase was integrated into main.
+Corrected-precision pan 302 started at 08:47:17 on frozen d836c09, one session
+with 24 balanced four-second blocks and a 96-second hold. It is diagnostic only,
+given static 301's original-energy failure. Preserve all evidence and defaults.
 
 
 

@@ -46,11 +46,18 @@ Latest trace median 1.250 ms; whole GI 52.621 ms under diagnostic validation.
 Full VVL is preserved at P1 build/p1-normal-footprint-301.validation.log.
 No scoped layout/push/write tags appeared; other VVL errors remain unresolved.
 
-No game is active as of the terminal audit. Update P1 from main, retain its
-phase evidence, then run ONE corrected-precision pan using the existing
-96-second balanced fixture. It is diagnostic only, given original-energy failure.
-No promotion or comparison of independent moving images. Fresh playing/process/
-queue checks are required immediately before launching.
+P1 was updated from main as d836c09 after the terminal audit. Only shared QA,
+docs/AGENTS and the already verified local-light reference fix arrived; GI code
+and paired binaries are unchanged. All 12 CTests, 49 shader files, QA detectors,
+eight energy tests and five merge-gate scenarios pass. No phase was merged to main.
+
+302 is LIVE on frozen d836c09, runner PID 45184 started at 08:47:17 after fresh
+playing/process/queue checks. ONE corrected-precision pan, 24 balanced four-second
+live-toggle blocks, direction reversals and a 96-second hold. Private/self-test
+production diagnostics off. Preserve static 301's original-energy failure.
+Do not edit P1 or change HEAD until actual terminal state. Report residual,
+cohort energy, coverage and motion together; no quality promotion or cross-run
+image comparison. Full VVL from 301 is already archived before this non-VVL pan.
 
 The complete fresh fallback now also tries current radiance for absent/nonfinite
 previous colour (4e11688). The disabled control remains original. Unsupported
@@ -90,7 +97,7 @@ promotion. A weak interval or lower-energy residual cannot close P1.
 Use explicit paths. The app may select a different managed checkout.
 
 - Main: C:/Users/quali/Documents/Code Projects/BG3RTX, branch main, pushed.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 816c986.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, d836c09.
 - P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, ca1959b, D-EM ABI 9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box, b913e8e, ABI 9.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm, 8d902d5.
