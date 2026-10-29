@@ -15,6 +15,37 @@ These rules come from mistakes already made in this repo. They apply on every br
   the targets still exist.
 - Write to the backups in `D:\BG3_Tools` (read-only for recovery).
 
+## Project map (read docs/ARCHITECTURE.md for the full picture)
+- `layer/` = host layer `VkLayer_bg3rtx.dll`: stable, needs a game restart to change. Hooks,
+  tracking, geometry capture, BVH (`rtscene`, `bvhsplit`, `alphatest`), NGX/Streamline, asset DB.
+- `core/` = `bg3rtx_core.dll`: hot-reloaded on rebuild. All lighting/RT/GI logic. Put new logic
+  here whenever possible: it is testable live without restarting the game.
+- `common/host_api.h` = the plain C ABI between them (`BG3RTX_ABI_VERSION`). Change it only when
+  the core truly needs new host data; bump the version, rebuild both DLLs, say so in the commit.
+  Every branch that bumps it conflicts with the others: keep ABI changes few and merge them early.
+- `shaders/` = HLSL compiled at runtime by DXC (edit, save, the pipeline rebuilds in game).
+  Variants via small wrapper files and defines. With a new key off, the ordinary shaders must
+  compile to byte-identical SPIR-V (check it): that proves the default path is untouched.
+- `common/settings.h` = the one table of settings. New key: add it to `bg3rtx.ini`, run
+  `python scripts/gen_settings_defaults.py`, and the settings test must pass.
+- `data/assetdb` = offline game data (lights, materials, roofs, probes); `tools/assets` builds it.
+- Tests: `.\scripts\build.ps1 -Test` (build + all CTests); `tests/qa_detectors_test.py`; QA
+  harness `python -m scripts.qa` (docs/QA.md). Add a unit test for any non-trivial CPU logic.
+
+## Developing the project
+- Priorities and the phase order are in `docs/HANDOFF_SESSION.md` ("Next"). Gaps ranked by
+  screen impact: `docs/COVERAGE.md`. Per-effect design and history: `docs/TRACK_*.md`.
+- Read the existing design section before implementing (many plans are already written, e.g.
+  TRACK_D 9.10 for box lights); update that section when the design changes.
+- Branches: one per phase or fix, from current main, short-lived. Merge small verified steps
+  often (off by default) instead of keeping long research branches; merge main into long ones daily.
+- Quality before frame rate on Ultra, but always report the cost (GPU ms of the pass, from the
+  existing `gpu` log lines) of a new effect or change.
+- Reuse what exists: the `ls_check`-style in-frame reference comparisons, `rt_debug`/`ls_debug`
+  views, `rt_stats`/`ls_stats` counters, `Ctrl+Shift+F9` A/B, the QA detectors.
+- When a feature is done: its key, its gate numbers, its cost, and how the user checks it in game
+  (what to look at, which save) go in the progress file and the effect's TRACK doc.
+
 ## Fix first, measure second
 - The goal is a visible, physically correct improvement in game (QUALITY R0). Instrumentation is
   a means, never the deliverable. If the next step is a known fix, do the fix; don't park it.
