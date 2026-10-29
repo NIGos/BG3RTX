@@ -267,6 +267,7 @@ struct Window {
   std::map<uint64_t, Glob> glob;               // luminance-scale copies per fragment shader (read back)
   std::map<uint64_t, Cmp> cmp;                 // projected comparison per fragment shader
   uint64_t dbg_frames = 0, dbg_depth = 0, dbg_hit = 0, dbg_miss = 0, dbg_dark = 0, dbg_bright = 0, dbg_front = 0;
+  uint64_t overlap_probe[7] = {}; // unused global debug words8..14
   double last_power = 0;
   uint32_t last_draws = 0, last_lights = 0;
 };
@@ -1740,6 +1741,7 @@ void em_on_present() {
       w.dbg_dark += st[3];
       w.dbg_bright += st[7];
       w.dbg_front += st[4];
+      for (uint32_t i = 0; i < 7; ++i) w.overlap_probe[i] += st[8 + i];
       for (uint32_t r = 0; r < si.rec_fs.size(); ++r) {
         const uint32_t* q = st + 16 + r * 16;
         if (!q[4]) continue;
@@ -1951,6 +1953,11 @@ void em_on_present() {
         w.dbg_bright ? 100.0 * double(w.dbg_front) / double(w.dbg_bright) : 0.0,
         w.dbg_hit ? 100.0 * double(w.dbg_dark) / double(w.dbg_hit) : 0.0);
     if (!items.empty()) log_list("[em] ours/game per family", items);
+    if (w.overlap_probe[0])
+      log("[em-overlap] receivers %llu candidates %llu multi-draw %llu distinct-draw sum %llu invalid %llu overflow %llu missing %llu",
+          (unsigned long long)w.overlap_probe[0], (unsigned long long)w.overlap_probe[1],
+          (unsigned long long)w.overlap_probe[2], (unsigned long long)w.overlap_probe[3],
+          (unsigned long long)w.overlap_probe[4], (unsigned long long)w.overlap_probe[5], (unsigned long long)w.overlap_probe[6]);
     if (!dump.empty()) log_list("[em] record dump (luminance families, exact families outside 0.8-1.25)", dump);
   }
   g_win = Window{};

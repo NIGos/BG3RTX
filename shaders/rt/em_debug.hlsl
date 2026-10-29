@@ -29,7 +29,7 @@ struct Camera2 { float4 v[14]; };   // the lighting's set 0 b2: v[13].xyz = abso
 [[vk::binding(5, 0)]] Texture2D<float4> gFx;     // the game's effects target
 [[vk::binding(6, 0)]] ConstantBuffer<Camera2> cam2;
 
-struct Push { uint2 full; uint mode; float tol; float thr; uint has_cam2; float filt; float aniso; uint fam; uint pad[3]; };   // filt: rt_em_filter; fam: rt_em_dbg_fam
+struct Push { uint2 full; uint mode; float tol; float thr; uint has_cam2; float filt; float aniso; uint fam; uint overlap_probe; uint pad[2]; };   // filt: rt_em_filter; fam: rt_em_dbg_fam
 [[vk::push_constant]] Push pc;
 
 float3 ray_at(float2 uv) {
@@ -38,6 +38,42 @@ float3 ray_at(float2 uv) {
 }
 
 void stat(uint word) { emStats.InterlockedAdd(word * 4, 1u); }
+// Observe coincident SAME-FAMILY draws, without changing nearest-hit emission.
+// Distinct geometry IDs avoid counting the two triangles of one rasterized
+// polygon as two draws. Eight is diagnostic storage only: overflow is explicit.
+void overlap_probe(float3 direction, float distance, float eps, float3 shift, uint nearest) {
+  if (pc.overlap_probe == 0u || nearest >= emHeader.Load(3 * 4) || emRecs[nearest].fs_hi != pc.fam) return;
+  stat(8);
+  RayDesc ray;
+  ray.Origin = shift; ray.Direction = direction;
+  ray.TMin = max(distance - eps, 0.0); ray.TMax = distance + eps;
+  RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> query;
+  query.TraceRayInline(emTlas, RAY_FLAG_NONE, 0xff, ray);
+  uint draws[8]; uint count = 0u, candidates = 0u;
+  [unroll] for (uint initialize = 0u; initialize < 8u; ++initialize) draws[initialize] = 0xffffffffu;
+  bool overflow = false, invalid = false;
+  while (query.Proceed()) {
+    if (query.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) continue;
+    uint geometry = query.CandidateGeometryIndex();
+    EmTri tri = em_triangle(geometry, query.CandidatePrimitiveIndex(), query.CandidateObjectToWorld3x4());
+    if (!tri.ok) { invalid = true; continue; }
+    if (emRecs[tri.rec].fs_hi != pc.fam) continue;
+    ++candidates;
+    bool seen = false;
+    [unroll] for (uint i = 0u; i < 8u; ++i) if (i < count && draws[i] == geometry) seen = true;
+    if (!seen) {
+      if (count < 8u) draws[count++] = geometry;
+      else overflow = true;
+    }
+    // Never commit: retain all candidates, including equal-distance draws.
+  }
+  emStats.InterlockedAdd(9 * 4, candidates);
+  if (count > 1u) stat(10);
+  emStats.InterlockedAdd(11 * 4, count);
+  if (invalid) stat(12);
+  if (overflow) stat(13);
+  if (candidates == 0u) stat(14);
+}
 // 64-bit sum of luminance x 4096 at byte `a` (lo, hi): the carry from the returned old value.
 void add64(uint a, float lum) {
   uint v = uint(clamp(lum, 0.0, 1e5) * 4096.0 + 0.5);
@@ -121,6 +157,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       }
     }
     if (hit) {
+      overlap_probe(dir, dist, eps, shift, rec);
       stat(1);
       if (game < 0.02 * ours) stat(3);
       // Another emitter in front of this one on the same ray (see rec_stat).

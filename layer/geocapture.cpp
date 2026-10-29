@@ -96,6 +96,8 @@ struct PipeInfo {
   uint8_t uv_vs_comps = 0;   // components the VS writes there
   bool restart = true;       // primitive restart enabled, or dynamic (unknown)
   InstPipe inst;             // instancing layout (Track D BVH split)
+  bool em_state = false, em_dynamic = false;
+  uint32_t em_raster[9] = {}; // blend/src/dst/op/mask/cull/depth-test/write/compare
 };
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
@@ -1113,6 +1115,27 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
       }
     }
     pi.xfb = vs_patched && !other;
+    const uint32_t overlap_family = (uint32_t(cfg_int("rt_em_dbg_fam_hi", 0) & 0xffff) << 16) |
+                                     uint32_t(cfg_int("rt_em_dbg_fam_lo", 0) & 0xffff);
+    if (cfg_int("rt_em_overlap_check", 0) && fio && uint32_t(fio->hash >> 32) == overlap_family &&
+        cis[i].pColorBlendState && cis[i].pColorBlendState->attachmentCount &&
+        cis[i].pRasterizationState && cis[i].pDepthStencilState) {
+      const auto& b = cis[i].pColorBlendState->pAttachments[0];
+      const auto& r = *cis[i].pRasterizationState;
+      const auto& d = *cis[i].pDepthStencilState;
+      pi.em_state = true;
+      const uint32_t values[9] = {b.blendEnable, uint32_t(b.srcColorBlendFactor), uint32_t(b.dstColorBlendFactor), uint32_t(b.colorBlendOp),
+                                  b.colorWriteMask, r.cullMode, d.depthTestEnable, d.depthWriteEnable, uint32_t(d.depthCompareOp)};
+      std::copy(std::begin(values), std::end(values), pi.em_raster);
+      if (cis[i].pDynamicState)
+        for (uint32_t k = 0; k < cis[i].pDynamicState->dynamicStateCount; ++k) {
+          const auto state = cis[i].pDynamicState->pDynamicStates[k];
+          pi.em_dynamic |= state == VK_DYNAMIC_STATE_CULL_MODE || state == VK_DYNAMIC_STATE_FRONT_FACE ||
+              state == VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE || state == VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE ||
+              state == VK_DYNAMIC_STATE_DEPTH_COMPARE_OP || state == VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT ||
+              state == VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT || state == VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT;
+        }
+    }
     // The UV-slot check: does the fragment shader read its texture coordinate where the
     // captured UV came from (TRACK_D 13.19)? Every pipeline, for every user of captured UVs.
     if (pi.xfb && g_stride >= 24 && vio && fio) {
@@ -1312,6 +1335,14 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
     std::lock_guard<std::mutex> lock(g_mu);
     auto it = g_pipes.find(s->pipe[0]);
     if (it != g_pipes.end()) pi = it->second;
+  }
+  if (pi.em_state && cfg_int("rt_em_overlap_check", 0)) {
+    static thread_local std::unordered_set<uint64_t> seen;
+    if (seen.insert(s->pipe_id[0]).second && seen.size() <= 16)
+      log("[em-overlap] native draw pipe %llu FS %016llx blend/src/dst/op/mask %u/%u/%u/%u/%u cull %u depth test/write/compare %u/%u/%u dynamic %u",
+          (unsigned long long)s->pipe_id[0], (unsigned long long)s->fs,
+          pi.em_raster[0], pi.em_raster[1], pi.em_raster[2], pi.em_raster[3], pi.em_raster[4],
+          pi.em_raster[5], pi.em_raster[6], pi.em_raster[7], pi.em_raster[8], unsigned(pi.em_dynamic));
   }
   if (!e->ubo) {
     Bg3Binding b;

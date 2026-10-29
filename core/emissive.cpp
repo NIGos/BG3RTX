@@ -155,7 +155,7 @@ void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, 
           // The family's FS hash, top 32 bits, as two 16-bit decimal keys (cfg_int is decimal):
           // 304be1c7 is rt_em_dbg_fam_hi=12363 (0x304b), rt_em_dbg_fam_lo=57799 (0xe1c7).
           (uint32_t(host->cfg_int("rt_em_dbg_fam_hi", 0) & 0xffff) << 16) | uint32_t(host->cfg_int("rt_em_dbg_fam_lo", 0) & 0xffff),
-          {0, 0, 0}};
+          {host->cfg_int("rt_em_overlap_check", 0) != 0 ? 1u : 0u, 0, 0}};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
