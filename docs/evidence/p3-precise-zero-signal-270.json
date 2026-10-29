@@ -1,0 +1,36 @@
+{
+  "job": {
+    "job": "p3-box-precise-projector-recompute",
+    "run": 1,
+    "start": "2026-10-29T03:58:33",
+    "sec": 283,
+    "valid": false,
+    "outcome": "INVALID (missing: ls box precise \\(120 frames\\): px [1-9]\\d* native nonzero [1-9]\\d* recomputed nonzero [1-9]\\d* invalid 0; raw game); Run ended: done after 219s (session s035833#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "8cb61f0 Recover projector QA radiance precision with bounded exact 64-bit sums | core 03:26:21",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-box-precise-projector-recompute.1.035936.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-035947"
+    ],
+    "lines": [
+      "04:01:32.553  [core] ls box: active (native lighting set 0000013F02BC73C0, dynamic offsets 2)",
+      "04:03:14.726  [core] ls box stats (120 frames): evaluated 1.323/px, shadow-mapped 0.013/px, traced 0.000/px, occluded 0.000/px, unknown 0.000/px, cookie 0.000/px; game box light 0.000% of lit luminance, removed 0.000%; projector validation px 325786931: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+      "04:03:14.726  [core] ls stats (120 frames): non-standard material px 0.1349M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.1305M px, game 0.0000, recomputed 0.0000, mean |diff| 0.00000, recompute above game 0.00000; set0/b0 _m4 (skin shaded white) 1",
+      "04:03:14.726  [core] ls validation fit (all pixels including projectors): game = 0.0000 x recomputed + 0.00000 over 2.53M lit px (mean recomputed 0.00000, game 0.00000); game where no local light reaches 0.00000 (0.06M px)",
+      "04:03:14.726  [core] ls box precise (120 frames): px 325786931 native nonzero 0 recomputed nonzero 0 invalid 0; raw game 0 recomputed 0 abs_diff 0 over 0 box 0; mean quantization <= 2.98023224e-08",
+      "INVALID: expected log lines not found: ls box precise \\(120 frames\\): px [1-9]\\d* native nonzero [1-9]\\d* recomputed nonzero [1-9]\\d* invalid 0; raw game"
+    ],
+    "session": "s035833#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "windows": 52,
+  "projector_pixels_sum": 16919202052,
+  "native_nonzero": 0,
+  "recomputed_nonzero": 0,
+  "invalid": 0,
+  "quality_valid": false,
+  "reason": "Positive projector population but no positive native/recomputed samples even with Q24 and nonzero counters. Need a nonzero-lighting control; native AO with GI disabled is the next isolation."
+}

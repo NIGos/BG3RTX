@@ -110,3 +110,13 @@ normalization or image-output expression changes. Default/check SPIRV remain
 byte-identical to main; full build/3 CTests and affected shader variants pass.
 Next repeat267 and inspect pure off/on windows with nonzero signal and invalid0;
 keep old FULL bit differences and unresolved validation categories visible.
+
+270 / 8cb61f0 precision repeat: INVALID positive-signal gate, 283 s total,
+no driver faults/dumps/build changes. 52 windows cover 16,919,202,052 projector
+samples, with native/recomputed nonzero counts BOTH 0 and invalid count 0.
+This comparison still has no reported positive input; higher precision alone
+cannot validate box accuracy. Runtime shaders compiled successfully. Next isolate
+with GI disabled so the game's own AO reaches the lighting: current native
+AO-on-direct flags are m0.x=1,m0.y=1, so a folded zero GI visibility could erase
+the very direct-light signal being compared. This is a hypothesis, not proof of
+black final rendering or an accepted recompute. Keep quality/shadow gates open.
