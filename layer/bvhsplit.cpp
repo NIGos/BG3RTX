@@ -365,6 +365,7 @@ struct DynSlot {
 };
 std::unordered_map<uint64_t, DynSlot> g_dyn;
 uint64_t g_hold_epoch = 1;
+uint64_t g_hold_why[7] = {};
 
 // ---- this capture's draws ----
 struct FrameDraw {
@@ -876,8 +877,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const DeviceData* dd = g_dd;
   const uint64_t now = frame_index();
   const uint32_t stride = cap.stride, tri_bytes = 3 * stride;
-  const uint32_t hold_frames = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 0), 0, 120));
+  const uint32_t hold_frames = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 4), 0, 120));
   const bool moving = rt_camera_moving();
+  const uint32_t hold_max_prims = uint32_t((std::max)(cfg_int("rt_dyn_hold_max_prims", 8192), 0));
   if (moving || !hold_frames) {
     ++g_hold_epoch;
     for (auto& [key, s] : g_dyn) if (s.hold_size) {
@@ -979,16 +981,24 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     std::unordered_set<uint64_t> present;
     for (const FrameDraw& fd : g_draws) present.insert(fd.dyn_key);
     for (auto& [key, s] : g_dyn) {
-      if (present.count(key) || !s.hold_size || s.hold_stride != stride ||
-          !dyn_hold_alive(now, s.last_used, hold_frames, moving,
-                          rec_submitted(s.hold_rec) && s.hold_rec == s.rec, s.hold_epoch == g_hold_epoch)) continue;
+      if (present.count(key)) continue;
+      // Why an absent draw was not held (rt_stability_log): 0 aged out, 1 no snapshot,
+      // 2 stride, 3 not submitted / newer record, 4 epoch, 5 alpha record not restorable, 6 held.
+      int why = 6;
+      if (!s.hold_size) why = 1;
+      else if (s.hold_stride != stride) why = 2;
+      else if (!(now > s.last_used && now - s.last_used <= hold_frames)) why = 0;
+      else if (!(rec_submitted(s.hold_rec) && s.hold_rec == s.rec)) why = 3;
+      else if (s.hold_epoch != g_hold_epoch) why = 4;
+      if (why != 6) { if (why) ++g_hold_why[why]; continue; }
       FrameDraw fd;
       fd.dyn_key = key; fd.held = true; fd.prims = s.prims;
       fd.soup_off = s.hold_off; fd.cap_alpha = s.alpha;
       if (s.hold_has_alpha) {
         fd.rec = alpha_restore(s.hold_alpha);
-        if (fd.rec == kNone) continue;   // never substitute an opaque alpha hold
+        if (fd.rec == kNone) { ++g_hold_why[5]; continue; }   // never substitute an opaque alpha hold
       }
+      ++g_hold_why[6];
       dyn.push_back({uint32_t(g_draws.size()), key});
       g_draws.push_back(fd);
     }
@@ -1076,7 +1086,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if (!refit && fresh) s.since_build = uint32_t(key % uint64_t(rebuild_frames));
     dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit});
     s.rec = rec;
-    if (hold_frames && !moving) {
+    // Only small draws are snapshotted: BG3's LOD swaps are props of a few hundred to a few
+    // thousand triangles, while the terrain/large meshes (up to 131k) were most of the copy cost.
+    if (hold_frames && !moving && fd.prims <= hold_max_prims) {
       const VkDeviceSize bytes = VkDeviceSize(fd.prims) * tri_bytes;
       if (s.hold_size && (s.hold_size != bytes || s.hold_stride != stride)) {
         g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
@@ -1472,8 +1484,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   if (cfg_int("rt_stability_log", 0) && now % 300 == 0) {
     uint32_t held = 0;
     for (const auto& [di, key] : dyn) held += key && g_draws[di].held;
-    log("[bvh] dyn hold frame %llu: key %u, moving %u, held %u, copied %zu draws",
-        (unsigned long long)now, hold_frames, moving ? 1u : 0u, held, hold_copies.size());
+    log("[bvh] dyn hold frame %llu: key %u, moving %u, held %u, copied %zu draws; last 300 frames: held %llu, "
+        "not held: no snapshot %llu, stride %llu, unsubmitted %llu, epoch %llu, alpha %llu",
+        (unsigned long long)now, hold_frames, moving ? 1u : 0u, held, hold_copies.size(),
+        (unsigned long long)g_hold_why[6], (unsigned long long)g_hold_why[1], (unsigned long long)g_hold_why[2],
+        (unsigned long long)g_hold_why[3], (unsigned long long)g_hold_why[4], (unsigned long long)g_hold_why[5]);
+    for (uint64_t& v : g_hold_why) v = 0;
   }
   bvh_cpu_mark(-1);
   {
