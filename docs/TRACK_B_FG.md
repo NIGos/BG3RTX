@@ -1,5 +1,44 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## P2 watched-image retirement candidate — 2026-10-29, unmeasured
+
+Log-only review: retained user excerpt 09:29-09:34 has 27 host on/off changes,
+peak 16 per 60 seconds. All 13 host offs follow image destruction by 2-63 ms.
+The SDK also explicitly disables interpolation three times because the window
+is not focused while requested mode remains on. Focus loss is not invalid input.
+Legacy logs do not name the destroyed image/role; exact input attribution is
+unavailable. A changed hudless/UI handle alone does not establish invalidity.
+
+Queue readiness diagnostics provide stronger attribution: of 20 host offs,
+17 have current inputs ready, gate 0x80 (destruction cooldown). Three have
+gate 0x40, UI age 4 during swapchain recreation. These stale UI shutdowns remain
+necessary. Current-ready state does not establish the retired/current role of
+the image destroyed in the preceding frame. Full per-off source lines are in
+docs/evidence/p2-fg-and-rt-log-review.json.
+
+`fg_current_destroy_only=0` is a new live, default-off candidate. Legacy behavior
+resets stability for any image in the 32-entry historical layout watch list.
+With the key on, only destruction of a currently selected depth/MV/hudless/UI
+image resets stability. Rotated-out images still wait for the DLSS-G inputs
+consumption fence before their views/images are destroyed, and layout/watch
+cleanup still occurs. Missing/stale current inputs and real target recreation
+keep the existing off/cooldown behavior. No change to the legacy cooldown when
+the key is off. No shader or ABI change; CPU/GPU cost is unmeasured.
+
+Every host options decision logs reason, missing/stale role masks (depth=1,
+MV=2, hudless=4, UI=8), handles/views, extent, age, layout, tag/constants API
+results, and last destruction/current roles plus cooldown reset frame. These
+logs distinguish actual current-input loss from a historical-image reset and
+flags-only options calls. SDK focus messages distinguish independent gating.
+
+Seven CTests pass, including CPU cooldown/retirement scenarios; four audit
+tests reject conflating flags or SDK focus with input failure. Evidence:
+docs/evidence/p2-fg-and-rt-log-review.json. No game launched and no runtime pass.
+Candidate remains off. The two P1 rotation jobs remain unchanged and queued.
+Next P2 gate: within one real-present FG run, observe key off/on and current
+role per toggle, keep genuine invalid-input shutdowns/fence safety, and reduce
+retired-only cooldowns without API/fence faults. No promotion before evidence.
+
 `layer/streamline.cpp` runs NVIDIA DLSS-G in BG3's Vulkan renderer, including
 multi frame generation on RTX 50. It uses Streamline 2.14.16 with manual
 hooking from inside the host layer. NVIDIA Smooth Motion is not involved:

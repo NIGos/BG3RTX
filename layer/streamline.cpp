@@ -24,6 +24,7 @@
 // Camera matrices come from the velocity pass's uniform buffers (set 0
 // bindings 2 and 5), read on the CPU from the game's mapped memory.
 #include "host.h"
+#include "../common/fg_stability.h"
 
 #include <psapi.h>
 #include <dbghelp.h>
@@ -587,9 +588,16 @@ std::unordered_map<VkImage, VkImageLayout> g_layout;   // queue-order layout at 
 // their layouts are tracked before they are identified in a given frame.
 constexpr int kWatch = 32;
 std::atomic<VkImage> g_watch[kWatch] = {};
-// Frame of the last destruction of a current tag: DLSS-G stays off for
-// fg_stable_frames after it (BG3 recreates its targets when gameplay starts).
-std::atomic<uint64_t> g_last_tag_destroy{0};
+// Legacy cooldown covers all watched images; the keyed policy scopes it to
+// current inputs. Real target recreation still waits for stable inputs.
+FgStability g_fg_stability;
+struct TagDestroyEvent {
+  uint64_t frame = 0;
+  VkImage image = VK_NULL_HANDLE;
+  uint32_t current_roles = 0;  // depth=1, MV=2, hudless=4, UI=8
+  bool reset = false;
+};
+TagDestroyEvent g_last_destroy_event;  // g_mu
 std::atomic<bool> g_fg_running{false};
 bool g_fg_running_flag() { return g_fg_running.load(); }
 // DLSS-G's inputs-processing completion fence (a timeline semaphore on
@@ -1767,28 +1775,43 @@ void sl_note_view_destroyed(VkImageView view) {
     std::lock_guard<std::mutex> lock(g_mu);
     for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui}) current |= i->view == view;
   }
-  if (current) wait_inputs_consumed("view", (uint64_t)view);
+  bool retired = false;
+  if (!current && cfg_int("fg_current_destroy_only",0)) {
+    std::shared_lock<std::shared_mutex> lock(tracker().mu);
+    auto it=tracker().views.find(view);
+    retired=it!=tracker().views.end() && sl_watched(it->second.image);
+  }
+  // A rotated-out tag can still belong to the last presented GPU frame.
+  // Ignoring its stability reset must never skip the consumption fence.
+  if (current || retired) wait_inputs_consumed("view", (uint64_t)view);
 }
 
 void sl_note_image_destroyed(VkImage image) {
   if (!g_active || !sl_watched(image)) return;
-  bool current = false;
+  uint32_t current_roles = 0;
   {
     std::lock_guard<std::mutex> lock(g_mu);
-    for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui}) current |= i->image == image;
+    const Img* inputs[] = {&g_depth, &g_mvec, &g_hudless, &g_ui};
+    for (uint32_t i=0; i<4; ++i)
+      if (inputs[i]->image == image) current_roles |= 1u << i;
   }
-  // Any tag image going away means the game is recreating its targets (the
-  // loading screen -> gameplay switch, resolution changes): frame generation
-  // goes off at the very next present and stays off for fg_stable_frames.
-  g_last_tag_destroy = frame_index();
-  if (current) wait_inputs_consumed("image", (uint64_t)image);
+  // Legacy policy treats every historical watched image as a target reset.
+  // The keyed policy only invalidates current inputs; retiring a previous
+  // rotation of the same target does not invalidate its live replacement.
+  const uint64_t frame = frame_index();
+  const bool current_only = cfg_int("fg_current_destroy_only",0) != 0;
+  const bool reset = g_fg_stability.destroyed(frame,current_roles,current_only);
+  if (current_roles || current_only) wait_inputs_consumed("image", (uint64_t)image);
   std::lock_guard<std::mutex> lock(g_mu);
+  g_last_destroy_event = {frame,image,current_roles,reset};
   for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui})
     if (i->image == image) *i = Img{};
   g_layout.erase(image);
   for (auto& w : g_watch)
     if (w.load() == image) w = VK_NULL_HANDLE;
-  log("[sl] a tagged image was destroyed; waiting for the passes to show it again");
+  log("[sl] a tagged image was destroyed; image %p frame %llu current roles 0x%x "
+      "(depth=1 MV=2 hudless=4 UI=8), stability reset %u, current-only %u",
+      (void*)image,(unsigned long long)frame,current_roles,unsigned(reset),unsigned(current_only));
 }
 
 // ---------------------------------------------------------------------------
@@ -1804,6 +1827,11 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
   uint32_t gen = fg >= 2 ? uint32_t(std::min(fg, 4) - 1) : 0;
 
   bool ready = false;
+  Img input_snapshot[4]{};
+  TagDestroyEvent destroy_snapshot{};
+  VkImageLayout input_layouts[4]{};
+  sl::Result tag_result = sl::Result::eOk, constants_result = sl::Result::eOk;
+  bool tagged = false;
   if (g_token) {
     // Snapshot under the lock; Streamline is called without it (it may wait on
     // GPU work that the game's recording threads, which take g_mu, still have to submit).
@@ -1812,6 +1840,9 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     VkImageLayout ld{}, lm{}, lh{}, lu{};
     {
       std::lock_guard<std::mutex> lock(g_mu);
+      input_snapshot[0]=g_depth; input_snapshot[1]=g_mvec;
+      input_snapshot[2]=g_hudless; input_snapshot[3]=g_ui;
+      destroy_snapshot=g_last_destroy_event;
       // everything identified within the last couple of frames (menus have no velocity pass)
       ready = g_depth.image && g_mvec.image && g_hudless.image && g_ui.image && frame <= g_mvec.seen + 3 &&
               frame <= g_ui.seen + 3;      if (ready) {
@@ -1822,6 +1853,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
         lm = layout_of(m.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         lh = layout_of(h.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         lu = layout_of(u.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        input_layouts[0]=ld; input_layouts[1]=lm; input_layouts[2]=lh; input_layouts[3]=lu;
       }
     }
     if (ready) {
@@ -1847,6 +1879,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
       sl::Constants c{};
       fill_constants(c, g_mvec.w, g_mvec.h);
       sl::Result cr = g_sl.SetConstants(c, *g_token, 0);
+      tag_result=tr; constants_result=cr; tagged=true;
       static uint32_t logged = 0;
       if (((tr != sl::Result::eOk || cr != sl::Result::eOk) && logged < 20) || frame % 600 == 0) {
         ++logged;
@@ -1861,13 +1894,31 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
   if (cfg_int("fg_only_interpolated", 0)) flags |= uint32_t(sl::DLSSGFlags::eShowOnlyInterpolatedFrame);
   if (cfg_int("fg_menu_detect", 1)) flags |= uint32_t(sl::DLSSGFlags::eEnableFullscreenMenuDetection);
   // Frame generation only once the inputs have been stable for a while.
-  static uint64_t stable_from = 0;
   uint64_t stable_n = uint64_t(cfg_int("fg_stable_frames", 30));
-  if (!ready || g_last_tag_destroy.load() + stable_n > frame) stable_from = 0;
-  else if (!stable_from) stable_from = frame;
-  bool stable = ready && stable_from && frame >= stable_from + stable_n;
+  bool stable = g_fg_stability.update(frame,ready,stable_n);
   int want = stable ? fg : 0;
   if (g_sl.DLSSGSetOptions && (want != g_fg_applied || flags != g_flags_applied)) {
+    uint32_t missing=0, stale=0;
+    for (uint32_t i=0; i<4; ++i) {
+      if (!input_snapshot[i].image) missing |= 1u << i;
+      if ((i==1 || i==3) && frame>input_snapshot[i].seen+3) stale |= 1u << i;
+    }
+    const char* reason = fg<2 ? "requested-off" : !g_token ? "no-token" : !ready ? "missing-or-stale-input" :
+                         !stable ? "stability-cooldown" : flags!=g_flags_applied && want==g_fg_applied ? "flags-only" : "stable-inputs";
+    log("[sl] FG decision frame %llu: applied %d -> want %d requested %d; reason %s; ready %u stable %u "
+        "missing 0x%x stale 0x%x (depth=1 MV=2 hudless=4 UI=8); tag API %s constants %s; "
+        "last destroy image %p frame %llu current roles 0x%x reset %u; cooldown destroy frame %llu; current-only %d",
+        (unsigned long long)frame,g_fg_applied,want,fg,reason,unsigned(ready),unsigned(stable),missing,stale,
+        tagged ? res_str(tag_result) : "not-called",tagged ? res_str(constants_result) : "not-called",
+        (void*)destroy_snapshot.image,(unsigned long long)destroy_snapshot.frame,destroy_snapshot.current_roles,
+        unsigned(destroy_snapshot.reset),(unsigned long long)g_fg_stability.last_destroy.load(),cfg_int("fg_current_destroy_only",0));
+    const char* names[] = {"depth","MV","hudless","UI"};
+    for (uint32_t i=0; i<4; ++i) {
+      const Img& input=input_snapshot[i];
+      log("[sl] FG input %s: image %p view %p extent %ux%u age %llu layout %d",
+          names[i],(void*)input.image,(void*)input.view,input.w,input.h,
+          (unsigned long long)(frame>=input.seen ? frame-input.seen : 0),int(input_layouts[i]));
+    }
     sl::DLSSGOptions o{};
     o.mode = want >= 2 ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
     o.numFramesToGenerate = std::max(1u, gen);

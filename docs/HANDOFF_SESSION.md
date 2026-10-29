@@ -1,10 +1,32 @@
-# Session handoff — P1 rotation gate prepared, 2026-10-29
+# Session handoff — P1 queued; P2 code/log-only candidate, 2026-10-29
 
 Read AGENTS.md, then the top of PROGRESS_CODEX.md. No Ponytail. No subagents.
 Latest user instruction: ROTATION is the main gate. Foreground real-present
 jobs require captures/queue/USER_AWAY. It is absent at preparation time.
 USER_PLAYING or an existing user game blocks execution. Never create USER_AWAY.
-The older permission to test while the user works no longer applies.
+The older permission to test while the user works no longer applies. Latest
+continuation explicitly authorizes P2 FG code/log-only work and RT cost review,
+with no game launch. It overrides the older P2 deferral at the bottom.
+
+## Latest P2 continuation
+
+Default-off fg_current_destroy_only only resets FG stability for current-input
+destruction, not rotated-out historical watched images. Consumption-fence waits
+remain for retired views/images. Every host options decision now logs input
+roles, ages, handles, API results and the cooldown event. Seven CTests and four
+audit tests pass; no shaders or ABI changed. No runtime benefit/cost established.
+User excerpt: 27 host transitions, all 13 offs follow destruction by 2-63 ms;
+destroyed roles are unknown in old logs. Three SDK offs explicitly say window
+not focused with mode on. Do not treat these as invalid DLSS-G inputs.
+Queue readiness identifies 20 offs: 17 current-ready destruction cooldowns,
+three stale UI age 4 during swapchain recreation; do not weaken that UI gate.
+RT log review: old/new GI median 0.466/6.212 ms, LS 0.378/5.271 ms, nearby RR
+2.590/2.337 ms. RR was on in both; old was headless, new foreground presented.
+Scene/settings/diagnostics differ; same newer settings in user CTY log have
+0.937 ms RT interval. Exact causal split of 4.269 versus 15.040 ms is UNKNOWN.
+See docs/evidence/p2-fg-and-rt-log-review.json and top of PROGRESS_CODEX.md.
+P1 jobs stay queued and unchanged. No new P2 game job or merge is authorized
+by this code/log-only continuation. Runtime candidate remains unmeasured.
 
 ## Checkout and current state
 
@@ -13,7 +35,7 @@ Branch codex/p1-pan-flashes; main remains 58b06b4. No experimental merge.
 314840d implements default-off rt_scene_rebase. 5c0057a records its incomplete
 pan gate. da4b64d contains the pushed rotation preparation on this branch only.
 Host/core remain paired ABI 16; rebuild both for the FG-independent crash logger.
-Six CTests pass. Ordinary 21 shader binaries remain byte-identical to baseline;
+Seven CTests pass. Ordinary 21 shader binaries remain byte-identical to baseline;
 20 rebase variants validate. Diagnostic keys default off.
 
 No live game was launched during rotation preparation. Two queue jobs are

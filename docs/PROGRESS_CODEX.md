@@ -1,5 +1,64 @@
 # BG3RTX progress
 
+## P2 FG toggle candidate; RT cost log review — 2026-10-29
+
+Code/log-only continuation: no game launch, no display changes. The two P1
+rotation jobs remain queued and unchanged; foreground still requires USER_AWAY.
+New `fg_current_destroy_only=0` stays off by default. No merge or runtime pass.
+
+Retained user log 09:29-09:34: 27 host on/off transitions, peak 16 per 60 s;
+all 13 host offs follow a watched-image destruction by 2-63 ms. This is the
+available excerpt, not proof of the reported whole-session 30 toggles/min.
+It also records 31 SDK interpolation transitions: 12 offs requested by our
+host, three offs explicitly caused by `window not focused` while mode stays on.
+Those three are not invalid inputs. Thirteen FG queue logs contain 50 host
+transitions. Their same-timestamp readiness lines identify all 20 offs: 17 have
+no missing/stale current input (`ready=1`, gate 0x80: destruction cooldown),
+three have stale UI (`age=4`, gate 0x40) during swapchain recreation. These three
+real stale-input shutdowns stay protected. Current-ready cooldowns do not alone
+prove whether the previously destroyed image was current or retired.
+
+The user excerpt's destruction log omits handle/current role, so its exact input
+at each host off is UNKNOWN. Do not call hudless/UI invalid just because their
+handles changed. Code does expose a concrete overbroad guard: destruction of
+any historical watched image resets stability, even if all current inputs have
+live replacements. With the key on, only destruction of a current depth/MV/
+hudless/UI image resets it. Retired-image/view consumption-fence waits and
+cleanup remain active. Missing/stale inputs still turn FG off. Each host options
+decision now logs its reason, missing/stale role masks, all four handles/views,
+extents, ages/layouts, API results and the destruction that set the cooldown.
+Candidate benefit and CPU/GPU cost remain UNMEASURED; no shader or ABI change.
+
+Existing GPU log samples, separate timing scopes:
+
+| Sample | RT interval average | GI trace median | Local shadows median | RR evaluation + guides |
+|---|---:|---:|---:|---:|
+| Historical 19:20:51 | 4.269 ms | 0.466 ms | 0.378 ms | 2.590 ms nearby |
+| Rebase-on 12:37:42 | 15.040 ms | 6.212 ms | 5.271 ms | 2.337 ms nearby |
+| User CTY 09:30:56 | 0.937 ms | 0.359 ms | 0.534 ms | 2.708 ms nearby |
+
+RR was on in both compared jobs; FG was off. The historical log explicitly has
+headless presentation ON, versus real foreground presentation in the new job.
+Both identify a 2560x1067 G-buffer. Scene changes WLD to CTY; GI 1 to 2 rays,
+shadowed mode 3 to 1, roughness 0.6 to 0.8, rebuild 60 to 600. The new job also
+enables full RT/LS statistics and primary checking. The 4.269 ms window contains
+44 missing RT observations and GI p90 7.195 ms; later that same log is 1.943 ms.
+The user CTY sample has the newer ray/LS/roughness settings yet costs 0.937 ms:
+settings alone do not explain 15 ms. GI and LS are measurably slower, while RR
+is not. No isolated primary/statistics timer exists in these logs, so the causal
+split remains UNKNOWN. Do not add pass medians to interval averages or attribute
+the difference to rebasing. The queued preflight compares primary/epoch off/on
+with full RT/LS statistics enabled throughout; it is not a statistics-off benchmark.
+
+Seven CTests and four log-audit tests pass. The CPU tests cover legacy cooldown
+boundaries, retired-tag churn, every current role, missing inputs and recovery.
+Evidence with source line numbers and every user off:
+`docs/evidence/p2-fg-and-rt-log-review.json`; full audit:
+`captures/p2-fg/retained-log-audit.json`. Kept: default-off candidate and diagnostics.
+Rejected: inventing missing roles in the user excerpt, a confirmed FG fix or an isolated
+15 ms regression from these logs. Next P2 evidence needs the logged role at an
+actual toggle before any promotion; the P1 rotation gate remains pending.
+
 ## P1 rotation gate prepared; waiting for USER_AWAY — 2026-10-29
 
 Implementation `da4b64d` is committed and pushed. No live game jobs ran in this
