@@ -179,3 +179,9 @@ aborts nonopaque candidates; lowering the cap alone did not exercise the
 required branch in S6. Do not claim fallback verification or relax the expect.
 Final nonfinite0; the D32F-only nonfinite dump remains retained. Next use other
 required scenes/alpha coverage, rather than repeating this unchanged control.
+
+S7/S5 next fixtures use normal production GI/debug0 and require actual nonzero
+projector evaluations and shadow rays. They do not require a guessed cookie
+population: inspect actual cookie counts and keep that requirement open if
+absent. Both saves are recorded loadable in main captures/scene-sweep.json;
+no mods/saves are changed. P1 existing-key AO-source isolation runs first.
