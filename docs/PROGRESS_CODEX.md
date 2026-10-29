@@ -1,5 +1,21 @@
 # BG3RTX progress
 
+## P1 exact camera versus present age — 2026-10-29
+
+First camera-selection probe: 1,800 / 1,800 queries redirected to another
+scene, zero missing camera identities. The old age guard rejected the matched
+scene, producing 1,046 missing-RT frames in the first logged window. Probe
+cancelled as INVALID; missing RT is never quality improvement. Full log:
+captures/p1-pan-flashes/0edf4ed-camera-match-full.log.
+Exact camera selection now uses live-slot retirement instead of present age;
+the core no longer rejects an exact match solely because it was recorded two
+presents earlier. Dropped builds and retired slots remain rejected. Camera
+identity is assigned only after a successful scene commit. ABI remains 16.
+rt_primary_check=1 reuses the existing GPU primary-check producer for counters
+without burst capture or a debug-colour overlay. Default 0; no shader changes.
+The same-run off/on fixture enables this counter in every phase. Four CTests
+pass. Moving primary-match gate remains open until this corrected A/B runs.
+
 ## P1 renderer alignment takes priority — 2026-10-29
 
 User accepts the real-present FG-off primary-ray evidence as the positive

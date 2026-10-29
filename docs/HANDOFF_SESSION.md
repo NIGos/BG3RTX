@@ -25,6 +25,13 @@ FG toggle issues and the roughly 18 fps base rate follow this explicit P1 task.
 
 ## Current checkpoint and next action
 
+Camera identity probe redirects 1,800 / 1,800 selections, zero unmatched.
+Old age guards disabled RT for exact matches, so that run was cancelled INVALID.
+Now exact matches are guarded by GPU slot retirement, not present age, in host
+and core. rt_primary_check=1 supplies the existing GPU primary counters without
+bursts or debug colour; the A/B fixture enables it throughout. Four CTests pass.
+Run the corrected p1_camera_match_job.json; quality gate is still OPEN.
+
 LATEST USER STEERING: stop burst-tool work. Existing primary-ray evidence is
 the accepted positive control (99.53-99.57% static, 89.25% slow, 31.40% fast).
 Fix renderer alignment behind a key; A/B within one presented pan run. Gate

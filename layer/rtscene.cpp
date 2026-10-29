@@ -860,8 +860,6 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   const int scene_slot = pick_scene_slot();
   if (scene_slot < 0) return;
   SceneSlot& scene = g_scene[scene_slot];
-  scene.camera = cap.ubo;
-  scene.camera_offset = cap.ubo_offset;
   scene.pose_valid = false;
   if (cfg_int("pan_capture", 0) > 0 || cfg_int("pan_prepare", 0)) {
     void* mapped = nullptr;
@@ -907,6 +905,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
     commit_scene_slot(scene_slot, res.tlas, set, true, res.rec);
+    scene.camera = cap.ubo;
+    scene.camera_offset = cap.ubo_offset;
     fault_checkpoint(cmd, kCkSceneCommitted, uint32_t(scene_slot));
     ++g_n_frames;
     ++g_n_split;
@@ -1040,6 +1040,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   g_legacy_rec = legacy_rec;
   g_split_valid = false;
   commit_scene_slot(scene_slot, g_tlas, legacy_set, false, legacy_rec);
+  scene.camera = cap.ubo;
+  scene.camera_offset = cap.ubo_offset;
   g_built_prims = prims;
   g_built_aprims = aprims;
   g_built_sig = signature;
@@ -1059,7 +1061,11 @@ bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* 
   if (slot < 0) return false;
   SceneSlot& s = g_scene[slot];
   const uint64_t now = frame_index();
-  if (!s.used || !s.tlas || s.built + 1 < now) return false;
+  if (!s.used || !s.tlas) return false;
+  // Exact camera selection can legitimately refer to a build stamped two
+  // presents earlier. A present on another thread is not a camera epoch.
+  const bool exact_camera = slot != g_scene_cur && cfg_int("rt_scene_camera_match", 0);
+  if (exact_camera ? slot_retired(s, life_gpu_done(), now) : s.built + 1 < now) return false;
   // Its command buffer was dropped without a submit: the TLAS was never built.
   if (bvh_rec_state(s.rec) == 2) return false;
   if (s.split ? !g_split_valid : !g_blas_valid) return false;
@@ -1106,11 +1112,13 @@ bool rt_scene_camera(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas, VkDe
   redirected += matched >= 0 && matched != g_scene_cur;
   missing += matched < 0;
   if (count % 300 == 0) {
-    log("[rt] camera scene identity: %llu queries, %llu redirected, %llu no match; lighting %p+%llu, latest %p+%llu",
+    log("[rt] camera scene identity: %llu queries, %llu redirected, %llu no match; lighting %p+%llu, latest %p+%llu; matched built %llu, present %llu",
         (unsigned long long)count, (unsigned long long)redirected, (unsigned long long)missing,
         (void*)camera.buffer, (unsigned long long)camera.offset,
         g_scene_cur >= 0 ? (void*)g_scene[g_scene_cur].camera : nullptr,
-        g_scene_cur >= 0 ? (unsigned long long)g_scene[g_scene_cur].camera_offset : 0);
+        g_scene_cur >= 0 ? (unsigned long long)g_scene[g_scene_cur].camera_offset : 0,
+        matched >= 0 ? (unsigned long long)g_scene[matched].built : 0,
+        (unsigned long long)frame_index());
   }
   *set = VK_NULL_HANDLE;
   return matched >= 0 && hand_out(tlas, set, built_frame, matched);

@@ -1374,7 +1374,7 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha) 
   const bool matched = host->cfg_int("rt_scene_camera_match", 0) != 0;
   bool scene_ok = matched ? host->rt_scene_camera && host->rt_scene_camera(cmd, &tlas, alpha, &built)
                           : host->rt_scene_set && host->rt_scene_set(&tlas, alpha, &built);
-  if (!scene_ok || !tlas || built + 1 < now || !*alpha) {
+  if (!scene_ok || !tlas || (!matched && built + 1 < now) || !*alpha) {
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
   }
@@ -1522,12 +1522,13 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     dispatch(cmd, g_rt_origin, b, pc, g_w, g_h, true);
     memory_barrier(cmd, kCS, kCS);
   }
-  if (s.pan && tlas && refresh(g_pan_primary, "gi/pan_primary.hlsl", g_rt_layout)) {
+  if ((s.pan || host->cfg_int("rt_primary_check", 0)) && tlas &&
+      refresh(g_pan_primary, "gi/pan_primary.hlsl", g_rt_layout)) {
     dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true);
     Bg3Binding im{};
     im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
-    host->pan_capture(cmd, "primary", &im);
+    if (s.pan) host->pan_capture(cmd, "primary", &im);
     memory_barrier(cmd, kAll, kCS);
   }
   // SHaRC: last frame's injections into the cache before this frame's GI rays read it.
