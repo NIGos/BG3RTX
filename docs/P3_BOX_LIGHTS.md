@@ -120,3 +120,10 @@ with GI disabled so the game's own AO reaches the lighting: current native
 AO-on-direct flags are m0.x=1,m0.y=1, so a folded zero GI visibility could erase
 the very direct-light signal being compared. This is a hypothesis, not proof of
 black final rendering or an accepted recompute. Keep quality/shadow gates open.
+
+The next isolated signal probe is prepared in
+ tests/fixtures/p3_box_s6_native_ao_probe.json: box1/debug4, GI off, native AO
+untouched, 35 s hold. It still requires actual activation, positive native AND
+recomputed populations and invalid0. This is a native-lighting recompute control,
+not a GI-off quality workaround or approval of production GI/box interaction.
+Run it only after runnable P1 tests have had queue priority.
