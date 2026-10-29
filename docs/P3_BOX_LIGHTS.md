@@ -79,3 +79,11 @@ limitation remains open, including any mode that requires exact FULL agreement.
 Projector native-light validation still requires actual coverage/accuracy in
 its own full/debug path. Re-run baseline before activating any boxes.
 P1 retains queue priority; fixture change alone is not runtime evidence.
+
+264 /ec68966 DEFAULT-path reference: valid165s total/104s session, zero driver
+faults/dumps/build changes. All24 complete120-frame windows have ZERO any-bit,
+relative, one-writer and joined-result differences over7,844,924,963 reference
+pixels. Default point/spot compatibility passes. This does not waive250's
+FULL-variant bit differences or prove boxes; first box-on native projector
+validation remains next once P1's runnable test has had queue priority.
+Evidence docs/evidence/p3-default-reference-264.json.

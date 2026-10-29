@@ -1,0 +1,33 @@
+{
+  "job": {
+    "job": "p3-box-default-reference-h90",
+    "run": 1,
+    "start": "2026-10-29T02:32:55",
+    "sec": 165,
+    "valid": true,
+    "outcome": "Run ended: done after 104s (session s023255#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "ec68966 Pin the box-light baseline to the accepted default point-spot variant | core 19:08:42",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-box-default-reference-h90.1.023357.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-023407"
+    ],
+    "lines": [
+      "02:35:38.349  [core] ls check (120 frames): join: 122123 slot results kept from the previous frame, 0 of them differ from a new search",
+      "02:35:39.715  [core] ls: local-light shadow pass GPU median 1.717 ms, p10 1.630, p90 1.870, of which join 0.018 (300 frames; samples 0, exact-k 0 + 1, soft -1, shadowed mode 0, debug 0, per-light data 1 (join ran), owners 0x1F, impl 1, box 0)"
+    ],
+    "session": "s023255#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "windows": 24,
+  "reference_pixels": 7844924963,
+  "any_bit_differences": 0,
+  "relative_differences": 0,
+  "one_writer_differences": 0,
+  "join_differences": 0,
+  "all_windows_zero": true,
+  "scope": "DEFAULT variant only. FULL bit differences in250 remain open."
+}
