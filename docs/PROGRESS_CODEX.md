@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 05:26 Europe/Rome
+## Current checkpoint - 2026-10-29 05:32 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -8,12 +8,31 @@
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P3 S7 exercises cookie sampling; native accuracy, exact unknown-query coverage and moving quality remain unverified.
+- P3 S7 exercises cookies; integer unknown-query control 287 is live, while native accuracy and moving quality remain open.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
 - One reset is authorized at exhaustion and unused; latest weekly usage read was 93%.
 
 ## Resumed — 2026-10-29
+
+286 recursion-off isolation still FAILS original-PRE consistency: valid 198 s /
+195 s exclusive, static <=0.16px, finite/pose/actual alpha pass, no faults/dumps/
+build changes. Gate +0.8129% has broad paired Y CI [-0.000058595,+0.000336572]
+including zero (half width about1.16% offY, not equivalence). Original POST/PRE
++0.4292% CI [+0.000014482,+0.000132254] excludes zero. Off mean changes remain
+below0.0024%, with41..67 RGB differences explicitly retained. Recursion removal
+alone is insufficient; keep complete production lighting. P1 725955f pushed.
+Existing lagged native exposure probes were inspected before proposing another
+payload: reported applied-k ranges271 0.999264..1.00135,280 0.999787..1.00011,
+286 0.999477..1.00019 (28 probes each). They do not establish a dominant source
+of drift and are not bounds on all history reads; no new transport added.
+287 LIVE frozenP3 b97477b: S7 cap1 with EXACT integer unknown/cookie counts.
+Runner20748 started05:31:48; no repeat from rounded0.000-rate assumptions.
+EN2 offline context: its root HANDOFF.md is stale sun-replace history. Actual
+EN2 source/spec is layer/hitmat.cpp, shaders/rt/rt_hitmat.hlsli and TRACK_D_RT13,
+branch0916cff; no edits there. Existing blue/metalness/class mismatch failures
+remain open, rather than being excused by join coverage or narrower cohorts.
+
 
 285 bounded S7 retry PASS for ray/cookie coverage: valid116s/48s session,
 seven complete windows; last traced0.295/px, occluded0.092/px, cookie0.004/px.

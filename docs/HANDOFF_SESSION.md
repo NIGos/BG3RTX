@@ -22,8 +22,8 @@ usage 93%, one reset available. Do not consume merely because it is eligible.
 Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 7bb43b5, pushed, paired ABI14.
-- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box 50b5dff, pushed.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 725955f, pushed, paired ABI14.
+- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b97477b, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
 Old research: pan-motion-vectors/BG3RTX 929be7a; motion-jitter/BG3RTX 53f0925.
@@ -32,14 +32,14 @@ D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Live job and immediate next action
-286 LIVE frozen P1 7bb43b5: gi_strength0 static12 recursive-source isolation.
-Runner30160 started05:24:51. Verify actual process/session and terminal result;
-do not restart from observation timeout. P1 source/binaries/HEAD stay FROZEN.
-Changed lighting composition means diagnostic-only, never a production fix.
-285 bounded S7 retry PASS: actual rays and cookie sampling, final/all dumps
-finite, no driver faults. P3 appends integer query counts (host only;3 CTests).
-Next S7 cap1 requires exact positive unknown AND cookie counts, because0.000
-rates cannot prove count0. Native accuracy and cookie-specific unknowns stay open.
+287 LIVE frozen P3 b97477b: S7 cap1 integer unknown/cookie-count control.
+Runner20748 started05:31:48. Verify actual process/session and terminal result;
+do not restart from observation timeout. P3 source/binaries/HEAD stay FROZEN.
+P1 286 recursion-off isolation still FAILS original PRE (+0.4292%, CI excludes0);
+broad paired CI is not equivalence. P1 725955f clean/pushed, no candidate approved.
+After287 terminal record actual counts, full capture finite checks and limits.
+Next P1 source-epoch/conditional mismatch remains unresolved; no transport tweak
+or lighting-model reduction is justified by these failed isolation controls.
 
 ## P1 - pan instability remains OPEN
 User sees lighting/shadows detach while panning; Ctrl+Shift+F9 restores native.
@@ -107,7 +107,8 @@ Local-light reference/gates merged6dba0a8 after two fresh hold90 repeats:
 25 windows each,8.173/8.173B pixels, zero differences; build/3 CTests/32 shaders/QA pass.
 EN2 hit materials (old worktree-agent-a94065fdd50bc8494) still fail blue/metalness/bias.
 D-EM (worktree-agent-a2212c228ec492214) AF family304be1c7 still fails0.361/0.362.
-Both stay off. Read branch HANDOFF and docs/P2_PENDING_MERGES.md before revisiting.
+Both stay off. EN2 root HANDOFF is stale; actual spec is TRACK_D_RT13 and
+layer/hitmat.cpp / shaders/rt/rt_hitmat.hlsli. See docs/P2_PENDING_MERGES.md.
 
 ## P3 - box lights remain off
 264 DEFAULT point/spot reference PASS:24 windows/7.845B pixels, zero differences.
