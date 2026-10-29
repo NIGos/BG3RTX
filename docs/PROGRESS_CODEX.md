@@ -1,13 +1,14 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 07:31 Europe/Rome
+## Current checkpoint - 2026-10-29 07:54 Europe/Rome
 
 - Main rendering remains 6dba0a8; the water design and legal QA exposure hold are merged.
 - P1 is active again by explicit user instruction. No more attribution or exposure research.
 - Fresh fallback preserves complete current-frame energy, ray weights and saved PRE visibility.
 - The new normal bound combines encoding precision with the actual same-plane GI footprint.
 - Static off/on energy is the first gate, followed by a single-run moving residual.
-- Static test 296 is live on P1 commit 0a0a9d2, with 12 captures and a 90-second hold.
+- Static 296 is inconclusive: preserve its baseline spike; original-PRE check fails (+0.350%).
+- Repeat 297 is live on b6165ce with 36 balanced captures, closer pairing and a 90-second hold.
 - All 12 CTests and 24 shader ABI checks pass; seven ordinary shaders are byte-identical.
 - P2 test 295 has finished. P2/P3/P4 research will not displace the required P1 measurement.
 - Main, research branches and evidence are pushed. All research defaults remain off.
@@ -27,12 +28,18 @@ ray weight, camera payload or accumulation reset changes. GPU self-tests cover
 20 cases; all 12 CTests and 24 compiled shader ABI checks pass. Seven ordinary
 GI/LS/sun/RF shader binaries are identical to d9cb628. Defaults remain off.
 
-Test 296 is live on frozen 0a0a9d2, runner 8396 at 07:30:39, after fresh idle
-checks. It uses 12 static off/on captures, normal production strength and AO,
-no exposure hold, and a 90-second final hold. Existing counters report gate-on
-normal rejection reasons. Inspect energy, finite/raw alpha, static pose, GPU
-predicate rows, full VVL and cost before the one-run moving residual. Specs:
-docs/GI_NORMAL_FOOTPRINT.md. The half-resolution support is derived and unit
+Test 296 finished execution-valid. All 12 captures passed all 20 GPU predicates,
+finite GI and exact saved alpha. Normal rejection was 13.45%. Energy remains
+inconclusive: preserve the final gate-off baseline spike; original-PRE change
+was +0.350% and its interval excludes zero. No pan gain is claimed. Trace median
+was 1.260 ms; whole GI was 56.466 ms under validation and duplicated experimental
+passes. No scoped layout/push/write VVL errors appeared; other errors remain.
+
+Repeat 297 started at 07:53:29 on frozen b6165ce. It uses 36 captures in nine
+ABBA blocks, a 30-second warmup, a 4-second gap and a 90-second hold. Rendering
+is unchanged. Existing energy QA now scales to larger cohorts; eight tests pass.
+Full 296 evidence and the repeat fixture are on P1; no samples were removed.
+Specs: docs/GI_NORMAL_FOOTPRINT.md.
 checked; the current fresh runtime prototype still requires full-resolution RR.
 
 

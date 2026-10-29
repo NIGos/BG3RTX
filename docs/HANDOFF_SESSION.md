@@ -37,37 +37,38 @@ Do not block on the old aggregate AO discrepancy; saved PRE alpha is authoritati
 
 ## Live job and next action
 
-296 is LIVE on frozen P1 commit 0a0a9d2, paired host/core ABI 14.
-Runner PID 8396 started at 07:30:39 after fresh idle and playing checks.
-Fixture: tests/fixtures/gi_normal_footprint_static_job.json.
-It takes 12 static off/on captures, then holds for 90 seconds. No exposure hold.
+296 is terminal and execution-valid on P1 commit 0a0a9d2, ABI 14.
+All 12 captures passed 20 GPU predicates, finite GI and exact saved PRE alpha.
+Normal rejection was 13.45% of gate-on queries. Energy is inconclusive: a final
+baseline spike widens the paired interval; original-PRE check fails (+0.350%).
+Every sample is retained. No pan quality pass is claimed. Full evidence is on
+P1 in docs/evidence/p1-normal-footprint-static-296.json.
 
-New key gi_history_normal_footprint stays off by default. The sample cell and
-point reprojection derive a 3 by 3 full-resolution or 4 by 4 half-resolution
-support. Only proven same-plane TLAS neighbours bound shading-normal variation.
-Encoding, normalization, oct16 and arithmetic precision supply numerical bounds.
-Depth and normal still test the actual contributing texel. No neighbour supplies
-replacement history colour. Existing complete fresh fallback retains all weights.
+297 is live on frozen P1 commit b6165ce, runner 3960 started at 07:53:29.
+It repeats the same rendering with 36 captures in nine ABBA blocks, a 30-second
+warmup, a 4-second gap and a 90-second hold. Existing QA now accepts larger
+balanced cohorts and uses the actual sample count; all eight energy tests pass.
+No new rendering or exposure changes. Inspect the actual terminal result before
+editing P1 or starting another game. Preserve validation.log and report interval
+width, original-PRE energy, predicate closure, finite/raw alpha and GPU cost.
+Then run the single-session pan only when the static energy gate is established.
 
-The fresh prototype currently requires full-resolution RR. Half-resolution
-support is derived and unit checked, not a claimed half-resolution runtime pass.
-Existing predicate counters report gate-on queries and each rejection reason.
-GPU test mode 1 now expects row 12: [1048575, 1048575, 20, 1].
-All 12 CTests, 24 shader ABI checks and four changed shader compiles pass.
-Seven ordinary GI/LS/sun/RF binaries are identical to d9cb628.
-
-After the actual job ends, inspect all 12 raw samples with scripts.qa.gi_energy:
-positive finite GI, valid pose, static camera, saved alpha and off/on energy.
-Check the GPU predicate rows, reason-count closure, full VVL categories and GPU
-cost. Keep the actual noise interval width visible. Only then run the single-run
-pan fixture. Do not substitute another research branch for this measurement.
+The default-off normal footprint derives spatial support from the real sample
+cell and reprojection rounding, bounded to same-plane TLAS neighbours. The
+fresh prototype requires full-resolution RR; half-resolution support is derived
+and unit checked, not a claimed half-resolution runtime pass. GPU row 12 in
+test mode 1 is [1048575, 1048575, 20, 1]. All 12 CTests and 24 shader ABI checks
+passed; seven ordinary shaders were byte-identical to d9cb628. No scoped layout,
+push or descriptor-write VVL errors appeared in 296; other VVL errors remain.
+Latest trace median was 1.260 ms and whole GI 56.466 ms per frame under validation
+and duplicated experimental passes, not a release performance measurement.
 
 ## Workspaces
 
 Use explicit paths. The app may select a different managed checkout.
 
 - Main: C:/Users/quali/Documents/Code Projects/BG3RTX, branch main, pushed.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 0a0a9d2.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, b6165ce.
 - P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, ca1959b, D-EM ABI 9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box, b913e8e, ABI 9.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm, 8d902d5.
