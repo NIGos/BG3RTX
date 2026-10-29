@@ -1,5 +1,19 @@
 # BG3RTX progress
 
+## Late Thursday 2026-10-29 22:40 (supervisor, user away)
+
+- Roof sun shadows leak with FG off: fixed (main 52bb6cd). With fg=0 the game records frame F's
+  build before F-1's cascade pass: 294 of 297 builds had no casters. Now the F-1 or F-2 soup
+  (triple buffer); S7 fg0 and fg2: instance in 60/60 builds, mean brightening 0.0011/px.
+- Box light shadows (experimental): main-menu skull loses its beam and the red gems' shadows
+  flicker. Cause: unshadowed box lights get RT shadows along the box; decorative casters inside
+  the box block it. Open: an art-intent rule for unshadowed box lights.
+- Foliage flicker while rotating (user: worst with rotation, around white in-world text; also
+  without FG): not the stochastic alpha (raw sun-mask flips equal on/off) and not FG. The raw
+  mask is noisy by design (static 3.4% flips), so only the post-RR image can judge it. Pan bursts
+  now also capture the tonemapped 'final' (main 0ca8ba1), but only on some frames in motion.
+  Next: live A/B with the user (rt_alpha_stochastic, rt_dyn_hold, rt_cascade_casters, RT off).
+
 ## Launcher "Experimental" section; cascade casters fixes from the user's play — 2026-10-29 21:50
 
 - Launcher: knobs with `experimental=true` (off in every preset) sit under "Experimental (being
