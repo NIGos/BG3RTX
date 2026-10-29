@@ -161,3 +161,13 @@ retained, not waived against an invented tolerance. This is marginal-light
 coverage evidence, not total recompute parity. Default/FULL compatibility,
 shadow rays/unknown fallback, S7/S5 cookies and temporal/visual quality remain
 independent requirements. Keep ls_box0 in both development and release.
+
+278 normal lighting/GI, debug0: actual box shadow execution PASS, valid111s/
+49s session, no driver faults/dumps/build changes. Last evaluated/traced1.319/px,
+occluded0.738/px, unknown0.000/px, cookie0.000/px; box native light46.054% of
+lit luminance, removed19.789%. Complete window ranges and capture metadata are
+retained in evidence. Final/lighting dumps have no reported nonfinite values;
+a D32F depth dump reports4590, preserved without a global finite-output claim.
+Next forced candidate-cap1 should exercise actual unknown box queries; source
+sets t=sh for unknown before both default/FULL deltas c*(t-sh). No visual,
+energy, cookies or moving-quality approval follows from smoke execution.
