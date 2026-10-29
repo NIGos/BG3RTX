@@ -86,3 +86,22 @@ No allowance is made for BRDF, atmosphere, material or cookie error. A sample
 inside the interval is compatible with storage rounding, not proof of exact math.
 Q24 half-step2^-25 describes statistic quantization, NOT a quality tolerance.
 All six ordinary shader variants remain byte-identical to56bcc06.
+
+290 execution PASS (145s total/49s session), but quality remains OPEN: eight
+post-ready windows, 2,622,259,200 shaded receivers/15,733,555,200 bounded channels;
+invalid0/unbounded0.2,605,305 receivers (0.0993535%) and13,986,533 channels violate
+the format intervals. Mean excess outside intervals3.48717637e-6 Y. The raw
+projector-only residual remains+0.599347%; the two cohorts are explicitly
+different, so do not subtract their means to claim a precise explained fraction.
+62 controlled native modules, NO full-log refusals, no faults/dumps/build changes.
+Final finite, native D32F d132 has2481 nonfinite values retained. Full scoped
+layout/push/write categories absent; other VVL unresolved (evidence290).
+
+Next diagnostic adds class0..7 population/failure counts (173..188) and a debug4
+map through the existing diffuse output/capture path: red above interval, blue
+below, magenta both, green invalid, cyan unbounded; passing receivers show native
+lighting in grey. This changes only the default-off diagnostic visualization,
+with GI disabled in its fixture; no new resource, ABI, capture transport or
+production light model is added. Counts identify the material cohort and the
+map locates it before considering any BRDF correction. Five CTests/two diagnostic
+shader compiles pass; six ordinary binaries remain identical to56bcc06.

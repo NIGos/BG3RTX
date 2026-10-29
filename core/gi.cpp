@@ -796,7 +796,7 @@ constexpr uint32_t kStatsRing = 8;
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
 // Box diagnostics also write projector-only baseline counters when ls_box=0.
-constexpr uint32_t kStatsCounters = 173;
+constexpr uint32_t kStatsCounters = 189;
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -1002,6 +1002,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_stats_n,(unsigned long long)t[144],(unsigned long long)t[163],(unsigned long long)t[164],
               (unsigned long long)t[162],mean24(152),mean24(154),mean24(156),mean24(158),mean24(160),
               0.5/16777216.0);
+
   }
   if(t[165]) {
     double excess=(double(t[171])+4294967296.0*double(t[172]))/16777216.0/double(t[165]);
@@ -1010,6 +1011,14 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_stats_n,(unsigned long long)t[165],(unsigned long long)t[166],(unsigned long long)t[167],
               (unsigned long long)t[168],(unsigned long long)t[169],(unsigned long long)t[170],excess,
               0.5/16777216.0);
+    host->log("ls native classes (%u frames): population %llu %llu %llu %llu %llu %llu %llu %llu; "
+              "failing %llu %llu %llu %llu %llu %llu %llu %llu",
+              g_stats_n,(unsigned long long)t[173],(unsigned long long)t[174],(unsigned long long)t[175],
+              (unsigned long long)t[176],(unsigned long long)t[177],(unsigned long long)t[178],
+              (unsigned long long)t[179],(unsigned long long)t[180],
+              (unsigned long long)t[181],(unsigned long long)t[182],(unsigned long long)t[183],
+              (unsigned long long)t[184],(unsigned long long)t[185],(unsigned long long)t[186],
+              (unsigned long long)t[187],(unsigned long long)t[188]);
   }
   if (t[69]) {   // D-LS on non-standard material classes (rt_local_shadows.hlsl, AUDIT_RT fix 3)
     host->log("ls stats (%u frames): non-standard material px %.4fM/frame; validation on them (lit, no projector "

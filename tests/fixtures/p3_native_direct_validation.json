@@ -13,6 +13,7 @@
     "ls validation fit",
     "ls box precise",
     "ls native format",
+    "ls native classes",
     "\\[ls-native-direct\\]"
   ],
   "expect": [

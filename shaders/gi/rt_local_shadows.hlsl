@@ -942,6 +942,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     {
       bool sample = validate && (pc.ls_flags & (1u << 19)) != 0u;
       bool invalid = false, unbounded = false, failed = false;
+      bool above = false, below = false;
       uint bounded_channels = 0u, failed_channels = 0u;
       float3 excess = 0.0;
       [unroll] for (uint lobe = 0u; lobe < 2u; ++lobe) {
@@ -957,6 +958,8 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
             ++bounded_channels;
             bool mismatch = !uf_contains(interval, native_rgb[channel], estimate);
             failed = failed || mismatch;
+            above = above || estimate >= interval.upper;
+            below = below || (estimate <= interval.lower && native_rgb[channel] != 0.0);
             failed_channels += mismatch ? 1u : 0u;
             excess[channel] += max(max(interval.lower - estimate, estimate - interval.upper), 0.0);
           }
@@ -969,6 +972,19 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       stat_addv(169, sample ? bounded_channels : 0u, bin);
       stat_addv(170, sample ? failed_channels : 0u, bin);
       ls_sum24(171, sample ? lum(excess) : 0.0, bin);
+      [unroll] for (uint material_class = 0u; material_class < 8u; ++material_class) {
+        stat_addv(173u + material_class, sample && cls == material_class ? 1u : 0u, bin);
+        stat_addv(181u + material_class, sample && failed && cls == material_class ? 1u : 0u, bin);
+      }
+      if (sample && pc.ls_debug == 4u) {
+        // Diagnostic colour only, through the existing diffuse capture path:
+        // red=above interval, blue=below, magenta=both, green=invalid,
+        // cyan=unbounded. Passing pixels retain native lighting in grey.
+        o_d = invalid ? float3(0.0,0.5,0.0) : unbounded ? float3(0.0,0.5,0.5) :
+              failed ? float3(above ? 0.5 : 0.0,0.0,below ? 0.5 : 0.0) :
+              min(lum(gd + gs),1.0).xxx * 0.2;
+        o_s = 0.0;
+      }
     }
 #endif
     stat_addv(21, vpx ? fx(lum(gd + gs)) : 0u, bin);
