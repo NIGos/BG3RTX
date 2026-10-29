@@ -1,5 +1,14 @@
 # BG3RTX progress
 
+## Static capture budget corrected — 2026-10-29 15:21
+
+The first lightweight attempt met cadence/FG/primary requirements but its 1 GB
+capture budget omitted G-buffer and debug diffuse. It was stopped as INVALID.
+Restoring the established QA budget of 6 GB produced both buffers, confirmed
+in captures/20261029-151939 and 151949. The complete static check is requeued
+with that budget; no threshold or lighting change. Earlier partial captures
+are not a parity pass. The 56-phase motion gate still awaits a valid static run.
+
 ## FG-on cadence setup isolated — 2026-10-29 15:08
 
 Windowed/native extent enables actual FG: SDK status 0, two presented frames,

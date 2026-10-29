@@ -45,7 +45,7 @@ def job(name,plan,seconds,post):
         set='preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,rt_stats=0,ls_stats=0,rf_stats=0,ls_k=0,ls_shadowed=1,'
             'rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,pan_capture=0,pan_prepare=0,rt_scene_camera_match=0,'
             'rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,crash_dump=1,'
-            'fg_state_every=30,rt_timing_frames=120,dump_images=1,dump_png_width=1280,dump_raw=0,dump_max_mb=1024',
+            'fg_state_every=30,rt_timing_frames=120,dump_images=1,dump_png_width=1280,dump_raw=0,dump_max_mb=6144',
         window_mode='visible_unfocused_fg',
         args=['-RealPresent','-Move','-MovePlan','tests/fixtures/'+plan],
         patterns=['primary-ray check','rt epoch','rt passes','rt cost scope',r'\[watch\]',r'\[sl\]',r'\[trace\]','gpu RR:',

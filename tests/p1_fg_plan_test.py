@@ -22,6 +22,7 @@ class FGPlanTest(unittest.TestCase):
         for job in jobs:
             self.assertIn('fg=2',job['set'].split(',')); self.assertNotIn('-Foreground',job['args']); self.assertIn('-RealPresent',job['args'])
             self.assertEqual(job['window_mode'],'visible_unfocused_fg')
+            self.assertIn('dump_max_mb=6144',job['set'].split(','))
             self.assertTrue(job['post_gate'])
             for key in ('patterns','expect','expect_runner','forbid'):
                 for pattern in job[key]: re.compile(pattern)
