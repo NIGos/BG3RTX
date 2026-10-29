@@ -162,6 +162,7 @@ $observedExitCode = $null
 $planCompleted = $false
 $exceptionText = $null
 $unfocusedChecks=0; $unfocusedVisibleMin=[long]::MaxValue; $unfocusedViolation=$null
+$unfocusedOccludedChecks=0; $unfocusedForegroundChecks=0
 $nextUnfocusedCheck=[datetime]::MinValue
 $runStatusPath = Join-Path $caps 'run-status.json'
 Remove-Item -LiteralPath $runStatusPath -ErrorAction SilentlyContinue
@@ -204,24 +205,26 @@ function Focus-Game {
   if ($NoActivate) {
     if ((Get-Date) -lt $script:nextUnfocusedCheck) { return }
     $script:nextUnfocusedCheck=(Get-Date).AddMilliseconds(500)
-    if ([BG3RTX.UnfocusedWindow]::ForegroundProcess() -eq $game.Id) {
+    if (-not $UnfocusedFG -and [BG3RTX.UnfocusedWindow]::ForegroundProcess() -eq $game.Id) {
       $script:unfocusedViolation='owned game unexpectedly activated'
       throw $script:unfocusedViolation
     }
     [BG3RTX.UnfocusedWindow]::ShowBehind($h)
     $pixels=[BG3RTX.UnfocusedWindow]::VisibleClientPixels($h)
-    if ($pixels -le 0) {
+    if ($pixels -le 0 -and -not $UnfocusedFG) {
       $script:unfocusedViolation='owned game fully occluded, minimized or off-screen'
       throw $script:unfocusedViolation
     }
-    if ([BG3RTX.UnfocusedWindow]::ForegroundProcess() -eq $game.Id) {
+    if (-not $UnfocusedFG -and [BG3RTX.UnfocusedWindow]::ForegroundProcess() -eq $game.Id) {
       $script:unfocusedViolation='owned game activated during no-activate update'
       throw $script:unfocusedViolation
     }
     $script:unfocusedChecks++
+    if ($pixels -le 0) { $script:unfocusedOccludedChecks++ }
+    if ([BG3RTX.UnfocusedWindow]::ForegroundProcess() -eq $game.Id) { $script:unfocusedForegroundChecks++ }
     $script:unfocusedVisibleMin=[Math]::Min($script:unfocusedVisibleMin,$pixels)
     if ($script:unfocusedChecks -eq 1 -or $script:unfocusedChecks % 60 -eq 0) {
-      Write-Host "[window-mode] visible_unfocused: hwnd=$h visible_client_pixels=$pixels checks=$script:unfocusedChecks real_present=1 preserve_fg=$UnfocusedFG input=PostMessage"
+      Write-Host "[window-mode] visible_unfocused: hwnd=$h visible_client_pixels=$pixels checks=$script:unfocusedChecks occluded_checks=$script:unfocusedOccludedChecks observed_foreground=$script:unfocusedForegroundChecks real_present=1 preserve_fg=$UnfocusedFG input=PostMessage"
     }
     return
   }
@@ -765,6 +768,7 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
 
 } catch {
   $exceptionText = $_.Exception.ToString()
+  $result = 'runner exception: '+$_.Exception.Message
   throw
 } finally {
   if (Get-Command Release-Rotation -ErrorAction SilentlyContinue) { Release-Rotation }
@@ -801,6 +805,7 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
      timeout_seconds=$TimeoutSec; foreground=[bool]$Foreground; real_present=[bool]$RealPresent;
      visible_unfocused=[bool]$NoActivate; unfocused_checks=$unfocusedChecks;
      unfocused_visible_min_pixels=$(if($unfocusedChecks){$unfocusedVisibleMin}else{0}); unfocused_violation=$unfocusedViolation;
+     unfocused_occluded_checks=$unfocusedOccludedChecks; unfocused_foreground_checks=$unfocusedForegroundChecks;
      ended=(Get-Date).ToString('o') } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $runStatusPath
   Exit-GameLock $lock
   $checkoutMutex.ReleaseMutex()

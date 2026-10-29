@@ -1,5 +1,15 @@
 # BG3RTX progress
 
+## Live setup retry — 2026-10-29 14:50
+
+First authorized static job was INVALID before its first phase: runner policy
+closed the game after 71 s because exposed client area reached zero. This was
+not a crash or its 1120 s timeout. No deciding FG/match/effect data was collected.
+For the explicitly authorized visible_unfocused_fg mode, coverage and observed
+foreground are now logged instead of aborting; the runner still never sets focus.
+Other apps can cover the shown game. Native presentation, actual FG generation
+and >=18 fps remain required. USER_PLAYING/unowned games still stop execution.
+
 ## Authorized live FG matrix, no focus forcing — 2026-10-29 14:46
 
 Read `D:/BG3_Tools/USER_STEERING.md`, including both 13:57 entries and the
