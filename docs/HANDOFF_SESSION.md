@@ -37,11 +37,20 @@ Do not block on the old aggregate AO discrepancy; saved PRE alpha is authoritati
 
 ## Live job and next action
 
-301 is LIVE on frozen P1 commit 4ba5bfc, paired host/core ABI 14.
-Runner PID 11000 started at 08:35:24 after fresh idle/playing checks.
-Fixture: gi_normal_footprint_static_random_job.json, 36 shuffled captures,
-30-second warmup, 4-second gaps and 90-second hold. No exposure hold.
-Do not edit P1, rebuild or change its HEAD until actual terminal state.
+301 is terminal and execution-valid on 4ba5bfc, paired ABI 14. All 36 raw captures
+are finite, alpha-exact and pass 23 GPU predicates; max static shift 0.36 pixels.
+Normal rejection 13.24%. On/off +0.6464%, paired CI [-0.00005839, +0.00028256] Y
+includes zero, but original-PRE +0.4599%, CI [+0.00003984, +0.00011942] Y FAILS.
+Do not claim complete energy parity. Evidence is committed on P1 at 816c986.
+Latest trace median 1.250 ms; whole GI 52.621 ms under diagnostic validation.
+Full VVL is preserved at P1 build/p1-normal-footprint-301.validation.log.
+No scoped layout/push/write tags appeared; other VVL errors remain unresolved.
+
+No game is active as of the terminal audit. Update P1 from main, retain its
+phase evidence, then run ONE corrected-precision pan using the existing
+96-second balanced fixture. It is diagnostic only, given original-energy failure.
+No promotion or comparison of independent moving images. Fresh playing/process/
+queue checks are required immediately before launching.
 
 The complete fresh fallback now also tries current radiance for absent/nonfinite
 previous colour (4e11688). The disabled control remains original. Unsupported
@@ -59,10 +68,8 @@ The fresh runtime prototype still requires full-resolution RR.
 GPU mode 1 row 12 now expects [8388607, 8388607, 23, 1]. Projection diagnostic
 modes 2/3 retain 15 bits. All 12 CTests and 24 shader ABI checks pass; four shader
 variants compile; seven ordinary shaders remain byte-identical to d9cb628.
-After terminal 301, preserve full validation.log, inspect all 36 raw captures,
-finite GI, exact PRE alpha, pose/static shift, 23 GPU cases, reason-count closure,
-energy intervals and GPU cost. Then measure ONE corrected-precision moving run.
-Merge current main into the long P1 branch when no game is active; retain evidence.
+The 301 terminal audit passed finite/alpha/pose checks and reason-count closure.
+Retain its original-energy failure when interpreting the next pan diagnostic.
 
 Recent evidence on P1:
 - 296 inconclusive; 297/298 fail energy parity, including shuffled order.
@@ -83,7 +90,7 @@ promotion. A weak interval or lower-energy residual cannot close P1.
 Use explicit paths. The app may select a different managed checkout.
 
 - Main: C:/Users/quali/Documents/Code Projects/BG3RTX, branch main, pushed.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 4ba5bfc.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 816c986.
 - P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, ca1959b, D-EM ABI 9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box, b913e8e, ABI 9.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm, 8d902d5.

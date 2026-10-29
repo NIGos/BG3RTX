@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 08:36 Europe/Rome
+## Current checkpoint - 2026-10-29 08:44 Europe/Rome
 
 - Main rendering remains 6dba0a8; water design and legal QA exposure hold are merged.
 - P1 remains active. No new attribution or exposure research; research defaults stay off.
@@ -9,7 +9,7 @@
 - Static 297/298 failed parity; 299 includes zero with low power and does not prove equivalence.
 - ONE pan 300 shows no gain: residual +1.84%, cohort energy -15.44%, motion +18.20%.
 - Pan coverage is 18.67% / 25.01%, with 21.2 / 28.6 million accepted samples.
-- Corrected-precision static 301 is live on frozen 4ba5bfc, with 36 captures and hold 90.
+- Static 301: on/off +0.646% within noise; original-PRE +0.460% still fails. All 23 GPU cases pass.
 - All 12 CTests and 24 shader ABI checks pass; seven ordinary shaders are byte-identical.
 - Evidence and branches are pushed. P2-P6 status remains below; reset used and backup safety rules apply.
 
@@ -88,6 +88,16 @@ ABI checks pass; seven ordinary shaders are identical. Static 301 started at
 08:35:24 on frozen 4ba5bfc. Inspect runtime evidence before the corrected pan.
 See docs/GI_NORMAL_FOOTPRINT.md and
 [Vulkan format conversion rules](https://docs.vulkan.org/spec/latest/chapters/fundamentals.html).
+
+
+Static 301 completed execution-valid on 4ba5bfc. All 36 captures finite and
+alpha-exact; all 23 GPU cases pass, max static shift 0.36 pixels. Normal rejection
+13.24%. On/off +0.6464%, paired CI [-0.00005839, +0.00028256] Y includes zero;
+original-PRE +0.4599%, CI [+0.00003984, +0.00011942] Y still FAILS. No complete
+energy-parity or quality claim. Trace median 1.250 ms; whole GI 52.621 ms under
+validation. No scoped layout/push/write tags; other VVL errors remain. Retain
+full evidence on P1, update the branch from main, then one corrected-precision
+pan diagnostic. No repeated unchanged static runs seeking a favourable interval.
 
 
 
