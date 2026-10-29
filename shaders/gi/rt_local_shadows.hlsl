@@ -393,6 +393,9 @@ float3 ls_box_dir(Bg3Box b) { return b.dir * rsqrt(max(dot(b.dir, b.dir), 1e-20)
 bool ls_box_traced(uint bi, LsLite s) {
   const Bg3Box b = load_box(bi);
   if ((b.flags & 1u) != 0u && ((pc.ls_shadowed == 0u && !ls_qa_off()) || s.cls == kMatHair)) return false;
+  // ls_box_unshadowed=0 (ls_flags bit 20): box lights the game draws without a shadow map keep
+  // the game's look (artists place decorative casters inside such boxes: the main-menu skull).
+  if ((b.flags & 1u) == 0u && (pc.ls_flags & (1u << 20)) != 0u) return false;
   float3 uvw;
   if (!bg3_box_reaches(b, s.channel, s.P, uvw)) return false;
   if (!(bg3_box_falloff(b, uvw) > 0.0)) return false;   // c = 0: no delta
