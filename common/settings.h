@@ -426,7 +426,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_stability_log", "0"},
     {"rt_dyn_hold", "4"},
     {"rt_dyn_hold_max_prims", "8192"},
-    {"rt_scene_wait_ms", "8"},
+    {"rt_scene_wait_ms", "12"},
     {"rt_primary_check", "0"},
     {"rt_primary_epoch", "0"},
     {"crash_dump", "0"},
