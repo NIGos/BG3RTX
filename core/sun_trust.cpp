@@ -48,6 +48,7 @@ uint32_t g_total = 0;
 int32_t g_level = -2;
 uint64_t g_sum[kCounters] = {};
 uint32_t g_sum_n = 0;
+int g_casc_trust = -1;   // rt_cascade_casters roof trust last logged (-1 never)
 
 const Bg3AssetDbApi* api() {
   const Bg3AssetDbApi* a = host->abi_version >= 6 ? host->assetdb : nullptr;
@@ -181,7 +182,19 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
   const bool active = replace && have_cam2 && (roofs || !want_roofs);
   uint32_t flags = (active ? kFReplace : 0u) | (roofs ? kFRoofs : 0u) |
                    (host->cfg_int("rt_sun_offscreen", 1) ? kFOffscreen : 0u) | kFStats;
-  const uint32_t n = uint32_t(g_vol.size());
+  // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
+  // casters, cut-away roofs included, so a roof volume no longer stops the replace: the
+  // volumes are queried (counted below) but not uploaded. Replace stays gated as before
+  // (roofs known, or rt_sun_roofs=0). The off-screen test is unchanged.
+  const bool casc_trust =
+      host->cfg_int("rt_cascade_casters", 0) != 0 && host->cfg_int("rt_cascade_roofs_trust", 1) != 0;
+  if (int(casc_trust) != g_casc_trust) {
+    g_casc_trust = int(casc_trust);
+    host->log("sun: roof volumes %s (rt_cascade_casters %d, rt_cascade_roofs_trust %d)",
+              casc_trust ? "TRUSTED: the cascade casters hold the roofs" : "gate the replace",
+              host->cfg_int("rt_cascade_casters", 0), host->cfg_int("rt_cascade_roofs_trust", 1));
+  }
+  const uint32_t n = casc_trust ? 0u : uint32_t(g_vol.size());
   const float pad_top = host->cfg_float("rt_sun_top_pad", 2.0f);
   // rt_sun_top=0: the ray need only rise rt_sun_rise above the pixel (the scene top, the
   // highest visible point, keeps nearly every outdoor pixel off screen behind tree tops).
@@ -233,12 +246,13 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
               "game dark & RT lit %.2f%% of traced px: replaced (lit) %.1f%%, partly %.1f%%, kept by roofs %.1f%%, "
               "kept off screen %.1f%%; px under roofs %.1f%%, off-screen ramp %.1f%%; game lit & RT shadowed %.2f%%; "
               "mean brightening %.4f per traced px; roof query %.0f m (farthest roof-tested px %.0f m), over "
-              "kSunMaxVolumes on %llu frames (max %u volumes, %.1f dropped per such frame)",
-              g_sum_n, int(active), g_vol.size(), g_top, 100.0 * g_sum[0] / double(g_sum[15] ? g_sum[15] : 1),
+              "kSunMaxVolumes on %llu frames (max %u volumes, %.1f dropped per such frame); roof volumes trusted "
+              "(cascade casters) %d",
+              g_sum_n, int(active), size_t(n), g_top, 100.0 * g_sum[0] / double(g_sum[15] ? g_sum[15] : 1),
               100.0 * g_sum[1] / px, 100.0 * g_sum[2] / px, 100.0 * g_sum[3] / dis, 100.0 * g_sum[4] / dis,
               100.0 * g_sum[5] / dis, 100.0 * g_sum[6] / dis, 100.0 * g_sum[7] / px, 100.0 * g_sum[8] / px,
               100.0 * g_sum[9] / px, g_sum[10] / 255.0 / px, g_radius, g_dmax, (unsigned long long)g_over_frames,
-              g_over_max, g_over_frames ? double(g_over_dropped) / double(g_over_frames) : 0.0);
+              g_over_max, g_over_frames ? double(g_over_dropped) / double(g_over_frames) : 0.0, int(casc_trust));
     // In-frame A/B (rt_sun_resolve.hlsl): the written mask against min(game, traced) of the
     // same pixel and frame, by at least one R8 code (1/255). "At the edge": the game's own
     // mask is partly lit there, or lit within half of rt_sun_near (a debug split only).
@@ -309,4 +323,5 @@ void sunt_release() {
   g_over_max = 0;
   memset(g_sum, 0, sizeof g_sum);
   g_sum_n = 0;
+  g_casc_trust = -1;
 }

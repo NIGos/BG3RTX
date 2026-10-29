@@ -26,6 +26,7 @@
 // The core traces against the TLAS in the tiled lighting (rt_shadow.hlsl).
 #include "host.h"
 #include "../common/camera_epoch.h"
+#include "../common/cascade_casters.h"
 
 #include <intrin.h>
 
@@ -91,6 +92,17 @@ VkDescriptorSetLayout g_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_pl = VK_NULL_HANDLE;
 VkPipeline g_pipe = VK_NULL_HANDLE;
 uint64_t g_pipe_gen = 0;
+// rt_cascade_casters: the same layout, xfb_to_world_ortho.hlsl (built on present, when the key is on).
+VkPipeline g_ortho_pipe = VK_NULL_HANDLE;
+uint64_t g_ortho_gen = 0;
+// Read without g_mu by the cascade's recording thread (a build may hold g_mu for milliseconds);
+// replaced only on present, after a shader edit (as g_pipe for the split's conversion).
+std::atomic<VkPipeline> g_ortho_live{VK_NULL_HANDLE};
+std::atomic<VkPipelineLayout> g_pl_live{VK_NULL_HANDLE};
+// The camera position (UBO byte 208) of the last builds, by frame: the cascade soup of frame F
+// is camera-relative to F's camera (rt_build_camera).
+struct CamHist { uint64_t frame = 0; float pos[3] = {}; };
+CamHist g_cam_hist[4];
 
 // The split's TLAS (bvhsplit.cpp), when the last build was a split one.
 VkAccelerationStructureKHR g_split_tlas = VK_NULL_HANDLE;
@@ -262,10 +274,12 @@ constexpr VkPipelineStageFlags kCS = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags kXFB = VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
 constexpr VkPipelineStageFlags kXfer = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
-bool ensure_pipeline() {
+bool ensure_pipeline_file(const char* file, VkPipeline& pipe, uint64_t& gen);
+bool ensure_pipeline() { return ensure_pipeline_file("rt/xfb_to_world.hlsl", g_pipe, g_pipe_gen); }
+bool ensure_pipeline_file(const char* file, VkPipeline& pipe, uint64_t& gen) {
   Bg3ShaderBlob blob{};
-  if (!shader_get("rt/xfb_to_world.hlsl", "main", "cs_6_6", &blob)) return g_pipe != VK_NULL_HANDLE;
-  if (g_pipe && blob.generation == g_pipe_gen) return true;
+  if (!shader_get(file, "main", "cs_6_6", &blob)) return pipe != VK_NULL_HANDLE;
+  if (pipe && blob.generation == gen) return true;
   DeviceData* dd = g_dd;
   if (!g_dsl) {
     VkDescriptorSetLayoutBinding b[2] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -287,7 +301,7 @@ bool ensure_pipeline() {
   mci.codeSize = blob.size_bytes;
   mci.pCode = blob.code;
   VkShaderModule mod = VK_NULL_HANDLE;
-  if (dd->vk.CreateShaderModule(dd->device, &mci, nullptr, &mod) != VK_SUCCESS) return g_pipe != VK_NULL_HANDLE;
+  if (dd->vk.CreateShaderModule(dd->device, &mci, nullptr, &mod) != VK_SUCCESS) return pipe != VK_NULL_HANDLE;
   VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main"};
   ci.layout = g_pl;
@@ -295,13 +309,14 @@ bool ensure_pipeline() {
   VkResult r = dd->vk.CreateComputePipelines(dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &p);
   dd->vk.DestroyShaderModule(dd->device, mod, nullptr);
   if (r != VK_SUCCESS) {
-    log("[rt] xfb_to_world pipeline creation failed (%d)", r);
-    return g_pipe != VK_NULL_HANDLE;
+    log("[rt] %s pipeline creation failed (%d)", file, r);
+    return pipe != VK_NULL_HANDLE;
   }
-  defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_pipe));
-  g_pipe = p;
-  g_pipe_gen = blob.generation;
-  log("[rt] xfb_to_world pipeline generation %llu", (unsigned long long)blob.generation);
+  defer_destroy(BG3_DEFER_PIPELINE, uint64_t(pipe));
+  pipe = p;
+  gen = blob.generation;
+  const std::string name = std::string(file).substr(3, std::strlen(file) - 8);   // "rt/<name>.hlsl"
+  log("[rt] %s pipeline generation %llu", name.c_str(), (unsigned long long)blob.generation);
   return true;
 }
 
@@ -734,6 +749,10 @@ void rt_device_destroyed(DeviceData* dd) {
       s.pose = VK_NULL_HANDLE; s.pose_memory = VK_NULL_HANDLE; s.pose_valid = false;
     }
     defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_pipe));
+    defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_ortho_pipe));
+    g_ortho_pipe = VK_NULL_HANDLE;
+    g_ortho_live = VK_NULL_HANDLE;
+    g_pl_live = VK_NULL_HANDLE;
     defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
     defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_dsl));
     defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(g_qp));
@@ -821,6 +840,78 @@ bool rt_convert(VkCommandBuffer cmd, const RtCapture& cap) {
   return true;
 }
 
+// rt_cascade_casters: the cascade soup, clip -> camera-relative world with the cascade's own
+// orthographic matrix (geocapture.cpp, after the cascade pass, in its command buffer).
+bool rt_cascade_convert(VkCommandBuffer cmd, VkBuffer xfb, uint32_t tris, uint32_t stride, VkBuffer ubo,
+                        VkDeviceSize ubo_offset) {
+  if (!g_rt || !tris || !xfb || !ubo) return false;
+  const VkPipeline pipe = g_ortho_live.load();
+  const VkPipelineLayout layout = g_pl_live.load();
+  if (!pipe || !layout) return false;
+  {
+    const DeviceData* dd = g_dd;
+    VkDescriptorBufferInfo in{ubo, ubo_offset, 224}, out{xfb, 0, VkDeviceSize(tris) * 3 * stride};
+    VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+    w[0].dstBinding = 0;
+    w[0].descriptorCount = 1;
+    w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    w[0].pBufferInfo = &in;
+    w[1].dstBinding = 1;
+    w[1].descriptorCount = 1;
+    w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    w[1].pBufferInfo = &out;
+    const uint32_t groups = (std::min)((tris + 255) / 256, 65535u);
+    const uint32_t pc[4] = {tris, groups * 256, stride, 0};
+    dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
+    dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 2, w);
+    dd->vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
+    dd->vk.CmdDispatch(cmd, groups, 1, 1);
+  }
+  restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
+  return true;
+}
+
+bool rt_build_camera(uint64_t frame, float pos[3]) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  for (const CamHist& h : g_cam_hist)
+    if (frame && h.frame == frame) {
+      std::memcpy(pos, h.pos, sizeof h.pos);
+      return true;
+    }
+  return false;
+}
+
+namespace {
+// Caller holds g_mu. Last frame's cascade-only soup for this (split) build, translated from
+// last frame's camera-relative space into this one's (common/cascade_casters.h rebase).
+void attach_cascade(RtCapture& cap, const float* cam, uint64_t now) {
+  if (!cap.split) {
+    geo_cascade_note_build(4, 0);
+    return;
+  }
+  CascadeSoup soup{};
+  const int why = geo_cascade_soup(now - 1, &soup);
+  if (why) {
+    geo_cascade_note_build(why, 0);
+    return;
+  }
+  const CamHist* prev = nullptr;
+  for (const CamHist& h : g_cam_hist)
+    if (h.frame == now - 1) prev = &h;
+  if (!prev || !cam) {
+    geo_cascade_note_build(3, 0);
+    return;
+  }
+  // rt_cascade_origin=1: the soup is relative to the cascade UBO's own origin (byte 208);
+  // 0: to the previous frame's camera (the first version's premise, kept for the A/B).
+  const bool own = cfg_int("rt_cascade_origin", 1) != 0 && soup.has_origin;
+  cascade::rebase(own ? soup.origin : prev->pos, cam, cap.cascade_t);
+  cap.cascade_xfb = soup.xfb;
+  cap.cascade_tris = soup.tris;
+  cap.cascade_stride = soup.stride;
+}
+}  // namespace
+
 namespace {
 VkCommandBuffer g_stamp_cmd = VK_NULL_HANDLE;
 int g_stamp_slot = -1;
@@ -893,6 +984,19 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     scene.pose_valid = geo_copy_camera(cmd, ubo, ubo_offset, scene.pose);
   }
   note_camera(cap);
+  // rt_cascade_casters: this build's camera (the next frame's cascade rebase) and last frame's soup.
+  RtCapture capx = cap;
+  capx.cascade_xfb = VK_NULL_HANDLE;
+  capx.cascade_tris = 0;
+  {
+    const uint64_t now = frame_index();
+    if (source_camera_valid) {
+      CamHist& h = g_cam_hist[now % 4];
+      h.frame = now;
+      std::memcpy(h.pos, source_camera + 52, sizeof h.pos);
+    }
+    if (cfg_int("rt_cascade_casters", 0)) attach_cascade(capx, source_camera_valid ? source_camera + 52 : nullptr, now);
+  }
   fault_track("soup (XFB capture)", buffer_address(xfb), cap.xfb_size);
   const DeviceData* dd = g_dd;
 
@@ -920,7 +1024,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     BvhResult res{};
     const bool cpu_t = cfg_int("cpu_timing", 0) != 0;
     const double t_bvh0 = cpu_t ? qpc_ms() : 0;
-    const bool bvh_ok = bvh_build(cmd, cap, &stamp_cb, uint32_t(scene_slot), &res);
+    const bool bvh_ok = bvh_build(cmd, capx, &stamp_cb, uint32_t(scene_slot), &res);
     const double t_bvh1 = cpu_t ? qpc_ms() : 0;
     if (!bvh_ok) {
       if (slot >= 0) g_slots[slot] = Slot{};   // the timestamps were not all written
@@ -1249,6 +1353,11 @@ void rt_on_present() {
   // Compile (and recompile after edits) on the present thread, not while
   // the game records.
   if (!g_failed && cfg_int("rt_build", 1)) ensure_pipeline();
+  if (!g_failed && cfg_int("rt_cascade_casters", 0) &&
+      ensure_pipeline_file("rt/xfb_to_world_ortho.hlsl", g_ortho_pipe, g_ortho_gen)) {
+    g_pl_live = g_pl;
+    g_ortho_live = g_ortho_pipe;
+  }
   uint64_t now = frame_index();
   for (uint32_t s = 0; s < kRing; ++s) {
     Slot& sl = g_slots[s];

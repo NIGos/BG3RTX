@@ -640,7 +640,8 @@ Found and fixed along the way:
    and no roofs the game hides. The fold keeps the game's cascades for those, but
    then RT can only add detail where the cascades already say "lit". Next: XFB on
    the cascade passes (their depth-only VS are patched already) to capture the
-   sun's view of the casters.
+   sun's view of the casters. **Implemented, off by default (`rt_cascade_casters`,
+   section 8.5 "Cascade casters as implemented"); not gated yet.**
 3. **Static/dynamic split** (section 5, step 3). **Done, see [section 11](#11-static-dynamic-bvh-split-instanced-object-space-blas-rt_bvh_split1).**
    The design differs from this plan: object-space BLAS per unique mesh with the
    game's per-instance matrices, not world-space per-draw BLAS.
@@ -1011,6 +1012,77 @@ rays, assume 2-3× that.
     shafts.
   - Capture the largest cascade first: one more XFB pass of about +0.3 ms, and
     duplicates with the G-buffer soup are harmless for any-hit rays.
+  - **Implemented 2026-10-29 (`rt_cascade_casters=0`, off until gated), see below.**
+
+#### Cascade casters as implemented (`rt_cascade_casters`)
+
+Goal: RT sun shadows from what the camera does not draw but the cascades do, mainly
+cut-away roofs, so the RT sun can replace the game's mask under roofs too.
+
+- **Matrix source (established).** Every cascade VS in the shader dumps of
+  `captures/20261026-165848` (`1cf36b97`, `a7bf37c6`, `646a930e`, `dcb21688`, ...)
+  ends like the camera's: `gl_Position = vec4(W, 1) * set0.b2._m2`, y negated. So each
+  cascade pass binds its own camera-layout UBO at set 0 binding 2 with its orthographic
+  view-projection at +128, and W is the same camera-relative world (the prepass and the
+  cascades share VS `646a930e`). The Shadow UBO `_m10[k]` is not needed.
+- **Detection.** Depth-only, D16, square >= 1024, a layer of an array of >= 3 layers
+  (the far shadow cache has 2). The cascade index is the depth view's base layer.
+- **Capture** (`layer/geocapture.cpp`). Cascade `rt_cascade_index` (default 1: cascade 0
+  is the smallest, 30 draws in the foundry; 1 covers the player's building and its
+  neighbours; check the extents in the `[cascade] matrix` line) is captured by the
+  existing XFB patch into its own buffer per frame parity (`rt_cascade_mb`, x2). Skipped:
+  draws the camera source pass drew in this or the last frame (key: kind, counts, firsts,
+  vertex binding 0, index range, and the instance stream binding or the set 1 binding 0
+  UBO that places it); alpha-tested draws (the FS can discard; no UV or material here);
+  indirect and non-sizeable topologies; draws with another set 0 binding 2.
+- **Conversion.** Right after the pass, in its command buffer:
+  `shaders/rt/xfb_to_world_ortho.hlsl` solves W from the x, y, z rows (the w row of an
+  orthographic matrix is (0, 0, 0, 1)); a vertex whose w is not 1 collapses its triangle.
+- **Next frame** (`rtscene.cpp`, `bvhsplit.cpp`; split builds only). The build of frame F
+  takes F-1's soup (its command buffer submitted) and adds one BLAS (new each build; the
+  old one is released once no live scene slot uses it) and one instance: translation
+  `origin_cascade(F-1) - cam(F)`, mask 0x02, custom index 0xFFFFFF, not opaque. The cascade
+  VS's world position is relative to the cascade UBO's own origin (byte 208), which is
+  92-96 m from the camera's in S7 (`rt_cascade_origin=1`; 0 = the first version's
+  `cam(F-1) - cam(F)`, which put the casters 92 m off and leaked).
+- **Alpha-tested casters** (`rt_cascade_alpha=1`): 435 of 694 cascade-2 draws in S7 are
+  alpha-tested; they go in as opaque (cutouts solid). Without them the RT still saw
+  "game dark & RT lit" on 9.5% of traced px; with them 0.47%. `rt_cascade_mb=160`: cascade 2
+  with alpha holds 1.47M triangles (~100 MB); cascade 3 overflows (340 draws dropped).
+- **Shaders.** `RT_VIS_MASK` / `RT_HIT_MASK` in `rt_common.hlsli` are the literal 0xFF in
+  ordinary builds (SPIR-V of all 66 existing outputs byte-identical). The core picks
+  `gi/cascade/` (`gi/cascade_rebase/` with `rt_scene_rebase`) variants with the key on:
+  mask 0x01 for GI, reflections, AO, local lights, origin and primary checks; the sun
+  ray (`rt_shadow.hlsl`) traces 0xFF and ignores cascade hits nearer than
+  `RT_CASCADE_TMIN` = 0.5 m (a coarser copy of the shaded surface; a roof is >= 2 m up).
+- **Trust** (`core/sun_trust.cpp`). With `rt_cascade_roofs_trust=1` the roof volumes are
+  not uploaded: roofs no longer stop the replace. The off-screen test stays.
+- **Logs.** `[cascade] sun cascade pass found` once per layer; every `rt_timing_frames`:
+  `[cascade] casters:` (draws seen / duplicates / alpha / added, triangles, MB, builds with
+  the instance and why not, captured pass GPU ms) and `[cascade] matrix of cascade k`
+  (w column error, det, extents of every cascade, UBO origin vs camera in m: the
+  inversion's premises). `sun: roof volumes TRUSTED` on toggle; `sun stats` ends with
+  `roof volumes trusted (cascade casters) 1`.
+- **Gate result 2026-10-29 (S7 Blushing Mermaid, static, FG 2, live A/B in one run,
+  sup-cascade2/3/4-s7-fg2).** Sun stats per 600 frames: key off (roof volumes): game dark &
+  RT lit 29-31% of traced px, kept by roofs 99%, mean brightening 0.0004-0.0005/px. Key on
+  (index 2, alpha 1, origin 1): game dark & RT lit 0.42-0.47%, kept by roofs 0%, replaced
+  (lit) 13-15% of those, mean brightening 0.0010/px; game lit & RT shadowed 0.95% -> 1.2%.
+  Origin 0: 0.0296/px (the leak). Cost: scene build 1.42 -> 2.72 ms GPU, cascade pass +0.43
+  ms; rendered rate unchanged (30.0 fps cap in unfocused runs). Pending: the user's visual
+  check (sharper roof shadow edges; no light through cut roofs; solid foliage cutouts in
+  shadows would be the artefact to look for).
+- **Gate (first plan).** Interior with the roof cut away, sun through windows: live A/B of
+  `rt_cascade_casters`. Pass: matrix line orthographic, origin ~0 m; builds with the
+  instance ~100%; with the key on `kept by roofs` 0% and no new light under the roof
+  (sun check: brightened px not above key-off); outdoors, mean brightening equal within
+  noise (no acne: `game lit & RT shadowed` not up). Cost: the casters line's pass ms and
+  the `[rt] scene build GPU` split lines (the BLAS build, TLAS rebuilt every frame).
+- **Known limits.** One frame of lag for moving casters (a moving character's shadow is
+  the union of two poses where not deduplicated). Roofs outside cascade k's extent are
+  not captured, but are trusted: raise `rt_cascade_index` if the extent is smaller than
+  the view. Alpha-tested cascade casters are left out. Legacy (non-split) builds get no
+  instance. The layer code needs a game restart once; the keys are live.
 - **Radiance cache (TRACK_C next, 7.4).** D-GI2 below fixes the design.
 
 ### 8.6 New effects

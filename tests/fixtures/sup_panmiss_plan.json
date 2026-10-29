@@ -1,0 +1,32 @@
+[
+ {
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 32,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 12,
+  "motion_end": 12,
+  "set": "rt_build=auto"
+ },
+ {
+  "seconds": 20,
+  "repeat_ms": 33,
+  "scan": 32,
+  "capture_at": 10,
+  "serial": 31,
+  "motion_start": 3,
+  "motion_end": 18,
+  "set": "rt_build=auto"
+ },
+ {
+  "seconds": 20,
+  "repeat_ms": 33,
+  "scan": 30,
+  "capture_at": 10,
+  "serial": 32,
+  "motion_start": 3,
+  "motion_end": 18,
+  "set": "rt_build=auto"
+ }
+]

@@ -25,7 +25,7 @@ uint lsref_rt_occluded(float3 o, float3 d, float tmax, lsref_RtCone cone) {
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
-  q.TraceRayInline(gScene, 0, 0xFF, r);
+  q.TraceRayInline(gScene, 0, RT_VIS_MASK, r); // hand edit: rt_cascade_casters mask
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   bool aborted = false;

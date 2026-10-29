@@ -111,6 +111,34 @@ float3 rt_scene_translation() {
 }
 float3 rt_scene_ray_origin(float3 lighting_origin) { return lighting_origin + rt_scene_translation(); }
 #endif
+
+// rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS gains one instance of the
+// sun cascade's casters the camera did not draw (mask 0x02, instanceCustomIndex
+// kRtCascadeId). The cascade variants (gi/cascade*/, RT_CASCADE_MASKS) trace 0x01 so that
+// only the sun (RT_CASCADE_SUN: rt_shadow.hlsl's rt_visibility) sees it. Ordinary builds
+// trace 0xFF, the literal they always had: their SPIR-V is unchanged.
+#ifdef RT_CASCADE_MASKS
+#define RT_HIT_MASK 0x01
+#ifdef RT_CASCADE_SUN
+#define RT_VIS_MASK 0xFF
+#else
+#define RT_VIS_MASK 0x01
+#endif
+#else
+#define RT_HIT_MASK 0xFF
+#define RT_VIS_MASK 0xFF
+#endif
+#ifdef RT_CASCADE_SUN
+static const uint kRtCascadeId = 0xFFFFFFu;   // common/cascade_casters.h kCustomIndex
+// The cascade soup holds the casters again where the camera drew them too, at the shadow
+// LOD: its hits nearer than this to the ray origin are ignored (no self-shadowing by a
+// coarser copy of the shaded surface). A copy offset by e <= 1 cm is met at e / sin(a)
+// <= 0.5 m for sun elevations above the surface a >= 1.2 deg; a roof is >= 2 m (one
+// storey) above the floor it shades, so 0.5 m keeps every roof with a 4x margin.
+#ifndef RT_CASCADE_TMIN
+#define RT_CASCADE_TMIN 0.5
+#endif
+#endif
 bool rt_scene_ok() {
   uint2 s = gSceneStamp.Load2(0);
 #ifdef RT_SCENE_REBASE
@@ -455,7 +483,7 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
-  q.TraceRayInline(gScene, 0, 0xFF, r);
+  q.TraceRayInline(gScene, 0, RT_VIS_MASK, r);
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   bool aborted = false;
@@ -466,6 +494,13 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
       q.Abort();
       break;
     }
+#ifdef RT_CASCADE_SUN
+    // The cascade instance is not opaque only for this test (no alpha: its triangles are solid).
+    if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && q.CandidateInstanceID() == kRtCascadeId) {
+      if (q.CandidateTriangleRayT() > RT_CASCADE_TMIN) q.CommitNonOpaqueTriangleHit();
+      continue;
+    }
+#endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
   if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) return kRtOccluded;
@@ -505,7 +540,7 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
-  q.TraceRayInline(gScene, 0, 0xFF, r);
+  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
   float near_t = 1e30;
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
@@ -558,7 +593,7 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
-  q.TraceRayInline(gScene, 0, 0xFF, r);
+  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   bool aborted = false;
@@ -695,7 +730,7 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
-  q.TraceRayInline(gScene, 0, 0xFF, r);
+  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   while (q.Proceed()) {

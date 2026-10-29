@@ -33,6 +33,7 @@
 // record (shaders/rt/rt_common.hlsli).
 #include "host.h"
 #include "../common/dyn_hold.h"
+#include "../common/cascade_casters.h"
 
 #include <algorithm>
 #include <smmintrin.h>
@@ -364,6 +365,9 @@ struct DynSlot {
   bool hold_has_alpha = false;
 };
 std::unordered_map<uint64_t, DynSlot> g_dyn;
+// rt_cascade_casters: the BLAS of last frame's cascade-only soup, a new one every build (the
+// previous one is released once no live scene slot's TLAS references it: as_destroy).
+AsAlloc g_casc_as;
 uint64_t g_hold_epoch = 1;
 uint64_t g_hold_why[7] = {};
 
@@ -708,6 +712,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   std::lock_guard<std::mutex> lock(g_mu);
   for (auto& [k, m] : g_meshes) as_destroy(m.as);
   for (auto& [k, s] : g_dyn) as_destroy(s.as);
+  as_destroy(g_casc_as);
   for (JobBatch& b : g_batches)
     for (Swap& s : b.swaps) as_destroy(s.c);
   g_batches.clear();
@@ -1007,10 +1012,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       return g_draws[a.first].dyn_key < g_draws[b.first].dyn_key;
     });
   }
-  // Instance count: every instance of a cached draw, one per captured draw.
+  // Instance count: every instance of a cached draw, one per captured draw, and the cascade
+  // soup's one (rt_cascade_casters, rtscene.cpp attach_cascade).
   uint32_t n_static = 0;
   for (uint32_t i : cached) n_static += g_draws[i].instances;
-  const uint32_t n_inst = n_static + uint32_t(dyn.size());
+  const bool casc = cap.cascade_tris && cap.cascade_xfb && cap.cascade_stride >= 12;
+  const uint32_t n_inst = n_static + uint32_t(dyn.size()) + (casc ? 1u : 0u);
   if (!ensure_ring(n_inst, n_mats) || !ensure_tlas(slot, (std::max)(n_inst, 1u))) {
     g_failed = true;
     log("[bvh] allocation failed (%u instances); the split is off, the legacy build takes over", n_inst);
@@ -1170,6 +1177,42 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     dyn_tris += fd.prims;
     ++g_st.dyn_draws;
   }
+  // rt_cascade_casters: last frame's cascade-only soup (camera-relative to last frame's
+  // camera), translated into this frame's space; mask 0x02 (only the sun's rays see it) and
+  // not opaque, so the sun's variant can ignore its hits near the ray origin (rt_common.hlsli
+  // RT_CASCADE_TMIN). InstInfo: no vertices (tris 0), never read by those rays.
+  bool casc_build = false;
+  VkDeviceSize casc_scratch = 0;
+  const VkBuildAccelerationStructureFlagsKHR casc_flags =
+      cfg_int("rt_fast_trace", 0) ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
+                                  : VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+  if (casc) {
+    if (g_casc_as.as) as_destroy(g_casc_as);
+    const VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(cap.cascade_tris, cap.cascade_stride, false, casc_flags);
+    if (as_create(sz.accelerationStructureSize, g_casc_as)) {
+      casc_build = true;
+      casc_scratch = sz.buildScratchSize;
+      VkAccelerationStructureInstanceKHR in{};
+      in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
+      for (int k = 0; k < 3; ++k) in.transform.matrix[k][3] = cap.cascade_t[k];
+      in.instanceCustomIndex = cascade::kCustomIndex;
+      in.mask = cascade::kMask;
+      in.instanceShaderBindingTableRecordOffset = 0;
+      in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+      in.accelerationStructureReference = g_casc_as.addr;
+      const uint32_t inf[4] = {0, cap.cascade_stride & 0xffu, 0, 0};
+      std::memcpy(inst_out + n, &in, sizeof in);
+      std::memcpy(info_out + n * 4, inf, sizeof inf);
+      inst_ref.push_back(in.accelerationStructureReference);
+      inst_flags.push_back(in.flags);
+      ++n;
+      geo_cascade_note_build(0, cap.cascade_tris);
+    } else {
+      geo_cascade_note_build(5, 0);
+    }
+  } else if (g_casc_as.as) {
+    as_destroy(g_casc_as);   // the key went off, or no soup this frame
+  }
   g_st.static_tris += static_tris;
   g_st.dyn_tris += dyn_tris;
   // Job matrices: instance 0 of the job's draw (and its last instance for a
@@ -1304,7 +1347,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     std::vector<VkAccelerationStructureGeometryKHR> geo;
     std::vector<VkAccelerationStructureBuildGeometryInfoKHR> infos;
     std::vector<VkAccelerationStructureBuildRangeInfoKHR> ranges;
-    geo.reserve(mesh_builds.size() + dyn_builds.size());
+    geo.reserve(mesh_builds.size() + dyn_builds.size() + 1);
     VkDeviceSize scratch = 0, al = rt_scratch_alignment();
     std::vector<VkDeviceSize> scratch_off;
     for (const MeshBuild& mb : mesh_builds) {
@@ -1345,6 +1388,19 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       infos.push_back(bi);
       scratch_off.push_back(scratch);
       scratch += ((db.refit ? db.slot->update_scratch : db.slot->build_scratch) + al - 1) / al * al;
+    }
+    if (casc_build) {   // rt_cascade_casters: converted in place after last frame's cascade pass
+      geo.push_back(tri_geometry(rt_buffer_address(cap.cascade_xfb), cap.cascade_tris, cap.cascade_stride, false));
+      ranges.push_back({cap.cascade_tris, 0, 0, 0});
+      VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+      bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+      bi.flags = casc_flags;
+      bi.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+      bi.dstAccelerationStructure = g_casc_as.as;
+      bi.geometryCount = 1;
+      infos.push_back(bi);
+      scratch_off.push_back(scratch);
+      scratch += (casc_scratch + al - 1) / al * al;
     }
     // The TLAS reuses the scratch from 0 after the barrier below.
     VkAccelerationStructureGeometryKHR tg{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};

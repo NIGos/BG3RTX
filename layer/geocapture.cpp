@@ -22,6 +22,7 @@
 // buffer, and the world-space triangle normals with the G-buffer normals.
 #include "host.h"
 #include "spirv_xfb.h"
+#include "../common/cascade_casters.h"
 
 #include <objbase.h>
 
@@ -70,6 +71,7 @@ std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
 thread_local VsInstancing t_last_inst; // its instancing analysis (bvhsplit.cpp)
 thread_local uint64_t t_last_hash = 0;
+thread_local bool t_last_discard = false;   // the module last scanned on this thread is a fragment shader that discards
 
 std::mutex g_mu;  // modules, pipelines, buffers
 struct ModInfo {
@@ -78,6 +80,7 @@ struct ModInfo {
   uint64_t hash = 0;         // SPIR-V hash of the game's module
 };
 std::unordered_map<VkShaderModule, ModInfo> g_patched;
+std::unordered_set<VkShaderModule> g_discard_mods;   // fragment shaders that can discard (alpha test)
 struct PipeInfo {
   bool xfb;                  // VS patched, VS is the last pre-raster stage
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
@@ -85,6 +88,7 @@ struct PipeInfo {
   int uv = -1;               // VS output location captured as UV (stride 24)
   bool restart = true;       // primitive restart enabled, or dynamic (unknown)
   InstPipe inst;             // instancing layout (Track D BVH split)
+  bool discard = false;      // its fragment shader can discard (rt_cascade_casters skips it: no alpha test)
 };
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
@@ -189,6 +193,15 @@ struct Capture {
   uint32_t alpha_overflow = 0, opaque_overflow = 0;
   uint32_t drop_indirect = 0, drop_topo = 0, strips = 0;
   uint64_t drop_topo_tris = 0, strip_tris = 0;
+  // rt_cascade_casters. Camera source pass: its draw keys are recorded (cc_keys). A cascade
+  // pass (cascade): the captured one, or a probe that only reads the cascade's matrix.
+  bool cc_keys = false;
+  bool cascade = false, probe = false;
+  int layer = -1;
+  int ts = -1;                                       // timestamp pair of the captured pass
+  uint64_t rec = 0;                                  // build record of its command buffer (submitted?)
+  uint32_t c_seen = 0, c_dup = 0, c_alpha = 0, c_drop = 0, c_ubo = 0, c_full = 0, c_added = 0;
+  uint64_t c_tris = 0;
 };
 
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
@@ -867,6 +880,335 @@ void release(Capture& c) {
   c.draws.shrink_to_fit();
 }
 
+// ---- rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2, common/cascade_casters.h) ----
+// The sun cascades are separate depth-only D16 passes, one layer each of one array, recorded
+// in their own command buffers (possibly on other threads) after the G-buffer. Every cascade
+// VS ends like the camera's: gl_Position = vec4(W, 1) * set0.b2._m2 with y negated (shader
+// dumps of captures/20261026-165848: 1cf36b97, a7bf37c6, 646a930e, dcb21688, ...), so the
+// cascade's own camera-layout UBO holds its orthographic view-projection. The captured
+// cascade (rt_cascade_index) goes into a buffer of its own per frame parity, is converted in
+// place after its pass, and the NEXT frame's build adds it (rtscene.cpp, bvhsplit.cpp).
+std::mutex g_cc_mu;                 // everything below
+cascade::KeySets g_cc_keys;         // the camera source pass's draw keys (this frame and the last)
+Capture g_ccap[2];                  // the captured cascade pass of frame F is g_ccap[F & 1]
+struct CcMeta { uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0; bool has_origin = false; float origin[3] = {}; };
+CcMeta g_cc_meta[2];                // what g_ccap[i] holds, converted (frame 0: nothing)
+constexpr int kCcLayers = 8;
+Capture g_cprobe[kCcLayers];        // the other cascades: their matrix is read, nothing captured
+struct CcMat { uint64_t frame = 0; float v[56] = {}; };
+CcMat g_cc_mat[kCcLayers];          // each cascade's camera-layout UBO (frame 0: never read)
+bool g_cc_seen[kCcLayers] = {};
+bool g_cc_alloc_failed = false;
+VkQueryPool g_cc_qp = VK_NULL_HANDLE;   // GPU time of the captured pass (incl. the conversion)
+constexpr uint32_t kCcTs = 16;
+uint64_t g_cc_ts_frame[kCcTs] = {};
+std::vector<float> g_cc_ms;
+struct CcStats {
+  uint64_t frames = 0, seen = 0, dup = 0, alpha = 0, drop = 0, ubo = 0, full = 0, added = 0, tris = 0, tris_max = 0;
+  uint64_t bytes = 0, bytes_max = 0, keys = 0, unconverted = 0;
+  uint64_t builds[6] = {}, build_tris = 0;
+};
+CcStats g_cc_st;
+
+// The cascade index (array layer) of a sun cascade pass, -1 for any other pass.
+int cascade_layer(const Bg3PassInfo& p) {
+  if (p.color_count != 0 || p.depth_format != VK_FORMAT_D16_UNORM || !p.depth_image || !p.depth_view) return -1;
+  uint32_t layers = 0, base = 0;
+  {
+    std::shared_lock<std::shared_mutex> lock(tracker().mu);
+    auto im = tracker().images.find(p.depth_image);
+    auto vw = tracker().views.find(p.depth_view);
+    if (im == tracker().images.end() || vw == tracker().views.end()) return -1;
+    layers = im->second.ci.arrayLayers;
+    base = vw->second.range.baseArrayLayer;
+  }
+  return cascade::pass_layer(p.color_count, true, p.width, p.height, layers, base);
+}
+
+// The draw's identity for the camera/cascade dedupe. place 0: unknown (never deduplicated).
+cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const PipeInfo& pi) {
+  cascade::DrawId d;
+  d.kind = a.kind, d.count = a.count, d.instances = a.instances, d.first = a.first;
+  d.first_instance = a.first_instance, d.vertex_offset = a.vertex_offset;
+  d.vb = uint64_t(s->vb[0].buffer), d.vb_offset = s->vb[0].offset;
+  d.ib = uint64_t(s->ib), d.ib_offset = s->ib_offset, d.ib_type = uint32_t(s->ib_type);
+  if (a.kind > 1) return d;
+  if (pi.inst.ok) {   // instanced: the instance stream places it
+    const CmdState::VertexBinding& vb = s->vb[pi.inst.row_binding[0]];
+    d.place = uint64_t(vb.buffer), d.place_offset = vb.offset;
+  } else {            // per-draw UBO (set 1 binding 0: the model matrix of the depth-only VS)
+    Bg3Binding b;
+    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 0, 0, &b) && b.buffer)
+      d.place = uint64_t(b.buffer), d.place_offset = b.offset;
+  }
+  return d;
+}
+
+void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
+  const uint64_t f = frame_index();
+  const int want = cfg_int("rt_cascade_index", 1);
+  std::lock_guard<std::mutex> lock(g_cc_mu);
+  if (layer < kCcLayers && !g_cc_seen[layer]) {
+    g_cc_seen[layer] = true;
+    log("[cascade] sun cascade pass found: layer %d of a %ux%u D16 array; %s", layer, s->pass.width, s->pass.height,
+        layer == want ? "captured (rt_cascade_index)" : "its matrix is only read");
+  }
+  if (layer != want) {
+    if (layer < kCcLayers) {
+      Capture& p = g_cprobe[layer];
+      p.cascade = p.probe = true;
+      p.layer = layer;
+      s->geo = &p;
+    }
+    return;
+  }
+  Capture& c = g_ccap[f & 1];
+  if (c.state == 1 && c.record_frame == f) return;   // one such pass per frame: never expected
+  // (state 1 from an older frame: that recording never ended its pass; start over)
+  const VkDeviceSize bytes = VkDeviceSize((std::clamp)(cfg_int("rt_cascade_mb", 64), 4, 1024)) << 20;
+  if (c.xfb.b && c.xfb.size != bytes) free_buf(c.xfb);   // deferred destruction: a build in flight may read it
+  if (!c.xfb.b && !make_buf(c.xfb, bytes, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | rt_xfb_usage(), false)) {
+    if (!g_cc_alloc_failed)
+      log("[cascade] could not allocate %llu MB for the cascade capture", (unsigned long long)(bytes >> 20));
+    g_cc_alloc_failed = true;
+    return;
+  }
+  c.state = 1;
+  c.cascade = true;
+  c.probe = false;
+  c.layer = layer;
+  c.cmd = cmd;
+  c.record_frame = f;
+  c.readback = c.rt = c.split = c.cc_keys = false;
+  c.cursor = 0;
+  c.xfb_active = false;
+  c.active_slot = -1;
+  c.rt_ubo = VK_NULL_HANDLE;
+  c.rt_ubo_off = 0;
+  c.c_seen = c.c_dup = c.c_alpha = c.c_drop = c.c_ubo = c.c_full = c.c_added = 0;
+  c.c_tris = 0;
+  c.rec = bvh_rec_register(cmd);
+  g_cc_meta[f & 1] = CcMeta{};
+  // The build two frames ago (BLAS input) and this buffer's last conversion are done with
+  // it before the XFB writes (both earlier in submission order).
+  barrier(cmd,
+          VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+              VK_PIPELINE_STAGE_TRANSFER_BIT,
+          VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT,
+          VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT);
+  c.ts = -1;
+  if (!g_cc_qp) {
+    VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    qi.queryCount = kCcTs * 2;
+    if (g_dd->vk.CreateQueryPool(g_dd->device, &qi, nullptr, &g_cc_qp) != VK_SUCCESS) g_cc_qp = VK_NULL_HANDLE;
+  }
+  const uint32_t slot = uint32_t(f % kCcTs);
+  if (g_cc_qp && !g_cc_ts_frame[slot]) {
+    g_cc_ts_frame[slot] = f + 1;
+    c.ts = int(slot);
+    g_dd->vk.CmdResetQueryPool(cmd, g_cc_qp, slot * 2, 2);
+    g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, g_cc_qp, slot * 2);
+  }
+  s->geo = &c;
+}
+
+void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawArgs& args, const PipeInfo& pi) {
+  Bg3Binding b;
+  const bool have = query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) && b.buffer &&
+                    (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+  if (c->probe) {   // only the matrix: the first draw's UBO, then no more hooks in this pass
+    CcMat m;
+    if (have && read_mapped(b.buffer, b.offset, m.v, sizeof m.v)) {
+      m.frame = frame_index();
+      std::lock_guard<std::mutex> lock(g_cc_mu);
+      g_cc_mat[c->layer] = m;
+    }
+    s->geo = nullptr;
+    return;
+  }
+  ++c->c_seen;
+  // One matrix converts the whole soup: every draw must use the first one's UBO.
+  if (!have || b.offset % g_ubo_align) {
+    ++c->c_ubo;
+    return;
+  }
+  if (!c->rt_ubo) {
+    c->rt_ubo = b.buffer;
+    c->rt_ubo_off = b.offset;
+  } else if (b.buffer != c->rt_ubo || b.offset != c->rt_ubo_off) {
+    ++c->c_ubo;
+    return;
+  }
+  const uint32_t kind = args.kind, count = args.count;
+  if (!pi.xfb || !pi.triangles || kind > 1 ||
+      !(pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST ||
+        ((pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP || pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN) &&
+         (kind == 0 || !pi.restart)))) {
+    ++c->c_drop;   // not sizeable exactly (indirect, adjacency, restart): as for the camera soup
+    return;
+  }
+  // rt_cascade_alpha=1 (A/B): alpha-tested draws go in as opaque (cutouts solid).
+  if (pi.discard && !cfg_int("rt_cascade_alpha", 0)) {   // alpha-tested: no UV or material here, its cutouts would turn solid
+    ++c->c_alpha;
+    return;
+  }
+  const cascade::DrawId id = cascade_draw_id(cmd, s, args, pi);
+  if (id.place) {
+    const uint64_t key = cascade::draw_key(id);
+    std::lock_guard<std::mutex> lock(g_cc_mu);
+    if (g_cc_keys.contains(c->record_frame, key)) {
+      ++c->c_dup;
+      return;
+    }
+  }
+  uint64_t prims = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST ? count / 3 : count > 2 ? count - 2 : 0;
+  prims *= args.instances;
+  const uint64_t reserved = prims * 3ull * g_stride;
+  if (!reserved) return;
+  if (c->cursor + reserved > c->xfb.size) {
+    ++c->c_full;
+    return;
+  }
+  VkDeviceSize off = c->cursor, size = reserved;
+  p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
+  p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
+  c->xfb_active = true;
+  c->cursor += reserved;
+  ++c->c_added;
+  c->c_tris += prims;
+}
+
+void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
+  if (c->probe) return;
+  const uint32_t tris = uint32_t(c->cursor / (3ull * g_stride));
+  bool converted = false;
+  if (tris && c->rt_ubo) {
+    barrier(cmd, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT, VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+    converted = rt_cascade_convert(cmd, c->xfb.b, tris, g_stride, c->rt_ubo, c->rt_ubo_off);
+    // -> the next frame's BLAS build (which has its own barriers too).
+    barrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_ACCESS_MEMORY_READ_BIT);
+  }
+  if (c->ts >= 0 && g_cc_qp)
+    g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_cc_qp, uint32_t(c->ts) * 2 + 1);
+  CcMat m;
+  const bool mat_ok = c->rt_ubo && read_mapped(c->rt_ubo, c->rt_ubo_off, m.v, sizeof m.v);
+  std::lock_guard<std::mutex> lock(g_cc_mu);
+  const uint64_t f = c->record_frame;
+  if (mat_ok && c->layer >= 0 && c->layer < kCcLayers) {
+    m.frame = f;
+    g_cc_mat[c->layer] = m;
+  }
+  CcMeta meta{};
+  if (converted) {
+    meta.frame = f; meta.tris = tris; meta.rec = c->rec;
+    // The cascade VS's world position is relative to its own UBO's origin (byte 208),
+    // which is not the camera's (92 m away in S7): the rebase starts from it.
+    if (mat_ok) { meta.has_origin = true; for (int k = 0; k < 3; ++k) meta.origin[k] = m.v[52 + k]; }
+  }
+  g_cc_meta[f & 1] = meta;
+  CcStats& st = g_cc_st;
+  ++st.frames;
+  st.seen += c->c_seen, st.dup += c->c_dup, st.alpha += c->c_alpha, st.drop += c->c_drop, st.ubo += c->c_ubo;
+  st.full += c->c_full, st.added += c->c_added, st.tris += tris;
+  st.tris_max = (std::max)(st.tris_max, uint64_t(tris));
+  st.bytes += c->cursor;
+  st.bytes_max = (std::max)(st.bytes_max, uint64_t(c->cursor));
+  st.keys += g_cc_keys.size(f);
+  st.unconverted += tris && !converted;
+  c->state = 0;
+}
+
+void cc_matrix(const CcMat& m, float m4[4][4]) {
+  for (int r = 0; r < 4; ++r)
+    for (int k = 0; k < 4; ++k) m4[r][k] = m.v[(8 + r) * 4 + k];
+}
+
+// The [cascade] lines, on the present thread.
+void cascade_on_present() {
+  if (g_cc_qp) {
+    std::lock_guard<std::mutex> lock(g_cc_mu);
+    const uint64_t now = frame_index();
+    for (uint32_t s = 0; s < kCcTs; ++s) {
+      if (!g_cc_ts_frame[s] || g_cc_ts_frame[s] + 6 > now) continue;
+      uint64_t r[4] = {};
+      VkResult res = g_dd->vk.GetQueryPoolResults(g_dd->device, g_cc_qp, s * 2, 2, sizeof r, r, 16,
+                                                  VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+      const bool done = res == VK_SUCCESS && r[1] && r[3];
+      if (!done && g_cc_ts_frame[s] + 40 > now) continue;
+      g_cc_ts_frame[s] = 0;
+      if (done && r[2] >= r[0]) g_cc_ms.push_back(float(double(r[2] - r[0]) * g_ts_period * 1e-6));
+    }
+  }
+  CcStats st;
+  CcMat mats[kCcLayers];
+  float ms = -1;
+  int layer = -1;
+  {
+    std::lock_guard<std::mutex> lock(g_cc_mu);
+    const int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+    if (g_cc_st.frames < uint64_t(every)) return;
+    st = g_cc_st;
+    g_cc_st = CcStats{};
+    for (int i = 0; i < kCcLayers; ++i) mats[i] = g_cc_mat[i];
+    if (!g_cc_ms.empty()) {
+      std::sort(g_cc_ms.begin(), g_cc_ms.end());
+      ms = g_cc_ms[g_cc_ms.size() / 2];
+      g_cc_ms.clear();
+    }
+    const uint64_t f = frame_index();
+    layer = g_ccap[(f - 1) & 1].layer >= 0 ? g_ccap[(f - 1) & 1].layer : g_ccap[f & 1].layer;
+  }
+  const double n = double(st.frames), mb = 1.0 / (1 << 20);
+  uint64_t builds = 0;
+  for (uint64_t b : st.builds) builds += b;
+  log("[cascade] casters: cascade %d, %llu frames; per frame: draws seen %.1f, skipped as duplicates %.1f, "
+      "alpha-tested skipped %.1f, not sizeable %.1f, other matrix %.1f, buffer full %.1f, added %.1f; triangles %.0f "
+      "(max %llu), %.2f MB (max %.2f of %d MB); camera pass keys %.0f; captures not converted %llu; next-frame builds "
+      "%llu: with the instance %llu (%.0f triangles), no soup %llu, unsubmitted %llu, no camera %llu, legacy %llu, "
+      "BLAS failed %llu; captured pass GPU median %.3f ms (its draws + XFB + conversion)",
+      layer, (unsigned long long)st.frames, st.seen / n, st.dup / n, st.alpha / n, st.drop / n, st.ubo / n, st.full / n,
+      st.added / n, st.tris / n, (unsigned long long)st.tris_max, st.bytes / n * mb, st.bytes_max * mb,
+      cfg_int("rt_cascade_mb", 64), st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
+      (unsigned long long)st.builds[0], st.builds[0] ? double(st.build_tris) / double(st.builds[0]) : 0.0,
+      (unsigned long long)st.builds[1], (unsigned long long)st.builds[2], (unsigned long long)st.builds[3],
+      (unsigned long long)st.builds[4], (unsigned long long)st.builds[5], ms);
+  // The inversion's premises, from the matrix the conversion used: orthographic (w column
+  // (0, 0, 0, 1)), invertible, and the UBO's origin (byte 208) = the camera's of that frame.
+  std::string ext;
+  for (int i = 0; i < kCcLayers; ++i) {
+    if (!mats[i].frame) continue;
+    float m4[4][4];
+    cc_matrix(mats[i], m4);
+    const cascade::Ortho o = cascade::ortho_check(m4);
+    char t[96];
+    snprintf(t, sizeof t, " c%d %.1f x %.1f x %.1f%s;", i, o.extent[0], o.extent[1], o.extent[2],
+             o.ok ? "" : " (NOT orthographic)");
+    ext += t;
+  }
+  if (layer >= 0 && layer < kCcLayers && mats[layer].frame) {
+    const CcMat& m = mats[layer];
+    float m4[4][4];
+    cc_matrix(m, m4);
+    const cascade::Ortho o = cascade::ortho_check(m4);
+    float cam[3];
+    const bool have_cam = rt_build_camera(m.frame, cam);
+    double d = -1.0;
+    if (have_cam) {
+      const double dx = m.v[52] - cam[0], dy = m.v[53] - cam[1], dz = m.v[54] - cam[2];
+      d = std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    log("[cascade] matrix of cascade %d (its set 0 binding 2, _m2 at +128): w column error %.2g -> %s, det %.3g, "
+        "extent %.1f x %.1f m, depth %.1f m; its UBO origin (+208) is %.3f m from the camera's of that frame%s; all "
+        "cascades (m):%s",
+        layer, o.w_err, o.ok ? "orthographic, inverted from its x, y, z rows" : "NOT orthographic: soup invalid",
+        o.det, o.extent[0], o.extent[1], o.extent[2], d, have_cam ? "" : " (that frame's camera unknown)", ext.c_str());
+  }
+}
+
 }  // namespace
 
 bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,
@@ -969,7 +1311,9 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   t_last_uv = -1;
   t_last_inst = VsInstancing{};
   t_last_hash = 0;
+  t_last_discard = false;
   if (!g_on) return false;
+  t_last_discard = cascade::spirv_fragment_discards(ci->pCode, ci->codeSize / 4);
   bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv);
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
@@ -990,6 +1334,10 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
 }
 
 void geo_note_module(VkShaderModule m, bool patched) {
+  if (t_last_discard && !patched) {
+    std::lock_guard<std::mutex> lock(g_mu);
+    g_discard_mods.insert(m);
+  }
   if (!patched) return;
   std::lock_guard<std::mutex> lock(g_mu);
   g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash};   // same thread, right after geo_patch_shader
@@ -999,6 +1347,7 @@ void geo_forget_module(VkShaderModule m) {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   g_patched.erase(m);
+  g_discard_mods.erase(m);
 }
 
 // The instancing layout of a class-A pipeline (Track D BVH split): its three
@@ -1080,7 +1429,9 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
           pi.inst = make_inst_pipe(cis[i], it->second);
           if (pi.inst.ok) ++g_inst_pipes;
         }
-      } else if (st.stage != VK_SHADER_STAGE_FRAGMENT_BIT) {
+      } else if (st.stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+        pi.discard = st.module && g_discard_mods.count(st.module) != 0;
+      } else {
         other = true;
       }
     }
@@ -1116,6 +1467,15 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
   s->geo = nullptr;
   s->geo_ts = -1;
   if (!g_dd) return;
+  // rt_cascade_casters: a sun shadow cascade pass (a depth-only D16 layer of the cascade array).
+  if (g_on && s->pass.color_count == 0 && s->pass.depth_format == VK_FORMAT_D16_UNORM && rt_enabled() &&
+      cfg_int("rt_cascade_casters", 0)) {
+    const int layer = cascade_layer(s->pass);
+    if (layer >= 0) {
+      cascade_pass_before(cmd, s, layer);
+      return;
+    }
+  }
   const bool gbuf = is_gbuffer(s->pass);
   if (gbuf) g_gbuf_w = s->pass.width, g_gbuf_h = s->pass.height;
   // The ray tracing scene's source pass: with rt_alpha the depth prepass
@@ -1133,6 +1493,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
         cfg_int("geo_capture", 0)) {
       if (start_capture(g_cap, true, s->pass.width, s->pass.height)) {
         g_cap.cmd = cmd;
+        g_cap.cc_keys = g_cap.cascade = false;
         g_cap.viewport = {};
         s->geo = &g_cap;
         g_submit_wanted = true;
@@ -1143,6 +1504,8 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
         g_scratch.cmd = cmd;
         g_scratch.rt = rt_src && rt_capture_wanted();
         g_scratch.split = g_scratch.rt && bvh_split_wanted();
+        g_scratch.cascade = false;
+        g_scratch.cc_keys = g_scratch.rt && cfg_int("rt_cascade_casters", 0) != 0;
         s->geo = &g_scratch;
         // The previous frame's AS build read this buffer.
         if (g_scratch.rt) rt_before_capture(cmd);
@@ -1244,6 +1607,18 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     std::lock_guard<std::mutex> lock(g_mu);
     auto it = g_pipes.find(s->pipe[0]);
     if (it != g_pipes.end()) pi = it->second;
+  }
+  if (c->cascade) {
+    cascade_pre_draw(cmd, s, c, args, pi);
+    return;
+  }
+  if (c->cc_keys) {   // every draw of the camera source pass, captured or not (rt_cascade_casters dedupe)
+    const cascade::DrawId id = cascade_draw_id(cmd, s, args, pi);
+    if (id.place) {
+      const uint64_t key = cascade::draw_key(id);
+      std::lock_guard<std::mutex> lock(g_cc_mu);
+      g_cc_keys.insert(c->record_frame, key);
+    }
   }
   if (c->rt && !c->rt_ubo) {
     Bg3Binding b;
@@ -1394,6 +1769,10 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
   } motion_tag{ts_slot};
   s->geo = nullptr;
   if (!c) return;
+  if (c->cascade) {
+    cascade_pass_after(cmd, c);
+    return;
+  }
   if (!c->readback) {
     // rt_alpha: a small depth-only pass (not the scene's) is captured once
     // until the big one is known, and dropped.
@@ -1484,6 +1863,23 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
   c->state = 2;
 }
 
+int geo_cascade_soup(uint64_t frame, CascadeSoup* out) {
+  std::lock_guard<std::mutex> lock(g_cc_mu);
+  const CcMeta& m = g_cc_meta[frame & 1];
+  const Capture& c = g_ccap[frame & 1];
+  if (m.frame != frame || !m.tris || !c.xfb.b) return 1;
+  if (bvh_rec_state(m.rec) != 1) return 2;   // its conversion has not run (yet) or never will
+  *out = CascadeSoup{c.xfb.b, m.tris, g_stride, m.has_origin, {m.origin[0], m.origin[1], m.origin[2]}};
+  return 0;
+}
+
+void geo_cascade_note_build(int reason, uint32_t tris) {
+  std::lock_guard<std::mutex> lock(g_cc_mu);
+  if (reason < 0 || reason > 5) return;
+  ++g_cc_st.builds[reason];
+  if (!reason) g_cc_st.build_tris += tris;
+}
+
 bool geo_submit_wanted() { return g_submit_wanted.load(std::memory_order_relaxed); }
 
 void geo_on_submit(const std::vector<VkCommandBuffer>& cmds) {
@@ -1533,6 +1929,7 @@ void geo_finish(uint64_t frame, const std::string& dir, VkQueue queue) {
 
 void geo_on_present(VkQueue queue) {
   if (g_cap.state != 0) try_process(queue);
+  if (g_dd) cascade_on_present();
   if (!g_timing || !g_qp) return;
   std::lock_guard<std::mutex> lock(g_ts_mu);
   uint64_t now = frame_index();
@@ -1574,6 +1971,13 @@ void geo_device_destroyed(DeviceData* dd) {
     std::lock_guard<std::mutex> lock(g_cap_mu);
     release(g_cap);
     release(g_scratch);
+  }
+  {
+    std::lock_guard<std::mutex> lock(g_cc_mu);
+    for (Capture& c : g_ccap) release(c);
+    for (CcMeta& m : g_cc_meta) m = CcMeta{};
+    if (g_cc_qp) dd->vk.DestroyQueryPool(dd->device, g_cc_qp, nullptr);
+    g_cc_qp = VK_NULL_HANDLE;
   }
   if (g_qp) dd->vk.DestroyQueryPool(dd->device, g_qp, nullptr);
   if (g_ubo_pipe) dd->vk.DestroyPipeline(dd->device, g_ubo_pipe, nullptr);

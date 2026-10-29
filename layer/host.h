@@ -437,8 +437,32 @@ struct RtCapture {
   uint32_t draws, alpha_draws;
   bool split;                // rt_bvh_split: the capture holds only the dynamic draws (bvhsplit.cpp)
   VkDeviceSize xfb_size;
+  // rt_cascade_casters (set by rt_after_capture, split builds only): last frame's cascade-only
+  // soup, already camera-relative world (its own frame's), and the TLAS translation that
+  // moves it into this frame's camera-relative space. cascade_tris 0: none.
+  VkBuffer cascade_xfb;
+  uint32_t cascade_tris, cascade_stride;
+  float cascade_t[3];
 };
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
+// ---- rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2, common/cascade_casters.h) ----
+// geocapture.cpp captures one sun cascade pass (minus the camera pass's draws) and
+// converts it in place after the pass; the next frame's split build adds it as one
+// instance (mask 0x02). The soup converted in `frame`: 0 found, 1 none, 2 its command
+// buffer not (yet) submitted (the geo_cascade_note_build reasons).
+struct CascadeSoup { VkBuffer xfb; uint32_t tris, stride; bool has_origin; float origin[3]; };
+int geo_cascade_soup(uint64_t frame, CascadeSoup* out);
+// Why a build has or lacks the cascade instance (the [cascade] log line): 0 added, 1 no soup
+// of the previous frame, 2 its command buffer not submitted, 3 no camera of that frame,
+// 4 legacy (non-split) build, 5 BLAS allocation failed.
+void geo_cascade_note_build(int reason, uint32_t tris);
+// clip -> camera-relative world with the cascade's orthographic matrix (its camera-layout
+// UBO), in place (shaders/rt/xfb_to_world_ortho.hlsl). Restores the game's compute bindings.
+bool rt_cascade_convert(VkCommandBuffer cmd, VkBuffer xfb, uint32_t tris, uint32_t stride, VkBuffer ubo,
+                        VkDeviceSize ubo_offset);
+// The camera position (camera UBO byte 208, the origin of camera-relative space) of the
+// scene build of `frame`, from the last few builds.
+bool rt_build_camera(uint64_t frame, float pos[3]);
 // Scene snapshots: each build writes one slot (its own TLAS for the split, its
 // InstInfo region of the bvhsplit ring, its alpha set and record region), and a
 // slot is reused only once the GPU finished every frame it was handed out in

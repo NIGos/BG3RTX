@@ -28,8 +28,15 @@ void main(uint3 id : SV_DispatchThreadID) {
   // Rows of the 3x3 system M W = b, one per used clip component (x, y, w).
   float3 r0 = float3(Cam.v[8].x, Cam.v[9].x, Cam.v[10].x);
   float3 r1 = float3(Cam.v[8].y, Cam.v[9].y, Cam.v[10].y);
+#ifdef XFB_ORTHO
+  // A sun cascade (xfb_to_world_ortho.hlsl): orthographic, its w row is (0, 0, 0, 1) and
+  // says nothing about W, so W comes from the x, y and z rows, and w is the check.
+  float3 r2 = float3(Cam.v[8].z, Cam.v[9].z, Cam.v[10].z);
+  float3 zr = float3(Cam.v[8].w, Cam.v[9].w, Cam.v[10].w);
+#else
   float3 r2 = float3(Cam.v[8].w, Cam.v[9].w, Cam.v[10].w);
   float3 zr = float3(Cam.v[8].z, Cam.v[9].z, Cam.v[10].z);
+#endif
   float4 t = Cam.v[11];
   float3 c0 = cross(r1, r2), c1 = cross(r2, r0), c2 = cross(r0, r1);
   float det = dot(r0, c0);
@@ -43,11 +50,19 @@ void main(uint3 id : SV_DispatchThreadID) {
     [unroll] for (uint k = 0; k < 3; ++k) {
       float4 c = asfloat(Verts.Load4((tri * 3 + k) * stride));
       bool vok = finite4(c);
+#ifdef XFB_ORTHO
+      float3 b = float3(c.x - t.x, -c.y - t.y, c.z - t.z);
+      float3 p = (c0 * b.x + c1 * b.y + c2 * b.z) * inv;
+      float wc = dot(p, zr) + t.w;
+      // w must be what the matrix gives (1): a vertex of another projection is dropped.
+      vok = vok && all(abs(p) < 1e7) && abs(wc - c.w) <= 1e-3 * abs(wc) + 1e-6;
+#else
       float3 b = float3(c.x - t.x, -c.y - t.y, c.w - t.w);
       float3 p = (c0 * b.x + c1 * b.y + c2 * b.z) * inv;
       float zc = dot(p, zr) + t.z;
       // Depth written by the shader must be what the matrix gives (sky: z = 0).
       vok = vok && all(abs(p) < 1e7) && abs(zc - c.z) <= 1e-3 * abs(zc) + 1e-7;
+#endif
       w[k] = vok ? p : float3(0, 0, 0);
       ok = ok && vok;
     }
