@@ -623,12 +623,17 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
 
 void pan_pass_end(VkCommandBuffer cmd, CmdState* s) {
   if (cfg_int("pan_capture", 0) <= 0) return;
+  // The game's final, hudless HDR image is the tonemap output (FRAME_MAP
+  // step 16), before the UI composite. Streamline can present through an
+  // interposed image which is never a native render-pass attachment.
+  // Reuse the same signature as the existing tracer/Streamline fallback.
+  if (s->pass.first_fs_hash != 0xd25b8086de1734d5ull || s->pass.draw_count == 0) return;
   for (uint32_t i = 0; i < s->pass.color_count; ++i) {
     ImageRec rec{};
     {
       std::shared_lock<std::shared_mutex> lock(tracker().mu);
       auto it = tracker().images.find(s->pass.color_images[i]);
-      if (it == tracker().images.end() || !it->second.swapchain) continue;
+      if (it == tracker().images.end()) continue;
       rec = it->second;
     }
     Bg3Binding b{};
@@ -657,7 +662,7 @@ void pan_on_present(VkQueue queue) {
   if (dd->graphics_queue != queue && dd->vk.QueueWaitIdle(dd->graphics_queue) != VK_SUCCESS) pan_invalid = true;
   make_dirs(pan_dir);
   std::string manifest = "{\"version\":1,\"serial\":" + std::to_string(pan_serial) +
-      ",\"K\":16,\"samples\":[";
+      ",\"K\":16,\"final_stage\":\"native_tonemap_hudless\",\"samples\":[";
   bool first = true;
   unsigned ordinal = 0;
   for (auto& p : pan_samples) {

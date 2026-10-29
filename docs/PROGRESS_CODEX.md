@@ -1,5 +1,25 @@
 # BG3RTX progress
 
+## P1 capture continuation — 2026-10-29
+
+Resumed from the interrupted pan-flashes conversation at a0bb416. Its owned
+positive-control process finished without a build change or driver event.
+All three bursts lack final colour and are quality-INVALID despite successful
+transport. Static/slow/fast burst rates are 18.82 / 16.84 / 18.82 fps. Primary
+match windows are 99.534% / 88.044% / 30.922%. GPU conversion-camera origins in
+the fast burst match lighting origins at offset +1 throughout the ten tested
+centres; this does not prove instance-transform timing or a visible flash.
+Evidence: docs/evidence/p1-pan-a0bb416-positive.json. No renderer fix applied.
+
+The capture now reads native hudless tonemap output, using the existing tracer/
+Streamline signature. Swapchain attachments alone missed the interposed final
+path. Missing final data remains invalid. Packed HDR Inf/NaN decoding is fixed.
+All six analyzer tests and three CTests pass. First verify complete transport
+with validation, then repeat the same-run positive control at comparable fps.
+The latest user permission allows visible second-plane presentation without
+USER_AWAY; never steal focus, run with USER_PLAYING or interfere with a user game.
+FG stays off first. The automated plan restores display settings on exit.
+
 ## P1 transient shadow flashes resumed — 2026-10-29
 
 Positive control is mandatory before any renderer fix. User permits a visible

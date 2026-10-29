@@ -31,8 +31,9 @@ def decode(path, entry):
         for shift, bits in ((0, 6), (11, 6), (22, 5)):
             c = (v >> shift) & ((1 << (bits + 5)) - 1)
             e, m = c >> bits, c & ((1 << bits) - 1)
-            channels.append(np.where(e == 0, np.ldexp(m.astype('f4'), -14-bits),
-                                     np.ldexp(1 + m.astype('f4') / (1 << bits), e.astype('i4') - 15)))
+            finite = np.where(e == 0, np.ldexp(m.astype('f4'), -14-bits),
+                              np.ldexp(1 + m.astype('f4') / (1 << bits), e.astype('i4') - 15))
+            channels.append(np.where(e == 31, np.where(m == 0, np.inf, np.nan), finite))
         return np.stack(channels, -1)
     raise ValueError(f'unsupported format {fmt}')
 

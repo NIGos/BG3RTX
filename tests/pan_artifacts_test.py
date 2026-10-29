@@ -1,10 +1,33 @@
 """Synthetic temporal oracle: flash, persistent shadow, disocclusion, reprojection."""
 import unittest
+import json
+import tempfile
+from pathlib import Path
 import numpy as np
-from scripts.qa.pan_artifacts import transient, reproject, camera
+from scripts.qa.pan_artifacts import transient, reproject, camera, decode, load_burst
 
 
 class PanTests(unittest.TestCase):
+    def test_missing_final_is_invalid_even_with_complete_frame_indices(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            np.ones((2, 3), dtype='<f4').tofile(root/'depth.raw')
+            samples = [dict(name='depth', file='depth.raw', record_frame=i,
+                            submit_frame=i, width=3, height=2, format=100)
+                       for i in range(16)]
+            (root/'burst.json').write_text(json.dumps(dict(valid_transport=True, samples=samples)))
+            with self.assertRaisesRegex(ValueError, 'missing.*final'):
+                load_burst(root)
+
+    def test_packed_hdr_special_values_remain_nonfinite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'hdr.raw'
+            np.array([31 << 6, (31 << 6) | 1], dtype='<u4').tofile(path)
+            rgb = decode(path, dict(width=2, height=1, format=122))
+            self.assertTrue(np.isinf(rgb[0, 0, 0]))
+            self.assertTrue(np.isnan(rgb[0, 1, 0]))
+            np.testing.assert_array_equal(rgb[0, :, 1:], 0)
+
     def test_short_flashes_and_persistent_shadow(self):
         for duration in (1,2,3):
             a = np.ones((16,3,4),dtype='f4')

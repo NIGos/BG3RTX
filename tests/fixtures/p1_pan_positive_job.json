@@ -1,0 +1,28 @@
+{
+  "set": "preset=ultra,fg=0,headless=0,fps_cap=0,rt_stats=1,ls_stats=1,ls_k=0,ls_shadowed=1,rt_debug=0,ls_debug=0,pan_capture=0,pan_prepare=1",
+  "save": "QuickSave_3784",
+  "tree": ".",
+  "name": "p1-pan-positive-final-fg-off",
+  "traces": 0,
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tests/fixtures/p1_pan_positive_plan.json"
+  ],
+  "expect": [
+    "\\[pan\\] burst 11 complete: 16 frames, .*transport ok",
+    "\\[pan\\] burst 12 complete: 16 frames, .*transport ok",
+    "\\[pan\\] burst 13 complete: 16 frames, .*transport ok",
+    "primary-ray check",
+    "\\[auto\\] scene ready"
+  ],
+  "hold": 90,
+  "patterns": [
+    "\\[pan\\]",
+    "primary-ray check",
+    "\\[watch\\]",
+    "gpu"
+  ],
+  "timeout": 450
+}
