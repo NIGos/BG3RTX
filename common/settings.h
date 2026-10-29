@@ -382,7 +382,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_primary_check", "0"},
     {"rt_primary_epoch", "0"},
     {"crash_dump", "0"},
-    {"fg_current_destroy_only", "0"},
+    {"fg_current_destroy_only", "1"},
 };
 // 20 keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {

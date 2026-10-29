@@ -1,5 +1,15 @@
 # BG3RTX progress
 
+## P2 FG toggling: fg_current_destroy_only=1 on by default (supervisor) — 2026-10-29 18:15
+
+Cause: our FG stability guard turned DLSS-G off for ~1 s whenever the game destroyed any image
+that was ever tagged, even a retired one (current roles 0x0): every "stability-cooldown" decision
+in the logs had roles 0x0. fg_current_destroy_only=1 (Codex) resets only for current inputs; a
+retired tag still waits for the DLSS-G inputs fence before it is destroyed.
+Job sup-fg-destroy-fg2 (FG 2, Q/E rotation + static, live A/B, 50 s windows): key off 7 and 1
+FG off/on toggles, displayed/rendered 1.81 / 1.92; key on 0 and 0 toggles, 2.00 / 2.00.
+No crash or device-lost lines. User check: play with FG on; the FG indicator stays on.
+
 ## Static shadow flicker: rt_dyn_hold=4 on by default (supervisor) — 2026-10-29 18:00
 
 User report: small polygonal RT shadow patches flicker now and then with the camera still.
