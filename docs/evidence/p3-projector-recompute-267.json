@@ -1,0 +1,53 @@
+{
+  "job": {
+    "job": "p3-box-s6-projector-recompute",
+    "run": 1,
+    "start": "2026-10-29T03:02:17",
+    "sec": 291,
+    "valid": true,
+    "outcome": "Run ended: done after 219s (session s030217#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "c039f87 Verify default point-spot compatibility over 24 zero-difference reference windows | core 19:08:42",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-box-s6-projector-recompute.1.030329.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-030340"
+    ],
+    "lines": [
+      "03:05:25.596  [core] ls box: active (native lighting set 0165290000016529, dynamic offsets 2)",
+      "03:07:03.228  [core] ls box stats (120 frames): evaluated 1.319/px, shadow-mapped 0.013/px, traced 0.000/px, occluded 0.000/px, unknown 0.000/px, cookie 0.000/px; game box light 0.000% of lit luminance, removed 0.000%; projector validation px 325786862: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+      "03:07:03.228  [core] ls stats (120 frames): non-standard material px 0.1351M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.1307M px, game 0.0000, recomputed 0.0000, mean |diff| 0.00000, recompute above game 0.00000; set0/b0 _m4 (skin shaded white) 1",
+      "03:07:03.228  [core] ls validation fit (all pixels including projectors): game = 0.0000 x recomputed + 0.00000 over 2.53M lit px (mean recomputed 0.00000, game 0.00000); game where no local light reaches 0.00000 (0.06M px)"
+    ],
+    "session": "s030217#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "quality_valid": false,
+  "reason": "Reported projector game/recomputed means are zero; fx has a 1/256 raw-radiance quantum, so these counters cannot establish nonzero-signal accuracy. Not proof of black rendering.",
+  "activation_lines": [
+    "03:05:25.596  [core] ls box: active (native lighting set 0165290000016529, dynamic offsets 2)"
+  ],
+  "projector_windows": 36,
+  "last_windows": [
+    "03:06:52.131  [core] ls box stats (120 frames): evaluated 1.319/px, shadow-mapped 0.013/px, traced 0.000/px, occluded 0.000/px, unknown 0.000/px, cookie 0.000/px; game box light 0.000% of lit luminance, removed 0.000%; projector validation px 325786903: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "03:06:57.785  [core] ls box stats (120 frames): evaluated 1.319/px, shadow-mapped 0.013/px, traced 0.000/px, occluded 0.000/px, unknown 0.000/px, cookie 0.000/px; game box light 0.000% of lit luminance, removed 0.000%; projector validation px 325786918: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "03:07:03.228  [core] ls box stats (120 frames): evaluated 1.319/px, shadow-mapped 0.013/px, traced 0.000/px, occluded 0.000/px, unknown 0.000/px, cookie 0.000/px; game box light 0.000% of lit luminance, removed 0.000%; projector validation px 325786862: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%"
+  ],
+  "validation": {
+    "bytes": 193174300,
+    "message_types": {
+      "UNASSIGNED-non-acquired-swapchain-image-used": 12038,
+      "VUID-VkShaderModuleCreateInfo-pCode-08737": 1,
+      "Undefined-Value-StorageImage-FormatMismatch-ImageView": 66596,
+      "Undefined-Value-OutputNotWritten": 53,
+      "SYNC-HAZARD-READ-AFTER-WRITE": 20831,
+      "SYNC-HAZARD-WRITE-AFTER-WRITE": 47,
+      "VUID-vkCmdDraw-None-09600": 3,
+      "VUID-vkCmdWaitEvents2-pEvents-10788": 124259
+    },
+    "set3_messages": 0,
+    "raw_log": "build/p3-projector-recompute-267.validation.log"
+  }
+}

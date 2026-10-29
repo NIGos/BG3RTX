@@ -87,3 +87,13 @@ pixels. Default point/spot compatibility passes. This does not waive250's
 FULL-variant bit differences or prove boxes; first box-on native projector
 validation remains next once P1's runnable test has had queue priority.
 Evidence docs/evidence/p3-default-reference-264.json.
+
+267 /c039f87: first native box activation executes (set3,2 dynamic offsets),
+valid291s total/219s session, zero driver faults/dumps/build changes. Listed
+projector population and evaluated boxes are nonzero (last1.319 evaluations/px),
+but reported game/recomputed/error means are all0. Accuracy INCONCLUSIVE, not
+a zero-error pass: fx rounds raw pre-exposed radiance in1/256 increments while
+the native scale is0.00136865. Zero counters do NOT prove black rendering.
+Upgrade projector-only sum precision or inspect existing raw data before deriving
+accuracy; keep default off. Validation log/evidence retained. Debug4 does not
+trace shadow rays, so actual shadowing/quality is still untested.
