@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 06:22 Europe/Rome
+## Current checkpoint - 2026-10-29 06:27 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -8,12 +8,27 @@
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P3 format-aware native diagnostic290 is live on ABI9; scene289 has +0.5993% residual, cause unproved.
+- P3 format diagnostic290 narrows incompatible pixels to0.09935%; material-map291 is live, accuracy open.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
 - The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
 
 ## Resumed — 2026-10-29
+
+P3 290 execution PASS,145s/49s session, eight scene windows. All shaded receiver
+cohort2,622,259,200 pixels/15,733,555,200 bounded channels: invalid0/unbounded0,
+2,605,305 failing pixels (0.0993535%),13,986,533 violating channels, mean excess
+outside derived UFLOAT intervals3.48717637e-6Y. Raw projector-only residual is
++0.599347%; populations DIFFER, do not subtract their means to claim an exact
+explained fraction.62 controlled modules, NO whole-log refusals/faults/dumps/
+build changes. Final finite, D32F2481 nonfinite retained; full layout/push/write
+categories absent, other VVL unresolved. Evidence290 on P3; quality still OPEN.
+9beb1e1 adds material-class population/failure counts and debug4 violation map
+through existing diffuse output (red above, blue below, green invalid, cyan
+unbounded). No new ABI/resource/transport; all six ordinary shader binaries are
+identical56bcc06, five CTests/two diagnostic shaders pass.291 LIVE runner37908
+at06:26:41 after fresh idle checks. P3 source/binaries/HEAD frozen until terminal.
+
 
 P3 289 is terminal, queue INVALID: a one-time box-active message occurred before
 its scene slice. No result is retroactively passed. Nine actual scene windows
