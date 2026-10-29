@@ -46,13 +46,14 @@ def job(name,plan,seconds,post):
             'rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,pan_capture=0,pan_prepare=0,rt_scene_camera_match=0,'
             'rt_scene_rebase=0,fg_current_destroy_only=0,rt_primary_check=1,rt_primary_epoch=1,crash_dump=1,'
             'fg_state_every=30,rt_timing_frames=120,dump_images=1,dump_png_width=1280,dump_raw=0,dump_max_mb=1024',
-        args=['-RealPresent','-Foreground','-Move','-MovePlan','tests/fixtures/'+plan],
+        window_mode='visible_unfocused_fg',
+        args=['-RealPresent','-Move','-MovePlan','tests/fixtures/'+plan],
         patterns=['primary-ray check','rt epoch','rt passes','rt cost scope',r'\[watch\]',r'\[sl\]',r'\[trace\]','gpu RR:',
             'hybrid GI','ls stats','rf stats','material classes',r'\[crash\]'],
         expect=[r'\[auto\] scene ready',r'\[crash\] exception diagnostics active independently of FG; minidump armed',
             'DLSS-G supported on this adapter: ok','slDLSSGSetOptions\\(mode on','slDLSSGSetOptions\\(mode off','rt epoch','primary-ray check'],
         forbid=[r'\[crash\] exception 0x','VK_ERROR_DEVICE_LOST'],
-        expect_runner=[r'\[motion-plan\] pointer centred',r'\[motion-plan\] complete phases=',r'^Run ended: done'],
+        expect_runner=[r'\[motion-plan\] posted pointer centre',r'\[window-mode\] visible_unfocused:',r'\[motion-plan\] complete phases=',r'^Run ended: done'],
         post_gate=True,post=post)
 
 

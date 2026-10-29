@@ -1,5 +1,16 @@
 # BG3RTX progress
 
+## Authorized live FG matrix, no focus forcing — 2026-10-29 14:46
+
+Read `D:/BG3_Tools/USER_STEERING.md`, including both 13:57 entries and the
+14:29 authorization. The current user instruction supersedes USER_AWAY waiting:
+run the queued pair now unless USER_PLAYING or an unowned game exists. Neither
+is present. `visible_unfocused_fg` preserves the planned FG 2/0 values with real
+presentation and non-activating startup/placement. It never calls a focus setter.
+The default `visible_unfocused` mode still forces FG off; the new explicit mode
+does not. Actual generated presentation is still required for a quality pass.
+Twenty-six policy/geometry checks pass. No renderer/default-key change.
+
 ## P1 now decided by FG ON; paired jobs prepared — 2026-10-29
 
 FG `2` with real focused presentation is the MAIN deciding configuration.

@@ -42,4 +42,10 @@ $empty=[BG3RTX.UnfocusedWindow+Rect]::new(100,0,50,100)
 Check ([BG3RTX.UnfocusedWindow]::RemainingArea($empty,$none) -eq 0) 'off-monitor empty clip'
 Check ([BG3RTX.UnfocusedWindow]::ShowNoActivate -eq 4 -and ([BG3RTX.UnfocusedWindow]::NoActivatePositionFlags -band 0x10)) 'non-activating API constants'
 Check (-not [BG3RTX.UnfocusedWindow].GetMethod('SetForegroundWindow')) 'no focus-setting native method'
+$fgJob=ConvertTo-QueueWindowJob ([pscustomobject]@{window_mode='visible_unfocused_fg';args=@('-Foreground');set='fg=2'})
+Check ($fgJob.args -contains '-UnfocusedFG' -and $fgJob.set -notmatch 'fg=0') 'authorized FG mode preserves FG on'
+Check ((Set-UnfocusedIniLines @('fg=2','headless=1') -PreserveFG) -contains 'fg=2') 'live FG phases preserved'
+$otherScratch=Join-Path $env:TEMP ('bg3-fg-authorized-'+[guid]::NewGuid().ToString('N'))
+Check (-not (Get-QueuePermissionBlock $fgJob $otherScratch)) 'explicit authorization no longer needs USER_AWAY'
+Check ((Get-QueuePermissionBlock $fgJob $scratch) -match 'USER_PLAYING') 'playing still blocks authorized FG mode'
 Write-Host "$count unfocused policy/geometry checks passed; no process or window methods invoked"

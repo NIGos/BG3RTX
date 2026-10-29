@@ -3,11 +3,13 @@
 Read AGENTS.md, then the top of PROGRESS_CODEX.md. No Ponytail or subagents.
 Latest steering: the user sees the bug only with FG ON. fg=2, real focused
 presentation is the MAIN deciding configuration; fg=0 is reference only.
-USER_STEERING.md (two entries at 13:57) was not found in this checkout, other
-Code Projects or .codex/worktrees. A path question is pending. Apply the explicit
-requirements restated in the user's message; do not claim the file was read.
+Read D:/BG3_Tools/USER_STEERING.md, both 13:57 entries and 14:29 authorization.
+Latest user instruction: do NOT wait for USER_AWAY; run the queued pair now
+with real presentation, FG active, visible non-activating launch. Skip only
+USER_PLAYING or an unowned game. New window_mode=visible_unfocused_fg preserves
+FG 2/0 while avoiding focus setters; actual FG generation still decides validity.
 
-No game launched in this continuation. USER_AWAY is absent. Jobs stay queued.
+USER_AWAY is absent but no longer required for this explicitly authorized mode.
 USER_PLAYING or an existing user game blocks execution. Never create USER_AWAY.
 No source/binary/HEAD changes while an actual game job runs. Never hold results.md
 open. Only scripts/test-queue.ps1 launches games. Restore display settings.

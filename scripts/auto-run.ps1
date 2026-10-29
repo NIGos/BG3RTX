@@ -38,6 +38,8 @@ param(
   [switch]$Foreground,
   # Visible, real-present owned window behind other windows; never activate it.
   [switch]$NoActivate,
+  # Explicit 2026-10-29 user authorization: preserve FG and do not wait for USER_AWAY.
+  [switch]$UnfocusedFG,
   # Hold a camera-pan key (default D) once gameplay is reached, so the
   # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
   [switch]$Move,
@@ -101,6 +103,7 @@ $ErrorActionPreference = "Stop"
 $ModWarnDiagTraces = 5   # "trace" steps in $mwSteps (below)
 # "powershell -File" passes "-Set a=1,b=2" as one string: split it.
 $Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ })
+if ($UnfocusedFG) { $NoActivate=$true }
 if ($NoActivate) {
   if ($Foreground -or $KeepRunning -or $Session) { throw '-NoActivate conflicts with -Foreground, -KeepRunning and -Session' }
   $Background=$true; $RealPresent=$true
@@ -110,7 +113,7 @@ $markerRoot = if ($env:BG3RTX_QUEUE_ROOT) { $env:BG3RTX_QUEUE_ROOT } else { $roo
 $playingMarker = Join-Path $markerRoot 'captures\queue\USER_PLAYING'
 $awayMarker = Join-Path $markerRoot 'captures\queue\USER_AWAY'
 if (Test-Path -LiteralPath $playingMarker) { throw 'USER_PLAYING exists; no launch' }
-if (($Foreground -or $NoActivate) -and -not (Test-Path -LiteralPath $awayMarker)) { throw 'Presented foreground/unfocused mode requires USER_AWAY; no launch' }
+if (-not $UnfocusedFG -and ($Foreground -or $NoActivate) -and -not (Test-Path -LiteralPath $awayMarker)) { throw 'Presented foreground/unfocused mode requires USER_AWAY; no launch' }
 $caps = Join-Path $root "captures"
 New-Item -ItemType Directory -Force $caps | Out-Null
 . (Join-Path $PSScriptRoot "gamelock.ps1")
@@ -218,7 +221,7 @@ function Focus-Game {
     $script:unfocusedChecks++
     $script:unfocusedVisibleMin=[Math]::Min($script:unfocusedVisibleMin,$pixels)
     if ($script:unfocusedChecks -eq 1 -or $script:unfocusedChecks % 60 -eq 0) {
-      Write-Host "[window-mode] visible_unfocused: hwnd=$h visible_client_pixels=$pixels checks=$script:unfocusedChecks real_present=1 fg=0 input=PostMessage"
+      Write-Host "[window-mode] visible_unfocused: hwnd=$h visible_client_pixels=$pixels checks=$script:unfocusedChecks real_present=1 preserve_fg=$UnfocusedFG input=PostMessage"
     }
     return
   }
@@ -343,7 +346,7 @@ if ($ensure) { py -3 -I $ensure }
 $lines = @("# auto-run.ps1 overrides, layered over bg3rtx.ini ($runMode run)") + @("auto_trace=1", "auto_traces=$Traces") +
          @(if (-not $RealPresent) { "headless=1", "fg=0" }) +   # headless test runs: no frame generation unless asked
          @(if ($Save) { "auto_min_draws=400", "auto_after_load=1" }) + $Set   # other scenes draw far fewer than the foundry (Rivington ~1240)
-if ($NoActivate) { $lines=Set-UnfocusedIniLines $lines }
+if ($NoActivate) { $lines=Set-UnfocusedIniLines $lines -PreserveFG:$UnfocusedFG }
 $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
 if ($UserIni) { $env:BG3RTX_USER_INI = (Resolve-Path $UserIni).Path } else { $env:BG3RTX_USER_INI = "none" }
@@ -561,7 +564,7 @@ while ((Get-Date) -lt $deadline) {
   if (Test-Path -LiteralPath $playingMarker) {
     $result = 'user playing marker; test stopped'; break
   }
-  if (($Foreground -or $NoActivate) -and -not (Test-Path -LiteralPath $awayMarker)) {
+  if (-not $UnfocusedFG -and ($Foreground -or $NoActivate) -and -not (Test-Path -LiteralPath $awayMarker)) {
     $result = 'USER_AWAY removed; test stopped'; break
   }
   if ((Get-Date) -ge $nextOwnershipCheck) {
@@ -618,7 +621,7 @@ while ((Get-Date) -lt $deadline) {
             $iniLines += $assignment
           }
         }
-        if ($NoActivate) { $iniLines=Set-UnfocusedIniLines $iniLines }
+        if ($NoActivate) { $iniLines=Set-UnfocusedIniLines $iniLines -PreserveFG:$UnfocusedFG }
         $iniLines | Set-Content -LiteralPath $ini
         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) set=$($step.set) foreground=$Foreground real_present=$RealPresent visible_unfocused=$NoActivate"
         $panCaptureSent = $true

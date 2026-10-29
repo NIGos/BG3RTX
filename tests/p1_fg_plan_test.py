@@ -20,8 +20,8 @@ class FGPlanTest(unittest.TestCase):
     def test_fg_is_cold_loaded_on_and_reference_does_not_use_unfocused(self):
         jobs=[json.loads((ROOT/f'tests/fixtures/p1_fg_{name}_job.json').read_text()) for name in ('static','motion')]
         for job in jobs:
-            self.assertIn('fg=2',job['set'].split(',')); self.assertIn('-Foreground',job['args']); self.assertIn('-RealPresent',job['args'])
-            self.assertNotIn('-NoActivate',job['args']); self.assertNotIn('window_mode',job)
+            self.assertIn('fg=2',job['set'].split(',')); self.assertNotIn('-Foreground',job['args']); self.assertIn('-RealPresent',job['args'])
+            self.assertEqual(job['window_mode'],'visible_unfocused_fg')
             self.assertTrue(job['post_gate'])
             for key in ('patterns','expect','expect_runner','forbid'):
                 for pattern in job[key]: re.compile(pattern)
