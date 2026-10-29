@@ -7,13 +7,26 @@
 - Geometry runs 265–266 are INVALID because base passes lacked origin binding 40.
 - The shared layout/write fix passes 12 CTests and 24 ABI checks; runtime 269 has no layout/push/write errors.
 - Probes 268–269 measure zero current ray/projection offset PRE and POST; native positions stay unchanged.
-- P1 7433185 prepares independent POST sampling without extra rays; job 271 is the corrected same-build stream-0 baseline.
+- P1 7433185 prepares independent POST sampling without extra rays; baseline 271 is complete and job 272 tests stream 3 on the same build.
 - P3 default reference passes: 24 windows, 7.845 billion pixels, zero differences.
 - P3 activation works, but even precise counters report no positive lighting signal; a GI-off/native-AO control is prepared.
 - EN2/D-EM stay off; P4 has a tested CPU classifier, while GPU integration and P5 remain open.
 - One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
 
 ## Resumed — 2026-10-29
+
+271 corrected-binding, stream-0 baseline: valid 200 s, no faults/dumps/build
+changes; static max shift 0.08 px, finite/pose/alpha pass. All six off frames
+match original PRE RGB bit-for-bit. Off/on +1.1048% has a broad paired interval
+including zero, but pooled POST/PRE +0.6630% FAILS the stricter target (95% CI
+[+0.000035013,+0.000193181] Y); all on captures are +1.03..1.77% versus PRE.
+This is VALID evidence after the binding correction, unlike 265/266.
+272 LIVE on identical frozen 7433185 binaries/HEAD, stream 3 enabled, otherwise
+same twelve-capture surface-gate AB/BA job. Original-PRE/mean/alpha gates remain;
+no brightness factor or relaxed threshold. The 271 evidence is temporarily
+untracked on P1 to retain the exact same HEAD; commit both after 272 terminates.
+P3 native-AO probe is ready after runnable P1 tests; zero-signal 270 proves no
+accuracy and remains invalid. P3 head 3379d60, no production/default change.
 
 269 corrected-binding validation passes its full layout/push/write audit: valid
 112 s, zero driver faults/dumps/build changes, all 15 cases and current projection

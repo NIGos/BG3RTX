@@ -35,11 +35,9 @@ codex/p1-pan: en2-selfcheck/BG3RTX 7433185, pushed, paired ABI14. All research
 keys0. Main has no P1 feature. Existing B2/B5 and PRE pose pins through actual
 submission are reused; no new camera transport. Metadata GPU token, depth AND
 world-normal checks guard actual integer colour texel, not unused neighbours.
-Camera fixture uses SDL client units; StaticCamera initializes event-owned cursor.
-Normal play/physical input untouched; queue hides the real-present moving game.
+QA uses SDL client units/event cursor initialization; real-present movement stays hidden.
 
-Old current-radiance replay remains off; docs/CURRENT_RADIANCE.md. Surface-gate
-history and point-footprint evidence: docs/GI_HISTORY_SURFACE_GATE.md. Old242/243
+Old replay stays off: CURRENT_RADIANCE.md. Surface history: GI_HISTORY_SURFACE_GATE.md. Old242/243
 loses71.8–99.9% bounce energy;249 point-load still-70.66%/-87.96%, alpha identical.
 248 moving residual improves but cohortY-97.29%: no win. Do not reuse these as
 quality passes. Cohort grew from0.08% to13.4%/7.15%; no arbitrary threshold added.
@@ -96,9 +94,10 @@ native ray_at positions. Do not infer old-matrix/MV convention from that alone.
 Self-test2 uses reserved row12 with exact24-bit packed fields; no new camera data.
 7433185 default-off gi_history_fresh_independent separates POST stream3 from
 PRE stream0, addressing possible nested-sample correlation without extra rays,
-images/weights/AO/camera change.271 LIVE frozen corrected static12 with key0.
-Then SAME build static12 key1 (fixture gi_fresh_independent_static_job.json),
-report both CIs/power and saved alpha; control RGB differs intentionally by RNG.
+images/weights/AO/camera change.271 valid200s/alpha/static0.08px, off RGB exact. PRE target FAILS +0.6630%
+(CI excludes0); on +1.03..1.77%.272 LIVE SAME frozen7433185 build with key1.
+271 evidence is untracked to keep HEAD identical; commit both AFTER272 terminal.
+Report CIs/power and saved alpha; control RGB differs intentionally by RNG.
 Only then ONE moving gate toggle as evidence permits. GI_FRESH_INDEPENDENT.md.
 Keep active checkout source/binaries frozen. Recheck user-playing/processes/queue
 before every launch. P1 active offline while P3 ran; next runnable P1 gets priority.
@@ -128,7 +127,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 codex/p3-box b3c42dc (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. Native-AO probe prepared (GI0, box1/debug4,35s); no accuracy claim. Shadow rays/quality untested; no merge.
+- P3 codex/p3-box 3379d60 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. Native-AO probe prepared (GI0, box1/debug4,35s); no accuracy claim. Shadow rays/quality untested; no merge.
 - P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.
