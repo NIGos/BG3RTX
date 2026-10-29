@@ -31,11 +31,8 @@ Remote: origin, private NIGos/BG3RTX. Preserve all snapshot tags and backups.
 Old pre-rewrite SHAs can be translated with
 D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history again.
 
-Research code/evidence is in the managed pan-motion-vectors/BG3RTX worktree.
-Its current head before this handoff update is 929be7a, plus the earlier hider
-fix 850e06a. Keep that work recoverable while creating the fresh phase branch.
-The camera agent is developing a guarded native-camera follow-up in
-motion-jitter/BG3RTX, branch codex/camera-native. Import only what P1 needs.
+Old research is preserved at pan-motion-vectors/BG3RTX 929be7a; camera-native
+53f0925 is in motion-jitter/BG3RTX. Import only needed work, no unrelated FG.
 
 ## P1 — Pan instability
 
@@ -45,22 +42,13 @@ Old static S3 candidate 03679ed fails: GI 172.938 per mille, mean 0.001258 PQ
 against 0.000978. Details in PROGRESS_CODEX. Those fixed-camera scores and
 independent moving trajectories cannot establish a P1 improvement.
 
-Already established in research:
-- Offscreen/NaN/Inf owned-motion GPU tests fall back to fresh GI samples exactly.
-- Full-resolution radiance/depth writer pairs match the exact bound game depth.
-- Static/moving camera transport works; movement is observed in GPU camera position.
-- Full additional native camera payload is still absent, so its verdict is inconclusive.
-- An introduced private metadata write hazard was fixed by nonoverlapping ranges.
-- Static/moving repeats on 929be7a pass their queue checks (116 / 126 s), with no faults and zero messages naming 3,255 / 3,345 logged private handles.
+Old research proves owned-motion nonfinite fallback, paired depth/radiance and
+observed camera motion. A private metadata overlap hazard was fixed. It does
+not prove pan quality or the unavailable additional native camera payload.
 
 Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now bc8cea0, pushed. It excludes
-unrelated FG work. Current-radiance 3c7b411 is default-off, paired ABI14; scope
-and old static evidence: phase docs/CURRENT_RADIANCE.md and main PROGRESS_CODEX.
-c428cde fixes a recursive tracker shared-lock. Smoke proves GPU-valid pose,
-changed RGB, exact PRE alpha, nine complete finite writers. Production repeat:
-79 s, zero events, 1,200 accepted/zero rejected. Static off control 226:
-GI 150.059 per mille, mean 0.000988 PQ (limit 0.000978), one NV153 also with
-candidate off. No moving quality improvement is established for that hypothesis.
+unrelated FG work. Old current-radiance replay is default-off, paired ABI14;
+scope/evidence: phase docs/CURRENT_RADIANCE.md. No pan-quality win established.
 Latest user steering: STOP cross-run image comparisons. Use a per-run reprojection
 residual or alternate the key within ONE moving run. Do not block on AO counters;
 compare their key-off control on the same build and obtain the pan number.
@@ -71,9 +59,8 @@ before bounce reuse. Metadata52 is paired with radiance; a CPU-zero initial toke
 is consumed by PRE and republished only by paired POST. Existing ABI14 pins
 private resources; geometry math remains native. No new camera transport.
 11 CTests, 45 shaders, 20 ABI checks and seven byte-identical ordinary shaders pass.
-Smoke 242: eleven GPU predicate cases pass twice and captured alpha matches over
-2,731,520 pixels each, but aggregate AO counters differ. 243 repeats that issue
-with native geometry math. Both have zero events/dumps. Do not block the pan.
+242/243: eleven GPU cases pass, saved alpha matches, aggregate AO counters differ;
+native geometry repeat confirms it. Zero driver events/dumps; do not block the pan.
 gi_pan_metric=0 now measures RR GI against paired previous GI with native B2/B5
 camera reprojection, round-trip validation, static-compatible depth/normal/MV
 filtering and a rotating 4x4 diagnostic grid. GPU buckets separate off/on even
