@@ -22,6 +22,19 @@ moved', '[rt] scene wait' (timeouts, skipped), '[alpha] ... held records dropped
 - Fix 4 (c09dff9): after 8 rt_scene_wait timeouts the wait paused up to 64 frames, so the RT
   passes traced the previous frame's scene for about a second. Static inn job: 16 timeouts and
   96 skipped per 600 frames, previous-frame TLAS in 50 of 300. A recent build now ends the pause.
+- Live (user away, 00:30-00:55), sun buffer: 'leak' = applied lit where the game is dark,
+  'dark' = applied dark where the game is lit. Roof sun shadows (rt_cascade_casters=1):
+  * Black squares / false sun shadows: solid alpha-tested cascade casters (tree and vine
+    cards). View over the inn roof: dark 17.5% (alpha 1) -> 2.7% (alpha 0); casters off 2.6%.
+    rt_cascade_alpha default 0.
+  * Sun leaking into the inn (window-shaped patches): trust 1 dropped the roof volumes and the
+    shutters/glass are alpha-tested (skipped). Leak 4.5% (trust 1) -> 0.14% (trust 0); casters
+    off 0.12%. rt_cascade_roofs_trust default 0 (roof volumes stay, cascade adds occluders).
+  * rt_scene_wait: 0 skipped after fix 4; timeouts 4-6 per 600 frames at 8 ms (max wait 10 ms):
+    rt_scene_wait_ms default 12.
+- Tree flicker with in-world UI: Shift-held labels do not raise foliage frame-to-frame change
+  (final, static: 1.5-1.8% with labels, 2.4-4.3% without); gi_rt=0 and rt_shadows=0 do not
+  lower it. Static runs vary 1.8-6.1% with nothing changed (wind). Open: needs motion runs.
 - Cost noted: with 'Full + shadowed lights' the local-light pass is 9-10 ms GPU in the inn's upper
   floor (S7 view 1.3-3.4 ms); stats say local shadows remove 85% of lit luminance there (S7 6%).
   To check: few very bright lights inside their fixtures?
