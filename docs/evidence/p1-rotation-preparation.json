@@ -2,10 +2,12 @@
   "date": "2026-10-29",
   "branch": "codex/p1-pan-flashes",
   "implementation_base": "314840d",
+  "rotation_preparation_commit": "da4b64d",
   "main_unchanged": "58b06b4",
   "abi": 16,
   "runtime": {
     "live_jobs_this_continuation": 0,
+    "queued_pending_jobs": ["captures/queue/pending/001-p1-rotation-preflight.json", "captures/queue/pending/002-p1-rotation-origin-ab.json"],
     "user_away_at_preparation": false,
     "rotation_gate": "NOT MEASURED",
     "policy": "Foreground requires USER_AWAY; USER_PLAYING or existing user game blocks launch. No override.",

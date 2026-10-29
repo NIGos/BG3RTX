@@ -11,13 +11,14 @@ The older permission to test while the user works no longer applies.
 Use C:/Users/quali/Documents/Code Projects/BG3RTX explicitly.
 Branch codex/p1-pan-flashes; main remains 58b06b4. No experimental merge.
 314840d implements default-off rt_scene_rebase. 5c0057a records its incomplete
-pan gate. The following rotation preparation is kept on this branch only.
+pan gate. da4b64d contains the pushed rotation preparation on this branch only.
 Host/core remain paired ABI 16; rebuild both for the FG-independent crash logger.
 Six CTests pass. Ordinary 21 shader binaries remain byte-identical to baseline;
 20 rebase variants validate. Diagnostic keys default off.
 
 No live game was launched during rotation preparation. Two queue jobs are
-prepared: p1-rotation-preflight, then p1-rotation-origin-ab. They must stay
+pending: 001-p1-rotation-preflight.json, then 002-p1-rotation-origin-ab.json in
+captures/queue/pending/. They must stay
 pending until USER_AWAY exists. Start only through scripts/test-queue.ps1.
 No display settings were changed during preparation.
 

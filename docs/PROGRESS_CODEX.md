@@ -2,8 +2,10 @@
 
 ## P1 rotation gate prepared; waiting for USER_AWAY — 2026-10-29
 
-No live game jobs ran in this continuation. `USER_AWAY` is absent. Two jobs are
-prepared for the queue: `p1-rotation-preflight`, then `p1-rotation-origin-ab`.
+Implementation `da4b64d` is committed and pushed. No live game jobs ran in this
+continuation. `USER_AWAY` is absent. Two jobs are pending under
+`captures/queue/pending/`: `001-p1-rotation-preflight.json`, then
+`002-p1-rotation-origin-ab.json`.
 The latter requires a successful preflight from the same build. Foreground
 authorization fields cannot bypass the marker; `USER_PLAYING` blocks launch.
 Rotation result: NOT MEASURED. No merge, promotion or in-game check request.
