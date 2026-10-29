@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 06:40 Europe/Rome
+## Current checkpoint - 2026-10-29 06:45 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -8,12 +8,31 @@
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P3 map291 confirms0.09991% incompatible receivers; corrected P1 exposure control293 is live.
+- P1 held exposure293 still fails PRE energy; isolated legal QA-hold fix is under validation294.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
 - The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
 
 ## Resumed — 2026-10-29
+
+293 valid execution210s/142s scene session confirms legal exposure writes:
+0 hold usage errors/refusals; held EV13.0522 matches both probes after472/1072
+successful writes. All12 captures/dumps finite, saved alpha exact, pose valid,
+static<=0.54px. All SIX gate-off controls are bit-identical RGB to original PRE.
+Original PRE consistency still FAILS+0.595469%,95%Y CI[+0.0000262039,+0.000185806].
+Paired gate on/off-0.0694147% has CI[-0.000774917,+0.000750046], half width4.26%
+of offY: includes0 but NOT equivalence. Exposure variation alone is insufficient;
+no new transport/compensation/brightness tuning or GI promotion. Full layout/
+push/write categories absent; other VVL unresolved. P1 evidence/spec d9cb628 pushed.
+
+The QA fix is isolated from ALL P1/P3 work on codex/qa-exposure-hold6523aaa
+(stable main ABI8, worktree qa-exposure-hold/BG3RTX): cherry-pick4941657 of5f84d9b
+plus smoke fixture. Full build/3 CTests/32 shader files/all QA detectors pass.
+294 LIVE runner17296 at06:44:18 after fresh idle checks, two scene-only held
+captures/full VVL. Freeze isolated tree; inspect actual held probes, no refusal/
+usage errors and finite output before merge-green. This improves the test suite,
+not production lighting. Temporary worktree should be archived after integration.
+
 
 P1 292 is INVALID despite a superficial statistical pass. The pre-existing
 qa_exposure_hold used CmdUpdateBuffer on a native STORAGE_BUFFER without

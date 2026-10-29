@@ -24,7 +24,7 @@ Fresh limits confirmed0% used/ordinary usage allowed. Never retry the successful
 Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan bfb723b, pushed, paired ABI14.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan d9cb628, pushed, paired ABI14.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b913e8e, paired ABI9, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
@@ -33,21 +33,21 @@ D:/BG3_Tools/git_backup/commit-map-old-to-new.txt. No unrelated FG imports.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Live job and immediate next action
-293 LIVE frozen P1 bfb723b, paired ABI14. Runner308 started06:40:14.
-Fresh launch checks found no user marker, game/runner or pending/running jobs.
-292 INVALID: pre-existing exposure hold used CmdUpdateBuffer on STORAGE-only
-native buffer (1262 dstBuffer-00034 violations). Apparent statistical pass is NOT
-valid; broad CIs and exact off controls cannot waive an invalid write.
-5f84d9b fixes the QA hold with a1-thread storage shader on ACTUAL dispatch target,
-24-byte/type checks, existing descriptor12/push/ring and compute barriers/restore.
-No new ABI/resource/transport; key0 unchanged.12 CTests, all11 post entries compile,
-10 previous entry binaries identical3d411aa. Separate fix/evidence commits pushed.
-293 repeats12 static AB/BA captures, scene-only hold/15s warmup, production GI/AO1.
-Require no hold REFUSED/update-usage errors, actual held probes, static/finite/
-saved alpha and paired/original-PRE intervals. Freeze P1 until terminal.
-P3 291 terminal:0.0999107% format-incompatible over2.950B receivers, mean outside
-excess3.50383e-6Y. Mostly standard/skin, sparse red rim/detail points; cause open.
-Native accuracy, cookie/unknown-pair/moving gates OPEN. Other VVL unresolved.
+294 LIVE frozen isolated QA tree qa-exposure-hold/BG3RTX, codex/qa-exposure-hold
+6523aaa, paired stable ABI8. Runner17296 started06:44:18 after fresh idle checks.
+It contains ONLY legal QA-hold fix4941657 (cherry-pick5f84d9b) + smoke fixture;
+no P1/P3 features. Full build/3 CTests/32 shaders/QA pass. Two scene-only held
+captures/full VVL must prove no refusal/usage error, held probes and finite output.
+If those scoped gates pass, merge ONLY this branch through merge-green; push
+main/branch and archive this temporary worktree (preserve needed ignored files).
+293 P1 corrected hold executes210/142s:0 hold usage errors/refusals, held probes
+EV13.0522, all dumps finite/alpha exact/static<=0.54px, SIX off controls RGB-exact.
+Original PRE still FAILS+0.595469%,95%Y CI[+2.62039e-5,+1.85806e-4]. Paired
+on/off-0.0694% CI spans0 with4.26%-of-off half width, NOT equivalence.
+Exposure alone is insufficient; no compensation/brightness tuning/GI promotion.
+Other VVL unresolved; full layout/push/write categories absent. Evidence293 on P1.
+292 INVALID transfer write evidence retained. No valid statistical pass from292.
+P3 291:0.0999107% format-incompatible over2.950B receivers; cause/quality open.
 One reset consumed at weekly100%; fresh quota0% confirmed, credits0.
 
 ## P1 - pan instability remains OPEN
@@ -93,17 +93,10 @@ Push32768, stats20, Q24 sums with uint64 carries;201 counters. Receiver-bin
 population uses actual dimensions/ray count; invalid inputs are reported, not capped.
 No source/output/visibility/weight/camera change. Modes1-3 keep their old probes.
 Build12 CTests/24 ABI pass; seven ordinary GI/RF shaders are byte-identical.
-282 initial run INVALID:9 failures/9.094M replacements, invalid0; reasons close.
-Mixed weighted old/freshY0.004275577/0.004360368. Full layout/push/write categories
-absent; other VVL categories UNRESOLVED, never claim globally clean validation.
-Off capture has53 RGB differences (+0.00353% mean): no exact control parity claim.
-On+1.908% versus PRE. c3b924f restores original selection condition and measures
-failure energy before quantization: unlit zero-old samples differ from lost
-positive bounces. No return/fallback is changed just to make an expect pass.
-284 FAILS that distinction: unlit old energy is positive (up to6.73e-9), but
-not the main positive drift1.40e-4. Off45/54 RGB differences remain; no parity
-waiver. On+0.859/+0.688% PRE; full layout/push/write audit passes, other VVL
-unresolved. Next gi_strength0 static12 isolates recursion, not a production fix.
+282/284 source-attribution runs retain tiny positive unlit losses and positive
+source drift.284 failure energy<=6.73e-9 versus total+1.40e-4; not the main cause.
+See GI_REJECTED_SOURCE_ENERGY.md/evidence for control parity, exact reasons and
+all VVL limitations.286 recursion-off and293 held exposure still fail PRE energy.
 
 P1 candidate is parked, not approved: PAUSED.md, GI_FRESH_FALLBACK.md,
 GI_DIFFUSE_EXACT.md, GI_GEOMETRIC_NORMAL.md, GI_FRESH_INDEPENDENT.md,
