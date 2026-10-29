@@ -185,3 +185,9 @@ projector evaluations and shadow rays. They do not require a guessed cookie
 population: inspect actual cookie counts and keep that requirement open if
 absent. Both saves are recorded loadable in main captures/scene-sweep.json;
 no mods/saves are changed. P1 existing-key AO-source isolation runs first.
+
+281 S7 INVALID at startup: game exits2s after launch, before any new layer log
+or scene-ready marker; zero driver faults/dumps. No box/lighting/cookie result.
+Historical loadability is not current runtime proof. Keep the raw startup output;
+no save/mod change or feature-bug attribution. Try S5 after runnable P1 work;
+a bounded S7 retry may distinguish transient startup from a persistent case.

@@ -1,0 +1,24 @@
+{
+  "job": {
+    "job": "p3-box-s7-shadow-coverage",
+    "run": 1,
+    "start": "2026-10-29T05:02:19",
+    "sec": 4,
+    "valid": false,
+    "outcome": "INVALID (missing: ls box: active | ls box stats \\(120 frames\\): evaluated (?!0\\.000)\\d+\\.\\d+/px, shadow-mapped \\d+\\.\\d+/px, traced (?!0\\.000)\\d+\\.\\d+/px); Run ended: session did not start: Run ended: game exited after 2s (exclusive)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "3075e38 Cover actual projector shadow populations in the remaining required scenes | core 03:26:21",
+    "build_changed": false,
+    "log": null,
+    "captures": [],
+    "lines": [
+      "INVALID: expected log lines not found: ls box: active | ls box stats \\(120 frames\\): evaluated (?!0\\.000)\\d+\\.\\d+/px, shadow-mapped \\d+\\.\\d+/px, traced (?!0\\.000)\\d+\\.\\d+/px"
+    ],
+    "session": "failed",
+    "core_gen": null,
+    "saved_sec": 0
+  },
+  "startup_output": "Waiting for the game lock (exclusive)...\nRun mode: exclusive (lock at 2026-10-29T05:02:19.8590355+01:00)\ngraphicSettings.lsx: ok\ngraphicSettings.lsx: Fullscreen added=0, FakeFullscreenEnabled added=1\nSave: Nhero-152012611716__The Blushing Mermaid - 96h 08m\nLaunching D:\\SteamLibrary\\steamapps\\common\\Baldurs Gate 3\\bin\\bg3.exe -loadSaveGame \"Nhero-152012611716__The Blushing Mermaid - 96h 08m\" with VK_LAYER_BG3RTX_host\nGame pid 39636\nRun ended: game exited after 2s (exclusive)\ngraphicSettings.lsx: Fullscreen removed, FakeFullscreenEnabled removed\nGame lock held 3s (released at 2026-10-29T05:02:22.7553570+01:00)\n",
+  "interpretation": "Startup coverage INVALID: game exited2s before a new layer log or scene-ready marker. No feature/scene/cookie/quality result; no driver event/dump. Scene was loadable in historical sweep; do not modify saves/mods or infer a box defect without new evidence."
+}
