@@ -31,7 +31,7 @@ Fixed-camera scores and cross-run moving images cannot close P1. Use exact
 reprojection residuals or live off/on in ONE moving session. Do not block on
 AO counters: saved PRE alpha and same-build key-off controls are authoritative.
 
-codex/p1-pan: en2-selfcheck/BG3RTX 07b3ebe, pushed, paired ABI14. All research
+codex/p1-pan: en2-selfcheck/BG3RTX bd6f6d2, pushed, paired ABI14. All research
 keys0. Main has no P1 feature. Existing B2/B5 and PRE pose pins through actual
 submission are reused; no new camera transport. Metadata GPU token, depth AND
 world-normal checks guard actual integer colour texel, not unused neighbours.
@@ -98,10 +98,14 @@ FAIL static energy parity: stream0 POST/PRE+0.6630%; stream3+0.8620% and gate
 on/off+1.4178% (both272 CIs exclude0). Saved alpha exact, camera<=0.10px.
 Independence alone is insufficient. Evidence committed a999f5d and pushed. Do not claim an energy or moving quality win. Full details:
 GI_FRESH_INDEPENDENT.md. Next old-camera/MV check reuses existing B2/B5.
-274 LIVE frozen07b3ebe: selftest3 compares previous-camera/nativeMV via existing
-B2/B5/MV17, reserved row12 only;12 CTests/24ABI pass.
-273 GI0 still has zero input: debug4 prep forces AO0, nativeflags1 suppress
-direct. P3e9a73d5 prepares debug6/AO1 positive control (includes ambient).
+274 valid117s: ground canonical MV/jitter agrees~0.002px, animated tent limits
+joint inference; no layout/push/write errors. No camera change justified.
+276 ONE moving AB/BA valid109s: residual+20.95%, Y+44.51%, motion+78.03%,
+coverage3.856/2.646%; unequal cohorts prevent causal claims. No quality win;
+static energy fails. Candidate parked in PAUSED.md; goal stays active. Next
+inspect native direct-AO/capped give-back at visibility0 using existing data/keys.
+275 P3 AO1 control PASS positive signal3.236B samples/invalid0; ambient remains.
+277 LIVE frozenP3 6184517: ONE short AO1 box0/1 marginal-light check.
 Keep active checkout source/binaries frozen. Recheck user-playing/processes/queue
 before every launch. P1 active offline while P3 ran; next runnable P1 gets priority.
 
@@ -130,7 +134,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 codex/p3-box e9a73d5 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. 273 GI0 still zero: debug4 forces AO0. Debug6/AO1 signal control ready; no accuracy claim. Shadow rays/quality untested; no merge.
+- P3 codex/p3-box 6184517 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. 273 GI0 still zero because debug4 forces AO0;275 AO1 positive3.236B/invalid0.277 marginal A/B LIVE; ambient prevents total-accuracy claim. Shadow rays/quality untested; no merge.
 - P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.

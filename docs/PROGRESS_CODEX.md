@@ -1,15 +1,15 @@
 # BG3RTX progress
 
-## Current checkpoint — 2026-10-29 04:37 Europe/Rome
+## Current checkpoint — 2026-10-29 04:45 Europe/Rome
 
 - Main rendering remains 6dba0a8; the P6 water design is merged.
-- P1 source-key pan tests have not demonstrated a quality gain; all variants stay off.
+- P1 corrected geometric gate pan276 demonstrates no gain; all variants stay off and static energy remains failed.
 - Geometry runs 265–266 are INVALID because base passes lacked origin binding 40.
 - The shared layout/write fix passes 12 CTests and 24 ABI checks; runtime 269 has no layout/push/write errors.
 - Probes 268–269 measure zero current ray/projection offset PRE and POST; native positions stay unchanged.
 - Corrected-interface 271/272 both FAIL static energy parity: independent POST sampling alone does not fix the bias.
 - P3 default reference passes: 24 windows, 7.845 billion pixels, zero differences.
-- P3 activation works, but precise counters report no positive lighting signal; debug4 itself forces AO0; AO1 positive-signal control is prepared.
+- P3 zero-signal cause isolated: debug4 forces AO0; AO1 control275 has positive inputs over3.236B samples.
 - EN2/D-EM stay off; P4 has a tested CPU classifier, while GPU integration and P5 remain open.
 - One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
 
@@ -34,10 +34,25 @@ Source audit: debug4 prep itself forces AO0; native m0.x/y=1 then suppresses
 both direct terms. The old claim native AO untouched was wrong for this mode.
 P3 e9a73d5 records negative evidence and prepares existing debug6/AO1 control;
 it includes native ambient, so positive signals cannot prove total parity.
-274 P1 native previous-camera/MV diagnostic LIVE on frozen07b3ebe. It compares
-existing B2/B5 projection to native MV at two points with precision-only bounds,
-reuses reserved pose row12, changes no rendering/camera transport. Build12 CTests
-and24 shader ABI checks pass; reflection checks actual sampled MV17.
+274 native previous-camera/MV probe valid117s, no faults/dumps/build changes,
+all15 cases/validity and PRE=POST pass; zero full layout/push/write categories.
+Ground offsets agree with canonical jitter to~0.002px; animated tent point limits
+joint inference (2/3 match). No camera/jitter correction justified. Other VVL
+categories remain unresolved. P1 bd6f6d2 preserves results and PAUSED.md.
+276 ONE corrected-interface moving AB/BA: valid109s/51s session, no faults,
+dumps/build changes. Residual0.133864671/0.161903599 (+20.95%), RGB+20.78%,
+cohortY+44.51%, motion29.58/52.66px (+78.03%). Grid coverage3.856/2.646%,
+2.317/1.572M samples. Unequal motion/cohorts prevent causal regression claims;
+there is no demonstrated gain, and static energy failures271/272 remain decisive.
+Park this candidate temporarily per goal, not the overall goal. Next P1 inspect
+native direct-AO/capped give-back at visibility0 before any correction; use
+existing data/keys and keep changed-integrand diagnostics clearly separate.
+275 P3 AO1/debug6 control PASS: valid110s/48s session;10 complete windows,
+3.236B samples, native positive100%, recompute positive3.165B, invalid0,
+no faults/dumps/build changes. Last nativeY0.0385764/recompute0.0295358,
+boxY0.0186991, overshoot1.248e-6. Native ambient remains: no total-parity or
+shadow/quality pass. 277 LIVE on frozen P3 6184517: ONE short AO1 box0/1
+control (35s off then40s on) checks marginal projector light, not full accuracy.
 
 269 corrected-binding validation passes its full layout/push/write audit: valid
 112 s, zero driver faults/dumps/build changes, all 15 cases and current projection
