@@ -31,7 +31,7 @@ Fixed-camera scores and cross-run moving images cannot close P1. Use exact
 reprojection residuals or live off/on in ONE moving session. Do not block on
 AO counters: saved PRE alpha and same-build key-off controls are authoritative.
 
-codex/p1-pan: en2-selfcheck/BG3RTX 7433185, pushed, paired ABI14. All research
+codex/p1-pan: en2-selfcheck/BG3RTX 07b3ebe, pushed, paired ABI14. All research
 keys0. Main has no P1 feature. Existing B2/B5 and PRE pose pins through actual
 submission are reused; no new camera transport. Metadata GPU token, depth AND
 world-normal checks guard actual integer colour texel, not unused neighbours.
@@ -93,12 +93,15 @@ Its surrounding render path was invalid, so this is CAMERA-ONLY evidence. Retain
 native ray_at positions. Do not infer old-matrix/MV convention from that alone.
 Self-test2 uses reserved row12 with exact24-bit packed fields; no new camera data.
 7433185 default-off gi_history_fresh_independent separates POST stream3 from
-PRE stream0, addressing possible nested-sample correlation without extra rays,
-images/weights/AO/camera change.271 valid200s/alpha/static0.08px, off RGB exact. PRE target FAILS +0.6630%
-(CI excludes0); on +1.03..1.77%.272 LIVE SAME frozen7433185 build with key1.
-271 evidence is untracked to keep HEAD identical; commit both AFTER272 terminal.
-Report CIs/power and saved alpha; control RGB differs intentionally by RNG.
-Only then ONE moving gate toggle as evidence permits. GI_FRESH_INDEPENDENT.md.
+PRE stream0 without extra rays/weights/AO/camera data. Corrected271/272 both
+FAIL static energy parity: stream0 POST/PRE+0.6630%; stream3+0.8620% and gate
+on/off+1.4178% (both272 CIs exclude0). Saved alpha exact, camera<=0.10px.
+Independence alone is insufficient. Evidence committed a999f5d and pushed. Do not claim an energy or moving quality win. Full details:
+GI_FRESH_INDEPENDENT.md. Next old-camera/MV check reuses existing B2/B5.
+274 LIVE frozen07b3ebe: selftest3 compares previous-camera/nativeMV via existing
+B2/B5/MV17, reserved row12 only;12 CTests/24ABI pass.
+273 GI0 still has zero input: debug4 prep forces AO0, nativeflags1 suppress
+direct. P3e9a73d5 prepares debug6/AO1 positive control (includes ambient).
 Keep active checkout source/binaries frozen. Recheck user-playing/processes/queue
 before every launch. P1 active offline while P3 ran; next runnable P1 gets priority.
 
@@ -127,7 +130,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 codex/p3-box 3379d60 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. Native-AO probe prepared (GI0, box1/debug4,35s); no accuracy claim. Shadow rays/quality untested; no merge.
+- P3 codex/p3-box e9a73d5 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. 273 GI0 still zero: debug4 forces AO0. Debug6/AO1 signal control ready; no accuracy claim. Shadow rays/quality untested; no merge.
 - P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.

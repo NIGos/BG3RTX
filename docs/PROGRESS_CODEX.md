@@ -1,15 +1,15 @@
 # BG3RTX progress
 
-## Current checkpoint — 2026-10-29 04:16 Europe/Rome
+## Current checkpoint — 2026-10-29 04:37 Europe/Rome
 
 - Main rendering remains 6dba0a8; the P6 water design is merged.
 - P1 source-key pan tests have not demonstrated a quality gain; all variants stay off.
 - Geometry runs 265–266 are INVALID because base passes lacked origin binding 40.
 - The shared layout/write fix passes 12 CTests and 24 ABI checks; runtime 269 has no layout/push/write errors.
 - Probes 268–269 measure zero current ray/projection offset PRE and POST; native positions stay unchanged.
-- P1 7433185 prepares independent POST sampling without extra rays; baseline 271 is complete and job 272 tests stream 3 on the same build.
+- Corrected-interface 271/272 both FAIL static energy parity: independent POST sampling alone does not fix the bias.
 - P3 default reference passes: 24 windows, 7.845 billion pixels, zero differences.
-- P3 activation works, but even precise counters report no positive lighting signal; a GI-off/native-AO control is prepared.
+- P3 activation works, but precise counters report no positive lighting signal; debug4 itself forces AO0; AO1 positive-signal control is prepared.
 - EN2/D-EM stay off; P4 has a tested CPU classifier, while GPU integration and P5 remain open.
 - One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
 
@@ -21,12 +21,23 @@ match original PRE RGB bit-for-bit. Off/on +1.1048% has a broad paired interval
 including zero, but pooled POST/PRE +0.6630% FAILS the stricter target (95% CI
 [+0.000035013,+0.000193181] Y); all on captures are +1.03..1.77% versus PRE.
 This is VALID evidence after the binding correction, unlike 265/266.
-272 LIVE on identical frozen 7433185 binaries/HEAD, stream 3 enabled, otherwise
-same twelve-capture surface-gate AB/BA job. Original-PRE/mean/alpha gates remain;
-no brightness factor or relaxed threshold. The 271 evidence is temporarily
-untracked on P1 to retain the exact same HEAD; commit both after 272 terminates.
-P3 native-AO probe is ready after runnable P1 tests; zero-signal 270 proves no
-accuracy and remains invalid. P3 head 3379d60, no production/default change.
+272 independent stream3 on the SAME frozen 7433185 build: valid190s,
+no faults/dumps/build changes, static0.10px and all saved alpha bits exact.
+Gate on/off +1.4178% FAILS: paired95% CI [+0.000009341,+0.000483439] Y.
+Original POST/PRE +0.8620% also FAILS, CI [+0.000037327,+0.000261842].
+Paired intervals have half widths about1.2/1.4% off Y for271/272: no equivalence
+or variance claim. Independence alone is rejected as a sufficient fix.
+Both evidence files are committed on P1 a999f5d and pushed (transient GitHub500 resolved). No candidate promotion or brightness/tolerance adjustment.
+273 GI-off/native-AO control INVALID positive-signal gate,108s/48s session,
+no faults/dumps/build changes. Counts remain0, so GI folding is not required.
+Source audit: debug4 prep itself forces AO0; native m0.x/y=1 then suppresses
+both direct terms. The old claim native AO untouched was wrong for this mode.
+P3 e9a73d5 records negative evidence and prepares existing debug6/AO1 control;
+it includes native ambient, so positive signals cannot prove total parity.
+274 P1 native previous-camera/MV diagnostic LIVE on frozen07b3ebe. It compares
+existing B2/B5 projection to native MV at two points with precision-only bounds,
+reuses reserved pose row12, changes no rendering/camera transport. Build12 CTests
+and24 shader ABI checks pass; reflection checks actual sampled MV17.
 
 269 corrected-binding validation passes its full layout/push/write audit: valid
 112 s, zero driver faults/dumps/build changes, all 15 cases and current projection
