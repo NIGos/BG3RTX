@@ -27,8 +27,7 @@ cookies and projector-pixel recompute errors. GPU timing identifies box mode.
 
 Build, all 3 CTests, generated-default agreement and 34 shader files pass.
 These checks do not prove native descriptor compatibility, physical agreement
-or visual quality in game. No box-light runtime was started and nothing here
-has been merged into main.
+or visual quality in game. Baseline250 has run (details below); no box-on runtime or main merge yet.
 
 ## Deciding queue work
 
@@ -64,3 +63,19 @@ discard a window spanning the change. Nonzero projector coverage and actual
 activation are required. The expect patterns prove execution only: they do not
 certify recomputation accuracy. Do not enqueue these behind an active P1 game;
 recheck user-playing, actual processes and the queue before each launch.
+
+## Reference fixture correction after250
+
+250 on8d40fdc is execution/expect INVALID:21 windows,6,861,577,296 reference
+pixels,12,304 any-bit differences, zero >1e-5-relative/one-writer differences,
+zero driver faults/dumps. The fixture accidentally set ls_stats=1, selecting
+the FULL variant. Earlier accepted P2 controls used the DEFAULT variant.
+The reference fixture now explicitly pins ls_stats=0,ls_samples=0,ls_debug=0,
+with ls_check=1 still allocating/reporting all reference-check counters.
+No threshold is relaxed and every zero-difference window remains required.
+This compares the actual default point/spot path to its accepted reference.
+It does NOT resolve or waive FULL-variant bit differences; that separate
+limitation remains open, including any mode that requires exact FULL agreement.
+Projector native-light validation still requires actual coverage/accuracy in
+its own full/debug path. Re-run baseline before activating any boxes.
+P1 retains queue priority; fixture change alone is not runtime evidence.
