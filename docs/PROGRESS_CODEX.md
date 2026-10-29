@@ -1,21 +1,17 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 08:29 Europe/Rome
+## Current checkpoint - 2026-10-29 08:36 Europe/Rome
 
-- Main rendering remains 6dba0a8; the water design and legal QA exposure hold are merged.
-- P1 is active again by explicit user instruction. No more attribution or exposure research.
-- Fresh fallback preserves complete current-frame energy, ray weights and saved PRE visibility.
-- The new normal bound combines encoding precision with the actual same-plane GI footprint.
-- Static off/on energy is the first gate, followed by a single-run moving residual.
-- Static 296 is inconclusive: preserve its baseline spike; original-PRE check fails (+0.350%).
-- Static 297 fails on/off parity (+2.142%); 36 finite captures, exact alpha, normal rejects 14.70%.
-- Shuffled static 298 also fails: on/off +0.8243%, original-PRE +0.3690%; both outside noise.
-- Static 299 includes zero in both energy intervals, but power is low; no equivalence claim.
-- ONE footprint pan diagnostic 300 is live on the same renderer, with balanced live toggles.
+- Main rendering remains 6dba0a8; water design and legal QA exposure hold are merged.
+- P1 remains active. No new attribution or exposure research; research defaults stay off.
+- Rejected history tries complete current radiance, including missing previous colour.
+- Normal bounds now cover both permitted FP16 conversion neighbours and the spatial footprint.
+- Static 297/298 failed parity; 299 includes zero with low power and does not prove equivalence.
+- ONE pan 300 shows no gain: residual +1.84%, cohort energy -15.44%, motion +18.20%.
+- Pan coverage is 18.67% / 25.01%, with 21.2 / 28.6 million accepted samples.
+- Corrected-precision static 301 is live on frozen 4ba5bfc, with 36 captures and hold 90.
 - All 12 CTests and 24 shader ABI checks pass; seven ordinary shaders are byte-identical.
-- P2 test 295 has finished. P2/P3/P4 research will not displace the required P1 measurement.
-- Main, research branches and evidence are pushed. All research defaults remain off.
-- The one authorized reset is consumed; backup recovery was verified and shared junction cleanup is forbidden.
+- Evidence and branches are pushed. P2-P6 status remains below; reset used and backup safety rules apply.
 
 ## Resumed — 2026-10-29
 
@@ -74,6 +70,25 @@ no quality promotion follows from the weak static result. Next concrete normal
 fix: the half-step FP16 bound underestimates conversion error permitted by
 Vulkan. Replace it with exact neighbour intervals after 300 is terminal.
 Specs: docs/GI_NORMAL_FOOTPRINT.md. P1 remains active.
+
+Pan 300 completed execution-valid on 45a275f, identical renderer to static 299.
+Off/on residual 0.1359554 / 0.1384546 (+1.838%), cohort GI Y -15.445%, motion
+67.80 / 80.14 pixels (+18.197%). No demonstrated quality win. Samples 28,648,686 /
+21,195,860; grid coverage 25.01% / 18.67%, much wider than the old 0.08% cohort.
+Trace median 0.550 ms; whole GI 65.771 ms under the experimental duplicated
+pipeline. Validation was off; preceding full 299 VVL remains preserved.
+
+4ba5bfc fixes a derived normal-bound error: Vulkan format conversion may choose
+either adjacent FP16 value. The previous half-step bound can be short by factor 2.
+The new bound uses actual neighbours and marks its metadata convention. No angle
+tuning, source/ray/resource/ABI changes. Existing spatial support is unchanged.
+The endpoint sweep covers 31,743 finite nonnegative intervals. GPU mode 1 now
+checks 23 cases (row 12 [8388607, 8388607, 23, 1]). All 12 CTests and 24 shader
+ABI checks pass; seven ordinary shaders are identical. Static 301 started at
+08:35:24 on frozen 4ba5bfc. Inspect runtime evidence before the corrected pan.
+See docs/GI_NORMAL_FOOTPRINT.md and
+[Vulkan format conversion rules](https://docs.vulkan.org/spec/latest/chapters/fundamentals.html).
+
 
 
 Previous goal turn made progress: merged a valid legal QA exposure-hold fix,
