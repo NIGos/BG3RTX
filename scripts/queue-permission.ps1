@@ -1,9 +1,9 @@
 # Read-only launch policy. Never create USER_AWAY on behalf of the user.
 function Get-QueuePermissionBlock($job, [string]$queueRoot) {
   if (Test-Path -LiteralPath (Join-Path $queueRoot 'captures\queue\USER_PLAYING')) { return 'USER_PLAYING exists' }
-  if (@($job.args) -contains '-Foreground' -and
+  if ((@($job.args) -contains '-Foreground' -or @($job.args) -contains '-NoActivate' -or $job.window_mode -eq 'visible_unfocused') -and
       -not (Test-Path -LiteralPath (Join-Path $queueRoot 'captures\queue\USER_AWAY'))) {
-    return 'foreground job waiting for USER_AWAY'
+    return 'presented foreground/unfocused job waiting for USER_AWAY'
   }
   return ''
 }

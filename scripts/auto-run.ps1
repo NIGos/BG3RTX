@@ -36,6 +36,8 @@ param(
   # Real focused presentation. The queue controls authorization/USER_AWAY.
   # Background still selects posted keys and reversible borderless settings.
   [switch]$Foreground,
+  # Visible, real-present owned window behind other windows; never activate it.
+  [switch]$NoActivate,
   # Hold a camera-pan key (default D) once gameplay is reached, so the
   # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
   [switch]$Move,
@@ -99,16 +101,21 @@ $ErrorActionPreference = "Stop"
 $ModWarnDiagTraces = 5   # "trace" steps in $mwSteps (below)
 # "powershell -File" passes "-Set a=1,b=2" as one string: split it.
 $Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ })
+if ($NoActivate) {
+  if ($Foreground -or $KeepRunning -or $Session) { throw '-NoActivate conflicts with -Foreground, -KeepRunning and -Session' }
+  $Background=$true; $RealPresent=$true
+}
 $root = Split-Path $PSScriptRoot
 $markerRoot = if ($env:BG3RTX_QUEUE_ROOT) { $env:BG3RTX_QUEUE_ROOT } else { $root }
 $playingMarker = Join-Path $markerRoot 'captures\queue\USER_PLAYING'
 $awayMarker = Join-Path $markerRoot 'captures\queue\USER_AWAY'
 if (Test-Path -LiteralPath $playingMarker) { throw 'USER_PLAYING exists; no launch' }
-if ($Foreground -and -not (Test-Path -LiteralPath $awayMarker)) { throw 'Foreground requires USER_AWAY; no launch' }
+if (($Foreground -or $NoActivate) -and -not (Test-Path -LiteralPath $awayMarker)) { throw 'Presented foreground/unfocused mode requires USER_AWAY; no launch' }
 $caps = Join-Path $root "captures"
 New-Item -ItemType Directory -Force $caps | Out-Null
 . (Join-Path $PSScriptRoot "gamelock.ps1")
 . (Join-Path $PSScriptRoot 'camera-plan.ps1')
+. (Join-Path $PSScriptRoot 'queue-window-mode.ps1')
 
 if (-not $NoBuild) { & (Join-Path $PSScriptRoot "build.ps1") }
 
@@ -151,6 +158,8 @@ $scriptCloseRequested = $false
 $observedExitCode = $null
 $planCompleted = $false
 $exceptionText = $null
+$unfocusedChecks=0; $unfocusedVisibleMin=[long]::MaxValue; $unfocusedViolation=$null
+$nextUnfocusedCheck=[datetime]::MinValue
 $runStatusPath = Join-Path $caps 'run-status.json'
 Remove-Item -LiteralPath $runStatusPath -ErrorAction SilentlyContinue
 try {
@@ -189,6 +198,30 @@ $userFg = [BG3RTX.Win]::GetForegroundWindow()
 function Focus-Game {
   $h = Get-GameWindow
   if ($h -eq [IntPtr]::Zero) { return }
+  if ($NoActivate) {
+    if ((Get-Date) -lt $script:nextUnfocusedCheck) { return }
+    $script:nextUnfocusedCheck=(Get-Date).AddMilliseconds(500)
+    if ([BG3RTX.UnfocusedWindow]::ForegroundProcess() -eq $game.Id) {
+      $script:unfocusedViolation='owned game unexpectedly activated'
+      throw $script:unfocusedViolation
+    }
+    [BG3RTX.UnfocusedWindow]::ShowBehind($h)
+    $pixels=[BG3RTX.UnfocusedWindow]::VisibleClientPixels($h)
+    if ($pixels -le 0) {
+      $script:unfocusedViolation='owned game fully occluded, minimized or off-screen'
+      throw $script:unfocusedViolation
+    }
+    if ([BG3RTX.UnfocusedWindow]::ForegroundProcess() -eq $game.Id) {
+      $script:unfocusedViolation='owned game activated during no-activate update'
+      throw $script:unfocusedViolation
+    }
+    $script:unfocusedChecks++
+    $script:unfocusedVisibleMin=[Math]::Min($script:unfocusedVisibleMin,$pixels)
+    if ($script:unfocusedChecks -eq 1 -or $script:unfocusedChecks % 60 -eq 0) {
+      Write-Host "[window-mode] visible_unfocused: hwnd=$h visible_client_pixels=$pixels checks=$script:unfocusedChecks real_present=1 fg=0 input=PostMessage"
+    }
+    return
+  }
   if ($Background -and -not $Foreground) {
     if ([BG3RTX.Win]::GetForegroundWindow() -eq $h -and $userFg -ne [IntPtr]::Zero) {
       [BG3RTX.Win]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)   # Alt tap lifts the foreground lock
@@ -310,6 +343,7 @@ if ($ensure) { py -3 -I $ensure }
 $lines = @("# auto-run.ps1 overrides, layered over bg3rtx.ini ($runMode run)") + @("auto_trace=1", "auto_traces=$Traces") +
          @(if (-not $RealPresent) { "headless=1", "fg=0" }) +   # headless test runs: no frame generation unless asked
          @(if ($Save) { "auto_min_draws=400", "auto_after_load=1" }) + $Set   # other scenes draw far fewer than the foundry (Rivington ~1240)
+if ($NoActivate) { $lines=Set-UnfocusedIniLines $lines }
 $lines | Set-Content $ini
 $env:BG3RTX_INI = $ini
 if ($UserIni) { $env:BG3RTX_USER_INI = (Resolve-Path $UserIni).Path } else { $env:BG3RTX_USER_INI = "none" }
@@ -407,6 +441,7 @@ $modSettings = Join-Path $env:LOCALAPPDATA "Larian Studios\Baldur's Gate 3\Playe
 $modSettingsBefore = if ($modWarn -and (Test-Path -LiteralPath $modSettings)) { [IO.File]::ReadAllBytes($modSettings) } else { $null }
 $start = Get-Date
 $launchArgs = @{ Clean = $true; GameArgs = $gameArgs }
+if ($NoActivate) { $launchArgs.NoActivate=$true }
 if ($Validation) {
   $vlog = Tagged $caps "validation" ".log"
   Remove-Item $vlog -ErrorAction SilentlyContinue
@@ -426,7 +461,7 @@ $game.EnableRaisingEvents = $true
 # Keep the process handle so ExitCode survives a quick game/crash-handler exit.
 [void]$game.Handle
 @{ pid = $game.Id; start = (Get-ProcStart $game); tag = $Tag; mode = $runMode; slot = $slot;
-   visible_present = [bool]$RealPresent; foreground = [bool]$Foreground } | ConvertTo-Json | Set-Content $pidFile
+   visible_present = [bool]$RealPresent; foreground = [bool]$Foreground; visible_unfocused=[bool]$NoActivate } | ConvertTo-Json | Set-Content $pidFile
 if ($Background) { Set-DisplayUserGame $displayUser $game }
 Write-Host "Game pid $($game.Id)"
 
@@ -525,7 +560,7 @@ while ((Get-Date) -lt $deadline) {
   if (Test-Path -LiteralPath $playingMarker) {
     $result = 'user playing marker; test stopped'; break
   }
-  if ($Foreground -and -not (Test-Path -LiteralPath $awayMarker)) {
+  if (($Foreground -or $NoActivate) -and -not (Test-Path -LiteralPath $awayMarker)) {
     $result = 'USER_AWAY removed; test stopped'; break
   }
   if ((Get-Date) -ge $nextOwnershipCheck) {
@@ -533,6 +568,7 @@ while ((Get-Date) -lt $deadline) {
     $otherGames = @(Get-Process bg3,bg3_dx11 -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $game.Id })
     if ($otherGames.Count) { $result='another game appeared; owned test stopped'; break }
   }
+  if ($NoActivate) { Focus-Game }
   if ($MovePlan) {
     if ($panIndex -lt 0 -and (Test-Path $doneFile)) {
       $panIndex = 0; $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
@@ -547,6 +583,11 @@ while ((Get-Date) -lt $deadline) {
         [void][BG3RTX.Win]::SetCursorPos($point.X,$point.Y)
         $pointerCentred = $true
         Write-Host "[motion-plan] pointer centred in owned foreground game"
+      } elseif ($NoActivate) {
+        $h=Get-GameWindow; $rect=New-Object BG3RTX.Win2+RECT
+        [void][BG3RTX.Win2]::GetClientRect($h,[ref]$rect)
+        Send-PlanMouse 0x0200 0 ([int](($rect.Right-$rect.Left)/2)) ([int](($rect.Bottom-$rect.Top)/2))
+        Write-Host '[motion-plan] posted pointer centre to owned unfocused HWND; physical cursor untouched'
       }
     }
     if ($panIndex -ge 0) {
@@ -576,8 +617,9 @@ while ((Get-Date) -lt $deadline) {
             $iniLines += $assignment
           }
         }
+        if ($NoActivate) { $iniLines=Set-UnfocusedIniLines $iniLines }
         $iniLines | Set-Content -LiteralPath $ini
-        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) set=$($step.set) foreground=$Foreground real_present=$RealPresent"
+        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) set=$($step.set) foreground=$Foreground real_present=$RealPresent visible_unfocused=$NoActivate"
         $panCaptureSent = $true
       }
       $h = Get-GameWindow; $rect = New-Object BG3RTX.Win2+RECT
@@ -742,6 +784,8 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
      plan_completed=$planCompleted; last_phase=$panIndex; expected_phases=$panPlan.Count;
      script_close_requested=$scriptCloseRequested; exception=$exceptionText;
      timeout_seconds=$TimeoutSec; foreground=[bool]$Foreground; real_present=[bool]$RealPresent;
+     visible_unfocused=[bool]$NoActivate; unfocused_checks=$unfocusedChecks;
+     unfocused_visible_min_pixels=$(if($unfocusedChecks){$unfocusedVisibleMin}else{0}); unfocused_violation=$unfocusedViolation;
      ended=(Get-Date).ToString('o') } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $runStatusPath
   Exit-GameLock $lock
   $checkoutMutex.ReleaseMutex()

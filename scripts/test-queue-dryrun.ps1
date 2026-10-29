@@ -34,7 +34,10 @@ $jobs = @(
   @{ name = 'l-post-fails'; save = 'Rivington'; set='gi=6'; traces=1; patterns=$guard;
      post='exit /b 7'; post_gate=$true },
   @{ name = 'm-forbidden'; save = 'Rivington'; set='gi=6'; traces=1; patterns=$guard;
-     forbid=@('\[core\] guard:') }
+     forbid=@('\[core\] guard:') },
+  @{ name='n-visible-unfocused'; save='Rivington'; set='fg=4,headless=1'; traces=1; session=$true;
+     args=@('-Foreground'); window_mode='visible_unfocused'; patterns=$guard;
+     expect_runner=@('\[fake-window-mode\] no_activate=True real_present=True foreground=False session=False') }
 )
 $t = (Get-Date).AddMinutes(-10)
 foreach ($j in $jobs) {
@@ -58,7 +61,7 @@ function Check([string]$what, [bool]$ok) {
 }
 function Has($lines, [string]$re) { [bool](@($lines) -match $re) }
 function Sess($k) { ($by[$k].session -split '#')[0] }
-Check "13 jobs, 14 runs recorded" ($recs.Count -eq 14)
+Check "14 jobs, 15 runs recorded" ($recs.Count -eq 15)
 Check "a, b, c share one session" ((Sess "a-gi0#1") -and (Sess "a-gi0#1") -eq (Sess "b-gi1-phases#1") -and (Sess "b-gi1-phases#1") -eq (Sess "c-refl0#1"))
 Check "a is run 1 of its session (nothing saved), c run 3 (saved > 0)" ($by["a-gi0#1"].saved_sec -eq 0 -and $by["c-refl0#1"].session -like "*#3" -and $by["c-refl0#1"].saved_sec -gt 0)
 Check "a sees its own setting (gi=0)" (Has $by["a-gi0#1"].lines 'gi=0 ')
@@ -77,6 +80,7 @@ Check "every normal run reports done unless faulted" (-not ($recs | Where-Object
 Check 'early single-run exit is INVALID even when every game-log expect matches' (-not $by['k-single-exit#1'].valid -and $by['k-single-exit#1'].outcome -match 'successful terminal state')
 Check 'failed post-analysis gate is INVALID' (-not $by['l-post-fails#1'].valid -and $by['l-post-fails#1'].outcome -match 'post-analysis gate passed')
 Check 'forbidden fault pattern is INVALID' (-not $by['m-forbidden#1'].valid -and $by['m-forbidden#1'].outcome -match 'forbidden log pattern')
+Check 'visible-unfocused field reaches single runner with forced settings' ($by['n-visible-unfocused#1'].valid -and -not $by['n-visible-unfocused#1'].session)
 Check "no session left running (no session.ready / trace.request)" (-not (Test-Path (Join-Path $Out "captures\session.ready")) -and -not (Test-Path (Join-Path $Out "trace.request")))
 Get-Content (Join-Path $Out "captures\queue\results.md")
 if ($fail) { Write-Host "$fail check(s) failed"; exit 1 }

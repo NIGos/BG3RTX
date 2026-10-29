@@ -47,6 +47,7 @@ $ErrorActionPreference = "Stop"
 if ($DryRun -and -not $Root) { throw "-DryRun needs -Root <scratch dir> (never the real captures)" }
 $root = if ($Root) { (Resolve-Path $Root).Path } else { Split-Path $PSScriptRoot -Parent }
 . (Join-Path $PSScriptRoot 'queue-permission.ps1')
+. (Join-Path $PSScriptRoot 'queue-window-mode.ps1')
 if (-not $DryRun -and (Test-Path -LiteralPath (Join-Path $root 'captures\queue\USER_PLAYING'))) {
   throw 'USER_PLAYING exists; runner must not start'
 }
@@ -401,7 +402,7 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
 }
 
 function Run-Job($file) {
-  $job = Get-Content $file.FullName -Raw | ConvertFrom-Json
+  $job = ConvertTo-QueueWindowJob (Get-Content $file.FullName -Raw | ConvertFrom-Json)
   $name = if ($job.name) { $job.name } else { $file.BaseName }
   $tree = Get-JobTree $job
   $repeat = if ($job.repeat) { [int]$job.repeat } else { 1 }
@@ -468,7 +469,7 @@ function Run-Job($file) {
                        outcome = $r.outcome; nv153 = $r.nv; dumps = @($r.dumps); build = $before
                        build_changed = ($before -ne $after); log = $r.keptLog; captures = $caps; lines = $lines
                        session = $r.session; core_gen = $r.generation; saved_sec = $r.saved;
-                       process_status = $r.status; runner_log = $r.runner_log }
+                       process_status = $r.status; runner_log = $r.runner_log; window_mode=$job.window_mode }
     ($rec | ConvertTo-Json -Compress -Depth 4) | Write-Record $jsonl
     $flag = if ($before -ne $after) { " BUILD CHANGED" } else { "" }
     $sessText = if ($r.session) { " session=$($r.session) gen=$($r.generation) saved~$($r.saved)s" } else { "" }
@@ -496,7 +497,7 @@ function Get-NextJob {
   $next = Get-InboxDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "*.json" -ErrorAction SilentlyContinue } |
     Sort-Object LastWriteTime | Select-Object -First 1
   if ($next -and -not $DryRun) {
-    $job = Get-Content -LiteralPath $next.FullName -Raw | ConvertFrom-Json
+    $job = ConvertTo-QueueWindowJob (Get-Content -LiteralPath $next.FullName -Raw | ConvertFrom-Json)
     $blocked = Get-QueuePermissionBlock $job $root
     if (-not $blocked) { $blocked = Get-QueueDependencyBlock $job $root (Stamp (Get-JobTree $job)) }
     if ($blocked) { Write-Host "Queued, not launched: $($next.Name): $blocked"; return $null }

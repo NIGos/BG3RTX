@@ -1,0 +1,46 @@
+{
+  "tree": ".",
+  "save": "QuickSave_3784",
+  "set": "preset=ultra,fg=0,headless=0,fps_cap=0,rt_stats=1,ls_stats=1,ls_k=0,ls_shadowed=1,rt_debug=0,ls_debug=0,pan_capture=0,pan_prepare=0,rt_scene_camera_match=0,rt_scene_rebase=0,rt_primary_check=0,rt_primary_epoch=0,crash_dump=1",
+  "traces": 0,
+  "hold": 90,
+  "timeout": 700,
+  "session": false,
+  "patterns": [
+    "primary-ray check",
+    "rt epoch",
+    "rt passes",
+    "rt cost scope",
+    "\\[watch\\]",
+    "\\[crash\\]",
+    "instance matrices read at submit",
+    "audits ok"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[crash\\] exception diagnostics active independently of FG; minidump armed",
+    "rt epoch",
+    "gi/rebase/pan_primary_epoch.hlsl generation",
+    "rt passes"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST"
+  ],
+  "post_gate": true,
+  "name": "p1-rotation-unfocused-preflight",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tests/fixtures/p1_rotation_preflight_plan.json"
+  ],
+  "expect_runner": [
+    "\\[motion-plan\\] posted pointer centre",
+    "\\[motion-plan\\] complete phases=4",
+    "^Run ended: done",
+    "\\[window-mode\\] visible_unfocused:"
+  ],
+  "post": "py -3 -m scripts.qa.rotation_preflight --log \"{log}\" --runner \"{runner}\" --status \"{status}\" --plan tests/fixtures/p1_rotation_preflight_plan.json --out captures/p1-pan-flashes/rotation-unfocused-preflight-result.json",
+  "window_mode": "visible_unfocused"
+}

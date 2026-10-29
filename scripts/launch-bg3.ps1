@@ -10,7 +10,8 @@ param(
   [string]$Exe,
   [string[]]$GameArgs = @(),
   [switch]$Clean,
-  [switch]$Validation
+  [switch]$Validation,
+  [switch]$NoActivate
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -43,5 +44,8 @@ $wd = Split-Path $Exe
 Write-Host "Launching $Exe $GameArgs with $($env:VK_INSTANCE_LAYERS)"
 # Returns the started process: auto-run.ps1 tracks only its own game, by this PID
 # (with SteamAppId set the game does not relaunch itself through Steam).
-if ($GameArgs.Count) { Start-Process -FilePath $Exe -WorkingDirectory $wd -ArgumentList $GameArgs -PassThru }
+if ($NoActivate) {
+  Add-Type -Path (Join-Path $PSScriptRoot 'visible-unfocused.cs')
+  [BG3RTX.UnfocusedWindow]::Start($Exe,($GameArgs -join ' '),$wd)
+} elseif ($GameArgs.Count) { Start-Process -FilePath $Exe -WorkingDirectory $wd -ArgumentList $GameArgs -PassThru }
 else { Start-Process -FilePath $Exe -WorkingDirectory $wd -PassThru }

@@ -36,6 +36,14 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual(qualify(inactive,runner,plan,status)['gate'],'FAIL')
         empty=log.replace('GPU camera frames 120, scene snapshots 120','GPU camera frames 0, scene snapshots 0')
         self.assertEqual(qualify(empty,runner,plan,status)['gate'],'FAIL')
+    def test_unfocused_requires_visibility_and_no_activation(self):
+        log,runner,plan,status=self.fixture()
+        status.update(foreground=False,visible_unfocused=True,unfocused_checks=20,
+                      unfocused_visible_min_pixels=100,unfocused_violation=None)
+        self.assertEqual(qualify(log,runner,plan,status)['gate'],'PASS')
+        for change in ({'unfocused_visible_min_pixels':0},{'unfocused_checks':0},
+                       {'unfocused_violation':'activated'},{'foreground':True}):
+            self.assertEqual(qualify(log,runner,plan,{**status,**change})['gate'],'FAIL')
 
 
 if __name__=='__main__': unittest.main()

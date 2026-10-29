@@ -202,6 +202,28 @@ readability, colour grade) as well as being physically better.
 
 ## Test queue (how in-game tests are run)
 
+Optional job field `"window_mode": "visible_unfocused"` selects a visible,
+non-activating owned game window for FG-off real presentation. It overrides
+`-Foreground`, forces `fg=0,headless=0`, adds `-NoActivate -RealPresent`, and
+disables session reuse. Custom `command` and uncontrolled live `phases` are
+rejected in this mode. Foreground/default jobs are unchanged. USER_AWAY is
+still mandatory; USER_PLAYING or an existing user game blocks execution.
+
+The initial native show uses SW_SHOWNOACTIVATE; later placement uses
+WS_EX_NOACTIVATE, HWND_BOTTOM and SWP_NOACTIVATE, never topmost or focus-setting
+calls. The game stays borderless with reversible display settings. The helper
+checks actual foreground ownership and positive exposed client area on real
+monitors every 500 ms. Observed activation or full occlusion aborts the run.
+Rectangle occlusion is conservative for transparent/shaped windows; a fully
+covered game cannot pass. No other application's placement is changed.
+
+Pan keys and middle-button rotation use PostMessage to the owned HWND; no
+SendInput, global keys or physical cursor movement in this mode. BG3 acceptance
+of unfocused rotation is not established by code checks. The GPU motion gate
+must prove actual rotation; there is no raw-input spoof/focus fallback. FG-on
+tests need focus and must not use this mode. Optional fixtures:
+`p1_rotation_unfocused_preflight_job.json` and `p1_rotation_unfocused_job.json`.
+
 Only one process starts the game: `scripts/test-queue.ps1`, run by the coordinating
 session. Agents and sessions never launch the game themselves. They add a job, a JSON
 file in `captures/queue/pending/`, and the runner executes the jobs oldest first, one game

@@ -15,8 +15,12 @@ def qualify(log,runner,plan,status):
         reasons.append('game/job did not complete the preflight')
     if status.get('observed_exit_code') is not None:
         reasons.append('game exited before scheduled cleanup')
-    if not status.get('foreground') or not status.get('real_present'):
-        reasons.append('foreground real presentation was not active')
+    unfocused=status.get('visible_unfocused',False)
+    if not status.get('real_present') or not (status.get('foreground') or unfocused):
+        reasons.append('foreground or verified visible-unfocused real presentation was not active')
+    if unfocused and (status.get('foreground') or status.get('unfocused_checks',0)<1 or
+        status.get('unfocused_visible_min_pixels',0)<=0 or status.get('unfocused_violation')):
+        reasons.append('unfocused presentation lacks visibility/focus proof or had a violation')
     if not re.search(r'\[motion-plan\] complete phases='+str(len(plan))+r'\b',runner):
         reasons.append('missing complete-plan marker')
     if re.search(r'\[crash\] exception 0x[0-9a-f]+|device lost|VK_ERROR_DEVICE_LOST',log,re.I):

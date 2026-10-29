@@ -1,5 +1,31 @@
 # BG3RTX progress
 
+## Answer: visible background queue mode is opt-in — 2026-10-29
+
+Use job field `"window_mode": "visible_unfocused"` for FG-off tests only.
+Default launch behavior is unchanged. The queue forces `fg=0`, `headless=0`,
+real presentation and window-targeted PostMessage input. Native startup uses
+SW_SHOWNOACTIVATE; the owned window gets WS_EX_NOACTIVATE and HWND_BOTTOM with
+SWP_NOACTIVATE, without topmost or SetForegroundWindow calls. This mode does
+not move the user's physical cursor or send global keys. Existing background
+SDL hooks keep the game rendering; frame generation is deliberately off.
+
+Limits: background rotation delivery and startup focus behavior are NOT verified
+in BG3. The runner aborts if it observes the game taking focus, minimization,
+off-screen placement or complete occlusion. If another app covers the entire
+game, this cannot guarantee visible presentation without moving that app; it
+fails instead. The rectangular visibility check is conservative for translucent
+or shaped windows. It does not prove uninterrupted visibility between polls.
+There is no synthetic WM_INPUT or focus-stealing fallback. Actual GPU camera
+rotation and at least 18 fps still have to pass the P1 gate.
+
+USER_AWAY remains required, and USER_PLAYING/user games still block launch.
+No game/window-control calls ran during these checks. Passed: 22 policy/geometry
+checks, six preflight tests and the offline queue (14 jobs / 15 fake runs).
+Unfocused rotation fixtures are prepared in tests/fixtures/p1_rotation_unfocused*
+but are NOT queued. The two existing foreground jobs remain pending unchanged.
+No runtime pass or merge. FG-on P1 tests must use focused real presentation.
+
 ## P2 FG toggle candidate; RT cost log review — 2026-10-29
 
 Code/log-only continuation: no game launch, no display changes. The two P1
