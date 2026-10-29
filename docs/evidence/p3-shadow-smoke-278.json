@@ -144,5 +144,5 @@
   },
   "final_key": "d222",
   "final_nonfinite": 0,
-  "interpretation": "Actual shadow execution PASS. Nonfinite preexisting-format depth dump retained; final/composed lighting finite. Not a native-energy, cookie or temporal-quality pass."
+  "interpretation": "Actual shadow execution PASS. Nonfinite D32F depth dump retained; final/composed lighting finite. Not a native-energy, cookie or temporal-quality pass."
 }

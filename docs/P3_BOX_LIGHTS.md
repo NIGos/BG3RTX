@@ -171,3 +171,11 @@ a D32F depth dump reports4590, preserved without a global finite-output claim.
 Next forced candidate-cap1 should exercise actual unknown box queries; source
 sets t=sh for unknown before both default/FULL deltas c*(t-sh). No visual,
 energy, cookies or moving-quality approval follows from smoke execution.
+
+279 forced-cap1 unknown-coverage attempt INVALID: valid execution117s/49s
+session, no faults/dumps/build changes, but all reported box unknown rates
+remain0.000/px. Actual opaque shadow hits can end traversal before the cap
+aborts nonopaque candidates; lowering the cap alone did not exercise the
+required branch in S6. Do not claim fallback verification or relax the expect.
+Final nonfinite0; the D32F-only nonfinite dump remains retained. Next use other
+required scenes/alpha coverage, rather than repeating this unchanged control.
