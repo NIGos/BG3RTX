@@ -23,7 +23,7 @@ Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
 - P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 725955f, pushed, paired ABI14.
-- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b97477b, pushed.
+- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box 56bcc06, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
 Old research: pan-motion-vectors/BG3RTX 929be7a; motion-jitter/BG3RTX 53f0925.
@@ -32,14 +32,14 @@ D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Live job and immediate next action
-287 LIVE frozen P3 b97477b: S7 cap1 integer unknown/cookie-count control.
-Runner20748 started05:31:48. Verify actual process/session and terminal result;
-do not restart from observation timeout. P3 source/binaries/HEAD stay FROZEN.
-P1 286 recursion-off isolation still FAILS original PRE (+0.4292%, CI excludes0);
-broad paired CI is not equivalence. P1 725955f clean/pushed, no candidate approved.
-After287 terminal record actual counts, full capture finite checks and limits.
-Next P1 source-epoch/conditional mismatch remains unresolved; no transport tweak
-or lighting-model reduction is justified by these failed isolation controls.
+Queue IDLE; no game or runner should be assumed live from an old state file.
+P1 725955f and P3 56bcc06 are clean/pushed.287 S7 cap1 PASS actual coverage:
+7.638M unknowns/10.084M cookies over seven complete windows; all dumps finite.
+Native accuracy and moving quality remain open. More uncontrolled AO1 smoke
+cannot close them: inspect a native-direct isolation that avoids ambient AND
+AO0/direct suppression, checking native binding ownership before any override.
+P1 source-epoch/conditional mismatch and unsupported unlit shading remain open;
+no transport, brightness or lighting-model reduction is justified by failed controls.
 
 ## P1 - pan instability remains OPEN
 User sees lighting/shadows detach while panning; Ctrl+Shift+F9 restores native.
@@ -124,9 +124,9 @@ Ambient and nonzero overshoot1.258e-6 prevent a total native-accuracy claim.
 281 S7 exits2s before layer/scene; bounded retry285 succeeds, actual cookie0.004/px.
 Sampling is exercised, not yet native-filter accuracy or unknown-pair proof.
 283 S5 PASS: ten windows,0.079 rays/px,0.029 occluded/px; final finite.
-S6/S5 cookie rates0; native accuracy, cookies, unknown coverage and moving/visual
-quality remain open. D32F nonfinite dumps are retained, not a global finite pass.
-See docs/P3_BOX_LIGHTS.md and evidence278-283. Do not modify saves or reinstall mods.
+S6/S5 cookie rates0;287 S7 exact counts prove7.638M unknown and10.084M cookie
+evaluations. Native accuracy/per-query delta and moving/visual quality stay open.
+See docs/P3_BOX_LIGHTS.md and evidence278-287. Do not modify saves or reinstall mods.
 
 ## P4-P6
 P4 has a conservative CPU interval classifier and corrected stochastic-alpha

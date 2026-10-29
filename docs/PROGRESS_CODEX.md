@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 05:32 Europe/Rome
+## Current checkpoint - 2026-10-29 05:37 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -8,12 +8,28 @@
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P3 S7 exercises cookies; integer unknown-query control 287 is live, while native accuracy and moving quality remain open.
+- P3 S7 exercises 7.638 million actual unknown queries and 10.084 million cookies; native accuracy and moving quality remain open.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
 - One reset is authorized at exhaustion and unused; latest weekly usage read was 93%.
 
 ## Resumed — 2026-10-29
+
+287 S7 cap1 exact-population control PASS: valid 115 s / 49 s session, seven
+complete windows total 640,149,005 traced queries, 192,085,618 occlusions,
+7,637,662 unknowns and 10,083,681 cookie evaluations. Final/all captured dumps
+finite; no driver faults, dumps or build changes. This establishes actual path
+coverage, not independent per-query delta identity, native cookie accuracy or
+moving quality. P3 56bcc06 is pushed; shader transport is unchanged by integer
+logging. Main rendering remains unchanged and every feature stays off.
+Shared queue is idle. Further uncontrolled AO1 smoke repeats cannot close native
+accuracy: the next P3 intervention must isolate native direct lighting without
+both ambient contamination (debug6) and direct suppression (debug4/native flag1).
+Inspect native flags/binding ownership before any replay/override implementation;
+no native buffer mutation or blanket validation waiver is authorized by these
+numbers. P1 source-epoch/conditional mismatch and unsupported unlit shading
+remain unresolved; no candidate promotion, denominator or brightness tuning.
+
 
 286 recursion-off isolation still FAILS original-PRE consistency: valid 198 s /
 195 s exclusive, static <=0.16px, finite/pose/actual alpha pass, no faults/dumps/
