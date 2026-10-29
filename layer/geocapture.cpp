@@ -1048,7 +1048,8 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     ++c->c_drop;   // not sizeable exactly (indirect, adjacency, restart): as for the camera soup
     return;
   }
-  if (pi.discard) {   // alpha-tested: no UV or material here, its cutouts would turn solid
+  // rt_cascade_alpha=1 (A/B): alpha-tested draws go in as opaque (cutouts solid).
+  if (pi.discard && !cfg_int("rt_cascade_alpha", 0)) {   // alpha-tested: no UV or material here, its cutouts would turn solid
     ++c->c_alpha;
     return;
   }
