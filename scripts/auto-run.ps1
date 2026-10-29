@@ -647,7 +647,7 @@ while ((Get-Date) -lt $deadline) {
       if (-not $panInMotion -and $moving) { Send-MoveKey $false; $moving = $false }
       if ($panInMotion -and (Get-Date) -ge $panNextKey) {
         $MoveScan = [byte]$step.scan
-        $moveVk = if ($MoveScan -eq 0x1e) { 0x41 } else { 0x44 }
+        $moveVk = switch ([int]$MoveScan) { 0x1e { 0x41 } 0x10 { 0x51 } 0x12 { 0x45 } default { 0x44 } }   # A, Q (rotate left), E (rotate right), D
         Send-MoveKey $true $moving; $moving = $true
         $panNextKey = (Get-Date).AddMilliseconds($step.repeat_ms)
       }

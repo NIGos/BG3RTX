@@ -1,5 +1,30 @@
 # BG3RTX progress
 
+## P1 rotation: rt_scene_rebase lifts the rotating primary match from 33% to 94% (supervisor) — 2026-10-29 16:50
+
+Root cause, measured: every RT pass traces the TLAS built in the previous frame index
+("TLAS this frame 0, previous frame 300" in every rt passes line). BG3 renders camera-relative,
+so the traced scene is offset by the camera translation between the two frames. Orbiting moves
+the camera origin most, which is why rotation shows it far more than panning.
+Fix: rt_scene_rebase=1 (Codex 314840d) shifts every ray origin by one per-frame constant: the
+lighting camera origin minus the scene build's camera origin (snapshotted on the GPU).
+
+Job p1-sup-rebase-rot-fg2-b (QuickSave_3784, FG 2, visible unfocused, real presentation,
+keyboard rotation Q/E at a steady ~2.55 deg/frame, live A/B in one run):
+| window | rebase=0 | rebase=1 |
+| --- | ---: | ---: |
+| static | 99.52% | 99.52% |
+| rotate left (two windows) | 33.0-35.0% | 94.3-94.8% |
+| rotate right | 33.1-38.7% | 94.0-94.4% |
+RT pass GPU cost 3.87-3.90 ms off, 4.04-4.29 ms on (with the epoch counters on; ~1.1 ms
+without them in the earlier run). Static identical, so brightness is unchanged.
+Residual 5-6%: pool hits 95%, soup hits ~74%. The scene camera trails the lighting camera by up
+to 5.1 deg (more than one frame), so the edge band that enters the view during rotation is
+missing from the older, CPU-culled scene. The real fix for that is tracing the TLAS of the
+same frame as the G-buffer (next step). Kept; gate (match ~99.5% while rotating) not passed yet.
+Input: scripts/auto-run.ps1 now maps scan codes 0x10/0x12 to Q/E, BG3's camera-rotate keys,
+posted to the window (no focus needed); tests/fixtures/p1_sup_rebase_rot_plan.json.
+
 ## P1 NOT ready: static parity passes, motion qualification fails — 2026-10-29 15:56
 
 Read D:/BG3_Tools/USER_STEERING.md (both 13:57 entries and 14:29 authorization).
