@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint — 2026-10-29 04:45 Europe/Rome
+## Current checkpoint — 2026-10-29 04:48 Europe/Rome
 
 - Main rendering remains 6dba0a8; the P6 water design is merged.
 - P1 corrected geometric gate pan276 demonstrates no gain; all variants stay off and static energy remains failed.
@@ -9,7 +9,7 @@
 - Probes 268–269 measure zero current ray/projection offset PRE and POST; native positions stay unchanged.
 - Corrected-interface 271/272 both FAIL static energy parity: independent POST sampling alone does not fix the bias.
 - P3 default reference passes: 24 windows, 7.845 billion pixels, zero differences.
-- P3 zero-signal cause isolated: debug4 forces AO0; AO1 control275 has positive inputs over3.236B samples.
+- P3 AO1 box A/B277 reduces the native/recompute difference67.40%; ambient/overshoot and shadow quality remain open.
 - EN2/D-EM stay off; P4 has a tested CPU classifier, while GPU integration and P5 remain open.
 - One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
 
@@ -51,8 +51,16 @@ existing data/keys and keep changed-integrand diagnostics clearly separate.
 3.236B samples, native positive100%, recompute positive3.165B, invalid0,
 no faults/dumps/build changes. Last nativeY0.0385764/recompute0.0295358,
 boxY0.0186991, overshoot1.248e-6. Native ambient remains: no total-parity or
-shadow/quality pass. 277 LIVE on frozen P3 6184517: ONE short AO1 box0/1
-control (35s off then40s on) checks marginal projector light, not full accuracy.
+shadow/quality pass.
+277 ONE short AO1 box0/1 control valid150s/88s session, zero faults/dumps/build
+changes. After excluding configuration-straddling/mixed windows,7 pure off/9 on
+cover2.281/2.932B pixels, invalid0. Absolute difference0.027741794/0.009043992
+(-67.3994%), nativeY0.038576762/0.038576244, boxY0.018699574 on.
+Overshoot1.33e-7/1.258e-6 remains nonzero and is NOT waived. Ambient/in-scatter
+prevents total direct-light parity; no shadow rays were traced in debug6.
+P3 8973a34 evidence pushed. Next short debug0 box-on test must exercise actual
+shadow rays and inspect finite output/unknown fallback, then S7/S5 cookie cases;
+FULL compatibility and native-accuracy gates remain open. Shared queue is idle.
 
 269 corrected-binding validation passes its full layout/push/write audit: valid
 112 s, zero driver faults/dumps/build changes, all 15 cases and current projection

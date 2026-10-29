@@ -105,9 +105,10 @@ coverage3.856/2.646%; unequal cohorts prevent causal claims. No quality win;
 static energy fails. Candidate parked in PAUSED.md; goal stays active. Next
 inspect native direct-AO/capped give-back at visibility0 using existing data/keys.
 275 P3 AO1 control PASS positive signal3.236B samples/invalid0; ambient remains.
-277 LIVE frozenP3 6184517: ONE short AO1 box0/1 marginal-light check.
+277 valid150s: ONE AO1 box0/1 reduces difference67.3994%,7/9 pure windows;
+ambient and nonzero overshoot retained. Queue idle. Next actual debug0 box rays.
 Keep active checkout source/binaries frozen. Recheck user-playing/processes/queue
-before every launch. P1 active offline while P3 ran; next runnable P1 gets priority.
+before every launch. Next runnable P1 experiment keeps priority; consult PAUSED.md.
 
 For a future approved candidate build: inspect static building/ground edges while
 panning; toggle candidate key, plus Ctrl+Shift+F9 as all-RT/native reference.
@@ -134,7 +135,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 codex/p3-box 6184517 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. 273 GI0 still zero because debug4 forces AO0;275 AO1 positive3.236B/invalid0.277 marginal A/B LIVE; ambient prevents total-accuracy claim. Shadow rays/quality untested; no merge.
+- P3 codex/p3-box 8973a34 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. 273 GI0 still zero because debug4 forces AO0;275 AO1 positive3.236B/invalid0.277 marginal A/B reduces difference67.40%; ambient/overshoot prevent total-accuracy claim. Next debug0 actual shadow rays. Shadow rays/quality untested; no merge.
 - P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.
