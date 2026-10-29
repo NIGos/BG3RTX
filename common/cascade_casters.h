@@ -53,6 +53,18 @@ inline uint64_t draw_key(const DrawId& d) {
   return h ? h : 1;
 }
 
+// The mesh alone (no instance count, no placement): an alpha-tested cascade draw whose mesh the
+// camera pass also drew is left to the camera pass's copy, which runs the real alpha test
+// (the cascade copy is solid: leaves would cast polygons; user, 2026-10-29).
+inline uint64_t mesh_key(const DrawId& d) {
+  uint64_t h = 1099511628211ull;
+  for (uint64_t v : {uint64_t(d.kind), uint64_t(d.count), uint64_t(d.first), uint64_t(int64_t(d.vertex_offset)),
+                     d.vb, d.vb_offset})
+    h = mix(h, v);
+  if (d.kind == 1) h = mix(mix(mix(h, d.ib), d.ib_offset), d.ib_type);
+  return h ? h : 1;
+}
+
 // The camera pass's draw keys of the last two frames (the camera pass and the cascades are
 // recorded on different threads, in either order: a cascade draw is a duplicate if the
 // camera pass drew it in this frame or the last one).

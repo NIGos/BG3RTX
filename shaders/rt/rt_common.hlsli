@@ -138,6 +138,14 @@ static const uint kRtCascadeId = 0xFFFFFFu;   // common/cascade_casters.h kCusto
 #ifndef RT_CASCADE_TMIN
 #define RT_CASCADE_TMIN 0.5
 #endif
+// The game's cascade draws coarser LODs far from the camera: their copy of a distant surface
+// can sit metres off the camera pass's one and shadow it (user, 2026-10-29: distant shadows
+// that vanish as the camera approaches). LOD swaps keep the screen error roughly constant in
+// pixels, so the world-space offset grows with distance: cascade hits nearer than this
+// fraction of the ray origin's camera distance are ignored (2%: 0.6 m at 30 m, 2 m at 100 m).
+#ifndef RT_CASCADE_TMIN_REL
+#define RT_CASCADE_TMIN_REL 0.02
+#endif
 #endif
 bool rt_scene_ok() {
   uint2 s = gSceneStamp.Load2(0);
@@ -500,7 +508,7 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
 #ifdef RT_CASCADE_SUN
     // The cascade instance is not opaque only for this test (no alpha: its triangles are solid).
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && q.CandidateInstanceID() == kRtCascadeId) {
-      if (q.CandidateTriangleRayT() > RT_CASCADE_TMIN) q.CommitNonOpaqueTriangleHit();
+      if (q.CandidateTriangleRayT() > max(RT_CASCADE_TMIN, RT_CASCADE_TMIN_REL * length(o))) q.CommitNonOpaqueTriangleHit();
       continue;
     }
 #endif

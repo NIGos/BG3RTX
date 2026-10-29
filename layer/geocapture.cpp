@@ -914,6 +914,7 @@ void release(Capture& c) {
 // place after its pass, and the NEXT frame's build adds it (rtscene.cpp, bvhsplit.cpp).
 std::mutex g_cc_mu;                 // everything below
 cascade::KeySets g_cc_keys;         // the camera source pass's draw keys (this frame and the last)
+cascade::KeySets g_cc_mesh_keys;    // its mesh keys (alpha-tested cascade draws drawn by it are skipped)
 Capture g_ccap[2];                  // the captured cascade pass of frame F is g_ccap[F & 1]
 struct CcMeta { uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0; bool has_origin = false; float origin[3] = {}; };
 CcMeta g_cc_meta[2];                // what g_ccap[i] holds, converted (frame 0: nothing)
@@ -1078,6 +1079,13 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     return;
   }
   const cascade::DrawId id = cascade_draw_id(cmd, s, args, pi);
+  if (pi.discard && cfg_int("rt_cascade_alpha_dedupe", 1)) {
+    std::lock_guard<std::mutex> lock(g_cc_mu);
+    if (g_cc_mesh_keys.contains(c->record_frame, cascade::mesh_key(id))) {
+      ++c->c_dup;
+      return;
+    }
+  }
   if (id.place) {
     const uint64_t key = cascade::draw_key(id);
     std::lock_guard<std::mutex> lock(g_cc_mu);
@@ -1764,11 +1772,9 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->cc_keys) {   // every draw of the camera source pass, captured or not (rt_cascade_casters dedupe)
     const cascade::DrawId id = cascade_draw_id(cmd, s, args, pi);
-    if (id.place) {
-      const uint64_t key = cascade::draw_key(id);
-      std::lock_guard<std::mutex> lock(g_cc_mu);
-      g_cc_keys.insert(c->record_frame, key);
-    }
+    std::lock_guard<std::mutex> lock(g_cc_mu);
+    g_cc_mesh_keys.insert(c->record_frame, cascade::mesh_key(id));
+    if (id.place) g_cc_keys.insert(c->record_frame, cascade::draw_key(id));
   }
   if (c->rt && !c->rt_ubo) {
     Bg3Binding b;
