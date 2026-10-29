@@ -234,6 +234,9 @@ bool ls_pixel(uint2 fp, out LsPixel px) {
 
 // The game's AO-on-direct factors (b6 .x, as the lighting read it).
 void ls_ao_factors(uint2 fp, Bg3Surface sf, out float ao, out float fdif, out float fspec) {
+#if LS_NATIVE_DIRECT_VALIDATION
+  if((pc.ls_flags&(1u<<19))!=0u) {ao=gAO[fp].x;fdif=1.0;fspec=1.0;return;}
+#endif
   ao = lFlags.m0.x > 0.0 ? gAO[fp].x : 1.0;
   float spec_occ = lFlags.m0.x > 0.0 ? saturate(pow(max(abs(sf.nov_raw + ao), 9.9999997e-05), exp2(-16.0 * sf.a - 1.0)) - 1.0 + ao) : 1.0;
   fdif = lerp(1.0, ao, lFlags.m0.y);

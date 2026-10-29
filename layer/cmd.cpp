@@ -167,7 +167,7 @@ static void after_dispatch(VkCommandBuffer cmd, CmdState* s, bool indirect, uint
   ++s->dispatches_since_pass;
   if (indirect) ++s->indirect_since_pass;
   s->last_cs = s->cs;
-  Bg3DispatchInfo info{s->cs, indirect, {x, y, z}};
+  Bg3DispatchInfo info{s->cs, indirect, {x, y, z},s->cs_native_validation};
   core_on_dispatch(cmd, &info);
 }
 
@@ -435,6 +435,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdBindPipeline(VkCommandBuffer cmd, VkPipelin
     s->fs = it == tracker().pipelines.end() ? 0 : it->second.fs;
   } else {
     s->cs = it == tracker().pipelines.end() ? 0 : it->second.cs;
+    s->cs_native_validation = it == tracker().pipelines.end() ? 0 : it->second.native_validation;
   }
 }
 
@@ -676,7 +677,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cm
 static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, uint32_t y, uint32_t z) {
   diag(DIAG_DISPATCH);
   if (CmdState* pre = cmd_state(cmd)) {
-    Bg3DispatchInfo info{pre->cs, false, {x, y, z}};
+    Bg3DispatchInfo info{pre->cs, false, {x, y, z},pre->cs_native_validation};
     rrpost_dispatch_pre(cmd, pre->cs);
     core_on_dispatch_pre(cmd, &info);
     assetdb_on_dispatch_pre(cmd);
@@ -696,7 +697,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, u
 static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o) {
   diag(DIAG_DISPATCH);
   if (CmdState* pre = cmd_state(cmd)) {
-    Bg3DispatchInfo info{pre->cs, true, {0, 0, 0}};
+    Bg3DispatchInfo info{pre->cs, true, {0, 0, 0},pre->cs_native_validation};
     rrpost_dispatch_pre(cmd, pre->cs);
     core_on_dispatch_pre(cmd, &info);
     assetdb_on_dispatch_pre(cmd);

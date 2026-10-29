@@ -11,7 +11,8 @@
 // 6: Bg3HostApi::assetdb (appended).
 // 7: Bg3HostApi::rr_active (appended).
 // 8: Bg3HostApi::rt_scene_set (appended).
-#define BG3RTX_ABI_VERSION 8
+// 9: actual native validation variant on Bg3DispatchInfo (paired host/core only).
+#define BG3RTX_ABI_VERSION 9
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -44,6 +45,7 @@ struct Bg3DispatchInfo {
   uint64_t cs_hash;
   bool indirect;
   uint32_t groups[3];          // zero for indirect dispatches
+  uint32_t native_validation;  // bit0: recognized native direct-light diagnostic controls
 };
 
 // A resource the game has bound at the moment of the query.

@@ -42,6 +42,7 @@ struct Snapshot {
   // D-LS: the lighting's light list (set 1 b0, b13, b23, b24, b25, b39, b40, b41; set 0 b2).
   Bg3Binding l_flags, l_scale, l_clusters, l_index, l_lights, l_consts, l_shadows, l_atlas, l_cam2;
   bool ls_ok;                        // all of them are bound
+  bool native_direct_validation = false;
   // D-RF: the lighting's own set 1 (bound as our set 2: probes, cubes, DFG LUT, samplers).
   VkDescriptorSet game_set1;
   VkDescriptorSetLayout game_set1_layout;
@@ -182,6 +183,7 @@ Pipe g_ls_full, g_ls_ref, g_ls_check, g_ls_full_check;
 // LS_BOX=1, which also reads the lighting's own set 1 (b29 box records, b45 cookies, b16 sampler)
 // bound as set 3. Its pipeline layout holds the game's set layout, so it is rebuilt if that changes.
 Pipe g_ls_box, g_ls_full_box;
+Pipe g_ls_native_full, g_ls_native_full_box;
 VkPipelineLayout g_ls_box_layout = VK_NULL_HANDLE;
 VkDescriptorSetLayout g_ls_box_game = VK_NULL_HANDLE;
 bool g_ls_box_missing_logged = false, g_ls_box_active = false;
@@ -617,7 +619,7 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
   VkDescriptorSet unused;
   if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
   if (g_ls_box_layout) {
-    for (Pipe* p : {&g_ls_box, &g_ls_full_box}) {
+    for (Pipe* p : {&g_ls_box, &g_ls_full_box, &g_ls_native_full_box}) {
       host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
       *p = Pipe{};
     }
@@ -1127,6 +1129,7 @@ void bind_all(Bound& b, const Snapshot& s) {
 
 // Tells the shaders which material inputs exist (Push::mat_classes bits 1-3), and logs it once.
 void mat_bits(Push& pc, const Snapshot& s, bool post) {
+  if(s.native_direct_validation)pc.ls_flags|=1u<<19;
   if (pc.mat_classes) pc.mat_classes |= (s.x_rt3.view ? 2u : 0u) | (s.x_prof.buffer ? 4u : 0u) | (s.x_frame.buffer ? 8u : 0u);
   // ao_direct bits: 0-1 mode, 2 the sun was ray traced this frame, 3 the sun's
   // inputs are bound (atmosphere LUT only needed with the atmosphere on), 4 gAux.x holds the game's AO.
@@ -1780,7 +1783,16 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     VkPipeline lsp = g_ls.pipeline;
     bool box = false;
     lp.ls_pass = host->cfg_int("ls_check", 0) == 2 ? 2u : 0u;   // reference against itself
-    if (host->cfg_int("ls_check", 0)) {
+    if(s.native_direct_validation) {
+      lsp=VK_NULL_HANDLE;
+      if(host->cfg_int("ls_box",0)) {
+        if(s.box_ready && ensure_ls_box_layout(s.game_set1_layout) &&
+           refresh(g_ls_native_full_box,"gi/rt_local_shadows_native_full_box.hlsl",g_ls_box_layout)) {
+          lsp=g_ls_native_full_box.pipeline;box=true;
+        }
+      } else if(refresh(g_ls_native_full,"gi/rt_local_shadows_native_full.hlsl",g_ls_layout))lsp=g_ls_native_full.pipeline;
+      if(!lsp)host->log("[ls-native-direct] REFUSED owned validation pipeline unavailable");
+    } else if (host->cfg_int("ls_check", 0)) {
       Pipe& c = full ? g_ls_full_check : g_ls_check;
       if (refresh(c, full ? "gi/rt_local_shadows_full_check.hlsl" : "gi/rt_local_shadows_check.hlsl", g_ls_layout))
         lsp = c.pipeline;
@@ -1807,7 +1819,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       host->log("ls box: %s (native lighting set %p, dynamic offsets %u)", box ? "active" : "inactive", (void*)s.game_set1, s.game_set1_ndyn);
       g_ls_ms.clear();g_ls_join_ms.clear();
     }
-    ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8, box ? &s : nullptr);
+    if(lsp)ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8, box ? &s : nullptr);
     ls_timestamp(cmd, 2);
     if (s.shadow.view) image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kAll);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kAll);
@@ -1913,6 +1925,22 @@ void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
   describe(cmd, d);
   std::lock_guard<std::mutex> lock(g_mu);
   uint64_t f = host->frame_index();
+  const bool validation=host->cfg_int("ls_native_direct_validate",0)!=0;
+  const int validation_view=host->cfg_int("ls_debug",0);
+  const bool actual=(d->native_validation&1u)!=0u;
+  if(validation || actual) {
+    Snapshot candidate{};
+    if(snapshot(cmd,candidate) && (!validation || !actual || (validation_view!=4 && validation_view!=5) ||
+       host->cfg_int("ls_check",0) || !host->cfg_int("ls_impl",1) || !candidate.shadow.view)) {
+      // Never mix transformed native output and the ordinary recompute. This
+      // also exposes unsupported/inline native modules and live key changes.
+      static uint64_t refused=0;
+      if(++refused<=8 || refused%300==0)host->log("[ls-native-direct] REFUSED frame %llu cs %016llx requested %u actual %u view %d shadow %u",
+          (unsigned long long)f,(unsigned long long)d->cs_hash,unsigned(validation),unsigned(actual),validation_view,unsigned(candidate.shadow.view!=VK_NULL_HANDLE));
+      for(auto& entry:g_pending)if(entry.second.native_direct_validation)entry.second.ls=false;
+      return;
+    }
+  }
   if (f == g_last_pre_frame) {
     // Later lighting permutations of the same frame: only the material ones bind
     // RT3 (set 1 b4) and the SSS profiles (b28), which the post passes need.
@@ -1940,6 +1968,12 @@ void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
   }
   Snapshot s{};
   if (!snapshot(cmd, s)) return;
+  s.native_direct_validation=validation && actual;
+  if(s.native_direct_validation) {
+    static uint64_t accepted=0;
+    if(++accepted<=4 || accepted%300==0)host->log("[ls-native-direct] active frame %llu cs %016llx matched native module; AO0/direct1/sun0 validation",
+        (unsigned long long)f,(unsigned long long)d->cs_hash);
+  }
   g_last_pre_frame = f;
   if (run_pre(cmd, s)) g_pending[cmd] = s;
 }
@@ -1988,7 +2022,7 @@ void gi_release() {
   sunt_release();
   g_sunt_ok = false;
   for (Pipe* p : {&g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
-                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box,
+                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);

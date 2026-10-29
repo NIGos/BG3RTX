@@ -2,6 +2,7 @@
 // shader modules (by SPIR-V hash), pipelines, images, views, framebuffers,
 // render passes and descriptor set contents.
 #include "host.h"
+#include "native_light_validation.h"
 
 #include <algorithm>
 #include <cstring>
@@ -436,15 +437,23 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
   std::vector<uint32_t> patched;
   VkShaderModuleCreateInfo pci;
   const bool geo = geo_patch_shader(ci, patched);
-  if (geo) {
+  // Startup-only diagnostic: constant native controls, never writes game UBOs.
+  static const bool native_requested=cfg_int("ls_native_direct_validate",0)!=0;
+  static const int native_debug=cfg_int("ls_debug",0);
+  native_light_validation::Result native;
+  if(native_requested && (native_debug==4 || native_debug==5) && !geo && ci->codeSize%4==0)
+    native=native_light_validation::patch(ci->pCode,ci->codeSize/4);
+  const bool direct=native.status==native_light_validation::Status::Applied;
+  if(direct)patched=std::move(native.words);
+  if (geo || direct) {
     pci = *ci;
     pci.pCode = patched.data();
     pci.codeSize = patched.size() * 4;
   }
-  VkResult r = device_of(device)->vk.CreateShaderModule(device, geo ? &pci : ci, alloc, out);
-  bool used_patched = geo && r == VK_SUCCESS;
-  if (r != VK_SUCCESS && geo) {
-    log("[geo] patched vertex shader rejected (%d); using the original", r);
+  VkResult r = device_of(device)->vk.CreateShaderModule(device, (geo || direct) ? &pci : ci, alloc, out);
+  bool used_patched = (geo || direct) && r == VK_SUCCESS;
+  if (r != VK_SUCCESS && (geo || direct)) {
+    log("[shader-control] diagnostic/XFB module rejected (%d); using the original", r);
     r = device_of(device)->vk.CreateShaderModule(device, ci, alloc, out);
   } else if (r == VK_SUCCESS) {
     geo_note_module(*out, geo);
@@ -452,10 +461,17 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
   if (r == VK_SUCCESS) {
     uint64_t h = hash64(ci->pCode, ci->codeSize);
     shader_dump(h, ci->pCode, ci->codeSize);
+    if(direct && used_patched) {
+      const uint64_t actual=hash64(pci.pCode,pci.codeSize);
+      shader_dump(actual,pci.pCode,pci.codeSize);
+      log("[ls-native-direct] module %016llx -> %016llx controls AO=enabled directAO=0 sunMask=enabled loads %u components %u",
+          (unsigned long long)h,(unsigned long long)actual,native.loads,native.components);
+    } else if(native.status==native_light_validation::Status::Unsupported)
+      log("[ls-native-direct] REFUSED unsupported native module %016llx",(unsigned long long)h);
     if (aftermath_enabled()) {
       // The driver sees the patched module when the capture patched it.
       char what[48];
-      snprintf(what, sizeof what, "game %016llx%s", (unsigned long long)h, used_patched ? " (XFB-patched)" : "");
+      snprintf(what, sizeof what, "game %016llx%s", (unsigned long long)h, used_patched ? (direct?" (native-control)":" (XFB-patched)") : "");
       const std::string dumped = root_dir() + "\\captures\\shaders\\" + [&] {
         char b[24];
         snprintf(b, sizeof b, "%016llx.spv", (unsigned long long)h);
@@ -466,6 +482,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
     }
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().modules[*out] = h;
+    tracker().module_validation[*out] = direct && used_patched ? 1u : 0u;
   }
   return r;
 }
@@ -475,6 +492,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyShaderModule(VkDevice device, VkShaderM
   geo_forget_module(m);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().modules.erase(m);
+  tracker().module_validation.erase(m);
 }
 
 // Stage hash from the module, or from SPIR-V chained inline (maintenance5 /
@@ -551,6 +569,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device, Vk
     if (!out[i]) continue;
     PipelineRec rec{tracker().next_pipeline_id++, VK_PIPELINE_BIND_POINT_COMPUTE, 0, 0, 0, 0, VK_NULL_HANDLE, 0};
     rec.cs = stage_hash_locked(cis[i].stage);
+    if(auto v=tracker().module_validation.find(cis[i].stage.module);v!=tracker().module_validation.end())rec.native_validation=v->second;
     tracker().pipelines[out[i]] = rec;
   }
   return r;

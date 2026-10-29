@@ -150,6 +150,9 @@ add_test(NAME assetdb_test COMMAND assetdb_test)
 # Light BVH for many-light sampling (common/light_tree.h, docs/DESIGN_SOTA_NEXT.md item 1).
 add_executable(light_tree_test tests/light_tree_test.cpp)
 add_test(NAME light_tree_test COMMAND light_tree_test)
+add_executable(native_light_validation_test tests/native_light_validation_test.cpp)
+target_include_directories(native_light_validation_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME native_light_validation_test COMMAND native_light_validation_test)
 
 # Hot-reloadable core: rebuild while the game runs.
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp)

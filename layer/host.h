@@ -96,6 +96,7 @@ struct PipelineRec {
   uint64_t vs, fs, cs, other;          // SPIR-V hashes per stage (0 if absent)
   VkRenderPass render_pass;
   uint32_t subpass;
+  uint32_t native_validation = 0;
 };
 struct RenderPassRec {
   std::vector<VkFormat> formats;
@@ -120,6 +121,7 @@ inline bool is_dynamic_type(VkDescriptorType t) {
 struct Tracker {
   std::shared_mutex mu;
   std::unordered_map<VkShaderModule, uint64_t> modules;
+  std::unordered_map<VkShaderModule, uint32_t> module_validation;
   std::unordered_map<VkImage, ImageRec> images;
   std::unordered_map<VkImageView, ViewRec> views;
   std::unordered_map<VkFramebuffer, std::vector<VkImageView>> framebuffers;
@@ -165,6 +167,7 @@ struct CmdState {
   VkPipeline pipe[2] = {};             // graphics, compute
   uint32_t pipe_id[2] = {};
   uint64_t vs = 0, fs = 0, cs = 0;     // stage hashes of the bound pipelines
+  uint32_t cs_native_validation = 0;
   std::array<VkDescriptorSet, 8> sets[2] = {};
   std::vector<uint32_t> dyn[2][8];     // dynamic offsets of each bound set, in binding order
   VkPipelineLayout set_layout[2][8] = {};
