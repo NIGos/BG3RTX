@@ -162,7 +162,7 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
   if (roofs) {
     const float dx = g_cam[0] - g_last_query[0], dy = g_cam[1] - g_last_query[1], dz = g_cam[2] - g_last_query[2];
     if (level != g_level || g_calls % 30 == 0 || dx * dx + dy * dy + dz * dz > 25.0f)
-      refresh(a, host->cfg_float("rt_sun_roof_pad", 1.0f), host->cfg_float("rt_sun_roof_up", 3.0f));
+      refresh(a, host->cfg_float("rt_sun_roof_pad", 3.0f), host->cfg_float("rt_sun_roof_up", 50.0f));
     if (level != g_level)
       host->log("sun: rt_sun_replace %d: level %s, %u roof volumes within %.0f m of the camera (%zu uploaded)", replace,
                 lname, g_total, g_radius, g_vol.size());
