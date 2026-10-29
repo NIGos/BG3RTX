@@ -1,19 +1,37 @@
 # BG3RTX progress
 
-## Current checkpoint — 2026-10-29 04:58 Europe/Rome
+## Current checkpoint — 2026-10-29 05:10 Europe/Rome
 
 - Main rendering remains 6dba0a8; the P6 water design is merged.
 - P1 corrected geometric gate pan276 demonstrates no gain; all variants stay off and static energy remains failed.
 - Geometry runs 265–266 are INVALID because base passes lacked origin binding 40.
 - The shared layout/write fix passes 12 CTests and 24 ABI checks; runtime 269 has no layout/push/write errors.
 - Probes 268–269 measure zero current ray/projection offset PRE and POST; native positions stay unchanged.
-- Corrected-interface 271/272 both FAIL static energy parity: independent POST sampling alone does not fix the bias.
+- Corrected-interface271/272 and native-AO isolation280 FAIL energy parity; weighted rejected-source attribution282 is running.
 - P3 default reference passes: 24 windows, 7.845 billion pixels, zero differences.
 - P3 shadow smoke278 exercises1.319 rays/px; cap1 run279 did not exercise unknowns, so fallback remains unverified.
 - EN2/D-EM stay off; P4 has a tested CPU classifier, while GPU integration and P5 remain open.
 - One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
 
 ## Resumed — 2026-10-29
+
+280 native-AO isolation FAIL: valid188s/185s exclusive, static<=0.16px,
+finite/pose/actual alpha pass; all six off captures match PRE RGB exactly.
+Gate on/off+1.1697%, pairedY95%CI [+0.000041581,+0.000373752]; original
+POST/PRE+0.8004%, CI [+0.000040715,+0.000242889]. Both exclude0. Removing
+the native GI-AO fold alone does not explain source drift; no AO/cap change.
+P1 aaa3754 adds diagnostic mode4 for old versus fresh Y*w/rays on the SAME
+rejected ray, including fresh failure, rejection reasons and all receiver pixels.
+Q24 carries/bounds use receiver bins and actual width/height/rays,196 counters;
+no output/weight/visibility/source/camera change. Exact source/independent rays/
+adaptive fallback2 are refused. Build12 CTests/24ABI pass, seven ordinary GI/RF
+shaders byte-identical. 282 LIVE frozenaaa3754, two static off/on traces with full
+VVL; inspect invalid/failed/count closure and all layout/push/write categories.
+281 S7 INVALID at startup: exits2s before new layer log or scene-ready; no driver
+fault/dump or box result. P3 state/evidence is pushed; try S5 after P1 and a
+bounded S7 retry without save/mod changes. It was historically loadable, not
+proved currently loadable. P3 branch3075e38 at attempted launch.
+
 
 278 actual box shadow execution PASS: normal GI/debug0, valid111s/49s session,
 ten complete120-frame windows; evaluated/traced1.319/px, occluded0.738/px,
