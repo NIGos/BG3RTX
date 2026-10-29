@@ -22,7 +22,7 @@ usage 93%, one reset available. Do not consume merely because it is eligible.
 Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
 Rendering remains 6dba0a8; P6 design merged 441904a. No P1/P3/P4 rendering merged.
 Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan c3b924f, pushed, paired ABI14.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 7bb43b5, pushed, paired ABI14.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b97f4d4, pushed.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
 - P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
@@ -32,14 +32,15 @@ D:/BG3_Tools/git_backup/commit-map-old-to-new.txt; never rewrite that history.
 Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
 
 ## Live job and immediate next action
-284 LIVE on frozen P1 c3b924f: rejected-source-energy validation, four static
-captures off/on/on/off, full unlimited VVL. Runner PID31100 started05:16.
-Verify ACTUAL processes/session and results before doing anything; do not restart
-because observation times out. P1 sources/binaries/HEAD must remain frozen.
-Inspect all windows: invalid sums0, rejection-reason totals equal replacements,
-failed-positive old energy0, full layout/push/write categories, finite/pose/alpha
-and off control parity. Read below for why failed sample counts alone are unsafe.
-After terminal record results, commit/push evidence. Next P3 bounded S7 retry.
+285 LIVE frozen P3 b97f4d4: bounded S7 startup retry. Actual runner39080
+started05:21:59, game37436 at05:22:01; fresh layer log confirms startup/loading.
+Check actual handles and terminal queue result; no restart from an observation timeout.
+P3 source/binaries/HEAD stay FROZEN. P1 7bb43b5 is clean/pushed; next runnable
+control is gi_recursive_source_isolation_static_job.json (gi_strength0, static12).
+284 strict loss gate FAILS: unlit failures have positive old energy up to6.73e-9
+weighted Y; total positive source delta1.40e-4 is over20000 times larger.
+No waiver or fallback/source change. Full audit and exact evidence below.
+After285 terminal, inspect S7 rays/cookies, record/push; P1 gets queue priority.
 
 ## P1 - pan instability remains OPEN
 User sees lighting/shadows detach while panning; Ctrl+Shift+F9 restores native.
@@ -91,7 +92,10 @@ Off capture has53 RGB differences (+0.00353% mean): no exact control parity clai
 On+1.908% versus PRE. c3b924f restores original selection condition and measures
 failure energy before quantization: unlit zero-old samples differ from lost
 positive bounces. No return/fallback is changed just to make an expect pass.
-284 checks that distinction with four captures and longer pure on windows.
+284 FAILS that distinction: unlit old energy is positive (up to6.73e-9), but
+not the main positive drift1.40e-4. Off45/54 RGB differences remain; no parity
+waiver. On+0.859/+0.688% PRE; full layout/push/write audit passes, other VVL
+unresolved. Next gi_strength0 static12 isolates recursion, not a production fix.
 
 P1 candidate is parked, not approved: PAUSED.md, GI_FRESH_FALLBACK.md,
 GI_DIFFUSE_EXACT.md, GI_GEOMETRIC_NORMAL.md, GI_FRESH_INDEPENDENT.md,

@@ -1,11 +1,11 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 05:17 Europe/Rome
+## Current checkpoint - 2026-10-29 05:23 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
 - Invalid geometry runs 265/266 are excluded; corrected bindings pass scoped runtime audits.
-- P1 weighted source attribution 284 is live on frozen c3b924f; it measures actual failed-old energy.
+- P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
 - P3 native accuracy, cookies, unknown-query coverage and moving quality remain unverified.
@@ -14,6 +14,25 @@
 - One reset is authorized at exhaustion and unused; latest weekly usage read was 93%.
 
 ## Resumed — 2026-10-29
+
+284 strict positive-old-loss gate FAILS: stable 135 s / 133 s exclusive,
+no driver faults, dumps or build changes. All fresh failures are unlit; up to
+25/26 have positive old energy. Weighted failed-old Y reaches 6.7333e-9,
+versus total positive replacement delta 1.40043e-4 in the same window. The
+small loss is NOT waived, but cannot explain the much larger positive drift.
+Reasons close exactly; invalid sums 0. Full layout/push/write VVL categories
+absent; other categories unresolved. Raw GI finite/alpha exact; off controls
+have 45/54 RGB differences (-0.00206/+0.00299% mean), explicitly retained.
+On captures are +0.859/+0.688% versus PRE. No denominator reset or lost bounce
+explains the main excess. P1 7bb43b5 pushes evidence and prepares existing-key
+gi_strength0 static12 isolation of recursive/source-epoch coupling. A changed
+lighting model is diagnostic only, never a fix; unsupported unlit shading stays
+open and must not be replaced by trusted rejected history or an altered gate.
+285 S7 bounded startup retry LIVE on frozen P3 b97f4d4. Unlike attempt281,
+actual game37436 started05:22:01, creates a fresh layer log and is loading the
+requested scene. Runner39080 started05:21:59. Do not relaunch it or infer success
+from startup alone. Next runnable P1 control follows this job's terminal result.
+
 
 283 S5 shadow coverage PASS: valid 113 s total / 49 s session, ten complete
 windows, evaluated/traced 0.079 per pixel and occluded 0.029. Final nonfinite 0;
