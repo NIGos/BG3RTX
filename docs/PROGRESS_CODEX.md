@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 05:59 Europe/Rome
+## Current checkpoint - 2026-10-29 06:22 Europe/Rome
 
 - Main rendering remains 6dba0a8; only the P6 water design is additionally merged.
 - P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
@@ -8,12 +8,33 @@
 - P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
 - Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
 - P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P3 native-direct diagnostic288 is live on matched ABI9; ordinary shaders remain byte-identical and native accuracy is still unproved.
+- P3 format-aware native diagnostic290 is live on ABI9; scene289 has +0.5993% residual, cause unproved.
 - P2 local-light reference is merged; EN2/D-EM failures keep those features off.
 - P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
 - The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
 
 ## Resumed — 2026-10-29
+
+P3 289 is terminal, queue INVALID: a one-time box-active message occurred before
+its scene slice. No result is retroactively passed. Nine actual scene windows
+cover 2,932,082,331 projector receivers: native Y0.0292808848, recompute0.0294563717
+(+0.599322%), abs error0.0001767432, invalid0. All62 native modules controlled;
+whole log has NO refusals. Final finite, native D32F d130 has2604 nonfinite.
+Full layout/push/write categories absent; other VVL categories remain unresolved.
+Evidence is committed on P3. Initial reset refresh lag resolved: fresh weekly0%,
+ordinary usage allowed; the single authorization is consumed, credit balance0.
+
+8ec56ab tests the storage-format hypothesis without waiving the residual:
+Vulkan allows either adjacent UFLOAT value, so each loaded R11/G11/B10 component
+defines its own open neighbour interval. Diffuse/specular RGB checked separately
+on ALL shaded receivers; finite maxima inconclusive, invalid values explicit.
+No tuned percentage or model-error allowance. Shared HLSL/C++ code is exhaustively
+checked against an independent decoder (2,974 bounded codes plus maxima), 5 CTests
+pass, two diagnostic shaders compile; all six ordinary variants byte-identical.
+Recurring scene box-active stats replace the startup-only queue expectation.
+290 LIVE frozen P3 8ec56ab, runner33888 at06:21:53, after fresh idle/playing checks.
+No native-accuracy/default/merge approval; wait terminal and inspect full audits.
+
 
 Usage reset consumed once after fresh weekly100% reading, per explicit user
 authorization. Tool outcome reset, credit balance0; idempotency key
