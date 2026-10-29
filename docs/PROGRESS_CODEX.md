@@ -2,6 +2,25 @@
 
 ## Resumed — 2026-10-29
 
+260 four-ray diagnostic: valid118s/52s session, zero faults/dumps/build changes.
+Within-run off/on residual0.281396/0.260002 (-7.60%), but cohort GI Y0.155257/
+0.015238 (-90.19%), motion74.61/80.65px; off has strong radiance spikes. No
+quality win. Both-zero normalized residual is not a monotone variance estimate
+as ray count changes; no cross-run image or noise-reduction inference.
+
+P1 bd4215c adds an INDEPENDENT default-off gi_history_diffuse_exact hypothesis:
+legacy RGB*(diffuse_Y/total_Y) preserves source Y but mixes view-dependent
+reflection colour into GI. Exact complete diffuse RGB now has its own metadata
+record, retaining complete radiance for RF/control and fresh same-source fallback.
+Requires gi_history_fresh=1; surface gate0 isolates it. gi_pan_metric=2 buckets
+this source key; same-cohort RGB residual complements Y. No extra ray/descriptor,
+weight/count change or camera transport. Metadata stride3 stays fixed across
+source toggles; range guard remains. Full build/11 CTests, eight affected shader
+variants, 24 ABI checks, five energy regressions and seven byte-identical ordinary
+shaders pass. 261 is the frozen two-capture unlimited-sync-validation smoke;
+then original-PRE/static-energy and ONE moving source-key test if valid. All keys0.
+Spec/evidence on P1: docs/GI_DIFFUSE_EXACT.md; no main rendering merge.
+
 259 ONE-run balanced moving test: valid112s/52s session, zero faults/dumps/
 build changes. Off/on residual0.134896214/0.144665732 (+7.242%); mean GI
 Y0.015967731/0.016094788 (+0.796%); motion68.822/71.812 render px. Cohort

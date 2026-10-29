@@ -27,15 +27,14 @@ Old research is preserved at pan-motion-vectors/BG3RTX 929be7a; camera-native
 
 ## P1 — Pan instability
 
-User report: RT lighting/shadows seem to detach from objects during pans;
-Ctrl+Shift+F9 (all RT off) restores the normal appearance.
+User: RT lighting/shadows detach during pans; Ctrl+Shift+F9 restores normal.
 Old static S3 fails (details in PROGRESS_CODEX); fixed scores and independent
 moving trajectories cannot establish a P1 improvement.
 
 Old research proves finite fallback/paired depth/radiance and observed motion;
 metadata overlap fixed. No pan-quality or additional camera-payload proof.
 
-Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now 2ff8b88, pushed. It excludes
+Fresh codex/p1-pan is in en2-selfcheck/BG3RTX, now bd4215c, pushed. It excludes
 unrelated FG work. Old current-radiance replay is default-off, paired ABI14;
 scope/evidence: phase docs/CURRENT_RADIANCE.md. No pan-quality win established.
 Latest user steering: STOP cross-run image comparisons. Use a per-run reprojection
@@ -76,10 +75,8 @@ on rejection, with material/strength/skin conventions and unchanged ray weights.
 PRE AO is preserved. RR full-res/diffuse-only. Metadata stride1/2; token consumed
 after POST readers; no new transport. 11 CTests, 49 shaders, 24 ABI checks,
 5 energy regressions and 36 helper checks pass; ordinary shaders unchanged.
-251 direct-only smoke valid113s, finite/pose/alpha pass, zero faults. Unlimited
-VVL has existing renderpass/NGX categories, no dispatch/private-handle hazard;
-scoped evidence only. 252/253 camera moved: INVALID static QA. SDL cursor event
-initialization fixed this; 254 static shift -0.04/0.0200 render px in99s.
+251 smoke valid; VVL only existing categories (scoped). 252/253 camera moved:
+INVALID static QA. SDL cursor event fixed; 254 static0.04px,99s/no faults.
 255 valid200s, twelve stationary captures, max shift0.16px, alpha exact, no faults.
 Direct-only internal parity -0.807%, CI [-0.000601951,+0.000329959]Y. PARTIAL:
 both modes changed integrand, so it does NOT prove original estimator parity.
@@ -92,12 +89,18 @@ Other on captures still+0.50..2.06% vsPRE; smaller bias NOT proved solved.
 259 valid112s/52s moving, no faults. Off/on residual0.134896/0.144666 (+7.24%),
 GI Y0.0159677/0.0160948 (+0.80%), motion68.82/71.81px, samples3.53M/4.60M,
 grid coverage4.87%/6.82%. NO pan win. Queue terminal, P1 evidence pushed.
-Next separate fresh stochastic noise from resolved RR instability; small static
-bias still open. No new transport/cross-run pictures/brightness compensation.
+260 four-ray diagnostic valid118s/no faults: residual-7.60% but cohortY-90.19%
+with off radiance spikes: no win/variance inference. Small static bias open.
+bd4215c independent gi_history_diffuse_exact=0 stores complete diffuse RGB,
+removing legacy reflected-colour mixture; original complete RF source retained.
+Requires fresh1; gate0 isolates. Metric2 selects exact-source key, adds RGB
+residual on same cohort. Fixed metadata3 across toggles; no new transport.
+11 CTests/8 shaders/24 ABI/5 energy checks/7 ordinary identical pass. 261 LIVE
+unlimited-sync two-capture smoke; then static12 and ONE moving source toggle.
+Spec docs/GI_DIFFUSE_EXACT.md. All keys0; no quality/default/main approval.
 Spec: phase docs/GI_FRESH_FALLBACK.md. Never report moving captures as static pass.
 Use existing B2/B5 camera data, derived bounds, the actual contributing colour
 footprint and GPU-ordered availability, not a CPU epoch certificate.
-Default VVL limit3 weakens smoke counts.
 Do not close P1 from diagnostic passes alone. The phase is done when each
 effect meets its derived gate, or is clearly reduced with its cause explained.
 Record the candidate key and user check in PROGRESS_CODEX: static building/ground
