@@ -1364,14 +1364,17 @@ void ls_timing_collect() {
 // usually stamped one frame earlier. The TLAS and set 1 come as one pair from
 // the same host snapshot (rt_scene_set, ABI 8): the passes never trace one
 // build's TLAS with another's InstInfo, records, soup or pool.
-VkAccelerationStructureKHR rt_tlas(VkDescriptorSet* alpha) {
+VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha) {
   if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 1) &&
                           !host->cfg_int("rt_local_shadows", 1) && !host->cfg_int("rt_reflections", 1)))
     return VK_NULL_HANDLE;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
   uint64_t built = 0, now = host->frame_index();
   *alpha = VK_NULL_HANDLE;
-  if (!host->rt_scene_set || !host->rt_scene_set(&tlas, alpha, &built) || !tlas || built + 1 < now || !*alpha) {
+  const bool matched = host->cfg_int("rt_scene_camera_match", 0) != 0;
+  bool scene_ok = matched ? host->rt_scene_camera && host->rt_scene_camera(cmd, &tlas, alpha, &built)
+                          : host->rt_scene_set && host->rt_scene_set(&tlas, alpha, &built);
+  if (!scene_ok || !tlas || built + 1 < now || !*alpha) {
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
   }
@@ -1423,7 +1426,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   mat_bits(pc, s, false);
   // Track D: the frame's TLAS for the ray-traced passes.
   VkDescriptorSet alpha = VK_NULL_HANDLE;
-  VkAccelerationStructureKHR tlas = rt_tlas(&alpha);
+  VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha);
   if (tlas && (!ensure_rt_layout() || !refresh(g_rt_shadow, "gi/rt_shadow.hlsl", g_rt_layout) ||
                !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) || !refresh(g_rt_ao, "gi/rt_ao.hlsl", g_rt_layout) ||
                !refresh(g_trace_rt, "gi/gi_trace_rt.hlsl", g_rt_layout) ||

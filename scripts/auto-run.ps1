@@ -498,8 +498,17 @@ while ((Get-Date) -lt $deadline) {
       if (-not $panCaptureSent -and $elapsed -ge $step.capture_at) {
         $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
         $iniLines += "pan_capture=$($step.serial)"
+        if ($step.set) {
+          foreach ($assignment in ($step.set -split ',')) {
+            $parts = $assignment -split '=', 2
+            if ($parts.Count -ne 2) { throw 'MovePlan set requires key=value' }
+            $settingPattern = '^' + [regex]::Escape($parts[0]) + '='
+            $iniLines = @($iniLines | Where-Object { $_ -notmatch $settingPattern })
+            $iniLines += $assignment
+          }
+        }
         $iniLines | Set-Content -LiteralPath $ini
-        Write-Host "[pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms)"
+        Write-Host "[pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) set=$($step.set)"
         $panCaptureSent = $true
       }
       $panInMotion = $step.repeat_ms -gt 0 -and $elapsed -ge $step.motion_start -and $elapsed -lt $step.motion_end

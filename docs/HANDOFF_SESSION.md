@@ -11,7 +11,7 @@ historical progress. No new renderer synchronization fix has been applied.
 Use C:/Users/quali/Documents/Code Projects/BG3RTX explicitly. This checkout is
 currently on codex/p1-pan-flashes, NOT main. Main ref is 58b06b4. Keep experimental
 work on this branch; only scripts/merge-green.ps1 may integrate into main.
-Paired ABI 15: host and core must match. Do not reuse other branch processes.
+Paired ABI 16: host and core must match. Do not reuse other branch processes.
 
 The latest user permission allows the game visible in the background while they
 use the PC. Do not require USER_AWAY or force focus. Always use real presentation.
@@ -24,6 +24,15 @@ without new user authorization. The original overall project scope remains P1-P6
 FG toggle issues and the roughly 18 fps base rate follow this explicit P1 task.
 
 ## Current checkpoint and next action
+
+LATEST USER STEERING: stop burst-tool work. Existing primary-ray evidence is
+the accepted positive control (99.53-99.57% static, 89.25% slow, 31.40% fast).
+Fix renderer alignment behind a key; A/B within one presented pan run. Gate
+is moving primary match near the static 99.5% level; images are optional.
+Current experiment rt_scene_camera_match defaults to 0 and matches the native
+lighting-camera UBO identity to its scene. Paired ABI is now 16, not 15 below.
+Fixture tests/fixtures/p1_camera_match_job.json alternates off/on in ONE run.
+No renderer quality result yet. Do not confuse missing RT with a passing gate.
 
 The first normal-rate final-colour positive run (08a0256) is INVALID: only
 6 / 4 / 7 / 8 final samples across the four bursts, with all other channels

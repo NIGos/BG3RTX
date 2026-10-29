@@ -114,6 +114,8 @@ struct SceneSlot {
   VkBuffer pose = VK_NULL_HANDLE;
   VkDeviceMemory pose_memory = VK_NULL_HANDLE;
   bool pose_valid = false;
+  VkBuffer camera = VK_NULL_HANDLE;
+  VkDeviceSize camera_offset = 0;
 };
 uint64_t g_legacy_rec = 0;   // the legacy BLAS's last build: refit only once it was submitted
 SceneSlot g_scene[kSceneSlots];
@@ -858,6 +860,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   const int scene_slot = pick_scene_slot();
   if (scene_slot < 0) return;
   SceneSlot& scene = g_scene[scene_slot];
+  scene.camera = cap.ubo;
+  scene.camera_offset = cap.ubo_offset;
   scene.pose_valid = false;
   if (cfg_int("pan_capture", 0) > 0 || cfg_int("pan_prepare", 0)) {
     void* mapped = nullptr;
@@ -1050,16 +1054,17 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
 
 // Caller holds g_mu. The current slot, stamped as handed out in this frame;
 // false before the first build and once it is stale (it may be retired then).
-bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {
-  if (g_scene_cur < 0) return false;
-  SceneSlot& s = g_scene[g_scene_cur];
+bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame, int slot = -1) {
+  if (slot < 0) slot = g_scene_cur;
+  if (slot < 0) return false;
+  SceneSlot& s = g_scene[slot];
   const uint64_t now = frame_index();
   if (!s.used || !s.tlas || s.built + 1 < now) return false;
   // Its command buffer was dropped without a submit: the TLAS was never built.
   if (bvh_rec_state(s.rec) == 2) return false;
   if (s.split ? !g_split_valid : !g_blas_valid) return false;
   s.last_use = (std::max)(s.last_use, now);
-  alpha_slot_in_use(uint32_t(g_scene_cur), now);   // the set's game views live while it may be bound
+  alpha_slot_in_use(uint32_t(slot), now);   // the set's game views live while it may be bound
   *tlas = s.tlas;
   if (set) *set = s.set;
   *built_frame = s.built;
@@ -1082,6 +1087,33 @@ bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64
   std::lock_guard<std::mutex> lock(g_mu);
   *set = VK_NULL_HANDLE;
   return hand_out(tlas, set, built_frame);
+}
+
+bool rt_scene_camera(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas, VkDescriptorSet* set,
+                     uint64_t* built_frame) {
+  if (!g_rt) return false;
+  Bg3Binding camera{};
+  if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, 0, 2, 0, &camera) || !camera.buffer) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  int matched = -1;
+  for (uint32_t i = 0; i < kSceneSlots; ++i) {
+    const SceneSlot& s = g_scene[i];
+    if (s.used && s.camera == camera.buffer && s.camera_offset == camera.offset &&
+        (matched < 0 || s.rec > g_scene[matched].rec)) matched = int(i);
+  }
+  static uint64_t count = 0, redirected = 0, missing = 0;
+  ++count;
+  redirected += matched >= 0 && matched != g_scene_cur;
+  missing += matched < 0;
+  if (count % 300 == 0) {
+    log("[rt] camera scene identity: %llu queries, %llu redirected, %llu no match; lighting %p+%llu, latest %p+%llu",
+        (unsigned long long)count, (unsigned long long)redirected, (unsigned long long)missing,
+        (void*)camera.buffer, (unsigned long long)camera.offset,
+        g_scene_cur >= 0 ? (void*)g_scene[g_scene_cur].camera : nullptr,
+        g_scene_cur >= 0 ? (unsigned long long)g_scene[g_scene_cur].camera_offset : 0);
+  }
+  *set = VK_NULL_HANDLE;
+  return matched >= 0 && hand_out(tlas, set, built_frame, matched);
 }
 
 uint64_t rt_scene_oldest_live() { return g_oldest_live.load(); }

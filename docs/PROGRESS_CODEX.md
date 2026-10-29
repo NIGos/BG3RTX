@@ -1,5 +1,20 @@
 # BG3RTX progress
 
+## P1 renderer alignment takes priority — 2026-10-29
+
+User accepts the real-present FG-off primary-ray evidence as the positive
+control: static 99.53-99.57%, slow 89.25%, fast 31.40% (36.1% in front,
+27.9% behind). Burst images are optional and no longer block a renderer fix.
+First fix hypothesis: latest-global scene selection can pick another camera
+epoch. rt_scene_camera_match=1 selects the live TLAS/set pair by the lighting
+camera UBO buffer and offset; default 0 preserves the ordinary selection.
+Host/core are paired ABI 16. Native instance rows still come from the recorded
+draw stream at submit; no guessed frame offset or shader-space shift.
+Build and four CTests pass. Next: ONE real-present job with static and slow/fast
+pan phases alternating the key. Gate: moving primary match reaches the static
+level, approximately 99.5%, with RT active. Missing scenes are not a pass.
+No burst-tool work or default promotion before this measurement.
+
 ## P1 presentation-counter capture race — 2026-10-29
 
 The normal-rate positive run is INVALID: final colour was captured in only

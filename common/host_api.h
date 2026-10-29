@@ -12,7 +12,7 @@
 // 7: Bg3HostApi::rr_active (appended).
 // 8: Bg3HostApi::rt_scene_set (appended).
 // 15: named, bounded pan-burst readbacks (9-14 belong to other phase branches).
-#define BG3RTX_ABI_VERSION 15
+#define BG3RTX_ABI_VERSION 16
 
 // One render pass instance (classic render pass or dynamic rendering) as the
 // game recorded it. Identified across frames by its signature, not by position:
@@ -201,6 +201,9 @@ struct Bg3HostApi {
   // Images require TRANSFER_SRC usage. Buffer samples are copied on the GPU.
   // Returns false outside a burst or when a resource cannot be captured.
   bool (*pan_capture)(VkCommandBuffer cmd, const char* name, const Bg3Binding* resource);
+  // ABI 16: select a scene by the lighting camera's native UBO identity.
+  bool (*rt_scene_camera)(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas,
+                          VkDescriptorSet* set, uint64_t* built_frame);
 };
 
 struct Bg3CoreApi {

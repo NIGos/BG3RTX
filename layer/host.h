@@ -443,6 +443,8 @@ constexpr uint32_t kSceneSlots = 8;
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
 // ABI 8: the latest scene's TLAS and its own set 1, as one versioned pair.
 bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame);
+bool rt_scene_camera(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas, VkDescriptorSet* set,
+                     uint64_t* built_frame);
 // Oldest build frame among the slots the GPU may still read (UINT64_MAX: none).
 // A BVH range freed in frame F is released only once this is > F.
 uint64_t rt_scene_oldest_live();
