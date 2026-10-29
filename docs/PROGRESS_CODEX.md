@@ -1,5 +1,22 @@
 # BG3RTX progress
 
+## P1 complete-burst transport and analyzer correction — 2026-10-29
+
+Final capture now contains 176 samples / 16 frames. All required image channels
+are finite; unused native camera metadata is preserved as bytes, with matrix/
+origin fields validated separately. No copy-image VVL errors, but other errors
+remain, including one unattributed buffer-usage error. Validation cadence is
+11.86 fps and is not the positive control. Evidence: p1-pan-final-transport.json;
+full log: captures/p1-pan-flashes/08a9c39-final-validation.log.
+
+Corrected jitter/static classification and footprint-bounded texture matching;
+static common coverage rises from 604 to 766,671 pixels on the same data. Noise
+is calibrated per matching world sample, with native format precision, rather
+than taking a global maximum that made binary-mask detection impossible. A
+second static burst is independent evaluation. 13 analysis tests pass; no lag
+fix or default promotion. Next: one real-present FG-off positive run, serials
+11/12 static and 13/14 moving. Contact sheets pending that complete run.
+
 ## P1 capture continuation — 2026-10-29
 
 Resumed from the interrupted pan-flashes conversation at a0bb416. Its owned

@@ -14,6 +14,7 @@
     "\\[pan\\] burst 11 complete: 16 frames, .*transport ok",
     "\\[pan\\] burst 12 complete: 16 frames, .*transport ok",
     "\\[pan\\] burst 13 complete: 16 frames, .*transport ok",
+    "\\[pan\\] burst 14 complete: 16 frames, .*transport ok",
     "primary-ray check",
     "\\[auto\\] scene ready"
   ],

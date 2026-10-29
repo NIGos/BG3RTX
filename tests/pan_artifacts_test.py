@@ -4,10 +4,71 @@ import json
 import tempfile
 from pathlib import Path
 import numpy as np
-from scripts.qa.pan_artifacts import transient, reproject, camera, decode, load_burst
+from scripts.qa.pan_artifacts import (transient, reproject, camera, decode, load_burst,
+                                     scene_camera_origin, texture_compatible, static_camera,
+                                     calibration_noise, storage_quantum, positive_control_status)
 
 
 class PanTests(unittest.TestCase):
+    def test_positive_control_needs_both_symptoms_and_comparable_cadence(self):
+        control = dict(role='static-evaluation', calibrated_pixel_frames=1000,
+                       primary_match_fraction=[.995], effects=dict(luma=dict(pixel_frames=1)))
+        pan = dict(role='panning', calibrated_pixel_frames=1000, burst_fps=20,
+                   primary_match_fraction=[.4], effects=dict(luma=dict(pixel_frames=50)))
+        self.assertTrue(positive_control_status([control, pan]).startswith('REPRODUCED'))
+        pan['burst_fps'] = 5
+        self.assertTrue(positive_control_status([control, pan]).startswith('INCOMPLETE'))
+        pan['burst_fps'] = 20; pan['primary_match_fraction'] = [.999]
+        self.assertEqual(positive_control_status([control, pan]), 'NOT_REPRODUCED')
+        self.assertTrue(positive_control_status([pan]).startswith('INCOMPLETE'))
+
+    def test_noisy_point_cannot_disable_detection_elsewhere(self):
+        noise = np.ones((16, 5, 5), dtype='f4')
+        noise[::2, 0, 0] = 0
+        valid = np.ones_like(noise, dtype=bool)
+        bound, known = calibration_noise(noise, valid, 1/255)
+        test = np.ones_like(noise); test[6:8, 3, 3] = .1
+        flags, count = transient(test, valid & known[None], bound)
+        self.assertEqual(count, 1)
+        self.assertEqual(int(flags[:, 3, 3].sum()), 2)
+        valid[:, 2, 2] = False
+        _, known = calibration_noise(noise, valid, 1/255)
+        self.assertFalse(known[2, 2])
+
+    def test_precision_uses_actual_capture_format(self):
+        self.assertEqual(storage_quantum(64, 1), 1/1023)
+        self.assertEqual(storage_quantum(37, 1), 1/255)
+        self.assertEqual(storage_quantum(97, 4), 2**-8)
+
+    def test_stationary_jitter_is_not_a_pan(self):
+        c = (np.eye(3), np.ones(2), np.zeros(2), np.zeros(3))
+        self.assertTrue(static_camera([c, c], [0, .85]))
+        self.assertFalse(static_camera([c, (*c[:3], np.array([.001, 0, 0]))], [0, .1]))
+        self.assertFalse(static_camera([c, c], [0, 3]))
+        self.assertFalse(static_camera([c, c], [None, None]))
+
+    def test_texture_ramp_sampling_and_material_change(self):
+        y, x = np.indices((5, 9))
+        a = np.repeat((x[..., None]/32).astype('f4'), 3, axis=-1)
+        b = a + .5/32
+        self.assertTrue(texture_compatible(a, b, y, x).all())
+        self.assertFalse(texture_compatible(a, b+.5, y, x).any())
+
+    def test_native_packed_footer_is_not_camera_colour(self):
+        pose = np.zeros((1, 56, 1), dtype='f4')
+        pose[0, 52:55, 0] = [12, 13, 14]
+        pose.view('u4')[0, 55, 0] = 0xffffffff
+        np.testing.assert_array_equal(scene_camera_origin(pose), [12, 13, 14])
+        pose[0, 53, 0] = np.nan
+        with self.assertRaisesRegex(ValueError, 'camera'):
+            scene_camera_origin(pose)
+
+    def test_scene_matrix_nonfinite_is_invalid(self):
+        pose = np.zeros((1, 56, 1), dtype='f4')
+        pose[0, 34, 0] = np.inf
+        with self.assertRaisesRegex(ValueError, 'camera'):
+            scene_camera_origin(pose)
+
     def test_missing_final_is_invalid_even_with_complete_frame_indices(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
