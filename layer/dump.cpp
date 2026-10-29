@@ -565,6 +565,10 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
     pan_last = now;
     ++pan_frames;
     state->pan_epoch.bind(state->recording, now, serial);
+  } else if (std::strcmp(name, "final") == 0) {
+    // The tonemap pass is recorded in another command buffer than the lighting one: no
+    // shared epoch. Its record frame, inside the burst's frames, identifies it.
+    if (pan_frames == 0 || now < pan_first || now > pan_last) return false;
   } else {
     if (!state->pan_epoch.matches(state->recording, serial)) return false;
     now = state->pan_epoch.frame;

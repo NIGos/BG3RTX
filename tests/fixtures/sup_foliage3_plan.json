@@ -1,0 +1,72 @@
+[
+ {
+  "seconds": 18,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 10,
+  "serial": 0,
+  "motion_start": 18,
+  "motion_end": 18,
+  "set": "rt_alpha_stochastic=1"
+ },
+ {
+  "seconds": 18,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 10,
+  "serial": 61,
+  "motion_start": 18,
+  "motion_end": 18,
+  "set": "rt_alpha_stochastic=1"
+ },
+ {
+  "seconds": 22,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 10,
+  "serial": 62,
+  "motion_start": 3,
+  "motion_end": 20,
+  "set": "rt_alpha_stochastic=1"
+ },
+ {
+  "seconds": 22,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 10,
+  "serial": 63,
+  "motion_start": 3,
+  "motion_end": 20,
+  "set": "rt_alpha_stochastic=0"
+ },
+ {
+  "seconds": 18,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 10,
+  "serial": 64,
+  "motion_start": 18,
+  "motion_end": 18,
+  "set": "rt_alpha_stochastic=0"
+ },
+ {
+  "seconds": 22,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 10,
+  "serial": 65,
+  "motion_start": 3,
+  "motion_end": 20,
+  "set": "rt_alpha_stochastic=1"
+ },
+ {
+  "seconds": 22,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 10,
+  "serial": 66,
+  "motion_start": 3,
+  "motion_end": 20,
+  "set": "rt_alpha_stochastic=0"
+ }
+]
