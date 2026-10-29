@@ -215,3 +215,13 @@ allocation, ray, output or settings-default change. Full build/3 CTests pass.
 Next S7 candidate-cap1 requires actual positive integer unknown AND cookie
 counts; a rounded rate alone cannot pass or fail that coverage requirement.
 This does not certify cookie-specific unknown pairs or native filter accuracy.
+
+287 S7 cap1 integer-population control PASS: valid115s/49s session, no driver
+faults/dumps/build changes. Positive exact unknown and cookie populations occur
+in complete120-frame windows; evidence retains all integers, not rounded rates.
+Final/all captured dumps finite. Last counts:96,109,807 traced,28,582,602
+occluded,1,161,493 unknown,1,454,367 cookie evaluations. Actual unknown dispatch
+coverage is now established. Source uses t=sh on unknown; this smoke does NOT
+independently prove each resulting shadow delta is zero, a cookie-specific
+unknown pair, native cookie filtering accuracy or temporal/visual quality.
+Keep native accuracy/unknown-delta/visual gates open and ls_box0 by default.
