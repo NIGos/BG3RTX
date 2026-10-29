@@ -225,3 +225,17 @@ coverage is now established. Source uses t=sh on unknown; this smoke does NOT
 independently prove each resulting shadow delta is zero, a cookie-specific
 unknown pair, native cookie filtering accuracy or temporal/visual quality.
 Keep native accuracy/unknown-delta/visual gates open and ls_box0 by default.
+
+## Supervisor run on main 2026-10-29 21:05 (merged off by default)
+
+Merged into main with ABI 17; the box counters moved from 136..188 to 200..252 (they
+collided with main's primary pool/soup counters). Default shaders byte-identical to main.
+S7 Blushing Mermaid, FG 2, static, one run (sup-box-s7-fg2): "ls box: active" in every on
+window; box lights 7.2% of the lit luminance; RT occluded 29% of box evaluations (0.066 of
+0.228/px), removing 1.7% of the lit luminance; unknown 0; local-light pass 0.95 -> 1.20 ms.
+Validation (sup-boxval-s7-fg2, ls_debug=4): projector px game 0.0361, recomputed 0.0183 box
+off, 0.0245 box on (box share 25%). The same mode also gives 0.0027 vs 0.0127 on pixels without
+projectors (point/spot only), so this validation mode under-recomputes everywhere: the
+accuracy gate stays open, not failed on the box path alone. Next: find why debug 4 recomputes
+~1/4 of the game's point/spot light (zeroed AO and sun mask premise?), then the user's visual
+check with ls_box=1 (Blushing Mermaid interior lights).
