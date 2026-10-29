@@ -7,7 +7,9 @@ ambient/in-scatter. Neither isolates native direct lighting for box accuracy.
 Default-off ls_native_direct_validate1 is a startup-only DIAGNOSTIC, requiring
 debug4/5 and ls_check0/ls_impl1. A recognized native compute module's READS of
 set1/b0 m0.x/y/w are replaced by constants1/0/1: use the AO texture, leave direct
-light unattenuated, and use the sun mask. Prep still writes AO0/sun0. Uniform
+light unattenuated, and use the sun mask. The recognized native binding7 float2D fetch is
+replaced with a typed null vector, so solar0 does not depend on a writable
+R8 view. Prep writes AO0; no shared solar image needs changing. Uniform
 buffers, descriptors, other fields and native BRDF/cookie/light code are untouched.
 In-scatter/atmospheric transmittance is NOT separately removed; inspect actual
 residuals rather than claiming pure accuracy from a request alone.
@@ -18,7 +20,7 @@ scalar field reads are supported. Whole/vector/dynamic/escaping pointer cases
 refuse the complete transform; no partial patch or guessed layout. Other shaders
 remain original. The actual successful module variant is propagated through
 module -> pipeline -> command state -> Bg3DispatchInfo. Paired host/core ABI9.
-Core refuses missing variants, unsupported views/reference modes, no sun mask,
+Core refuses missing variants, unsupported views/reference modes
 and live startup-key mismatches. Inspect the WHOLE log for every REFUSED line;
 no mixture of transformed native output and ordinary recompute is acceptable.
 
@@ -36,3 +38,16 @@ transform exactly3 reads/components11 and each passes spirv-val. Full build/4
 CTests and both owned shader compiles pass. Runtime still needs actual applied
 modules, positive inputs, no refusals, full layout/push/write VVL audit and native
 error numbers. No quality/merge/default approval follows from offline checks.
+
+288 scene comparison INVALID despite queue expectations: native modules are
+applied, but the writable R8 solar-mask view is absent in S6. Core refuses
+scene frames; early positive windows belong to menu/preload. No native accuracy
+follows. Next transform additionally requires EXACTLY ONE native set1/b7
+float2D fetch and replaces its result with a typed zero, validated on all62
+original modules. SPIR-V Depth0/2 float2D fetches are recognized; arrayed/MS/
+depth-only or sampled-image paths refuse rather than guessing. No native image
+or buffer is overwritten to force a pass. Corpus hashes are retained.
+Fixture now uses a session with -Set in startup args AND the same live set:
+modules are transformed before creation, expects/statistics use the post-ready
+scene slice. Full startup log/VVL still needs separate audit. This prevents menu
+lighting from masquerading as positive scene-reference data.

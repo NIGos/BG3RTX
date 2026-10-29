@@ -14,7 +14,7 @@ static std::vector<uint32_t> fixture() {
     w.push_back((uint32_t(a.size()+1)<<16)|op);w.insert(w.end(),a);
   };
   add(spv::OpEntryPoint,{5,90,0x6e69616d,0});
-  for(auto [id,binding]:{std::pair{20u,0u},{21u,10u},{22u,11u},{23u,23u}}) {
+  for(auto [id,binding]:{std::pair{20u,0u},{21u,10u},{22u,11u},{23u,23u},{24u,7u}}) {
     add(spv::OpDecorate,{id,spv::DecorationDescriptorSet,1});
     add(spv::OpDecorate,{id,spv::DecorationBinding,binding});
   }
@@ -25,12 +25,16 @@ static std::vector<uint32_t> fixture() {
   add(spv::OpTypeStruct,{6,3,4,2,2});
   add(spv::OpTypePointer,{7,spv::StorageClassUniform,6});
   add(spv::OpTypePointer,{8,spv::StorageClassUniform,1});
+  add(spv::OpTypeImage,{9,1,spv::Dim2D,0,0,0,1,spv::ImageFormatUnknown});
+  add(spv::OpTypePointer,{15,spv::StorageClassUniformConstant,9});
   for(uint32_t i=0;i<4;++i)add(spv::OpConstant,{2,10+i,i});
   add(spv::OpVariable,{7,20,spv::StorageClassUniform});
+  add(spv::OpVariable,{15,24,spv::StorageClassUniformConstant});
   add(spv::OpFunction,{1,90,0,91});
   for(uint32_t i=0;i<4;++i) {
     add(spv::OpAccessChain,{8,30+i,20,10,10+i});add(spv::OpLoad,{1,40+i,30+i});
   }
+  add(spv::OpLoad,{9,45,24});add(spv::OpImageFetch,{3,46,45,47});
   add(spv::OpFunctionEnd,{});return w;
 }
 int main(int argc,char** argv) {
@@ -40,27 +44,30 @@ int main(int argc,char** argv) {
     if(bytes.empty() || bytes.size()%4)return 2;
     std::vector<uint32_t> words(bytes.size()/4);std::memcpy(words.data(),bytes.data(),bytes.size());
     auto r=patch(words.data(),words.size());
-    std::cout<<"status "<<int(r.status)<<" loads "<<r.loads<<" components "<<r.components<<"\n";
+    std::cout<<"status "<<int(r.status)<<" loads "<<r.loads<<" components "<<r.components<<" sun_fetches "<<r.sun_fetches<<"\n";
     if(r.status!=Status::Applied)return 3;
     std::ofstream out(argv[2],std::ios::binary);out.write(reinterpret_cast<const char*>(r.words.data()),r.words.size()*4);
     return out?0:4;
   }
   auto w=fixture();auto r=patch(w.data(),w.size());
-  assert(r.status==Status::Applied && r.loads==3 && r.components==11);
+  assert(r.status==Status::Applied && r.loads==3 && r.components==11 && r.sun_fetches==1);
   // Independently interpret the four scalar results. Original memory is
   // x=.25,y=.75,z=.5,w=.125; only the diagnostic contract may change x/y/w.
   std::map<uint32_t,float> values;
+  std::set<uint32_t> null_values;
   float expected[4]={1,0,.5f,1};uint32_t found=0;
   for(size_t at=5;at<r.words.size();) {
     auto* p=r.words.data()+at;auto op=spv::Op(p[0]&65535);uint32_t n=p[0]>>16;
     if(op==spv::OpConstant && p[1]==1)values[p[2]]=std::bit_cast<float>(p[3]);
+    if(op==spv::OpConstantNull && p[1]==3)null_values.insert(p[2]);
+    if(op==spv::OpCopyObject && p[2]==46) {assert(null_values.contains(p[3]));++found;}
     if(op==spv::OpCopyObject && p[1]==1 && p[2]>=40 && p[2]<=43) {
       assert(values.at(p[3])==expected[p[2]-40]);++found;
     }
     if(op==spv::OpLoad && p[2]==42) {assert(p[3]==32);++found;}
     at+=n;
   }
-  assert(found==4 && r.words[3]==102);
+  assert(found==5 && r.words[3]==103);
   // A different descriptor set must remain entirely outside this transformation.
   auto other=w;
   for(size_t at=5;at<other.size();at+=other[at]>>16)

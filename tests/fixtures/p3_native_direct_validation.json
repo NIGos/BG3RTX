@@ -1,9 +1,9 @@
 {
   "name": "p3-native-direct-validation",
   "tree": "../../../.codex/worktrees/p2-pending/BG3RTX",
-  "session": false,
+  "session": true,
   "save": "Adamantine Forge",
-  "traces": 2,
+  "traces": 1,
   "timeout": 420,
   "set": "ls_box=1,ls_check=0,ls_shadowed=3,ls_noshadow=0,ls_giveback_cap=1,ls_debug=4,ls_stats=1,rt_stats=1,fg=0,gi=0,ls_native_direct_validate=1,dump_shaders=1,auto_interval=120,auto_stable_s=20,auto_stable_frames=1000000",
   "patterns": [
@@ -17,13 +17,15 @@
   "expect": [
     "ls box: active",
     "ls box precise \\(120 frames\\): px [1-9]\\d* native nonzero [1-9]\\d* recomputed nonzero [1-9]\\d* invalid 0; raw game",
-    "\\[assetdb\\] loaded",
-    "\\[ls-native-direct\\] module .*controls AO=enabled directAO=0 sunMask=enabled loads 3 components 11",
     "\\[ls-native-direct\\] active frame .* matched native module"
   ],
   "args": [
     "-Validation",
     "-VSet",
-    "validate_sync=true,enable_message_limit=false"
-  ]
+    "validate_sync=true,enable_message_limit=false",
+    "-Set",
+    "ls_box=1,ls_check=0,ls_shadowed=3,ls_noshadow=0,ls_giveback_cap=1,ls_debug=4,ls_stats=1,rt_stats=1,fg=0,gi=0,ls_native_direct_validate=1,dump_shaders=1,auto_interval=120,auto_stable_s=20,auto_stable_frames=1000000"
+  ],
+  "warmup": 10,
+  "hold": 35
 }

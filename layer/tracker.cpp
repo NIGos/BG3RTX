@@ -464,8 +464,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
     if(direct && used_patched) {
       const uint64_t actual=hash64(pci.pCode,pci.codeSize);
       shader_dump(actual,pci.pCode,pci.codeSize);
-      log("[ls-native-direct] module %016llx -> %016llx controls AO=enabled directAO=0 sunMask=enabled loads %u components %u",
-          (unsigned long long)h,(unsigned long long)actual,native.loads,native.components);
+      log("[ls-native-direct] module %016llx -> %016llx controls AO=enabled directAO=0 sunMask=enabled loads %u components %u sun_fetches %u",
+          (unsigned long long)h,(unsigned long long)actual,native.loads,native.components,native.sun_fetches);
     } else if(native.status==native_light_validation::Status::Unsupported)
       log("[ls-native-direct] REFUSED unsupported native module %016llx",(unsigned long long)h);
     if (aftermath_enabled()) {

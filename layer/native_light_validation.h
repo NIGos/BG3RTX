@@ -12,7 +12,7 @@ namespace bg3::native_light_validation {
 enum class Status { NotTarget, Unsupported, Applied };
 struct Result {
   Status status = Status::NotTarget;
-  uint32_t loads = 0, components = 0;
+  uint32_t loads = 0, components = 0, sun_fetches = 0;
   std::vector<uint32_t> words;
 };
 inline Result patch(const uint32_t* data, size_t count) {
@@ -21,7 +21,7 @@ inline Result patch(const uint32_t* data, size_t count) {
   struct Inst { size_t at; uint32_t n; spv::Op op; };
   std::vector<Inst> ins;
   std::map<uint32_t,std::vector<uint32_t>> types;
-  std::map<uint32_t,uint32_t> sets, bindings, constants, constant_types, variables;
+  std::map<uint32_t,uint32_t> sets, bindings, constants, constant_types, variables, image_variables, nulls;
   std::map<std::pair<uint32_t,uint32_t>,uint32_t> offsets;
   bool compute=false;
   for(size_t at=5;at<count;) {
@@ -35,18 +35,21 @@ inline Result patch(const uint32_t* data, size_t count) {
     }
     if(op==spv::OpMemberDecorate && n==5 && w[3]==spv::DecorationOffset)offsets[{w[1],w[2]}]=w[4];
     if((op==spv::OpTypeFloat || op==spv::OpTypeInt || op==spv::OpTypeVector ||
-        op==spv::OpTypeStruct || op==spv::OpTypePointer) && n>=2)
+        op==spv::OpTypeStruct || op==spv::OpTypePointer || op==spv::OpTypeImage) && n>=2)
       types[w[1]]=std::vector<uint32_t>(w,w+n);
     if(op==spv::OpConstant && n==4) {constants[w[2]]=w[3];constant_types[w[2]]=w[1];}
+    if(op==spv::OpConstantNull && n==3)nulls[w[1]]=w[2];
     if(op==spv::OpVariable && n>=4 && w[3]==spv::StorageClassUniform)variables[w[2]]=w[1];
+    if(op==spv::OpVariable && n>=4 && w[3]==spv::StorageClassUniformConstant)image_variables[w[2]]=w[1];
     at+=n;
   }
   if(!compute)return r;
   std::set<uint32_t> native_bindings;
-  uint32_t flags=0;
+  uint32_t flags=0,sun=0;
   for(auto [id,binding]:bindings)if(sets.contains(id) && sets[id]==1) {
     native_bindings.insert(binding);
     if(binding==0 && variables.contains(id))flags=id;
+    if(binding==7 && image_variables.contains(id))sun=id;
   }
   if(!flags || !native_bindings.contains(10) || !native_bindings.contains(11) || !native_bindings.contains(23))return r;
   auto ptr=types[variables[flags]];
@@ -62,10 +65,28 @@ inline Result patch(const uint32_t* data, size_t count) {
      !offsets.contains({structure,0}) || offsets[{structure,0}]!=0 ||
      !offsets.contains({structure,1}) || offsets[{structure,1}]!=16)return r;
   r.status=Status::Unsupported;
+  if(!sun)return r;
+  auto sun_ptr=types[image_variables[sun]];
+  if(sun_ptr.size()!=4 || (sun_ptr[0]&65535u)!=spv::OpTypePointer || sun_ptr[2]!=spv::StorageClassUniformConstant)return r;
+  const uint32_t sun_type=sun_ptr[3];auto sun_image=types[sun_type];
+  if(sun_image.size()!=9 || (sun_image[0]&65535u)!=spv::OpTypeImage || sun_image[2]!=float_type ||
+     sun_image[3]!=spv::Dim2D || (sun_image[4]!=0 && sun_image[4]!=2) || sun_image[5]!=0 || sun_image[6]!=0 || sun_image[7]!=1)return r;
   std::map<uint32_t,std::vector<uint32_t>> paths;paths[flags]={};
   std::map<size_t,uint32_t> replace;
+  std::set<uint32_t> sun_images;
+  std::set<size_t> sun_replace;
   for(auto i:ins) {
     const uint32_t* w=data+i.at;
+    if(i.op==spv::OpLoad && i.n>=4 && w[3]==sun) {
+      if(w[1]!=sun_type)return r;
+      sun_images.insert(w[2]);
+    }
+    if(i.op==spv::OpCopyObject && i.n==4 && sun_images.contains(w[3]))sun_images.insert(w[2]);
+    if(i.op==spv::OpImageFetch && i.n>=5 && sun_images.contains(w[3])) {
+      if(w[1]!=st[2])return r;
+      sun_replace.insert(i.at);
+    }
+    if(i.op==spv::OpSampledImage && i.n>=5 && sun_images.contains(w[3]))return r;
     if((i.op==spv::OpAccessChain || i.op==spv::OpInBoundsAccessChain) && i.n>=5 && paths.contains(w[3])) {
       auto path=paths[w[3]];
       for(uint32_t k=4;k<i.n;++k) {
@@ -86,10 +107,10 @@ inline Result patch(const uint32_t* data, size_t count) {
       if(path[1]!=2) {replace[i.at]=path[1];r.components|=1u<<path[1];}
     } else if(i.op==spv::OpFunctionCall || i.op==spv::OpPhi || i.op==spv::OpSelect ||
               i.op==spv::OpCopyMemory || i.op==spv::OpCopyMemorySized || i.op==spv::OpPtrAccessChain) {
-      for(uint32_t k=1;k<i.n;++k)if(paths.contains(w[k]))return r;
+      for(uint32_t k=1;k<i.n;++k)if(paths.contains(w[k]) || sun_images.contains(w[k]))return r;
     }
   }
-  if(replace.empty() || r.components!=11u)return r;
+  if(replace.empty() || r.components!=11u || sun_replace.size()!=1)return r;
   uint32_t next=data[3],zero=0,one=0;
   for(auto [id,value]:constants)if(constant_types[id]==float_type) {
     if(value==0)zero=id;
@@ -101,13 +122,17 @@ inline Result patch(const uint32_t* data, size_t count) {
     if(!id) {id=next++;added.insert(added.end(),{(4u<<16)|spv::OpConstant,float_type,id,bits});}
   };
   make_const(zero,0);make_const(one,0x3f800000u);
+  uint32_t sun_zero=nulls.contains(st[2])?nulls[st[2]]:0;
+  if(!sun_zero) {sun_zero=next++;added.insert(added.end(),{(3u<<16)|spv::OpConstantNull,st[2],sun_zero});}
   r.words.assign(data,data+5);r.words[3]=next;bool inserted=false;
   for(auto i:ins) {
     const uint32_t* w=data+i.at;
     if(i.op==spv::OpFunction && !inserted) {
       r.words.insert(r.words.end(),added.begin(),added.end());inserted=true;
     }
-    if(auto f=replace.find(i.at);f!=replace.end()) {
+    if(sun_replace.contains(i.at)) {
+      r.words.insert(r.words.end(),{(4u<<16)|spv::OpCopyObject,w[1],w[2],sun_zero});++r.sun_fetches;
+    } else if(auto f=replace.find(i.at);f!=replace.end()) {
       r.words.insert(r.words.end(),{(4u<<16)|spv::OpCopyObject,w[1],w[2],f->second==1?zero:one});
       ++r.loads;
     } else r.words.insert(r.words.end(),w,w+i.n);

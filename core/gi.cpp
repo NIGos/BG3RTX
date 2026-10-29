@@ -1931,7 +1931,7 @@ void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
   if(validation || actual) {
     Snapshot candidate{};
     if(snapshot(cmd,candidate) && (!validation || !actual || (validation_view!=4 && validation_view!=5) ||
-       host->cfg_int("ls_check",0) || !host->cfg_int("ls_impl",1) || !candidate.shadow.view)) {
+       host->cfg_int("ls_check",0) || !host->cfg_int("ls_impl",1))) {
       // Never mix transformed native output and the ordinary recompute. This
       // also exposes unsupported/inline native modules and live key changes.
       static uint64_t refused=0;
