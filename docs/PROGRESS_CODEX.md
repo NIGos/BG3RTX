@@ -1,19 +1,40 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 07:11 Europe/Rome
+## Current checkpoint - 2026-10-29 07:31 Europe/Rome
 
-- Main rendering remains6dba0a8; P6 water design and QA-only exposure-hold fix7a98949 are merged.
-- P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
-- Invalid geometry runs 265/266 are excluded; corrected bindings pass scoped runtime audits.
-- P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
-- Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
-- P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P1 held exposure293 still fails PRE energy; QA-hold fix passes294 and is merged, queue idle.
-- P2 local-light reference is merged; EN2/D-EM failures keep those features off.
-- P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
-- The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
+- Main rendering remains 6dba0a8; the water design and legal QA exposure hold are merged.
+- P1 is active again by explicit user instruction. No more attribution or exposure research.
+- Fresh fallback preserves complete current-frame energy, ray weights and saved PRE visibility.
+- The new normal bound combines encoding precision with the actual same-plane GI footprint.
+- Static off/on energy is the first gate, followed by a single-run moving residual.
+- Static test 296 is live on P1 commit 0a0a9d2, with 12 captures and a 90-second hold.
+- All 12 CTests and 24 shader ABI checks pass; seven ordinary shaders are byte-identical.
+- P2 test 295 has finished. P2/P3/P4 research will not displace the required P1 measurement.
+- Main, research branches and evidence are pushed. All research defaults remain off.
+- The one authorized reset is consumed; backup recovery was verified and shared junction cleanup is forbidden.
 
 ## Resumed — 2026-10-29
+
+P1 resumed by the user. The previous park decision is superseded. No new
+attribution, exposure or provenance research before the static energy and
+single-run pan measurements. The new AGENTS.md applies to every branch.
+
+P1 commit 0a0a9d2 keeps the complete fresh rejection fallback and adds a normal
+cone derived from FP16/oct16 precision and the real GI footprint. Only TLAS
+neighbours on the same geometric plane widen the shading-normal bound. The
+actual history texel still must pass depth and normal checks. No denominator,
+ray weight, camera payload or accumulation reset changes. GPU self-tests cover
+20 cases; all 12 CTests and 24 compiled shader ABI checks pass. Seven ordinary
+GI/LS/sun/RF shader binaries are identical to d9cb628. Defaults remain off.
+
+Test 296 is live on frozen 0a0a9d2, runner 8396 at 07:30:39, after fresh idle
+checks. It uses 12 static off/on captures, normal production strength and AO,
+no exposure hold, and a 90-second final hold. Existing counters report gate-on
+normal rejection reasons. Inspect energy, finite/raw alpha, static pose, GPU
+predicate rows, full VVL and cost before the one-run moving residual. Specs:
+docs/GI_NORMAL_FOOTPRINT.md. The half-resolution support is derived and unit
+checked; the current fresh runtime prototype still requires full-resolution RR.
+
 
 Previous goal turn made progress: merged a valid legal QA exposure-hold fix,
 rejected P1 source consistency again with valid held data293, narrowed native

@@ -1,154 +1,118 @@
 # Session handoff - 2026-10-29
-Read this first, then docs/STATUS.md and the top of docs/PROGRESS_CODEX.md.
-STATUS describes stable rendering; PROGRESS_CODEX is the current work log.
 
-## Goal and hard rules
-Advance P1 through P6 until Saturday 2026-10-31 at 20:00 Europe/Rome.
-Then write the final progress summary, push main/work branches and stop.
-The user resumed on Oct29; the overall goal remains ACTIVE.
-- Never modify user saves, force-push, rewrite history, or alter snapshot tags/backups.
+Read this first, then the top of docs/PROGRESS_CODEX.md and AGENTS.md.
+The goal remains active until Saturday 2026-10-31 at 20:00 Europe/Rome.
+
+## Hard rules
+
+- Never modify user saves, force-push, rewrite history or alter snapshot tags.
 - Never use Ponytail, its skills, hooks or instructions.
-- Before EVERY launch check USER_PLAYING, actual BG3/runner processes and queue state.
-- A marker or unowned game means offline work only. No concurrent games/runners.
-- All games run through the serial hidden queue with explicit expect patterns.
-- Source, binaries and HEAD of the active job tree stay FROZEN until terminal.
-- Merge only through scripts/merge-green.ps1 after inspecting deciding numbers; push both branches.
-- QUALITY R0: derived gates, quality before speed on Ultra; research defaults stay off.
-- No FG/HDR-UI/swapchain work unless needed by the active phase.
-- NEVER archive a checkout with live shared-data/dependency junctions: cleanup traversed them.
-The ONE user-authorized reset was CONSUMED at weekly100% on Oct29.
-Tool outcome reset; idempotencyKey8ce84295-c9a8-4ba8-bbfb-cf1f81dd0af7.
-Reset credit balance is0. Never redeem another without fresh user authorization.
-Fresh limits confirmed0% used/ordinary usage allowed. Never retry the successful reset.
+- Before every launch check USER_PLAYING, actual BG3/runner processes and pending/running jobs.
+- Games run only through the serial hidden queue, with patterns and expect checks.
+- Freeze an active job's source, binaries and HEAD until the actual process is terminal.
+- Merge only through scripts/merge-green.ps1 after reading the deciding numbers; push both branches.
+- Quality R0, derived gates and quality before speed on Ultra. Research defaults stay off.
+- Never archive or clean a checkout with live junctions to shared SDK/data directories.
+- Backups in D:/BG3_Tools are read-only. Do not touch snapshot tags or backup files.
+- Background 120-frame statistics require a job hold of at least 90 seconds.
+- Write short English sentences with normal spacing between numbers and words.
 
-## Stable code and checkouts
-Main: C:/Users/quali/Documents/Code Projects/BG3RTX, origin NIGos/BG3RTX.
-Rendering remains6dba0a8; P6 design441904a and QA-only hold fix7a98949 merged.
-No P1/P3/P4 rendering feature merged.
-Use EXPLICIT workdirs: the app may still point to the unrelated P4 checkout.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan 2914bde, pushed, paired ABI14.
-- P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, codex/p2-emissive ca1959b, paired D-EM ABI9.
-- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box b913e8e, paired ABI9, pushed.
-- P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm 8d902d5, pushed.
-- P6: p6-water/BG3RTX, codex/p6-water cd04c63, pushed.
-Old research/provenance is preserved in PROGRESS_CODEX and
-D:/BG3_Tools/git_backup/commit-map-old-to-new.txt. No unrelated FG imports.
-Backups D:/BG3_Tools/snapshot-20261028 and snapshot-20261027/* are untouched.
+The one authorized usage reset was consumed at weekly 100% on October 29.
+The successful reset was confirmed by a fresh usage reading. Reset credits: 0.
+Do not redeem another without fresh user authorization.
 
-## Current checkpoint and next action
-295 LIVE frozen P2 D-EM ca1959b, runner2692 started07:11:07 after fresh idle checks.
-New codex/p2-emissive starts main6514a13, cherry-picks consolidated D-EM source
-through9f4d17d; original old branch/history unchanged. Feature/research defaults0;
-no emissive allocation when disabled at startup. Enabling requires restart.
-Diagnostic counts same-family coincident candidate/distinct-draw geometry in
-existing interval; does NOT change emission/calibration/light list. Actual native
-draw logs blend/cull/depth state; dynamic state is inconclusive. A multiplicity
-count alone does not prove additive/copolanar contribution. Target304be1c7 AF.
-Debug0 normal output, legal exposure hold only after scene-ready. Check whole
-native-state log, positive probe/no invalid/overflow/missing, full VVL/captures.
-Build/3 CTests/36 shader files PASS; seven ordinary GI/LS/sun/RF binaries identical
-main. SDKs use explicit paths/owned small copy, asset DB owned copy; NO junctions.
-Paired ABI9 is D-EM-specific; never reuse P3 ABI9 process. Freeze tree until terminal.
-P1 candidate parked2914bde after293 still fails PRE energy+0.595469%; no promotion.
-QA hold fix merged7a98949 after294; other VVL remains unresolved. Archive incident
-recovered992 SDK files + DB/manifest from backups, hashes match; no recursive
-cleanup through shared junctions again. One reset consumed, credit balance0.
+## Current priority: P1 is active
 
-## P1 - pan instability remains OPEN
-User sees lighting/shadows detach while panning; Ctrl+Shift+F9 restores native.
-Fixed-camera scores cannot close P1. Never compare images across independent
-moving trajectories. Use exact-camera per-run residual or live toggles in ONE run.
-Do not block on aggregate AO counters; actual saved PRE alpha and same-build
-key-off controls are authoritative. QA uses SDL client coordinates/actual image
-sizes and neutralizes events for StaticCamera; no desktop-resolution constants.
+The user explicitly resumed P1. Do not park it or start more attribution/exposure
+research before measuring the concrete fix. Required order:
 
-Fresh candidate reuses existing B2/B5 and immutable PRE pose through actual
-submission. No new camera transport. On rejection of AVAILABLE legacy colour,
-fresh source is native current lighting PLUS immutable PRE GI with the same
-material/strength/skin/spec-share convention and ray weight/PDF/denominator.
-Original missing/nonfinite-colour cohort stays fixed in BOTH gate modes; newly
-visible colour outside that cohort is a known limitation, not solved shading.
-POST changes RGB, preserves PRE alpha exactly, then composite publishes metadata.
-Metadata availability token is GPU-owned; stride3 avoids source-toggle allocation;
-128MiB range guard and typed actual-submit pins apply. All research keys default0.
+1. Rejected history uses a complete fresh current-frame sample with the same expected value.
+2. Derive the normal tolerance from encoding precision and the actual GI sample footprint.
+3. Static camera: key-on mean GI must equal key-off within measured noise.
+4. Then measure the reprojection residual with live toggles in ONE moving run.
 
-Important evidence (specs and docs/evidence preserve exact values/provenance):
-- 242/243 and249 old rejection loses71.8-99.9% and70.66/87.96% GI energy. No win.
-- 252/253 static tests INVALID (~300px drift); SDL event fix254/255 proves static.
-- Direct-only255 changes the integrand. Complete-source256 fails energy;258 low power.
-- ONE-run259 residual+7.24%;260 residual-7.60% but cohort energy-90.19%: no gain.
-- Exact-diffuse262 fails original PRE target;263 moving residual+2.60%: no gain.
-- Geometry265/266 rendering INVALID: base passes lacked origin40; never reuse for quality.
-- 7e91e6d shares base20/40/48 layouts AND writes.269 full layout/push/write audit passes.
-- Projection268/269: current ray/B2 offset0 with nonzero jitter. Retain native positions.
-- 274: previous projection/native MV agrees with canonical jitter on ground; tent animates.
-- Corrected271/272 static12: POST/PRE+0.6630/+0.8620%; independent POST stream alone fails.
-- 276 ONE moving geometric gate: residual+20.95%, Y+44.51%, motion+78.03%; unequal cohorts.
-- Grid coverage276 is3.856/2.646% (millions of samples), not old0.08%; no quality gain.
-- 280 gi_ao0 isolation still fails: gate+1.1697%, PRE+0.8004%, both CIs exclude0.
-Removing native AO folding alone does not explain drift. No cap removal/AO workaround.
-Existing271 PRE alpha below the give-back denominator0.001 covers3.2255%; exact0
-only0.0211%. Receiver frequency is not source-energy attribution or causal proof.
+Never compare images from independent pans. A lower residual with lower energy is
+not a quality improvement. Keep the original weights, PDF, ray count and PRE alpha.
+Do not block on the old aggregate AO discrepancy; saved PRE alpha is authoritative.
 
-Mode4 attribution (docs/GI_REJECTED_SOURCE_ENERGY.md) is diagnostic only:
-old/fresh Y*w/rays on the SAME rejected ray, including actual failed-old energy.
-Requires fresh RR full-res, original diffuse source/shared stream, fallback!=2.
-Push32768, stats20, Q24 sums with uint64 carries;201 counters. Receiver-bin
-population uses actual dimensions/ray count; invalid inputs are reported, not capped.
-No source/output/visibility/weight/camera change. Modes1-3 keep their old probes.
-Build12 CTests/24 ABI pass; seven ordinary GI/RF shaders are byte-identical.
-282/284 source-attribution runs retain tiny positive unlit losses and positive
-source drift.284 failure energy<=6.73e-9 versus total+1.40e-4; not the main cause.
-See GI_REJECTED_SOURCE_ENERGY.md/evidence for control parity, exact reasons and
-all VVL limitations.286 recursion-off and293 held exposure still fail PRE energy.
+## Live job and next action
 
-P1 candidate is parked, not approved: PAUSED.md, GI_FRESH_FALLBACK.md,
-GI_DIFFUSE_EXACT.md, GI_GEOMETRIC_NORMAL.md, GI_FRESH_INDEPENDENT.md,
-GI_NATIVE_AO_ISOLATION.md. After an approved candidate, inspect static ground/
-building edges while panning, toggle its key and Ctrl+Shift+F9. Local/sun/RF
-pan gates also remain open. No prototype may be promoted from execution alone.
+296 is LIVE on frozen P1 commit 0a0a9d2, paired host/core ABI 14.
+Runner PID 8396 started at 07:30:39 after fresh idle and playing checks.
+Fixture: tests/fixtures/gi_normal_footprint_static_job.json.
+It takes 12 static off/on captures, then holds for 90 seconds. No exposure hold.
 
-## P2 - pending merges
-Local-light reference/gates merged6dba0a8 after two fresh hold90 repeats:
-25 windows each,8.173/8.173B pixels, zero differences; build/3 CTests/32 shaders/QA pass.
-EN2 hit materials (old worktree-agent-a94065fdd50bc8494) still fail blue/metalness/bias.
-D-EM (worktree-agent-a2212c228ec492214) AF family304be1c7 still fails0.361/0.362.
-Both stay off. EN2 root HANDOFF is stale; actual spec is TRACK_D_RT13 and
-layer/hitmat.cpp / shaders/rt/rt_hitmat.hlsli. See docs/P2_PENDING_MERGES.md.
+New key gi_history_normal_footprint stays off by default. The sample cell and
+point reprojection derive a 3 by 3 full-resolution or 4 by 4 half-resolution
+support. Only proven same-plane TLAS neighbours bound shading-normal variation.
+Encoding, normalization, oct16 and arithmetic precision supply numerical bounds.
+Depth and normal still test the actual contributing texel. No neighbour supplies
+replacement history colour. Existing complete fresh fallback retains all weights.
 
-## P3 - box lights remain off
-264 DEFAULT point/spot reference PASS:24 windows/7.845B pixels, zero differences.
-250 FULL variant bit differences remain open, never waived by DEFAULT success.
-267 activates native set3/two offsets; precision upgrade uses Q24/165 counters.
-270 has no positive signal.273 GI0 still zero because debug4 prep forces AO0;
-native direct flag1 suppresses direct terms too.275 debug6/AO1 has positive inputs but retains ambient/in-scatter.
-277 ONE AO1 box0/1: seven/nine pure windows, absolute difference falls67.3994%.
-Ambient and nonzero overshoot1.258e-6 prevent a total native-accuracy claim.
-278 S6 debug0 normal GI: ten windows,1.319 rays/px,0.738 occluded/px; final finite.
-279 cap1 did NOT exercise unknown boxes (0.000/px): coverage INVALID, no fallback proof.
-281 S7 exits2s before layer/scene; bounded retry285 succeeds, actual cookie0.004/px.
-Sampling is exercised, not yet native-filter accuracy or unknown-pair proof.
-283 S5 PASS: ten windows,0.079 rays/px,0.029 occluded/px; final finite.
-S6/S5 cookie rates0;287 S7 exact counts prove7.638M unknown and10.084M cookie
-evaluations. Native accuracy/per-query delta and moving/visual quality stay open.
-Native-direct control: docs/P3_NATIVE_DIRECT_VALIDATION.md (ABI9); runtime291
-is terminal with format intervals, ordinary key0 unchanged. See docs/P3_BOX_LIGHTS.md and evidence278-287. Do not modify saves or reinstall mods.
+The fresh prototype currently requires full-resolution RR. Half-resolution
+support is derived and unit checked, not a claimed half-resolution runtime pass.
+Existing predicate counters report gate-on queries and each rejection reason.
+GPU test mode 1 now expects row 12: [1048575, 1048575, 20, 1].
+All 12 CTests, 24 shader ABI checks and four changed shader compiles pass.
+Seven ordinary GI/LS/sun/RF binaries are identical to d9cb628.
 
-## P4-P6
-P4 has a conservative CPU interval classifier and corrected stochastic-alpha
-contract:197,621 independent checks/4 CTests pass. Sampling-domain provider,
-GPU bake and OMM backend are NOT implemented. Mip0/1-only plan is unsafe;
-unknown keeps native alpha. See docs/P4_OMM.md; no runtime/merge claim.
-P5 SHaRC v2/light tree/EN2 consumers depend on EN2; sharc-v2 stays off.
-P6 minimum water design DONE: docs/P6_WATER.md, merge441904a through merge-green
-(build/3 CTests/32 shaders/QA). Runtime water and COVERAGE gap1 remain open.
+After the actual job ends, inspect all 12 raw samples with scripts.qa.gi_energy:
+positive finite GI, valid pose, static camera, saved alpha and off/on energy.
+Check the GPU predicate rows, reason-count closure, full VVL categories and GPU
+cost. Keep the actual noise interval width visible. Only then run the single-run
+pan fixture. Do not substitute another research branch for this measurement.
 
-## Queue workflow
-Main captures/queue/results.jsonl and logs are authoritative; never leave results.md open.
-Before EACH launch: USER_PLAYING + actual CIM bg3.exe/bg3_dx11.exe and test-queue/
-auto-run processes + pending/running. One job only; fresh checks again after terminal.
-Runner uses its own tree scripts, Main -Root, hidden window and explicit SDK/data env.
-Preserve paired host/core ABI; do not reuse a process between different phase trees.
-Copy validation.log to a named ignored build file before another validation run.
-Inspect ALL layout/push/write categories (including07988), not sync errors alone.
-Record numbers and scoped limits in Main PROGRESS_CODEX, then push work branches/main.
+## Workspaces
+
+Use explicit paths. The app may select a different managed checkout.
+
+- Main: C:/Users/quali/Documents/Code Projects/BG3RTX, branch main, pushed.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 0a0a9d2.
+- P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, ca1959b, D-EM ABI 9.
+- P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box, b913e8e, ABI 9.
+- P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm, 8d902d5.
+- P6: p6-water/BG3RTX, codex/p6-water, cd04c63.
+
+The two ABI 9 research branches have different contracts. Never reuse their game
+processes. SDKs and generated asset data are available in the main checkout.
+
+## Established results and limits
+
+Main rendering remains 6dba0a8. P6 water design 441904a and the QA-only exposure
+hold fix 7a98949 are merged. No GI, box-light or OMM prototype is promoted.
+
+P1 historical results are in the phase specs and docs/evidence. Runs 265/266 are
+INVALID because a base descriptor layout lacked origin binding 40. The corrected
+binding passed the scoped audits. Run 276 gave no demonstrated moving gain.
+Run 293, with a legal held exposure, still failed original-PRE energy by +0.595%.
+It had six RGB-exact off controls and exact saved alpha. Exposure/attribution work
+is now stopped by user steering; those results do not replace the current fix.
+The original missing/nonfinite-colour cohort remains a known fresh-source limit.
+
+P2: local-light reference is merged after two hold-90 repeats with zero differences.
+EN2 and D-EM remain off because their material/radiance gates failed. D-EM test 295
+finished before P1 resumed; do not pursue it while the required P1 measures remain.
+
+P3: real box shadow rays and cookie/unknown coverage have been exercised.
+Run 291 found 0.09991% format-incompatible receivers out of 2.950 billion samples.
+The cause, native accuracy, cookie filter, unknown-delta and moving gates remain open.
+
+P4: a conservative CPU classifier passes 197,621 oracle checks and four CTests.
+The sampling-domain provider, GPU bake and OMM backend are not implemented.
+P5 depends on EN2. P6's minimum water design is done; runtime water remains open.
+
+## Validation and cleanup
+
+Preserve full validation.log before the next validation run. Inspect every layout,
+push and descriptor-write category, including VUID 07988. Other pre-existing VVL
+categories remain unresolved; scoped success never means globally clean validation.
+
+The QA exposure hold now uses legal storage writes. Stable test 294 passed with
+finite dumps and matching held probes. Its evidence is under main captures/
+qa-exposure-hold-294. During archival, the tool followed SDK/data junctions and
+emptied their targets. SDKs and the generated database were restored from read-only
+backups; all 992 SDK file hashes and both database/manifest hashes match the backup.
+The recovery manifest is committed. Never repeat cleanup with shared junctions.
+
+Keep HANDOFF_SESSION and PROGRESS_CODEX current. At the Saturday stop time, write
+the final summary, push main and work branches, then stop.
