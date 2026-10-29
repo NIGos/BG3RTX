@@ -2,6 +2,20 @@
 
 ## Resumed — 2026-10-29
 
+265 geometric-normal smoke valid111s, no driver faults/dumps/build changes.
+BOTH GPU self-test rows[32767,32767,15,1]:15/15 pass. Static shift0.06px,
+finite GI, PRE alpha exact. Off Y0.017494613 vsPRE0.017495760;45/2,731,520
+RGB pixels differ in this diagnostic run (do not call control bit-exact).
+On Y0.017680915 vsPRE0.017518661 (+0.926%); two captures are not a noise pass.
+One on source window:39,157,093 queries,25,108,223 history,14,040,564 fresh,
+8,306 original-unavailable. VVL2667 existing-category sync messages; zero
+compute-dispatch/private-source/new-metadata messages, scoped only.49/49 shader
+files compile/validate after sharing the origin declaration. P1 head82b8528
+pushed.266 LIVE frozen twelve captures without self-test or VVL overhead.
+If depth rejection/energy bias persists, compare the predicate's plain ray_at
+position with the pan metric's existing native-camera round-trip correction;
+reuse existing matrices, no new camera payload/empirical threshold/brightness fix.
+
 264 P3 DEFAULT-path baseline PASS: valid165s/104s session,24 complete windows,
 7,844,924,963 reference pixels, ZERO any-bit/relative/one-writer/join differences,
 no faults/dumps/build changes. c039f87 evidence pushed; FULL-variant250 still

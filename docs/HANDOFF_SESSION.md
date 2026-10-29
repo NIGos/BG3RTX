@@ -31,7 +31,7 @@ Fixed-camera scores and cross-run moving images cannot close P1. Use exact
 reprojection residuals or live off/on in ONE moving session. Do not block on
 AO counters: saved PRE alpha and same-build key-off controls are authoritative.
 
-codex/p1-pan: en2-selfcheck/BG3RTX b6a1c84, pushed, paired ABI14. All research
+codex/p1-pan: en2-selfcheck/BG3RTX 82b8528, pushed, paired ABI14. All research
 keys0. Main has no P1 feature. Existing B2/B5 and PRE pose pins through actual
 submission are reused; no new camera transport. Metadata GPU token, depth AND
 world-normal checks guard actual integer colour texel, not unused neighbours.
@@ -82,10 +82,14 @@ ONLY matched non-aborted TLAS normals from existing owned image40 are accepted.
 Missing/degenerate/nonfinite stays unavailable, no neighbour/shading rescue.
 Depth AND world geometric normal must match with fp16/normalization/oct16/fp32
 precision bounds, no angular fudge or new camera data. GPU metadata records mode.
-Full build/11 CTests,9 shaders/24 ABI,7 ordinary byte-identical pass. GPU15-case
-self-test expected row12[32767,32767,15,1];265 LIVE frozen b6a1c84 unlimited-sync
-smoke, gate off/on static. Spec docs/GI_GEOMETRIC_NORMAL.md. Then static12 and
-ONE moving test only as evidence permits; no quality pass from execution alone.
+Full build/11 CTests,49 shaders/24 ABI,7 ordinary byte-identical pass.265 valid111s,
+GPU15/15 pass in both captures, static0.06px/AO/finite/no faults. Off45/2.73M RGB
+pixels differ; on versusPRE+0.926%, NOT a two-capture noise pass. VVL2667 existing
+hazards, zero dispatch/private-source/new-metadata messages (scoped, not clean).
+266 LIVE frozen82b8528, twelve non-self-test captures. Spec GI_GEOMETRIC_NORMAL.md.
+Then ONE moving test only as evidence permits; no execution-only quality pass.
+If depth bias persists, compare plain ray_at position against the pan metric's
+existing native-camera round-trip correction; no new payload or arbitrary bound.
 Keep active checkout source/binaries frozen. Recheck user-playing/processes/queue
 before every launch. P1 active offline while P3 ran; next runnable P1 gets priority.
 
