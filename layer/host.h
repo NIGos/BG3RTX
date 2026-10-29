@@ -44,6 +44,9 @@ uint64_t hash64(const void* data, size_t size);   // FNV-1a 64
 // ---- config (util.cpp) ----
 void cfg_poll();                       // re-reads bg3rtx.ini when it changes
 int cfg_int(const char* key, int fallback);
+// rt_order_trace=N: log record/submit order of the scene build and the RT passes for N
+// frames every 600 frames (P1 frame-lag diagnosis).
+bool order_trace_active();
 float cfg_float(const char* key, float fallback);
 
 // ---- frame cap (framecap.cpp; fps_cap) ----

@@ -30,6 +30,8 @@
 #include <intrin.h>
 
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
 #include <cmath>
 #include <cstring>
 
@@ -123,6 +125,16 @@ struct SceneSlot {
 uint64_t g_legacy_rec = 0;   // the legacy BLAS's last build: refit only once it was submitted
 SceneSlot g_scene[kSceneSlots];
 int g_scene_cur = -1;
+// rt_scene_wait=1 (P1, docs/TRACK_D_RT.md): BG3 records the lighting command buffer, where the
+// RT passes go, on a worker thread 1-5 ms before another thread ends the G-buffer pass of the
+// same frame (where the scene is captured and built). Both go down in one vkQueueSubmit with the
+// G-buffer first, so the RT passes can trace this frame's TLAS if their recording waits for it.
+// Without the wait they trace the previous frame's scene: a camera-relative scene one frame
+// old, which detaches shadows while the camera moves.
+std::condition_variable g_scene_cv;
+struct WaitStats { uint64_t calls = 0, waited = 0, got = 0, timeouts = 0, skipped = 0; double ms = 0, ms_max = 0; };
+WaitStats g_wait;
+uint32_t g_wait_misses = 0;   // consecutive timeouts: stop waiting after a few (no capture this frame)
 uint32_t g_scene_next = 0;
 uint64_t g_scene_skipped = 0, g_scene_skip_logged = 0;
 std::atomic<uint64_t> g_oldest_live{UINT64_MAX};
@@ -172,6 +184,7 @@ void commit_scene_slot(int slot, VkAccelerationStructureKHR tlas, VkDescriptorSe
   s.split = split;
   g_scene_cur = slot;
   update_oldest_live();
+  g_scene_cv.notify_all();
 }
 
 // GPU timing: 4 timestamps per build (start, converted, BLAS, TLAS) in a ring.
@@ -841,6 +854,9 @@ bool rt_camera_moving() { return g_moving.load(); }
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   if (!g_rt) return;
   std::lock_guard<std::mutex> lock(g_mu);
+  if (order_trace_active())
+    log("[order] capture end cmd %p frame %llu tid %lu%s", (void*)cmd, (unsigned long long)frame_index(),
+        GetCurrentThreadId(), g_last_frame == frame_index() ? " (second capture this frame: no build)" : "");
   if (g_last_frame == frame_index()) return;
   const VkBuffer xfb = cap.xfb, ubo = cap.ubo;
   const VkDeviceSize ubo_offset = cap.ubo_offset;
@@ -1083,6 +1099,9 @@ bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* 
   if (bvh_rec_state(s.rec) == 2) return false;
   if (s.split ? !g_split_valid : !g_blas_valid) return false;
   s.last_use = (std::max)(s.last_use, now);
+  if (order_trace_active())
+    log("[order] hand out slot %d built %llu now %llu tid %lu", slot, (unsigned long long)s.built,
+        (unsigned long long)now, GetCurrentThreadId());
   alpha_slot_in_use(uint32_t(slot), now);   // the set's game views live while it may be bound
   *tlas = s.tlas;
   if (set) *set = s.set;
@@ -1101,10 +1120,46 @@ VkBuffer rt_scene_pose() {
   return g_scene_cur >= 0 && g_scene[g_scene_cur].pose_valid ? g_scene[g_scene_cur].pose : VK_NULL_HANDLE;
 }
 
+// Caller holds `lock` (g_mu). Waits (bounded) for this frame's scene commit; see g_scene_cv.
+void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
+  const int ms = cfg_int("rt_scene_wait_ms", 8);
+  const uint64_t now = frame_index();
+  auto current = [&] { return g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built >= now; };
+  ++g_wait.calls;
+  if (!current()) {
+    if (g_wait_misses >= 8 && now % 64 != 0) {
+      ++g_wait.skipped;   // no capture lately (menus, loading): probe once every 64 frames
+    } else {
+      const auto t0 = std::chrono::steady_clock::now();
+      const bool ok = g_scene_cv.wait_for(lock, std::chrono::milliseconds(ms > 0 ? ms : 1), current);
+      const double dt = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      ++g_wait.waited;
+      g_wait.ms += dt;
+      g_wait.ms_max = (std::max)(g_wait.ms_max, dt);
+      if (ok) { ++g_wait.got; g_wait_misses = 0; } else { ++g_wait.timeouts; ++g_wait_misses; }
+    }
+  }
+  if (g_wait.calls >= 600) {
+    log("[rt] scene wait: %llu frames, %llu waited (%llu got this frame's scene, %llu timeouts, %llu skipped), "
+        "wait mean %.3f ms, max %.3f ms",
+        (unsigned long long)g_wait.calls, (unsigned long long)g_wait.waited, (unsigned long long)g_wait.got,
+        (unsigned long long)g_wait.timeouts, (unsigned long long)g_wait.skipped,
+        g_wait.waited ? g_wait.ms / double(g_wait.waited) : 0.0, g_wait.ms_max);
+    g_wait = WaitStats{};
+  }
+}
+
 bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {
   if (!g_rt) return false;
-  std::lock_guard<std::mutex> lock(g_mu);
+  std::unique_lock<std::mutex> lock(g_mu);
   *set = VK_NULL_HANDLE;
+  if (cfg_int("rt_scene_wait", 0)) {
+    static uint64_t last_frame = 0;   // the first RT query of a frame waits; later ones reuse its result
+    if (last_frame != frame_index()) {
+      last_frame = frame_index();
+      wait_for_frame_scene(lock);
+    }
+  }
   return hand_out(tlas, set, built_frame);
 }
 

@@ -35,6 +35,19 @@ static void guard_check(const char* where, bool safe);
 DeviceData* main_device() { return g_main; }
 uint64_t frame_index() { return g_frame.load(); }
 
+bool order_trace_active() {
+  const int n = cfg_int("rt_order_trace", 0);
+  return n > 0 && frame_index() > 600 && frame_index() % 600 < uint64_t(n);
+}
+
+static void order_log_submit(const char* what, const std::vector<VkCommandBuffer>& cmds) {
+  if (!order_trace_active()) return;
+  std::string s;
+  char b[24];
+  for (VkCommandBuffer c : cmds) { snprintf(b, sizeof b, " %p", (void*)c); s += b; }
+  log("[order] %s frame %llu tid %lu cmds%s", what, (unsigned long long)frame_index(), GetCurrentThreadId(), s.c_str());
+}
+
 static InstanceData* instance_of(const void* handle) {
   std::shared_lock<std::shared_mutex> lock(g_mu);
   auto it = g_instances.find(dkey(handle));
@@ -414,6 +427,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   for (uint32_t i = 0; i < count; ++i)
     cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
   if (trace_recording()) trace_on_submit(cmds);
+  order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   pan_on_submit(cmds);
@@ -435,6 +449,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
     for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
       cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
   if (trace_recording()) trace_on_submit(cmds);
+  order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   pan_on_submit(cmds);

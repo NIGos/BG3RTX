@@ -1,0 +1,62 @@
+[
+ {
+  "seconds": 14,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 14,
+  "motion_end": 14,
+  "set": "rt_scene_rebase=1,rt_scene_wait=0"
+ },
+ {
+  "seconds": 14,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 14,
+  "motion_end": 14,
+  "set": "rt_scene_rebase=1,rt_scene_wait=1"
+ },
+ {
+  "seconds": 20,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 3,
+  "motion_end": 19,
+  "set": "rt_scene_rebase=1,rt_scene_wait=0"
+ },
+ {
+  "seconds": 20,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 3,
+  "motion_end": 19,
+  "set": "rt_scene_rebase=1,rt_scene_wait=1"
+ },
+ {
+  "seconds": 20,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 3,
+  "motion_end": 19,
+  "set": "rt_scene_rebase=0,rt_scene_wait=1"
+ },
+ {
+  "seconds": 20,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 3,
+  "motion_end": 19,
+  "set": "rt_scene_rebase=0,rt_scene_wait=0"
+ }
+]

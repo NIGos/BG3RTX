@@ -1433,6 +1433,9 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha) 
     return VK_NULL_HANDLE;
   }
   ++(built == now ? g_rt_frames_traced : g_rt_frames_stale);
+  if (host->cfg_int("rt_order_trace", 0) > 0 && now > 600 && now % 600 < uint64_t(host->cfg_int("rt_order_trace", 0)))
+    host->log("[order] rt passes cmd %p frame %llu scene built %llu", (void*)cmd, (unsigned long long)now,
+              (unsigned long long)built);
   return tlas;
 }
 
