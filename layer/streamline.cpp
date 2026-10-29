@@ -1776,7 +1776,7 @@ void sl_note_view_destroyed(VkImageView view) {
     for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui}) current |= i->view == view;
   }
   bool retired = false;
-  if (!current && cfg_int("fg_current_destroy_only",0)) {
+  if (!current && cfg_int("fg_current_destroy_only",1)) {
     std::shared_lock<std::shared_mutex> lock(tracker().mu);
     auto it=tracker().views.find(view);
     retired=it!=tracker().views.end() && sl_watched(it->second.image);
@@ -1799,7 +1799,7 @@ void sl_note_image_destroyed(VkImage image) {
   // The keyed policy only invalidates current inputs; retiring a previous
   // rotation of the same target does not invalidate its live replacement.
   const uint64_t frame = frame_index();
-  const bool current_only = cfg_int("fg_current_destroy_only",0) != 0;
+  const bool current_only = cfg_int("fg_current_destroy_only",1) != 0;
   const bool reset = g_fg_stability.destroyed(frame,current_roles,current_only);
   if (current_roles || current_only) wait_inputs_consumed("image", (uint64_t)image);
   std::lock_guard<std::mutex> lock(g_mu);
@@ -1911,7 +1911,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
         (unsigned long long)frame,g_fg_applied,want,fg,reason,unsigned(ready),unsigned(stable),missing,stale,
         tagged ? res_str(tag_result) : "not-called",tagged ? res_str(constants_result) : "not-called",
         (void*)destroy_snapshot.image,(unsigned long long)destroy_snapshot.frame,destroy_snapshot.current_roles,
-        unsigned(destroy_snapshot.reset),(unsigned long long)g_fg_stability.last_destroy.load(),cfg_int("fg_current_destroy_only",0));
+        unsigned(destroy_snapshot.reset),(unsigned long long)g_fg_stability.last_destroy.load(),cfg_int("fg_current_destroy_only",1));
     const char* names[] = {"depth","MV","hudless","UI"};
     for (uint32_t i=0; i<4; ++i) {
       const Img& input=input_snapshot[i];
