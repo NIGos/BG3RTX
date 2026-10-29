@@ -31,7 +31,7 @@ Fixed-camera scores and cross-run moving images cannot close P1. Use exact
 reprojection residuals or live off/on in ONE moving session. Do not block on
 AO counters: saved PRE alpha and same-build key-off controls are authoritative.
 
-codex/p1-pan: en2-selfcheck/BG3RTX 7e91e6d, pushed, paired ABI14. All research
+codex/p1-pan: en2-selfcheck/BG3RTX 7433185, pushed, paired ABI14. All research
 keys0. Main has no P1 feature. Existing B2/B5 and PRE pose pins through actual
 submission are reused; no new camera transport. Metadata GPU token, depth AND
 world-normal checks guard actual integer colour texel, not unused neighbours.
@@ -87,13 +87,19 @@ base temporal/composite layout and writes lacked origin40. Separate15-case math
 kernel remains valid; do not interpret energy/rejection from those render runs.
 7e91e6d shares base extras20/40/48 between layout and actual push writes; compiled
 pointer/type contract test and header-derived reflection pass (12 CTests/24 ABI).
-269 LIVE frozen7e91e6d unlimited VVL repeat; inspect ALL layout/binding/pipeline
-errors before any new static/moving gate. Spec docs/GI_GEOMETRIC_NORMAL.md.
+269 valid112s: ZERO full layout/push/write errors,15 cases/probes pass. Other
+VVL categories unresolved; not globally clean. Spec docs/GI_GEOMETRIC_NORMAL.md.
 268 isolated four-binding probe valid97s:15 cases and finite inputs pass; two
 ray/projection offsets zero PRE/POST for3 captures despite nonzero current jitter.
 Its surrounding render path was invalid, so this is CAMERA-ONLY evidence. Retain
 native ray_at positions. Do not infer old-matrix/MV convention from that alone.
 Self-test2 uses reserved row12 with exact24-bit packed fields; no new camera data.
+7433185 default-off gi_history_fresh_independent separates POST stream3 from
+PRE stream0, addressing possible nested-sample correlation without extra rays,
+images/weights/AO/camera change.271 LIVE frozen corrected static12 with key0.
+Then SAME build static12 key1 (fixture gi_fresh_independent_static_job.json),
+report both CIs/power and saved alpha; control RGB differs intentionally by RNG.
+Only then ONE moving gate toggle as evidence permits. GI_FRESH_INDEPENDENT.md.
 Keep active checkout source/binaries frozen. Recheck user-playing/processes/queue
 before every launch. P1 active offline while P3 ran; next runnable P1 gets priority.
 
@@ -122,7 +128,7 @@ state and aborts its own failed merge. Its failure/success fixtures pass.
 
 ## P3 to P6
 
-- P3 codex/p3-box 8cb61f0 (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. New Q24 uint64 sums/nonzero/invalid counts built/tested, runtime pending. Shadow rays/quality untested; no merge.
+- P3 codex/p3-box b3c42dc (p2-pending/BG3RTX), off.264 DEFAULT reference PASS24 windows/7.845B pixels/zero differences.250 FULL bit differences open.267 box activation valid291s, native set3/2 offsets, nonzero evaluations; accuracy INCONCLUSIVE from zero quantized means (fx1/256, scale0.00136865), not proof of black rendering. VVL unresolved categories retained. Q24 repeat270 INVALID:52 windows/16.919B samples, native/recompute nonzero0, invalid0. Native-AO probe prepared (GI0, box1/debug4,35s); no accuracy claim. Shadow rays/quality untested; no merge.
 - P4 codex/p4-omm 8d902d5, managed p4-omm/BG3RTX: conservative interval classifier and corrected stochastic-alpha contract, 197,621 checks/4 CTests pass. No runtime integration or merge. Old mip0/1-only plan is unsafe; unknown retains native alpha.
 - P5 SHaRC v2 after EN2, light tree, EN2 consumers in GI/SHaRC. sharc-v2 remains off.
 - P6 minimum design DONE: docs/P6_WATER.md, merged 441904a through merge-green (build, 3 CTests, 32 shaders, QA pass), main/branch pushed. Water runtime and gap 1 remain open; phase branch codex/p6-water cd04c63.

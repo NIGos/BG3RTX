@@ -1,19 +1,38 @@
 # BG3RTX progress
 
-## Current checkpoint — 2026-10-29 03:42 Europe/Rome
+## Current checkpoint — 2026-10-29 04:16 Europe/Rome
 
 - Main rendering remains 6dba0a8; the P6 water design is merged.
 - P1 source-key pan tests have not demonstrated a quality gain; all variants stay off.
 - Geometry runs 265–266 are INVALID because base passes lacked origin binding 40.
-- P1 7e91e6d fixes layout and writes together; 12 CTests and 24 ABI checks pass.
-- Probe 268 measures zero current ray/projection offset PRE and POST; positions stay native.
-- Job 269 is checking the corrected binding with unlimited validation before more quality runs.
+- The shared layout/write fix passes 12 CTests and 24 ABI checks; runtime 269 has no layout/push/write errors.
+- Probes 268–269 measure zero current ray/projection offset PRE and POST; native positions stay unchanged.
+- P1 7433185 prepares independent POST sampling without extra rays; job 271 is the corrected same-build stream-0 baseline.
 - P3 default reference passes: 24 windows, 7.845 billion pixels, zero differences.
-- P3 activation works; accuracy remains inconclusive. Higher-precision projector sums await runtime.
+- P3 activation works, but even precise counters report no positive lighting signal; a GI-off/native-AO control is prepared.
 - EN2/D-EM stay off; P4 has a tested CPU classifier, while GPU integration and P5 remain open.
 - One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
 
 ## Resumed — 2026-10-29
+
+269 corrected-binding validation passes its full layout/push/write audit: valid
+112 s, zero driver faults/dumps/build changes, all 15 cases and current projection
+probes valid PRE/POST. Other validation categories remain unresolved; this is not
+a clean VVL certificate. Saved alpha is exact; on versus PRE is still positive
+in two samples, which cannot establish energy parity. Never reuse invalid 265/266.
+P1 7433185 adds default-off gi_history_fresh_independent: POST uses stream 3,
+PRE lighting/GI stream 0. Reusing the same stochastic transport for nested fresh
+lighting can correlate self-hits/short cycles; independence is a hypothesis to
+test, not a proven cause. No extra rays, images, weights, camera payload or AO
+change. Build 12 CTests/24 ABI checks pass; seven ordinary shaders are identical.
+271 LIVE on the frozen build with independent=0, corrected origin binding and
+12 static gate pairs. Next use independent=1 on the SAME build before any pan.
+
+270 P3 precise repeat INVALID: 52 windows, 16.919 billion projector samples,
+zero reported native/recomputed positive samples and invalid=0. No nonzero-signal
+accuracy evidence. New precision is not a reason to accept a zero comparison.
+A box-on/debug-4 GI-off probe is prepared to isolate native AO; no production
+quality workaround. Shadow rays and FULL-variant exactness remain open.
 
 Full validation audit invalidates geometry runs 265 and 266: base surface passes
 lacked declared/bound origin image 40 (VUID 07988). Their energy/rejection numbers
