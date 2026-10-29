@@ -47,3 +47,18 @@ AF family 304be1c7 repeats ratios 0.361 / 0.362 outside the derived
 
 P1 remains the active rendering priority while this independent reference fix
 is integrated. No EN2, D-EM, box-light, OMM or GI candidate is approved here.
+
+
+## Resumed P2 checkpoint — 2026-10-29
+
+The required P1 fresh fallback, normal bounds and static/same-run pan measures
+are recorded through 303. No visible gain is established; the GI candidate stays
+off. P1 remains incomplete while pending integrations resume under the goal's
+stalled-phase rule. The overall goal remains active.
+
+D-EM diagnostic 295 rejects coincident additive draws in the observed AF cohort:
+67,031 receivers, no multi-draw hits, native blend disabled. The exact family
+still fails 0.362 against 0.842-1.188. No calibration or scale is permitted.
+Next inspect facing: native back-face culling versus two-sided emissive lookup.
+Preserved evidence is on codex/p2-emissive at 1922260. Future stats jobs use hold
+at least 90. The short diagnostic and scoped VVL check are not promotion gates.

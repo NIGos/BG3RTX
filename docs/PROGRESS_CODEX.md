@@ -1,19 +1,170 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 06:48 Europe/Rome
+## Current checkpoint - 2026-10-29 09:03 Europe/Rome
 
-- Main rendering remains6dba0a8; P6 water design and QA-only exposure-hold fix7a98949 are merged.
-- P1 static energy consistency and moving quality remain unclosed; every prototype stays off.
-- Invalid geometry runs 265/266 are excluded; corrected bindings pass scoped runtime audits.
-- P1 attribution 284 fails the strict loss gate: unlit losses are real but far smaller than positive source drift.
-- Build 12 CTests and 24 shader ABI checks pass; ordinary GI/RF shaders are unchanged.
-- P3 actual shadow rays run in S6 and S5, with finite final output and no driver faults.
-- P1 held exposure293 still fails PRE energy; QA-hold fix passes294 and is merged, queue idle.
-- P2 local-light reference is merged; EN2/D-EM failures keep those features off.
-- P4 has a tested CPU classifier, P5 depends on EN2, and P6 runtime water remains open.
-- The one authorized reset was consumed at weekly100%; credit balance0, no second authorization.
+- Main rendering remains 6dba0a8; local-light reference, water design and legal QA hold are merged.
+- P1 requested fix and static/moving measures are complete; P1 quality remains incomplete.
+- Static 301 fails original-PRE energy (+0.460%); all 23 GPU cases and raw safety checks pass.
+- Cadence-controlled pan 303 has motion +1.162%, raw residual +21.951%, cohort energy +11.193%.
+- Keep the GI candidate off. PAUSED.md preserves its evidence and resolved-image return point.
+- Under the goal's stalled-phase rule, continue P2 pending integrations; the overall goal stays active.
+- D-EM 295 rejects additive overlap: 67,031 receivers, zero multi-draw; native blend is disabled.
+- AF emissive family still fails 0.362 against 0.842-1.188. Next smallest probe is native facing.
+- No GI, EN2, D-EM, box-light or OMM candidate is promoted. P3-P6 gaps remain documented.
+- Evidence and branches are pushed. Reset used; backups and shared junctions remain protected.
 
 ## Resumed — 2026-10-29
+
+P1 resumed by the user. The previous park decision is superseded. No new
+attribution, exposure or provenance research before the static energy and
+single-run pan measurements. The new AGENTS.md applies to every branch.
+
+P1 commit 0a0a9d2 keeps the complete fresh rejection fallback and adds a normal
+cone derived from FP16/oct16 precision and the real GI footprint. Only TLAS
+neighbours on the same geometric plane widen the shading-normal bound. The
+actual history texel still must pass depth and normal checks. No denominator,
+ray weight, camera payload or accumulation reset changes. GPU self-tests cover
+20 cases; all 12 CTests and 24 compiled shader ABI checks pass. Seven ordinary
+GI/LS/sun/RF shader binaries are identical to d9cb628. Defaults remain off.
+
+Test 296 finished execution-valid. All 12 captures passed all 20 GPU predicates,
+finite GI and exact saved alpha. Normal rejection was 13.45%. Energy remains
+inconclusive: preserve the final gate-off baseline spike; original-PRE change
+was +0.350% and its interval excludes zero. No pan gain is claimed. Trace median
+was 1.260 ms; whole GI was 56.466 ms under validation and duplicated experimental
+passes. No scoped layout/push/write VVL errors appeared; other errors remain.
+
+Repeat 297 finished execution-valid on b6165ce. All 36 captures are finite,
+saved alpha is exact and all 20 GPU predicates pass. Normal rejection was
+14.70% of 291,499,658 queries. On/off energy +2.142%, paired CI
+[+0.00005157, +0.00068514] Y: FAIL. Original-PRE +0.271% includes zero narrowly;
+this cannot waive the paired failure. Keep every sample, including two high
+original-PRE values in the on cohort. Trace median 1.273 ms; whole GI 54.986 ms
+under validation. No scoped layout/push/write VVL tags; other errors remain.
+
+Shuffled static 298 finished execution-valid but still fails energy parity:
+on/off +0.8243%, CI [+0.00005181, +0.00023276] Y; original-PRE +0.3690%,
+CI [+0.00003676, +0.00009067] Y. All 36 samples retained, finite, alpha-exact,
+20 GPU predicates pass, max static shift 0.44 pixels. Normal rejection 14.22%.
+Trace median 1.734 ms; whole GI 53.658 ms under diagnostic validation.
+No scoped layout/push/write VVL tags; other VVL errors remain. No pan pass.
+
+4e11688 fixes a concrete early zero return: absent/nonfinite previous colour
+now attempts the same complete fresh fallback when rejection is enabled. The
+old availability-cohort restriction is superseded; control behavior is unchanged.
+Unsupported current sources remain unavailable. This is not a claimed explanation
+of the positive bias. All 12 CTests, eight energy tests and 24 shader ABI checks
+pass; seven ordinary shaders are byte-identical. Static 299 started at 08:18:39
+on that frozen commit, using the same shuffled fixture and a 90-second hold.
+299 completed on 4e11688. All 36 samples are finite, alpha-exact and pass all
+20 GPU predicates. Max static shift 0.621 pixels, normal rejects 14.03%.
+Both energy intervals include zero, but power is LOW: on/off +2.651%, relative
+interval about [-1.093%, +6.395%]; original-PRE +0.2126%. This does not erase
+297/298 or establish equivalence. Trace median 1.242 ms; whole GI 52.880 ms
+under validation. No scoped layout/push/write tags; other VVL errors remain.
+
+ONE moving diagnostic 300 started at 08:28:17 on 45a275f, identical renderer
+to 299. It uses 24 balanced four-second blocks and a 96-second hold, private/
+self-test diagnostics off. Report residual with energy, coverage and motion;
+no quality promotion follows from the weak static result. Next concrete normal
+fix: the half-step FP16 bound underestimates conversion error permitted by
+Vulkan. Replace it with exact neighbour intervals after 300 is terminal.
+Specs: docs/GI_NORMAL_FOOTPRINT.md. P1 remains active.
+
+Pan 300 completed execution-valid on 45a275f, identical renderer to static 299.
+Off/on residual 0.1359554 / 0.1384546 (+1.838%), cohort GI Y -15.445%, motion
+67.80 / 80.14 pixels (+18.197%). No demonstrated quality win. Samples 28,648,686 /
+21,195,860; grid coverage 25.01% / 18.67%, much wider than the old 0.08% cohort.
+Trace median 0.550 ms; whole GI 65.771 ms under the experimental duplicated
+pipeline. Validation was off; preceding full 299 VVL remains preserved.
+
+4ba5bfc fixes a derived normal-bound error: Vulkan format conversion may choose
+either adjacent FP16 value. The previous half-step bound can be short by factor 2.
+The new bound uses actual neighbours and marks its metadata convention. No angle
+tuning, source/ray/resource/ABI changes. Existing spatial support is unchanged.
+The endpoint sweep covers 31,743 finite nonnegative intervals. GPU mode 1 now
+checks 23 cases (row 12 [8388607, 8388607, 23, 1]). All 12 CTests and 24 shader
+ABI checks pass; seven ordinary shaders are identical. Static 301 started at
+08:35:24 on frozen 4ba5bfc. Inspect runtime evidence before the corrected pan.
+See docs/GI_NORMAL_FOOTPRINT.md and
+[Vulkan format conversion rules](https://docs.vulkan.org/spec/latest/chapters/fundamentals.html).
+
+
+Static 301 completed execution-valid on 4ba5bfc. All 36 captures finite and
+alpha-exact; all 23 GPU cases pass, max static shift 0.36 pixels. Normal rejection
+13.24%. On/off +0.6464%, paired CI [-0.00005839, +0.00028256] Y includes zero;
+original-PRE +0.4599%, CI [+0.00003984, +0.00011942] Y still FAILS. No complete
+energy-parity or quality claim. Trace median 1.250 ms; whole GI 52.621 ms under
+validation. No scoped layout/push/write tags; other VVL errors remain. Retain
+full evidence on P1, update the branch from main, then one corrected-precision
+pan diagnostic. No repeated unchanged static runs seeking a favourable interval.
+
+
+P1 updated from main as d836c09 while no game was active. AGENTS.md and shared
+QA/reference fixes are present; GI source and paired binaries are unchanged.
+All 12 CTests, 49 shader files, QA detectors, eight energy tests and five merge
+gate scenarios pass. No experimental phase was integrated into main.
+Corrected-precision pan 302 started at 08:47:17 on frozen d836c09, one session
+with 24 balanced four-second blocks and a 96-second hold. It is diagnostic only,
+given static 301's original-energy failure. Preserve all evidence and defaults.
+
+
+Corrected-precision pan 302 completed execution-valid on d836c09. Off/on residual
+0.1393289 / 0.1372433 (-1.497%), cohort energy -17.904%, motion +19.888%.
+No quality gain. Samples 34.4 / 25.9 million, grid coverage 29.75% / 23.01%.
+Trace median 0.551 ms; whole GI 65.059 ms under the experimental duplicated
+pipeline. No VVL in this moving run; full 301 validation remains preserved.
+
+Test 303 started at 08:54:05 on frozen 8fe00de. Only the existing fixture changes:
+fps_cap=8 in both modes, same balanced 96-second pan. The common cadence tests
+the mode-dependent camera step confound without new GI or camera logic. Require
+actual framecap/watch logs and report energy, motion and coverage with residual.
+Static 301's original-PRE gate still fails; no promotion is permitted.
+
+
+Pan 303 completed execution-valid on 8fe00de. The 8 fps cap is verified by
+19 complete windows of 40 frames per 5 seconds. Off/on motion 93.57 / 94.66
+pixels (+1.162%), raw residual 0.1114922 / 0.1359662 (+21.951%), cohort energy
++11.193%. No quality gain. Samples 20.96 / 14.45 million, grid coverage 31.49% /
+22.16%. Trace median 0.548 ms; whole experimental GI 64.288 ms. No VVL in this
+moving run; full 301 validation is retained. The requested P1 fix and measurement
+sequence is now recorded, with the candidate off and the phase incomplete.
+The stalled-phase rule advances the priority slot to P2; the overall goal stays
+active. P1 dbd320c PAUSED.md preserves the next useful resolved-image/source test.
+
+Audited preserved D-EM 295: 67,031 target receivers, 71,754 triangle candidates,
+zero distinct-draw overlap or invalid/overflow/missing counters. Nine actual
+native draw records show blend disabled and back-face culling. Additive-stack
+hypothesis rejected for that cohort; no brightness scaling. AF 304be1c7 remains
+0.362 against 0.842-1.188. Final captures finite, native D32F nonfinite values
+preserved. Build median 0.496 ms, effects passes 0.118 ms with capture only.
+The short hold-45 diagnostic is not a promotion gate. Evidence on P2 at 1922260.
+Next: sync main, count committed facing using existing debug resources, and
+compare native front-face state before any physical change. No new ABI needed.
+
+
+
+Previous goal turn made progress: merged a valid legal QA exposure-hold fix,
+rejected P1 source consistency again with valid held data293, narrowed native
+box residual291 and recovered the archival junction incident. No rendering
+candidate was promoted. P1 park file2914bde now preserves293 and next constraints.
+
+P2 D-EM next hypothesis: nearest-hit-only emissive lookup may miss coincident
+native additive/ordered draws. AF family304be1c7 still fails0.361/0.362 while GF
+passes0.999; UV/pulse hypotheses already checked, no coefficient or gate tuning.
+New codex/p2-emissive from main6514a13 selectively cherry-picks consolidated D-EM
+work through9f4d17d (69b4eaa), preserving original branches/history. Defaults/release
+rt_emissive0, no scene allocated while disabled; startup required to enable.
+ca1959b adds default-off observer using reserved push/stats words: same-family
+triangle candidates vs distinct draw geometry, explicit invalid/overflow/missing.
+It changes NO emission/calibration/light list. Actual native draw blend/cull/depth
+state logged separately; dynamic state/multiplicity alone cannot prove addition.
+Build/3 CTests/36 shaders pass, seven ordinary GI/LS/sun/RF binaries identical main.
+SDKs use explicit paths and owned small SDK/DB copies; no shared junctions.
+295 LIVE frozen ca1959b, runner2692 at07:11:07 after fresh idle/playing checks:
+AF debug0 with scene-only legal hold; inspect actual full native-state log,
+post-ready probe populations, complete VVL/captures before interpreting results.
+
 
 Archive incident and recovery: the managed-worktree archival tool followed the
 qa-exposure-hold checkout's NTFS junctions for external and data/assetdb, emptying
