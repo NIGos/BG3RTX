@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint — 2026-10-29 04:48 Europe/Rome
+## Current checkpoint — 2026-10-29 04:58 Europe/Rome
 
 - Main rendering remains 6dba0a8; the P6 water design is merged.
 - P1 corrected geometric gate pan276 demonstrates no gain; all variants stay off and static energy remains failed.
@@ -9,11 +9,28 @@
 - Probes 268–269 measure zero current ray/projection offset PRE and POST; native positions stay unchanged.
 - Corrected-interface 271/272 both FAIL static energy parity: independent POST sampling alone does not fix the bias.
 - P3 default reference passes: 24 windows, 7.845 billion pixels, zero differences.
-- P3 AO1 box A/B277 reduces the native/recompute difference67.40%; ambient/overshoot and shadow quality remain open.
+- P3 shadow smoke278 exercises1.319 rays/px; cap1 run279 did not exercise unknowns, so fallback remains unverified.
 - EN2/D-EM stay off; P4 has a tested CPU classifier, while GPU integration and P5 remain open.
 - One usage reset is authorized at exhaustion and remains unused; prototype keys default to zero.
 
 ## Resumed — 2026-10-29
+
+278 actual box shadow execution PASS: normal GI/debug0, valid111s/49s session,
+ten complete120-frame windows; evaluated/traced1.319/px, occluded0.738/px,
+unknown/cookie0.000/px. No faults/dumps/build changes. Final/lighting finite;
+D32F dump reports4590 nonfinite values, retained without global-finite claim.
+279 cap1 unknown-coverage attempt INVALID: execution117s/49s session is stable,
+but reported unknown box population stays0.000/px. Opaque committed hits can
+finish before the nonopaque-candidate cap; do not claim branch verification or
+relax the expect. P3 prepares S7/S5 shadow coverage on known-loadable saves.
+P1 raw271 visibility over32.778M samples: exact0 only0.0211%, but below the
+0.001 give-back denominator covers3.2255%. Frequency only, not source-energy
+attribution or proof of native flags at Camp. 280 LIVE frozenP1 2df23ae:
+existing-key gi_ao0 static12 isolates native visibility/source coupling with
+geometric1/exact0/independent0. Its changed ambient/bounce integrand makes any
+pass diagnostic-only, never a production workaround. No safety-cap removal,
+brightness scaling, new random-stream variants or camera transport.
+
 
 271 corrected-binding, stream-0 baseline: valid 200 s, no faults/dumps/build
 changes; static max shift 0.08 px, finite/pose/alpha pass. All six off frames
