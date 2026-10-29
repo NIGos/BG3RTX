@@ -49,3 +49,46 @@ No comparison of independent moving-run images is used.
 SDKs use explicit CMake paths and an owned small SHaRC copy; asset DB is an owned
 copy. No dependency/data junction is created. Offline build/3 CTests and all36
 shader files pass before runtime; ordinary shader parity is checked separately.
+
+## Run 295 audit: additive overlap rejected
+
+The preserved run completed execution-valid on ca1959b, before P1 resumed.
+Ten scene-only windows contain 67,031 target receivers and 71,754 triangle
+candidates. Multi-draw receivers are zero; the distinct-draw sum is exactly
+67,031, with zero invalid IDs, overflow or missing candidates. Extra candidates
+belong to one geometry/draw, not an observed additive stack.
+
+Nine actual native draw-state records show pipeline 34445, fragment shader
+304be1c71df194cb, blend disabled, back-face culling, depth test EQUAL, no depth
+write and no relevant dynamic state. This rejects the tested additive-draw
+hypothesis for that observed cohort. Do not multiply radiance by draw count.
+
+The exact-family gate still FAILS: ratio 0.362 against 0.842-1.188, 237 bright
+pixels on average. The other five evaluated families pass this short diagnostic.
+Both final captures report zero nonfinite values. Native D32F dumps report
+2,764 / 2,587 nonfinite values, preserved as a limitation; exported raw arrays
+contain none. No scoped layout/push/write VVL tags, but other VVL errors remain.
+Build median 0.496 ms (p99 0.756); effects passes 0.118 ms with capture. No
+without-capture baseline was sampled, so incremental overhead is not established.
+
+Full evidence: docs/evidence/p2-emissive-overlap-295.json. Full VVL is preserved
+at build/p2-emissive-overlap-295.validation.log. The old job used hold 45; future
+120-frame jobs must use hold at least 90. This observation is not a promotion gate.
+
+## Next smallest hypothesis: facing policy
+
+The native shader was re-read from the preserved SPIR-V. It samples raw location-0
+UV at set 1 binding 1, combines colour/mask/intensity, and applies the captured
+pulse. No missing additive term appears. Existing constants and UV checks remain
+unchanged. Native sampling state is not recorded by the current trace, so repeat
+versus clamp is still unverified; do not treat filtering tests as its proof.
+
+A more concrete mismatch is present in the emissive query: the native draw culls
+back faces, while the emissive TLAS disables facing culling and lookup forces
+opaque, two-sided hits. Multiple candidates from ONE draw could still select a
+surface native rasterization culled. This is a hypothesis, not its demonstrated
+cause. Reuse the existing debug query/stat slots to count committed facing for
+AF and the passing GF control before changing emission. Native front-face state
+and captured transform winding must be respected; never guess a sign or fit a
+scale. No new resource or ABI is needed for a facing-only probe. Keep off until
+the original exact-family gates, validation and moving checks pass.
