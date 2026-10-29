@@ -44,14 +44,22 @@ baseline spike widens the paired interval; original-PRE check fails (+0.350%).
 Every sample is retained. No pan quality pass is claimed. Full evidence is on
 P1 in docs/evidence/p1-normal-footprint-static-296.json.
 
-297 is live on frozen P1 commit b6165ce, runner 3960 started at 07:53:29.
-It repeats the same rendering with 36 captures in nine ABBA blocks, a 30-second
-warmup, a 4-second gap and a 90-second hold. Existing QA now accepts larger
-balanced cohorts and uses the actual sample count; all eight energy tests pass.
-No new rendering or exposure changes. Inspect the actual terminal result before
-editing P1 or starting another game. Preserve validation.log and report interval
-width, original-PRE energy, predicate closure, finite/raw alpha and GPU cost.
-Then run the single-session pan only when the static energy gate is established.
+297 is terminal and execution-valid on b6165ce. All 36 captures are finite,
+saved alpha is exact, and 20 GPU predicates pass in each. Normal rejection is
+14.70% of 291,499,658 gate-on queries. Static energy FAIL: on/off +2.142%,
+paired CI [+0.00005157, +0.00068514] Y excludes zero. Original-PRE +0.271%
+includes zero narrowly; this cannot waive the paired failure. All samples stay,
+including two original-PRE spikes in the on cohort. Evidence is on P1 in
+docs/evidence/p1-normal-footprint-static-297.json. No pan quality pass.
+
+298 is live on frozen 6e5a553, runner 29724 started at 08:05:46.
+The same rendering now uses a prespecified shuffled order of nine AB and nine
+BA pairs (seed 297), eliminating the periodic ABBA state schedule. There are
+still 36 captures, 30-second warmup, 4-second gaps and a 90-second hold. No
+sample deletion, brightness scaling, threshold tuning or exposure change.
+All eight energy unit tests pass. Inspect actual terminal state before editing
+P1 or launching another game. Preserve validation.log, audit all raw data and
+VVL tags, and report interval width and GPU cost. Static parity precedes pan.
 
 The default-off normal footprint derives spatial support from the real sample
 cell and reprojection rounding, bounded to same-plane TLAS neighbours. The
@@ -60,7 +68,7 @@ and unit checked, not a claimed half-resolution runtime pass. GPU row 12 in
 test mode 1 is [1048575, 1048575, 20, 1]. All 12 CTests and 24 shader ABI checks
 passed; seven ordinary shaders were byte-identical to d9cb628. No scoped layout,
 push or descriptor-write VVL errors appeared in 296; other VVL errors remain.
-Latest trace median was 1.260 ms and whole GI 56.466 ms per frame under validation
+Latest trace median was 1.273 ms and whole GI 54.986 ms per frame under validation
 and duplicated experimental passes, not a release performance measurement.
 
 ## Workspaces
@@ -68,7 +76,7 @@ and duplicated experimental passes, not a release performance measurement.
 Use explicit paths. The app may select a different managed checkout.
 
 - Main: C:/Users/quali/Documents/Code Projects/BG3RTX, branch main, pushed.
-- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, b6165ce.
+- P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, codex/p1-pan, 6e5a553.
 - P2 D-EM: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, ca1959b, D-EM ABI 9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, codex/p3-box, b913e8e, ABI 9.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, codex/p4-omm, 8d902d5.

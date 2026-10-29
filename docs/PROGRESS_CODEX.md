@@ -1,6 +1,6 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 07:54 Europe/Rome
+## Current checkpoint - 2026-10-29 08:06 Europe/Rome
 
 - Main rendering remains 6dba0a8; the water design and legal QA exposure hold are merged.
 - P1 is active again by explicit user instruction. No more attribution or exposure research.
@@ -8,7 +8,8 @@
 - The new normal bound combines encoding precision with the actual same-plane GI footprint.
 - Static off/on energy is the first gate, followed by a single-run moving residual.
 - Static 296 is inconclusive: preserve its baseline spike; original-PRE check fails (+0.350%).
-- Repeat 297 is live on b6165ce with 36 balanced captures, closer pairing and a 90-second hold.
+- Static 297 fails on/off parity (+2.142%); 36 finite captures, exact alpha, normal rejects 14.70%.
+- Repeat 298 is live on 6e5a553 with a prespecified shuffled balanced order and a 90-second hold.
 - All 12 CTests and 24 shader ABI checks pass; seven ordinary shaders are byte-identical.
 - P2 test 295 has finished. P2/P3/P4 research will not displace the required P1 measurement.
 - Main, research branches and evidence are pushed. All research defaults remain off.
@@ -35,12 +36,19 @@ was +0.350% and its interval excludes zero. No pan gain is claimed. Trace median
 was 1.260 ms; whole GI was 56.466 ms under validation and duplicated experimental
 passes. No scoped layout/push/write VVL errors appeared; other errors remain.
 
-Repeat 297 started at 07:53:29 on frozen b6165ce. It uses 36 captures in nine
-ABBA blocks, a 30-second warmup, a 4-second gap and a 90-second hold. Rendering
-is unchanged. Existing energy QA now scales to larger cohorts; eight tests pass.
-Full 296 evidence and the repeat fixture are on P1; no samples were removed.
-Specs: docs/GI_NORMAL_FOOTPRINT.md. The current fresh runtime prototype still
-requires full-resolution RR; half-resolution support is derived and unit checked.
+Repeat 297 finished execution-valid on b6165ce. All 36 captures are finite,
+saved alpha is exact and all 20 GPU predicates pass. Normal rejection was
+14.70% of 291,499,658 queries. On/off energy +2.142%, paired CI
+[+0.00005157, +0.00068514] Y: FAIL. Original-PRE +0.271% includes zero narrowly;
+this cannot waive the paired failure. Keep every sample, including two high
+original-PRE values in the on cohort. Trace median 1.273 ms; whole GI 54.986 ms
+under validation. No scoped layout/push/write VVL tags; other errors remain.
+
+Repeat 298 started at 08:05:46 on frozen 6e5a553. The rendering is unchanged;
+only the nine AB and nine BA pairs are shuffled with prespecified seed 297.
+This removes the periodic state schedule without trimming or rescaling data.
+There are 36 captures and a 90-second final hold. Eight energy unit tests pass.
+Specs: docs/GI_NORMAL_FOOTPRINT.md. P1 remains active; static parity precedes pan.
 
 
 Previous goal turn made progress: merged a valid legal QA exposure-hold fix,
