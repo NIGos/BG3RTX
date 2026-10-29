@@ -45,8 +45,9 @@ Never compare independent pan images or repeat unchanged tests until one passes.
 ## P2 next action: emissive facing hypothesis
 
 No game/runner is active as of the terminal 303 audit. Repeat fresh checks before
-any launch. P2 branch codex/p2-emissive is at 1922260 and needs updating from main
-before more code. It has owned SDK/data copies, no shared junctions.
+any launch. P2 branch codex/p2-emissive is at 7a87ba7, updated from current main. The merge
+changed only AGENTS/docs; source and binaries are unchanged. It has owned
+SDK/data copies, no shared junctions.
 Paired D-EM ABI 9 differs from P3 ABI 9: never reuse their game processes.
 
 Preserved diagnostic 295 was fully audited after the required P1 measurements.
@@ -72,13 +73,17 @@ hit facing in AF and passing GF. Log native front-face state; respect captured
 winding. No guessed sign, brightness scale, new resource or ABI. Sampler address
 state is unrecorded; filtering tests do not prove repeat/clamp equivalence.
 Read docs/P2_EMISSIVE_OVERLAP.md and TRACK_D_RT section 13 before implementing.
+The existing rt_em_overlap_check push currently collapses nonzero to 1; mode 2
+can report facing using debug words 8-14. Unused global word 15 can mark the
+probe mode, so mixed in-flight windows cannot be mislabelled. Native state logs
+need frontFace as well as cullMode. Keep emission and ordinary shaders unchanged.
 
 ## Workspaces and stable state
 
 Use explicit paths; the app may select another checkout.
 - Main: C:/Users/quali/Documents/Code Projects/BG3RTX, main, pushed.
 - P1: C:/Users/quali/.codex/worktrees/en2-selfcheck/BG3RTX, dbd320c, ABI 14.
-- P2: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, 1922260, D-EM ABI 9.
+- P2: C:/Users/quali/.codex/worktrees/p2-emissive/BG3RTX, 7a87ba7, D-EM ABI 9.
 - P3: C:/Users/quali/.codex/worktrees/p2-pending/BG3RTX, b913e8e, box ABI 9.
 - P4: C:/Users/quali/.codex/worktrees/p4-omm/BG3RTX, 8d902d5.
 - P6: p6-water/BG3RTX, cd04c63.

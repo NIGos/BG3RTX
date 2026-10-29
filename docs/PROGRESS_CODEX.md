@@ -11,6 +11,7 @@
 - D-EM 295 rejects additive overlap: 67,031 receivers, zero multi-draw; native blend is disabled.
 - AF emissive family still fails 0.362 against 0.842-1.188. Next smallest probe is native facing.
 - No GI, EN2, D-EM, box-light or OMM candidate is promoted. P3-P6 gaps remain documented.
+- P2 is synced from main at 7a87ba7 (AGENTS/docs only); no game is active.
 - Evidence and branches are pushed. Reset used; backups and shared junctions remain protected.
 
 ## Resumed — 2026-10-29
