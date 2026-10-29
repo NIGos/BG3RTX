@@ -1,0 +1,48 @@
+{
+  "baseline": "3d411aa",
+  "profile": "cs_6_0",
+  "unchanged_entries": [
+    {
+      "entry": "start",
+      "sha256": "9770aa290d785bd7445492e5d3d22f36e3e7d22cefdbafb392f0a744115e2ba9"
+    },
+    {
+      "entry": "dof",
+      "sha256": "8f8f67e5546dc2cc6a471d7215bcf67eb1ef791c9d36d64df647a88b96446667"
+    },
+    {
+      "entry": "resolve",
+      "sha256": "d9432fa69d3982730f2376f9d42cc397676eef3a59bcefcfd30a2857ece6964d"
+    },
+    {
+      "entry": "exposure",
+      "sha256": "9ed831c16218702d5a924ff2111ca1e22c85b6bbb4c4d3c866dcb8c2c22149b8"
+    },
+    {
+      "entry": "bloom",
+      "sha256": "1fcc7c4e90939810ced4e1b240fb0fa68f1113ddf023e2d65c86f5372130cb0a"
+    },
+    {
+      "entry": "final",
+      "sha256": "9e257a725435a22179441f8a56efac5a9e9e7fe7b413ea0c393b85d6a6554a06"
+    },
+    {
+      "entry": "check",
+      "sha256": "e909b00f1cf5ba2caf2b7f36c9b5022934ad41d31c31b0fec8b47cfa9dbaa9a0"
+    },
+    {
+      "entry": "probe",
+      "sha256": "e03905b3b211ac3164b6b45b417551a91d7f16999dd7abf00c5464d8b17826a1"
+    },
+    {
+      "entry": "copy",
+      "sha256": "cc8231f4576959b106b6acf108a10594f9b165624038c0fe038beb7ac8302357"
+    },
+    {
+      "entry": "sss",
+      "sha256": "a5e448f711b524f91b0ce6a675623a236cc2e391a729d62b0fd8f04e9c7ae9f8"
+    }
+  ],
+  "hold_spirv_valid": true,
+  "hold_sha256": "d1384cae7bbd31221ccdc2dbc74d9be75aa57cb167128b174ada2ad943b83a61"
+}

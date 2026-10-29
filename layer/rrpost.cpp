@@ -94,6 +94,7 @@ struct Binds {
   VkDescriptorBufferInfo buf[3] = {};
   bool has_buf[3] = {};
   bool probe = false;
+  VkDescriptorBufferInfo probe_out = {}; // optional writable storage target (QA hold)
 };
 
 struct Chain {
@@ -133,8 +134,8 @@ struct Pipe {
   VkPipeline pipe = VK_NULL_HANDLE;
   uint64_t gen = 0;
 };
-Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}};
-enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS };
+Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}};
+enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD };
 std::string g_last_logged_why;
 uint64_t g_completed = 0, g_broken_frames = 0;
 
@@ -426,9 +427,9 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
       w[n].pBufferInfo = &bi[i];
       ++n;
     }
-  if (b.probe) {
+  if (b.probe || b.probe_out.buffer) {
     written |= 1u << 12;
-    bi[3] = {g_probe_buf, 0, VK_WHOLE_SIZE};
+    bi[3] = b.probe_out.buffer ? b.probe_out : VkDescriptorBufferInfo{g_probe_buf, 0, VK_WHOLE_SIZE};
     w[n] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     w[n].dstSet = set;
     w[n].dstBinding = 12;
@@ -466,7 +467,7 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   }
 
   uint32_t slot = UINT32_MAX;
-  if (g_qp && which != P_PROBE && which != P_CHECK) {
+  if (g_qp && which != P_PROBE && which != P_CHECK && which != P_HOLD) {
     slot = g_ts_next++ % kTs;
     ts_harvest(dd, slot);
     dd->vk.CmdResetQueryPool(cmd, g_qp, slot * 2, 2);
@@ -1074,20 +1075,33 @@ float rrpost_pre_exposure() { return g_pre_exposure.load(); }
 void rrpost_dispatch_post(VkCommandBuffer cmd, uint64_t cs) {
   if (cs != kCsAdapt) return;
   std::lock_guard<std::mutex> lock(g_mu);
-  if (!g_hold_on || !g_adapt_out.buffer) return;
+  if (!g_hold_on) return;
   DeviceData* dd = device_of(cmd);
   if (!dd) return;
-  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-  mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-  mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0,
-                            nullptr, 0, nullptr);
-  dd->vk.CmdUpdateBuffer(cmd, g_adapt_out.buffer, g_adapt_out.offset, sizeof g_hold, g_hold);
-  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb, 0,
-                            nullptr, 0, nullptr);
-  ++g_hold_writes;
+  // This native buffer has STORAGE_BUFFER usage, not TRANSFER_DST. Query the
+  // actual dispatch target (including dynamic offset), then write its six
+  // floats with the same legal storage access as the adaptation shader.
+  Bg3Binding target{};
+  const bool valid = query_binding(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, 1, 1, 0, &target) && target.buffer &&
+      (target.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER || target.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) &&
+      target.range >= sizeof g_hold;
+  bool wrote = false;
+  if (valid && ensure_layout(dd)) {
+    Binds b;
+    b.probe_out = {target.buffer, target.offset, sizeof g_hold};
+    Push pc{};
+    std::memcpy(pc.uvmap, g_hold, 4 * sizeof(float));
+    std::memcpy(pc.uvclamp, g_hold + 4, 2 * sizeof(float));
+    // run() supplies shader-write dependencies on both sides and restores the
+    // game's compute bindings. No change to buffer usage, allocation or ABI.
+    wrote = run(dd, cmd, P_HOLD, b, pc, 1, 1);
+  }
+  if (wrote) ++g_hold_writes;
+  else {
+    static uint64_t refused = 0;
+    if (++refused <= 4 || refused % 300 == 0)
+      log("[rrpost] exposure hold REFUSED: actual storage target/range or pipeline unavailable");
+  }
 }
 
 void rrpost_on_present() {

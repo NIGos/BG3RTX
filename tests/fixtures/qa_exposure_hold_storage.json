@@ -1,0 +1,23 @@
+{
+  "name": "qa-exposure-hold-storage",
+  "session": true,
+  "save": "Campsite - 27h",
+  "traces": 2,
+  "warmup": 12,
+  "trace_gap": 8,
+  "hold": 35,
+  "timeout": 420,
+  "set": "qa_exposure_hold=1,fg=0,auto_interval=120,auto_stable_s=20,auto_stable_frames=1000000",
+  "args": [
+    "-Validation",
+    "-VSet",
+    "validate_sync=true,enable_message_limit=false"
+  ],
+  "patterns": [
+    "\\[rrpost\\] exposure held",
+    "\\[rrpost\\] exposure probe"
+  ],
+  "expect": [
+    "\\[rrpost\\] exposure held .*: [1-9]\\d* writes so far"
+  ]
+}
