@@ -191,3 +191,10 @@ or scene-ready marker; zero driver faults/dumps. No box/lighting/cookie result.
 Historical loadability is not current runtime proof. Keep the raw startup output;
 no save/mod change or feature-bug attribution. Try S5 after runnable P1 work;
 a bounded S7 retry may distinguish transient startup from a persistent case.
+
+283 S5 normal-GI shadow coverage PASS: valid113s/49s session, no driver faults,
+dumps/build changes. Last evaluated/traced0.079/px, occluded0.029/px,
+unknown/cookie/shadow-mapped0.000/px. Native box light3.351% of lit luminance,
+removed0.664%. Final finite; raw dump nonfinite records retained in evidence.
+This adds actual ray coverage in the lava scene, not cookie or native-accuracy
+proof. S7 needs one bounded startup retry after runnable P1 attribution.
