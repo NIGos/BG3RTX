@@ -1,17 +1,17 @@
 # BG3RTX progress
 
-## Current checkpoint - 2026-10-29 08:55 Europe/Rome
+## Current checkpoint - 2026-10-29 09:03 Europe/Rome
 
-- Main rendering remains 6dba0a8; water design and legal QA exposure hold are merged.
-- P1 remains active. No new attribution or exposure research; research defaults stay off.
-- Rejected history tries complete current radiance, including missing previous colour.
-- Normal bounds now cover both permitted FP16 conversion neighbours and the spatial footprint.
-- Static 297/298 failed parity; 299 includes zero with low power and does not prove equivalence.
-- Corrected pan 302 shows no gain: residual -1.50%, cohort energy -17.90%, motion +19.89%.
-- Pan 302 coverage is 23.01% / 29.75%, with 25.9 / 34.4 million accepted samples.
-- Static 301: on/off +0.646% within noise; original-PRE +0.460% still fails. All 23 GPU cases pass.
-- All 12 CTests and 24 shader ABI checks pass; seven ordinary shaders are byte-identical.
-- Evidence and branches are pushed. P2-P6 status remains below; reset used and backup safety rules apply.
+- Main rendering remains 6dba0a8; local-light reference, water design and legal QA hold are merged.
+- P1 requested fix and static/moving measures are complete; P1 quality remains incomplete.
+- Static 301 fails original-PRE energy (+0.460%); all 23 GPU cases and raw safety checks pass.
+- Cadence-controlled pan 303 has motion +1.162%, raw residual +21.951%, cohort energy +11.193%.
+- Keep the GI candidate off. PAUSED.md preserves its evidence and resolved-image return point.
+- Under the goal's stalled-phase rule, continue P2 pending integrations; the overall goal stays active.
+- D-EM 295 rejects additive overlap: 67,031 receivers, zero multi-draw; native blend is disabled.
+- AF emissive family still fails 0.362 against 0.842-1.188. Next smallest probe is native facing.
+- No GI, EN2, D-EM, box-light or OMM candidate is promoted. P3-P6 gaps remain documented.
+- Evidence and branches are pushed. Reset used; backups and shared junctions remain protected.
 
 ## Resumed — 2026-10-29
 
@@ -120,6 +120,27 @@ fps_cap=8 in both modes, same balanced 96-second pan. The common cadence tests
 the mode-dependent camera step confound without new GI or camera logic. Require
 actual framecap/watch logs and report energy, motion and coverage with residual.
 Static 301's original-PRE gate still fails; no promotion is permitted.
+
+
+Pan 303 completed execution-valid on 8fe00de. The 8 fps cap is verified by
+19 complete windows of 40 frames per 5 seconds. Off/on motion 93.57 / 94.66
+pixels (+1.162%), raw residual 0.1114922 / 0.1359662 (+21.951%), cohort energy
++11.193%. No quality gain. Samples 20.96 / 14.45 million, grid coverage 31.49% /
+22.16%. Trace median 0.548 ms; whole experimental GI 64.288 ms. No VVL in this
+moving run; full 301 validation is retained. The requested P1 fix and measurement
+sequence is now recorded, with the candidate off and the phase incomplete.
+The stalled-phase rule advances the priority slot to P2; the overall goal stays
+active. P1 dbd320c PAUSED.md preserves the next useful resolved-image/source test.
+
+Audited preserved D-EM 295: 67,031 target receivers, 71,754 triangle candidates,
+zero distinct-draw overlap or invalid/overflow/missing counters. Nine actual
+native draw records show blend disabled and back-face culling. Additive-stack
+hypothesis rejected for that cohort; no brightness scaling. AF 304be1c7 remains
+0.362 against 0.842-1.188. Final captures finite, native D32F nonfinite values
+preserved. Build median 0.496 ms, effects passes 0.118 ms with capture only.
+The short hold-45 diagnostic is not a promotion gate. Evidence on P2 at 1922260.
+Next: sync main, count committed facing using existing debug resources, and
+compare native front-face state before any physical change. No new ABI needed.
 
 
 
