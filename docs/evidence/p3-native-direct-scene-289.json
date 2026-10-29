@@ -1,0 +1,68 @@
+{
+  "job": {
+    "job": "p3-native-direct-validation",
+    "run": 1,
+    "start": "2026-10-29T06:10:16",
+    "sec": 155,
+    "valid": false,
+    "outcome": "INVALID (missing: ls box: active); Run ended: done after 49s (session s061016#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "8fa0c0c Control the native solar fetch directly and restrict reference metrics to the loaded scene | core 06:06:04",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-native-direct-validation.1.061202.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-061212"
+    ],
+    "lines": [
+      "06:12:49.602  [core] ls box stats (120 frames): evaluated 1.319/px, shadow-mapped 0.013/px, traced 0.000/px, occluded 0.000/px, unknown 0.000/px, cookie 0.000/px; game box light 0.000% of lit luminance, removed 0.000%; projector validation px 325786901: game 0.029278, recomputed 0.029453, mean |diff| 0.000008, recompute above game 0.000008, box share 63.227%; counts traced 0 occluded 0 unknown 0 cookie 50311",
+      "06:12:49.602  [core] ls stats (120 frames): non-standard material px 0.1348M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.1304M px, game 0.0496, recomputed 0.0499, mean |diff| 0.00003, recompute above game 0.00003; set0/b0 _m4 (skin shaded white) 1",
+      "06:12:49.602  [core] ls validation fit (all pixels including projectors): game = 0.9961 x recomputed + -0.00006 over 2.53M lit px (mean recomputed 0.02894, game 0.02876); game where no local light reaches 0.00000 (0.06M px)",
+      "06:12:49.602  [core] ls box precise (120 frames): px 325786901 native nonzero 318355074 recomputed nonzero 318590740 invalid 0; raw game 0.0292913587 recomputed 0.0294669195 abs_diff 0.000176813873 over 0.000176187357 box 0.0186406928; mean quantization <= 2.98023224e-08",
+      "06:12:47.046  [core] [ls-native-direct] active frame 3041 cs f469db7865d7c524 matched native module; AO0/direct1/sun0 validation",
+      "INVALID: expected log lines not found: ls box: active"
+    ],
+    "session": "s061016#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "quality_verdict": "Queue INVALID: one-time startup box activation absent from scene slice; matched post-ready native data available but no native accuracy pass.",
+  "scene_windows": 9,
+  "pixels": 2932082331.0,
+  "weighted_means": {
+    "native_y": 0.029280884811006196,
+    "recomputed_y": 0.029456371699894558,
+    "abs_diff": 0.00017674316533303655,
+    "over": 0.00017611503088847525,
+    "box_y": 0.01863026976657888
+  },
+  "relative_y_excess": 0.005993223566195027,
+  "invalid": 0.0,
+  "full_log_refused": [],
+  "module_controls": 62,
+  "validation_tags": {
+    "UNASSIGNED-non-acquired-swapchain-image-used": 6318,
+    "VUID-VkShaderModuleCreateInfo-pCode-08737": 1,
+    "Undefined-Value-StorageImage-FormatMismatch-ImageView": 24514,
+    "Undefined-Value-OutputNotWritten": 53,
+    "SYNC-HAZARD-READ-AFTER-WRITE": 7605,
+    "SYNC-HAZARD-WRITE-AFTER-WRITE": 19,
+    "VUID-vkCmdDraw-None-09600": 3,
+    "VUID-vkCmdWaitEvents2-pEvents-10788": 45019
+  },
+  "scoped_validation_tags": {},
+  "captures": [
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-061212",
+      "final_key": "d222",
+      "final_nonfinite": 0,
+      "nonfinite_dumps": {
+        "d130": [
+          "D32F",
+          "76433aef",
+          2604
+        ]
+      }
+    }
+  ]
+}

@@ -70,9 +70,22 @@
 #include "../rt/rt_common.hlsli"
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_sun.hlsli"
+#if LS_NATIVE_DIRECT_VALIDATION
+#include "../../common/ufloat_interval.h"
+#endif
 
 #ifndef LS_FULL
 #define LS_FULL 0
+#endif
+// Box (projector) lights (ls_box=1; docs/TRACK_D_RT.md 9.12): rt_local_shadows_box.hlsl and
+// rt_local_shadows_full_box.hlsl. They read the lighting's own set 1 (bound as set 3), so they
+// need their own pipeline layout; with LS_BOX=0 none of the box code is compiled and the pass
+// is the one before (ls_check against the frozen reference unchanged).
+#ifndef LS_BOX
+#define LS_BOX 0
+#endif
+#if LS_BOX
+#include "../rt/bg3_boxes.hlsli"
 #endif
 
 [[vk::binding(46, 0)]] [[vk::image_format("rgba32ui")]] RWTexture2D<uint4> lsSlots;
@@ -224,6 +237,9 @@ bool ls_pixel(uint2 fp, out LsPixel px) {
 
 // The game's AO-on-direct factors (b6 .x, as the lighting read it).
 void ls_ao_factors(uint2 fp, Bg3Surface sf, out float ao, out float fdif, out float fspec) {
+#if LS_NATIVE_DIRECT_VALIDATION
+  if((pc.ls_flags&(1u<<19))!=0u) {ao=gAO[fp].x;fdif=1.0;fspec=1.0;return;}
+#endif
   ao = lFlags.m0.x > 0.0 ? gAO[fp].x : 1.0;
   float spec_occ = lFlags.m0.x > 0.0 ? saturate(pow(max(abs(sf.nov_raw + ao), 9.9999997e-05), exp2(-16.0 * sf.a - 1.0)) - 1.0 + ao) : 1.0;
   fdif = lerp(1.0, ao, lFlags.m0.y);
@@ -343,6 +359,147 @@ void ls_light_ray(uint li, out float3 lpos, out float R) {
   }
 }
 
+#if LS_BOX
+// ---- box (projector) lights (ls_box=1; docs/TRACK_D_RT.md 9.12) ----
+//
+// The froxel's projector entries follow its spot lights in the index list b24 and index the
+// box records b29 (rt/bg3_boxes.hlsli). Each one the game evaluated is treated like a point or
+// spot light: its exact unshadowed contribution c (the class terms with the direction _m9,
+// the box falloff and the cookie), one ray, the delta c (t - s). Rules as for point/spot:
+//   - ls_shadowed for the box lights with a game shadow map (the atlas term s replicated: an
+//     orthographic view); hair keeps it; mode 3's on-screen test uses the ray's exit point;
+//   - no per-light data (the join covers the b25 array only): every box light is traced. Under
+//     the default art-intent rule (ls_noshadow=1, only the darkvision point lights) that is
+//     the same set; ls_noshadow=2 cannot be applied to them;
+//   - the QA ambient floor removes them too (t = 0, transmission included);
+//   - not in the exact-k / RIS selection: always one exact ray each.
+// The ray: from the surface along _m9 (a directional light has no extent: hard, no sampling),
+// up to where it leaves the box on the light's side. The box is the light's extent, so
+// geometry beyond that face is outside the light and does not shadow it.
+
+// The world position under another pixel (non-finite where it has no depth, so that the
+// cookie's uv difference is dropped, as the game's isnan test does).
+float3 ls_P_at(int2 p) {
+  p = clamp(p, int2(0, 0), int2(pc.full) - 1);
+  const float d = gDepth.Load(int3(p, 0));
+  const float2 uv = (float2(p) + 0.5) / float2(lFlags.res);
+  return d > 0.0 ? ray_at(uv) * d : asfloat(0x7fc00000u).xxx;
+}
+
+float3 ls_box_dir(Bg3Box b) { return b.dir * rsqrt(max(dot(b.dir, b.dir), 1e-20)); }
+
+// Phase 1: does this pass trace box light `bi` at this pixel (the game adds light, and the
+// rules above)?
+bool ls_box_traced(uint bi, LsLite s) {
+  const Bg3Box b = load_box(bi);
+  if ((b.flags & 1u) != 0u && ((pc.ls_shadowed == 0u && !ls_qa_off()) || s.cls == kMatHair)) return false;
+  float3 uvw;
+  if (!bg3_box_reaches(b, s.channel, s.P, uvw)) return false;
+  if (!(bg3_box_falloff(b, uvw) > 0.0)) return false;   // c = 0: no delta
+  const float nol = dot(s.N, b.dir);
+  if (s.cls == 5u) return saturate(2.0 * nol + 0.5) > 0.0;
+  if ((s.cls == 3u || s.cls == 4u) && s.trans && bg3_sss_wrap(nol) > 0.0) return true;
+  return saturate(nol) > 0.0;
+}
+
+// The ray's origin and extent towards box light `b` (tmax <= 0: the origin left the box).
+float ls_box_ray(Bg3Box b, LsLite s, out float3 o, out float3 dir) {
+  dir = ls_box_dir(b);
+  o = rt_ray_origin_o(s.org, s.P, s.N, s.cone.f0, dir);
+  return bg3_box_exit(b, o, dir);
+}
+
+// Phase 2: the ray (kRtLit / kRtOccluded / kRtUnknown).
+uint ls_box_trace(uint bi, LsLite s) {
+  float3 o, dir;
+  const float tmax = ls_box_ray(load_box(bi), s, o, dir);
+  if (!(tmax > 0.0)) return kRtLit;
+  return rt_visibility(o, dir, tmax, s.cone);
+}
+
+// ls_shadowed 2, or 3 where the segment surface -> box exit is not wholly in the view frustum.
+bool ls_box_fallback(Bg3Box b, LsLite s) {
+  if (pc.ls_shadowed == 2u) return true;
+  if (pc.ls_shadowed != 3u) return false;
+  float3 o, dir;
+  const float tmax = ls_box_ray(b, s, o, dir);
+  return !ls_light_on_screen(o + dir * max(tmax, 0.0));
+}
+
+// The pixel's quad partners (cookie gradients).
+struct LsQuad {
+  float3 Px, Py;
+};
+LsQuad ls_quad(uint2 fp) {
+  LsQuad q;
+  q.Px = ls_P_at(int2(fp.x ^ 1u, fp.y));
+  q.Py = ls_P_at(int2(fp.x, fp.y ^ 1u));
+  return q;
+}
+
+// Phase 3: box light `bi`'s exact terms. vs: its ray (ignored under QA). False: the game adds
+// nothing. cd/ct/cs: unshadowed diffuse / unshadowed transmission / specular; sh the game's
+// shadow term, t ours.
+bool ls_box_eval(uint bi, LsLite s, Bg3Surface sf, Bg3Mat mt, LsQuad q, uint vs, out float3 cd, out float3 ct,
+                 out float3 cs, out float sh, out float t, out bool cookie, out bool shadowed) {
+  cd = 0; ct = 0; cs = 0; sh = 1.0; t = 1.0;
+  const Bg3Box b = load_box(bi);
+  cookie = (b.m1 >> 1) != 0u;
+  shadowed = (b.flags & 1u) != 0u;
+  float3 uvw;
+  if (!bg3_box_reaches(b, sf.channel, sf.P, uvw)) return false;
+  const float g = bg3_box_falloff(b, uvw);
+  const float3 col = bg3_box_colour(b, uvw.xy, bg3_box_uvw(b, q.Px).xy - uvw.xy, bg3_box_uvw(b, q.Py).xy - uvw.xy);
+  float nol;
+  if (!bg3_box_eval_mat(b, col, g, sf, mt, cd, ct, cs, nol)) return false;
+  const float v = vs == kRtLit ? 1.0 : 0.0;
+  t = v;
+  if (shadowed) {
+    sh = bg3_box_atlas_shadow(b, sf, saturate(nol));
+    if (ls_box_fallback(b, s)) t = min(v, sh);
+  }
+  if (vs == kRtUnknown) t = sh;   // unknown ray: the game's own term
+  if (ls_qa_off()) t = 0.0;       // QA ambient floor: none of this light
+  return true;
+}
+
+// Every box light of the pixel (list entries [first, first + n)), in the three phases of the
+// point/spot loop; adds to the delta and ao_direct sums. px: reloaded here (phase 3).
+// (The default variant and exact-k; LS_FULL's ls_main has its own loop with the statistics.)
+void ls_box_all(uint2 fp, LsLite s, uint first, uint n, inout LsPixel px, inout float3 dd, inout float3 ds,
+                inout float3 td, inout float3 ts) {
+  const bool qa = ls_qa_off();
+  for (uint base = first; base < first + n; base += 32u) {
+    const uint m = min(first + n - base, 32u);
+    uint traced = 0;
+    for (uint j = 0; j < m; ++j)
+      if (ls_box_traced(bg3_light_index(base + j), s)) traced |= 1u << j;
+    if (traced == 0u) continue;
+    uint vsb[2] = {0u, 0u};   // 2 bits per entry: kRtLit / kRtOccluded / kRtUnknown
+    for (uint mm = qa ? 0u : traced; mm != 0u; mm &= mm - 1u) {
+      const uint j = firstbitlow(mm);
+      const uint vs = ls_box_trace(bg3_light_index(base + j), s);
+      vsb[j >> 4] |= vs << ((j & 15u) * 2u);
+    }
+    ls_surface(WaveReadLaneAt(fp, WaveGetLaneIndex()), s, px.sf, px.mt);
+    const LsQuad q = ls_quad(fp);
+    for (uint m3 = traced; m3 != 0u; m3 &= m3 - 1u) {
+      const uint j = firstbitlow(m3);
+      const uint vs = qa ? kRtOccluded : (vsb[j >> 4] >> ((j & 15u) * 2u)) & 3u;
+      float3 cd, ct, cs;
+      float sh, t;
+      bool cookie, shadowed;
+      if (!ls_box_eval(bg3_light_index(base + j), s, px.sf, px.mt, q, vs, cd, ct, cs, sh, t, cookie, shadowed)) continue;
+      if (qa) dd -= ct;
+      dd += cd * (t - sh);
+      ds += cs * (t - sh);
+      td += cd * t;
+      ts += cs * t;
+    }
+  }
+}
+#endif
+
 #if !LS_FULL
 // Phases 1 and 2 for the list entries [base, base + n), n <= 32: x the entries traced,
 // y those of them whose ray found no occluder, z those whose ray was aborted (unknown).
@@ -418,6 +575,9 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     }
     base += n;
   } while (base < end_s);
+#if LS_BOX
+  ls_box_all(fp, s, end_s, bg3_cluster_projectors(fp, d), px, dd, ds, td, ts);
+#endif
 
   ls_finish(fp, px.sf, px.mt, dd, ds, td, ts, o_d, o_s);
   return true;
@@ -441,6 +601,30 @@ void stat_addv(uint index, uint v, uint bin) {
   if (WaveIsFirstLane() && n) rtStats.InterlockedAdd((index * 64 + b) * 4, n);
 }
 uint fx(float v) { return uint(clamp(v, 0.0, 64.0) * 256.0 + 0.5); }
+// Projector QA: exact integer sum with24 fractional bits, not fx's1/256.
+// Bin is constant over each8x8 group;7 and13 are coprime to64, so a bin
+// receives at most64*ceil(width/512)*ceil(height/8) invocations per dispatch.
+// Half the uint64 capacity leaves rounding/carry headroom. Never silently cap.
+void ls_sum24(uint index,float value,uint bin) {
+  float group_bound=64.0*float((pc.full.x+511u)/512u)*float((pc.full.y+7u)/8u);
+  float safe_max=549755813888.0/max(group_bound,1.0); //2^39 / bin population
+  bool valid=isfinite(value) && value>=0.0 && value<safe_max;
+  stat_addv(226,valid?0u:1u,bin);
+  float q=round((valid?value:0.0)*16777216.0);
+  uint hi=uint(floor(q/4294967296.0));
+  uint lo=uint(q-float(hi)*4294967296.0);
+  uint low16=WaveActiveSum(lo&65535u);
+  uint high16=WaveActiveSum(lo>>16u)+(low16>>16u);
+  uint sum_lo=(high16<<16u)|(low16&65535u);
+  uint sum_hi=WaveActiveSum(hi)+(high16>>16u);
+  uint b=WaveReadLaneFirst(bin)&63u;
+  if(WaveIsFirstLane()) {
+    uint old;rtStats.InterlockedAdd((index*64u+b)*4u,sum_lo,old);
+    sum_hi+=old>0xffffffffu-sum_lo?1u:0u;
+    if(sum_hi)rtStats.InterlockedAdd(((index+1u)*64u+b)*4u,sum_hi);
+  }
+}
+
 
 bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   if (any(fp >= pc.full)) return false;
@@ -567,6 +751,58 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     }
   }
 
+  // ---- box (projector) lights (ls_box=1): one exact ray each, also under ls_samples ----
+  const uint n_proj = bg3_cluster_projectors(fp, d);
+  float3 bgd = 0, bgs = 0;   // stats: the box light as the game lit it (c s), diffuse / specular
+  float3 bdd = 0, bds = 0;   // stats: the box lights' delta
+  uint nb_ev = 0, nb_sh = 0, nb_tr = 0, nb_occ = 0, nb_unk = 0, nb_ck = 0;
+#if LS_BOX
+  if (n_proj > 0u) {
+    LsLite bs_ = (LsLite)0;
+    ls_lite(fp, d, bs_);
+    const LsQuad q = ls_quad(fp);
+    for (uint bi_ = end_s; bi_ < end_s + n_proj; ++bi_) {
+      const uint bi = bg3_light_index(bi_);
+      const bool tr = validate ? false : ls_box_traced(bi, bs_);
+      const uint vs = tr && !qa ? ls_box_trace(bi, bs_) : kRtOccluded;
+      float3 cd, ct, cs;
+      float sh, t;
+      bool cookie, shadowed;
+      if (!ls_box_eval(bi, bs_, sf, mt, q, vs, cd, ct, cs, sh, t, cookie, shadowed)) continue;
+      ++n_lights;
+      ++nb_ev;
+      nb_ck += cookie ? 1u : 0u;
+      n_shadowed += shadowed ? 1u : 0u;
+      nb_sh += shadowed ? 1u : 0u;
+      bgd += cd * sh + ct;
+      bgs += cs * sh;
+      if (validate) {
+        md += cd * sh + ct;
+        ms += cs * sh;
+        continue;
+      }
+      if (!tr) continue;
+      cd_all += cd;
+      cs_all += cs;
+      const bool occ = vs == kRtOccluded && !qa;
+      n_traced += qa ? 0u : 1u;
+      nb_tr += qa ? 0u : 1u;
+      n_occ += occ ? 1u : 0u;
+      nb_occ += occ ? 1u : 0u;
+      n_unk += vs == kRtUnknown ? 1u : 0u;
+      nb_unk += vs == kRtUnknown ? 1u : 0u;
+      if (qa) dd -= ct;
+      dd += cd * (t - sh);
+      ds += cs * (t - sh);
+      td += cd * t;
+      ts += cs * t;
+      bdd += cd * (t - sh) - (qa ? ct : 0.0);
+      bds += cs * (t - sh);
+      vd_all += cd * (vs == kRtUnknown ? sh : vs == kRtLit ? 1.0 : 0.0);
+    }
+  }
+#endif
+
   // ---- the game's factors on direct light: AO (b6 .x, as the lighting read it) ----
   float ao, fdif, fspec;
   ls_ao_factors(fp, sf, ao, fdif, fspec);
@@ -664,8 +900,97 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     stat_addv(17, n_lights, bin);
     stat_addv(18, n_shadowed, bin);
     stat_addv(19, n_traced, bin);
-    // Validation sums only where no projector light is listed (they are not recomputed).
-    bool vpx = bg3_cluster_projectors(fp, d) == 0u;
+    // Validation sums only where no projector light is listed (they are not recomputed),
+    // except with ls_box=1 (LS_BOX), which recomputes them: every pixel.
+    bool vpx = LS_BOX != 0 || n_proj == 0u;
+    // Box lights (ls_box=1, TRACK_D_RT.md 9.12): evaluations, with a game shadow map, traced,
+    // occluded, unknown, with a cookie; their light as the game lit it and the light our
+    // shadows remove (with the game's AO factor); validation on the projector pixels alone.
+    if (LS_BOX != 0) {
+      stat_addv(200, nb_ev, bin);
+      stat_addv(201, nb_sh, bin);
+      stat_addv(202, nb_tr, bin);
+      stat_addv(203, nb_occ, bin);
+      stat_addv(204, nb_unk, bin);
+      stat_addv(207, nb_ck, bin);
+      stat_addv(213, nb_ev > 0u ? 1u : 0u, bin);
+      if (!validate) {
+        stat_addv(205, fx(lum(bgd * fdif + bgs * fspec)), bin);
+        stat_addv(206, fx(-lum(bdd * fdif + bds * fspec)), bin);
+      }
+    }
+    {   // (also with ls_box=0: there the recompute lacks the box lights, the comparison's baseline)
+      // Keep the same raster population with boxes off/on. Requiring a
+      // recomputed light would drop box-only pixels from the off baseline.
+      const bool pv = validate && n_proj > 0u;
+      const float pover = lum(max(md - gd, 0.0) + max(ms - gs, 0.0));
+      stat_addv(208, pv ? 1u : 0u, bin);
+      stat_addv(209, pv ? fx(lum(gd + gs)) : 0u, bin);
+      stat_addv(210, pv ? fx(lum(md + ms)) : 0u, bin);
+      stat_addv(211, pv ? fx(lum(abs(gd - md) + abs(gs - ms))) : 0u, bin);
+      stat_addv(212, pv ? fx(pover) : 0u, bin);
+      stat_addv(214, pv ? fx(lum(bgd * fdif + bgs * fspec)) : 0u, bin);   // the box share of the recompute
+      float game_y=pv?lum(gd+gs):0.0,recomputed_y=pv?lum(md+ms):0.0;
+      ls_sum24(216,game_y,bin);
+      ls_sum24(218,recomputed_y,bin);
+      ls_sum24(220,pv?lum(abs(gd-md)+abs(gs-ms)):0.0,bin);
+      ls_sum24(222,pv?pover:0.0,bin);
+      ls_sum24(224,pv?lum(bgd*fdif+bgs*fspec):0.0,bin);
+      stat_addv(227,pv && isfinite(game_y) && game_y>0.0?1u:0u,bin);
+      stat_addv(228,pv && isfinite(recomputed_y) && recomputed_y>0.0?1u:0u,bin);
+    }
+#if LS_NATIVE_DIRECT_VALIDATION
+    // Independent diffuse/specular RGB channels, BEFORE output write conversion.
+    // Actual queried native formats are B10G11R11_UFLOAT_PACK32 (snapshot gate).
+    // Measure every shaded validation receiver, not only projector-list pixels.
+    {
+      bool sample = validate && (pc.ls_flags & (1u << 19)) != 0u;
+      bool invalid = false, unbounded = false, failed = false;
+      bool above = false, below = false;
+      uint bounded_channels = 0u, failed_channels = 0u;
+      float3 excess = 0.0;
+      [unroll] for (uint lobe = 0u; lobe < 2u; ++lobe) {
+        float3 native_rgb = lobe == 0u ? gd : gs;
+        float3 estimate_rgb = lobe == 0u ? md : ms;
+        [unroll] for (uint channel = 0u; channel < 3u; ++channel) {
+          UfInterval interval = uf_interval(native_rgb[channel], channel == 2u ? 5u : 6u);
+          float estimate = estimate_rgb[channel];
+          bool bad = interval.status == 0u || !isfinite(estimate) || estimate < 0.0;
+          invalid = invalid || bad;
+          unbounded = unbounded || interval.status == 2u;
+          if (!bad && interval.status == 1u) {
+            ++bounded_channels;
+            bool mismatch = !uf_contains(interval, native_rgb[channel], estimate);
+            failed = failed || mismatch;
+            above = above || estimate >= interval.upper;
+            below = below || (estimate <= interval.lower && native_rgb[channel] != 0.0);
+            failed_channels += mismatch ? 1u : 0u;
+            excess[channel] += max(max(interval.lower - estimate, estimate - interval.upper), 0.0);
+          }
+        }
+      }
+      stat_addv(229, sample ? 1u : 0u, bin);
+      stat_addv(230, sample && invalid ? 1u : 0u, bin);
+      stat_addv(231, sample && unbounded ? 1u : 0u, bin);
+      stat_addv(232, sample && failed ? 1u : 0u, bin);
+      stat_addv(233, sample ? bounded_channels : 0u, bin);
+      stat_addv(234, sample ? failed_channels : 0u, bin);
+      ls_sum24(235, sample ? lum(excess) : 0.0, bin);
+      [unroll] for (uint material_class = 0u; material_class < 8u; ++material_class) {
+        stat_addv(237u + material_class, sample && cls == material_class ? 1u : 0u, bin);
+        stat_addv(245u + material_class, sample && failed && cls == material_class ? 1u : 0u, bin);
+      }
+      if (sample && pc.ls_debug == 4u) {
+        // Diagnostic colour only, through the existing diffuse capture path:
+        // red=above interval, blue=below, magenta=both, green=invalid,
+        // cyan=unbounded. Passing pixels retain native lighting in grey.
+        o_d = invalid ? float3(0.0,0.5,0.0) : unbounded ? float3(0.0,0.5,0.5) :
+              failed ? float3(above ? 0.5 : 0.0,0.0,below ? 0.5 : 0.0) :
+              min(lum(gd + gs),1.0).xxx * 0.2;
+        o_s = 0.0;
+      }
+    }
+#endif
     stat_addv(21, vpx ? fx(lum(gd + gs)) : 0u, bin);
     stat_addv(22, vpx ? fx(lum((md + ms))) : 0u, bin);
     stat_addv(15, vpx ? fx(lum(abs(gd - md) + abs(gs - ms))) : 0u, bin);
@@ -872,6 +1197,9 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
     td += cd * (t * f);
     ts += cs * (t * f);
   }
+#if LS_BOX
+  ls_box_all(fp, s, end_s, bg3_cluster_projectors(fp, d), px, dd, ds, td, ts);
+#endif
   ls_finish(fp, px.sf, px.mt, dd, ds, td, ts, o_d, o_s);
 
 #if LS_FULL

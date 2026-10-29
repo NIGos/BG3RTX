@@ -1,0 +1,38 @@
+{
+  "job": {
+    "job": "p3-box-s7-shadow-retry",
+    "run": 1,
+    "start": "2026-10-29T05:22:00",
+    "sec": 116,
+    "valid": true,
+    "outcome": "Run ended: done after 48s (session s052200#1, core gen 1)",
+    "nv153": 0,
+    "dumps": [],
+    "build": "b97f4d4 Confirm actual projector shadow coverage in S5 while keeping cookie and quality gates open | core 03:26:21",
+    "build_changed": false,
+    "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p3-box-s7-shadow-retry.1.052307.log",
+    "captures": [
+      "C:\\Users\\quali\\.codex\\worktrees\\p2-pending\\BG3RTX\\captures\\20261029-052318"
+    ],
+    "lines": [
+      "05:23:10.950  [core] ls box: active (native lighting set 000001950DE678D0, dynamic offsets 2)",
+      "05:23:50.933  [core] ls box stats (120 frames): evaluated 0.295/px, shadow-mapped 0.000/px, traced 0.295/px, occluded 0.092/px, unknown 0.000/px, cookie 0.004/px; game box light 9.253% of lit luminance, removed 2.187%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+      "05:23:50.933  [core] ls stats (120 frames): non-standard material px 0.1633M/frame; validation on them (lit, no projector lights; ls_debug=4): 0.0000M px, game 0.0000, recomputed 0.0000, mean |diff| 0.00000, recompute above game 0.00000; set0/b0 _m4 (skin shaded white) 1"
+    ],
+    "session": "s052200#1",
+    "core_gen": 1,
+    "saved_sec": 0
+  },
+  "box_windows": [
+    "05:23:15.191  [core] ls box stats (120 frames): evaluated 0.127/px, shadow-mapped 0.000/px, traced 0.127/px, occluded 0.047/px, unknown 0.000/px, cookie 0.004/px; game box light 3.619% of lit luminance, removed 0.326%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:23:23.413  [core] ls box stats (120 frames): evaluated 0.298/px, shadow-mapped 0.000/px, traced 0.298/px, occluded 0.089/px, unknown 0.000/px, cookie 0.004/px; game box light 10.111% of lit luminance, removed 2.626%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:23:29.009  [core] ls box stats (120 frames): evaluated 0.303/px, shadow-mapped 0.000/px, traced 0.303/px, occluded 0.092/px, unknown 0.000/px, cookie 0.004/px; game box light 9.756% of lit luminance, removed 2.368%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:23:34.544  [core] ls box stats (120 frames): evaluated 0.297/px, shadow-mapped 0.000/px, traced 0.297/px, occluded 0.098/px, unknown 0.000/px, cookie 0.004/px; game box light 9.161% of lit luminance, removed 2.357%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:23:40.021  [core] ls box stats (120 frames): evaluated 0.295/px, shadow-mapped 0.000/px, traced 0.295/px, occluded 0.092/px, unknown 0.000/px, cookie 0.004/px; game box light 9.157% of lit luminance, removed 2.146%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:23:45.476  [core] ls box stats (120 frames): evaluated 0.294/px, shadow-mapped 0.000/px, traced 0.294/px, occluded 0.089/px, unknown 0.000/px, cookie 0.004/px; game box light 9.180% of lit luminance, removed 2.141%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%",
+    "05:23:50.933  [core] ls box stats (120 frames): evaluated 0.295/px, shadow-mapped 0.000/px, traced 0.295/px, occluded 0.092/px, unknown 0.000/px, cookie 0.004/px; game box light 9.253% of lit luminance, removed 2.187%; projector validation px 0: game 0.000000, recomputed 0.000000, mean |diff| 0.000000, recompute above game 0.000000, box share 0.000%"
+  ],
+  "nonfinite_dumps": {},
+  "final_nonfinite": 0,
+  "interpretation": "S7 actual shadow and cookie-sampling coverage PASS after bounded retry. Native cookie accuracy, unknown-query behavior and moving/visual quality are not established."
+}

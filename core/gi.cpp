@@ -43,10 +43,12 @@ struct Snapshot {
   // D-LS: the lighting's light list (set 1 b0, b13, b23, b24, b25, b39, b40, b41; set 0 b2).
   Bg3Binding l_flags, l_scale, l_clusters, l_index, l_lights, l_consts, l_shadows, l_atlas, l_cam2;
   bool ls_ok;                        // all of them are bound
+  bool native_direct_validation = false;
   // D-RF: the lighting's own set 1 (bound as our set 2: probes, cubes, DFG LUT, samplers).
   VkDescriptorSet game_set1;
   VkDescriptorSetLayout game_set1_layout;
   uint32_t game_set1_dyn[16], game_set1_ndyn;
+  bool box_ready;                     // native box-light storage buffer is bound
   VkAccelerationStructureKHR tlas;   // the TLAS the ray-traced passes used (Track D)
   VkDescriptorSet alpha;             // the host's set 1 for them (alpha-tested geometry, phase 3)
   bool gi;                           // the GI passes ran (gi=1); otherwise only the sun shadow work
@@ -186,6 +188,14 @@ Pipe g_ls_match;    // D-LS per-light data: joins the runtime lights to the ligh
 // pass (shaders/gi/ls_ref, tools/lsref); ls_check=1 runs it and the live variant on the same pixels
 // and counts those whose outputs differ (stats 80-83).
 Pipe g_ls_full, g_ls_ref, g_ls_check, g_ls_full_check;
+// D-LS box (projector) lights (ls_box=1, docs/TRACK_D_RT.md 9.12): the same pass compiled with
+// LS_BOX=1, which also reads the lighting's own set 1 (b29 box records, b45 cookies, b16 sampler)
+// bound as set 3. Its pipeline layout holds the game's set layout, so it is rebuilt if that changes.
+Pipe g_ls_box, g_ls_full_box;
+Pipe g_ls_native_full, g_ls_native_full_box;
+VkPipelineLayout g_ls_box_layout = VK_NULL_HANDLE;
+VkDescriptorSetLayout g_ls_box_game = VK_NULL_HANDLE;
+bool g_ls_box_missing_logged = false, g_ls_box_active = false;
 LslFrame g_lsl{};   // this frame's upload (bindings 45, 46)
 bool g_lsl_ok = false;
 SunTrustFrame g_sunt{};   // rt_sun_replace: this frame's trust slot (bindings 47, 48)
@@ -406,6 +416,9 @@ bool snapshot(VkCommandBuffer cmd, Snapshot& s) {
     s.game_set1_layout = VK_NULL_HANDLE;
     s.game_set1_ndyn = 0;
   }
+  Bg3Binding boxes{};
+  s.box_ready = host->cfg_int("ls_box", 0) && s.game_set1 && q(1, 29, boxes) &&
+                boxes.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && boxes.buffer && boxes.range >= 128;
   return s.nrm.width == s.dif.width && s.dep.width == s.dif.width && s.ao.width == s.dif.width && s.dif.width > 0;
 }
 
@@ -606,6 +619,39 @@ bool ensure_ls_layout() {
   return make_layout(kLsBindings, &g_ls_set_layout, &g_ls_layout, host_layout, g_sun_dsl);
 }
 
+// ls_box: D-LS's push set 0, the host's set 1, the sun set 2, and the game's layout of the
+// lighting's set 1 as set 3. A different game layout rebuilds the box pipelines.
+bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
+  if (!game || !ensure_ls_layout()) return false;
+  if (g_ls_box_layout && g_ls_box_game == game) return true;
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
+  if (g_ls_box_layout) {
+    for (Pipe* p : {&g_ls_box, &g_ls_full_box, &g_ls_native_full_box}) {
+      host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
+      *p = Pipe{};
+    }
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_box_layout);
+    g_ls_box_layout = VK_NULL_HANDLE;
+    host->log("ls: the lighting's set 1 layout changed (%p -> %p); rebuilding the box-light pipelines",
+              (void*)g_ls_box_game, (void*)game);
+  }
+  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
+  VkDescriptorSetLayout sets[4] = {g_ls_set_layout, host_layout, g_sun_dsl, game};
+  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  lci.setLayoutCount = 4;
+  lci.pSetLayouts = sets;
+  lci.pushConstantRangeCount = 1;
+  lci.pPushConstantRanges = &pc;
+  if (host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &g_ls_box_layout) != VK_SUCCESS) {
+    g_ls_box_layout = VK_NULL_HANDLE;
+    return false;
+  }
+  g_ls_box_game = game;
+  return true;
+}
+
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
   static const char* const rebased_files[] = {
       "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl", "gi/pan_local.hlsl",
@@ -784,9 +830,8 @@ constexpr uint32_t kStatsRing = 8;
 // (rt_common.hlsli kStatUnknown + g_rt_pass): other (origins, debug), sun, D-LS, D-RF, RT AO,
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
-// 136..143 primary pool/soup hit cohorts; 144..150 raw GPU pose floats,
-// 151 snapshot valid, 152 diagnostic present. No extra ray is dispatched.
-constexpr uint32_t kStatsCounters = 160;
+// 136..152: primary pool/soup cohorts (HEAD); box diagnostics 200..252 (shifted +64 from the box branch).
+constexpr uint32_t kStatsCounters = 253;
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -978,12 +1023,13 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
     double px = double(t[16]), n = double(g_stats_n);
     host->log("ls stats (%u frames): %.2fM px/frame; lights per pixel: listed %.2f, evaluated %.2f (with a game shadow "
               "%.2f), traced %.2f, occluded %.2f; %.1f%% of px lit by a local light; light removed %.2f%% of the lit "
-              "luminance (mean %.4f); validation (px without projector lights): game %.4f, recomputed %.4f, mean |diff| %.5f (%.3f%% of game), recompute above game %.5f (%.3f%%; %.3f%% of px); "
-              "set1/b0 m0.x %g m0.y (AO on direct) %g m0.w %g, b13[0] %g; projector lights listed %.2f/px (not handled)",
+              "luminance (mean %.4f); validation (%s): game %.4f, recomputed %.4f, mean |diff| %.5f (%.3f%% of game), recompute above game %.5f (%.3f%%; %.3f%% of px); "
+              "set1/b0 m0.x %g m0.y (AO on direct) %g m0.w %g, b13[0] %g; projector lights listed %.2f/px (box active %d)",
               g_stats_n, px / n * 1e-6, t[26] / px, t[17] / px, t[18] / px, t[19] / px, t[20] / px, 100.0 * t[25] / px,
-              t[21] ? 100.0 * t[24] / double(t[21]) : 0.0, t[24] / px / 256.0, t[21] / px / 256.0, t[22] / px / 256.0,
+              t[21] ? 100.0 * t[24] / double(t[21]) : 0.0, t[24] / px / 256.0,
+              g_ls_box_active ? "all pixels including projectors" : "px without projector lights", t[21] / px / 256.0, t[22] / px / 256.0,
               t[15] / px / 256.0, t[21] ? 100.0 * t[15] / double(t[21]) : 0.0, t[23] / px / 256.0, t[21] ? 100.0 * t[23] / double(t[21]) : 0.0, 100.0 * t[20] / px, g_ls_raw[0], g_ls_raw[1], g_ls_raw[2],
-              g_ls_raw[3], t[31] / px);
+              g_ls_raw[3], t[31] / px, int(g_ls_box_active));
   }
   if (t[16] && t[122]) {   // D-LS exact-k (rt_local_shadows.hlsl ls_main_k; TRACK_D_RT.md 9.11)
     double px = double(t[16]), hit = double(t[123] ? t[123] : 1), rr = double(t[125] ? t[125] : 1);
@@ -994,6 +1040,46 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_stats_n, host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1), t[122] / px, t[19] / px,
               (t[19] - t[125]) / px, t[125] / px, t[20] / px, 100.0 * t[123] / px, t[124] / px, t[124] / hit,
               100.0 * t[126] / rr, 100.0 * t[127] / 256.0 / hit);
+  }
+  if (t[16] && (t[200] || t[208])) {
+    const double px = double(t[16]);
+    host->log("ls box stats (%u frames): evaluated %.3f/px, shadow-mapped %.3f/px, traced %.3f/px, "
+              "occluded %.3f/px, unknown %.3f/px, cookie %.3f/px; game box light %.3f%% of lit luminance, "
+              "removed %.3f%%; projector validation px %llu: game %.6f, recomputed %.6f, mean |diff| %.6f, "
+              "recompute above game %.6f, box share %.3f%%; counts traced %llu occluded %llu unknown %llu cookie %llu",
+              g_stats_n, t[200]/px, t[201]/px, t[202]/px, t[203]/px, t[204]/px, t[207]/px,
+              t[21] ? 100.0*t[205]/double(t[21]) : 0.0, t[21] ? 100.0*t[206]/double(t[21]) : 0.0,
+              (unsigned long long)t[208], t[208] ? t[209]/double(t[208])/256.0 : 0.0,
+              t[208] ? t[210]/double(t[208])/256.0 : 0.0, t[208] ? t[211]/double(t[208])/256.0 : 0.0,
+              t[208] ? t[212]/double(t[208])/256.0 : 0.0, t[210] ? 100.0*t[214]/double(t[210]) : 0.0,
+              (unsigned long long)t[202],(unsigned long long)t[203],(unsigned long long)t[204],(unsigned long long)t[207]);
+  }
+  if(t[208]) {
+    auto mean24=[&](uint32_t i) {
+      return (double(t[i])+4294967296.0*double(t[i+1]))/16777216.0/double(t[208]);
+    };
+    host->log("ls box precise (%u frames): px %llu native nonzero %llu recomputed nonzero %llu invalid %llu; "
+              "raw game %.9g recomputed %.9g abs_diff %.9g over %.9g box %.9g; mean quantization <= %.9g",
+              g_stats_n,(unsigned long long)t[208],(unsigned long long)t[227],(unsigned long long)t[228],
+              (unsigned long long)t[226],mean24(216),mean24(218),mean24(220),mean24(222),mean24(224),
+              0.5/16777216.0);
+
+  }
+  if(t[229]) {
+    double excess=(double(t[235])+4294967296.0*double(t[236]))/16777216.0/double(t[229]);
+    host->log("ls native format (%u frames): px %llu invalid %llu unbounded %llu failing %llu; "
+              "bounded channels %llu violating %llu; mean excess outside UFLOAT interval %.9g (Q24 half-step %.9g)",
+              g_stats_n,(unsigned long long)t[229],(unsigned long long)t[230],(unsigned long long)t[231],
+              (unsigned long long)t[232],(unsigned long long)t[233],(unsigned long long)t[234],excess,
+              0.5/16777216.0);
+    host->log("ls native classes (%u frames): population %llu %llu %llu %llu %llu %llu %llu %llu; "
+              "failing %llu %llu %llu %llu %llu %llu %llu %llu",
+              g_stats_n,(unsigned long long)t[237],(unsigned long long)t[238],(unsigned long long)t[239],
+              (unsigned long long)t[240],(unsigned long long)t[241],(unsigned long long)t[242],
+              (unsigned long long)t[243],(unsigned long long)t[244],
+              (unsigned long long)t[245],(unsigned long long)t[246],(unsigned long long)t[247],
+              (unsigned long long)t[248],(unsigned long long)t[249],(unsigned long long)t[250],
+              (unsigned long long)t[251],(unsigned long long)t[252]);
   }
   if (t[69]) {   // D-LS on non-standard material classes (rt_local_shadows.hlsl, AUDIT_RT fix 3)
     host->log("ls stats (%u frames): non-standard material px %.4fM/frame; validation on them (lit, no projector "
@@ -1006,8 +1092,9 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   if (t[32] > 100) {
     double N = double(t[32]), sm = t[33] * 1e-5, sg = t[34] * 1e-5, smm = t[35] * 1e-7, smg = t[36] * 1e-7;
     double k = (N * smg - sm * sg) / (std::max)(N * smm - sm * sm, 1e-30);
-    host->log("ls validation fit (px without projector lights): game = %.4f x recomputed + %.5f over %.2fM lit px "
+    host->log("ls validation fit (%s): game = %.4f x recomputed + %.5f over %.2fM lit px "
               "(mean recomputed %.5f, game %.5f); game where no local light reaches %.5f (%.2fM px)",
+              g_ls_box_active ? "all pixels including projectors" : "px without projector lights",
               k, (sg - k * sm) / N, N / g_stats_n * 1e-6, sm / N, sg / N, t[37] ? t[38] * 1e-5 / double(t[37]) : 0.0,
               double(t[37]) / g_stats_n * 1e-6);
   }
@@ -1121,6 +1208,7 @@ void bind_all(Bound& b, const Snapshot& s) {
 
 // Tells the shaders which material inputs exist (Push::mat_classes bits 1-3), and logs it once.
 void mat_bits(Push& pc, const Snapshot& s, bool post) {
+  if(s.native_direct_validation)pc.ls_flags|=1u<<19;
   if (pc.mat_classes) pc.mat_classes |= (s.x_rt3.view ? 2u : 0u) | (s.x_prof.buffer ? 4u : 0u) | (s.x_frame.buffer ? 8u : 0u);
   // ao_direct bits: 0-1 mode, 2 the sun was ray traced this frame, 3 the sun's
   // inputs are bound (atmosphere LUT only needed with the atmosphere on), 4 gAux.x holds the game's AO.
@@ -1282,14 +1370,17 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
 }
 
 void ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet sun, VkPipeline pipe, uint32_t gx,
-                 uint32_t gy) {
+                 uint32_t gy, const Snapshot* box = nullptr) {
   const VkDeviceFuncs& vk = *host->vk;
+  const VkPipelineLayout layout = box ? g_ls_box_layout : g_ls_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   VkWriteDescriptorSet w[kLsBindings + kNumExtras];
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls_layout, 0, gather_writes(b, kLsBindings, w), w);
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, kLsBindings, w), w);
   VkDescriptorSet sets[2] = {b.alpha, sun};
-  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_ls_layout, 1, 2, sets, 0, nullptr);
-  vk.CmdPushConstants(cmd, g_ls_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 2, sets, 0, nullptr);
+  if (box) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 3, 1, &box->game_set1,
+                                   box->game_set1_ndyn, box->game_set1_ndyn ? box->game_set1_dyn : nullptr);
+  vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, gx, gy, 1);
 }
 
@@ -1410,12 +1501,12 @@ void ls_timing_collect() {
   std::sort(v.begin(), v.end());
   std::sort(j.begin(), j.end());
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
-            "samples %d, exact-k %d + %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d)",
+            "samples %d, exact-k %d + %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d, box %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
             host->cfg_int("ls_samples", 0), host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1),
             host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
             host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
-            host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1));
+            host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1), int(g_ls_box_active));
   v.clear();
   j.clear();
 }
@@ -1811,19 +1902,46 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     // The default-settings variant, or the one with every mode (more registers, docs/TRACK_D_RT.md 9.9).
     const bool full = lp.ls_samples || lp.ls_debug || lp.ls_stats;
     VkPipeline lsp = g_ls.pipeline;
+    bool box = false;
     lp.ls_pass = host->cfg_int("ls_check", 0) == 2 ? 2u : 0u;   // reference against itself
-    if (host->cfg_int("ls_check", 0)) {
+    if(s.native_direct_validation) {
+      lsp=VK_NULL_HANDLE;
+      if(host->cfg_int("ls_box",0)) {
+        if(s.box_ready && ensure_ls_box_layout(s.game_set1_layout) &&
+           refresh(g_ls_native_full_box,"gi/rt_local_shadows_native_full_box.hlsl",g_ls_box_layout)) {
+          lsp=g_ls_native_full_box.pipeline;box=true;
+        }
+      } else if(refresh(g_ls_native_full,"gi/rt_local_shadows_native_full.hlsl",g_ls_layout))lsp=g_ls_native_full.pipeline;
+      if(!lsp)host->log("[ls-native-direct] REFUSED owned validation pipeline unavailable");
+    } else if (host->cfg_int("ls_check", 0)) {
       Pipe& c = full ? g_ls_full_check : g_ls_check;
       if (refresh(c, full ? "gi/rt_local_shadows_full_check.hlsl" : "gi/rt_local_shadows_check.hlsl", g_ls_layout))
         lsp = c.pipeline;
     } else if (!host->cfg_int("ls_impl", 1)) {
       if (refresh(g_ls_ref, "gi/rt_local_shadows_ref.hlsl", g_ls_layout)) lsp = g_ls_ref.pipeline;
-    } else if (full) {
-      // Not before the first frame that needs it: an unused pipeline is not compiled.
-      if (refresh(g_ls_full, "gi/rt_local_shadows_full.hlsl", g_ls_layout)) lsp = g_ls_full.pipeline;
+    } else {
+      if (host->cfg_int("ls_box", 0)) {
+        if (s.box_ready && ensure_ls_box_layout(s.game_set1_layout)) {
+          Pipe& variant = full ? g_ls_full_box : g_ls_box;
+          if (refresh(variant, full ? "gi/rt_local_shadows_full_box.hlsl" : "gi/rt_local_shadows_box.hlsl", g_ls_box_layout)) {
+            lsp = variant.pipeline;
+            box = true;
+          }
+        }
+        if (!box && !g_ls_box_missing_logged) {
+          host->log("ls box: requested but native set/layout or pipeline unavailable; retaining point/spot pass");
+          g_ls_box_missing_logged = true;
+        }
+      }
+      if (!box && full && refresh(g_ls_full, "gi/rt_local_shadows_full.hlsl", g_ls_layout)) lsp = g_ls_full.pipeline;
+    }
+    if (box != g_ls_box_active) {
+      g_ls_box_active = box;
+      host->log("ls box: %s (native lighting set %p, dynamic offsets %u)", box ? "active" : "inactive", (void*)s.game_set1, s.game_set1_ndyn);
+      g_ls_ms.clear();g_ls_join_ms.clear();
     }
     if (s.pan && refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout)) lsp = g_pan_ls.pipeline;
-    ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8);
+    if (lsp) ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8, box ? &s : nullptr);
     local_applied=true;
     if (s.pan) {
       Bg3Binding im{};
@@ -1955,6 +2073,22 @@ void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
   describe(cmd, d);
   std::lock_guard<std::mutex> lock(g_mu);
   uint64_t f = host->frame_index();
+  const bool validation=host->cfg_int("ls_native_direct_validate",0)!=0;
+  const int validation_view=host->cfg_int("ls_debug",0);
+  const bool actual=(d->native_validation&1u)!=0u;
+  if(validation || actual) {
+    Snapshot candidate{};
+    if(snapshot(cmd,candidate) && (!validation || !actual || (validation_view!=4 && validation_view!=5) ||
+       host->cfg_int("ls_check",0) || !host->cfg_int("ls_impl",1))) {
+      // Never mix transformed native output and the ordinary recompute. This
+      // also exposes unsupported/inline native modules and live key changes.
+      static uint64_t refused=0;
+      if(++refused<=8 || refused%300==0)host->log("[ls-native-direct] REFUSED frame %llu cs %016llx requested %u actual %u view %d shadow %u",
+          (unsigned long long)f,(unsigned long long)d->cs_hash,unsigned(validation),unsigned(actual),validation_view,unsigned(candidate.shadow.view!=VK_NULL_HANDLE));
+      for(auto& entry:g_pending)if(entry.second.native_direct_validation)entry.second.ls=false;
+      return;
+    }
+  }
   if (f == g_last_pre_frame) {
     // Later lighting permutations of the same frame: only the material ones bind
     // RT3 (set 1 b4) and the SSS profiles (b28), which the post passes need.
@@ -1982,6 +2116,12 @@ void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
   }
   Snapshot s{};
   if (!snapshot(cmd, s)) return;
+  s.native_direct_validation=validation && actual;
+  if(s.native_direct_validation) {
+    static uint64_t accepted=0;
+    if(++accepted<=4 || accepted%300==0)host->log("[ls-native-direct] active frame %llu cs %016llx matched native module; AO0/direct1/sun0 validation",
+        (unsigned long long)f,(unsigned long long)d->cs_hash);
+  }
   g_last_pre_frame = f;
   if (run_pre(cmd, s)) g_pending[cmd] = s;
 }
@@ -2030,7 +2170,7 @@ void gi_release() {
   sunt_release();
   g_sunt_ok = false;
   for (Pipe* p : {&g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
-                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check,
+                  &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
     for (VkPipeline variant : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant);
@@ -2057,6 +2197,10 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_ls_set_layout);
   g_ls_layout = VK_NULL_HANDLE;
   g_ls_set_layout = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_box_layout);
+  g_ls_box_layout = VK_NULL_HANDLE;
+  g_ls_box_game = VK_NULL_HANDLE;
+  g_ls_box_active = g_ls_box_missing_logged = false;
   host->defer_destroy(BG3_DEFER_SAMPLER, (uint64_t)g_linear_clamp);
   g_linear_clamp = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, (uint64_t)g_sun_pool);   // frees the sets
