@@ -34,6 +34,20 @@ while native accepts it. All neighbor cases agree. This is a reproduced integrat
 hazard, not a passing runtime-alpha or Vulkan traversal gate. Do not bake defaults
 unchanged or repair coverage by forcing unknown states to two-state opaque/transparent.
 
+Follow-up CPU SDK experiment: set alphaCutoffLessEqual to UnknownOpaque, leave
+alphaCutoffGreater Opaque and keep the cutoff unchanged. In FOUR-state mode this
+withholds the unsafe <= transparent certificate while preserving > opaque states.
+It does not change native alpha, shift a cutoff or certify equality. The actual
+SDK probe exhausts every UNORM8 constant code at equality and adjacent float32
+cutoffs in [0,1], nearest and linear: 1,532 cases, ZERO known-state contradictions,
+12,192 known opaque and 12,320 unknown microtriangle states, zero known transparent.
+The baseline still reproduces six contradictions in 18 cases. This conservative
+configuration trades away all known-transparent acceleration; UNKNOWN must execute
+the ordinary alpha predicate, never be treated as opaque by traversal flags.
+It applies ONLY to fixed hard cut with the same sample. It is not valid evidence
+for stochastic thresholds, nonconstant textures, different filters/LOD, the GPU
+baker or Vulkan traversal. No production caller or runtime integration was added.
+
 Offline isolated FULL build / CTest: 19/19 pass (probe enabled). Individual oracles:
 197,621 classifier checks; 398,526 alpha code-support checks; bake identity/completion
 checks logged in docs/evidence/p4-omm-domain-20261030.json. GPU cost and speedup are
@@ -41,7 +55,7 @@ NOT measured. No rendering change or main merge is justified by these CPU result
 
 Remaining before a live OMM gate: tighter UV/filter support, GPU numeric/filter/LOD
 precision certificate, VT residency/content provider, native >= and stochastic
-threshold adapter, one consistent EXT backend (not the different KHR object API),
+threshold adapter with useful transparent coverage, one consistent EXT backend (not the different KHR object API),
 micromap triangle indexing/bake/build/BLAS attachment and GPU-completion retirement.
 Then same-ray known-state comparison with zero contradictions; only afterwards
 foliage build/query/memory cost and visual checks.
