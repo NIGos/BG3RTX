@@ -1,7 +1,7 @@
 {
   "base": "92183e7",
   "branch": "codex/omm-ext-backend",
-  "mode": "Isolated offline build and CPU tests only; no game or GPU/device calls",
+  "mode": "Initial CPU work, then explicitly authorized synthetic console GPU fixture; no game/deployment",
   "extension": "VK_EXT_opacity_micromap",
   "key": "rt_omm=0",
   "host_abi_changed": false,
@@ -12,7 +12,7 @@
   "CTest_result": "2/2 passed",
   "settings_defaults_check": "passed",
   "gpu_cost_ms": null,
-  "gpu_traversal_gate": "not run",
+  "gpu_traversal_gate": "Synthetic production EXT backend pass:3primitives/6rays,0contradictions,2UNKNOWNcandidates; actualtimeline retirement",
   "production_caller": "not present in this component commit; root owns provider/BLAS integration",
   "limits": [
     "Four-state only; known alpha truth is external provider responsibility",
@@ -27,5 +27,7 @@
   "fresh_default_off_extra_gpu_calls": false,
   "ini_off_held_ticket_tracking": "Continues until all attached tickets retire",
   "input_owner": "Optional shared_ptr<void> copied into ticket resource; released after micromap/storage/scratch destruction",
-  "coordinated_abi": "ABI19 cherry-pick6913124; input_owner itself changes no host ABI"
+  "coordinated_abi": "ABI19 cherry-pick6913124; input_owner itself changes no host ABI",
+  "synthetic_validation_errors": 0,
+  "synthetic_gpu": "NVIDIA GeForce RTX5090 Vulkan1.4.357 rawdriver2604679168"
 }

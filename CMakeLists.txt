@@ -179,6 +179,13 @@ add_executable(omm_backend_plan_test tests/omm_backend_plan_test.cpp)
 add_test(NAME omm_backend_plan_test COMMAND omm_backend_plan_test)
 add_executable(omm_submit_state_test tests/omm_submit_state_test.cpp)
 add_test(NAME omm_submit_state_test COMMAND omm_submit_state_test)
+# Explicit synthetic GPU probe only. Never registered in routine CTest and never
+# launched by a build. No game, presentation or global loader settings changes.
+option(BG3RTX_OMM_GPU_SMOKE "Build the opt-in synthetic EXT OMM console probe" OFF)
+if(BG3RTX_OMM_GPU_SMOKE)
+  add_executable(omm_ext_smoke tools/omm_ext_smoke.cpp layer/omm_backend.cpp layer/omm_submit.cpp)
+  target_include_directories(omm_ext_smoke PRIVATE ${VULKAN_SDK}/Include)
+endif()
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)
 add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
 add_executable(settings_test tests/settings_test.cpp)

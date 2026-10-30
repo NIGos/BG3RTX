@@ -1,7 +1,7 @@
 # EXT opacity micromap backend contract
 
-Offline increment, 2026-10-30, based on main 92183e7. No game, Vulkan device,
-GPU job or deployment was performed. `rt_omm=0` remains the default. Restart is
+Offline increment, 2026-10-30, based on main 92183e7. The initial increment used CPU-only validation. A later explicitly authorized
+synthetic GPU test is recorded below; no game or deployment was performed. `rt_omm=0` remains the default. Restart is
 required to request the extension. Existing shaders and the host ABI are unchanged.
 
 The layer requests **VK_EXT_opacity_micromap**, its `micromap` feature and core
@@ -89,3 +89,55 @@ Vulkan 1.3; registry synchronization tables support the recorded micromap stages
 
 The coordinated Sun ABI19 change (6913124) is included in this branch before the
 owner follow-up build; shared_ptr input ownership is internal C++ and adds no ABI change.
+
+## Actual synthetic EXT hardware gate
+
+The console probe links the PRODUCTION backend and submission sources with minimal
+isolated host seams. It requests a real device, builds three four-state micromaps,
+attaches them to a real BLAS/TLAS, and executes six ray queries. GPU: NVIDIA GeForce
+RTX 5090, Vulkan 1.4.357, raw driver 2604679168. EXT/AS/RQ/BDA/sync2/timeline/push
+features are present. The micromap uses 640 storage bytes and 1,023 scratch bytes.
+Two known-opaque rays hit automatically with zero candidates (native alpha=cut=1).
+Two known-transparent rays miss without candidates. Two UnknownOpaque rays produce
+actual nonopaque candidates; native alpha >= .5 yields one miss and one equality
+hit. Zero reference contradictions. Production private timeline signal/counter
+retirement collects the completed ticket. No forced two-state/opaque ray flags.
+
+Installed explicit Khronos validation was enabled: zero validation errors, including
+teardown. Implicit layers were disabled only for the child process, inherited
+VK_INSTANCE_LAYERS was cleared, and no global registry/environment changed. Test
+runs open no window, presentation, focus or input path. This is NOT a BG3/FG gate,
+textured sampler/content-domain proof or measured GPU performance result.
+
+Build optional target BG3RTX_OMM_GPU_SMOKE (OFF by default); compile
+`tools/omm_ext_smoke.hlsl` with installed DXC cs_6_6, SPIR-V Vulkan 1.3 and validate
+with spirv-val, then explicitly run `bin/omm_ext_smoke.exe build/omm_ext_smoke.spv`.
+The build never launches it and routine CTest never executes GPU work.
+Evidence: docs/evidence/omm-ext-smoke-20261030.txt.
+
+### Constant UNORM8 endpoint follow-up
+
+The same RTX 5090 reports subTexelPrecisionBits=8 and mipmapPrecisionBits=8.
+A second compute entry samples R8G8B8A8_UNORM alpha 0/1 in two array layers,
+all three mips (4x4, 2x2, 1x1), LINEAR min/mag and LINEAR mip filtering,
+REPEAT addressing and no anisotropy. A 64-UV grid includes negative coordinates,
+texel boundaries and many wraps; 17 LODs cover [0,2] in eighth-level steps.
+All 2,176 samples returned exact endpoint float bits (0x00000000/0x3f800000).
+The six-ray gate and actual timeline retirement still pass; validation errors=0.
+Evidence: docs/evidence/omm-sampler-endpoints-20261030.txt.
+
+The official [Vulkan sampling chapter](https://docs.vulkan.org/spec/latest/chapters/textures.html#textures-texel-filtering)
+defines ordinary linear texel and mip filtering as weighted averages. Algebraically,
+normalized weights preserve a constant value, regardless of coordinate/mip weight
+quantization. This is an inference from the ideal filtering equations, not a new
+portable guarantee about undocumented internal rounding. The finite hardware
+fixture supports this format/sampler/device combination; it is not an all-UV,
+all-driver, mixed-value or complete-content certificate. Precision-bit limits
+alone do not certify alpha conversion or every intermediate arithmetic operation.
+For native stochastic >= with hash zero reachable, alpha zero STILL cannot become
+known transparent under threshold range [0,1]. No hash/cutoff shift is introduced.
+
+To run the endpoint follow-up, compile the same HLSL with entry `endpoints` into a
+second SPIR-V file and supply it as the optional second shader argument. The
+producer/content identity, resident mip support, view swizzle and evaluator proof
+remain separate mandatory checks before enabling production known states.
