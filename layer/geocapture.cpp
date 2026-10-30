@@ -63,6 +63,7 @@ VkDescriptorSetLayout g_ubo_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_ubo_pl = VK_NULL_HANDLE;
 VkPipeline g_ubo_pipe = VK_NULL_HANDLE;
 float g_ts_period = 1.0f;
+VkDeviceSize g_storage_range = 0;
 
 // Storage for the modified device create info (one device).
 std::vector<const char*> g_ext_names;
@@ -165,9 +166,12 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host) 
     out.b = VK_NULL_HANDLE;
     return false;
   }
-  dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0);
+  if(dd->vk.BindBufferMemory(dd->device,out.b,out.m,0)!=VK_SUCCESS ||
+     (host && dd->vk.MapMemory(dd->device,out.m,0,VK_WHOLE_SIZE,0,&out.map)!=VK_SUCCESS)){
+    dd->vk.DestroyBuffer(dd->device,out.b,nullptr);
+    dd->vk.FreeMemory(dd->device,out.m,nullptr);out=Buf{};return false;
+  }
   out.size = size;
-  if (host) dd->vk.MapMemory(dd->device, out.m, 0, VK_WHOLE_SIZE, 0, &out.map);
   return true;
 }
 
@@ -395,6 +399,10 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
     // in the test scene) and is read in place by the AS build.
     const bool rt = !readback && rt_enabled();
     VkDeviceSize mb = VkDeviceSize((std::max)(rt ? cfg_int("rt_xfb_mb", 384) : cfg_int("geo_xfb_mb", 768), 16));
+    if(rt && !capture_budget::storage_range_supported(mb<<20,g_storage_range)){
+      log("[geo] RT capture refused: %llu MB needs full SSBO range, device limit %llu bytes",
+          (unsigned long long)mb,(unsigned long long)g_storage_range);return false;
+    }
     c.max_slots = uint32_t((std::max)(cfg_int("geo_max_draws", 16384), 256));
     // Readback captures write straight into host-cached memory (one frame, so
     // the PCIe traffic does not matter); the cost probe uses device memory.
@@ -1509,6 +1517,7 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
     dd->inst->GetPhysicalDeviceProperties(dd->physical, &p);
     g_ts_period = p.limits.timestampPeriod;
     g_ubo_align = p.limits.minUniformBufferOffsetAlignment;
+    g_storage_range=p.limits.maxStorageBufferRange;
   }
   if (xfb_enabled) {
     p_bind_xfb = reinterpret_cast<PFN_vkCmdBindTransformFeedbackBuffersEXT>(

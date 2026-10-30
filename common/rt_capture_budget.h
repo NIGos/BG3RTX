@@ -4,6 +4,7 @@
 
 namespace bg3::capture_budget {
 inline constexpr uint64_t mib=uint64_t(1)<<20;
+inline bool storage_range_supported(uint64_t size,uint64_t limit){return size && limit && size<=limit;}
 
 // Existing per-frame alpha partition arithmetic. Physical MB limits and the
 // 1.5x alpha / 1.1x opaque reserves are unchanged.

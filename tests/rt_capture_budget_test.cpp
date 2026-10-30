@@ -62,5 +62,10 @@ int main(){
  check(groups<=65535 && groups*256<=std::numeric_limits<uint32_t>::max());
  check(triangles*3*88<=size && triangles*3*88<=std::numeric_limits<uint32_t>::max());
  check((size-partition)-base<256);
+ check(storage_range_supported(size,size));
+ check(storage_range_supported(size,uint64_t(1)<<31));
+ check(!storage_range_supported(size,size-1));
+ check(!storage_range_supported(size,0));
+ check(!storage_range_supported(0,size));
  std::printf("RT capture budget: %u CPU checks; explicit MB limits unchanged; no GPU claim\n",checks);
 }
