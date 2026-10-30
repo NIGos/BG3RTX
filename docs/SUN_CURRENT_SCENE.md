@@ -138,3 +138,23 @@ copy/fill/update invalidation exists for the mesh cache, but does not prove all
 possible GPU storage writes or late mapped instance mutations between passes.
 A GPU geometric-equivalence check can close that remaining proof without
 assuming every same-buffer native pass read identical bytes.
+
+## Raw current cards and isolated legacy compaction
+
+The current four-layer stream now retains every capturable native card, including
+cutouts omitted by the legacy opaque path. Unknown material/depth behavior still
+withholds the current certificate; these cards are never called opaque by
+assumption. Each current layer has its own raw ring. For the configured legacy
+cascade, a separate GPU copy compacts only ranges admitted by the existing
+legacy alpha/dedupe policy, after world conversion. The legacy F-1 TLAS therefore
+never receives newly captured unknown cards as solid geometry. Its destination
+buffers explicitly include TRANSFER_DST, including key-on transitions from
+previously allocated ordinary rings. The actual legacy-policy helper has CPU
+regression checks for opaque, texture/scalar discard, mode0/1/2 and duplicates.
+
+The fourth private raw ring means the maximum incremental capture capacity is
+now 768 MiB at the default 64 MiB per buffer (twelve complementary buffers),
+in addition to the unchanged 192 MiB legacy ring capacity. Actual allocation,
+GPU copy/build time and quality remain unmeasured. Both DLLs and 25 CTests pass.
+Per-draw opacity dispatch is the next consumer; unsupported material/depth paths
+still prevent this preparatory capture increment from being a world gate pass.

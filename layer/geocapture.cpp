@@ -245,6 +245,11 @@ struct Capture {
   bool c_finite_sun_clip = true;
   VkImage c_depth_image = VK_NULL_HANDLE;
   std::vector<SunCascadeDraw> c_sun_draws;
+  bool c_legacy_transfer=false;
+  Capture* c_legacy_target=nullptr;
+  std::vector<VkBufferCopy> c_legacy_copies;
+  VkDeviceSize c_legacy_bytes=0;
+  uint64_t c_legacy_sig=1469598103934665603ull;
 };
 
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
@@ -942,6 +947,7 @@ void release(Capture& c) {
   if (c.qp) defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(c.qp));
   c.qp = VK_NULL_HANDLE;
   c.state = 0;
+  c.c_legacy_transfer=false;c.c_legacy_target=nullptr;c.c_legacy_copies.clear();
   c.draws.clear();
   c.draws.shrink_to_fit();
 }
@@ -1060,16 +1066,27 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
     }
     return;
   }
-  Capture& c = layer==want ? g_ccap[f % 3] : g_sun_ccap[layer][f % 3];
+  Capture& c = all_current ? g_sun_ccap[layer][f % 3] : g_ccap[f % 3];
   if (c.state == 1 && c.record_frame == f) return;   // one such pass per frame: never expected
   // (state 1 from an older frame: that recording never ended its pass; start over)
   const VkDeviceSize bytes = VkDeviceSize((std::clamp)(cfg_int("rt_cascade_mb", 64), 4, 1024)) << 20;
-  if (c.xfb.b && c.xfb.size != bytes) free_buf(c.xfb);   // deferred destruction: a build in flight may read it
+  if (c.xfb.b && c.xfb.size != bytes) {free_buf(c.xfb);c.c_legacy_transfer=false;} // deferred destruction
   if (!c.xfb.b && !make_buf(c.xfb, bytes, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | rt_xfb_usage(), false)) {
     if (!g_cc_alloc_failed)
       log("[cascade] could not allocate %llu MB for the cascade capture", (unsigned long long)(bytes >> 20));
     g_cc_alloc_failed = true;
     return;
+  }
+  c.c_legacy_target=nullptr;c.c_legacy_copies.clear();c.c_legacy_bytes=0;c.c_legacy_sig=1469598103934665603ull;
+  if(all_current && layer==want) {
+    Capture& legacy=g_ccap[f%3];
+    if(legacy.xfb.b && (legacy.xfb.size!=bytes || !legacy.c_legacy_transfer)) {free_buf(legacy.xfb);legacy.c_legacy_transfer=false;}
+    if(!legacy.xfb.b) make_buf(legacy.xfb,bytes,VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | rt_xfb_usage() |
+                              VK_BUFFER_USAGE_TRANSFER_DST_BIT,false);
+    if(legacy.xfb.b) {
+      legacy.c_legacy_transfer=true;
+      c.c_legacy_target=&legacy;legacy.layer=layer;legacy.cmd=cmd;legacy.record_frame=f;
+    }
   }
   c.state = 1;
   c.cascade = true;
@@ -1171,37 +1188,23 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   // rt_cascade_alpha=2: only draws whose FS is a texture cutout (in the alpha table) are
   // skipped; the other discarding FS test no texture alpha (LOD dither, camera fade: 856 of the
   // 1263 depth-only discarding FS in the dump) and their geometry goes in solid.
-  const int cc_alpha = cfg_int("rt_cascade_alpha", 0);
-  if (pi.discard && cc_alpha != 1) {
-    AlphaFs a{};
-    const bool cutout = alpha_lookup(s->fs, &a);
-    if (cutout || cc_alpha != 2) {
-      ++c->c_alpha;
-      // Feasibility of alpha-testing them (as the camera soup does): is the FS in the alpha table,
-      // with the UV location the patched VS captures?
-      if (cutout) {
-        ++g_cc_alpha_known;
-        if (a.uv == pi.uv && pi.uv >= 0) ++g_cc_alpha_uv;
-      }
-      return;
-    }
-  }
-  const cascade::DrawId id = cascade_draw_id(cmd, s, args, pi);
-  if (!current_sun && pi.discard && cfg_int("rt_cascade_alpha_dedupe", 1)) {
+  const int cc_alpha=cfg_int("rt_cascade_alpha",0);
+  AlphaFs alpha_fs{};
+  const bool cutout=pi.discard && cc_alpha!=1 && alpha_lookup(s->fs,&alpha_fs);
+  const cascade::DrawId id=cascade_draw_id(cmd,s,args,pi);
+  bool mesh_duplicate=false,draw_duplicate=false;
+  {
     std::lock_guard<std::mutex> lock(g_cc_mu);
-    if (g_cc_mesh_keys.contains(c->record_frame, cascade::mesh_key(id))) {
-      ++c->c_dup;
-      return;
-    }
+    mesh_duplicate=g_cc_mesh_keys.contains(c->record_frame,cascade::mesh_key(id));
+    draw_duplicate=id.place && g_cc_keys.contains(c->record_frame,cascade::draw_key(id));
   }
-  if (!current_sun && id.place) {
-    const uint64_t key = cascade::draw_key(id);
-    std::lock_guard<std::mutex> lock(g_cc_mu);
-    if (g_cc_keys.contains(c->record_frame, key)) {
-      ++c->c_dup;
-      return;
-    }
-  }
+  const auto legacy=cascade::legacy_caster(pi.discard,cc_alpha,cutout,
+    cfg_int("rt_cascade_alpha_dedupe",1)!=0,mesh_duplicate,draw_duplicate);
+  const bool legacy_keep=legacy==cascade::LegacyCaster::keep;
+  if(legacy==cascade::LegacyCaster::alpha_skip) {
+    if(cutout) {++g_cc_alpha_known;if(alpha_fs.uv==pi.uv && pi.uv>=0) ++g_cc_alpha_uv;}
+    if(!current_sun) {++c->c_alpha;return;}
+  } else if(legacy==cascade::LegacyCaster::duplicate && !current_sun) {++c->c_dup;return;}
   uint64_t prims = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST ? count / 3 : count > 2 ? count - 2 : 0;
   prims *= args.instances;
   if (current_sun && prims > UINT64_MAX / (3ull * g_stride)) { ++c->c_full; return; }
@@ -1210,6 +1213,13 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   if (c->cursor + reserved > c->xfb.size) {
     ++c->c_full;
     return;
+  }
+  if(current_sun && legacy_keep && c->c_legacy_target) {
+    c->c_legacy_copies.push_back({c->cursor,c->c_legacy_bytes,reserved});
+    c->c_legacy_bytes+=reserved;
+    for(uint64_t v:{uint64_t(s->pipe_id[0]),uint64_t(args.count),uint64_t(args.first),uint64_t(args.instances),
+                   uint64_t(int64_t(args.vertex_offset)),uint64_t(s->vb[0].buffer),uint64_t(s->vb[0].offset),prims})
+      c->c_legacy_sig=(c->c_legacy_sig^v)*1099511628211ull;
   }
   if(current_sun) {
     SunCascadeDraw draw;
@@ -1243,6 +1253,20 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
             VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
             VK_ACCESS_MEMORY_READ_BIT);
   }
+  // The raw current soup retains every capturable caster, including unknown
+  // cutouts. Compact ONLY legacy-approved ranges for the old F-1 path, after
+  // conversion, so no raw unknown card is accidentally made opaque there.
+  bool legacy_copied=false;
+  if(converted && c->c_legacy_target && !c->c_legacy_copies.empty()) {
+    barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+    g_dd->vk.CmdCopyBuffer(cmd,c->xfb.b,c->c_legacy_target->xfb.b,uint32_t(c->c_legacy_copies.size()),c->c_legacy_copies.data());
+    barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_ACCESS_MEMORY_READ_BIT);
+    legacy_copied=true;
+  }
   if (c->ts >= 0 && g_cc_qp)
     g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_cc_qp, uint32_t(c->ts) * 2 + 1);
   CcMat m;
@@ -1273,6 +1297,12 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     meta.sun.finite_native_clip=c->c_finite_sun_clip;
   }
   if(c==&g_ccap[f % 3]) g_cc_meta[f % 3] = meta;
+  if(c->c_legacy_target) {
+    CcMeta legacy=meta;
+    legacy.tris=legacy_copied ? uint32_t(c->c_legacy_bytes/(3ull*g_stride)) : 0;
+    legacy.sig=c->c_legacy_sig;legacy.sun={};
+    g_cc_meta[f%3]=std::move(legacy);
+  }
   if(cfg_int("rt_sun_cascade_current",0) && c->layer>=0 && c->layer<4)
     g_sun_meta[c->layer][f % 3]=meta;
   g_cc_cv.notify_all();
@@ -2298,7 +2328,9 @@ bool geo_sun_cascade(const sun_coverage::NativeEpoch& epoch, SunCascadeCapture* 
   std::unique_lock<std::mutex> lock(g_cc_mu);
   auto find=[&]() {
     const CcMeta* best=nullptr;
-    for(const CcMeta& m:g_cc_meta)
+    const int layer=cfg_int("rt_cascade_index",1);
+    if(layer<0 || layer>=4) return false;
+    for(const CcMeta& m:g_sun_meta[layer])
       if(m.tris && sun_coverage::same_epoch(m.sun.native_epoch,epoch) &&
          bvh_rec_state(m.rec)>=0 && bvh_rec_state(m.rec)!=2 && (!best || m.rec>best->rec)) best=&m;
     if(best) *out=best->sun;
