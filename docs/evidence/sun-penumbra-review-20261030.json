@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-30",
+  "mode": "Offline source and retained log audit only",
+  "source_log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\dialogue-shadow-review-20261030\\user-session.log",
+  "source_configuration": {
+    "rt_sun_radius": 0.00459,
+    "rt_sun_replace": 1,
+    "rt_sun_offscreen": 1,
+    "rt_sun_rise": 6,
+    "rt_sun_ramp": 0.75,
+    "rt_sun_roofs": 1,
+    "rt_sun_roof_mode": 0,
+    "rt_strength": 1,
+    "rt_cascade_casters": 1,
+    "rt_cascade_roofs_trust": 0,
+    "radius_readback_available": false
+  },
+  "sun_stats_600_frame_windows": [
+    "16:18:05.934  [core] sun stats (600 frames, replace 1, 15 roof volumes, scene top 43.0): traced 87.2% of px, lit 70.1%; game dark & RT lit 8.87% of traced px: replaced (lit) 0.3%, partly 1.7%, kept by roofs 0.0%, kept off screen 98.1%; px under roofs 0.0%, off-screen ramp 99.6%; game lit & RT shadowed 11.08%; mean brightening 0.0010 per traced px; roof query 398 m (farthest roof-tested px 98 m), over kSunMaxVolumes on 0 frames (max 0 volumes, 0.0 dropped per such frame); roof volumes trusted (cascade casters) 0",
+    "16:18:17.233  [core] sun stats (600 frames, replace 1, 15 roof volumes, scene top 26.7): traced 85.8% of px, lit 73.2%; game dark & RT lit 9.39% of traced px: replaced (lit) 0.9%, partly 2.9%, kept by roofs 0.0%, kept off screen 96.2%; px under roofs 0.0%, off-screen ramp 98.6%; game lit & RT shadowed 3.85%; mean brightening 0.0024 per traced px; roof query 372 m (farthest roof-tested px 72 m), over kSunMaxVolumes on 0 frames (max 0 volumes, 0.0 dropped per such frame); roof volumes trusted (cascade casters) 0",
+    "16:18:32.665  [core] sun stats (600 frames, replace 1, 15 roof volumes, scene top 26.3): traced 83.6% of px, lit 64.1%; game dark & RT lit 8.21% of traced px: replaced (lit) 1.3%, partly 4.1%, kept by roofs 0.0%, kept off screen 94.6%; px under roofs 0.0%, off-screen ramp 96.2%; game lit & RT shadowed 6.74%; mean brightening 0.0025 per traced px; roof query 372 m (farthest roof-tested px 72 m), over kSunMaxVolumes on 0 frames (max 0 volumes, 0.0 dropped per such frame); roof volumes trusted (cascade casters) 0",
+    "16:18:39.826  [core] sun stats (600 frames, replace 1, 15 roof volumes, scene top 16.9): traced 84.8% of px, lit 66.6%; game dark & RT lit 7.75% of traced px: replaced (lit) 0.8%, partly 3.0%, kept by roofs 0.0%, kept off screen 96.1%; px under roofs 0.0%, off-screen ramp 97.7%; game lit & RT shadowed 8.41%; mean brightening 0.0017 per traced px; roof query 372 m (farthest roof-tested px 72 m), over kSunMaxVolumes on 0 frames (max 0 volumes, 0.0 dropped per such frame); roof volumes trusted (cascade casters) 0",
+    "16:18:50.644  [core] sun stats (600 frames, replace 1, 17 roof volumes, scene top 15.8): traced 84.9% of px, lit 65.7%; game dark & RT lit 7.25% of traced px: replaced (lit) 0.7%, partly 2.7%, kept by roofs 0.0%, kept off screen 96.6%; px under roofs 0.0%, off-screen ramp 99.5%; game lit & RT shadowed 9.97%; mean brightening 0.0014 per traced px; roof query 437 m (farthest roof-tested px 137 m), over kSunMaxVolumes on 0 frames (max 0 volumes, 0.0 dropped per such frame); roof volumes trusted (cascade casters) 0",
+    "16:18:57.337  [core] sun stats (600 frames, replace 1, 15 roof volumes, scene top 30.9): traced 85.8% of px, lit 60.8%; game dark & RT lit 3.39% of traced px: replaced (lit) 0.9%, partly 1.5%, kept by roofs 0.0%, kept off screen 97.6%; px under roofs 0.0%, off-screen ramp 99.5%; game lit & RT shadowed 4.60%; mean brightening 0.0005 per traced px; roof query 388 m (farthest roof-tested px 88 m), over kSunMaxVolumes on 0 frames (max 0 volumes, 0.0 dropped per such frame); roof volumes trusted (cascade casters) 0"
+  ],
+  "rt_scope_cost_lines": [
+    "16:18:02.263  [core] rt passes: GPU cost 1.333 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:05.922  [core] rt passes: GPU cost 1.130 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:13.476  [core] rt passes: GPU cost 1.133 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:17.221  [core] rt passes: GPU cost 1.140 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:28.585  [core] rt passes: GPU cost 1.226 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:32.656  [core] rt passes: GPU cost 2.422 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:36.172  [core] rt passes: GPU cost 1.658 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:39.814  [core] rt passes: GPU cost 1.374 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:43.513  [core] rt passes: GPU cost 1.314 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:50.634  [core] rt passes: GPU cost 2.521 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:53.968  [core] rt passes: GPU cost 2.226 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0",
+    "16:18:57.327  [core] rt passes: GPU cost 1.883 ms/frame (average of 300 frames); TLAS this frame 300, previous frame 0, none 0"
+  ],
+  "finding": "Finite source sampling is implemented; conservative offscreen trust often preserves multiplicative native mask and suppresses missing-side direct-sun penumbra. Not a universal outdoor-shadow attribution.",
+  "renderer_changed": false,
+  "game_launched": false,
+  "save_files_accessed": false,
+  "next": "Verify actual caster coverage before lifting trust; same-pose debug6/debug2 profiles later with user."
+}
