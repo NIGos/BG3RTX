@@ -1,0 +1,913 @@
+{
+  "date": "2026-10-30",
+  "scope": [
+    "20261030-162008",
+    "20261030-163004",
+    "20261030-163010"
+  ],
+  "source": "Existing packaged assetdb SHDR/SREF/MVAR/MTPL plus exact retained runtime SPIR-V/GLSL; no game/GPU calls",
+  "tex_table_total": 120,
+  "observed_tex_hashes": 8,
+  "simple_shader_hashes": 2,
+  "observed_draw_calls_matching_simple_fs": 27,
+  "camera_depth_calls_matching_simple_fs": 1,
+  "D16_calls_matching_simple_fs": 26,
+  "observed_other_tex_calls_excluded": 18,
+  "eligible_triangles_from_F10": null,
+  "triangle_limit": "F10 draw n is call count, not primitive count; do not infer triangles",
+  "existing_log_triangle_samples": [
+    {
+      "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\bg3rtx.log",
+      "reported_samples": 158,
+      "minimum_triangles": 90,
+      "maximum_triangles": 6340,
+      "first_examples": [
+        {
+          "hash": "16ac1391689391d0",
+          "line": 7407,
+          "time": "16:06:59.795",
+          "draws": 1,
+          "triangles": 98
+        },
+        {
+          "hash": "16ac1391689391d0",
+          "line": 7569,
+          "time": "16:07:09.891",
+          "draws": 1,
+          "triangles": 98
+        },
+        {
+          "hash": "16ac1391689391d0",
+          "line": 7611,
+          "time": "16:07:13.400",
+          "draws": 1,
+          "triangles": 98
+        }
+      ],
+      "scope": "Independent per-frame top12 alpha log samples; not unique geometry totals and not aligned exact F10",
+      "per_hash": {
+        "16ac1391689391d0": {
+          "samples": 158,
+          "draw_range": [
+            1,
+            14
+          ],
+          "triangle_range": [
+            90,
+            6340
+          ],
+          "maximum_example": {
+            "draws": 11,
+            "triangles": 6340,
+            "time": "16:31:16.190"
+          }
+        }
+      }
+    },
+    {
+      "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\p1-fg-static-effects.1.145054.log",
+      "reported_samples": 23,
+      "minimum_triangles": 98,
+      "maximum_triangles": 98,
+      "first_examples": [
+        {
+          "hash": "16ac1391689391d0",
+          "line": 882,
+          "time": "14:52:16.907",
+          "draws": 1,
+          "triangles": 98
+        },
+        {
+          "hash": "16ac1391689391d0",
+          "line": 917,
+          "time": "14:52:23.346",
+          "draws": 1,
+          "triangles": 98
+        },
+        {
+          "hash": "16ac1391689391d0",
+          "line": 946,
+          "time": "14:52:30.415",
+          "draws": 1,
+          "triangles": 98
+        }
+      ],
+      "scope": "Independent per-frame top12 alpha log samples; not unique geometry totals and not aligned exact F10",
+      "per_hash": {
+        "16ac1391689391d0": {
+          "samples": 23,
+          "draw_range": [
+            1,
+            1
+          ],
+          "triangle_range": [
+            98,
+            98
+          ],
+          "maximum_example": {
+            "draws": 1,
+            "triangles": 98,
+            "time": "14:52:16.907"
+          }
+        }
+      }
+    }
+  ],
+  "recipes": [
+    {
+      "hash": "16ac1391689391d0",
+      "recipe": "16ac1391689391d0 tex uv=0 cut=0.5 tex=1.1 ch=3",
+      "draw_counts": {
+        "20261030-162008:camera_depth": 1,
+        "20261030-162008:D16": 6
+      },
+      "glsl": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\alpha_cache\\16ac1391689391d0.glsl",
+      "exists": true,
+      "packaged_refs": [
+        {
+          "template": "Base/Base_AlphaBlend",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "discards"
+          ]
+        },
+        {
+          "template": "UI/Base",
+          "variant": "StaticInstancedDepth",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "UI/Base",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "UI/CircleClip",
+          "variant": "StaticInstancedDepth",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "UI/CircleClip",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "UI/Base_OGLFix",
+          "variant": "StaticInstancedDepth",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "UI/Base_OGLFix",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_AlphaTest",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_AlphaBlend_2s",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "two_sided",
+            "discards"
+          ]
+        },
+        {
+          "template": "Environment/ENV_DetailMap_Alphatest",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_AlphaTest_2s",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "two_sided",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_SSS_AlphaTested",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "sss_skin",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "sss",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_Unlit_AlphaTest",
+          "variant": "StaticInstancedDepth",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_Unlit_AlphaTest",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_SSS_Fresnel",
+          "variant": "StaticInstancedDepth",
+          "class": "sss_skin",
+          "flags": [
+            "opaque",
+            "sss",
+            "character",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_SSS_Fresnel",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "sss_skin",
+          "flags": [
+            "opaque",
+            "sss",
+            "character",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_AlphaBlend_2S",
+          "variant": "StaticInstancedDepth",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "two_sided",
+            "character",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_AlphaBlend_2S",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "two_sided",
+            "character",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_Cloth_Fresnel_1L_AlphaTest",
+          "variant": "StaticInstancedDepth",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "anisotropic",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_Cloth_Fresnel_1L_AlphaTest",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "anisotropic",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_GM_Pulse_AlphaBlend_Luminance",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "emissive",
+            "luminance_emissive",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_GradientMapping_AlphaTested_1G_GM",
+          "variant": "StaticInstancedDepth",
+          "class": "emissive",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "emissive",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_GradientMapping_AlphaTested_1G_GM",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "emissive",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "emissive",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_GradientMapping_AlphaTested_2G_GM",
+          "variant": "StaticInstancedDepth",
+          "class": "emissive",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "emissive",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_GradientMapping_AlphaTested_2G_GM",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "emissive",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "emissive",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_AlphaTest_2s_Flipped_Backface_Normal",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "two_sided",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_AlphaTest",
+          "variant": "StaticInstancedDepth",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "virtual_texture",
+            "character",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_AlphaTest",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "virtual_texture",
+            "character",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_MSK_AlphaTest_2s_Translucency",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "foliage",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "foliage",
+            "two_sided",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_SSS_AlphaTested_MSK",
+          "variant": "StaticInstancedDepth",
+          "class": "sss_skin",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "sss",
+            "character",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_SSS_AlphaTested_MSK",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "sss_skin",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "sss",
+            "character",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_Cloth_Fresnel_1L_AlphaTest_2s_Translucency_SeeThrough",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "foliage",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "foliage",
+            "two_sided",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_AlphaTest_2S",
+          "variant": "StaticInstancedDepth",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "virtual_texture",
+            "two_sided",
+            "character",
+            "discards"
+          ]
+        },
+        {
+          "template": "Characters/CHAR_BASE_AlphaTest_2S",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "virtual_texture",
+            "two_sided",
+            "character",
+            "discards"
+          ]
+        }
+      ],
+      "native_predicate_simple": true,
+      "decision": "shader_predicate_whitelisted_pending_external_contract",
+      "reason": "Single sampled alpha minus literal cutoff; no other FS inputs or coverage factors",
+      "spv_sha256": "adb287c8d02db42a676f6ce79df664a1e8b3f20f05527a18b34ee41f6831e73a",
+      "glsl_sha256": "19943edeef00ce2338c1c56178af04953c87c16dbb5f879f108b3728a2e85601",
+      "pipeline_contract": {
+        "vs": "f4b35620d54abc6c",
+        "fragment_uv_location": 0,
+        "vertex_uv_input_location": 4,
+        "post_vertex_uv_output_location": 0,
+        "uv_scale": [
+          1,
+          1
+        ],
+        "texture_set": 1,
+        "texture_binding": 1,
+        "channel": 3,
+        "cutoff": 0.5,
+        "sampler_set": 0,
+        "sampler_binding": 7,
+        "vertex_deformation": false,
+        "requires_current_post_vs_geometry": true,
+        "requires_native_sampler_domain_proof": true,
+        "no_geometry_or_tessellation_stage": true
+      },
+      "fresh_decompile_matches_cache": true
+    },
+    {
+      "hash": "c22b20253e25e473",
+      "recipe": "c22b20253e25e473 tex uv=0 cut=0.33333 tex=1.3 ch=3",
+      "draw_counts": {
+        "20261030-162008:camera_depth": 1
+      },
+      "glsl": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\alpha_cache\\c22b20253e25e473.glsl",
+      "exists": true,
+      "packaged_refs": [
+        {
+          "template": "Characters/CHAR_Fur_IDmsk",
+          "variant": "StaticDepth",
+          "class": "anisotropic",
+          "flags": [
+            "opaque",
+            "anisotropic",
+            "two_sided",
+            "world_position_offset",
+            "vertex_color",
+            "character",
+            "discards"
+          ]
+        }
+      ],
+      "native_predicate_simple": false,
+      "decision": "excluded",
+      "reason": "Frame/FragCoord noise, mask B smoothstep and view/normal-dependent fur factor; raw alpha is insufficient",
+      "spv_sha256": "6b22db09b612d5cbf68ee3737a9ed41ef062122e27045e0b6b4cfa7439f408f8",
+      "glsl_sha256": "0e5f9c2e61976e6c5931fd222ef4df6958b08045561709416fb74928eac48946"
+    },
+    {
+      "hash": "9aaa6d61f7d2d9a9",
+      "recipe": "9aaa6d61f7d2d9a9 tex uv=0 cut=0.5 tex=1.2 ch=3",
+      "draw_counts": {
+        "20261030-162008:camera_depth": 3,
+        "20261030-162008:D16": 7
+      },
+      "glsl": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\alpha_cache\\9aaa6d61f7d2d9a9.glsl",
+      "exists": true,
+      "packaged_refs": [
+        {
+          "template": "Helper/Helper_Invisible",
+          "variant": "StaticDepth",
+          "class": "unlit",
+          "flags": [
+            "opaque",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "Helper/Helper_Invisible",
+          "variant": "StaticDepthShadow",
+          "class": "unlit",
+          "flags": [
+            "opaque",
+            "unlit",
+            "discards"
+          ]
+        }
+      ],
+      "native_predicate_simple": false,
+      "decision": "excluded",
+      "reason": "Product of TWO sampled alpha textures and material UBO multiplier",
+      "spv_sha256": "e33ddcea1572e76c616af9525f387ced875a874c0594e7ff20895edfc3ee6b67",
+      "glsl_sha256": "012833a4dfbf3a7af85b2de49042cc6e8fe8a6873e1a1b73f5dc341213807e5f"
+    },
+    {
+      "hash": "a912cbe3dc896c46",
+      "recipe": "a912cbe3dc896c46 tex uv=0 cut=0.5 tex=1.1 ch=3",
+      "draw_counts": {
+        "20261030-162008:camera_depth": 1
+      },
+      "glsl": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\alpha_cache\\a912cbe3dc896c46.glsl",
+      "exists": true,
+      "packaged_refs": [
+        {
+          "template": "Helper/Helper_Invisible",
+          "variant": "StaticInstancedDepth",
+          "class": "unlit",
+          "flags": [
+            "opaque",
+            "unlit",
+            "discards"
+          ]
+        },
+        {
+          "template": "Helper/Helper_Invisible",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "unlit",
+          "flags": [
+            "opaque",
+            "unlit",
+            "discards"
+          ]
+        }
+      ],
+      "native_predicate_simple": false,
+      "decision": "excluded",
+      "reason": "Product of TWO sampled alpha textures and material UBO multiplier",
+      "spv_sha256": "08edc4e59a6fc4795f29af903a9d1faa660bc9f99ad51f8751eaeb13ba7c3e04",
+      "glsl_sha256": "438df373a049e72c8d8e5b596cf906e2a6f9d93f0fae2c4fdfcea3a7de78bf66"
+    },
+    {
+      "hash": "e752d4330d455339",
+      "recipe": "e752d4330d455339 tex uv=0 cut=0.5 tex=1.1 ch=3",
+      "draw_counts": {
+        "20261030-162008:camera_depth": 2
+      },
+      "glsl": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\alpha_cache\\e752d4330d455339.glsl",
+      "exists": true,
+      "packaged_refs": [
+        {
+          "template": "Base/Base_AlphaBlend",
+          "variant": "StaticInstancedDepth",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_AlphaTest",
+          "variant": "StaticInstancedDepth",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_AlphaBlend_2s",
+          "variant": "StaticInstancedDepth",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "two_sided",
+            "discards"
+          ]
+        },
+        {
+          "template": "Environment/ENV_DetailMap_Alphatest",
+          "variant": "StaticInstancedDepth",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_AlphaTest_2s",
+          "variant": "StaticInstancedDepth",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "two_sided",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_SSS_AlphaTested",
+          "variant": "StaticInstancedDepth",
+          "class": "sss_skin",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "sss",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_GM_Pulse_AlphaBlend_Luminance",
+          "variant": "StaticInstancedDepth",
+          "class": "transparent",
+          "flags": [
+            "alpha_blend",
+            "emissive",
+            "luminance_emissive",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_AlphaTest_2s_Flipped_Backface_Normal",
+          "variant": "StaticInstancedDepth",
+          "class": "alpha_test",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "two_sided",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_MSK_AlphaTest_2s_Translucency",
+          "variant": "StaticInstancedDepth",
+          "class": "foliage",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "foliage",
+            "two_sided",
+            "discards"
+          ]
+        },
+        {
+          "template": "Base/Base_Cloth_Fresnel_1L_AlphaTest_2s_Translucency_SeeThrough",
+          "variant": "StaticInstancedDepth",
+          "class": "foliage",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "foliage",
+            "two_sided",
+            "discards"
+          ]
+        }
+      ],
+      "native_predicate_simple": false,
+      "decision": "excluded",
+      "reason": "Conditional camera fade/noise factor reads Camera and CutAway UBO; raw alpha insufficient",
+      "spv_sha256": "7d586fb57b51941785adb0dc68a8ffccb8efc46520db3bf9d1ad523b5a570bee",
+      "glsl_sha256": "5409fd1ac3e67a5ae8f2a834b115228b4907a677fc0afd4a5d9388d2a7af7bdc"
+    },
+    {
+      "hash": "42d7e2cf1c9a7e24",
+      "recipe": "42d7e2cf1c9a7e24 tex uv=0 cut=0.2 tex=1.3 ch=3",
+      "draw_counts": {
+        "20261030-162008:D16": 4,
+        "20261030-163004:D16": 8,
+        "20261030-163010:D16": 8
+      },
+      "glsl": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\alpha_cache\\42d7e2cf1c9a7e24.glsl",
+      "exists": true,
+      "packaged_refs": [
+        {
+          "template": "Atmosphere/ATM_Wind_Bushes_AlphaTest_2S_PBR",
+          "variant": "StaticDepthShadow",
+          "class": "foliage",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "foliage",
+            "two_sided",
+            "world_position_offset",
+            "discards"
+          ]
+        },
+        {
+          "template": "Atmosphere/ATM_Wind_Bushes_AlphaTest_2S_PBR",
+          "variant": "StaticInstancedDepthShadow",
+          "class": "foliage",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "foliage",
+            "two_sided",
+            "world_position_offset",
+            "discards"
+          ]
+        },
+        {
+          "template": "Atmosphere/ATM_Wind_Banners_Cloth_AlphaTest_PBR_Translucency",
+          "variant": "StaticDepthShadow",
+          "class": "foliage",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "foliage",
+            "world_position_offset",
+            "vertex_color",
+            "discards"
+          ]
+        },
+        {
+          "template": "Atmosphere/ATM_Wind_GrassFlowers_AlphaTest_2S_No_Decals",
+          "variant": "StaticDepthShadow",
+          "class": "decal",
+          "flags": [
+            "opaque",
+            "alpha_test",
+            "foliage",
+            "decal",
+            "two_sided",
+            "world_position_offset",
+            "discards"
+          ]
+        }
+      ],
+      "native_predicate_simple": true,
+      "decision": "shader_predicate_whitelisted_pending_external_contract",
+      "reason": "Single sampled alpha minus literal cutoff; no other FS inputs or coverage factors",
+      "spv_sha256": "78aa9aad2f744be8e208dabf63b92cfadd423f4da1a87785247bf44ce32efa0b",
+      "glsl_sha256": "6b3af2a3218e99fd7d637c410a72be5694afa47ea13f2307228e8a3ca4b07ea2",
+      "pipeline_contract": {
+        "vs": "910cffb017c2fb37",
+        "fragment_uv_location": 0,
+        "vertex_uv_input_location": 4,
+        "post_vertex_uv_output_location": 0,
+        "uv_scale": [
+          1,
+          1
+        ],
+        "texture_set": 1,
+        "texture_binding": 3,
+        "channel": 3,
+        "cutoff": 0.2,
+        "sampler_set": 0,
+        "sampler_binding": 7,
+        "vertex_deformation": true,
+        "requires_current_post_vs_geometry": true,
+        "requires_native_sampler_domain_proof": true,
+        "no_geometry_or_tessellation_stage": true
+      },
+      "fresh_decompile_matches_cache": true
+    },
+    {
+      "hash": "03a2d9f645625c44",
+      "recipe": "03a2d9f645625c44 tex uv=0 cut=0.3333 tex=1.2 ch=3",
+      "draw_counts": {
+        "20261030-162008:D16": 2
+      },
+      "glsl": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\alpha_cache\\03a2d9f645625c44.glsl",
+      "exists": true,
+      "packaged_refs": [
+        {
+          "template": "Characters/CHAR_Scalp",
+          "variant": "StaticDepthShadow",
+          "class": "hair",
+          "flags": [
+            "opaque",
+            "hair",
+            "character",
+            "discards"
+          ]
+        }
+      ],
+      "native_predicate_simple": false,
+      "decision": "excluded",
+      "reason": "Scalp smoothstep(A) times B/root material transform, not raw alpha",
+      "spv_sha256": "fc9f2a914bb59b5939ad5cd075cdb1c31e3f4b30b855d3bfd457b9385c6012b2",
+      "glsl_sha256": "917074dfe2eb43039e9d87dc6b960d82503012d93b250d6cd18f92b2985b64f1"
+    },
+    {
+      "hash": "1e144b6e40e48558",
+      "recipe": "1e144b6e40e48558 tex uv=0 cut=0.3333 tex=1.3 ch=3",
+      "draw_counts": {
+        "20261030-162008:D16": 2
+      },
+      "glsl": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\alpha_cache\\1e144b6e40e48558.glsl",
+      "exists": true,
+      "packaged_refs": [
+        {
+          "template": "Characters/CHAR_Fur_IDmsk",
+          "variant": "StaticDepthShadow",
+          "class": "anisotropic",
+          "flags": [
+            "opaque",
+            "anisotropic",
+            "two_sided",
+            "world_position_offset",
+            "vertex_color",
+            "character",
+            "discards"
+          ]
+        }
+      ],
+      "native_predicate_simple": false,
+      "decision": "excluded",
+      "reason": "Fur B smoothstep, view/normal factor and material multiplier, not raw alpha",
+      "spv_sha256": "f5babc3a5bc88a604c2a694dd870d27a1642dfa856e58c1159a2fc4d04589da0",
+      "glsl_sha256": "0268661d9e98d1c6db45c4f48711a5ff85e3659af86c4ed3d8838960260df870"
+    }
+  ],
+  "limits": [
+    "This is shader predicate agreement, not complete runtime eligibility",
+    "Actual template cannot be recovered uniquely from shared shader hash",
+    "Native sampler state is absent from retained F10/DescEntry; shader binding0.7 is known, sampler addressing/filter domain still requires proof",
+    "VS910cffb017c2fb37 deforms geometry using frame/wind textures; cannot assume static geometry",
+    "Only kind2 plain recipes; VT, scalp and fur excluded",
+    "Stochastic threshold[0,1]: uniform decoded1 can be Opaque; alpha0 remains UNKNOWN",
+    "Full mip/view/content epoch/descriptor/sampler and post-VS geometry identities remain mandatory"
+  ]
+}
