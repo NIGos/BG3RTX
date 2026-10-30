@@ -278,6 +278,22 @@ static VkDescriptorPool g_pool = VK_NULL_HANDLE;
 static std::vector<std::pair<SetKey, VkDescriptorSet>> g_sets;
 static std::unordered_map<VkImage, VkImageView> g_views;  // our views of game images
 
+// Recording threads must never idle the device to reclaim RR descriptors:
+// DLSS-G's pacer can still submit to its queues. Keep old sets alive behind
+// the existing GPU-completion retirement fence and allocate a fresh pool.
+static void retire_guide_pool() {
+  g_sets.clear();
+  if (g_pool) defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, uint64_t(g_pool));
+  g_pool = VK_NULL_HANDLE;
+}
+
+static bool create_guide_pool(DeviceData* dd) {
+  VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 4 * 64}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4 * 64}};
+  VkDescriptorPoolCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+  ci.maxSets = 64; ci.poolSizeCount = 2; ci.pPoolSizes = sizes;
+  return dd->vk.CreateDescriptorPool(dd->device, &ci, nullptr, &g_pool) == VK_SUCCESS;
+}
+
 // GPU timing: per evaluate, 3 timestamps (start, after guides, after evaluate).
 static const uint32_t kTsSlots = 32;
 static VkQueryPool g_qpool = VK_NULL_HANDLE;
@@ -500,8 +516,7 @@ bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view) {
 static bool ensure_guides(DeviceData* dd, uint32_t w, uint32_t h) {
   if (g_guide_w == w && g_guide_h == h && g_guide[0].image) return true;
   for (auto& g : g_guide) guide_destroy(dd, g);
-  g_sets.clear();
-  if (g_pool) dd->vk.ResetDescriptorPool(dd->device, g_pool, 0);
+  retire_guide_pool();
   const VkFormat fmts[3] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT};
   for (int i = 0; i < 3; ++i)
     if (!guide_create(dd, g_guide[i], fmts[i], w, h)) {
@@ -535,12 +550,6 @@ static bool ensure_layouts(DeviceData* dd) {
   pci.pushConstantRangeCount = 1;
   pci.pPushConstantRanges = &pcr;
   if (dd->vk.CreatePipelineLayout(dd->device, &pci, nullptr, &g_pl) != VK_SUCCESS) return false;
-  VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 4 * 64}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4 * 64}};
-  VkDescriptorPoolCreateInfo ppi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-  ppi.maxSets = 64;
-  ppi.poolSizeCount = 2;
-  ppi.pPoolSizes = sizes;
-  if (dd->vk.CreateDescriptorPool(dd->device, &ppi, nullptr, &g_pool) != VK_SUCCESS) return false;
   return true;
 }
 
@@ -609,22 +618,23 @@ static VkDescriptorSet get_set(DeviceData* dd, const SetKey& key, VkImageView ou
   for (auto& [k, s] : g_sets)
     if (k == key) return s;
   if (g_sets.size() >= 48) {
-    log("[ngx] descriptor set cache full; resetting the pool");
-    dd->vk.DeviceWaitIdle(dd->device);
-    dd->vk.ResetDescriptorPool(dd->device, g_pool, 0);
-    g_sets.clear();
+    log("[ngx] descriptor set cache full; retiring pool without device idle");
+    retire_guide_pool();
   }
+  if (!g_pool && !create_guide_pool(dd)) return VK_NULL_HANDLE;
   VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
   ai.descriptorPool = g_pool;
   ai.descriptorSetCount = 1;
   ai.pSetLayouts = &g_dsl;
   VkDescriptorSet set = VK_NULL_HANDLE;
-  if (dd->vk.AllocateDescriptorSets(dd->device, &ai, &set) != VK_SUCCESS) {
+  VkResult allocated = dd->vk.AllocateDescriptorSets(dd->device, &ai, &set);
+  if (allocated != VK_SUCCESS) {
+    if (allocated != VK_ERROR_OUT_OF_POOL_MEMORY && allocated != VK_ERROR_FRAGMENTED_POOL) return VK_NULL_HANDLE;
     // Sets abandoned by destroyed G-buffers (one per level load) fill the pool.
-    log("[ngx] descriptor pool exhausted; waiting idle and resetting it");
-    dd->vk.DeviceWaitIdle(dd->device);
-    dd->vk.ResetDescriptorPool(dd->device, g_pool, 0);
-    g_sets.clear();
+    log("[ngx] descriptor pool exhausted; retiring pool without device idle");
+    retire_guide_pool();
+    if (!create_guide_pool(dd)) return VK_NULL_HANDLE;
+    ai.descriptorPool = g_pool;
     if (dd->vk.AllocateDescriptorSets(dd->device, &ai, &set) != VK_SUCCESS) return VK_NULL_HANDLE;
   }
   VkDescriptorImageInfo ii[8] = {};

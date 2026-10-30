@@ -7,6 +7,12 @@ int main() {
   if (!check(fg_copy_for_present(4809, 4810))) return 1;
   if (!check(!fg_copy_for_present(4808, 4810) && !fg_copy_for_present(4810, 4810))) return 1;
   if (!check(!fg_copy_for_present(UINT64_MAX, 0))) return 1;
+  if (!check(fg_copy_pair_for_present(4809, 4809, 4809, 4810))) return 1;
+  // A current private copy must never be combined with past/future camera or color.
+  if (!check(!fg_copy_pair_for_present(4809, 4808, 4809, 4810))) return 1;
+  if (!check(!fg_copy_pair_for_present(4809, 4809, 4810, 4810))) return 1;
+  if (!check(!fg_copy_pair_for_present(4808, 4808, 4808, 4810))) return 1;
+  if (!check(!fg_copy_pair_for_present(UINT64_MAX, UINT64_MAX, UINT64_MAX, 0))) return 1;
   // Switching the key off between recording and present leaves a copy
   // untagged. The following present's fence still covers its earlier write.
   if (!check(fg_copy_precedes_present(4809, 4810) && fg_copy_precedes_present(4808, 4810))) return 1;

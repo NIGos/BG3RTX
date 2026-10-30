@@ -26,6 +26,7 @@
 #include "host.h"
 #include "../common/fg_stability.h"
 #include "../common/fg_copy_lease.h"
+#include "../common/async_capture_queue.h"
 
 #include <psapi.h>
 #include <dbghelp.h>
@@ -404,8 +405,13 @@ void snap_finish(DeviceData* dd) {
     dd->vk.UnmapMemory(dd->device, S.mem);
     char name[64];
     snprintf(name, sizeof name, "\\p%02d.png", S.index++);
-    bool ok = write_png_rgb(g_snap_dir + name, ow, oh, rgb);
-    log("[sl] presented frame %d -> %s%s (%s)", S.index - 1, g_snap_dir.c_str(), name, ok ? "ok" : "PNG write failed");
+    struct Png { std::string path; uint32_t w,h; int index; std::vector<uint8_t> rgb; };
+    static AsyncCaptureQueue<Png> writer(32,[](Png&& p) {
+      bool ok=write_png_rgb(p.path,p.w,p.h,p.rgb);
+      log("[sl] presented frame %d -> %s (%s)",p.index,p.path.c_str(),ok ? "ok" : "PNG write failed");
+    });
+    if (!writer.submit({g_snap_dir+name,ow,oh,S.index-1,std::move(rgb)}))
+      log("[sl] PNG write failed: capture writer backlog full");
   }
   if (--g_snaps_left == 0) log("[sl] present capture done");
 }
@@ -630,6 +636,7 @@ std::mutex g_mv_copy_mu;
 MvCopySlot g_mv_copies[8]{};
 Img g_preserved_mvec; // selected in submit order, under g_mu
 Img g_preserved_depth;
+uint64_t g_copy_record = 0, g_color_record = 0, g_color_submit = 0;
 VkQueryPool g_mv_copy_queries = VK_NULL_HANDLE;
 float g_mv_copy_period = 1;
 std::vector<double> g_mv_copy_ms;
@@ -988,7 +995,9 @@ void ensure_depth_view() {
 //   cam  (set0 b2): mat4 m0, m1, m2 = view-projection relative to the camera; float near?, far?; vec2; vec3 camPos @208
 //   prev (set0 b5): mat4 m0, m1, m2 = previous view-projection relative to the previous camera; vec3 prevCamPos @192;
 //                   float; vec2 jitter @208; vec2 prevJitter @216
-void fill_constants(sl::Constants& c, uint32_t rw, uint32_t rh) {
+void fill_constants(sl::Constants& c, uint32_t rw, uint32_t rh, const CamRaw* snapshot = nullptr, bool snapshot_valid = false) {
+  const CamRaw& cam = snapshot ? *snapshot : g_cam;
+  const bool cam_valid = snapshot ? snapshot_valid : g_cam_valid;
   float sx = cfg_float("fg_mvec_scale_x", -1.0f), sy = cfg_float("fg_mvec_scale_y", -1.0f);
   c.mvecScale = sl::float2(sx / float(rw ? rw : 1), sy / float(rh ? rh : 1));
   c.jitterOffset = sl::float2(0, 0);
@@ -1014,12 +1023,12 @@ void fill_constants(sl::Constants& c, uint32_t rw, uint32_t rh) {
   M4 vp_c = I, vp_p = I, proj = I, c2p_log = I;
   bool ok = false;
   float jx = 0, jy = 0;
-  if (g_cam_valid && cfg_int("fg_camera", 1)) {
+  if (cam_valid && cfg_int("fg_camera", 1)) {
     // m1 is the jittered reversed-Z projection (row-vector, w = view z): the
     // jitter sits in row 2, columns 0 and 1. clip.xy_unjittered = clip.xy -
     // P[2][0..1] * w, i.e. post-multiplying by S with S[3][0..1] = -P[2][0..1].
-    proj = load(&g_cam.cam[16]);
-    M4 pprev = load(&g_cam.prev[16]);
+    proj = load(&cam.cam[16]);
+    M4 pprev = load(&cam.prev[16]);
     M4 s_c = I, s_p = I;
     s_c.m[3][0] = -proj.m[2][0];
     s_c.m[3][1] = -proj.m[2][1];
@@ -1031,16 +1040,16 @@ void fill_constants(sl::Constants& c, uint32_t rw, uint32_t rh) {
       s_p = s_c;
     }
     float pjx = proj.m[2][0], pjy = proj.m[2][1];
-    vp_c = mul(load(&g_cam.cam[32]), s_c);
-    vp_p = mul(load(&g_cam.prev[32]), s_p);
+    vp_c = mul(load(&cam.cam[32]), s_c);
+    vp_p = mul(load(&cam.prev[32]), s_p);
     proj.m[2][0] = 0;
     proj.m[2][1] = 0;
-    if (g_cam.cam[48] > 0 && g_cam.cam[49] > g_cam.cam[48]) {
-      c.cameraNear = g_cam.cam[48];
-      c.cameraFar = g_cam.cam[49];
+    if (cam.cam[48] > 0 && cam.cam[49] > cam.cam[48]) {
+      c.cameraNear = cam.cam[48];
+      c.cameraFar = cam.cam[49];
     }
-    const float* cp = &g_cam.cam[52];
-    const float* pp = &g_cam.prev[48];
+    const float* cp = &cam.cam[52];
+    const float* pp = &cam.prev[48];
     // jitter in pixels, from the projection: x = P20 * W / 2, y = -P21 * H / 2 (y down)
     jx = pjx * float(rw) * 0.5f;
     jy = -pjy * float(rh) * 0.5f;
@@ -1078,14 +1087,14 @@ void fill_constants(sl::Constants& c, uint32_t rw, uint32_t rh) {
     if (cfg_int("fg_jitter", 1)) c.jitterOffset = sl::float2(jx * cfg_float("fg_jitter_sx", 1.0f), jy * cfg_float("fg_jitter_sy", 1.0f));
     if (g_cam_log < 3 || (cfg_int("fg_log_camera", 0) && frame_index() % 600 == 0)) {
       ++g_cam_log;
-      log("[sl] camera b2.m0 %s", mstr(load(&g_cam.cam[0])).c_str());
-      log("[sl] camera b2.m1 %s", mstr(load(&g_cam.cam[16])).c_str());
+      log("[sl] camera b2.m0 %s", mstr(load(&cam.cam[0])).c_str());
+      log("[sl] camera b2.m1 %s", mstr(load(&cam.cam[16])).c_str());
       log("[sl] camera b2.m2 %s", mstr(vp_c).c_str());
-      log("[sl] camera b2 floats %g %g | %g %g | pos %g %g %g | %d", g_cam.cam[48], g_cam.cam[49], g_cam.cam[50],
-          g_cam.cam[51], cp[0], cp[1], cp[2], *reinterpret_cast<const int*>(&g_cam.cam[55]));
+      log("[sl] camera b2 floats %g %g | %g %g | pos %g %g %g | %d", cam.cam[48], cam.cam[49], cam.cam[50],
+          cam.cam[51], cp[0], cp[1], cp[2], *reinterpret_cast<const int*>(&cam.cam[55]));
       log("[sl] camera b5.m2 %s", mstr(vp_p).c_str());
       log("[sl] camera b5 prevpos %g %g %g | %g | jitter %g %g | prev jitter %g %g", pp[0], pp[1], pp[2],
-          g_cam.prev[51], g_cam.prev[52], g_cam.prev[53], g_cam.prev[54], g_cam.prev[55]);
+          cam.prev[51], cam.prev[52], cam.prev[53], cam.prev[54], cam.prev[55]);
       log("[sl] clipToPrevClip %s (ok %d) fov %.3f", mstr(c2p_log).c_str(), ok,
           c.cameraFOV);
     }
@@ -2045,8 +2054,16 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
       log("[sl] hudless = image %p (composite fs %016llx)", (void*)i_h, (unsigned long long)p.first_fs_hash);
     if (i_u && i_u != g_ui.image)
       log("[sl] UI color+alpha = image %p (composite fs %016llx)", (void*)i_u, (unsigned long long)p.first_fs_hash);
-    if (i_h) fill_img(g_hudless, i_h, v_h);
-    if (i_u) fill_img(g_ui, i_u, v_u);
+    auto remember = [&](Bg3Binding& b, VkImage image, VkImageView view) {
+      Img im{}; fill_img(im, image, view);
+      b.image = im.image; b.view = im.view; b.format = im.format; b.width = im.w; b.height = im.h;
+    };
+    if (i_h) remember(s->sl_hudless, i_h, v_h);
+    if (i_u) remember(s->sl_ui, i_u, v_u);
+    if (!cfg_int("fg_input_copy", 0)) {
+      if (i_h) fill_img(g_hudless, i_h, v_h);
+      if (i_u) fill_img(g_ui, i_u, v_u);
+    }
     if (i_h && i_u && p.color_views[0] && (cfg_int("fg_ui_pq", 0) || cfg_int("pan_inputs", 0)))
       g_uipq_pending[cmd] = UiPqPending{p.color_images[0], p.color_views[0], v_h, v_u, i_h, i_u, p.width, p.height};
     set_watch();
@@ -2071,14 +2088,13 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s) {
     }
     if (have && cfg_int("fg_ui_pq", 0) && uipq_record(cmd, pend, s->color_layouts[0])) {
       std::lock_guard<std::mutex> lock(g_mu);
-      g_ui.image = g_uipq.img;
-      g_ui.view = g_uipq.view;
-      g_ui.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-      g_ui.w = g_uipq.w;
-      g_ui.h = g_uipq.h;
-      g_ui.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-      g_ui.seen = frame_index();
+      if (!cfg_int("fg_input_copy", 0))
+        g_ui = {g_uipq.img, g_uipq.view, VK_FORMAT_R16G16B16A16_SFLOAT, g_uipq.w, g_uipq.h,
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, frame_index()};
       g_layout[g_uipq.img] = VK_IMAGE_LAYOUT_GENERAL;
+      s->sl_ui = {};
+      s->sl_ui.image = g_uipq.img; s->sl_ui.view = g_uipq.view; s->sl_ui.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+      s->sl_ui.width = g_uipq.w; s->sl_ui.height = g_uipq.h;
     }
     if (have && cfg_int("pan_inputs", 0) && cfg_int("pan_capture", 0) > 0) {
       Img inputs[4];
@@ -2086,6 +2102,11 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s) {
       {
         std::lock_guard<std::mutex> lock(g_mu);
         inputs[0] = g_hudless; inputs[1] = g_ui;
+        fill_img(inputs[0], pend.hud_img, pend.hud_view);
+        if (cfg_int("fg_ui_pq", 0))
+          inputs[1] = {g_uipq.img,g_uipq.view,VK_FORMAT_R16G16B16A16_SFLOAT,g_uipq.w,g_uipq.h,
+                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,frame_index()};
+        else fill_img(inputs[1], pend.ui_img, pend.ui_view);
         inputs[2] = g_depth; inputs[3] = g_mvec;
         for (unsigned i = 0; i < 4; ++i) {
           layouts[i] = layout_of(inputs[i].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -2139,6 +2160,7 @@ void sl_note_submit(const std::vector<VkCommandBuffer>& cmds) {
     for (auto& [img, lay] : s->sl_layouts) g_layout[img] = lay;
     for (auto& [img, lay] : s->sl_input_layouts) g_input_layout[img] = lay;
     if (s->sl_mvec_copy.image) {
+      g_copy_record = s->recording;
       {
         std::lock_guard<std::mutex> copy_lock(g_mv_copy_mu);
         if (s->sl_mvec_slot < 8) g_mv_copies[s->sl_mvec_slot].submitted = frame_index();
@@ -2157,6 +2179,18 @@ void sl_note_submit(const std::vector<VkCommandBuffer>& cmds) {
       memcpy(g_cam.prev, s->sl_cam[1], sizeof g_cam.prev);
       g_cam_valid = true;
       g_cam_frame = frame_index();
+    }
+    if (s->sl_hudless.image) {
+      g_color_record = s->recording; g_color_submit = frame_index();
+      if (cfg_int("fg_input_copy", 0)) {
+        const auto& h = s->sl_hudless; const auto& u = s->sl_ui;
+        fill_img(g_hudless, h.image, h.view);
+        if (u.image && u.image == g_uipq.img) {
+          g_ui = {u.image, u.view, u.format, u.width, u.height,
+                  VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, frame_index()};
+        } else if (u.image) fill_img(g_ui, u.image, u.view);
+        set_watch();
+      }
     }
   }
 }
@@ -2245,6 +2279,8 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
 
   bool ready = false;
   Img input_snapshot[4]{};
+  CamRaw camera_snapshot{};
+  bool camera_snapshot_valid = false, use_camera_snapshot = false;
   TagDestroyEvent destroy_snapshot{};
   VkImageLayout input_layouts[4]{};
   sl::Result tag_result = sl::Result::eOk, constants_result = sl::Result::eOk;
@@ -2259,12 +2295,24 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
       std::lock_guard<std::mutex> lock(g_mu);
       input_snapshot[0]=g_depth; input_snapshot[1]=g_mvec;
       const bool copied = cfg_int("fg_input_copy", 0) && g_preserved_mvec.image && g_preserved_depth.image &&
-                          fg_copy_for_present(g_preserved_mvec.seen, frame) && fg_copy_for_present(g_preserved_depth.seen, frame);
+                          fg_copy_pair_for_present(g_preserved_mvec.seen, g_cam_frame, g_color_submit, frame) &&
+                          g_preserved_depth.seen == g_preserved_mvec.seen;
       if (copied) { input_snapshot[1] = g_preserved_mvec; input_snapshot[0] = g_preserved_depth; }
       if (cfg_int("fg_input_copy", 0) && frame % 30 == 0)
         log("[sl] input copy frame %llu: selected %u, submit age %llu, image %p",
             (unsigned long long)frame, unsigned(copied), (unsigned long long)(frame - g_preserved_mvec.seen),
             (void*)input_snapshot[1].image);
+      if (cfg_int("pan_inputs", 0) && frame % 30 == 0)
+        log("[sl] pair stamp present %llu token %u: copy submit %llu record %llu, camera submit %llu, color submit %llu record %llu, hud seen %llu UI seen %llu",
+            (unsigned long long)frame, uint32_t(*g_token), (unsigned long long)g_preserved_mvec.seen,
+            (unsigned long long)g_copy_record, (unsigned long long)g_cam_frame,
+            (unsigned long long)g_color_submit, (unsigned long long)g_color_record,
+            (unsigned long long)g_hudless.seen, (unsigned long long)g_ui.seen);
+      if (cfg_int("pan_inputs", 0) && cfg_int("fg_snap", 0) > 0 && frame % 2 == 0)
+        log("[sl] pair camera present %llu: forward %.8g %.8g %.8g",
+            (unsigned long long)frame,g_cam.cam[35],g_cam.cam[39],g_cam.cam[43]);
+      use_camera_snapshot = cfg_int("fg_input_copy", 0) != 0;
+      if (use_camera_snapshot) { camera_snapshot = g_cam; camera_snapshot_valid = g_cam_valid; }
       input_snapshot[2]=g_hudless; input_snapshot[3]=g_ui;
       destroy_snapshot=g_last_destroy_event;
       // everything identified within the last couple of frames (menus have no velocity pass)
@@ -2305,13 +2353,15 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
           sl::ResourceTag(&depth, sl::kBufferTypeDepth, life, &dx),
           sl::ResourceTag(&mvec, sl::kBufferTypeMotionVectors, life, &rx),
       };
-      if (cfg_int("fg_tag_hudless", 1)) tags.emplace_back(&hud, sl::kBufferTypeHUDLessColor, life, &ox);
-      if (cfg_int("fg_tag_ui", 1)) tags.emplace_back(&ui, sl::kBufferTypeUIColorAndAlpha, life, &ux);
+      // Omission can retain a previously tagged input. Live A/B must explicitly
+      // remove the disabled tag (SL's resource-cache contract).
+      tags.emplace_back(cfg_int("fg_tag_hudless", 1) ? &hud : nullptr, sl::kBufferTypeHUDLessColor, life, &ox);
+      tags.emplace_back(cfg_int("fg_tag_ui", 1) ? &ui : nullptr, sl::kBufferTypeUIColorAndAlpha, life, &ux);
       if (cfg_int("fg_tag_backbuffer", 1))
         tags.emplace_back(nullptr, sl::kBufferTypeBackbuffer, sl::ResourceLifecycle::eValidUntilPresent, &ox);
       sl::Result tr = g_sl.SetTagForFrame(*g_token, 0, tags.data(), uint32_t(tags.size()), nullptr);
       sl::Constants c{};
-      fill_constants(c, g_mvec.w, g_mvec.h);
+      fill_constants(c, g_mvec.w, g_mvec.h, use_camera_snapshot ? &camera_snapshot : nullptr, camera_snapshot_valid);
       sl::Result cr = g_sl.SetConstants(c, *g_token, 0);
       tag_result=tr; constants_result=cr; tagged=true;
       static uint32_t logged = 0;
