@@ -1,36 +1,44 @@
 # BG3RTX progress
 
-## Rendering program: isolated coverage integration - 2026-10-30
+## Rendering program: verified isolated composition - 2026-10-30
 
-The full M0-M6 execution plan is active. No live grant exists. Main remains at
-92183e7; its uncommitted planning documents and the user's build are preserved.
-This isolated codex/omm-bake candidate combines the Sun 4edd799 checkpoint with
-native Hair/Scalp/Pubes, the OMM producer and four Experimental GUI controls
-(75bb833). All experimental defaults/presets remain off. ABI stays 19; both DLLs
-must travel together. Main integration is pending merge-green and a clean main.
+Full M0-M6 plan remains active. No live grant exists. Main stays at 92183e7;
+its uncommitted planning documents and the user's build are preserved. Isolated
+codex/omm-bake source checkpoint 7259c21 combines native Hair/Scalp/Pubes, current
+four-cascade Sun, OMM producer/BLAS, Experimental GUI and initial asset/material
+increments. ABI remains 19; both DLLs build together. All new presets stay off.
 
-Current Sun uses four native caster domains, native receiver selection and
-same-submit GPU packet validation. Unsupported domains retain native shadows;
-no larger sun radius or arbitrary blur. In-game quality and GPU cost are NOT
-measured. OMM descriptor/Core selection is still unwired; no acceleration claim.
-Both DLLs build and 35/35 CTests pass, including 271 settings checks. Initial
-shader integration: 219 existing entries byte-identical, 10 new compile/validate.
-Independent review then found double origin rebasing of current-Sun rays; that
-gated shader correction is applied and the full shader gate is running again.
+Gate: 36/36 CTests and QA pass; 271 settings checks. After correcting double
+rebasing of current-Sun rays, 219 existing shader entries are byte-identical to
+75bb833; 10 new entries compile/validate. Retained Sun ring copies now require
+the source buffer's actual TRANSFER_SRC usage. Independent review found no other
+concrete combined-Sun blockers. Native GPU/game quality and pass cost are NOT
+measured. OMM descriptor/Core selection remains unwired: no acceleration claim.
 
-M0: scoped permission receipt passed fake-runner gates; revocation during child
-execution and blocked-inbox skipping are under final independent verification.
-M2: 01db43b exports one actual Foundry board: 3 LODs, 8,038 vertices / 9,965
-triangles; native local bounds match exactly. Its enabled VT maps to 64 decoded
-tiles / 1024 x 1024 RGBA. 35 asset tests pass, one existing skip. This is one
-asset, not a closed room or an authored PBR material. Affine placement and native
-material evaluation now have separate offline owners. Raw artifacts remain in
-the isolated m2-foundry-mesh checkout under captures/m2-foundry/.
+M0: scoped explicit batch receipts, cancellation during single/command execution,
+nested QA injector cancellation, blocked-inbox skipping and runtime C# source
+freezing are composed. Scratch tests pass: 28 cancellation, 27 permission, 26
+window policy, four phase cancellation and two C# identity checks. The worker's
+full fake queue also passed (14 jobs / 15 runs). No real inbox/permission changed.
 
-Next: complete combined coverage checks, review M0 cancellation, wire OMM only
-with its original same-ray reference, and extend verified placement/materials.
-Future live batches automate settings, A/B, captures and restoration. The user
-will not be asked to edit INI or perform manual comparisons.
+M2: 40e57c4 exports one real Foundry board and its enabled VT (64 tiles,
+1024 x 1024 RGBA). 7259c21 adds full affine placement, inverse-transpose normals
+and mirrored winding: 5,728 LOD-0 world triangles; other LODs stay alternatives.
+44 asset tests pass, one existing zstd skip. World/XFB agreement and room closure
+are NOT qualified. Actual artifacts remain in the m2-foundry-mesh checkout under
+captures/m2-foundry/. Nearby construction reconstruction is the next asset step.
+
+M3a: 56ab2de decodes audited Base_AlphaTest_VT fields after native sampling;
+164,188 CPU checks pass. Normal swizzle and material parameters follow actual
+native shaders. Coverage remains UNKNOWN; actual view/color interpretation,
+VT sampling/residency and the runtime provider are still missing. Existing F10
+view metadata is being extended only to resolve that concrete missing evidence.
+
+Next offline work: OMM reference/descriptor selection; next observed Fur coverage
+recipe; bounded room geometry; native sampled-view/material proof. Future live
+batches automate all keys, A/B, input, capture and restoration. No manual INI or
+comparison is requested. Main integration waits for merge-green and clean main.
+Evidence: docs/evidence/rendering-composition-20261030.json.
 
 ## Native material BLAS and same-frame scene clone prepared - 2026-10-30
 
