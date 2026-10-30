@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include "host.h"
+#include "omm_submit.h"
 #include "assetdb.h"
 #include "sebridge.h"
 #include "hookguard.h"
@@ -438,9 +439,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM: the emissive scene of this batch's effects passes
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   return r;
 }
 
@@ -461,9 +464,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit2");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM (our build goes through vkQueueSubmit)
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   return r;
 }
 

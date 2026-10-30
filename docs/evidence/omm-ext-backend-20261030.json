@@ -7,9 +7,9 @@
   "host_abi_changed": false,
   "shader_files_changed": false,
   "host_dll_build": "passed, two compiler workers",
-  "cpu_plan_range_layout_lifetime_checks": 68,
-  "CTest_target": "omm_backend_plan_test",
-  "CTest_result": "1/1 passed",
+  "cpu_plan_range_layout_lifetime_checks": 87,
+  "CTest_target": "omm_backend_plan_test and omm_submit_state_test",
+  "CTest_result": "2/2 passed",
   "settings_defaults_check": "passed",
   "gpu_cost_ms": null,
   "gpu_traversal_gate": "not run",
@@ -20,5 +20,10 @@
     "Same compute-capable queue and actual submission/completion serials only",
     "Requested storage/scratch buffers capped at 256 MiB, not physical memory accounting",
     "No claim of completed OMM from all-unknown plumbing"
-  ]
+  ],
+  "cpu_submit_graph_generation_queue_counter_checks": 76,
+  "actual_submission_hooks": "QueueSubmit/QueueSubmit2 before-driver CPU pin, after-success private timeline signal/counter; exact command-generation and secondary/pool/reset tracking",
+  "failure_policy": "Private signal/counter/provenance failure retains resources and blocks discard/collection until device idle; unrelated foreign queue ignored",
+  "fresh_default_off_extra_gpu_calls": false,
+  "ini_off_held_ticket_tracking": "Continues until all attached tickets retire"
 }

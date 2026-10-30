@@ -37,6 +37,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/geocapture.cpp
   layer/rtscene.cpp
   layer/omm_backend.cpp
+  layer/omm_submit.cpp
   layer/alphatest.cpp
   layer/bvhsplit.cpp
   layer/emissive.cpp
@@ -171,6 +172,8 @@ add_executable(mapped_copy_test tests/mapped_copy_test.cpp)
 add_test(NAME mapped_copy_test COMMAND mapped_copy_test)
 add_executable(omm_backend_plan_test tests/omm_backend_plan_test.cpp)
 add_test(NAME omm_backend_plan_test COMMAND omm_backend_plan_test)
+add_executable(omm_submit_state_test tests/omm_submit_state_test.cpp)
+add_test(NAME omm_submit_state_test COMMAND omm_submit_state_test)
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)
 add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
 add_executable(settings_test tests/settings_test.cpp)

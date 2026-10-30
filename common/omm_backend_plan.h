@@ -40,11 +40,15 @@ inline bool input_ranges(const Plan& p, uint64_t dataAddress, uint64_t dataBytes
 // counters. Before retirement the owner must mark every referencing BLAS use.
 struct Lifetime {
   uint64_t lastUse{}; bool submitted{}, retiring{};
+  uint32_t reservations{};
+  bool reserve() {if(reservations==UINT32_MAX)return false;++reservations;return true;}
+  bool unreserve() {if(!reservations)return false;--reservations;return true;}
+  bool discardable() const {return !submitted && !reservations;}
   bool use(uint64_t serial) {
     if (!serial || retiring || (submitted && serial < lastUse)) return false;
     lastUse = serial; submitted = true; return true;
   }
   bool retire() { if (!submitted || retiring) return false; retiring = true; return true; }
-  bool releasable(uint64_t completed) const { return submitted && retiring && completed >= lastUse; }
+  bool releasable(uint64_t completed) const { return submitted && retiring && !reservations && completed >= lastUse; }
 };
 }

@@ -9,6 +9,10 @@ const void* device_features(InstanceData*, VkPhysicalDevice, const void* next,
 void device_created(DeviceData*, bool rtEnabled);
 void device_destroyed(DeviceData*);
 bool available();
+bool has_resources();
+void retain_until_idle(); // Lost completion/provenance: collection AND discard stop.
+void reserve_submissions(std::span<const uint64_t>);
+void release_submissions(std::span<const uint64_t>);
 using Ticket = uint64_t;
 struct Input {
   std::span<const Triangle> descriptors;
