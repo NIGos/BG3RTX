@@ -206,8 +206,9 @@ static void content_fixture(DeviceData& dd,VkCommandPool pool){
 }
 #include "omm_bc_fixture.inl"
 #include "omm_scene_fixture.inl"
+#include "omm_feedback_fixture.inl"
 int main(int argc,char** argv){
-  check((argc==2 || argc==3 || argc==5 || argc==6 || argc==7),"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv [producer.spv content.spv [bc.spv [scene.spv]]]]");
+  check((argc==2 || argc==3 || argc==5 || argc==6 || argc==7 || argc==8),"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv [producer.spv content.spv [bc.spv [scene.spv [feedback.spv]]]]]");
   if(argc>=4)producerShader=argv[3];
   if(argc>=5){std::ifstream f(argv[4],std::ios::binary|std::ios::ate);check(bool(f),"content shader");auto size=f.tellg();check(size>0&&uint64_t(size)%4==0,"content shader size");contentShader.resize(size_t(size)/4);f.seekg(0);f.read(reinterpret_cast<char*>(contentShader.data()),size);}
   // Process-local loader settings only. The parent also sets these before launch.
@@ -382,7 +383,8 @@ int main(int argc,char** argv){
         auto* words=answers+12500+i*16;
         check(words[0]==expected[i],"produced O/T/UNKNOWN wire states");
         check(words[4]==(i<2?0u:1u),"producer certificate status");
-        check(words[5]==1u && words[6]==i+1u && words[7]==0u && words[8]==0x4f4d4d31u,
+        // The lifetime regression replays this upload/bake CB: image epochs2, global4..6.
+        check(words[5]==2u && words[6]==i+4u && words[7]==0u && words[8]==0x4f4d4d31u,
               "producer captures actual GPU image/global epochs and valid stamp");
         const float expectedVertices[18]={0,0,0,1,.1f,.1f,1,0,0,1,.2f,.1f,0,1,0,1,.1f,.2f};
         check(!std::memcmp(static_cast<const uint8_t*>(result.mapped)+52000+i*128,expectedVertices,sizeof expectedVertices),"private post-VS snapshot full byte equality");
@@ -411,7 +413,8 @@ int main(int argc,char** argv){
     if(endpointSampler)dd.vk.DestroySampler(dd.device,endpointSampler,nullptr);if(endpointView)dd.vk.DestroyImageView(dd.device,endpointView,nullptr);if(endpointImage)dd.vk.DestroyImage(dd.device,endpointImage,nullptr);if(endpointMemory)dd.vk.FreeMemory(dd.device,endpointMemory,nullptr);
     if(argc>=5)content_fixture(dd,pool);
     if(argc>=6)bc_fixture(dd,pool,argv[5]);
-    if(argc==7)scene_fixture(dd,pool,argv[6]);
+    if(argc>=7)scene_fixture(dd,pool,argv[6]);
+    if(argc>=8)feedback_fixture(dd,pool,argv[7]);
     dd.vk.DestroyCommandPool(dd.device,pool,nullptr);omm::pool_discard(pool,true);
     std::printf("PASS synthetic EXT: primitives=3 rays=6 contradictions=%u unknown_candidates=%u actual_timeline_retirement=1; not a BG3/FG/sampler proof\n",contradictions,unknownCandidates);
   }

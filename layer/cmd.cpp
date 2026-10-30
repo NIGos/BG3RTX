@@ -373,7 +373,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   diag(DIAG_BEGIN_CMD);
   bvh_cmd_reset(cmd);   // recorded again: a previous recording not submitted is dropped
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
-  if(r==VK_SUCCESS){omm::command_discard(cmd);omm::command_begin(cmd);}
+  if(r==VK_SUCCESS){omm::command_discard(cmd);omm::command_begin(cmd,(bi->flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)==0);}
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
   s->recording = ++recordings;
@@ -423,6 +423,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL EndCommandBuffer(VkCommandBuffer cmd) {
   CmdState* s = cmd_state(cmd);
   if (s && !s->in_pass) core_on_cmd_end(cmd);
   if (s && s->tracing) trace_flush_segment(s);
+  omm::feedback_before_end(cmd,s && !s->in_pass);
   const auto r=vk(cmd).EndCommandBuffer(cmd);
   omm::command_end(cmd,r==VK_SUCCESS);
   return r;

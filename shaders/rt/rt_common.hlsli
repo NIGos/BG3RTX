@@ -95,7 +95,11 @@ static const float kOriginNoHit = 1000.0;
 // the host expects, uint 1 the one the build's command buffer wrote when it ran.
 // Different: that build never ran before this pass (its command buffer dropped
 // without a submit, or submitted later): its TLAS is not traced (every ray misses).
+#ifdef RT_OMM_SCENE
+[[vk::binding(9, 1)]] globallycoherent RWByteAddressBuffer gSceneStamp;
+#else
 [[vk::binding(9, 1)]] ByteAddressBuffer gSceneStamp;
+#endif
 #ifdef RT_OMM_SCENE
 #include "omm_scene_guard.hlsli"
 #endif

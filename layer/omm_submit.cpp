@@ -57,7 +57,7 @@ bool mark_content_dispatch(VkCommandBuffer cmd) {if(!active.load())return false;
 bool content_dispatch_in_submit(std::span<const VkCommandBuffer> commands) {
   if(!active.load())return false;std::lock_guard lock(graphMutex);
   for(auto cmd:commands){
-    if(graph.has_content(id(cmd)) || untrackedContent.contains(id(cmd)))return true;
+    if(graph.has_content(id(cmd)) || graph.has_feedback(id(cmd)) || untrackedContent.contains(id(cmd)))return true;
     auto i=graph.commands.find(id(cmd));if(i!=graph.commands.end() && !graph.references(i->second).empty())return true;
   }
   return false;
@@ -85,7 +85,21 @@ void command_discard(VkCommandBuffer cmd,bool freed) {
   if(!active.load())return;std::set<Id> orphan;
   {std::lock_guard lock(graphMutex);orphan=graph.reset(id(cmd),freed);untrackedContent.erase(id(cmd));}discard(orphan);
 }
-void command_begin(VkCommandBuffer cmd) {if(active.load()){std::lock_guard lock(graphMutex);graph.begin(id(cmd));}}
+void command_begin(VkCommandBuffer cmd,bool hostBarrierAllowed) {if(active.load()){std::lock_guard lock(graphMutex);graph.begin(id(cmd),hostBarrierAllowed);}}
+bool mark_feedback_use(VkCommandBuffer cmd) {
+  if(!active.load())return false;std::lock_guard lock(graphMutex);return graph.mark_feedback(id(cmd));
+}
+void feedback_before_end(VkCommandBuffer cmd,bool outsideRenderPass) {
+  if(!active.load(std::memory_order_acquire) || !outsideRenderPass)return;
+  bool needed=false;
+  {std::lock_guard lock(graphMutex);needed=owner && graph.feedback_before_end(id(cmd),owner->graphics_family,outsideRenderPass);}
+  if(!needed)return;
+  VkMemoryBarrier2 barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};
+  barrier.srcStageMask=VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;barrier.srcAccessMask=VK_ACCESS_2_SHADER_WRITE_BIT;
+  barrier.dstStageMask=VK_PIPELINE_STAGE_2_HOST_BIT;barrier.dstAccessMask=VK_ACCESS_2_HOST_READ_BIT;
+  VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};dependency.memoryBarrierCount=1;dependency.pMemoryBarriers=&barrier;
+  owner->vk.CmdPipelineBarrier2(cmd,&dependency);
+}
 void command_end(VkCommandBuffer cmd,bool success) {if(active.load()){std::lock_guard lock(graphMutex);graph.end(id(cmd),success);}}
 void command_execute(VkCommandBuffer cmd,std::span<const VkCommandBuffer> children) {
   if(!active.load())return;

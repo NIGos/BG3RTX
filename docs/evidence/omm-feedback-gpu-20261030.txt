@@ -1,0 +1,69 @@
+implicit_layers=disabled explicit_validation=1 debug_error_counting=1
+GPU=NVIDIA GeForce RTX 5090 vendor=10de device=2b85 driver_raw=2604679168 API=1.4.357
+subTexelPrecisionBits=8 mipmapPrecisionBits=8
+EXT=1 AS=1 rayQuery=1 BDA=1 sync2=1 timeline=1 pushDescriptor=1
+[omm] requesting EXT micromap + synchronization2; four-state only, classification gate still required
+[omm content] GPU epochs active slots=65536 stride=16 bytes=1048592
+[omm] EXT backend available max_four_state_level=12; no known-state quality gate passed
+[omm] recorded EXT build ticket=1 triangles=3 storage=640 scratch=1023
+[omm] recorded EXT build ticket=2 triangles=3 storage=640 scratch=1023
+[omm] recorded EXT build ticket=3 triangles=1 storage=640 scratch=1023
+[omm] recorded EXT build ticket=4 triangles=1 storage=640 scratch=1023
+[omm] recorded EXT build ticket=5 triangles=1 storage=640 scratch=1023
+ray=0 hit=1 candidates=0 native_ge=1 primitive=0
+ray=1 hit=1 candidates=0 native_ge=1 primitive=0
+ray=2 hit=0 candidates=0 native_ge=0 primitive=1
+ray=3 hit=0 candidates=0 native_ge=0 primitive=1
+ray=4 hit=0 candidates=1 native_ge=0 primitive=2
+ray=5 hit=1 candidates=1 native_ge=1 primitive=2
+UNORM8_ENDPOINTS samples=2176 UVs=64 LODs=17 mips=3 layers=2 filter=LINEAR mipmap=LINEAR repeat exact_bit_failures=0
+PRODUCER cases=3 known_opaque=1 known_transparent=1 unknown_without_certificate=1 actual_EXT_builds=3 GPU_epoch_stamps=3 private_vertex_snapshots=3 snapshot_copy_bytes=216 failures=0; synthetic endpoints only
+[omm] recorded EXT build ticket=6 triangles=3 storage=640 scratch=1023
+OWNER_RELEASE pending_before_submit=1 submitted_release_replay=1 dropped_generation=1 no_early_free=1 backend_unpoisoned=1
+CONTENT_VIEW first_id=4 new_id=5 baseMip=0 levels=1 format=37 image_id=4
+CONTENT first global=1 disabled=0 image=1 active=0 id=4 slot=3
+CONTENT second_recording global=2 disabled=0 image=2 active=0 id=4 slot=3
+CONTENT same_CB_replay global=3 disabled=0 image=3 active=0 id=4 slot=3
+CONTENT saturation global=4294967295 disabled=1 image=4294967295 active=0 id=4 slot=3
+CONTENT after_saturation_no_wrap global=4294967295 disabled=1 image=4294967295 active=0 id=4 slot=3
+CONTENT unsupported_sticky_disable global=0 disabled=1 image=0 active=0 id=4 slot=3
+CONTENT disable_stays_set global=1 disabled=1 image=1 active=0 id=4 slot=3
+CONTENT before_native_write global=0 disabled=0 image=0 active=1 id=4 slot=3
+CONTENT two_active_writers global=0 disabled=0 image=0 active=2 id=4 slot=3
+CONTENT first_completion_still_active global=1 disabled=0 image=1 active=1 id=4 slot=3
+CONTENT last_completion_coherent global=2 disabled=0 image=2 active=0 id=4 slot=3
+CONTENT unpaired_end_sticky_disable global=2 disabled=1 image=2 active=0 id=4 slot=3
+CONTENT unsupported_before_native_write global=0 disabled=1 image=0 active=0 id=4 slot=3
+CONTENT active_saturation_no_wrap global=0 disabled=1 image=0 active=4294967294 id=4 slot=3
+BC_ENDPOINT format=137 alpha=0 samples=1088 load_and_linear_mip_exact_failures=0 certificate_required=2
+BC_ENDPOINT format=137 alpha=1 samples=1088 load_and_linear_mip_exact_failures=0 certificate_required=2
+BC_ENDPOINT format=138 alpha=0 samples=1088 load_and_linear_mip_exact_failures=0 certificate_required=2
+BC_ENDPOINT format=138 alpha=1 samples=1088 load_and_linear_mip_exact_failures=0 certificate_required=2
+BC_ENDPOINT format=145 alpha=0 samples=1088 load_and_linear_mip_exact_failures=0 certificate_required=2
+BC_ENDPOINT format=145 alpha=1 samples=1088 load_and_linear_mip_exact_failures=0 certificate_required=2
+BC_ENDPOINT format=146 alpha=0 samples=1088 load_and_linear_mip_exact_failures=0 certificate_required=2
+BC_ENDPOINT format=146 alpha=1 samples=1088 load_and_linear_mip_exact_failures=0 certificate_required=2
+BC_ENDPOINT_COMPLETE samples=8704 exact_failures=0; finite BC3/BC7 alpha fixture, no mixed-value numeric certificate
+SCENE_VALIDATOR cases=14 failures=0; current/stale/unrelated/disabled/bounds/multiple images; not yet native scene wiring
+FEEDBACK case=current flag=0 lanes=64
+FEEDBACK case=stale_global flag=1 lanes=64
+FEEDBACK case=active_write flag=1 lanes=64
+FEEDBACK case=sticky_disabled flag=1 lanes=64
+FEEDBACK case=proof_zero flag=0 lanes=64
+FEEDBACK case=bad_generation flag=0 lanes=64
+FEEDBACK case=bad_magic flag=0 lanes=64
+FEEDBACK case=zero_materials flag=0 lanes=64
+FEEDBACK cases=8 failures=0 production_guard=1 production_end_barrier=1 actual_completion=1
+PASS synthetic EXT: primitives=3 rays=6 contradictions=0 unknown_candidates=2 actual_timeline_retirement=1; not a BG3/FG/sampler proof
+validation_errors=0
+
+CPU submit graph checks:159, including feedback marker, render-pass-continuation
+secondary exclusion and containing-primary propagation; host DLL build passes.
+Ordinary gi/rt_shadow.hlsl before/after SHA256:
+01FB8EDDCF26E3FA835275E7306EA486138AA408DA48AF2FE19EEAFFB62E888B
+Both outputs are byte identical (RT_OMM_SCENE undefined). Production guard wrapper
+DXC and Vulkan1.3 spirv-val pass. No game, presentation or deployment occurred.
+CPU reads/resets byte144 only AFTER actual retired slot fence; Root owns that
+consumer and generation matching. Shader proof words128..143 remain unchanged.
+Zero/malformed/no-material proof does not request invalidation. All GPU writes to
+byte144 are atomic. The bounded fixture does not prove native scene wiring/cost.

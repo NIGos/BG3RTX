@@ -77,5 +77,14 @@ int main(){
   check(!replay.releasable(20));check(replay.releasable(21));check(refs.referenced(7));
   auto old=refs.reset(1);check(old==std::set<Id>({7}));refs.begin(1);refs.end(1,true);
   const Id cmds[]={1};check(refs.submitted(cmds,out));check(out.empty());check(!refs.referenced(7));
+  CommandGraph feedback;feedback.allocate(1,1,3);feedback.begin(1);
+  check(!feedback.feedback_before_end(1,3,true));check(feedback.mark_feedback(1));
+  check(feedback.feedback_before_end(1,3,true));check(!feedback.feedback_before_end(1,3,false));
+  check(!feedback.feedback_before_end(1,4,true));feedback.end(1,true);check(!feedback.feedback_before_end(1,3,true));
+  feedback.allocate(2,1,3);feedback.begin(2,false);check(feedback.add(2,7,3));
+  check(!feedback.feedback_before_end(2,3,true));feedback.end(2,true);
+  feedback.allocate(3,1,3);feedback.begin(3);check(feedback.execute(3,2));
+  check(feedback.feedback_before_end(3,3,true));feedback.reset(3);feedback.begin(3);
+  check(!feedback.feedback_before_end(3,3,true));check(!feedback.mark_feedback(999));
   std::printf("OMM submit graph/generation/queue/counter checks %u; no device calls\n",checks);
 }

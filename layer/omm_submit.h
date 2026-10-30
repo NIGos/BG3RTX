@@ -17,7 +17,13 @@ void pool_created(VkCommandPool,uint32_t family);
 void pool_discard(VkCommandPool,bool destroyed);
 void command_allocated(VkCommandPool,VkCommandBuffer);
 void command_discard(VkCommandBuffer,bool freed=false);
-void command_begin(VkCommandBuffer);
+void command_begin(VkCommandBuffer,bool hostBarrierAllowed=true);
+// Explicit marker for a feedback dispatch without a ticket; normal RT queries
+// already carry ticket references. Propagates through recorded secondary edges.
+bool mark_feedback_use(VkCommandBuffer);
+// Once before native EndCommandBuffer: compute writes -> host reads. Caller
+// still waits the actual retired slot fence before reading/resetting byte144.
+void feedback_before_end(VkCommandBuffer,bool outsideRenderPass);
 void command_end(VkCommandBuffer,bool success);
 void command_execute(VkCommandBuffer,std::span<const VkCommandBuffer>);
 struct PreparedSubmit {std::vector<uint64_t> tickets;bool valid=true;};
