@@ -1,4 +1,4 @@
-# Session handoff — 2026-10-30 (UI inputs candidate)
+# Session handoff — 2026-10-30 (FG copy quality not qualified)
 
 Read AGENTS.md, then the top of docs/PROGRESS_CODEX.md, then D:/BG3_Tools/USER_STEERING.md
 (newest entries first). The user decides by FG on (fg=2), real presentation, visible window.
@@ -20,11 +20,26 @@ Check Blushing Mermaid - 96h 39m near crates and stage edge. Refits and instance
 indexing are not the cause. Split-off hid the boxes by capture-buffer overflow.
 See PROGRESS_CODEX and TRACK_D_RT section 11 for the deciding run and diagnostics.
 
+## FG copy gate follow-up (sup/fg-copy-gate; stays off)
+
+`sup-fg-copy-motion-gate` is transport-valid but quality INVALID. Copy off: depth
+zero 42/96, MV non-finite components 4,890,263. On: 101/101 private pairs match NGX,
+zero invalid samples. Cost 0.026 ms. Host toggles 0, steady ratio 2.00, capture range
+1.60-2.10 with 85 timer resets. No new VUIDs or faults. Fast unwarped midpoint proxy
+world 1.90 -> 8.93 codes; cannot establish a semantic or normal-cadence quality gate.
+Slow Q/E pulses still alias with readbacks; pan drifts. Next: explicit endpoint
+identities at normal capture cadence and matched UI support. Default remains 0.
+Evidence: docs/evidence/fg-copy-gate-20261030.json. No main integration.
+Foliage native-final class 4 rotation change (codes/255): FG 0 clear 6.68 / 9.99,
+hover 7.17 / 6.47; FG 2 clear 10.05 / 8.88, hover 11.07 / 10.82. Hover does not
+prove matched ring/nameplate support (last hover UI 0). Cause unresolved; no fix.
+Build -Test 13/13, camera checks 25/25. All 23 raw bursts analysed and deleted.
+
 ## UI inputs (sup/ui-inputs; optional correction stays off)
 
 Late FG depth is zero in 64/128 samples; MV gains 3 non-finite components after RR/post.
 Missing event-wait tracking also declared layouts 3/2 instead of observed 5/5.
-fg_input_copy=0 preserves the NGX depth/MV pair, guarded by the SDK consumption fence,
+fg_input_copy=1 preserves the NGX depth/MV pair, guarded by the SDK consumption fence,
 and corrects event-wait tracking. Both inputs match in 68/68 private copies; pair-copy
 GPU median 0.026 ms. No new validation errors in the deciding capture. Keep default 0:
 continuous rotation and matched in-world UI coverage are not qualified; full flicker

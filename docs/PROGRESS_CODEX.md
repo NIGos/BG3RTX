@@ -1,5 +1,48 @@
 # BG3RTX progress
 
+USER CHECK (FG copy gate: default remains 0): restart after the layer update and load
+The Blushing Mermaid - 96h 39m. Compare `fg_input_copy=0/1` while continuously rotating
+past foliage with nameplates and a selection ring visible; keep `fg_ui_pq=0`.
+The private input pair is valid, but this session's capture cadence and UI coverage do
+not qualify generated-frame quality. Do not treat the input fix as a flicker fix.
+
+## FG input copy motion gate - 2026-10-30 (`sup/fg-copy-gate`, not promoted)
+
+- One Q/E and pan probe, followed by one same-run copy 0/1/0/1 matrix for slow rotation,
+  fast rotation and pan. The probe showed that key repeat does not change held-key
+  speed. Added tested key duty cycles and separated native bursts from presented PNGs.
+- Input validity and the copy cost are measured independently of image-quality claims.
+  The existing motion parser and static pose checker are reused. Their original gates
+  target primary-ray tracking and FG 0/2 static effect parity, not interpolation error.
+- The slow pulse input still aliases with readback stalls. Changing in-world UI support
+  also prevents matched semantic comparisons. Presented midpoint residuals are unwarped
+  review proxies, not a passed interpolation gate. Default stays 0; no integration.
+- Validity gate PASS: off late depth zero in 42/96 samples; 4,890,263 non-finite MV
+  components across those samples. On: 101/101 private depth/MV pairs match NGX;
+  zero all-zero private depth samples and zero non-finite private MV components.
+- NOT PROMOTED: fast-rotation midpoint residual off -> on, in 8-bit code values:
+  world 1.90 -> 8.93, foliage ROI 2.44 -> 9.93, character ROI 2.45 -> 9.16,
+  world-UI ROI 2.07 -> 9.44. These fixed-ROI, unwarped proxies are review only;
+  no claim of ground-truth interpolation error or matched semantic coverage.
+- FG interior host toggles 0; steady SDK ratio 2.00. Captured windows range 1.60-2.10
+  (33/462 ratio lines differ from 2.00), with 85 frame-timer resets. No new VUIDs
+  relative to the six known probe IDs, no NVIDIA events or dumps. Copy GPU 0.026 ms.
+- Jobs: `sup-fg-copy-probe`, `sup-fg-copy-motion-gate`; both transport/expect checks
+  pass. The latter's quality gate is INVALID, not a PASS. All 15 raw bursts were
+  analysed and their plain directories deleted. Evidence: docs/evidence/fg-copy-gate-20261030.json.
+- Next: normal-cadence generated-frame capture with explicit endpoint identities,
+  then matched continuous motion and selection/nameplate support. No default change.
+- Rotation-only foliage job `sup-fg-foliage-rotation`: native-final class 4 reprojected
+  mean absolute change (codes/255), clear / hover-request repeats:
+  FG 0 clear 6.68 / 9.99, hover 7.17 / 6.47; FG 2 clear 10.05 / 8.88,
+  hover 11.07 / 10.82. FG 0 watch ratio 1.00; FG 2 SDK median 2.00; no interior
+  option toggles. World UI pixels: clear always 0; hover FG 0 2,547 / 15,008,
+  FG 2 14,905 / 0. The last hover lacks world UI. Selection rings/nameplates are
+  not proved matched; camera paths also differ. Attribution unresolved; no fix.
+- Build `-Test`: 13/13 CTests pass; 25 camera schedule/permission checks pass.
+  All 23 job bursts are analysed and deleted. Main and the default remain unchanged;
+  the branch records test harness changes and evidence only.
+
 USER CHECK (FG input protection, candidate stays off): restart the game after the layer
 update. Load The Blushing Mermaid - 96h 39m. Compare live `fg_input_copy=0/1` while
 rotating past foliage with floating text, names or selection UI visible. Keep `fg_ui_pq=0`

@@ -477,3 +477,22 @@ D-LS samples stays within 0.012 (camp) and 0.008 (foundry) of the RR noise floor
   - GI and the RT sun each sharpen the per-blade lighting that the wind moves. Telling that apart from noise needs traces closer than 240 presents.
   - The derived motion mask first marked 99.6% of the frame. The game's sun mask is a dithered PCF that differs on static pixels between any two frames, and the jitter bound alone (|grad| × 1 px + one code step) took that dither for motion. The bound now adds the input's own measured frame-to-frame noise (MAD × 1.4826 of the difference, at the buffer's kσ): 42% marked, the albedo 9% and the sun mask 30% per set, mostly swaying tree shadows. The case is in `tests/qa_detectors_test.py`.
 - **`s6-lscheck-mode0` (`ls_check=1 ls_shadowed=0`):** live and reference still differ on 1.5-19% of px. Since `c650dac` the live pass skips the darkvision light (`ls_noshadow=1`), which the frozen reference does not know, so this run cannot isolate the cap. `ls_giveback_cap=0/1` (ls_flags bit 18, in both passes) makes the A/B possible.
+
+## FG motion follow-up scope
+
+`fg_motion_gate.phase_metrics` parses same-run GPU camera, presentation and option
+transition evidence. Its original CLI gates primary-ray tracking across FG 0/2;
+it does not score generated-frame interpolation. `fg_static_effects` gates same-pose
+FG 0/2 effect/debug parity; `same_pose` also rejects a static-camera assumption in
+motion captures. Neither CLI supplies a ground-truth generated-frame quality metric.
+
+The `sup-fg-copy-*` fixtures reproduce the copy follow-up. Posted Q/E repeat cadence
+is not held-key speed. `key_period_ms` / `key_down_ms` optionally pulse a pan-kind
+keyboard input; GPU camera evidence must still prove the intended motion. The pure
+schedule is tested by `tests/camera_plan_test.ps1`. `hover_x` / `hover_y` are fractions
+of the owned game client, posted every 100 ms without moving the desktop cursor.
+They request hover UI; they do not prove character selection or deselection.
+
+Queue expect/transport validity is distinct from quality qualification. Presented
+PNG and raw burst readbacks can stall and reset SDK frame timers. Unwarped midpoint
+residuals and unmatched fixed ROIs are review proxies only. Keep failed gates off.

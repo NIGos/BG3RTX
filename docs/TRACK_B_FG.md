@@ -1,5 +1,43 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## Copy motion follow-up - 2026-10-30 (`sup/fg-copy-gate`, default 0)
+
+The inn Q/E probe proved that posted key repeat is not a speed control. The follow-up
+uses tested duty cycles for slow keys, held keys for fast rotation, and a pan, copy
+0/1/0/1 for each. Native input bursts and presented PNGs occupy separate windows.
+Slow input still aliases with stalls; the pan drifts away from the inn; UI support
+varies. This is a failed quality qualification, not evidence for promotion.
+
+Validity: copy off has 42/96 entirely zero late depth samples and 4,890,263 non-finite
+late MV components. Copy on has 101/101 private depth/MV pairs equal to NGX, zero
+all-zero private depth samples and zero non-finite private MV components. Private
+validity is captured at copy time; selected private resources are guarded until SDK
+consumption. Original late images remain corrupt with the key on.
+
+Fast presented midpoint residual off -> on (code values): world 1.90 -> 8.93,
+foliage ROI 2.44 -> 9.93, character ROI 2.45 -> 9.16, world-UI ROI 2.07 -> 9.44.
+These unwarped fixed-ROI proxies are review only. Probe odd PNGs match rendered
+endpoints exactly; main separated captures infer parity and lack simultaneous
+endpoint identities. A lower proxy would not establish a quality improvement either.
+`fg_motion_gate.phase_metrics` and `fg_static_effects.same_pose` are reused; those
+tools' original gates do not score generated-frame interpolation error.
+
+No host FG toggles during the matrix. Steady ratio 2.00, but 33/462 sampled lines
+range away from it (full range 1.60-2.10); 85 SDK frame-timer resets. No new VUIDs,
+NVIDIA events or dumps. GPU copy median 0.026 ms. Default stays 0; no merge.
+Raw burst directories are deleted after analysis. Evidence and paths:
+`docs/evidence/fg-copy-gate-20261030.json`. Next: capture at normal cadence with
+explicit rendered/generated endpoint identity and matched in-world UI during motion.
+
+The rotation-only foliage follow-up measures native-final class 4 reprojected change
+(codes/255): FG 0 clear 6.68 / 9.99, hover-request 7.17 / 6.47; FG 2 clear
+10.05 / 8.88, hover-request 11.07 / 10.82. FG 0 watch ratio 1.00; FG 2 SDK
+median 2.00, no interior host toggles. Hover world UI pixels are 2,547 / 15,008
+at FG 0 and 14,905 / 0 at FG 2; clear windows have 0. Ring/nameplate matching
+is unproved and one hover has no world UI. These pre-FG residuals include physical
+animation and reprojection error. No RR-versus-FG attribution; no foliage fix.
+Build -Test passes all 13 CTests; camera schedule/permission checks 25/25.
+
 ## Transient FG inputs - 2026-10-30 (`sup/ui-inputs`, default off)
 
 The inn's captured floating text is in the UI image, absent from RR input colour and
@@ -14,7 +52,7 @@ x 512..551, y 80..103 at UI composite. Captures locate the intervening damage, n
 writer. Input layouts are also stale: depth tag 3 and MV tag 2 versus observed layout 5.
 The game performs these transitions in CmdWaitEvents(2), which FG tracking omitted.
 
-`fg_input_copy=0` preserves the actual depth/MV pair before evaluate in private D24S8
+`fg_input_copy=1` preserves the actual depth/MV pair before evaluate in private D24S8
 and RG16F images. Depth has a depth-only view. Submit order selects the matching pair;
 present's counter is submit's counter plus 1. The option also tracks event-wait layouts
 for FG tags. Diagnostics maintain independent observations, leaving key-off tags intact.

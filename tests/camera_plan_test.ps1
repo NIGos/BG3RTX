@@ -26,6 +26,18 @@ foreach($t in @(5,5.1,13,41,84.99)) {
 }
 $small=Get-CameraPlanSample $step 6 65 49
 Check ($small.x -gt 0 -and $small.x -lt 65 -and $small.y -gt 0 -and $small.y -lt 49) 'small window bounds'
+$pulse=@{kind='pan';motion_start=1;motion_end=5;key_period_ms=200;key_down_ms=60}
+Check (-not (Get-CameraPlanSample $pulse .99 1920 1080).active) 'pulse stays off before motion'
+Check ((Get-CameraPlanSample $pulse 1.03 1920 1080).active) 'pulse presses during duty interval'
+Check (-not (Get-CameraPlanSample $pulse 1.1 1920 1080).active) 'pulse releases between intervals'
+Check ((Get-CameraPlanSample $pulse 1.23 1920 1080).active) 'pulse repeats relative to motion start'
+Check (-not (Get-CameraPlanSample $pulse 5 1920 1080).active) 'pulse releases at motion end'
+$pulse.key_down_ms=200
+Check ((Get-CameraPlanSample $pulse 1.19 1920 1080).active) 'full duty preserves held input'
+$pulse.key_down_ms=201
+$rejected=$false
+try { Get-CameraPlanSample $pulse 2 1920 1080 | Out-Null } catch { $rejected=$true }
+Check $rejected 'pulse rejects a down interval longer than its period'
 $scratch=Join-Path $env:TEMP ('bg3-permission-'+[guid]::NewGuid().ToString('N'))
 $q=Join-Path $scratch 'captures\queue'
 New-Item -ItemType Directory -Force $q | Out-Null

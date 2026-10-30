@@ -1,0 +1,3576 @@
+{
+  "decision": "NOT QUALIFIED; keep fg_input_copy=0",
+  "log": "captures\\queue\\logs\\sup-fg-copy-motion-gate.1.110509.log",
+  "runner": "captures\\queue\\logs\\sup-fg-copy-motion-gate.1.110509.runner.txt",
+  "rows": [
+    {
+      "serial": 1010,
+      "label": "slow-0-inputs",
+      "copy": 0,
+      "transport": true,
+      "world_ui_pixels": 13521,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 1.97,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.03,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.87,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 6,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 102658,
+      "private_depth_zero": 0,
+      "private_depth_samples": 0,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 0,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          0,
+          0
+        ],
+        "depth_copy_matches_ngx": [
+          0,
+          0
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 8,
+      "source_native_flicker": null,
+      "angular_step_deg_p0_p50_p100": [
+        0.009988484868913362,
+        4.196193672520026,
+        5.98579932295952
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 0.18078303337097168,
+          "foliage_roi": 0.1494285613298416,
+          "character_roi": 0.13407322764396667,
+          "world_ui_roi": 0.18139822781085968
+        },
+        {
+          "world": 8.184016227722168,
+          "foliage_roi": 11.06699275970459,
+          "character_roi": 9.604241371154785,
+          "world_ui_roi": 8.650418281555176
+        },
+        {
+          "world": 8.061281204223633,
+          "foliage_roi": 12.335229873657227,
+          "character_roi": 7.638344764709473,
+          "world_ui_roi": 8.531222343444824
+        },
+        {
+          "world": 2.1929712295532227,
+          "foliage_roi": 2.47904372215271,
+          "character_roi": 1.3461894989013672,
+          "world_ui_roi": 2.5719680786132812
+        },
+        {
+          "world": 0.5259348154067993,
+          "foliage_roi": 0.26186347007751465,
+          "character_roi": 0.18694323301315308,
+          "world_ui_roi": 0.2570575773715973
+        },
+        {
+          "world": 0.6186879873275757,
+          "foliage_roi": 0.8326027393341064,
+          "character_roi": 0.4869389533996582,
+          "world_ui_roi": 0.6218902468681335
+        },
+        {
+          "world": 0.4432674050331116,
+          "foliage_roi": 0.697482705116272,
+          "character_roi": 0.3377445936203003,
+          "world_ui_roi": 0.492069810628891
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 24.79750049989042,
+        "displayed_rendered_median": 2.007936507936508,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1011,
+      "label": "slow-1-inputs",
+      "copy": 1,
+      "transport": true,
+      "world_ui_pixels": 6517,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 1.97,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.03,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.8,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 6,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 1128448,
+      "private_depth_zero": 0,
+      "private_depth_samples": 17,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 17,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          17,
+          17
+        ],
+        "depth_copy_matches_ngx": [
+          17,
+          17
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 7,
+      "source_native_flicker": "pan-20261030-110912-1011: pairs 16 mean|d| 3.39/255 p99 29.9 c4:5.35 >8/255 21.04% c8:3.37 >8/255 11.43%\n",
+      "angular_step_deg_p0_p50_p100": [
+        0.00998051983186498,
+        0.017870815297070047,
+        3.9412361522917223
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 0.27696043252944946,
+          "foliage_roi": 0.18883828818798065,
+          "character_roi": 0.2722880244255066,
+          "world_ui_roi": 0.22239306569099426
+        },
+        {
+          "world": 0.23276156187057495,
+          "foliage_roi": 0.1943865865468979,
+          "character_roi": 0.248862162232399,
+          "world_ui_roi": 0.2034505307674408
+        },
+        {
+          "world": 0.217321515083313,
+          "foliage_roi": 0.19198498129844666,
+          "character_roi": 0.20097500085830688,
+          "world_ui_roi": 0.16145142912864685
+        },
+        {
+          "world": 0.4152423143386841,
+          "foliage_roi": 0.3375650942325592,
+          "character_roi": 0.3712979555130005,
+          "world_ui_roi": 0.2910641133785248
+        },
+        {
+          "world": 0.3297014832496643,
+          "foliage_roi": 0.16414929926395416,
+          "character_roi": 0.2578248083591461,
+          "world_ui_roi": 0.20354057848453522
+        },
+        {
+          "world": 0.27685970067977905,
+          "foliage_roi": 0.13437502086162567,
+          "character_roi": 0.23718155920505524,
+          "world_ui_roi": 0.19172485172748566
+        },
+        {
+          "world": 0.5661996603012085,
+          "foliage_roi": 0.37991899251937866,
+          "character_roi": 0.5235768556594849,
+          "world_ui_roi": 0.4233641028404236
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 22.49768046391518,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1012,
+      "label": "slow-2-inputs",
+      "copy": 0,
+      "transport": true,
+      "world_ui_pixels": 20956,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.83,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.1,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 5,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 114708,
+      "private_depth_zero": 0,
+      "private_depth_samples": 0,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 0,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          0,
+          0
+        ],
+        "depth_copy_matches_ngx": [
+          0,
+          0
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 6,
+      "source_native_flicker": "pan-20261030-111012-1012: pairs 15 mean|d| 3.02/255 p99 26.9 c4:6.79 >8/255 29.84% c8:2.79 >8/255 7.90%\n",
+      "angular_step_deg_p0_p50_p100": [
+        0.014102643100061799,
+        3.989520817392819,
+        4.423888469229169
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 0.16204823553562164,
+          "foliage_roi": 0.0546368770301342,
+          "character_roi": 0.12366531044244766,
+          "world_ui_roi": 0.16160379350185394
+        },
+        {
+          "world": 7.47214937210083,
+          "foliage_roi": 6.322598457336426,
+          "character_roi": 6.982193946838379,
+          "world_ui_roi": 7.5916032791137695
+        },
+        {
+          "world": 9.206060409545898,
+          "foliage_roi": 5.787045001983643,
+          "character_roi": 9.653810501098633,
+          "world_ui_roi": 9.409235954284668
+        },
+        {
+          "world": 11.100773811340332,
+          "foliage_roi": 8.636394500732422,
+          "character_roi": 11.79448413848877,
+          "world_ui_roi": 11.08869457244873
+        },
+        {
+          "world": 9.069578170776367,
+          "foliage_roi": 7.692440986633301,
+          "character_roi": 8.07917594909668,
+          "world_ui_roi": 9.201760292053223
+        },
+        {
+          "world": 11.736828804016113,
+          "foliage_roi": 7.643540859222412,
+          "character_roi": 14.940994262695312,
+          "world_ui_roi": 12.247542381286621
+        },
+        {
+          "world": 9.216070175170898,
+          "foliage_roi": 7.911784648895264,
+          "character_roi": 8.397452354431152,
+          "world_ui_roi": 9.85689640045166
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 22.200000000000003,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1013,
+      "label": "slow-3-inputs",
+      "copy": 1,
+      "transport": true,
+      "world_ui_pixels": 6287,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.9,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.03,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 8,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 82046,
+      "private_depth_zero": 0,
+      "private_depth_samples": 17,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 17,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          17,
+          17
+        ],
+        "depth_copy_matches_ngx": [
+          17,
+          17
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 7,
+      "source_native_flicker": "pan-20261030-111112-1013: pairs 16 mean|d| 3.35/255 p99 30.6 c4:7.11 >8/255 29.05% c8:3.16 >8/255 10.54%\n",
+      "angular_step_deg_p0_p50_p100": [
+        0.009979961571562251,
+        0.017869686812069636,
+        4.138711735965574
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 0.5261547565460205,
+          "foliage_roi": 0.19578996300697327,
+          "character_roi": 0.5219159722328186,
+          "world_ui_roi": 0.3218016028404236
+        },
+        {
+          "world": 7.657458305358887,
+          "foliage_roi": 11.304594039916992,
+          "character_roi": 7.213366985321045,
+          "world_ui_roi": 6.669680118560791
+        },
+        {
+          "world": 7.411076068878174,
+          "foliage_roi": 13.016073226928711,
+          "character_roi": 7.076446533203125,
+          "world_ui_roi": 6.8527398109436035
+        },
+        {
+          "world": 2.4282033443450928,
+          "foliage_roi": 3.0553457736968994,
+          "character_roi": 1.9661877155303955,
+          "world_ui_roi": 1.2568705081939697
+        },
+        {
+          "world": 0.5769246220588684,
+          "foliage_roi": 0.28156834840774536,
+          "character_roi": 0.9691861271858215,
+          "world_ui_roi": 0.8839552402496338
+        },
+        {
+          "world": 0.4192790687084198,
+          "foliage_roi": 0.26181280612945557,
+          "character_roi": 0.8854160308837891,
+          "world_ui_roi": 0.8629141449928284
+        },
+        {
+          "world": 0.5524513125419617,
+          "foliage_roi": 0.6563295722007751,
+          "character_roi": 0.8375396728515625,
+          "world_ui_roi": 0.7939869165420532
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 22.0,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1014,
+      "label": "fast-0-inputs",
+      "copy": 0,
+      "transport": true,
+      "world_ui_pixels": 0,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.9,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.9,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 7,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 1173292,
+      "private_depth_zero": 0,
+      "private_depth_samples": 0,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 0,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          0,
+          0
+        ],
+        "depth_copy_matches_ngx": [
+          0,
+          0
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 7,
+      "source_native_flicker": "pan-20261030-111212-1014: pairs 16 mean|d| 3.50/255 p99 31.1 c4:7.18 >8/255 31.30% c8:3.39 >8/255 10.37%\n",
+      "angular_step_deg_p0_p50_p100": [
+        0.019097398059973188,
+        4.183730688981638,
+        4.713731329594517
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 7.5893659591674805,
+          "foliage_roi": 12.815618515014648,
+          "character_roi": 6.900073528289795,
+          "world_ui_roi": 7.292415142059326
+        },
+        {
+          "world": 2.070824384689331,
+          "foliage_roi": 3.8632161617279053,
+          "character_roi": 1.7197306156158447,
+          "world_ui_roi": 1.0446586608886719
+        },
+        {
+          "world": 0.5517545342445374,
+          "foliage_roi": 0.2768084704875946,
+          "character_roi": 0.3493604362010956,
+          "world_ui_roi": 0.32448890805244446
+        },
+        {
+          "world": 1.1171730756759644,
+          "foliage_roi": 0.5199363827705383,
+          "character_roi": 1.8300546407699585,
+          "world_ui_roi": 0.9945076107978821
+        },
+        {
+          "world": 0.8509727120399475,
+          "foliage_roi": 0.4630352854728699,
+          "character_roi": 1.7572424411773682,
+          "world_ui_roi": 1.286063551902771
+        },
+        {
+          "world": 0.749274492263794,
+          "foliage_roi": 0.3272642493247986,
+          "character_roi": 1.782868504524231,
+          "world_ui_roi": 1.6594845056533813
+        },
+        {
+          "world": 0.263292133808136,
+          "foliage_roi": 0.16479310393333435,
+          "character_roi": 0.6330486536026001,
+          "world_ui_roi": 0.5783258080482483
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 21.5978204359203,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1015,
+      "label": "fast-1-inputs",
+      "copy": 1,
+      "transport": true,
+      "world_ui_pixels": 8750,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 1.97,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.03,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.77,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.1,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 8,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 85300,
+      "private_depth_zero": 0,
+      "private_depth_samples": 16,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 16,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          16,
+          16
+        ],
+        "depth_copy_matches_ngx": [
+          16,
+          16
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 7,
+      "source_native_flicker": "pan-20261030-111312-1015: pairs 15 mean|d| 3.21/255 p99 27.3 c4:6.50 >8/255 28.22% c8:2.94 >8/255 8.35%\n",
+      "angular_step_deg_p0_p50_p100": [
+        4.331486130232458,
+        4.4769665242674375,
+        4.812726996161174
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 8.030902862548828,
+          "foliage_roi": 6.711523532867432,
+          "character_roi": 7.671078205108643,
+          "world_ui_roi": 7.559230804443359
+        },
+        {
+          "world": 7.162174224853516,
+          "foliage_roi": 6.25042724609375,
+          "character_roi": 6.125887393951416,
+          "world_ui_roi": 7.492796897888184
+        },
+        {
+          "world": 8.041707992553711,
+          "foliage_roi": 6.4477434158325195,
+          "character_roi": 7.049074172973633,
+          "world_ui_roi": 7.304542064666748
+        },
+        {
+          "world": 8.18264102935791,
+          "foliage_roi": 5.948430061340332,
+          "character_roi": 7.656313419342041,
+          "world_ui_roi": 8.024491310119629
+        },
+        {
+          "world": 11.758479118347168,
+          "foliage_roi": 11.077386856079102,
+          "character_roi": 12.013331413269043,
+          "world_ui_roi": 12.021076202392578
+        },
+        {
+          "world": 11.060827255249023,
+          "foliage_roi": 12.118815422058105,
+          "character_roi": 10.521883010864258,
+          "world_ui_roi": 12.463168144226074
+        },
+        {
+          "world": 8.716395378112793,
+          "foliage_roi": 9.23577880859375,
+          "character_roi": 8.770594596862793,
+          "world_ui_roi": 9.963313102722168
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 22.19774045190094,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1016,
+      "label": "fast-2-inputs",
+      "copy": 0,
+      "transport": true,
+      "world_ui_pixels": 18567,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 1.97,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.03,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.77,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.97,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 8,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 11261,
+      "private_depth_zero": 0,
+      "private_depth_samples": 0,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 0,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          0,
+          0
+        ],
+        "depth_copy_matches_ngx": [
+          0,
+          0
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 7,
+      "source_native_flicker": "pan-20261030-111412-1016: pairs 15 mean|d| 3.24/255 p99 28.1 c4:9.34 >8/255 39.95% c8:2.97 >8/255 8.56%\n",
+      "angular_step_deg_p0_p50_p100": [
+        3.548409199075582,
+        4.167309554012313,
+        4.928639812865538
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 8.384333610534668,
+          "foliage_roi": 10.247895240783691,
+          "character_roi": 12.14058780670166,
+          "world_ui_roi": 9.550533294677734
+        },
+        {
+          "world": 1.9225902557373047,
+          "foliage_roi": 2.5377676486968994,
+          "character_roi": 2.369906425476074,
+          "world_ui_roi": 2.280702829360962
+        },
+        {
+          "world": 0.5662798881530762,
+          "foliage_roi": 0.6085359454154968,
+          "character_roi": 0.858269214630127,
+          "world_ui_roi": 0.6814813613891602
+        },
+        {
+          "world": 1.0347647666931152,
+          "foliage_roi": 0.9092158675193787,
+          "character_roi": 1.7549667358398438,
+          "world_ui_roi": 1.627728819847107
+        },
+        {
+          "world": 0.7964988946914673,
+          "foliage_roi": 0.8075665831565857,
+          "character_roi": 1.2302141189575195,
+          "world_ui_roi": 0.9628490209579468
+        },
+        {
+          "world": 0.2891673743724823,
+          "foliage_roi": 0.3417607545852661,
+          "character_roi": 0.32778966426849365,
+          "world_ui_roi": 0.21391569077968597
+        },
+        {
+          "world": 0.4562944173812866,
+          "foliage_roi": 0.23333336412906647,
+          "character_roi": 0.6628486514091492,
+          "world_ui_roi": 0.491702675819397
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 21.700000000000003,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1017,
+      "label": "fast-3-inputs",
+      "copy": 1,
+      "transport": true,
+      "world_ui_pixels": 30264,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 1.97,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.03,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.8,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.07,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 6,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 1389579,
+      "private_depth_zero": 0,
+      "private_depth_samples": 17,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 17,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          17,
+          17
+        ],
+        "depth_copy_matches_ngx": [
+          17,
+          17
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 7,
+      "source_native_flicker": "pan-20261030-111512-1017: pairs 16 mean|d| 3.19/255 p99 27.3 c4:6.48 >8/255 28.51% c8:2.96 >8/255 8.23%\n",
+      "angular_step_deg_p0_p50_p100": [
+        4.054812340491449,
+        4.4036115515635625,
+        4.85374194106927
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 7.1449103355407715,
+          "foliage_roi": 10.360569953918457,
+          "character_roi": 7.3764967918396,
+          "world_ui_roi": 8.386871337890625
+        },
+        {
+          "world": 6.814228534698486,
+          "foliage_roi": 10.509441375732422,
+          "character_roi": 7.3173604011535645,
+          "world_ui_roi": 7.670178413391113
+        },
+        {
+          "world": 7.249880790710449,
+          "foliage_roi": 11.244829177856445,
+          "character_roi": 8.028031349182129,
+          "world_ui_roi": 8.168364524841309
+        },
+        {
+          "world": 7.728909492492676,
+          "foliage_roi": 11.129658699035645,
+          "character_roi": 8.597554206848145,
+          "world_ui_roi": 8.688511848449707
+        },
+        {
+          "world": 9.664374351501465,
+          "foliage_roi": 11.838997840881348,
+          "character_roi": 10.692487716674805,
+          "world_ui_roi": 11.033376693725586
+        },
+        {
+          "world": 10.147042274475098,
+          "foliage_roi": 11.924985885620117,
+          "character_roi": 10.38673210144043,
+          "world_ui_roi": 10.47827434539795
+        },
+        {
+          "world": 13.318704605102539,
+          "foliage_roi": 14.179348945617676,
+          "character_roi": 16.0205020904541,
+          "world_ui_roi": 12.946504592895508
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 21.4,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1018,
+      "label": "pan-0-inputs",
+      "copy": 0,
+      "transport": true,
+      "world_ui_pixels": 1794,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.6,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 8,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 3488296,
+      "private_depth_zero": 0,
+      "private_depth_samples": 0,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 0,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          0,
+          0
+        ],
+        "depth_copy_matches_ngx": [
+          0,
+          0
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 8,
+      "source_native_flicker": "pan-20261030-111612-1018: pairs 15 mean|d| 2.93/255 p99 31.7 c4:5.71 >8/255 21.84% c8:2.87 >8/255 7.87%\n",
+      "angular_step_deg_p0_p50_p100": [
+        0.009972198564531057,
+        0.01758301753667796,
+        0.029378007670368755
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 8.7371187210083,
+          "foliage_roi": 6.5813446044921875,
+          "character_roi": 12.274584770202637,
+          "world_ui_roi": 9.249715805053711
+        },
+        {
+          "world": 11.335152626037598,
+          "foliage_roi": 10.044907569885254,
+          "character_roi": 15.303351402282715,
+          "world_ui_roi": 11.686433792114258
+        },
+        {
+          "world": 10.321063041687012,
+          "foliage_roi": 8.539786338806152,
+          "character_roi": 14.900257110595703,
+          "world_ui_roi": 10.813933372497559
+        },
+        {
+          "world": 7.553078651428223,
+          "foliage_roi": 5.7574005126953125,
+          "character_roi": 11.631689071655273,
+          "world_ui_roi": 7.814640045166016
+        },
+        {
+          "world": 4.107165336608887,
+          "foliage_roi": 2.4337456226348877,
+          "character_roi": 7.722654342651367,
+          "world_ui_roi": 4.530405521392822
+        },
+        {
+          "world": 0.6115085482597351,
+          "foliage_roi": 0.37617912888526917,
+          "character_roi": 1.3914990425109863,
+          "world_ui_roi": 0.6755527257919312
+        },
+        {
+          "world": 0.8709489107131958,
+          "foliage_roi": 0.6390408277511597,
+          "character_roi": 2.5613796710968018,
+          "world_ui_roi": 1.0468958616256714
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 21.897820435920302,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1019,
+      "label": "pan-1-inputs",
+      "copy": 1,
+      "transport": true,
+      "world_ui_pixels": 0,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.77,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.03,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 8,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 48,
+      "private_depth_zero": 0,
+      "private_depth_samples": 17,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 17,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          17,
+          17
+        ],
+        "depth_copy_matches_ngx": [
+          17,
+          17
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 7,
+      "source_native_flicker": "pan-20261030-111712-1019: pairs 16 mean|d| 13.74/255 p99 116.7 c4:5.92 >8/255 23.29% c8:15.17 >8/255 22.64%\n",
+      "angular_step_deg_p0_p50_p100": [
+        0.0099764039233653,
+        0.017845091119678358,
+        0.029411029844327738
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 6.281716346740723,
+          "foliage_roi": 10.213397979736328,
+          "character_roi": 4.551759243011475,
+          "world_ui_roi": 5.4081621170043945
+        },
+        {
+          "world": 6.904782295227051,
+          "foliage_roi": 10.682226181030273,
+          "character_roi": 5.016879081726074,
+          "world_ui_roi": 6.035031795501709
+        },
+        {
+          "world": 6.073716640472412,
+          "foliage_roi": 9.089054107666016,
+          "character_roi": 4.107983589172363,
+          "world_ui_roi": 5.213729381561279
+        },
+        {
+          "world": 6.707618713378906,
+          "foliage_roi": 9.851692199707031,
+          "character_roi": 4.162211894989014,
+          "world_ui_roi": 5.842593193054199
+        },
+        {
+          "world": 6.4262800216674805,
+          "foliage_roi": 10.08765983581543,
+          "character_roi": 4.07398796081543,
+          "world_ui_roi": 5.441787242889404
+        },
+        {
+          "world": 8.8908109664917,
+          "foliage_roi": 14.48752212524414,
+          "character_roi": 5.416811943054199,
+          "world_ui_roi": 7.052741527557373
+        },
+        {
+          "world": 7.666391849517822,
+          "foliage_roi": 12.351858139038086,
+          "character_roi": 4.920845985412598,
+          "world_ui_roi": 6.129903793334961
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 20.0,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1020,
+      "label": "pan-2-inputs",
+      "copy": 0,
+      "transport": true,
+      "world_ui_pixels": 0,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.87,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.87,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 8,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 48,
+      "private_depth_zero": 0,
+      "private_depth_samples": 0,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 0,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          0,
+          0
+        ],
+        "depth_copy_matches_ngx": [
+          0,
+          0
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 7,
+      "source_native_flicker": "pan-20261030-111813-1020: pairs 16 mean|d| 5.42/255 p99 45.6 c4:7.27 >8/255 29.79% c8:5.07 >8/255 15.00%\n",
+      "angular_step_deg_p0_p50_p100": [
+        0.00998068507267805,
+        0.017869144279838746,
+        0.029378007670368755
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 5.416975498199463,
+          "foliage_roi": 8.77821159362793,
+          "character_roi": 4.417297840118408,
+          "world_ui_roi": 5.160288333892822
+        },
+        {
+          "world": 7.045385360717773,
+          "foliage_roi": 10.342897415161133,
+          "character_roi": 5.687654495239258,
+          "world_ui_roi": 7.2826762199401855
+        },
+        {
+          "world": 6.300168037414551,
+          "foliage_roi": 8.418554306030273,
+          "character_roi": 5.700705051422119,
+          "world_ui_roi": 7.159789085388184
+        },
+        {
+          "world": 9.908636093139648,
+          "foliage_roi": 10.428146362304688,
+          "character_roi": 8.85523796081543,
+          "world_ui_roi": 12.12571907043457
+        },
+        {
+          "world": 7.626771450042725,
+          "foliage_roi": 11.870277404785156,
+          "character_roi": 7.577805995941162,
+          "world_ui_roi": 8.092158317565918
+        },
+        {
+          "world": 5.314054012298584,
+          "foliage_roi": 6.519705295562744,
+          "character_roi": 5.017731189727783,
+          "world_ui_roi": 5.826289176940918
+        },
+        {
+          "world": 4.323883056640625,
+          "foliage_roi": 6.229528427124023,
+          "character_roi": 4.5140862464904785,
+          "world_ui_roi": 4.376856327056885
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 20.200000000000003,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    },
+    {
+      "serial": 1021,
+      "label": "pan-3-inputs",
+      "copy": 1,
+      "transport": true,
+      "world_ui_pixels": 0,
+      "sdk": [
+        {
+          "status": 0,
+          "ratio": 1.97,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.03,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.83,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 1.97,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        },
+        {
+          "status": 0,
+          "ratio": 2.0,
+          "api_errors": 0
+        }
+      ],
+      "original_late_depth_zero": 8,
+      "original_late_depth_samples": 16,
+      "original_late_mv_nonfinite": 48,
+      "private_depth_zero": 0,
+      "private_depth_samples": 17,
+      "private_mv_nonfinite": 0,
+      "private_mv_samples": 17,
+      "copies_equal_ngx": {
+        "copy_matches_ngx": [
+          17,
+          17
+        ],
+        "depth_copy_matches_ngx": [
+          17,
+          17
+        ]
+      },
+      "host_toggles": 0,
+      "timer_resets": 7,
+      "source_native_flicker": "pan-20261030-111913-1021: pairs 16 mean|d| 15.64/255 p99 117.9 c4:6.17 >8/255 24.39% c8:17.41 >8/255 28.05%\n",
+      "angular_step_deg_p0_p50_p100": [
+        0.009980542436239385,
+        0.017870167582532404,
+        0.029379387388104087
+      ],
+      "presented_midpoint_residual_code_values": [
+        {
+          "world": 3.5684731006622314,
+          "foliage_roi": 4.378378391265869,
+          "character_roi": 2.826247215270996,
+          "world_ui_roi": 3.439016819000244
+        },
+        {
+          "world": 5.067192554473877,
+          "foliage_roi": 6.868374347686768,
+          "character_roi": 3.897948980331421,
+          "world_ui_roi": 4.996454238891602
+        },
+        {
+          "world": 4.483883857727051,
+          "foliage_roi": 5.6696038246154785,
+          "character_roi": 3.5771591663360596,
+          "world_ui_roi": 4.301383972167969
+        },
+        {
+          "world": 3.9122273921966553,
+          "foliage_roi": 4.6488142013549805,
+          "character_roi": 3.307901382446289,
+          "world_ui_roi": 3.8834567070007324
+        },
+        {
+          "world": 3.6278533935546875,
+          "foliage_roi": 4.400947570800781,
+          "character_roi": 3.02968168258667,
+          "world_ui_roi": 3.5603113174438477
+        },
+        {
+          "world": 8.443276405334473,
+          "foliage_roi": 14.18579387664795,
+          "character_roi": 6.265956878662109,
+          "world_ui_roi": 8.303995132446289
+        },
+        {
+          "world": 9.202434539794922,
+          "foliage_roi": 14.749920845031738,
+          "character_roi": 7.458530426025391,
+          "world_ui_roi": 9.771989822387695
+        }
+      ],
+      "qa_phase_summary": {
+        "fps_median": 19.9,
+        "displayed_rendered_median": 2.0,
+        "host_toggles_interior": 0,
+        "sdk_transitions_interior": [],
+        "faults": []
+      },
+      "same_gpu_pose": false
+    }
+  ],
+  "new_vuids": [],
+  "measurement_vuids": [],
+  "limitations": [
+    "Existing fg_motion_gate measures primary-camera tracking, not generated-image quality; phase_metrics is reused. fg_static_effects requires same-pose FG 0/2 debug repeats; this FG 2 motion job cannot satisfy that gate.",
+    "Snapshot parity is inferred from three probe captures: odd PNGs exactly match rendered endpoints; intervening even PNGs are generated. Main separated captures lack simultaneous endpoint identities.",
+    "Midpoint residual is unwarped, fixed-ROI review only: camera motion and changing ROI contents contribute; it cannot prove interpolation quality not worse.",
+    "Readback resets SDK frame timers. Matched UI/character/foliage support and normal-cadence generated quality remain unqualified."
+  ],
+  "summary": {
+    "default_changed": false,
+    "depth_zero_off": 42,
+    "depth_samples_off": 96,
+    "mv_nonfinite_components_off": 4890263,
+    "private_depth_zero": 0,
+    "private_mv_nonfinite": 0,
+    "private_pairs": 101,
+    "copy_gpu_ms_median": 0.026,
+    "ratio_range": [
+      1.6,
+      2.1
+    ],
+    "ratio_non2": 33,
+    "ratio_samples": 462,
+    "host_toggles": 0,
+    "timer_resets": 85,
+    "fast_midpoint_review": {
+      "0": {
+        "world": 1.9030418928180421,
+        "foliage_roi": 2.4369105409298624,
+        "character_roi": 2.4512115312474116,
+        "world_ui_roi": 2.070632705731051
+      },
+      "1": {
+        "world": 8.930084160396031,
+        "foliage_roi": 9.926995515823364,
+        "character_roi": 9.159094776426043,
+        "world_ui_roi": 9.442907163075038
+      }
+    }
+  },
+  "quality_gate": "INVALID: sampling stalls, intermittent slow input, unmatched semantic support; fast review proxies also worsen",
+  "queue_validity": "Transport/expect lines passed; this is not a quality PASS",
+  "foliage_rotation": {
+    "rows": [
+      {
+        "serial": 1030,
+        "fg": 0,
+        "hover_requested": false,
+        "transport": true,
+        "world_ui_pixels": 0,
+        "near_ui_foliage_pixels": 10733,
+        "native_final_foliage_reprojected_mae_code": 6.68,
+        "above_8_code_pct": 28.14,
+        "source": "pan-20261030-112321-1030: pairs 15 mean|d| 3.45/255 p99 34.0 c4:6.68 >8/255 28.14% c8:3.25 >8/255 9.41%",
+        "sdk_ratio_range": null,
+        "sdk_ratio_median": null,
+        "interior_host_toggles": 0,
+        "timer_resets": 0,
+        "watch_ratio_median": 1.0
+      },
+      {
+        "serial": 1031,
+        "fg": 0,
+        "hover_requested": true,
+        "transport": true,
+        "world_ui_pixels": 2547,
+        "near_ui_foliage_pixels": 380,
+        "native_final_foliage_reprojected_mae_code": 7.17,
+        "above_8_code_pct": 30.34,
+        "source": "pan-20261030-112347-1031: pairs 16 mean|d| 3.33/255 p99 28.5 c4:7.17 >8/255 30.34% c8:3.05 >8/255 8.81%",
+        "sdk_ratio_range": null,
+        "sdk_ratio_median": null,
+        "interior_host_toggles": 0,
+        "timer_resets": 0,
+        "watch_ratio_median": 1.0
+      },
+      {
+        "serial": 1032,
+        "fg": 0,
+        "hover_requested": false,
+        "transport": true,
+        "world_ui_pixels": 0,
+        "near_ui_foliage_pixels": 3942,
+        "native_final_foliage_reprojected_mae_code": 9.99,
+        "above_8_code_pct": 40.64,
+        "source": "pan-20261030-112413-1032: pairs 16 mean|d| 3.49/255 p99 30.6 c4:9.99 >8/255 40.64% c8:3.21 >8/255 9.40%",
+        "sdk_ratio_range": null,
+        "sdk_ratio_median": null,
+        "interior_host_toggles": 0,
+        "timer_resets": 0,
+        "watch_ratio_median": 1.0
+      },
+      {
+        "serial": 1033,
+        "fg": 0,
+        "hover_requested": true,
+        "transport": true,
+        "world_ui_pixels": 15008,
+        "near_ui_foliage_pixels": 0,
+        "native_final_foliage_reprojected_mae_code": 6.47,
+        "above_8_code_pct": 28.58,
+        "source": "pan-20261030-112439-1033: pairs 16 mean|d| 3.04/255 p99 25.8 c4:6.47 >8/255 28.58% c8:2.82 >8/255 7.74%",
+        "sdk_ratio_range": null,
+        "sdk_ratio_median": null,
+        "interior_host_toggles": 0,
+        "timer_resets": 0,
+        "watch_ratio_median": 1.0
+      },
+      {
+        "serial": 1034,
+        "fg": 2,
+        "hover_requested": false,
+        "transport": true,
+        "world_ui_pixels": 0,
+        "near_ui_foliage_pixels": 5235,
+        "native_final_foliage_reprojected_mae_code": 10.05,
+        "above_8_code_pct": 41.49,
+        "source": "pan-20261030-112505-1034: pairs 16 mean|d| 3.84/255 p99 32.4 c4:10.05 >8/255 41.49% c8:3.58 >8/255 11.15%",
+        "sdk_ratio_range": [
+          1.97,
+          2.03
+        ],
+        "sdk_ratio_median": 2.0,
+        "interior_host_toggles": 0,
+        "timer_resets": 2,
+        "watch_ratio_median": 1.9957264957264957
+      },
+      {
+        "serial": 1035,
+        "fg": 2,
+        "hover_requested": true,
+        "transport": true,
+        "world_ui_pixels": 14905,
+        "near_ui_foliage_pixels": 24794,
+        "native_final_foliage_reprojected_mae_code": 11.07,
+        "above_8_code_pct": 43.1,
+        "source": "pan-20261030-112531-1035: pairs 16 mean|d| 3.68/255 p99 32.5 c4:11.07 >8/255 43.10% c8:3.36 >8/255 10.05%",
+        "sdk_ratio_range": [
+          2.0,
+          2.0
+        ],
+        "sdk_ratio_median": 2.0,
+        "interior_host_toggles": 0,
+        "timer_resets": 2,
+        "watch_ratio_median": 2.0
+      },
+      {
+        "serial": 1036,
+        "fg": 2,
+        "hover_requested": false,
+        "transport": true,
+        "world_ui_pixels": 0,
+        "near_ui_foliage_pixels": 9221,
+        "native_final_foliage_reprojected_mae_code": 8.88,
+        "above_8_code_pct": 38.45,
+        "source": "pan-20261030-112557-1036: pairs 15 mean|d| 3.55/255 p99 30.7 c4:8.88 >8/255 38.45% c8:3.26 >8/255 9.31%",
+        "sdk_ratio_range": [
+          1.97,
+          2.03
+        ],
+        "sdk_ratio_median": 2.0,
+        "interior_host_toggles": 0,
+        "timer_resets": 2,
+        "watch_ratio_median": 2.004385964912281
+      },
+      {
+        "serial": 1037,
+        "fg": 2,
+        "hover_requested": true,
+        "transport": true,
+        "world_ui_pixels": 0,
+        "near_ui_foliage_pixels": 4863,
+        "native_final_foliage_reprojected_mae_code": 10.82,
+        "above_8_code_pct": 44.78,
+        "source": "pan-20261030-112623-1037: pairs 16 mean|d| 3.88/255 p99 33.5 c4:10.82 >8/255 44.78% c8:3.59 >8/255 11.15%",
+        "sdk_ratio_range": [
+          1.97,
+          2.03
+        ],
+        "sdk_ratio_median": 2.0,
+        "interior_host_toggles": 0,
+        "timer_resets": 2,
+        "watch_ratio_median": 2.0014963880288956
+      }
+    ],
+    "ui_control_valid": false,
+    "selection_control": "Hover requested, not actual character selection/deselection. Nameplates/rings not proved matched. Dialogue varies.",
+    "decision": "No causal attribution; no fix. Native-final residual is pre-FG and includes physical foliage motion and reprojection error, not only flicker.",
+    "capture_limit": "Native readback stalls; camera paths and semantic support are not paired.",
+    "log": "captures\\queue\\logs\\sup-fg-foliage-rotation.1.112014.log",
+    "runner": "captures\\queue\\logs\\sup-fg-foliage-rotation.1.112014.runner.txt",
+    "planned_fg_transitions": [
+      "11:23:15.267  [sl] slDLSSGSetOptions(mode off, frames to generate 1, flags 0x18): ok",
+      "11:24:59.322  [sl] slDLSSGSetOptions(mode on, frames to generate 1, flags 0x18): ok"
+    ]
+  },
+  "validation": {
+    "build_test": "PASS: 13/13 CTests",
+    "camera_plan_checks": 25,
+    "raw_bursts_analyzed_and_deleted": 23,
+    "queue_jobs": [
+      {
+        "job": "sup-fg-copy-probe",
+        "valid": true,
+        "outcome": "Run ended: done after 275s (exclusive)",
+        "nv153": 0,
+        "dumps": [],
+        "build_changed": false
+      },
+      {
+        "job": "sup-fg-copy-motion-gate",
+        "valid": true,
+        "outcome": "Run ended: done after 902s (exclusive)",
+        "nv153": 0,
+        "dumps": [],
+        "build_changed": false
+      },
+      {
+        "job": "sup-fg-foliage-rotation",
+        "valid": true,
+        "outcome": "Run ended: done after 391s (exclusive)",
+        "nv153": 0,
+        "dumps": [],
+        "build_changed": false
+      }
+    ]
+  }
+}
