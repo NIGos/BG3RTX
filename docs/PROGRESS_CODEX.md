@@ -1,5 +1,16 @@
 # BG3RTX progress
 
+## Native scalp CPU contract - 2026-10-30, isolated and not deployed
+
+`codex/native-coverage` adds native scalp depth/shadow hash mapping, bounded
+material/Frame capture and full scalar root/smoothstep/dither evaluation. No
+production caller, key, ABI or shader change. This is preparation for the actual
+coverage correction, not a live fix. MSVC standalone test: 178,522 checks pass;
+43,191 shadow and 2,826 dither reference decisions. Exact raster/sampler capture,
+Hair view/strand/depth attributes and cascade material records remain required.
+Design and exact source hashes: docs/TRACK_D_RT.md, native scalp section.
+No live files or game state changed; no GPU cost or quality gate claimed.
+
 ## User steering: native shader discovery before workarounds - 2026-10-30
 
 Search the packaged native shaders thoroughly before choosing an unknown-shader

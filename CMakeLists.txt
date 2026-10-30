@@ -140,6 +140,8 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(native_scalp_coverage_test tests/native_scalp_coverage_test.cpp)
+add_test(NAME native_scalp_coverage_test COMMAND native_scalp_coverage_test)
 add_executable(descriptor_epoch_test tests/descriptor_epoch_test.cpp)
 add_test(NAME descriptor_epoch_test COMMAND descriptor_epoch_test)
 add_executable(mapped_copy_test tests/mapped_copy_test.cpp)
