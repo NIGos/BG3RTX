@@ -18,7 +18,7 @@ bool same_source(const ContentSource& a,const ContentSource& b) {
 }
 bool admissible_source(const ContentSource& s) {
   return s.buffer && s.imageId && s.viewId && s.levelCount && s.levelCount<=17 &&
-    s.imageOffset>=8 && s.imageOffset<=UINT32_MAX && s.imageOffset%4==0 &&
+    s.imageOffset>=16 && s.imageOffset<=UINT32_MAX && s.imageOffset%4==0 &&
     s.imageOffset<=s.bytes && s.bytes-s.imageOffset>=4 &&
     (s.requiredSamplingCertificate==1 || s.requiredSamplingCertificate==2);
 }

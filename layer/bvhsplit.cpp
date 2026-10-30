@@ -34,6 +34,7 @@
 #include "host.h"
 #include "../common/dyn_hold.h"
 #include "../common/cascade_casters.h"
+#include "omm_native_plain.h"
 
 #include <algorithm>
 #include <smmintrin.h>
@@ -401,6 +402,7 @@ struct FrameDraw {
   VkDeviceSize soup_off = 0;
   uint32_t prims = 0;
   uint32_t rec = kNone;
+  std::shared_ptr<omm::NativePlainCapture> omm_material;
   std::vector<Range> ranges;
 };
 std::vector<FrameDraw> g_draws;
@@ -826,7 +828,7 @@ void bvh_begin_capture(VkCommandBuffer) {
   g_capture_all_meshes = cfg_int("rt_mesh_capture", 0) != 0;
 }
 
-BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris) {
+BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris) {
   std::lock_guard<std::mutex> lock(g_mu);
   *token = uint32_t(g_draws.size());
   g_draws.emplace_back();
@@ -899,6 +901,15 @@ BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint
   if (!mk) mk = 1;
   fd.mesh_key = mk;
   fd.tris_per_instance = d.args.count / 3;
+  // Capture while the exact native draw is still bound, including cached draws
+  // that skip transform feedback. Build-time tracker state belongs to another
+  // pipeline and cannot recover this material's sampler/descriptor identity.
+  if(d.alpha && ip.uv_ok && cfg_int("rt_omm",0) && omm::available_for(g_dd)) {
+    AlphaFs fs{};AlphaSnapshot source{};omm::NativePlainCapture captured{};
+    if(alpha_lookup(s->fs,&fs) && alpha_capture_source(cmd,fs,0,fd.tris_per_instance,&source) &&
+       omm::capture_native_plain(cmd,fs,d.vs,source,&captured))
+      fd.omm_material=std::make_shared<omm::NativePlainCapture>(std::move(captured));
+  }
   if (g_capture_all_meshes) return BVH_CAPTURE;
   auto it = g_meshes.find(mk);
   if (it == g_meshes.end()) {

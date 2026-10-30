@@ -1,6 +1,6 @@
 // GPU-execution epochs. No push constants; ordinary native push values survive.
-[[vk::binding(0,0)]] RWByteAddressBuffer globalEpoch;
-[[vk::binding(1,0)]] RWByteAddressBuffer imageEpoch;
+[[vk::binding(0,0)]] globallycoherent RWByteAddressBuffer globalEpoch;
+[[vk::binding(1,0)]] globallycoherent RWByteAddressBuffer imageEpoch;
 [[vk::constant_id(0)]] const uint beginWrite=0u;
 void disable() {uint unused;globalEpoch.InterlockedOr(4u,1u,unused);}
 void increment(bool image) {

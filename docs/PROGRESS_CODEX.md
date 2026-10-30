@@ -1,5 +1,34 @@
 # BG3RTX progress
 
+## Combined candidate: native material capture and coherent OMM guards - 2026-10-30
+
+Isolated codex/omm-bake now includes native Hair plus Scalp camera dither,
+immutable-sampler/source factory, paired before/after image-write epochs, and
+ticket-owned attached BLAS. Main/user build is unchanged. No game launched.
+Both ABI-19 DLLs build; 31/31 CTests pass. Native capture now runs at eligible
+static draws, including cached draws; actual accelerated scene attachment is
+still pending. Do not mistake captured metadata for active OMM acceleration.
+
+Real RTX 5090 probe traverses the production ticket-owned BLAS: six rays, zero
+contradictions; BLAS is destroyed before its micromap after actual completion.
+Fourteen counter-phase states and fourteen scene-validator cases pass, along
+with 2,176 UNORM and 8,704 BC endpoint checks; zero Vulkan validation errors.
+Evidence: docs/evidence/omm-coherent-attached-scene-20261030.txt.
+
+All four query entry points can choose the original, micromap-free reference
+scene when the GPU content proof fails. Readers use coherent atomic snapshots
+and device memory barriers around active-write/epoch checks. Native image/RT
+synchronization remains mandatory: these counters cannot repair a concurrent
+image read/write race. The shader branches are not enabled by a production
+layout/caller yet. Native scene clone, descriptor wiring, nonzero useful known
+coverage and live same-ray/cost gates remain OPEN; rt_omm stays off by default.
+
+Before the final coherent-reader change, 190 ordinary/capable entry points were
+byte-identical with RT_OMM_SCENE off and compiled/validated with it on. The final
+coherent readers plus Scalp were compiled/validated in Sun, origin, GI and
+reflection entries; producer/init/content/scene kernels also validate. No GPU
+pass timing or acceleration claim follows from these synthetic checks.
+
 ## Scalp camera coverage candidate verified - 2026-10-30, default off
 
 Observed native Scalp camera shaders now capture original Frame, projection and

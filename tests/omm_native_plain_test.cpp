@@ -56,6 +56,7 @@ int main(){
  sampler.immutable=false;check(!take());sampler.immutable=true;
  sampler.sampler.info.addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;check(!take());sampler.sampler.info.addressModeU=VK_SAMPLER_ADDRESS_MODE_REPEAT;
  sourceAvailable=false;check(!take());sourceAvailable=true;
+ source.imageOffset=8;check(!take());source.imageOffset=16;
  source.levelCount=18;check(!take());source.levelCount=4;
  source.requiredSamplingCertificate=0;check(!take());source.requiredSamplingCertificate=2;check(take());source.requiredSamplingCertificate=1;
  state.fs++;check(!take());state.fs--;state.vs++;check(!take());state.vs--;

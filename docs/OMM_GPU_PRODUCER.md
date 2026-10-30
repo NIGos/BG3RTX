@@ -59,9 +59,21 @@ Validation in the isolated worktree:
   the two into a native-textured scene gate.
 - No game launch, live deployment, new GPU pass timing or performance claim.
 
-Required next integration: scene validation of the captured content epochs and
-reference selection on changes; material-specific BLAS variants with
-baseline/reference TLAS; exact ticket use and
+The backend now also builds/owns the attached material BLAS under the micromap
+ticket. The existing six-ray GPU fixture uses this production builder. BLAS is
+destroyed before micromap/input storage, after actual completion and command
+reference retirement. Actual Vulkan allocation requirements count against the
+256 MiB backend budget, including attached BLAS storage and scratch.
+
+The scene validator and all four reference-query branches are implemented and
+compile. Fourteen GPU validator cases cover stale/current/unrelated/multiple
+image epochs, invalid records and in-progress writers; no native scene caller
+or descriptor setup is installed yet. Native source capture is now invoked at
+actual eligible static draw bindings, but does not attach micromaps to BG3 yet.
+
+Required next integration: material-specific BLAS variants with
+baseline/reference TLAS; scene validation dispatch and shader descriptor wiring;
+exact ticket use and
 retirement at every scene build/traversal; GPU same-ray known-state comparison;
 nonzero useful known coverage and measured BG3 quality/cost with FG active. Higher
 subdivision and VT coverage remain open. Level 0 is an initial production wire
