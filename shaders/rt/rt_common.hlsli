@@ -388,7 +388,11 @@ AlphaRead native_hair_alpha(uint a,float2 uv,float g,uint mask_tex,uint noise_te
     float2 z=float2(frac(((mad(raster.y,2.0,raster.x)-1.5)+phase)*0.2),
                     frac(mad(raster.x,2.4084,raster.y*3.2535)));
     float dither=frac(dot(float2(0.833,0.1666),z)+gNativeHair.fade.x);
-    r.a=mad(cov,density,dither-0.6667);
+    // Pubes has no density scalar: its native FMA combines base*angular,
+    // unlike Hair's already-rounded coverage times the separate density.
+    if(gAlphaRec.Load(a+196u)==1u)
+      r.a=mad(mask.w*mad(-mask.z,hair_param(a,8),1.0),angular,dither-0.6667);
+    else r.a=mad(cov,density,dither-0.6667);
   } else r.a=cov*density;
   r.ok=isfinite(r.a) && isfinite(thick) && all(isfinite(world));
   return r;

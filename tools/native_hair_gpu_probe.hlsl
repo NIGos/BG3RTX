@@ -23,4 +23,31 @@ void main(){
  Result.Store(76,uint(primary.t>=0 && !primary.aborted && alpha_instance(primary.inst,primary.geom)));
  float3 normal=physical.t>=0 && !physical.aborted?rt_hit_normal(physical):0.0.xxx;
  Result.Store3(80,asuint(normal));
+ if(gAlphaRec.Load(16u+8u)==4u && gAlphaRec.Load(16u+196u)==1u) {
+  // Test the actual new Pubes FMA branch with angular<1. Native equations are
+  // evaluated independently below; the existing query cases still test geometry.
+  g_rt_class=0;gNativeHair.valid=true;gNativeHair.physical=false;
+  gNativeHair.p=float3(1,0,10);gNativeHair.n=float3(1,0,0);
+  gNativeHair.t=float3(0,1,0);gNativeHair.b=float3(0,0,1);gNativeHair.fade=0;
+  AlphaRead actual=native_hair_alpha(16u,0.5.xx,0,1,2);
+  float4 mask=gAlphaTex[1].SampleLevel(gAlphaWrap,0.5.xx,0);
+  float3 view=-(gNativeHair.p-normalize(gNativeHair.p)*(20.0*0.01));
+  float3 v=normalize(view),nn=normalize(gNativeHair.n);
+  float3 local=normalize(float3(dot(v,gNativeHair.b),dot(v,gNativeHair.n),dot(v,gNativeHair.t)));
+  float3 world=normalize(gNativeHair.b*local.x+gNativeHair.n*local.y+gNativeHair.t*local.z);
+  float angular=saturate(abs(dot(world,nn))*5.0);
+  float4x4 vp=float4x4(asfloat(gAlphaRec.Load4(112u)),asfloat(gAlphaRec.Load4(128u)),
+                       asfloat(gAlphaRec.Load4(144u)),asfloat(gAlphaRec.Load4(160u)));
+  float4 clip=mul(float4(gNativeHair.p,1),vp),viewport=asfloat(gAlphaRec.Load4(176u));
+  float2 raster=floor(viewport.xy+(float2(clip.x,-clip.y)/clip.w+1.0)*viewport.zw*0.5)+0.5;
+  float2 frame=asfloat(gAlphaRec.Load2(48u));
+  float phase=frame.x-4.0*trunc(frame.x/4.0);
+  float noise=frac(dot(float2(0.833,0.1666),float2(frac(((mad(raster.y,2.0,raster.x)-1.5)+phase)*0.2),
+                                                           frac(mad(raster.x,2.4084,raster.y*3.2535)))));
+  float base=mask.w*mad(-mask.z,hair_param(16u,8u),1.0);
+  float reference=frame.y!=0?mad(base,angular,noise-0.6667):base*angular;
+  Result.Store(96,asuint(actual.a));Result.Store(100,asuint(reference));Result.Store(104,uint(actual.ok));
+  precise float rounded=base*angular;
+  Result.Store(108,asuint(frame.y!=0?mad(rounded,1.0,noise-0.6667):rounded));
+ }
 }

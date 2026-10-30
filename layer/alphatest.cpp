@@ -511,6 +511,7 @@ static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_
     std::memcpy(bytes+96,captured.view_projection.data(),64);
     std::memcpy(bytes+176,captured.near_far.data(),8);
     std::memcpy(bytes+184,&captured.orthographic,4);
+    std::memcpy(bytes+196,&captured.subtype,4); // 0 Hair, 1 Pubes; native dither FMA grouping.
     const float width=std::clamp(captured.material[7],0.0f,1.0f);
     const float edge0=std::fma(-width,0.5f,captured.material[6]),edge1=std::fma(width,0.5f,captured.material[6]);
     const bool zero_height=captured.material[4]==0.0f && captured.material[5]==0.0f;

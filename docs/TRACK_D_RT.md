@@ -1,5 +1,19 @@
 # Track D: hardware ray tracing
 
+## Observed static Pubes coverage - 2026-10-30, default off
+
+Existing rt_native_hair now recognizes static depth 2f2c46668da906a2 and shadow
+bf44216269789070, using verified N/T/B/W/fade outputs and the existing 88-byte
+capture. Native dual-mask/root/thickness inputs map into canonical kind 4;
+byte 196 subtype preserves the different Pubes camera FMA grouping. Sun's full
+record copies preserve it. No new key/kind/ABI/stride. All four normal queries
+reuse procedural primary depth and physical Shadow ribbons. Other Pubes passes
+remain unreviewed for activation; this is not complete all-family Hair closure.
+31/31 CTests, 19,782 capture/strand checks, 37 GPU cases (10 Pubes), 0 validation
+errors; 95 fresh ordinary shader identities and 95 capable compilations validate.
+GPU cost/native G-buffer/live gate remain pending. See NATIVE_HAIR.md and
+docs/evidence/native-pubes-20261030.json for exact source/layout/sampling limits.
+
 ## Native Scalp camera dither - 2026-10-30, default-off candidate
 
 The earlier hard-only limitation below is superseded for camera FS

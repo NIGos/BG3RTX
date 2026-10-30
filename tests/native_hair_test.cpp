@@ -13,7 +13,12 @@ int main(){
   Captured c;unsigned calls=0,seen=0;
   check(capture(r.hash,[&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes){
    ++calls;std::memset(dst,0,bytes);
-   if(set==1){check(binding==r.material && off==0 && bytes==(r.camera?48u:32u));float vals[12]={0,0,3,0.1f,4,5,0.4f,0.5f,0.7f,0.8f,0,0};std::memcpy(dst,vals,bytes);}
+   if(set==1){
+    check(binding==r.material && off==0 && bytes==(r.layout==Layout::Pubes?(r.camera?32u:16u):(r.camera?48u:32u)));
+    float vals[12]={0,0,3,0.1f,4,5,0.4f,0.5f,0.7f,0.8f,0,0};
+    if(r.layout==Layout::Pubes){const float pubes[8]={3,0.1f,4,5,0.4f,0.5f,0.7f,0};std::memcpy(vals,pubes,32);if(!r.camera)vals[2]=0.7f;}
+    std::memcpy(dst,vals,bytes);
+   }
    else {
     check(set==0);
     if(binding==0 && off==8){check(bytes==8);const float frame[2]={37,1};std::memcpy(dst,frame,8);seen|=1;}
@@ -25,12 +30,21 @@ int main(){
    return true;
   },c));
   check(c.valid && c.material[2]==3 && c.material[3]==0.1f);
-  check(c.material[8]==(r.camera?0.7f:4.0f));check(c.material[9]==(r.camera?0.8f:5.0f));
+  check(c.material[8]==(r.layout==Layout::Pubes?0.7f:(r.camera?0.7f:4.0f)));
+  check(c.material[9]==(r.layout==Layout::Pubes?1.0f:(r.camera?0.8f:5.0f)));
+  check(c.subtype==uint32_t(r.layout));
+  if(r.camera)check(c.material[4]==4 && c.material[5]==5 && c.material[6]==0.4f && c.material[7]==0.5f);
+  else check(c.material[4]==0 && c.material[5]==0);
   check(calls==(r.camera?5u:1u));
   check(seen==(r.camera?15u:0u));
   if(r.camera){check(c.frame[0]==37 && c.frame[1]==1 && c.orthographic==1);check(c.view_projection[5]==1 && c.near_far[1]==1000);}
-  check(!capture(r.hash,[](unsigned,unsigned,unsigned,void*,size_t){return false;},c));check(!c.valid);
+  check(!capture(r.hash,[](unsigned,unsigned,unsigned,void*,size_t){return false;},c));check(!c.valid && c.subtype==0);
  }
+ for(uint64_t fs:{0x2f2c46668da906a2ull,0xbf44216269789070ull}) {
+  const auto* r=lookup(fs);check(r && r->material==1 && r->noise==4 && r->mask==5 && r->layout==Layout::Pubes);
+ }
+ // Only the two verified static recipes are enabled, not unreviewed instancing.
+ check(!lookup(0x102b58c38ce6d991ull));check(!lookup(0xb33cb854a349f3e3ull));
  Captured bad;check(!capture(0,[](unsigned,unsigned,unsigned,void*,size_t){return true;},bad));
  // Native combined mask differs from a lone A read and from componentwise max
  // in the centered red channel when opposing signed offsets have unequal size.

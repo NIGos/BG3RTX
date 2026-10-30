@@ -1,6 +1,6 @@
 # Native hair runtime coverage and depth
 
-## Status: procedural CHAR_Hair candidate, family and live gates remain open
+## Status: procedural CHAR_Hair/Pubes candidate, family and live gates remain open
 
 `rt_native_hair=0` is default. Enabling requires a restart with `rt_alpha=1` and
 `rt_bvh_split=1`. The latter requirement is enforced: legacy startup rejects this
@@ -10,6 +10,44 @@ mode, logs the reason and never mixes 24/88-byte geometry. Hot-enabling after a
 The current increment implements actual native CHAR_Hair coverage and procedural
 primary depth. It is not an alpha-A surrogate. Console GPU gate passes; native G-buffer
 comparison remains pending; do not call all hair or face shadows closed.
+
+## Observed static CHAR_Pubes increment - 2026-10-30
+
+Only two exact additional native recipes are enabled, under the existing startup
+key; no new kind, stream stride or host ABI. Packaged/cached native source:
+
+| Pass | FS | VS | Material / noise / mask, set 1 |
+|---|---|---|---|
+| StaticDepth | 2f2c46668da906a2 | 2f07f6463a175a20 | 1 / 4 / 5 |
+| StaticDepthShadow | bf44216269789070 | e5aea62376fd3451 | 1 / 4 / 5 |
+
+Both use UV 0, native sampler set 0/binding 7, world N/T/B at locations 1..3,
+native W at 4; camera also supplies fade vec4 at 5. The VS use Camera._m2 and
+negate clipY. Existing 88-byte capture therefore needs no extra attributes.
+Camera material 32B maps noise 0/1 to canonical 2/3, thickness 2/3 to 4/5,
+smoothstep edge/width 4/5 to 6/7 and root 6 to 8. Shadow material 16B maps noise 0/1
+and root 2. Density is exactly 1: Pubes has no density material scalar.
+
+AlphaRec kind 4 and all four shared query paths are reused. Existing unused
+uint at byte 196 is subtype 0 for Hair/old records, subtype 1 for Pubes; Sun copies all 208B
+before descriptor remapping and preserves it. This is needed for native camera
+FMA grouping: Pubes fma(maskRoot,angular,noise) versus Hair's already multiplied
+coverage times separate density. Native Shadow uses the same hard formula with
+density 1. Camera fragment depth and physical thin-ribbon policies are otherwise
+the same source equations as CHAR_Hair and reuse its procedural implementation.
+
+31/31 CTests and 19,782 native capture/strand checks pass. Actual RTX 5090 fixture:
+37 cases, including 10 Pubes cases, zero validation errors. Checks cover camera
+depth, physical shadows, dither/fade, root suppression, held geometry and rebase.
+One reference case distinguishes single FMA from explicitly rounded multiplication.
+The full nontrivial-angle source expression uses the existing gamma128 FP32
+envelope: independent normalization differed by 1 ULP in the initial fixture.
+This is not a bit-exact GPU/native sampler precision certificate. RT-cone
+footprints and the pending native G-buffer/live gate remain unchanged.
+Other Pubes passes, including instanced and tetrahedron, are NOT enabled by hash
+similarity. Their native sources remain the next bounded recipe backlog.
+Fresh DXC proof: 95 ordinary entries byte-identical to fc46634; 95 capable variants
+compile/validate. Evidence: docs/evidence/native-pubes-20261030.json.
 
 ## Native source and pass contract
 

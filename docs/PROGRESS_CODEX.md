@@ -1,5 +1,15 @@
 # BG3RTX progress
 
+## Verified static Pubes coverage added - 2026-10-30, default off
+
+Two observed static Pubes shaders now use native dual-mask/root/strand coverage,
+camera dither and procedural depth under existing rt_native_hair. No new key,
+ABI or vertex stride. 31/31 CTests and 19,782 capture/strand checks pass; 37 actual
+GPU cases (10 Pubes), zero validation errors. 95 ordinary shaders byte-identical,
+95 capable compile/validate. Other Pubes passes and live/native G-buffer quality
+remain open; no game deployment or measured GPU cost. Exact supported hashes and
+evidence: docs/NATIVE_HAIR.md, docs/evidence/native-pubes-20261030.json.
+
 ## Combined candidate: native material capture and coherent OMM guards - 2026-10-30
 
 Isolated codex/omm-bake now includes native Hair plus Scalp camera dither,

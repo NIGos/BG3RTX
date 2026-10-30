@@ -1,5 +1,5 @@
 #pragma once
-// Native CHAR_Hair DEP/DEPS/DEPST recipes, verified packaged FS hashes.
+// Native CHAR_Hair/Pubes recipes, verified packaged FS hashes.
 // Other passes are inventoried, not reinterpreted as these material layouts.
 #include <algorithm>
 #include <array>
@@ -8,11 +8,14 @@
 
 namespace bg3::native_hair {
 inline constexpr uint32_t stride = 88;
-struct Recipe { uint64_t hash; uint8_t material, noise, mask; bool camera; };
+enum class Layout:uint32_t { Hair=0,Pubes=1 };
+struct Recipe { uint64_t hash; uint8_t material, noise, mask; bool camera; Layout layout=Layout::Hair; };
 inline constexpr Recipe recipes[] = {
  {0x5a03e5b678b2d040ull,1,3,4,true}, {0x0527bb148e1d6c03ull,0,2,3,true},
  {0x34951669ed4b3b0full,1,3,4,false}, {0x00a9ecbb9c2b4ff8ull,1,3,4,false},
  {0x8dddc0bc49e56efcull,0,2,3,false}, {0xa39086306bfc9c03ull,0,2,3,false},
+ {0x2f2c46668da906a2ull,1,4,5,true,Layout::Pubes},
+ {0xbf44216269789070ull,1,4,5,false,Layout::Pubes},
 };
 inline const Recipe* lookup(uint64_t hash) { for (const auto& r:recipes) if(r.hash==hash)return &r;return nullptr; }
 struct Captured {
@@ -20,14 +23,23 @@ struct Captured {
  std::array<float,16> view_projection{};
  std::array<float,2> frame{}, near_far{};
  float orthographic{};
+ uint32_t subtype{};
  bool valid{};
 };
 template<class Read> bool capture(uint64_t hash, Read&& read, Captured& out) {
  out={};const auto* r=lookup(hash);if(!r)return false;
  Captured v;
- if(!read(1u,r->material,0u,v.material.data(),r->camera?48u:32u))return false;
- if(!r->camera){v.material[8]=v.material[4];v.material[9]=v.material[5];v.material[4]=v.material[5]=0;}
- else {
+ if(r->layout==Layout::Pubes) {
+  float raw[8]{};if(!read(1u,r->material,0u,raw,r->camera?32u:16u))return false;
+  v.material[2]=raw[0];v.material[3]=raw[1];v.material[9]=1;
+  if(r->camera){for(unsigned i=2;i<=6;++i)v.material[i+2]=raw[i];}
+  else v.material[8]=raw[2];
+  v.subtype=1;
+ } else {
+  if(!read(1u,r->material,0u,v.material.data(),r->camera?48u:32u))return false;
+  if(!r->camera){v.material[8]=v.material[4];v.material[9]=v.material[5];v.material[4]=v.material[5]=0;}
+ }
+ if(r->camera) {
   float projection_type{};
   if(!read(0u,0u,8u,v.frame.data(),8u) || !read(0u,2u,128u,v.view_projection.data(),64u) ||
      !read(0u,2u,192u,v.near_far.data(),8u) || !read(0u,2u,124u,&projection_type,4u))return false;
