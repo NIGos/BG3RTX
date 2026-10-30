@@ -1,5 +1,22 @@
 # BG3RTX progress
 
+## Solar shadow sharpness: native-mask restriction confirmed in logs - 2026-10-30
+
+Dedicated solar agent found correct finite-disc radius, normalization and changing
+sample seeds. Final direct sun can still be clipped by the native mask: untrusted
+resolve keeps nativeMask * rtVisibility. In six 600-frame dialogue windows,
+94.6-98.1% of native-dark/RT-lit disagreements keep native shadowing because of
+the off-screen guard; only 0.3-1.3% are fully replaced. RR is active but cannot
+restore the omitted expected direct-sun contribution. This supports the reported
+hard edges in those views, not an attribution of every outdoor shadow or hairstyle.
+
+No radius, bias, blur, trust setting or renderer changed for this audit. Correct
+off-screen caster coverage, including native cutouts, is required before relaxing
+the guard. Sun has no dedicated mask accumulator; nearby hair can also be naturally
+sharp. Report docs/SUN_PENUMBRA_REVIEW.md and matching evidence JSON. Existing RT
+scope 1.130-2.521 ms/frame includes other work, not isolated solar cost. Live
+same-view trust/mask check remains user-coordinated; no game job was launched.
+
 ## Follow-through: UI merged; dedicated native capture and OMM CPU work - 2026-10-30
 
 UI descriptor fix is now on main 7b9c1e4, merged ONLY through merge-green after the

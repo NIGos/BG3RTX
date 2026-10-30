@@ -71,6 +71,10 @@ Sun already has radius 0.00459 rad half-angle (~0.526 deg diameter), uniform dis
 sample per pixel, RR reconstruction, plus native-mask fallback in untrusted zones.
 Penumbra ~9.18 mm/metre of caster-receiver separation: near hair can be subpixel.
 Do not enlarge radius to conceal solid hair/cascade cards.
+Solar audit docs/SUN_PENUMBRA_REVIEW.md: units/disc/seeds correct, but off-screen
+guard retains native-dark sun edges. Six dialogue windows keep 94.6-98.1% of
+native-dark/RT-lit disagreements; fully replace 0.3-1.3%, with RR active. Establish
+actual caster-volume coverage before lifting trust; no radius/bias/blur change.
 
 ## OMM OFFLINE milestone - not runtime integration
 
