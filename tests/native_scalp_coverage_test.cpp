@@ -1,8 +1,10 @@
 #include "../common/native_scalp_coverage.h"
+#include "../common/native_scalp_capability.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <thread>
 
 using namespace bg3::native_scalp;
 static unsigned checks = 0;
@@ -17,6 +19,22 @@ static long double coverage(Material m, Mask v) {
   return (3*t*t-2*t*t*t)*(1+(static_cast<long double>(v.blue)-1)*m.root);
 }
 int main() {
+  alignas(std::atomic_ref<uint32_t>::required_alignment) uint32_t capability=0;
+  check(!has_capability(&capability)); // Fresh key-off session stays ordinary.
+  check(!has_capability(nullptr));
+  for (unsigned i=0;i<128;++i) {
+    // A scene pointer publication represents the existing scene mutex handoff.
+    // Acquiring a new scene before choosing the pipeline must see capability.
+    std::atomic<bool> scene_ready=false;
+    std::thread producer([&]{publish_capability(&capability);scene_ready.store(true,std::memory_order_release);});
+    while(!scene_ready.load(std::memory_order_acquire))std::this_thread::yield();
+    check(has_capability(&capability));
+    producer.join();
+    // A fresh core and key-off still read the SAME persistent word; retired
+    // kind3 records cannot be reinterpreted by ordinary texture-alpha shaders.
+    uint32_t* new_core_persist_pointer=&capability;
+    check(has_capability(new_core_persist_pointer));
+  }
   constexpr uint64_t depth=0x9e77575a9f377ec5ull, shadow=0x03a2d9f645625c44ull;
   const Frame no_dither{0,0,0,0,true,false};
   for (const auto& r : recipes) {

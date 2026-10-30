@@ -21,6 +21,7 @@
 
 #include "core.h"
 #include "../common/camera_motion.h"
+#include "../common/native_scalp_capability.h"
 #include "ls_lights.h"
 #include "sharc.h"
 #include "sun_trust.h"
@@ -75,9 +76,9 @@ struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
   // Variant bits: 1 rt_scene_rebase (gi/rebase/), 2 rt_cascade_casters (gi/cascade*/).
-  VkPipeline variants[4] = {};
-  uint64_t variant_generations[4] = {};
-  std::string variant_files[4];
+  VkPipeline variants[8] = {};
+  uint64_t variant_generations[8] = {};
+  std::string variant_files[8];
   bool rebased = false;
 };
 
@@ -669,10 +670,18 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // (gi/cascade*/, shaders/rt/rt_common.hlsli). rt_sun_resolve traces nothing.
   const bool cascade = listed && host->cfg_int("rt_cascade_casters", 0) != 0 &&
                        std::strcmp(file, "gi/rt_sun_resolve.hlsl") != 0;
-  const std::string selected = cascade ? std::string(rebase ? "gi/cascade_rebase/" : "gi/cascade/") + (file + 3)
+  // Include box/native/check helpers too: each may reach rt_common through
+  // includes even when it is outside the origin-rebase variant list.
+  const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
+      host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
+  const std::string base = cascade ? std::string(rebase ? "gi/cascade_rebase/" : "gi/cascade/") + (file + 3)
                                : rebase ? std::string("gi/rebase/") + (file + 3)
                                         : std::string(file);
-  const unsigned variant = (rebase ? 1u : 0u) | (cascade ? 2u : 0u);
+  const std::string selected = scalp ? "native_scalp/" + base : base;
+  const unsigned variant = (rebase ? 1u : 0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u);
+  // Never retain an ordinary shader on compilation failure with kind3 records.
+  // Some diagnostic callers intentionally ignore refresh's boolean result.
+  if (scalp) p.pipeline = p.variants[variant];
   Bg3ShaderBlob blob{};
   if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
   if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {

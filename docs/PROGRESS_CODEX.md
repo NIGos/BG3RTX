@@ -1,5 +1,18 @@
 # BG3RTX progress
 
+## Native scalp hard-cut candidate - 2026-10-30, isolated and not deployed
+
+`rt_native_scalp=0` is the new default-off runtime key. Kind3 captures native scalp
+material edge/root and uses the exact hard-cut scalar transform across normal RT
+query paths, with existing RT-cone sampling explicitly retained. Camera mode != 0
+stays unsupported/opaque and is counted; no fake RT dither or raw-alpha substitute.
+Sticky host capability keeps held scenes safe through key-off and core reload.
+No ABI change. Not full Hair/cascade support. F10 native Frame mode is unavailable;
+the user's close-up may remain unsupported. No live files/game changes or GPU cost
+and quality gate claimed. Full isolated build and 17/17 CTests pass; 178,780 scalar/
+capture/capability checks, 95/95 ordinary shader SPIR-V byte-identical to 37299f2,
+95/95 capable variants compile and validate. No live quality gate yet.
+
 ## Native scalp CPU contract - 2026-10-30, isolated and not deployed
 
 `codex/native-coverage` adds native scalp depth/shadow hash mapping, bounded

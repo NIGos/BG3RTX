@@ -1,11 +1,65 @@
 # Track D: hardware ray tracing
 
+## Native scalp hard-cut runtime candidate - 2026-10-30, default off
+
+`rt_native_scalp=0/1` now selects a bounded runtime increment in isolated
+`codex/native-coverage`. It does not implement full hair or camera raster dither.
+Six verified scalp depth/shadow hashes use AlphaRec kind 3; p0.xy at bytes 48/52
+hold the actual per-draw material edge/root scalars. The 208-byte record and host
+ABI 18 remain unchanged. Static/instanced descriptors follow the table below;
+existing UV capture must match native FS location 0 or the draw remains unsupported.
+
+Camera depth additionally reads native Frame phase/mode at offsets 8/12. Mode 0
+has native hard coverage; any nonzero mode is explicitly unsupported and retains
+the baseline opaque path. Missing/nonfinite state and undefined smoothstep also
+remain unsupported. Native shadow and tetrahedron programs have no frame dither.
+Logs `[alpha scalp]` distinguish committed hard records, unsupported camera dither
+and invalid/missing state. Existing view/region failures retain existing counters.
+
+The capable shared alpha_eval samples B/A together, applies native smoothstep
+and root multiplication, then the native hard cutoff 0.3333. It bypasses the
+generic stochastic alpha threshold, even at coarse mips. All four normal query
+entry points and origin queries share this dispatch. Its declared sampling policy
+is existing isotropic RT-cone LOD with linear repeat/trilinear, max sampler LOD 16;
+this is NOT native raster derivative/anisotropic or floating-point equivalence.
+Shader code and native GLSL formula correspondence alone are not a GPU image gate.
+The special cascade soup still lacks per-material UV records and is unchanged.
+
+Key transitions: before new kind3 records can be created, the host atomically
+publishes a sticky process capability through existing persist storage. Core
+selects capable variants AFTER obtaining the actual TLAS/set pair. Acquire/release
+ordering and the existing scene handoff prevent an ordinary shader consuming a
+new record. The flag survives core reload and never clears on key-off: held and
+retired records retain their original formula until retirement. Newly captured
+key-off draws follow baseline paths. Fresh process key-off uses ordinary shaders.
+Failed capable compilation leaves a compatible old variant or NULL, never an
+ordinary pipeline interpreting kind3 as raw alpha. No new ABI storage fields.
+
+Exact camera raster identity is not currently representable end-to-end:
+AlphaRec has space for material/frame plus view-projection/viewport metadata, and
+alpha_eval already knows triangle positions/UVs. But current descriptors retain
+image view/layout, NOT native VkSampler state; Bg3Binding also omits sampler.
+Native viewport/projection and original raster sample coordinates are not copied
+into each alpha record. Secondary rays need an explicit RT footprint policy
+rather than claiming original raster derivatives. These remain separate work.
+Existing F10 files contain images and descriptor identities but no captured native
+Frame scalar bytes; the close-up's actual mode is UNKNOWN. It may be unsupported
+by this candidate. No live test, quality improvement or GPU cost is claimed.
+
+Offline gate: full isolated build and 17/17 CTests pass. Native test passes
+178,780 checks including 128 publication/scene-handoff/new-core cases. DXC compiles
+all 95 ordinary entries byte-identically to 37299f2 and all 95 capable wrappers;
+all capable modules pass spirv-val for Vulkan 1.3. Shader disassembly retains
+native SmoothStep/Fma for the hard scalar transform. Reproduce with
+`tests/native_scalp_shader_test.py --dxc <dxc.exe> --sharc <SDK include>` (two CPU
+workers, no device). Evidence: docs/evidence/native-scalp-hard-20261030.json.
+
 ## Native scalp coverage contract - 2026-10-30, offline increment
 
 Branch `codex/native-coverage`, based on 857a616, is isolated from the user's game.
-`common/native_scalp_coverage.h` is a reusable scalar evaluator and portable bounded
-capture adapter. It has NO production caller. No ini key, ABI, shader, descriptor
-layout or geometry behavior changes. This is not the face-shadow correction yet.
+At 37299f2, `common/native_scalp_coverage.h` was a reusable scalar evaluator and
+portable bounded capture adapter with no production caller. The later runtime
+candidate above reuses its capture adapter for the representable hard branch.
 
 Native references are verified Materials.pak SPIR-V, recovered using
 `tools.assets.spirv.modules` and the layer's FNV hash. Complete inventory and native

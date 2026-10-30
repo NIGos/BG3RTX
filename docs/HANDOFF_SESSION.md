@@ -1,10 +1,11 @@
 # Session handoff - 2026-10-30: UI fix confirmed; hair/cascade coverage open
 
-Isolated `codex/native-coverage` increment: common/native_scalp_coverage.h and its
-test implement six native scalp pass mappings, bounded draw-state capture and
-scalar coverage/dither. No production caller/key/shader/ABI/runtime change.
-178,522 standalone checks pass. Exact sampling/raster-domain capture and Hair
-strand/view/depth attributes remain; see TRACK_D_RT native scalp section.
+Isolated `codex/native-coverage`: default-off rt_native_scalp adds native scalp
+hard-cut scalar coverage/material capture; camera dither != 0 remains unsupported.
+No ABI bump or live deployment. Sticky persisted capability protects held scenes
+through key-off/core reload. 17/17 CTests and 178,780 scalar/capture/capability checks
+pass; 95 ordinary shaders byte-identical and 95 capable compile/validate. Actual
+F10 Frame mode unknown. Full Hair/cascade/raster identity still open; TRACK_D_RT.
 
 Read AGENTS.md, top PROGRESS_CODEX.md and latest user steering in this conversation.
 No Ponytail. The user explicitly permits modest multi-agent OFFLINE work; two

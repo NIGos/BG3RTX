@@ -1,6 +1,7 @@
 #pragma once
 
-// Native CHAR_Scalp scalar contract. NOT wired into capture/ray queries yet.
+// Native CHAR_Scalp scalar contract. The opt-in runtime hard branch uses its
+// bounded capture adapter; camera raster dither remains CPU-reference only.
 // Inputs are the native sampler's already-filtered mask B/A and native draw
 // state. This does not replace texture sampling, derivatives or rasterization.
 // Source: verified Vulkan modules listed below, Materials.pak (2026-10-26 DB).
