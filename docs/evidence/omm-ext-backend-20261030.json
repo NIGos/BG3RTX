@@ -1,0 +1,24 @@
+{
+  "base": "92183e7",
+  "branch": "codex/omm-ext-backend",
+  "mode": "Isolated offline build and CPU tests only; no game or GPU/device calls",
+  "extension": "VK_EXT_opacity_micromap",
+  "key": "rt_omm=0",
+  "host_abi_changed": false,
+  "shader_files_changed": false,
+  "host_dll_build": "passed, two compiler workers",
+  "cpu_plan_range_layout_lifetime_checks": 68,
+  "CTest_target": "omm_backend_plan_test",
+  "CTest_result": "1/1 passed",
+  "settings_defaults_check": "passed",
+  "gpu_cost_ms": null,
+  "gpu_traversal_gate": "not run",
+  "production_caller": "not present in this component commit; root owns provider/BLAS integration",
+  "limits": [
+    "Four-state only; known alpha truth is external provider responsibility",
+    "One-to-one nonindexed triangle attachment only",
+    "Same compute-capable queue and actual submission/completion serials only",
+    "Requested storage/scratch buffers capped at 256 MiB, not physical memory accounting",
+    "No claim of completed OMM from all-unknown plumbing"
+  ]
+}
