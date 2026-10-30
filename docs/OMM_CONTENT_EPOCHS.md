@@ -115,3 +115,23 @@ Run the existing optional console with a fourth shader path compiled from entry
 bc_endpoints. Evidence: docs/evidence/omm-bc-endpoints-20261030.txt. Host DLL and
 3/3 targeted CPU tests pass; registry/view/policy checks are now 83. No game,
 window, presentation, runtime configuration change or deployment was performed.
+
+## Native sampler metadata
+
+Host-internal sampler tracking reuses existing descriptor writes/templates/copies;
+public ABI and ordinary shaders are unchanged. Fresh rt_omm=0 records no sampler
+metadata and emits no added GPU calls. Created samplers receive never-reused IDs;
+raw handle reuse cannot change an older descriptor's sampler generation. Snapshot
+fields include filter/mipmap/address modes, LOD min/max/bias, anisotropy, compare,
+normalization, border color and flags. Weighted-average/min/max reduction state
+is retained; unknown/custom-border/Ycbcr chains decline with their structure type.
+
+BoundSampler returns sampler ID/state, descriptor-set/layout generations, write
+version, binding flags and immutable status. Immutable samplers are seeded from
+actual layout definitions and survive layout-handle reuse through copied set
+metadata. Unknown/push/cross-binding rollover/unsupported allocation paths decline.
+Mutable state is CURRENT CPU metadata, not a frozen GPU descriptor certificate.
+The initial factory must require immutable_sampler_current and a standard frozen
+image binding, rather than treating a lifetime reference as freezing updates.
+No production factory was introduced by this sampler increment. Host DLL build
+and two CPU tests pass: 32 create-state and 42 binding/generation checks, no device calls.

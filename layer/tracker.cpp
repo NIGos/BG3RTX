@@ -3,6 +3,7 @@
 // render passes and descriptor set contents.
 #include "host.h"
 #include "omm_content.h"
+#include "omm_sampler.h"
 #include "native_light_validation.h"
 #include "../common/descriptor_epoch.h"
 
@@ -304,6 +305,12 @@ static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& 
     if (is_image_type(w.descriptorType) && w.pImageInfo) {
       e.view = w.pImageInfo[i].imageView;
       e.layout = w.pImageInfo[i].imageLayout;
+      if(w.descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && omm::sampler_tracking_active()){
+        e.sampler=w.pImageInfo[i].sampler;e.sampler_id=omm::sampler_identity(e.sampler);
+      }
+    }
+    else if(w.descriptorType==VK_DESCRIPTOR_TYPE_SAMPLER && w.pImageInfo && omm::sampler_tracking_active()){
+      e.sampler=w.pImageInfo[i].sampler;e.sampler_id=omm::sampler_identity(e.sampler);
     }
     else if (is_buffer_type(w.descriptorType) && w.pBufferInfo) {
       e.buffer = w.pBufferInfo[i].buffer;
@@ -318,7 +325,10 @@ static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& 
 static void merge(VkDescriptorSet set, const std::vector<DescEntry>& src) {
   auto& dst = tracker().sets[set];
   for (const auto& e : src) {
-    auto [it, inserted] = dst.insert_or_assign(desc_key(e.binding, e.element), e);
+    auto saved=e;
+    if(e.type==VK_DESCRIPTOR_TYPE_SAMPLER || e.type==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+      omm::immutable_sampler(set,e.binding,e.element,saved.sampler,saved.sampler_id);
+    auto [it, inserted] = dst.insert_or_assign(desc_key(e.binding, e.element), saved);
     if (inserted && is_dynamic_type(e.type)) ++tracker().dynamic_counts[set];
   }
 }
@@ -345,6 +355,12 @@ static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate 
         auto ii = reinterpret_cast<const VkDescriptorImageInfo*>(p);
         e.view = ii->imageView;
         e.layout = ii->imageLayout;
+        if(t.descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && omm::sampler_tracking_active()){
+          e.sampler=ii->sampler;e.sampler_id=omm::sampler_identity(e.sampler);
+        }
+      }
+      else if(t.descriptorType==VK_DESCRIPTOR_TYPE_SAMPLER && omm::sampler_tracking_active()){
+        e.sampler=reinterpret_cast<const VkDescriptorImageInfo*>(p)->sampler;e.sampler_id=omm::sampler_identity(e.sampler);
       }
       else if (is_buffer_type(t.descriptorType)) {
         auto b = reinterpret_cast<const VkDescriptorBufferInfo*>(p);
@@ -361,6 +377,7 @@ static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate 
 void track_set_template(VkDescriptorSet set, VkDescriptorUpdateTemplate tpl, const void* data) {
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   auto entries = decode_template_locked(tpl, data);
+  for(const auto& e:entries)omm::sampler_template_write(set,e.binding,e.element,e.type);
   if (!entries.empty()) merge(set, entries);
 }
 
@@ -410,6 +427,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDescriptorSetLayout(VkDevice device,
                                                                 VkDescriptorSetLayout* out) {
   VkResult r = device_of(device)->vk.CreateDescriptorSetLayout(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
+    omm::sampler_layout_created(device_of(device),*out,*ci);
     std::vector<std::pair<uint32_t, uint32_t>> dyn;
     for (uint32_t i = 0; i < ci->bindingCount; ++i)
       if (is_dynamic_type(ci->pBindings[i].descriptorType))
@@ -426,10 +444,31 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, co
   VkResult r = device_of(device)->vk.AllocateDescriptorSets(device, ai, out);
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
-    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i)
+    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i){
       descriptor_set_allocated(tracker(), out[i], ai->pSetLayouts[i]);
+      omm::sampler_set_allocated(device_of(device),out[i],ai->pSetLayouts[i],ai->descriptorPool,ai->pNext==nullptr);
+    }
   }
   return r;
+}
+
+static VKAPI_ATTR void VKAPI_CALL DestroyDescriptorSetLayout(VkDevice device,VkDescriptorSetLayout layout,const VkAllocationCallbacks* alloc){
+  omm::sampler_layout_destroyed(device_of(device),layout);device_of(device)->vk.DestroyDescriptorSetLayout(device,layout,alloc);
+}
+static VKAPI_ATTR VkResult VKAPI_CALL FreeDescriptorSets(VkDevice device,VkDescriptorPool pool,uint32_t count,const VkDescriptorSet* sets){
+  auto* dd=device_of(device);const auto r=dd->vk.FreeDescriptorSets(device,pool,count,sets);if(r==VK_SUCCESS)omm::sampler_sets_freed(dd,count,sets);return r;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL ResetDescriptorPool(VkDevice device,VkDescriptorPool pool,VkDescriptorPoolResetFlags flags){
+  auto* dd=device_of(device);const auto r=dd->vk.ResetDescriptorPool(device,pool,flags);if(r==VK_SUCCESS)omm::sampler_pool_reset(dd,pool);return r;
+}
+static VKAPI_ATTR void VKAPI_CALL DestroyDescriptorPool(VkDevice device,VkDescriptorPool pool,const VkAllocationCallbacks* alloc){
+  auto* dd=device_of(device);omm::sampler_pool_reset(dd,pool);dd->vk.DestroyDescriptorPool(device,pool,alloc);
+}
+static VKAPI_ATTR VkResult VKAPI_CALL CreateSampler(VkDevice device,const VkSamplerCreateInfo* info,const VkAllocationCallbacks* alloc,VkSampler* sampler){
+  auto* dd=device_of(device);const auto r=dd->vk.CreateSampler(device,info,alloc,sampler);if(r==VK_SUCCESS)omm::sampler_created(dd,*sampler,*info);return r;
+}
+static VKAPI_ATTR void VKAPI_CALL DestroySampler(VkDevice device,VkSampler sampler,const VkAllocationCallbacks* alloc){
+  auto* dd=device_of(device);omm::sampler_destroyed(dd,sampler);dd->vk.DestroySampler(device,sampler,alloc);
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* ci,
@@ -721,6 +760,7 @@ static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t
   device_of(device)->vk.UpdateDescriptorSets(device, wc, w, cc, c);
   diag(DIAG_DESC_WRITES, wc + cc);
   for (uint32_t i = 0; i < wc; ++i) track_set_write(w[i]);
+  omm::sampler_descriptor_ranges(device_of(device),wc,w,cc,c);
   if (cc) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     for (uint32_t i = 0; i < cc; ++i) {
@@ -928,7 +968,13 @@ void register_tracker_hooks(HookMap& m) {
   HOOK(DestroyRenderPass);
   HOOK(UpdateDescriptorSets);
   HOOK(CreateDescriptorSetLayout);
+  HOOK(DestroyDescriptorSetLayout);
+  HOOK(CreateSampler);
+  HOOK(DestroySampler);
   HOOK(AllocateDescriptorSets);
+  HOOK(FreeDescriptorSets);
+  HOOK(ResetDescriptorPool);
+  HOOK(DestroyDescriptorPool);
   HOOK(CreateDescriptorUpdateTemplate);
   HOOK(DestroyDescriptorUpdateTemplate);
   HOOK(UpdateDescriptorSetWithTemplate);

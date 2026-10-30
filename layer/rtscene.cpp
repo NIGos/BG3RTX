@@ -28,6 +28,7 @@
 #include "omm_backend.h"
 #include "omm_submit.h"
 #include "omm_content.h"
+#include "omm_sampler.h"
 #include "../common/camera_epoch.h"
 #include "../common/cascade_casters.h"
 
@@ -739,6 +740,7 @@ void rt_device_created(DeviceData* dd, bool enabled) {
   if (dd->vk.CreateQueryPool(dd->device, &qi, nullptr, &g_qp) != VK_SUCCESS) g_qp = VK_NULL_HANDLE;
   g_rt = true;
   omm::device_created(dd, true);
+  if(omm::available())omm::sampler_device_created(dd);
   log("[rt] acceleration structures + ray query enabled on the game's device (scratch alignment %llu)",
       (unsigned long long)g_scratch_align);
 }
@@ -748,6 +750,7 @@ void rt_device_destroyed(DeviceData* dd) {
   omm::device_destroyed(dd);
   omm::submit_device_destroyed(dd);
   omm::content_device_destroyed(dd);
+  omm::sampler_device_destroyed(dd);
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();
