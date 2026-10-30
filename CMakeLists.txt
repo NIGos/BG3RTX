@@ -187,6 +187,8 @@ add_executable(omm_submit_state_test tests/omm_submit_state_test.cpp)
 add_test(NAME omm_submit_state_test COMMAND omm_submit_state_test)
 add_executable(omm_content_registry_test tests/omm_content_registry_test.cpp)
 add_test(NAME omm_content_registry_test COMMAND omm_content_registry_test)
+add_executable(native_sun_math_test tests/native_sun_math_test.cpp)
+add_test(NAME native_sun_math_test COMMAND native_sun_math_test)
 # Explicit synthetic GPU probe only. Never registered in routine CTest and never
 # launched by a build. No game, presentation or global loader settings changes.
 option(BG3RTX_OMM_GPU_SMOKE "Build the opt-in synthetic EXT OMM console probe" OFF)
