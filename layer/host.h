@@ -474,6 +474,7 @@ struct CascadeSoup {
 };
 struct SunCascadeCapture {
   CascadeSoup soup{};
+  VkImage depth_image = VK_NULL_HANDLE;
   sun_coverage::NativeEpoch native_epoch;
   VkBuffer native_frame_buffer = VK_NULL_HANDLE;
   VkDeviceSize native_frame_offset = 0;
@@ -488,6 +489,8 @@ struct SunCascadeCapture {
 // Exact native Frame packet, independent of presentation-frame tag. Pending
 // conversions are returned for private-build scheduling, never as submitted proof.
 bool geo_sun_cascade(const sun_coverage::NativeEpoch& epoch, SunCascadeCapture* out);
+// Four separate native draw domains; never infer near-layer membership from far.
+bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCascadeCapture,4>* out);
 bool geo_native_frame_epoch(VkCommandBuffer cmd, VkPipelineBindPoint bind,
                              sun_coverage::NativeEpoch* epoch, VkBuffer* buffer, VkDeviceSize* offset);
 int geo_cascade_soup(uint64_t frame, CascadeSoup* out);

@@ -243,6 +243,7 @@ struct Capture {
   bool c_epoch_ok = false;
   uint32_t c_material_unknown = 0;
   bool c_finite_sun_clip = true;
+  VkImage c_depth_image = VK_NULL_HANDLE;
 };
 
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
@@ -963,6 +964,10 @@ struct CcMeta {
   SunCascadeCapture sun;
 };
 CcMeta g_cc_meta[3];                // what g_ccap[i] holds, converted (frame 0: nothing)
+// Current-only complementary layers. The configured legacy layer keeps its
+// existing ring; these buffers are allocated lazily only with the new key on.
+Capture g_sun_ccap[4][3];
+CcMeta g_sun_meta[4][3];
 constexpr int kCcLayers = 8;
 Capture g_cprobe[kCcLayers];        // the other cascades: their matrix is read, nothing captured
 struct CcMat { uint64_t frame = 0; float v[56] = {}; };
@@ -1024,7 +1029,8 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
     log("[cascade] sun cascade pass found: layer %d of a %ux%u D16 array; %s", layer, s->pass.width, s->pass.height,
         layer == want ? "captured (rt_cascade_index)" : "its matrix is only read");
   }
-  if (layer != want) {
+  const bool all_current=cfg_int("rt_sun_cascade_current",0)!=0 && layer>=0 && layer<4;
+  if (layer != want && !all_current) {
     if (layer < kCcLayers) {
       Capture& p = g_cprobe[layer];
       p.cascade = p.probe = true;
@@ -1033,7 +1039,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
     }
     return;
   }
-  Capture& c = g_ccap[f % 3];
+  Capture& c = layer==want ? g_ccap[f % 3] : g_sun_ccap[layer][f % 3];
   if (c.state == 1 && c.record_frame == f) return;   // one such pass per frame: never expected
   // (state 1 from an older frame: that recording never ended its pass; start over)
   const VkDeviceSize bytes = VkDeviceSize((std::clamp)(cfg_int("rt_cascade_mb", 64), 4, 1024)) << 20;
@@ -1061,8 +1067,10 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.c_tris = 0;
   c.c_native_epoch = {}; c.c_native_frame = VK_NULL_HANDLE; c.c_native_offset = 0;
   c.c_epoch_ok = false; c.c_material_unknown = 0; c.c_finite_sun_clip = true;
+  c.c_depth_image=s->pass.depth_image;
   c.rec = bvh_rec_register(cmd);
-  g_cc_meta[f % 3] = CcMeta{};
+  if(layer==want) g_cc_meta[f % 3] = CcMeta{};
+  if(all_current) g_sun_meta[layer][f % 3]=CcMeta{};
   // The build two frames ago (BLAS input) and this buffer's last conversion are done with
   // it before the XFB writes (both earlier in submission order).
   barrier(cmd,
@@ -1225,6 +1233,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     // which is not the camera's (92 m away in S7): the rebase starts from it.
     if (mat_ok) { meta.has_origin = true; for (int k = 0; k < 3; ++k) meta.origin[k] = m.v[52 + k]; }
     meta.sun.soup={c->xfb.b,tris,g_stride,meta.has_origin,{meta.origin[0],meta.origin[1],meta.origin[2]},meta.sig,c->rec,c->cmd};
+    meta.sun.depth_image=c->c_depth_image;
     meta.sun.native_epoch=c->c_native_epoch;
     meta.sun.native_frame_buffer=c->c_native_frame;meta.sun.native_frame_offset=c->c_native_offset;
     meta.sun.camera_buffer=c->rt_ubo;meta.sun.camera_offset=c->rt_ubo_off;
@@ -1235,7 +1244,9 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     meta.sun.materials_complete=c->c_material_unknown==0;
     meta.sun.finite_native_clip=c->c_finite_sun_clip;
   }
-  g_cc_meta[f % 3] = meta;
+  if(c==&g_ccap[f % 3]) g_cc_meta[f % 3] = meta;
+  if(cfg_int("rt_sun_cascade_current",0) && c->layer>=0 && c->layer<4)
+    g_sun_meta[c->layer][f % 3]=meta;
   g_cc_cv.notify_all();
   CcStats& st = g_cc_st;
   ++st.frames;
@@ -2270,6 +2281,28 @@ bool geo_sun_cascade(const sun_coverage::NativeEpoch& epoch, SunCascadeCapture* 
   return ms>0 && g_cc_cv.wait_for(lock,std::chrono::milliseconds(ms),find);
 }
 
+bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCascadeCapture,4>* out) {
+  if(!out || !sun_coverage::valid(epoch)) return false;
+  *out={};
+  std::unique_lock<std::mutex> lock(g_cc_mu);
+  auto find=[&]() {
+    std::array<SunCascadeCapture,4> found{};
+    VkImage image=VK_NULL_HANDLE;
+    for(unsigned layer=0;layer<4;++layer) {
+      const CcMeta* best=nullptr;
+      for(const CcMeta& m:g_sun_meta[layer])
+        if(m.tris && sun_coverage::same_epoch(m.sun.native_epoch,epoch) &&
+           bvh_rec_state(m.rec)>=0 && bvh_rec_state(m.rec)!=2 && (!best || m.rec>best->rec)) best=&m;
+      if(!best || !best->sun.depth_image || (image && image!=best->sun.depth_image)) return false;
+      image=best->sun.depth_image;found[layer]=best->sun;
+    }
+    *out=std::move(found);return true;
+  };
+  if(find()) return true;
+  const int ms=(std::clamp)(cfg_int("rt_scene_wait_ms",12),0,50);
+  return ms>0 && g_cc_cv.wait_for(lock,std::chrono::milliseconds(ms),find);
+}
+
 void geo_cascade_note_build(int reason, uint32_t tris) {
   std::lock_guard<std::mutex> lock(g_cc_mu);
   if (reason < 0 || reason > 5) return;
@@ -2372,6 +2405,8 @@ void geo_device_destroyed(DeviceData* dd) {
   {
     std::lock_guard<std::mutex> lock(g_cc_mu);
     for (Capture& c : g_ccap) release(c);
+    for(auto& layer:g_sun_ccap) for(Capture& c:layer) release(c);
+    for(auto& layer:g_sun_meta) for(CcMeta& m:layer) m=CcMeta{};
     for (CcMeta& m : g_cc_meta) m = CcMeta{};
     if (g_cc_qp) dd->vk.DestroyQueryPool(dd->device, g_cc_qp, nullptr);
     g_cc_qp = VK_NULL_HANDLE;

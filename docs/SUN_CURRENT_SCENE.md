@@ -93,3 +93,19 @@ the first supported CSM layer and optional next-layer blending, not distance
 splits. Auxiliary shadow arrays can override or restrict the four-layer result.
 Capturing all four actual draw domains plus the enabled auxiliary state and
 per-draw opacity remains necessary; a single far cascade is not a world gate.
+
+## Four-layer capture preparation
+
+With the experimental key on, all four actual CSM draw passes now have separate
+three-slot XFB rings. The configured legacy cascade keeps its original ring and
+metadata. Additional rings are allocated lazily; the ordinary key-off path is
+unchanged. Exact native epochs, producer generations, per-layer camera and clip
+state are retained independently. A four-layer snapshot is returned only when
+all layers match the epoch and the same actual depth-array image. No far-layer
+containment or equal shader-set assumption replaces draw membership.
+
+This prepares the native finite-domain consumer; the current query still uses
+the original single selected cascade and strict segment proof. Auxiliary domains,
+per-draw opacity and receiver selection remain pending. At the default 64 MiB
+capture capacity, the nine complementary ring buffers can add up to 576 MiB
+when allocated. No live allocation, GPU timing or visual gate was run.
