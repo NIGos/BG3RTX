@@ -46,7 +46,11 @@ struct AttachedBlas {
 bool record_blas(VkCommandBuffer,Ticket,VkDeviceAddress vertices,VkDeviceSize vertexBytes,
                  uint32_t stride,uint32_t triangles,AttachedBlas*);
 bool mark_submitted(Ticket, uint64_t actualSubmissionSerial);
-bool retire(Ticket);
+// Cache owner release, valid before first submit. Rejects NEW attachments/uses;
+// existing recorded command generations may replay and advance actual last use.
+// Destruction still requires no graph refs/reservations and GPU completion.
+void release_ticket(Ticket);
+bool retire(Ticket); // Legacy terminal retirement: replay remains invalid.
 void collect(uint64_t actualCompletedSerial);
 bool discard_unsubmitted(Ticket); // Only after the recorded command buffer is discarded/reset.
 }

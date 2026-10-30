@@ -174,6 +174,8 @@ void release_submissions(std::span<const uint64_t> tickets) {
 }
 bool register_ticket_use(VkCommandBuffer cmd,uint64_t ticket) {
   std::lock_guard lock(mutex);auto i=resources.find(ticket);
+  // Expected cache-eviction decline, not a loss of completion provenance.
+  if(i!=resources.end() && i->second.life.owner_released)return false;
   if(device_of(cmd)!=device || i==resources.end() || i->second.life.retiring || !register_record_ticket(cmd,ticket)) {
     if(!retained)log("[omm] rejected ticket use without live ticket/tracked command recording; retaining until idle");
     retained=true;return false;
@@ -235,7 +237,7 @@ Ticket record(VkCommandBuffer cmd,const Input& input) {
 }
 bool attachment(Ticket t,uint32_t primitiveCount,VkAccelerationStructureTrianglesOpacityMicromapEXT& out) {
   std::lock_guard lock(mutex);auto it=resources.find(t);
-  if (it==resources.end() || it->second.life.retiring || primitiveCount!=it->second.triangles) return false;
+  if (it==resources.end() || !it->second.life.accepts_new_use() || primitiveCount!=it->second.triangles) return false;
   auto& r=it->second;
   out={VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_TRIANGLES_OPACITY_MICROMAP_EXT};
   out.indexType=VK_INDEX_TYPE_NONE_KHR;out.micromap=r.micromap;
@@ -248,7 +250,7 @@ bool record_blas(VkCommandBuffer cmd,Ticket ticket,VkDeviceAddress vertices,VkDe
   if(!output || !blas_vertex_range(vertices,vertexBytes,stride,triangles))return false;
   std::lock_guard lock(mutex);auto it=resources.find(ticket);
   if(!enabled || retained || !cfg_int("rt_omm",0) || device_of(cmd)!=device || !tracked_recording(cmd) ||
-     it==resources.end() || it->second.life.retiring || it->second.triangles!=triangles || it->second.blas ||
+     it==resources.end() || !it->second.life.accepts_new_use() || it->second.triangles!=triangles || it->second.blas ||
      triangles>maxBlasPrimitives)return false;
   auto& r=it->second;
   VkAccelerationStructureTrianglesOpacityMicromapEXT opacity{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_TRIANGLES_OPACITY_MICROMAP_EXT};
@@ -295,6 +297,14 @@ bool record_blas(VkCommandBuffer cmd,Ticket ticket,VkDeviceAddress vertices,VkDe
   *output={blas,address,storage.bytes,scratch.bytes};return true;
 }
 bool mark_submitted(Ticket t,uint64_t serial) {std::lock_guard lock(mutex);auto i=resources.find(t);return i!=resources.end() && i->second.life.use(serial);}
+void release_ticket(Ticket t) {
+  std::lock_guard lock(mutex);auto i=resources.find(t);if(i==resources.end())return;
+  i->second.life.release_owner();
+  // Pending work with no surviving recording/reservation never reached GPU.
+  if(!retained && i->second.life.releasable(0) && !recorded_reference(t)){
+    destroy(i->second);resources.erase(i);
+  }
+}
 bool retire(Ticket t) {std::lock_guard lock(mutex);auto i=resources.find(t);return i!=resources.end() && i->second.life.retire();}
 void collect(uint64_t completed) {
   std::lock_guard lock(mutex);
@@ -303,7 +313,7 @@ void collect(uint64_t completed) {
 }
 bool discard_unsubmitted(Ticket t) {
   std::lock_guard lock(mutex);auto i=resources.find(t);
-  if(retained || i==resources.end() || !i->second.life.discardable()) return false;
+  if(retained || i==resources.end() || !i->second.life.discardable() || recorded_reference(t)) return false;
   destroy(i->second);resources.erase(i);return true;
 }
 void device_destroyed(DeviceData* dd) {

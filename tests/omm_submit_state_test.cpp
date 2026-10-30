@@ -61,5 +61,21 @@ int main(){
     check(!refs.referenced(1));check(submitted?life.releasable(7):life.discardable());
     objectsDestroyed=true;retained.reset();check(weak.expired());check(inputsReleased);
   }
+  // Cache owner release does not invalidate already recorded executable CBs.
+  for(bool submitted:{false,true}) {
+    Lifetime life;CommandGraph refs;refs.allocate(1,1,0);refs.begin(1);refs.add(1,7,0);refs.end(1,true);
+    if(submitted)check(life.use(10));life.release_owner();check(!life.accepts_new_use());
+    check(refs.referenced(7));check(!(life.releasable(UINT64_MAX) && !refs.referenced(7)));
+    const Id cmds[]={1};check(refs.submitted(cmds,out));check(out==std::set<Id>({7}));
+    check(life.reserve());check(!life.releasable(UINT64_MAX));
+    // Reset after preparing submission cannot drop the reservation's lifetime.
+    check(refs.reset(1)==std::set<Id>({7}));check(!life.releasable(UINT64_MAX));
+    check(life.use(11));check(life.unreserve());check(!life.releasable(10));check(life.releasable(11));
+  }
+  Lifetime replay;CommandGraph refs;refs.allocate(1,1,0);refs.begin(1);refs.add(1,7,0);refs.end(1,true);
+  check(replay.use(20));replay.release_owner();check(replay.use(21));
+  check(!replay.releasable(20));check(replay.releasable(21));check(refs.referenced(7));
+  auto old=refs.reset(1);check(old==std::set<Id>({7}));refs.begin(1);refs.end(1,true);
+  const Id cmds[]={1};check(refs.submitted(cmds,out));check(out.empty());check(!refs.referenced(7));
   std::printf("OMM submit graph/generation/queue/counter checks %u; no device calls\n",checks);
 }

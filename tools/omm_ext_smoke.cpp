@@ -273,7 +273,7 @@ int main(int argc,char** argv){
     VkCommandPool pool{};vkcheck(dd.vk.CreateCommandPool(dd.device,&pci,nullptr,&pool),"command pool");omm::pool_created(pool,dd.graphics_family);
     VkCommandBufferAllocateInfo cai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};cai.commandPool=pool;cai.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;cai.commandBufferCount=1;
     VkCommandBuffer cmd{};vkcheck(dd.vk.AllocateCommandBuffers(dd.device,&cai,&cmd),"allocate command");omm::command_allocated(pool,cmd);
-    struct Inputs {Buffer data,descriptors;};auto inputs=std::make_shared<Inputs>();
+    struct Inputs {Buffer data,descriptors;};auto inputs=std::make_shared<Inputs>();std::weak_ptr<Inputs> inputLifetime=inputs;
     constexpr auto inputUsage=VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     buffer(dd,inputs->data,256,inputUsage);buffer(dd,inputs->descriptors,256,inputUsage);
     const uint32_t states[]={1,0,3};std::memcpy(inputs->data.mapped,states,sizeof(states));
@@ -286,6 +286,7 @@ int main(int argc,char** argv){
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};vkcheck(dd.vk.BeginCommandBuffer(cmd,&begin),"begin command");omm::command_begin(cmd);
     omm::Input input{};input.descriptors=descriptors;input.data=inputs->data.address;input.triangles=inputs->descriptors.address;input.dataBytes=input.triangleBytes=256;input.dataUsage=input.triangleUsage=inputUsage;input.input_owner=inputs;
     const auto ticket=omm::record(cmd,input);check(ticket!=0,"production micromap record");
+    const auto releasedAfterSubmit=omm::record(cmd,input);check(releasedAfterSubmit!=0,"second actual owner-release micromap");
     VkAccelerationStructureTrianglesOpacityMicromapEXT attachment{};check(omm::attachment(ticket,3,attachment),"production matching attachment");
     VkAccelerationStructureGeometryKHR geometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};geometry.geometryType=VK_GEOMETRY_TYPE_TRIANGLES_KHR;
     geometry.geometry.triangles={VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,&attachment};
@@ -342,7 +343,21 @@ int main(int argc,char** argv){
     barrier(dd,cmd,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,VK_ACCESS_2_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
     vkcheck(dd.vk.EndCommandBuffer(cmd),"end command");omm::command_end(cmd,true);
     const VkCommandBuffer commands[]={cmd};const auto prepared=omm::before_submit(&dd,commands);VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};submit.commandBufferCount=1;submit.pCommandBuffers=commands;
+    // Owner eviction BEFORE the first submit must retain already recorded uses.
+    omm::release_ticket(ticket);omm::release_ticket(ticket);
+    VkAccelerationStructureTrianglesOpacityMicromapEXT rejected{};
+    check(!omm::attachment(ticket,3,rejected),"released pending attachment rejected");
+    check(!omm::register_ticket_use(cmd,ticket),"released new recording use rejected without poisoning");
+    omm::AttachedBlas rejectedBlas{};
+    check(!omm::record_blas(cmd,ticket,vertices.address,sizeof(v),12,3,&rejectedBlas),"released new BLAS rejected");
+    check(omm::available(),"expected eviction decline does not poison backend");
     const auto sent=dd.vk.QueueSubmit(dd.graphics_queue,1,&submit,VK_NULL_HANDLE);omm::after_submit(&dd,dd.graphics_queue,prepared,sent==VK_SUCCESS);vkcheck(sent,"synthetic submit");vkcheck(dd.vk.QueueWaitIdle(dd.graphics_queue),"synthetic queue idle");
+    omm::release_ticket(releasedAfterSubmit);
+    const auto replayPrepared=omm::before_submit(&dd,commands);
+    const auto replaySent=dd.vk.QueueSubmit(dd.graphics_queue,1,&submit,VK_NULL_HANDLE);
+    omm::after_submit(&dd,dd.graphics_queue,replayPrepared,replaySent==VK_SUCCESS);
+    vkcheck(replaySent,"owner-released actual CB replay");vkcheck(dd.vk.QueueWaitIdle(dd.graphics_queue),"replay actual completion");
+    check(omm::available() && omm::has_resources(),"released replay advances serial without poisoning or early collection");
     auto* answers=static_cast<uint32_t*>(result.mapped);unsigned contradictions=0,unknownCandidates=0;
     for(unsigned i=0;i<6;++i){auto* a=answers+i*4;std::printf("ray=%u hit=%u candidates=%u native_ge=%u primitive=%u\n",i,a[0],a[1],a[2],a[3]);contradictions+=a[0]!=a[2];unknownCandidates+=i>=4?a[1]:0;check(a[1]==(i>=4?1u:0u),"known automatic vs unknown alpha candidate path");}
     check(!contradictions && unknownCandidates==2,"zero known/native contradictions and actual unknown fallback");
@@ -361,12 +376,21 @@ int main(int argc,char** argv){
     }
     vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"reset completed command");omm::command_discard(cmd);
     dd.vk.DestroyAccelerationStructureKHR(dd.device,tlas,nullptr);tlas=VK_NULL_HANDLE;
-    check(omm::retire(ticket),"retire ticket");
-    input.input_owner.reset();inputs.reset();
+    // A third recorded build is discarded without EVER submitting its generation.
+    vkcheck(dd.vk.BeginCommandBuffer(cmd,&begin),"begin dropped release generation");omm::command_begin(cmd);
+    const auto droppedTicket=omm::record(cmd,input);check(droppedTicket!=0,"pending dropped ticket record");
+    omm::release_ticket(droppedTicket);check(omm::recorded_reference(droppedTicket),"pending released ticket retains graph reference");
+    check(!omm::discard_unsubmitted(droppedTicket),"cannot discard while graph still references pending ticket");
+    vkcheck(dd.vk.EndCommandBuffer(cmd),"end dropped generation");omm::command_end(cmd,true);
+    vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"discard never submitted generation");omm::command_discard(cmd);
+    check(!omm::recorded_reference(droppedTicket),"dropped generation reference gone");
+    check(!omm::attachment(droppedTicket,3,rejected),"dropped generation ticket destroyed");
+    input.input_owner.reset();inputs.reset();check(!inputLifetime.expired(),"released submitted input owner held until completion collection");
     for(auto item:produced)check(omm::retire(item),"producer retire");
+    std::puts("OWNER_RELEASE pending_before_submit=1 submitted_release_replay=1 dropped_generation=1 no_early_free=1 backend_unpoisoned=1");
     // An actual empty app submit polls the private timeline through production
     // code. It does not manufacture a completed serial from frame age or idle.
-    const auto empty=omm::before_submit(&dd,{});vkcheck(dd.vk.QueueSubmit(dd.graphics_queue,0,nullptr,VK_NULL_HANDLE),"empty app submit");omm::after_submit(&dd,dd.graphics_queue,empty,true);check(!omm::has_resources(),"actual timeline retirement collected ticket");
+    const auto empty=omm::before_submit(&dd,{});vkcheck(dd.vk.QueueSubmit(dd.graphics_queue,0,nullptr,VK_NULL_HANDLE),"empty app submit");omm::after_submit(&dd,dd.graphics_queue,empty,true);check(!omm::has_resources(),"actual timeline retirement collected ticket");check(inputLifetime.expired(),"input owner released only after resource collection");
     dd.vk.DestroyPipeline(dd.device,pipeline,nullptr);dd.vk.DestroyPipelineLayout(dd.device,pipelineLayout,nullptr);dd.vk.DestroyDescriptorSetLayout(dd.device,layout,nullptr);dd.vk.DestroyShaderModule(dd.device,shader,nullptr);
     if(endpointPipeline)dd.vk.DestroyPipeline(dd.device,endpointPipeline,nullptr);if(endpointShader)dd.vk.DestroyShaderModule(dd.device,endpointShader,nullptr);
     if(endpointSampler)dd.vk.DestroySampler(dd.device,endpointSampler,nullptr);if(endpointView)dd.vk.DestroyImageView(dd.device,endpointView,nullptr);if(endpointImage)dd.vk.DestroyImage(dd.device,endpointImage,nullptr);if(endpointMemory)dd.vk.FreeMemory(dd.device,endpointMemory,nullptr);

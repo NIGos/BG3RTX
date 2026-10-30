@@ -39,5 +39,14 @@ int main() {
   check(pending.reserve());check(pending.use(20));check(!pending.discardable());
   check(pending.retire());check(!pending.releasable(20));check(pending.unreserve());check(pending.releasable(20));
   pending.reservations=UINT32_MAX;check(!pending.reserve());check(!pending.releasable(UINT64_MAX));
+  Lifetime evicted;check(evicted.accepts_new_use());evicted.release_owner();
+  check(!evicted.accepts_new_use());check(evicted.releasable(0));check(!evicted.retire());
+  check(evicted.reserve());check(!evicted.releasable(UINT64_MAX));check(evicted.use(30));
+  check(evicted.unreserve());check(!evicted.releasable(29));check(evicted.releasable(30));
+  check(evicted.use(31));check(!evicted.releasable(30));check(evicted.releasable(31));
+  evicted.release_owner();check(evicted.use(32));check(!evicted.use(31));
+  check(!evicted.releasable(31));check(evicted.releasable(32));
+  Lifetime terminal;check(terminal.use(40));check(terminal.retire());terminal.release_owner();
+  check(!terminal.use(41));check(!terminal.accepts_new_use());check(terminal.releasable(40));
   std::printf("OMM EXT plan/range/lifetime checks %u; no device calls\n",checks);
 }

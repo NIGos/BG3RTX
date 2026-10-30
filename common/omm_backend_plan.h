@@ -48,7 +48,7 @@ inline bool blas_vertex_range(uint64_t address,uint64_t vertexBytes,uint32_t str
 // Serial values are actual SAME-QUEUE submission/completion values, never frame
 // counters. Before retirement the owner must mark every referencing BLAS use.
 struct Lifetime {
-  uint64_t lastUse{}; bool submitted{}, retiring{};
+  uint64_t lastUse{}; bool submitted{}, retiring{}, owner_released{};
   uint32_t reservations{};
   bool reserve() {if(reservations==UINT32_MAX)return false;++reservations;return true;}
   bool unreserve() {if(!reservations)return false;--reservations;return true;}
@@ -57,7 +57,9 @@ struct Lifetime {
     if (!serial || retiring || (submitted && serial < lastUse)) return false;
     lastUse = serial; submitted = true; return true;
   }
+  bool accepts_new_use() const {return !retiring && !owner_released;}
+  void release_owner() {owner_released=true;}
   bool retire() { if (!submitted || retiring) return false; retiring = true; return true; }
-  bool releasable(uint64_t completed) const { return submitted && retiring && !reservations && completed >= lastUse; }
+  bool releasable(uint64_t completed) const { return (owner_released || (submitted && retiring)) && !reservations && (!submitted || completed >= lastUse); }
 };
 }
