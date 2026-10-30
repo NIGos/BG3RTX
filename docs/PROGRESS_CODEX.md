@@ -1,10 +1,28 @@
 # BG3RTX progress
 
-USER CHECK (FG follow-up; defaults unchanged): restart after rebuilding the layer on
-`sup/fg-copy-gate`. Load The Blushing Mermaid - 96h 39m with `fg=2`. Rotate past
-foliage while an NPC nameplate or selection UI is visible. Compare `fg_input_copy=0/1`;
-keep `fg_ui_pq=0`. Input preservation and RR pool retirement are verified. Visible
-flicker quality remains unqualified; the default stays 0.
+USER CHECK (FG input preservation is now the default): restart after rebuilding the layer.
+Load The Blushing Mermaid - 96h 39m with FG 2. Rotate past foliage with NPC names or
+selection UI visible. `fg_input_copy=1` now preserves finite MV/nonempty depth from
+NGX; compare live with 0 if needed. Keep `fg_ui_pq=0`. Full flicker resolution is unproved.
+
+## FG copy default decision - 2026-10-30 (`sup/fg-copy-default`)
+
+- PROMOTED for correctness. Earlier private-input gates passed 200/200 depth and
+  MV matches, zero empty depth/non-finite MV; original late depth was zero in half
+  the samples. Copy GPU cost remains 0.026 ms. No ABI or shader change.
+- One FG 2 run, fast Q rotation, 0/1 alternating four times, 16 presented PNGs per
+  window. World mean +/- window SE: 7.039 +/- 0.352 -> 7.940 +/- 0.100 codes;
+  UI ROI 7.458 +/- 0.509 -> 7.835 +/- 0.447. Observed deltas worsen by 0.901 and
+  0.377. They do not exceed the simultaneous one-sided 95% noise bounds, 1.075
+  and 1.663 (Welch SE 0.366 / 0.677, df 3.48 / 5.90, two ROIs, family alpha 0.05).
+  This decision is not a proof of equivalence or a passed full flicker-quality gate.
+- Copy-0 repeat SD was 0.831 / 0.055 in the prior two windows; this run measures
+  0.704 / 1.017. Windows, not PNGs, are the sampling units. All capture windows
+  reset SDK timers (33 total); last on camera step is larger. Steady ratio 2.00,
+  capture ratios 1.70-2.30, zero host toggles, no new VUID IDs; two existing SDK
+  latency-marker threading warnings. No driver events or dumps. Queue valid.
+- Job `sup-fg-copy-default`; evidence `docs/evidence/fg-copy-default-20261030.json`.
+  Defaults regenerated; build -Test passes 14/14 CTests. Integration uses merge-green.
 
 ## FG pairing / UI follow-up - 2026-10-30 (`066b38b`, not merged)
 
