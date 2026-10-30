@@ -1,3 +1,4 @@
+#include "../common/rt_capture_budget.h"
 #include "../common/omm_native_plain_recipes.h"
 #include "../common/sun_raster_domain.h"
 // Track D phase 1: capture the opaque scene geometry of BG3's G-buffer pass in
@@ -454,18 +455,9 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
     // opaque triangles needed last frame.
     const VkDeviceSize mb = VkDeviceSize(1) << 20, size = c.xfb.size;
     VkDeviceSize floor_b = VkDeviceSize((std::max)(cfg_int("rt_alpha_mb", 64), 1)) * mb;
-    VkDeviceSize amb = g_alpha_region.load();
-    if (!amb) amb = floor_b;
-    if (cfg_int("rt_alpha_auto", 1)) {
-      VkDeviceSize want = (std::max)(floor_b, (g_alpha_demand_prev.load() * 3 / 2 + mb - 1) / mb * mb);
-      if (want > amb || want * 2 < amb) amb = want;
-      VkDeviceSize cap = size / 100 * VkDeviceSize((std::min)((std::max)(cfg_int("rt_alpha_max_pct", 60), 5), 90));
-      VkDeviceSize opaque = g_opaque_demand_prev.load() * 11 / 10;
-      if (opaque && opaque < size) cap = (std::min)(cap, (std::max)(size - opaque, floor_b));
-      amb = (std::min)(amb, cap);
-    } else {
-      amb = floor_b;
-    }
+    const VkDeviceSize amb=capture_budget::alpha_region(size,floor_b,g_alpha_region.load(),
+      g_alpha_demand_prev.load(),g_opaque_demand_prev.load(),cfg_int("rt_alpha_auto",1)!=0,
+      cfg_int("rt_alpha_max_pct",60));
     if (amb < size) {
       g_alpha_region = amb;
       c.alpha_base = c.alpha_cursor = c.opaque_end = (size - amb) & ~VkDeviceSize(255);
@@ -1937,7 +1929,11 @@ void rt_capture_stats(const Capture& c) {
     log("[rt-capture] discard filter 1 frame %llu skipped %llu always-discard draws",
         (unsigned long long)c.record_frame, (unsigned long long)c.discard_skipped);
   g_alpha_demand_prev = c.alpha_demand;
-  g_opaque_demand_prev = c.cursor + c.opaque_overflow_bytes;
+  // In the opt-in 88-byte stream, capacity-forced alpha fallbacks must not
+  // reserve opaque space a second time and lock the next alpha partition down.
+  // Logs below retain the total physical opaque/fallback stream and all drops.
+  g_opaque_demand_prev=capture_budget::opaque_partition_demand(c.cursor+c.opaque_overflow_bytes,
+    c.alpha_overflow_bytes,geo_native_hair_enabled());
   std::lock_guard<std::mutex> lock(g_drop_mu);
   RtDropLog& l = g_drop;
   ++l.frames;
