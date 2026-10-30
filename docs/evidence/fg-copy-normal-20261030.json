@@ -1,0 +1,132 @@
+{
+  "log": "captures\\queue\\logs\\sup-fg-copy-normal.1.125806.log",
+  "rows": [
+    {
+      "copy": 0,
+      "directories": [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\fg_20261030-130038"
+      ],
+      "images": 16,
+      "proxy": {
+        "world": 7.208476339067731,
+        "world_ui_roi": 7.236508096967425
+      },
+      "moving_energy_delta_pct": {
+        "world": -0.449084160451263,
+        "world_ui_roi": -0.6777498871403109
+      },
+      "camera_step_degrees_p0_p50_p100": [
+        5.618433829524212,
+        6.296166549023181,
+        10.88665701679465
+      ],
+      "sdk_ratio_p0_p50_p100": [
+        1.9,
+        2.0,
+        2.1
+      ],
+      "timer_resets": 4,
+      "host_toggles": 0
+    },
+    {
+      "copy": 1,
+      "directories": [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\fg_20261030-130126"
+      ],
+      "images": 16,
+      "proxy": {
+        "world": 3.873461963874953,
+        "world_ui_roi": 3.9715086221694946
+      },
+      "moving_energy_delta_pct": {
+        "world": 0.2621126667893492,
+        "world_ui_roi": 0.10141182779337399
+      },
+      "camera_step_degrees_p0_p50_p100": [
+        0.0,
+        6.273565737246351,
+        10.886605113264013
+      ],
+      "sdk_ratio_p0_p50_p100": [
+        1.7,
+        2.0,
+        2.3
+      ],
+      "timer_resets": 4,
+      "host_toggles": 0
+    },
+    {
+      "copy": 0,
+      "directories": [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\fg_20261030-130214"
+      ],
+      "images": 16,
+      "proxy": {
+        "world": 8.383707114628383,
+        "world_ui_roi": 7.3144025802612305
+      },
+      "moving_energy_delta_pct": {
+        "world": -0.24805191902770307,
+        "world_ui_roi": -0.358596538723599
+      },
+      "camera_step_degrees_p0_p50_p100": [
+        5.482516150647708,
+        6.298343343723406,
+        10.886594005995446
+      ],
+      "sdk_ratio_p0_p50_p100": [
+        1.7,
+        2.0,
+        2.3
+      ],
+      "timer_resets": 4,
+      "host_toggles": 0
+    },
+    {
+      "copy": 1,
+      "directories": [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\fg_20261030-130302"
+      ],
+      "images": 16,
+      "proxy": {
+        "world": 8.379220179149083,
+        "world_ui_roi": 8.350848197937012
+      },
+      "moving_energy_delta_pct": {
+        "world": 0.4074583257850817,
+        "world_ui_roi": 0.5520903742044725
+      },
+      "camera_step_degrees_p0_p50_p100": [
+        3.286649018702053,
+        6.308554152335458,
+        10.886613872615062
+      ],
+      "sdk_ratio_p0_p50_p100": [
+        1.9,
+        2.0,
+        2.1
+      ],
+      "timer_resets": 4,
+      "host_toggles": 0
+    }
+  ],
+  "new_vuids": [],
+  "sdk_threading_warnings": 1,
+  "pooled_proxy": {
+    "0": {
+      "world": 7.796091726848057,
+      "world_ui_roi": 7.275455338614328
+    },
+    "1": {
+      "world": 6.126341071512018,
+      "world_ui_roi": 6.161178410053253
+    }
+  },
+  "decision": "NOT PROMOTED. Second UI repeat is worse; captured cadence is not a constant 2.00. Keep fg_input_copy=0.",
+  "limitations": [
+    "Unwarped midpoint proxy, not ground-truth interpolation. Odd native / even generated parity comes from image-matched companion runs; constant 2.00 cadence and no timer reset are required for this separated capture.",
+    "Input validity is reused from same-frame RR/private-copy bursts. Forward vectors during PNG windows come from the submitted velocity camera UBO.",
+    "All four windows have four SDK frame-timer resets despite asynchronous PNG encoding. GPU readbacks still stall presentation."
+  ],
+  "code_commit": "066b38b"
+}

@@ -1,4 +1,4 @@
-# Session handoff — 2026-10-30 (UI inputs candidate)
+# Session handoff — 2026-10-30 (FG copy quality not qualified)
 
 Read AGENTS.md, then the top of docs/PROGRESS_CODEX.md, then D:/BG3_Tools/USER_STEERING.md
 (newest entries first). The user decides by FG on (fg=2), real presentation, visible window.
@@ -20,11 +20,28 @@ Check Blushing Mermaid - 96h 39m near crates and stage edge. Refits and instance
 indexing are not the cause. Split-off hid the boxes by capture-buffer overflow.
 See PROGRESS_CODEX and TRACK_D_RT section 11 for the deciding run and diagnostics.
 
+## FG pairing / UI follow-up (sup/fg-copy-gate; not merged)
+
+Read the top of PROGRESS_CODEX. Code `066b38b`: submit-order color/UI and a locked
+camera snapshot behind fg_input_copy; disabled UI tags clear their SDK cache entry.
+200/200 same-NGX depth/MV comparisons valid; 245 selected submit stamps align.
+No causal input lag established. MV scale agrees with camera motion (0.9994).
+Final copy 0/1 twice: world off 7.21 / 8.38, on 3.87 / 8.38; UI off 7.24 / 7.31,
+on 3.97 / 8.35. Second UI repeat is worse. Steady 2.00, capture 1.70-2.30 with
+16 timer resets. No new VUID IDs; SDK latency-marker threading warning remains.
+Five UI combinations repeated; baseline near-UI foliage support is zero. No winner.
+Defaults unchanged: copy 0, UI tag 1, PQ 0, hudless 1. Main still 65bd0a2.
+RR pool idle/reset raced the FG pacer and stalled; fenced pool retirement survived
+64 rollovers. PNG encoding is asynchronous, but GPU readbacks still stall capture.
+Temporary virtual mouse changes were removed. Build 14/14, shaders 107/107, QA pass.
+All 44 new completed raw bursts deleted. Evidence: fg-followup-20261030.json.
+Next: normal-cadence GPU readback with native endpoint IDs and actual hover/foliage overlap.
+
 ## UI inputs (sup/ui-inputs; optional correction stays off)
 
 Late FG depth is zero in 64/128 samples; MV gains 3 non-finite components after RR/post.
 Missing event-wait tracking also declared layouts 3/2 instead of observed 5/5.
-fg_input_copy=0 preserves the NGX depth/MV pair, guarded by the SDK consumption fence,
+fg_input_copy=1 preserves the NGX depth/MV pair, guarded by the SDK consumption fence,
 and corrects event-wait tracking. Both inputs match in 68/68 private copies; pair-copy
 GPU median 0.026 ms. No new validation errors in the deciding capture. Keep default 0:
 continuous rotation and matched in-world UI coverage are not qualified; full flicker

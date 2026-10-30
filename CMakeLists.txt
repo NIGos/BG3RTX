@@ -165,6 +165,8 @@ add_executable(fg_stability_test tests/fg_stability_test.cpp)
 add_test(NAME fg_stability_test COMMAND fg_stability_test)
 add_executable(fg_copy_lease_test tests/fg_copy_lease_test.cpp)
 add_test(NAME fg_copy_lease_test COMMAND fg_copy_lease_test)
+add_executable(async_capture_queue_test tests/async_capture_queue_test.cpp)
+add_test(NAME async_capture_queue_test COMMAND async_capture_queue_test)
 # rt_cascade_casters (common/cascade_casters.h, docs/TRACK_D_RT.md 6.7 item 2).
 add_executable(cascade_casters_test tests/cascade_casters_test.cpp)
 add_test(NAME cascade_casters_test COMMAND cascade_casters_test)

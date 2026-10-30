@@ -559,6 +559,7 @@ $phaseTraceIndex=0
 $rotateHeld = $false; $rotateSegment = -1; $rotateX = 0; $rotateY = 0
 $planClock = [System.Diagnostics.Stopwatch]::StartNew(); $phaseStartMs = 0.0
 $pointerCentred = $false
+$planHoverNext = [datetime]::MinValue
 $nextOwnershipCheck = [datetime]::MinValue
 function Send-PlanMouse([int]$message, [int]$buttons, [int]$x, [int]$y) {
   $h = Get-GameWindow
@@ -635,7 +636,7 @@ while ((Get-Date) -lt $deadline) {
         }
         if ($NoActivate) { $iniLines=Set-UnfocusedIniLines $iniLines -PreserveFG:$UnfocusedFG }
         $iniLines | Set-Content -LiteralPath $ini
-        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) set=$($step.set) foreground=$Foreground real_present=$RealPresent visible_unfocused=$NoActivate"
+        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) hover=$($step.hover_x),$($step.hover_y) set=$($step.set) foreground=$Foreground real_present=$RealPresent visible_unfocused=$NoActivate"
         $panCaptureSent = $true
       }
       # Optional static-view diagnostics use the existing trace path, never a
@@ -655,6 +656,11 @@ while ((Get-Date) -lt $deadline) {
       } elseif (-not $step.shift_hold -and $shiftHeld) { Send-ShiftKey $false; $shiftHeld = $false }
       $h = Get-GameWindow; $rect = New-Object BG3RTX.Win2+RECT
       if ($h -ne [IntPtr]::Zero) { [void][BG3RTX.Win2]::GetClientRect($h,[ref]$rect) }
+      # Explicit hover targets stay in the owned HWND; never move the desktop pointer.
+      if ($null -ne $step.hover_x -and $null -ne $step.hover_y -and (Get-Date) -ge $planHoverNext) {
+        Send-PlanMouse 0x0200 0 ([int]($step.hover_x*($rect.Right-$rect.Left))) ([int]($step.hover_y*($rect.Bottom-$rect.Top)))
+        $planHoverNext = (Get-Date).AddMilliseconds(100)
+      }
       $sample = Get-CameraPlanSample $step $elapsed ([Math]::Max(32,$rect.Right-$rect.Left)) ([Math]::Max(32,$rect.Bottom-$rect.Top))
       $panInMotion = $sample.kind -eq 'pan' -and $sample.active
       if (-not $panInMotion -and $moving) { Send-MoveKey $false; $moving = $false; if ($step.shift) { Send-ShiftKey $false } }

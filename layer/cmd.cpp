@@ -387,6 +387,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->sl_cam_valid = false;
   s->sl_mvec_copy = {};
   s->sl_depth_copy = {};
+  s->sl_hudless = {}; s->sl_ui = {};
   s->sl_mvec_slot = UINT32_MAX;
   s->refs.clear();
   return r;
@@ -801,6 +802,13 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
     if (sec->sl_cam_valid) {
       memcpy(s->sl_cam, sec->sl_cam, sizeof s->sl_cam);
       s->sl_cam_valid = true;
+    }
+    if (sec->sl_hudless.image) s->sl_hudless = sec->sl_hudless;
+    if (sec->sl_ui.image) s->sl_ui = sec->sl_ui;
+    if (sec->sl_mvec_copy.image) {
+      s->sl_mvec_copy = sec->sl_mvec_copy;
+      s->sl_depth_copy = sec->sl_depth_copy;
+      s->sl_mvec_slot = sec->sl_mvec_slot;
     }
   }
   if (!s->tracing) return;

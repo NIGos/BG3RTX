@@ -190,6 +190,7 @@ struct CmdState {
   bool sl_cam_valid = false;
   Bg3Binding sl_mvec_copy{};
   Bg3Binding sl_depth_copy{};
+  Bg3Binding sl_hudless{}, sl_ui{}; // publish composite inputs in submit order
   uint32_t sl_mvec_slot = UINT32_MAX;
   uint8_t sl_cam[2][256] = {};
   std::vector<DescEntry> push[2];
