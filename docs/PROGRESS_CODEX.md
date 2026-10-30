@@ -1,5 +1,31 @@
 # BG3RTX progress
 
+## Hair trial regression: capacity fix ready; live setup blocked - 2026-10-31
+
+User reports improved faces but new vegetation flicker and darker/dithered hair.
+OMM was OFF. The supplied trial log confirms capture exhaustion after the global
+vertex stride increased from 24 to 88 bytes with the same 384 MiB allocation:
+alpha demand peaked at 660.8 MiB; the last window forced 41.57 alpha draws/frame
+opaque and dropped 30.41 opaque draws/frame. This is a confirmed coverage defect;
+it does not prove every remaining visual symptom has the same cause.
+
+Native88-only feedback correction 1e324af removes forced-alpha bytes from the
+opaque reservation. Explicit diagnostic allocation 1408 MiB restores previous
+vertex capacity (+1024 MiB in one camera buffer). 0a08191 rejects unsupported
+storage ranges and failed binding/mapping. Both DLLs build; 42/42 CTests pass.
+Private trial Ctrl+Shift+F10 was gated by dev=0, not removed; dev=1 is restored.
+
+The user authorized live testing in this chat. Original trial a9f8688 is retained;
+frozen candidate hair-capacity-fix c22a887 has Hair/Scalp ON, OMM/current Sun OFF.
+One bounded Test1 FG2 static/rotation capacity diagnostic is prepared. No game
+has launched: first setup rejected an absolute job tree (corrected to relative),
+then the claimed child failed authorization validation. This run is INVALID,
+not a renderer failure. Cross-process authorization is being corrected offline.
+Independent review closed a separate late-unowned-game launch race; 33 synthetic
+child authorization checks pass, but actual cross-PowerShell setup still needs proof.
+No measured candidate GPU cost or live quality claim. Dark hair/dither remains open.
+
+
 ## Hair/Scalp personal trial installed - 2026-10-30
 
 At the user's request, installation only; no agent game launch. Desktop shortcut
