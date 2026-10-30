@@ -32,6 +32,8 @@ int main(){
   check(!g.submitted(primary,out));check(out==std::set<Id>({300})); // Reused handle is a new generation.
   check(g.reset(1)==std::set<Id>({300}));check(g.reset(2,true)==std::set<Id>({500}));
   check(!g.referenced(300));check(!g.referenced(500));
+  g.allocate(20,10,3);g.allocate(21,10,3);check(g.begin(21));check(g.mark_content(21));check(g.end(21,true));check(g.begin(20));check(g.execute(20,21));check(g.end(20,true));check(g.has_content(20));
+  g.reset(21);check(g.has_content(20));g.reset(20);check(!g.has_content(20));check(!g.mark_content(999));
   // Failed application submits never call signal; no completion serial exists.
   SubmitSerial s;check(s.candidate()==1);check(s.lastSignal==0);check(s.completed(0,true));
   check(s.signal(1,true));check(s.candidate()==2);check(s.completed(0,true));

@@ -9,8 +9,8 @@ using Id=uint64_t;
 inline bool queue_allowed(bool sameQueue,bool references) {return sameQueue || !references;}
 // CPU recording graph. Generation, not handle equality, identifies a recording.
 struct CommandGraph {
-  struct Edge { Id command,generation; std::set<Id> tickets; };
-  struct Command { Id pool{},generation{}; uint32_t family{}; bool recording{},executable{}; std::set<Id> tickets; std::vector<Edge> children; };
+  struct Edge { Id command,generation; std::set<Id> tickets;bool content{}; };
+  struct Command { Id pool{},generation{}; uint32_t family{}; bool recording{},executable{}; std::set<Id> tickets; std::vector<Edge> children;bool content{}; };
   std::map<Id,Command> commands;
   Id generation{};
   bool resolve(Id id,std::set<Id>& out,std::set<Id>& visited) const {
@@ -33,6 +33,8 @@ struct CommandGraph {
     for(const auto& [id,c]:commands)if(references(c).contains(ticket))return true;
     return false;
   }
+  bool has_content(Id id) const {auto i=commands.find(id);if(i==commands.end())return false;if(i->second.content)return true;for(const auto& e:i->second.children)if(e.content)return true;return false;}
+  bool mark_content(Id id) {auto i=commands.find(id);if(i==commands.end() || !i->second.recording)return false;i->second.content=true;return true;}
   std::set<Id> reset(Id id,bool erase=false) {
     auto i=commands.find(id);if(i==commands.end())return {};
     auto orphan=references(i->second);
@@ -57,7 +59,7 @@ struct CommandGraph {
     auto p=commands.find(primary),s=commands.find(secondary);
     if(p==commands.end() || s==commands.end() || !p->second.recording)return false;
     std::set<Id> refs,visited;bool valid=resolve(secondary,refs,visited);
-    p->second.children.push_back({secondary,s->second.generation,std::move(refs)});return valid;
+    p->second.children.push_back({secondary,s->second.generation,std::move(refs),has_content(secondary)});return valid;
   }
   bool submitted(std::span<const Id> ids,std::set<Id>& out) const {
     out.clear();bool valid=true;

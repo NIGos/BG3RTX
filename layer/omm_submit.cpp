@@ -8,6 +8,7 @@ namespace {
 std::mutex graphMutex,serialMutex;
 CommandGraph graph;
 std::map<Id,uint32_t> pools;
+std::set<Id> untrackedContent;
 DeviceData* owner{};
 VkSemaphore timeline{};
 PFN_vkGetSemaphoreCounterValue getCounter{};
@@ -42,11 +43,24 @@ void submit_device_destroyed(DeviceData* dd) {
     dd->vk.DestroySemaphore(dd->device,timeline,nullptr);
   }
   timeline=VK_NULL_HANDLE;owner=nullptr;getCounter=nullptr;
-  std::lock_guard graphLock(graphMutex);graph={};pools.clear();
+  std::lock_guard graphLock(graphMutex);graph={};pools.clear();untrackedContent.clear();
 }
 bool tracked_recording(VkCommandBuffer cmd) {
   if(!active.load(std::memory_order_acquire))return false;
   std::lock_guard lock(graphMutex);return owner && graph.tracked_recording(id(cmd),owner->graphics_family);
+}
+bool command_queue_family(VkCommandBuffer cmd,uint32_t& family) {
+  if(!active.load())return false;std::lock_guard lock(graphMutex);auto i=graph.commands.find(id(cmd));
+  if(i==graph.commands.end() || !i->second.recording)return false;family=i->second.family;return true;
+}
+bool mark_content_dispatch(VkCommandBuffer cmd) {if(!active.load())return false;std::lock_guard lock(graphMutex);if(graph.mark_content(id(cmd)))return true;untrackedContent.insert(id(cmd));return false;}
+bool content_dispatch_in_submit(std::span<const VkCommandBuffer> commands) {
+  if(!active.load())return false;std::lock_guard lock(graphMutex);
+  for(auto cmd:commands){
+    if(graph.has_content(id(cmd)) || untrackedContent.contains(id(cmd)))return true;
+    auto i=graph.commands.find(id(cmd));if(i!=graph.commands.end() && !graph.references(i->second).empty())return true;
+  }
+  return false;
 }
 bool register_record_ticket(VkCommandBuffer cmd,uint64_t ticket) {
   if(!active.load(std::memory_order_acquire))return false;
@@ -69,13 +83,13 @@ void command_allocated(VkCommandPool pool,VkCommandBuffer cmd) {
 }
 void command_discard(VkCommandBuffer cmd,bool freed) {
   if(!active.load())return;std::set<Id> orphan;
-  {std::lock_guard lock(graphMutex);orphan=graph.reset(id(cmd),freed);}discard(orphan);
+  {std::lock_guard lock(graphMutex);orphan=graph.reset(id(cmd),freed);untrackedContent.erase(id(cmd));}discard(orphan);
 }
 void command_begin(VkCommandBuffer cmd) {if(active.load()){std::lock_guard lock(graphMutex);graph.begin(id(cmd));}}
 void command_end(VkCommandBuffer cmd,bool success) {if(active.load()){std::lock_guard lock(graphMutex);graph.end(id(cmd),success);}}
 void command_execute(VkCommandBuffer cmd,std::span<const VkCommandBuffer> children) {
   if(!active.load())return;
-  std::lock_guard lock(graphMutex);for(auto child:children)graph.execute(id(cmd),id(child));
+  std::lock_guard lock(graphMutex);for(auto child:children){graph.execute(id(cmd),id(child));if(untrackedContent.contains(id(child))){if(!graph.mark_content(id(cmd)))untrackedContent.insert(id(cmd));}}
 }
 PreparedSubmit before_submit(DeviceData* dd,std::span<const VkCommandBuffer> commands) {
   PreparedSubmit prepared;

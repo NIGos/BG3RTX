@@ -8,6 +8,8 @@ namespace bg3::omm {
 bool submit_device_created(DeviceData*);
 void submit_device_destroyed(DeviceData*);
 bool tracked_recording(VkCommandBuffer);
+bool command_queue_family(VkCommandBuffer,uint32_t& family);
+bool mark_content_dispatch(VkCommandBuffer);
 bool register_ticket_use(VkCommandBuffer,uint64_t ticket);
 bool register_record_ticket(VkCommandBuffer,uint64_t ticket); // Backend pre-record path, no callback.
 bool recorded_reference(uint64_t ticket);
