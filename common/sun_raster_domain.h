@@ -4,6 +4,11 @@
 namespace bg3::sun_coverage {
 // An affine shader matrix does not establish finite clipping: Vulkan raster
 // state can clamp or disable it. Unknown dynamic values withhold the witness.
+inline bool full_native_view(const VkViewport& v,const VkRect2D& s,uint32_t width,uint32_t height) {
+  return width && height && v.x==0 && v.width==float(width) && v.minDepth==0 && v.maxDepth==1 &&
+    ((v.y==0 && v.height==float(height)) || (v.y==float(height) && v.height==-float(height))) &&
+    s.offset.x==0 && s.offset.y==0 && s.extent.width==width && s.extent.height==height;
+}
 inline bool finite_native_clip(const VkGraphicsPipelineCreateInfo& ci) {
   if (!ci.pRasterizationState || ci.pRasterizationState->depthClampEnable) return false;
   for (auto* n=static_cast<const VkBaseInStructure*>(ci.pRasterizationState->pNext); n; n=n->pNext)

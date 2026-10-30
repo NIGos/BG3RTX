@@ -24,5 +24,14 @@ int main() {
   }
   VkDynamicState unrelated=VK_DYNAMIC_STATE_VIEWPORT;dynamic.pDynamicStates=&unrelated;CHECK(finite_native_clip(ci));
   clip.depthClipEnable=VK_FALSE;CHECK(!finite_native_clip(ci));
+  using bg3::sun_coverage::full_native_view;
+  VkViewport view{0,0,2048,2048,0,1};VkRect2D scissor{{0,0},{2048,2048}};
+  CHECK(full_native_view(view,scissor,2048,2048));
+  view.y=2048;view.height=-2048;CHECK(full_native_view(view,scissor,2048,2048));
+  view.y=0;CHECK(!full_native_view(view,scissor,2048,2048));
+  view.height=2048;view.minDepth=1;view.maxDepth=0;CHECK(!full_native_view(view,scissor,2048,2048));
+  view.minDepth=0;view.maxDepth=1;scissor.extent.width=1024;CHECK(!full_native_view(view,scissor,2048,2048));
+  scissor.extent.width=2048;scissor.offset.x=1;CHECK(!full_native_view(view,scissor,2048,2048));
+  scissor.offset.x=0;view.width=1024;CHECK(!full_native_view(view,scissor,2048,2048));
   std::printf("Sun raster domain: %u checks; no Vulkan calls\n",checks);
 }

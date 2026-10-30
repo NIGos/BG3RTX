@@ -18,7 +18,8 @@ struct Work {
   VkCommandBuffer build=VK_NULL_HANDLE, consumer=VK_NULL_HANDLE;
   uint64_t consumer_record=0;
   SunBaseCapture base;
-  SunCascadeCapture cascade;
+  std::array<SunCascadeCapture,4> cascades;
+  SunReceiverCapture receiver;
   sun_coverage::NativeEpoch lighting_epoch;
   VkBuffer lighting_frame=VK_NULL_HANDLE,lighting_camera_buffer=VK_NULL_HANDLE;
   VkDeviceSize lighting_offset=0,lighting_camera_offset=0;
@@ -28,6 +29,11 @@ struct Work {
 };
 Work g_work[kSceneSlots];
 SunReceiverCapture g_receiver[16];
+uint32_t g_receiver_next=0;
+VkDescriptorSetLayout g_packet_set=VK_NULL_HANDLE;
+VkPipelineLayout g_packet_layout=VK_NULL_HANDLE;
+VkPipeline g_packet_pipeline=VK_NULL_HANDLE;
+uint64_t g_packet_generation=0;
 VkDescriptorSetLayout g_validate_set=VK_NULL_HANDLE;
 VkPipelineLayout g_validate_layout=VK_NULL_HANDLE;
 VkPipeline g_validate_pipeline=VK_NULL_HANDLE;
@@ -44,15 +50,16 @@ bool ensure_validation() {
   if(g_validate_pipeline && g_validate_generation==blob.generation) return true;
   const auto& vk=g_sun_dd->vk;
   if(!g_validate_set) {
-    VkDescriptorSetLayoutBinding bindings[3]={{0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+    VkDescriptorSetLayoutBinding bindings[4]={{0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
       {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {2,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
+      {2,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {3,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
     VkDescriptorSetLayoutCreateInfo si{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    si.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;si.bindingCount=3;si.pBindings=bindings;
+    si.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;si.bindingCount=4;si.pBindings=bindings;
     if(vk.CreateDescriptorSetLayout(g_sun_dd->device,&si,nullptr,&g_validate_set)!=VK_SUCCESS) return false;
   }
   if(!g_validate_layout) {
-    VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT,0,12};
+    VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT,0,16};
     VkPipelineLayoutCreateInfo pi{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pi.setLayoutCount=1;pi.pSetLayouts=&g_validate_set;pi.pushConstantRangeCount=1;pi.pPushConstantRanges=&push;
     if(vk.CreatePipelineLayout(g_sun_dd->device,&pi,nullptr,&g_validate_layout)!=VK_SUCCESS) return false;
@@ -69,6 +76,36 @@ bool ensure_validation() {
   if(result==VK_SUCCESS) {
     if(g_validate_pipeline) defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_validate_pipeline));
     g_validate_pipeline=pipeline;g_validate_generation=blob.generation;
+  }
+  return result==VK_SUCCESS;
+}
+bool ensure_packet_pipeline() {
+  Bg3ShaderBlob blob{};
+  if(!shader_get("rt/sun_receiver_packet.hlsl","main","cs_6_6",&blob)) return false;
+  if(g_packet_pipeline && g_packet_generation==blob.generation) return true;
+  const auto& vk=g_sun_dd->vk;
+  if(!g_packet_set) {
+    VkDescriptorSetLayoutBinding bindings[13]{};
+    for(unsigned i=0;i<13;++i) bindings[i]={i,i==12?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    ci.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;ci.bindingCount=13;ci.pBindings=bindings;
+    if(vk.CreateDescriptorSetLayout(g_sun_dd->device,&ci,nullptr,&g_packet_set)!=VK_SUCCESS) return false;
+  }
+  if(!g_packet_layout) {
+    VkPipelineLayoutCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};ci.setLayoutCount=1;ci.pSetLayouts=&g_packet_set;
+    if(vk.CreatePipelineLayout(g_sun_dd->device,&ci,nullptr,&g_packet_layout)!=VK_SUCCESS) return false;
+  }
+  VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};mi.codeSize=blob.size_bytes;mi.pCode=blob.code;
+  VkShaderModule module=VK_NULL_HANDLE;
+  if(vk.CreateShaderModule(g_sun_dd->device,&mi,nullptr,&module)!=VK_SUCCESS) return false;
+  VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};ci.layout=g_packet_layout;
+  ci.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};ci.stage.stage=VK_SHADER_STAGE_COMPUTE_BIT;
+  ci.stage.module=module;ci.stage.pName="main";
+  VkPipeline pipeline=VK_NULL_HANDLE;auto result=vk.CreateComputePipelines(g_sun_dd->device,VK_NULL_HANDLE,1,&ci,nullptr,&pipeline);
+  vk.DestroyShaderModule(g_sun_dd->device,module,nullptr);
+  if(result==VK_SUCCESS) {
+    if(g_packet_pipeline) defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_packet_pipeline));
+    g_packet_pipeline=pipeline;g_packet_generation=blob.generation;
   }
   return result==VK_SUCCESS;
 }
@@ -93,21 +130,31 @@ VkCommandBuffer take_build(VkCommandBuffer consumer,std::span<const VkCommandBuf
   for(auto c:entry) keys.push_back(reinterpret_cast<uint64_t>(c));
   for(Work& w:g_work) {
     if(!w.prepared || w.inserted || w.consumer!=consumer) continue;
-    const bool order=sun_coverage::producers_before(keys,reinterpret_cast<uint64_t>(w.base.producer),
-      reinterpret_cast<uint64_t>(w.cascade.soup.producer),reinterpret_cast<uint64_t>(consumer));
-    if(!order || !bvh_rec_matches_command(w.base.base.record,w.base.producer) ||
-       !bvh_rec_matches_command(w.cascade.soup.record,w.cascade.soup.producer) ||
-       !bvh_rec_matches_command(w.consumer_record,consumer)) {++g_failed_order;continue;}
+    bool order=bvh_rec_matches_command(w.base.base.record,w.base.producer) &&
+      bvh_rec_matches_command(w.consumer_record,consumer);
+    for(const auto& cascade:w.cascades) order=order &&
+      sun_coverage::producers_before(keys,reinterpret_cast<uint64_t>(w.base.producer),
+        reinterpret_cast<uint64_t>(cascade.soup.producer),reinterpret_cast<uint64_t>(consumer)) &&
+      bvh_rec_matches_command(cascade.soup.record,cascade.soup.producer);
+    order=order && sun_coverage::producers_before(keys,reinterpret_cast<uint64_t>(w.base.producer),
+      reinterpret_cast<uint64_t>(w.receiver.producer),reinterpret_cast<uint64_t>(consumer)) &&
+      bvh_rec_matches_command(w.receiver.record,w.receiver.producer);
+    if(!order) {++g_failed_order;continue;}
     // Native upload-ring contents can be written late. Revalidate the actual
     // source/consumer packets and projection bytes at submission, not just record.
     if(!frame_still_matches(w.base.native_frame_buffer,w.base.native_frame_offset,w.base.native_epoch) ||
-       !frame_still_matches(w.cascade.native_frame_buffer,w.cascade.native_frame_offset,w.cascade.native_epoch) ||
        !frame_still_matches(w.lighting_frame,w.lighting_offset,w.lighting_epoch) ||
        !camera_still_matches(w.base.camera_buffer,w.base.camera_offset,w.base.camera) ||
-       !camera_still_matches(w.cascade.camera_buffer,w.cascade.camera_offset,w.cascade.camera) ||
        !camera_still_matches(w.lighting_camera_buffer,w.lighting_camera_offset,w.lighting_camera)) {
       ++g_failed_epoch;continue;
     }
+    bool receiver_owned=false;
+    for(const auto& source:g_receiver) if(source.record==w.receiver.record && source.producer==w.receiver.producer) receiver_owned=true;
+    bool fresh=receiver_owned && geo_sun_captures_owned(w.cascades);
+    for(const auto& cascade:w.cascades) fresh=fresh &&
+      frame_still_matches(cascade.native_frame_buffer,cascade.native_frame_offset,cascade.native_epoch) &&
+      (!cascade.camera_mapped || camera_still_matches(cascade.camera_buffer,cascade.camera_offset,cascade.camera));
+    if(!fresh) {++g_failed_epoch;continue;}
     w.inserted=true;++g_inserted;
     return w.build;
   }
@@ -152,7 +199,7 @@ void sun_note_native_draw(VkCommandBuffer cmd,const CmdState* state) {
   }
   capture.record=bvh_rec_register(cmd);
   std::lock_guard<std::mutex> lock(g_sun_mutex);
-  g_receiver[capture.record%std::size(g_receiver)]=std::move(capture);
+  g_receiver[g_receiver_next++%std::size(g_receiver)]=std::move(capture);
 }
 bool sun_native_receiver(const sun_coverage::NativeEpoch& epoch,SunReceiverCapture* out) {
   if(!out || !sun_coverage::valid(epoch)) return false;
@@ -182,21 +229,64 @@ bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,V
      !geo_native_frame_epoch(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,&lighting_epoch,&lighting_frame,&lighting_offset) ||
      !sun_coverage::same_epoch(base.native_epoch,lighting_epoch) ||
      !query_binding(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,0,2,0,&lighting_cb) || !lighting_cb.buffer ||
+     (lighting_cb.range!=VK_WHOLE_SIZE && lighting_cb.range<224) ||
      !read_mapped(lighting_cb.buffer,lighting_cb.offset,lighting_camera,sizeof lighting_camera) ||
      !same_camera_pose(base.camera,lighting_camera)) {++g_failed_epoch;return false;}
-  SunCascadeCapture cascade;
-  if(!geo_sun_cascade(lighting_epoch,&cascade) || !cascade.geometry_complete || !cascade.materials_complete ||
-     !cascade.finite_native_clip || !cascade.soup.has_origin || !cascade::ortho_check(cascade.matrix).ok) {
-    ++g_failed_material;return false;
+  std::array<SunCascadeCapture,4> cascades;
+  if(!geo_sun_cascades(lighting_epoch,&cascades)) {++g_failed_epoch;return false;}
+  for(const auto& c:cascades) {
+    if(!c.geometry_complete || !c.materials_complete || !c.finite_native_clip || !c.native_raster_valid || !c.fresh_depth || !c.camera_buffer) {++g_failed_material;return false;}
+    if(base.producer==cmd || c.soup.producer==cmd) {++g_failed_order;return false;}
   }
-  if(base.producer==cmd || cascade.soup.producer==cmd) {++g_failed_order;return false;}
+  const SunReceiverCapture* native=nullptr;
+  bool native_epoch_match=false;
+  for(const auto& source:g_receiver) {
+    if(!source.sources_valid || source.csm.image!=cascades[0].depth_image ||
+       !bvh_rec_matches_command(source.record,source.producer)) continue;
+    const bool match=sun_coverage::same_epoch(source.epoch,lighting_epoch);
+    if(!native || (match && !native_epoch_match) || (match==native_epoch_match && source.record>native->record)) {
+      native=&source;native_epoch_match=match;
+    }
+  }
+  if(!native || native->producer==cmd) {++g_failed_epoch;return false;}
+  // Exact sampled layer/mip mapping, not just an image handle with a different
+  // array-view offset. GPU packet matching below validates actual UBO contents.
+  {
+    std::shared_lock<std::shared_mutex> lock(tracker().mu);
+    auto view=tracker().views.find(native->csm.view);
+    if(view==tracker().views.end() || view->second.range.baseMipLevel!=0 ||
+       view->second.range.baseArrayLayer!=0 || view->second.range.layerCount<4) {++g_failed_material;return false;}
+  }
+  Bg3Binding lighting_rays{};
+  if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,0,1,0,&lighting_rays) || !lighting_rays.buffer ||
+     (lighting_rays.range!=VK_WHOLE_SIZE && lighting_rays.range<160) || native->ray_basis.source.offset<112) return false;
   Work& w=g_work[base.slot];
   if(w.prepared && w.base.base.record==base.base.record) {
-    if(w.consumer!=cmd || w.cascade.soup.record!=cascade.soup.record ||
-       !bvh_rec_matches_command(w.consumer_record,cmd)) return false;
+    if(w.consumer!=cmd || w.receiver.record!=native->record || !bvh_rec_matches_command(w.consumer_record,cmd)) return false;
+    for(unsigned layer=0;layer<4;++layer) if(w.cascades[layer].soup.record!=cascades[layer].soup.record) return false;
     *out=w.info;return true;
   }
-  if(!ensure_validation()) return false;
+  VkPhysicalDeviceProperties physical{};
+  if(!dd->inst || !dd->inst->GetPhysicalDeviceProperties) return false;
+  dd->inst->GetPhysicalDeviceProperties(dd->physical,&physical);
+  const auto alignment=physical.limits.minUniformBufferOffsetAlignment;
+  if(!alignment || physical.limits.maxPerStageDescriptorUniformBuffers<12 || physical.limits.maxDescriptorSetUniformBuffers<12 ||
+     physical.limits.maxPerStageDescriptorStorageBuffers<1 || physical.limits.maxUniformBufferRange<544) return false;
+  auto valid_uniform=[&](VkBuffer buffer,VkDeviceSize offset,VkDeviceSize bytes) {
+    return offset%alignment==0 && geo_uniform_buffer_range(buffer,offset,bytes);
+  };
+  for(const auto* p:{&native->sun,&native->auxiliary,&native->camera,&native->frame})
+    if(!valid_uniform(p->source.buffer,p->source.offset,p->size)) return false;
+  if(!valid_uniform(native->ray_basis.source.buffer,native->ray_basis.source.offset-112,160) ||
+     !valid_uniform(lighting_cb.buffer,lighting_cb.offset,224) || !valid_uniform(lighting_frame,lighting_offset,32) ||
+     !valid_uniform(lighting_rays.buffer,lighting_rays.offset,160)) return false;
+  for(const auto& c:cascades) if(!valid_uniform(c.camera_buffer,c.camera_offset,224)) return false;
+  auto props2=reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(dd->inst->gipa(dd->inst->instance,"vkGetPhysicalDeviceProperties2"));
+  if(!props2) return false;
+  VkPhysicalDevicePushDescriptorPropertiesKHR push_limits{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR};
+  VkPhysicalDeviceProperties2 properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};properties.pNext=&push_limits;
+  props2(dd->physical,&properties);if(push_limits.maxPushDescriptors<13) return false;
+  if(!ensure_validation() || !ensure_packet_pipeline()) return false;
   const auto& vk=dd->vk;
   if(!w.pool) {
     VkCommandPoolCreateInfo pi{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -217,14 +307,42 @@ bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,V
   VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};begin.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
   if(vk.BeginCommandBuffer(w.build,&begin)!=VK_SUCCESS) return false;
   AlphaSunClone alpha;
-  if(!alpha_prepare_sun_clone(w.build,base.slot,selected_alpha,cascade,&alpha)) return false;
+  if(!alpha_prepare_sun_clone(w.build,base.slot,selected_alpha,cascades,&alpha)) return false;
   barrier(w.build,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
           VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
-  float translation[3];cascade::rebase(cascade.soup.origin,base.camera+52,translation);
+  std::array<uint32_t,308> parameters{};
+  parameters[1200/4]=0;parameters[1204/4]=15;parameters[1208/4]=native->csm.width;parameters[1212/4]=native->csm.height;
+  for(unsigned layer=0;layer<4;++layer) if(cascades[layer].native_viewport.height<0) parameters[1216/4]|=1u<<layer;
+  vk.CmdUpdateBuffer(w.build,alpha.parameters,0,sizeof parameters,parameters.data());
+  barrier(w.build,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+    VK_ACCESS_MEMORY_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_UNIFORM_READ_BIT|VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
+  const auto& n=*native;
+  VkDescriptorBufferInfo packet_buffers[13]={
+    {n.sun.source.buffer,n.sun.source.offset,544},{n.auxiliary.source.buffer,n.auxiliary.source.offset,144},
+    {n.camera.source.buffer,n.camera.source.offset,224},{n.frame.source.buffer,n.frame.source.offset,32},
+    {n.ray_basis.source.buffer,n.ray_basis.source.offset-112,160},
+    {lighting_cb.buffer,lighting_cb.offset,224},{lighting_frame,lighting_offset,32},
+    {lighting_rays.buffer,lighting_rays.offset,160}};
+  for(unsigned layer=0;layer<4;++layer) packet_buffers[8+layer]={cascades[layer].camera_buffer,cascades[layer].camera_offset,192};
+  packet_buffers[12]={alpha.parameters,0,1232};
+  VkWriteDescriptorSet packet_writes[13]{};
+  for(unsigned i=0;i<13;++i) {
+    packet_writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};packet_writes[i].dstBinding=i;
+    packet_writes[i].descriptorCount=1;packet_writes[i].descriptorType=i==12?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    packet_writes[i].pBufferInfo=&packet_buffers[i];
+  }
+  vk.CmdBindPipeline(w.build,VK_PIPELINE_BIND_POINT_COMPUTE,g_packet_pipeline);
+  vk.CmdPushDescriptorSet(w.build,VK_PIPELINE_BIND_POINT_COMPUTE,g_packet_layout,0,13,packet_writes);
+  vk.CmdDispatch(w.build,1,1,1);
+  barrier(w.build,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
   BvhSunCloneResult result;
-  if(!bvh_build_sun_clone(w.build,base.slot,base.base,cascade.soup,translation,g_validate_pipeline,g_validate_layout,alpha.stamp,&result)) return false;
+  if(!bvh_build_sun_clone(w.build,base.slot,base.base,cascades,base.camera+52,g_validate_pipeline,g_validate_layout,alpha.stamp,alpha.parameters,&result)) return false;
+  if(!alpha_sun_bind_scene(base.slot,result.tlas)) return false;
+  const auto& cascade=cascades[0];
   Bg3SunSceneInfo info{};
-  info.tlas=result.tlas;info.alpha_set=alpha.set;info.alpha_layout=alpha.layout;info.build_identity=result.record;
+  info.tlas=result.tlas;info.reference_tlas=result.tlas;info.alpha_set=alpha.set;info.alpha_layout=alpha.layout;info.build_identity=result.record;
   info.camera_record=base.base.record;info.cascade_record=cascade.soup.record;
   info.flags=BG3_SUN_SCENE_RECORDED|BG3_SUN_SCENE_GEOMETRY_COMPLETE|BG3_SUN_SCENE_MATERIALS_COMPLETE|
              BG3_SUN_SCENE_VOLUME_VALID|BG3_SUN_SCENE_NATIVE_EPOCH_VALID;
@@ -252,7 +370,7 @@ bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,V
     VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
   if(vk.EndCommandBuffer(w.build)!=VK_SUCCESS) return false;
-  w.consumer=cmd;w.consumer_record=bvh_rec_register(cmd);w.base=base;w.cascade=cascade;
+  w.consumer=cmd;w.consumer_record=bvh_rec_register(cmd);w.base=base;w.cascades=cascades;w.receiver=*native;
   w.lighting_epoch=lighting_epoch;w.lighting_frame=lighting_frame;w.lighting_offset=lighting_offset;
   w.lighting_camera_buffer=lighting_cb.buffer;w.lighting_camera_offset=lighting_cb.offset;
   std::memcpy(w.lighting_camera,lighting_camera,sizeof lighting_camera);
@@ -306,6 +424,10 @@ void sun_device_destroyed(DeviceData* dd) {
   std::lock_guard<std::mutex> lock(g_sun_mutex);if(g_sun_dd && dd!=g_sun_dd) return;
   for(auto& receiver:g_receiver) receiver=SunReceiverCapture{};
   for(Work& w:g_work) {if(w.pool) defer_destroy(BG3_DEFER_COMMAND_POOL,uint64_t(w.pool));w=Work{};}
+  if(g_packet_pipeline) defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_packet_pipeline));
+  if(g_packet_layout) defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_packet_layout));
+  if(g_packet_set) defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_packet_set));
+  g_packet_pipeline=VK_NULL_HANDLE;g_packet_layout=VK_NULL_HANDLE;g_packet_set=VK_NULL_HANDLE;g_packet_generation=0;g_receiver_next=0;
   if(g_validate_pipeline) defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_validate_pipeline));
   if(g_validate_layout) defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_validate_layout));
   if(g_validate_set) defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_validate_set));

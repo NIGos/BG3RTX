@@ -17,12 +17,14 @@ inline float saturate(float a){return std::clamp(a,0.f,1.f);}
 #define NS_INLINE inline
 #define NS_UINT uint32_t
 #define NS3(x,y,z) float3{x,y,z}
+#define NS4(x,y,z,w) float4{x,y,z,w}
 inline float ns_up(float a){return std::nextafter(a,INFINITY);}
 inline float ns_down(float a){return std::nextafter(a,-INFINITY);}
 #else
 #define NS_INLINE
 #define NS_UINT uint
 #define NS3(x,y,z) float3(x,y,z)
+#define NS4(x,y,z,w) float4(x,y,z,w)
 float ns_up(float a){if(a==0)return asfloat(1u);uint b=asuint(a);return asfloat(a>0?b+1u:b-1u);}
 float ns_down(float a){if(a==0)return -asfloat(1u);uint b=asuint(a);return asfloat(a>0?b-1u:b+1u);}
 #endif
@@ -84,6 +86,69 @@ NS_INLINE NativeSunAux ns_aux(NS_UINT enabled,float cameraFar,float linearDepth,
  float depth=cameraFar*linearDepth;if(!isfinite(depth))return result;
  result.valid=1;result.active=enabled!=0 && depth>threshold?1u:0u;return result;
 }
+// The threshold only enters the auxiliary branch. A full CSM3 suppresses q5
+// auxiliary sampling; q4 is tried only when q5 has no spatial support.
+NS_INLINE NativeSunAux ns_aux_domain(NativeSunAux threshold,float3 q4,float3 q5,float csm3Weight) {
+ NativeSunAux result=threshold;if(!result.valid || !result.active)return result;
+ if(!isfinite(q4.x)||!isfinite(q4.y)||!isfinite(q4.z)||!isfinite(q5.x)||!isfinite(q5.y)||!isfinite(q5.z)||!isfinite(csm3Weight)) {result.valid=0;return result;}
+ bool inside5=q5.x>0 && q5.x<1 && q5.y>0 && q5.y<1 && q5.z>=0;
+ result.active=inside5?(csm3Weight<1?1u:0u):(q4.x>0 && q4.x<1 && q4.y>0 && q4.y<1 && q4.z>=0?1u:0u);
+ return result;
+}
+NS_INLINE float ns_dot3(float3 a,float3 b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+NS_INLINE float3 ns_cross3(float3 a,float3 b){return NS3(a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x);}
+struct NativeSunAffine {NS_UINT valid;float error;float4 rows[3];};
+// q=An*P+bn=Ac*W+bc. Normalize equations by their largest native coefficient
+// before inversion, avoiding false singularity from anisotropic cascade scale.
+NS_INLINE NativeSunAffine ns_affine_from_q(float4 nativeRows[3],float4 casterRows[3]) {
+ NativeSunAffine result;result.valid=0;result.error=0;
+ float4 n[3],c[3];
+ for(NS_UINT i=0;i<3;++i){
+  float scale=max(abs(nativeRows[i].x),max(abs(nativeRows[i].y),abs(nativeRows[i].z)));
+  if(!isfinite(scale)||scale<=0)return result;
+  for(NS_UINT k=0;k<4;++k)if(!isfinite(nativeRows[i][k])||!isfinite(casterRows[i][k]))return result;
+  n[i]=NS4(nativeRows[i].x/scale,nativeRows[i].y/scale,nativeRows[i].z/scale,nativeRows[i].w/scale);
+  c[i]=NS4(casterRows[i].x/scale,casterRows[i].y/scale,casterRows[i].z/scale,casterRows[i].w/scale);
+ }
+ float3 nv[3]={NS3(n[0].x,n[0].y,n[0].z),NS3(n[1].x,n[1].y,n[1].z),NS3(n[2].x,n[2].y,n[2].z)};
+ // A directional orthographic native projection must have orthogonal metric
+ // axes. gamma128 bounds normalized-input encoding and dot-product rounding.
+ for(NS_UINT i=0;i<3;++i)for(NS_UINT j=i+1;j<3;++j){
+  float magnitude=abs(nv[i].x*nv[j].x)+abs(nv[i].y*nv[j].y)+abs(nv[i].z*nv[j].z);
+  if(abs(ns_dot3(nv[i],nv[j]))>7.62945274e-6f*magnitude)return result;
+ }
+ float3 co[3]={ns_cross3(nv[1],nv[2]),ns_cross3(nv[2],nv[0]),ns_cross3(nv[0],nv[1])};
+ float determinant=ns_dot3(nv[0],co[0]);
+ float magnitude=abs(nv[0].x)*(abs(nv[1].y*nv[2].z)+abs(nv[1].z*nv[2].y))+
+  abs(nv[0].y)*(abs(nv[1].z*nv[2].x)+abs(nv[1].x*nv[2].z))+
+  abs(nv[0].z)*(abs(nv[1].x*nv[2].y)+abs(nv[1].y*nv[2].x));
+ if(!isfinite(determinant)||abs(determinant)<=7.62945274e-6f*magnitude)return result;
+ float maximum=1,condition=0;
+ for(NS_UINT row=0;row<3;++row){
+  float x=(co[0][row]*c[0].x+co[1][row]*c[1].x+co[2][row]*c[2].x)/determinant;
+  float y=(co[0][row]*c[0].y+co[1][row]*c[1].y+co[2][row]*c[2].y)/determinant;
+  float z=(co[0][row]*c[0].z+co[1][row]*c[1].z+co[2][row]*c[2].z)/determinant;
+  float w=(co[0][row]*(c[0].w-n[0].w)+co[1][row]*(c[1].w-n[1].w)+co[2][row]*(c[2].w-n[2].w))/determinant;
+  if(!isfinite(x)||!isfinite(y)||!isfinite(z)||!isfinite(w))return result;
+  result.rows[row]=NS4(x,y,z,w);maximum=max(maximum,max(abs(x),max(abs(y),abs(z))));
+  condition=max(condition,3*(abs(co[0][row])+abs(co[1][row])+abs(co[2][row]))/abs(determinant));
+ }
+ // gamma512 covers <128 scalar operations, weighted conservatively for
+ // normalization/division (up to8 rounding units each), plus metric products.
+ result.error=3.05185094e-5f*max(condition,1.0f)*maximum;
+ result.valid=isfinite(result.error)&&result.error<1?1u:0u;return result;
+}
+NS_INLINE bool ns_metric_affine(NativeSunAffine a){
+ if(!a.valid)return false;
+ for(NS_UINT i=0;i<3;++i)for(NS_UINT j=i;j<3;++j){
+  float dot=a.rows[i].x*a.rows[j].x+a.rows[i].y*a.rows[j].y+a.rows[i].z*a.rows[j].z;
+  float mag=abs(a.rows[i].x*a.rows[j].x)+abs(a.rows[i].y*a.rows[j].y)+abs(a.rows[i].z*a.rows[j].z);
+  float sums=abs(a.rows[i].x)+abs(a.rows[i].y)+abs(a.rows[i].z)+abs(a.rows[j].x)+abs(a.rows[j].y)+abs(a.rows[j].z);
+  float bound=7.62945274e-6f*mag+a.error*(sums+3*a.error);
+  if(abs(dot-(i==j?1.0f:0.0f))>bound)return false;
+ }
+ return true;
+}
 struct NativeSunRayFront {NS_UINT valid;float lower,upper;};
 NS_INLINE NativeSunRayFront ns_ray_front(float3 origin,float3 direction,bool domainCertified){
  NativeSunRayFront result;result.valid=0;result.lower=0;result.upper=0;
@@ -129,3 +194,4 @@ NS_INLINE NativeSunFront ns_cone_front(NativeSunCone cone,bool domainCertified){
 #undef NS_INLINE
 #undef NS_UINT
 #undef NS3
+#undef NS4

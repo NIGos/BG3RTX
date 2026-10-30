@@ -196,3 +196,69 @@ therefore preserved. Native selected/next-layer and enabled auxiliary-domain
 consumption is still pending; this increment is NOT a world-shadow gate pass.
 No GPU or game execution, visual gate, frame-time measurement or deployment was
 performed. The additional private record copies also have unmeasured GPU cost.
+
+
+## All-four native-domain consumer checkpoint (offline)
+
+`rt_sun_cascade_current=0` remains the default. The private scene now retains all
+four native Shadow memberships, with masks 2, 4, 8 and 16. Camera instances keep
+mask 1 for primary checks. Native receiver selection and next-layer blending use
+the audited spatial feather formula, not guessed camera-distance splits. The Sun
+ray ends at the verified native caster-domain front. This is the finite engine
+Sun visibility contract; it does not assert that 300 m of uncaptured world is clear.
+The entire angular disc must remain inside captured support, independently of
+which random direction is sampled. Candidate hits outside the native clip volume
+are skipped; numerically ambiguous boundaries remain UNKNOWN.
+
+A same-submit GPU gather snapshots the actual Sun, auxiliary, camera, Frame,
+ray-basis and four caster-camera buffers. Native receiver and lighting camera,
+Frame and ray packets must agree bit for bit. Actual caster projection plus full
+native viewport orientation derives the caster-W to lighting-P transform. A
+shared numeric-error-bounded metric test rejects scale/shear or unsupported
+projection instead of inventing an origin selector. Raster depth bias stays out
+of the physical geometry. Full native viewport/scissor, ordinary depth clipping,
+reverse-Z empty-depth clear and current ownership are required. Enabled auxiliary
+sampling remains UNKNOWN only where its actual branch affects the receiver.
+
+Legacy alpha-table membership is not a completeness certificate. Plain cutouts
+are accepted only for the two audited native predicates with matching captured
+UV/channel/scalar values. Native Scalp and Hair retain their explicit formulas;
+other bounded candidates fall back to the native mask. Unsupported fragment-depth
+geometry rejects scene readiness. The private record copy preserves all 208 bytes,
+including the reserved Pubes subtype at byte 196. No blanket trust override or
+radius/bias increase was added.
+
+Gather descriptors require actual UNIFORM buffer usage, full created ranges and
+aligned offsets, 12 per-stage uniform descriptors and 13 push descriptors. Private
+Sun binding 10 references its own TLAS; binding 11 has a valid dummy until combined
+OMM integration supplies its actual epoch buffer. The copied OMM proof bytes
+128..159 are cleared, preserving Hair-invalid byte 12 and camera bytes 256 onward.
+
+The new counters distinguish certified pixels, fallback, packet failures, active
+auxiliary coverage, cone escape, unknown candidates, actual selected/next ray
+samples and native-white pixels without any ray. Native-white or missing RT is
+never an RT gate pass. Both DLLs and all 28 CTests pass; final shader identity and
+validation are recorded in the checkpoint commit evidence. GPU execution, visual
+energy/penumbra and primary-match gates are explicitly missing. No game launch,
+deployment, new GPU cost or quality pass is claimed. Extra capture capacity is
+up to 768 MiB plus private records and build resources; actual residency and GPU
+milliseconds must be measured in the coordinated live check.
+
+
+Raster limitation for the coordinated gate: physical RT still treats captured
+triangles as two-sided, like the baseline. Per-draw native face culling is not
+replayed by this checkpoint. The current raster witness proves finite clipping
+and full coverage, not exact native raster visibility equivalence. This must not
+be reported as a completed native-equivalence or physical-quality live gate.
+
+
+Final offline checkpoint: both DLLs rebuilt successfully; 28/28 CTests pass,
+including 271,677 native Sun shared-math checks and 49,443 caster coverage/dispatch
+checks. Against Scalp checkpoint `fafc442`, all 214 ordinary shader entries are
+byte-identical and all 11 new entries compile and pass SPIR-V validation.
+Evidence: `captures/sun-coverage-20261030/build-final-checkpoint.txt`,
+`captures/sun-coverage-20261030/shader-final.txt` and
+`captures/sun-coverage-20261030/shader-check/result.json` in the Sun worktree.
+GUI contract: one startup/restart control `rt_sun_cascade_current`; requires
+`rt_cascade_casters=1`, `rt_bvh_split=1` and active RT. Keep it off in every preset
+until coordinated GPU, energy, moving primary-match and visible penumbra gates pass.

@@ -32,6 +32,28 @@ int main(){
  c.directionLo.z=0;check(!ns_cone_front(c,true).valid);
  c=ns_cone_bounds({.98f,.5f,.2f},{0,0,1},{.1f,.1f,0},{0,0,0},{0,0,0});check(!ns_cone_front(c,true).valid);
  c=ns_cone_bounds({.5f,.5f,.2f},{0,0,1},{-.1f,0,0},{0,0,0},{0,0,0});check(!ns_cone_front(c,true).valid);
+ // Auxiliary spatial branch and actual caster-W to receiver-P mapping.
+ NativeSunAux enabled{1,1},disabled{1,0};
+ check(!ns_aux_domain(disabled,{.5f,.5f,.5f},{.5f,.5f,.5f},0).active);
+ check(!ns_aux_domain(enabled,{.5f,.5f,.5f},{.5f,.5f,.5f},1).active);
+ check(ns_aux_domain(enabled,{.5f,.5f,.5f},{.5f,.5f,.5f},.5f).active);
+ check(ns_aux_domain(enabled,{.5f,.5f,.5f},{2,.5f,.5f},1).active);
+ check(!ns_aux_domain(enabled,{2,.5f,.5f},{2,.5f,.5f},0).active);
+ check(!ns_aux_domain(enabled,{NAN,0,0},{0,0,0},0).valid);
+ float4 native[3]={{.125f,0,0,.25f},{0,.25f,0,.5f},{0,0,.0625f,.125f}};
+ float4 caster[3]={{0,-.125f,0,1.5f},{.25f,0,0,-.25f},{0,0,.0625f,.25f}};
+ auto affine=ns_affine_from_q(native,caster);check(affine.valid && ns_metric_affine(affine));
+ for(int sample=-16;sample<=16;++sample)for(unsigned axis=0;axis<3;++axis){
+  double v[3]={sample*.25,sample*-.125,sample*.5},mapped[3]={};
+  for(unsigned row=0;row<3;++row){mapped[row]=affine.rows[row].w;for(unsigned col=0;col<3;++col)mapped[row]+=double(affine.rows[row][col])*v[col];}
+  double left=native[axis].w,right=caster[axis].w;
+  for(unsigned col=0;col<3;++col){left+=double(native[axis][col])*mapped[col];right+=double(caster[axis][col])*v[col];}
+  check(left==right); // Powers of two make this independent double oracle exact.
+ }
+ caster[0].y=-.25f;affine=ns_affine_from_q(native,caster);check(affine.valid && !ns_metric_affine(affine));
+ caster[0].y=-.125f;caster[0].x=.0625f;check(!ns_metric_affine(ns_affine_from_q(native,caster)));
+ native[0]={0,0,0,0};check(!ns_affine_from_q(native,caster).valid);
+ native[0]={NAN,0,0,0};check(!ns_affine_from_q(native,caster).valid);
  std::mt19937 rng(0x687fa32);std::uniform_real_distribution<float> unit(0,1);
  for(unsigned i=0;i<4000;++i){
   for(unsigned j=0;j<4;++j)q[j]={unit(rng)*1.4f-.2f,unit(rng)*1.4f-.2f,unit(rng)*1.5f};

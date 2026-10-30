@@ -1,3 +1,4 @@
+#include "../common/omm_native_plain_recipes.h"
 #include "../common/sun_raster_domain.h"
 // Track D phase 1: capture the opaque scene geometry of BG3's G-buffer pass in
 // camera-relative world space (docs/TRACK_D_RT.md).
@@ -51,6 +52,7 @@ PFN_vkCmdBeginTransformFeedbackEXT p_begin_xfb = nullptr;
 PFN_vkCmdEndTransformFeedbackEXT p_end_xfb = nullptr;
 PFN_vkCmdCopyBuffer p_copy_buffer = nullptr;
 PFN_vkCmdSetViewport p_set_viewport = nullptr;
+PFN_vkCmdSetScissor p_set_scissor=nullptr;
 PFN_vkCmdBeginQuery p_begin_query = nullptr;
 PFN_vkCmdEndQuery p_end_query = nullptr;
 PFN_vkCmdDispatch p_dispatch = nullptr;
@@ -115,6 +117,8 @@ struct PipeInfo {
   bool always_discard = false;
   bool fragment_depth = false;
   bool fragment_known = true;
+  bool native_view_known=false,dynamic_viewport=false,dynamic_scissor=false;
+  VkViewport native_viewport{};VkRect2D native_scissor{};
   bool finite_sun_clip = false; // observed Vulkan z=[0,1], clipping enabled, no clamp
   int depth_write = -1, depth_test = -1; // -1: missing or dynamic; never reject unknown state
   uint32_t color_mask = 0, blend_mask = 0;
@@ -245,7 +249,9 @@ struct Capture {
   VkDeviceSize c_native_offset = 0;
   bool c_epoch_ok = false;
   uint32_t c_material_unknown = 0;
-  bool c_finite_sun_clip = true;
+  bool c_finite_sun_clip = true,c_native_raster_valid=true,c_have_native_viewport=false;
+  VkViewport c_native_viewport{};
+  bool c_fresh_depth=false;
   VkImage c_depth_image = VK_NULL_HANDLE;
   std::vector<SunCascadeDraw> c_sun_draws;
   std::vector<AlphaSnapshot> c_sun_materials;
@@ -326,6 +332,11 @@ VKAPI_ATTR void VKAPI_CALL CmdSetViewport(VkCommandBuffer cmd, uint32_t first, u
       s->viewport = vps[0];
       s->has_viewport = true;
     }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetScissor(VkCommandBuffer cmd,uint32_t first,uint32_t count,const VkRect2D* scissors) {
+  p_set_scissor(cmd,first,count,scissors);
+  if(first==0 && count) if(auto* state=cmd_state(cmd)) {state->scissor=scissors[0];state->has_scissor=true;}
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateBuffer(VkDevice device, const VkBufferCreateInfo* ci,
@@ -1088,8 +1099,16 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.c_sig = 1469598103934665603ull;
   c.c_tris = 0;
   c.c_native_epoch = {}; c.c_native_frame = VK_NULL_HANDLE; c.c_native_offset = 0;
-  c.c_epoch_ok = false; c.c_material_unknown = 0; c.c_finite_sun_clip = true;
+  c.c_epoch_ok = false; c.c_material_unknown = 0; c.c_finite_sun_clip = true;c.c_native_raster_valid=true;c.c_have_native_viewport=false;c.c_fresh_depth=s->depth_cleared_empty && s->render_area.offset.x==0 && s->render_area.offset.y==0;
   c.c_depth_image=s->pass.depth_image; c.c_sun_draws.clear();c.c_sun_materials.clear();
+  if(all_current) {
+    std::shared_lock<std::shared_mutex> image_lock(tracker().mu);
+    auto image=tracker().images.find(s->pass.depth_image);auto view=tracker().views.find(s->pass.depth_view);
+    c.c_native_raster_valid=image!=tracker().images.end() && view!=tracker().views.end() &&
+      image->second.ci.extent.width==s->pass.width && image->second.ci.extent.height==s->pass.height &&
+      view->second.range.baseMipLevel==0 && view->second.range.baseArrayLayer==uint32_t(layer) &&
+      view->second.range.layerCount==1 && s->render_area.offset.x==0 && s->render_area.offset.y==0;
+  }
   c.rec = bvh_rec_register(cmd);
   if(layer==want) g_cc_meta[f % 3] = CcMeta{};
   if(all_current) g_sun_meta[layer][f % 3]=CcMeta{};
@@ -1133,6 +1152,8 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   }
   ++c->c_seen;
   const bool current_sun = cfg_int("rt_sun_cascade_current", 0) != 0;
+  if(current_sun && (!have || (b.range!=VK_WHOLE_SIZE && b.range<224) ||
+      !geo_uniform_buffer_range(b.buffer,b.offset,224))) {++c->c_ubo;return;}
   if (current_sun) {
     sun_coverage::NativeEpoch epoch;
     VkBuffer frame_buffer = VK_NULL_HANDLE; VkDeviceSize frame_offset = 0;
@@ -1145,6 +1166,14 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     // unknown state is NOT interpreted as that known empty case.
     if (pi.depth_write == 0 || pi.always_discard) return;
     c->c_finite_sun_clip = c->c_finite_sun_clip && pi.finite_sun_clip;
+    const bool have_view=pi.native_view_known && (!pi.dynamic_viewport || s->has_viewport) &&
+      (!pi.dynamic_scissor || s->has_scissor);
+    const VkViewport view=pi.dynamic_viewport?s->viewport:pi.native_viewport;
+    const VkRect2D scissor=pi.dynamic_scissor?s->scissor:pi.native_scissor;
+    c->c_native_raster_valid=c->c_native_raster_valid && have_view &&
+      sun_coverage::full_native_view(view,scissor,s->pass.width,s->pass.height);
+    if(!c->c_have_native_viewport) {c->c_native_viewport=view;c->c_have_native_viewport=true;}
+    else c->c_native_raster_valid=c->c_native_raster_valid && std::memcmp(&view,&c->c_native_viewport,sizeof view)==0;
     if (pi.fragment_depth || !pi.fragment_known)
       ++c->c_material_unknown;
   }
@@ -1214,8 +1243,17 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
       if(!pi.fragment_depth && pi.fragment_known && pi.depth_write>=0 && pi.depth_test>=0 && alpha_lookup(s->fs,&material) && material.uv==pi.uv && pi.uv>=0 &&
          (material.kind!=4 || (g_stride>=88 && (pi.hair_outputs&1u)!=0u)) &&
          alpha_capture_source(cmd,material,draw.first_triangle,draw.triangles,&snapshot)) {
-        draw.material=uint32_t(c->c_sun_materials.size())+1;
-        c->c_sun_materials.push_back(std::move(snapshot));
+        // Legacy alpha-table membership is NOT proof of the native predicate:
+        // helper/fade/secondary factors omitted by those recipes stay UNKNOWN.
+        bool native=material.kind==3 || material.kind==4;
+        if(const auto* recipe=omm::native_plain_recipe(s->fs,s->vs))
+          native=omm::native_plain_record_matches(*recipe,material.kind,uint32_t(material.uv),material.tex_set,
+            material.tex_bind,snapshot.rec.channel,snapshot.rec.cut,snapshot.rec.cut_first,
+            snapshot.rec.scale[0],snapshot.rec.scale[1]);
+        if(native) {
+          draw.material=uint32_t(c->c_sun_materials.size())+1;
+          c->c_sun_materials.push_back(std::move(snapshot));
+        }
       }
     }
     c->c_sun_draws.push_back(std::move(draw));
@@ -1283,12 +1321,14 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     meta.sun.native_epoch=c->c_native_epoch;
     meta.sun.native_frame_buffer=c->c_native_frame;meta.sun.native_frame_offset=c->c_native_offset;
     meta.sun.camera_buffer=c->rt_ubo;meta.sun.camera_offset=c->rt_ubo_off;
+    meta.sun.camera_mapped=mat_ok;
     if(mat_ok) std::memcpy(meta.sun.camera,m.v,sizeof m.v);
     meta.sun.layer=uint32_t(c->layer);
     if (mat_ok) for(unsigned r=0;r<4;++r) for(unsigned k=0;k<4;++k) meta.sun.matrix[r][k]=m.v[(8+r)*4+k];
-    meta.sun.geometry_complete=mat_ok && c->c_epoch_ok && c->c_seen && !c->c_drop && !c->c_ubo && !c->c_full && !c->c_dup && !c->c_alpha;
+    meta.sun.geometry_complete=c->rt_ubo && c->c_epoch_ok && c->c_seen && !c->c_drop && !c->c_ubo && !c->c_full && !c->c_dup && !c->c_alpha;
     meta.sun.materials_complete=c->c_material_unknown==0;
     meta.sun.finite_native_clip=c->c_finite_sun_clip;
+    meta.sun.fresh_depth=c->c_fresh_depth;meta.sun.native_raster_valid=c->c_native_raster_valid;meta.sun.native_viewport=c->c_native_viewport;
   }
   if(c==&g_ccap[f % 3]) g_cc_meta[f % 3] = meta;
   if(c->c_legacy_target) {
@@ -1467,6 +1507,7 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
   if (g_dd) return;
   g_dd = dd;
   p_set_viewport = reinterpret_cast<PFN_vkCmdSetViewport>(dd->gdpa(dd->device, "vkCmdSetViewport"));
+  p_set_scissor=reinterpret_cast<PFN_vkCmdSetScissor>(dd->gdpa(dd->device,"vkCmdSetScissor"));
   p_copy_buffer = reinterpret_cast<PFN_vkCmdCopyBuffer>(dd->gdpa(dd->device, "vkCmdCopyBuffer"));
   p_begin_query = reinterpret_cast<PFN_vkCmdBeginQuery>(dd->gdpa(dd->device, "vkCmdBeginQuery"));
   p_end_query = reinterpret_cast<PFN_vkCmdEndQuery>(dd->gdpa(dd->device, "vkCmdEndQuery"));
@@ -1673,6 +1714,18 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     }
     pi.xfb = vs_patched && !other;
     pi.finite_sun_clip = sun_coverage::finite_native_clip(cis[i]);
+    if(cis[i].pViewportState) {
+      const auto& v=*cis[i].pViewportState;
+      pi.native_view_known=v.viewportCount==1 && v.scissorCount==1;
+      if(cis[i].pDynamicState) for(uint32_t k=0;k<cis[i].pDynamicState->dynamicStateCount;++k) {
+        const auto state=cis[i].pDynamicState->pDynamicStates[k];
+        if(state==VK_DYNAMIC_STATE_VIEWPORT) pi.dynamic_viewport=true;
+        if(state==VK_DYNAMIC_STATE_SCISSOR) pi.dynamic_scissor=true;
+        if(state==VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT || state==VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT) pi.native_view_known=false;
+      }
+      if(!pi.dynamic_viewport) {if(v.pViewports) pi.native_viewport=v.pViewports[0];else pi.native_view_known=false;}
+      if(!pi.dynamic_scissor) {if(v.pScissors) pi.native_scissor=v.pScissors[0];else pi.native_view_known=false;}
+    }
     if (cis[i].pDepthStencilState) {
       pi.depth_write = cis[i].pDepthStencilState->depthWriteEnable != 0;
       pi.depth_test = cis[i].pDepthStencilState->depthTestEnable != 0;
@@ -2370,6 +2423,20 @@ bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCasc
   return ms>0 && g_cc_cv.wait_for(lock,std::chrono::milliseconds(ms),find);
 }
 
+bool geo_sun_captures_owned(std::span<const SunCascadeCapture> captures) {
+  std::lock_guard<std::mutex> lock(g_cc_mu);
+  for(const auto& capture:captures) {
+    if(capture.layer>=4) return false;
+    bool owned=false;
+    for(const auto& current:g_sun_meta[capture.layer])
+      if(current.rec==capture.soup.record && current.sun.soup.xfb==capture.soup.xfb &&
+         current.sun.soup.producer==capture.soup.producer &&
+         sun_coverage::same_epoch(current.sun.native_epoch,capture.native_epoch)) owned=true;
+    if(!owned) return false;
+  }
+  return !captures.empty();
+}
+
 void geo_cascade_note_build(int reason, uint32_t tris) {
   std::lock_guard<std::mutex> lock(g_cc_mu);
   if (reason < 0 || reason > 5) return;
@@ -2503,8 +2570,16 @@ VkDeviceSize geo_buffer_size(VkBuffer b) {
   return it == g_buffer_size.end() ? 0 : it->second;
 }
 
+bool geo_uniform_buffer_range(VkBuffer buffer,VkDeviceSize offset,VkDeviceSize bytes) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  auto usage=g_buffer_usage.find(buffer);auto size=g_buffer_size.find(buffer);
+  return usage!=g_buffer_usage.end() && size!=g_buffer_size.end() && (usage->second&VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) &&
+    offset<=size->second && bytes<=size->second-offset;
+}
+
 void register_geo_hooks(HookMap& m) {
   m["vkCmdSetViewport"] = reinterpret_cast<PFN_vkVoidFunction>(&CmdSetViewport);
+  m["vkCmdSetScissor"]=reinterpret_cast<PFN_vkVoidFunction>(&CmdSetScissor);
   m["vkCreateBuffer"] = reinterpret_cast<PFN_vkVoidFunction>(&CreateBuffer);
 }
 

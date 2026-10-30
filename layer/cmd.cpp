@@ -93,6 +93,7 @@ static std::string pass_json(const Bg3PassInfo& p) {
 
 static void begin_pass(VkCommandBuffer cmd, CmdState* s, const VkRect2D& area) {
   s->in_pass = true;
+  s->depth_cleared_empty=false;s->render_area=area;
   s->pass = Bg3PassInfo{};
   s->pass.ordinal = s->pass_ordinal++;
   s->pass.width = area.extent.width;
@@ -145,6 +146,8 @@ static CmdState* describe_classic(VkCommandBuffer cmd, const VkRenderPassBeginIn
     if (d < views.size()) {
       fill_attachment(s->pass, views[d], true);
       if (d < rp.final_layouts.size()) s->depth_layout = rp.final_layouts[d];
+      s->depth_cleared_empty=d<rp.load_ops.size() && rp.load_ops[d]==VK_ATTACHMENT_LOAD_OP_CLEAR &&
+        d<info->clearValueCount && info->pClearValues[d].depthStencil.depth==0;
     }
   }
   pass_ready(cmd, s);
@@ -409,6 +412,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->ib = VK_NULL_HANDLE;
   s->ib_offset = 0;
   s->has_viewport = false;
+  s->has_scissor=false;
   s->sl_layouts.clear();
   s->sl_input_layouts.clear();
   s->sl_cam_valid = false;
@@ -471,6 +475,8 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cmd, const V
   if (info->pDepthAttachment && info->pDepthAttachment->imageView) {
     fill_attachment(s->pass, info->pDepthAttachment->imageView, true);
     s->depth_layout = info->pDepthAttachment->imageLayout;
+    s->depth_cleared_empty=info->pDepthAttachment->loadOp==VK_ATTACHMENT_LOAD_OP_CLEAR &&
+      info->pDepthAttachment->clearValue.depthStencil.depth==0;
   }
   pass_ready(cmd, s);
   vk(cmd).CmdBeginRendering(cmd, info);

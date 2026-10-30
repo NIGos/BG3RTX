@@ -1776,7 +1776,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     rt_begin();
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     Bg3SunSceneInfo current_sun{};
-    const bool use_current = host->cfg_int("rt_sun_cascade_current",0) && host->rt_sun_scene &&
+    const bool current_requested=host->cfg_int("rt_sun_cascade_current",0)!=0;
+    const bool use_current = current_requested && host->rt_sun_scene &&
       host->rt_sun_scene(cmd,b.tlas,b.alpha,&current_sun) &&
       ensure_current_sun_layout(current_sun.alpha_layout) &&
       refresh(g_rt_shadow_current,"gi/rt_shadow.hlsl",g_current_sun_layout);
@@ -1785,8 +1786,12 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
       bind_rt(b,current_sun.tlas,current_sun.alpha_set);
       dispatch(cmd,g_rt_shadow_current,b,pc,g_w,g_h,true,g_current_sun_layout);
       bind_rt(b,original_tlas,original_alpha);
-    } else dispatch(cmd, g_rt_shadow, b, pc, g_w, g_h, true);
-    if ((g_sunt.replace || use_current) && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
+    } else {
+      auto fallback=pc;
+      if(current_requested) fallback.rt_strength=0; // exact native mask, never an unsupported opaque substitute
+      dispatch(cmd,g_rt_shadow,b,fallback,g_w,g_h,true);
+    }
+    if ((use_current || (!current_requested && g_sunt.replace)) && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
         refresh(g_sun_resolve, "gi/rt_sun_resolve.hlsl", g_rt_layout)) {
       memory_barrier(cmd, kCS, kCS);
       dispatch(cmd, g_sun_resolve, b, pc, g_w, g_h, true);

@@ -264,8 +264,11 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
               100.0 * g_sum[18] / br, 100.0 * g_sum[18] / all, 100.0 * g_sum[19] / all, g_sum[10] / 255.0 / all,
               100.0 * g_sum[20] / double(g_sum[10] ? g_sum[10] : 1));
     if(host->cfg_int("rt_sun_cascade_current",0))
-      host->log("sun current finite-ray coverage (%u frames): certified %llu pixels, outside volume %llu, private scene unready %llu; full requested rt_tmax, not clipped to native near plane",
-        g_sum_n,(unsigned long long)g_sum[21],(unsigned long long)g_sum[22],(unsigned long long)g_sum[23]);
+      host->log("sun current native-domain coverage (%u frames): certified %llu pixels, fallback %llu, scene unready %llu; frame/camera/rays rejected %llu/%llu/%llu, aux active %llu, cone escape %llu, unknown candidate %llu; actual selected/next ray samples %llu, native white without ray %llu (not an RT gate pass)",
+        g_sum_n,(unsigned long long)g_sum[21],(unsigned long long)g_sum[22],(unsigned long long)g_sum[23],
+        (unsigned long long)g_sum[24],(unsigned long long)g_sum[25],(unsigned long long)g_sum[26],
+        (unsigned long long)g_sum[27],(unsigned long long)g_sum[28],(unsigned long long)g_sum[29],
+        (unsigned long long)g_sum[30],(unsigned long long)g_sum[31]);
     memset(g_sum, 0, sizeof g_sum);
     g_sum_n = 0;
     g_over_frames = g_over_dropped = 0;
