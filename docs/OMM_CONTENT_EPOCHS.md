@@ -144,3 +144,48 @@ Run the existing optional console with a fourth shader path compiled from entry
 bc_endpoints. Evidence: docs/evidence/omm-bc-endpoints-20261030.txt. Host DLL and
 3/3 targeted CPU tests pass; registry/view/policy checks are now 83. No game,
 window, presentation, runtime configuration change or deployment was performed.
+
+## Native sampler metadata
+
+Host-internal sampler tracking reuses existing descriptor writes/templates/copies;
+public ABI and ordinary shaders are unchanged. Fresh rt_omm=0 records no sampler
+metadata and emits no added GPU calls. Created samplers receive never-reused IDs;
+raw handle reuse cannot change an older descriptor's sampler generation. Snapshot
+fields include filter/mipmap/address modes, LOD min/max/bias, anisotropy, compare,
+normalization, border color and flags. Weighted-average/min/max reduction state
+is retained; unknown/custom-border/Ycbcr chains decline with their structure type.
+
+BoundSampler returns sampler ID/state, descriptor-set/layout generations, write
+version, binding flags and immutable status. Immutable samplers are seeded from
+actual layout definitions and survive layout-handle reuse through copied set
+metadata. Unknown/push/cross-binding rollover/unsupported allocation paths decline.
+Mutable state is CURRENT CPU metadata, not a frozen GPU descriptor certificate.
+The initial factory must require immutable_sampler_current and a standard frozen
+image binding, rather than treating a lifetime reference as freezing updates.
+No production factory was introduced by this sampler increment. Host DLL build
+and two CPU tests pass: 32 create-state and 42 binding/generation checks, no device calls.
+
+
+## Native plain material factory
+
+`capture_native_plain` now captures the actual native draw pipeline, exact audited
+FS/VS recipe, canonical AlphaSnapshot, view/content identities and immutable
+sampler metadata. It requires a normal frozen sampled-image binding and exact
+binding/view agreement. Unknown recipes, WPO recipe 2, UV/material changes,
+unsupported sampler state, mutable samplers and stale generations decline.
+
+`make_native_plain_input` requires the SAME native command recording and an
+explicit owner for the caller-verified post-VS triangle-list vertex range
+(float4 position followed by float2 UV at byte 16). It rechecks source/view and
+sampler identities, then selects certificate 2, every view mip and stochastic
+thresholds [0,1]. All-zero regions remain UNKNOWN. It does not invent a continuous
+numeric certificate for mixed values or freeze image bytes: production GPU epochs,
+scene validation and baseline fallback remain mandatory. Existing lifetime notes
+retain sampled handles through the same command submission.
+
+The helper has no renderer call site yet; the static BLAS variant integration
+must call capture at every native draw, including cached static draws. Forty CPU
+checks exercise the actual helper, including stale recordings/view identities,
+changed recipes/samplers, range failures and strict WPO rejection. The isolated
+host DLL and sampler tests also build/pass. No game or GPU work was run for this
+increment; ordinary shader sources and public ABI are unchanged.

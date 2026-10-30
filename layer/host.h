@@ -115,6 +115,8 @@ struct DescEntry {
   VkBuffer buffer;                     // buffer descriptors
   VkDeviceSize offset, range;
   VkImageLayout layout;                // image descriptors
+  VkSampler sampler = VK_NULL_HANDLE;  // OMM metadata only; public host ABI unchanged
+  uint64_t sampler_id = 0;             // generation at write, never raw-handle age
 };
 
 inline uint64_t desc_key(uint32_t binding, uint32_t element) { return (uint64_t(binding) << 32) | element; }
