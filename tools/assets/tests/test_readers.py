@@ -4,6 +4,7 @@ import struct
 import tempfile
 import unittest
 import zlib
+from unittest.mock import patch
 
 from tools.assets import colour, compress, lsf, lsx, spirv
 from tools.assets.geom import Transform, qrot
@@ -14,9 +15,9 @@ from tools.assets.tests import samples
 
 class Lz4(unittest.TestCase):
     # token 0x35: 3 literals "abc", then a match of 5 + 4 = 9 bytes at offset 3 (overlapping),
-    # then the final literal-only sequence "x"
-    BLOCK = bytes([0x35]) + b"abc" + b"\x03\x00" + bytes([0x10]) + b"x"
-    PLAIN = b"abcabcabcabc" + b"x"
+    # Valid LZ4 blocks end with at least five literal bytes.
+    BLOCK = bytes([0x35]) + b"abc" + b"\x03\x00" + bytes([0x50]) + b"12345"
+    PLAIN = b"abcabcabcabc" + b"12345"
 
     def test_block_overlapping_match(self):
         self.assertEqual(compress.lz4_block_decompress(self.BLOCK, len(self.PLAIN)), self.PLAIN)
@@ -24,9 +25,9 @@ class Lz4(unittest.TestCase):
     def test_block_long_literal_and_match(self):
         lit = bytes(range(40))
         # 40 literals (15 + 25), then a 300-byte match at offset 40 (15 + 255 + 26 + 4)
-        blk = bytes([0xFF, 25]) + lit + b"\x28\x00" + bytes([255, 26]) + bytes([0x00])
-        out = compress.lz4_block_decompress(blk, 340)
-        self.assertEqual(out, lit + (lit * 8)[:300])
+        blk = bytes([0xFF, 25]) + lit + b"\x28\x00" + bytes([255, 26]) + bytes([0x50]) + b"end!!"
+        out = compress.lz4_block_decompress(blk, 345)
+        self.assertEqual(out, lit + (lit * 8)[:300] + b"end!!")
 
     def test_literal_block_helper(self):
         data = os.urandom(1000)
@@ -38,6 +39,13 @@ class Lz4(unittest.TestCase):
     def test_bad_offset(self):
         with self.assertRaises(compress.DecompressError):
             compress.lz4_block_decompress(bytes([0x10]) + b"a" + b"\x05\x00", 10)
+
+    def test_same_valid_vectors_with_python_fallback(self):
+        with patch.object(compress, '_lz4_block', None), patch.object(compress, '_lz4_frame', None):
+            self.assertEqual(compress.lz4_block_decompress(self.BLOCK,len(self.PLAIN)),self.PLAIN)
+            self.assertEqual(compress.lz4_frame_decompress(samples.lz4_frame(self.BLOCK)),self.PLAIN)
+            with self.assertRaises(compress.DecompressError):
+                compress.lz4_block_decompress(b'\x10a\x05\x00',10)
 
     def test_methods(self):
         data = b"hello world" * 20

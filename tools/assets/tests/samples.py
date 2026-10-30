@@ -24,9 +24,10 @@ def lz4_literal_block(data: bytes) -> bytes:
 
 
 def lz4_frame(block: bytes) -> bytes:
-    """An LZ4 frame (independent blocks, no checksums) around one compressed block."""
+    """Independent blocks, no optional checksums; mandatory header checksum valid."""
     flg, bd = 0x60, 0x40
-    return struct.pack("<IBBB", 0x184D2204, flg, bd, 0) + struct.pack("<I", len(block)) + block + b"\0\0\0\0"
+    # (XXH32(bytes([0x60,0x40]), seed=0) >> 8) & 255 == 0x82.
+    return struct.pack("<IBBB", 0x184D2204, flg, bd, 0x82) + struct.pack("<I", len(block)) + block + b"\0\0\0\0"
 
 
 def lspk(files: dict[str, bytes], priority: int = 0) -> bytes:
