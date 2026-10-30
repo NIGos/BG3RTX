@@ -140,6 +140,28 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(omm_classify_test tests/omm_classify_test.cpp)
+add_test(NAME omm_classify_test COMMAND omm_classify_test)
+add_executable(omm_alpha_bounds_test tests/omm_alpha_bounds_test.cpp)
+add_test(NAME omm_alpha_bounds_test COMMAND omm_alpha_bounds_test)
+add_executable(omm_bake_identity_test tests/omm_bake_identity_test.cpp)
+add_test(NAME omm_bake_identity_test COMMAND omm_bake_identity_test)
+# Optional OFFLINE CPU-baker probe. This does not enable a Vulkan extension or
+# create a device; it verifies the installed SDK's incompatible strict cutoff.
+option(BG3RTX_OMM_CPU_PROBE "Build the offline OMM SDK 1.10 CPU contract probe" OFF)
+if(BG3RTX_OMM_CPU_PROBE)
+  set(BG3RTX_OMM_SDK "${BG3RTX_EXTERNAL}/omm-sdk-1.10.0" CACHE PATH "Offline OMM SDK 1.10")
+  if(NOT EXISTS "${BG3RTX_OMM_SDK}/include/omm.h" OR NOT EXISTS "${BG3RTX_OMM_SDK}/lib/omm-lib.lib"
+      OR NOT EXISTS "${BG3RTX_OMM_SDK}/bin/omm-lib.dll")
+    message(FATAL_ERROR "OMM CPU probe requested but BG3RTX_OMM_SDK is incomplete")
+  endif()
+  add_executable(omm_cpu_contract_probe tools/omm_cpu_contract_probe.cpp)
+  target_include_directories(omm_cpu_contract_probe PRIVATE ${BG3RTX_OMM_SDK}/include)
+  target_link_libraries(omm_cpu_contract_probe PRIVATE ${BG3RTX_OMM_SDK}/lib/omm-lib.lib)
+  add_custom_command(TARGET omm_cpu_contract_probe POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BG3RTX_OMM_SDK}/bin/omm-lib.dll ${BG3RTX_BIN}/omm-lib.dll)
+  add_test(NAME omm_cpu_contract_probe COMMAND omm_cpu_contract_probe)
+endif()
 add_executable(mapped_copy_test tests/mapped_copy_test.cpp)
 add_test(NAME mapped_copy_test COMMAND mapped_copy_test)
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)

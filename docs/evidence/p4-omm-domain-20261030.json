@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-30",
+  "branch": "codex/p4-omm-domain",
+  "base": "47ac6a9",
+  "worktree": "C:\\Users\\quali\\.codex\\worktrees\\p4-omm-domain\\BG3RTX",
+  "mode": "Offline CPU work only; no live game or GPU device calls; user live checkout unchanged.",
+  "agents": 2,
+  "code": [
+    "common/omm_classify.h",
+    "common/omm_alpha_bounds.h",
+    "common/omm_bake_identity.h",
+    "tests/omm_classify_test.cpp",
+    "tests/omm_alpha_bounds_test.cpp",
+    "tests/omm_bake_identity_test.cpp",
+    "tools/omm_cpu_contract_probe.cpp"
+  ],
+  "tests": {
+    "full_build": true,
+    "CTest_passed": 19,
+    "CTest_total": 19,
+    "classifier_checks": 197621,
+    "alpha_code_bounds_checks": 398526,
+    "SDK_CPU_cases": 18,
+    "SDK_default_known_state_contradictions": 6,
+    "SDK_cpu_probe_optional": "BG3RTX_OMM_CPU_PROBE=ON in isolated build, OFF by default",
+    "bake_identity_checks": 65
+  },
+  "sdk": {
+    "path": "C:/Users/quali/Documents/Code Projects/BG3RTX/external/omm-sdk-1.10.0",
+    "version": "1.10.0",
+    "dll_sha256": "b0c031f2085f5080ccbdfd7ada451aa57376e4acbb8ccd1c1365b5d3adf2f46e",
+    "finding": "SDK strict > default vs native >=: alpha=cut for0,128/255,1 is assigned known transparent by SDK for nearest and linear, but solid natively.",
+    "all_outputs": "Special indices only, no array data/descriptors for constant cases.",
+    "source_results": "captures/omm-domain-20261030/compiler-probes/build-omm-sdk-probe/results.txt"
+  },
+  "limitations": [
+    "No production callers or runtime setting/extension/BLAS/shader/ABI changes.",
+    "Code hull does not certify numerical GPU filtering/LOD/conversion.",
+    "Whole-mip bounds deliberately sacrifice spatial coverage.",
+    "VT/sRGB RGB/unsupported formats remain incomplete.",
+    "No forced two-state or altered alpha hash/cut policy.",
+    "Native counterpart equality mismatch is not fixed by this preparation.",
+    "No measured GPU cost, speedup or runtime visual gate.",
+    "EXT and KHR APIs must not be mixed."
+  ],
+  "live_priority": "Hair/scalp coverage and distant caster shadow reports are separate from UI descriptor fix; user save reference Test1, no save access.",
+  "next": "Review actual native hair coverage first. OMM needs spatial/numeric/VT proofs and a native threshold adapter before GPU bake/traversal integration.",
+  "merge": false
+}
