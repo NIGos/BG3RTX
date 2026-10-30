@@ -32,7 +32,10 @@ index NONE, base triangle 0 and exact primitive count, with ticket-owned histogr
 storage. This first interface supports one-to-one triangle order, not indexed
 remapping. The caller must preserve unrelated pNext structures and mark every
 submission that uses a BLAS referencing the micromap. Ordinary AS-build-to-query
-barriers remain the BLAS owner's responsibility. Inputs must stay valid through
+barriers remain the BLAS owner's responsibility. Optional `Input.input_owner` holds the producer buffers, pipeline and source
+snapshot through ticket retirement, including submissions and recorded replay
+references. The backend resets this owner only after destroying its micromap,
+storage and scratch. Bare-address inputs still require caller-owned validity through
 micromap build completion; noncoherent host inputs need flushing before submission.
 All GPU recording/submission and completion serials must refer to the same compute
 capable graphics queue; cross-queue ownership/semaphore handling is not implemented.
@@ -69,8 +72,8 @@ The storage/scratch allocation budget is bounded to 256 MiB of requested buffer
 bytes. This is not a measured device-memory footprint or performance result.
 
 Offline validation: isolated host DLL build succeeded with two compiler workers.
-CPU CTests pass 87 plan/range/layout/reservation/lifetime checks and 76 command
-graph/generation/queue/counter state checks (2/2 tests). Settings defaults agree.
+CPU CTests pass 87 plan/range/layout/reservation/lifetime checks and 103 command
+graph/generation/queue/counter/input-owner state checks (2/2 tests). Settings defaults agree.
 No shader files differ from the baseline. No Vulkan command was executed, and
 neither GPU cost nor traversal correctness has been measured. This component has
 no production caller in this commit; provider/BLAS integration and a live same-ray
@@ -83,3 +86,6 @@ input usage and address alignment), `VkMicromapCreateInfoEXT` 07437/07438
 (buffer extent/256-byte offset), and triangle-opacity 10719/10722/10723
 (index type/stride). Registry extension dependencies require AS plus sync2 or
 Vulkan 1.3; registry synchronization tables support the recorded micromap stages.
+
+The coordinated Sun ABI19 change (6913124) is included in this branch before the
+owner follow-up build; shared_ptr input ownership is internal C++ and adds no ABI change.

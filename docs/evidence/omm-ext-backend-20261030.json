@@ -21,9 +21,11 @@
     "Requested storage/scratch buffers capped at 256 MiB, not physical memory accounting",
     "No claim of completed OMM from all-unknown plumbing"
   ],
-  "cpu_submit_graph_generation_queue_counter_checks": 76,
+  "cpu_submit_graph_generation_queue_counter_checks": 103,
   "actual_submission_hooks": "QueueSubmit/QueueSubmit2 before-driver CPU pin, after-success private timeline signal/counter; exact command-generation and secondary/pool/reset tracking",
   "failure_policy": "Private signal/counter/provenance failure retains resources and blocks discard/collection until device idle; unrelated foreign queue ignored",
   "fresh_default_off_extra_gpu_calls": false,
-  "ini_off_held_ticket_tracking": "Continues until all attached tickets retire"
+  "ini_off_held_ticket_tracking": "Continues until all attached tickets retire",
+  "input_owner": "Optional shared_ptr<void> copied into ticket resource; released after micromap/storage/scratch destruction",
+  "coordinated_abi": "ABI19 cherry-pick6913124; input_owner itself changes no host ABI"
 }

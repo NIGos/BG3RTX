@@ -1,6 +1,7 @@
 #pragma once
 #include "../common/omm_backend_plan.h"
 #include <vulkan/vulkan.h>
+#include <memory>
 namespace bg3 { struct DeviceData; struct InstanceData; }
 namespace bg3::omm {
 // Chained by rtscene only after the ordinary AS/RQ prerequisites pass.
@@ -21,6 +22,9 @@ struct Input {
   VkDeviceAddress data{}, triangles{};
   VkDeviceSize dataBytes{}, triangleBytes{};
   VkBufferUsageFlags dataUsage{}, triangleUsage{};
+  // Optional owner of baked data, descriptors and their source/pipeline state.
+  // Retained until ticket destruction AFTER micromap/storage destruction.
+  std::shared_ptr<void> input_owner;
 };
 // Inputs must be exact uploads of descriptors, immutable through build completion,
 // with four-state alpha semantics already certified by the provider. Backend

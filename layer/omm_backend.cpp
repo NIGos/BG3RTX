@@ -24,6 +24,7 @@ PFN_vkCmdBuildMicromapsEXT buildMicromaps{};
 std::mutex mutex;
 struct Buffer { VkBuffer buffer{}; VkDeviceMemory memory{}; VkDeviceSize bytes{}; VkDeviceAddress address{}; };
 struct Resource {
+  std::shared_ptr<void> input_owner;
   Buffer storage, scratch;
   VkMicromapEXT micromap{};
   std::vector<VkMicromapUsageEXT> usage;
@@ -49,6 +50,7 @@ void destroy(Resource& r) {
   if (r.micromap) destroyMicromap(device->device,r.micromap,nullptr);
   bytesLive -= r.storage.bytes + r.scratch.bytes;
   destroy(r.storage); destroy(r.scratch); r.micromap=VK_NULL_HANDLE;
+  r.input_owner.reset();
 }
 bool allocate(VkDeviceSize bytes, VkBufferUsageFlags usage, Buffer& out) {
   if (!bytes) return false;
@@ -179,7 +181,7 @@ Ticket record(VkCommandBuffer cmd,const Input& input) {
         (VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) ||
       (input.triangleUsage & (VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)) !=
         (VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)) return 0;
-  Resource resource;resource.triangles=plan.triangles;
+  Resource resource;resource.triangles=plan.triangles;resource.input_owner=input.input_owner;
   for (auto u:plan.usage) resource.usage.push_back({u.count,u.subdivisionLevel,u.format});
   VkMicromapBuildInfoEXT build{VK_STRUCTURE_TYPE_MICROMAP_BUILD_INFO_EXT};
   build.type=VK_MICROMAP_TYPE_OPACITY_MICROMAP_EXT; build.flags=VK_BUILD_MICROMAP_PREFER_FAST_TRACE_BIT_EXT;
