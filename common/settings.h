@@ -427,7 +427,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_order_trace", "0"},
     {"rt_scene_wait", "1"},
     {"cpu_timing", "0"},
-    {"rt_alpha_stream", "0"},
+    {"rt_alpha_stream", "1"},
     {"rt_stability_log", "0"},
     {"rt_capture_state_log", "0"},
     {"rt_mesh_draw_log", "0"},
