@@ -21,7 +21,7 @@
     "Requested storage/scratch buffers capped at 256 MiB, not physical memory accounting",
     "No claim of completed OMM from all-unknown plumbing"
   ],
-  "cpu_submit_graph_generation_queue_counter_checks": 103,
+  "cpu_submit_graph_generation_queue_counter_checks": 101,
   "actual_submission_hooks": "QueueSubmit/QueueSubmit2 before-driver CPU pin, after-success private timeline signal/counter; exact command-generation and secondary/pool/reset tracking",
   "failure_policy": "Private signal/counter/provenance failure retains resources and blocks discard/collection until device idle; unrelated foreign queue ignored",
   "fresh_default_off_extra_gpu_calls": false,
