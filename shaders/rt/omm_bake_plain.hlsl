@@ -12,23 +12,30 @@ struct BakePush {
 [[vk::binding(1, 0)]] Texture2D<float4> maskTexture;
 [[vk::binding(2, 0)]] RWByteAddressBuffer opacityData;
 [[vk::binding(3, 0)]] RWByteAddressBuffer audit;
-[[vk::binding(4, 0)]] RWByteAddressBuffer contentEpochs;
+[[vk::binding(4, 0)]] globallycoherent RWByteAddressBuffer contentEpochs;
 static const uint kOpacityDataOffset = 256u;
 uint atomic_epoch(uint offset) { uint value; contentEpochs.InterlockedOr(offset, 0u, value); return value; }
 bool content_matches(uint4 stamp) {
-  return stamp.z == 0u && stamp.w == 0x4f4d4d31u &&
+  if(stamp.z!=0u || stamp.w!=0x4f4d4d31u || atomic_epoch(8u)!=0u)return false;
+  DeviceMemoryBarrier();
+  const bool current=
          atomic_epoch(4u) == 0u && atomic_epoch(0u) == stamp.y &&
          atomic_epoch(pc.source_epoch_offset) == stamp.x;
+  DeviceMemoryBarrier();
+  return current && atomic_epoch(8u)==0u && atomic_epoch(0u)==stamp.y;
 }
 [numthreads(1, 1, 1)]
 void init_stamp(uint3 id : SV_DispatchThreadID) {
   uint bytes; contentEpochs.GetDimensions(bytes);
   uint image = 0u, global = 0u, disabled = 1u;
-  if (pc.source_epoch_offset >= 8u && pc.source_epoch_offset % 4u == 0u &&
+  if (bytes >= 16u && pc.source_epoch_offset >= 16u && pc.source_epoch_offset % 4u == 0u &&
       pc.source_epoch_offset <= bytes && bytes - pc.source_epoch_offset >= 4u) {
-    disabled = atomic_epoch(4u);
+    disabled = atomic_epoch(4u) | atomic_epoch(8u);
+    DeviceMemoryBarrier();
     global = atomic_epoch(0u);
     image = atomic_epoch(pc.source_epoch_offset);
+    DeviceMemoryBarrier();
+    disabled |= atomic_epoch(8u);
   }
   const bool valid = disabled == 0u && global != 0xffffffffu && image != 0u && image != 0xffffffffu;
   opacityData.Store4(0u, uint4(image, global, valid ? 0u : 1u, 0x4f4d4d31u));

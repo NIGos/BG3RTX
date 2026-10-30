@@ -177,8 +177,9 @@ static void content_fixture(DeviceData& dd,VkCommandPool pool){
   omm::content_image_destroyed(&dd,image);dd.vk.DestroyImage(dd.device,image,nullptr);omm::content_memory_freed(&dd,mem);dd.vk.FreeMemory(dd.device,mem,nullptr);
 }
 #include "omm_bc_fixture.inl"
+#include "omm_scene_fixture.inl"
 int main(int argc,char** argv){
-  check((argc==2 || argc==3 || argc==5 || argc==6),"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv [producer.spv content.spv [bc.spv]]]");
+  check((argc==2 || argc==3 || argc==5 || argc==6 || argc==7),"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv [producer.spv content.spv [bc.spv [scene.spv]]]]");
   if(argc>=4)producerShader=argv[3];
   if(argc>=5){std::ifstream f(argv[4],std::ios::binary|std::ios::ate);check(bool(f),"content shader");auto size=f.tellg();check(size>0&&uint64_t(size)%4==0,"content shader size");contentShader.resize(size_t(size)/4);f.seekg(0);f.read(reinterpret_cast<char*>(contentShader.data()),size);}
   // Process-local loader settings only. The parent also sets these before launch.
@@ -276,9 +277,10 @@ int main(int argc,char** argv){
     geometry.geometry.triangles.vertexFormat=VK_FORMAT_R32G32B32_SFLOAT;geometry.geometry.triangles.vertexData.deviceAddress=vertices.address;geometry.geometry.triangles.vertexStride=12;geometry.geometry.triangles.maxVertex=8;geometry.geometry.triangles.indexType=VK_INDEX_TYPE_NONE_KHR;
     VkAccelerationStructureBuildGeometryInfoKHR build{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};build.type=VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;build.mode=VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;build.geometryCount=1;build.pGeometries=&geometry;
     uint32_t primitiveCount=3;VkAccelerationStructureBuildSizesInfoKHR sizes{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};dd.vk.GetAccelerationStructureBuildSizesKHR(dd.device,VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,&build,&primitiveCount,&sizes);
-    auto blas=acceleration(dd,blasStorage,build.type,sizes.accelerationStructureSize);buffer(dd,blasScratch,sizes.buildScratchSize+scratchAlignment,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,false);
-    build.dstAccelerationStructure=blas;build.scratchData.deviceAddress=alignedScratch(blasScratch.address);
-    VkAccelerationStructureBuildRangeInfoKHR range{3,0,0,0};const auto* rangePointer=&range;dd.vk.CmdBuildAccelerationStructuresKHR(cmd,1,&build,&rangePointer);
+    omm::AttachedBlas ownedBlas{};
+    check(omm::record_blas(cmd,ticket,vertices.address,sizeof(v),12,3,&ownedBlas),"production ticket-owned attached BLAS");
+    const auto blas=ownedBlas.handle;
+    VkAccelerationStructureBuildRangeInfoKHR range{3,0,0,0};const auto* rangePointer=&range;
     barrier(dd,cmd,VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR);
     VkAccelerationStructureDeviceAddressInfoKHR address{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};address.accelerationStructure=blas;
     VkAccelerationStructureInstanceKHR inst{};inst.transform.matrix[0][0]=inst.transform.matrix[1][1]=inst.transform.matrix[2][2]=1;inst.mask=255;inst.accelerationStructureReference=dd.vk.GetAccelerationStructureDeviceAddressKHR(dd.device,&address);std::memcpy(instances.mapped,&inst,sizeof(inst));
@@ -342,7 +344,9 @@ int main(int argc,char** argv){
       }
       std::puts("PRODUCER cases=3 known_opaque=1 known_transparent=1 unknown_without_certificate=1 actual_EXT_builds=3 GPU_epoch_stamps=3 failures=0; synthetic endpoints only, scene stale fallback not yet wired");
     }
-    vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"reset completed command");omm::command_discard(cmd);check(omm::retire(ticket),"retire ticket");
+    vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"reset completed command");omm::command_discard(cmd);
+    dd.vk.DestroyAccelerationStructureKHR(dd.device,tlas,nullptr);tlas=VK_NULL_HANDLE;
+    check(omm::retire(ticket),"retire ticket");
     input.input_owner.reset();inputs.reset();
     for(auto item:produced)check(omm::retire(item),"producer retire");
     // An actual empty app submit polls the private timeline through production
@@ -351,8 +355,9 @@ int main(int argc,char** argv){
     dd.vk.DestroyPipeline(dd.device,pipeline,nullptr);dd.vk.DestroyPipelineLayout(dd.device,pipelineLayout,nullptr);dd.vk.DestroyDescriptorSetLayout(dd.device,layout,nullptr);dd.vk.DestroyShaderModule(dd.device,shader,nullptr);
     if(endpointPipeline)dd.vk.DestroyPipeline(dd.device,endpointPipeline,nullptr);if(endpointShader)dd.vk.DestroyShaderModule(dd.device,endpointShader,nullptr);
     if(endpointSampler)dd.vk.DestroySampler(dd.device,endpointSampler,nullptr);if(endpointView)dd.vk.DestroyImageView(dd.device,endpointView,nullptr);if(endpointImage)dd.vk.DestroyImage(dd.device,endpointImage,nullptr);if(endpointMemory)dd.vk.FreeMemory(dd.device,endpointMemory,nullptr);
-    dd.vk.DestroyAccelerationStructureKHR(dd.device,tlas,nullptr);dd.vk.DestroyAccelerationStructureKHR(dd.device,blas,nullptr);if(argc>=5)content_fixture(dd,pool);
-    if(argc==6)bc_fixture(dd,pool,argv[5]);
+    if(argc>=5)content_fixture(dd,pool);
+    if(argc>=6)bc_fixture(dd,pool,argv[5]);
+    if(argc==7)scene_fixture(dd,pool,argv[6]);
     dd.vk.DestroyCommandPool(dd.device,pool,nullptr);omm::pool_discard(pool,true);
     std::printf("PASS synthetic EXT: primitives=3 rays=6 contradictions=%u unknown_candidates=%u actual_timeline_retirement=1; not a BG3/FG/sampler proof\n",contradictions,unknownCandidates);
   }

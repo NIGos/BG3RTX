@@ -96,6 +96,9 @@ static const float kOriginNoHit = 1000.0;
 // Different: that build never ran before this pass (its command buffer dropped
 // without a submit, or submitted later): its TLAS is not traced (every ray misses).
 [[vk::binding(9, 1)]] ByteAddressBuffer gSceneStamp;
+#ifdef RT_OMM_SCENE
+#include "omm_scene_guard.hlsli"
+#endif
 #ifdef RT_SCENE_REBASE
 // The native camera is already bound at 29 in D-LS/D-RF and at 48 in
 // the other RT layouts. Descriptor aliases have the same 14-float4 layout.
@@ -670,7 +673,13 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
+#ifdef RT_OMM_SCENE
+  if (rt_omm_scene_current())
   q.TraceRayInline(gScene, 0, RT_VIS_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, 0, RT_VIS_MASK, r);
+#else
+  q.TraceRayInline(gScene, 0, RT_VIS_MASK, r);
+#endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   bool aborted = false;
@@ -742,7 +751,13 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
+#ifdef RT_OMM_SCENE
+  if (rt_omm_scene_current())
   q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, 0, RT_HIT_MASK, r);
+#else
+  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
+#endif
   float near_t = 1e30;
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
@@ -815,7 +830,13 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
+#ifdef RT_OMM_SCENE
+  if (rt_omm_scene_current())
   q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, 0, RT_HIT_MASK, r);
+#else
+  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
+#endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   bool aborted = false;
@@ -986,7 +1007,13 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;
+#ifdef RT_OMM_SCENE
+  if (rt_omm_scene_current())
   q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, 0, RT_HIT_MASK, r);
+#else
+  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
+#endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   while (q.Proceed()) {

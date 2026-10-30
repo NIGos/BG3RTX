@@ -18,6 +18,7 @@ VkPhysicalDeviceSynchronization2Features sync{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_
 VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeature{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES};
 VkPhysicalDeviceOpacityMicromapPropertiesEXT properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT};
 VkDeviceSize scratchAlignment{256};
+uint64_t maxBlasPrimitives{};
 PFN_vkCreateMicromapEXT createMicromap{};
 PFN_vkDestroyMicromapEXT destroyMicromap{};
 PFN_vkGetMicromapBuildSizesEXT getSizes{};
@@ -27,6 +28,8 @@ struct Buffer { VkBuffer buffer{}; VkDeviceMemory memory{}; VkDeviceSize bytes{}
 struct Resource {
   std::shared_ptr<void> input_owner;
   Buffer storage, scratch;
+  Buffer blas_storage, blas_scratch;
+  VkAccelerationStructureKHR blas{};
   VkMicromapEXT micromap{};
   std::vector<VkMicromapUsageEXT> usage;
   uint32_t triangles{};
@@ -47,6 +50,9 @@ void destroy(Buffer& b) {
   b={};
 }
 void destroy(Resource& r) {
+  if(r.blas)device->vk.DestroyAccelerationStructureKHR(device->device,r.blas,nullptr);
+  bytesLive-=r.blas_storage.bytes+r.blas_scratch.bytes;
+  destroy(r.blas_storage);destroy(r.blas_scratch);r.blas=VK_NULL_HANDLE;
   // Micromap must die BEFORE its storage. Caller has proven all uses completed.
   if (r.micromap) destroyMicromap(device->device,r.micromap,nullptr);
   bytesLive -= r.storage.bytes + r.scratch.bytes;
@@ -75,7 +81,7 @@ bool allocate(VkDeviceSize bytes, VkBufferUsageFlags usage, Buffer& out) {
   VkBufferDeviceAddressInfo address{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO}; address.buffer=out.buffer;
   out.address=device->vk.GetBufferDeviceAddress(device->device,&address);
   if (!out.address) {destroy(out);return false;}
-  out.bytes=bytes; return true;
+  out.bytes=req.size; return true;
 }
 }
 
@@ -146,6 +152,7 @@ void device_created(DeviceData* dd, bool rtEnabled) {
   properties={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT,&as};
   VkPhysicalDeviceProperties2 p{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,&properties};properties2(dd->physical,&p);
   scratchAlignment=std::max<VkDeviceSize>(as.minAccelerationStructureScratchOffsetAlignment,1);
+  maxBlasPrimitives=as.maxPrimitiveCount;
   enabled=submit_device_created(dd);
   if(!enabled){log("[omm] private completion timeline unavailable; backend disabled");return;}
   if(!content_device_created(dd))log("[omm content] unavailable; native asset content proof must decline");
@@ -197,6 +204,10 @@ Ticket record(VkCommandBuffer cmd,const Input& input) {
   if (size.micromapSize>budget || scratchBytes>budget-size.micromapSize || bytesLive>budget-size.micromapSize-scratchBytes) return 0;
   if (!allocate(size.micromapSize,VK_BUFFER_USAGE_MICROMAP_STORAGE_BIT_EXT,resource.storage)) return 0;
   if (!allocate(scratchBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,resource.scratch)) {destroy(resource.storage);return 0;}
+  if(resource.storage.bytes>budget || resource.scratch.bytes>budget-resource.storage.bytes ||
+     bytesLive>budget-resource.storage.bytes-resource.scratch.bytes) {
+    destroy(resource.storage);destroy(resource.scratch);return 0;
+  }
   VkMicromapCreateInfoEXT ci{VK_STRUCTURE_TYPE_MICROMAP_CREATE_INFO_EXT};
   ci.buffer=resource.storage.buffer;ci.size=size.micromapSize;ci.type=VK_MICROMAP_TYPE_OPACITY_MICROMAP_EXT;
   if (createMicromap(device->device,&ci,nullptr,&resource.micromap)!=VK_SUCCESS) {destroy(resource.storage);destroy(resource.scratch);return 0;}
@@ -230,6 +241,58 @@ bool attachment(Ticket t,uint32_t primitiveCount,VkAccelerationStructureTriangle
   out.indexType=VK_INDEX_TYPE_NONE_KHR;out.micromap=r.micromap;
   out.usageCountsCount=uint32_t(r.usage.size());out.pUsageCounts=r.usage.data();
   return true;
+}
+bool record_blas(VkCommandBuffer cmd,Ticket ticket,VkDeviceAddress vertices,VkDeviceSize vertexBytes,
+                 uint32_t stride,uint32_t triangles,AttachedBlas* output) {
+  if(output)*output={};
+  if(!output || !blas_vertex_range(vertices,vertexBytes,stride,triangles))return false;
+  std::lock_guard lock(mutex);auto it=resources.find(ticket);
+  if(!enabled || retained || !cfg_int("rt_omm",0) || device_of(cmd)!=device || !tracked_recording(cmd) ||
+     it==resources.end() || it->second.life.retiring || it->second.triangles!=triangles || it->second.blas ||
+     triangles>maxBlasPrimitives)return false;
+  auto& r=it->second;
+  VkAccelerationStructureTrianglesOpacityMicromapEXT opacity{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_TRIANGLES_OPACITY_MICROMAP_EXT};
+  opacity.indexType=VK_INDEX_TYPE_NONE_KHR;opacity.micromap=r.micromap;
+  opacity.usageCountsCount=uint32_t(r.usage.size());opacity.pUsageCounts=r.usage.data();
+  VkAccelerationStructureGeometryKHR geometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+  geometry.geometryType=VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+  geometry.geometry.triangles={VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,&opacity};
+  auto& tri=geometry.geometry.triangles;tri.vertexFormat=VK_FORMAT_R32G32B32_SFLOAT;
+  tri.vertexData.deviceAddress=vertices;tri.vertexStride=stride;tri.maxVertex=triangles*3u-1u;tri.indexType=VK_INDEX_TYPE_NONE_KHR;
+  VkAccelerationStructureBuildGeometryInfoKHR build{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+  build.type=VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;build.flags=VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+  build.mode=VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;build.geometryCount=1;build.pGeometries=&geometry;
+  VkAccelerationStructureBuildSizesInfoKHR size{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+  device->vk.GetAccelerationStructureBuildSizesKHR(device->device,VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,&build,&triangles,&size);
+  if(!size.accelerationStructureSize || size.buildScratchSize>UINT64_MAX-(scratchAlignment-1u))return false;
+  const VkDeviceSize scratchBytes=std::max<VkDeviceSize>(size.buildScratchSize,1)+scratchAlignment-1;
+  Buffer storage{},scratch{};
+  if(!allocate(size.accelerationStructureSize,VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,storage))return false;
+  if(!allocate(scratchBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,scratch)){destroy(storage);return false;}
+  if(storage.bytes>budget || scratch.bytes>budget-storage.bytes || bytesLive>budget-storage.bytes-scratch.bytes){destroy(storage);destroy(scratch);return false;}
+  VkAccelerationStructureCreateInfoKHR ci{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+  ci.type=build.type;ci.buffer=storage.buffer;ci.size=size.accelerationStructureSize;
+  VkAccelerationStructureKHR blas{};
+  if(device->vk.CreateAccelerationStructureKHR(device->device,&ci,nullptr,&blas)!=VK_SUCCESS){destroy(storage);destroy(scratch);return false;}
+  VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};ai.accelerationStructure=blas;
+  const auto address=device->vk.GetAccelerationStructureDeviceAddressKHR(device->device,&ai);
+  if(!address || !register_record_ticket(cmd,ticket)){
+    device->vk.DestroyAccelerationStructureKHR(device->device,blas,nullptr);destroy(storage);destroy(scratch);return false;
+  }
+  r.blas=blas;r.blas_storage=storage;r.blas_scratch=scratch;bytesLive+=storage.bytes+scratch.bytes;
+  build.dstAccelerationStructure=blas;
+  const auto rem=scratch.address%scratchAlignment;build.scratchData.deviceAddress=scratch.address+(rem?scratchAlignment-rem:0);
+  VkMemoryBarrier2 before{VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};before.srcStageMask=VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+  before.srcAccessMask=VK_ACCESS_2_MEMORY_WRITE_BIT;before.dstStageMask=VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
+  before.dstAccessMask=VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR|VK_ACCESS_2_MICROMAP_READ_BIT_EXT;
+  VkDependencyInfo dep{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};dep.memoryBarrierCount=1;dep.pMemoryBarriers=&before;
+  device->vk.CmdPipelineBarrier2(cmd,&dep);
+  VkAccelerationStructureBuildRangeInfoKHR range{triangles,0,0,0};const auto* ranges=&range;
+  device->vk.CmdBuildAccelerationStructuresKHR(cmd,1,&build,&ranges);
+  before.srcStageMask=VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;before.srcAccessMask=VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+  before.dstStageMask=VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+  before.dstAccessMask=VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR;device->vk.CmdPipelineBarrier2(cmd,&dep);
+  *output={blas,address,storage.bytes,scratch.bytes};return true;
 }
 bool mark_submitted(Ticket t,uint64_t serial) {std::lock_guard lock(mutex);auto i=resources.find(t);return i!=resources.end() && i->second.life.use(serial);}
 bool retire(Ticket t) {std::lock_guard lock(mutex);auto i=resources.find(t);return i!=resources.end() && i->second.life.retire();}

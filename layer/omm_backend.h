@@ -35,6 +35,16 @@ Ticket record(VkCommandBuffer, const Input&);
 // One-to-one triangle order, indexType NONE; attachment storage returned by value
 // points to ticket-owned histogram. Never overwrite caller's unrelated pNext.
 bool attachment(Ticket, uint32_t primitiveCount, VkAccelerationStructureTrianglesOpacityMicromapEXT&);
+struct AttachedBlas {
+  VkAccelerationStructureKHR handle{};
+  VkDeviceAddress address{};
+  VkDeviceSize storage_bytes{},scratch_bytes{};
+};
+// One immutable, nonindexed material BLAS per ticket, owned alongside its
+// micromap. Retirement destroys BLAS first, then micromap, then producer inputs.
+// Every TLAS build/traversal must still register_ticket_use(cmd,ticket).
+bool record_blas(VkCommandBuffer,Ticket,VkDeviceAddress vertices,VkDeviceSize vertexBytes,
+                 uint32_t stride,uint32_t triangles,AttachedBlas*);
 bool mark_submitted(Ticket, uint64_t actualSubmissionSerial);
 bool retire(Ticket);
 void collect(uint64_t actualCompletedSerial);

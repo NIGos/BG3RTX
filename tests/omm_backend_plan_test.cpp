@@ -5,6 +5,12 @@ using namespace bg3::omm;
 static unsigned checks;
 static void check(bool x) { ++checks; if (!x) { std::fprintf(stderr,"check %u failed\n",checks); std::exit(1); } }
 int main() {
+  check(blas_vertex_range(256,108,12,3));check(!blas_vertex_range(256,107,12,3));
+  check(blas_vertex_range(256,204,24,3));check(!blas_vertex_range(256,203,24,3));
+  check(!blas_vertex_range(0,108,12,3));check(!blas_vertex_range(257,108,12,3));
+  check(!blas_vertex_range(256,108,8,3));check(!blas_vertex_range(256,108,13,3));
+  check(!blas_vertex_range(256,108,12,0));check(!blas_vertex_range(256,UINT64_MAX,12,UINT32_MAX));
+  check(!blas_vertex_range(UINT64_MAX-3,108,12,3));
   static_assert(sizeof(Triangle)==8); static_assert(sizeof(Usage)==12);
   const Triangle ts[]={{0,0,2},{1,0,2},{2,1,2}}; Plan p;
   check(make_plan(ts,3,12,p)); check(p.triangles==3 && p.usage.size()==2);

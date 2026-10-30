@@ -36,6 +36,15 @@ inline bool input_ranges(const Plan& p, uint64_t dataAddress, uint64_t dataBytes
     dataBytes >= p.dataBytes && triangleBytes >= uint64_t(p.triangles) * sizeof(Triangle) &&
     dataBytes <= UINT64_MAX - dataAddress && triangleBytes <= UINT64_MAX - triangleAddress;
 }
+// Nonindexed triangle-list position range used by the attached BLAS builder.
+// vertexBytes is the actual remaining source range, not the allocation size of
+// some unrelated buffer. UV/material correspondence is certified by the caller.
+inline bool blas_vertex_range(uint64_t address,uint64_t vertexBytes,uint32_t stride,uint32_t triangles) {
+  if(!address || address%4 || stride<12 || stride%4 || !triangles || triangles>UINT32_MAX/3u)return false;
+  const uint64_t last=uint64_t(triangles)*3u-1u;
+  const uint64_t required=last*stride+12u;
+  return required<=vertexBytes && required<=UINT64_MAX-address;
+}
 // Serial values are actual SAME-QUEUE submission/completion values, never frame
 // counters. Before retirement the owner must mark every referencing BLAS use.
 struct Lifetime {

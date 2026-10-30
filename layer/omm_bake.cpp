@@ -113,7 +113,7 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
   if (!available_for(dd)) return 0;
   ContentSource source{};
   if (!content_source_view(in.mask,source) || !source.buffer || !source.viewId || !source.imageId || !source.levelCount ||
-      source.imageOffset<8 || source.imageOffset>UINT32_MAX || source.imageOffset%4 ||
+      source.imageOffset<16 || source.imageOffset>UINT32_MAX || source.imageOffset%4 ||
       source.imageOffset>source.bytes || source.bytes-source.imageOffset<4) return 0;
   // BC and sRGB views have no general mixed-value filtering certificate here.
   // Source eligibility is a constraint, never permission to invent a proof.
