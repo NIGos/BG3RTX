@@ -933,6 +933,7 @@ VkQueryPool g_cc_qp = VK_NULL_HANDLE;   // GPU time of the captured pass (incl. 
 constexpr uint32_t kCcTs = 16;
 uint64_t g_cc_ts_frame[kCcTs] = {};
 std::vector<float> g_cc_ms;
+std::atomic<uint64_t> g_cc_alpha_known{0}, g_cc_alpha_uv{0};   // skipped alpha-tested cascade draws
 struct CcStats {
   uint64_t frames = 0, seen = 0, dup = 0, alpha = 0, drop = 0, ubo = 0, full = 0, added = 0, tris = 0, tris_max = 0;
   uint64_t bytes = 0, bytes_max = 0, keys = 0, unconverted = 0;
@@ -1081,6 +1082,13 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   // rt_cascade_alpha=1 (A/B): alpha-tested draws go in as opaque (cutouts solid).
   if (pi.discard && !cfg_int("rt_cascade_alpha", 0)) {   // alpha-tested: no UV or material here, its cutouts would turn solid
     ++c->c_alpha;
+    // Feasibility of alpha-testing them (as the camera soup does): is the FS in the alpha table,
+    // with the UV location the patched VS captures?
+    AlphaFs a{};
+    if (alpha_lookup(s->fs, &a)) {
+      ++g_cc_alpha_known;
+      if (a.uv == pi.uv && pi.uv >= 0) ++g_cc_alpha_uv;
+    }
     return;
   }
   const cascade::DrawId id = cascade_draw_id(cmd, s, args, pi);
@@ -1202,6 +1210,9 @@ void cascade_on_present() {
   const double n = double(st.frames), mb = 1.0 / (1 << 20);
   uint64_t builds = 0;
   for (uint64_t b : st.builds) builds += b;
+  log("[cascade] alpha-tested cascade draws skipped %.1f per frame: FS in the alpha table %.1f, with the captured UV %.1f",
+      st.alpha / double(st.frames ? st.frames : 1), g_cc_alpha_known.exchange(0) / double(st.frames ? st.frames : 1),
+      g_cc_alpha_uv.exchange(0) / double(st.frames ? st.frames : 1));
   log("[cascade] casters: cascade %d, %llu frames; per frame: draws seen %.1f, skipped as duplicates %.1f, "
       "alpha-tested skipped %.1f, not sizeable %.1f, other matrix %.1f, buffer full %.1f, added %.1f; triangles %.0f "
       "(max %llu), %.2f MB (max %.2f of %d MB); camera pass keys %.0f; captures not converted %llu; next-frame builds "
