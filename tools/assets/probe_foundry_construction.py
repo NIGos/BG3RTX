@@ -1,4 +1,4 @@
-"""Decode ONE explicit, undeformed foundry floor construction (not a room).
+"""Decode ONE of TWO explicit, undeformed foundry constructions (not a room).
 
 Uses the already pinned portable LSLib; package reads and CPU exports only.
 Generated meshes/JSON remain private in captures/m2-foundry/construction-96ed.
@@ -21,6 +21,8 @@ ROOT=Path(__file__).resolve().parents[2]
 SOURCE='Mods/GustavDev/Levels/BGH_SteelWatchFoundry_B/TileConstructions/_merged.lsf'
 RECORD='96ed9025-f791-440b-b954-8f19c06bb543'
 BANK='Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Floor_C_2D_0n5H_A/_merged.lsf'
+WALL_RECORD='569ba5ab-2ab9-4083-b44f-b2b42b337509'
+WALL_BANK='Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Mid_A_0n5D_4H_A/_merged.lsf'
 NULL='00000000-0000-0000-0000-000000000000'
 
 
@@ -140,9 +142,42 @@ def span_evidence(record, instances):
         status='AUTHORING_CONSISTENT_NOT_RUNTIME_QUALIFIED')
 
 
+def wall_span_evidence(record,instances):
+    """Native wall anchors and actual mesh intervals, without sealing overlaps.
+
+    The decorative wall geometry deliberately extends past some tile anchors.
+    Its bounds must NOT be treated as exact topological construction lengths.
+    This records the source geometry rather than inventing a closure threshold.
+    """
+    spline=record.child('ConstructionSpline')
+    points=[n for n in spline.children_named('ConstructionPoint') if n.get('ConstructionHelperPoint') is False]
+    if len(points)!=2:raise UnsupportedAffine('Selected wall is no longer one straight segment')
+    ends=[vec(n.get('ConstructionPointTransform')[12:15],3) for n in points]
+    if ends[0][1:]!=ends[1][1:]:raise UnsupportedAffine('Selected wall is no longer level-X aligned')
+    if any(p not in [tuple(n['tile']['Translate']) for n in instances] for p in ends):
+        raise ValueError('Native wall endpoints no longer share explicit tile anchors')
+    spans=[]
+    for n in instances:
+        a=tile_affine(n['tile'],record.child('tiles'))
+        if a.vector((1,0,0))[0]>=0:raise ValueError('Native wall local +X must point toward decreasing level X')
+        bounds=[m['bounds'] for m in n['meshes'] if m['lod']==0]
+        xlo=min(b[0][0] for b in bounds);xhi=max(b[1][0] for b in bounds)
+        spans.append(dict(uuid=n['tile']['UUID'],x=sorted(a.point((x,0,0))[0] for x in (xlo,xhi)),
+            local_visual_x_bounds=[xlo,xhi],anchor=n['tile']['Translate']))
+    spans.sort(key=lambda n:n['x'][0])
+    return dict(endpoints=ends,endpoint_anchor_identity=True,actual_mesh_x_spans=spans,
+        signed_neighbour_mesh_gaps=[b['x'][0]-a['x'][1] for a,b in zip(spans,spans[1:])],
+        layout='Previously checked raw column-major Rotate9 and explicit level-coordinate Translate; construction pivot excluded',
+        status='AUTHORING_CONSISTENT_NOT_RUNTIME_QUALIFIED',
+        note='Mesh X intervals are not opening/solid coverage or watertightness proof; authored overlap is preserved')
+
+
 def main():
-    ap=argparse.ArgumentParser(__doc__);ap.add_argument('--lslib',type=Path,required=True);args=ap.parse_args()
-    base=ROOT/'captures/m2-foundry';out=base/'construction-96ed';out.mkdir(parents=True,exist_ok=True)
+    ap=argparse.ArgumentParser(__doc__);ap.add_argument('--lslib',type=Path,required=True)
+    ap.add_argument('--construction',choices=('floor','wall'),default='floor');args=ap.parse_args()
+    wall=args.construction=='wall';record_id=WALL_RECORD if wall else RECORD;bank_path=WALL_BANK if wall else BANK
+    count=8 if wall else 5
+    base=ROOT/'captures/m2-foundry';out=base/('construction-569b-wall' if wall else 'construction-96ed');out.mkdir(parents=True,exist_ok=True)
     packed=args.lslib.resolve();tools=packed/'Tools'
     if hashlib.sha256((tools/'LSLib.dll').read_bytes()).hexdigest()!='5dfe246b93cbc95531e011dbf18478c665a9de4f922f8b4a2b73da5a865c76d0':
         raise ValueError('Requires previously verified LSLib v1.20.4')
@@ -153,10 +188,10 @@ def main():
         if len(raw)>64*1024**2:raise ValueError('Selected construction read exceeds bound')
         sources.append(dict(path=path,bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest(),package=ps.owner(path)))
         return raw
-    record=unique(lsf.parse(read(SOURCE)).find_all('GameObjects'),'MapKey',RECORD)
+    record=unique(lsf.parse(read(SOURCE)).find_all('GameObjects'),'MapKey',record_id)
     tiles=record.child('tiles');native_tiles=tiles.children_named('tile')
-    if len(native_tiles)!=5 or record.child('Fillings').children:raise ValueError('Selected five-tile construction changed')
-    bank=lsf.parse(read(BANK));tile_set=unique(bank.region('TileSetBank').children,'ID',tiles.get('TileSet'))
+    if len(native_tiles)!=count or record.child('Fillings').children:raise ValueError('Selected explicit construction changed')
+    bank=lsf.parse(read(bank_path));tile_set=unique(bank.region('TileSetBank').children,'ID',tiles.get('TileSet'))
     tile_map={n.get('TileGUID'):n for n in tile_set.find_all('Tile')}
     if len(tile_map)!=len(list(tile_set.find_all('Tile'))):raise ValueError('Duplicate native TileGUID')
     folded={n.casefold():n for n in ps.index};assets={}
@@ -199,9 +234,9 @@ def main():
             for p,w in zip(mesh['attributes']['POSITION'],transformed['attributes']['POSITION']):
                 raw_delta.append(max(abs(a-b) for a,b in zip(raw.point(p),w)))
                 fp32_bounds.append(max(world.fp32_application_bound(p)))
-    span=span_evidence(record,instances)
+    span=wall_span_evidence(record,instances) if wall else span_evidence(record,instances)
     geometry=out/'world-lod0.json';geometry.write_text(json.dumps(world_meshes,separators=(',',':'))+'\n')
-    summary=dict(scope='ONE explicit foundry floor construction; five instances/four native resources; NOT a room or closure certificate',
+    summary=dict(scope=f'ONE explicit foundry {args.construction} construction; {count} instances/{len(assets)} native resources; NOT a room or closure certificate',
         record=record.to_dict(),source_fingerprints=sources,assets={vid:{k:v for k,v in a.items() if k!='meshes'} for vid,a in assets.items()},
         active_lod=0,instances=[{k:v for k,v in n.items() if k!='meshes'} for n in instances],
         triangles=sum(m['triangles'] for m in world_meshes),vertices=sum(m['vertices'] for m in world_meshes),

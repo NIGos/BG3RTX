@@ -4,7 +4,7 @@ import unittest
 from tools.assets.affine import Affine, UnsupportedAffine
 from tools.assets.resource import Node
 from tools.assets.probe_foundry_mesh import accessor
-from tools.assets.probe_foundry_construction import tile_affine, span_evidence, validate_export, unique, NULL
+from tools.assets.probe_foundry_construction import tile_affine, span_evidence, wall_span_evidence, validate_export, unique, NULL
 
 
 def node(name,**attrs):
@@ -58,6 +58,34 @@ class ConstructionProbeTests(unittest.TestCase):
         for n in instances:
             v=n['tile']['Rotate'];n['tile']['Rotate']=[v[j*3+i] for i in range(3) for j in range(3)]
         with self.assertRaises(ValueError):span_evidence(r,instances)
+
+    def test_actual_wall_anchors_keep_authored_visual_overhang(self):
+        r=node('GameObjects');ts=node('tiles',ConstructionBend=False,ConstructionPlaceTwoTiles=False)
+        spline=node('ConstructionSpline');r.children=[ts,spline]
+        for x in (28.76894760131836,41.76894760131836):
+            spline.children.append(node('ConstructionPoint',ConstructionHelperPoint=False,
+                ConstructionPointTransform=[1,0,0,0,0,1,0,0,0,0,1,0,x,.2703995704650879,93.41004180908203,1]))
+        instances=[]
+        for x,lo,hi in ((28.76894760131836,-3.0517577442878974e-7,.5884971618652344),
+                        (29.76894760131836,-3.0517577442878974e-7,1.003671407699585),
+                        (31.76894760131836,-3.0517577442878974e-7,2.003671407699585),
+                        (37.76894760131836,-.0036709595005959272,6.003670692443848),
+                        (39.76894760131836,-3.0517577442878974e-7,2.003671407699585),
+                        (40.76894760131836,-3.0517577442878974e-7,1.003671407699585),
+                        (41.76894760131836,-3.0517577442878974e-7,1.003671407699585),
+                        (42.26894760131836,-.07847045361995697,.500146746635437)):
+            t=tile(Scale=1.,Translate=[x,.2703995704650879,93.41004180908203],UUID=str(x),
+                   Rotate=[-1,0,8.742277657347586e-8,0,1,0,-8.742277657347586e-8,0,-1])
+            instances.append(dict(tile=t,meshes=[dict(lod=0,bounds=[[lo,0,-.26710978150367737],[hi,4,.018573490902781487]])]))
+        original=copy.deepcopy(instances);e=wall_span_evidence(r,instances)
+        self.assertTrue(e['endpoint_anchor_identity']);self.assertEqual(instances,original)
+        self.assertEqual(len(e['actual_mesh_x_spans']),8)
+        # These millimetre-scale visual overhangs are authored geometry, not a
+        # floating-point gap to snap away or a proof of continuous opacity.
+        self.assertTrue(all(g<0 for g in e['signed_neighbour_mesh_gaps']))
+        self.assertLess(min(e['signed_neighbour_mesh_gaps']),-.007)
+        instances[3]['tile']['Rotate']=[1,0,0,0,1,0,0,0,1]
+        with self.assertRaises(ValueError):wall_span_evidence(r,instances)
 
     def test_deformation_and_unknown_missing_fields_fail(self):
         ts=node('tiles',ConstructionBend=False,ConstructionPlaceTwoTiles=False)
