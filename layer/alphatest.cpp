@@ -102,6 +102,25 @@ uint64_t g_frames = 0, g_draws = 0, g_tris = 0;
 std::atomic<uint32_t> g_scalp_hard{0}, g_scalp_dither{0}, g_scalp_invalid{0};
 std::atomic<uint32_t> g_hair_records{0}, g_hair_invalid{0};
 std::atomic<uint32_t> g_hair_attributes{0};
+std::atomic<uint32_t> g_hair_bounds_invalid{0};
+
+bool unit_mask_format(VkFormat f) {
+  switch(f) {
+    case VK_FORMAT_R8_UNORM:case VK_FORMAT_R8G8_UNORM:case VK_FORMAT_R8G8B8_UNORM:
+    case VK_FORMAT_R8G8B8A8_UNORM:case VK_FORMAT_R8G8B8A8_SRGB:
+    case VK_FORMAT_B8G8R8A8_UNORM:case VK_FORMAT_B8G8R8A8_SRGB:
+    case VK_FORMAT_A8B8G8R8_UNORM_PACK32:case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+    case VK_FORMAT_R16_UNORM:case VK_FORMAT_R16G16_UNORM:case VK_FORMAT_R16G16B16A16_UNORM:
+    case VK_FORMAT_BC1_RGB_UNORM_BLOCK:case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
+    case VK_FORMAT_BC2_UNORM_BLOCK:case VK_FORMAT_BC2_SRGB_BLOCK:
+    case VK_FORMAT_BC3_UNORM_BLOCK:case VK_FORMAT_BC3_SRGB_BLOCK:
+    case VK_FORMAT_BC4_UNORM_BLOCK:case VK_FORMAT_BC5_UNORM_BLOCK:
+    case VK_FORMAT_BC7_UNORM_BLOCK:case VK_FORMAT_BC7_SRGB_BLOCK:return true;
+    default:return false;
+  }
+}
 
 bool make_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& b, VkDeviceMemory& m, bool address = false) {
   DeviceData* dd = g_dd;
@@ -398,6 +417,21 @@ bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   return true;
 }
 
+bool alpha_native_hair_record(uint32_t index,AlphaRec* out) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if(index>=g_recs.size() || g_recs[index].kind!=4)return false;
+  *out=g_recs[index];return true;
+}
+bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if(index>=g_recs.size() || g_recs[index].kind!=4)return false;
+  std::memcpy(reinterpret_cast<uint8_t*>(&g_recs[index])+192,&pool_offset,4);return true;
+}
+bool alpha_hair_build_status(uint32_t slot,VkBuffer* buffer,VkDeviceSize* offset) {
+  if(!geo_native_hair_enabled() || !g_stamp_buf || slot>=kRing)return false;
+  *buffer=g_stamp_buf;*offset=VkDeviceSize(slot)*kStampStride;return true;
+}
+
 void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags) {
   const auto n=g_hair_attributes.fetch_add(1);
   if(n<8) log("[alpha hair] unsupported native interface FS %016llx VS %016llx flags %u (strand=1, camera fade=2)",
@@ -482,6 +516,12 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
     std::memcpy(bytes+96,captured.view_projection.data(),64);
     std::memcpy(bytes+176,captured.near_far.data(),8);
     std::memcpy(bytes+184,&captured.orthographic,4);
+    const float width=std::clamp(captured.material[7],0.0f,1.0f);
+    const float edge0=std::fma(-width,0.5f,captured.material[6]),edge1=std::fma(width,0.5f,captured.material[6]);
+    const bool zero_height=captured.material[4]==0.0f && captured.material[5]==0.0f;
+    const bool defined_height=!a.channel || edge0<edge1 || zero_height;
+    const float bounded_mask=(!a.channel || (unit_mask_format(t.format) && defined_height))?1.0f:0.0f;
+    std::memcpy(bytes+188,&bounded_mask,4);
     r.scale[0]=captured.frame[0];r.scale[1]=captured.frame[1];
     if (a.channel) {
       auto* state=cmd_state(cmd);
@@ -659,7 +699,8 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   // header: record count, the opaque soup's vertex stride (0: not bound), the
   // alpha-test policy bits (rt_common.hlsli kAlpha*; live switches)
   const uint32_t policy = (cfg_int("rt_alpha_cut", 1) ? 1u : 0u) | (cfg_int("rt_alpha_stochastic", 1) ? 2u : 0u) |
-                          (cfg_int("rt_alpha_unknown", 1) ? 4u : 0u);
+                          (cfg_int("rt_alpha_unknown", 1) ? 4u : 0u) |
+                          (geo_native_hair_enabled() && !cfg_int("rt_alpha_test",1) ? 8u : 0u);
   uint32_t header[4] = {uint32_t(g_recs.size()), geo_native_hair_enabled() ? stride : (soup && opaque_bytes ? stride : 0u), policy, 0};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
@@ -679,6 +720,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   // buffer runs (after the scene build recorded before this call).
   if (++g_stamp_gen == 0) g_stamp_gen = 1;
   const VkDeviceSize stamp_base = VkDeviceSize(slot) * kStampStride;
+  if(geo_native_hair_enabled())g_hair_bounds_invalid.fetch_add(g_stamp_map[stamp_base/4+3]);
   g_stamp_map[stamp_base / 4] = g_stamp_gen;
   // Snapshot the very same native UBO used by XFB conversion. This read is
   // executed on the GPU with the build, not a CPU observation at record time.
@@ -772,9 +814,9 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
       log("[alpha scalp] native hard records %u; unsupported camera dither %u; invalid/missing native state %u; "
           "RT cone footprint, not native raster sample identity",
           g_scalp_hard.exchange(0), g_scalp_dither.exchange(0), g_scalp_invalid.exchange(0));
-    if (geo_native_hair_enabled()) log("[alpha hair] native coverage records %u; invalid/missing native state %u; unsupported native interfaces total %u; "
+    if (geo_native_hair_enabled()) log("[alpha hair] native coverage records %u; invalid/missing native state %u; unsupported native interfaces total %u; retired bounds-invalid primitives %u; "
         "88-byte strand capture, base-card RT geometry (native fragment depth remains raster-only)",
-        g_hair_records.exchange(0),g_hair_invalid.exchange(0),g_hair_attributes.load());
+        g_hair_records.exchange(0),g_hair_invalid.exchange(0),g_hair_attributes.load(),g_hair_bounds_invalid.exchange(0));
     // The alpha-tested fragment shaders of this frame by triangles, with their
     // cut-offs (identifies the families on screen: grass, foliage, chains).
     std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> per;

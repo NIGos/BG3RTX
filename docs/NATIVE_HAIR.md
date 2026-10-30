@@ -1,15 +1,15 @@
 # Native hair runtime coverage and depth
 
-## Status: coverage candidate, full Hair remains open
+## Status: procedural CHAR_Hair candidate, family and live gates remain open
 
 `rt_native_hair=0` is default. Enabling requires a restart with `rt_alpha=1` and
 `rt_bvh_split=1`. The latter requirement is enforced: legacy startup rejects this
 mode, logs the reason and never mixes 24/88-byte geometry. Hot-enabling after a
 24-byte startup is also explicitly rejected. No live build was deployed.
 
-The current increment implements actual native CHAR_Hair coverage, not an alpha-A
-surrogate. It still intersects base-card triangles. Native fragment depth/origin
-equivalence remains OPEN; do not call this a complete hair or face-shadow fix.
+The current increment implements actual native CHAR_Hair coverage and procedural
+primary depth. It is not an alpha-A surrogate. Console GPU and native G-buffer
+comparison gates remain pending; do not call all hair or face shadows closed.
 
 ## Native source and pass contract
 
@@ -64,7 +64,7 @@ raster coordinates are reprojected to their pixel centers. Shadow queries use th
 light-ray view direction and native shadow hard branch, without camera fade or
 dither. No generic RT stochastic cutoff replaces either native branch.
 
-## Why fragment depth is still open
+## Native fragment depth and the intended RT material model
 
 Native Depth writes `D' = (D*w + h*A)/(w+h)`, `A = near/(near-far)`, for perspective;
 orthographic writes `D' = D + h/(near-far)`. This is a material-dependent virtual
@@ -79,21 +79,53 @@ component ratios `(P_i-C)/w_i` bound the whole triangle's ratio, permitting a
 conservative widened AABB. Actual close-up material bytes were not in the F10
 capture; no claim that h is below `depth_tol` is possible from existing evidence.
 
-Next implementation: procedural Hair AABBs and original88-byte triangle sidecar,
-reserved InstInfo bit12. Camera-collinear primary rays have a direct one-sample
-solution; native shadow rays intersect the base card because native Shadow has
-no fragment-depth output. Arbitrary secondary rays need a bounded interval solver
-with explicit UNKNOWN on unresolved cases, not a fixed-step false miss. GPU bounds
-failure will use reserved scene-stamp byte12 and make all query types unknown;
-it cannot silently drop a caster or pass a missing-RT primary-match gate.
+Implemented: procedural Hair AABBs and original 88-byte triangle sidecar, InstInfo
+bit 12. An outward-rounded interval builder bounds the general captured projection
+and takes the union with the physical base card. The last record words store a
+normalized-mask/defined-height certificate at 188 and the AABB pool offset at 192.
+Geometry-type changes force rebuilds; refits retain their original geometry type.
+Bounds are regenerated and certified for each scene, including held snapshots.
+
+The material model is explicit by query purpose. Camera-collinear primary checks,
+screen debug and origin queries solve the native camera virtual point directly,
+using hardware SampleLevel at the original base-card ray footprint. They retain
+native camera coverage/dither and use the actual depth-buffer geometric normal
+for the virtual primary surface. A primary request which does not match the
+captured camera ray is UNKNOWN. The origin search can begin after the base card;
+the virtual intersection may still be inside its search window.
+
+Sun/local visibility, GI, AO, reflections and ordinary closest queries intersect
+the physical thin ribbon, with ray-view strand coverage and the native Shadow
+hard branch. Native Shadow has no fragment-depth output. A frozen main-camera
+faux-depth sheet would introduce unrequested off-axis geometry; it is deliberately
+NOT the physical secondary material model. This is not an unresolved fallback or
+a fixed-step heightfield solver. Point sampling stays hardware SampleLevel;
+native raster anisotropic/derivative identity is not claimed.
+
+All four query loops accept generated procedural hits. Dominant-axis shared-edge
+intersection uses precise products and a derived FP32 uncertainty band. Clearly
+outside is MISS; unresolved edges are UNKNOWN, never false holes. A proven
+xfb_to_world inactive marker is handled before inspecting original NaN outputs:
+it keeps a finite point AABB for refit identity and is a known inactive MISS,
+skipped before the software candidate cap. Unsupported finite bounds are different:
+GPU scene-stamp byte 12 becomes nonzero, all four query modes become UNKNOWN or
+aborted, and the primary gate cannot falsely pass on missing geometry.
 
 ## Offline validation
 
-Full isolated build and 21/21 CTests pass. Native Hair CPU test: 19,716 checks,
+Full isolated ABI 19 build and 22/22 CTests pass. The ABI bump is the separately
+approved Sun/OMM tuple extension, imported unchanged; Hair adds no ABI fields.
+Native Hair CPU test: 19,734 checks,
 including six exact parameter-binding recipes, reset-on-read-failure, signed mask
 combination, root/density effects, 4,912 strand sign cases and XFB interface checks.
 All 15 native VS patch and validate; nine expose strand frames, five also fade,
 and all six actual supported pass interfaces meet their individual requirements.
+Shared C++/DXC geometry math passes 310,883 checks, including 20,475 perspective
+and 20,475 orthographic native-depth equations and 11,250 shared-edge, translated,
+scaled and mirrored triangle cases against an independent high precision oracle.
+Inactive identity and an origin window after the physical card are also tested.
 95 fresh key-off ordinary shader entries are byte-identical to main92183e7;
-95 capable variants compile and validate. No GPU/game jobs. GPU cost, depth match,
-image quality and temporal behavior remain unmeasured.
+95 capable variants compile and validate; the new bounds module also validates.
+No GPU/game jobs yet. GPU cost, depth match, image quality and temporal behavior
+remain unmeasured. The other catalog families (Scalp, Pubes, ExtraUV, fur and lashes)
+remain an explicit backlog, not implicitly covered by these six recipes.

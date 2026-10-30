@@ -335,7 +335,7 @@ AlphaRead native_scalp_alpha(uint a, float2 uv, float g, uint tex) {
 #endif
 
 #ifdef RT_NATIVE_HAIR
-struct NativeHairData { float3 n, t, b, p; float4 fade; float3 ray; bool valid; };
+struct NativeHairData { float3 n, t, b, p; float4 fade; float3 ray; bool valid, physical; };
 static NativeHairData gNativeHair;
 float hair_param(uint a,uint i) { return asfloat(gAlphaRec.Load(a+48u+4u*i)); }
 float4 hair_sample(uint tex,float2 uv,float g) {
@@ -344,26 +344,38 @@ float4 hair_sample(uint tex,float2 uv,float g) {
   float lod=clamp(log2(max(g*float(max(w,h)),1e-8)),0.0,float(levels)-1.0);
   return gAlphaTex[NonUniformResourceIndex(tex)].SampleLevel(gAlphaWrap,uv,lod);
 }
-AlphaRead native_hair_alpha(uint a,float2 uv,float g,uint mask_tex,uint noise_tex) {
-  AlphaRead r=(AlphaRead)0;
-  if(!gNativeHair.valid)return r;
+struct HairMaterialSample {float4 mask;float height;bool ok;};
+HairMaterialSample hair_material(uint a,float2 uv,float g,uint mask_tex,uint noise_tex,bool evaluate_depth) {
+  HairMaterialSample r=(HairMaterialSample)0;
   float ns=hair_param(a,2), shift=hair_param(a,3);
-  float4 noise=hair_sample(noise_tex,uv*ns,g*abs(ns));
+  float2 nuv=uv*ns;
+  if(!all(isfinite(nuv)))return r;
+  float4 noise=hair_sample(noise_tex,nuv,g*abs(ns));
   float2 duv=(mad(noise.x,2.0,-1.0)*shift).xx;
+  if(!all(isfinite(duv)) || !all(isfinite(uv+duv)))return r;
   float4 ca=hair_sample(mask_tex,uv+duv,g), cb=hair_sample(mask_tex,uv,g);
   if(!all(isfinite(noise)) || !all(isfinite(ca)) || !all(isfinite(cb)))return r;
   float4 center=float4(0.5,0,0,0), x=ca-center, y=cb-center;
-  float4 mask=mad(max(sign(x),sign(y)),max(abs(x),abs(y)),center);
+  r.mask=mad(max(sign(x),sign(y)),max(abs(x),abs(y)),center);
   bool camera=gAlphaRec.Load(a+20u)!=0u;
-  float thick=0.0;
-  if(camera) {
+  if(camera && evaluate_depth && (hair_param(a,4)!=0.0 || hair_param(a,5)!=0.0)) {
     float width=saturate(hair_param(a,7));
-    float blend=smoothstep(mad(-width,0.5,hair_param(a,6)),mad(width,0.5,hair_param(a,6)),mask.z);
-    thick=max((1.0-mask.y)*lerp(hair_param(a,4)*0.01,hair_param(a,5)*0.01,blend),0.0);
+    float blend=smoothstep(mad(-width,0.5,hair_param(a,6)),mad(width,0.5,hair_param(a,6)),r.mask.z);
+    r.height=max((1.0-r.mask.y)*lerp(hair_param(a,4)*0.01,hair_param(a,5)*0.01,blend),0.0);
   }
+  r.ok=all(isfinite(r.mask)) && isfinite(r.height);return r;
+}
+AlphaRead native_hair_alpha(uint a,float2 uv,float g,uint mask_tex,uint noise_tex) {
+  AlphaRead r=(AlphaRead)0;
+  if(!gNativeHair.valid)return r;
+  bool physical=g_rt_class==1u || gNativeHair.physical;
+  HairMaterialSample sample=hair_material(a,uv,g,mask_tex,noise_tex,!physical);
+  if(!sample.ok)return r;
+  float4 mask=sample.mask;float thick=sample.height;
+  bool camera=gAlphaRec.Load(a+20u)!=0u;
   // Match native camera material for closest/origin queries. Shadow rays use
   // their light-view direction and native shadow hard branch, not camera fade.
-  float3 view=g_rt_class==1u ? -gNativeHair.ray : -(gNativeHair.p-normalize(gNativeHair.p)*thick);
+  float3 view=physical ? -gNativeHair.ray : -(gNativeHair.p-normalize(gNativeHair.p)*thick);
   float3 v=normalize(view), nn=normalize(gNativeHair.n);
   float3 local=normalize(float3(dot(v,gNativeHair.b),dot(v,gNativeHair.n),dot(v,gNativeHair.t)));
   float3 world=normalize(gNativeHair.b*local.x+gNativeHair.n*local.y+gNativeHair.t*local.z);
@@ -371,7 +383,7 @@ AlphaRead native_hair_alpha(uint a,float2 uv,float g,uint mask_tex,uint noise_te
   float cov=(mask.w*mad(-mask.z,hair_param(a,8),1.0))*angular;
   float density=hair_param(a,9);
   float2 frame=asfloat(gAlphaRec.Load2(a+32u));
-  if(camera && g_rt_class==0u && frame.y!=0.0) {
+  if(camera && !physical && frame.y!=0.0) {
     float4x4 vp=float4x4(asfloat(gAlphaRec.Load4(a+96u)),asfloat(gAlphaRec.Load4(a+112u)),
                          asfloat(gAlphaRec.Load4(a+128u)),asfloat(gAlphaRec.Load4(a+144u)));
     float4 clip=mul(float4(gNativeHair.p,1),vp);
@@ -657,6 +669,15 @@ bool alpha_instance(uint inst, uint geom) {
 
 // Ray footprint: width f0 at the origin, growing by `spread` per unit length.
 struct RtCone { float f0, spread; };
+#ifdef RT_NATIVE_HAIR
+#include "native_hair_procedural.hlsli"
+#define RT_SKIP_PROCEDURAL 0u
+#define RT_HAS_COMMITTED(q) (q.CommittedStatus()!=COMMITTED_NOTHING)
+bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
+#else
+#define RT_SKIP_PROCEDURAL RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES
+#define RT_HAS_COMMITTED(q) (q.CommittedStatus()==COMMITTED_TRIANGLE_HIT)
+#endif
 
 // Visibility along [0, tmax] (shadow and occlusion rays): kRtOccluded if an
 // alpha-tested hit was committed, kRtLit if traversal finished without one, kRtUnknown
@@ -670,8 +691,12 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
     rt_count_unknown(0u);return kRtUnknown;
   }
 #endif
+#ifdef RT_NATIVE_HAIR
+  gHairCameraQuery=false;
+  if(!hair_bounds_ok()){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
+#endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return kRtLit;
-  RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+  RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RT_SKIP_PROCEDURAL> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
@@ -685,12 +710,23 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   uint cand_n = 0;
   bool aborted = false;
   while (q.Proceed()) {
+#ifdef RT_NATIVE_HAIR
+    if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
+#endif
     if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
       aborted = true;
       q.Abort();
       break;
     }
+#ifdef RT_NATIVE_HAIR
+    if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
+      HairProceduralHit ph=hair_intersect(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex(),r.Origin,d,tmax,cone);
+      if(ph.unknown){aborted=true;q.Abort();break;}
+      if(ph.t>=0.0)q.CommitProceduralPrimitiveHit(ph.t);
+      continue;
+    }
+#endif
 #ifdef RT_CASCADE_SUN
     // The cascade instance is not opaque only for this test (no alpha: its triangles are solid).
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && q.CandidateInstanceID() == kRtCascadeId) {
@@ -700,7 +736,7 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
 #endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
-  if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) return kRtOccluded;
+  if (RT_HAS_COMMITTED(q)) return kRtOccluded;
   if (aborted) {
     rt_count_unknown(asuint(o.x) ^ asuint(o.z));
     return kRtUnknown;
@@ -722,13 +758,17 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   RtDebugHit h = (RtDebugHit)0;
   h.near_kind = 0;
   h.aborted = false;
+#ifdef RT_NATIVE_HAIR
+  gHairCameraQuery=true;
+  if(!hair_bounds_ok()){h.t=-1;h.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return h;}
+#endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
     h.t = -1.0;
     h.alpha = false;
     h.hit_kind = 0u;
     return h;
   }
-  RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+  RayQuery<RT_SKIP_PROCEDURAL> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
@@ -742,12 +782,24 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   while (q.Proceed()) {
+#ifdef RT_NATIVE_HAIR
+    if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
+#endif
     if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
       h.aborted = true;
       q.Abort();
       break;
     }
+#ifdef RT_NATIVE_HAIR
+    if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
+      float maximum=RT_HAS_COMMITTED(q)?min(tmax,q.CommittedRayT()):tmax;
+      HairProceduralHit ph=hair_intersect(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex(),r.Origin,d,maximum,cone);
+      if(ph.unknown){h.aborted=true;q.Abort();break;}
+      if(ph.t>=0.0){if(ph.t<near_t){near_t=ph.t;h.near_kind=4;}q.CommitProceduralPrimitiveHit(ph.t);}
+      continue;
+    }
+#endif
     if (q.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) continue;
     float ct = q.CandidateTriangleRayT();
     if (ct < near_t) {
@@ -756,7 +808,7 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
     }
     if (RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
-  bool hit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+  bool hit = RT_HAS_COMMITTED(q);
   h.t = hit ? q.CommittedRayT() : -1.0;
   h.alpha = hit && alpha_instance(q.CommittedInstanceIndex(), q.CommittedGeometryIndex());
   h.hit_kind = h.alpha ? alpha_kind_hit(q.CommittedInstanceIndex(), q.CommittedGeometryIndex(), q.CommittedPrimitiveIndex())
@@ -771,8 +823,16 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
 // inst / o2w are that hit's. Treat it like a hidden / off-screen hit (the game's own
 // term for the pixel), never as a miss or as the closest surface.
 struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; bool aborted; };
-RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
+RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
+#ifdef RT_NATIVE_HAIR
+                     ,bool camera_primary=false
+#endif
+                     ) {
   g_rt_class = 0u;
+#ifdef RT_NATIVE_HAIR
+  gHairCameraQuery=camera_primary;
+  if(!hair_bounds_ok()){RtHit bad=(RtHit)0;bad.t=-1;bad.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return bad;}
+#endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
     RtHit m = (RtHit)0;
     m.t = -1.0;
@@ -781,7 +841,7 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
     m.aborted = false;
     return m;
   }
-  RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+  RayQuery<RT_SKIP_PROCEDURAL> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
@@ -795,18 +855,30 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone) {
   uint cand_n = 0;
   bool aborted = false;
   while (q.Proceed()) {
+#ifdef RT_NATIVE_HAIR
+    if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
+#endif
     if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
       aborted = true;
       q.Abort();
       break;
     }
+#ifdef RT_NATIVE_HAIR
+    if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
+      float maximum=RT_HAS_COMMITTED(q)?min(tmax,q.CommittedRayT()):tmax;
+      HairProceduralHit ph=hair_intersect(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex(),r.Origin,d,maximum,cone);
+      if(ph.unknown){aborted=true;q.Abort();break;}
+      if(ph.t>=0.0)q.CommitProceduralPrimitiveHit(ph.t);
+      continue;
+    }
+#endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
   if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
   RtHit h = (RtHit)0;
   h.aborted = aborted;
-  bool hit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+  bool hit = RT_HAS_COMMITTED(q);
   h.t = hit ? q.CommittedRayT() : -1.0;
   h.geom = hit ? q.CommittedGeometryIndex() : 0u;
   h.prim = hit ? q.CommittedPrimitiveIndex() : 0u;
@@ -877,6 +949,13 @@ float3 rt_hit_normal(RtHit h) {
     return 0.0.xxx;
   }
   float3 p0 = inst_pos(ii, h.prim, 0), p1 = inst_pos(ii, h.prim, 1), p2 = inst_pos(ii, h.prim, 2);
+#ifdef RT_NATIVE_HAIR
+  if((ii.meta&kInfoHairProcedural)!=0u){
+    p0=hair_vertex(ii.base,ii.meta,h.prim,0,60,3,false).xyz;
+    p1=hair_vertex(ii.base,ii.meta,h.prim,1,60,3,false).xyz;
+    p2=hair_vertex(ii.base,ii.meta,h.prim,2,60,3,false).xyz;
+  }
+#endif
   if ((ii.meta & kInfoPool) != 0u) {
     p0 = mul(h.o2w, float4(p0, 1.0));
     p1 = mul(h.o2w, float4(p1, 1.0));
@@ -928,8 +1007,12 @@ float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
 float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) {
   g_rt_class = 0u;
   aborted = false;
+#ifdef RT_NATIVE_HAIR
+  gHairCameraQuery=false;
+  if(!hair_bounds_ok()){aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return -1.0;}
+#endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return -1.0;
-  RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+  RayQuery<RT_SKIP_PROCEDURAL> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
@@ -942,16 +1025,28 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   while (q.Proceed()) {
+#ifdef RT_NATIVE_HAIR
+    if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
+#endif
     if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
       aborted = true;
       q.Abort();
       break;
     }
+#ifdef RT_NATIVE_HAIR
+    if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
+      float maximum=RT_HAS_COMMITTED(q)?min(tmax,q.CommittedRayT()):tmax;
+      HairProceduralHit ph=hair_intersect(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex(),r.Origin,d,maximum,cone);
+      if(ph.unknown){aborted=true;q.Abort();break;}
+      if(ph.t>=0.0)q.CommitProceduralPrimitiveHit(ph.t);
+      continue;
+    }
+#endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
   if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
-  return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? q.CommittedRayT() : -1.0;
+  return RT_HAS_COMMITTED(q) ? q.CommittedRayT() : -1.0;
 }
 // (For callers that cannot act on an abort: the aborted query reads as above.)
 float rt_closest(float3 o, float3 d, float tmax, RtCone cone) {

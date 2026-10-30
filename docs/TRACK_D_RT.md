@@ -1,5 +1,19 @@
 # Track D: hardware ray tracing
 
+## Procedural native Hair geometry - 2026-10-30, default-off candidate
+
+`rt_native_hair` now uses dynamic AABB BLAS geometry with the original 88-byte
+native triangle sidecar. Explicit primary/origin queries solve native fragment
+depth directly; physical secondaries use native Shadow base-card/ray-view hard
+coverage. A frozen main-camera pseudo-volume is not imposed on GI/reflections.
+GPU bounds failure at scene-stamp byte 12 returns UNKNOWN across all four query
+entry points, never false lit/missing geometry. Proven converter-inactive cards
+remain inactive; unresolved FP32 edges are UNKNOWN. Refits preserve geometry type,
+and held bounds are certified again for each scene. Existing sampler policy stays.
+22/22 CTests, 310,883 shared geometry checks, 19,734 capture/strand checks and
+95 ordinary/capable shader identity/validation gates pass. No live or GPU gate yet;
+no all-family Hair closure claimed. Full source/model details: docs/NATIVE_HAIR.md.
+
 ## Native CHAR_Hair coverage - 2026-10-30, default off
 
 Actual native strand coverage is implemented in isolated `codex/native-coverage`:
