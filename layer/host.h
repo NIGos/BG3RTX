@@ -653,6 +653,9 @@ struct AlphaSnapshot {
   // destroy a view during a hold and the driver reuse its handle for another image.
   uint32_t tex_id = 0, cache_id = 0;
 };
+// Canonical material capture without modifying camera descriptor indices.
+// Caller retains source resources and assigns descriptor-local indices.
+bool alpha_capture_source(VkCommandBuffer cmd,const AlphaFs& fs,uint32_t first_tri,uint32_t tris,AlphaSnapshot* out);
 bool alpha_snapshot(uint32_t index, AlphaSnapshot* out);
 uint32_t alpha_restore(const AlphaSnapshot& saved);   // UINT32_MAX on failure
 void alpha_device_created(DeviceData* dd);
