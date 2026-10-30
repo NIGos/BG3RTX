@@ -368,6 +368,10 @@ std::unordered_map<uint64_t, DynSlot> g_dyn;
 // rt_cascade_casters: the BLAS of last frame's cascade-only soup, a new one every build (the
 // previous one is released once no live scene slot's TLAS references it: as_destroy).
 AsAlloc g_casc_as;
+uint64_t g_casc_sig = 0;          // the draw list g_casc_as was built from (rt_cascade_refit)
+uint32_t g_casc_tris = 0, g_casc_refits = 0;
+VkDeviceSize g_casc_update_scratch = 0;
+uint64_t g_casc_n_build = 0, g_casc_n_refit = 0;
 uint64_t g_hold_epoch = 1;
 uint64_t g_hold_why[7] = {};
 
@@ -1181,17 +1185,40 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // camera), translated into this frame's space; mask 0x02 (only the sun's rays see it) and
   // not opaque, so the sun's variant can ignore its hits near the ray origin (rt_common.hlsli
   // RT_CASCADE_TMIN). InstInfo: no vertices (tris 0), never read by those rays.
-  bool casc_build = false;
+  bool casc_build = false, casc_refit = false;
   VkDeviceSize casc_scratch = 0;
+  // rt_cascade_refit=1: the same draw list as the last build (cap.cascade_sig, same triangle
+  // count) refits the BLAS instead of rebuilding it, up to rt_cascade_rebuild_frames refits.
+  const bool casc_refit_on = cfg_int("rt_cascade_refit", 0) != 0;
   const VkBuildAccelerationStructureFlagsKHR casc_flags =
-      cfg_int("rt_fast_trace", 0) ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
-                                  : VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+      (cfg_int("rt_fast_trace", 0) ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
+                                   : VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR) |
+      (casc_refit_on ? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR : 0);
   if (casc) {
-    if (g_casc_as.as) as_destroy(g_casc_as);
-    const VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(cap.cascade_tris, cap.cascade_stride, false, casc_flags);
-    if (as_create(sz.accelerationStructureSize, g_casc_as)) {
-      casc_build = true;
+    casc_refit = casc_refit_on && g_casc_as.as && g_casc_sig == cap.cascade_sig && g_casc_tris == cap.cascade_tris &&
+                 g_casc_update_scratch && g_casc_refits < uint32_t((std::max)(cfg_int("rt_cascade_rebuild_frames", 60), 1));
+    bool ok = casc_refit;
+    if (!casc_refit) {
+      if (g_casc_as.as) as_destroy(g_casc_as);
+      const VkAccelerationStructureBuildSizesInfoKHR sz =
+          blas_sizes(cap.cascade_tris, cap.cascade_stride, false, casc_flags);
+      ok = as_create(sz.accelerationStructureSize, g_casc_as);
       casc_scratch = sz.buildScratchSize;
+      g_casc_update_scratch = casc_refit_on ? sz.updateScratchSize : 0;
+      g_casc_sig = cap.cascade_sig;
+      g_casc_tris = cap.cascade_tris;
+      g_casc_refits = 0;
+      ++g_casc_n_build;
+    } else {
+      casc_scratch = g_casc_update_scratch;
+      ++g_casc_refits;
+      ++g_casc_n_refit;
+    }
+    if ((g_casc_n_build + g_casc_n_refit) % 600 == 0 && casc_refit_on)
+      log("[cascade] BLAS: %llu builds, %llu refits", (unsigned long long)g_casc_n_build,
+          (unsigned long long)g_casc_n_refit);
+    if (ok) {
+      casc_build = true;
       VkAccelerationStructureInstanceKHR in{};
       in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
       for (int k = 0; k < 3; ++k) in.transform.matrix[k][3] = cap.cascade_t[k];
@@ -1395,7 +1422,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
       bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
       bi.flags = casc_flags;
-      bi.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+      bi.mode = casc_refit ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+      if (casc_refit) bi.srcAccelerationStructure = g_casc_as.as;
       bi.dstAccelerationStructure = g_casc_as.as;
       bi.geometryCount = 1;
       infos.push_back(bi);

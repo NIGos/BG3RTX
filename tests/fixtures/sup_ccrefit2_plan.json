@@ -1,0 +1,122 @@
+[
+ {
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 10,
+  "serial": 0,
+  "motion_start": 12,
+  "motion_end": 12,
+  "set": "rt_cascade_casters=1"
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 33,
+  "scan": 32,
+  "capture_at": 8,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 2.5,
+  "set": "rt_cascade_casters=1"
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 33,
+  "scan": 32,
+  "capture_at": 8,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 2.5,
+  "set": "rt_cascade_casters=1"
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 33,
+  "scan": 32,
+  "capture_at": 8,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 2.5,
+  "set": "rt_cascade_casters=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 290,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_cascade_refit=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 291,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_cascade_refit=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 292,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_cascade_refit=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 293,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_cascade_refit=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 294,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_cascade_refit=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 295,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_cascade_refit=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 296,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_cascade_refit=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 297,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_cascade_refit=1"
+ }
+]
