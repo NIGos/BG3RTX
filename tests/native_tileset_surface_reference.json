@@ -1,0 +1,612 @@
+{
+  "scope": "One actual shared construction material. Exact native Deferred branch/sample-field arithmetic only; no runtime sampler/view/residency/coverage/world-normal proof.",
+  "material": {
+    "path": "Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Mid_A_0n5D_2H_A/_merged.lsf",
+    "owner": "Shared.pak",
+    "sha256": "6fce2bf47479ad8b5fa8f0e0007146b05a98673103556151686f0705b46648ba",
+    "node": {
+      "_": "Resource",
+      "DiffusionProfileUUID": "",
+      "ID": "a1a20440-b6f8-0446-bc9d-8b92545b637d",
+      "MaterialType": 4,
+      "Name": "WALL_GEN_Glasshouse_Bronze_A_Multi_A",
+      "SourceFile": "Public/Shared/Assets/Materials/Environment/ENV_Tileset_MultipleTextures_AlphaTest.lsf",
+      "_OriginalFileVersion_": 144115207403209030,
+      "children": [
+        {
+          "_": "ScalarParameters",
+          "BaseValue": 1.0,
+          "Enabled": false,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map Green",
+          "ParameterName": "TilingGreenChannel",
+          "Value": 1.0
+        },
+        {
+          "_": "ScalarParameters",
+          "BaseValue": 1.0,
+          "Enabled": false,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map Red",
+          "ParameterName": "TilingRedChannel",
+          "Value": 1.0
+        },
+        {
+          "_": "ScalarParameters",
+          "BaseValue": 1.0,
+          "Enabled": false,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map",
+          "ParameterName": "TilingBaseChannel",
+          "Value": 1.0
+        },
+        {
+          "_": "ScalarParameters",
+          "BaseValue": 0.0,
+          "Enabled": false,
+          "ExportAsPreset": false,
+          "GroupName": "",
+          "ParameterName": "SeeThroughEnabled",
+          "Value": 0.0
+        },
+        {
+          "_": "ScalarParameters",
+          "BaseValue": 0.5,
+          "Enabled": false,
+          "ExportAsPreset": true,
+          "GroupName": "",
+          "ParameterName": "Reflectance",
+          "Value": 0.5
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": true,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map Green",
+          "ID": "bac980a2-1286-e474-6628-57ff3f921292",
+          "ParameterName": "basecolor_Green"
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": true,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map Red",
+          "ID": "6eaeb21e-dced-594a-e325-14bffcfbf489",
+          "ParameterName": "basecolor_Red"
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": true,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map",
+          "ID": "18162693-2fe3-2a6c-95dd-edb1c02e729d",
+          "ParameterName": "basecolor"
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": false,
+          "ExportAsPreset": true,
+          "GroupName": "",
+          "ID": "9dc5807b-3697-4b8f-ab0f-b9c5c1bd7010",
+          "IgnoreTexelDensity": true,
+          "ParameterName": ""
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": true,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map Green",
+          "ID": "36ec3f61-5318-41f1-e6c7-5494bee307a0",
+          "ParameterName": "normalmap_Green"
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": true,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map Red",
+          "ID": "40416ac9-1343-c85c-2481-d8eedf14bb12",
+          "ParameterName": "normalmap_Red"
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": true,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map",
+          "ID": "38bc1e55-4d9b-c2ed-23e6-4278851dd3f2",
+          "ParameterName": "normalmap"
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": true,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map Green",
+          "ID": "53026d90-1b8f-5169-8c33-9254ef9248ca",
+          "ParameterName": "physicalmap_Green"
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": true,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map Red",
+          "ID": "e9070ba5-2530-1e48-c7aa-a5ba55473122",
+          "ParameterName": "physicalmap_Red"
+        },
+        {
+          "_": "Texture2DParameters",
+          "Enabled": true,
+          "ExportAsPreset": true,
+          "GroupName": "Texture Map",
+          "ID": "2bf7d5cf-7684-b02c-99ee-e7f7a5ad6703",
+          "ParameterName": "physicalmap"
+        }
+      ]
+    }
+  },
+  "template": {
+    "path": "Public/Shared/Assets/Materials/Environment/ENV_Tileset_MultipleTextures_AlphaTest.lsf",
+    "owner": "Materials.pak",
+    "sha256": "6456680878a31ab98f7d9e9a55f2ad6748cd738df331e7b157f74e1f227c92cf"
+  },
+  "parameters": [
+    {
+      "ParameterName": "TilingGreenChannel",
+      "BaseValue": 1.0,
+      "StaticDeferred": 0,
+      "StaticInstancedDeferred": 0
+    },
+    {
+      "ParameterName": "TilingRedChannel",
+      "BaseValue": 1.0,
+      "StaticDeferred": 4,
+      "StaticInstancedDeferred": 4
+    },
+    {
+      "ParameterName": "TilingBaseChannel",
+      "BaseValue": 1.0,
+      "StaticDeferred": 8,
+      "StaticInstancedDeferred": 8
+    },
+    {
+      "ParameterName": "SeeThroughEnabled",
+      "BaseValue": 0.0
+    },
+    {
+      "ParameterName": "Reflectance",
+      "BaseValue": 0.5,
+      "StaticDeferred": 12,
+      "StaticInstancedDeferred": 12
+    }
+  ],
+  "programs": {
+    "7621aebd092c3889.fs.spv": "90cdbde4ae7d32d849f99abe1a702600d264b5ad00aa2a6aef41e7f147e65925",
+    "a618ddae98c2d1cf.vs.spv": "e41ea9ddd1de51bf43d96c11b510c45fe774cd7b0d681d4e7d40918051bb5e05",
+    "af1d30a11685c516.vs.spv": "662faf6748182d931793489fbad49aba6b022e290a73baadf7efcd56c8bd1c24",
+    "cad41eff979970e4.fs.spv": "022e5c79530d38b562136fce70b0b1990e3ab1ba6ab0f80befc7a4ca3048e30b"
+  },
+  "enabled_textures": [
+    {
+      "parameter": "basecolor_Green",
+      "texture_id": "bac980a2-1286-e474-6628-57ff3f921292",
+      "resource_bank": "Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Mid_A_0n5D_2H_A/_merged.lsf",
+      "resource_owner": "Shared.pak",
+      "decoded": {
+        "id": "bac980a2-1286-e474-6628-57ff3f921292",
+        "name": "WALL_GEN_Glasshouse_Trim_Bronze_B_BMA",
+        "path": "Generated/Public/SharedDev/Assets/Tilesets/Generic/WALL_GEN_Glasshouse_ABC/Resources/WALL_GEN_Glasshouse_Trim_Bronze_B_BMA.DDS",
+        "owner": "Textures.pak",
+        "sha256": "a4c55d006488dd3a6d499ea73f937c5f69709d8f20ba0b914149d603d5a80f11",
+        "authored_srgb": true,
+        "decoded_size": [
+          1024,
+          1024
+        ],
+        "decoded_point_0": [
+          154,
+          121,
+          104,
+          255
+        ]
+      }
+    },
+    {
+      "parameter": "basecolor_Red",
+      "texture_id": "6eaeb21e-dced-594a-e325-14bffcfbf489",
+      "resource_bank": "Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Mid_A_0n5D_2H_A/_merged.lsf",
+      "resource_owner": "Shared.pak",
+      "decoded": {
+        "id": "6eaeb21e-dced-594a-e325-14bffcfbf489",
+        "name": "WALL_GEN_Glasshouse_Trim_Bronze_A_BMA",
+        "path": "Generated/Public/SharedDev/Assets/Tilesets/Generic/WALL_GEN_Glasshouse_ABC/Resources/WALL_GEN_Glasshouse_Trim_Bronze_A_BMA.DDS",
+        "owner": "Textures.pak",
+        "sha256": "5d785cdef075f0ba130e70573dba34adf1897631caa725be58337c69725f58a0",
+        "authored_srgb": true,
+        "decoded_size": [
+          2048,
+          2048
+        ],
+        "decoded_point_0": [
+          148,
+          133,
+          109,
+          255
+        ]
+      }
+    },
+    {
+      "parameter": "basecolor",
+      "texture_id": "18162693-2fe3-2a6c-95dd-edb1c02e729d",
+      "resource_bank": "Public/SharedDev/Content/Assets/Textures/[PAK]_Tileable Textures/_merged.lsf",
+      "resource_owner": "Shared.pak",
+      "decoded": {
+        "id": "18162693-2fe3-2a6c-95dd-edb1c02e729d",
+        "name": "Tileable_Wall_Bronze_Plate_C_BM",
+        "path": "Generated/Public/SharedDev/Assets/Textures/Tileable_Textures/Tileable_Wall_Bronze_Plate_ABC/Resources/Tileable_Wall_Bronze_Plate_C_BM.DDS",
+        "owner": "Textures.pak",
+        "sha256": "c2e06a8815358c620353f32e9db7876d780f5ce8a7fd0cbedcec24b584ba5246",
+        "authored_srgb": true,
+        "decoded_size": [
+          2048,
+          2048
+        ],
+        "decoded_point_0": [
+          156,
+          146,
+          140,
+          255
+        ]
+      }
+    },
+    {
+      "parameter": "normalmap_Green",
+      "texture_id": "36ec3f61-5318-41f1-e6c7-5494bee307a0",
+      "resource_bank": "Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Mid_A_0n5D_2H_A/_merged.lsf",
+      "resource_owner": "Shared.pak",
+      "decoded": {
+        "id": "36ec3f61-5318-41f1-e6c7-5494bee307a0",
+        "name": "WALL_GEN_Glasshouse_Trim_Bronze_B_NM",
+        "path": "Generated/Public/SharedDev/Assets/Tilesets/Generic/WALL_GEN_Glasshouse_ABC/Resources/WALL_GEN_Glasshouse_Trim_Bronze_B_NM.DDS",
+        "owner": "Textures.pak",
+        "sha256": "2761e3af8dc6d9ae27da407e5b0fe12accc4f1a8f5ad0a550f9cc66a86e51288",
+        "authored_srgb": false,
+        "decoded_size": [
+          1024,
+          1024
+        ],
+        "decoded_point_0": [
+          0,
+          109,
+          255,
+          119
+        ]
+      }
+    },
+    {
+      "parameter": "normalmap_Red",
+      "texture_id": "40416ac9-1343-c85c-2481-d8eedf14bb12",
+      "resource_bank": "Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Mid_A_0n5D_2H_A/_merged.lsf",
+      "resource_owner": "Shared.pak",
+      "decoded": {
+        "id": "40416ac9-1343-c85c-2481-d8eedf14bb12",
+        "name": "WALL_GEN_Glasshouse_Trim_Bronze_A_NM",
+        "path": "Generated/Public/SharedDev/Assets/Tilesets/Generic/WALL_GEN_Glasshouse_ABC/Resources/WALL_GEN_Glasshouse_Trim_Bronze_A_NM.DDS",
+        "owner": "Textures.pak",
+        "sha256": "a1c6a604ae529f7ce38eb19382a5bb2a62e70f5624b1692ba13fd391c9621fbd",
+        "authored_srgb": false,
+        "decoded_size": [
+          2048,
+          2048
+        ],
+        "decoded_point_0": [
+          0,
+          252,
+          150,
+          123
+        ]
+      }
+    },
+    {
+      "parameter": "normalmap",
+      "texture_id": "38bc1e55-4d9b-c2ed-23e6-4278851dd3f2",
+      "resource_bank": "Public/SharedDev/Content/Assets/Textures/[PAK]_Tileable Textures/_merged.lsf",
+      "resource_owner": "Shared.pak",
+      "decoded": {
+        "id": "38bc1e55-4d9b-c2ed-23e6-4278851dd3f2",
+        "name": "Tileable_Wall_Bronze_Plate_C_NM",
+        "path": "Generated/Public/SharedDev/Assets/Textures/Tileable_Textures/Tileable_Wall_Bronze_Plate_ABC/Resources/Tileable_Wall_Bronze_Plate_C_NM.DDS",
+        "owner": "Textures.pak",
+        "sha256": "68bbd0afb60f19d535d484b98889c7b33d3623db7b001f1703f322d514854856",
+        "authored_srgb": false,
+        "decoded_size": [
+          2048,
+          2048
+        ],
+        "decoded_point_0": [
+          0,
+          48,
+          206,
+          41
+        ]
+      }
+    },
+    {
+      "parameter": "physicalmap_Green",
+      "texture_id": "53026d90-1b8f-5169-8c33-9254ef9248ca",
+      "resource_bank": "Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Mid_A_0n5D_2H_A/_merged.lsf",
+      "resource_owner": "Shared.pak",
+      "decoded": {
+        "id": "53026d90-1b8f-5169-8c33-9254ef9248ca",
+        "name": "WALL_GEN_Glasshouse_Trim_Bronze_B_PMA",
+        "path": "Generated/Public/SharedDev/Assets/Tilesets/Generic/WALL_GEN_Glasshouse_ABC/Resources/WALL_GEN_Glasshouse_Trim_Bronze_B_PMA.DDS",
+        "owner": "Textures.pak",
+        "sha256": "3f8ba27817173c18ef8ca37158d13f8ea336c9a80c32f169cd1983d6ed720abc",
+        "authored_srgb": false,
+        "decoded_size": [
+          1024,
+          1024
+        ],
+        "decoded_point_0": [
+          82,
+          85,
+          255,
+          127
+        ]
+      }
+    },
+    {
+      "parameter": "physicalmap_Red",
+      "texture_id": "e9070ba5-2530-1e48-c7aa-a5ba55473122",
+      "resource_bank": "Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Mid_A_0n5D_2H_A/_merged.lsf",
+      "resource_owner": "Shared.pak",
+      "decoded": {
+        "id": "e9070ba5-2530-1e48-c7aa-a5ba55473122",
+        "name": "WALL_GEN_Glasshouse_Trim_Bronze_A_PMA",
+        "path": "Generated/Public/SharedDev/Assets/Tilesets/Generic/WALL_GEN_Glasshouse_ABC/Resources/WALL_GEN_Glasshouse_Trim_Bronze_A_PMA.DDS",
+        "owner": "Textures.pak",
+        "sha256": "12f4b67598fcd11feafa500c8caa33da72a2b79eb390d6c129ca09d4a3baca00",
+        "authored_srgb": false,
+        "decoded_size": [
+          2048,
+          2048
+        ],
+        "decoded_point_0": [
+          107,
+          125,
+          247,
+          127
+        ]
+      }
+    },
+    {
+      "parameter": "physicalmap",
+      "texture_id": "2bf7d5cf-7684-b02c-99ee-e7f7a5ad6703",
+      "resource_bank": "Public/SharedDev/Content/Assets/Textures/[PAK]_Tileable Textures/_merged.lsf",
+      "resource_owner": "Shared.pak",
+      "decoded": {
+        "id": "2bf7d5cf-7684-b02c-99ee-e7f7a5ad6703",
+        "name": "Tileable_Wall_Bronze_Plate_C_PM",
+        "path": "Generated/Public/SharedDev/Assets/Textures/Tileable_Textures/Tileable_Wall_Bronze_Plate_ABC/Resources/Tileable_Wall_Bronze_Plate_C_PM.DDS",
+        "owner": "Textures.pak",
+        "sha256": "a66fa6f9f97bb4358b53037048cf0c8bed015f63941e4c678b1ac8dc5e64d0ec",
+        "authored_srgb": false,
+        "decoded_size": [
+          2048,
+          2048
+        ],
+        "decoded_point_0": [
+          19,
+          159,
+          227,
+          255
+        ]
+      }
+    }
+  ],
+  "enabled_vt": [],
+  "native": {
+    "selection": "interpolated COLOR0.y > 0 => Green, else COLOR0.x > 0 => Red, else Base; strict positive, no blend",
+    "normal_bindings": [
+      2,
+      3,
+      4
+    ],
+    "albedo_bindings": [
+      5,
+      6,
+      7
+    ],
+    "physical_bindings": [
+      8,
+      9,
+      10
+    ],
+    "texture_set": 1,
+    "sampler_set": 0,
+    "sampler_binding": 7,
+    "uv": "TEXCOORD0 * material float at byte 0/4/8 selected by branch",
+    "reflectance_byte": 12,
+    "normal": "normalize(vec3(2*A-1,2*B-1,1-2*G)); native columns(T,N,B)",
+    "physical": "R metalness, G roughness, B albedo target alpha; scalar Reflectance, each physical material scalar clamp[0,1]",
+    "coverage": "Deferred has no discard; depth/coverage recipe not audited"
+  },
+  "actual_mesh_colors": {
+    "construction-96ed\\59681270-2c4f-33e0-69af-7d0cba7105ab\\mesh-decoded.json": {
+      "lod0_vertex_branch_counts_green_red_base": [
+        1292,
+        0,
+        0
+      ],
+      "color_min": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ],
+      "color_max": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ]
+    },
+    "construction-96ed\\95e5c584-d938-c5c4-8314-86a2c738d64e\\mesh-decoded.json": {
+      "lod0_vertex_branch_counts_green_red_base": [
+        1275,
+        0,
+        0
+      ],
+      "color_min": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ],
+      "color_max": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ]
+    },
+    "construction-96ed\\a3ee4f6f-b294-9d5a-9391-e797bdb4e3d5\\mesh-decoded.json": {
+      "lod0_vertex_branch_counts_green_red_base": [
+        150,
+        0,
+        0
+      ],
+      "color_min": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ],
+      "color_max": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ]
+    },
+    "construction-96ed\\e3351d44-0b8d-fd13-431a-f5881b1831d7\\mesh-decoded.json": {
+      "lod0_vertex_branch_counts_green_red_base": [
+        708,
+        0,
+        0
+      ],
+      "color_min": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ],
+      "color_max": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ]
+    },
+    "construction-569b-wall\\15930102-c46e-f99c-7fdd-00cc36e9113d\\mesh-decoded.json": {
+      "lod0_vertex_branch_counts_green_red_base": [
+        3668,
+        236,
+        4
+      ],
+      "color_min": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color_max": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    "construction-569b-wall\\2ebdad3c-47de-6d9f-a392-45f7f0b0f515\\mesh-decoded.json": {
+      "lod0_vertex_branch_counts_green_red_base": [
+        544,
+        248,
+        0
+      ],
+      "color_min": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color_max": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    "construction-569b-wall\\608dc27a-2584-c11c-0fe0-84c87764779d\\mesh-decoded.json": {
+      "lod0_vertex_branch_counts_green_red_base": [
+        1088,
+        236,
+        0
+      ],
+      "color_min": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color_max": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    "construction-569b-wall\\e2f359fa-7892-6fd8-c3b9-8ccb4fdf605b\\mesh-decoded.json": {
+      "lod0_vertex_branch_counts_green_red_base": [
+        312,
+        284,
+        0
+      ],
+      "color_min": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color_max": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    "construction-569b-wall\\e9b73f62-9dbd-c67e-c22d-58a92211c6d4\\mesh-decoded.json": {
+      "lod0_vertex_branch_counts_green_red_base": [
+        312,
+        276,
+        0
+      ],
+      "color_min": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color_max": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "missing": [
+    "actual native sampled view format/type/swizzle/mips and sampler",
+    "actual interpolation/derivatives/LOD at hit",
+    "native world normal basis equivalence",
+    "depth-pass coverage",
+    "runtime shader/material tuple confirmation"
+  ],
+  "fixture_note": "DDS point bytes are decoded code fixtures, not actual filtered/native-view samples; no inferred sRGB conversion."
+}

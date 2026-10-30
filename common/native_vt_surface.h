@@ -30,12 +30,12 @@ struct Surface {
  float perceptual_roughness{},reflectance{},metalness{},albedo_aux{};
  Coverage coverage{Coverage::Unknown}; // DEF has no discard; depth-pass coverage is separate.
 };
-inline Status decode(uint64_t fs,const Samples& in,Surface& result){
+// Shared, proven post-sampler arithmetic for the audited VT and multi-texture
+// recipes. This function does not validate a shader or certify a sampled view.
+inline Status decode_sample_fields(const Samples& in,Surface& result){
  result={};
- if(!recipe(fs))return Status::UnsupportedShader;
  if((in.available_layers&7u)!=7u)return Status::MissingSamples;
  if(!in.native_view_interpretation)return Status::UnknownViewInterpretation;
- if(in.tileset_magic!=2202.f)return Status::MissingTileset;
  if(!in.reflectance_available)return Status::MissingReflectance;
  for(const auto* layer:{&in.albedo,&in.normal,&in.physical})for(float x:*layer)if(!std::isfinite(x))return Status::InvalidSample;
  if(!std::isfinite(in.reflectance))return Status::InvalidSample;
@@ -51,5 +51,14 @@ inline Status decode(uint64_t fs,const Samples& in,Surface& result){
  decoded.metalness=std::clamp(in.physical[0],0.f,1.f);
  decoded.albedo_aux=in.physical[2]; // Native albedo target alpha; no invented AO meaning.
  result=decoded;return Status::SupportedFields;
+}
+inline Status decode(uint64_t fs,const Samples& in,Surface& result){
+ result={};
+ if(!recipe(fs))return Status::UnsupportedShader;
+ if((in.available_layers&7u)!=7u)return Status::MissingSamples;
+ if(!in.native_view_interpretation)return Status::UnknownViewInterpretation;
+ if(in.tileset_magic!=2202.f)return Status::MissingTileset;
+ if(!in.reflectance_available)return Status::MissingReflectance;
+ return decode_sample_fields(in,result);
 }
 }
