@@ -6,6 +6,7 @@ GPU camera headers drive reprojection. No image registration or human labels.
 from __future__ import annotations
 import argparse
 import json
+import re
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
@@ -302,16 +303,49 @@ def analyze(directory, out):
     return report, arrays, valid, frames, ids
 
 
+def fg_burst_evidence(frame_ids, log):
+    """Existing per-frame SDK rows, not disk-write time or a fix gate."""
+    from .fg_motion_gate import normalize_clocks
+    from .rebase_gate import clock
+    log, _ = normalize_clocks(log, '')
+    states = {}
+    duplicates = []
+    for line in log.splitlines():
+        m = re.search(r'DLSS-G frame (\d+): status (0x[\da-f]+), presented per app frame (\d+).*api errors (\d+)',line)
+        if m and clock(line) is not None:
+            frame,status,presented,errors = m.groups()
+            if int(frame) in states: duplicates.append(int(frame))
+            states[int(frame)] = dict(time=clock(line),status=int(status,16),presented=int(presented),api_errors=int(errors))
+    selected = [states[i] for i in frame_ids if i in states]
+    missing = [i for i in frame_ids if i not in states]
+    ambiguous = sorted(set(frame_ids) & set(duplicates))
+    intervals = [1000*(b['time']-a['time']) for a,b in zip(selected,selected[1:])] if not missing else []
+    duration = selected[-1]['time']-selected[0]['time'] if len(selected)>1 else 0
+    return {'fg_frame_states':selected,'fg_missing_frames':missing,'fg_duplicate_frames':ambiguous,
+            'fg_active_every_captured_frame':bool(frame_ids) and not missing and not ambiguous and
+                all(row['status']==0 and row['presented']>=2 and row['api_errors']==0 for row in selected),
+            'presentation_fps':(len(selected)-1)/duration if duration>0 and intervals and min(intervals)>0 else None,
+            'presentation_intervals_ms':intervals,
+            'presentation_evidence_source':'SDK present-end log rows matched to exact captured record-frame indices; no GPU scanout timing claim'}
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('bursts',nargs='+',type=Path)
+    ap.add_argument('bursts',nargs='*',type=Path)
+    ap.add_argument('--log',type=Path,help='Optional same-run log; also resolves exact burst paths when none are supplied')
     ap.add_argument('--out',required=True,type=Path)
     args = ap.parse_args()
+    log = args.log.read_text(errors='replace') if args.log else ''
+    if not args.bursts and args.log:
+        args.bursts = [Path(m[1].strip()) for line in log.splitlines()
+                       if (m := re.search(r'\[pan\] burst \d+ complete:.* -> (.+)$',line))]
+    if not args.bursts: ap.error('no captured bursts')
     args.out.mkdir(parents=True,exist_ok=True)
     results, loaded = [], []
     for directory in args.bursts:
         try:
             item = analyze(directory,args.out)
+            if args.log: item[0].update(fg_burst_evidence(item[0]['frames'],log))
             loaded.append(item)
             results.append(item[0])
         except (ValueError,KeyError,OSError,np.linalg.LinAlgError) as e:
