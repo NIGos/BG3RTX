@@ -26,6 +26,7 @@
 // The core traces against the TLAS in the tiled lighting (rt_shadow.hlsl).
 #include "host.h"
 #include "omm_backend.h"
+#include "omm_submit.h"
 #include "../common/camera_epoch.h"
 #include "../common/cascade_casters.h"
 
@@ -744,6 +745,7 @@ void rt_device_created(DeviceData* dd, bool enabled) {
 void rt_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   omm::device_destroyed(dd);
+  omm::submit_device_destroyed(dd);
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();

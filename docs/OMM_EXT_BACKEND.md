@@ -35,17 +35,40 @@ micromap build completion; noncoherent host inputs need flushing before submissi
 All GPU recording/submission and completion serials must refer to the same compute
 capable graphics queue; cross-queue ownership/semaphore handling is not implemented.
 
-Lifetime protocol: `mark_submitted(ticket, serial)` for the build and all subsequent
-BLAS uses; `retire(ticket)` only after no scene can schedule future uses;
+Actual submission integration is in `layer/omm_submit.*`: the opt-in device requests
+and creates a private timeline semaphore. Command allocation/pool/begin/end/reset/
+free hooks track exact recording generations; ExecuteCommands retains secondary
+generation identity and its possible ticket references. `record` rejects untracked
+or wrong-device/non-graphics-family command buffers. Scene/BLAS acquisition must
+call `register_ticket_use(cmd,ticket)` for every referencing traversal/build and
+reject a false return. No host ABI callback or frame-age inference is introduced.
+
+Before the real application QueueSubmit/QueueSubmit2, a snapshot CPU-pins the
+referenced tickets. After SUCCESS, a separate empty private QueueSubmit signals
+an ordered timeline value; only its successful return permits stamping the tickets
+with that submission serial. The application's pNext and timeline values are never
+changed. A private counter query supplies actual completion. Failed application
+submits only release CPU pins; failed private signals/counter reads, stale recording
+generations or referencing foreign-queue submissions retain resources until device
+idle. Unrelated transfer-queue submits are ignored. Fresh rt_omm=0 has no extra GPU
+calls; an already enabled session continues tracking held attached tickets through
+INI off. Recorded executable references and CPU submission reservations also block
+collection, protecting CB replay and app-fence/reset races.
+
+Lifetime protocol: submission hooks call `mark_submitted(ticket, serial)` for the
+build and all registered BLAS uses; root scene ownership calls `retire(ticket)`
+only after no scene can schedule future uses;
 `collect(completedSerial)` destroys only retired resources whose last use completed.
-Serials are actual queue submission/completion values, never frame indices.
+Serials are actual private timeline submission/completion values, never frame indices.
+Unsubmitted discard is also blocked when completion/provenance has been lost.
 `discard_unsubmitted` is permitted only after the recorded command buffer is reset
 or discarded. Device teardown waits idle before freeing any remaining objects.
 The storage/scratch allocation budget is bounded to 256 MiB of requested buffer
 bytes. This is not a measured device-memory footprint or performance result.
 
 Offline validation: isolated host DLL build succeeded with two compiler workers.
-CPU CTest passes 68 plan/range/layout/lifetime checks. Settings defaults agree.
+CPU CTests pass 87 plan/range/layout/reservation/lifetime checks and 76 command
+graph/generation/queue/counter state checks (2/2 tests). Settings defaults agree.
 No shader files differ from the baseline. No Vulkan command was executed, and
 neither GPU cost nor traversal correctness has been measured. This component has
 no production caller in this commit; provider/BLAS integration and a live same-ray

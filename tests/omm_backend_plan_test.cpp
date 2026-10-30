@@ -27,5 +27,11 @@ int main() {
   check(l.use(10)); check(!l.use(9)); check(l.use(10)); check(l.use(12));
   check(!l.releasable(12)); check(l.retire()); check(!l.retire()); check(!l.use(13));
   check(!l.releasable(11)); check(l.releasable(12)); check(l.releasable(13));
+  check(l.reserve());check(!l.releasable(13));check(l.unreserve());check(l.releasable(13));check(!l.unreserve());
+  Lifetime pending;check(pending.discardable());check(pending.reserve());check(!pending.discardable());
+  check(pending.unreserve());check(pending.discardable());
+  check(pending.reserve());check(pending.use(20));check(!pending.discardable());
+  check(pending.retire());check(!pending.releasable(20));check(pending.unreserve());check(pending.releasable(20));
+  pending.reservations=UINT32_MAX;check(!pending.reserve());check(!pending.releasable(UINT64_MAX));
   std::printf("OMM EXT plan/range/lifetime checks %u; no device calls\n",checks);
 }

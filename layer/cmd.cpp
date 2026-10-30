@@ -1,6 +1,7 @@
 // Command buffer hooks: pass boundaries (where the core gets to inject work),
 // pipeline/descriptor binding state, and draw/dispatch notes for the tracer.
 #include "host.h"
+#include "omm_submit.h"
 #include "assetdb.h"
 
 #include <cstring>
@@ -323,11 +324,33 @@ void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp) {
 
 // ---- hooks ----
 
+static VKAPI_ATTR VkResult VKAPI_CALL CreateCommandPool(VkDevice device,const VkCommandPoolCreateInfo* ci,
+    const VkAllocationCallbacks* allocator,VkCommandPool* pool) {
+  const auto r=device_of(device)->vk.CreateCommandPool(device,ci,allocator,pool);
+  if(r==VK_SUCCESS)omm::pool_created(*pool,ci->queueFamilyIndex);
+  return r;
+}
+static VKAPI_ATTR void VKAPI_CALL DestroyCommandPool(VkDevice device,VkCommandPool pool,const VkAllocationCallbacks* allocator) {
+  device_of(device)->vk.DestroyCommandPool(device,pool,allocator);
+  omm::pool_discard(pool,true);
+}
+static VKAPI_ATTR VkResult VKAPI_CALL ResetCommandPool(VkDevice device,VkCommandPool pool,VkCommandPoolResetFlags flags) {
+  const auto r=device_of(device)->vk.ResetCommandPool(device,pool,flags);
+  if(r==VK_SUCCESS)omm::pool_discard(pool,false);
+  return r;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL ResetCommandBuffer(VkCommandBuffer cmd,VkCommandBufferResetFlags flags) {
+  const auto r=vk(cmd).ResetCommandBuffer(cmd,flags);
+  if(r==VK_SUCCESS)omm::command_discard(cmd);
+  return r;
+}
+
 static VKAPI_ATTR VkResult VKAPI_CALL AllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* ai,
                                                              VkCommandBuffer* out) {
   VkResult r = device_of(device)->vk.AllocateCommandBuffers(device, ai, out);
   if (r == VK_SUCCESS)
     for (uint32_t i = 0; i < ai->commandBufferCount; ++i) {
+      omm::command_allocated(ai->commandPool,out[i]);
       bvh_cmd_reset(out[i]);   // a handle reused after its pool was destroyed: old records are dropped
       cmd_state(out[i], true)->game_alloc = true;
     }
@@ -339,6 +362,7 @@ static VKAPI_ATTR void VKAPI_CALL FreeCommandBuffers(VkDevice device, VkCommandP
   device_of(device)->vk.FreeCommandBuffers(device, pool, n, cmds);
   for (uint32_t i = 0; i < n; ++i)
     if (cmds[i]) {
+      omm::command_discard(cmds[i],true);
       bvh_cmd_reset(cmds[i]);   // freed without (another) submit: our builds in it never run
       cmd_forget(cmds[i]);
     }
@@ -348,6 +372,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   diag(DIAG_BEGIN_CMD);
   bvh_cmd_reset(cmd);   // recorded again: a previous recording not submitted is dropped
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
+  if(r==VK_SUCCESS){omm::command_discard(cmd);omm::command_begin(cmd);}
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
   s->recording = ++recordings;
@@ -397,7 +422,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL EndCommandBuffer(VkCommandBuffer cmd) {
   CmdState* s = cmd_state(cmd);
   if (s && !s->in_pass) core_on_cmd_end(cmd);
   if (s && s->tracing) trace_flush_segment(s);
-  return vk(cmd).EndCommandBuffer(cmd);
+  const auto r=vk(cmd).EndCommandBuffer(cmd);
+  omm::command_end(cmd,r==VK_SUCCESS);
+  return r;
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info,
@@ -790,6 +817,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdClearDepthStencilImage(VkCommandBuffer cmd,
 static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32_t n, const VkCommandBuffer* cmds) {
   diag(DIAG_EXEC);
   vk(cmd).CmdExecuteCommands(cmd, n, cmds);
+  omm::command_execute(cmd,{cmds,n});
   CmdState* s = cmd_state(cmd);
   if (!s) return;
   // Streamline bookkeeping recorded in secondaries counts when the primary is submitted.
@@ -901,6 +929,10 @@ void register_cmd_hooks(HookMap& m) {
     m[std::string("vk") + name + "KHR"] = fn;
   };
 #define HOOK(n) add(#n, reinterpret_cast<PFN_vkVoidFunction>(&n))
+  HOOK(CreateCommandPool);
+  HOOK(DestroyCommandPool);
+  HOOK(ResetCommandPool);
+  HOOK(ResetCommandBuffer);
   HOOK(AllocateCommandBuffers);
   HOOK(FreeCommandBuffers);
   HOOK(BeginCommandBuffer);

@@ -1,5 +1,6 @@
 #include "host.h"
 #include "omm_backend.h"
+#include "omm_submit.h"
 #include <algorithm>
 #include <cstddef>
 #include <map>
@@ -9,8 +10,10 @@ namespace bg3::omm {
 namespace {
 DeviceData* device{};
 bool requested{}, enabled{};
+bool retained{};
 VkPhysicalDeviceOpacityMicromapFeaturesEXT feature{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT};
 VkPhysicalDeviceSynchronization2Features sync{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES};
+VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeature{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES};
 VkPhysicalDeviceOpacityMicromapPropertiesEXT properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT};
 VkDeviceSize scratchAlignment{256};
 PFN_vkCreateMicromapEXT createMicromap{};
@@ -96,17 +99,21 @@ const void* device_features(InstanceData* id, VkPhysicalDevice physical, const v
   if (id->EnumerateDeviceExtensionProperties(physical,nullptr,&count,ext.data())!=VK_SUCCESS) return next;
   bool has=false; for (const auto& e:ext) has |= !strcmp(e.extensionName,VK_EXT_OPACITY_MICROMAP_EXTENSION_NAME);
   if (!has) {log("[omm] VK_EXT_opacity_micromap unavailable; ordinary RT retained");return next;}
-  VkPhysicalDeviceSynchronization2Features s{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES};
+  VkPhysicalDeviceTimelineSemaphoreFeatures t{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES};
+  VkPhysicalDeviceSynchronization2Features s{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,&t};
   VkPhysicalDeviceOpacityMicromapFeaturesEXT f{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT,&s};
   VkPhysicalDeviceFeatures2 all{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,&f};
   id->GetPhysicalDeviceFeatures2(physical,&all);
-  if (!f.micromap || !s.synchronization2) {log("[omm] micromap/synchronization2 unsupported; ordinary RT retained");return next;}
+  if (!f.micromap || !s.synchronization2 || !t.timelineSemaphore) {log("[omm] micromap/synchronization2/timeline unsupported; ordinary RT retained");return next;}
   auto* existing= reinterpret_cast<const VkPhysicalDeviceOpacityMicromapFeaturesEXT*>(find(next,f.sType));
   auto* existingSync= reinterpret_cast<const VkPhysicalDeviceSynchronization2Features*>(find(next,s.sType));
   auto* v13= reinterpret_cast<const VkPhysicalDeviceVulkan13Features*>(find(next,VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES));
-  if ((existing && !existing->micromap) || (existingSync && !existingSync->synchronization2) || (v13 && !v13->synchronization2)) {
+  auto* existingTimeline=reinterpret_cast<const VkPhysicalDeviceTimelineSemaphoreFeatures*>(find(next,t.sType));
+  if ((existing && !existing->micromap) || (existingSync && !existingSync->synchronization2) || (v13 && !v13->synchronization2) ||
+      (v12 && !v12->timelineSemaphore) || (existingTimeline && !existingTimeline->timelineSemaphore)) {
     log("[omm] application explicitly disabled needed feature; ordinary RT retained");return next;
   }
+  if (!existingTimeline && !v12) {timelineFeature={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES};timelineFeature.timelineSemaphore=VK_TRUE;timelineFeature.pNext=const_cast<void*>(next);next=&timelineFeature;}
   if (!existingSync && !v13) {sync={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES};sync.synchronization2=VK_TRUE;sync.pNext=const_cast<void*>(next);next=&sync;}
   if (!existing) {feature={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT};feature.micromap=VK_TRUE;feature.pNext=const_cast<void*>(next);next=&feature;}
   bool listed=false;for (auto e:extensions) listed |= !strcmp(e,VK_EXT_OPACITY_MICROMAP_EXTENSION_NAME);
@@ -118,7 +125,7 @@ const void* device_features(InstanceData* id, VkPhysicalDevice physical, const v
 void device_created(DeviceData* dd, bool rtEnabled) {
   std::lock_guard lock(mutex);
   if (device) return;
-  device=dd; enabled=false;
+  device=dd; enabled=false;retained=false;
   if (!requested || !rtEnabled) return;
 #define LOAD(name, member) member=reinterpret_cast<PFN_vk##name>(dd->gdpa(dd->device,"vk" #name))
   LOAD(CreateMicromapEXT,createMicromap); LOAD(DestroyMicromapEXT,destroyMicromap);
@@ -133,14 +140,35 @@ void device_created(DeviceData* dd, bool rtEnabled) {
   properties={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT,&as};
   VkPhysicalDeviceProperties2 p{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,&properties};properties2(dd->physical,&p);
   scratchAlignment=std::max<VkDeviceSize>(as.minAccelerationStructureScratchOffsetAlignment,1);
-  enabled=true;
+  enabled=submit_device_created(dd);
+  if(!enabled){log("[omm] private completion timeline unavailable; backend disabled");return;}
   log("[omm] EXT backend available max_four_state_level=%u; no known-state quality gate passed",properties.maxOpacity4StateSubdivisionLevel);
 }
-bool available() {std::lock_guard lock(mutex);return enabled && cfg_int("rt_omm",0);}
+bool available() {std::lock_guard lock(mutex);return enabled && !retained && cfg_int("rt_omm",0);}
+bool has_resources() {std::lock_guard lock(mutex);return !resources.empty();}
+void retain_until_idle() {std::lock_guard lock(mutex);if(!retained)log("[omm] resource provenance/completion unavailable; retaining until device idle");retained=true;}
+void reserve_submissions(std::span<const uint64_t> tickets) {
+  std::lock_guard lock(mutex);
+  for(auto ticket:tickets) {auto i=resources.find(ticket);if(i==resources.end()){retained=true;continue;}
+    if(!i->second.life.reserve())retained=true;
+  }
+}
+void release_submissions(std::span<const uint64_t> tickets) {
+  std::lock_guard lock(mutex);
+  for(auto ticket:tickets){auto i=resources.find(ticket);if(i!=resources.end() && !i->second.life.unreserve())retained=true;}
+}
+bool register_ticket_use(VkCommandBuffer cmd,uint64_t ticket) {
+  std::lock_guard lock(mutex);auto i=resources.find(ticket);
+  if(device_of(cmd)!=device || i==resources.end() || i->second.life.retiring || !register_record_ticket(cmd,ticket)) {
+    if(!retained)log("[omm] rejected ticket use without live ticket/tracked command recording; retaining until idle");
+    retained=true;return false;
+  }
+  return true;
+}
 
 Ticket record(VkCommandBuffer cmd,const Input& input) {
   std::lock_guard lock(mutex);
-  if (!enabled || !cfg_int("rt_omm",0) || !cmd) return 0;
+  if (!enabled || retained || !cfg_int("rt_omm",0) || !cmd || device_of(cmd)!=device || !tracked_recording(cmd)) return 0;
   Plan plan;
   if (!make_plan(input.descriptors,input.dataBytes,properties.maxOpacity4StateSubdivisionLevel,plan) ||
       !input_ranges(plan,input.data,input.dataBytes,input.triangles,input.triangleBytes) ||
@@ -165,6 +193,8 @@ Ticket record(VkCommandBuffer cmd,const Input& input) {
   ci.buffer=resource.storage.buffer;ci.size=size.micromapSize;ci.type=VK_MICROMAP_TYPE_OPACITY_MICROMAP_EXT;
   if (createMicromap(device->device,&ci,nullptr,&resource.micromap)!=VK_SUCCESS) {destroy(resource.storage);destroy(resource.scratch);return 0;}
   bytesLive+=resource.storage.bytes+resource.scratch.bytes;
+  const Ticket ticket=nextTicket++;
+  if(!register_record_ticket(cmd,ticket)){destroy(resource);return 0;}
   build.dstMicromap=resource.micromap;
   const auto remainder=resource.scratch.address%scratchAlignment;
   build.scratchData.deviceAddress=resource.scratch.address+(remainder?scratchAlignment-remainder:0);
@@ -180,7 +210,6 @@ Ticket record(VkCommandBuffer cmd,const Input& input) {
   after.srcStageMask=VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT;after.srcAccessMask=VK_ACCESS_2_MICROMAP_WRITE_BIT_EXT;
   after.dstStageMask=VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;after.dstAccessMask=VK_ACCESS_2_MICROMAP_READ_BIT_EXT;
   dep.pMemoryBarriers=&after;device->vk.CmdPipelineBarrier2(cmd,&dep);
-  const Ticket ticket=nextTicket++;
   resources.emplace(ticket,std::move(resource));
   log("[omm] recorded EXT build ticket=%llu triangles=%u storage=%llu scratch=%llu",ticket,plan.triangles,size.micromapSize,scratchBytes);
   return ticket;
@@ -198,11 +227,12 @@ bool mark_submitted(Ticket t,uint64_t serial) {std::lock_guard lock(mutex);auto 
 bool retire(Ticket t) {std::lock_guard lock(mutex);auto i=resources.find(t);return i!=resources.end() && i->second.life.retire();}
 void collect(uint64_t completed) {
   std::lock_guard lock(mutex);
-  for (auto i=resources.begin();i!=resources.end();) if (i->second.life.releasable(completed)) {destroy(i->second);i=resources.erase(i);} else ++i;
+  if(retained)return;
+  for (auto i=resources.begin();i!=resources.end();) if (i->second.life.releasable(completed) && !recorded_reference(i->first)) {destroy(i->second);i=resources.erase(i);} else ++i;
 }
 bool discard_unsubmitted(Ticket t) {
   std::lock_guard lock(mutex);auto i=resources.find(t);
-  if(i==resources.end() || i->second.life.submitted) return false;
+  if(retained || i==resources.end() || !i->second.life.discardable()) return false;
   destroy(i->second);resources.erase(i);return true;
 }
 void device_destroyed(DeviceData* dd) {
@@ -215,7 +245,7 @@ void device_destroyed(DeviceData* dd) {
     for(auto& [ticket,r]:resources)destroy(r);
     resources.clear();
   }
-  device=nullptr;enabled=false;requested=false;bytesLive=0;
+  device=nullptr;enabled=false;requested=false;bytesLive=0;retained=false;
 }
 static_assert(sizeof(Triangle)==sizeof(VkMicromapTriangleEXT));
 static_assert(offsetof(Triangle,dataOffset)==offsetof(VkMicromapTriangleEXT,dataOffset));
