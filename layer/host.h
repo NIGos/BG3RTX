@@ -614,7 +614,7 @@ bool em_scene(VkCommandBuffer cmd, VkDescriptorSetLayout* layout, VkDescriptorSe
 // ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
 // One line of shaders/rt/alpha_fs.txt (scripts/alpha_table.py).
 struct AlphaFs {
-  uint8_t kind;              // 1 virtual texture, 2 plain texture
+  uint8_t kind;              // 1 virtual texture, 2 plain texture, 3 native scalp hard coverage
   int8_t uv;                 // FS input location of the texture coordinate
   float cut;                 // discard below this alpha (the strictest constant test on it)
   float cut_first;           // the shader's first test (an early-out where lower; rt_alpha_cut=0)
@@ -635,7 +635,7 @@ struct AlphaRec {
   float cut, cut_first;                  // effective cut-off; the first test's (rt_alpha_cut=0)
   float scale[2];
   uint32_t fs_lo, fs_hi;                 // fragment shader hash (diagnostics)
-  float p0[4], p1[4];                    // vt: uv transform
+  float p0[4], p1[4];                    // vt: uv transform; scalp: p0.xy edge/root
   float t[32];                           // vt: the SSBO entry, two row-major mat4
 };
 static_assert(sizeof(AlphaRec) == 208, "AlphaRec must match rt_common.hlsli");

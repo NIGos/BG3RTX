@@ -7,11 +7,15 @@ game and launcher closed: 16/16 CTests, 107/107 runtime shader compilations and 
 detector tests passed. Main and codex/ui-contamination-offline pushed; test-main
 refreshed. This closes the earlier integration deferral. No game was launched.
 
-Dedicated capture agent works in isolated codex/native-coverage. First commit
-37299f2 has native scalp hash/binding recipes, bounded material/frame extraction
-and scalar smoothstep/root/dither reference: 178,522 checks. No runtime caller in
-that increment. Work continues on default-off native scalp hard-cut wiring;
-full hair strand/view/depth inputs, native camera dither and cascades remain open.
+Dedicated capture work is merged through merge-green onto main dd13361, pushed
+with codex/native-coverage. Key rt_native_scalp remains OFF by default. Gate:
+20/20 CTests, 202/202 shader files and QA passed; 178,780 scalar/capture/capability
+checks, 95 ordinary shader binaries unchanged and 95 capable variants validated.
+This is native scalp hard-cut support, not full Hair/cascade/dither handling.
+Actual F10 native Frame mode is unknown; the reported close-ups may still be
+unsupported. No live quality or GPU cost measured, no key enabled or game launched.
+Future user-led check: Test1, same dialogue and pose, key 0/1; require successful
+native hard-record counters first. Unsupported dither/zero records is NOT a pass.
 
 OMM CPU groundwork is now also merged via merge-green onto main e277548, pushed
 with its branch; 19/19 CTests, 107/107 shaders and QA passed, test-main refreshed.
@@ -26,6 +30,31 @@ only, and is NOT GPU/filter/LOD/stochastic or traversal certification. No OMM
 production caller or performance claim. Mixed-texture real descriptor/array tests
 add 25,740 independent finite samples, 66 exact-cut points and eight decoder bounds
 checks, all passing. Runtime GPU OMM is not integrated.
+
+## Native scalp hard-cut implementation evidence - 2026-10-30, before integration
+
+`rt_native_scalp=0` is the new default-off runtime key. Kind3 captures native scalp
+material edge/root and uses the exact hard-cut scalar transform across normal RT
+query paths, with existing RT-cone sampling explicitly retained. Camera mode != 0
+stays unsupported/opaque and is counted; no fake RT dither or raw-alpha substitute.
+Sticky host capability keeps held scenes safe through key-off and core reload.
+No ABI change. Not full Hair/cascade support. F10 native Frame mode is unavailable;
+the user's close-up may remain unsupported. No live files/game changes or GPU cost
+and quality gate claimed. Full isolated build and 17/17 CTests pass; 178,780 scalar/
+capture/capability checks, 95/95 ordinary shader SPIR-V byte-identical to 37299f2,
+95/95 capable variants compile and validate. After merging main e277548, full
+isolated build and 20/20 CTests pass with both scalp and OMM tests. No live gate.
+
+## Native scalp CPU contract - 2026-10-30, isolated and not deployed
+
+`codex/native-coverage` adds native scalp depth/shadow hash mapping, bounded
+material/Frame capture and full scalar root/smoothstep/dither evaluation. No
+production caller, key, ABI or shader change. This is preparation for the actual
+coverage correction, not a live fix. MSVC standalone test: 178,522 checks pass;
+43,191 shadow and 2,826 dither reference decisions. Exact raster/sampler capture,
+Hair view/strand/depth attributes and cascade material records remain required.
+Design and exact source hashes: docs/TRACK_D_RT.md, native scalp section.
+No live files or game state changed; no GPU cost or quality gate claimed.
 
 ## User steering: native shader discovery before workarounds - 2026-10-30
 

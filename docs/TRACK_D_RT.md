@@ -1,5 +1,119 @@
 # Track D: hardware ray tracing
 
+## Native scalp hard-cut runtime candidate - 2026-10-30, default off
+
+`rt_native_scalp=0/1` now selects a bounded runtime increment in isolated
+`codex/native-coverage`. It does not implement full hair or camera raster dither.
+Six verified scalp depth/shadow hashes use AlphaRec kind 3; p0.xy at bytes 48/52
+hold the actual per-draw material edge/root scalars. The 208-byte record and host
+ABI 18 remain unchanged. Static/instanced descriptors follow the table below;
+existing UV capture must match native FS location 0 or the draw remains unsupported.
+
+Camera depth additionally reads native Frame phase/mode at offsets 8/12. Mode 0
+has native hard coverage; any nonzero mode is explicitly unsupported and retains
+the baseline opaque path. Missing/nonfinite state and undefined smoothstep also
+remain unsupported. Native shadow and tetrahedron programs have no frame dither.
+Logs `[alpha scalp]` distinguish committed hard records, unsupported camera dither
+and invalid/missing state. Existing view/region failures retain existing counters.
+
+The capable shared alpha_eval samples B/A together, applies native smoothstep
+and root multiplication, then the native hard cutoff 0.3333. It bypasses the
+generic stochastic alpha threshold, even at coarse mips. All four normal query
+entry points and origin queries share this dispatch. Its declared sampling policy
+is existing isotropic RT-cone LOD with linear repeat/trilinear, max sampler LOD 16;
+this is NOT native raster derivative/anisotropic or floating-point equivalence.
+Shader code and native GLSL formula correspondence alone are not a GPU image gate.
+The special cascade soup still lacks per-material UV records and is unchanged.
+
+Key transitions: before new kind3 records can be created, the host atomically
+publishes a sticky process capability through existing persist storage. Core
+selects capable variants AFTER obtaining the actual TLAS/set pair. Acquire/release
+ordering and the existing scene handoff prevent an ordinary shader consuming a
+new record. The flag survives core reload and never clears on key-off: held and
+retired records retain their original formula until retirement. Newly captured
+key-off draws follow baseline paths. Fresh process key-off uses ordinary shaders.
+Failed capable compilation leaves a compatible old variant or NULL, never an
+ordinary pipeline interpreting kind3 as raw alpha. No new ABI storage fields.
+
+Exact camera raster identity is not currently representable end-to-end:
+AlphaRec has space for material/frame plus view-projection/viewport metadata, and
+alpha_eval already knows triangle positions/UVs. But current descriptors retain
+image view/layout, NOT native VkSampler state; Bg3Binding also omits sampler.
+Native viewport/projection and original raster sample coordinates are not copied
+into each alpha record. Secondary rays need an explicit RT footprint policy
+rather than claiming original raster derivatives. These remain separate work.
+Existing F10 files contain images and descriptor identities but no captured native
+Frame scalar bytes; the close-up's actual mode is UNKNOWN. It may be unsupported
+by this candidate. No live test, quality improvement or GPU cost is claimed.
+
+Offline gate: full isolated build and 17/17 CTests pass. Native test passes
+178,780 checks including 128 publication/scene-handoff/new-core cases. DXC compiles
+all 95 ordinary entries byte-identically to 37299f2 and all 95 capable wrappers;
+all capable modules pass spirv-val for Vulkan 1.3. Shader disassembly retains
+native SmoothStep/Fma for the hard scalar transform. Reproduce with
+`tests/native_scalp_shader_test.py --dxc <dxc.exe> --sharc <SDK include>` (two CPU
+workers, no device). Evidence: docs/evidence/native-scalp-hard-20261030.json.
+Main e277548 was then merged into this isolated branch, preserving both scalp and
+OMM CTest targets. Full isolated build and 20/20 CTests pass; the merge changes no
+layer/core/shader code, so the shader identity proof remains applicable.
+
+## Native scalp coverage contract - 2026-10-30, offline increment
+
+Branch `codex/native-coverage`, based on 857a616, is isolated from the user's game.
+At 37299f2, `common/native_scalp_coverage.h` was a reusable scalar evaluator and
+portable bounded capture adapter with no production caller. The later runtime
+candidate above reuses its capture adapter for the representable hard branch.
+
+Native references are verified Materials.pak SPIR-V, recovered using
+`tools.assets.spirv.modules` and the layer's FNV hash. Complete inventory and native
+GLSL live in the main capture report `captures/dialogue-shadow-review-20261030/`.
+All 29 Hair/Scalp fragment programs are available; none needs an unknown-shader
+fallback. This increment implements the scalar contract of these six scalp FS:
+
+| Pass | Static FS | Instanced FS | Material / mask binding |
+|---|---|---|---|
+| Depth | 9e77575a9f377ec5 | 36eeb96ba83ea027 | 1/2 static, 0/1 instanced |
+| DepthShadow | 03a2d9f645625c44 | 4096aa06e414de92 | 1/2 static, 0/1 instanced |
+| DepthShadowTetrahedron | b1b923f0662a55b5 | 3535fd5f461f7d23 | 1/2 static, 0/1 instanced |
+
+All material and texture descriptors are set 1, UV location 0, sampler set 0
+binding 7. Material offsets 0 and 4 hold smoothstep edge and root multiplier.
+For already native-filtered mask B/A, coverage is
+`smoothstep(edge, clamp(edge + float(0.7), 0, 1), A) * fma(B - 1, root, 1)`.
+Shadow passes retain coverage >= float(0.3333). Camera depth also reads Frame set 0
+binding 0 offsets 8/12. Mode zero uses that same cut; nonzero uses the original
+screen/frame dither expression and its TWO subtractions/comparison, including
+native truncation remainder for negative phase. It does not substitute pc.frame
+or an RT stochastic hash. Existing raw-A scalp shadow entries are not equivalent.
+
+The adapter reads only 8 material bytes and, for camera depth, 8 Frame bytes.
+It resets output before every attempt and publishes nothing after a failed read.
+Missing frame/raster coordinates, nonfinite data and undefined smoothstep return
+an incomplete status. CompleteScalar means evaluation of supplied scalar inputs,
+not GPU sampling, floating-point or rasterization equivalence certification.
+
+Required runtime integration remains concrete:
+- Capture native sampler identity/state, image view/content/residency and the
+  native filtered mask footprint; current synthetic wrap/cone sampling is an
+  approximation and cannot establish exact coverage alone.
+- Capture original per-draw viewport/projection and native Frame phase for camera
+  dither. An arbitrary secondary-ray output pixel is not gl_FragCoord. Preserve
+  this state across held draws with matching geometry and descriptor lifetime.
+- Extend record dispatch behind a default-off key, using the unified alpha_eval
+  path for visibility, closest, debug and origin queries. Cascade geometry's
+  special-case query path must retain its own per-triangle material/UV records;
+  the current cascade branch bypasses the normal alpha evaluator.
+- Hair is a DIFFERENT recipe, requiring dual samples/noise, root parameters,
+  tangent/view/front-face inputs, fades/dither and gl_FragDepth displacement. The
+  current position+UV soup cannot encode all of that. Scalp never writes depth.
+  Do not apply this scalp evaluator to Hair or treat a fragment depth offset as
+  ordinary vertex displacement.
+
+Standalone MSVC C++20 /W4 /WX /fp:strict test: 178,522 checks, including 43,191
+higher precision shadow-reference and 2,826 dither-reference decisions, derived
+rounding envelopes, real raw-alpha counterexamples and binding/failure tests.
+CTest target registered. No GPU jobs; GPU cost and in-game appearance unmeasured.
+
 ## Base frame CPU cost - 2026-10-30, default-off candidate
 
 `rt_alpha_stream=0/1` selects ordinary copies or aligned streaming loads for alpha

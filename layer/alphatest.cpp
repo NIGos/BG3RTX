@@ -20,6 +20,8 @@
 // Every view in a set was bound by the game in the frame the set was written.
 #include "host.h"
 #include "../common/mapped_copy.h"
+#include "../common/native_scalp_coverage.h"
+#include "../common/native_scalp_capability.h"
 
 #include <algorithm>
 #include <cstring>
@@ -88,6 +90,7 @@ std::vector<std::pair<VkImageView, VkImageLayout>> g_tex, g_cache;
 // Why draws stayed opaque, for the log.
 uint32_t g_fail[6] = {};
 uint64_t g_frames = 0, g_draws = 0, g_tris = 0;
+std::atomic<uint32_t> g_scalp_hard{0}, g_scalp_dither{0}, g_scalp_invalid{0};
 
 bool make_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& b, VkDeviceMemory& m, bool address = false) {
   DeviceData* dd = g_dd;
@@ -338,6 +341,24 @@ void alpha_device_destroyed(DeviceData* dd) {
 
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
+  if (cfg_int("rt_native_scalp", 0)) {
+    if (const auto* recipe = native_scalp::lookup(fs)) {
+      // Before any possible kind3 publication. The core selects after acquiring
+      // its actual scene; acquire of this sticky word survives core reloads.
+      native_scalp::publish_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t))));
+      *out = AlphaFs{};
+      out->kind = 3;
+      out->hash = fs;
+      out->uv = 0;
+      out->tex_set = out->ubo_set = 1;
+      out->tex_bind = recipe->mask_binding;
+      out->ubo_bind = recipe->material_binding;
+      out->cut = out->cut_first = 0.3333f;
+      out->channel = 3;
+      out->k = 1.0f;
+      return true;
+    }
+  }
   std::lock_guard<std::mutex> lock(g_mu);
   auto it = g_table.find(fs);
   if (it == g_table.end()) return false;
@@ -347,6 +368,8 @@ bool alpha_lookup(uint64_t fs, AlphaFs* out) {
 
 void alpha_begin_capture() {
   std::lock_guard<std::mutex> lock(g_mu);
+  if (cfg_int("rt_native_scalp", 0))
+    native_scalp::publish_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t))));
   g_stream_reads = cfg_int("rt_alpha_stream", 0) != 0;
   g_recs.clear();
   g_tex.clear();
@@ -386,6 +409,27 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
       ++g_fail[0];
       return false;
     }
+  } else if (a.kind == 3) {
+    native_scalp::Captured captured;
+    if (!native_scalp::capture(a.hash, [&](unsigned set, unsigned binding, unsigned off, void* dst, size_t bytes) {
+          return read_bound(cmd, set, binding, off, dst, bytes);
+        }, captured)) {
+      ++g_scalp_invalid;
+      return false;
+    }
+    if (captured.frame.available && captured.frame.dither_mode != 0.0f) {
+      // Camera raster dither needs original sample coordinates. Do not replace
+      // it with an RT hash or pretend this draw has native hard coverage.
+      ++g_scalp_dither;
+      return false;
+    }
+    const auto probe = native_scalp::evaluate(a.hash, captured.material, {1, 1, true}, captured.frame);
+    if (probe.status != native_scalp::Status::CompleteScalar) {
+      ++g_scalp_invalid;
+      return false;
+    }
+    r.p0[0] = captured.material.edge;
+    r.p0[1] = captured.material.root;
   } else if (a.has_scale) {
     if (!read_bound(cmd, a.ubo_set, a.ubo_bind, a.scale, r.scale, 8)) {
       ++g_fail[1];
@@ -418,6 +462,7 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
   }
   if (rec_index) *rec_index = uint32_t(g_recs.size());
   g_recs.push_back(r);
+  if (r.kind == 3) ++g_scalp_hard;
   return true;
 }
 
@@ -659,6 +704,10 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
         (unsigned long long)g_frames, double(g_draws) / g_frames, double(g_tris) / g_frames, g_tex.size(),
         g_cache.size(), kTextures - 1, kCaches - 1, kMaxRecords, g_fail[0], g_fail[1], g_fail[2], g_fail[3], g_fail[4],
         g_fail[5], g_stale_views.load());
+    if (native_scalp::has_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t)))))
+      log("[alpha scalp] native hard records %u; unsupported camera dither %u; invalid/missing native state %u; "
+          "RT cone footprint, not native raster sample identity",
+          g_scalp_hard.exchange(0), g_scalp_dither.exchange(0), g_scalp_invalid.exchange(0));
     // The alpha-tested fragment shaders of this frame by triangles, with their
     // cut-offs (identifies the families on screen: grass, foliage, chains).
     std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> per;

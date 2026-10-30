@@ -1,8 +1,16 @@
 # Session handoff - 2026-10-30: UI fix confirmed; hair/cascade coverage open
 
+Main dd13361 includes `codex/native-coverage`, merged via merge-green and pushed:
+20/20 CTests, 202/202 shader files and QA pass. Default-off rt_native_scalp adds native scalp
+hard-cut scalar coverage/material capture; camera dither != 0 remains unsupported.
+No ABI bump or feature enablement. Sticky persisted capability protects held scenes
+through key-off/core reload. 20/20 CTests and 178,780 scalar/capture/capability checks
+pass; 95 ordinary shaders byte-identical and 95 capable compile/validate. Actual
+F10 Frame mode unknown. Full Hair/cascade/raster identity still open; TRACK_D_RT.
+
 Read AGENTS.md, top PROGRESS_CODEX.md and latest user steering in this conversation.
-No Ponytail. The user explicitly permits modest multi-agent OFFLINE work; two
-agents were used. Live testing is coordinated here with the user, not autonomous
+No Ponytail. The user explicitly permits modest multi-agent OFFLINE work; three
+agents were used (capture, OMM, solar review). Live testing is coordinated here, not autonomous
 launches while the user plays. Never touch saves, D:/BG3_Tools backups, snapshot
 tags, force-push or clean junction checkouts. Never hold results.md open.
 Game launches, when authorized, only scripts/test-queue.ps1; USER_PLAYING or an
