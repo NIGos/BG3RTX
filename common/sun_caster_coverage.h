@@ -41,6 +41,16 @@ inline bool same_epoch(NativeEpoch a, NativeEpoch b) {
   return valid(a) && valid(b) && a.words == b.words;
 }
 
+// Cross-pass affine source identity. No VS hash is used: camera and shadow
+// shaders differ, but the class-A recognizer proves identical affine semantics.
+// Keep the COMPLETE sources, not a hash of VB0 and one placement binding.
+// Equal identities nominate a duplicate; content/placement freshness still
+// requires validation before a caster can actually be omitted.
+struct AffineSource {
+  std::array<uint64_t,27> words{};
+  bool available=false;
+  bool operator==(const AffineSource&) const = default;
+};
 // These are mandatory observations, not defaults inferred from a capture flag.
 // Pending command buffers can be recorded as dependencies, but may not publish
 // a complete certificate until their actual submission order is verified.

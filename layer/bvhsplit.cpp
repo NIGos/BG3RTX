@@ -377,6 +377,7 @@ uint64_t g_hold_why[7] = {};
 
 // ---- this capture's draws ----
 struct FrameDraw {
+  sun_coverage::AffineSource affine;
   uint64_t mesh_key = 0;      // 0: not instanceable
   uint64_t dyn_key = 0;
   const uint8_t* rows[3] = {};   // instance 0's matrix rows in the game's mapped memory
@@ -789,6 +790,7 @@ BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint
   *token = uint32_t(g_draws.size());
   g_draws.emplace_back();
   FrameDraw& fd = g_draws.back();
+  fd.affine=d.affine;
   fd.alpha = d.alpha;
   fd.instances = d.args.instances;
   fd.first_instance = d.args.first_instance;
@@ -1605,6 +1607,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->pool_bytes = g_pool.size;
   out->rec = rec;
   out->sun_base = {g_ring.b, rbase, g_ring.size, sun_base_instances, rec};
+  if(cfg_int("rt_sun_cascade_current",0))
+    for(uint32_t di:cached) {
+      const auto& fd=g_draws[di];
+      if(!fd.alpha && fd.affine.available) out->sun_base.affine_sources.push_back(fd.affine);
+    }
   if (cfg_int("rt_stability_log", 0) && now % 300 == 0) {
     uint32_t held = 0;
     for (const auto& [di, key] : dyn) held += key && g_draws[di].held;

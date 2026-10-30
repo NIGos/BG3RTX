@@ -121,3 +121,20 @@ snapshotted where available. An unmapped UBO remains a valid referenced GPU
 source, with no fabricated CPU values; GPU copying and validation before ready
 publication is still required for that case. No new consumer trust is enabled by
 these packets yet. Both DLLs and 25 CTests pass; no live test was run.
+
+## Cross-pass affine identity preparation
+
+Current Sun draw records now retain triangle ranges and complete class-A affine
+source identities. Position binding, format, offset and actual stride are kept,
+as are all three matrix-row buffers, offsets and actual strides, the full draw
+range, index type and instance range. VS hashes are deliberately excluded after
+class-A semantic recognition, since native camera/shadow variants differ. The
+camera scene exports only actually included opaque cached affine draws.
+
+These identities nominate duplicate candidates only. The old camera-seen hash
+is not accepted as coverage proof. No caster is omitted yet: even equal source
+bindings require actual content/placement freshness before omission. Native
+copy/fill/update invalidation exists for the mesh cache, but does not prove all
+possible GPU storage writes or late mapped instance mutations between passes.
+A GPU geometric-equivalence check can close that remaining proof without
+assuming every same-buffer native pass read identical bytes.

@@ -244,6 +244,7 @@ struct Capture {
   uint32_t c_material_unknown = 0;
   bool c_finite_sun_clip = true;
   VkImage c_depth_image = VK_NULL_HANDLE;
+  std::vector<SunCascadeDraw> c_sun_draws;
 };
 
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
@@ -1020,6 +1021,26 @@ cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const Dr
   return d;
 }
 
+sun_coverage::AffineSource sun_affine_source(const CmdState* s,const DrawArgs& a,const InstPipe& ip) {
+  sun_coverage::AffineSource source;
+  if(!ip.ok || a.kind>1 || !a.count || !a.instances || ip.pos_binding>=CmdState::kMaxVertexBindings) return source;
+  const auto& pos=s->vb[ip.pos_binding];
+  const uint32_t stride=ip.pos_stride ? ip.pos_stride : uint32_t(pos.stride);
+  if(!pos.buffer || !stride || (a.kind==1 && !s->ib)) return source;
+  auto& w=source.words;
+  w[0]=a.kind;w[1]=a.count;w[2]=a.instances;w[3]=a.first;w[4]=a.first_instance;w[5]=uint64_t(int64_t(a.vertex_offset));
+  w[6]=uint64_t(pos.buffer);w[7]=pos.offset;w[8]=ip.pos_offset;w[9]=stride;w[10]=ip.pos_format;
+  if(a.kind==1) {w[11]=uint64_t(s->ib);w[12]=s->ib_offset;w[13]=s->ib_type;}
+  for(unsigned k=0;k<3;++k) {
+    if(ip.row_binding[k]>=CmdState::kMaxVertexBindings) return {};
+    const auto& row=s->vb[ip.row_binding[k]];
+    const uint32_t rs=ip.row_stride[k] ? ip.row_stride[k] : uint32_t(row.stride);
+    if(!row.buffer || !rs) return {};
+    w[14+4*k]=uint64_t(row.buffer);w[15+4*k]=row.offset;w[16+4*k]=ip.row_offset[k];w[17+4*k]=rs;
+  }
+  source.available=true;return source;
+}
+
 void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   const uint64_t f = frame_index();
   const int want = cfg_int("rt_cascade_index", 1);
@@ -1067,7 +1088,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.c_tris = 0;
   c.c_native_epoch = {}; c.c_native_frame = VK_NULL_HANDLE; c.c_native_offset = 0;
   c.c_epoch_ok = false; c.c_material_unknown = 0; c.c_finite_sun_clip = true;
-  c.c_depth_image=s->pass.depth_image;
+  c.c_depth_image=s->pass.depth_image; c.c_sun_draws.clear();
   c.rec = bvh_rec_register(cmd);
   if(layer==want) g_cc_meta[f % 3] = CcMeta{};
   if(all_current) g_sun_meta[layer][f % 3]=CcMeta{};
@@ -1190,6 +1211,12 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     ++c->c_full;
     return;
   }
+  if(current_sun) {
+    SunCascadeDraw draw;
+    draw.first_triangle=uint32_t(c->cursor/(3ull*g_stride));draw.triangles=uint32_t(prims);draw.fragment_shader=s->fs;
+    if(!pi.discard && !pi.fragment_depth && pi.fragment_known) draw.affine=sun_affine_source(s,args,pi.inst);
+    c->c_sun_draws.push_back(std::move(draw));
+  }
   VkDeviceSize off = c->cursor, size = reserved;
   p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
   p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
@@ -1233,6 +1260,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     // which is not the camera's (92 m away in S7): the rebase starts from it.
     if (mat_ok) { meta.has_origin = true; for (int k = 0; k < 3; ++k) meta.origin[k] = m.v[52 + k]; }
     meta.sun.soup={c->xfb.b,tris,g_stride,meta.has_origin,{meta.origin[0],meta.origin[1],meta.origin[2]},meta.sig,c->rec,c->cmd};
+    meta.sun.draws=c->c_sun_draws;
     meta.sun.depth_image=c->c_depth_image;
     meta.sun.native_epoch=c->c_native_epoch;
     meta.sun.native_frame_buffer=c->c_native_frame;meta.sun.native_frame_offset=c->c_native_offset;
@@ -1547,6 +1575,7 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   const auto* pa = attr(vi.pos_location);
   const auto* pb = pa ? binding(pa->binding) : nullptr;
   if (!pa || !pb || pb->inputRate != VK_VERTEX_INPUT_RATE_VERTEX) return ip;
+  ip.pos_binding=pa->binding;ip.pos_offset=pa->offset;ip.pos_stride=dyn_stride ? 0 : pb->stride;ip.pos_format=pa->format;
   // The mesh is what the per-vertex inputs hold: the VS and their layout are part of its key.
   uint64_t h = mod.hash ^ 0x9e3779b97f4a7c15ull;
   auto mix = [&](uint64_t v) { h = (h ^ v) * 1099511628211ull; };
@@ -2030,6 +2059,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     const bool list = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && kind <= 1;
     BvhDraw bd{list && pi.inst.ok && (!alpha_fs || pi.inst.uv_ok) ? &pi.inst : nullptr, s->vs, d.pipe_id, alpha_fs,
                args, s};
+    if(cfg_int("rt_sun_cascade_current",0)) bd.affine=sun_affine_source(s,args,pi.inst);
     uint32_t mesh_tris = 0;
     BvhVerdict v = bvh_classify(cmd, bd, &token, &mesh_tris);
     if (v != BVH_CAPTURE) {
