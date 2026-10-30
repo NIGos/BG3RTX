@@ -31,7 +31,11 @@ function Get-QueueBuildIdentity([string]$tree) {
     $revision+="`n"+((& git -C $tree diff HEAD --binary) -join "`n")
     if($LASTEXITCODE -ne 0){throw 'Cannot freeze candidate source changes'}
   }
-  $rows=@($files | Sort-Object -Unique | ForEach-Object {$_+':'+(Get-FileHash -LiteralPath (Join-Path $tree $_) -Algorithm SHA256).Hash})
+  # PowerShell 5/.NET Framework and PowerShell 7/.NET use different culture
+  # collation (e.g. native_hair.h versus native_hair_math.h). Freeze ordinally.
+  $ordered=[Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+  foreach($file in $files){[void]$ordered.Add($file)}
+  $rows=@($ordered | ForEach-Object {$_+':'+(Get-FileHash -LiteralPath (Join-Path $tree $_) -Algorithm SHA256).Hash})
   Get-QueueTextHash ($revision+"`n"+($rows -join "`n"))
 }
 function Get-QueuePermissionBlock($job,[string]$queueRoot,[string]$tree='', [string]$build='',
@@ -89,7 +93,7 @@ function Get-QueueChildPermissionBlock([string]$tree,[switch]$ReceiptOnly) {
     $build=if($ReceiptOnly){[string]$ctx.build}else{Get-QueueBuildIdentity $tree}
     if($build -cne $ctx.build){return 'Queue child frozen build changed'}
     return Get-QueuePermissionBlock $ctx.job $ctx.queue_root $ctx.tree $build $ctx.session $ctx.runner -InFlight
-  } catch {return 'Invalid queue child context or queue owner exited'}
+  } catch {return ('Invalid queue child context or queue owner exited: '+$_.Exception.GetType().Name+': '+$_.Exception.Message+' (line '+$_.InvocationInfo.ScriptLineNumber+')')}
 }
 # No game is owned by an auto-run child before its own launch returns a handle.
 # An old PID file/another queue/shared slot never grants ownership of a process.

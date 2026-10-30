@@ -7,7 +7,12 @@ New-Item -ItemType Directory -Force (Join-Path $fake 'bin'),(Join-Path $fake 'ca
 Set-Content (Join-Path $fake '.queue-fake-root') synthetic
 Set-Content (Join-Path $fake 'bin/VkLayer_bg3rtx.dll') synthetic-layer
 Set-Content (Join-Path $fake 'bin/bg3rtx_core.dll') synthetic-core
-$job=[pscustomobject]@{name='child';live_batch='test';timeout=10;args=@('-Foreground');patterns=@('fake');expect=@('fake')}
+New-Item -ItemType Directory (Join-Path $fake 'common'),(Join-Path $fake 'scripts') | Out-Null
+foreach($file in @('common/native_hair.h','common/native_hair_math.h','scripts/game-minimizer.ps1','scripts/gamelock.ps1')){Set-Content (Join-Path $fake $file) synthetic}
+$job=[pscustomobject]@{name='child';live_batch='test';timeout=10;session=$false;repeat=1;traces=0;tree='.';save='Test1';
+ set='rt=1,fg=2,rt_native_hair=1,rt_native_scalp=1,rt_omm=0,rt_sun_cascade_current=0,rt_xfb_mb=1408';
+ args=@('-Foreground','-RealPresent','-Move','-MovePlan',(Join-Path $fake 'captures/motion.json').Replace('\','\\'),'-UserIni',(Join-Path $fake 'bg3rtx_user.ini').Replace('\','\\'),'-AcceptModWarning','off');
+ patterns=@('\\[geo\\] RT capture','\\[alpha hair\\]','primary-ray check');expect=@('\\[sl\\] DLSS-G frame','\\[alpha hair\\] native coverage records [1-9]');expect_runner=@('\\[rotation-input\\]','\\[motion-plan\\] complete phases=7','foreground=True real_present=True')}
 $build=Get-QueueBuildIdentity $fake
 $runner="$PID|synthetic"
 $grant=@{version=1;status='approved';user_steering='SYNTHETIC ONLY';steering_source='CPU test';expires_utc=[datetimeoffset]::UtcNow.AddHours(1).ToString('o');runner_session='test';jobs=@(@{hash=(Get-QueueJobHash $job $fake);tree=$fake;build=$build;runs=1})}
@@ -27,6 +32,15 @@ try {
  $env:BG3RTX_QUEUE_CONTEXT=$good
  Check (-not(Test-Path (Join-Path $fake 'captures/queue/USER_AWAY'))) 'no away marker manufactured'
  Check (-not(Get-QueueChildPermissionBlock $fake)) 'current consumed presented job accepted without away'
+ $identityScript=Join-Path $fake 'identity.ps1'
+ @'
+param([string]$Repo,[string]$Tree)
+. (Join-Path $Repo 'scripts/queue-permission.ps1')
+Get-QueueBuildIdentity $Tree
+'@ | Set-Content $identityScript
+ $ps5=& powershell -NoProfile -File $identityScript -Repo $repo -Tree $fake
+ $ps7=& pwsh -NoProfile -File $identityScript -Repo $repo -Tree $fake
+ Check ($LASTEXITCODE -eq 0 -and "$ps5" -ceq "$ps7" -and "$ps5" -ceq $build) 'PS5 and PS7 freeze identical punctuation-heavy tree'
  Check (-not(Get-QueueLaunchProcessBlock @([pscustomobject]@{ProcessName='powershell';Id=1}))) 'claim starts with no game'
  foreach($name in @('bg3','bg3_dx11')){
   $appeared=@([pscustomobject]@{ProcessName=$name;Id=456})
