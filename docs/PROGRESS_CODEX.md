@@ -1,5 +1,10 @@
 # BG3RTX progress
 
+QUESTION FOR THE USER (FG flicker around UI): the game outputs HDR10 and composites its sRGB UI
+over the PQ scene; the UI image we give DLSS-G is the raw sRGB one. Please compare in game,
+camera moving with names/labels on screen: fg_tag_ui=1 (now) vs fg_tag_ui=0 (bg3rtx.ini,
+live). If 0 is cleaner it becomes the default; else a PQ-consistent UI image is next.
+
 ## Night 2026-10-29/30 (supervisor): in-world UI flicker, roof casters (merged, main f72abca)
 
 READY FOR THE USER'S CHECK (restart the game; Roof sun shadows on): save The Blushing Mermaid -
