@@ -181,6 +181,7 @@ static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra =
   diag(DIAG_DRAW);
   CmdState* s = cmd_state(cmd);
   if (!s) return;
+  sun_note_native_draw(cmd,s);
   assetdb_note_draw(s->vs, s->fs);
   if (s->in_pass) {
     if (!s->pass.draw_count++) {

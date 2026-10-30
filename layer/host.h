@@ -601,6 +601,24 @@ struct SunBaseCapture {
 bool rt_sun_base_capture(VkAccelerationStructureKHR selected_tlas, VkDescriptorSet selected_alpha, SunBaseCapture* out);
 bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,VkDescriptorSet selected_alpha,
                    Bg3SunSceneInfo* out);
+// Exact native Sun-mask source packets. Unmapped source UBOs remain valid GPU
+// sources, not invented CPU values; a consumer must copy/validate them on GPU.
+struct SunReceiverPacket {
+  Bg3Binding source{};
+  std::array<uint8_t,544> bytes{};
+  uint32_t size=0;
+  bool mapped=false;
+};
+struct SunReceiverCapture {
+  VkCommandBuffer producer=VK_NULL_HANDLE;
+  uint64_t record=0;
+  sun_coverage::NativeEpoch epoch;
+  SunReceiverPacket frame, camera, sun, auxiliary, ray_basis;
+  Bg3Binding csm{}, auxiliary_near{}, auxiliary_far{};
+  bool sources_valid=false;
+};
+void sun_note_native_draw(VkCommandBuffer cmd, const CmdState* state);
+bool sun_native_receiver(const sun_coverage::NativeEpoch& epoch, SunReceiverCapture* out);
 struct SunSubmitBatch {
   std::vector<VkSubmitInfo> legacy;
   std::vector<VkSubmitInfo2> modern;

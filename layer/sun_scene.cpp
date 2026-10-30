@@ -27,6 +27,7 @@ struct Work {
   bool prepared=false, inserted=false;
 };
 Work g_work[kSceneSlots];
+SunReceiverCapture g_receiver[16];
 VkDescriptorSetLayout g_validate_set=VK_NULL_HANDLE;
 VkPipelineLayout g_validate_layout=VK_NULL_HANDLE;
 VkPipeline g_validate_pipeline=VK_NULL_HANDLE;
@@ -118,6 +119,51 @@ void stats() {
       (unsigned long long)g_failed_epoch,(unsigned long long)g_failed_material,(unsigned long long)g_failed_order);
 }
 } // namespace
+
+void sun_note_native_draw(VkCommandBuffer cmd,const CmdState* state) {
+  if(!state || !state->in_pass || state->fs!=0x0687fa327aed7f8eull || !cfg_int("rt_sun_cascade_current",0)) return;
+  SunReceiverCapture capture;
+  capture.producer=cmd;
+  auto packet=[&](uint32_t set,uint32_t binding,uint32_t offset,uint32_t size,SunReceiverPacket& p) {
+    p.size=size;
+    if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,binding,0,&p.source) || !p.source.buffer ||
+       (p.source.type!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && p.source.type!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
+       (p.source.range!=VK_WHOLE_SIZE && (offset>p.source.range || size>p.source.range-offset))) return false;
+    p.source.offset+=offset;
+    if(p.source.range!=VK_WHOLE_SIZE) p.source.range-=offset;
+    p.mapped=read_mapped(p.source.buffer,p.source.offset,p.bytes.data(),size);
+    return true;
+  };
+  capture.sources_valid=packet(0,0,0,32,capture.frame);
+  capture.sources_valid=packet(0,2,0,224,capture.camera) && capture.sources_valid;
+  capture.sources_valid=packet(2,26,0,544,capture.sun) && capture.sources_valid;
+  capture.sources_valid=packet(1,0,0,144,capture.auxiliary) && capture.sources_valid;
+  capture.sources_valid=packet(0,1,112,48,capture.ray_basis) && capture.sources_valid;
+  capture.sources_valid=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,2,8,0,&capture.csm) &&
+    capture.csm.image && capture.csm.view && capture.sources_valid;
+  // Merely bound auxiliary textures are NOT evidence that native auxiliary
+  // shadows are enabled. Preserve actual enable/selection bytes above.
+  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,3,0,&capture.auxiliary_near);
+  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,4,0,&capture.auxiliary_far);
+  if(capture.frame.mapped) {
+    std::memcpy(capture.epoch.words.data(),capture.frame.bytes.data(),32);
+    capture.epoch.available=true;
+  }
+  capture.record=bvh_rec_register(cmd);
+  std::lock_guard<std::mutex> lock(g_sun_mutex);
+  g_receiver[capture.record%std::size(g_receiver)]=std::move(capture);
+}
+bool sun_native_receiver(const sun_coverage::NativeEpoch& epoch,SunReceiverCapture* out) {
+  if(!out || !sun_coverage::valid(epoch)) return false;
+  *out={};
+  std::lock_guard<std::mutex> lock(g_sun_mutex);
+  const SunReceiverCapture* best=nullptr;
+  for(const auto& source:g_receiver)
+    if(source.sources_valid && sun_coverage::same_epoch(source.epoch,epoch) &&
+       bvh_rec_matches_command(source.record,source.producer) && (!best || source.record>best->record)) best=&source;
+  if(!best) return false;
+  *out=*best;return true;
+}
 
 bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,VkDescriptorSet selected_alpha,
                    Bg3SunSceneInfo* out) {
@@ -266,7 +312,8 @@ void sun_prepare_submit2(DeviceData* dd,VkQueue queue,uint32_t count,const VkSub
   }
 }
 void sun_device_destroyed(DeviceData* dd) {
-  std::lock_guard<std::mutex> lock(g_sun_mutex);if(dd!=g_sun_dd) return;
+  std::lock_guard<std::mutex> lock(g_sun_mutex);if(g_sun_dd && dd!=g_sun_dd) return;
+  for(auto& receiver:g_receiver) receiver=SunReceiverCapture{};
   for(Work& w:g_work) {if(w.pool) defer_destroy(BG3_DEFER_COMMAND_POOL,uint64_t(w.pool));w=Work{};}
   if(g_validate_pipeline) defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_validate_pipeline));
   if(g_validate_layout) defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_validate_layout));

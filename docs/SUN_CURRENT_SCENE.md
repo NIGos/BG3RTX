@@ -109,3 +109,15 @@ the original single selected cascade and strict segment proof. Auxiliary domains
 per-draw opacity and receiver selection remain pending. At the default 64 MiB
 capture capacity, the nine complementary ring buffers can add up to 576 MiB
 when allocated. No live allocation, GPU timing or visual gate was run.
+
+## Exact native receiver source packets
+
+The default-off native Sun draw hook now retains its actual source bindings:
+Frame 32 bytes, camera 224, Sun UBO 544, auxiliary UBO 144, and the 48-byte VS ray
+basis. It records CSM and auxiliary image/view identity plus the exact native
+command generation. Bound auxiliary images never imply the auxiliary branch is
+enabled; that decision comes from the captured UBO values. CPU-mapped bytes are
+snapshotted where available. An unmapped UBO remains a valid referenced GPU
+source, with no fabricated CPU values; GPU copying and validation before ready
+publication is still required for that case. No new consumer trust is enabled by
+these packets yet. Both DLLs and 25 CTests pass; no live test was run.
