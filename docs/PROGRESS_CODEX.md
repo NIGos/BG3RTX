@@ -1,5 +1,40 @@
 # BG3RTX progress
 
+## Hair/Scalp capacity correction installed; user review pending - 2026-10-31
+
+The existing Desktop shortcut BG3RTX - Hair Scalp now selects isolated candidate
+hair-capacity-fix 859b879. Native Hair/Scalp remain ON; OMM/current Sun remain OFF.
+The prior a9f8688 trial and shortcut backup are retained. Main code/binaries and
+user saves are unchanged. Ctrl+Shift+F10 is restored through private dev=1.
+
+Confirmed regression: 24 -> 88 bytes per captured vertex exhausted the unchanged
+camera and legacy cascade buffers. Native88 reservation feedback was corrected;
+explicit capacities are now camera 1408 MiB and cascade 587 MiB, restoring prior
+vertex capacity (+2305 MiB total across one camera and three cascade buffers).
+Two presented FG2 Test1 runs completed: 485 s and 450 s, seven phases each,
+including slow/fast mouse rotations both ways. The second run has ZERO forced
+alpha, camera drops and cascade overflow in every measured steady window.
+RT and FG remained active; measured rotation cadence 45.4-48.2 rendered fps,
+displayed/rendered about 2, no interior FG toggles. Static RT cost without the
+primary diagnostic: 3.397 ms median. This is not total frame time or a controlled
+speedup claim. Queue reports zero NVIDIA 153 events/dumps and unchanged builds.
+The first run had a recovered startup stall before measurement, retained in evidence.
+
+Keep the capacity correction. It fixes demonstrated geometry loss; full flicker
+closure is not claimed. Global primary match is 97.410% static and 96.247-97.007%
+rotating in this scene; full P1/M1 is unqualified, but that unrelated threshold
+is not a veto on this capacity fix. Optional burst evidence is being kept small.
+Detailed numbers: omm-bake/captures/vegetation-regression-20261031/r3 and r4.
+
+User review status: UI descriptor fix confirmed; original Hair/Scalp trial reported
+improved faces with darker/dithered hair and vegetation regression. The capacity
+correction installed today is NOT YET TESTED BY THE USER. Physical Hair secondary
+origins are in offline development; OMM and current-Sun remain unqualified and
+OFF in the trial. RTX Hair is a scoped feasibility/prototype plan, not installed.
+The user explicitly permits autonomous advancement after adequate scoped checks;
+manual witnessing/confirmation is not an implementation or release prerequisite.
+
+
 ## Hair trial regression: capacity fix ready; live setup blocked - 2026-10-31
 
 User reports improved faces but new vegetation flicker and darker/dithered hair.
