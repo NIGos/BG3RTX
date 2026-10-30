@@ -1080,16 +1080,23 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     return;
   }
   // rt_cascade_alpha=1 (A/B): alpha-tested draws go in as opaque (cutouts solid).
-  if (pi.discard && !cfg_int("rt_cascade_alpha", 0)) {   // alpha-tested: no UV or material here, its cutouts would turn solid
-    ++c->c_alpha;
-    // Feasibility of alpha-testing them (as the camera soup does): is the FS in the alpha table,
-    // with the UV location the patched VS captures?
+  // rt_cascade_alpha=2: only draws whose FS is a texture cutout (in the alpha table) are
+  // skipped; the other discarding FS test no texture alpha (LOD dither, camera fade: 856 of the
+  // 1263 depth-only discarding FS in the dump) and their geometry goes in solid.
+  const int cc_alpha = cfg_int("rt_cascade_alpha", 0);
+  if (pi.discard && cc_alpha != 1) {
     AlphaFs a{};
-    if (alpha_lookup(s->fs, &a)) {
-      ++g_cc_alpha_known;
-      if (a.uv == pi.uv && pi.uv >= 0) ++g_cc_alpha_uv;
+    const bool cutout = alpha_lookup(s->fs, &a);
+    if (cutout || cc_alpha != 2) {
+      ++c->c_alpha;
+      // Feasibility of alpha-testing them (as the camera soup does): is the FS in the alpha table,
+      // with the UV location the patched VS captures?
+      if (cutout) {
+        ++g_cc_alpha_known;
+        if (a.uv == pi.uv && pi.uv >= 0) ++g_cc_alpha_uv;
+      }
+      return;
     }
-    return;
   }
   const cascade::DrawId id = cascade_draw_id(cmd, s, args, pi);
   if (pi.discard && cfg_int("rt_cascade_alpha_dedupe", 1)) {
