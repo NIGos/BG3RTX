@@ -19,6 +19,7 @@
 // textures, one for tile caches, the captured UV soup, and two samplers.
 // Every view in a set was bound by the game in the frame the set was written.
 #include "host.h"
+#include "../common/mapped_copy.h"
 
 #include <algorithm>
 #include <cstring>
@@ -28,6 +29,7 @@
 namespace bg3 {
 
 namespace {
+bool g_stream_reads = false;
 
 // Must match shaders/rt/rt_common.hlsli. Outdoors (foliage) a frame binds far
 // more than the 256 views of the first version; a full list turns draws opaque
@@ -194,7 +196,9 @@ bool read_bound(VkCommandBuffer cmd, uint32_t set, uint32_t binding, VkDeviceSiz
   if (bm == tracker().buffer_mem.end()) return false;
   auto mp = tracker().mapped.find(bm->second.first);
   if (mp == tracker().mapped.end() || !mp->second) return false;
-  std::memcpy(dst, mp->second + bm->second.second + b.offset + extra, n);
+  const auto* src = mp->second + bm->second.second + b.offset + extra;
+  if (g_stream_reads) copy_mapped_stream(dst, src, n);
+  else std::memcpy(dst, src, n);
   return true;
 }
 
@@ -343,6 +347,7 @@ bool alpha_lookup(uint64_t fs, AlphaFs* out) {
 
 void alpha_begin_capture() {
   std::lock_guard<std::mutex> lock(g_mu);
+  g_stream_reads = cfg_int("rt_alpha_stream", 0) != 0;
   g_recs.clear();
   g_tex.clear();
   g_cache.clear();

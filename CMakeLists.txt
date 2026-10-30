@@ -140,6 +140,8 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(mapped_copy_test tests/mapped_copy_test.cpp)
+add_test(NAME mapped_copy_test COMMAND mapped_copy_test)
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)
 add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
 add_executable(settings_test tests/settings_test.cpp)

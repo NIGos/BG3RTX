@@ -1,0 +1,50 @@
+{
+  "name": "sup-perf-game-uncapped",
+  "tree": ".",
+  "save": "The Blushing Mermaid - 96h 39m",
+  "session": false,
+  "traces": 0,
+  "hold": 700,
+  "timeout": 1100,
+  "set": "preset=ultra,fg=0,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,rt_stats=0,ls_stats=0,rf_stats=0,sharc_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,sharc_debug=0,rr_show=0,rt_primary_check=0,rt_order_trace=0,rt_stability_log=0,geo_timing=0,cpu_timing=1,pan_capture=0,pan_prepare=0,pan_inputs=0,rt_timing_frames=60,watchdog_s=2,dump_images=0,dump_raw=0,dump_shaders=0,crash_dump=1,rt_alpha_stream=0,force_present_mode=0",
+  "window_mode": "visible_unfocused_fg",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tests\\fixtures\\sup-perf-immediate-plan.json"
+  ],
+  "patterns": [
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[cpu\\]",
+    "rt passes",
+    "gpu RR:",
+    "gpu SR:",
+    "scene build GPU",
+    "scene wait",
+    "\\[cfg\\] keys:",
+    "\\[crash\\]",
+    "primary-ray check",
+    "Validation Error",
+    "VUID-",
+    "VK_ERROR_"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[pace\\]",
+    "\\[cpu\\] capture hooks",
+    "rt passes",
+    "scene build GPU",
+    "primary-ray check"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\] visible_unfocused:",
+    "\\[motion-plan\\] complete phases=",
+    "^Run ended: done"
+  ]
+}

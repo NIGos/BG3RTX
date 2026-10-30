@@ -10,6 +10,19 @@ Live jobs only through scripts/test-queue.ps1; visible unfocused FG jobs are all
 runs. Never hold results.md open. No saves, backups, snapshot tags, force-push or junction
 cleanup. The launcher BG3RTX.exe, if left open, locks bin/BG3RTX.exe and breaks the build.
 
+## Base frame rate (`sup/perf`, unmerged; 2026-10-30)
+
+Default-off `rt_alpha_stream` speeds alpha mapped-memory reads: capture CPU
+4.224 -> 2.973 ms/frame, pre-draw 2.989 -> 1.730. Build included ~0.97 ms;
+submit copies ~0.48 ms. GPU chain / scene / RR ~2.54 / 1.67 / 2.36 ms.
+All stats-off windows cap at 30 fps, even with restored-after-test driver/game
+cap controls and immediate presentation. WDDM GPU busy ~10.6 vs frame 33.3 ms.
+FPS promotion gate NOT QUALIFIED; foreground permission asked, not received.
+Primary median 98.969 -> 98.968%, exact-copy CTest passes; build 15/15, no VK
+errors, driver events or dumps. No bursts. Do not merge/promote until uncapped
+speed repeats pass. User check/decision at top of PROGRESS_CODEX; evidence
+`docs/evidence/perf-base-20261030.json`, job `sup-perf-game-uncapped`.
+
 ## Hidden floor squares (2026-10-30, sup/hidden-quads)
 
 Fixed: `rt_capture_discard=1` (restart layer; live A/B key). An always-OpKill fragment

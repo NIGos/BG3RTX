@@ -1,5 +1,26 @@
 # Track D: hardware ray tracing
 
+## Base frame CPU cost - 2026-10-30, default-off candidate
+
+`rt_alpha_stream=0/1` selects ordinary copies or aligned streaming loads for alpha
+material constants from mapped game uploads. The split instance path already uses
+streaming loads. Prefixes/tails stay inside the requested range; shader and ABI stay
+unchanged. Capture once per pass reads the key, avoiding per-draw config overhead.
+
+Static inn, Ultra 3840x1600, FG 0: capture CPU 4.224 -> 2.973 ms/frame, of which
+pre-draw 2.989 -> 1.730. Build recording (included) ~0.97 and submit copies ~0.48 ms.
+GPU chain / scene / RR: 2.54 / 1.67 / 2.36 -> 2.55 / 1.63 / 2.36 ms. Primary match
+98.969 -> 98.968% median, overlapping ranges; exact-copy alignment/boundary CTest
+passes. No final-image energy comparison. No VK errors, driver events or dumps.
+
+NOT QUALIFIED for promotion: all stats-off A/B windows stay at a 30 fps ceiling.
+WDDM GPU busy ~10.6 ms vs 33.3 ms presentation; no uncapped CPU/GPU bound claim.
+Keep default 0 and branch unmerged until an authorized foreground speed gate passes.
+Full rt_stats parity windows raise RT GPU cost from 1.03 to ~19.4 ms: never include
+them in speed gates. Check: inn save, static view, toggle rt_alpha_stream live, compare
+[cpu] pre-draw/capture and rendered fps with all stats off. See PROGRESS_CODEX and
+docs/evidence/perf-base-20261030.json; job sup-perf-game-uncapped.
+
 ## Live FG-on primary gate — 2026-10-29, NOT passed
 
 Static parity PASS at primary 99.5195-99.5215%, 18.7-18.8 fps and actual FG 2.00.
