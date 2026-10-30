@@ -1,7 +1,7 @@
 # EXT opacity micromap backend contract
 
-Offline increment, 2026-10-30, based on main 92183e7. No game, Vulkan device,
-GPU job or deployment was performed. `rt_omm=0` remains the default. Restart is
+Offline increment, 2026-10-30, based on main 92183e7. The initial increment used CPU-only validation. A later explicitly authorized
+synthetic GPU test is recorded below; no game or deployment was performed. `rt_omm=0` remains the default. Restart is
 required to request the extension. Existing shaders and the host ABI are unchanged.
 
 The layer requests **VK_EXT_opacity_micromap**, its `micromap` feature and core
@@ -89,3 +89,28 @@ Vulkan 1.3; registry synchronization tables support the recorded micromap stages
 
 The coordinated Sun ABI19 change (6913124) is included in this branch before the
 owner follow-up build; shared_ptr input ownership is internal C++ and adds no ABI change.
+
+## Actual synthetic EXT hardware gate
+
+The console probe links the PRODUCTION backend and submission sources with minimal
+isolated host seams. It requests a real device, builds three four-state micromaps,
+attaches them to a real BLAS/TLAS, and executes six ray queries. GPU: NVIDIA GeForce
+RTX 5090, Vulkan 1.4.357, raw driver 2604679168. EXT/AS/RQ/BDA/sync2/timeline/push
+features are present. The micromap uses 640 storage bytes and 1,023 scratch bytes.
+Two known-opaque rays hit automatically with zero candidates (native alpha=cut=1).
+Two known-transparent rays miss without candidates. Two UnknownOpaque rays produce
+actual nonopaque candidates; native alpha >= .5 yields one miss and one equality
+hit. Zero reference contradictions. Production private timeline signal/counter
+retirement collects the completed ticket. No forced two-state/opaque ray flags.
+
+Installed explicit Khronos validation was enabled: zero validation errors, including
+teardown. Implicit layers were disabled only for the child process, inherited
+VK_INSTANCE_LAYERS was cleared, and no global registry/environment changed. Test
+runs open no window, presentation, focus or input path. This is NOT a BG3/FG gate,
+textured sampler/content-domain proof or measured GPU performance result.
+
+Build optional target BG3RTX_OMM_GPU_SMOKE (OFF by default); compile
+`tools/omm_ext_smoke.hlsl` with installed DXC cs_6_6, SPIR-V Vulkan 1.3 and validate
+with spirv-val, then explicitly run `bin/omm_ext_smoke.exe build/omm_ext_smoke.spv`.
+The build never launches it and routine CTest never executes GPU work.
+Evidence: docs/evidence/omm-ext-smoke-20261030.txt.
