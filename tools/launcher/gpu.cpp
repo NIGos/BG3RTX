@@ -37,6 +37,7 @@ std::vector<st::Gpu> probe_gpus(std::wstring* err) {
   LOAD(vkDestroyInstance);
   LOAD(vkEnumeratePhysicalDevices);
   LOAD(vkGetPhysicalDeviceProperties);
+  LOAD(vkGetPhysicalDeviceFeatures2);
   LOAD(vkEnumerateDeviceExtensionProperties);
 #undef LOAD
   uint32_t n = 0;
@@ -50,10 +51,11 @@ std::vector<st::Gpu> probe_gpus(std::wstring* err) {
     vkEnumerateDeviceExtensionProperties(d, nullptr, &ne, nullptr);
     std::vector<VkExtensionProperties> ext(ne);
     if (ne) vkEnumerateDeviceExtensionProperties(d, nullptr, &ne, ext.data());
-    bool rq = false, as = false;
+    bool rq = false, as = false, omm = false;
     for (auto& e : ext) {
       if (!strcmp(e.extensionName, VK_KHR_RAY_QUERY_EXTENSION_NAME)) rq = true;
       if (!strcmp(e.extensionName, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) as = true;
+      if (!strcmp(e.extensionName, VK_EXT_OPACITY_MICROMAP_EXTENSION_NAME)) omm = true;
     }
     st::Gpu g;
     g.vendor = p.vendorID;
@@ -61,6 +63,16 @@ std::vector<st::Gpu> probe_gpus(std::wstring* err) {
     g.name = p.deviceName;
     g.ray_query = rq && as;
     g.discrete = p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+    if(omm && rq && as && p.apiVersion>=VK_API_VERSION_1_3 && vkGetPhysicalDeviceFeatures2){
+      VkPhysicalDeviceVulkan13Features f13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+      VkPhysicalDeviceVulkan12Features f12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,&f13};
+      VkPhysicalDeviceOpacityMicromapFeaturesEXT mm{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT,&f12};
+      VkPhysicalDeviceRayQueryFeaturesKHR ray{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,&mm};
+      VkPhysicalDeviceAccelerationStructureFeaturesKHR accel{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,&ray};
+      VkPhysicalDeviceFeatures2 features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,&accel};
+      vkGetPhysicalDeviceFeatures2(d,&features);
+      g.opacity_micromap=mm.micromap && f12.bufferDeviceAddress && f12.timelineSemaphore && f13.synchronization2 && ray.rayQuery && accel.accelerationStructure;
+    }
     out.push_back(g);
   }
   vkDestroyInstance(inst, nullptr);

@@ -349,6 +349,40 @@ static void test_dependencies_and_caps() {
   CHECK(!key_change_needs_restart("sharc_log2", "22", "21"));   // reallocated by the core
 }
 
+static void test_rendering_experiments() {
+  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_omm","exp_current_sun"};
+  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_omm","rt_sun_cascade_current"};
+  for(int i=0;i<4;++i){
+    const auto* knob=find_knob(ids[i]);CHECK(knob!=nullptr);if(!knob)continue;
+    CHECK(knob->experimental);CHECK(choice_count(*knob)==2);CHECK_EQ(code_default(keys[i]),"0");
+    for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,keys[i]),"0");CHECK(knob->preset[p]==0);}
+    KVList pairs;knob_kvs(*knob,1,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;
+    CHECK(knob_value(*knob,on)==1);CHECK_EQ(get(on,keys[i]),"1");
+    auto values=preset_values(kHigh);values[knob_index(ids[i])]=1;
+    auto user=render_user_ini("# preserved\ncustom_key=7\n",kHigh,values);auto parsed=parse_ini(user);
+    CHECK_EQ(get(parsed,"custom_key"),"7");CHECK(knob_value(*knob,parsed)==1);
+    CHECK(!unmet_need(*knob,1,preset_values(kLow)).empty());
+  }
+  const auto kept=parse_ini(render_user_ini("rt=0\nrt_bvh_split=0\ncustom_key=7\n",kHigh,preset_values(kHigh)));
+  CHECK_EQ(get(kept,"rt"),"0");CHECK_EQ(get(kept,"rt_bvh_split"),"0");
+  CHECK(!unmet_key_need(*find_knob("exp_omm"),1,kept).empty());
+  CHECK(unmet_key_need(*find_knob("exp_omm"),0,kept).empty());
+  CHECK(unmet_key_need(*find_knob("exp_omm"),1,code_defaults()).empty());
+  CHECK(schema_json().find("\"required_on\"")!=std::string::npos);
+  CHECK(key_change_needs_restart("rt_native_hair","0","1"));
+  CHECK(key_change_needs_restart("rt_omm","1","0"));
+  CHECK(key_change_needs_restart("rt_sun_cascade_current","0","1"));
+  CHECK(!key_change_needs_restart("rt_native_scalp","0","1"));
+  CHECK(find_knob("exp_native_scalp")->apply==Apply::Hitch);
+  Gpu gpu{0x10de,0x2b85,"NVIDIA GeForce RTX 5090",true,true};
+  CHECK(!choice_supported(*find_knob("exp_omm"),1,gpu_caps(gpu)));
+  gpu.opacity_micromap=true;CHECK(choice_supported(*find_knob("exp_omm"),1,gpu_caps(gpu)));
+  gpu.ray_query=false;CHECK(!(gpu_caps(gpu)&kCapOpacityMicromap));
+  CHECK(schema_json().find("\"experimental\": true")!=std::string::npos);
+  CHECK(schema_json().find("\"experimental\": false")!=std::string::npos);
+  CHECK(schema_json().find("opacity_micromap")!=std::string::npos);
+}
+
 static void test_schema_file() {
   std::string want = schema_json();
   std::string have = read_file(BG3RTX_SOURCE_DIR "/data/settings_schema.json");
@@ -377,6 +411,7 @@ int main(int argc, char** argv) {
   test_defaults_one_source();
   test_user_ini_writer();
   test_dependencies_and_caps();
+  test_rendering_experiments();
   test_schema_file();
   std::printf("%d checks, %d failed\n", g_checks, g_failed);
   return g_failed;
