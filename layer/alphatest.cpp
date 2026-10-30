@@ -822,7 +822,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
           "RT cone footprint, not native raster sample identity",
           g_scalp_hard.exchange(0), g_scalp_dither.exchange(0), g_scalp_invalid.exchange(0));
     if (geo_native_hair_enabled()) log("[alpha hair] native coverage records %u; invalid/missing native state %u; unsupported native interfaces total %u; retired bounds-invalid primitives %u; "
-        "88-byte strand capture, base-card RT geometry (native fragment depth remains raster-only)",
+        "88-byte strand capture; procedural camera depth and physical Shadow ribbons",
         g_hair_records.exchange(0),g_hair_invalid.exchange(0),g_hair_attributes.load(),g_hair_bounds_invalid.exchange(0));
     // The alpha-tested fragment shaders of this frame by triangles, with their
     // cut-offs (identifies the families on screen: grass, foliage, chains).

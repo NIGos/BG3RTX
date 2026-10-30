@@ -8,8 +8,8 @@ mode, logs the reason and never mixes 24/88-byte geometry. Hot-enabling after a
 24-byte startup is also explicitly rejected. No live build was deployed.
 
 The current increment implements actual native CHAR_Hair coverage and procedural
-primary depth. It is not an alpha-A surrogate. Console GPU and native G-buffer
-comparison gates remain pending; do not call all hair or face shadows closed.
+primary depth. It is not an alpha-A surrogate. Console GPU gate passes; native G-buffer
+comparison remains pending; do not call all hair or face shadows closed.
 
 ## Native source and pass contract
 
@@ -144,3 +144,29 @@ installed Khronos validation, creates no window and never launches the game.
 No game jobs run. GPU cost, live depth match, image quality and temporal behavior
 remain unmeasured. The other catalog families (Scalp, Pubes, ExtraUV, fur and lashes)
 remain an explicit backlog, not implicitly covered by these six recipes.
+
+## User-led Test1 check after coordinated integration
+
+Start the new layer with rt_native_hair=1, rt_alpha=1, rt_bvh_split=1.
+This is a startup stream choice: hot-on from a 24-byte startup is rejected.
+Keep rt_native_scalp unchanged to isolate this CHAR_Hair increment. Load Test1
+and inspect the same affected hairstyle/face pose, then the close-up dialogue
+which showed solid polygonal face shadows. Expected: cutout strand shadows,
+not whole opaque cards; no detached primary surface or new face holes.
+
+Use existing debug views and rt_stats=1: rt_debug=3 or5, enough time for the
+120-frame primary-ray line. Require RT active, native coverage records >0,
+invalid/missing state=0, unsupported interfaces=0 for the targeted shader and
+retired bounds-invalid primitives=0. Primary match should stay near the scene
+static baseline (about 99.5%), including camera movement. A high aggregate match
+alone does not prove the small face region; inspect that region in the debug view.
+
+For a SAME-RUN coverage-only control, hold the pose and toggle rt_alpha_test=0
+then1 with existing settings/A-B flow. Zero deliberately makes cutouts opaque;
+one restores native coverage. This is not a full rt_native_hair off baseline:
+procedural depth and the 88-byte scene remain present. Do not hot-toggle the
+startup key or compare unrelated poses across runs as an image-quality gate.
+Keep light, RR and FG settings fixed. Restore rt_debug=0 for final image checks.
+Record existing rt passes: GPU cost (300-frame average), TLAS current/previous/none
+and existing gpu pass lines; cost cannot be inferred from this synthetic fixture.
+No new queue/input tool is needed. All other native families remain separate gaps.
