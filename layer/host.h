@@ -641,6 +641,9 @@ struct AlphaRec {
   float t[32];                           // vt: the SSBO entry, two row-major mat4
 };
 static_assert(sizeof(AlphaRec) == 208, "AlphaRec must match rt_common.hlsli");
+bool alpha_native_hair_record(uint32_t index,AlphaRec* out);
+bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset);
+bool alpha_hair_build_status(uint32_t slot,VkBuffer* buffer,VkDeviceSize* offset);
 // Captured material plus actual views; descriptor indices are local to a frame.
 struct AlphaSnapshot {
   AlphaRec rec{};

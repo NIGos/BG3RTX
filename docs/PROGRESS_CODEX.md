@@ -1,5 +1,18 @@
 # BG3RTX progress
 
+## Procedural CHAR_Hair candidate - 2026-10-30, default off, no live gate yet
+
+Native camera primary/origin rays now solve material-dependent fragment depth;
+physical shadow/GI/AO/reflection queries use native Shadow thin-ribbon semantics.
+Conservative AABBs cover both, with held-range recertification and explicit UNKNOWN
+on invalid bounds. Precise shared-edge tests avoid false holes; proven culled
+native geometry remains inactive. No manual replacement for hardware sampling.
+22/22 CTests; 310,883 geometry and 19,734 capture/strand checks; 95 ordinary shaders
+byte-identical and 95 capable variants compile/validate. ABI 19 Sun/OMM callback
+extension imported separately; Hair adds no ABI layout change. No live deployment,
+GPU cost or native 99.5% primary-match result yet. Other hair families remain open.
+Implementation and exact material-model limits: docs/NATIVE_HAIR.md.
+
 ## Native Hair coverage candidate - 2026-10-30, full Hair still open
 
 Isolated native-coverage adds startup-only rt_native_hair=0default. Actual native

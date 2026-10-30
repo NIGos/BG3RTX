@@ -10,16 +10,25 @@ unsigned count=0;
 void check(bool v){++count;if(!v){std::fprintf(stderr,"check%u failed\n",count);std::exit(1);}}
 int main(){
  for(const auto& r:recipes){
-  Captured c;unsigned calls=0;
+  Captured c;unsigned calls=0,seen=0;
   check(capture(r.hash,[&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes){
    ++calls;std::memset(dst,0,bytes);
    if(set==1){check(binding==r.material && off==0 && bytes==(r.camera?48u:32u));float vals[12]={0,0,3,0.1f,4,5,0.4f,0.5f,0.7f,0.8f,0,0};std::memcpy(dst,vals,bytes);}
-   else {check(set==0);if(binding==2 && off==192){const float nf[2]={0.1f,1000};std::memcpy(dst,nf,8);}}
+   else {
+    check(set==0);
+    if(binding==0 && off==8){check(bytes==8);const float frame[2]={37,1};std::memcpy(dst,frame,8);seen|=1;}
+    else if(binding==2 && off==128){check(bytes==64);float matrix[16]={};matrix[0]=matrix[5]=matrix[10]=matrix[15]=1;std::memcpy(dst,matrix,64);seen|=2;}
+    else if(binding==2 && off==192){check(bytes==8);const float nf[2]={0.1f,1000};std::memcpy(dst,nf,8);seen|=4;}
+    else if(binding==2 && off==124){check(bytes==4);const float ortho=1;std::memcpy(dst,&ortho,4);seen|=8;}
+    else check(false);
+   }
    return true;
   },c));
   check(c.valid && c.material[2]==3 && c.material[3]==0.1f);
   check(c.material[8]==(r.camera?0.7f:4.0f));check(c.material[9]==(r.camera?0.8f:5.0f));
   check(calls==(r.camera?5u:1u));
+  check(seen==(r.camera?15u:0u));
+  if(r.camera){check(c.frame[0]==37 && c.frame[1]==1 && c.orthographic==1);check(c.view_projection[5]==1 && c.near_far[1]==1000);}
   check(!capture(r.hash,[](unsigned,unsigned,unsigned,void*,size_t){return false;},c));check(!c.valid);
  }
  Captured bad;check(!capture(0,[](unsigned,unsigned,unsigned,void*,size_t){return true;},bad));
