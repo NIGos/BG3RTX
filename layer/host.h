@@ -483,6 +483,7 @@ struct SunCascadeCapture {
   float matrix[4][4] = {};
   uint32_t layer = 0;
   bool geometry_complete = false, materials_complete = false;
+  bool finite_native_clip = false;
 };
 // Exact native Frame packet, independent of presentation-frame tag. Pending
 // conversions are returned for private-build scheduling, never as submitted proof.

@@ -77,3 +77,19 @@ accesses and actual RT. Zero records or zero full-ray coverage is INVALID.
 Then compare native/RT/final masks, penumbra growth with caster separation, temporal
 stability and static expected energy in the same view. Do not tune radius, bias
 or brightness to reduce the residual. No live job was launched or queued here.
+
+## Native clipping witness (offline follow-up)
+
+The private path now records actual pipeline raster state before interpreting
+its cascade projection as a finite domain. Missing raster state, enabled depth
+clamp, disabled depth clipping, negative-one-to-one clipping, or any unobserved
+dynamic override withhold the certificate. This does not change the ordinary
+path. The CPU regression exercises extension and dynamic-state interactions
+without Vulkan calls. Both DLLs and all 25 CTests pass; no live gate or GPU cost
+has been measured.
+
+The native receiver audit additionally establishes spatial feather selection of
+the first supported CSM layer and optional next-layer blending, not distance
+splits. Auxiliary shadow arrays can override or restrict the four-layer result.
+Capturing all four actual draw domains plus the enabled auxiliary state and
+per-draw opacity remains necessary; a single far cascade is not a world gate.

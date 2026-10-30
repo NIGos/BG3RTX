@@ -1,3 +1,4 @@
+#include "../common/sun_raster_domain.h"
 // Track D phase 1: capture the opaque scene geometry of BG3's G-buffer pass in
 // camera-relative world space (docs/TRACK_D_RT.md).
 //
@@ -111,6 +112,7 @@ struct PipeInfo {
   bool always_discard = false;
   bool fragment_depth = false;
   bool fragment_known = true;
+  bool finite_sun_clip = false; // observed Vulkan z=[0,1], clipping enabled, no clamp
   int depth_write = -1, depth_test = -1; // -1: missing or dynamic; never reject unknown state
   uint32_t color_mask = 0, blend_mask = 0;
   bool em_state = false, em_dynamic = false;
@@ -240,6 +242,7 @@ struct Capture {
   VkDeviceSize c_native_offset = 0;
   bool c_epoch_ok = false;
   uint32_t c_material_unknown = 0;
+  bool c_finite_sun_clip = true;
 };
 
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
@@ -1057,7 +1060,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.c_sig = 1469598103934665603ull;
   c.c_tris = 0;
   c.c_native_epoch = {}; c.c_native_frame = VK_NULL_HANDLE; c.c_native_offset = 0;
-  c.c_epoch_ok = false; c.c_material_unknown = 0;
+  c.c_epoch_ok = false; c.c_material_unknown = 0; c.c_finite_sun_clip = true;
   c.rec = bvh_rec_register(cmd);
   g_cc_meta[f % 3] = CcMeta{};
   // The build two frames ago (BLAS input) and this buffer's last conversion are done with
@@ -1111,6 +1114,7 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     // A native depth-write-disabled draw contributes no caster. Dynamic or
     // unknown state is NOT interpreted as that known empty case.
     if (pi.depth_write == 0 || pi.always_discard) return;
+    c->c_finite_sun_clip = c->c_finite_sun_clip && pi.finite_sun_clip;
     if (pi.discard || pi.fragment_depth || !pi.fragment_known || pi.depth_write < 0 || pi.depth_test < 0)
       ++c->c_material_unknown;
   }
@@ -1229,6 +1233,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     if (mat_ok) for(unsigned r=0;r<4;++r) for(unsigned k=0;k<4;++k) meta.sun.matrix[r][k]=m.v[(8+r)*4+k];
     meta.sun.geometry_complete=mat_ok && c->c_epoch_ok && c->c_seen && !c->c_drop && !c->c_ubo && !c->c_full && !c->c_dup && !c->c_alpha;
     meta.sun.materials_complete=c->c_material_unknown==0;
+    meta.sun.finite_native_clip=c->c_finite_sun_clip;
   }
   g_cc_meta[f % 3] = meta;
   g_cc_cv.notify_all();
@@ -1596,6 +1601,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
       }
     }
     pi.xfb = vs_patched && !other;
+    pi.finite_sun_clip = sun_coverage::finite_native_clip(cis[i]);
     if (cis[i].pDepthStencilState) {
       pi.depth_write = cis[i].pDepthStencilState->depthWriteEnable != 0;
       pi.depth_test = cis[i].pDepthStencilState->depthTestEnable != 0;

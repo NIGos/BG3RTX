@@ -139,7 +139,7 @@ bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,V
      !same_camera_pose(base.camera,lighting_camera)) {++g_failed_epoch;return false;}
   SunCascadeCapture cascade;
   if(!geo_sun_cascade(lighting_epoch,&cascade) || !cascade.geometry_complete || !cascade.materials_complete ||
-     !cascade.soup.has_origin || !cascade::ortho_check(cascade.matrix).ok) {
+     !cascade.finite_native_clip || !cascade.soup.has_origin || !cascade::ortho_check(cascade.matrix).ok) {
     ++g_failed_material;return false;
   }
   if(base.producer==cmd || cascade.soup.producer==cmd) {++g_failed_order;return false;}

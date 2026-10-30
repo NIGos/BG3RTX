@@ -144,6 +144,9 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(sun_raster_domain_test tests/sun_raster_domain_test.cpp)
+target_include_directories(sun_raster_domain_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME sun_raster_domain_test COMMAND sun_raster_domain_test)
 add_executable(sun_caster_coverage_test tests/sun_caster_coverage_test.cpp)
 add_test(NAME sun_caster_coverage_test COMMAND sun_caster_coverage_test)
 add_executable(native_scalp_coverage_test tests/native_scalp_coverage_test.cpp)
