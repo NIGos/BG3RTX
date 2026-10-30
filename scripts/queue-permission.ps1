@@ -22,7 +22,7 @@ function Get-QueueBuildIdentity([string]$tree) {
   foreach($file in $files) { if(-not(Test-Path -LiteralPath (Join-Path $tree $file) -PathType Leaf)){throw "Missing frozen binary $file"} }
   foreach($dir in @('shaders','common','scripts')) {
     $path=Join-Path $tree $dir
-    if(Test-Path -LiteralPath $path){$files+=@(Get-ChildItem -LiteralPath $path -Recurse -File | Where-Object {$_.Extension -in @('.h','.hlsl','.hlsli','.ps1','.py','.txt')} | ForEach-Object {$_.FullName.Substring($tree.Length+1)})}
+    if(Test-Path -LiteralPath $path){$files+=@(Get-ChildItem -LiteralPath $path -Recurse -File | Where-Object {$_.Extension -in @('.h','.hlsl','.hlsli','.ps1','.py','.cs','.txt')} | ForEach-Object {$_.FullName.Substring($tree.Length+1)})}
   }
   $revision='synthetic-no-git'
   if(Test-Path -LiteralPath (Join-Path $tree '.git')){
