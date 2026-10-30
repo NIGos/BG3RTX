@@ -101,6 +101,8 @@ struct PipeInfo {
   bool restart = true;       // primitive restart enabled, or dynamic (unknown)
   InstPipe inst;             // instancing layout (Track D BVH split)
   bool discard = false;      // its fragment shader can discard (rt_cascade_casters skips it: no alpha test)
+  int depth_write = -1, depth_test = -1; // -1: missing or dynamic; never reject unknown state
+  uint32_t color_mask = 0, blend_mask = 0;
   bool em_state = false, em_dynamic = false;
   uint32_t em_raster[9] = {}; // blend/src/dst/op/mask/cull/depth-test/write/compare
 };
@@ -197,6 +199,10 @@ struct Capture {
   VkDeviceSize rt_ubo_off = 0;
   uint64_t sig = 0;
   uint32_t rt_draws = 0;
+  bool state_log = false, state_sample = false, depth_filter = false;
+  uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0, depth_skipped = 0;
+  struct StateCount { uint64_t fs = 0, draws = 0, tris = 0; PipeInfo pipe{}; };
+  std::unordered_map<uint64_t, StateCount> states;
   // rt_alpha: opaque draws fill [0, opaque_end), alpha-tested ones
   // [alpha_base, xfb.size) from alpha_cursor.
   VkDeviceSize opaque_end = 0, alpha_base = 0, alpha_cursor = 0;
@@ -227,6 +233,7 @@ struct RtDropLog {
   uint64_t frames = 0, alpha_overflow = 0, alpha_overflow_mb = 0, opaque_overflow = 0, drop_indirect = 0, drop_topo = 0,
            drop_topo_tris = 0, strips = 0, strip_tris = 0;
   uint64_t peak_alpha = 0, peak_opaque = 0;
+  uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0, depth_skipped = 0;
   bool first_alpha = false, first_opaque = false, first_drop = false;
 };
 std::mutex g_drop_mu;
@@ -384,6 +391,11 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.rt_ubo_off = 0;
   c.sig = 1469598103934665603ull;
   c.rt_draws = 0;
+  c.state_log = cfg_int("rt_capture_state_log", 0) != 0;
+  c.state_sample = c.state_log && c.record_frame % (std::max)(cfg_int("rt_timing_frames", 300), 30) == 0;
+  c.depth_filter = cfg_int("rt_capture_depth_write", 0) != 0;
+  c.source_draws = c.no_depth_draws = c.no_depth_tris = c.depth_skipped = 0;
+  c.states.clear();
   c.opaque_end = c.xfb.size;
   c.alpha_base = c.alpha_cursor = c.xfb.size;
   c.alpha_draws = 0;
@@ -1521,6 +1533,22 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
       }
     }
     pi.xfb = vs_patched && !other;
+    if (cis[i].pDepthStencilState) {
+      pi.depth_write = cis[i].pDepthStencilState->depthWriteEnable != 0;
+      pi.depth_test = cis[i].pDepthStencilState->depthTestEnable != 0;
+    }
+    if (cis[i].pColorBlendState)
+      for (uint32_t k = 0; k < cis[i].pColorBlendState->attachmentCount; ++k) {
+        const auto& b = cis[i].pColorBlendState->pAttachments[k];
+        pi.color_mask |= uint32_t(b.colorWriteMask) << (4 * (std::min)(k, 7u));
+        if (b.blendEnable) pi.blend_mask |= 1u << (std::min)(k, 31u);
+      }
+    if (cis[i].pDynamicState)
+      for (uint32_t k = 0; k < cis[i].pDynamicState->dynamicStateCount; ++k) {
+        const auto state = cis[i].pDynamicState->pDynamicStates[k];
+        if (state == VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE) pi.depth_write = -1;
+        if (state == VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE) pi.depth_test = -1;
+      }
     const uint32_t overlap_family = (uint32_t(cfg_int("rt_em_dbg_fam_hi", 0) & 0xffff) << 16) |
                                      uint32_t(cfg_int("rt_em_dbg_fam_lo", 0) & 0xffff);
     if (cfg_int("rt_em_overlap_check", 0) && fio && uint32_t(fio->hash >> 32) == overlap_family &&
@@ -1725,6 +1753,16 @@ void rt_capture_stats(const Capture& c) {
   l.drop_topo_tris += c.drop_topo_tris;
   l.strips += c.strips;
   l.strip_tris += c.strip_tris;
+  l.source_draws += c.source_draws;
+  l.no_depth_draws += c.no_depth_draws;
+  l.no_depth_tris += c.no_depth_tris;
+  l.depth_skipped += c.depth_skipped;
+  if (c.state_sample)
+    for (const auto& [id, row] : c.states)
+      log("[rt-capture] frame %llu pipe %llu FS %016llx depth write/test %d/%d colorWriteMask 0x%x blendMask 0x%x draws %llu triangles %llu filter %u",
+          (unsigned long long)c.record_frame, (unsigned long long)id, (unsigned long long)row.fs,
+          row.pipe.depth_write, row.pipe.depth_test, row.pipe.color_mask, row.pipe.blend_mask,
+          (unsigned long long)row.draws, (unsigned long long)row.tris, unsigned(c.depth_filter));
   l.peak_alpha = (std::max)(l.peak_alpha, uint64_t(c.alpha_demand));
   l.peak_opaque = (std::max)(l.peak_opaque, uint64_t(c.cursor + c.opaque_overflow_bytes));
   const double mb = 1.0 / (1 << 20);
@@ -1747,6 +1785,10 @@ void rt_capture_stats(const Capture& c) {
   }
   int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
   if (l.frames >= uint64_t(every)) {
+    if (c.state_log)
+      log("[rt-capture] last %llu frames per frame: source draws %.2f depth-write-off draws %.2f triangles %.2f skipped %.2f filter %u",
+          (unsigned long long)l.frames, double(l.source_draws) / l.frames, double(l.no_depth_draws) / l.frames,
+          double(l.no_depth_tris) / l.frames, double(l.depth_skipped) / l.frames, unsigned(c.depth_filter));
     log("[geo] RT capture, last %llu frames: alpha region %.0f MB (peak demand %.1f MB), opaque peak %.1f MB of a "
         "%.0f MB buffer; per frame: alpha draws made opaque (region full) %.2f, opaque draws dropped (buffer full) %.2f, "
         "indirect draws dropped %.2f, non-list draws dropped %.2f (%.0f triangles), strips/fans captured %.2f (%.0f "
@@ -1855,6 +1897,22 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     prims = (uint64_t((std::max)(cfg_int("geo_indirect_mb", 8), 1)) << 20) / (3ull * g_stride);
   }
   const uint64_t tri_bytes = 3ull * g_stride;
+  if (c->rt && pi.xfb && pi.triangles && prims && kind <= 1) {
+    if (c->state_log) {
+      ++c->source_draws;
+      if (pi.depth_write == 0) ++c->no_depth_draws, c->no_depth_tris += prims;
+      if (c->state_sample) {
+        auto& row = c->states[d.pipe_id];
+        row.fs = s->fs; row.pipe = pi; ++row.draws; row.tris += prims;
+      }
+    }
+    // Reject before alpha allocation and bvh_classify: cached instances and
+    // captured triangles must obey the same rule. Raster draws still execute.
+    if (c->depth_filter && pi.depth_write == 0) {
+      ++c->depth_skipped;
+      return;
+    }
+  }
   d.reserved = prims * tri_bytes;
   d.offset = c->cursor;
   if (!pi.xfb) d.skip = 1;
