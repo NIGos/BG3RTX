@@ -1,0 +1,68 @@
+[
+ {
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "set": "fg_ui_pq=0",
+  "shift_hold": 0
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "set": "fg_ui_pq=1",
+  "shift_hold": 0
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "set": "fg_ui_pq=1",
+  "shift_hold": 1
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "set": "fg_ui_pq=0",
+  "shift_hold": 1
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "set": "fg_ui_pq=1",
+  "shift_hold": 1
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 9,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "set": "fg_ui_pq=1",
+  "shift_hold": 0
+ }
+]
