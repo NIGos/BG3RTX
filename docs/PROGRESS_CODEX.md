@@ -1,5 +1,27 @@
 # BG3RTX progress
 
+## Follow-through: UI merged; dedicated native capture and OMM CPU work - 2026-10-30
+
+UI descriptor fix is now on main 7b9c1e4, merged ONLY through merge-green after the
+game and launcher closed: 16/16 CTests, 107/107 runtime shader compilations and QA
+detector tests passed. Main and codex/ui-contamination-offline pushed; test-main
+refreshed. This closes the earlier integration deferral. No game was launched.
+
+Dedicated capture agent works in isolated codex/native-coverage. First commit
+37299f2 has native scalp hash/binding recipes, bounded material/frame extraction
+and scalar smoothstep/root/dither reference: 178,522 checks. No runtime caller in
+that increment. Work continues on default-off native scalp hard-cut wiring;
+full hair strand/view/depth inputs, native camera dither and cascades remain open.
+
+Root OMM follow-up in isolated codex/p4-omm-domain 9bb426d: actual CPU SDK configured
+with <= UNKNOWN and > opaque, unchanged cutoff, four states. All 1,532 UNORM8
+equality/adjacent-float cases pass with zero known-state contradictions; baseline
+still reproduces six in 18 cases. Outputs include 12,192 opaque and 12,320 unknown
+states, zero transparent. This sacrifices transparent acceleration, is fixed-cut
+only, and is NOT GPU/filter/LOD/stochastic or traversal certification. No OMM
+production caller, live binary deployment or performance claim. Separate reviewer
+continues mixed-texture/real descriptor-array regression. OMM is not integrated.
+
 ## User steering: native shader discovery before workarounds - 2026-10-30
 
 Search the packaged native shaders thoroughly before choosing an unknown-shader
