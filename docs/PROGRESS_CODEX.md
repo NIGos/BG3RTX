@@ -1,5 +1,53 @@
 # BG3RTX progress
 
+## Offline continuation: dialogue shadows and OMM groundwork - 2026-10-30
+
+Latest user clarification: face shadows are STATIC and hairstyle-dependent,
+separate from distant shadow changes (suspected trees at culling/LOD limits).
+Other dialogues/camp also show odd shadows. User created Test1 and is collecting
+F10s; no save files were accessed. No game launch, setting, shader, DLL or input
+changes while the user plays. All future live tests coordinated in this chat.
+The UI blue-block fix still has positive provisional user confirmation.
+
+Face finding: actual prepass CHAR_Hair 5a03e5b678b2d040 and CHAR_Scalp 9e77575a9f377ec5
+conditionally discard pixels but are absent from alpha_fs.txt; capturable draws
+therefore enter RT as opaque. The dark polygonal face/neck shapes already appear
+in pre-post diffuse d471(-161818)/d694(-161845), before RR/FG/DoF. Scene wait is
+current, no timeouts/skips around those frames. Native hair coverage needs dual
+mask/root/view/dither/depth treatment, not a raw alpha cutoff. Correct handling
+or explicit native fallback must include visibility AND closest/origin queries.
+This is a concrete coverage defect, not yet a measured per-ray attribution/fix.
+
+Distant finding: rt_cascade_alpha=2 assumes unknown discarding FS are only fades,
+but actual D16 passes contain unsupported multi-texture cutouts, plus hair and a
+skydome material. Camera-pass dedupe can switch an unsupported cutout from skipped
+to solid as it leaves camera keys. Counts cover all D16 passes, not post-dedupe
+selected-layer captures; no particular tree/pixel is identified. Do not label all
+unknown shaders as foliage. Root report docs/DIALOGUE_SHADOWS.md, evidence JSON
+and captures/dialogue-shadow-review-20261030/ index/log/images retain the findings.
+
+Solar radius is already finite: rt_sun_radius=0.00459 rad half-angle (~0.526 deg
+full diameter), one sample per pixel, RR reconstructs. Characteristic penumbra
+~9.18 mm per metre of caster/receiver separation; near-contact hair shadows can
+be sharp. Native-mask fallback also remains. No sun-radius/bias tuning performed.
+
+OMM milestone in ISOLATED worktree C:/Users/quali/.codex/worktrees/p4-omm-domain/BG3RTX,
+branch codex/p4-omm-domain, commit 7134338: conservative whole-mip UNORM8 code hull,
+exact bake identity/content/residency/completion guards and imported classifier.
+19/19 CTests/full build pass with optional CPU-only SDK probe; 197,621 classifier,
+398,526 support and 65 identity checks. Actual installed OMM SDK 1.10 CPU baker:
+18 cases, six equality contradictions (SDK > vs native >=) under nearest/linear.
+This is an integration hazard, not a runtime gate pass. No production callers,
+GPU bake/BLAS/backend/ABI/shader changes or measured speedup. No OMM main merge.
+That worktree is based on main 47ac6a9 and DOES NOT include UI fix 17fb500; never
+copy its baseline DLLs into the user's working build. Its outputs are isolated.
+Two agents used for bounded offline work; no extra live test runner.
+
+UI fix main integration is pending while the user's game/launcher are open; merge
+only via merge-green when they are closed. Runtime priority is now correct hair
+and unsupported cascade coverage before accelerating those materials with OMM.
+
+
 ## User confirmation and remaining plan — 2026-10-30
 
 After descriptor reset 17fb500, the user reports the foliage/UI artifact appears

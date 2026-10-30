@@ -1,0 +1,102 @@
+# Dialogue shadows and distant casters - 2026-10-30
+
+The user separates two new symptoms from the resolved UI blue-block issue:
+- STATIC face shadows, hairstyle-dependent; not face flicker.
+- Distant shadow changes, suspected trees near cull/LOD distance. Camp and other
+  dialogues also show strange shadows. The user is collecting more F10 captures.
+Save reference: Test1. No save files were read or changed. Live tests will be
+coordinated in the root conversation; no game/settings/binary/shader changes were made.
+
+## Confirmed capture/source evidence
+
+Completed F10 frames 57830/58438/60034/64487: captures/20261030-161807,
+-161818, -161845, -162008. All have zero reported non-finite dump components.
+Around these frames scene wait has zero timeouts/skips; logged RT windows use
+current TLAS 300/300, previous/none 0. No evidence here for the old whole-scene lag.
+
+The Shadowheart polygonal cheek/neck shadow is already in post-lighting diffuse
+-161818/d471; Lae'zel's face/neck shadow is already in -161845/d694. They precede
+compose, DoF, RR and FG, so post reconstruction is not their first visible stage.
+These are separate single frames, not a same-pose A/B or consecutive-frame flicker gate.
+
+Actual depth-prepass shader 5a03e5b678b2d040 occurs in both close-ups (1 and 3 draws).
+Local asset DB identifies Characters/CHAR_Hair:StaticDepth, mask s1b4
+ID_Depth_Root_Alpha_MSKA. Shader 9e77575a9f377ec5, Characters/CHAR_Scalp:StaticDepth,
+mask s1b2, additionally occurs in Shadowheart's prepass. Both conditionally discard
+pixels; both are absent from shaders/rt/alpha_fs.txt. All 15 CHAR_Hair fragment
+variants are currently absent; supported scalp shadow entries are only surrogates.
+
+geocapture.cpp:1874 filters always-discard FS only. At line 1956 alpha capture requires
+alpha_lookup to succeed. These capturable conditional hair/scalp draws therefore
+follow the opaque geometry path, which can make transparent cards cast solid
+polygonal shadows. This is a concrete unsupported-coverage defect consistent with
+the user's hairstyle dependence; exact ray/caster attribution still needs a live gate.
+
+The native hair recipe cannot be represented by a plain texture-alpha cutoff:
+- Hair: noise s1b3 shifts mask UV, combines two s1b4 samples, root/depth channels
+  and material parameters, front-facing tangent/view coverage and frame/pixel dither.
+  The depth prepass also displaces gl_FragDepth; XFB retains vertex geometry instead.
+- Scalp: smoothstep of mask.a times root/density attenuation using mask.b, then
+  threshold 1/3 or screen/frame dither. Existing raw-A shadow entries are not exact.
+
+Sources: captures/alpha_cache/{5a03e5b678b2d040,9e77575a9f377ec5}.glsl,
+layer/geocapture.cpp:1874/1956, layer/alphatest.cpp, shaders/rt/alpha_fs.txt;
+asset identities verified with python -m tools.assets shader HASH.
+
+## Separate distant-caster risk
+
+Current base/user settings: rt_cascade_casters 1, rt_cascade_alpha 2, dedupe 1.
+At geocapture.cpp:1109 mode 2 skips known alpha-table cutouts, but inserts OTHER
+conditional-discard shaders as opaque, assuming they are only LOD/camera fades.
+That assumption is not generally true: unsupported texture-cutout materials exist
+in the user's actual D16 cascade passes. The inventory below establishes that the assumption is false.
+
+| Missing FS | Asset DB family | Native D16 inventory |
+| --- | --- | --- |
+| 378c2a63a11d4076 | ENV_Tileset_MultipleTextures, three sampled alphas then discard < 0.5 | 30 draws in 162008; 22 in 162506 |
+| 5c37b87299d86ce1 | ENV_Base_TileBlend_Test_Alphatest_2s_Translucency, two textures feed discard | 4 draws each in 163004/163010 |
+| ccf72d548a0b69fd | VFX_Model Skydome Mountains, sampled red times vertex alpha | 5 draws in 162506/163004/163010 |
+| 34951669ed4b3b0f | CHAR_Hair, three texture reads feed coverage/discard | 11 draws in 162008; 3 in 162506 |
+
+All four are absent from the alpha table. Counts cover ALL native D16 passes,
+not proven post-dedupe RT captures in selected cascade 2. Environment template
+names do not identify a particular tree; skydome mountains are not foliage.
+Some unknown FS are genuinely nontexture dither/fade and need a different policy.
+
+The dedupe rule skips a discarding cascade mesh while its camera-pass key is
+present; after it is absent, mode 2 may capture the unsupported texture cutout
+as solid. This is a concrete transition mechanism. F10 events lack VB/IB/range/
+placement keys, actual dedupe outcomes and depth-view layer, so they do not prove
+which mesh entered the RT BLAS or which distant shadow pixel it affected.
+
+A cull/LOD transition, cascade copy and the camera-pass dedupe can therefore alter
+occluder coverage; a single F10 does not establish the exact distant tree or flicker.
+
+## Solar softness question
+
+Current rt_sun_radius 0.00459 is a half-angle, approximately 0.526 degrees full
+angular diameter. rt_shadow.hlsl122 samples a uniform finite disc, one ray per pixel;
+core/gi.cpp1243 passes the configured value. It is not a zero-radius hard light.
+Characteristic penumbra width is about distance*2*tan(radius), or 9.18 mm per metre
+of caster-receiver separation. Hair a few centimetres from skin can have subpixel
+penumbrae. RR reconstructs the 1-spp result; untrusted regions retain native masks.
+A hard edge alone is not proof of a wrong sun radius. Do not enlarge the sun to hide
+unsupported hair geometry or force a blur/bias as a claimed physical correction.
+The prism's appearance alone does not establish a runtime light; a native placed
+light is still possible, even though our separate emissive-capture feature is off.
+
+## Next correction / later live discrimination
+
+First model hair/scalp coverage faithfully or return an explicit UNKNOWN/native
+fallback when an unsupported hair intersection is encountered, in every visibility,
+closest-hit and ray-origin query. Do not skip all hair, label it opaque, or add a
+simple alpha>=cut table entry as an exact implementation. OMM must not accelerate
+the existing wrong coverage; its preparation remains in an isolated worktree.
+
+Later user-led, SAME-pose diagnostics: RT sun off/on, local shadows off/on, then
+box lights off/on if needed. For distant casters separately compare cascade casters
+off/on, then retention 0/4 if justified. These tests were NOT run and no settings
+were changed during the user's play. Unsupported coverage is established, but its
+share of the observed face shadow and the distant-caster transition is not quantified.
+
+Artifact index and current log snapshot: captures/dialogue-shadow-review-20261030/.
