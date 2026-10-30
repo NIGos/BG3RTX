@@ -1,5 +1,38 @@
 # Track D: hardware ray tracing
 
+## Native Scalp camera dither - 2026-10-30, default-off candidate
+
+The earlier hard-only limitation below is superseded for camera FS
+9e77575a9f377ec5 and 36eeb96ba83ea027. Existing `rt_native_scalp=0` default stays.
+The same 208-byte kind3 record captures material8B, Frame phase/mode, original
+Camera set0/binding2 VP at128, and native viewport. Marker float at record56
+distinguishes new camera packets from held hard-only records. VP occupies96..159,
+viewport160..175, Frame header32..39; no host ABI or stream stride change.
+Scalp VS0e58570a2aa88c5a/f4b35620d54abc6c apply Camera._m2 and negate clipY;
+the existing converter recovers that native position. Kind3 stays dynamic so
+object caching cannot separate the position from its original camera packet.
+
+Explicit camera primary/debug/origin queries project the triangle hit into the
+captured viewport, use the original single-sample pixel center and native Frame
+truncation remainder/noise, then native smoothstep/root/dither comparison.
+Visibility and physical closest/GI/reflection queries use native Shadow hard
+coverage, independent of camera dither. No RT hash, extra geometry attributes,
+or fragment-depth displacement: the verified Scalp FS never writes depth.
+The canonical capture helper is shared with Sun snapshots without camera table
+mutation. Missing/nonfinite source state is rejected and counted. Existing RT
+cone filtering remains an explicit policy, not native raster/aniso equivalence.
+
+22/22 CTests; 178,810 Scalp checks; 95 ordinary SPIR-V byte-identical to 19fd488,
+95 capable compile/validate. Windowless RTX 5090 GPU probe: 27/27 cases, zero
+validation errors, including 11 Scalp cases through real 24-byte triangle queries:
+native phases, B-channel root suppression, negative phase/viewport, held/rebase.
+Scalp primary and physical t=3; Hair primary remains 3.20000029/physical 3.
+Evidence: docs/evidence/native-scalp-camera-20261030.json. No game deployment or
+live image/99.5% primary gate; GPU pass cost remains unmeasured. User check after
+coordinated layer restart: rt_native_scalp=1, rt_alpha=1, same Test1 close-up pose;
+require native camera records>0 and invalid state=0, then primary stats and face
+region inspection. Keep other keys fixed; other Hair-family gaps remain open.
+
 ## Procedural native Hair geometry - 2026-10-30, default-off candidate
 
 `rt_native_hair` now uses dynamic AABB BLAS geometry with the original 88-byte

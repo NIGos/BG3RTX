@@ -46,7 +46,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float w = depth_tol(dist, pa, dot(o.xyz, V), kJitterPx, 1.0) + kTlasRel * dist;
   float t0 = max(dist - w, 0.0);
   RtCone cone = {t0 * pa, pa};
-#ifdef RT_NATIVE_HAIR
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_SCALP)
   RtHit h = rt_closest_hit(-V*t0,-V,dist+w-t0,cone,true);
 #else
   RtHit h = rt_closest_hit(-V * t0, -V, dist + w - t0, cone);

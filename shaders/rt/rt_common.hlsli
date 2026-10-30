@@ -288,10 +288,11 @@ AlphaRead tex_alpha(uint a, float2 uv, float g, uint tex, uint ch) {
 }
 
 #ifdef RT_NATIVE_SCALP
-// Native CHAR_Scalp hard branch. Sample B and A TOGETHER; the root transform
+static bool gNativeCameraQuery=false;
+// Native CHAR_Scalp. Sample B and A TOGETHER; the root transform
 // is part of coverage, not a replacement cutoff on raw A. Sampling follows our
-// declared ray-cone LOD policy, not original raster derivatives/dither.
-AlphaRead native_scalp_alpha(uint a, float2 uv, float g, uint tex) {
+// declared ray-cone LOD policy, not original raster derivatives.
+AlphaRead native_scalp_alpha(uint a, float2 uv, float g, uint tex,float3 position) {
   uint w, h, levels;
   gAlphaTex[NonUniformResourceIndex(tex)].GetDimensions(0, w, h, levels);
   float lod = clamp(log2(max(g * float(max(w, h)), 1e-8)), 0.0, float(levels) - 1.0);
@@ -302,6 +303,19 @@ AlphaRead native_scalp_alpha(uint a, float2 uv, float g, uint tex) {
   r.lvl = lod;
   r.ok = all(isfinite(mask.zw)) && all(isfinite(material)) && material.x < hi;
   if (r.ok) r.a = smoothstep(material.x, hi, mask.w) * mad(mask.z - 1.0, material.y, 1.0);
+  if(r.ok && gNativeCameraQuery && asfloat(gAlphaRec.Load(a+56u))!=0.0) {
+    float4x4 vp=float4x4(asfloat(gAlphaRec.Load4(a+96u)),asfloat(gAlphaRec.Load4(a+112u)),
+                         asfloat(gAlphaRec.Load4(a+128u)),asfloat(gAlphaRec.Load4(a+144u)));
+    float4 clip=mul(float4(position,1),vp),viewport=asfloat(gAlphaRec.Load4(a+160u));
+    float2 frame=asfloat(gAlphaRec.Load2(a+32u));
+    if(!all(isfinite(clip))||clip.w==0||!all(isfinite(viewport))||!all(isfinite(frame))) {r.ok=false;return r;}
+    float2 raster=floor(viewport.xy+(float2(clip.x,-clip.y)/clip.w+1.0)*viewport.zw*0.5)+0.5;
+    float phase=frame.x-4.0*trunc(frame.x/4.0);
+    float2 z=float2(frac(((mad(raster.y,2.0,raster.x)-1.5)+phase)*0.2),
+                    frac(mad(raster.x,2.4084,raster.y*3.2535)));
+    float noise=frac(dot(float2(0.833,0.1666),z));
+    r.a=mad(smoothstep(material.x,hi,mask.w),mad(mask.z-1.0,material.y,1.0),noise-0.6667);
+  }
   r.ok = r.ok && isfinite(r.a);
   return r;
 }
@@ -491,7 +505,7 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   AlphaRead r = (AlphaRead)0;
   if (vt) r = vt_alpha(a, uv, g, tex, cache, min(h1.y, 3u));
 #ifdef RT_NATIVE_SCALP
-  else if (h0.z == 3u) r = native_scalp_alpha(a, uv, g, tex);
+  else if (h0.z == 3u) r = native_scalp_alpha(a, uv, g, tex,p0+(p1-p0)*bary.x+(p2-p0)*bary.y);
 #endif
 #ifdef RT_NATIVE_HAIR
   else if (h0.z == 4u) r = native_hair_alpha(a,uv,g,tex,min(h1.x,4095u));
@@ -658,6 +672,9 @@ bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
 // real occluder: kRtOccluded). Invalid rays and an unbuilt scene stay kRtLit as before
 // (rt_ray_valid / rt_scene_ok, counted guards).
 uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
+#ifdef RT_NATIVE_SCALP
+  gNativeCameraQuery=false;
+#endif
   g_rt_class = 1u;
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=false;
@@ -728,6 +745,9 @@ bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) { return rt_visibi
 // aborted: the candidate cap ended the query; t, alpha and hit_kind are then unreliable.
 struct RtDebugHit { float t; bool alpha; uint near_kind; uint hit_kind; bool aborted; };
 RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
+#ifdef RT_NATIVE_SCALP
+  gNativeCameraQuery=true;
+#endif
   g_rt_class = 0u;
   RtDebugHit h = (RtDebugHit)0;
   h.near_kind = 0;
@@ -804,10 +824,13 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
 // term for the pixel), never as a miss or as the closest surface.
 struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; bool aborted; };
 RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
-#ifdef RT_NATIVE_HAIR
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_SCALP)
                      ,bool camera_primary=false
 #endif
                      ) {
+#ifdef RT_NATIVE_SCALP
+  gNativeCameraQuery=camera_primary;
+#endif
   g_rt_class = 0u;
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=camera_primary;
@@ -991,6 +1014,9 @@ float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
 // Closest alpha-tested hit distance, or -1. `aborted`: the candidate cap ended the
 // query; the distance is then unknown (-1, or a hit farther than the closest one).
 float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) {
+#ifdef RT_NATIVE_SCALP
+  gNativeCameraQuery=false;
+#endif
   g_rt_class = 0u;
   aborted = false;
 #ifdef RT_NATIVE_HAIR

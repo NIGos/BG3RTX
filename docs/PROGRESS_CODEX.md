@@ -1,5 +1,17 @@
 # BG3RTX progress
 
+## Scalp camera coverage candidate verified - 2026-10-30, default off
+
+Observed native Scalp camera shaders now capture original Frame, projection and
+viewport and evaluate native screen dither. Physical rays retain native Shadow
+hard coverage. Existing rt_native_scalp=0 stays; no new ABI or stream layout.
+22/22 CPU tests;178,810 Scalp checks; 95 ordinary shaders byte-identical and 95
+capable validated. Actual production GPU queries pass 27/27 cases (11 Scalp),
+zero validation errors. No game launch/deployment or measured GPU pass cost.
+Next user-led Test1 check: enable rt_native_scalp=1 in coordinated new layer,
+keep lighting/RR/FG fixed, inspect the same affected close-up face and primary
+match near static baseline. Evidence: docs/evidence/native-scalp-camera-20261030.json.
+
 ## OMM counter coherence fixed in isolation - 2026-10-30
 
 Image writes now mark GPU active-writers before the native command, then update

@@ -14,7 +14,10 @@ strand stream, native coverage/dither and procedural virtual primary/origin dept
 Physical secondaries use native Shadow thin ribbons, not frozen camera volume.
 22/22 CTests, 310,883 geometry + 19,734 capture checks; 95 ordinary shader identity
 and 95 capable validation pass. ABI 19 Sun/OMM callback import, no Hair ABI fields.
-No GPU/live gate yet; other hair families remain OPEN. See NATIVE_HAIR.md.
+Hair GPU probe 16/16 passes; Scalp camera dither adds 11 GPU cases, 27/27 total,
+zero Vulkan validation errors. Scalp Frame/VP/viewport captured in existing kind3
+payload, no stride/ABI change. 22/22 CTests and 95 ordinary shader identities pass.
+Live gate and other families remain OPEN. See NATIVE_HAIR.md and TRACK_D_RT.md.
 
 Main dd13361 includes `codex/native-coverage`, merged via merge-green and pushed:
 20/20 CTests, 202/202 shader files and QA pass. Default-off rt_native_scalp adds native scalp

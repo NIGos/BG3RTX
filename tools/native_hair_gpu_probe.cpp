@@ -4,6 +4,7 @@
 #undef VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #include "../layer/host.h"
+#include "../common/native_scalp_coverage.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -82,6 +83,10 @@ int main(int argc,char** argv){
  const auto buildFlags=VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR|VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
  VkAccelerationStructureBuildGeometryInfoKHR bottom{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};bottom.type=VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;bottom.flags=buildFlags;bottom.geometryCount=1;bottom.pGeometries=&geometry;
  uint32_t primitives=3;VkAccelerationStructureBuildSizesInfoKHR bs{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};sizesAS(dev,VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,&bottom,&primitives,&bs);
+ VkAccelerationStructureGeometryKHR scalpGeometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};scalpGeometry.geometryType=VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+ scalpGeometry.geometry.triangles={VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR};scalpGeometry.geometry.triangles.vertexFormat=VK_FORMAT_R32G32B32_SFLOAT;scalpGeometry.geometry.triangles.vertexData.deviceAddress=source.address;scalpGeometry.geometry.triangles.vertexStride=24;scalpGeometry.geometry.triangles.maxVertex=8;scalpGeometry.geometry.triangles.indexType=VK_INDEX_TYPE_NONE_KHR;
+ auto scalpBuild=bottom;scalpBuild.pGeometries=&scalpGeometry;VkAccelerationStructureBuildSizesInfoKHR scalpSizes{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};sizesAS(dev,VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,&scalpBuild,&primitives,&scalpSizes);
+ bs.accelerationStructureSize=(std::max)(bs.accelerationStructureSize,scalpSizes.accelerationStructureSize);bs.buildScratchSize=(std::max)(bs.buildScratchSize,scalpSizes.buildScratchSize);bs.updateScratchSize=(std::max)(bs.updateScratchSize,scalpSizes.updateScratchSize);
  make_buffer(blasStore,bs.accelerationStructureSize,VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,false);VkAccelerationStructureCreateInfoKHR ac{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};ac.buffer=blasStore.b;ac.size=bs.accelerationStructureSize;ac.type=bottom.type;VkAccelerationStructureKHR blas;vkcheck(createAS(dev,&ac,nullptr,&blas),"BLAS");bottom.dstAccelerationStructure=blas;
  VkAccelerationStructureDeviceAddressInfoKHR ba{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};ba.accelerationStructure=blas;VkAccelerationStructureInstanceKHR object{};object.transform.matrix[0][0]=object.transform.matrix[1][1]=object.transform.matrix[2][2]=1;object.mask=255;object.accelerationStructureReference=addressAS(dev,&ba);std::memcpy(instances.map,&object,sizeof(object));
  VkAccelerationStructureGeometryKHR topGeometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};topGeometry.geometryType=VK_GEOMETRY_TYPE_INSTANCES_KHR;topGeometry.geometry.instances={VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,nullptr,VK_FALSE,{instances.address}};
@@ -104,16 +109,19 @@ int main(int argc,char** argv){
  VkPushConstantRange queryPush{VK_SHADER_STAGE_COMPUTE_BIT,0,32};VkPipelineLayoutCreateInfo ql{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};ql.setLayoutCount=2;ql.pSetLayouts=layouts;ql.pushConstantRangeCount=1;ql.pPushConstantRanges=&queryPush;VkPipelineLayout queryLayout;vkcheck(vkCreatePipelineLayout(dev,&ql,nullptr,&queryLayout),"query layout");VkPipeline query[2]={pipeline(argv[2],queryLayout),pipeline(argv[3],queryLayout)};
  VkDescriptorSetLayoutBinding boundsBindings[3];for(uint32_t b=0;b<3;++b)boundsBindings[b]={b,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};dl.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;dl.bindingCount=3;dl.pBindings=boundsBindings;VkDescriptorSetLayout boundsSet;vkcheck(vkCreateDescriptorSetLayout(dev,&dl,nullptr,&boundsSet),"bounds push layout");VkPushConstantRange boundsPush{VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(BoundsPush)};ql.setLayoutCount=1;ql.pSetLayouts=&boundsSet;ql.pPushConstantRanges=&boundsPush;VkPipelineLayout boundsLayout;vkcheck(vkCreatePipelineLayout(dev,&ql,nullptr,&boundsLayout),"bounds layout");VkPipeline boundsPipeline=pipeline(argv[1],boundsLayout);
  VkCommandPoolCreateInfo cp{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};cp.flags=VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;cp.queueFamilyIndex=family;VkCommandPool commandPool;vkcheck(vkCreateCommandPool(dev,&cp,nullptr,&commandPool),"command pool");VkCommandBufferAllocateInfo ca{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};ca.commandPool=commandPool;ca.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;ca.commandBufferCount=1;VkCommandBuffer cmd;vkcheck(vkAllocateCommandBuffers(dev,&ca,&cmd),"command");
- bool first=true;unsigned cases=0;
- auto run=[&](const char* label,float alpha,float phase,float vertexPhase,bool held,bool inactive,bool invalid,bool rebase){
+ bool first=true,lastScalp=false;unsigned cases=0;
+ auto run=[&](const char* label,float alpha,float phase,float vertexPhase,bool held,bool inactive,bool invalid,bool rebase,bool scalp=false,float viewportY=0,float viewportHeight=16){
   const float cx=rebase?2.0f:0.0f,nearPlane=0.1f,farPlane=100.0f,A=nearPlane/(nearPlane-farPlane),B=-nearPlane*farPlane/(nearPlane-farPlane);
   Vertex vertices[9]{};for(unsigned n=0;n<9;++n){auto& v=vertices[n];v.position[3]=n>=6&&!inactive?1.0f:0.0f;v.uv[0]=0.5f;v.uv[1]=0.5f;v.n[2]=v.t[0]=v.b[1]=1;v.native[0]=v.native[1]=v.native[2]=std::numeric_limits<float>::quiet_NaN();v.phase[0]=vertexPhase;}
   const float positions[9]={-1,-1,3,1,-1,3,0,1,3};for(unsigned k=0;k<3;++k){auto& v=vertices[6+k];for(unsigned j=0;j<3;++j){v.position[j]=positions[k*3+j]+(j==0?cx:0);if(!inactive)v.native[j]=v.position[j];}}
   std::memcpy(source.map,vertices,sizeof(vertices));std::memcpy(static_cast<uint8_t*>(pool.map)+256,vertices,sizeof(vertices));
+  if(scalp) {float compact[9][6]{};for(unsigned k=0;k<9;++k){for(unsigned j=0;j<4;++j)compact[k][j]=vertices[k].position[j];compact[k][4]=compact[k][5]=0.5f;}std::memcpy(source.map,compact,sizeof(compact));std::memcpy(static_cast<uint8_t*>(pool.map)+256,compact,sizeof(compact));}
   bg3::AlphaRec rec{};rec.tris=3;rec.kind=4;rec.tex=1;rec.cache=2;rec.channel=1;rec.cut=rec.cut_first=0.3333f;rec.scale[0]=phase;rec.scale[1]=phase<0?0.0f:1.0f;rec.p0[2]=1;rec.p1[0]=rec.p1[1]=20;rec.p1[2]=0.5f;rec.p1[3]=1;rec.t[1]=1;
-  const float matrix[16]={1,0,0,0,0,1,0,0,0,0,A,1,-cx,0,B,0};const float viewport[4]={0,0,16,16},nf[2]={nearPlane,farPlane};auto* rb=reinterpret_cast<uint8_t*>(&rec);std::memcpy(rb+96,matrix,64);std::memcpy(rb+160,viewport,16);std::memcpy(rb+176,nf,8);const float cert=invalid?0.0f:1.0f;std::memcpy(rb+188,&cert,4);
-  const uint32_t header[4]={1,88,1,0};std::memcpy(records.map,header,16);std::memcpy(static_cast<uint8_t*>(records.map)+16,&rec,sizeof(rec));
-  const uint32_t meta[4]={held?256u:0u,88u|(1u<<10)|(1u<<12)|(held?(1u<<8):0u),16,3};std::memcpy(info.map,meta,16);
+  const float matrix[16]={1,0,0,0,0,1,0,0,0,0,A,1,-cx,0,B,0};const float viewport[4]={0,viewportY,16,viewportHeight},nf[2]={nearPlane,farPlane};auto* rb=reinterpret_cast<uint8_t*>(&rec);std::memcpy(rb+96,matrix,64);std::memcpy(rb+160,viewport,16);std::memcpy(rb+176,nf,8);const float cert=invalid?0.0f:1.0f;std::memcpy(rb+188,&cert,4);
+  if(scalp) {rec.kind=3;rec.cache=0;rec.p0[0]=0;rec.p0[1]=vertexPhase;rec.p0[2]=phase!=-1?1.0f:0.0f;rec.scale[0]=phase;rec.scale[1]=phase!=-1?1.0f:0.0f;}
+  const uint32_t stride=scalp?24u:88u;
+  const uint32_t header[4]={1,stride,1,0};std::memcpy(records.map,header,16);std::memcpy(static_cast<uint8_t*>(records.map)+16,&rec,sizeof(rec));
+  const uint32_t meta[4]={held?256u:0u,stride|(1u<<10)|(scalp?0u:(1u<<12))|(held?(1u<<8):0u),16,3};std::memcpy(info.map,meta,16);
   std::memset(stamp.map,0,512);static_cast<uint32_t*>(stamp.map)[0]=static_cast<uint32_t*>(stamp.map)[1]=static_cast<uint32_t*>(stamp.map)[2]=1;std::memset(nativeCamera.map,0,256);if(rebase){float sourceOrigin=100,currentOrigin=102;std::memcpy(static_cast<uint8_t*>(stamp.map)+464,&sourceOrigin,4);std::memcpy(static_cast<uint8_t*>(nativeCamera.map)+208,&currentOrigin,4);}
   std::memset(result.map,0xcd,256);std::memset(stats.map,0,65536);
   vkcheck(vkResetCommandBuffer(cmd,0),"reset command");VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};vkcheck(vkBeginCommandBuffer(cmd,&begin),"begin");
@@ -123,9 +131,12 @@ int main(int argc,char** argv){
   vkCmdFillBuffer(cmd,stamp.b,12,4,0);barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
   VkDescriptorBufferInfo buffers[3]={{held?pool.b:source.b,0,4096},{pool.b,0,4096},{stamp.b,0,512}};VkWriteDescriptorSet writes[3];for(unsigned b=0;b<3;++b){writes[b]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[b].dstBinding=b;writes[b].descriptorCount=1;writes[b].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[b].pBufferInfo=buffers+b;}
   BoundsPush push{};push.tris=3;push.step=128;push.soup=held?256:0;std::memcpy(push.vp,matrix,64);push.depth[0]=0.2f;push.depth[1]=nearPlane;push.depth[2]=farPlane;push.stride=88;push.camera=1;push.bounded=!invalid;
-  vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,boundsPipeline);pushDescriptors(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,boundsLayout,0,3,writes);vkCmdPushConstants(cmd,boundsLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(push),&push);vkCmdDispatch(cmd,1,1,1);
+  if(!scalp) {  vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,boundsPipeline);pushDescriptors(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,boundsLayout,0,3,writes);vkCmdPushConstants(cmd,boundsLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(push),&push);vkCmdDispatch(cmd,1,1,1);}
   barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR|VK_ACCESS_SHADER_READ_BIT);
-  bottom.mode=top.mode=first?VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR:VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;bottom.srcAccelerationStructure=first?VK_NULL_HANDLE:blas;top.srcAccelerationStructure=first?VK_NULL_HANDLE:tlas;VkAccelerationStructureBuildRangeInfoKHR br{3,0,0,0},tr{1,0,0,0};const auto* bp=&br;const auto* tp=&tr;buildAS(cmd,1,&bottom,&bp);
+  scalpGeometry.geometry.triangles.vertexData.deviceAddress=held?pool.address+256:source.address;
+  bottom.pGeometries=scalp?&scalpGeometry:&geometry;
+  const bool rebuild=first||scalp!=lastScalp;lastScalp=scalp;
+  bottom.mode=top.mode=rebuild?VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR:VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;bottom.srcAccelerationStructure=rebuild?VK_NULL_HANDLE:blas;top.srcAccelerationStructure=rebuild?VK_NULL_HANDLE:tlas;VkAccelerationStructureBuildRangeInfoKHR br{3,0,0,0},tr{1,0,0,0};const auto* bp=&br;const auto* tp=&tr;buildAS(cmd,1,&bottom,&bp);
   barrier(cmd,VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR|VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);buildAS(cmd,1,&top,&tp);
   barrier(cmd,VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR|VK_ACCESS_SHADER_READ_BIT);
   vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,query[rebase?1:0]);vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,queryLayout,0,2,sets,0,nullptr);uint32_t pc[8]={0,1,1,0,0,0,0,0};vkCmdPushConstants(cmd,queryLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,32,pc);vkCmdDispatch(cmd,1,1,1);
@@ -134,6 +145,18 @@ int main(int argc,char** argv){
   check(w[17]==1,"real TLAS stamp active");
   if(invalid){check(w[0]==2&&w[2]&&w[4]&&w[7]&&w[9]&&w[11]&&w[13]&&w[18]>0,"invalid bounds => all four UNKNOWN");}
   else if(inactive){check(w[0]==0&&!w[2]&&!w[4]&&!w[7]&&!w[9]&&w[18]==0&&as_float(w[1])<0&&as_float(w[6])<0,"proven inactive MISS, not UNKNOWN");}
+  else if(scalp) {
+   using namespace bg3::native_scalp;
+   const float filtered=std::round(alpha*255.0f)/255.0f;
+   const bool physical=evaluate(0x03a2d9f645625c44ull,{0,vertexPhase,true},{0,filtered,true}).survives;
+   const bool primary=evaluate(0x9e77575a9f377ec5ull,{0,vertexPhase,true},{0,filtered,true},{phase,phase!=-1?1.0f:0.0f,8.5f,std::floor(viewportY+viewportHeight*0.5f)+0.5f,true,true}).survives;
+   check(w[0]==unsigned(physical)&&!w[2]&&!w[4]&&!w[13],"Scalp native physical hard branch");
+   check(physical?gpu_near(as_float(w[1]),3)&&gpu_near(as_float(w[3]),3):as_float(w[1])<0&&as_float(w[3])<0,"Scalp physical distance");
+   check(!w[7]&&!w[9]&&!w[11]&&!w[15],"Scalp camera queries known");
+   check(primary?gpu_near(as_float(w[6]),3)&&gpu_near(as_float(w[8]),3):as_float(w[6])<0&&as_float(w[8])<0,"Scalp native camera dither reference");
+   check(as_float(w[10])<0,"Scalp has no fragment depth displacement");
+   check(w[18]==0,"Scalp does not invalidate Hair bounds");
+  }
   else{
    check(w[18]==0,"valid conservative bounds");check(w[0]==uint32_t(opaque),"physical visibility");check(!w[2]&&!w[4]&&!w[13],"physical queries known");
    check(opaque?gpu_near(as_float(w[1]),3)&&gpu_near(as_float(w[3]),3)&&gpu_near(as_float(w[12]),3):as_float(w[1])<0&&as_float(w[3])<0&&as_float(w[12])<0,"physical plane distances");
@@ -151,6 +174,12 @@ int main(int argc,char** argv){
  run("held",1,-1,0,true,false,false,false);run("original_native_rebase",1,-1,0,false,false,false,true);
  run("inactive_native_nan",1,-1,0,false,true,false,false);run("invalid_bounds",1,-1,0,false,false,true,false);
  run("held_invalid_recertified",1,-1,0,true,false,true,false);run("recovered",1,-1,0,false,false,false,false);
+ run("scalp_opaque",1,-1,0,false,false,false,false,true);run("scalp_clear",0,-1,0,false,false,false,false,true);
+ for(unsigned p=0;p<4;++p)run("scalp_camera_dither",128.0f/255.0f,float(p),0,false,false,false,false,true);
+ run("scalp_root_suppression",1,0,1,false,false,false,false,true);
+ run("scalp_negative_phase",128.0f/255.0f,-3,0,false,false,false,false,true);
+ run("scalp_negative_viewport",128.0f/255.0f,2,0,false,false,false,false,true,7,-16);
+ run("scalp_held",128.0f/255.0f,0,0,true,false,false,false,true);run("scalp_rebase",128.0f/255.0f,0,0,false,false,false,true,true);
  check(validationErrors.load()==0,"zero Vulkan validation errors");std::printf("PASS cases=%u validation_errors=0 production_bounds=1 production_four_queries=1\n",cases);
  vkDeviceWaitIdle(dev);vkDestroyCommandPool(dev,commandPool,nullptr);vkDestroyPipeline(dev,boundsPipeline,nullptr);vkDestroyPipeline(dev,query[0],nullptr);vkDestroyPipeline(dev,query[1],nullptr);vkDestroyPipelineLayout(dev,boundsLayout,nullptr);vkDestroyPipelineLayout(dev,queryLayout,nullptr);vkDestroyDescriptorPool(dev,descriptorPool,nullptr);vkDestroyDescriptorSetLayout(dev,boundsSet,nullptr);vkDestroyDescriptorSetLayout(dev,layouts[0],nullptr);vkDestroyDescriptorSetLayout(dev,layouts[1],nullptr);vkDestroySampler(dev,sampler,nullptr);vkDestroyImageView(dev,view,nullptr);vkDestroyImageView(dev,arrayView,nullptr);vkDestroyImage(dev,image,nullptr);vkFreeMemory(dev,imageMemory,nullptr);destroyAS(dev,tlas,nullptr);destroyAS(dev,blas,nullptr);
  }
