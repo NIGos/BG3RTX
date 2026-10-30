@@ -6,8 +6,8 @@ The isolated codex/omm-bake candidate is combining Sun 4edd799 with native
 Hair/Scalp/Pubes, OMM producer/BLAS and Experimental controls 75bb833. Defaults
 remain off. OMM descriptor/Core selection is wired but not GPU/live qualified. ABI 19;
 main is 92183e7 with ABI 18 and uncommitted user planning docs: preserve them.
-Both DLLs build; 37/37 CTests pass. New OMM full shader gate is running after
-Windows include correction; prior combined Sun gate was 219 identities / 10 new.
+Both DLLs build; current composition 40/40 CTests. OMM shader gate passes: 229
+existing entries byte-identical to d444e70 and 198 new compile/validate.
 No game launch, live deployment or measured pass cost.
 M0 receipt/cancellation is isolated with the existing Sun owner; material proof
 and affine asset placement have separate offline owners. One real GR2 + enabled

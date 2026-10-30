@@ -1,0 +1,33 @@
+{
+  "name": "m1-hair-user-trial",
+  "live_batch": "m1-hair-user-trial",
+  "tree": "C:/Users/quali/.codex/worktrees/hair-user-trial/BG3RTX",
+  "save": "Test1",
+  "session": true,
+  "traces": 0,
+  "timeout": 900,
+  "warmup": 10,
+  "hold": 600,
+  "repeat": 1,
+  "set": "rt=1,rt_alpha=1,rt_bvh_split=1,rt_native_hair=1,rt_native_scalp=1,rt_alpha_test=1,rt_sun_cascade_current=0,rt_omm=0,fg=2,rt_stats=0,ls_stats=0,rt_primary_check=0",
+  "args": [
+    "-Foreground",
+    "-RealPresent",
+    "-UserIni",
+    "C:\\Users\\quali\\.codex\\worktrees\\hair-user-trial\\BG3RTX\\captures\\user-prefs.snapshot.ini"
+  ],
+  "patterns": [
+    "\\[rt\\] first split scene",
+    "rt: first traced frame",
+    "\\[alpha hair\\]",
+    "\\[alpha scalp\\]",
+    "DLSS-G",
+    "\\[gpu\\]"
+  ],
+  "expect": [
+    "\\[rt\\] first split scene",
+    "rt: first traced frame",
+    "\\[alpha hair\\] native coverage records [1-9][0-9]*"
+  ],
+  "stop_on_dump": true
+}

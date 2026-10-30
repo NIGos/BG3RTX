@@ -29,10 +29,12 @@ order; native compute bindings are restored after it. Scene retirement and ticke
 release use actual completion, not frame age. Sun's separate scene has no OMM;
 its self-reference and cleared proof cannot redirect rays into the camera scene.
 
-Offline checkpoint: both DLLs build; 37/37 CTests pass, including per-command
-selection, reference fallback, reused generation, key-off and unwind restoration.
-The full ordinary-byte-identity/new-variant DXC+SPIR-V gate is running after fixing
-an overlong Windows relative-include chain. Wrappers retain native DXC16-bit flags.
+Offline checkpoint: both DLLs build; current composition passes 40/40 CTests.
+Per-command binding tests cover 58 cases: reference fallback, reused generation,
+key-off and unwind restoration. Against d444e70, 229 existing shader entries are
+byte-identical; 198 OMM wrappers compile/validate. Wrappers retain native DXC16-bit
+flags. Short owned baseline extraction fixes Windows MAX_PATH without changing
+the archived baseline source. No GPU execution follows from this shader gate.
 
 OPEN: actual renderer descriptor/GPU traversal validation; nonzero useful known
 coverage; same-ray reference violation counts; energy/movement/FG2 quality;

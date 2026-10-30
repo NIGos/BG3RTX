@@ -1,0 +1,35 @@
+{
+  "source_checkpoint": "dc0764547fb06bc9e4f943bf6fe0ad8f9e75b066",
+  "abi": 19,
+  "default_rt_omm": 0,
+  "ctest_passed": 40,
+  "ctest_total": 40,
+  "bindings_cpu_checks": 58,
+  "asset_tests_passed": 54,
+  "asset_tests_skipped": 1,
+  "shader_gate": {
+    "baseline": "d444e70",
+    "ordinary_identical": 229,
+    "new_compiled_validated": 198
+  },
+  "shader_artifact_sha256": "83345a9adb10701cc13deddf7eb3291c65c68880e4798e4c579841250f12622f",
+  "agent_game_launches": 0,
+  "new_gpu_execution": false,
+  "user_trial_installed": {
+    "tree": "C:/Users/quali/.codex/worktrees/hair-user-trial/BG3RTX",
+    "revision": "a9f8688",
+    "hair": 1,
+    "scalp": 1,
+    "omm": 0,
+    "current_sun": 0,
+    "launch": "user only; Desktop BG3RTX - Hair Scalp"
+  },
+  "quality_gate_passed": false,
+  "gpu_cost_ms": null,
+  "missing": [
+    "native renderer OMM known-state usefulness/same-ray/energy/cost gate",
+    "native sampled view/filter/residency + runtime material provider",
+    "bounded room closure and world/state correspondence",
+    "shared cache-free reference lighting/PT and real-time decision"
+  ]
+}

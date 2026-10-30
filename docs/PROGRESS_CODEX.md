@@ -1,5 +1,44 @@
 # BG3RTX progress
 
+## Hair/Scalp personal trial installed - 2026-10-30
+
+At the user's request, installation only; no agent game launch. Desktop shortcut
+BG3RTX - Hair Scalp points to the frozen isolated a9f8688 candidate (ABI 19,
+both matching DLLs). Native Hair/Scalp are on in its private user settings; OMM
+and current-cascade Sun are off. Other user choices were copied and preserved.
+Launcher dry-run passes and selects the trial layer. 39 CTests pass; prior native
+Hair/Pubes GPU fixture37cases passes. Actual user quality/cost is unqualified.
+Main binaries/source/prefs are unchanged. Rollback: use the original tool.
+Candidate: C:/Users/quali/.codex/worktrees/hair-user-trial/BG3RTX.
+Manifest: captures/trial-package.json in that candidate. Do not rebuild/edit it
+while the user's game runs. Development continues in the separate omm-bake tree.
+
+## Offline materials and bounded architecture advanced - 2026-10-30
+
+40/40 CTests and 54 asset tests pass (one existing zstd skip). Native construction
+material a1a20440 uses an exact vertex-color branch, not texture blending: Green
+when interpolated G > 0, else Red when R > 0, else Base. Nine enabled Texture2D
+resources and their native FS/VS/parameter layout are joined; 230 new decoder
+checks pass. Actual view/color/filter/residency and runtime provider remain open.
+Existing F10 extension retains exact VT sampled-view metadata; no new capture run.
+
+A real floor (5,114 triangles) and wall (9,502) were exported and placed, followed
+by a 730-triangle supporting corner. The latter supports only two of 16 sampled
+low board vertices; room floor/closure is NOT qualified. Adjacent Floor_C/wall
+are explicitly not counted as support. Seven of nine active Floor_B scale tests
+fail the declared precision envelope; no tolerance increase or guessed flip was
+introduced. Exact evidence stays in m2-foundry-mesh/captures/m2-foundry/.
+
+Native Fur source/capture/scalar helpers pass 60,048 checks, with no runtime hook.
+Descending native SmoothStep defaults stay UNKNOWN until proven; Fur has no Hair
+virtual-depth displacement. Historical retention review releases zero raw bytes:
+52 capture directories / 17.88 GiB remain needed for failed or unresolved gates.
+Source docs/evidence/historical-capture-retention-20261030.* list exact holds.
+
+Next: current-Sun diagnostic counter correction and strict phase gates; complete
+material provider evidence; shared cache-free BSDF math. The user tests the frozen
+Hair/Scalp installation independently. No development touches that candidate.
+
 ## OMM renderer selection wired offline - 2026-10-30
 
 Default-off rt_omm now reaches the renderer in the isolated candidate: alpha
@@ -7,8 +46,9 @@ reference/epoch bindings, generation-checked fast/reference tuples and per-comma
 ticket/feedback registration in GI, Sun, local, reflection and SHaRC dispatches.
 Old-core/key-off/reference cases retain baseline scenes. Failed dispatches no
 longer claim stale output as fresh; GI falls back to the current screen trace.
-ABI stays 19; both DLLs build and 37/37 CTests pass. Full shader gate is running
-following the Windows include-path correction. No game/GPU run or cost claim.
+ABI stays 19; both DLLs build. Final OMM shader gate: 229 existing entries
+byte-identical to d444e70; 198 new entries compile/validate. Current composition
+passes 40/40 CTests. No agent game/GPU run or cost claim.
 Useful known coverage, same-ray comparison and live quality/energy/cost remain
 OPEN. All-UNKNOWN/missing RT cannot pass. See P4_OMM.md for the exact contract.
 
