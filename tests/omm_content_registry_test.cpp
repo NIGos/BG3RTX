@@ -30,5 +30,8 @@ int main(){
   views.destroy(10);check(!views.lookup_view(1));check(views.create(10,true,5,37));views.bind(10,true);check(!views.lookup_view(1));
   check(views.create_view(1,10,true,0,5,37));check(views.lookup_view(1)->imageId!=old.imageId);
   views.nextViewId=UINT64_MAX;check(!views.create_view(2,10,true,0,1,37));
+  ContentRegistry policies;check(!policies.create(1,true,1,37,0));check(!policies.create(1,true,1,37,3));
+  check(policies.create(1,true,3,137,2));check(policies.lookup(1)->requiredSamplingCertificate==2);
+  check(policies.create_view(1,1,true,0,3,137));check(policies.lookup_view(1)->format==137);
   std::printf("OMM content registry checks %u; no device calls\n",checks);
 }

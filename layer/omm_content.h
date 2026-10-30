@@ -9,6 +9,9 @@ struct ContentSource {
   uint64_t imageId{};uint32_t slot{};
   uint64_t viewId{};uint32_t baseMipLevel{},levelCount{};
   VkFormat format{VK_FORMAT_UNDEFINED};VkComponentMapping components{};
+  // 1: general UNORM8 interval contract; 2: ONLY uniform decoded 0/1 endpoints.
+  // BC/sRGB NEVER inherit a general code8/filter numeric certificate.
+  uint32_t requiredSamplingCertificate{};
   // Header uint globalEpoch@0, stickyDisabled@4. Image epoch@imageOffset.
   // Reads MUST be atomic (InterlockedOr(...,0,out)) if upload queues can run.
   // A zero image epoch is uninitialized, not an immutable-content certificate.

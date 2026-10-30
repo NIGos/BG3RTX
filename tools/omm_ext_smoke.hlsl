@@ -3,6 +3,7 @@
 [[vk::binding(1,0)]] RWStructuredBuffer<uint4> output;
 [[vk::binding(2,0)]] Texture2DArray<float4> endpointTexture;
 [[vk::binding(3,0)]] SamplerState endpointSampler;
+[[vk::binding(4,0)]] Texture2D<float4> bcTexture;
 [numthreads(6,1,1)]
 void main(uint3 tid:SV_DispatchThreadID) {
   uint i=tid.x,p=i/2;
@@ -26,4 +27,14 @@ void endpoints(uint3 tid:SV_DispatchThreadID) {
   float2 uv=float2(positions[uvIndex%8u],positions[uvIndex/8u]);
   float alpha=endpointTexture.SampleLevel(endpointSampler,float3(uv,float(layer)),float(lodIndex)/8.0).w;
   output[6u+i]=uint4(asuint(alpha),layer,lodIndex,uvIndex);
+}
+[numthreads(64,1,1)]
+void bc_endpoints(uint3 tid:SV_DispatchThreadID) {
+  uint i=tid.x;if(i>=1088u)return;
+  uint uvIndex=i/17u,lodIndex=i%17u;
+  const float positions[8]={-17.0,-1.125,-.5,0.0,.125,.5,1.0,17.125};
+  float2 uv=float2(positions[uvIndex%8u],positions[uvIndex/8u]);
+  float sampled=bcTexture.SampleLevel(endpointSampler,uv,float(lodIndex)/8.0).w;
+  float decoded=bcTexture.Load(int3(0,0,int(lodIndex/8u))).w;
+  output[i]=uint4(asuint(sampled),asuint(decoded),lodIndex,uvIndex);
 }

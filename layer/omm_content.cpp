@@ -30,11 +30,22 @@ void cleanup(){
   pipeline=VK_NULL_HANDLE;layout=VK_NULL_HANDLE;pool=VK_NULL_HANDLE;setLayout=VK_NULL_HANDLE;
   counters=VK_NULL_HANDLE;counterMemory=VK_NULL_HANDLE;mapped=nullptr;sets.clear();memorySafe.clear();imageMemory.clear();registry.images.clear();registry.views.clear();
 }
+uint32_t certificate(VkFormat format){
+  switch(format){
+    case VK_FORMAT_R8_UNORM:case VK_FORMAT_R8G8_UNORM:case VK_FORMAT_R8G8B8A8_UNORM:case VK_FORMAT_B8G8R8A8_UNORM:return 1;
+    case VK_FORMAT_R8_SRGB:case VK_FORMAT_R8G8_SRGB:case VK_FORMAT_R8G8B8A8_SRGB:case VK_FORMAT_B8G8R8A8_SRGB:
+    case VK_FORMAT_BC1_RGB_UNORM_BLOCK:case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
+    case VK_FORMAT_BC2_UNORM_BLOCK:case VK_FORMAT_BC2_SRGB_BLOCK:
+    case VK_FORMAT_BC3_UNORM_BLOCK:case VK_FORMAT_BC3_SRGB_BLOCK:
+    case VK_FORMAT_BC4_UNORM_BLOCK:case VK_FORMAT_BC5_UNORM_BLOCK:
+    case VK_FORMAT_BC7_UNORM_BLOCK:case VK_FORMAT_BC7_SRGB_BLOCK:return 2;
+    default:return 0;
+  }
+}
 bool policy(const VkImageCreateInfo& c){
-  const bool format=c.format==VK_FORMAT_R8_UNORM || c.format==VK_FORMAT_R8G8_UNORM ||
-    c.format==VK_FORMAT_R8G8B8A8_UNORM || c.format==VK_FORMAT_B8G8R8A8_UNORM;
   constexpr VkImageUsageFlags allowed=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-  return !c.pNext && !c.flags && format && c.imageType==VK_IMAGE_TYPE_2D &&
+  return !c.pNext && !c.flags && certificate(c.format)!=0 && c.imageType==VK_IMAGE_TYPE_2D &&
     c.tiling==VK_IMAGE_TILING_OPTIMAL && c.samples==VK_SAMPLE_COUNT_1_BIT &&
     c.extent.width && c.extent.height && c.extent.depth==1 && c.arrayLayers==1 && c.mipLevels &&
     (c.usage&VK_IMAGE_USAGE_SAMPLED_BIT) && !(c.usage&~allowed) && c.initialLayout==VK_IMAGE_LAYOUT_UNDEFINED;
@@ -92,7 +103,7 @@ void content_device_destroyed(DeviceData* dd){
   if(recorded)dd->vk.DeviceWaitIdle(dd->device);
   cleanup();owner=nullptr;families.clear();
 }
-void content_image_created(DeviceData* dd,VkImage image,const VkImageCreateInfo& info){if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);registry.create(key(image),policy(info),info.mipLevels,uint32_t(info.format));}
+void content_image_created(DeviceData* dd,VkImage image,const VkImageCreateInfo& info){if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);registry.create(key(image),policy(info),info.mipLevels,uint32_t(info.format),certificate(info.format));}
 void content_image_destroyed(DeviceData* dd,VkImage image){if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);registry.destroy(key(image));imageMemory.erase(image);}
 void content_view_created(DeviceData* dd,VkImageView view,const VkImageViewCreateInfo& info){
   if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);
@@ -118,13 +129,14 @@ void content_image_bound(DeviceData* dd,VkImage image,VkDeviceMemory memory,bool
 bool content_source(VkImage image,ContentSource& out){
   out={};if(!active.load())return false;std::lock_guard lock(contentMutex);const auto* e=registry.lookup(key(image));
   if(cpuUnsupported || !e || !e->boundSafe)return false;
-  out={counters,bytes,(VkDeviceSize(e->slot)+1)*stride,e->imageId,e->slot};return true;
+  out={counters,bytes,(VkDeviceSize(e->slot)+1)*stride,e->imageId,e->slot};out.requiredSamplingCertificate=e->requiredSamplingCertificate;return true;
 }
 bool content_source_view(VkImageView view,ContentSource& out){
   out={};if(!active.load())return false;std::lock_guard lock(contentMutex);const auto* v=registry.lookup_view(view_key(view));
   if(cpuUnsupported || !v)return false;const auto* image=registry.lookup(v->image);if(!image || !image->boundSafe)return false;
   out={counters,bytes,(VkDeviceSize(image->slot)+1)*stride,image->imageId,image->slot,v->viewId,v->baseMip,v->levelCount,VkFormat(v->format),
     {VkComponentSwizzle(v->components[0]),VkComponentSwizzle(v->components[1]),VkComponentSwizzle(v->components[2]),VkComponentSwizzle(v->components[3])}};
+  out.requiredSamplingCertificate=image->requiredSamplingCertificate;
   return true;
 }
 void content_after_image_write(VkCommandBuffer cmd,VkImage image,bool unsupported){
