@@ -40,6 +40,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/omm_submit.cpp
   layer/omm_content.cpp
   layer/omm_sampler.cpp
+  layer/omm_native_plain.cpp
   layer/omm_bake.cpp
   layer/alphatest.cpp
   layer/bvhsplit.cpp
@@ -195,6 +196,9 @@ add_test(NAME omm_sampler_metadata_test COMMAND omm_sampler_metadata_test)
 add_executable(omm_sampler_bindings_test tests/omm_sampler_bindings_test.cpp layer/omm_sampler.cpp)
 target_include_directories(omm_sampler_bindings_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME omm_sampler_bindings_test COMMAND omm_sampler_bindings_test)
+add_executable(omm_native_plain_test tests/omm_native_plain_test.cpp layer/omm_native_plain.cpp)
+target_include_directories(omm_native_plain_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME omm_native_plain_test COMMAND omm_native_plain_test)
 # Explicit synthetic GPU probe only. Never registered in routine CTest and never
 # launched by a build. No game, presentation or global loader settings changes.
 option(BG3RTX_OMM_GPU_SMOKE "Build the opt-in synthetic EXT OMM console probe" OFF)
