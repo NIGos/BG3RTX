@@ -21,6 +21,7 @@
 // triangles are rasterised on the CPU and compared with the frame's own depth
 // buffer, and the world-space triangle normals with the G-buffer normals.
 #include "host.h"
+#include "../common/spirv_visibility.h"
 #include "spirv_xfb.h"
 #include "../common/cascade_casters.h"
 
@@ -73,6 +74,7 @@ thread_local int t_last_uv = -1;       // UV location of the module patched last
 thread_local VsInstancing t_last_inst; // its instancing analysis (bvhsplit.cpp)
 thread_local uint64_t t_last_hash = 0;
 thread_local bool t_last_discard = false;   // the module last scanned on this thread is a fragment shader that discards
+thread_local bool t_last_always_discard = false;
 thread_local std::vector<StageIo> t_last_io;   // the module's user interface (stage_io)
 thread_local int t_last_model = -1;
 
@@ -90,6 +92,7 @@ struct ModInfo {
 };
 std::unordered_map<VkShaderModule, ModInfo> g_patched;
 std::unordered_set<VkShaderModule> g_discard_mods;   // fragment shaders that can discard (alpha test)
+std::unordered_set<VkShaderModule> g_always_discard_mods;
 struct PipeInfo {
   bool xfb;                  // VS patched, VS is the last pre-raster stage
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
@@ -101,6 +104,7 @@ struct PipeInfo {
   bool restart = true;       // primitive restart enabled, or dynamic (unknown)
   InstPipe inst;             // instancing layout (Track D BVH split)
   bool discard = false;      // its fragment shader can discard (rt_cascade_casters skips it: no alpha test)
+  bool always_discard = false;
   int depth_write = -1, depth_test = -1; // -1: missing or dynamic; never reject unknown state
   uint32_t color_mask = 0, blend_mask = 0;
   bool em_state = false, em_dynamic = false;
@@ -200,6 +204,8 @@ struct Capture {
   uint64_t sig = 0;
   uint32_t rt_draws = 0;
   bool state_log = false, state_sample = false, depth_filter = false;
+  bool discard_filter = false;
+  uint64_t discard_skipped = 0;
   uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0, depth_skipped = 0;
   struct StateCount { uint64_t fs = 0, draws = 0, tris = 0; PipeInfo pipe{}; };
   std::unordered_map<uint64_t, StateCount> states;
@@ -394,6 +400,8 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.state_log = cfg_int("rt_capture_state_log", 0) != 0;
   c.state_sample = c.state_log && c.record_frame % (std::max)(cfg_int("rt_timing_frames", 300), 30) == 0;
   c.depth_filter = cfg_int("rt_capture_depth_write", 0) != 0;
+  c.discard_filter = cfg_int("rt_capture_discard", 1) != 0;
+  c.discard_skipped = 0;
   c.source_draws = c.no_depth_draws = c.no_depth_tris = c.depth_skipped = 0;
   c.states.clear();
   c.opaque_end = c.xfb.size;
@@ -1385,10 +1393,12 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   t_last_inst = VsInstancing{};
   t_last_hash = 0;
   t_last_discard = false;
+  t_last_always_discard = false;
   t_last_io.clear();
   t_last_model = -1;
   if (!g_on) return false;
   t_last_discard = cascade::spirv_fragment_discards(ci->pCode, ci->codeSize / 4);
+  t_last_always_discard = spirv_fragment_always_discards(ci->pCode, ci->codeSize / 4);
   // Every module's interface (vertex and fragment): the UV-slot check at pipeline creation.
   t_last_model = stage_io(ci->pCode, ci->codeSize / 4, t_last_io);
   t_last_hash = hash64(ci->pCode, ci->codeSize);
@@ -1418,6 +1428,7 @@ void geo_note_module(VkShaderModule m, bool patched) {
     g_discard_mods.insert(m);
   }
   std::lock_guard<std::mutex> lock(g_mu);
+  if (t_last_always_discard && !patched) g_always_discard_mods.insert(m);
   if (t_last_model == 0 || t_last_model == 4) g_mod_io[m] = ModIo{t_last_model, std::move(t_last_io), t_last_hash};
   if (!patched) return;
   g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash};   // same thread, right after geo_patch_shader
@@ -1428,6 +1439,7 @@ void geo_forget_module(VkShaderModule m) {
   std::lock_guard<std::mutex> lock(g_mu);
   g_patched.erase(m);
   g_discard_mods.erase(m);
+  g_always_discard_mods.erase(m);
   g_mod_io.erase(m);
 }
 
@@ -1528,6 +1540,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
         }
       } else if (st.stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
         pi.discard = st.module && g_discard_mods.count(st.module) != 0;
+        pi.always_discard = st.module && g_always_discard_mods.count(st.module) != 0;
       } else {
         other = true;
       }
@@ -1740,6 +1753,9 @@ void geo_pass_ending(VkCommandBuffer cmd, CmdState* s) {
 // The demand of this frame (next frame's alpha/opaque split) and the loud log of
 // everything that did not make it into the RT soup as it should.
 void rt_capture_stats(const Capture& c) {
+  if (c.discard_filter && c.record_frame % uint64_t((std::max)(cfg_int("rt_timing_frames", 300), 30)) == 0)
+    log("[rt-capture] discard filter 1 frame %llu skipped %llu always-discard draws",
+        (unsigned long long)c.record_frame, (unsigned long long)c.discard_skipped);
   g_alpha_demand_prev = c.alpha_demand;
   g_opaque_demand_prev = c.cursor + c.opaque_overflow_bytes;
   std::lock_guard<std::mutex> lock(g_drop_mu);
@@ -1854,6 +1870,10 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     std::lock_guard<std::mutex> lock(g_mu);
     auto it = g_pipes.find(s->pipe[0]);
     if (it != g_pipes.end()) pi = it->second;
+  }
+  if (c->rt && c->discard_filter && pi.always_discard) {
+    ++c->discard_skipped;
+    return;
   }
   if (c->cascade) {
     cascade_pre_draw(cmd, s, c, args, pi);

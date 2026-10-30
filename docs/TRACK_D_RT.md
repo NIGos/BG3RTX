@@ -2336,6 +2336,38 @@ gives: where its vertices are (the mesh pool, binding 8, object space; or the so
 - Opaque draws' instances are `FORCE_OPAQUE`. `rt_alpha_test=0` forces all instances
   opaque, as before.
 
+### Invisible helper draws (`rt_capture_discard`, 2026-10-30)
+
+The inn's two dark floor squares come from one captured 24-triangle helper draw,
+VS `ca869467434cd2db`, FS `dc180592a8fc6087`. In capture 890 both floor regions hit
+TLAS instance 1834 in frame 3992, on the per-draw path. This FS has one empty
+entry block ending in `OpKill` and no EarlyFragmentTests mode. It never produces
+raster depth or color, regardless of its pipeline's depth-write flag.
+
+Transform feedback runs before fragment discard. `rt_capture_discard` filters
+this proved always-discard case before either BVH classification or XFB allocation.
+`common/spirv_visibility.h` recognizes only that exact control-flow shape. It
+rejects conditional alpha tests, normal returns, multiple entry points and early
+fragment tests (which can write depth/stencil before the kill). Raster commands
+still run. The check is cached per module/pipeline and its live key once per capture.
+No host ABI or lighting shader change is needed.
+
+The split-off oracle was incomplete: the legacy capture overflowed about 168
+opaque draws/frame and omitted this late helper. A corrected same-run refit sweep
+leaves 30,343-30,362 opaque-front pixels for TLAS refit, dynamic refit and in-place
+rebuild toggles. Capture-all/audit-all also overflow; their lower residual is not
+parity. The cause is capture eligibility, rather than firstInstance, instance count,
+vertex offset or stale transforms.
+
+Gate: `sup-hidden-quads-discard-gate`, valid FG 2 run, 0/1 twice in debug 8.
+Opaque-front pixels 29,411 / 29,429 -> 132 / 127; the two square regions together
+29,288 / 29,303 -> 0 / 1 pixels. Primary-ray match 96.095% / 96.092% ->
+96.951% / 97.190%. Normal-image mean +0.28%. BVH build GPU median, with all
+statistics and primary diagnostics off: 1.387 -> 1.368 ms (14 timing windows each;
+median reported p99 1.791 -> 1.686 ms). Zero VK errors, NVIDIA events or dumps.
+Kept, `rt_capture_discard=1` by default. Check The Blushing Mermaid - 96h 39m near
+the crates and stage edge after a layer restart. Diagnostic keys remain default 0.
+
 ### Static-camera LOD retention (`rt_dyn_hold`, 2026-10-29)
 
 BG3 alternates captured LOD draws every two frames even with the camera still

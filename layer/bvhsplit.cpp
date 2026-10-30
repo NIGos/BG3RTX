@@ -382,6 +382,8 @@ struct FrameDraw {
   const uint8_t* rows[3] = {};   // instance 0's matrix rows in the game's mapped memory
   uint32_t row_stride[3] = {};
   uint32_t instances = 0, tris_per_instance = 0;
+  uint32_t first_instance = 0;
+  uint64_t vs = 0;
   bool alpha = false;
   bool cached = false, audit = false, extract = false, check = false;
   bool captured = false, cap_alpha = false;
@@ -394,6 +396,7 @@ struct FrameDraw {
 std::vector<FrameDraw> g_draws;
 std::unordered_map<uint64_t, uint32_t> g_dyn_seen;   // dyn key -> occurrences this capture
 uint32_t g_audits_this_frame = 0;
+bool g_capture_all_meshes = false;
 
 // ---- host ring: TLAS instances, InstInfo, job matrices; written at record, matrices at submit ----
 Buf g_ring;
@@ -407,6 +410,9 @@ struct Fixup {
   uint32_t src_stride[3];
   bool instance;              // a TLAS instance (mask byte set from the result) or a job matrix
   uint8_t sample[48];         // instance 0's rows at record time (late-write diagnostic)
+  uint64_t log_key = 0, log_vs = 0;
+  uint32_t log_tris = 0, log_first = 0, log_instance = 0;
+  uint64_t log_frame = 0;
 };
 std::mutex g_fix_mu;
 std::unordered_map<VkCommandBuffer, std::vector<Fixup>> g_fixups;
@@ -760,6 +766,7 @@ void bvh_begin_capture(VkCommandBuffer) {
   g_draws.clear();
   g_dyn_seen.clear();
   g_audits_this_frame = 0;
+  g_capture_all_meshes = cfg_int("rt_mesh_capture", 0) != 0;
 }
 
 BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris) {
@@ -769,6 +776,8 @@ BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint
   FrameDraw& fd = g_draws.back();
   fd.alpha = d.alpha;
   fd.instances = d.args.instances;
+  fd.first_instance = d.args.first_instance;
+  fd.vs = d.vs;
   const CmdState* s = d.s;
   const bool indexed = d.args.kind == 1;
   // The draw's identity across frames (per-draw BLAS of captured draws). The
@@ -833,6 +842,7 @@ BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint
   if (!mk) mk = 1;
   fd.mesh_key = mk;
   fd.tris_per_instance = d.args.count / 3;
+  if (g_capture_all_meshes) return BVH_CAPTURE;
   auto it = g_meshes.find(mk);
   if (it == g_meshes.end()) {
     auto rj = g_rejected.find(mk);
@@ -1121,6 +1131,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   bvh_cpu_mark(2);
   // ---- 2. TLAS instances and InstInfo (static matrices at submit) ----
   std::vector<Fixup> fix;
+  const int draw_log = cfg_int("rt_mesh_draw_log", 0);
+  const bool draw_sample = draw_log && now % uint64_t(draw_log > 1 ? draw_log :
+                                      (std::max)(cfg_int("rt_timing_frames", 300), 30)) == 0;
   uint32_t n = 0;
   // Local copies of each instance's BLAS reference and flags for the TLAS signature and
   // the chunk guard below: reading them back from the mapped ring is uncached (P3).
@@ -1134,6 +1147,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     Fixup f{reinterpret_cast<uint8_t*>(inst_out + n), fd.instances, uint32_t(sizeof(VkAccelerationStructureInstanceKHR)),
             {fd.rows[0], fd.rows[1], fd.rows[2]}, {fd.row_stride[0], fd.row_stride[1], fd.row_stride[2]}, true, {}};
     for (int k = 0; k < 3; ++k) load_mapped16(reinterpret_cast<float*>(f.sample + 16 * k), fd.rows[k]);
+    if (draw_sample) {
+      f.log_key = fd.mesh_key; f.log_vs = fd.vs;
+      f.log_tris = m.tris; f.log_first = fd.first_instance;
+      f.log_instance = n;
+      f.log_frame = now;
+    }
     fix.push_back(f);
     // Built in local memory and copied whole: inst_out/info_out are mapped (often
     // write-combined) memory, where the bit-field stores below would read back
@@ -1163,6 +1182,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     const FrameDraw& fd = g_draws[di];
     const DynSlot& s = g_dyn[key];
     const bool alpha = fd.cap_alpha && fd.rec != kNone;
+    if (draw_sample)
+      log("[bvh-draw] frame %llu dynamic instance %u key %016llx VS %016llx tris %u held %u soup %llu",
+          (unsigned long long)now, n, (unsigned long long)key, (unsigned long long)fd.vs, fd.prims, unsigned(fd.held),
+          (unsigned long long)fd.soup_off);
     VkAccelerationStructureInstanceKHR in{};   // local, then copied whole (see above)
     in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
     in.instanceCustomIndex = n;
@@ -1704,6 +1727,10 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
         float m[12];
         for (int k = 0; k < 3; ++k) load_mapped16(m + 4 * k, f.src[k] + VkDeviceSize(i) * f.src_stride[k]);
         if (i == 0 && f.instance && std::memcmp(f.sample, m, 48)) ++late;
+        if (i == 0 && f.log_key)
+          log("[bvh-draw] frame %llu mesh %016llx VS %016llx tris %u firstInstance %u instanceCount %u translation %.6f %.6f %.6f instance %u",
+              (unsigned long long)f.log_frame, (unsigned long long)f.log_key, (unsigned long long)f.log_vs, f.log_tris, f.log_first, f.count,
+              m[3], m[7], m[11], f.log_instance);
         bool ok = true;
         for (float v : m) ok = ok && v > -1e7f && v < 1e7f;
         if (ok) {

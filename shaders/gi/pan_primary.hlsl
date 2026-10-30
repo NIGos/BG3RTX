@@ -58,7 +58,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 P = ray_at(uv)*d;
   float dist = length(P), pa = pixel_angle(uv);
   RtCone cone = {0,pa};
-#ifdef RT_PRIMARY_EPOCH
+#if defined(RT_PRIMARY_EPOCH) || defined(RT_PRIMARY_IDENTITY)
   RtHit hit = rt_closest_hit(0.0.xxx,P/dist,dist*1.5+1.0,cone);
   const bool hit_alpha = hit.t >= 0 && alpha_instance(hit.inst,hit.geom);
 #else
@@ -73,6 +73,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // status: 0 absent, 1 opaque, 2 alpha hit, -1 miss/unknown.
   gAux[p] = float4(valid ? clamp((hit.t-dist)/tol,-65000.0,65000.0) : 0,
                    dist,tol,valid ? (hit_alpha ? 2 : 1) : -1);
+#ifdef RT_PRIMARY_IDENTITY
+  // Preserve residual/status; exact instance index bytes survive FP16 storage.
+  gAux[p].yz = float2(hit.inst & 255u, (hit.inst >> 8) & 255u);
+#endif
   uint bin = (p.x >> 3)*7+(p.y >> 3)*13;
 #ifdef RT_PRIMARY_EPOCH
   { // Keep primary/epoch checks with full per-ray alpha/light statistics off.

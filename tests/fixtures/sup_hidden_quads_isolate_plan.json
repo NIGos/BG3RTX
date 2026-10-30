@@ -1,0 +1,189 @@
+[
+  {
+    "seconds": 13,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 13,
+    "motion_end": 13
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 7,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 7,
+    "motion_end": 7,
+    "set": "rt_tlas_refit=1,rt_dyn_refit=1,rt_dyn_inplace=0,rt_mesh_capture=0,rt_mesh_draw_log=8"
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 2,
+    "serial": 890,
+    "motion_start": 13,
+    "motion_end": 13
+  },
+  {
+    "seconds": 7,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 7,
+    "motion_end": 7,
+    "set": "rt_tlas_refit=0,rt_mesh_draw_log=1"
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 2,
+    "serial": 891,
+    "motion_start": 13,
+    "motion_end": 13
+  },
+  {
+    "seconds": 7,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 7,
+    "motion_end": 7,
+    "set": "rt_tlas_refit=1,rt_dyn_refit=0"
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 2,
+    "serial": 892,
+    "motion_start": 13,
+    "motion_end": 13
+  },
+  {
+    "seconds": 7,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 7,
+    "motion_end": 7,
+    "set": "rt_dyn_refit=1,rt_dyn_inplace=1"
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 2,
+    "serial": 893,
+    "motion_start": 13,
+    "motion_end": 13
+  },
+  {
+    "seconds": 7,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 7,
+    "motion_end": 7,
+    "set": "rt_dyn_inplace=0"
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 2,
+    "serial": 894,
+    "motion_start": 13,
+    "motion_end": 13
+  },
+  {
+    "seconds": 7,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 7,
+    "motion_end": 7,
+    "set": "rt_mesh_capture=1"
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 2,
+    "serial": 895,
+    "motion_start": 13,
+    "motion_end": 13
+  },
+  {
+    "seconds": 7,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 7,
+    "motion_end": 7,
+    "set": "rt_mesh_capture=0,rt_mesh_audits=4096,rt_mesh_audit_frames=1"
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 2,
+    "serial": 896,
+    "motion_start": 13,
+    "motion_end": 13
+  }
+]
