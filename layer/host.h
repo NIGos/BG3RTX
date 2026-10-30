@@ -554,6 +554,7 @@ struct BvhResult {
 // `slot` (< kSceneSlots, retired on the GPU): the ring region and TLAS it writes.
 bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), uint32_t slot,
                BvhResult* out);
+bool bvh_omm_commit(VkCommandBuffer cmd,uint32_t slot,VkBuffer stamp,VkDeviceSize base,uint32_t generation,const uint32_t* mapped);
 void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 // Build records: work of ours recorded into a game command buffer counts only once
 // that buffer is submitted. The game can drop a recorded buffer (vkBeginCommandBuffer

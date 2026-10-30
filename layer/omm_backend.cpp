@@ -258,6 +258,7 @@ bool record_blas(VkCommandBuffer cmd,Ticket ticket,VkDeviceAddress vertices,VkDe
   opacity.usageCountsCount=uint32_t(r.usage.size());opacity.pUsageCounts=r.usage.data();
   VkAccelerationStructureGeometryKHR geometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
   geometry.geometryType=VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+  geometry.flags=VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
   geometry.geometry.triangles={VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,&opacity};
   auto& tri=geometry.geometry.triangles;tri.vertexFormat=VK_FORMAT_R32G32B32_SFLOAT;
   tri.vertexData.deviceAddress=vertices;tri.vertexStride=stride;tri.maxVertex=triangles*3u-1u;tri.indexType=VK_INDEX_TYPE_NONE_KHR;

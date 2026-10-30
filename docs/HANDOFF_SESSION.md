@@ -2,9 +2,10 @@
 
 Current isolated checkpoint: codex/omm-bake combines native Hair/Scalp camera
 coverage, coherent OMM epochs, native material factory/capture and ticket-owned
-attached BLAS. Both ABI-19 DLLs build, 31/31 CTests pass. Main remains unchanged.
+attached BLAS and GPU instance clone. Both ABI-19 DLLs build, 32/32 CTests pass.
+OMM descriptor/Core selection remains unwired; do not claim BG3 acceleration.
 See the top of PROGRESS_CODEX.md for exact commits/evidence and remaining gates.
-Hair/Scalp production GPU queries pass 27/27; Test1 live quality/cost is pending.
+Hair/Scalp/Pubes production GPU queries pass 37/37; live quality/cost is pending.
 Root owns static OMM material/BLAS integration; Sun agent owns current cascade
 scene/material dispatcher and all4 finite native domains. Sampler/factory proof
 is integrated; no new generic frameworks. Live tests remain user-coordinated.

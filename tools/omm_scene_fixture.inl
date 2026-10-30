@@ -15,6 +15,39 @@ static void scene_fixture(DeviceData& dd,VkCommandPool pool,const char* shaderPa
   Buffer rows,epochs,stamp;buffer(dd,rows,64,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);buffer(dd,epochs,64,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);buffer(dd,stamp,512,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
   VkCommandBufferAllocateInfo ca{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};ca.commandPool=pool;ca.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;ca.commandBufferCount=1;VkCommandBuffer cmd{};
   vkcheck(dd.vk.AllocateCommandBuffers(dd.device,&ca,&cmd),"scene command");omm::command_allocated(pool,cmd);
+  {
+    std::string path=shaderPath;const auto slash=path.find_last_of("/\\");
+    path=(slash==std::string::npos?std::string():path.substr(0,slash+1))+"scene-clone.spv";
+    std::ifstream file(path,std::ios::binary|std::ios::ate);check(bool(file),"production scene clone shader");
+    const auto length=file.tellg();check(length>0 && uint64_t(length)%4==0,"clone shader size");
+    std::vector<uint32_t> words(size_t(length)/4);file.seekg(0);file.read(reinterpret_cast<char*>(words.data()),length);
+    sm.codeSize=words.size()*4;sm.pCode=words.data();VkShaderModule cloneModule{};
+    vkcheck(dd.vk.CreateShaderModule(dd.device,&sm,nullptr,&cloneModule),"clone module");
+    pi.stage.module=cloneModule;VkPipeline clonePipeline{};vkcheck(dd.vk.CreateComputePipelines(dd.device,VK_NULL_HANDLE,1,&pi,nullptr,&clonePipeline),"clone pipeline");
+    Buffer original,copy,overrides;buffer(dd,original,128,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    buffer(dd,copy,128,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    buffer(dd,overrides,16,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    auto* native=static_cast<VkAccelerationStructureInstanceKHR*>(original.mapped);
+    std::memset(native,0,128);for(unsigned i=0;i<2;++i){native[i].transform.matrix[0][0]=native[i].transform.matrix[1][1]=native[i].transform.matrix[2][2]=1;native[i].instanceCustomIndex=17+i;native[i].mask=255-i;native[i].flags=VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;native[i].accelerationStructureReference=0x1000ull*(i+1);}
+    const uint64_t addresses[]={0,0x3000};std::memcpy(overrides.mapped,addresses,sizeof addresses);
+    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};vkcheck(dd.vk.BeginCommandBuffer(cmd,&begin),"clone begin");omm::command_begin(cmd);
+    const VkBufferCopy region{0,0,128};dd.vk.CmdCopyBuffer(cmd,original.handle,copy.handle,1,&region);
+    barrier(dd,cmd,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_SHADER_WRITE_BIT);
+    const VkDescriptorBufferInfo infos[]={{copy.handle,0,128},{overrides.handle,0,16},{stamp.handle,0,512}};VkWriteDescriptorSet writes[3]{};
+    for(unsigned i=0;i<3;++i){writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstBinding=i;writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=infos+i;}
+    const uint32_t push[]={2,0,0,0};dd.vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,clonePipeline);dd.vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,3,writes);dd.vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,16,push);dd.vk.CmdDispatch(cmd,1,1,1);
+    barrier(dd,cmd,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,VK_ACCESS_2_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
+    vkcheck(dd.vk.EndCommandBuffer(cmd),"clone end");omm::command_end(cmd,true);
+    // Mimic native matrix fixups AFTER recording, BEFORE the actual submission.
+    native[0].transform.matrix[0][3]=3.25f;native[1].transform.matrix[1][3]=-2.5f;
+    VkAccelerationStructureInstanceKHR expected[2];std::memcpy(expected,native,128);expected[1].accelerationStructureReference=addresses[1];
+    const VkCommandBuffer commands[]={cmd};const auto pending=omm::before_submit(&dd,commands);VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};submit.commandBufferCount=1;submit.pCommandBuffers=commands;
+    const auto sent=dd.vk.QueueSubmit(dd.graphics_queue,1,&submit,VK_NULL_HANDLE);omm::after_submit(&dd,dd.graphics_queue,pending,sent==VK_SUCCESS);vkcheck(sent,"clone submit");vkcheck(dd.vk.QueueWaitIdle(dd.graphics_queue),"clone actual completion");
+    check(std::memcmp(expected,copy.mapped,128)==0,"exact native late matrices/order/masks/IDs and only selected AS replacement");
+    vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"clone reset");omm::command_discard(cmd);
+    dd.vk.DestroyPipeline(dd.device,clonePipeline,nullptr);dd.vk.DestroyShaderModule(dd.device,cloneModule,nullptr);
+    std::puts("SCENE_CLONE instances=2 late_matrix_words=2 AS_replacements=1 preserved_bytes=120 failures=0; production shader, no game");
+  }
   const char* names[]={"current","stale_image","unrelated_write","disabled","invalid_bake","source_out_of_range","global_saturated","uninitialized_image","missing_rows","bad_generation","multiple_materials","second_material_stale","write_in_progress","global_advanced_before_image"};
   unsigned passed=0;
   for(unsigned test=0;test<std::size(names);++test){

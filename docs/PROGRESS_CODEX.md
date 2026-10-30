@@ -1,5 +1,34 @@
 # BG3RTX progress
 
+## Native material BLAS and same-frame scene clone prepared - 2026-10-30
+
+Both ABI-19 DLLs build; 32/32 CTests pass. Native static draw capture now feeds
+material-specific OMM baking, owned post-VS snapshots, attached BLAS and a
+separate GPU-cloned TLAS. Original Mesh.as and baseline instance order/material
+records remain intact. GPU clone preserves late native matrix updates and changes
+only selected AS addresses. Cache owner release supports pending/replayed commands.
+
+RTX 5090 combined probe: six rays with zero contradictions; three private
+snapshots / 216 exact copied bytes; two cloned instances with 120 untouched bytes
+and two late matrix updates preserved; 14 validator cases, eight feedback cases,
+2,176 UNORM / 8,704 BC endpoint checks; zero validation errors. Evidence:
+docs/evidence/omm-native-clone-20261030.txt. This is not a live BG3 quality gate.
+
+Retired-slot invalidation/rebake logic is prepared, with matching generation,
+recording, dispatch/storage limits and AS scratch dependencies. The actual
+alpha descriptor/reference bindings and Core accelerated-scene selection are
+NOT wired yet: OMM is not active in rendered BG3 queries. rt_omm stays default0;
+useful hardware-known coverage, same-ray violations, live energy/cost and FG2
+gates remain OPEN. No game launch, live settings change or GPU ms claim.
+
+Hair candidate now includes the two verified static Pubes recipes under existing
+rt_native_hair, with source-faithful FMA ordering, no new key/kind/ABI/stride.
+37/37 production GPU cases pass; 95 ordinary shaders remain byte-identical.
+Test1 face/strand quality and temporal/cost checks remain user-led after restart
+with both ABI-19 DLLs: rt_native_hair=1, rt_native_scalp=1, rt_alpha=1,
+rt_bvh_split=1, rt_omm=0. Keep RR/FG/light settings fixed; FG2 is deciding.
+Other native families and full solar coverage remain open; defaults stay off.
+
 ## Verified static Pubes coverage added - 2026-10-30, default off
 
 Two observed static Pubes shaders now use native dual-mask/root/strand coverage,

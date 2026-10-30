@@ -163,6 +163,7 @@ std::atomic<uint64_t> g_oldest_live{UINT64_MAX};
 bool slot_retired(const SceneSlot& s, uint64_t gpu_done, uint64_t now) {
   if (!s.used) return true;
   if (gpu_done >= s.last_use + 2) return true;
+  if (omm::has_resources()) return false; // OMM never substitutes frame age for completion.
   // No present fence completed for 240 frames (as defer_tick's fallback).
   return now >= s.last_use + 240;
 }

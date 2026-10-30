@@ -146,6 +146,8 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(omm_material_cache_test tests/omm_material_cache_test.cpp)
+add_test(NAME omm_material_cache_test COMMAND omm_material_cache_test)
 add_executable(omm_spatial_support_test tests/omm_spatial_support_test.cpp)
 add_test(NAME omm_spatial_support_test COMMAND omm_spatial_support_test)
 add_executable(omm_plain_bake_test tests/omm_plain_bake_test.cpp)
