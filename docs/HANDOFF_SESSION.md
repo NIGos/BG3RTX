@@ -1,100 +1,46 @@
-# Session handoff — P1 static PASS, motion INVALID, 2026-10-29
+# Session handoff — 2026-10-30 01:40 (supervisor, hands-on; no Codex, no subagents)
 
-Read AGENTS.md, then the top of PROGRESS_CODEX.md. No Ponytail or subagents.
-Read D:/BG3_Tools/USER_STEERING.md (two 13:57 entries and 14:29 authorization).
-FG 2 decides P1; FG 0 is reference only. The user sees the bug only with FG on.
+Read AGENTS.md, then the top of docs/PROGRESS_CODEX.md, then D:/BG3_Tools/USER_STEERING.md
+(newest entries first). The user decides by FG on (fg=2), real presentation, visible window.
 
-## Permission and checkout
+## Permission
 
-Latest user instruction authorizes visible/non-activating real-present FG jobs
-without USER_AWAY. Never force focus; skip USER_PLAYING or an unowned game.
-Never create USER_AWAY. Launch only scripts/test-queue.ps1; never hold results.md
-open. No source/binary/HEAD edits while a game job runs. Restore display settings.
-No saves, backups, snapshot tags, force-push or junction cleanup.
+Live jobs only through scripts/test-queue.ps1; visible unfocused FG jobs are allowed
+(14:29 authorization). Skip while USER_PLAYING exists or a game the runner did not launch
+runs. Never hold results.md open. No saves, backups, snapshot tags, force-push or junction
+cleanup. The launcher BG3RTX.exe, if left open, locks bin/BG3RTX.exe and breaks the build.
 
-Branch codex/p1-pan-flashes in the main workspace. Main still 58b06b4; no merge.
-Tested build c5a909c, ABI 16. Both fix defaults remain 0:
-- rt_scene_rebase (314840d): consistent translation between lighting and TLAS space
-  at all four ray-query entries. Native pool and dynamic XFB use camera-relative
-  world axes. The frame epoch of each instance row is not established.
-- fg_current_destroy_only (9bc8e70): historical-tag destruction no longer resets
-  FG stability; current input destruction still does. Fence retirement unchanged.
+## State (main a54da5a)
 
-Tool commits this continuation, pushed:
-92cc6ad authorized no-Away FG mode; fe17233 observe coverage in authorized mode;
-0a6a8cf native windowed extent; b5a2e87 cheap primary/epoch checks and recorded
-RT dispatch counts; c5a909c restore 6 GB trace budget.
+Defaults on since 2026-10-29: rt_scene_wait (now 12 ms), rt_dyn_hold=4,
+fg_current_destroy_only=1, rt_sun_roof_up 50 / pad 3, rt_prepass_by_ordinal=0,
+rt_cascade_alpha=0, rt_cascade_roofs_trust=0 (cascade casters themselves stay off by
+default; the user runs them on as "Roof sun shadows"). ls_box=0 (ls_box_unshadowed=0).
+Layer fixes of the night (in-world UI): RT scene prepass found per frame, not by ordinal;
+held alpha views checked for handle reuse; UI portraits no longer replace the G-buffer;
+rt_scene_wait resumes at once after a gap. Pan bursts keep all 16 'final' frames.
 
-## Actual queue results — stopped after invalid motion verdict
+## Measurement tools (D:/BG3_Tools/sup_scripts)
 
-QuickSave_3784, real presentation, window_mode=visible_unfocused_fg, FG 2 cold-load.
-No observed activation, client fully covered throughout, native windowed 3840x1600.
-Game closed, display restored, queue empty. Do not relaunch unchanged motion input.
+- sunmap.py out.png <burst dirs>: sun buffer after resolve (r RT, g game mask, b applied):
+  leak = applied lit where the game is dark, dark = applied dark where the game is lit.
+- flicker_final.py <burst dirs>: reprojected frame-to-frame change of the final image per
+  material class (4 = translucent/foliage, 8 = standard).
+- tflk.py (static) and buffers.py (rotation vs static) for the pre-RR buffers.
+- Fixtures tests/fixtures/sup-*-inn-fg2.json: save "The Blushing Mermaid - 96h 39m".
+  Never leave ls_stats=1 / rt_stats=1 in a cost job: their counters cost ~6.6 ms.
 
-Static p1-fg-static-effects.1.152122: PASS, 13 phases / 30 traces.
-FG 2 normal primary 99.5195-99.5215%, 18.7-18.8 rendered fps, ratio 2.00;
-FG 0 99.516%, 18.2 fps, ratio 1.00. No interior toggles. Sun/local/GI/reflection
-recorded 120/120 and RR GPU timing; no persistent debug parity differences.
-GI debug is black in both modes: parity only, not proof of visible GI energy.
-Composite writes debug diffuse into previous radiance; app dumps do not certify
-DLSS-G generated images. All five sheets under captures/p1-fg/static-effects-sheets.
+## Open (ranked)
 
-Motion p1-fg-motion-matrix.1.153616: analyzer FAIL, qualification INVALID.
-56-phase job deliberately stopped after 13 complete phases plus partial phase 13.
-Posted 60 px/s rotation has stationary windows and jumps up to 98.58 deg/frame.
-Baseline FG 2 median displayed/rendered 1.00, so sustained generation was absent.
-All sampled phases have active RT 120/120, none 0; missing unrun phase evidence
-is expected after stop, not an observed RT outage. No visible-flash certification.
-First negative FG 2 rotation, baseline / rebase / destroy-only:
-- match medians 21.299 / 85.984 / 20.5465%; static floor 99.501%
-- fps 26.0 / 25.3 / 26.6; displayed/rendered 1.000 / 1.163 / 1.412
-- options calls 5 / 3 / 1; interior mode changes 0 / 1 / 0
-FG 0 reference matches 17.434 / 75.819 / 15.887%, ratio 1.00.
-Different prior paths/views confound cross-variant median attribution.
+1. User re-check in game of the night's fixes (list at the top of PROGRESS_CODEX.md).
+2. Red square blocks on foliage with RR off: not reproduced since the scene-stall fixes.
+3. FG temporal artefact around in-world UI while the camera moves (also with RT off): the
+   game recreates its UI and hudless images often (~160 times in 4 minutes in one user
+   session); our tags follow. Not yet measured on generated frames.
+4. Face/skin flicker (P4 of the supervisor list): no repro data.
+5. Phase plan: OMM foliage (P4), EN2/D-EM gates and SHaRC v2 (P5), water (P6).
 
-6,106 retired-only destructions reset FG with guard off; 3,279 do not with guard on.
-Three current-role destructions still reset with guard off. No SDK focus-disable
-or crash exception. Guard policy does suppress real unnecessary resets, but neither
-candidate passes P1 and interior-toggle reduction is unproved. Defaults stay off.
-No merge and NOT ready for user check. Only merge-green if future valid gates pass.
+## Cost (inn upper floor, Ultra, FG 2, stats off)
 
-Retained sources: captures/queue/logs/<job names above>.{log,runner.txt,status.json}.
-Reports: captures/p1-fg/{static-effects-result,motion-gate-result}.json.
-Curated: docs/evidence/p1-fg-live-20261029.json, with 14 measured phase summaries.
-CloseMainWindow was deliberate; Invalid window handle followed during runner
-teardown, not a game crash/timeout. Earlier origin-rebase 242 s exit still unknown.
-
-## Next, bounded
-
-First repair or qualify background relative rotation input, without moving the
-physical cursor or forcing focus. PostMessage reaches the game, but controlled
-speed/direction is not established. Check relative mouse/warp semantics before
-changing renderer code. Preserve actual FG generation and >=18 fps requirements.
-Then run controlled FG-on static/rotation A/B; FG 0 remains reference only.
-The 56-phase fixtures/generator remain; jobs are not requeued after the verdict.
-
-New hypothesis: translation rebasing alone is insufficient. Residual pool/soup
-mismatch and scene/lighting pose separation are consistent with older native
-instance/dynamic geometry data or camera-buffer epoch mismatch. Exact frame lag
-and Reflex/FG causation remain unproved. Do not add another camera selector.
-App QueuePresent increments g_frame once; SL generated presents call next layer
-and update displayed counters, no app increment. New token/ReflexSleep follows
-app present; initialized FG 0 retains that path. No speculative Reflex fix.
-
-## Cost and checks
-
-Same FG-2 static debug phase, full per-ray stats off at 15:02:53 until 15:03:18:
-15.5 -> 19-20 fps, GI ~6.8 -> 0.379 ms, LS ~5.25 -> 0.530 ms. Full statistics
-have major cost; historical 15.040 vs 4.269 ms are not matched settings/scene/
-presentation. RR on in both. RT 2.872 ms is a mixed 300-frame interval.
-Source p1-fg-static-effects.1.145628.log. No isolated renderer regression claim.
-Primary/epoch checks now work with rt_stats/ls_stats/rf_stats=0, while ordinary
-shaders remain byte-identical. Recorded counts are commands, not per-ray totals.
-20 matrix/static/plan tests, 26 policy/geometry, 18 camera/permission checks pass.
-Prior build 7 CTests, 21 ordinary shader identities, 20 variants passed.
-
-Default visible_unfocused stays FG 0 only and requires USER_AWAY. Explicit
-visible_unfocused_fg preserves FG 2/0 and follows latest no-Away authorization;
-it uses SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE and HWND_BOTTOM, no focus setter.
-Native windowed extent avoids UI/hudless 3840x1600 vs borderless swapchain
-3840x2160 mismatch. Coverage/foreground are observed, not aborted in that mode.
+Local-light shadows 0.93 ms (Fast 0.75); rt passes 1.2 ms; scene build 2.6-2.9 ms;
+RR 2.4 ms. rt_fast_trace=1 gives no trace gain and +0.3 ms build.
