@@ -1,5 +1,17 @@
 # BG3RTX progress
 
+## OMM renderer selection wired offline - 2026-10-30
+
+Default-off rt_omm now reaches the renderer in the isolated candidate: alpha
+reference/epoch bindings, generation-checked fast/reference tuples and per-command
+ticket/feedback registration in GI, Sun, local, reflection and SHaRC dispatches.
+Old-core/key-off/reference cases retain baseline scenes. Failed dispatches no
+longer claim stale output as fresh; GI falls back to the current screen trace.
+ABI stays 19; both DLLs build and 37/37 CTests pass. Full shader gate is running
+following the Windows include-path correction. No game/GPU run or cost claim.
+Useful known coverage, same-ray comparison and live quality/energy/cost remain
+OPEN. All-UNKNOWN/missing RT cannot pass. See P4_OMM.md for the exact contract.
+
 ## Rendering program: verified isolated composition - 2026-10-30
 
 Full M0-M6 plan remains active. No live grant exists. Main stays at 92183e7;

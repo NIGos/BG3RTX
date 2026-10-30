@@ -663,6 +663,9 @@ bool bvh_build_sun_clone(VkCommandBuffer cmd, uint32_t slot, const BvhSunBase& b
 // `slot` (< kSceneSlots, retired on the GPU): the ring region and TLAS it writes.
 bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), uint32_t slot,
                BvhResult* out);
+VkAccelerationStructureKHR bvh_omm_scene(uint32_t slot,VkAccelerationStructureKHR reference);
+bool bvh_omm_use(VkCommandBuffer cmd,uint32_t slot,VkAccelerationStructureKHR selected,uint64_t* identity);
+bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkAccelerationStructureKHR* reference,uint64_t* identity);
 bool bvh_omm_commit(VkCommandBuffer cmd,uint32_t slot,VkBuffer stamp,VkDeviceSize base,uint32_t generation,const uint32_t* mapped);
 void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 // Build records: work of ours recorded into a game command buffer counts only once
@@ -795,10 +798,12 @@ struct AlphaBindings {
   VkDeviceSize pool_bytes;
   VkBuffer camera = VK_NULL_HANDLE;
   VkDeviceSize camera_offset = 0;
+  VkAccelerationStructureKHR reference_tlas = VK_NULL_HANDLE;
 };
 // Writes set `slot` (< kSceneSlots, retired on the GPU) and its record region;
 // returns that set (VK_NULL_HANDLE when alpha testing is off).
 VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& b, uint32_t slot);
+bool alpha_omm_commit(VkCommandBuffer cmd,uint32_t slot);
 struct AlphaSunClone {
   VkDescriptorSet set = VK_NULL_HANDLE;
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;

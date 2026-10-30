@@ -147,6 +147,8 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(omm_scene_binding_test tests/omm_scene_binding_test.cpp)
+add_test(NAME omm_scene_binding_test COMMAND omm_scene_binding_test)
 add_executable(native_vt_surface_test tests/native_vt_surface_test.cpp)
 add_test(NAME native_vt_surface_test COMMAND native_vt_surface_test)
 add_executable(omm_material_cache_test tests/omm_material_cache_test.cpp)

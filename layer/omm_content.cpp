@@ -107,6 +107,11 @@ void content_device_destroyed(DeviceData* dd){
   if(recorded)dd->vk.DeviceWaitIdle(dd->device);
   cleanup();owner=nullptr;families.clear();
 }
+bool content_buffer(DeviceData* dd,VkBuffer* out,VkDeviceSize* size){
+  if(!out || !size)return false;*out=VK_NULL_HANDLE;*size=0;
+  std::lock_guard lock(contentMutex);if(dd!=owner || !counters || !bytes)return false;
+  *out=counters;*size=bytes;return true;
+}
 void content_image_created(DeviceData* dd,VkImage image,const VkImageCreateInfo& info){if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);registry.create(key(image),policy(info),info.mipLevels,uint32_t(info.format),certificate(info.format));}
 void content_image_destroyed(DeviceData* dd,VkImage image){if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);registry.destroy(key(image));imageMemory.erase(image);}
 void content_view_created(DeviceData* dd,VkImageView view,const VkImageViewCreateInfo& info){

@@ -26,6 +26,9 @@ void content_view_destroyed(DeviceData*,VkImageView);
 void content_memory_allocated(DeviceData*,VkDeviceMemory,const VkMemoryAllocateInfo&);
 void content_memory_freed(DeviceData*,VkDeviceMemory);
 void content_image_bound(DeviceData*,VkImage,VkDeviceMemory,bool simpleBinding);
+// Descriptor binding only: returns the live device counter buffer even after a
+// CPU proof failure. This does not certify any source content.
+bool content_buffer(DeviceData*,VkBuffer*,VkDeviceSize*);
 bool content_source(VkImage,ContentSource&);
 // Sampled view proof: image identity alone does NOT certify view mip semantics.
 bool content_source_view(VkImageView,ContentSource&);

@@ -17,11 +17,14 @@
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "core.h"
 #include "../common/camera_motion.h"
 #include "../common/native_scalp_capability.h"
+#include "../common/omm_scene_capability.h"
+#include "../common/omm_scene_binding.h"
 #include "ls_lights.h"
 #include "sharc.h"
 #include "sun_trust.h"
@@ -40,6 +43,7 @@
 namespace {
 
 struct Snapshot {
+  uint64_t omm_identity=0;
   Bg3Binding cam, vp, nrm, alb, mat, dep, ao, shadow, dif, spe;
   // D-LS: the lighting's light list (set 1 b0, b13, b23, b24, b25, b39, b40, b41; set 0 b2).
   Bg3Binding l_flags, l_scale, l_clusters, l_index, l_lights, l_consts, l_shadows, l_atlas, l_cam2;
@@ -75,12 +79,15 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
-  // Variant bits: 1 origin rebase, 2 cascade masks, 4 scalp-capable records.
-  VkPipeline variants[8] = {};
-  uint64_t variant_generations[8] = {};
-  std::string variant_files[8];
+  // Variant bits: 1 rebase, 2 cascade, 4 scalp, 8 OMM scene/reference bindings.
+  VkPipeline variants[16] = {};
+  uint64_t variant_generations[16] = {};
+  std::string variant_files[16];
   bool rebased = false;
 };
+
+// Bound pipeline capability, including a first-frame capability publication race.
+std::unordered_set<VkPipeline> g_omm_pipelines;
 
 struct Push {
   uint32_t full[2], half[2];
@@ -693,11 +700,14 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
                                : rebase ? std::string("gi/rebase/") + (file + 3)
                                         : std::string(file);
   const std::string material_selected = scalp ? "native_scalp/" + base : base;
-  const std::string selected = &p == &g_rt_shadow_current ? "sun_current/" + material_selected : material_selected;
-  const unsigned variant = (rebase ? 1u : 0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u);
+  const std::string scene_selected = &p == &g_rt_shadow_current ? "sun_current/" + material_selected : material_selected;
+  const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
+  if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
+  const std::string selected=omm?"omm/"+scene_selected:scene_selected;
+  const unsigned variant = (rebase ? 1u : 0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
-  if (scalp) p.pipeline = p.variants[variant];
+  if (scalp || omm) p.pipeline = p.variants[variant];
   Bg3ShaderBlob blob{};
   if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
   if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
@@ -725,6 +735,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     host->log("gi: %s pipeline creation failed; keeping the previous one", file);
     return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
   }
+  g_omm_pipelines.erase(p.variants[variant]);
+  if(omm)g_omm_pipelines.insert(np);
   host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.variants[variant]);
   p.variants[variant] = np;
   p.variant_generations[variant] = blob.generation;
@@ -759,6 +771,7 @@ void image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImag
 
 // Everything the passes need, bound through one push-descriptor layout.
 struct Bound {
+  uint64_t omm_identity=0;
   VkDescriptorBufferInfo cam, vp, stats;
   VkDescriptorBufferInfo ls_buf[8];
   VkDescriptorImageInfo ls_atlas;
@@ -1198,6 +1211,7 @@ void bind_rt(Bound& b, VkAccelerationStructureKHR tlas, VkDescriptorSet alpha) {
 }
 
 void bind_all(Bound& b, const Snapshot& s) {
+  b.omm_identity=s.omm_identity;
   Bg3Image& hin = g_hist[g_parity];
   Bg3Image& hout = g_hist[g_parity ^ 1];
   Bg3Image& din = g_hist_depth[g_parity];
@@ -1344,9 +1358,21 @@ Push make_push() {
   return pc;
 }
 
-void dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w, uint32_t h, bool rt = false,
+bg3::omm::SceneBinding<VkAccelerationStructureKHR> prepare_omm_traversal(VkCommandBuffer cmd,Bound& b,VkPipeline pipeline,bool active=true){
+  const bool required=active && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
+  return bg3::omm::SceneBinding<VkAccelerationStructureKHR>(b.tlas,required,[&](auto selected,auto& reference,uint64_t& identity){
+    const bool fast=host->rt_omm_scene_reference && host->rt_omm_scene_reference(cmd,selected,&reference,&identity);
+    if(!reference || (fast && !identity))host->log("[omm scene] traversal tuple unavailable; dispatch rejected (not a quality pass)");
+    return fast && g_omm_pipelines.contains(pipeline);
+  },b.omm_identity);
+}
+
+bool dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w, uint32_t h, bool rt = false,
                VkPipelineLayout private_layout=VK_NULL_HANDLE) {
   const VkDeviceFuncs& vk = *host->vk;
+  if(!p.pipeline)return false;
+  auto traversal=prepare_omm_traversal(cmd,b,p.pipeline,rt && &p!=&g_rt_shadow_current);
+  if(!traversal.valid())return false;
   VkPipelineLayout layout = private_layout?private_layout:rt ? g_rt_layout : g_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p.pipeline);
   VkWriteDescriptorSet wr[kLsBindings + kNumExtras];
@@ -1354,6 +1380,7 @@ void dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w
   if (rt) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 1, &b.alpha, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
+  return true;
 }
 
 constexpr VkPipelineStageFlags kCS = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
@@ -1398,8 +1425,11 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
   return set;
 }
 
-void ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet sun, VkPipeline pipe, uint32_t gx,
+bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet sun, VkPipeline pipe, uint32_t gx,
                  uint32_t gy, const Snapshot* box = nullptr) {
+  if(!pipe)return false;
+  auto traversal=prepare_omm_traversal(cmd,b,pipe);
+  if(!traversal.valid())return false;
   const VkDeviceFuncs& vk = *host->vk;
   const VkPipelineLayout layout = box ? g_ls_box_layout : g_ls_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
@@ -1411,11 +1441,15 @@ void ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
                                    box->game_set1_ndyn, box->game_set1_ndyn ? box->game_set1_dyn : nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, gx, gy, 1);
+  return true;
 }
 
 // D-RF: push set 0 (bindings 0-30), the host's set 1, the game's lighting set 1 as set 2.
 // With rf_sharc: the variant reading the radiance cache, its layout adding set 4.
-void rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& pc) {
+bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& pc) {
+  if(!(s.rf_sharc?g_rf_sharc.pipeline:g_rf.pipeline))return false;
+  auto traversal=prepare_omm_traversal(cmd,b,s.rf_sharc?g_rf_sharc.pipeline:g_rf.pipeline);
+  if(!traversal.valid())return false;
   const VkDeviceFuncs& vk = *host->vk;
   const VkPipelineLayout layout = s.rf_sharc ? g_rf_sharc_layout : g_rf_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.rf_sharc ? g_rf_sharc.pipeline : g_rf.pipeline);
@@ -1427,10 +1461,14 @@ void rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
   if (s.rf_sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  return true;
 }
 
 // SHaRC passes: the ray-traced push set 0, the host's set 1, the cache's set 4; `gx`, `gy` groups.
-void sharc_dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, VkDescriptorSet set, uint32_t gx, uint32_t gy) {
+bool sharc_dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, VkDescriptorSet set, uint32_t gx, uint32_t gy) {
+  if(!p.pipeline)return false;
+  auto traversal=prepare_omm_traversal(cmd,b,p.pipeline);
+  if(!traversal.valid())return false;
   const VkDeviceFuncs& vk = *host->vk;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p.pipeline);
   VkWriteDescriptorSet wr[kLsBindings + kNumExtras];
@@ -1439,6 +1477,7 @@ void sharc_dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, VkDe
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_rt_sharc_layout, 4, 1, &set, 0, nullptr);
   vk.CmdPushConstants(cmd, g_rt_sharc_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, gx, gy, 1);
+  return true;
 }
 
 // D-RF pass alone, 2 timestamps per frame, medians over 300 frames.
@@ -1546,7 +1585,8 @@ void ls_timing_collect() {
 // usually stamped one frame earlier. The TLAS and set 1 come as one pair from
 // the same host snapshot (rt_scene_set, ABI 8): the passes never trace one
 // build's TLAS with another's InstInfo, records, soup or pool.
-VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha) {
+VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity) {
+  *omm_identity=0;
   if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 1) &&
                           !host->cfg_int("rt_local_shadows", 1) && !host->cfg_int("rt_reflections", 1)))
     return VK_NULL_HANDLE;
@@ -1559,6 +1599,12 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha) 
   if (!scene_ok || !tlas || (!matched && built + 1 < now) || !*alpha) {
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
+  }
+  if(bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))))){
+    VkAccelerationStructureKHR reference{};
+    const bool fast=host->rt_omm_scene_reference && host->rt_omm_scene_reference(cmd,tlas,&reference,omm_identity);
+    if(!reference || !*omm_identity){++g_rt_frames_missing;return VK_NULL_HANDLE;}
+    if(!fast)tlas=reference;
   }
   ++(built == now ? g_rt_frames_traced : g_rt_frames_stale);
   if (host->cfg_int("rt_order_trace", 0) > 0 && now > 600 && now % 600 < uint64_t(host->cfg_int("rt_order_trace", 0)))
@@ -1612,7 +1658,9 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   mat_bits(pc, s, false);
   // Track D: the frame's TLAS for the ray-traced passes.
   VkDescriptorSet alpha = VK_NULL_HANDLE;
-  VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha);
+  s.omm_identity=0;
+  VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha,&s.omm_identity);
+  b.omm_identity=s.omm_identity;
   if (tlas && (!ensure_rt_layout() || !refresh(g_rt_shadow, "gi/rt_shadow.hlsl", g_rt_layout) ||
                !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) || !refresh(g_rt_ao, "gi/rt_ao.hlsl", g_rt_layout) ||
                !refresh(g_trace_rt, "gi/gi_trace_rt.hlsl", g_rt_layout) ||
@@ -1713,13 +1761,13 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // Robust ray origins first: every ray-traced pass (and D-LS after the lighting) reads them.
   if (tlas && pc.rt_origin != 0) {
     rt_begin();
-    dispatch(cmd, g_rt_origin, b, pc, g_w, g_h, true);
+    if(!dispatch(cmd, g_rt_origin, b, pc, g_w, g_h, true))return false;
     memory_barrier(cmd, kCS, kCS);
   }
   if ((s.pan || host->cfg_int("rt_primary_check", 0)) && tlas &&
       refresh(g_pan_primary, host->cfg_int("rt_primary_identity",0) ? "gi/pan_primary_identity.hlsl" :
               host->cfg_int("rt_primary_epoch",0) ? "gi/pan_primary_epoch.hlsl" : "gi/pan_primary.hlsl", g_rt_layout)) {
-    dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true);
+    if(!dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true))return false;
     Bg3Binding im{};
     im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
@@ -1730,7 +1778,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   if (s.sharc) {
     rt_begin();
     sharc_timestamp(cmd, 0);
-    sharc_dispatch(cmd, g_sharc_resolve, b, pc, s.sh.set, s.sh.resolve_groups[0], s.sh.resolve_groups[1]);
+    if(!sharc_dispatch(cmd, g_sharc_resolve, b, pc, s.sh.set, s.sh.resolve_groups[0], s.sh.resolve_groups[1])){sharc_end(cmd);s.sharc=false;s.rf_sharc=false;}
     sharc_timestamp(cmd, 1);
     memory_barrier(cmd, kCS, kCS);
   }
@@ -1743,13 +1791,13 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     trace_timestamp(cmd, 0);
     if (gi_rt) {
       rt_begin();
-      if (s.sharc) sharc_dispatch(cmd, g_trace_rt_sharc, b, pc, s.sh.set, (g_hw + 7) / 8, (g_hh + 7) / 8);
-      else dispatch(cmd, g_trace_rt, b, pc, g_hw, g_hh, true);
-      s.rt_gi_applied = true;
+      s.rt_gi_applied=s.sharc?sharc_dispatch(cmd,g_trace_rt_sharc,b,pc,s.sh.set,(g_hw+7)/8,(g_hh+7)/8):
+                                  dispatch(cmd,g_trace_rt,b,pc,g_hw,g_hh,true);
+      if(!s.rt_gi_applied){if(s.sharc)sharc_end(cmd);s.sharc=false;s.rf_sharc=false;dispatch(cmd,g_trace,b,pc,g_hw,g_hh);}
     } else {
       dispatch(cmd, g_trace, b, pc, g_hw, g_hh);
     }
-    trace_timestamp(cmd, 1, gi_rt);
+    trace_timestamp(cmd, 1, s.rt_gi_applied);
     memory_barrier(cmd, kCS, kCS);
     if (rt_ao) {
       // Ray-traced visibility replaces the screen-space one before accumulation.
@@ -1771,7 +1819,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // screen-space contact shadows; both fold into the game's sun shadow mask.
   s.tlas = tlas;   // the post pass's debug views
   s.alpha = alpha;
-  s.rt_sun = rt_shadows;
+  s.rt_sun = false;
   if (rt_shadows) {
     rt_begin();
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
@@ -1784,21 +1832,21 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     if(use_current) {
       const auto original_tlas=b.tlas;const auto original_alpha=b.alpha;
       bind_rt(b,current_sun.tlas,current_sun.alpha_set);
-      dispatch(cmd,g_rt_shadow_current,b,pc,g_w,g_h,true,g_current_sun_layout);
+      s.rt_sun=dispatch(cmd,g_rt_shadow_current,b,pc,g_w,g_h,true,g_current_sun_layout);
       bind_rt(b,original_tlas,original_alpha);
     } else {
       auto fallback=pc;
       if(current_requested) fallback.rt_strength=0; // exact native mask, never an unsupported opaque substitute
-      dispatch(cmd,g_rt_shadow,b,fallback,g_w,g_h,true);
+      s.rt_sun=dispatch(cmd,g_rt_shadow,b,fallback,g_w,g_h,true) && !current_requested;
     }
-    if ((use_current || (!current_requested && g_sunt.replace)) && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
+    if (s.rt_sun && (use_current || (!current_requested && g_sunt.replace)) && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
         refresh(g_sun_resolve, "gi/rt_sun_resolve.hlsl", g_rt_layout)) {
       memory_barrier(cmd, kCS, kCS);
-      dispatch(cmd, g_sun_resolve, b, pc, g_w, g_h, true);
+      s.rt_sun=dispatch(cmd, g_sun_resolve, b, pc, g_w, g_h, true);
     }
     sunt_end(cmd);
     image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
-    if (s.pan) {
+    if (s.pan && s.rt_sun) {
       Bg3Binding im{};
       im.image = g_rt_vis.image; im.format = VK_FORMAT_R8G8B8A8_UNORM;
       im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
@@ -1886,9 +1934,10 @@ void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
     const uint32_t st = (std::max)(uint32_t(host->cfg_int("sharc_inject_stride", 2)), 1u);
     const uint32_t bw = (g_w + st - 1) / st, bh = (g_h + st - 1) / st;
     sharc_timestamp(cmd, 2);
-    sharc_dispatch(cmd, inj, b, pc, s.sh.set, (bw + 7) / 8, (bh + 7) / 8);
+    const bool injected=sharc_dispatch(cmd, inj, b, pc, s.sh.set, (bw + 7) / 8, (bh + 7) / 8);
     sharc_timestamp(cmd, 3);
     if (fx_image && fx_in != fx_from) image_layout(cmd, fx_image, fx_in, fx_from, kCS, kAll);
+    if(!injected){sharc_end(cmd);return;}
     memory_barrier(cmd, kCS, kCS);
   }
   // Views (sharc_debug 1-6); 5, the QA roof mask, needs rt_sun_replace's roof volumes (binding 47).
@@ -1940,7 +1989,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       lp.ls_flags |= host->cfg_int("ls_lights", 1) ? 1u : 0u;
       Push mp = lp;
       mp.ls_pass = host->cfg_int("ls_check", 0) ? 1u : 0u;   // the join's own check (rtStats 84-85)
-      ls_dispatch(cmd, lb, mp, sun, g_ls_match.pipeline, kLslSlots / 64, 1);
+      if(!ls_dispatch(cmd, lb, mp, sun, g_ls_match.pipeline, kLslSlots / 64, 1))lp.ls_flags &= ~1u;
       memory_barrier(cmd, kCS, kCS);
     }
     ls_timestamp(cmd, 1);
@@ -1986,9 +2035,8 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       g_ls_ms.clear();g_ls_join_ms.clear();
     }
     if (s.pan && refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout)) lsp = g_pan_ls.pipeline;
-    if (lsp) ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8, box ? &s : nullptr);
-    local_applied=true;
-    if (s.pan) {
+    local_applied=lsp && ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8, box ? &s : nullptr);
+    if (s.pan && local_applied) {
       Bg3Binding im{};
       im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
       im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
@@ -2028,13 +2076,13 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     bool mv_move = rp.has_mv && g_mv_image && g_mv_layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     if (mv_move) image_layout(cmd, g_mv_image, g_mv_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, kAll, kCS);
     rf_timestamp(cmd, 0);
-    rf_dispatch(cmd, rb, s, rp);
-    reflection_applied=true;
+    reflection_applied=rf_dispatch(cmd, rb, s, rp);
     rf_timestamp(cmd, 1);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
     if (host->set_spec_hit_distance)
-      host->set_spec_hit_distance(g_rf_hit.image, g_rf_hit.view, VK_FORMAT_R16_SFLOAT, g_w, g_h);
+      host->set_spec_hit_distance(reflection_applied?g_rf_hit.image:VK_NULL_HANDLE,reflection_applied?g_rf_hit.view:VK_NULL_HANDLE,
+                                  reflection_applied?VK_FORMAT_R16_SFLOAT:VK_FORMAT_UNDEFINED,reflection_applied?g_w:0,reflection_applied?g_h:0);
     if (!g_rf_logged) {
       g_rf_logged = true;
       host->log("rf: first frame at %ux%u; lighting set 1 %p layout %p (%u dynamic offsets), validate %d", g_w, g_h,
@@ -2063,7 +2111,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 8) {
     memory_barrier(cmd, kCS, kCS);
     bind_rt(b, s.tlas, s.alpha);
-    dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);
+    if(!dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true))return;
   }
   // Capture after the RT debug overlay so debug 8 bursts contain its QA encoding.
   if (s.pan) host->pan_capture(cmd, "diffuse", &s.dif);
@@ -2213,6 +2261,8 @@ void gi_on_cmd_end(VkCommandBuffer cmd) { flush(cmd); }
 void gi_on_frame(uint64_t) {}
 
 void gi_release() {
+  g_omm_pipelines.clear();
+  bg3::omm::release_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   std::lock_guard<std::mutex> lock(g_mu);
   release_images();
   lsl_release();

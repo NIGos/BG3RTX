@@ -23,6 +23,9 @@
 #include "../common/native_scalp_coverage.h"
 #include "../common/native_scalp_capability.h"
 #include "../common/native_hair.h"
+#include "../common/omm_scene_capability.h"
+#include "omm_backend.h"
+#include "omm_content.h"
 
 #include <algorithm>
 #include <cstring>
@@ -45,6 +48,7 @@ constexpr VkDeviceSize kRegion = 16 + VkDeviceSize(kMaxRecords) * sizeof(AlphaRe
 
 DeviceData* g_dd = nullptr;
 bool g_on = false;
+bool g_omm_layout = false;
 std::atomic<uint32_t> g_stale_views{0};   // held alpha records dropped: a view was destroyed/reused
 std::mutex g_mu;
 std::unordered_map<uint64_t, AlphaFs> g_table;
@@ -280,7 +284,8 @@ void alpha_device_created(DeviceData* dd) {
   bool ok = vk.CreateSampler(dd->device, &si, nullptr, &g_wrap) == VK_SUCCESS;
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   ok = ok && vk.CreateSampler(dd->device, &si, nullptr, &g_clamp) == VK_SUCCESS;
-  VkDescriptorSetLayoutBinding b[10] = {
+  g_omm_layout=omm::available_for(dd) || omm::scene_capability(static_cast<uint32_t*>(persist(omm::scene_capability_key,sizeof(uint32_t))));
+  VkDescriptorSetLayoutBinding b[12] = {
       {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},   // scene stamp
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -290,17 +295,20 @@ void alpha_device_created(DeviceData* dd) {
       {2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kTextures, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kCaches, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {4, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_wrap},
-      {5, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_clamp}};
+      {5, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_clamp},
+      {10,VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.bindingCount = 10;
+  dci.bindingCount = g_omm_layout?12u:10u;
   dci.pBindings = b;
   ok = ok && vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) == VK_SUCCESS;
-  VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6 * kRing},
+  VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, (g_omm_layout?7u:6u) * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches) * kRing},
-                                {VK_DESCRIPTOR_TYPE_SAMPLER, 2 * kRing}};
+                                {VK_DESCRIPTOR_TYPE_SAMPLER, 2 * kRing},
+                                {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,kRing}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   pci.maxSets = kRing;
-  pci.poolSizeCount = 3;
+  pci.poolSizeCount = g_omm_layout?4u:3u;
   pci.pPoolSizes = ps;
   ok = ok && vk.CreateDescriptorPool(dd->device, &pci, nullptr, &g_pool) == VK_SUCCESS;
   VkDescriptorSetLayout layouts[kRing];
@@ -770,6 +778,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
                                                stamp_base + kStampCameraOffset);
   const uint32_t gpu_stamp[2] = {g_stamp_gen, pose_ok ? g_stamp_gen : 0};
   vk.CmdUpdateBuffer(cmd, g_stamp_buf, stamp_base + 4, sizeof gpu_stamp, gpu_stamp);
+  if(g_omm_layout)vk.CmdFillBuffer(cmd,g_stamp_buf,stamp_base+128u,32u,0u);
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
   vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr,
@@ -833,6 +842,22 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   w[2].descriptorCount = ntex, w[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[2].pImageInfo = tex.data();
   w[3].descriptorCount = ncache, w[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[3].pImageInfo = cache.data();
   vk.UpdateDescriptorSets(g_dd->device, 8, w, 0, nullptr);
+  if(g_omm_layout){
+    // No capable shader may execute before both additional bindings are valid.
+    if(!ab.reference_tlas)return VK_NULL_HANDLE;
+    VkBuffer epochs{};VkDeviceSize epoch_bytes{};
+    omm::content_buffer(g_dd,&epochs,&epoch_bytes);
+    VkDescriptorBufferInfo epoch{epochs?epochs:g_dummy_buf,0,epochs?epoch_bytes:256};
+    VkWriteDescriptorSetAccelerationStructureKHR as{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
+    as.accelerationStructureCount=1;as.pAccelerationStructures=&ab.reference_tlas;
+    VkWriteDescriptorSet extra[2]{};
+    extra[0]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,&as};extra[0].dstSet=g_sets[slot];extra[0].dstBinding=10;
+    extra[0].descriptorCount=1;extra[0].descriptorType=VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    extra[1]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};extra[1].dstSet=g_sets[slot];extra[1].dstBinding=11;
+    extra[1].descriptorCount=1;extra[1].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;extra[1].pBufferInfo=&epoch;
+    vk.UpdateDescriptorSets(g_dd->device,2,extra,0,nullptr);
+    omm::publish_scene_capability(static_cast<uint32_t*>(persist(omm::scene_capability_key,sizeof(uint32_t))));
+  }
   g_current = int(slot);
 
   ++g_frames;
@@ -912,6 +937,18 @@ bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set) {
   uint64_t built;
   if (!rt_scene_set(&tlas, set, &built)) *set = VK_NULL_HANDLE;
   return true;
+}
+
+// Called after alpha_commit releases its mutex: BVH capture uses the opposite
+// BVH -> alpha lock order. The retired SceneSlot gives exclusive stamp ownership.
+bool alpha_omm_commit(VkCommandBuffer cmd,uint32_t slot){
+  VkBuffer stamp{};const uint32_t* mapped{};uint32_t generation{};
+  {
+    std::lock_guard lock(g_mu);
+    if(!g_on || !g_omm_layout || slot>=kRing || !g_stamp_map)return false;
+    stamp=g_stamp_buf;mapped=g_stamp_map+VkDeviceSize(slot)*kStampStride/4;generation=mapped[0];
+  }
+  return bvh_omm_commit(cmd,slot,stamp,VkDeviceSize(slot)*kStampStride,generation,mapped);
 }
 
 bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet selected_alpha,

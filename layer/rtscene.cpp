@@ -27,6 +27,7 @@
 #include "host.h"
 #include "omm_backend.h"
 #include "omm_submit.h"
+#include "../common/omm_scene_capability.h"
 #include "omm_content.h"
 #include "omm_sampler.h"
 #include "omm_bake.h"
@@ -128,6 +129,7 @@ struct SceneSlot {
   bool used = false;
   uint64_t built = 0, last_use = 0;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+  VkAccelerationStructureKHR omm_reference = VK_NULL_HANDLE;
   VkDescriptorSet set = VK_NULL_HANDLE;
   bool split = false;
   uint64_t rec = 0;   // build record of the command buffer it was recorded into (bvhsplit.cpp)
@@ -207,6 +209,7 @@ void commit_scene_slot(int slot, VkAccelerationStructureKHR tlas, VkDescriptorSe
   s.rec = rec;
   s.built = s.last_use = frame_index();
   s.tlas = tlas;
+  s.omm_reference=VK_NULL_HANDLE;
   s.set = set;
   s.split = split;
   g_scene_cur = slot;
@@ -1068,7 +1071,10 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
                      cap.xfb_size, stride, true, res.info, res.info_off, res.info_bytes, res.pool, res.pool_bytes};
     ab.camera = cap.ubo;
     ab.camera_offset = cap.ubo_offset;
+    ab.reference_tlas=res.tlas;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
+    if(set)alpha_omm_commit(cmd,uint32_t(scene_slot));
+    restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
     if (cpu_t) {
       const double t2 = qpc_ms();
       g_bcpu.bvh += t_bvh1 - t_bvh0;
@@ -1081,7 +1087,9 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     }
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
-    commit_scene_slot(scene_slot, res.tlas, set, true, res.rec);
+    const auto accelerated=set?bvh_omm_scene(uint32_t(scene_slot),res.tlas):VK_NULL_HANDLE;
+    commit_scene_slot(scene_slot, accelerated?accelerated:res.tlas, set, true, res.rec);
+    if(accelerated)scene.omm_reference=res.tlas;
     scene.camera = cap.ubo;
     scene.camera_offset = cap.ubo_offset;
     std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
@@ -1128,6 +1136,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
                    cap.xfb_size, stride, false, info, 0, info_bytes, VK_NULL_HANDLE, 0};
   ab.camera = cap.ubo;
   ab.camera_offset = cap.ubo_offset;
+  ab.reference_tlas=g_tlas;
   const VkDescriptorSet legacy_set = alpha_commit(cmd, ab, uint32_t(scene_slot));
   int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
   // A refit reads the BLAS: only if its last build's command buffer was submitted.
@@ -1260,7 +1269,7 @@ bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* 
     log("[order] hand out slot %d built %llu now %llu tid %lu", slot, (unsigned long long)s.built,
         (unsigned long long)now, GetCurrentThreadId());
   alpha_slot_in_use(uint32_t(slot), now);   // the set's game views live while it may be bound
-  *tlas = s.tlas;
+  *tlas = s.omm_reference && (!cfg_int("rt_omm",0) || !omm::scene_consumer(static_cast<uint32_t*>(persist(omm::scene_capability_key,sizeof(uint32_t)))))?s.omm_reference:s.tlas;
   if (set) *set = s.set;
   *built_frame = s.built;
   return true;
@@ -1360,6 +1369,24 @@ bool rt_scene_camera(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas, VkDe
   return matched >= 0 && hand_out(tlas, set, built_frame, matched, true);
 }
 
+bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkAccelerationStructureKHR* reference,uint64_t* identity){
+  if(!reference || !identity)return false;const uint64_t expected=*identity;*reference=VK_NULL_HANDLE;*identity=0;
+  if(!g_rt || !selected || !cmd)return false;
+  std::lock_guard lock(g_mu);
+  for(uint32_t i=0;i<kSceneSlots;++i){
+    SceneSlot& s=g_scene[i];
+    if(!s.used || (expected && expected!=s.rec) || (s.tlas!=selected && s.omm_reference!=selected) ||
+       slot_retired(s,life_gpu_done(),frame_index()) || bvh_rec_state(s.rec)==2)continue;
+    *reference=s.omm_reference?s.omm_reference:s.tlas;*identity=s.rec;
+    s.last_use=(std::max)(s.last_use,frame_index());alpha_slot_in_use(i,s.last_use);update_oldest_live();
+    // Even reference-only dispatches can write stale-proof feedback at byte144.
+    if(!omm::mark_feedback_use(cmd) && omm::available()){*reference=VK_NULL_HANDLE;*identity=0;return false;}
+    uint64_t accelerated_identity{};
+    return s.omm_reference && bvh_omm_use(cmd,i,selected,&accelerated_identity) && accelerated_identity==s.rec;
+  }
+  return false;
+}
+
 uint64_t rt_scene_oldest_live() { return g_oldest_live.load(); }
 
 bool rt_sun_base_capture(VkAccelerationStructureKHR selected_tlas, VkDescriptorSet selected_alpha, SunBaseCapture* out) {
@@ -1369,7 +1396,7 @@ bool rt_sun_base_capture(VkAccelerationStructureKHR selected_tlas, VkDescriptorS
   std::lock_guard<std::mutex> lock(g_mu);
   for(uint32_t i=0;i<kSceneSlots;++i) {
     SceneSlot& s=g_scene[i];
-    if(!s.used || !s.split || s.tlas!=selected_tlas || s.set!=selected_alpha || !s.camera_pose_valid ||
+    if(!s.used || !s.split || (s.tlas!=selected_tlas && s.omm_reference!=selected_tlas) || s.set!=selected_alpha || !s.camera_pose_valid ||
        !s.sun_base.record || !sun_coverage::valid(s.native_epoch) ||
        slot_retired(s,life_gpu_done(),frame_index()) || bvh_rec_state(s.rec)==2) continue;
     out->base=s.sun_base;out->slot=i;out->producer=s.producer;

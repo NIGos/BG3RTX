@@ -2024,6 +2024,22 @@ bool bvh_omm_commit(VkCommandBuffer cmd,uint32_t slot,VkBuffer stamp,VkDeviceSiz
   g_omm_expected[slot]=generation;g_omm_mapped_stamp[slot]=mapped;return true;
 }
 
+VkAccelerationStructureKHR bvh_omm_scene(uint32_t slot,VkAccelerationStructureKHR reference){
+  std::lock_guard lock(g_mu);
+  if(slot>=kSceneSlots || !g_omm_expected[slot] || reference!=g_tlas[slot].as ||
+     !omm::cached_bake_ready(g_omm_records[slot],g_omm_records[slot],bvh_rec_state(g_omm_records[slot])))return VK_NULL_HANDLE;
+  return g_omm_tlas[slot].as;
+}
+bool bvh_omm_use(VkCommandBuffer cmd,uint32_t slot,VkAccelerationStructureKHR selected,uint64_t* identity){
+  if(!identity)return false;*identity=0;
+  std::lock_guard lock(g_mu);
+  if(slot>=kSceneSlots || !selected || selected!=g_omm_tlas[slot].as || !g_omm_expected[slot] ||
+     !cfg_int("rt_omm",0) || !omm::available_for(g_dd) || g_omm_ranges[slot].empty() ||
+     !omm::cached_bake_ready(g_omm_records[slot],g_omm_records[slot],bvh_rec_state(g_omm_records[slot])))return false;
+  for(const auto& source:g_omm_ranges[slot])if(!omm::register_ticket_use(cmd,source.baked.ticket))return false;
+  *identity=g_omm_records[slot];return true;
+}
+
 // A sun-only clone of an immutable camera scene. This function deliberately does
 // not collect draws, mutate the camera TLAS, or treat old cascade geometry as a
 // current-frame certificate. The caller must establish native epoch/dependencies.

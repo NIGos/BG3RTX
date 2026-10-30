@@ -270,7 +270,12 @@ struct Bg3HostApi {
   // that baseline; clear *out on failure. Never silently substitute another epoch.
   bool (*rt_sun_scene)(VkCommandBuffer cmd, VkAccelerationStructureKHR selected_tlas,
                        VkDescriptorSet selected_alpha, Bg3SunSceneInfo* out);
-  // ABI 19. Optional same-ray diagnostic for an OMM scene; not a visual fallback.
+  // ABI 19. Validate/register each OMM traversal command. Always returns its
+  // immutable baseline reference on a recognized tuple; build_identity is in/out:
+  // zero discovers identity, nonzero requires that exact recording generation.
+  // True permits acceleration
+  // and supplies a nonzero build identity. False with a reference selects baseline.
+  // False with no reference means the tuple is unavailable, never a quality pass.
   bool (*rt_omm_scene_reference)(VkCommandBuffer cmd, VkAccelerationStructureKHR selected_tlas,
                                 VkAccelerationStructureKHR* reference_tlas, uint64_t* build_identity);
 };
