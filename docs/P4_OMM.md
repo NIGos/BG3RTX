@@ -45,8 +45,31 @@ The baseline still reproduces six contradictions in 18 cases. This conservative
 configuration trades away all known-transparent acceleration; UNKNOWN must execute
 the ordinary alpha predicate, never be treated as opaque by traversal flags.
 It applies ONLY to fixed hard cut with the same sample. It is not valid evidence
-for stochastic thresholds, nonconstant textures, different filters/LOD, the GPU
+for stochastic thresholds, general nonconstant textures, different filters/LOD, the GPU
 baker or Vulkan traversal. No production caller or runtime integration was added.
+
+Mixed-texture follow-up (offline CPU only): four fixtures use 4x4 UNORM8 zero/one
+stripes in both axes, nearest and linear mip-0 sampling, with three primitives
+per fixture at subdivision 0. Debug-only DisableSpecialIndices forces real packed
+array decoding; the conservative alpha policy is unchanged. Each bake returns two
+descriptors and two array bytes, mapping to one Opaque and two UnknownOpaque
+primitive/microtriangle states. The crossing primitive MUST remain UnknownOpaque;
+the solid primitive MUST remain Opaque, so an all-unknown result fails. Level 0
+has one microtriangle per primitive and needs no guessed bird-order mapping.
+
+An independent ideal sampler checks a 65-edge barycentric lattice, including
+vertices/edges: 25,740 sample checks, zero known-state contradictions. Linear
+fixtures include 66 exact alpha=cut points overall, without epsilon or cutoff
+shifts. The solid/zero fixtures also have analytically constant full filter
+footprints. Eight decoder tests cover exact byte ends, truncation, huge offsets,
+invalid subdivision/format and null storage; descriptor bounds are checked before
+pointer formation. These finite CPU samples are regression evidence for these
+fixtures, NOT continuous-domain coverage, higher-subdivision bird-order mapping,
+GPU rounding/filtering/LOD, stochastic alpha or Vulkan traversal certification.
+No GPU/device/resource API, runtime integration or performance measurement was added.
+Evidence: docs/evidence/p4-omm-sdk-cpu-mixed-20261030.txt. The incremental probe
+compiled in isolation and returned 0; the prior full 19/19 run below predates this
+increment, and was not repeated for this tool-only change.
 
 Offline isolated FULL build / CTest: 19/19 pass (probe enabled). Individual oracles:
 197,621 classifier checks; 398,526 alpha code-support checks; bake identity/completion
