@@ -28,32 +28,32 @@ camera capacity warning is before the scene plan, not hidden by rounded zeros.
 | fast-left | 8 | 17.4 | 50.4 | 96.3905% | 7.693 |
 | static-cost | 32 | 20.7 | 59.8940 | disabled | 3.824 |
 
-Warmup interior has two zero-overflow camera windows, aggregate RT3.867ms;
+Warmup interior has two zero-overflow camera windows, aggregate RT 3.867 ms;
 its FPS/primary diagnostics are unavailable and are not invented. The diagnostic
 phase cost numbers include primary/epoch work; only static-cost has them off.
 The aggregate RT timer is not isolated Sun/Hair build cost.
 
 Global camera forced-alpha maximum 0.62 draws/frame comes from the first
 120-frame report at 00:29:53.383, before the plan. The raw bootstrap warning at
-00:29:33.982 records 64MB alpha reserve versus307.8MB demand and74 draws/243.8MB
+00:29:33.982 records 64 MB alpha reserve versus 307.8 MB demand and 74 draws / 243.8 MB
 made opaque on that frame. Thus steady camera allocation is qualified in this
-scene, while bootstrap still overflowed. Global opaque drop maximum is0.00.
+scene, while bootstrap still overflowed. Global opaque drop maximum is 0.00.
 Do not call the complete run zero-overflow or claim all initial frames were fixed.
 
-Cascade full maximum is22.0 draws/frame globally and remains nonzero in every
+Cascade full maximum is 22.0 draws/frame globally and remains nonzero in every
 measured phase. Consequently only steady CAMERA capacity is green; combined
-camera/cascade capacity is not. The separately authorized587MB cascade run is
+camera/cascade capacity is not. The separately authorized 587 MB cascade run is
 not reviewed here and no result is assumed.
 
 No deciding-window API/RR/device errors were detected by the existing parser.
 However the full log is not literally fault-free: loading reported no present
-for5seconds at00:29:39.580, diagnostic pending build records, and
-`vkGetDeviceFaultInfoEXT (counts) failed: -13`. Presents resumed at00:29:48.586,
+for 5 seconds at 00:29:39.580, diagnostic pending build records, and
+`vkGetDeviceFaultInfoEXT (counts) failed: -13`. Presents resumed at 00:29:48.586,
 before the plan. Record this recovered startup stall rather than calling it a
 crash/device loss or suppressing it with a blanket no-fault claim.
 
 Verdict: steady camera-capacity invariant supported; cascade capacity open;
 startup bootstrap/stall limitations retained. This is NOT full P1/M1 or visual
-vegetation qualification. Static97.4075% and moving96.068-97.1545% primary match
-do not satisfy the intended approximately99.5% static-level gate. No paired
+vegetation qualification. Static 97.4075% and moving 96.068-97.1545% primary match
+do not satisfy the intended approximately 99.5% static-level gate. No paired
 same-run old-capacity control or automatic face/distant ROI proof is available.
