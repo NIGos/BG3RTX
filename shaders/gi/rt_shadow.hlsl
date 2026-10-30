@@ -238,7 +238,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   }
   if((tflags&8u)!=0u) {
     trust_add(21u,traced && current_covers);
-    trust_add(22u,traced && !current_covers);
+    trust_add(22u,(nl>0.0 || backlit) && !current_covers);
     trust_add(23u,(nl>0.0 || backlit) && !sun_current_scene_ready());
     uint packet=gSunParameters.Load(1200u);
     trust_add(24u,(nl>0.0 || backlit) && (packet&2u)==0u);

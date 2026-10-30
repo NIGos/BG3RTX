@@ -65,13 +65,11 @@ the dependent motion job or promoting M1. Without automatic pose/ROI and
 phase-native-counter qualification, this draft's M1 verdict remains INVALID.
 This explicit missing observable is not a request for a new framework or user work.
 
-A source counter issue also needs correction before release: at this baseline,
-Sun fallback counter 22 uses `traced && !current_covers`, while `traced` excludes
-UNKNOWN and `current_covers` is true for its remaining lit-side pixels. The logged
-fallback count can therefore be zero despite fallback. The gate needs the actual
-lit-side `!current_covers` population; retain the unknown-candidate/cone/packet
-counters and do not interpret the old fallback field as proof. No shader change
-was made by this draft; the eventual candidate identity must include its fix.
+The companion source correction fixes Sun fallback counter 22: it now counts
+lit-side `!current_covers`, including UNKNOWN, instead of the contradictory
+`traced && !current_covers`. The eventual candidate must include that correction;
+older zero fallback fields are not proof. Keep unknown-candidate/cone/packet
+counts and require `certified - native_white_without_ray > 0` as well.
 
 ## Deciding evidence once the blockers are resolved
 

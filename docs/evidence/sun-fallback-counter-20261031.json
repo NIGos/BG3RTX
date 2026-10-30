@@ -1,0 +1,169 @@
+{
+  "baseline": "a676bf5",
+  "ordinary_shadow_entries_identical": 16,
+  "current_sun_entries_compiled_validated": 16,
+  "gpu_executed": false,
+  "records": [
+    {
+      "shader": "gi\\cascade\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "803954f7d55a2d5357595b70205bd5a3b883ca82cdd6d759bfd24f8f14586677"
+    },
+    {
+      "shader": "gi\\cascade_rebase\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "fd593bb5fbd4b7d4f5fbee372ef7f37e6b065192b00f2d6ea62accc41f16330a"
+    },
+    {
+      "shader": "gi\\rebase\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "6402c1cc8a591bdafcad95b8c79b12d6a2409d1bc1fbd8904d308090d17cbe68"
+    },
+    {
+      "shader": "gi\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "01fb8eddcf26e3fa835275e7306ea486138aa408da48af2fe19eeaffb62e888b"
+    },
+    {
+      "shader": "native_scalp\\gi\\cascade\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "c3737aa2e99dba69e405b9b52f5fb2756ce9066142d3f1f144abfe158b57c089"
+    },
+    {
+      "shader": "native_scalp\\gi\\cascade_rebase\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "81c1f8ce5a159909ca5325d39be78760172fbb7d0e80186a2093b2fe33adb2dd"
+    },
+    {
+      "shader": "native_scalp\\gi\\rebase\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "b0dd5615e1592854903c8be61e916a5b2704c7c167bd66fddc1bfe91314bbbd7"
+    },
+    {
+      "shader": "native_scalp\\gi\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "11b90935310f73d00951882d22181b490bf9f668de400e79b4d66e65ff379a58"
+    },
+    {
+      "shader": "omm\\gi\\cascade\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "1a20e2339c15f3ab66da3547002d78c05be7764bf0917192e7f33301e1855429"
+    },
+    {
+      "shader": "omm\\gi\\cascade_rebase\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "7490704c9d44eb221e49445b7e9f184e84eb173b7cec796e6c2d16f4cf38cf86"
+    },
+    {
+      "shader": "omm\\gi\\rebase\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "d917c31df86d6f49fab7bd10be2e647c3517171eb879726638e87bd7e02e5600"
+    },
+    {
+      "shader": "omm\\gi\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "f18fadb720914e65f7867eec05e3d39fb5144153ead89b7de078b6c43ec4e17b"
+    },
+    {
+      "shader": "omm\\native_scalp\\gi\\cascade\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "a36e58161317cac123f1a31883d33b0798af7b6a9515b5a4a1877022b0e5b529"
+    },
+    {
+      "shader": "omm\\native_scalp\\gi\\cascade_rebase\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "bd766497b57a7c769f2ddd7da293f93f3144dfc9aa00f36898aaa4c6d6ab5ba9"
+    },
+    {
+      "shader": "omm\\native_scalp\\gi\\rebase\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "f77066ef351c8fd60a117831a687dde82cd4632090a95741584dfa34c2a4d307"
+    },
+    {
+      "shader": "omm\\native_scalp\\gi\\rt_shadow.hlsl",
+      "current_sun": false,
+      "sha256": "0ec6aba5d61343cf316f08285a7151016259260d23e7a7ab0fcbfb6160fe9028"
+    },
+    {
+      "shader": "omm\\sun_current\\gi\\cascade\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "9d415509e93a8b5a1c015928c2f26377f98ece7d23b46761a70eedf0249ce8ad"
+    },
+    {
+      "shader": "omm\\sun_current\\gi\\cascade_rebase\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "dfd73ac04896248b116babd8cf13eb7cb1b541ce5b4178190408ff88cb509c1a"
+    },
+    {
+      "shader": "omm\\sun_current\\gi\\rebase\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "dfd73ac04896248b116babd8cf13eb7cb1b541ce5b4178190408ff88cb509c1a"
+    },
+    {
+      "shader": "omm\\sun_current\\gi\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "9d415509e93a8b5a1c015928c2f26377f98ece7d23b46761a70eedf0249ce8ad"
+    },
+    {
+      "shader": "omm\\sun_current\\native_scalp\\gi\\cascade\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "acf84e5cd0921d3a389a4f57b4d3f8d67f5494a82e9999d63f630a33c88f9cf0"
+    },
+    {
+      "shader": "omm\\sun_current\\native_scalp\\gi\\cascade_rebase\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "756a1f21f1d91cff121d8279e77851e982bb85d9028fd6de5c6486d427827b3e"
+    },
+    {
+      "shader": "omm\\sun_current\\native_scalp\\gi\\rebase\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "756a1f21f1d91cff121d8279e77851e982bb85d9028fd6de5c6486d427827b3e"
+    },
+    {
+      "shader": "omm\\sun_current\\native_scalp\\gi\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "acf84e5cd0921d3a389a4f57b4d3f8d67f5494a82e9999d63f630a33c88f9cf0"
+    },
+    {
+      "shader": "sun_current\\gi\\cascade\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "09e7d4eed8f7fde75c2407436a8a75318bd8a82af986f43d1e6619ede6b2d621"
+    },
+    {
+      "shader": "sun_current\\gi\\cascade_rebase\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "b3ed122c7dff84c529eeca6c61c9c77ae201597ea1de0e0a4b469ff67f188ae7"
+    },
+    {
+      "shader": "sun_current\\gi\\rebase\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "b3ed122c7dff84c529eeca6c61c9c77ae201597ea1de0e0a4b469ff67f188ae7"
+    },
+    {
+      "shader": "sun_current\\gi\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "09e7d4eed8f7fde75c2407436a8a75318bd8a82af986f43d1e6619ede6b2d621"
+    },
+    {
+      "shader": "sun_current\\native_scalp\\gi\\cascade\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "1a14c34a6c49b3298bb1e6ab9c23f4925ea4391b45ebb1daaaaa2d6b2fa7c8e7"
+    },
+    {
+      "shader": "sun_current\\native_scalp\\gi\\cascade_rebase\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "0dd4eb59f0c00e106143df821b1d4dae20dff24d68a292c750175150e7f7b20a"
+    },
+    {
+      "shader": "sun_current\\native_scalp\\gi\\rebase\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "0dd4eb59f0c00e106143df821b1d4dae20dff24d68a292c750175150e7f7b20a"
+    },
+    {
+      "shader": "sun_current\\native_scalp\\gi\\rt_shadow.hlsl",
+      "current_sun": true,
+      "sha256": "1a14c34a6c49b3298bb1e6ab9c23f4925ea4391b45ebb1daaaaa2d6b2fa7c8e7"
+    }
+  ],
+  "change": "Sun counter22 counts lit-side !current_covers including UNKNOWN; ray/visibility computation unchanged"
+}
