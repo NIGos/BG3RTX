@@ -1,0 +1,122 @@
+[
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 230,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "gi_strength=1,rt_strength=1,ls_strength=1,rf_strength=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 231,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_strength=1,rt_strength=1,ls_strength=1,rf_strength=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 232,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_strength=1,rt_strength=1,ls_strength=1,rf_strength=1"
+ },
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 233,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "gi_strength=0,rt_strength=0,ls_strength=0,rf_strength=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 234,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_strength=0,rt_strength=0,ls_strength=0,rf_strength=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 235,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_strength=0,rt_strength=0,ls_strength=0,rf_strength=0"
+ },
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 236,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "gi_strength=1,rt_strength=1,ls_strength=1,rf_strength=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 237,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_strength=1,rt_strength=1,ls_strength=1,rf_strength=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 238,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_strength=1,rt_strength=1,ls_strength=1,rf_strength=1"
+ },
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 239,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "gi_strength=0,rt_strength=0,ls_strength=0,rf_strength=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 240,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_strength=0,rt_strength=0,ls_strength=0,rf_strength=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 241,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_strength=0,rt_strength=0,ls_strength=0,rf_strength=0"
+ }
+]
