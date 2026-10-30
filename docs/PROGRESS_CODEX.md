@@ -1,5 +1,160 @@
 # BG3RTX progress
 
+## User steering: native shader discovery before workarounds - 2026-10-30
+
+Search the packaged native shaders thoroughly before choosing an unknown-shader
+fallback. A missing alpha_lookup entry means missing RT coverage support, not an
+unidentified native program. scripts/alpha_table.py only scans retained runtime
+dumps and recognises two cutout families; that is not a complete shader census.
+The two actual dialogue prepass programs are already identified and decompiled.
+Their full coverage formulas, including material parameters and depth handling,
+must guide the correction. No hair fallback or simple raw-alpha entry was added.
+
+Offline catalog audit: 1,149 templates, 17,235 variants, 15,363 material modules;
+the 2026-10-26 manifest records zero unreadable BSHD files. Hair/name classification
+selects 17 families and 234 distinct fragment programs; adding three eyelash
+families gives 20 families / 273 distinct fragment programs, only 22 listed in the
+RT alpha table. Table presence does not certify exact native coverage. The local
+cache initially contained 83 of 273; absence from cache is not archive absence.
+All nine uncached Hair/Scalp fragment programs were recovered from Materials.pak,
+hash-verified and CPU-decompiled: all 29 distinct Hair/Scalp native programs now
+have GLSL available for exact coverage implementation. No fallback was needed to
+find them. This is source availability, not an implementation correctness gate.
+Archive-body cross-check found all 273/273 selected fragment hashes in 300 native
+containers, zero missing/read errors. These shaders are available, not unknown.
+Per-pass hashes and F10 correspondence: captures/dialogue-shadow-review-20261030/
+hair-inventory.json. Catalog scope is the game's Data package set, not separate
+Mods or loose overrides; zero BSHD errors does not prove every format was indexed.
+No live files, settings, binaries or game state were changed.
+Concise versioned inventory: docs/evidence/hair-native-inventory-20261030.json.
+
+## Offline continuation: dialogue shadows and OMM groundwork - 2026-10-30
+
+Latest user clarification: face shadows are STATIC and hairstyle-dependent,
+separate from distant shadow changes (suspected trees at culling/LOD limits).
+Other dialogues/camp also show odd shadows. User created Test1 and is collecting
+F10s; no save files were accessed. No game launch, setting, shader, DLL or input
+changes while the user plays. All future live tests coordinated in this chat.
+The UI blue-block fix still has positive provisional user confirmation.
+
+Face finding: actual prepass CHAR_Hair 5a03e5b678b2d040 and CHAR_Scalp 9e77575a9f377ec5
+conditionally discard pixels but are absent from alpha_fs.txt; capturable draws
+therefore enter RT as opaque. The dark polygonal face/neck shapes already appear
+in pre-post diffuse d471(-161818)/d694(-161845), before RR/FG/DoF. Scene wait is
+current, no timeouts/skips around those frames. Native hair coverage needs dual
+mask/root/view/dither/depth treatment, not a raw alpha cutoff. Correct handling
+or explicit native fallback must include visibility AND closest/origin queries.
+This is a concrete coverage defect, not yet a measured per-ray attribution/fix.
+
+Distant finding: rt_cascade_alpha=2 assumes unknown discarding FS are only fades,
+but actual D16 passes contain unsupported multi-texture cutouts, plus hair and a
+skydome material. Camera-pass dedupe can switch an unsupported cutout from skipped
+to solid as it leaves camera keys. Counts cover all D16 passes, not post-dedupe
+selected-layer captures; no particular tree/pixel is identified. Do not label all
+unknown shaders as foliage. Root report docs/DIALOGUE_SHADOWS.md, evidence JSON
+and captures/dialogue-shadow-review-20261030/ index/log/images retain the findings.
+
+Solar radius is already finite: rt_sun_radius=0.00459 rad half-angle (~0.526 deg
+full diameter), one sample per pixel, RR reconstructs. Characteristic penumbra
+~9.18 mm per metre of caster/receiver separation; near-contact hair shadows can
+be sharp. Native-mask fallback also remains. No sun-radius/bias tuning performed.
+
+OMM milestone in ISOLATED worktree C:/Users/quali/.codex/worktrees/p4-omm-domain/BG3RTX,
+branch codex/p4-omm-domain, commit 7134338: conservative whole-mip UNORM8 code hull,
+exact bake identity/content/residency/completion guards and imported classifier.
+19/19 CTests/full build pass with optional CPU-only SDK probe; 197,621 classifier,
+398,526 support and 65 identity checks. Actual installed OMM SDK 1.10 CPU baker:
+18 cases, six equality contradictions (SDK > vs native >=) under nearest/linear.
+This is an integration hazard, not a runtime gate pass. No production callers,
+GPU bake/BLAS/backend/ABI/shader changes or measured speedup. No OMM main merge.
+That worktree is based on main 47ac6a9 and DOES NOT include UI fix 17fb500; never
+copy its baseline DLLs into the user's working build. Its outputs are isolated.
+Two agents used for bounded offline work; no extra live test runner.
+
+UI fix main integration is pending while the user's game/launcher are open; merge
+only via merge-green when they are closed. Runtime priority is now correct hair
+and unsupported cascade coverage before accelerating those materials with OMM.
+
+
+## User confirmation and remaining plan — 2026-10-30
+
+After descriptor reset 17fb500, the user reports the foliage/UI artifact appears
+resolved and cannot currently trigger it. This is a positive provisional in-game
+confirmation, not a guarantee that every temporal symptom is closed. Keep the
+trial specific; material-source/RR-helper changes remain absent. No new game job.
+The fix is built on codex/ui-contamination-offline, not yet merged into main.
+
+Verified current plan: OMM is NOT integrated. codex/p4-omm 8d902d5 contains only
+an unused conservative interval classifier and tests; no device extension,
+GPU bake, BLAS attachment or production caller. Main has no OMM runtime path.
+Remaining: qualify actual foreground base fps (CPU alpha-stream optimization is
+already merged/default-on in main 47ac6a9), close experimental box-light gates,
+face/skin and any separate FG/RR temporal issues if still reproducible; implement
+OMM backend; finish EN2 hit-material correctness and D-EM consumers/gates, light
+tree and SHaRC v2; implement water (P6 has design only). SHaRC v1 already exists,
+off by default; D-EM data capture exists, off. Older roadmap snapshots may be stale.
+
+
+## READY FOR USER TRIAL: descriptor allocation lifetime — 2026-10-30
+
+User asked to try the minimal patch. Applied ONLY the fresh-allocation reset:
+every successfully allocated descriptor-set handle starts with empty tracked
+bindings/dynamic counts, even if its handle and layout were used before.
+Unrelated live sets and ordinary partial writes within one lifetime are preserved.
+Caller still holds the tracker lock; failed allocations do not change state.
+The shared helper is common/descriptor_epoch.h, used by layer/tracker.cpp.
+
+The layer DLL in bin/VkLayer_bg3rtx.dll was rebuilt at 15:56:50 local time.
+No ini key/change is required: this is CPU bookkeeping correctness, not a lighting
+feature. No ABI/HLSL/GPU dispatch changes. Restart the game through the normal
+launcher to load it. Same location as the screenshots (Blushing Mermaid), FG as
+currently configured: make overhead dialogue, name/health banners or other world
+UI appear while looking at the affected cypresses/flags. Compare RR on/off if useful.
+Look for saturated blue blocks and UI-triggered flicker, not a general brightness change.
+
+Build -Test: 16/16 CTests pass, including the new descriptor_epoch_test.
+Actual fixed allocation function + existing source reproduction: 9 cases, 0 failures
+(previous production 4 failures). Patch is built for this trial branch; NOT merged
+into main and no visual-quality pass claimed. No game launched, saves/settings
+changed or foreground input sent. CPU/GPU performance was not measured; no GPU
+work was added. The separate material-source selection and RR exposure-helper
+issues remain unchanged to keep this trial specific.
+Evidence: docs/evidence/ui-descriptor-trial-20261030.json. Offline analysis and
+historical source reproductions remain in docs/UI_CONTAMINATION_OFFLINE.md.
+
+
+## UI / foliage offline investigation — 2026-10-30
+
+The user's new screenshots still show saturated blue blocks on foliage/flags,
+with and without RR; UI elements are possible triggers, not only mouse hover.
+Offline analysis found a reproducible descriptor-lifetime bug in main 47ac6a9:
+AllocateDescriptorSets updates the layout but keeps old descriptor contents and
+dynamic counts when a handle is recycled. Optional RT material queries can then
+accept a retired UI buffer/view. First nonempty RT3/SSS inputs are kept even when
+a later native material permutation supplies the correct source. The shader uses
+SSS RGB tint/thickness on class-4 foliage; finite garbage passes bounds/NaN checks.
+
+Native C++ reproduction uses actual extracted production functions, with only driver
+allocation stubbed: 9 cases, 4 failures current -> 0 failures with allocation clearing.
+A second exact-block reproduction retains the stale profile and never queries the
+real material source. The minimal patch is PREPARED ONLY, not applied. Optional material reads also need
+active-shader provenance; clearing allocation state alone does not certify all cases.
+No renderer/DLL/shader/ini change, game launch, live test, merge or quality claim.
+
+A separate RR issue: exposure helper 4681b95e is rejected as an unknown color effect,
+causing fallback to RR on graded color. It is not a UI shader and cannot explain the
+RR-off symptom alone. Current log also reports SSS ranges 16384 / 144 / 327680;
+range alone is not proof of a bad buffer. Three retained traces have no non-finites,
+but do not reproduce the screenshot's saturated patches in inspected compose views.
+Exact UI-to-blue-frame attribution remains OPEN: descriptor epochs/profile bytes at
+the visibly bad frame are absent. Prior zero near-UI foliage support was inconclusive.
+
+Report: docs/UI_CONTAMINATION_OFFLINE.md. Versioned proof/patch/JSON:
+docs/evidence/ui-descriptor-20261030/. Original screenshots, copied user log and
+compiled harnesses: captures/offline-ui-20261030/. Next: fix allocation lifetime and
+material provenance, then qualify a same-frame UI transition; no brightness clamp.
+
+
 USER CHECK / DECISION (base frame rate): may the next speed gate use one focused foreground
 run? Required visible-unfocused runs stay at 30 fps after temporary game/driver cap and
 immediate-present controls. Until an uncapped fps gate passes, keep `rt_alpha_stream=0`.

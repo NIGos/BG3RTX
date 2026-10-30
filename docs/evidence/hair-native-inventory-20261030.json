@@ -1,0 +1,652 @@
+{
+  "date": "2026-10-30",
+  "purpose": "Native discovery before unknown-shader workarounds",
+  "provenance": {
+    "manifest_built": "2026-10-26T16:41:27",
+    "game_data": "D:\\SteamLibrary\\steamapps\\common\\Baldurs Gate 3\\Data",
+    "source_digest": "17aa729be2a299980a19f09d69697a86",
+    "selection": "All12 primary hair-class templates plus name/flag-related hair/scalp/fur/beard/brow/lash templates, explicitly including LashesShadow and LashShadow; false-positive Brown/Slash/Splash/Flashes names excluded.",
+    "scope_limit": "Catalog material templates and ST/STI DEF/FOR/EMI/DEP/DEPS/DEPST/VEL/BAKE Vulkan modules; not a guarantee for all mods/runtime shaders. Local cache absence is not archive absence.",
+    "templates": 1149,
+    "variants": 17235,
+    "hashes": 15363
+  },
+  "totals": {
+    "families": 20,
+    "modules": 495,
+    "unique_fs": 273,
+    "cached_fs_spv": 83,
+    "cached_fs_glsl": 83,
+    "alpha_table_fs": 22
+  },
+  "families": [
+    {
+      "name": "Characters/CHAR_ARM_Fur_HairShading",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 29,
+      "unique_fs_count": 14,
+      "cached_fs_spv": 10,
+      "cached_fs_glsl": 10,
+      "alpha_table_fs": 2,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Characters/CHAR_BASE_Crowd_C_MSK_Hair",
+      "class": "opaque",
+      "hair_flag": false,
+      "module_count": 27,
+      "unique_fs_count": 14,
+      "cached_fs_spv": 0,
+      "cached_fs_glsl": 0,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Characters/CHAR_Feathers_V2",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 27,
+      "unique_fs_count": 14,
+      "cached_fs_spv": 5,
+      "cached_fs_glsl": 5,
+      "alpha_table_fs": 3,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Characters/CHAR_Fur",
+      "class": "opaque",
+      "hair_flag": false,
+      "module_count": 27,
+      "unique_fs_count": 14,
+      "cached_fs_spv": 10,
+      "cached_fs_glsl": 10,
+      "alpha_table_fs": 6,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Characters/CHAR_Fur_HairShading_MSK1",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 29,
+      "unique_fs_count": 14,
+      "cached_fs_spv": 5,
+      "cached_fs_glsl": 5,
+      "alpha_table_fs": 1,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Characters/CHAR_Fur_IDmsk",
+      "class": "anisotropic",
+      "hair_flag": false,
+      "module_count": 29,
+      "unique_fs_count": 14,
+      "cached_fs_spv": 10,
+      "cached_fs_glsl": 10,
+      "alpha_table_fs": 6,
+      "f10_draw_counts": [
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-161845",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-162008",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-161845",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-162008",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161807",
+          "draws": 4
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161845",
+          "draws": 8
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-162008",
+          "draws": 2
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-161845",
+          "draws": 1
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-162008",
+          "draws": 1
+        }
+      ]
+    },
+    {
+      "name": "Characters/CHAR_Hair",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 30,
+      "unique_fs_count": 15,
+      "cached_fs_spv": 10,
+      "cached_fs_glsl": 10,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": [
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-161807",
+          "draws": 2
+        },
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-161818",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-161845",
+          "draws": 3
+        },
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-162008",
+          "draws": 4
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-161807",
+          "draws": 2
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-161818",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-161845",
+          "draws": 3
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-162008",
+          "draws": 4
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161807",
+          "draws": 24
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161818",
+          "draws": 5
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161845",
+          "draws": 19
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-162008",
+          "draws": 11
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-161807",
+          "draws": 2
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-161818",
+          "draws": 1
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-161845",
+          "draws": 3
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-162008",
+          "draws": 4
+        }
+      ]
+    },
+    {
+      "name": "Characters/CHAR_Hair_BodyInfluence",
+      "class": "anisotropic",
+      "hair_flag": false,
+      "module_count": 30,
+      "unique_fs_count": 15,
+      "cached_fs_spv": 0,
+      "cached_fs_glsl": 0,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Characters/CHAR_Hair_ExtraUV",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 30,
+      "unique_fs_count": 15,
+      "cached_fs_spv": 5,
+      "cached_fs_glsl": 5,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Characters/CHAR_LashesShadow",
+      "class": "transparent",
+      "hair_flag": false,
+      "module_count": 24,
+      "unique_fs_count": 13,
+      "cached_fs_spv": 8,
+      "cached_fs_glsl": 8,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": [
+        {
+          "variant": "StaticForward",
+          "capture": "20261030-161807",
+          "draws": 2
+        },
+        {
+          "variant": "StaticForward",
+          "capture": "20261030-161818",
+          "draws": 2
+        },
+        {
+          "variant": "StaticForward",
+          "capture": "20261030-161845",
+          "draws": 2
+        }
+      ]
+    },
+    {
+      "name": "Characters/CHAR_LashesShadow_Dithered",
+      "class": "alpha_test",
+      "hair_flag": false,
+      "module_count": 27,
+      "unique_fs_count": 14,
+      "cached_fs_spv": 5,
+      "cached_fs_glsl": 5,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Characters/CHAR_Pubes",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 30,
+      "unique_fs_count": 15,
+      "cached_fs_spv": 5,
+      "cached_fs_glsl": 5,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": [
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-161807",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-162008",
+          "draws": 2
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-161807",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-162008",
+          "draws": 2
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161807",
+          "draws": 12
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161818",
+          "draws": 4
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161845",
+          "draws": 4
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-162008",
+          "draws": 5
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-161807",
+          "draws": 1
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-162008",
+          "draws": 2
+        }
+      ]
+    },
+    {
+      "name": "Characters/CHAR_Scalp",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 27,
+      "unique_fs_count": 14,
+      "cached_fs_spv": 10,
+      "cached_fs_glsl": 10,
+      "alpha_table_fs": 4,
+      "f10_draw_counts": [
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-161807",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-161818",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDeferred",
+          "capture": "20261030-162008",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-161807",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-161818",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDepth",
+          "capture": "20261030-162008",
+          "draws": 1
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161807",
+          "draws": 20
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161818",
+          "draws": 5
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-161845",
+          "draws": 11
+        },
+        {
+          "variant": "StaticDepthShadow",
+          "capture": "20261030-162008",
+          "draws": 2
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-161807",
+          "draws": 1
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-161818",
+          "draws": 1
+        },
+        {
+          "variant": "StaticVelocity",
+          "capture": "20261030-162008",
+          "draws": 1
+        }
+      ]
+    },
+    {
+      "name": "Effects/Cinematic/VFX_CHAR_Hair_Dissolve_01",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 30,
+      "unique_fs_count": 15,
+      "cached_fs_spv": 0,
+      "cached_fs_glsl": 0,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Effects/Cinematic/VFX_Cinematic_Orin_Hair_Accessories_Hack_01",
+      "class": "opaque",
+      "hair_flag": false,
+      "module_count": 25,
+      "unique_fs_count": 12,
+      "cached_fs_spv": 0,
+      "cached_fs_glsl": 0,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Effects/Cinematic/VFX_Cinematic_Orin_Hair_Hack_01",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 30,
+      "unique_fs_count": 15,
+      "cached_fs_spv": 0,
+      "cached_fs_glsl": 0,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Effects/Cinematic/VFX_Cinematic_Orin_Hair_Transformation_Hack_01",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 26,
+      "unique_fs_count": 13,
+      "cached_fs_spv": 0,
+      "cached_fs_glsl": 0,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Effects/Model/VFX_Model_AlphaTest_BASE_CINE_HAIR_Wavy_Long_A_01",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 30,
+      "unique_fs_count": 15,
+      "cached_fs_spv": 0,
+      "cached_fs_glsl": 0,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Effects/Model/VFX_Model_AlphaTest_BASE_CINE_HAIR_Wavy_Medium_A_01",
+      "class": "hair",
+      "hair_flag": true,
+      "module_count": 30,
+      "unique_fs_count": 15,
+      "cached_fs_spv": 0,
+      "cached_fs_glsl": 0,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    },
+    {
+      "name": "Effects/Model/VFX_Model_AlphaTest_BASE_CINE_LashShadow_01",
+      "class": "transparent",
+      "hair_flag": false,
+      "module_count": 24,
+      "unique_fs_count": 13,
+      "cached_fs_spv": 0,
+      "cached_fs_glsl": 0,
+      "alpha_table_fs": 0,
+      "f10_draw_counts": []
+    }
+  ],
+  "full_inventory": "captures/dialogue-shadow-review-20261030/hair-inventory.json",
+  "limits": [
+    "Alpha-table presence does not certify exact native coverage.",
+    "Cached-source absence does not imply archive absence.",
+    "Catalog does not cover separate Mods or loose overrides.",
+    "Use every SREF to MVAR variant for pass membership, not canonical SHDR pass."
+  ],
+  "runtime_changes": false,
+  "excluded_name_substring_false_positives": [
+    "Effects/Model/VFX_Model_AlphaBlend_Unlit_FX_TwoSided_Panning_UVDistortion_Mask_ScrollingMask_GradientMap_Slash_01",
+    "Effects/Model/VFX_Model_AlphaBlend_Unlit_FX_TwoSided_Panning_UVDistortion_Mask_ScrollingMask_GradientMap_Slash_02",
+    "Effects/Model/VFX_Model_AlphaBlend_Unlit_FX_TwoSided_Panning_UVDistortion_Mask_ScrollingMask_Slash_01",
+    "Effects/Model/VFX_Model_AlphaBlend_Unlit_Luminance_Cubemap_Fresnel_MotionVector_WhiteWaterSplash_01",
+    "Effects/Model/VFX_Model_AlphaBlend_Unlit_Refraction_FX_TwoSided_Panning_UVDistortion_Mask_ScrollingMask_Slash_01",
+    "Effects/Model/VFX_Model_AlphaTest_BASE_CINE_EYES_Natural_Brown_B_01",
+    "Effects/Model/VFX_Model_AlphaTest_Lit_TwoSided_UvDistortion_MotionVector_Threshold_Normal_Curve_Splash_01",
+    "Effects/Model/VFX_Model_AlphaTest_Unlit_Emissive_AlphaErosion_VertexAlphaFlashes_01",
+    "Effects/Model/VFX_Model_AlphaTest_Unlit_Emissive_AlphaErosion_VertexAlphaFlashes_LateAlpha_01",
+    "Effects/Model/VFX_Model_AlphaTest_Unlit_FX_TwoSided_Panning_UVDistortion_Mask_ScrollingMask_GradientMap_Slash_01",
+    "Effects/ParticleSystem/VFX_ParticleSystem_AlphaBlend_Unlit_Emissive_Cubemap_Fresnel_MotionVector_GradientMap_05x05_WWSplash_03_Healing_01",
+    "Effects/ParticleSystem/VFX_ParticleSystem_AlphaTest_Lit_TwoSided_UvDistortion_MotionVector_Threshold_Normal_Ribbon_Splash_01"
+  ],
+  "native_hair_scalp_recovery": {
+    "requested_missing_unique_fs": 9,
+    "recovered_unique_fs": 9,
+    "glsl_decompiled": 9,
+    "records": {
+      "7c0930707122962a": {
+        "archive": "Materials.pak",
+        "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_EMI_Vulkan.bshd",
+        "spv": "captures\\dialogue-shadow-review-20261030\\native-hair\\7c0930707122962a.spv",
+        "glsl": "captures\\dialogue-shadow-review-20261030\\native-hair\\7c0930707122962a.glsl",
+        "bytes": 3580,
+        "hash_verified": true,
+        "source_flags": {
+          "discard_statements": 0,
+          "writes_frag_depth": true
+        }
+      },
+      "88308cb8581c6ef0": {
+        "archive": "Materials.pak",
+        "path": "Public/Shared/Assets/Materials/Characters/CHAR_Scalp_STI_EMI_Vulkan.bshd",
+        "spv": "captures\\dialogue-shadow-review-20261030\\native-hair\\88308cb8581c6ef0.spv",
+        "glsl": "captures\\dialogue-shadow-review-20261030\\native-hair\\88308cb8581c6ef0.glsl",
+        "bytes": 280,
+        "hash_verified": true,
+        "source_flags": {
+          "discard_statements": 0,
+          "writes_frag_depth": false
+        }
+      },
+      "d50aee3f25ca943f": {
+        "archive": "Materials.pak",
+        "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_BAKE_Vulkan.bshd",
+        "spv": "captures\\dialogue-shadow-review-20261030\\native-hair\\d50aee3f25ca943f.spv",
+        "glsl": "captures\\dialogue-shadow-review-20261030\\native-hair\\d50aee3f25ca943f.glsl",
+        "bytes": 15848,
+        "hash_verified": true,
+        "source_flags": {
+          "discard_statements": 0,
+          "writes_frag_depth": true
+        }
+      },
+      "339e3985498cf25d": {
+        "archive": "Materials.pak",
+        "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_EMI_Vulkan.bshd",
+        "spv": "captures\\dialogue-shadow-review-20261030\\native-hair\\339e3985498cf25d.spv",
+        "glsl": "captures\\dialogue-shadow-review-20261030\\native-hair\\339e3985498cf25d.glsl",
+        "bytes": 3580,
+        "hash_verified": true,
+        "source_flags": {
+          "discard_statements": 0,
+          "writes_frag_depth": true
+        }
+      },
+      "64839f1de55e314f": {
+        "archive": "Materials.pak",
+        "path": "Public/Shared/Assets/Materials/Characters/CHAR_Scalp_ST_BAKE_Vulkan.bshd",
+        "spv": "captures\\dialogue-shadow-review-20261030\\native-hair\\64839f1de55e314f.spv",
+        "glsl": "captures\\dialogue-shadow-review-20261030\\native-hair\\64839f1de55e314f.glsl",
+        "bytes": 6068,
+        "hash_verified": true,
+        "source_flags": {
+          "discard_statements": 0,
+          "writes_frag_depth": false
+        }
+      },
+      "b5090ef86666e8b2": {
+        "archive": "Materials.pak",
+        "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_FOR_Vulkan.bshd",
+        "spv": "captures\\dialogue-shadow-review-20261030\\native-hair\\b5090ef86666e8b2.spv",
+        "glsl": "captures\\dialogue-shadow-review-20261030\\native-hair\\b5090ef86666e8b2.glsl",
+        "bytes": 50072,
+        "hash_verified": true,
+        "source_flags": {
+          "discard_statements": 1,
+          "writes_frag_depth": true
+        }
+      },
+      "fd73163ee63040a3": {
+        "archive": "Materials.pak",
+        "path": "Public/Shared/Assets/Materials/Characters/CHAR_Scalp_STI_FOR_Vulkan.bshd",
+        "spv": "captures\\dialogue-shadow-review-20261030\\native-hair\\fd73163ee63040a3.spv",
+        "glsl": "captures\\dialogue-shadow-review-20261030\\native-hair\\fd73163ee63040a3.glsl",
+        "bytes": 39124,
+        "hash_verified": true,
+        "source_flags": {
+          "discard_statements": 1,
+          "writes_frag_depth": false
+        }
+      },
+      "85218328b0610e80": {
+        "archive": "Materials.pak",
+        "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_FOR_Vulkan.bshd",
+        "spv": "captures\\dialogue-shadow-review-20261030\\native-hair\\85218328b0610e80.spv",
+        "glsl": "captures\\dialogue-shadow-review-20261030\\native-hair\\85218328b0610e80.glsl",
+        "bytes": 50012,
+        "hash_verified": true,
+        "source_flags": {
+          "discard_statements": 1,
+          "writes_frag_depth": true
+        }
+      },
+      "200befad52ea16a9": {
+        "archive": "Materials.pak",
+        "path": "Public/Shared/Assets/Materials/Characters/CHAR_Scalp_ST_FOR_Vulkan.bshd",
+        "spv": "captures\\dialogue-shadow-review-20261030\\native-hair\\200befad52ea16a9.spv",
+        "glsl": "captures\\dialogue-shadow-review-20261030\\native-hair\\200befad52ea16a9.glsl",
+        "bytes": 39184,
+        "hash_verified": true,
+        "source_flags": {
+          "discard_statements": 1,
+          "writes_frag_depth": false
+        }
+      }
+    },
+    "errors": [],
+    "scope": "Read-only effective game Data package set, exact layer hash verification. New report-only SPV/GLSL files; runtime cache untouched.",
+    "semantic_limit": "All29 Hair/Scalp FS sources now available. Recovery and source flags are not formula equivalence or GPU implementation certification. Existing reviewed StaticDepth and shadow formulas remain distinct from forward/emissive/bake; no generic raw-alpha equivalence asserted."
+  },
+  "archive_verification": {
+    "matching_bshd_containers_read": 300,
+    "target_unique_fs": 273,
+    "exact_hash_verified_fs": 273,
+    "missing_hashes": [],
+    "errors": [],
+    "scope": "Effective read-only Data package set; exact SHD8 SPIR-V module FNV hash verification; no claim about unindexed/runtime/mod families."
+  }
+}

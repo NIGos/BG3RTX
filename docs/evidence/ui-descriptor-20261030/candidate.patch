@@ -1,0 +1,17 @@
+--- a/layer/tracker.cpp
++++ b/layer/tracker.cpp
+@@ -424,7 +424,13 @@
+   VkResult r = device_of(device)->vk.AllocateDescriptorSets(device, ai, out);
+   if (r == VK_SUCCESS) {
+     std::unique_lock<std::shared_mutex> lock(tracker().mu);
+-    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i) tracker().set_layouts[out[i]] = ai->pSetLayouts[i];
++    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i) {
++      // A recycled Vulkan handle starts a NEW descriptor-set lifetime. Entries
++      // from the retired set must not satisfy optional RT/material queries.
++      tracker().sets.erase(out[i]);
++      tracker().dynamic_counts.erase(out[i]);
++      tracker().set_layouts[out[i]] = ai->pSetLayouts[i];
++    }
+   }
+   return r;
+ }

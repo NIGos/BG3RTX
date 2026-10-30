@@ -1,0 +1,143 @@
+{
+  "date": "2026-10-30",
+  "user_save_reference": "Test1",
+  "save_files_accessed": false,
+  "symptoms": {
+    "face": "Static shadows, possibly hairstyle-specific. Not the resolved blue-block flicker.",
+    "distant": "User suspects trees near culling/LOD threshold; not established.",
+    "additional": "Other dialogues and camp also show strange shadows; user collecting F10 captures."
+  },
+  "mode": "Read-only source/retained-capture review, no game actions or runtime changes.",
+  "hypotheses_not_conclusions": [
+    "Conditional alpha discard missing from capture table may make some hair cards opaque.",
+    "Static shadow terminator/origin or hair-transmission model.",
+    "Local/box shadow replacement and authored cinematic lights.",
+    "Distant foliage retention/culling/LOD or cascade caster changes."
+  ],
+  "known_stage_evidence": [
+    {
+      "capture": "20261030-161818",
+      "diffuse_dump": "d471",
+      "finding": "Hard polygonal face/neck shadows present before compose, DoF, RR and FG."
+    },
+    {
+      "capture": "20261030-161845",
+      "diffuse_dump": "d694",
+      "finding": "Face/neck dark pattern also present in diffuse before post."
+    }
+  ],
+  "limits": [
+    "Single F10 frames do not quantify flickering.",
+    "No per-ray caster identity or applied RT visibility dump; sun/local/box attribution remains open.",
+    "Prism appearance alone does not establish runtime light emission."
+  ],
+  "hair_source_findings": [
+    {
+      "fs": "5a03e5b678b2d040",
+      "asset": "Characters/CHAR_Hair:StaticDepth",
+      "camera_prepass_draws": {
+        "20261030-161818": 1,
+        "20261030-161845": 3
+      },
+      "alpha_table_supported": false,
+      "native": "Conditional discard using dual mask/noise/root attenuation, tangent/view coverage, material parameters and screen/frame dither; gl_FragDepth displaced.",
+      "path": "capturable draws follow opaque BvhDraw path because alpha_lookup fails; always-discard filter does not remove conditional cutouts."
+    },
+    {
+      "fs": "9e77575a9f377ec5",
+      "asset": "Characters/CHAR_Scalp:StaticDepth",
+      "camera_prepass_draws": {
+        "20261030-161818": 1
+      },
+      "alpha_table_supported": false,
+      "native": "smoothstep(mask.a) times root/density(mask.b) coverage, threshold or frame dither."
+    }
+  ],
+  "source_references": [
+    "layer/geocapture.cpp:1874",
+    "layer/geocapture.cpp:1956",
+    "layer/alphatest.cpp:alpha_lookup",
+    "shaders/rt/alpha_fs.txt",
+    "captures/alpha_cache/5a03e5b678b2d040.glsl",
+    "captures/alpha_cache/9e77575a9f377ec5.glsl"
+  ],
+  "sun": {
+    "configured_half_angle_radians": 0.00459,
+    "diameter_degrees": 0.525974,
+    "samples_per_pixel": 1,
+    "denoising": "RR; native shadow-map fallback remains in some regions.",
+    "approx_penumbra_width_per_metre": 0.00918,
+    "limits": "Correct finite source setting is not proof of every shadow edge; static F10 cannot measure temporal softness."
+  },
+  "next_design": "Unsupported coverage needs faithful hair/scalp evaluation or explicit native fallback for unknown intersections across visibility AND closest/origin queries. Do not make plain alpha table additions, increase bias/sun radius, or skip all hair as a claimed exact fix.",
+  "distant_caster_inventory": [
+    {
+      "fs": "378c2a63a11d4076",
+      "family": "ENV_Tileset_MultipleTextures",
+      "texture_cutout": true,
+      "native_D16_draws": {
+        "162008": 30,
+        "162506": 22
+      }
+    },
+    {
+      "fs": "5c37b87299d86ce1",
+      "family": "ENV_Base_TileBlend_Test_Alphatest_2s_Translucency",
+      "texture_cutout": true,
+      "native_D16_draws": {
+        "163004": 4,
+        "163010": 4
+      }
+    },
+    {
+      "fs": "ccf72d548a0b69fd",
+      "family": "VFX_Model Skydome Mountains",
+      "texture_cutout": true,
+      "native_D16_draws": {
+        "162506": 5,
+        "163004": 5,
+        "163010": 5
+      }
+    },
+    {
+      "fs": "34951669ed4b3b0f",
+      "family": "CHAR_Hair",
+      "texture_cutout": true,
+      "native_D16_draws": {
+        "162008": 11,
+        "162506": 3
+      }
+    }
+  ],
+  "distant_caster_limits": "Counts cover all D16 passes, not actual RT selected-layer post-dedupe captures. No specific tree or ray hit was identified.",
+  "capture_rows": [
+    {
+      "capture": "20261030-161807",
+      "frame": 57830
+    },
+    {
+      "capture": "20261030-161818",
+      "frame": 58438
+    },
+    {
+      "capture": "20261030-161845",
+      "frame": 60034
+    },
+    {
+      "capture": "20261030-162008",
+      "frame": 64487
+    },
+    {
+      "capture": "20261030-162506",
+      "frame": 80631
+    },
+    {
+      "capture": "20261030-163004",
+      "frame": 94565
+    },
+    {
+      "capture": "20261030-163010",
+      "frame": 94853
+    }
+  ]
+}
