@@ -231,7 +231,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 212 keys of bg3rtx.ini, in file order.
+// 213 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -343,6 +343,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_alpha_test", "1"},
     {"rt_alpha_cut", "1"},
     {"rt_alpha_stochastic", "1"},
+    {"rt_native_scalp", "0"},
     {"rt_alpha_unknown", "1"},
     {"rt_alpha_auto", "1"},
     {"rt_alpha_max_pct", "60"},

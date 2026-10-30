@@ -284,6 +284,26 @@ AlphaRead tex_alpha(uint a, float2 uv, float g, uint tex, uint ch) {
   return r;
 }
 
+#ifdef RT_NATIVE_SCALP
+// Native CHAR_Scalp hard branch. Sample B and A TOGETHER; the root transform
+// is part of coverage, not a replacement cutoff on raw A. Sampling follows our
+// declared ray-cone LOD policy, not original raster derivatives/dither.
+AlphaRead native_scalp_alpha(uint a, float2 uv, float g, uint tex) {
+  uint w, h, levels;
+  gAlphaTex[NonUniformResourceIndex(tex)].GetDimensions(0, w, h, levels);
+  float lod = clamp(log2(max(g * float(max(w, h)), 1e-8)), 0.0, float(levels) - 1.0);
+  float4 mask = gAlphaTex[NonUniformResourceIndex(tex)].SampleLevel(gAlphaWrap, uv, lod);
+  float2 material = asfloat(gAlphaRec.Load2(a + 48)); // AlphaRec p0.xy
+  float hi = clamp(material.x + 0.7, 0.0, 1.0);
+  AlphaRead r = (AlphaRead)0;
+  r.lvl = lod;
+  r.ok = all(isfinite(mask.zw)) && all(isfinite(material)) && material.x < hi;
+  if (r.ok) r.a = smoothstep(material.x, hi, mask.w) * mad(mask.z - 1.0, material.y, 1.0);
+  r.ok = r.ok && isfinite(r.a);
+  return r;
+}
+#endif
+
 // ---- per-instance data (Track D BVH split, layer/bvhsplit.cpp) ----
 // One 16-byte InstInfo per TLAS instance (set 1 binding 7, indexed by the
 // instance index):
@@ -369,6 +389,9 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   const bool vt = h0.z == 1;
   AlphaRead r = (AlphaRead)0;
   if (vt) r = vt_alpha(a, uv, g, tex, cache, min(h1.y, 3u));
+#ifdef RT_NATIVE_SCALP
+  else if (h0.z == 3u) r = native_scalp_alpha(a, uv, g, tex);
+#endif
   else r = tex_alpha(a, uv, g, tex, h1.y);
   if (!r.ok) {
     alpha_stat(5, true, prim);
@@ -378,7 +401,11 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   const float cut = (flags & kAlphaCutEff) != 0u ? asfloat(h1.z) : cut_first;
   // Hard cut-off where the read is as sharp as the game's (levels 0-1); towards
   // a hashed threshold over the next level, where it is a blurred coverage.
+#ifdef RT_NATIVE_SCALP
+  const float k = h0.z == 3u ? 0.0 : ((flags & kAlphaStochastic) != 0u ? saturate(r.lvl - 1.0) : 0.0);
+#else
   const float k = (flags & kAlphaStochastic) != 0u ? saturate(r.lvl - 1.0) : 0.0;
+#endif
   const float thr = k > 0.0 ? lerp(cut, alpha_hash(uv, prim), k) : cut;
   const bool solid = r.a >= thr;
   if (pc.rt_stats != 0u) {

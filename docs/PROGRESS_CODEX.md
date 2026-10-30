@@ -1,5 +1,30 @@
 # BG3RTX progress
 
+## Native scalp hard-cut candidate - 2026-10-30, isolated and not deployed
+
+`rt_native_scalp=0` is the new default-off runtime key. Kind3 captures native scalp
+material edge/root and uses the exact hard-cut scalar transform across normal RT
+query paths, with existing RT-cone sampling explicitly retained. Camera mode != 0
+stays unsupported/opaque and is counted; no fake RT dither or raw-alpha substitute.
+Sticky host capability keeps held scenes safe through key-off and core reload.
+No ABI change. Not full Hair/cascade support. F10 native Frame mode is unavailable;
+the user's close-up may remain unsupported. No live files/game changes or GPU cost
+and quality gate claimed. Full isolated build and 17/17 CTests pass; 178,780 scalar/
+capture/capability checks, 95/95 ordinary shader SPIR-V byte-identical to 37299f2,
+95/95 capable variants compile and validate. After merging main e277548, full
+isolated build and 20/20 CTests pass with both scalp and OMM tests. No live gate.
+
+## Native scalp CPU contract - 2026-10-30, isolated and not deployed
+
+`codex/native-coverage` adds native scalp depth/shadow hash mapping, bounded
+material/Frame capture and full scalar root/smoothstep/dither evaluation. No
+production caller, key, ABI or shader change. This is preparation for the actual
+coverage correction, not a live fix. MSVC standalone test: 178,522 checks pass;
+43,191 shadow and 2,826 dither reference decisions. Exact raster/sampler capture,
+Hair view/strand/depth attributes and cascade material records remain required.
+Design and exact source hashes: docs/TRACK_D_RT.md, native scalp section.
+No live files or game state changed; no GPU cost or quality gate claimed.
+
 ## User steering: native shader discovery before workarounds - 2026-10-30
 
 Search the packaged native shaders thoroughly before choosing an unknown-shader
