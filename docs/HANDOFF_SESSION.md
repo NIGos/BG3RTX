@@ -1,5 +1,14 @@
 # Session handoff - 2026-10-30: UI fix confirmed; hair/cascade coverage open
 
+Current isolated checkpoint: codex/omm-bake at c74b792 combines native Hair
+renderer/GPU probe with versioned EXT OMM producer and canonical material helper.
+Both ABI-19 DLLs build, 28/28 CTests pass. Main user build remains unchanged.
+See the top of PROGRESS_CODEX.md for exact commits/evidence and remaining gates.
+Hair actual production GPU queries pass 16/16; Test1 live quality/cost is pending.
+Root owns static OMM material/BLAS integration; Sun agent owns current cascade
+scene/material dispatcher. Sampler metadata agent finishes the minimum factory
+proof; no new generic frameworks. All live tests remain user-coordinated.
+
 Dedicated native-coverage branch: startup rt_native_hair=0 default, 88-byte native
 strand stream, native coverage/dither and procedural virtual primary/origin depth.
 Physical secondaries use native Shadow thin ribbons, not frozen camera volume.

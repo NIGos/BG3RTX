@@ -1,5 +1,35 @@
 # BG3RTX progress
 
+## Isolated integration checkpoint: Hair GPU gate and versioned OMM - 2026-10-30
+
+Branch codex/omm-bake now combines native Hair renderer 4ca35f5 with the actual
+EXT producer/content backend. Both ABI-19 DLLs build; 28/28 CTests pass. Main's
+user build remains unchanged. No game launch, live deployment or performance
+claim. Goal remains open: finish OMM, Hair and RT shadows without extra tooling.
+
+Hair production bounds and all four query entry points pass 16/16 GPU cases on
+RTX 5090, zero validation errors. Physical card t=3.0, native camera primary
+t=3.20000029; dither, held geometry, rebasing and invalid-bound UNKNOWN pass.
+Renderer source 4ca35f5, optional probe 8b1c5cc, live instructions 19fd488
+(imported here as 1b85a62/ca994f6/c74b792). Startup rt_native_hair=1 is still
+default-off. Test1 face/strand quality, moving primary match and pass cost need
+the coordinated live check in docs/NATIVE_HAIR.md. Other native families remain
+separate gaps, not implicitly covered by CHAR_Hair.
+
+OMM commits ac641b8/ed7e9e1/797d7ec capture actual GPU image/global epochs before
+sampling and recheck them per primitive, derive all reachable view mips, and
+reject unsupported BC/sRGB numeric certificates. Combined synthetic test:
+three produced O/T/UNKNOWN micromaps and GPU stamps, 2,176 UNORM endpoint and
+8,704 BC3/BC7 endpoint checks, zero failures/validation errors. Evidence:
+docs/evidence/omm-combined-bc-producer-gpu-20261030.txt. These tests do not prove
+native scene attachment, stale-scene reference selection or useful acceleration.
+
+Canonical material capture is shared with Sun work (d0e6269). Only two audited
+plain-alpha shader pairs enter the OMM recipe whitelist; six incomplete recipes
+are excluded (c5c41fc). Next: sampler proof, material-specific BLAS/reference
+scene integration, then same-ray native quality and cost gates. Do not bake
+unsupported hair/fur recipes as a single texture channel.
+
 ## Native Hair GPU candidate verified - 2026-10-30
 
 Windowless RTX 5090 probe: 16/16 cases, zero Vulkan validation errors, actual
