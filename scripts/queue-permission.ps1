@@ -91,6 +91,12 @@ function Get-QueueChildPermissionBlock([string]$tree,[switch]$ReceiptOnly) {
     return Get-QueuePermissionBlock $ctx.job $ctx.queue_root $ctx.tree $build $ctx.session $ctx.runner -InFlight
   } catch {return 'Invalid queue child context or queue owner exited'}
 }
+# No game is owned by an auto-run child before its own launch returns a handle.
+# An old PID file/another queue/shared slot never grants ownership of a process.
+function Get-QueueLaunchProcessBlock([object[]]$processes) {
+  if(@($processes | Where-Object {$_.ProcessName -in @('bg3','bg3_dx11')}).Count){return 'An unowned BG3 process is active; no launch'}
+  return ''
+}
 function Use-QueuePermission($job,[string]$queueRoot,[string]$tree,[string]$build,[string]$session,[string]$runner) {
   $path=Join-Path $queueRoot "captures/queue/authorizations/$($job.live_batch).json"
   $lock=[IO.File]::Open($path+'.lock','OpenOrCreate','ReadWrite','None')

@@ -27,6 +27,17 @@ try {
  $env:BG3RTX_QUEUE_CONTEXT=$good
  Check (-not(Test-Path (Join-Path $fake 'captures/queue/USER_AWAY'))) 'no away marker manufactured'
  Check (-not(Get-QueueChildPermissionBlock $fake)) 'current consumed presented job accepted without away'
+ Check (-not(Get-QueueLaunchProcessBlock @([pscustomobject]@{ProcessName='powershell';Id=1}))) 'claim starts with no game'
+ foreach($name in @('bg3','bg3_dx11')){
+  $appeared=@([pscustomobject]@{ProcessName=$name;Id=456})
+  Check ([bool](Get-QueueLaunchProcessBlock $appeared)) "$name appeared after claim blocks launch"
+ }
+ # Assert the actual entry/setup/prelaunch ordering and absence of the old
+ # automatic prior-run process kill, rather than only testing an unused helper.
+ $source=Get-Content (Join-Path $repo 'scripts/auto-run.ps1') -Raw
+ Check ($source -match 'Assert-QueueLaunchProcesses\s*\$game = @\(&') 'process guard is immediately before actual launch'
+ Check ($source -match 'Assert-QueueLaunchProcesses\s*Remove-Item \$pidFile') 'process guard precedes stale PID cleanup and shared setup'
+ Check ($source -notmatch '\$p\.CloseMainWindow\(\)') 'prior-run process is never closed by PID file'
  $child=Join-Path $fake 'validate.ps1'
  @'
 param([string]$Repo,[string]$Tree,[switch]$Nested)

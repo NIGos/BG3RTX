@@ -114,6 +114,12 @@ $root = Split-Path $PSScriptRoot
 . (Join-Path $PSScriptRoot 'queue-permission.ps1')
 $childBlock=Get-QueueChildPermissionBlock $root
 if($childBlock){throw $childBlock}
+function Assert-QueueLaunchProcesses {
+  # Enumerating all processes avoids treating a failed query as an empty list.
+  $block=Get-QueueLaunchProcessBlock @(Get-Process -ErrorAction Stop)
+  if($block){throw $block}
+}
+Assert-QueueLaunchProcesses
 $markerRoot = if ($env:BG3RTX_QUEUE_ROOT) { $env:BG3RTX_QUEUE_ROOT } else { $root }
 $playingMarker = Join-Path $markerRoot 'captures\queue\USER_PLAYING'
 if (Test-Path -LiteralPath $playingMarker) { throw 'USER_PLAYING exists; no launch' }
@@ -331,20 +337,10 @@ function Read-NewLog {
   } catch { return @() }
 }
 
-# A game this checkout (and tag) left running: an earlier run with -KeepRunning, or
-# one whose script was killed. Other games, other agents' and the player's, stay.
-if (Test-Path $pidFile) {
-  $old = try { Get-Content $pidFile -Raw | ConvertFrom-Json } catch { $null }
-  if ($old -and (Test-ProcAlive $old.pid $old.start)) {
-    $p = Get-Process -Id $old.pid
-    Write-Host "Closing the game an earlier run of this checkout left running (pid $($p.Id))"
-    [void]$p.CloseMainWindow()
-    if (-not $p.WaitForExit(20000)) { $p | Stop-Process -Force; $p.WaitForExit(15000) | Out-Null }
-  }
-  Remove-Item $pidFile -ErrorAction SilentlyContinue
-}
-$others = @(Get-Process bg3, bg3_dx11 -ErrorAction SilentlyContinue)
-if ($others.Count) { Write-Host "Other games running (left alone): pid $(($others | ForEach-Object Id) -join ', ')" }
+# Setup may have waited on a lock. A prior runner's process is unowned too:
+# never close/kill it based on a stale PID file or enter shared-save setup.
+Assert-QueueLaunchProcesses
+Remove-Item $pidFile -ErrorAction SilentlyContinue
 
 # Only once the game lock is held: a game that exited while we waited may have
 # rewritten graphicSettings.lsx without its DLSS entries.
@@ -429,6 +425,7 @@ if ($slot -ge 0) { $gameArgs += "bg3rtxse=slot$slot" }
 # the main menu. Shared runs therefore also put a copy of the save there (once; it is
 # refreshed when the player's save is newer). The player's own folder is only read.
 if ($slot -ge 0) {
+  Assert-QueueLaunchProcesses
   $dbgStory = Join-Path (Split-Path (Split-Path (Split-Path $saveRoot))) "Debug_Client_Profile_1\Savegames\Story"
   $dst = Join-Path $dbgStory $sd.Name
   $srcLsv = Get-ChildItem -LiteralPath $sd.FullName -Filter *.lsv | Select-Object -First 1
@@ -476,6 +473,7 @@ if ($Validation) {
 if($env:BG3RTX_QUEUE_QUIT_FILE -and (Test-Path -LiteralPath $env:BG3RTX_QUEUE_QUIT_FILE)){throw 'Queue run cancelled before game launch'}
 $childBlock=Get-QueueChildPermissionBlock $root
 if($childBlock){throw $childBlock}
+Assert-QueueLaunchProcesses
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
 $game.EnableRaisingEvents = $true
@@ -801,7 +799,7 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
 } finally {
   if (Get-Command Release-Rotation -ErrorAction SilentlyContinue) { Release-Rotation }
   # Also on errors and Ctrl+C. A killed script skips this: its locks are released by
-  # Windows, the next run of this checkout closes its game (game.pid), and the next
+  # Windows. A later run refuses any surviving game rather than closing it. The next
   # background run restores the display settings once no run of ours is alive.
   if (-not $KeepRunning) {
     # Ask nicely first so the game can save its pipeline cache; a killed game
