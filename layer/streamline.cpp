@@ -1636,6 +1636,149 @@ void sl_note_barrier(CmdState* s, VkImage image, VkImageLayout layout) {
   s->sl_layouts.emplace_back(image, layout);
 }
 
+
+// ---- fg_ui_pq=1: a UI tag consistent with the game's HDR10 composite (shaders/fg/fg_ui_pq.hlsl) ----
+// Our own persistent RGBA16F image: ui' = final - hudless * (1 - a), alpha a. Recorded at the end
+// of the UI composite pass, in the same command buffer, from the views that pass sampled.
+struct UiPqPending {
+  VkImage final_img; VkImageView final_view, hud_view, ui_view; VkImage hud_img, ui_img; uint32_t w, h;
+};
+std::unordered_map<VkCommandBuffer, UiPqPending> g_uipq_pending;   // g_mu
+struct UiPq {
+  VkImage img = VK_NULL_HANDLE; VkDeviceMemory mem = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE;
+  uint32_t w = 0, h = 0;
+  VkDescriptorSetLayout dsl = VK_NULL_HANDLE; VkPipelineLayout pl = VK_NULL_HANDLE; VkPipeline pipe = VK_NULL_HANDLE;
+  uint64_t gen = 0; VkDescriptorPool pool = VK_NULL_HANDLE; VkDescriptorSet sets[8] = {}; uint32_t next = 0;
+  bool failed = false; bool layout_known = false;
+} g_uipq;   // under g_uipq_mu
+std::mutex g_uipq_mu;
+
+bool uipq_ensure(uint32_t w, uint32_t h) {
+  DeviceData* dd = g_dd;
+  if (!dd || g_uipq.failed) return false;
+  const VkDeviceFuncs& vk = dd->vk;
+  if (!g_uipq.dsl) {
+    VkDescriptorSetLayoutBinding b[4] = {};
+    for (uint32_t i = 0; i < 4; ++i) {
+      b[i].binding = i; b[i].descriptorCount = 1; b[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+      b[i].descriptorType = i < 3 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    }
+    VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    dci.bindingCount = 4; dci.pBindings = b;
+    bool ok = vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_uipq.dsl) == VK_SUCCESS;
+    VkPipelineLayoutCreateInfo pci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pci.setLayoutCount = 1; pci.pSetLayouts = &g_uipq.dsl;
+    ok = ok && vk.CreatePipelineLayout(dd->device, &pci, nullptr, &g_uipq.pl) == VK_SUCCESS;
+    VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 3 * 8}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 8}};
+    VkDescriptorPoolCreateInfo ppi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    ppi.maxSets = 8; ppi.poolSizeCount = 2; ppi.pPoolSizes = sizes;
+    ok = ok && vk.CreateDescriptorPool(dd->device, &ppi, nullptr, &g_uipq.pool) == VK_SUCCESS;
+    if (ok) {
+      VkDescriptorSetLayout ls[8];
+      for (auto& l : ls) l = g_uipq.dsl;
+      VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+      ai.descriptorPool = g_uipq.pool; ai.descriptorSetCount = 8; ai.pSetLayouts = ls;
+      ok = vk.AllocateDescriptorSets(dd->device, &ai, g_uipq.sets) == VK_SUCCESS;
+    }
+    if (!ok) {
+      g_uipq.failed = true;
+      log("[sl] fg_ui_pq: descriptor setup failed (off)");
+      return false;
+    }
+  }
+  Bg3ShaderBlob blob{};
+  if (shader_get("fg/fg_ui_pq.hlsl", "main", "cs_6_0", &blob) && (!g_uipq.pipe || blob.generation != g_uipq.gen)) {
+    VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    mci.codeSize = blob.size_bytes; mci.pCode = blob.code;
+    VkShaderModule mod = VK_NULL_HANDLE;
+    if (vk.CreateShaderModule(dd->device, &mci, nullptr, &mod) == VK_SUCCESS) {
+      VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+      ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main"};
+      ci.layout = g_uipq.pl;
+      VkPipeline np = VK_NULL_HANDLE;
+      if (vk.CreateComputePipelines(dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &np) == VK_SUCCESS) {
+        if (g_uipq.pipe) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_uipq.pipe));
+        g_uipq.pipe = np; g_uipq.gen = blob.generation;
+        log("[sl] fg_ui_pq: pipeline built (generation %llu)", (unsigned long long)blob.generation);
+      }
+      vk.DestroyShaderModule(dd->device, mod, nullptr);
+    }
+  }
+  if (!g_uipq.pipe) return false;
+  if (g_uipq.img && g_uipq.w == w && g_uipq.h == h) return true;
+  if (g_uipq.view) defer_destroy(BG3_DEFER_IMAGE_VIEW, uint64_t(g_uipq.view));
+  if (g_uipq.img) defer_destroy(BG3_DEFER_IMAGE, uint64_t(g_uipq.img));
+  if (g_uipq.mem) defer_destroy(BG3_DEFER_MEMORY, uint64_t(g_uipq.mem));
+  g_uipq.img = VK_NULL_HANDLE; g_uipq.view = VK_NULL_HANDLE; g_uipq.mem = VK_NULL_HANDLE;
+  g_uipq.layout_known = false;
+  VkImageCreateInfo ici{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+  ici.imageType = VK_IMAGE_TYPE_2D; ici.format = VK_FORMAT_R16G16B16A16_SFLOAT; ici.extent = {w, h, 1};
+  ici.mipLevels = 1; ici.arrayLayers = 1; ici.samples = VK_SAMPLE_COUNT_1_BIT; ici.tiling = VK_IMAGE_TILING_OPTIMAL;
+  ici.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  if (vk.CreateImage(dd->device, &ici, nullptr, &g_uipq.img) != VK_SUCCESS) { g_uipq.failed = true; return false; }
+  VkMemoryRequirements req{};
+  vk.GetImageMemoryRequirements(dd->device, g_uipq.img, &req);
+  VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  mai.allocationSize = req.size;
+  mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  if (mai.memoryTypeIndex == UINT32_MAX || vk.AllocateMemory(dd->device, &mai, nullptr, &g_uipq.mem) != VK_SUCCESS ||
+      vk.BindImageMemory(dd->device, g_uipq.img, g_uipq.mem, 0) != VK_SUCCESS) {
+    g_uipq.failed = true;
+    return false;
+  }
+  VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+  vi.image = g_uipq.img; vi.viewType = VK_IMAGE_VIEW_TYPE_2D; vi.format = ici.format;
+  vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  if (vk.CreateImageView(dd->device, &vi, nullptr, &g_uipq.view) != VK_SUCCESS) { g_uipq.failed = true; return false; }
+  g_uipq.w = w; g_uipq.h = h;
+  log("[sl] fg_ui_pq: UI tag image %ux%u RGBA16F", w, h);
+  return true;
+}
+
+// Records the UI tag image after the composite pass; true if it was written.
+bool uipq_record(VkCommandBuffer cmd, const UiPqPending& p, VkImageLayout final_layout) {
+  std::lock_guard<std::mutex> lock(g_uipq_mu);
+  if (final_layout == VK_IMAGE_LAYOUT_UNDEFINED || !uipq_ensure(p.w, p.h)) return false;
+  const VkDeviceFuncs& vk = g_dd->vk;
+  VkDescriptorSet set = g_uipq.sets[g_uipq.next++ % 8];
+  VkDescriptorImageInfo ii[4] = {{VK_NULL_HANDLE, p.final_view, VK_IMAGE_LAYOUT_GENERAL},
+                                 {VK_NULL_HANDLE, p.hud_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                 {VK_NULL_HANDLE, p.ui_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                 {VK_NULL_HANDLE, g_uipq.view, VK_IMAGE_LAYOUT_GENERAL}};
+  VkWriteDescriptorSet wr[4] = {};
+  for (uint32_t i = 0; i < 4; ++i) {
+    wr[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wr[i].dstSet = set; wr[i].dstBinding = i; wr[i].descriptorCount = 1; wr[i].pImageInfo = &ii[i];
+    wr[i].descriptorType = i < 3 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+  }
+  vk.UpdateDescriptorSets(g_dd->device, 4, wr, 0, nullptr);
+  VkImageMemoryBarrier b[2] = {};
+  for (auto& x : b) {
+    x = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    x.srcQueueFamilyIndex = x.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    x.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  }
+  b[0].image = p.final_img; b[0].oldLayout = final_layout; b[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+  b[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT; b[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  b[1].image = g_uipq.img;
+  b[1].oldLayout = g_uipq.layout_known ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+  b[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+  b[1].srcAccessMask = VK_ACCESS_SHADER_READ_BIT; b[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
+                        nullptr, 2, b);
+  g_uipq.layout_known = true;
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_uipq.pipe);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_uipq.pl, 0, 1, &set, 0, nullptr);
+  vk.CmdDispatch(cmd, (p.w + 7) / 8, (p.h + 7) / 8, 1);
+  b[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL; b[0].newLayout = final_layout;
+  b[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT; b[0].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+  b[1].oldLayout = b[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+  b[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; b[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
+                        nullptr, 2, b);
+  return true;
+}
+
 void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
   (void)cmd;
   if (!g_active) return;
@@ -1699,6 +1842,8 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
       log("[sl] UI color+alpha = image %p (composite fs %016llx)", (void*)i_u, (unsigned long long)p.first_fs_hash);
     if (i_h) fill_img(g_hudless, i_h, v_h);
     if (i_u) fill_img(g_ui, i_u, v_u);
+    if (i_h && i_u && p.color_views[0] && cfg_int("fg_ui_pq", 0))
+      g_uipq_pending[cmd] = UiPqPending{p.color_images[0], p.color_views[0], v_h, v_u, i_h, i_u, p.width, p.height};
     set_watch();
   }
 }
@@ -1707,6 +1852,30 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s) {
   (void)cmd;
   if (!g_active) return;
   const Bg3PassInfo& p = s->pass;
+  {
+    UiPqPending pend{};
+    bool have = false;
+    {
+      std::lock_guard<std::mutex> lock(g_mu);
+      auto it = g_uipq_pending.find(cmd);
+      if (it != g_uipq_pending.end()) {
+        pend = it->second;
+        have = true;
+        g_uipq_pending.erase(it);
+      }
+    }
+    if (have && uipq_record(cmd, pend, s->color_layouts[0])) {
+      std::lock_guard<std::mutex> lock(g_mu);
+      g_ui.image = g_uipq.img;
+      g_ui.view = g_uipq.view;
+      g_ui.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+      g_ui.w = g_uipq.w;
+      g_ui.h = g_uipq.h;
+      g_ui.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+      g_ui.seen = frame_index();
+      g_layout[g_uipq.img] = VK_IMAGE_LAYOUT_GENERAL;
+    }
+  }
   if (p.first_fs_hash == kVelocityFs && p.color_count >= 1 && p.depth_image) {
     std::lock_guard<std::mutex> lock(g_mu);
     static int logged = 0;   // the game rotates several motion-vector images

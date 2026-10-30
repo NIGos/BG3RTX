@@ -1,0 +1,65 @@
+{
+ "name": "sup-p1regress-s7-fg2",
+ "tree": ".",
+ "save": "QuickSave_3784",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 500,
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,crash_dump=1,fg_state_every=10,rt_timing_frames=60,dump_images=0,rt_primary_check=1,rt_primary_epoch=1",
+ "window_mode": "visible_unfocused_fg",
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "tests/fixtures/sup_shift_plan.json"
+ ],
+ "patterns": [
+  "primary-ray check",
+  "rt epoch",
+  "rt passes",
+  "rt cost scope",
+  "\\[watch\\]",
+  "\\[sl\\]",
+  "\\[trace\\]",
+  "gpu RR:",
+  "hybrid GI",
+  "ls stats",
+  "rf stats",
+  "material classes",
+  "rt applied",
+  "\\[crash\\]",
+  "\\[pace\\]",
+  "pan-plan",
+  "scene wait",
+  "geo",
+  "G-buffer",
+  "\\[cpu\\]",
+  "primary-ray check",
+  "rt epoch",
+  "scene wait",
+  "\\[bvh\\]",
+  "\\[rt\\]",
+  "FG decision",
+  "displayed/rendered",
+  "\\[sl\\]",
+  "primary-ray check",
+  "sun stats"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "DLSS-G supported on this adapter: ok",
+  "slDLSSGSetOptions\\(mode on",
+  "FG decision frame",
+  "\\[pace\\]"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST"
+ ],
+ "expect_runner": [
+  "\\[window-mode\\] visible_unfocused:",
+  "\\[motion-plan\\] complete phases=",
+  "^Run ended: done"
+ ]
+}
