@@ -29,7 +29,8 @@ int main() {
   p.scale_u=NAN;check(!valid_plain_push(p));p=base;
   p.alpha_error=-1;check(!valid_plain_push(p));p=base;
   p.uv_error_u=INFINITY;check(!valid_plain_push(p));p=base;
-  p.sampling_certificate=2;check(!valid_plain_push(p));p=base;
+  p.sampling_certificate=2;check(valid_plain_push(p));p=base;
+  p.sampling_certificate=3;check(!valid_plain_push(p));p=base;
   p.max_lod=17;check(!valid_plain_push(p));p=base;
   p.max_texels=UINT32_MAX;check(!valid_plain_push(p));p=base;
   p.vertex_stride=UINT32_MAX;check(!valid_plain_push(p));p=base;

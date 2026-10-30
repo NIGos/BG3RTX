@@ -29,11 +29,13 @@ uint32_t find_memory_type(DeviceData* dd,uint32_t bits,VkMemoryPropertyFlags wan
   return UINT32_MAX;
 }
 VkDeviceAddress rt_buffer_address(VkBuffer buffer){VkBufferDeviceAddressInfo i{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};i.buffer=buffer;return smokeDevice->vk.GetBufferDeviceAddress(smokeDevice->device,&i);}
-bool shader_get(const char* name,const char*,const char*,Bg3ShaderBlob* out){
+bool shader_get(const char* name,const char* entry,const char*,Bg3ShaderBlob* out){
   if(!std::strcmp(name,"rt/omm_content_epoch.hlsl")&&!contentShader.empty()){*out={contentShader.data(),contentShader.size()*4,1};return true;}
   if(!producerShader||std::strcmp(name,"rt/omm_bake_plain.hlsl"))return false;
-  static std::vector<uint32_t> code;
-  if(code.empty()){std::ifstream f(producerShader,std::ios::binary|std::ios::ate);if(!f)return false;auto n=f.tellg();if(n<=0||uint64_t(n)%4)return false;code.resize(size_t(n)/4);f.seekg(0);f.read(reinterpret_cast<char*>(code.data()),n);if(!f)return false;}
+  static std::vector<uint32_t> mainCode,initCode;auto& code=!strcmp(entry,"init_stamp")?initCode:mainCode;
+  std::string path=producerShader;
+  if(!strcmp(entry,"init_stamp")){auto slash=path.find_last_of("/\\");path=(slash==std::string::npos?std::string():path.substr(0,slash+1))+"producer-init.spv";}
+  if(code.empty()){std::ifstream f(path,std::ios::binary|std::ios::ate);if(!f)return false;auto n=f.tellg();if(n<=0||uint64_t(n)%4)return false;code.resize(size_t(n)/4);f.seekg(0);f.read(reinterpret_cast<char*>(code.data()),n);if(!f)return false;}
   *out={code.data(),code.size()*4,1};return true;
 }
 }
@@ -74,8 +76,12 @@ static void barrier(DeviceData& dd,VkCommandBuffer cmd,VkPipelineStageFlags2 sou
   VkDependencyInfo dep{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};dep.memoryBarrierCount=1;dep.pMemoryBarriers=&b;dd.vk.CmdPipelineBarrier2(cmd,&dep);
 }
 struct ProducerOwner {
-  DeviceData* dd{};Buffer source;VkImageView view{};
-  ~ProducerOwner(){if(view)dd->vk.DestroyImageView(dd->device,view,nullptr);}
+  DeviceData* dd{};Buffer source;VkImage image{};VkDeviceMemory memory{};VkImageView view{};
+  ~ProducerOwner(){
+    if(view){omm::content_view_destroyed(dd,view);dd->vk.DestroyImageView(dd->device,view,nullptr);}
+    if(image){omm::content_image_destroyed(dd,image);dd->vk.DestroyImage(dd->device,image,nullptr);}
+    if(memory){omm::content_memory_freed(dd,memory);dd->vk.FreeMemory(dd->device,memory,nullptr);}
+  }
 };
 static std::vector<omm::Ticket> producer_fixtures(DeviceData& dd,VkCommandBuffer cmd,VkImage image,Buffer& result){
   std::vector<omm::Ticket> tickets;
@@ -84,17 +90,36 @@ static std::vector<omm::Ticket> producer_fixtures(DeviceData& dd,VkCommandBuffer
     buffer(dd,owner->source,256,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     const float v[18]={0,0,0,1,.1f,.1f,1,0,0,1,.2f,.1f,0,1,0,1,.1f,.2f};
     std::memcpy(owner->source.mapped,v,sizeof v);
-    VkImageViewCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};ci.image=image;ci.viewType=VK_IMAGE_VIEW_TYPE_2D;ci.format=VK_FORMAT_R8G8B8A8_UNORM;
-    ci.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,3,i==0?1u:0u,1};vkcheck(dd.vk.CreateImageView(dd.device,&ci,nullptr,&owner->view),"producer source view");
+    VkImageCreateInfo img{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};img.imageType=VK_IMAGE_TYPE_2D;img.format=VK_FORMAT_R8G8B8A8_UNORM;
+    img.extent={4,4,1};img.mipLevels=3;img.arrayLayers=1;img.samples=VK_SAMPLE_COUNT_1_BIT;img.tiling=VK_IMAGE_TILING_OPTIMAL;img.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+    vkcheck(dd.vk.CreateImage(dd.device,&img,nullptr,&owner->image),"producer private image");omm::content_image_created(&dd,owner->image,img);
+    VkMemoryRequirements req{};dd.vk.GetImageMemoryRequirements(dd.device,owner->image,&req);VkPhysicalDeviceMemoryProperties mp{};dd.inst->GetPhysicalDeviceMemoryProperties(dd.physical,&mp);
+    VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};ai.allocationSize=req.size;ai.memoryTypeIndex=UINT32_MAX;
+    for(uint32_t n=0;n<mp.memoryTypeCount;++n)if((req.memoryTypeBits&(1u<<n))&&(mp.memoryTypes[n].propertyFlags&VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)&&!(mp.memoryTypes[n].propertyFlags&VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)){ai.memoryTypeIndex=n;break;}
+    check(ai.memoryTypeIndex!=UINT32_MAX,"producer non-host-visible source backing");vkcheck(dd.vk.AllocateMemory(dd.device,&ai,nullptr,&owner->memory),"producer source memory");omm::content_memory_allocated(&dd,owner->memory,ai);
+    vkcheck(dd.vk.BindImageMemory(dd.device,owner->image,owner->memory,0),"producer source bind");omm::content_image_bound(&dd,owner->image,owner->memory,true);
+    VkImageViewCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};ci.image=owner->image;ci.viewType=VK_IMAGE_VIEW_TYPE_2D;ci.format=img.format;
+    ci.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,3,0,1};vkcheck(dd.vk.CreateImageView(dd.device,&ci,nullptr,&owner->view),"producer source view");omm::content_view_created(&dd,owner->view,ci);
+    omm::ContentSource verified{};check(omm::content_source_view(owner->view,verified),"producer actual view/content proof registration");
+    VkImageMemoryBarrier ib[2]{};for(auto& b:ib){b={VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,3,0,1};}
+    ib[0].image=image;ib[0].subresourceRange.baseArrayLayer=i==0?1u:0u;ib[0].srcAccessMask=VK_ACCESS_SHADER_READ_BIT;ib[0].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;ib[0].oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;ib[0].newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    ib[1].image=owner->image;ib[1].dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;ib[1].oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;ib[1].newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    dd.vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,2,ib);
+    VkImageCopy cp[3]{};for(uint32_t n=0;n<3;++n){cp[n].srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,n,i==0?1u:0u,1};cp[n].dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,n,0,1};cp[n].extent={4u>>n,4u>>n,1};}
+    dd.vk.CmdCopyImage(cmd,image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,owner->image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,3,cp);omm::content_after_image_write(cmd,owner->image);
+    ib[0].srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;ib[0].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;ib[0].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;ib[0].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    ib[1].srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;ib[1].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;ib[1].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;ib[1].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    dd.vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,0,nullptr,0,nullptr,2,ib);
     omm::PlainInput in{};in.vertices=owner->source.handle;in.vertex_bytes=256;in.mask=owner->view;in.sampled_owner=owner;
     in.push.vertex_stride=24;in.push.triangles=1;in.push.source_bytes=72;in.push.channel=3;
-    in.push.threshold_lo=in.push.threshold_hi=.5f;in.push.sampling_certificate=i<2?1u:0u;
+    in.push.threshold_lo=in.push.threshold_hi=.5f;in.push.sampling_certificate=i<2?2u:0u;
     // This synthetic source is immutable through submission, every mip is
     // identically zero/one. That endpoint fixture is not a game-asset certificate.
     omm::PlainOutput output{};auto ticket=omm::record_plain(cmd,in,&output);check(ticket&&output.data,"production GPU producer ticket");tickets.push_back(ticket);
     barrier(dd,cmd,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,VK_ACCESS_2_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_READ_BIT);
-    VkBufferCopy copies[]={{0,50000+i*32,4},{0,50004+i*32,16}};
+    VkBufferCopy copies[]={{output.data_offset,50000+i*64,4},{0,50004+i*64,16},{0,50020+i*64,16}};
     dd.vk.CmdCopyBuffer(cmd,output.data,result.handle,1,&copies[0]);dd.vk.CmdCopyBuffer(cmd,output.audit,result.handle,1,&copies[1]);
+    dd.vk.CmdCopyBuffer(cmd,output.data,result.handle,1,&copies[2]);
   }
   barrier(dd,cmd,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
   return tickets;
@@ -135,7 +160,12 @@ static void content_fixture(DeviceData& dd,VkCommandPool pool){
     const auto result=dd.vk.QueueSubmit(dd.graphics_queue,1,&s,VK_NULL_HANDLE);omm::after_submit(&dd,dd.graphics_queue,pending,result==VK_SUCCESS);vkcheck(result,"counter submit");vkcheck(dd.vk.QueueWaitIdle(dd.graphics_queue),"counter idle");
     const auto* values=static_cast<const uint32_t*>(readback.mapped);std::printf("CONTENT %s global=%u disabled=%u image=%u id=%llu slot=%u\n",label,values[0],values[1],values[2],source.imageId,source.slot);check(values[0]==global && values[1]==disabled && values[2]==perImage,"counter expected exact state");
   };
-  begin();write(false);end();submit("first",1,0,1);submit("same_CB_replay",2,0,2);first=false;
+  // TEST ONLY: prior producer fixtures have retired after queue completion.
+  // Isolate this counter test; production never resets the global epoch.
+  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,8,0);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,0);
+  write(false);end();submit("first",1,0,1);
+  // Replay must NOT repeat initialization, otherwise it would conceal the bug.
+  first=false;begin();write(false);end();submit("second_recording",2,0,2);submit("same_CB_replay",3,0,3);
   begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,4,UINT32_MAX-1);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,UINT32_MAX-1);write(false);end();submit("saturation",UINT32_MAX,1,UINT32_MAX);
   begin();write(false);end();submit("after_saturation_no_wrap",UINT32_MAX,1,UINT32_MAX);
   // TEST-ONLY reinitialization isolates the unsupported-write branch. Production
@@ -258,7 +288,7 @@ int main(int argc,char** argv){
     VkImage endpointImage{};VkDeviceMemory endpointMemory{};VkImageView endpointView{};VkSampler endpointSampler{};
     if(argc>=3){
       buffer(dd,texels,256,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);std::memset(texels.mapped,0,84);std::memset(static_cast<char*>(texels.mapped)+84,255,84);
-      VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};image.imageType=VK_IMAGE_TYPE_2D;image.format=VK_FORMAT_R8G8B8A8_UNORM;image.extent={4,4,1};image.mipLevels=3;image.arrayLayers=2;image.samples=VK_SAMPLE_COUNT_1_BIT;image.tiling=VK_IMAGE_TILING_OPTIMAL;image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+      VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};image.imageType=VK_IMAGE_TYPE_2D;image.format=VK_FORMAT_R8G8B8A8_UNORM;image.extent={4,4,1};image.mipLevels=3;image.arrayLayers=2;image.samples=VK_SAMPLE_COUNT_1_BIT;image.tiling=VK_IMAGE_TILING_OPTIMAL;image.usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
       vkcheck(dd.vk.CreateImage(dd.device,&image,nullptr,&endpointImage),"endpoint image");
       VkMemoryRequirements req{};dd.vk.GetImageMemoryRequirements(dd.device,endpointImage,&req);VkPhysicalDeviceMemoryProperties memory{};instance.GetPhysicalDeviceMemoryProperties(dd.physical,&memory);
       uint32_t type=UINT32_MAX;for(uint32_t j=0;j<memory.memoryTypeCount;++j)if((req.memoryTypeBits&(1u<<j)) && (memory.memoryTypes[j].propertyFlags&VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)){type=j;break;}check(type!=UINT32_MAX,"endpoint memory type");
@@ -303,11 +333,13 @@ int main(int argc,char** argv){
     if(argc>=4){
       const uint32_t expected[]={1,0,3};
       for(unsigned i=0;i<3;++i){
-        auto* words=answers+12500+i*8;
+        auto* words=answers+12500+i*16;
         check(words[0]==expected[i],"produced O/T/UNKNOWN wire states");
         check(words[4]==(i<2?0u:1u),"producer certificate status");
+        check(words[5]==1u && words[6]==i+1u && words[7]==0u && words[8]==0x4f4d4d31u,
+              "producer captures actual GPU image/global epochs and valid stamp");
       }
-      std::puts("PRODUCER cases=3 known_opaque=1 known_transparent=1 unknown_without_certificate=1 actual_EXT_builds=3 failures=0; immutable synthetic endpoints only");
+      std::puts("PRODUCER cases=3 known_opaque=1 known_transparent=1 unknown_without_certificate=1 actual_EXT_builds=3 GPU_epoch_stamps=3 failures=0; synthetic endpoints only, scene stale fallback not yet wired");
     }
     vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"reset completed command");omm::command_discard(cmd);check(omm::retire(ticket),"retire ticket");
     input.input_owner.reset();inputs.reset();

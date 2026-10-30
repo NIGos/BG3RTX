@@ -1,6 +1,7 @@
 #include "host.h"
 #include "omm_bake.h"
 #include "omm_submit.h"
+#include "omm_content.h"
 #include <cstring>
 #include <atomic>
 #include <memory>
@@ -23,10 +24,11 @@ struct Buffer {
 };
 struct Pipeline {
   DeviceData* dd{}; VkDescriptorSetLayout descriptors{};
-  VkPipelineLayout layout{}; VkPipeline handle{}; uint64_t generation{};
+  VkPipelineLayout layout{}; VkPipeline handle{}, stamp{}; uint64_t generation{}, stamp_generation{};
   ~Pipeline() {
     if (!dd) return;
     if (handle) dd->vk.DestroyPipeline(dd->device,handle,nullptr);
+    if (stamp) dd->vk.DestroyPipeline(dd->device,stamp,nullptr);
     if (layout) dd->vk.DestroyPipelineLayout(dd->device,layout,nullptr);
     if (descriptors) dd->vk.DestroyDescriptorSetLayout(dd->device,descriptors,nullptr);
   }
@@ -68,32 +70,33 @@ bool allocate(DeviceData* dd, Buffer& out, VkDeviceSize size, VkBufferUsageFlags
   return !host || dd->vk.MapMemory(dd->device,out.memory,0,size,0,&out.mapped)==VK_SUCCESS;
 }
 bool ensure_pipeline(DeviceData* dd) {
-  Bg3ShaderBlob blob{};
+  Bg3ShaderBlob blob{}, stamp{};
   // Compilation failure must not bake with a different evaluator generation.
-  if (!shader_get("rt/omm_bake_plain.hlsl","main","cs_6_6",&blob)) return false;
-  if (pipeline && pipeline->dd==dd && pipeline->generation==blob.generation) return true;
+  if (!shader_get("rt/omm_bake_plain.hlsl","main","cs_6_6",&blob) ||
+      !shader_get("rt/omm_bake_plain.hlsl","init_stamp","cs_6_6",&stamp)) return false;
+  if (pipeline && pipeline->dd==dd && pipeline->generation==blob.generation && pipeline->stamp_generation==stamp.generation) return true;
   auto fresh=std::make_shared<Pipeline>(); fresh->dd=dd;
-  VkDescriptorSetLayoutBinding b[4]{};
-  for (uint32_t i=0;i<4;++i) b[i]={i,i==1?VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+  VkDescriptorSetLayoutBinding b[5]{};
+  for (uint32_t i=0;i<5;++i) b[i]={i,i==1?VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                    1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; dci.bindingCount=4; dci.pBindings=b;
+  dci.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; dci.bindingCount=5; dci.pBindings=b;
   if (dd->vk.CreateDescriptorSetLayout(dd->device,&dci,nullptr,&fresh->descriptors)!=VK_SUCCESS) return false;
   VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(PlainBakePush)};
   VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   lci.setLayoutCount=1;lci.pSetLayouts=&fresh->descriptors;lci.pushConstantRangeCount=1;lci.pPushConstantRanges=&range;
   if (dd->vk.CreatePipelineLayout(dd->device,&lci,nullptr,&fresh->layout)!=VK_SUCCESS) return false;
-  VkShaderModuleCreateInfo sci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-  sci.codeSize=blob.size_bytes;sci.pCode=blob.code;
-  VkShaderModule shader{};
-  if (dd->vk.CreateShaderModule(dd->device,&sci,nullptr,&shader)!=VK_SUCCESS) return false;
-  VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-  pci.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_COMPUTE_BIT,shader,"main",nullptr};
-  pci.layout=fresh->layout;
-  const VkResult result=dd->vk.CreateComputePipelines(dd->device,VK_NULL_HANDLE,1,&pci,nullptr,&fresh->handle);
-  dd->vk.DestroyShaderModule(dd->device,shader,nullptr);
-  if (result!=VK_SUCCESS) return false;
+  auto create=[&](const Bg3ShaderBlob& code,const char* entry,VkPipeline& destination) {
+    VkShaderModuleCreateInfo sci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};sci.codeSize=code.size_bytes;sci.pCode=code.code;
+    VkShaderModule shader{};if(dd->vk.CreateShaderModule(dd->device,&sci,nullptr,&shader)!=VK_SUCCESS)return false;
+    VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+    pci.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_COMPUTE_BIT,shader,entry,nullptr};pci.layout=fresh->layout;
+    const auto result=dd->vk.CreateComputePipelines(dd->device,VK_NULL_HANDLE,1,&pci,nullptr,&destination);
+    dd->vk.DestroyShaderModule(dd->device,shader,nullptr);return result==VK_SUCCESS;
+  };
+  if(!create(blob,"main",fresh->handle)||!create(stamp,"init_stamp",fresh->stamp))return false;
   fresh->generation=blob.generation;
+  fresh->stamp_generation=stamp.generation;
   // Submitted owners retain the exact pipeline/layout until actual completion.
   pipeline=std::move(fresh);
   return true;
@@ -107,6 +110,15 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
       (in.layout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && in.layout!=VK_IMAGE_LAYOUT_GENERAL)) return 0;
   std::lock_guard lock(bake_mutex);
   DeviceData* dd=device_of(cmd);
+  if (!available_for(dd)) return 0;
+  ContentSource source{};
+  if (!content_source_view(in.mask,source) || !source.buffer || !source.viewId || !source.imageId || !source.levelCount ||
+      source.imageOffset<8 || source.imageOffset>UINT32_MAX || source.imageOffset%4 ||
+      source.imageOffset>source.bytes || source.bytes-source.imageOffset<4) return 0;
+  PlainBakePush push=in.push; push.source_epoch_offset=uint32_t(source.imageOffset);
+  // Every ray-cone footprint currently supported by tex_alpha can reach any
+  // view mip up to gAlphaWrap.maxLod=16. A caller cannot narrow this domain.
+  push.max_lod=std::min(16u,source.levelCount-1u);
   if (producer_failed || !dd || !ensure_pipeline(dd)) return 0;
   VkPhysicalDeviceProperties properties{};
   dd->inst->GetPhysicalDeviceProperties(dd->physical,&properties);
@@ -116,7 +128,7 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
   if (!level_zero_descriptors(in.push.triangles,triangles)) return 0;
   auto inputs=std::make_shared<Inputs>(); inputs->pipeline=pipeline; inputs->sampled=in.sampled_owner;
   constexpr VkBufferUsageFlags buildInput=VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT;
-  if (!allocate(dd,inputs->data,VkDeviceSize(in.push.triangles)*4,
+  if (!allocate(dd,inputs->data,256+VkDeviceSize(in.push.triangles)*4,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|buildInput,false) ||
       !allocate(dd,inputs->triangles,triangles.size()*sizeof(Triangle),buildInput,true) ||
       !allocate(dd,inputs->audit,VkDeviceSize(in.push.triangles)*16,
@@ -129,21 +141,26 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
   producer.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;producer.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
   dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                            0,1,&producer,0,nullptr,0,nullptr);
-  VkDescriptorBufferInfo buffers[3]{{in.vertices,0,in.push.source_bytes},{inputs->data.handle,0,inputs->data.bytes},
-                                  {inputs->audit.handle,0,inputs->audit.bytes}};
+  VkDescriptorBufferInfo buffers[4]{{in.vertices,0,in.push.source_bytes},{inputs->data.handle,0,inputs->data.bytes},
+                                  {inputs->audit.handle,0,inputs->audit.bytes},{source.buffer,0,source.bytes}};
   VkDescriptorImageInfo image{};image.imageView=in.mask;image.imageLayout=in.layout;
-  VkWriteDescriptorSet writes[4]{};
-  for (uint32_t i=0;i<4;++i) {
+  VkWriteDescriptorSet writes[5]{};
+  for (uint32_t i=0;i<5;++i) {
     writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstBinding=i;writes[i].descriptorCount=1;
     writes[i].descriptorType=i==1?VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     if (i==1) writes[i].pImageInfo=&image; else writes[i].pBufferInfo=&buffers[i==0?0:i-1];
   }
+  dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline->stamp);
+  dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline->layout,0,5,writes);
+  dd->vk.CmdPushConstants(cmd,pipeline->layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(push),&push);
+  dd->vk.CmdDispatch(cmd,1,1,1);
+  VkMemoryBarrier stampBarrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  stampBarrier.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT;stampBarrier.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;
+  dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&stampBarrier,0,nullptr,0,nullptr);
   dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline->handle);
-  dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline->layout,0,4,writes);
-  dd->vk.CmdPushConstants(cmd,pipeline->layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(in.push),&in.push);
   dd->vk.CmdDispatch(cmd,(in.push.triangles+63)/64,1,1);
-  Input build{};build.descriptors=triangles;build.data=inputs->data.address;build.triangles=inputs->triangles.address;
-  build.dataBytes=inputs->data.bytes;build.triangleBytes=inputs->triangles.bytes;
+  Input build{};build.descriptors=triangles;build.data=inputs->data.address+256;build.triangles=inputs->triangles.address;
+  build.dataBytes=inputs->data.bytes-256;build.triangleBytes=inputs->triangles.bytes;
   build.dataUsage=buildInput|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   build.triangleUsage=buildInput|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;build.input_owner=inputs;
   const Ticket ticket=record(cmd,build);
@@ -154,7 +171,8 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
     failed_recordings.push_back(std::move(inputs));producer_failed=true;
     log("[omm] producer disabled after EXT record failure; pending inputs retained until device idle");
   }
-  if (ticket && output) *output={ticket,inputs->data.handle,inputs->audit.handle,inputs->data.bytes,inputs->audit.bytes};
+  if (ticket && output) *output={ticket,inputs->data.handle,inputs->audit.handle,inputs->data.bytes,inputs->audit.bytes,
+                                256,source.imageId,source.viewId,uint32_t(source.imageOffset)};
   return ticket;
 }
 void bake_device_destroyed(DeviceData* dd) {

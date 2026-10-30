@@ -3,12 +3,14 @@
 #include <cmath>
 
 namespace bg3::omm {
+enum class SamplingCertificate : uint32_t { None, CompleteNumericDomain, UniformDecodedEndpoints };
 // Exact 64-byte push layout of rt/omm_bake_plain.hlsl.
 struct PlainBakePush {
   uint32_t vertex_offset{}, vertex_stride{}, triangles{}, channel{};
   float scale_u{1}, scale_v{1}, threshold_lo{}, threshold_hi{1};
   uint32_t max_lod{16}, max_texels{4096}, sampling_certificate{}, source_bytes{};
-  float alpha_error{}, uv_error_u{}, uv_error_v{}, reserved{};
+  float alpha_error{}, uv_error_u{}, uv_error_v{};
+  uint32_t source_epoch_offset{};
 };
 static_assert(sizeof(PlainBakePush)==64);
 inline bool valid_plain_push(const PlainBakePush& p) {
@@ -16,7 +18,7 @@ inline bool valid_plain_push(const PlainBakePush& p) {
       p.vertex_offset>p.source_bytes || p.channel>3 ||
       p.triangles>(p.source_bytes-p.vertex_offset)/p.vertex_stride/3 ||
       p.triangles>65535u*64u || !p.max_texels ||
-      uint64_t(p.triangles)*p.max_texels>(1u<<24) || p.max_lod>16 || p.sampling_certificate>1)
+      uint64_t(p.triangles)*p.max_texels>(1u<<24) || p.max_lod>16 || p.sampling_certificate>2 || p.source_epoch_offset%4)
     return false;
   for (float x:{p.scale_u,p.scale_v,p.threshold_lo,p.threshold_hi,p.alpha_error,p.uv_error_u,p.uv_error_v})
     if (!std::isfinite(x)) return false;

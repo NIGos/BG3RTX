@@ -17,6 +17,9 @@ struct PlainOutput {
   Ticket ticket{};
   VkBuffer data{}, audit{};
   VkDeviceSize data_bytes{}, audit_bytes{};
+  VkDeviceSize data_offset{}; // immutable content-stamp header precedes packed states
+  uint64_t image_id{}, view_id{};
+  uint32_t source_epoch_offset{};
 };
 // Producer -> EXT build. Does not bypass required material/content proofs.
 // Changes compute bindings; the enclosing injection must restore_bindings()
