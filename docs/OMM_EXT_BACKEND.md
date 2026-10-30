@@ -8,6 +8,8 @@ The layer requests **VK_EXT_opacity_micromap**, its `micromap` feature and core
 Vulkan 1.3 synchronization2. Vulkan 1.2 still supports ordinary RT, but this first
 backend declines OMM there. Explicitly disabled application features are respected.
 Private EXT function pointers avoid changing the shared Vulkan dispatch table.
+Core/Vulkan12 bufferDeviceAddress must also be enabled for address-flag allocations;
+the diagnostic EXT-only BDA configuration is declined for OMM.
 The KHR micromap-object backend is not used; recent headers alias some wire types,
 but object creation, build, destruction and triangle attachment all use EXT APIs.
 
