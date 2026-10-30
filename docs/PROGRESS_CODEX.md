@@ -13,14 +13,19 @@ and scalar smoothstep/root/dither reference: 178,522 checks. No runtime caller i
 that increment. Work continues on default-off native scalp hard-cut wiring;
 full hair strand/view/depth inputs, native camera dither and cascades remain open.
 
-Root OMM follow-up in isolated codex/p4-omm-domain 9bb426d: actual CPU SDK configured
+OMM CPU groundwork is now also merged via merge-green onto main e277548, pushed
+with its branch; 19/19 CTests, 107/107 shaders and QA passed, test-main refreshed.
+It has NO production caller or GPU OMM activation. The feature branch was updated
+with main's UI fix before integration; the old baseline-DLL warning is historical.
+Root OMM follow-up 9bb426d and mixed-texture regression fab1ee5: actual CPU SDK configured
 with <= UNKNOWN and > opaque, unchanged cutoff, four states. All 1,532 UNORM8
 equality/adjacent-float cases pass with zero known-state contradictions; baseline
 still reproduces six in 18 cases. Outputs include 12,192 opaque and 12,320 unknown
 states, zero transparent. This sacrifices transparent acceleration, is fixed-cut
 only, and is NOT GPU/filter/LOD/stochastic or traversal certification. No OMM
-production caller, live binary deployment or performance claim. Separate reviewer
-continues mixed-texture/real descriptor-array regression. OMM is not integrated.
+production caller or performance claim. Mixed-texture real descriptor/array tests
+add 25,740 independent finite samples, 66 exact-cut points and eight decoder bounds
+checks, all passing. Runtime GPU OMM is not integrated.
 
 ## User steering: native shader discovery before workarounds - 2026-10-30
 

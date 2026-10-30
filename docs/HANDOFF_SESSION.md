@@ -66,9 +66,10 @@ Do not enlarge radius to conceal solid hair/cascade cards.
 
 ## OMM OFFLINE milestone - not runtime integration
 
-Isolated C:/Users/quali/.codex/worktrees/p4-omm-domain/BG3RTX,
-codex/p4-omm-domain commit 9bb426d, based on main 47ac6a9 (WITHOUT UI fix 17fb500).
-Never deploy that worktree's baseline DLLs over the user's corrected build.
+CPU preparation merged via merge-green onto main e277548; main and branch pushed.
+Gate: 19/19 CTests, 107/107 shaders and QA; test-main refreshed. No GPU OMM enabled.
+Isolated C:/Users/quali/.codex/worktrees/p4-omm-domain/BG3RTX now includes main's
+UI fix after e79c49b; old pre-integration baseline DLLs must still not be deployed.
 - common/omm_classify.h imported from old 8d902d5; no production caller.
 - common/omm_alpha_bounds.h validates immutable selected LINEAR UNORM8 mip planes,
   conservatively scans whole selected mips, checks missing/unsupported/budget/UV/LOD.
@@ -83,7 +84,9 @@ Never deploy that worktree's baseline DLLs over the user's corrected build.
 - Follow-up fixed-cut conservative CPU configuration keeps <= UNKNOWN and >
   opaque: 1,532 UNORM8 equality/neighbor cases, ZERO contradictions, with opaque
   AND unknown outputs. Sacrifices all known-transparent acceleration; not valid
-  for stochastic thresholds/GPU sampling. Mixed-texture array regression underway.
+  for stochastic thresholds/GPU sampling. Four mixed texture tests use real
+  descriptors/arrays: 25,740 sample checks, 66 equality points, zero contradictions;
+  eight decoder bounds checks. CPU-only tests, not continuous/GPU proof.
 - FULL isolated build/CTest 19/19, 197621 classifier, 398526 code-support, 65 identity
   checks pass. No shader/ABI/device/BLAS/runtime-setting changes, no GPU cost claims.
   docs/P4_OMM.md and evidence p4-omm-domain-20261030.json in that worktree.

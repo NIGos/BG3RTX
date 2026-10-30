@@ -1,5 +1,12 @@
 # P4 opacity micromaps: corrected classification contract
 
+CPU groundwork merged to main e277548 through merge-green on 2026-10-30:
+19/19 CTests, 107/107 compute shader files and QA detector tests passed. Main and
+codex/p4-omm-domain pushed, test-main refreshed. This includes the confirmed UI
+descriptor fix. There is still NO production OMM caller, GPU bake, device
+extension activation or BLAS attachment. The isolated work history below records
+the original baseline and CPU experiments; it is not a runtime feature claim.
+
 ## Offline domain preparation - 2026-10-30
 
 Current branch codex/p4-omm-domain starts at main 47ac6a9 in an isolated worktree.
