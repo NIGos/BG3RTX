@@ -30,7 +30,7 @@ foreach($name in @('preflight','motion')){
  Check ([object]::ReferenceEquals($job,(ConvertTo-QueueWindowJob $job))) "$name unchanged by default window policy"
  Check ($job.args[-1] -eq "docs/live-test-drafts/m1-coverage/$name.plan.json") "$name existing MovePlan file"
  Check ($job.args[-2] -eq '-MovePlan') "$name MovePlan argument"
- Check (-not $job.post_gate -and $job.post -match 'scripts.qa.fg_log_audit --logs') "$name diagnostic report is not an M1 pass"
+ Check ($job.post_gate -and $job.post -match 'scripts.qa.fg_motion_gate --coverage' -and $job.post -match '--status') "$name missing pose remains a hard post gate"
  $base=Settings $job.set
  foreach($key in $base.Keys){Check ($settingSources -match ('["\n]'+[regex]::Escape($key)+'["=]')) "$name known setting $key"}
  foreach($key in @('rt','rt_alpha','rt_bvh_split','rt_native_hair','rt_native_scalp','rt_sun_cascade_current','rt_cascade_casters')){

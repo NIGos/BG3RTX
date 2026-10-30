@@ -2,7 +2,7 @@
   "name": "m1-coverage-preflight",
   "tree": ".",
   "save": "Test1",
-  "set": "preset=ultra,rt=1,rt_bvh_split=1,rt_alpha=1,rt_native_hair=1,rt_native_scalp=1,rt_sun_cascade_current=1,rt_cascade_casters=1,rt_omm=0,fg=2,fg_current_destroy_only=1,headless=0,rr=1,fps_cap=0,rt_shadows=1,rt_local_shadows=1,rt_reflections=1,gi=1,gi_rt=1,rt_origin=1,rt_scene_rebase=0,rt_alpha_test=1,rt_stats=1,ls_stats=1,rf_stats=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,pan_capture=0,pan_prepare=0,dump_raw=0,crash_dump=1",
+  "set": "preset=ultra,rt=1,rt_bvh_split=1,rt_alpha=1,rt_native_hair=1,rt_native_scalp=1,rt_sun_cascade_current=1,rt_cascade_casters=1,rt_omm=0,fg=2,fg_current_destroy_only=1,headless=0,rr=1,fps_cap=0,rt_shadows=1,rt_local_shadows=1,rt_reflections=1,gi=1,gi_rt=1,rt_origin=1,rt_scene_rebase=0,rt_alpha_test=1,rt_stats=1,ls_stats=1,rf_stats=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,pan_capture=0,pan_prepare=0,dump_raw=0,crash_dump=1,rt_xfb_mb=1408,rt_alpha_auto=1,rt_alpha_max_pct=60",
   "traces": 0,
   "hold": 90,
   "timeout": 660,
@@ -63,7 +63,7 @@
     "\\[motion-plan\\] complete phases=6\\b",
     "\\[motion-plan\\] pointer centred"
   ],
-  "post": "py -3 -m scripts.qa.fg_log_audit --logs \"{log}\" --out captures/m1-coverage/preflight-fg-audit.json",
-  "post_gate": false,
+  "post": "py -3 -m scripts.qa.fg_motion_gate --coverage --log \"{log}\" --runner \"{runner}\" --plan docs/live-test-drafts/m1-coverage/preflight.plan.json --status \"{status}\" --out captures/m1-coverage/preflight-gate.json",
+  "post_gate": true,
   "stop_on_dump": true
 }

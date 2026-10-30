@@ -88,6 +88,143 @@ def phase_metrics(log,runner,plan):
     return rows
 
 
+def coverage_quality(log, runner, plan, status=None):
+    """M1's existing-log gate; absent automatic pose/ROI proof can never pass M1."""
+    log, runner = normalize_clocks(log, runner)
+    normalized = [dict(step, fg=2, variant='native_coverage', view='normal') for step in plan]
+    rows = phase_metrics(log, runner, normalized)
+    times = starts(runner)
+    invalid, quality_failures = [], []
+    if not re.search(r'slDLSSGSetOptions\(mode on, frames to generate 1,.*: ok', log):
+        invalid.append('FG2 one-generated-frame options were never successfully applied')
+    if not status or status.get('result') != 'done' or not status.get('plan_completed'):
+        invalid.append('missing successful completed-plan process status')
+    if status and (status.get('observed_exit_code') is not None or not status.get('real_present') or
+                   not status.get('foreground') or status.get('visible_unfocused')):
+        invalid.append('real foreground presentation or normal owned cleanup unproven')
+    if not re.search(r'\[motion-plan\] complete phases='+str(len(plan))+r'\b', runner):
+        invalid.append('incomplete M1 plan')
+    alpha_frames = None
+    parsed = []
+    sun_pattern = (r'sun current native-domain coverage \((\d+) frames\): certified (\d+) pixels, fallback (\d+), '
+        r'scene unready (\d+); frame/camera/rays rejected (\d+)/(\d+)/(\d+), aux active (\d+), cone escape (\d+), '
+        r'unknown candidate (\d+); actual selected/next ray samples (\d+), native white without ray (\d+)')
+    for line in log.splitlines():
+        t = clock(line)
+        if t is None: continue
+        header = re.search(r'\[alpha\] last (\d+) frames:', line)
+        if header: alpha_frames = int(header[1])
+        hair = re.search(r'\[alpha hair\] native coverage records (\d+); invalid/missing native state (\d+); '
+            r'unsupported native interfaces total (\d+); retired bounds-invalid primitives (\d+)', line)
+        scalp = re.search(r'\[alpha scalp\] native hard records (\d+); native camera dither records (\d+); invalid/missing native state (\d+)', line)
+        sun = re.search(sun_pattern, line)
+        insertion = re.search(r'\[sun current\] calls (\d+), recorded (\d+), same-submit inserted (\d+)', line)
+        parsed.append((t, line, hair, scalp, sun, insertion, alpha_frames))
+    for row, step in zip(rows, plan):
+        label = f'phase {row["index"]}'
+        settings = dict(pair.split('=', 1) for pair in step['set'].split(',') if '=' in pair)
+        cost = bool(re.search(r'cost', step.get('label', '')))
+        opaque = settings.get('rt_alpha_test') == '0'
+        debug = settings.get('rt_debug', '0') != '0' or settings.get('ls_debug', '0') != '0'
+        row.update(cost_window=cost, opaque_control=opaque, debug_window=debug,
+                   native_hair=[], native_scalp=[], native_sun=[], sun_insertions=[], target_fs=[], capture_capacity=[], actual_alpha_modes=[],
+                   coverage_primary_required=not (cost or opaque or debug))
+        if row['index'] not in times:
+            invalid.append(label+': missing phase clock'); continue
+        begin, end = row['begin'], row['end']
+        rates = row['fps']
+        fps = min(rates) if rates else 0
+        if row.get('error') or not rates or fps < 18:
+            invalid.append(label+': incomplete real-time cadence (minimum 18 rendered fps)')
+        if row['faults']: invalid.append(label+': API/RR/device fault')
+        if not row['rt_active'] or min(row['rt_active']) < 120 or any(row['rt_missing']):
+            invalid.append(label+': missing active RT')
+        if (not row['sdk'] or not any(s['presented'] >= 1 for s in row['sdk']) or any(s['status'] or s['ratio'] <= 1 for s in row['sdk']) or
+            not row['watch_ratios'] or min(row['watch_ratios']) <= 1 or row['sdk_focus_disable_messages'] or
+            row['sdk_transitions_interior'] or row['host_toggles_interior']):
+            invalid.append(label+': steady generated FG2 presentation unproven')
+        if row['coverage_primary_required']:
+            if len(row['primary_match']) < 3 or len(row['epoch']) < 3:
+                invalid.append(label+': fewer than 3 complete primary/epoch windows')
+            if any(e['frames'] < 120 or e['frames'] != e['scene_frames'] for e in row['epoch']):
+                invalid.append(label+': current native epoch snapshots incomplete')
+        for t, line, hair, scalp, sun, insertion, frames in parsed:
+            if not begin <= t <= end: continue
+            # Each counter window must start after settings/input settle, not in
+            # the preceding phase. A minimum observed rendered rate is conservative.
+            full_alpha = fps > 0 and frames and t >= times[row['index']]+15+frames/fps
+            if hair and full_alpha: row['native_hair'].append(list(map(int, hair.groups())))
+            if scalp and full_alpha: row['native_scalp'].append(list(map(int, scalp.groups())))
+            if sun and fps > 0 and t >= times[row['index']]+max(15,step.get('motion_start',15))+int(sun[1])/fps:
+                values = list(map(int, sun.groups()))
+                row['native_sun'].append(dict(zip(('frames','certified','fallback','unready','frame_rejected',
+                    'camera_rejected','rays_rejected','aux','cone','unknown','attempted_samples','white_without_ray'), values)))
+            if insertion: row['sun_insertions'].append(list(map(int, insertion.groups())))
+            capacity = re.search(r'\[geo\] RT capture, last (\d+) frames:.*alpha draws made opaque \(region full\) ([\d.]+), opaque draws dropped \(buffer full\) ([\d.]+)', line)
+            if capacity and fps > 0 and t >= times[row['index']]+15+int(capacity[1])/fps:
+                row['capture_capacity'].append({'frames':int(capacity[1]),'alpha_made_opaque':float(capacity[2]),'opaque_dropped':float(capacity[3])})
+            if re.search(r'\[geo\] WARNING (alpha-tested region full|opaque region full)', line):
+                invalid.append(label+': capture capacity overflow (raw draw warning)')
+
+            actual_mode = re.search(r'rt stats \([0-9]+ frames, alpha test (on|off)\): primary-ray check', line)
+            if actual_mode: row['actual_alpha_modes'].append(actual_mode[1])
+            if 'this frame\'s shaders by triangles' in line:
+                row['target_fs'].extend(re.findall(r'\b[0-9a-f]{16}\b', line))
+            timing = re.search(r'rt passes: GPU cost .*TLAS this frame (\d+), previous frame (\d+), none (\d+)',line)
+            if timing and (int(timing[1]) == 0 or int(timing[2]) != 0 or int(timing[3]) != 0):
+                invalid.append(label+': stale/missing TLAS is not current-Sun proof')
+        if not row['capture_capacity'] or any(v['alpha_made_opaque'] or v['opaque_dropped'] for v in row['capture_capacity']):
+            invalid.append(label+': missing or overflowing capture capacity window')
+        if cost: continue  # Report consumer cost without requiring disabled primary diagnostics.
+        if not row['actual_alpha_modes'] or any(mode != ('off' if opaque else 'on') for mode in row['actual_alpha_modes']):
+            invalid.append(label+': requested alpha coverage control was not observed')
+        if not row['native_hair'] or any(v[0] == 0 or any(v[1:]) for v in row['native_hair']):
+            invalid.append(label+': missing/invalid native Hair coverage')
+        if not row['native_scalp'] or any(v[0]+v[1] == 0 or v[2] for v in row['native_scalp']):
+            invalid.append(label+': missing/invalid native Scalp coverage')
+        if not {'5a03e5b678b2d040','9e77575a9f377ec5'} <= set(row['target_fs']):
+            invalid.append(label+': required retained target FS unproven')
+        if len(row['sun_insertions']) < 2 or row['sun_insertions'][-1][2] <= row['sun_insertions'][0][2]:
+            invalid.append(label+': no current-phase private Sun insertion increase')
+        if not row['native_sun']:
+            invalid.append(label+': no complete native Sun coverage window')
+        for sun in row['native_sun']:
+            sun['certified_ray_pixels'] = sun['certified']-sun['white_without_ray']
+            if (sun['certified_ray_pixels'] <= 0 or sun['attempted_samples'] == 0 or sun['unready'] or
+                sun['frame_rejected'] or sun['camera_rejected'] or sun['rays_rejected']):
+                invalid.append(label+': native-white, all-unknown or unready Sun never passes')
+    calibration = next((r for r in rows if r['kind']=='static' and r['coverage_primary_required']), None)
+    values = calibration['primary_match'] if calibration else []
+    floor = min(values)-(max(values)-min(values))-.001 if len(values) >= 3 else None
+    if floor is None or floor < 99:
+        invalid.append('missing stable native static calibration near 99.5%')
+    rotations = [r for r in rows if r['kind']=='rotate' and not r['cost_window']]
+    static_motion = max((e['motion_max'] for e in calibration['epoch']), default=0)+.000001 if calibration else .000001
+    for row in rotations:
+        if not row['epoch'] or statistics.median(e['motion_mean'] for e in row['epoch']) <= static_motion:
+            invalid.append(f'phase {row["index"]}: actual rotation above static noise unproven')
+        if floor is not None and row['primary_match'] and min(row['primary_match']) < floor:
+            quality_failures.append(f'phase {row["index"]}: moving native primary below static-derived floor {floor:.3f}%')
+    if rotations:
+        for speed in {r['speed_px_s'] for r in rotations}:
+            pair = [r for r in rotations if r['speed_px_s']==speed]
+            yaw = [statistics.median(e['signed_yaw'] for e in r['epoch']) for r in pair if r['epoch']]
+            if {r['direction'] for r in pair} != {-1,1} or len(yaw) != 2 or min(yaw)*max(yaw) >= 0:
+                invalid.append(f'rotation speed {speed}: both actual directions unproven')
+        for direction in (-1,1):
+            ordered = sorted((r for r in rotations if r['direction']==direction), key=lambda r:r['speed_px_s'])
+            measured = [statistics.median(e['motion_mean'] for e in r['epoch'])*r['fps_median'] for r in ordered if r['epoch'] and r['fps_median']]
+            if len(measured) != len(ordered) or len(measured)<2 or any(b<=a for a,b in zip(measured,measured[1:])):
+                invalid.append(f'rotation direction {direction}: increasing actual speeds unproven')
+    invalid = list(dict.fromkeys(invalid))
+    return {'gate':'FAIL' if quality_failures and not invalid else 'INVALID',
+            'log_gate':'INVALID' if invalid else 'FAIL' if quality_failures else 'PASS',
+            'invalid':invalid, 'quality_failures':quality_failures, 'static_floor_percent':floor,
+            'pose_roi':{'gate':'UNAVAILABLE','reason':'Automatic Test1 dialogue pose and face/distant ROI assertion is absent; global counts cannot replace it'},
+            'phases':rows,
+            'limits':'Opaque coverage control may change energy. Cost rows exclude primary diagnostics; private Sun build cost is outside the existing consumer interval. No complete M1 PASS without automatic pose/ROI evidence.'}
+
+
 def quality(log,runner,plan):
     rows=phase_metrics(log,runner,plan); invalid=[]
     if {s['fg'] for s in plan}!={0,2}: invalid.append('both FG 0 reference and FG 2 deciding configurations required')
@@ -159,10 +296,22 @@ def quality(log,runner,plan):
 def main():
     p=argparse.ArgumentParser()
     for name in ('log','runner','plan','out'): p.add_argument('--'+name,type=Path,required=True)
-    a=p.parse_args(); result=quality(a.log.read_text(errors='replace'),a.runner.read_text(encoding='utf-8-sig',errors='replace'),json.loads(a.plan.read_text()))
+    p.add_argument('--coverage',action='store_true',help='M1 native coverage log gate; missing automatic pose/ROI remains INVALID')
+    p.add_argument('--status',type=Path)
+    a=p.parse_args()
+    log=a.log.read_text(errors='replace'); runner=a.runner.read_text(encoding='utf-8-sig',errors='replace'); plan=json.loads(a.plan.read_text())
+    if a.coverage:
+        status=json.loads(a.status.read_text(encoding='utf-8-sig')) if a.status and a.status.is_file() else None
+        result=coverage_quality(log,runner,plan,status)
+    else: result=quality(log,runner,plan)
     a.out.parent.mkdir(parents=True,exist_ok=True); a.out.write_text(json.dumps(result,indent=2)+'\n')
-    print('FG 2 DECIDING GATE',result['gate'],'reproduced',result['FG_on_reproduced'],'floor',result['static_floor_percent'])
-    for name,value in result['candidates'].items(): print(name,value)
+    if a.coverage:
+        print('M1 COVERAGE GATE',result['gate'],'floor',result['static_floor_percent'])
+        print('native log gate',result['log_gate'],'automatic pose/ROI',result['pose_roi']['gate'])
+        for reason in result['invalid']+result['quality_failures']: print(reason)
+    else:
+        print('FG 2 DECIDING GATE',result['gate'],'reproduced',result['FG_on_reproduced'],'floor',result['static_floor_percent'])
+        for name,value in result['candidates'].items(): print(name,value)
     raise SystemExit(0 if result['gate']=='PASS' else 1)
 
 

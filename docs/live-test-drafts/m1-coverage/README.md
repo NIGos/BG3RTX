@@ -6,7 +6,8 @@ PC is free. The coordinator must resolve the automatic-observation gaps below,
 receive actual user steering for the finite batch, select a frozen built candidate
 and only then create its exact authorization receipt. Do not stage these drafts.
 
-Renderer source baseline: `a9f8688` plus `a676bf5` (generation-matched OMM wiring).
+Renderer source baseline: `a9f8688` plus `a676bf5` (generation-matched OMM wiring),
+`2e049e4` (wide-capture partition feedback) and `c26f831` (Sun fallback counter).
 The experiment sets `rt_omm=0` to isolate native Hair, Scalp and current Sun.
 `tree: "."` means that future frozen candidate's queue root, not an arbitrary
 current main checkout. Freeze the eventual job, plan, tree, both ABI-19 DLLs and
@@ -27,6 +28,11 @@ source identity together. This draft does not provide a binary fingerprint.
 
 Both launches initialize `rt_native_hair=1`, `rt_native_scalp=1`,
 `rt_sun_cascade_current=1`, `rt_cascade_casters=1`, `rt_bvh_split=1`, `rt_alpha=1`.
+The profile explicitly selects a 1408 MiB RT capture budget with existing
+60% adaptive alpha partitioning and the wide-stream feedback correction. This
+restores the old total vertex capacity for the 88-byte stream; it does not
+silently redefine a user's MB cap. Physical allocation failure or any deciding
+capacity warning/alpha-made-opaque/opaque-dropped draw invalidates the test.
 These startup controls never change during a run. The same-run coverage control
 changes only `rt_alpha_test=0/1`; the opaque control does not disable RT or native
 capture. FG remains requested at 2 throughout, with real foreground presentation.
@@ -55,21 +61,27 @@ Sun tuple makes preflight/motion INVALID, never “no artifact” or a quality p
 **Current release blockers:** existing logs report native record totals and only
 the top 12 FS hashes, not a face/distant screen ROI or an assertion that Test1
 restored its dialogue pose. A target omitted from that top list is unproven.
-Existing `rebase_gate` expects a rebase off/on positive control; `fg_motion_gate`
-expects the full FG0/FG2 matrix; `rotation_preflight` treats primary-enabled rows
-as static. None is an M1 native-coverage/unknown-region gate. They must not be
-attached unchanged as a passing post-analysis. The sole existing post command,
-`fg_log_audit`, produces a diagnostic report and intentionally has `post_gate=false`.
-Therefore the current queue's execution `valid:true` cannot authorize releasing
-the dependent motion job or promoting M1. Without automatic pose/ROI and
-phase-native-counter qualification, this draft's M1 verdict remains INVALID.
-This explicit missing observable is not a request for a new framework or user work.
+The existing `fg_motion_gate` now has a bounded `--coverage` mode that reuses
+its phase/FG/primary parser and qualifies native Hair/Scalp/Sun, capacity,
+current-TLAS and actual coverage-control evidence. It reports a separate
+`log_gate`; the full `gate` remains INVALID without automatic pose/ROI proof.
+Both drafts attach it with `post_gate=true`, so an unproved preflight cannot
+release motion. Existing rebase/full FG-matrix analyzers are not substituted.
+Missing pose/ROI is an explicit unavailable observable, with no manual override
+or invented positive assertion. This is not a request for a new framework or
+user work.
 
 The companion source correction fixes Sun fallback counter 22: it now counts
 lit-side `!current_covers`, including UNKNOWN, instead of the contradictory
 `traced && !current_covers`. The eventual candidate must include that correction;
 older zero fallback fields are not proof. Keep unknown-candidate/cone/packet
 counts and require `certified - native_white_without_ray > 0` as well.
+
+The dedicated current-Sun CAS material dispatcher does not yet honor the
+baseline/procedural opaque-control bit. `rt_alpha_test=0` is observed for the
+camera Hair/Scalp/control path, but must not be called a full opaque control of
+current-Sun caster materials until that narrow control branch is corrected.
+The analyzer does not invent proof of that effect from a requested toggle.
 
 ## Deciding evidence once the blockers are resolved
 
@@ -148,7 +160,9 @@ Offline validation: `powershell -NoProfile -File docs/live-test-drafts/m1-covera
 It reads JSON, checks known fields/controls/regexes and samples the existing pure
 camera-plan function. It never imports a window controller or runs the queue.
 
-Draft validation passed 620 checks on Windows PowerShell 5.1. No queue runner,
+Draft validation passed 632 checks on each of Windows PowerShell 5.1 and 7.6.5.
+The coverage/legacy log analyzer regressions passed 27 tests, including its CLI
+report and failure exit when automatic pose/ROI evidence is absent. No queue runner,
 window API, save inspection, game or GPU was invoked. The unchanged actual
 MovePlan loader separately passed multi/single/absent cases on PowerShell 5.1
 and 7.6.5; no loader fix was needed.
