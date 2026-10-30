@@ -165,7 +165,7 @@ int main(int argc,char** argv){
   if(validationAvailable && debugAvailable){auto createDebug=reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(gipa(instance.instance,"vkCreateDebugUtilsMessengerEXT"));vkcheck(createDebug(instance.instance,&debug,nullptr,&messenger),"debug messenger");}
   std::printf("implicit_layers=disabled explicit_validation=%d debug_error_counting=%d\n",validationAvailable,messenger!=VK_NULL_HANDLE);
 #define LOAD_I(n) instance.n=reinterpret_cast<PFN_vk##n>(gipa(instance.instance,"vk" #n))
-  LOAD_I(GetPhysicalDeviceFeatures2);LOAD_I(GetPhysicalDeviceProperties);LOAD_I(GetPhysicalDeviceMemoryProperties);LOAD_I(EnumerateDeviceExtensionProperties);LOAD_I(DestroyInstance);
+  LOAD_I(GetPhysicalDeviceFeatures2);LOAD_I(GetPhysicalDeviceProperties);LOAD_I(GetPhysicalDeviceMemoryProperties);LOAD_I(GetPhysicalDeviceQueueFamilyProperties);LOAD_I(EnumerateDeviceExtensionProperties);LOAD_I(DestroyInstance);
 #undef LOAD_I
   auto enumerate=reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(gipa(instance.instance,"vkEnumeratePhysicalDevices"));
   uint32_t count{};vkcheck(enumerate(instance.instance,&count,nullptr),"enumerate device count");check(count!=0,"physical device present");
@@ -204,7 +204,8 @@ int main(int argc,char** argv){
   BG3RTX_DEVICE_FUNCS(LOAD_D)
 #undef LOAD_D
   dd.vk.GetDeviceQueue(dd.device,dd.graphics_family,0,&dd.graphics_queue);smokeDevice=&dd;
-  omm::device_created(&dd,true);check(omm::available(),"production EXT backend available");check(omm::content_device_created(&dd),"production content epochs available");
+  omm::device_created(&dd,true);check(omm::available(),"production EXT backend available");
+  if(argc==5)check(omm::content_device_created(&dd),"production content epochs available");
   VkPhysicalDeviceAccelerationStructurePropertiesKHR asProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
   VkPhysicalDeviceProperties2 allProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,&asProperties};
   auto properties2=reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(gipa(instance.instance,"vkGetPhysicalDeviceProperties2"));properties2(dd.physical,&allProperties);

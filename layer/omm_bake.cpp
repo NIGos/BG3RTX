@@ -122,6 +122,9 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
       !allocate(dd,inputs->audit,VkDeviceSize(in.push.triangles)*16,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT,false)) return 0;
   std::memcpy(inputs->triangles.mapped,triangles.data(),triangles.size()*sizeof(Triangle));
+  // Native Submit2 signal stages must include these additional texture reads,
+  // even if the later EXT build fails and leaves an orphan recording.
+  if (!mark_content_dispatch(cmd)) return 0;
   VkMemoryBarrier producer{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   producer.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;producer.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
   dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
