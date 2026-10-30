@@ -126,6 +126,21 @@ scaled and mirrored triangle cases against an independent high precision oracle.
 Inactive identity and an origin window after the physical card are also tested.
 95 fresh key-off ordinary shader entries are byte-identical to main92183e7;
 95 capable variants compile and validate; the new bounds module also validates.
-No GPU/game jobs yet. GPU cost, depth match, image quality and temporal behavior
+The separate windowless GPU probe passes 16 cases with zero Vulkan validation
+errors on RTX 5090. It executes the actual bounds shader and all four query
+functions: physical t=3, camera depth t=3.20000029, origin window t=0.1; native
+dither/vertex phases, held pool, rebase, inactive NaNs and invalid-bound UNKNOWN
+all pass. No renderer correction was needed; the initial fixture omitted the
+rebase epoch word and was corrected. See evidence/native-hair-gpu-20261030.json.
+This synthetic gate does not exercise game capture hooks or the DynSlot allocator,
+and does not replace the native G-buffer primary-match gate.
+
+Build the optional console target with BG3RTX_HAIR_GPU_PROBE=ON. Compile
+hair_bounds.hlsl and tools/native_hair_gpu_probe.hlsl using DXC cs_6_6, Vulkan1.3;
+compile the query once more with RT_SCENE_REBASE=1. Pass those three SPV paths
+to native_hair_gpu_probe.exe. The executable disables implicit layers, requires
+installed Khronos validation, creates no window and never launches the game.
+
+No game jobs run. GPU cost, live depth match, image quality and temporal behavior
 remain unmeasured. The other catalog families (Scalp, Pubes, ExtraUV, fur and lashes)
 remain an explicit backlog, not implicitly covered by these six recipes.

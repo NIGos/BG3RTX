@@ -1,5 +1,16 @@
 # BG3RTX progress
 
+## Native Hair GPU candidate verified - 2026-10-30
+
+Windowless RTX 5090 probe: 16/16 cases, zero Vulkan validation errors, actual
+production bounds and all four query functions. Physical ribbon t=3; native
+camera surface t=3.20000029; origin window t=0.1. Dither, vertex phase, held
+geometry, rebase, inactive NaNs and invalid-bound UNKNOWN pass. Runtime remains
+default off, no live deployment. Next: integrated user-led dialogue check with
+rt_native_hair=1 at startup, rt_alpha=1 and rt_bvh_split=1; inspect the affected
+hairstyle face shadows and primary match near static 99.5%. Other families and
+GPU pass cost remain open. Evidence: docs/evidence/native-hair-gpu-20261030.json.
+
 ## Procedural CHAR_Hair candidate - 2026-10-30, default off, no live gate yet
 
 Native camera primary/origin rays now solve material-dependent fragment depth;

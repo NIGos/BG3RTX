@@ -232,6 +232,14 @@ add_executable(ufloat_interval_test tests/ufloat_interval_test.cpp)
 add_test(NAME ufloat_interval_test COMMAND ufloat_interval_test)
 
 # Hot-reloadable core: rebuild while the game runs.
+option(BG3RTX_HAIR_GPU_PROBE "Build the isolated, windowless native Hair Vulkan probe" OFF)
+if(BG3RTX_HAIR_GPU_PROBE)
+  add_executable(native_hair_gpu_probe tools/native_hair_gpu_probe.cpp)
+  target_include_directories(native_hair_gpu_probe PRIVATE ${VULKAN_SDK}/Include)
+  target_link_directories(native_hair_gpu_probe PRIVATE ${VULKAN_SDK}/Lib)
+  target_link_libraries(native_hair_gpu_probe PRIVATE vulkan-1)
+endif()
+
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # SHaRC radiance cache: inject the D-EM effects-target emission. AUTO follows whether
