@@ -46,6 +46,12 @@ moved', '[rt] scene wait' (timeouts, skipped), '[alpha] ... held records dropped
 - Tree flicker with in-world UI: Shift-held labels do not raise foliage frame-to-frame change
   (final, static: 1.5-1.8% with labels, 2.4-4.3% without); gi_rt=0 and rt_shadows=0 do not
   lower it. Static runs vary 1.8-6.1% with nothing changed (wind). Open: needs motion runs.
+- Next for Roof sun shadows: alpha-test the cascade casters instead of skipping them. Inn,
+  sup-ccalpha-inn-fg2: 750-796 alpha-tested cascade draws skipped per frame, 475-489 (62%) with
+  an FS already in the alpha table and the UV the patched VS captures; the rest need table
+  entries (scripts/alpha_table.py over the shadow-pass FS). Work: a non-opaque alpha geometry
+  in the cascade BLAS, its records appended to the build's alpha set (views kept alive one
+  frame more: the cascade capture is F-1's), InstInfo for the cascade instance.
 - Foliage flicker, measured on the final image (pan bursts now keep all 16 tonemap frames):
   foliage px changing > 8/255 per frame, inn view, static 20-28%, rotating 16-50% (Q/E
   differ). With all RT strengths at 0 (the game's image, RR still on) the same (static

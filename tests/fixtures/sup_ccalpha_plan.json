@@ -1,0 +1,42 @@
+[
+ {
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 10,
+  "serial": 0,
+  "motion_start": 12,
+  "motion_end": 12,
+  "set": "rt_cascade_casters=1"
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 33,
+  "scan": 32,
+  "capture_at": 8,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 2.5,
+  "set": "rt_cascade_casters=1"
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 33,
+  "scan": 32,
+  "capture_at": 8,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 2.5,
+  "set": "rt_cascade_casters=1"
+ },
+ {
+  "seconds": 10,
+  "repeat_ms": 33,
+  "scan": 32,
+  "capture_at": 8,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 2.5,
+  "set": "rt_cascade_casters=1"
+ }
+]
