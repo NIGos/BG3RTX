@@ -1,4 +1,4 @@
-"""Decode ONE of TWO explicit, undeformed foundry constructions (not a room).
+"""Decode ONE of THREE explicit, undeformed foundry selections (not a room).
 
 Uses the already pinned portable LSLib; package reads and CPU exports only.
 Generated meshes/JSON remain private in captures/m2-foundry/construction-96ed.
@@ -23,10 +23,13 @@ RECORD='96ed9025-f791-440b-b954-8f19c06bb543'
 BANK='Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Floor_C_2D_0n5H_A/_merged.lsf'
 WALL_RECORD='569ba5ab-2ab9-4083-b44f-b2b42b337509'
 WALL_BANK='Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Mid_A_0n5D_4H_A/_merged.lsf'
+SUPPORT_RECORD='090da40c-0519-44ce-a6cb-bff11a194484'
+SUPPORT_BANK='Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Floor_A_4D_0n5H_A/_merged.lsf'
+SUPPORT_TILE='bfe78877-3d4b-b5c4-6522-2f7e83ae7de3'
 NULL='00000000-0000-0000-0000-000000000000'
 
 
-def tile_affine(tile, tiles):
+def tile_affine(tile, tiles, legacy_inactive=False):
     """Selected native Rotate is column-major; preserve its raw coefficients.
 
     This supports only explicit generated, unbent/unflipped unit-stretch tiles.
@@ -35,9 +38,11 @@ def tile_affine(tile, tiles):
     """
     if tiles.get('ConstructionBend') is not False or tiles.get('ConstructionPlaceTwoTiles') is not False:
         raise UnsupportedAffine('Bend/two-tile construction is not represented')
-    if tile.get('Flip') is not False or tile.get('ScaleZ')!=1 or tile.get('TwoSidedTileCount')!=0:
+    missing=object()
+    missing_legacy=legacy_inactive and tile.get('Stretchable') is False and all(tile.get(k,missing) is missing for k in ('Point1','Point2','TwoSidedTileCount'))
+    if tile.get('Flip') is not False or tile.get('ScaleZ')!=1 or (tile.get('TwoSidedTileCount')!=0 and not missing_legacy):
         raise UnsupportedAffine('Flip/stretch/two-sided authoring semantics not represented')
-    if any(tile.get(k)!=NULL for k in ('Point1','Point2')):
+    if any(tile.get(k)!=NULL for k in ('Point1','Point2')) and not missing_legacy:
         raise UnsupportedAffine('Linked spline deformation not represented')
     r=vec(tile.get('Rotate',()),9);p=vec(tile.get('Translate',()),3);s=tile.get('Scale')
     if not isinstance(s,(float,int)) or not math.isfinite(s) or s<=0:
@@ -68,20 +73,33 @@ def hierarchy(parent, ps):
 
 
 def validate_export(doc, visual, buffers):
-    # These four resources carry a dummy skeleton. Accept only literally
-    # identity transforms/bind matrices and a single unit-weight identity joint.
+    # These resources carry authoring skeletons. Accept only literally identity
+    # weighted-joint ancestry/bind matrices and a single unit-weight joint.
     # Never treat arbitrary skinned resources as static by discarding their pose.
-    if doc.get('animations') or any(set(n)-{'mesh','skin','name','children'} for n in doc['nodes']):
-        raise UnsupportedAffine('Nonidentity node pose/animation not represented')
+    if doc.get('animations'):raise UnsupportedAffine('Animated resource not represented')
     identity=(1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.)
+    parents={}
+    for i,n in enumerate(doc['nodes']):
+        for child in n.get('children',[]):
+            if child in parents or child<0 or child>=len(doc['nodes']):raise UnsupportedAffine('Invalid/shared node ancestry')
+            parents[child]=i
+    def require_identity_chain(index):
+        seen=set()
+        while True:
+            if index in seen:raise UnsupportedAffine('Cyclic weighted-joint ancestry')
+            seen.add(index);n=doc['nodes'][index]
+            if set(n)-{'mesh','skin','name','children'}:raise UnsupportedAffine('Nonidentity used node pose')
+            if index not in parents:break
+            index=parents[index]
     for skin in doc.get('skins',[]):
         if any(j<0 or j>=len(doc['nodes']) for j in skin['joints']):raise ValueError('Invalid skin joint')
         matrices=accessor(doc,buffers,skin['inverseBindMatrices'])
-        if len(matrices)!=len(skin['joints']) or any(m!=identity for m in matrices):
-            raise UnsupportedAffine('Nonidentity inverse bind matrix')
+        if len(matrices)!=len(skin['joints']) or not matrices or matrices[0]!=identity:
+            raise UnsupportedAffine('Nonidentity weighted inverse bind matrix')
     for i,m in enumerate(doc['meshes']):
         attached=[n for n in doc['nodes'] if n.get('mesh')==i]
         if len(attached)!=1:raise UnsupportedAffine('Missing/duplicated mesh node')
+        require_identity_chain(doc['nodes'].index(attached[0]))
         if 'skin' in attached[0] and not 0<=attached[0]['skin']<len(doc.get('skins',[])):
             raise ValueError('Invalid mesh skin')
         for p in m['primitives']:
@@ -91,6 +109,8 @@ def validate_export(doc, visual, buffers):
                 j=accessor(doc,buffers,attrs['JOINTS_0']);w=accessor(doc,buffers,attrs['WEIGHTS_0'])
                 if any(v!=(0,0,0,0) for v in j) or any(v!=(1.,0.,0.,0.) for v in w):
                     raise UnsupportedAffine('Nontrivial vertex skinning')
+                skin=doc['skins'][attached[0]['skin']]
+                require_identity_chain(skin['joints'][0])
     for m in doc['meshes']:
         if any(p.get('targets') for p in m['primitives']):raise UnsupportedAffine('Morph deformation')
         flags=m['extensions']['EXT_lslib_profile']
@@ -172,12 +192,66 @@ def wall_span_evidence(record,instances):
         note='Mesh X intervals are not opening/solid coverage or watertightness proof; authored overlap is preserved')
 
 
+def vertical_hits(meshes,x,z):
+    """Actual triangle XZ intersection; near-edge roundoff is reported uncertain.
+
+    No sampled/AABB coverage claim. Closed interval tests use a gamma32 FP64
+    arithmetic enclosure; uncertain edge hits cannot certify geometric support.
+    """
+    hits=[];uncertain=0;u=2**-53;gamma=32*u/(1-32*u)
+    for mesh in meshes:
+        p=mesh['attributes']['POSITION'];ix=mesh['indices']
+        for i in range(0,len(ix),3):
+            a,b,c=(p[j] for j in ix[i:i+3]);bx,bz=b[0]-a[0],b[2]-a[2];cx,cz=c[0]-a[0],c[2]-a[2]
+            px,pz=x-a[0],z-a[2];den=bx*cz-bz*cx
+            scale=max(abs(v) for v in (bx,bz,cx,cz,px,pz))
+            error=gamma*scale*scale
+            if abs(den)<=error:
+                # Degenerate projected triangles do not bound an XZ area.
+                continue
+            v=px*cz-pz*cx;w=bx*pz-bz*px
+            if den<0:den,v,w=-den,-v,-w
+            q=den-v-w
+            if min(v,w,q)<-3*error:continue
+            if min(v,w,q)<=3*error:uncertain+=1;continue
+            height=a[1]+(v*(b[1]-a[1])+w*(c[1]-a[1]))/den
+            hits.append(dict(height=height,tile_uuid=mesh.get('tile_uuid'),triangle=i//3,material_id=mesh['material_id']))
+    return dict(interior_hits=hits,uncertain_projected_edge_candidates=uncertain)
+
+
+def support_evidence(base,world_meshes):
+    board=json.loads((base/'world-lod0.json').read_text())
+    # This file has one ordinary asset/LOD in the verified export.
+    positions=board['attributes']['POSITION'];minimum=min(p[1] for p in positions)
+    parent=json.loads((base/'world-placement.json').read_text())
+    envelope=2*parent['world_lod_alternatives'][0]['max_declared_fp32_application_bound']
+    low=list(dict.fromkeys(tuple(p) for p in positions if p[1]<=minimum+envelope))
+    samples=[]
+    for p in low:
+        sample=vertical_hits(world_meshes,p[0],p[2]);sample['board_position']=p
+        for hit in sample['interior_hits']:hit['height_minus_board_vertex']=hit['height']-p[1]
+        samples.append(sample)
+    adjacent={}
+    for name in ('construction-96ed','construction-569b-wall'):
+        path=base/name/'evidence.json';bounds=json.loads(path.read_text())['bounds']
+        adjacent[name]=dict(bounds=bounds,source_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            xz_axis_separation=[max(0.,board['bounds'][0][j]-bounds[1][j],bounds[0][j]-board['bounds'][1][j]) for j in (0,2)])
+    return dict(board_source_sha256=hashlib.sha256((base/'world-lod0.json').read_bytes()).hexdigest(),
+        board_bounds=board['bounds'],minimum_board_y=minimum,low_vertex_band=envelope,low_vertex_samples=samples,
+        existing_adjacent_bounds=adjacent,
+        strict_interior_hit_samples=sum(bool(s['interior_hits']) for s in samples),
+        sample_count=len(samples),status='ACTUAL_TRIANGLES_AT_LOW_VERTICES_ONLY_NOT_FOOTPRINT_CLOSURE',
+        note='No opacity/collision or physical contact certification; triangle heights relative to authored board are retained, including penetration/gaps')
+
+
 def main():
     ap=argparse.ArgumentParser(__doc__);ap.add_argument('--lslib',type=Path,required=True)
-    ap.add_argument('--construction',choices=('floor','wall'),default='floor');args=ap.parse_args()
-    wall=args.construction=='wall';record_id=WALL_RECORD if wall else RECORD;bank_path=WALL_BANK if wall else BANK
-    count=8 if wall else 5
-    base=ROOT/'captures/m2-foundry';out=base/('construction-569b-wall' if wall else 'construction-96ed');out.mkdir(parents=True,exist_ok=True)
+    ap.add_argument('--construction',choices=('floor','wall','support'),default='floor');args=ap.parse_args()
+    wall=args.construction=='wall';support=args.construction=='support'
+    record_id=SUPPORT_RECORD if support else WALL_RECORD if wall else RECORD
+    bank_path=SUPPORT_BANK if support else WALL_BANK if wall else BANK
+    count=1 if support else 8 if wall else 5
+    base=ROOT/'captures/m2-foundry';out=base/('construction-support-090d' if support else 'construction-569b-wall' if wall else 'construction-96ed');out.mkdir(parents=True,exist_ok=True)
     packed=args.lslib.resolve();tools=packed/'Tools'
     if hashlib.sha256((tools/'LSLib.dll').read_bytes()).hexdigest()!='5dfe246b93cbc95531e011dbf18478c665a9de4f922f8b4a2b73da5a865c76d0':
         raise ValueError('Requires previously verified LSLib v1.20.4')
@@ -190,13 +264,19 @@ def main():
         return raw
     record=unique(lsf.parse(read(SOURCE)).find_all('GameObjects'),'MapKey',record_id)
     tiles=record.child('tiles');native_tiles=tiles.children_named('tile')
+    omitted=[]
+    if support:
+        if len(native_tiles)!=18 or record.get('_OriginalFileVersion_')!=144115207403209018:
+            raise ValueError('Selected legacy support record changed')
+        omitted=[n.to_dict() for n in native_tiles if n.get('UUID')!=SUPPORT_TILE]
+        native_tiles=[unique(native_tiles,'UUID',SUPPORT_TILE)]
     if len(native_tiles)!=count or record.child('Fillings').children:raise ValueError('Selected explicit construction changed')
     bank=lsf.parse(read(bank_path));tile_set=unique(bank.region('TileSetBank').children,'ID',tiles.get('TileSet'))
     tile_map={n.get('TileGUID'):n for n in tile_set.find_all('Tile')}
     if len(tile_map)!=len(list(tile_set.find_all('Tile'))):raise ValueError('Duplicate native TileGUID')
     folded={n.casefold():n for n in ps.index};assets={}
     for tile in native_tiles:
-        tile_affine(tile,tiles)
+        tile_affine(tile,tiles,legacy_inactive=support)
         ref=tile_map[tile.get('tile')];vid=ref.get('VisualGUID')
         if vid in assets:continue
         visual=unique(bank.region('VisualBank').children,'ID',vid)
@@ -218,7 +298,7 @@ def main():
     parent=json.loads((base/'world-placement.json').read_text());level,raw_level=hierarchy(parent,ps)
     instances=[];world_meshes=[];raw_delta=[];fp32_bounds=[]
     for tile in native_tiles:
-        vid=tile_map[tile.get('tile')].get('VisualGUID');asset=assets[vid];local=tile_affine(tile,tiles)
+        vid=tile_map[tile.get('tile')].get('VisualGUID');asset=assets[vid];local=tile_affine(tile,tiles,legacy_inactive=support)
         world=level.compose(local);raw=raw_level.compose(local)
         instance=dict(tile=tile.to_dict(),visual_id=vid,meshes=asset['meshes'],world_linear=world.linear,world_translation=world.translation)
         instances.append(instance)
@@ -234,11 +314,12 @@ def main():
             for p,w in zip(mesh['attributes']['POSITION'],transformed['attributes']['POSITION']):
                 raw_delta.append(max(abs(a-b) for a,b in zip(raw.point(p),w)))
                 fp32_bounds.append(max(world.fp32_application_bound(p)))
-    span=wall_span_evidence(record,instances) if wall else span_evidence(record,instances)
+    span=support_evidence(base,world_meshes) if support else wall_span_evidence(record,instances) if wall else span_evidence(record,instances)
     geometry=out/'world-lod0.json';geometry.write_text(json.dumps(world_meshes,separators=(',',':'))+'\n')
     summary=dict(scope=f'ONE explicit foundry {args.construction} construction; {count} instances/{len(assets)} native resources; NOT a room or closure certificate',
         record=record.to_dict(),source_fingerprints=sources,assets={vid:{k:v for k,v in a.items() if k!='meshes'} for vid,a in assets.items()},
         active_lod=0,instances=[{k:v for k,v in n.items() if k!='meshes'} for n in instances],
+        omitted_native_tiles=omitted,
         triangles=sum(m['triangles'] for m in world_meshes),vertices=sum(m['vertices'] for m in world_meshes),
         bounds=[[f(m['bounds'][side][j] for m in world_meshes) for j in range(3)] for side,f in enumerate((min,max))],
         native_material_ids=sorted({m['material_id'] for m in world_meshes}),
@@ -249,7 +330,8 @@ def main():
         parent_placement_sha256=hashlib.sha256((base/'world-placement.json').read_bytes()).hexdigest(),
         implementation_sha256={name:hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
             for name in ('probe_foundry_construction.py','probe_foundry_mesh.py','affine.py','place_foundry_mesh.py')},
-        limitations=['No runtime/XFB transform or visibility agreement','Literal identity skin bind pose only; nonidentity skin/animation rejected',
+        legacy_field_policy='Support selection ONLY: Point1/Point2/TwoSidedTileCount absent in fixed source version; nonstretchable, unit ScaleZ, Flipfalse, Bendfalse are explicit. No active spline/extra tile semantics inferred' if support else None,
+        limitations=['No runtime/XFB transform or visibility agreement','Literal identity weighted-joint ancestry/bind only; nonidentity used skin/animation rejected; unused authoring bones preserved',
             'Material identity retained, construction material textures/recipe not decoded here',
             'HLOD/dynamic visibility/destruction/fade state unresolved; no opacity inferred from editor Opacity field',
             'No bent/flipped/stretched/linked spline construction or regenerated tiles','No wall/roof/opening enclosure or room closure proof',

@@ -4,7 +4,7 @@ import unittest
 from tools.assets.affine import Affine, UnsupportedAffine
 from tools.assets.resource import Node
 from tools.assets.probe_foundry_mesh import accessor
-from tools.assets.probe_foundry_construction import tile_affine, span_evidence, wall_span_evidence, validate_export, unique, NULL
+from tools.assets.probe_foundry_construction import tile_affine, span_evidence, wall_span_evidence, vertical_hits, validate_export, unique, NULL
 
 
 def node(name,**attrs):
@@ -102,6 +102,31 @@ class ConstructionProbeTests(unittest.TestCase):
         for values in ([],[n,n]):
             with self.assertRaises(ValueError):unique(values,'ID','yes')
 
+    def test_legacy_missing_fields_only_for_inactive_selected_subset(self):
+        ts=node('tiles',ConstructionBend=False,ConstructionPlaceTwoTiles=False)
+        t=tile(Stretchable=False)
+        for k in ('Point1','Point2','TwoSidedTileCount'):del t[k]
+        with self.assertRaises(UnsupportedAffine):tile_affine(t,ts)
+        self.assertEqual(tile_affine(t,ts,legacy_inactive=True).point((0,0,0)),tuple(t['Translate']))
+        t['Stretchable']=True
+        with self.assertRaises(UnsupportedAffine):tile_affine(t,ts,legacy_inactive=True)
+        t['Stretchable']=False;t['Point1']='linked'
+        with self.assertRaises(UnsupportedAffine):tile_affine(t,ts,legacy_inactive=True)
+
+    def test_actual_vertical_triangle_hits_keep_height_and_edge_uncertainty(self):
+        # Plane y = x + 2*z at both ordinary and world-scale translations.
+        for ox,oy,oz in ((0.,0.,0.),(-330.,6.,-143.)):
+            m=dict(attributes={'POSITION':[(ox,oy,oz),(ox+2,oy+2,oz),(ox,oy+4,oz+2)]},
+                   indices=[0,1,2],material_id='native',tile_uuid='source')
+            hit=vertical_hits([m],ox+.5,oz+.5)
+            self.assertEqual(hit['uncertain_projected_edge_candidates'],0)
+            self.assertEqual(hit['interior_hits'][0]['height'],oy+1.5)
+            m['indices']=[0,2,1]
+            self.assertEqual(vertical_hits([m],ox+.5,oz+.5)['interior_hits'][0]['height'],oy+1.5)
+            self.assertFalse(vertical_hits([m],ox+3,oz+3)['interior_hits'])
+            edge=vertical_hits([m],ox+1,oz+1)
+            self.assertFalse(edge['interior_hits']);self.assertEqual(edge['uncertain_projected_edge_candidates'],1)
+
     def test_color_unorm_requires_explicit_opt_in(self):
         d={'accessors':[dict(bufferView=0,componentType=5121,type='VEC4',count=1,normalized=True)],
            'bufferViews':[dict(buffer=0,byteLength=4)]}
@@ -119,6 +144,12 @@ class ConstructionProbeTests(unittest.TestCase):
                         dict(bufferView=2,componentType=5126,type='VEC4',count=1)],
            'bufferViews':[dict(buffer=0,byteOffset=0,byteLength=64),dict(buffer=0,byteOffset=64,byteLength=4),dict(buffer=0,byteOffset=68,byteLength=16)]}
         validate_export(d,node('Visual'),[raw])
+        unused=copy.deepcopy(d);unused['nodes'].append({'name':'unweighted authoring bone','translation':[7,8,9]})
+        validate_export(unused,node('Visual'),[raw])
+        # The same extra bone becomes relevant as soon as it is an ancestor of
+        # the weighted joint. It must never be discarded as a harmless helper.
+        unused['nodes'][-1]['children']=[0]
+        with self.assertRaises(UnsupportedAffine):validate_export(unused,node('Visual'),[raw])
         changed=bytearray(raw);struct.pack_into('<f',changed,12*4,1)
         with self.assertRaises(UnsupportedAffine):validate_export(d,node('Visual'),[changed])
         changed=bytearray(raw);struct.pack_into('<f',changed,68,.5)
