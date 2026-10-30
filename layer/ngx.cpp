@@ -1338,12 +1338,40 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   }
 
   int old_reset = 0;
+  if (cfg_int("pan_inputs", 0) && cfg_int("pan_capture", 0) > 0) {
+    const char* keys[] = {NVSDK_NGX_Parameter_Color, NVSDK_NGX_Parameter_Depth,
+                          NVSDK_NGX_Parameter_MotionVectors};
+    const char* names[] = {"rr_color", "rr_depth", "rr_mvec"};
+    for (unsigned i = 0; i < 3; ++i) {
+      auto* r = get_res(p, keys[i]);
+      if (!r || r->Type != NVSDK_NGX_RESOURCE_VK_TYPE_VK_IMAGEVIEW) continue;
+      const auto& im = r->Resource.ImageViewInfo;
+      Bg3Binding b{};
+      b.image = im.Image; b.view = im.ImageView; b.format = VkFormat(im.Format);
+      b.width = im.Width; b.height = im.Height;
+      b.layout = i == 0 && use_post ? VK_IMAGE_LAYOUT_GENERAL : sl_input_layout(cmd, b.image,
+          i == 1 ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      pan_capture(cmd, names[i], &b);
+    }
+  }
   bool had_reset = get_i(p, NVSDK_NGX_Parameter_Reset, old_reset);
+  auto dump_mv = [&](const char* name) {
+    if (!cfg_int("pan_inputs", 0) || cfg_int("pan_capture", 0) <= 0) return;
+    auto* mv = get_res(p, NVSDK_NGX_Parameter_MotionVectors);
+    if (!mv || mv->Type != NVSDK_NGX_RESOURCE_VK_TYPE_VK_IMAGEVIEW) return;
+    const auto& im = mv->Resource.ImageViewInfo;
+    Bg3Binding b{};
+    b.image = im.Image; b.view = im.ImageView; b.format = VkFormat(im.Format);
+    b.width = im.Width; b.height = im.Height;
+    b.layout = sl_input_layout(cmd, b.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    pan_capture(cmd, name, &b);
+  };
   if (reset) p->Set(NVSDK_NGX_Parameter_Reset, 1);
   {
     Nest n;
     result = orig_eval()(cmd, f.rr, p, cb);
   }
+  dump_mv("rr_mvec_after");
   if (reset) p->Set(NVSDK_NGX_Parameter_Reset, had_reset ? old_reset : 0);
   if (use_post) {
     p->Set(NVSDK_NGX_Parameter_Color, static_cast<void*>(color));
@@ -1357,6 +1385,7 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   // The game's post chain after RR, at output resolution, into its DLSS output.
   if (use_post && result == NVSDK_NGX_Result_Success && !rrpost_final(cmd, out->Resource.ImageViewInfo.Image, VkFormat(out->Resource.ImageViewInfo.Format), ow, oh))
     log("[ngx] RR before post: the output-resolution grade could not be recorded");
+  dump_mv("rr_mvec_after_post");
 
   if (show && result == NVSDK_NGX_Result_Success) {
     memory_barrier(dd, cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -1463,6 +1492,22 @@ static NVSDK_NGX_Result Detour_Eval(VkCommandBuffer cmd, const NVSDK_NGX_Handle*
   auto* p = const_cast<NVSDK_NGX_Parameter*>(cp);
   ++f->evals;
   if (NVSDK_NGX_Resource_VK* mv = get_res(p, NVSDK_NGX_Parameter_MotionVectors)) {
+    if (cfg_int("fg_input_copy", 0)) {
+      const auto& im = mv->Resource.ImageViewInfo;
+      Bg3Binding b{};
+      b.image = im.Image; b.view = im.ImageView; b.format = VkFormat(im.Format);
+      b.width = im.Width; b.height = im.Height;
+      b.layout = sl_input_layout(cmd, b.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      auto* dep = get_res(p, NVSDK_NGX_Parameter_Depth);
+      if (dep && dep->Type == NVSDK_NGX_RESOURCE_VK_TYPE_VK_IMAGEVIEW) {
+        const auto& di = dep->Resource.ImageViewInfo;
+        Bg3Binding db{};
+        db.image = di.Image; db.view = di.ImageView; db.format = VkFormat(di.Format);
+        db.width = di.Width; db.height = di.Height;
+        db.layout = sl_input_layout(cmd, db.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        sl_preserve_inputs(cmd, b, db);
+      }
+    }
     std::lock_guard<std::mutex> mvl(g_mv_mu);
     g_mv_image = mv->Resource.ImageViewInfo.Image;
     g_mv_view = mv->Resource.ImageViewInfo.ImageView;

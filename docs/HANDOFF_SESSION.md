@@ -1,4 +1,4 @@
-# Session handoff — 2026-10-30 09:00 (hidden floor squares fixed)
+# Session handoff — 2026-10-30 (UI inputs candidate)
 
 Read AGENTS.md, then the top of docs/PROGRESS_CODEX.md, then D:/BG3_Tools/USER_STEERING.md
 (newest entries first). The user decides by FG on (fg=2), real presentation, visible window.
@@ -20,7 +20,17 @@ Check Blushing Mermaid - 96h 39m near crates and stage edge. Refits and instance
 indexing are not the cause. Split-off hid the boxes by capture-buffer overflow.
 See PROGRESS_CODEX and TRACK_D_RT section 11 for the deciding run and diagnostics.
 
-## State (before this integration: main 6e3b997)
+## UI inputs (sup/ui-inputs; optional correction stays off)
+
+Late FG depth is zero in 64/128 samples; MV gains 3 non-finite components after RR/post.
+Missing event-wait tracking also declared layouts 3/2 instead of observed 5/5.
+fg_input_copy=0 preserves the NGX depth/MV pair, guarded by the SDK consumption fence,
+and corrects event-wait tracking. Both inputs match in 68/68 private copies; pair-copy
+GPU median 0.026 ms. No new validation errors in the deciding capture. Keep default 0:
+continuous rotation and matched in-world UI coverage are not qualified; full flicker
+resolution is not claimed. See top of PROGRESS_CODEX, TRACK_B_FG and the evidence JSON.
+
+## State (before UI input integration: main f257d00)
 
 Defaults on since 2026-10-29: rt_scene_wait (now 12 ms), rt_dyn_hold=4,
 fg_current_destroy_only=1, rt_sun_roof_up 50 / pad 3, rt_prepass_by_ordinal=0,

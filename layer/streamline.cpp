@@ -25,11 +25,13 @@
 // bindings 2 and 5), read on the CPU from the game's mapped memory.
 #include "host.h"
 #include "../common/fg_stability.h"
+#include "../common/fg_copy_lease.h"
 
 #include <psapi.h>
 #include <dbghelp.h>
 
 #include <cmath>
+#include <algorithm>
 #include <cstring>
 #include <set>
 
@@ -269,9 +271,12 @@ uint32_t snap_memory_type(DeviceData* dd, uint32_t bits) {
 
 bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, VkPresentInfoKHR& out,
                   VkSemaphore& wait) {
+  // Allow separate off/on snapshot windows in one live A/B session.
+  const int requested = cfg_int("fg_snap", 0);
+  if (requested <= 0) { g_snaps_left = -1; return false; }
   if (g_snaps_left == 0 || info->swapchainCount != 1 || !g_sc_extent.width) return false;
   if (g_snaps_left < 0) {
-    int n = cfg_int("fg_snap", 0);
+    int n = requested;
     if (n <= 0 || !fg_running_now() || g_fg_enables < cfg_int("fg_snap_on", 1) ||
         frame_index() < g_fg_on_frame + uint64_t(cfg_int("fg_snap_after", 60)))
       return false;
@@ -584,6 +589,7 @@ Img g_depth, g_mvec, g_hudless, g_ui;
 VkImageView g_depth_only_view = VK_NULL_HANDLE;   // ours: depth aspect only
 VkImage g_depth_only_for = VK_NULL_HANDLE;
 std::unordered_map<VkImage, VkImageLayout> g_layout;   // queue-order layout at the last submit
+std::unordered_map<VkImage, VkImageLayout> g_input_layout; // observations, including event waits
 // Every image that has been a tag (the game rotates several per kind), so
 // their layouts are tracked before they are identified in a given frame.
 constexpr int kWatch = 32;
@@ -608,6 +614,160 @@ VkSemaphore g_inputs_fence = VK_NULL_HANDLE;
 uint64_t g_inputs_value = 0;
 PFN_vkWaitSemaphores g_wait_semaphores = nullptr;
 int g_watch_next = 0;
+
+// Private allocations: MV contents observed at UI composite differ from NGX's inputs.
+// Reuse a slot only after the SDK's inputs-consumed fence for its tagged present.
+struct MvCopySlot {
+  Img image{};
+  Img depth{};
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  VkDeviceMemory depth_memory = VK_NULL_HANDLE;
+  VkSemaphore fence = VK_NULL_HANDLE;
+  FgCopyLease lease;
+  uint64_t submitted = UINT64_MAX;
+};
+std::mutex g_mv_copy_mu;
+MvCopySlot g_mv_copies[8]{};
+Img g_preserved_mvec; // selected in submit order, under g_mu
+Img g_preserved_depth;
+VkQueryPool g_mv_copy_queries = VK_NULL_HANDLE;
+float g_mv_copy_period = 1;
+std::vector<double> g_mv_copy_ms;
+
+void preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& source, const Bg3Binding& depth) {
+  if (!g_active || !g_fg_running || !source.image || source.format != VK_FORMAT_R16G16_SFLOAT ||
+      !depth.image || depth.format != VK_FORMAT_D24_UNORM_S8_UINT ||
+      depth.width != source.width || depth.height != source.height) return;
+  {
+    std::shared_lock<std::shared_mutex> lock(tracker().mu);
+    auto it = tracker().images.find(source.image);
+    if (it == tracker().images.end() || !(it->second.ci.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return;
+    it = tracker().images.find(depth.image);
+    if (it == tracker().images.end() || !(it->second.ci.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return;
+  }
+  CmdState* state = cmd_state(cmd);
+  if (!state || state->sl_mvec_copy.image) return;
+  std::lock_guard<std::mutex> lock(g_mv_copy_mu);
+  auto* dd = g_dd;
+  auto& vk = dd->vk;
+  for (unsigned index = 0; index < 8; ++index) {
+    auto& slot = g_mv_copies[index];
+    if (slot.lease.written) {
+      if (!slot.fence || !slot.lease.value || !g_wait_semaphores) continue;
+      VkSemaphoreWaitInfo wait{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
+      wait.semaphoreCount = 1; wait.pSemaphores = &slot.fence; wait.pValues = &slot.lease.value;
+      if (!slot.lease.reusable(g_wait_semaphores(dd->device, &wait, 0) == VK_SUCCESS)) continue;
+    }
+    if (slot.image.image && (slot.image.w != source.width || slot.image.h != source.height)) {
+      vk.DestroyImageView(dd->device, slot.image.view, nullptr);
+      vk.DestroyImage(dd->device, slot.image.image, nullptr);
+      vk.FreeMemory(dd->device, slot.memory, nullptr);
+      if (slot.depth.view) vk.DestroyImageView(dd->device, slot.depth.view, nullptr);
+      if (slot.depth.image) vk.DestroyImage(dd->device, slot.depth.image, nullptr);
+      if (slot.depth_memory) vk.FreeMemory(dd->device, slot.depth_memory, nullptr);
+      slot = {};
+    }
+    auto allocate = [&](const Bg3Binding& src, Img& target, VkDeviceMemory& target_memory, VkImageAspectFlags aspect) {
+      if (target.image) return true;
+      VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+      ci.imageType = VK_IMAGE_TYPE_2D; ci.format = src.format; ci.extent = {src.width, src.height, 1};
+      ci.mipLevels = ci.arrayLayers = 1; ci.samples = VK_SAMPLE_COUNT_1_BIT; ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+      ci.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+      VkImage image = VK_NULL_HANDLE; VkDeviceMemory memory = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE;
+      if (vk.CreateImage(dd->device, &ci, nullptr, &image) != VK_SUCCESS) return false;
+      VkMemoryRequirements req{}; vk.GetImageMemoryRequirements(dd->device, image, &req);
+      VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+      ai.allocationSize = req.size; ai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+      bool ok = ai.memoryTypeIndex != UINT32_MAX && vk.AllocateMemory(dd->device, &ai, nullptr, &memory) == VK_SUCCESS &&
+                vk.BindImageMemory(dd->device, image, memory, 0) == VK_SUCCESS;
+      VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+      vi.image = image; vi.viewType = VK_IMAGE_VIEW_TYPE_2D; vi.format = src.format;
+      vi.subresourceRange = {aspect, 0, 1, 0, 1};
+      ok = ok && vk.CreateImageView(dd->device, &vi, nullptr, &view) == VK_SUCCESS;
+      if (!ok) {
+        if (view) vk.DestroyImageView(dd->device, view, nullptr);
+        vk.DestroyImage(dd->device, image, nullptr);
+        if (memory) vk.FreeMemory(dd->device, memory, nullptr);
+        return false;
+      }
+      target = {image, view, src.format, src.width, src.height, ci.usage, 0};
+      target_memory = memory;
+      log("[sl] input copy slot %u: %ux%u private fmt %d image %p", index, src.width, src.height, int(src.format), (void*)image);
+      return true;
+    };
+    if (!allocate(source,slot.image,slot.memory,VK_IMAGE_ASPECT_COLOR_BIT) ||
+        !allocate(depth,slot.depth,slot.depth_memory,VK_IMAGE_ASPECT_DEPTH_BIT)) return;
+    if (!g_mv_copy_queries) {
+      VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+      qi.queryType = VK_QUERY_TYPE_TIMESTAMP; qi.queryCount = 16;
+      vk.CreateQueryPool(dd->device, &qi, nullptr, &g_mv_copy_queries);
+      VkPhysicalDeviceProperties props{};
+      dd->inst->GetPhysicalDeviceProperties(dd->physical, &props);
+      g_mv_copy_period = props.limits.timestampPeriod;
+    }
+    if (g_mv_copy_queries) {
+      if (slot.lease.written) {
+        uint64_t result[4]{};
+        if (vk.GetQueryPoolResults(dd->device, g_mv_copy_queries, index * 2, 2, sizeof result, result, 16,
+                                  VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_SUCCESS && result[1] && result[3]) {
+          g_mv_copy_ms.push_back(double(result[2] - result[0]) * g_mv_copy_period / 1e6);
+          if (g_mv_copy_ms.size() == 120) {
+            std::sort(g_mv_copy_ms.begin(), g_mv_copy_ms.end());
+            log("[sl] gpu FG input copy: median %.3f ms, p99 %.3f ms (120 samples)", g_mv_copy_ms[60], g_mv_copy_ms[118]);
+            g_mv_copy_ms.clear();
+          }
+        }
+      }
+      vk.CmdResetQueryPool(cmd, g_mv_copy_queries, index * 2, 2);
+      vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_mv_copy_queries, index * 2);
+    }
+    VkImageMemoryBarrier barriers[4]{};
+    for (auto& b : barriers) {
+      b = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+      b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    }
+    const Bg3Binding* inputs[] = {&source,&depth};
+    const Img* targets[] = {&slot.image,&slot.depth};
+    for (unsigned i=0;i<2;++i) {
+      auto& src = barriers[i*2]; auto& dst = barriers[i*2+1];
+      src.image = inputs[i]->image; src.oldLayout = inputs[i]->layout;
+      src.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+      src.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT; src.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+      dst.image = targets[i]->image;
+      dst.oldLayout = slot.lease.written ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+      dst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+      dst.srcAccessMask = slot.lease.written ? VK_ACCESS_MEMORY_READ_BIT : 0; dst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+      if(i) src.subresourceRange.aspectMask = dst.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
+    vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 4, barriers);
+    for (unsigned i=0;i<2;++i) {
+      VkImageCopy copy{};
+      copy.srcSubresource = copy.dstSubresource = {VkImageAspectFlags(i ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT), 0, 0, 1};
+      copy.extent = {source.width, source.height, 1};
+      vk.CmdCopyImage(cmd, inputs[i]->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, targets[i]->image,
+                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+    }
+    for (auto& b : barriers) { std::swap(b.oldLayout, b.newLayout); b.srcAccessMask = b.dstAccessMask; b.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT; }
+    barriers[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barriers[3].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 4, barriers);
+    if (g_mv_copy_queries) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_mv_copy_queries, index * 2 + 1);
+    state->sl_mvec_copy = source;
+    state->sl_mvec_copy.image = slot.image.image; state->sl_mvec_copy.view = slot.image.view;
+    state->sl_mvec_copy.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    state->sl_depth_copy = depth;
+    state->sl_depth_copy.image = slot.depth.image; state->sl_depth_copy.view = slot.depth.view;
+    state->sl_depth_copy.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    state->sl_mvec_slot = index;
+    slot.lease.write(); slot.fence = VK_NULL_HANDLE; slot.submitted = UINT64_MAX;
+    if (cfg_int("pan_inputs", 0)) pan_capture(cmd, "rr_mvec_copy", &state->sl_mvec_copy);
+    if (cfg_int("pan_inputs", 0)) pan_capture(cmd, "rr_depth_copy", &state->sl_depth_copy);
+    return;
+  }
+  static unsigned failures = 0;
+  if (failures++ < 8) log("[sl] input copy unavailable: all slots pending SDK input consumption or different extent");
+}
 
 // Camera constants from the last submitted velocity pass.
 struct CamRaw {
@@ -796,6 +956,16 @@ VkImageLayout layout_of(VkImage img, VkImageLayout fallback) {
   return it == g_layout.end() || it->second == VK_IMAGE_LAYOUT_UNDEFINED ? fallback : it->second;
 }
 
+VkImageLayout recorded_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout fallback) {
+  if (auto* state = cmd_state(cmd))
+    for (const auto& [img, layout] : state->sl_input_layouts)
+      if (img == image) return layout;
+  std::lock_guard<std::mutex> lock(g_mu);
+  auto it = g_input_layout.find(image);
+  if (it != g_input_layout.end()) return it->second;
+  return layout_of(image, fallback);
+}
+
 void ensure_depth_view() {
   if (g_depth.image == g_depth_only_for && g_depth_only_view) return;
   if (g_depth_only_view) defer_destroy(BG3_DEFER_IMAGE_VIEW, uint64_t(g_depth_only_view));
@@ -929,6 +1099,11 @@ void fill_constants(sl::Constants& c, uint32_t rw, uint32_t rh) {
 }
 
 }  // namespace
+
+void sl_preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& source, const Bg3Binding& depth) { preserve_inputs(cmd, source, depth); }
+VkImageLayout sl_input_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout fallback) {
+  return recorded_layout(cmd, image, fallback);
+}
 
 // ---------------------------------------------------------------------------
 // crash diagnostics: the game's own crash handler exits silently, so fatal
@@ -1569,6 +1744,23 @@ void sl_device_destroy(DeviceData* dd) {
     sl::Result r = g_sl.Shutdown();
     log("[sl] slShutdown: %s", res_str(r));
   }
+  bool have_copies = g_mv_copy_queries != VK_NULL_HANDLE;
+  for (const auto& slot : g_mv_copies) have_copies |= slot.image.image != VK_NULL_HANDLE;
+  if (have_copies) dd->vk.DeviceWaitIdle(dd->device);
+  if (g_mv_copy_queries) dd->vk.DestroyQueryPool(dd->device, g_mv_copy_queries, nullptr);
+  g_mv_copy_queries = VK_NULL_HANDLE;
+  g_preserved_mvec = {};
+  g_preserved_depth = {};
+  g_mv_copy_ms.clear();
+  for (auto& slot : g_mv_copies) {
+    if (slot.image.view) dd->vk.DestroyImageView(dd->device, slot.image.view, nullptr);
+    if (slot.image.image) dd->vk.DestroyImage(dd->device, slot.image.image, nullptr);
+    if (slot.memory) dd->vk.FreeMemory(dd->device, slot.memory, nullptr);
+    if (slot.depth.view) dd->vk.DestroyImageView(dd->device, slot.depth.view, nullptr);
+    if (slot.depth.image) dd->vk.DestroyImage(dd->device, slot.depth.image, nullptr);
+    if (slot.depth_memory) dd->vk.FreeMemory(dd->device, slot.depth_memory, nullptr);
+    slot = {};
+  }
   g_sl = {};
   g_px = {};
   g_dd = nullptr;
@@ -1626,14 +1818,27 @@ bool sl_watched(VkImage image) {
   return false;
 }
 
+static void note_input_layout(CmdState* s, VkImage image, VkImageLayout layout) {
+  for (auto& p : s->sl_input_layouts)
+    if (p.first == image) { p.second = layout; return; }
+  s->sl_input_layouts.emplace_back(image, layout);
+}
+
 void sl_note_barrier(CmdState* s, VkImage image, VkImageLayout layout) {
   if (!sl_watched(image)) return;
+  if (cfg_int("fg_input_copy", 0) || cfg_int("pan_inputs", 0)) note_input_layout(s, image, layout);
   for (auto& p : s->sl_layouts)
     if (p.first == image) {
       p.second = layout;
       return;
     }
   s->sl_layouts.emplace_back(image, layout);
+}
+
+void sl_note_event_barrier(CmdState* s, VkImage image, VkImageLayout layout) {
+  if (!sl_watched(image)) return;
+  if (cfg_int("fg_input_copy", 0)) sl_note_barrier(s, image, layout);
+  else note_input_layout(s, image, layout);
 }
 
 
@@ -1842,7 +2047,7 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
       log("[sl] UI color+alpha = image %p (composite fs %016llx)", (void*)i_u, (unsigned long long)p.first_fs_hash);
     if (i_h) fill_img(g_hudless, i_h, v_h);
     if (i_u) fill_img(g_ui, i_u, v_u);
-    if (i_h && i_u && p.color_views[0] && cfg_int("fg_ui_pq", 0))
+    if (i_h && i_u && p.color_views[0] && (cfg_int("fg_ui_pq", 0) || cfg_int("pan_inputs", 0)))
       g_uipq_pending[cmd] = UiPqPending{p.color_images[0], p.color_views[0], v_h, v_u, i_h, i_u, p.width, p.height};
     set_watch();
   }
@@ -1864,7 +2069,7 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s) {
         g_uipq_pending.erase(it);
       }
     }
-    if (have && uipq_record(cmd, pend, s->color_layouts[0])) {
+    if (have && cfg_int("fg_ui_pq", 0) && uipq_record(cmd, pend, s->color_layouts[0])) {
       std::lock_guard<std::mutex> lock(g_mu);
       g_ui.image = g_uipq.img;
       g_ui.view = g_uipq.view;
@@ -1874,6 +2079,33 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s) {
       g_ui.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
       g_ui.seen = frame_index();
       g_layout[g_uipq.img] = VK_IMAGE_LAYOUT_GENERAL;
+    }
+    if (have && cfg_int("pan_inputs", 0) && cfg_int("pan_capture", 0) > 0) {
+      Img inputs[4];
+      VkImageLayout layouts[4];
+      {
+        std::lock_guard<std::mutex> lock(g_mu);
+        inputs[0] = g_hudless; inputs[1] = g_ui;
+        inputs[2] = g_depth; inputs[3] = g_mvec;
+        for (unsigned i = 0; i < 4; ++i) {
+          layouts[i] = layout_of(inputs[i].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+          auto observed = g_input_layout.find(inputs[i].image);
+          if (observed != g_input_layout.end()) layouts[i] = observed->second;
+          for (auto& [image, layout] : s->sl_input_layouts)
+            if (image == inputs[i].image) layouts[i] = layout;
+        }
+      }
+      const char* names[] = {"fg_hudless", "fg_ui", "fg_depth", "fg_mvec"};
+      for (unsigned i = 0; i < 4; ++i) {
+        Bg3Binding b{};
+        b.image = inputs[i].image; b.view = inputs[i].view; b.format = inputs[i].format;
+        b.width = inputs[i].w; b.height = inputs[i].h; b.layout = layouts[i];
+        pan_capture(cmd, names[i], &b);
+      }
+      Bg3Binding b{};
+      b.image = pend.final_img; b.view = pend.final_view;
+      b.width = pend.w; b.height = pend.h; b.format = p.color_formats[0]; b.layout = s->color_layouts[0];
+      if (b.layout != VK_IMAGE_LAYOUT_UNDEFINED) pan_capture(cmd, "fg_final", &b);
     }
   }
   if (p.first_fs_hash == kVelocityFs && p.color_count >= 1 && p.depth_image) {
@@ -1905,6 +2137,21 @@ void sl_note_submit(const std::vector<VkCommandBuffer>& cmds) {
     CmdState* s = cmd_state(c);
     if (!s) continue;
     for (auto& [img, lay] : s->sl_layouts) g_layout[img] = lay;
+    for (auto& [img, lay] : s->sl_input_layouts) g_input_layout[img] = lay;
+    if (s->sl_mvec_copy.image) {
+      {
+        std::lock_guard<std::mutex> copy_lock(g_mv_copy_mu);
+        if (s->sl_mvec_slot < 8) g_mv_copies[s->sl_mvec_slot].submitted = frame_index();
+      }
+      const auto& b = s->sl_mvec_copy;
+      if (cfg_int("fg_input_copy", 0)) g_preserved_mvec = {b.image, b.view, b.format, b.width, b.height,
+                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                          frame_index()};
+      const auto& d = s->sl_depth_copy;
+      if (cfg_int("fg_input_copy", 0)) g_preserved_depth = {d.image, d.view, d.format, d.width, d.height,
+                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                          frame_index()};
+    }
     if (s->sl_cam_valid) {
       memcpy(g_cam.cam, s->sl_cam[0], sizeof g_cam.cam);
       memcpy(g_cam.prev, s->sl_cam[1], sizeof g_cam.prev);
@@ -1976,6 +2223,7 @@ void sl_note_image_destroyed(VkImage image) {
   for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui})
     if (i->image == image) *i = Img{};
   g_layout.erase(image);
+  g_input_layout.erase(image);
   for (auto& w : g_watch)
     if (w.load() == image) w = VK_NULL_HANDLE;
   log("[sl] a tagged image was destroyed; image %p frame %llu current roles 0x%x "
@@ -2010,19 +2258,36 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     {
       std::lock_guard<std::mutex> lock(g_mu);
       input_snapshot[0]=g_depth; input_snapshot[1]=g_mvec;
+      const bool copied = cfg_int("fg_input_copy", 0) && g_preserved_mvec.image && g_preserved_depth.image &&
+                          fg_copy_for_present(g_preserved_mvec.seen, frame) && fg_copy_for_present(g_preserved_depth.seen, frame);
+      if (copied) { input_snapshot[1] = g_preserved_mvec; input_snapshot[0] = g_preserved_depth; }
+      if (cfg_int("fg_input_copy", 0) && frame % 30 == 0)
+        log("[sl] input copy frame %llu: selected %u, submit age %llu, image %p",
+            (unsigned long long)frame, unsigned(copied), (unsigned long long)(frame - g_preserved_mvec.seen),
+            (void*)input_snapshot[1].image);
       input_snapshot[2]=g_hudless; input_snapshot[3]=g_ui;
       destroy_snapshot=g_last_destroy_event;
       // everything identified within the last couple of frames (menus have no velocity pass)
       ready = g_depth.image && g_mvec.image && g_hudless.image && g_ui.image && frame <= g_mvec.seen + 3 &&
               frame <= g_ui.seen + 3;      if (ready) {
-        ensure_depth_view();
+        if (!copied) ensure_depth_view();
         d = g_depth, m = g_mvec, h = g_hudless, u = g_ui;
-        dview = g_depth_only_view;
-        ld = layout_of(d.image, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+        if (copied) { m = g_preserved_mvec; d = g_preserved_depth; }
+        dview = copied ? g_preserved_depth.view : g_depth_only_view;
+        ld = copied ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : layout_of(d.image, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
         lm = layout_of(m.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         lh = layout_of(h.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         lu = layout_of(u.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         input_layouts[0]=ld; input_layouts[1]=lm; input_layouts[2]=lh; input_layouts[3]=lu;
+        if (cfg_int("pan_inputs", 0) && frame % 30 == 0) {
+          auto observed = [&](VkImage image, VkImageLayout fallback) {
+            auto it = g_input_layout.find(image);
+            return it == g_input_layout.end() ? fallback : it->second;
+          };
+          log("[sl] input layouts frame %llu: copy %u depth tag %d observed %d, MV tag %d observed %d",
+              (unsigned long long)frame, unsigned(copied), int(ld), int(observed(d.image,ld)),
+              int(lm), int(observed(m.image,lm)));
+        }
       }
     }
     if (ready) {
@@ -2122,6 +2387,14 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
       std::lock_guard<std::mutex> lock(g_fence_mu);
       g_inputs_fence = reinterpret_cast<VkSemaphore>(st.inputsProcessingCompletionFence);
       g_inputs_value = st.lastPresentInputsProcessingCompletionFenceValue;
+      if (tagged) {
+        std::lock_guard<std::mutex> copy_lock(g_mv_copy_mu);
+        for (auto& slot : g_mv_copies)
+          if (slot.image.image == input_snapshot[1].image ||
+              (slot.lease.written && !slot.lease.value && fg_copy_precedes_present(slot.submitted,frame))) {
+            slot.fence = g_inputs_fence; slot.lease.presented(g_inputs_value);
+          }
+      }
     }
   }
 

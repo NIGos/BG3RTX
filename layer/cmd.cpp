@@ -383,7 +383,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->ib_offset = 0;
   s->has_viewport = false;
   s->sl_layouts.clear();
+  s->sl_input_layouts.clear();
   s->sl_cam_valid = false;
+  s->sl_mvec_copy = {};
+  s->sl_depth_copy = {};
+  s->sl_mvec_slot = UINT32_MAX;
   s->refs.clear();
   return r;
 }
@@ -793,6 +797,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
     if (!sec) continue;
     s->refs.insert(s->refs.end(), sec->refs.begin(), sec->refs.end());   // submitted with the primary
     for (auto& [img, lay] : sec->sl_layouts) sl_note_barrier(s, img, lay);
+    for (auto& [img, lay] : sec->sl_input_layouts) sl_note_event_barrier(s, img, lay);
     if (sec->sl_cam_valid) {
       memcpy(s->sl_cam, sec->sl_cam, sizeof s->sl_cam);
       s->sl_cam_valid = true;
@@ -860,12 +865,26 @@ static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents(VkCommandBuffer cmd, uint32_t n,
                                                 const VkImageMemoryBarrier* ib) {
   barrier_ours_before_wait(cmd);
   vk(cmd).CmdWaitEvents(cmd, n, ev, src, dst, mbc, mb, bbc, bb, ibc, ib);
+  // BG3 performs sampled-input transitions in event waits too. Tracking only
+  // pipeline barriers left FG/deferred readbacks with stale attachment layouts.
+  if (cfg_int("fg_input_copy", 0) || cfg_int("pan_inputs", 0)) {
+    CmdState* s = cmd_state(cmd, true);
+    for (uint32_t i = 0; i < ibc; ++i) sl_note_event_barrier(s, ib[i].image, ib[i].newLayout);
+  }
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents2(VkCommandBuffer cmd, uint32_t n, const VkEvent* ev,
                                                  const VkDependencyInfo* deps) {
   barrier_ours_before_wait(cmd);
   vk(cmd).CmdWaitEvents2(cmd, n, ev, deps);
+  if (cfg_int("fg_input_copy", 0) || cfg_int("pan_inputs", 0)) {
+    CmdState* s = cmd_state(cmd, true);
+    for (uint32_t event = 0; event < n; ++event)
+      for (uint32_t i = 0; i < deps[event].imageMemoryBarrierCount; ++i) {
+        const auto& b = deps[event].pImageMemoryBarriers[i];
+        sl_note_event_barrier(s, b.image, b.newLayout);
+      }
+  }
 }
 
 void register_cmd_hooks(HookMap& m) {
