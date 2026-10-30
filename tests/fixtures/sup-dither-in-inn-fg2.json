@@ -1,0 +1,71 @@
+{
+ "name": "sup-dither-in-inn-fg2",
+ "tree": ".",
+ "save": "The Blushing Mermaid - 96h 39m",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 600,
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,rt_stats=0,ls_stats=0,rf_stats=0,ls_k=0,ls_shadowed=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,pan_capture=0,pan_prepare=0,rt_scene_camera_match=0,rt_scene_rebase=0,crash_dump=1,fg_state_every=30,rt_timing_frames=60,dump_images=0,dump_png_width=1280,dump_raw=0,dump_max_mb=6144,geo_timing=1,cpu_timing=0,rt_stability_log=0,rt_scene_wait=1,rt_cascade_casters=1,rt_timing_frames=60,rt_primary_check=1,ls_box=1,ls_samples=0,ls_stats=0",
+ "window_mode": "visible_unfocused_fg",
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "tests/fixtures/sup_dither_in_plan.json"
+ ],
+ "patterns": [
+  "primary-ray check",
+  "rt epoch",
+  "rt passes",
+  "rt cost scope",
+  "\\[watch\\]",
+  "\\[sl\\]",
+  "\\[trace\\]",
+  "gpu RR:",
+  "hybrid GI",
+  "ls stats",
+  "rf stats",
+  "material classes",
+  "rt applied",
+  "\\[crash\\]",
+  "\\[pace\\]",
+  "pan-plan",
+  "scene wait",
+  "geo",
+  "G-buffer",
+  "\\[cpu\\]",
+  "primary-ray check",
+  "rt epoch",
+  "scene wait",
+  "\\[bvh\\]",
+  "\\[rt\\]",
+  "FG decision",
+  "displayed/rendered",
+  "sun stats",
+  "sun: rt_sun_replace",
+  "\\[cascade\\]",
+  "roof volumes",
+  "scene build GPU",
+  "scene prepass moved",
+  "scene wait",
+  "\\[cascade\\] casters",
+  "alpha-tested cascade draws"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "sun stats",
+  "\\[pace\\]",
+  "\\[cascade\\] sun cascade pass found",
+  "\\[cascade\\] casters:"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST"
+ ],
+ "expect_runner": [
+  "\\[window-mode\\] visible_unfocused:",
+  "\\[motion-plan\\] complete phases=",
+  "^Run ended: done"
+ ]
+}
