@@ -1,6 +1,8 @@
 #include "../common/omm_submit_state.h"
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
+#include "../common/omm_backend_plan.h"
 using namespace bg3::omm;
 static unsigned checks;
 static void check(bool v){++checks;if(!v){std::fprintf(stderr,"check %u failed\n",checks);std::exit(1);}}
@@ -40,5 +42,22 @@ int main(){
   s={};check(s.signal(1,true));check(!s.completed(2,true));check(s.poisoned);
   s={};check(s.signal(1,true));check(!s.completed(0,false));check(s.poisoned);
   s={};s.lastSignal=UINT64_MAX;check(!s.candidate());
+  // Dummy input ownership traverses the actual lifetime/recording gates: reset
+  // cannot release a submitted owner; timeline completion alone cannot release
+  // an executable recording that can replay its ticket.
+  for(bool submitted:{false,true}) {
+    bool inputsReleased=false,objectsDestroyed=false;
+    auto source=std::shared_ptr<void>(new int(1),[&](void* p){check(objectsDestroyed);inputsReleased=true;delete static_cast<int*>(p);});
+    std::weak_ptr<void> weak=source;
+    auto retained=source;source.reset();check(!weak.expired());
+    Lifetime life;CommandGraph refs;refs.allocate(1,1,0);refs.begin(1);refs.add(1,1,0);refs.end(1,true);
+    check(life.reserve());check(!life.discardable());check(!inputsReleased);
+    if(submitted){check(life.use(7));check(life.retire());}
+    check(life.unreserve());
+    if(submitted){check(life.releasable(7));check(refs.referenced(1));check(!weak.expired());}
+    refs.reset(1);
+    check(!refs.referenced(1));check(submitted?life.releasable(7):life.discardable());
+    objectsDestroyed=true;retained.reset();check(weak.expired());check(inputsReleased);
+  }
   std::printf("OMM submit graph/generation/queue/counter checks %u; no device calls\n",checks);
 }
