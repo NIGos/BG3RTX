@@ -11,7 +11,8 @@ No ABI change. Not full Hair/cascade support. F10 native Frame mode is unavailab
 the user's close-up may remain unsupported. No live files/game changes or GPU cost
 and quality gate claimed. Full isolated build and 17/17 CTests pass; 178,780 scalar/
 capture/capability checks, 95/95 ordinary shader SPIR-V byte-identical to 37299f2,
-95/95 capable variants compile and validate. No live quality gate yet.
+95/95 capable variants compile and validate. After merging main e277548, full
+isolated build and 20/20 CTests pass with both scalp and OMM tests. No live gate.
 
 ## Native scalp CPU contract - 2026-10-30, isolated and not deployed
 

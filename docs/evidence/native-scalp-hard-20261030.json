@@ -496,5 +496,8 @@
     "RT-cone isotropic linear-repeat/trilinear maxLod16 policy; not native raster sample equivalence",
     "Full Hair strand/view/depth coverage and special cascade alpha remain unsupported",
     "No live quality or GPU cost gate"
-  ]
+  ],
+  "main_merged": "e277548",
+  "post_merge_ctests_passed": 20,
+  "post_merge_ctests_total": 20
 }

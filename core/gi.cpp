@@ -75,7 +75,7 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
-  // Variant bits: 1 rt_scene_rebase (gi/rebase/), 2 rt_cascade_casters (gi/cascade*/).
+  // Variant bits: 1 origin rebase, 2 cascade masks, 4 scalp-capable records.
   VkPipeline variants[8] = {};
   uint64_t variant_generations[8] = {};
   std::string variant_files[8];

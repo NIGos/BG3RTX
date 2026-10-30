@@ -53,6 +53,9 @@ all capable modules pass spirv-val for Vulkan 1.3. Shader disassembly retains
 native SmoothStep/Fma for the hard scalar transform. Reproduce with
 `tests/native_scalp_shader_test.py --dxc <dxc.exe> --sharc <SDK include>` (two CPU
 workers, no device). Evidence: docs/evidence/native-scalp-hard-20261030.json.
+Main e277548 was then merged into this isolated branch, preserving both scalp and
+OMM CTest targets. Full isolated build and 20/20 CTests pass; the merge changes no
+layer/core/shader code, so the shader identity proof remains applicable.
 
 ## Native scalp coverage contract - 2026-10-30, offline increment
 

@@ -3,7 +3,7 @@
 Isolated `codex/native-coverage`: default-off rt_native_scalp adds native scalp
 hard-cut scalar coverage/material capture; camera dither != 0 remains unsupported.
 No ABI bump or live deployment. Sticky persisted capability protects held scenes
-through key-off/core reload. 17/17 CTests and 178,780 scalar/capture/capability checks
+through key-off/core reload. 20/20 CTests and 178,780 scalar/capture/capability checks
 pass; 95 ordinary shaders byte-identical and 95 capable compile/validate. Actual
 F10 Frame mode unknown. Full Hair/cascade/raster identity still open; TRACK_D_RT.
 
