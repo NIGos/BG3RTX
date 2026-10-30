@@ -1,0 +1,16 @@
+implicit_layers=disabled explicit_validation=1 debug_error_counting=1
+GPU=NVIDIA GeForce RTX 5090 vendor=10de device=2b85 driver_raw=2604679168 API=1.4.357
+subTexelPrecisionBits=8 mipmapPrecisionBits=8
+EXT=1 AS=1 rayQuery=1 BDA=1 sync2=1 timeline=1 pushDescriptor=1
+[omm] requesting EXT micromap + synchronization2; four-state only, classification gate still required
+[omm] EXT backend available max_four_state_level=12; no known-state quality gate passed
+[omm] recorded EXT build ticket=1 triangles=3 storage=640 scratch=1023
+ray=0 hit=1 candidates=0 native_ge=1 primitive=0
+ray=1 hit=1 candidates=0 native_ge=1 primitive=0
+ray=2 hit=0 candidates=0 native_ge=0 primitive=1
+ray=3 hit=0 candidates=0 native_ge=0 primitive=1
+ray=4 hit=0 candidates=1 native_ge=0 primitive=2
+ray=5 hit=1 candidates=1 native_ge=1 primitive=2
+UNORM8_ENDPOINTS samples=2176 UVs=64 LODs=17 mips=3 layers=2 filter=LINEAR mipmap=LINEAR repeat exact_bit_failures=0
+PASS synthetic EXT: primitives=3 rays=6 contradictions=0 unknown_candidates=2 actual_timeline_retirement=1; not a BG3/FG/sampler proof
+validation_errors=0

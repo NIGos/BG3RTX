@@ -25,6 +25,9 @@
 //   3. a one-instance TLAS (identity transform: the space is already camera-relative).
 // The core traces against the TLAS in the tiled lighting (rt_shadow.hlsl).
 #include "host.h"
+#include "omm_backend.h"
+#include "omm_submit.h"
+#include "omm_content.h"
 #include "../common/camera_epoch.h"
 #include "../common/cascade_casters.h"
 
@@ -680,6 +683,7 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   bool core_features = false;
   if (sharc && cfg_int("sharc_device", 1)) next = sharc_features(id, phys, ci, next, &core_features);
   else log("[rt] SHaRC device features not requested (%s)", sharc ? "sharc_device=0" : "retry without them");
+  next = omm::device_features(id, phys, next, g_ext_names);
   g_f_rq = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
   g_f_rq.rayQuery = VK_TRUE;
   g_f_rq.pNext = const_cast<void*>(next);
@@ -739,13 +743,20 @@ void rt_device_created(DeviceData* dd, bool enabled) {
   qi.queryCount = kRing * 4;
   if (dd->vk.CreateQueryPool(dd->device, &qi, nullptr, &g_qp) != VK_SUCCESS) g_qp = VK_NULL_HANDLE;
   g_rt = true;
+  omm::device_created(dd, true);
   log("[rt] acceleration structures + ray query enabled on the game's device (scratch alignment %llu)",
       (unsigned long long)g_scratch_align);
 }
 
 void rt_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
+<<<<<<< HEAD
   sun_device_destroyed(dd);
+=======
+  omm::device_destroyed(dd);
+  omm::submit_device_destroyed(dd);
+  omm::content_device_destroyed(dd);
+>>>>>>> 07d3ec5
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();

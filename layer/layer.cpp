@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <vector>
 #include "host.h"
+#include "omm_submit.h"
+#include "omm_backend.h"
 #include "assetdb.h"
 #include "sebridge.h"
 #include "hookguard.h"
@@ -220,6 +222,16 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     use_ci = rt_use;
     sl_scratch = sl_device_pre(id, phys, use_ci, patched);
     r = create(phys, &patched, alloc, out);
+  }
+  if (r != VK_SUCCESS && rt_on && omm::device_requested()) {
+    log("[layer] optional EXT opacity micromap device request failed (%d); retrying ordinary RT",r);
+    sl_device_post(sl_scratch,nullptr,r);
+    rt_device_features_undo();
+    omm::disable_device_request();
+    rt_use=rt_device_create_info(id,phys,geo_use,&rt_ci);
+    rt_on=rt_use!=geo_use;use_ci=rt_use;
+    sl_scratch=sl_device_pre(id,phys,use_ci,patched);
+    r=create(phys,&patched,alloc,out);
   }
   if (r != VK_SUCCESS && rt_on && rt_device_features_added()) {
     // The SHaRC features (64-bit atomics, float16, 16-bit storage) next; ray tracing stays.
@@ -441,9 +453,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM: the emissive scene of this batch's effects passes
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   return r;
 }
 
@@ -467,9 +481,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit2");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM (our build goes through vkQueueSubmit)
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   return r;
 }
 

@@ -37,6 +37,9 @@ add_library(VkLayer_bg3rtx SHARED
   layer/geocapture.cpp
   layer/rtscene.cpp
   layer/sun_scene.cpp
+  layer/omm_backend.cpp
+  layer/omm_submit.cpp
+  layer/omm_content.cpp
   layer/alphatest.cpp
   layer/bvhsplit.cpp
   layer/emissive.cpp
@@ -171,6 +174,19 @@ add_executable(descriptor_epoch_test tests/descriptor_epoch_test.cpp)
 add_test(NAME descriptor_epoch_test COMMAND descriptor_epoch_test)
 add_executable(mapped_copy_test tests/mapped_copy_test.cpp)
 add_test(NAME mapped_copy_test COMMAND mapped_copy_test)
+add_executable(omm_backend_plan_test tests/omm_backend_plan_test.cpp)
+add_test(NAME omm_backend_plan_test COMMAND omm_backend_plan_test)
+add_executable(omm_submit_state_test tests/omm_submit_state_test.cpp)
+add_test(NAME omm_submit_state_test COMMAND omm_submit_state_test)
+add_executable(omm_content_registry_test tests/omm_content_registry_test.cpp)
+add_test(NAME omm_content_registry_test COMMAND omm_content_registry_test)
+# Explicit synthetic GPU probe only. Never registered in routine CTest and never
+# launched by a build. No game, presentation or global loader settings changes.
+option(BG3RTX_OMM_GPU_SMOKE "Build the opt-in synthetic EXT OMM console probe" OFF)
+if(BG3RTX_OMM_GPU_SMOKE)
+  add_executable(omm_ext_smoke tools/omm_ext_smoke.cpp layer/omm_backend.cpp layer/omm_submit.cpp layer/omm_content.cpp)
+  target_include_directories(omm_ext_smoke PRIVATE ${VULKAN_SDK}/Include)
+endif()
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)
 add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
 add_executable(settings_test tests/settings_test.cpp)

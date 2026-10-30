@@ -345,6 +345,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_alpha_cut", "1"},
     {"rt_alpha_stochastic", "1"},
     {"rt_native_scalp", "0"},
+    {"rt_omm", "0"},
     {"rt_alpha_unknown", "1"},
     {"rt_alpha_auto", "1"},
     {"rt_alpha_max_pct", "60"},
