@@ -15,6 +15,7 @@ to bg3rtx.log readers as a "[phase]" marker line in captures/phases.log.
 is already running, and only the lines written during this job count).
 """
 import json
+import os
 import re
 import sys
 import time
@@ -28,9 +29,19 @@ tag = "." + spec["tag"] if spec.get("tag") else ""
 ini = root / "captures" / f"auto{tag}.ini"
 log = root / f"bg3rtx{tag}.log"
 marks = root / "captures" / f"phases{tag}.log"
+# Inherited from the queue, including nested QA commands. One immutable per-run
+# request remains present through owned-game cleanup and later scene attempts.
+quit_file = Path(os.environ["BG3RTX_QUEUE_QUIT_FILE"]) if os.environ.get("BG3RTX_QUEUE_QUIT_FILE") else None
+
+
+def cancelled():
+    return quit_file is not None and quit_file.exists()
+
 
 
 def apply(settings, name):
+    if cancelled():
+        return
     lines = ini.read_text().splitlines()
     keys = set(settings)
     lines = [l for l in lines if l.split("=", 1)[0].strip() not in keys]
@@ -49,8 +60,10 @@ t0 = None
 phases = list(spec.get("phases", []))
 after = list(spec.get("after_trace", []))
 deadline = time.time() + spec.get("timeout", 600)
-while time.time() < deadline and (phases or after):
+while time.time() < deadline and (phases or after) and not cancelled():
     time.sleep(0.5)
+    if cancelled():
+        break
     if not log.exists() or (offset is None and log.stat().st_mtime < t_launch):
         continue
     if log.stat().st_size < pos:   # the game recreated the log
