@@ -402,6 +402,8 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s);   // outside the pass, b
 void geo_pass_begun(VkCommandBuffer cmd, CmdState* s);    // inside, right after it
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s);
+bool geo_native_hair_enabled(); // Startup-fixed XFB/soup stride88; never hot-enable 24-byte scenes.
+void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags);
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right before the game's end
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right after the game's end
 void geo_forget_buffer(VkBuffer b);
