@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-30",
+  "key": "rt_sun_cascade_current",
+  "default": 0,
+  "abi": 19,
+  "isolated_build_both_dlls": true,
+  "ctest_passed": 28,
+  "ctest_total": 28,
+  "cpu_proof_checks": 49443,
+  "ordinary_shader_entries_identical": 214,
+  "new_entries_compiled_validated": 11,
+  "baseline": "fafc442",
+  "mode": "Offline CPU build, DXC and retained capture analysis; no new GPU or game execution.",
+  "implemented": [
+    "Sun-only per-slot instance GPU-copy and BLAS/TLAS clone",
+    "Native Frame packet and producer command generation checks",
+    "Conditional private-build insertion within the same actual submit entry",
+    "Source stamp copy preserves Hair12 and camera256",
+    "Zero/unready stamp returns UNKNOWN before AS traversal",
+    "Whole requested finite-ray affine-volume check; no arbitrary trust lift",
+    "Private per-candidate native material dispatch, including canonical kind1/2/3/4 snapshots",
+    "Unsupported bounded cards return UNKNOWN/native-mask fallback, never forced opaque",
+    "GPU camera mask1/native Shadow mask2 separation after late fixups; speculative dedupe removed",
+    "Complete all-four raw caster capture isolated from legacy opaque compaction",
+    "Native raster clipping witness and exact receiver source packet capture",
+    "Selected/next/aux native finite-domain consumer over current layers 0..3",
+    "Same-submit GPU gather/validation of actual receiver and caster uniform packets"
+  ],
+  "remaining": [
+    "Actual GPU/native game validation, same-view energy and visual penumbra gates",
+    "Moving primary-ray match and FG2 qualification",
+    "Actual GPU build/pass timing and residency",
+    "OMM renderer integration remains separate; Sun clone itself has no micromaps"
+  ],
+  "gate_passed": false,
+  "runtime_enabled": false,
+  "live_game_launched": false,
+  "maximum_extra_capture_capacity_mib_at_default": 768,
+  "checkpoint": "4edd799"
+}

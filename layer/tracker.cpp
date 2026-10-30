@@ -713,6 +713,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass(VkDevice device, const Vk
     for (uint32_t i = 0; i < ci->attachmentCount; ++i) {
       rec.formats.push_back(ci->pAttachments[i].format);
       rec.final_layouts.push_back(ci->pAttachments[i].finalLayout);
+      rec.load_ops.push_back(ci->pAttachments[i].loadOp);
     }
     for (uint32_t s = 0; s < ci->subpassCount; ++s) {
       RenderPassRec::Subpass sp;
@@ -735,6 +736,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass2(VkDevice device, const V
     for (uint32_t i = 0; i < ci->attachmentCount; ++i) {
       rec.formats.push_back(ci->pAttachments[i].format);
       rec.final_layouts.push_back(ci->pAttachments[i].finalLayout);
+      rec.load_ops.push_back(ci->pAttachments[i].loadOp);
     }
     for (uint32_t s = 0; s < ci->subpassCount; ++s) {
       RenderPassRec::Subpass sp;

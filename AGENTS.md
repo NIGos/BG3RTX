@@ -76,3 +76,20 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Progress entries: what changed, the key numbers before/after, kept/rejected/paused. No log dumps.
 - If a user decision is needed, put the question at the top of `docs/PROGRESS_CODEX.md`, take the
   conservative option or do other work, and keep going.
+
+## Autonomous rendering program (user steering, 2026-10-30)
+- Execution contract: `docs/RENDERING_EXECUTION_PLAN.md`; transferable goal:
+  `docs/GOAL_RENDERING_AGENT.md`. Coordinate with existing owners before delegating.
+- Offline implementation and independent verification may run in parallel in isolated trees.
+- Live tests require explicit user steering for the batch. Old approvals, `USER_AWAY`, absent
+  `USER_PLAYING`, background/window modes and old queue-policy exceptions do not grant it.
+- Prepare unauthorized jobs outside every watched `captures/queue/pending` inbox. Use the
+  existing serial queue after authorization; automate A/B, toggles, captures and restoration.
+- Do not ask the user to edit INI or perform A/B. Expose meaningful experimental feature
+  flags in the central settings model and GUI, off in presets until qualified.
+- Finish the candidate's dependent offline checks before requesting a concrete live batch;
+  do not wait for unrelated offline lanes. Pending live evidence is `READY_FOR_LIVE`, not a
+  quality pass. Tools must answer a specific missing observable.
+- Pending or declined live permission does not stop independent offline work. Reassign
+  workers across useful remaining increments; stop only at actual input/resource blockers
+  or explicit user pause/cancellation, without busywork or speculative scope expansion.

@@ -1,5 +1,37 @@
 # BG3RTX progress
 
+## Rendering program: isolated coverage integration - 2026-10-30
+
+The full M0-M6 execution plan is active. No live grant exists. Main remains at
+92183e7; its uncommitted planning documents and the user's build are preserved.
+This isolated codex/omm-bake candidate combines the Sun 4edd799 checkpoint with
+native Hair/Scalp/Pubes, the OMM producer and four Experimental GUI controls
+(75bb833). All experimental defaults/presets remain off. ABI stays 19; both DLLs
+must travel together. Main integration is pending merge-green and a clean main.
+
+Current Sun uses four native caster domains, native receiver selection and
+same-submit GPU packet validation. Unsupported domains retain native shadows;
+no larger sun radius or arbitrary blur. In-game quality and GPU cost are NOT
+measured. OMM descriptor/Core selection is still unwired; no acceleration claim.
+Both DLLs build and 35/35 CTests pass, including 271 settings checks. Initial
+shader integration: 219 existing entries byte-identical, 10 new compile/validate.
+Independent review then found double origin rebasing of current-Sun rays; that
+gated shader correction is applied and the full shader gate is running again.
+
+M0: scoped permission receipt passed fake-runner gates; revocation during child
+execution and blocked-inbox skipping are under final independent verification.
+M2: 01db43b exports one actual Foundry board: 3 LODs, 8,038 vertices / 9,965
+triangles; native local bounds match exactly. Its enabled VT maps to 64 decoded
+tiles / 1024 x 1024 RGBA. 35 asset tests pass, one existing skip. This is one
+asset, not a closed room or an authored PBR material. Affine placement and native
+material evaluation now have separate offline owners. Raw artifacts remain in
+the isolated m2-foundry-mesh checkout under captures/m2-foundry/.
+
+Next: complete combined coverage checks, review M0 cancellation, wire OMM only
+with its original same-ray reference, and extend verified placement/materials.
+Future live batches automate settings, A/B, captures and restoration. The user
+will not be asked to edit INI or perform manual comparisons.
+
 ## Native material BLAS and same-frame scene clone prepared - 2026-10-30
 
 Both ABI-19 DLLs build; 32/32 CTests pass. Native static draw capture now feeds
@@ -24,9 +56,9 @@ gates remain OPEN. No game launch, live settings change or GPU ms claim.
 Hair candidate now includes the two verified static Pubes recipes under existing
 rt_native_hair, with source-faithful FMA ordering, no new key/kind/ABI/stride.
 37/37 production GPU cases pass; 95 ordinary shaders remain byte-identical.
-Test1 face/strand quality and temporal/cost checks remain user-led after restart
-with both ABI-19 DLLs: rt_native_hair=1, rt_native_scalp=1, rt_alpha=1,
-rt_bvh_split=1, rt_omm=0. Keep RR/FG/light settings fixed; FG2 is deciding.
+Test1 face/strand quality and temporal/cost checks await an explicitly authorized
+automated batch with both ABI-19 DLLs. The runner sets startup keys and keeps
+RR/FG/light settings fixed; FG2 is deciding. No manual INI/A-B is requested.
 Other native families and full solar coverage remain open; defaults stay off.
 
 ## Verified static Pubes coverage added - 2026-10-30, default off

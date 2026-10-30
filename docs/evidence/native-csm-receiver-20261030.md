@@ -110,3 +110,38 @@ Native fullscreen VS negates clipY, interpolates View0b1 rays and FS multiplies
 by set1b1 depth. Validate these versus the core's reconstructed P at same pixels,
 actual CB/submit epoch and selected image identities, rather than assigning UBO
 names from matching binding numbers alone. This is source evidence, not live data.
+
+
+## Shared receiver/domain helper
+
+`common/native_sun_math.h` is shared C++/HLSL math, not a packet parser or a
+runtime certification source. `ns_select` reproduces the audited nominal weight,
+first-positive selection and immediate-next blend; missing next coverage keeps
+only weighted selected visibility. Layer 3 fades to white. Relevant captured
+layer bits, strict native raster/clipping validation and receiver-space identity
+are explicit mandatory inputs. It never assumes layer 3 contains nearer drawsets.
+`ns_aux` tests actual per-receiver activation with the native strict greater-than
+far-times-depth test. Active unsupported auxiliary coverage declines selection.
+
+`ns_cone_bounds` takes an actual projected finite-disc center/halfwidth and
+independently derived transform errors. `ns_cone_front` proves the full supplied
+direction interval remains inside the layer XY volume until its slowest positive
+lightward direction reaches qz=1. A linear path reaches each axis extremum at an
+endpoint; an outward-rounded upper front distance therefore bounds all enclosed
+paths. Nonpositive z direction, edge contact, invalid/negative errors or missing
+native clip certificate decline. This is a sufficient conservative enclosure,
+not a necessary domain test. Receivers beyond the front also decline for now.
+
+`ns_ray_front` returns a lower/upper interval for the actual ray's rounded front
+quotient and checks its XY support. It does NOT promise an exact float boundary:
+consumers must enforce native candidate-domain clipping or fall back for ambiguous
+front hits. In particular, whole source triangles outside native depth clipping
+cannot be certified by an approximate tMax alone. No generic 300-unit ray limit
+or unconstrained infinite-cone claim is made.
+
+271,567 CPU checks cover the actual shared helper, including independent double
+precision selection and 64 direction samples for each of 4,000 random cone cases
+where certified. Dense samples are a numerical regression, not a continuous-domain
+proof or validation of live matrices/errors/caster membership. A dynamic-input
+HLSL compile fixture passes DXC and Vulkan 1.3 SPIR-V validation. No runtime shader,
+public ABI, game/GPU work or live quality/performance gate changed here.

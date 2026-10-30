@@ -183,28 +183,22 @@ No game jobs run. GPU cost, live depth match, image quality and temporal behavio
 remain unmeasured. The other catalog families (Scalp, Pubes, ExtraUV, fur and lashes)
 remain an explicit backlog, not implicitly covered by these six recipes.
 
-## User-led Test1 check after coordinated integration
+## Prepared automated Test1 qualification
 
-Start the new layer with rt_native_hair=1, rt_alpha=1, rt_bvh_split=1.
-This is a startup stream choice: hot-on from a 24-byte startup is rejected.
-Keep rt_native_scalp unchanged to isolate this CHAR_Hair increment. Load Test1
-and inspect the same affected hairstyle/face pose, then the close-up dialogue
-which showed solid polygonal face shadows. Expected: cutout strand shadows,
-not whole opaque cards; no detached primary surface or new face holes.
+No live permission is currently granted. A future batch uses test-queue only,
+both ABI-19 DLLs, startup rt_native_hair=1, rt_alpha=1, rt_bvh_split=1 and stable
+RR/FG/light settings. The runner owns all configuration changes and restoration.
+The user is not asked to edit INI, toggle flags or repeat comparisons.
 
-Use existing debug views and rt_stats=1: rt_debug=3 or5, enough time for the
-120-frame primary-ray line. Require RT active, native coverage records >0,
-invalid/missing state=0, unsupported interfaces=0 for the targeted shader and
-retired bounds-invalid primitives=0. Primary match should stay near the scene
-static baseline (about 99.5%), including camera movement. A high aggregate match
-alone does not prove the small face region; inspect that region in the debug view.
+Hold the affected hairstyle/face pose, then automate an opaque-coverage control
+(rt_alpha_test=0) and native coverage (1) in the SAME run. This isolates coverage;
+it is not a hot toggle of the startup vertex layout. Collect final/debug views,
+face-region errors and the existing primary-ray check. RT must be active and
+native records nonzero; invalid/missing state and bounds failures must be zero
+for the targeted recipes. Static and movement match should agree within measured
+repeat noise (historical aggregate baseline about 99.5% is not a face-ROI proof).
 
-For a SAME-RUN coverage-only control, hold the pose and toggle rt_alpha_test=0
-then1 with existing settings/A-B flow. Zero deliberately makes cutouts opaque;
-one restores native coverage. This is not a full rt_native_hair off baseline:
-procedural depth and the 88-byte scene remain present. Do not hot-toggle the
-startup key or compare unrelated poses across runs as an image-quality gate.
-Keep light, RR and FG settings fixed. Restore rt_debug=0 for final image checks.
-Record existing rt passes: GPU cost (300-frame average), TLAS current/previous/none
-and existing gpu pass lines; cost cannot be inferred from this synthetic fixture.
-No new queue/input tool is needed. All other native families remain separate gaps.
+Include the distant-shadow scene separately. FG2 is the deciding moving case;
+FG0 is reference only. Use existing pass timing with heavy stats disabled in the
+cost window. No GPU cost, temporal quality or native capture-hook gate has passed.
+Other native hair families remain separate unsupported recipe gaps.

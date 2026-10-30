@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cstdint>
 #include "../common/pan_epoch.h"
+#include "../common/sun_caster_coverage.h"
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -105,6 +106,7 @@ struct PipelineRec {
 struct RenderPassRec {
   std::vector<VkFormat> formats;
   std::vector<VkImageLayout> final_layouts;
+  std::vector<VkAttachmentLoadOp> load_ops;
   struct Subpass { std::vector<uint32_t> color; uint32_t depth = VK_ATTACHMENT_UNUSED; };
   std::vector<Subpass> subpasses;
 };
@@ -214,6 +216,10 @@ struct CmdState {
   int geo_ts = -1;                     // timestamp slot of the current pass
   VkViewport viewport{};               // last vkCmdSetViewport(first = 0)
   bool has_viewport = false;
+  VkRect2D scissor{};
+  bool has_scissor=false;
+  bool depth_cleared_empty=false;
+  VkRect2D render_area{};
   // Vertex and index buffer bindings (Track D BVH split: mesh keys, instance streams).
   struct VertexBinding { VkBuffer buffer = VK_NULL_HANDLE; VkDeviceSize offset = 0, stride = 0; };   // stride 0: the pipeline's
   static constexpr uint32_t kMaxVertexBindings = 16;
@@ -410,6 +416,7 @@ void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right befor
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right after the game's end
 void geo_forget_buffer(VkBuffer b);
 VkDeviceSize geo_buffer_size(VkBuffer b);                   // 0 if unknown
+bool geo_uniform_buffer_range(VkBuffer buffer,VkDeviceSize offset,VkDeviceSize bytes);
 bool geo_submit_wanted();
 void geo_on_submit(const std::vector<VkCommandBuffer>& cmds);
 void geo_on_present(VkQueue queue);
@@ -460,6 +467,9 @@ struct RtCapture {
   uint32_t cascade_tris, cascade_stride;
   float cascade_t[3];
   uint64_t cascade_sig;   // the cascade draw list (same: the BLAS may be refitted)
+  sun_coverage::NativeEpoch native_epoch;
+  VkBuffer native_frame_buffer = VK_NULL_HANDLE;
+  VkDeviceSize native_frame_offset = 0;
 };
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
 // ---- rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2, common/cascade_casters.h) ----
@@ -467,7 +477,43 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
 // converts it in place after the pass; the next frame's split build adds it as one
 // instance (mask 0x02). The soup converted in `frame`: 0 found, 1 none, 2 its command
 // buffer not (yet) submitted (the geo_cascade_note_build reasons).
-struct CascadeSoup { VkBuffer xfb; uint32_t tris, stride; bool has_origin; float origin[3]; uint64_t sig; };
+struct CascadeSoup {
+  VkBuffer xfb; uint32_t tris, stride; bool has_origin; float origin[3]; uint64_t sig;
+  uint64_t record = 0;
+  VkCommandBuffer producer = VK_NULL_HANDLE;
+};
+struct AlphaSnapshot;
+struct SunCascadeDraw {
+  uint32_t first_triangle=0, triangles=0;
+  uint64_t fragment_shader=0;
+  uint32_t material=0; // 0 opaque; 1+ snapshot index; UINT32_MAX unknown
+};
+struct SunCascadeCapture {
+  CascadeSoup soup{};
+  std::vector<SunCascadeDraw> draws;
+  std::vector<AlphaSnapshot> materials;
+  VkImage depth_image = VK_NULL_HANDLE;
+  sun_coverage::NativeEpoch native_epoch;
+  VkBuffer native_frame_buffer = VK_NULL_HANDLE;
+  VkDeviceSize native_frame_offset = 0;
+  VkBuffer camera_buffer = VK_NULL_HANDLE;
+  VkDeviceSize camera_offset = 0;
+  float camera[56] = {};
+  bool camera_mapped=false;
+  float matrix[4][4] = {};
+  uint32_t layer = 0;
+  bool geometry_complete = false, materials_complete = false;
+  bool finite_native_clip = false, native_raster_valid=false, fresh_depth=false;
+  VkViewport native_viewport{};
+};
+// Exact native Frame packet, independent of presentation-frame tag. Pending
+// conversions are returned for private-build scheduling, never as submitted proof.
+bool geo_sun_cascade(const sun_coverage::NativeEpoch& epoch, SunCascadeCapture* out);
+// Four separate native draw domains; never infer near-layer membership from far.
+bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCascadeCapture,4>* out);
+bool geo_sun_captures_owned(std::span<const SunCascadeCapture> captures);
+bool geo_native_frame_epoch(VkCommandBuffer cmd, VkPipelineBindPoint bind,
+                             sun_coverage::NativeEpoch* epoch, VkBuffer* buffer, VkDeviceSize* offset);
 int geo_cascade_soup(uint64_t frame, CascadeSoup* out);
 // Why a build has or lacks the cascade instance (the [cascade] log line): 0 added, 1 no soup
 // of the previous frame, 2 its command buffer not submitted, 3 no camera of that frame,
@@ -543,6 +589,15 @@ void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alph
 void bvh_note_skipped(uint32_t token);
 // After the pass: object-space extraction, BLAS builds/refits, compaction, TLAS.
 // `stamp(i)` writes the timing timestamps 1..3.
+// Immutable instance input of a retired-slot build, before its optional OLD
+// cascade instance. Late sun clones GPU-copy this range, so submit-time native
+// transform fixups are preserved. The owning SceneSlot retains every BLAS ref.
+struct BvhSunBase {
+  VkBuffer instances = VK_NULL_HANDLE;
+  VkDeviceSize offset = 0, buffer_bytes = 0;
+  uint32_t count = 0;
+  uint64_t record = 0;
+};
 struct BvhResult {
   VkAccelerationStructureKHR tlas;
   uint32_t instances, static_instances, dynamic_draws, cached_draws, new_meshes;
@@ -550,7 +605,60 @@ struct BvhResult {
   VkBuffer info; VkDeviceSize info_off, info_bytes;   // InstInfo of this TLAS (set 1 binding 7)
   VkBuffer pool; VkDeviceSize pool_bytes;             // object-space vertices (binding 8)
   uint64_t rec;                                       // build record of the command buffer (bvh_rec_state)
+  BvhSunBase sun_base;
 };
+struct BvhSunCloneResult { VkAccelerationStructureKHR tlas = VK_NULL_HANDLE; uint64_t record = 0; };
+struct SunBaseCapture {
+  BvhSunBase base;
+  uint32_t slot = 0;
+  VkCommandBuffer producer = VK_NULL_HANDLE;
+  sun_coverage::NativeEpoch native_epoch;
+  VkBuffer native_frame_buffer = VK_NULL_HANDLE;
+  VkDeviceSize native_frame_offset = 0;
+  VkBuffer camera_buffer = VK_NULL_HANDLE;
+  VkDeviceSize camera_offset = 0;
+  float camera[56] = {};
+};
+bool rt_sun_base_capture(VkAccelerationStructureKHR selected_tlas, VkDescriptorSet selected_alpha, SunBaseCapture* out);
+bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,VkDescriptorSet selected_alpha,
+                   Bg3SunSceneInfo* out);
+// Exact native Sun-mask source packets. Unmapped source UBOs remain valid GPU
+// sources, not invented CPU values; a consumer must copy/validate them on GPU.
+struct SunReceiverPacket {
+  Bg3Binding source{};
+  std::array<uint8_t,544> bytes{};
+  uint32_t size=0;
+  bool mapped=false;
+};
+struct SunReceiverCapture {
+  VkCommandBuffer producer=VK_NULL_HANDLE;
+  uint64_t record=0;
+  sun_coverage::NativeEpoch epoch;
+  SunReceiverPacket frame, camera, sun, auxiliary, ray_basis;
+  Bg3Binding csm{}, auxiliary_near{}, auxiliary_far{};
+  bool sources_valid=false;
+};
+void sun_note_native_draw(VkCommandBuffer cmd, const CmdState* state);
+bool sun_native_receiver(const sun_coverage::NativeEpoch& epoch, SunReceiverCapture* out);
+struct SunSubmitBatch {
+  std::vector<VkSubmitInfo> legacy;
+  std::vector<VkSubmitInfo2> modern;
+  std::vector<std::vector<VkCommandBuffer>> legacy_commands;
+  std::vector<std::vector<VkCommandBufferSubmitInfo>> modern_commands;
+  std::vector<std::vector<VkSemaphoreSubmitInfo>> modern_signals;
+  std::vector<VkCommandBuffer> commands;
+  bool modified=false;
+};
+void sun_prepare_submit(DeviceData* dd,VkQueue queue,uint32_t count,const VkSubmitInfo* submits,SunSubmitBatch* out);
+void sun_prepare_submit2(DeviceData* dd,VkQueue queue,uint32_t count,const VkSubmitInfo2* submits,SunSubmitBatch* out);
+void sun_device_destroyed(DeviceData* dd);
+// Records a NEW per-slot sun-only BLAS/TLAS after the native cascade conversion.
+// Never rewrites the camera TLAS or reruns bvh_build's mutable draw collection.
+// Caller owns verified command dependencies; no coverage certificate is implied.
+bool bvh_build_sun_clone(VkCommandBuffer cmd, uint32_t slot, const BvhSunBase& base,
+                         std::span<const SunCascadeCapture> cascades, const float camera_origin[3],
+                         VkPipeline validate_pipeline, VkPipelineLayout validate_layout, VkBuffer stamp, VkBuffer parameters,
+                         BvhSunCloneResult* out);
 // `slot` (< kSceneSlots, retired on the GPU): the ring region and TLAS it writes.
 bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), uint32_t slot,
                BvhResult* out);
@@ -562,6 +670,7 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 // dropped. States: 0 pending, 1 submitted, 2 dropped, -1 unknown (never trusted).
 uint64_t bvh_rec_register(VkCommandBuffer cmd);
 int bvh_rec_state(uint64_t id);
+bool bvh_rec_matches_command(uint64_t id, VkCommandBuffer command);
 void bvh_cmd_reset(VkCommandBuffer cmd);
 void bvh_log_state(const char* prefix);   // device-loss / stall report (devfault.cpp)
 VkResult life_poll_fence(DeviceData* dd);  // our latest present fence (0-timeout); INITIALIZATION_FAILED: device gone
@@ -689,6 +798,22 @@ struct AlphaBindings {
 // Writes set `slot` (< kSceneSlots, retired on the GPU) and its record region;
 // returns that set (VK_NULL_HANDLE when alpha testing is off).
 VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& b, uint32_t slot);
+struct AlphaSunClone {
+  VkDescriptorSet set = VK_NULL_HANDLE;
+  VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+  VkBuffer stamp = VK_NULL_HANDLE;
+  VkBuffer parameters=VK_NULL_HANDLE;
+  uint32_t expected_generation = 0;
+};
+// Retired-slot private descriptors. Records a GPU copy of the ENTIRE original
+// stamp (including Hair-invalid byte12 and camera256), then clears Sun16/20.
+// CPU initialization leaves the clone unready if its private work is not submitted.
+bool alpha_prepare_sun_clone(VkCommandBuffer private_cmd, uint32_t slot,
+                             VkDescriptorSet selected_alpha, std::span<const SunCascadeCapture> cascades, AlphaSunClone* out);
+// Sun has no micromaps: reference10 is its OWN TLAS. Optional source epoch11
+// is supplied by the combined OMM path; a valid zero dummy is used otherwise.
+bool alpha_sun_bind_scene(uint32_t slot,VkAccelerationStructureKHR sun_tlas,
+                          VkBuffer epochs=VK_NULL_HANDLE,VkDeviceSize epoch_bytes=0);
 // The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).
 bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);

@@ -116,19 +116,34 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const bool backlit = pc.rt_backlit != 0 && nl <= 0.0 && mat_transmits(cls);
   float vis = pc.rt_backlit != 0 ? 1.0 : 0.0;   // (legacy: back faces were zeroed)
   bool unknown = false;
+#ifdef RT_SUN_CURRENT
+  bool current_covers=false;
+  uint native_samples=0u,native_reason=0u;
+#endif
   if (nl > 0.0 || backlit) {
     RtCone cone = {dist * pa, pa};
     float3 dir = L;
+#ifdef RT_SUN_CURRENT
+    float3 t=abs(L.y)<0.99?normalize(cross(float3(0,1,0),L)):normalize(cross(float3(0,0,1),L));
+    float3 b=cross(L,t);
+#endif
     if (pc.sun_radius > 0.0) {   // uniform sample of the sun's disc (half-angle sun_radius)
       uint s = pixel_seed(fp, 1u);
       float u1 = rand01(s), u2 = rand01(s);
+#ifndef RT_SUN_CURRENT
       float3 t = abs(L.y) < 0.99 ? normalize(cross(float3(0, 1, 0), L)) : float3(1, 0, 0);
       float3 b = cross(L, t);
+#endif
       float r = sqrt(u1) * tan(pc.sun_radius), phi = 6.2831853 * u2;
       dir = normalize(L + (t * cos(phi) + b * sin(phi)) * r);
     }
     // From the side the light comes from (the back side for transmission).
     float3 o = rt_ray_origin(fp, P, N, dist * pa, dir);
+#ifdef RT_SUN_CURRENT
+    NativeSunResult native=sun_native_visibility(P,d,o,dir,L,t,b,pc.sun_radius,cone,N,rt_origin_at(fp).xyz);
+    unknown=native.unknown;current_covers=!native.unknown;native_samples=native.samples;native_reason=native.reason;
+    vis=unknown?mask:native.visibility;
+#else
     const uint vs = rt_visibility(o, dir, pc.rt_tmax, cone);
     // Unknown (the candidate cap aborted the query, rt_common.hlsli): the game's own sun
     // visibility for this pixel, its mask value. One ray per pixel, so the decision is per
@@ -136,6 +151,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     // the fold, the trust and rt_sun_resolve all keep the game's mask there.
     unknown = vs == kRtUnknown;
     vis = unknown ? mask : vs == kRtOccluded ? 0.0 : 1.0;
+#endif
   }
   float check = 0.0, fam = 0.0;
   const bool primary_check = pc.rt_debug == 3 || pc.rt_debug == 5 || pc.rt_debug == 8;
@@ -213,6 +229,26 @@ void main(uint3 tid : SV_DispatchThreadID) {
     if ((tflags & 2u) != 0) roof = sun_under_roof(P, L, cam_abs);
     if ((tflags & 4u) != 0) t_off = sun_offscreen_trust(P, L, cam_abs.y);
   }
+#ifdef RT_SUN_CURRENT
+  if(traced) {
+    // Explicit finite native caster domain, exact selected/next membership.
+    // Unsupported auxiliary/domain/material cases keep the native reference.
+    t_off=current_covers?1.0:0.0;
+    if(current_covers) roof=false;
+  }
+  if((tflags&8u)!=0u) {
+    trust_add(21u,traced && current_covers);
+    trust_add(22u,traced && !current_covers);
+    trust_add(23u,(nl>0.0 || backlit) && !sun_current_scene_ready());
+    uint packet=gSunParameters.Load(1200u);
+    trust_add(24u,(nl>0.0 || backlit) && (packet&2u)==0u);
+    trust_add(25u,(nl>0.0 || backlit) && (packet&4u)==0u);
+    trust_add(26u,(nl>0.0 || backlit) && (packet&8u)==0u);
+    trust_add(27u,native_reason==2u);trust_add(28u,native_reason==3u);trust_add(29u,native_reason==4u);
+    trust_add(30u,native_samples>0u);trust_add(30u,native_samples>1u);
+    trust_add(31u,current_covers && native_samples==0u);
+  }
+#endif
   if (!primary_check) {
     check = fold;
     fam = unknown ? kSunUnknownCode : !traced ? 0.0 : roof ? 0.25 : 0.5 + 0.5 * t_off;

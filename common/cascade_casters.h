@@ -65,6 +65,17 @@ inline uint64_t mesh_key(const DrawId& d) {
   return h ? h : 1;
 }
 
+// Preserve the existing legacy opaque-cascade policy when a richer current
+// material stream is captured alongside it. Raw cutouts never become legacy
+// opaque casters merely because the current path knows their triangle range.
+enum class LegacyCaster { keep, alpha_skip, duplicate };
+inline LegacyCaster legacy_caster(bool discards,int alpha_mode,bool known_cutout,
+                                  bool alpha_dedupe,bool mesh_duplicate,bool draw_duplicate) {
+  if(discards && alpha_mode!=1 && (known_cutout || alpha_mode!=2)) return LegacyCaster::alpha_skip;
+  if((discards && alpha_dedupe && mesh_duplicate) || draw_duplicate) return LegacyCaster::duplicate;
+  return LegacyCaster::keep;
+}
+
 // The camera pass's draw keys of the last two frames (the camera pass and the cascades are
 // recorded on different threads, in either order: a cascade draw is a duplicate if the
 // camera pass drew it in this frame or the last one).

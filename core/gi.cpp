@@ -179,10 +179,13 @@ constexpr uint32_t kNumExtras = sizeof kExtras / sizeof kExtras[0];
 std::mutex g_mu;
 std::unordered_map<VkCommandBuffer, Snapshot> g_pending;   // pre done, post owed
 VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_HANDLE, g_ls_set_layout = VK_NULL_HANDLE;
+VkDescriptorSetLayout g_current_sun_set_layout=VK_NULL_HANDLE,g_current_sun_host_layout=VK_NULL_HANDLE;
+VkPipelineLayout g_current_sun_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
 Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
+Pipe g_rt_shadow_current; // private current-caster tuple; ordinary sun pipe stays untouched
 Pipe g_ls_match;    // D-LS per-light data: joins the runtime lights to the light array (core/ls_lights.h)
 // D-LS variants (docs/TRACK_D_RT.md 9.9): g_ls serves the default settings only, g_ls_full every
 // mode (ls_samples, ls_shadowed, ls_debug, ls_stats). A/B: ls_impl=0 runs the frozen pre-optimisation
@@ -518,6 +521,18 @@ bool ensure_rt_layout() {
   return make_layout(kRtBindings, &g_rt_set_layout, &g_rt_layout, host_layout);
 }
 
+bool ensure_current_sun_layout(VkDescriptorSetLayout materials) {
+  if(!materials) return false;
+  if(g_current_sun_layout && g_current_sun_host_layout==materials) return true;
+  for(auto pipeline:g_rt_shadow_current.variants) host->defer_destroy(BG3_DEFER_PIPELINE,uint64_t(pipeline));
+  g_rt_shadow_current=Pipe{};
+  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
+  g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;
+  g_current_sun_host_layout=materials;
+  return make_layout(kRtBindings,&g_current_sun_set_layout,&g_current_sun_layout,materials);
+}
+
 // D-RF: push set 0..30, the host's set 1, and the game's own layout of the
 // lighting's set 1 as set 2. A different game layout rebuilds the pipeline.
 bool ensure_rf_layout(VkDescriptorSetLayout game) {
@@ -677,7 +692,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const std::string base = cascade ? std::string(rebase ? "gi/cascade_rebase/" : "gi/cascade/") + (file + 3)
                                : rebase ? std::string("gi/rebase/") + (file + 3)
                                         : std::string(file);
-  const std::string selected = scalp ? "native_scalp/" + base : base;
+  const std::string material_selected = scalp ? "native_scalp/" + base : base;
+  const std::string selected = &p == &g_rt_shadow_current ? "sun_current/" + material_selected : material_selected;
   const unsigned variant = (rebase ? 1u : 0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u);
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
@@ -1328,9 +1344,10 @@ Push make_push() {
   return pc;
 }
 
-void dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w, uint32_t h, bool rt = false) {
+void dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w, uint32_t h, bool rt = false,
+               VkPipelineLayout private_layout=VK_NULL_HANDLE) {
   const VkDeviceFuncs& vk = *host->vk;
-  VkPipelineLayout layout = rt ? g_rt_layout : g_layout;
+  VkPipelineLayout layout = private_layout?private_layout:rt ? g_rt_layout : g_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p.pipeline);
   VkWriteDescriptorSet wr[kLsBindings + kNumExtras];
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, rt ? kRtBindings : kBindings, wr), wr);
@@ -1758,8 +1775,23 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   if (rt_shadows) {
     rt_begin();
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
-    dispatch(cmd, g_rt_shadow, b, pc, g_w, g_h, true);
-    if (g_sunt.replace && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
+    Bg3SunSceneInfo current_sun{};
+    const bool current_requested=host->cfg_int("rt_sun_cascade_current",0)!=0;
+    const bool use_current = current_requested && host->rt_sun_scene &&
+      host->rt_sun_scene(cmd,b.tlas,b.alpha,&current_sun) &&
+      ensure_current_sun_layout(current_sun.alpha_layout) &&
+      refresh(g_rt_shadow_current,"gi/rt_shadow.hlsl",g_current_sun_layout);
+    if(use_current) {
+      const auto original_tlas=b.tlas;const auto original_alpha=b.alpha;
+      bind_rt(b,current_sun.tlas,current_sun.alpha_set);
+      dispatch(cmd,g_rt_shadow_current,b,pc,g_w,g_h,true,g_current_sun_layout);
+      bind_rt(b,original_tlas,original_alpha);
+    } else {
+      auto fallback=pc;
+      if(current_requested) fallback.rt_strength=0; // exact native mask, never an unsupported opaque substitute
+      dispatch(cmd,g_rt_shadow,b,fallback,g_w,g_h,true);
+    }
+    if ((use_current || (!current_requested && g_sunt.replace)) && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
         refresh(g_sun_resolve, "gi/rt_sun_resolve.hlsl", g_rt_layout)) {
       memory_barrier(cmd, kCS, kCS);
       dispatch(cmd, g_sun_resolve, b, pc, g_w, g_h, true);
@@ -2187,7 +2219,10 @@ void gi_release() {
   g_lsl_ok = false;
   sunt_release();
   g_sunt_ok = false;
-  for (Pipe* p : {&g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug, &g_rt_ao,
+  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
+  g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
+  for (Pipe* p : {&g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {

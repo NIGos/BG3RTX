@@ -1,0 +1,850 @@
+{
+  "scope": "Package index, foundry placement references, content-bank joins and bounded resource headers only.",
+  "limitations": [
+    "No GR2 vertex/index decode or export",
+    "No VT tile decode or shading comparison",
+    "No runtime state, save, game launch, GPU execution or performance measurement",
+    "Scenery results do not cover terrain, constructions, instances, characters or mods",
+    "Content-bank ID collisions use lexical last match in this probe; not an engine precedence proof"
+  ],
+  "git_head": "92183e7e78487feba06ff75a7a88fdd32ed05cd3",
+  "git_head_start": "92183e7e78487feba06ff75a7a88fdd32ed05cd3",
+  "package_fingerprint": [
+    {
+      "name": "Assets.pak",
+      "size": 115417194,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "DiceSet01.pak",
+      "size": 17969592,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "DiceSet02.pak",
+      "size": 19348794,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "DiceSet03.pak",
+      "size": 17514043,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "DiceSet06.pak",
+      "size": 12982662,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Effects.pak",
+      "size": 438864541,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Engine.pak",
+      "size": 7039827,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "EngineShaders.pak",
+      "size": 30332659,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Game.pak",
+      "size": 1116598983,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "GamePlatform.pak",
+      "size": 81157,
+      "mtime": 1776699856,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Gustav.pak",
+      "size": 13186753328,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Gustav_NavCloud.pak",
+      "size": 95851455,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Gustav_Textures.pak",
+      "size": 888878399,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Gustav_Video.pak",
+      "size": 1718353532,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "GustavX.pak",
+      "size": 185129297,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Icons.pak",
+      "size": 26884871,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "LowTex.pak",
+      "size": 34457940,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Materials.pak",
+      "size": 364770186,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Models.pak",
+      "size": 8929633868,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "PsoCache.pak",
+      "size": 258656,
+      "mtime": 1776700683,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Shared.pak",
+      "size": 162779988,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "SharedSoundBanks.pak",
+      "size": 43505432,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "SharedSounds.pak",
+      "size": 10859554561,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Textures.pak",
+      "size": 4293034456,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "VirtualTextures.pak",
+      "size": 4292500575,
+      "mtime": 1776694335,
+      "priority": 0,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Patch8_HotFix9.pak",
+      "size": 136753912,
+      "mtime": 1785762279,
+      "priority": 1,
+      "md5": "00000000000000000000000000000000"
+    },
+    {
+      "name": "Patch8_HotFix10.pak",
+      "size": 131714609,
+      "mtime": 1790695120,
+      "priority": 3,
+      "md5": "00000000000000000000000000000000"
+    }
+  ],
+  "packages": 27,
+  "indexed_paths": 566751,
+  "gr2_files": 154273,
+  "hlod_gr2_files": 19037,
+  "terrain_patch_files": 3819,
+  "level": "BGH_SteelWatchFoundry_B",
+  "categories": {
+    "Scenery": {
+      "path": "Mods/GustavDev/Levels/BGH_SteelWatchFoundry_B/Scenery/_merged.lsf",
+      "objects": 2315,
+      "with_direct_visual": 0,
+      "with_template": 2315,
+      "child_nodes": {
+        "LayerList": 1504,
+        "Transform": 2315,
+        "FadeChildren": 1
+      }
+    },
+    "TileConstructions": {
+      "path": "Mods/GustavDev/Levels/BGH_SteelWatchFoundry_B/TileConstructions/_merged.lsf",
+      "objects": 627,
+      "with_direct_visual": 0,
+      "with_template": 627,
+      "child_nodes": {
+        "ConstructionLines": 627,
+        "ConstructionPoints": 627,
+        "ConstructionSpline": 627,
+        "Fillings": 627,
+        "LayerList": 466,
+        "Transform": 627,
+        "tiles": 627
+      }
+    },
+    "Items": {
+      "path": "Mods/GustavDev/Levels/BGH_SteelWatchFoundry_B/Items/_merged.lsf",
+      "objects": 144,
+      "with_direct_visual": 0,
+      "with_template": 144,
+      "child_nodes": {
+        "LayerList": 143,
+        "Transform": 144,
+        "InventoryList": 18,
+        "ItemList": 3,
+        "OnUsePeaceActions": 4
+      }
+    },
+    "Terrains": {
+      "path": "Mods/GustavDev/Levels/BGH_SteelWatchFoundry_B/Terrains/_merged.lsf",
+      "objects": 1,
+      "with_direct_visual": 0,
+      "with_template": 1,
+      "child_nodes": {
+        "LayerList": 1,
+        "TerrainBaseLayers": 1,
+        "TerrainLayers": 1,
+        "Transform": 1,
+        "Visual": 1
+      }
+    }
+  },
+  "extra_instance_lsf_files": 9,
+  "content_banks_parsed": 3183,
+  "scenery": {
+    "placements_with_visual": 2315,
+    "unique_visual_ids": 212,
+    "unresolved_template_visuals": [],
+    "visual_ids_found": 209,
+    "missing_visual_ids": [
+      "78f0a631-fda5-2f56-c1b7-2d88eddfe9d4",
+      "b7b7e0ed-8b2b-a2be-6bf2-43d2e8da61e9",
+      "e96989da-28a0-1080-064b-521d977355d8"
+    ],
+    "non_visual_bank_matches": {
+      "78f0a631-fda5-2f56-c1b7-2d88eddfe9d4": {
+        "bank_kind": "EffectBank",
+        "path": "Public/Shared/Content/Assets/Effects/Effects/[PAK]_Environment/_merged.lsf",
+        "name": "VFX_Environment_Dust_S_White_01",
+        "source": "Public/Shared/Assets/Effects/Effects_Banks/Environment/VFX_Environment_Dust_S_White_01.lsfx"
+      },
+      "b7b7e0ed-8b2b-a2be-6bf2-43d2e8da61e9": {
+        "bank_kind": "EffectBank",
+        "path": "Public/Shared/Content/Assets/Effects/Effects/[PAK]_Environment/_merged.lsf",
+        "name": "VFX_Environment_Nautiloid_Sparks_Medium_Blue_01",
+        "source": "Public/Shared/Assets/Effects/Effects_Banks/Environment/VFX_Environment_Nautiloid_Sparks_Medium_Blue_01.lsfx"
+      },
+      "e96989da-28a0-1080-064b-521d977355d8": {
+        "bank_kind": "EffectBank",
+        "path": "Public/SharedDev/Content/Assets/Effects/Effects/[PAK]_Environment/_merged.lsf",
+        "name": "VFX_Environment_SCL_Steam_Aggressive_01",
+        "source": "Public/SharedDev/Assets/Effects/Effects_Banks/Environment/VFX_Environment_SCL_Steam_Aggressive_01.lsfx"
+      }
+    },
+    "missing_visual_placement_counts": {
+      "e96989da-28a0-1080-064b-521d977355d8": 35,
+      "b7b7e0ed-8b2b-a2be-6bf2-43d2e8da61e9": 4,
+      "78f0a631-fda5-2f56-c1b7-2d88eddfe9d4": 1
+    },
+    "unique_mesh_paths_found": 185,
+    "missing_mesh_paths": [],
+    "unique_material_ids": 79,
+    "material_ids_in_banks": 79,
+    "missing_material_ids": [],
+    "samples": [
+      {
+        "visual": "006c6b34-2889-2eb0-1d2e-6bca8398d99a",
+        "bank": "Public/Shared/Content/Assets/Furniture/[PAK]_Hospital/_merged.lsf",
+        "source": "Generated/Public/Shared/Assets/Furniture/Hospital/FUR_Hospital_Anatomical_Board_ABC/Resources/FUR_Hospital_Anatomical_Board_A_Big_B.GR2",
+        "source_exists": true,
+        "material_ids": [
+          "cfacd158-d460-6810-78bf-6d7d2b0576f1",
+          "cfacd158-d460-6810-78bf-6d7d2b0576f1",
+          "cfacd158-d460-6810-78bf-6d7d2b0576f1"
+        ],
+        "object_lods": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "visual": "019153a9-7ac3-8355-0c77-98221ebe2752",
+        "bank": "Public/SharedDev/Content/Assets/Decoration/[PAK]_Glasshouse/_merged.lsf",
+        "source": "Generated/Public/SharedDev/Assets/Decoration/Glasshouse/DEC_GEN_Glasshouse_ABC/Resources/DEC_GEN_Glasshouse_Rubble_Beam_C.GR2",
+        "source_exists": true,
+        "material_ids": [
+          "878e1129-6245-b9a8-66cc-ec437bf4ce65",
+          "878e1129-6245-b9a8-66cc-ec437bf4ce65"
+        ],
+        "object_lods": [
+          0,
+          1
+        ]
+      },
+      {
+        "visual": "028ffefd-367f-ea1a-2f7b-cb3e86a138ed",
+        "bank": "Public/SharedDev/Content/Assets/Buildings/[PAK]_Foundry/_merged.lsf",
+        "source": "Generated/Public/SharedDev/Assets/Buildings/Foundry/BLD_Foundry_Construction_ABC/Resources/BLD_Foundry_Construction_Pillar_Bottom_B.GR2",
+        "source_exists": true,
+        "material_ids": [
+          "c7a5db87-f1f8-97bd-1d8b-ede3bea9ecef",
+          "b9981e85-5717-199d-0ee3-b85ea210eb1e",
+          "c7a5db87-f1f8-97bd-1d8b-ede3bea9ecef",
+          "b9981e85-5717-199d-0ee3-b85ea210eb1e"
+        ],
+        "object_lods": [
+          0,
+          0,
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  "lowercity_hlod_visuals": 716,
+  "mesh_header_samples": [
+    {
+      "path": "Generated/Public/Shared/Assets/Books/Generic/BOOK_GEN_Books_Stack_B.GR2",
+      "bytes": 23344,
+      "sha256": "3bf59fae2a2e5916d6f96a7df43a9b6a8a6a0b38bcd5eb258983fcd313430588",
+      "first_64_bytes": "e52f4ae16fc28aee1ed2b44c90d755afc801000000000000000000000000000007000000305b000089b9f7144800000008000000060000000000000000000000",
+      "gr2_version_word_at_32": 7,
+      "sections": [
+        {
+          "codec": 4,
+          "compressed_bytes": 1348,
+          "uncompressed_bytes": 2528,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 0,
+          "uncompressed_bytes": 0,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 52,
+          "uncompressed_bytes": 532,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 80,
+          "uncompressed_bytes": 256,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 68,
+          "uncompressed_bytes": 616,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 8356,
+          "uncompressed_bytes": 13232,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 11224,
+          "uncompressed_bytes": 30348,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 0,
+          "compressed_bytes": 0,
+          "uncompressed_bytes": 0,
+          "stored_range_in_file": true
+        }
+      ]
+    },
+    {
+      "path": "Generated/Public/Shared/Assets/Books/Generic/BOOK_GEN_Books_Stack_C.GR2",
+      "bytes": 17548,
+      "sha256": "e6756146eb5d6847042dc268cb9dc8f7b3f20cbd197210a9853aa205eae02df2",
+      "first_64_bytes": "e52f4ae16fc28aee1ed2b44c90d755afc8010000000000000000000000000000070000008c44000008c288654800000008000000060000000000000000000000",
+      "gr2_version_word_at_32": 7,
+      "sections": [
+        {
+          "codec": 4,
+          "compressed_bytes": 1340,
+          "uncompressed_bytes": 2528,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 0,
+          "uncompressed_bytes": 0,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 52,
+          "uncompressed_bytes": 532,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 76,
+          "uncompressed_bytes": 256,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 68,
+          "uncompressed_bytes": 616,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 5708,
+          "uncompressed_bytes": 8888,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 8088,
+          "uncompressed_bytes": 23340,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 0,
+          "compressed_bytes": 0,
+          "uncompressed_bytes": 0,
+          "stored_range_in_file": true
+        }
+      ]
+    },
+    {
+      "path": "Generated/Public/Shared/Assets/Books/Generic/BOOK_GEN_Paper_ABC/Resources/BOOK_GEN_Paper_Pile_A.GR2",
+      "bytes": 15736,
+      "sha256": "e0a295ae9f2d1e77ccb78a0f22ea66cd447830b5cc00b42dc413dc4827dfd71b",
+      "first_64_bytes": "e52f4ae16fc28aee1ed2b44c90d755afc801000000000000000000000000000007000000783d00006bc06e954800000008000000060000000000000000000000",
+      "gr2_version_word_at_32": 7,
+      "sections": [
+        {
+          "codec": 4,
+          "compressed_bytes": 1320,
+          "uncompressed_bytes": 2388,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 0,
+          "uncompressed_bytes": 0,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 88,
+          "uncompressed_bytes": 368,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 52,
+          "uncompressed_bytes": 128,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 68,
+          "uncompressed_bytes": 616,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 2568,
+          "uncompressed_bytes": 3340,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 0,
+          "compressed_bytes": 8272,
+          "uncompressed_bytes": 8272,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 0,
+          "compressed_bytes": 0,
+          "uncompressed_bytes": 0,
+          "stored_range_in_file": true
+        }
+      ]
+    },
+    {
+      "path": "Generated/Public/GustavDev/Assets/HLOD/CTY_LowerCity_A/HLOD_230_37_249_LOW.GR2",
+      "bytes": 31992,
+      "sha256": "b7c902c07024120a727025874d57c2e28a6fa04166c94f717840abeb2ba017bd",
+      "first_64_bytes": "e52f4ae16fc28aee1ed2b44c90d755afc801000000000000000000000000000007000000f87c0000c4d5f96e4800000008000000060000000000000000000000",
+      "gr2_version_word_at_32": 7,
+      "sections": [
+        {
+          "codec": 4,
+          "compressed_bytes": 1344,
+          "uncompressed_bytes": 2400,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 0,
+          "uncompressed_bytes": 0,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 48,
+          "uncompressed_bytes": 368,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 52,
+          "uncompressed_bytes": 128,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 68,
+          "uncompressed_bytes": 616,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 4,
+          "compressed_bytes": 18840,
+          "uncompressed_bytes": 25008,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 0,
+          "compressed_bytes": 8272,
+          "uncompressed_bytes": 8272,
+          "stored_range_in_file": true
+        },
+        {
+          "codec": 0,
+          "compressed_bytes": 0,
+          "uncompressed_bytes": 0,
+          "stored_range_in_file": true
+        }
+      ]
+    }
+  ],
+  "virtual_textures": {
+    ".gts": {
+      "files": 16,
+      "logical_bytes": 1318060032
+    },
+    ".gtp": {
+      "files": 12974,
+      "logical_bytes": 82948653056
+    }
+  },
+  "gts_sample": {
+    "path": "Generated/Public/VirtualTextures/Albedo_Normal_Physical_0.gts",
+    "magic": "GRPG",
+    "version": 5,
+    "layers": 3,
+    "mip_levels": 9
+  },
+  "tile_construction_sample": {
+    "_": "GameObjects",
+    "Flag": 1,
+    "LevelName": "BGH_SteelWatchFoundry_B",
+    "MapKey": "0013795e-6f3a-44a7-8015-46b74e286325",
+    "Name": "WALL_GEN_Glasshouse_Pipe_B_0n5D_0n5H_A_135",
+    "TemplateName": "610bfa80-073c-4cff-8006-02564f1cee0f",
+    "Type": "TileConstruction",
+    "_OriginalFileVersion_": 144115207403209029,
+    "children": [
+      {
+        "_": "ConstructionLines",
+        "children": [
+          {
+            "_": "ConstructionLine",
+            "ConstructionLineGuid": "33860191-e8f4-a59f-9722-a8f0730b4da8"
+          }
+        ]
+      },
+      {
+        "_": "ConstructionPoints",
+        "children": [
+          {
+            "_": "ConstructionPoint",
+            "ConstructionPointId": "72f28c69-5d1c-eaec-fa25-ce3d636742f1",
+            "ConstructionPointStop": false
+          },
+          {
+            "_": "ConstructionPoint",
+            "ConstructionPointId": "dabce442-2866-efbe-244e-ec5358837add",
+            "ConstructionPointStop": false
+          },
+          {
+            "_": "ConstructionPoint",
+            "ConstructionPointId": "3a3f6bc2-3ab3-15b7-e252-72c1e34f1ed1",
+            "ConstructionPointStop": false
+          },
+          {
+            "_": "ConstructionPoint",
+            "ConstructionPointId": "b80abbaf-08d8-449a-8faf-a2a561843ee0",
+            "ConstructionPointStop": false
+          }
+        ]
+      },
+      {
+        "_": "ConstructionSpline",
+        "ConstructionPointCount": 4,
+        "id": "499a1534-067e-c06e-089d-b5f04c9e9c9a",
+        "children": [
+          {
+            "_": "ConstructionPoint",
+            "ConstructionHelperPoint": false,
+            "ConstructionPointId": "3a3f6bc2-3ab3-15b7-e252-72c1e34f1ed1",
+            "ConstructionPointStretch": false
+          },
+          {
+            "_": "ConstructionPoint",
+            "ConstructionHelperPoint": true,
+            "ConstructionPointId": "72f28c69-5d1c-eaec-fa25-ce3d636742f1",
+            "ConstructionPointStretch": false
+          },
+          {
+            "_": "ConstructionPoint",
+            "ConstructionHelperPoint": true,
+            "ConstructionPointId": "b80abbaf-08d8-449a-8faf-a2a561843ee0",
+            "ConstructionPointStretch": false
+          },
+          {
+            "_": "ConstructionPoint",
+            "ConstructionHelperPoint": false,
+            "ConstructionPointId": "dabce442-2866-efbe-244e-ec5358837add",
+            "ConstructionPointStretch": false
+          }
+        ]
+      },
+      {
+        "_": "Fillings"
+      },
+      {
+        "_": "LayerList",
+        "children": [
+          {
+            "_": "Layers"
+          }
+        ]
+      },
+      {
+        "_": "Transform",
+        "Position": [
+          24.186847686767578,
+          8.880602836608887,
+          88.91970825195312
+        ],
+        "RotationQuat": [
+          -0.49999964237213135,
+          0.49999988079071045,
+          0.5000007152557373,
+          0.4999997615814209
+        ],
+        "Scale": 1.0
+      },
+      {
+        "_": "tiles",
+        "CanSeeThrough": false,
+        "ClickThrough": false,
+        "Climbable": false,
+        "ConstructionBend": false,
+        "ConstructionPlaceTwoTiles": false,
+        "FadeGroup": "",
+        "Fadeable": true,
+        "HierarchyOnlyFade": true,
+        "SeeThrough": true,
+        "ShootThrough": true,
+        "ShootThroughType": 6,
+        "TileSet": "f26c5d82-5432-2fb6-4ae7-21ca4d8f884a",
+        "WalkOn": false,
+        "WalkThrough": false,
+        "children": [
+          {
+            "_": "tile",
+            "CanSeeThrough": false,
+            "ClickThrough": false,
+            "Climbable": false,
+            "Flip": false,
+            "HLOD": "9532393f-821e-7915-0208-72dcfb462b1d",
+            "QRotate": [
+              4.0612863472233585e-07,
+              3.8743019104003906e-07,
+              0.7071070671081543,
+              0.7071065306663513
+            ],
+            "Scale": 1.0,
+            "ScaleZ": 1.0,
+            "ShootThrough": true,
+            "ShootThroughType": 6,
+            "Stretchable": false,
+            "Translate": [
+              24.18657112121582,
+              12.21342658996582,
+              88.91963195800781
+            ],
+            "UUID": "829080b7-3e47-0d04-38c6-e6cad19a6203",
+            "WalkOn": false,
+            "WalkThrough": false,
+            "tile": "ece68d75-5e19-402b-9738-f4e719efd2d6"
+          },
+          {
+            "_": "tile",
+            "CanSeeThrough": false,
+            "ClickThrough": false,
+            "Climbable": false,
+            "Flip": false,
+            "HLOD": "9532393f-821e-7915-0208-72dcfb462b1d",
+            "QRotate": [
+              -0.7071070075035095,
+              0.7071065902709961,
+              1.088223712031322e-06,
+              2.1884218881496054e-07
+            ],
+            "Scale": 1.0,
+            "ScaleZ": 1.0,
+            "ShootThrough": true,
+            "ShootThroughType": 6,
+            "Stretchable": true,
+            "Translate": [
+              24.186573028564453,
+              10.21342658996582,
+              88.91963195800781
+            ],
+            "UUID": "24f192b2-1d34-4c0d-9376-994c960d8c99",
+            "WalkOn": false,
+            "WalkThrough": false,
+            "tile": "43df4747-a0ef-40c7-831c-1227dae44b0d"
+          },
+          {
+            "_": "tile",
+            "CanSeeThrough": false,
+            "ClickThrough": false,
+            "Climbable": false,
+            "Flip": false,
+            "HLOD": "9532393f-821e-7915-0208-72dcfb462b1d",
+            "QRotate": [
+              -0.7071070075035095,
+              0.7071065306663513,
+              4.6237471451604506e-07,
+              -4.0700669501347875e-07
+            ],
+            "Scale": 1.0,
+            "ScaleZ": 1.0,
+            "ShootThrough": true,
+            "ShootThroughType": 6,
+            "Stretchable": false,
+            "Translate": [
+              24.186573028564453,
+              8.21342658996582,
+              88.91962432861328
+            ],
+            "UUID": "06bf4a6d-ff9b-4ad2-bb17-d0882b34f5c2",
+            "WalkOn": false,
+            "WalkThrough": false,
+            "tile": "10e65925-1c06-4e4d-8e23-4cf6fd9c4524"
+          },
+          {
+            "_": "tile",
+            "CanSeeThrough": false,
+            "ClickThrough": false,
+            "Climbable": false,
+            "Flip": false,
+            "HLOD": "9532393f-821e-7915-0208-72dcfb462b1d",
+            "QRotate": [
+              -0.7071070075035095,
+              0.7071065902709961,
+              1.088223712031322e-06,
+              2.1884218881496054e-07
+            ],
+            "Scale": 1.0,
+            "ScaleZ": 1.0,
+            "ShootThrough": true,
+            "ShootThroughType": 6,
+            "Stretchable": true,
+            "Translate": [
+              24.18657112121582,
+              12.21342658996582,
+              88.91963195800781
+            ],
+            "UUID": "2614edc2-3e55-4f26-ab77-8620fc694939",
+            "WalkOn": false,
+            "WalkThrough": false,
+            "tile": "43df4747-a0ef-40c7-831c-1227dae44b0d"
+          }
+        ]
+      }
+    ]
+  },
+  "read_errors": [],
+  "source_sha256": {
+    "tools/assets/geom.py": "54e5a4bdd390c407743fdffb47c5cd552f5921bd1d671d3e2190e2217b93d308",
+    "tools/assets/build.py": "766469014d44f5efa84d8b8a85144fade41712770cabf890bdafc78a47fcb955",
+    "tools/assets/extract/world.py": "a159bea4be8f31b5cc629b02e9b6552650c9b42f2127c9e5e5f74cc1075b0b75",
+    "shaders/rt/rt_common.hlsli": "bad083211b6f38d5b436c1f293846690289bce3b527daa578f9eb70a471db652",
+    "shaders/rt/bg3_materials.hlsli": "01315a86745469abee12dfc453ae52133a8841b299a901f688b152f504cafdeb",
+    "shaders/gi/sharc_inject.hlsl": "5000aa709271325c60d83306022e123b1143e75511f64c76d0513db9f5d34bc9",
+    "shaders/gi/rt_reflections.hlsl": "3f5abb44d17794d8b388fb47528cd59b4e44314a8a15f5b5a3bb2fd07022dab3",
+    "mods/BG3RTX_Bridge/ScriptExtender/Lua/BootstrapClient.lua": "dbb3980ea3795a9ca6a13cf2634ee7760b13f1de0a0bc81d54da7d1b21194c9e",
+    "layer/bvhsplit.cpp": "dd45160f09a287daa5aceb85bc5fe84bb7319d5f4a4882dd8fdcfa176dade677"
+  }
+}

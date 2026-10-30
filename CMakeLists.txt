@@ -36,6 +36,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rrpost.cpp
   layer/geocapture.cpp
   layer/rtscene.cpp
+  layer/sun_scene.cpp
   layer/omm_backend.cpp
   layer/omm_submit.cpp
   layer/omm_content.cpp
@@ -152,6 +153,11 @@ add_executable(omm_spatial_support_test tests/omm_spatial_support_test.cpp)
 add_test(NAME omm_spatial_support_test COMMAND omm_spatial_support_test)
 add_executable(omm_plain_bake_test tests/omm_plain_bake_test.cpp)
 add_test(NAME omm_plain_bake_test COMMAND omm_plain_bake_test)
+add_executable(sun_raster_domain_test tests/sun_raster_domain_test.cpp)
+target_include_directories(sun_raster_domain_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME sun_raster_domain_test COMMAND sun_raster_domain_test)
+add_executable(sun_caster_coverage_test tests/sun_caster_coverage_test.cpp)
+add_test(NAME sun_caster_coverage_test COMMAND sun_caster_coverage_test)
 add_executable(native_hair_geometry_test tests/native_hair_geometry_test.cpp)
 add_test(NAME native_hair_geometry_test COMMAND native_hair_geometry_test)
 add_executable(native_hair_test tests/native_hair_test.cpp)
@@ -201,6 +207,8 @@ add_test(NAME omm_sampler_bindings_test COMMAND omm_sampler_bindings_test)
 add_executable(omm_native_plain_test tests/omm_native_plain_test.cpp layer/omm_native_plain.cpp)
 target_include_directories(omm_native_plain_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME omm_native_plain_test COMMAND omm_native_plain_test)
+add_executable(native_sun_math_test tests/native_sun_math_test.cpp)
+add_test(NAME native_sun_math_test COMMAND native_sun_math_test)
 # Explicit synthetic GPU probe only. Never registered in routine CTest and never
 # launched by a build. No game, presentation or global loader settings changes.
 option(BG3RTX_OMM_GPU_SMOKE "Build the opt-in synthetic EXT OMM console probe" OFF)
