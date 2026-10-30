@@ -100,7 +100,8 @@ bool ensure_pipeline(DeviceData* dd) {
 }
 }
 
-Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in) {
+Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output) {
+  if (output) *output={};
   if (!available() || !cfg_int("rt_omm",0) || !tracked_recording(cmd) || !in.vertices || !in.mask ||
       !in.sampled_owner || !valid_plain_push(in.push) || in.vertex_bytes<in.push.source_bytes ||
       (in.layout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && in.layout!=VK_IMAGE_LAYOUT_GENERAL)) return 0;
@@ -116,7 +117,7 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in) {
   auto inputs=std::make_shared<Inputs>(); inputs->pipeline=pipeline; inputs->sampled=in.sampled_owner;
   constexpr VkBufferUsageFlags buildInput=VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT;
   if (!allocate(dd,inputs->data,VkDeviceSize(in.push.triangles)*4,
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|buildInput,false) ||
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|buildInput,false) ||
       !allocate(dd,inputs->triangles,triangles.size()*sizeof(Triangle),buildInput,true) ||
       !allocate(dd,inputs->audit,VkDeviceSize(in.push.triangles)*16,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT,false)) return 0;
@@ -140,7 +141,7 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in) {
   dd->vk.CmdDispatch(cmd,(in.push.triangles+63)/64,1,1);
   Input build{};build.descriptors=triangles;build.data=inputs->data.address;build.triangles=inputs->triangles.address;
   build.dataBytes=inputs->data.bytes;build.triangleBytes=inputs->triangles.bytes;
-  build.dataUsage=buildInput|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  build.dataUsage=buildInput|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   build.triangleUsage=buildInput|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;build.input_owner=inputs;
   const Ticket ticket=record(cmd,build);
   if (!ticket) {
@@ -150,6 +151,7 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in) {
     failed_recordings.push_back(std::move(inputs));producer_failed=true;
     log("[omm] producer disabled after EXT record failure; pending inputs retained until device idle");
   }
+  if (ticket && output) *output={ticket,inputs->data.handle,inputs->audit.handle,inputs->data.bytes,inputs->audit.bytes};
   return ticket;
 }
 void bake_device_destroyed(DeviceData* dd) {

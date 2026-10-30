@@ -13,11 +13,17 @@ struct PlainInput {
   // and the push's full mip/UV/numeric domain must be certified by the caller.
   std::shared_ptr<void> sampled_owner;
 };
+struct PlainOutput {
+  Ticket ticket{};
+  VkBuffer data{}, audit{};
+  VkDeviceSize data_bytes{}, audit_bytes{};
+};
 // Producer -> EXT build. Does not bypass required material/content proofs.
 // Changes compute bindings; the enclosing injection must restore_bindings()
 // before returning to the game, as for existing BVH extraction work.
 // A zero sampling_certificate produces UNKNOWN only; that is backend testing,
 // never a successful quality/acceleration gate.
-Ticket record_plain(VkCommandBuffer,const PlainInput&);
+// Optional diagnostic buffers live exactly as long as the returned ticket.
+Ticket record_plain(VkCommandBuffer,const PlainInput&,PlainOutput* = nullptr);
 void bake_device_destroyed(DeviceData*);
 }

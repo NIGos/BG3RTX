@@ -37,6 +37,13 @@ Validation in the isolated worktree:
 - Producer layout/range/budget planning: 4,136 checks.
 - New producer DXC compilation and SPIR-V validation pass. Ordinary shader sources
   are unchanged; this file is not included by any ordinary shader.
+- Actual RTX 5090 synthetic producer: production compute creates Opaque,
+  Transparent and UNKNOWN-without-certificate outputs, reads back exact wire
+  states/status, feeds three real EXT micromap builds and retires them through
+  the actual production timeline. Zero validation errors. The separate six-ray
+  backend fixture and 2,176 endpoint samples also remain green. The six rays
+  traverse the backend fixture, not these producer micromaps: do not conflate
+  the two into a native-textured scene gate.
 - No game launch, live deployment, new GPU pass timing or performance claim.
 
 Required next integration: content epochs for mutable/streaming game images;

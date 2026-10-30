@@ -3,6 +3,7 @@
 #include "../layer/host.h"
 #include "../layer/omm_backend.h"
 #include "../layer/omm_submit.h"
+#include "../layer/omm_bake.h"
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -13,9 +14,22 @@
 #include <atomic>
 namespace bg3 {
 static DeviceData* smokeDevice;
+static const char* producerShader;
 void log(const char* fmt,...){va_list ap;va_start(ap,fmt);std::vprintf(fmt,ap);std::puts("");va_end(ap);}
 int cfg_int(const char* key,int fallback){return !std::strcmp(key,"rt_omm")?1:fallback;}
 DeviceData* device_of(const void*){return smokeDevice;}
+uint32_t find_memory_type(DeviceData* dd,uint32_t bits,VkMemoryPropertyFlags want){
+  VkPhysicalDeviceMemoryProperties p{};dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical,&p);
+  for(uint32_t i=0;i<p.memoryTypeCount;++i)if((bits&(1u<<i))&&(p.memoryTypes[i].propertyFlags&want)==want)return i;
+  return UINT32_MAX;
+}
+VkDeviceAddress rt_buffer_address(VkBuffer buffer){VkBufferDeviceAddressInfo i{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};i.buffer=buffer;return smokeDevice->vk.GetBufferDeviceAddress(smokeDevice->device,&i);}
+bool shader_get(const char* name,const char*,const char*,Bg3ShaderBlob* out){
+  if(!producerShader||std::strcmp(name,"rt/omm_bake_plain.hlsl"))return false;
+  static std::vector<uint32_t> code;
+  if(code.empty()){std::ifstream f(producerShader,std::ios::binary|std::ios::ate);if(!f)return false;auto n=f.tellg();if(n<=0||uint64_t(n)%4)return false;code.resize(size_t(n)/4);f.seekg(0);f.read(reinterpret_cast<char*>(code.data()),n);if(!f)return false;}
+  *out={code.data(),code.size()*4,1};return true;
+}
 }
 using namespace bg3;
 static std::atomic<unsigned> validationErrors{};
@@ -53,8 +67,35 @@ static void barrier(DeviceData& dd,VkCommandBuffer cmd,VkPipelineStageFlags2 sou
   VkMemoryBarrier2 b{VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};b.srcStageMask=source;b.srcAccessMask=access;b.dstStageMask=target;b.dstAccessMask=read;
   VkDependencyInfo dep{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};dep.memoryBarrierCount=1;dep.pMemoryBarriers=&b;dd.vk.CmdPipelineBarrier2(cmd,&dep);
 }
+struct ProducerOwner {
+  DeviceData* dd{};Buffer source;VkImageView view{};
+  ~ProducerOwner(){if(view)dd->vk.DestroyImageView(dd->device,view,nullptr);}
+};
+static std::vector<omm::Ticket> producer_fixtures(DeviceData& dd,VkCommandBuffer cmd,VkImage image,Buffer& result){
+  std::vector<omm::Ticket> tickets;
+  for(uint32_t i=0;i<3;++i){
+    auto owner=std::make_shared<ProducerOwner>();owner->dd=&dd;
+    buffer(dd,owner->source,256,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    const float v[18]={0,0,0,1,.1f,.1f,1,0,0,1,.2f,.1f,0,1,0,1,.1f,.2f};
+    std::memcpy(owner->source.mapped,v,sizeof v);
+    VkImageViewCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};ci.image=image;ci.viewType=VK_IMAGE_VIEW_TYPE_2D;ci.format=VK_FORMAT_R8G8B8A8_UNORM;
+    ci.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,3,i==0?1u:0u,1};vkcheck(dd.vk.CreateImageView(dd.device,&ci,nullptr,&owner->view),"producer source view");
+    omm::PlainInput in{};in.vertices=owner->source.handle;in.vertex_bytes=256;in.mask=owner->view;in.sampled_owner=owner;
+    in.push.vertex_stride=24;in.push.triangles=1;in.push.source_bytes=72;in.push.channel=3;
+    in.push.threshold_lo=in.push.threshold_hi=.5f;in.push.sampling_certificate=i<2?1u:0u;
+    // This synthetic source is immutable through submission, every mip is
+    // identically zero/one. That endpoint fixture is not a game-asset certificate.
+    omm::PlainOutput output{};auto ticket=omm::record_plain(cmd,in,&output);check(ticket&&output.data,"production GPU producer ticket");tickets.push_back(ticket);
+    barrier(dd,cmd,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,VK_ACCESS_2_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_READ_BIT);
+    VkBufferCopy copies[]={{0,50000+i*32,4},{0,50004+i*32,16}};
+    dd.vk.CmdCopyBuffer(cmd,output.data,result.handle,1,&copies[0]);dd.vk.CmdCopyBuffer(cmd,output.audit,result.handle,1,&copies[1]);
+  }
+  barrier(dd,cmd,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
+  return tickets;
+}
 int main(int argc,char** argv){
-  check(argc==2 || argc==3,"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv]");
+  check(argc>=2 && argc<=4,"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv [producer.spv]]");
+  if(argc==4)producerShader=argv[3];
   // Process-local loader settings only. The parent also sets these before launch.
   SetEnvironmentVariableA("VK_LOADER_LAYERS_DISABLE","~implicit~");SetEnvironmentVariableA("VK_INSTANCE_LAYERS",nullptr);
   HMODULE loader=LoadLibraryA("vulkan-1.dll");check(loader!=nullptr,"existing Vulkan loader");
@@ -139,7 +180,7 @@ int main(int argc,char** argv){
     buffer(dd,vertices,256,VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
     float v[27]{};for(unsigned p=0;p<3;++p){float x=float(p)*4;const float tri[]={x,0,0,x+1,0,0,x,1,0};std::memcpy(v+p*9,tri,sizeof(tri));}std::memcpy(vertices.mapped,v,sizeof(v));
     buffer(dd,instances,256,VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
-    buffer(dd,result,65536,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);std::memset(result.mapped,0xcd,65536);
+    buffer(dd,result,65536,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);std::memset(result.mapped,0xcd,65536);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};vkcheck(dd.vk.BeginCommandBuffer(cmd,&begin),"begin command");omm::command_begin(cmd);
     omm::Input input{};input.descriptors=descriptors;input.data=inputs->data.address;input.triangles=inputs->descriptors.address;input.dataBytes=input.triangleBytes=256;input.dataUsage=input.triangleUsage=inputUsage;input.input_owner=inputs;
     const auto ticket=omm::record(cmd,input);check(ticket!=0,"production micromap record");
@@ -160,7 +201,7 @@ int main(int argc,char** argv){
     auto tlas=acceleration(dd,tlasStorage,build.type,sizes.accelerationStructureSize);buffer(dd,tlasScratch,sizes.buildScratchSize+scratchAlignment,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,false);build.dstAccelerationStructure=tlas;build.scratchData.deviceAddress=alignedScratch(tlasScratch.address);range.primitiveCount=1;dd.vk.CmdBuildAccelerationStructuresKHR(cmd,1,&build,&rangePointer);
     barrier(dd,cmd,VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR);
     VkImage endpointImage{};VkDeviceMemory endpointMemory{};VkImageView endpointView{};VkSampler endpointSampler{};
-    if(argc==3){
+    if(argc>=3){
       buffer(dd,texels,256,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);std::memset(texels.mapped,0,84);std::memset(static_cast<char*>(texels.mapped)+84,255,84);
       VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};image.imageType=VK_IMAGE_TYPE_2D;image.format=VK_FORMAT_R8G8B8A8_UNORM;image.extent={4,4,1};image.mipLevels=3;image.arrayLayers=2;image.samples=VK_SAMPLE_COUNT_1_BIT;image.tiling=VK_IMAGE_TILING_OPTIMAL;image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
       vkcheck(dd.vk.CreateImage(dd.device,&image,nullptr,&endpointImage),"endpoint image");
@@ -186,13 +227,15 @@ int main(int argc,char** argv){
     VkDescriptorBufferInfo output{result.handle,0,65536};VkWriteDescriptorSet writes[2]{};writes[0]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,&asWrite};writes[0].dstBinding=0;writes[0].descriptorCount=1;writes[0].descriptorType=VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;writes[1]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[1].dstBinding=1;writes[1].descriptorCount=1;writes[1].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[1].pBufferInfo=&output;
     check(omm::register_ticket_use(cmd,ticket),"register actual TLAS traversal use");dd.vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline);dd.vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipelineLayout,0,2,writes);dd.vk.CmdDispatch(cmd,1,1,1);
     VkPipeline endpointPipeline{};VkShaderModule endpointShader{};
-    if(argc==3){
+    if(argc>=3){
       std::ifstream endpointFile(argv[2],std::ios::binary|std::ios::ate);check(bool(endpointFile),"endpoint shader file");auto length=endpointFile.tellg();check(length>0 && uint64_t(length)%4==0,"endpoint shader size");std::vector<uint32_t> endpointCode(size_t(length)/4);endpointFile.seekg(0);endpointFile.read(reinterpret_cast<char*>(endpointCode.data()),length);
       smci.codeSize=endpointCode.size()*4;smci.pCode=endpointCode.data();vkcheck(dd.vk.CreateShaderModule(dd.device,&smci,nullptr,&endpointShader),"endpoint shader");cpci.stage.module=endpointShader;cpci.stage.pName="endpoints";vkcheck(dd.vk.CreateComputePipelines(dd.device,VK_NULL_HANDLE,1,&cpci,nullptr,&endpointPipeline),"endpoint pipeline");
       VkDescriptorImageInfo image{VK_NULL_HANDLE,endpointView,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},sampler{endpointSampler,VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};VkWriteDescriptorSet descriptors[2]{};
       for(uint32_t j=0;j<2;++j){descriptors[j]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};descriptors[j].dstBinding=2+j;descriptors[j].descriptorCount=1;descriptors[j].descriptorType=j?VK_DESCRIPTOR_TYPE_SAMPLER:VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;descriptors[j].pImageInfo=j?&sampler:&image;}
       dd.vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,endpointPipeline);dd.vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipelineLayout,0,2,descriptors);dd.vk.CmdDispatch(cmd,34,1,1);
     }
+    std::vector<omm::Ticket> produced;
+    if(argc==4)produced=producer_fixtures(dd,cmd,endpointImage,result);
     barrier(dd,cmd,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,VK_ACCESS_2_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
     vkcheck(dd.vk.EndCommandBuffer(cmd),"end command");omm::command_end(cmd,true);
     const VkCommandBuffer commands[]={cmd};const auto prepared=omm::before_submit(&dd,commands);VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};submit.commandBufferCount=1;submit.pCommandBuffers=commands;
@@ -200,10 +243,20 @@ int main(int argc,char** argv){
     auto* answers=static_cast<uint32_t*>(result.mapped);unsigned contradictions=0,unknownCandidates=0;
     for(unsigned i=0;i<6;++i){auto* a=answers+i*4;std::printf("ray=%u hit=%u candidates=%u native_ge=%u primitive=%u\n",i,a[0],a[1],a[2],a[3]);contradictions+=a[0]!=a[2];unknownCandidates+=i>=4?a[1]:0;check(a[1]==(i>=4?1u:0u),"known automatic vs unknown alpha candidate path");}
     check(!contradictions && unknownCandidates==2,"zero known/native contradictions and actual unknown fallback");
-    if(argc==3){unsigned failures=0;for(unsigned i=0;i<2176;++i){auto* a=answers+(6+i)*4;const uint32_t layer=i/(64*17);failures+=a[0]!=(layer?0x3f800000u:0u) || a[1]!=layer || a[2]!=i%17 || a[3]!=(i/17)%64;}
+    if(argc>=3){unsigned failures=0;for(unsigned i=0;i<2176;++i){auto* a=answers+(6+i)*4;const uint32_t layer=i/(64*17);failures+=a[0]!=(layer?0x3f800000u:0u) || a[1]!=layer || a[2]!=i%17 || a[3]!=(i/17)%64;}
       std::printf("UNORM8_ENDPOINTS samples=2176 UVs=64 LODs=17 mips=3 layers=2 filter=LINEAR mipmap=LINEAR repeat exact_bit_failures=%u\n",failures);check(!failures,"exact constant zero/one endpoint samples");}
+    if(argc==4){
+      const uint32_t expected[]={1,0,3};
+      for(unsigned i=0;i<3;++i){
+        auto* words=answers+12500+i*8;
+        check(words[0]==expected[i],"produced O/T/UNKNOWN wire states");
+        check(words[4]==(i<2?0u:1u),"producer certificate status");
+      }
+      std::puts("PRODUCER cases=3 known_opaque=1 known_transparent=1 unknown_without_certificate=1 actual_EXT_builds=3 failures=0; immutable synthetic endpoints only");
+    }
     vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"reset completed command");omm::command_discard(cmd);check(omm::retire(ticket),"retire ticket");
     input.input_owner.reset();inputs.reset();
+    for(auto item:produced)check(omm::retire(item),"producer retire");
     // An actual empty app submit polls the private timeline through production
     // code. It does not manufacture a completed serial from frame age or idle.
     const auto empty=omm::before_submit(&dd,{});vkcheck(dd.vk.QueueSubmit(dd.graphics_queue,0,nullptr,VK_NULL_HANDLE),"empty app submit");omm::after_submit(&dd,dd.graphics_queue,empty,true);check(!omm::has_resources(),"actual timeline retirement collected ticket");
@@ -213,7 +266,7 @@ int main(int argc,char** argv){
     dd.vk.DestroyAccelerationStructureKHR(dd.device,tlas,nullptr);dd.vk.DestroyAccelerationStructureKHR(dd.device,blas,nullptr);dd.vk.DestroyCommandPool(dd.device,pool,nullptr);omm::pool_discard(pool,true);
     std::printf("PASS synthetic EXT: primitives=3 rays=6 contradictions=%u unknown_candidates=%u actual_timeline_retirement=1; not a BG3/FG/sampler proof\n",contradictions,unknownCandidates);
   }
-  omm::device_destroyed(&dd);omm::submit_device_destroyed(&dd);dd.vk.DestroyDevice(dd.device,nullptr);
+  omm::device_destroyed(&dd);omm::bake_device_destroyed(&dd);omm::submit_device_destroyed(&dd);dd.vk.DestroyDevice(dd.device,nullptr);
   if(messenger){auto destroyDebug=reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(gipa(instance.instance,"vkDestroyDebugUtilsMessengerEXT"));destroyDebug(instance.instance,messenger,nullptr);}
   instance.DestroyInstance(instance.instance,nullptr);
   std::printf("validation_errors=%u\n",validationErrors.load());check(validationErrors==0,"zero validation errors");

@@ -183,7 +183,7 @@ add_test(NAME omm_submit_state_test COMMAND omm_submit_state_test)
 # launched by a build. No game, presentation or global loader settings changes.
 option(BG3RTX_OMM_GPU_SMOKE "Build the opt-in synthetic EXT OMM console probe" OFF)
 if(BG3RTX_OMM_GPU_SMOKE)
-  add_executable(omm_ext_smoke tools/omm_ext_smoke.cpp layer/omm_backend.cpp layer/omm_submit.cpp)
+  add_executable(omm_ext_smoke tools/omm_ext_smoke.cpp layer/omm_backend.cpp layer/omm_submit.cpp layer/omm_bake.cpp)
   target_include_directories(omm_ext_smoke PRIVATE ${VULKAN_SDK}/Include)
 endif()
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)
