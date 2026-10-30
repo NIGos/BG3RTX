@@ -1,5 +1,19 @@
 # Session handoff — 2026-10-30 (FG copy quality not qualified)
 
+## Latest: minimal descriptor reset built for user trial (2026-10-30)
+
+User: "proviamola". Applied only allocation-lifetime reset; layer DLL rebuilt.
+Successful allocations clear tracked descriptor contents/fallback dynamic counts
+before assigning layout; unrelated sets/partial writes are preserved. No ini key,
+ABI, HLSL, settings or GPU work changes. Build/CTest 16/16; fixed real-function
+nine-case reproduction 0 failures (old 4). New helper common/descriptor_epoch.h
+and descriptor_epoch_test. No game launched or main merge. User should restart
+through normal launcher and test screenshot foliage/flags with world UI, RR on/off.
+Full visual resolution remains unproved. Material-owner selection and RR helper
+changes are deliberately absent. Top PROGRESS_CODEX and trial evidence JSON apply.
+The earlier UNAPPLIED note below describes the preceding offline-analysis state.
+
+
 ## Latest: user-requested offline UI contamination analysis (2026-10-30)
 
 UI includes overhead text/labels/selection, not only hover. No new live job authorized

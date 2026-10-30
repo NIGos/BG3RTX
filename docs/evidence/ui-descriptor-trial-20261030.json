@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-30",
+  "authorization": "User: proviamola",
+  "branch": "codex/ui-contamination-offline",
+  "parent": "1b4aac7",
+  "scope": "Fresh descriptor-set allocation resets tracked content and fallback dynamic counts.",
+  "files": [
+    "layer/tracker.cpp",
+    "common/descriptor_epoch.h",
+    "tests/descriptor_epoch_test.cpp",
+    "CMakeLists.txt"
+  ],
+  "key": null,
+  "activation": "Restart game through normal launcher; rebuilt bin/VkLayer_bg3rtx.dll is ready.",
+  "tests": {
+    "build_Test_CTests_passed": 16,
+    "build_Test_CTests_total": 16,
+    "fixed_production_source_repro_cases": 9,
+    "fixed_production_source_repro_failures": 0,
+    "old_production_source_repro_failures": 4,
+    "source": "captures/offline-ui-20261030/descriptor_epoch_suite_fixed.cpp"
+  },
+  "binary": {
+    "path": "bin\\VkLayer_bg3rtx.dll",
+    "sha256": "d5c252ac359edde21119c6ac2d754a28ca3403a5d38bdc4021de1c96f52b0f76",
+    "bytes": 4433920,
+    "mtime_local": "2026-10-30T15:56:50.599411"
+  },
+  "unchanged": [
+    "core lighting code",
+    "shaders",
+    "ABI",
+    "ini settings",
+    "material-source selection",
+    "RR exposure-helper handling"
+  ],
+  "runtime": {
+    "game_launched": false,
+    "save_changes": false,
+    "visual_gate": "NOT MEASURED; user trial pending",
+    "GPU_or_CPU_cost": "Not measured; only CPU bookkeeping changed, no new GPU work."
+  },
+  "merge": false
+}

@@ -1,5 +1,33 @@
 # BG3RTX progress
 
+## READY FOR USER TRIAL: descriptor allocation lifetime — 2026-10-30
+
+User asked to try the minimal patch. Applied ONLY the fresh-allocation reset:
+every successfully allocated descriptor-set handle starts with empty tracked
+bindings/dynamic counts, even if its handle and layout were used before.
+Unrelated live sets and ordinary partial writes within one lifetime are preserved.
+Caller still holds the tracker lock; failed allocations do not change state.
+The shared helper is common/descriptor_epoch.h, used by layer/tracker.cpp.
+
+The layer DLL in bin/VkLayer_bg3rtx.dll was rebuilt at 15:56:50 local time.
+No ini key/change is required: this is CPU bookkeeping correctness, not a lighting
+feature. No ABI/HLSL/GPU dispatch changes. Restart the game through the normal
+launcher to load it. Same location as the screenshots (Blushing Mermaid), FG as
+currently configured: make overhead dialogue, name/health banners or other world
+UI appear while looking at the affected cypresses/flags. Compare RR on/off if useful.
+Look for saturated blue blocks and UI-triggered flicker, not a general brightness change.
+
+Build -Test: 16/16 CTests pass, including the new descriptor_epoch_test.
+Actual fixed allocation function + existing source reproduction: 9 cases, 0 failures
+(previous production 4 failures). Patch is built for this trial branch; NOT merged
+into main and no visual-quality pass claimed. No game launched, saves/settings
+changed or foreground input sent. CPU/GPU performance was not measured; no GPU
+work was added. The separate material-source selection and RR exposure-helper
+issues remain unchanged to keep this trial specific.
+Evidence: docs/evidence/ui-descriptor-trial-20261030.json. Offline analysis and
+historical source reproductions remain in docs/UI_CONTAMINATION_OFFLINE.md.
+
+
 ## UI / foliage offline investigation — 2026-10-30
 
 The user's new screenshots still show saturated blue blocks on foliage/flags,

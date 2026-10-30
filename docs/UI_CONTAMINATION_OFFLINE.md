@@ -1,5 +1,13 @@
 # Offline UI / foliage contamination investigation - 2026-10-30
 
+Implementation update: after the user's "proviamola", the allocation-lifetime
+reset was applied via common/descriptor_epoch.h and the layer rebuilt for a user
+trial. Build/CTest 16/16 and all nine cases using the fixed production allocation
+function pass. No live quality result or main merge. The material-owner and RR
+issues below remain unchanged. Details: top of PROGRESS_CODEX.md. The original
+unapplied patch/source harnesses below are retained as historical evidence.
+
+
 Analyzed main 47ac6a9, the two user screenshots, a snapshot of the user's current
 15:13 session log, native shader sources, and complete frames 43186 / 44920 /
 45580 (captures 20261030-152728, -152758, -152811).
