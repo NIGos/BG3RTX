@@ -137,6 +137,7 @@ enum Bg3SunSceneFlags : uint32_t {
 struct Bg3SunSceneInfo {
   VkAccelerationStructureKHR tlas;
   VkDescriptorSet alpha_set;
+  VkDescriptorSetLayout alpha_layout; // private material dispatch can extend the ordinary alpha layout
   // Optional same-geometry, non-OMM reference. Null until supplied by the host.
   VkAccelerationStructureKHR reference_tlas;
   uint64_t build_identity, camera_record, cascade_record;
