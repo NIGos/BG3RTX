@@ -1,6 +1,11 @@
 # BG3RTX progress
 
-## Night 2026-10-29/30 (supervisor, offline): in-world UI flicker, layer fixes (branch sup/scene-pass-robust)
+## Night 2026-10-29/30 (supervisor): in-world UI flicker, roof casters (merged, main f72abca)
+
+READY FOR THE USER'S CHECK (restart the game; Roof sun shadows on): save The Blushing Mermaid -
+96h 39m. Look for: black squares on the floor and sun patches inside the inn (should be gone),
+tree/flag flicker while rotating and with dialogue on screen, red blocks with RR off.
+
 
 Ready for the user's in-game check once a live test confirms (layer change: restart the game).
 Save: The Blushing Mermaid - 96h 39m. Look at cypresses, flags and curtains while dialogue or
@@ -35,6 +40,12 @@ moved', '[rt] scene wait' (timeouts, skipped), '[alpha] ... held records dropped
 - Tree flicker with in-world UI: Shift-held labels do not raise foliage frame-to-frame change
   (final, static: 1.5-1.8% with labels, 2.4-4.3% without); gi_rt=0 and rt_shadows=0 do not
   lower it. Static runs vary 1.8-6.1% with nothing changed (wind). Open: needs motion runs.
+- Foliage flicker, measured on the final image (pan bursts now keep all 16 tonemap frames):
+  foliage px changing > 8/255 per frame, inn view, static 20-28%, rotating 16-50% (Q/E
+  differ). With all RT strengths at 0 (the game's image, RR still on) the same (static
+  21-42%, rotating 25-50%); gi_rt=0, rt_shadows=0, rt_local_shadows=0 or
+  rt_alpha_stochastic=0 alone lower nothing. So our effects add no measurable foliage
+  flicker in this view after the fixes above. User to re-check in game (main f72abca+).
 - Cost noted: with 'Full + shadowed lights' the local-light pass is 9-10 ms GPU in the inn's upper
   floor (S7 view 1.3-3.4 ms); stats say local shadows remove 85% of lit luminance there (S7 6%).
   To check: few very bright lights inside their fixtures?

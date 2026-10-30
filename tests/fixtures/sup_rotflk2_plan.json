@@ -1,0 +1,142 @@
+[
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 190,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "rt_stats=0"
+ },
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 191,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "rt_stats=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 192,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_stats=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 193,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_stats=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 194,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_rt=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 195,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_rt=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 196,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_rt=1,rt_shadows=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 197,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi_rt=1,rt_shadows=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 198,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_shadows=1,rt_local_shadows=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 199,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_shadows=1,rt_local_shadows=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 200,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_local_shadows=1,rt_alpha_stochastic=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 201,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_local_shadows=1,rt_alpha_stochastic=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 202,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_alpha_stochastic=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 203,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rt_alpha_stochastic=1"
+ }
+]

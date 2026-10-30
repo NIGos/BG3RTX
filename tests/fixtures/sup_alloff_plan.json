@@ -1,0 +1,122 @@
+[
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 210,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "gi=1,rt_shadows=1,rt_local_shadows=1,rt_reflections=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 211,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi=1,rt_shadows=1,rt_local_shadows=1,rt_reflections=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 212,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi=1,rt_shadows=1,rt_local_shadows=1,rt_reflections=1"
+ },
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 213,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "gi=0,rt_shadows=0,rt_local_shadows=0,rt_reflections=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 214,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi=0,rt_shadows=0,rt_local_shadows=0,rt_reflections=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 215,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi=0,rt_shadows=0,rt_local_shadows=0,rt_reflections=0"
+ },
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 216,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "gi=1,rt_shadows=1,rt_local_shadows=1,rt_reflections=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 217,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi=1,rt_shadows=1,rt_local_shadows=1,rt_reflections=1"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 218,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi=1,rt_shadows=1,rt_local_shadows=1,rt_reflections=1"
+ },
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 219,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "gi=0,rt_shadows=0,rt_local_shadows=0,rt_reflections=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 220,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi=0,rt_shadows=0,rt_local_shadows=0,rt_reflections=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 221,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "gi=0,rt_shadows=0,rt_local_shadows=0,rt_reflections=0"
+ }
+]
