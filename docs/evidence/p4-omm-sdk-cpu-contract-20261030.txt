@@ -1,0 +1,20 @@
+OMM SDK CPU library 1.10.0; no GPU/device creation
+filter=nearest code=0 alpha=0 cut=0 native_ge=1 index=-1 T=16 O=0 UT=0 UO=0 mismatch=1 array_bytes=0 descriptors=0
+filter=nearest code=0 alpha=0 cut=1.40129846e-45 native_ge=0 index=-1 T=16 O=0 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=nearest code=1 alpha=0.00392156886 cut=0 native_ge=1 index=-2 T=0 O=16 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=nearest code=127 alpha=0.498039216 cut=0.501960814 native_ge=0 index=-1 T=16 O=0 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=nearest code=128 alpha=0.501960814 cut=0.501960814 native_ge=1 index=-1 T=16 O=0 UT=0 UO=0 mismatch=1 array_bytes=0 descriptors=0
+filter=nearest code=129 alpha=0.505882382 cut=0.501960814 native_ge=1 index=-2 T=0 O=16 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=nearest code=255 alpha=1 cut=1 native_ge=1 index=-1 T=16 O=0 UT=0 UO=0 mismatch=1 array_bytes=0 descriptors=0
+filter=nearest code=255 alpha=1 cut=0.99999994 native_ge=1 index=-2 T=0 O=16 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=nearest code=254 alpha=0.996078432 cut=1 native_ge=0 index=-1 T=16 O=0 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=linear code=0 alpha=0 cut=0 native_ge=1 index=-1 T=16 O=0 UT=0 UO=0 mismatch=1 array_bytes=0 descriptors=0
+filter=linear code=0 alpha=0 cut=1.40129846e-45 native_ge=0 index=-1 T=16 O=0 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=linear code=1 alpha=0.00392156886 cut=0 native_ge=1 index=-2 T=0 O=16 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=linear code=127 alpha=0.498039216 cut=0.501960814 native_ge=0 index=-1 T=16 O=0 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=linear code=128 alpha=0.501960814 cut=0.501960814 native_ge=1 index=-1 T=16 O=0 UT=0 UO=0 mismatch=1 array_bytes=0 descriptors=0
+filter=linear code=129 alpha=0.505882382 cut=0.501960814 native_ge=1 index=-2 T=0 O=16 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=linear code=255 alpha=1 cut=1 native_ge=1 index=-1 T=16 O=0 UT=0 UO=0 mismatch=1 array_bytes=0 descriptors=0
+filter=linear code=255 alpha=1 cut=0.99999994 native_ge=1 index=-2 T=0 O=16 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+filter=linear code=254 alpha=0.996078432 cut=1 native_ge=0 index=-1 T=16 O=0 UT=0 UO=0 mismatch=0 array_bytes=0 descriptors=0
+COMPLETE cases=18 SDK known-state contradictions_vs_native_ge=6; this is not a Vulkan traversal or performance gate
