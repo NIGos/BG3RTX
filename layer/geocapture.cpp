@@ -74,6 +74,7 @@ bool g_alpha_mode = false;
 std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the last G-buffer pass
 std::atomic<uint64_t> g_gbuf_depth{0};            // the last G-buffer pass's depth image (the prepass writes it)
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
+thread_local uint32_t t_last_hair_outputs = 0;
 thread_local VsInstancing t_last_inst; // its instancing analysis (bvhsplit.cpp)
 thread_local uint64_t t_last_hash = 0;
 thread_local bool t_last_discard = false;   // the module last scanned on this thread is a fragment shader that discards
@@ -93,6 +94,7 @@ struct ModInfo {
   int uv = -1;               // UV output location (-1 none)
   VsInstancing inst;         // class-A position path (spirv_xfb.h)
   uint64_t hash = 0;         // SPIR-V hash of the game's module
+  uint32_t hair_outputs = 0;
 };
 std::unordered_map<VkShaderModule, ModInfo> g_patched;
 std::unordered_set<VkShaderModule> g_discard_mods;   // fragment shaders that can discard (alpha test)
@@ -103,6 +105,7 @@ struct PipeInfo {
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
   VkPrimitiveTopology topo;
   int uv = -1;               // VS output location captured as UV (stride 24)
+  uint32_t hair_outputs = 0;
   uint8_t uv_match = 0;      // UvMatch of the VS/FS pair (spirv_xfb.h)
   int8_t uv_fs = -1;         // the FS's float2 input location
   uint8_t uv_vs_comps = 0;   // components the VS writes there
@@ -1492,7 +1495,11 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
     // Track D phase 3: the UV goes along with the position, and the scene
     // comes from the depth prepass (rt_alpha needs rt=1; both are read here, once).
     g_alpha_mode = cfg_int("rt", 1) && cfg_int("rt_alpha", 1);
-    g_stride = g_alpha_mode ? 24 : 16;
+    const bool hair_requested=cfg_int("rt_native_hair",0)!=0;
+    const bool hair_split=cfg_int("rt_bvh_split",1)!=0;
+    if(hair_requested && !hair_split)
+      log("[geo] rt_native_hair rejected: requires rt_bvh_split=1 at startup; legacy procedural range not implemented");
+    g_stride = g_alpha_mode ? (hair_requested && hair_split ? 88 : 24) : 16;
     log("[geo] transform feedback %s: vertex shaders get Position%s XFB decorations (stride %u)%s",
         g_on ? "enabled" : "FAILED to load", g_alpha_mode ? " + UV" : "", g_stride,
         g_alpha_mode ? "; ray tracing scene from the depth prepass" : "");
@@ -1506,8 +1513,11 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
   }
 }
 
+bool geo_native_hair_enabled() { return g_stride >= 88u && g_alpha_mode; }
+
 bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>& out) {
   t_last_uv = -1;
+  t_last_hair_outputs = 0;
   t_last_inst = VsInstancing{};
   t_last_hash = 0;
   t_last_discard = false;
@@ -1522,7 +1532,7 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   // Every module's interface (vertex and fragment): the UV-slot check at pipeline creation.
   t_last_model = stage_io(ci->pCode, ci->codeSize / 4, t_last_io);
   t_last_hash = hash64(ci->pCode, ci->codeSize);
-  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv);
+  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs);
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
   if (rt_enabled()) {
@@ -1552,7 +1562,7 @@ void geo_note_module(VkShaderModule m, bool patched) {
   if (t_last_fragment_depth && !patched) g_fragment_depth_mods.insert(m);
   if (t_last_model == 0 || t_last_model == 4) g_mod_io[m] = ModIo{t_last_model, std::move(t_last_io), t_last_hash};
   if (!patched) return;
-  g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash};   // same thread, right after geo_patch_shader
+  g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash, t_last_hair_outputs};
 }
 
 void geo_forget_module(VkShaderModule m) {
@@ -1658,6 +1668,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
         vs_patched = it != g_patched.end();
         if (vs_patched) {
           pi.uv = it->second.uv;
+          pi.hair_outputs = it->second.hair_outputs;
           pi.inst = make_inst_pipe(cis[i], it->second);
           if (pi.inst.ok) ++g_inst_pipes;
         }
@@ -2080,14 +2091,17 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   const bool capturable = c->rt && d.skip != 1 && d.skip != 2 && d.skip != 4 && d.reserved > 0;
   AlphaFs a{};
   const bool alpha_fs = capturable && g_alpha_mode && alpha_lookup(s->fs, &a) && a.uv == pi.uv && pi.uv >= 0 &&
+                        (a.kind != 4 || (pi.hair_outputs & (a.channel ? 3u : 1u)) == (a.channel ? 3u : 1u)) &&
                         cfg_int("rt_alpha_capture", 1);
+  if(a.kind==4 && (pi.hair_outputs & (a.channel?3u:1u)) != (a.channel?3u:1u))
+    alpha_native_hair_missing_attributes(s->fs,s->vs,pi.hair_outputs);
   // Track D BVH split: a draw of a cached instanced mesh is not captured; its
   // instances go into the TLAS with the matrices of the game's instance stream.
   uint32_t token = UINT32_MAX;
   bool audit = false;
   if (c->split && capturable) {
     const bool list = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && kind <= 1;
-    BvhDraw bd{list && pi.inst.ok && (!alpha_fs || pi.inst.uv_ok) ? &pi.inst : nullptr, s->vs, d.pipe_id, alpha_fs,
+    BvhDraw bd{list && pi.inst.ok && (!alpha_fs || (pi.inst.uv_ok && a.kind != 4)) ? &pi.inst : nullptr, s->vs, d.pipe_id, alpha_fs,
                args, s};
     if(cfg_int("rt_sun_cascade_current",0)) bd.affine=sun_affine_source(s,args,pi.inst);
     uint32_t mesh_tris = 0;

@@ -1,5 +1,17 @@
 # BG3RTX progress
 
+## Native Hair coverage candidate - 2026-10-30, full Hair still open
+
+Isolated native-coverage adds startup-only rt_native_hair=0default. Actual native
+88-byte strand attributes, dual mask/noise/root/view coverage and camera dither
+are implemented across normal query entry points. Native shadow queries use the
+light-ray hard branch. Split1 enforced; no mixed-stride hot enable. No ABI change.
+21/21 CTests and 19,716 Hair checks; all15nativeVS patch/validate; 95 ordinary
+shader binaries byte-identical and 95 capable compile/validate. No live change.
+Native fragment depth creates a real virtual surface; original card intersection
+is NOT equivalent. Procedural depth/origin support remains required before closing
+Hair. Source/layout/formula evidence and next implementation: docs/NATIVE_HAIR.md.
+
 ## Solar shadow sharpness: native-mask restriction confirmed in logs - 2026-10-30
 
 Dedicated solar agent found correct finite-disc radius, normalization and changing

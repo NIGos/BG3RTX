@@ -1,5 +1,17 @@
 # Track D: hardware ray tracing
 
+## Native CHAR_Hair coverage - 2026-10-30, default off
+
+Actual native strand coverage is implemented in isolated `codex/native-coverage`:
+startup-only `rt_native_hair=0/1`, validated88-byte output capture, six depth/shadow
+hash mappings, dual masks/noise, material root/density, strand-frame view coverage,
+original camera phase/fade dither and native shadow hard branch. Record208 unchanged.
+21/21 CTests, 19,716 Hair checks, all15nativeVS patch/validate, 95 ordinary SPIR-V
+byte-identical and 95 capable compile/validate. No live deployment/GPU work.
+Full Hair is OPEN: base-card triangles do not reproduce native fragment depth.
+Exact derivation, data layout, supported source hashes and procedural plan:
+docs/NATIVE_HAIR.md. Do not claim a complete face-shadow or origin-match gate.
+
 ## Native scalp hard-cut runtime candidate - 2026-10-30, default off
 
 `rt_native_scalp=0/1` now selects a bounded runtime increment in isolated

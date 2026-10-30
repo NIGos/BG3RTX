@@ -334,6 +334,64 @@ AlphaRead native_scalp_alpha(uint a, float2 uv, float g, uint tex) {
 }
 #endif
 
+#ifdef RT_NATIVE_HAIR
+struct NativeHairData { float3 n, t, b, p; float4 fade; float3 ray; bool valid; };
+static NativeHairData gNativeHair;
+float hair_param(uint a,uint i) { return asfloat(gAlphaRec.Load(a+48u+4u*i)); }
+float4 hair_sample(uint tex,float2 uv,float g) {
+  uint w,h,levels;
+  gAlphaTex[NonUniformResourceIndex(tex)].GetDimensions(0,w,h,levels);
+  float lod=clamp(log2(max(g*float(max(w,h)),1e-8)),0.0,float(levels)-1.0);
+  return gAlphaTex[NonUniformResourceIndex(tex)].SampleLevel(gAlphaWrap,uv,lod);
+}
+AlphaRead native_hair_alpha(uint a,float2 uv,float g,uint mask_tex,uint noise_tex) {
+  AlphaRead r=(AlphaRead)0;
+  if(!gNativeHair.valid)return r;
+  float ns=hair_param(a,2), shift=hair_param(a,3);
+  float4 noise=hair_sample(noise_tex,uv*ns,g*abs(ns));
+  float2 duv=(mad(noise.x,2.0,-1.0)*shift).xx;
+  float4 ca=hair_sample(mask_tex,uv+duv,g), cb=hair_sample(mask_tex,uv,g);
+  if(!all(isfinite(noise)) || !all(isfinite(ca)) || !all(isfinite(cb)))return r;
+  float4 center=float4(0.5,0,0,0), x=ca-center, y=cb-center;
+  float4 mask=mad(max(sign(x),sign(y)),max(abs(x),abs(y)),center);
+  bool camera=gAlphaRec.Load(a+20u)!=0u;
+  float thick=0.0;
+  if(camera) {
+    float width=saturate(hair_param(a,7));
+    float blend=smoothstep(mad(-width,0.5,hair_param(a,6)),mad(width,0.5,hair_param(a,6)),mask.z);
+    thick=max((1.0-mask.y)*lerp(hair_param(a,4)*0.01,hair_param(a,5)*0.01,blend),0.0);
+  }
+  // Match native camera material for closest/origin queries. Shadow rays use
+  // their light-view direction and native shadow hard branch, not camera fade.
+  float3 view=g_rt_class==1u ? -gNativeHair.ray : -(gNativeHair.p-normalize(gNativeHair.p)*thick);
+  float3 v=normalize(view), nn=normalize(gNativeHair.n);
+  float3 local=normalize(float3(dot(v,gNativeHair.b),dot(v,gNativeHair.n),dot(v,gNativeHair.t)));
+  float3 world=normalize(gNativeHair.b*local.x+gNativeHair.n*local.y+gNativeHair.t*local.z);
+  float angular=saturate(abs(dot(world,nn))*5.0);
+  float cov=(mask.w*mad(-mask.z,hair_param(a,8),1.0))*angular;
+  float density=hair_param(a,9);
+  float2 frame=asfloat(gAlphaRec.Load2(a+32u));
+  if(camera && g_rt_class==0u && frame.y!=0.0) {
+    float4x4 vp=float4x4(asfloat(gAlphaRec.Load4(a+96u)),asfloat(gAlphaRec.Load4(a+112u)),
+                         asfloat(gAlphaRec.Load4(a+128u)),asfloat(gAlphaRec.Load4(a+144u)));
+    float4 clip=mul(float4(gNativeHair.p,1),vp);
+    float4 viewport=asfloat(gAlphaRec.Load4(a+160u));
+    if(!all(isfinite(clip)) || clip.w==0.0)return r;
+    float2 raster=viewport.xy+(float2(clip.x,-clip.y)/clip.w+1.0)*viewport.zw*0.5;
+    // BG3's single-sample native raster coverage domain, including its original
+    // viewport offset/negative height; never substitute current RT output pixel.
+    raster=floor(raster)+0.5;
+    float phase=frame.x-4.0*trunc(frame.x/4.0);
+    float2 z=float2(frac(((mad(raster.y,2.0,raster.x)-1.5)+phase)*0.2),
+                    frac(mad(raster.x,2.4084,raster.y*3.2535)));
+    float dither=frac(dot(float2(0.833,0.1666),z)+gNativeHair.fade.x);
+    r.a=mad(cov,density,dither-0.6667);
+  } else r.a=cov*density;
+  r.ok=isfinite(r.a) && isfinite(thick) && all(isfinite(world));
+  return r;
+}
+#endif
+
 // ---- per-instance data (Track D BVH split, layer/bvhsplit.cpp) ----
 // One 16-byte InstInfo per TLAS instance (set 1 binding 7, indexed by the
 // instance index):
@@ -382,6 +440,34 @@ float2 inst_uv(InstInfo ii, uint prim, uint k) {
   return (ii.meta & kInfoPool) != 0u ? asfloat(gMeshPool.Load2(a)) : asfloat(gOpaqueSoup.Load2(a));
 }
 
+#ifdef RT_NATIVE_HAIR
+float4 hair_vertex(uint base,uint meta,uint prim,uint k,uint offset,uint components,bool legacy) {
+  uint at=base+(prim*3u+k)*(meta&255u)+offset;
+  uint4 bits;
+  if(legacy) bits=components==4u?gAlphaSoup.Load4(at):uint4(gAlphaSoup.Load3(at),0);
+  else if((meta&kInfoPool)!=0u)bits=components==4u?gMeshPool.Load4(at):uint4(gMeshPool.Load3(at),0);
+  else bits=components==4u?gOpaqueSoup.Load4(at):uint4(gOpaqueSoup.Load3(at),0);
+  return asfloat(bits);
+}
+float4 hair_interpolate(uint base,uint meta,uint prim,uint offset,uint n,float2 bary,bool legacy) {
+  float4 a=hair_vertex(base,meta,prim,0,offset,n,legacy),b=hair_vertex(base,meta,prim,1,offset,n,legacy),
+         c=hair_vertex(base,meta,prim,2,offset,n,legacy);
+  return a+(b-a)*bary.x+(c-a)*bary.y;
+}
+void hair_inputs(uint base,uint meta,uint prim,float2 bary,float3 ray,bool legacy,bool camera) {
+  gNativeHair=(NativeHairData)0;
+  if((meta&255u)<88u)return;
+  gNativeHair.n=hair_interpolate(base,meta,prim,24,3,bary,legacy).xyz;
+  gNativeHair.t=hair_interpolate(base,meta,prim,36,3,bary,legacy).xyz;
+  gNativeHair.b=hair_interpolate(base,meta,prim,48,3,bary,legacy).xyz;
+  gNativeHair.p=hair_interpolate(base,meta,prim,60,3,bary,legacy).xyz;
+  if(camera)gNativeHair.fade=hair_interpolate(base,meta,prim,72,4,bary,legacy);
+  gNativeHair.ray=ray;
+  gNativeHair.valid=all(isfinite(gNativeHair.n)) && all(isfinite(gNativeHair.t)) && all(isfinite(gNativeHair.b)) &&
+                    all(isfinite(gNativeHair.p)) && all(isfinite(gNativeHair.fade));
+}
+#endif
+
 // Byte address of the record of alpha-tested triangle `prim` (legacy: geometry 1's
 // triangle index; 0 if none).
 uint find_rec(uint prim) {
@@ -422,6 +508,9 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
 #ifdef RT_NATIVE_SCALP
   else if (h0.z == 3u) r = native_scalp_alpha(a, uv, g, tex);
 #endif
+#ifdef RT_NATIVE_HAIR
+  else if (h0.z == 4u) r = native_hair_alpha(a,uv,g,tex,min(h1.x,4095u));
+#endif
   else r = tex_alpha(a, uv, g, tex, h1.y);
   if (!r.ok) {
     alpha_stat(5, true, prim);
@@ -432,7 +521,7 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   // Hard cut-off where the read is as sharp as the game's (levels 0-1); towards
   // a hashed threshold over the next level, where it is a blurred coverage.
 #ifdef RT_NATIVE_SCALP
-  const float k = h0.z == 3u ? 0.0 : ((flags & kAlphaStochastic) != 0u ? saturate(r.lvl - 1.0) : 0.0);
+  const float k = h0.z == 3u || h0.z == 4u ? 0.0 : ((flags & kAlphaStochastic) != 0u ? saturate(r.lvl - 1.0) : 0.0);
 #else
   const float k = (flags & kAlphaStochastic) != 0u ? saturate(r.lvl - 1.0) : 0.0;
 #endif
@@ -466,19 +555,43 @@ bool alpha_pass(uint prim, float2 bary, float footprint) {
     alpha_stat(1, true, prim);
     return alpha_unknown(alpha_flags());
   }
+#ifdef RT_NATIVE_HAIR
+  uint stride=gAlphaRec.Load(4),vb=prim*3u*stride,sbytes;
+#else
   uint vb = prim * 72, sbytes;
+#endif
   gAlphaSoup.GetDimensions(sbytes);
+#ifdef RT_NATIVE_HAIR
+  if (!tri_in_range(0,prim,stride,sbytes)) {
+#else
   if (vb + 72u > sbytes) {
+#endif
     alpha_stat(3, true, prim);
     return alpha_unknown(alpha_flags());
   }
+#ifdef RT_NATIVE_HAIR
+  float3 p0=asfloat(gAlphaSoup.Load3(vb)),p1=asfloat(gAlphaSoup.Load3(vb+stride)),p2=asfloat(gAlphaSoup.Load3(vb+2u*stride));
+  float2 u0=asfloat(gAlphaSoup.Load2(vb+16)),u1=asfloat(gAlphaSoup.Load2(vb+stride+16)),u2=asfloat(gAlphaSoup.Load2(vb+2u*stride+16));
+  if(h0.z==4u) {
+    float3 ray=gNativeHair.ray;
+    hair_inputs(0,stride,prim,bary,ray,true,gAlphaRec.Load(a+20u)!=0u);
+  }
+#else
   float3 p0 = asfloat(gAlphaSoup.Load3(vb)), p1 = asfloat(gAlphaSoup.Load3(vb + 24)), p2 = asfloat(gAlphaSoup.Load3(vb + 48));
   float2 u0 = asfloat(gAlphaSoup.Load2(vb + 16)), u1 = asfloat(gAlphaSoup.Load2(vb + 40)), u2 = asfloat(gAlphaSoup.Load2(vb + 64));
+#endif
   return alpha_eval(a, p0, p1, p2, u0, u1, u2, bary, footprint, prim);
 }
 
 // A non-opaque candidate of any instance: solid at `bary`?
-bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprint, float3x4 o2w) {
+bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprint, float3x4 o2w
+#ifdef RT_NATIVE_HAIR
+                    ,float3 hair_ray
+#endif
+                    ) {
+#ifdef RT_NATIVE_HAIR
+  gNativeHair.ray=hair_ray;
+#endif
   InstInfo ii = inst_info(inst);
   if ((ii.meta & kInfoLegacy) != 0u) return geom == 1u ? alpha_pass(prim, bary, footprint) : true;
   alpha_stat(0, true, prim);
@@ -506,6 +619,10 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
     p1 = mul(o2w, float4(p1, 1.0));
     p2 = mul(o2w, float4(p2, 1.0));
   }
+#ifdef RT_NATIVE_HAIR
+  if(gAlphaRec.Load(ii.rec+8u)==4u)
+    hair_inputs(ii.base,ii.meta,prim,bary,hair_ray,false,gAlphaRec.Load(ii.rec+20u)!=0u);
+#endif
   return alpha_eval(ii.rec, p0, p1, p2, inst_uv(ii, prim, 0), inst_uv(ii, prim, 1), inst_uv(ii, prim, 2), bary, footprint,
                     prim);
 }
@@ -526,10 +643,17 @@ bool alpha_instance(uint inst, uint geom) {
 }
 
 // The candidate test every ray query loop runs.
+#ifdef RT_NATIVE_HAIR
+#define RT_ALPHA_CANDIDATE(q, cone)                                                                         \
+  alpha_pass_hit(q.CandidateInstanceIndex(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(),        \
+                 q.CandidateTriangleBarycentrics(), cone.f0 + cone.spread * q.CandidateTriangleRayT(),       \
+                 q.CandidateObjectToWorld3x4(),q.WorldRayDirection())
+#else
 #define RT_ALPHA_CANDIDATE(q, cone)                                                                             \
   alpha_pass_hit(q.CandidateInstanceIndex(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(),        \
                  q.CandidateTriangleBarycentrics(), cone.f0 + cone.spread * q.CandidateTriangleRayT(),       \
                  q.CandidateObjectToWorld3x4())
+#endif
 
 // Ray footprint: width f0 at the origin, growing by `spread` per unit length.
 struct RtCone { float f0, spread; };
@@ -711,18 +835,29 @@ float3 rt_tri_normal(uint geom, uint prim) {
   if (geom == 0u) {
     uint stride = gAlphaRec.Load(4);
     gOpaqueSoup.GetDimensions(bytes);
+#ifdef RT_NATIVE_HAIR
+    if (stride == 0u || stride > 128u || prim >= bytes / (3u * stride)) return 0.0.xxx;
+#else
     if (stride == 0u || stride > 64u || prim >= bytes / (3u * stride)) return 0.0.xxx;
+#endif
     uint vb = prim * 3u * stride;
     p0 = asfloat(gOpaqueSoup.Load3(vb));
     p1 = asfloat(gOpaqueSoup.Load3(vb + stride));
     p2 = asfloat(gOpaqueSoup.Load3(vb + 2u * stride));
   } else {
     gAlphaSoup.GetDimensions(bytes);
+#ifdef RT_NATIVE_HAIR
+    uint stride=gAlphaRec.Load(4);
+    if(!tri_in_range(0,prim,stride,bytes))return 0.0.xxx;
+    uint vb=prim*3u*stride;
+    p0=asfloat(gAlphaSoup.Load3(vb));p1=asfloat(gAlphaSoup.Load3(vb+stride));p2=asfloat(gAlphaSoup.Load3(vb+2u*stride));
+#else
     if (prim >= bytes / 72u) return 0.0.xxx;
     uint vb = prim * 72u;
     p0 = asfloat(gAlphaSoup.Load3(vb));
     p1 = asfloat(gAlphaSoup.Load3(vb + 24u));
     p2 = asfloat(gAlphaSoup.Load3(vb + 48u));
+#endif
   }
   float3 n = cross(p1 - p0, p2 - p0);
   return all(isfinite(n)) ? n : 0.0.xxx;
