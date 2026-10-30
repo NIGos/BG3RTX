@@ -108,6 +108,13 @@ static void content_fixture(DeviceData& dd,VkCommandPool pool){
   VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};alloc.allocationSize=req.size;alloc.memoryTypeIndex=type;VkDeviceMemory mem{};vkcheck(dd.vk.AllocateMemory(dd.device,&alloc,nullptr,&mem),"content fixture memory");omm::content_memory_allocated(&dd,mem,alloc);
   vkcheck(dd.vk.BindImageMemory(dd.device,image,mem,0),"content fixture bind");omm::content_image_bound(&dd,image,mem,true);
   omm::ContentSource source{};check(omm::content_source(image,source),"content fixture eligible source");
+  VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};vci.image=image;vci.viewType=VK_IMAGE_VIEW_TYPE_2D;vci.format=ci.format;vci.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,VK_REMAINING_MIP_LEVELS,0,VK_REMAINING_ARRAY_LAYERS};
+  VkImageView view{};vkcheck(dd.vk.CreateImageView(dd.device,&vci,nullptr,&view),"content fixture sampled view");omm::content_view_created(&dd,view,vci);
+  omm::ContentSource sampled{};check(omm::content_source_view(view,sampled),"sampled view proof");
+  check(sampled.viewId && sampled.imageId==source.imageId && sampled.levelCount==1 && sampled.baseMipLevel==0 && sampled.format==ci.format,"resolved sampled view metadata");
+  const auto firstViewId=sampled.viewId;omm::content_view_destroyed(&dd,view);dd.vk.DestroyImageView(dd.device,view,nullptr);check(!omm::content_source_view(view,sampled),"destroyed view proof rejected");
+  vkcheck(dd.vk.CreateImageView(dd.device,&vci,nullptr,&view),"content fixture recreated view");omm::content_view_created(&dd,view,vci);check(omm::content_source_view(view,sampled),"recreated view proof");check(sampled.viewId!=firstViewId,"sampled view ID never reused");
+  std::printf("CONTENT_VIEW first_id=%llu new_id=%llu baseMip=%u levels=%u format=%u image_id=%llu\n",firstViewId,sampled.viewId,sampled.baseMipLevel,sampled.levelCount,uint32_t(sampled.format),sampled.imageId);
   Buffer readback;buffer(dd,readback,256,VK_BUFFER_USAGE_TRANSFER_DST_BIT);
   VkCommandBufferAllocateInfo ai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};ai.commandPool=pool;ai.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;ai.commandBufferCount=1;VkCommandBuffer cmd{};vkcheck(dd.vk.AllocateCommandBuffers(dd.device,&ai,&cmd),"counter command");omm::command_allocated(pool,cmd);
   bool first=true;
@@ -136,6 +143,7 @@ static void content_fixture(DeviceData& dd,VkCommandPool pool){
   begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,8,0);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,0);write(true);end();submit("unsupported_sticky_disable",0,1,0);
   begin();write(false);end();submit("disable_stays_set",1,1,1);
   vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"counter final reset");omm::command_discard(cmd);
+  omm::content_view_destroyed(&dd,view);dd.vk.DestroyImageView(dd.device,view,nullptr);
   omm::content_image_destroyed(&dd,image);dd.vk.DestroyImage(dd.device,image,nullptr);omm::content_memory_freed(&dd,mem);dd.vk.FreeMemory(dd.device,mem,nullptr);
 }
 int main(int argc,char** argv){

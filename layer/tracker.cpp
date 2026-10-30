@@ -631,6 +631,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device, const VkI
                                                       const VkAllocationCallbacks* alloc, VkImageView* out) {
   VkResult r = device_of(device)->vk.CreateImageView(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
+    omm::content_view_created(device_of(device),*out,*ci);
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().views[*out] = ViewRec{ci->image, ci->format, ci->subresourceRange};
   }
@@ -638,6 +639,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device, const VkI
 }
 
 static VKAPI_ATTR void VKAPI_CALL DestroyImageView(VkDevice device, VkImageView v, const VkAllocationCallbacks* a) {
+  omm::content_view_destroyed(device_of(device),v);
   life_before_destroy((uint64_t)v, "image view");
   sl_note_view_destroyed(v);
   device_of(device)->vk.DestroyImageView(device, v, a);
