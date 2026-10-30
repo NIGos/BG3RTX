@@ -24,13 +24,13 @@ VISUAL = '006c6b34-2889-2eb0-1d2e-6bca8398d99a'
 MATERIAL = 'cfacd158-d460-6810-78bf-6d7d2b0576f1'
 ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS = {5121: ('B', 1), 5123: ('H', 2), 5125: ('I', 4), 5126: ('f', 4)}
-WIDTH = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}
+WIDTH = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
 
 
-def accessor(doc, buffers, index):
+def accessor(doc, buffers, index, allow_unorm8=False):
     """Independent bounded glTF accessor read; no LSLib/SharpGLTF reuse."""
     a = doc['accessors'][index]
-    if a.get('sparse') or a.get('normalized'):
+    if a.get('sparse') or (a.get('normalized') and not (allow_unorm8 and a['componentType']==5121)):
         raise ValueError('Sparse/normalized accessor outside this probe')
     kind, size = COMPONENTS[a['componentType']]
     width = WIDTH[a['type']]
@@ -44,12 +44,13 @@ def accessor(doc, buffers, index):
     if base + length > len(raw) or offset + (count - 1) * stride + width * size > length:
         raise ValueError('Accessor exceeds declared view/buffer')
     values = [struct.unpack_from('<' + kind * width, raw, base + offset + i * stride) for i in range(count)]
+    if a.get('normalized'):values=[tuple(v/255. for v in row) for row in values]
     if any(not math.isfinite(x) for row in values for x in row):
         raise ValueError('Nonfinite exported attributes')
     return values
 
 
-def decode_mesh(path, visual):
+def decode_mesh(path, visual, allow_color_unorm8=False):
     doc = json.loads(path.read_text())
     buffers = []
     for b in doc['buffers']:
@@ -71,7 +72,7 @@ def decode_mesh(path, visual):
         for primitive in m['primitives']:
             if primitive.get('mode', 4) != 4:
                 raise ValueError('Non-triangle-list primitive')
-            attrs = {k: accessor(doc, buffers, v) for k, v in primitive['attributes'].items()}
+            attrs = {k: accessor(doc, buffers, v, allow_unorm8=allow_color_unorm8 and k=='COLOR_0') for k, v in primitive['attributes'].items()}
             if not {'POSITION', 'NORMAL', 'TANGENT', 'TEXCOORD_0'} <= attrs.keys():
                 raise ValueError('Required native attributes absent')
             for name, width in {'POSITION':3,'NORMAL':3,'TANGENT':4,'TEXCOORD_0':2}.items():
