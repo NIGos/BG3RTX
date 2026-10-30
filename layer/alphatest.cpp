@@ -70,6 +70,14 @@ VkDeviceMemory g_stamp_mem = VK_NULL_HANDLE;
 uint32_t* g_stamp_map = nullptr;
 uint32_t g_stamp_gen = 0;
 constexpr VkDeviceSize kStampStride = 512, kStampCameraOffset = 256;
+struct SunAlphaSlot {
+  VkDescriptorPool pool = VK_NULL_HANDLE;
+  VkDescriptorSet set = VK_NULL_HANDLE;
+  VkBuffer stamp = VK_NULL_HANDLE;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  uint32_t* mapped = nullptr;
+};
+SunAlphaSlot g_sun_alpha[kRing];
 VkBuffer g_legacy_buf = VK_NULL_HANDLE;   // alpha_legacy_info
 VkDeviceMemory g_legacy_mem = VK_NULL_HANDLE;
 uint32_t g_legacy_stride = 0;
@@ -284,7 +292,7 @@ void alpha_device_created(DeviceData* dd) {
   if (ok) {   // the scene stamps: host-visible, persistently mapped, zeroed
     VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bci.size = kStampStride * kRing;
-    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     ok = vk.CreateBuffer(dd->device, &bci, nullptr, &g_stamp_buf) == VK_SUCCESS;
     VkMemoryRequirements req{};
     if (ok) vk.GetBufferMemoryRequirements(dd->device, g_stamp_buf, &req);
@@ -312,6 +320,12 @@ void alpha_device_created(DeviceData* dd) {
 void alpha_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   const VkDeviceFuncs& vk = dd->vk;
+  for (SunAlphaSlot& s : g_sun_alpha) {
+    if (s.pool) vk.DestroyDescriptorPool(dd->device,s.pool,nullptr);
+    if (s.stamp) vk.DestroyBuffer(dd->device,s.stamp,nullptr);
+    if (s.memory) vk.FreeMemory(dd->device,s.memory,nullptr);
+    s = SunAlphaSlot{};
+  }
   if (g_pool) vk.DestroyDescriptorPool(dd->device, g_pool, nullptr);
   if (g_dsl) vk.DestroyDescriptorSetLayout(dd->device, g_dsl, nullptr);
   for (VkSampler s : {g_wrap, g_clamp})
@@ -761,6 +775,66 @@ bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set) {
   VkAccelerationStructureKHR tlas;
   uint64_t built;
   if (!rt_scene_set(&tlas, set, &built)) *set = VK_NULL_HANDLE;
+  return true;
+}
+
+bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet selected_alpha,
+                             AlphaSunClone* out) {
+  if (!out) return false;
+  *out = {};
+  if (!g_on || !cmd || slot >= kRing || !selected_alpha) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (selected_alpha != g_sets[slot] || !g_set_init[slot] || !g_stamp_map) return false;
+  const uint32_t expected=g_stamp_map[VkDeviceSize(slot)*kStampStride/4];
+  if (!expected) return false;
+  SunAlphaSlot& s=g_sun_alpha[slot];
+  const auto& vk=g_dd->vk;
+  if (!s.pool) {
+    VkDescriptorPoolSize sizes[3]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,6},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches},{VK_DESCRIPTOR_TYPE_SAMPLER,2}};
+    VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    pi.maxSets=1;pi.poolSizeCount=3;pi.pPoolSizes=sizes;
+    if (vk.CreateDescriptorPool(g_dd->device,&pi,nullptr,&s.pool)!=VK_SUCCESS) return false;
+  }
+  if(!s.set) {
+    VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    ai.descriptorPool=s.pool;ai.descriptorSetCount=1;ai.pSetLayouts=&g_dsl;
+    if (vk.AllocateDescriptorSets(g_dd->device,&ai,&s.set)!=VK_SUCCESS) return false;
+  }
+  if (!s.set) return false;
+  if (!s.stamp) {
+    void* mapped=nullptr;
+    if (!alloc_host_buffer(kStampStride,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                           &s.stamp,&s.memory,&mapped)) return false;
+    s.mapped=static_cast<uint32_t*>(mapped);
+  }
+  if (!s.mapped) return false;
+  // This slot's previous consumer is retired. Without an approved private build
+  // none of these zero words can authorize traversal of an unbuilt clone TLAS.
+  std::memset(s.mapped,0,size_t(kStampStride));
+  VkCopyDescriptorSet copies[7]{};
+  const uint32_t bindings[7]={0,1,2,3,6,7,8};
+  for(unsigned i=0;i<7;++i) {
+    copies[i]={VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
+    copies[i].srcSet=selected_alpha;copies[i].srcBinding=bindings[i];
+    copies[i].dstSet=s.set;copies[i].dstBinding=bindings[i];
+    copies[i].descriptorCount=bindings[i]==2?kTextures:bindings[i]==3?kCaches:1u;
+  }
+  VkDescriptorBufferInfo stamp{s.stamp,0,kStampStride};
+  VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+  write.dstSet=s.set;write.dstBinding=9;write.descriptorCount=1;
+  write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;write.pBufferInfo=&stamp;
+  vk.UpdateDescriptorSets(g_dd->device,1,&write,7,copies);
+  VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  barrier.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT;
+  barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT;
+  vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_HOST_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&barrier,0,nullptr,0,nullptr);
+  VkBufferCopy cp{VkDeviceSize(slot)*kStampStride,0,kStampStride};
+  vk.CmdCopyBuffer(cmd,g_stamp_buf,s.stamp,1,&cp);
+  // byte12 belongs to Hair, and must survive the source stamp copy.
+  vk.CmdFillBuffer(cmd,s.stamp,16,8,0);
+  out->set=s.set;out->layout=g_dsl;out->stamp=s.stamp;out->expected_generation=expected;
   return true;
 }
 

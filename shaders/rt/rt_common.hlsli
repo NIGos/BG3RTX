@@ -156,6 +156,36 @@ bool rt_scene_ok() {
 #endif
 }
 
+#ifdef RT_SUN_CURRENT
+// A private build can be withheld when native producer generations/submit order
+// do not match. Never touch its unbuilt TLAS in that case. Byte12 belongs to
+// native Hair; byte16 is the current cascade's conversion-invalid counter.
+bool sun_current_scene_ready() {
+  return rt_scene_ok() && gSceneStamp.Load(20u)==gSceneStamp.Load(0u) &&
+         gSceneStamp.Load(12u)==0u && gSceneStamp.Load(16u)==0u &&
+         (gSceneStamp.Load(24u)&31u)==31u;
+}
+bool sun_current_covers(float3 o,float3 d,float tmax) {
+  if(!sun_current_scene_ready() || !all(isfinite(o)) || !all(isfinite(d)) ||
+     !isfinite(tmax) || tmax<0.0) return false;
+  float3 end=o+d*tmax;
+  const float gamma=1.43051364e-6; // outward gamma(24), includes magnitude-sum rounding.
+  const float offset_error=asfloat(gSceneStamp.Load(28u));
+  if(!isfinite(offset_error) || offset_error<0.0) return false;
+  [unroll] for(uint axis=0;axis<3;++axis) {
+    float4 row=asfloat(gSceneStamp.Load4(32u+16u*axis));
+    float a=dot(row,float4(o,1)),b=dot(row,float4(end,1));
+    float ma=dot(abs(row.xyz),abs(o))+abs(row.w);
+    float mb=dot(abs(row.xyz),abs(o)+abs(d)*tmax)+abs(row.w);
+    float ea=gamma*ma+offset_error+1.41059322e-37;
+    float eb=gamma*mb+offset_error+1.41059322e-37;
+    float lo=axis==2u?0.0:-1.0;
+    if(!(a>lo+ea && a<1.0-ea && b>lo+eb && b<1.0-eb)) return false;
+  }
+  return true;
+}
+#endif
+
 static const uint kRecBytes = 208;
 
 uint rec_addr(uint i) { return 16 + i * kRecBytes; }
@@ -511,6 +541,11 @@ struct RtCone { float f0, spread; };
 // (rt_ray_valid / rt_scene_ok, counted guards).
 uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   g_rt_class = 1u;
+#ifdef RT_SUN_CURRENT
+  if(g_rt_pass==kRtPassSun && (!sun_current_scene_ready() || !rt_ray_valid(o,d,tmax))) {
+    rt_count_unknown(0u);return kRtUnknown;
+  }
+#endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return kRtLit;
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r = (RayDesc)0;

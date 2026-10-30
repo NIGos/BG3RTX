@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-30",
+  "key": "rt_sun_cascade_current",
+  "default": 0,
+  "abi": 19,
+  "isolated_build_both_dlls": true,
+  "ctest_passed": 21,
+  "ctest_total": 21,
+  "cpu_proof_checks": 47623,
+  "ordinary_shader_entries_identical": 213,
+  "new_entries_compiled_validated": 9,
+  "baseline": "92183e7",
+  "mode": "Offline CPU build, DXC and retained capture analysis; no new GPU or game execution.",
+  "implemented": [
+    "Sun-only per-slot instance GPU-copy and BLAS/TLAS clone",
+    "Native Frame packet and producer command generation checks",
+    "Conditional private-build insertion within the same actual submit entry",
+    "Source stamp copy preserves Hair12 and camera256",
+    "Zero/unready stamp returns UNKNOWN before AS traversal",
+    "Whole requested finite-ray affine-volume check; no arbitrary trust lift"
+  ],
+  "remaining": [
+    "Per-native-draw material dispatch needed for foliage-heavy world coverage",
+    "Proven camera-static dedupe needed instead of cascade TMIN bias",
+    "Native receiver/CSM domain audit and full current 0..3 capture coverage",
+    "Actual GPU build timing, GPU validation, same-view exploration quality gate",
+    "OMM-active clone reference and optional descriptor integration"
+  ],
+  "gate_passed": false,
+  "runtime_enabled": false,
+  "live_game_launched": false
+}

@@ -30,6 +30,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <condition_variable>
+#include <chrono>
 #include <thread>
 #include <unordered_set>
 
@@ -75,6 +77,7 @@ thread_local VsInstancing t_last_inst; // its instancing analysis (bvhsplit.cpp)
 thread_local uint64_t t_last_hash = 0;
 thread_local bool t_last_discard = false;   // the module last scanned on this thread is a fragment shader that discards
 thread_local bool t_last_always_discard = false;
+thread_local bool t_last_fragment_depth = false;
 thread_local std::vector<StageIo> t_last_io;   // the module's user interface (stage_io)
 thread_local int t_last_model = -1;
 
@@ -93,6 +96,7 @@ struct ModInfo {
 std::unordered_map<VkShaderModule, ModInfo> g_patched;
 std::unordered_set<VkShaderModule> g_discard_mods;   // fragment shaders that can discard (alpha test)
 std::unordered_set<VkShaderModule> g_always_discard_mods;
+std::unordered_set<VkShaderModule> g_fragment_depth_mods;
 struct PipeInfo {
   bool xfb;                  // VS patched, VS is the last pre-raster stage
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
@@ -105,6 +109,8 @@ struct PipeInfo {
   InstPipe inst;             // instancing layout (Track D BVH split)
   bool discard = false;      // its fragment shader can discard (rt_cascade_casters skips it: no alpha test)
   bool always_discard = false;
+  bool fragment_depth = false;
+  bool fragment_known = true;
   int depth_write = -1, depth_test = -1; // -1: missing or dynamic; never reject unknown state
   uint32_t color_mask = 0, blend_mask = 0;
   bool em_state = false, em_dynamic = false;
@@ -229,6 +235,11 @@ struct Capture {
   uint32_t c_seen = 0, c_dup = 0, c_alpha = 0, c_drop = 0, c_ubo = 0, c_full = 0, c_added = 0;
   uint64_t c_sig = 1469598103934665603ull;   // cascade: the added draws in order (rt_cascade_refit)
   uint64_t c_tris = 0;
+  sun_coverage::NativeEpoch c_native_epoch;
+  VkBuffer c_native_frame = VK_NULL_HANDLE;
+  VkDeviceSize c_native_offset = 0;
+  bool c_epoch_ok = false;
+  uint32_t c_material_unknown = 0;
 };
 
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
@@ -939,10 +950,15 @@ void release(Capture& c) {
 // cascade (rt_cascade_index) goes into a buffer of its own per frame parity, is converted in
 // place after its pass, and the NEXT frame's build adds it (rtscene.cpp, bvhsplit.cpp).
 std::mutex g_cc_mu;                 // everything below
+std::condition_variable g_cc_cv;
 cascade::KeySets g_cc_keys;         // the camera source pass's draw keys (this frame and the last)
 cascade::KeySets g_cc_mesh_keys;    // its mesh keys (alpha-tested cascade draws drawn by it are skipped)
 Capture g_ccap[3];                  // the captured cascade pass of frame F is g_ccap[F % 3] (a build may use F-1 or F-2)
-struct CcMeta { uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0; bool has_origin = false; float origin[3] = {}; uint64_t sig = 0; };
+struct CcMeta {
+  uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0;
+  bool has_origin = false; float origin[3] = {}; uint64_t sig = 0;
+  SunCascadeCapture sun;
+};
 CcMeta g_cc_meta[3];                // what g_ccap[i] holds, converted (frame 0: nothing)
 constexpr int kCcLayers = 8;
 Capture g_cprobe[kCcLayers];        // the other cascades: their matrix is read, nothing captured
@@ -1040,6 +1056,8 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.c_seen = c.c_dup = c.c_alpha = c.c_drop = c.c_ubo = c.c_full = c.c_added = 0;
   c.c_sig = 1469598103934665603ull;
   c.c_tris = 0;
+  c.c_native_epoch = {}; c.c_native_frame = VK_NULL_HANDLE; c.c_native_offset = 0;
+  c.c_epoch_ok = false; c.c_material_unknown = 0;
   c.rec = bvh_rec_register(cmd);
   g_cc_meta[f % 3] = CcMeta{};
   // The build two frames ago (BLAS input) and this buffer's last conversion are done with
@@ -1081,6 +1099,21 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     return;
   }
   ++c->c_seen;
+  const bool current_sun = cfg_int("rt_sun_cascade_current", 0) != 0;
+  if (current_sun) {
+    sun_coverage::NativeEpoch epoch;
+    VkBuffer frame_buffer = VK_NULL_HANDLE; VkDeviceSize frame_offset = 0;
+    const bool ok = geo_native_frame_epoch(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,&epoch,&frame_buffer,&frame_offset);
+    if (c->c_seen == 1) {
+      c->c_native_epoch=epoch;c->c_native_frame=frame_buffer;c->c_native_offset=frame_offset;c->c_epoch_ok=ok;
+    } else c->c_epoch_ok = c->c_epoch_ok && ok &&
+      sun_coverage::same_epoch(c->c_native_epoch,epoch) && frame_buffer==c->c_native_frame && frame_offset==c->c_native_offset;
+    // A native depth-write-disabled draw contributes no caster. Dynamic or
+    // unknown state is NOT interpreted as that known empty case.
+    if (pi.depth_write == 0 || pi.always_discard) return;
+    if (pi.discard || pi.fragment_depth || !pi.fragment_known || pi.depth_write < 0 || pi.depth_test < 0)
+      ++c->c_material_unknown;
+  }
   // One matrix converts the whole soup: every draw must use the first one's UBO.
   if (!have || b.offset % g_ubo_align) {
     ++c->c_ubo;
@@ -1121,14 +1154,14 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     }
   }
   const cascade::DrawId id = cascade_draw_id(cmd, s, args, pi);
-  if (pi.discard && cfg_int("rt_cascade_alpha_dedupe", 1)) {
+  if (!current_sun && pi.discard && cfg_int("rt_cascade_alpha_dedupe", 1)) {
     std::lock_guard<std::mutex> lock(g_cc_mu);
     if (g_cc_mesh_keys.contains(c->record_frame, cascade::mesh_key(id))) {
       ++c->c_dup;
       return;
     }
   }
-  if (id.place) {
+  if (!current_sun && id.place) {
     const uint64_t key = cascade::draw_key(id);
     std::lock_guard<std::mutex> lock(g_cc_mu);
     if (g_cc_keys.contains(c->record_frame, key)) {
@@ -1138,6 +1171,7 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   }
   uint64_t prims = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST ? count / 3 : count > 2 ? count - 2 : 0;
   prims *= args.instances;
+  if (current_sun && prims > UINT64_MAX / (3ull * g_stride)) { ++c->c_full; return; }
   const uint64_t reserved = prims * 3ull * g_stride;
   if (!reserved) return;
   if (c->cursor + reserved > c->xfb.size) {
@@ -1186,8 +1220,18 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     // The cascade VS's world position is relative to its own UBO's origin (byte 208),
     // which is not the camera's (92 m away in S7): the rebase starts from it.
     if (mat_ok) { meta.has_origin = true; for (int k = 0; k < 3; ++k) meta.origin[k] = m.v[52 + k]; }
+    meta.sun.soup={c->xfb.b,tris,g_stride,meta.has_origin,{meta.origin[0],meta.origin[1],meta.origin[2]},meta.sig,c->rec,c->cmd};
+    meta.sun.native_epoch=c->c_native_epoch;
+    meta.sun.native_frame_buffer=c->c_native_frame;meta.sun.native_frame_offset=c->c_native_offset;
+    meta.sun.camera_buffer=c->rt_ubo;meta.sun.camera_offset=c->rt_ubo_off;
+    if(mat_ok) std::memcpy(meta.sun.camera,m.v,sizeof m.v);
+    meta.sun.layer=uint32_t(c->layer);
+    if (mat_ok) for(unsigned r=0;r<4;++r) for(unsigned k=0;k<4;++k) meta.sun.matrix[r][k]=m.v[(8+r)*4+k];
+    meta.sun.geometry_complete=mat_ok && c->c_epoch_ok && c->c_seen && !c->c_drop && !c->c_ubo && !c->c_full && !c->c_dup && !c->c_alpha;
+    meta.sun.materials_complete=c->c_material_unknown==0;
   }
   g_cc_meta[f % 3] = meta;
+  g_cc_cv.notify_all();
   CcStats& st = g_cc_st;
   ++st.frames;
   st.seen += c->c_seen, st.dup += c->c_dup, st.alpha += c->c_alpha, st.drop += c->c_drop, st.ubo += c->c_ubo;
@@ -1394,11 +1438,13 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   t_last_hash = 0;
   t_last_discard = false;
   t_last_always_discard = false;
+  t_last_fragment_depth = false;
   t_last_io.clear();
   t_last_model = -1;
   if (!g_on) return false;
   t_last_discard = cascade::spirv_fragment_discards(ci->pCode, ci->codeSize / 4);
   t_last_always_discard = spirv_fragment_always_discards(ci->pCode, ci->codeSize / 4);
+  t_last_fragment_depth = sun_coverage::fragment_depth_replacing(ci->pCode, ci->codeSize / 4);
   // Every module's interface (vertex and fragment): the UV-slot check at pipeline creation.
   t_last_model = stage_io(ci->pCode, ci->codeSize / 4, t_last_io);
   t_last_hash = hash64(ci->pCode, ci->codeSize);
@@ -1429,6 +1475,7 @@ void geo_note_module(VkShaderModule m, bool patched) {
   }
   std::lock_guard<std::mutex> lock(g_mu);
   if (t_last_always_discard && !patched) g_always_discard_mods.insert(m);
+  if (t_last_fragment_depth && !patched) g_fragment_depth_mods.insert(m);
   if (t_last_model == 0 || t_last_model == 4) g_mod_io[m] = ModIo{t_last_model, std::move(t_last_io), t_last_hash};
   if (!patched) return;
   g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash};   // same thread, right after geo_patch_shader
@@ -1440,6 +1487,7 @@ void geo_forget_module(VkShaderModule m) {
   g_patched.erase(m);
   g_discard_mods.erase(m);
   g_always_discard_mods.erase(m);
+  g_fragment_depth_mods.erase(m);
   g_mod_io.erase(m);
 }
 
@@ -1541,6 +1589,8 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
       } else if (st.stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
         pi.discard = st.module && g_discard_mods.count(st.module) != 0;
         pi.always_discard = st.module && g_always_discard_mods.count(st.module) != 0;
+        pi.fragment_depth = st.module && g_fragment_depth_mods.count(st.module) != 0;
+        pi.fragment_known = st.module && g_mod_io.count(st.module) != 0;
       } else {
         other = true;
       }
@@ -2101,6 +2151,9 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
       rc.alpha_draws = c->alpha_draws;
       rc.split = c->split;
       rc.xfb_size = c->xfb.size;
+      if (cfg_int("rt_sun_cascade_current",0))
+        geo_native_frame_epoch(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,&rc.native_epoch,
+                                &rc.native_frame_buffer,&rc.native_frame_offset);
       rt_after_capture(cmd, rc);
     }
     // Next frame's capture into the same scratch memory comes after this one.
@@ -2173,8 +2226,42 @@ int geo_cascade_soup(uint64_t frame, CascadeSoup* out) {
   const Capture& c = g_ccap[frame % 3];
   if (m.frame != frame || !m.tris || !c.xfb.b) return 1;
   if (bvh_rec_state(m.rec) != 1) return 2;   // its conversion has not run (yet) or never will
-  *out = CascadeSoup{c.xfb.b, m.tris, g_stride, m.has_origin, {m.origin[0], m.origin[1], m.origin[2]}, m.sig};
+  *out = CascadeSoup{c.xfb.b, m.tris, g_stride, m.has_origin, {m.origin[0], m.origin[1], m.origin[2]}, m.sig,
+                     m.rec, c.cmd};
   return 0;
+}
+
+bool geo_native_frame_epoch(VkCommandBuffer cmd, VkPipelineBindPoint bind,
+                             sun_coverage::NativeEpoch* epoch, VkBuffer* buffer, VkDeviceSize* offset) {
+  if (!epoch || !buffer || !offset) return false;
+  *epoch={};*buffer=VK_NULL_HANDLE;*offset=0;
+  Bg3Binding b{};
+  if (!query_binding(cmd,bind,0,0,0,&b) || !b.buffer ||
+      (b.type!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && b.type!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
+      (b.range!=VK_WHOLE_SIZE && b.range<sizeof epoch->words) ||
+      !read_mapped(b.buffer,b.offset,epoch->words.data(),sizeof epoch->words)) return false;
+  epoch->available=true;
+  if (!sun_coverage::valid(*epoch)) { *epoch={};return false; }
+  *buffer=b.buffer;*offset=b.offset;return true;
+}
+
+bool geo_sun_cascade(const sun_coverage::NativeEpoch& epoch, SunCascadeCapture* out) {
+  if (!out || !sun_coverage::valid(epoch)) return false;
+  *out={};
+  std::unique_lock<std::mutex> lock(g_cc_mu);
+  auto find=[&]() {
+    const CcMeta* best=nullptr;
+    for(const CcMeta& m:g_cc_meta)
+      if(m.tris && sun_coverage::same_epoch(m.sun.native_epoch,epoch) &&
+         bvh_rec_state(m.rec)>=0 && bvh_rec_state(m.rec)!=2 && (!best || m.rec>best->rec)) best=&m;
+    if(best) *out=best->sun;
+    return best!=nullptr;
+  };
+  if (find()) return true;
+  // Worker recording order differs from GPU submission order. Never wait for
+  // GPU completion here or for a future presentation/native epoch.
+  const int ms=(std::clamp)(cfg_int("rt_scene_wait_ms",12),0,50);
+  return ms>0 && g_cc_cv.wait_for(lock,std::chrono::milliseconds(ms),find);
 }
 
 void geo_cascade_note_build(int reason, uint32_t tris) {

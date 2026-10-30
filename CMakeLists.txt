@@ -36,6 +36,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rrpost.cpp
   layer/geocapture.cpp
   layer/rtscene.cpp
+  layer/sun_scene.cpp
   layer/alphatest.cpp
   layer/bvhsplit.cpp
   layer/emissive.cpp
@@ -140,6 +141,8 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(sun_caster_coverage_test tests/sun_caster_coverage_test.cpp)
+add_test(NAME sun_caster_coverage_test COMMAND sun_caster_coverage_test)
 add_executable(native_scalp_coverage_test tests/native_scalp_coverage_test.cpp)
 add_test(NAME native_scalp_coverage_test COMMAND native_scalp_coverage_test)
 add_executable(omm_classify_test tests/omm_classify_test.cpp)

@@ -3657,3 +3657,10 @@ all traces, all modules dumped):
 - The em12 jobs `af-view19/20` trace both for `304be1c7`. The images show whether the
   mismatch is a pattern (mask, UV transform, texture) or a level (constants).
 
+
+## Current native-caster sun scene (ABI 19, default off)
+
+`rt_sun_cascade_current=0`: source/record-order-correct sun-only TLAS clone,
+private same-submit build insertion, cloned alpha/stamp, strict whole-ray coverage.
+Design, tests and remaining material/LOD/volume gates: docs/SUN_CURRENT_SCENE.md.
+This is not a passing exploration-shadow gate; zero certified pixels is INVALID.

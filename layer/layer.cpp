@@ -430,6 +430,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   for (uint32_t i = 0; i < count; ++i)
     cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
   if (trace_recording()) trace_on_submit(cmds);
+  SunSubmitBatch sun;
+  sun_prepare_submit(dd,queue,count,submits,&sun);
+  if(sun.modified) {submits=sun.legacy.data();cmds=sun.commands;}
   order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
@@ -453,6 +456,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
     for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
       cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
   if (trace_recording()) trace_on_submit(cmds);
+  SunSubmitBatch sun;
+  sun_prepare_submit2(dd,queue,count,submits,&sun);
+  if(sun.modified) {submits=sun.modern.data();cmds=sun.commands;}
   order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits

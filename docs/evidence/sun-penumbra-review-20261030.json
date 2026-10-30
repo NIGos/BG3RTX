@@ -41,5 +41,18 @@
   "renderer_changed": false,
   "game_launched": false,
   "save_files_accessed": false,
-  "next": "Verify actual caster coverage before lifting trust; same-pose debug6/debug2 profiles later with user."
+  "next": "Verify actual caster coverage before lifting trust; same-pose debug6/debug2 profiles later with user.",
+  "user_primary_case": "Exploration outside dialogues; prior closeup windows are mechanism evidence only.",
+  "capture_view_classification": {
+    "20261030-161807": "dialogue: wide Shadowheart",
+    "20261030-162008": "world: overhead ruined bridge",
+    "20261030-162506": "dialogue: Astarion",
+    "20261030-163004": "world: overhead camp trees/rocks",
+    "20261030-163010": "world: overhead camp trees/rocks"
+  },
+  "exploration_sun_stats_600_frame_windows": [
+    "16:20:06.894  [core] sun stats (600 frames, replace 1, 15 roof volumes, scene top 18.9): traced 86.1% of px, lit 63.0%; game dark & RT lit 8.99% of traced px: replaced (lit) 27.1%, partly 16.2%, kept by roofs 0.7%, kept off screen 56.1%; px under roofs 0.9%, off-screen ramp 69.6%; game lit & RT shadowed 5.69%; mean brightening 0.0335 per traced px; roof query 366 m (farthest roof-tested px 66 m), over kSunMaxVolumes on 0 frames (max 0 volumes, 0.0 dropped per such frame); roof volumes trusted (cascade casters) 0",
+    "16:20:17.747  [core] sun stats (600 frames, replace 1, 14 roof volumes, scene top 22.9): traced 78.8% of px, lit 58.4%; game dark & RT lit 7.01% of traced px: replaced (lit) 34.7%, partly 15.1%, kept by roofs 5.1%, kept off screen 45.1%; px under roofs 3.9%, off-screen ramp 59.0%; game lit & RT shadowed 5.55%; mean brightening 0.0318 per traced px; roof query 331 m (farthest roof-tested px 31 m), over kSunMaxVolumes on 0 frames (max 0 volumes, 0.0 dropped per such frame); roof volumes trusted (cascade casters) 0",
+    "16:30:07.580  [core] sun stats (600 frames, replace 1, 64 roof volumes, scene top 16.4): traced 92.4% of px, lit 62.9%; game dark & RT lit 39.33% of traced px: replaced (lit) 26.5%, partly 17.5%, kept by roofs 0.0%, kept off screen 55.9%; px under roofs 0.0%, off-screen ramp 63.7%; game lit & RT shadowed 1.98%; mean brightening 0.1386 per traced px; roof query 1973 m (farthest roof-tested px 1673 m), over kSunMaxVolumes on 0 frames (max 0 volumes, 0.0 dropped per such frame); roof volumes trusted (cascade casters) 0"
+  ]
 }

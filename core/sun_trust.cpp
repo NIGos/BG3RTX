@@ -263,6 +263,9 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
               g_sum_n, int(active), 100.0 * g_sum[16] / all, double(g_sum[16]) / g_sum_n, 100.0 * g_sum[17] / br,
               100.0 * g_sum[18] / br, 100.0 * g_sum[18] / all, 100.0 * g_sum[19] / all, g_sum[10] / 255.0 / all,
               100.0 * g_sum[20] / double(g_sum[10] ? g_sum[10] : 1));
+    if(host->cfg_int("rt_sun_cascade_current",0))
+      host->log("sun current finite-ray coverage (%u frames): certified %llu pixels, outside volume %llu, private scene unready %llu; full requested rt_tmax, not clipped to native near plane",
+        g_sum_n,(unsigned long long)g_sum[21],(unsigned long long)g_sum[22],(unsigned long long)g_sum[23]);
     memset(g_sum, 0, sizeof g_sum);
     g_sum_n = 0;
     g_over_frames = g_over_dropped = 0;

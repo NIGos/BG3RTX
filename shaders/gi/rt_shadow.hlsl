@@ -116,6 +116,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const bool backlit = pc.rt_backlit != 0 && nl <= 0.0 && mat_transmits(cls);
   float vis = pc.rt_backlit != 0 ? 1.0 : 0.0;   // (legacy: back faces were zeroed)
   bool unknown = false;
+#ifdef RT_SUN_CURRENT
+  bool current_covers=false;
+#endif
   if (nl > 0.0 || backlit) {
     RtCone cone = {dist * pa, pa};
     float3 dir = L;
@@ -129,6 +132,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
     }
     // From the side the light comes from (the back side for transmission).
     float3 o = rt_ray_origin(fp, P, N, dist * pa, dir);
+#ifdef RT_SUN_CURRENT
+    current_covers=sun_current_covers(o,dir,pc.rt_tmax);
+#endif
     const uint vs = rt_visibility(o, dir, pc.rt_tmax, cone);
     // Unknown (the candidate cap aborted the query, rt_common.hlsli): the game's own sun
     // visibility for this pixel, its mask value. One ray per pixel, so the decision is per
@@ -213,6 +219,19 @@ void main(uint3 tid : SV_DispatchThreadID) {
     if ((tflags & 2u) != 0) roof = sun_under_roof(P, L, cam_abs);
     if ((tflags & 4u) != 0) t_off = sun_offscreen_trust(P, L, cam_abs.y);
   }
+#ifdef RT_SUN_CURRENT
+  if(traced) {
+    // The certificate covers the ENTIRE requested ray, never just the part up
+    // to a native shadow near-plane. Otherwise keep conservative native fallback.
+    t_off=current_covers?1.0:0.0;
+    if(current_covers) roof=false;
+  }
+  if((tflags&8u)!=0u) {
+    trust_add(21u,traced && current_covers);
+    trust_add(22u,traced && !current_covers);
+    trust_add(23u,(nl>0.0 || backlit) && !sun_current_scene_ready());
+  }
+#endif
   if (!primary_check) {
     check = fold;
     fam = unknown ? kSunUnknownCode : !traced ? 0.0 : roof ? 0.25 : 0.5 + 0.5 * t_off;
