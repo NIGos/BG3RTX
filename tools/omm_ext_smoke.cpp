@@ -77,6 +77,7 @@ static void barrier(DeviceData& dd,VkCommandBuffer cmd,VkPipelineStageFlags2 sou
 }
 struct ProducerOwner {
   DeviceData* dd{};Buffer source;VkImage image{};VkDeviceMemory memory{};VkImageView view{};
+  omm::PlainVertices snapshot;
   ~ProducerOwner(){
     if(view){omm::content_view_destroyed(dd,view);dd->vk.DestroyImageView(dd->device,view,nullptr);}
     if(image){omm::content_image_destroyed(dd,image);dd->vk.DestroyImage(dd->device,image,nullptr);}
@@ -87,9 +88,14 @@ static std::vector<omm::Ticket> producer_fixtures(DeviceData& dd,VkCommandBuffer
   std::vector<omm::Ticket> tickets;
   for(uint32_t i=0;i<3;++i){
     auto owner=std::make_shared<ProducerOwner>();owner->dd=&dd;
-    buffer(dd,owner->source,256,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    buffer(dd,owner->source,256,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     const float v[18]={0,0,0,1,.1f,.1f,1,0,0,1,.2f,.1f,0,1,0,1,.1f,.2f};
-    std::memcpy(owner->source.mapped,v,sizeof v);
+    std::memcpy(static_cast<uint8_t*>(owner->source.mapped)+16,v,sizeof v);
+    check(omm::allocate_plain_vertices(cmd,sizeof v,&owner->snapshot),"owned post-VS vertex allocation");
+    check(owner->snapshot.buffer && owner->snapshot.address && owner->snapshot.bytes==sizeof v && owner->snapshot.owner,"owned snapshot handles");
+    omm::PlainVertices rejected=owner->snapshot;
+    check(!omm::allocate_plain_vertices(cmd,0,&rejected)&&!rejected.buffer&&!rejected.owner,"empty allocation rejected/reset");
+    check(!omm::allocate_plain_vertices(cmd,128ull*1024*1024+4,&rejected)&&!rejected.buffer&&!rejected.owner,"actual producer allocation budget");
     VkImageCreateInfo img{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};img.imageType=VK_IMAGE_TYPE_2D;img.format=VK_FORMAT_R8G8B8A8_UNORM;
     img.extent={4,4,1};img.mipLevels=3;img.arrayLayers=1;img.samples=VK_SAMPLE_COUNT_1_BIT;img.tiling=VK_IMAGE_TILING_OPTIMAL;img.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
     vkcheck(dd.vk.CreateImage(dd.device,&img,nullptr,&owner->image),"producer private image");omm::content_image_created(&dd,owner->image,img);
@@ -110,16 +116,23 @@ static std::vector<omm::Ticket> producer_fixtures(DeviceData& dd,VkCommandBuffer
     ib[0].srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;ib[0].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;ib[0].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;ib[0].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     ib[1].srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;ib[1].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;ib[1].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;ib[1].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     dd.vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,0,nullptr,0,nullptr,2,ib);
-    omm::PlainInput in{};in.vertices=owner->source.handle;in.vertex_bytes=256;in.mask=owner->view;in.sampled_owner=owner;
+    omm::PlainInput in{};in.vertices=owner->snapshot.buffer;in.vertex_bytes=owner->snapshot.bytes;in.mask=owner->view;in.sampled_owner=owner;
+    in.copy_source=owner->source.handle;in.copy_source_bytes=256;in.copy_offset=16;
     in.push.vertex_stride=24;in.push.triangles=1;in.push.source_bytes=72;in.push.channel=3;
     in.push.threshold_lo=in.push.threshold_hi=.5f;in.push.sampling_certificate=i<2?2u:0u;
+    auto bad=in;bad.copy_offset=1;check(!omm::record_plain(cmd,bad),"snapshot copy alignment rejected");
+    bad=in;bad.copy_source_bytes=87;check(!omm::record_plain(cmd,bad),"snapshot copy source range rejected");
+    bad=in;bad.copy_offset=UINT64_MAX-3;check(!omm::record_plain(cmd,bad),"snapshot copy overflow rejected");
+    bad=in;bad.vertex_bytes+=4;check(!omm::record_plain(cmd,bad),"snapshot exact destination extent required");
+    bad=in;bad.copy_source=bad.vertices;check(!omm::record_plain(cmd,bad),"snapshot source/destination alias rejected");
     // This synthetic source is immutable through submission, every mip is
     // identically zero/one. That endpoint fixture is not a game-asset certificate.
     omm::PlainOutput output{};auto ticket=omm::record_plain(cmd,in,&output);check(ticket&&output.data,"production GPU producer ticket");tickets.push_back(ticket);
-    barrier(dd,cmd,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,VK_ACCESS_2_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_READ_BIT);
+    barrier(dd,cmd,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_SHADER_WRITE_BIT|VK_ACCESS_2_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_READ_BIT);
     VkBufferCopy copies[]={{output.data_offset,50000+i*64,4},{0,50004+i*64,16},{0,50020+i*64,16}};
     dd.vk.CmdCopyBuffer(cmd,output.data,result.handle,1,&copies[0]);dd.vk.CmdCopyBuffer(cmd,output.audit,result.handle,1,&copies[1]);
     dd.vk.CmdCopyBuffer(cmd,output.data,result.handle,1,&copies[2]);
+    VkBufferCopy vertexCopy{0,52000+i*128,sizeof v};dd.vk.CmdCopyBuffer(cmd,owner->snapshot.buffer,result.handle,1,&vertexCopy);
   }
   barrier(dd,cmd,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
   return tickets;
@@ -371,8 +384,10 @@ int main(int argc,char** argv){
         check(words[4]==(i<2?0u:1u),"producer certificate status");
         check(words[5]==1u && words[6]==i+1u && words[7]==0u && words[8]==0x4f4d4d31u,
               "producer captures actual GPU image/global epochs and valid stamp");
+        const float expectedVertices[18]={0,0,0,1,.1f,.1f,1,0,0,1,.2f,.1f,0,1,0,1,.1f,.2f};
+        check(!std::memcmp(static_cast<const uint8_t*>(result.mapped)+52000+i*128,expectedVertices,sizeof expectedVertices),"private post-VS snapshot full byte equality");
       }
-      std::puts("PRODUCER cases=3 known_opaque=1 known_transparent=1 unknown_without_certificate=1 actual_EXT_builds=3 GPU_epoch_stamps=3 failures=0; synthetic endpoints only, scene stale fallback not yet wired");
+      std::puts("PRODUCER cases=3 known_opaque=1 known_transparent=1 unknown_without_certificate=1 actual_EXT_builds=3 GPU_epoch_stamps=3 private_vertex_snapshots=3 snapshot_copy_bytes=216 failures=0; synthetic endpoints only");
     }
     vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"reset completed command");omm::command_discard(cmd);
     dd.vk.DestroyAccelerationStructureKHR(dd.device,tlas,nullptr);tlas=VK_NULL_HANDLE;

@@ -103,11 +103,31 @@ bool ensure_pipeline(DeviceData* dd) {
 }
 }
 
+bool allocate_plain_vertices(VkCommandBuffer cmd,VkDeviceSize bytes,PlainVertices* out) {
+  if(!out)return false;*out={};
+  if(!bytes || bytes%4 || bytes>UINT32_MAX || !available() || !cfg_int("rt_omm",0) || !tracked_recording(cmd))return false;
+  DeviceData* dd=device_of(cmd);if(!available_for(dd))return false;
+  std::lock_guard lock(bake_mutex);if(producer_failed)return false;
+  VkPhysicalDeviceProperties props{};dd->inst->GetPhysicalDeviceProperties(dd->physical,&props);
+  if(bytes>props.limits.maxStorageBufferRange)return false;
+  auto buffer=std::make_shared<Buffer>();
+  // TRANSFER_SRC also permits the existing GPU fixture to verify exact bytes.
+  if(!allocate(dd,*buffer,bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR|
+      VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT,false))return false;
+  *out={buffer->handle,buffer->address,buffer->bytes,std::move(buffer)};
+  return true;
+}
+
 Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output) {
   if (output) *output={};
   if (!available() || !cfg_int("rt_omm",0) || !tracked_recording(cmd) || !in.vertices || !in.mask ||
       !in.sampled_owner || !valid_plain_push(in.push) || in.vertex_bytes<in.push.source_bytes ||
       (in.layout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && in.layout!=VK_IMAGE_LAYOUT_GENERAL)) return 0;
+  if(in.copy_source) {
+    if(in.copy_source==in.vertices || in.push.vertex_offset!=0 || in.vertex_bytes!=in.push.source_bytes ||
+       in.copy_offset%4 || in.push.source_bytes%4 || in.copy_offset>in.copy_source_bytes ||
+       in.push.source_bytes>in.copy_source_bytes-in.copy_offset)return 0;
+  } else if(in.copy_source_bytes || in.copy_offset)return 0;
   std::lock_guard lock(bake_mutex);
   DeviceData* dd=device_of(cmd);
   if (!available_for(dd)) return 0;
@@ -140,6 +160,17 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
   // Native Submit2 signal stages must include these additional texture reads,
   // even if the later EXT build fails and leaves an orphan recording.
   if (!mark_content_dispatch(cmd)) return 0;
+  if(in.copy_source) {
+    VkMemoryBarrier before{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    before.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;before.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT;
+    dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&before,0,nullptr,0,nullptr);
+    const VkBufferCopy copy{in.copy_offset,0,in.push.source_bytes};
+    dd->vk.CmdCopyBuffer(cmd,in.copy_source,in.vertices,1,&copy);
+    VkMemoryBarrier copied{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    copied.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;copied.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+    dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+                             0,1,&copied,0,nullptr,0,nullptr);
+  }
   VkMemoryBarrier producer{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   producer.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;producer.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
   dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,

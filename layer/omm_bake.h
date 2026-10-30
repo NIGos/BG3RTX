@@ -3,6 +3,13 @@
 #include "../common/omm_plain_bake.h"
 #include <memory>
 namespace bg3::omm {
+struct PlainVertices {
+  VkBuffer buffer{};VkDeviceAddress address{};VkDeviceSize bytes{};
+  std::shared_ptr<void> owner;
+};
+// Allocation ONLY: no copy, barrier or other GPU command is recorded. Uses the
+// same actual-allocation 128 MiB producer budget. Pass owner to the native factory.
+bool allocate_plain_vertices(VkCommandBuffer,VkDeviceSize,PlainVertices*);
 struct PlainInput {
   VkBuffer vertices{};
   VkDeviceSize vertex_bytes{};
@@ -12,6 +19,11 @@ struct PlainInput {
   // Keeps the immutable sampled snapshot/source vertices alive. Their contents
   // and the push's full mip/UV/numeric domain must be certified by the caller.
   std::shared_ptr<void> sampled_owner;
+  // Optional same-command post-VS snapshot. Destination vertices must be an
+  // owned, exact source_bytes range at offset0; sampled_owner retains it. The
+  // source needs TRANSFER_SRC and lifetime through this copy, not ticket lifetime.
+  VkBuffer copy_source{};
+  VkDeviceSize copy_source_bytes{},copy_offset{};
 };
 struct PlainOutput {
   Ticket ticket{};

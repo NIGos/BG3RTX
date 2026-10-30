@@ -4,6 +4,31 @@ This branch adds an actual compute producer feeding the production EXT backend.
 It is not yet called by BG3's BLAS builder and is not an acceleration/quality gate.
 The active goal remains complete OMM, Hair and RT shadows, including live validation.
 
+## Owned post-VS snapshots - 2026-10-30
+
+`allocate_plain_vertices(cmd,bytes,&out)` returns buffer/address/bytes/shared owner
+without recording GPU commands. Allocation charges the same actual-memory
+128 MiB producer budget, with storage, AS build-input, transfer-destination and
+diagnostic transfer-source usage. Zero, unaligned and excessive extents decline.
+Pass that owner to `make_native_plain_input`; the existing sampled owner keeps
+the private snapshot through ticket retirement, including the retained orphan
+path after an EXT failure. The original mesh pool is not captured by this owner.
+
+Set `PlainInput.copy_source`, `copy_source_bytes` and `copy_offset` to request a
+same-command source-pool copy. The destination is exactly `push.source_bytes`,
+with vertex_offset zero. Aliasing, unaligned/overflowing source ranges and size
+disagreement reject before recording. After all producer allocations/validation
+and the submit marker succeed, record_plain records source-write to transfer,
+the private copy, and transfer to compute/AS-read barriers, then the existing bake.
+The caller still owns source validity and TRANSFER_SRC usage through the copy.
+Only the private destination must remain alive for later attached BLAS traversal.
+
+Full DLL build and 31/31 CTests pass. Existing RTX 5090 fixture verifies three private
+72-byte snapshots byte-for-byte, offset 16 copying, malformed ranges, allocation
+failure/reset and O/T/UNKNOWN production. It is not native BG3 scene attachment
+or a live quality gate. No ordinary shader changed; GPU pass cost is unmeasured.
+Evidence: docs/evidence/omm-owned-vertices-20261030.txt.
+
 `record_plain` accepts one registered plain texture view and a triangle vertex
 range. Its level-0 micromaps use the exact EXT descriptor order, one primitive per
 micromap, four states, four allocated bytes per primitive (only two bits used).
