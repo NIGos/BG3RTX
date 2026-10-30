@@ -114,3 +114,30 @@ Build optional target BG3RTX_OMM_GPU_SMOKE (OFF by default); compile
 with spirv-val, then explicitly run `bin/omm_ext_smoke.exe build/omm_ext_smoke.spv`.
 The build never launches it and routine CTest never executes GPU work.
 Evidence: docs/evidence/omm-ext-smoke-20261030.txt.
+
+### Constant UNORM8 endpoint follow-up
+
+The same RTX 5090 reports subTexelPrecisionBits=8 and mipmapPrecisionBits=8.
+A second compute entry samples R8G8B8A8_UNORM alpha 0/1 in two array layers,
+all three mips (4x4, 2x2, 1x1), LINEAR min/mag and LINEAR mip filtering,
+REPEAT addressing and no anisotropy. A 64-UV grid includes negative coordinates,
+texel boundaries and many wraps; 17 LODs cover [0,2] in eighth-level steps.
+All 2,176 samples returned exact endpoint float bits (0x00000000/0x3f800000).
+The six-ray gate and actual timeline retirement still pass; validation errors=0.
+Evidence: docs/evidence/omm-sampler-endpoints-20261030.txt.
+
+The official [Vulkan sampling chapter](https://docs.vulkan.org/spec/latest/chapters/textures.html#textures-texel-filtering)
+defines ordinary linear texel and mip filtering as weighted averages. Algebraically,
+normalized weights preserve a constant value, regardless of coordinate/mip weight
+quantization. This is an inference from the ideal filtering equations, not a new
+portable guarantee about undocumented internal rounding. The finite hardware
+fixture supports this format/sampler/device combination; it is not an all-UV,
+all-driver, mixed-value or complete-content certificate. Precision-bit limits
+alone do not certify alpha conversion or every intermediate arithmetic operation.
+For native stochastic >= with hash zero reachable, alpha zero STILL cannot become
+known transparent under threshold range [0,1]. No hash/cutoff shift is introduced.
+
+To run the endpoint follow-up, compile the same HLSL with entry `endpoints` into a
+second SPIR-V file and supply it as the optional second shader argument. The
+producer/content identity, resident mip support, view swizzle and evaluator proof
+remain separate mandatory checks before enabling production known states.
