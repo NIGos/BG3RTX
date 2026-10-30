@@ -87,10 +87,57 @@ light is still possible, even though our separate emissive-capture feature is of
 
 ## Next correction / later live discrimination
 
-First model hair/scalp coverage faithfully or return an explicit UNKNOWN/native
-fallback when an unsupported hair intersection is encountered, in every visibility,
-closest-hit and ray-origin query. Do not skip all hair, label it opaque, or add a
-simple alpha>=cut table entry as an exact implementation. OMM must not accelerate
+### Native shader inventory before implementation
+
+Bulk catalog audit covers 1,149 templates / 17,235 variants / 15,363 material
+modules. Hair class/flags and hair/scalp/beard/fur names select 17 families with
+234 distinct fragment programs. Independent eyelash-name review adds three:
+CHAR_LashesShadow, CHAR_LashesShadow_Dithered and the cinematic LashShadow effect.
+The combined 20 families contain 273 distinct fragment programs, 83 with retained
+SPIR-V/GLSL and only 22 listed in alpha_fs.txt. Presence in that table does NOT
+certify exact native coverage. Hair has 15 fragment programs / zero table entries;
+Scalp has 14 distinct programs / four shadow-only entries. Counts overlap between
+families and do not count distinct hairstyles or objects.
+
+Full per-hash/pass/cache/table/F10 inventory is retained in
+captures/dialogue-shadow-review-20261030/hair-inventory.json. Native cached lash
+depth/shadow shaders also contain nonlinear sampled-mask coverage, so eyelashes
+must not be silently left outside a hair-adjacent audit. Their presence in a
+forward draw does not prove that their depth variant entered the captured BLAS.
+
+All nine Hair/Scalp fragment programs missing from the runtime cache were recovered
+from read-only Materials.pak, hash-verified and CPU-decompiled into the report-only
+native-hair/ subdirectory. All 29 distinct Hair/Scalp fragment programs therefore
+have native GLSL available. This establishes source availability, not an exact RT
+implementation or equivalence gate. Use all SREF-to-MVAR variant references for
+pass membership: SHDR's first/canonical pass alone can hide shared-hash variants.
+Concise versioned evidence: docs/evidence/hair-native-inventory-20261030.json.
+Native archive verification found all 273/273 selected fragment hashes in 300
+matching BSHD containers, with zero missing bodies or read errors. The remaining
+task is faithful coverage support; no selected native binary was unavailable.
+
+Scope: manifest built 2026-10-26 from 27 packages in the game's Data directory,
+including Hotfix 9/10. The catalog is not a census of separate Mods directories,
+loose overrides or future runtime variants. Its extractor accepts exact-case Vulkan
+ST/STI DEF/FOR/EMI/DEP/DEPS/DEPST/VEL/BAKE names; other names can be omitted. The
+reported zero unreadable BSHD inputs does not certify unmatched inputs or malformed
+containers returning zero modules. Missing retained source must be searched in
+native package bodies before calling a shader unavailable.
+
+User steering: exhaust native shader discovery and coverage mapping BEFORE choosing
+an unknown-shader workaround. "Unknown to alpha_lookup" does not mean unidentified
+or unavailable native code. scripts/alpha_table.py scans retained runtime dumps and
+recognises two limited cutout families; it is not an exhaustive native-shader audit.
+Inventory package/catalog variants, exact hashes, parameter bindings and native
+coverage formulas, including depth and shadow passes. Distinguish missing runtime
+cache files from missing packaged SPIR-V. Check observed F10 shaders against this
+inventory; catalog completeness alone cannot prove coverage of future/mod shaders.
+
+Then model hair/scalp coverage faithfully in every visibility, closest-hit and
+ray-origin query. Any unavoidable fallback needs a documented remaining limitation
+and is not the default solution to a missing table entry. Do not skip all hair,
+label it opaque, or add a simple alpha>=cut entry as an exact implementation.
+OMM must not accelerate
 the existing wrong coverage; its preparation remains in an isolated worktree.
 
 Later user-led, SAME-pose diagnostics: RT sun off/on, local shadows off/on, then

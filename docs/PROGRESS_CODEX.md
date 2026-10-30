@@ -1,5 +1,33 @@
 # BG3RTX progress
 
+## User steering: native shader discovery before workarounds - 2026-10-30
+
+Search the packaged native shaders thoroughly before choosing an unknown-shader
+fallback. A missing alpha_lookup entry means missing RT coverage support, not an
+unidentified native program. scripts/alpha_table.py only scans retained runtime
+dumps and recognises two cutout families; that is not a complete shader census.
+The two actual dialogue prepass programs are already identified and decompiled.
+Their full coverage formulas, including material parameters and depth handling,
+must guide the correction. No hair fallback or simple raw-alpha entry was added.
+
+Offline catalog audit: 1,149 templates, 17,235 variants, 15,363 material modules;
+the 2026-10-26 manifest records zero unreadable BSHD files. Hair/name classification
+selects 17 families and 234 distinct fragment programs; adding three eyelash
+families gives 20 families / 273 distinct fragment programs, only 22 listed in the
+RT alpha table. Table presence does not certify exact native coverage. The local
+cache initially contained 83 of 273; absence from cache is not archive absence.
+All nine uncached Hair/Scalp fragment programs were recovered from Materials.pak,
+hash-verified and CPU-decompiled: all 29 distinct Hair/Scalp native programs now
+have GLSL available for exact coverage implementation. No fallback was needed to
+find them. This is source availability, not an implementation correctness gate.
+Archive-body cross-check found all 273/273 selected fragment hashes in 300 native
+containers, zero missing/read errors. These shaders are available, not unknown.
+Per-pass hashes and F10 correspondence: captures/dialogue-shadow-review-20261030/
+hair-inventory.json. Catalog scope is the game's Data package set, not separate
+Mods or loose overrides; zero BSHD errors does not prove every format was indexed.
+No live files, settings, binaries or game state were changed.
+Concise versioned inventory: docs/evidence/hair-native-inventory-20261030.json.
+
 ## Offline continuation: dialogue shadows and OMM groundwork - 2026-10-30
 
 Latest user clarification: face shadows are STATIC and hairstyle-dependent,

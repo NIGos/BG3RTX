@@ -42,8 +42,10 @@ Conditional alpha/depth recipes are absent from alpha_fs.txt, so capturable card
 enter RT as OPAQUE. Always-discard filtering does not handle conditional cutouts.
 Hair needs dual-mask/noise/root/tangent/view/dither/depth coverage; scalp needs
 smoothstep/root-density. A plain alpha>=cut entry is NOT an exact implementation.
-Next correct coverage or explicitly preserve native handling for unknown hair
-intersections in ALL visibility/closest/origin queries. No hair-skipping/bias blur.
+Latest user steering: exhaust package/catalog shader discovery BEFORE workarounds.
+Missing alpha-table entries are not unidentified native shaders. Complete the
+hair/scalp/pass/hash/formula inventory first, then faithful coverage in ALL
+visibility/closest/origin queries. No fallback-first, hair-skipping or bias blur.
 Per-ray caster identity and the dominant sun/local/box contribution remain unproved.
 The prism's visible glow alone does not establish an actual native runtime light.
 
