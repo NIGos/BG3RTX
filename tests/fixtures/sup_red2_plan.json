@@ -1,0 +1,64 @@
+[
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 250,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "rr=0",
+  "shift_hold": 0
+ },
+ {
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 5,
+  "serial": 251,
+  "motion_start": 8,
+  "motion_end": 8,
+  "set": "rr=0",
+  "shift_hold": 1
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 252,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rr=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 253,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rr=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 16,
+  "capture_at": 3,
+  "serial": 254,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rr=0"
+ },
+ {
+  "seconds": 7,
+  "repeat_ms": 33,
+  "scan": 18,
+  "capture_at": 3,
+  "serial": 255,
+  "motion_start": 1,
+  "motion_end": 6,
+  "set": "rr=0"
+ }
+]
