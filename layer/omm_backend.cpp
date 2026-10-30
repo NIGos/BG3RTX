@@ -76,6 +76,15 @@ const void* device_features(InstanceData* id, VkPhysicalDevice physical, const v
                             std::vector<const char*>& extensions) {
   requested=false;
   if (!cfg_int("rt_omm",0) || !id || !id->GetPhysicalDeviceFeatures2) return next;
+  const auto* bda=reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeatures*>(
+      find(next,VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES));
+  const auto* v12=reinterpret_cast<const VkPhysicalDeviceVulkan12Features*>(
+      find(next,VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES));
+  // Our allocations use the core DEVICE_ADDRESS memory flag. The diagnostic
+  // EXT-only BDA path does not certify this allocation prerequisite.
+  if (!(bda && bda->bufferDeviceAddress) && !(v12 && v12->bufferDeviceAddress)) {
+    log("[omm] enabled core bufferDeviceAddress required; ordinary RT retained");return next;
+  }
   VkPhysicalDeviceProperties props{}; id->GetPhysicalDeviceProperties(physical,&props);
   // Initial backend deliberately requires core 1.3 synchronization2. Keep the
   // ordinary RT 1.2 path intact rather than adding extension dependency chains.
