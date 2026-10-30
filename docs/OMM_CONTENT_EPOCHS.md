@@ -1,5 +1,34 @@
 # OMM GPU content epochs: bounded source contract
 
+## Coherent write protocol - 2026-10-30
+
+An AFTER-only global/image increment can certify torn state across queues:
+validator observes new global with old image, then image changes without another
+global change. Reordering those two increments alone also leaves the native write
+unmarked before the epoch dispatch. Existing hooks now bracket each eligible
+copy/blit/resolve/clear with a GPU active-writer increment BEFORE the native
+command and image epoch, global epoch, memory fence, active decrement AFTER it.
+The header is 16 bytes: global 0, sticky-disabled 4, active-writers 8; every image
+counter starts at an alignment-derived stride >= 16. Begin/end use specialization
+constant 0 on the same shader module; native push constants remain untouched.
+
+Untracked/unsupported queue, push-descriptor restore or allocation paths record
+sticky disable before the native command. Missing completion leaves active>0;
+unpaired completion and active-counter saturation disable permanently without
+wrapping. The ordinary fresh rt_omm=0 path still performs no counter GPU work.
+
+Readers must reject active writers and perform ordered before/after epoch checks.
+This counter protocol does NOT synchronize native image reads against writes or
+make concurrent texture accesses legal. Native producer/consumer semaphore and
+pipeline dependencies must cover the injected RT/bake reads, including subsequent
+uploads after G-buffer shading. Root owns those reader/submit integration gates;
+the writer-only GPU fixture cannot certify them. Two tiny dispatches replace one
+per supported native write; GPU cost remains unmeasured.
+
+Actual GPU evidence: docs/evidence/omm-write-protocol-20261030.txt. Existing
+windowless fixture exercises beginning, overlapping writers, partial completion,
+coherent final completion, replay, saturation and pre-write sticky disable.
+
 `rt_omm=0` in a fresh process allocates nothing and adds no GPU calls. Successful
 OMM device initialization latches content instrumentation until device teardown,
 including after INI off, because held BLASes may still reference micromaps.
@@ -8,7 +37,7 @@ code never resets live epochs/disable. It is concurrent across queue families.
 
 `ContentSource` supplies the counter buffer, byte extent, per-image byte offset,
 process-unique 64-bit image ID and never-recycled slot. Header words are global
-epoch at byte 0 and sticky disabled at byte 4. A zero per-image epoch is not
+epoch at byte 0, sticky disabled at byte 4 and active writers at byte 8. A zero per-image epoch is not
 initialized content. Consumers must use atomic GPU reads (e.g. InterlockedOr 0)
 when unrelated upload queues can write; a blind transfer copy/plain shader Load
 is not a concurrent atomic snapshot. Global and per-image counters saturate and
@@ -28,12 +57,12 @@ These restrictions exclude data-consistent aliases. Native valid Vulkan contents
 and independent source/view/descriptor lifetime identity remain required.
 
 Ordinary CopyBufferToImage, CopyImage, Blit, Clear and Resolve operations and their
-core/KHR 2 variants append a one-thread GPU epoch dispatch. A replay executes the
-increment again. Queue family comes from the actual command pool recording graph.
+core/KHR 2 variants bracket writes with one-thread GPU begin/end dispatches.
+A replay executes both phases again. Queue family comes from the actual command pool recording graph.
 The kernel has no push constants. It binds immutable ordinary descriptor sets
 with an alignment-derived image-counter slice and restores native compute bindings.
 Transfer-only, unknown recordings, active native push descriptors or failed set
-allocation use GPU CmdFillBuffer sticky disable. NV/KHR indirect image copies also
+allocation use GPU CmdFillBuffer sticky disable BEFORE the native write. NV/KHR indirect image copies also
 take this unsupported path. No substitute content certificate is manufactured.
 
 **Required integration:** `content_dispatch_in_submit(spanCBs)` covers direct

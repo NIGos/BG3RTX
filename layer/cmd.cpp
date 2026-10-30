@@ -785,30 +785,34 @@ static void note_transfer(VkCommandBuffer cmd, const char* op, VkImage src, VkIm
 
 static VKAPI_ATTR void VKAPI_CALL CmdCopyImage(VkCommandBuffer cmd, VkImage s, VkImageLayout sl, VkImage d,
                                                VkImageLayout dl, uint32_t n, const VkImageCopy* r) {
+  const bool began=omm::content_before_image_write(cmd,d);
   vk(cmd).CmdCopyImage(cmd, s, sl, d, dl, n, r);
-  omm::content_after_image_write(cmd,d);
+  omm::content_after_image_write(cmd,d,began);
   note_transfer(cmd, "copy", s, d);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBlitImage(VkCommandBuffer cmd, VkImage s, VkImageLayout sl, VkImage d,
                                                VkImageLayout dl, uint32_t n, const VkImageBlit* r, VkFilter f) {
+  const bool began=omm::content_before_image_write(cmd,d);
   vk(cmd).CmdBlitImage(cmd, s, sl, d, dl, n, r, f);
-  omm::content_after_image_write(cmd,d);
+  omm::content_after_image_write(cmd,d,began);
   note_transfer(cmd, "blit", s, d);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdResolveImage(VkCommandBuffer cmd, VkImage s, VkImageLayout sl, VkImage d,
                                                   VkImageLayout dl, uint32_t n, const VkImageResolve* r) {
+  const bool began=omm::content_before_image_write(cmd,d);
   vk(cmd).CmdResolveImage(cmd, s, sl, d, dl, n, r);
-  omm::content_after_image_write(cmd,d);
+  omm::content_after_image_write(cmd,d,began);
   note_transfer(cmd, "resolve", s, d);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdClearColorImage(VkCommandBuffer cmd, VkImage img, VkImageLayout l,
                                                      const VkClearColorValue* c, uint32_t n,
                                                      const VkImageSubresourceRange* r) {
+  const bool began=omm::content_before_image_write(cmd,img);
   vk(cmd).CmdClearColorImage(cmd, img, l, c, n, r);
-  omm::content_after_image_write(cmd,img);
+  omm::content_after_image_write(cmd,img,began);
   note_transfer(cmd, "clear", VK_NULL_HANDLE, img);
 }
 
@@ -823,25 +827,25 @@ template<class F> static F image_copy_proc(VkCommandBuffer cmd,const char* name,
   auto* dd=device_of(cmd);auto fn=reinterpret_cast<F>(dd->gdpa(dd->device,name));if(!fn)fn=reinterpret_cast<F>(dd->gdpa(dd->device,alias));return fn;
 }
 static VKAPI_ATTR void VKAPI_CALL CmdCopyBufferToImage(VkCommandBuffer cmd,VkBuffer source,VkImage target,VkImageLayout layout,uint32_t count,const VkBufferImageCopy* copies){
-  vk(cmd).CmdCopyBufferToImage(cmd,source,target,layout,count,copies);omm::content_after_image_write(cmd,target);
+  const bool began=omm::content_before_image_write(cmd,target);vk(cmd).CmdCopyBufferToImage(cmd,source,target,layout,count,copies);omm::content_after_image_write(cmd,target,began);
 }
 static VKAPI_ATTR void VKAPI_CALL CmdCopyBufferToImage2(VkCommandBuffer cmd,const VkCopyBufferToImageInfo2* info){
-  auto fn=image_copy_proc<PFN_vkCmdCopyBufferToImage2>(cmd,"vkCmdCopyBufferToImage2","vkCmdCopyBufferToImage2KHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage);
+  auto fn=image_copy_proc<PFN_vkCmdCopyBufferToImage2>(cmd,"vkCmdCopyBufferToImage2","vkCmdCopyBufferToImage2KHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
 }
 static VKAPI_ATTR void VKAPI_CALL CmdCopyImage2(VkCommandBuffer cmd,const VkCopyImageInfo2* info){
-  auto fn=image_copy_proc<PFN_vkCmdCopyImage2>(cmd,"vkCmdCopyImage2","vkCmdCopyImage2KHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage);
+  auto fn=image_copy_proc<PFN_vkCmdCopyImage2>(cmd,"vkCmdCopyImage2","vkCmdCopyImage2KHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
 }
 static VKAPI_ATTR void VKAPI_CALL CmdBlitImage2(VkCommandBuffer cmd,const VkBlitImageInfo2* info){
-  auto fn=image_copy_proc<PFN_vkCmdBlitImage2>(cmd,"vkCmdBlitImage2","vkCmdBlitImage2KHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage);
+  auto fn=image_copy_proc<PFN_vkCmdBlitImage2>(cmd,"vkCmdBlitImage2","vkCmdBlitImage2KHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
 }
 static VKAPI_ATTR void VKAPI_CALL CmdResolveImage2(VkCommandBuffer cmd,const VkResolveImageInfo2* info){
-  auto fn=image_copy_proc<PFN_vkCmdResolveImage2>(cmd,"vkCmdResolveImage2","vkCmdResolveImage2KHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage);
+  auto fn=image_copy_proc<PFN_vkCmdResolveImage2>(cmd,"vkCmdResolveImage2","vkCmdResolveImage2KHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
 }
 static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectNV(VkCommandBuffer cmd,VkDeviceAddress address,uint32_t count,uint32_t stride,VkImage target,VkImageLayout layout,const VkImageSubresourceLayers* layers){
-  auto fn=image_copy_proc<PFN_vkCmdCopyMemoryToImageIndirectNV>(cmd,"vkCmdCopyMemoryToImageIndirectNV","vkCmdCopyMemoryToImageIndirectNV");if(!fn)return;fn(cmd,address,count,stride,target,layout,layers);omm::content_after_image_write(cmd,target,true);
+  auto fn=image_copy_proc<PFN_vkCmdCopyMemoryToImageIndirectNV>(cmd,"vkCmdCopyMemoryToImageIndirectNV","vkCmdCopyMemoryToImageIndirectNV");if(!fn)return;const bool began=omm::content_before_image_write(cmd,target,true);fn(cmd,address,count,stride,target,layout,layers);omm::content_after_image_write(cmd,target,began);
 }
 static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectKHR(VkCommandBuffer cmd,const VkCopyMemoryToImageIndirectInfoKHR* info){
-  auto fn=image_copy_proc<PFN_vkCmdCopyMemoryToImageIndirectKHR>(cmd,"vkCmdCopyMemoryToImageIndirectKHR","vkCmdCopyMemoryToImageIndirectKHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,true);
+  auto fn=image_copy_proc<PFN_vkCmdCopyMemoryToImageIndirectKHR>(cmd,"vkCmdCopyMemoryToImageIndirectKHR","vkCmdCopyMemoryToImageIndirectKHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage,true);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32_t n, const VkCommandBuffer* cmds) {

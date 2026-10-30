@@ -106,7 +106,7 @@ static std::vector<omm::Ticket> producer_fixtures(DeviceData& dd,VkCommandBuffer
     ib[1].image=owner->image;ib[1].dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;ib[1].oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;ib[1].newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     dd.vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,2,ib);
     VkImageCopy cp[3]{};for(uint32_t n=0;n<3;++n){cp[n].srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,n,i==0?1u:0u,1};cp[n].dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,n,0,1};cp[n].extent={4u>>n,4u>>n,1};}
-    dd.vk.CmdCopyImage(cmd,image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,owner->image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,3,cp);omm::content_after_image_write(cmd,owner->image);
+    const bool began=omm::content_before_image_write(cmd,owner->image);dd.vk.CmdCopyImage(cmd,image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,owner->image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,3,cp);omm::content_after_image_write(cmd,owner->image,began);
     ib[0].srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;ib[0].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;ib[0].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;ib[0].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     ib[1].srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;ib[1].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;ib[1].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;ib[1].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     dd.vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,0,nullptr,0,nullptr,2,ib);
@@ -146,23 +146,24 @@ static void content_fixture(DeviceData& dd,VkCommandPool pool){
   auto begin=[&]{vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"counter reset");omm::command_discard(cmd);VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};vkcheck(dd.vk.BeginCommandBuffer(cmd,&bi),"counter begin");omm::command_begin(cmd);};
   auto write=[&](bool unsupported){
     if(first){VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=image;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};dd.vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);}
-    VkClearColorValue color{};color.float32[3]=1;VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};dd.vk.CmdClearColorImage(cmd,image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,&color,1,&range);omm::content_after_image_write(cmd,image,unsupported);
+    const bool began=omm::content_before_image_write(cmd,image,unsupported);
+    VkClearColorValue color{};color.float32[3]=1;VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};dd.vk.CmdClearColorImage(cmd,image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,&color,1,&range);omm::content_after_image_write(cmd,image,began);
   };
   auto end=[&]{
     barrier(dd,cmd,VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,VK_ACCESS_2_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_READ_BIT|VK_ACCESS_2_TRANSFER_WRITE_BIT);
-    VkBufferCopy copies[]={{0,0,8},{source.imageOffset,8,4}};dd.vk.CmdCopyBuffer(cmd,source.buffer,readback.handle,2,copies);
+    VkBufferCopy copies[]={{0,0,8},{source.imageOffset,8,4},{8,12,4}};dd.vk.CmdCopyBuffer(cmd,source.buffer,readback.handle,3,copies);
     barrier(dd,cmd,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
     vkcheck(dd.vk.EndCommandBuffer(cmd),"counter end");omm::command_end(cmd,true);
     const VkCommandBuffer buffers[]={cmd};check(omm::content_dispatch_in_submit(buffers),"counter submit stage marker");
   };
-  auto submit=[&](const char* label,uint32_t global,uint32_t disabled,uint32_t perImage){
+  auto submit=[&](const char* label,uint32_t global,uint32_t disabled,uint32_t perImage,uint32_t active=0){
     const VkCommandBuffer commands[]={cmd};auto pending=omm::before_submit(&dd,commands);VkSubmitInfo s{VK_STRUCTURE_TYPE_SUBMIT_INFO};s.commandBufferCount=1;s.pCommandBuffers=commands;
     const auto result=dd.vk.QueueSubmit(dd.graphics_queue,1,&s,VK_NULL_HANDLE);omm::after_submit(&dd,dd.graphics_queue,pending,result==VK_SUCCESS);vkcheck(result,"counter submit");vkcheck(dd.vk.QueueWaitIdle(dd.graphics_queue),"counter idle");
-    const auto* values=static_cast<const uint32_t*>(readback.mapped);std::printf("CONTENT %s global=%u disabled=%u image=%u id=%llu slot=%u\n",label,values[0],values[1],values[2],source.imageId,source.slot);check(values[0]==global && values[1]==disabled && values[2]==perImage,"counter expected exact state");
+    const auto* values=static_cast<const uint32_t*>(readback.mapped);std::printf("CONTENT %s global=%u disabled=%u image=%u active=%u id=%llu slot=%u\n",label,values[0],values[1],values[2],values[3],source.imageId,source.slot);check(values[0]==global && values[1]==disabled && values[2]==perImage && values[3]==active,"counter expected exact state");
   };
   // TEST ONLY: prior producer fixtures have retired after queue completion.
   // Isolate this counter test; production never resets the global epoch.
-  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,8,0);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,0);
+  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,16,0);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,0);
   write(false);end();submit("first",1,0,1);
   // Replay must NOT repeat initialization, otherwise it would conceal the bug.
   first=false;begin();write(false);end();submit("second_recording",2,0,2);submit("same_CB_replay",3,0,3);
@@ -170,8 +171,22 @@ static void content_fixture(DeviceData& dd,VkCommandPool pool){
   begin();write(false);end();submit("after_saturation_no_wrap",UINT32_MAX,1,UINT32_MAX);
   // TEST-ONLY reinitialization isolates the unsupported-write branch. Production
   // never resets disabled/epochs after initial host-coherent zero initialization.
-  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,8,0);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,0);write(true);end();submit("unsupported_sticky_disable",0,1,0);
+  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,16,0);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,0);write(true);end();submit("unsupported_sticky_disable",0,1,0);
   begin();write(false);end();submit("disable_stays_set",1,1,1);
+  // TEST ONLY: split begin/end into submitted phases to expose the old torn
+  // epoch window deterministically. Active writers prohibit any certificate.
+  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,16,0);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,0);
+  check(omm::content_before_image_write(cmd,image),"tracked begin phase");end();submit("before_native_write",0,0,0,1);
+  begin();check(omm::content_before_image_write(cmd,image),"overlapping begin phase");end();submit("two_active_writers",0,0,0,2);
+  // Production pairs both phases in one marked CB. These deliberately split
+  // test-only completions must retain that submit marker explicitly.
+  begin();check(omm::mark_content_dispatch(cmd),"completion phase marker");omm::content_after_image_write(cmd,image,true);end();submit("first_completion_still_active",1,0,1,1);
+  begin();check(omm::mark_content_dispatch(cmd),"completion phase marker");omm::content_after_image_write(cmd,image,true);end();submit("last_completion_coherent",2,0,2,0);
+  begin();check(omm::mark_content_dispatch(cmd),"completion phase marker");omm::content_after_image_write(cmd,image,true);end();submit("unpaired_end_sticky_disable",2,1,2,0);
+  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,16,0);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,0);
+  check(!omm::content_before_image_write(cmd,image,true),"unsupported pre-write is not paired");end();submit("unsupported_before_native_write",0,1,0,0);
+  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,16,0);dd.vk.CmdFillBuffer(cmd,source.buffer,8,4,UINT32_MAX-1);
+  check(omm::content_before_image_write(cmd,image),"active saturation dispatch");end();submit("active_saturation_no_wrap",0,1,0,UINT32_MAX-1);
   vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"counter final reset");omm::command_discard(cmd);
   omm::content_view_destroyed(&dd,view);dd.vk.DestroyImageView(dd.device,view,nullptr);
   omm::content_image_destroyed(&dd,image);dd.vk.DestroyImage(dd.device,image,nullptr);omm::content_memory_freed(&dd,mem);dd.vk.FreeMemory(dd.device,mem,nullptr);

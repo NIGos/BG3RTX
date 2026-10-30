@@ -16,18 +16,19 @@ std::unordered_map<uint32_t,VkDescriptorSet> sets;
 std::vector<VkQueueFamilyProperties> families;
 VkBuffer counters{};VkDeviceMemory counterMemory{};void* mapped{};
 VkDeviceSize stride{},bytes{};
-VkDescriptorSetLayout setLayout{};VkDescriptorPool pool{};VkPipelineLayout layout{};VkPipeline pipeline{};
+VkDescriptorSetLayout setLayout{};VkDescriptorPool pool{};VkPipelineLayout layout{};VkPipeline pipeline{},beginPipeline{};
 uint64_t key(VkImage image){return uint64_t(reinterpret_cast<uintptr_t>(image));}
 uint64_t view_key(VkImageView view){return uint64_t(reinterpret_cast<uintptr_t>(view));}
 void cleanup(){
   if(pipeline)owner->vk.DestroyPipeline(owner->device,pipeline,nullptr);
+  if(beginPipeline)owner->vk.DestroyPipeline(owner->device,beginPipeline,nullptr);
   if(layout)owner->vk.DestroyPipelineLayout(owner->device,layout,nullptr);
   if(pool)owner->vk.DestroyDescriptorPool(owner->device,pool,nullptr);
   if(setLayout)owner->vk.DestroyDescriptorSetLayout(owner->device,setLayout,nullptr);
   if(mapped)owner->vk.UnmapMemory(owner->device,counterMemory);
   if(counters)owner->vk.DestroyBuffer(owner->device,counters,nullptr);
   if(counterMemory)owner->vk.FreeMemory(owner->device,counterMemory,nullptr);
-  pipeline=VK_NULL_HANDLE;layout=VK_NULL_HANDLE;pool=VK_NULL_HANDLE;setLayout=VK_NULL_HANDLE;
+  pipeline=beginPipeline=VK_NULL_HANDLE;layout=VK_NULL_HANDLE;pool=VK_NULL_HANDLE;setLayout=VK_NULL_HANDLE;
   counters=VK_NULL_HANDLE;counterMemory=VK_NULL_HANDLE;mapped=nullptr;sets.clear();memorySafe.clear();imageMemory.clear();registry.images.clear();registry.views.clear();
 }
 uint32_t certificate(VkFormat format){
@@ -58,7 +59,7 @@ VkDescriptorSet descriptor(uint32_t slot){
   if(auto i=sets.find(slot);i!=sets.end())return i->second;
   VkDescriptorSetAllocateInfo a{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};a.descriptorPool=pool;a.descriptorSetCount=1;a.pSetLayouts=&setLayout;
   VkDescriptorSet set{};if(owner->vk.AllocateDescriptorSets(owner->device,&a,&set)!=VK_SUCCESS)return VK_NULL_HANDLE;
-  VkDescriptorBufferInfo info[]={{counters,0,8},{counters,(VkDeviceSize(slot)+1)*stride,4}};
+  VkDescriptorBufferInfo info[]={{counters,0,16},{counters,(VkDeviceSize(slot)+1)*stride,4}};
   VkWriteDescriptorSet writes[2]{};for(uint32_t i=0;i<2;++i){writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=set;writes[i].dstBinding=i;writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=&info[i];}
   owner->vk.UpdateDescriptorSets(owner->device,2,writes,0,nullptr);sets.emplace(slot,set);return set;
 }
@@ -67,7 +68,7 @@ bool content_device_created(DeviceData* dd){
   std::lock_guard lock(contentMutex);if(owner)return active.load();owner=dd;recorded=false;cpuUnsupported=false;
   for(const auto& extension:dd->extensions)if(extension==VK_KHR_DEVICE_ADDRESS_COMMANDS_EXTENSION_NAME || extension==VK_NV_DEDICATED_ALLOCATION_IMAGE_ALIASING_EXTENSION_NAME){cleanup();return false;}
   VkPhysicalDeviceProperties props{};dd->inst->GetPhysicalDeviceProperties(dd->physical,&props);
-  stride=std::max<VkDeviceSize>(4,props.limits.minStorageBufferOffsetAlignment);
+  stride=std::max<VkDeviceSize>(16,props.limits.minStorageBufferOffsetAlignment);
   bytes=(VkDeviceSize(registry.capacity)+1)*stride;
   if(bytes>64ull*1024*1024 || bytes>props.limits.maxStorageBufferRange){cleanup();return false;}
   uint32_t n{};dd->inst->GetPhysicalDeviceQueueFamilyProperties(dd->physical,&n,nullptr);families.resize(n);dd->inst->GetPhysicalDeviceQueueFamilyProperties(dd->physical,&n,families.data());
@@ -94,8 +95,11 @@ bool content_device_created(DeviceData* dd){
   VkShaderModuleCreateInfo s{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};s.codeSize=blob.size_bytes;s.pCode=blob.code;VkShaderModule shader{};
   if(dd->vk.CreateShaderModule(dd->device,&s,nullptr,&shader)!=VK_SUCCESS){cleanup();return false;}
   VkComputePipelineCreateInfo p{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};p.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_COMPUTE_BIT,shader,"main",nullptr};p.layout=layout;
-  const auto result=dd->vk.CreateComputePipelines(dd->device,VK_NULL_HANDLE,1,&p,nullptr,&pipeline);dd->vk.DestroyShaderModule(dd->device,shader,nullptr);
-  if(result!=VK_SUCCESS){cleanup();return false;}
+  const auto result=dd->vk.CreateComputePipelines(dd->device,VK_NULL_HANDLE,1,&p,nullptr,&pipeline);
+  const uint32_t begin=1;VkSpecializationMapEntry entry{0,0,4};VkSpecializationInfo spec{1,&entry,4,&begin};p.stage.pSpecializationInfo=&spec;
+  const auto beginResult=result==VK_SUCCESS?dd->vk.CreateComputePipelines(dd->device,VK_NULL_HANDLE,1,&p,nullptr,&beginPipeline):result;
+  dd->vk.DestroyShaderModule(dd->device,shader,nullptr);
+  if(result!=VK_SUCCESS || beginResult!=VK_SUCCESS){cleanup();return false;}
   active.store(true,std::memory_order_release);log("[omm content] GPU epochs active slots=%u stride=%llu bytes=%llu",registry.capacity,stride,bytes);return true;
 }
 void content_device_destroyed(DeviceData* dd){
@@ -139,8 +143,8 @@ bool content_source_view(VkImageView view,ContentSource& out){
   out.requiredSamplingCertificate=image->requiredSamplingCertificate;
   return true;
 }
-void content_after_image_write(VkCommandBuffer cmd,VkImage image,bool unsupported){
-  if(!active.load() || device_of(cmd)!=owner)return;std::lock_guard lock(contentMutex);const auto* e=registry.lookup(key(image));if(!e || !e->boundSafe)return;
+bool content_before_image_write(VkCommandBuffer cmd,VkImage image,bool unsupported){
+  if(!active.load() || device_of(cmd)!=owner)return false;std::lock_guard lock(contentMutex);const auto* e=registry.lookup(key(image));if(!e || !e->boundSafe)return false;
   uint32_t family{};CmdState* state=cmd_state(cmd);
   const bool tracked=mark_content_dispatch(cmd);
   if(!tracked)cpuUnsupported=true;
@@ -152,11 +156,24 @@ void content_after_image_write(VkCommandBuffer cmd,VkImage image,bool unsupporte
     memory_barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
     owner->vk.CmdFillBuffer(cmd,counters,4,4,1); // Sticky; CPU never clears this word.
     memory_barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT);
-    return;
+    return false;
   }
   memory_barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
-  owner->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline);
+  owner->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,beginPipeline);
   owner->vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,1,&set,0,nullptr);
+  owner->vk.CmdDispatch(cmd,1,1,1);
+  memory_barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT);
+  restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
+  return true;
+}
+void content_after_image_write(VkCommandBuffer cmd,VkImage image,bool began){
+  if(!began || !active.load() || device_of(cmd)!=owner)return;
+  std::lock_guard lock(contentMutex);const auto* e=registry.lookup(key(image));
+  if(!e || !e->boundSafe)return; // Missing completion keeps active!=0, never certifies.
+  auto i=sets.find(e->slot);if(i==sets.end())return;
+  memory_barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
+  owner->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline);
+  owner->vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,1,&i->second,0,nullptr);
   owner->vk.CmdDispatch(cmd,1,1,1);
   memory_barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT);
   restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);

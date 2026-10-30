@@ -1,5 +1,15 @@
 # BG3RTX progress
 
+## OMM counter coherence fixed in isolation - 2026-10-30
+
+Image writes now mark GPU active-writers before the native command, then update
+image/global epochs and clear the active count after a device memory fence.
+Unsupported writes disable OMM before the write. This fixes torn counter proofs;
+native image/RT synchronization and scene attachment remain separate root gates.
+Full DLL build and 28/28 CTests pass. RTX 5090: 14 counter-phase states, six EXT
+rays, 2,176 UNORM and 8,704 BC endpoint samples pass; zero validation errors.
+No live deployment or measured GPU cost. Evidence: docs/evidence/omm-write-protocol-20261030.txt.
+
 ## Isolated integration checkpoint: Hair GPU gate and versioned OMM - 2026-10-30
 
 Branch codex/omm-bake now combines native Hair renderer 4ca35f5 with the actual
