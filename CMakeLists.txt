@@ -38,6 +38,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rtscene.cpp
   layer/omm_backend.cpp
   layer/omm_submit.cpp
+  layer/omm_bake.cpp
   layer/alphatest.cpp
   layer/bvhsplit.cpp
   layer/emissive.cpp
@@ -142,6 +143,10 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(omm_spatial_support_test tests/omm_spatial_support_test.cpp)
+add_test(NAME omm_spatial_support_test COMMAND omm_spatial_support_test)
+add_executable(omm_plain_bake_test tests/omm_plain_bake_test.cpp)
+add_test(NAME omm_plain_bake_test COMMAND omm_plain_bake_test)
 add_executable(native_scalp_coverage_test tests/native_scalp_coverage_test.cpp)
 add_test(NAME native_scalp_coverage_test COMMAND native_scalp_coverage_test)
 add_executable(omm_classify_test tests/omm_classify_test.cpp)
