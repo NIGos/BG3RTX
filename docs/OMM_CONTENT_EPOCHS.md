@@ -51,7 +51,7 @@ component waits idle before destroying recorded counter resources. It exposes no
 host ABI change; coordinated ABI 19 remains separate.
 
 Offline validation: host DLL builds with two workers; targeted CTests 3/3 pass:
-87 backend checks, 111 submission checks, 17 registry checks. Shader DXC/spirv-val
+87 backend checks, 111 submission checks, 77 registry/view checks. Shader DXC/spirv-val
 pass. Actual RTX 5090 synthetic GPU test, explicit Khronos validation, zero errors:
 first write global/image 1, same-CB replay 2, UINT32_MAX saturation + disable 1,
 subsequent update no wrap, unsupported sticky-fill disable 1, later supported update
@@ -60,3 +60,22 @@ transfer-only queue was not tested. Requested counter storage is 1,048,592 bytes
 (65,536 slots, alignment stride 16), excluding driver descriptor/pipeline overhead.
 GPU time is not measured. No game/window/presentation/input/config deployment.
 Evidence: docs/evidence/omm-content-epochs-20261030.txt.
+
+## Sampled view identity follow-up
+
+Native asset proof must use `content_source_view`, not image-only `content_source`.
+View creation/destruction hooks retain a never-reused 64-bit view ID plus the exact
+parent image generation. Accepted views are 2D, flags 0, empty pNext, color aspect,
+single layer 0, exact plain UNORM image format and an in-range nonempty mip span.
+VK_REMAINING_MIP_LEVELS/ARRAY_LAYERS are resolved against the stored image metadata.
+Unknown pNext (including VkImageViewMinLodEXT), flags/types/formats/ranges decline.
+A destroyed/reused image or view handle cannot inherit its predecessor's proof.
+Base mip, resolved level count, format and component swizzle are returned in
+ContentSource. Swizzles are retained because bake and native alpha must bind the
+SAME view; these fields and view ID belong in the root bake identity.
+
+Targeted CTests remain 3/3; registry/view CPU checks increased from 17 to 77.
+Actual GPU fixture created/destroyed/recreated a sampled view: view IDs 1 then 2,
+resolved base 0, one level, format 37, same image ID. Source lookup after destruction
+fails. The ray, endpoint and epoch replay/saturation gates still pass, with zero
+Khronos validation errors. Evidence: docs/evidence/omm-content-view-20261030.txt.

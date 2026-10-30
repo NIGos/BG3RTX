@@ -14,5 +14,21 @@ int main(){
   r.destroy(2);check(!r.create(3,true)); // Freed slots are NEVER recycled.
   ContentRegistry ids;ids.nextId=UINT64_MAX;check(!ids.create(1,true));
   ids.nextId=UINT64_MAX-1;check(ids.create(1,true));check(!ids.create(2,true));
+  ContentRegistry views;check(views.create(10,true,5,37));views.bind(10,true);
+  check(!views.create_view(0,10,true,0,1,37));check(!views.create_view(1,99,true,0,1,37));
+  check(!views.create_view(1,10,false,0,1,37));check(!views.create_view(1,10,true,0,1,38));
+  check(!views.create_view(1,10,true,0,0,37));check(!views.create_view(1,10,true,5,1,37));
+  check(!views.create_view(1,10,true,UINT32_MAX,1,37));check(!views.create_view(1,10,true,4,2,37));
+  for(uint32_t base=0;base<5;++base){
+    check(views.create_view(1,10,true,base,UINT32_MAX,37));const auto* view=views.lookup_view(1);
+    check(view && view->baseMip==base && view->levelCount==5-base);
+    for(uint32_t n=1;n<=5-base;++n){check(views.create_view(1,10,true,base,n,37));check(views.lookup_view(1)->levelCount==n);}
+  }
+  check(views.create_view(1,10,true,0,5,37,{1,2,3,4}));const auto old=*views.lookup_view(1);
+  check(old.components==std::array<uint32_t,4>{1,2,3,4});views.destroy_view(1);check(!views.lookup_view(1));
+  check(views.create_view(1,10,true,0,5,37));check(views.lookup_view(1)->viewId!=old.viewId);
+  views.destroy(10);check(!views.lookup_view(1));check(views.create(10,true,5,37));views.bind(10,true);check(!views.lookup_view(1));
+  check(views.create_view(1,10,true,0,5,37));check(views.lookup_view(1)->imageId!=old.imageId);
+  views.nextViewId=UINT64_MAX;check(!views.create_view(2,10,true,0,1,37));
   std::printf("OMM content registry checks %u; no device calls\n",checks);
 }

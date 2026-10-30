@@ -18,6 +18,7 @@ VkBuffer counters{};VkDeviceMemory counterMemory{};void* mapped{};
 VkDeviceSize stride{},bytes{};
 VkDescriptorSetLayout setLayout{};VkDescriptorPool pool{};VkPipelineLayout layout{};VkPipeline pipeline{};
 uint64_t key(VkImage image){return uint64_t(reinterpret_cast<uintptr_t>(image));}
+uint64_t view_key(VkImageView view){return uint64_t(reinterpret_cast<uintptr_t>(view));}
 void cleanup(){
   if(pipeline)owner->vk.DestroyPipeline(owner->device,pipeline,nullptr);
   if(layout)owner->vk.DestroyPipelineLayout(owner->device,layout,nullptr);
@@ -27,7 +28,7 @@ void cleanup(){
   if(counters)owner->vk.DestroyBuffer(owner->device,counters,nullptr);
   if(counterMemory)owner->vk.FreeMemory(owner->device,counterMemory,nullptr);
   pipeline=VK_NULL_HANDLE;layout=VK_NULL_HANDLE;pool=VK_NULL_HANDLE;setLayout=VK_NULL_HANDLE;
-  counters=VK_NULL_HANDLE;counterMemory=VK_NULL_HANDLE;mapped=nullptr;sets.clear();memorySafe.clear();imageMemory.clear();registry.images.clear();
+  counters=VK_NULL_HANDLE;counterMemory=VK_NULL_HANDLE;mapped=nullptr;sets.clear();memorySafe.clear();imageMemory.clear();registry.images.clear();registry.views.clear();
 }
 bool policy(const VkImageCreateInfo& c){
   const bool format=c.format==VK_FORMAT_R8_UNORM || c.format==VK_FORMAT_R8G8_UNORM ||
@@ -91,8 +92,17 @@ void content_device_destroyed(DeviceData* dd){
   if(recorded)dd->vk.DeviceWaitIdle(dd->device);
   cleanup();owner=nullptr;families.clear();
 }
-void content_image_created(DeviceData* dd,VkImage image,const VkImageCreateInfo& info){if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);registry.create(key(image),policy(info));}
+void content_image_created(DeviceData* dd,VkImage image,const VkImageCreateInfo& info){if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);registry.create(key(image),policy(info),info.mipLevels,uint32_t(info.format));}
 void content_image_destroyed(DeviceData* dd,VkImage image){if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);registry.destroy(key(image));imageMemory.erase(image);}
+void content_view_created(DeviceData* dd,VkImageView view,const VkImageViewCreateInfo& info){
+  if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);
+  const bool simple=!info.pNext && !info.flags && info.viewType==VK_IMAGE_VIEW_TYPE_2D &&
+    info.subresourceRange.aspectMask==VK_IMAGE_ASPECT_COLOR_BIT && info.subresourceRange.baseArrayLayer==0 &&
+    (info.subresourceRange.layerCount==1 || info.subresourceRange.layerCount==VK_REMAINING_ARRAY_LAYERS);
+  registry.create_view(view_key(view),key(info.image),simple,info.subresourceRange.baseMipLevel,
+    info.subresourceRange.levelCount,uint32_t(info.format),{uint32_t(info.components.r),uint32_t(info.components.g),uint32_t(info.components.b),uint32_t(info.components.a)});
+}
+void content_view_destroyed(DeviceData* dd,VkImageView view){if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);registry.destroy_view(view_key(view));}
 void content_memory_allocated(DeviceData* dd,VkDeviceMemory memory,const VkMemoryAllocateInfo& info){
   if(!active.load() || dd!=owner)return;std::lock_guard lock(contentMutex);
   VkPhysicalDeviceMemoryProperties m{};dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical,&m);
@@ -109,6 +119,13 @@ bool content_source(VkImage image,ContentSource& out){
   out={};if(!active.load())return false;std::lock_guard lock(contentMutex);const auto* e=registry.lookup(key(image));
   if(cpuUnsupported || !e || !e->boundSafe)return false;
   out={counters,bytes,(VkDeviceSize(e->slot)+1)*stride,e->imageId,e->slot};return true;
+}
+bool content_source_view(VkImageView view,ContentSource& out){
+  out={};if(!active.load())return false;std::lock_guard lock(contentMutex);const auto* v=registry.lookup_view(view_key(view));
+  if(cpuUnsupported || !v)return false;const auto* image=registry.lookup(v->image);if(!image || !image->boundSafe)return false;
+  out={counters,bytes,(VkDeviceSize(image->slot)+1)*stride,image->imageId,image->slot,v->viewId,v->baseMip,v->levelCount,VkFormat(v->format),
+    {VkComponentSwizzle(v->components[0]),VkComponentSwizzle(v->components[1]),VkComponentSwizzle(v->components[2]),VkComponentSwizzle(v->components[3])}};
+  return true;
 }
 void content_after_image_write(VkCommandBuffer cmd,VkImage image,bool unsupported){
   if(!active.load() || device_of(cmd)!=owner)return;std::lock_guard lock(contentMutex);const auto* e=registry.lookup(key(image));if(!e || !e->boundSafe)return;
