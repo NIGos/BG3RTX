@@ -4,6 +4,7 @@
 #include "../layer/omm_backend.h"
 #include "../layer/omm_submit.h"
 #include "../layer/omm_bake.h"
+#include "../layer/omm_content.h"
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -15,9 +16,13 @@
 namespace bg3 {
 static DeviceData* smokeDevice;
 static const char* producerShader;
+static std::vector<uint32_t> contentShader;
+static CmdState smokeCommand;
 void log(const char* fmt,...){va_list ap;va_start(ap,fmt);std::vprintf(fmt,ap);std::puts("");va_end(ap);}
 int cfg_int(const char* key,int fallback){return !std::strcmp(key,"rt_omm")?1:fallback;}
 DeviceData* device_of(const void*){return smokeDevice;}
+CmdState* cmd_state(VkCommandBuffer,bool){return &smokeCommand;}
+void restore_bindings(VkCommandBuffer,VkPipelineBindPoint){}
 uint32_t find_memory_type(DeviceData* dd,uint32_t bits,VkMemoryPropertyFlags want){
   VkPhysicalDeviceMemoryProperties p{};dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical,&p);
   for(uint32_t i=0;i<p.memoryTypeCount;++i)if((bits&(1u<<i))&&(p.memoryTypes[i].propertyFlags&want)==want)return i;
@@ -25,6 +30,7 @@ uint32_t find_memory_type(DeviceData* dd,uint32_t bits,VkMemoryPropertyFlags wan
 }
 VkDeviceAddress rt_buffer_address(VkBuffer buffer){VkBufferDeviceAddressInfo i{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};i.buffer=buffer;return smokeDevice->vk.GetBufferDeviceAddress(smokeDevice->device,&i);}
 bool shader_get(const char* name,const char*,const char*,Bg3ShaderBlob* out){
+  if(!std::strcmp(name,"rt/omm_content_epoch.hlsl")&&!contentShader.empty()){*out={contentShader.data(),contentShader.size()*4,1};return true;}
   if(!producerShader||std::strcmp(name,"rt/omm_bake_plain.hlsl"))return false;
   static std::vector<uint32_t> code;
   if(code.empty()){std::ifstream f(producerShader,std::ios::binary|std::ios::ate);if(!f)return false;auto n=f.tellg();if(n<=0||uint64_t(n)%4)return false;code.resize(size_t(n)/4);f.seekg(0);f.read(reinterpret_cast<char*>(code.data()),n);if(!f)return false;}
@@ -93,9 +99,49 @@ static std::vector<omm::Ticket> producer_fixtures(DeviceData& dd,VkCommandBuffer
   barrier(dd,cmd,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
   return tickets;
 }
+static void content_fixture(DeviceData& dd,VkCommandPool pool){
+  VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};ci.imageType=VK_IMAGE_TYPE_2D;ci.format=VK_FORMAT_R8G8B8A8_UNORM;ci.extent={2,2,1};ci.mipLevels=ci.arrayLayers=1;ci.samples=VK_SAMPLE_COUNT_1_BIT;ci.tiling=VK_IMAGE_TILING_OPTIMAL;ci.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+  VkImage image{};vkcheck(dd.vk.CreateImage(dd.device,&ci,nullptr,&image),"content fixture image");omm::content_image_created(&dd,image,ci);
+  VkMemoryRequirements req{};dd.vk.GetImageMemoryRequirements(dd.device,image,&req);VkPhysicalDeviceMemoryProperties memory{};dd.inst->GetPhysicalDeviceMemoryProperties(dd.physical,&memory);
+  uint32_t type=UINT32_MAX;for(uint32_t i=0;i<memory.memoryTypeCount;++i)if((req.memoryTypeBits&(1u<<i)) && (memory.memoryTypes[i].propertyFlags&VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) && !(memory.memoryTypes[i].propertyFlags&VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)){type=i;break;}
+  check(type!=UINT32_MAX,"non-host-visible image allocation for source proof");
+  VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};alloc.allocationSize=req.size;alloc.memoryTypeIndex=type;VkDeviceMemory mem{};vkcheck(dd.vk.AllocateMemory(dd.device,&alloc,nullptr,&mem),"content fixture memory");omm::content_memory_allocated(&dd,mem,alloc);
+  vkcheck(dd.vk.BindImageMemory(dd.device,image,mem,0),"content fixture bind");omm::content_image_bound(&dd,image,mem,true);
+  omm::ContentSource source{};check(omm::content_source(image,source),"content fixture eligible source");
+  Buffer readback;buffer(dd,readback,256,VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+  VkCommandBufferAllocateInfo ai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};ai.commandPool=pool;ai.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;ai.commandBufferCount=1;VkCommandBuffer cmd{};vkcheck(dd.vk.AllocateCommandBuffers(dd.device,&ai,&cmd),"counter command");omm::command_allocated(pool,cmd);
+  bool first=true;
+  auto begin=[&]{vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"counter reset");omm::command_discard(cmd);VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};vkcheck(dd.vk.BeginCommandBuffer(cmd,&bi),"counter begin");omm::command_begin(cmd);};
+  auto write=[&](bool unsupported){
+    if(first){VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=image;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};dd.vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);}
+    VkClearColorValue color{};color.float32[3]=1;VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};dd.vk.CmdClearColorImage(cmd,image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,&color,1,&range);omm::content_after_image_write(cmd,image,unsupported);
+  };
+  auto end=[&]{
+    barrier(dd,cmd,VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,VK_ACCESS_2_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_READ_BIT|VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    VkBufferCopy copies[]={{0,0,8},{source.imageOffset,8,4}};dd.vk.CmdCopyBuffer(cmd,source.buffer,readback.handle,2,copies);
+    barrier(dd,cmd,VK_PIPELINE_STAGE_2_TRANSFER_BIT,VK_ACCESS_2_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
+    vkcheck(dd.vk.EndCommandBuffer(cmd),"counter end");omm::command_end(cmd,true);
+    const VkCommandBuffer buffers[]={cmd};check(omm::content_dispatch_in_submit(buffers),"counter submit stage marker");
+  };
+  auto submit=[&](const char* label,uint32_t global,uint32_t disabled,uint32_t perImage){
+    const VkCommandBuffer commands[]={cmd};auto pending=omm::before_submit(&dd,commands);VkSubmitInfo s{VK_STRUCTURE_TYPE_SUBMIT_INFO};s.commandBufferCount=1;s.pCommandBuffers=commands;
+    const auto result=dd.vk.QueueSubmit(dd.graphics_queue,1,&s,VK_NULL_HANDLE);omm::after_submit(&dd,dd.graphics_queue,pending,result==VK_SUCCESS);vkcheck(result,"counter submit");vkcheck(dd.vk.QueueWaitIdle(dd.graphics_queue),"counter idle");
+    const auto* values=static_cast<const uint32_t*>(readback.mapped);std::printf("CONTENT %s global=%u disabled=%u image=%u id=%llu slot=%u\n",label,values[0],values[1],values[2],source.imageId,source.slot);check(values[0]==global && values[1]==disabled && values[2]==perImage,"counter expected exact state");
+  };
+  begin();write(false);end();submit("first",1,0,1);submit("same_CB_replay",2,0,2);first=false;
+  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,4,UINT32_MAX-1);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,UINT32_MAX-1);write(false);end();submit("saturation",UINT32_MAX,1,UINT32_MAX);
+  begin();write(false);end();submit("after_saturation_no_wrap",UINT32_MAX,1,UINT32_MAX);
+  // TEST-ONLY reinitialization isolates the unsupported-write branch. Production
+  // never resets disabled/epochs after initial host-coherent zero initialization.
+  begin();dd.vk.CmdFillBuffer(cmd,source.buffer,0,8,0);dd.vk.CmdFillBuffer(cmd,source.buffer,source.imageOffset,4,0);write(true);end();submit("unsupported_sticky_disable",0,1,0);
+  begin();write(false);end();submit("disable_stays_set",1,1,1);
+  vkcheck(dd.vk.ResetCommandBuffer(cmd,0),"counter final reset");omm::command_discard(cmd);
+  omm::content_image_destroyed(&dd,image);dd.vk.DestroyImage(dd.device,image,nullptr);omm::content_memory_freed(&dd,mem);dd.vk.FreeMemory(dd.device,mem,nullptr);
+}
 int main(int argc,char** argv){
-  check(argc>=2 && argc<=4,"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv [producer.spv]]");
-  if(argc==4)producerShader=argv[3];
+  check(argc>=2 && argc<=5,"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv [producer.spv [content.spv]]]");
+  if(argc>=4)producerShader=argv[3];
+  if(argc==5){std::ifstream f(argv[4],std::ios::binary|std::ios::ate);check(bool(f),"content shader");auto size=f.tellg();check(size>0&&uint64_t(size)%4==0,"content shader size");contentShader.resize(size_t(size)/4);f.seekg(0);f.read(reinterpret_cast<char*>(contentShader.data()),size);}
   // Process-local loader settings only. The parent also sets these before launch.
   SetEnvironmentVariableA("VK_LOADER_LAYERS_DISABLE","~implicit~");SetEnvironmentVariableA("VK_INSTANCE_LAYERS",nullptr);
   HMODULE loader=LoadLibraryA("vulkan-1.dll");check(loader!=nullptr,"existing Vulkan loader");
@@ -158,7 +204,7 @@ int main(int argc,char** argv){
   BG3RTX_DEVICE_FUNCS(LOAD_D)
 #undef LOAD_D
   dd.vk.GetDeviceQueue(dd.device,dd.graphics_family,0,&dd.graphics_queue);smokeDevice=&dd;
-  omm::device_created(&dd,true);check(omm::available(),"production EXT backend available");
+  omm::device_created(&dd,true);check(omm::available(),"production EXT backend available");check(omm::content_device_created(&dd),"production content epochs available");
   VkPhysicalDeviceAccelerationStructurePropertiesKHR asProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
   VkPhysicalDeviceProperties2 allProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,&asProperties};
   auto properties2=reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(gipa(instance.instance,"vkGetPhysicalDeviceProperties2"));properties2(dd.physical,&allProperties);
@@ -235,7 +281,7 @@ int main(int argc,char** argv){
       dd.vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,endpointPipeline);dd.vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipelineLayout,0,2,descriptors);dd.vk.CmdDispatch(cmd,34,1,1);
     }
     std::vector<omm::Ticket> produced;
-    if(argc==4)produced=producer_fixtures(dd,cmd,endpointImage,result);
+    if(argc>=4)produced=producer_fixtures(dd,cmd,endpointImage,result);
     barrier(dd,cmd,VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,VK_ACCESS_2_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_2_HOST_BIT,VK_ACCESS_2_HOST_READ_BIT);
     vkcheck(dd.vk.EndCommandBuffer(cmd),"end command");omm::command_end(cmd,true);
     const VkCommandBuffer commands[]={cmd};const auto prepared=omm::before_submit(&dd,commands);VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};submit.commandBufferCount=1;submit.pCommandBuffers=commands;
@@ -245,7 +291,7 @@ int main(int argc,char** argv){
     check(!contradictions && unknownCandidates==2,"zero known/native contradictions and actual unknown fallback");
     if(argc>=3){unsigned failures=0;for(unsigned i=0;i<2176;++i){auto* a=answers+(6+i)*4;const uint32_t layer=i/(64*17);failures+=a[0]!=(layer?0x3f800000u:0u) || a[1]!=layer || a[2]!=i%17 || a[3]!=(i/17)%64;}
       std::printf("UNORM8_ENDPOINTS samples=2176 UVs=64 LODs=17 mips=3 layers=2 filter=LINEAR mipmap=LINEAR repeat exact_bit_failures=%u\n",failures);check(!failures,"exact constant zero/one endpoint samples");}
-    if(argc==4){
+    if(argc>=4){
       const uint32_t expected[]={1,0,3};
       for(unsigned i=0;i<3;++i){
         auto* words=answers+12500+i*8;
@@ -263,10 +309,11 @@ int main(int argc,char** argv){
     dd.vk.DestroyPipeline(dd.device,pipeline,nullptr);dd.vk.DestroyPipelineLayout(dd.device,pipelineLayout,nullptr);dd.vk.DestroyDescriptorSetLayout(dd.device,layout,nullptr);dd.vk.DestroyShaderModule(dd.device,shader,nullptr);
     if(endpointPipeline)dd.vk.DestroyPipeline(dd.device,endpointPipeline,nullptr);if(endpointShader)dd.vk.DestroyShaderModule(dd.device,endpointShader,nullptr);
     if(endpointSampler)dd.vk.DestroySampler(dd.device,endpointSampler,nullptr);if(endpointView)dd.vk.DestroyImageView(dd.device,endpointView,nullptr);if(endpointImage)dd.vk.DestroyImage(dd.device,endpointImage,nullptr);if(endpointMemory)dd.vk.FreeMemory(dd.device,endpointMemory,nullptr);
-    dd.vk.DestroyAccelerationStructureKHR(dd.device,tlas,nullptr);dd.vk.DestroyAccelerationStructureKHR(dd.device,blas,nullptr);dd.vk.DestroyCommandPool(dd.device,pool,nullptr);omm::pool_discard(pool,true);
+    dd.vk.DestroyAccelerationStructureKHR(dd.device,tlas,nullptr);dd.vk.DestroyAccelerationStructureKHR(dd.device,blas,nullptr);if(argc==5)content_fixture(dd,pool);
+    dd.vk.DestroyCommandPool(dd.device,pool,nullptr);omm::pool_discard(pool,true);
     std::printf("PASS synthetic EXT: primitives=3 rays=6 contradictions=%u unknown_candidates=%u actual_timeline_retirement=1; not a BG3/FG/sampler proof\n",contradictions,unknownCandidates);
   }
-  omm::device_destroyed(&dd);omm::bake_device_destroyed(&dd);omm::submit_device_destroyed(&dd);dd.vk.DestroyDevice(dd.device,nullptr);
+  omm::device_destroyed(&dd);omm::bake_device_destroyed(&dd);omm::submit_device_destroyed(&dd);omm::content_device_destroyed(&dd);dd.vk.DestroyDevice(dd.device,nullptr);
   if(messenger){auto destroyDebug=reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(gipa(instance.instance,"vkDestroyDebugUtilsMessengerEXT"));destroyDebug(instance.instance,messenger,nullptr);}
   instance.DestroyInstance(instance.instance,nullptr);
   std::printf("validation_errors=%u\n",validationErrors.load());check(validationErrors==0,"zero validation errors");

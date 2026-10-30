@@ -2,6 +2,7 @@
 // shader modules (by SPIR-V hash), pipelines, images, views, framebuffers,
 // render passes and descriptor set contents.
 #include "host.h"
+#include "omm_content.h"
 #include "native_light_validation.h"
 #include "../common/descriptor_epoch.h"
 
@@ -605,6 +606,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
   VkResult r = device_of(device)->vk.CreateImage(device, &patched, alloc, out);
   if (r == VK_SUCCESS) {
     ImageRec rec{tracker().next_image_id++, patched, false};
+    omm::content_image_created(device_of(device),*out,patched);
     rec.ci.pNext = nullptr;
     rec.ci.pQueueFamilyIndices = nullptr;
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
@@ -614,6 +616,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
 }
 
 static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAllocationCallbacks* a) {
+  omm::content_image_destroyed(device_of(device),img);
   life_before_destroy((uint64_t)img, "image");   // first: the hooks below release our views of it
   sl_note_image_destroyed(img);
   ngx_on_destroy_image(img);  // our views of it go first
@@ -831,6 +834,21 @@ static VKAPI_ATTR void VKAPI_CALL DestroySwapchainKHR(VkDevice device, VkSwapcha
 
 // ---- host-visible memory, so uniform buffers can be read on the CPU ----
 
+static VKAPI_ATTR VkResult VKAPI_CALL AllocateMemory(VkDevice device,const VkMemoryAllocateInfo* info,const VkAllocationCallbacks* alloc,VkDeviceMemory* memory){
+  auto* dd=device_of(device);const auto result=dd->vk.AllocateMemory(device,info,alloc,memory);
+  if(result==VK_SUCCESS)omm::content_memory_allocated(dd,*memory,*info);return result;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL BindImageMemory(VkDevice device,VkImage image,VkDeviceMemory memory,VkDeviceSize offset){
+  auto* dd=device_of(device);const auto result=dd->vk.BindImageMemory(device,image,memory,offset);
+  if(result==VK_SUCCESS)omm::content_image_bound(dd,image,memory,true);return result;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL BindImageMemory2(VkDevice device,uint32_t count,const VkBindImageMemoryInfo* info){
+  auto* dd=device_of(device);auto fn=reinterpret_cast<PFN_vkBindImageMemory2>(dd->gdpa(device,"vkBindImageMemory2"));
+  if(!fn)fn=reinterpret_cast<PFN_vkBindImageMemory2>(dd->gdpa(device,"vkBindImageMemory2KHR"));
+  if(!fn)return VK_ERROR_EXTENSION_NOT_PRESENT;const auto result=fn(device,count,info);
+  if(result==VK_SUCCESS)for(uint32_t i=0;i<count;++i)omm::content_image_bound(dd,info[i].image,info[i].memory,info[i].pNext==nullptr);return result;
+}
+
 static VKAPI_ATTR VkResult VKAPI_CALL BindBufferMemory(VkDevice device, VkBuffer b, VkDeviceMemory m, VkDeviceSize o) {
   VkResult r = device_of(device)->vk.BindBufferMemory(device, b, m, o);
   if (r == VK_SUCCESS) {
@@ -878,6 +896,7 @@ static VKAPI_ATTR void VKAPI_CALL UnmapMemory(VkDevice device, VkDeviceMemory m)
 }
 
 static VKAPI_ATTR void VKAPI_CALL FreeMemory(VkDevice device, VkDeviceMemory m, const VkAllocationCallbacks* a) {
+  omm::content_memory_freed(device_of(device),m);
   {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().mapped.erase(m);
@@ -915,6 +934,9 @@ void register_tracker_hooks(HookMap& m) {
   m["vkGetSwapchainImagesKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&GetSwapchainImagesKHR);
   m["vkDestroySwapchainKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&DestroySwapchainKHR);
   HOOK(BindBufferMemory);
+  HOOK(AllocateMemory);
+  HOOK(BindImageMemory);
+  HOOK(BindImageMemory2);
   HOOK(BindBufferMemory2);
   HOOK(DestroyBuffer);
   HOOK(MapMemory);

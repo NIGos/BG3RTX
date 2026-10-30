@@ -2,6 +2,7 @@
 // pipeline/descriptor binding state, and draw/dispatch notes for the tracer.
 #include "host.h"
 #include "omm_submit.h"
+#include "omm_content.h"
 #include "assetdb.h"
 
 #include <cstring>
@@ -785,18 +786,21 @@ static void note_transfer(VkCommandBuffer cmd, const char* op, VkImage src, VkIm
 static VKAPI_ATTR void VKAPI_CALL CmdCopyImage(VkCommandBuffer cmd, VkImage s, VkImageLayout sl, VkImage d,
                                                VkImageLayout dl, uint32_t n, const VkImageCopy* r) {
   vk(cmd).CmdCopyImage(cmd, s, sl, d, dl, n, r);
+  omm::content_after_image_write(cmd,d);
   note_transfer(cmd, "copy", s, d);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBlitImage(VkCommandBuffer cmd, VkImage s, VkImageLayout sl, VkImage d,
                                                VkImageLayout dl, uint32_t n, const VkImageBlit* r, VkFilter f) {
   vk(cmd).CmdBlitImage(cmd, s, sl, d, dl, n, r, f);
+  omm::content_after_image_write(cmd,d);
   note_transfer(cmd, "blit", s, d);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdResolveImage(VkCommandBuffer cmd, VkImage s, VkImageLayout sl, VkImage d,
                                                   VkImageLayout dl, uint32_t n, const VkImageResolve* r) {
   vk(cmd).CmdResolveImage(cmd, s, sl, d, dl, n, r);
+  omm::content_after_image_write(cmd,d);
   note_transfer(cmd, "resolve", s, d);
 }
 
@@ -804,6 +808,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdClearColorImage(VkCommandBuffer cmd, VkImag
                                                      const VkClearColorValue* c, uint32_t n,
                                                      const VkImageSubresourceRange* r) {
   vk(cmd).CmdClearColorImage(cmd, img, l, c, n, r);
+  omm::content_after_image_write(cmd,img);
   note_transfer(cmd, "clear", VK_NULL_HANDLE, img);
 }
 
@@ -812,6 +817,31 @@ static VKAPI_ATTR void VKAPI_CALL CmdClearDepthStencilImage(VkCommandBuffer cmd,
                                                             const VkImageSubresourceRange* r) {
   vk(cmd).CmdClearDepthStencilImage(cmd, img, l, c, n, r);
   note_transfer(cmd, "clear_depth", VK_NULL_HANDLE, img);
+}
+
+template<class F> static F image_copy_proc(VkCommandBuffer cmd,const char* name,const char* alias){
+  auto* dd=device_of(cmd);auto fn=reinterpret_cast<F>(dd->gdpa(dd->device,name));if(!fn)fn=reinterpret_cast<F>(dd->gdpa(dd->device,alias));return fn;
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyBufferToImage(VkCommandBuffer cmd,VkBuffer source,VkImage target,VkImageLayout layout,uint32_t count,const VkBufferImageCopy* copies){
+  vk(cmd).CmdCopyBufferToImage(cmd,source,target,layout,count,copies);omm::content_after_image_write(cmd,target);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyBufferToImage2(VkCommandBuffer cmd,const VkCopyBufferToImageInfo2* info){
+  auto fn=image_copy_proc<PFN_vkCmdCopyBufferToImage2>(cmd,"vkCmdCopyBufferToImage2","vkCmdCopyBufferToImage2KHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyImage2(VkCommandBuffer cmd,const VkCopyImageInfo2* info){
+  auto fn=image_copy_proc<PFN_vkCmdCopyImage2>(cmd,"vkCmdCopyImage2","vkCmdCopyImage2KHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdBlitImage2(VkCommandBuffer cmd,const VkBlitImageInfo2* info){
+  auto fn=image_copy_proc<PFN_vkCmdBlitImage2>(cmd,"vkCmdBlitImage2","vkCmdBlitImage2KHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdResolveImage2(VkCommandBuffer cmd,const VkResolveImageInfo2* info){
+  auto fn=image_copy_proc<PFN_vkCmdResolveImage2>(cmd,"vkCmdResolveImage2","vkCmdResolveImage2KHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectNV(VkCommandBuffer cmd,VkDeviceAddress address,uint32_t count,uint32_t stride,VkImage target,VkImageLayout layout,const VkImageSubresourceLayers* layers){
+  auto fn=image_copy_proc<PFN_vkCmdCopyMemoryToImageIndirectNV>(cmd,"vkCmdCopyMemoryToImageIndirectNV","vkCmdCopyMemoryToImageIndirectNV");if(!fn)return;fn(cmd,address,count,stride,target,layout,layers);omm::content_after_image_write(cmd,target,true);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectKHR(VkCommandBuffer cmd,const VkCopyMemoryToImageIndirectInfoKHR* info){
+  auto fn=image_copy_proc<PFN_vkCmdCopyMemoryToImageIndirectKHR>(cmd,"vkCmdCopyMemoryToImageIndirectKHR","vkCmdCopyMemoryToImageIndirectKHR");if(!fn)return;fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,true);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32_t n, const VkCommandBuffer* cmds) {
@@ -956,8 +986,15 @@ void register_cmd_hooks(HookMap& m) {
   HOOK(CmdDispatch);
   HOOK(CmdDispatchIndirect);
   HOOK(CmdCopyImage);
+  HOOK(CmdCopyImage2);
+  HOOK(CmdCopyBufferToImage);
+  HOOK(CmdCopyBufferToImage2);
   HOOK(CmdBlitImage);
+  HOOK(CmdBlitImage2);
   HOOK(CmdResolveImage);
+  HOOK(CmdResolveImage2);
+  m["vkCmdCopyMemoryToImageIndirectNV"]=reinterpret_cast<PFN_vkVoidFunction>(&CmdCopyMemoryToImageIndirectNV);
+  m["vkCmdCopyMemoryToImageIndirectKHR"]=reinterpret_cast<PFN_vkVoidFunction>(&CmdCopyMemoryToImageIndirectKHR);
   HOOK(CmdClearColorImage);
   HOOK(CmdClearDepthStencilImage);
   HOOK(CmdExecuteCommands);

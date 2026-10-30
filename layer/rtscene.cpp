@@ -28,6 +28,7 @@
 #include "omm_backend.h"
 #include "omm_bake.h"
 #include "omm_submit.h"
+#include "omm_content.h"
 #include "../common/camera_epoch.h"
 #include "../common/cascade_casters.h"
 
@@ -748,6 +749,7 @@ void rt_device_destroyed(DeviceData* dd) {
   omm::device_destroyed(dd);
   omm::bake_device_destroyed(dd);
   omm::submit_device_destroyed(dd);
+  omm::content_device_destroyed(dd);
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();

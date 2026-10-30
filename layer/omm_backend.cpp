@@ -1,6 +1,7 @@
 #include "host.h"
 #include "omm_backend.h"
 #include "omm_submit.h"
+#include "omm_content.h"
 #include <algorithm>
 #include <cstddef>
 #include <map>
@@ -147,6 +148,7 @@ void device_created(DeviceData* dd, bool rtEnabled) {
   scratchAlignment=std::max<VkDeviceSize>(as.minAccelerationStructureScratchOffsetAlignment,1);
   enabled=submit_device_created(dd);
   if(!enabled){log("[omm] private completion timeline unavailable; backend disabled");return;}
+  if(!content_device_created(dd))log("[omm content] unavailable; native asset content proof must decline");
   log("[omm] EXT backend available max_four_state_level=%u; no known-state quality gate passed",properties.maxOpacity4StateSubdivisionLevel);
 }
 bool available() {std::lock_guard lock(mutex);return enabled && !retained && cfg_int("rt_omm",0);}
