@@ -3,6 +3,7 @@
 // render passes and descriptor set contents.
 #include "host.h"
 #include "native_light_validation.h"
+#include "../common/descriptor_epoch.h"
 
 #include <algorithm>
 #include <cstring>
@@ -424,7 +425,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, co
   VkResult r = device_of(device)->vk.AllocateDescriptorSets(device, ai, out);
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
-    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i) tracker().set_layouts[out[i]] = ai->pSetLayouts[i];
+    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i)
+      descriptor_set_allocated(tracker(), out[i], ai->pSetLayouts[i]);
   }
   return r;
 }
