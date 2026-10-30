@@ -500,19 +500,27 @@ static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_
       ++g_scalp_invalid;
       return false;
     }
-    if (captured.frame.available && captured.frame.dither_mode != 0.0f) {
-      // Camera raster dither needs original sample coordinates. Do not replace
-      // it with an RT hash or pretend this draw has native hard coverage.
-      ++g_scalp_dither;
-      return false;
-    }
-    const auto probe = native_scalp::evaluate(a.hash, captured.material, {1, 1, true}, captured.frame);
+    // Validate the material independently of original raster coordinates.
+    auto hard_frame=captured.frame;hard_frame.dither_mode=0.0f;
+    const auto probe = native_scalp::evaluate(a.hash, captured.material, {1, 1, true}, hard_frame);
     if (probe.status != native_scalp::Status::CompleteScalar) {
       ++g_scalp_invalid;
       return false;
     }
     r.p0[0] = captured.material.edge;
     r.p0[1] = captured.material.root;
+    if(captured.frame.available && captured.frame.dither_mode!=0.0f) {
+      auto* state=cmd_state(cmd);
+      if(!captured.projection_available || !state || !state->has_viewport) {++g_scalp_invalid;return false;}
+      const float viewport[4]={state->viewport.x,state->viewport.y,state->viewport.width,state->viewport.height};
+      if(!finite(viewport,4)||viewport[2]==0||viewport[3]==0) {++g_scalp_invalid;return false;}
+      auto* bytes=reinterpret_cast<uint8_t*>(&r);
+      std::memcpy(bytes+96,captured.projection.data(),64);
+      std::memcpy(bytes+160,viewport,16);
+      r.p0[2]=1.0f; // Explicit camera-dither packet. Old kind3 hard records stay zero.
+      r.scale[0]=captured.frame.phase;r.scale[1]=captured.frame.dither_mode;
+    }
+
   } else if (a.kind == 4) {
     native_hair::Captured captured;
     if (!native_hair::capture(a.hash, [&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes) {
@@ -594,7 +602,7 @@ bool alpha_add_draw(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint
   }
   if (rec_index) *rec_index = uint32_t(g_recs.size());
   g_recs.push_back(r);
-  if (r.kind == 3) ++g_scalp_hard;
+  if (r.kind == 3) {if(r.p0[2]!=0.0f) ++g_scalp_dither; else ++g_scalp_hard;}
   if (r.kind == 4) ++g_hair_records;
   return true;
 }
@@ -843,7 +851,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
         g_cache.size(), kTextures - 1, kCaches - 1, kMaxRecords, g_fail[0], g_fail[1], g_fail[2], g_fail[3], g_fail[4],
         g_fail[5], g_stale_views.load());
     if (native_scalp::has_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t)))))
-      log("[alpha scalp] native hard records %u; unsupported camera dither %u; invalid/missing native state %u; "
+      log("[alpha scalp] native hard records %u; native camera dither records %u; invalid/missing native state %u; "
           "RT cone footprint, not native raster sample identity",
           g_scalp_hard.exchange(0), g_scalp_dither.exchange(0), g_scalp_invalid.exchange(0));
     if (geo_native_hair_enabled()) log("[alpha hair] native coverage records %u; invalid/missing native state %u; unsupported native interfaces total %u; retired bounds-invalid primitives %u; "

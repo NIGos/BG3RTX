@@ -47,21 +47,41 @@ int main() {
     Captured c;
     unsigned calls=0;
     const bool captured=capture(r.hash,[&](unsigned set,unsigned binding,unsigned offset,void* dst,size_t size){
-      ++calls;check(size==8);
+      ++calls;
+      if(binding==2 && set==0) {check(offset==128 && size==64);float matrix[16]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};std::memcpy(dst,matrix,64);return true;}
+      check(size==8);
       const float data[2]={0.25f,0.75f};
       if(set==1){check(binding==r.material_binding && offset==0);}
       else {check(set==0 && binding==0 && offset==8);}
       std::memcpy(dst,data,size);return true;
     },c);
     check(captured && c.material.available && c.material.edge==0.25f && c.material.root==0.75f);
-    check(calls==(r.pass==Pass::CameraDepth?2u:1u));
+    check(calls==(r.pass==Pass::CameraDepth?3u:1u));
     check(!c.frame.coordinates_available);
+    check(c.projection_available==(r.pass==Pass::CameraDepth));
+    if(c.projection_available)check(c.projection[0]==1 && c.projection[15]==1);
     check(c.frame.available==(r.pass==Pass::CameraDepth));
     // A failed read must clear prior output, never reuse another draw's state.
     check(!capture(r.hash,[](unsigned,unsigned,unsigned,void*,size_t){return false;},c));
     check(!c.material.available && !c.frame.available);
   }
   check(!lookup(0x5a03e5b678b2d040ull)); // Hair is NOT Scalp.
+  for(uint64_t hash:{0x9e77575a9f377ec5ull,0x36eeb96ba83ea027ull}) {
+    Captured c;
+    auto reader=[&](bool nonfinite,unsigned set,unsigned binding,unsigned offset,void* dst,size_t bytes) {
+      if(set==0 && binding==2) {
+        check(offset==128 && bytes==64);
+        if(!nonfinite)return false;
+        float matrix[16]{};matrix[3]=std::numeric_limits<float>::quiet_NaN();std::memcpy(dst,matrix,64);return true;
+      }
+      check(bytes==8);const float data[2]={0.1f,1.0f};std::memcpy(dst,data,8);return true;
+    };
+    for(bool nonfinite:{false,true}) {
+      c.material.available=true;c.projection_available=true;
+      check(!capture(hash,[&](unsigned set,unsigned binding,unsigned offset,void* dst,size_t bytes){return reader(nonfinite,set,binding,offset,dst,bytes);},c));
+      check(!c.material.available && !c.frame.available && !c.projection_available);
+    }
+  }
   check(evaluate(0,{},{}).status==Status::UnsupportedShader);
   check(evaluate(depth,{0,0,true},{1,1,true}).status==Status::MissingInputs);
   check(evaluate(shadow,{},{}).status==Status::MissingInputs);

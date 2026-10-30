@@ -59,7 +59,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float dist = length(P), pa = pixel_angle(uv);
   RtCone cone = {0,pa};
 #if defined(RT_PRIMARY_EPOCH) || defined(RT_PRIMARY_IDENTITY)
-#ifdef RT_NATIVE_HAIR
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_SCALP)
   RtHit hit = rt_closest_hit(0.0.xxx,P/dist,dist*1.5+1.0,cone,true);
 #else
   RtHit hit = rt_closest_hit(0.0.xxx,P/dist,dist*1.5+1.0,cone);

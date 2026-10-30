@@ -2091,7 +2091,9 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   bool audit = false;
   if (c->split && capturable) {
     const bool list = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && kind <= 1;
-    BvhDraw bd{list && pi.inst.ok && (!alpha_fs || (pi.inst.uv_ok && a.kind != 4)) ? &pi.inst : nullptr, s->vs, d.pipe_id, alpha_fs,
+    // Native camera cutouts retain their original projection/Frame packet.
+    // Keep the matching positions dynamic, never a separately transformed cache.
+    BvhDraw bd{list && pi.inst.ok && (!alpha_fs || (pi.inst.uv_ok && a.kind != 4 && a.kind != 3)) ? &pi.inst : nullptr, s->vs, d.pipe_id, alpha_fs,
                args, s};
     uint32_t mesh_tris = 0;
     BvhVerdict v = bvh_classify(cmd, bd, &token, &mesh_tris);
