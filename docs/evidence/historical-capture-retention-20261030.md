@@ -76,8 +76,8 @@ Future owner-approved immutable hard-link consolidation could retain all names
 and bytes. It requires writer/liveness checks and does not relax raw holds.
 
 **Approved raw disposal: 0 bytes.** No analyzed repeat was proven safe to discard
-as a raw dataset in this bounded review. The remaining roughly 177 GiB capture
-collections need further batch-specific owner classification; this is not a
-claim that the unreviewed remainder is disposable or that all 1.46 GiB can be
+as a raw dataset in this bounded review. The two source collections total roughly 177 GiB. Outside these 52 classified
+directories, their raw data remain held pending batch-specific owner review.
+This is not a claim that the unreviewed remainder is disposable or that all 1.46 GiB can be
 reclaimed immediately. Preserve PAUSED/failure/control sets and current renderer
 holds independently of any future lossless PNG consolidation.
