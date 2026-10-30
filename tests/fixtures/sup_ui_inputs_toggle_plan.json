@@ -1,0 +1,332 @@
+[
+  {
+    "seconds": 95,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "pan_inputs=0,fg_input_copy=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=1,pan_inputs=0,fg_snap=0"
+  },
+  {
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 100,
+    "motion_end": 100,
+    "set": "fg_input_copy=0,pan_inputs=0,fg_snap=0"
+  }
+]

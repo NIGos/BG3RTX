@@ -528,6 +528,7 @@ void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue)
 namespace {
 struct PanSample {
   Dump dump{};
+  VkImage image = VK_NULL_HANDLE;
   std::string name;
   uint64_t recorded = 0, submitted = UINT64_MAX, built = UINT64_MAX;
   uint64_t time_ms = 0;
@@ -537,6 +538,7 @@ std::mutex pan_mu;
 std::vector<PanSample> pan_samples;
 int pan_serial = 0;
 uint32_t pan_frames = 0;
+uint32_t pan_target = 16;
 uint64_t pan_first = 0, pan_last = 0, pan_bytes = 0;
 bool pan_finished = true, pan_invalid = false;
 std::string pan_dir;
@@ -554,31 +556,37 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
     if (serial != pan_serial && pan_finished) {
       pan_serial = serial;
       pan_frames = 0;
+      // The other recording threads can finish the first frame's inputs
+      // before depth arms the burst. One extra frame guarantees 16 late inputs.
+      pan_target = cfg_int("pan_inputs", 0) ? 17 : 16;
       pan_bytes = 0;
       pan_first = now;
       pan_finished = pan_invalid = false;
       pan_dir = root_dir() + "\\captures\\pan-" + capture_stamp() + "-" + std::to_string(serial);
-      log("[pan] burst %d armed at record frame %llu, K=16", serial, (unsigned long long)now);
+      log("[pan] burst %d armed at record frame %llu, K=%u", serial, (unsigned long long)now, pan_target);
     }
-    if (pan_finished || pan_frames >= 16) return false;
+    if (pan_finished || pan_frames >= pan_target) return false;
     if (pan_frames && now != pan_last + 1) pan_invalid = true;
     pan_last = now;
     ++pan_frames;
     state->pan_epoch.bind(state->recording, now, serial);
-  } else if (std::strcmp(name, "final") == 0) {
+  } else if (std::strcmp(name, "final") == 0 || std::strncmp(name, "rr_", 3) == 0 ||
+             std::strncmp(name, "fg_", 3) == 0) {
     // The tonemap pass is recorded in another command buffer than the lighting one: no
     // shared epoch. Its record frame, inside the burst's frames, identifies it.
     // It can be recorded before the lighting command buffer of its own frame (another thread):
     // accept the burst's 16 frames by number, not only those already seen by the lighting pass.
-    if (pan_frames == 0 || now < pan_first || now >= pan_first + 16) return false;
+    if (pan_frames == 0 || now < pan_first || now >= pan_first + pan_target) return false;
   } else {
     if (!state->pan_epoch.matches(state->recording, serial)) return false;
     now = state->pan_epoch.frame;
   }
-  const bool is_final = std::strcmp(name, "final") == 0;
+  const bool is_final = std::strcmp(name, "final") == 0 || std::strncmp(name, "rr_", 3) == 0 ||
+                        std::strncmp(name, "fg_", 3) == 0;
   if (pan_finished || !pan_frames || now < pan_first || (!is_final && now > pan_last)) return false;
   PanSample p;
   p.name = name;
+  p.image = r->image;
   p.recorded = now;
   p.recording = state->recording;
   p.time_ms = GetTickCount64();
@@ -675,14 +683,14 @@ void pan_on_submit(const std::vector<VkCommandBuffer>& cmds) {
 
 void pan_on_present(VkQueue queue) {
   std::lock_guard<std::mutex> lock(pan_mu);
-  if (pan_finished || pan_frames < 16 || frame_index() < pan_last + 3) return;
+  if (pan_finished || pan_frames < pan_target || frame_index() < pan_last + 3) return;
   DeviceData* dd = main_device();
   // The waits occur after the entire burst, never inside its measurement.
   if (dd->vk.QueueWaitIdle(queue) != VK_SUCCESS) pan_invalid = true;
   if (dd->graphics_queue != queue && dd->vk.QueueWaitIdle(dd->graphics_queue) != VK_SUCCESS) pan_invalid = true;
   make_dirs(pan_dir);
   std::string manifest = "{\"version\":1,\"serial\":" + std::to_string(pan_serial) +
-      ",\"K\":16,\"final_stage\":\"native_tonemap_hudless\",\"samples\":[";
+      ",\"K\":" + std::to_string(pan_target) + ",\"final_stage\":\"native_tonemap_hudless\",\"samples\":[";
   bool first = true;
   unsigned ordinal = 0;
   for (auto& p : pan_samples) {
@@ -699,6 +707,7 @@ void pan_on_present(VkQueue queue) {
     manifest += (first ? "" : ",") + std::string("{\"name\":\"") + p.name + "\",\"file\":\"" + file +
         "\",\"record_frame\":" + std::to_string(p.recorded) + ",\"submit_frame\":" + std::to_string(p.submitted) +
         ",\"command_recording\":" + std::to_string(p.recording) +
+        ",\"image\":\"" + std::to_string(uint64_t(p.image)) + "\"" +
         ",\"tlas_record_frame\":" + std::to_string(p.built) + ",\"format\":" + std::to_string(d.format) +
         ",\"time_ms\":" + std::to_string(p.time_ms) +
         ",\"width\":" + std::to_string(d.w) + ",\"height\":" + std::to_string(d.h) + "}";

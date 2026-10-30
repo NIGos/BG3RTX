@@ -1,5 +1,45 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## Transient FG inputs - 2026-10-30 (`sup/ui-inputs`, default off)
+
+The inn's captured floating text is in the UI image, absent from RR input colour and
+hudless. Other in-world UI types are not all qualified. Raw sRGB UI does not satisfy
+HDR10 composition: mean error 0.085 on UI pixels, zero outside. Existing fg_ui_pq=1
+reduces it to 0.000075 but remains off without a qualified visual gate.
+
+The deciding pair gate finds late depth entirely cleared to zero in 64/128 samples
+(8/16 in each burst), after valid nonzero depth at NGX evaluate. The MV image is finite
+before/after RR and its post replay, then has 3 non-finite components in render pixels
+x 512..551, y 80..103 at UI composite. Captures locate the intervening damage, not its
+writer. Input layouts are also stale: depth tag 3 and MV tag 2 versus observed layout 5.
+The game performs these transitions in CmdWaitEvents(2), which FG tracking omitted.
+
+`fg_input_copy=0` preserves the actual depth/MV pair before evaluate in private D24S8
+and RG16F images. Depth has a depth-only view. Submit order selects the matching pair;
+present's counter is submit's counter plus 1. The option also tracks event-wait layouts
+for FG tags. Diagnostics maintain independent observations, leaving key-off tags intact.
+
+A slot cannot be reused until the SDK publishes a nonzero input-consumption fence value
+and it completes. Earlier submitted copies deselected by a toggle retire under the next
+present's fence; unsubmitted/future copies remain reserved. CPU tests cover these cases.
+Eight busy slots fall back safely and log failure. Resizing and device teardown release
+both images only after consumption. There is no ABI or shader change.
+
+`sup-ui-inputs-pair-gate`: 8 valid bursts, 17 lighting and at least 16 input frames each;
+68/68 MV and 68/68 masked D24 copies match NGX. Median GPU pair-copy cost 0.026 ms.
+Steady-state FG 2.00, status/API errors 0; no new VUIDs during measurement, no VK_ERROR,
+NVIDIA events or dumps. Six existing startup validation IDs precede the measurement.
+The earlier lease stress completed 16 on/off cycles without exhaustion.
+
+The full quality gate is NOT passed. Static native-final class 4 tflk off 1.51 / 1.45%,
+on 1.43 / 1.63%; energy +0.020%, within off-repeat spread 0.126%. Native final precedes
+UI and FG. Slow posted rotation is intermittent; views and near-UI coverage differ.
+Presented PNG readbacks stall, so their metrics are review-only. Keep default 0.
+
+After restarting, load The Blushing Mermaid - 96h 39m and compare fg_input_copy=0/1
+with floating text/selection UI visible while rotating continuously. Keep fg_ui_pq=0
+for that comparison. Evidence and limitations: docs/evidence/ui-inputs-20261030.json.
+
 ## Live FG matrix — 2026-10-29, no promotion
 
 Static same-view parity PASS: 30 debug traces, FG 2 primary 99.5195-99.5215%,

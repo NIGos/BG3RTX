@@ -1,5 +1,44 @@
 # BG3RTX progress
 
+USER CHECK (FG input protection, candidate stays off): restart the game after the layer
+update. Load The Blushing Mermaid - 96h 39m. Compare live `fg_input_copy=0/1` while
+rotating past foliage with floating text, names or selection UI visible. Keep `fg_ui_pq=0`
+for this comparison. Input preservation is verified; the full flicker bug is still open.
+
+## UI / FG inputs - 2026-10-30 (`sup/ui-inputs`, default off)
+
+- Found two invalid FG inputs in the inn. In the deciding 128 paired samples, late
+  depth is entirely zero in 64 samples (8/16 in each burst), despite nonzero scene
+  depth before RR. The same MV image is finite through RR/post, then gains 3 non-finite
+  components in a 40 x 24 pixel region before UI composite. The writer is not identified.
+- Layouts were also wrong: depth tagged 3 / observed 5, MV tagged 2 / observed 5.
+  CmdWaitEvents(2) transitions were missing from FG tracking. With the correction,
+  both tags are 5 / observed 5. Diagnostics observe actual layouts without repairing
+  the key-off tags, so the baseline is preserved.
+- KEPT, default 0: `fg_input_copy` preserves the depth/MV pair from the same NGX evaluate
+  in private D24S8/RG16F images, with a depth-only view. Submit order selects the pair;
+  the SDK input-consumption fence guards reuse, including copies deselected by toggles.
+  No ABI or shader changes. All ordinary shader sources remain identical.
+- `sup-ui-inputs-pair-gate`: 8 valid bursts, 17 lighting frames and at least 16 RR/FG
+  input frames each. 68/68 MV copies and 68/68 masked D24 copies equal the finite,
+  pre-UI inputs. GPU pair-copy median 0.026 ms. FG steady-state ratio 2.00, status 0,
+  API errors 0; no new VUIDs after capture starts, no VK_ERROR, device events or dumps.
+  Six existing validation IDs occur before measurement; they are listed in the evidence.
+- NOT PROMOTED: native final class 4 tflk off 1.51 / 1.45%, on 1.43 / 1.63%.
+  Static mean energy differs by +0.020%, within the off-repeat spread (0.126%).
+  Native final is pre-UI/pre-FG. Posted rotation has stationary windows and view jumps,
+  and near-UI foliage coverage differs. A full visual improvement is not established.
+- The captured floating text is absent from RR colour and hudless, present only in UI.
+  Raw UI fails the HDR10 blend (mean error 0.085 on UI pixels). Existing fg_ui_pq=1
+  reduces it to 0.000075, but also stays 0 without a qualified visual gate.
+- Initial evidence was invalid (15 late frames / expect typo); first copy gate had a
+  present-counter offset; Vulkan exposed stale layouts. Each test was corrected.
+  The lease stress completed 16 on/off cycles without exhaustion; the paired gate
+  also exercises off/on twice in static and scheduled rotation windows. All 13 CTests pass.
+- Raw pan directories are deleted after analysis. Manifests, previews and numbers remain
+  in captures/ui-inputs. Evidence: docs/evidence/ui-inputs-20261030.json.
+  Next: qualified continuous rotation with matched in-world UI before default 1.
+
 USER CHECK (hidden floor squares fixed, default on): restart after the layer update. Load
 The Blushing Mermaid - 96h 39m. Look near the crates and stage edge; compare the live key
 `rt_capture_discard=0/1`. The two dark square shadows should disappear with 1.

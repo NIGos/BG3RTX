@@ -1,0 +1,400 @@
+{
+  "date": "2026-10-30",
+  "branch": "sup/ui-inputs",
+  "base": "f257d00",
+  "save": "The Blushing Mermaid - 96h 39m",
+  "ui": {
+    "raw_blend_error_mean_ui_pixels": 0.085,
+    "pq_blend_error_mean_ui_pixels": 7.5e-05,
+    "pq_default": 0,
+    "scope": "Captured floating text absent from RR input and hudless, present in separate UI. Other in-world UI types are not all qualified."
+  },
+  "quality_limits": [
+    "Native final is pre-UI/pre-FG; it cannot measure generated-frame defects.",
+    "Posted rotation has stationary burst windows and view jumps, not qualified continuous slow motion.",
+    "UI text and near-UI foliage coverage differ between key windows.",
+    "Presented PNG readbacks stall; their flicker metrics are review-only."
+  ],
+  "toggle_stress": {
+    "log": "captures\\queue\\logs\\sup-ui-inputs-toggle-stress.1.102159.log",
+    "cycles": 16,
+    "private_images_created": 2,
+    "pool_exhaustions": 0,
+    "layout_errors": 0,
+    "vk_error_results": 0,
+    "scope": "MV-only prototype; same fence/retirement logic, 16 cycles. Final pair gate also exercises 4 on windows."
+  },
+  "decision": "Keep optional correction, fg_input_copy=0. Coherent NGX depth/MV pair and input layouts repaired. Full visual flicker gate not passed.",
+  "jobs": [
+    {
+      "name": "sup-ui-inputs-evidence",
+      "queue_valid": false,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-evidence.1.090449.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "INVALID (missing: displayed/rendered 2.00); Run ended: done after 181s (exclusive)"
+    },
+    {
+      "name": "sup-ui-inputs-pq-gate",
+      "queue_valid": true,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-pq-gate.1.091300.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "Run ended: done after 409s (exclusive)"
+    },
+    {
+      "name": "sup-ui-inputs-mvec-gate",
+      "queue_valid": false,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-mvec-gate.1.092716.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "INVALID (missing: MV copy frame .*selected 1 | gpu FG MV copy: | forbidden log pattern: MV copy unavailable); Run ended: done after 424s (exclusive)"
+    },
+    {
+      "name": "sup-ui-inputs-mvec-gate2",
+      "queue_valid": true,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-mvec-gate2.1.093705.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "Run ended: done after 414s (exclusive)"
+    },
+    {
+      "name": "sup-ui-inputs-validation",
+      "queue_valid": true,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-validation.1.094530.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "Run ended: done after 231s (exclusive)"
+    },
+    {
+      "name": "sup-ui-inputs-final-gate",
+      "queue_valid": false,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-final-gate.1.095513.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "INVALID (missing: forbidden log pattern: VUID-VkImageMemoryBarrier-oldLayout-01197); Run ended: done after 429s (exclusive)"
+    },
+    {
+      "name": "sup-ui-inputs-event-gate",
+      "queue_valid": true,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-event-gate.1.100338.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "Run ended: done after 434s (exclusive)"
+    },
+    {
+      "name": "sup-ui-inputs-gate",
+      "queue_valid": true,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-gate.1.101211.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "Run ended: done after 430s (exclusive)"
+    },
+    {
+      "name": "sup-ui-inputs-toggle-stress",
+      "queue_valid": true,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-toggle-stress.1.102159.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "Run ended: done after 243s (exclusive)"
+    },
+    {
+      "name": "sup-ui-inputs-pair-gate",
+      "queue_valid": true,
+      "log": "captures\\queue\\logs\\sup-ui-inputs-pair-gate.1.103444.log",
+      "nv153": 0,
+      "dumps": [],
+      "outcome": "Run ended: done after 414s (exclusive)"
+    }
+  ],
+  "transport": {
+    "serials": [
+      980,
+      981,
+      982,
+      983,
+      984,
+      985,
+      986,
+      987
+    ],
+    "lighting_frames_each": 17,
+    "minimum_input_frames": 16,
+    "valid": true
+  },
+  "motion_vectors": {
+    "paired_late_frames": 128,
+    "same_source_image": 128,
+    "late_nonfinite_frames": 128,
+    "late_nonfinite_components_per_frame": [
+      3
+    ],
+    "early_nonfinite_components_max": 0,
+    "damaged_pixels_range": [
+      935,
+      960
+    ],
+    "damaged_c4_pixels_max": 38,
+    "rect_render_pixels": [
+      512,
+      80,
+      551,
+      103
+    ],
+    "exact_private_copies": 68,
+    "private_copy_samples": 68
+  },
+  "depth": {
+    "paired_late_frames": 128,
+    "same_source_image": 128,
+    "late_entire_image_zero_frames": 64,
+    "early_entire_image_zero_frames": 0,
+    "render_pixels": 2731520,
+    "exact_masked_private_copies": 68,
+    "private_copy_samples": 68,
+    "probe": "captures/ui-inputs/980/depth-probe.npz: D24 integer ranges before RR 15265..1629872; late 0..0 on first differing frame."
+  },
+  "input_layouts": {
+    "key0": [
+      [
+        "3",
+        "5",
+        "2",
+        "5"
+      ]
+    ],
+    "key1": [
+      [
+        "5",
+        "5",
+        "5",
+        "5"
+      ]
+    ],
+    "cause": "CmdWaitEvents and CmdWaitEvents2 transitions omitted from FG tracking. Diagnostic observations are independent; key-off tags remain unchanged."
+  },
+  "windows": [
+    {
+      "serial": 980,
+      "key": 0,
+      "scheduled": "static",
+      "world_ui_pixels": 0,
+      "native_final": {
+        "n": 17,
+        "mean": 0.22860680520534515,
+        "all_pct": 0.44329604506492615,
+        "c4_pixels": 154422,
+        "c4_pct": 1.5111562013626099,
+        "near_ui_c4_pixels": 5440,
+        "near_ui_c4_pct": 0.7794896364212036,
+        "near_ui_c4_mean": 0.36630845069885254
+      },
+      "mv_copies": 0,
+      "depth_copies": 0,
+      "rr_mv_magnitude": {
+        "p50": 0.00018310546875,
+        "p95": 0.01345436903648068,
+        "max": 13.576760292053223
+      }
+    },
+    {
+      "serial": 981,
+      "key": 1,
+      "scheduled": "static",
+      "world_ui_pixels": 0,
+      "native_final": {
+        "n": 17,
+        "mean": 0.2287888377904892,
+        "all_pct": 0.3965442180633545,
+        "c4_pixels": 159830,
+        "c4_pct": 1.4318073987960815,
+        "near_ui_c4_pixels": 0,
+        "near_ui_c4_pct": null,
+        "near_ui_c4_mean": null
+      },
+      "mv_copies": 17,
+      "depth_copies": 17,
+      "rr_mv_magnitude": {
+        "p50": 0.0002516543900128454,
+        "p95": 0.01291698473505673,
+        "max": 40.54628372192383
+      }
+    },
+    {
+      "serial": 982,
+      "key": 0,
+      "scheduled": "static",
+      "world_ui_pixels": 0,
+      "native_final": {
+        "n": 17,
+        "mean": 0.2288946956396103,
+        "all_pct": 0.33365899324417114,
+        "c4_pixels": 156246,
+        "c4_pct": 1.4470670223236084,
+        "near_ui_c4_pixels": 3668,
+        "near_ui_c4_pct": 0.9697732329368591,
+        "near_ui_c4_mean": 0.37532055377960205
+      },
+      "mv_copies": 0,
+      "depth_copies": 0,
+      "rr_mv_magnitude": {
+        "p50": 0.0002516543900128454,
+        "p95": 0.012540021073073124,
+        "max": 12.757247924804688
+      }
+    },
+    {
+      "serial": 983,
+      "key": 1,
+      "scheduled": "static",
+      "world_ui_pixels": 0,
+      "native_final": {
+        "n": 17,
+        "mean": 0.22880209982395172,
+        "all_pct": 0.40847155451774597,
+        "c4_pixels": 155329,
+        "c4_pct": 1.6335514783859253,
+        "near_ui_c4_pixels": 0,
+        "near_ui_c4_pct": null,
+        "near_ui_c4_mean": null
+      },
+      "mv_copies": 17,
+      "depth_copies": 17,
+      "rr_mv_magnitude": {
+        "p50": 0.0002593994140625,
+        "p95": 0.022311335057019877,
+        "max": 20.660539627075195
+      }
+    },
+    {
+      "serial": 984,
+      "key": 0,
+      "scheduled": "slow_rotation",
+      "world_ui_pixels": 0,
+      "native_final": {
+        "n": 17,
+        "mean": 0.22877022624015808,
+        "all_pct": 0.8185613751411438,
+        "c4_pixels": 231740,
+        "c4_pct": 1.421913743019104,
+        "near_ui_c4_pixels": 23759,
+        "near_ui_c4_pct": 1.1055704355239868,
+        "near_ui_c4_mean": 0.3303587734699249
+      },
+      "mv_copies": 0,
+      "depth_copies": 0,
+      "rr_mv_magnitude": {
+        "p50": 0.000492081162519753,
+        "p95": 0.032988392934203144,
+        "max": 11.339217185974121
+      }
+    },
+    {
+      "serial": 985,
+      "key": 1,
+      "scheduled": "slow_rotation",
+      "world_ui_pixels": 0,
+      "native_final": {
+        "n": 17,
+        "mean": 0.22965648770332336,
+        "all_pct": 0.36789748072624207,
+        "c4_pixels": 231309,
+        "c4_pct": 0.8191045522689819,
+        "near_ui_c4_pixels": 23823,
+        "near_ui_c4_pct": 0.8604018092155457,
+        "near_ui_c4_mean": 0.3309129774570465
+      },
+      "mv_copies": 17,
+      "depth_copies": 17,
+      "rr_mv_magnitude": {
+        "p50": 0.0004618147504515946,
+        "p95": 0.030967872589826584,
+        "max": 17.851337432861328
+      }
+    },
+    {
+      "serial": 986,
+      "key": 0,
+      "scheduled": "slow_rotation",
+      "world_ui_pixels": 6741,
+      "native_final": {
+        "n": 17,
+        "mean": 0.3464551270008087,
+        "all_pct": 0.8771881461143494,
+        "c4_pixels": 494712,
+        "c4_pct": 3.332958459854126,
+        "near_ui_c4_pixels": 40461,
+        "near_ui_c4_pct": 5.36024808883667,
+        "near_ui_c4_mean": 0.24096211791038513
+      },
+      "mv_copies": 0,
+      "depth_copies": 0,
+      "rr_mv_magnitude": {
+        "p50": 0.000492081162519753,
+        "p95": 0.12245112098753444,
+        "max": 34.4184455871582
+      }
+    },
+    {
+      "serial": 987,
+      "key": 1,
+      "scheduled": "slow_rotation",
+      "world_ui_pixels": 38546,
+      "native_final": {
+        "n": 17,
+        "mean": 0.34522974491119385,
+        "all_pct": 0.6689184904098511,
+        "c4_pixels": 505695,
+        "c4_pct": 4.629671096801758,
+        "near_ui_c4_pixels": 43762,
+        "near_ui_c4_pct": 8.216852188110352,
+        "near_ui_c4_mean": 0.2379111349582672
+      },
+      "mv_copies": 17,
+      "depth_copies": 17,
+      "rr_mv_magnitude": {
+        "p50": 0.0004942058003507555,
+        "p95": 0.10440249443054189,
+        "max": 8.656216621398926
+      }
+    }
+  ],
+  "gpu_pair_copy_median_ms": 0.026,
+  "validation": {
+    "baseline_vuids": [
+      "VUID-03328",
+      "VUID-VkShaderModuleCreateInfo-pCode-08737",
+      "VUID-vkCmdCopyBuffer-srcBuffer-00118",
+      "VUID-vkCmdDraw-None-09600",
+      "VUID-vkCmdWaitEvents2-pEvents-10788",
+      "VUID-vkQueueSubmit-pSignalSemaphores-00067"
+    ],
+    "measurement_vuids": [],
+    "new_vuids": [],
+    "vk_error_results": 0,
+    "sdk_api_errors_max": 0
+  },
+  "churn": {
+    "hudless_handle_changes": 2,
+    "ui_handle_changes": 2,
+    "destroy_events": 6,
+    "options_calls": 0,
+    "host_mode_transitions": 0,
+    "sdk_ratio_counts": {
+      "1.53": 1,
+      "1.63": 2,
+      "1.70": 1,
+      "1.77": 2,
+      "1.90": 4,
+      "1.97": 7,
+      "2.00": 113,
+      "2.03": 7,
+      "2.07": 1,
+      "2.10": 1
+    }
+  },
+  "shader_changes": false,
+  "abi_changes": false,
+  "raw_bursts_deleted": true,
+  "retained_analysis": "captures/ui-inputs/<serial>/: numbers.json, tflk.txt, manifest.json, preview PNGs, representative depth probe only"
+}

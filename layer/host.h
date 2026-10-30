@@ -186,7 +186,11 @@ struct CmdState {
   // Streamline bookkeeping: layouts the watched images end this buffer in, and
   // the camera constants read at the velocity pass (applied at submit).
   std::vector<std::pair<VkImage, VkImageLayout>> sl_layouts;
+  std::vector<std::pair<VkImage, VkImageLayout>> sl_input_layouts; // actual layouts for diagnostic reads
   bool sl_cam_valid = false;
+  Bg3Binding sl_mvec_copy{};
+  Bg3Binding sl_depth_copy{};
+  uint32_t sl_mvec_slot = UINT32_MAX;
   uint8_t sl_cam[2][256] = {};
   std::vector<DescEntry> push[2];
   uint32_t push_set[2] = {UINT32_MAX, UINT32_MAX};
@@ -311,7 +315,10 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
 void sl_note_draw(VkCommandBuffer cmd, CmdState* s);           // first draw of a pass
 void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s);
 void sl_note_barrier(CmdState* s, VkImage image, VkImageLayout layout);
+void sl_note_event_barrier(CmdState* s, VkImage image, VkImageLayout layout);
 void sl_note_submit(const std::vector<VkCommandBuffer>& cmds);
+void sl_preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& motion, const Bg3Binding& depth);
+VkImageLayout sl_input_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout fallback);
 void sl_note_image_destroyed(VkImage image);
 void sl_note_view_destroyed(VkImageView view);   // a tag's view: DLSS-G may still read it
 bool sl_watched(VkImage image);
