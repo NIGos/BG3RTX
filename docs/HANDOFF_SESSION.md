@@ -1,24 +1,25 @@
 # Session handoff - 2026-10-30: UI fix confirmed; hair/cascade coverage open
 
-Isolated `codex/native-coverage`: default-off rt_native_scalp adds native scalp
+Main dd13361 includes `codex/native-coverage`, merged via merge-green and pushed:
+20/20 CTests, 202/202 shader files and QA pass. Default-off rt_native_scalp adds native scalp
 hard-cut scalar coverage/material capture; camera dither != 0 remains unsupported.
-No ABI bump or live deployment. Sticky persisted capability protects held scenes
+No ABI bump or feature enablement. Sticky persisted capability protects held scenes
 through key-off/core reload. 20/20 CTests and 178,780 scalar/capture/capability checks
 pass; 95 ordinary shaders byte-identical and 95 capable compile/validate. Actual
 F10 Frame mode unknown. Full Hair/cascade/raster identity still open; TRACK_D_RT.
 
 Read AGENTS.md, top PROGRESS_CODEX.md and latest user steering in this conversation.
-No Ponytail. The user explicitly permits modest multi-agent OFFLINE work; two
-agents were used. Live testing is coordinated here with the user, not autonomous
+No Ponytail. The user explicitly permits modest multi-agent OFFLINE work; three
+agents were used (capture, OMM, solar review). Live testing is coordinated here, not autonomous
 launches while the user plays. Never touch saves, D:/BG3_Tools backups, snapshot
 tags, force-push or clean junction checkouts. Never hold results.md open.
 Game launches, when authorized, only scripts/test-queue.ps1; USER_PLAYING or an
-unowned game blocks them. The user is playing and the launcher is open.
+unowned game blocks them. Live tests remain user-coordinated even when closed.
 
 ## Current checkout and confirmed UI correction
 
-C:/Users/quali/Documents/Code Projects/BG3RTX, codex/ui-contamination-offline.
-Main remains 47ac6a9. 17fb500 fixes recycled descriptor-set tracking: successful
+C:/Users/quali/Documents/Code Projects/BG3RTX. UI fix merged via merge-green onto
+main 7b9c1e4 and pushed with codex/ui-contamination-offline. 17fb500 fixes recycled descriptor-set tracking: successful
 new allocations clear old binding/dynamic-count maps before recording layout.
 No key, shader, ABI or GPU work changes. Built bin/VkLayer_bg3rtx.dll at 15:56:50;
 16/16 CTests and actual-function nine-case regression pass (old four failures).
@@ -27,8 +28,9 @@ initially good. This is positive provisional confirmation, not every shadow issu
 Evidence docs/evidence/ui-descriptor-trial-20261030.json; offline original analysis
 in docs/UI_CONTAMINATION_OFFLINE.md. Material-owner first-candidate freeze and RR
 exposure-helper fallback remain unchanged, to isolate this successful trial.
-No main merge yet: merge-green refuses while the game runs; the open launcher
-also locks its executable during a rebuild.
+Game/launcher were closed at integration. Merge gate passed 16/16 CTests,
+107/107 runtime compute shader compilations and QA detector tests. Test-main was
+refreshed to the same merge. No game was launched.
 Do not rebuild or change live shaders/settings/HEAD while a game JOB is running;
 new development below was isolated from the user's active build.
 
@@ -69,12 +71,17 @@ Sun already has radius 0.00459 rad half-angle (~0.526 deg diameter), uniform dis
 sample per pixel, RR reconstruction, plus native-mask fallback in untrusted zones.
 Penumbra ~9.18 mm/metre of caster-receiver separation: near hair can be subpixel.
 Do not enlarge radius to conceal solid hair/cascade cards.
+Solar audit docs/SUN_PENUMBRA_REVIEW.md: units/disc/seeds correct, but off-screen
+guard retains native-dark sun edges. Six dialogue windows keep 94.6-98.1% of
+native-dark/RT-lit disagreements; fully replace 0.3-1.3%, with RR active. Establish
+actual caster-volume coverage before lifting trust; no radius/bias/blur change.
 
 ## OMM OFFLINE milestone - not runtime integration
 
-Isolated C:/Users/quali/.codex/worktrees/p4-omm-domain/BG3RTX,
-codex/p4-omm-domain commit 7134338, based on main 47ac6a9 (WITHOUT UI fix 17fb500).
-Never deploy that worktree's baseline DLLs over the user's corrected build.
+CPU preparation merged via merge-green onto main e277548; main and branch pushed.
+Gate: 19/19 CTests, 107/107 shaders and QA; test-main refreshed. No GPU OMM enabled.
+Isolated C:/Users/quali/.codex/worktrees/p4-omm-domain/BG3RTX now includes main's
+UI fix after e79c49b; old pre-integration baseline DLLs must still not be deployed.
 - common/omm_classify.h imported from old 8d902d5; no production caller.
 - common/omm_alpha_bounds.h validates immutable selected LINEAR UNORM8 mip planes,
   conservatively scans whole selected mips, checks missing/unsupported/budget/UV/LOD.
@@ -86,12 +93,24 @@ Never deploy that worktree's baseline DLLs over the user's corrected build.
   Optional CMake BG3RTX_OMM_CPU_PROBE is OFF by default, enabled only in isolated tests.
   ACTUAL CPU baker: 18 constant cases, SIX known-state equality contradictions:
   SDK > makes alpha=cut transparent, native >= accepts it. Both nearest/linear.
+- Follow-up fixed-cut conservative CPU configuration keeps <= UNKNOWN and >
+  opaque: 1,532 UNORM8 equality/neighbor cases, ZERO contradictions, with opaque
+  AND unknown outputs. Sacrifices all known-transparent acceleration; not valid
+  for stochastic thresholds/GPU sampling. Four mixed texture tests use real
+  descriptors/arrays: 25,740 sample checks, 66 equality points, zero contradictions;
+  eight decoder bounds checks. CPU-only tests, not continuous/GPU proof.
 - FULL isolated build/CTest 19/19, 197621 classifier, 398526 code-support, 65 identity
   checks pass. No shader/ABI/device/BLAS/runtime-setting changes, no GPU cost claims.
   docs/P4_OMM.md and evidence p4-omm-domain-20261030.json in that worktree.
 Remaining: tight spatial support, GPU numeric/LOD/filter/VT proof, threshold adapter,
 consistent EXT backend (KHR API differs), GPU bake/build/BLAS and completion lifetime.
 Runtime priority now correct unsupported hair/cascade coverage before OMM acceleration.
+
+Dedicated capture branch codex/native-coverage in isolated native-coverage/BG3RTX:
+37299f2 adds six exact scalp shader recipes, bounded scalar-input capture and
+native smoothstep/root/dither CPU reference, 178,522 checks. No runtime fix in
+that commit. Agent continues opt-in runtime scalp hard-cut support without ABI
+layout changes; native camera dither and full strand/depth capture remain separate.
 
 ## Other plan/state
 

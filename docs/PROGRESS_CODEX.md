@@ -1,6 +1,54 @@
 # BG3RTX progress
 
-## Native scalp hard-cut candidate - 2026-10-30, isolated and not deployed
+## Solar shadow sharpness: native-mask restriction confirmed in logs - 2026-10-30
+
+Dedicated solar agent found correct finite-disc radius, normalization and changing
+sample seeds. Final direct sun can still be clipped by the native mask: untrusted
+resolve keeps nativeMask * rtVisibility. In six 600-frame dialogue windows,
+94.6-98.1% of native-dark/RT-lit disagreements keep native shadowing because of
+the off-screen guard; only 0.3-1.3% are fully replaced. RR is active but cannot
+restore the omitted expected direct-sun contribution. This supports the reported
+hard edges in those views, not an attribution of every outdoor shadow or hairstyle.
+
+No radius, bias, blur, trust setting or renderer changed for this audit. Correct
+off-screen caster coverage, including native cutouts, is required before relaxing
+the guard. Sun has no dedicated mask accumulator; nearby hair can also be naturally
+sharp. Report docs/SUN_PENUMBRA_REVIEW.md and matching evidence JSON. Existing RT
+scope 1.130-2.521 ms/frame includes other work, not isolated solar cost. Live
+same-view trust/mask check remains user-coordinated; no game job was launched.
+
+## Follow-through: UI merged; dedicated native capture and OMM CPU work - 2026-10-30
+
+UI descriptor fix is now on main 7b9c1e4, merged ONLY through merge-green after the
+game and launcher closed: 16/16 CTests, 107/107 runtime shader compilations and QA
+detector tests passed. Main and codex/ui-contamination-offline pushed; test-main
+refreshed. This closes the earlier integration deferral. No game was launched.
+
+Dedicated capture work is merged through merge-green onto main dd13361, pushed
+with codex/native-coverage. Key rt_native_scalp remains OFF by default. Gate:
+20/20 CTests, 202/202 shader files and QA passed; 178,780 scalar/capture/capability
+checks, 95 ordinary shader binaries unchanged and 95 capable variants validated.
+This is native scalp hard-cut support, not full Hair/cascade/dither handling.
+Actual F10 native Frame mode is unknown; the reported close-ups may still be
+unsupported. No live quality or GPU cost measured, no key enabled or game launched.
+Future user-led check: Test1, same dialogue and pose, key 0/1; require successful
+native hard-record counters first. Unsupported dither/zero records is NOT a pass.
+
+OMM CPU groundwork is now also merged via merge-green onto main e277548, pushed
+with its branch; 19/19 CTests, 107/107 shaders and QA passed, test-main refreshed.
+It has NO production caller or GPU OMM activation. The feature branch was updated
+with main's UI fix before integration; the old baseline-DLL warning is historical.
+Root OMM follow-up 9bb426d and mixed-texture regression fab1ee5: actual CPU SDK configured
+with <= UNKNOWN and > opaque, unchanged cutoff, four states. All 1,532 UNORM8
+equality/adjacent-float cases pass with zero known-state contradictions; baseline
+still reproduces six in 18 cases. Outputs include 12,192 opaque and 12,320 unknown
+states, zero transparent. This sacrifices transparent acceleration, is fixed-cut
+only, and is NOT GPU/filter/LOD/stochastic or traversal certification. No OMM
+production caller or performance claim. Mixed-texture real descriptor/array tests
+add 25,740 independent finite samples, 66 exact-cut points and eight decoder bounds
+checks, all passing. Runtime GPU OMM is not integrated.
+
+## Native scalp hard-cut implementation evidence - 2026-10-30, before integration
 
 `rt_native_scalp=0` is the new default-off runtime key. Kind3 captures native scalp
 material edge/root and uses the exact hard-cut scalar transform across normal RT
