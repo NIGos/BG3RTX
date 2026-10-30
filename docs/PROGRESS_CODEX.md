@@ -1,5 +1,37 @@
 # BG3RTX progress
 
+## UI / foliage offline investigation — 2026-10-30
+
+The user's new screenshots still show saturated blue blocks on foliage/flags,
+with and without RR; UI elements are possible triggers, not only mouse hover.
+Offline analysis found a reproducible descriptor-lifetime bug in main 47ac6a9:
+AllocateDescriptorSets updates the layout but keeps old descriptor contents and
+dynamic counts when a handle is recycled. Optional RT material queries can then
+accept a retired UI buffer/view. First nonempty RT3/SSS inputs are kept even when
+a later native material permutation supplies the correct source. The shader uses
+SSS RGB tint/thickness on class-4 foliage; finite garbage passes bounds/NaN checks.
+
+Native C++ reproduction uses actual extracted production functions, with only driver
+allocation stubbed: 9 cases, 4 failures current -> 0 failures with allocation clearing.
+A second exact-block reproduction retains the stale profile and never queries the
+real material source. The minimal patch is PREPARED ONLY, not applied. Optional material reads also need
+active-shader provenance; clearing allocation state alone does not certify all cases.
+No renderer/DLL/shader/ini change, game launch, live test, merge or quality claim.
+
+A separate RR issue: exposure helper 4681b95e is rejected as an unknown color effect,
+causing fallback to RR on graded color. It is not a UI shader and cannot explain the
+RR-off symptom alone. Current log also reports SSS ranges 16384 / 144 / 327680;
+range alone is not proof of a bad buffer. Three retained traces have no non-finites,
+but do not reproduce the screenshot's saturated patches in inspected compose views.
+Exact UI-to-blue-frame attribution remains OPEN: descriptor epochs/profile bytes at
+the visibly bad frame are absent. Prior zero near-UI foliage support was inconclusive.
+
+Report: docs/UI_CONTAMINATION_OFFLINE.md. Versioned proof/patch/JSON:
+docs/evidence/ui-descriptor-20261030/. Original screenshots, copied user log and
+compiled harnesses: captures/offline-ui-20261030/. Next: fix allocation lifetime and
+material provenance, then qualify a same-frame UI transition; no brightness clamp.
+
+
 USER CHECK / DECISION (base frame rate): may the next speed gate use one focused foreground
 run? Required visible-unfocused runs stay at 30 fps after temporary game/driver cap and
 immediate-present controls. Until an uncapped fps gate passes, keep `rt_alpha_stream=0`.

@@ -1,5 +1,18 @@
 # Session handoff — 2026-10-30 (FG copy quality not qualified)
 
+## Latest: user-requested offline UI contamination analysis (2026-10-30)
+
+UI includes overhead text/labels/selection, not only hover. No new live job authorized
+by this task; no game actions or production code/binary/ini changes were made.
+Read docs/UI_CONTAMINATION_OFFLINE.md and top PROGRESS_CODEX.md. Proven CPU bug:
+recycled descriptor-set handles retain old contents/dynamic counts; optional RT3/SSS
+reads can accept stale-but-live UI data. Nine-case native source harness: production
+4 failures -> candidate 0. Minimal patch is UNAPPLIED; fix also needs material-owner
+provenance. Exact blue-frame attribution remains unproved (buffer epoch/data missing).
+Separate RR fallback rejects normal exposure helper 4681b95e. No quality pass/merge.
+Proofs in docs/evidence/ui-descriptor-20261030; artifacts captures/offline-ui-20261030.
+
+
 Read AGENTS.md, then the top of docs/PROGRESS_CODEX.md, then D:/BG3_Tools/USER_STEERING.md
 (newest entries first). The user decides by FG on (fg=2), real presentation, visible window.
 
