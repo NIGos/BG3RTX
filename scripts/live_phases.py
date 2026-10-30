@@ -46,6 +46,8 @@ def apply(settings, name):
     keys = set(settings)
     lines = [l for l in lines if l.split("=", 1)[0].strip() not in keys]
     lines += [f"{k}={v}" for k, v in settings.items()]
+    if cancelled():
+        return
     ini.write_text("\n".join(lines) + "\n")
     msg = f"{time.strftime('%H:%M:%S')} [phase] {name}: {settings}"
     print(msg, flush=True)

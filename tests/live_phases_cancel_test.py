@@ -77,6 +77,24 @@ class CancellationTest(unittest.TestCase):
         exec(compile(ast.Module(body=[apply], type_ignores=[]), str(SCRIPT), 'exec'), namespace)
         namespace['apply']({'key': 'BAD'}, 'must not execute')
 
+    def test_cancellation_during_ini_read(self):
+        state = {'cancelled': False}
+
+        class Ini:
+            def read_text(self):
+                state['cancelled'] = True
+                return 'preserve=1'
+
+            def write_text(self, text):
+                raise AssertionError('wrote settings after cancellation')
+
+        module = ast.parse(SCRIPT.read_text())
+        apply = next(node for node in module.body
+                     if isinstance(node, ast.FunctionDef) and node.name == 'apply')
+        namespace = {'cancelled': lambda: state['cancelled'], 'ini': Ini()}
+        exec(compile(ast.Module(body=[apply], type_ignores=[]), str(SCRIPT), 'exec'), namespace)
+        namespace['apply']({'preserve': 'BAD'}, 'must not write')
+
 
 if __name__ == '__main__':
     unittest.main()
