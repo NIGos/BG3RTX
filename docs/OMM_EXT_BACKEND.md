@@ -12,6 +12,8 @@ Core/Vulkan12 bufferDeviceAddress must also be enabled for address-flag allocati
 the diagnostic EXT-only BDA configuration is declined for OMM.
 The KHR micromap-object backend is not used; recent headers alias some wire types,
 but object creation, build, destruction and triangle attachment all use EXT APIs.
+If the driver rejects the optional device request after reporting support, an
+OMM-only retry rebuilds ordinary RT first; later retries keep OMM suppressed.
 
 `layer/omm_backend.h` accepts immutable GPU packed state bytes plus a GPU triangle
 descriptor buffer. Both addresses require 256-byte alignment and the MICROMAP

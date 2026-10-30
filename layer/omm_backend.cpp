@@ -10,6 +10,7 @@ namespace bg3::omm {
 namespace {
 DeviceData* device{};
 bool requested{}, enabled{};
+bool creationSuppressed{};
 bool retained{};
 VkPhysicalDeviceOpacityMicromapFeaturesEXT feature{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT};
 VkPhysicalDeviceSynchronization2Features sync{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES};
@@ -78,7 +79,7 @@ bool allocate(VkDeviceSize bytes, VkBufferUsageFlags usage, Buffer& out) {
 const void* device_features(InstanceData* id, VkPhysicalDevice physical, const void* next,
                             std::vector<const char*>& extensions) {
   requested=false;
-  if (!cfg_int("rt_omm",0) || !id || !id->GetPhysicalDeviceFeatures2) return next;
+  if (creationSuppressed || !cfg_int("rt_omm",0) || !id || !id->GetPhysicalDeviceFeatures2) return next;
   const auto* bda=reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeatures*>(
       find(next,VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES));
   const auto* v12=reinterpret_cast<const VkPhysicalDeviceVulkan12Features*>(
@@ -122,6 +123,8 @@ const void* device_features(InstanceData* id, VkPhysicalDevice physical, const v
   log("[omm] requesting EXT micromap + synchronization2; four-state only, classification gate still required");
   return next;
 }
+bool device_requested() {return requested;}
+void disable_device_request() {requested=false;creationSuppressed=true;}
 void device_created(DeviceData* dd, bool rtEnabled) {
   std::lock_guard lock(mutex);
   if (device) return;
@@ -245,7 +248,7 @@ void device_destroyed(DeviceData* dd) {
     for(auto& [ticket,r]:resources)destroy(r);
     resources.clear();
   }
-  device=nullptr;enabled=false;requested=false;bytesLive=0;retained=false;
+  device=nullptr;enabled=false;requested=false;bytesLive=0;retained=false;creationSuppressed=false;
 }
 static_assert(sizeof(Triangle)==sizeof(VkMicromapTriangleEXT));
 static_assert(offsetof(Triangle,dataOffset)==offsetof(VkMicromapTriangleEXT,dataOffset));

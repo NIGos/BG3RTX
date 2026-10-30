@@ -4,6 +4,7 @@
 #include <vector>
 #include "host.h"
 #include "omm_submit.h"
+#include "omm_backend.h"
 #include "assetdb.h"
 #include "sebridge.h"
 #include "hookguard.h"
@@ -221,6 +222,16 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     use_ci = rt_use;
     sl_scratch = sl_device_pre(id, phys, use_ci, patched);
     r = create(phys, &patched, alloc, out);
+  }
+  if (r != VK_SUCCESS && rt_on && omm::device_requested()) {
+    log("[layer] optional EXT opacity micromap device request failed (%d); retrying ordinary RT",r);
+    sl_device_post(sl_scratch,nullptr,r);
+    rt_device_features_undo();
+    omm::disable_device_request();
+    rt_use=rt_device_create_info(id,phys,geo_use,&rt_ci);
+    rt_on=rt_use!=geo_use;use_ci=rt_use;
+    sl_scratch=sl_device_pre(id,phys,use_ci,patched);
+    r=create(phys,&patched,alloc,out);
   }
   if (r != VK_SUCCESS && rt_on && rt_device_features_added()) {
     // The SHaRC features (64-bit atomics, float16, 16-bit storage) next; ray tracing stays.

@@ -7,6 +7,8 @@ namespace bg3::omm {
 const void* device_features(InstanceData*, VkPhysicalDevice, const void* next,
                             std::vector<const char*>& extensions);
 void device_created(DeviceData*, bool rtEnabled);
+bool device_requested();
+void disable_device_request(); // Optional-device retry; ordinary RT is retained.
 void device_destroyed(DeviceData*);
 bool available();
 bool has_resources();
