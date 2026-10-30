@@ -12,16 +12,16 @@ not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
 
 Desktop BG3RTX - Hair Scalp now targets hair-capacity-fix 859b879, with matching
-DLLs. Native Hair/Scalp ON; OMM/current Sun OFF; camera1408 MiB/cascade587 MiB.
+DLLs. Native Hair/Scalp ON; OMM/current Sun OFF; camera 1408 MiB/cascade 587 MiB.
 Two Test1 FG2 static/rotation runs complete; all steady camera/cascade drops ZERO
-in the final run. Static RT cost3.397 ms without primary diagnostics; rotations
-45.4-48.2 rendered fps, FG ratio~2. Original a9f8688 trial is retained. User has
+in the final run. Static RT cost 3.397 ms without primary diagnostics; rotations
+45.4-48.2 rendered fps, FG ratio ~2. Original a9f8688 trial is retained. User has
 NOT yet checked the capacity update. Main code/binaries/saves untouched.
 
 Next concrete fix: virtual Hair primary hit vs physical card secondary-origin
 self-hit. Dedicated worker owns a default-off auxiliary-image candidate; preserve
 virtual primary/history depth and ordinary shader byte identity. No live proof yet.
-Darker/dithered Hair remains open. Optional small cascade160/587 burst diagnostic
+Darker/dithered Hair remains open. Optional small cascade 160/587 burst diagnostic
 supports, but does not delay, the already-demonstrated capacity correction.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and

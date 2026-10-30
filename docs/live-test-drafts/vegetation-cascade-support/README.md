@@ -18,7 +18,9 @@ No attempt is made to force darkness or alter shader coverage.
 Nine phases take 265 seconds after load. Job timeout is 600 seconds, one run.
 Dedicated 15-second static phases settle each live cascade allocation change;
 bursts start 18 seconds into the test window, three seconds after rotation starts.
-The diagnostic pass is prewarmed. `pan_inputs=0` is required: setting it to 1
+The diagnostic pass is prewarmed. Primary epoch counters are enabled while
+expensive per-effect atomic statistics remain off, matching R4. The private
+UserIni preserves the trial quality settings. The queue already supplies NoBuild. `pan_inputs=0` is required: setting it to 1
 changes the producer to 17 frames and adds FG/RR inputs this detector does not need.
 Primary difference, G-buffer, sun visibility, local visibility, GI and hudless
 native-tonemap final are captured by the existing path. Extra diffuse is retained.
