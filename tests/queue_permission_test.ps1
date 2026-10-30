@@ -48,6 +48,13 @@ $jobs=@(
  [pscustomobject]@{name='d-session';live_batch='batch';session=$true;set='gi=3';traces=0;warmup=0;hold=1;timeout=10;patterns=@('settings read');expect=@('settings read')})
 $order=[datetime]::UtcNow.AddMinutes(-5)
 foreach($j in $jobs){$file=Join-Path $runRoot "captures/queue/pending/$($j.name).json";$j | ConvertTo-Json | Set-Content $file;(Get-Item $file).LastWriteTimeUtc=($order=$order.AddSeconds(1))}
+# Bad/unauthorized oldest inbox entries must not starve authorized work.
+$blocked=Join-Path $runRoot 'captures/queue/pending/0-blocked.json'
+Set-Content $blocked '{"name":"blocked","command":"SHOULD NEVER RUN"}'
+$malformed=Join-Path $runRoot 'captures/queue/pending/0-malformed.json'
+Set-Content $malformed '{not json'
+(Get-Item $blocked).LastWriteTimeUtc=$order.AddMinutes(-2)
+(Get-Item $malformed).LastWriteTimeUtc=$order.AddMinutes(-1)
 Set-Content (Join-Path $runRoot 'docs/live-test-drafts/M0/unauthorized.json') '{"command":"SHOULD NEVER RUN"}'
 $build=Get-QueueBuildIdentity $runRoot
 $grant.jobs=@($jobs | ForEach-Object {@{hash=(Get-QueueJobHash $_ $runRoot);tree=$runRoot;build=$build;runs=1}});$grant.runner_session='fake-runner'
@@ -57,6 +64,7 @@ $env:BG3RTX_FAKE_LOAD_SEC='.1'
 Check ($LASTEXITCODE -eq 0) 'actual fake runner exits cleanly'
 $records=@(Get-Content (Join-Path $runRoot 'captures/queue/results.jsonl') | ConvertFrom-Json)
 Check ($records.Count -eq 4) 'command single and two session paths ran'
+Check ((Test-Path $blocked) -and (Test-Path $malformed)) 'blocked and malformed heads preserved while later authorized jobs run'
 Check ($records[2].session -and ($records[2].session -split '#')[0] -eq ($records[3].session -split '#')[0]) 'same session reuse exercised'
 Check ((Get-Content (Join-Path $runRoot 'bg3rtx_user.ini') -Raw).Trim() -eq 'USER_PREFERENCE=preserve') 'user settings preserved'
 Check (-not((Get-Content (Join-Path $runRoot 'captures/auto.ini') -Raw) -match '(?m)^gi=[23]$')) 'session settings restored'

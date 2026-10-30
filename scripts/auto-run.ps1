@@ -470,6 +470,7 @@ if ($Validation) {
   $env:VK_LAYER_SETTINGS_PATH = $settings
   $launchArgs.Validation = $true
 }
+if($env:BG3RTX_QUEUE_QUIT_FILE -and (Test-Path -LiteralPath $env:BG3RTX_QUEUE_QUIT_FILE)){throw 'Queue run cancelled before game launch'}
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
 $game.EnableRaisingEvents = $true
@@ -574,6 +575,9 @@ function Release-Rotation {
   }
 }
 while ((Get-Date) -lt $deadline) {
+  if($env:BG3RTX_QUEUE_QUIT_FILE -and (Test-Path -LiteralPath $env:BG3RTX_QUEUE_QUIT_FILE)){
+    $result='queue cancelled';break
+  }
   if (Test-Path -LiteralPath $playingMarker) {
     $result = 'user playing marker; test stopped'; break
   }

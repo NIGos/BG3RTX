@@ -375,30 +375,74 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
   if ($job.save) { $runArgs += @("-Save", $job.save) }
   if ($job.set) { $runArgs += @("-Set", (@($job.set) -join ',')) }
   if ($job.args) { $runArgs += @($job.args) }
-  $phase = $null
-  if ($job.phases) {
-    $phase = Start-Process py -ArgumentList "-3", (Join-Args @((Join-Path $tree "scripts\live_phases.py"), (Join-Path $tree $job.phases))) `
-      -WorkingDirectory $tree -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $q "$name.$i.phases.out")
-  }
-  Push-Location $tree
+  $phase = $null; $child=$null; $cancelled=''
+  $quit=Join-Path $q ("single."+[guid]::NewGuid().ToString('N')+".quit")
+  $previousQuit=$env:BG3RTX_QUEUE_QUIT_FILE
+  $env:BG3RTX_QUEUE_QUIT_FILE=$quit
+  $runnerLog=Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).runner.txt"
+  $stderr=$runnerLog+'.stderr'
   try {
-    # "command" replaces auto-run for tools that launch the game themselves (python -m scripts.qa run ...).
-    # Through cmd: a native tool's stderr must not become a terminating PowerShell error.
-    $out = if ($job.command) { cmd /c "$($job.command) 2>&1" | ForEach-Object { "$_" } }
-           else { & powershell @runArgs 2>&1 | ForEach-Object { "$_" } }
-    if ($job.command) { $lines += @($out | Select-Object -Last 8) }
-  } finally { Pop-Location }
-  if ($phase) { Stop-Process -Id $phase.Id -ErrorAction SilentlyContinue }
+    Assert-QueueActive
+    if ($job.phases) {
+      $phase = Start-Process py -ArgumentList "-3", (Join-Args @((Join-Path $tree "scripts\live_phases.py"), (Join-Path $tree $job.phases))) `
+        -WorkingDirectory $tree -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $q "$name.$i.phases.out")
+    }
+    Assert-QueueActive
+    if($job.command) {
+      $child=Start-Process cmd.exe -ArgumentList '/d','/s','/c',('"'+$job.command+' 2>&1"') -WorkingDirectory $tree `
+        -PassThru -WindowStyle Hidden -RedirectStandardOutput $runnerLog -RedirectStandardError $stderr
+    } else {
+      $child=Start-Process powershell -ArgumentList (Join-Args $runArgs) -WorkingDirectory $tree `
+        -PassThru -WindowStyle Hidden -RedirectStandardOutput $runnerLog -RedirectStandardError $stderr
+    }
+    $deadline=$t0.AddSeconds($timeout)
+    while(-not $child.WaitForExit(250)) {
+      try {
+        # auto-run owns its game and already checks foreign processes. Queue
+        # permission checks must not classify that owned single-run game as foreign.
+        if($DryRun -and (Test-Path -LiteralPath (Join-Path $root 'fake_unowned_game'))){throw 'Unowned game exists'}
+        $ctx=$script:permissionContext
+        $block=Get-QueuePermissionBlock $ctx.job $root $ctx.tree $ctx.build $PermissionSession $script:permissionRunner -InFlight
+        if($block){throw $block}
+        if((Get-Date) -ge $deadline){throw 'Single-run deadline reached'}
+      } catch { $cancelled=$_.Exception.Message; break }
+    }
+    if(-not $cancelled) {
+      $ctx=$script:permissionContext
+      $cancelled=Get-QueuePermissionBlock $ctx.job $root $ctx.tree $ctx.build $PermissionSession $script:permissionRunner -InFlight
+      if(-not $cancelled -and (Get-Date) -ge $deadline){$cancelled='Single-run deadline reached'}
+    }
+    if($cancelled) {
+      if($phase -and -not $phase.HasExited){$phase.Kill();$phase.WaitForExit()}
+      [IO.File]::WriteAllText($quit,$cancelled)
+      # Normal auto-run cleanup allows 20 s close +15 s owned-process exit.
+      # Never enumerate/kill a game here. A non-cooperative command wrapper alone
+      # may be stopped; the persistent quit request still guards nested auto-run.
+      if(-not $child.WaitForExit(40000)){$child.Kill();$child.WaitForExit()}
+    }
+    $child.WaitForExit();$childExit=$child.ExitCode
+  } finally {
+    if($phase -and -not $phase.HasExited){$phase.Kill();$phase.WaitForExit()}
+    if($child -and -not $child.HasExited){
+      [IO.File]::WriteAllText($quit,'Queue run interrupted')
+      if(-not $child.WaitForExit(40000)){$child.Kill();$child.WaitForExit()}
+    }
+    $env:BG3RTX_QUEUE_QUIT_FILE=$previousQuit
+  }
+  $out=@(Get-Content -LiteralPath $runnerLog -ErrorAction SilentlyContinue)
+  $out+=@(Get-Content -LiteralPath $stderr -ErrorAction SilentlyContinue)
+  if($cancelled){$out+= "Run ended: cancelled: $cancelled"}
+  if ($job.command) { $lines += @($out | Select-Object -Last 8) }
   # Retain phase timestamps and the actual presentation/focus mode for A/B
   # analysis. The ordinary pattern summary keeps only the last matching line.
   $out | Set-Content -LiteralPath (Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).runner.txt")
   $runnerLog = Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).runner.txt"
-  $outcome = ($out | Select-String 'Run ended|STALL' | Select-Object -First 1).Line
+  $outcome = if($cancelled){"Run ended: cancelled: $cancelled"}else{($out | Select-String 'Run ended|STALL' | Select-Object -First 1).Line}
   $runnerMissing = @()
   foreach ($pattern in @($job.expect_runner | Where-Object { $_ })) {
     if (-not ($out | Select-String -Pattern $pattern -Quiet)) { $runnerMissing += $pattern }
   }
-  $completed = if ($job.command) { $LASTEXITCODE -eq 0 } else { $outcome -match '^Run ended: done\b' }
+  $completed = -not $cancelled -and $(if ($job.command) { $childExit -eq 0 } else { $outcome -match '^Run ended: done\b' })
   $statusFile = Join-Path $tree 'captures\run-status.json'
   $statusCopy = $null
   if ((Test-Path -LiteralPath $statusFile) -and (Get-Item -LiteralPath $statusFile).LastWriteTime -ge $t0) {
@@ -423,7 +467,7 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
   }
   @{ outcome = $outcome; nv = $nv; dumps = $dumps; keptLog = $keptLog; captures = $caps; lines = $lines
      session = ""; generation = $null; saved = 0; completed = $completed;
-     runner_missing = $runnerMissing; status = $statusCopy; runner_log = $runnerLog }
+     runner_missing = $runnerMissing; status = $statusCopy; runner_log = $runnerLog; cancelled=[bool]$cancelled }
 }
 
 function Run-Job($file) {
@@ -467,7 +511,7 @@ function Run-Job($file) {
     if (-not $r) { $r = Invoke-SingleRun $job $name $i $tree $traces $timeout }
     $caps = @($r.captures)
     $lines = @($r.lines)
-    if ($job.post) {
+    if ($job.post -and -not $r.cancelled) {
       Assert-QueueActive
       Push-Location $tree
       try {
@@ -523,16 +567,31 @@ function Get-InboxDirs {
   })
 }
 
+$script:blockedQueueMessages=@{}
 function Get-NextJob {
-  $next = Get-InboxDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "*.json" -ErrorAction SilentlyContinue } |
-    Sort-Object LastWriteTime | Select-Object -First 1
-  if ($next) {
-    $job = ConvertTo-QueueWindowJob (Get-Content -LiteralPath $next.FullName -Raw | ConvertFrom-Json)
-    $blocked = Get-QueuePermissionBlock $job $root (Get-JobTree $job) (Get-QueueBuildIdentity (Get-JobTree $job)) $PermissionSession $script:permissionRunner
-    if (-not $blocked) { $blocked = Get-QueueDependencyBlock $job $root (Stamp (Get-JobTree $job)) }
-    if ($blocked) { Write-Host "Queued, not launched: $($next.Name): $blocked"; return $null }
+  $candidates=@(Get-InboxDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "*.json" -ErrorAction SilentlyContinue } | Sort-Object LastWriteTime)
+  $shown=0
+  foreach($next in $candidates) {
+    try {
+      $job = ConvertTo-QueueWindowJob (Get-Content -LiteralPath $next.FullName -Raw | ConvertFrom-Json)
+      $tree=Get-JobTree $job
+      $blocked=Get-QueuePermissionBlock $job $root $tree (Get-QueueBuildIdentity $tree) $PermissionSession $script:permissionRunner
+      if(-not $blocked){$blocked=Get-QueueDependencyBlock $job $root (Stamp $tree)}
+    } catch {$blocked='Invalid queued job: '+$_.Exception.Message}
+    if(-not $blocked){return $next}
+    # Leave blocked files untouched. At most one message per unchanged reason in
+    # each polling minute, with a bounded cache and bounded text.
+    $message=($next.Name+': '+$blocked);$key=$next.FullName
+    if($message.Length -gt 400){$message=$message.Substring(0,400)}
+    $previous=$script:blockedQueueMessages[$key]
+    if($shown -lt 4 -and (-not $previous -or $previous.message -ne $message -or ((Get-Date)-$previous.at).TotalSeconds -ge 60)) {
+      ++$shown
+      Write-Host "Queued, not launched: $message"
+      if($script:blockedQueueMessages.Count -ge 128){$script:blockedQueueMessages.Clear()}
+      $script:blockedQueueMessages[$key]=@{message=$message;at=Get-Date}
+    }
   }
-  $next
+  return $null
 }
 
 # A changed test-queue.ps1 replaces this runner between jobs (no restart by hand).
