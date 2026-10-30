@@ -4,17 +4,17 @@
 #include <array>
 namespace bg3::omm {
 struct ContentRegistry {
-  struct Entry {uint64_t imageId{};uint32_t slot{};bool boundSafe{};uint32_t mipLevels{1},format{};};
+  struct Entry {uint64_t imageId{};uint32_t slot{};bool boundSafe{};uint32_t mipLevels{1},format{},requiredSamplingCertificate{1};};
   struct View {uint64_t image{},imageId{},viewId{};uint32_t baseMip{},levelCount{},format{};std::array<uint32_t,4> components{};};
   uint32_t capacity{},nextSlot{};uint64_t nextId{1};
   std::unordered_map<uint64_t,Entry> images;
   std::unordered_map<uint64_t,View> views;
   uint64_t nextViewId{1};
   explicit ContentRegistry(uint32_t slots=65536):capacity(slots){}
-  bool create(uint64_t image,bool policy,uint32_t mipLevels=1,uint32_t format=0) {
+  bool create(uint64_t image,bool policy,uint32_t mipLevels=1,uint32_t format=0,uint32_t requiredSamplingCertificate=1) {
     images.erase(image);
-    if(!image || !policy || !mipLevels || nextSlot>=capacity || nextId==UINT64_MAX)return false;
-    images.emplace(image,Entry{nextId++,nextSlot++,false,mipLevels,format});return true;
+    if(!image || !policy || !mipLevels || (requiredSamplingCertificate!=1 && requiredSamplingCertificate!=2) || nextSlot>=capacity || nextId==UINT64_MAX)return false;
+    images.emplace(image,Entry{nextId++,nextSlot++,false,mipLevels,format,requiredSamplingCertificate});return true;
   }
   void bind(uint64_t image,bool safe) {auto i=images.find(image);if(i!=images.end())i->second.boundSafe=safe;}
   void destroy(uint64_t image) {images.erase(image);}

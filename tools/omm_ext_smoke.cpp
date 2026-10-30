@@ -176,10 +176,11 @@ static void content_fixture(DeviceData& dd,VkCommandPool pool){
   omm::content_view_destroyed(&dd,view);dd.vk.DestroyImageView(dd.device,view,nullptr);
   omm::content_image_destroyed(&dd,image);dd.vk.DestroyImage(dd.device,image,nullptr);omm::content_memory_freed(&dd,mem);dd.vk.FreeMemory(dd.device,mem,nullptr);
 }
+#include "omm_bc_fixture.inl"
 int main(int argc,char** argv){
-  check(argc>=2 && argc<=5,"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv [producer.spv [content.spv]]]");
+  check((argc==2 || argc==3 || argc==5 || argc==6),"usage: omm_ext_smoke.exe ray_query.spv [endpoints.spv [producer.spv content.spv [bc.spv]]]");
   if(argc>=4)producerShader=argv[3];
-  if(argc==5){std::ifstream f(argv[4],std::ios::binary|std::ios::ate);check(bool(f),"content shader");auto size=f.tellg();check(size>0&&uint64_t(size)%4==0,"content shader size");contentShader.resize(size_t(size)/4);f.seekg(0);f.read(reinterpret_cast<char*>(contentShader.data()),size);}
+  if(argc>=5){std::ifstream f(argv[4],std::ios::binary|std::ios::ate);check(bool(f),"content shader");auto size=f.tellg();check(size>0&&uint64_t(size)%4==0,"content shader size");contentShader.resize(size_t(size)/4);f.seekg(0);f.read(reinterpret_cast<char*>(contentShader.data()),size);}
   // Process-local loader settings only. The parent also sets these before launch.
   SetEnvironmentVariableA("VK_LOADER_LAYERS_DISABLE","~implicit~");SetEnvironmentVariableA("VK_INSTANCE_LAYERS",nullptr);
   HMODULE loader=LoadLibraryA("vulkan-1.dll");check(loader!=nullptr,"existing Vulkan loader");
@@ -243,7 +244,7 @@ int main(int argc,char** argv){
 #undef LOAD_D
   dd.vk.GetDeviceQueue(dd.device,dd.graphics_family,0,&dd.graphics_queue);smokeDevice=&dd;
   omm::device_created(&dd,true);check(omm::available(),"production EXT backend available");
-  if(argc==5)check(omm::content_device_created(&dd),"production content epochs available");
+  if(argc>=5)check(omm::content_device_created(&dd),"production content epochs available");
   VkPhysicalDeviceAccelerationStructurePropertiesKHR asProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
   VkPhysicalDeviceProperties2 allProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,&asProperties};
   auto properties2=reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(gipa(instance.instance,"vkGetPhysicalDeviceProperties2"));properties2(dd.physical,&allProperties);
@@ -350,7 +351,8 @@ int main(int argc,char** argv){
     dd.vk.DestroyPipeline(dd.device,pipeline,nullptr);dd.vk.DestroyPipelineLayout(dd.device,pipelineLayout,nullptr);dd.vk.DestroyDescriptorSetLayout(dd.device,layout,nullptr);dd.vk.DestroyShaderModule(dd.device,shader,nullptr);
     if(endpointPipeline)dd.vk.DestroyPipeline(dd.device,endpointPipeline,nullptr);if(endpointShader)dd.vk.DestroyShaderModule(dd.device,endpointShader,nullptr);
     if(endpointSampler)dd.vk.DestroySampler(dd.device,endpointSampler,nullptr);if(endpointView)dd.vk.DestroyImageView(dd.device,endpointView,nullptr);if(endpointImage)dd.vk.DestroyImage(dd.device,endpointImage,nullptr);if(endpointMemory)dd.vk.FreeMemory(dd.device,endpointMemory,nullptr);
-    dd.vk.DestroyAccelerationStructureKHR(dd.device,tlas,nullptr);dd.vk.DestroyAccelerationStructureKHR(dd.device,blas,nullptr);if(argc==5)content_fixture(dd,pool);
+    dd.vk.DestroyAccelerationStructureKHR(dd.device,tlas,nullptr);dd.vk.DestroyAccelerationStructureKHR(dd.device,blas,nullptr);if(argc>=5)content_fixture(dd,pool);
+    if(argc==6)bc_fixture(dd,pool,argv[5]);
     dd.vk.DestroyCommandPool(dd.device,pool,nullptr);omm::pool_discard(pool,true);
     std::printf("PASS synthetic EXT: primitives=3 rays=6 contradictions=%u unknown_candidates=%u actual_timeline_retirement=1; not a BG3/FG/sampler proof\n",contradictions,unknownCandidates);
   }

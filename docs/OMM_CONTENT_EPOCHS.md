@@ -17,8 +17,9 @@ the reference TLAS, irrespective of an otherwise matching scene epoch.
 
 Eligibility is deliberately narrow: 2D, one layer/sample, optimal tiling, empty
 create pNext/flags, R8/RG8/RGBA8/BGRA8 UNORM, and usage limited to sampled/transfer.
-Storage, attachments, host transfer, compressed/sRGB, mutable/alias/sparse/external
-images and unknown extensions decline. Allocation/binding tracking requires known
+Storage, attachments, host transfer, mutable/alias/sparse/external images and
+unknown extensions decline. BC UNORM/sRGB formats have only the explicit
+uniform-endpoint policy described below; general code8 proof does not apply. Allocation/binding tracking requires known
 non-host-visible backing without imported/unknown allocation extensions. Unknown
 bind pNext declines. Free/recreate invalidates CPU source lookup; image IDs/slots
 are not reused. Devices enabling raw device-address commands or dedicated image
@@ -51,7 +52,7 @@ component waits idle before destroying recorded counter resources. It exposes no
 host ABI change; coordinated ABI 19 remains separate.
 
 Offline validation: host DLL builds with two workers; targeted CTests 3/3 pass:
-87 backend checks, 111 submission checks, 77 registry/view checks. Shader DXC/spirv-val
+87 backend checks, 111 submission checks, 83 registry/view/policy checks. Shader DXC/spirv-val
 pass. Actual RTX 5090 synthetic GPU test, explicit Khronos validation, zero errors:
 first write global/image 1, same-CB replay 2, UINT32_MAX saturation + disable 1,
 subsequent update no wrap, unsupported sticky-fill disable 1, later supported update
@@ -79,3 +80,38 @@ Actual GPU fixture created/destroyed/recreated a sampled view: view IDs 1 then 2
 resolved base 0, one level, format 37, same image ID. Source lookup after destruction
 fails. The ray, endpoint and epoch replay/saturation gates still pass, with zero
 Khronos validation errors. Evidence: docs/evidence/omm-content-view-20261030.txt.
+
+## BC and sRGB: explicit uniform-endpoint policy
+
+ContentSource.requiredSamplingCertificate is metadata, not a granted certificate:
+1 means the general plain-UNORM8 interval contract; 2 means ONLY uniform decoded
+0/1 endpoints. BC1 RGB/RGBA, BC2, BC3, BC4, BC5 and BC7 UNORM plus their available
+sRGB counterparts require policy 2. Plain R8/RG8/RGBA8/BGRA8 sRGB also requires 2.
+SNORM, BC6 floating formats and unknown formats still decline. Root must enforce
+this metadata and supply the separately established sampling certificate. Mixed
+values cannot inherit a general UNORM8 code/rounding certificate. All mip/view/
+content epoch guards remain mandatory. For stochastic native >= threshold [0,1],
+uniform zero remains UNKNOWN (hash zero is reachable); uniform one can be Opaque.
+
+The actual RTX 5090 fixture checks BC3 UNORM/SRGB (formats 137/138) and BC7
+UNORM/SRGB (145/146), alpha 0 and 1, all three mips, LINEAR min/mag and mip
+filtering, 64 UVs and 17 fractional LODs. Each of eight fixtures has 1,088 sample
+points: 8,704 total. Both Texture.Load decoded alpha and filtered SampleLevel
+return exact endpoint float bits, zero failures. BC7 mode-6 block construction is
+verified by the actual decoded loads, not accepted from a guessed bit layout.
+All eight sampled-view sources report required policy 2. Explicit Khronos
+validation errors remain zero. BC1/2/4/5 were not separately hardware-tested here;
+their registry acceptance is conditional on the same explicit endpoint policy,
+not a claim that arbitrary decoded values or filtering errors were certified.
+
+[sRGB conversion in Vulkan](https://docs.vulkan.org/spec/latest/chapters/images.html)
+converts RGB after UNORM decoding; alpha remains linear. This does not grant a
+mixed-value RGB precision bound. The [weighted-average filtering contract](https://docs.vulkan.org/spec/latest/chapters/textures.html#textures-texel-filtering)
+preserves constants algebraically, subject to the numerical caveats already
+recorded in OMM_EXT_BACKEND.md. This finite fixture is not an all-content or
+all-driver certificate and does not itself bake/attach BC-derived micromaps.
+
+Run the existing optional console with a fourth shader path compiled from entry
+bc_endpoints. Evidence: docs/evidence/omm-bc-endpoints-20261030.txt. Host DLL and
+3/3 targeted CPU tests pass; registry/view/policy checks are now 83. No game,
+window, presentation, runtime configuration change or deployment was performed.
