@@ -485,6 +485,7 @@ function Run-Job($file) {
     $actualBuild=Get-QueueBuildIdentity $tree
     $script:permissionStates+=Use-QueuePermission $job $root $tree $actualBuild $PermissionSession $script:permissionRunner
     $script:permissionContext=@{job=$job;tree=$tree;build=$actualBuild}
+    $env:BG3RTX_QUEUE_CONTEXT=New-QueueChildContext $job $root $tree $actualBuild $PermissionSession $script:permissionRunner
     if(-not $DryRun -and -not $script:minimizer){
       $script:minimizer=Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$(Join-Path $PSScriptRoot 'game-minimizer.ps1')`"",'-WhilePid',$PID
     }

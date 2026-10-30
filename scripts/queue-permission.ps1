@@ -59,10 +59,37 @@ function Get-QueuePermissionBlock($job,[string]$queueRoot,[string]$tree='', [str
       foreach($row in @($state.used)){if($row.hash -notmatch '^[a-f0-9]{64}$' -or [string]$row.runs -notmatch '^([0-9]|[1-9][0-9]|100)$'){return 'Malformed consumed-run state'}}
       if(@($state.used | Group-Object hash | Where-Object Count -gt 1).Count){return 'Duplicate consumed-run state'}
       $used=@($state.used | Where-Object {$_.hash -ceq $hash} | Select-Object -First 1)
+      if($InFlight -and ($used.Count -ne 1 -or [int]$used[0].runs -lt 1 -or [int]$used[0].runs -gt [int]$entry[0].runs)){return 'No consumed run for in-flight job'}
       if(-not $InFlight -and $used.Count -and [int]$used[0].runs -ge [int]$entry[0].runs){return 'Consumed job allowance'}
-    }
+    } elseif($InFlight){return 'Missing consumed-run state'}
     return ''
   } catch {return 'Missing or invalid live batch receipt'}
+}
+
+# This context identifies a claimed queue run; it is not a grant or a secret.
+# QA subprocesses inherit it and still validate the original live queue owner.
+function New-QueueChildContext($job,[string]$queueRoot,[string]$tree,[string]$build,[string]$session,[string]$runner) {
+  $block=Get-QueuePermissionBlock $job $queueRoot $tree $build $session $runner -InFlight
+  if($block){throw $block}
+  $parent=Get-Process -Id $PID
+  if($runner -notlike "$PID|*"){throw 'Child context runner is not this queue process'}
+  @{version=1;job=$job;queue_root=[IO.Path]::GetFullPath($queueRoot);tree=[IO.Path]::GetFullPath($tree);
+    build=$build;session=$session;runner=$runner;parent_pid=$PID;parent_start_ticks=[string]$parent.StartTime.ToUniversalTime().Ticks} | ConvertTo-Json -Depth 64 -Compress
+}
+function Get-QueueChildPermissionBlock([string]$tree,[switch]$ReceiptOnly) {
+  try {
+    if(-not $env:BG3RTX_QUEUE_CONTEXT){return 'Queue child context required for auto-run'}
+    $ctx=$env:BG3RTX_QUEUE_CONTEXT | ConvertFrom-Json
+    if($ctx.version -ne 1 -or -not $ctx.job -or -not $ctx.parent_pid -or -not $ctx.parent_start_ticks){return 'Malformed queue child context'}
+    if([IO.Path]::GetFullPath($ctx.tree) -ine [IO.Path]::GetFullPath($tree)){return 'Queue child tree mismatch'}
+    if(-not $env:BG3RTX_QUEUE_ROOT -or [IO.Path]::GetFullPath($ctx.queue_root) -ine [IO.Path]::GetFullPath($env:BG3RTX_QUEUE_ROOT)){return 'Queue child root mismatch'}
+    if($ctx.runner -notlike "$($ctx.parent_pid)|*"){return 'Queue child runner mismatch'}
+    $parent=Get-Process -Id ([int]$ctx.parent_pid) -ErrorAction Stop
+    if([string]$parent.StartTime.ToUniversalTime().Ticks -cne [string]$ctx.parent_start_ticks){return 'Queue owner exited or PID reused'}
+    $build=if($ReceiptOnly){[string]$ctx.build}else{Get-QueueBuildIdentity $tree}
+    if($build -cne $ctx.build){return 'Queue child frozen build changed'}
+    return Get-QueuePermissionBlock $ctx.job $ctx.queue_root $ctx.tree $build $ctx.session $ctx.runner -InFlight
+  } catch {return 'Invalid queue child context or queue owner exited'}
 }
 function Use-QueuePermission($job,[string]$queueRoot,[string]$tree,[string]$build,[string]$session,[string]$runner) {
   $path=Join-Path $queueRoot "captures/queue/authorizations/$($job.live_batch).json"
