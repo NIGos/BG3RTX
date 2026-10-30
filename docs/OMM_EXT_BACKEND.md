@@ -72,7 +72,7 @@ The storage/scratch allocation budget is bounded to 256 MiB of requested buffer
 bytes. This is not a measured device-memory footprint or performance result.
 
 Offline validation: isolated host DLL build succeeded with two compiler workers.
-CPU CTests pass 87 plan/range/layout/reservation/lifetime checks and 103 command
+CPU CTests pass 87 plan/range/layout/reservation/lifetime checks and 101 command
 graph/generation/queue/counter/input-owner state checks (2/2 tests). Settings defaults agree.
 No shader files differ from the baseline. No Vulkan command was executed, and
 neither GPU cost nor traversal correctness has been measured. This component has
