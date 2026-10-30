@@ -2,7 +2,9 @@
 
 ## Latest: minimal descriptor reset built for user trial (2026-10-30)
 
-User: "proviamola". Applied only allocation-lifetime reset; layer DLL rebuilt.
+User tried 17fb500 and reports the artifact currently no longer reproducible.
+Positive provisional visual confirmation; main integration still pending.
+Applied only allocation-lifetime reset; layer DLL rebuilt.
 Successful allocations clear tracked descriptor contents/fallback dynamic counts
 before assigning layout; unrelated sets/partial writes are preserved. No ini key,
 ABI, HLSL, settings or GPU work changes. Build/CTest 16/16; fixed real-function

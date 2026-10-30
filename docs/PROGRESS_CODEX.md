@@ -1,5 +1,24 @@
 # BG3RTX progress
 
+## User confirmation and remaining plan — 2026-10-30
+
+After descriptor reset 17fb500, the user reports the foliage/UI artifact appears
+resolved and cannot currently trigger it. This is a positive provisional in-game
+confirmation, not a guarantee that every temporal symptom is closed. Keep the
+trial specific; material-source/RR-helper changes remain absent. No new game job.
+The fix is built on codex/ui-contamination-offline, not yet merged into main.
+
+Verified current plan: OMM is NOT integrated. codex/p4-omm 8d902d5 contains only
+an unused conservative interval classifier and tests; no device extension,
+GPU bake, BLAS attachment or production caller. Main has no OMM runtime path.
+Remaining: qualify actual foreground base fps (CPU alpha-stream optimization is
+already merged/default-on in main 47ac6a9), close experimental box-light gates,
+face/skin and any separate FG/RR temporal issues if still reproducible; implement
+OMM backend; finish EN2 hit-material correctness and D-EM consumers/gates, light
+tree and SHaRC v2; implement water (P6 has design only). SHaRC v1 already exists,
+off by default; D-EM data capture exists, off. Older roadmap snapshots may be stale.
+
+
 ## READY FOR USER TRIAL: descriptor allocation lifetime — 2026-10-30
 
 User asked to try the minimal patch. Applied ONLY the fresh-allocation reset:

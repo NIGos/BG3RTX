@@ -40,5 +40,11 @@
     "visual_gate": "NOT MEASURED; user trial pending",
     "GPU_or_CPU_cost": "Not measured; only CPU bookkeeping changed, no new GPU work."
   },
-  "merge": false
+  "merge": false,
+  "user_confirmation": {
+    "date": "2026-10-30",
+    "report": "Problem seems resolved; user cannot currently trigger it.",
+    "qualification": "Positive provisional in-game confirmation, not a universal temporal-quality guarantee.",
+    "tested_fix": "17fb500"
+  }
 }
