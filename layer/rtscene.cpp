@@ -750,13 +750,10 @@ void rt_device_created(DeviceData* dd, bool enabled) {
 
 void rt_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
-<<<<<<< HEAD
   sun_device_destroyed(dd);
-=======
   omm::device_destroyed(dd);
   omm::submit_device_destroyed(dd);
   omm::content_device_destroyed(dd);
->>>>>>> 07d3ec5
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();
