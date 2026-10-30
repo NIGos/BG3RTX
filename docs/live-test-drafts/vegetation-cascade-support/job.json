@@ -52,7 +52,7 @@
   "post": "py -3 -m scripts.qa.pan_artifacts --log \"{log}\" --out captures/cascade-support",
   "post_gate": false,
   "stop_on_dump": true,
-  "motion_plan_sha256": "0819a9a1537a79b0513c98f55409361f54886a9df6021726cae35b00a5f7e197",
+  "motion_plan_sha256": "8293b6776cbf3aa872a6d228b680e3de7a37315dad5755c68cc5006fede6f708",
   "draft_only": true,
   "estimated_raw_gib": 8.96,
   "required_free_gib": 40,
