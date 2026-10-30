@@ -479,7 +479,6 @@ struct SunCascadeDraw {
   uint32_t first_triangle=0, triangles=0;
   uint64_t fragment_shader=0;
   uint32_t material=0; // 0 opaque; 1+ snapshot index; UINT32_MAX unknown
-  sun_coverage::AffineSource affine;
 };
 struct SunCascadeCapture {
   CascadeSoup soup{};
@@ -552,7 +551,6 @@ struct InstPipe {
   uint8_t row_binding[3] = {};
   uint32_t row_offset[3] = {};
   uint32_t row_stride[3] = {};  // binding strides (0: dynamic, from the bind call)
-  uint32_t pos_binding=0, pos_offset=0, pos_stride=0, pos_format=0;
   uint64_t vtx_sig = 0;         // VS + per-vertex input layout
   uint32_t vtx_bindings = 0;    // mask of the per-vertex bindings the attributes read
   bool uv_ok = false;           // the captured UV output is a copy of a per-vertex input
@@ -569,7 +567,6 @@ struct BvhDraw {
   bool alpha;                   // alpha-tested (its FS is in the table, UV captured)
   DrawArgs args;
   const CmdState* s;
-  sun_coverage::AffineSource affine;
 };
 enum BvhVerdict { BVH_CAPTURE = 0, BVH_CACHED = 1, BVH_CACHED_AUDIT = 2 };
 BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris);
@@ -589,7 +586,6 @@ struct BvhSunBase {
   VkDeviceSize offset = 0, buffer_bytes = 0;
   uint32_t count = 0;
   uint64_t record = 0;
-  std::vector<sun_coverage::AffineSource> affine_sources;
 };
 struct BvhResult {
   VkAccelerationStructureKHR tlas;
@@ -650,6 +646,7 @@ void sun_device_destroyed(DeviceData* dd);
 // Caller owns verified command dependencies; no coverage certificate is implied.
 bool bvh_build_sun_clone(VkCommandBuffer cmd, uint32_t slot, const BvhSunBase& base,
                          const CascadeSoup& cascade, const float translation[3],
+                         VkPipeline validate_pipeline, VkPipelineLayout validate_layout, VkBuffer stamp,
                          BvhSunCloneResult* out);
 // `slot` (< kSceneSlots, retired on the GPU): the ring region and TLAS it writes.
 bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), uint32_t slot,
@@ -799,7 +796,7 @@ struct AlphaSunClone {
 // stamp (including Hair-invalid byte12 and camera256), then clears Sun16/20.
 // CPU initialization leaves the clone unready if its private work is not submitted.
 bool alpha_prepare_sun_clone(VkCommandBuffer private_cmd, uint32_t slot,
-                             VkDescriptorSet selected_alpha, AlphaSunClone* out);
+                             VkDescriptorSet selected_alpha, const SunCascadeCapture& cascade, AlphaSunClone* out);
 // The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).
 bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);

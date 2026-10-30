@@ -77,8 +77,13 @@ struct SunAlphaSlot {
   VkBuffer stamp = VK_NULL_HANDLE;
   VkDeviceMemory memory = VK_NULL_HANDLE;
   uint32_t* mapped = nullptr;
+  VkBuffer records=VK_NULL_HANDLE, dispatch=VK_NULL_HANDLE;
+  VkDeviceMemory records_memory=VK_NULL_HANDLE, dispatch_memory=VK_NULL_HANDLE;
+  VkDeviceSize record_bytes=0, dispatch_bytes=0;
 };
 SunAlphaSlot g_sun_alpha[kRing];
+VkDescriptorSetLayout g_sun_dsl=VK_NULL_HANDLE;
+uint32_t g_set_records[kRing]={};
 VkBuffer g_legacy_buf = VK_NULL_HANDLE;   // alpha_legacy_info
 VkDeviceMemory g_legacy_mem = VK_NULL_HANDLE;
 uint32_t g_legacy_stride = 0;
@@ -305,7 +310,7 @@ void alpha_device_created(DeviceData* dd) {
   ai.descriptorSetCount = kRing;
   ai.pSetLayouts = layouts;
   ok = ok && vk.AllocateDescriptorSets(dd->device, &ai, g_sets) == VK_SUCCESS;
-  ok = ok && make_buffer(kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+  ok = ok && make_buffer(kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                          g_rec_buf, g_rec_mem, true);
   if (ok) fault_track("alpha records (8 slot regions)", rt_buffer_address(g_rec_buf), kRegion * kRing);
   ok = ok && make_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_dummy_buf,
@@ -346,8 +351,13 @@ void alpha_device_destroyed(DeviceData* dd) {
     if (s.pool) vk.DestroyDescriptorPool(dd->device,s.pool,nullptr);
     if (s.stamp) vk.DestroyBuffer(dd->device,s.stamp,nullptr);
     if (s.memory) vk.FreeMemory(dd->device,s.memory,nullptr);
+    for(auto [b,m]:{std::pair{s.records,s.records_memory},std::pair{s.dispatch,s.dispatch_memory}}) {
+      if(b) vk.DestroyBuffer(dd->device,b,nullptr);if(m) vk.FreeMemory(dd->device,m,nullptr);
+    }
     s = SunAlphaSlot{};
   }
+  if(g_sun_dsl) vk.DestroyDescriptorSetLayout(dd->device,g_sun_dsl,nullptr);
+  g_sun_dsl=VK_NULL_HANDLE;
   if (g_pool) vk.DestroyDescriptorPool(dd->device, g_pool, nullptr);
   if (g_dsl) vk.DestroyDescriptorSetLayout(dd->device, g_dsl, nullptr);
   for (VkSampler s : {g_wrap, g_clamp})
@@ -722,6 +732,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   const uint32_t policy = (cfg_int("rt_alpha_cut", 1) ? 1u : 0u) | (cfg_int("rt_alpha_stochastic", 1) ? 2u : 0u) |
                           (cfg_int("rt_alpha_unknown", 1) ? 4u : 0u) |
                           (geo_native_hair_enabled() && !cfg_int("rt_alpha_test",1) ? 8u : 0u);
+  g_set_records[slot]=uint32_t(g_recs.size());
   uint32_t header[4] = {uint32_t(g_recs.size()), geo_native_hair_enabled() ? stride : (soup && opaque_bytes ? stride : 0u), policy, 0};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
@@ -895,7 +906,7 @@ bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set) {
 }
 
 bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet selected_alpha,
-                             AlphaSunClone* out) {
+                             const SunCascadeCapture& cascade, AlphaSunClone* out) {
   if (!out) return false;
   *out = {};
   if (!g_on || !cmd || slot >= kRing || !selected_alpha) return false;
@@ -905,8 +916,76 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
   if (!expected) return false;
   SunAlphaSlot& s=g_sun_alpha[slot];
   const auto& vk=g_dd->vk;
+  if(!g_sun_dsl) {
+    VkDescriptorSetLayoutBinding bindings[12]={
+      {0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {2,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {3,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kCaches,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {4,VK_DESCRIPTOR_TYPE_SAMPLER,1,VK_SHADER_STAGE_COMPUTE_BIT,&g_wrap},
+      {5,VK_DESCRIPTOR_TYPE_SAMPLER,1,VK_SHADER_STAGE_COMPUTE_BIT,&g_clamp},
+      {6,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {7,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {8,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {9,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {12,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {13,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
+    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    ci.bindingCount=12;ci.pBindings=bindings;
+    if(vk.CreateDescriptorSetLayout(g_dd->device,&ci,nullptr,&g_sun_dsl)!=VK_SUCCESS) return false;
+  }
+  if(!sun_coverage::contiguous_triangle_ranges(std::span<const SunCascadeDraw>(cascade.draws),cascade.soup.tris)) return false;
+  std::vector<AlphaRec> extra;
+  std::vector<std::pair<VkImageView,VkImageLayout>> textures,caches;
+  std::vector<uint32_t> dispatch={uint32_t(cascade.draws.size()),cascade.soup.stride,cascade.soup.tris,0};
+  uint32_t next=0;
+  for(const auto& draw:cascade.draws) {
+    if(draw.first_triangle!=next || draw.triangles>cascade.soup.tris-next) return false;
+    next+=draw.triangles;
+    uint32_t record=0,state=draw.material==0?0u:2u;
+    if(draw.material && draw.material!=UINT32_MAX && draw.material<=cascade.materials.size()) {
+      const auto& snapshot=cascade.materials[draw.material-1];
+      const auto& source=snapshot.rec;
+      if(snapshot.tex_id && snapshot.tex_id==view_image_id(snapshot.tex) &&
+         ((source.kind!=1 && source.kind!=4) || (snapshot.cache_id && snapshot.cache_id==view_image_id(snapshot.cache)))) {
+        AlphaRec r=source;
+        const uint32_t t=slot_of(textures,kTextures-g_set_tex[slot],snapshot.tex,snapshot.tex_layout);
+        uint32_t c=0;
+        if(source.kind==1) c=slot_of(caches,kCaches-g_set_cache[slot],snapshot.cache,snapshot.cache_layout);
+        if(source.kind==4) c=slot_of(textures,kTextures-g_set_tex[slot],snapshot.cache,snapshot.cache_layout);
+        if(t && ((source.kind!=1 && source.kind!=4) || c)) {
+          r.tex=g_set_tex[slot]+t;
+          r.cache=source.kind==1?g_set_cache[slot]+c:source.kind==4?g_set_tex[slot]+c:0;
+          record=16u+uint32_t((uint64_t(g_set_records[slot])+extra.size())*sizeof(AlphaRec));
+          extra.push_back(r);state=1;
+          const uint64_t until=frame_index()+kRing+uint64_t((std::clamp)(cfg_int("rt_dyn_hold",0),0,120));
+          for(auto view:{snapshot.tex,snapshot.cache}) if(view) {
+            uint64_t image_handle=0;
+            {std::shared_lock<std::shared_mutex> lock(tracker().mu);
+             auto image=tracker().views.find(view);
+             if(image!=tracker().views.end()) image_handle=uint64_t(image->second.image);}
+            life_extend(uint64_t(view),until);if(image_handle) life_extend(image_handle,until);
+          }
+        }
+      }
+    }
+    dispatch.insert(dispatch.end(),{draw.first_triangle,draw.triangles,record,state});
+  }
+  if(next!=cascade.soup.tris || uint64_t(g_set_records[slot])+extra.size()>kMaxRecords) return false;
+  dispatch[3]=uint32_t(g_set_records[slot]+extra.size());
+  auto ensure=[&](VkBuffer& buffer,VkDeviceMemory& memory,VkDeviceSize& capacity,VkDeviceSize bytes) {
+    if(buffer && capacity>=bytes) return true;
+    if(buffer) defer_destroy(BG3_DEFER_BUFFER,uint64_t(buffer));
+    if(memory) defer_destroy(BG3_DEFER_MEMORY,uint64_t(memory));
+    buffer=VK_NULL_HANDLE;memory=VK_NULL_HANDLE;capacity=0;
+    if(!make_buffer(bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,buffer,memory)) return false;
+    capacity=bytes;return true;
+  };
+  const VkDeviceSize record_bytes=16+VkDeviceSize(dispatch[3])*sizeof(AlphaRec);
+  if(!ensure(s.records,s.records_memory,s.record_bytes,record_bytes) ||
+     !ensure(s.dispatch,s.dispatch_memory,s.dispatch_bytes,dispatch.size()*4ull)) return false;
   if (!s.pool) {
-    VkDescriptorPoolSize sizes[3]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,6},
+    VkDescriptorPoolSize sizes[3]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,8},
       {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches},{VK_DESCRIPTOR_TYPE_SAMPLER,2}};
     VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pi.maxSets=1;pi.poolSizeCount=3;pi.pPoolSizes=sizes;
@@ -914,7 +993,7 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
   }
   if(!s.set) {
     VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-    ai.descriptorPool=s.pool;ai.descriptorSetCount=1;ai.pSetLayouts=&g_dsl;
+    ai.descriptorPool=s.pool;ai.descriptorSetCount=1;ai.pSetLayouts=&g_sun_dsl;
     if (vk.AllocateDescriptorSets(g_dd->device,&ai,&s.set)!=VK_SUCCESS) return false;
   }
   if (!s.set) return false;
@@ -928,19 +1007,34 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
   // This slot's previous consumer is retired. Without an approved private build
   // none of these zero words can authorize traversal of an unbuilt clone TLAS.
   std::memset(s.mapped,0,size_t(kStampStride));
-  VkCopyDescriptorSet copies[7]{};
-  const uint32_t bindings[7]={0,1,2,3,6,7,8};
-  for(unsigned i=0;i<7;++i) {
+  VkCopyDescriptorSet copies[6]{};
+  const uint32_t bindings[6]={1,2,3,6,7,8};
+  for(unsigned i=0;i<6;++i) {
     copies[i]={VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
     copies[i].srcSet=selected_alpha;copies[i].srcBinding=bindings[i];
     copies[i].dstSet=s.set;copies[i].dstBinding=bindings[i];
     copies[i].descriptorCount=bindings[i]==2?kTextures:bindings[i]==3?kCaches:1u;
   }
-  VkDescriptorBufferInfo stamp{s.stamp,0,kStampStride};
-  VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-  write.dstSet=s.set;write.dstBinding=9;write.descriptorCount=1;
-  write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;write.pBufferInfo=&stamp;
-  vk.UpdateDescriptorSets(g_dd->device,1,&write,7,copies);
+  // Copy first: Vulkan applies descriptor copies AFTER writes in one call.
+  vk.UpdateDescriptorSets(g_dd->device,0,nullptr,6,copies);
+  VkDescriptorBufferInfo buffers[4]={{s.stamp,0,kStampStride},{s.records,0,record_bytes},
+    {s.dispatch,0,dispatch.size()*4ull},{cascade.soup.xfb,0,VkDeviceSize(cascade.soup.tris)*3*cascade.soup.stride}};
+  const uint32_t bindings_out[4]={9,0,12,13};
+  VkWriteDescriptorSet writes[4]{};
+  for(unsigned i=0;i<4;++i) {
+    writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=s.set;writes[i].dstBinding=bindings_out[i];
+    writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=&buffers[i];
+  }
+  vk.UpdateDescriptorSets(g_dd->device,4,writes,0,nullptr);
+  auto images=[&](uint32_t binding,uint32_t base,const auto& views) {
+    std::vector<VkDescriptorImageInfo> info;
+    for(auto [view,layout]:views) info.push_back({VK_NULL_HANDLE,view,layout});
+    if(info.empty()) return;
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=s.set;write.dstBinding=binding;
+    write.dstArrayElement=base+1;write.descriptorCount=uint32_t(info.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.pImageInfo=info.data();vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);
+  };
+  images(2,g_set_tex[slot],textures);images(3,g_set_cache[slot],caches);
   VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   barrier.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT;
   barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -948,9 +1042,23 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
                          VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&barrier,0,nullptr,0,nullptr);
   VkBufferCopy cp{VkDeviceSize(slot)*kStampStride,0,kStampStride};
   vk.CmdCopyBuffer(cmd,g_stamp_buf,s.stamp,1,&cp);
+  VkBufferCopy records{VkDeviceSize(slot)*kRegion,0,16+VkDeviceSize(g_set_records[slot])*sizeof(AlphaRec)};
+  vk.CmdCopyBuffer(cmd,g_rec_buf,s.records,1,&records);
+  barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;barrier.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+  vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&barrier,0,nullptr,0,nullptr);
+  vk.CmdUpdateBuffer(cmd,s.records,0,4,&dispatch[3]);
+  auto upload=[&](VkBuffer buffer,VkDeviceSize offset,const void* data,VkDeviceSize bytes) {
+    const auto* src=static_cast<const uint8_t*>(data);
+    for(VkDeviceSize copied=0;copied<bytes;) {
+      const VkDeviceSize count=(std::min)(VkDeviceSize(65536),bytes-copied);
+      vk.CmdUpdateBuffer(cmd,buffer,offset+copied,count,src+copied);copied+=count;
+    }
+  };
+  if(!extra.empty()) upload(s.records,16+VkDeviceSize(g_set_records[slot])*sizeof(AlphaRec),extra.data(),extra.size()*sizeof(AlphaRec));
+  upload(s.dispatch,0,dispatch.data(),dispatch.size()*4ull);
   // byte12 belongs to Hair, and must survive the source stamp copy.
   vk.CmdFillBuffer(cmd,s.stamp,16,8,0);
-  out->set=s.set;out->layout=g_dsl;out->stamp=s.stamp;out->expected_generation=expected;
+  out->set=s.set;out->layout=g_sun_dsl;out->stamp=s.stamp;out->expected_generation=expected;
   return true;
 }
 

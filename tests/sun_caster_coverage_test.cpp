@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <random>
+#include <vector>
 
 using namespace bg3::sun_coverage;
 static unsigned checks;
@@ -73,8 +74,38 @@ int main() {
   ray.tmax=300;Volume zero{};zero.available=true;CHECK(!contains_segment(zero,ray));
   Volume corrupt=box;corrupt.clip[0][0]=INFINITY;CHECK(!contains_segment(corrupt,ray));
 
+  struct DrawRange {uint32_t first_triangle,triangles;};
+  auto ranges_ok=[](const std::vector<DrawRange>& v,uint32_t total) {
+    return contiguous_triangle_ranges(std::span<const DrawRange>(v),total);
+  };
+  CHECK(ranges_ok({},0));CHECK(!ranges_ok({},1));
+  CHECK(ranges_ok({{0,1},{1,2},{3,1}},4));
+  CHECK(!ranges_ok({{0,1},{2,2}},4)); // missing primitive must not become clear
+  CHECK(!ranges_ok({{0,2},{1,2}},3)); // overlap must not select a different material
+  CHECK(!ranges_ok({{0,0},{0,1}},1));
+  CHECK(!ranges_ok({{0,UINT32_MAX},{UINT32_MAX,1}},UINT32_MAX));
   std::mt19937 rng(0x5a17cafe);
   std::uniform_real_distribution<float> pos(-120,120), dir(-1,1), extent(.001f,.04f), time(0,350);
+  for(unsigned trial=0;trial<1000;++trial) {
+    std::vector<DrawRange> ranges;uint32_t total=32;
+    for(uint32_t start=0;start<total;) {
+      uint32_t count=(std::min)(1u+rng()%8u,total-start);
+      ranges.push_back({start,count});start+=count;
+    }
+    CHECK(ranges_ok(ranges,total));
+    // Independent primitive ownership oracle for corrupted interval tables.
+    auto& changed=ranges[rng()%ranges.size()];changed.first_triangle=rng()%35u;
+    std::array<unsigned,32> owners{};bool oracle_ok=true;
+    for(auto draw:ranges) {
+      if(draw.first_triangle>=total || draw.triangles>total-draw.first_triangle) {oracle_ok=false;break;}
+      for(uint32_t p=draw.first_triangle;p<draw.first_triangle+draw.triangles;++p) ++owners[p];
+    }
+    for(auto count:owners) oracle_ok=oracle_ok && count==1;
+    // The shader uses ordered binary search, so order is an additional required
+    // invariant even if a shuffled table would cover every primitive once.
+    for(size_t i=1;i<ranges.size();++i) oracle_ok=oracle_ok && ranges[i-1].first_triangle<ranges[i].first_triangle;
+    CHECK(ranges_ok(ranges,total)==oracle_ok);
+  }
   unsigned accepted=0,rejected=0;
   for(unsigned i=0;i<30000;++i) {
     Volume v=box;

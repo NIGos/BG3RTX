@@ -4,12 +4,12 @@
   "default": 0,
   "abi": 19,
   "isolated_build_both_dlls": true,
-  "ctest_passed": 21,
-  "ctest_total": 21,
-  "cpu_proof_checks": 47623,
-  "ordinary_shader_entries_identical": 213,
-  "new_entries_compiled_validated": 9,
-  "baseline": "92183e7",
+  "ctest_passed": 27,
+  "ctest_total": 27,
+  "cpu_proof_checks": 49443,
+  "ordinary_shader_entries_identical": 214,
+  "new_entries_compiled_validated": 10,
+  "baseline": "4ca35f5",
   "mode": "Offline CPU build, DXC and retained capture analysis; no new GPU or game execution.",
   "implemented": [
     "Sun-only per-slot instance GPU-copy and BLAS/TLAS clone",
@@ -17,16 +17,21 @@
     "Conditional private-build insertion within the same actual submit entry",
     "Source stamp copy preserves Hair12 and camera256",
     "Zero/unready stamp returns UNKNOWN before AS traversal",
-    "Whole requested finite-ray affine-volume check; no arbitrary trust lift"
+    "Whole requested finite-ray affine-volume check; no arbitrary trust lift",
+    "Private per-candidate native material dispatch, including canonical kind1/2/3/4 snapshots",
+    "Unsupported bounded cards return UNKNOWN/native-mask fallback, never forced opaque",
+    "GPU camera mask1/native Shadow mask2 separation after late fixups; speculative dedupe removed",
+    "Complete all-four raw caster capture isolated from legacy opaque compaction",
+    "Native raster clipping witness and exact receiver source packet capture"
   ],
   "remaining": [
-    "Per-native-draw material dispatch needed for foliage-heavy world coverage",
-    "Proven camera-static dedupe needed instead of cascade TMIN bias",
-    "Native receiver/CSM domain audit and full current 0..3 capture coverage",
+    "Native selected/next/aux finite-domain consumer and full current 0..3 scene attachment",
+    "Unmapped receiver packet GPU copy/validation path",
     "Actual GPU build timing, GPU validation, same-view exploration quality gate",
     "OMM-active clone reference and optional descriptor integration"
   ],
   "gate_passed": false,
   "runtime_enabled": false,
-  "live_game_launched": false
+  "live_game_launched": false,
+  "maximum_extra_capture_capacity_mib_at_default": 768
 }

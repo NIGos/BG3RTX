@@ -44,14 +44,15 @@ bool ensure_validation() {
   if(g_validate_pipeline && g_validate_generation==blob.generation) return true;
   const auto& vk=g_sun_dd->vk;
   if(!g_validate_set) {
-    VkDescriptorSetLayoutBinding bindings[2]={{0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
+    VkDescriptorSetLayoutBinding bindings[3]={{0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {2,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
     VkDescriptorSetLayoutCreateInfo si{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    si.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;si.bindingCount=2;si.pBindings=bindings;
+    si.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;si.bindingCount=3;si.pBindings=bindings;
     if(vk.CreateDescriptorSetLayout(g_sun_dd->device,&si,nullptr,&g_validate_set)!=VK_SUCCESS) return false;
   }
   if(!g_validate_layout) {
-    VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT,0,8};
+    VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT,0,12};
     VkPipelineLayoutCreateInfo pi{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pi.setLayoutCount=1;pi.pSetLayouts=&g_validate_set;pi.pushConstantRangeCount=1;pi.pPushConstantRanges=&push;
     if(vk.CreatePipelineLayout(g_sun_dd->device,&pi,nullptr,&g_validate_layout)!=VK_SUCCESS) return false;
@@ -216,22 +217,12 @@ bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,V
   VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};begin.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
   if(vk.BeginCommandBuffer(w.build,&begin)!=VK_SUCCESS) return false;
   AlphaSunClone alpha;
-  if(!alpha_prepare_sun_clone(w.build,base.slot,selected_alpha,&alpha)) return false;
+  if(!alpha_prepare_sun_clone(w.build,base.slot,selected_alpha,cascade,&alpha)) return false;
   barrier(w.build,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
           VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
-  VkDescriptorBufferInfo buffers[2]={{alpha.stamp,0,512},{cascade.soup.xfb,0,VkDeviceSize(cascade.soup.tris)*3*cascade.soup.stride}};
-  VkWriteDescriptorSet writes[2]{};
-  for(unsigned i=0;i<2;++i) {writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstBinding=i;
-    writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=&buffers[i];}
-  vk.CmdBindPipeline(w.build,VK_PIPELINE_BIND_POINT_COMPUTE,g_validate_pipeline);
-  vk.CmdPushDescriptorSet(w.build,VK_PIPELINE_BIND_POINT_COMPUTE,g_validate_layout,0,2,writes);
-  const uint32_t push[2]={cascade.soup.tris,cascade.soup.stride};
-  vk.CmdPushConstants(w.build,g_validate_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof push,push);
-  if(cascade.soup.tris>65535u*256u) return false;
-  vk.CmdDispatch(w.build,(cascade.soup.tris+255)/256,1,1);
   float translation[3];cascade::rebase(cascade.soup.origin,base.camera+52,translation);
   BvhSunCloneResult result;
-  if(!bvh_build_sun_clone(w.build,base.slot,base.base,cascade.soup,translation,&result)) return false;
+  if(!bvh_build_sun_clone(w.build,base.slot,base.base,cascade.soup,translation,g_validate_pipeline,g_validate_layout,alpha.stamp,&result)) return false;
   Bg3SunSceneInfo info{};
   info.tlas=result.tlas;info.alpha_set=alpha.set;info.alpha_layout=alpha.layout;info.build_identity=result.record;
   info.camera_record=base.base.record;info.cascade_record=cascade.soup.record;

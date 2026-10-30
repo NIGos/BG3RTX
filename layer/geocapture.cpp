@@ -1031,26 +1031,6 @@ cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const Dr
   return d;
 }
 
-sun_coverage::AffineSource sun_affine_source(const CmdState* s,const DrawArgs& a,const InstPipe& ip) {
-  sun_coverage::AffineSource source;
-  if(!ip.ok || a.kind>1 || !a.count || !a.instances || ip.pos_binding>=CmdState::kMaxVertexBindings) return source;
-  const auto& pos=s->vb[ip.pos_binding];
-  const uint32_t stride=ip.pos_stride ? ip.pos_stride : uint32_t(pos.stride);
-  if(!pos.buffer || !stride || (a.kind==1 && !s->ib)) return source;
-  auto& w=source.words;
-  w[0]=a.kind;w[1]=a.count;w[2]=a.instances;w[3]=a.first;w[4]=a.first_instance;w[5]=uint64_t(int64_t(a.vertex_offset));
-  w[6]=uint64_t(pos.buffer);w[7]=pos.offset;w[8]=ip.pos_offset;w[9]=stride;w[10]=ip.pos_format;
-  if(a.kind==1) {w[11]=uint64_t(s->ib);w[12]=s->ib_offset;w[13]=s->ib_type;}
-  for(unsigned k=0;k<3;++k) {
-    if(ip.row_binding[k]>=CmdState::kMaxVertexBindings) return {};
-    const auto& row=s->vb[ip.row_binding[k]];
-    const uint32_t rs=ip.row_stride[k] ? ip.row_stride[k] : uint32_t(row.stride);
-    if(!row.buffer || !rs) return {};
-    w[14+4*k]=uint64_t(row.buffer);w[15+4*k]=row.offset;w[16+4*k]=ip.row_offset[k];w[17+4*k]=rs;
-  }
-  source.available=true;return source;
-}
-
 void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   const uint64_t f = frame_index();
   const int want = cfg_int("rt_cascade_index", 1);
@@ -1165,7 +1145,7 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     // unknown state is NOT interpreted as that known empty case.
     if (pi.depth_write == 0 || pi.always_discard) return;
     c->c_finite_sun_clip = c->c_finite_sun_clip && pi.finite_sun_clip;
-    if (pi.discard || pi.fragment_depth || !pi.fragment_known || pi.depth_write < 0 || pi.depth_test < 0)
+    if (pi.fragment_depth || !pi.fragment_known)
       ++c->c_material_unknown;
   }
   // One matrix converts the whole soup: every draw must use the first one's UBO.
@@ -1238,7 +1218,6 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
         c->c_sun_materials.push_back(std::move(snapshot));
       }
     }
-    if(!pi.discard && !pi.fragment_depth && pi.fragment_known) draw.affine=sun_affine_source(s,args,pi.inst);
     c->c_sun_draws.push_back(std::move(draw));
   }
   VkDeviceSize off = c->cursor, size = reserved;
@@ -1627,7 +1606,6 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   const auto* pa = attr(vi.pos_location);
   const auto* pb = pa ? binding(pa->binding) : nullptr;
   if (!pa || !pb || pb->inputRate != VK_VERTEX_INPUT_RATE_VERTEX) return ip;
-  ip.pos_binding=pa->binding;ip.pos_offset=pa->offset;ip.pos_stride=dyn_stride ? 0 : pb->stride;ip.pos_format=pa->format;
   // The mesh is what the per-vertex inputs hold: the VS and their layout are part of its key.
   uint64_t h = mod.hash ^ 0x9e3779b97f4a7c15ull;
   auto mix = [&](uint64_t v) { h = (h ^ v) * 1099511628211ull; };
@@ -2115,7 +2093,6 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     const bool list = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && kind <= 1;
     BvhDraw bd{list && pi.inst.ok && (!alpha_fs || (pi.inst.uv_ok && a.kind != 4)) ? &pi.inst : nullptr, s->vs, d.pipe_id, alpha_fs,
                args, s};
-    if(cfg_int("rt_sun_cascade_current",0)) bd.affine=sun_affine_source(s,args,pi.inst);
     uint32_t mesh_tris = 0;
     BvhVerdict v = bvh_classify(cmd, bd, &token, &mesh_tris);
     if (v != BVH_CAPTURE) {

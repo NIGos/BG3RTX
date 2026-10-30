@@ -122,22 +122,17 @@ source, with no fabricated CPU values; GPU copying and validation before ready
 publication is still required for that case. No new consumer trust is enabled by
 these packets yet. Both DLLs and 25 CTests pass; no live test was run.
 
-## Cross-pass affine identity preparation
+## Camera/Shadow membership separation
 
-Current Sun draw records now retain triangle ranges and complete class-A affine
-source identities. Position binding, format, offset and actual stride are kept,
-as are all three matrix-row buffers, offsets and actual strides, the full draw
-range, index type and instance range. VS hashes are deliberately excluded after
-class-A semantic recognition, since native camera/shadow variants differ. The
-camera scene exports only actually included opaque cached affine draws.
-
-These identities nominate duplicate candidates only. The old camera-seen hash
-is not accepted as coverage proof. No caster is omitted yet: even equal source
-bindings require actual content/placement freshness before omission. Native
-copy/fill/update invalidation exists for the mesh cache, but does not prove all
-possible GPU storage writes or late mapped instance mutations between passes.
-A GPU geometric-equivalence check can close that remaining proof without
-assuming every same-buffer native pass read identical bytes.
+The interim cross-pass source-identity preparation is superseded and removed.
+Current Sun rays use only the actual native Shadow caster membership (mask2).
+Camera instances are retained only for primary checks/debug (mask1); their
+nonzero masks are narrowed by GPU compute after the source instance copy and
+late native transform fixups, before private TLAS construction. Disabled invalid
+camera transforms stay disabled. This avoids duplicate camera/Shadow geometry
+and the need to assume source-buffer equality proves equal contents between
+native passes. No heuristic duplicate filtering or extra geometric-equivalence
+framework is required.
 
 ## Raw current cards and isolated legacy compaction
 
@@ -174,3 +169,30 @@ successful snapshots do not authorize trust or silently make unknown cards solid
 Both DLLs and 27 CTests pass. Against the stable native Hair baseline4ca35f5,
 214 existing shader entries are byte-identical and all10 new entries compile
 and validate. This is offline integration evidence, not a live world-shadow gate.
+
+## Per-candidate material dispatcher (implemented, still default off)
+
+The private descriptor tuple now GPU-copies the original camera record prefix
+and appends independently indexed native Sun material records. Raw source views
+are checked against their captured image identities, assigned private texture
+slots, and retained separately. Native cutouts, scalar coverage and validated
+native Hair Shadow coverage run their captured formulas at each candidate.
+Unsupported bounded cards or invalid coverage reads produce UNKNOWN and preserve
+the original native mask for that ray. Fragment-depth geometry that cannot be
+bounded by the captured card still rejects the scene certificate.
+
+Camera instance masks are narrowed to1 by GPU compute after late native fixups
+and the instance copy, before private TLAS construction. Sun visibility sees only
+native Shadow mask2; primary checks retain camera mask1. This removes camera/CSM
+duplicate acne without a near-hit bias or speculative source-identity dedupe.
+All current wrappers explicitly enable the cascade-ID path even when the baseline
+scene has no legacy cascade. Private copy/update overlap has an explicit transfer
+write dependency; the source Hair-invalid byte12 remains preserved.
+
+Offline gate: both DLLs build, 27/27 CTests pass, 49,443 coverage/dispatch-range
+checks, and214 existing shader entries byte-identical against Hair4ca35f5.
+All10 new entries compile and validate. The unchanged ordinary shader paths are
+therefore preserved. Native selected/next-layer and enabled auxiliary-domain
+consumption is still pending; this increment is NOT a world-shadow gate pass.
+No GPU or game execution, visual gate, frame-time measurement or deployment was
+performed. The additional private record copies also have unmeasured GPU cost.

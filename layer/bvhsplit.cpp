@@ -387,7 +387,6 @@ uint64_t g_hold_why[7] = {};
 
 // ---- this capture's draws ----
 struct FrameDraw {
-  sun_coverage::AffineSource affine;
   uint64_t mesh_key = 0;      // 0: not instanceable
   uint64_t dyn_key = 0;
   const uint8_t* rows[3] = {};   // instance 0's matrix rows in the game's mapped memory
@@ -847,7 +846,6 @@ BvhVerdict bvh_classify(VkCommandBuffer, const BvhDraw& d, uint32_t* token, uint
   *token = uint32_t(g_draws.size());
   g_draws.emplace_back();
   FrameDraw& fd = g_draws.back();
-  fd.affine=d.affine;
   fd.alpha = d.alpha;
   fd.instances = d.args.instances;
   fd.first_instance = d.args.first_instance;
@@ -1717,11 +1715,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->pool_bytes = g_pool.size;
   out->rec = rec;
   out->sun_base = {g_ring.b, rbase, g_ring.size, sun_base_instances, rec};
-  if(cfg_int("rt_sun_cascade_current",0))
-    for(uint32_t di:cached) {
-      const auto& fd=g_draws[di];
-      if(!fd.alpha && fd.affine.available) out->sun_base.affine_sources.push_back(fd.affine);
-    }
+
   if (cfg_int("rt_stability_log", 0) && now % 300 == 0) {
     uint32_t held = 0;
     for (const auto& [di, key] : dyn) held += key && g_draws[di].held;
@@ -1803,11 +1797,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
 // current-frame certificate. The caller must establish native epoch/dependencies.
 bool bvh_build_sun_clone(VkCommandBuffer cmd, uint32_t slot, const BvhSunBase& base,
                          const CascadeSoup& soup, const float translation[3],
+                         VkPipeline validate_pipeline,VkPipelineLayout validate_layout,VkBuffer stamp,
                          BvhSunCloneResult* out) {
   if (!out) return false;
   *out = {};
   if (!g_on || slot >= kSceneSlots || !cmd || !base.instances || !base.record ||
-      !soup.xfb || !soup.tris || soup.stride < 16 || !soup.record) return false;
+      !soup.xfb || !soup.tris || soup.stride < 16 || !soup.record || !validate_pipeline || !validate_layout || !stamp ||
+      (std::max)(soup.tris,base.count)>65535u*256u) return false;
   const VkDeviceSize prefix = VkDeviceSize(base.count) * sizeof(VkAccelerationStructureInstanceKHR);
   if (base.offset > base.buffer_bytes || prefix > base.buffer_bytes - base.offset || base.count == UINT32_MAX)
     return false;
@@ -1831,7 +1827,7 @@ bool bvh_build_sun_clone(VkCommandBuffer cmd, uint32_t slot, const BvhSunBase& b
   const auto bsz = blas_sizes(soup.tris,soup.stride,false,flags);
   if (!as_create(bsz.accelerationStructureSize,s.cascade)) return false;
   if (!make_buf(s.instances,prefix+sizeof(VkAccelerationStructureInstanceKHR),
-                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
                 true,"sun current-cascade instances")) return false;
   VkAccelerationStructureInstanceKHR in{};
   in.transform.matrix[0][0]=in.transform.matrix[1][1]=in.transform.matrix[2][2]=1.f;
@@ -1868,6 +1864,24 @@ bool bvh_build_sun_clone(VkCommandBuffer cmd, uint32_t slot, const BvhSunBase& b
   barrier(cmd,as|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_HOST_BIT,
           VK_ACCESS_MEMORY_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT,as|xf,VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT);
   if (prefix) { VkBufferCopy cp{base.offset,0,prefix};g_dd->vk.CmdCopyBuffer(cmd,base.instances,s.instances.b,1,&cp); }
+  barrier(cmd,xf|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_HOST_BIT,
+          VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT,
+          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
+  VkDescriptorBufferInfo validation_buffers[3]={{stamp,0,512},
+    {soup.xfb,0,VkDeviceSize(soup.tris)*3*soup.stride},{s.instances.b,0,prefix+sizeof(VkAccelerationStructureInstanceKHR)}};
+  VkWriteDescriptorSet validation_writes[3]{};
+  for(unsigned i=0;i<3;++i) {
+    validation_writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};validation_writes[i].dstBinding=i;
+    validation_writes[i].descriptorCount=1;validation_writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    validation_writes[i].pBufferInfo=&validation_buffers[i];
+  }
+  g_dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,validate_pipeline);
+  g_dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,validate_layout,0,3,validation_writes);
+  const uint32_t validation_push[3]={soup.tris,soup.stride,base.count};
+  g_dd->vk.CmdPushConstants(cmd,validate_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof validation_push,validation_push);
+  g_dd->vk.CmdDispatch(cmd,((std::max)(soup.tris,base.count)+255u)/256u,1,1);
+  barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,
+          as,VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
   barrier(cmd,xf,VK_ACCESS_TRANSFER_WRITE_BIT,as,VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
   VkAccelerationStructureGeometryKHR bg=tri_geometry(rt_buffer_address(soup.xfb),soup.tris,soup.stride,false);
   VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};

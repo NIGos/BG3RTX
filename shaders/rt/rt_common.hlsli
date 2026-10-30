@@ -128,6 +128,10 @@ float3 rt_scene_ray_origin(float3 lighting_origin) { return lighting_origin + rt
 #define RT_HIT_MASK 0xFF
 #define RT_VIS_MASK 0xFF
 #endif
+#ifdef RT_SUN_CURRENT
+#undef RT_VIS_MASK
+#define RT_VIS_MASK 0x02
+#endif
 #ifdef RT_CASCADE_SUN
 static const uint kRtCascadeId = 0xFFFFFFu;   // common/cascade_casters.h kCustomIndex
 // The cascade soup holds the casters again where the camera drew them too, at the shadow
@@ -186,6 +190,11 @@ bool sun_current_covers(float3 o,float3 d,float tmax) {
 }
 #endif
 
+#ifdef RT_SUN_CURRENT
+[[vk::binding(12,1)]] ByteAddressBuffer gSunDraws;
+[[vk::binding(13,1)]] ByteAddressBuffer gSunSoup;
+static bool gSunAlphaKnown=true;
+#endif
 static const uint kRecBytes = 208;
 
 uint rec_addr(uint i) { return 16 + i * kRecBytes; }
@@ -511,6 +520,9 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   float g = footprint * sqrt(area_uv / max(area_w, 1e-12));   // uv change across the footprint
   if (!all(isfinite(uv)) || !isfinite(g)) {
     alpha_stat(4, true, prim);
+#ifdef RT_SUN_CURRENT
+    gSunAlphaKnown=false;
+#endif
     return alpha_unknown(flags);
   }
   uint tex = min(h0.w, 4095u), cache = min(h1.x, 15u);
@@ -526,6 +538,9 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   else r = tex_alpha(a, uv, g, tex, h1.y);
   if (!r.ok) {
     alpha_stat(5, true, prim);
+#ifdef RT_SUN_CURRENT
+    gSunAlphaKnown=false;
+#endif
     return alpha_unknown(flags);
   }
   const float cut_first = asfloat(h1.w);
@@ -553,6 +568,56 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   }
   return solid;
 }
+
+#ifdef RT_SUN_CURRENT
+// UNKNOWN is a reference fallback, never an opaque interpretation of a native
+// shader whose scalar/texture coverage was not captured correctly.
+uint sun_caster_visibility(uint prim,float2 bary,float footprint,float3x4 o2w,float3 ray) {
+  uint bytes,soup_bytes;gSunDraws.GetDimensions(bytes);gSunSoup.GetDimensions(soup_bytes);
+  if(bytes<16u)return kRtUnknown;
+  uint n=gSunDraws.Load(0u),stride=gSunDraws.Load(4u),total=gSunDraws.Load(8u);
+  if(n==0u || n>(bytes-16u)/16u || prim>=total)return kRtUnknown;
+  uint lo=0u,hi=n;
+  while(hi-lo>1u) {uint mid=lo+(hi-lo)/2u;if(gSunDraws.Load(16u+16u*mid)<=prim)lo=mid;else hi=mid;}
+  uint4 record=gSunDraws.Load4(16u+16u*lo);
+  if(prim<record.x || prim-record.x>=record.y || record.w>1u)return kRtUnknown;
+  if(record.w==0u)return kRtOccluded;
+  if(stride<24u || !tri_in_range(0u,prim,stride,soup_bytes) || !rec_in_range(record.z))return kRtUnknown;
+  uint offset=prim*3u*stride;
+  float3 p0=mul(o2w,float4(asfloat(gSunSoup.Load3(offset)),1)),
+         p1=mul(o2w,float4(asfloat(gSunSoup.Load3(offset+stride)),1)),
+         p2=mul(o2w,float4(asfloat(gSunSoup.Load3(offset+2u*stride)),1));
+  float2 u0=asfloat(gSunSoup.Load2(offset+16u)),u1=asfloat(gSunSoup.Load2(offset+stride+16u)),
+         u2=asfloat(gSunSoup.Load2(offset+2u*stride+16u));
+  uint kind=gAlphaRec.Load(record.z+8u);
+#ifndef RT_NATIVE_SCALP
+  if(kind==3u || kind==4u)return kRtUnknown;
+#endif
+#ifndef RT_NATIVE_HAIR
+  if(kind==4u)return kRtUnknown;
+#else
+  if(kind==4u) {
+    if(stride<88u)return kRtUnknown;
+    gNativeHair=(NativeHairData)0;
+    float3 weights=float3(1.0-bary.x-bary.y,bary);
+    [unroll]for(uint i=0u;i<3u;++i) {
+      uint v=offset+i*stride;
+      gNativeHair.n+=asfloat(gSunSoup.Load3(v+24u))*weights[i];
+      gNativeHair.t+=asfloat(gSunSoup.Load3(v+36u))*weights[i];
+      gNativeHair.b+=asfloat(gSunSoup.Load3(v+48u))*weights[i];
+      gNativeHair.p+=asfloat(gSunSoup.Load3(v+60u))*weights[i];
+    }
+    gNativeHair.ray=ray;gNativeHair.physical=true;
+    gNativeHair.valid=all(isfinite(gNativeHair.n)) && all(isfinite(gNativeHair.t)) &&
+      all(isfinite(gNativeHair.b)) && all(isfinite(gNativeHair.p));
+  }
+#endif
+  if(kind<1u || kind>4u)return kRtUnknown;
+  gSunAlphaKnown=true;
+  bool solid=alpha_eval(record.z,p0,p1,p2,u0,u1,u2,bary,footprint,prim);
+  return !gSunAlphaKnown?kRtUnknown:solid?kRtOccluded:kRtLit;
+}
+#endif
 
 // Legacy: true if the alpha-tested triangle `prim` of geometry 1 is solid at `bary`.
 bool alpha_pass(uint prim, float2 bary, float footprint) {
@@ -730,7 +795,14 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
 #ifdef RT_CASCADE_SUN
     // The cascade instance is not opaque only for this test (no alpha: its triangles are solid).
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && q.CandidateInstanceID() == kRtCascadeId) {
+#ifdef RT_SUN_CURRENT
+      uint state=sun_caster_visibility(q.CandidatePrimitiveIndex(),q.CandidateTriangleBarycentrics(),
+        cone.f0+cone.spread*q.CandidateTriangleRayT(),q.CandidateObjectToWorld3x4(),d);
+      if(state==kRtUnknown) {aborted=true;q.Abort();break;}
+      if(state==kRtOccluded)q.CommitNonOpaqueTriangleHit();
+#else
       if (q.CandidateTriangleRayT() > max(RT_CASCADE_TMIN, RT_CASCADE_TMIN_REL * length(o))) q.CommitNonOpaqueTriangleHit();
+#endif
       continue;
     }
 #endif
