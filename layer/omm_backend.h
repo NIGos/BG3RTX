@@ -12,6 +12,7 @@ bool device_requested();
 void disable_device_request(); // Optional-device retry; ordinary RT is retained.
 void device_destroyed(DeviceData*);
 bool available();
+bool available_for(DeviceData*);
 bool has_resources();
 void retain_until_idle(); // Lost completion/provenance: collection AND discard stop.
 void reserve_submissions(std::span<const uint64_t>);

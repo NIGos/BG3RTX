@@ -70,6 +70,7 @@ void bvh_cpu_mark(int phase) {   // phase -1 closes the build
 }
 
 constexpr uint32_t kInfoPool = 1u << 8, kInfoLegacy = 1u << 9, kInfoAlpha = 1u << 10;   // rt_common.hlsli
+constexpr uint32_t kInfoHairProcedural = 1u << 12;
 constexpr uint32_t kRecBytes = 208;                // AlphaRec, rt_common.hlsli
 constexpr uint32_t kRingSlots = kSceneSlots;       // per-build regions of the host ring (= scene slots, rtscene.cpp)
 constexpr uint32_t kStatusSlots = 16384;           // validation results (16 B each)
@@ -349,10 +350,19 @@ std::unordered_map<uint64_t, RejectRec> g_rejected;
 uint32_t g_compact_next = 0;
 
 // ---- per-draw BLAS for everything captured ----
+struct HairBoundsPush {
+  uint32_t tris,step,soup_base,bounds_base;
+  float vp[16],depth[4];
+  uint32_t stride,camera,bounded,pad;
+};
+static_assert(sizeof(HairBoundsPush)==112);
 struct DynSlot {
   AsAlloc as;
   uint32_t prims = 0, cap_prims = 0;
   bool alpha = false;
+  bool hair = false;
+  VkDeviceSize hair_bounds_off = 0, hair_bounds_size = 0;
+  HairBoundsPush hair_push{};
   VkBuildAccelerationStructureFlagsKHR flags = 0;
   uint64_t last_used = 0;
   uint32_t since_build = 0;
@@ -498,6 +508,10 @@ VkDescriptorSetLayout g_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_pl = VK_NULL_HANDLE;
 VkPipeline g_pipe = VK_NULL_HANDLE;
 uint64_t g_pipe_gen = 0;
+VkDescriptorSetLayout g_hair_dsl = VK_NULL_HANDLE;
+VkPipelineLayout g_hair_pl = VK_NULL_HANDLE;
+VkPipeline g_hair_pipe = VK_NULL_HANDLE;
+uint64_t g_hair_gen = 0;
 
 // ---- statistics (logged every rt_timing_frames builds) ----
 struct Stats {
@@ -554,6 +568,30 @@ bool ensure_pipeline() {
   g_pipe_gen = blob.generation;
   log("[bvh] mesh_extract pipeline generation %llu", (unsigned long long)blob.generation);
   return true;
+}
+
+bool ensure_hair_pipeline() {
+  Bg3ShaderBlob blob{};
+  if(!shader_get("rt/hair_bounds.hlsl","main","cs_6_6",&blob))return false;
+  if(g_hair_pipe && g_hair_gen==blob.generation)return true;
+  auto& vk=g_dd->vk;
+  if(!g_hair_dsl){
+    VkDescriptorSetLayoutBinding b[3];for(uint32_t i=0;i<3;++i)b[i]={i,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    ci.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;ci.bindingCount=3;ci.pBindings=b;
+    if(vk.CreateDescriptorSetLayout(g_dd->device,&ci,nullptr,&g_hair_dsl)!=VK_SUCCESS)return false;
+    VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(HairBoundsPush)};
+    VkPipelineLayoutCreateInfo pc{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};pc.setLayoutCount=1;pc.pSetLayouts=&g_hair_dsl;
+    pc.pushConstantRangeCount=1;pc.pPushConstantRanges=&range;
+    if(vk.CreatePipelineLayout(g_dd->device,&pc,nullptr,&g_hair_pl)!=VK_SUCCESS)return false;
+  }
+  VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};mi.codeSize=blob.size_bytes;mi.pCode=blob.code;
+  VkShaderModule module{};if(vk.CreateShaderModule(g_dd->device,&mi,nullptr,&module)!=VK_SUCCESS)return false;
+  VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  ci.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_COMPUTE_BIT,module,"main"};ci.layout=g_hair_pl;
+  VkPipeline pipe{};const auto result=vk.CreateComputePipelines(g_dd->device,VK_NULL_HANDLE,1,&ci,nullptr,&pipe);
+  vk.DestroyShaderModule(g_dd->device,module,nullptr);if(result!=VK_SUCCESS)return false;
+  defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_hair_pipe));g_hair_pipe=pipe;g_hair_gen=blob.generation;return true;
 }
 
 bool ensure_ring(uint32_t inst, uint32_t mats) {
@@ -659,6 +697,21 @@ VkAccelerationStructureBuildSizesInfoKHR blas_sizes(uint32_t prims, uint32_t str
   return sz;
 }
 
+VkAccelerationStructureGeometryKHR hair_geometry(VkDeviceAddress bounds) {
+  VkAccelerationStructureGeometryKHR g{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+  g.geometryType=VK_GEOMETRY_TYPE_AABBS_KHR;
+  g.flags=VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
+  g.geometry.aabbs.sType=VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+  g.geometry.aabbs.data.deviceAddress=bounds;g.geometry.aabbs.stride=24;return g;
+}
+VkAccelerationStructureBuildSizesInfoKHR hair_sizes(uint32_t prims,VkBuildAccelerationStructureFlagsKHR flags) {
+  const auto g=hair_geometry(0);
+  VkAccelerationStructureBuildGeometryInfoKHR b{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+  b.type=VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;b.flags=flags;b.geometryCount=1;b.pGeometries=&g;
+  VkAccelerationStructureBuildSizesInfoKHR size{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+  g_dd->vk.GetAccelerationStructureBuildSizesKHR(g_dd->device,VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,&b,&prims,&size);return size;
+}
+
 void unindex(uint64_t key, const std::vector<Range>& ranges) {
   for (const Range& r : ranges) {
     auto it = g_buf_meshes.find(r.b);
@@ -749,6 +802,10 @@ void bvh_device_destroyed(DeviceData* dd) {
   g_tlas_valid = false;
   defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(g_compact_qp));
   defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_pipe));
+  defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_hair_pipe));
+  defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_hair_pl));
+  defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hair_dsl));
+  g_hair_pipe=VK_NULL_HANDLE;g_hair_pl=VK_NULL_HANDLE;g_hair_dsl=VK_NULL_HANDLE;g_hair_gen=0;
   defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
   defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_dsl));
   g_compact_qp = VK_NULL_HANDLE;
@@ -928,8 +985,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   std::vector<Ext> ext;
   struct MeshBuild { uint64_t key; };
   std::vector<MeshBuild> mesh_builds;
-  struct DynBuild { DynSlot* slot; VkDeviceSize soup_off; uint32_t prims; bool refit; };
+  struct DynBuild { DynSlot* slot; VkDeviceSize soup_off; uint32_t prims; bool refit; HairBoundsPush hair; };
   std::vector<DynBuild> dyn_builds;
+  struct HairBoundsWork {HairBoundsPush push;bool pool_source;};
+  std::vector<HairBoundsWork> hair_bounds_work;
   struct Inst { uint32_t draw; uint64_t key; };      // static: draw index (instances follow); dynamic: slot key
   std::vector<uint32_t> cached;   // draw indices
   std::vector<std::pair<uint32_t, uint64_t>> dyn;   // draw index, slot key
@@ -1058,17 +1117,39 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   std::vector<HoldCopy> hold_copies;
   for (auto& [di, key] : dyn) {
     FrameDraw& fd = g_draws[di];
-    if (fd.held) continue;
+    if (fd.held) {
+      // Re-certify held ranges for EACH new scene's invalid-status word. A
+      // previous scene may have rejected these same bounds; never clear that
+      // evidence merely because its native inputs were snapshotted.
+      const auto old=g_dyn.find(key);
+      if(old!=g_dyn.end() && old->second.hair){
+        auto push=old->second.hair_push;push.soup_base=uint32_t(fd.soup_off);
+        hair_bounds_work.push_back({push,true});
+      }
+      continue;
+    }
     key = fd.dyn_key;
     if (!dyn_this_frame.insert(key).second) {
       key = 0;
       continue;
     }
     DynSlot& s = g_dyn[key];
+    AlphaRec hair_record{};
+    const bool hair=geo_native_hair_enabled() && fd.cap_alpha && fd.rec!=kNone && alpha_native_hair_record(fd.rec,&hair_record);
+    if(hair && !ensure_hair_pipeline()){
+      log("[hair geometry] bounds pipeline unavailable: scene rejected, RT must not pass its gate");return false;
+    }
+    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u){
+      if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
+      s.hair_bounds_size=0;
+      const VkDeviceSize bytes=VkDeviceSize(fd.prims+fd.prims/4u)*24u;
+      if(!pool_alloc(cmd,bytes,&s.hair_bounds_off))return false;
+      s.hair_bounds_size=bytes;
+    }
     bool fresh = !s.as.as;
     // A refit (UPDATE) needs the source built: its last build must have been submitted
     // (a dropped command buffer left the BLAS unbuilt; a full build does not read it).
-    bool refit = dyn_refit_ok && !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.flags == dyn_flags &&
+    bool refit = dyn_refit_ok && !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.hair==hair && s.flags == dyn_flags &&
                  rec_submitted(s.rec) &&
                  s.since_build < uint32_t(rebuild_frames);
     // A full build never goes into the BLAS that TLASes in flight reference: a
@@ -1080,23 +1161,25 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // A new range gives the BLAS a new address, so the TLAS signature changes and
     // the TLAS is rebuilt; the old range is released once no live slot references it.
     // Refits (UPDATE) keep the layout and stay in place. rt_dyn_inplace=1: old behaviour.
-    if (!refit && (fresh || !inplace_ok || fd.prims > s.cap_prims || s.alpha != fd.cap_alpha || s.flags != dyn_flags)) {
+    if (!refit && (fresh || !inplace_ok || fd.prims > s.cap_prims || s.alpha != fd.cap_alpha || s.hair!=hair || s.flags != dyn_flags)) {
       if (s.as.as) as_destroy(s.as);
       uint32_t cap_prims = fd.prims + fd.prims / 4;
-      VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(cap_prims, stride, !fd.cap_alpha, dyn_flags);
+      VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(cap_prims,dyn_flags):blas_sizes(cap_prims, stride, !fd.cap_alpha, dyn_flags);
       if (!as_create(sz.accelerationStructureSize, s.as)) {
         if (s.hold_size) g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
+        if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
         g_dyn.erase(key);
         key = 0;
         continue;
       }
       s.cap_prims = cap_prims;
       s.alpha = fd.cap_alpha;
+      s.hair=hair;
       s.flags = dyn_flags;
       ++g_st.dyn_new;
     }
     if (!refit || s.prims != fd.prims) {
-      VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(fd.prims, stride, !fd.cap_alpha, dyn_flags);
+      VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(fd.prims,dyn_flags):blas_sizes(fd.prims, stride, !fd.cap_alpha, dyn_flags);
       s.build_scratch = sz.buildScratchSize;
       s.update_scratch = sz.updateScratchSize;
     }
@@ -1105,7 +1188,18 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     s.since_build = refit ? s.since_build + 1 : 0;
     // Staggered forced rebuilds: a slot's first rebuild comes at a key-dependent frame.
     if (!refit && fresh) s.since_build = uint32_t(key % uint64_t(rebuild_frames));
-    dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit});
+    HairBoundsPush hp{};
+    if(hair){
+      hp.tris=fd.prims;hp.step=((fd.prims+127u)/128u)*128u;hp.soup_base=uint32_t(fd.soup_off);hp.bounds_base=uint32_t(s.hair_bounds_off);
+      const auto* data=reinterpret_cast<const uint8_t*>(&hair_record);
+      std::memcpy(hp.vp,data+96,64);std::memcpy(hp.depth+1,data+176,12);
+      hp.depth[0]=0.01f*(std::max)({0.0f,hair_record.p1[0],hair_record.p1[1]});
+      hp.stride=stride;hp.camera=hair_record.channel;
+      float bounded{};std::memcpy(&bounded,data+188,4);hp.bounded=bounded==1.0f;
+      if(!alpha_native_hair_bounds(fd.rec,uint32_t(s.hair_bounds_off)))return false;
+      s.hair_push=hp;hair_bounds_work.push_back({hp,false});
+    }
+    dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp});
     s.rec = rec;
     // Only small draws are snapshotted: BG3's LOD swaps are props of a few hundred to a few
     // thousand triangles, while the terrain/large meshes (up to 131k) were most of the copy cost.
@@ -1194,7 +1288,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
                (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
     in.accelerationStructureReference = s.as.addr;
-    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool : 0u) | (alpha ? kInfoAlpha : 0u),
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u),
                              alpha ? 16 + fd.rec * kRecBytes : 0, fd.prims};
     std::memcpy(inst_out + n, &in, sizeof in);
     std::memcpy(info_out + n * 4, inf, sizeof inf);
@@ -1301,6 +1395,22 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // f9fac2a faults: per-draw builds only). The legacy build has always had
   // kCS -> kAS here (rtscene.cpp), and never faulted.
   barrier(cmd, kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS, kRW);
+  VkBuffer hair_status{};VkDeviceSize hair_status_base{};
+  if(alpha_hair_build_status(slot,&hair_status,&hair_status_base)){
+    dd->vk.CmdFillBuffer(cmd,hair_status,hair_status_base+12,4,0);
+    barrier(cmd,kXfer,VK_ACCESS_TRANSFER_WRITE_BIT,kCS,kRW);
+  }
+  for(const auto& work:hair_bounds_work){
+    if(!hair_status)return false;
+    const VkDescriptorBufferInfo b[3]={{work.pool_source?g_pool.b:cap.xfb,0,work.pool_source?g_pool.size:cap.xfb_size},
+                                     {g_pool.b,0,g_pool.size},{hair_status,hair_status_base,512}};
+    VkWriteDescriptorSet w[3];for(uint32_t i=0;i<3;++i){w[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};w[i].dstBinding=i;w[i].descriptorCount=1;w[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;w[i].pBufferInfo=b+i;}
+    dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_hair_pipe);
+    dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_hair_pl,0,3,w);
+    dd->vk.CmdPushConstants(cmd,g_hair_pl,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(work.push),&work.push);
+    dd->vk.CmdDispatch(cmd,work.push.step/128u,1,1);
+  }
+  if(hair_status)barrier(cmd,kCS,VK_ACCESS_SHADER_WRITE_BIT,kAS|kCS,kRW);
   if (!hold_copies.empty()) {
     // Conversion -> copy source; prior frame's shader reads -> snapshot writes.
     barrier(cmd, kCS | kXfer, kRW, kXfer, kRW);
@@ -1426,7 +1536,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
               (unsigned long long)now, (unsigned long long)db.soup_off,
               (unsigned long long)(VkDeviceSize(db.prims) * tri_bytes), (unsigned long long)cap.xfb_size);
       }
-      geo.push_back(tri_geometry(soup_addr + db.soup_off, db.prims, stride, !db.slot->alpha));
+      geo.push_back(db.slot->hair?hair_geometry(g_pool.addr+db.slot->hair_bounds_off):tri_geometry(soup_addr + db.soup_off, db.prims, stride, !db.slot->alpha));
       ranges.push_back({db.prims, 0, 0, 0});
       VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
       bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
@@ -2065,6 +2175,8 @@ void bvh_on_present() {
       as_destroy(it->second.as);
       if (it->second.hold_size)
         g_pending_free.push_back({now, -1, it->second.hold_off, it->second.hold_size});
+      if(it->second.hair_bounds_size)
+        g_pending_free.push_back({now,-1,it->second.hair_bounds_off,it->second.hair_bounds_size});
       it = g_dyn.erase(it);
     } else {
       ++it;

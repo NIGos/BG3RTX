@@ -404,6 +404,8 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s);   // outside the pass, b
 void geo_pass_begun(VkCommandBuffer cmd, CmdState* s);    // inside, right after it
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s);
+bool geo_native_hair_enabled(); // Startup-fixed XFB/soup stride88; never hot-enable 24-byte scenes.
+void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags);
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right before the game's end
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right after the game's end
 void geo_forget_buffer(VkBuffer b);
@@ -641,6 +643,9 @@ struct AlphaRec {
   float t[32];                           // vt: the SSBO entry, two row-major mat4
 };
 static_assert(sizeof(AlphaRec) == 208, "AlphaRec must match rt_common.hlsli");
+bool alpha_native_hair_record(uint32_t index,AlphaRec* out);
+bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset);
+bool alpha_hair_build_status(uint32_t slot,VkBuffer* buffer,VkDeviceSize* offset);
 // Captured material plus actual views; descriptor indices are local to a frame.
 struct AlphaSnapshot {
   AlphaRec rec{};
@@ -650,6 +655,9 @@ struct AlphaSnapshot {
   // destroy a view during a hold and the driver reuse its handle for another image.
   uint32_t tex_id = 0, cache_id = 0;
 };
+// Canonical material capture without modifying camera descriptor indices.
+// Caller retains source resources and assigns descriptor-local indices.
+bool alpha_capture_source(VkCommandBuffer cmd,const AlphaFs& fs,uint32_t first_tri,uint32_t tris,AlphaSnapshot* out);
 bool alpha_snapshot(uint32_t index, AlphaSnapshot* out);
 uint32_t alpha_restore(const AlphaSnapshot& saved);   // UINT32_MAX on failure
 void alpha_device_created(DeviceData* dd);

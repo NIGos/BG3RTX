@@ -1,5 +1,71 @@
 # BG3RTX progress
 
+## Isolated integration checkpoint: Hair GPU gate and versioned OMM - 2026-10-30
+
+Branch codex/omm-bake now combines native Hair renderer 4ca35f5 with the actual
+EXT producer/content backend. Both ABI-19 DLLs build; 28/28 CTests pass. Main's
+user build remains unchanged. No game launch, live deployment or performance
+claim. Goal remains open: finish OMM, Hair and RT shadows without extra tooling.
+
+Hair production bounds and all four query entry points pass 16/16 GPU cases on
+RTX 5090, zero validation errors. Physical card t=3.0, native camera primary
+t=3.20000029; dither, held geometry, rebasing and invalid-bound UNKNOWN pass.
+Renderer source 4ca35f5, optional probe 8b1c5cc, live instructions 19fd488
+(imported here as 1b85a62/ca994f6/c74b792). Startup rt_native_hair=1 is still
+default-off. Test1 face/strand quality, moving primary match and pass cost need
+the coordinated live check in docs/NATIVE_HAIR.md. Other native families remain
+separate gaps, not implicitly covered by CHAR_Hair.
+
+OMM commits ac641b8/ed7e9e1/797d7ec capture actual GPU image/global epochs before
+sampling and recheck them per primitive, derive all reachable view mips, and
+reject unsupported BC/sRGB numeric certificates. Combined synthetic test:
+three produced O/T/UNKNOWN micromaps and GPU stamps, 2,176 UNORM endpoint and
+8,704 BC3/BC7 endpoint checks, zero failures/validation errors. Evidence:
+docs/evidence/omm-combined-bc-producer-gpu-20261030.txt. These tests do not prove
+native scene attachment, stale-scene reference selection or useful acceleration.
+
+Canonical material capture is shared with Sun work (d0e6269). Only two audited
+plain-alpha shader pairs enter the OMM recipe whitelist; six incomplete recipes
+are excluded (c5c41fc). Next: sampler proof, material-specific BLAS/reference
+scene integration, then same-ray native quality and cost gates. Do not bake
+unsupported hair/fur recipes as a single texture channel.
+
+## Native Hair GPU candidate verified - 2026-10-30
+
+Windowless RTX 5090 probe: 16/16 cases, zero Vulkan validation errors, actual
+production bounds and all four query functions. Physical ribbon t=3; native
+camera surface t=3.20000029; origin window t=0.1. Dither, vertex phase, held
+geometry, rebase, inactive NaNs and invalid-bound UNKNOWN pass. Runtime remains
+default off, no live deployment. Next: integrated user-led dialogue check with
+rt_native_hair=1 at startup, rt_alpha=1 and rt_bvh_split=1; inspect the affected
+hairstyle face shadows and primary match near static 99.5%. Other families and
+GPU pass cost remain open. Evidence: docs/evidence/native-hair-gpu-20261030.json.
+
+## Procedural CHAR_Hair candidate - 2026-10-30, default off, no live gate yet
+
+Native camera primary/origin rays now solve material-dependent fragment depth;
+physical shadow/GI/AO/reflection queries use native Shadow thin-ribbon semantics.
+Conservative AABBs cover both, with held-range recertification and explicit UNKNOWN
+on invalid bounds. Precise shared-edge tests avoid false holes; proven culled
+native geometry remains inactive. No manual replacement for hardware sampling.
+22/22 CTests; 310,883 geometry and 19,734 capture/strand checks; 95 ordinary shaders
+byte-identical and 95 capable variants compile/validate. ABI 19 Sun/OMM callback
+extension imported separately; Hair adds no ABI layout change. No live deployment,
+GPU cost or native 99.5% primary-match result yet. Other hair families remain open.
+Implementation and exact material-model limits: docs/NATIVE_HAIR.md.
+
+## Native Hair coverage candidate - 2026-10-30, full Hair still open
+
+Isolated native-coverage adds startup-only rt_native_hair=0default. Actual native
+88-byte strand attributes, dual mask/noise/root/view coverage and camera dither
+are implemented across normal query entry points. Native shadow queries use the
+light-ray hard branch. Split1 enforced; no mixed-stride hot enable. No ABI change.
+21/21 CTests and 19,716 Hair checks; all15nativeVS patch/validate; 95 ordinary
+shader binaries byte-identical and 95 capable compile/validate. No live change.
+Native fragment depth creates a real virtual surface; original card intersection
+is NOT equivalent. Procedural depth/origin support remains required before closing
+Hair. Source/layout/formula evidence and next implementation: docs/NATIVE_HAIR.md.
+
 ## Solar shadow sharpness: native-mask restriction confirmed in logs - 2026-10-30
 
 Dedicated solar agent found correct finite-disc radius, normalization and changing

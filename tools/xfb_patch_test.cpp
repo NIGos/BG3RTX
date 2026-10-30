@@ -19,6 +19,7 @@ int main(int argc, char** argv) {
   namespace fs = std::filesystem;
   fs::create_directories(argv[2]);
   int total = 0, patched = 0, vertices = 0, with_uv = 0, instanced = 0, uv_copy = 0;
+  int hair_strand=0,hair_fade=0;
   const uint32_t stride = argc > 3 ? uint32_t(std::atoi(argv[3])) : 16;
   for (const auto& e : fs::directory_iterator(argv[1])) {
     if (e.path().extension() != ".spv" || e.path().string().find(".xfb.") != std::string::npos) continue;
@@ -35,12 +36,14 @@ int main(int argc, char** argv) {
     }
     vertices += vertex;
     int uv = -1;
-    if (!bg3::patch_vs(code.data(), code.size(), out, stride, &uv)) {
+    uint32_t hair=0;
+    if (!bg3::patch_vs(code.data(), code.size(), out, stride, &uv, &hair)) {
       if (vertex) std::printf("not patched: %s\n", e.path().filename().string().c_str());
       continue;
     }
     ++patched;
     with_uv += uv >= 0;
+    hair_strand+=(hair&1u)!=0;hair_fade+=(hair&2u)!=0;
     // Track D BVH split: the class-A instancing analysis on the original module.
     bg3::VsInstancing vi = bg3::analyze_vs_instancing(code.data(), code.size(), uv);
     if (vi.ok) {
@@ -55,5 +58,6 @@ int main(int argc, char** argv) {
   }
   std::printf("%d modules, %d vertex shaders, %d patched (stride %u, %d with a UV output), %d class-A instanced (%d with the UV a copy of an input)\n",
               total, vertices, patched, stride, with_uv, instanced, uv_copy);
+  if(stride>=88)std::printf("native hair: %d strand-frame outputs, %d with camera fade\n",hair_strand,hair_fade);
   return 0;
 }

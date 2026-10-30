@@ -152,6 +152,7 @@ void device_created(DeviceData* dd, bool rtEnabled) {
   log("[omm] EXT backend available max_four_state_level=%u; no known-state quality gate passed",properties.maxOpacity4StateSubdivisionLevel);
 }
 bool available() {std::lock_guard lock(mutex);return enabled && !retained && cfg_int("rt_omm",0);}
+bool available_for(DeviceData* expected) {std::lock_guard lock(mutex);return expected && expected==device && enabled && !retained && cfg_int("rt_omm",0);}
 bool has_resources() {std::lock_guard lock(mutex);return !resources.empty();}
 void retain_until_idle() {std::lock_guard lock(mutex);if(!retained)log("[omm] resource provenance/completion unavailable; retaining until device idle");retained=true;}
 void reserve_submissions(std::span<const uint64_t> tickets) {

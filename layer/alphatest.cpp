@@ -22,6 +22,7 @@
 #include "../common/mapped_copy.h"
 #include "../common/native_scalp_coverage.h"
 #include "../common/native_scalp_capability.h"
+#include "../common/native_hair.h"
 
 #include <algorithm>
 #include <cstring>
@@ -91,6 +92,27 @@ std::vector<std::pair<VkImageView, VkImageLayout>> g_tex, g_cache;
 uint32_t g_fail[6] = {};
 uint64_t g_frames = 0, g_draws = 0, g_tris = 0;
 std::atomic<uint32_t> g_scalp_hard{0}, g_scalp_dither{0}, g_scalp_invalid{0};
+std::atomic<uint32_t> g_hair_records{0}, g_hair_invalid{0};
+std::atomic<uint32_t> g_hair_attributes{0};
+std::atomic<uint32_t> g_hair_bounds_invalid{0};
+
+bool unit_mask_format(VkFormat f) {
+  switch(f) {
+    case VK_FORMAT_R8_UNORM:case VK_FORMAT_R8G8_UNORM:case VK_FORMAT_R8G8B8_UNORM:
+    case VK_FORMAT_R8G8B8A8_UNORM:case VK_FORMAT_R8G8B8A8_SRGB:
+    case VK_FORMAT_B8G8R8A8_UNORM:case VK_FORMAT_B8G8R8A8_SRGB:
+    case VK_FORMAT_A8B8G8R8_UNORM_PACK32:case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+    case VK_FORMAT_R16_UNORM:case VK_FORMAT_R16G16_UNORM:case VK_FORMAT_R16G16B16A16_UNORM:
+    case VK_FORMAT_BC1_RGB_UNORM_BLOCK:case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
+    case VK_FORMAT_BC2_UNORM_BLOCK:case VK_FORMAT_BC2_SRGB_BLOCK:
+    case VK_FORMAT_BC3_UNORM_BLOCK:case VK_FORMAT_BC3_SRGB_BLOCK:
+    case VK_FORMAT_BC4_UNORM_BLOCK:case VK_FORMAT_BC5_UNORM_BLOCK:
+    case VK_FORMAT_BC7_UNORM_BLOCK:case VK_FORMAT_BC7_SRGB_BLOCK:return true;
+    default:return false;
+  }
+}
 
 bool make_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& b, VkDeviceMemory& m, bool address = false) {
   DeviceData* dd = g_dd;
@@ -341,6 +363,21 @@ void alpha_device_destroyed(DeviceData* dd) {
 
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
+  if (cfg_int("rt_native_hair", 0)) {
+    if (const auto* recipe = native_hair::lookup(fs)) {
+      if (!geo_native_hair_enabled()) {
+        static std::atomic<bool> warned{false};
+        if (!warned.exchange(true)) log("[alpha hair] rt_native_hair requires restart with rt_alpha=1; no mixed 24/88-byte scene");
+        return false;
+      }
+      native_scalp::publish_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t))));
+      *out = AlphaFs{};
+      out->kind=4;out->hash=fs;out->uv=0;out->tex_set=out->cache_set=out->ubo_set=1;
+      out->tex_bind=recipe->mask;out->cache_bind=recipe->noise;out->ubo_bind=recipe->material;
+      out->channel=recipe->camera?1:0;out->cut=out->cut_first=0.3333f;out->k=1;
+      return true;
+    }
+  }
   if (cfg_int("rt_native_scalp", 0)) {
     if (const auto* recipe = native_scalp::lookup(fs)) {
       // Before any possible kind3 publication. The core selects after acquiring
@@ -366,9 +403,30 @@ bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   return true;
 }
 
+bool alpha_native_hair_record(uint32_t index,AlphaRec* out) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if(index>=g_recs.size() || g_recs[index].kind!=4)return false;
+  *out=g_recs[index];return true;
+}
+bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if(index>=g_recs.size() || g_recs[index].kind!=4)return false;
+  std::memcpy(reinterpret_cast<uint8_t*>(&g_recs[index])+192,&pool_offset,4);return true;
+}
+bool alpha_hair_build_status(uint32_t slot,VkBuffer* buffer,VkDeviceSize* offset) {
+  if(!geo_native_hair_enabled() || !g_stamp_buf || slot>=kRing)return false;
+  *buffer=g_stamp_buf;*offset=VkDeviceSize(slot)*kStampStride;return true;
+}
+
+void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags) {
+  const auto n=g_hair_attributes.fetch_add(1);
+  if(n<8) log("[alpha hair] unsupported native interface FS %016llx VS %016llx flags %u (strand=1, camera fade=2)",
+             (unsigned long long)fs,(unsigned long long)vs,flags);
+}
+
 void alpha_begin_capture() {
   std::lock_guard<std::mutex> lock(g_mu);
-  if (cfg_int("rt_native_scalp", 0))
+  if (cfg_int("rt_native_scalp", 0) || geo_native_hair_enabled())
     native_scalp::publish_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t))));
   g_stream_reads = cfg_int("rt_alpha_stream", 0) != 0;
   g_recs.clear();
@@ -376,8 +434,11 @@ void alpha_begin_capture() {
   g_cache.clear();
 }
 
-bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, uint32_t tris, uint32_t* rec_index) {
-  AlphaRec r{};
+// Shared canonical capture: never touches the camera capture's mutable record
+// or descriptor-index arrays. Ordinary camera adds use the same raw bindings.
+static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint32_t tris,
+                                    AlphaRec& r,Bg3Binding& t,Bg3Binding& c) {
+  r={};t={};c={};
   r.first_tri = first_tri;
   r.tris = tris;
   r.kind = a.kind;
@@ -387,12 +448,10 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
   r.fs_lo = uint32_t(a.hash);
   r.fs_hi = uint32_t(a.hash >> 32);
   r.scale[0] = r.scale[1] = a.k;
-  Bg3Binding t;
   if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, a.tex_set, a.tex_bind, 0, &t) || !t.view) {
     ++g_fail[0];
     return false;
   }
-  Bg3Binding c{};
   if (a.kind == 1) {
     // UV transform (two vec4) and the tile-set index from the material UBO,
     // the tile-set constants (two row-major mat4) from the SSBO entry.
@@ -430,6 +489,34 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
     }
     r.p0[0] = captured.material.edge;
     r.p0[1] = captured.material.root;
+  } else if (a.kind == 4) {
+    native_hair::Captured captured;
+    if (!native_hair::capture(a.hash, [&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes) {
+          return read_bound(cmd,set,binding,off,dst,bytes);
+        },captured) || !query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,a.cache_set,a.cache_bind,0,&c) || !c.view) {
+      ++g_hair_invalid; return false;
+    }
+    // Fixed208B payload: material48B, VP64B, viewport16B, near/far8B,
+    // projection flag4B. Header scale.xy holds native frame phase/mode.
+    auto* bytes = reinterpret_cast<uint8_t*>(&r);
+    std::memcpy(bytes+48,captured.material.data(),48);
+    std::memcpy(bytes+96,captured.view_projection.data(),64);
+    std::memcpy(bytes+176,captured.near_far.data(),8);
+    std::memcpy(bytes+184,&captured.orthographic,4);
+    const float width=std::clamp(captured.material[7],0.0f,1.0f);
+    const float edge0=std::fma(-width,0.5f,captured.material[6]),edge1=std::fma(width,0.5f,captured.material[6]);
+    const bool zero_height=captured.material[4]==0.0f && captured.material[5]==0.0f;
+    const bool defined_height=!a.channel || edge0<edge1 || zero_height;
+    const float bounded_mask=(!a.channel || (unit_mask_format(t.format) && defined_height))?1.0f:0.0f;
+    std::memcpy(bytes+188,&bounded_mask,4);
+    r.scale[0]=captured.frame[0];r.scale[1]=captured.frame[1];
+    if (a.channel) {
+      auto* state=cmd_state(cmd);
+      if (!state || !state->has_viewport) {++g_hair_invalid;return false;}
+      const float viewport[4]={state->viewport.x,state->viewport.y,state->viewport.width,state->viewport.height};
+      if (!finite(viewport,4) || viewport[2]==0 || viewport[3]==0) {++g_hair_invalid;return false;}
+      std::memcpy(bytes+160,viewport,16);
+    }
   } else if (a.has_scale) {
     if (!read_bound(cmd, a.ubo_set, a.ubo_bind, a.scale, r.scale, 8)) {
       ++g_fail[1];
@@ -440,6 +527,26 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
     ++g_fail[3];
     return false;
   }
+  return true;
+}
+
+bool alpha_capture_source(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint32_t tris,AlphaSnapshot* out) {
+  if(!out) return false;
+  *out={};
+  Bg3Binding t{},c{};
+  if(!capture_source_material(cmd,a,first_tri,tris,out->rec,t,c)) return false;
+  out->tex=t.view;out->tex_layout=t.layout;out->tex_id=view_image_id(t.view);
+  if(a.kind==1 || a.kind==4) {
+    out->cache=c.view;out->cache_layout=c.layout;out->cache_id=view_image_id(c.view);
+  }
+  // Reject unidentified/recycled resources before a private descriptor tuple can
+  // be published. Camera ordinary adds retain their previous lookup/cost path.
+  return out->tex_id && ((a.kind!=1 && a.kind!=4) || out->cache_id);
+}
+
+bool alpha_add_draw(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint32_t tris,uint32_t* rec_index) {
+  AlphaRec r{};Bg3Binding t{},c{};
+  if(!capture_source_material(cmd,a,first_tri,tris,r,t,c)) return false;
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_recs.size() >= kMaxRecords) {
     ++g_fail[4];
@@ -450,8 +557,9 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
     return false;
   }
   r.tex = slot_of(g_tex, kTextures, t.view, t.layout);
-  r.cache = a.kind == 1 ? slot_of(g_cache, kCaches, c.view, c.layout) : 0;
-  if (!r.tex || (a.kind == 1 && !r.cache)) {
+  r.cache = a.kind == 1 ? slot_of(g_cache, kCaches, c.view, c.layout) :
+            a.kind == 4 ? slot_of(g_tex, kTextures, c.view, c.layout) : 0;
+  if (!r.tex || ((a.kind == 1 || a.kind == 4) && !r.cache)) {
     ++g_fail[5];
     if (!g_full_logged) {
       g_full_logged = true;
@@ -463,6 +571,7 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
   if (rec_index) *rec_index = uint32_t(g_recs.size());
   g_recs.push_back(r);
   if (r.kind == 3) ++g_scalp_hard;
+  if (r.kind == 4) ++g_hair_records;
   return true;
 }
 
@@ -505,12 +614,13 @@ bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (index >= g_recs.size()) return false;
   const AlphaRec& r = g_recs[index];
-  if (!r.tex || r.tex > g_tex.size() || (r.kind == 1 && (!r.cache || r.cache > g_cache.size()))) return false;
+  if (!r.tex || r.tex > g_tex.size() || (r.kind == 1 && (!r.cache || r.cache > g_cache.size())) ||
+      (r.kind == 4 && (!r.cache || r.cache > g_tex.size()))) return false;
   out->rec = r;
   const auto t = g_tex[r.tex - 1];
   out->tex = t.first; out->tex_layout = t.second;
-  if (r.kind == 1) {
-    const auto c = g_cache[r.cache - 1];
+  if (r.kind == 1 || r.kind == 4) {
+    const auto c = r.kind == 1 ? g_cache[r.cache - 1] : g_tex[r.cache - 1];
     out->cache = c.first; out->cache_layout = c.second;
   }
   // Keep both the view and its image alive until the last possible held use.
@@ -534,7 +644,7 @@ uint32_t alpha_restore(const AlphaSnapshot& saved) {
   // A view destroyed during the hold (its handle possibly reused for another image,
   // e.g. a glyph or UI texture) must not be bound: the held draw is dropped instead.
   if (view_image_id(saved.tex) != saved.tex_id || !saved.tex_id ||
-      (saved.rec.kind == 1 && (view_image_id(saved.cache) != saved.cache_id || !saved.cache_id))) {
+      ((saved.rec.kind == 1 || saved.rec.kind == 4) && (view_image_id(saved.cache) != saved.cache_id || !saved.cache_id))) {
     ++g_stale_views;
     return UINT32_MAX;
   }
@@ -542,8 +652,9 @@ uint32_t alpha_restore(const AlphaSnapshot& saved) {
   if (g_recs.size() >= kMaxRecords) return UINT32_MAX;
   AlphaRec r = saved.rec;
   r.tex = slot_of(g_tex, kTextures, saved.tex, saved.tex_layout);
-  r.cache = r.kind == 1 ? slot_of(g_cache, kCaches, saved.cache, saved.cache_layout) : 0;
-  if (!r.tex || (r.kind == 1 && !r.cache)) return UINT32_MAX;
+  r.cache = r.kind == 1 ? slot_of(g_cache, kCaches, saved.cache, saved.cache_layout) :
+            r.kind == 4 ? slot_of(g_tex, kTextures, saved.cache, saved.cache_layout) : 0;
+  if (!r.tex || ((r.kind == 1 || r.kind == 4) && !r.cache)) return UINT32_MAX;
   const uint32_t index = uint32_t(g_recs.size());
   g_recs.push_back(r);
   return index;
@@ -595,8 +706,9 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   // header: record count, the opaque soup's vertex stride (0: not bound), the
   // alpha-test policy bits (rt_common.hlsli kAlpha*; live switches)
   const uint32_t policy = (cfg_int("rt_alpha_cut", 1) ? 1u : 0u) | (cfg_int("rt_alpha_stochastic", 1) ? 2u : 0u) |
-                          (cfg_int("rt_alpha_unknown", 1) ? 4u : 0u);
-  uint32_t header[4] = {uint32_t(g_recs.size()), soup && opaque_bytes ? stride : 0u, policy, 0};
+                          (cfg_int("rt_alpha_unknown", 1) ? 4u : 0u) |
+                          (geo_native_hair_enabled() && !cfg_int("rt_alpha_test",1) ? 8u : 0u);
+  uint32_t header[4] = {uint32_t(g_recs.size()), geo_native_hair_enabled() ? stride : (soup && opaque_bytes ? stride : 0u), policy, 0};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -615,6 +727,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   // buffer runs (after the scene build recorded before this call).
   if (++g_stamp_gen == 0) g_stamp_gen = 1;
   const VkDeviceSize stamp_base = VkDeviceSize(slot) * kStampStride;
+  if(geo_native_hair_enabled())g_hair_bounds_invalid.fetch_add(g_stamp_map[stamp_base/4+3]);
   g_stamp_map[stamp_base / 4] = g_stamp_gen;
   // Snapshot the very same native UBO used by XFB conversion. This read is
   // executed on the GPU with the build, not a CPU observation at record time.
@@ -708,6 +821,9 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
       log("[alpha scalp] native hard records %u; unsupported camera dither %u; invalid/missing native state %u; "
           "RT cone footprint, not native raster sample identity",
           g_scalp_hard.exchange(0), g_scalp_dither.exchange(0), g_scalp_invalid.exchange(0));
+    if (geo_native_hair_enabled()) log("[alpha hair] native coverage records %u; invalid/missing native state %u; unsupported native interfaces total %u; retired bounds-invalid primitives %u; "
+        "88-byte strand capture; procedural camera depth and physical Shadow ribbons",
+        g_hair_records.exchange(0),g_hair_invalid.exchange(0),g_hair_attributes.load(),g_hair_bounds_invalid.exchange(0));
     // The alpha-tested fragment shaders of this frame by triangles, with their
     // cut-offs (identifies the families on screen: grass, foliage, chains).
     std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> per;

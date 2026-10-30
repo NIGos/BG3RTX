@@ -1,0 +1,748 @@
+{
+  "baseline": "92183e7",
+  "ordinary_identical": 95,
+  "capable_compiled": 95,
+  "capable_validated": 95,
+  "entries": [
+    {
+      "entry": "gi/cascade/gi_trace_rt.hlsl",
+      "ordinary_sha256": "988dfd4865c8d1d2b74d7279e5d2432538f2945aead5b767c5e3d91c273abc88",
+      "capable_sha256": "e1186b65851ab12d203983be47e92230669a6bbba4822663a81ae01ef8554ab7"
+    },
+    {
+      "entry": "gi/cascade/gi_trace_rt_sharc.hlsl",
+      "ordinary_sha256": "e3b59cdf0bca48f5471f83965bff2166513d8a196d21389d78b4f3049bc16200",
+      "capable_sha256": "fd11fb9795e7cd5296d06bd5f5f576903d286be5872ba298762e187343de4d35"
+    },
+    {
+      "entry": "gi/cascade/pan_local.hlsl",
+      "ordinary_sha256": "2cdd359ac87e030084548fc9e74a50c817990e3e8c251ddcbb6e8c630e78094e",
+      "capable_sha256": "8753dfa1d618c52a9c6a5bc6815139318ead21c5d2db77adbb5ed66b2815eda7"
+    },
+    {
+      "entry": "gi/cascade/pan_primary.hlsl",
+      "ordinary_sha256": "77a4d314fd7db2c759aa85b6756aa4425da1357d3b1f824e1b34839e833725e2",
+      "capable_sha256": "93601941050864ef4ff30293031104fbc848f0c742f4a7c253c61a3e07528ec0"
+    },
+    {
+      "entry": "gi/cascade/pan_primary_epoch.hlsl",
+      "ordinary_sha256": "4063d0e4a4f6d38ee81699d85897a3127d30cdac9405e493aa49272a1bae9dc2",
+      "capable_sha256": "d4680e03910644842aedac260988fde7d42d187e15f9c58a57eae3463be2eee6"
+    },
+    {
+      "entry": "gi/cascade/pan_primary_identity.hlsl",
+      "ordinary_sha256": "af7c56042108ac9413ddcabbbea2f9ace6ee4751424b2b3af219121524f27695",
+      "capable_sha256": "64d814f51851e47c457f404fca1b9da84055d9b0af4d91c24341d6deb6205045"
+    },
+    {
+      "entry": "gi/cascade/rt_ao.hlsl",
+      "ordinary_sha256": "1f1ae1db71b18fa754da6dd196ba0710aef462c8507287c413fbefd3dc5133f2",
+      "capable_sha256": "b03ed347ee8173e026b2b25b62d9daecdd3fc889a29bda18ffb78cd7b4cfb72f"
+    },
+    {
+      "entry": "gi/cascade/rt_debug.hlsl",
+      "ordinary_sha256": "6078f8736b994f4567d94da959bf1324c711acce2de9893cc0b1cdb58fe5f305",
+      "capable_sha256": "e68dc5cebbf6fb50a7b8f17db9696fbc6fdb4bae3505a29f8f84f28adf0edf81"
+    },
+    {
+      "entry": "gi/cascade/rt_local_shadows.hlsl",
+      "ordinary_sha256": "aa0f0303f3dc776cc9af5df6b64887a5d8e095628da1aaa60f4312666f69dc59",
+      "capable_sha256": "fa76ea8e56bde045618fb4399987536b6b64691090f0369dfd892478d64a8338"
+    },
+    {
+      "entry": "gi/cascade/rt_local_shadows_check.hlsl",
+      "ordinary_sha256": "e15f28c643f6f78a28a89ed10e81f309534d2dbf30dbfb2f479c3bb3deda9ce6",
+      "capable_sha256": "d30c1c1bb2d1e307002559a5d40d338f77ef434995be820cf729f9c0a466cc81"
+    },
+    {
+      "entry": "gi/cascade/rt_local_shadows_full.hlsl",
+      "ordinary_sha256": "de5853222c8644f62fbcaafb3e2f4548041d355ab215a69167a608d98f281591",
+      "capable_sha256": "2120681320a61bf76ab896cd3a9c5aaee2781f586532504d67f6d9340956cf7f"
+    },
+    {
+      "entry": "gi/cascade/rt_local_shadows_full_check.hlsl",
+      "ordinary_sha256": "8a30fadd14700f00819327cf86116b14fb64c51d50ce80f1d6a0f13cba31d28d",
+      "capable_sha256": "4075ed664b8922424a8b288181b4f5217c780ee2625fead2e00302951807bb0d"
+    },
+    {
+      "entry": "gi/cascade/rt_local_shadows_ref.hlsl",
+      "ordinary_sha256": "358c4a9e0157d3f703de4fa008b0332f1d86c99802c540791e43014dbc2a27d2",
+      "capable_sha256": "4c4204b4e26fb48742d9dd29e3bcfebaadad36c342f8de5551afff1330ccdf20"
+    },
+    {
+      "entry": "gi/cascade/rt_origin.hlsl",
+      "ordinary_sha256": "2a43f9a0567e75985025b7a945e39a8b11c1324e259133332631a038ba8f3ff6",
+      "capable_sha256": "c7c7c2229a48ca90d623000d85607764da4fa7b22fc97000868bad2414602de2"
+    },
+    {
+      "entry": "gi/cascade/rt_reflections.hlsl",
+      "ordinary_sha256": "aec0f87b21e21aa81fbed44b81e8812428fc215eba44e07148008ae54a2b30cf",
+      "capable_sha256": "9587a04699ca473970db44425a189108863c1d0698b4c06d62d9584c7fcfa8cd"
+    },
+    {
+      "entry": "gi/cascade/rt_reflections_sharc.hlsl",
+      "ordinary_sha256": "fedff84455f4c8cc8707d95b51db3d756a41f5d141d7b36697ed3509e7ee56d3",
+      "capable_sha256": "6f3c57838d8b9ede733bbfc0f90839f4e9c3570fd4916e063ae4a850e0d6c50e"
+    },
+    {
+      "entry": "gi/cascade/rt_shadow.hlsl",
+      "ordinary_sha256": "803954f7d55a2d5357595b70205bd5a3b883ca82cdd6d759bfd24f8f14586677",
+      "capable_sha256": "282f49a9d7f0098e244483414a4ea7b2ba1f9ca6ded226f793aabdb69ee3e5d0"
+    },
+    {
+      "entry": "gi/cascade/sharc_debug.hlsl",
+      "ordinary_sha256": "fa7f4fac0c13025b6e6c0ec2eb9dae1e4bad7452508377c75a03f7b3612e423d",
+      "capable_sha256": "f9811009573054437a12a56b69f1981e5f33e4c6981e0c77ffce2f8897da433b"
+    },
+    {
+      "entry": "gi/cascade/sharc_inject.hlsl",
+      "ordinary_sha256": "9c2803434097b204d1f0daa49eb752653021f09b96649b79f22940a036d07b44",
+      "capable_sha256": "d3b1c46211e2c0ed51212023a1d2ed37bf3e6d31bc2429f0284c815ccc27e9b4"
+    },
+    {
+      "entry": "gi/cascade/sharc_inject_lock.hlsl",
+      "ordinary_sha256": "b71adfb12aade7c2505ac07b7085d699a603a195c18539163b7c239d8bd96fe2",
+      "capable_sha256": "bae734c506e0aed0ad36830d9027c316bdf5c9f68a1699e2fbfd8b9427bf5315"
+    },
+    {
+      "entry": "gi/cascade_rebase/gi_trace_rt.hlsl",
+      "ordinary_sha256": "7e7f93678963baf5d1de0e1bd01f6ce4f87634b14908e38763a6aab0bfaca70d",
+      "capable_sha256": "a3366ad9122f2e19b4a158a8c43b52d32c9f614c213fcab2aaa4a3a6b8f2181d"
+    },
+    {
+      "entry": "gi/cascade_rebase/gi_trace_rt_sharc.hlsl",
+      "ordinary_sha256": "73c3b54403a264d300efdf54dfa07d37037b1e6401265d3700201e530c451469",
+      "capable_sha256": "f865e4f3c2e93bdf5fda84dfb3b8f87df5d55e17254c6a7ed3deacdddeea2e14"
+    },
+    {
+      "entry": "gi/cascade_rebase/pan_local.hlsl",
+      "ordinary_sha256": "c61bb2fe7f73cb878b76b035c7b5117305baf0acea24bda43f48e71fa827ee3e",
+      "capable_sha256": "3ef1f732a7ba0ce227e0f2785ea4f4610750013d36aa1fc7c582642008f7fdff"
+    },
+    {
+      "entry": "gi/cascade_rebase/pan_primary.hlsl",
+      "ordinary_sha256": "227c013ee9cd8e5c03f2dbb1f7d604bfd13a3c4f38045a63253445df03cc12e1",
+      "capable_sha256": "0df83cefcdf10d2518cf9144f6b458c0f6c61e12f47eee1cb6fc4e6e6ead0fb3"
+    },
+    {
+      "entry": "gi/cascade_rebase/pan_primary_epoch.hlsl",
+      "ordinary_sha256": "e0a56e02025e49b9f1735fe5541361639e0c84b719567dffe6ee25f8852e3fdf",
+      "capable_sha256": "b4f079a57f5688965686a707423958be3aac3d8a100f0eb8e2622a9d338a4d81"
+    },
+    {
+      "entry": "gi/cascade_rebase/pan_primary_identity.hlsl",
+      "ordinary_sha256": "06fefed051e7d74b8a9b8e7f1dadcb097bf61d1b9016b8bb6a948deed8b96f75",
+      "capable_sha256": "f6e3a62d0c93e593302ac7c6bb4fe20fe0ab3c7726deb1d8b5d4dd67e2304c11"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_ao.hlsl",
+      "ordinary_sha256": "4a446adbf5450df21818adc97505f0a6de62e2c84122db4999cb414587685bb8",
+      "capable_sha256": "5fe63963551e80707af2b1fd6606f797729ee6af317434c229b8201f859c557e"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_debug.hlsl",
+      "ordinary_sha256": "6078f8736b994f4567d94da959bf1324c711acce2de9893cc0b1cdb58fe5f305",
+      "capable_sha256": "e68dc5cebbf6fb50a7b8f17db9696fbc6fdb4bae3505a29f8f84f28adf0edf81"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_local_shadows.hlsl",
+      "ordinary_sha256": "61d30fcac28bda8cc3fa38aeae5199784278e344a4c3a8e800bdef9d3d3ec3ed",
+      "capable_sha256": "d6e9e2198ebcb3b3b41681580870514c99b2ba5ae1402ec7608a43868b9fe2b7"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_local_shadows_check.hlsl",
+      "ordinary_sha256": "96db9dd0a8ec1628b169b6a1c5196fb25f5de7b6c8370d5ede366d36635a1c66",
+      "capable_sha256": "97abd8338861e8a01644b4af503a0db4b0401c5e35ffa172a1468a3196c9a830"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_local_shadows_full.hlsl",
+      "ordinary_sha256": "25613debd0be924bdf0bb5b5c620587896d3799f3ca09e94b7a19e425adba783",
+      "capable_sha256": "eb7b25d556c2c44e8de37dd47a4a7e7d984fca707e53f0aa7630c5ed0dbea2fe"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_local_shadows_full_check.hlsl",
+      "ordinary_sha256": "f1a45543e8bbf4e0567c1e1af7ed28518adc635c9187ba0b3679fc6e1776bce8",
+      "capable_sha256": "74021fd8646623c3efa858f21731d75621872950a69f7df5458df7cdd851faa7"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_local_shadows_ref.hlsl",
+      "ordinary_sha256": "0f0c61dabfde48bc9181eb2033aa14ddcdec4af3a13393412f35e8900a089021",
+      "capable_sha256": "03e68a4bce194f7bbed0086170eacac4721e3e1cc3a5ac20c18c0c209efd8301"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_origin.hlsl",
+      "ordinary_sha256": "1cb039458afaed18d322d36469fe48a8b345f5f0485f2efdf89f0a44da91fd0c",
+      "capable_sha256": "2162235b427a7b877d157363b487523ba65d212ddcde2db4d8c7cf1b0ed97f60"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_reflections.hlsl",
+      "ordinary_sha256": "fcd130070617b7bdb076a69d5d8e8bbdfc81eb3d1a3033a620d02ca076c7a52b",
+      "capable_sha256": "5f249943b80b29791ce76fc93144837b31c6d66baa9cc4bf73813c37b1f555dc"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_reflections_sharc.hlsl",
+      "ordinary_sha256": "0ce0c15ead0d2e1a5c4da47a8d52b39a4341c87f05c2670a5827cf3cdd2805ea",
+      "capable_sha256": "2180f98bf198718cca089cba0fce30cd8740b222b5669a32488180397d60880a"
+    },
+    {
+      "entry": "gi/cascade_rebase/rt_shadow.hlsl",
+      "ordinary_sha256": "fd593bb5fbd4b7d4f5fbee372ef7f37e6b065192b00f2d6ea62accc41f16330a",
+      "capable_sha256": "d95484cf623a07d5650e4fe26dc58d52e113647715a8b117e24ac8a38239a0d6"
+    },
+    {
+      "entry": "gi/cascade_rebase/sharc_debug.hlsl",
+      "ordinary_sha256": "103dfdcfec7fe52003e61707b40d7960f14da5da77f1474fc5bce4134d9ef00f",
+      "capable_sha256": "39741e8aa78a6b757eff0d2bbde2bf13327da9831dc664b745da568ed017c2ab"
+    },
+    {
+      "entry": "gi/cascade_rebase/sharc_inject.hlsl",
+      "ordinary_sha256": "ddcf857082f8276b4f9ff13ccfc878f0c3b6b5ca2f8e6236c34109d70fa0f207",
+      "capable_sha256": "1e1cbbf685b84bdc42723c1e6ed103dc3e43b1183418ea2def86de66c4d23c30"
+    },
+    {
+      "entry": "gi/cascade_rebase/sharc_inject_lock.hlsl",
+      "ordinary_sha256": "f312f02c939e3dedfb5d51d8356f5d30e6a55550bd1d1738f6238417072a741a",
+      "capable_sha256": "496b55e431105d7a049a2969fdc751612faa4456779abfa96c933fdd4c3ea0ba"
+    },
+    {
+      "entry": "gi/gi_ao_apply.hlsl",
+      "ordinary_sha256": "864b50bc75727c45a3e8409529fee1623477eef5f5b4ec112014bc6434343ccf",
+      "capable_sha256": "864b50bc75727c45a3e8409529fee1623477eef5f5b4ec112014bc6434343ccf"
+    },
+    {
+      "entry": "gi/gi_composite.hlsl",
+      "ordinary_sha256": "3a770b823a5eef20491d4a982f38668e177c3003ed82ae2245c98f85f63fae7d",
+      "capable_sha256": "3a770b823a5eef20491d4a982f38668e177c3003ed82ae2245c98f85f63fae7d"
+    },
+    {
+      "entry": "gi/gi_contact.hlsl",
+      "ordinary_sha256": "7c6c195182cc23a841a79fed788347669570d21d76cf4cf5c5817d5dfbbdaf69",
+      "capable_sha256": "7c6c195182cc23a841a79fed788347669570d21d76cf4cf5c5817d5dfbbdaf69"
+    },
+    {
+      "entry": "gi/gi_temporal.hlsl",
+      "ordinary_sha256": "ad818a6a33045af2204c574501823cb1878245f8c63a31d3ad97ffdef5026f08",
+      "capable_sha256": "ad818a6a33045af2204c574501823cb1878245f8c63a31d3ad97ffdef5026f08"
+    },
+    {
+      "entry": "gi/gi_trace.hlsl",
+      "ordinary_sha256": "5995ae2105946347c0b280d36acc608bd3ba4cea6c73478ab07dae436c9174aa",
+      "capable_sha256": "5995ae2105946347c0b280d36acc608bd3ba4cea6c73478ab07dae436c9174aa"
+    },
+    {
+      "entry": "gi/gi_trace_rt.hlsl",
+      "ordinary_sha256": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+      "capable_sha256": "80f5271cdf42fd1b94c3c6f245e53afa85ddd7af5a327e043c141c0f212f9ffc"
+    },
+    {
+      "entry": "gi/gi_trace_rt_sharc.hlsl",
+      "ordinary_sha256": "ef7067cddf1c46b61962639b6b129192bc3023362d40a05c56da7aefb7c8940b",
+      "capable_sha256": "dd2cb5123beb940b793d68c4c0b6f50d3d0ab8cffbb7fddae6e9ff2b1120c72b"
+    },
+    {
+      "entry": "gi/pan_local.hlsl",
+      "ordinary_sha256": "aec66fea281e568a3116e34aa0a290ad7352828d4cf338b65af570bba08ca9cc",
+      "capable_sha256": "abf20abf50a14b6594c82ec04f8928910936c7d2d72ce19b7a7744b27e6e815d"
+    },
+    {
+      "entry": "gi/pan_primary.hlsl",
+      "ordinary_sha256": "105eeed85eb535c14d5e2ae6a77e062ec530e1a649eb4c9b9c8fdddfc4834a54",
+      "capable_sha256": "faab2cc3f1219e91d6c97451d54e882e6bf5d5b647e8acb9ba4baad89cfc6fb7"
+    },
+    {
+      "entry": "gi/pan_primary_epoch.hlsl",
+      "ordinary_sha256": "d7610c75d7e2cfbe2563a195593da95c93a006450627ee471e401d9ce6d50dc4",
+      "capable_sha256": "14a4313691390a0ba564cb2d6198e704647584d3be9856acaf68d109b1bc6142"
+    },
+    {
+      "entry": "gi/pan_primary_identity.hlsl",
+      "ordinary_sha256": "faece8678e163b14bef79e554f169998a72631677e6a6de3d4d9f305926bdd4b",
+      "capable_sha256": "2f8865c04ba50625c70e1d7a40cccd90b21c87aa37111436c3276cad8ad677c5"
+    },
+    {
+      "entry": "gi/rebase/gi_trace_rt.hlsl",
+      "ordinary_sha256": "b32dbd30d23d46887bf160cdf82d6623b9f4441fd9540158378da408d0a1cefa",
+      "capable_sha256": "bfdf08fc07a24eaa0d61defff0126c1947a63a6bb9e649adcac45093e787a901"
+    },
+    {
+      "entry": "gi/rebase/gi_trace_rt_sharc.hlsl",
+      "ordinary_sha256": "cf116fdcd2cab71118caf76373b3869cac98c77d1a21c831bba329403689e97c",
+      "capable_sha256": "c6d7eb0a14639cf98e735e80c5fbee3e06ed1d0651e917802f0c178adc0ca7e9"
+    },
+    {
+      "entry": "gi/rebase/pan_local.hlsl",
+      "ordinary_sha256": "5b437ed62b6241ed64d604b65ee8b7df3e972bb2ac90ca225e62df53bca8b5c3",
+      "capable_sha256": "46d6ba2fc1a165d048907f0728a25977c481c65626dc00f3a479cf3693468615"
+    },
+    {
+      "entry": "gi/rebase/pan_primary.hlsl",
+      "ordinary_sha256": "d6ced992f7a0bf35d4318e493a63e7c95fb9d77dddd6a6eeee541c35d49c4b18",
+      "capable_sha256": "3a7ee67c28fd943b5f61ff2484a9aca328cc722c3e64117518a25a6aa235a9c0"
+    },
+    {
+      "entry": "gi/rebase/pan_primary_epoch.hlsl",
+      "ordinary_sha256": "0d00df7fb914a6ddbaaf4d4d5f7bdbb4f7f654310d9d21b6352563a93f1220a3",
+      "capable_sha256": "e9ae7e723dde88f29c1c289ad79ff56ba8a635de4b2d1d59676b73cbd0f3d666"
+    },
+    {
+      "entry": "gi/rebase/pan_primary_identity.hlsl",
+      "ordinary_sha256": "0be6d2750150e0b82af49cfdb3416316b0accff08d3dacc255a6d38e3d65f753",
+      "capable_sha256": "29dd26c8340a7c653d6d365656a71122dfc80eae111e9c40b2fbb5d7d7d33e70"
+    },
+    {
+      "entry": "gi/rebase/rt_ao.hlsl",
+      "ordinary_sha256": "903d82f04977787cee651a606518963a6b36979d0e0028ab28b2b85acaac80b4",
+      "capable_sha256": "eb3a91baa26c4b383242d4be2156e9b4a1d666d286e2f0dddc6a52c2b5150741"
+    },
+    {
+      "entry": "gi/rebase/rt_debug.hlsl",
+      "ordinary_sha256": "6078f8736b994f4567d94da959bf1324c711acce2de9893cc0b1cdb58fe5f305",
+      "capable_sha256": "e68dc5cebbf6fb50a7b8f17db9696fbc6fdb4bae3505a29f8f84f28adf0edf81"
+    },
+    {
+      "entry": "gi/rebase/rt_local_shadows.hlsl",
+      "ordinary_sha256": "27d016cd8fd120e1d15fec663ca6422a8fb7193618da5368f14526ea0f4928c8",
+      "capable_sha256": "3e42877a32ae8a6b3b8fc25a5fd3c2e37a551da87b60b999fb1b4007476b752f"
+    },
+    {
+      "entry": "gi/rebase/rt_local_shadows_check.hlsl",
+      "ordinary_sha256": "551dc9afefebbf7f2f325e8620aa02815a9908e99ed80aebab84a69094b59cda",
+      "capable_sha256": "b8ff01c85f5b1d12cff3319d24fd99690ca7e08164ac0196aea95c2cc7d15d11"
+    },
+    {
+      "entry": "gi/rebase/rt_local_shadows_full.hlsl",
+      "ordinary_sha256": "01aa2f1391cb50e76fbc58a8e4752ab7bdb8a50e25cc364862e3437742aa5154",
+      "capable_sha256": "cbffa208cb4bdedbbc420bd7fe9397f5997471dc6c5bb9580f5bb6450c8daabf"
+    },
+    {
+      "entry": "gi/rebase/rt_local_shadows_full_check.hlsl",
+      "ordinary_sha256": "b0a4544fef94fce6ceee9ddeedf18011a296def7d22cd51785ef172291b89b1f",
+      "capable_sha256": "93732e2a067f023f691b953ad2a9d070bab5eb9152e6db1b53c45b77b4cf2101"
+    },
+    {
+      "entry": "gi/rebase/rt_local_shadows_ref.hlsl",
+      "ordinary_sha256": "638f22c0fd81fbf11b833c2760dab30d5c138b7c01ddd509eacf8abbc33c4b4b",
+      "capable_sha256": "2e2db183651b3a4a53b20c850b89c6eb3a8b78255e69a99abe1b14fe086e82ca"
+    },
+    {
+      "entry": "gi/rebase/rt_origin.hlsl",
+      "ordinary_sha256": "6a35fcba711b555600c81bac895335104873c1d365246b4c1271376d680fd67d",
+      "capable_sha256": "b1dfd9d1a847c620384be544a7f3bd84226767ab669fc70f153b9bad2d777e18"
+    },
+    {
+      "entry": "gi/rebase/rt_reflections.hlsl",
+      "ordinary_sha256": "e162a134183ac91d3fe45ba5c97f021addb3edd4293aac401e7828184b578149",
+      "capable_sha256": "edd5e023f05cb34cf87323c2d79bf65b82312ee662b8d104e061ad76305e6275"
+    },
+    {
+      "entry": "gi/rebase/rt_reflections_sharc.hlsl",
+      "ordinary_sha256": "a366fcc6a2cadcb62cd0054dc6699f6b1d51a332b659476a486bd6cc4547aabe",
+      "capable_sha256": "371afbf643d830c93b7a7143900c618fd99fc1bbdeef67d0be52aa6cadbb6073"
+    },
+    {
+      "entry": "gi/rebase/rt_shadow.hlsl",
+      "ordinary_sha256": "6402c1cc8a591bdafcad95b8c79b12d6a2409d1bc1fbd8904d308090d17cbe68",
+      "capable_sha256": "cffb736954ac9fb77ce672420e7cb902e8fc1b41020b3d3baf2787a7548a0a44"
+    },
+    {
+      "entry": "gi/rebase/rt_sun_resolve.hlsl",
+      "ordinary_sha256": "2030c5b3e18a21ed3c9a01621ee5200f21173ab6737cb28baa6dcd84956e9ce2",
+      "capable_sha256": "2030c5b3e18a21ed3c9a01621ee5200f21173ab6737cb28baa6dcd84956e9ce2"
+    },
+    {
+      "entry": "gi/rebase/sharc_debug.hlsl",
+      "ordinary_sha256": "103dfdcfec7fe52003e61707b40d7960f14da5da77f1474fc5bce4134d9ef00f",
+      "capable_sha256": "39741e8aa78a6b757eff0d2bbde2bf13327da9831dc664b745da568ed017c2ab"
+    },
+    {
+      "entry": "gi/rebase/sharc_inject.hlsl",
+      "ordinary_sha256": "ddcf857082f8276b4f9ff13ccfc878f0c3b6b5ca2f8e6236c34109d70fa0f207",
+      "capable_sha256": "1e1cbbf685b84bdc42723c1e6ed103dc3e43b1183418ea2def86de66c4d23c30"
+    },
+    {
+      "entry": "gi/rebase/sharc_inject_lock.hlsl",
+      "ordinary_sha256": "f312f02c939e3dedfb5d51d8356f5d30e6a55550bd1d1738f6238417072a741a",
+      "capable_sha256": "496b55e431105d7a049a2969fdc751612faa4456779abfa96c933fdd4c3ea0ba"
+    },
+    {
+      "entry": "gi/rt_ao.hlsl",
+      "ordinary_sha256": "e3c057cb55b0243d12042a7ea1924f7faf59c1573464c8841604a919afaec080",
+      "capable_sha256": "117e802e162b1ec8c9692a52f2f9dcfe35c9749245d516622a9575e061b830d7"
+    },
+    {
+      "entry": "gi/rt_debug.hlsl",
+      "ordinary_sha256": "6078f8736b994f4567d94da959bf1324c711acce2de9893cc0b1cdb58fe5f305",
+      "capable_sha256": "e68dc5cebbf6fb50a7b8f17db9696fbc6fdb4bae3505a29f8f84f28adf0edf81"
+    },
+    {
+      "entry": "gi/rt_local_shadows.hlsl",
+      "ordinary_sha256": "1f96d88691c3ec284cee057c100cea11d8acf2552ba117c45febf34e373f5d39",
+      "capable_sha256": "c30f158cbd02a4dfa92b400a9963563a7d725dfbfeb901be4dc2b3d725fd2801"
+    },
+    {
+      "entry": "gi/rt_local_shadows_box.hlsl",
+      "ordinary_sha256": "ce7ae1458bd0216f6c6df38c5fd63dae7c931bb08c9bd5947cd5a9386a475021",
+      "capable_sha256": "ce978e03997a4eb1493707340c180c8a62a901279e0bbeefdeb5cd8fde07a788"
+    },
+    {
+      "entry": "gi/rt_local_shadows_check.hlsl",
+      "ordinary_sha256": "05f99db27761943cb0a60ba49087a8e3e62e0b5f0e4f08b1b0d32ef1982865e3",
+      "capable_sha256": "85c66a984bd7b9c38924167f5655fc4c49bc5c80445d2c4163cefeff8f78760a"
+    },
+    {
+      "entry": "gi/rt_local_shadows_full.hlsl",
+      "ordinary_sha256": "b6db156d850bc8ad3a987c0092a935dfa698938c533ba1c66c3deb6642d15c38",
+      "capable_sha256": "9c1cf0955284869553c2c92e853ff6ad7c8fd12566e661aeeafdd1373a6e020a"
+    },
+    {
+      "entry": "gi/rt_local_shadows_full_box.hlsl",
+      "ordinary_sha256": "72e65765531e4b0536572c0c7d3aad76063fac7f2c5e9625650844d243092558",
+      "capable_sha256": "0e0a5da6f5f01a9a92fcd084a640d015824852915f5c389629b7ce6b3c59369f"
+    },
+    {
+      "entry": "gi/rt_local_shadows_full_check.hlsl",
+      "ordinary_sha256": "31275503ce18dab175c3bb9ba97a5c3994e4a0ab8647decd97ed53713be6d097",
+      "capable_sha256": "8af223ca4438c39481de49eb917bd273a55adcb8e6f5d0e636405b80ab1eafa3"
+    },
+    {
+      "entry": "gi/rt_local_shadows_match.hlsl",
+      "ordinary_sha256": "2c36e83e4952182f6241f0a814fcde0864640f95bbce42332c31cd49ac08f141",
+      "capable_sha256": "6facf903764eced4f7b465309de3ae01be334c99ab4012ea991e758cd06e16aa"
+    },
+    {
+      "entry": "gi/rt_local_shadows_native_full.hlsl",
+      "ordinary_sha256": "98ab6e4fe16a46f633d4727fcd2c5a0aaf5bb8d6f78624197b77bc135b4dee3b",
+      "capable_sha256": "5723a024e8ded067be3912a3a1c43dd73ed6b0584973a9cee39c80b87c535f89"
+    },
+    {
+      "entry": "gi/rt_local_shadows_native_full_box.hlsl",
+      "ordinary_sha256": "18cb1f843434a46e4e5df69b170ab817e105c0cc18033ef24318dd6fdfcb9567",
+      "capable_sha256": "36b87c12d8c98391d69da8f5a39336ced6fcd5daedb0464d619b398a11822e6e"
+    },
+    {
+      "entry": "gi/rt_local_shadows_prep.hlsl",
+      "ordinary_sha256": "db290bcd698c5ad374a2ff41c4d0c9e5444dbe687fa00995f4eb6b2b553c59b4",
+      "capable_sha256": "db290bcd698c5ad374a2ff41c4d0c9e5444dbe687fa00995f4eb6b2b553c59b4"
+    },
+    {
+      "entry": "gi/rt_local_shadows_ref.hlsl",
+      "ordinary_sha256": "e63edfaa92def12b18f24f96af5f50c70c2bd82ceb02acfd3cd003d179114afb",
+      "capable_sha256": "9a217b2d748e333679c43eece58ae3f8bddb0aa12e4414942f1ddb8ca057a25c"
+    },
+    {
+      "entry": "gi/rt_origin.hlsl",
+      "ordinary_sha256": "9c6721758fba7a3047b69b6e65bd2cdc2213f001f5c5c9cca69433e0eb249df1",
+      "capable_sha256": "d390c585830f8e7b9cd3af45d42a3fa2a7d47333f6ce758e1e4004fa22a09627"
+    },
+    {
+      "entry": "gi/rt_reflections.hlsl",
+      "ordinary_sha256": "934614ea091231a5efddca365ad5aa1f22f3de7e7ce7384c780159f2aef7375c",
+      "capable_sha256": "248c9b81efa60c97424202ed7221c62d214274532f00a21cde98f1f59a97be99"
+    },
+    {
+      "entry": "gi/rt_reflections_sharc.hlsl",
+      "ordinary_sha256": "84e967da2f33052ab5907f00a39afa24210fdddbc8f17494652a470b80dfc021",
+      "capable_sha256": "4847b0c68b5ffd0a5139c45f811d32a8ea7f4b9974dda90db2740d5e2f5ef3fc"
+    },
+    {
+      "entry": "gi/rt_shadow.hlsl",
+      "ordinary_sha256": "01fb8eddcf26e3fa835275e7306ea486138aa408da48af2fe19eeaffb62e888b",
+      "capable_sha256": "f4b1553b81069df5991a761217cc850d3f8b229e8ec525be81191d7034e515f2"
+    },
+    {
+      "entry": "gi/rt_sun_resolve.hlsl",
+      "ordinary_sha256": "2030c5b3e18a21ed3c9a01621ee5200f21173ab6737cb28baa6dcd84956e9ce2",
+      "capable_sha256": "2030c5b3e18a21ed3c9a01621ee5200f21173ab6737cb28baa6dcd84956e9ce2"
+    },
+    {
+      "entry": "gi/sharc_debug.hlsl",
+      "ordinary_sha256": "fa7f4fac0c13025b6e6c0ec2eb9dae1e4bad7452508377c75a03f7b3612e423d",
+      "capable_sha256": "f9811009573054437a12a56b69f1981e5f33e4c6981e0c77ffce2f8897da433b"
+    },
+    {
+      "entry": "gi/sharc_inject.hlsl",
+      "ordinary_sha256": "9c2803434097b204d1f0daa49eb752653021f09b96649b79f22940a036d07b44",
+      "capable_sha256": "d3b1c46211e2c0ed51212023a1d2ed37bf3e6d31bc2429f0284c815ccc27e9b4"
+    },
+    {
+      "entry": "gi/sharc_inject_lock.hlsl",
+      "ordinary_sha256": "b71adfb12aade7c2505ac07b7085d699a603a195c18539163b7c239d8bd96fe2",
+      "capable_sha256": "bae734c506e0aed0ad36830d9027c316bdf5c9f68a1699e2fbfd8b9427bf5315"
+    },
+    {
+      "entry": "gi/sharc_resolve.hlsl",
+      "ordinary_sha256": "26d52d8d1416136393ee7059d9188ac241f64b7045cd6d689dd1098a52de0fa0",
+      "capable_sha256": "26d52d8d1416136393ee7059d9188ac241f64b7045cd6d689dd1098a52de0fa0"
+    },
+    {
+      "entry": "gi/sharc_roof.hlsl",
+      "ordinary_sha256": "784f46549bffb20e6b347266e32398916b6d4610b8f6d51ec9476cd50e3dc54a",
+      "capable_sha256": "784f46549bffb20e6b347266e32398916b6d4610b8f6d51ec9476cd50e3dc54a"
+    }
+  ],
+  "key": "rt_native_hair",
+  "default": 0,
+  "startup_only": true,
+  "requires": [
+    "rt_alpha=1",
+    "rt_bvh_split=1"
+  ],
+  "record_bytes": 208,
+  "soup_stride": 88,
+  "ctests_passed": 21,
+  "ctests_total": 21,
+  "native_hair_cpu_checks": 19716,
+  "strand_sign_cases": 4912,
+  "native_vs_patched_validated": 15,
+  "module_provenance": [
+    {
+      "hash": "503909db318d5bed",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_EMI_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 8832,
+      "strand": false,
+      "fade": false
+    },
+    {
+      "hash": "7c0930707122962a",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_EMI_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 3580
+    },
+    {
+      "hash": "fb74490e1a527950",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_DEPS_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 7376,
+      "strand": true,
+      "fade": false
+    },
+    {
+      "hash": "8dddc0bc49e56efc",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_DEPS_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 2724
+    },
+    {
+      "hash": "a8bdc1e8f14aa0dd",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_BAKE_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 9976,
+      "strand": true,
+      "fade": true
+    },
+    {
+      "hash": "d50aee3f25ca943f",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_BAKE_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 15848
+    },
+    {
+      "hash": "c91f12ecd13d2040",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_EMI_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 7080,
+      "strand": false,
+      "fade": false
+    },
+    {
+      "hash": "339e3985498cf25d",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_EMI_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 3580
+    },
+    {
+      "hash": "8a184a11265dd358",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_FOR_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 10384,
+      "strand": true,
+      "fade": true
+    },
+    {
+      "hash": "b5090ef86666e8b2",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_FOR_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 50072
+    },
+    {
+      "hash": "304b4f616f0c2f7b",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_DEPST_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 7424,
+      "strand": true,
+      "fade": false
+    },
+    {
+      "hash": "a39086306bfc9c03",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_DEPST_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 2732
+    },
+    {
+      "hash": "f99b997be5725de7",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_DEPST_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 9176,
+      "strand": true,
+      "fade": false
+    },
+    {
+      "hash": "00a9ecbb9c2b4ff8",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_DEPST_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 2732
+    },
+    {
+      "hash": "85fa53eb28444e89",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_FOR_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 8632,
+      "strand": true,
+      "fade": true
+    },
+    {
+      "hash": "85218328b0610e80",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_FOR_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 50012
+    },
+    {
+      "hash": "00e2829fe1dd1a70",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_DEP_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 7520,
+      "strand": true,
+      "fade": true
+    },
+    {
+      "hash": "0527bb148e1d6c03",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_DEP_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 6324
+    },
+    {
+      "hash": "501c448c9fca2a75",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_VEL_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 13536,
+      "strand": false,
+      "fade": false
+    },
+    {
+      "hash": "b70cadc5dd3adcbd",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_VEL_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 8368
+    },
+    {
+      "hash": "c39780dc8824981e",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_DEPS_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 9128,
+      "strand": true,
+      "fade": false
+    },
+    {
+      "hash": "34951669ed4b3b0f",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_DEPS_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 2724
+    },
+    {
+      "hash": "41a168e2d8cfcaed",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_DEF_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 10228,
+      "strand": false,
+      "fade": false
+    },
+    {
+      "hash": "42a95e17ec3adc51",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_DEF_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 17944
+    },
+    {
+      "hash": "bf72b58803efe34d",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_DEP_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 9272,
+      "strand": true,
+      "fade": true
+    },
+    {
+      "hash": "5a03e5b678b2d040",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_ST_DEP_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 6324
+    },
+    {
+      "hash": "8e93bb6b056f20be",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_DEF_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 8476,
+      "strand": false,
+      "fade": false
+    },
+    {
+      "hash": "0ca5ee93d0f33b8c",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_DEF_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 17884
+    },
+    {
+      "hash": "9d37b986de940790",
+      "stage": "vs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_VEL_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 9752,
+      "strand": false,
+      "fade": false
+    },
+    {
+      "hash": "5d5f88e49258811a",
+      "stage": "fs",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Hair_STI_VEL_Vulkan.bshd",
+      "archive": "Materials.pak",
+      "bytes": 8368
+    }
+  ],
+  "gpu_jobs": 0,
+  "full_hair_closed": false,
+  "limits": [
+    "Native fragment-depth geometry/origin mismatch remains OPEN",
+    "Basecard intersections only in this coverage increment",
+    "Native raster anisotropic footprint/precision equivalence not claimed",
+    "All15pass sources inventoried; six DEP/DEPS/DEPST capture mappings implemented",
+    "Otherhairfamilies and cascade materialdispatch still require implementation"
+  ]
+}

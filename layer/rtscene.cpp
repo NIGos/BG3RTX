@@ -29,6 +29,7 @@
 #include "omm_submit.h"
 #include "omm_content.h"
 #include "omm_sampler.h"
+#include "omm_bake.h"
 #include "../common/camera_epoch.h"
 #include "../common/cascade_casters.h"
 
@@ -748,6 +749,7 @@ void rt_device_created(DeviceData* dd, bool enabled) {
 void rt_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   omm::device_destroyed(dd);
+  omm::bake_device_destroyed(dd);
   omm::submit_device_destroyed(dd);
   omm::content_device_destroyed(dd);
   omm::sampler_device_destroyed(dd);
