@@ -115,6 +115,9 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
   if (!content_source_view(in.mask,source) || !source.buffer || !source.viewId || !source.imageId || !source.levelCount ||
       source.imageOffset<8 || source.imageOffset>UINT32_MAX || source.imageOffset%4 ||
       source.imageOffset>source.bytes || source.bytes-source.imageOffset<4) return 0;
+  // BC and sRGB views have no general mixed-value filtering certificate here.
+  // Source eligibility is a constraint, never permission to invent a proof.
+  if (source.requiredSamplingCertificate==2u && in.push.sampling_certificate==1u) return 0;
   PlainBakePush push=in.push; push.source_epoch_offset=uint32_t(source.imageOffset);
   // Every ray-cone footprint currently supported by tex_alpha can reach any
   // view mip up to gAlphaWrap.maxLod=16. A caller cannot narrow this domain.

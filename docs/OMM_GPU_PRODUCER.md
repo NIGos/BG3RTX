@@ -23,6 +23,11 @@ the code hull, finite fixture, image handle or frame age looks plausible. It
 requires matching interpolation/UV/LOD/numeric/content proofs. In particular,
 legacy stochastic thresholds cover [0,1]; alpha zero is not universally transparent
 because the existing 24-bit hash includes zero. An all-UNKNOWN bake is not a pass.
+BC/sRGB source metadata explicitly rejects the general numeric certificate;
+only uniform decoded endpoint proof is currently accepted for these formats.
+The combined GPU probe preserves the producer/content checks and adds 8,704
+BC3/BC7 UNORM/sRGB Load and LINEAR/trilinear endpoint checks: zero failures and
+zero validation errors. This does not certify mixed filtered values.
 
 Host ownership retains source snapshot, producer pipeline/layout, micromap input
 and descriptor buffers until backend retirement proves completion. Pipeline reload
