@@ -269,3 +269,8 @@ only for current-Sun visibility rays. Camera-mask primary queries retain their
 normal rebasing. This prevents a second origin shift when GPU-late camera data
 differs; actual native/game validation is still required. Ordinary variants keep
 the original expression. No bias, radius or temporal tuning.
+
+Each retained BvhSunBase also snapshots its actual TRANSFER_SRC creation usage.
+A late Sun enable cannot copy an older non-transferable ring just because the
+current ring has since upgraded; the old source declines before recording work.
+This is internal host metadata, with no public ABI change.

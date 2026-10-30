@@ -597,6 +597,7 @@ struct BvhSunBase {
   VkDeviceSize offset = 0, buffer_bytes = 0;
   uint32_t count = 0;
   uint64_t record = 0;
+  bool transfer_source = false; // Creation usage of this retained buffer, not the current ring.
 };
 struct BvhResult {
   VkAccelerationStructureKHR tlas;

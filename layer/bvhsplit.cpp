@@ -1918,7 +1918,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->pool = g_pool.b;
   out->pool_bytes = g_pool.size;
   out->rec = rec;
-  out->sun_base = {g_ring.b, rbase, g_ring.size, sun_base_instances, rec};
+  out->sun_base = {g_ring.b, rbase, g_ring.size, sun_base_instances, rec, g_ring_transfer_source};
 
   if (cfg_int("rt_stability_log", 0) && now % 300 == 0) {
     uint32_t held = 0;
@@ -2032,7 +2032,7 @@ bool bvh_build_sun_clone(VkCommandBuffer cmd,uint32_t slot,const BvhSunBase& bas
                          VkPipeline validate_pipeline,VkPipelineLayout validate_layout,VkBuffer stamp,VkBuffer parameters,
                          BvhSunCloneResult* out) {
   if(!out) return false;*out={};
-  if(!g_on || slot>=kSceneSlots || !cmd || !base.instances || !base.record || cascades.size()!=4 ||
+  if(!g_on || slot>=kSceneSlots || !cmd || !base.instances || !base.record || !base.transfer_source || cascades.size()!=4 ||
      !validate_pipeline || !validate_layout || !stamp || !parameters || base.count>65535u*256u) return false;
   const VkDeviceSize prefix=VkDeviceSize(base.count)*sizeof(VkAccelerationStructureInstanceKHR);
   if(base.offset>base.buffer_bytes || prefix>base.buffer_bytes-base.offset || base.count>UINT32_MAX-4) return false;
