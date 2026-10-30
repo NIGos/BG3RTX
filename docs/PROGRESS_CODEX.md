@@ -46,9 +46,10 @@ moved', '[rt] scene wait' (timeouts, skipped), '[alpha] ... held records dropped
   21-42%, rotating 25-50%); gi_rt=0, rt_shadows=0, rt_local_shadows=0 or
   rt_alpha_stochastic=0 alone lower nothing. So our effects add no measurable foliage
   flicker in this view after the fixes above. User to re-check in game (main f72abca+).
-- Cost noted: with 'Full + shadowed lights' the local-light pass is 9-10 ms GPU in the inn's upper
-  floor (S7 view 1.3-3.4 ms); stats say local shadows remove 85% of lit luminance there (S7 6%).
-  To check: few very bright lights inside their fixtures?
+- Local-light shadow cost in the inn (sup-lsstat-inn-fg2, Full + shadowed lights): 0.93 ms GPU
+  (no rays 0.26 ms; Fast mode 0.75 ms). The 7-10 ms seen earlier was ls_stats=1 in the job sets
+  (its counters cost ~6.6 ms). rt_fast_trace=1: no gain (build +0.3 ms). The 'removed 85%'
+  stat jumps after a live ls_box toggle while the image is unchanged: stats-only.
 
 ## Late Thursday 2026-10-29 22:40 (supervisor, user away)
 
