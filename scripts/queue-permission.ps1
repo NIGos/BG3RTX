@@ -7,12 +7,19 @@ function Get-QueueTextHash([string]$text) {
   $sha=[Security.Cryptography.SHA256]::Create()
   try { ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text)))).Replace('-','').ToLowerInvariant() } finally { $sha.Dispose() }
 }
+function Get-QueueFileHash([string]$path) {
+  # Windows PowerShell children can inherit a PS7 PSModulePath that hides the
+  # script-based Get-FileHash command. Stream directly; no optional module.
+  $stream=[IO.File]::OpenRead($path)
+  $sha=[Security.Cryptography.SHA256]::Create()
+  try {([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','')} finally {$sha.Dispose();$stream.Dispose()}
+}
 function Get-QueueJobHash($job,[string]$tree) {
   $text=$job | ConvertTo-Json -Depth 64 -Compress
   if ($job.phases) {
     $phase=Join-Path $tree $job.phases
     if (-not (Test-Path -LiteralPath $phase -PathType Leaf)) { throw 'Missing frozen phase input' }
-    $text+='|phase:'+ (Get-FileHash -LiteralPath $phase -Algorithm SHA256).Hash
+    $text+='|phase:'+ (Get-QueueFileHash $phase)
   }
   Get-QueueTextHash $text
 }
@@ -35,7 +42,7 @@ function Get-QueueBuildIdentity([string]$tree) {
   # collation (e.g. native_hair.h versus native_hair_math.h). Freeze ordinally.
   $ordered=[Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
   foreach($file in $files){[void]$ordered.Add($file)}
-  $rows=@($ordered | ForEach-Object {$_+':'+(Get-FileHash -LiteralPath (Join-Path $tree $_) -Algorithm SHA256).Hash})
+  $rows=@($ordered | ForEach-Object {$_+':'+(Get-QueueFileHash (Join-Path $tree $_))})
   Get-QueueTextHash ($revision+"`n"+($rows -join "`n"))
 }
 function Get-QueuePermissionBlock($job,[string]$queueRoot,[string]$tree='', [string]$build='',
