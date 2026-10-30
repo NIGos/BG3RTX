@@ -474,14 +474,17 @@ struct CascadeSoup {
   uint64_t record = 0;
   VkCommandBuffer producer = VK_NULL_HANDLE;
 };
+struct AlphaSnapshot;
 struct SunCascadeDraw {
   uint32_t first_triangle=0, triangles=0;
   uint64_t fragment_shader=0;
+  uint32_t material=0; // 0 opaque; 1+ snapshot index; UINT32_MAX unknown
   sun_coverage::AffineSource affine;
 };
 struct SunCascadeCapture {
   CascadeSoup soup{};
   std::vector<SunCascadeDraw> draws;
+  std::vector<AlphaSnapshot> materials;
   VkImage depth_image = VK_NULL_HANDLE;
   sun_coverage::NativeEpoch native_epoch;
   VkBuffer native_frame_buffer = VK_NULL_HANDLE;
@@ -753,6 +756,9 @@ struct AlphaSnapshot {
   // destroy a view during a hold and the driver reuse its handle for another image.
   uint32_t tex_id = 0, cache_id = 0;
 };
+// Canonical draw capture without modifying camera g_recs/g_tex/g_cache.
+// The caller owns lifetime extension and descriptor-local index assignment.
+bool alpha_capture_source(VkCommandBuffer cmd,const AlphaFs& fs,uint32_t first_tri,uint32_t tris,AlphaSnapshot* out);
 bool alpha_snapshot(uint32_t index, AlphaSnapshot* out);
 uint32_t alpha_restore(const AlphaSnapshot& saved);   // UINT32_MAX on failure
 void alpha_device_created(DeviceData* dd);

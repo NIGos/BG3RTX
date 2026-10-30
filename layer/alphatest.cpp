@@ -448,8 +448,11 @@ void alpha_begin_capture() {
   g_cache.clear();
 }
 
-bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, uint32_t tris, uint32_t* rec_index) {
-  AlphaRec r{};
+// Shared canonical capture: never touches the camera capture's mutable record
+// or descriptor-index arrays. Ordinary camera adds use the same raw bindings.
+static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint32_t tris,
+                                    AlphaRec& r,Bg3Binding& t,Bg3Binding& c) {
+  r={};t={};c={};
   r.first_tri = first_tri;
   r.tris = tris;
   r.kind = a.kind;
@@ -459,12 +462,10 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
   r.fs_lo = uint32_t(a.hash);
   r.fs_hi = uint32_t(a.hash >> 32);
   r.scale[0] = r.scale[1] = a.k;
-  Bg3Binding t;
   if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, a.tex_set, a.tex_bind, 0, &t) || !t.view) {
     ++g_fail[0];
     return false;
   }
-  Bg3Binding c{};
   if (a.kind == 1) {
     // UV transform (two vec4) and the tile-set index from the material UBO,
     // the tile-set constants (two row-major mat4) from the SSBO entry.
@@ -540,6 +541,26 @@ bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, u
     ++g_fail[3];
     return false;
   }
+  return true;
+}
+
+bool alpha_capture_source(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint32_t tris,AlphaSnapshot* out) {
+  if(!out) return false;
+  *out={};
+  Bg3Binding t{},c{};
+  if(!capture_source_material(cmd,a,first_tri,tris,out->rec,t,c)) return false;
+  out->tex=t.view;out->tex_layout=t.layout;out->tex_id=view_image_id(t.view);
+  if(a.kind==1 || a.kind==4) {
+    out->cache=c.view;out->cache_layout=c.layout;out->cache_id=view_image_id(c.view);
+  }
+  // Reject unidentified/recycled resources before a private descriptor tuple can
+  // be published. Camera ordinary adds retain their previous lookup/cost path.
+  return out->tex_id && ((a.kind!=1 && a.kind!=4) || out->cache_id);
+}
+
+bool alpha_add_draw(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint32_t tris,uint32_t* rec_index) {
+  AlphaRec r{};Bg3Binding t{},c{};
+  if(!capture_source_material(cmd,a,first_tri,tris,r,t,c)) return false;
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_recs.size() >= kMaxRecords) {
     ++g_fail[4];

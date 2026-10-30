@@ -158,3 +158,19 @@ in addition to the unchanged 192 MiB legacy ring capacity. Actual allocation,
 GPU copy/build time and quality remain unmeasured. Both DLLs and 25 CTests pass.
 Per-draw opacity dispatch is the next consumer; unsupported material/depth paths
 still prevent this preparatory capture increment from being a world gate pass.
+
+## Canonical material snapshots
+
+Stable native Hair coverage/procedural commits are integrated. Canonical alpha
+capture is now factored from alpha_add_draw without touching camera record or
+texture-index tables. The ordinary camera path retains its raw-binding/indexing
+behavior. Current native cascade draw records can independently retain kind1/2
+texture cutouts, kind3 scalar coverage, and validated stride88 kind4 native Hair
+shadow coverage, with both actual views/layouts/image identities. Unsupported
+fragment-depth or dynamic depth state stays unknown. Private descriptor-local
+remapping and per-candidate material evaluation are still pending, so mere
+successful snapshots do not authorize trust or silently make unknown cards solid.
+
+Both DLLs and 27 CTests pass. Against the stable native Hair baseline4ca35f5,
+214 existing shader entries are byte-identical and all10 new entries compile
+and validate. This is offline integration evidence, not a live world-shadow gate.

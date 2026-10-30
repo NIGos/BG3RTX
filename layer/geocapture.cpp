@@ -248,6 +248,7 @@ struct Capture {
   bool c_finite_sun_clip = true;
   VkImage c_depth_image = VK_NULL_HANDLE;
   std::vector<SunCascadeDraw> c_sun_draws;
+  std::vector<AlphaSnapshot> c_sun_materials;
   bool c_legacy_transfer=false;
   Capture* c_legacy_target=nullptr;
   std::vector<VkBufferCopy> c_legacy_copies;
@@ -1108,7 +1109,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.c_tris = 0;
   c.c_native_epoch = {}; c.c_native_frame = VK_NULL_HANDLE; c.c_native_offset = 0;
   c.c_epoch_ok = false; c.c_material_unknown = 0; c.c_finite_sun_clip = true;
-  c.c_depth_image=s->pass.depth_image; c.c_sun_draws.clear();
+  c.c_depth_image=s->pass.depth_image; c.c_sun_draws.clear();c.c_sun_materials.clear();
   c.rec = bvh_rec_register(cmd);
   if(layer==want) g_cc_meta[f % 3] = CcMeta{};
   if(all_current) g_sun_meta[layer][f % 3]=CcMeta{};
@@ -1227,6 +1228,16 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   if(current_sun) {
     SunCascadeDraw draw;
     draw.first_triangle=uint32_t(c->cursor/(3ull*g_stride));draw.triangles=uint32_t(prims);draw.fragment_shader=s->fs;
+    if(pi.discard || pi.fragment_depth || !pi.fragment_known || pi.depth_write<0 || pi.depth_test<0) {
+      draw.material=UINT32_MAX;
+      AlphaFs material{};AlphaSnapshot snapshot;
+      if(!pi.fragment_depth && pi.fragment_known && pi.depth_write>=0 && pi.depth_test>=0 && alpha_lookup(s->fs,&material) && material.uv==pi.uv && pi.uv>=0 &&
+         (material.kind!=4 || (g_stride>=88 && (pi.hair_outputs&1u)!=0u)) &&
+         alpha_capture_source(cmd,material,draw.first_triangle,draw.triangles,&snapshot)) {
+        draw.material=uint32_t(c->c_sun_materials.size())+1;
+        c->c_sun_materials.push_back(std::move(snapshot));
+      }
+    }
     if(!pi.discard && !pi.fragment_depth && pi.fragment_known) draw.affine=sun_affine_source(s,args,pi.inst);
     c->c_sun_draws.push_back(std::move(draw));
   }
@@ -1288,6 +1299,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     if (mat_ok) { meta.has_origin = true; for (int k = 0; k < 3; ++k) meta.origin[k] = m.v[52 + k]; }
     meta.sun.soup={c->xfb.b,tris,g_stride,meta.has_origin,{meta.origin[0],meta.origin[1],meta.origin[2]},meta.sig,c->rec,c->cmd};
     meta.sun.draws=c->c_sun_draws;
+    meta.sun.materials=c->c_sun_materials;
     meta.sun.depth_image=c->c_depth_image;
     meta.sun.native_epoch=c->c_native_epoch;
     meta.sun.native_frame_buffer=c->c_native_frame;meta.sun.native_frame_offset=c->c_native_offset;
