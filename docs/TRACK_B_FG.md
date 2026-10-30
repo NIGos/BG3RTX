@@ -1,5 +1,42 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## Submit-order / UI follow-up - 2026-10-30 (`066b38b`, defaults unchanged)
+
+Color/UI used to be published while recording; private inputs and camera were
+published at submit. Camera constants were then read outside the snapshot lock.
+`fg_input_copy=1` now publishes composite resources at submit, snapshots camera
+constants with them, and selects private inputs only for that same submit frame.
+Secondaries forward the private pair. `fg_tag_ui=0` / `fg_tag_hudless=0` now send
+explicit null tags, following the SDK cache contract. No ABI or shader changes.
+
+The same-evaluate bit comparisons pass 200/200 for each private input, with zero
+invalid samples. All 245 selected submit/token stamps align. This repairs hazards;
+the original proxy regression is not causally attributed to a proven input lag.
+Camera reprojection verifies MV scale 0.9994, median error 0.61 render pixels versus
+104.65 for the opposite sign. Copy GPU median stays 0.026 ms.
+
+Final fast 0/1/0/1 world proxy: 7.21 / 3.87 / 8.38 / 8.38 codes; UI ROI:
+7.24 / 3.97 / 7.31 / 8.35. The second UI repeat fails the requested non-regression
+check. Steady ratio 2.00; captured ratios 1.70-2.30 with 16 timer resets. PNG IO is
+now off the present thread and bounded; synchronous GPU readback remains a limit.
+Image-matched companion captures contain repeated natives and native frame gaps
+(e.g. 15300 -> 15302 in UI burst 1097), so parity alone is not sufficient.
+
+The UI matrix tests (UI,PQ,hudless) = (1,0,1), (0,0,1), (1,1,1), (1,0,0),
+(1,1,0), twice, in one FG 2 selected-character rotation run. Both baseline near-UI
+foliage reprojection supports are zero. Far class 4 means are 7.80, 8.52, 8.08,
+8.06, 8.32 respectively. They have different camera/material support and cannot
+rank causal hover-excess removal. No setting qualifies for a new default.
+
+RR guide-pool rollover also exposed an idle/reset race with the FG pacer; see
+TRACK_A_RR. Repaired runs survive 64 rollovers. No new VUID IDs in the final fast
+job; one SDK latency-marker threading warning remains. All quality defaults stay
+unchanged and the branch is not merged. Experimental virtual mouse controls were
+removed. Evidence: `docs/evidence/fg-followup-20261030.json`. Build 14/14, shaders
+107/107, QA detectors pass; all 44 new completed raw bursts analysed and deleted.
+Check The Blushing Mermaid - 96h 39m with FG 2, real rotation and a visible NPC
+nameplate/selection UI over foliage. Next qualify cadence and actual near-UI support.
+
 ## Copy motion follow-up - 2026-10-30 (`sup/fg-copy-gate`, default 0)
 
 The inn Q/E probe proved that posted key repeat is not a speed control. The follow-up
@@ -330,7 +367,7 @@ The layouts seen are depth 3 (`DEPTH_STENCIL_ATTACHMENT`), MV and hudless 2 (`CO
 - `depthInverted = true` (reversed Z, D24 values 0.001 to 0.03);
 - `cameraMotionIncluded = true`.
 
-The sign has not been checked against moving-camera output yet (see [Next steps](#next-steps)).
+The 2026-10-30 camera reprojection check verifies the sign and pixel scale; see the submit-order follow-up above.
 
 ### Camera constants
 

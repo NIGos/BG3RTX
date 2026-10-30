@@ -20,20 +20,22 @@ Check Blushing Mermaid - 96h 39m near crates and stage edge. Refits and instance
 indexing are not the cause. Split-off hid the boxes by capture-buffer overflow.
 See PROGRESS_CODEX and TRACK_D_RT section 11 for the deciding run and diagnostics.
 
-## FG copy gate follow-up (sup/fg-copy-gate; stays off)
+## FG pairing / UI follow-up (sup/fg-copy-gate; not merged)
 
-`sup-fg-copy-motion-gate` is transport-valid but quality INVALID. Copy off: depth
-zero 42/96, MV non-finite components 4,890,263. On: 101/101 private pairs match NGX,
-zero invalid samples. Cost 0.026 ms. Host toggles 0, steady ratio 2.00, capture range
-1.60-2.10 with 85 timer resets. No new VUIDs or faults. Fast unwarped midpoint proxy
-world 1.90 -> 8.93 codes; cannot establish a semantic or normal-cadence quality gate.
-Slow Q/E pulses still alias with readbacks; pan drifts. Next: explicit endpoint
-identities at normal capture cadence and matched UI support. Default remains 0.
-Evidence: docs/evidence/fg-copy-gate-20261030.json. No main integration.
-Foliage native-final class 4 rotation change (codes/255): FG 0 clear 6.68 / 9.99,
-hover 7.17 / 6.47; FG 2 clear 10.05 / 8.88, hover 11.07 / 10.82. Hover does not
-prove matched ring/nameplate support (last hover UI 0). Cause unresolved; no fix.
-Build -Test 13/13, camera checks 25/25. All 23 raw bursts analysed and deleted.
+Read the top of PROGRESS_CODEX. Code `066b38b`: submit-order color/UI and a locked
+camera snapshot behind fg_input_copy; disabled UI tags clear their SDK cache entry.
+200/200 same-NGX depth/MV comparisons valid; 245 selected submit stamps align.
+No causal input lag established. MV scale agrees with camera motion (0.9994).
+Final copy 0/1 twice: world off 7.21 / 8.38, on 3.87 / 8.38; UI off 7.24 / 7.31,
+on 3.97 / 8.35. Second UI repeat is worse. Steady 2.00, capture 1.70-2.30 with
+16 timer resets. No new VUID IDs; SDK latency-marker threading warning remains.
+Five UI combinations repeated; baseline near-UI foliage support is zero. No winner.
+Defaults unchanged: copy 0, UI tag 1, PQ 0, hudless 1. Main still 65bd0a2.
+RR pool idle/reset raced the FG pacer and stalled; fenced pool retirement survived
+64 rollovers. PNG encoding is asynchronous, but GPU readbacks still stall capture.
+Temporary virtual mouse changes were removed. Build 14/14, shaders 107/107, QA pass.
+All 44 new completed raw bursts deleted. Evidence: fg-followup-20261030.json.
+Next: normal-cadence GPU readback with native endpoint IDs and actual hover/foliage overlap.
 
 ## UI inputs (sup/ui-inputs; optional correction stays off)
 

@@ -14,6 +14,18 @@ Files:
   conversion, hot-reloaded.
 - `bg3rtx.ini`: the `rr*` and `ngx_hook` keys.
 
+## Guide descriptor pool retirement - 2026-10-30 (`066b38b`, not merged)
+
+The guide cache used DeviceWaitIdle + ResetDescriptorPool on cache pressure or
+pool exhaustion, and reset pools directly on resize. With FG 2, exhaustion during
+real rotation raced the SDK pacer's vkQueueSubmit and stalled the test process.
+Pools now retire through the existing GPU-completion deferred-destruction path;
+new allocations use a fresh 64-set pool. In-flight sets keep their old pool alive.
+Non-pool allocation errors return failure instead of attempting an idle/reset.
+The repaired runs completed 64 pool rollovers without that stall. This adds no GPU
+dispatch and changes no guide shader or ABI. See `docs/evidence/fg-followup-20261030.json`.
+The FG/UI quality gates remain unqualified; no main merge or feature-default change.
+
 ## How it hooks NGX
 
 - **Where the calls go.** BG3 links the NGX client statically: bg3.exe exports

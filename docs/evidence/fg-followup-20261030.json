@@ -1,0 +1,507 @@
+{
+  "branch": "sup/fg-copy-gate",
+  "base": "51c6d2d",
+  "main": "65bd0a2",
+  "decision": "NO MERGE OR DEFAULT CHANGE. A remains unqualified; B has no matched near-UI foliage support.",
+  "pairing_findings": {
+    "cause": "No causal one-frame input lag established. Fixed recording-time color/UI publication versus submit-time private inputs, unlocked camera reads, and missing secondary-buffer copy propagation.",
+    "proof": {
+      "bursts": 44,
+      "private_depth_samples": 200,
+      "private_depth_zero": 0,
+      "private_mv_samples": 200,
+      "private_mv_nonfinite": 0,
+      "depth_equal": 200,
+      "depth_pairs": 200,
+      "mv_equal": 200,
+      "mv_pairs": 200
+    },
+    "selected_stamps": 245,
+    "stamp_mismatches": 0,
+    "stamp_limit": "Submission counters and same-evaluate byte comparisons do not independently label SDK-consumed/generated output frames.",
+    "mv_contract": {
+      "serial": 1060,
+      "normalized_scale_p50": 0.9994354315916935,
+      "error_render_pixels_p50": 0.6100822374522552,
+      "flipped_error_render_pixels_p50": 104.64896955535752
+    }
+  },
+  "A": {
+    "log": "captures\\queue\\logs\\sup-fg-copy-normal.1.125806.log",
+    "rows": [
+      {
+        "copy": 0,
+        "directories": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\fg_20261030-130038"
+        ],
+        "images": 16,
+        "proxy": {
+          "world": 7.208476339067731,
+          "world_ui_roi": 7.236508096967425
+        },
+        "moving_energy_delta_pct": {
+          "world": -0.449084160451263,
+          "world_ui_roi": -0.6777498871403109
+        },
+        "camera_step_degrees_p0_p50_p100": [
+          5.618433829524212,
+          6.296166549023181,
+          10.88665701679465
+        ],
+        "sdk_ratio_p0_p50_p100": [
+          1.9,
+          2.0,
+          2.1
+        ],
+        "timer_resets": 4,
+        "host_toggles": 0
+      },
+      {
+        "copy": 1,
+        "directories": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\fg_20261030-130126"
+        ],
+        "images": 16,
+        "proxy": {
+          "world": 3.873461963874953,
+          "world_ui_roi": 3.9715086221694946
+        },
+        "moving_energy_delta_pct": {
+          "world": 0.2621126667893492,
+          "world_ui_roi": 0.10141182779337399
+        },
+        "camera_step_degrees_p0_p50_p100": [
+          0.0,
+          6.273565737246351,
+          10.886605113264013
+        ],
+        "sdk_ratio_p0_p50_p100": [
+          1.7,
+          2.0,
+          2.3
+        ],
+        "timer_resets": 4,
+        "host_toggles": 0
+      },
+      {
+        "copy": 0,
+        "directories": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\fg_20261030-130214"
+        ],
+        "images": 16,
+        "proxy": {
+          "world": 8.383707114628383,
+          "world_ui_roi": 7.3144025802612305
+        },
+        "moving_energy_delta_pct": {
+          "world": -0.24805191902770307,
+          "world_ui_roi": -0.358596538723599
+        },
+        "camera_step_degrees_p0_p50_p100": [
+          5.482516150647708,
+          6.298343343723406,
+          10.886594005995446
+        ],
+        "sdk_ratio_p0_p50_p100": [
+          1.7,
+          2.0,
+          2.3
+        ],
+        "timer_resets": 4,
+        "host_toggles": 0
+      },
+      {
+        "copy": 1,
+        "directories": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\fg_20261030-130302"
+        ],
+        "images": 16,
+        "proxy": {
+          "world": 8.379220179149083,
+          "world_ui_roi": 8.350848197937012
+        },
+        "moving_energy_delta_pct": {
+          "world": 0.4074583257850817,
+          "world_ui_roi": 0.5520903742044725
+        },
+        "camera_step_degrees_p0_p50_p100": [
+          3.286649018702053,
+          6.308554152335458,
+          10.886613872615062
+        ],
+        "sdk_ratio_p0_p50_p100": [
+          1.9,
+          2.0,
+          2.1
+        ],
+        "timer_resets": 4,
+        "host_toggles": 0
+      }
+    ],
+    "new_vuids": [],
+    "sdk_threading_warnings": 1,
+    "pooled_proxy": {
+      "0": {
+        "world": 7.796091726848057,
+        "world_ui_roi": 7.275455338614328
+      },
+      "1": {
+        "world": 6.126341071512018,
+        "world_ui_roi": 6.161178410053253
+      }
+    },
+    "decision": "NOT PROMOTED. Second UI repeat is worse; captured cadence is not a constant 2.00. Keep fg_input_copy=0.",
+    "limitations": [
+      "Unwarped midpoint proxy, not ground-truth interpolation. Odd native / even generated parity comes from image-matched companion runs; constant 2.00 cadence and no timer reset are required for this separated capture.",
+      "Input validity is reused from same-frame RR/private-copy bursts. Forward vectors during PNG windows come from the submitted velocity camera UBO.",
+      "All four windows have four SDK frame-timer resets despite asynchronous PNG encoding. GPU readbacks still stall presentation."
+    ]
+  },
+  "B": {
+    "rows": [
+      {
+        "serial": 1090,
+        "variant": "ui1-pq0-hud1",
+        "transport": true,
+        "world_ui_pixels": 0,
+        "native_c4": {
+          "near": {
+            "samples": 0,
+            "mae_codes": null,
+            "mean": null
+          },
+          "away": {
+            "samples": 383576,
+            "mae_codes": 9.04000707456043,
+            "mean": 0.30285870791958414
+          }
+        },
+        "identified_triples": 5,
+        "camera_step_degrees": [
+          4.118558200525531,
+          5.60644285282854,
+          6.011806924956103
+        ]
+      },
+      {
+        "serial": 1091,
+        "variant": "ui0-pq0-hud1",
+        "transport": true,
+        "world_ui_pixels": 21595,
+        "native_c4": {
+          "near": {
+            "samples": 0,
+            "mae_codes": null,
+            "mean": null
+          },
+          "away": {
+            "samples": 496795,
+            "mae_codes": 9.108988611322307,
+            "mean": 0.26618947107114094
+          }
+        },
+        "identified_triples": 3,
+        "camera_step_degrees": [
+          4.423319322812877,
+          5.856635242361151,
+          6.011812223132672
+        ]
+      },
+      {
+        "serial": 1092,
+        "variant": "ui1-pq1-hud1",
+        "transport": true,
+        "world_ui_pixels": 21599,
+        "native_c4": {
+          "near": {
+            "samples": 627,
+            "mae_codes": 2.2404864978942385,
+            "mean": 0.3573731782904082
+          },
+          "away": {
+            "samples": 541128,
+            "mae_codes": 7.763917969352481,
+            "mean": 0.2546122623206161
+          }
+        },
+        "identified_triples": 5,
+        "camera_step_degrees": [
+          4.528682856526558,
+          5.902692452931964,
+          6.011747368915911
+        ]
+      },
+      {
+        "serial": 1093,
+        "variant": "ui1-pq0-hud0",
+        "transport": true,
+        "world_ui_pixels": 21001,
+        "native_c4": {
+          "near": {
+            "samples": 0,
+            "mae_codes": null,
+            "mean": null
+          },
+          "away": {
+            "samples": 177950,
+            "mae_codes": 6.532030428194806,
+            "mean": 0.3971784555982358
+          }
+        },
+        "identified_triples": 2,
+        "camera_step_degrees": [
+          4.658916793963573,
+          5.91600506728431,
+          6.011734469118456
+        ]
+      },
+      {
+        "serial": 1094,
+        "variant": "ui1-pq1-hud0",
+        "transport": true,
+        "world_ui_pixels": 23719,
+        "native_c4": {
+          "near": {
+            "samples": 0,
+            "mae_codes": null,
+            "mean": null
+          },
+          "away": {
+            "samples": 224632,
+            "mae_codes": 6.268083591747159,
+            "mean": 0.3434903209605717
+          }
+        },
+        "identified_triples": 2,
+        "camera_step_degrees": [
+          4.752096898967463,
+          5.982627752768455,
+          6.011620853499066
+        ]
+      },
+      {
+        "serial": 1095,
+        "variant": "ui1-pq0-hud1",
+        "transport": true,
+        "world_ui_pixels": 22903,
+        "native_c4": {
+          "near": {
+            "samples": 0,
+            "mae_codes": null,
+            "mean": null
+          },
+          "away": {
+            "samples": 292074,
+            "mae_codes": 6.563768514143676,
+            "mean": 0.4082401614456011
+          }
+        },
+        "identified_triples": 1,
+        "camera_step_degrees": [
+          5.0222333186700645,
+          5.980190347348684,
+          6.011717669851779
+        ]
+      },
+      {
+        "serial": 1096,
+        "variant": "ui0-pq0-hud1",
+        "transport": true,
+        "world_ui_pixels": 4865,
+        "native_c4": {
+          "near": {
+            "samples": 0,
+            "mae_codes": null,
+            "mean": null
+          },
+          "away": {
+            "samples": 714363,
+            "mae_codes": 7.921537680247997,
+            "mean": 0.35172470061395605
+          }
+        },
+        "identified_triples": 1,
+        "camera_step_degrees": [
+          5.299100945631286,
+          5.990894380729922,
+          6.011774893610885
+        ]
+      },
+      {
+        "serial": 1097,
+        "variant": "ui1-pq1-hud1",
+        "transport": true,
+        "world_ui_pixels": 0,
+        "native_c4": {
+          "near": {
+            "samples": 0,
+            "mae_codes": null,
+            "mean": null
+          },
+          "away": {
+            "samples": 851408,
+            "mae_codes": 8.393222847477356,
+            "mean": 0.3338193117955052
+          }
+        },
+        "identified_triples": 0,
+        "camera_step_degrees": [
+          5.12745475508207,
+          5.994991532925935,
+          6.0117989178658515
+        ]
+      },
+      {
+        "serial": 1098,
+        "variant": "ui1-pq0-hud0",
+        "transport": true,
+        "world_ui_pixels": 11764,
+        "native_c4": {
+          "near": {
+            "samples": 0,
+            "mae_codes": null,
+            "mean": null
+          },
+          "away": {
+            "samples": 987521,
+            "mae_codes": 9.583896823459957,
+            "mean": 0.32238725314923683
+          }
+        },
+        "identified_triples": 0,
+        "camera_step_degrees": [
+          4.71520492931373,
+          5.990833114856418,
+          6.011787936840626
+        ]
+      },
+      {
+        "serial": 1099,
+        "variant": "ui1-pq1-hud0",
+        "transport": true,
+        "world_ui_pixels": 5648,
+        "native_c4": {
+          "near": {
+            "samples": 0,
+            "mae_codes": null,
+            "mean": null
+          },
+          "away": {
+            "samples": 976933,
+            "mae_codes": 10.378066900442507,
+            "mean": 0.30617780858884386
+          }
+        },
+        "identified_triples": 1,
+        "camera_step_degrees": [
+          5.2475660706843215,
+          5.990422510418179,
+          6.011717445366529
+        ]
+      }
+    ],
+    "decision": "No setting qualifies. Both baseline near-UI reprojection supports are zero; no causal hover-excess removal can be measured.",
+    "far_c4_mean_by_variant": {
+      "ui0-pq0-hud1": 8.515263145785152,
+      "ui1-pq0-hud0": 8.057963625827382,
+      "ui1-pq0-hud1": 7.801887794352053,
+      "ui1-pq1-hud0": 8.323075246094833,
+      "ui1-pq1-hud1": 8.078570408414919
+    },
+    "endpoint_example": "In serial 1097, image-matched presented native frames are 15300, 15302, 15304. Parity alone cannot establish an adjacent-frame midpoint."
+  },
+  "safety_fix": "RR descriptor pool exhaustion/cache turnover/resize now retires pools through GPU-completion fences. It no longer calls DeviceWaitIdle or resets live pools. The first virtual-mouse stress run stalled in the old idle/reset path; repaired runs completed.",
+  "pool_rollovers": 64,
+  "experiments": "Temporary virtual mouse / Alt / reset-gap changes were rejected for quality qualification and removed. Their detailed plans and reports remain under captures/fg-followup-fixtures and captures/fg-followup-evidence.",
+  "defaults": {
+    "fg_input_copy": 0,
+    "fg_tag_ui": 1,
+    "fg_ui_pq": 0,
+    "fg_tag_hudless": 1
+  },
+  "raw_bursts_analysed_deleted": 44,
+  "jobs": [
+    {
+      "job": "sup-fg-pair-fast",
+      "log": "captures\\queue\\logs\\sup-fg-pair-fast.1.113406.log",
+      "selected_stamps": 26,
+      "stamp_mismatches": 0,
+      "pool_rollovers_without_device_idle": 0,
+      "gpu_copy_median_ms": 0.027
+    },
+    {
+      "job": "sup-fg-pair-q",
+      "log": "captures\\queue\\logs\\sup-fg-pair-q.1.114043.log",
+      "selected_stamps": 28,
+      "stamp_mismatches": 0,
+      "pool_rollovers_without_device_idle": 0,
+      "gpu_copy_median_ms": 0.026
+    },
+    {
+      "job": "sup-fg-pair-final",
+      "log": "captures\\queue\\logs\\sup-fg-pair-final.1.114803.log",
+      "selected_stamps": 26,
+      "stamp_mismatches": 0,
+      "pool_rollovers_without_device_idle": 0,
+      "gpu_copy_median_ms": 0.026
+    },
+    {
+      "job": "sup-fg-pair-mouse",
+      "log": "captures\\queue\\logs\\sup-fg-pair-mouse.1.115625.log",
+      "selected_stamps": 29,
+      "stamp_mismatches": 0,
+      "pool_rollovers_without_device_idle": 0,
+      "gpu_copy_median_ms": 0.026
+    },
+    {
+      "job": "sup-fg-ui-live",
+      "log": "captures\\queue\\logs\\sup-fg-ui-live.1.120351.log",
+      "selected_stamps": 0,
+      "stamp_mismatches": 0,
+      "pool_rollovers_without_device_idle": 0,
+      "gpu_copy_median_ms": null
+    },
+    {
+      "job": "sup-fg-pair-ui-virtual",
+      "log": "captures\\queue\\logs\\sup-fg-pair-ui-virtual.1.121752.log",
+      "selected_stamps": 0,
+      "stamp_mismatches": 0,
+      "pool_rollovers_without_device_idle": 0,
+      "gpu_copy_median_ms": null
+    },
+    {
+      "job": "sup-fg-pair-ui-fixed",
+      "log": "captures\\queue\\logs\\sup-fg-pair-ui-fixed.1.122559.log",
+      "selected_stamps": 27,
+      "stamp_mismatches": 0,
+      "pool_rollovers_without_device_idle": 47,
+      "gpu_copy_median_ms": 0.026
+    },
+    {
+      "job": "sup-fg-copy-confirm",
+      "log": "captures\\queue\\logs\\sup-fg-copy-confirm.1.124246.log",
+      "selected_stamps": 29,
+      "stamp_mismatches": 0,
+      "pool_rollovers_without_device_idle": 9,
+      "gpu_copy_median_ms": 0.026
+    },
+    {
+      "job": "sup-fg-copy-normal",
+      "log": "captures\\queue\\logs\\sup-fg-copy-normal.1.125806.log",
+      "selected_stamps": 80,
+      "stamp_mismatches": 0,
+      "pool_rollovers_without_device_idle": 8,
+      "gpu_copy_median_ms": 0.026
+    }
+  ],
+  "validation": {
+    "ctests": "14/14",
+    "camera_permission": "25/25",
+    "fg_parser": "11/11",
+    "runtime_shaders": "107/107",
+    "qa_detectors": "all passed",
+    "abi_changed": false,
+    "shader_sources_changed": false
+  },
+  "code_commit": "066b38b"
+}

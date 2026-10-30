@@ -1,10 +1,48 @@
 # BG3RTX progress
 
-USER CHECK (FG copy gate: default remains 0): restart after the layer update and load
-The Blushing Mermaid - 96h 39m. Compare `fg_input_copy=0/1` while continuously rotating
-past foliage with nameplates and a selection ring visible; keep `fg_ui_pq=0`.
-The private input pair is valid, but this session's capture cadence and UI coverage do
-not qualify generated-frame quality. Do not treat the input fix as a flicker fix.
+USER CHECK (FG follow-up; defaults unchanged): restart after rebuilding the layer on
+`sup/fg-copy-gate`. Load The Blushing Mermaid - 96h 39m with `fg=2`. Rotate past
+foliage while an NPC nameplate or selection UI is visible. Compare `fg_input_copy=0/1`;
+keep `fg_ui_pq=0`. Input preservation and RR pool retirement are verified. Visible
+flicker quality remains unqualified; the default stays 0.
+
+## FG pairing / UI follow-up - 2026-10-30 (`066b38b`, not merged)
+
+- Fixed two publication hazards behind `fg_input_copy`: color/UI now follow submit
+  order, and camera constants are snapshotted under the input lock. Copied depth/MV,
+  camera and color must share the current submit frame. Secondary buffers propagate
+  private-copy metadata. Disabled live UI tags are explicitly cleared in Streamline.
+- Input gates PASS: 200/200 MV pairs and 200/200 masked D24 pairs equal the same
+  NGX evaluate inputs; zero non-finite private MV components and zero empty private
+  depth samples. All 245 selected submit/token stamps align. This does not prove
+  an original one-frame input lag. Camera-derived MV scale 0.9994, median error
+  0.61 render pixels; reversing the sign gives 104.65 pixels. Copy GPU 0.026 ms.
+- A NOT PROMOTED. Final one-run fast Q rotation, copy 0/1 twice, world residual
+  off 7.21 / 8.38, on 3.87 / 8.38 codes; UI ROI off 7.24 / 7.31, on 3.97 / 8.35.
+  Pooled world 7.80 -> 6.13 and UI 7.28 -> 6.16 do not qualify the worse second
+  UI repeat. Steady SDK median 2.00, capture samples 1.70-2.30; 16 timer resets,
+  zero host toggles, zero new VUID IDs, one SDK latency-marker threading warning.
+- B NOT QUALIFIED. Five valid UI combinations repeated in one selected-character
+  rotation job at FG 2, copy 0. Both baseline near-UI foliage reprojection supports
+  are zero. Far class 4 change: baseline 7.80, UI off 8.52, PQ UI 8.08, hudless off
+  8.06, hudless off + PQ 8.32 codes. Camera/material support varies; these numbers
+  do not establish causal hover-excess removal. No UI default change.
+- KEPT safety repair: RR descriptor exhaustion previously called DeviceWaitIdle
+  while the SDK pacer submitted, producing a validation queue race and a stall.
+  Cache turnover, exhaustion and resize now retire pools through the existing GPU
+  completion fence. Repaired runs completed 64 pool rollovers without that stall.
+  No new GPU dispatch, ABI or shader-source change.
+- Debug PNG encoding now uses a bounded FIFO writer, with ordered drain and queue
+  backpressure tests. GPU readbacks still stall presentation. Temporary virtual
+  mouse / Alt / reset-gap experiments were rejected and removed from the change.
+- Build -Test 14/14; runtime shaders 107/107; QA detectors pass; camera/permission
+  checks 25/25; FG parser 11/11. All 44 new completed raw burst directories deleted.
+  Main remains 65bd0a2. No merge-green or default promotion: quality gates did not pass.
+- Evidence: `docs/evidence/fg-followup-20261030.json` and
+  `docs/evidence/fg-copy-normal-20261030.json`. Deciding jobs:
+  `sup-fg-pair-ui-fixed`, `sup-fg-copy-normal`; earlier controls are listed in evidence.
+  Next: remove GPU-readback stalls, retain adjacent native endpoint identities,
+  and obtain actual near-UI foliage support before repeating the quality gates.
 
 ## FG input copy motion gate - 2026-10-30 (`sup/fg-copy-gate`, not promoted)
 
