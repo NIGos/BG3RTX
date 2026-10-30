@@ -4,8 +4,9 @@
 #   .\scripts\test-queue.ps1 -IdleExitSec 300   # keep polling, exit after 5 idle minutes
 #   .\scripts\test-queue.ps1 -DryRun -Root <dir>   # no game: test-queue-fake.ps1 plays it (offline test)
 #
-# Jobs are JSON files in captures/queue/pending/ (any agent or session may add one; only
-# this runner starts the game). They run oldest first, one game at a time:
+# Only authorized batches enter captures/queue/pending/. Unapproved drafts stay
+# outside every watched pending inbox. This runner is the sole game launch path.
+# Jobs run oldest first, one game at a time:
 #
 #   { "name": "split-guard",                 # file-safe label (default: the file name)
 #     "tree": ".claude/worktrees/agent-x",   # checkout whose bin/ and scripts/ are used (default: repo root)
@@ -41,13 +42,29 @@
 # (commit and core DLL time) at start and end, flagged if the build changed mid-run;
 # session runs add the session ("s<hhmmss>#<run>"), the core generation and the
 # seconds saved (the session's launch-to-ready time, for every run but its first).
-param([int]$IdleExitSec = 0, [switch]$DryRun, [string]$Root = "")
+param([int]$IdleExitSec = 0, [switch]$DryRun, [string]$Root = "", [string]$PermissionSession = "")
 
 $ErrorActionPreference = "Stop"
 if ($DryRun -and -not $Root) { throw "-DryRun needs -Root <scratch dir> (never the real captures)" }
 $root = if ($Root) { (Resolve-Path $Root).Path } else { Split-Path $PSScriptRoot -Parent }
 . (Join-Path $PSScriptRoot 'queue-permission.ps1')
 . (Join-Path $PSScriptRoot 'queue-window-mode.ps1')
+# DryRun never touches a checkout or a queue below one, even if manually marked.
+if($DryRun){
+  if(-not(Test-Path -LiteralPath (Join-Path $root '.queue-fake-root'))){throw 'DryRun requires a marked scratch root outside checkouts'}
+  $ancestor=[IO.DirectoryInfo]$root
+  while($ancestor){if(Test-Path -LiteralPath (Join-Path $ancestor.FullName '.git')){throw 'DryRun cannot use a checkout or its captures tree'};$ancestor=$ancestor.Parent}
+}
+$script:permissionRunner="$PID|$([guid]::NewGuid().ToString('N'))"
+$script:permissionStates=@()
+$script:minimizer=$null
+function Assert-QueueRuntime {
+  if(Test-Path -LiteralPath (Join-Path $root 'captures/queue/USER_PLAYING')){throw 'USER_PLAYING exists'}
+  if($DryRun){if(Test-Path -LiteralPath (Join-Path $root 'fake_unowned_game')){throw 'Unowned game exists'};return}
+  foreach($game in @(Get-Process bg3,bg3_dx11 -ErrorAction SilentlyContinue)){
+    if(-not $script:sess -or $game.Id -ne $script:sess.gamePid -or $game.StartTime.ToUniversalTime().Ticks -ne $script:sess.gameStart){throw 'An unowned game exists'}
+  }
+}
 if (-not $DryRun -and (Test-Path -LiteralPath (Join-Path $root 'captures\queue\USER_PLAYING'))) {
   throw 'USER_PLAYING exists; runner must not start'
 }
@@ -79,6 +96,13 @@ $logs = Join-Path $q "logs"
 New-Item -ItemType Directory -Force $logs | Out-Null
 Get-ChildItem $logs -File -ErrorAction SilentlyContinue | Where-Object LastWriteTime -lt (Get-Date).AddDays(-3) | Remove-Item -ErrorAction SilentlyContinue
 $script:sess = $null
+
+function Assert-QueueActive {
+  Assert-QueueRuntime
+  $ctx=$script:permissionContext
+  if($ctx){$block=Get-QueuePermissionBlock $ctx.job $root $ctx.tree $ctx.build $PermissionSession $script:permissionRunner -InFlight
+    if($block){throw $block}}
+}
 
 function Stamp($tree) {
   $commit = try { (git -C $tree log --oneline -1 2>$null) -join "" } catch { "" }   # (no git: a dry run's scratch tree)
@@ -149,6 +173,7 @@ function Wait-LogLine([string]$pattern, [long]$from, [double]$sec) {
   $s = $script:sess
   $end = (Get-Date).AddSeconds($sec)
   while ($true) {
+    Assert-QueueActive
     $gone = $s.proc.HasExited
     foreach ($line in ((Read-LogText $s.log $from) -split "`r?`n")) {
       $m = [regex]::Match($line, $pattern)
@@ -163,6 +188,7 @@ function Wait-LogLine([string]$pattern, [long]$from, [double]$sec) {
 function Wait-Session([double]$sec) {
   $end = (Get-Date).AddSeconds($sec)
   while ((Get-Date) -lt $end) {
+    Assert-QueueActive
     if ($script:sess.proc.HasExited) { return $false }
     Start-Sleep -Milliseconds 250
   }
@@ -179,6 +205,7 @@ function Merge-Ini([string]$base, [string]$set) {
 
 # Writes the session's auto.ini; $true once the layer logged that it re-read it.
 function Set-SessionIni([string]$text) {
+  Assert-QueueActive
   $s = $script:sess
   $from = Get-LogSize $s.log
   [IO.File]::WriteAllText($s.ini, $text)
@@ -198,10 +225,7 @@ function Get-LastGeneration([string]$log, [long]$from = 0) {
 # Launches auto-run.ps1 -Session for this job's tree and save; returns once the scene is
 # ready. $null: the tree's layer predates sessions (no "scene ready" marker), run it alone.
 function Start-Session($job, $tree, [int]$timeout) {
-  if (-not $DryRun) {
-    $blocked = Get-QueuePermissionBlock $job $root
-    if ($blocked) { throw $blocked }
-  }
+  Assert-QueueRuntime
   $caps = Join-Path $tree "captures"
   $layer = Join-Path $tree "bin\VkLayer_bg3rtx.dll"
   if (-not (Select-String -Path $layer -Pattern 'scene ready at present' -SimpleMatch -Quiet)) { return $null }
@@ -237,6 +261,8 @@ function Start-Session($job, $tree, [int]$timeout) {
           runs = 0; layerMtime = (Get-Item $layer).LastWriteTimeUtc
           coreMtime = (Get-Item (Join-Path $tree "bin\bg3rtx_core.dll")).LastWriteTimeUtc
           generation = (Get-LastGeneration $log); scanPos = (Get-LogSize $log) }
+  if(-not $DryRun){$s.gamePid=[int](Get-Content -LiteralPath $ready -Raw | ConvertFrom-Json).pid
+    $s.gameStart=(Get-Process -Id $s.gamePid -ErrorAction Stop).StartTime.ToUniversalTime().Ticks}
   $s.base = [IO.File]::ReadAllText($s.ini)
   "- session ${id}: ready after $($s.readySec)s (core generation $($s.generation), $($job.save))" | Write-Record $md
   $script:sess = $s
@@ -247,6 +273,7 @@ function Stop-Session([string]$reason) {
   $s = $script:sess
   if (-not $s) { return }
   $script:sess = $null
+  if($s.base){[IO.File]::WriteAllText($s.ini,$s.base)}
   if (-not $s.proc.HasExited) {
     Set-Content $s.quit "quit"
     if (-not $s.proc.WaitForExit(120000)) { Stop-Process -Id $s.proc.Id -Force -ErrorAction SilentlyContinue }
@@ -260,6 +287,7 @@ function Stop-Session([string]$reason) {
 
 # One run inside the session: settings, warm-up, traces, slice of the log.
 function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
+  Assert-QueueActive
   $s = $script:sess
   $s.runs++
   $k = $s.runs
@@ -280,6 +308,7 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
   $from = $s.scanPos
   $caps = @()
   $phase = $null
+  try {
   if (-not $fault) {
     $set = @($job.set) -join ','
     if (-not (Set-SessionIni (Merge-Ini $s.base $set))) { $fault = "settings not re-read (game not presenting?)" }
@@ -327,21 +356,17 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
   $r = @{ outcome = $outcome; nv = $nv; dumps = $dumps; keptLog = $keptLog; captures = $caps; lines = $lines
           session = "$($s.id)#$k"; generation = $s.generation; saved = $(if ($k -gt 1) { $s.readySec } else { 0 }); fault = $fault }
   $r   # after a fault the caller closes the session, once the run is recorded
+  } finally {
+    if($phase){Stop-Process -Id $phase.Id -ErrorAction SilentlyContinue}
+    if($s.base){[IO.File]::WriteAllText($s.ini,$s.base)}
+  }
 }
 
 # One run of its own: auto-run.ps1 (or the job's command) launches and closes the game.
 function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeout) {
   $t0 = Get-Date
   $lines = @()
-  if (-not $DryRun) {
-    if (Test-Path (Join-Path $root 'captures\queue\USER_PLAYING')) { throw 'User is playing; no launch' }
-    if (Get-Process bg3,bg3_dx11 -ErrorAction SilentlyContinue) { throw 'An existing game is active; no launch' }
-    if (@($job.args) -contains '-Foreground') {
-      if (-not (Test-Path (Join-Path $root 'captures\queue\USER_AWAY'))) {
-        throw 'Foreground test needs USER_AWAY; job authorization fields cannot bypass it'
-      }
-    }
-  }
+  Assert-QueueRuntime
   $env:BG3RTX_QUEUE_ROOT = $root
   $runner = if ($DryRun) { Join-Path $PSScriptRoot "test-queue-fake.ps1" } else { Join-Path $tree "scripts\auto-run.ps1" }
   $runArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runner,
@@ -412,6 +437,13 @@ function Run-Job($file) {
   if ($script:sess -and $script:sess.key -ne $key) { Stop-Session "next job differs" }
   "## $name ($(Get-Date -Format 'HH:mm'), $repeat run(s), $($job.save), $(@($job.set) -join ','))$(if ($key) { ' [session]' })" | Write-Record $md
   for ($i = 1; $i -le $repeat; $i++) {
+    Assert-QueueRuntime
+    $actualBuild=Get-QueueBuildIdentity $tree
+    $script:permissionStates+=Use-QueuePermission $job $root $tree $actualBuild $PermissionSession $script:permissionRunner
+    $script:permissionContext=@{job=$job;tree=$tree;build=$actualBuild}
+    if(-not $DryRun -and -not $script:minimizer){
+      $script:minimizer=Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$(Join-Path $PSScriptRoot 'game-minimizer.ps1')`"",'-WhilePid',$PID
+    }
     $t0 = Get-Date
     $before = Stamp $tree
     $r = $null
@@ -436,6 +468,7 @@ function Run-Job($file) {
     $caps = @($r.captures)
     $lines = @($r.lines)
     if ($job.post) {
+      Assert-QueueActive
       Push-Location $tree
       try {
         $postCommand = $job.post.Replace('{captures}',($caps -join ' ')).Replace('{log}',[string]$r.keptLog).Replace('{runner}',[string]$r.runner_log).Replace('{status}',[string]$r.status)
@@ -459,6 +492,7 @@ function Run-Job($file) {
         if (Select-String -LiteralPath $r.keptLog -Pattern $pattern -Quiet) { $missing += "forbidden log pattern: $pattern" }
       }
     }
+    if((Get-QueueBuildIdentity $tree) -cne $actualBuild){$missing+='frozen candidate build changed'}
     if ($missing) {
       $r.outcome = "INVALID (missing: $($missing -join ' | ')); $($r.outcome)"
       $lines += "INVALID: expected log lines not found: $($missing -join ' | ')"
@@ -467,9 +501,9 @@ function Run-Job($file) {
     $rec = [ordered]@{ job = $name; run = $i; start = $t0.ToString('s'); sec = [int]((Get-Date) - $t0).TotalSeconds
                        valid = (-not $missing)
                        outcome = $r.outcome; nv153 = $r.nv; dumps = @($r.dumps); build = $before
-                       build_changed = ($before -ne $after); log = $r.keptLog; captures = $caps; lines = $lines
+                       build_changed = ($before -ne $after -or (Get-QueueBuildIdentity $tree) -cne $actualBuild); log = $r.keptLog; captures = $caps; lines = $lines
                        session = $r.session; core_gen = $r.generation; saved_sec = $r.saved;
-                       process_status = $r.status; runner_log = $r.runner_log; window_mode=$job.window_mode }
+                       process_status = $r.status; runner_log = $r.runner_log; window_mode=$job.window_mode; candidate_build=$actualBuild; live_batch=$job.live_batch; authorization_session=$PermissionSession }
     ($rec | ConvertTo-Json -Compress -Depth 4) | Write-Record $jsonl
     $flag = if ($before -ne $after) { " BUILD CHANGED" } else { "" }
     $sessText = if ($r.session) { " session=$($r.session) gen=$($r.generation) saved~$($r.saved)s" } else { "" }
@@ -479,10 +513,6 @@ function Run-Job($file) {
     if ($job.stop_on_dump -and $r.dumps) { break }
   }
 }
-
-# Our games stay hidden while the queue runs (scripts/game-minimizer.ps1).
-$minimizer = Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass",
-  "-File", "`"$(Join-Path $PSScriptRoot "game-minimizer.ps1")`"", "-WhilePid", $PID
 
 # Agents whose sandbox can't write the main queue drop jobs into their own worktree's
 # captures/queue/pending/; the runner collects those too (the job's "tree" names the worktree).
@@ -496,9 +526,9 @@ function Get-InboxDirs {
 function Get-NextJob {
   $next = Get-InboxDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "*.json" -ErrorAction SilentlyContinue } |
     Sort-Object LastWriteTime | Select-Object -First 1
-  if ($next -and -not $DryRun) {
+  if ($next) {
     $job = ConvertTo-QueueWindowJob (Get-Content -LiteralPath $next.FullName -Raw | ConvertFrom-Json)
-    $blocked = Get-QueuePermissionBlock $job $root
+    $blocked = Get-QueuePermissionBlock $job $root (Get-JobTree $job) (Get-QueueBuildIdentity (Get-JobTree $job)) $PermissionSession $script:permissionRunner
     if (-not $blocked) { $blocked = Get-QueueDependencyBlock $job $root (Stamp (Get-JobTree $job)) }
     if ($blocked) { Write-Host "Queued, not launched: $($next.Name): $blocked"; return $null }
   }
@@ -542,5 +572,5 @@ try {
     }
     $idle = Get-Date
   }
-} finally { Stop-Session "runner stopped" }
+} finally { Stop-Session "runner stopped"; foreach($state in $script:permissionStates | Select-Object -Unique){Close-QueuePermission $state $script:permissionRunner} }
 "queue empty"
