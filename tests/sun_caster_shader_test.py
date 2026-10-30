@@ -33,7 +33,7 @@ def main():
         assert old.resolve().parent == Path(tempfile.gettempdir()).resolve()
         with zipfile.ZipFile(archive) as contents:
             contents.extractall(old)
-    
+
         def compile_one(source, destination, include, entry):
             destination.parent.mkdir(parents=True, exist_ok=True)
             first = source.read_text(encoding='utf-8').splitlines()[0]
@@ -45,7 +45,7 @@ def main():
             if result.returncode:
                 raise RuntimeError(f'{source}/{entry}: {result.stdout}\n{result.stderr}')
             return hashlib.sha256(destination.read_bytes()).hexdigest()
-    
+
         def check(item):
             relative, entry, ordinary = item
             source = ROOT / 'shaders' / relative
@@ -61,7 +61,7 @@ def main():
             if result.returncode:
                 raise RuntimeError(f'{relative}/{entry}: {result.stdout}\n{result.stderr}')
             return {'shader': relative.as_posix(), 'entry': entry, 'ordinary': ordinary, 'sha256': current}
-    
+
         items = []
         for path in sorted((ROOT / 'shaders').rglob('*.hlsl')):
             relative = path.relative_to(ROOT / 'shaders')

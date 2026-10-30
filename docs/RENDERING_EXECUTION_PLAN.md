@@ -109,6 +109,47 @@ external input, or unavailable resources. Explain those specific blockers once.
 Do not fill the wait with repeated unchanged tests, speculative scope or invented
 tooling. A refusal that explicitly cancels or pauses work takes precedence.
 
+## Bug fixing and consolidation (user steering, 2026-10-30)
+
+Before a significant renderer trial or promotion, consolidate its changed domain:
+review native inputs/space/coverage, all affected query/dispatch paths, capture
+capacity and resource completion, defaults/GUI and capture shortcuts. Use focused
+regressions and unchanged-path shader proof; require an independent reviewer for
+cross-cutting capture, lifetime or material changes. Small unrelated/doc edits do
+not need another ceremony or repeated full suites.
+
+After user trials, prioritize observed regressions before enabling more effects.
+Record the actual candidate, symptoms, supported/unknown cases and deciding logs;
+fix demonstrated causes, then run the smallest authorized same-run comparison or
+restart-required invariant gate. Inspect output freshness, energy, temporal behavior,
+GPU cost and memory, not merely compilation. Failed/confounded tests stay invalid.
+Keep previous builds available and install only explicit trial flags. Independent
+asset/material/reference work may continue while a renderer fix is consolidated.
+
+Current consolidation: a9f8688 Hair/Scalp improves faces provisionally, but user
+reports vegetation flicker and darker/dithered hair. OMM/current-Sun are OFF.
+Actual capture logs show alpha region exhaustion/opaque substitution and dropped
+opaque draws; validate the capacity/partition fix first. Restore Ctrl+Shift+F10
+in the trial profile (its existing dev gate was disabled by preset expansion).
+
+## RTX Hair extension (user steering, 2026-10-30)
+
+Add a separate optional strand-rendering lane after the current Hair/Scalp
+regression is controlled. Read docs/RTX_HAIR_FEASIBILITY.md. Vulkan LSS/DOTS and
+inline-query support are real options, but captured BG3 triangle cards do not
+supply proven centerline connectivity/radii. Do not promise automatic conversion,
+replace the scalp, or treat this as a cure for an unrelated capture overflow.
+
+Stages: prove one hairstyle's authored/runtime groom provider; compile a bounded
+LSS/DOTS backend; replace only the selected native primary/secondary hair while
+preserving scalp, animation and unsupported native content; then qualify density,
+shading/transmission, motion/RR/FG, energy and GPU/memory cost. Experimental control
+and hardware requirements ship with an actual feature, off in presets. Native
+card corrections and true strand replacement remain distinct supported domains.
+Necessary software/SDK installation is authorized; use pinned primary sources
+and bounded dependencies, preserve licenses, and never use Ponytail. No GPU/live
+execution follows from dependency permission alone.
+
 ## Milestones and dependency order
 
 States per independently testable increment: TODO -> IN_PROGRESS -> OFFLINE_VERIFIED
