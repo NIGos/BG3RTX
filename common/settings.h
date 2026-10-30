@@ -317,7 +317,7 @@ inline constexpr KV kDefaults[] = {
     {"pan_capture", "0"},
     {"pan_prepare", "0"},
     {"pan_inputs", "0"},
-    {"fg_input_copy", "0"},
+    {"fg_input_copy", "1"},
     {"qa_zero", "0"},
     {"qa_exposure_hold", "0"},
     {"rt_max_candidates", "0"},

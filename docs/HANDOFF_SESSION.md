@@ -20,7 +20,7 @@ Check Blushing Mermaid - 96h 39m near crates and stage edge. Refits and instance
 indexing are not the cause. Split-off hid the boxes by capture-buffer overflow.
 See PROGRESS_CODEX and TRACK_D_RT section 11 for the deciding run and diagnostics.
 
-## FG pairing / UI follow-up (sup/fg-copy-gate; not merged)
+## FG pairing / UI follow-up (merged main 5e78b88; default follow-up)
 
 Read the top of PROGRESS_CODEX. Code `066b38b`: submit-order color/UI and a locked
 camera snapshot behind fg_input_copy; disabled UI tags clear their SDK cache entry.
@@ -30,7 +30,10 @@ Final copy 0/1 twice: world off 7.21 / 8.38, on 3.87 / 8.38; UI off 7.24 / 7.31,
 on 3.97 / 8.35. Second UI repeat is worse. Steady 2.00, capture 1.70-2.30 with
 16 timer resets. No new VUID IDs; SDK latency-marker threading warning remains.
 Five UI combinations repeated; baseline near-UI foliage support is zero. No winner.
-Defaults unchanged: copy 0, UI tag 1, PQ 0, hudless 1. Main still 65bd0a2.
+Default follow-up: copy 1 for input correctness. Four-window means +/- SE:
+world 7.039 +/- 0.352 -> 7.940 +/- 0.100; UI 7.458 +/- 0.509 -> 7.835 +/- 0.447.
+Observed worsening is below simultaneous 95% noise bounds (1.075 / 1.663).
+This does not qualify full flicker resolution. UI tag 1, PQ 0, hudless 1 unchanged.
 RR pool idle/reset raced the FG pacer and stalled; fenced pool retirement survived
 64 rollovers. PNG encoding is asynchronous, but GPU readbacks still stall capture.
 Temporary virtual mouse changes were removed. Build 14/14, shaders 107/107, QA pass.

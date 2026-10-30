@@ -1,5 +1,22 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## Default promotion - 2026-10-30
+
+`fg_input_copy=1` is now the default for input correctness. The previous sections
+record historical off-default decisions, superseded here. One run with four fast-Q
+windows per setting gives world 7.039 +/- 0.352 -> 7.940 +/- 0.100 and UI ROI
+7.458 +/- 0.509 -> 7.835 +/- 0.447 codes (mean +/- window SE). The observed
+worsening is below the simultaneous one-sided 95% Welch noise bounds, 1.075 /
+1.663 codes, across the two measures. This is not an equivalence or full flicker
+quality claim. Prior copy-0 SD 0.831 / 0.055; new copy-0 SD 0.704 / 1.017.
+
+Input preservation already passed 200/200 private depth/MV matches with zero
+invalid private samples; GPU copy median 0.026 ms. Steady FG ratio 2.00, zero
+host toggles or new VUID IDs. PNG windows still reset timers (33 times), so the
+proxy retains the documented cadence/endpoint limitations. User check: restart,
+The Blushing Mermaid - 96h 39m, FG 2, rotate with overhead UI, compare copy 1/0.
+Job `sup-fg-copy-default`, evidence `docs/evidence/fg-copy-default-20261030.json`.
+
 ## Submit-order / UI follow-up - 2026-10-30 (`066b38b`, defaults unchanged)
 
 Color/UI used to be published while recording; private inputs and camera were
