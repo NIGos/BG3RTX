@@ -1,5 +1,36 @@
 # BG3RTX progress
 
+USER CHECK (hidden floor squares fixed, default on): restart after the layer update. Load
+The Blushing Mermaid - 96h 39m. Look near the crates and stage edge; compare the live key
+`rt_capture_discard=0/1`. The two dark square shadows should disappear with 1.
+
+## Hidden floor squares — 2026-10-30 (`sup/hidden-quads`)
+
+- Cause: the camera prepass includes a 24-triangle helper (VS `ca869467434cd2db`,
+  FS `dc180592a8fc6087`). The FS is just `OpKill`, without EarlyFragmentTests. Raster
+  writes no surface, but transform feedback captured it as an opaque RT caster.
+  Capture 890 identifies both blobs as dynamic TLAS instance 1834, frame 3992.
+- Fix: `rt_capture_discard` excludes only fragment entry points proved to be an empty
+  block ending in unconditional kill. Conditional alpha tests and early depth tests
+  are kept. No ABI change. Unit tests cover the proof's positive and negative cases.
+- `sup-hidden-quads-isolate`: TLAS refit, dynamic refit and in-place rebuild toggles
+  leave 30,343–30,362 opaque-front pixels. firstInstance, draw counts and vertex offset
+  are already applied correctly. No matrix changes between record and submit.
+- Split-off was a confounded oracle: about 168 opaque draws/frame overflowed the
+  capture. Capture-all likewise removes the helper but drops primary match to 75.68%.
+- `sup-hidden-quads-depth-gate`: INVALID (missing primary log); 1 draw / 1,024 triangles
+  excluded per frame, blobs 28,271 -> 28,242; rejected as a fix, diagnostics kept off.
+- Early refit/identity toggle windows were invalid (settings scheduled after phase end);
+  corrected in the isolate fixture. Their instance-ID baseline remains useful.
+- Optional diagnostics: `rt_mesh_draw_log=1` logs draw keys, counts, transforms and TLAS
+  indices; N > 1 samples every N frames. `rt_primary_identity=1` captures hit-index bytes
+  in primary Y/Z. Both default 0. Plain and epoch default SPIR-V remain byte-identical.
+- KEPT / default 1: `sup-hidden-quads-discard-gate`, valid FG 2 run, key 0/1 twice:
+  opaque-front pixels 29,411 / 29,429 -> 132 / 127; square ROIs 29,288 / 29,303 -> 0 / 1.
+  Primary match 96.095% / 96.092% -> 96.951% / 97.190%. Normal-image mean +0.28%.
+  Stats-off BVH build median 1.387 -> 1.368 ms (14 windows each); no VK errors,
+  NVIDIA events or dumps. All 12 CTests pass. Integration uses `scripts/merge-green.ps1`.
+
 QUESTION FOR THE USER (FG flicker around UI): the game outputs HDR10 and composites its sRGB UI
 over the PQ scene; the UI image we give DLSS-G is the raw sRGB one. Please compare in game,
 camera moving with names/labels on screen: fg_tag_ui=1 (now) vs fg_tag_ui=0 (bg3rtx.ini,

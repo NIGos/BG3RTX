@@ -1,4 +1,4 @@
-# Session handoff — 2026-10-30 01:40 (supervisor, hands-on; no Codex, no subagents)
+# Session handoff — 2026-10-30 09:00 (hidden floor squares fixed)
 
 Read AGENTS.md, then the top of docs/PROGRESS_CODEX.md, then D:/BG3_Tools/USER_STEERING.md
 (newest entries first). The user decides by FG on (fg=2), real presentation, visible window.
@@ -10,7 +10,17 @@ Live jobs only through scripts/test-queue.ps1; visible unfocused FG jobs are all
 runs. Never hold results.md open. No saves, backups, snapshot tags, force-push or junction
 cleanup. The launcher BG3RTX.exe, if left open, locks bin/BG3RTX.exe and breaks the build.
 
-## State (main a54da5a)
+## Hidden floor squares (2026-10-30, sup/hidden-quads)
+
+Fixed: `rt_capture_discard=1` (restart layer; live A/B key). An always-OpKill fragment
+shader's helper boxes were captured by XFB as opaque casters. Gate 0/1 twice:
+29.4k opaque-front px -> 132 / 127, both square ROIs -> 0 / 1; primary match improves
+96.09% -> 96.95-97.19%. BVH build 1.387 -> 1.368 ms, no VK errors or driver faults.
+Check Blushing Mermaid - 96h 39m near crates and stage edge. Refits and instance
+indexing are not the cause. Split-off hid the boxes by capture-buffer overflow.
+See PROGRESS_CODEX and TRACK_D_RT section 11 for the deciding run and diagnostics.
+
+## State (before this integration: main 6e3b997)
 
 Defaults on since 2026-10-29: rt_scene_wait (now 12 ms), rt_dyn_hold=4,
 fg_current_destroy_only=1, rt_sun_roof_up 50 / pad 3, rt_prepass_by_ordinal=0,
@@ -32,7 +42,7 @@ rt_scene_wait resumes at once after a gap. Pan bursts keep all 16 'final' frames
 
 ## Open (ranked)
 
-1. User re-check in game of the night's fixes (list at the top of PROGRESS_CODEX.md).
+1. User re-check of the hidden floor squares fix and the night's fixes (PROGRESS_CODEX.md).
 2. Red square blocks on foliage with RR off: not reproduced since the scene-stall fixes.
 3. FG temporal artefact around in-world UI while the camera moves (also with RT off): the
    game recreates its UI and hudless images often (~160 times in 4 minutes in one user

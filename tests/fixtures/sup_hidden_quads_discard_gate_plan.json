@@ -1,0 +1,190 @@
+[
+  {
+    "seconds": 13,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 13,
+    "motion_end": 13
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 13,
+    "repeat_ms": 33,
+    "scan": 18,
+    "capture_at": 999,
+    "serial": 0,
+    "motion_start": 0.5,
+    "motion_end": 1.5
+  },
+  {
+    "seconds": 6,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 6,
+    "motion_end": 6,
+    "set": "rt_capture_discard=0,rt_debug=8,rt_stats=1,rt_primary_check=1,rt_primary_identity=0,rt_primary_epoch=0"
+  },
+  {
+    "seconds": 22,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 3,
+    "serial": 910,
+    "motion_start": 22,
+    "motion_end": 22
+  },
+  {
+    "seconds": 6,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 6,
+    "motion_end": 6,
+    "set": "rt_capture_discard=1,rt_debug=8,rt_stats=1,rt_primary_check=1,rt_primary_identity=0,rt_primary_epoch=0"
+  },
+  {
+    "seconds": 22,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 3,
+    "serial": 911,
+    "motion_start": 22,
+    "motion_end": 22
+  },
+  {
+    "seconds": 6,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 6,
+    "motion_end": 6,
+    "set": "rt_capture_discard=0,rt_debug=8,rt_stats=1,rt_primary_check=1,rt_primary_identity=0,rt_primary_epoch=0"
+  },
+  {
+    "seconds": 22,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 3,
+    "serial": 912,
+    "motion_start": 22,
+    "motion_end": 22
+  },
+  {
+    "seconds": 6,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 6,
+    "motion_end": 6,
+    "set": "rt_capture_discard=1,rt_debug=8,rt_stats=1,rt_primary_check=1,rt_primary_identity=0,rt_primary_epoch=0"
+  },
+  {
+    "seconds": 22,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 3,
+    "serial": 913,
+    "motion_start": 22,
+    "motion_end": 22
+  },
+  {
+    "seconds": 6,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 6,
+    "motion_end": 6,
+    "set": "rt_capture_discard=0,rt_debug=0,rt_stats=0,rt_primary_check=1,rt_primary_identity=0,rt_primary_epoch=0"
+  },
+  {
+    "seconds": 22,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 3,
+    "serial": 914,
+    "motion_start": 22,
+    "motion_end": 22
+  },
+  {
+    "seconds": 6,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 6,
+    "motion_end": 6,
+    "set": "rt_capture_discard=1,rt_debug=0,rt_stats=0,rt_primary_check=1,rt_primary_identity=0,rt_primary_epoch=0"
+  },
+  {
+    "seconds": 22,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 3,
+    "serial": 915,
+    "motion_start": 22,
+    "motion_end": 22
+  },
+  {
+    "seconds": 36,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 36,
+    "motion_end": 36,
+    "set": "rt_capture_discard=0,rt_debug=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,rt_primary_epoch=0"
+  },
+  {
+    "seconds": 36,
+    "repeat_ms": 0,
+    "scan": 18,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 36,
+    "motion_end": 36,
+    "set": "rt_capture_discard=1,rt_debug=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,rt_primary_epoch=0"
+  }
+]

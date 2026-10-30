@@ -654,7 +654,8 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
   static const char* const rebased_files[] = {
-      "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl", "gi/pan_local.hlsl",
+      "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
+      "gi/pan_primary_identity.hlsl", "gi/pan_local.hlsl",
       "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
       "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
       "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
@@ -1690,7 +1691,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     memory_barrier(cmd, kCS, kCS);
   }
   if ((s.pan || host->cfg_int("rt_primary_check", 0)) && tlas &&
-      refresh(g_pan_primary, host->cfg_int("rt_primary_epoch",0) ? "gi/pan_primary_epoch.hlsl" : "gi/pan_primary.hlsl", g_rt_layout)) {
+      refresh(g_pan_primary, host->cfg_int("rt_primary_identity",0) ? "gi/pan_primary_identity.hlsl" :
+              host->cfg_int("rt_primary_epoch",0) ? "gi/pan_primary_epoch.hlsl" : "gi/pan_primary.hlsl", g_rt_layout)) {
     dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true);
     Bg3Binding im{};
     im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -2015,7 +2017,6 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     im.image = g_hist[g_parity ^ 1].image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_hw; im.height = g_hh;
     if (s.gi) host->pan_capture(cmd, "gi", &im);
-    host->pan_capture(cmd, "diffuse", &s.dif);
   }
   if (s.sharc && s.tlas) sharc_post(cmd, s, pc);
   if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 8) {
@@ -2023,6 +2024,8 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     bind_rt(b, s.tlas, s.alpha);
     dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);
   }
+  // Capture after the RT debug overlay so debug 8 bursts contain its QA encoding.
+  if (s.pan) host->pan_capture(cmd, "diffuse", &s.dif);
   // D-EM (core/emissive.cpp): rt_debug 16-18 are its views (its modes 6-8), else the check.
   const bool em_view = pc.rt_debug >= 16 && pc.rt_debug <= 20;
   if (em_view || em_check_due())
