@@ -1,5 +1,43 @@
 # BG3RTX progress
 
+USER CHECK / DECISION (base frame rate): may the next speed gate use one focused foreground
+run? Required visible-unfocused runs stay at 30 fps after temporary game/driver cap and
+immediate-present controls. Until an uncapped fps gate passes, keep `rt_alpha_stream=0`.
+At the inn save, `rt_alpha_stream=1` is available for a live CPU-cost A/B. No restart needed.
+
+## Base frame rate - 2026-10-30 (`sup/perf`, not merged)
+
+- KEPT as a default-off candidate: `rt_alpha_stream` reads alpha material constants with
+  aligned SSE4.1 streaming loads, as the existing instance-matrix path already does.
+  Ordinary memcpy reads from mapped game uploads stalled capture preparation. Copies
+  preserve the requested bytes, including alignment prefixes and tails. No ABI/shader change.
+- One deciding Ultra 3840x1600, FG 0, static inn run. Rendered fps by window (means):
+  RT off 30.056; defaults 30.056; GI off 30.000; sun off 30.000; LS off 30.000;
+  RF off 30.056; SHaRC off 30.000 (already off); RR off 30.000; repeat 30.000;
+  CPU timers off/on 30.000/30.056. Live RT-off disables build and every consumer;
+  the device remains RT capable because rt is a restart key. RR stays on.
+- Pacing limited, not GPU saturated: 33.3 ms present interval, WDDM GPU busy 6.48 ms/frame
+  RT off vs 10.52-10.63 defaults. Exact CPU critical-path frame time is unavailable:
+  PresentMon produced no CSV. Sampled game stacks sleep in NtDelayExecution; the exact
+  ceiling cause is not established. Do not infer the user's uncapped bound from this run.
+- Our known CPU: capture 4.224 -> 2.973 ms/frame (-1.251 ms, 29.6%); pre-draw 2.989 ->
+  1.730. Build recording 0.97 ms is INCLUDED in capture; submit matrix copies add 0.48 ms.
+  Scene wait ~5.4 ms overlaps recording; it is not additive and was left intact.
+  GPU: complete GI/effects chain 2.54 ms (RT scope 1.03, LS 0.74, RF 0.71), scene 1.67,
+  RR 2.36. With streaming: 2.55 / 1.63 / 2.36 ms, within baseline repeats.
+- FPS GATE NOT QUALIFIED: three off means 30.000/30.000/30.000, on 30.000/30.042/30.000.
+  Last on window enabled CPU timing manually after 2 s; clean 300-frame reports only.
+  Parity check: primary median 98.969 -> 98.968%, ranges 98.951-98.984 / 98.957-98.980
+  (21 reports each). Copy unit test covers every alignment/tail and protected boundaries.
+  This is not a final-image energy measurement. Full rt_stats used ONLY for parity costs
+  about 19.4 ms in the RT GPU scope, versus 1.03 with stats off; exclude it from speed gates.
+- Build -Test 15/15. Queue expect gates pass; zero VK error lines, driver events or dumps.
+  No bursts created. Game/driver overrides restored. Initial cap controls and an aborted
+  immediate-present job are retained in evidence. Cascade code and the user's untracked shaders were left alone.
+- Deciding job `sup-perf-game-uncapped`; evidence `docs/evidence/perf-base-20261030.json`.
+  No merge-green/main push: fps improvement remains unproved. Next: authorized uncapped
+  foreground repeats; if passed, integrate with merge-green and push both branches.
+
 USER CHECK (FG input preservation is now the default): restart after rebuilding the layer.
 Load The Blushing Mermaid - 96h 39m with FG 2. Rotate past foliage with NPC names or
 selection UI visible. `fg_input_copy=1` now preserves finite MV/nonempty depth from
