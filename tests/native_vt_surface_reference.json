@@ -541,5 +541,74 @@
         }
       ]
     }
-  ]
+  ],
+  "existing_capture_observables": {
+    "source": "captures/20261030-163004/frame.json",
+    "sha256": "43a3e1646df13eb9cec72fc460798b60f2fc1368464876d478a0cbef6035b16f",
+    "frame": 94565,
+    "native_draws": [
+      {
+        "fs": "14678345c10aefbc",
+        "vs": "2d2ac3c38992b7f0",
+        "pipe": 42768,
+        "res": {
+          "s0b11": "r:i1014",
+          "s1b3": "r:i38",
+          "s1b4": "r:i21",
+          "s1b5": "r:i21",
+          "s1b6": "r:i21"
+        },
+        "n": 1
+      },
+      {
+        "fs": "14678345c10aefbc",
+        "vs": "2d2ac3c38992b7f0",
+        "pipe": 43663,
+        "res": {
+          "s0b11": "r:i1014",
+          "s1b3": "r:i50",
+          "s1b4": "r:i21",
+          "s1b5": "r:i21",
+          "s1b6": "r:i21"
+        },
+        "n": 1
+      }
+    ],
+    "i21_backing_image": {
+      "fmt": 137,
+      "w": 32688,
+      "h": 26352,
+      "d": 1,
+      "mips": 2,
+      "layers": 2,
+      "samples": 1,
+      "usage": 7,
+      "type": 1,
+      "swapchain": false
+    },
+    "sampled_view_formats_available": false,
+    "sampled_view_components_available": false,
+    "sampled_view_mip_layer_ranges_available": false,
+    "sampler_runtime_state_available": false,
+    "runtime_engine_material_ubo_bytes_available": false,
+    "conclusion": "Backing image format137 is NOT proof of per-binding VkImageView format. Native post-sample/provider input contract remains unqualified."
+  },
+  "prepared_capture_extension": {
+    "scope": "Only audited Base_AlphaTest_VT Deferred FS hashes, bindings s1b3..s1b6; at most four metadata entries per recorded draw group.",
+    "field": "sampled_views",
+    "properties": [
+      "actual view format/type/components/flags/extension marker",
+      "never-reused process view ID and creation-time image ID",
+      "actual descriptor type/layout",
+      "raw and resolved mip/layer ranges",
+      "backing image format/flags/mip/layer counts"
+    ],
+    "status": "OFFLINE_VERIFIED; no newly authorized game capture exists",
+    "limits": [
+      "CPU draw-recording snapshot, not GPU descriptor-execution/content/residency proof.",
+      "Unknown create metadata, extensions, identity saturation and stale image generations are explicit.",
+      "Sampled view metadata participates in segment key; same-image distinct views cannot collapse into one known entry.",
+      "Sampler runtime filtering/LOD and native engine/material UBO bytes remain separate missing observables."
+    ]
+  }
 }

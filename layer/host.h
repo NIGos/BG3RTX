@@ -15,6 +15,7 @@
 #include <cstdint>
 #include "../common/pan_epoch.h"
 #include "../common/sun_caster_coverage.h"
+#include "../common/trace_sampled_view.h"
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -94,7 +95,7 @@ struct ImageRec {
   VkImageCreateInfo ci;                // pNext/pQueueFamilyIndices cleared
   bool swapchain;
 };
-struct ViewRec { VkImage image; VkFormat format; VkImageSubresourceRange range; };
+struct ViewRec { VkImage image; VkFormat format; VkImageSubresourceRange range; trace_view::Creation creation{}; };
 struct PipelineRec {
   uint32_t id;
   VkPipelineBindPoint bind_point;
@@ -148,6 +149,7 @@ struct Tracker {
   std::unordered_map<VkBuffer, std::pair<VkDeviceMemory, VkDeviceSize>> buffer_mem;
   std::unordered_map<VkDeviceMemory, uint8_t*> mapped;   // base of the mapping (offset 0)
   std::atomic<uint32_t> next_image_id{1}, next_pipeline_id{1};
+  std::atomic<uint64_t> next_view_id{1};
 };
 Tracker& tracker();
 // Caller holds tracker().mu. Number of dynamic offsets a set consumes, and the

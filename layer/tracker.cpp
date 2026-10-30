@@ -672,7 +672,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device, const VkI
   if (r == VK_SUCCESS) {
     omm::content_view_created(device_of(device),*out,*ci);
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
-    tracker().views[*out] = ViewRec{ci->image, ci->format, ci->subresourceRange};
+    auto& t=tracker();const auto image=t.images.find(ci->image);
+    const auto creation=trace_view::capture(*ci,trace_view::allocate_id(t.next_view_id),image==t.images.end()?0:image->second.id);
+    t.views[*out] = ViewRec{ci->image, ci->format, ci->subresourceRange,creation};
   }
   return r;
 }
