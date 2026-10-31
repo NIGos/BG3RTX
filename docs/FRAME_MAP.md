@@ -89,7 +89,7 @@ Composition (line 1452, 1622): `b11 = T · (direct_spec · mix(1, SO, b0 m0.y) +
 with `S` the probe term after the local-probe loop (`_1684`) and `T` the aerial-perspective
 transmittance (`_2978`, only when `_26._m19 > 0`; 1 indoors). D-RF
 (`shaders/rt/bg3_ambient.hlsli`) replicates `S·k·SO` from the lighting's own descriptor set
-and replaces it by an exact delta; see [TRACK_D_RT.md section 10](TRACK_D_RT.md).
+and replaces it by an exact delta; see [TRACK_D_REFLECTIONS.md section 10](TRACK_D_REFLECTIONS.md#10-d-rf-ray-traced-reflections-implemented-tiers-a-and-c).
 
 ## DLSS SR contract (hooked in `_nvngx.dll`, `layer/ngx.cpp`)
 
@@ -124,7 +124,7 @@ The parameter block is shared between create and evaluate (as the dlss5-bridge f
 - **Ray Reconstruction (Track A)** — done, see [TRACK_A_RR.md](TRACK_A_RR.md).
   - Inputs from the scene: the game's own SR evaluate block (colour, depth, MV, output, jitter, MV scale).
   - Guides, built at the G-buffer pass end: diffuse albedo `RT1·(1−RT2.z)`, specular albedo `EnvBRDFApprox2(F0, RT2.x², N·V)`, normals decoded from RT0 and rotated to world space with the G-buffer camera (set 0 b2 `_m0`), roughness RT2.x packed in w; plus the unjittered `_m0`/`_m1` as WorldToView/ViewToClip (TRACK_A "Guides v2").
-  - `DLSSD.SpecularHitDistance`: D-RF's reflection-ray hit distance, written after the lighting (TRACK_D 10.3).
+  - `DLSSD.SpecularHitDistance`: D-RF's reflection-ray hit distance, written after the lighting (TRACK_D_REFLECTIONS.md 10.3).
 - **Frame generation (Track B).**
   - Hudless colour = the tonemapped image from step 16, and UI = the RGBA8 target from step 17. Both are inputs of the final composite pass.
   - Depth and MV as above.

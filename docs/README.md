@@ -26,7 +26,13 @@ not yet authorized are in [live-test-drafts/](live-test-drafts/).
 - [TRACK_A_RR.md](TRACK_A_RR.md): DLSS Ray Reconstruction in place of DLSS SR, RR before post.
 - [TRACK_B_FG.md](TRACK_B_FG.md): DLSS Frame Generation through Streamline.
 - [TRACK_C_GI.md](TRACK_C_GI.md): screen-space GI.
-- [TRACK_D_RT.md](TRACK_D_RT.md): hardware RT: geometry capture, BVH, sun, local lights (D-LS), reflections (D-RF), emissive data (D-EM).
+- [TRACK_D_RT.md](TRACK_D_RT.md): hardware RT index, with the map from old section numbers to the files below.
+  - [TRACK_D_SCENE_BUILD.md](TRACK_D_SCENE_BUILD.md): geometry capture, BVH, static/dynamic split, `rt_scene_wait` (sections 1-6, 11).
+  - [TRACK_D_ALPHA_GI.md](TRACK_D_ALPHA_GI.md): alpha test, hybrid RT GI, effect catalogue (sections 7, 8).
+  - [TRACK_D_LOCAL_LIGHTS.md](TRACK_D_LOCAL_LIGHTS.md): D-LS local-light shadows, box lights (section 9).
+  - [TRACK_D_REFLECTIONS.md](TRACK_D_REFLECTIONS.md): D-RF reflections, unknown queries (sections 10, first 13).
+  - [TRACK_D_SUN.md](TRACK_D_SUN.md): sun replace, current native-caster sun scene (section 12).
+  - [TRACK_D_EMISSIVE.md](TRACK_D_EMISSIVE.md): D-EM emissive geometry (section 13.1 to 13.21).
 
 ## Designs and plans
 
@@ -67,6 +73,6 @@ The same letters mean different things in different docs:
 | M0 to M6 | Milestones of the current rendering program (replace the P phases) | RENDERING_EXECUTION_PLAN.md |
 | S1 to S14 | Test scenes (player saves) | TEST_SCENES.md |
 | R0 to R10 | Quality rules (R0 physically correct, R5 validation, R7 cost budget, ...) | QUALITY.md |
-| R1, R2, R3, ... after a feature name | Numbered live runs of one feature's test batch, for example "GI R3", "material R1/R2", "R8" in the plan's milestone table, D-EM R4/R5 | PROGRESS_CODEX.md, HANDOFF_SESSION.md, RENDERING_EXECUTION_PLAN.md, TRACK_D_RT.md 13.20 |
+| R1, R2, R3, ... after a feature name | Numbered live runs of one feature's test batch, for example "GI R3", "material R1/R2", "R8" in the plan's milestone table, D-EM R4/R5 | PROGRESS_CODEX.md, HANDOFF_SESSION.md, RENDERING_EXECUTION_PLAN.md, TRACK_D_EMISSIVE.md 13.20 |
 
 So "R3" alone is ambiguous: write "QUALITY R3" for the rule and "GI R3" for the run.

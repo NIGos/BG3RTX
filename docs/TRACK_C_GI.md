@@ -90,7 +90,7 @@ With `rt=1` the trace can use hardware ray queries against the TLAS
 Hits that project on screen with matching depth take last frame's radiance;
 hidden or off-screen hits count as occlusion with no bounce (`gi_rt_fallback`).
 Trace pass 0.175 ms vs 0.248 ms screen-space (4 rays, half res); see
-TRACK_D_RT.md section 7.2 for numbers and comparison images.
+TRACK_D_ALPHA_GI.md section 7.2 for numbers and comparison images.
 
 ## SHaRC radiance cache (`sharc=1`, off by default)
 A screen-injected world-space hash grid gives hidden and off-screen GI hits (and glossy
@@ -166,7 +166,7 @@ along the view ray by at most
 - `|N·V|` is moved towards grazing by its own error ε = max(fp16 storage √3·2⁻¹², depth-normal
   2·prec/f): 0.0037 at 5 m, 0.022 at 30 m; floored there (tan θ ≤ 1/ε).
 - Jitter (Halton ±0.5 px per axis) adds 0.71 px per jittered depth sample.
-- Measured, not derived: TLAS against raster, 0.5% of the distance (TRACK_D_RT 7.1: 99.09% of
+- Measured, not derived: TLAS against raster, 0.5% of the distance (TRACK_D_ALPHA_GI.md 7.1: 99.09% of
   primary rays within the 0.5% bin; the rest is other geometry). Only where no per-pixel TLAS
   reference exists; `rtOrigin.w` is that reference (rt_origin=1).
 

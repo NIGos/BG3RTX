@@ -40,7 +40,7 @@ presents later (240 by default, enough for RR's history to settle):
 | N+3 | `local_off` | `rt_shadows=1 rt_local_shadows=0` | D-LS contribution |
 | N+4 | `sun_dbg` | `rt_local_shadows=1 rt_debug=2 rt_backlit=0` | sun mask against traced visibility and the written mask |
 | N+5 | `sun_check` | `rt_debug=7 rt_backlit=1` | `rt_sun_replace` in-frame A/B: the written mask against min(game, traced), same pixel and frame |
-| N+6 | `sun_trust` | `rt_debug=6` | the trust of `rt_sun_replace` (TRACK_D 12) |
+| N+6 | `sun_trust` | `rt_debug=6` | the trust of `rt_sun_replace` (TRACK_D_SUN.md 12) |
 | N+7.. | `tlas0`..`tlas{max(2,N)-1}` | `rt_debug=8` | the TLAS hit in front of the depth buffer in units of the derived tolerance (`tlas_front`), repeated for its per-pixel spread |
 | then | `sun_zero`, `ls_zero`, `all_zero`, `amb_zero` | `rt_debug=0 qa_zero=1`, `2`, `7`, then `4 rt_reflections=0` | the light-off floors of the hard_dark energy gate (`capture.FLOORS`): no direct sun, no D-LS lights, none of the three, no ambient (AO 0, with the GI on and the reflections off). `--no-floors` skips them |
 | (opt) | `ref` | `rt_debug=0 gi_rr_rays=8 ls_samples=2` | `--reference` |
@@ -278,7 +278,7 @@ noise, artifacts, jitter and pans; no game).
 | same_view | albedo \|Δ\| > 0.1 on > 5% of px → **global shift ≥ 1 px** (sub-pixel phase correlation of the albedo) | derived (jitter) | A camera move shifts everything; the jitter < 1 px. The changed share is reported for review: S7 had 8% in every trace including `on1` (water), which the 5% limit called a camera move. A rotation or zoom about the centre has no single shift; it shows in the changed share. |
 | reference | mean FLIP − FLIP(on0, on1) ≤ 0.03 → **rank test**: min FLIP(ref, on_i) ≤ max FLIP(on_i, on_j) | derived (noise) | Exchangeable values: P = 1/C(n_t + n_n, n_t) = 0.05 with 3 on-frames; with 2 it is reported only. So `--temporal 3` is the minimum for this gate (derived). |
 | sun_check_darker | 0.01‰ → **0** | derived (physics) | Darker than min(game, traced) is impossible with `rt_sun_roof_mode=0`. The 0.8/0.2 levels decode the debug colours, not tolerances. |
-| tlas_front_alpha | 0.5% fixed band → **depth_tol + kTlasRel**, mean log2 e > **kσ** (σ from the tlas* repeats and the code rounding), alpha-tested hit → any region fails | derived (precision, footprint, measured noise; physics of the alpha test) | Synthetic (`tests/qa_detectors_test.py`): a card 4 tolerances in front in every trace fails; stochastic-alpha px in front in 1 of 3 traces are not significant; an opaque cut-away wall is review only. kTlasRel is the measured bin edge (TRACK_D 7.1), not a derived spread. |
+| tlas_front_alpha | 0.5% fixed band → **depth_tol + kTlasRel**, mean log2 e > **kσ** (σ from the tlas* repeats and the code rounding), alpha-tested hit → any region fails | derived (precision, footprint, measured noise; physics of the alpha test) | Synthetic (`tests/qa_detectors_test.py`): a card 4 tolerances in front in every trace fails; stochastic-alpha px in front in 1 of 3 traces are not significant; an opaque cut-away wall is review only. kTlasRel is the measured bin edge (TRACK_D_ALPHA_GI.md 7.1), not a derived spread. |
 | nonfinite | 0 | derived (correctness) | |
 | roofed_brightening (`--sharc`) | ratio 1.3, area 0.5‰, roofed ≥ 1%, sun-lit ≥ 1% | arbitrary | **Not changed here**: the SHaRC branch replaces it with `sharc_reference` (per-pixel σ of repeated cache and reference traces, binomial test on independent samples) and a geometric leak report. |
 
@@ -334,10 +334,10 @@ Not changed here (rendering defaults are the coordinator's). Agent inventory of 
   so a shadow ray counted as unoccluded. `rt_visibility()` is tri-state; an unknown query
   takes the game's own term (sun mask; D-LS shadow map, or unshadowed where the game never
   shadows; reflection probe), GI and AO count it as occluded. Counted per pass in the
-  `[core] guard:` line; `rt_max_candidates` forces aborts for tests (TRACK_D 13).
+  `[core] guard:` line; `rt_max_candidates` forces aborts for tests (TRACK_D_REFLECTIONS.md 13).
 - *Fixed (logged, not silent):* `kSunMaxVolumes` 256: volumes beyond it are dropped
   farthest first, logged once per level (`sun: WARNING N roof volumes ...`) and counted in
-  `sun stats`. Measured: at most 183 within 600 m of any volume centre (TRACK_D 12.1).
+  `sun stats`. Measured: at most 183 within 600 m of any volume centre (TRACK_D_SUN.md 12.1).
 - *Fixed:* code defaults differed from the ini (`rt_sun_near`, `rt_sun_top`, `gi_rays`,
   `gi_steps` and 10 more). `common/settings.h` `kDefaults` is generated from `bg3rtx.ini`
   (`scripts/gen_settings_defaults.py`), `cfg_*` fall back to it, a disagreeing call-site
@@ -351,7 +351,7 @@ The arbitrary ones with the most effect on the image:
 | A/B classes in the shader: brightened / darker by > 0.1 | `rt_sun_resolve.hlsl` | 0.1 | *Done:* one R8 code step (1/255). `rtVis` is RGBA8 and the mask R8, so there is no fp16 rounding to add. |
 | GI distance falloff `1 − (t/R)²` on occlusion *and* bounce | `gi_trace_rt.hlsl`, `rt_ao.hlsl` | — | No physical basis for the bounce; keep it unfaded and account for the truncation with the IBL remainder. |
 | `gi_rt_radius` | ini | 1 m | From the measured tier mix once the cache or fallback exists (DSN A/B planned). |
-| Roof padding 1 m sideways / 3 m up, `rt_sun_rise` 6 m, `rt_sun_roof_radius` 120 m (< `rt_tmax` 300 m) | ini, `sun_trust.cpp` | — | From the asset DB: roof mesh AABB minus trigger AABB per level; tallest caster in the ray's footprint; radius ≥ the farthest traced pixel's reach. *Radius done* (farthest roof-tested pixel + `rt_tmax`, per frame). Pad, up and rise: the DB has no meshes (`scripts/roof_stats.py`); TLAS experiment in TRACK_D 12.4. |
+| Roof padding 1 m sideways / 3 m up, `rt_sun_rise` 6 m, `rt_sun_roof_radius` 120 m (< `rt_tmax` 300 m) | ini, `sun_trust.cpp` | — | From the asset DB: roof mesh AABB minus trigger AABB per level; tallest caster in the ray's footprint; radius ≥ the farthest traced pixel's reach. *Radius done* (farthest roof-tested pixel + `rt_tmax`, per frame). Pad, up and rise: the DB has no meshes (`scripts/roof_stats.py`); TLAS experiment in TRACK_D_SUN.md 12.4. |
 | `ls_clear` | ini | 0.2 m | The fixture's own radius, or skip the first back-facing hit: today every occluder within 20 cm of a light is ignored. |
 | Source radii (0.05 m and the fixture table) | ini, `assetdb.cpp` | — | Measure the emitter mesh in the TLAS or asset DB ("typical sizes, not measured"). |
 | GI temporal depth reject 3%, bilateral σ 1% depth, `gi_rt_depth_tol`/`rf_depth_tol` 0.03 | `gi_temporal.hlsl`, `gi_common.hlsli`, ini | — | *Done* (`shaders/rt/depth_tol.hlsli`, TRACK_C): footprint × (tanθ + 1) + depth precision + jitter (+ the measured 0.5% TLAS error where no per-pixel reference exists); the keys are now multipliers `gi_rt_depth_k`/`rf_depth_k` = 1. Left: the temporal test's camera-translation term (3%) needs the previous camera position in that pass. SS offsets 0.003/0.002·dist and `gi_thickness` 0.03 not done. |
@@ -470,7 +470,7 @@ D-LS samples stays within 0.012 (camp) and 0.008 (foundry) of the RR noise floor
   - 0 green px in the all-on overview. Non-finite passes, with the game's D32F (`9aaa6d61`) listed as game-owned.
   - The D-LS review brightening is 0.25‰, against 0.97-1.81‰ in the two runs before the cap.
   - The GI hard-dark (8.1‰) and the all_rt flicker excess (7.1‰) are where they were before the cap (5.4-8.9‰).
-- **`ls_check=1` with the cap (`s6-lscheck-cap`):** live and reference differ on 1.5-20% of px, but that run had `ls_shadowed=3`, and the frozen reference knows modes 0-2 only (TRACK_D_RT 9.10). Bit-exactness needs `ls_shadowed=0`.
+- **`ls_check=1` with the cap (`s6-lscheck-cap`):** live and reference differ on 1.5-20% of px, but that run had `ls_shadowed=3`, and the frozen reference knows modes 0-2 only (TRACK_D_LOCAL_LIGHTS.md 9.10). Bit-exactness needs `ls_shadowed=0`.
 
 **8. S3 grass attribution (`qa/20261027-155410`, `--temporal-gi --temporal-sun`).**
 - **Grass:** with the RT sun off, the moving-blade std drops from 0.050 to 0.0043 (`crops/flicker_rt_shadows_2.png`). The GI split does not flag the grass. The residual is therefore the RT sun's sharp per-blade shadows on wind-blown grass: physically expected (R0), though stochastic alpha noise on the moving blades cannot be separated at 240 presents.
