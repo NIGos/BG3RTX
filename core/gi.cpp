@@ -1393,6 +1393,8 @@ Push make_push() {
   pc.ls_flags |= host->cfg_int("ls_giveback_cap", 1) ? (1u << 18) : 0u;
   // Bit 20: ls_box_unshadowed=0, box lights without a game shadow map are not traced.
   pc.ls_flags |= host->cfg_int("ls_box_unshadowed", 1) ? 0u : (1u << 20);
+  // Diagnostic A/B: HPO stays active; only competing-receiver rejection changes.
+  pc.ls_flags |= host->cfg_int("rt_hair_receiver_guard", 0) ? (1u << 21) : 0u;
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;
   pc.mat_classes = host->cfg_int("mat_classes", 1) ? 1u : 0u;
   pc.ao_direct = uint32_t((std::min)((std::max)(host->cfg_int("ao_direct", 1), 0), 2));

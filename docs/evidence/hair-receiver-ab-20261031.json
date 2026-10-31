@@ -1,0 +1,193 @@
+{
+  "base": "fbee8d7",
+  "ordinary_identical": 16,
+  "hpo_validated": 16,
+  "variants": [
+    {
+      "tile": 0,
+      "omm": 0,
+      "cascade": 0,
+      "rebase": 0,
+      "hashes": {
+        "baseline": "0c9542d7646f71e169723560a436e1e81385d8dfbc700e3601188a5d077e70d6",
+        "ordinary": "0c9542d7646f71e169723560a436e1e81385d8dfbc700e3601188a5d077e70d6",
+        "hpo": "e544203a3471ae73a39375e95cace8b4696fb6d6cd8e66b6d54608bf8742a6c3"
+      }
+    },
+    {
+      "tile": 0,
+      "omm": 0,
+      "cascade": 0,
+      "rebase": 1,
+      "hashes": {
+        "baseline": "352e6a5e189c9b6e870a7428217982d8e626f0fde1bc1b9644e2af8628cf0885",
+        "ordinary": "352e6a5e189c9b6e870a7428217982d8e626f0fde1bc1b9644e2af8628cf0885",
+        "hpo": "93ab687fa438aec22a509a71ba542987cf3e56ceab3859d02cf5b9fe7507b780"
+      }
+    },
+    {
+      "tile": 0,
+      "omm": 0,
+      "cascade": 1,
+      "rebase": 0,
+      "hashes": {
+        "baseline": "9f47862c387884d27420be5b26808944d8310c5a684b8435cb049f58b23700e1",
+        "ordinary": "9f47862c387884d27420be5b26808944d8310c5a684b8435cb049f58b23700e1",
+        "hpo": "8f6ce850227ce12a8d14b275e504e2c4142787c1e7026ce586c61d64aeac1040"
+      }
+    },
+    {
+      "tile": 0,
+      "omm": 0,
+      "cascade": 1,
+      "rebase": 1,
+      "hashes": {
+        "baseline": "7ff3771f827422bb4121dc4764d103a693516527e737a8557695d576e6c90624",
+        "ordinary": "7ff3771f827422bb4121dc4764d103a693516527e737a8557695d576e6c90624",
+        "hpo": "dee64f78f27c82bfb3cb4eb985bdeb5160ece325c621edecb3fe9a1962930e50"
+      }
+    },
+    {
+      "tile": 0,
+      "omm": 1,
+      "cascade": 0,
+      "rebase": 0,
+      "hashes": {
+        "baseline": "5668dc972d7d886a1e14c8321151f48d4a82efdcf42577d83ccf7941303c3029",
+        "ordinary": "5668dc972d7d886a1e14c8321151f48d4a82efdcf42577d83ccf7941303c3029",
+        "hpo": "c3d5f95f105186c8375c1a3f1a52a5966b3c30600777295cb271d0df53e1c0f3"
+      }
+    },
+    {
+      "tile": 0,
+      "omm": 1,
+      "cascade": 0,
+      "rebase": 1,
+      "hashes": {
+        "baseline": "4d70a457f5bb9bd17d1ce8f63df9cb275a84a9a5028a535851920c394ffe5f44",
+        "ordinary": "4d70a457f5bb9bd17d1ce8f63df9cb275a84a9a5028a535851920c394ffe5f44",
+        "hpo": "d9317797a57c137ebdf59df0da17787adf43f59c9aef74df844c734a4c55c08e"
+      }
+    },
+    {
+      "tile": 0,
+      "omm": 1,
+      "cascade": 1,
+      "rebase": 0,
+      "hashes": {
+        "baseline": "56cd229e827c2ba64d42a6b55a36d261f3e5921dce2958f3d039ed94d667f9ae",
+        "ordinary": "56cd229e827c2ba64d42a6b55a36d261f3e5921dce2958f3d039ed94d667f9ae",
+        "hpo": "a459f6918ef972bd453315d325e407e91965cc24d6eb47122f67c1982f4e3b5d"
+      }
+    },
+    {
+      "tile": 0,
+      "omm": 1,
+      "cascade": 1,
+      "rebase": 1,
+      "hashes": {
+        "baseline": "07cb781a310a716b99e3c52b8663bbd313f6afcd01479f016d8857a3b84e3de9",
+        "ordinary": "07cb781a310a716b99e3c52b8663bbd313f6afcd01479f016d8857a3b84e3de9",
+        "hpo": "0a7668b36591dcd21db3d732a9c740ab84438e18fef4609bdc034f9a3ab86539"
+      }
+    },
+    {
+      "tile": 1,
+      "omm": 0,
+      "cascade": 0,
+      "rebase": 0,
+      "hashes": {
+        "baseline": "754d9afe3fc753aa8a7a39c98ef68d7381c9c2183e7563687308ae2cccc6cb62",
+        "ordinary": "754d9afe3fc753aa8a7a39c98ef68d7381c9c2183e7563687308ae2cccc6cb62",
+        "hpo": "2e018594ecb159846dae04586b63f46c87713b8a89d54df9a49a2539291d65de"
+      }
+    },
+    {
+      "tile": 1,
+      "omm": 0,
+      "cascade": 0,
+      "rebase": 1,
+      "hashes": {
+        "baseline": "c6741b44ed3f2d2ebbb1bb93721993f005e2c0fafce68d5f56cee7804ab3da6a",
+        "ordinary": "c6741b44ed3f2d2ebbb1bb93721993f005e2c0fafce68d5f56cee7804ab3da6a",
+        "hpo": "0ed4f9b198ce93ecd4903f6d81994a88c42b42f482e04ce12bc7467c28c6f4a1"
+      }
+    },
+    {
+      "tile": 1,
+      "omm": 0,
+      "cascade": 1,
+      "rebase": 0,
+      "hashes": {
+        "baseline": "d082a9645a7113431cbf616c0a603df7fb79a0e7009e82cad7c3be2ce486065b",
+        "ordinary": "d082a9645a7113431cbf616c0a603df7fb79a0e7009e82cad7c3be2ce486065b",
+        "hpo": "4e42bf8f7f8b325b86021f5ebd31f5fa864d5370768abebeefaa6ae06b413f17"
+      }
+    },
+    {
+      "tile": 1,
+      "omm": 0,
+      "cascade": 1,
+      "rebase": 1,
+      "hashes": {
+        "baseline": "49095097862b36d646c990911bf8c999624de5d64d4bf3105d77242f255c9353",
+        "ordinary": "49095097862b36d646c990911bf8c999624de5d64d4bf3105d77242f255c9353",
+        "hpo": "51b5b133c31d751e6b0966e0d6132fe8a642da30e04f39b27bfd9358c968d217"
+      }
+    },
+    {
+      "tile": 1,
+      "omm": 1,
+      "cascade": 0,
+      "rebase": 0,
+      "hashes": {
+        "baseline": "dd70f6927b2a5059f97fb64d5be8a3f8db2a1896e29f64b5d87e3af029010af2",
+        "ordinary": "dd70f6927b2a5059f97fb64d5be8a3f8db2a1896e29f64b5d87e3af029010af2",
+        "hpo": "2548410d7a002495e74a70fb8c02aa659352533992bceab912b05de94e9ca85f"
+      }
+    },
+    {
+      "tile": 1,
+      "omm": 1,
+      "cascade": 0,
+      "rebase": 1,
+      "hashes": {
+        "baseline": "7694fa6e7b98b455f937513bf5700ea94ba02cf16d71cc556de8e0eec15adbfb",
+        "ordinary": "7694fa6e7b98b455f937513bf5700ea94ba02cf16d71cc556de8e0eec15adbfb",
+        "hpo": "bcf6d04f972871a1174459eea234b9697661c568d493431aa25da2d0f089623d"
+      }
+    },
+    {
+      "tile": 1,
+      "omm": 1,
+      "cascade": 1,
+      "rebase": 0,
+      "hashes": {
+        "baseline": "041caa614a19910c4bc8c4be7c02d29fc1baab8e8e30d92700e084cae01c3e10",
+        "ordinary": "041caa614a19910c4bc8c4be7c02d29fc1baab8e8e30d92700e084cae01c3e10",
+        "hpo": "ebad0e4a82634a6c822857f1f796852052ab676ad1e329d43ffa4f09fbc1edb0"
+      }
+    },
+    {
+      "tile": 1,
+      "omm": 1,
+      "cascade": 1,
+      "rebase": 1,
+      "hashes": {
+        "baseline": "3404b0dd963af4058bd6b7688d7177adce7689e7f3a198b2aadac61a9096b9f7",
+        "ordinary": "3404b0dd963af4058bd6b7688d7177adce7689e7f3a198b2aadac61a9096b9f7",
+        "hpo": "e9d948d6bebe3955b14f8025ad370da81c9400953efe7602f0b89f32aa4664db"
+      }
+    }
+  ],
+  "key": "rt_hair_receiver_guard",
+  "default": 0,
+  "push_field": "ls_flags",
+  "push_bit": 21,
+  "settings_checks": 335,
+  "settings_failures": 0,
+  "core_link": true,
+  "gpu_run": false,
+  "scope": "Diagnostic runtime receiver-guard A/B with physical Hair origins ON in both phases; no quality verdict.",
+  "bit_audit": "Existing ls_flags writers/readers use bit0, bits8..12,16..20 only; no whole-word comparison; bit21 newly reserved. Existing Push byte-size assertion compiled unchanged."
+}
