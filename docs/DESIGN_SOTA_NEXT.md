@@ -11,7 +11,7 @@ that can be implemented in this codebase:
 (sections 7-12), QA.md, ASSET_DB.md, `core/gi.cpp`, `core/ls_lights.cpp`, `shaders/gi/*`,
 `shaders/rt/rt_common.hlsli`, `layer/bvhsplit.cpp`, and `layer/rtscene.cpp`. I also read
 the D-EM branch `worktree-agent-a2212c228ec492214` (its HANDOFF, `em_common.hlsli`,
-`em_lights.hlsl`, TRACK_D section 12, host ABI 8) without changing it. SDK facts come from
+`em_lights.hlsl`, TRACK_D_SUN.md section 12, host ABI 8) without changing it. SDK facts come from
 the GitHub repositories and their docs (links in section 5).
 
 **Target** (memory, AUDIT_SOTA §0): RTX 5090; 3840x1600 output, 2560x1067 render
@@ -19,7 +19,7 @@ the GitHub repositories and their docs (links in section 5).
 or less. QUALITY R7 budgets: AO + GI including the cache 0.6 ms, local-light shadows
 0.5 ms, reflections 1.0 ms, all Track D effects 2.5 ms or less, caches 256 MB or less.
 
-**Cost rule of thumb used below** (TRACK_D 8.3): 0.04-0.07 ms per million short rays,
+**Cost rule of thumb used below** (TRACK_D_ALPHA_GI.md 8.3): 0.04-0.07 ms per million short rays,
 2-3x that for long closest-hit rays. Costs are estimates unless they say "measured".
 
 ---
@@ -116,7 +116,7 @@ Nothing in the game's frame changes.
 ### 1.3 Data flow and integration points
 
 **(B) Exact-k + RIS remainder** changes only the D-LS default variant:
-- `shaders/gi/rt_local_shadows.hlsl`, **phase 1** (which entries are traced, TRACK_D 9.9):
+- `shaders/gi/rt_local_shadows.hlsl`, **phase 1** (which entries are traced, TRACK_D_LOCAL_LIGHTS.md 9.9):
   it already evaluates the acceptance tests. Add a running top-k by `lum(c_i)` (k ≤ 4, kept
   in registers as an insertion list of (luminance, list position)) and a streaming RIS
   reservoir over the entries that drop out of the top-k:
@@ -164,7 +164,7 @@ Nothing in the game's frame changes.
        cluster's triangle normals; until then cos_o = −1, conservative).
      - **Off by default** (`lt_em=0`), see the double-counting risk in 1.7.
    - **Owners:** character-owned lights follow `ls_owners` (excluded by default). The
-     darkvision pair is a readability light with `CastShadow = false` (TRACK_D 9.8); its
+     darkvision pair is a readability light with `CastShadow = false` (TRACK_D_LOCAL_LIGHTS.md 9.8); its
      bounce is not authored either.
 2. **Build** (`lt_build_*.hlsl`): an LBVH (Karras, HPG 2012):
    - 30-bit Morton codes of the centroids within the 80 m window;
@@ -317,7 +317,7 @@ whose two children both have importance 0 (smallest probability sum 0.001 in sce
 
 | Key | Default | Meaning |
 |---|---|---|
-| `ls_k` (was `ls_exact_k`, TRACK_D 9.11; removed 2026-10-31, see CONSOLIDATION.md C1) | 0 (measured: k1 −22%, k2 −8% at Grymforge, over budget either way) | Lights traced exactly per pixel; 0 = all (the pass before) |
+| `ls_k` (was `ls_exact_k`, TRACK_D_LOCAL_LIGHTS.md 9.11; removed 2026-10-31, see CONSOLIDATION.md C1) | 0 (measured: k1 −22%, k2 −8% at Grymforge, over budget either way) | Lights traced exactly per pixel; 0 = all (the pass before) |
 | `ls_rest_samples` (was `ls_remainder`; removed 2026-10-31 with `ls_k`) | 1 | 0 drop R (biased, debug only), 1-2 RIS rays; ReSTIR (1b) would be a separate key |
 | `ls_restir_m_max` | 20 | Temporal M cap |
 | `ls_restir_visreuse` | 0 | Bitterli visibility reuse (biased A/B) |
@@ -411,7 +411,7 @@ whose two children both have importance 0 (smallest probability sum 0.001 in sce
 | Fit for BG3 | **Yes**, in a **screen-injected** form: the game's lit diffuse of visible pixels is the exact radiance at those surfaces | **No**: no materials at secondary vertices (EN2 not done), a training loop, and cooperative vectors / a Slang toolchain (AUDIT_SOTA §1) | longer rays without a cache only turn more of the frame into "occlusion without bounce" |
 
 **Choice: SHaRC, screen-injected (v1), then traced update (v2). NRC rejected.**
-- This is the D-GI2 design of TRACK_D 8.6, made concrete. The key difference from
+- This is the D-GI2 design of TRACK_D_ALPHA_GI.md 8.6, made concrete. The key difference from
   standard SHaRC is the update source.
 - A path tracer computes radiance at every vertex from materials and lights. We do not
   have that off screen. **On screen we have something better**: the game's own lit
@@ -744,7 +744,7 @@ place (docs/QA.md):
    gate the default on Ultra (quality is not traded for frame rate); 0.6 ms is the optimisation
    target for the cache's added cost, nothing more. Measured so far: measured +0.17 (S6) to
    +0.44 ms (S3) at 4 m before the leak rays (≤ one shadow ray per cache hit: 0.02-0.23 M
-   rays/frame, ≈ 0.01 ms by TRACK_D 8.3's 0.04-0.07 ms per M rays). Register count of the GI
+   rays/frame, ≈ 0.01 ms by TRACK_D_ALPHA_GI.md 8.3's 0.04-0.07 ms per M rays). Register count of the GI
    trace variant rose 113 → 128 (two more inlined ray queries): to be measured, not assumed.
 4. **Default:** decided by quality only: on for Ultra once the leak test and the reference
    comparison pass on S7 and S8 (the latter possibly only with the v2 traced update, which gives

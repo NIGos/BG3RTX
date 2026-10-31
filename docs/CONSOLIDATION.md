@@ -99,6 +99,7 @@ is the chosen value, and ~45 are diagnostics (fine to stay off; no GPU cost when
   log). Fix stale facts (ABI 19 mentions, plan checkpoint 90d7930, "fix the two regressions first"
   although the user can no longer reproduce them). Add `docs/README.md` as an index.
 - **F4.** Split TRACK_D_RT.md (3,785 lines) by effect (sun, local lights, reflections, scene build).
+  Done 2026-10-31: TRACK_D_RT.md is now an index with the old-section map.
 - **F5.** One naming legend: P1-P6 phases vs M0-M6 milestones vs S1-S8 scenes vs R0-R8 runs.
 
 ## G. Open user-visible items (status today)

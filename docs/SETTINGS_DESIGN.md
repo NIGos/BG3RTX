@@ -393,7 +393,7 @@ Notes:
   automatically.
 - **Medium drops `rt_alpha`.** That halves the refit (0.88 → 0.39 ms on a 5090, about −1.3 ms
   on a 4070-class card). The cost is false shadows under grates and chains (1.9% of pixels,
-  `TRACK_D_RT.md` 6.7). It needs a restart, so the launcher sets it before launch.
+  `TRACK_D_SCENE_BUILD.md` 6.7). It needs a restart, so the launcher sets it before launch.
 - **High is today's `bg3rtx.ini`.**
 
 ### 5.3 GPU capability rules (applied on top of any preset)
@@ -443,9 +443,9 @@ passes unless stated.
 | 3 | 2 GI rays per pixel | `gi_rr_rays=2` | +0.15–0.2 ms (trace 0.175 ms per ray) | medium: less RR boil in dim interiors. GI reach is still 1 m | **take** |
 | 4 | Remove the forced periodic rebuild | `rt_rebuild_frames` 60 → 600 (internal) | **saves** ≈ 0.04 ms average and removes one 2.5 ms spike per second | p1 improvement | **take** (internal; needs a refit-quality check over 10 s) |
 | 5 | DLAA (game DLSS mode) with RR | game `DLSS2Mode` | **+5–7 ms** (2.25x render pixels: our per-pixel passes ≈ 1.0 → 2.3 ms; game raster, assuming ~70% pixel-bound, ≈ +3.5 ms; RR input 2.25x ≈ +1–2 ms) | high on paper, but RR at Quality already reconstructs a 4K-class output well | **not in the default Ultra**: static ≈ 16–17 ms (≈ 60 fps) fails the ≥ 65 capacity rule, and pans fall below 58. Offer it as a choice and measure; revisit after the static/dynamic BLAS split (ROADMAP 6.7 item 3, recovers ≈ 2.5 ms in pans) |
-| 6 | Multi-bounce GI (D-GI2, screen-seeded SHaRC) | not implemented | 0.4–0.6 ms, 160 MiB (`TRACK_D_RT.md` 8) | high (room-scale reach, colour bleeding) | **reserve the budget**; becomes Ultra's first add when it exists |
+| 6 | Multi-bounce GI (D-GI2, screen-seeded SHaRC) | not implemented | 0.4–0.6 ms, 160 MiB (`TRACK_D_ALPHA_GI.md` 8) | high (room-scale reach, colour bleeding) | **reserve the budget**; becomes Ultra's first add when it exists |
 | 7 | Longer rays | `gi_rt_radius`, `rf_tmax`, `rt_tmax` | ~0 to +0.1 ms (traversal is cheap, ≈ 0.04–0.07 ms per M short rays) | **negative today**: the TLAS lacks off-screen and culled geometry, and `gi_rt_fallback=0` treats a hidden/off-screen hit as occlusion only. Longer GI rays mostly darken. `rf_tmax=100` and `rt_tmax=300` are already scene-scale | **skip** until D-GI2 and cascade capture (D-EN3) |
-| 8 | D-EM data: capture, emissive BLAS/TLAS, light list (`TRACK_D_RT.md` 13) | `rt_emissive=1` | **0.7 ms** (measured on the 5090: effects-pass capture +0.044 ms; build and light list 0.39-0.62 ms median per scene, WQ 0.39-0.44, AF 0.43-0.50, GF 0.62 at 519k triangles; 0.044 + 0.62 rounded up = 0.7) | high: the only source of the game's emitters for ray-traced lighting (lava, glow maps, decals) | **take**, from the pan headroom (approved 2026-10-27). The 0.7 ms is an optimisation target, not a gate (user directive: on Ultra a budget never drops or degrades a physically better result). A BLAS refit while the draw list is unchanged is to lower it |
+| 8 | D-EM data: capture, emissive BLAS/TLAS, light list (`TRACK_D_EMISSIVE.md` 13) | `rt_emissive=1` | **0.7 ms** (measured on the 5090: effects-pass capture +0.044 ms; build and light list 0.39-0.62 ms median per scene, WQ 0.39-0.44, AF 0.43-0.50, GF 0.62 at 519k triangles; 0.044 + 0.62 rounded up = 0.7) | high: the only source of the game's emitters for ray-traced lighting (lava, glow maps, decals) | **take**, from the pan headroom (approved 2026-10-27). The 0.7 ms is an optimisation target, not a gate (user directive: on Ultra a budget never drops or degrades a physically better result). A BLAS refit while the draw list is unchanged is to lower it |
 
 **Ultra (5090) = High + #1–#4 + `fps_cap=58`.** Estimated static ≈ 10.9 ms (≈ 92 fps
 uncapped) and pan ≈ 13.4 ms (≈ 75 fps). Both clear 65 with margin, so the 58 cap holds and

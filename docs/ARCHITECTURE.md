@@ -13,7 +13,7 @@ bg3.exe ──► Vulkan loader ──► VK_LAYER_BG3RTX_host (bin/VkLayer_bg3r
                                  ├─ ngx       hooks _nvngx.dll's Vulkan entry points; game's DLSS SR
                                  │            evaluate → Ray Reconstruction + G-buffer guides (TRACK_A_RR.md)
                                  ├─ streamline: DLSS-G (TRACK_B_FG.md)
-                                 ├─ geocapture: G-buffer geometry by transform feedback (TRACK_D_RT.md)
+                                 ├─ geocapture: G-buffer geometry by transform feedback (TRACK_D_SCENE_BUILD.md)
                                  ├─ rtscene: rt=1 enables AS + ray query; per-frame BLAS/TLAS
                                  │            over the captured geometry, handed to the core
                                  └─ assetdb: offline game data (data/assetdb, built by

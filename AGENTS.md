@@ -37,7 +37,7 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Priorities and the phase order are in `docs/HANDOFF_SESSION.md` ("Next"). Gaps ranked by
   screen impact: `docs/COVERAGE.md`. Per-effect design and history: `docs/TRACK_*.md`.
 - Read the existing design section before implementing (many plans are already written, e.g.
-  TRACK_D 9.10 for box lights); update that section when the design changes.
+  TRACK_D_LOCAL_LIGHTS.md 9.10 for box lights); update that section when the design changes.
 - Branches: one per phase or fix, from current main, short-lived. Merge small verified steps
   often (off by default) instead of keeping long research branches; merge main into long ones daily.
 - Quality before frame rate on Ultra, but always report the cost (GPU ms of the pass, from the

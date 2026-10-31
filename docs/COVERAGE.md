@@ -34,7 +34,8 @@ the asset-DB tables are written by hand.
 - **Scenes** come from `run.json`, the QA folder, `captures/queue/results.jsonl` with the
   job files, or `captures/scene-sweep.json`. Captures without a known scene are "?".
 - **Handling columns** come from the `HANDLING` table in the script, which mirrors
-  TRACK_D_RT.md 9.10 (casters/receivers), 10 (D-RF), 12 (sun replace) and 13 (D-EM). Update
+  TRACK_D_LOCAL_LIGHTS.md 9.10 (casters/receivers), TRACK_D_REFLECTIONS.md 10 (D-RF),
+  TRACK_D_SUN.md 12 (sun replace) and TRACK_D_EMISSIVE.md 13 (D-EM). Update
   it when an effect changes. Columns: **caster** in the TLAS; receives the RT **sun**, the
   RT **local** shadows (D-LS), RT **GI**/AO, **refl**ections (D-RF); its emission captured by
   **D-EM** ("branch": `worktree-agent-a2212c228ec492214`, not in main).
@@ -109,7 +110,7 @@ Captures (all: draws; measured: pixel shares):
 |---|---|---|---|---|---|---|---|
 | Point | 12,041 (61.5%) | 156 | 28 | 10 | 835 | 538 | D-LS traces them (runtime b25 list; asset-DB/SE join for the source radius); GI sees their light on screen |
 | Spot | 374 (1.9%) | 114 | 1 | 14 | 4 | 4 | as point (cone from b25) |
-| Box ("projector", `DirectionLightDimensions`) | **7,157 (36.6%)** | **3,828** | 245 | **1,597** | 128 | 15 | **not traced** (TRACK_D 9.10: listed per froxel, `projector lights listed/px (not handled)` in `ls stats`); the game's atlas shadow stays; GI sees their light on screen only |
+| Box ("projector", `DirectionLightDimensions`) | **7,157 (36.6%)** | **3,828** | 245 | **1,597** | 128 | 15 | **not traced** (TRACK_D_LOCAL_LIGHTS.md 9.10: listed per froxel, `projector lights listed/px (not handled)` in `ls stats`); the game's atlas shadow stays; GI sees their light on screen only |
 | Directional (the sun/moon, from the lighting preset, 219 presets) | per area | — | — | — | — | — | RT sun shadows, sun replace (R0), sun size from the game; cloud shadows not applied to the RT sun (R4) |
 | Effect lights (`.lsfx`, 5,876 definitions) | runtime | — | — | — | animated | — | traced by D-LS while in b25 (owner 0); off-screen ones absent |
 
@@ -132,7 +133,7 @@ Captures (all: draws; measured: pixel shares):
 | opaque | 139 | 113 | G-buffer path: every class through RT2.w (FRAME_MAP); RT hits shade from the screen (no hit-material table yet, STATUS backlog 4) |
 | alpha_test / foliage | 82 / 46 | 47 / 57 | the alpha table `shaders/rt/alpha_fs.txt`: 38 of the 64 depth-prepass FS seen; see gap 5 |
 | hair / sss_skin / cloth / anisotropic | 12 / 86 / 4 / 6 | 21 / 22 / 1 / 11 | G-buffer classes 5 / 3 / 6-7 / 2, replicated in `bg3_materials.hlsli`, `bg3_sun.hlsli` |
-| emissive | 377 | 80 (40 EMI variants) | D-EM records (branch): 7 families checked against the decompiled shaders (TRACK_D 13.2), lava LUT, calibrated approximate families |
+| emissive | 377 | 80 (40 EMI variants) | D-EM records (branch): 7 families checked against the decompiled shaders (TRACK_D_EMISSIVE.md 13.2), lava LUT, calibrated approximate families |
 | transparent / refractive / water | 223 / 75 / 10 | 21 / 10 / 4 | **none** (forward pass; 44 forward template:variant pairs seen) |
 | decal | 55 | 9 | deferred decals edit the G-buffer, so they receive everything; not at RT hits |
 | unlit | 34 | 7 | class 1, not lit, by design |
@@ -143,7 +144,7 @@ Captures (all: draws; measured: pixel shares):
 - **16 fragment shaders seen are in neither the DB nor `EngineShaders.pak`.** They are the
   unknown decal shaders `bbe097ee`, `a3ce86d2`, `ba09dd80`, `d3472d08`, `57f66fab` and
   `d0b0e290` (4-target passes) and their effects-target twins `e176c25a`, `e0e3b441`,
-  `f081b803`, `12e2531f` and `87ea6f1c` (the VFX planes of TRACK_D 13.5). Plus `79b8181e`
+  `f081b803`, `12e2531f` and `87ea6f1c` (the VFX planes of TRACK_D_EMISSIVE.md 13.5). Plus `79b8181e`
   (S5) and the SSS and cloud engine passes.
 
 ## Gaps, ranked by visible impact (pixels × how wrong) and effort
@@ -155,8 +156,8 @@ Effort: L ≤ 3 days, M 1-2 weeks, H ≥ 3 weeks. "Data" says where the inputs a
 | # | Gap | Evidence (pixels) | How wrong | Effort | Data |
 |---|---|---|---|---|---|
 | 1 | **Forward water: not in the TLAS, receives no RT effect** | S1 docks: the forward pass (1 draw, `FLUID_Water_Plane_flowmap_huge_PixelLighting`) changes **89%** of the screen, where the G-buffer is empty; S8 5 draws, S5 23, S3 6, S4 12 | High: probe-only reflections of a world the probe does not see; no RT sun/local shadows on it; rays pass through it, so GI, AO and D-RF see the bed or nothing | M (forward XFB into the TLAS, AUDIT_ENGINE_DATA 2.9) + H (receivers: RT reflection and shadows on water pixels after the forward pass, normals from the XFB, `Roughness_Base` etc. from the DB) | have: forward-pass XFB mechanism, FLUID params in the DB (A8), water FS in `captures/shaders` |
-| 2 | **Box (projector) lights not traced** | 36.6% of placed lights; 93% of the shadow-mapped ones; dungeons and character rigs. **Measured** (box-light jobs, below): 2.1 (S5), 2.6 (S6), 2.8 (S7) box lights listed per pixel against 4.3-7.1 point/spot; direct light about 8% (S5), 15% (S6), 8% (S7) of the lit luminance, above 20% of a pixel's light on 8%, 29%, 4% of the screen: S7's characters (Rim/Key/Fill rigs) and S6's light shafts | High in interiors: atlas shadows stay (not R0), and the 3,329 unshadowed ones leak through walls | M (plan in TRACK_D 9.10: b29 record, direction `_m9`, box falloff, cookie `_m1`) | have: record layout from the SPIR-V in `captures/shaders`, box sizes and cookies in the DB |
-| 3 | **Emission does not bounce** (GI hits read the lit diffuse/specular b10/b11 only; the effects target and the forward lava are not in it) | S6 effects target 1.0% median, 26.7% in the lava view `20261027-072936` (D-EM branch); S5 8.3% effects + 3.5-12.3% forward (forward lava); S1, S7, S8 0.4-0.7% | High near lava, magic and candles: no glow on nearby walls beyond the game's placed fake lights | L (first step: GI hits also read the effects target) + M (D-EM consumers: `em_lookup` at GI/D-RF hits, emissive light sampling) | have: D-EM branch data (TRACK_D 13) |
+| 2 | **Box (projector) lights not traced** | 36.6% of placed lights; 93% of the shadow-mapped ones; dungeons and character rigs. **Measured** (box-light jobs, below): 2.1 (S5), 2.6 (S6), 2.8 (S7) box lights listed per pixel against 4.3-7.1 point/spot; direct light about 8% (S5), 15% (S6), 8% (S7) of the lit luminance, above 20% of a pixel's light on 8%, 29%, 4% of the screen: S7's characters (Rim/Key/Fill rigs) and S6's light shafts | High in interiors: atlas shadows stay (not R0), and the 3,329 unshadowed ones leak through walls | M (plan in TRACK_D_LOCAL_LIGHTS.md 9.10: b29 record, direction `_m9`, box falloff, cookie `_m1`) | have: record layout from the SPIR-V in `captures/shaders`, box sizes and cookies in the DB |
+| 3 | **Emission does not bounce** (GI hits read the lit diffuse/specular b10/b11 only; the effects target and the forward lava are not in it) | S6 effects target 1.0% median, 26.7% in the lava view `20261027-072936` (D-EM branch); S5 8.3% effects + 3.5-12.3% forward (forward lava); S1, S7, S8 0.4-0.7% | High near lava, magic and candles: no glow on nearby walls beyond the game's placed fake lights | L (first step: GI hits also read the effects target) + M (D-EM consumers: `em_lookup` at GI/D-RF hits, emissive light sampling) | have: D-EM branch data (TRACK_D_EMISSIVE.md 13) |
 | 4 | **TLAS incomplete: cut-away roofs, off-screen and culled casters** | QA `sun_missing_casters`: S7 tavern **73.8‰**, S14 24.3‰ (sun_r0); D-LS coverage: S8 missing ≤ 0.07% | Medium-high in roofed interiors: the fold keeps the game's mask (no leak), so RT cannot improve; GI and reflections see sky through cut roofs | M (R1: the game's shadow maps as a fallback occluder) / H (offline static world, STATUS backlog 9) | have: rooms and roofs in the DB, cascades and atlas at runtime; **new** only for the offline world geometry (level placements → GR2) |
 | 5 | **Alpha-tested families missing from the alpha table** (solid cards in the TLAS) | `CHAR_Hair` (`5a03e5b6`, `0527bb14`), `CHAR_Pubes`, `CHAR_Scalp`: about 4k draws over all scenes; `ENV_Base_TileBlend_Test_Alphatest_2s_Translucency` (S3), `ENV_Tileset_MultipleTextures_AlphaTest` (S1), `ENV_Lava_AlphaTest_Flowmap_Bounce_VT` (S5), VFX alpha-test particles `2204752e` (S5, S6), wind banners `f3b2c375` (S3, S7), waterfall foam (S4) | Medium: card-shaped RT shadows and AO from hair on faces and shoulders (hair is 0.1-0.3% of pixels but the focus of the image); square foliage shadows in S3 | L: extend `scripts/alpha_table.py`; also check the 14 "discards only" FS (`Base/Base` `7937fb79`, `IP_Base_VT`, tilesets). They are probably LOD dither, not alpha | have: `captures/shaders/*.spv` |
 | 6 | **Ray misses and the sky**: misses take the game's IBL (rule Q15); the RT sun has no cloud shadows; the skydome backdrop (`f12c2004`) is not in the TLAS | Every outdoor scene; G-buffer empty 29.5% in S1 | Medium: reflection misses and outdoor GI use a flat probe; the RT sun is unclouded where the game's is clouded | L (AUDIT_ENGINE_DATA R3 + R4: set 5 LUTs, cloud textures) | have (runtime) |

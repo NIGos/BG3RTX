@@ -9,7 +9,7 @@ Scope: the effects on `main` as of 2026-10-26:
 They are compared against best practice: RTXGI/ReSTIR GI, NRD and the DLSS-RR
 integration guide (`external/DLSS/doc/DLSS-RR Integration Guide.pdf`, section 3.5
 "Sampling and Noise"), SHaRC, and BG3's own lighting (`f469db78`; see
-[TRACK_D_RT.md 8.1](TRACK_D_RT.md#81-what-the-game-gives-us-data-inventory)).
+[TRACK_D_ALPHA_GI.md 8.1](TRACK_D_ALPHA_GI.md#81-what-the-game-gives-us-data-inventory)).
 
 This is a code and shader analysis. The game was not run for it. Gains marked
 "expected" are estimates and must be confirmed with the A/B protocol in section 3.
@@ -58,7 +58,7 @@ Priority: **P1** do next (correctness or a large cheap gain), **P2** soon, **P3*
 
 **Q3 (P1, verify). The game multiplies *direct* light by AO.** **Status: resolved by RT audit fix 4**
 (`ao_direct=1`: no AO on ray-traced direct light, exact compensation; AUDIT_RT §4). Answered by D-LS
-(TRACK_D 9.1): `set1/b0 _m0.y = 0.5` in gameplay, so the AO fold darkens direct light
+(TRACK_D_LOCAL_LIGHTS.md 9.1): `set1/b0 _m0.y = 0.5` in gameplay, so the AO fold darkens direct light
 by half its occlusion. Kept as the game's art intent.
 - `f469db78` line 1451/1452: local-light and sun diffuse are × `mix(1, AO, b0._m0.y)`,
   and specular × `mix(1, specOcc, b0._m0.y)`.
@@ -108,7 +108,7 @@ by half its occlusion. Kept as the game's art intent.
     highlight;
   - (b) it contains the atmosphere's in-scatter, which the lighting adds into b10;
   - (c) it lacks the pre-lighting emissive/sky/FX target that compose adds
-    separately (TRACK_D 8.1), so emissive surfaces do not light their surroundings.
+    separately (TRACK_D_ALPHA_GI.md 8.1), so emissive surfaces do not light their surroundings.
 - **Fix:**
   - use the diffuse only, or diffuse + specular × roughness² as a "diffuse-like"
     lobe proxy;
@@ -151,7 +151,7 @@ by half its occlusion. Kept as the game's art intent.
 with the half-angle corrected by the RT audit; bias: RT audit fix 6, `rt_origin=1`, see
 [AUDIT_RT.md §4](archive/AUDIT_RT.md#4-fix-batch-2026-10-26-branch-of-e285602)).
 - `rt_shadow.hlsl:40` traces 1 deterministic ray to a point light. The game's own
-  sun specular uses a disc with `sin θ = 0.00459` (TRACK_D 8.1), so shadow and
+  sun specular uses a disc with `sin θ = 0.00459` (TRACK_D_ALPHA_GI.md 8.1), so shadow and
   specular disagree, and distant casters get a pixel-hard edge.
 - The normal offset is `0.002 × camera distance` (`rt_shadow.hlsl:38`): 3-5 cm at
   BG3's usual camera distance. That loses contact shadows under small props
@@ -159,7 +159,7 @@ with the half-angle corrected by the RT audit; bias: RT audit fix 6, `rt_origin=
 - **Fix:**
   - sample a cone over the disc (half-angle `rt_sun_radius`, default 0.00459,
     artistic scale), 1 ray per pixel, white noise; RR denoises with `rr=1`, SIGMA
-    with `rr=0` (TRACK_D 8.5);
+    with `rr=0` (TRACK_D_ALPHA_GI.md 8.5);
   - offset by `max(k·pixel footprint, ε·|P|)` along a *geometric* normal
     reconstructed from depth (cross product of the position derivatives), with the
     shading normal only for the N·L test;
@@ -217,13 +217,13 @@ Evidence, all in game:
   frame is clean.
 - No non-finite values in 21 traces. The `-Validation` message IDs and counts
   are identical with v2 on and off.
-- Specular hit distance: done with D-RF (2026-10-26, TRACK_D 10.3).
+- Specular hit distance: done with D-RF (2026-10-26, TRACK_D_REFLECTIONS.md 10.3).
   `DLSSD.SpecularHitDistance` is the reflection ray's hit distance for on-screen
   hits and 65504 elsewhere; RR accepted it in every run, including `fg=2`.
 
 The original finding:
 - `rr_guides.hlsl:59` writes the decoded RT0. Track D proved those normals are
-  *view* space (TRACK_D section 1), but the guide comment and TRACK_A treat them as
+  *view* space (TRACK_D_SCENE_BUILD.md section 1), but the guide comment and TRACK_A treat them as
   world space.
 - The RR guide: "If the app relies on RR computing specular motion, these should be
   World Space". We give no specular motion vectors, so RR computes them itself.
@@ -265,7 +265,7 @@ family's alpha test was not recognised (opaque BLAS geometry), and 76 shaders
 took their 0.001 early-out as the cut-off. Fixed in `alpha_table.py`; the
 per-hit test now blends to a hashed threshold where the read is blurred
 (unbiased coverage under RR) and lets unreadable cutouts through for visibility
-rays only. TRACK_D_RT 7.1b, `img/alpha_campsite_*`.
+rays only. TRACK_D_ALPHA_GI.md 7.1b, `img/alpha_campsite_*`.
 
 **Q14 (P3). Dithered LOD cross-fades and unrecognised cutouts.**
 - The 0.73% "opaque in front" is screen-door dithered geometry. During a LOD
@@ -298,7 +298,7 @@ rays only. TRACK_D_RT 7.1b, `img/alpha_campsite_*`.
 **Q15 (P2). A TLAS miss is not sky.**
 - The TLAS lacks cut-away roofs and culled geometry.
 - `gi_rt_fallback=0` (miss → the game's IBL, through the AO fold) is the right
-  choice and must stay the rule for every effect (TRACK_D 8.6, D-GI2) until
+  choice and must stay the rule for every effect (TRACK_D_ALPHA_GI.md 8.6, D-GI2) until
   cascade-caster capture closes rooms.
 - Record it as a rule (R3), so that no new effect returns the sky on a miss indoors.
 
@@ -382,7 +382,7 @@ reproduce them.
   expected value), not by switching the effect off or degrading it. Quality-for-speed
   trades belong to the lower presets. Quality gates (artifacts, physics, leaks) still
   decide whether an effect is on.
-- **First application: the sun** (`rt_sun_replace=1`, TRACK_D 12). The traced visibility
+- **First application: the sun** (`rt_sun_replace=1`, TRACK_D_SUN.md 12). The traced visibility
   replaces the game's sun mask where it is trusted: no roof volume of the asset DB on the
   sun ray, and the ray stays in the captured view frustum until it has risen above the
   visible scene (or `rt_sun_rise`). Those geometric terms are the whole trust: the former
@@ -418,7 +418,7 @@ reproduce them.
 - No hidden pre-filtering under RR.
 
 **R3 Composition.**
-- Each effect names the game term it replaces (TRACK_D 8.2 table) and uses fold
+- Each effect names the game term it replaces (TRACK_D_ALPHA_GI.md 8.2 table) and uses fold
   (replace semantics when the new signal subsumes the old), exact delta (the game's
   term replicated from the decompile and validated to < 1% mean error), or a patch.
 - Apply the game's own factors: the DFG LUT, the specular occlusion, the global
@@ -518,7 +518,7 @@ reproduce them.
 |---|---|---|
 | 1 | Q1, Q2, Q11 (Q11 done) | correctness bugs; tiny code changes |
 | 2 | Q4 + Q5 (RR path) | the biggest quality gain for the GI at zero cost; defines how every later effect feeds RR |
-| 3 | Q10 (soft sun + bias) | together with TRACK_D 8.5 |
+| 3 | Q10 (soft sun + bias) | together with TRACK_D_ALPHA_GI.md 8.5 |
 | 4 | Q3 (read `b0._m0.y`), Q8, Q12 | small, needs EN1's bindings |
 | 5 | Q6, Q7, Q9 | the `rr=0` path quality |
 | 6 | Q13, Q14, Q15 | polish and rules |
@@ -535,14 +535,14 @@ reproduce them.
 | RT audit 2. Back-lit translucency | **Done.** Skin, thin-translucency and hair pixels are traced for N·L ≤ 0 too (their transmission reads the sun mask); other back faces are left untouched. `rt_backlit`. | AUDIT_RT §4 #2: game mask lit on 66% of back-lit transmitting px at the docks, all of them zeroed before; `img/rtfix2_backlit_docks_*` |
 | RT audit 3. Material classes | **Done.** RT2.a & 7 and RT3 decoded as the game does. D-LS evaluates each light with the class's exact term, and the GI composite uses the class's diffuse colour (no albedo² on skin, none on unlit). `mat_classes`. | AUDIT_RT §4 #3: the recompute never exceeds the game on those px; `img/rtfix3_materials_*` |
 | RT audit 4 / Q3. AO on direct light | **Done.** `ao_direct=1`: no AO factor on ray-traced direct light (D-LS lights; the sun, recomputed exactly). The RT visibility stays on the ambient only, so no contact is darkened twice and direct light carries no 1-spp AO noise. `ao_direct=2`: the game's SSAO factor instead. | AUDIT_RT §4 #4: 1.9% of the locally lit luminance given back in the foundry; sun recompute = game − in-scatter at the docks |
-| D-LS per-light data (TRACK_D 9.8, SE_BRIDGE.md) | **Done.** Each light of the game's array is joined (GPU, by position and radius) to the runtime lights of the Script Extender bridge and the asset database. Its source radius comes from the fixture class instead of 0.05 for all. Character-owned lights (the darkvision light; the game sets `Shadow = false`) are left unshadowed by default (`ls_owners=15`): traced, their own carrier darkened the character they exist to light. Without the bridge, the database covers the placed lights; without both, nothing changes. R5: 0 non-finite values, `-Validation` IDs equal the baseline, `ls_debug=9` owner view, `ls_stats` coverage. R7: +0.04 ms. | `img/sebridge_charlight_crop.png`, `img/sebridge_owner_view.png`, `img/sebridge_radius_crop.png`; foundry coverage 65% → 100% of listed lights |
-| D-LS cost (TRACK_D 9.9) | **Done, target not fully met.** The pass had grown from 0.345 ms to 0.59-0.77 ms in the foundry. The cause was 252 registers (8 warps/SM): the per-class BRDF, the ray queries and the debug state were live in one loop. The default settings now run a three-phase variant (light tests, rays, exact terms in the old order) at 96 registers. The sun is not recomputed where it cannot matter. The join keeps unchanged slots. Debug, stats and RIS stay in an `LS_FULL` variant. R3: bit-identical, proven per pixel by `ls_check=1` against the frozen old pass in the same frame (0 differing pixels in the foundry, Grymforge and Water Queens House). R7 (shared GPU, same-run A/B): foundry 0.39-0.42 ms vs 0.57-0.65 (−31 to −37%), Water Queens House 0.114 vs 0.169. **Grymforge 0.71-0.73 vs 0.97: over the 0.5 ms budget** (many torch lights). The 0.35 ms goal was not reached: the rest is rays (≈0.25 ms) and G-buffer traffic. R5: `-Validation` shows the baseline IDs plus `vkCmdDispatch-format-07753`: a pre-existing placeholder format on binding 46 when the join is off, now fixed, but the fix is not re-confirmed by a validation run. `-Move`: 0 non-finite values. | TRACK_D 9.9; `tools/pipeline_stats.py`; `ls_impl`, `ls_check` |
+| D-LS per-light data (TRACK_D_LOCAL_LIGHTS.md 9.8, SE_BRIDGE.md) | **Done.** Each light of the game's array is joined (GPU, by position and radius) to the runtime lights of the Script Extender bridge and the asset database. Its source radius comes from the fixture class instead of 0.05 for all. Character-owned lights (the darkvision light; the game sets `Shadow = false`) are left unshadowed by default (`ls_owners=15`): traced, their own carrier darkened the character they exist to light. Without the bridge, the database covers the placed lights; without both, nothing changes. R5: 0 non-finite values, `-Validation` IDs equal the baseline, `ls_debug=9` owner view, `ls_stats` coverage. R7: +0.04 ms. | `img/sebridge_charlight_crop.png`, `img/sebridge_owner_view.png`, `img/sebridge_radius_crop.png`; foundry coverage 65% → 100% of listed lights |
+| D-LS cost (TRACK_D_LOCAL_LIGHTS.md 9.9) | **Done, target not fully met.** The pass had grown from 0.345 ms to 0.59-0.77 ms in the foundry. The cause was 252 registers (8 warps/SM): the per-class BRDF, the ray queries and the debug state were live in one loop. The default settings now run a three-phase variant (light tests, rays, exact terms in the old order) at 96 registers. The sun is not recomputed where it cannot matter. The join keeps unchanged slots. Debug, stats and RIS stay in an `LS_FULL` variant. R3: bit-identical, proven per pixel by `ls_check=1` against the frozen old pass in the same frame (0 differing pixels in the foundry, Grymforge and Water Queens House). R7 (shared GPU, same-run A/B): foundry 0.39-0.42 ms vs 0.57-0.65 (−31 to −37%), Water Queens House 0.114 vs 0.169. **Grymforge 0.71-0.73 vs 0.97: over the 0.5 ms budget** (many torch lights). The 0.35 ms goal was not reached: the rest is rays (≈0.25 ms) and G-buffer traffic. R5: `-Validation` shows the baseline IDs plus `vkCmdDispatch-format-07753`: a pre-existing placeholder format on binding 46 when the join is off, now fixed, but the fix is not re-confirmed by a validation run. `-Move`: 0 non-finite values. | TRACK_D_LOCAL_LIGHTS.md 9.9; `tools/pipeline_stats.py`; `ls_impl`, `ls_check` |
 | RT audit 5. Alpha region / textures | **Done.** Sized from demand, 4096 textures, overflow logged loudly. | AUDIT_RT §4 #5 |
 | RT audit 6 / Q10 bias. Ray origins | **Done.** Exact TLAS surface + Wächter & Binder offset along the geometric normal, in every RT pass. `rt_origin`. Q10 is now fully done (soft sun: fix 5; bias: this). | AUDIT_RT §4 #6; `img/rtfix6_origin_*` |
 | RT audit 10. Dropped draws | **Done.** Counted and logged; strips and fans captured. `rt_strips`. | 0 dropped in the foundry, the docks and the menu scene |
-| Q16. Grass / cutouts at secondary hits | **Done.** Grass family recognised (24 shaders, 108 → 412 alpha-tested draws in Campsite), effective cut-offs (76 shaders), stochastic alpha where the read is blurred, unknown cutouts clear for visibility rays. `rt_alpha_cut`, `rt_alpha_stochastic`, `rt_alpha_unknown` (live). R7: GI + RT passes about +0.1-0.4 ms in Campsite (noise ~0.2). | `img/alpha_campsite_*`; TRACK_D_RT 7.1b |
+| Q16. Grass / cutouts at secondary hits | **Done.** Grass family recognised (24 shaders, 108 → 412 alpha-tested draws in Campsite), effective cut-offs (76 shaders), stochastic alpha where the read is blurred, unknown cutouts clear for visibility rays. `rt_alpha_cut`, `rt_alpha_stochastic`, `rt_alpha_unknown` (live). R7: GI + RT passes about +0.1-0.4 ms in Campsite (noise ~0.2). | `img/alpha_campsite_*`; TRACK_D_ALPHA_GI.md 7.1b |
 | RR before post (AUDIT_SOTA #1) | RR denoises the pre-DoF, pre-grade scene colour; the game's post chain (DoF weights, exposure, bloom, grade UBO + LUT) is replayed at output resolution. R3: bit-exact replication at render resolution (100.00% identical texels, foundry and Goblin Camp; a DoF frame not re-checked on the final build). R5: non-finite 0, fallback per frame on unmodelled post effects, `-Move` clean, `-Validation` no new IDs (the earlier `vkDestroyImage-01000` at load transitions was stale descriptors in our set ring, fixed; a fence-backed wait in the destroy hooks guards real in-flight use: none at level loads, 3 waits of 0.1 to 6.8 ms in 5 `-Move` runs, 0 non-finite in the traced motion frame; TRACK_A "Lifetime of the game's images"). R6: foundry A/B, difference at the frame-to-frame floor; motion/dark-scene metric not done. R7: about +0.2 ms. Effective RR (SETTINGS_DESIGN 7.3.1): the core's RR modes follow `rr_active()`, not the key. | `img/rrpost_foundry_*.png` |
-| D-RF against the rules (TRACK_D 10) | R1: bounded GGX VNDF, pcg3d white noise on its own stream, mirror below a = 0.1. R2: RR only, no history or filter of ours; without RR deterministic mirror rays only (a < 0.3). R3: exact delta on the game's probe term (D-EN4, mean error 0.58%), TLAS miss keeps the probe, the game's DFG LUT as env BRDF, its SO kept for the probe and not re-applied to traced hits. R5: debug views 1-6, `rf_stats` tier fractions, non-finite guards, identical `-Validation` IDs, `-Move`, `fg=2`. R6: foundry A/B + crops; **reflective-scene A/B and stability metric not done**. R7: 0.33 ms. | `img/rf_foundry_*.png`, `img/rf_docks_*.png` |
-| AUDIT_SOTA 2. Static/dynamic BVH split (TRACK_D 11) | **Done.** Class-A meshes get one object-space BLAS each, built once from their first XFB capture (the inverse instance matrix), verified against another instance or a later frame, compacted and cached. The TLAS takes every instance with the game's matrices, read at submit. The rest is captured with a BLAS per draw, refit while its triangle count holds. `rt_bvh_split` (live; 0 = the old soup). R3: the primary-ray check and triangle count match the soup in the same view. R5: audits recapture cached draws and evict on mismatch; non-finite matrices are masked; `-Move` and `-Validation` runs (TRACK_D 11.4). R7: pan 1.37 → 0.45 ms median, 2.91 → 0.83 ms p99. | Foundry A/B: match 98.98% / 98.98%, 2.59M / 2.595M triangles; foliage scenes and the main menu not compared |
-| R0 sun replace (TRACK_D 12) | **Implemented, partly verified.** `rt_sun_replace` (live): the traced sun replaces the game's mask where trusted (roof volumes from the asset DB, off-screen frustum test, proximity to the game's lit mask); otherwise `min(game, traced)`. In-frame A/B against min (`rt_debug=7`, `sun check` log, QA `sun_check`). R5: non-finite 0 in S1, S3, S7, S8, S14. | No leaks: written lit where the game is dark on 0‰ in all five scenes (S7: traced sun through the cut-away roof on 43‰, all kept by roof volumes, `img/sun_replace_s7_interior.png`). Too conservative outdoors: 94-98% of Campsite's disagreeing pixels fail the off-screen test (`rt_sun_top=0` to try). In-frame A/B, `-Validation`, `-Move` and the isolated cost are still to run (HANDOFF.md) |
-| D-EM data: emissive geometry capture (TRACK_D 13) | **Data only; the second design is not run in game yet.** The game's emissive draws (EMI material variants in its effects target) go into a separate emissive TLAS with a per-draw record and a bounded light list (area, mean radiance, power π·A·L), built per game submission in our own command buffer (one frame of latency; independent of `rt_bvh_split`). R0/R3, radiance from the material's own data: colour × intensity × glow map, × the base colour for BGM templates (VT albedo reproduced on the GPU), × the game's global scale for luminance-emissive materials (now read on the GPU: the CPU read of device memory had left it at 1, the ×3,318 of Base_GM_Pulse). First design's projected check: CHAR_BASE_GM 1.21, BGM 2-6× (base colour now modelled), coverage 10.6% (each frame's draws were split across two builds; fixed). R5: DEVICE_LOST at level load found and fixed; 0 non-finite power sums; `-Validation`, `-Move` and the new design pending (HANDOFF.md). R7: build 0.31 ms at 36k triangles (first design). | foundry log 2026-10-27 05:28 |
+| D-RF against the rules (TRACK_D_REFLECTIONS.md 10) | R1: bounded GGX VNDF, pcg3d white noise on its own stream, mirror below a = 0.1. R2: RR only, no history or filter of ours; without RR deterministic mirror rays only (a < 0.3). R3: exact delta on the game's probe term (D-EN4, mean error 0.58%), TLAS miss keeps the probe, the game's DFG LUT as env BRDF, its SO kept for the probe and not re-applied to traced hits. R5: debug views 1-6, `rf_stats` tier fractions, non-finite guards, identical `-Validation` IDs, `-Move`, `fg=2`. R6: foundry A/B + crops; **reflective-scene A/B and stability metric not done**. R7: 0.33 ms. | `img/rf_foundry_*.png`, `img/rf_docks_*.png` |
+| AUDIT_SOTA 2. Static/dynamic BVH split (TRACK_D_SCENE_BUILD.md 11) | **Done.** Class-A meshes get one object-space BLAS each, built once from their first XFB capture (the inverse instance matrix), verified against another instance or a later frame, compacted and cached. The TLAS takes every instance with the game's matrices, read at submit. The rest is captured with a BLAS per draw, refit while its triangle count holds. `rt_bvh_split` (live; 0 = the old soup). R3: the primary-ray check and triangle count match the soup in the same view. R5: audits recapture cached draws and evict on mismatch; non-finite matrices are masked; `-Move` and `-Validation` runs (TRACK_D_SCENE_BUILD.md 11.4). R7: pan 1.37 → 0.45 ms median, 2.91 → 0.83 ms p99. | Foundry A/B: match 98.98% / 98.98%, 2.59M / 2.595M triangles; foliage scenes and the main menu not compared |
+| R0 sun replace (TRACK_D_SUN.md 12) | **Implemented, partly verified.** `rt_sun_replace` (live): the traced sun replaces the game's mask where trusted (roof volumes from the asset DB, off-screen frustum test, proximity to the game's lit mask); otherwise `min(game, traced)`. In-frame A/B against min (`rt_debug=7`, `sun check` log, QA `sun_check`). R5: non-finite 0 in S1, S3, S7, S8, S14. | No leaks: written lit where the game is dark on 0‰ in all five scenes (S7: traced sun through the cut-away roof on 43‰, all kept by roof volumes, `img/sun_replace_s7_interior.png`). Too conservative outdoors: 94-98% of Campsite's disagreeing pixels fail the off-screen test (`rt_sun_top=0` to try). In-frame A/B, `-Validation`, `-Move` and the isolated cost are still to run (HANDOFF.md) |
+| D-EM data: emissive geometry capture (TRACK_D_EMISSIVE.md 13) | **Data only; the second design is not run in game yet.** The game's emissive draws (EMI material variants in its effects target) go into a separate emissive TLAS with a per-draw record and a bounded light list (area, mean radiance, power π·A·L), built per game submission in our own command buffer (one frame of latency; independent of `rt_bvh_split`). R0/R3, radiance from the material's own data: colour × intensity × glow map, × the base colour for BGM templates (VT albedo reproduced on the GPU), × the game's global scale for luminance-emissive materials (now read on the GPU: the CPU read of device memory had left it at 1, the ×3,318 of Base_GM_Pulse). First design's projected check: CHAR_BASE_GM 1.21, BGM 2-6× (base colour now modelled), coverage 10.6% (each frame's draws were split across two builds; fixed). R5: DEVICE_LOST at level load found and fixed; 0 non-finite power sums; `-Validation`, `-Move` and the new design pending (HANDOFF.md). R7: build 0.31 ms at 36k triangles (first design). | foundry log 2026-10-27 05:28 |
