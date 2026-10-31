@@ -42,7 +42,7 @@ There were two sections numbered 13: "13 (RF)" below is the first, "13 (D-EM)" t
 | 13 (D-EM), 13.1 to 13.21 | [TRACK_D_EMISSIVE.md#13](TRACK_D_EMISSIVE.md#13-d-em-data-emissive-geometry-capture-rt_emissive1-2026-10-27-data-side-only) |
 | Current native-caster sun scene | [TRACK_D_SUN.md](TRACK_D_SUN.md#current-native-caster-sun-scene-default-off) |
 | Split capture partition spill | [TRACK_D_SCENE_BUILD.md](TRACK_D_SCENE_BUILD.md#split-capture-partition-spill-2026-10-31-offline-candidate) |
-| P1 rt_scene_wait modes | [TRACK_D_SCENE_BUILD.md](TRACK_D_SCENE_BUILD.md#p1-rt_scene_wait-modes--2026-10-31-mode-2-ready_for_live) |
+| P1 rt_scene_wait modes | [TRACK_D_SCENE_BUILD.md](TRACK_D_SCENE_BUILD.md#p1-rt_scene_wait-modes--2026-10-31) |
 | Base frame CPU cost (`rt_alpha_stream`) | [TRACK_D_SCENE_BUILD.md](TRACK_D_SCENE_BUILD.md#base-frame-cpu-cost---2026-10-30-default-off-candidate) |
 | Native Hair, Scalp, Pubes entries (top) | [NATIVE_HAIR.md](NATIVE_HAIR.md#dated-entries-moved-from-track_d_rtmd-2026-10-30) |
 | Live FG-on gate, P1 FG ON, rotation, translation, flashes | [archive/TRACK_D_P1_HISTORY.md](archive/TRACK_D_P1_HISTORY.md) |

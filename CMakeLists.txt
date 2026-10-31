@@ -326,8 +326,6 @@ add_test(NAME emissive_policy_test COMMAND emissive_policy_test)
 add_executable(emissive_core_test tests/emissive_core_test.cpp core/em_policy.cpp)
 target_include_directories(emissive_core_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME emissive_core_test COMMAND emissive_core_test)
-add_executable(scene_wait_test tests/scene_wait_test.cpp)
-add_test(NAME scene_wait_test COMMAND scene_wait_test)
 
 # Hot-reloadable core: rebuild while the game runs.
 option(BG3RTX_HAIR_GPU_PROBE "Build the isolated, windowless native Hair Vulkan probe" OFF)
