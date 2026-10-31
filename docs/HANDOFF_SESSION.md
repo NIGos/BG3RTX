@@ -12,8 +12,10 @@ Existing foreground batch receipts are terminal, not authority for another run.
 User trial 047e105: foliage flicker improved, hair color more native; camp rug/plank
 rectangles and fixed Astarion hairline band remain. Preserve trial. Sun found real
 receiver-identity hole: raster class 5 also used by Scalp; physical-origin guard
-cannot prove Hair identity. Exact/ambiguous receiver proof under review, not yet
-image-causal proof. M2 audits rug/plank coverage. Root preserved session log/config;
+cannot prove Hair identity. Conservative competing-Scalp guard implemented and
+reviewed; 31 CPU checks, 16 actual off identities/on compiles. Not image-causal
+proof. Existing GPU probe owner tests the actual query helper next. M2 implements
+exact native TileBlend camera coverage, not yet attributed to pictured rug/planks. Root preserved session log/config;
 77 capacity windows, 11 residual alpha substitutions, last three zero; opaque drops
 all zero. See progress and docs/evidence/user-camp-regression-20261031.json.
 
@@ -26,7 +28,8 @@ review pass. Not game-qualified. Experimental control/schema included; trial unt
 
 Main d31633b, ABI 21: M1 coverage/capture budget merged through merge-green and
 pushed; 58 CTests, 1231 shader files and QA pass. Root development:
-C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX, codex/omm-bake, 2ad5b4e.
+C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX, codex/omm-bake.
+Root source c0aa8ec includes split spill 7785ba1 and receiver guard 532879c/c0aa8ec.
 Main integration deferred: actual BG3 PID 41420 was open; merge-green refused
 before mutation. Isolated combined build, 59 CTests and QA pass; independent
 runtime source review is clear. Full compile: 984/1232, 248 SHaRC failures due
@@ -57,9 +60,11 @@ Sun independently found both defects and reviewed both fixes clear.
 No source edits in the frozen private tree; future fixed image A/B needs new
 appropriate live steering. Do not close visual quality from positive counters.
 
-M1/M3 source and ST extension owners have completed their source work. Root owns
-main integration and concise shared docs; omm_contract_review extends the existing
-compute-only GPU fixture for actual material fields, not a new renderer/harness.
+Active lanes: M2 (omm_alpha_bounds) TileBlend camera coverage and 604 ON shader
+proof; omm_contract_review production receiver-helper GPU fixture/reviews. Sun
+receiver source and split-spill review complete. Root owns integration/shared docs.
+Root combined guard/spill build session 11653 runs -Test in isolated tree; log
+captures/combined-guard-spill-build-20261031.log. No game/installation.
 Sun optional native graphics-XFB fixture exceeded a small extension and stopped;
 this is a fixture scope limit, not a rendering impossibility. No Ponytail.
 

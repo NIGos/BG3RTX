@@ -33,8 +33,12 @@ Concrete source issue under review: physical-origin raster class 5 is shared by
 native Hair/Pubes AND Scalp (FS 600446334bc7d478 / 87aab1f9603cf4a9). Class 5 alone
 cannot prove a hair receiver; an ambiguous nearby hair hit can authorize rebasing.
 This is a confirmed identity gap, not yet proof of this screenshot's cause.
-Owner Sun seeks exact native receiver evidence/conservative ambiguous rejection;
-M2 owner audits rug/plank coverage and cascade paths. No bias, opacity workaround,
+Guard 532879c/c0aa8ec now rejects competing Scalp, unreadable source ranges,
+unknown record kinds, candidate cap or pruned traversal before publishing the
+physical origin. Existing virtual origin and all occluders stay unchanged.
+31 CPU checks and 16 actual off shader identities/on validations pass; query-helper
+GPU fixture is next. M2 implements the exact retained TileBlend camera recipe;
+its object association to the pictured rugs/planks remains unknown. No bias, opacity workaround,
 trial edit or live action. Prioritize these regressions before feature promotion.
 
 ## Native tileset materials and static depth integrated offline - 2026-10-31
