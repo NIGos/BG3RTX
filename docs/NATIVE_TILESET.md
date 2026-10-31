@@ -147,3 +147,45 @@ preprocessed token inputs are unchanged; 42 representative OFF SPIR-V modules
 are byte-identical. 604 feature-ON wrappers validate; 48 GI and 32 reference
 interfaces pass. No GPU or game was run. Extra image allocation is 0 bytes; GPU
 cost remains unmeasured. [Exact evidence](evidence/native-tileblend-coverage-20261031.json).
+
+## Exact native shadow recipe in current-Sun capture - 2026-10-31
+
+The material-aware current-Sun path now recognizes only the native STI DEPS pair
+VS `f4b35620d54abc6c` / FS `5c37b87299d86ce1`. Its existing post-VS UV0 needs no
+new patch or COLOR stream. The same subtype 1 predicate, two views and native
+sampler are used. DEPS reads only seven floats (28 bytes) from set 1 binding 0;
+SeeThrough at byte 28 is never accessed. Native SPIR-V access chains confirm
+members 0 through 5 only. Shadow capture therefore does not read or validate the
+unused mode, including mode 1. Its unused eighth record word stays zero and is
+not a substituted authored mode. Camera capture still requires all 32 bytes and
+rejects its actual SeeThrough mode 1.
+
+`alpha_lookup_native_tileset_shadow` is called only inside current-Sun's per-draw
+material capture. The exact pair and UV layout are verified again by canonical
+capture. Ordinary `alpha_lookup` explicitly excludes this shadow recipe, so the
+legacy cascade classifier neither skips a newly registered cutout nor claims
+material support. Missing native views, sampler, used scalars or valid domains
+remain UNKNOWN through the existing per-draw current-Sun record path.
+
+Validation: 1,687 CPU checks, 1,708 with the actual native shadow VS. Host DLL links
+and four selected CTests pass. Four native UV0 patches validate and match the
+frozen baseline at strides 40/64/80/88. Five targeted ordinary/current-Sun SPIR-V
+modules validate and are byte-identical to the camera increment. HLSL, descriptor
+layouts and public ABI are unchanged; the previous full shader proof is reused.
+No BG3/GPU run, runtime image qualification or GPU cost claim. User rug/walkway
+identity is still unknown. [Exact evidence](evidence/native-tileblend-shadow-20261031.json).
+
+### Precise legacy F-1 material bridge still missing
+
+`geo_cascade_soup` / `CascadeSoup` and `attach_cascade` pass only the converted
+buffer, triangle count, stride, origin, signature and producer. They discard the
+triangle-to-material association. The legacy instance also has no readable
+triangle/UV range in InstInfo. Faithful support needs the matching per-draw ranges
+and canonical snapshots, the actual cascade UV buffer, and descriptor-local
+records/native sampler owners retired with that scene. When legacy geometry is
+compacted, the material ranges must be remapped to those compacted offsets;
+current-Sun raw offsets cannot be reused. This is a specific missing data bridge,
+not permission to skip cutouts or treat them as opaque. No bridge implementation
+is included here. Current-Sun's source instance count already excludes the old
+opaque F-1 cascade, so this increment does not duplicate that legacy caster in
+its material-aware scene.

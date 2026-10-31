@@ -1265,12 +1265,13 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     if(pi.discard || pi.fragment_depth || !pi.fragment_known || pi.depth_write<0 || pi.depth_test<0) {
       draw.material=UINT32_MAX;
       AlphaFs material{};AlphaSnapshot snapshot;
-      if(!pi.fragment_depth && pi.fragment_known && pi.depth_write>=0 && pi.depth_test>=0 && alpha_lookup(s->fs,&material) && material.uv==pi.uv && pi.uv>=0 &&
+      if(!pi.fragment_depth && pi.fragment_known && pi.depth_write>=0 && pi.depth_test>=0 && (alpha_lookup(s->fs,&material) || alpha_lookup_native_tileset_shadow(s->fs,&material)) && material.uv==pi.uv && pi.uv>=0 &&
          (material.kind!=4 || (g_stride>=88 && (pi.hair_outputs&1u)!=0u)) &&
          alpha_capture_source(cmd,material,draw.first_triangle,draw.triangles,&snapshot)) {
         // Legacy alpha-table membership is NOT proof of the native predicate:
         // helper/fade/secondary factors omitted by those recipes stay UNKNOWN.
-        bool native=material.kind==3 || material.kind==4;
+        bool native=material.kind==3 || material.kind==4 ||
+          (material.kind==5 && native_tileset_coverage::lookup_shadow(s->fs) && native_tileset_coverage::matches(s->vs,s->fs));
         if(const auto* recipe=omm::native_plain_recipe(s->fs,s->vs))
           native=omm::native_plain_record_matches(*recipe,material.kind,uint32_t(material.uv),material.tex_set,
             material.tex_bind,snapshot.rec.channel,snapshot.rec.cut,snapshot.rec.cut_first,
@@ -2283,7 +2284,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->rt && !alpha && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
     ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
-  if(c->rt && g_tileset_capture && cfg_int("rt_native_tileset",0) && native_tileset_coverage::lookup(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
+  if(c->rt && g_tileset_capture && cfg_int("rt_native_tileset",0) && native_tileset_coverage::lookup_camera(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
   uint32_t materialRecord=UINT32_MAX;
   if(capture && c->rt && !alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
     materialRecord=native_hit::note_opaque_prepass(cmd,s,args,d.offset,g_stride,uint32_t(prims));

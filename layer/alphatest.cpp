@@ -457,13 +457,22 @@ void alpha_device_destroyed(DeviceData* dd) {
   g_dd = nullptr;
 }
 
+// Only the rich current-Sun stream has per-draw material records. Do not add
+// these hashes to global alpha_lookup: legacy F-1 would merely skip cutouts.
+bool alpha_lookup_native_tileset_shadow(uint64_t fs,AlphaFs* out){
+ if(!g_on || !g_tileset_layout || !cfg_int("rt_native_tileset",0))return false;
+ const auto* recipe=native_tileset_coverage::lookup_shadow(fs);if(!recipe)return false;
+ *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=recipe->uv;out->tex_set=1;out->tex_bind=recipe->green_binding;
+ out->ubo_set=1;out->ubo_bind=recipe->material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
+}
+
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
-  if(!g_tileset_layout && native_tileset_coverage::lookup(fs)!=nullptr && cfg_int("rt_native_tileset",0)){
+  if(!g_tileset_layout && native_tileset_coverage::lookup_camera(fs)!=nullptr && cfg_int("rt_native_tileset",0)){
     static std::atomic<bool> warned{false};if(!warned.exchange(true))log("[alpha tileset] enable rejected: restart with rt_alpha=1 rt_bvh_split=1 and supported sampler limits");
   }
-  if(g_tileset_layout && cfg_int("rt_native_tileset",0) && native_tileset_coverage::lookup(fs)!=nullptr) {
-    const auto& recipe=*native_tileset_coverage::lookup(fs);
+  if(g_tileset_layout && cfg_int("rt_native_tileset",0) && native_tileset_coverage::lookup_camera(fs)!=nullptr) {
+    const auto& recipe=*native_tileset_coverage::lookup_camera(fs);
     *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=recipe.uv;out->tex_set=1;out->tex_bind=recipe.green_binding;
     out->ubo_set=1;out->ubo_bind=recipe.material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
   }
@@ -562,9 +571,9 @@ static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_
     if(!recipe)return false;
     if(recipe->subtype==1u){
       r.p0[2]=1.f;
-      const auto material=native_tileset_coverage::capture_blend([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes){return read_bound(cmd,set,binding,off,dst,bytes);});
+      const auto material=native_tileset_coverage::capture_blend([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes){return read_bound(cmd,set,binding,off,dst,bytes);},recipe->shadow);
       uint32_t status=native_tileset_coverage::ntb_material(material);
-      if(material.known && finite(material.packet,8))std::memcpy(r.t,material.packet,sizeof(material.packet));
+      if(material.known && finite(material.packet,recipe->shadow?7u:8u))std::memcpy(r.t,material.packet,recipe->shadow?28u:sizeof(material.packet));
       if(!state || state->fs!=a.hash || !native_tileset_coverage::matches(state->vs,a.hash) || !geo_native_tileset_inputs(state->pipe[0],1u))status=native_tileset_coverage::NtcMissing;
       auto view=[&](unsigned binding,Bg3Binding& out){return query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&out) && out.view && view_image_id(out.view)!=0 && omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0);};
       const bool base=view(1,t),mask=view(2,c);
