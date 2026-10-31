@@ -37,9 +37,9 @@ Actual S1 trace proves prepass/deferred use different command buffers (866/835
 draws,100 static VT). Fix cross-CB association/ownership before any zero-record
 trial. Secondary-command no-write proof and Submit2 compute ordering need review.
 Shared frame de1ccdd has 4338 CPU checks and validated HLSL; real consumer pending.
-Explicit ABI 20 material-use callback approved in development; main/trial stay19.
+Explicit ABI 20 material-use callback approved in development; main/trial stay ABI 19.
 89 actual S1 G-buffer VS/FS modules pass the read-only scanner. Non-watched
-360s acquisition draft is under captures/native-hit-material-20261031/draft/.
+360 s acquisition draft is under captures/native-hit-material-20261031/draft/.
 M2 native S1 reference completed in 53 s: 835 draws, no capture overflow.
 Floor_B POSITION matches 48 instances/20256 corners, max residual 3.22e-5.
 ScaleZ acts on local X; observed Flip does not reflect POSITION. Target residual
@@ -51,6 +51,12 @@ three Floor_B pieces plus matched Floor_A, 8/16 -> 13/16 low-vertex intersection
 Three gaps and room wall/roof/opening closure remain explicit. 58 asset tests pass,
 one existing skip. Material64 partition feedback now shares the Hair88 correction
 (55 fresh CPU checks); unchanged16/24 policy and explicit budgets are preserved.
+The open bay is now exported: 27 native-qualified components/24506 triangles,
+824 frozen terrain triangles, nine authored components separately UNKNOWN.
+All 16 low-vertex lines intersect real geometry, not an opacity/contact certificate.
+Two bounded persistent v8 render terrain patches exist; decode them next. No roof
+was invented; parent-level roof/current cutaway state stays unresolved. 62 asset
+checks pass with one existing skip. Source 00af160, development 5ec54cc.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
 module-independent SHA256 are fixed and tested through actual simulated runner.
