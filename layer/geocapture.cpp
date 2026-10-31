@@ -31,6 +31,7 @@
 #include "../common/native_tileset_coverage.h"
 #include "../common/native_hit_tileset_inputs.h"
 #include "../common/native_hit_qualify.h"
+#include "../common/native_hit_pool.h"
 #include "../common/spirv_visibility.h"
 #include "spirv_xfb.h"
 #include "../common/cascade_casters.h"
@@ -1695,6 +1696,8 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   const auto* pa = attr(vi.pos_location);
   const auto* pb = pa ? binding(pa->binding) : nullptr;
   if (!pa || !pb || pb->inputRate != VK_VERTEX_INPUT_RATE_VERTEX) return ip;
+  ip.pos_binding = pa->binding < CmdState::kMaxVertexBindings ? uint8_t(pa->binding) : uint8_t(0xff);
+  ip.pos_offset = pa->offset;
   // The mesh is what the per-vertex inputs hold: the VS and their layout are part of its key.
   uint64_t h = mod.hash ^ 0x9e3779b97f4a7c15ull;
   auto mix = [&](uint64_t v) { h = (h ^ v) * 1099511628211ull; };
@@ -2109,7 +2112,8 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
 
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if(geo_is(s,GeoKind::Material)){
-    bool exact=false;{std::lock_guard lock(g_mu);auto i=g_pipes.find(s->pipe[0]);if(i!=g_pipes.end()){
+    bool exact=false,pool_pipeline=false;InstPipe pool_inst{};
+    {std::lock_guard lock(g_mu);auto i=g_pipes.find(s->pipe[0]);if(i!=g_pipes.end()){
       s->geo_material_no_writes&=i->second.no_storage_writes;
       const auto& p=i->second;
       const bool tileset=native_hit::tileset_deferred(s->vs,s->fs);
@@ -2119,6 +2123,8 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
       facts.xfb=p.xfb;facts.material_state=p.material_state;facts.depth_test=p.depth_test;facts.blend_mask=p.blend_mask;
       facts.color_mask=p.color_mask;facts.triangle_list=p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;facts.uv_ok=p.uv_match==UV_OK;
       exact=native_hit::exact_material_pipeline(facts);
+      // Class A G-buffer draws feed the pool material records (their meshes are BVH-cached).
+      if(native_hit::enabled() && p.inst.ok){pool_inst=p.inst;pool_pipeline=native_hit::pool::pool_material_pipeline(facts);}
       // One sparse, exact state record per audited native pipeline. A later
       // unsupported term is visible without another blind attribution run.
       static std::unordered_set<uint64_t> reported;
@@ -2128,6 +2134,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
           s->pipe_id[0],unsigned(exact),unsigned(p.xfb),tileset?p.tileset_outputs:p.vt_outputs,unsigned(p.material_state),p.material_reasons,p.depth_test,p.blend_mask,p.color_mask,unsigned(p.topo),unsigned(p.uv_match),p.raster_next,p.multisample_next,p.blend_next);
 
     }else s->geo_material_no_writes=false;}
+    if(pool_inst.ok)native_hit::pool_observe(cmd,s,args,pool_inst,pool_pipeline);
     VkBuffer buffer{};VkDeviceSize offset=0,bytes=0;
     if(native_hit::deferred_begin(cmd,s,args,exact,g_stride,&buffer,&offset,&bytes)){
       p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;

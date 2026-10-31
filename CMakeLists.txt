@@ -323,6 +323,8 @@ add_executable(native_sun_packets_test tests/native_sun_packets_test.cpp)
 add_test(NAME native_sun_packets_test COMMAND native_sun_packets_test)
 add_executable(native_hit_qualify_test tests/native_hit_qualify_test.cpp)
 add_test(NAME native_hit_qualify_test COMMAND native_hit_qualify_test)
+add_executable(native_hit_pool_test tests/native_hit_pool_test.cpp)
+add_test(NAME native_hit_pool_test COMMAND native_hit_pool_test)
 add_executable(emissive_policy_test tests/emissive_policy_test.cpp)
 add_test(NAME emissive_policy_test COMMAND emissive_policy_test)
 # D-EM policy in the core (ABI 24): core/em_policy.cpp against the former layer path, bit for bit.

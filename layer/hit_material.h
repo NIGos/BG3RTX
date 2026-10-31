@@ -21,4 +21,12 @@ void deferred_finish(VkCommandBuffer,bool noGraphicsStorageWrites);
 void slot_in_use(uint32_t slot,uint64_t frame);
 bool slot_reusable(uint32_t slot,uint64_t gpuDone);
 bool register_use(VkCommandBuffer,uint32_t slot,VkDescriptorSet* query_alpha);
+// Pool material records (common/native_hit_pool.h, PLAN_M4 "Hit material on pool
+// instances"). Geometry/position keys of a class A draw (false: not keyable).
+bool pool_keys(const InstPipe&,const CmdState&,const DrawArgs&,uint64_t* geometry,uint64_t* position);
+// Every G-buffer draw of a class A pipeline; poolPipeline: pool::pool_material_pipeline.
+void pool_observe(VkCommandBuffer,CmdState*,const DrawArgs&,const InstPipe&,bool poolPipeline);
+// One cached (pool) draw of the BVH build: returns its pool::Status, counts it per instance.
+uint32_t pool_lookup(uint64_t geometry,uint64_t position,uint64_t meshGeneration,uint32_t instances);
+void pool_evicted(uint64_t geometry);
 }
