@@ -2,13 +2,28 @@
 struct ProbePC {uint frame,rt_stats,rt_max_cand,rt_origin;float rt_bias;uint pad0,pad1,pad2;};
 [[vk::push_constant]] ProbePC pc;
 uint3 pcg3d(uint3 v){v=v*1664525u+1013904223u;v.x+=v.y*v.z;v.y+=v.z*v.x;v.z+=v.x*v.y;v^=v>>16;v.x+=v.y*v.z;v.y+=v.z*v.x;v.z+=v.x*v.y;return v;}
+#ifdef NATIVE_TILESET_PROBE
+#define RT_NATIVE_TILESET 1
+#else
 #define RT_NATIVE_SCALP 1
 #define RT_NATIVE_HAIR 1
+#endif
 #include "../shaders/rt/rt_common.hlsli"
 [[vk::binding(21,0)]] RWByteAddressBuffer Result;
 [numthreads(1,1,1)]
 void main(){
  RtCone cone={0,1.0/1024.0};float3 origin=0.0.xxx,direction=float3(0,0,1);bool aborted;
+#ifdef NATIVE_TILESET_PROBE
+ Result.Store(0,rt_visibility(origin,direction,10,cone));
+ float distance=rt_closest(origin,direction,10,cone,aborted);Result.Store(4,asuint(distance));Result.Store(8,uint(aborted));
+ RtHit hit=rt_closest_hit(origin,direction,10,cone);Result.Store(12,asuint(hit.t));Result.Store(16,uint(hit.aborted));
+ RtDebugHit debug=rt_closest_debug(origin,direction,10,cone);Result.Store(20,asuint(debug.t));Result.Store(24,uint(debug.aborted));
+ Result.Store(28,uint(rt_scene_ok()));
+ // Same texture, deliberately contrasting sampler: real kind5 uses binding19;
+ // legacy wrap would sample alpha0 instead of native opaque-white border1.
+ Result.Store(32,asuint(gAlphaTex[1].SampleLevel(gAlphaWrap,2.5.xx,0).a));
+ Result.Store(36,asuint(gAlphaTex[1].SampleLevel(gNativeTilesetSampler[1],2.5.xx,0).a));
+#else
  Result.Store(0,rt_visibility(origin,direction,10,cone));
  float distance=rt_closest(origin,direction,10,cone,aborted);Result.Store(4,asuint(distance));Result.Store(8,uint(aborted));
  RtHit physical=rt_closest_hit(origin,direction,10,cone);Result.Store(12,asuint(physical.t));Result.Store(16,uint(physical.aborted));
@@ -50,4 +65,5 @@ void main(){
   precise float rounded=base*angular;
   Result.Store(108,asuint(frame.y!=0?mad(rounded,1.0,noise-0.6667):rounded));
  }
+#endif
 }
