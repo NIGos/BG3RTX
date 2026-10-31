@@ -1,10 +1,12 @@
 #pragma once
 // D-EM emissive POLICY (docs/TRACK_D_RT.md 13): the per-draw record (radiance
 // formula per material family) and the rt_em_calib calibration rule. Pure
-// functions: no Vulkan, no globals. The layer (layer/emissive.cpp) supplies a
-// Reader that reads the draw's bound constant buffers and binds its views; it
-// keeps every Vulkan object and the luminance-copy bookkeeping.
-// tests/emissive_policy_test.cpp pins the records on captured-like inputs.
+// functions: no Vulkan, no globals. They run in the hot-reloaded core (core/em_policy.cpp,
+// Bg3CoreApi::em_record, ABI 24), whose Reader reads the draw's bound constant buffers and
+// views through the host; the layer (layer/emissive.cpp) keeps every Vulkan object, the
+// views and the luminance-copy bookkeeping, and uses only the EmRec layout and flags.
+// tests/emissive_policy_test.cpp pins the records on captured-like inputs;
+// tests/emissive_core_test.cpp the core path against the former layer path, bit for bit.
 //
 // Reader concept (all members required):
 //   bool read(uint32_t set, uint32_t binding, uint64_t offset, void* dst, size_t n);

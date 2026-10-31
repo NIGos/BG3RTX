@@ -42,6 +42,15 @@ static void host_log(const char* fmt, ...) {
 
 static uint64_t host_frame_index() { return frame_index(); }
 
+// ABI 24 (D-EM policy in the core): the bound buffer's bytes from the game's host mapping.
+static bool host_read_bound(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding,
+                            uint64_t offset, void* dst, size_t n) {
+  Bg3Binding b;
+  if (!query_binding(cmd, bp, set, binding, 0, &b) || !b.buffer) return false;
+  if (b.range != VK_WHOLE_SIZE && offset + n > b.range) return false;
+  return read_mapped(b.buffer, b.offset + offset, dst, n);
+}
+
 // SEH wrappers: no C++ objects with destructors may live in these frames.
 static bool seh_load(PFN_bg3rtx_core_load fn, const Bg3HostApi* host, const Bg3CoreApi** out) {
   __try {
@@ -210,6 +219,7 @@ void core_init(DeviceData* dd) {
   g_host.rt_omm_scene_reference=&rt_omm_scene_reference;
   g_host.rt_sun_scene = &rt_sun_scene;
   g_host.rt_hit_material_use=&rt_hit_material_use;
+  g_host.read_bound = &host_read_bound;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);
@@ -302,6 +312,56 @@ void core_on_cmd_end(VkCommandBuffer cmd) {
   fault_checkpoint(cmd, kCkCmdEndPre, 0);
   if (!seh_cmd_end(g_core, cmd)) fault("on_cmd_end");
   fault_checkpoint(cmd, kCkCmdEndPost, 0);
+}
+
+// ---- D-EM policy in the core (ABI 24, docs/TRACK_D_RT.md 13.21) ----
+static bool seh_em_record(const Bg3CoreApi* c, const Bg3EmRecordIn* in, Bg3EmRecordOut* out, bool* ok) {
+  __try {
+    *ok = c->em_record(in, out);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+static bool seh_em_calib_update(const Bg3CoreApi* c, Bg3EmCalib* cal, uint32_t first, double ratio, uint32_t flags,
+                                uint64_t frames, double bright, bool* changed) {
+  __try {
+    *changed = c->em_calib_update(cal, first, ratio, flags, frames, bright);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+static bool seh_em_calib_apply(const Bg3CoreApi* c, uint32_t* rec, const Bg3EmCalib* cal) {
+  __try {
+    c->em_calib_apply(rec, cal);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
+std::shared_lock<std::shared_mutex> core_shared_lock() { return std::shared_lock<std::shared_mutex>(g_core_mu); }
+
+bool em_core_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out) {
+  if (!g_core || g_faulted || !g_core->em_record) return false;
+  bool ok = false;
+  if (!seh_em_record(g_core, in, out, &ok)) return fault("em_record"), false;
+  return ok;
+}
+
+bool em_core_calib_update(Bg3EmCalib* cal, bool first, double ratio, uint32_t flags, uint64_t frames, double bright) {
+  if (!g_core || g_faulted || !g_core->em_calib_update) return false;
+  bool changed = false;
+  if (!seh_em_calib_update(g_core, cal, first ? 1u : 0u, ratio, flags, frames, bright, &changed))
+    return fault("em_calib_update"), false;
+  return changed;
+}
+
+bool em_core_calib_apply(uint32_t* rec, const Bg3EmCalib* cal) {
+  if (!g_core || g_faulted || !g_core->em_calib_apply) return false;
+  if (!seh_em_calib_apply(g_core, rec, cal)) return fault("em_calib_apply"), false;
+  return true;
 }
 
 bool alloc_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer, VkDeviceMemory* memory,

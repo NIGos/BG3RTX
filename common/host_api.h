@@ -19,8 +19,10 @@
 // 21: Bg3HostApi::rt_hit_material_use (material-consuming dispatches).
 // 22: Bg3HostApi::rt_scene_camera removed (ABI 16; rt_scene_camera_match, CONSOLIDATION C1).
 // 23: get_shader accepts "<file>?NAME=VALUE;..." defines (common/shader_variant.h); no layout change.
+// 24: D-EM policy in the core (TRACK_D 13.21): Bg3HostApi::read_bound, Bg3CoreApi::em_record /
+//     em_calib_update / em_calib_apply (appended).
 // Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
-#define BG3RTX_ABI_VERSION 23
+#define BG3RTX_ABI_VERSION 24
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -125,6 +127,31 @@ struct Bg3EmissiveInfo {
   VkImageLayout fx_layout;     // the layout its last pass left it in
   uint32_t fx_width, fx_height;
 };
+
+// ABI 24 (D-EM policy in the core, docs/TRACK_D_RT.md 13.21). The host classifies an
+// emissive draw and calls Bg3CoreApi::em_record inside its draw hook; the core runs
+// common/emissive_policy.h, reading the draw's constant buffers (read_bound) and views
+// (query_binding) itself. The host keeps the views, the luminance-copy slots and the build.
+struct Bg3EmRecordIn {
+  VkCommandBuffer cmd;           // the draw's command buffer (its bindings are current)
+  uint64_t fs;                   // fragment shader hash
+  const Bg3MaterialInfo* info;   // the asset DB material
+  const char* name;              // its template name
+  uint32_t forward, decal;       // forward-pass emissive / deferred decal
+};
+struct Bg3EmView { VkImageView view; VkImageLayout layout; };
+struct Bg3EmRecordOut {
+  uint32_t rec[64];              // em::EmRec (shaders/rt/em_common.hlsli); glob 0 when lum_wanted
+  Bg3EmView views[4];            // em::EmView order: mask, base, VT indirection, VT cache
+  uint32_t lum_wanted;           // the host allocates the luminance-copy slot of `luminance` into glob
+  Bg3Binding luminance;          // set 2 b0 as bound
+  uint32_t cb_unreadable, vt_missing, pulse_no_time;
+  uint32_t dbg_m, dbg_pulse;     // diagnostics: m (and m45, time, pulse) were read
+  float m[6], m45[2], time, pulse;
+  uint32_t dbg_rec[64];          // the record before the non-finite clamp
+};
+// em::Calib (rt_em_calib state per family), kept by the host across core reloads.
+struct Bg3EmCalib { float scale; uint32_t updates; double log_u; };
 
 // ABI 19: one matching sun-only TLAS/material tuple. The host owns all resources
 // and retains the source scene's BLAS references until the consuming work retires.
@@ -286,6 +313,10 @@ struct Bg3HostApi {
   // False means preserve existing output; ordinary/OMM dispatches do not call.
   bool (*rt_hit_material_use)(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,
                              VkDescriptorSet selected_alpha,uint64_t build_identity,VkDescriptorSet* query_alpha);
+  // ABI 24: reads n bytes at `offset` into the buffer bound at (set, binding) from the game's
+  // host mapping. False when nothing is bound, the range is shorter or it is not host-mapped.
+  bool (*read_bound)(VkCommandBuffer cmd, VkPipelineBindPoint bind_point, uint32_t set, uint32_t binding,
+                     uint64_t offset, void* dst, size_t n);
 };
 
 struct Bg3CoreApi {
@@ -307,6 +338,15 @@ struct Bg3CoreApi {
   // Right before each game dispatch is recorded; its pipeline and descriptors
   // are already bound, so query_binding sees what it will read and write.
   void (*on_dispatch_pre)(VkCommandBuffer cmd, const Bg3DispatchInfo* dispatch);
+  // ABI 24 (D-EM policy, Bg3EmRecordIn). The record of one emissive draw, inside the
+  // host's draw hook. False: no record (the host skips the draw).
+  bool (*em_record)(const Bg3EmRecordIn* in, Bg3EmRecordOut* out);
+  // rt_em_calib: first != 0 is em::calib_first(ratio, flags, frames, bright), else
+  // em::calib_window(ratio, flags, px = bright). True when it changed the scale.
+  bool (*em_calib_update)(Bg3EmCalib* cal, uint32_t first, double ratio, uint32_t flags, uint64_t frames,
+                          double bright);
+  // At the build: em::calib_apply on a record (rec: 64 words); cal null when uncalibrated.
+  void (*em_calib_apply)(uint32_t* rec, const Bg3EmCalib* cal);
 };
 
 typedef const Bg3CoreApi* (*PFN_bg3rtx_core_load)(const Bg3HostApi* host);

@@ -883,6 +883,9 @@ Foundry families seen in round 1: `20864dc6` exact, `7085eee7` exact (VT albedo)
 
 ### 13.21 Policy out of the host (2026-10-31, partial step done)
 
+**Done 2026-10-31 (ABI 24):** the record policy and the calibration rule run in the core (`core/em_policy.cpp`); the layer keeps the views, the luminance slots, the calibration state and the build. The core reads the bindings itself during the draw hook instead of a raw copy. Proof: `emissive_core_test`, bit-identical against the old layer path. Without a core a draw has no record. Still to do: a live check with `rt_emissive=1` (record count, projected check and calibration log the same as before).
+
+
 Done: the record formulas (make_record, family_fixup), the EmRec layout and the rt_em_calib
 rule are pure functions in `common/emissive_policy.h`, pinned by `emissive_policy_test`. The
 layer still calls them through a reader of the draw's bound CBs and views: a change still
