@@ -26,10 +26,15 @@ Limits that decide the order:
 - The froxel light provider only indexes lights for points inside the view frustum.
   Offscreen lights, projector lights, sun and emission at hits are unsupported today.
 - Hit-material coverage (2026-10-31, branch hitmat-reasons): the provider covers only the audited
-  static VT opaque pair (and tileset with `rt_native_tileset=1`), non-instanced, at most 128 opaque
-  prepass records and 128 deferred material slots per frame (`nh_opaque_rows`, `material_slots`,
-  16 samplers, 64 cache views). Every other instance is reason `base` (counter 127 separates them).
-  Live S8/S6: 0.83% of GI candidates qualified, S6 98.7% unknown. Raising it is M3 work.
+  static VT opaque pair (and tileset with `rt_native_tileset=1`), non-instanced, fresh XFB only.
+  Live S8/S6: 0.83% of GI candidates qualified, S6 98.7% unknown. Every other instance is reason
+  `base` (counter 127 separates them). Caps raised on branch m3-coverage (next item).
+- Caps (m3-coverage, READY_FOR_LIVE): opaque rows 128 -> 4096, deferred rows 128 -> 4096,
+  samplers 16 -> 64, cache views 64 -> 256 (`common/native_hit_records.h`); streams sized by need
+  (source <= 128 MB per slot, deferred 32 MB chunks <= 4, query basis <= 256 MB). COVERAGE.md
+  sees at most 1026 standard G-buffer draws per frame, so the row caps are 4x that.
+  `[hit material capacity]` logs used/capacity/overflow of each cap. The caps were likely not the
+  main limit: most static geometry is BVH-cached (`kInfoPool`, no per-frame XFB), see below.
 - `native_hit_direct` traced to the light centre, into the light's own fixture: 0 nonzero of 22871
   supported. It now stops `ls_clear` short, as D-LS. Reasons and the zero split (134/135) are logged
   by the real consumers (`hit material`, `GI hit direct ... supported zero`).
@@ -37,6 +42,22 @@ Limits that decide the order:
   its extra inputs from descriptor sets, not new push slots.
 - GI R2 failed from a shader dispatched through the wrong (contracted D-LS) layout. Every new
   dispatch gets its own typed binding contract, checked against the compiled SPIR-V.
+
+## Hit-material coverage: next families (m3-coverage, 2026-10-31)
+
+`[hit material families]` (rt_stats) lists the declined G-buffer pairs by vertices per packet.
+- Instanced statics (Base_VT_STI_DEF, FS `14678345c10aefbc`, class A VSs 2d2ac3c3 and others):
+  not extended. The audited VS 3812bc98 is a per-draw UBO-matrix VS, so it never draws instanced;
+  STI is a different pair. Blockers: its depth/deferred VS XFB patch and binding map are not
+  audited, and its meshes are BVH-cached (pool), so no per-frame prepass/deferred XFB exists for
+  the exact per-hit geometry check. Needs a per-mesh material row on pool instances (record id in
+  InstInfo for kInfoPool, UV/basis from the pool) plus the STI audit.
+- Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;
+  terrain draws patches from `_m0[gl_InstanceIndex]` + a heightmap, needs its own recipe.
+- Skinned characters (class B always-skinned VSs, CHAR_* STI FSs): positions from the skinning
+  SSBO (0.13) per frame; fresh XFB already, needs each CHAR FS recipe audited (fields, SSS).
+- Decals (COVERAGE: up to 9.3% S1): they edit the G-buffer, have no own geometry at a hit; needs
+  the decal projection volumes in the scene, after the above.
 
 ## What is missing for a visible gain
 
