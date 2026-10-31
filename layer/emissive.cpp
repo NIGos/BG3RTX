@@ -111,6 +111,7 @@ struct Census {
   uint32_t skip_xfb = 0, skip_indirect = 0, skip_topo = 0, skip_full = 0, skip_recs = 0, skip_tex = 0, no_ubo = 0;
   uint32_t global_conflicts = 0, vt_missing = 0, cb_unreadable = 0, pulse_no_time = 0;
   uint32_t skip_core = 0;   // no core loaded (the record policy is the core's, ABI 24)
+  uint32_t skip_excluded = 0;   // draws of a family the policy excludes (em::kFlagExcluded, rt_em_fx_pulse)
   uint64_t captured_tris = 0;
   void add(const Census& o) {
     passes += o.passes, draws += o.draws, captured += o.captured, captured_tris += o.captured_tris;
@@ -118,7 +119,7 @@ struct Census {
     skip_xfb += o.skip_xfb, skip_indirect += o.skip_indirect, skip_topo += o.skip_topo, skip_full += o.skip_full;
     skip_recs += o.skip_recs, skip_tex += o.skip_tex, no_ubo += o.no_ubo, global_conflicts += o.global_conflicts;
     vt_missing += o.vt_missing, cb_unreadable += o.cb_unreadable, pulse_no_time += o.pulse_no_time;
-    skip_core += o.skip_core;
+    skip_core += o.skip_core, skip_excluded += o.skip_excluded;
   }
 };
 struct FsCount {
@@ -138,7 +139,7 @@ Fx g_fx;
 // ---- per command buffer (draws recorded, not yet submitted) ----
 struct View { VkImageView v = VK_NULL_HANDLE; VkImageLayout l = VK_IMAGE_LAYOUT_UNDEFINED; };
 struct PDraw {
-  EmRec rec;
+  EmRec rec{};
   View mask, base, vt_ind, vt_cache;
   VkDeviceSize off = 0;
   VkBuffer soup = VK_NULL_HANDLE;     // the soup it was captured into (a grown soup replaces it)
@@ -354,6 +355,7 @@ bool make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDra
   if (!em_core_record(&in, &o)) return false;
   static_assert(sizeof o.rec == sizeof d.rec, "Bg3EmRecordOut::rec holds an EmRec");
   std::memcpy(&d.rec, o.rec, sizeof d.rec);
+  if (d.rec.flags & em::kFlagExcluded) return false;   // counted by the caller, not captured
   View* v[4] = {&d.mask, &d.base, &d.vt_ind, &d.vt_cache};   // em::EmView order
   for (int i = 0; i < 4; ++i) *v[i] = View{o.views[i].view, o.views[i].layout};
   RecDbg& g = g_rec_dbg[fs];
@@ -1270,7 +1272,7 @@ bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const Em
   // The ring: what the pending builds may still read stays (a third of the soup per build).
   if (g_soup_since + need > g_soup.size / 3) return ++C.skip_full, false;
   PDraw d;
-  if (!make_record(cmd, s->fs, mat, P, d)) return ++C.skip_core, false;
+  if (!make_record(cmd, s->fs, mat, P, d)) return (d.rec.flags & em::kFlagExcluded) ? ++C.skip_excluded : ++C.skip_core, false;
   if (g_soup_head + need > g_soup.size) g_soup_head = 0;
   d.off = g_soup_head;
   d.soup = g_soup.b;
@@ -1649,9 +1651,10 @@ void em_on_present() {
       c.skip_tex / nb, c.vt_missing / nb, c.global_conflicts / nb, g_stale, g_busy);
   log("[em] soup %llu MB, %u draws dropped by a soup resize; forward-pass emissive draws %.1f per build; triangles per "
       "light %u (last build); invalid soup triangles collapsed by the sanitize pass %.1f per build; material constants "
-      "not host-readable %.2f per build; draws without a core (no record) %.2f per build",
+      "not host-readable %.2f per build; draws without a core (no record) %.2f per build; draws of excluded families "
+      "(rt_em_fx_pulse=0: 304be1c7) %.2f per build",
       (unsigned long long)(g_soup.size >> 20), g_regrown, c.kinds[kMatForward] / nb, g_last_cluster,
-      double(w.collapsed) / nb, c.cb_unreadable / nb, c.skip_core / nb);
+      double(w.collapsed) / nb, c.cb_unreadable / nb, c.skip_core / nb, c.skip_excluded / nb);
   {
     std::string line;
     for (auto& [fs, gl] : w.glob) {

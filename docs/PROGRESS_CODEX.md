@@ -1,5 +1,11 @@
 # BG3RTX current progress — 2026-10-31
 
+## D-EM AF 304be1c7 (branch em-forge, offline, 2026-11-01)
+
+- Fragment shader re-derived: the record already matches it term for term (no missing intensity, layer or exposure). Cause of AF 0.36 not found offline.
+- Excluded: `rt_em_fx_pulse=0` (default; 1 captures it). Counter on the `[em] soup` line. rt_emissive stays 0. Tests: policy 9b pins the record; core test covers both values. No ABI or shader change.
+- READY_FOR_LIVE: `tools/live_batches/em_forge/` (one AF run, about 5 min; dry run passes). Details: TRACK_D_EMISSIVE 13.22.
+
 ## Stage 0 closed (Claude, /goal, 2026-10-31 evening)
 
 - Done: consolidation (CONSOLIDATION.md), live batch cb1-cb7 + lean regression lr1-lr3: no regression vs pre-consolidation (same pass costs, same primary match). Real fps, focused, diagnostics off: camp 60 RT on / 93 off, inn ~71 / 89, forge ~100.

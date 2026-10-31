@@ -53,6 +53,8 @@ bool read_mapped(VkBuffer b, VkDeviceSize offset, void* dst, size_t n) {
   return false;
 }
 float cfg_float(const char* key, float fallback) { return std::strcmp(key, "rt_em_lava_heat") ? fallback : g_heat; }
+int g_fx_pulse = 0;   // rt_em_fx_pulse
+int cfg_int(const char* key, int fallback) { return std::strcmp(key, "rt_em_fx_pulse") ? fallback : g_fx_pulse; }
 
 // ---- the former layer path (layer/emissive.cpp at 9d94ff3), test-only copy ----
 namespace old {
@@ -112,6 +114,7 @@ struct DrawReader {
     return slot;
   }
   float lava_heat() { return cfg_float("rt_em_lava_heat", 0.5f); }
+  bool fx_pulse() { return cfg_int("rt_em_fx_pulse", 0) != 0; }   // (added with the 304be1c7 exclusion)
 };
 void make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDraw& d) {
   DrawReader rd{cmd, P, d};
@@ -281,6 +284,7 @@ std::vector<Family> families() {
 void random_state() {
   g_bind.clear();
   g_heat = rnd(4) ? 0.5f : rnd_float();
+  g_fx_pulse = int(rnd(2));
   const std::pair<uint32_t, uint32_t> cbs[] = {{1, 0}, {1, 1}, {0, 0}};
   for (auto [s, b] : cbs) {
     if (rnd(5) == 0) continue;
@@ -359,6 +363,7 @@ int main() {
   h.abi_version = BG3RTX_ABI_VERSION;
   h.query_binding = &query_binding;
   h.cfg_float = &cfg_float;
+  h.cfg_int = &cfg_int;
   h.read_bound = [](VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint64_t offset,
                     void* dst, size_t n) {
     // layer/hotreload.cpp host_read_bound (the former emissive.cpp read_bound).
@@ -375,9 +380,11 @@ int main() {
   core.em_calib_apply = &core_em_calib_apply;
 
   const std::vector<Family> fams = families();
-  // 1. Every family with everything readable and bound.
+  // 1. Every family with everything readable and bound (304be1c7 excluded and captured).
+  for (int fx = 0; fx < 2; ++fx)
   for (const Family& f : fams) {
     ++g_case;
+    g_fx_pulse = fx;
     g_bind.clear();
     std::vector<float> m(64);
     for (int i = 0; i < 64; ++i) m[i] = 0.25f * float(i + 1);
@@ -405,10 +412,10 @@ int main() {
       compare(&core, v, rnd(), 1 + int(rnd(3)));
       ++per_family;
     }
-  // The fuzz reached every mode, every record flag but Calibrated (the build's), shared
+  // The fuzz reached every mode, every record flag but Calibrated (the build's; Excluded included), shared
   // and conflicting luminance slots.
   std::printf("coverage: modes %x flags %x glob %u conflicts %u\n", g_seen_modes, g_seen_flags, g_seen_glob, g_seen_conflicts);
-  CHECK(g_seen_modes == 0xFu && g_seen_flags == 0x3Fu && g_seen_glob > 1000 && g_seen_conflicts > 100);
+  CHECK(g_seen_modes == 0xFu && g_seen_flags == 0xBFu && g_seen_glob > 1000 && g_seen_conflicts > 100);
   // 3. Calibration through the core entries equals em:: directly.
   for (int it = 0; it < 20000; ++it) {
     ++g_case;
