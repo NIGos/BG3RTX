@@ -99,6 +99,15 @@ and status: DESIGN_SOTA_NEXT.md 2.9 (`core/sharc.cpp`, `shaders/gi/sharc_*.hlsl`
 
 ## Qualified hidden-hit direct bounce (`gi_hit_direct=0`, 2026-10-31)
 
+R2 key-on images are **rejected**: visible new dark stippling despite positive GI
+counters. The original dedicated shader was mistakenly dispatched through the
+contracted D-LS set0 layout/writes, missing GI output/history/MV bindings and the
+SHaRC/rebase camera. A source-only fix supplies one typed GI/native-light contract
+for both layout creation and pushed writes (19 descriptors, 20 with physical Hair).
+Actual compiled SPIR-V descriptor types/counts/push range are checked against it.
+The key stays off pending a new authorized image A/B; compilation and positive
+radiance counters alone do not qualify image quality.
+
 Experimental and off in every preset. Requires native-material startup,
 `gi_rt=1` and `gi_rt_fallback=0`. Successful screen and SHaRC hits keep priority.
 A qualified fresh native VT hit may replace only the zero-radiance fallback with

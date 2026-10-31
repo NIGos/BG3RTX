@@ -1,0 +1,220 @@
+{
+  "scope": "CPU proof against actual retained production SPIR-V; HLSL unchanged",
+  "modules": 48,
+  "returncode": 0,
+  "checks_output": "PASS 1294597 GI host/interface checks",
+  "files": [
+    {
+      "file": "gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "1346ab7441f0277826e31fe72a70b973be7ac7f58a9c878fc9e55454ca9a67c3"
+    },
+    {
+      "file": "gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "612bd2310275baa021a84931f2f29af69befa1b78c2bb99c1f7011842b04b71e"
+    },
+    {
+      "file": "gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "0d2a5c09aeb7b0636e2ee5b729cc5c58af9fe053ee445383fc99a77a6bc2cef9"
+    },
+    {
+      "file": "gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "a9d48b3a2ef1d51829b022105858cb76ff4d54242d34513eda3257413d1c30f3"
+    },
+    {
+      "file": "gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "91ea85d8106e62e7f9182301bca9c5190bbd640c2202f5cad6e742ffac0fe955"
+    },
+    {
+      "file": "gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "eab8e73a48e5431647663e27fdce884af5d7e87c6671aeb283a6cd177d240a17"
+    },
+    {
+      "file": "gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "10486220449eaa3b85dd75b8267e5fcfcc2e4ba7a7a707c717771ed5c90d7c4f"
+    },
+    {
+      "file": "gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "9647d5e7d4b40fdbb74947927c62e7d70867589362743c47c743905eb4d56337"
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "97d9ee502cd68803504321c46c8e12d5ab80d1a7d08037bfbaa38316a4b7b977"
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "6ac8e7deab5773b9e2824b475c6a266a959f0c3f1cc15e474242a76a7b4421c7"
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "141095f9b506cdbc8a4ca038609b41a1adc6ce4117a35a458ce634f2307ec2f0"
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "7dd993d41cc1c54fa6282c9aa56880c48334f4c7454e41e370adf6259cab01c8"
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "eb8b8ab7fb02b1f2e0c8d4f1c8bc1e4fbfbed475973de89ea263ba4829db5e13"
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "405e785b059f8feb81fa516970f707fdd507fb0d0128b5d0aeb4901ab12d3080"
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "54f44892c6baeba869fe4c83628c736807c0dfaec2c021bb75941396f4161f86"
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "674b92b714c13fc5596c17470f4f92997d181d5830124c04a325af50620d08bd"
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "aee74619ab52d9918cbe240ff473dccfff276f8d3206e729c6ab2ea8ac9d212a"
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "d287085cc77809e0bb2b505ba3e23bf748ddda69787f35349fa1a22fbe2430b4"
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "a0b9882f1da02682e2638b10e9be7a8c204200682e230e92cf5fc2f1d5305ed3"
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "42b0366376c64e735b9e4436417c901c0f09645b6b1e77e99a36ab8d488e7739"
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "61bf03af6b2a81de14238ad608c434a1b9b3a5d8282c2d5b562f6bc674c18725"
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "1cd1f11f9058e0a0b97917236ed2c3542008874dcdf2d7f7078ac58722c1bf0f"
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "40d16590eb51659b7c07e5698bd8ea2f58711fe4f374f6ef834fe56289887f2c"
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "b945adbeceef161b199e25002225bf7d824e6b2bd612df87d9d04943c80c8586"
+    },
+    {
+      "file": "native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "a5fe8a0fb7cdef4ad977d83b1891d33f6002ae545985d11900235706a246e9eb"
+    },
+    {
+      "file": "native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "a18d405db70d3f95f7ce3498cb65829e1b684b48b779da972768265ab0c3eb53"
+    },
+    {
+      "file": "native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "9393c7a9f28a031901580a47136e7ba4915594a5e362293d6e7ede348230049e"
+    },
+    {
+      "file": "native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "fed6764c2d6decc3cdde96cf2830ecd499f73bd24e96f134772f7dd056d30bf7"
+    },
+    {
+      "file": "native_scalp_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "b1a3ddd64c2cde4c863451e65725509e7c1a86dc49c5a6cb210e2fdc974220e2"
+    },
+    {
+      "file": "native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "41171d9d8c56295e0dc16b796e67ad3b808e8895b3fde8b693f5066b7e96af66"
+    },
+    {
+      "file": "native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "4814d4e4d2ffd7b0214ef251ff940b6b839d15a2405f6f6dfb6bd5d477aca3c6"
+    },
+    {
+      "file": "native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "2db535ea5d4fbee292b4c60f0c2fad22a1b3282058cf5630cecf5757b4fbaf45"
+    },
+    {
+      "file": "omm_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "21c2931f8891147c943d308d036036fd04bf698b7e63d40258bba8520a8c68f9"
+    },
+    {
+      "file": "omm_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "96b8af3babaa6114acf89960eee3297868872b5eef7a14f1d2b055776dff4f6c"
+    },
+    {
+      "file": "omm_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "d3c787821ee518753427779fd65cb201b49b504ce69144215c12ffa469ce7d6a"
+    },
+    {
+      "file": "omm_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "d5d4b4642aef842b9b138148853d1c7861f1f8035001d2a97b1563a733dfc77b"
+    },
+    {
+      "file": "omm_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "9618efa6fc0e0319e4b6e1682209eb2dd3b856a4520fc11b0b55c64126f1a8ec"
+    },
+    {
+      "file": "omm_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "fdbc6cbca6d1eca0cce4a2791e214eef4e53932bdf99744e1c6783fa6cff7402"
+    },
+    {
+      "file": "omm_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "d1ed9021678938624654d409e80e3d1b438f1086c82edd8b08969e1f7b5ad55a"
+    },
+    {
+      "file": "omm_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "6c18ecfcfe7117b75b3e23be022e3e0e922768c420e23adf17fe86d2f99c08b8"
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "b5ea899cc14590f2fa212d962a8b5406c1fedc37f8316c042503e97d76b69b35"
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "b62194045c87166242d2637a6543acee680acee67ea2b9087ad3fafda4d25515"
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "acbeda9995e85018bd76c62fe487e12a7a73842830c912a4feb285cea87d9dfd"
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "1143c544a018894347dc45dc9676c21fce21bf91d2c17ad0060dbebb584f3a82"
+    },
+    {
+      "file": "omm_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "de6c3dc3c0856cb00602ab3f64180ed7f9287d8fe100eb9e1997e8a038ae8d54"
+    },
+    {
+      "file": "omm_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "78f72b592d8f1d2185ce75230231cba0c7d4395cc2fdf599d7d81e3557e2260b"
+    },
+    {
+      "file": "omm_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "sha256": "1b964e2bc1ca8fb55b388edc951fb579fdebdf1c3d4cb06fad4a85b26859e5a0"
+    },
+    {
+      "file": "omm_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "sha256": "1ff0fbdc63f1667da3972410537d233690e424df28cbc576ed1baca0cb1daa4f"
+    }
+  ],
+  "layout_write_contract": "Same typed shared contract enumerates create-layout bindings and runtime pushed writes;19 descriptors without physical Hair,20 with physical Hair; set0 camera48 always retained.",
+  "defect": "Previous D-LS filter omitted GI8/11/13/17 and SHaRC/rebase48; positive counter alone did not prove defined output.",
+  "live_status": "Default-off; source fix still needs new authorized static image A/B.",
+  "other_sets": "Actual statically used sets restricted to0/1/4; material arrays/types and optional SHaRC descriptor types checked; set0 derives from shared host layout/write contract",
+  "review": "Independent scoped source review clear for dedicated layout, gather, exact tuple/lifetime and fallback; live quality still requires revalidation",
+  "compiler_gate_regression_cases": [
+    {
+      "case": "checker_available",
+      "exitcode": 0
+    },
+    {
+      "case": "checker_absent",
+      "exitcode": 0
+    },
+    {
+      "case": "missing_actual_binding",
+      "exitcode": 1
+    }
+  ],
+  "shader_changes": "none; all48 retained modules match unchanged HLSL since4e24157. Existing48ordinary byte-identity evidence remains applicable."
+}
