@@ -30,6 +30,29 @@ QUALITY Q14; TRACK_D_ALPHA_GI 7.1), so the TLAS holds a wall that the raster sho
 the inn keeps such occluders in view. Open scenes have few, hence ~97% elsewhere. A LOD cross-fade would give
 small in-front distances and a cut-away wall large ones; the next test separates the two.
 
+## The mechanism, from the shader dump (2026-10-31)
+- It is not a screen-door dither. 94 depth-prepass fragment shaders (46 of them also in `alpha_fs.txt`) cut
+  with a world-space capsule: `if (flag == 1.0) f = min(clamp(max(0.5 n + d(P, m4->m0), 0) / m1),
+  clamp(max(0.5 n + d(P, m4->m2), 0) / m3))`, `n` an edge noise in [-1, 1], `discard if alpha * f < cut`
+  (cut 1e-4 to 1.0). The capsule is the frame UBO at set 0 binding 6; `flag` is a per-draw float in a set 1
+  UBO at a shader-specific offset (`scripts/camera_fade_table.py` -> `shaders/rt/camera_fade_fs.txt`).
+- The IGN + 8-step temporal dither in other prepass shaders (`52.98 * fract(dot(...))`) is a distance (draw
+  range) fade, not the camera cut.
+- User decision: the cut is for the camera only. Faded walls keep occluding in every RT effect (the game's
+  lighting does not change when they dissolve either). So the TLAS is unchanged; only the measurement changes.
+
+## rt_primary_fade_class (diagnostics only, layer + core)
+- With `rt_primary_epoch=1`, `rt_bvh_split=1`, alpha on: the layer reads each fade shader's flag at capture,
+  marks enabled draws in InstInfo (bit 14) and stores the capsule in the scene stamp (bytes 192..243).
+  `gi/pan_primary_fade.hlsl` counts hits on marked draws; in front of the raster and within `d < r + 0.5` of a
+  segment (the largest region the game can cut) is the class "faded occluder (expected)".
+- Logs: `[camera fade]` every 300 captures (fade-shader draws, cut enabled, triangles, marked TLAS instances,
+  the last capsule) and `rt fade class` with each 120-frame stats window (match, in front, behind and miss with
+  the faded occluders excluded; marked-draw fronts outside the envelope stay mismatches).
+- Key off: all 704 existing SPIR-V modules byte-identical; capture, TLAS and InstInfo unchanged.
+- Unverified until live: that the capsule is in the same world frame as the view UBO's m6 (the FS adds m6 to
+  the camera-relative position; the check adds the trace camera). Which end is the camera does not matter.
+
 ## Next test (one launch, inn, about 3 min, about 150 MB)
 Repeat the p11/p12 rotation pair (wait 1), then hold the p13 view: 15 s of rt_stats + epoch, one trace with
 `rt_debug=8` (tlas_front QA: log2 distance and opaque/alpha flag), one with `rt_primary_identity=1` (instance id

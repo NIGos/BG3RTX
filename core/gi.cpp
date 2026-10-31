@@ -945,7 +945,8 @@ constexpr uint32_t kStatsRing = 8;
 // light list / of set 1 out of range, and rays not traced because their origin,
 // direction or extent was invalid (NaN, Inf, zero direction); logged as "[core] guard:".
 // [121] loop caps hit: a froxel list over 1024 entries or a ray with over 4096 candidates.
-// [122..127] unused (the D-LS exact-k counters, ls_k removed 2026-10-31).
+// [122..126] rt_primary_fade_class (gi/pan_primary_fade.hlsl): hits on camera-fade draws, in front
+// inside / outside the cut envelope, inside but not in front, frames with a capsule. [127] unused.
 // [128..133] ray queries aborted by the candidate cap with their answer unknown, per pass
 // (rt_common.hlsli kStatUnknown + g_rt_pass): other (origins, debug), sun, D-LS, D-RF, RT AO,
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
@@ -1114,6 +1115,17 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_stats_n, alpha_test ? "on" : "off", 100.0 * t[1] / px, 100.0 * t[2] / px, 100.0 * t[5] / px,
               100.0 * t[6] / px, 100.0 * t[7] / px, 100.0 * t[3] / px, 100.0 * t[13] / px, 100.0 * t[14] / px,
               100.0 * t[4] / px);
+  }
+  if (t[0] && t[126]) {   // gi/pan_primary_fade.hlsl (rt_primary_fade_class): diagnostics only
+    // A TLAS hit in front of the raster on a draw whose camera-fade cut is enabled, inside the
+    // capsule's cut envelope, is the wall the game cut for the camera only: a separate class.
+    const double px = double(t[0]), rest = double(t[0] > t[123] ? t[0] - t[123] : 1);
+    host->log("rt fade class (%u frames, capsule in %llu): camera-fade draws hit by %.3f%% of px; in front %.3f%% "
+              "inside the cut envelope (faded occluder, expected), %.3f%% outside; inside the envelope but not in "
+              "front %.3f%%; excluding faded occluders: primary match %.3f%%, in front %.3f%%, behind %.3f%%, miss %.3f%%",
+              g_stats_n, (unsigned long long)t[126], 100.0 * t[122] / px, 100.0 * t[123] / px, 100.0 * t[124] / px,
+              100.0 * t[125] / px, 100.0 * t[1] / rest, 100.0 * (t[2] - (std::min)(t[2], t[123])) / rest,
+              100.0 * t[3] / rest, 100.0 * t[4] / rest);
   }
   if (g_epoch_motion.frames) {
     constexpr double to_deg = 57.29577951308232;
@@ -1843,8 +1855,10 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // Warmup and actual primary dispatch share one Pipe/variant cache slot.
   // Select once so identity/epoch preparation cannot replace it with base
   // every frame and force two pipeline creations at an unchanged generation.
+  // rt_primary_fade_class (with rt_primary_epoch): the epoch check plus the camera-fade class.
   const char* primary_shader=host->cfg_int("rt_primary_identity",0)?"gi/pan_primary_identity.hlsl":
-                             host->cfg_int("rt_primary_epoch",0)?"gi/pan_primary_epoch.hlsl":"gi/pan_primary.hlsl";
+                             !host->cfg_int("rt_primary_epoch",0)?"gi/pan_primary.hlsl":
+                             host->cfg_int("rt_primary_fade_class",0)?"gi/pan_primary_fade.hlsl":"gi/pan_primary_epoch.hlsl";
   if (host->cfg_int("pan_prepare", 0) && g_rt_layout) {
     refresh(g_pan_primary, primary_shader, g_rt_layout);
     if (g_ls_layout) refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout);
