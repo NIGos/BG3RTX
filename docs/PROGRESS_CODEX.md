@@ -1,8 +1,15 @@
 # BG3RTX progress
 
-Main integration is running through merge-green at frozen candidate e660cf8.
-Build and 60 CTests pass; full shader check and QA/commit are pending. No game
-launch, installation or user-profile change. The user has not tested these fixes.
+Main efc27e7 is merged through merge-green and pushed: both DLLs/launcher,
+60/60 CTests, 1232/1232 runtime shader files and QA pass. Includes the receiver
+guard, alpha spill, TileBlend camera coverage and STI materials. All experimental
+defaults remain OFF. No game launch, installation or user-profile change.
+The user has not tested these fixes; screenshot causality remains unproven.
+
+Root also includes the reviewed current-Sun-only shadow recipe (2e01c3c/92f9995),
+not yet in main: 28 used native bytes, exact two-view coverage, unchanged camera/
+legacy lookup. Host links and five combined CTests pass. No HLSL/layout/ABI change.
+Legacy material-aware bridge and a bounded two-texture GPU test are in progress.
 
 ## Preserve alpha semantics on partition overflow - offline candidate, 2026-10-31
 
