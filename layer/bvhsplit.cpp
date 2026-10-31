@@ -496,7 +496,7 @@ enum JobKind : uint8_t { kJobExtract, kJobCheck, kJobAudit };
 // again under the same key (its buffer rewritten) is another mesh: an old
 // batch's compacted size must not size the new one's compaction (a copy into a
 // too small range overwrites the neighbouring BLAS in the chunk).
-struct Job { uint64_t key, gen; uint32_t status; JobKind kind; bool cross_instance; };
+struct Job { uint64_t key, gen; uint32_t status; JobKind kind; bool cross_instance; bool moving; };   // moving: camera moved this build
 struct CompactRead { uint64_t key, gen; uint32_t slot; };
 // A compaction copy: the mesh switches to `c` only once the batch's done word shows
 // the copy executed (a dropped command buffer never wrote it).
@@ -569,6 +569,10 @@ struct Stats {
   uint64_t not_inst_pattern = 0, not_inst_stream = 0, not_inst_count = 0;
   uint64_t fix_applied = 0, fix_late = 0, fix_bad = 0, fix_stale = 0;
   float err_max_ok = 0;
+  // Audits recorded while the camera moved: a cached mesh's TLAS matrices (read at submit)
+  // against the same frame's raster capture of that draw (docs/INN_ROTATION_MATCH.md).
+  uint64_t audits_moving_ok = 0, audits_moving_failed = 0;
+  float err_max_moving = 0;
 };
 Stats g_st;
 std::mutex g_st_mu;   // fixup counters (submit thread)
@@ -1687,7 +1691,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       dd->vk.CmdPushConstants(cmd, g_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
       dd->vk.CmdDispatch(cmd, groups, 1, 1);
       auto mi = g_meshes.find(e.key);
-      batch.jobs.push_back({e.key, mi != g_meshes.end() ? mi->second.gen : 0, e.status, e.kind, e.matn != kNone});
+      batch.jobs.push_back({e.key, mi != g_meshes.end() ? mi->second.gen : 0, e.status, e.kind, e.matn != kNone, moving});
     }
     barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kAS | kXfer, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR |
                                                                  VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -2527,6 +2531,10 @@ void bvh_on_present() {
           else m.state = kReady, ++g_st.ready, ++g_st.checks_ok;
           break;
         case kJobAudit:
+          if (j.moving && invalid == 0) {
+            ++(ok ? g_st.audits_moving_ok : g_st.audits_moving_failed);
+            if (std::isfinite(err)) g_st.err_max_moving = (std::max)(g_st.err_max_moving, err);
+          }
           if (!ok) {
             log("[bvh] WARNING audit failed for a cached mesh (%u triangles, error %.3g x tolerance, %u invalid): evicted",
                 m.tris, err, invalid);
@@ -2636,6 +2644,10 @@ void bvh_on_present() {
       "between record and submit %llu; recorded but never submitted %llu",
       (unsigned long long)s.fix_applied, (unsigned long long)s.fix_bad, (unsigned long long)s.fix_late,
       (unsigned long long)s.fix_stale);
+  if (s.audits_moving_ok + s.audits_moving_failed)
+    log("[bvh] audits while the camera moved: %llu ok, %llu failed, max error %.3f x tolerance "
+        "(cached instance matrices at submit against the same frame's raster capture)",
+        (unsigned long long)s.audits_moving_ok, (unsigned long long)s.audits_moving_failed, s.err_max_moving);
 }
 
 }  // namespace bg3
