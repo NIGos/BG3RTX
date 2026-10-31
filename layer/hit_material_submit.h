@@ -8,8 +8,8 @@ namespace bg3::native_hit {
 bool recording_needs_submit_promotion(VkCommandBuffer);
 // Capture/pin owner IDs BEFORE the real submit, since a legal completed/reset
 // command may have a different recording by the time that call returns.
-struct PreparedSubmission {std::vector<uint64_t> owners;};
-PreparedSubmission before_submit(std::span<const VkCommandBuffer>);
+struct PreparedSubmission {std::vector<uint64_t> owners;std::vector<uint64_t> queries;};
+PreparedSubmission before_submit(VkQueue,std::span<const VkCommandBuffer>);
 // Only actual successful submits stamp completion-fence frame ownership.
 // Failure unpins and leaves the original recording pending/retryable.
 void after_submit(const PreparedSubmission&,VkQueue,bool success);
