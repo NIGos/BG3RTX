@@ -6,8 +6,9 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main remains 92183e7 ABI 18 with user planning docs; preserve them. Development
-is codex/omm-bake ABI 19. Both DLLs build; 42/42 CTests. OMM is wired offline,
+Main f1402ec ABI 19 is merged via merge-green and pushed with codex/omm-bake.
+Both DLLs rebuilt; 42/42 CTests, 415/415 runtime shaders and QA passed. Related
+user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
 
@@ -21,8 +22,10 @@ NOT yet checked the capacity update. Main code/binaries/saves untouched.
 Next concrete fix: virtual Hair primary hit vs physical card secondary-origin
 self-hit. Dedicated worker owns a default-off auxiliary-image candidate; preserve
 virtual primary/history depth and ordinary shader byte identity. No live proof yet.
-Darker/dithered Hair remains open. Optional small cascade 160/587 burst diagnostic
-supports, but does not delay, the already-demonstrated capacity correction.
+Darker/dithered Hair remains open. Optional R5 same-run cascade 160/587 supports
+the fix: rotating primary 95.930 -> 97.493%, high-budget static 97.472%, FG healthy.
+Flash counts remain UNKNOWN: first final was missing. Producer/reader are now
+fixed to retain 16 complete frames after explicit warmup; live rerun pending.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
 module-independent SHA256 are fixed and tested through actual simulated runner.
@@ -30,7 +33,7 @@ M2 actual mesh/construction/material exports and shared CPU/HLSL BSDF remain
 bounded offline increments, not room closure/world runtime/PT qualification.
 No Ponytail. Never touch saves/backups/tags, force-push, clean junction trees or
 hold results.md open. Read DISK_HYGIENE.md before any cleanup; owner holds remain.
-Only merge-green integrates main; dirty main still blocks it.
+Only merge-green integrates main; the prior tracked-doc blocker is resolved.
 
 ## Current checkout and confirmed UI correction
 

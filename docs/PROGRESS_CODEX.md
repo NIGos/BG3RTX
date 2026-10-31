@@ -1,5 +1,33 @@
 # BG3RTX progress
 
+## Consolidated on main f1402ec; scoped capacity fix kept - 2026-10-31
+
+Merged only through merge-green and pushed main plus codex/omm-bake. ABI 18 -> 19;
+both matching DLLs rebuilt. Required checks passed: 42/42 CTests, 415/415 runtime
+compute shaders and QA detectors. New experimental feature controls remain OFF
+in presets. The installed Desktop Hair/Scalp trial stays at verified 859b879 with
+explicit camera 1408 MiB/cascade 587 MiB; its original fallback is retained.
+
+Optional same-run Test1 cascade comparison R5 supports the fix: rotation primary
+match 95.930% at 160 MiB -> 97.493% at 587 MiB, near static 97.472% at 587 MiB.
+FG was healthy on every captured frame, presentation about 42 fps; settled cascade
+overflow was zero at 587. Keep the demonstrated correction, without demanding an
+unrelated global 99% threshold. User witnessing is not required for advancement.
+
+R5 flash counts/contacts are UNKNOWN: its old producer missed the first final
+image, and the reader rejected a legitimate separate tonemap command recording.
+The small consolidation now explicitly omits one warmup and validates 16 complete
+retained frames; mixed lighting records/missing finals still fail. Host build,
+21 Python checks and epoch regression pass; the corrected capture path has not
+yet had a live rerun. No false zero-flash claim and no large repeat matrix.
+Evidence: omm-bake/captures/vegetation-regression-20261031/r5/analysis/summary.md.
+
+NOT YET TESTED BY USER: capacity update and this integrated program base. Original
+Hair/Scalp trial was user-tested with improved faces, darker/dithered hair and
+vegetation regression. Physical Hair secondary origins remain in isolated offline
+development, not installed. OMM/current Sun remain unqualified and OFF in the trial.
+
+
 ## Hair/Scalp capacity correction installed; user review pending - 2026-10-31
 
 The existing Desktop shortcut BG3RTX - Hair Scalp now selects isolated candidate
