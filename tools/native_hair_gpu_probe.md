@@ -49,3 +49,50 @@ under `captures/tileset-windowless-probe`. The inherited summary's bounds flag
 was corrected after this run, with no GPU behavior change or second invocation.
 
 Uniform vertex COLOR exercises the production interpolation expression, but is not a varying-COLOR oracle. Held pool reads are exercised at stride 88. Native graphics XFB execution, game capture, anisotropic 16 filtering precision and raster derivative equivalence are not certified by this synthetic fixture.
+
+## Optional material packet mode
+
+The same executable now accepts:
+
+```text
+native_hair_gpu_probe.exe bounds.spv material.spv material_rebase.spv --material gather.spv join.spv
+```
+
+Compile the existing probe shader with `NATIVE_MATERIAL_PROBE=1` (and additionally
+`RT_SCENE_REBASE=1` for its second query module). The final two modules are the
+unchanged production `rt/hit_material_tileset_gather.hlsl` and
+`rt/hit_material_join.hlsl`. The bounds pipeline is created but not dispatched.
+No production source, descriptor layout, setting or public ABI is changed.
+
+Material mode adds only its private bindings 12/13/14/15. Nine distinct 1-pixel
+RGBA32F 2D views provide three normal, three albedo and three physical samples;
+these views select separate layers of one tiny image. Actual sampler 15 slots
+provide contrasting repeat and opaque-white border behavior. Production scalar
+gather and join dispatches assemble the query-owned packet before an actual
+`rt_closest_hit` result enters the production `rt_hit_material` decoder. Declared
+synthetic 80-byte source/deferred vertex buffers supply clip, UV, COLOR and NBT;
+this mode does not perform native graphics capture or invoke the host producer.
+The source-coverage texture is separately declared opaque to isolate material
+sampling; host Green-view identity validation is not exercised.
+
+One authorized windowless invocation on RTX 5090 passed all 14 cases in 1.217 s
+wall time, with zero validation errors through destruction. Green/Red/Base
+albedo, roughness, metalness, reflectance, frame-normal and channel/family checks
+passed. Green priority, interpolated COLOR and actual border-sampler behavior
+passed. Clip/UV/COLOR mismatches returned status 4; zero publication returned
+status 1; invalid scalar and wrong snapshot identity returned status 3. Rejected
+publication/scalar/identity packets remained unjoined; clip/UV/COLOR packets
+were rejected by the per-hit proof. Geometry hits remained at distance 3. This is
+GPU packet/decoder evidence, not native asset/view provenance, host recording
+ownership, G-buffer equality, in-game image quality, a performance benchmark or
+a four-query material pass. Rebase uses zero origins and is not a nonzero
+coordinate-conversion certificate. Existing Hair and tileset query modules keep
+all four ordinary/rebase shader identities.
+
+Raw evidence is retained at `captures/native-hit-material-gpu-20261031/`.
+The raw inherited footer incorrectly printed `production_four_queries=1` for
+material mode: only `rt_closest_hit` ran. That log-only footer was corrected and
+the executable rebuilt without another GPU invocation. Versioned JSON records
+both tested and rebuilt binary hashes, the exact fields, module hashes and this
+exclusion. The tested executable remains beside the raw run. See
+`docs/evidence/native-hit-material-windowless-gpu-20261031.json`.

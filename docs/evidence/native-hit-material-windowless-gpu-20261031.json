@@ -1,0 +1,241 @@
+{
+  "exit": 0,
+  "presentation": false,
+  "elapsed_seconds": 1.2169581,
+  "window": false,
+  "implicit_layers": "disabled",
+  "cases_planned": 14,
+  "priority": "BelowNormal",
+  "pid": 25140,
+  "tested_binary_sha256": "ed2ca385079b7a168f2f9b104cd55d304ae08c5da6b316e44d315248f770dbbe",
+  "tested_cpp_sha256": "65819b3a0d8c6d0a12f228cc0b7fc98fb5a99c7d120af168110715102323179d",
+  "query_shader_sha256": "5e27c801334409f9dc87ee62d6e6d91ee499cac946f881bee7ddb5ab1ec83549",
+  "spv_sha256": {
+    "bounds.spv": "6cd0808800e616eefe718166af73a0f46a3ffe965325c23d5fc2620cefd451c5",
+    "gather.spv": "68b1a8e524566e652f4a6ad169cf6b39f4921bce68824479a932853d3cd97b66",
+    "join.spv": "5c8f189b432fd3576ce38051e89a1c89cd6b9f1bfffa50b7f059f0b3c04fa634",
+    "query-rebase.spv": "263a578c026e9726000062583705ae7d98b35b77b509ce9da1a21b8f6dde9f73",
+    "query.spv": "70ba507fb518216291cac4d15469e233d43776aec80a836bae6211469c33de05"
+  },
+  "raw_stdout_sha256": "889a54037c2e1db3d8b1310846922a9e4f58aef050352cd2c324de44222d52d9",
+  "raw_stderr_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+  "cases": [
+    {
+      "material": "green",
+      "status": "0",
+      "family": "2",
+      "channel": "5",
+      "albedo": "0.2/0.3/0.4",
+      "rough": "0.2",
+      "metal": "0.1",
+      "reflect": "0.65",
+      "normal": "1/0/0",
+      "joined": "1"
+    },
+    {
+      "material": "red",
+      "status": "0",
+      "family": "2",
+      "channel": "5",
+      "albedo": "0.5/0.6/0.7",
+      "rough": "0.5",
+      "metal": "0.4",
+      "reflect": "0.65",
+      "normal": "0/0/1",
+      "joined": "1"
+    },
+    {
+      "material": "base",
+      "status": "0",
+      "family": "2",
+      "channel": "5",
+      "albedo": "0.8/0.9/1",
+      "rough": "0.8",
+      "metal": "0.7",
+      "reflect": "0.65",
+      "normal": "0/1/0",
+      "joined": "1"
+    },
+    {
+      "material": "green_priority",
+      "status": "0",
+      "family": "2",
+      "channel": "5",
+      "albedo": "0.2/0.3/0.4",
+      "rough": "0.2",
+      "metal": "0.1",
+      "reflect": "0.65",
+      "normal": "1/0/0",
+      "joined": "1"
+    },
+    {
+      "material": "interpolated_green",
+      "status": "0",
+      "family": "2",
+      "channel": "5",
+      "albedo": "0.2/0.3/0.4",
+      "rough": "0.2",
+      "metal": "0.1",
+      "reflect": "0.65",
+      "normal": "1/0/0",
+      "joined": "1"
+    },
+    {
+      "material": "repeat_outside",
+      "status": "0",
+      "family": "2",
+      "channel": "5",
+      "albedo": "0.2/0.3/0.4",
+      "rough": "0.2",
+      "metal": "0.1",
+      "reflect": "0.65",
+      "normal": "1/0/0",
+      "joined": "1"
+    },
+    {
+      "material": "native_border",
+      "status": "0",
+      "family": "2",
+      "channel": "5",
+      "albedo": "1/1/1",
+      "rough": "1",
+      "metal": "1",
+      "reflect": "0.65",
+      "normal": "0.5773503/-0.5773503/0.5773503",
+      "joined": "1"
+    },
+    {
+      "material": "rebase_zero_origin",
+      "status": "0",
+      "family": "2",
+      "channel": "5",
+      "albedo": "0.5/0.6/0.7",
+      "rough": "0.5",
+      "metal": "0.4",
+      "reflect": "0.65",
+      "normal": "0/0/1",
+      "joined": "1"
+    },
+    {
+      "material": "clip_mismatch",
+      "status": "4",
+      "family": "0",
+      "channel": "0",
+      "albedo": "0/0/0",
+      "rough": "0",
+      "metal": "0",
+      "reflect": "0",
+      "normal": "0/0/0",
+      "joined": "1"
+    },
+    {
+      "material": "uv_mismatch",
+      "status": "4",
+      "family": "0",
+      "channel": "0",
+      "albedo": "0/0/0",
+      "rough": "0",
+      "metal": "0",
+      "reflect": "0",
+      "normal": "0/0/0",
+      "joined": "1"
+    },
+    {
+      "material": "color_mismatch",
+      "status": "4",
+      "family": "0",
+      "channel": "0",
+      "albedo": "0/0/0",
+      "rough": "0",
+      "metal": "0",
+      "reflect": "0",
+      "normal": "0/0/0",
+      "joined": "1"
+    },
+    {
+      "material": "publication_zero",
+      "status": "1",
+      "family": "0",
+      "channel": "0",
+      "albedo": "0/0/0",
+      "rough": "0",
+      "metal": "0",
+      "reflect": "0",
+      "normal": "0/0/0",
+      "joined": "0"
+    },
+    {
+      "material": "invalid_scalar",
+      "status": "3",
+      "family": "0",
+      "channel": "0",
+      "albedo": "0/0/0",
+      "rough": "0",
+      "metal": "0",
+      "reflect": "0",
+      "normal": "0/0/0",
+      "joined": "0"
+    },
+    {
+      "material": "snapshot_identity",
+      "status": "3",
+      "family": "0",
+      "channel": "0",
+      "albedo": "0/0/0",
+      "rough": "0",
+      "metal": "0",
+      "reflect": "0",
+      "normal": "0/0/0",
+      "joined": "0"
+    }
+  ],
+  "device_line": "GPU=NVIDIA GeForce RTX 5090 driver=2604679168 implicit_layers=disabled validation=1 real_presentation=none",
+  "validation_errors": 0,
+  "actual_queries": [
+    "rt_closest_hit"
+  ],
+  "gpu_invocations": 1,
+  "scope": "Synthetic compute-only material family2 fields, production scalar gather/join and closest-hit decoder; not BG3, native graphics/XFB capture, image quality, performance, source/descriptor generation ledger or a four-query pass.",
+  "footer_discrepancy": "Raw inherited production_four_queries=1 is incorrect for --material; only rt_closest_hit runs. Source footer corrected after this run; no GPU rerun.",
+  "log_only_rebuilt_binary_sha256": "62a04ad57dcf924991779c1304933d8e11729a68d8bfc4156497fca83abf3373",
+  "log_only_rebuilt_cpp_sha256": "9c599940c8b07a8bafed18bcf39b003c8d80a1395463016bc87e5c2b9e3e80cc",
+  "rebuilt_binary_ran_on_gpu": false,
+  "ordinary_probe_shader_identity": [
+    {
+      "tileset": false,
+      "rebase": false,
+      "old_sha256": "8e3f6891b8bf0c0dd9bd174f9f59c05815f5e935b0c35363218af5a43d936c59",
+      "current_sha256": "8e3f6891b8bf0c0dd9bd174f9f59c05815f5e935b0c35363218af5a43d936c59",
+      "identical": true
+    },
+    {
+      "tileset": false,
+      "rebase": true,
+      "old_sha256": "66494e59d7bf97aca14e85b4b27512686efc6d20d61cd235e72391e4eaacd2af",
+      "current_sha256": "66494e59d7bf97aca14e85b4b27512686efc6d20d61cd235e72391e4eaacd2af",
+      "identical": true
+    },
+    {
+      "tileset": true,
+      "rebase": false,
+      "old_sha256": "456c5011927c83356362136d229e7393608e5bb62d5df9e44fac7c4e384cda1e",
+      "current_sha256": "456c5011927c83356362136d229e7393608e5bb62d5df9e44fac7c4e384cda1e",
+      "identical": true
+    },
+    {
+      "tileset": true,
+      "rebase": true,
+      "old_sha256": "cfce44fd55a7d3f0e5b861ff6249303fd31fb460e3ea76ef046148002c89ab2c",
+      "current_sha256": "cfce44fd55a7d3f0e5b861ff6249303fd31fb460e3ea76ef046148002c89ab2c",
+      "identical": true
+    }
+  ],
+  "exclusions": [
+    "No BG3 process launch, attachment, focus, input or presentation",
+    "No native graphics/XFB capture or host source/deferred ownership/view-identity join",
+    "Synthetic source coverage texture is separately opaque; nine material views exercise only material sampling",
+    "No native asset, G-buffer residual, full image-quality, GI/reflection energy or GPU pass-cost claim",
+    "Only rt_closest_hit query; rebase case uses zero origins",
+    "Log-only footer rebuild was not invoked on GPU"
+  ]
+}
