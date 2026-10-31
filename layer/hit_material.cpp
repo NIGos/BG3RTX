@@ -41,7 +41,7 @@ static_assert(offsetof(Row,pre)==8 && offsetof(Row,deferred)==12 && offsetof(Row
 static_assert(offsetof(Row,p0)==48 && offsetof(Row,t)==80 && offsetof(Row,parameters)==208);
 struct View {VkImageView view{};VkImage image{};VkImageLayout layout{};uint64_t id{};uint32_t image_id{};};
 struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};uint64_t vs{},fs{};bool opaque{};};
-struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;std::array<View,9> tileset_views{};};
+struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{},reflectance{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;std::array<View,9> tileset_views{};};
 struct Deferred {
  std::vector<Buffer> chunks;Buffer rows;uint64_t command{},recording{},frame{};VkBuffer camera{};VkDeviceSize camera_offset{},cursor{},total{};
  DrawJoin join;std::vector<Material> materials;std::vector<VkSampler> samplers;ResourceBudget resources;
@@ -258,7 +258,10 @@ bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* rec
   if(out.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(out.buffer);if(out.offset<=size)out.range=size-out.offset;}
   bool valid=queried[n] && out.buffer && out.range>=minimum && frozen;if(!valid)failed|=1u<<n;
  };
- buffer(0,1,0,recipe?pool::engine_bytes(*recipe):112u,material.engine);buffer(1,1,1,16,material.physical_ubo);buffer(2,0,12,128,material.tilesets);
+ // Reflectance mode of the pair (native_vt_surface.h): the 0.5 variants have no 1:1 binding.
+ const auto* vt=recipe?recipe:native_vt::recipe(state->fs);material.reflectance=vt?vt->reflectance:native_vt::ReflectanceUbo;
+ buffer(0,1,0,recipe?pool::engine_bytes(*recipe):112u,material.engine);buffer(2,0,12,128,material.tilesets);
+ if(material.reflectance!=native_vt::ReflectanceConstant)buffer(1,1,1,16,material.physical_ubo);else material.physical_ubo={};
  ViewFacts views[4]{};View* targets[4]={&material.table,&material.normal,&material.albedo,&material.physical};
  for(uint32_t i=0;i<4;++i)if(!view(cmd,3+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
  bool sampler_bound=omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,2,0,material.sampler);
@@ -324,6 +327,7 @@ void publish_word(Query& query,uint32_t value){
 // tracker/sampler currency checks (their own leaf locks).
 struct PoolMaterial {
  View table,normal,albedo,physical;omm::BoundSampler sampler;uint32_t engine[12]{},reflectance{};
+ const native_vt::Recipe* recipe{}; // the record's pair (offsets of engine[], reflectance mode)
  uint64_t checked{};bool current{}; // currency of the last check (once per frame per record)
  // Persistent across material refreshes: the pool mesh (from the BVH build) and its UV/basis.
  PoolMesh mesh{};pool::BasisTrack basis{};
@@ -380,6 +384,12 @@ void pool_log(uint64_t frame){
   (unsigned long long)frame,(unsigned long long)ranges,double(bytes)/1048576.0,double(pool::kBasisCapBytes)/1048576.0,(unsigned long long)ready,(unsigned long long)pending,(unsigned long long)failed,
   (unsigned long long)b.jobs,(unsigned long long)b.results[0],(unsigned long long)b.results[1],(unsigned long long)b.results[2],(unsigned long long)b.results[3],(unsigned long long)b.results[4],double(b.err_max),
   pool_slots.used(),nh_pool_rows,(unsigned long long)b.row_instances,(unsigned long long)b.rows,(unsigned long long)b.no_slot);
+ // Records and ready UV/basis per pool pair (FS): which variant the qualified share comes from.
+ char pairs[256];int k=0;
+ for(const auto& r:native_vt::recipes){if(!pool::pool_recipe(r.vs,r.fs) || k<0 || k>=int(sizeof pairs))continue;uint64_t records=0,with_basis=0;
+  pool_table.for_each([&](uint64_t,const auto& e){if(e.payload.recipe!=&r)return;++records;with_basis+=e.payload.basis.state==pool::Basis::Ready;});
+  k+=snprintf(pairs+k,sizeof pairs-k,"%sFS %08llx %llu/%llu",k?"; ":"",(unsigned long long)(r.fs>>32),(unsigned long long)records,(unsigned long long)with_basis);}
+ log("[hit material pool pairs] frame %llu records/ready UV-basis by pair (VS 2d2ac3c3): %s",(unsigned long long)frame,k>0?pairs:"none");
 }
 void pool_release_slot(PoolMaterial& m){if(m.basis.slot<nh_pool_rows)pool_slots.release(m.basis.slot);m.basis.slot=UINT32_MAX;}
 // Results of recorded captures (under pool_mutex, once per frame from the build's first lookup).
@@ -587,7 +597,10 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
   VkWriteDescriptorSet writes[4]{};for(uint32_t n=0;n<4;++n){writes[n]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=n<2?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[n].pBufferInfo=info+n;}
   const bool tileset=m.row.reserved==2;if(tileset && !compute_ready(false,true))continue;
   if(tileset){info[2]={p.rows.b,0,packet_rows};writes[2].pBufferInfo=info+2;}
-  uint32_t push[4]={16u+local*record_bytes,local,1,0};
+  // Reflectance 0.5 (FS 3da860be): no 1:1 UBO; binding 1 gets the engine UBO only to stay valid
+  // and hit_material_gather.hlsl stores the constant (push word 3 = 1).
+  const bool constant=m.reflectance==native_vt::ReflectanceConstant;if(constant)info[1]={m.engine.buffer,m.engine.offset,16};
+  uint32_t push[4]={16u+local*record_bytes,local,1,constant?1u:0u};
   dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,tileset?tileset_gather_pipeline:gather_pipeline);dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,gather_layout,0,4,writes);
   dd->vk.CmdPushConstants(cmd,gather_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,16,push);dd->vk.CmdDispatch(cmd,1,1,1);++captured;
  }
@@ -673,7 +686,10 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
    // statics, so it runs under the main mutex, never under pool_mutex.
    Material m{};bool ok;{std::lock_guard lock(mutex);ok=capture(cmd,m,recipe,&failures);}
    const uint32_t engine=pool::engine_bytes(*recipe);
-   if(ok && !(read_mapped(m.engine.buffer,m.engine.offset,payload.engine,engine) && read_mapped(m.physical_ubo.buffer,m.physical_ubo.offset,&payload.reflectance,4))){ok=false;failures|=1u<<10;}
+   const bool constant=recipe->reflectance==native_vt::ReflectanceConstant;const float half=0.5f;
+   if(ok && constant)std::memcpy(&payload.reflectance,&half,4); // FS 3df678c0: RT2.y is 0.5, no 1:1 UBO
+   if(ok && !(read_mapped(m.engine.buffer,m.engine.offset,payload.engine,engine) && (constant || read_mapped(m.physical_ubo.buffer,m.physical_ubo.offset,&payload.reflectance,4)))){ok=false;failures|=1u<<10;}
+   payload.recipe=recipe;
    o.status=ok?pool::Status::Qualified:pool::Status::Binding;
    if(ok){
     payload.table=m.table;payload.normal=m.normal;payload.albedo=m.albedo;payload.physical=m.physical;payload.sampler=m.sampler;
@@ -812,14 +828,15 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  if(compute_ready(false)){
   std::lock_guard pool(pool_mutex);
   if(pool_tilesets.frame==slot.frame)pool_table_binding=pool_tilesets.binding;
-  const auto* recipe=pool::pool_recipe(0x2d2ac3c38992b7f0ull,0x14678345c10aefbcull);
-  if(pool_table_binding.buffer && pool_table_binding.range>=128 && recipe)pool_table.for_each([&](uint64_t,auto& r){auto& m=r.payload;
-   if(m.basis.state!=pool::Basis::Ready || m.basis.slot>=nh_pool_rows || m.basis.gen!=m.mesh.gen || !m.mesh.basis_bytes ||
+  if(pool_table_binding.buffer && pool_table_binding.range>=128)pool_table.for_each([&](uint64_t,auto& r){auto& m=r.payload;const auto* recipe=m.recipe;
+   if(!recipe || m.basis.state!=pool::Basis::Ready || m.basis.slot>=nh_pool_rows || m.basis.gen!=m.mesh.gen || !m.mesh.basis_bytes ||
       r.seen.status!=pool::Status::Qualified || r.conflict || r.prev_conflict || !pool_current(m,frame_index()))return;
    Material x{};x.table=m.table;x.normal=m.normal;x.albedo=m.albedo;x.physical=m.physical;x.sampler=m.sampler;
    x.row.valid=m.basis.slot+1;x.row.triangles=m.mesh.tris;x.row.pre=uint32_t(m.mesh.pool_off);x.row.deferred=uint32_t(m.mesh.basis_off);
    x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=3;
    const uint32_t gen=uint32_t(m.mesh.gen);std::memcpy(&x.row.parameters[2],&gen,4);
+   // Row word 220: reflectance mode (rt_hit_material_pool: 2 mixes the normal layer's x).
+   std::memcpy(&x.row.parameters[3],&recipe->reflectance,4);
    std::array<uint32_t,12> e{};const uint32_t t=recipe->transform_offset/4u;
    for(uint32_t w=0;w<8;++w)e[w]=m.engine[t+w];e[8]=m.engine[recipe->tileset_index_offset/4u];e[9]=m.engine[recipe->channel_offset/4u];e[10]=m.reflectance;
    q.pool_rows.push_back(x);pool_engine.push_back(e);

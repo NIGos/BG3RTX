@@ -1,6 +1,8 @@
 // Pins the pool material record policy (common/native_hit_pool.h).
 #include "../common/native_hit_pool.h"
+#include "../common/native_hit_join.h"
 #include "../layer/spirv_xfb.h"
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -47,6 +49,34 @@ int main(int argc, char** argv) {
   CHECK(sti.transform_offset == 0 && sti.tileset_index_offset == 32 && sti.channel_offset == 36);
   CHECK(engine_bytes(sti) == 40);
   CHECK(engine_bytes(*bg3::native_vt::recipe(0x8995da1e4060f53bull)) == 108);
+  // Reflectance variants (audit of the dumped GLSL, PLAN_M4 "next families"): same VS, same
+  // engine UBO layout and sampling as their base FS; only RT2.y differs.
+  namespace vt = bg3::native_vt;
+  const auto* half = pool_recipe(0x2d2ac3c38992b7f0ull, 0x3df678c09f13ea60ull);
+  const auto* mixed = pool_recipe(0x2d2ac3c38992b7f0ull, 0x8165785442a20e57ull);
+  CHECK(half && mixed && half != &sti && mixed != &sti && half != mixed);
+  for (const auto* r : {half, mixed})
+    CHECK(r->transform_offset == sti.transform_offset && r->tileset_index_offset == sti.tileset_index_offset &&
+          r->channel_offset == sti.channel_offset && engine_bytes(*r) == 40);
+  CHECK(sti.reflectance == vt::ReflectanceUbo && half->reflectance == vt::ReflectanceConstant && mixed->reflectance == vt::ReflectanceNormalMix);
+  CHECK(pool_recipe(0xa618ddae00000000ull, 0x3df678c09f13ea60ull) == nullptr);
+  // The per-draw variant 3812bc98/3da860be: never a pool pair, an audited per-draw pair.
+  CHECK(pool_recipe(0x3812bc980438747full, 0x3da860bebbe9133bull) == nullptr);
+  CHECK(audited_static_family(0x3812bc980438747full, 0x3da860bebbe9133bull));
+  CHECK(audited_static_family(0x3812bc980438747full, 0x8995da1e4060f53bull));
+  CHECK(!audited_static_family(0x2d2ac3c38992b7f0ull, 0x3da860bebbe9133bull));
+  CHECK(!audited_static_family(0x3812bc980438747full, 0x14678345c10aefbcull));
+  const auto* per_draw = vt::recipe(0x3da860bebbe9133bull);
+  const auto* base = vt::recipe(0x8995da1e4060f53bull);
+  CHECK(per_draw && per_draw->reflectance == vt::ReflectanceConstant && per_draw->transform_offset == base->transform_offset &&
+        per_draw->tileset_index_offset == base->tileset_index_offset && per_draw->channel_offset == base->channel_offset);
+  // nv_reflectance: UBO value, constant 0.5, mix(0.5, n.x, p) (GLSL mix = a + (b - a) t).
+  using bg3::transport::nv_reflectance;
+  CHECK(nv_reflectance(vt::ReflectanceUbo, 0.25f, 0.9f) == 0.25f);
+  CHECK(nv_reflectance(vt::ReflectanceConstant, 0.25f, 0.9f) == 0.5f);
+  CHECK(nv_reflectance(vt::ReflectanceNormalMix, 0.f, 0.9f) == 0.5f);
+  CHECK(nv_reflectance(vt::ReflectanceNormalMix, 1.f, 0.9f) == 0.9f);
+  CHECK(std::fabs(nv_reflectance(vt::ReflectanceNormalMix, 0.25f, 0.9f) - 0.6f) < 1e-6f);
   // Pipeline rule: exact_material_pipeline without the XFB/basis/UV terms.
   MaterialPipelineFacts f;f.material_state=true;f.depth_test=1;f.color_mask=0xf73u;f.triangle_list=true;
   CHECK(pool_material_pipeline(f));

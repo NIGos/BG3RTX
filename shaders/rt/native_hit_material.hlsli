@@ -71,7 +71,8 @@ NativeLayer hit_material_tileset_layer(uint row,uint layer,float2 uv,float g,flo
 }
 #endif
 // Pool instance with a material row (native_hit_records.h nh_pool_meta, native_hit_pool.h): the
-// qualified STI record (pair 2d2ac3c3/14678345, same sampling recipe and FS frame as 8995) in the
+// qualified record (VS 2d2ac3c3 with FS 14678345, 3df678c0 or 81657854: the 8995 sampling recipe
+// and FS frame, they differ only in the reflectance term, row word 220) in the
 // query's pool region, its UV and object-space N/B/T in the mesh pool. The basis was extracted
 // from the G-buffer XFB of instance 0 after the positions matched M_0 * P within the mesh cache
 // tolerance (rt/mesh_extract_basis.hlsl); the row binds it to this mesh by pool base, triangle
@@ -103,7 +104,10 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  float g=footprint*sqrt(uvarea/area);float2 u=uv[0]+d1*hit.bary.x+d2*hit.bary.y;
  NativeLayer al=hit_material_layer(row,u,g,h1.y,h2.y,h1.z,0),nl=hit_material_layer(row,u,g,h1.y,h2.x,h1.z,1),pl=hit_material_layer(row,u,g,h1.y,h2.z,h1.z,2);
  if(!al.known || !nl.known || !pl.known)return hit_material_unknown(6);
- NvFields fields=nv_fields(al.value.rgb,nl.value.wzy,pl.value.xyz,asfloat(gHitRecords.Load(row+208u)));
+ // Row word 220: the record pair's reflectance mode (native_vt_fields.h nv_reflectance; 81657854
+ // mixes 0.5 with the normal layer's x by the UBO value; 3df678c0's 0.5 is already in word 208).
+ const float reflectance=nv_reflectance(gHitRecords.Load(row+220u),asfloat(gHitRecords.Load(row+208u)),nl.value.x);
+ NvFields fields=nv_fields(al.value.rgb,nl.value.wzy,pl.value.xyz,reflectance);
  if(fields.status!=0)return hit_material_unknown(7);
  float3 basis[3];
  [unroll]for(uint component=0;component<3;++component){

@@ -19,7 +19,9 @@ void main(){
   if(any(asuint(engine.v[4])!=rows.Load4(push.row+48u)) || any(asuint(engine.v[5])!=rows.Load4(push.row+64u)))return;
   [unroll]for(uint i=0;i<8;++i)if(any(tilesets.Load4(index*128u+i*16u)!=rows.Load4(push.row+80u+i*16u)))return;
  }
- float reflectance=physical.value.x;if(!isfinite(reflectance))return;
+ // reserved1 1: the pair's RT2.y is the constant 0.5 (FS 3da860be, native_vt_surface.h
+ // ReflectanceConstant); binding 1 is then a placeholder and is not read.
+ float reflectance=push.reserved1==1u?0.5:physical.value.x;if(!isfinite(reflectance))return;
  rows.Store(push.row+208u,asuint(reflectance));
  rows.Store(push.row+212u,engine.words.z&7u); // native material light channel, UBO104
  // Valid is published only after all exact execution-time reads/checks.
