@@ -554,3 +554,26 @@ states s4b4/s1b1/s0b7. Preserve format/view/swizzle/row pitch and same draw iden
 The 256x4 s1b3 is a curve LUT, not a second painted mask: native textureGather
 uses (normalY,0.25) and (normalizedHeight,0.75). Exact native derivatives/LOD
 remain a separate missing raster observable. No generic capture system is added.
+
+
+### Authored open-bay light candidates
+
+`python -m tools.assets.probe_foundry_lights --join-dir <existing captures>`
+reuses the existing light/world/template extractor for CTY_Main_A. The fixed cell
+bounds select seven authored support-sphere candidates out of 3886 world lights:
+five point and two box, no spot. All seven belong to the parent LowerCity level;
+full affine recomputation agrees exactly with the extractor positions for these
+instances. Raw placement/template/level chains, resource IDs, complete resolved
+fields, default provenance and all transforms remain in
+`captures/m2-foundry/cell-lights/evidence.json`. Archive Enabled is true for these
+seven, but runtime activation/state and native photometric parameters stay UNKNOWN.
+
+Five retained assetdb_join CSVs dated 2026-10-26 contain seven distinct historical
+name+position candidates, one for each placement. Decimal CSV rounding plus the
+existing FP32 affine evaluation enclosure separates two same-name lights without
+an arbitrary join tolerance. This is historical reconciliation evidence, not an
+S1 same-frame/native UUID/current activation certificate. Candidate selection
+retains the existing extractor point/spot radius and box half-diagonal+att_end
+policy; cone/OBB, generic nonuniform-transform/range completeness and native
+colour-temperature/exposure/cookie/occlusion/shadow behavior remain unqualified.
+No emissive surface is promoted into a runtime light and no radiance is guessed.
