@@ -1,0 +1,300 @@
+{
+  "baseline_frozen_provider": "177ef6e",
+  "abi": 21,
+  "gpu_executed": false,
+  "gpu_ms": null,
+  "cpu": {
+    "targeted_ctests_passed": 10,
+    "submit_order_publication_checks": 131,
+    "packet_join_orders": [
+      "source-first",
+      "deferred-first"
+    ],
+    "query_alpha_output": "typed distinct descriptor set; baseline tuple preserved"
+  },
+  "shaders": {
+    "files": [
+      "gi/cascade/rt_hit_direct.hlsl",
+      "gi/cascade/rt_hit_material.hlsl",
+      "gi/cascade_rebase/rt_hit_direct.hlsl",
+      "gi/cascade_rebase/rt_hit_material.hlsl",
+      "gi/rebase/rt_hit_direct.hlsl",
+      "gi/rebase/rt_hit_material.hlsl",
+      "gi/rt_hit_direct.hlsl",
+      "gi/rt_hit_material.hlsl",
+      "native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "native_scalp/gi/cascade/rt_hit_material.hlsl",
+      "native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "native_scalp/gi/cascade_rebase/rt_hit_material.hlsl",
+      "native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "native_scalp/gi/rebase/rt_hit_material.hlsl",
+      "native_scalp/gi/rt_hit_direct.hlsl",
+      "native_scalp/gi/rt_hit_material.hlsl",
+      "omm/gi/cascade/rt_hit_direct.hlsl",
+      "omm/gi/cascade/rt_hit_material.hlsl",
+      "omm/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "omm/gi/cascade_rebase/rt_hit_material.hlsl",
+      "omm/gi/rebase/rt_hit_direct.hlsl",
+      "omm/gi/rebase/rt_hit_material.hlsl",
+      "omm/gi/rt_hit_direct.hlsl",
+      "omm/gi/rt_hit_material.hlsl",
+      "omm/native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "omm/native_scalp/gi/cascade/rt_hit_material.hlsl",
+      "omm/native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "omm/native_scalp/gi/cascade_rebase/rt_hit_material.hlsl",
+      "omm/native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "omm/native_scalp/gi/rebase/rt_hit_material.hlsl",
+      "omm/native_scalp/gi/rt_hit_direct.hlsl",
+      "omm/native_scalp/gi/rt_hit_material.hlsl",
+      "rt/hit_material_gather.hlsl",
+      "rt/hit_material_join.hlsl"
+    ],
+    "failures": [],
+    "validation": [
+      {
+        "file": "gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "20510d0f0a856dd0e9841d8ee855b4867e8492a43280c6b9e12821adf06b23ed"
+      },
+      {
+        "file": "gi_cascade_rebase_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "6e4bd4da643349ebdc99209eff90730a8db3641bd212ccec0a915a085e3a2471"
+      },
+      {
+        "file": "gi_cascade_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "288ed5542804b94e1ccfc509a101886771bcaafafd8fd28964a1759c99ffb6e3"
+      },
+      {
+        "file": "gi_cascade_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "e11c0a7f8a8f92766e8faf3a8c71156a0f572895fff31919286174c749c7a9c9"
+      },
+      {
+        "file": "gi_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "75f3f072b46ca6c7787f397512a706c5b71ef200e7821fbc4038736376c8ed2e"
+      },
+      {
+        "file": "gi_rebase_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "0de830fedc15dbddf48688ed5fa15a503dd4165bc2472ec83e1e6fc2caaf36c8"
+      },
+      {
+        "file": "gi_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "1858b04916e51aaeb765bb22dc73206ddbb845ab0964a2228d3dcb7635ab4d21"
+      },
+      {
+        "file": "gi_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "7e163bb8eb9c31a1dc4c0c43329732c4cc283d1afb9156363b5e4806ebde9e10"
+      },
+      {
+        "file": "native_scalp_gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "0a6e85f41541343a42729361fce916ebc651e7652971babc1306985b49da208d"
+      },
+      {
+        "file": "native_scalp_gi_cascade_rebase_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "d74365b5691163c3dce4de1e86f43d977046939264067c5ae6825da31512b3e4"
+      },
+      {
+        "file": "native_scalp_gi_cascade_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "a3326caa8c73f323252823f6833afac67354579aafc19d641d6d0a2b6cbeb7c4"
+      },
+      {
+        "file": "native_scalp_gi_cascade_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "31be4db3caf2cdeb01e90eafc786ea3e9c0bfecf4c58afa0af2b4b2d275b6ead"
+      },
+      {
+        "file": "native_scalp_gi_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "4f2e135b2a12a116cc60177b94c4132e7df46929eb6299bd07df88a33bf56b1a"
+      },
+      {
+        "file": "native_scalp_gi_rebase_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "aa26dbe1f843865d95755b8476d2fb47aefdec1c228739afa05231c7fa7304be"
+      },
+      {
+        "file": "native_scalp_gi_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "e430f8a029d66fd10674519a50ae4fd83530aa0fc85a428e238c4386707ab2ea"
+      },
+      {
+        "file": "native_scalp_gi_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "999c590aee788006bf91614a5f9236d8b025a26c63c89c8419429cebb03bb353"
+      },
+      {
+        "file": "omm_gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "21f0bd972f8332c7f54296dd900d6812275669676354e5ba548ec1a6fef2dbd1"
+      },
+      {
+        "file": "omm_gi_cascade_rebase_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "932e88947d21e9f73db56e57267959384f51011fd6203ff279159f8406488bc8"
+      },
+      {
+        "file": "omm_gi_cascade_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "1b8c45551532187fcc7b15bc46065ddca7af7fb9b5e68e270624361cebba89e7"
+      },
+      {
+        "file": "omm_gi_cascade_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "22993764e3b8709c8724c73d727237b2039a83cf5c86e51c0af1174f2b7d9c21"
+      },
+      {
+        "file": "omm_gi_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "f7fa076ed182e1656214b84856d15d8b34e832f9d3bcdc643bce9d31be1c36bc"
+      },
+      {
+        "file": "omm_gi_rebase_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "d50f8cc27b948bc888c0987e1bcf469abd7e9d453b9135fd403a7bdbf831de5b"
+      },
+      {
+        "file": "omm_gi_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "1a9ca157c04ace2ebcbefa0d0f8046eef3e5640668acbbb5a785e7523d080803"
+      },
+      {
+        "file": "omm_gi_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "f5bb327903d50731fa4dbdb0d7883d84e6524ca32e77b4a4be929a05def1c751"
+      },
+      {
+        "file": "omm_native_scalp_gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "c5f002a6e6c353e99260939261428d29a81f5b9465ffa7ceb1cfc9e1939c67bd"
+      },
+      {
+        "file": "omm_native_scalp_gi_cascade_rebase_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "1a55641c832d25c56d9b0fe293384bb70ec00d3f6370ef8664f4d04de5f7b59a"
+      },
+      {
+        "file": "omm_native_scalp_gi_cascade_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "5a0260f74315d977c0e83a23572f46ba932c34000b21a6b7cdd8573a769133b9"
+      },
+      {
+        "file": "omm_native_scalp_gi_cascade_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "dafe1d442290c1121cded4a8ff4994f54facf3afc92c592c74d8133be57abcce"
+      },
+      {
+        "file": "omm_native_scalp_gi_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "1aa5d4e58aa808eddf4a4c2f294721024b4533a71d1ab570da12b5ad76041eb7"
+      },
+      {
+        "file": "omm_native_scalp_gi_rebase_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "e149018c33c3b518032d9a1b9716243d74ab09ae9b4503aedc71e7d2d0941f3e"
+      },
+      {
+        "file": "omm_native_scalp_gi_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "c32f8bebc8f342405462f6341f2be357f5c9c5683debcf89ebeb5c4af9dd9a9f"
+      },
+      {
+        "file": "omm_native_scalp_gi_rt_hit_material.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "88e130713b299509ada8ccb0a6386a88ab38f555c4ea9b603f7fe27bb2f3e42c"
+      },
+      {
+        "file": "rt_hit_material_gather.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "d51207a6e8f1a00afc751fa716b05827e2080194567d954748986bb902228c52"
+      },
+      {
+        "file": "rt_hit_material_join.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "b76444ee5d337786dfe26259351e4e8d2229131d994c6276538c0a4402bb498d"
+      }
+    ],
+    "scope": "CPU DXC and spirv-val only; no GPU"
+  },
+  "ordinary_parity": {
+    "pairs": [
+      {
+        "file": "gi/rt_reflections.hlsl",
+        "baseline177ef6e": "934614ea091231a5efddca365ad5aa1f22f3de7e7ce7384c780159f2aef7375c",
+        "current": "934614ea091231a5efddca365ad5aa1f22f3de7e7ce7384c780159f2aef7375c",
+        "identical": true
+      },
+      {
+        "file": "gi/rt_shadow.hlsl",
+        "baseline177ef6e": "01fb8eddcf26e3fa835275e7306ea486138aa408da48af2fe19eeaffb62e888b",
+        "current": "01fb8eddcf26e3fa835275e7306ea486138aa408da48af2fe19eeaffb62e888b",
+        "identical": true
+      },
+      {
+        "file": "gi/gi_trace_rt.hlsl",
+        "baseline177ef6e": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+        "current": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+        "identical": true
+      },
+      {
+        "file": "omm/native_scalp/gi/cascade_rebase/rt_reflections.hlsl",
+        "baseline177ef6e": "46ddf2bcad631d28ad6a13dc14454be5fc3f29aded92d19e6148ed382944b431",
+        "current": "46ddf2bcad631d28ad6a13dc14454be5fc3f29aded92d19e6148ed382944b431",
+        "identical": true
+      }
+    ],
+    "compile_failures": [],
+    "scope": "Actual CPU DXC byte parity, 2 workers; no GPU"
+  },
+  "review": "Independent packet/descriptor/owner/publication review clear; no actionable blocker.",
+  "source_sha256": {
+    "layer/hit_material.cpp": "fe8d23cbfbb254fff64ba531d405228c41192b33fde648652345ace5bdd6db5c",
+    "shaders/rt/hit_material_gather.hlsl": "48a9787731d41298105a0788bdcd5f0c7b9035a1d50cb7ad1b0917ea3e9351f0",
+    "shaders/rt/hit_material_join.hlsl": "6db2fb3451abec4d578f3e4553ce5858655814cd9bb1f41d4a5df3b84a004fb6",
+    "shaders/rt/native_hit_material.hlsli": "476e8dae70a144738ca05c89d3fe52626f1e607b0a03f17d482e214bc5dbdd7b",
+    "common/native_hit_order.h": "c030d7a3a5f3b5f2c247e890a9789bfd1618b30f4f2eec7129d85ba45a5ab56a"
+  },
+  "source_hash_encoding": "UTF-8 file bytes with CRLF normalized to LF"
+}

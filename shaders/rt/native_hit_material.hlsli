@@ -8,6 +8,10 @@
 [[vk::binding(14,1)]] Texture2DArray<float4> gHitCache[64];
 [[vk::binding(15,1)]] SamplerState gHitSampler[16];
 struct NativeHitMaterial {NtResult parameters;NtFresnelBlendResult scattering;float3 normal;uint status,channel;};
+bool hit_material_publication_ready(){
+ uint bytes;gHitRecords.GetDimensions(bytes);const uint control=16u+8192u*256u;
+ return bytes>=control+4u && gHitRecords.Load(control)==1u;
+}
 NativeHitMaterial hit_material_unknown(uint reason){
  NativeHitMaterial r=(NativeHitMaterial)0;r.status=reason;r.parameters=nt_empty(NtUnknownSamples);
  r.scattering=nt_to_fresnel_blend(r.parameters);return r;
@@ -49,6 +53,7 @@ NativeLayer hit_material_layer(uint row,float2 uv,float g,uint table,uint cache,
  result.known=all(isfinite(result.value));return result;
 }
 NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
+ if(!hit_material_publication_ready())return hit_material_unknown(1);
  NativeHitMaterial result=hit_material_unknown(1);
  if(hit.t<0 || hit.aborted || !isfinite(footprint) || footprint<=0 || !rt_scene_ok())return result;
  InstInfo ii=inst_info(hit.inst);

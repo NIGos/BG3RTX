@@ -18,5 +18,5 @@ bool deferred_begin(VkCommandBuffer,CmdState*,const DrawArgs&,bool exactPipeline
 void deferred_finish(VkCommandBuffer,bool noGraphicsStorageWrites);
 void slot_in_use(uint32_t slot,uint64_t frame);
 bool slot_reusable(uint32_t slot,uint64_t gpuDone);
-bool register_use(VkCommandBuffer,uint32_t slot);
+bool register_use(VkCommandBuffer,uint32_t slot,VkDescriptorSet* query_alpha);
 }

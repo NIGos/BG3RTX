@@ -675,7 +675,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
 VkAccelerationStructureKHR bvh_omm_scene(uint32_t slot,VkAccelerationStructureKHR reference);
 bool bvh_omm_use(VkCommandBuffer cmd,uint32_t slot,VkAccelerationStructureKHR selected,uint64_t* identity);
 bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkAccelerationStructureKHR* reference,uint64_t* identity);
-bool rt_hit_material_use(VkCommandBuffer,VkAccelerationStructureKHR,VkDescriptorSet,uint64_t);
+bool rt_hit_material_use(VkCommandBuffer,VkAccelerationStructureKHR,VkDescriptorSet,uint64_t,VkDescriptorSet*);
 bool bvh_omm_commit(VkCommandBuffer cmd,uint32_t slot,VkBuffer stamp,VkDeviceSize base,uint32_t generation,const uint32_t* mapped);
 void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 // Build records: work of ours recorded into a game command buffer counts only once
@@ -833,6 +833,8 @@ bool alpha_sun_bind_scene(uint32_t slot,VkAccelerationStructureKHR sun_tlas,
 // The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).
 bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
+// Query-owned clone of the exact main AlphaDSL; caller retires its pool.
+bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescriptorSet* set);
 
 // ---- device-fault diagnostics (devfault.cpp, VK_EXT_device_fault) ----
 const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
