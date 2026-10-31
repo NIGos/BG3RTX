@@ -316,6 +316,8 @@ target_include_directories(native_light_validation_test PRIVATE ${VULKAN_SDK}/In
 add_test(NAME native_light_validation_test COMMAND native_light_validation_test)
 add_executable(ufloat_interval_test tests/ufloat_interval_test.cpp)
 add_test(NAME ufloat_interval_test COMMAND ufloat_interval_test)
+add_executable(native_sun_packets_test tests/native_sun_packets_test.cpp)
+add_test(NAME native_sun_packets_test COMMAND native_sun_packets_test)
 
 # Hot-reloadable core: rebuild while the game runs.
 option(BG3RTX_HAIR_GPU_PROBE "Build the isolated, windowless native Hair Vulkan probe" OFF)
