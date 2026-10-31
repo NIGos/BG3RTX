@@ -16,11 +16,13 @@
 #include <unordered_map>
 #include <vector>
 namespace bg3::native_hit::pool {
-// The pool pair: a deferred recipe of native_vt_surface.h that is not the audited per-draw
-// pair (3812bc98/8995da1e, class B, never pooled). Today: VS 2d2ac3c3, FS 14678345.
+// The pool pair: a deferred recipe of native_vt_surface.h whose VS is not the audited per-draw
+// VS (3812bc98, class B, never pooled: its FSs 8995da1e/3da860be take the per-draw path).
+// Today: VS 2d2ac3c3 with FS 14678345 (STI), 3df678c0 (reflectance 0.5) or 81657854
+// (reflectance mix(0.5, normal x, p)).
 inline const native_vt::Recipe* pool_recipe(uint64_t vs, uint64_t fs) {
   const auto* r = native_vt::recipe(fs);
-  return r && r->vs == vs && !(vs == 0x3812bc980438747full && fs == 0x8995da1e4060f53bull) ? r : nullptr;
+  return r && r->vs == vs && vs != 0x3812bc980438747full ? r : nullptr;
 }
 // Engine UBO (set 1 binding 0) bytes the recipe reads: the UV transform p0 and the mip clamp p1,
 // the tile-set index and the light channel word (STI: 40 of the UBO's 48 bytes).

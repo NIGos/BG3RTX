@@ -51,7 +51,9 @@ public:
       i->second.pre_count==1 && i->second.deferred_count==1;
   }
 };
-inline bool audited_static_family(uint64_t vs,uint64_t fs){return vs==0x3812bc980438747full && fs==0x8995da1e4060f53bull;}
+// The per-draw VT pairs: VS 3812bc98 with FS 8995da1e or 3da860be (8995 with reflectance 0.5,
+// native_vt_surface.h ReflectanceConstant).
+inline bool audited_static_family(uint64_t vs,uint64_t fs){return vs==0x3812bc980438747full && (fs==0x8995da1e4060f53bull || fs==0x3da860bebbe9133bull);}
 inline bool observe_static_deferred(DrawJoin& join,uint64_t command,uint64_t recording,const DrawKey& key,
                                     uint64_t vs,uint64_t fs,bool capturable){
  return audited_static_family(vs,fs) && capturable && join.note(command,recording,key,UINT32_MAX);

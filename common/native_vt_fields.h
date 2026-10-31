@@ -15,6 +15,11 @@ struct NvFields {
  NvUint status;
 };
 inline float nv_unit(float x){return tb_min(1,tb_max(0,x));}
+// Reflectance input (RT2.y before the clamp) of the VT deferred variants, by the recipe's
+// reflectance mode (native_vt_surface.h): 0 material UBO 1:1 x (8995, 14678345); 1 the constant
+// 0.5, no 1:1 binding (3da860be, 3df678c0); 2 mix(0.5, normal-layer sample x, UBO 1:1 x)
+// (81657854: the normal layer's x, which the frame normal (wzy) does not use). nv_fields clamps.
+inline float nv_reflectance(NvUint mode,float ubo,float normal_x){return mode==1u?0.5f:(mode==2u?0.5f+(normal_x-0.5f)*ubo:ubo);}
 inline NvFields nv_fields(NvVec3 albedo,NvVec3 normal_wzy,NvVec3 physical,float reflectance){
  NvFields r;r.albedo=tb_vec(0,0,0);r.frame_normal=tb_vec(0,0,0);r.roughness=0;r.reflectance=0;r.metalness=0;r.aux=0;r.status=1;
  if(!tb_finite3(albedo)||!tb_finite3(normal_wzy)||!tb_finite3(physical)||!tb_finite(reflectance))return r;

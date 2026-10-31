@@ -11,10 +11,17 @@ namespace bg3::native_vt {
 using V3=std::array<float,3>;using V4=std::array<float,4>;
 // Engine UBO (1:0) byte offsets: UV transform p0 (p1 = mip clamp follows at +16), tile-set
 // index, light channel word (&7). 8995: v[4]/v[5]/words.y/words.z; STI 14678345: _m0[0]/_m0[1]/_m1/_m2.
-struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset,channel_offset;};
+// reflectance: nv_reflectance mode (native_vt_fields.h). The variants differ from their base FS
+// (8995 or 14678345) only in that RT2.y term; the rest of the dumped GLSL is identical after
+// renaming (audit 2026-10-31, captures/alpha_cache, PLAN_M4 "next families").
+enum Reflectance : uint32_t {ReflectanceUbo=0,ReflectanceConstant=1,ReflectanceNormalMix=2};
+struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset,channel_offset;uint32_t reflectance=ReflectanceUbo;};
 inline constexpr Recipe recipes[]={
  {0x8995da1e4060f53bull,0x3812bc980438747full,64,100,104},
- {0x14678345c10aefbcull,0x2d2ac3c38992b7f0ull,0,32,36}};
+ {0x14678345c10aefbcull,0x2d2ac3c38992b7f0ull,0,32,36},
+ {0x3da860bebbe9133bull,0x3812bc980438747full,64,100,104,ReflectanceConstant},   // per-draw, 8995 with 0.5
+ {0x3df678c09f13ea60ull,0x2d2ac3c38992b7f0ull,0,32,36,ReflectanceConstant},      // pool, 14678345 with 0.5
+ {0x8165785442a20e57ull,0x2d2ac3c38992b7f0ull,0,32,36,ReflectanceNormalMix}};    // pool, mix(0.5, n.x, p)
 inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
 // Both deferred variants: sampler 1:2, table 1:3, normal 1:4, albedo 1:5,
 // physical 1:6; Reflectance is material UBO 1:1 byte 0. Engine UBO is 1:0.

@@ -82,6 +82,21 @@ Limits that decide the order:
   Remaining: live gate on S6/S8 (`[hit material pool basis]` ok > 0, mismatch 0; `hit material`
   qualified up, base/without record down; GI/RF A/B energy rule). Alpha pool instances: none (STI
   is opaque); other class A pairs need their own recipe audit.
+- Reflectance variants (branch next-families, READY_FOR_LIVE, no ABI change, behind `rt_hit_material`).
+  Ranking (main 0ad3fac; S8 m4r1-gi-rf-s8 / S6 m4r1-rf-hit-shade-s6): qualified 15% / 5.8%, base 58% / 85%,
+  row 27% / 9%. Row is the per-draw path (8.0M of 27M in S8 already before the pool path): opaque depth
+  records (940da312/19994bf3) whose G-buffer draw is not an audited pair get no row (S8 opaque rows 32,
+  query mapped 13; S6 8 and 6). Declined pairs by vertices: S8 41a168e2/42a95e17 hair 839k, 54df894a/613ead9c
+  685k, 2d2ac3c3/81657854 512k, 1ed985dd/2257579f 473k, 54df894a/7a07134e 433k, terrain 393k, f111e292/288876d1
+  342k, 3812bc98/3da860be 276k; S6 c32ce535/9064a6bd 1.53M, STI 1.24M (pool), bd5dbda2/0b8dfd73 728k,
+  54df894a/613ead9c 497k, 2d2ac3c3/3df678c0 215k. Pool "other pair" 111/391 (S8), 93/351 (S6) draws/instances.
+  Audit (dumped GLSL, renamed and diffed): 3da860be = 8995 and 3df678c0 = 14678345 with RT2.y = 0.5 and no
+  1:1 UBO; 81657854 = 14678345 with RT2.y = mix(0.5, normal-layer x, 1:1 x). Built: recipe reflectance
+  modes (`native_vt_surface.h`, `nv_reflectance`), 3812bc98/3da860be as a per-draw pair (gather push word 3),
+  both 2d2ac3c3 FSs as pool pairs (row word 220 = mode). Check: `[hit material pool pairs]` records/ready
+  per FS > 0; `hit material` row and base down, qualified up; `[hit material capacity]` opaque used vs mapped.
+  Next, larger audits: 54df894a/613ead9c (two-layer VT blend + 2D mask, VS 54df894a, 7 VS outputs),
+  c32ce535/9064a6bd (plain 2D textures, set 0:7 sampler), class B 1ed985dd/f111e292 (FS 2257579f/288876d1).
 - Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;
   terrain draws patches from `_m0[gl_InstanceIndex]` + a heightmap, needs its own recipe.
 - Skinned characters (class B always-skinned VSs, CHAR_* STI FSs): positions from the skinning
