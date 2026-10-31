@@ -62,6 +62,11 @@
 // game's set 1, which this variant binds as set 2 (common/native_hit_rf_bindings.h).
 #define BG3_BOX_SET 2
 #define NATIVE_HIT_BOXES 1
+// The screen's light policy and AO at hits (native_hit_direct.hlsli NATIVE_HIT_DLS_POLICY); lsSlots
+// in the sun set b7 (D-RF's push set already holds the 32 push descriptors).
+#define NATIVE_HIT_DLS_POLICY 1
+#define NATIVE_HIT_SLOTS_SET 3
+#define NATIVE_HIT_SLOTS_BINDING 7
 #include "../rt/native_hit_direct.hlsli"
 #define NATIVE_HIT_SHADE_FULL 1
 #include "../rt/native_hit_shade.hlsli"
@@ -168,6 +173,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // shaded hit; the tier (a) check: complete, unsupported
   uint hs_asked = 0, hs_material = 0, hs_light = 0, hs_probes = 0, hs_checked = 0, hs_check_fail = 0;
   float3 hs_Lb = 0, hs_La = 0, hs_direct = 0, hs_sun = 0, hs_amb = 0;
+  // the tier (a) check's per-term breakdown (counters 304-311): L_b's direct part from lights at
+  // the game's visibility, ambient diffuse / specular, L_b at AO 1, A; the screen's AO at the hit's
+  // pixel (b6 as the lighting read it), L_a's diffuse / specular parts (prevRadiance .a share).
+  float3 hs_native = 0, hs_amb_d = 0, hs_amb_s = 0, hs_Lb1 = 0;
+  float hs_ao = 1, hs_ao_screen = 1, hs_La_share = 1;
 #endif
   if (eligible) {
     float3 Nn = normalize(sf.N);
@@ -246,8 +256,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
           g_hd_stats = pc.rf_stats != 0u;
           g_hd_base = 176u;
           g_hd_xbase = 196u;
+          g_hd_pbase = 316u;   // policy / AO counters (core/gi.cpp kHitPolicyFirst + 4)
           g_hd_bin = (fp.x >> 3) * 7u + (fp.y >> 3) * 13u;
-          NativeHitShade hs = native_hit_shade(hh, o + dir * t, -dir, cone.f0 + cone.spread * t);
+          NativeHitShade hs = native_hit_shade(hh, o + dir * t, -dir, cone.f0 + cone.spread * t, uint3(fp, pc.frame));
           // Hit-material reasons (253+status, 127) for the normal stats windows; run_post's push
           // has rt_stats 0, so the D-RF stats key gates it (core/gi.cpp "hit material" line).
           if (pc.rf_stats != 0u) hit_material_count(hh, hs.material_status, (fp.x >> 3) * 7u + (fp.y >> 3) * 13u);
@@ -260,6 +271,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
               hs_direct = hs.direct;
               hs_sun = hs.sun;
               hs_amb = hs.ambient;
+              hs_native = hs.native;
+              hs_amb_d = hs.ambient_d;
+              hs_amb_s = hs.ambient_s;
+              hs_Lb1 = hs.radiance_ao1;
+              hs_ao = hs.ao;
+              const int2 qq = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
+              hs_ao_screen = lFlags.m0.x > 0.0 ? saturate(lgAO.Load(int3(qq, 0)).x) : 1.0;
+              hs_La_share = saturate(prevRadiance[prev_radiance_px(qq)].a);
             }
           } else {
             hs_asked = 1u;
@@ -413,6 +432,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_addv(301, hs_checked != 0u ? fxh(lum(hs_sun)) : 0u, bin);
     stat_addv(302, hs_checked != 0u ? fxh(lum(hs_amb)) : 0u, bin);
     stat_addv(303, (hs_checked != 0u || shaded) && clip ? 1u : 0u, bin);
+    stat_addv(304, hs_checked != 0u ? fxh(lum(hs_native)) : 0u, bin);
+    stat_addv(305, hs_checked != 0u ? fxh(lum(hs_amb_d)) : 0u, bin);
+    stat_addv(306, hs_checked != 0u ? fxh(lum(hs_amb_s)) : 0u, bin);
+    stat_addv(307, hs_checked != 0u ? fxh(lum(hs_Lb1)) : 0u, bin);
+    stat_addv(308, hs_checked != 0u ? fxh(hs_ao) : 0u, bin);
+    stat_addv(309, hs_checked != 0u ? fxh(hs_ao_screen) : 0u, bin);
+    stat_addv(310, hs_checked != 0u ? fxh(lum(hs_La) * hs_La_share) : 0u, bin);
+    stat_addv(311, hs_checked != 0u ? fxh(lum(hs_La) * (1.0 - hs_La_share)) : 0u, bin);
 #endif
   }
 }

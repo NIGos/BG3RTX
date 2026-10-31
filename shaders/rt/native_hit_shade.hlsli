@@ -5,7 +5,8 @@
 // under live qualification as M4.1, stays byte-identical; M4.3 moves it here). rf_hit_shade
 // (rt_reflections.hlsl, RF_HIT_SHADE) adds the sun and the game's ambient at the hit
 // (NATIVE_HIT_SHADE_FULL; docs/PLAN_M4_REFLECTIONS_GI.md M4.2).
-// Needs rt_common.hlsli, native_hit_material.hlsli and native_hit_direct.hlsli first.
+// Needs rt_common.hlsli, native_hit_material.hlsli and native_hit_direct.hlsli first (the full
+// shading with NATIVE_HIT_DLS_POLICY: the screen's light policy and AO).
 struct NativeHitLit {NativeHitMaterial material;NativeHitDirect direct;};
 NativeHitLit native_hit_lit(RtHit hit,float3 position,float3 outgoing,float footprint){
  NativeHitLit r;r.material=rt_hit_material(hit,footprint);
@@ -23,7 +24,10 @@ NativeHitLit native_hit_lit(RtHit hit,float3 position,float3 outgoing,float foot
 [[vk::binding(36, 2)]] TextureCube<float4> lgIrrCube1;
 
 // L_b at the hit = point/spot (native_hit_direct) + sun (replicated colour x clouds x b13[0],
-// one RT visibility ray instead of the native mask) + the game's ambient there with AO 1:
+// one RT visibility ray instead of the native mask) + the game's ambient there with AO A (AO 1
+// before hit_ao_rays; native_hit_ao, native_hit_direct.hlsli: the screen's AO estimator at the
+// hit, applied as the lighting applies b6: ambient diffuse x A, specular x SO(A), direct light
+// x mix(1, A, m0.y) where the screen keeps that factor):
 // diffuse (sky irradiance x diffuse colour x DFG.z) and specular (bg3_spec_ambient at the hit,
 // its local probes included) x b13[0]*100, and the projector (box) lights of the hit's froxel
 // (native_hit_direct.hlsli NATIVE_HIT_BOXES, D-LS's ls_box visibility rule). Not included:
@@ -31,7 +35,10 @@ NativeHitLit native_hit_lit(RtHit hit,float3 position,float3 outgoing,float foot
 // status 0 complete; 1 material unknown; 2 local lights unsupported (outside the frustum,
 // bad list or record, unknown visibility); 3 sun unsupported; 4 not finite.
 static const uint kHitShadeOk=0u,kHitShadeMaterial=1u,kHitShadeDirect=2u,kHitShadeSun=3u,kHitShadeInvalid=4u;
-struct NativeHitShade {float3 radiance,direct,sun,ambient;uint status,material_status;bool local_probes;};   // material_status: rt_hit_material's
+// material_status: rt_hit_material's. Terms as added (after A); native: the direct part from lights
+// at the game's visibility; ambient_d / ambient_s: the ambient's diffuse / specular parts;
+// radiance_ao1: the same hit at AO 1 (the L_b before hit_ao_rays, for the tier (a) log); ao: A.
+struct NativeHitShade {float3 radiance,direct,sun,ambient,native,ambient_d,ambient_s,radiance_ao1;float ao;uint status,material_status;bool local_probes;};
 
 // Sun diagnostics (g_hd_stats; counters 191-195, core/gi.cpp): evaluated, a zero incident
 // (sun colour x clouds x b13[0]: below the horizon, night, full cloud), a known zero after the
@@ -113,9 +120,11 @@ float3 native_hit_diffuse_probes(float3 D,float3 P,float3 N,float nov,float3 dco
  return D;
 }
 
-// The game's diffuse + specular ambient at the hit, AO 1 (bg3_ambient.hlsli, f469db78:967-1344).
-float3 native_hit_ambient(NativeHitMaterial material,float3 position,float3 outgoing,uint4 cluster,out bool local_probes){
- local_probes=(cluster.y>>24)!=0u;
+// The game's diffuse + specular ambient at the hit (bg3_ambient.hlsli, f469db78:967-1344), at AO 1:
+// diffuse d, specular s, both x b13[0]*100.
+float3 native_hit_ambient(NativeHitMaterial material,float3 position,float3 outgoing,uint4 cluster,out bool local_probes,
+                          out float3 d,out float3 s){
+ local_probes=(cluster.y>>24)!=0u;d=0;s=0;
  if((pc.qa_zero&4u)!=0u)return 0;   // QA ambient floor: AO 0 removes the ambient
  const float3 N=material.normal;
  const float a=material.parameters.value.base_roughness;
@@ -127,25 +136,46 @@ float3 native_hit_ambient(NativeHitMaterial material,float3 position,float3 outg
                                           material.parameters.value.diffuse_color,a,cluster);
  float3 E;uint n_local;
  float3 specular=bg3_spec_ambient(position,N,outgoing,material.parameters.value.F0,a,cluster,E,n_local);
- return (diffuse+specular)*(asfloat(lScale.Load(0))*100.0);
+ const float k=asfloat(lScale.Load(0))*100.0;
+ d=diffuse*k;s=specular*k;
+ return d+s;
+}
+// Lagarde's specular occlusion as the lighting computes it from b6 (bg3_spec_occlusion), at AO A.
+float native_hit_spec_occlusion(float A,float nov_raw,float a){
+ if(!(lFlags.m0.x>0.0))return 1.0;
+ return saturate(pow(max(abs(nov_raw+A),9.9999997e-05),exp2(-16.0*a-1.0))-1.0+A);
 }
 
-NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float footprint){
- NativeHitShade r;r.radiance=0;r.direct=0;r.sun=0;r.ambient=0;r.local_probes=false;r.status=kHitShadeMaterial;
+// key: the pixel and frame, for the AO rays' random stream.
+NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float footprint,uint3 key){
+ NativeHitShade r;r.radiance=0;r.direct=0;r.sun=0;r.ambient=0;r.native=0;r.ambient_d=0;r.ambient_s=0;r.radiance_ao1=0;r.ao=1;
+ r.local_probes=false;r.status=kHitShadeMaterial;
  NativeHitLit lit=native_hit_lit(hit,position,outgoing,footprint);r.material_status=lit.material.status;
  position=native_hit_position(hit,position);   // the same exact point native_hit_lit lit
  if(lit.material.status!=0u)return r;
  r.status=kHitShadeDirect;
  if(lit.direct.status!=HdOk)return r;
  uint4 cluster;if(!native_hit_cluster(position,cluster))return r;
- r.direct=(pc.qa_zero&2u)!=0u?0.0.xxx:lit.direct.radiance;   // QA: local-light visibility 0
+ const bool qa_local=(pc.qa_zero&2u)!=0u;   // QA: local-light visibility 0
  HdDirect sun=native_hit_sun(lit.material,position,outgoing,rt_hit_normal(hit),footprint);
  r.status=kHitShadeSun;
  if(sun.status!=HdOk)return r;
- r.sun=sun.radiance;
- r.ambient=native_hit_ambient(lit.material,position,outgoing,cluster,r.local_probes);
+ float3 amb_d,amb_s;
+ native_hit_ambient(lit.material,position,outgoing,cluster,r.local_probes,amb_d,amb_s);
+ r.radiance_ao1=(qa_local?0.0.xxx:lit.direct.radiance)+sun.radiance+amb_d+amb_s;
+ // The screen's AO at the hit, applied term by term as the lighting applies b6.
+ r.ao=native_hit_ao(position,rt_hit_normal(hit),footprint,key);
+ const float f=native_hit_ao_factor(r.ao);
+ r.direct=qa_local?0.0.xxx:native_hit_ao_direct(lit.direct,r.ao);
+ r.native=qa_local?0.0.xxx:lit.direct.native*f;
+ // The sun keeps mix(1, AO, m0.y) unless D-LS's ao_direct=1 gives it back (bit 2 its shadow ray
+ // traced, bit 3 its inputs bound: rt_local_shadows.hlsl).
+ r.sun=sun.radiance*((pc.ao_direct&3u)==1u && (pc.ao_direct&12u)==12u?1.0:f);
+ r.ambient_d=amb_d*r.ao;
+ r.ambient_s=amb_s*native_hit_spec_occlusion(r.ao,dot(outgoing,lit.material.normal),lit.material.parameters.value.base_roughness);
+ r.ambient=r.ambient_d+r.ambient_s;
  r.radiance=r.direct+r.sun+r.ambient;
- r.status=all(isfinite(r.radiance)) && all(r.radiance>=0)?kHitShadeOk:kHitShadeInvalid;
+ r.status=all(isfinite(r.radiance)) && all(r.radiance>=0) && all(isfinite(r.radiance_ao1))?kHitShadeOk:kHitShadeInvalid;
  return r;
 }
 #endif

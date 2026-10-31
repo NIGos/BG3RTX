@@ -68,7 +68,8 @@ static void module(const char* file,bool reference,bool tileset){
  std::printf("PASS %s: %u unique set0 descriptors, push %u bytes\n",file,descriptors,push);
 }
 int main(int argc,char**argv){
- check(descriptor_count(false)==19 && descriptor_count(true)==20,"bounded plain/Hair union");
+ check(descriptor_count(false)==20 && descriptor_count(true)==21,"bounded plain/Hair union");
+ check(find(46,false)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && !find(46,false,true),"hit light policy per-light data (GI only)");
  for(bool hair:{false,true}){uint32_t n=0;for(const auto& b:bindings)if(enabled(b,hair)){check(find(b.binding,hair)==&b,"layout and write iteration identical");n+=b.count;}check(n<=32,"host push descriptor count");}
  for(uint32_t i:{8u,11u,13u,17u}){check(find(i,false)!=nullptr,"regression: required GI binding omitted by old LS contraction");check(!(i<=7 || i==12 || i==16 || i==18 || i>=20),"old LS filter really omitted GI input/output");}
  check(find(48,false)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,"rebase and SHaRC camera input");check(!find(50,false)&&find(50,true),"physical Hair conditional descriptor");

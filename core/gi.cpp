@@ -121,7 +121,7 @@ struct Push {
   uint32_t rt_debug;
   float rt_strength;
   float rt_ao_radius;   // unused, 0 (rt_ao removed 2026-10-31)
-  uint32_t rt_ao_rays;  // unused, 0
+  uint32_t rt_ao_rays;  // hit_ao_rays: AO rays at gi_hit_direct / rf_hit_shade hits (native_hit_direct.hlsli native_hit_ao)
   uint32_t ls_kmode, sharc_fx;   // sharc_fx: sharc_inject.hlsl, the D-EM effects target is bound (49); ls_kmode: unused, 0 (ls_k removed 2026-10-31)
   float gi_rt_radius, gi_rt_tol;
   uint32_t gi_rt_fallback, rt_stats;
@@ -132,7 +132,8 @@ struct Push {
   float ls_source_radius, ls_clear, ls_min_radius;
   uint32_t ls_samples, ls_shadowed, ls_debug, ls_stats, ls_pass, ls_soft;
   float ls_strength;
-  uint32_t ls_has_mask, ls_flags;   // ls_flags: bit 0 per-light data (ls_lights), bits 8-12 owners traced (ls_owners)
+  uint32_t ls_has_mask, ls_flags;   // ls_flags: bit 0 per-light data (ls_lights), bits 8-12 owners traced (ls_owners),
+                                    // bit 24 hit_ls_policy (the screen's light policy at gi_hit_direct / rf_hit_shade hits)
   float rf_max_rough, rf_mirror_rough, rf_tmax, rf_depth_tol, rf_edge, rf_strength;
   uint32_t rf_debug, rf_sample, rf_so, rf_validate, rf_models, rf_stats;   // rf_so: unused, 0 (removed 2026-10-31)
   // RT audit fixes (docs/archive/AUDIT_RT.md)
@@ -199,6 +200,12 @@ VkDescriptorSet g_sun_sets[kSunRing] = {};
 uint64_t g_sun_used[kSunRing] = {};
 uint64_t g_sun_full = 0;
 uint32_t g_sun_slot = 0;
+bool g_sun_slots[kSunRing] = {};   // the set's b7 holds the per-light data image (else the 1x1 fallback)
+constexpr uint32_t kSunBindings = 8;
+VkDescriptorType sun_binding_type(uint32_t i) {
+  return i == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : i == 6 ? VK_DESCRIPTOR_TYPE_SAMPLER
+       : i == 7 ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+}
 constexpr uint32_t kNumExtras = sizeof kExtras / sizeof kExtras[0];
 
 std::mutex g_mu;
@@ -659,20 +666,22 @@ bool ensure_ls_layout() {
     if (host->vk->CreateSampler(host->device, &si, nullptr, &g_linear_clamp) != VK_SUCCESS) return false;
   }
   if (!g_sun_dsl) {
-    VkDescriptorSetLayoutBinding b[7];
-    for (uint32_t i = 0; i < 7; ++i)
-      b[i] = {i, i == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : i == 6 ? VK_DESCRIPTOR_TYPE_SAMPLER : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-              1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    // b7: the D-LS per-light data (lsSlots) for rf_hit_shade's light policy (D-RF's push set is
+    // full; common/native_hit_rf_bindings.h sun). D-LS reads it at push b46 and never uses b7.
+    VkDescriptorSetLayoutBinding b[kSunBindings];
+    for (uint32_t i = 0; i < kSunBindings; ++i)
+      b[i] = {i, sun_binding_type(i), 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
     VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    sci.bindingCount = 7;
+    sci.bindingCount = kSunBindings;
     sci.pBindings = b;
     if (host->vk->CreateDescriptorSetLayout(host->device, &sci, nullptr, &g_sun_dsl) != VK_SUCCESS) return false;
-    VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kSunRing},
+    VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kSunRing},
                                   {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 5 * kSunRing},
-                                  {VK_DESCRIPTOR_TYPE_SAMPLER, kSunRing}};
+                                  {VK_DESCRIPTOR_TYPE_SAMPLER, kSunRing},
+                                  {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, kSunRing}};
     VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pci.maxSets = kSunRing;
-    pci.poolSizeCount = 3;
+    pci.poolSizeCount = 4;
     pci.pPoolSizes = ps;
     if (host->vk->CreateDescriptorPool(host->device, &pci, nullptr, &g_sun_pool) != VK_SUCCESS) return false;
     VkDescriptorSetLayout ls[kSunRing];
@@ -962,10 +971,17 @@ constexpr uint32_t kStatsRing = 8;
 // tier (a) check: complete / unsupported / sums L_b, L_a, |L_b - L_a| and the L_b terms direct,
 // sun, ambient; clipped values. Luminance x 8192 (fxh, clamped at 8). Logged every 300 frames ("rf hit shade").
 // [160..171] GI / [176..187] rf_hit_shade light diagnostics (native_hit_direct.hlsli g_hd_*), [191..195] rf sun.
-constexpr uint32_t kRfHitFirst = 289, kRfHitCount = 15;
+// [304..311] the tier (a) check's per-term breakdown (rt_reflections.hlsl): L_b direct from lights at the
+// game's visibility, ambient diffuse, ambient specular, L_b at AO 1, the hit AO A; the screen's AO at
+// the hit's pixel; L_a diffuse part, L_a specular part.
+// [312..319] hit light policy / AO (native_hit_direct.hlsli g_hd_pbase): GI 312.., rf_hit_shade 316..:
+// lights left at the game's visibility, traced with a per-light R, hits with an AO estimate, sum A x 8192.
+constexpr uint32_t kRfHitFirst = 289, kRfHitCount = 23;
+constexpr uint32_t kHitPolicyFirst = kRfHitFirst + kRfHitCount, kHitPolicyCount = 8;
 constexpr double kRfHitScale = 8192.0;   // fxh in rt_reflections.hlsl
 static_assert(bg3::transport::NtsStatsCount == kRfHitFirst, "rf hit shade counters follow the tileset ones");
-constexpr uint32_t kStatsCounters = kRfHitFirst + kRfHitCount; //253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..303 rf hit shade
+constexpr uint32_t kStatsCounters = kHitPolicyFirst + kHitPolicyCount; //253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy
+static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -1019,6 +1035,15 @@ void rf_hit_fold(const uint32_t* c) {
               t[1] ? t[5] * q / double(t[1]) : 0.0, (unsigned long long)t[6], (unsigned long long)t[7], t[8] * q / ck,
               t[9] * q / ck, mean, se, g_rfh.d_frames, t[10] * q / ck, t[11] * q / ck, t[12] * q / ck, t[13] * q / ck,
               (unsigned long long)t[14]);
+    // Term by term (the live question: which term carries the residual). L_a cannot be split into
+    // direct / sun / ambient; its diffuse / specular shares and the screen's AO there can.
+    if (t[6])
+      host->log("rf hit shade terms (%u frames, %llu tier a hits): L_b direct %.5f (of it lights at the game's visibility %.5f), "
+                "sun %.5f, ambient diffuse %.5f, ambient specular %.5f; L_b at AO 1 %.5f; AO at the hit %.4f vs the screen's AO "
+                "there %.4f; L_a diffuse %.5f, specular %.5f; ratio L_b / L_a %.3f (at AO 1 %.3f)",
+                g_rfh.frames, (unsigned long long)t[6], t[11] * q / ck, t[15] * q / ck, t[12] * q / ck, t[16] * q / ck,
+                t[17] * q / ck, t[18] * q / ck, t[19] * q / ck, t[20] * q / ck, t[21] * q / ck, t[22] * q / ck,
+                t[9] ? double(t[8]) / double(t[9]) : 0.0, t[9] ? double(t[18]) / double(t[9]) : 0.0);
   }
   g_rfh = RfHitWindow{};
 }
@@ -1187,6 +1212,11 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               "unsupported: source (frustum/froxel slice/index) %llu, projector %llu, other %llu",who,g_stats_n,t[b],t[b+1],t[b]-t[b+1]-t[b+4],t[b+2],t[b+3],
               t[x],t[b+4],t[x+1],t[b+5],t[b+6],t[b+7],t[b+8],t[x+2],t[x+3],t[x+2]-t[x+3],t[b+9],t[b+10],t[b+11]);};
   hd_log("GI hit direct",160u,172u);hd_log("rf hit shade",176u,196u);
+  // The hit light policy and AO (hit_ls_policy, hit_ao_rays; native_hit_direct.hlsli g_hd_pbase).
+  for(unsigned k=0;k<2;++k){const unsigned p=kHitPolicyFirst+4u*k;
+    if(t[p]|t[p+1]|t[p+2])host->log("%s policy (%u frames): lights at the game's visibility (unshadowed, as D-LS leaves them) %llu, "
+      "traced with a per-light radius %llu; AO estimates %llu, mean AO %.4f",k?"rf hit shade":"GI hit direct",g_stats_n,
+      t[p],t[p+1],t[p+2],t[p+2]?double(t[p+3])/8192.0/double(t[p+2]):0.0);}
   if(t[191])host->log("rf hit shade sun (%u frames): evaluated %llu, zero sun colour x clouds x b13 %llu, N.L <= 0 %llu, traced lit %llu, traced occluded %llu",
                       g_stats_n,t[191],t[192],t[193],t[194],t[195]);
   uint64_t material_total=0;for(unsigned i=253;i<263;++i)material_total+=t[i];
@@ -1496,6 +1526,12 @@ Push make_push() {
   pc.ls_flags |= host->cfg_int("ls_giveback_cap", 1) ? (1u << 18) : 0u;
   // Diagnostic A/B: HPO stays active; only competing-receiver rejection changes.
   pc.ls_flags |= host->cfg_int("rt_hair_receiver_guard", 0) ? (1u << 21) : 0u;
+  // Bit 24: hit_ls_policy (native_hit_direct.hlsli NATIVE_HIT_DLS_POLICY): gi_hit_direct and
+  // rf_hit_shade hits follow D-LS's light policy (lights it leaves to the game unshadowed, stop
+  // short by max(R, ls_clear)). Only those variants read it.
+  pc.ls_flags |= host->cfg_int("hit_ls_policy", 1) ? (1u << 24) : 0u;
+  // hit_ao_rays: AO rays at those hits (native_hit_ao; 0 = AO 1, the old L_b).
+  pc.rt_ao_rays = uint32_t((std::min)((std::max)(host->cfg_int("hit_ao_rays", 2), 0), 8));
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;
   pc.mat_classes = host->cfg_int("mat_classes", 1) ? 1u : 0u;
   pc.ao_direct = uint32_t((std::min)((std::max)(host->cfg_int("ao_direct", 1), 0), 2));
@@ -1568,22 +1604,26 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
   VkDescriptorBufferInfo ubo = s.x_atmo.buffer ? VkDescriptorBufferInfo{s.x_atmo.buffer, s.x_atmo.offset, (std::min)(s.x_atmo.range, VkDeviceSize(65536))}
                                                : VkDescriptorBufferInfo{s.cam.buffer, s.cam.offset, s.cam.range};
   const Bg3Binding* src[5] = {&s.x_tlut, &s.x_ca0, &s.x_ca1, &s.x_cb0, &s.x_cb1};
-  VkDescriptorImageInfo img[6];
+  VkDescriptorImageInfo img[7];
   for (int i = 0; i < 5; ++i)
     img[i] = src[i]->view ? VkDescriptorImageInfo{VK_NULL_HANDLE, src[i]->view, src[i]->layout}
                           : VkDescriptorImageInfo{VK_NULL_HANDLE, s.alb.view, s.alb.layout};
   img[5] = {g_linear_clamp, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED};
-  VkWriteDescriptorSet w[7];
-  for (uint32_t i = 0; i < 7; ++i) {
+  // b7: the per-light data image once a join has created and initialised it (it persists; the
+  // shader checks each slot's key), else the 1x1 fallback, never read (Push::ls_flags bit 0 clear).
+  g_sun_slots[pick] = g_lsl.slots_view != VK_NULL_HANDLE;
+  img[6] = {VK_NULL_HANDLE, g_sun_slots[pick] ? g_lsl.slots_view : g_ls_nodata.view, VK_IMAGE_LAYOUT_GENERAL};
+  VkWriteDescriptorSet w[kSunBindings];
+  for (uint32_t i = 0; i < kSunBindings; ++i) {
     w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     w[i].dstSet = set;
     w[i].dstBinding = i;
     w[i].descriptorCount = 1;
-    w[i].descriptorType = i == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : i == 6 ? VK_DESCRIPTOR_TYPE_SAMPLER : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    w[i].descriptorType = sun_binding_type(i);
     if (i == 0) w[i].pBufferInfo = &ubo;
     else w[i].pImageInfo = &img[i - 1];
   }
-  host->vk->UpdateDescriptorSets(host->device, 7, w, 0, nullptr);
+  host->vk->UpdateDescriptorSets(host->device, img[6].imageView ? kSunBindings : kSunBindings - 1, w, 0, nullptr);
   return set;
 }
 
@@ -1660,7 +1700,14 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 3, sets, s.game_set1_ndyn,
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
   if (sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
-  vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  // The hit light policy reads the per-light data from the sun set's b7 (ls_flags bit 0) when that
+  // set holds the image and a join has run.
+  Push hp = pc;
+  bool slots = false;
+  for (uint32_t i = 0; i < kSunRing; ++i)
+    if (g_sun_sets[i] == sun) slots = g_sun_slots[i];
+  hp.ls_flags = (hp.ls_flags & ~1u) | (slots && g_lsl_ok && host->cfg_int("ls_lights", 1) ? 1u : 0u);
+  vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof hp, &hp);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
   return true;
 }
@@ -1735,7 +1782,10 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,write_count,writes);
  vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,1,1,&material_alpha,0,nullptr);
  if(s.sharc)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,4,1,&s.sh.set,0,nullptr);
- vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof pc,&pc);
+ // The hit light policy's per-light data (b46): the latest join's, the GI runs before this
+ // frame's (native_hit_direct.hlsli checks each slot's key).
+ Push hp=pc;hp.ls_flags=(hp.ls_flags&~1u)|(g_lsl_ok && host->cfg_int("ls_lights",1)?1u:0u);
+ vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof hp,&hp);
  vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);return true;
 }
 

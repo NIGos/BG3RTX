@@ -327,6 +327,38 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Offline: 708/708 compile; 612/708 key-off requests byte-identical to c3f406f, the 96 others
     are exactly the gi_hit_direct and rf_hit_shade variants; 48/48 rf_hit_shade pass spirv-val
     and the descriptor contract (set 2 b29 added); build + 67 CTests pass.
+- **Hit lighting as the screen (2026-10-31, branch hit-bias; offline, READY_FOR_LIVE).** Live
+  tier (a) at main 0ad3fac: S8 L_b 0.148 vs L_a 0.107 (x 1.39; terms direct 0.0024, sun 0.036,
+  ambient ~0.110), S6 0.0356 vs 0.0185 (x 1.9; direct 0.0248, sun 0). 96% of light rays go to
+  lights of radius >= 10 m (the darkvision pair). Matched to the screen term by term, both
+  `gi_hit_direct` and `rf_hit_shade` (`native_hit_direct.hlsli` `NATIVE_HIT_DLS_POLICY`):
+  - `hit_ls_policy=1` (Push ls_flags bit 24): D-LS's own light policy. A light without a game
+    shadow map that D-LS leaves to the game (ls_min_radius, ls_owners, ls_noshadow: the
+    darkvision pair) is unshadowed, no ray, as on screen; traced lights stop max(R, ls_clear)
+    short, R from lsSlots (else ls_source_radius); shadow-mapped lights are traced (no atlas at
+    a hit; D-LS replaces it by default). lsSlots: GI push set b46 (room: 20/21 of 32); D-RF sun
+    set b7 (the push set is full; D-LS ignores b7). A slot is used only while its key (absolute
+    position within 0.25 m, radius) is the light's: the GI runs before this frame's join.
+  - `hit_ao_rays=2`: the screen's AO estimator at the hit (the hybrid GI's: cosine rays,
+    gi_rt_radius, weight 1 - (t/R)^2, aborted 1 - u^2/3), applied as the lighting applies b6:
+    ambient diffuse x A, specular x Lagarde SO(A), direct light x mix(1, A, m0.y) where the
+    screen keeps it (lights at the game's visibility; the sun unless ao_direct=1 with the RT
+    sun; traced lights only with ao_direct != 1). Chosen over a fixed bias: the screen's AO is
+    a per-point visibility (indoor corners vs open floor), a constant cannot match both.
+    Residual bias: the screen's occluded ambient is partly replaced by the GI bounce, which the
+    hit lacks (darker, never brighter). GI computes A only where a factor applies.
+  - Log: `rf hit shade terms`: L_b direct (of it lights at the game's visibility), sun, ambient
+    diffuse / specular, L_b at AO 1 (the old L_b, same frames), A vs the screen's AO at the
+    hit's pixel, L_a diffuse / specular (prevRadiance .a), ratio L_b / L_a (and at AO 1);
+    `GI hit direct policy` / `rf hit shade policy`: lights at the game's visibility, traced with
+    a per-light R, AO estimates and mean A.
+  - Expected: S8 ambient x ~0.6-0.7 (indoor A) -> L_b ~0.10-0.11 (ratio ~1.0); darkvision
+    unshadowed adds at most ~+0.002. S6 is direct-dominated: unshadowing raises direct; the AO
+    factor removes <= m0.y x (1 - A) of it; if the ratio stays > 1 the new terms line says
+    whether L_b's direct or L_a's specular share carries it (outgoing = -ray, not the camera).
+  - Cost (not measured): 2 rays <= 1 m per shaded hit (+ fewer light rays: the darkvision pair
+    is no longer traced); `rf: reflection pass GPU median` and the GI trace median tell.
+  - A/B in one run: `hit_ao_rays` 2 / 0 and `hit_ls_policy` 1 / 0 (both live).
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.
