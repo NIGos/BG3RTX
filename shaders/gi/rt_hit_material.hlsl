@@ -19,7 +19,7 @@ void main(uint3 id:SV_DispatchThreadID){
  RtHit hit=rt_closest_hit(0.0.xxx,p/dist,dist*1.5+1,cone);
 #endif
  NativeHitMaterial material=rt_hit_material(hit,cone.spread*max(hit.t,0));
- if(pc.rt_stats!=0){[unroll]for(uint status=0;status<10;++status)stat_add(253u+status,material.status==status,fp.x^fp.y);}
+ if(pc.rt_stats!=0)hit_material_count(hit,material.status,fp.x^fp.y);
  if(material.status!=0)return;
  if(pc.rt_stats!=0){
   float3 ng=normalize(rt_hit_normal(hit));float tol=depth_tol(dist,cone.spread,dot(ng,p)/dist,kJitterPx,1.0)+kTlasRel*dist;

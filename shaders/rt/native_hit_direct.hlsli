@@ -59,7 +59,12 @@ NativeHitDirect native_hit_direct(NativeHitMaterial material,float3 surface_posi
   if(!(dot(normal,incident.direction)>0)){result.status=HdNormalDomain;return result;}
   float3 origin=rt_offset_ray(surface_position,normal),delta=light.pos-origin;
   float distance=length(delta);if(!(distance>0) || !isfinite(distance)){result.status=kHitDirectDomain;return result;}
-  RtCone cone={footprint,0};uint visibility=rt_visibility(origin,delta/distance,distance,cone);
+  // Stop ls_clear short of the light, as D-LS trace_light (rt_local_shadows.hlsl): BG3 lights
+  // sit inside their own lamp/sconce/candle geometry, which is in the BVH. A ray to the light
+  // centre hits that fixture and every such light reads occluded (live S8: 22871 supported
+  // GI hits, 0 nonzero; rf tier (a) check direct term 0). Within ls_clear: lit, as D-LS.
+  float reach=distance-max(pc.ls_clear,0.0);
+  RtCone cone={footprint,0};uint visibility=reach>0?rt_visibility(origin,delta/distance,reach,cone):kRtLit;
   if(visibility==kRtUnknown){result.status=HdUnknownVisibility;return result;}
   term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
   if(term.status!=HdOk){result.status=term.status;return result;}

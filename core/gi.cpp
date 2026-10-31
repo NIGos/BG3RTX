@@ -946,7 +946,11 @@ constexpr uint32_t kStatsRing = 8;
 // direction or extent was invalid (NaN, Inf, zero direction); logged as "[core] guard:".
 // [121] loop caps hit: a froxel list over 1024 entries or a ray with over 4096 candidates.
 // [122..126] rt_primary_fade_class (gi/pan_primary_fade.hlsl): hits on camera-fade draws, in front
-// inside / outside the cut envelope, inside but not in front, frames with a capsule. [127] unused.
+// inside / outside the cut envelope, inside but not in front, frames with a capsule. [127] hit material
+// lookups of status 1 (base) on an instance without any material record (native_hit_material.hlsli
+// hit_material_count). [134..135] GI hit direct supported but zero: no positive light term / all occluded.
+// [253..262] hit material reasons, counted by every consumer under its stats key: rt_hit_material.hlsl
+// and gi_trace_rt (rt_stats), rf_hit_shade (rf_stats; run_post's push has rt_stats 0).
 // [128..133] ray queries aborted by the candidate cap with their answer unknown, per pass
 // (rt_common.hlsli kStatUnknown + g_rt_pass): other (origins, debug), sun, D-LS, D-RF, RT AO,
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
@@ -1167,10 +1171,10 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   if(host->cfg_int("rt_native_tileset",0) && host->cfg_int("rt_hit_material",0))
     host->log("hit material tileset (%u frames): qualified family2 %llu; native primary matches %llu",g_stats_n,
       (unsigned long long)t[bg3::transport::NtsStatQualified],(unsigned long long)t[bg3::transport::NtsStatPrimaryMatch]);
-  if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/256.0);
+  if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/256.0,t[134],t[135]);
   uint64_t material_total=0;for(unsigned i=253;i<263;++i)material_total+=t[i];
-  if(material_total)host->log("hit material (%u frames): attempted %llu qualified %llu unsupported %llu; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters %llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu",
-    g_stats_n,material_total,t[253],material_total-t[253],t[254],t[255],t[256],t[257],t[258],t[259],t[260],t[261],t[262]);
+  if(material_total)host->log("hit material (%u frames): attempted %llu qualified %llu unsupported %llu; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters %llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu; of base, instance without a material record %llu",
+    g_stats_n,material_total,t[253],material_total-t[253],t[254],t[255],t[256],t[257],t[258],t[259],t[260],t[261],t[262],t[127]);
   if(t[263])host->log("hit material native compare (%u frames): matched class0 %llu; mean raw albedo/normal/roughness/reflectance/metalness %.7f/%.7f/%.7f/%.7f/%.7f; sum quantization1/256; cone vs raster footprint, NOT equality gate",
     g_stats_n,t[263],double(t[264])/t[263]/256.0,double(t[265])/t[263]/256.0,double(t[266])/t[263]/256.0,double(t[267])/t[263]/256.0,double(t[268])/t[263]/256.0);
   uint64_t bounce_total=0;for(unsigned i=269;i<=280;++i)bounce_total+=t[i];

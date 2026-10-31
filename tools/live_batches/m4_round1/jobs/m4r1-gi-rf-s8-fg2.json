@@ -49,10 +49,10 @@
   "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
   "\\[cfg\\] settings read",
   "\\[trace\\] frame \\d+ written",
-  "GI hit direct \\([0-9]+ frames\\): candidates [1-9]\\d* qualified [1-9]\\d* direct supported [1-9]\\d* nonzero [1-9]\\d*",
+  "GI hit direct \\([0-9]+ frames\\): candidates [1-9]\\d* qualified \\d+ direct supported \\d+ nonzero \\d+; .*supported zero: no positive light term \\d+, all occluded \\d+",
   "rt stats \\(\\d+ frames\\): hybrid GI [0-9.]+M rays/frame, [0-9.]+% hit; of the hits [0-9.]+% shaded from the screen, ([1-9]\\d*\\.\\d)% on screen but hidden",
-  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters",
-  "rf hit shade \\(300 frames\\): tier b hidden hits [1-9]\\d*, shaded [1-9]\\d* \\([0-9.]+%\\), .*tier a check: [1-9]\\d* hits .*standard error [0-9.]+ \\([1-9]\\d* frames\\), mean \\|L_b - L_a\\| [0-9.]+; L_b terms direct [0-9.]+, sun [0-9.]+, ambient [0-9.]+",
+  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified \\d+ unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters \\d+(/\\d+){8}; of base, instance without a material record \\d+",
+  "rf hit shade \\(300 frames\\): tier b hidden hits [1-9]\\d*, shaded \\d+ \\([0-9.]+%\\), .*tier a check: \\d+ hits .*standard error [0-9.]+ \\(\\d+ frames\\), mean \\|L_b - L_a\\| [0-9.]+; L_b terms direct [0-9.]+, sun [0-9.]+, ambient [0-9.]+",
   "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
   "rf: reflection pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames; .*debug 0,",
   "rf: reflection pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames; .*debug 8,"

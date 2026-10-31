@@ -46,8 +46,8 @@
   "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
   "\\[cfg\\] settings read",
   "\\[trace\\] frame \\d+ written",
-  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters",
-  "rf hit shade \\(300 frames\\): tier b hidden hits [1-9]\\d*, shaded [1-9]\\d* \\([0-9.]+%\\), .*tier a check: [1-9]\\d* hits .*standard error [0-9.]+ \\([1-9]\\d* frames\\), mean \\|L_b - L_a\\| [0-9.]+; L_b terms direct [0-9.]+, sun [0-9.]+, ambient [0-9.]+",
+  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified \\d+ unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters \\d+(/\\d+){8}; of base, instance without a material record \\d+",
+  "rf hit shade \\(300 frames\\): tier b hidden hits [1-9]\\d*, shaded \\d+ \\([0-9.]+%\\), .*tier a check: \\d+ hits .*standard error [0-9.]+ \\(\\d+ frames\\), mean \\|L_b - L_a\\| [0-9.]+; L_b terms direct [0-9.]+, sun [0-9.]+, ambient [0-9.]+",
   "rf: reflection pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames; .*debug 0,",
   "rf: reflection pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames; .*debug 8,"
  ],

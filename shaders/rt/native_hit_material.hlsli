@@ -152,4 +152,15 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
 #endif
  result.status=(result.parameters.status==NtOk && result.scattering.status==NtOk)?0:9;return result;
 }
+// Reason histogram of one lookup (core/gi.cpp "hit material" line): counter 253+status
+// (0 qualified; 1 base, 2 epoch, 3 row, 4 clip, 5 geometry, 6 sampling, 7 fields, 8 frame,
+// 9 parameters) and 127: status 1 because the hit instance carries no material record at
+// all (neither nh_opaque_meta nor kInfoAlpha in its BVH-split info: a draw family, instancing
+// or pool the provider does not cover). Callers gate it on their stats key.
+void hit_material_count(RtHit hit,uint status,uint bin){
+ [unroll]for(uint s=0;s<10;++s)stat_add(253u+s,status==s,bin);
+ bool uncovered=false;
+ if(status==1u && hit.t>=0 && !hit.aborted){InstInfo ii=inst_info(hit.inst);uncovered=(ii.meta&(nh_opaque_meta|kInfoAlpha))==0u || (ii.meta&(kInfoLegacy|kInfoPool))!=0u;}
+ stat_add(127u,uncovered,bin);
+}
 #endif

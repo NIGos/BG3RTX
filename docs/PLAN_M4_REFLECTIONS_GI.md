@@ -25,6 +25,14 @@ contract). Variants are defines (`common/shader_variant.h`, `shaders/variants.tx
 Limits that decide the order:
 - The froxel light provider only indexes lights for points inside the view frustum.
   Offscreen lights, projector lights, sun and emission at hits are unsupported today.
+- Hit-material coverage (2026-10-31, branch hitmat-reasons): the provider covers only the audited
+  static VT opaque pair (and tileset with `rt_native_tileset=1`), non-instanced, at most 128 opaque
+  prepass records and 128 deferred material slots per frame (`nh_opaque_rows`, `material_slots`,
+  16 samplers, 64 cache views). Every other instance is reason `base` (counter 127 separates them).
+  Live S8/S6: 0.83% of GI candidates qualified, S6 98.7% unknown. Raising it is M3 work.
+- `native_hit_direct` traced to the light centre, into the light's own fixture: 0 nonzero of 22871
+  supported. It now stops `ls_clear` short, as D-LS. Reasons and the zero split (134/135) are logged
+  by the real consumers (`hit material`, `GI hit direct ... supported zero`).
 - D-RF already uses 32 push descriptors (the RTX 5090 limit). A material variant must take
   its extra inputs from descriptor sets, not new push slots.
 - GI R2 failed from a shader dispatched through the wrong (contracted D-LS) layout. Every new
