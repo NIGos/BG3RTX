@@ -40,6 +40,11 @@ ScaleZ acts on local X; observed Flip does not reflect POSITION. Target residual
 2.10e-5 is inside the derived 2.20e-4 precision envelope. Old decorative-anchor
 tests were not a transform oracle. Room closure and UV/material parity stay open.
 Next: nearby qualified floor support and the actual runtime material consumer.
+Nearby ground is now 736 triangles/1191 vertices, preserving native material IDs:
+three Floor_B pieces plus matched Floor_A, 8/16 -> 13/16 low-vertex intersections.
+Three gaps and room wall/roof/opening closure remain explicit. 58 asset tests pass,
+one existing skip. Material64 partition feedback now shares the Hair88 correction
+(55 fresh CPU checks); unchanged16/24 policy and explicit budgets are preserved.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
 module-independent SHA256 are fixed and tested through actual simulated runner.
