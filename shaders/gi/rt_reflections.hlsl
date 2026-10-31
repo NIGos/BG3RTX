@@ -238,6 +238,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
         const bool hs_check = tier == 1 && (pc.rf_stats != 0u || pc.rf_debug == 8u);
         if ((tier == 2 || tier == 3 || hs_check) && hit_material_publication_ready()) {
           NativeHitShade hs = native_hit_shade(hh, o + dir * t, -dir, cone.f0 + cone.spread * t);
+          // Hit-material reasons (253+status, 127) for the normal stats windows; run_post's push
+          // has rt_stats 0, so the D-RF stats key gates it (core/gi.cpp "hit material" line).
+          if (pc.rf_stats != 0u) hit_material_count(hh, hs.material_status, (fp.x >> 3) * 7u + (fp.y >> 3) * 13u);
           if (tier == 1) {
             hs_checked = hs.status == kHitShadeOk ? 1u : 0u;
             hs_check_fail = 1u - hs_checked;

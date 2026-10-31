@@ -182,13 +182,17 @@ void main(uint3 tid : SV_DispatchThreadID) {
       uint hit_bin=fp.x^fp.y;
       if(pc.rt_stats!=0u)stat_add(282u,true,hit_bin);
       NativeHitMaterial material=rt_hit_material(hh,cone.f0+cone.spread*t);
-      if(pc.rt_stats!=0u)stat_add(283u,material.status==0u,hit_bin);
+      if(pc.rt_stats!=0u){stat_add(283u,material.status==0u,hit_bin);hit_material_count(hh,material.status,hit_bin);}
       if(material.status==0u){
         NativeHitDirect direct=native_hit_direct(material,o+dir*t,-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
         if(pc.rt_stats!=0u)stat_add(284u,direct.status==HdOk,hit_bin);
         if(direct.status==HdOk){
           if(pc.rt_stats!=0u){
             stat_add(285u,any(direct.radiance>0),hit_bin);
+            // Zero direct split: 134 no positive unshadowed point/spot term (empty froxel, or
+            // every listed light out of range/channel/cone), 135 positive terms all traced occluded.
+            stat_add(134u,!any(direct.radiance>0) && direct.lights==0u,hit_bin);
+            stat_add(135u,!any(direct.radiance>0) && direct.lights!=0u,hit_bin);
             uint value=uint(round(dot(direct.radiance*w,float3(.2126,.7152,.0722))*256.0));
             uint sum=WaveActiveSum(value);if(WaveIsFirstLane() && sum)rtStats.InterlockedAdd((286u*64u+(WaveReadLaneFirst(hit_bin)&63u))*4u,sum);
           }

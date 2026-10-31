@@ -29,7 +29,7 @@ NativeHitLit native_hit_lit(RtHit hit,float3 position,float3 outgoing,float foot
 // status 0 complete; 1 material unknown; 2 point/spot unsupported (outside the frustum,
 // projector, unknown visibility); 3 sun unsupported; 4 not finite.
 static const uint kHitShadeOk=0u,kHitShadeMaterial=1u,kHitShadeDirect=2u,kHitShadeSun=3u,kHitShadeInvalid=4u;
-struct NativeHitShade {float3 radiance,direct,sun,ambient;uint status;bool local_probes;};
+struct NativeHitShade {float3 radiance,direct,sun,ambient;uint status,material_status;bool local_probes;};   // material_status: rt_hit_material's
 
 // The sun at a qualified hit, through the same declared BSDF as the point/spot term.
 HdDirect native_hit_sun(NativeHitMaterial material,float3 position,float3 outgoing,float3 geometric_normal,float footprint){
@@ -67,7 +67,7 @@ float3 native_hit_ambient(NativeHitMaterial material,float3 position,float3 outg
 
 NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float footprint){
  NativeHitShade r;r.radiance=0;r.direct=0;r.sun=0;r.ambient=0;r.local_probes=false;r.status=kHitShadeMaterial;
- NativeHitLit lit=native_hit_lit(hit,position,outgoing,footprint);
+ NativeHitLit lit=native_hit_lit(hit,position,outgoing,footprint);r.material_status=lit.material.status;
  if(lit.material.status!=0u)return r;
  r.status=kHitShadeDirect;
  if(lit.direct.status!=HdOk)return r;
