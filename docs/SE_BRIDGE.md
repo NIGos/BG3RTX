@@ -365,8 +365,14 @@ this diagnostic cannot claim no-activate/FG-timing equivalence.
 
 A dedicated hidden child attaches only to the owned PID/start identity and exact
 SE console title. It preserves the runner's console, sends a fixed one-shot Lua
-payload through CONIN$ (never global typing/window activation), restores the prior
-S/C context and detaches. It reads at most 32 S1-cell point candidates and writes
+single-line payload through CONIN$ (never global typing/window activation). Every
+write and wait rechecks the canonical shared USER_PLAYING markers and the finite
+consumed queue receipt. Context completion requires an exact S/C prompt on a new
+console row beyond the pre-write cursor; an old tail prompt is never accepted.
+The prior context is restored only after proven input completion. Partial native
+writes or uncertain completion cause failure without repair typing; auto-run then
+aborts only its owned game. The helper detaches in all cases and never falsely
+reports uncertain input as restored. It reads at most 32 S1-cell candidates and writes
 nonce-matched diagnostic reports only. No subscriptions, entity setters, installed
 Lua/config/profile edits or game launches occur in the helper. The normal queue
 still owns every launch/cleanup and rejects USER_PLAYING/unowned games.
@@ -376,8 +382,11 @@ UUID/name/position/radius/type/flags and reflected type. Missing/nonfinite core
 fields fail explicitly. `assetdb_join=1`, `assetdb_join_interval=30` and existing
 CSV output provide native b25 RGB/m3/m4/m5/current global scale for comparison;
 no parallel native light capture is added. Default-off opt-in leaves normal runs
-unchanged. CPU checks validate input-record layout, text budget/normalization and
-PowerShell syntax only. Console transport, Lua execution and colour mapping still
+unchanged. CPU checks validate input-record layout, single-line budget, fresh/old
+prompt boundaries, guarded write structure and PowerShell syntax. Twelve actual
+permission-function tests use synthetic consumed receipts and linked TEMP trees:
+canonical markers, missing/revoked/expired/closed permissions all fail closed.
+Console transport, Lua execution and colour mapping still
 await the first separately queued probe.
 
 Primary source:

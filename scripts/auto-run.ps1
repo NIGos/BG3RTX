@@ -489,7 +489,8 @@ function Invoke-SEProbeChild([string]$mode) {
    '-PidFile',('"'+$pidFile+'"'),'-MarkerRoot',('"'+$markerRoot+'"'),'-ResultPath',('"'+$resultPath+'"'))
   $child=Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru `
    -RedirectStandardOutput ($resultPath+'.stdout.txt') -RedirectStandardError ($resultPath+'.stderr.txt')
-  if(-not $child.WaitForExit(20000)){$child.Kill();throw 'Bounded SE probe helper timed out'}
+  $helperTimeout=if($mode -eq 'Probe'){30000}else{12000}
+  if(-not $child.WaitForExit($helperTimeout)){$child.Kill();throw 'Bounded SE probe helper timed out'}
   $child.WaitForExit();$result=Get-Content -LiteralPath $resultPath -Raw|ConvertFrom-Json
   if($child.ExitCode -ne 0){throw ("SE probe declined: "+$result.error)}
   Write-Host "[se-probe] mode=$mode status=$($result.status) records=$($result.records) known_blackbody=$($result.known_blackbody_records) result=$resultPath"
@@ -500,6 +501,7 @@ if($SELightProbe){
   [BG3RTX.Win]::keybd_event(0xA1,0x36,0,[UIntPtr]::Zero);$seLaunchShiftInjected=$true
 }
 try {
+Assert-QueueLaunchProcesses
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
 $game.EnableRaisingEvents = $true
