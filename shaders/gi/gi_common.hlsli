@@ -59,7 +59,7 @@ struct Push {
   uint cs_steps;
   float2 mv_scale;
   uint has_mv;
-  uint bounce_spec; // 1: GI bounces diffuse + specular (old); 0: the diffuse only (QUALITY R3)
+  uint bounce_spec; // unused, 0 (gi_bounce_spec removed 2026-10-31): GI bounces the diffuse only (QUALITY R3)
   // Track D ray-traced sun shadows (rt_shadow.hlsl)
   float rt_bias;      // ray origin offset along the normal, fraction of camera distance
   float rt_tmax;      // shadow ray length (world units)
@@ -172,7 +172,7 @@ float3 prev_radiance_at(int2 qp) { return prevRadiance[prev_radiance_px(qp)].rgb
 // shading point; its sun glints are the sparsest, brightest values on screen.
 float3 prev_bounce_at(int2 qp) {
   float4 v = prevRadiance[prev_radiance_px(qp)];
-  return pc.bounce_spec != 0 ? v.rgb : v.rgb * saturate(v.a);
+  return v.rgb * saturate(v.a);
 }
 
 // pcg3d (Jarzynski & Olano 2020): decorrelated across pixels and frames,
