@@ -12,8 +12,8 @@
 //     value (it reads this AO); the sun (core/gi.cpp clamps ao_direct to 0..2, so its sun
 //     bits are never set from the ini) and projector lights keep half.
 // What stays: our GI bounce (gi_composite.hlsl adds it to the diffuse after the lighting,
-// it does not read the AO: gi_strength=0 removes it), and D-RF's traced reflections with
-// rf_so=0 (the default; rf_so=1 multiplies them by the same SO, i.e. 0).
+// it does not read the AO: gi_strength=0 removes it), and D-RF's traced reflections (the
+// game's specular occlusion is not applied to them).
 // The trace is a lower bound for an effect that only removes ambient light: the floor it
 // gives is lower than "everything but the ambient" by the halved direct light above.
 #include "gi_common.hlsli"

@@ -361,7 +361,7 @@ struct CfgHotKey { const char* key; int fallback; };
 static const CfgHotKey kCfgHot[] = {
   {"geo_indirect_mb", 8}, {"rt_strips", 1}, {"rt_alpha_capture", 1}, {"rt_alpha_spill", 0},
   {"rt_native_tileset", 0}, {"rt_stats", 0}, {"rt_em_overlap_check", 0}, {"rt_cascade_casters", 0},
-  {"geo_capture", 0}, {"geo_xfb_always", 0}, {"pan_capture", 0}, {"fg_input_copy", 0},
+  {"geo_capture", 0}, {"pan_capture", 0}, {"fg_input_copy", 0},
   {"pan_inputs", 0}, {"rt_event_flush", 1}, {"sl_log_barriers", 0}, {"rt_build", 1},
   {"rt_bvh_split", 1}, {"rt_omm", 0}, {"rt_hit_material", 0}, {"rt_native_hair", 0},
   {"rt_native_scalp", 0}, {"rt_mesh_audit_frames", 600}, {"rt_mesh_audits", 2}, {"rt_emissive", 0},

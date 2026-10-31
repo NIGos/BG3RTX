@@ -56,7 +56,7 @@ float cfg_float(const char* key, float fallback);
 // the only place the merged settings and the A/B hotkey change), read without a lock.
 enum class CfgHot : int {
   geo_indirect_mb, rt_strips, rt_alpha_capture, rt_alpha_spill, rt_native_tileset, rt_stats,
-  rt_em_overlap_check, rt_cascade_casters, geo_capture, geo_xfb_always, pan_capture,
+  rt_em_overlap_check, rt_cascade_casters, geo_capture, pan_capture,
   fg_input_copy, pan_inputs, rt_event_flush, sl_log_barriers, rt_build, rt_bvh_split, rt_omm,
   rt_hit_material, rt_native_hair, rt_native_scalp, rt_mesh_audit_frames, rt_mesh_audits,
   rt_emissive, rt_em_backdrop, rt_em_decal,
@@ -582,8 +582,6 @@ constexpr uint32_t kSceneSlots = 8;
 bool rt_scene(VkAccelerationStructureKHR* tlas, uint64_t* built_frame);
 // ABI 8: the latest scene's TLAS and its own set 1, as one versioned pair.
 bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame);
-bool rt_scene_camera(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas, VkDescriptorSet* set,
-                     uint64_t* built_frame);
 // Oldest build frame among the slots the GPU may still read (UINT64_MAX: none).
 // A BVH range freed in frame F is released only once this is > F.
 uint64_t rt_scene_oldest_live();

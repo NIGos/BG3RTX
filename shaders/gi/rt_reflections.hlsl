@@ -18,7 +18,7 @@
 //            aborted (closest hit unknown, rt_common.hlsli): w = 0, the game's probe
 //            stays exactly as it was (a TLAS miss is not sky: roofs are cut away).
 // Tier (b), shading off-screen hits, needs the hit material (D-EN2) and is not done.
-// The game's specular occlusion is not applied to traced hits (rf_so=0): the ray
+// The game's specular occlusion is not applied to traced hits: the ray
 // already found the occluder and returns its radiance.
 //
 // Sampling (QUALITY R1, R2). With RR (rf_sample=1): one ray per pixel, GGX bounded
@@ -228,7 +228,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   }
 
   float3 gs = gSpecular[fp];
-  float3 Trt = Lrt * E * (pc.rf_so != 0 ? so : 1.0);
+  float3 Trt = Lrt * E;
   float3 delta = w * (Trt - Tp);
   float3 os = max(gs + delta, 0.0);
   float3 gd = gDiffuse[fp], od = gd;

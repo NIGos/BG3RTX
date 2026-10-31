@@ -245,10 +245,10 @@ struct Capture {
   VkDeviceSize rt_ubo_off = 0;
   uint64_t sig = 0;
   uint32_t rt_draws = 0;
-  bool state_log = false, state_sample = false, depth_filter = false;
+  bool state_log = false, state_sample = false;
   bool discard_filter = false;
   uint64_t discard_skipped = 0;
-  uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0, depth_skipped = 0;
+  uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0;
   struct StateCount { uint64_t fs = 0, draws = 0, tris = 0; PipeInfo pipe{}; };
   std::unordered_map<uint64_t, StateCount> states;
   // rt_alpha: opaque draws fill [0, opaque_end), alpha-tested ones
@@ -299,7 +299,7 @@ struct RtDropLog {
   uint64_t frames = 0, alpha_overflow = 0, alpha_overflow_mb = 0, opaque_overflow = 0, drop_indirect = 0, drop_topo = 0,
            drop_topo_tris = 0, strips = 0, strip_tris = 0;
   uint64_t peak_alpha = 0, peak_opaque = 0, alpha_spills = 0, alpha_spill_bytes = 0;
-  uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0, depth_skipped = 0;
+  uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0;
   bool first_alpha = false, first_opaque = false, first_drop = false;
 };
 std::mutex g_drop_mu;
@@ -307,7 +307,7 @@ RtDropLog g_drop;
 
 std::mutex g_cap_mu;
 Capture g_cap;                 // the readback capture (one per trace)
-Capture g_scratch;             // geo_xfb_always
+Capture g_scratch;             // the device-memory capture (the RT scene source)
 std::atomic<bool> g_submit_wanted{false};
 
 // An effects pass of the emissive capture (D-EM, emissive.cpp): CmdState::geo holds
@@ -355,8 +355,6 @@ bool is_prepass(const Bg3PassInfo& p) {
          (!g_gbuf_depth || uint64_t(p.depth_image) == g_gbuf_depth);
 }
 constexpr uint32_t kPrepassMinDraws = 64;
-std::atomic<int> g_prepass_ordinal{-1};   // learned: ordinal of the depth-only pass with the scene
-std::atomic<uint64_t> g_prepass_frame{0}; // frame it was last captured in (relearned when it goes missing)
 std::atomic<uint64_t> g_scene_frame1{0};   // frame_index()+1 of the last non-minor prepass capture
 std::atomic<int> g_scene_ordinal{-1};      // its ordinal (logged when it moves)
 std::atomic<uint32_t> g_scene_moves{0}, g_minor_dropped{0};
@@ -476,10 +474,9 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.rt_draws = 0;
   c.state_log = cfg_int("rt_capture_state_log", 0) != 0;
   c.state_sample = c.state_log && c.record_frame % (std::max)(cfg_int("rt_timing_frames", 300), 30) == 0;
-  c.depth_filter = cfg_int("rt_capture_depth_write", 0) != 0;
   c.discard_filter = cfg_int("rt_capture_discard", 1) != 0;
   c.discard_skipped = 0;
-  c.source_draws = c.no_depth_draws = c.no_depth_tris = c.depth_skipped = 0;
+  c.source_draws = c.no_depth_draws = c.no_depth_tris = 0;
   c.states.clear();
   c.opaque_end = c.xfb.size;
   c.alpha_base = c.alpha_cursor = c.xfb.size;
@@ -1912,20 +1909,12 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
   if (gbuf) g_gbuf_w = s->pass.width, g_gbuf_h = s->pass.height, g_gbuf_depth = uint64_t(s->pass.depth_image);
   // The ray tracing scene's source pass: with rt_alpha the depth prepass
   // (depth-only D24S8 at render resolution), otherwise the G-buffer.
-  // BG3 draws a few small depth-only passes before the big one: once seen, only
-  // the big one's ordinal (its position in the command buffer) is captured.
-  // rt_prepass_by_ordinal=0 (default): the scene's prepass is the first non-minor
-  // depth-only pass of the frame, wherever it sits. The learned ordinal is fragile:
-  // the small passes before the big one come and go with what is on screen (in-world
-  // UI, highlights), and a shifted ordinal froze the RT scene for 8 frames, or made a
-  // small pass the RT source (its capture clears the frame's draw and alpha lists).
-  // Minor passes are still captured and dropped at their end (as while learning).
-  static const bool by_ordinal = cfg_int("rt_prepass_by_ordinal", 0) != 0;
-  if (g_prepass_ordinal >= 0 && frame_index() > g_prepass_frame + 8) g_prepass_ordinal = -1;
-  const bool prepass =
-      is_prepass(s->pass) &&
-      (by_ordinal ? (g_prepass_ordinal < 0 || int(s->pass.ordinal) == g_prepass_ordinal)
-                  : g_scene_frame1.load() != frame_index() + 1);
+  // BG3 draws a few small depth-only passes before the big one.
+  // The scene's prepass is the first non-minor depth-only pass of the frame, wherever
+  // it sits. (A learned ordinal was fragile: the small passes before the big one come and
+  // go with what is on screen, and a shifted ordinal froze the RT scene for 8 frames.)
+  // Minor passes are still captured and dropped at their end.
+  const bool prepass = is_prepass(s->pass) && g_scene_frame1.load() != frame_index() + 1;
   const bool rt_src = g_alpha_mode ? prepass : gbuf;
   if(g_on && gbuf && !rt_src && native_hit::enabled() && !trace_recording()) {
     s->geo={GeoKind::Material,nullptr};s->geo_material_no_writes=true;return;
@@ -1944,7 +1933,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
         g_submit_wanted = true;
         g_dd->vk.CmdResetQueryPool(cmd, g_cap.qp, 0, g_cap.max_slots);
       }
-    } else if (g_scratch.state != 1 && ((rt_src && rt_capture_wanted()) || (gbuf && cfg_hot(CfgHot::geo_xfb_always)))) {
+    } else if (g_scratch.state != 1 && rt_src && rt_capture_wanted()) {
       if (start_capture(g_scratch, false, s->pass.width, s->pass.height)) {
         g_scratch.cmd = cmd;
         g_scratch.rt = rt_src && rt_capture_wanted();
@@ -2027,13 +2016,12 @@ void rt_capture_stats(const Capture& c) {
   l.source_draws += c.source_draws;
   l.no_depth_draws += c.no_depth_draws;
   l.no_depth_tris += c.no_depth_tris;
-  l.depth_skipped += c.depth_skipped;
   if (c.state_sample)
     for (const auto& [id, row] : c.states)
-      log("[rt-capture] frame %llu pipe %llu FS %016llx depth write/test %d/%d colorWriteMask 0x%x blendMask 0x%x draws %llu triangles %llu filter %u",
+      log("[rt-capture] frame %llu pipe %llu FS %016llx depth write/test %d/%d colorWriteMask 0x%x blendMask 0x%x draws %llu triangles %llu",
           (unsigned long long)c.record_frame, (unsigned long long)id, (unsigned long long)row.fs,
           row.pipe.depth_write, row.pipe.depth_test, row.pipe.color_mask, row.pipe.blend_mask,
-          (unsigned long long)row.draws, (unsigned long long)row.tris, unsigned(c.depth_filter));
+          (unsigned long long)row.draws, (unsigned long long)row.tris);
   l.peak_alpha = (std::max)(l.peak_alpha, uint64_t(c.alpha_demand));
   l.peak_opaque = (std::max)(l.peak_opaque, uint64_t(c.cursor + c.opaque_overflow_bytes));
   const double mb = 1.0 / (1 << 20);
@@ -2057,9 +2045,9 @@ void rt_capture_stats(const Capture& c) {
   int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
   if (l.frames >= uint64_t(every)) {
     if (c.state_log)
-      log("[rt-capture] last %llu frames per frame: source draws %.2f depth-write-off draws %.2f triangles %.2f skipped %.2f filter %u",
+      log("[rt-capture] last %llu frames per frame: source draws %.2f depth-write-off draws %.2f triangles %.2f",
           (unsigned long long)l.frames, double(l.source_draws) / l.frames, double(l.no_depth_draws) / l.frames,
-          double(l.no_depth_tris) / l.frames, double(l.depth_skipped) / l.frames, unsigned(c.depth_filter));
+          double(l.no_depth_tris) / l.frames);
     log("[geo] RT capture, last %llu frames: alpha region %.0f MB (peak demand %.1f MB), opaque peak %.1f MB of a "
         "%.0f MB buffer; per frame: alpha draws made opaque (region full) %.2f, opaque draws dropped (buffer full) %.2f, "
         "indirect draws dropped %.2f, non-list draws dropped %.2f (%.0f triangles), strips/fans captured %.2f (%.0f "
@@ -2205,12 +2193,6 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
         auto& row = c->states[d.pipe_id];
         row.fs = s->fs; row.pipe = pi; ++row.draws; row.tris += prims;
       }
-    }
-    // Reject before alpha allocation and bvh_classify: cached instances and
-    // captured triangles must obey the same rule. Raster draws still execute.
-    if (c->depth_filter && pi.depth_write == 0) {
-      ++c->depth_skipped;
-      return;
     }
   }
   d.reserved = prims * tri_bytes;
@@ -2385,8 +2367,6 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
     // until the big one is known, and dropped.
     const bool minor_pass = g_alpha_mode && s->pass.draw_count < kPrepassMinDraws;
     if (g_alpha_mode && !minor_pass) {
-      g_prepass_ordinal = int(s->pass.ordinal);
-      g_prepass_frame = frame_index();
       g_scene_frame1 = frame_index() + 1;
       const int was = g_scene_ordinal.exchange(int(s->pass.ordinal));
       if (was >= 0 && was != int(s->pass.ordinal)) {

@@ -19,9 +19,6 @@ uint lsref_rt_occluded(float3 o, float3 d, float tmax, lsref_RtCone cone) {
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
-#ifdef RT_SCENE_REBASE
-  r.Origin = rt_scene_ray_origin(o); // hand edit: shared coordinate-space infrastructure
-#endif
   r.Direction = d;
   r.TMin = 0.0;
   r.TMax = tmax;

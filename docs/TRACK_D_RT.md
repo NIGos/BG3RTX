@@ -293,6 +293,11 @@ checks and 20 variant validations pass. No promotion or merge.
 
 ## P1 lighting-to-scene translation — 2026-10-29, gate incomplete
 
+`rt_scene_rebase` (its gi/rebase and gi/cascade_rebase wrappers), `rt_scene_camera_match` and
+the host's `rt_scene_camera` (ABI 16): removed 2026-10-31, see CONSOLIDATION.md C1 (ABI 22).
+The `RT_SCENE_REBASE` blocks of rt_common.hlsli and hair_receiver.hlsli stay for
+tools/native_hair_gpu_probe's rebase cases; no runtime variant defines it.
+
 314840d: one real-present foreground FG-off job exited before slow/fast windows.
 Late static primary match off 99.164-99.177%, on 99.157-99.177%, RT active and no
 missing scene in interior windows. Median cadence 17.60 / 17.50 fps. Initial
@@ -476,8 +481,8 @@ to any depth bias. The residual on z then flags such vertices (3,072 sky vertice
 
 Settings: `geo_capture`, `geo_xfb_mb` (768), `geo_max_draws` (16384), `geo_depth_tol`
 (0.002), `geo_obj`, `geo_timing` (G-buffer pass GPU time, logged every
-`geo_timing_frames`), `geo_xfb_always` (XFB into device memory every frame, for the cost
-measurement), `geo_patch_dump=N`.
+`geo_timing_frames`), `geo_patch_dump=N`. `geo_xfb_always` (the cost probe below): removed
+2026-10-31, see CONSOLIDATION.md C1.
 
 ## 3. Results
 
@@ -541,8 +546,8 @@ device so that it measures the same hardware without touching the game. Enabling
   - Only the G-buffer pass is captured. Forward/transparent passes, decals and the
     depth-only prepass are not.
   - No UVs or material IDs yet.
-  - The capture runs in traced frames only. `geo_xfb_always` is a cost probe and writes
-    to a scratch buffer nobody reads.
+  - The capture runs in traced frames only. (The `geo_xfb_always` cost probe was removed
+    2026-10-31.)
 
 ## 4. Validation
 
@@ -719,7 +724,8 @@ Memory for 3.2M triangles: 384 MB XFB, 214 MB BLAS (capacity 3.6M), 13 MB scratc
   - The pass replaces the screen-space contact shadows whenever a TLAS exists.
     Without one (`rt=0`, loading screens) the contact shadows run as before.
   - It also works with `gi=0`.
-- **AO** (`rt_ao=1`, `gi/rt_ao.hlsl`, needs `gi=1`). Runs at half resolution on
+- **AO** (`rt_ao=1`, `gi/rt_ao.hlsl`, needs `gi=1`; superseded by `gi_rt`: removed
+  2026-10-31, see CONSOLIDATION.md C1). Runs at half resolution on
   exactly the samples `gi_trace` used, with `rt_ao_rays` (2) cosine rays of
   `rt_ao_radius` (1.0 world units).
   - Occlusion falls off smoothly with hit distance, `1 − (t/R)²`.
@@ -812,7 +818,7 @@ are off-screen or behind a surface now count.
 
 - `rt_fast_trace=1` (`PREFER_FAST_TRACE`): rebuild 3.3 ms, refit 0.56 ms, with no
   measurable gain in trace time (0.225–0.235 vs 0.235–0.241 ms). Fast build stays
-  the default.
+  the default. `rt_fast_trace`: removed 2026-10-31, see CONSOLIDATION.md C1.
 - The phase-1 bench (0.55 ms refit, 2.5–3.4 ms rebuild on its own device) is
   reproduced on the game's device.
 - With `rt_debug=3` the extra primary ray brings the shadow pass to 0.25–0.36 ms.
@@ -864,10 +870,9 @@ Found and fixed along the way:
    screen when on-screen, otherwise from a radiance cache. Denoise with RR (Track A).
 
 Settings (`bg3rtx.ini`):
-- `rt`, `rt_build`, `rt_refit`, `rt_rebuild_frames`, `rt_fast_trace`, `rt_xfb_mb`,
+- `rt`, `rt_build`, `rt_refit`, `rt_rebuild_frames`, `rt_xfb_mb`,
   `rt_bda_core`;
 - `rt_shadows`, `rt_strength`, `rt_bias`, `rt_tmax`;
-- `rt_ao`, `rt_ao_rays`, `rt_ao_radius`;
 - `rt_debug`, `rt_timing_frames`.
 
 The log reports `[rt] scene build GPU …` (convert, BLAS, TLAS per rebuild/refit),
@@ -1266,18 +1271,18 @@ cut-away roofs, so the RT sun can replace the game's mask under roofs too.
   with alpha holds 1.47M triangles (~100 MB); cascade 3 overflows (340 draws dropped).
 - **Shaders.** `RT_VIS_MASK` / `RT_HIT_MASK` in `rt_common.hlsli` are the literal 0xFF in
   ordinary builds (SPIR-V of all 66 existing outputs byte-identical). The core picks
-  `gi/cascade/` (`gi/cascade_rebase/` with `rt_scene_rebase`) variants with the key on:
+  `gi/cascade/` variants with the key on:
   mask 0x01 for GI, reflections, AO, local lights, origin and primary checks; the sun
   ray (`rt_shadow.hlsl`) traces 0xFF and ignores cascade hits nearer than
   `RT_CASCADE_TMIN` = 0.5 m (a coarser copy of the shaded surface; a roof is >= 2 m up).
 - **Trust** (`core/sun_trust.cpp`). With `rt_cascade_roofs_trust=1` the roof volumes are
   not uploaded: roofs no longer stop the replace. The off-screen test stays.
+  `rt_cascade_roofs_trust` (rejected, interior leak): removed 2026-10-31, see CONSOLIDATION.md C1.
 - **Logs.** `[cascade] sun cascade pass found` once per layer; every `rt_timing_frames`:
   `[cascade] casters:` (draws seen / duplicates / alpha / added, triangles, MB, builds with
   the instance and why not, captured pass GPU ms) and `[cascade] matrix of cascade k`
   (w column error, det, extents of every cascade, UBO origin vs camera in m: the
-  inversion's premises). `sun: roof volumes TRUSTED` on toggle; `sun stats` ends with
-  `roof volumes trusted (cascade casters) 1`.
+  inversion's premises).
 - **Gate result 2026-10-29 (S7 Blushing Mermaid, static, FG 2, live A/B in one run,
   sup-cascade2/3/4-s7-fg2).** Sun stats per 600 frames: key off (roof volumes): game dark &
   RT lit 29-31% of traced px, kept by roofs 99%, mean brightening 0.0004-0.0005/px. Key on
@@ -2156,6 +2161,8 @@ the box's face on the light side (the box is the light's extent; casters outside
 shadow it); (4) the same delta and `ls_shadowed` logic, the same art-intent rule (the rim
 and fill rigs come from `CharacterLight` lists, owner character, flags from their
 templates). Validation as 9.3: `ls_debug=4` with the projector pixels included.
+(Implemented as `ls_box`: only box lights with a game shadow map are traced; the
+`ls_box_unshadowed` A/B key: removed 2026-10-31, see CONSOLIDATION.md C1.)
 
 **Forward receivers: design note (later).** Water, glass, particles and VFX are drawn after
 the deferred lighting by the game's forward passes, which evaluate the sun with the cascades
@@ -2169,6 +2176,8 @@ patched lookup. Water is the most visible case and also needs the forward captur
 backlog item 12 to cast. Do it with item 12.
 
 ### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, measured, off by default)
+
+`ls_k` and `ls_rest_samples` (with `ls_main_k`): removed 2026-10-31, see CONSOLIDATION.md C1.
 
 Why: Grymforge is over the 0.5 ms budget (0.73 ms with the 9.10 policy; `ls stats`: 6.09
 listed, 4.34 evaluated, **3.83 traced** lights per pixel, against 2.1-2.3 in the foundry).
@@ -2354,8 +2363,9 @@ frame's lit radiance, reflections included, as next frame's `prevRadiance`), SSS
      (QUALITY R3; roofs are cut away).
    - Tier (b), shading off-screen hits, needs the hit material (D-EN2) and is not done.
 5. The exact delta `b11 += w·(L·E − Tp)`, clamped at 0 only against the transmittance it does
-   not replicate. The game's `SO` is not applied to traced hits (`rf_so=0`): the ray found the
-   occluder and returns its radiance; applying `SO` as well would double-occlude.
+   not replicate. The game's `SO` is not applied to traced hits: the ray found the
+   occluder and returns its radiance; applying `SO` as well would double-occlude. (`rf_so`:
+   removed 2026-10-31, see CONSOLIDATION.md C1.)
 6. RR's `DLSSD.SpecularHitDistance` (R16F): the hit distance for tier (a), 65504 elsewhere
    (the probe behaves as an environment at infinity). Non-finite guard on every write (R5).
 
@@ -2457,7 +2467,7 @@ D-LS 0.35 ms, D-RF 0.33 ms, about 0.95 ms of the 2.5 ms.
 - `stats_begin` adds 3.8-4 ms when `rf_stats=1`, as for D-LS: measurement only.
 
 Settings (`bg3rtx.ini`, all live): `rt_reflections`, `rf_max_rough`, `rf_max_rough_norr`,
-`rf_mirror_rough`, `rf_rr`, `rf_tmax`, `rf_depth_k` (was `rf_depth_tol`), `rf_edge`, `rf_strength`, `rf_so`,
+`rf_mirror_rough`, `rf_rr`, `rf_tmax`, `rf_depth_k` (was `rf_depth_tol`), `rf_edge`, `rf_strength`,
 `rf_models`, `rf_debug` (1 tiers, 2 change ×4, 3 probe term, 4 probe term after D-RF,
 5 validation residual, 6 hit distance), `rf_stats`, `rf_validate`, `rr_spec_hit_distance`.
 The log reports `rf: first frame ...` (the lighting's set and its layout),
@@ -2828,6 +2838,7 @@ and what the trust did with them (`sun stats`, 600-frame windows):
   `rt_sun_top=0` (new) drops the scene top and asks only for `rt_sun_rise` above the pixel;
   the proximity test (`rt_sun_near`) still limits any leak to bands at the game's shadow
   edges. Which default is right needs the in-frame A/B (HANDOFF.md).
+  `rt_sun_top` and `rt_sun_top_pad` (0 kept): removed 2026-10-31, see CONSOLIDATION.md C1.
 - The `brightening rt_sun_replace` crops of that run were animation (waves in S8, swaying
   foliage in S3), which is why that comparison is gone.
 - Cost: `rt passes` 0.5-0.7 ms in total in S7 (the sun passes are not timed on their own).
@@ -3626,7 +3637,8 @@ Scored with `scripts/qa/em_gate.py`.
 
 - The GF +3.8% and the AF 1.93 of `222986b8` were the all-hit metric, which includes the dark
   texels. On bright pixels both match.
-- **The filter stays 0** (the ray-cone LOD). Filters 1 and 2 remain as diagnostics.
+- **The filter stays 0** (the ray-cone LOD). `rt_em_filter` and `rt_em_aniso` (filters 1/2):
+  removed 2026-10-31, see CONSOLIDATION.md C1.
 
 **AF `304be1c7` at 0.42 is independent of filtering.**
 - The candidate: other emitters on the same ray, such as alpha-blended glows or particles

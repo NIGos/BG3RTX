@@ -85,11 +85,10 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
-  // Variant bits: 1 rebase, 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset.
+  // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset (1 was rt_scene_rebase).
   VkPipeline variants[64] = {};
   uint64_t variant_generations[64] = {};
   std::string variant_files[64];
-  bool rebased = false;
 };
 
 // Bound pipeline capability, including a first-frame capability publication race.
@@ -113,13 +112,13 @@ struct Push {
   float cs_length, cs_strength;
   uint32_t cs_steps;
   float mv_scale[2];
-  uint32_t has_mv, bounce_spec;   // bounce_spec: gi_bounce_spec (1: the old diffuse + view-dependent specular source)
+  uint32_t has_mv, bounce_spec;   // bounce_spec: unused, 0 (gi_bounce_spec removed 2026-10-31)
   float rt_bias, rt_tmax;
   uint32_t rt_debug;
   float rt_strength;
-  float rt_ao_radius;
-  uint32_t rt_ao_rays;
-  uint32_t ls_kmode, sharc_fx;   // sharc_fx: sharc_inject.hlsl, the D-EM effects target is bound (49); ls_kmode: D-LS exact-k, bits 0-3 ls_k, bits 4-7 ls_rest_samples
+  float rt_ao_radius;   // unused, 0 (rt_ao removed 2026-10-31)
+  uint32_t rt_ao_rays;  // unused, 0
+  uint32_t ls_kmode, sharc_fx;   // sharc_fx: sharc_inject.hlsl, the D-EM effects target is bound (49); ls_kmode: unused, 0 (ls_k removed 2026-10-31)
   float gi_rt_radius, gi_rt_tol;
   uint32_t gi_rt_fallback, rt_stats;
   float sun_radius;
@@ -131,7 +130,7 @@ struct Push {
   float ls_strength;
   uint32_t ls_has_mask, ls_flags;   // ls_flags: bit 0 per-light data (ls_lights), bits 8-12 owners traced (ls_owners)
   float rf_max_rough, rf_mirror_rough, rf_tmax, rf_depth_tol, rf_edge, rf_strength;
-  uint32_t rf_debug, rf_sample, rf_so, rf_validate, rf_models, rf_stats;
+  uint32_t rf_debug, rf_sample, rf_so, rf_validate, rf_models, rf_stats;   // rf_so: unused, 0 (removed 2026-10-31)
   // RT audit fixes (docs/AUDIT_RT.md)
   uint32_t rt_backlit, mat_classes, ao_direct, rt_origin;
 };
@@ -204,7 +203,7 @@ VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_H
 VkDescriptorSetLayout g_current_sun_set_layout=VK_NULL_HANDLE,g_current_sun_host_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_current_sun_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
-Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
+Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_trace_rt, g_ls, g_ls_prep;
 Pipe g_hit_material, g_hit_direct, g_hit_two_bounce, g_hit_gi, g_hit_gi_sharc;
 Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
@@ -706,29 +705,27 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
-  static const char* const rebased_files[] = {
+  // The RT passes that have cascade/OMM/Hair/tileset variants.
+  static const char* const rt_files[] = {
       "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/gi_trace_rt_hit_direct.hlsl", "gi/gi_trace_rt_sharc_hit_direct.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
       "gi/pan_primary_identity.hlsl", "gi/pan_local.hlsl",
-      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
+      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_origin.hlsl",
       "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
       "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
       "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
       "gi/rt_sun_resolve.hlsl", "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl"};
   bool listed = false;
-  for (const char* candidate : rebased_files) listed |= std::strcmp(file, candidate) == 0;
-  const bool rebase = listed && host->cfg_int("rt_scene_rebase", 0) != 0;
+  for (const char* candidate : rt_files) listed |= std::strcmp(file, candidate) == 0;
   // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
   // casters as instance mask 0x02; these variants trace 0x01 except the sun ray
   // (gi/cascade*/, shaders/rt/rt_common.hlsli). rt_sun_resolve traces nothing.
   const bool cascade = listed && host->cfg_int("rt_cascade_casters", 0) != 0 &&
                        std::strcmp(file, "gi/rt_sun_resolve.hlsl") != 0;
   // Include box/native/check helpers too: each may reach rt_common through
-  // includes even when it is outside the origin-rebase variant list.
+  // includes even when it is outside the variant list.
   const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
       host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
-  const std::string base = cascade ? std::string(rebase ? "gi/cascade_rebase/" : "gi/cascade/") + (file + 3)
-                               : rebase ? std::string("gi/rebase/") + (file + 3)
-                                        : std::string(file);
+  const std::string base = cascade ? std::string("gi/cascade/") + (file + 3) : std::string(file);
   const std::string material_selected = scalp ? "native_scalp/" + base : base;
   const std::string scene_selected = &p == &g_rt_shadow_current ? "sun_current/" + material_selected : material_selected;
   const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
@@ -738,14 +735,14 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const std::string before_tileset=physical_origin?"hair_origin/"+original_selected:original_selected;
   const bool tileset=std::strncmp(file,"gi/",3)==0 && bg3::native_tileset::enabled(static_cast<uint32_t*>(host->persist(bg3::native_tileset::capability_key,sizeof(uint32_t))));
   const std::string selected=tileset?"native_tileset/"+before_tileset:before_tileset;
-  const unsigned variant = (tileset?32u:0u) | (physical_origin?16u:0u) | (rebase ? 1u : 0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  const unsigned variant = (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset) p.pipeline = p.variants[variant];
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
+  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == selected;
   if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
-    p.pipeline = p.variants[variant]; p.generation = blob.generation; p.rebased = rebase;
+    p.pipeline = p.variants[variant]; p.generation = blob.generation;
     return true;
   }
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
@@ -756,7 +753,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   VkShaderModule mod = VK_NULL_HANDLE;
   if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
     host->log("gi: %s shader module creation failed; keeping the previous pipeline", file);
-    return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
+    return p.pipeline && p.variant_files[variant] == selected;
   }
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
@@ -767,7 +764,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
   if (pr != VK_SUCCESS) {
     host->log("gi: %s pipeline creation failed; keeping the previous one", file);
-    return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
+    return p.pipeline && p.variant_files[variant] == selected;
   }
   g_omm_pipelines.erase(p.variants[variant]);
   if(omm)g_omm_pipelines.insert(np);
@@ -775,7 +772,6 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   p.variants[variant] = np;
   p.variant_generations[variant] = blob.generation;
   p.variant_files[variant] = selected;
-  p.rebased = rebase;
   p.pipeline = np;
   p.generation = blob.generation;
   host->log("gi: %s generation %llu", selected.c_str(), (unsigned long long)blob.generation);
@@ -908,8 +904,7 @@ constexpr uint32_t kStatsRing = 8;
 // light list / of set 1 out of range, and rays not traced because their origin,
 // direction or extent was invalid (NaN, Inf, zero direction); logged as "[core] guard:".
 // [121] loop caps hit: a froxel list over 1024 entries or a ray with over 4096 candidates.
-// [122..127] D-LS exact-k (ls_k, ls_stats=1): candidates, px over the cap, remainder lights,
-// remainder rays, their occluded ones, the remainder's weight share (x256).
+// [122..127] unused (the D-LS exact-k counters, ls_k removed 2026-10-31).
 // [128..133] ray queries aborted by the candidate cap with their answer unknown, per pass
 // (rt_common.hlsli kStatUnknown + g_rt_pass): other (origins, debug), sun, D-LS, D-RF, RT AO,
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
@@ -1128,16 +1123,6 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               t[15] / px / 256.0, t[21] ? 100.0 * t[15] / double(t[21]) : 0.0, t[23] / px / 256.0, t[21] ? 100.0 * t[23] / double(t[21]) : 0.0, 100.0 * t[20] / px, g_ls_raw[0], g_ls_raw[1], g_ls_raw[2],
               g_ls_raw[3], t[31] / px, int(g_ls_box_active));
   }
-  if (t[16] && t[122]) {   // D-LS exact-k (rt_local_shadows.hlsl ls_main_k; TRACK_D_RT.md 9.11)
-    double px = double(t[16]), hit = double(t[123] ? t[123] : 1), rr = double(t[125] ? t[125] : 1);
-    host->log("ls exact-k stats (%u frames): ls_k %d, ls_rest_samples %d: traced lights (ls_k=0 would trace) %.2f/px; "
-              "rays %.2f/px (exact %.2f, remainder %.2f), occluded %.2f/px; over the cap (k-hit) %.1f%% of px; "
-              "remainder %.2f lights/px, %.2f per capped px; remainder rays occluded %.1f%%; remainder share of the "
-              "irradiance weight on capped px %.1f%%",
-              g_stats_n, host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1), t[122] / px, t[19] / px,
-              (t[19] - t[125]) / px, t[125] / px, t[20] / px, 100.0 * t[123] / px, t[124] / px, t[124] / hit,
-              100.0 * t[126] / rr, 100.0 * t[127] / 256.0 / hit);
-  }
   if (t[16] && (t[200] || t[208])) {
     const double px = double(t[16]);
     host->log("ls box stats (%u frames): evaluated %.3f/px, shadow-mapped %.3f/px, traced %.3f/px, "
@@ -1355,13 +1340,10 @@ Push make_push() {
   // QUALITY R3: the bounce source is view-independent radiance (the diffuse), not the
   // specular the camera sees (sun glints: sparse, very bright 1-spp hits that RR leaves
   // as blotches). 1 restores diffuse + specular for an A/B.
-  pc.bounce_spec = host->cfg_int("gi_bounce_spec", 0) ? 1u : 0u;
   pc.rt_bias = host->cfg_float("rt_bias", 0.002f);
   pc.rt_tmax = host->cfg_float("rt_tmax", 300.0f);
   pc.rt_debug = uint32_t(host->cfg_int("rt_debug", 0));
   pc.rt_strength = host->cfg_float("rt_strength", 1.0f);
-  pc.rt_ao_radius = host->cfg_float("rt_ao_radius", 1.0f);
-  pc.rt_ao_rays = uint32_t((std::max)(host->cfg_int("rt_ao_rays", 2), 1));
   pc.gi_rt_radius = (std::max)(host->cfg_float("gi_rt_radius", 1.0f), 0.01f);
   // Multiplier on the derived on-screen-hit depth tolerance (rt/depth_tol.hlsli), 1 = as
   // derived. New key: an old gi_rt_depth_tol=0.03 read as k would reject nearly every hit.
@@ -1378,11 +1360,6 @@ Push make_push() {
   int soft = host->cfg_int("ls_soft", -1);   // -1 follows rr
   pc.ls_soft = (soft < 0 ? host->rr_active() : soft != 0) ? 1u : 0u;
   pc.ls_strength = host->cfg_float("ls_strength", 1.0f);
-  // Exact-k + RIS remainder (docs/DESIGN_SOTA_NEXT.md 1a, TRACK_D_RT.md 9.11): the ls_k
-  // strongest traced lights per pixel exactly, ls_rest_samples rays to the rest (RIS);
-  // ls_k=0 traces every light (the pass before). Ignored with ls_samples or ls_debug.
-  pc.ls_kmode = uint32_t((std::min)((std::max)(host->cfg_int("ls_k", 0), 0), 4)) |
-                (uint32_t((std::min)((std::max)(host->cfg_int("ls_rest_samples", 1), 0), 2)) << 4);
   // Per-light data (docs/SE_BRIDGE.md): bit 0 set in run_post when the join ran; bits 8-12
   // the owners whose lights are traced (bit 8 + Bg3RtLightOwner; default 0x1F, every owner:
   // the owner is no reason to skip a light, TRACK_D 9.10); bits 16-17 the art-intent rule
@@ -1391,8 +1368,6 @@ Push make_push() {
   pc.ls_flags |= uint32_t((std::min)((std::max)(host->cfg_int("ls_noshadow", 1), 0), 2)) << 16;
   // Bit 18: ls_giveback_cap (gi_common.hlsli): the AO-on-direct give-back bounded by the game's pixel.
   pc.ls_flags |= host->cfg_int("ls_giveback_cap", 1) ? (1u << 18) : 0u;
-  // Bit 20: ls_box_unshadowed=0, box lights without a game shadow map are not traced.
-  pc.ls_flags |= host->cfg_int("ls_box_unshadowed", 1) ? 0u : (1u << 20);
   // Diagnostic A/B: HPO stays active; only competing-receiver rejection changes.
   pc.ls_flags |= host->cfg_int("rt_hair_receiver_guard", 0) ? (1u << 21) : 0u;
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;
@@ -1411,7 +1386,6 @@ Push make_push() {
   pc.rf_edge = host->cfg_float("rf_edge", 0.05f);
   pc.rf_strength = host->cfg_float("rf_strength", 1.0f);
   pc.rf_debug = uint32_t(host->cfg_int("rf_debug", 0));
-  pc.rf_so = host->cfg_int("rf_so", 0) ? 1u : 0u;
   pc.rf_validate = host->cfg_int("rf_validate", 0) ? 1u : 0u;
   pc.rf_models = uint32_t(host->cfg_int("rf_models", 3)) & 255u;
   pc.rf_stats = host->cfg_int("rf_stats", 0) ? 1u : 0u;
@@ -1696,9 +1670,9 @@ void ls_timing_collect() {
   std::sort(v.begin(), v.end());
   std::sort(j.begin(), j.end());
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
-            "samples %d, exact-k %d + %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d, box %d)",
+            "samples %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d, box %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
-            host->cfg_int("ls_samples", 0), host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1),
+            host->cfg_int("ls_samples", 0),
             host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
             host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
             host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1), int(g_ls_box_active));
@@ -1714,16 +1688,14 @@ void ls_timing_collect() {
 // build's TLAS with another's InstInfo, records, soup or pool.
 VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity) {
   *omm_identity=0;
-  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 1) &&
+  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("gi_rt", 1) &&
                           !host->cfg_int("rt_local_shadows", 1) && !host->cfg_int("rt_reflections", 1)))
     return VK_NULL_HANDLE;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
   uint64_t built = 0, now = host->frame_index();
   *alpha = VK_NULL_HANDLE;
-  const bool matched = host->cfg_int("rt_scene_camera_match", 0) != 0;
-  bool scene_ok = matched ? host->rt_scene_camera && host->rt_scene_camera(cmd, &tlas, alpha, &built)
-                          : host->rt_scene_set && host->rt_scene_set(&tlas, alpha, &built);
-  if (!scene_ok || !tlas || (!matched && built + 1 < now) || !*alpha) {
+  const bool scene_ok = host->rt_scene_set && host->rt_scene_set(&tlas, alpha, &built);
+  if (!scene_ok || !tlas || built + 1 < now || !*alpha) {
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
   }
@@ -1803,14 +1775,13 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha,&s.omm_identity);
   b.omm_identity=s.omm_identity;
   if (tlas && (!ensure_rt_layout() || !refresh(g_rt_shadow, "gi/rt_shadow.hlsl", g_rt_layout) ||
-               !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) || !refresh(g_rt_ao, "gi/rt_ao.hlsl", g_rt_layout) ||
+               !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) ||
                !refresh(g_trace_rt, "gi/gi_trace_rt.hlsl", g_rt_layout) ||
                !refresh(g_rt_origin, "gi/rt_origin.hlsl", g_rt_layout) || !stats_init()))
     tlas = VK_NULL_HANDLE;   // (the statistics buffer is binding 20 and must exist)
   s.gi = host->cfg_int("gi", 1) != 0;
   // Hybrid GI: ray queries replace the screen-space march (and do the AO rays too).
   const bool gi_rt = tlas && s.gi && host->cfg_int("gi_rt", 1);
-  const bool rt_ao = tlas && s.gi && !gi_rt && host->cfg_int("rt_ao", 0);
   const bool rt_shadows = tlas && s.shadow.view && host->cfg_int("rt_shadows", 1) && g_sunt_ok;
   // D-LS runs after the lighting (run_post); it needs the TLAS and the light list.
   s.ls = tlas && host->cfg_int("rt_local_shadows", 1) && s.ls_ok && ensure_ls_layout() &&
@@ -1874,8 +1845,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
-      host->log("rt: first traced frame at %ux%u (TLAS %p, shadows %d, AO %d, GI %d)", g_w, g_h, (void*)tlas, rt_shadows,
-                rt_ao, gi_rt);
+      host->log("rt: first traced frame at %ux%u (TLAS %p, shadows %d, GI %d)", g_w, g_h, (void*)tlas, rt_shadows,
+                gi_rt);
     }
   }
   bool rt_started = false;
@@ -1945,12 +1916,6 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     trace_timestamp(cmd, 1, s.rt_gi_applied);
     memory_barrier(cmd, kCS, kCS);
-    if (rt_ao) {
-      // Ray-traced visibility replaces the screen-space one before accumulation.
-      rt_begin();
-      dispatch(cmd, g_rt_ao, b, pc, g_hw, g_hh, true);
-      memory_barrier(cmd, kCS, kCS);
-    }
     dispatch(cmd, g_temporal, b, pc, g_hw, g_hh);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
@@ -2442,7 +2407,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
-  for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
+  for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {

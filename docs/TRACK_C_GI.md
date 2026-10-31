@@ -132,7 +132,8 @@ fallback. Misses remain misses; no sky/environment constant is invented.
 
 The declared opaque FresnelBlend model uses actual native point/spot inputs.
 It includes directional diffuse and specular scattering along the secondary ray;
-legacy `gi_bounce_spec=0` still controls only the screen-radiance source. This is a
+the screen-radiance source stays diffuse only (`gi_bounce_spec`: removed 2026-10-31, see
+CONSOLIDATION.md C1). This is a
 physical directional addition, not a promise of identical diffuse-only semantics.
 The current native froxel provider supports hidden points inside the view
 frustum. True offscreen lights, sunlight, projector and emissive terms remain
@@ -187,4 +188,4 @@ along the view ray by at most
   `gi_rt_fallback`, weighted by the fade's mean over its unknown distance, never a miss.
 - `qa_zero` bit 2 (gi_ao_apply.hlsl) writes the AO 0: the diffuse AND the specular ambient go
   (SO = 0 at AO 0); direct light keeps 1 − m0.y = half (traced local lights get it back with
-  ao_direct=1); the GI bounce and rf_so=0 reflections stay.
+  ao_direct=1); the GI bounce and the reflections stay.

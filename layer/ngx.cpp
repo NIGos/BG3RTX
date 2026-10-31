@@ -1330,21 +1330,14 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
     p->Set(NVSDK_NGX_Parameter_DLSSD_ScreenSpaceSubsurfaceScatteringGuide_Subrect_Base_Y, 0u);
   }
   p->Set(NVSDK_NGX_Parameter_DLSSD_ScreenSpaceSubsurfaceScatteringGuide, sss_ok ? static_cast<void*>(&s_sss) : nullptr);
-  // Pre-exposure (rr_pre_exposure=1, A/B only): the RR guide 3.7 says RR does
-  // not support the exposure parameters, so by default the game's own value
-  // (1) stays. With 1, the lighting's s1b13[0] as read back by rrpost.
-  float old_pe = 1.0f;
-  const bool had_pe = get_f(p, NVSDK_NGX_Parameter_DLSS_Pre_Exposure, old_pe);
-  const float pe = rrpost_pre_exposure();
-  const bool set_pe = use_post && cfg_int("rr_pre_exposure", 0) && pe > 0.0f;
-  if (set_pe) p->Set(NVSDK_NGX_Parameter_DLSS_Pre_Exposure, pe);
+  // Pre-exposure: the RR guide 3.7 says RR does not support the exposure
+  // parameters, so the game's own value (1) stays.
   static bool said_post = false;
   if (use_post && !said_post) {
     said_post = true;
     log("[ngx] RR before post: colour %ux%u fmt %d (pre-DoF, pre-grade), output %ux%u RGBA16F, CBT %s, SSS guide %s, "
-        "pre-exposure %s",
-        post.color.w, post.color.h, int(post.color.format), ow, oh, cbt_ok ? "yes" : "no", sss_ok ? "yes" : "no",
-        set_pe ? "lighting s1b13[0]" : "game's (1)");
+        "pre-exposure game's (1)",
+        post.color.w, post.color.h, int(post.color.format), ow, oh, cbt_ok ? "yes" : "no", sss_ok ? "yes" : "no");
   }
 
   int old_reset = 0;
@@ -1387,7 +1380,6 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
     p->Set(NVSDK_NGX_Parameter_Color, static_cast<void*>(color));
     p->Set(NVSDK_NGX_Parameter_Output, static_cast<void*>(out));
   }
-  if (set_pe) p->Set(NVSDK_NGX_Parameter_DLSS_Pre_Exposure, had_pe ? old_pe : 1.0f);
   static int eval_logs = 0;
   if (result != NVSDK_NGX_Result_Success && eval_logs++ < 8)
     log("[ngx] RR evaluate failed: %s (0x%08x)", result_name(result), unsigned(result));

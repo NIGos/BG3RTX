@@ -332,7 +332,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 223 keys of bg3rtx.ini, in file order.
+// 203 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -345,7 +345,6 @@ inline constexpr KV kDefaults[] = {
     {"rr_post", "1"},
     {"rr_cbt", "1"},
     {"rr_post_quantise", "1"},
-    {"rr_pre_exposure", "0"},
     {"rr_post_check", "0"},
     {"rr_test_fail", "0"},
     {"rr_show", "0"},
@@ -367,7 +366,6 @@ inline constexpr KV kDefaults[] = {
     {"gi_debug", "0"},
     {"geo_capture", "0"},
     {"geo_timing", "0"},
-    {"geo_xfb_always", "0"},
     {"rt", "1"},
     {"rt_build", "auto"},
     {"rt_refit", "1"},
@@ -379,7 +377,6 @@ inline constexpr KV kDefaults[] = {
     {"rt_mesh_budget_mb", "2048"},
     {"rt_mesh_audits", "2"},
     {"rt_mesh_audit_frames", "600"},
-    {"rt_fast_trace", "0"},
     {"rt_shadows", "1"},
     {"contact_shadows", "1"},
     {"rt_strength", "1.0"},
@@ -397,23 +394,17 @@ inline constexpr KV kDefaults[] = {
     {"rt_sun_roof_radius", "0"},
     {"rt_sun_offscreen", "1"},
     {"rt_sun_rise", "6.0"},
-    {"rt_sun_top_pad", "2.0"},
-    {"rt_sun_top", "0"},
     {"rt_sun_margin", "0.0"},
     {"rt_sun_ramp", "0.75"},
     {"rt_sun_near", "0"},
     {"rt_cascade_casters", "0"},
     {"rt_cascade_index", "2"},
     {"rt_cascade_mb", "160"},
-    {"rt_cascade_roofs_trust", "0"},
     {"rt_cascade_origin", "1"},
     {"rt_cascade_alpha", "2"},
     {"rt_cascade_alpha_dedupe", "1"},
     {"rt_cascade_refit", "1"},
     {"rt_cascade_rebuild_frames", "60"},
-    {"rt_ao", "0"},
-    {"rt_ao_rays", "2"},
-    {"rt_ao_radius", "1.0"},
     {"rt_debug", "0"},
     {"rt_stats", "0"},
     {"pan_capture", "0"},
@@ -435,13 +426,10 @@ inline constexpr KV kDefaults[] = {
     {"rt_em_dbg_fam_hi", "0"},
     {"rt_em_dbg_fam_lo", "0"},
     {"rt_em_tol", "0.01"},
-    {"rt_em_filter", "0"},
-    {"rt_em_aniso", "16"},
     {"rt_em_fx_thr", "0.05"},
     {"rt_em_backdrop", "0"},
     {"rt_em_decal", "1"},
     {"rt_alpha", "1"},
-    {"rt_prepass_by_ordinal", "0"},
     {"rt_alpha_test", "1"},
     {"rt_alpha_cut", "1"},
     {"rt_alpha_stochastic", "1"},
@@ -463,7 +451,6 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt_depth_k", "1.0"},
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},
-    {"gi_bounce_spec", "0"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},
@@ -494,13 +481,10 @@ inline constexpr KV kDefaults[] = {
     {"ls_clear", "0.2"},
     {"ls_min_radius", "0"},
     {"ls_samples", "0"},
-    {"ls_k", "0"},
-    {"ls_rest_samples", "1"},
     {"ls_strength", "1.0"},
     {"ls_debug", "0"},
     {"ls_stats", "0"},
     {"ls_box", "0"},
-    {"ls_box_unshadowed", "0"},
     {"ls_native_direct_validate", "0"},
     {"ls_lights", "1"},
     {"ls_owners", "31"},
@@ -524,7 +508,6 @@ inline constexpr KV kDefaults[] = {
     {"rf_depth_k", "1.0"},
     {"rf_edge", "0.05"},
     {"rf_strength", "1.0"},
-    {"rf_so", "0"},
     {"rf_models", "3"},
     {"rf_debug", "0"},
     {"rf_stats", "0"},
@@ -534,8 +517,6 @@ inline constexpr KV kDefaults[] = {
     {"reflex", "1"},
     {"fps_cap", "0"},
     {"se_unhook", "1"},
-    {"rt_scene_camera_match", "0"},
-    {"rt_scene_rebase", "0"},
     {"rt_order_trace", "0"},
     {"rt_scene_wait", "1"},
     {"cpu_timing", "0"},
@@ -544,7 +525,6 @@ inline constexpr KV kDefaults[] = {
     {"rt_capture_state_log", "0"},
     {"rt_mesh_draw_log", "0"},
     {"rt_mesh_capture", "0"},
-    {"rt_capture_depth_write", "0"},
     {"rt_capture_discard", "1"},
     {"rt_dyn_hold", "4"},
     {"rt_dyn_hold_max_prims", "8192"},
@@ -558,7 +538,7 @@ inline constexpr KV kDefaults[] = {
     {"fg_tag_ui", "1"},
     {"fg_ui_pq", "0"},
 };
-// 24 keys of data/release.ini, in file order.
+// 23 keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {
     {"dev", "0"},
     {"dump_shaders", "0"},
@@ -566,7 +546,6 @@ inline constexpr KV kReleaseDefaults[] = {
     {"census_dump", "0"},
     {"geo_capture", "0"},
     {"geo_timing", "0"},
-    {"geo_xfb_always", "0"},
     {"rr_show", "0"},
     {"rr_dump_gbuffer", "0"},
     {"gi_debug", "0"},
@@ -759,7 +738,7 @@ inline int map_int(const Map& m, const char* key, int fallback) {
 inline bool resolve_derived(Map& m) {
   auto it = m.find("rt_build");
   if (it == m.end() || lower(it->second) != "auto") return false;
-  bool consumer = map_int(m, "rt_shadows", 0) || map_int(m, "rt_ao", 0) || map_int(m, "gi_rt", 0) ||
+  bool consumer = map_int(m, "rt_shadows", 0) || map_int(m, "gi_rt", 0) ||
                   map_int(m, "rt_local_shadows", 0) || map_int(m, "rt_reflections", 0) || map_int(m, "rt_debug", 0);
   it->second = consumer ? "1" : "0";
   return true;

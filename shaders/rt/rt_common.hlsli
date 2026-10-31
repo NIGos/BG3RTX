@@ -118,6 +118,8 @@ static const float kOriginNoHit = 1000.0;
 #include "omm_scene_guard.hlsli"
 #endif
 #ifdef RT_SCENE_REBASE
+// No runtime variant defines RT_SCENE_REBASE since rt_scene_rebase was removed (2026-10-31,
+// docs/CONSOLIDATION.md C1); the blocks stay for tools/native_hair_gpu_probe's rebase cases.
 // The native camera is already bound at 29 in D-LS/D-RF and at 48 in
 // the other RT layouts. Descriptor aliases have the same 14-float4 layout.
 struct RtRebaseCameraCB { float4 c[14]; };

@@ -71,11 +71,11 @@ How settings work today:
 | `rt_alpha` | 1 | R | refit 0.39 → 0.88 ms, +64 MB | Alpha-tested casters (grates, foliage). The candidate restart-only "quality" knob |
 | `rt_alpha_test` | 1 | L | shadows + AO 0.20 → 0.22 ms | Live A/B for the above. Internal |
 | `rt_shadows` | 1 | L | 0.08–0.11 ms | Sun. Without RT, contact shadows (`contact_shadows`) are the fallback |
-| `gi` | 1 | L | GI total 0.35 ms (`gi_rt`) / 0.44 ms (screen-space + `rt_ao`) | Also the host of `rt_ao`, `gi_rt` and the bounce source for `rt_reflections` |
+| `gi` | 1 | L | GI total 0.35 ms (`gi_rt`) / 0.44 ms (screen-space + the removed `rt_ao`) | Also the host of `gi_rt` and the bounce source for `rt_reflections` |
 | `gi_rt` | 1 | L | trace 0.175 ms (vs 0.248 ms screen-space) | Needs `rt`, `gi` |
 | `gi_rays` / `gi_rr_rays` | 4 / 1 | L | 2 rays/12 steps 0.18 ms, 4/16 0.28 ms (half res, `rr=0`); RR path 1 ray full res ≈ the same | The RR mode uses `gi_rr_rays` |
 | `gi_steps` | 16 | L | see above | Screen-space path only |
-| `rt_ao`, `rt_ao_rays`, `rt_ao_radius` | 0 / 2 / 1.0 | L | +0.13 ms | Superseded by `gi_rt` (only used if `gi_rt=0`) |
+| `rt_ao`, `rt_ao_rays`, `rt_ao_radius` | — | — | — | Superseded by `gi_rt`: removed 2026-10-31, see CONSOLIDATION.md C1 (`gi_rt=0` keeps the screen-space AO) |
 | `rt_local_shadows` | 1 | L | **0.345 ms** foundry, 0.068 ms docks | Needs the light list bindings, `rt` |
 | `ls_samples` | 0 | L | 0 → 0.345 ms; 1 (RIS) → **0.219 ms** | RIS is the cheaper "Medium" mode, but noisier: needs RR |
 | `ls_shadowed` | 0 | L | unmeasured (no scene with shadow-casting lights yet) | 1 replaces the game's atlas (loses off-screen casters); 2 takes the min of both |
@@ -106,7 +106,7 @@ is capped at 1.0.
 ### 1.3 Internal tuning (class N: correctness constants, never exposed)
 
 - **Ray geometry / bias:** `rt_bias`, `rt_tmax`, `rf_tmax`, `rf_depth_k`, `rf_edge`,
-  `rf_mirror_rough`, `rf_so`, `rf_models`, `gi_radius`, `gi_thickness`, `gi_history`,
+  `rf_mirror_rough`, `rf_models`, `gi_radius`, `gi_thickness`, `gi_history`,
   `gi_rt_radius`, `gi_rt_depth_k`, `gi_rt_fallback`, `gi_reproject`, `ls_clear`,
   `ls_min_radius`, `rt_sun_radius`.
   - Note: `rt_sun_radius` is read but unused by the hard-shadow path today.
@@ -114,7 +114,7 @@ is capped at 1.0.
     why they stay internal.
 - **Mode routing:** `gi_rr`, `rf_rr`, `ls_soft` (-1 follows `rr`), `rf_max_rough_norr`,
   `rr_guides_v2`, `rr_guides_at`, `rr_nov`.
-- **BVH policy:** `rt_refit`, `rt_rebuild_frames` (60), `rt_fast_trace` (no measured gain).
+- **BVH policy:** `rt_refit`, `rt_rebuild_frames` (60). (`rt_fast_trace`, no measured gain: removed 2026-10-31, see CONSOLIDATION.md C1.)
 - **Memory budgets** (R): `rt_xfb_mb` 384, `rt_alpha_mb` 64, `geo_xfb_mb`, `geo_max_draws`,
   `geo_indirect_mb`.
 - **Frame-gen plumbing:**
@@ -127,7 +127,7 @@ is capped at 1.0.
     `sl_app_id`).
 - **Hooks / compatibility** (R, static): `ngx_hook`, `core`, `rt_bda_core`,
   `force_transfer_src`, `force_storage_rgb10a2`, `force_storage_r8`, `force_present_mode`,
-  `rt_alpha_capture`, `geo_capture`, `geo_xfb_always`, `headless`.
+  `rt_alpha_capture`, `geo_capture`, `headless`. (`geo_xfb_always`: removed 2026-10-31, see CONSOLIDATION.md C1.)
 
 ### 1.4 Debug / dev (class D: stripped from the shipped ini, defaults off)
 
@@ -550,7 +550,7 @@ Changing any knob switches the preset combo to **Custom**. "Reset to preset" res
      and the GI drops to its half-resolution mode until RR runs again (logged
      as `gi: resources for ...`).
 2. **Derived `rt_build`.** Build the scene only if any RT consumer is on (`rt_shadows`,
-   `gi_rt`, `rt_ao`, `rt_local_shadows`, `rt_reflections`). Today `rt_build=1` with every
+   `gi_rt`, `rt_local_shadows`, `rt_reflections`). Today `rt_build=1` with every
    effect off still spends ≈ 1.9 ms static / 4.4 ms pan.
 3. **Layered config.** `cfg_raw` order: user ini → preset table (compiled) → `bg3rtx.ini`
    (dev/shipped defaults) → code fallback. Write the user ini atomically. `cfg_poll` already
@@ -566,7 +566,7 @@ Changing any knob switches the preset combo to **Custom**. "Reset to preset" res
 |---|---|---|
 | **Live, next frame** | all strengths, `rt_shadows`, `rt_local_shadows`, `ls_samples`, `ls_shadowed`, `rt_reflections`, `rf_max_rough`, `gi`, `gi_rt`, `gi_rays`, `gi_rr_rays`, `gi_steps`, `reflex`, `fps_cap`, `fg` 2↔3↔4↔0 (with Streamline loaded) | push constants / per-frame branches; the next present's `cfg_poll` picks them up (≤ 1 s) |
 | **Live with a reset or reallocation (brief hitch, one frame of history lost)** | `rr` (RR ↔ SR history reset, GI images reallocated full ↔ half res via `gi_res_shift`); `rt_build` 0→1 (first build is a full rebuild, ≈ 3.4 ms once) | handled by existing code; badge "brief hitch" |
-| **BVH rebuild** | `rt_alpha_test`, `rt_refit`, `rt_fast_trace`, `rt_rebuild_frames` | the next build is a rebuild; live but internal |
+| **BVH rebuild** | `rt_alpha_test`, `rt_refit`, `rt_rebuild_frames` | the next build is a rebuild; live but internal |
 | **Game-side** | DLSS mode / upscaler | game's own menu; it recreates SR, and our RR follows that feature's lifetime |
 | **Restart** | `rt` (device features), `rt_alpha` (capture source + memory), `fg` 0 → 2+ (Streamline loads at instance creation), memory budgets, `ngx_hook`, `sl_*`, `force_*`, `geo_capture` | the overlay shows "applies after restart" and writes the value; the launcher sets them before launch |
 
@@ -610,7 +610,7 @@ So, among the user-facing knobs, only **"Ray-traced geometry: Full ↔ Opaque"**
 |---|---|---|
 | Settings table (single source of truth) | `common/settings.h` | Header-only, standard C++. It holds the entries of §6 (9 knobs + Reflex under Advanced; the preset is the combo), with labels, descriptions, choices → keys, per-preset values, apply class (live / hitch / partial restart), hardware caps per choice and dependencies between knobs. It also has the preset extras (Ultra: `rt_rebuild_frames=600`), `render_user_ini`, `suggest_preset` and `gpu_caps`. The phase-2 overlay can include it as is. `data/settings_schema.json` is the same table as JSON (also `BG3RTX.exe --dump-schema`); `settings_test` fails when the file is stale, and `settings_test.exe --write-schema` regenerates it |
 | Layered config | `layer/util.cpp` `cfg_poll` | Order: `bg3rtx.ini` → `bg3rtx_user.ini` (`%BG3RTX_USER_INI%` replaces the path; `none` skips it) → `%BG3RTX_INI%`. **Change from §7.3.3:** the preset is not a separate layer. Any file may contain `preset=`, which expands at that file's position before the file's own keys, so a later file (test overrides) beats a user preset. Each layer is hot-reloaded on its own mtime, and a truncated layer keeps its previous keys. The log prints `[cfg] settings read`, `[cfg] knobs:` (choices + matching preset) and `[cfg] keys:` |
-| Derived `rt_build` (§7.3.2, partly) | `settings::resolve_derived` | Presets write `rt_build=auto`, which resolves to 1 only while an RT consumer (`rt_shadows`, `rt_ao`, `gi_rt`, `rt_local_shadows`, `rt_reflections`, `rt_debug`) is on. `bg3rtx.ini` keeps `rt_build=1`, so the developer default is unchanged. `rtscene.cpp` is untouched |
+| Derived `rt_build` (§7.3.2, partly) | `settings::resolve_derived` | Presets write `rt_build=auto`, which resolves to 1 only while an RT consumer (`rt_shadows`, `gi_rt`, `rt_local_shadows`, `rt_reflections`, `rt_debug`) is on. `bg3rtx.ini` keeps `rt_build=1`, so the developer default is unchanged. `rtscene.cpp` is untouched |
 | `fps_cap` (§7.3.4) | `layer/streamline.cpp` `reflex_apply`, `layer/framecap.cpp` | With Streamline active, `slReflexSetOptions` gets `frameLimitUs = 1e6/fps_cap`, and `reflex`/`fps_cap` are re-applied whenever they change (Reflex used to be set once). Without Streamline, a sleep limiter (high-resolution waitable timer, then a spin) runs in `QueuePresentKHR` |
 | Release defaults (§7.3.5) | `data/release.ini`, `scripts/package.ps1`, `layer/tracer.cpp` | The trace hotkey needs `dev=1` (code default 0; the repository's `bg3rtx.ini` has `dev=1`). The `dump_shaders` code default is now 0; the repository ini keeps 1. `package.ps1` builds `dist/BG3RTX` with `bg3rtx.ini` = repository ini + `release.ini` (D keys off) |
 | Launcher | `tools/launcher` → `bin/BG3RTX.exe` (target `bg3rtx_launcher`, `build.ps1 -Launcher`) | The window is generated from the table: preset combo + "Use suggested", knobs, markers (live / brief hitch / restart required / unmet dependency / not supported), description panel, game folder (Steam registry + `libraryfolders.vdf`, or Browse), Save (atomic: temp + `MoveFileEx`), Save and launch. There is also a command line (`--launch`, `--dry-run`, `--preset`, `--detect`, `--dump-schema`) and a Steam `%command%` mode |

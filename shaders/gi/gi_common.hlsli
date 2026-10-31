@@ -59,15 +59,15 @@ struct Push {
   uint cs_steps;
   float2 mv_scale;
   uint has_mv;
-  uint bounce_spec; // 1: GI bounces diffuse + specular (old); 0: the diffuse only (QUALITY R3)
+  uint bounce_spec; // unused, 0 (gi_bounce_spec removed 2026-10-31): GI bounces the diffuse only (QUALITY R3)
   // Track D ray-traced sun shadows (rt_shadow.hlsl)
   float rt_bias;      // ray origin offset along the normal, fraction of camera distance
   float rt_tmax;      // shadow ray length (world units)
   uint rt_debug;      // 0 off, 1 visibility, 2 game mask (red) vs traced (green), 3 primary-ray depth check
   float rt_strength;  // how strongly traced visibility darkens the game's sun shadow mask
-  float rt_ao_radius; // ray-traced AO ray length (world units, rt_ao.hlsl)
-  uint rt_ao_rays;
-  uint ls_kmode;            // D-LS exact-k (DESIGN_SOTA_NEXT 1a): bits 0-3 ls_k (0 trace every light), bits 4-7 ls_rest_samples
+  float rt_ao_radius; // unused, 0 (rt_ao removed 2026-10-31)
+  uint rt_ao_rays;    // unused, 0
+  uint ls_kmode;            // unused, 0 (the D-LS exact-k ls_k removed 2026-10-31)
   uint sharc_fx;           // sharc_inject.hlsl: 1 the D-EM effects target is bound at 49 (emission)
   // Hybrid ray-traced GI (gi_trace_rt.hlsl)
   float gi_rt_radius;   // ray length and falloff radius (world units)
@@ -101,7 +101,7 @@ struct Push {
   float rf_strength;
   uint rf_debug;
   uint rf_sample;         // 1 GGX bounded VNDF (RR denoises), 0 mirror rays only (no denoiser)
-  uint rf_so;             // 1 also apply the game's specular occlusion to traced hits
+  uint rf_so;             // unused, 0 (rf_so removed 2026-10-31): no game SO on traced hits
   uint rf_validate;       // 1 EN4 check: the lighting ran with AO 1 and no sun (prep pass)
   uint rf_models;         // bit mask of the shading models (RT2.w & 7) that get reflections
   uint rf_stats;
@@ -172,7 +172,7 @@ float3 prev_radiance_at(int2 qp) { return prevRadiance[prev_radiance_px(qp)].rgb
 // shading point; its sun glints are the sparsest, brightest values on screen.
 float3 prev_bounce_at(int2 qp) {
   float4 v = prevRadiance[prev_radiance_px(qp)];
-  return pc.bounce_spec != 0 ? v.rgb : v.rgb * saturate(v.a);
+  return v.rgb * saturate(v.a);
 }
 
 // pcg3d (Jarzynski & Olano 2020): decorrelated across pixels and frames,
