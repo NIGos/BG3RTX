@@ -13,7 +13,7 @@ void life_note(VkCommandBuffer,uint64_t h){if(h)++notes;}
 namespace omm {
 bool tracked_recording(VkCommandBuffer){return recording;}
 bool sampler_tracking_active(){return true;}
-bool ordinary_frozen_binding(VkCommandBuffer,VkPipelineBindPoint,uint32_t,uint32_t,uint32_t){return frozen;}
+bool ordinary_frozen_binding(VkCommandBuffer,VkPipelineBindPoint,uint32_t,uint32_t,uint32_t,OrdinaryBindingFacts*){return frozen;}
 bool content_source_view(VkImageView,ContentSource& out){out=source;return sourceAvailable;}
 bool bound_sampler(VkCommandBuffer,VkPipelineBindPoint,uint32_t,uint32_t,uint32_t,BoundSampler& out){out=sampler;return true;}
 bool immutable_sampler_current(const BoundSampler&){return currentSampler;}
