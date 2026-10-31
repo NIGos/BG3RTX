@@ -6,6 +6,7 @@
 // screenshot or a graphics debugger.
 #include "host.h"
 #include "../common/pan_epoch.h"
+#include "omm_sampler.h"
 
 #include <wincodec.h>
 
@@ -142,6 +143,7 @@ static bool record_copy(VkCommandBuffer cmd, DeviceData* dd, VkImage image, VkIm
 }
 
 std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s) {
+  terrain_capture_pass(cmd,s);
   if (!trace_recording() || !cfg_int("dump_images", 1)) return {};
   DeviceData* dd = device_of(cmd);
   const VkDeviceSize budget = VkDeviceSize(cfg_int("dump_max_mb", 6144)) << 20;
@@ -189,6 +191,7 @@ std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s) {
 }
 
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame) {
+  terrain_capture_submit(cmds,frame);
   std::lock_guard<std::mutex> lock(g_mu);
   for (VkCommandBuffer c : cmds) {
     CmdState* s = cmd_state(c);
@@ -465,6 +468,7 @@ static std::string process(const Dump& d, const uint8_t* data, const std::string
 }
 
 void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue) {
+  terrain_capture_finish(frame,capture_dir,queue);
   DeviceData* dd = main_device();
   std::vector<Dump> mine, all;
   {
@@ -734,3 +738,5 @@ void pan_on_present(VkQueue queue) {
 }
 
 }  // namespace bg3
+
+#include "terrain_packet_dump.inl"

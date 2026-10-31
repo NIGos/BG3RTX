@@ -281,13 +281,19 @@ void trace_on_present(VkQueue queue, const VkPresentInfoKHR* info);
 void trace_on_submit(const std::vector<VkCommandBuffer>& cmds);
 void trace_flush_segment(CmdState* s);
 void trace_event(CmdState* s, std::string json);
-void trace_note_draw(CmdState* s, int bind_point, const char* kind, const char* extra);
+void trace_note_draw(VkCommandBuffer cmd, CmdState* s, int bind_point, const char* kind, const char* extra);
 void shader_dump(uint64_t hash, const void* code, size_t size);
 std::string image_ref(VkImage image);
 std::string view_ref(VkImageView view);
 // Records copies of the pass's attachments into readback buffers; returns
 // the dump ids as a JSON array fragment for the pass's "end" event.
 std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s);
+std::string terrain_capture_note(VkCommandBuffer cmd, CmdState* s);
+void terrain_capture_pass(VkCommandBuffer cmd, CmdState* s);
+void terrain_capture_secondary(VkCommandBuffer cmd, CmdState* s);
+void terrain_capture_discard(VkCommandBuffer cmd);
+void terrain_capture_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
+void terrain_capture_finish(uint64_t frame, const std::string& dir, VkQueue queue);
 void count_pass();
 // Diagnostic counters, logged with the periodic [auto] line.
 enum DiagCounter { DIAG_PRESENT, DIAG_PIPELINES, DIAG_PIPELINE_US, DIAG_DESC_WRITES, DIAG_SHADER_MODULES, DIAG_SUBMIT, DIAG_BEGIN_CMD, DIAG_BEGIN_PASS, DIAG_BEGIN_RENDERING, DIAG_BIND_PIPE, DIAG_DRAW,
@@ -424,6 +430,7 @@ void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right before the game's end
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right after the game's end
 void geo_forget_buffer(VkBuffer b);
+VkBufferUsageFlags geo_buffer_usage(VkBuffer b); // readonly tracked create usage; 0 if unknown
 VkDeviceSize geo_buffer_size(VkBuffer b);                   // 0 if unknown
 bool geo_uniform_buffer_range(VkBuffer buffer,VkDeviceSize offset,VkDeviceSize bytes);
 bool geo_submit_wanted();

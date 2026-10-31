@@ -2629,6 +2629,11 @@ void geo_forget_buffer(VkBuffer b) {
   g_buffer_size.erase(b);
 }
 
+VkBufferUsageFlags geo_buffer_usage(VkBuffer b) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  auto it = g_buffer_usage.find(b);
+  return it == g_buffer_usage.end() ? 0 : it->second;
+}
 VkDeviceSize geo_buffer_size(VkBuffer b) {
   std::lock_guard<std::mutex> lock(g_mu);
   auto it = g_buffer_size.find(b);

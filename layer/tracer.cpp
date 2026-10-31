@@ -104,7 +104,8 @@ static const char* desc_tag(VkDescriptorType t) {
   }
 }
 
-void trace_note_draw(CmdState* s, int bp, const char* kind, const char* extra) {
+void trace_note_draw(VkCommandBuffer cmd, CmdState* s, int bp, const char* kind, const char* extra) {
+  const std::string terrain = bp == 0 ? terrain_capture_note(cmd,s) : std::string();
   const uint32_t kMaxPerSet = 32;
   std::string res, sampledViews;
   {
@@ -158,7 +159,7 @@ void trace_note_draw(CmdState* s, int bp, const char* kind, const char* extra) {
 
   }
 
-  std::string key = std::string(kind) + "|" + std::to_string(s->pipe_id[bp]) + "|" + res + "|" + sampledViews + "|" + (extra ? extra : "");
+  std::string key = std::string(kind) + "|" + std::to_string(s->pipe_id[bp]) + "|" + res + "|" + sampledViews + "|" + (extra ? extra : "") + terrain;
   if (key == s->seg_key) {
     ++s->seg_count;
     return;
@@ -172,6 +173,7 @@ void trace_note_draw(CmdState* s, int bp, const char* kind, const char* extra) {
   j += ",\"res\":{" + res + "}";
   if(!sampledViews.empty())j+=",\"sampled_views_scope\":\"Base_AlphaTest_VT_DEF_recording\",\"sampled_views\":{"+sampledViews+"}";
   if (extra) j += std::string(",") + extra;
+  if (!terrain.empty()) j += ",\"terrain_packet\":" + terrain;
   s->seg_json = std::move(j);
 }
 
