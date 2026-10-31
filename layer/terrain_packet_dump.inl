@@ -51,7 +51,7 @@ void terrain_release(TerrainCopy& c,bool deferred){
 }
 }
 std::string terrain_capture_note(VkCommandBuffer cmd,CmdState* s){
- if(!s||!s->in_pass)return {};
+ if(!s||!s->in_pass||!trace_recording())return {};
  std::lock_guard lock(terrain_mu);
  const bool family=s->vs==0x64e2568916ede3d6ull&&s->fs==0x6650c75f3d3e4968ull;
  // Later draws cannot silently mutate an earlier packet through an ordinary
