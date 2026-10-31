@@ -450,6 +450,7 @@ void alpha_tileset_incomplete(); // Startup-fixed XFB/soup stride88; never hot-e
 void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags);
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right before the game's end
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right after the game's end
+void geo_cmd_discard(CmdState* s);   // begin/reset/free with a pass still open: frees its EmPass
 void geo_forget_buffer(VkBuffer b);
 VkBufferUsageFlags geo_buffer_usage(VkBuffer b); // readonly tracked create usage; 0 if unknown
 VkDeviceSize geo_buffer_size(VkBuffer b);                   // 0 if unknown

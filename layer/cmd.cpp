@@ -67,6 +67,7 @@ void cmd_forget(VkCommandBuffer cmd) {
   std::unique_lock<std::shared_mutex> lock(g_cmd_mu);
   auto it = g_cmds.find(cmd);
   if (it == g_cmds.end()) return;
+  geo_cmd_discard(it->second);
   delete it->second;
   g_cmds.erase(it);
 }
@@ -82,6 +83,7 @@ static void discard_recordings(VkDevice device, VkCommandPool pool, bool destroy
       if (state->allocation_device!=device || state->allocation_pool!=pool) { ++it; continue; }
       commands.push_back(it->first);
       std::atomic_ref<uint64_t>(state->recording).store(0,std::memory_order_release);
+      geo_cmd_discard(state);
       if (destroy) { delete state; it=g_cmds.erase(it); }
       else { state->begin_flags=0; ++it; }
     }
@@ -96,6 +98,7 @@ static void discard_recording(VkCommandBuffer command) {
     if (it!=g_cmds.end()) {
       std::atomic_ref<uint64_t>(it->second->recording).store(0,std::memory_order_release);
       it->second->begin_flags=0;
+      geo_cmd_discard(it->second);
     }
   }
   bvh_cmd_reset(command);
@@ -448,7 +451,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->dumps.clear();
   s->seg_key.clear();
   s->seg_count = 0;
-  s->geo = nullptr;   // (an effects pass left open by a reset buffer leaks its small EmPass)
+  geo_cmd_discard(s);   // an effects pass left open by the previous recording
+  s->geo = nullptr;
   s->geo_em = false;
   s->geo_material=s->geo_material_active=s->geo_material_no_writes=false;
   em_forget_cmd(cmd);   // D-EM: draws of an earlier recording that was never submitted

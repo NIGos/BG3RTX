@@ -2337,6 +2337,15 @@ void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
   }
 }
 
+// The command buffer is begun again, reset or freed with an effects pass still open (its
+// recording is never submitted): its EmPass is freed (geo_pass_after never runs for it).
+void geo_cmd_discard(CmdState* s) {
+  if (!s->geo_em) return;
+  delete static_cast<EmPass*>(s->geo);
+  s->geo = nullptr;
+  s->geo_em = false;
+}
+
 // After the game's vkCmdEndRenderPass (outside the pass).
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
   if(s->geo_material){native_hit::deferred_finish(cmd,s->geo_material_no_writes);s->geo_material=false;s->geo_material_active=false;s->geo=nullptr;return;}
