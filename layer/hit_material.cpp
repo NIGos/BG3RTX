@@ -4,6 +4,7 @@
 #include "../common/native_hit_order.h"
 #include "../common/native_hit_inputs.h"
 #include "../common/native_hit_resources.h"
+#include "../common/native_hit_records.h"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -12,7 +13,7 @@
 namespace bg3::native_hit {
 namespace {
 constexpr VkDeviceSize stream_bytes=32u<<20;
-constexpr VkDeviceSize row_payload=16u+VkDeviceSize(record_bytes)*max_records;
+constexpr VkDeviceSize row_payload=16u+VkDeviceSize(record_bytes)*nh_material_rows;
 constexpr VkDeviceSize row_bytes=row_payload+16u;
 static_assert(ResourceBudget{}.samplers.size()==sampler_slots && ResourceBudget{}.caches.size()==cache_slots);
 constexpr VkDeviceSize packet_rows=16u+VkDeviceSize(record_bytes)*material_slots;
@@ -28,7 +29,7 @@ static_assert(sizeof(Row)==record_bytes);
 static_assert(offsetof(Row,pre)==8 && offsetof(Row,deferred)==12 && offsetof(Row,stride)==16);
 static_assert(offsetof(Row,p0)==48 && offsetof(Row,t)==80 && offsetof(Row,parameters)==208);
 struct View {VkImageView view{};VkImage image{};VkImageLayout layout{};uint64_t id{};uint32_t image_id{};};
-struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};uint64_t vs{},fs{};};
+struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};uint64_t vs{},fs{};bool opaque{};};
 struct Material {uint32_t source_raw{},deferred_raw{},snapshot{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;};
 struct Deferred {
  Buffer data,rows;uint64_t command{},recording{},frame{};VkBuffer camera{};VkDeviceSize camera_offset{},cursor{};
@@ -46,7 +47,7 @@ struct Query {
  PendingPublication publication;std::vector<Material> materials;
 };
 DeviceData* dd{};bool on{};std::mutex mutex;
-struct Pending {uint64_t command{},recording{};uint32_t candidate_draws{};DrawJoin join;std::vector<Pre> pre;};
+struct Pending {uint64_t command{},recording{};uint32_t candidate_draws{},opaque_count{};DrawJoin join;std::vector<Pre> pre;};
 std::unordered_map<uint64_t,Pending> pending;
 std::unordered_map<uint64_t,RecordingOwner> owners;
 std::unordered_map<uint64_t,VkQueue> submitted_queues;
@@ -94,11 +95,12 @@ DrawKey key(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  const bool depth=static_depth_family(s.vs,s.fs),deferred=audited_static_family(s.vs,s.fs);
  if(!depth && !deferred)return k;
  StaticInputs attributes{};StaticKeyInputs inputs{};Bg3Binding engine{},pulled{};
+ const auto layout=depth_input_layout(s.vs,s.fs);const uint32_t engine_bytes=layout.engine_bytes,pull_offset=layout.pull_offset;
  bool available=geo_native_hit_inputs(s.pipe[0],&attributes) &&
-  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,0,0,&engine) && engine.buffer && engine.range>=112 && geo_uniform_buffer_range(engine.buffer,engine.offset,112);
+  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,0,0,&engine) && engine.buffer && engine.range>=engine_bytes && geo_uniform_buffer_range(engine.buffer,engine.offset,engine_bytes);
  if(available){
   inputs.engine_buffer=uint64_t(engine.buffer);inputs.engine_offset=engine.offset;
-  inputs.pull_hint_known=read_mapped(engine.buffer,engine.offset+96,&inputs.pull_index,4);
+  inputs.pull_hint_known=read_mapped(engine.buffer,engine.offset+pull_offset,&inputs.pull_index,4);
   if(inputs.pull_hint_known && inputs.pull_index>0 && query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,13,0,&pulled)){
    inputs.pull_buffer=uint64_t(pulled.buffer);inputs.pull_offset=pulled.offset;inputs.pull_range=pulled.range;
   }
@@ -263,6 +265,16 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
  ++p->second.candidate_draws;
  if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record))p->second.pre.push_back(pre);
 }
+uint32_t note_opaque_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,VkDeviceSize raw,uint32_t stride,uint32_t triangles){
+ if(!on || !cfg_int("rt_hit_material",0) || !one_time(state) || !opaque_depth_family(state->vs,state->fs) || args.kind>1 || args.instances!=1 || args.count!=uint64_t(triangles)*3 || stride<64)return UINT32_MAX;
+ Pre pre{};pre.key=key(cmd,*state,args);pre.raw=raw;pre.stride=stride;pre.triangles=triangles;pre.vs=state->vs;pre.fs=state->fs;pre.opaque=true;
+ std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return UINT32_MAX;
+ ++p->second.candidate_draws;
+ if(!p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) || p->second.opaque_count>=nh_opaque_rows)return UINT32_MAX;
+ if(!opaque_material_record(p->second.opaque_count,pre.record))return UINT32_MAX;++p->second.opaque_count;
+ if(!p->second.join.assign(handle(cmd),state->recording,pre.key,pre.record))return UINT32_MAX;
+ p->second.pre.push_back(pre);return pre.record;
+}
 void prepass_observe(VkCommandBuffer,CmdState*,const DrawArgs&){
  // Only actual note_prepass candidates reserve a material join identity.
 }
@@ -413,22 +425,31 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   uint32_t record=0;if(!join_packets(slot.join,packet->join,deferred.key,deferred.row.valid-1,record))continue;
   auto source=std::find_if(slot.pre.begin(),slot.pre.end(),[&](const auto& pre){return pre.record==record;});
   if(source==slot.pre.end() || source->stride!=deferred.row.stride || source->triangles!=deferred.row.triangles ||
-     source->alpha.tex!=deferred.table.view || source->alpha.cache!=deferred.albedo.view ||
+     (!source->opaque && (source->alpha.tex!=deferred.table.view || source->alpha.cache!=deferred.albedo.view)) ||
      !current(deferred.table) || !current(deferred.normal) || !current(deferred.albedo) || !current(deferred.physical))continue;
   VkDeviceSize bytes=VkDeviceSize(source->triangles)*3*source->stride;
   if(!byte_range(cursor,bytes*2,stream_bytes))continue;
   auto m=deferred;m.snapshot=deferred.row.valid-1;m.source_raw=uint32_t(source->raw);m.deferred_raw=deferred.row.deferred;
-  m.row.valid=record+1;m.row.pre=uint32_t(cursor);m.row.deferred=uint32_t(cursor+bytes);m.row.table=source->alpha.rec.tex;
-  std::memcpy(m.row.p0,source->alpha.rec.p0,32);std::memcpy(m.row.t,source->alpha.rec.t,128);cursor+=bytes*2;q.materials.push_back(m);
+  m.row.valid=record+1;m.row.pre=uint32_t(cursor);m.row.deferred=uint32_t(cursor+bytes);m.row.reserved=source->opaque?1u:0u;
+  if(!source->opaque){m.row.table=source->alpha.rec.tex;std::memcpy(m.row.p0,source->alpha.rec.p0,32);std::memcpy(m.row.t,source->alpha.rec.t,128);}
+  cursor+=bytes*2;q.materials.push_back(m);
  }
  if(q.materials.empty()){
   if(cfg_int("rt_stats",0) && slot.frame%120==0)log("[hit material query] no exact mapping frame %llu source records %zu deferred records %zu; camera %p+%llu",
    (unsigned long long)slot.frame,slot.pre.size(),packet->materials.size(),(void*)slot.camera,(unsigned long long)slot.camera_offset);return false;
  }
+ std::vector<VkDescriptorImageInfo> tables;std::vector<View> table_views;
+ for(auto& m:q.materials)if(m.row.reserved){
+  auto i=std::find_if(table_views.begin(),table_views.end(),[&](const auto& v){return v.view==m.table.view && v.id==m.table.id && v.image_id==m.table.image_id && v.layout==m.table.layout;});
+  if(i==table_views.end()){table_views.push_back(m.table);tables.push_back({VK_NULL_HANDLE,m.table.view,m.table.layout});m.row.table=uint32_t(tables.size()-1);}
+  else m.row.table=uint32_t(i-table_views.begin());
+ }
+ uint32_t first_table=0;
  if(!create(q.rows,row_bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,true) ||
-    !create(q.data,cursor,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) || !alpha_clone_hit_set(slot.set,&q.pool,&q.set)){
+    !create(q.data,cursor,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) || !alpha_clone_hit_set(slot.set,&q.pool,&q.set,tables,&first_table)){
   destroy_query(q);return false;
  }
+ for(auto& m:q.materials)if(m.row.reserved)m.row.table+=first_table;
  publish_word(q,0); // initialized before any GPU use; never rewritten after success.
  if(!mark_owner(cmd,slot)){destroy_query(q);return false;}
  if(std::find(slot.owners.begin(),slot.owners.end(),packet->recording)==slot.owners.end())slot.owners.push_back(packet->recording);

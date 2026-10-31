@@ -1,3 +1,4 @@
+#include "../common/native_hit_records.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
 // docs/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
 //
@@ -421,7 +422,7 @@ struct FrameDraw {
   bool held = false;
   VkDeviceSize soup_off = 0;
   uint32_t prims = 0;
-  uint32_t rec = kNone;
+  uint32_t rec = kNone,material_record=kNone;
   std::shared_ptr<omm::NativePlainCapture> omm_material;
   std::vector<Range> ranges;
 };
@@ -1087,7 +1088,7 @@ void bvh_set_record(uint32_t token, uint32_t rec) {
   if (token < g_draws.size()) g_draws[token].rec = rec;
 }
 
-void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec) {
+void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec, uint32_t materialRecord) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (token >= g_draws.size()) return;
   FrameDraw& fd = g_draws[token];
@@ -1095,6 +1096,7 @@ void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alph
   fd.soup_off = offset;
   fd.prims = prims;
   fd.cap_alpha = alpha;
+  fd.material_record=alpha?kNone:materialRecord;
   if (!fd.cached) fd.rec = alpha ? rec : kNone;
 }
 
@@ -1497,8 +1499,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
                (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
     in.accelerationStructureReference = s.as.addr;
-    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u),
-                             alpha ? 16 + fd.rec * kRecBytes : 0, fd.prims};
+    const bool opaque_material=!alpha && !fd.held && fd.material_record>=native_hit::nh_alpha_rows && fd.material_record<native_hit::nh_material_rows;
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u),
+                             alpha ? 16 + fd.rec * kRecBytes : opaque_material?fd.material_record:0u, fd.prims};
     std::memcpy(inst_out + n, &in, sizeof in);
     std::memcpy(info_out + n * 4, inf, sizeof inf);
     inst_ref.push_back(in.accelerationStructureReference);

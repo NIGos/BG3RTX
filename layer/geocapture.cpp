@@ -2239,8 +2239,11 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->rt && !alpha && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
     ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
+  uint32_t materialRecord=UINT32_MAX;
+  if(capture && c->rt && !alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+    materialRecord=native_hit::note_opaque_prepass(cmd,s,args,d.offset,g_stride,uint32_t(prims));
   if (token != UINT32_MAX) {
-    if (capture) bvh_captured(token, d.offset, uint32_t(prims), alpha, alpha ? rec : UINT32_MAX);
+    if (capture) bvh_captured(token, d.offset, uint32_t(prims), alpha, alpha ? rec : UINT32_MAX,materialRecord);
     else bvh_note_skipped(token);
   }
   if (capture && c->rt) {
