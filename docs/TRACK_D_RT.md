@@ -2172,6 +2172,8 @@ backlog item 12 to cast. Do it with item 12.
 
 ### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, measured, off by default)
 
+`ls_k` and `ls_rest_samples` (with `ls_main_k`): removed 2026-10-31, see CONSOLIDATION.md C1.
+
 Why: Grymforge is over the 0.5 ms budget (0.73 ms with the 9.10 policy; `ls stats`: 6.09
 listed, 4.34 evaluated, **3.83 traced** lights per pixel, against 2.1-2.3 in the foundry).
 

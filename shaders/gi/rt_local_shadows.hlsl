@@ -26,8 +26,6 @@
 // (no denoiser), one deterministic ray to the light centre (hard shadows).
 // ls_samples > 0 instead traces that many rays per pixel to lights chosen by
 // RIS over the unshadowed luminance (unbiased, noisier, cheaper with many lights).
-// ls_k > 0 (default 0, TRACK_D 9.11; both variants, see ls_main_k below): the ls_k strongest lights
-// exactly, ls_rest_samples RIS rays for the rest (unbiased, at most ls_k + ls_rest_samples rays).
 //
 // Per-light data (ls_lights=1, ls_flags bit 0; docs/SE_BRIDGE.md): lsSlots holds, per
 // light array slot, what rt_local_shadows_match.hlsl joined to it from the Script
@@ -59,7 +57,7 @@
 // what it added), projector lights (cluster z, not recomputed), anything outside the tiled
 // lighting's froxel list (forward-shaded draws, fog in-scatter, emissives), and nothing at
 // all on frames D-LS does not run (rt_local_shadows=0, no TLAS, sun-set ring full) or in
-// the validation views ls_debug=4-7. Exact-k / RIS sampling (ls_k, ls_samples) is bypassed
+// the validation views ls_debug=4-7. RIS sampling (ls_samples) is bypassed
 // under it: the exact sum, no noise.
 // ls_debug=10 (LS_FULL): pixels where any light's ray was unknown, in yellow.
 //
@@ -276,7 +274,7 @@ void ls_sun(uint2 fp, Bg3Surface sf, Bg3Mat mt, out float3 sund, out float3 suns
 }
 
 // The pass's output from the delta sums: the sun recompute, the AO-on-direct give-back
-// (ao_direct) and the guarded result (the default variant's tail, shared with exact-k).
+// (ao_direct) and the guarded result (the default variant's tail).
 void ls_finish(uint2 fp, Bg3Surface sf, Bg3Mat mt, float3 dd, float3 ds, float3 td, float3 ts, out float3 o_d,
                out float3 o_s) {
   float ao, fdif, fspec;
@@ -391,7 +389,7 @@ void ls_light_ray(uint li, out float3 lpos, out float R) {
 //     the default art-intent rule (ls_noshadow=1, only the darkvision point lights) that is
 //     the same set; ls_noshadow=2 cannot be applied to them;
 //   - the QA ambient floor removes them too (t = 0, transmission included);
-//   - not in the exact-k / RIS selection: always one exact ray each.
+//   - not in the RIS selection: always one exact ray each.
 // The ray: from the surface along _m9 (a directional light has no extent: hard, no sampling),
 // up to where it leaves the box on the light's side. The box is the light's extent, so
 // geometry beyond that face is outside the light and does not shadow it.
@@ -487,7 +485,7 @@ bool ls_box_eval(uint bi, LsLite s, Bg3Surface sf, Bg3Mat mt, LsQuad q, uint vs,
 
 // Every box light of the pixel (list entries [first, first + n)), in the three phases of the
 // point/spot loop; adds to the delta and ao_direct sums. px: reloaded here (phase 3).
-// (The default variant and exact-k; LS_FULL's ls_main has its own loop with the statistics.)
+// (The default variant; LS_FULL's ls_main has its own loop with the statistics.)
 void ls_box_all(uint2 fp, LsLite s, uint first, uint n, inout LsPixel px, inout float3 dd, inout float3 ds,
                 inout float3 td, inout float3 ts) {
   const bool qa = ls_qa_off();
@@ -1070,204 +1068,6 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
 }
 #endif
 
-// ---- exact-k + RIS remainder (ls_k > 0; docs/DESIGN_SOTA_NEXT.md 1a, TRACK_D_RT.md 9.11) ----
-//
-// The lights this pass traces at a pixel (the same set as above: ls_light_traced) are split
-// deterministically by a per-pixel weight w_i: the ls_k largest (E) are traced exactly as
-// before; from the rest (R), ls_rest_samples lights are picked with p_j = w_j / sum_R w (with
-// replacement), and each adds its delta divided by its probability:
-//     sum_{i in E} c_i (t_i - s_i)  +  (1/n) sum_{samples j} c_j (t_j - s_j) / p_j
-// The split depends only on the pixel's deterministic inputs, and p_j > 0 wherever c_j != 0,
-// so the estimator is unbiased; at most ls_k + ls_rest_samples rays per pixel.
-//
-// w = lum(c_d + c_s), the light's exact unshadowed contribution (bg3_light_eval_mat, the
-// surface evaluated in phase 1 and reloaded in phase 3 as above). With it a remainder
-// sample's scaled delta has the luminance of the whole remainder, sum_R w, at most: no
-// fireflies. (A first version used the irradiance without the BRDF lobe, which phase 1 has
-// for free; at grazing view angles the specular term c_s / irradiance grows without bound,
-// and the Grymforge A/B showed fireflies at 65,000 on wall edges: TRACK_D_RT.md 9.11.)
-//
-// Noise for RR (QUALITY R1): one pcg3d white-noise draw per (pixel, frame), from an input
-// domain disjoint from ls_rand's (so independent of every ray direction), drives both
-// reservoirs (rescaled after each decision); no reuse across pixels or frames.
-static const uint kLsNone = 0xFFFFFFFFu;
-
-uint ls_k() { return min(pc.ls_kmode & 15u, 4u); }
-uint ls_rest_n() { return min((pc.ls_kmode >> 4) & 15u, 2u); }
-// (QA ambient floor: off, the exact sum of ls_main.)
-bool ls_k_active() { return ls_k() != 0u && pc.ls_samples == 0u && pc.ls_debug == 0u && !ls_qa_off(); }
-
-uint3 ls_rand_sel(uint2 fp) { return pcg3d(uint3(fp.x | 0x100000u, fp.y, pc.frame)); }
-
-// One reservoir decision with the uniform u (rescaled to stay uniform for the next one).
-bool ls_pick(inout float u, float p) {
-  const bool take = u < p;
-  u = min(take ? u / p : (u - p) / max(1.0 - p, 1e-30), 0.99999994);
-  return take;
-}
-
-// Entry q of the pixel's selection: 0-3 the exact lights, 4-5 the remainder samples.
-uint ls_sel(uint q, uint4 ex, uint2 rs) {
-  return q == 0u ? ex.x : q == 1u ? ex.y : q == 2u ? ex.z : q == 3u ? ex.w : q == 4u ? rs.x : rs.y;
-}
-
-bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
-  if (any(fp >= pc.full)) return false;
-  g_rt_pass = kRtPassLocal;
-  float d = gDepth.Load(int3(fp, 0));
-  if (d <= 0.0) return false;
-  LsLite s = (LsLite)0;
-  #ifdef RT_HAIR_PHYSICAL_ORIGIN
-  s.pixel=fp;
-  #endif
-  if (!ls_lite(fp, d, s)) return false;   // the lighting skips unlit pixels
-
-  const uint3 cl = bg3_cluster(fp, d);
-  const uint end_p = cl.x + cl.y, end_s = end_p + cl.z;
-  const uint K = ls_k(), NR = ls_rest_n();
-
-  // 1. the traced lights in one pass: a running top-K by w (descending), and a streaming
-  // reservoir per remainder sample over the lights that never enter it or are pushed out.
-  float4 ew = 0;              // the exact set's weights (0: empty)
-  uint4 ex = uint4(kLsNone, kLsNone, kLsNone, kLsNone);   // ... and list positions
-  uint2 rs = uint2(kLsNone, kLsNone);   // the remainder samples' list positions
-  float2 rw = 0;              // ... and weights
-  float rsum = 0;             // sum of w over R
-  uint n_cand = 0;
-  const uint3 ru = ls_rand_sel(fp);
-  float2 u = float2(u01(ru.x), u01(ru.y));
-  LsPixel px = (LsPixel)0;
-  ls_surface(fp, s, px.sf, px.mt);
-  for (uint i = cl.x; i < end_s; ++i) {
-    const uint li = bg3_light_index(i);
-    const bool spot = i >= end_p;
-    float3 lpos;
-    float R;
-    if (!ls_light_traced(li, spot, s, lpos, R)) continue;
-    float3 cd, ct, cs, Ld;
-    float d2, nol;
-    if (!bg3_light_eval_mat(load_light(li), spot, px.sf, px.mt, cd, ct, cs, Ld, d2, nol)) continue;
-    float cw = lum(cd + cs);
-    if (!(cw > 0.0) || !isfinite(cw)) continue;   // c = 0: no delta, no ray
-    ++n_cand;
-    uint ce = i;
-    [unroll] for (uint k = 0; k < 4u; ++k) {
-      if (k < K && cw > ew[k]) {
-        const float tw = ew[k];
-        const uint te = ex[k];
-        ew[k] = cw;
-        ex[k] = ce;
-        cw = tw;
-        ce = te;
-      }
-    }
-    if (cw > 0.0) {   // ce is (now) in R
-      rsum += cw;
-      const float p = cw / rsum;
-      if (ls_pick(u.x, p)) {
-        rs.x = ce;
-        rw.x = cw;
-      }
-      if (ls_pick(u.y, p) && NR > 1u) {
-        rs.y = ce;
-        rw.y = cw;
-      }
-    }
-  }
-  if (NR == 0u) rs = uint2(kLsNone, kLsNone);   // (debug: R dropped, biased)
-  else if (NR == 1u) rs.y = kLsNone;
-  // The exact set in list order (empty slots last), not by weight: neighbouring pixels with the
-  // same set but another ranking then trace the same light in the same iteration, as the
-  // ls_k=0 loop does (coherent rays; the order of the sums does not matter).
-  ex.xy = uint2(min(ex.x, ex.y), max(ex.x, ex.y));
-  ex.zw = uint2(min(ex.z, ex.w), max(ex.z, ex.w));
-  ex.xz = uint2(min(ex.x, ex.z), max(ex.x, ex.z));
-  ex.yw = uint2(min(ex.y, ex.w), max(ex.y, ex.w));
-  ex.yz = uint2(min(ex.y, ex.z), max(ex.y, ex.z));
-
-  // 2. the rays (at most K + NR per pixel); unk: aborted (unknown) ones
-  uint lit = 0, unk = 0;
-  for (uint q = 0; q < 6u; ++q) {
-    const uint e = ls_sel(q, ex, rs);
-    if (e == kLsNone) continue;
-    const uint li = bg3_light_index(e);
-    float3 lpos;
-    float R;
-    ls_light_ray(li, lpos, R);
-    // the second remainder sample may repeat the first light: its own random stream
-    const uint vs = trace_light(s.P, s.N, s.org, lpos, fp, q == 5u ? li ^ 0x155u : li, s.cone, R);
-    if (vs == kRtLit) lit |= 1u << q;
-    if (vs == kRtUnknown) unk |= 1u << q;
-  }
-
-  // 3. the surface (reloaded, as above), the exact terms of the selected lights
-  ls_surface(WaveReadLaneAt(fp, WaveGetLaneIndex()), s, px.sf, px.mt);
-  float3 dd = 0, ds = 0, td = 0, ts = 0;
-  for (uint q3 = 0; q3 < 6u; ++q3) {
-    const uint e = ls_sel(q3, ex, rs);
-    if (e == kLsNone) continue;
-    Bg3Light l = load_light(bg3_light_index(e));
-    float3 cd, ct, cs, Ld;
-    float d2, nol;
-    const bool spot = e >= end_p;
-    if (!bg3_light_eval_mat(l, spot, px.sf, px.mt, cd, ct, cs, Ld, d2, nol)) continue;
-    const float v = (lit >> q3) & 1u ? 1.0 : 0.0;
-    float sh = 1.0, t = v;
-    if ((l.flags & 1u) != 0u) {
-      sh = bg3_atlas_shadow(l, spot, px.sf, Ld, d2, saturate(nol));
-      if (ls_atlas_fallback(l.pos)) t = min(v, sh);
-    }
-    if ((unk >> q3) & 1u) t = sh;   // unknown ray: the game's own term (see the top)
-    // 1 for the exact lights, 1 / (n p_j) for a remainder sample
-    const float f = q3 < 4u ? 1.0 : rsum / ((q3 == 4u ? rw.x : rw.y) * float(NR));
-    dd += cd * ((t - sh) * f);
-    ds += cs * ((t - sh) * f);
-    td += cd * (t * f);
-    ts += cs * (t * f);
-  }
-#if LS_BOX
-  ls_box_all(fp, s, end_s, bg3_cluster_projectors(fp, d), px, dd, ds, td, ts);
-#endif
-  ls_finish(fp, px.sf, px.mt, dd, ds, td, ts, o_d, o_s);
-
-#if LS_FULL
-  if (pc.ls_stats != 0) {   // TRACK_D_RT.md 9.11; the counters core/gi.cpp logs as "ls exact-k stats"
-    const uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
-    uint n_rays = 0, n_occ = 0, n_rr = 0, n_rocc = 0;
-    for (uint q4 = 0; q4 < 6u; ++q4) {
-      if (ls_sel(q4, ex, rs) == kLsNone) continue;
-      const bool occ = ((lit >> q4) & 1u) == 0u && ((unk >> q4) & 1u) == 0u;
-      ++n_rays;
-      n_occ += occ ? 1u : 0u;
-      n_rr += q4 >= 4u ? 1u : 0u;
-      n_rocc += q4 >= 4u && occ ? 1u : 0u;
-    }
-    const float wall = rsum + ew.x + ew.y + ew.z + ew.w;
-    const float3 gd = gDiffuse[fp], gs = gSpecular[fp];
-    const bool vpx = bg3_cluster_projectors(fp, d) == 0u;
-    float ao, fdif, fspec;
-    ls_ao_factors(fp, px.sf, ao, fdif, fspec);
-    // the counters of the trace-every-light path that keep their meaning here
-    stat_addv(16, 1u, bin);
-    stat_addv(19, n_rays, bin);
-    stat_addv(20, n_occ, bin);
-    stat_addv(21, vpx ? fx(lum(gd + gs)) : 0u, bin);
-    stat_addv(24, fx(-lum(dd * fdif + ds * fspec)), bin);
-    stat_addv(25, n_cand > 0u ? 1u : 0u, bin);
-    stat_addv(26, cl.y + cl.z, bin);
-    // exact-k: candidates (what ls_k=0 traces), px over the cap (k-hit), |R|, remainder rays,
-    // their occluded ones, and R's share of the candidates' weight on the capped px
-    stat_addv(122, n_cand, bin);
-    stat_addv(123, n_cand > K ? 1u : 0u, bin);
-    stat_addv(124, n_cand > K ? n_cand - K : 0u, bin);
-    stat_addv(125, n_rr, bin);
-    stat_addv(126, n_rocc, bin);
-    stat_addv(127, n_cand > K && wall > 0.0 ? fx(rsum / wall) : 0u, bin);
-  }
-#endif
-  return true;
-}
-
 #ifndef LS_NO_MAIN
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -1276,7 +1076,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   gAux[tid.xy].zw = float2(1, 0);
 #endif
   float3 od = 0, os = 0;
-  if (ls_k_active() ? ls_main_k(tid.xy, od, os) : ls_main(tid.xy, od, os)) {
+  if (ls_main(tid.xy, od, os)) {
     gDiffuse[tid.xy] = od;
     gSpecular[tid.xy] = os;
   }
