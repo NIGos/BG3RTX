@@ -99,6 +99,25 @@ inline TbEval tb_evaluate(TbMaterial m,TbVec3 wo_input,TbVec3 wi_input) {
     if(!tb_finite3(r.f)||!tb_finite(r.pdf)||r.pdf<0) return tb_zero(TbNumericFailure);
     return r;
 }
+// Internal shared direction mapping: validated unit wo, alpha, ps and randoms.
+// Returned null mass belongs to the NDF sampler; never retry or renormalize it.
+inline TbDirection tb_reflection_sample_unit(float alpha,TbVec3 wo,float ps,float lobe_u,float u,float v) {
+    TbDirection r;r.v=tb_vec(0,0,0);r.status=TbOk;
+    float phi=2*TbPi*v;
+    if(lobe_u<ps) {
+        float a2=alpha*alpha,d=(1-u)+a2*u;
+        float hz=tb_sqrt((1-u)/d),hs=tb_sqrt(a2*u/d);
+        TbVec3 h=tb_vec(hs*tb_cos(phi),hs*tb_sin(phi),hz);
+        float c=tb_dot(wo,h);
+        r.v=tb_vec(2*c*h.x-wo.x,2*c*h.y-wo.y,2*c*h.z-wo.z);
+        // Rejected NDF reflections are a real null atom. Never retry, clamp to
+        // hemisphere, or renormalize the surviving continuous density.
+        if(c<=0||r.v.z<=0) { r.v=tb_vec(0,0,0);r.status=TbNull;return r; }
+    } else {
+        float radius=tb_sqrt(u);r.v=tb_vec(radius*tb_cos(phi),radius*tb_sin(phi),tb_sqrt(1-u));
+    }
+    return r;
+}
 inline TbSample tb_sample(TbMaterial m,TbVec3 wo_input,float lobe_u,float u,float v) {
     TbSample r;r.wi=tb_vec(0,0,0);r.f=tb_vec(0,0,0);r.pdf=0;r.status=tb_material_status(m);
     if(r.status!=TbOk) return r;
@@ -106,21 +125,57 @@ inline TbSample tb_sample(TbMaterial m,TbVec3 wo_input,float lobe_u,float u,floa
     TbDirection od=tb_direction(wo_input);if(od.status!=TbOk) { r.status=TbInvalid;return r; }
     TbVec3 wo=od.v;float total=m.diffuse_weight+m.specular_weight;
     if(wo.z<=0||total==0) { r.status=TbNull;return r; }
-    float phi=2*TbPi*v;
-    if(lobe_u<m.specular_weight/total) {
-        float a2=m.alpha*m.alpha,d=(1-u)+a2*u;
-        float hz=tb_sqrt((1-u)/d),hs=tb_sqrt(a2*u/d);
-        TbVec3 h=tb_vec(hs*tb_cos(phi),hs*tb_sin(phi),hz);
-        float c=tb_dot(wo,h);
-        r.wi=tb_vec(2*c*h.x-wo.x,2*c*h.y-wo.y,2*c*h.z-wo.z);
-        // Rejected NDF reflections are a real null atom. Never retry, clamp to
-        // hemisphere, or renormalize the surviving continuous density.
-        if(c<=0||r.wi.z<=0) { r.wi=tb_vec(0,0,0);r.status=TbNull;return r; }
-    } else {
-        float radius=tb_sqrt(u);r.wi=tb_vec(radius*tb_cos(phi),radius*tb_sin(phi),tb_sqrt(1-u));
-    }
+    TbDirection direction=tb_reflection_sample_unit(m.alpha,wo,m.specular_weight/total,lobe_u,u,v);
+    r.wi=direction.v;if(direction.status!=TbOk){r.status=direction.status;return r;}
     TbEval e=tb_evaluate(m,wo,r.wi);r.f=e.f;r.pdf=e.pdf;r.status=e.status;
     if(r.status==TbOk&&!(r.pdf>0)) r.status=TbNumericFailure;
+    return r;
+}
+
+// Declared PBRT/Ashikhmin-Shirley FresnelBlend, using isotropic GGX D.
+// Rd/Rs are substrate/Fresnel reflectances, NOT material mixture weights.
+// Sampling uses 1/2 cosine and 1/2 full NDF only for variance reduction.
+struct TbFresnelBlend {TbVec3 Rd,Rs;float alpha;};
+inline TbUint tb_fresnel_status(TbFresnelBlend m){
+    if(!tb_color(m.Rd)||!tb_color(m.Rs)||!tb_finite(m.alpha)||m.alpha<0||m.alpha>1)return TbInvalid;
+    if(m.alpha==0)return TbUnsupportedDelta;
+    if(m.alpha*m.alpha==0)return TbNumericFailure;
+    return TbOk;
+}
+inline float tb_pow5(float t){float t2=t*t;return t2*t2*t;}
+inline float tb_fresnel_diffuse_gate(float cosine){
+    // Stable polynomial for 1-(1-cosine/2)^5, including grazing directions.
+    float t=cosine*0.5f;return t*(5+t*(-10+t*(10+t*(-5+t))));
+}
+inline TbEval tb_fresnel_evaluate(TbFresnelBlend m,TbVec3 wo_input,TbVec3 wi_input){
+    TbUint status=tb_fresnel_status(m);if(status!=TbOk)return tb_zero(status);
+    TbDirection od=tb_direction(wo_input),id=tb_direction(wi_input);
+    if(od.status!=TbOk||id.status!=TbOk)return tb_zero(TbInvalid);
+    TbVec3 wo=od.v,wi=id.v;if(wo.z<=0||wi.z<=0)return tb_zero(TbOk);
+    TbVec3 sum=tb_vec(wo.x+wi.x,wo.y+wi.y,wo.z+wi.z);
+    TbDirection hd=tb_direction(sum);if(hd.status!=TbOk)return tb_zero(TbNumericFailure);
+    float c=tb_min(1,0.5f*tb_sqrt(tb_dot(sum,sum)));
+    float D=tb_D(hd.v,m.alpha*m.alpha),t5=tb_pow5(1-c);
+    float specular=D/(4*c*tb_max(wo.z,wi.z));
+    float diffuse=(28/(23*TbPi))*tb_fresnel_diffuse_gate(wo.z)*tb_fresnel_diffuse_gate(wi.z);
+    TbEval r=tb_zero(TbOk);
+    r.f=tb_vec(diffuse*m.Rd.x*(1-m.Rs.x)+specular*(m.Rs.x+(1-m.Rs.x)*t5),
+               diffuse*m.Rd.y*(1-m.Rs.y)+specular*(m.Rs.y+(1-m.Rs.y)*t5),
+               diffuse*m.Rd.z*(1-m.Rs.z)+specular*(m.Rs.z+(1-m.Rs.z)*t5));
+    r.pdf=0.5f*(wi.z/TbPi+D*hd.v.z/(4*c));
+    if(!tb_finite3(r.f)||!tb_finite(r.pdf)||r.pdf<0)return tb_zero(TbNumericFailure);
+    return r;
+}
+inline TbSample tb_fresnel_sample(TbFresnelBlend m,TbVec3 wo_input,float lobe_u,float u,float v){
+    TbSample r;r.wi=tb_vec(0,0,0);r.f=tb_vec(0,0,0);r.pdf=0;r.status=tb_fresnel_status(m);
+    if(r.status!=TbOk)return r;
+    if(!tb_finite(lobe_u)||!tb_finite(u)||!tb_finite(v)||lobe_u<0||u<0||v<0||lobe_u>=1||u>=1||v>=1){r.status=TbInvalid;return r;}
+    TbDirection od=tb_direction(wo_input);if(od.status!=TbOk){r.status=TbInvalid;return r;}
+    if(od.v.z<=0){r.status=TbNull;return r;}
+    TbDirection direction=tb_reflection_sample_unit(m.alpha,od.v,0.5f,lobe_u,u,v);
+    r.wi=direction.v;if(direction.status!=TbOk){r.status=direction.status;return r;}
+    TbEval e=tb_fresnel_evaluate(m,od.v,r.wi);r.f=e.f;r.pdf=e.pdf;r.status=e.status;
+    if(r.status==TbOk&&!(r.pdf>0))r.status=TbNumericFailure;
     return r;
 }
 #ifdef __cplusplus

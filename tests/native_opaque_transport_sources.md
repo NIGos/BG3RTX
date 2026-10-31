@@ -55,15 +55,21 @@ coverage is still unknown and is rejected unless a real provider establishes it.
 coefficients and roughness parameters. It intentionally contains no lobe weights
 and cannot silently become `TbMaterial`.
 
-Current `TbMaterial` is a convex Lambert + GGX mixture with weights summing at
+Original `TbMaterial` is a convex Lambert + GGX mixture with weights summing at
 most 1. Native class 0 uses empirical Burley diffuse and different visibility
 math; preserving its parameter coefficients does not make that mixture its BSDF,
 a coupled dielectric or a proven energy-conserving native transport model.
 There is no automatic metalness-to-weights prescription here.
 
+`nt_to_fresnel_blend` now offers an explicit separate physical-model policy:
+native diffuse_color -> FresnelBlend Rd, native F0 -> Rs, base_alpha -> GGX alpha.
+It propagates non-success native status and does not claim native-BRDF equivalence.
+Sampling probabilities do not become material weights. Model tests and limits
+are in `tests/transport_bsdf_sources.md`.
+
 Remaining runtime gap: the shared reference must obtain a qualified hit-material
-tuple (including current sampling, coverage and frame), choose an explicit supported
-scattering contract and then wire its evaluate/sample/PDF. Native AA requires its
+tuple (including current sampling, coverage and frame) and wire the declared
+model's evaluate/sample/PDF. Native AA requires its
 own footprint evidence. Emission, normal basis/correction and unsupported classes
 remain separate provider/consumer work. No scene, renderer, energy or GPU cost
 qualification follows from this helper.

@@ -67,6 +67,17 @@ inline NtRoughness nt_native_quad_roughness(NtResult parameters,NtVec3 dh,NtVec3
     out_data.alpha=out_data.native_roughness*out_data.native_roughness;
     return out_data;
 }
+// Explicit physical-model policy, not native-BRDF equivalence: native diffuse
+// coefficient becomes substrate Rd, native F0 becomes Rs, intrinsic alpha stays.
+// No raster AA is invented for an offscreen hit and no lobe weights are assigned.
+struct NtFresnelBlendResult {TbFresnelBlend value;NtUint status;};
+inline NtFresnelBlendResult nt_to_fresnel_blend(NtResult parameters){
+    NtFresnelBlendResult r;r.value.Rd=tb_vec(0,0,0);r.value.Rs=tb_vec(0,0,0);r.value.alpha=0;r.status=parameters.status;
+    if(parameters.status!=NtOk)return r;
+    r.value.Rd=parameters.value.diffuse_color;r.value.Rs=parameters.value.F0;r.value.alpha=parameters.value.base_alpha;
+    if(tb_fresnel_status(r.value)!=TbOk)r.status=NtInvalid;
+    return r;
+}
 #ifdef __cplusplus
 // Decode success does not establish coverage or actual sampled-view provenance.
 // Both remain explicit caller evidence, including for an AlphaTest_VT asset.
