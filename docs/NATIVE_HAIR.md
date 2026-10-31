@@ -1,6 +1,7 @@
 # Native hair runtime coverage and depth
 
-Default-off physical secondary-origin candidate: [HAIR_PHYSICAL_ORIGIN.md](HAIR_PHYSICAL_ORIGIN.md).
+Default-off physical secondary-origin candidate: see "Physical secondary origin" below
+(merged from the former HAIR_PHYSICAL_ORIGIN.md, now in [archive/](archive/HAIR_PHYSICAL_ORIGIN.md)).
 It preserves virtual primary/history depth. CPU/shader qualification is separate
 from the pending actual GPU/in-game gate and the user's darker-Hair attribution.
 
@@ -206,3 +207,71 @@ Include the distant-shadow scene separately. FG2 is the deciding moving case;
 FG0 is reference only. Use existing pass timing with heavy stats disabled in the
 cost window. No GPU cost, temporal quality or native capture-hook gate has passed.
 Other native hair families remain separate unsupported recipe gaps.
+
+## Physical secondary origin (`rt_hair_physical_origin`, default off)
+
+A candidate correction, not confirmation of the user's darker/dithered Hair
+attribution. No game/GPU check has been done. Native sampling and other Hair-family
+gaps remain. The user has not tested it.
+
+**Problem.** Native Hair camera depth moves the apparent surface behind its base
+card. Camera primary queries reproduce that virtual surface; physical secondary
+queries use the thin base ribbon and native Shadow coverage. `rtOrigin` launched
+secondary rays from the virtual surface, so a camera-facing light could hit the same
+card in front of that origin. The ULP offset removes floating-point
+self-intersection, not a real material displacement.
+
+**Fix.** `rtOrigin` stays unchanged for primary checks and history matching. Only
+after the virtual primary match succeeds is the physical point/normal rebuilt from
+the **same procedural instance/primitive**. Eligibility also requires raster
+material class 5: native deferred FS `42a95e17ec3adc51` (Hair static),
+`0ca5ee93d0f33b8c` (Hair instanced) and `7362bcdec4c0415c` (Pubes static) always
+write `(5 | ((channel & 7) << 4)) / 255` to RT2.a. Depth-only FS do not write the
+class. Other receivers keep the original origin. The triangle test starts at camera
+zero with the same scene rebase. Ambiguous edges and invalid state keep the original
+path and are counted.
+
+- A full render-resolution RGBA32F image stores the unit physical normal and the
+  positive physical radial distance (0 = inactive). Cost: `16 * renderWidth *
+  renderHeight` bytes, **41.68 MiB** at 2560x1067 (one image, no ring; padding and
+  GPU time unmeasured). A gamma16 FP32 envelope checks encoding in CPU cases; it is
+  not a native/GPU error certificate. The ULP offset and terminator fallback are
+  unchanged but anchored at the physical point. No bias is weakened.
+- Sun, GI, AO, reflections and local visibility use the physical launch data.
+  Finite-light segments choose direction/soft sample from the physical receiver,
+  then keep the actual centre (also hard mode with nonzero radius) or the sampled
+  target after the offset. The shared CPU/HLSL segment helper rejects an unresolved
+  sphere intersection instead of inventing a hit or miss. Frozen local-light
+  arithmetic and the procedural caster traversal limit are unchanged.
+- Startup latch: capability is fixed at first resource init and kept across core
+  reload. Restart with this key, `rt_native_hair=1` and `rt_origin=1`; then
+  `1 -> 0 -> 1` works in one session. No host ABI or shader-loader change. GUI:
+  Experimental in every preset.
+- Layout: startup on adds set 0 binding 50; RF drops proven-unused binding 12 to stay
+  within 32 descriptors. OMM bindings 10/11 stay in set 1. Key-off uses the frozen
+  normal entry.
+
+**Competing Scalp receivers.** Scalp FS `600446334bc7d478`/`87aab1f9603cf4a9` also
+write class 5 with the same channel bits, and no G-buffer field identifies the
+writer. So publication also scans triangles over the SAME `[t0, dist+w]` interval
+(reference AS when OMM is on). Native camera Scalp records `9e77575a9f377ec5` and
+`36eeb96ba83ea027`, unreadable identity, candidate-cap exhaustion or an automatic
+opaque commitment keep the virtual origin. Non-Scalp candidates need a valid source
+range, stride and record kind 1..5. This may reject valid Hair near other surfaces.
+It closes the known admission hole but is NOT a raster-writer identity certificate
+or proof of the hairline cause. A/B windows must be capture-complete: the preserved
+trial had alpha-capacity fallbacks in 11 of 77 windows.
+
+**Checks.** `native_hair_origin_test`, `settings_test`, the scalp shader check and
+`tests/hair_origin_shader_test.py` (key-off SPIR-V byte-identical, feature modules
+validated, binding 12 unused in all 16 RF variants). Last gate: 100 origin checks,
+272 settings checks, 43/43 CTests after main 5f3e93b, 112 byte-identical and 112
+validated modules; scalp gate 95/95; 31 Scalp-decision cases; 16 off-SPV identical
+to 39e5475, 16 on-variants valid. Review fixed hard nonzero-radius targeting (48
+local modules recompiled).
+
+**Live gate (pending).** Both mode markers, RT active, nonzero matched-Hair and
+available-origin counts, recorded unresolved counts (`rt_stats` counters 188/189/190).
+Compare primary agreement with this scene's own off/off repeat, not an assumed 99.5%.
+Compare Hair-local visibility and energy, unchanged non-Hair pixels, and report the
+`rt passes` GPU cost. Missing RT or no affected Hair cannot pass.

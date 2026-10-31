@@ -78,8 +78,8 @@ These rules come from mistakes already made in this repo. They apply on every br
   conservative option or do other work, and keep going.
 
 ## Autonomous rendering program (user steering, 2026-10-30)
-- Execution contract: `docs/RENDERING_EXECUTION_PLAN.md`; transferable goal:
-  `docs/GOAL_RENDERING_AGENT.md`. Coordinate with existing owners before delegating.
+- Execution contract: `docs/RENDERING_EXECUTION_PLAN.md` (the old goal prompt is in
+  `docs/archive/GOAL_RENDERING_AGENT.md`). Coordinate with existing owners before delegating.
 - Offline implementation and independent verification may run in parallel in isolated trees.
 - Live tests require explicit user steering for the batch. Old approvals, `USER_AWAY`, absent
   `USER_PLAYING`, background/window modes and old queue-policy exceptions do not grant it.

@@ -149,7 +149,7 @@ by half its occlusion. Kept as the game's art intent.
 
 **Q10 (P1). Hard sun shadows from a point sun; bias.** **Status: done** (soft sun: fix 5,
 with the half-angle corrected by the RT audit; bias: RT audit fix 6, `rt_origin=1`, see
-[AUDIT_RT.md §4](AUDIT_RT.md#4-fix-batch-2026-10-26-branch-of-e285602)).
+[AUDIT_RT.md §4](archive/AUDIT_RT.md#4-fix-batch-2026-10-26-branch-of-e285602)).
 - `rt_shadow.hlsl:40` traces 1 deterministic ray to a point light. The game's own
   sun specular uses a disc with `sin θ = 0.00459` (TRACK_D 8.1), so shadow and
   specular disagree, and distant casters get a pixel-hard edge.

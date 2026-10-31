@@ -1033,7 +1033,7 @@ Documentation changes only; no implementation, build or live test performed.
 ## Autonomous execution plan and receiving-agent goal - 2026-10-30
 
 docs/RENDERING_EXECUTION_PLAN.md defines M0-M6, tooling, ownership, GUI/settings,
-evidence gates and live authorization; docs/GOAL_RENDERING_AGENT.md is the prompt
+evidence gates and live authorization; docs/archive/GOAL_RENDERING_AGENT.md is the prompt
 to activate in the receiving conversation. AGENTS/handoff link the new mandate.
 No renderer implementation or live test started by this planning task.
 
@@ -1074,7 +1074,7 @@ hard edges in those views, not an attribution of every outdoor shadow or hairsty
 No radius, bias, blur, trust setting or renderer changed for this audit. Correct
 off-screen caster coverage, including native cutouts, is required before relaxing
 the guard. Sun has no dedicated mask accumulator; nearby hair can also be naturally
-sharp. Report docs/SUN_PENUMBRA_REVIEW.md and matching evidence JSON. Existing RT
+sharp. Report docs/archive/SUN_PENUMBRA_REVIEW.md and matching evidence JSON. Existing RT
 scope 1.130-2.521 ms/frame includes other work, not isolated solar cost. Live
 same-view trust/mask check remains user-coordinated; no game job was launched.
 
@@ -1254,7 +1254,7 @@ changed or foreground input sent. CPU/GPU performance was not measured; no GPU
 work was added. The separate material-source selection and RR exposure-helper
 issues remain unchanged to keep this trial specific.
 Evidence: docs/evidence/ui-descriptor-trial-20261030.json. Offline analysis and
-historical source reproductions remain in docs/UI_CONTAMINATION_OFFLINE.md.
+historical source reproductions remain in docs/archive/UI_CONTAMINATION_OFFLINE.md.
 
 
 ## UI / foliage offline investigation — 2026-10-30
@@ -1283,7 +1283,7 @@ but do not reproduce the screenshot's saturated patches in inspected compose vie
 Exact UI-to-blue-frame attribution remains OPEN: descriptor epochs/profile bytes at
 the visibly bad frame are absent. Prior zero near-UI foliage support was inconclusive.
 
-Report: docs/UI_CONTAMINATION_OFFLINE.md. Versioned proof/patch/JSON:
+Report: docs/archive/UI_CONTAMINATION_OFFLINE.md. Versioned proof/patch/JSON:
 docs/evidence/ui-descriptor-20261030/. Original screenshots, copied user log and
 compiled harnesses: captures/offline-ui-20261030/. Next: fix allocation lifetime and
 material provenance, then qualify a same-frame UI transition; no brightness clamp.
@@ -3197,7 +3197,7 @@ or use all-RT-off as a claimed fix. No new user-facing candidate key is ready ye
 
 ## Next phases
 
-- P2: the useful lscheck fix is merged at 6dba0a8 and pushed with codex/p2-pending. Fresh valid S6 hold-90 runs have 25 windows each and zero any-bit, relative or one-writer differences across 8,172,707,324 / 8,172,707,294 pixels; no faults, dumps or build changes. The first refresh pair was invalid because a startup-only expectation was incorrectly applied to session slices; valid repeats supersede it. Full startup independently confirms the real 8.0 MB asset DB. Details: docs/P2_PENDING_MERGES.md.
+- P2: the useful lscheck fix is merged at 6dba0a8 and pushed with codex/p2-pending. Fresh valid S6 hold-90 runs have 25 windows each and zero any-bit, relative or one-writer differences across 8,172,707,324 / 8,172,707,294 pixels; no faults, dumps or build changes. The first refresh pair was invalid because a startup-only expectation was incorrectly applied to session slices; valid repeats supersede it. Full startup independently confirms the real 8.0 MB asset DB. Details: docs/archive/P2_PENDING_MERGES.md.
 - EN2 pure S8 windows join 300/300 without waits but still fail blue/metalness and luminance bias. D-EM family 304be1c7 fails AF at ratio 0.361 / 0.362 (band 0.842–1.187); GF passes at 0.999. Both remain excluded.
 - P3 offline preparation: codex/p3-box at 907857c is pushed, using the managed p2-pending checkout. The useful shader foundation is ported onto current main; host pipeline selection, native descriptor replay, cleanup, default-off ls_box key and projector validation logging are implemented. The stats allocation now covers added counters 136–150; the inherited 136-counter allocation was insufficient. Full build, 3/3 CTests, default agreement and 34/34 shader files pass. No runtime or merge yet; S6 / S7 / S5 recompute and shadow checks follow P1's runnable candidate. See that branch's docs/P3_BOX_LIGHTS.md.
 - P4: implement and validate the conservative OMM foliage design.

@@ -22,6 +22,7 @@ New logic in core where possible. ABI 21. Merge once per verified milestone.
 
 ## Camp rugs and planks
 
+Status: not reproducible since 10-31, kept as a watch item.
 Symptoms are recorded in four user screenshots. Their precise mesh/shader identity
 and the responsible RT effect have not yet been established. Do not call them fixed.
 A rectangular shadow alone does not establish a cutout or identify its caster.
@@ -49,6 +50,7 @@ No new public ABI is required. Keep this candidate separate until attribution.
 
 ## Astarion hairline
 
+Status: not reproducible since 10-31, kept as a watch item.
 Confirmed source defect: native Hair, Pubes and Scalp all write material class 5.
 Class 5 alone cannot identify a Hair receiver for physical-origin rebasing.
 A nearby Hair primitive may depth-match a Scalp pixel at the boundary.
@@ -105,7 +107,7 @@ The full RENDERING_EXECUTION_PLAN remains active; it has not been narrowed.
 | Milestone | Current state and remaining work |
 |---|---|
 | M0 | Queue authorization/ownership implemented; respect the live boundary. |
-| M1 | Scoped Hair evidence and offline cutout fixes; current two regressions first. |
+| M1 | Scoped Hair evidence and offline cutout fixes. Camp rug rectangles and Astarion hairline band: not reproducible since 10-31, kept as watch items. |
 | M2 | 27 native-matched components, 24506 triangles; room closure unproven. |
 | M3 | Supported hit materials; persistent materials, world lights and state open. |
 | M4 | GI descriptor fix implemented; corrected image recheck still pending. |

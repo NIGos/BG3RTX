@@ -7,7 +7,7 @@ that can be implemented in this codebase:
 - **Item 2.** A radiance cache for GI and reflections (backlog #5, D-GI2).
 - **Item 3.** Opacity micromaps for alpha-tested foliage (backlog #6).
 
-**Sources read:** STATUS, AUDIT_SOTA, research.md, QUALITY (R0-R10), TRACK_C_GI, TRACK_D_RT
+**Sources read:** STATUS, AUDIT_SOTA, archive/research.md, QUALITY (R0-R10), TRACK_C_GI, TRACK_D_RT
 (sections 7-12), QA.md, ASSET_DB.md, `core/gi.cpp`, `core/ls_lights.cpp`, `shaders/gi/*`,
 `shaders/rt/rt_common.hlsli`, `layer/bvhsplit.cpp`, and `layer/rtscene.cpp`. I also read
 the D-EM branch `worktree-agent-a2212c228ec492214` (its HANDOFF, `em_common.hlsli`,

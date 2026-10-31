@@ -3752,7 +3752,41 @@ all traces, all modules dumped):
   mismatch is a pattern (mask, UV transform, texture) or a level (constants).
 
 
-## Current native-caster sun scene (ABI 19, default off)
+### 13.20 Open items and remaining tests
+
+Kept from the former D-EM branch handoff (`archive/P2_EMISSIVE_LEGACY_HANDOFF.md`),
+only what 13.1-13.19 do not already say.
+
+**Still open after em11/em12:**
+- AF `304be1c7` (13.18, 13.19): read the em12 `af-view19/20` per-pixel images.
+- GF build median 0.616 ms against the 0.7 ms optimisation target (not a gate).
+- Coverage (>= 95%) is review-only until it is derived.
+
+**R4 (when a foundry save exists): S1.** Same command and criteria as the derived gate.
+Foundry families seen in round 1: `20864dc6` exact, `7085eee7` exact (VT albedo),
+`aab75fed` approximate (vertex colour), `159a6211` exact.
+
+**R5: cost, validation and motion (S6).**
+- Cost: from the `rt_debug=0` and `rt_emissive=0` windows. Build <= 0.5 ms. Effects passes
+  with capture minus without <= 0.1 ms. The calibration check (every 16 frames) must not
+  show in frame pacing.
+- Validation: `auto-run.ps1 -Background -Validation -Save "Adamantine Forge" -Traces 2
+  -Set rt_debug=18`. Pass: no IDs beyond main's baseline, none naming our queue
+  submission, acceleration-structure builds or updates, and no layout IDs on the
+  effects target.
+- Motion: `auto-run.ps1 -Background -Move -Save "Adamantine Forge" -Traces 3`. Pass: no
+  device loss, 0 non-finite values in the dumps.
+
+**Known gaps.**
+- Lava texture detail: the calibration matches the mean per family only. The heat field
+  (bright cracks, dark crust) is not in the data; the light list's power is right on average.
+- Grymforge's forward lava is not validated: the reference would be the forward-lit target
+  before and after the lava's draw.
+- `aab75fed` vertex colour (approximate, calibrated) and the HLOD family `b86501b6`.
+- Not captured: candles and fire (forward particles) and the unit-58 VFX planes.
+- One frame of latency: consumers apply `em_shift()`.
+
+## Current native-caster sun scene (default off)
 
 `rt_sun_cascade_current=0`: source/record-order-correct sun-only TLAS clone,
 private same-submit build insertion, cloned alpha/stamp, strict whole-ray coverage.
