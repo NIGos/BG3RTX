@@ -33,6 +33,7 @@
 // where the instance's vertices are (pool or soup), its stride, and its alpha
 // record (shaders/rt/rt_common.hlsli).
 #include "host.h"
+#include "hit_material.h"
 #include "../common/dyn_hold.h"
 #include "../common/cascade_casters.h"
 #include "omm_native_plain.h"
@@ -354,6 +355,7 @@ struct Mesh {
   uint64_t created = 0, last_used = 0, last_audit = 0;
   uint32_t instances_seen = 0;
   uint64_t gen = 0;                   // unique per created mesh: results of an evicted one never apply to a new one
+  uint64_t geo_key = 0;               // native_hit pool material record (rt_hit_material; 0 none)
   std::unique_ptr<std::vector<NativeOmmVariant>> omm;
 };
 uint64_t g_mesh_gen = 0;
@@ -427,6 +429,7 @@ struct FrameDraw {
   VkDeviceSize soup_off = 0;
   uint32_t prims = 0;
   uint32_t rec = kNone,material_record=kNone;
+  uint64_t geo_key = 0, pos_key = 0;  // pool material join (native_hit::pool_keys; rt_hit_material)
   std::shared_ptr<omm::NativePlainCapture> omm_material;
   std::vector<Range> ranges;
 };
@@ -860,6 +863,7 @@ void evict(uint64_t key) {
   if (it == g_meshes.end()) return;
   Mesh& m = it->second;
   unindex(key, m.ranges);
+  native_hit::pool_evicted(m.geo_key);
   if(m.omm)for(const auto& v:*m.omm)omm::release_ticket(v.baked.ticket);
   as_destroy(m.as);
   if (m.pool_size) g_pending_free.push_back({frame_index(), -1, m.pool_off, m.pool_size});
@@ -1056,6 +1060,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   }
   if (!mk) mk = 1;
   fd.mesh_key = mk;
+  if (native_hit::enabled()) native_hit::pool_keys(ip, *s, d.args, &fd.geo_key, &fd.pos_key);
   fd.tris_per_instance = d.args.count / 3;
   // Capture while the exact native draw is still bound, including cached draws
   // that skip transform feedback. Build-time tracker state belongs to another
@@ -1250,6 +1255,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         continue;
       }
       m.ranges = fd.ranges;
+      m.geo_key = fd.geo_key;
       for (const Range& r : m.ranges) g_buf_meshes[r.b].push_back(fd.mesh_key);
       g_meshes[fd.mesh_key] = std::move(m);
       g_any_mesh = true;
@@ -1491,6 +1497,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       inst_ref.push_back(in.accelerationStructureReference);
       inst_flags.push_back(in.flags);
     }
+    // Pool material records: counted per instance (step 1: InstInfo and shaders unchanged).
+    if (native_hit::enabled()) native_hit::pool_lookup(fd.geo_key, fd.pos_key, m.gen, fd.instances);
     static_tris += uint64_t(m.tris) * fd.instances;
     ++g_st.cached_draws;
     g_st.static_inst += fd.instances;

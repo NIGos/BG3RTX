@@ -651,6 +651,8 @@ struct InstPipe {
   uint64_t vtx_sig = 0;         // VS + per-vertex input layout
   uint32_t vtx_bindings = 0;    // mask of the per-vertex bindings the attributes read
   bool uv_ok = false;           // the captured UV output is a copy of a per-vertex input
+  uint8_t pos_binding = 0xff;   // the position attribute's binding (0xff: none) and offset (pool material join)
+  uint32_t pos_offset = 0;
 };
 void bvh_device_created(DeviceData* dd);
 void bvh_device_destroyed(DeviceData* dd);

@@ -52,6 +52,24 @@ Limits that decide the order:
   audited, and its meshes are BVH-cached (pool), so no per-frame prepass/deferred XFB exists for
   the exact per-hit geometry check. Needs a per-mesh material row on pool instances (record id in
   InstInfo for kInfoPool, UV/basis from the pool) plus the STI audit.
+- Pool instances, step 1 (branch pool-materials, READY_FOR_LIVE, no shader/ABI change): the
+  pool holds only class A meshes; the audited pair is class B and never pooled, so pool records
+  come from the STI pair (2d2ac3c3/14678345, fields recipe in `native_vt_surface.h`). Every class A
+  G-buffer draw is joined to its pool mesh by index range + position stream
+  (`common/native_hit_pool.h`); STI bindings (same set 1 map) + engine/reflectance bytes go into a
+  persistent record (refresh every 30 frames, dropped on mesh eviction, "stale" when a view/sampler
+  dies, "ambiguous" for two materials on one geometry). `[hit material pool]` (rt_stats) gives
+  pool instances qualified/without by reason. Hits still use no pool record. Remaining:
+  1. Audit the 2d2ac3c3 G-buffer XFB patch (`vt_frame` today only for 3812bc98): UV + T/N/B outputs.
+  2. At record creation, one XFB of that draw; a `mesh_extract` mode maps instance 0's UV + basis to
+     object space (inverse matrix, as positions) into a pool range (44 B/vertex, ~130 B/triangle:
+     ~200 MB at 1.5M triangles; only qualified meshes, under `rt_mesh_pool_max_mb`).
+  3. Per frame, register_use appends the current qualified records as rows (same 256 B layout, a
+     gather dispatch for t/p0/p1 from the record's engine bytes), views into the cloned set.
+  4. InstInfo: the material row in a side buffer indexed by instance (rec stays the alpha record);
+     the shader path for kInfoPool reads UV/basis from the pool and replaces the prepass/deferred
+     clip check by an exact UV check (pool UV vs the G-buffer XFB UV at extraction).
+  5. Ordinary shaders byte-identical with rt_hit_material=0 (variant define); one A/B on S6/S8.
 - Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;
   terrain draws patches from `_m0[gl_InstanceIndex]` + a heightmap, needs its own recipe.
 - Skinned characters (class B always-skinned VSs, CHAR_* STI FSs): positions from the skinning

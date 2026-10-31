@@ -7,6 +7,7 @@
 #include "../common/native_hit_resources.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_qualify.h"
+#include "../common/native_hit_pool.h"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -227,8 +228,9 @@ bool capture_tileset(VkCommandBuffer cmd,Material& material){
  }
  return failed==0;
 }
-bool capture(VkCommandBuffer cmd,Material& material){
- auto* state=cmd_state(cmd);if(!state || !audited_static_family(state->vs,state->fs))return false;
+// recipe: a pool pair (native_hit_pool.h, persistent record); nullptr: the audited per-draw pair.
+bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* recipe=nullptr,uint32_t* failures=nullptr){
+ auto* state=cmd_state(cmd);if(!state || !(recipe?pool::pool_recipe(state->vs,state->fs)==recipe:audited_static_family(state->vs,state->fs)))return false;
  omm::OrdinaryBindingFacts buffer_facts[3]{};bool queried[3]{};uint32_t failed=0;
  auto buffer=[&](uint32_t n,uint32_t set,uint32_t slot,VkDeviceSize minimum,Bg3Binding& out){
   queried[n]=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&out);
@@ -236,7 +238,7 @@ bool capture(VkCommandBuffer cmd,Material& material){
   if(out.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(out.buffer);if(out.offset<=size)out.range=size-out.offset;}
   bool valid=queried[n] && out.buffer && out.range>=minimum && frozen;if(!valid)failed|=1u<<n;
  };
- buffer(0,1,0,112,material.engine);buffer(1,1,1,16,material.physical_ubo);buffer(2,0,12,128,material.tilesets);
+ buffer(0,1,0,recipe?pool::engine_bytes(*recipe):112u,material.engine);buffer(1,1,1,16,material.physical_ubo);buffer(2,0,12,128,material.tilesets);
  ViewFacts views[4]{};View* targets[4]={&material.table,&material.normal,&material.albedo,&material.physical};
  for(uint32_t i=0;i<4;++i)if(!view(cmd,3+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
  bool sampler_bound=omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,2,0,material.sampler);
@@ -246,7 +248,9 @@ bool capture(VkCommandBuffer cmd,Material& material){
  if(!sampler_frozen || !omm::ordinary_sampler_current(material.sampler))failed|=1u<<8;
  const auto& c=material.sampler.sampler;
  if(!c.complete || c.info.flags || c.info.compareEnable || c.info.unnormalizedCoordinates || c.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)failed|=1u<<9;
+ if(failures)*failures=failed;
  if(!failed)return true;
+ if(recipe)return false; // pool failures are counted by bit in "[hit material pool]"
  // Two full prerequisite records per 120-frame window, not one missing-term
  // experiment at a time. These are actual draw bindings, not a native-proof claim.
  static uint64_t logged_frame=UINT64_MAX;static uint32_t logged=0;const auto frame=frame_index();
@@ -294,6 +298,52 @@ void publish_word(Query& query,uint32_t value){
  auto* word=reinterpret_cast<uint32_t*>(static_cast<unsigned char*>(query.rows.mapped)+row_payload);
  std::atomic_ref<uint32_t>(*word).store(value,std::memory_order_release);
 }
+// Pool material records (common/native_hit_pool.h). pool_mutex is a leaf: it is taken under
+// the BVH build lock (pool_lookup, pool_evicted) and never held while calling out, except the
+// tracker/sampler currency checks (their own leaf locks).
+struct PoolMaterial {
+ View table,normal,albedo,physical;omm::BoundSampler sampler;uint32_t engine[12]{},reflectance{};
+ uint64_t checked{};bool current{}; // currency of the last check (once per frame per record)
+};
+std::mutex pool_mutex;
+pool::Table<PoolMaterial> pool_table;
+struct PoolObserved {uint64_t frame{};uint32_t draws{},recipe{},captured{},throttled{},no_key{},overflow{};uint32_t failures[12]{};};
+PoolObserved pool_obs[2]; // this frame and the previous one (the G-buffer may record after the BVH build)
+uint64_t pool_counter_frame{};
+void pool_capture_bits(uint32_t bits,uint32_t (&out)[12]){for(uint32_t b=0;b<12;++b)if(bits&(1u<<b))++out[b];}
+PoolObserved& pool_observed(uint64_t frame){
+ if(pool_obs[0].frame!=frame){pool_obs[1]=pool_obs[0];pool_obs[0]={};pool_obs[0].frame=frame;}
+ return pool_obs[0];
+}
+void pool_log(uint64_t frame){
+ const auto& c=pool_table.counters();const auto& t=pool_table.totals();uint64_t draws=0,instances=0;
+ for(size_t i=0;i<size_t(pool::Status::Count);++i){draws+=c.draws[i];instances+=c.instances[i];}
+ const PoolObserved empty{};
+ const PoolObserved* o=pool_obs[0].frame==frame?&pool_obs[0]:pool_obs[1].frame==frame?&pool_obs[1]:&empty;
+ const auto q=size_t(pool::Status::Qualified);
+ log("[hit material pool] frame %llu pool draws %llu instances %llu; qualified draws %llu instances %llu (%.1f%% of pool instances); records %zu stored %llu refreshed %llu conflicts %llu evicted %llu mesh replaced %llu invalidated (stale views) %llu overflow %llu; lookup at hits not wired (step 1)",
+  (unsigned long long)frame,(unsigned long long)draws,(unsigned long long)instances,(unsigned long long)c.draws[q],(unsigned long long)c.instances[q],
+  instances?100.0*double(c.instances[q])/double(instances):0.0,pool_table.size(),(unsigned long long)t.stored,(unsigned long long)t.refreshed,(unsigned long long)t.conflicts,
+  (unsigned long long)t.evicted,(unsigned long long)t.replaced,(unsigned long long)t.stale,(unsigned long long)t.overflow);
+ char reasons[512];int n=0;
+ for(size_t i=1;i<size_t(pool::Status::Count) && n>=0 && n<int(sizeof reasons);++i)
+  n+=snprintf(reasons+n,sizeof reasons-n,"%s%s %llu/%llu",i>1?"; ":"",pool::kStatusName[i],(unsigned long long)c.draws[i],(unsigned long long)c.instances[i]);
+ log("[hit material pool] frame %llu without record (draws/instances): %s",(unsigned long long)frame,reasons);
+ log("[hit material pool] frame %llu G-buffer class A draws %u, STI pair %u, captured %u, refresh not due %u, no geometry key %u, table full %u; capture failures by bit (0..2 buffers, 3..6 views, 7..9 sampler, 10 parameters) %u/%u/%u %u/%u/%u/%u %u/%u/%u %u",
+  (unsigned long long)frame,o->draws,o->recipe,o->captured,o->throttled,o->no_key,o->overflow,o->failures[0],o->failures[1],o->failures[2],o->failures[3],o->failures[4],o->failures[5],o->failures[6],
+  o->failures[7],o->failures[8],o->failures[9],o->failures[10]);
+}
+// Counters cover one frame: the first lookup of a new frame logs the previous one (rt_stats,
+// every 120 frames) and starts over.
+void pool_rollover(uint64_t frame){
+ if(pool_counter_frame==frame)return;
+ if(pool_counter_frame && pool_counter_frame%120==0 && cfg_hot(CfgHot::rt_stats))pool_log(pool_counter_frame);
+ pool_table.end_frame();pool_counter_frame=frame;
+}
+bool pool_current(PoolMaterial& m,uint64_t frame){
+ if(m.checked!=frame){m.checked=frame;m.current=current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical)&&omm::ordinary_sampler_current(m.sampler);}
+ return m.current;
+}
 }
 bool enabled(){return on;}
 void device_created(DeviceData* device){std::lock_guard lock(mutex);if(dd)return;dd=device;on=cfg_hot(CfgHot::rt_hit_material)!=0 && cfg_int("rt_alpha",1)!=0 && cfg_int("rt_bvh_split",1)!=0;}
@@ -304,6 +354,7 @@ void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);if(dd!=dev
  for(auto pipeline:{gather_pipeline,join_pipeline,tileset_gather_pipeline})if(pipeline)dd->vk.DestroyPipeline(dd->device,pipeline,nullptr);
  for(auto layout:{gather_layout,join_layout})if(layout)dd->vk.DestroyPipelineLayout(dd->device,layout,nullptr);
  for(auto dsl:{gather_dsl,join_dsl})if(dsl)dd->vk.DestroyDescriptorSetLayout(dd->device,dsl,nullptr);
+ {std::lock_guard pool(pool_mutex);pool_table.clear();for(auto& o:pool_obs)o={};pool_counter_frame=0;}
  gather_pipeline={};join_pipeline={};tileset_gather_pipeline={};gather_layout={};join_layout={};gather_dsl={};join_dsl={};pending.clear();owners.clear();submitted_queues.clear();marked.clear();dd=nullptr;on=false;
 }
 void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(!one_time(s))return;std::lock_guard lock(mutex);collect();
@@ -480,6 +531,55 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
  }
 }
 void slot_in_use(uint32_t index,uint64_t frame){if(!on || index>=kSceneSlots)return;std::lock_guard lock(mutex);for(auto h:slots[index].handles)life_extend(h,frame);}
+bool pool_keys(const InstPipe& inst,const CmdState& s,const DrawArgs& args,uint64_t* geometry,uint64_t* position){
+ *geometry=*position=0;if(!inst.ok || args.kind>1)return false;
+ pool::Geometry g;g.indexed=args.kind==1;g.count=args.count;g.first=args.first;g.vertex_offset=g.indexed?args.vertex_offset:0;
+ if(g.indexed){if(!s.ib)return false;g.ib=uint64_t(s.ib);g.ib_offset=s.ib_offset;g.ib_type=uint32_t(s.ib_type);}
+ if(inst.pos_binding<CmdState::kMaxVertexBindings){const auto& vb=s.vb[inst.pos_binding];
+  if(vb.buffer && vb.offset<=UINT64_MAX-inst.pos_offset){g.position_buffer=uint64_t(vb.buffer);g.position_offset=vb.offset+inst.pos_offset;}}
+ if(!g.indexed && !g.position_buffer)return false;
+ *geometry=pool::geometry_key(g);*position=pool::position_key(g);return true;
+}
+void pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const InstPipe& inst,bool poolPipeline){
+ if(!on || !state || !cfg_hot(CfgHot::rt_hit_material))return;const auto frame=frame_index();
+ uint64_t geometry=0,position=0;const bool keyed=pool_keys(inst,*state,args,&geometry,&position);
+ const auto* recipe=pool::pool_recipe(state->vs,state->fs);
+ pool::Observation o{pool::mix(state->vs,state->fs),position,pool::Status::Family};PoolMaterial payload{};uint32_t failures=0;
+ if(keyed && recipe && poolPipeline){
+  // A current qualified record is not captured again before its refresh frame.
+  std::lock_guard lock(pool_mutex);if(!pool_table.capture_due(geometry,frame)){auto& seen=pool_observed(frame);++seen.draws;++seen.recipe;++seen.throttled;return;}
+ }
+ if(keyed && recipe){
+  if(!poolPipeline)o.status=pool::Status::Pipeline;
+  else{
+   // Same bindings as the audited pair (native_vt_surface.h). capture() keeps its own
+   // statics, so it runs under the main mutex, never under pool_mutex.
+   Material m{};bool ok;{std::lock_guard lock(mutex);ok=capture(cmd,m,recipe,&failures);}
+   const uint32_t engine=pool::engine_bytes(*recipe);
+   if(ok && !(read_mapped(m.engine.buffer,m.engine.offset,payload.engine,engine) && read_mapped(m.physical_ubo.buffer,m.physical_ubo.offset,&payload.reflectance,4))){ok=false;failures|=1u<<10;}
+   o.status=ok?pool::Status::Qualified:pool::Status::Binding;
+   if(ok){
+    payload.table=m.table;payload.normal=m.normal;payload.albedo=m.albedo;payload.physical=m.physical;payload.sampler=m.sampler;
+    uint64_t h=pool::mix(o.identity,m.sampler.sampler.id);
+    for(const View* v:{&m.table,&m.normal,&m.albedo,&m.physical})h=pool::mix(pool::mix(h,v->id),v->image_id);
+    for(uint32_t w=0;w<engine/4u;++w)h=pool::mix(h,payload.engine[w]);
+    o.identity=pool::mix(h,payload.reflectance);
+   }
+  }
+ }
+ std::lock_guard lock(pool_mutex);auto& seen=pool_observed(frame);++seen.draws;
+ if(!keyed){++seen.no_key;return;}
+ if(recipe){++seen.recipe;pool_capture_bits(failures,seen.failures);seen.captured+=o.status==pool::Status::Qualified;}
+ const auto stored=pool_table.observe(geometry,frame,o);
+ if(stored==pool::Table<PoolMaterial>::Store::Full)++seen.overflow;
+ else if(stored==pool::Table<PoolMaterial>::Store::Fresh)pool_table.find(geometry)->payload=payload;
+}
+uint32_t pool_lookup(uint64_t geometry,uint64_t position,uint64_t mesh,uint32_t instances){
+ if(!on || !cfg_hot(CfgHot::rt_hit_material))return uint32_t(pool::Status::NoDeferred);const auto frame=frame_index();
+ std::lock_guard lock(pool_mutex);pool_rollover(frame);
+ return uint32_t(pool_table.lookup(geometry,mesh,position,frame,instances,[&](PoolMaterial& m){return pool_current(m,frame);}));
+}
+void pool_evicted(uint64_t geometry){if(!on || !geometry)return;std::lock_guard lock(pool_mutex);pool_table.evicted(geometry);}
 bool slot_reusable(uint32_t index,uint64_t gpuDone){if(!on || index>=kSceneSlots)return true;std::lock_guard lock(mutex);
  for(auto id:slots[index].owners){auto i=owners.find(id);if(i==owners.end() || !i->second.retired(current_recording(i->second.command),gpuDone))return false;}return true;
 }
