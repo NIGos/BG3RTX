@@ -592,6 +592,7 @@ $panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetim
 $phaseTraceIndex=0
 $rotateHeld = $false; $rotateSegment = -1; $rotateX = 0; $rotateY = 0
 $planClock = [System.Diagnostics.Stopwatch]::StartNew(); $phaseStartMs = 0.0
+$rotationInput = @{stage="released";at=[double]::NegativeInfinity;segment=-1;x=0;y=0}
 $pointerCentred = $false
 $planHoverNext = [datetime]::MinValue
 $nextOwnershipCheck = [datetime]::MinValue
@@ -606,6 +607,8 @@ function Release-Rotation {
     Send-PlanMouse 0x0208 0 $script:rotateX $script:rotateY
     $script:rotateHeld = $false
   }
+  $script:rotationInput.stage="released"
+  $script:rotationInput.at=$script:planClock.Elapsed.TotalSeconds
 }
 while ((Get-Date) -lt $deadline) {
   if($env:BG3RTX_QUEUE_QUIT_FILE -and (Test-Path -LiteralPath $env:BG3RTX_QUEUE_QUIT_FILE)){
@@ -707,23 +710,19 @@ while ((Get-Date) -lt $deadline) {
         Send-MoveKey $true $moving; $moving = $true
         $panNextKey = (Get-Date).AddMilliseconds($step.repeat_ms)
       }
-      if ($sample.kind -eq 'rotate' -and $sample.active) {
-        if (-not $rotateHeld -or $rotateSegment -ne $sample.segment) {
-          Release-Rotation
-          Send-PlanMouse 0x0200 0 $sample.x $sample.y
-          Send-PlanMouse 0x0207 0x10 $sample.x $sample.y
-          $rotateHeld = $true; $rotateSegment = $sample.segment
-          Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [rotation-input] phase=$panIndex segment=$rotateSegment direction=$($sample.direction) speed_px_s=$($step.pixels_per_second)"
+      $rotationAction=Get-RotationInputAction $rotationInput $sample $planClock.Elapsed.TotalSeconds
+      if ($rotationAction) {
+        switch ($rotationAction.kind) {
+          release { Release-Rotation }
+          reset { Send-PlanMouse 0x0200 0 $rotationAction.x $rotationAction.y }
+          press {
+            Send-PlanMouse 0x0207 0x10 $rotationAction.x $rotationAction.y
+            $rotateHeld=$true;$rotateSegment=$sample.segment
+            Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [rotation-input] phase=$panIndex segment=$rotateSegment direction=$($sample.direction) speed_px_s=$($step.pixels_per_second)"
+          }
+          drag { Send-PlanMouse 0x0200 0x10 $rotationAction.x $rotationAction.y }
         }
-        if ($rotateX -ne $sample.x -or $rotateY -ne $sample.y) {
-          Send-PlanMouse 0x0200 0x10 $sample.x $sample.y
-          $rotateX = $sample.x; $rotateY = $sample.y
-        }
-      } else {
-        if ($rotateHeld -and $sample.kind -eq 'rotate') {
-          Release-Rotation
-          Send-PlanMouse 0x0200 0 $sample.x $sample.y
-        } else { Release-Rotation }
+        $rotateX=$rotationAction.x;$rotateY=$rotationAction.y
       }
     }
     Start-Sleep -Milliseconds 10
