@@ -375,7 +375,10 @@ After each milestone record: hypothesis/fix, revision, supported subset, key/GUI
 status, commands and evidence, numbers/units, cost or unmeasured, pass/reject/pending,
 rollback and next action. Keep handoff short and progress entries concise; link
 detailed evidence rather than duplicating logs. The coordinator alone edits the
-shared progress/decision ledger. Do not delete shared captures or caches as cleanup.
+shared progress/decision ledger. No blanket deletion of shared captures/caches.
+For the user's storage-cleanup request, follow docs/DISK_HYGIENE.md: preserve owner
+holds and decisive raw evidence, and remove only classified redundant/regenerable
+outputs from idle locations. This does not require pausing unrelated implementation.
 For a small increment this is one concise row/note plus links to existing output,
 not a separate report in every document. Update TRACK when its design/results
 change, progress at useful checkpoints, and handoff when the next agent's action

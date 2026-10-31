@@ -29,7 +29,8 @@ module-independent SHA256 are fixed and tested through actual simulated runner.
 M2 actual mesh/construction/material exports and shared CPU/HLSL BSDF remain
 bounded offline increments, not room closure/world runtime/PT qualification.
 No Ponytail. Never touch saves/backups/tags, force-push, clean junction trees or
-hold results.md open. Only merge-green integrates main; dirty main still blocks it.
+hold results.md open. Read DISK_HYGIENE.md before any cleanup; owner holds remain.
+Only merge-green integrates main; dirty main still blocks it.
 
 ## Current checkout and confirmed UI correction
 

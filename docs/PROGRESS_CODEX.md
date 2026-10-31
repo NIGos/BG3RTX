@@ -309,6 +309,74 @@ Native fragment depth creates a real virtual surface; original card intersection
 is NOT equivalent. Procedural depth/origin support remains required before closing
 Hair. Source/layout/formula evidence and next implementation: docs/NATIVE_HAIR.md.
 
+## Disk audit and cleanup coordination - 2026-10-30
+
+docs/DISK_HYGIENE.md records owner holds and disposal/retention rules. Active
+rendering coordinator notified and added protected datasets. Captures: en2-selfcheck
+128.13 GiB, pan-motion-vectors 49.05 GiB, old .claude trees 20.60 GiB, main 17.22 GiB.
+These include unresolved P1 evidence and are not wholesale disposal candidates.
+Synthetic queue/policy temp outputs are regenerable but total only 884,048 bytes.
+Bounded SHA-256 check found 2,675 PNG alias groups / 1,495.4 MiB redundant storage;
+names remain referenced, so no blind deletion. Exact paths/hashes and durable disk
+snapshot are linked from DISK_HYGIENE. Owner has not released old P1 raw sets.
+QA docs now warn that prune can run after incomplete analysis; preserve raw until
+classified. No captures/checkouts deleted and no live work requested by this audit.
+
+## Third plan review - 2026-10-30
+
+Independent read-only audit found no material blockers. Checked six handoff
+documents, 21 tool/source paths, M0-M6 dependencies, goal structure and offline/live
+boundaries; diff whitespace check passed. Ready to hand to the execution agent.
+This qualifies the plan only: M0 guard, rendering changes and live tests are not
+implemented or passed by this review. No new procedural gates added.
+
+## Execution plan agility review - 2026-10-30
+
+Latest steering: pending/declined live permission must not stop useful independent
+offline work. Plan/goal require a cross-milestone task scan and worker reassignment
+before stopping, with actual missing-input/resource blockers and no busywork.
+
+Independent read-only review identified avoidable serialization. Plan/goal now
+split M2 probes and M3 providers, allow supported M4 increments on existing geometry,
+and develop the minimal reference alongside M3/M4. M0 gates live release only and
+stays a small queue-policy change. Request candidate-ready live batches without
+waiting for unrelated offline work; authorized iterative windows need no per-build
+approval. Workers may own shared-file edits; only conflicts/integration serialize.
+Focused checks during edits, mandatory merge-green checks at integration, concise
+docs and feature-level GUI updates. Explicit user steering remains required for live.
+Documentation changes only; no implementation, build or live test performed.
+
+## Autonomous execution plan and receiving-agent goal - 2026-10-30
+
+docs/RENDERING_EXECUTION_PLAN.md defines M0-M6, tooling, ownership, GUI/settings,
+evidence gates and live authorization; docs/GOAL_RENDERING_AGENT.md is the prompt
+to activate in the receiving conversation. AGENTS/handoff link the new mandate.
+No renderer implementation or live test started by this planning task.
+
+Read-only tooling review found old queue permission exceptions and watched root/
+worktree pending inboxes. Keep unauthorized drafts outside those inboxes; M0 adds
+a minimal fail-closed batch authorization check with fake-runner tests. Existing
+experimental GUI metadata is reusable; schema currently omits experimental.
+Current hair/cascade work keeps priority. Parallel offline room/data proof follows;
+whole-game PT stays outside the required deliverable. No user live grant recorded.
+
+## Offline path tracing feasibility study - 2026-10-30
+
+User-requested study: docs/PT_FEASIBILITY_OFFLINE.md, with reproducible probe and
+JSON in docs/evidence/pt-feasibility-probe-20261030.*. No game/save access, runtime
+changes, build or GPU measurement. Package probe: 3,183 content banks parsed,
+zero errors. Foundry ordinary scenery resolves to 209 visual resources, 185 mesh
+paths and 79 material IDs; all referenced meshes/materials found. Three other
+resource IDs are effects (40 placements), not missing meshes. Reference/header
+availability only: no mesh export, texture decode or visual coverage claim.
+
+No hard impossibility found. Whole-game PT remains unqualified: construction and
+terrain reconstruction, dynamic offscreen state, full materials and light semantics
+are major risks. Recommend improved hybrid rendering, then a bounded opaque PT
+lighting proof with raster primary visibility. Current hair/cascade fixes retain
+priority; this study changes no implementation order or defaults. Historical
+5-8 ms PT estimates are not a measured budget for the proposed renderer.
+
 ## Solar shadow sharpness: native-mask restriction confirmed in logs - 2026-10-30
 
 Dedicated solar agent found correct finite-disc radius, normalization and changing

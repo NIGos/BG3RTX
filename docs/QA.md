@@ -146,8 +146,12 @@ values follow FLIP's ordering, not its exact numbers.
 
 The raw traces (11-12 per scene, about 0.3-1 GB at `--full-res`) are deleted
 after the analysis; only the crops, the overview, the JSON and the report stay
-(a few MB per scene). `--keep-raw` keeps them for `analyze`; delete them by
-hand afterwards. The trace folders auto-run leaves in `captures/` are moved
+(a few MB per scene). `--keep-raw` keeps them for `analyze`. For unresolved work,
+use `--keep-raw`: the current analyzer's prune path also runs after incomplete
+analysis results. Keep decisive raw baseline/failure/control data until the owner
+classifies redundant outputs under [DISK_HYGIENE.md](DISK_HYGIENE.md). Do not
+request manual user cleanup or prune solely by age/result.json presence.
+The trace folders auto-run leaves in `captures/` are moved
 into the QA folder and their `frame.json`/shaders dropped at once.
 
 ## Runtime
