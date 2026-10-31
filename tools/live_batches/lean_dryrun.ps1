@@ -2,15 +2,17 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\live_batches\lean_dryrun.ps1 -Batch lean_regression [-Out <scratch dir>]
 # 1. Static checks per job: plan parses and samples, foreground FG 2 single launch, timeout covers the
 #    plan, expect_runner names the phase count and every trace, no float bursts, diagnostics
-#    (rt_stats, rt_primary_check, ls_stats, ls_check, rt_debug) on exactly in "diag-*" phases, cost
-#    windows diag-off and without traces, phases 5-25 s. Batch totals against -MaxMinutes / -MaxMB.
+#    (rt_stats, rt_primary_check, rt_primary_identity, ls_stats, ls_check, rt_debug, rf_stats, rf_debug) on
+#    exactly in "diag-*" phases, cost windows diag-off and without traces (debug-view traces only in
+#    "diag-view-*"), phases 5-25 s. Batch totals against -MaxMinutes / -MaxMB.
 # 2. Run A (real jobs, fake game): job 1 cannot see its expect lines, so it is INVALID and the
-#    dependent jobs stay in pending (stop-on-failure).
+#    dependent jobs stay in pending (stop-on-failure). With -Independent (no requires_success_of):
+#    every job runs and every one is INVALID.
 # 3. Run B (expect/forbid/post stripped): every job runs in order and is valid.
 # Scratch root only (outside any checkout); the receipt written there is fake and has no authority.
 param([Parameter(Mandatory)][string]$Batch, [string]$Receipt = '',
       [string]$Out = '', [double]$MaxMinutes = 20, [double]$MaxMB = 2048,
-      [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10)
+      [switch]$Independent, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10)
 $ErrorActionPreference = 'Stop'
 $here = Join-Path $PSScriptRoot $Batch
 if (-not (Test-Path $here)) { throw "no batch folder $here" }
@@ -26,7 +28,7 @@ function Apply-Set($state, [string]$set) {
   foreach ($a in ($set -split ',' | Where-Object { $_ })) { $kv = $a -split '=', 2; if ($kv.Count -ne 2) { return $false }; $state[$kv[0]] = $kv[1] }
   $true
 }
-function Test-Diag($s) { foreach ($k in 'rt_stats', 'rt_primary_check', 'ls_stats', 'ls_check', 'rt_debug') { if ($s[$k] -and $s[$k] -ne '0') { return $true } }; $false }
+function Test-Diag($s) { foreach ($k in 'rt_stats', 'rt_primary_check', 'rt_primary_identity', 'ls_stats', 'ls_check', 'rt_debug', 'rf_stats', 'rf_debug') { if ($s[$k] -and $s[$k] -ne '0') { return $true } }; $false }
 
 $jobFiles = @(Get-ChildItem (Join-Path $here 'jobs') -Filter '*.json' | Sort-Object Name)
 $jobs = @($jobFiles | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json })
@@ -55,7 +57,7 @@ foreach ($job in $jobs) {
       $totalTraces += @($step.trace_at).Count
       if ($label.StartsWith('cost-')) { $roles = $false; $roleNote += " $label(trace in cost window)" }
       if (@($step.trace_at | Where-Object { $_ -ge $step.seconds }).Count) { $ok = $false }
-      if ($diag) { $roles = $false; $roleNote += " $label(trace in diag)" }
+      if ($diag -and -not $label.StartsWith('diag-view-')) { $roles = $false; $roleNote += " $label(trace in diag)" }
       $traceLines += "[motion-trace] phase=$i label=$label repeat=0"
     }
   }
@@ -75,7 +77,8 @@ foreach ($job in $jobs) {
     @($job.patterns).Count -and @($job.expect).Count -and @($job.forbid).Count)
   $norm = ConvertTo-QueueWindowJob $job
   Check "${n}: queue keeps the foreground args (no -NoActivate)" (@($norm.args) -notcontains '-NoActivate' -and (@($norm.args) -join ' ') -eq (@($job.args) -join ' '))
-  Check "${n}: stop-on-failure dependency" ($n -eq $first -or @($job.requires_success_of) -contains $first)
+  if ($Independent) { Check "${n}: independent (no requires_success_of)" (-not $job.requires_success_of) }
+  else { Check "${n}: stop-on-failure dependency" ($n -eq $first -or @($job.requires_success_of) -contains $first) }
 }
 $min = ($totalSec + $jobs.Count * $LoadSec) / 60.0
 $mb = $totalTraces * $TraceMB + $jobs.Count * $LogMB
@@ -117,8 +120,13 @@ function Invoke-Queue([string]$dir) {
 $a = New-Root (Join-Path $Out 'a-real')
 $recs = @(Invoke-Queue $a)
 $left = @(Get-ChildItem (Join-Path $a 'captures\queue\pending') -Filter '*.json')
+if ($Independent) {
+  Check "run A: all $($jobs.Count) jobs ran and each is INVALID (fake game has no expect lines)" ($recs.Count -eq $jobs.Count -and -not ($recs | Where-Object { $_.valid -or $_.outcome -notmatch '^INVALID' }))
+  Check "run A: pending empty" ($left.Count -eq 0)
+} else {
 Check "run A: only job 1 ran and it is INVALID (fake game has no expect lines)" ($recs.Count -eq 1 -and $recs[0].job -eq $first -and -not $recs[0].valid -and $recs[0].outcome -match '^INVALID')
 Check "run A: the $($jobs.Count - 1) dependent job(s) stayed in pending, not run" ($left.Count -eq $jobs.Count - 1)
+}
 
 $b = New-Root (Join-Path $Out 'b-structural') -Strip
 $recs = @(Invoke-Queue $b)
