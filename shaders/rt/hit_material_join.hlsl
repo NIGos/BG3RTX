@@ -12,8 +12,12 @@ void main(uint3 id:SV_DispatchThreadID){
  // Written only before the FIRST successful submission; never a frame-age flag.
  if(queryRows.Load(push.control)!=1u)return;
  if(snapshotRows.Load(push.snapshot)!=push.local+1u)return;
- [unroll]for(uint i=0;i<10;++i)
-  if(any(snapshotRows.Load4(push.snapshot+48u+i*16u)!=queryRows.Load4(push.row+48u+i*16u)))return;
+ bool opaque=queryRows.Load(push.row+44u)==1u;
+ if(!opaque){[unroll]for(uint i=0;i<10;++i)
+  if(any(snapshotRows.Load4(push.snapshot+48u+i*16u)!=queryRows.Load4(push.row+48u+i*16u)))return;}
+ // Opaque depth has no alpha-material UBO. Its matched native deferred draw
+ // is the authoritative execution snapshot; geometry is still checked per hit.
+ if(opaque && id.x==0u){[unroll]for(uint i=0;i<10;++i)queryRows.Store4(push.row+48u+i*16u,snapshotRows.Load4(push.snapshot+48u+i*16u));}
  uint3 header=queryRows.Load3(push.row+8u); // pre, deferred, stride (byte offsets)
  uint offset=id.x*4u;
  if(offset<push.bytes){

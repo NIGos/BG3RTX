@@ -1,0 +1,41 @@
+{
+  "scope": "Offline rt_hit_material default-off fresh static opaque VT metadata; ABI21 unchanged",
+  "native_family": {
+    "template": "Base/Base_VT",
+    "depth_vs": "940da3120a9511d1",
+    "depth_fs": "19994bf3e9417a58",
+    "deferred_vs": "3812bc980438747f",
+    "deferred_fs": "8995da1e4060f53b",
+    "proof": "Native catalog maps the existing deferred pair to both Base_VT and Base_AlphaTest_VT; actual retained opaque depth SPIR-V produces identical model/camera clip and UV, with Engine80B pull index+64 rather than112B/+96. Existing deferred sampler/field decoding is unchanged. Opaque depth camera-fade/discard behavior is not altered or reinterpreted."
+  },
+  "native_spirv_sha256": {
+    "940da3120a9511d1": "201118e051664b3bd62ed1a554472d103eac1bfc2cfce624fb11c24631234400",
+    "19994bf3e9417a58": "7189213eb5895698c997ef34923a4a3ac21e8a60b22a50a79aff2e7307b78325",
+    "3812bc980438747f": "680a5bd491b7045ec50eb4a9df0796b0ba4aa7b598f0d1078be11961690e9cfc",
+    "8995da1e4060f53b": "76912df99dbd5320ae0f372f51331e77b2c8b14fb2001c00e90e793ea53222f6"
+  },
+  "metadata": {
+    "alpha_rows": "0..8191 remain208-byte AlphaRec-backed records",
+    "opaque_rows": "8192..8319, private material rows only",
+    "opaque_instinfo": "bit13; direct private row index in otherwise unused opaque rec; only fresh non-held dynamic instances",
+    "visibility": "Existing opaque BLAS/instance flags and FORCE_OPAQUE unchanged; kInfoAlpha never set; no invented AlphaRec or cutoff"
+  },
+  "query": "Exact draw identity and full GPU post-VS clip/UV certificate remain mandatory. Opaque depth has no material-alpha parameters, so query join copies matched deferred execution-time p0/p1/VT matrices. Actual opaque page tables append only to query-private cloned binding2 above baseline used count, with bounded capacity. Native source views and sampler ownership/current checks retained.",
+  "validation": {
+    "host_link": "pass",
+    "cpu_pipeline_input_resource_record_cases": 768,
+    "targeted_ctests": "3/3",
+    "affected_shader_files": 49,
+    "validated_modules": 53,
+    "representative_ordinary_byte_identity": "4/4 vs ec1b0c8",
+    "ordinary_shader_input_changes": "none; only material-consumer include and query-assembly shader changed",
+    "matching_core_launcher_link": "pass"
+  },
+  "remaining": "Fresh-only static subset; cached/held/instanced and other native shader families unsupported. Actual qualified coverage, native field residuals, reference contribution and GPU cost require an authorized live run. No M3 completeness or performance claim.",
+  "review": "Independent scoped source review clear: opaque namespace/control, fresh InstInfo flags, query-private page tables/lifetime, submission and exact clip/UV proof; no actionable blocker.",
+  "binary_sha256": {
+    "VkLayer_bg3rtx.dll": "47b7985333a8999e1bf124b1759c97784d90a97c911ed2c8f5c037a0b540e183",
+    "bg3rtx_core.dll": "a654a5b51ee003f475a77f8df360b82d5c8c75509ecf66a6146a6028d0e206f7",
+    "BG3RTX.exe": "b016cab1e819b397b55adf6a4562728e1677ed35324237f9275a8c0ab68adb03"
+  }
+}

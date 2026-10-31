@@ -2,6 +2,7 @@
 #define BG3_NATIVE_HIT_MATERIAL_HLSLI
 #include "../../common/native_opaque_transport.h"
 #include "../../common/native_vt_fields.h"
+#include "../../common/native_hit_records.h"
 // Main AlphaDSL ONLY. Private current-Sun binding14 has a different contract.
 [[vk::binding(12,1)]] ByteAddressBuffer gHitRecords;
 [[vk::binding(13,1)]] ByteAddressBuffer gHitBasis;
@@ -9,7 +10,7 @@
 [[vk::binding(15,1)]] SamplerState gHitSampler[16];
 struct NativeHitMaterial {NtResult parameters;NtFresnelBlendResult scattering;float3 normal;uint status,channel;};
 bool hit_material_publication_ready(){
- uint bytes;gHitRecords.GetDimensions(bytes);const uint control=16u+8192u*256u;
+ uint bytes;gHitRecords.GetDimensions(bytes);const uint control=16u+nh_material_rows*256u;
  return bytes>=control+4u && gHitRecords.Load(control)==1u;
 }
 NativeHitMaterial hit_material_unknown(uint reason){
@@ -57,12 +58,15 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  NativeHitMaterial result=hit_material_unknown(1);
  if(hit.t<0 || hit.aborted || !isfinite(footprint) || footprint<=0 || !rt_scene_ok())return result;
  InstInfo ii=inst_info(hit.inst);
- if((ii.meta&(kInfoLegacy|kInfoPool))!=0 || (ii.meta&kInfoAlpha)==0 || !rec_in_range(ii.rec) || (ii.rec-16u)%208u!=0 || hit.prim>=ii.tris)return result;
+ bool opaque=(ii.meta&nh_opaque_meta)!=0;
+ if((ii.meta&(kInfoLegacy|kInfoPool))!=0 || hit.prim>=ii.tris)return result;
+ if(opaque){if((ii.meta&kInfoAlpha)!=0 || ii.rec<nh_alpha_rows || ii.rec>=nh_material_rows)return result;}
+ else if((ii.meta&kInfoAlpha)==0 || !rec_in_range(ii.rec) || (ii.rec-16u)%208u!=0)return result;
 #ifdef RT_NATIVE_HAIR
  if((ii.meta&kInfoHairProcedural)!=0)return result;
 #endif
- uint record=(ii.rec-16u)/208u,bytes;gHitRecords.GetDimensions(bytes);
- if(record>=8192u || bytes<16u+256u || record>=(bytes-16u)/256u)return result;
+ uint record=opaque?ii.rec:(ii.rec-16u)/208u,bytes;gHitRecords.GetDimensions(bytes);
+ if(record>=nh_material_rows || bytes<16u+256u || record>=(bytes-16u)/256u)return result;
  uint4 header=gHitRecords.Load4(0);
  if(header.w!=1 || header.x!=pc.frame || header.y==0 || header.y!=gSceneStamp.Load(0) || header.y!=gSceneStamp.Load(4))return hit_material_unknown(2);
  uint row=16u+record*256u;uint4 h0=gHitRecords.Load4(row),h1=gHitRecords.Load4(row+16),h2=gHitRecords.Load4(row+32);

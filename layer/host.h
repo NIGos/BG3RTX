@@ -606,7 +606,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
 // The draw's alpha record (cached draws; UINT32_MAX: none, made opaque).
 void bvh_set_record(uint32_t token, uint32_t rec);
 // The draw was captured into the soup at `offset` (`prims` triangles, all instances).
-void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec);
+void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec, uint32_t materialRecord=UINT32_MAX);
 // Uncaptured draw that is not instanceable (counted only).
 void bvh_note_skipped(uint32_t token);
 // After the pass: object-space extraction, BLAS builds/refits, compaction, TLAS.
@@ -847,7 +847,7 @@ bool alpha_sun_bind_scene(uint32_t slot,VkAccelerationStructureKHR sun_tlas,
 bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
 // Query-owned clone of the exact main AlphaDSL; caller retires its pool.
-bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescriptorSet* set);
+bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescriptorSet* set,std::span<const VkDescriptorImageInfo> tables={},uint32_t* firstTable=nullptr);
 
 // ---- device-fault diagnostics (devfault.cpp, VK_EXT_device_fault) ----
 const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,

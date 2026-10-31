@@ -9,6 +9,7 @@ void device_created(DeviceData*);
 void device_destroyed(DeviceData*);
 void prepass_begin(VkCommandBuffer);
 void prepass_observe(VkCommandBuffer,CmdState*,const DrawArgs&);
+uint32_t note_opaque_prepass(VkCommandBuffer,CmdState*,const DrawArgs&,VkDeviceSize rawOffset,uint32_t stride,uint32_t triangles);
 void note_prepass(VkCommandBuffer,CmdState*,const DrawArgs&,uint32_t record,VkDeviceSize rawOffset,uint32_t stride,uint32_t triangles);
 // Called only after rtscene selects an actually retired slot, before conversion.
 void scene_prepare(VkCommandBuffer,uint32_t slot,const RtCapture&);

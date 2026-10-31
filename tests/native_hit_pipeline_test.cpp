@@ -1,6 +1,7 @@
 #include "../common/native_hit_pipeline.h"
 #include "../common/native_hit_inputs.h"
 #include "../common/native_hit_resources.h"
+#include "../common/native_hit_records.h"
 #include <cstdio>
 #include <initializer_list>
 #include <cstdlib>
@@ -87,5 +88,15 @@ int main(){
  check(atomic.reserve(7,views,indices));auto generation=normal;generation.view_generation++;check(atomic.reserve(7,{generation,albedo,physical},indices) && indices.normal==3);
  generation=normal;generation.image_generation++;check(atomic.reserve(7,{generation,albedo,physical},indices) && indices.normal==4);
  generation=normal;generation.layout++;check(atomic.reserve(7,{generation,albedo,physical},indices) && indices.normal==5);
+ check(opaque_depth_family(0x940da3120a9511d1ull,0x19994bf3e9417a58ull));
+ check(!opaque_depth_family(0x940da3120a9511d1ull,0xe2ecf65a7810b23bull));
+ auto opaque_layout=depth_input_layout(0x940da3120a9511d1ull,0x19994bf3e9417a58ull);check(opaque_layout.engine_bytes==80 && opaque_layout.pull_offset==64);
+ auto alpha_layout=depth_input_layout(0x8975ea2744c12a74ull,0xe2ecf65a7810b23bull);check(alpha_layout.engine_bytes==112 && alpha_layout.pull_offset==96);
+ auto deferred_layout=depth_input_layout(0x3812bc980438747full,0x8995da1e4060f53bull);check(deferred_layout.engine_bytes==112 && deferred_layout.pull_offset==96);
+ uint32_t opaque_record=0;for(uint32_t i=0;i<nh_opaque_rows;++i){check(opaque_material_record(i,opaque_record));check(opaque_record==8192u+i && opaque_record<nh_material_rows);check(16ull+uint64_t(opaque_record+1)*256u<=16ull+uint64_t(nh_material_rows)*256u);}
+ check(!opaque_material_record(nh_opaque_rows,opaque_record));check((nh_opaque_meta&((1u<<10)|(1u<<12)|255u))==0);
+ uint32_t first_table=0;check(appended_table_range(4094,1,4096,first_table) && first_table==4095);
+ check(!appended_table_range(4095,1,4096,first_table));check(!appended_table_range(4096,0,4096,first_table));check(!appended_table_range(4000,96,4096,first_table));
+ check(appended_table_range(4000,95,4096,first_table) && first_table==4001);
  std::printf("PASS %u actual Vulkan material-state cases; no GPU\n",checks);
 }

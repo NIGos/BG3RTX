@@ -43,5 +43,8 @@ inline bool canonical_static_key(const DrawKey& ordinary,const StaticKeyInputs& 
  out.words[16]=in.uv.buffer;out.words[17]=in.uv.offset;out.words[18]=in.uv.stride;out.words[19]=in.uv.format;
  out.words[20]=0x4e484b31u;out.words[21]=pull?in.pull_index:0u;return true;
 }
-inline bool static_depth_family(uint64_t vs,uint64_t fs){return vs==0x8975ea2744c12a74ull && fs==0xe2ecf65a7810b23bull;}
+inline bool opaque_depth_family(uint64_t vs,uint64_t fs){return vs==0x940da3120a9511d1ull && fs==0x19994bf3e9417a58ull;}
+struct DepthInputLayout {uint32_t engine_bytes,pull_offset;};
+inline DepthInputLayout depth_input_layout(uint64_t vs,uint64_t fs){return opaque_depth_family(vs,fs)?DepthInputLayout{80,64}:DepthInputLayout{112,96};}
+inline bool static_depth_family(uint64_t vs,uint64_t fs){return (vs==0x8975ea2744c12a74ull && fs==0xe2ecf65a7810b23bull) || opaque_depth_family(vs,fs);}
 }

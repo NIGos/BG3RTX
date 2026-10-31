@@ -1,3 +1,4 @@
+#include "../common/native_hit_records.h"
 // Track D phase 3: what the ray queries need to alpha-test BG3's cutout
 // geometry (chains, grates, foliage), per captured draw (docs/TRACK_D_RT.md).
 //
@@ -939,8 +940,13 @@ void alpha_slot_in_use(uint32_t slot, uint64_t frame) {
 // The set layout is fixed for the device's lifetime; the set is the one of the
 // latest scene build (VK_NULL_HANDLE before the first), from the same scene
 // slot as rt_scene's TLAS (rt_scene_set returns both as one pair).
-bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescriptorSet* set) {
+bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescriptorSet* set,std::span<const VkDescriptorImageInfo> tables,uint32_t* firstTable) {
   if(!native_hit::enabled() || !g_dd || !g_dsl || !source || !pool || !set)return false;
+  uint32_t first=0;
+  if(!tables.empty()){
+    bool found=false;for(uint32_t slot=0;slot<kRing;++slot)if(g_sets[slot]==source && g_set_init[slot]){found=native_hit::appended_table_range(g_set_tex[slot],uint32_t(tables.size()),kTextures,first);break;}
+    if(!found || !firstTable)return false;
+  }
   const auto& vk=g_dd->vk;
   if(!*pool){
     VkDescriptorPoolSize sizes[4]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,g_omm_layout?9u:8u},
@@ -963,7 +969,9 @@ bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescrip
     copy.srcSet=source;copy.dstSet=*set;copy.srcBinding=copy.dstBinding=binding;
     copy.descriptorCount=binding==2?kTextures:binding==3?kCaches:1u;
   }
-  vk.UpdateDescriptorSets(g_dd->device,0,nullptr,count,copies);return true;
+  vk.UpdateDescriptorSets(g_dd->device,0,nullptr,count,copies);
+  if(!tables.empty()){VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=*set;write.dstBinding=2;write.dstArrayElement=first;write.descriptorCount=uint32_t(tables.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;write.pImageInfo=tables.data();vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);}
+  if(firstTable)*firstTable=first;return true;
 }
 
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set) {
