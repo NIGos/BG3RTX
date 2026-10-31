@@ -208,6 +208,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_cascade_casters", "1"}}, {{"rt_geometry", 1}, {"sun_shadows", 1}}}},
    {}, {0, 0, 0, 0}, true},
 
+  {"exp_scene_wait", "Non-blocking scene sync",
+   "The ray-traced passes normally wait on the CPU (up to 12 ms, mean about 5) for this frame's "
+   "scene build. Camera match skips that wait whenever the camera did not move since the last "
+   "build, and waits as before otherwise. Look for: higher frame rate while standing still; "
+   "character shadows may lag one frame then. Experimental: frame rate gain unmeasured.",
+   Kind::Choice, Apply::Live, "experimental", true,
+   {{"wait", "Always wait", 0, {{"rt_scene_wait", "1"}}, {}},
+    {"camera", "Camera match", kCapRayQuery, {{"rt_scene_wait", "2"}}, {{"rt_geometry", 1}}}},
+   {}, {0, 0, 0, 0}, true},
+
   {"exp_box_lights", "Box light shadows",
    "Ray-traced shadows for the game's box (projector) lights, 37% of its placed lights. Look at lit "
    "interiors: shadows of furniture and characters from these lights. About +0.25 ms.",
