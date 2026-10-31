@@ -1,5 +1,25 @@
 # BG3RTX progress
 
+## Material integration: actual command-buffer split found offline - 2026-10-31
+
+Main is 5fab4ba (merge-green, pushed): 44/44 CTests, 527/527 shaders and QA.
+The pending material provider's initial same-command-buffer restriction cannot
+participate in actual S1: frame 3242 has an 866-draw depth prepass and an 835-draw
+G-buffer in different command buffers, with 100 supported static VT draws.
+Both occur in the same traced submit; CPU recording order is not established.
+Keep triangle/UV and submission ownership checks, but fix the association before
+launching a zero-record live test. Evidence: omm-bake/BG3RTX/captures/
+native-hit-material-20261031/cross-command-buffer-evidence.json.
+
+de1ccdd adds the shared right-handed scattering frame requested by the direct-hit
+consumer: 4338 CPU checks plus DXC/spirv-val pass. No pole singularity or implicit
+direction normalization; not a shading-normal correction/GPU precision claim.
+The runtime owner will consume it; it is not yet a delivered GI/reflection gain.
+Sampler ownership is corrected. Review still requires secondary-command no-write
+coverage and Submit2 ordering for added compute, independently of OMM. No live
+material participation/cost or full probe replacement claim yet. Direct-only
+lighting remains a reference output; normal RF keeps its established policy.
+
 ## Native ground expanded; material capture regression prevented - 2026-10-31
 
 Nearby S1 ground now exports three native-qualified Floor_B pieces plus a matched
