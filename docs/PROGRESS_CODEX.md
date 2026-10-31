@@ -137,12 +137,11 @@ GPU pass costs of the new fixes are unmeasured. Fixture wall times are not costs
 Measure timing separately from diagnostics, capture and validation overhead.
 Keep rendered and displayed FG rates separate; missing RT never passes a test.
 
-Prepared camp batch: Campsite - 27h, about 10-13 minutes, real FG 2 presentation.
-RT-off reference, then spill OFF/ON/OFF; three K16 bursts, stable static view.
-Draft stays outside pending while the original defect is not reproduced.
-No rescued draws or no defect means inconclusive, not a fixed regression.
-Dialogue flicker needs temporal captures; older F10 stills cannot establish it.
-First separate native mask from added RT visibility; do not add blur or change bias.
+Authorized batch: corrected GI descriptor image A/B, QuickSave_3784, 10-15 minutes.
+Real FG 2 presentation, visible unfocused; eight static phases, OFF/ON/OFF K16.
+Require active RT/FG, nonzero GI hits, no dark stipple versus both OFF repeats.
+Check final image, GI outputs, stable G-buffer and cost; transport alone cannot pass.
+No dialogue-flicker claim from this different scene. Camp draft remains unqueued.
 Preserve saves, backup files, snapshot tags and shared junction targets.
 
 History: [pre-trim progress archive](archive/PROGRESS_CODEX_2026-10-31.md).
