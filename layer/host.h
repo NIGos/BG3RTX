@@ -230,9 +230,17 @@ struct CmdState {
   uint32_t seg_count = 0;
   std::string seg_json;
   // Track D geometry capture (geocapture.cpp)
-  void* geo = nullptr;                 // capture active in the current pass
-  bool geo_em = false;                 // ... and it is an effects pass of the emissive capture (D-EM)
-  bool geo_material = false, geo_material_active = false; // opt-in exact deferred VT stream
+  // The capture active in the current pass. Kind::Capture: `object` is geocapture.cpp's
+  // Capture; Kind::Em: its EmPass (an effects pass of the emissive capture, D-EM);
+  // Kind::Material: the opt-in exact deferred VT stream (no object). Only geocapture.cpp
+  // reads `object`, through the kind.
+  struct GeoPass {
+    enum class Kind : uint8_t { None, Capture, Em, Material };
+    Kind kind = Kind::None;
+    void* object = nullptr;
+    explicit operator bool() const { return kind != Kind::None; }
+  } geo;
+  bool geo_material_active = false;   // Kind::Material: its XFB is active
   bool geo_material_no_writes = false;
   int geo_ts = -1;                     // timestamp slot of the current pass
   VkViewport viewport{};               // last vkCmdSetViewport(first = 0)

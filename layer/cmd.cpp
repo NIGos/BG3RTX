@@ -452,9 +452,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->seg_key.clear();
   s->seg_count = 0;
   geo_cmd_discard(s);   // an effects pass left open by the previous recording
-  s->geo = nullptr;
-  s->geo_em = false;
-  s->geo_material=s->geo_material_active=s->geo_material_no_writes=false;
+  s->geo = {};
+  s->geo_material_active=s->geo_material_no_writes=false;
   em_forget_cmd(cmd);   // D-EM: draws of an earlier recording that was never submitted
   s->geo_ts = -1;
   s->vb.fill({});
@@ -906,7 +905,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectKHR(VkCommandBuffe
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32_t n, const VkCommandBuffer* cmds) {
-  if(auto* state=cmd_state(cmd);state && state->geo_material)state->geo_material_no_writes=false;
+  if(auto* state=cmd_state(cmd);state && state->geo.kind==CmdState::GeoPass::Kind::Material)state->geo_material_no_writes=false;
   diag(DIAG_EXEC);
   if(auto* state=cmd_state(cmd);state&&state->tracing&&state->in_pass)terrain_capture_secondary(cmd,state);
   vk(cmd).CmdExecuteCommands(cmd, n, cmds);
