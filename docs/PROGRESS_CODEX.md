@@ -2,7 +2,7 @@
 
 ## Native Floor_B positions qualified; practical checks retained - 2026-10-31
 
-Main d4a1612 is integrated and pushed: ABI 19, 44/44 CTests, 527/527 runtime
+Main 06312ac is integrated and pushed: ABI 19, 44/44 CTests, 527/527 runtime
 shader entries and QA passed. The installed personal Hair trial is 047e105;
 the user has NOT yet reviewed its capacity and physical-origin updates.
 
@@ -13,10 +13,13 @@ The selected tile residual is 2.10e-5 within its derived 2.20e-4 envelope.
 ScaleZ applies to local X; Flip does not reflect observed positions. Keep this
 scoped result; UV/normal/material equivalence and room closure remain open.
 Asset checks: 57 passed, one existing skip. No renderer or GPU cost change.
-Code: source 942113f, development import 33b14b0; not yet integrated into main.
+Code: source 942113f, development import 33b14b0, main merge 06312ac.
 Evidence: m2-foundry-mesh/BG3RTX/captures/m2-foundry/floor-b-native-oracle/native-position-oracle.json.
 Next: nearby floor support and the static-VT runtime hit-material consumer.
 No unrelated global match threshold will block a demonstrated local correction.
+Material review found two concrete pre-trial fixes: execution-time uniform capture
+and ownership of samplers through GPU retirement. The owner is implementing them;
+runtime material participation and cost remain unmeasured.
 
 ## Physical Hair origins kept and installed in the personal trial - 2026-10-31
 
