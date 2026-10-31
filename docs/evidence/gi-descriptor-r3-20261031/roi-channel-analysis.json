@@ -1,0 +1,130 @@
+{
+  "roi": [
+    1152,
+    424,
+    1472,
+    664
+  ],
+  "stable_pixels": 12812,
+  "signals": {
+    "gi": {
+      "off_a_mean": 0.0009340289980173111,
+      "on_mean": 0.000916660763323307,
+      "off_b_mean": 0.0009343718411400914,
+      "on_minus_mean_off": -1.753961441863794e-05,
+      "off_repeat_mean": 3.427557828672434e-07,
+      "mean_off_temporal_std": 0.0021154468413442373,
+      "mean_on_temporal_std": 0.0018470508512109518,
+      "negative_mean_pixels_outside_local_repeat_envelope": 0,
+      "on_pixels_ever_below_ALL_OFF_frames_plus_quantum": 0,
+      "on_pixel_frames_below_ALL_OFF": 0,
+      "on_anchor_frame_below_ALL_OFF": 0,
+      "display_range": [
+        0.0,
+        0.22639843821525574
+      ]
+    },
+    "alpha": {
+      "off_a_mean": 0.9522998332977295,
+      "on_mean": 0.9527897238731384,
+      "off_b_mean": 0.9530280232429504,
+      "on_minus_mean_off": 0.000125820777611807,
+      "off_repeat_mean": 0.0007282053702510893,
+      "mean_off_temporal_std": 0.07303997129201889,
+      "mean_on_temporal_std": 0.06737262010574341,
+      "negative_mean_pixels_outside_local_repeat_envelope": 585,
+      "on_pixels_ever_below_ALL_OFF_frames_plus_quantum": 2516,
+      "on_pixel_frames_below_ALL_OFF": 3407,
+      "on_anchor_frame_below_ALL_OFF": 215,
+      "display_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "sun": {
+      "off_a_mean": 0.8781757354736328,
+      "on_mean": 0.8798245787620544,
+      "off_b_mean": 0.877751350402832,
+      "on_minus_mean_off": 0.001861048280261457,
+      "off_repeat_mean": -0.00042440681136213243,
+      "mean_off_temporal_std": 0.020377909764647484,
+      "mean_on_temporal_std": 0.01646658405661583,
+      "negative_mean_pixels_outside_local_repeat_envelope": 51,
+      "on_pixels_ever_below_ALL_OFF_frames_plus_quantum": 51,
+      "on_pixel_frames_below_ALL_OFF": 339,
+      "on_anchor_frame_below_ALL_OFF": 15,
+      "display_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "local": {
+      "off_a_mean": 0.24492664635181427,
+      "on_mean": 0.2452714592218399,
+      "off_b_mean": 0.24484582245349884,
+      "on_minus_mean_off": 0.00038523797411471605,
+      "off_repeat_mean": -8.083887951215729e-05,
+      "mean_off_temporal_std": 0.11367738991975784,
+      "mean_on_temporal_std": 0.10984654724597931,
+      "negative_mean_pixels_outside_local_repeat_envelope": 38,
+      "on_pixels_ever_below_ALL_OFF_frames_plus_quantum": 760,
+      "on_pixel_frames_below_ALL_OFF": 1177,
+      "on_anchor_frame_below_ALL_OFF": 68,
+      "display_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "diffuse": {
+      "off_a_mean": 0.03934345192968199,
+      "on_mean": 0.0393650128033137,
+      "off_b_mean": 0.03965233012501946,
+      "on_minus_mean_off": -0.00013287822403702462,
+      "off_repeat_mean": 0.0003088781953374685,
+      "mean_off_temporal_std": 0.002816522621043312,
+      "mean_on_temporal_std": 0.002652867375976254,
+      "negative_mean_pixels_outside_local_repeat_envelope": 0,
+      "on_pixels_ever_below_ALL_OFF_frames_plus_quantum": 2229,
+      "on_pixel_frames_below_ALL_OFF": 2898,
+      "on_anchor_frame_below_ALL_OFF": 188,
+      "display_range": [
+        0.006966729768464575,
+        0.10294765565777197
+      ]
+    },
+    "final": {
+      "off_a_mean": 0.2515064477920532,
+      "on_mean": 0.2518579363822937,
+      "off_b_mean": 0.25333496928215027,
+      "on_minus_mean_off": -0.0005628056242130697,
+      "off_repeat_mean": 0.0018284780671820045,
+      "mean_off_temporal_std": 0.006590649951249361,
+      "mean_on_temporal_std": 0.0055376458913087845,
+      "negative_mean_pixels_outside_local_repeat_envelope": 14,
+      "on_pixels_ever_below_ALL_OFF_frames_plus_quantum": 1439,
+      "on_pixel_frames_below_ALL_OFF": 7086,
+      "on_anchor_frame_below_ALL_OFF": 463,
+      "display_range": [
+        0.11206531524658203,
+        0.6183117628097534
+      ]
+    }
+  },
+  "ON_anchor_final_dark_channel_coincidence": {
+    "final_dark_pixels": 463,
+    "denominator": 12812,
+    "also_newlow_in_channel": {
+      "gi": 0,
+      "alpha": 16,
+      "sun": 0,
+      "local": 0,
+      "diffuse": 11
+    }
+  },
+  "limitations": [
+    "Crop-level existing stable_samples with exactly transformed crop camera; edge gradients differ at crop boundary.",
+    "Observed OFF minima/envelope are descriptive, not probability confidence.",
+    "Final is native tonemapped/RR output, not scene-linear radiance; temporal inputs/actual RR internals are not captured.",
+    "No material or sampling rule changed during this analysis; source remains OFF."
+  ]
+}

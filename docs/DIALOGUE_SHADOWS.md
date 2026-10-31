@@ -158,3 +158,11 @@ Sun samples, then later scene-unready fallback windows with zero samples.
 Changing views and aggregate windows do not prove a flicker-causing transition.
 Separate native-mask visibility from added RT visibility before changing shaders.
 See docs/evidence/dialogue-flicker-user-feedback-20261031.json for all eight windows.
+
+Independent follow-up: no demonstrated guard defect. The 5005 combined epoch/
+late-write rejects include initial capture/epoch/camera/cascade/receiver failures;
+all 41 prepared builds were inserted. These counts do not prove late writes.
+Positive GPU scene-unready counters come from the Current Sun shader itself,
+not just ordinary host fallback. Exact failed readiness conditions are not logged.
+No guard relaxation or renderer fix was made. User paused further work; temporal
+dialogue evidence remains necessary. See current HANDOFF_SESSION.md.

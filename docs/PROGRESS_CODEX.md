@@ -1,27 +1,24 @@
 # BG3RTX current progress — 2026-10-31
 
-## Latest user steering
+## Paused at the user's request - latest checkpoint
 
-User now reports rugs, plank rectangles and Astarion's hairline band not reproduced.
-No new candidate was installed: personal trial remains 047e105, ABI 19.
-OMM and Current Cascade Sun look encouraging in the user's trial, but a slight
-environment-dependent dialogue shadow flicker remains; attribution is unknown.
-The full 12:14-12:18 log has one window with 368956 actual solar ray samples;
-later windows have zero and native fallback. This is not yet a quality pass.
+No further development or live jobs until the user resumes. Test game is closed;
+private queue pending/running are empty and its finite authorization is consumed.
+User cannot currently reproduce rug/plank rectangles or Astarion hairline band.
+Personal trial 047e105 ABI 19 is unchanged. OMM/Current Sun user smoke test positive.
+A slight dialogue shadow flicker remains; its source is not established.
+Current Sun full log has one window with 368956 actual samples, then GPU scene
+readiness failures. The combined epoch/late-write counter does not prove lag.
 
-User reports good results with FG 2.0 and about 85 fps without diagnostics.
-Rotation artifacts were attributed to cascade capacity. Do not reopen camera/TLAS
-lag or add selectors without new contradictory evidence. The 85 fps is the user's
-reported baseline, not a timing result for the new offline candidates below.
-
-Fix these two visible regressions first:
-1. Dark rectangles around camp rugs and strange shadows on the wooden walkway.
-2. Astarion's fixed, stepped dark band along the hairline.
-
-Use one hypothesis at a time, automatic A/B in one run, then a user trial build.
-New logic belongs in core unless native capture/resource ownership requires layer.
-Keep public ABI 21. Merge once per verified milestone, not after every commit.
-Defer unrelated feature expansion until the two regressions are addressed.
+GI R3 d19ecd7: VALID 580 s, FG 2 real presentation, no focus activation, no
+NVIDIA 153/dumps/build drift. Three K16 bursts, 176 samples each; FG active all 48.
+565595 stable pixels; GI negative-envelope pixels 0, positive 21517.
+Previous stipple ROI: 14/12812 final mean-low pixels; old R2 was 1144/19043.
+Different runs/denominators: descriptive reduction, not a direct cross-run A/B.
+Final full-image review, motion and visible gain remain unqualified; keep GI OFF.
+Whole GI median OFF A/ON/OFF B: 2.097/2.288/2.048 ms. Not isolated bounce cost.
+Evidence/contact sheets: docs/evidence/gi-descriptor-r3-20261031/.
+New logic in core where possible. ABI 21. Merge once per verified milestone.
 
 ## Camp rugs and planks
 
@@ -73,20 +70,16 @@ Candidate 09fc3eb builds; all 60 CTests pass. Image A/B remains unmeasured.
 
 ## Live boundary and trial
 
-Latest user steering authorizes background live tests without stealing focus.
-No new game was launched for this update. Do not interrupt a user-owned game.
-Use scripts/test-queue.ps1 only. Keep unapproved drafts outside pending inboxes.
-Never interrupt an unowned game, erase USER_PLAYING or manufacture USER_AWAY.
-
-The last recorded personal trial is hair-origin-live 047e105, ABI 19. It has native
-Hair/Scalp/physical origins ON, camera/cascade budgets 1408/587 MiB, OMM/current Sun
-OFF and dev 1. It remains unchanged. Do not mix its DLLs with ABI 21 components.
-The user reports improved foliage and hair, plus no current rug/hairline reproduction.
-Do not ask the user to edit INI files or perform test toggles.
+User paused the goal and requested safe shutdown plus complete handoff updates.
+Latest background-test permission was used for the completed GI batch; do not
+reuse its consumed receipt or launch pending drafts on resume without steering.
+Only scripts/test-queue.ps1 may launch; preserve markers, saves and unowned games.
+Personal hair-origin-live remains 047e105 ABI 19; never mix its DLLs with ABI 21.
+No new user trial was installed. Camp and Hair A/B remain unqualified/nonreproduced.
 
 ## Verified source state
 
-Main efc27e7 is pushed. merge-green passed both DLLs/launcher, 60 CTests,
+Main d3e06e1 is pushed. merge-green passed both DLLs/launcher, 60 CTests,
 1232 runtime shader files and QA. All new experimental defaults remain OFF.
 It includes native STI materials, ST depth coverage, TileBlend camera coverage,
 the receiver guard and alpha spill. Source checks are not in-game qualification.
@@ -137,12 +130,10 @@ GPU pass costs of the new fixes are unmeasured. Fixture wall times are not costs
 Measure timing separately from diagnostics, capture and validation overhead.
 Keep rendered and displayed FG rates separate; missing RT never passes a test.
 
-Prepared camp batch: Campsite - 27h, about 10-13 minutes, real FG 2 presentation.
-RT-off reference, then spill OFF/ON/OFF; three K16 bursts, stable static view.
-Draft stays outside pending while the original defect is not reproduced.
-No rescued draws or no defect means inconclusive, not a fixed regression.
-Dialogue flicker needs temporal captures; older F10 stills cannot establish it.
-First separate native mask from added RT visibility; do not add blur or change bias.
+Resume order: reproduce dialogue flicker with temporal native/RT evidence;
+review GI R3 final images, then motion/visible gain before any default promotion.
+Camp/Hair candidates remain ready only if the original defect returns.
+No automatic queued continuation. Full program remains incomplete and paused.
 Preserve saves, backup files, snapshot tags and shared junction targets.
 
 History: [pre-trim progress archive](archive/PROGRESS_CODEX_2026-10-31.md).

@@ -99,6 +99,16 @@ and status: DESIGN_SOTA_NEXT.md 2.9 (`core/sharc.cpp`, `shaders/gi/sharc_*.hlsl`
 
 ## Qualified hidden-hit direct bounce (`gi_hit_direct=0`, 2026-10-31)
 
+R3 corrected-contract acquisition: candidate d19ecd7, queue VALID, 580 seconds,
+three K16 OFF/ON/OFF bursts, FG active all 48 frames, no NVIDIA 153/dumps/build
+drift. 565595 stable pixels; zero negative GI-envelope pixels, 21517 positive.
+Previous failure ROI: final mean-low pixels beyond OFF-repeat are 14/12812;
+old R2 was 1144/19043. Different sessions/denominators, not a cross-run A/B.
+Whole GI median OFF A/ON/OFF B: 2.097/2.288/2.048 ms; not isolated bounce cost.
+Broad final-image review, motion and visible gain remain pending. User paused
+work. Key OFF; no trial installation. Exact job, results and contact sheets:
+docs/evidence/gi-descriptor-r3-20261031/. Raw captures in user-regression-ab.
+
 R2 key-on images are **rejected**: visible new dark stippling despite positive GI
 counters. The original dedicated shader was mistakenly dispatched through the
 contracted D-LS set0 layout/writes, missing GI output/history/MV bindings and the

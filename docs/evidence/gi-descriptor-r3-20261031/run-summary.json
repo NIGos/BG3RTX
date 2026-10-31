@@ -1,0 +1,94 @@
+{
+  "queue_valid": true,
+  "build_changed": false,
+  "nv153": 0,
+  "dumps": [],
+  "duration_seconds": 580,
+  "phase_costs": [
+    {
+      "index": 2,
+      "start": 46288.871,
+      "end": 46368.889,
+      "metrics": {
+        "gi": {
+          "n": 6,
+          "median_ms": 2.0965,
+          "range_ms": [
+            1.989,
+            2.311
+          ]
+        },
+        "gi_trace": {
+          "n": 0,
+          "median_ms": null,
+          "range_ms": null
+        },
+        "rt_scope": {
+          "n": 6,
+          "median_ms": 0.8205,
+          "range_ms": [
+            0.789,
+            0.891
+          ]
+        }
+      }
+    },
+    {
+      "index": 4,
+      "start": 46403.965,
+      "end": 46483.954,
+      "metrics": {
+        "gi": {
+          "n": 6,
+          "median_ms": 2.2875,
+          "range_ms": [
+            2.105,
+            2.396
+          ]
+        },
+        "gi_trace": {
+          "n": 0,
+          "median_ms": null,
+          "range_ms": null
+        },
+        "rt_scope": {
+          "n": 6,
+          "median_ms": 0.9484999999999999,
+          "range_ms": [
+            0.889,
+            0.992
+          ]
+        }
+      }
+    },
+    {
+      "index": 6,
+      "start": 46519.074,
+      "end": 46599.066,
+      "metrics": {
+        "gi": {
+          "n": 6,
+          "median_ms": 2.0484999999999998,
+          "range_ms": [
+            2.005,
+            2.088
+          ]
+        },
+        "gi_trace": {
+          "n": 0,
+          "median_ms": null,
+          "range_ms": null
+        },
+        "rt_scope": {
+          "n": 5,
+          "median_ms": 0.808,
+          "range_ms": [
+            0.806,
+            0.834
+          ]
+        }
+      }
+    }
+  ],
+  "cost_limit": "Existing GPU log scopes after 20 seconds in each capture window; not total frame cost or isolated new-bounce cost. OFF A overlaps full shader compilation on CPU. No performance speedup claim."
+}
