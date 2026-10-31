@@ -1,5 +1,36 @@
 # BG3RTX progress
 
+## User at PC: offline work; three complete GI image bursts retained - 2026-10-31
+
+User requests background windows. No game is running; no further focused FG or
+SE-console launch while the PC is in use. Continue code, review and capture analysis.
+Personal Hair trial unchanged; all material/reference/GI increments remain untested
+by the user and experimental defaults remain OFF.
+
+GI R2 ended 386 s, no NVIDIA 153/dumps/build drift. Queue is INVALID solely because
+its frozen expectation said "transport valid" while the producer logs "transport ok".
+The expectation is corrected for future drafts, not retroactively altered. Do not
+repeat a 7 GiB run solely for this typo. Independent existing QA indexing validates
+all three complete K16 bursts, REQUIRED views and actual transport. Raw paths:
+native-hit-provider-live/BG3RTX/captures/pan-20261031-080416-62101 (OFF),
+pan-20261031-080526-62102 (ON), pan-20261031-080636-62103 (OFF).
+Root captures/gi-hit-direct-20261031/r2/ preserves logs/manifests/validation;
+a worker is streaming the stable-surface/noise image comparison. No visual pass yet.
+
+R1 refined GPU evidence: GI trace median OFF 0.345 / ON 0.442 ms (+0.097 ms).
+The larger rendered-cadence loss (84.14 to 75.56 fps) is not attributed: no phase CPU
+rows exist; whole GI omits native lighting/producer GPU work and CPU recording.
+No speedup claim from the lower whole-GI interval. Scoped contribution stays PASS.
+
+53f2167/import de3a9bf separates actual rotation release/reset/press after scheduler
+stalls; 41 focused checks pass. 051333f/import e742f0d makes pan warmup select the
+same primary shader as dispatch, fixing per-frame pipeline flip during preparation.
+Core links and two focused tests pass. No shader/ABI/key/default changes. Both need
+future live confirmation; R2 capture phases already disabled that warmup churn.
+SE reader safety changes196f869/28430ff remain reviewed and offline-tested.
+Consolidate these small fixes via merge-green; defer focused live work.
+
+
 ## Production GI participation passes; output captures running - 2026-10-31
 
 Main d894b06, ABI 21: merge-green 55/55 CTests, 627/627 shaders and QA; pushed.
