@@ -1,6 +1,8 @@
 // Command buffer hooks: pass boundaries (where the core gets to inject work),
 // pipeline/descriptor binding state, and draw/dispatch notes for the tracer.
 #include "host.h"
+#include "omm_submit.h"
+#include "omm_content.h"
 #include "assetdb.h"
 
 #include <cstring>
@@ -91,6 +93,7 @@ static std::string pass_json(const Bg3PassInfo& p) {
 
 static void begin_pass(VkCommandBuffer cmd, CmdState* s, const VkRect2D& area) {
   s->in_pass = true;
+  s->depth_cleared_empty=false;s->render_area=area;
   s->pass = Bg3PassInfo{};
   s->pass.ordinal = s->pass_ordinal++;
   s->pass.width = area.extent.width;
@@ -143,6 +146,8 @@ static CmdState* describe_classic(VkCommandBuffer cmd, const VkRenderPassBeginIn
     if (d < views.size()) {
       fill_attachment(s->pass, views[d], true);
       if (d < rp.final_layouts.size()) s->depth_layout = rp.final_layouts[d];
+      s->depth_cleared_empty=d<rp.load_ops.size() && rp.load_ops[d]==VK_ATTACHMENT_LOAD_OP_CLEAR &&
+        d<info->clearValueCount && info->pClearValues[d].depthStencil.depth==0;
     }
   }
   pass_ready(cmd, s);
@@ -179,6 +184,7 @@ static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra =
   diag(DIAG_DRAW);
   CmdState* s = cmd_state(cmd);
   if (!s) return;
+  sun_note_native_draw(cmd,s);
   assetdb_note_draw(s->vs, s->fs);
   if (s->in_pass) {
     if (!s->pass.draw_count++) {
@@ -323,11 +329,33 @@ void restore_bindings(VkCommandBuffer cmd, VkPipelineBindPoint bp) {
 
 // ---- hooks ----
 
+static VKAPI_ATTR VkResult VKAPI_CALL CreateCommandPool(VkDevice device,const VkCommandPoolCreateInfo* ci,
+    const VkAllocationCallbacks* allocator,VkCommandPool* pool) {
+  const auto r=device_of(device)->vk.CreateCommandPool(device,ci,allocator,pool);
+  if(r==VK_SUCCESS)omm::pool_created(*pool,ci->queueFamilyIndex);
+  return r;
+}
+static VKAPI_ATTR void VKAPI_CALL DestroyCommandPool(VkDevice device,VkCommandPool pool,const VkAllocationCallbacks* allocator) {
+  device_of(device)->vk.DestroyCommandPool(device,pool,allocator);
+  omm::pool_discard(pool,true);
+}
+static VKAPI_ATTR VkResult VKAPI_CALL ResetCommandPool(VkDevice device,VkCommandPool pool,VkCommandPoolResetFlags flags) {
+  const auto r=device_of(device)->vk.ResetCommandPool(device,pool,flags);
+  if(r==VK_SUCCESS)omm::pool_discard(pool,false);
+  return r;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL ResetCommandBuffer(VkCommandBuffer cmd,VkCommandBufferResetFlags flags) {
+  const auto r=vk(cmd).ResetCommandBuffer(cmd,flags);
+  if(r==VK_SUCCESS)omm::command_discard(cmd);
+  return r;
+}
+
 static VKAPI_ATTR VkResult VKAPI_CALL AllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* ai,
                                                              VkCommandBuffer* out) {
   VkResult r = device_of(device)->vk.AllocateCommandBuffers(device, ai, out);
   if (r == VK_SUCCESS)
     for (uint32_t i = 0; i < ai->commandBufferCount; ++i) {
+      omm::command_allocated(ai->commandPool,out[i]);
       bvh_cmd_reset(out[i]);   // a handle reused after its pool was destroyed: old records are dropped
       cmd_state(out[i], true)->game_alloc = true;
     }
@@ -339,6 +367,7 @@ static VKAPI_ATTR void VKAPI_CALL FreeCommandBuffers(VkDevice device, VkCommandP
   device_of(device)->vk.FreeCommandBuffers(device, pool, n, cmds);
   for (uint32_t i = 0; i < n; ++i)
     if (cmds[i]) {
+      omm::command_discard(cmds[i],true);
       bvh_cmd_reset(cmds[i]);   // freed without (another) submit: our builds in it never run
       cmd_forget(cmds[i]);
     }
@@ -348,6 +377,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   diag(DIAG_BEGIN_CMD);
   bvh_cmd_reset(cmd);   // recorded again: a previous recording not submitted is dropped
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
+  if(r==VK_SUCCESS){omm::command_discard(cmd);omm::command_begin(cmd,(bi->flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)==0);}
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
   s->recording = ++recordings;
@@ -382,6 +412,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->ib = VK_NULL_HANDLE;
   s->ib_offset = 0;
   s->has_viewport = false;
+  s->has_scissor=false;
   s->sl_layouts.clear();
   s->sl_input_layouts.clear();
   s->sl_cam_valid = false;
@@ -397,7 +428,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL EndCommandBuffer(VkCommandBuffer cmd) {
   CmdState* s = cmd_state(cmd);
   if (s && !s->in_pass) core_on_cmd_end(cmd);
   if (s && s->tracing) trace_flush_segment(s);
-  return vk(cmd).EndCommandBuffer(cmd);
+  omm::feedback_before_end(cmd,s && !s->in_pass);
+  const auto r=vk(cmd).EndCommandBuffer(cmd);
+  omm::command_end(cmd,r==VK_SUCCESS);
+  return r;
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info,
@@ -442,6 +476,8 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cmd, const V
   if (info->pDepthAttachment && info->pDepthAttachment->imageView) {
     fill_attachment(s->pass, info->pDepthAttachment->imageView, true);
     s->depth_layout = info->pDepthAttachment->imageLayout;
+    s->depth_cleared_empty=info->pDepthAttachment->loadOp==VK_ATTACHMENT_LOAD_OP_CLEAR &&
+      info->pDepthAttachment->clearValue.depthStencil.depth==0;
   }
   pass_ready(cmd, s);
   vk(cmd).CmdBeginRendering(cmd, info);
@@ -757,26 +793,34 @@ static void note_transfer(VkCommandBuffer cmd, const char* op, VkImage src, VkIm
 
 static VKAPI_ATTR void VKAPI_CALL CmdCopyImage(VkCommandBuffer cmd, VkImage s, VkImageLayout sl, VkImage d,
                                                VkImageLayout dl, uint32_t n, const VkImageCopy* r) {
+  const bool began=omm::content_before_image_write(cmd,d);
   vk(cmd).CmdCopyImage(cmd, s, sl, d, dl, n, r);
+  omm::content_after_image_write(cmd,d,began);
   note_transfer(cmd, "copy", s, d);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBlitImage(VkCommandBuffer cmd, VkImage s, VkImageLayout sl, VkImage d,
                                                VkImageLayout dl, uint32_t n, const VkImageBlit* r, VkFilter f) {
+  const bool began=omm::content_before_image_write(cmd,d);
   vk(cmd).CmdBlitImage(cmd, s, sl, d, dl, n, r, f);
+  omm::content_after_image_write(cmd,d,began);
   note_transfer(cmd, "blit", s, d);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdResolveImage(VkCommandBuffer cmd, VkImage s, VkImageLayout sl, VkImage d,
                                                   VkImageLayout dl, uint32_t n, const VkImageResolve* r) {
+  const bool began=omm::content_before_image_write(cmd,d);
   vk(cmd).CmdResolveImage(cmd, s, sl, d, dl, n, r);
+  omm::content_after_image_write(cmd,d,began);
   note_transfer(cmd, "resolve", s, d);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdClearColorImage(VkCommandBuffer cmd, VkImage img, VkImageLayout l,
                                                      const VkClearColorValue* c, uint32_t n,
                                                      const VkImageSubresourceRange* r) {
+  const bool began=omm::content_before_image_write(cmd,img);
   vk(cmd).CmdClearColorImage(cmd, img, l, c, n, r);
+  omm::content_after_image_write(cmd,img,began);
   note_transfer(cmd, "clear", VK_NULL_HANDLE, img);
 }
 
@@ -787,9 +831,35 @@ static VKAPI_ATTR void VKAPI_CALL CmdClearDepthStencilImage(VkCommandBuffer cmd,
   note_transfer(cmd, "clear_depth", VK_NULL_HANDLE, img);
 }
 
+template<class F> static F image_copy_proc(VkCommandBuffer cmd,const char* name,const char* alias){
+  auto* dd=device_of(cmd);auto fn=reinterpret_cast<F>(dd->gdpa(dd->device,name));if(!fn)fn=reinterpret_cast<F>(dd->gdpa(dd->device,alias));return fn;
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyBufferToImage(VkCommandBuffer cmd,VkBuffer source,VkImage target,VkImageLayout layout,uint32_t count,const VkBufferImageCopy* copies){
+  const bool began=omm::content_before_image_write(cmd,target);vk(cmd).CmdCopyBufferToImage(cmd,source,target,layout,count,copies);omm::content_after_image_write(cmd,target,began);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyBufferToImage2(VkCommandBuffer cmd,const VkCopyBufferToImageInfo2* info){
+  auto fn=image_copy_proc<PFN_vkCmdCopyBufferToImage2>(cmd,"vkCmdCopyBufferToImage2","vkCmdCopyBufferToImage2KHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyImage2(VkCommandBuffer cmd,const VkCopyImageInfo2* info){
+  auto fn=image_copy_proc<PFN_vkCmdCopyImage2>(cmd,"vkCmdCopyImage2","vkCmdCopyImage2KHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdBlitImage2(VkCommandBuffer cmd,const VkBlitImageInfo2* info){
+  auto fn=image_copy_proc<PFN_vkCmdBlitImage2>(cmd,"vkCmdBlitImage2","vkCmdBlitImage2KHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdResolveImage2(VkCommandBuffer cmd,const VkResolveImageInfo2* info){
+  auto fn=image_copy_proc<PFN_vkCmdResolveImage2>(cmd,"vkCmdResolveImage2","vkCmdResolveImage2KHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectNV(VkCommandBuffer cmd,VkDeviceAddress address,uint32_t count,uint32_t stride,VkImage target,VkImageLayout layout,const VkImageSubresourceLayers* layers){
+  auto fn=image_copy_proc<PFN_vkCmdCopyMemoryToImageIndirectNV>(cmd,"vkCmdCopyMemoryToImageIndirectNV","vkCmdCopyMemoryToImageIndirectNV");if(!fn)return;const bool began=omm::content_before_image_write(cmd,target,true);fn(cmd,address,count,stride,target,layout,layers);omm::content_after_image_write(cmd,target,began);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectKHR(VkCommandBuffer cmd,const VkCopyMemoryToImageIndirectInfoKHR* info){
+  auto fn=image_copy_proc<PFN_vkCmdCopyMemoryToImageIndirectKHR>(cmd,"vkCmdCopyMemoryToImageIndirectKHR","vkCmdCopyMemoryToImageIndirectKHR");if(!fn)return;const bool began=omm::content_before_image_write(cmd,info->dstImage,true);fn(cmd,info);omm::content_after_image_write(cmd,info->dstImage,began);
+}
+
 static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32_t n, const VkCommandBuffer* cmds) {
   diag(DIAG_EXEC);
   vk(cmd).CmdExecuteCommands(cmd, n, cmds);
+  omm::command_execute(cmd,{cmds,n});
   CmdState* s = cmd_state(cmd);
   if (!s) return;
   // Streamline bookkeeping recorded in secondaries counts when the primary is submitted.
@@ -901,6 +971,10 @@ void register_cmd_hooks(HookMap& m) {
     m[std::string("vk") + name + "KHR"] = fn;
   };
 #define HOOK(n) add(#n, reinterpret_cast<PFN_vkVoidFunction>(&n))
+  HOOK(CreateCommandPool);
+  HOOK(DestroyCommandPool);
+  HOOK(ResetCommandPool);
+  HOOK(ResetCommandBuffer);
   HOOK(AllocateCommandBuffers);
   HOOK(FreeCommandBuffers);
   HOOK(BeginCommandBuffer);
@@ -924,8 +998,15 @@ void register_cmd_hooks(HookMap& m) {
   HOOK(CmdDispatch);
   HOOK(CmdDispatchIndirect);
   HOOK(CmdCopyImage);
+  HOOK(CmdCopyImage2);
+  HOOK(CmdCopyBufferToImage);
+  HOOK(CmdCopyBufferToImage2);
   HOOK(CmdBlitImage);
+  HOOK(CmdBlitImage2);
   HOOK(CmdResolveImage);
+  HOOK(CmdResolveImage2);
+  m["vkCmdCopyMemoryToImageIndirectNV"]=reinterpret_cast<PFN_vkVoidFunction>(&CmdCopyMemoryToImageIndirectNV);
+  m["vkCmdCopyMemoryToImageIndirectKHR"]=reinterpret_cast<PFN_vkVoidFunction>(&CmdCopyMemoryToImageIndirectKHR);
   HOOK(CmdClearColorImage);
   HOOK(CmdClearDepthStencilImage);
   HOOK(CmdExecuteCommands);

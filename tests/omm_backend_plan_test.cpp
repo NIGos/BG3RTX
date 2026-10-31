@@ -1,0 +1,52 @@
+#include "../common/omm_backend_plan.h"
+#include <cstdio>
+#include <cstdlib>
+using namespace bg3::omm;
+static unsigned checks;
+static void check(bool x) { ++checks; if (!x) { std::fprintf(stderr,"check %u failed\n",checks); std::exit(1); } }
+int main() {
+  check(blas_vertex_range(256,108,12,3));check(!blas_vertex_range(256,107,12,3));
+  check(blas_vertex_range(256,204,24,3));check(!blas_vertex_range(256,203,24,3));
+  check(!blas_vertex_range(0,108,12,3));check(!blas_vertex_range(257,108,12,3));
+  check(!blas_vertex_range(256,108,8,3));check(!blas_vertex_range(256,108,13,3));
+  check(!blas_vertex_range(256,108,12,0));check(!blas_vertex_range(256,UINT64_MAX,12,UINT32_MAX));
+  check(!blas_vertex_range(UINT64_MAX-3,108,12,3));
+  static_assert(sizeof(Triangle)==8); static_assert(sizeof(Usage)==12);
+  const Triangle ts[]={{0,0,2},{1,0,2},{2,1,2}}; Plan p;
+  check(make_plan(ts,3,12,p)); check(p.triangles==3 && p.usage.size()==2);
+  check(p.usage[0].count==2 && p.usage[1].count==1);
+  check(input_ranges(p,256,3,512,24));
+  check(!input_ranges(p,257,3,512,24)); check(!input_ranges(p,256,3,513,24));
+  check(!input_ranges(p,256,2,512,24)); check(!input_ranges(p,256,3,512,23));
+  check(!input_ranges(p,UINT64_MAX-255,256,512,24));
+  check(!input_ranges(p,256,3,UINT64_MAX-255,256));
+  check(!make_plan({},3,12,p)); check(!make_plan(ts,0,12,p));
+  for (unsigned level=0;level<=12;++level) {
+    Triangle t{0,uint16_t(level),2}; const uint64_t bytes=((uint64_t(2)<<(2*level))+7)/8;
+    check(make_plan({&t,1},bytes,12,p)); check(!make_plan({&t,1},bytes-1,12,p));
+    t.dataOffset=UINT32_MAX; check(!make_plan({&t,1},bytes,12,p));
+  }
+  Triangle t{0,13,2}; check(!make_plan({&t,1},UINT64_MAX,20,p));
+  t={0,1,2}; check(!make_plan({&t,1},1,0,p));
+  t={0,0,1}; check(!make_plan({&t,1},1,12,p));
+  Lifetime l; check(!l.retire()); check(!l.releasable(UINT64_MAX)); check(!l.use(0));
+  check(l.use(10)); check(!l.use(9)); check(l.use(10)); check(l.use(12));
+  check(!l.releasable(12)); check(l.retire()); check(!l.retire()); check(!l.use(13));
+  check(!l.releasable(11)); check(l.releasable(12)); check(l.releasable(13));
+  check(l.reserve());check(!l.releasable(13));check(l.unreserve());check(l.releasable(13));check(!l.unreserve());
+  Lifetime pending;check(pending.discardable());check(pending.reserve());check(!pending.discardable());
+  check(pending.unreserve());check(pending.discardable());
+  check(pending.reserve());check(pending.use(20));check(!pending.discardable());
+  check(pending.retire());check(!pending.releasable(20));check(pending.unreserve());check(pending.releasable(20));
+  pending.reservations=UINT32_MAX;check(!pending.reserve());check(!pending.releasable(UINT64_MAX));
+  Lifetime evicted;check(evicted.accepts_new_use());evicted.release_owner();
+  check(!evicted.accepts_new_use());check(evicted.releasable(0));check(!evicted.retire());
+  check(evicted.reserve());check(!evicted.releasable(UINT64_MAX));check(evicted.use(30));
+  check(evicted.unreserve());check(!evicted.releasable(29));check(evicted.releasable(30));
+  check(evicted.use(31));check(!evicted.releasable(30));check(evicted.releasable(31));
+  evicted.release_owner();check(evicted.use(32));check(!evicted.use(31));
+  check(!evicted.releasable(31));check(evicted.releasable(32));
+  Lifetime terminal;check(terminal.use(40));check(terminal.retire());terminal.release_owner();
+  check(!terminal.use(41));check(!terminal.accepts_new_use());check(terminal.releasable(40));
+  std::printf("OMM EXT plan/range/lifetime checks %u; no device calls\n",checks);
+}

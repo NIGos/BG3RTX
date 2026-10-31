@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <vector>
 #include "host.h"
+#include "omm_submit.h"
+#include "omm_backend.h"
+#include "omm_content.h"
 #include "assetdb.h"
 #include "sebridge.h"
 #include "hookguard.h"
@@ -221,6 +224,16 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     sl_scratch = sl_device_pre(id, phys, use_ci, patched);
     r = create(phys, &patched, alloc, out);
   }
+  if (r != VK_SUCCESS && rt_on && omm::device_requested()) {
+    log("[layer] optional EXT opacity micromap device request failed (%d); retrying ordinary RT",r);
+    sl_device_post(sl_scratch,nullptr,r);
+    rt_device_features_undo();
+    omm::disable_device_request();
+    rt_use=rt_device_create_info(id,phys,geo_use,&rt_ci);
+    rt_on=rt_use!=geo_use;use_ci=rt_use;
+    sl_scratch=sl_device_pre(id,phys,use_ci,patched);
+    r=create(phys,&patched,alloc,out);
+  }
   if (r != VK_SUCCESS && rt_on && rt_device_features_added()) {
     // The SHaRC features (64-bit atomics, float16, 16-bit storage) next; ray tracing stays.
     log("[layer] device creation with the SHaRC device features failed (%d); retrying without them", r);
@@ -430,6 +443,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   for (uint32_t i = 0; i < count; ++i)
     cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
   if (trace_recording()) trace_on_submit(cmds);
+  SunSubmitBatch sun;
+  sun_prepare_submit(dd,queue,count,submits,&sun);
+  if(sun.modified) {submits=sun.legacy.data();cmds=sun.commands;}
   order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
@@ -438,9 +454,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM: the emissive scene of this batch's effects passes
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   return r;
 }
 
@@ -453,6 +471,30 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
     for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
       cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
   if (trace_recording()) trace_on_submit(cmds);
+  SunSubmitBatch sun;
+  sun_prepare_submit2(dd,queue,count,submits,&sun);
+  if(sun.modified) {submits=sun.modern.data();cmds=sun.commands;}
+  // App signals restricted to TRANSFER/FRAGMENT must not outrun appended OMM
+  // content writes or its extra alpha reads. This also covers OMM-only submits,
+  // independently of the optional Sun insertion above.
+  std::vector<VkSubmitInfo2> content_submits;
+  std::vector<std::vector<VkSemaphoreSubmitInfo>> content_signals;
+  if(omm::content_dispatch_in_submit(cmds)) {
+    std::vector<VkCommandBuffer> entry;
+    for(uint32_t i=0;i<count;++i) {
+      const auto& s=submits[i];
+      if(!s.signalSemaphoreInfoCount) continue;
+      entry.clear();
+      for(uint32_t j=0;j<s.commandBufferInfoCount;++j) entry.push_back(s.pCommandBufferInfos[j].commandBuffer);
+      if(!omm::content_dispatch_in_submit(entry)) continue;
+      if(content_submits.empty()) {content_submits.assign(submits,submits+count);content_signals.resize(count);}
+      auto& signals=content_signals[i];
+      signals.assign(s.pSignalSemaphoreInfos,s.pSignalSemaphoreInfos+s.signalSemaphoreInfoCount);
+      for(auto& signal:signals) signal.stageMask=VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+      content_submits[i].pSignalSemaphoreInfos=signals.data();
+    }
+    if(!content_submits.empty()) submits=content_submits.data();
+  }
   order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
   bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
@@ -461,9 +503,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit2");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM (our build goes through vkQueueSubmit)
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   return r;
 }
 

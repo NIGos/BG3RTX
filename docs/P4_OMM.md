@@ -1,11 +1,54 @@
-# P4 opacity micromaps: corrected classification contract
+# P4 opacity micromaps: current isolated runtime candidate
 
-CPU groundwork merged to main e277548 through merge-green on 2026-10-30:
-19/19 CTests, 107/107 compute shader files and QA detector tests passed. Main and
-codex/p4-omm-domain pushed, test-main refreshed. This includes the confirmed UI
-descriptor fix. There is still NO production OMM caller, GPU bake, device
-extension activation or BLAS attachment. The isolated work history below records
-the original baseline and CPU experiments; it is not a runtime feature claim.
+Default rt_omm=0, Experimental GUI off in all presets. ABI remains 19; both DLLs
+must travel together. Main/user build is unchanged. No current game/GPU validation
+or measured acceleration/cost is claimed.
+
+The isolated renderer now wires alpha bindings 10/11 (original micromap-free
+reference and coherent content epochs), generation-matched scene selection and
+all four query entry points. Every actual Core dispatch path registers its own
+traversal command, including local lighting, reflections and SHaRC. Ticket-use or
+feedback-tracking failure declines acceleration; an unavailable tuple is rejected,
+not counted as a quality pass. Reference-only scenes still have stable build IDs.
+
+Snapshot/Bound retain the exact build generation, so a recycled AS handle cannot
+substitute another frame's scene. Reference selection is scoped per dispatch and
+restores the original bound state. Failed queries do not mark stale GI, local,
+reflection, primary or Sun outputs fresh; GI uses the current screen-space trace.
+Specular hit distance is cleared when reflection dispatch fails.
+
+The layout capability persists through key-off/core reload. A core-consumer bit
+is cleared on unload: an older core receives baseline scenes. An ordinary pipeline
+caught during capability publication also receives baseline, even if another
+pipeline already enabled acceleration. A later unsupported device keeps the
+superset layout with baseline/dummy bindings and zero proof. Fresh key-off paths
+still select ordinary shader files.
+
+Alpha proof validation is outside the alpha mutex, preserving BVH -> alpha lock
+order; native compute bindings are restored after it. Scene retirement and ticket
+release use actual completion, not frame age. Sun's separate scene has no OMM;
+its self-reference and cleared proof cannot redirect rays into the camera scene.
+
+Offline checkpoint: both DLLs build; current composition passes 40/40 CTests.
+Per-command binding tests cover 58 cases: reference fallback, reused generation,
+key-off and unwind restoration. Against d444e70, 229 existing shader entries are
+byte-identical; 198 OMM wrappers compile/validate. Wrappers retain native DXC16-bit
+flags. Short owned baseline extraction fixes Windows MAX_PATH without changing
+the archived baseline source. No GPU execution follows from this shader gate.
+
+OPEN: actual renderer descriptor/GPU traversal validation; nonzero useful known
+coverage; same-ray reference violation counts; energy/movement/FG2 quality;
+capture/build/traversal GPU ms and real residency. All-UNKNOWN or missing RT never
+passes. Current code is an unqualified opt-in candidate, not a shipped speedup.
+Only an explicitly authorized queue batch may test it, with automated A/B/settings,
+input/captures/restoration. No manual INI/toggles are requested.
+
+## Historical CPU groundwork
+
+CPU domain preparation was merged to main e277548 through merge-green. The
+historical entries below describe their original checkpoints and limitations;
+their statements about absent production callers are superseded only in the
+isolated candidate described above, not in main.
 
 ## Offline domain preparation - 2026-10-30
 

@@ -1,5 +1,78 @@
 # Track D: hardware ray tracing
 
+## Observed static Pubes coverage - 2026-10-30, default off
+
+Existing rt_native_hair now recognizes static depth 2f2c46668da906a2 and shadow
+bf44216269789070, using verified N/T/B/W/fade outputs and the existing 88-byte
+capture. Native dual-mask/root/thickness inputs map into canonical kind 4;
+byte 196 subtype preserves the different Pubes camera FMA grouping. Sun's full
+record copies preserve it. No new key/kind/ABI/stride. All four normal queries
+reuse procedural primary depth and physical Shadow ribbons. Other Pubes passes
+remain unreviewed for activation; this is not complete all-family Hair closure.
+31/31 CTests, 19,782 capture/strand checks, 37 GPU cases (10 Pubes), 0 validation
+errors; 95 fresh ordinary shader identities and 95 capable compilations validate.
+GPU cost/native G-buffer/live gate remain pending. See NATIVE_HAIR.md and
+docs/evidence/native-pubes-20261030.json for exact source/layout/sampling limits.
+
+## Native Scalp camera dither - 2026-10-30, default-off candidate
+
+The earlier hard-only limitation below is superseded for camera FS
+9e77575a9f377ec5 and 36eeb96ba83ea027. Existing `rt_native_scalp=0` default stays.
+The same 208-byte kind3 record captures material8B, Frame phase/mode, original
+Camera set0/binding2 VP at128, and native viewport. Marker float at record56
+distinguishes new camera packets from held hard-only records. VP occupies96..159,
+viewport160..175, Frame header32..39; no host ABI or stream stride change.
+Scalp VS0e58570a2aa88c5a/f4b35620d54abc6c apply Camera._m2 and negate clipY;
+the existing converter recovers that native position. Kind3 stays dynamic so
+object caching cannot separate the position from its original camera packet.
+
+Explicit camera primary/debug/origin queries project the triangle hit into the
+captured viewport, use the original single-sample pixel center and native Frame
+truncation remainder/noise, then native smoothstep/root/dither comparison.
+Visibility and physical closest/GI/reflection queries use native Shadow hard
+coverage, independent of camera dither. No RT hash, extra geometry attributes,
+or fragment-depth displacement: the verified Scalp FS never writes depth.
+The canonical capture helper is shared with Sun snapshots without camera table
+mutation. Missing/nonfinite source state is rejected and counted. Existing RT
+cone filtering remains an explicit policy, not native raster/aniso equivalence.
+
+22/22 CTests; 178,810 Scalp checks; 95 ordinary SPIR-V byte-identical to 19fd488,
+95 capable compile/validate. Windowless RTX 5090 GPU probe: 27/27 cases, zero
+validation errors, including 11 Scalp cases through real 24-byte triangle queries:
+native phases, B-channel root suppression, negative phase/viewport, held/rebase.
+Scalp primary and physical t=3; Hair primary remains 3.20000029/physical 3.
+Evidence: docs/evidence/native-scalp-camera-20261030.json. No game deployment or
+live image/99.5% primary gate; GPU pass cost remains unmeasured. User check after
+coordinated layer restart: rt_native_scalp=1, rt_alpha=1, same Test1 close-up pose;
+require native camera records>0 and invalid state=0, then primary stats and face
+region inspection. Keep other keys fixed; other Hair-family gaps remain open.
+
+## Procedural native Hair geometry - 2026-10-30, default-off candidate
+
+`rt_native_hair` now uses dynamic AABB BLAS geometry with the original 88-byte
+native triangle sidecar. Explicit primary/origin queries solve native fragment
+depth directly; physical secondaries use native Shadow base-card/ray-view hard
+coverage. A frozen main-camera pseudo-volume is not imposed on GI/reflections.
+GPU bounds failure at scene-stamp byte 12 returns UNKNOWN across all four query
+entry points, never false lit/missing geometry. Proven converter-inactive cards
+remain inactive; unresolved FP32 edges are UNKNOWN. Refits preserve geometry type,
+and held bounds are certified again for each scene. Existing sampler policy stays.
+22/22 CTests, 310,883 shared geometry checks, 19,734 capture/strand checks and
+95 ordinary/capable shader identity/validation gates pass. No live or GPU gate yet;
+no all-family Hair closure claimed. Full source/model details: docs/NATIVE_HAIR.md.
+
+## Native CHAR_Hair coverage - 2026-10-30, default off
+
+Actual native strand coverage is implemented in isolated `codex/native-coverage`:
+startup-only `rt_native_hair=0/1`, validated88-byte output capture, six depth/shadow
+hash mappings, dual masks/noise, material root/density, strand-frame view coverage,
+original camera phase/fade dither and native shadow hard branch. Record208 unchanged.
+21/21 CTests, 19,716 Hair checks, all15nativeVS patch/validate, 95 ordinary SPIR-V
+byte-identical and 95 capable compile/validate. No live deployment/GPU work.
+Full Hair is OPEN: base-card triangles do not reproduce native fragment depth.
+Exact derivation, data layout, supported source hashes and procedural plan:
+docs/NATIVE_HAIR.md. Do not claim a complete face-shadow or origin-match gate.
+
 ## Native scalp hard-cut runtime candidate - 2026-10-30, default off
 
 `rt_native_scalp=0/1` now selects a bounded runtime increment in isolated
@@ -3657,3 +3730,10 @@ all traces, all modules dumped):
 - The em12 jobs `af-view19/20` trace both for `304be1c7`. The images show whether the
   mismatch is a pattern (mask, UV transform, texture) or a level (constants).
 
+
+## Current native-caster sun scene (ABI 19, default off)
+
+`rt_sun_cascade_current=0`: source/record-order-correct sun-only TLAS clone,
+private same-submit build insertion, cloned alpha/stamp, strict whole-ray coverage.
+Design, tests and remaining material/LOD/volume gates: docs/SUN_CURRENT_SCENE.md.
+This is not a passing exploration-shadow gate; zero certified pixels is INVALID.

@@ -3,6 +3,7 @@
 // captures/<stamp>/frame.json. Shader modules are dumped once, by hash, to
 // captures/shaders/<hash>.spv as the game creates them.
 #include "host.h"
+#include "../common/native_vt_surface.h"
 
 #include <thread>
 #include <unordered_set>
@@ -105,7 +106,7 @@ static const char* desc_tag(VkDescriptorType t) {
 
 void trace_note_draw(CmdState* s, int bp, const char* kind, const char* extra) {
   const uint32_t kMaxPerSet = 32;
-  std::string res;
+  std::string res, sampledViews;
   {
     std::shared_lock<std::shared_mutex> lock(tracker().mu);
     auto add = [&](const std::string& slot, const DescEntry& e) {
@@ -132,9 +133,32 @@ void trace_note_draw(CmdState* s, int bp, const char* kind, const char* extra) {
     }
     for (const auto& e : s->push[bp])
       add("push_b" + std::to_string(e.binding) + (e.element ? "[" + std::to_string(e.element) + "]" : std::string()), e);
+    // The missing M3a observable: exact view interpretation of the four audited
+    // native VT bindings. Fixed four entries, independent of generic res limits.
+    // This records CPU draw bindings; it does not attest GPU descriptor/content epochs.
+    if(bp==0 && native_vt::recipe(s->fs))for(uint32_t binding=3;binding<=6;++binding){
+      const DescEntry* entry=nullptr;
+      if(s->push_set[0]==1){for(const auto& e:s->push[0])if(e.binding==binding && e.element==0)entry=&e;}
+      else if(auto set=tracker().sets.find(s->sets[0][1]);set!=tracker().sets.end()){
+        auto e=set->second.find(desc_key(binding,0));if(e!=set->second.end())entry=&e->second;
+      }
+      std::string value="{\"status\":\"unbound\"}";
+      if(entry && entry->view){
+        auto view=tracker().views.find(entry->view);
+        if(view==tracker().views.end())value="{\"status\":\"unavailable_view\"}";
+        else {
+          const auto image=tracker().images.find(view->second.image);const auto& v=view->second;
+          value=trace_view::json(v.format,v.range,v.creation,image==tracker().images.end()?0:image->second.id,
+             image==tracker().images.end()?nullptr:&image->second.ci,entry->type,entry->layout);
+          ref_locked(v.image);
+        }
+      }
+      sampledViews+=(sampledViews.empty()?"":",")+std::string("\"s1b")+std::to_string(binding)+"\":"+value;
+    }
+
   }
 
-  std::string key = std::string(kind) + "|" + std::to_string(s->pipe_id[bp]) + "|" + res + "|" + (extra ? extra : "");
+  std::string key = std::string(kind) + "|" + std::to_string(s->pipe_id[bp]) + "|" + res + "|" + sampledViews + "|" + (extra ? extra : "");
   if (key == s->seg_key) {
     ++s->seg_count;
     return;
@@ -146,6 +170,7 @@ void trace_note_draw(CmdState* s, int bp, const char* kind, const char* extra) {
   if (bp == 0) j += ",\"vs\":\"" + hex64(s->vs) + "\",\"fs\":\"" + hex64(s->fs) + "\"";
   else j += ",\"cs\":\"" + hex64(s->cs) + "\"";
   j += ",\"res\":{" + res + "}";
+  if(!sampledViews.empty())j+=",\"sampled_views_scope\":\"Base_AlphaTest_VT_DEF_recording\",\"sampled_views\":{"+sampledViews+"}";
   if (extra) j += std::string(",") + extra;
   s->seg_json = std::move(j);
 }

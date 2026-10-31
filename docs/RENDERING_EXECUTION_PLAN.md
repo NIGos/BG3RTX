@@ -163,10 +163,10 @@ blocker; name that blocker. Missing live permission is waiting, not a technical 
 
 | ID | Initial state | Deliverable and acceptance |
 |---|---|---|
-| M0 | TODO | Reconcile owners/baseline; make live release fail closed; prove authorization and draft isolation with fake tests. Preserve the existing runner. |
-| M1 | IN_PROGRESS in existing work | Complete faithful Hair/Scalp/cascade cutout support and query consistency. Keep existing agents' ownership; reuse their work. Offline scalar/shader tests, missing-input rejection and default-off parity first; automated Test1 and distant-shadow qualification only when authorized. |
-| M2 | TODO, independent offline lane alongside M1 | First export one ordinary GR2 and decode its material/VT mapping. Build the smallest useful room subset with correct affine transforms, identities and bounds. Probe construction, terrain and HLOD separately; require each only where the selected scene/rays actually depend on it. Validate against native/captured evidence where available. No room-closure claim from reference counts alone. |
-| M3 | TODO, split into independent increments | M3a: supported hit-material provider; M3b: world-light provider; M3c: persistent static subset; M3d: runtime reconciliation. Start with declared subsets and independent contracts. Prove no duplicates/stale doors/removed objects and no camera-driven light/material loss where the consumer depends on those inputs. M3a/b do not wait for a complete world baker or every dynamic class. |
+| M0 | OFFLINE_VERIFIED isolated receipt/cancellation; main release pending | Reconcile owners/baseline; make live release fail closed; prove authorization and draft isolation with fake tests. Preserve the existing runner. |
+| M1 | OFFLINE_VERIFIED subsets; combined Sun/Hair/material build 36/36, live gates pending | Complete faithful Hair/Scalp/cascade cutout support and query consistency. Keep existing agents' ownership; reuse their work. Offline scalar/shader tests, missing-input rejection and default-off parity first; automated Test1 and distant-shadow qualification only when authorized. |
+| M2 | OFFLINE_VERIFIED one mesh/VT + affine export (7259c21); room construction open | First export one ordinary GR2 and decode its material/VT mapping. Build the smallest useful room subset with correct affine transforms, identities and bounds. Probe construction, terrain and HLOD separately; require each only where the selected scene/rays actually depend on it. Validate against native/captured evidence where available. No room-closure claim from reference counts alone. |
+| M3 | OFFLINE_VERIFIED post-sampler VT fields (56ab2de); runtime providers open | M3a: supported hit-material provider; M3b: world-light provider; M3c: persistent static subset; M3d: runtime reconciliation. Start with declared subsets and independent contracts. Prove no duplicates/stale doors/removed objects and no camera-driven light/material loss where the consumer depends on those inputs. M3a/b do not wait for a complete world baker or every dynamic class. |
 | M4 | TODO | Deliver offscreen shaded reflections and emissive/direct-hit GI, then traced SHaRC updates. Replace accounted native terms, avoid double counting, handle unknown traversal explicitly. Compare cache/reuse against a cache-free supported reference; validate motion, energy and cost. Small increments, not one cache-plus-lighting rewrite. |
 | M5 | TODO, impact-dependent | Implement P6 water as a distinct interface/receiver; select cloud/environment and volume-shadow improvements by measured scene impact. Keep native unsupported components. M5 is not a prerequisite for an opaque-room PT reference. OMM is a separate measured optimization after alpha correctness and GPU proof, not a prerequisite to PT. |
 | M6 | CONDITIONAL | Build a simple cache-free, unfiltered multi-bounce opaque PT reference over the verified room using raster primary hits; test BSDF sampling/evaluation/PDF, emission, MIS and termination. Then qualify an optional real-time candidate only if input, temporal and cost gates pass. Otherwise deliver the reference plus a precise go/no-go report and preserve the improved hybrid renderer. |
@@ -190,10 +190,11 @@ Use the smallest dependency graph that serves the next visible result:
 An unsupported class outside a consumer's tested domain does not block that
 consumer; an unsupported input inside it must remain explicit and cannot pass.
 
-Current known evidence: native scalp hard-cut support is default-off and not full
-hair/dither coverage; GPU OMM is absent; SHaRC v1 is screen-fed; P6 water is design.
-The fresh package probe found ordinary foundry mesh/material references available,
-but did not decode/export them or prove scene coverage. Historical PT 5-8 ms
+Current isolated evidence: audited Hair/Scalp/Pubes coverage and current-cascade
+Sun are default-off candidates. OMM GPU production/BLAS fixtures exist, but actual
+renderer descriptor/Core selection is still unwired. SHaRC v1 is screen-fed; P6
+water is design. One foundry GR2/VT is exported and validated (01db43b), with exact
+native local bounds; this is not world/room closure or a material BSDF proof. Historical PT 5-8 ms
 estimates are not acceptance targets. Derive tolerances and budgets from evidence.
 
 ## M0: close the actual authorization gap

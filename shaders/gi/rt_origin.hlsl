@@ -46,10 +46,19 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float w = depth_tol(dist, pa, dot(o.xyz, V), kJitterPx, 1.0) + kTlasRel * dist;
   float t0 = max(dist - w, 0.0);
   RtCone cone = {t0 * pa, pa};
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_SCALP)
+  RtHit h = rt_closest_hit(-V*t0,-V,dist+w-t0,cone,true);
+#else
   RtHit h = rt_closest_hit(-V * t0, -V, dist + w - t0, cone);
+#endif
   h.t = h.t >= 0.0 ? h.t + t0 : -1.0;
   if (h.t > 0.0) {
     float3 Ng = rt_hit_normal(h);
+#ifdef RT_NATIVE_HAIR
+    // The primary faux-depth surface's geometric normal comes from the actual
+    // native depth field. The base-card normal belongs to physical secondaries.
+    if((inst_info(h.inst).meta&kInfoHairProcedural)!=0u)Ng=o.xyz;
+#endif
     float l = length(Ng);
     // The same surface as the depth buffer (see the window above); an aborted query's hit
     // is not known to be the closest one, so it never matches (the depth normal stays).

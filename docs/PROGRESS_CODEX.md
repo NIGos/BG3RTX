@@ -35,6 +35,32 @@ The user explicitly permits autonomous advancement after adequate scoped checks;
 manual witnessing/confirmation is not an implementation or release prerequisite.
 
 
+## Hair trial regression: capacity fix ready; live setup blocked - 2026-10-31
+
+User reports improved faces but new vegetation flicker and darker/dithered hair.
+OMM was OFF. The supplied trial log confirms capture exhaustion after the global
+vertex stride increased from 24 to 88 bytes with the same 384 MiB allocation:
+alpha demand peaked at 660.8 MiB; the last window forced 41.57 alpha draws/frame
+opaque and dropped 30.41 opaque draws/frame. This is a confirmed coverage defect;
+it does not prove every remaining visual symptom has the same cause.
+
+Native88-only feedback correction 1e324af removes forced-alpha bytes from the
+opaque reservation. Explicit diagnostic allocation 1408 MiB restores previous
+vertex capacity (+1024 MiB in one camera buffer). 0a08191 rejects unsupported
+storage ranges and failed binding/mapping. Both DLLs build; 42/42 CTests pass.
+Private trial Ctrl+Shift+F10 was gated by dev=0, not removed; dev=1 is restored.
+
+The user authorized live testing in this chat. Original trial a9f8688 is retained;
+frozen candidate hair-capacity-fix c22a887 has Hair/Scalp ON, OMM/current Sun OFF.
+One bounded Test1 FG2 static/rotation capacity diagnostic is prepared. No game
+has launched: first setup rejected an absolute job tree (corrected to relative),
+then the claimed child failed authorization validation. This run is INVALID,
+not a renderer failure. Cross-process authorization is being corrected offline.
+Independent review closed a separate late-unowned-game launch race; 33 synthetic
+child authorization checks pass, but actual cross-PowerShell setup still needs proof.
+No measured candidate GPU cost or live quality claim. Dark hair/dither remains open.
+
+
 ## Hair/Scalp personal trial installed - 2026-10-30
 
 At the user's request, installation only; no agent game launch. Desktop shortcut
@@ -47,6 +73,241 @@ Main binaries/source/prefs are unchanged. Rollback: use the original tool.
 Candidate: C:/Users/quali/.codex/worktrees/hair-user-trial/BG3RTX.
 Manifest: captures/trial-package.json in that candidate. Do not rebuild/edit it
 while the user's game runs. Development continues in the separate omm-bake tree.
+
+## Offline materials and bounded architecture advanced - 2026-10-30
+
+40/40 CTests and 54 asset tests pass (one existing zstd skip). Native construction
+material a1a20440 uses an exact vertex-color branch, not texture blending: Green
+when interpolated G > 0, else Red when R > 0, else Base. Nine enabled Texture2D
+resources and their native FS/VS/parameter layout are joined; 230 new decoder
+checks pass. Actual view/color/filter/residency and runtime provider remain open.
+Existing F10 extension retains exact VT sampled-view metadata; no new capture run.
+
+A real floor (5,114 triangles) and wall (9,502) were exported and placed, followed
+by a 730-triangle supporting corner. The latter supports only two of 16 sampled
+low board vertices; room floor/closure is NOT qualified. Adjacent Floor_C/wall
+are explicitly not counted as support. Seven of nine active Floor_B scale tests
+fail the declared precision envelope; no tolerance increase or guessed flip was
+introduced. Exact evidence stays in m2-foundry-mesh/captures/m2-foundry/.
+
+Native Fur source/capture/scalar helpers pass 60,048 checks, with no runtime hook.
+Descending native SmoothStep defaults stay UNKNOWN until proven; Fur has no Hair
+virtual-depth displacement. Historical retention review releases zero raw bytes:
+52 capture directories / 17.88 GiB remain needed for failed or unresolved gates.
+Source docs/evidence/historical-capture-retention-20261030.* list exact holds.
+
+Next: current-Sun diagnostic counter correction and strict phase gates; complete
+material provider evidence; shared cache-free BSDF math. The user tests the frozen
+Hair/Scalp installation independently. No development touches that candidate.
+
+## OMM renderer selection wired offline - 2026-10-30
+
+Default-off rt_omm now reaches the renderer in the isolated candidate: alpha
+reference/epoch bindings, generation-checked fast/reference tuples and per-command
+ticket/feedback registration in GI, Sun, local, reflection and SHaRC dispatches.
+Old-core/key-off/reference cases retain baseline scenes. Failed dispatches no
+longer claim stale output as fresh; GI falls back to the current screen trace.
+ABI stays 19; both DLLs build. Final OMM shader gate: 229 existing entries
+byte-identical to d444e70; 198 new entries compile/validate. Current composition
+passes 40/40 CTests. No agent game/GPU run or cost claim.
+Useful known coverage, same-ray comparison and live quality/energy/cost remain
+OPEN. All-UNKNOWN/missing RT cannot pass. See P4_OMM.md for the exact contract.
+
+## Rendering program: verified isolated composition - 2026-10-30
+
+Full M0-M6 plan remains active. No live grant exists. Main stays at 92183e7;
+its uncommitted planning documents and the user's build are preserved. Isolated
+codex/omm-bake source checkpoint 7259c21 combines native Hair/Scalp/Pubes, current
+four-cascade Sun, OMM producer/BLAS, Experimental GUI and initial asset/material
+increments. ABI remains 19; both DLLs build together. All new presets stay off.
+
+Gate: 36/36 CTests and QA pass; 271 settings checks. After correcting double
+rebasing of current-Sun rays, 219 existing shader entries are byte-identical to
+75bb833; 10 new entries compile/validate. Retained Sun ring copies now require
+the source buffer's actual TRANSFER_SRC usage. Independent review found no other
+concrete combined-Sun blockers. Native GPU/game quality and pass cost are NOT
+measured. OMM descriptor/Core selection remains unwired: no acceleration claim.
+
+M0: scoped explicit batch receipts, cancellation during single/command execution,
+nested QA injector cancellation, blocked-inbox skipping and runtime C# source
+freezing are composed. Scratch tests pass: 28 cancellation, 27 permission, 26
+window policy, four phase cancellation and two C# identity checks. The worker's
+full fake queue also passed (14 jobs / 15 runs). No real inbox/permission changed.
+
+M2: 40e57c4 exports one real Foundry board and its enabled VT (64 tiles,
+1024 x 1024 RGBA). 7259c21 adds full affine placement, inverse-transpose normals
+and mirrored winding: 5,728 LOD-0 world triangles; other LODs stay alternatives.
+44 asset tests pass, one existing zstd skip. World/XFB agreement and room closure
+are NOT qualified. Actual artifacts remain in the m2-foundry-mesh checkout under
+captures/m2-foundry/. Nearby construction reconstruction is the next asset step.
+
+M3a: 56ab2de decodes audited Base_AlphaTest_VT fields after native sampling;
+164,188 CPU checks pass. Normal swizzle and material parameters follow actual
+native shaders. Coverage remains UNKNOWN; actual view/color interpretation,
+VT sampling/residency and the runtime provider are still missing. Existing F10
+view metadata is being extended only to resolve that concrete missing evidence.
+
+Next offline work: OMM reference/descriptor selection; next observed Fur coverage
+recipe; bounded room geometry; native sampled-view/material proof. Future live
+batches automate all keys, A/B, input, capture and restoration. No manual INI or
+comparison is requested. Main integration waits for merge-green and clean main.
+Evidence: docs/evidence/rendering-composition-20261030.json.
+
+## Native material BLAS and same-frame scene clone prepared - 2026-10-30
+
+Both ABI-19 DLLs build; 32/32 CTests pass. Native static draw capture now feeds
+material-specific OMM baking, owned post-VS snapshots, attached BLAS and a
+separate GPU-cloned TLAS. Original Mesh.as and baseline instance order/material
+records remain intact. GPU clone preserves late native matrix updates and changes
+only selected AS addresses. Cache owner release supports pending/replayed commands.
+
+RTX 5090 combined probe: six rays with zero contradictions; three private
+snapshots / 216 exact copied bytes; two cloned instances with 120 untouched bytes
+and two late matrix updates preserved; 14 validator cases, eight feedback cases,
+2,176 UNORM / 8,704 BC endpoint checks; zero validation errors. Evidence:
+docs/evidence/omm-native-clone-20261030.txt. This is not a live BG3 quality gate.
+
+Retired-slot invalidation/rebake logic is prepared, with matching generation,
+recording, dispatch/storage limits and AS scratch dependencies. The actual
+alpha descriptor/reference bindings and Core accelerated-scene selection are
+NOT wired yet: OMM is not active in rendered BG3 queries. rt_omm stays default0;
+useful hardware-known coverage, same-ray violations, live energy/cost and FG2
+gates remain OPEN. No game launch, live settings change or GPU ms claim.
+
+Hair candidate now includes the two verified static Pubes recipes under existing
+rt_native_hair, with source-faithful FMA ordering, no new key/kind/ABI/stride.
+37/37 production GPU cases pass; 95 ordinary shaders remain byte-identical.
+Test1 face/strand quality and temporal/cost checks await an explicitly authorized
+automated batch with both ABI-19 DLLs. The runner sets startup keys and keeps
+RR/FG/light settings fixed; FG2 is deciding. No manual INI/A-B is requested.
+Other native families and full solar coverage remain open; defaults stay off.
+
+## Verified static Pubes coverage added - 2026-10-30, default off
+
+Two observed static Pubes shaders now use native dual-mask/root/strand coverage,
+camera dither and procedural depth under existing rt_native_hair. No new key,
+ABI or vertex stride. 31/31 CTests and 19,782 capture/strand checks pass; 37 actual
+GPU cases (10 Pubes), zero validation errors. 95 ordinary shaders byte-identical,
+95 capable compile/validate. Other Pubes passes and live/native G-buffer quality
+remain open; no game deployment or measured GPU cost. Exact supported hashes and
+evidence: docs/NATIVE_HAIR.md, docs/evidence/native-pubes-20261030.json.
+
+## Combined candidate: native material capture and coherent OMM guards - 2026-10-30
+
+Isolated codex/omm-bake now includes native Hair plus Scalp camera dither,
+immutable-sampler/source factory, paired before/after image-write epochs, and
+ticket-owned attached BLAS. Main/user build is unchanged. No game launched.
+Both ABI-19 DLLs build; 31/31 CTests pass. Native capture now runs at eligible
+static draws, including cached draws; actual accelerated scene attachment is
+still pending. Do not mistake captured metadata for active OMM acceleration.
+
+Real RTX 5090 probe traverses the production ticket-owned BLAS: six rays, zero
+contradictions; BLAS is destroyed before its micromap after actual completion.
+Fourteen counter-phase states and fourteen scene-validator cases pass, along
+with 2,176 UNORM and 8,704 BC endpoint checks; zero Vulkan validation errors.
+Evidence: docs/evidence/omm-coherent-attached-scene-20261030.txt.
+
+All four query entry points can choose the original, micromap-free reference
+scene when the GPU content proof fails. Readers use coherent atomic snapshots
+and device memory barriers around active-write/epoch checks. Native image/RT
+synchronization remains mandatory: these counters cannot repair a concurrent
+image read/write race. The shader branches are not enabled by a production
+layout/caller yet. Native scene clone, descriptor wiring, nonzero useful known
+coverage and live same-ray/cost gates remain OPEN; rt_omm stays off by default.
+
+Before the final coherent-reader change, 190 ordinary/capable entry points were
+byte-identical with RT_OMM_SCENE off and compiled/validated with it on. The final
+coherent readers plus Scalp were compiled/validated in Sun, origin, GI and
+reflection entries; producer/init/content/scene kernels also validate. No GPU
+pass timing or acceleration claim follows from these synthetic checks.
+
+## Scalp camera coverage candidate verified - 2026-10-30, default off
+
+Observed native Scalp camera shaders now capture original Frame, projection and
+viewport and evaluate native screen dither. Physical rays retain native Shadow
+hard coverage. Existing rt_native_scalp=0 stays; no new ABI or stream layout.
+22/22 CPU tests;178,810 Scalp checks; 95 ordinary shaders byte-identical and 95
+capable validated. Actual production GPU queries pass 27/27 cases (11 Scalp),
+zero validation errors. No game launch/deployment or measured GPU pass cost.
+Next user-led Test1 check: enable rt_native_scalp=1 in coordinated new layer,
+keep lighting/RR/FG fixed, inspect the same affected close-up face and primary
+match near static baseline. Evidence: docs/evidence/native-scalp-camera-20261030.json.
+
+## OMM counter coherence fixed in isolation - 2026-10-30
+
+Image writes now mark GPU active-writers before the native command, then update
+image/global epochs and clear the active count after a device memory fence.
+Unsupported writes disable OMM before the write. This fixes torn counter proofs;
+native image/RT synchronization and scene attachment remain separate root gates.
+Full DLL build and 28/28 CTests pass. RTX 5090: 14 counter-phase states, six EXT
+rays, 2,176 UNORM and 8,704 BC endpoint samples pass; zero validation errors.
+No live deployment or measured GPU cost. Evidence: docs/evidence/omm-write-protocol-20261030.txt.
+
+## Isolated integration checkpoint: Hair GPU gate and versioned OMM - 2026-10-30
+
+Branch codex/omm-bake now combines native Hair renderer 4ca35f5 with the actual
+EXT producer/content backend. Both ABI-19 DLLs build; 28/28 CTests pass. Main's
+user build remains unchanged. No game launch, live deployment or performance
+claim. Goal remains open: finish OMM, Hair and RT shadows without extra tooling.
+
+Hair production bounds and all four query entry points pass 16/16 GPU cases on
+RTX 5090, zero validation errors. Physical card t=3.0, native camera primary
+t=3.20000029; dither, held geometry, rebasing and invalid-bound UNKNOWN pass.
+Renderer source 4ca35f5, optional probe 8b1c5cc, live instructions 19fd488
+(imported here as 1b85a62/ca994f6/c74b792). Startup rt_native_hair=1 is still
+default-off. Test1 face/strand quality, moving primary match and pass cost need
+the coordinated live check in docs/NATIVE_HAIR.md. Other native families remain
+separate gaps, not implicitly covered by CHAR_Hair.
+
+OMM commits ac641b8/ed7e9e1/797d7ec capture actual GPU image/global epochs before
+sampling and recheck them per primitive, derive all reachable view mips, and
+reject unsupported BC/sRGB numeric certificates. Combined synthetic test:
+three produced O/T/UNKNOWN micromaps and GPU stamps, 2,176 UNORM endpoint and
+8,704 BC3/BC7 endpoint checks, zero failures/validation errors. Evidence:
+docs/evidence/omm-combined-bc-producer-gpu-20261030.txt. These tests do not prove
+native scene attachment, stale-scene reference selection or useful acceleration.
+
+Canonical material capture is shared with Sun work (d0e6269). Only two audited
+plain-alpha shader pairs enter the OMM recipe whitelist; six incomplete recipes
+are excluded (c5c41fc). Next: sampler proof, material-specific BLAS/reference
+scene integration, then same-ray native quality and cost gates. Do not bake
+unsupported hair/fur recipes as a single texture channel.
+
+## Native Hair GPU candidate verified - 2026-10-30
+
+Windowless RTX 5090 probe: 16/16 cases, zero Vulkan validation errors, actual
+production bounds and all four query functions. Physical ribbon t=3; native
+camera surface t=3.20000029; origin window t=0.1. Dither, vertex phase, held
+geometry, rebase, inactive NaNs and invalid-bound UNKNOWN pass. Runtime remains
+default off, no live deployment. Next: integrated user-led dialogue check with
+rt_native_hair=1 at startup, rt_alpha=1 and rt_bvh_split=1; inspect the affected
+hairstyle face shadows and primary match near static 99.5%. Other families and
+GPU pass cost remain open. Evidence: docs/evidence/native-hair-gpu-20261030.json.
+
+## Procedural CHAR_Hair candidate - 2026-10-30, default off, no live gate yet
+
+Native camera primary/origin rays now solve material-dependent fragment depth;
+physical shadow/GI/AO/reflection queries use native Shadow thin-ribbon semantics.
+Conservative AABBs cover both, with held-range recertification and explicit UNKNOWN
+on invalid bounds. Precise shared-edge tests avoid false holes; proven culled
+native geometry remains inactive. No manual replacement for hardware sampling.
+22/22 CTests; 310,883 geometry and 19,734 capture/strand checks; 95 ordinary shaders
+byte-identical and 95 capable variants compile/validate. ABI 19 Sun/OMM callback
+extension imported separately; Hair adds no ABI layout change. No live deployment,
+GPU cost or native 99.5% primary-match result yet. Other hair families remain open.
+Implementation and exact material-model limits: docs/NATIVE_HAIR.md.
+
+## Native Hair coverage candidate - 2026-10-30, full Hair still open
+
+Isolated native-coverage adds startup-only rt_native_hair=0default. Actual native
+88-byte strand attributes, dual mask/noise/root/view coverage and camera dither
+are implemented across normal query entry points. Native shadow queries use the
+light-ray hard branch. Split1 enforced; no mixed-stride hot enable. No ABI change.
+21/21 CTests and 19,716 Hair checks; all15nativeVS patch/validate; 95 ordinary
+shader binaries byte-identical and 95 capable compile/validate. No live change.
+Native fragment depth creates a real virtual surface; original card intersection
+is NOT equivalent. Procedural depth/origin support remains required before closing
+Hair. Source/layout/formula evidence and next implementation: docs/NATIVE_HAIR.md.
 
 ## Disk audit and cleanup coordination - 2026-10-30
 

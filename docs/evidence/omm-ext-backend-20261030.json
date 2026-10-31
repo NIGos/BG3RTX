@@ -1,0 +1,33 @@
+{
+  "base": "92183e7",
+  "branch": "codex/omm-ext-backend",
+  "mode": "Initial CPU work, then explicitly authorized synthetic console GPU fixture; no game/deployment",
+  "extension": "VK_EXT_opacity_micromap",
+  "key": "rt_omm=0",
+  "host_abi_changed": false,
+  "shader_files_changed": false,
+  "host_dll_build": "passed, two compiler workers",
+  "cpu_plan_range_layout_lifetime_checks": 87,
+  "CTest_target": "omm_backend_plan_test and omm_submit_state_test",
+  "CTest_result": "2/2 passed",
+  "settings_defaults_check": "passed",
+  "gpu_cost_ms": null,
+  "gpu_traversal_gate": "Synthetic production EXT backend pass:3primitives/6rays,0contradictions,2UNKNOWNcandidates; actualtimeline retirement",
+  "production_caller": "not present in this component commit; root owns provider/BLAS integration",
+  "limits": [
+    "Four-state only; known alpha truth is external provider responsibility",
+    "One-to-one nonindexed triangle attachment only",
+    "Same compute-capable queue and actual submission/completion serials only",
+    "Requested storage/scratch buffers capped at 256 MiB, not physical memory accounting",
+    "No claim of completed OMM from all-unknown plumbing"
+  ],
+  "cpu_submit_graph_generation_queue_counter_checks": 101,
+  "actual_submission_hooks": "QueueSubmit/QueueSubmit2 before-driver CPU pin, after-success private timeline signal/counter; exact command-generation and secondary/pool/reset tracking",
+  "failure_policy": "Private signal/counter/provenance failure retains resources and blocks discard/collection until device idle; unrelated foreign queue ignored",
+  "fresh_default_off_extra_gpu_calls": false,
+  "ini_off_held_ticket_tracking": "Continues until all attached tickets retire",
+  "input_owner": "Optional shared_ptr<void> copied into ticket resource; released after micromap/storage/scratch destruction",
+  "coordinated_abi": "ABI19 cherry-pick6913124; input_owner itself changes no host ABI",
+  "synthetic_validation_errors": 0,
+  "synthetic_gpu": "NVIDIA GeForce RTX5090 Vulkan1.4.357 rawdriver2604679168"
+}

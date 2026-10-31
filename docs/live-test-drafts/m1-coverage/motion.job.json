@@ -1,0 +1,74 @@
+{
+  "name": "m1-coverage-motion",
+  "tree": ".",
+  "save": "Test1",
+  "set": "preset=ultra,rt=1,rt_bvh_split=1,rt_alpha=1,rt_native_hair=1,rt_native_scalp=1,rt_sun_cascade_current=1,rt_cascade_casters=1,rt_omm=0,fg=2,fg_current_destroy_only=1,headless=0,rr=1,fps_cap=0,rt_shadows=1,rt_local_shadows=1,rt_reflections=1,gi=1,gi_rt=1,rt_origin=1,rt_scene_rebase=0,rt_alpha_test=1,rt_stats=1,ls_stats=1,rf_stats=1,rt_primary_check=1,rt_primary_epoch=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,pan_capture=0,pan_prepare=0,dump_raw=0,crash_dump=1,rt_xfb_mb=1408,rt_alpha_auto=1,rt_alpha_max_pct=60",
+  "traces": 0,
+  "hold": 90,
+  "timeout": 840,
+  "repeat": 1,
+  "session": false,
+  "patterns": [
+    "\\[alpha hair\\]",
+    "\\[alpha scalp\\]",
+    "this frame.s shaders by triangles",
+    "\\[sun current\\]",
+    "sun current native-domain coverage",
+    "primary-ray check",
+    "rt epoch",
+    "rt passes",
+    "rt cost scope",
+    "\\[core\\] guard:",
+    "\\[watch\\]",
+    "\\[sl\\] FG decision",
+    "\\[sl\\] FG input",
+    "slDLSSGSetOptions",
+    "DLSS-G frame",
+    "\\[ngx\\] gpu RR:",
+    "\\[cfg\\] keys:"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "rt: first traced frame",
+    "\\[alpha hair\\] native coverage records [1-9]\\d*; invalid/missing native state 0;",
+    "\\[alpha scalp\\] native hard records (?:[1-9]\\d*; native camera dither records \\d+|0; native camera dither records [1-9]\\d*); invalid/missing native state 0;",
+    "this frame.s shaders by triangles.*5a03e5b678b2d040",
+    "this frame.s shaders by triangles.*9e77575a9f377ec5",
+    "\\[sun current\\].*same-submit inserted [1-9]\\d*;",
+    "sun current native-domain coverage.*actual selected/next ray samples [1-9]\\d*,",
+    "primary-ray check match",
+    "\\[sl\\] slDLSSGSetOptions\\(mode on,.*: ok",
+    "DLSS-G frame.*camera from uniforms",
+    "rt passes: GPU cost",
+    "rt cost scope: primary_check=0 epoch=0"
+  ],
+  "forbid": [
+    "VK_ERROR_DEVICE_LOST",
+    "\\[crash\\] exception 0x",
+    "\\[alpha hair\\].*invalid/missing native state [1-9]",
+    "\\[alpha scalp\\].*invalid/missing native state [1-9]",
+    "\\[alpha hair\\].*unsupported native interfaces total [1-9]",
+    "\\[alpha hair\\].*retired bounds-invalid primitives [1-9]",
+    "\\[core\\] guard:.*[1-9]\\d* invalid rays"
+  ],
+  "args": [
+    "-RealPresent",
+    "-Foreground",
+    "-Move",
+    "-MovePlan",
+    "docs/live-test-drafts/m1-coverage/motion.plan.json"
+  ],
+  "expect_runner": [
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=7\\b",
+    "\\[motion-plan\\] pointer centred",
+    "\\[rotation-input\\].*direction=1",
+    "\\[rotation-input\\].*direction=-1"
+  ],
+  "post": "py -3 -m scripts.qa.fg_motion_gate --coverage --log \"{log}\" --runner \"{runner}\" --plan docs/live-test-drafts/m1-coverage/motion.plan.json --status \"{status}\" --out captures/m1-coverage/motion-gate.json",
+  "post_gate": true,
+  "stop_on_dump": true,
+  "requires_success_of": [
+    "m1-coverage-preflight"
+  ]
+}

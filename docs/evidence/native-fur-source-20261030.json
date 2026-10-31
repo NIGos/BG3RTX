@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-30",
+  "mode": "Read-only retained F10 and effective package recovery; CPU helper only; no game, GPU or live setting changes",
+  "save_files_accessed": false,
+  "native_modules": [
+    {
+      "hash": "0d6885be08b2faa4",
+      "stage": "vs",
+      "package": "Materials.pak",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Fur_IDmsk_ST_DEP_Vulkan.bshd",
+      "spv_sha256": "1f103049071de165646653fca6d4ab52b46f0034085eb312a4ea1a61b1e89df2",
+      "fresh_glsl_matches_cache": true,
+      "writes_frag_depth": false
+    },
+    {
+      "hash": "c22b20253e25e473",
+      "stage": "fs",
+      "package": "Materials.pak",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Fur_IDmsk_ST_DEP_Vulkan.bshd",
+      "spv_sha256": "6b22db09b612d5cbf68ee3737a9ed41ef062122e27045e0b6b4cfa7439f408f8",
+      "fresh_glsl_matches_cache": true,
+      "writes_frag_depth": false
+    },
+    {
+      "hash": "ff2a169c3d58bac8",
+      "stage": "vs",
+      "package": "Materials.pak",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Fur_IDmsk_ST_DEPS_Vulkan.bshd",
+      "spv_sha256": "8071df08d7660f9f90ae10b1d7aeaee883f5bc0e7dcc5d5326f5c7a641a57e98",
+      "fresh_glsl_matches_cache": true,
+      "writes_frag_depth": false
+    },
+    {
+      "hash": "1e144b6e40e48558",
+      "stage": "fs",
+      "package": "Materials.pak",
+      "path": "Public/Shared/Assets/Materials/Characters/CHAR_Fur_IDmsk_ST_DEPS_Vulkan.bshd",
+      "spv_sha256": "f5babc3a5bc88a604c2a694dd870d27a1642dfa856e58c1159a2fc4d04589da0",
+      "fresh_glsl_matches_cache": true,
+      "writes_frag_depth": false
+    }
+  ],
+  "observed_depth_shadow_counts": [
+    {
+      "capture": "20261030-161807",
+      "frame": 57830,
+      "fs_draw_calls": {
+        "1e144b6e40e48558": 4
+      },
+      "pairs": {
+        "1e144b6e40e48558:ff2a169c3d58bac8": 4
+      }
+    },
+    {
+      "capture": "20261030-161845",
+      "frame": 60034,
+      "fs_draw_calls": {
+        "1e144b6e40e48558": 8,
+        "c22b20253e25e473": 1
+      },
+      "pairs": {
+        "1e144b6e40e48558:ff2a169c3d58bac8": 8,
+        "c22b20253e25e473:0d6885be08b2faa4": 1
+      }
+    },
+    {
+      "capture": "20261030-162008",
+      "frame": 64487,
+      "fs_draw_calls": {
+        "c22b20253e25e473": 1,
+        "1e144b6e40e48558": 2
+      },
+      "pairs": {
+        "c22b20253e25e473:0d6885be08b2faa4": 1,
+        "1e144b6e40e48558:ff2a169c3d58bac8": 2
+      }
+    }
+  ],
+  "primary_inventory_family_calls": 20,
+  "primary_inventory_supported_depth_shadow_calls": 16,
+  "material_defaults_are_not_live_values": true,
+  "known_missing_proof": [
+    "Actual retained material UBO values are absent; native descending SmoothStep edges require a driver/source-semantics gate",
+    "Native sampler and exact mask sampling must be proved before runtime eligibility",
+    "Original interpolated N/T/B/W and original raster coordinates are required; no zero/orthogonal/default substitute",
+    "Runtime alpha/capture dispatcher is intentionally not edited in this isolated helper increment"
+  ],
+  "runtime_enabled": false,
+  "gpu_gate_passed": false,
+  "cpu_checks": 60048,
+  "runtime_unknown_for_descending_smoothstep": true,
+  "cpp_compile": "MSVC /std:c++20 /O2 /fp:precise /W4"
+}

@@ -14,7 +14,9 @@
 // 15: named, bounded pan-burst readbacks (9-14 belong to other phase branches).
 // 17: Bg3DispatchInfo::native_validation (box lights, codex/p3-box's 9, merged).
 // 18: Bg3HostApi::rt_emissive (D-EM, codex/p2-emissive's 9, merged after pan_capture/rt_scene_camera).
-#define BG3RTX_ABI_VERSION 18
+// 19: sun-only current-caster scene and optional OMM same-ray reference callback.
+// Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
+#define BG3RTX_ABI_VERSION 19
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 9) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -118,6 +120,33 @@ struct Bg3EmissiveInfo {
   VkImageView fx_view;
   VkImageLayout fx_layout;     // the layout its last pass left it in
   uint32_t fx_width, fx_height;
+};
+
+// ABI 19: one matching sun-only TLAS/material tuple. The host owns all resources
+// and retains the source scene's BLAS references until the consuming work retires.
+// A returned recorded scene is not by itself a completeness/physical-coverage
+// certificate. The ready stamp in its alpha set must match before traversal;
+// finite rays must additionally fit its proven caster volume and flags below.
+enum Bg3SunSceneFlags : uint32_t {
+  BG3_SUN_SCENE_RECORDED = 1u,
+  BG3_SUN_SCENE_GEOMETRY_COMPLETE = 2u,
+  BG3_SUN_SCENE_MATERIALS_COMPLETE = 4u,
+  BG3_SUN_SCENE_VOLUME_VALID = 8u,
+  BG3_SUN_SCENE_NATIVE_EPOCH_VALID = 16u,
+};
+struct Bg3SunSceneInfo {
+  VkAccelerationStructureKHR tlas;
+  VkDescriptorSet alpha_set;
+  VkDescriptorSetLayout alpha_layout; // private material dispatch can extend the ordinary alpha layout
+  // Optional same-geometry, non-OMM reference. Null until supplied by the host.
+  VkAccelerationStructureKHR reference_tlas;
+  uint64_t build_identity, camera_record, cascade_record;
+  uint32_t flags;
+  // Exact native Frame CB packet (set0/b0), NOT a presentation frame index.
+  uint32_t native_epoch[8];
+  // Three affine rows: lighting-space P -> native cascade clip x,y,z.
+  // Domain x/y [-1,1], z [0,1]. Does not certify space beyond that box.
+  float clip_from_lighting[3][4];
 };
 
 struct Bg3HostApi {
@@ -235,6 +264,20 @@ struct Bg3HostApi {
   // the game images and buffers it reads (glow maps, the effects target) are then kept
   // alive until that command buffer has run (the layer's image lifetime tracking).
   bool (*rt_emissive)(VkCommandBuffer cmd, VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
+
+  // ABI 19. Optional, default null until implemented. Invoked ONLY by the opt-in
+  // sun path, after selection of the baseline TLAS/alpha tuple. False means keep
+  // that baseline; clear *out on failure. Never silently substitute another epoch.
+  bool (*rt_sun_scene)(VkCommandBuffer cmd, VkAccelerationStructureKHR selected_tlas,
+                       VkDescriptorSet selected_alpha, Bg3SunSceneInfo* out);
+  // ABI 19. Validate/register each OMM traversal command. Always returns its
+  // immutable baseline reference on a recognized tuple; build_identity is in/out:
+  // zero discovers identity, nonzero requires that exact recording generation.
+  // True permits acceleration
+  // and supplies a nonzero build identity. False with a reference selects baseline.
+  // False with no reference means the tuple is unavailable, never a quality pass.
+  bool (*rt_omm_scene_reference)(VkCommandBuffer cmd, VkAccelerationStructureKHR selected_tlas,
+                                VkAccelerationStructureKHR* reference_tlas, uint64_t* build_identity);
 };
 
 struct Bg3CoreApi {

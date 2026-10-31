@@ -287,6 +287,7 @@ std::wstring caps_text(unsigned caps) {
   t += (caps & st::kCapMfg) ? L", frame generation 2x/3x/4x"
        : (caps & st::kCapFg) ? L", frame generation 2x"
                              : L", frame generation no";
+  t += (caps & st::kCapOpacityMicromap) ? L", opacity micromaps yes" : L", opacity micromaps no";
   return t;
 }
 

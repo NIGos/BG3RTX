@@ -1,0 +1,64 @@
+#pragma once
+// Exact post-sampling field decode of Base_AlphaTest_VT Deferred ST/STI.
+// Native recipe evidence: tests/native_vt_surface_reference.json. This is NOT a
+// VT sampler, coverage evaluator, BSDF or world-space normal reconstruction.
+#include <array>
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+namespace bg3::native_vt {
+using V3=std::array<float,3>;using V4=std::array<float,4>;
+struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset;};
+inline constexpr Recipe recipes[]={
+ {0x8995da1e4060f53bull,0x3812bc980438747full,64,100},
+ {0x14678345c10aefbcull,0x2d2ac3c38992b7f0ull,0,32}};
+inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
+// Both deferred variants: sampler 1:2, table 1:3, normal 1:4, albedo 1:5,
+// physical 1:6; Reflectance is material UBO 1:1 byte 0. Engine UBO is 1:0.
+struct Samples {
+ V4 albedo{},normal{},physical{};
+ uint32_t available_layers{}; // Bits 0/1/2: actual albedo/normal/physical samples.
+ bool native_view_interpretation{}; // Includes linear albedo from the ACTUAL view.
+ float tileset_magic{}; // Native tileset [0][2].w must equal 2202.
+ bool reflectance_available{};float reflectance{};
+};
+enum class Status {SupportedFields,UnsupportedShader,MissingSamples,UnknownViewInterpretation,
+                   MissingTileset,MissingReflectance,InvalidSample,InvalidNormal};
+enum class Coverage {Unknown};
+struct Surface {
+ V3 albedo{},native_frame_normal{}; // Normal weights multiply native columns(T,N,B).
+ float perceptual_roughness{},reflectance{},metalness{},albedo_aux{};
+ Coverage coverage{Coverage::Unknown}; // DEF has no discard; depth-pass coverage is separate.
+};
+// Shared, proven post-sampler arithmetic for the audited VT and multi-texture
+// recipes. This function does not validate a shader or certify a sampled view.
+inline Status decode_sample_fields(const Samples& in,Surface& result){
+ result={};
+ if((in.available_layers&7u)!=7u)return Status::MissingSamples;
+ if(!in.native_view_interpretation)return Status::UnknownViewInterpretation;
+ if(!in.reflectance_available)return Status::MissingReflectance;
+ for(const auto* layer:{&in.albedo,&in.normal,&in.physical})for(float x:*layer)if(!std::isfinite(x))return Status::InvalidSample;
+ if(!std::isfinite(in.reflectance))return Status::InvalidSample;
+ // Native FS: (_normal.wzy*2-1), then negate third component, normalize.
+ V3 n{in.normal[3]*2-1,in.normal[2]*2-1,1-in.normal[1]*2};
+ float length2=(n[0]*n[0]+n[1]*n[1])+n[2]*n[2];
+ if(!std::isfinite(length2) || length2<=0)return Status::InvalidNormal;
+ float length=std::sqrt(length2);for(float& x:n)x/=length;
+ Surface decoded{};decoded.native_frame_normal=n;
+ for(unsigned i=0;i<3;++i)decoded.albedo[i]=std::clamp(in.albedo[i],0.f,1.f);
+ decoded.perceptual_roughness=std::clamp(in.physical[1],0.f,1.f);
+ decoded.reflectance=std::clamp(in.reflectance,0.f,1.f);
+ decoded.metalness=std::clamp(in.physical[0],0.f,1.f);
+ decoded.albedo_aux=in.physical[2]; // Native albedo target alpha; no invented AO meaning.
+ result=decoded;return Status::SupportedFields;
+}
+inline Status decode(uint64_t fs,const Samples& in,Surface& result){
+ result={};
+ if(!recipe(fs))return Status::UnsupportedShader;
+ if((in.available_layers&7u)!=7u)return Status::MissingSamples;
+ if(!in.native_view_interpretation)return Status::UnknownViewInterpretation;
+ if(in.tileset_magic!=2202.f)return Status::MissingTileset;
+ if(!in.reflectance_available)return Status::MissingReflectance;
+ return decode_sample_fields(in,result);
+}
+}

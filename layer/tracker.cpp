@@ -2,6 +2,8 @@
 // shader modules (by SPIR-V hash), pipelines, images, views, framebuffers,
 // render passes and descriptor set contents.
 #include "host.h"
+#include "omm_content.h"
+#include "omm_sampler.h"
 #include "native_light_validation.h"
 #include "../common/descriptor_epoch.h"
 
@@ -303,6 +305,12 @@ static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& 
     if (is_image_type(w.descriptorType) && w.pImageInfo) {
       e.view = w.pImageInfo[i].imageView;
       e.layout = w.pImageInfo[i].imageLayout;
+      if(w.descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && omm::sampler_tracking_active()){
+        e.sampler=w.pImageInfo[i].sampler;e.sampler_id=omm::sampler_identity(e.sampler);
+      }
+    }
+    else if(w.descriptorType==VK_DESCRIPTOR_TYPE_SAMPLER && w.pImageInfo && omm::sampler_tracking_active()){
+      e.sampler=w.pImageInfo[i].sampler;e.sampler_id=omm::sampler_identity(e.sampler);
     }
     else if (is_buffer_type(w.descriptorType) && w.pBufferInfo) {
       e.buffer = w.pBufferInfo[i].buffer;
@@ -317,7 +325,10 @@ static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& 
 static void merge(VkDescriptorSet set, const std::vector<DescEntry>& src) {
   auto& dst = tracker().sets[set];
   for (const auto& e : src) {
-    auto [it, inserted] = dst.insert_or_assign(desc_key(e.binding, e.element), e);
+    auto saved=e;
+    if(e.type==VK_DESCRIPTOR_TYPE_SAMPLER || e.type==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+      omm::immutable_sampler(set,e.binding,e.element,saved.sampler,saved.sampler_id);
+    auto [it, inserted] = dst.insert_or_assign(desc_key(e.binding, e.element), saved);
     if (inserted && is_dynamic_type(e.type)) ++tracker().dynamic_counts[set];
   }
 }
@@ -344,6 +355,12 @@ static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate 
         auto ii = reinterpret_cast<const VkDescriptorImageInfo*>(p);
         e.view = ii->imageView;
         e.layout = ii->imageLayout;
+        if(t.descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && omm::sampler_tracking_active()){
+          e.sampler=ii->sampler;e.sampler_id=omm::sampler_identity(e.sampler);
+        }
+      }
+      else if(t.descriptorType==VK_DESCRIPTOR_TYPE_SAMPLER && omm::sampler_tracking_active()){
+        e.sampler=reinterpret_cast<const VkDescriptorImageInfo*>(p)->sampler;e.sampler_id=omm::sampler_identity(e.sampler);
       }
       else if (is_buffer_type(t.descriptorType)) {
         auto b = reinterpret_cast<const VkDescriptorBufferInfo*>(p);
@@ -360,6 +377,7 @@ static std::vector<DescEntry> decode_template_locked(VkDescriptorUpdateTemplate 
 void track_set_template(VkDescriptorSet set, VkDescriptorUpdateTemplate tpl, const void* data) {
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   auto entries = decode_template_locked(tpl, data);
+  for(const auto& e:entries)omm::sampler_template_write(set,e.binding,e.element,e.type);
   if (!entries.empty()) merge(set, entries);
 }
 
@@ -409,6 +427,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDescriptorSetLayout(VkDevice device,
                                                                 VkDescriptorSetLayout* out) {
   VkResult r = device_of(device)->vk.CreateDescriptorSetLayout(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
+    omm::sampler_layout_created(device_of(device),*out,*ci);
     std::vector<std::pair<uint32_t, uint32_t>> dyn;
     for (uint32_t i = 0; i < ci->bindingCount; ++i)
       if (is_dynamic_type(ci->pBindings[i].descriptorType))
@@ -425,10 +444,31 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, co
   VkResult r = device_of(device)->vk.AllocateDescriptorSets(device, ai, out);
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
-    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i)
+    for (uint32_t i = 0; i < ai->descriptorSetCount; ++i){
       descriptor_set_allocated(tracker(), out[i], ai->pSetLayouts[i]);
+      omm::sampler_set_allocated(device_of(device),out[i],ai->pSetLayouts[i],ai->descriptorPool,ai->pNext==nullptr);
+    }
   }
   return r;
+}
+
+static VKAPI_ATTR void VKAPI_CALL DestroyDescriptorSetLayout(VkDevice device,VkDescriptorSetLayout layout,const VkAllocationCallbacks* alloc){
+  omm::sampler_layout_destroyed(device_of(device),layout);device_of(device)->vk.DestroyDescriptorSetLayout(device,layout,alloc);
+}
+static VKAPI_ATTR VkResult VKAPI_CALL FreeDescriptorSets(VkDevice device,VkDescriptorPool pool,uint32_t count,const VkDescriptorSet* sets){
+  auto* dd=device_of(device);const auto r=dd->vk.FreeDescriptorSets(device,pool,count,sets);if(r==VK_SUCCESS)omm::sampler_sets_freed(dd,count,sets);return r;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL ResetDescriptorPool(VkDevice device,VkDescriptorPool pool,VkDescriptorPoolResetFlags flags){
+  auto* dd=device_of(device);const auto r=dd->vk.ResetDescriptorPool(device,pool,flags);if(r==VK_SUCCESS)omm::sampler_pool_reset(dd,pool);return r;
+}
+static VKAPI_ATTR void VKAPI_CALL DestroyDescriptorPool(VkDevice device,VkDescriptorPool pool,const VkAllocationCallbacks* alloc){
+  auto* dd=device_of(device);omm::sampler_pool_reset(dd,pool);dd->vk.DestroyDescriptorPool(device,pool,alloc);
+}
+static VKAPI_ATTR VkResult VKAPI_CALL CreateSampler(VkDevice device,const VkSamplerCreateInfo* info,const VkAllocationCallbacks* alloc,VkSampler* sampler){
+  auto* dd=device_of(device);const auto r=dd->vk.CreateSampler(device,info,alloc,sampler);if(r==VK_SUCCESS)omm::sampler_created(dd,*sampler,*info);return r;
+}
+static VKAPI_ATTR void VKAPI_CALL DestroySampler(VkDevice device,VkSampler sampler,const VkAllocationCallbacks* alloc){
+  auto* dd=device_of(device);omm::sampler_destroyed(dd,sampler);dd->vk.DestroySampler(device,sampler,alloc);
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* ci,
@@ -605,6 +645,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
   VkResult r = device_of(device)->vk.CreateImage(device, &patched, alloc, out);
   if (r == VK_SUCCESS) {
     ImageRec rec{tracker().next_image_id++, patched, false};
+    omm::content_image_created(device_of(device),*out,patched);
     rec.ci.pNext = nullptr;
     rec.ci.pQueueFamilyIndices = nullptr;
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
@@ -614,6 +655,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
 }
 
 static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAllocationCallbacks* a) {
+  omm::content_image_destroyed(device_of(device),img);
   life_before_destroy((uint64_t)img, "image");   // first: the hooks below release our views of it
   sl_note_image_destroyed(img);
   ngx_on_destroy_image(img);  // our views of it go first
@@ -628,13 +670,17 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device, const VkI
                                                       const VkAllocationCallbacks* alloc, VkImageView* out) {
   VkResult r = device_of(device)->vk.CreateImageView(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
+    omm::content_view_created(device_of(device),*out,*ci);
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
-    tracker().views[*out] = ViewRec{ci->image, ci->format, ci->subresourceRange};
+    auto& t=tracker();const auto image=t.images.find(ci->image);
+    const auto creation=trace_view::capture(*ci,trace_view::allocate_id(t.next_view_id),image==t.images.end()?0:image->second.id);
+    t.views[*out] = ViewRec{ci->image, ci->format, ci->subresourceRange,creation};
   }
   return r;
 }
 
 static VKAPI_ATTR void VKAPI_CALL DestroyImageView(VkDevice device, VkImageView v, const VkAllocationCallbacks* a) {
+  omm::content_view_destroyed(device_of(device),v);
   life_before_destroy((uint64_t)v, "image view");
   sl_note_view_destroyed(v);
   device_of(device)->vk.DestroyImageView(device, v, a);
@@ -669,6 +715,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass(VkDevice device, const Vk
     for (uint32_t i = 0; i < ci->attachmentCount; ++i) {
       rec.formats.push_back(ci->pAttachments[i].format);
       rec.final_layouts.push_back(ci->pAttachments[i].finalLayout);
+      rec.load_ops.push_back(ci->pAttachments[i].loadOp);
     }
     for (uint32_t s = 0; s < ci->subpassCount; ++s) {
       RenderPassRec::Subpass sp;
@@ -691,6 +738,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass2(VkDevice device, const V
     for (uint32_t i = 0; i < ci->attachmentCount; ++i) {
       rec.formats.push_back(ci->pAttachments[i].format);
       rec.final_layouts.push_back(ci->pAttachments[i].finalLayout);
+      rec.load_ops.push_back(ci->pAttachments[i].loadOp);
     }
     for (uint32_t s = 0; s < ci->subpassCount; ++s) {
       RenderPassRec::Subpass sp;
@@ -716,6 +764,7 @@ static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t
   device_of(device)->vk.UpdateDescriptorSets(device, wc, w, cc, c);
   diag(DIAG_DESC_WRITES, wc + cc);
   for (uint32_t i = 0; i < wc; ++i) track_set_write(w[i]);
+  omm::sampler_descriptor_ranges(device_of(device),wc,w,cc,c);
   if (cc) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     for (uint32_t i = 0; i < cc; ++i) {
@@ -831,6 +880,21 @@ static VKAPI_ATTR void VKAPI_CALL DestroySwapchainKHR(VkDevice device, VkSwapcha
 
 // ---- host-visible memory, so uniform buffers can be read on the CPU ----
 
+static VKAPI_ATTR VkResult VKAPI_CALL AllocateMemory(VkDevice device,const VkMemoryAllocateInfo* info,const VkAllocationCallbacks* alloc,VkDeviceMemory* memory){
+  auto* dd=device_of(device);const auto result=dd->vk.AllocateMemory(device,info,alloc,memory);
+  if(result==VK_SUCCESS)omm::content_memory_allocated(dd,*memory,*info);return result;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL BindImageMemory(VkDevice device,VkImage image,VkDeviceMemory memory,VkDeviceSize offset){
+  auto* dd=device_of(device);const auto result=dd->vk.BindImageMemory(device,image,memory,offset);
+  if(result==VK_SUCCESS)omm::content_image_bound(dd,image,memory,true);return result;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL BindImageMemory2(VkDevice device,uint32_t count,const VkBindImageMemoryInfo* info){
+  auto* dd=device_of(device);auto fn=reinterpret_cast<PFN_vkBindImageMemory2>(dd->gdpa(device,"vkBindImageMemory2"));
+  if(!fn)fn=reinterpret_cast<PFN_vkBindImageMemory2>(dd->gdpa(device,"vkBindImageMemory2KHR"));
+  if(!fn)return VK_ERROR_EXTENSION_NOT_PRESENT;const auto result=fn(device,count,info);
+  if(result==VK_SUCCESS)for(uint32_t i=0;i<count;++i)omm::content_image_bound(dd,info[i].image,info[i].memory,info[i].pNext==nullptr);return result;
+}
+
 static VKAPI_ATTR VkResult VKAPI_CALL BindBufferMemory(VkDevice device, VkBuffer b, VkDeviceMemory m, VkDeviceSize o) {
   VkResult r = device_of(device)->vk.BindBufferMemory(device, b, m, o);
   if (r == VK_SUCCESS) {
@@ -878,6 +942,7 @@ static VKAPI_ATTR void VKAPI_CALL UnmapMemory(VkDevice device, VkDeviceMemory m)
 }
 
 static VKAPI_ATTR void VKAPI_CALL FreeMemory(VkDevice device, VkDeviceMemory m, const VkAllocationCallbacks* a) {
+  omm::content_memory_freed(device_of(device),m);
   {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().mapped.erase(m);
@@ -907,7 +972,13 @@ void register_tracker_hooks(HookMap& m) {
   HOOK(DestroyRenderPass);
   HOOK(UpdateDescriptorSets);
   HOOK(CreateDescriptorSetLayout);
+  HOOK(DestroyDescriptorSetLayout);
+  HOOK(CreateSampler);
+  HOOK(DestroySampler);
   HOOK(AllocateDescriptorSets);
+  HOOK(FreeDescriptorSets);
+  HOOK(ResetDescriptorPool);
+  HOOK(DestroyDescriptorPool);
   HOOK(CreateDescriptorUpdateTemplate);
   HOOK(DestroyDescriptorUpdateTemplate);
   HOOK(UpdateDescriptorSetWithTemplate);
@@ -915,6 +986,9 @@ void register_tracker_hooks(HookMap& m) {
   m["vkGetSwapchainImagesKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&GetSwapchainImagesKHR);
   m["vkDestroySwapchainKHR"] = reinterpret_cast<PFN_vkVoidFunction>(&DestroySwapchainKHR);
   HOOK(BindBufferMemory);
+  HOOK(AllocateMemory);
+  HOOK(BindImageMemory);
+  HOOK(BindImageMemory2);
   HOOK(BindBufferMemory2);
   HOOK(DestroyBuffer);
   HOOK(MapMemory);

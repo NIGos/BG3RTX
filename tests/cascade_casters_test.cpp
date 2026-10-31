@@ -21,6 +21,19 @@ static void project(const float m[4][4], const float w[3], float clip[4]) {
 }
 
 int main() {
+  // The old opaque stream must retain EXACTLY its legacy policy even when
+  // the current material stream also records cards the old path skipped.
+  for(int mode=0;mode<=2;++mode) {
+    if(legacy_caster(false,mode,false,true,false,false)!=LegacyCaster::keep) return fail(60,"opaque retained");
+    if(legacy_caster(false,mode,false,true,true,false)!=LegacyCaster::keep) return fail(61,"opaque ignores alpha mesh dedupe");
+    if(legacy_caster(false,mode,false,true,false,true)!=LegacyCaster::duplicate) return fail(62,"placed duplicate removed");
+  }
+  if(legacy_caster(true,0,false,false,false,false)!=LegacyCaster::alpha_skip) return fail(63,"default unknown discard stays skipped");
+  if(legacy_caster(true,0,true,false,false,false)!=LegacyCaster::alpha_skip) return fail(64,"default cutout stays skipped");
+  if(legacy_caster(true,1,true,false,false,false)!=LegacyCaster::keep) return fail(65,"explicit solid experiment retained");
+  if(legacy_caster(true,2,true,false,false,false)!=LegacyCaster::alpha_skip) return fail(66,"texture cutout never solid in mode2");
+  if(legacy_caster(true,2,false,false,true,false)!=LegacyCaster::keep) return fail(67,"scalar mode2 allowed without dedupe");
+  if(legacy_caster(true,2,false,true,true,false)!=LegacyCaster::duplicate) return fail(68,"scalar duplicate removed");
   // ---- pass detection ----
   if (pass_layer(0, true, 2048, 2048, 4, 1) != 1) return fail(1, "cascade layer 1");
   if (pass_layer(0, true, 2048, 2048, 4, 0) != 0) return fail(2, "cascade layer 0");

@@ -76,7 +76,10 @@ def _lz4_block_into(src, dst: bytearray, i: int = 0, end: int | None = None) -> 
 
 def lz4_block_decompress(src: bytes, usize: int | None = None) -> bytes:
     if _lz4_block is not None and usize is not None:
-        return _lz4_block.decompress(src, uncompressed_size=usize)
+        try:
+            return _lz4_block.decompress(src, uncompressed_size=usize)
+        except Exception as exc:
+            raise DecompressError(f"lz4: {exc}") from exc
     dst = bytearray()
     _lz4_block_into(memoryview(src).tobytes() if isinstance(src, memoryview) else src, dst)
     if usize is not None and len(dst) != usize:
@@ -86,7 +89,10 @@ def lz4_block_decompress(src: bytes, usize: int | None = None) -> bytes:
 
 def lz4_frame_decompress(src: bytes) -> bytes:
     if _lz4_frame is not None:
-        return _lz4_frame.decompress(src)
+        try:
+            return _lz4_frame.decompress(src)
+        except Exception as exc:
+            raise DecompressError(f"lz4 frame: {exc}") from exc
     out = bytearray()
     i, n = 0, len(src)
     while i + 4 <= n:

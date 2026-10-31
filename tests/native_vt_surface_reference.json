@@ -1,0 +1,614 @@
+{
+  "scope": "Actual one material association and post-sampling arithmetic only; not full native VT sampling, color-view proof, coverage or BSDF qualification",
+  "material": "cfacd158-d460-6810-78bf-6d7d2b0576f1",
+  "enabled_vt": "7806fbbb-af3a-7a74-6c95-e22d13e76d50",
+  "disabled_texture2d": "9dc5807b-3697-4b8f-ab0f-b9c5c1bd7010",
+  "template": "Public/Shared/Assets/Materials/Base/Base_AlphaTest_VT.lsf",
+  "template_sha256": "7dc0469a1d2436ae23d8a8e52ca239bac0e1233d81c166dd556a0185f59fa8cd",
+  "material_bank_sha256": "796a2b592e4398da8676b935a09dd2f99efc12eac603deb31a3e983097b28564",
+  "reflectance_effective": 0.5,
+  "reflectance_override_enabled": false,
+  "vt_texture": "dd05df823aa7642755305ef93e48412d",
+  "layers": [
+    {
+      "layer": 0,
+      "sha256_dds": "9fd4104ab73489d87b16372ac53d4271862f524e72910500cb674c66b1b16c92",
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "layer": 1,
+      "sha256_dds": "373235b119019bb411d4b951980c2322768ea459406fcc1c7285a41214038675",
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "layer": 2,
+      "sha256_dds": "c98001fda86c82772be2cf79589268c64df0e694876e312dcdca0b624061519f",
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "programs": {
+    "14678345c10aefbc.fs.spv": "b3a9eafa299500121cea9e1a4a12e07cd7c66379e287191ada7124628f3aa0aa",
+    "2d2ac3c38992b7f0.vs.spv": "11d83f9236f2fa77582c4271fc3ef5619f5ed9a49abf62bfb2c5f3440e8281a5",
+    "3812bc980438747f.vs.spv": "680a5bd491b7045ec50eb4a9df0796b0ba4aa7b598f0d1078be11961690e9cfc",
+    "8995da1e4060f53b.fs.spv": "76912df99dbd5320ae0f372f51331e77b2c8b14fb2001c00e90e793ea53222f6"
+  },
+  "bindings": {
+    "engine_ubo": [
+      1,
+      0
+    ],
+    "material_ubo": [
+      1,
+      1
+    ],
+    "reflectance_byte": 0,
+    "sampler": [
+      1,
+      2
+    ],
+    "table": [
+      1,
+      3
+    ],
+    "normal": [
+      1,
+      4
+    ],
+    "albedo": [
+      1,
+      5
+    ],
+    "physical": [
+      1,
+      6
+    ]
+  },
+  "native_source": {
+    "ST_normal_lines": [
+      96,
+      100
+    ],
+    "ST_material_output_lines": [
+      173,
+      177
+    ],
+    "STI_material_output_lines": [
+      172,
+      177
+    ]
+  },
+  "limitations": [
+    "DDS samples are decoded point-code fixtures, not proof of native sampler/view/color space.",
+    "Albedo format/sRGB view identity, mip/residency and raster derivative LOD are unavailable.",
+    "Normals are native frame weights(T,N,B); GR2/world frame association and affine normal transport remain separate.",
+    "Alpha coverage is UNKNOWN: Deferred FS has no discard; earlier depth/shadow coverage is not inferred.",
+    "SeeThroughEnabled is absent from these Deferred shader descriptions; other passes need their own coverage audit."
+  ],
+  "point_samples": [
+    {
+      "xy": [
+        0,
+        0
+      ],
+      "rgba8": [
+        [
+          178,
+          136,
+          109,
+          255
+        ],
+        [
+          0,
+          113,
+          247,
+          87
+        ],
+        [
+          0,
+          212,
+          247,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        31,
+        47
+      ],
+      "rgba8": [
+        [
+          132,
+          113,
+          107,
+          255
+        ],
+        [
+          0,
+          121,
+          249,
+          94
+        ],
+        [
+          0,
+          227,
+          247,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        127,
+        127
+      ],
+      "rgba8": [
+        [
+          148,
+          101,
+          74,
+          255
+        ],
+        [
+          0,
+          125,
+          247,
+          165
+        ],
+        [
+          0,
+          199,
+          214,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        255,
+        255
+      ],
+      "rgba8": [
+        [
+          137,
+          117,
+          106,
+          255
+        ],
+        [
+          0,
+          161,
+          241,
+          99
+        ],
+        [
+          0,
+          211,
+          222,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        333,
+        777
+      ],
+      "rgba8": [
+        [
+          140,
+          93,
+          66,
+          255
+        ],
+        [
+          0,
+          117,
+          255,
+          112
+        ],
+        [
+          0,
+          199,
+          255,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        511,
+        511
+      ],
+      "rgba8": [
+        [
+          186,
+          148,
+          117,
+          255
+        ],
+        [
+          0,
+          117,
+          255,
+          120
+        ],
+        [
+          0,
+          176,
+          255,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        512,
+        512
+      ],
+      "rgba8": [
+        [
+          189,
+          154,
+          123,
+          255
+        ],
+        [
+          0,
+          118,
+          255,
+          125
+        ],
+        [
+          0,
+          178,
+          255,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        513,
+        513
+      ],
+      "rgba8": [
+        [
+          189,
+          154,
+          123,
+          255
+        ],
+        [
+          0,
+          115,
+          255,
+          119
+        ],
+        [
+          0,
+          179,
+          255,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        700,
+        64
+      ],
+      "rgba8": [
+        [
+          140,
+          112,
+          82,
+          255
+        ],
+        [
+          0,
+          125,
+          255,
+          132
+        ],
+        [
+          0,
+          113,
+          255,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        767,
+        767
+      ],
+      "rgba8": [
+        [
+          206,
+          174,
+          140,
+          255
+        ],
+        [
+          0,
+          142,
+          255,
+          133
+        ],
+        [
+          0,
+          215,
+          255,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        850,
+        101
+      ],
+      "rgba8": [
+        [
+          216,
+          184,
+          153,
+          255
+        ],
+        [
+          0,
+          125,
+          255,
+          128
+        ],
+        [
+          0,
+          175,
+          255,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        900,
+        300
+      ],
+      "rgba8": [
+        [
+          206,
+          170,
+          140,
+          255
+        ],
+        [
+          0,
+          124,
+          255,
+          133
+        ],
+        [
+          0,
+          174,
+          255,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        1000,
+        1000
+      ],
+      "rgba8": [
+        [
+          140,
+          109,
+          90,
+          255
+        ],
+        [
+          0,
+          223,
+          214,
+          148
+        ],
+        [
+          0,
+          190,
+          159,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        1023,
+        0
+      ],
+      "rgba8": [
+        [
+          186,
+          151,
+          120,
+          255
+        ],
+        [
+          0,
+          130,
+          255,
+          126
+        ],
+        [
+          0,
+          180,
+          255,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        0,
+        1023
+      ],
+      "rgba8": [
+        [
+          99,
+          81,
+          66,
+          255
+        ],
+        [
+          0,
+          77,
+          231,
+          183
+        ],
+        [
+          0,
+          186,
+          239,
+          255
+        ]
+      ]
+    },
+    {
+      "xy": [
+        1023,
+        1023
+      ],
+      "rgba8": [
+        [
+          173,
+          130,
+          99,
+          255
+        ],
+        [
+          0,
+          105,
+          255,
+          128
+        ],
+        [
+          0,
+          211,
+          239,
+          255
+        ]
+      ]
+    }
+  ],
+  "priority_resolved_package_sources": [
+    {
+      "path": "Public/Shared/Assets/Materials/Base/Base_AlphaTest_VT.lsf",
+      "owner": "Materials.pak",
+      "sha256": "7dc0469a1d2436ae23d8a8e52ca239bac0e1233d81c166dd556a0185f59fa8cd"
+    },
+    {
+      "path": "Public/Shared/Assets/Materials/Base/Base_AlphaTest_VT_ST_DEF_Vulkan.bshd",
+      "owner": "Materials.pak",
+      "sha256": "db4ce4bcef58f09e414285b9371e2160f3cb8108a1298725ecec6172c074bfb7",
+      "modules": [
+        {
+          "stage": "vs",
+          "hash": "3812bc980438747f"
+        },
+        {
+          "stage": "fs",
+          "hash": "8995da1e4060f53b"
+        }
+      ]
+    },
+    {
+      "path": "Public/Shared/Assets/Materials/Base/Base_AlphaTest_VT_STI_DEF_Vulkan.bshd",
+      "owner": "Materials.pak",
+      "sha256": "5cde4cb98e018bdf44436371302157fe671706029d60ddecba6287751b021a4d",
+      "modules": [
+        {
+          "stage": "vs",
+          "hash": "2d2ac3c38992b7f0"
+        },
+        {
+          "stage": "fs",
+          "hash": "14678345c10aefbc"
+        }
+      ]
+    }
+  ],
+  "existing_capture_observables": {
+    "source": "captures/20261030-163004/frame.json",
+    "sha256": "43a3e1646df13eb9cec72fc460798b60f2fc1368464876d478a0cbef6035b16f",
+    "frame": 94565,
+    "native_draws": [
+      {
+        "fs": "14678345c10aefbc",
+        "vs": "2d2ac3c38992b7f0",
+        "pipe": 42768,
+        "res": {
+          "s0b11": "r:i1014",
+          "s1b3": "r:i38",
+          "s1b4": "r:i21",
+          "s1b5": "r:i21",
+          "s1b6": "r:i21"
+        },
+        "n": 1
+      },
+      {
+        "fs": "14678345c10aefbc",
+        "vs": "2d2ac3c38992b7f0",
+        "pipe": 43663,
+        "res": {
+          "s0b11": "r:i1014",
+          "s1b3": "r:i50",
+          "s1b4": "r:i21",
+          "s1b5": "r:i21",
+          "s1b6": "r:i21"
+        },
+        "n": 1
+      }
+    ],
+    "i21_backing_image": {
+      "fmt": 137,
+      "w": 32688,
+      "h": 26352,
+      "d": 1,
+      "mips": 2,
+      "layers": 2,
+      "samples": 1,
+      "usage": 7,
+      "type": 1,
+      "swapchain": false
+    },
+    "sampled_view_formats_available": false,
+    "sampled_view_components_available": false,
+    "sampled_view_mip_layer_ranges_available": false,
+    "sampler_runtime_state_available": false,
+    "runtime_engine_material_ubo_bytes_available": false,
+    "conclusion": "Backing image format137 is NOT proof of per-binding VkImageView format. Native post-sample/provider input contract remains unqualified."
+  },
+  "prepared_capture_extension": {
+    "scope": "Only audited Base_AlphaTest_VT Deferred FS hashes, bindings s1b3..s1b6; at most four metadata entries per recorded draw group.",
+    "field": "sampled_views",
+    "properties": [
+      "actual view format/type/components/flags/extension marker",
+      "never-reused process view ID and creation-time image ID",
+      "actual descriptor type/layout",
+      "raw and resolved mip/layer ranges",
+      "backing image format/flags/mip/layer counts"
+    ],
+    "status": "OFFLINE_VERIFIED; no newly authorized game capture exists",
+    "limits": [
+      "CPU draw-recording snapshot, not GPU descriptor-execution/content/residency proof.",
+      "Unknown create metadata, extensions, identity saturation and stale image generations are explicit.",
+      "Sampled view metadata participates in segment key; same-image distinct views cannot collapse into one known entry.",
+      "Sampler runtime filtering/LOD and native engine/material UBO bytes remain separate missing observables."
+    ]
+  }
+}

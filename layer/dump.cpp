@@ -5,6 +5,7 @@
 // per-channel statistics, so a pass's contents can be judged without a
 // screenshot or a graphics debugger.
 #include "host.h"
+#include "../common/pan_epoch.h"
 
 #include <wincodec.h>
 
@@ -538,7 +539,7 @@ std::mutex pan_mu;
 std::vector<PanSample> pan_samples;
 int pan_serial = 0;
 uint32_t pan_frames = 0;
-uint32_t pan_target = 16;
+uint32_t pan_target = PanBurstSamples::raw_frames;
 uint64_t pan_first = 0, pan_last = 0, pan_bytes = 0;
 bool pan_finished = true, pan_invalid = false;
 std::string pan_dir;
@@ -556,14 +557,14 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
     if (serial != pan_serial && pan_finished) {
       pan_serial = serial;
       pan_frames = 0;
-      // The other recording threads can finish the first frame's inputs
-      // before depth arms the burst. One extra frame guarantees 16 late inputs.
-      pan_target = cfg_int("pan_inputs", 0) ? 17 : 16;
+      // Native tonemap (even without pan_inputs) can precede depth on another
+      // thread. Omit one explicit warmup, then require 16 complete frames.
+      pan_target = PanBurstSamples::raw_frames;
       pan_bytes = 0;
       pan_first = now;
       pan_finished = pan_invalid = false;
       pan_dir = root_dir() + "\\captures\\pan-" + capture_stamp() + "-" + std::to_string(serial);
-      log("[pan] burst %d armed at record frame %llu, K=%u", serial, (unsigned long long)now, pan_target);
+      log("[pan] burst %d armed at record frame %llu, K=16 plus 1 omitted warmup", serial, (unsigned long long)now);
     }
     if (pan_finished || pan_frames >= pan_target) return false;
     if (pan_frames && now != pan_last + 1) pan_invalid = true;
@@ -688,13 +689,22 @@ void pan_on_present(VkQueue queue) {
   // The waits occur after the entire burst, never inside its measurement.
   if (dd->vk.QueueWaitIdle(queue) != VK_SUCCESS) pan_invalid = true;
   if (dd->graphics_queue != queue && dd->vk.QueueWaitIdle(dd->graphics_queue) != VK_SUCCESS) pan_invalid = true;
+  PanBurstSamples completeness{pan_first};
+  for(const auto& p:pan_samples)completeness.add(p.recorded,p.name,p.recording);
+  if(!completeness.complete())pan_invalid=true;
   make_dirs(pan_dir);
-  std::string manifest = "{\"version\":1,\"serial\":" + std::to_string(pan_serial) +
-      ",\"K\":" + std::to_string(pan_target) + ",\"final_stage\":\"native_tonemap_hudless\",\"samples\":[";
+  std::string manifest = "{\"version\":2,\"serial\":" + std::to_string(pan_serial) +
+      ",\"K\":16,\"raw_record_frames\":17,\"omitted_warmup_record_frame\":"+std::to_string(pan_first)+
+      ",\"final_stage\":\"native_tonemap_hudless\",\"samples\":[";
   bool first = true;
   unsigned ordinal = 0;
   for (auto& p : pan_samples) {
     Dump& d = p.dump;
+    if(!completeness.retained(p.recorded)){
+      defer_destroy(BG3_DEFER_BUFFER,uint64_t(d.buffer));
+      defer_destroy(BG3_DEFER_MEMORY,uint64_t(d.memory));
+      continue;
+    }
     const std::string file = "f" + std::to_string(p.recorded) + "-" + p.name + "-" + std::to_string(ordinal++) + ".raw";
     void* ptr = nullptr;
     bool saved = p.submitted != UINT64_MAX && dd->vk.MapMemory(dd->device, d.memory, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS;
@@ -717,8 +727,8 @@ void pan_on_present(VkQueue queue) {
   }
   manifest += std::string("],\"valid_transport\":") + (pan_invalid ? "false" : "true") + "}\n";
   write_file(pan_dir + "\\burst.json", manifest.data(), manifest.size());
-  log("[pan] burst %d complete: %u frames, %zu samples, transport %s -> %s", pan_serial, pan_frames,
-      pan_samples.size(), pan_invalid ? "INVALID" : "ok", pan_dir.c_str());
+  log("[pan] burst %d complete: 16 frames, %u samples, transport %s -> %s", pan_serial,
+      ordinal, pan_invalid ? "INVALID" : "ok", pan_dir.c_str());
   pan_samples.clear();
   pan_finished = true;
 }

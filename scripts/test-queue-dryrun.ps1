@@ -6,6 +6,7 @@ param([string]$Out = (Join-Path $env:TEMP "bg3rtx-queue-dryrun\$(Get-Date -Forma
 $ErrorActionPreference = "Stop"
 New-Item -ItemType Directory -Force (Join-Path $Out "bin"), (Join-Path $Out "scripts"), (Join-Path $Out "captures\queue\pending") | Out-Null
 $Out = (Resolve-Path $Out).Path
+Set-Content -LiteralPath (Join-Path $Out ".queue-fake-root") "synthetic only"
 # A layer with session support carries the "scene ready" marker string (layer/tracer.cpp).
 Set-Content (Join-Path $Out "bin\VkLayer_bg3rtx.dll") "fake layer: scene ready at present"
 Set-Content (Join-Path $Out "bin\bg3rtx_core.dll") "fake core"
@@ -41,14 +42,22 @@ $jobs = @(
 )
 $t = (Get-Date).AddMinutes(-10)
 foreach ($j in $jobs) {
+  $j.live_batch="synthetic-dryrun"
   $f = Join-Path $Out "captures\queue\pending\$($j.name).json"
   $j | ConvertTo-Json | Set-Content $f
   (Get-Item $f).LastWriteTime = ($t = $t.AddSeconds(1))
 }
 
+# TEST ONLY: fabricated receipt in this scratch root has no live authority.
+. (Join-Path $PSScriptRoot 'queue-permission.ps1')
+. (Join-Path $PSScriptRoot 'queue-window-mode.ps1')
+$auth=Join-Path $Out 'captures/queue/authorizations';New-Item -ItemType Directory -Force $auth | Out-Null
+$build=Get-QueueBuildIdentity $Out
+$entries=@($jobs | ForEach-Object {$normalized=ConvertTo-QueueWindowJob ([pscustomobject]$_);@{hash=(Get-QueueJobHash $normalized $Out);tree=$Out;build=$build;runs=$(if($_.repeat){$_.repeat}else{1})}})
+@{version=1;status='approved';runner_session='synthetic-dryrun';user_steering='FAKE TEST ONLY, not user permission';steering_source='offline harness';expires_utc=[datetimeoffset]::UtcNow.AddHours(1).ToString('o');jobs=$entries} | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $auth 'synthetic-dryrun.json')
 $env:BG3RTX_FAKE_LOAD_SEC = "3"
 $t0 = Get-Date
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "test-queue.ps1") -DryRun -Root $Out
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "test-queue.ps1") -DryRun -Root $Out -PermissionSession synthetic-dryrun
 Write-Host "queue took $([int]((Get-Date) - $t0).TotalSeconds)s; results in $Out\captures\queue"
 
 $recs = @(Get-Content (Join-Path $Out "captures\queue\results.jsonl") | ConvertFrom-Json)

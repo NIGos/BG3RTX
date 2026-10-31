@@ -1,0 +1,60 @@
+{
+  "name": "vegetation-cascade-support",
+  "tree": ".",
+  "save": "Test1",
+  "session": false,
+  "traces": 0,
+  "timeout": 600,
+  "repeat": 1,
+  "set": "rt=1,rt_bvh_split=1,rt_alpha=1,rt_native_hair=1,rt_native_scalp=1,rt_omm=0,rt_sun_cascade_current=0,rt_xfb_mb=1408,rt_cascade_mb=160,rt_cascade_casters=1,fg=2,headless=0,fg_state_every=1,rr=1,gi=1,gi_rt=1,rt_shadows=1,rt_local_shadows=1,rt_reflections=1,rt_stats=0,ls_stats=0,rf_stats=0,rt_primary_check=1,rt_primary_epoch=1,pan_prepare=1,pan_inputs=0,pan_capture=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,dump_raw=0,dump_images=0",
+  "args": [
+    "-Foreground",
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "docs/live-test-drafts/vegetation-cascade-support/motion.plan.json",
+    "-AcceptModWarning",
+    "off",
+    "-UserIni",
+    "bg3rtx_user.ini"
+  ],
+  "patterns": [
+    "\\[cascade\\] casters",
+    "\\[pan\\]",
+    "primary-ray check",
+    "rt passes:",
+    "rt cost scope",
+    "DLSS-G frame",
+    "slDLSSGSetOptions",
+    "\\[core\\] guard:"
+  ],
+  "expect": [
+    "rt: first traced frame",
+    "primary-ray check match",
+    "rt passes: GPU cost",
+    "DLSS-G frame.*status 0x0, presented per app frame 2",
+    "\\[pan\\] burst 58001 complete: 16 frames, .*transport ok",
+    "\\[pan\\] burst 58002 complete: 16 frames, .*transport ok",
+    "\\[pan\\] burst 58003 complete: 16 frames, .*transport ok",
+    "\\[pan\\] burst 58004 complete: 16 frames, .*transport ok"
+  ],
+  "expect_runner": [
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=9\\b",
+    "\\[rotation-input\\].*direction=1",
+    "\\[rotation-input\\].*direction=-1",
+    "foreground=True real_present=True"
+  ],
+  "forbid": [
+    "VK_ERROR_DEVICE_LOST",
+    "\\[crash\\] exception 0x"
+  ],
+  "post": "py -3 -m scripts.qa.pan_artifacts --log \"{log}\" --out captures/cascade-support",
+  "post_gate": false,
+  "stop_on_dump": true,
+  "motion_plan_sha256": "8293b6776cbf3aa872a6d228b680e3de7a37315dad5755c68cc5006fede6f708",
+  "draft_only": true,
+  "estimated_raw_gib": 8.96,
+  "required_free_gib": 40,
+  "estimated_total_gib_allowance": 12
+}

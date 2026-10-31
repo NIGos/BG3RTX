@@ -199,6 +199,8 @@ void core_init(DeviceData* dd) {
   g_host.rt_emissive = &em_scene;
   g_host.rt_scene_set = &rt_scene_set;
   g_host.rt_scene_camera = &rt_scene_camera;
+  g_host.rt_omm_scene_reference=&rt_omm_scene_reference;
+  g_host.rt_sun_scene = &rt_sun_scene;
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);

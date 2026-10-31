@@ -86,6 +86,7 @@ struct Ui {
   State st;
   std::wstring gpu_err;
   bool updating = false;
+  int content_height = 0, scroll_y = 0;
   int desc_knob = -2;   // -1 preset, >= 0 knob
   COLORREF badge_color[st::kKnobCount] = {};
   HBRUSH bg = nullptr;
@@ -138,9 +139,16 @@ static void show_desc(int knob) {
   SetWindowTextW(item(IDC_DESC), d.c_str());
 }
 
+static st::Map effective_settings() {
+  st::Map map;st::apply_layer(map,g.st.base);st::apply_layer(map,g.st.user);
+  for(int i=0;i<st::kKnobCount;++i)if(g.st.values[i]>=0){st::KVList values;st::knob_kvs(st::kKnobs[i],g.st.values[i],values);for(const auto& kv:values)map[kv.first]=kv.second;}
+  return map;
+}
+
 static void refresh() {
   g.updating = true;
   State& s = g.st;
+  const auto effective=effective_settings();
   SendMessageW(item(IDC_PRESET), CB_SETCURSEL, s.preset, 0);
   std::vector<int> pv = st::preset_values_for(s.preset, s.caps);
   int changed = 0;
@@ -166,6 +174,7 @@ static void refresh() {
     std::wstring badge;
     COLORREF col = RGB(110, 110, 110);
     std::string need = st::unmet_need(k, v, s.values);
+    if(need.empty())need=st::unmet_key_need(k,v,effective);
     bool restart = false;
     if (v >= 0 && s.loaded[i] >= 0 && v != s.loaded[i]) {
       st::KVList from, to;
@@ -180,7 +189,7 @@ static void refresh() {
     else if (!st::choice_supported(k, v, s.caps)) badge = L"not supported on this GPU", col = RGB(200, 30, 30);
     else if (restart) badge = L"restart required", col = RGB(210, 110, 0);
     else if (k.apply == st::Apply::Hitch) badge = L"live, brief hitch";
-    else if (k.apply == st::Apply::Partial) badge = widen(k.apply_note);
+    else if (k.apply == st::Apply::Partial || k.apply == st::Apply::Restart) badge = widen(k.apply_note);
     else badge = L"live";
     g.badge_color[i] = col;
     SetWindowTextW(item(IDC_BADGE + i), badge.c_str());
@@ -189,6 +198,14 @@ static void refresh() {
 }
 
 static void status(const std::wstring& t) { SetWindowTextW(item(IDC_STATUS), t.c_str()); }
+
+static void scroll_to(int requested) {
+  RECT client{};GetClientRect(g.wnd,&client);
+  const int next=std::clamp(requested,0,std::max(0,g.content_height-int(client.bottom)));
+  if(next!=g.scroll_y){ScrollWindowEx(g.wnd,0,g.scroll_y-next,nullptr,nullptr,nullptr,nullptr,SW_SCROLLCHILDREN|SW_INVALIDATE|SW_ERASE);g.scroll_y=next;}
+  SCROLLINFO info{sizeof info,SIF_RANGE|SIF_PAGE|SIF_POS,0,std::max(0,g.content_height-1),UINT(client.bottom),g.scroll_y};
+  SetScrollInfo(g.wnd,SB_VERT,&info,TRUE);
+}
 
 static void build_window() {
   State& s = g.st;
@@ -260,9 +277,13 @@ static void build_window() {
   add(L"STATIC", L"", SS_LEFT | SS_ENDELLIPSIS, L, y, 904, 20, IDC_STATUS);
   y += 30;
 
-  RECT r{0, 0, S(936), S(y)};
+  g.content_height=S(y);
+  MONITORINFO monitor{sizeof monitor};GetMonitorInfoW(MonitorFromWindow(g.wnd,MONITOR_DEFAULTTOPRIMARY),&monitor);
+  const int available=std::max(1,int(monitor.rcWork.bottom-monitor.rcWork.top)-S(52));
+  RECT r{0, 0, S(936), std::min(g.content_height,available)};
   AdjustWindowRectEx(&r, GetWindowLongW(g.wnd, GWL_STYLE), FALSE, 0);
-  SetWindowPos(g.wnd, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
+  SetWindowPos(g.wnd, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+  scroll_to(0);
 }
 
 static std::wstring game_dir_text() {
@@ -339,12 +360,26 @@ static void on_choice(int i, int c) {
   }
   g.st.values[i] = c;
   std::string need = st::unmet_need(k, c, g.st.values);
+  if(need.empty())need=st::unmet_key_need(k,c,effective_settings());
   status(need.empty() ? L"" : widen(k.label) + L": " + widen(need) + L".");
   refresh();
 }
 
 static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
   switch (msg) {
+    case WM_SIZE: scroll_to(g.scroll_y);break;
+    case WM_VSCROLL: {
+      SCROLLINFO si{sizeof si,SIF_ALL};GetScrollInfo(h,SB_VERT,&si);
+      int target=g.scroll_y;
+      switch(LOWORD(wp)){
+        case SB_TOP:target=0;break;case SB_BOTTOM:target=g.content_height;break;
+        case SB_LINEUP:target-=S(30);break;case SB_LINEDOWN:target+=S(30);break;
+        case SB_PAGEUP:target-=int(si.nPage);break;case SB_PAGEDOWN:target+=int(si.nPage);break;
+        case SB_THUMBTRACK:target=si.nTrackPos;break;
+      }
+      scroll_to(target);return 0;
+    }
+    case WM_MOUSEWHEEL:scroll_to(g.scroll_y-GET_WHEEL_DELTA_WPARAM(wp)*S(90)/WHEEL_DELTA);return 0;
     case WM_COMMAND: {
       int id = LOWORD(wp), code = HIWORD(wp);
       if (g.updating) break;
@@ -445,14 +480,18 @@ static void screenshot(const std::wstring& path) {
 }
 
 static std::wstring g_screenshot;
+static bool g_screenshot_bottom=false;
+static float g_screenshot_scale=0;
 
 static int run_window(HINSTANCE inst, const std::wstring& game_dir_arg) {
   CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   INITCOMMONCONTROLSEX icc{sizeof icc, ICC_STANDARD_CLASSES | ICC_BAR_CLASSES};
   InitCommonControlsEx(&icc);
-  g.s = float(GetDpiForSystem()) / 96.0f;
+  const float native_scale=float(GetDpiForSystem())/96.0f;
+  g.s = g_screenshot_scale>0?g_screenshot_scale:native_scale;
   NONCLIENTMETRICSW ncm{sizeof ncm};
   SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof ncm, &ncm, 0);
+  if(g_screenshot_scale>0)ncm.lfMessageFont.lfHeight=LONG(ncm.lfMessageFont.lfHeight*g.s/native_scale);
   g.font = CreateFontIndirectW(&ncm.lfMessageFont);
   LOGFONTW b = ncm.lfMessageFont;
   b.lfWeight = FW_SEMIBOLD;
@@ -470,7 +509,7 @@ static int run_window(HINSTANCE inst, const std::wstring& game_dir_arg) {
   wc.lpszClassName = L"BG3RTXLauncher";
   wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
   RegisterClassExW(&wc);
-  g.wnd = CreateWindowExW(0, wc.lpszClassName, L"BG3RTX settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+  g.wnd = CreateWindowExW(0, wc.lpszClassName, L"BG3RTX settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VSCROLL,
                           CW_USEDEFAULT, CW_USEDEFAULT, 800, 600, nullptr, nullptr, inst, nullptr);
   build_window();
 
@@ -484,7 +523,8 @@ static int run_window(HINSTANCE inst, const std::wstring& game_dir_arg) {
   if (!g_screenshot.empty()) {
     SetWindowPos(g.wnd, nullptr, -20000, -20000, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     ShowWindow(g.wnd, SW_SHOWNOACTIVATE);
-    UpdateWindow(g.wnd);
+    if(g_screenshot_bottom)scroll_to(g.content_height);
+    RedrawWindow(g.wnd,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN|RDW_UPDATENOW);
     screenshot(g_screenshot);
     DestroyWindow(g.wnd);
     return 0;
@@ -532,6 +572,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     else if (a == L"--preset") preset = next();
     else if (a == L"--out") g_out_file = next();
     else if (a == L"--screenshot") g_screenshot = next();
+    else if (a == L"--screenshot-bottom") g_screenshot_bottom=true;
+    else if (a == L"--screenshot-scale") g_screenshot_scale=float(_wtof(next().c_str()));
     else if (a == L"--help" || a == L"-h" || a == L"/?") {
       emit(L"BG3RTX.exe [--launch [--dry-run]] [--preset low|medium|high|ultra [--no-clamp]] [--detect]\n"
            L"           [--dump-schema] [--game <folder>] [--exe <program>] [--clean] [--out <file>] [-- <game args>]\n"
@@ -551,6 +593,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     }
   }
   LocalFree(argv);
+  if((g_screenshot_bottom || g_screenshot_scale!=0) && (g_screenshot.empty() || do_launch || detect || dump || !preset.empty() || g_screenshot_scale<0 || g_screenshot_scale>3))return 2;
 
   if (!do_launch && !detect && !dump && preset.empty()) return run_window(inst, game_dir);
 

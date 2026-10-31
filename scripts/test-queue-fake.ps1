@@ -57,6 +57,7 @@ $nvDone = $false
 $deadline = $start.AddSeconds($TimeoutSec)
 $result = "timeout"
 while ((Get-Date) -lt $deadline) {
+  if($env:BG3RTX_QUEUE_QUIT_FILE -and (Test-Path -LiteralPath $env:BG3RTX_QUEUE_QUIT_FILE)){$result='queue cancelled';break}
   Start-Sleep -Milliseconds 100
   if (-not $stalled) { $present += 12 }
   $mt = (Get-Item $ini).LastWriteTimeUtc

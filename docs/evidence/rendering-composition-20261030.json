@@ -1,0 +1,44 @@
+{
+  "source_checkpoint": "7259c21e514a058116f8c17f3e7b72171f05d87d",
+  "abi": 19,
+  "isolated": true,
+  "main_unchanged": "92183e7",
+  "both_dlls_built": true,
+  "ctests": {
+    "passed": 36,
+    "total": 36
+  },
+  "settings_checks": 271,
+  "qa_detectors": "passed",
+  "shader_gate": {
+    "baseline": "75bb833",
+    "ordinary_identical": 219,
+    "new_compiled_validated": 10
+  },
+  "shader_gate_artifact": "captures/sun-coverage-20261030/shader-check/result.json",
+  "shader_gate_sha256": "bf8735bdfe8f8c4fda905be049a0d58304a80949f72db4bd5e9e6b22dff3e030",
+  "queue_scratch_checks": {
+    "cancellation": 28,
+    "permission": 27,
+    "window_policy": 26,
+    "phase_cancellation": 4,
+    "runtime_cs_identity": 2
+  },
+  "asset_tests": {
+    "passed": 44,
+    "skipped": 1
+  },
+  "native_vt_field_checks": 164188,
+  "game_launched": false,
+  "new_gpu_execution": false,
+  "gpu_ms": null,
+  "omm_render_queries_active": false,
+  "remaining": [
+    "M1 native/game quality, energy, motion and measured cost",
+    "M2 bounded room closure and engine world correspondence",
+    "M3 actual sampled-view/material/light/state providers",
+    "M4 cache-free supported transport and traced reflections/GI",
+    "M5 selected water/environment improvements",
+    "M6 bounded opaque PT reference and reasoned real-time decision"
+  ]
+}

@@ -25,6 +25,12 @@
 //   3. a one-instance TLAS (identity transform: the space is already camera-relative).
 // The core traces against the TLAS in the tiled lighting (rt_shadow.hlsl).
 #include "host.h"
+#include "omm_backend.h"
+#include "omm_submit.h"
+#include "../common/omm_scene_capability.h"
+#include "omm_content.h"
+#include "omm_sampler.h"
+#include "omm_bake.h"
 #include "../common/camera_epoch.h"
 #include "../common/cascade_casters.h"
 
@@ -123,6 +129,7 @@ struct SceneSlot {
   bool used = false;
   uint64_t built = 0, last_use = 0;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+  VkAccelerationStructureKHR omm_reference = VK_NULL_HANDLE;
   VkDescriptorSet set = VK_NULL_HANDLE;
   bool split = false;
   uint64_t rec = 0;   // build record of the command buffer it was recorded into (bvhsplit.cpp)
@@ -133,6 +140,11 @@ struct SceneSlot {
   VkDeviceSize camera_offset = 0;
   float camera_pose[56] = {};
   bool camera_pose_valid = false;
+  BvhSunBase sun_base;
+  VkCommandBuffer producer = VK_NULL_HANDLE;
+  sun_coverage::NativeEpoch native_epoch;
+  VkBuffer native_frame_buffer = VK_NULL_HANDLE;
+  VkDeviceSize native_frame_offset = 0;
 };
 uint64_t g_legacy_rec = 0;   // the legacy BLAS's last build: refit only once it was submitted
 SceneSlot g_scene[kSceneSlots];
@@ -158,6 +170,7 @@ std::atomic<uint64_t> g_oldest_live{UINT64_MAX};
 bool slot_retired(const SceneSlot& s, uint64_t gpu_done, uint64_t now) {
   if (!s.used) return true;
   if (gpu_done >= s.last_use + 2) return true;
+  if (omm::has_resources()) return false; // OMM never substitutes frame age for completion.
   // No present fence completed for 240 frames (as defer_tick's fallback).
   return now >= s.last_use + 240;
 }
@@ -196,6 +209,7 @@ void commit_scene_slot(int slot, VkAccelerationStructureKHR tlas, VkDescriptorSe
   s.rec = rec;
   s.built = s.last_use = frame_index();
   s.tlas = tlas;
+  s.omm_reference=VK_NULL_HANDLE;
   s.set = set;
   s.split = split;
   g_scene_cur = slot;
@@ -675,6 +689,7 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   bool core_features = false;
   if (sharc && cfg_int("sharc_device", 1)) next = sharc_features(id, phys, ci, next, &core_features);
   else log("[rt] SHaRC device features not requested (%s)", sharc ? "sharc_device=0" : "retry without them");
+  next = omm::device_features(id, phys, next, g_ext_names);
   g_f_rq = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
   g_f_rq.rayQuery = VK_TRUE;
   g_f_rq.pNext = const_cast<void*>(next);
@@ -734,12 +749,20 @@ void rt_device_created(DeviceData* dd, bool enabled) {
   qi.queryCount = kRing * 4;
   if (dd->vk.CreateQueryPool(dd->device, &qi, nullptr, &g_qp) != VK_SUCCESS) g_qp = VK_NULL_HANDLE;
   g_rt = true;
+  omm::device_created(dd, true);
+  if(omm::available())omm::sampler_device_created(dd);
   log("[rt] acceleration structures + ray query enabled on the game's device (scratch alignment %llu)",
       (unsigned long long)g_scratch_align);
 }
 
 void rt_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
+  sun_device_destroyed(dd);
+  omm::device_destroyed(dd);
+  omm::bake_device_destroyed(dd);
+  omm::submit_device_destroyed(dd);
+  omm::content_device_destroyed(dd);
+  omm::sampler_device_destroyed(dd);
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();
@@ -986,6 +1009,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   float source_camera[56]{};
   const bool source_camera_valid = read_mapped(cap.ubo, cap.ubo_offset, source_camera, sizeof source_camera);
   scene.pose_valid = false;
+  scene.sun_base = {}; scene.producer = VK_NULL_HANDLE;
+  scene.native_epoch = {}; scene.native_frame_buffer=VK_NULL_HANDLE;scene.native_frame_offset=0;
   if (cfg_int("pan_capture", 0) > 0 || cfg_int("pan_prepare", 0)) {
     void* mapped = nullptr;
     if (!scene.pose) alloc_host_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -1046,7 +1071,10 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
                      cap.xfb_size, stride, true, res.info, res.info_off, res.info_bytes, res.pool, res.pool_bytes};
     ab.camera = cap.ubo;
     ab.camera_offset = cap.ubo_offset;
+    ab.reference_tlas=res.tlas;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
+    if(set)alpha_omm_commit(cmd,uint32_t(scene_slot));
+    restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
     if (cpu_t) {
       const double t2 = qpc_ms();
       g_bcpu.bvh += t_bvh1 - t_bvh0;
@@ -1059,11 +1087,16 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     }
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
-    commit_scene_slot(scene_slot, res.tlas, set, true, res.rec);
+    const auto accelerated=set?bvh_omm_scene(uint32_t(scene_slot),res.tlas):VK_NULL_HANDLE;
+    commit_scene_slot(scene_slot, accelerated?accelerated:res.tlas, set, true, res.rec);
+    if(accelerated)scene.omm_reference=res.tlas;
     scene.camera = cap.ubo;
     scene.camera_offset = cap.ubo_offset;
     std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
     scene.camera_pose_valid = source_camera_valid;
+    scene.sun_base=res.sun_base;scene.producer=cmd;
+    scene.native_epoch=cap.native_epoch;
+    scene.native_frame_buffer=cap.native_frame_buffer;scene.native_frame_offset=cap.native_frame_offset;
     fault_checkpoint(cmd, kCkSceneCommitted, uint32_t(scene_slot));
     ++g_n_frames;
     ++g_n_split;
@@ -1103,6 +1136,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
                    cap.xfb_size, stride, false, info, 0, info_bytes, VK_NULL_HANDLE, 0};
   ab.camera = cap.ubo;
   ab.camera_offset = cap.ubo_offset;
+  ab.reference_tlas=g_tlas;
   const VkDescriptorSet legacy_set = alpha_commit(cmd, ab, uint32_t(scene_slot));
   int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
   // A refit reads the BLAS: only if its last build's command buffer was submitted.
@@ -1235,7 +1269,7 @@ bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* 
     log("[order] hand out slot %d built %llu now %llu tid %lu", slot, (unsigned long long)s.built,
         (unsigned long long)now, GetCurrentThreadId());
   alpha_slot_in_use(uint32_t(slot), now);   // the set's game views live while it may be bound
-  *tlas = s.tlas;
+  *tlas = s.omm_reference && (!cfg_int("rt_omm",0) || !omm::scene_consumer(static_cast<uint32_t*>(persist(omm::scene_capability_key,sizeof(uint32_t)))))?s.omm_reference:s.tlas;
   if (set) *set = s.set;
   *built_frame = s.built;
   return true;
@@ -1335,7 +1369,48 @@ bool rt_scene_camera(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas, VkDe
   return matched >= 0 && hand_out(tlas, set, built_frame, matched, true);
 }
 
+bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkAccelerationStructureKHR* reference,uint64_t* identity){
+  if(!reference || !identity)return false;const uint64_t expected=*identity;*reference=VK_NULL_HANDLE;*identity=0;
+  if(!g_rt || !selected || !cmd)return false;
+  std::lock_guard lock(g_mu);
+  for(uint32_t i=0;i<kSceneSlots;++i){
+    SceneSlot& s=g_scene[i];
+    if(!s.used || (expected && expected!=s.rec) || (s.tlas!=selected && s.omm_reference!=selected) ||
+       slot_retired(s,life_gpu_done(),frame_index()) || bvh_rec_state(s.rec)==2)continue;
+    *reference=s.omm_reference?s.omm_reference:s.tlas;*identity=s.rec;
+    s.last_use=(std::max)(s.last_use,frame_index());alpha_slot_in_use(i,s.last_use);update_oldest_live();
+    // Even reference-only dispatches can write stale-proof feedback at byte144.
+    if(!omm::mark_feedback_use(cmd) && omm::available()){*reference=VK_NULL_HANDLE;*identity=0;return false;}
+    uint64_t accelerated_identity{};
+    return s.omm_reference && bvh_omm_use(cmd,i,selected,&accelerated_identity) && accelerated_identity==s.rec;
+  }
+  return false;
+}
+
 uint64_t rt_scene_oldest_live() { return g_oldest_live.load(); }
+
+bool rt_sun_base_capture(VkAccelerationStructureKHR selected_tlas, VkDescriptorSet selected_alpha, SunBaseCapture* out) {
+  if(!out) return false;
+  *out={};
+  if(!g_rt || !selected_tlas || !selected_alpha) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  for(uint32_t i=0;i<kSceneSlots;++i) {
+    SceneSlot& s=g_scene[i];
+    if(!s.used || !s.split || (s.tlas!=selected_tlas && s.omm_reference!=selected_tlas) || s.set!=selected_alpha || !s.camera_pose_valid ||
+       !s.sun_base.record || !sun_coverage::valid(s.native_epoch) ||
+       slot_retired(s,life_gpu_done(),frame_index()) || bvh_rec_state(s.rec)==2) continue;
+    out->base=s.sun_base;out->slot=i;out->producer=s.producer;
+    out->native_epoch=s.native_epoch;out->native_frame_buffer=s.native_frame_buffer;
+    out->native_frame_offset=s.native_frame_offset;
+    out->camera_buffer=s.camera;out->camera_offset=s.camera_offset;
+    std::memcpy(out->camera,s.camera_pose,sizeof out->camera);
+    // The late clone keeps precisely these mesh/alpha references alive.
+    s.last_use=(std::max)(s.last_use,frame_index());
+    alpha_slot_in_use(i,s.last_use);update_oldest_live();
+    return true;
+  }
+  return false;
+}
 
 void rt_log_state(const char* prefix) {
   if (!g_rt) return;

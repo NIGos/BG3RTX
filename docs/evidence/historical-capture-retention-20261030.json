@@ -1,0 +1,482 @@
+{
+  "date": "2026-10-30",
+  "mode": "READ_ONLY_CLASSIFICATION_NO_RELEASE_OR_CLEANUP",
+  "new_raw_hashes": 0,
+  "shared_capture_writes": 0,
+  "junction_traversal": false,
+  "byte_estimate_source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\docs\\evidence\\disk-usage-20261030.json",
+  "sets": [
+    {
+      "batch": "static301",
+      "source_report": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\docs\\evidence\\p1-normal-footprint-static-301.json",
+      "reason": "Unresolved latest energy failure: all 18 gate-off and 18 gate-on samples form the 36-sample estimate; do not trim controls/noise outliers",
+      "capture_count": 36,
+      "logical_bytes": 14595336505,
+      "captures": [
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405150682,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083712",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405263167,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083722",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 406251073,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083729",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 406182404,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083736",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 404974937,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083742",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405116123,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083749",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 404648598,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083756",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 404916182,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083802",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405825947,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083809",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 406214643,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083816",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 406155384,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083823",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405005316,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083830",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405044623,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083837",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 404775270,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083844",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405827465,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083851",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405075877,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083858",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405724252,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083905",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 406184250,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083913",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 406216360,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083920",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405229573,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083927",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 404928094,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083935",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405410869,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083942",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405157061,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083949",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405713258,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083957",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405499576,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084004",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 404998188,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084011",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 406038247,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084018",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405226003,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084025",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 406369936,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084032",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 404713163,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084039",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405489933,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084046",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 404765520,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084053",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405026138,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084100",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 404695784,
+          "gate": 0
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084107",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405938227,
+          "gate": 1
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-084114",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 405584382,
+          "gate": 0
+        }
+      ]
+    },
+    {
+      "batch": "pan303",
+      "source_report": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\docs\\evidence\\p1-normal-footprint-pan-303.json",
+      "reason": "Latest verified 8 fps moving diagnostic: residual and cohort energy worsened; no quality pass",
+      "capture_count": 1,
+      "logical_bytes": 15448654,
+      "captures": [
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-085459",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 15448654
+        }
+      ]
+    },
+    {
+      "batch": "private-smoke-control",
+      "source_report": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\private-smoke-report.json",
+      "reason": "Baseline for private-S14 validation comparison; export completeness only, with unresolved source transfer usage VUID",
+      "capture_count": 3,
+      "logical_bytes": 907315924,
+      "captures": [
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-124945",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 305459249
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-125002",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 295780523
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-125020",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 306076152
+        }
+      ]
+    },
+    {
+      "batch": "private-S14-sequence",
+      "source_report": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\private-S14-sequence-report.json",
+      "reason": "Candidate comparison retains 12 execution/export checkpoints; pixel validity, writer meaning and universal lifetime remain unproven",
+      "capture_count": 12,
+      "logical_bytes": 3681338887,
+      "captures": [
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131006",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 305569852
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131024",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 305999963
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131043",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 306651787
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131102",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 306660536
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131121",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 306374386
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131140",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 308406379
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131200",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 306730125
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131219",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 306667231
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131238",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 306540031
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131258",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 306700217
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131316",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 308367831
+        },
+        {
+          "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131336",
+          "classification": "KEEP_OWNER_HOLD",
+          "logical_bytes_from_existing_audit": 306670549
+        }
+      ]
+    }
+  ],
+  "representative_required_raw_files": [
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705\\img\\d181_checkpoint_gi.surface_pose_private365_RGBA32U.f32",
+      "role": "gi.surface_pose",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705\\img\\d183_checkpoint_gi.origin_private47_RGBA16F.f32",
+      "role": "gi.origin",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705\\img\\d184_checkpoint_gi.surface_legacy_private39_RGBA16F.f32",
+      "role": "gi.surface_legacy",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705\\img\\d185_checkpoint_gi.trace_private39_RGBA16F.f32",
+      "role": "gi.trace",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705\\img\\d186_checkpoint_gi.temporal_private40_RGBA16F.f32",
+      "role": "gi.temporal",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705\\img\\d187_checkpoint_gi.ssao_original_private48_RGBA16F.f32",
+      "role": "gi.ssao_original",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705\\img\\d188_checkpoint_sun.trace_private46_RGBA8.f32",
+      "role": "sun.trace",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705\\img\\d189_checkpoint_sun.resolve_private46_RGBA8.f32",
+      "role": "sun.resolve",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261029-083705\\img\\d192_checkpoint_gi.fresh_gate_off_private39_RGBA16F.f32",
+      "role": "gi.fresh_gate_off",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-124945\\img\\d143_checkpoint_gi.origin_private47_RGBA16F.f32",
+      "role": "gi.origin",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-124945\\img\\d145_checkpoint_gi.trace_private39_RGBA16F.f32",
+      "role": "gi.trace",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-124945\\img\\d147_checkpoint_gi.temporal_private41_RGBA16F.f32",
+      "role": "gi.temporal",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-124945\\img\\d149_checkpoint_gi.ssao_original_private48_RGBA16F.f32",
+      "role": "gi.ssao_original",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-124945\\img\\d151_checkpoint_sun.trace_private46_RGBA8.f32",
+      "role": "sun.trace",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-124945\\img\\d153_checkpoint_sun.resolve_private46_RGBA8.f32",
+      "role": "sun.resolve",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131006\\img\\d141_checkpoint_gi.origin_private47_RGBA16F.f32",
+      "role": "gi.origin",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131006\\img\\d143_checkpoint_gi.trace_private39_RGBA16F.f32",
+      "role": "gi.trace",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131006\\img\\d145_checkpoint_gi.temporal_private41_RGBA16F.f32",
+      "role": "gi.temporal",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131006\\img\\d147_checkpoint_gi.ssao_original_private48_RGBA16F.f32",
+      "role": "gi.ssao_original",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131006\\img\\d149_checkpoint_sun.trace_private46_RGBA8.f32",
+      "role": "sun.trace",
+      "classification": "KEEP_RAW"
+    },
+    {
+      "path": "C:\\Users\\quali\\.codex\\worktrees\\pan-motion-vectors\\BG3RTX\\captures\\20261028-131006\\img\\d151_checkpoint_sun.resolve_private46_RGBA8.f32",
+      "role": "sun.resolve",
+      "classification": "KEEP_RAW"
+    }
+  ],
+  "protected_classified_logical_bytes": 19199439970,
+  "approved_raw_disposal_bytes": 0,
+  "unclassified_remainder": "All other en2-selfcheck and pan-motion-vectors raw data retain their existing owner holds. This bounded classification does not release historical failures or repeats.",
+  "verified_redundant_png_storage": {
+    "manifest": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\docs\\evidence\\disk-identical-png-aliases-20261030.json",
+    "groups": 2675,
+    "redundant_bytes": 1568070001,
+    "method": "Existing bounded SHA256 PNG-only manifest; no new hashes",
+    "classification": "CONTENT_REDUNDANT_BUT_KEEP_PATHS_PENDING_OWNER_APPROVED_LOSSLESS_CONSOLIDATION",
+    "covers_selected_52_capture_directories": false,
+    "example": {
+      "sha256": "9c715816df0d7944a581773c97147f689f074ff7a11ed429a5dd6844f574379f",
+      "bytes_per_file": 34189,
+      "canonical": "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261028-081712\\img\\d93_p0_c0_i11279_R16F.png",
+      "duplicate_paths": [
+        "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261028-081712\\img\\d94_p0_c1_i11279_R16F.png",
+        "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261028-081712\\img\\d95_p0_c2_i11279_R16F.png",
+        "C:\\Users\\quali\\.codex\\worktrees\\en2-selfcheck\\BG3RTX\\captures\\20261028-081712\\img\\d96_p0_c3_i11279_R16F.png"
+      ],
+      "redundant_bytes": 102567
+    }
+  },
+  "preserve_metadata_and_reports": [
+    "PAUSED.md on en2-selfcheck",
+    "GI_NORMAL_FOOTPRINT.md and its evidence JSONs",
+    "Existing jobs, results.jsonl, source logs and run/phases/effective settings",
+    "private-smoke-report.json/private-S14-sequence-report.json/private-sequence-validation-compare.json and their validation logs"
+  ],
+  "warnings": [
+    "Execution complete / analyzed / newer run is not raw disposability proof",
+    "The duplicate PNG manifest says nothing about .f32 equivalence",
+    "No producer ownership release or permission to consolidate/delete is implied"
+  ]
+}

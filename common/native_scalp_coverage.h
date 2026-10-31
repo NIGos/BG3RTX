@@ -1,11 +1,12 @@
 #pragma once
 
-// Native CHAR_Scalp scalar contract. The opt-in runtime hard branch uses its
-// bounded capture adapter; camera raster dither remains CPU-reference only.
+// Native CHAR_Scalp scalar contract. The opt-in runtime uses its bounded capture
+// adapter; camera coverage uses the captured native projection and viewport.
 // Inputs are the native sampler's already-filtered mask B/A and native draw
 // state. This does not replace texture sampling, derivatives or rasterization.
 // Source: verified Vulkan modules listed below, Materials.pak (2026-10-26 DB).
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 
@@ -18,6 +19,7 @@ struct Recipe {
   // All six: mask/material set 1, sampler set 0 binding 7, UV location 0.
   // Material scalar offsets 0 (smoothstep edge), 4 (root multiplier).
   // CameraDepth additionally reads Frame set 0 binding 0 offsets 8/12.
+  // Nonzero camera mode also reads Camera set 0 binding 2 VP at offset 128.
 };
 inline constexpr Recipe recipes[] = {
     {0x9e77575a9f377ec5ull, Pass::CameraDepth, 1, 2},
@@ -35,7 +37,7 @@ enum class Status { CompleteScalar, MissingInputs, Nonfinite, UndefinedSmoothste
 struct Material { float edge{}, root{}; bool available{}; };
 struct Mask { float blue{}, alpha{}; bool available{}; };
 struct Frame { float phase{}, dither_mode{}, frag_x{}, frag_y{}; bool available{}, coordinates_available{}; };
-struct Captured { Material material; Frame frame; };
+struct Captured { Material material; Frame frame; std::array<float,16> projection{}; bool projection_available{}; };
 // Portable adapter for layer read_bound-style readers. The read must address
 // the SAME draw's binding and dynamic offset. No unbounded/full UBO copying.
 // read(set,binding,byte_offset,dst,byte_count) returns false if not resident.
@@ -53,8 +55,15 @@ inline bool capture(uint64_t hash, Read&& read, Captured& out) {
   if (recipe->pass == Pass::CameraDepth) {
     if (!read(0u, 0u, 8u, frame, sizeof(frame)) || !std::isfinite(frame[0]) || !std::isfinite(frame[1])) return false;
   }
+  std::array<float,16> projection{};
+  if (recipe->pass == Pass::CameraDepth && frame[1] != 0.0f) {
+    if (!read(0u,2u,128u,projection.data(),64u)) return false;
+    for(float x:projection) if(!std::isfinite(x)) return false;
+  }
   out.material = {material[0], material[1], true};
   if (recipe->pass == Pass::CameraDepth) out.frame = {frame[0], frame[1], 0, 0, true, false};
+  out.projection=projection;
+  out.projection_available=recipe->pass==Pass::CameraDepth && frame[1]!=0.0f;
   return true;
 }
 struct Result {

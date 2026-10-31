@@ -36,6 +36,13 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rrpost.cpp
   layer/geocapture.cpp
   layer/rtscene.cpp
+  layer/sun_scene.cpp
+  layer/omm_backend.cpp
+  layer/omm_submit.cpp
+  layer/omm_content.cpp
+  layer/omm_sampler.cpp
+  layer/omm_native_plain.cpp
+  layer/omm_bake.cpp
   layer/alphatest.cpp
   layer/bvhsplit.cpp
   layer/emissive.cpp
@@ -140,6 +147,36 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(transport_bsdf_test tests/transport_bsdf_test.cpp)
+add_test(NAME transport_bsdf_test COMMAND transport_bsdf_test)
+add_executable(omm_scene_binding_test tests/omm_scene_binding_test.cpp)
+add_test(NAME omm_scene_binding_test COMMAND omm_scene_binding_test)
+add_executable(native_tileset_surface_test tests/native_tileset_surface_test.cpp)
+add_test(NAME native_tileset_surface_test COMMAND native_tileset_surface_test)
+add_executable(native_vt_surface_test tests/native_vt_surface_test.cpp)
+add_test(NAME native_vt_surface_test COMMAND native_vt_surface_test)
+add_executable(trace_sampled_view_test tests/trace_sampled_view_test.cpp)
+target_include_directories(trace_sampled_view_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME trace_sampled_view_test COMMAND trace_sampled_view_test)
+add_executable(omm_material_cache_test tests/omm_material_cache_test.cpp)
+add_test(NAME omm_material_cache_test COMMAND omm_material_cache_test)
+add_executable(omm_spatial_support_test tests/omm_spatial_support_test.cpp)
+add_test(NAME omm_spatial_support_test COMMAND omm_spatial_support_test)
+add_executable(omm_plain_bake_test tests/omm_plain_bake_test.cpp)
+add_test(NAME omm_plain_bake_test COMMAND omm_plain_bake_test)
+add_executable(sun_raster_domain_test tests/sun_raster_domain_test.cpp)
+target_include_directories(sun_raster_domain_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME sun_raster_domain_test COMMAND sun_raster_domain_test)
+add_executable(sun_caster_coverage_test tests/sun_caster_coverage_test.cpp)
+add_test(NAME sun_caster_coverage_test COMMAND sun_caster_coverage_test)
+add_executable(native_hair_geometry_test tests/native_hair_geometry_test.cpp)
+add_test(NAME native_hair_geometry_test COMMAND native_hair_geometry_test)
+add_executable(native_hair_test tests/native_hair_test.cpp)
+add_test(NAME native_hair_test COMMAND native_hair_test)
+add_executable(rt_capture_budget_test tests/rt_capture_budget_test.cpp)
+add_test(NAME rt_capture_budget_test COMMAND rt_capture_budget_test)
+add_executable(native_fur_test tests/native_fur_test.cpp)
+add_test(NAME native_fur_test COMMAND native_fur_test)
 add_executable(native_scalp_coverage_test tests/native_scalp_coverage_test.cpp)
 add_test(NAME native_scalp_coverage_test COMMAND native_scalp_coverage_test)
 add_executable(omm_classify_test tests/omm_classify_test.cpp)
@@ -168,6 +205,32 @@ add_executable(descriptor_epoch_test tests/descriptor_epoch_test.cpp)
 add_test(NAME descriptor_epoch_test COMMAND descriptor_epoch_test)
 add_executable(mapped_copy_test tests/mapped_copy_test.cpp)
 add_test(NAME mapped_copy_test COMMAND mapped_copy_test)
+add_executable(omm_backend_plan_test tests/omm_backend_plan_test.cpp)
+add_test(NAME omm_backend_plan_test COMMAND omm_backend_plan_test)
+add_executable(omm_submit_state_test tests/omm_submit_state_test.cpp)
+add_test(NAME omm_submit_state_test COMMAND omm_submit_state_test)
+add_executable(omm_content_registry_test tests/omm_content_registry_test.cpp)
+add_test(NAME omm_content_registry_test COMMAND omm_content_registry_test)
+add_executable(omm_native_plain_recipes_test tests/omm_native_plain_recipes_test.cpp)
+add_test(NAME omm_native_plain_recipes_test COMMAND omm_native_plain_recipes_test)
+add_executable(omm_sampler_metadata_test tests/omm_sampler_metadata_test.cpp)
+target_include_directories(omm_sampler_metadata_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME omm_sampler_metadata_test COMMAND omm_sampler_metadata_test)
+add_executable(omm_sampler_bindings_test tests/omm_sampler_bindings_test.cpp layer/omm_sampler.cpp)
+target_include_directories(omm_sampler_bindings_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME omm_sampler_bindings_test COMMAND omm_sampler_bindings_test)
+add_executable(omm_native_plain_test tests/omm_native_plain_test.cpp layer/omm_native_plain.cpp)
+target_include_directories(omm_native_plain_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME omm_native_plain_test COMMAND omm_native_plain_test)
+add_executable(native_sun_math_test tests/native_sun_math_test.cpp)
+add_test(NAME native_sun_math_test COMMAND native_sun_math_test)
+# Explicit synthetic GPU probe only. Never registered in routine CTest and never
+# launched by a build. No game, presentation or global loader settings changes.
+option(BG3RTX_OMM_GPU_SMOKE "Build the opt-in synthetic EXT OMM console probe" OFF)
+if(BG3RTX_OMM_GPU_SMOKE)
+  add_executable(omm_ext_smoke tools/omm_ext_smoke.cpp layer/omm_backend.cpp layer/omm_submit.cpp layer/omm_bake.cpp layer/omm_content.cpp)
+  target_include_directories(omm_ext_smoke PRIVATE ${VULKAN_SDK}/Include)
+endif()
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)
 add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
 add_executable(settings_test tests/settings_test.cpp)
@@ -205,6 +268,14 @@ add_executable(ufloat_interval_test tests/ufloat_interval_test.cpp)
 add_test(NAME ufloat_interval_test COMMAND ufloat_interval_test)
 
 # Hot-reloadable core: rebuild while the game runs.
+option(BG3RTX_HAIR_GPU_PROBE "Build the isolated, windowless native Hair Vulkan probe" OFF)
+if(BG3RTX_HAIR_GPU_PROBE)
+  add_executable(native_hair_gpu_probe tools/native_hair_gpu_probe.cpp)
+  target_include_directories(native_hair_gpu_probe PRIVATE ${VULKAN_SDK}/Include)
+  target_link_directories(native_hair_gpu_probe PRIVATE ${VULKAN_SDK}/Lib)
+  target_link_libraries(native_hair_gpu_probe PRIVATE vulkan-1)
+endif()
+
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # SHaRC radiance cache: inject the D-EM effects-target emission. AUTO follows whether

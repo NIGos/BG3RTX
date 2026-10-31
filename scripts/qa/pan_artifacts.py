@@ -6,6 +6,7 @@ GPU camera headers drive reprojection. No image registration or human labels.
 from __future__ import annotations
 import argparse
 import json
+import re
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
@@ -200,10 +201,11 @@ def positive_control_status(reports, minimum_fps=18):
     return 'NOT_REPRODUCED' if evaluated else 'INCOMPLETE: no calibrated pan at comparable cadence'
 
 
-def load_burst(directory):
-    meta = json.loads((directory/'burst.json').read_text())
+def index_burst_samples(meta):
     if not meta['valid_transport']:
         raise ValueError('transport invalid')
+    if meta.get('K', 16) != 16:
+        raise ValueError('burst does not declare K16')
     frames = {}
     for e in meta['samples']:
         if e['name'] not in REQUIRED:
@@ -211,16 +213,37 @@ def load_burst(directory):
         f = frames.setdefault(e['record_frame'], {})
         generation = e.get('command_recording')
         if generation is not None:
-            if not generation or f.setdefault('command_recording', generation) != generation:
+            if not generation:
+                raise ValueError('invalid command recording')
+            # G-buffer, RT debug masks and pose share one lighting recording.
+            # Native final tonemap is intentionally recorded in another CB.
+            if e['name'] != 'final' and f.setdefault('command_recording', generation) != generation:
                 raise ValueError('mixed command recordings in one captured frame')
-        # Native tonemap output, associated with the depth command recording.
-        f[e['name']] = decode(directory/e['file'], e)
-        f.setdefault('formats', {})[e['name']] = e['format']
-        f.setdefault('submits', {})[e['name']] = e['submit_frame']
-        if e['name'] == 'depth': f['time_ms'] = e.get('time_ms')
+        if e['name'] in f:
+            raise ValueError('duplicate captured view in one frame')
+        f[e['name']] = e
     indices = sorted(frames)
     if len(indices) != 16 or np.any(np.diff(indices) != 1):
         raise ValueError('burst is not 16 consecutive frames')
+    for i in indices:
+        missing = REQUIRED-frames[i].keys()
+        if missing:
+            raise ValueError(f'frame {i}: missing {sorted(missing)}')
+    return indices, frames
+
+
+def load_burst(directory):
+    meta = json.loads((directory/'burst.json').read_text())
+    indices, entries = index_burst_samples(meta)
+    frames = {}
+    for i in indices:
+        f = frames.setdefault(i, {})
+        for name in REQUIRED:
+            e = entries[i][name]
+            f[name] = decode(directory/e['file'], e)
+            f.setdefault('formats', {})[name] = e['format']
+            f.setdefault('submits', {})[name] = e['submit_frame']
+            if name == 'depth': f['time_ms'] = e.get('time_ms')
     for i in indices:
         f = frames[i]
         missing = REQUIRED-f.keys()
@@ -302,16 +325,49 @@ def analyze(directory, out):
     return report, arrays, valid, frames, ids
 
 
+def fg_burst_evidence(frame_ids, log):
+    """Existing per-frame SDK rows, not disk-write time or a fix gate."""
+    from .fg_motion_gate import normalize_clocks
+    from .rebase_gate import clock
+    log, _ = normalize_clocks(log, '')
+    states = {}
+    duplicates = []
+    for line in log.splitlines():
+        m = re.search(r'DLSS-G frame (\d+): status (0x[\da-f]+), presented per app frame (\d+).*api errors (\d+)',line)
+        if m and clock(line) is not None:
+            frame,status,presented,errors = m.groups()
+            if int(frame) in states: duplicates.append(int(frame))
+            states[int(frame)] = dict(time=clock(line),status=int(status,16),presented=int(presented),api_errors=int(errors))
+    selected = [states[i] for i in frame_ids if i in states]
+    missing = [i for i in frame_ids if i not in states]
+    ambiguous = sorted(set(frame_ids) & set(duplicates))
+    intervals = [1000*(b['time']-a['time']) for a,b in zip(selected,selected[1:])] if not missing else []
+    duration = selected[-1]['time']-selected[0]['time'] if len(selected)>1 else 0
+    return {'fg_frame_states':selected,'fg_missing_frames':missing,'fg_duplicate_frames':ambiguous,
+            'fg_active_every_captured_frame':bool(frame_ids) and not missing and not ambiguous and
+                all(row['status']==0 and row['presented']>=2 and row['api_errors']==0 for row in selected),
+            'presentation_fps':(len(selected)-1)/duration if duration>0 and intervals and min(intervals)>0 else None,
+            'presentation_intervals_ms':intervals,
+            'presentation_evidence_source':'SDK present-end log rows matched to exact captured record-frame indices; no GPU scanout timing claim'}
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('bursts',nargs='+',type=Path)
+    ap.add_argument('bursts',nargs='*',type=Path)
+    ap.add_argument('--log',type=Path,help='Optional same-run log; also resolves exact burst paths when none are supplied')
     ap.add_argument('--out',required=True,type=Path)
     args = ap.parse_args()
+    log = args.log.read_text(errors='replace') if args.log else ''
+    if not args.bursts and args.log:
+        args.bursts = [Path(m[1].strip()) for line in log.splitlines()
+                       if (m := re.search(r'\[pan\] burst \d+ complete:.* -> (.+)$',line))]
+    if not args.bursts: ap.error('no captured bursts')
     args.out.mkdir(parents=True,exist_ok=True)
     results, loaded = [], []
     for directory in args.bursts:
         try:
             item = analyze(directory,args.out)
+            if args.log: item[0].update(fg_burst_evidence(item[0]['frames'],log))
             loaded.append(item)
             results.append(item[0])
         except (ValueError,KeyError,OSError,np.linalg.LinAlgError) as e:

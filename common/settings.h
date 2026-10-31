@@ -52,6 +52,7 @@ enum Cap : unsigned {
   kCapRayQuery = 1u << 0,   // VK_KHR_ray_query + VK_KHR_acceleration_structure
   kCapDlss = 1u << 1,       // NVIDIA RTX (DLSS SR/RR): Ray Reconstruction
   kCapFg = 1u << 2,         // RTX 40 and later: DLSS-G 2x
+  kCapOpacityMicromap = 1u << 4, // EXT opacity micromap + core BDA/timeline/sync2
   kCapMfg = 1u << 3,        // RTX 50 and later: DLSS-G 3x/4x
 };
 
@@ -87,6 +88,8 @@ struct Slider {
   const char* keys[3]; // all set to the same value
 };
 
+struct KeyNeed {const char* key; const char* value; const char* label;};
+
 struct Knob {
   const char* id;
   const char* label;
@@ -99,6 +102,7 @@ struct Knob {
   Slider slider;            // Kind::Slider
   int preset[kPresetCount]; // choice index or slider value per preset
   bool experimental = false; // shown under "Experimental": off in every preset, being tested
+  KeyNeed required_on[4] = {}; // Raw startup prerequisites; checked, never silently written.
 };
 
 // clang-format off
@@ -211,6 +215,45 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"ls_box", "0"}}, {}},
     {"on", "On", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}}},
    {}, {0, 0, 0, 0}, true},
+
+  {"exp_native_scalp", "Native scalp coverage",
+   "Uses audited native scalp coverage in ray queries. Needs Full ray-traced geometry. "
+   "Unsupported material/input domains keep the existing path. First use may compile shaders. "
+   "Experimental: in-game quality and GPU cost still need qualification.",
+   Kind::Choice, Apply::Hitch, "first-use shader compilation", true,
+   {{"off", "Off", 0, {{"rt_native_scalp", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_native_scalp", "1"}}, {{"rt_geometry", 2}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
+
+  {"exp_native_hair", "Native hair coverage",
+   "Captures the audited CHAR_Hair strand coverage and depth for ray queries. Other hair "
+   "families remain separate coverage gaps. Needs Full ray-traced geometry. Restart required "
+   "because the captured vertex layout changes. In-game quality and cost are unqualified.",
+   Kind::Choice, Apply::Restart, "restart required", true,
+   {{"off", "Off", 0, {{"rt_native_hair", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_native_hair", "1"}}, {{"rt_geometry", 2}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
+
+  {"exp_omm", "Opacity micromaps",
+   "Experimental hardware opacity micromaps for the audited static alpha-material subset. "
+   "Requires Full ray-traced geometry, Vulkan 1.3, EXT opacity micromaps, buffer device "
+   "address, timeline semaphores, synchronization2 and the static BVH split. "
+   "Unsupported or stale inputs use the reference scene. Useful in-game coverage and speed "
+   "are not qualified. Restart required to negotiate device features.",
+   Kind::Choice, Apply::Restart, "restart required", true,
+   {{"off", "Off", 0, {{"rt_omm", "0"}}, {}},
+    {"on", "On", kCapRayQuery | kCapOpacityMicromap, {{"rt_omm", "1"}}, {{"rt_geometry", 2}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_bvh_split","1","Static geometry cache"}}},
+
+  {"exp_current_sun", "Current cascade sun shadows",
+   "Uses the current four native sun-caster domains with finite per-layer rays and native "
+   "receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the "
+   "static BVH split to be enabled. Unsupported receiver/input domains retain native shadows. Physical "
+   "sun size is unchanged. Restart required; in-game quality and GPU cost are unqualified.",
+   Kind::Choice, Apply::Restart, "restart required", true,
+   {{"off", "Off", 0, {{"rt_sun_cascade_current", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_sun_cascade_current", "1"}}, {{"rt_geometry", 1}, {"exp_roof_shadows", 1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_bvh_split","1","Static geometry cache"},{"rt_cascade_casters","1","Roof sun shadows"}}},
 };
 // clang-format on
 inline constexpr int kKnobCount = int(sizeof kKnobs / sizeof kKnobs[0]);
@@ -231,7 +274,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 213 keys of bg3rtx.ini, in file order.
+// 216 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -287,6 +330,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_backlit", "1"},
     {"rt_tmax", "300"},
     {"rt_sun_radius", "0.00459"},
+    {"rt_sun_cascade_current", "0"},
     {"rt_sun_replace", "1"},
     {"rt_sun_roofs", "1"},
     {"rt_sun_roof_mode", "0"},
@@ -344,6 +388,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_alpha_cut", "1"},
     {"rt_alpha_stochastic", "1"},
     {"rt_native_scalp", "0"},
+    {"rt_omm", "0"},
+    {"rt_native_hair", "0"},
     {"rt_alpha_unknown", "1"},
     {"rt_alpha_auto", "1"},
     {"rt_alpha_max_pct", "60"},
@@ -498,7 +544,7 @@ inline Map code_defaults() {
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
-                                         "sharc_device"};
+                                         "sharc_device", "rt_native_hair", "rt_omm", "rt_sun_cascade_current"};
   for (const char* k : kRestart)
     if (key == k) return from != to;
   return false;
@@ -740,6 +786,13 @@ inline std::string unmet_need(const Knob& k, int c, const std::vector<int>& valu
   return "";
 }
 
+inline std::string unmet_key_need(const Knob& k,int c,const Map& effective) {
+  if(c<=0)return {};
+  for(const auto& need:k.required_on)
+    if(need.key && !same_value(lookup(effective,need.key),need.value))return std::string("needs ")+need.label;
+  return {};
+}
+
 inline bool choice_supported(const Knob& k, int c, unsigned caps) {
   if (k.kind != Kind::Choice || c < 0 || c >= choice_count(k)) return true;
   return (k.choices[c].caps & ~caps) == 0;
@@ -765,6 +818,7 @@ struct Gpu {
   std::string name;
   bool ray_query = false;   // VK_KHR_ray_query + VK_KHR_acceleration_structure
   bool discrete = false;
+  bool opacity_micromap = false; // Required EXT/core features were queried, not inferred from GPU name.
 };
 
 // NVIDIA RTX generation as the marketing series: 20, 30, 40, 50 (0 unknown / not RTX).
@@ -788,6 +842,7 @@ inline int nv_series(const Gpu& g) {
 inline unsigned gpu_caps(const Gpu& g) {
   unsigned c = 0;
   if (g.ray_query) c |= kCapRayQuery;
+  if (g.ray_query && g.opacity_micromap) c |= kCapOpacityMicromap;
   int s = nv_series(g);
   if (s >= 20) c |= kCapDlss;
   if (s >= 40) c |= kCapFg;
@@ -907,12 +962,16 @@ inline std::string schema_json() {
     o += std::string("}}") + (p + 1 < kPresetCount ? "," : "") + "\n";
   }
   o += "  ],\n  \"knobs\": [\n";
-  static const char* const kCapNames[] = {"ray_query", "dlss", "fg", "mfg"};
+  static const char* const kCapNames[] = {"ray_query", "dlss", "fg", "mfg", "opacity_micromap"};
   for (int i = 0; i < kKnobCount; ++i) {
     const Knob& k = kKnobs[i];
     o += "    {\"id\": " + json_str(k.id) + ", \"label\": " + json_str(k.label) + ",\n     \"description\": " +
          json_str(k.desc) + ",\n     \"apply\": " + json_str(apply_name(k.apply)) + ", \"apply_note\": " +
-         json_str(k.apply_note) + ", \"advanced\": " + (k.advanced ? "true" : "false") + ",\n";
+         json_str(k.apply_note) + ", \"advanced\": " + (k.advanced ? "true" : "false") + ", \"experimental\": " + (k.experimental ? "true" : "false") + ",\n";
+    o += "     \"required_on\": {";
+    bool firstNeed=true;
+    for(const auto& need:k.required_on)if(need.key){o+=std::string(firstNeed?"":", ")+json_str(need.key)+": "+json_str(need.value);firstNeed=false;}
+    o += "},\n";
     o += "     \"preset_values\": {";
     for (int p = 0; p < kPresetCount; ++p)
       o += json_str(kPresetId[p]) + ": " + std::to_string(k.preset[p]) + (p + 1 < kPresetCount ? ", " : "");
@@ -937,7 +996,7 @@ inline std::string schema_json() {
         const Choice& ch = k.choices[c];
         o += "       {\"id\": " + json_str(ch.id) + ", \"label\": " + json_str(ch.label) + ", \"caps\": [";
         bool first = true;
-        for (int b = 0; b < 4; ++b)
+        for (int b = 0; b < 5; ++b)
           if (ch.caps & (1u << b)) {
             o += std::string(first ? "" : ", ") + json_str(kCapNames[b]);
             first = false;

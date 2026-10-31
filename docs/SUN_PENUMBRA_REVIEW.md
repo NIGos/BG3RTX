@@ -88,6 +88,30 @@ previews are downscaled and are not a precise edge-width measurement.
 
 ## Physical expectation and next correction
 
+### Exploration is the user's primary case
+
+New user clarification: the sharp/uniform shadows are especially visible outside
+dialogues. The close-up percentages above are mechanism evidence, not primary-case
+attribution. Retained final PNG inspection identifies 162008 as an overhead world
+view of the ruined bridge, and 163004/163010 as overhead world views of camp trees
+and rocks. 161807 is a wide Shadowheart DIALOGUE view, and 162506 is an Astarion
+DIALOGUE; those two must not be counted as exploration controls.
+
+Relevant 600-frame windows have less extreme but still substantial fallback:
+
+| Window end / nearby world capture | Traced pixels | Off-screen ramp | Disagreements kept off screen | Fully replaced disagreements |
+| --- | ---: | ---: | ---: | ---: |
+| 16:20:06.894 / 162008 | 86.1% of image | 69.6% | 56.1% | 27.1% |
+| 16:20:17.747 / 162008 | 78.8% of image | 59.0% | 45.1% | 34.7% |
+| 16:30:07.580 / 163004, 163010 | 92.4% of image | 63.7% | 55.9% | 26.5% |
+
+These are aggregate windows around capture times, not region-matched sun-mask
+readbacks. The same composition limitation therefore remains relevant in retained
+exploration, but the extreme dialogue percentages cannot be transferred to it.
+The two camp frames are six seconds apart, not a frozen-scene A/B; animated foliage
+or changed geometry can also alter individual shadows. No specific tree edge has
+yet been proven dominated by fallback rather than trusted RT reconstruction.
+
 Radius .00459 means .526 degrees full diameter. For a straight edge and suitable
 receiver geometry, full penumbra width is approximately `2*d*tan(radius)`:
 0.184 mm at d=.02 m, .918 mm at .1 m, 9.18 mm at 1 m, 91.8 mm at 10 m.

@@ -20,8 +20,9 @@ namespace bg3 {
 // `stride` is 16 (Position only) or 24 (Position + UV); `uv_location`
 // receives the location of the captured UV output, or -1.
 inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& out, uint32_t stride = 16,
-                     int* uv_location = nullptr) {
+                     int* uv_location = nullptr, uint32_t* native_hair_outputs = nullptr) {
   if (uv_location) *uv_location = -1;
+  if (native_hair_outputs) *native_hair_outputs = 0;
   if (words < 5 || code[0] != 0x07230203) return false;
   struct Ins { size_t pos; uint32_t op, n; };
   std::vector<Ins> ins;
@@ -108,6 +109,39 @@ inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& 
   if (uv_var)
     dec.insert(dec.end(), {(4u << 16) | 71, uv_var, 36, 0, (4u << 16) | 71, uv_var, 37, stride,
                            (4u << 16) | 71, uv_var, 35, 16});
+  // Opt-in native hair stream: N/T/B at 24/36/48, original W at60,
+  // fade/color vec4 at72. Preserve the actual post-wind native outputs.
+  // Only a complete smooth float32 strand frame is advertised; partial,
+  // component-decorated or flat/noperspective interfaces remain unsupported.
+  uint32_t hair_flags = 0;
+  if (stride >= 88u && uv_loc == 0) {
+    uint32_t vars[5] = {};
+    for (unsigned slot = 0; slot < 5; ++slot) {
+      const unsigned components = slot == 4 ? 4u : 3u;
+      for (const auto& v : ins) {
+        const uint32_t* a = code + v.pos;
+        if (v.op != 59 || v.n < 4 || a[3] != 3) continue;
+        uint32_t type = 0, element = 0;
+        for (const auto& p : ins) if (p.op == 32 && p.n >= 4 && code[p.pos+1] == a[1] && code[p.pos+2] == 3) type = code[p.pos+3];
+        for (const auto& t : ins) if (t.op == 23 && t.n >= 4 && code[t.pos+1] == type && code[t.pos+3] == components) element = code[t.pos+2];
+        bool f32 = false, located = false, unsafe = false;
+        for (const auto& t : ins) if (t.op == 22 && t.n >= 3 && code[t.pos+1] == element && code[t.pos+2] == 32) f32 = true;
+        for (const auto& d : ins) if (d.op == 71 && d.n >= 3 && code[d.pos+1] == a[2]) {
+          const auto decoration = code[d.pos+2];
+          if (decoration == 30 && d.n >= 4 && code[d.pos+3] == slot + 1) located = true;
+          if (decoration == 31 || decoration == 35 || decoration == 36 || decoration == 37 || decoration == 13 || decoration == 14) unsafe = true;
+        }
+        if (f32 && located && !unsafe) vars[slot] = a[2];
+      }
+    }
+    if (vars[0] && vars[1] && vars[2] && vars[3]) {
+      hair_flags = 1u | (vars[4] ? 2u : 0u);
+      for (unsigned slot = 0; slot < 5; ++slot) if (vars[slot]) {
+        const uint32_t offset = slot == 4 ? 72u : 24u + slot * 12u;
+        dec.insert(dec.end(), {(4u<<16)|71,vars[slot],36,0,(4u<<16)|71,vars[slot],37,stride,(4u<<16)|71,vars[slot],35,offset});
+      }
+    }
+  }
   if (pos_struct) dec.insert(dec.end(), {(5u << 16) | 72, pos_struct, pos_member, 35, 0});
   else dec.insert(dec.end(), {(4u << 16) | 71, pos_var, 35, 0});
   out.clear();
@@ -120,6 +154,7 @@ inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& 
   out.insert(out.end(), dec.begin(), dec.end());
   out.insert(out.end(), code + pos_dec, code + words);
   if (uv_location) *uv_location = uv_loc;
+  if (native_hair_outputs) *native_hair_outputs = hair_flags;
   return true;
 }
 

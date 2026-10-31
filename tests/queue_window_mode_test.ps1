@@ -23,9 +23,9 @@ Check (@($lines | Where-Object {$_ -match '^fg='}).Count -eq 1 -and $lines -cont
 Check ($lines -contains 'headless=0' -and $lines -contains 'gi=1') 'phase preserves lighting and real presentation'
 $scratch=Join-Path $env:TEMP ('bg3-unfocused-policy-'+[guid]::NewGuid().ToString('N'))
 $q=Join-Path $scratch 'captures\queue'; New-Item -ItemType Directory -Force $q | Out-Null
-Check ((Get-QueuePermissionBlock $job $scratch) -match 'USER_AWAY') 'new mode retains away requirement'
+Check ((Get-QueuePermissionBlock $job $scratch) -match 'authorization') 'new mode requires explicit batch'
 Set-Content -LiteralPath (Join-Path $q 'USER_AWAY') 'synthetic policy test only'
-Check (-not (Get-QueuePermissionBlock $normalized $scratch)) 'away permits owned mode'
+Check ((Get-QueuePermissionBlock $normalized $scratch) -match 'authorization') 'away is not authorization'
 Set-Content -LiteralPath (Join-Path $q 'USER_PLAYING') 'synthetic policy test only'
 Check ((Get-QueuePermissionBlock $normalized $scratch) -match 'USER_PLAYING') 'playing blocks unfocused too'
 $r=[BG3RTX.UnfocusedWindow+Rect]::new(0,0,100,100)
@@ -46,6 +46,6 @@ $fgJob=ConvertTo-QueueWindowJob ([pscustomobject]@{window_mode='visible_unfocuse
 Check ($fgJob.args -contains '-UnfocusedFG' -and $fgJob.set -notmatch 'fg=0') 'authorized FG mode preserves FG on'
 Check ((Set-UnfocusedIniLines @('fg=2','headless=1') -PreserveFG) -contains 'fg=2') 'live FG phases preserved'
 $otherScratch=Join-Path $env:TEMP ('bg3-fg-authorized-'+[guid]::NewGuid().ToString('N'))
-Check (-not (Get-QueuePermissionBlock $fgJob $otherScratch)) 'explicit authorization no longer needs USER_AWAY'
+Check ((Get-QueuePermissionBlock $fgJob $otherScratch) -match 'authorization') 'old FG exception is not authorization'
 Check ((Get-QueuePermissionBlock $fgJob $scratch) -match 'USER_PLAYING') 'playing still blocks authorized FG mode'
 Write-Host "$count unfocused policy/geometry checks passed; no process or window methods invoked"

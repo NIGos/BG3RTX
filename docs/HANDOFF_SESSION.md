@@ -1,35 +1,36 @@
-# Session handoff - 2026-10-30: UI fix confirmed; hair/cascade coverage open
+# Session handoff - 2026-10-31: capacity regression corrected; Hair origins next
 
-Latest user mandate: autonomous offline implementation/verification may be parallel;
-live ONLY after explicit steering for a prepared batch. No manual user A/B/INI edits.
-Read docs/RENDERING_EXECUTION_PLAN.md and docs/GOAL_RENDERING_AGENT.md. Experimental
-feature controls must stay synchronized with the GUI. Old queue/window exceptions
-are not authorization; keep drafts OUT of pending inboxes. Queue policy needs a
-small fake-tested correction before autonomous live release. No live grant exists
-for the new program. Current coverage fixes retain priority; reuse their owners.
-Milestones are independent increments, not a waterfall. M0 gates live release only.
-Request a ready candidate's live batch while unrelated offline lanes keep working.
-Pending/declined live permission blocks live only: reassign workers across useful
-offline increments before stopping. Record actual blockers; no repeated-test busywork.
-Storage: read docs/DISK_HYGIENE.md before cleanup. The active rendering coordinator
-listed protected evidence there; large historical P1 raw collections remain held.
-Bound new captures and retain decisive data; no blanket worktree/raw deletion.
+Full rendering execution plan M0-M6 remains active; do not claim completion.
+User permits live diagnostics now, queue-only with finite scoped receipts and
+unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
+after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
+a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main dd13361 includes `codex/native-coverage`, merged via merge-green and pushed:
-20/20 CTests, 202/202 shader files and QA pass. Default-off rt_native_scalp adds native scalp
-hard-cut scalar coverage/material capture; camera dither != 0 remains unsupported.
-No ABI bump or feature enablement. Sticky persisted capability protects held scenes
-through key-off/core reload. 20/20 CTests and 178,780 scalar/capture/capability checks
-pass; 95 ordinary shaders byte-identical and 95 capable compile/validate. Actual
-F10 Frame mode unknown. Full Hair/cascade/raster identity still open; TRACK_D_RT.
+Main remains 92183e7 ABI 18 with user planning docs; preserve them. Development
+is codex/omm-bake ABI 19. Both DLLs build; 42/42 CTests. OMM is wired offline,
+not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
+Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
 
-Read AGENTS.md, top PROGRESS_CODEX.md and latest user steering in this conversation.
-No Ponytail. The user explicitly permits modest multi-agent OFFLINE work; three
-agents were used (capture, OMM, solar review). Live testing is coordinated here, not autonomous
-launches while the user plays. Never touch saves, D:/BG3_Tools backups, snapshot
-tags, force-push or clean junction checkouts. Never hold results.md open.
-Game launches, when authorized, only scripts/test-queue.ps1; USER_PLAYING or an
-unowned game blocks them. Live tests remain user-coordinated even when closed.
+Desktop BG3RTX - Hair Scalp now targets hair-capacity-fix 859b879, with matching
+DLLs. Native Hair/Scalp ON; OMM/current Sun OFF; camera 1408 MiB/cascade 587 MiB.
+Two Test1 FG2 static/rotation runs complete; all steady camera/cascade drops ZERO
+in the final run. Static RT cost 3.397 ms without primary diagnostics; rotations
+45.4-48.2 rendered fps, FG ratio ~2. Original a9f8688 trial is retained. User has
+NOT yet checked the capacity update. Main code/binaries/saves untouched.
+
+Next concrete fix: virtual Hair primary hit vs physical card secondary-origin
+self-hit. Dedicated worker owns a default-off auxiliary-image candidate; preserve
+virtual primary/history depth and ordinary shader byte identity. No live proof yet.
+Darker/dithered Hair remains open. Optional small cascade 160/587 burst diagnostic
+supports, but does not delay, the already-demonstrated capacity correction.
+
+Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
+module-independent SHA256 are fixed and tested through actual simulated runner.
+M2 actual mesh/construction/material exports and shared CPU/HLSL BSDF remain
+bounded offline increments, not room closure/world runtime/PT qualification.
+No Ponytail. Never touch saves/backups/tags, force-push, clean junction trees or
+hold results.md open. Read DISK_HYGIENE.md before any cleanup; owner holds remain.
+Only merge-green integrates main; dirty main still blocks it.
 
 ## Current checkout and confirmed UI correction
 
