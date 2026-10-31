@@ -114,7 +114,7 @@ is capped at 1.0.
     why they stay internal.
 - **Mode routing:** `gi_rr`, `rf_rr`, `ls_soft` (-1 follows `rr`), `rf_max_rough_norr`,
   `rr_guides_v2`, `rr_guides_at`, `rr_nov`.
-- **BVH policy:** `rt_refit`, `rt_rebuild_frames` (60), `rt_fast_trace` (no measured gain).
+- **BVH policy:** `rt_refit`, `rt_rebuild_frames` (60). (`rt_fast_trace`, no measured gain: removed 2026-10-31, see CONSOLIDATION.md C1.)
 - **Memory budgets** (R): `rt_xfb_mb` 384, `rt_alpha_mb` 64, `geo_xfb_mb`, `geo_max_draws`,
   `geo_indirect_mb`.
 - **Frame-gen plumbing:**
@@ -566,7 +566,7 @@ Changing any knob switches the preset combo to **Custom**. "Reset to preset" res
 |---|---|---|
 | **Live, next frame** | all strengths, `rt_shadows`, `rt_local_shadows`, `ls_samples`, `ls_shadowed`, `rt_reflections`, `rf_max_rough`, `gi`, `gi_rt`, `gi_rays`, `gi_rr_rays`, `gi_steps`, `reflex`, `fps_cap`, `fg` 2↔3↔4↔0 (with Streamline loaded) | push constants / per-frame branches; the next present's `cfg_poll` picks them up (≤ 1 s) |
 | **Live with a reset or reallocation (brief hitch, one frame of history lost)** | `rr` (RR ↔ SR history reset, GI images reallocated full ↔ half res via `gi_res_shift`); `rt_build` 0→1 (first build is a full rebuild, ≈ 3.4 ms once) | handled by existing code; badge "brief hitch" |
-| **BVH rebuild** | `rt_alpha_test`, `rt_refit`, `rt_fast_trace`, `rt_rebuild_frames` | the next build is a rebuild; live but internal |
+| **BVH rebuild** | `rt_alpha_test`, `rt_refit`, `rt_rebuild_frames` | the next build is a rebuild; live but internal |
 | **Game-side** | DLSS mode / upscaler | game's own menu; it recreates SR, and our RR follows that feature's lifetime |
 | **Restart** | `rt` (device features), `rt_alpha` (capture source + memory), `fg` 0 → 2+ (Streamline loads at instance creation), memory budgets, `ngx_hook`, `sl_*`, `force_*`, `geo_capture` | the overlay shows "applies after restart" and writes the value; the launcher sets them before launch |
 

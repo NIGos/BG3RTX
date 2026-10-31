@@ -812,7 +812,7 @@ are off-screen or behind a surface now count.
 
 - `rt_fast_trace=1` (`PREFER_FAST_TRACE`): rebuild 3.3 ms, refit 0.56 ms, with no
   measurable gain in trace time (0.225–0.235 vs 0.235–0.241 ms). Fast build stays
-  the default.
+  the default. `rt_fast_trace`: removed 2026-10-31, see CONSOLIDATION.md C1.
 - The phase-1 bench (0.55 ms refit, 2.5–3.4 ms rebuild on its own device) is
   reproduced on the game's device.
 - With `rt_debug=3` the extra primary ray brings the shadow pass to 0.25–0.36 ms.
@@ -864,7 +864,7 @@ Found and fixed along the way:
    screen when on-screen, otherwise from a radiance cache. Denoise with RR (Track A).
 
 Settings (`bg3rtx.ini`):
-- `rt`, `rt_build`, `rt_refit`, `rt_rebuild_frames`, `rt_fast_trace`, `rt_xfb_mb`,
+- `rt`, `rt_build`, `rt_refit`, `rt_rebuild_frames`, `rt_xfb_mb`,
   `rt_bda_core`;
 - `rt_shadows`, `rt_strength`, `rt_bias`, `rt_tmax`;
 - `rt_ao`, `rt_ao_rays`, `rt_ao_radius`;

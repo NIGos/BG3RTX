@@ -1178,8 +1178,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   g_omm_ranges[slot].clear();
   g_omm_records[slot]=0;
   const VkBuildAccelerationStructureFlagsKHR dyn_flags =
-      (cfg_int("rt_fast_trace", 0) ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
-                                   : VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR) |
+      VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR |
       VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
   const VkBuildAccelerationStructureFlagsKHR mesh_flags =
       VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
@@ -1521,8 +1520,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // count) refits the BLAS instead of rebuilding it, up to rt_cascade_rebuild_frames refits.
   const bool casc_refit_on = cfg_int("rt_cascade_refit", 0) != 0;
   const VkBuildAccelerationStructureFlagsKHR casc_flags =
-      (cfg_int("rt_fast_trace", 0) ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
-                                   : VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR) |
+      VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR |
       (casc_refit_on ? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR : 0);
   if (casc) {
     casc_refit = casc_refit_on && g_casc_as.as && g_casc_sig == cap.cascade_sig && g_casc_tris == cap.cascade_tris &&

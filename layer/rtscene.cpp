@@ -1133,8 +1133,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   // ---- legacy: one BLAS over the whole soup ----
   const bool want_refit = cfg_int("rt_refit", 1) != 0;
   VkBuildAccelerationStructureFlagsKHR flags =
-      (cfg_int("rt_fast_trace", 0) ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
-                                   : VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR) |
+      VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR |
       (want_refit ? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR : 0);
   VkDeviceAddress verts = buffer_address(xfb), averts = verts + cap.alpha_base;
   if (!ensure_tlas() || !ensure_blas(prims, aprims, geoms, stride, flags, verts, averts)) {
