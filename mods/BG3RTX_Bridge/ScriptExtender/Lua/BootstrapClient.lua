@@ -160,6 +160,7 @@ end
 local function reset()
   cache, grid, dynamic, classified = {}, {}, {}, 0
   pending, pending_i = nil, 1
+  n_all, last_sync = 0, -RESYNC_US -- same-count level changes still need a fresh membership scan
 end
 
 -- Flag bits by the LightFlags string (a handful of distinct values per level).
@@ -231,9 +232,10 @@ local function tick()
     collect_charlights()
     local q = {}
     local live = {}
+    classified = 0 -- CURRENT successful membership, never a cumulative lifetime counter
     for _, e in ipairs(all) do
       live[e] = true
-      if cache[e] == nil then q[#q + 1] = e end
+      if cache[e] == nil then q[#q + 1] = e elseif cache[e] then classified = classified + 1 end
     end
     if #q > 0 then pending, pending_i = q, 1 end
     local d = {}
@@ -285,8 +287,8 @@ local function tick()
   local cost = clock() - t0
   cost_sum, cost_n = cost_sum + cost, cost_n + 1
   if cost > cost_max then cost_max = cost end
-  local hdr = string.format("BG3RTX_SE 1\nseq %d ms %.0f level %s host %.3f %.3f %.3f scan_us %.0f avg_us %.0f max_us %.0f all %d classified %d out %d classify_us %.0f classify_max_us %.0f",
-    seq, now / 1000, level ~= "" and level or "-", hx, hy, hz, cost, cost_sum / cost_n, cost_max, n_all, classified, #out, cls_us, cls_max)
+  local hdr = string.format("BG3RTX_SE 1\nseq %d ms %.0f level %s host %.3f %.3f %.3f scan_us %.0f avg_us %.0f max_us %.0f all %d classified %d out %d pending %d classify_us %.0f classify_max_us %.0f",
+    seq, now / 1000, level ~= "" and level or "-", hx, hy, hz, cost, cost_sum / cost_n, cost_max, n_all, classified, #out, pending and math.max(0, #pending - pending_i + 1) or 0, cls_us, cls_max)
   Ext.IO.SaveFile(OUT, hdr .. "\n" .. table.concat(out, "\n") .. "\nEND\n")
 end
 

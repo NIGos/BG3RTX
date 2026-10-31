@@ -2,6 +2,7 @@
 #include "omm_sampler.h"
 #include "../common/native_hit_join.h"
 #include "../common/native_hit_order.h"
+#include "../common/native_hit_inputs.h"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -80,15 +81,48 @@ bool mark_owner(VkCommandBuffer cmd,Slot& slot){
  if(std::find(slot.owners.begin(),slot.owners.end(),id)==slot.owners.end())slot.owners.push_back(id);return true;
 }
 uint64_t current_recording(uint64_t command){return cmd_recording(reinterpret_cast<VkCommandBuffer>(uintptr_t(command)));}
-DrawKey key(const CmdState& s,const DrawArgs& a){
+DrawKey key(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  DrawKey k;size_t i=0;for(uint64_t v:{uint64_t(a.kind),uint64_t(a.count),uint64_t(a.instances),uint64_t(a.first),uint64_t(uint32_t(a.vertex_offset)),uint64_t(a.first_instance)})k.words[i++]=v;
  k.words[i++]=uint64_t(s.ib);k.words[i++]=s.ib_offset;k.words[i++]=uint64_t(s.ib_type);
- // Canonical vertex stream0 + index/draw identity select candidates. Unused
- // higher binding state differs across depth/deferred pipelines and is NOT a
- // geometry certificate. Exact post-VS clip/UV comparison is the certificate;
- // duplicate candidate identities remain unsupported.
+ // Legacy candidate for other shader families. The audited static pair below
+ // resolves its actual active inputs instead of assuming vertex stream 0.
+ // Neither CPU identity is a certificate: exact GPU clip/UV/parameter checks
+ // remain mandatory, and duplicate candidate identities stay unsupported.
  const auto& v=s.vb[0];k.words[i++]=uint64_t(v.buffer);k.words[i++]=v.offset;k.words[i++]=v.stride;
- return k;
+ const bool depth=static_depth_family(s.vs,s.fs),deferred=audited_static_family(s.vs,s.fs);
+ if(!depth && !deferred)return k;
+ StaticInputs attributes{};StaticKeyInputs inputs{};Bg3Binding engine{},pulled{};
+ bool available=geo_native_hit_inputs(s.pipe[0],&attributes) &&
+  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,0,0,&engine) && engine.buffer && engine.range>=112 && geo_uniform_buffer_range(engine.buffer,engine.offset,112);
+ if(available){
+  inputs.engine_buffer=uint64_t(engine.buffer);inputs.engine_offset=engine.offset;
+  inputs.pull_hint_known=read_mapped(engine.buffer,engine.offset+96,&inputs.pull_index,4);
+  if(inputs.pull_hint_known && inputs.pull_index>0 && query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,13,0,&pulled)){
+   inputs.pull_buffer=uint64_t(pulled.buffer);inputs.pull_offset=pulled.offset;inputs.pull_range=pulled.range;
+  }
+  auto stream=[&](const InputAttribute& attr,InputStream& out){
+   if(attr.binding>=CmdState::kMaxVertexBindings)return false;const auto& bound=s.vb[attr.binding];
+   const auto stride=attr.dynamic_stride?bound.stride:attr.stride;
+   if(!bound.buffer || !stride || bound.offset>UINT64_MAX-attr.offset || bound.offset+attr.offset>=geo_buffer_size(bound.buffer))return false;
+   out={uint64_t(bound.buffer),bound.offset+attr.offset,stride,uint32_t(attr.format)};return true;
+  };
+  bool position=stream(attributes.position,inputs.position),uv=stream(attributes.uv,inputs.uv);
+  available=uv && (position || (inputs.pull_hint_known && inputs.pull_index>0));
+ }
+ DrawKey canonical{};bool ready=available && canonical_static_key(k,inputs,canonical);
+ // Mapped index is a candidate hint, never an execution-time certificate.
+ // Unknown/zero retains the actual position attribute. GPU clip/UV/parameter
+ // equality remains mandatory even when an inactive position stream is omitted.
+ static thread_local uint64_t logged_frame=UINT64_MAX;static thread_local uint32_t logged[2]{};const auto frame=frame_index();
+ if(cfg_int("rt_stats",0) && frame%120==0){if(logged_frame!=frame){logged_frame=frame;logged[0]=logged[1]=0;}
+  if(logged[deferred?1:0]++<4)log("[hit material canonical inputs] frame %llu %s ready %u input layout known %u engine %p+%llu range %llu pull hint known/index %u/%u SSBO0.13 %p+%llu range %llu; position location0 binding/format/stride %u/%u/%llu UV location1 binding/format/stride %u/%u/%llu; draw count %u first %u vertex %d; CPU hints only, GPU clip/UV/params required",
+   (unsigned long long)frame,depth?"source":"deferred",unsigned(ready),unsigned(attributes.valid),(void*)engine.buffer,(unsigned long long)engine.offset,(unsigned long long)engine.range,unsigned(inputs.pull_hint_known),inputs.pull_index,(void*)pulled.buffer,(unsigned long long)pulled.offset,(unsigned long long)pulled.range,
+   attributes.position.binding,unsigned(attributes.position.format),(unsigned long long)inputs.position.stride,attributes.uv.binding,unsigned(attributes.uv.format),(unsigned long long)inputs.uv.stride,a.count,a.first,a.vertex_offset);
+ }
+ if(ready)return canonical;
+ // A missing audited input tuple cannot accidentally join through the old
+ // coarse VB0 key. Different shader hashes make this explicitly unsupported.
+ k.words[20]=0x4e484b30u;k.words[21]=s.vs;return k;
 }
 bool create(Buffer& out,VkDeviceSize bytes,VkBufferUsageFlags usage,bool host=false){
  if(out.b)return true;
@@ -223,7 +257,7 @@ void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(
 void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint32_t record,VkDeviceSize rawOffset,uint32_t stride,uint32_t triangles){
  if(!on || !state || args.kind>1 || args.instances!=1 || args.count!=uint64_t(triangles)*3 || record>=max_records)return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot) || snapshot.rec.kind!=1 || snapshot.rec.channel!=0)return;
- Pre pre{key(*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
+ Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
  ++p->second.candidate_draws;
  if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record))p->second.pre.push_back(pre);
 }
@@ -253,10 +287,17 @@ void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
   // Samples are explicitly NOT a claimed pair. They expose source shader and
   // raw argument/IB/VB domains if no exact key association can be constructed.
   auto sample=[&](const char* side,const DrawKey& key,uint64_t vs,uint64_t fs){const auto& w=key.words;
-   log("[hit material key sample] frame %llu %s vs/fs %016llx/%016llx kind/count/instances/first/vertex/instance %llu/%llu/%llu/%llu/%llu/%llu IB/offset/type %llx/%llu/%llu VB0/offset/stride %llx/%llu/%llu; not a claimed pair",
+   log("[hit material key sample] frame %llu %s vs/fs %016llx/%016llx kind/count/instances/first/vertex/instance %llu/%llu/%llu/%llu/%llu/%llu IB/offset/type %llx/%llu/%llu schema 0x%llx; not a claimed pair",
     (unsigned long long)s.frame,side,(unsigned long long)vs,(unsigned long long)fs,(unsigned long long)w[0],(unsigned long long)w[1],(unsigned long long)w[2],(unsigned long long)w[3],(unsigned long long)w[4],(unsigned long long)w[5],
-    (unsigned long long)w[6],(unsigned long long)w[7],(unsigned long long)w[8],(unsigned long long)w[9],(unsigned long long)w[10],(unsigned long long)w[11]);};
-  if(!p->second.pre.empty()){const auto& pre=p->second.pre.front();sample("source",pre.key,pre.vs,pre.fs);}
+    (unsigned long long)w[6],(unsigned long long)w[7],(unsigned long long)w[8],(unsigned long long)w[20]);
+   if(w[20]==0x4e484b31u)log("[hit material key inputs] %s engine %llx+%llu pull %llu index hint %llu position buffer/offset/stride/format %llx/%llu/%llu/%llu UV buffer/offset/stride/format %llx/%llu/%llu/%llu",
+    side,(unsigned long long)w[9],(unsigned long long)w[10],(unsigned long long)w[11],(unsigned long long)w[21],(unsigned long long)w[12],(unsigned long long)w[13],(unsigned long long)w[14],(unsigned long long)w[15],
+    (unsigned long long)w[16],(unsigned long long)w[17],(unsigned long long)w[18],(unsigned long long)w[19]);
+  };
+  if(!p->second.pre.empty()){
+   auto source=std::find_if(p->second.pre.begin(),p->second.pre.end(),[](const auto& pre){return static_depth_family(pre.vs,pre.fs);});
+   if(source==p->second.pre.end())source=p->second.pre.begin();sample("source",source->key,source->vs,source->fs);
+  }
   sample("deferred",deferred->materials.front().key,0x3812bc980438747full,0x8995da1e4060f53bull);
  }
  s.prepared=true;pending.erase(p);
@@ -277,7 +318,7 @@ bool attach(VkCommandBuffer,uint32_t index,VkDescriptorSet set,VkBuffer dummyBuf
 }
 bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,bool exactPipeline,uint32_t stride,VkBuffer* buffer,VkDeviceSize* offset,VkDeviceSize* bytes){
  if(!on || !cfg_int("rt_hit_material",0) || !one_time(state))return false;Bg3Binding camera{};if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera) || !camera.buffer)return false;
- auto draw=key(*state,args);std::lock_guard lock(mutex);collect();
+ auto draw=key(cmd,*state,args);std::lock_guard lock(mutex);collect();
  auto it=packets.find(state->recording);
  if(it==packets.end()){
   if(packets.size()>=kSceneSlots)return false;

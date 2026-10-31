@@ -191,7 +191,6 @@ std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s) {
 }
 
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame) {
-  terrain_capture_submit(cmds,frame);
   std::lock_guard<std::mutex> lock(g_mu);
   for (VkCommandBuffer c : cmds) {
     CmdState* s = cmd_state(c);

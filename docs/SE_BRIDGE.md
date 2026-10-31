@@ -307,6 +307,41 @@ and the `[se] join` check use the same rules).
 - `[se] join: ... radius disagreement max a (placed) / b (moving, relative); moving
   tolerance T m (D s between export and frame)`: with `assetdb_join=1`.
 
-**Known gap.** The Lua classifies at most 100 new light entities per tick. Until it has
-classified a level's lights (about a second after a load), a database light inside the
-export's coverage that the bridge has not classified yet is dropped too.
+**Classification absence fix (source only, 2026-10-31).** The first export queues
+classification after that tick's classification loop, so `seq 1`, zero output and
+thousands of `all` entities is expected startup behavior. The reader previously
+logged only this first fresh export. Retained later files contain nonzero records;
+this is not evidence of a failed Light-component API mapping.
+
+The old reader also treated omitted database lights as absent while classification
+was incomplete. The existing Lua now recounts successful CURRENT live membership
+on resync, exports the pending count, and forces resync on same-count level changes.
+The reader requires known `all/classified/pending/out`, `classified == all`,
+`pending == 0`, and an exact emitted-body count before `se_covers` can supply negative
+absence evidence. Explicit emitted lights remain usable independently. Failed
+classification remains UNKNOWN rather than an invented absence. A once-per-level
+completion log makes the transition visible; no global percentage threshold exists.
+
+The controlling key remains `se_bridge=1` (existing default). Legacy exports missing
+pending remain readable and supply their explicit records; they no longer suppress
+unmatched database fallback. This compatibility change is conservative UNKNOWN,
+not current activation proof. Both source Lua and layer must be updated to obtain
+complete negative coverage; no installed game script/profile was changed here.
+Standalone source tests cover 16 parser/coverage scenarios, including startup,
+partial membership, pending equal-count replacement, legacy/malformed counts and
+retained explicit records. No game/GPU run verified this source change yet.
+
+Read-only observations and copied complete outputs live at
+`captures/m2-foundry/se-bridge-review/evidence.json`: default snapshot seq 525 has
+4013/4013 classified and 124 emitted records (110 enabled); historical slot0 has
+3964/3964 and 89 records, slot1 has 4082/4082 and 94. Exact paths, timestamps and hashes
+are retained. An earlier header-only seq 1385 observation had 132 records; that file
+was overwritten by the next run before copying, so no hash is invented for it.
+
+The bridge already supplies process-local entity IDs, world positions, type/radius,
+raw colour/intensity/Kelvin and explicit enabled/channel/owner/flicker flags to the
+existing `runtime_lights` provider. These are sampled states, not permanent resource
+UUIDs or a complete transform/shape packet. Rotation, spot cones, box dimensions,
+cookies and calibrated native colour-temperature/exposure/intensity conversions
+still require existing DB/native bindings. The provider's name-based source-radius
+heuristic is not newly certified physical photometry. No new resolver is added.

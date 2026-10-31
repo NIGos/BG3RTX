@@ -6,8 +6,8 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main 90d7930 ABI 21 is merged via merge-green and pushed with codex/omm-bake.
-Both DLLs rebuilt; 52/52 CTests, 561/561 runtime shaders and QA passed. Related
+Main c82fe8d ABI 21 is merged via merge-green and pushed with codex/omm-bake.
+Both DLLs rebuilt; 54/54 CTests, 577/577 runtime shaders and QA passed. Related
 user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
@@ -46,10 +46,17 @@ No material GPU participation yet. Static primary 99.524/99.524/99.525%, FG rati
 R3 dae7d32 is TERMINAL: 448 s, parser fix confirmed actual, binding attempts
 still decline; no material GPU rows. Immutable root captures/r3 analysis retained.
 76ef799/import d8510b1 fixes eligibility-before-key and ordinary frozen samplers.
-R4 unreleased draft: 20/90/20 s plus one ON+30 s existing trace for terrain packet.
-Exact packet capture e3b238a/8a84f11 linked/tested, opt-in request marker.
+R4 c82fe8d is TERMINAL (230 s): captured 16, snapshots 12, no GPU association.
+Actual 8975/e2ec and 3812/8995 use conditional SSBO 0.13 position pulling; owner fixes
+canonical Engine/active-stream keys (5b5c595/import bd6719f), retaining exact GPU
+clip/UV proof. No cache-
+only rerun: static source draws are not the instanced cached domain.
+Terrain UBO usage 16 lacks TRANSFER_SRC; fa3d9f4 shaderreadback built/validated,
+actual-submit pinning/stages fixed in 68321d0/import fe9f949, targeted checks pass.
+R5 same 130 s draft, normal cache/reference OFF, needs merge-green+freeze. No live job.
+Exact packet capture e3b238a/8a84f11 is opt-in only; R4 raw evidence is retained.
 Two-surface reference d74f766, rt_hit_reference=2, default OFF; CPU/shader checks
-pass, no GPU/path-quality claim. Consolidate via merge-green before candidate.
+pass, no GPU/path-quality claim. All consolidated via merge-green and pushed.
 Main is ABI 21; personal Hair trial stays ABI 19. Do not rerun unchanged.
 89 actual S1 G-buffer VS/FS modules pass the read-only scanner. Non-watched
 360 s acquisition draft is under captures/native-hit-material-20261031/draft/.
@@ -71,7 +78,9 @@ Persistent terrain now matches all 13512 active triangle IDs and 738 holes; loca
 289 triangles replace frozen capture geometry. Shared CPU/HLSL terrain arithmetic
 has 1366 CPU checks, but real mask/brush packets remain missing. Seven authored
 cell lights exported with raw parameters; live activation/photometry UNKNOWN.
-74 asset checks: 73 pass, one skip. No invented roof or material defaults.
+74 asset checks: 73 pass, one skip. SE absence fix 59a4e56/2a708a3 has 16 fresh
+checks; Lua install unchanged. Actual exports contain 124/89 lights; native/DB
+CSV photometry adapter task active. No invented roof or material defaults.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
 module-independent SHA256 are fixed and tested through actual simulated runner.

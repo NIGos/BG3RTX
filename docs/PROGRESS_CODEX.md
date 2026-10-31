@@ -1,5 +1,69 @@
 # BG3RTX progress
 
+## Native input and terrain submit fixes prepared - 2026-10-31
+
+5b5c595/import bd6719f resolves actual native Engine, position and UV inputs for
+8975/e2ec and 3812/8995. Positive mapped pull index is only a candidate hint; full
+GPU clip/UV/parameter proof remains required. Host links, 44 pipeline/input cases
+and two targeted tests pass. fe645b7 makes concurrent diagnostic counters thread
+local; gameplay/shader behavior is unchanged by that follow-up.
+
+68321d0/import fe9f949 pins exact terrain packet owners before the real driver
+call, stamps actual successful submissions/queues and keeps failed executable
+attempts retryable. Submit2 waits/signals cover the injected work independently
+of RT/OMM; device cleanup handles remaining objects. Host links and 41 terrain
+lifetime/range, 131 order and 58 stage checks pass. No additional shader/ABI key.
+
+Next changed S1 acquisition R5 remains a non-watched draft: same 130 s OFF/ON/OFF,
+one terrain trace, real FG2/RR1, reference OFF. Normal cache mode is retained;
+no unrelated selector or capacity change. Require positive GPU-qualified material
+rows AND actual copied terrain bytes; absence cannot pass. Main remains c82fe8d
+until this consolidation passes merge-green. No game currently running.
+
+## R4 completed: real deferred snapshots; canonical input fix next - 2026-10-31
+
+R4 c82fe8d completed 230 s, all three phases, zero NVIDIA 153/dumps/build drift.
+Retain eligibility/sampler fixes: 100 audited draws now yield 20 unique candidates,
+16 captures and 12 execution-time snapshots, zero pipeline/binding declines.
+GPU material acquisition still FAILED: no source association/qualified rows.
+Primary OFF/ON/OFF 99.525/99.524/99.5265%; FG ratio 2.0, no bad phase samples,
+rendered SDK log cadence 36.11/35.57/35.83 fps. Diagnostic RT 18.50/18.33/18.45 ms;
+not production/new-reference cost. Raw/derived evidence: omm-bake/BG3RTX/captures/
+native-hit-material-20261031/r4/ including the exact trace.
+
+Actual native shader pair StaticDepth 8975/e2ec and Deferred 3812/8995 can pull
+positions from SSBO 0.13 via Engine UBO uint at byte 96; location 0 may be inactive.
+Old geometry key used VB0 and collapsed instances. Owner implements canonical
+actual input/Engine/UV identity with explicit branch hints and unchanged FULL GPU
+clip/UV/parameter proof. A cache-only rerun is NOT being launched: native evidence
+shows the corresponding static depth draws are not the cached instancing domain.
+
+Terrain attempt copied 0: native UBO usage 16 has no TRANSFER_SRC. fa3d9f4 adds
+80-byte uniform/7168-byte bounded storage raw shader readback to the same tracer.
+Host links; two new modules compile/validate; ordinary shader files untouched.
+Review identified actual-submit success/pinning and Submit2 stage coverage to fix
+before release; that narrow patch is active. No terrain bytes/GPU success yet.
+
+SE fb3f98c/import 59a4e56 + test registration 2a708a3 fixes premature absent-light
+claims during incomplete current classification; 16 fresh parser/coverage tests
+pass. Existing exports contain 124/89 real records, not zero. Existing se_bridge=1
+stays; new Lua/C++ sources are together, installed Lua/profile unchanged. Legacy
+records remain usable but cannot prove absence without completeness. Native world
+photometry mapping now reuses the five retained native/DB CSVs; no old light list
+is replayed. Separate user Hair trial remains untouched and not newly user-tested.
+
+## R4 brief acquisition running on consolidated c82fe8d - 2026-10-31
+
+Main c82fe8d is merged via merge-green and pushed: 54/54 CTests, 577/577 runtime
+shader files/all entries and QA pass. A fixture still using the old helper signature
+caused the first build failure; cbc0723 updates it, fresh fixture test passes and
+full integration then passes. Independent sampler/key/ownership review is clear.
+
+Private R4 c82fe8d has matching copied ABI 21 host/core/launcher hashes and a finite
+one-run receipt. Real-present FG2/RR1 S1: 20/90/20 s; one trace at ON+30 s requests
+exact terrain bytes. Reference stays OFF. No verdict yet; runner session 60673.
+New features remain OFF in presets; the separate user Hair trial stays unchanged.
+
 ## Bounded reference and acquisition fixes ready for consolidation - 2026-10-31
 
 Default-OFF `rt_hit_reference=2` extends the SAME direct reference by one BSDF

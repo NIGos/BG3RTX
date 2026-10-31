@@ -1,0 +1,60 @@
+{
+  "scope": "Offline ABI21 candidate-identity fix; no game/GPU/candidate edits",
+  "native_mapping": {
+    "StaticDepth": [
+      "8975ea2744c12a74",
+      "e2ecf65a7810b23b"
+    ],
+    "StaticDeferred": [
+      "3812bc980438747f",
+      "8995da1e4060f53b"
+    ],
+    "template": "Base/Base_AlphaTest_VT",
+    "R4_exact_pass_draws": {
+      "depth": 76,
+      "deferred": 100
+    },
+    "Engine": "set1 binding0; model matrix bytes0..63; vertex-pull index uint at96;112B validated domain",
+    "positions": "location0 when index is zero; otherwise readonly SSBO0.13, xyz at ((gl_VertexIndex+index-1)*20)/4",
+    "UV": "input location1, resolved through actual pipeline attribute/binding metadata",
+    "instancing_analyzer_on_actual_depth_vs": false
+  },
+  "R4": {
+    "captured_deferred": 16,
+    "snapshots": 12,
+    "audited_unique": 20,
+    "audited_duplicates": 80,
+    "source_draws": 99,
+    "source_entries": 25,
+    "source_duplicate_keys": 2,
+    "source_filtered_unrelated": 23,
+    "prepared": 0,
+    "qualification": "No material GPU/native-field pass; unpaired159-index versus960-index samples were not corresponding objects."
+  },
+  "fix": [
+    "For only the proven shader pair, include exact Engine buffer+effective offset, index/draw arguments, and actual pipeline-resolved UV stream.",
+    "Positive mapped byte96 is only a candidate hint: use exact SSBO0.13 tuple and raw index, guard arithmetic/range, omit only the inactive position input. Zero/unknown retains the actual location0 stream.",
+    "Position and UV use actual attribute binding/offset/format/stride, not assumed VB0. Missing audited inputs cannot join through legacy keys.",
+    "Full GPU clip/UV and material-parameter certificate and duplicate rejection remain unchanged. Explicit input facts report hints, Engine, SSBO and streams."
+  ],
+  "tests": {
+    "targeted_ctests_passed": 2,
+    "pipeline_and_canonical_input_cases": 44,
+    "host_link": true,
+    "shader_inputs_changed": false
+  },
+  "source_sha256_lf": {
+    "common/native_hit_inputs.h": "269f7417f13e80c0369ad2e8478610626451383b30fd49a15e95d48e70865d3b",
+    "layer/geocapture.cpp": "85ed0ff723ccd7169d772fef9e1730c37216c9f79253150fffd576087f5fde63",
+    "layer/hit_material.cpp": "4bdc76eecef8ad2339f5f275015188e2d2842b75a206cdfb3b023cd0135b5393",
+    "layer/host.h": "b4a358c2ad6e233a36ed73c05fee6d76559d4d834f51f5c31239e45e1a484b11",
+    "tests/native_hit_pipeline_test.cpp": "95e0f077a0d2d9deb2cfea4a389c439f7fa68c00eb4d61b1deae40078fa7fe66"
+  },
+  "binary_sha256": {
+    "VkLayer_bg3rtx.dll": "9bc10a33d7ff1a0e9cb491a25e05f02d0636d578a21b740f2b68c792025c1bbd",
+    "bg3rtx_core.dll": "2f2ba31b26a4d16405eb16021af2a4fd70c9f7d83b878f941b99f25cbddd7c1f",
+    "BG3RTX.exe": "d55b8f4c0250a1ab41249d16a344685718a8ab627f34917f7d7d6227ae63ec99",
+    "VkLayer_bg3rtx.json": "e62ad6e9d788efde539c7239a100f4e69223493b51be6c416fbb2122528a3a70"
+  },
+  "limits": "Runtime same-object Engine/SSBO/UV tuple agreement remains to be observed; old frame serializer omits all buffer descriptors. No performance/quality qualification. Cached geometry remains unsupported. Existing rt_mesh_capture=1 bypass exists, but cannot explain away the proven noncached StaticDepth domain."
+}

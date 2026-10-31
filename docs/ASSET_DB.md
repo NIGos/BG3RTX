@@ -612,3 +612,14 @@ UNPROVEN until the first targeted run. No compute-copy fallback is guessed;
 only a real missing-transfer-source decline would justify that next change.
 Offline verification: all four touched layer translation units compile, and13
 standalone CPU range/overflow/alias checks pass. No GPU or game execution yet.
+
+### Native terrain buffer readback correction (2026-10-31)
+
+R4 proves s4b0 is UNIFORM_BUFFER usage 16, not TRANSFER_SRC. The exact packet
+copy therefore needs the same shader-read approach already used for the camera.
+Development fa3d9f4 adds raw uint copies of 80 UBO bytes and up to 7168 SSBO bytes,
+with descriptor type/usage/alignment/range checks. It preserves the image transfer
+path, post-pass capture point and bounded packet ownership. Host links and both
+new SPIR-V modules validate; no original shader input changed. GPU byte capture
+is pending. Actual-submit pinning/success and Submit2 stage coverage are being
+corrected before this adaptation is released. This is not terrain shading parity.
