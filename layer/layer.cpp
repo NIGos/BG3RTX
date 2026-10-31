@@ -6,6 +6,7 @@
 #include "omm_submit.h"
 #include "omm_backend.h"
 #include "omm_content.h"
+#include "hit_material_submit.h"
 #include "../common/material_submit_stages.h"
 #include "assetdb.h"
 #include "sebridge.h"
@@ -17,10 +18,6 @@
 #include <unordered_set>
 
 namespace bg3 {
-namespace native_hit {
-// Exact recording marker owned by the material provider. False without added work.
-bool recording_needs_submit_promotion(VkCommandBuffer);
-}
 
 using HookMap = std::unordered_map<std::string, PFN_vkVoidFunction>;
 void register_tracker_hooks(HookMap& m);
@@ -459,11 +456,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto materialWork=native_hit::before_submit(cmds);
   const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM: the emissive scene of this batch's effects passes
   omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
+  native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
   return r;
 }
 
@@ -502,11 +501,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto materialWork=native_hit::before_submit(cmds);
   const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit2");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM (our build goes through vkQueueSubmit)
   omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
+  native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
   return r;
 }
 
