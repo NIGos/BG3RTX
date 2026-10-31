@@ -21,6 +21,7 @@ int main(){
  CHECK(!binding_enabled(true,8,12));CHECK(binding_enabled(false,8,12));CHECK(binding_enabled(true,4,12));
  for(bool enabled:{false,true}){unsigned count=1+unsigned(enabled);for(unsigned i=0;i<31;i++)count+=binding_enabled(enabled,8,i);CHECK(count==32);}
  CHECK(hpo_unit_normal({0,0,1}));CHECK(!hpo_unit_normal({0,0,.8f}));
+ CHECK(alternate_entry("gi/gi_trace_rt_hit_direct.hlsl"));CHECK(alternate_entry("gi/gi_trace_rt_sharc_hit_direct.hlsl"));
  CHECK(alternate_entry("gi/rt_origin.hlsl"));CHECK(alternate_entry("gi/rt_reflections_sharc.hlsl"));
  CHECK(!alternate_entry("gi/pan_primary.hlsl")); // primary/history semantics unchanged
  const auto* knob=bg3::settings::find_knob("exp_hair_physical_origin");

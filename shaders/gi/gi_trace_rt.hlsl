@@ -32,6 +32,10 @@
 // cache's contribution split by the leak test (r occluded cell, g clean, b thin surface).
 #include "gi_common.hlsli"
 #include "../rt/rt_common.hlsli"
+#if RT_HIT_GI_DIRECT
+#include "../rt/native_hit_material.hlsli"
+#include "../rt/native_hit_direct.hlsli"
+#endif
 #if SHARC_QUERY_PASS
 #define SHARC_RT_QUERY 1
 #include "sharc_common.hlsli"
@@ -78,7 +82,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   for (uint r = 0; r < pc.rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
     float3 o = RT_SECONDARY_ORIGIN(fp,org, P, N, dist * pa, dir);
-#if SHARC_QUERY_PASS
+#if SHARC_QUERY_PASS || RT_HIT_GI_DIRECT
     RtHit hh = rt_closest_hit(o, dir, R, cone);
     float t = hh.t;
     const bool aborted = hh.aborted;
@@ -168,6 +172,29 @@ void main(uint3 tid : SV_DispatchThreadID) {
       const float k0 = saturate(t / R0);
       w = 1.0 - k0 * k0;
       if (w <= 0.0) continue;   // beyond the base radius: a miss, as before
+    }
+#endif
+#if RT_HIT_GI_DIRECT
+    // Screen and successful SHaRC hits already returned their radiance above.
+    // This replaces only fallback0's zero bounce; its native ambient occlusion
+    // remains exactly the same. Direct-only radiance never replaces a full probe.
+    if(!visible && !aborted && t>=0 && pc.gi_rt_fallback==0u && hit_material_publication_ready()){
+      uint hit_bin=fp.x^fp.y;
+      if(pc.rt_stats!=0u)stat_add(282u,true,hit_bin);
+      NativeHitMaterial material=rt_hit_material(hh,cone.f0+cone.spread*t);
+      if(pc.rt_stats!=0u)stat_add(283u,material.status==0u,hit_bin);
+      if(material.status==0u){
+        NativeHitDirect direct=native_hit_direct(material,o+dir*t,-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
+        if(pc.rt_stats!=0u)stat_add(284u,direct.status==HdOk,hit_bin);
+        if(direct.status==HdOk){
+          if(pc.rt_stats!=0u){
+            stat_add(285u,any(direct.radiance>0),hit_bin);
+            uint value=uint(round(dot(direct.radiance*w,float3(.2126,.7152,.0722))*256.0));
+            uint sum=WaveActiveSum(value);if(WaveIsFirstLane() && sum)rtStats.InterlockedAdd((286u*64u+(WaveReadLaneFirst(hit_bin)&63u))*4u,sum);
+          }
+          bounce+=direct.radiance*w;occ+=w;continue;
+        }
+      }
     }
 #endif
     if (visible) occ += w;

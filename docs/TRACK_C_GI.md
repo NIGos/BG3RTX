@@ -97,6 +97,32 @@ A screen-injected world-space hash grid gives hidden and off-screen GI hits (and
 reflection fallbacks) a bounce, and lengthens the GI rays to `sharc_gi_radius` (8 m). Design
 and status: DESIGN_SOTA_NEXT.md 2.9 (`core/sharc.cpp`, `shaders/gi/sharc_*.hlsl`).
 
+## Qualified hidden-hit direct bounce (`gi_hit_direct=0`, 2026-10-31)
+
+Experimental and off in every preset. Requires native-material startup,
+`gi_rt=1` and `gi_rt_fallback=0`. Successful screen and SHaRC hits keep priority.
+A qualified fresh native VT hit may replace only the zero-radiance fallback with
+`bounce += weight * direct_radiance`, preserving exactly the old `occ += weight`.
+The existing primary diffuse colour and GI strength are applied once by the
+composite. Direct-only light never replaces full probe or cache radiance.
+Unknown material, source, visibility or query registration retains the original
+fallback. Misses remain misses; no sky/environment constant is invented.
+
+The declared opaque FresnelBlend model uses actual native point/spot inputs.
+It includes directional diffuse and specular scattering along the secondary ray;
+legacy `gi_bounce_spec=0` still controls only the screen-radiance source. This is a
+physical directional addition, not a promise of identical diffuse-only semantics.
+The current native froxel provider supports hidden points inside the view
+frustum. True offscreen lights, sunlight, projector and emissive terms remain
+unsupported. ABI 21 registers the exact tuple and returns its query-owned set
+before tracing; startup-off material resources still require restart.
+
+`rt_stats=1` reports candidates, qualified materials, supported direct terms,
+nonzero additions and weighted luminance as `GI hit direct`. Cost remains inside
+the existing GI trace interval. Live contribution, motion and cost remain
+unqualified until same-run A/B. This changes lighting by an accounted addition;
+it does not claim unchanged-transport energy preservation or full M4 completion.
+
 ## Next
 - QA and defaults for the radiance cache (above); its traced update (v2).
 - ReSTIR-style reuse.
