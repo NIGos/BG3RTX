@@ -1,4 +1,5 @@
 #include "../common/native_hit_pipeline.h"
+#include "../common/native_hit_inputs.h"
 #include <cstdio>
 #include <initializer_list>
 #include <cstdlib>
@@ -35,5 +36,32 @@ int main(){
  ci.pMultisampleState=nullptr;check((material_state_reasons(ci)&MaterialMultisample)!=0);ci.pMultisampleState=&ms;
  ci.pColorBlendState=nullptr;check((material_state_reasons(ci)&MaterialBlendState)!=0);ci.pColorBlendState=&blend;
  raster.pNext=nullptr;check(material_state_reasons(ci)==0);
+ // Actual pipeline attribute bindings, not a fixed assumption that location0
+ // lives in stream0 or that higher streams are unused.
+ VkVertexInputBindingDescription bindings[2]={{4,32,VK_VERTEX_INPUT_RATE_VERTEX},{7,8,VK_VERTEX_INPUT_RATE_VERTEX}};
+ VkVertexInputAttributeDescription attrs[2]={{0,4,VK_FORMAT_R32G32B32_SFLOAT,4},{1,7,VK_FORMAT_R32G32_SFLOAT,0}};
+ VkPipelineVertexInputStateCreateInfo vertex{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};vertex.vertexBindingDescriptionCount=2;vertex.pVertexBindingDescriptions=bindings;vertex.vertexAttributeDescriptionCount=2;vertex.pVertexAttributeDescriptions=attrs;ci.pVertexInputState=&vertex;
+ auto inputs=static_inputs(ci);check(inputs.valid && inputs.position.binding==4 && inputs.uv.binding==7 && inputs.position.offset==4 && inputs.uv.stride==8);
+ VkDynamicState stride=VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE;dynamic.pDynamicStates=&stride;ci.pDynamicState=&dynamic;check(static_inputs(ci).position.dynamic_stride);
+ VkDynamicState unknown_vertex=VK_DYNAMIC_STATE_VERTEX_INPUT_EXT;dynamic.pDynamicStates=&unknown_vertex;check(!static_inputs(ci).valid);ci.pDynamicState=nullptr;
+ bindings[1].inputRate=VK_VERTEX_INPUT_RATE_INSTANCE;check(!static_inputs(ci).valid);bindings[1].inputRate=VK_VERTEX_INPUT_RATE_VERTEX;
+ attrs[1].location=2;check(!static_inputs(ci).valid);attrs[1].location=1;
+ DrawKey ordinary{};ordinary.words[0]=1;ordinary.words[1]=960;ordinary.words[6]=77;ordinary.words[9]=123;
+ StaticKeyInputs a{};a.engine_buffer=1;a.engine_offset=112;a.position={2,16,32,uint32_t(VK_FORMAT_R32G32B32_SFLOAT)};a.uv={3,24,8,uint32_t(VK_FORMAT_R32G32_SFLOAT)};
+ DrawKey source{},deferred{};check(canonical_static_key(ordinary,a,source));
+ auto other_stale=ordinary;other_stale.words[9]=999;check(canonical_static_key(other_stale,a,deferred) && source==deferred);
+ auto different=a;different.position.buffer=4;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
+ different=a;different.engine_offset+=112;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
+ different=a;different.uv.offset+=4;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
+ a.pull_hint_known=true;a.pull_index=5;a.pull_buffer=9;a.pull_offset=64;a.pull_range=256;check(canonical_static_key(ordinary,a,source));
+ different=a;different.position={999,999,999,999};check(canonical_static_key(other_stale,different,deferred) && source==deferred); // ONLY inactive position stream omitted.
+ different=a;different.pull_index=6;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
+ different=a;different.pull_buffer=10;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
+ different=a;different.uv.buffer=11;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
+ different=a;different.pull_range=91;check(!canonical_static_key(ordinary,different,deferred));
+ different=a;different.pull_offset=UINT64_MAX-1;check(!canonical_static_key(ordinary,different,deferred));
+ a.pull_hint_known=false;different=a;different.position.buffer=4;check(canonical_static_key(ordinary,a,source));check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
+ a.pull_hint_known=true;a.pull_index=0;check(canonical_static_key(ordinary,a,source));different=a;different.position.buffer=4;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
+ check(static_depth_family(0x8975ea2744c12a74ull,0xe2ecf65a7810b23bull));check(!static_depth_family(0x3812bc980438747full,0x8995da1e4060f53bull));
  std::printf("PASS %u actual Vulkan material-state cases; no GPU\n",checks);
 }

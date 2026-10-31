@@ -432,6 +432,8 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right afte
 void geo_forget_buffer(VkBuffer b);
 VkBufferUsageFlags geo_buffer_usage(VkBuffer b); // readonly tracked create usage; 0 if unknown
 VkDeviceSize geo_buffer_size(VkBuffer b);                   // 0 if unknown
+namespace native_hit {struct StaticInputs;}
+bool geo_native_hit_inputs(VkPipeline,native_hit::StaticInputs*);
 bool geo_uniform_buffer_range(VkBuffer buffer,VkDeviceSize offset,VkDeviceSize bytes);
 bool geo_submit_wanted();
 void geo_on_submit(const std::vector<VkCommandBuffer>& cmds);

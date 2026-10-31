@@ -27,6 +27,7 @@
 #include "hit_material.h"
 #include "../common/native_hit_writes.h"
 #include "../common/native_hit_pipeline.h"
+#include "../common/native_hit_inputs.h"
 #include "../common/spirv_visibility.h"
 #include "spirv_xfb.h"
 #include "../common/cascade_casters.h"
@@ -128,6 +129,7 @@ struct PipeInfo {
   bool fragment_depth = false;
   bool fragment_known = true;
   bool no_storage_writes = false;
+  native_hit::StaticInputs material_inputs{};
   bool material_state = false;
   uint32_t material_reasons=0,raster_next=0,multisample_next=0,blend_next=0;
   bool native_view_known=false,dynamic_viewport=false,dynamic_scissor=false;
@@ -1733,6 +1735,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     }
     pi.xfb = vs_patched && !other;
     pi.no_storage_writes=all_no_writes;
+    if(native_hit::enabled())pi.material_inputs=native_hit::static_inputs(cis[i]);
     pi.material_reasons=native_hit::material_state_reasons(cis[i]);
     pi.material_state=pi.material_reasons==0;
     auto next_type=[](const void* chain){return chain?uint32_t(static_cast<const VkBaseInStructure*>(chain)->sType):0u;};
@@ -2640,6 +2643,10 @@ VkDeviceSize geo_buffer_size(VkBuffer b) {
   return it == g_buffer_size.end() ? 0 : it->second;
 }
 
+bool geo_native_hit_inputs(VkPipeline pipeline,native_hit::StaticInputs* out){
+ if(!out)return false;std::lock_guard lock(g_mu);auto p=g_pipes.find(pipeline);if(p==g_pipes.end())return false;
+ *out=p->second.material_inputs;return out->valid;
+}
 bool geo_uniform_buffer_range(VkBuffer buffer,VkDeviceSize offset,VkDeviceSize bytes) {
   std::lock_guard<std::mutex> lock(g_mu);
   auto usage=g_buffer_usage.find(buffer);auto size=g_buffer_size.find(buffer);
