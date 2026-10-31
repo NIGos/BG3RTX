@@ -95,7 +95,8 @@
   "lookup": {
     "camera": false,
     "current_sun_material": true,
-    "legacy_classifier_changed": false
+    "legacy_classifier_changed": false,
+    "camera_incomplete_header_predicate": "lookup_camera only; shadow registry membership must not affect the camera scene header"
   },
   "validation": {
     "cpu": "1687 native tileset coverage checks passed",
@@ -160,7 +161,8 @@
         "valid": true
       }
     ],
-    "reused_camera_shader_proof": "640 ordinary OFF token identities,42 actual OFF identities,604 ON validations,80 GI/reference interfaces; HLSL/effective shader changes absent"
+    "reused_camera_shader_proof": "640 ordinary OFF token identities,42 actual OFF identities,604 ON validations,80 GI/reference interfaces; HLSL/effective shader changes absent",
+    "route_followup": "Host DLL rebuilt; four selected CTests rerun after narrowing the camera incomplete predicate"
   },
   "limitations": [
     "Legacy F-1 cascade has no per-draw material/UV association and remains unsupported for this cutout",
@@ -176,7 +178,7 @@
     "common/native_tileblend_coverage.h": "0b5893eb9c37fea6ee6db86533bace2349db7b659cf7f11a05a93065f946690a",
     "common/native_tileset_coverage.h": "65ddfa4770f52c9b24853a2777e307222917aa3d284fe7fc7b00011c4e6ca346",
     "layer/alphatest.cpp": "5573f75efb1ffc073db90a104ad8a80b765f2ac2b370ce58b1fbe04af768d13f",
-    "layer/geocapture.cpp": "a4837df0b25ce23b1a3533b137f7e429b65271cf919ed6a57fb3c93edd6249b9",
+    "layer/geocapture.cpp": "980cc0c294463dbabb4adf3ed4a7683c2cd27d48e7fb05e954134debf3b508ac",
     "layer/host.h": "1cc8d8d43769f6dd0bf9123997a3924b31c7a2de18ddb00185e3fc5fd9e40770",
     "tests/native_tileset_coverage_test.cpp": "e3af5c231fdbcb674a27559faeb9ffad19a434f8da85055982011a531ddcfc2e"
   },
