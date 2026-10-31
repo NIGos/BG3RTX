@@ -6,18 +6,24 @@ asks for pragmatic, scoped checks. Do not invent unrelated global gates.
 
 ## Current integration and ownership
 
-Main a0bd782, ABI 21, merged via merge-green and pushed with source branches:
-55/55 CTests, 579/579 runtime shaders/all entries and QA passed. Both DLLs and
+Main d894b06, ABI 21, merged via merge-green and pushed with source branches:
+55/55 CTests, 627/627 runtime shaders/all entries and QA passed. Both DLLs and
 launcher rebuilt. No defaults promoted. No Ponytail.
 Root development: C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX, codex/omm-bake.
-Private queue candidate: native-hit-provider-live/BG3RTX, frozen a0bd782 ABI 21.
-R8 is TERMINAL VALID498 s: no NVIDIA153/dumps/build drift. FG2/RR1 real present.
-Primary OFF/material/direct/two/OFF99.525/99.524/99.524/99.522/99.527%.
-Qualified median2246464/window; two-surface positive438..15389/window.
-Whole GI statsOFFdirect2.429ms/two2.442ms; overlapping ranges, not isolated cost.
-Full immutable root captures/native-hit-material-20261031/r8/. No game now.
-Next production GI1b34336 defaultOFF is imported locally, not main yet;
-confirm pre-pass packet eligibility, consolidate, then scoped same-run live.
+Private queue candidate: native-hit-provider-live/BG3RTX, frozen d894b06 ABI 21.
+R8 TERMINAL VALID498 s: FG2/RR1, positive two-surface paths; root material/r8 evidence.
+Main now d894b06, GI defaultOFF integrated, 55 tests/627 shaders/QA pass and pushed.
+GI R1 TERMINAL VALID504 s: static primary99.524/99.524/99.525%, 2941129 positive
+additions across25ONwindows, OFFnone. WholeGI2.380/2.243msOFF/ON, no speedup;
+rendered cadence84.14/75.56fps. Rotation reset jumps confound quality (78.884deg).
+GI R2 TERMINAL386s, queueINVALIDonly"transport valid"vsactual"transport ok" typo.
+Existing QA independently validates3completeK16+REQUIRED views/transport. No rerun
+for typo; root captures/gi-hit-direct-20261031/r2 logs/manifests, rawprivatepan62101/2/3.
+Worker streams stable-surface image/noise analysis; no visualqualitypass yet.
+User now atPC requests backgroundwindows: no furtherfocusedFG/SElaunch. No game.
+Root pendingconsolidation: SEreader196f869/28430ff, rotationsequence53f2167,
+primarywarmupchurn051333f. Focusedtests/reviewpass, no shader/ABI/defaultchanges.
+Next: consolidateoffline, finishGIimageanalysis. Livefocuswork waits for newsteering.
 
 Only test-queue launches games. Canonical USER_PLAYING and unowned-game guards
 always apply. Receipts record current explicit steering, never create authority.
@@ -25,14 +31,11 @@ No save parsing/writes, backup writes, force-push, snapshot tag edits or cleanup
 of junction trees. Never hold results.md open. Merge main only through merge-green.
 No source/bin/settings/HEAD edits in an active queue or personal trial checkout.
 
-Existing workers: omm_contract_review implements default-off gi_hit_direct in
-native-hit-material tree: qualified hidden-hit local-light GI, fallback0 only,
-successful screen/SHaRC priority preserved. Owns settings/GUI and stats282..286.
-Do not import old a15 counters269..271 (collide with reference).
-omm_alpha_bounds fixes SE probe94759b7 canonical guards/fresh prompt protocol;
-not imported/live yet. sun_penumbra_review scoped opaque review clear, terrain
-texture mapping investigation finished: exact runtime-to-DDS identity absent.
-Use existing agents, disjoint branches; no parallel live instances.
+Existing workers: omm_contract_review streams actual GI image comparison (CPU/RAM
+bounded); omm_alpha_bounds inspects one authored RTXHair groom/provider offline;
+sun_penumbra_review extends existing opt-in terrain descriptor metadata capture.
+No worker live access. Root owns main integration/ABI/shared progress. Disjointtrees.
+Stats282..286 are GI contribution; never import old a15 counters269..271.
 
 ## Proven material and terrain increments
 
@@ -93,6 +96,5 @@ Official v33 exposes Blackbody vec3. Probe94759b7 uses transient Shift console,
 no installed config/mod changes; fix canonical cancellation and fresh prompt first.
 Actual exports124/89 records are nonzero; initial startup seq1 zero is not absence.
 
-Next: finish R8 and preserve immutable evidence; update progress with scoped verdict
-and real FG/RT/cost. Integrate focused GI consumer after tests/review, then smallest
-same-run trial. M4 production offscreen gains/full M6 PT decision still incomplete.
+Next: finish GI static output evidence and preserve the scoped verdict.
+Fix rotation input; integrate/run the separately scoped SE native-light reader. M4 production offscreen gains/full M6 PT decision still incomplete.

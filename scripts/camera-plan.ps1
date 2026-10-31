@@ -29,3 +29,44 @@ function Get-CameraPlanSample($step, [double]$elapsed, [int]$width, [int]$height
   @{ kind=$kind; active=($active -and $kind -eq 'pan'); x=[int][Math]::Floor($width/2);
      y=[int][Math]::Floor($height/2); segment=0; direction=0 }
 }
+
+# Emit at most ONE transition per poll. The modulo sample describes desired
+# motion, not proof that previously posted input has had time to be consumed.
+# Retain the existing two-frame-at-18-fps settling budget AFTER each actual
+# release and reset, including when the runner stalls across an entire reset.
+function Get-RotationInputAction($state, $sample, [double]$now) {
+  $gap = 2.0/18.0
+  if (-not ($sample.kind -eq 'rotate' -and $sample.active)) {
+    if ($state.stage -eq 'pressed') {
+      $state.stage='released';$state.at=$now
+      return @{kind='release';x=$state.x;y=$state.y}
+    }
+    if ($state.stage -eq 'positioned') {$state.stage='released';$state.at=$now}
+    return $null
+  }
+  if ($state.stage -eq 'pressed') {
+    if ($state.segment -ne $sample.segment) {
+      $state.stage='released';$state.at=$now
+      return @{kind='release';x=$state.x;y=$state.y}
+    }
+    if ($state.x -ne $sample.x -or $state.y -ne $sample.y) {
+      $state.x=$sample.x;$state.y=$sample.y
+      return @{kind='drag';x=$state.x;y=$state.y}
+    }
+    return $null
+  }
+  if ($state.stage -eq 'positioned' -and $state.segment -ne $sample.segment) {
+    $state.stage='released';$state.at=$now
+  }
+  if ($now-$state.at -lt $gap) {return $null}
+  if ($state.stage -eq 'released') {
+    $state.stage='positioned';$state.at=$now
+    $state.segment=$sample.segment;$state.x=$sample.x;$state.y=$sample.y
+    return @{kind='reset';x=$state.x;y=$state.y}
+  }
+  if ($state.stage -eq 'positioned') {
+    $state.stage='pressed';$state.at=$now
+    return @{kind='press';x=$state.x;y=$state.y}
+  }
+  throw 'Invalid rotation input state'
+}

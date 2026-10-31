@@ -345,3 +345,53 @@ UUIDs or a complete transform/shape packet. Rotation, spot cones, box dimensions
 cookies and calibrated native colour-temperature/exposure/intensity conversions
 still require existing DB/native bindings. The provider's name-based source-radius
 heuristic is not newly certified physical photometry. No new resolver is added.
+
+
+## Native Blackbody read-only probe (prepared, not run)
+
+Official Norbyte/bg3se v33 is pinned to commit
+`af85fd2bd2be28646539060d45df487f4d3314b9`. Its public LightComponent and generated
+IDE helpers expose Blackbody as vec3, plus Gain, IntensityOffset, UUID and world
+transform. This establishes a readable field, not its normalization/multiplication
+meaning. The five cell point lights use temperature; no Planck approximation,
+LUT-coordinate guess or white/intensity whitelist was accepted as a converter.
+
+Existing queued auto-run can opt in with `-SELightProbe` in job.args. It is limited
+to exclusive static foreground runs, rejects an already held Shift, temporarily
+injects only RightShift around launch and releases it in nested/outer finally.
+Official v33 SetupScriptExtender samples Shift to enable its console without an
+installed config change. Native console creation may activate its own window;
+this diagnostic cannot claim no-activate/FG-timing equivalence.
+
+A dedicated hidden child attaches only to the owned PID/start identity and exact
+SE console title. It preserves the runner's console, sends a fixed one-shot Lua
+single-line payload through CONIN$ (never global typing/window activation). Every
+write and wait rechecks the canonical shared USER_PLAYING markers and the finite
+consumed queue receipt. Context completion requires an exact S/C prompt on a new
+console row beyond the pre-write cursor; an old tail prompt is never accepted.
+The prior context is restored only after proven input completion. Partial native
+writes or uncertain completion cause failure without repair typing; auto-run then
+aborts only its owned game. The helper detaches in all cases and never falsely
+reports uncertain input as restored. It reads at most 32 S1-cell candidates and writes
+nonce-matched diagnostic reports only. No subscriptions, entity setters, installed
+Lua/config/profile edits or game launches occur in the helper. The normal queue
+still owns every launch/cleanup and rejects USER_PLAYING/unowned games.
+
+Readbacks include actual Blackbody/Color/Intensity/IntensityOffset/Gain, IDs,
+UUID/name/position/radius/type/flags and reflected type. Missing/nonfinite core
+fields fail explicitly. `assetdb_join=1`, `assetdb_join_interval=30` and existing
+CSV output provide native b25 RGB/m3/m4/m5/current global scale for comparison;
+no parallel native light capture is added. Default-off opt-in leaves normal runs
+unchanged. CPU checks validate input-record layout, single-line budget, fresh/old
+prompt boundaries, guarded write structure and PowerShell syntax. Twelve actual
+permission-function tests use synthetic consumed receipts and linked TEMP trees:
+canonical markers, missing/revoked/expired/closed permissions all fail closed.
+Console transport, Lua execution and colour mapping still
+await the first separately queued probe.
+
+Primary source:
+[Render.h](https://github.com/Norbyte/bg3se/blob/af85fd2bd2be28646539060d45df487f4d3314b9/BG3Extender/GameDefinitions/Render.h),
+[console](https://github.com/Norbyte/bg3se/blob/af85fd2bd2be28646539060d45df487f4d3314b9/BG3Extender/Extender/Shared/Console.cpp),
+[Shift enablement](https://github.com/Norbyte/bg3se/blob/af85fd2bd2be28646539060d45df487f4d3314b9/BG3Extender/Extender/Shared/dllmain.cpp).
+Private source fingerprints/probe job draft are under
+`captures/m2-foundry/se-bridge-review/`; the draft is outside queue inboxes.
