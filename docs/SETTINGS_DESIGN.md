@@ -106,7 +106,7 @@ is capped at 1.0.
 ### 1.3 Internal tuning (class N: correctness constants, never exposed)
 
 - **Ray geometry / bias:** `rt_bias`, `rt_tmax`, `rf_tmax`, `rf_depth_k`, `rf_edge`,
-  `rf_mirror_rough`, `rf_so`, `rf_models`, `gi_radius`, `gi_thickness`, `gi_history`,
+  `rf_mirror_rough`, `rf_models`, `gi_radius`, `gi_thickness`, `gi_history`,
   `gi_rt_radius`, `gi_rt_depth_k`, `gi_rt_fallback`, `gi_reproject`, `ls_clear`,
   `ls_min_radius`, `rt_sun_radius`.
   - Note: `rt_sun_radius` is read but unused by the hard-shadow path today.

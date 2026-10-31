@@ -101,7 +101,7 @@ struct Push {
   float rf_strength;
   uint rf_debug;
   uint rf_sample;         // 1 GGX bounded VNDF (RR denoises), 0 mirror rays only (no denoiser)
-  uint rf_so;             // 1 also apply the game's specular occlusion to traced hits
+  uint rf_so;             // unused, 0 (rf_so removed 2026-10-31): no game SO on traced hits
   uint rf_validate;       // 1 EN4 check: the lighting ran with AO 1 and no sun (prep pass)
   uint rf_models;         // bit mask of the shading models (RT2.w & 7) that get reflections
   uint rf_stats;

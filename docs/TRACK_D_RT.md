@@ -2354,8 +2354,9 @@ frame's lit radiance, reflections included, as next frame's `prevRadiance`), SSS
      (QUALITY R3; roofs are cut away).
    - Tier (b), shading off-screen hits, needs the hit material (D-EN2) and is not done.
 5. The exact delta `b11 += w·(L·E − Tp)`, clamped at 0 only against the transmittance it does
-   not replicate. The game's `SO` is not applied to traced hits (`rf_so=0`): the ray found the
-   occluder and returns its radiance; applying `SO` as well would double-occlude.
+   not replicate. The game's `SO` is not applied to traced hits: the ray found the
+   occluder and returns its radiance; applying `SO` as well would double-occlude. (`rf_so`:
+   removed 2026-10-31, see CONSOLIDATION.md C1.)
 6. RR's `DLSSD.SpecularHitDistance` (R16F): the hit distance for tier (a), 65504 elsewhere
    (the probe behaves as an environment at infinity). Non-finite guard on every write (R5).
 
@@ -2457,7 +2458,7 @@ D-LS 0.35 ms, D-RF 0.33 ms, about 0.95 ms of the 2.5 ms.
 - `stats_begin` adds 3.8-4 ms when `rf_stats=1`, as for D-LS: measurement only.
 
 Settings (`bg3rtx.ini`, all live): `rt_reflections`, `rf_max_rough`, `rf_max_rough_norr`,
-`rf_mirror_rough`, `rf_rr`, `rf_tmax`, `rf_depth_k` (was `rf_depth_tol`), `rf_edge`, `rf_strength`, `rf_so`,
+`rf_mirror_rough`, `rf_rr`, `rf_tmax`, `rf_depth_k` (was `rf_depth_tol`), `rf_edge`, `rf_strength`,
 `rf_models`, `rf_debug` (1 tiers, 2 change ×4, 3 probe term, 4 probe term after D-RF,
 5 validation residual, 6 hit distance), `rf_stats`, `rf_validate`, `rr_spec_hit_distance`.
 The log reports `rf: first frame ...` (the lighting's set and its layout),

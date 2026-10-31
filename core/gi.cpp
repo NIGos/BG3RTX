@@ -131,7 +131,7 @@ struct Push {
   float ls_strength;
   uint32_t ls_has_mask, ls_flags;   // ls_flags: bit 0 per-light data (ls_lights), bits 8-12 owners traced (ls_owners)
   float rf_max_rough, rf_mirror_rough, rf_tmax, rf_depth_tol, rf_edge, rf_strength;
-  uint32_t rf_debug, rf_sample, rf_so, rf_validate, rf_models, rf_stats;
+  uint32_t rf_debug, rf_sample, rf_so, rf_validate, rf_models, rf_stats;   // rf_so: unused, 0 (removed 2026-10-31)
   // RT audit fixes (docs/AUDIT_RT.md)
   uint32_t rt_backlit, mat_classes, ao_direct, rt_origin;
 };
@@ -1410,7 +1410,6 @@ Push make_push() {
   pc.rf_edge = host->cfg_float("rf_edge", 0.05f);
   pc.rf_strength = host->cfg_float("rf_strength", 1.0f);
   pc.rf_debug = uint32_t(host->cfg_int("rf_debug", 0));
-  pc.rf_so = host->cfg_int("rf_so", 0) ? 1u : 0u;
   pc.rf_validate = host->cfg_int("rf_validate", 0) ? 1u : 0u;
   pc.rf_models = uint32_t(host->cfg_int("rf_models", 3)) & 255u;
   pc.rf_stats = host->cfg_int("rf_stats", 0) ? 1u : 0u;

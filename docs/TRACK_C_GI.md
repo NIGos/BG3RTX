@@ -188,4 +188,4 @@ along the view ray by at most
   `gi_rt_fallback`, weighted by the fade's mean over its unknown distance, never a miss.
 - `qa_zero` bit 2 (gi_ao_apply.hlsl) writes the AO 0: the diffuse AND the specular ambient go
   (SO = 0 at AO 0); direct light keeps 1 − m0.y = half (traced local lights get it back with
-  ao_direct=1); the GI bounce and rf_so=0 reflections stay.
+  ao_direct=1); the GI bounce and the reflections stay.
