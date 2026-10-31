@@ -1,0 +1,36 @@
+{
+  "scope": "Offline positive-pull candidate key correction only; no game/GPU or frozen candidate edits; ABI21 unchanged",
+  "R5_observed": {
+    "frame": 5640,
+    "deferred_unique_duplicate": [
+      100,
+      0
+    ],
+    "captured_snapshots": [
+      16,
+      16
+    ],
+    "source_unique": 99,
+    "source_filtered": 99,
+    "source_copied_bytes": 0,
+    "deferred_engine": "B9CAE7D0",
+    "source_engine": "B9CAE650",
+    "same_camera": "B9CA09D0+3776",
+    "shared_pulled_ssbo": "D907A750"
+  },
+  "change": "Only audited positive-pull candidates omit pass-local Engine buffer/effective-offset from equality. Actual SSBO, raw pull index, UV stream, indexed draw inputs remain. Zero/unknown pull retains Engine identity. Engine facts remain logged.",
+  "proof_unchanged": "Full execution-time GPU clip/UV/material parameter certificate remains required. Genuine duplicate remaining keys remain unsupported. No native field agreement or M3 completion claimed.",
+  "validation": {
+    "host_link": "pass",
+    "targeted_ctests": "2/2",
+    "pipeline_cases": 48,
+    "new_cases": [
+      "same physical inputs different Engine allocations match",
+      "different IB fails",
+      "different pulled SSBO offset fails",
+      "different UV offset fails"
+    ],
+    "shader_inputs_changed": false
+  },
+  "remaining": "Actual source association and qualified native-field residuals require the next authorized acquisition; sparse R5 samples are not presumed counterpart draws."
+}

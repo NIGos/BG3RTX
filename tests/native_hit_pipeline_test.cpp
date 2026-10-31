@@ -55,6 +55,10 @@ int main(){
  different=a;different.uv.offset+=4;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
  a.pull_hint_known=true;a.pull_index=5;a.pull_buffer=9;a.pull_offset=64;a.pull_range=256;check(canonical_static_key(ordinary,a,source));
  different=a;different.position={999,999,999,999};check(canonical_static_key(other_stale,different,deferred) && source==deferred); // ONLY inactive position stream omitted.
+ different=a;different.engine_buffer=9999;different.engine_offset=987654;check(canonical_static_key(ordinary,different,deferred) && source==deferred); // Pass-local Engine copies are not geometry identity.
+ auto other_index=ordinary;other_index.words[6]=78;check(canonical_static_key(other_index,a,deferred) && !(source==deferred));
+ different=a;different.pull_offset+=20;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
+ different=a;different.uv.offset+=4;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
  different=a;different.pull_index=6;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
  different=a;different.pull_buffer=10;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
  different=a;different.uv.buffer=11;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
