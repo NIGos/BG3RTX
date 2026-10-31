@@ -1,0 +1,44 @@
+{
+  "scope": "CPU-only narrow material raster-state fix; no candidate/game/GPU edits",
+  "r2_observation": {
+    "static_seen": 100,
+    "pipeline_declined": 100,
+    "binding_declined": 0,
+    "captured": 0,
+    "snapshots": 0,
+    "query_level": 0,
+    "query_begin_flags": 1,
+    "camera_same_buffer_offset": 3776,
+    "primary_match_percent": 99.527,
+    "material_gpu_attempts": 0
+  },
+  "native_shader_probe": {
+    "actual_vs": "3812bc980438747f",
+    "actual_fs": "8995da1e4060f53b",
+    "patch_stride": 64,
+    "patch_success": true,
+    "basis_output": 1,
+    "uv_location": 0,
+    "uv_match": "UV_OK"
+  },
+  "fix": "Accept only one flags0 VkPipelineRasterizationDepthClipStateCreateInfoEXT under existing finite_native_clip semantics; unknown/duplicate raster structures and previous MSAA/blend/dynamic restrictions remain rejected. Sparse pipeline evidence prints every exact predicate and pNext type.",
+  "limits": "R2 did not serialize actual raster pNext: native depth-clip extension is enabled, but the actual failing term is not yet individually proven. No material quality pass claimed.",
+  "tests": {
+    "actual_vulkan_material_state_cases": 21,
+    "targeted_ctests_passed": 2,
+    "host_link": true,
+    "shader_inputs_changed": false
+  },
+  "source_hash_encoding": "UTF-8, CRLF normalized to LF",
+  "source_sha256": {
+    "common/native_hit_pipeline.h": "b587e2b689900ece9f4d3309d20cf122d6018d9d8dcf57b7d038f9980110c1de",
+    "layer/geocapture.cpp": "594e1845b321f209427740d5c8b67381fd361d0e8cafcbe68a344162c5845af9",
+    "tests/native_hit_pipeline_test.cpp": "576d80ff975b7ddf2f8abaa2caeda97684c9739aa098a1c51d7cbf0fca296a23"
+  },
+  "binary_sha256": {
+    "VkLayer_bg3rtx.dll": "e94abce75702296d3d9bd8cff19a1b3661a06c24dd882b91b3428837bfd08969",
+    "bg3rtx_core.dll": "2f2ba31b26a4d16405eb16021af2a4fd70c9f7d83b878f941b99f25cbddd7c1f",
+    "BG3RTX.exe": "d55b8f4c0250a1ab41249d16a344685718a8ab627f34917f7d7d6227ae63ec99",
+    "VkLayer_bg3rtx.json": "e62ad6e9d788efde539c7239a100f4e69223493b51be6c416fbb2122528a3a70"
+  }
+}
