@@ -46,6 +46,11 @@ is the chosen value, and ~45 are diagnostics (fine to stay off; no GPU cost when
   `rt_cascade_roofs_trust`, `gi_bounce_spec`, `ls_box_unshadowed`, `geo_xfb_always`.
   Each removal: key, schema, GUI, shaders and tests together; the remaining shaders must compile
   byte-identical. Effort M overall.
+  **Done 2026-10-31** (branch `consolidation`; also `rt_ao_rays`/`rt_ao_radius`, `ls_rest_samples`,
+  `rt_em_aniso`, `rt_sun_top_pad`; ABI 22). Kept: the `RT_SCENE_REBASE` blocks of rt_common.hlsli
+  and hair_receiver.hlsli (tools/native_hair_gpu_probe rebase cases), the QA analyzers keyed on
+  `rt_scene_rebase=1` plan steps (scripts/qa/rebase_gate.py, fg_motion_gate, rotation_preflight,
+  prepare-p1-fg-matrix.py) and historical job fixtures. Push fields stay (layout), always 0.
 - **C2. Keep experimental, with a gate to finish:** `rt_cascade_casters`, `ls_box`,
   `rt_native_scalp`, `rt_native_hair`, `rt_hair_physical_origin`, `rt_omm`, `rt_sun_cascade_current`,
   `rt_hit_material`, `gi_hit_direct`, `rt_alpha_spill`, `rt_emissive`, `sharc`, `fg_ui_pq`.

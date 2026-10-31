@@ -71,7 +71,7 @@ How settings work today:
 | `rt_alpha` | 1 | R | refit 0.39 → 0.88 ms, +64 MB | Alpha-tested casters (grates, foliage). The candidate restart-only "quality" knob |
 | `rt_alpha_test` | 1 | L | shadows + AO 0.20 → 0.22 ms | Live A/B for the above. Internal |
 | `rt_shadows` | 1 | L | 0.08–0.11 ms | Sun. Without RT, contact shadows (`contact_shadows`) are the fallback |
-| `gi` | 1 | L | GI total 0.35 ms (`gi_rt`) / 0.44 ms (screen-space + `rt_ao`) | Also the host of `rt_ao`, `gi_rt` and the bounce source for `rt_reflections` |
+| `gi` | 1 | L | GI total 0.35 ms (`gi_rt`) / 0.44 ms (screen-space + the removed `rt_ao`) | Also the host of `gi_rt` and the bounce source for `rt_reflections` |
 | `gi_rt` | 1 | L | trace 0.175 ms (vs 0.248 ms screen-space) | Needs `rt`, `gi` |
 | `gi_rays` / `gi_rr_rays` | 4 / 1 | L | 2 rays/12 steps 0.18 ms, 4/16 0.28 ms (half res, `rr=0`); RR path 1 ray full res ≈ the same | The RR mode uses `gi_rr_rays` |
 | `gi_steps` | 16 | L | see above | Screen-space path only |
