@@ -77,7 +77,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
   for (uint r = 0; r < pc.rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
-    float3 o = rt_ray_origin_o(org, P, N, dist * pa, dir);
+    float3 o = RT_SECONDARY_ORIGIN(fp,org, P, N, dist * pa, dir);
 #if SHARC_QUERY_PASS
     RtHit hh = rt_closest_hit(o, dir, R, cone);
     float t = hh.t;

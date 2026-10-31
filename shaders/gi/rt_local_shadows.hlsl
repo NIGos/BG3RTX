@@ -136,6 +136,10 @@ float3 nan0(float3 v) { return any(isnan(v)) ? float3(0, 0, 0) : v; }
 // starts on the side of the surface its direction leaves on (back-lit transmission, hair).
 uint trace_light(float3 P, float3 N, float4 org, float3 lpos, uint2 fp, uint key, RtCone cone, float R) {
   float3 L = lpos - P;
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+  float3 receiver;bool physical_receiver=rt_hair_receiver(fp,P,receiver);
+  if(physical_receiver)L=lpos-receiver;
+#endif
   float dist = length(L);
   float3 Ld = L / max(dist, 1e-6);
   float3 dir = Ld;
@@ -150,8 +154,14 @@ uint trace_light(float3 P, float3 N, float4 org, float3 lpos, uint2 fp, uint key
     float3 b = cross(Ld, t);
     dir = normalize(Ld * ct + (t * cos(phi) + b * sin(phi)) * st);
   }
-  float3 o = rt_ray_origin_o(org, P, N, cone.f0, dir);
+  float3 o = RT_SECONDARY_ORIGIN(fp,org, P, N, cone.f0, dir);
   float tmax = length(lpos - o) - max(R, pc.ls_clear);
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+  if(physical_receiver){
+    HairLightSegment segment=hpo_light_segment(receiver,o,lpos,dir,R,pc.ls_clear);
+    if(!segment.valid)return kRtUnknown;dir=segment.direction;tmax=segment.tmax;
+  }
+#endif
   if (tmax <= 0.0) return kRtLit;
   return rt_visibility(o, dir, tmax, cone);
 }
@@ -159,6 +169,9 @@ uint trace_light(float3 P, float3 N, float4 org, float3 lpos, uint2 fp, uint key
 // The pixel as f469db78 sets it up, in two parts: what the light tests and the rays need
 // (LsLite), and the rest of the surface and the class terms (ls_surface).
 struct LsLite {
+  #ifdef RT_HAIR_PHYSICAL_ORIGIN
+  uint2 pixel;
+  #endif
   float3 P, N;
   float4 org;
   RtCone cone;
@@ -168,6 +181,9 @@ struct LsLite {
 // False: nothing to do (the lighting skips unlit pixels).
 bool ls_lite(uint2 fp, float d, out LsLite s) {
   s = (LsLite)0;
+  #ifdef RT_HAIR_PHYSICAL_ORIGIN
+  s.pixel=fp;
+  #endif
   float2 uv = (float2(fp) + 0.5) / float2(lFlags.res);
   s.P = ray_at(uv) * d;
   s.N = n_world(decode_normal(gNormal.Load(int3(fp, 0)).xy));
@@ -227,6 +243,9 @@ bool ls_pixel(uint2 fp, out LsPixel px) {
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
   LsLite s = (LsLite)0;
+  #ifdef RT_HAIR_PHYSICAL_ORIGIN
+  s.pixel=fp;
+  #endif
   if (!ls_lite(fp, d, s)) return false;
   ls_surface(fp, s, px.sf, px.mt);
   px.cls = s.cls;
@@ -408,7 +427,7 @@ bool ls_box_traced(uint bi, LsLite s) {
 // The ray's origin and extent towards box light `b` (tmax <= 0: the origin left the box).
 float ls_box_ray(Bg3Box b, LsLite s, out float3 o, out float3 dir) {
   dir = ls_box_dir(b);
-  o = rt_ray_origin_o(s.org, s.P, s.N, s.cone.f0, dir);
+  o = RT_SECONDARY_ORIGIN(s.pixel,s.org, s.P, s.N, s.cone.f0, dir);
   return bg3_box_exit(b, o, dir);
 }
 
@@ -535,6 +554,9 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
   LsLite s = (LsLite)0;
+  #ifdef RT_HAIR_PHYSICAL_ORIGIN
+  s.pixel=fp;
+  #endif
   if (!ls_lite(fp, d, s)) return false;   // the lighting skips unlit pixels
   const bool qa = ls_qa_off();
 
@@ -1095,6 +1117,9 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return false;
   LsLite s = (LsLite)0;
+  #ifdef RT_HAIR_PHYSICAL_ORIGIN
+  s.pixel=fp;
+  #endif
   if (!ls_lite(fp, d, s)) return false;   // the lighting skips unlit pixels
 
   const uint3 cl = bg3_cluster(fp, d);

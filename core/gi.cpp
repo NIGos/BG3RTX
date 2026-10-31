@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include "../common/native_hair_origin.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -57,6 +58,7 @@ struct Snapshot {
   VkAccelerationStructureKHR tlas;   // the TLAS the ray-traced passes used (Track D)
   VkDescriptorSet alpha;             // the host's set 1 for them (alpha-tested geometry, phase 3)
   bool gi;                           // the GI passes ran (gi=1); otherwise only the sun shadow work
+  bool hair_physical_origin=false;
   bool rt_gi_applied = false;         // diagnostic: RT GI commands actually recorded in run_pre
   bool ls;                           // D-LS runs after the lighting
   bool rf;                           // D-RF runs after the lighting
@@ -80,14 +82,23 @@ struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
   // Variant bits: 1 rebase, 2 cascade, 4 scalp, 8 OMM scene/reference bindings.
-  VkPipeline variants[16] = {};
-  uint64_t variant_generations[16] = {};
-  std::string variant_files[16];
+  VkPipeline variants[32] = {};
+  uint64_t variant_generations[32] = {};
+  std::string variant_files[32];
   bool rebased = false;
 };
 
 // Bound pipeline capability, including a first-frame capability publication race.
 std::unordered_set<VkPipeline> g_omm_pipelines;
+bool g_hair_origin_cap=false,g_hair_origin_init=false,g_hair_origin_frame=false;
+uint32_t g_hair_origin_last_mode=UINT32_MAX;
+bool g_hair_origin_warned=false;
+void initialize_hair_origin(){
+ if(g_hair_origin_init)return;g_hair_origin_init=true;
+ const bool requested=host->cfg_int("rt_hair_physical_origin",0)!=0 && host->cfg_int("rt_native_hair",0)!=0;
+ g_hair_origin_cap=bg3::hair_origin::capability(static_cast<uint32_t*>(host->persist(bg3::hair_origin::capability_key,sizeof(uint32_t))),requested);
+ host->log("[hair origin] startup auxiliary capability %u; runtime A/B key rt_hair_physical_origin (off startup requires restart)",unsigned(g_hair_origin_cap));
+}
 
 struct Push {
   uint32_t full[2], half[2];
@@ -227,6 +238,7 @@ Pipe g_rf;
 bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
+Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F, startup opt-in only.
 Bg3Image g_origin{}, g_aux{};   // extras 40 and 44 (full resolution, RGBA16F)
 Bg3Image g_ls_nodata{};          // extra 46 when there is no per-light data: 1x1 RGBA32UI (the shaders' type)
 bool g_x_logged = false;
@@ -434,6 +446,12 @@ bool snapshot(VkCommandBuffer cmd, Snapshot& s) {
 }
 
 void release_images() {
+  if(g_hair_origin.image){
+    host->defer_destroy(BG3_DEFER_IMAGE_VIEW,uint64_t(g_hair_origin.view));
+    host->defer_destroy(BG3_DEFER_IMAGE,uint64_t(g_hair_origin.image));
+    host->defer_destroy(BG3_DEFER_MEMORY,uint64_t(g_hair_origin.memory));
+    g_hair_origin={};
+  }
   // RR must stop using the hit distance image before it goes.
   if (host->set_spec_hit_distance) host->set_spec_hit_distance(VK_NULL_HANDLE, VK_NULL_HANDLE, VK_FORMAT_UNDEFINED, 0, 0);
   for (Bg3Image* im : all_images) {
@@ -465,6 +483,10 @@ bool ensure_images(uint32_t w, uint32_t h) {
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_aux) &&
             host->alloc_image(1, 1, VK_FORMAT_R32G32B32A32_UINT, use, &g_ls_nodata) &&
             host->alloc_image(w, h, VK_FORMAT_R16_SFLOAT, use | VK_IMAGE_USAGE_SAMPLED_BIT, &g_rf_hit);
+  if(ok && g_hair_origin_cap) {
+    ok=host->alloc_image(w,h,VK_FORMAT_R32G32B32A32_SFLOAT,use,&g_hair_origin);
+    if(ok)host->log("[hair origin] auxiliary image %ux%u, %llu bytes (16 bytes/pixel); GPU cost pending",w,h,(unsigned long long)(uint64_t(w)*h*16));
+  }
   if (!ok) {
     host->log("gi: image allocation failed");
     release_images();
@@ -491,13 +513,14 @@ VkDescriptorType binding_type(uint32_t i) {
 // `set1`: the host's set layout for the ray-traced passes (alpha-tested geometry).
 bool make_layout(uint32_t count, VkDescriptorSetLayout* set_layout, VkPipelineLayout* layout,
                  VkDescriptorSetLayout set1 = VK_NULL_HANDLE, VkDescriptorSetLayout set2 = VK_NULL_HANDLE) {
-  VkDescriptorSetLayoutBinding b[kRfBindings + kNumExtras];
+  VkDescriptorSetLayoutBinding b[kRfBindings + kNumExtras + 1];
   const uint32_t mask = layout_mask(count);
   uint32_t n = 0;
   for (uint32_t i = 0; i < count; ++i)
-    if (mask != 4u || ls_uses(i)) b[n++] = {i, binding_type(i), 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    if ((mask != 4u || ls_uses(i)) && bg3::hair_origin::binding_enabled(g_hair_origin_cap,mask,i)) b[n++] = {i, binding_type(i), 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
   for (const ExtraBinding& x : kExtras)
     if (x.layouts & mask) b[n++] = {x.binding, x.type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+  if(g_hair_origin_cap && mask!=1u)b[n++]={50,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
   VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   sci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
   sci.bindingCount = n;
@@ -703,8 +726,10 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const std::string scene_selected = &p == &g_rt_shadow_current ? "sun_current/" + material_selected : material_selected;
   const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
-  const std::string selected=omm?"omm/"+scene_selected:scene_selected;
-  const unsigned variant = (rebase ? 1u : 0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  const std::string original_selected=omm?"omm/"+scene_selected:scene_selected;
+  const bool physical_origin=scalp && g_hair_origin_frame && bg3::hair_origin::alternate_entry(file);
+  const std::string selected=physical_origin?"hair_origin/"+original_selected:original_selected;
+  const unsigned variant = (physical_origin?16u:0u) | (rebase ? 1u : 0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm) p.pipeline = p.variants[variant];
@@ -782,6 +807,8 @@ struct Bound {
   VkAccelerationStructureKHR tlas;
   VkDescriptorSet alpha;
   // kExtras, in table order
+  VkWriteDescriptorSet hair_origin_write{};
+  VkDescriptorImageInfo hair_origin_image{};
   VkWriteDescriptorSet xw[kNumExtras];
   VkDescriptorImageInfo ximg[kNumExtras];
   VkDescriptorBufferInfo xbuf[kNumExtras];
@@ -790,6 +817,12 @@ struct Bound {
 // The extras' descriptors, with fallbacks when the game did not bind a source
 // (the shaders are told through Push::mat_classes bits 1-3).
 void bind_extras(Bound& b, const Snapshot& s) {
+  if(g_hair_origin_cap){
+    b.hair_origin_image={VK_NULL_HANDLE,g_hair_origin.view,VK_IMAGE_LAYOUT_GENERAL};
+    b.hair_origin_write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};b.hair_origin_write.dstBinding=50;
+    b.hair_origin_write.descriptorCount=1;b.hair_origin_write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    b.hair_origin_write.pImageInfo=&b.hair_origin_image;
+  }
   const VkImageLayout G = VK_IMAGE_LAYOUT_GENERAL;
   for (uint32_t i = 0; i < kNumExtras; ++i) {
     b.xw[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -840,9 +873,10 @@ uint32_t gather_writes(const Bound& b, uint32_t count, VkWriteDescriptorSet* out
   const uint32_t mask = layout_mask(count);
   uint32_t n = 0;
   for (uint32_t i = 0; i < count; ++i)
-    if (mask != 4u || ls_uses(i)) out[n++] = b.w[i];
+    if ((mask != 4u || ls_uses(i)) && bg3::hair_origin::binding_enabled(g_hair_origin_cap,mask,i)) out[n++] = b.w[i];
   for (uint32_t i = 0; i < kNumExtras; ++i)
     if (kExtras[i].layouts & mask) out[n++] = b.xw[i];
+  if(g_hair_origin_cap && mask!=1u)out[n++]=b.hair_origin_write;
   return n;
 }
 
@@ -979,6 +1013,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   }
   if (g_stats_n < 120) return;
   const uint64_t* t = g_stats_sum;
+  if(g_hair_origin_cap && t[188])host->log("[hair origin] %u frames: matched virtual Hair pixels %llu, physical origin available %llu, unresolved %llu",g_stats_n,(unsigned long long)t[188],(unsigned long long)t[189],(unsigned long long)t[190]);
   if (t[0]) {
     double px = double(t[0]);
     host->log("rt stats (%u frames, alpha test %s): primary-ray check match %.3f%%, in front %.3f%% (opaque geometry "
@@ -1614,6 +1649,9 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,u
 }
 
 bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
+  initialize_hair_origin();
+  if(!g_hair_origin_cap && host->cfg_int("rt_hair_physical_origin",0) && !g_hair_origin_warned){g_hair_origin_warned=true;host->log("[hair origin] enable rejected: restart with rt_hair_physical_origin=1 and rt_native_hair=1 to reserve resources");}
+  g_hair_origin_frame=s.hair_physical_origin=g_hair_origin_cap && host->cfg_int("rt_hair_physical_origin",0)!=0 && host->cfg_int("rt_origin",1)!=0;
   s.rt_gi_applied=false;
   if (!ensure_layout() || !ensure_images(s.dif.width, s.dif.height)) return false;
   bool ok = refresh(g_trace, "gi/gi_trace.hlsl") & refresh(g_temporal, "gi/gi_temporal.hlsl") &
@@ -1631,6 +1669,11 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     VkClearColorValue zero{};
     VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     for (Bg3Image* im : all_images) host->vk->CmdClearColorImage(cmd, im->image, VK_IMAGE_LAYOUT_GENERAL, &zero, 1, &range);
+    if(g_hair_origin_cap){
+      image_layout(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
+      VkClearColorValue invalid{};invalid.float32[3]=0.0f;
+      host->vk->CmdClearColorImage(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_GENERAL,&invalid,1,&range);
+    }
     memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
     g_images_ready = true;
   }
@@ -1762,6 +1805,10 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   if (tlas && pc.rt_origin != 0) {
     rt_begin();
     if(!dispatch(cmd, g_rt_origin, b, pc, g_w, g_h, true))return false;
+    if(g_hair_origin_cap && g_hair_origin_last_mode!=uint32_t(s.hair_physical_origin)){
+      g_hair_origin_last_mode=uint32_t(s.hair_physical_origin);
+      host->log("[hair origin] frame %llu secondary origin mode %u; virtual primary/history unchanged",(unsigned long long)host->frame_index(),g_hair_origin_last_mode);
+    }
     memory_barrier(cmd, kCS, kCS);
   }
   if ((s.pan || host->cfg_int("rt_primary_check", 0)) && tlas &&
@@ -1953,6 +2000,7 @@ void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
 }
 
 void run_post(VkCommandBuffer cmd, const Snapshot& s) {
+  g_hair_origin_frame=s.hair_physical_origin;
   bool local_applied=false, reflection_applied=false;
   Bound b;
   bind_all(b, s);

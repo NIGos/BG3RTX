@@ -31,7 +31,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float occ = 0.0;
   for (uint r = 0; r < pc.rt_ao_rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
-    float3 o = rt_ray_origin_o(org, P, N, dist * pa, dir);
+    float3 o = RT_SECONDARY_ORIGIN(fp,org, P, N, dist * pa, dir);
     bool aborted;
     float t = rt_closest(o, dir, pc.rt_ao_radius, cone, aborted);
     if (aborted) {

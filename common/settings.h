@@ -234,6 +234,15 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_native_hair", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
 
+  {"exp_hair_physical_origin", "Physical hair ray origins",
+   "Starts secondary rays on the selected native hair card while retaining native camera depth for primary checks. "
+   "Enable at startup with Native hair coverage to reserve the auxiliary image; then Off/On is a live A/B. "
+   "Starting Off requires a restart before enabling. Quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Partial, "Enable at startup; then live A/B", true,
+   {{"off", "Off", 0, {{"rt_hair_physical_origin", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_hair_physical_origin", "1"}}, {{"rt_geometry", 2}, {"exp_native_hair",1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"},{"rt_origin","1","Primary origin matching"}}},
+
   {"exp_omm", "Opacity micromaps",
    "Experimental hardware opacity micromaps for the audited static alpha-material subset. "
    "Requires Full ray-traced geometry, Vulkan 1.3, EXT opacity micromaps, buffer device "
@@ -274,7 +283,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 216 keys of bg3rtx.ini, in file order.
+// 217 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -390,6 +399,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_native_scalp", "0"},
     {"rt_omm", "0"},
     {"rt_native_hair", "0"},
+    {"rt_hair_physical_origin", "0"},
     {"rt_alpha_unknown", "1"},
     {"rt_alpha_auto", "1"},
     {"rt_alpha_max_pct", "60"},
