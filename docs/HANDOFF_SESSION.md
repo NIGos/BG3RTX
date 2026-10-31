@@ -12,20 +12,28 @@ user mandate docs were preserved in history; unrelated disk-audit files untouche
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
 
-Desktop BG3RTX - Hair Scalp now targets hair-capacity-fix 859b879, with matching
-DLLs. Native Hair/Scalp ON; OMM/current Sun OFF; camera 1408 MiB/cascade 587 MiB.
-Two Test1 FG2 static/rotation runs complete; all steady camera/cascade drops ZERO
-in the final run. Static RT cost 3.397 ms without primary diagnostics; rotations
-45.4-48.2 rendered fps, FG ratio ~2. Original a9f8688 trial is retained. User has
-NOT yet checked the capacity update. Main code/binaries/saves untouched.
+Desktop BG3RTX - Hair Scalp now targets hair-origin-live 047e105 (ABI19),
+with rt_hair_physical_origin=1; native Hair/Scalp ON, OMM/current Sun OFF,
+camera/cascade 1408/587 MiB. Old 859b879 and a9f8688 trials are retained.
+User has NOT yet checked the capacity or physical-origin updates. User saves
+are untouched. This is a private profile; all new preset defaults stay OFF.
 
-Next concrete fix: virtual Hair primary hit vs physical card secondary-origin
-self-hit. Dedicated worker owns a default-off auxiliary-image candidate; preserve
-virtual primary/history depth and ordinary shader byte identity. No live proof yet.
-Darker/dithered Hair remains open. Optional R5 same-run cascade 160/587 supports
-the fix: rotating primary 95.930 -> 97.493%, high-budget static 97.472%, FG healthy.
-Flash counts remain UNKNOWN: first final was missing. Producer/reader are now
-fixed to retain 16 complete frames after explicit warmup; live rerun pending.
+Physical Hair receiver fix: separate 41.68 MiB image preserves virtual primary
+and history data, but starts secondary rays at the same selected physical card.
+Audited native class 5 is required; finite-light endpoints remain correct.
+R6 completed 759s, guarded R7 completed 242s; no NVIDIA 153/dumps/build drift.
+Same-run primary 97.410/97.414/97.409%; encoded Hair brightness .26649/.32127/.26837.
+Actual world coverage 1177-1239 Hair pixels/frame; no strict common Hair across
+all 48 due idle poses. Do not claim dialogue closure or unchanged non-Hair.
+Stats-off RT 3.438 ms off / 3.409 ms on; no speedup claim. Complete K16 transport
+and contact output are live verified. See PROGRESS and hair-origin captures.
+
+Native class 0 parameter mapping and declared shared FresnelBlend eval/sample/PDF
+are implemented offline with tests. They are not native BSDF equivalence, a
+runtime hit provider or a complete reference renderer. M2 still needs one actual
+native Floor_B vertex oracle; the old 7/9 anchor test is not a transform oracle.
+Existing captures across 28 Git worktrees have no scene.bin. A bounded S1 native
+geometry draft is prepared outside inboxes; no additional launch yet.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
 module-independent SHA256 are fixed and tested through actual simulated runner.

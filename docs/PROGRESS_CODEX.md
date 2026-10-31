@@ -1,5 +1,41 @@
 # BG3RTX progress
 
+## Physical Hair origins kept and installed in the personal trial - 2026-10-31
+
+Desktop BG3RTX - Hair Scalp now selects frozen hair-origin-live 047e105, with
+rt_hair_physical_origin=1, native Hair/Scalp ON and camera/cascade 1408/587 MiB.
+OMM/current Sun remain OFF. The prior capacity trial 859b879 and shortcut backup
+are retained. The feature remains default OFF in all presets; GUI: Experimental,
+Physical hair ray origins. User has NOT yet tested this update.
+
+One Test1 FG2 same-run off/on/off + motion/cost job completed in 759 s. Virtual
+primary match stayed 97.410/97.414/97.409%. Physical origins were available for
+99.43-99.52% of matched Hair in 19 diagnostic windows. Encoded Hair luminance was
+0.26649 -> 0.32127 -> 0.26837; sun visibility 0.1503 -> 0.3547 -> 0.1635. This is
+reversible world-view support for removing false Hair self-shadow, not radiometric
+energy or dialogue closure: only 1177-1239 Hair pixels/frame, and idle poses leave
+zero common Hair pixels across all 48 frames. Non-Hair was not proven identical.
+
+Source audit then added a necessary native class-5 receiver guard, so depth-near
+skin/other materials cannot receive Hair origins. Accepted Hair arithmetic stays
+unchanged. A short guarded job completed in 242 s, with active RT/FG, participation,
+one complete K16 burst and no NVIDIA153/dump/build change. All three earlier
+K16 bursts are complete too; the capture warmup/tonemap fix is now live verified.
+
+Separate stats-off RT cost: 3.438 ms off / 3.409 ms on, no speedup claim. Extra
+image payload: 41.68 MiB at 2560 x 1067. Guarded smoke's last RT samples span
+3.352-3.434 ms. Keep the scoped fix and continue; no user-witness requirement.
+Detailed measurements/contact sheet:
+C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX/captures/hair-origin-20261031/roi-analysis/hair-off-on-off.png
+Same folder summary.md/report.json; parent live-summary.json and guard-smoke/.
+
+Offline prerequisites also advanced: verified native class-0 parameters now feed
+an explicitly declared shared FresnelBlend model (not native BSDF equivalence).
+786570 parameter checks, 1700 independent scattering comparisons and numerical
+furnace cases pass (max 0.999126497). Runtime hit-material acquisition and the
+reference consumer remain unwired; no offscreen GI/PT completion claim.
+
+
 ## Consolidated on main f1402ec; scoped capacity fix kept - 2026-10-31
 
 Merged only through merge-green and pushed main plus codex/omm-bake. ABI 18 -> 19;
