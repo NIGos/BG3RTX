@@ -6,6 +6,7 @@
 #include "../common/native_hit_tileset_inputs.h"
 #include "../common/native_hit_resources.h"
 #include "../common/native_hit_records.h"
+#include "../common/native_hit_qualify.h"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -303,15 +304,15 @@ void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(
 void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint32_t record,VkDeviceSize rawOffset,uint32_t stride,uint32_t triangles){
  if(!on || !state || args.kind>1 || record>=max_records)return;
  const bool tileset=tileset_depth(state->vs,state->fs);if(tileset && !tileset_active())return;uint32_t vertices=0;
- if(!tileset_vertex_count(args.count,args.instances,vertices) || vertices!=uint64_t(triangles)*3 || (!tileset && args.instances!=1) || (tileset && stride<80))return;
+ if(!tileset_vertex_count(args.count,args.instances,vertices) || !prepass_geometry_ok(tileset,vertices,args.instances,triangles,stride))return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
- if(tileset){if(snapshot.rec.kind!=5 || snapshot.rec.p0[2]!=0.f || snapshot.rec.p0[1]!=0.f)return;}else if(snapshot.rec.kind!=1 || snapshot.rec.channel!=0)return;
+ if(!prepass_alpha_ok(tileset,snapshot.rec.kind,snapshot.rec.channel,snapshot.rec.p0[1],snapshot.rec.p0[2]))return;
  Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
  ++p->second.candidate_draws;
  if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record))p->second.pre.push_back(pre);
 }
 uint32_t note_opaque_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,VkDeviceSize raw,uint32_t stride,uint32_t triangles){
- if(!on || !cfg_hot(CfgHot::rt_hit_material) || !one_time(state) || !opaque_depth_family(state->vs,state->fs) || args.kind>1 || args.instances!=1 || args.count!=uint64_t(triangles)*3 || stride<64)return UINT32_MAX;
+ if(!on || !cfg_hot(CfgHot::rt_hit_material) || !one_time(state) || !opaque_depth_family(state->vs,state->fs) || !opaque_prepass_geometry_ok(args.kind,args.instances,args.count,triangles,stride))return UINT32_MAX;
  Pre pre{};pre.key=key(cmd,*state,args);pre.raw=raw;pre.stride=stride;pre.triangles=triangles;pre.vs=state->vs;pre.fs=state->fs;pre.opaque=true;
  std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return UINT32_MAX;
  ++p->second.candidate_draws;
@@ -392,8 +393,9 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  auto& p=*it->second;
  if(p.finalized || p.frame!=frame_index() || p.camera!=camera.buffer || p.camera_offset!=camera.offset){p.valid=false;return false;}
  const bool tileset=tileset_deferred(state->vs,state->fs);const bool audited=audited_static_family(state->vs,state->fs)||tileset;
- if(!audited){++p.family_declined;return false;}++p.seen;
- if(!exactPipeline || args.kind>1 || (!tileset && args.instances!=1) || stride<(tileset?80u:64u)){++p.pipeline_declined;return false;}
+ const auto qualify=deferred_qualify(audited,tileset,exactPipeline,args.kind,args.instances,stride);
+ if(qualify==DeferredQualify::FamilyDeclined){++p.family_declined;return false;}++p.seen;
+ if(qualify==DeferredQualify::PipelineDeclined){++p.pipeline_declined;return false;}
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
  if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;
  // Count real audited duplicates even beyond the storage bound. Unrelated

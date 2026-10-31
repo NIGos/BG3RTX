@@ -30,6 +30,7 @@
 #include "../common/native_hit_inputs.h"
 #include "../common/native_tileset_coverage.h"
 #include "../common/native_hit_tileset_inputs.h"
+#include "../common/native_hit_qualify.h"
 #include "../common/spirv_visibility.h"
 #include "spirv_xfb.h"
 #include "../common/cascade_casters.h"
@@ -2110,9 +2111,12 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
       s->geo_material_no_writes&=i->second.no_storage_writes;
       const auto& p=i->second;
       const bool tileset=native_hit::tileset_deferred(s->vs,s->fs);
-      const bool outputs=tileset ? g_tileset_capture && g_stride>=80u && p.tileset_outputs==3u && p.tileset_material_inputs.valid : p.vt_outputs!=0u;
-      exact=p.xfb && outputs && p.material_state && p.depth_test==1 && p.blend_mask==0 &&
-        (p.color_mask&0xf73u)==0xf73u && p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && p.uv_match==UV_OK;
+      native_hit::MaterialPipelineFacts facts;
+      facts.tileset=tileset;facts.tileset_capture=g_tileset_capture;facts.stride=g_stride;
+      facts.tileset_outputs=p.tileset_outputs;facts.tileset_inputs_valid=p.tileset_material_inputs.valid;facts.vt_outputs=p.vt_outputs;
+      facts.xfb=p.xfb;facts.material_state=p.material_state;facts.depth_test=p.depth_test;facts.blend_mask=p.blend_mask;
+      facts.color_mask=p.color_mask;facts.triangle_list=p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;facts.uv_ok=p.uv_match==UV_OK;
+      exact=native_hit::exact_material_pipeline(facts);
       // One sparse, exact state record per audited native pipeline. A later
       // unsupported term is visible without another blind attribution run.
       static std::unordered_set<uint64_t> reported;

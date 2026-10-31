@@ -4,6 +4,7 @@
 #include "host.h"
 #include "../common/camera_epoch.h"
 #include "../common/cascade_casters.h"
+#include "../common/native_sun_packets.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -169,10 +170,13 @@ void stats() {
 } // namespace
 
 void sun_note_native_draw(VkCommandBuffer cmd,const CmdState* state) {
-  if(!state || !state->in_pass || state->fs!=0x0687fa327aed7f8eull || !cfg_int("rt_sun_cascade_current",0)) return;
+  if(!state || !state->in_pass || state->fs!=bg3::sun_packets::kReceiverFs || !cfg_int("rt_sun_cascade_current",0)) return;
   SunReceiverCapture capture;
   capture.producer=cmd;
-  auto packet=[&](uint32_t set,uint32_t binding,uint32_t offset,uint32_t size,SunReceiverPacket& p) {
+  namespace sp=bg3::sun_packets;
+  static_assert(sp::kMaxPacketBytes==sizeof(SunReceiverPacket{}.bytes),"packet capacity");
+  auto packet=[&](sp::UboPacket where,SunReceiverPacket& p) {
+    const uint32_t set=where.set,binding=where.binding,offset=where.offset,size=where.size;
     p.size=size;
     if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,binding,0,&p.source) || !p.source.buffer ||
        (p.source.type!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && p.source.type!=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
@@ -182,19 +186,19 @@ void sun_note_native_draw(VkCommandBuffer cmd,const CmdState* state) {
     p.mapped=read_mapped(p.source.buffer,p.source.offset,p.bytes.data(),size);
     return true;
   };
-  capture.sources_valid=packet(0,0,0,32,capture.frame);
-  capture.sources_valid=packet(0,2,0,224,capture.camera) && capture.sources_valid;
-  capture.sources_valid=packet(2,26,0,544,capture.sun) && capture.sources_valid;
-  capture.sources_valid=packet(1,0,0,144,capture.auxiliary) && capture.sources_valid;
-  capture.sources_valid=packet(0,1,112,48,capture.ray_basis) && capture.sources_valid;
-  capture.sources_valid=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,2,8,0,&capture.csm) &&
+  capture.sources_valid=packet(sp::kFrame,capture.frame);
+  capture.sources_valid=packet(sp::kCamera,capture.camera) && capture.sources_valid;
+  capture.sources_valid=packet(sp::kSun,capture.sun) && capture.sources_valid;
+  capture.sources_valid=packet(sp::kAuxiliary,capture.auxiliary) && capture.sources_valid;
+  capture.sources_valid=packet(sp::kRayBasis,capture.ray_basis) && capture.sources_valid;
+  capture.sources_valid=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,sp::kCsm.set,sp::kCsm.binding,0,&capture.csm) &&
     capture.csm.image && capture.csm.view && capture.sources_valid;
   // Merely bound auxiliary textures are NOT evidence that native auxiliary
   // shadows are enabled. Preserve actual enable/selection bytes above.
-  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,3,0,&capture.auxiliary_near);
-  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,4,0,&capture.auxiliary_far);
+  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,sp::kAuxiliaryNear.set,sp::kAuxiliaryNear.binding,0,&capture.auxiliary_near);
+  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,sp::kAuxiliaryFar.set,sp::kAuxiliaryFar.binding,0,&capture.auxiliary_far);
   if(capture.frame.mapped) {
-    std::memcpy(capture.epoch.words.data(),capture.frame.bytes.data(),32);
+    std::memcpy(capture.epoch.words.data(),capture.frame.bytes.data(),sp::kEpochBytes);
     capture.epoch.available=true;
   }
   capture.record=bvh_rec_register(cmd);
