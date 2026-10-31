@@ -128,6 +128,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_native_scalp": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_native_scalp": "1"}, "needs": {"rt_geometry": 2}}
      ]},
+    {"id": "exp_native_tileset", "label": "Native tileset coverage",
+     "description": "Captures native instanced floor and wall coverage for ray queries. Requires a restart and Full ray-traced geometry. SeeThrough and missing native inputs remain unknown. Experimental: quality and GPU cost are unqualified.",
+     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_native_tileset": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_native_tileset": "1"}, "needs": {"rt_geometry": 2}}
+     ]},
     {"id": "exp_native_hair", "label": "Native hair coverage",
      "description": "Captures the audited CHAR_Hair strand coverage and depth for ray queries. Other hair families remain separate coverage gaps. Needs Full ray-traced geometry. Restart required because the captured vertex layout changes. In-game quality and cost are unqualified.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
