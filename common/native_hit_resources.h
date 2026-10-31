@@ -14,6 +14,14 @@ struct ResourceIndices {uint32_t sampler{},normal{},albedo{},physical{};bool new
 struct ResourceBudget {
  std::array<uint64_t,16> samplers{};std::array<CacheIdentity,64> caches{};
  uint32_t sampler_count{},cache_count{},material_count{};
+ bool reserve_sampler(uint64_t sampler,ResourceIndices& result){
+  if(!sampler || material_count>=material_slots)return false;
+  auto next=*this;ResourceIndices indices{};indices.sampler=next.sampler_count;
+  for(uint32_t i=0;i<next.sampler_count;++i)if(next.samplers[i]==sampler){indices.sampler=i;break;}
+  indices.new_sampler=indices.sampler==next.sampler_count;
+  if(indices.new_sampler){if(next.sampler_count==next.samplers.size())return false;next.samplers[next.sampler_count++]=sampler;}
+  ++next.material_count;*this=next;result=indices;return true;
+ }
  bool reserve(uint64_t sampler,const std::array<CacheIdentity,3>& views,ResourceIndices& result){
   if(!sampler || material_count>=material_slots)return false;
   auto next=*this;ResourceIndices indices{};indices.sampler=next.sampler_count;

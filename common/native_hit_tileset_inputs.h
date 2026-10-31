@@ -5,6 +5,7 @@ inline constexpr uint64_t tileset_depth_vs=0x689836dece58e778ull,tileset_depth_f
 inline constexpr uint64_t tileset_deferred_vs=0xa618ddae98c2d1cfull,tileset_deferred_fs=0xcad41eff979970e4ull;
 inline bool tileset_depth(uint64_t vs,uint64_t fs){return vs==tileset_depth_vs && fs==tileset_depth_fs;}
 inline bool tileset_deferred(uint64_t vs,uint64_t fs){return vs==tileset_deferred_vs && fs==tileset_deferred_fs;}
+inline bool tileset_material_enabled(bool startup,bool active){return startup && active;}
 struct TilesetInputs {std::array<InputAttribute,6> attributes{};bool valid{};};
 // Exact active position, three instance rows, COLOR and UV. Quaternion location6
 // belongs only to deferred shading; its actual output frame is captured by XFB.
