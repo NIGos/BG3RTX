@@ -51,6 +51,11 @@ public:
       i->second.pre_count==1 && i->second.deferred_count==1;
   }
 };
+inline bool audited_static_family(uint64_t vs,uint64_t fs){return vs==0x3812bc980438747full && fs==0x8995da1e4060f53bull;}
+inline bool observe_static_deferred(DrawJoin& join,uint64_t command,uint64_t recording,const DrawKey& key,
+                                    uint64_t vs,uint64_t fs,bool capturable){
+ return audited_static_family(vs,fs) && capturable && join.note(command,recording,key,UINT32_MAX);
+}
 // Independent packets can be created in either CPU recording order. Local
 // deferred snapshot indices never substitute for source AlphaRec indices.
 inline bool join_packets(const DrawJoin& source,const DrawJoin& deferred,const DrawKey& key,

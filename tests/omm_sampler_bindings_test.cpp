@@ -43,8 +43,18 @@ int main(){
   {std::unique_lock lock(tracker().mu);tracker().sets[set][desc_key(7,0)]=entry;}
   check(query());check(!out.immutable && out.sampler.id==newId);
   check(!immutable_sampler_current(out));
+  check(ordinary_sampler_current(out));auto mutableStable=out;
+  OrdinaryBindingFacts facts{};check(ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,&facts));
+  check(facts.active && facts.command && !facts.push && facts.allocated && facts.supported && facts.layout_complete);
+  check(facts.set_id==out.descriptorSetId && facts.layout_id==out.layoutId && facts.flags==0 && facts.count==1);
+  auto wrong=out;++wrong.descriptorSetId;check(!ordinary_sampler_current(wrong));wrong=out;++wrong.layoutId;check(!ordinary_sampler_current(wrong));
+  wrong=out;++wrong.sampler.id;check(!ordinary_sampler_current(wrong));wrong=out;wrong.bindingFlags=VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;check(!ordinary_sampler_current(wrong));
+  cmd_state(cmd)->push_set[0]=0;check(!ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,&facts));check(facts.push);cmd_state(cmd)->push_set[0]=UINT32_MAX;
+
   VkDescriptorImageInfo image{sampler,VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=set;write.dstBinding=7;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLER;write.pImageInfo=&image;
   sampler_descriptor_ranges(dd,1,&write,0,nullptr);check(query());check(out.writeVersion==1);
+  check(!ordinary_sampler_current(mutableStable));check(ordinary_sampler_current(out));auto versionOne=out;
+  sampler_template_write(set,7,0,VK_DESCRIPTOR_TYPE_SAMPLER);check(!ordinary_sampler_current(versionOne));check(query());check(ordinary_sampler_current(out));
   sampler_destroyed(dd,sampler);sampler_created(dd,sampler,ci);check(!query());check(out.status==BoundSampler::Status::DeadSampler);
   // Rollovers cannot silently preserve a previous known descriptor.
   allocate(set,layout);entry.sampler_id=sampler_identity(sampler);{std::unique_lock lock(tracker().mu);tracker().sets[set][desc_key(7,0)]=entry;}
@@ -56,6 +66,16 @@ int main(){
   VkCopyDescriptorSet copy{VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};copy.srcSet=handle<VkDescriptorSet>(99);copy.srcBinding=7;copy.dstSet=set;copy.dstBinding=7;copy.descriptorCount=1;
   sampler_descriptor_ranges(dd,0,nullptr,1,&copy);check(!query());check(out.status==BoundSampler::Status::UnsupportedRange);
   sampler_sets_freed(dd,1,&set);check(!query());allocate(set,layout);sampler_pool_reset(dd,pool);check(!query());
+  // Actual registry/layout policy rejects update-after-bind and unknown layout
+  // chains; the ordinary mutable-sampler extension does not relax either.
+  VkDescriptorBindingFlags uab=VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+  VkDescriptorSetLayoutBindingFlagsCreateInfo flags{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};flags.bindingCount=1;flags.pBindingFlags=&uab;
+  info.pNext=&flags;binding.pImmutableSamplers=nullptr;sampler_layout_created(dd,layout,info);allocate(set,layout);
+  {std::unique_lock lock(tracker().mu);tracker().sets[set][desc_key(7,0)]=entry;}
+  check(query());check(!ordinary_sampler_current(out));check(!ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,&facts));check(facts.flags==uab);
+  VkBaseInStructure unknown{VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT,nullptr};info.pNext=&unknown;sampler_layout_created(dd,layout,info);allocate(set,layout);
+  check(!query());check(out.status==BoundSampler::Status::UnsupportedLayout);check(!ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,&facts));check(!facts.layout_complete);
+  info.pNext=nullptr;
   // Unsupported sampler chains stay observable but cannot certify a factory.
   VkSamplerCustomBorderColorCreateInfoEXT custom{VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT};ci.pNext=&custom;sampler_created(dd,sampler,ci);binding.pImmutableSamplers=&sampler;sampler_layout_created(dd,layout,info);allocate(set,layout);
   check(!query());check(out.status==BoundSampler::Status::UnsupportedSampler);check(out.sampler.unsupportedStructure==custom.sType);

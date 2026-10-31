@@ -25,12 +25,12 @@ static_assert(sizeof(Row)==record_bytes);
 static_assert(offsetof(Row,pre)==8 && offsetof(Row,deferred)==12 && offsetof(Row,stride)==16);
 static_assert(offsetof(Row,p0)==48 && offsetof(Row,t)==80 && offsetof(Row,parameters)==208);
 struct View {VkImageView view{};VkImage image{};VkImageLayout layout{};uint64_t id{};uint32_t image_id{};};
-struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};};
+struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};uint64_t vs{},fs{};};
 struct Material {uint32_t source_raw{},deferred_raw{},snapshot{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;};
 struct Deferred {
  Buffer data,rows;uint64_t command{},recording{},frame{};VkBuffer camera{};VkDeviceSize camera_offset{},cursor{};
  DrawJoin join;std::vector<Material> materials;std::vector<VkSampler> samplers;
- bool finalized{},valid{true};uint32_t seen{},pipeline_declined{},binding_declined{};
+ bool finalized{},valid{true};uint32_t seen{},audited_unique{},audited_duplicate{},family_declined{},pipeline_declined{},binding_declined{};
 };
 struct Slot {
  Buffer data;VkDescriptorSet set{};uint64_t command{},recording{},frame{};uint32_t generation{};
@@ -43,7 +43,7 @@ struct Query {
  PendingPublication publication;std::vector<Material> materials;
 };
 DeviceData* dd{};bool on{};std::mutex mutex;
-struct Pending {uint64_t command{},recording{};DrawJoin join;std::vector<Pre> pre;};
+struct Pending {uint64_t command{},recording{};uint32_t candidate_draws{};DrawJoin join;std::vector<Pre> pre;};
 std::unordered_map<uint64_t,Pending> pending;
 std::unordered_map<uint64_t,RecordingOwner> owners;
 std::unordered_map<uint64_t,VkQueue> submitted_queues;
@@ -108,22 +108,28 @@ void barrier(VkCommandBuffer cmd,VkPipelineStageFlags source,VkAccessFlags acces
  VkMemoryBarrier b{VK_STRUCTURE_TYPE_MEMORY_BARRIER};b.srcAccessMask=access;b.dstAccessMask=next;
  dd->vk.CmdPipelineBarrier(cmd,source,target,0,1,&b,0,nullptr,0,nullptr);
 }
-bool view(VkCommandBuffer cmd,uint32_t binding,VkImageViewType type,View& out){
- Bg3Binding b{};
- if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&b) || !b.view ||
-    !omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0) ||
-    (b.layout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && b.layout!=VK_IMAGE_LAYOUT_GENERAL))return false;
+struct ViewFacts {
+ Bg3Binding binding{};omm::OrdinaryBindingFacts ordinary{};bool queried{},tracked{},known{},image_current{};
+ uint64_t id{};uint32_t image_id{},current_image_id{},flags{},mips{},layers{};
+ VkImageViewType type{VK_IMAGE_VIEW_TYPE_MAX_ENUM};VkFormat format{VK_FORMAT_UNDEFINED};
+ VkStructureType extension{VK_STRUCTURE_TYPE_MAX_ENUM};VkImageSubresourceRange range{};
+};
+bool view(VkCommandBuffer cmd,uint32_t binding,VkImageViewType type,View& out,ViewFacts& fact){
+ auto& b=fact.binding;fact.queried=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&b);
+ bool frozen=omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&fact.ordinary);
+ if(!fact.queried || !b.view)return false;
  std::shared_lock lock(tracker().mu);auto i=tracker().views.find(b.view);if(i==tracker().views.end())return false;
- const auto& v=i->second;auto image=tracker().images.find(v.image);
- if(image==tracker().images.end() || !v.creation.known || !v.creation.id || v.creation.type!=type || v.creation.flags ||
-    v.creation.extension!=VK_STRUCTURE_TYPE_MAX_ENUM || !v.creation.image_id || v.creation.image_id!=image->second.id ||
-    v.range.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || v.range.baseMipLevel!=0 || v.range.baseArrayLayer!=0)return false;
- uint32_t mips=0,layers=0;
- if(!trace_view::resolve_count(0,v.range.levelCount,image->second.ci.mipLevels,mips) ||
-    !trace_view::resolve_count(0,v.range.layerCount,image->second.ci.arrayLayers,layers))return false;
- if(type==VK_IMAGE_VIEW_TYPE_2D && layers!=1)return false;
- if(type==VK_IMAGE_VIEW_TYPE_2D && v.format!=VK_FORMAT_R32G32B32A32_SFLOAT)return false;
- out={b.view,v.image,b.layout,v.creation.id,image->second.id};return true;
+ const auto& v=i->second;fact.tracked=true;fact.known=v.creation.known;fact.id=v.creation.id;fact.image_id=v.creation.image_id;
+ fact.type=v.creation.type;fact.format=v.format;fact.flags=v.creation.flags;fact.extension=v.creation.extension;fact.range=v.range;
+ auto image=tracker().images.find(v.image);if(image==tracker().images.end())return false;
+ fact.current_image_id=image->second.id;fact.image_current=v.creation.image_id && v.creation.image_id==image->second.id;
+ bool range=trace_view::resolve_count(0,v.range.levelCount,image->second.ci.mipLevels,fact.mips) &&
+  trace_view::resolve_count(0,v.range.layerCount,image->second.ci.arrayLayers,fact.layers);
+ bool valid=frozen && (b.layout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL || b.layout==VK_IMAGE_LAYOUT_GENERAL) &&
+  fact.known && fact.id && fact.type==type && !fact.flags && fact.extension==VK_STRUCTURE_TYPE_MAX_ENUM && fact.image_current &&
+  v.range.aspectMask==VK_IMAGE_ASPECT_COLOR_BIT && v.range.baseMipLevel==0 && v.range.baseArrayLayer==0 && range &&
+  (type!=VK_IMAGE_VIEW_TYPE_2D || (fact.layers==1 && v.format==VK_FORMAT_R32G32B32A32_SFLOAT));
+ if(!valid)return false;out={b.view,v.image,b.layout,v.creation.id,image->second.id};return true;
 }
 bool current(const View& v){
  std::shared_lock lock(tracker().mu);auto i=tracker().views.find(v.view);if(i==tracker().views.end())return false;
@@ -131,23 +137,50 @@ bool current(const View& v){
  return i->second.image==v.image && i->second.creation.id==v.id && image!=tracker().images.end() && image->second.id==v.image_id;
 }
 bool capture(VkCommandBuffer cmd,Material& material){
- // The exact non-instanced Deferred family only. No depth-binding guesses.
- auto* s=cmd_state(cmd);
- if(!s || s->vs!=0x3812bc980438747full || s->fs!=0x8995da1e4060f53bull)return false;
- auto binding=[&](uint32_t set,uint32_t slot,VkDeviceSize minimum,Bg3Binding& out){
-  if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&out) || !out.buffer)return false;
-  if(out.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(out.buffer);if(out.offset>size)return false;out.range=size-out.offset;}
-  return out.range>=minimum && omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0);
+ auto* state=cmd_state(cmd);if(!state || !audited_static_family(state->vs,state->fs))return false;
+ omm::OrdinaryBindingFacts buffer_facts[3]{};bool queried[3]{};uint32_t failed=0;
+ auto buffer=[&](uint32_t n,uint32_t set,uint32_t slot,VkDeviceSize minimum,Bg3Binding& out){
+  queried[n]=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&out);
+  bool frozen=omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&buffer_facts[n]);
+  if(out.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(out.buffer);if(out.offset<=size)out.range=size-out.offset;}
+  bool valid=queried[n] && out.buffer && out.range>=minimum && frozen;if(!valid)failed|=1u<<n;
  };
- if(!binding(1,0,112,material.engine) || !binding(1,1,16,material.physical_ubo) || !binding(0,12,128,material.tilesets))return false;
- if(!view(cmd,3,VK_IMAGE_VIEW_TYPE_2D,material.table) || !view(cmd,4,VK_IMAGE_VIEW_TYPE_2D_ARRAY,material.normal) ||
-    !view(cmd,5,VK_IMAGE_VIEW_TYPE_2D_ARRAY,material.albedo) || !view(cmd,6,VK_IMAGE_VIEW_TYPE_2D_ARRAY,material.physical))return false;
- if(!omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,2,0,material.sampler) || !material.sampler.immutable ||
-    !omm::immutable_sampler_current(material.sampler))return false;
+ buffer(0,1,0,112,material.engine);buffer(1,1,1,16,material.physical_ubo);buffer(2,0,12,128,material.tilesets);
+ ViewFacts views[4]{};View* targets[4]={&material.table,&material.normal,&material.albedo,&material.physical};
+ for(uint32_t i=0;i<4;++i)if(!view(cmd,3+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
+ bool sampler_bound=omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,2,0,material.sampler);
+ omm::OrdinaryBindingFacts sampler_binding{};
+ bool sampler_frozen=omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,2,0,&sampler_binding);
+ if(!sampler_bound)failed|=1u<<7;
+ if(!sampler_frozen || !omm::ordinary_sampler_current(material.sampler))failed|=1u<<8;
  const auto& c=material.sampler.sampler;
- if(!c.complete || c.info.flags || c.info.compareEnable || c.info.unnormalizedCoordinates ||
-    c.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)return false;
- return true;
+ if(!c.complete || c.info.flags || c.info.compareEnable || c.info.unnormalizedCoordinates || c.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)failed|=1u<<9;
+ if(!failed)return true;
+ // Two full prerequisite records per 120-frame window, not one missing-term
+ // experiment at a time. These are actual draw bindings, not a native-proof claim.
+ static uint64_t logged_frame=UINT64_MAX;static uint32_t logged=0;const auto frame=frame_index();
+ if(cfg_int("rt_stats",0) && frame%120==0){if(logged_frame!=frame){logged_frame=frame;logged=0;}
+  if(logged++<2){
+   log("[hit material capture] frame %llu failures 0x%x (bits0..2 buffers,3..6 views,7 sampler metadata,8 frozen sampler,9 sampler policy) pipe %u",
+    (unsigned long long)frame,failed,state->pipe_id[0]);
+   Bg3Binding* buffers[3]={&material.engine,&material.physical_ubo,&material.tilesets};
+   for(uint32_t i=0;i<3;++i){const auto& f=buffer_facts[i];const auto& v=*buffers[i];
+    log("[hit material capture buffer] %u queried %u %p+%llu range %llu type %u; push %u allocated %u supported %u complete %u set/layout/version %llu/%llu/%llu flags 0x%x count %u",
+     i,unsigned(queried[i]),(void*)v.buffer,(unsigned long long)v.offset,(unsigned long long)v.range,unsigned(v.type),unsigned(f.push),unsigned(f.allocated),unsigned(f.supported),unsigned(f.layout_complete),
+     (unsigned long long)f.set_id,(unsigned long long)f.layout_id,(unsigned long long)f.version,unsigned(f.flags),f.count);
+   }
+   for(uint32_t i=0;i<4;++i){const auto& f=views[i];const auto& o=f.ordinary;
+    log("[hit material capture view] binding %u queried %u tracked %u known %u format/type %u/%u id %llu image ids %u/%u flags 0x%x extension %u layout %u base mip/layer %u/%u resolved %u/%u; push %u set supported/complete %u/%u binding flags 0x%x",
+     i+3,unsigned(f.queried),unsigned(f.tracked),unsigned(f.known),unsigned(f.format),unsigned(f.type),(unsigned long long)f.id,f.image_id,f.current_image_id,f.flags,unsigned(f.extension),unsigned(f.binding.layout),
+     f.range.baseMipLevel,f.range.baseArrayLayer,f.mips,f.layers,unsigned(o.push),unsigned(o.supported),unsigned(o.layout_complete),unsigned(o.flags));
+   }
+   log("[hit material capture sampler] bound %u status %u immutable %u frozen %u complete %u flags 0x%x reduction %u compare %u unnormalized %u extension %u set/layout/version/sampler %llu/%llu/%llu/%llu; push %u supported %u layout complete %u binding flags 0x%x",
+    unsigned(sampler_bound),unsigned(material.sampler.status),unsigned(material.sampler.immutable),unsigned(sampler_frozen),unsigned(c.complete),unsigned(c.info.flags),unsigned(c.reduction),unsigned(c.info.compareEnable),unsigned(c.info.unnormalizedCoordinates),unsigned(c.unsupportedStructure),
+    (unsigned long long)material.sampler.descriptorSetId,(unsigned long long)material.sampler.layoutId,(unsigned long long)material.sampler.writeVersion,(unsigned long long)c.id,
+    unsigned(sampler_binding.push),unsigned(sampler_binding.supported),unsigned(sampler_binding.layout_complete),unsigned(sampler_binding.flags));
+  }
+ }
+ return false;
 }
 void destroy_query(Query& q){if(q.pool)dd->vk.DestroyDescriptorPool(dd->device,q.pool,nullptr);destroy(q.data);destroy(q.rows);}
 void destroy_packet(Deferred& p){for(auto sampler:p.samplers)dd->vk.DestroySampler(dd->device,sampler,nullptr);destroy(p.data);destroy(p.rows);}
@@ -190,10 +223,13 @@ void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(
 void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint32_t record,VkDeviceSize rawOffset,uint32_t stride,uint32_t triangles){
  if(!on || !state || args.kind>1 || args.instances!=1 || args.count!=uint64_t(triangles)*3 || record>=max_records)return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot) || snapshot.rec.kind!=1 || snapshot.rec.channel!=0)return;
- Pre pre{key(*state,args),snapshot,rawOffset,stride,triangles,record};std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
- if(p->second.join.assign(handle(cmd),state->recording,pre.key,record))p->second.pre.push_back(pre);
+ Pre pre{key(*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
+ ++p->second.candidate_draws;
+ if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record))p->second.pre.push_back(pre);
 }
-void prepass_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args){if(!on || !state)return;std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p!=pending.end())p->second.join.note(handle(cmd),state->recording,key(*state,args),UINT32_MAX);}
+void prepass_observe(VkCommandBuffer,CmdState*,const DrawArgs&){
+ // Only actual note_prepass candidates reserve a material join identity.
+}
 void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
  if(!on || !cfg_int("rt_hit_material",0) || index>=kSceneSlots)return;auto* state=cmd_state(cmd);if(!one_time(state))return;std::lock_guard lock(mutex);collect();
  auto& s=slots[index];s.set={};s.handles.clear();s.pre.clear();s.owners.clear();s.prepared=s.attached=false;
@@ -205,18 +241,28 @@ void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
  // Copy only their source records; unrelated VT records cannot consume the cap.
  auto deferred=packet_for(s);
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT);
- uint32_t filtered=0;
+ uint32_t filtered=0,duplicates=0,range_dropped=0;const auto source_draws=p->second.candidate_draws,source_entries=uint32_t(p->second.pre.size());
  for(const auto& pre:p->second.pre){
-  uint32_t sourceRecord=0;if(!s.join.unique_source(pre.key,sourceRecord) || sourceRecord!=pre.record)continue;
+  uint32_t sourceRecord=0;if(!s.join.unique_source(pre.key,sourceRecord) || sourceRecord!=pre.record){++duplicates;continue;}
   if(deferred && std::none_of(deferred->materials.begin(),deferred->materials.end(),[&](const auto& m){return m.key==pre.key && deferred->join.unique(m.key,m.row.valid-1);})){++filtered;continue;}
   VkDeviceSize bytes=VkDeviceSize(pre.triangles)*3*pre.stride;
-  if(!pre.stride || !byte_range(pre.raw,bytes,cap.xfb_size) || !byte_range(s.cursor,bytes,stream_bytes/2))continue;
+  if(!pre.stride || !byte_range(pre.raw,bytes,cap.xfb_size) || !byte_range(s.cursor,bytes,stream_bytes/2)){++range_dropped;continue;}
   VkBufferCopy copy{pre.raw,s.cursor,bytes};dd->vk.CmdCopyBuffer(cmd,cap.xfb,s.data.b,1,&copy);auto saved=pre;saved.raw=s.cursor;s.pre.push_back(saved);s.cursor+=bytes;
+ }
+ if(s.pre.empty() && deferred && !deferred->materials.empty() && cfg_int("rt_stats",0) && s.frame%120==0){
+  // Samples are explicitly NOT a claimed pair. They expose source shader and
+  // raw argument/IB/VB domains if no exact key association can be constructed.
+  auto sample=[&](const char* side,const DrawKey& key,uint64_t vs,uint64_t fs){const auto& w=key.words;
+   log("[hit material key sample] frame %llu %s vs/fs %016llx/%016llx kind/count/instances/first/vertex/instance %llu/%llu/%llu/%llu/%llu/%llu IB/offset/type %llx/%llu/%llu VB0/offset/stride %llx/%llu/%llu; not a claimed pair",
+    (unsigned long long)s.frame,side,(unsigned long long)vs,(unsigned long long)fs,(unsigned long long)w[0],(unsigned long long)w[1],(unsigned long long)w[2],(unsigned long long)w[3],(unsigned long long)w[4],(unsigned long long)w[5],
+    (unsigned long long)w[6],(unsigned long long)w[7],(unsigned long long)w[8],(unsigned long long)w[9],(unsigned long long)w[10],(unsigned long long)w[11]);};
+  if(!p->second.pre.empty()){const auto& pre=p->second.pre.front();sample("source",pre.key,pre.vs,pre.fs);}
+  sample("deferred",deferred->materials.front().key,0x3812bc980438747full,0x8995da1e4060f53bull);
  }
  s.prepared=true;pending.erase(p);
  barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
- if(cfg_int("rt_stats",0) && s.frame%120==0)log("[hit material source] frame %llu cmd %p recording %llu level %u flags 0x%x prepared %zu copied %llu bytes filtered unrelated %u; deferred packet %u camera %p+%llu",
-  (unsigned long long)s.frame,(void*)cmd,(unsigned long long)s.recording,unsigned(state->level),unsigned(state->begin_flags),s.pre.size(),(unsigned long long)s.cursor,filtered,unsigned(bool(deferred)),(void*)s.camera,(unsigned long long)s.camera_offset);
+ if(cfg_int("rt_stats",0) && s.frame%120==0)log("[hit material source] frame %llu cmd %p recording %llu level %u flags 0x%x prepared %zu copied %llu bytes source draws/entries %u/%u duplicate keys %u range dropped %u filtered unrelated %u; deferred packet %u camera %p+%llu",
+  (unsigned long long)s.frame,(void*)cmd,(unsigned long long)s.recording,unsigned(state->level),unsigned(state->begin_flags),s.pre.size(),(unsigned long long)s.cursor,source_draws,source_entries,duplicates,range_dropped,filtered,unsigned(bool(deferred)),(void*)s.camera,(unsigned long long)s.camera_offset);
 }
 bool attach(VkCommandBuffer,uint32_t index,VkDescriptorSet set,VkBuffer dummyBuffer,VkImageView dummyArray,VkSampler dummySampler,uint32_t generation){
  if(!on || index>=kSceneSlots || !set || !generation)return false;std::lock_guard lock(mutex);auto& s=slots[index];s.set=set;s.generation=generation;s.attached=true;s.dummy_array=dummyArray;s.dummy_sampler=dummySampler;
@@ -242,10 +288,14 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  }
  auto& p=*it->second;
  if(p.finalized || p.frame!=frame_index() || p.camera!=camera.buffer || p.camera_offset!=camera.offset){p.valid=false;return false;}
- bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
- if(state->vs==0x3812bc980438747full && state->fs==0x8995da1e4060f53bull)++p.seen;
- if(!exactPipeline && state->vs==0x3812bc980438747full && state->fs==0x8995da1e4060f53bull)++p.pipeline_declined;
- if(!unique || !cfg_int("rt_hit_material",0) || !exactPipeline || args.kind>1 || args.instances!=1 || stride<64 || p.materials.size()>=sampler_slots)return false;
+ const bool audited=audited_static_family(state->vs,state->fs);
+ if(!audited){++p.family_declined;return false;}++p.seen;
+ if(!exactPipeline || args.kind>1 || args.instances!=1 || stride<64){++p.pipeline_declined;return false;}
+ bool unique=observe_static_deferred(p.join,p.command,p.recording,draw,state->vs,state->fs,true);
+ if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;
+ // Count real audited duplicates even beyond the storage bound. Unrelated
+ // shader families never reserve an audited candidate's geometry identity.
+ if(p.materials.size()>=sampler_slots)return false;
  Material material{};if(!capture(cmd,material)){++p.binding_declined;return false;}
  *bytes=VkDeviceSize(args.count)*stride;if(!args.count || args.count%3 || !byte_range(p.cursor,*bytes,stream_bytes))return false;
  if(!own(cmd))return false;
@@ -265,7 +315,7 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
  uint32_t captured=0;
  if(p.valid)for(auto& m:p.materials){uint32_t local=0;
-  if(!p.join.claim(p.command,p.recording,m.key,local) || local!=m.row.valid-1 || !current(m.table) || !current(m.normal) || !current(m.albedo) || !current(m.physical) || !omm::immutable_sampler_current(m.sampler))continue;
+  if(!p.join.claim(p.command,p.recording,m.key,local) || local!=m.row.valid-1 || !current(m.table) || !current(m.normal) || !current(m.albedo) || !current(m.physical) || !omm::ordinary_sampler_current(m.sampler))continue;
   VkDescriptorBufferInfo info[4]={{m.engine.buffer,m.engine.offset,m.engine.range},{m.physical_ubo.buffer,m.physical_ubo.offset,m.physical_ubo.range},{m.tilesets.buffer,m.tilesets.offset,m.tilesets.range},{p.rows.b,0,packet_rows}};
   VkWriteDescriptorSet writes[4]{};for(uint32_t n=0;n<4;++n){writes[n]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=n<2?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[n].pBufferInfo=info+n;}
   uint32_t push[4]={16u+local*record_bytes,local,1,0};
@@ -274,8 +324,8 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
  }
  barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
  if(p.valid)restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
- if(cfg_int("rt_stats",0) && p.frame%120==0)log("[hit material deferred packet] frame %llu cmd %p recording %llu level %u flags 0x%x static seen %u pipeline declined %u binding declined %u captured %zu snapshots %u bytes %llu valid %u readonly %u camera %p+%llu; source preparation not required",
-  (unsigned long long)p.frame,(void*)cmd,(unsigned long long)p.recording,unsigned(state->level),unsigned(state->begin_flags),p.seen,p.pipeline_declined,p.binding_declined,p.materials.size(),captured,(unsigned long long)p.cursor,unsigned(p.valid),unsigned(readonly),(void*)p.camera,(unsigned long long)p.camera_offset);
+ if(cfg_int("rt_stats",0) && p.frame%120==0)log("[hit material deferred packet] frame %llu cmd %p recording %llu level %u flags 0x%x static seen %u audited unique/duplicate %u/%u other family %u pipeline declined %u binding declined %u captured %zu snapshots %u bytes %llu valid %u readonly %u camera %p+%llu; source preparation not required",
+  (unsigned long long)p.frame,(void*)cmd,(unsigned long long)p.recording,unsigned(state->level),unsigned(state->begin_flags),p.seen,p.audited_unique,p.audited_duplicate,p.family_declined,p.pipeline_declined,p.binding_declined,p.materials.size(),captured,(unsigned long long)p.cursor,unsigned(p.valid),unsigned(readonly),(void*)p.camera,(unsigned long long)p.camera_offset);
 }
 void slot_in_use(uint32_t index,uint64_t frame){if(!on || index>=kSceneSlots)return;std::lock_guard lock(mutex);for(auto h:slots[index].handles)life_extend(h,frame);}
 bool slot_reusable(uint32_t index,uint64_t gpuDone){if(!on || index>=kSceneSlots)return true;std::lock_guard lock(mutex);

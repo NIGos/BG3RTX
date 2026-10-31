@@ -18,7 +18,8 @@ Initial family: native VS `3812bc980438747f`, deferred FS `8995da1e4060f53b`,
 fresh dynamic alpha-soup triangles only. Instanced, cached/pool, procedural,
 legacy and ambiguous identities are unsupported. Existing original alpha data
 and TLAS remain intact. Native deferred bindings are engine UBO 1.0, reflectance
-UBO 1.1, immutable sampler 1.2, indirection view 1.3, normal/albedo/physical
+UBO 1.1, sampler 1.2 (this initial checkpoint required an immutable descriptor;
+actual native mutability was not established), indirection view 1.3, normal/albedo/physical
 views 1.4/1.5/1.6, and tile-set SSBO 0.12. The provider uses these actual native
 views, including their component mapping and sampler interpretation. It does
 not infer sRGB from backing images or invent VT residency.
