@@ -18,6 +18,14 @@ int main(){
  check(opaque_partition_demand(700*mib,400*mib,true)==300*mib);
  check(opaque_partition_demand(700*mib,0,true)==700*mib);
  check(opaque_partition_demand(700*mib,701*mib,true)==0); // Saturate; never wrap the reservation.
+ check(!corrected_partition_feedback(16));
+ check(!corrected_partition_feedback(24));
+ check(corrected_partition_feedback(64));
+ check(corrected_partition_feedback(88));
+ check(!corrected_partition_feedback(0));
+ check(!corrected_partition_feedback(32));
+ check(!corrected_partition_feedback(128));
+ check((1024*mib)/64==(384*mib)/24); // Explicit material-only budget; not an automatic resize.
 
  // Root supplied maxima over 47 actual log windows: A660.8/O634.5 MiB.
  // The logs print one decimal; use upper half-code bounds, not the last window.
@@ -51,6 +59,18 @@ int main(){
   check(intrinsic==o);
   new_region=alpha_region(size,floor,new_region,a,intrinsic,true,60);
   check(new_region>=a && size-new_region>=o);
+ }
+
+ // The material-only64 layout must recover too. Scale the synthetic demands,
+ // not configured MB limits; no live64 capture or performance claim is implied.
+ uint64_t material_region=floor;
+ const auto material_a=(a*64+87)/88,material_o=(o*64+87)/88;
+ for(unsigned frame=0;frame<4;++frame){
+  auto fallback=material_a>material_region?material_a-material_region:0;
+  auto intrinsic=opaque_partition_demand(material_o+fallback,fallback,corrected_partition_feedback(64));
+  check(intrinsic==material_o);
+  material_region=alpha_region(1024*mib,floor,material_region,material_a,intrinsic,true,60);
+  check(material_region>=material_a && 1024*mib-material_region>=material_o);
  }
 
  // Existing shader/host addressing: InstInfo base and HLSL byte offsets are
