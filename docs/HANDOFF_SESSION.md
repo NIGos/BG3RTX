@@ -25,6 +25,20 @@ when free opaque storage can rescue an alpha-partition overflow. No shader/ABI
 change. Host build, 105 budget checks, 335 settings checks, six CTests and source
 review pass. Not game-qualified. Experimental control/schema included; trial untouched.
 
+## Integration in progress: verify this handle before any main mutation
+
+Main merge-green is LIVE in root exec session 45105, frozen ref e660cf8.
+Its full build and 60 CTests passed; 1232-file shader stage is running with the
+correct SDK, followed by QA/commit/test-tree refresh. Never launch a second merge
+or infer a stopped process from elapsed time/log silence. Poll that session or
+verify its actual process (merge powershell PID 47788, compiler PID 32836).
+Do not edit main while it runs. Root docs can advance independently.
+
+Next source phase: currentSun-only shadow recipe a80fdea+b572489, independently
+reviewed clear, not yet imported. M2 inspects exact legacy F-1 material bridge
+contract before implementation. Contract reviewer extends existing GPU probe for
+TileBlend two-texture production coverage; one bounded standalone invocation only.
+
 ## Trees and immediate next action
 
 Main d31633b, ABI 21: M1 coverage/capture budget merged through merge-green and

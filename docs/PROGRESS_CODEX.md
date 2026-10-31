@@ -1,5 +1,9 @@
 # BG3RTX progress
 
+Main integration is running through merge-green at frozen candidate e660cf8.
+Build and 60 CTests pass; full shader check and QA/commit are pending. No game
+launch, installation or user-profile change. The user has not tested these fixes.
+
 ## Preserve alpha semantics on partition overflow - offline candidate, 2026-10-31
 
 rt_alpha_spill=0 is a new Experimental live control, OFF in defaults/presets.
