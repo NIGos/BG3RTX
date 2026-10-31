@@ -3,6 +3,7 @@
 #include "../common/native_hit_join.h"
 #include "../common/native_hit_order.h"
 #include "../common/native_hit_inputs.h"
+#include "../common/native_hit_tileset_inputs.h"
 #include "../common/native_hit_resources.h"
 #include "../common/native_hit_records.h"
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <cmath>
 #include <memory>
 #include <set>
+namespace bg3 {bool geo_native_tileset_enabled();bool geo_native_tileset_material_inputs(VkPipeline,native_hit::TilesetInputs*);}
 namespace bg3::native_hit {
 namespace {
 constexpr VkDeviceSize stream_bytes=32u<<20;
@@ -30,7 +32,7 @@ static_assert(offsetof(Row,pre)==8 && offsetof(Row,deferred)==12 && offsetof(Row
 static_assert(offsetof(Row,p0)==48 && offsetof(Row,t)==80 && offsetof(Row,parameters)==208);
 struct View {VkImageView view{};VkImage image{};VkImageLayout layout{};uint64_t id{};uint32_t image_id{};};
 struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};uint64_t vs{},fs{};bool opaque{};};
-struct Material {uint32_t source_raw{},deferred_raw{},snapshot{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;};
+struct Material {uint32_t source_raw{},deferred_raw{},snapshot{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;std::array<View,9> tileset_views{};};
 struct Deferred {
  Buffer data,rows;uint64_t command{},recording{},frame{};VkBuffer camera{};VkDeviceSize camera_offset{},cursor{};
  DrawJoin join;std::vector<Material> materials;std::vector<VkSampler> samplers;ResourceBudget resources;
@@ -56,10 +58,11 @@ std::unordered_map<uint64_t,std::shared_ptr<Deferred>> packets;
 std::unordered_map<uint64_t,std::unique_ptr<Query>> queries;
 Slot slots[kSceneSlots];
 VkDescriptorSetLayout gather_dsl{},join_dsl{};VkPipelineLayout gather_layout{},join_layout{};VkPipeline gather_pipeline{},join_pipeline{};
-bool compute_ready(bool join){
- auto& pipeline=join?join_pipeline:gather_pipeline;auto& dsl=join?join_dsl:gather_dsl;auto& layout=join?join_layout:gather_layout;
+VkPipeline tileset_gather_pipeline{};
+bool compute_ready(bool join,bool tileset=false){
+ auto& pipeline=join?join_pipeline:(tileset?tileset_gather_pipeline:gather_pipeline);auto& dsl=join?join_dsl:gather_dsl;auto& layout=join?join_layout:gather_layout;
  if(pipeline)return true;
- Bg3ShaderBlob blob{};if(!dd->vk.CmdPushDescriptorSet || !shader_get(join?"rt/hit_material_join.hlsl":"rt/hit_material_gather.hlsl","main","cs_6_6",&blob))return false;
+ Bg3ShaderBlob blob{};if(!dd->vk.CmdPushDescriptorSet || !shader_get(join?"rt/hit_material_join.hlsl":(tileset?"rt/hit_material_tileset_gather.hlsl":"rt/hit_material_gather.hlsl"),"main","cs_6_6",&blob))return false;
  VkDescriptorSetLayoutBinding bindings[5]{};uint32_t count=join?5u:4u;
  for(uint32_t i=0;i<count;++i)bindings[i]={i,(!join && i<2)?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT};
  VkDescriptorSetLayoutCreateInfo d{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};d.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;d.bindingCount=count;d.pBindings=bindings;
@@ -84,6 +87,7 @@ bool mark_owner(VkCommandBuffer cmd,Slot& slot){
  if(std::find(slot.owners.begin(),slot.owners.end(),id)==slot.owners.end())slot.owners.push_back(id);return true;
 }
 uint64_t current_recording(uint64_t command){return cmd_recording(reinterpret_cast<VkCommandBuffer>(uintptr_t(command)));}
+bool tileset_active(){return tileset_material_enabled(geo_native_tileset_enabled(),cfg_int("rt_native_tileset",0)!=0);}
 DrawKey key(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  DrawKey k;size_t i=0;for(uint64_t v:{uint64_t(a.kind),uint64_t(a.count),uint64_t(a.instances),uint64_t(a.first),uint64_t(uint32_t(a.vertex_offset)),uint64_t(a.first_instance)})k.words[i++]=v;
  k.words[i++]=uint64_t(s.ib);k.words[i++]=s.ib_offset;k.words[i++]=uint64_t(s.ib_type);
@@ -92,6 +96,17 @@ DrawKey key(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  // Neither CPU identity is a certificate: exact GPU clip/UV/parameter checks
  // remain mandatory, and duplicate candidate identities stay unsupported.
  const auto& v=s.vb[0];k.words[i++]=uint64_t(v.buffer);k.words[i++]=v.offset;k.words[i++]=v.stride;
+ if((tileset_depth(s.vs,s.fs) || tileset_deferred(s.vs,s.fs)) && tileset_active()){
+  TilesetInputs inputs{};std::array<InputStream,6> streams{};
+  bool ready=geo_native_tileset_material_inputs(s.pipe[0],&inputs) && inputs.valid;
+  for(uint32_t j=0;ready && j<6;++j){const auto& a=inputs.attributes[j];
+   if(a.binding>=CmdState::kMaxVertexBindings){ready=false;break;}const auto& vb=s.vb[a.binding];auto stride=a.dynamic_stride?vb.stride:a.stride;
+   ready=vb.buffer && stride && vb.offset<=UINT64_MAX-a.offset && vb.offset+a.offset<geo_buffer_size(vb.buffer);
+   streams[j]={uint64_t(vb.buffer),vb.offset+a.offset,stride,uint32_t(a.format)};
+  }
+  DrawKey canonical{};if(ready && tileset_key(k,streams,canonical))return canonical;
+  k.words[33]=0x4e485430u;k.words[34]=s.vs;return k;
+ }
  const bool depth=static_depth_family(s.vs,s.fs),deferred=audited_static_family(s.vs,s.fs);
  if(!depth && !deferred)return k;
  StaticInputs attributes{};StaticKeyInputs inputs{};Bg3Binding engine{},pulled{};
@@ -152,7 +167,7 @@ struct ViewFacts {
  VkImageViewType type{VK_IMAGE_VIEW_TYPE_MAX_ENUM};VkFormat format{VK_FORMAT_UNDEFINED};
  VkStructureType extension{VK_STRUCTURE_TYPE_MAX_ENUM};VkImageSubresourceRange range{};
 };
-bool view(VkCommandBuffer cmd,uint32_t binding,VkImageViewType type,View& out,ViewFacts& fact){
+bool view(VkCommandBuffer cmd,uint32_t binding,VkImageViewType type,View& out,ViewFacts& fact,bool native2d=false){
  auto& b=fact.binding;fact.queried=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&b);
  bool frozen=omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&fact.ordinary);
  if(!fact.queried || !b.view)return false;
@@ -161,18 +176,45 @@ bool view(VkCommandBuffer cmd,uint32_t binding,VkImageViewType type,View& out,Vi
  fact.type=v.creation.type;fact.format=v.format;fact.flags=v.creation.flags;fact.extension=v.creation.extension;fact.range=v.range;
  auto image=tracker().images.find(v.image);if(image==tracker().images.end())return false;
  fact.current_image_id=image->second.id;fact.image_current=v.creation.image_id && v.creation.image_id==image->second.id;
- bool range=trace_view::resolve_count(0,v.range.levelCount,image->second.ci.mipLevels,fact.mips) &&
-  trace_view::resolve_count(0,v.range.layerCount,image->second.ci.arrayLayers,fact.layers);
+ bool range=trace_view::resolve_count(v.range.baseMipLevel,v.range.levelCount,image->second.ci.mipLevels,fact.mips) &&
+  trace_view::resolve_count(v.range.baseArrayLayer,v.range.layerCount,image->second.ci.arrayLayers,fact.layers);
  bool valid=frozen && (b.layout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL || b.layout==VK_IMAGE_LAYOUT_GENERAL) &&
   fact.known && fact.id && fact.type==type && !fact.flags && fact.extension==VK_STRUCTURE_TYPE_MAX_ENUM && fact.image_current &&
-  v.range.aspectMask==VK_IMAGE_ASPECT_COLOR_BIT && v.range.baseMipLevel==0 && v.range.baseArrayLayer==0 && range &&
-  (type!=VK_IMAGE_VIEW_TYPE_2D || (fact.layers==1 && v.format==VK_FORMAT_R32G32B32A32_SFLOAT));
+  v.range.aspectMask==VK_IMAGE_ASPECT_COLOR_BIT && (native2d || (v.range.baseMipLevel==0 && v.range.baseArrayLayer==0)) && range &&
+  (type!=VK_IMAGE_VIEW_TYPE_2D || (fact.layers==1 && (native2d || v.format==VK_FORMAT_R32G32B32A32_SFLOAT)));
  if(!valid)return false;out={b.view,v.image,b.layout,v.creation.id,image->second.id};return true;
 }
 bool current(const View& v){
  std::shared_lock lock(tracker().mu);auto i=tracker().views.find(v.view);if(i==tracker().views.end())return false;
  auto image=tracker().images.find(v.image);
  return i->second.image==v.image && i->second.creation.id==v.id && image!=tracker().images.end() && image->second.id==v.image_id;
+}
+bool material_current(const Material& m){
+ if(m.row.reserved==2){for(const auto& v:m.tileset_views)if(!current(v))return false;return true;}
+ return current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical);
+}
+bool capture_tileset(VkCommandBuffer cmd,Material& material){
+ auto* state=cmd_state(cmd);if(!state || !tileset_deferred(state->vs,state->fs))return false;
+ material.row.reserved=2;uint32_t failed=0;
+ for(uint32_t n=0;n<2;++n){auto& out=n?material.physical_ubo:material.engine;
+  bool known=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,n,0,&out) &&
+   omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,n,0) && out.buffer && out.range>=16 && geo_uniform_buffer_range(out.buffer,out.offset,16);
+  if(!known)failed|=1u<<n;
+ }
+ ViewFacts facts[9]{};
+ for(uint32_t i=0;i<9;++i)if(!view(cmd,2+i,VK_IMAGE_VIEW_TYPE_2D,material.tileset_views[i],facts[i],true))failed|=1u<<(2+i);
+ if(!omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,material.sampler))failed|=1u<<11;
+ if(!omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0) || !omm::ordinary_sampler_current(material.sampler))failed|=1u<<12;
+ const auto& c=material.sampler.sampler;
+ if(!c.complete || c.info.flags || c.info.compareEnable || c.info.unnormalizedCoordinates || c.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)failed|=1u<<13;
+ if(failed && cfg_int("rt_stats",0) && frame_index()%120==0){
+  static uint64_t frame=UINT64_MAX;static uint32_t count=0;if(frame!=frame_index()){frame=frame_index();count=0;}
+  if(count++<2){log("[hit material tileset capture] frame %llu failures 0x%x (UBO bits0..1, native2D views2..10, sampler metadata/frozen/policy11..13); sampler generation %llu",(unsigned long long)frame,failed,(unsigned long long)c.id);
+   for(uint32_t i=0;i<9;++i)if(failed&(1u<<(2+i))){const auto& f=facts[i];log("[hit material tileset view] binding %u queried/known/current %u/%u/%u format/type %u/%u mip/layer %u/%u extent %u/%u frozen set/layout/version %llu/%llu/%llu",
+    i+2,unsigned(f.queried),unsigned(f.known),unsigned(f.image_current),unsigned(f.format),unsigned(f.type),f.range.baseMipLevel,f.range.baseArrayLayer,f.mips,f.layers,(unsigned long long)f.ordinary.set_id,(unsigned long long)f.ordinary.layout_id,(unsigned long long)f.ordinary.version);}
+  }
+ }
+ return failed==0;
 }
 bool capture(VkCommandBuffer cmd,Material& material){
  auto* state=cmd_state(cmd);if(!state || !audited_static_family(state->vs,state->fs))return false;
@@ -248,10 +290,10 @@ void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);if(dd!=dev
  for(auto& [id,q]:queries)destroy_query(*q);queries.clear();
  for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();
  for(auto& s:slots){destroy(s.data);s={};}
- for(auto pipeline:{gather_pipeline,join_pipeline})if(pipeline)dd->vk.DestroyPipeline(dd->device,pipeline,nullptr);
+ for(auto pipeline:{gather_pipeline,join_pipeline,tileset_gather_pipeline})if(pipeline)dd->vk.DestroyPipeline(dd->device,pipeline,nullptr);
  for(auto layout:{gather_layout,join_layout})if(layout)dd->vk.DestroyPipelineLayout(dd->device,layout,nullptr);
  for(auto dsl:{gather_dsl,join_dsl})if(dsl)dd->vk.DestroyDescriptorSetLayout(dd->device,dsl,nullptr);
- gather_pipeline={};join_pipeline={};gather_layout={};join_layout={};gather_dsl={};join_dsl={};pending.clear();owners.clear();submitted_queues.clear();marked.clear();dd=nullptr;on=false;
+ gather_pipeline={};join_pipeline={};tileset_gather_pipeline={};gather_layout={};join_layout={};gather_dsl={};join_dsl={};pending.clear();owners.clear();submitted_queues.clear();marked.clear();dd=nullptr;on=false;
 }
 void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(!one_time(s))return;std::lock_guard lock(mutex);collect();
  for(auto i=pending.begin();i!=pending.end();)if(current_recording(i->second.command)!=i->second.recording)i=pending.erase(i);else ++i;
@@ -259,8 +301,11 @@ void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(
  auto& p=pending[s->recording];p={};p.command=handle(cmd);p.recording=s->recording;p.join.begin(p.command,p.recording);
 }
 void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint32_t record,VkDeviceSize rawOffset,uint32_t stride,uint32_t triangles){
- if(!on || !state || args.kind>1 || args.instances!=1 || args.count!=uint64_t(triangles)*3 || record>=max_records)return;
- AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot) || snapshot.rec.kind!=1 || snapshot.rec.channel!=0)return;
+ if(!on || !state || args.kind>1 || record>=max_records)return;
+ const bool tileset=tileset_depth(state->vs,state->fs);if(tileset && !tileset_active())return;uint32_t vertices=0;
+ if(!tileset_vertex_count(args.count,args.instances,vertices) || vertices!=uint64_t(triangles)*3 || (!tileset && args.instances!=1) || (tileset && stride<80))return;
+ AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
+ if(tileset){if(snapshot.rec.kind!=5 || snapshot.rec.p0[2]!=0.f || snapshot.rec.p0[1]!=0.f)return;}else if(snapshot.rec.kind!=1 || snapshot.rec.channel!=0)return;
  Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
  ++p->second.candidate_draws;
  if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record))p->second.pre.push_back(pre);
@@ -303,7 +348,9 @@ void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
   auto sample=[&](const char* side,const DrawKey& key,uint64_t vs,uint64_t fs){const auto& w=key.words;
    log("[hit material key sample] frame %llu %s vs/fs %016llx/%016llx kind/count/instances/first/vertex/instance %llu/%llu/%llu/%llu/%llu/%llu IB/offset/type %llx/%llu/%llu schema 0x%llx; not a claimed pair",
     (unsigned long long)s.frame,side,(unsigned long long)vs,(unsigned long long)fs,(unsigned long long)w[0],(unsigned long long)w[1],(unsigned long long)w[2],(unsigned long long)w[3],(unsigned long long)w[4],(unsigned long long)w[5],
-    (unsigned long long)w[6],(unsigned long long)w[7],(unsigned long long)w[8],(unsigned long long)w[20]);
+    (unsigned long long)w[6],(unsigned long long)w[7],(unsigned long long)w[8],(unsigned long long)(w[33]==0x4e485432u?w[33]:w[20]));
+   if(w[33]==0x4e485432u)for(uint32_t location=0;location<6;++location)log("[hit material tileset key input] %s location %u buffer/offset/stride/format %llx/%llu/%llu/%llu",side,location,
+    (unsigned long long)w[9+4*location],(unsigned long long)w[10+4*location],(unsigned long long)w[11+4*location],(unsigned long long)w[12+4*location]);
    if(w[20]==0x4e484b31u)log("[hit material key inputs] %s engine %llx+%llu pull %llu index hint %llu position buffer/offset/stride/format %llx/%llu/%llu/%llu UV buffer/offset/stride/format %llx/%llu/%llu/%llu",
     side,(unsigned long long)w[9],(unsigned long long)w[10],(unsigned long long)w[11],(unsigned long long)w[21],(unsigned long long)w[12],(unsigned long long)w[13],(unsigned long long)w[14],(unsigned long long)w[15],
     (unsigned long long)w[16],(unsigned long long)w[17],(unsigned long long)w[18],(unsigned long long)w[19]);
@@ -312,7 +359,7 @@ void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
    auto source=std::find_if(p->second.pre.begin(),p->second.pre.end(),[](const auto& pre){return static_depth_family(pre.vs,pre.fs);});
    if(source==p->second.pre.end())source=p->second.pre.begin();sample("source",source->key,source->vs,source->fs);
   }
-  sample("deferred",deferred->materials.front().key,0x3812bc980438747full,0x8995da1e4060f53bull);
+  const auto& first=deferred->materials.front();sample("deferred",first.key,first.row.reserved==2?tileset_deferred_vs:0x3812bc980438747full,first.row.reserved==2?tileset_deferred_fs:0x8995da1e4060f53bull);
  }
  s.prepared=true;pending.erase(p);
  barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
@@ -331,7 +378,8 @@ bool attach(VkCommandBuffer,uint32_t index,VkDescriptorSet set,VkBuffer dummyBuf
  writes[3].descriptorType=VK_DESCRIPTOR_TYPE_SAMPLER;writes[3].descriptorCount=sampler_slots;writes[3].pImageInfo=samplers.data();dd->vk.UpdateDescriptorSets(dd->device,4,writes,0,nullptr);return true;
 }
 bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,bool exactPipeline,uint32_t stride,VkBuffer* buffer,VkDeviceSize* offset,VkDeviceSize* bytes){
- if(!on || !cfg_int("rt_hit_material",0) || !one_time(state))return false;Bg3Binding camera{};if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera) || !camera.buffer)return false;
+ if(!on || !cfg_int("rt_hit_material",0) || !one_time(state))return false;
+ if(tileset_deferred(state->vs,state->fs) && !tileset_active())return false;Bg3Binding camera{};if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera) || !camera.buffer)return false;
  auto draw=key(cmd,*state,args);std::lock_guard lock(mutex);collect();
  auto it=packets.find(state->recording);
  if(it==packets.end()){
@@ -343,27 +391,28 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  }
  auto& p=*it->second;
  if(p.finalized || p.frame!=frame_index() || p.camera!=camera.buffer || p.camera_offset!=camera.offset){p.valid=false;return false;}
- const bool audited=audited_static_family(state->vs,state->fs);
+ const bool tileset=tileset_deferred(state->vs,state->fs);const bool audited=audited_static_family(state->vs,state->fs)||tileset;
  if(!audited){++p.family_declined;return false;}++p.seen;
- if(!exactPipeline || args.kind>1 || args.instances!=1 || stride<64){++p.pipeline_declined;return false;}
- bool unique=observe_static_deferred(p.join,p.command,p.recording,draw,state->vs,state->fs,true);
+ if(!exactPipeline || args.kind>1 || (!tileset && args.instances!=1) || stride<(tileset?80u:64u)){++p.pipeline_declined;return false;}
+ bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
  if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;
  // Count real audited duplicates even beyond the storage bound. Unrelated
  // shader families never reserve an audited candidate's geometry identity.
  if(p.materials.size()>=material_slots)return false;
- Material material{};if(!capture(cmd,material)){++p.binding_declined;return false;}
- *bytes=VkDeviceSize(args.count)*stride;if(!args.count || args.count%3 || !byte_range(p.cursor,*bytes,stream_bytes))return false;
+ Material material{};if(!(tileset?capture_tileset(cmd,material):capture(cmd,material))){++p.binding_declined;return false;}
+ uint32_t vertices=0;if(!tileset_vertex_count(args.count,args.instances,vertices))return false;
+ *bytes=VkDeviceSize(vertices)*stride;if(!byte_range(p.cursor,*bytes,stream_bytes))return false;
  if(!own(cmd))return false;
  auto identity=[](const View& v){return CacheIdentity{uint64_t(v.view),v.id,uint64_t(v.image),v.image_id,uint64_t(v.layout)};};
  auto resources=p.resources;ResourceIndices indices{};
- if(!resources.reserve(material.sampler.sampler.id,{identity(material.normal),identity(material.albedo),identity(material.physical)},indices))return false;
+ if(!(tileset?resources.reserve_sampler(material.sampler.sampler.id,indices):resources.reserve(material.sampler.sampler.id,{identity(material.normal),identity(material.albedo),identity(material.physical)},indices)))return false;
  if(indices.new_sampler){
   auto sampler_info=material.sampler.sampler.info;sampler_info.pNext=nullptr;VkSampler sampler{};
   if(dd->vk.CreateSampler(dd->device,&sampler_info,nullptr,&sampler)!=VK_SUCCESS)return false;
   p.samplers.push_back(sampler);
  }
  p.resources=resources;uint32_t local=uint32_t(p.materials.size());
- material.key=draw;material.row.valid=local+1;material.row.triangles=args.count/3;material.row.deferred=uint32_t(p.cursor);material.row.stride=stride;material.row.frame=uint32_t(p.frame);
+ material.key=draw;material.row.valid=local+1;material.row.triangles=vertices/3;material.row.deferred=uint32_t(p.cursor);material.row.stride=stride;material.row.frame=uint32_t(p.frame);
  material.row.sampler=indices.sampler;material.row.normal=indices.normal;material.row.albedo=indices.albedo;material.row.physical=indices.physical;
  p.join.assign(p.command,p.recording,draw,local);p.materials.push_back(material);*buffer=p.data.b;*offset=p.cursor;p.cursor+=*bytes;return true;
 }
@@ -376,11 +425,13 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
  uint32_t captured=0;
  if(p.valid)for(auto& m:p.materials){uint32_t local=0;
-  if(!p.join.claim(p.command,p.recording,m.key,local) || local!=m.row.valid-1 || !current(m.table) || !current(m.normal) || !current(m.albedo) || !current(m.physical) || !omm::ordinary_sampler_current(m.sampler))continue;
+  if(!p.join.claim(p.command,p.recording,m.key,local) || local!=m.row.valid-1 || !material_current(m) || !omm::ordinary_sampler_current(m.sampler))continue;
   VkDescriptorBufferInfo info[4]={{m.engine.buffer,m.engine.offset,m.engine.range},{m.physical_ubo.buffer,m.physical_ubo.offset,m.physical_ubo.range},{m.tilesets.buffer,m.tilesets.offset,m.tilesets.range},{p.rows.b,0,packet_rows}};
   VkWriteDescriptorSet writes[4]{};for(uint32_t n=0;n<4;++n){writes[n]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=n<2?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[n].pBufferInfo=info+n;}
+  const bool tileset=m.row.reserved==2;if(tileset && !compute_ready(false,true))continue;
+  if(tileset){info[2]={p.rows.b,0,packet_rows};writes[2].pBufferInfo=info+2;}
   uint32_t push[4]={16u+local*record_bytes,local,1,0};
-  dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,gather_pipeline);dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,gather_layout,0,4,writes);
+  dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,tileset?tileset_gather_pipeline:gather_pipeline);dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,gather_layout,0,4,writes);
   dd->vk.CmdPushConstants(cmd,gather_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,16,push);dd->vk.CmdDispatch(cmd,1,1,1);++captured;
  }
  barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
@@ -425,13 +476,13 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   uint32_t record=0;if(!join_packets(slot.join,packet->join,deferred.key,deferred.row.valid-1,record))continue;
   auto source=std::find_if(slot.pre.begin(),slot.pre.end(),[&](const auto& pre){return pre.record==record;});
   if(source==slot.pre.end() || source->stride!=deferred.row.stride || source->triangles!=deferred.row.triangles ||
-     (!source->opaque && (source->alpha.tex!=deferred.table.view || source->alpha.cache!=deferred.albedo.view)) ||
-     !current(deferred.table) || !current(deferred.normal) || !current(deferred.albedo) || !current(deferred.physical))continue;
+     (deferred.row.reserved==2 ? (source->alpha.rec.kind!=5 || source->alpha.rec.p0[2]!=0.f || source->alpha.rec.p0[1]!=0.f || source->alpha.tex!=deferred.tileset_views[3].view || source->alpha.tex_id!=deferred.tileset_views[3].image_id) :
+      (!source->opaque && (source->alpha.tex!=deferred.table.view || source->alpha.cache!=deferred.albedo.view))) || !material_current(deferred))continue;
   VkDeviceSize bytes=VkDeviceSize(source->triangles)*3*source->stride;
   if(!byte_range(cursor,bytes*2,stream_bytes))continue;
   auto m=deferred;m.snapshot=deferred.row.valid-1;m.source_raw=uint32_t(source->raw);m.deferred_raw=deferred.row.deferred;
-  m.row.valid=record+1;m.row.pre=uint32_t(cursor);m.row.deferred=uint32_t(cursor+bytes);m.row.reserved=source->opaque?1u:0u;
-  if(!source->opaque){m.row.table=source->alpha.rec.tex;std::memcpy(m.row.p0,source->alpha.rec.p0,32);std::memcpy(m.row.t,source->alpha.rec.t,128);}
+  m.row.valid=record+1;m.row.pre=uint32_t(cursor);m.row.deferred=uint32_t(cursor+bytes);m.row.reserved=deferred.row.reserved==2?2u:source->opaque?1u:0u;
+  if(!source->opaque && m.row.reserved!=2){m.row.table=source->alpha.rec.tex;std::memcpy(m.row.p0,source->alpha.rec.p0,32);std::memcpy(m.row.t,source->alpha.rec.t,128);}
   cursor+=bytes*2;q.materials.push_back(m);
  }
  if(q.materials.empty()){
@@ -439,25 +490,33 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    (unsigned long long)slot.frame,slot.pre.size(),packet->materials.size(),(void*)slot.camera,(unsigned long long)slot.camera_offset);return false;
  }
  std::vector<VkDescriptorImageInfo> tables;std::vector<View> table_views;
- for(auto& m:q.materials)if(m.row.reserved){
+ for(auto& m:q.materials)if(m.row.reserved==1){
   auto i=std::find_if(table_views.begin(),table_views.end(),[&](const auto& v){return v.view==m.table.view && v.id==m.table.id && v.image_id==m.table.image_id && v.layout==m.table.layout;});
   if(i==table_views.end()){table_views.push_back(m.table);tables.push_back({VK_NULL_HANDLE,m.table.view,m.table.layout});m.row.table=uint32_t(tables.size()-1);}
   else m.row.table=uint32_t(i-table_views.begin());
+ }
+ for(auto& m:q.materials)if(m.row.reserved==2)for(uint32_t n=0;n<9;++n){const auto& view=m.tileset_views[n];
+  auto i=std::find_if(table_views.begin(),table_views.end(),[&](const auto& v){return v.view==view.view && v.id==view.id && v.image_id==view.image_id && v.layout==view.layout;});
+  uint32_t index=uint32_t(i-table_views.begin());if(i==table_views.end()){table_views.push_back(view);tables.push_back({VK_NULL_HANDLE,view.view,view.layout});}
+  std::memcpy(m.row.t+n,&index,4);
  }
  uint32_t first_table=0;
  if(!create(q.rows,row_bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,true) ||
     !create(q.data,cursor,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) || !alpha_clone_hit_set(slot.set,&q.pool,&q.set,tables,&first_table)){
   destroy_query(q);return false;
  }
- for(auto& m:q.materials)if(m.row.reserved)m.row.table+=first_table;
+ for(auto& m:q.materials){if(m.row.reserved==1)m.row.table+=first_table;
+  if(m.row.reserved==2)for(uint32_t n=0;n<9;++n){uint32_t index;std::memcpy(&index,m.row.t+n,4);index+=first_table;std::memcpy(m.row.t+n,&index,4);}
+ }
  publish_word(q,0); // initialized before any GPU use; never rewritten after success.
  if(!mark_owner(cmd,slot)){destroy_query(q);return false;}
  if(std::find(slot.owners.begin(),slot.owners.end(),packet->recording)==slot.owners.end())slot.owners.push_back(packet->recording);
  std::vector<VkDescriptorImageInfo> caches(cache_slots,{VK_NULL_HANDLE,slot.dummy_array,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}),samplers(sampler_slots,{slot.dummy_sampler,VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED});
  for(const auto& m:q.materials){
-  caches[m.row.normal]={VK_NULL_HANDLE,m.normal.view,m.normal.layout};caches[m.row.albedo]={VK_NULL_HANDLE,m.albedo.view,m.albedo.layout};caches[m.row.physical]={VK_NULL_HANDLE,m.physical.view,m.physical.layout};
+  if(m.row.reserved!=2){caches[m.row.normal]={VK_NULL_HANDLE,m.normal.view,m.normal.layout};caches[m.row.albedo]={VK_NULL_HANDLE,m.albedo.view,m.albedo.layout};caches[m.row.physical]={VK_NULL_HANDLE,m.physical.view,m.physical.layout};}
   samplers[m.row.sampler]={packet->samplers[m.row.sampler],VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};
-  for(const auto& view:{m.table,m.normal,m.albedo,m.physical}){slot.handles.push_back(uint64_t(view.view));slot.handles.push_back(uint64_t(view.image));life_note(cmd,uint64_t(view.view));life_note(cmd,uint64_t(view.image));}
+  std::vector<View> retained;if(m.row.reserved==2)retained.assign(m.tileset_views.begin(),m.tileset_views.end());else retained={m.table,m.normal,m.albedo,m.physical};
+  for(const auto& view:retained){slot.handles.push_back(uint64_t(view.view));slot.handles.push_back(uint64_t(view.image));life_note(cmd,uint64_t(view.view));life_note(cmd,uint64_t(view.image));}
  }
  VkDescriptorBufferInfo buffers[2]={{q.rows.b,0,row_bytes},{q.data.b,0,cursor}};
  VkWriteDescriptorSet writes[4]{};for(uint32_t i=0;i<4;++i){writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=q.set;writes[i].dstBinding=12+i;writes[i].descriptorCount=1;}

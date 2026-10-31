@@ -27,6 +27,7 @@
 #include "../common/native_scalp_capability.h"
 #include "../common/native_hair.h"
 #include "../common/native_tileset_coverage.h"
+#include "../common/native_tileblend_coverage.h"
 #include "../common/native_tileset_capability.h"
 #include "omm_sampler.h"
 #include "../common/omm_scene_capability.h"
@@ -458,12 +459,13 @@ void alpha_device_destroyed(DeviceData* dd) {
 
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
-  if(!g_tileset_layout && fs==native_tileset_coverage::depth_fs && cfg_int("rt_native_tileset",0)){
+  if(!g_tileset_layout && native_tileset_coverage::lookup(fs)!=nullptr && cfg_int("rt_native_tileset",0)){
     static std::atomic<bool> warned{false};if(!warned.exchange(true))log("[alpha tileset] enable rejected: restart with rt_alpha=1 rt_bvh_split=1 and supported sampler limits");
   }
-  if(g_tileset_layout && cfg_int("rt_native_tileset",0) && fs==native_tileset_coverage::depth_fs) {
-    *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=1;out->tex_set=1;out->tex_bind=1;
-    out->ubo_set=1;out->ubo_bind=0;out->cut=out->cut_first=.5f;out->k=1;return true;
+  if(g_tileset_layout && cfg_int("rt_native_tileset",0) && native_tileset_coverage::lookup(fs)!=nullptr) {
+    const auto& recipe=*native_tileset_coverage::lookup(fs);
+    *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=recipe.uv;out->tex_set=1;out->tex_bind=recipe.green_binding;
+    out->ubo_set=1;out->ubo_bind=recipe.material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
   }
   if (cfg_int("rt_native_hair", 0)) {
     if (const auto* recipe = native_hair::lookup(fs)) {
@@ -556,13 +558,28 @@ static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_
   r.scale[0] = r.scale[1] = a.k;
   if(a.kind==5) {
     auto* state=cmd_state(cmd);
-    const auto material=native_tileset_coverage::capture([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t size){return read_bound(cmd,set,binding,off,dst,size);});
+    const auto* recipe=native_tileset_coverage::lookup(a.hash);
+    if(!recipe)return false;
+    if(recipe->subtype==1u){
+      r.p0[2]=1.f;
+      const auto material=native_tileset_coverage::capture_blend([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes){return read_bound(cmd,set,binding,off,dst,bytes);});
+      uint32_t status=native_tileset_coverage::ntb_material(material);
+      if(material.known && finite(material.packet,8))std::memcpy(r.t,material.packet,sizeof(material.packet));
+      if(!state || state->fs!=a.hash || !native_tileset_coverage::matches(state->vs,a.hash) || !geo_native_tileset_inputs(state->pipe[0],1u))status=native_tileset_coverage::NtcMissing;
+      auto view=[&](unsigned binding,Bg3Binding& out){return query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&out) && out.view && view_image_id(out.view)!=0 && omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0);};
+      const bool base=view(1,t),mask=view(2,c);
+      const auto owned=capture_native_sampler(cmd);if(sampler)*sampler=owned;
+      if(!base || !mask || !owned)status=native_tileset_coverage::NtcMissing;
+      if(!base)t={};if(!mask)c={};
+      r.p0[1]=float(status);return true;
+    }
+    const auto material=native_tileset_coverage::capture([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t size){return read_bound(cmd,set,binding,off,dst,size);},a.hash);
     uint32_t status=native_tileset_coverage::ntc_material(material.known,material.tiling,material.see_through);
     r.scale[0]=r.scale[1]=material.known && std::isfinite(material.tiling)?material.tiling:0;
     r.p0[0]=material.known && std::isfinite(material.see_through)?material.see_through:0;
-    if(!state || state->vs!=native_tileset_coverage::depth_vs || !geo_native_tileset_inputs(state->pipe[0]))status=native_tileset_coverage::NtcMissing;
-    const bool texture=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,1,0,&t) && t.view && view_image_id(t.view)!=0 &&
-      omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,1,0);
+    if(!state || state->fs!=a.hash || !native_tileset_coverage::matches(state->vs,a.hash) || !geo_native_tileset_inputs(state->pipe[0],native_tileset_coverage::lookup(a.hash)->subtype))status=native_tileset_coverage::NtcMissing;
+    const bool texture=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,a.tex_set,a.tex_bind,0,&t) && t.view && view_image_id(t.view)!=0 &&
+      omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,a.tex_set,a.tex_bind,0);
     const auto owned=capture_native_sampler(cmd);if(sampler)*sampler=owned;
     if(!texture || !owned)status=native_tileset_coverage::NtcMissing;
     if(!texture)t={}; // Never publish an unidentified/unsupported view, even for UNKNOWN records.
@@ -665,7 +682,7 @@ bool alpha_capture_source(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tr
   Bg3Binding t{},c{};
   if(!capture_source_material(cmd,a,first_tri,tris,out->rec,t,c,&out->native_sampler)) return false;
   out->tex=t.view;out->tex_layout=t.layout;out->tex_id=view_image_id(t.view);
-  if(a.kind==1 || a.kind==4) {
+  if(a.kind==1 || a.kind==4 || (a.kind==5 && out->rec.p0[2]==1.f)) {
     out->cache=c.view;out->cache_layout=c.layout;out->cache_id=view_image_id(c.view);
   }
   // Reject unidentified/recycled resources before a private descriptor tuple can
@@ -689,7 +706,7 @@ bool alpha_add_draw(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint
   r.tex = slot_of(g_tex, kTextures, t.view, t.layout);
   r.cache = a.kind == 1 ? slot_of(g_cache, kCaches, c.view, c.layout) :
             a.kind == 4 ? slot_of(g_tex, kTextures, c.view, c.layout) : 0;
-  if(a.kind==5){r.cache=native_sampler_slot(g_native_samplers,sampler);if(!r.tex || !r.cache)r.p0[1]=float(native_tileset_coverage::NtcMissing);}
+  if(a.kind==5){r.cache=native_sampler_slot(g_native_samplers,sampler);if(r.p0[2]==1.f)r.channel=slot_of(g_tex,kTextures,c.view,c.layout);if(!r.tex || !r.cache || (r.p0[2]==1.f && !r.channel))r.p0[1]=float(native_tileset_coverage::NtcMissing);}
   if ((a.kind!=5 && !r.tex) || ((a.kind == 1 || a.kind == 4) && !r.cache)) {
     ++g_fail[5];
     if (!g_full_logged) {
@@ -748,15 +765,15 @@ bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
   *out={};out->rec=r;
   if(r.kind==5){
     if(r.cache && r.cache<=g_native_samplers.size())out->native_sampler=g_native_samplers[r.cache-1u];
-    if(r.p0[1]!=0.0f || !r.tex || r.tex>g_tex.size()){out->rec.p0[1]=float(native_tileset_coverage::NtcMissing);return true;}
+    if(r.p0[1]!=0.0f || !r.tex || r.tex>g_tex.size() || (r.p0[2]==1.f && (!r.channel || r.channel>g_tex.size()))){out->rec.p0[1]=float(native_tileset_coverage::NtcMissing);return true;}
   }
   if (!r.tex || r.tex > g_tex.size() || (r.kind == 1 && (!r.cache || r.cache > g_cache.size())) ||
       (r.kind == 4 && (!r.cache || r.cache > g_tex.size()))) return false;
   out->rec = r;
   const auto t = g_tex[r.tex - 1];
   out->tex = t.first; out->tex_layout = t.second;
-  if (r.kind == 1 || r.kind == 4) {
-    const auto c = r.kind == 1 ? g_cache[r.cache - 1] : g_tex[r.cache - 1];
+  if (r.kind == 1 || r.kind == 4 || (r.kind==5 && r.p0[2]==1.f)) {
+    const auto c = r.kind == 1 ? g_cache[r.cache - 1] : g_tex[(r.kind==5?r.channel:r.cache) - 1];
     out->cache = c.first; out->cache_layout = c.second;
   }
   // Keep both the view and its image alive until the last possible held use.
@@ -779,11 +796,12 @@ bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
 uint32_t alpha_restore(const AlphaSnapshot& saved) {
   if(saved.rec.kind==5){
     std::lock_guard lock(g_mu);if(g_recs.size()>=kMaxRecords){g_tileset_incomplete=true;return UINT32_MAX;}
-    AlphaRec r=saved.rec;r.tex=0;r.cache=0;
+    AlphaRec r=saved.rec;r.tex=0;r.cache=0;if(r.p0[2]==1.f)r.channel=0;
     if(saved.tex_id && view_image_id(saved.tex)==saved.tex_id && saved.native_sampler && saved.native_sampler->handle){
       r.tex=slot_of(g_tex,kTextures,saved.tex,saved.tex_layout);r.cache=native_sampler_slot(g_native_samplers,saved.native_sampler);
     }
-    if(!r.tex || !r.cache)r.p0[1]=float(native_tileset_coverage::NtcMissing);
+    if(r.p0[2]==1.f && saved.cache_id && view_image_id(saved.cache)==saved.cache_id)r.channel=slot_of(g_tex,kTextures,saved.cache,saved.cache_layout);
+    if(!r.tex || !r.cache || (r.p0[2]==1.f && !r.channel))r.p0[1]=float(native_tileset_coverage::NtcMissing);
     const auto index=uint32_t(g_recs.size());g_recs.push_back(r);return index;
   }
   // A view destroyed during the hold (its handle possibly reused for another image,
@@ -1158,7 +1176,7 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
       const auto& snapshot=cascade.materials[draw.material-1];
       const auto& source=snapshot.rec;
       if(snapshot.tex_id && snapshot.tex_id==view_image_id(snapshot.tex) &&
-         ((source.kind!=1 && source.kind!=4) || (snapshot.cache_id && snapshot.cache_id==view_image_id(snapshot.cache)))) {
+         ((source.kind!=1 && source.kind!=4 && !(source.kind==5 && source.p0[2]==1.f)) || (snapshot.cache_id && snapshot.cache_id==view_image_id(snapshot.cache)))) {
         AlphaRec r=source;
         if(source.kind==5){r.cache=native_sampler_slot(native_samplers,snapshot.native_sampler);
           if(!r.cache)r.p0[1]=float(native_tileset_coverage::NtcMissing);}
@@ -1166,9 +1184,10 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
         const uint32_t t=slot_of(textures,kTextures-g_set_tex[slot],snapshot.tex,snapshot.tex_layout);
         uint32_t c=0;
         if(source.kind==1) c=slot_of(caches,kCaches-g_set_cache[slot],snapshot.cache,snapshot.cache_layout);
-        if(source.kind==4) c=slot_of(textures,kTextures-g_set_tex[slot],snapshot.cache,snapshot.cache_layout);
-        if(t && ((source.kind!=1 && source.kind!=4) || c)) {
+        if(source.kind==4 || (source.kind==5 && source.p0[2]==1.f)) c=slot_of(textures,kTextures-g_set_tex[slot],snapshot.cache,snapshot.cache_layout);
+        if(t && ((source.kind!=1 && source.kind!=4 && !(source.kind==5 && source.p0[2]==1.f)) || c)) {
           r.tex=g_set_tex[slot]+t;
+          if(source.kind==5 && source.p0[2]==1.f)r.channel=g_set_tex[slot]+c;
           r.cache=source.kind==1?g_set_cache[slot]+c:source.kind==4?g_set_tex[slot]+c:source.kind==5?r.cache:0;
           record=16u+uint32_t((uint64_t(g_set_records[slot])+extra.size())*sizeof(AlphaRec));
           extra.push_back(r);state=1;

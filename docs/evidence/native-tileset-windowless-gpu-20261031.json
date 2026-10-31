@@ -1,0 +1,84 @@
+{
+  "base_commit": "224b864a928034687a27a33ba341b81723174083",
+  "scope": "One tiny windowless synthetic GPU invocation; not game/image quality or cost",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "driver_raw": 2604679168,
+  "cases": 32,
+  "validation_errors": 0,
+  "presentation": false,
+  "game_launched_or_attached": false,
+  "timeout_seconds": 60,
+  "process_priority": "BelowNormal",
+  "queue_priority": 0,
+  "wall_ms_not_GPU_cost": 3137,
+  "stride_bytes": [
+    40,
+    64,
+    88
+  ],
+  "green_threshold_cases": [
+    0.4999999701976776,
+    0.5,
+    0.5000000596046448
+  ],
+  "four_production_queries": [
+    "rt_visibility",
+    "rt_closest",
+    "rt_closest_hit",
+    "rt_closest_debug"
+  ],
+  "unknown_cases": [
+    "SeeThrough1",
+    "missing recipe",
+    "invalid geometry range",
+    "AlphaRec header12 incomplete"
+  ],
+  "extra_cases": [
+    "Red/Base literal alpha1",
+    "native sampler19 white border vs legacy repeat alpha0",
+    "held pool",
+    "rebase variant with zero translation"
+  ],
+  "hair_probe_SPV_byte_identical": true,
+  "hair_mode_GPU_rerun": false,
+  "bounds_GPU_dispatch_in_tileset_mode": false,
+  "raw_summary_note": "Inherited summary printed production_bounds=1 despite no bounds dispatch in tileset mode; source logging corrected after this invocation only. red_literal input green=-1 is a selector: actual vertex green0/red1.",
+  "tested_binary_sha256": "cd75074c6c14d9ab5710a12a4db65d0d172a0c39cde1cd356f5a082ef087cf6d",
+  "artifacts": {
+    "bounds.spv": {
+      "bytes": 163992,
+      "sha256": "6cd0808800e616eefe718166af73a0f46a3ffe965325c23d5fc2620cefd451c5"
+    },
+    "tileset.spv": {
+      "bytes": 229356,
+      "sha256": "456c5011927c83356362136d229e7393608e5bb62d5df9e44fac7c4e384cda1e"
+    },
+    "tileset_rebase.spv": {
+      "bytes": 233440,
+      "sha256": "cfce44fd55a7d3f0e5b861ff6249303fd31fb460e3ea76ef046148002c89ab2c"
+    },
+    "hair_current.spv": {
+      "bytes": 1262248,
+      "sha256": "8e3f6891b8bf0c0dd9bd174f9f59c05815f5e935b0c35363218af5a43d936c59"
+    },
+    "hair_old.spv": {
+      "bytes": 1262248,
+      "sha256": "8e3f6891b8bf0c0dd9bd174f9f59c05815f5e935b0c35363218af5a43d936c59"
+    },
+    "gpu.stdout.txt": {
+      "bytes": 3574,
+      "sha256": "55a186050fc1251e2a0fdb2973e694f6854f0e381338ef84ff3d526b7e734b6e"
+    },
+    "gpu.stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "post_log_only_rebuild_sha256": "3f8d13fdfc674c038d5a82cf148a6b0998cef364d80782b8220e48117c51fd96",
+  "COLOR_scope": "Production query interpolation expression executed with uniform per-triangle COLOR; held pool88 reads exercised. Not a varying-COLOR interpolation oracle.",
+  "not_certified": [
+    "Native graphics XFB execution or game capture",
+    "Native anisotropic16 sampling precision/raster derivative equivalence",
+    "Whole-game image/temporal quality or GPU pass cost"
+  ]
+}

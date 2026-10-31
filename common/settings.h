@@ -225,6 +225,15 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_native_scalp", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
 
+  {"exp_alpha_spill", "Preserve cutout capture on overflow",
+   "Uses free space in the existing capture buffer when its cutout partition fills. "
+   "Retains native coverage and hair geometry for exact split draws. Does not increase memory "
+   "limits or fix missing material inputs. Experimental: game quality and GPU cost are unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_alpha_spill", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_alpha_spill", "1"}}, {{"rt_geometry", 2}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"},{"rt_bvh_split","1","Direct split records"}}},
+
   {"exp_native_tileset", "Native tileset coverage",
    "Captures native instanced floor and wall coverage for ray queries. Requires a restart "
    "and Full ray-traced geometry. SeeThrough and missing native inputs remain unknown. "
@@ -323,7 +332,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 221 keys of bg3rtx.ini, in file order.
+// 222 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -445,6 +454,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_physical_origin", "0"},
     {"rt_alpha_unknown", "1"},
     {"rt_alpha_auto", "1"},
+    {"rt_alpha_spill", "0"},
     {"rt_alpha_max_pct", "60"},
     {"rt_strips", "1"},
     {"gi_rt", "1"},

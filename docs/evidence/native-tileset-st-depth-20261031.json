@@ -1,0 +1,81 @@
+{
+  "source": "Public/Shared/Assets/Materials/Environment/ENV_Tileset_MultipleTextures_AlphaTest_ST_DEP_Vulkan.bshd",
+  "package": "Materials.pak",
+  "modules": [
+    {
+      "stage": "vs",
+      "hash": "4235ddab8aa759d0",
+      "bytes": 2528,
+      "sha256": "3261351dbe6f9494db7f37de9e102ff059e131d7f7fc2b28f6d074e42b12d4d6"
+    },
+    {
+      "stage": "fs",
+      "hash": "ca4bf1d78f6438fe",
+      "bytes": 3552,
+      "sha256": "38557fe2b717aafd5028da34d3154e56683582575cf5ac06f5a63a83d258878b"
+    }
+  ],
+  "fragment_main_bodies_byte_equal": true,
+  "st_bindings": {
+    "material": "1.1",
+    "green": "1.2",
+    "noise": "1.5",
+    "sampler": "0.7"
+  },
+  "sti_bindings": {
+    "material": "1.0",
+    "green": "1.1",
+    "noise": "1.4",
+    "sampler": "0.7"
+  },
+  "scope": "Host-only exact ST depth coverage extension; ST material decoder remains unsupported",
+  "base_commit": "7d487ec",
+  "key": "rt_native_tileset",
+  "default": 0,
+  "hlsl_changed": false,
+  "core_changed": false,
+  "new_public_abi": false,
+  "source_fragment_main_body_equal_to_sti": true,
+  "cpu_checks": 253,
+  "cpu_with_native_module_checks": 282,
+  "targeted_ctests": 4,
+  "host_dll_build": true,
+  "native_patch_checks": [
+    {
+      "stride": 40,
+      "validated": true,
+      "ordinary_native_patch_identity": true,
+      "sha256": "86f42250c31e52fd5199a9f3f96aacad61dbfc5475047aea834b029bdaff9580",
+      "native_instruction_stream_unchanged_except_colour_xfb": true
+    },
+    {
+      "stride": 64,
+      "validated": true,
+      "ordinary_native_patch_identity": true,
+      "sha256": "c747039a29fa46baa5774cdaa722d02288ca705eac1036114e55a7882000c690",
+      "native_instruction_stream_unchanged_except_colour_xfb": true
+    },
+    {
+      "stride": 80,
+      "validated": true,
+      "ordinary_native_patch_identity": true,
+      "sha256": "03ef96ad98e772edaa1046558e37852d8913873d28ffb8c3b92f555e938e0697",
+      "native_instruction_stream_unchanged_except_colour_xfb": true
+    },
+    {
+      "stride": 88,
+      "validated": true,
+      "ordinary_native_patch_identity": true,
+      "sha256": "5a23bcdfea18eb20686c1a5b32f28e24cdf6c939956e4e293746673f39c14ee5",
+      "native_instruction_stream_unchanged_except_colour_xfb": true
+    }
+  ],
+  "shader_proof_reused": {
+    "ordinary_identities": 639,
+    "tileset_compiled_validated": 604
+  },
+  "gpu_run": false,
+  "game_run": false,
+  "gpu_cost_ms": null,
+  "private_evidence": "captures/native-tileset-st-depth-20261031"
+}

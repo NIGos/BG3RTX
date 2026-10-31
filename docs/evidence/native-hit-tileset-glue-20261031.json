@@ -1,0 +1,39 @@
+{
+  "scope": "Narrow combined M3 capture/getter/stats glue; runtime quality unqualified",
+  "source_parent": "224b864 + 2a9bf65",
+  "native_deferred_vs": "a618ddae98c2d1cf",
+  "native_deferred_fs": "cad41eff979970e4",
+  "native_module_bytes": 2848,
+  "minimum_stride_both_startup_controls": 80,
+  "output_offsets": {
+    "clip": 0,
+    "uv": 16,
+    "color": 24,
+    "normal": 40,
+    "bitangent": 52,
+    "tangent": 64
+  },
+  "validated_native_strides": [
+    80,
+    88
+  ],
+  "native_patch_key_off_identities": 2,
+  "cpu_fixture_checks": 785,
+  "with_actual_module_checks": 816,
+  "targeted_ctests": 5,
+  "both_dlls_link": true,
+  "changed_acquisition_modules": 16,
+  "changed_modules_validated_and_byte_identical_to_combined_proof": 16,
+  "shared_stats": {
+    "qualified": 287,
+    "native_primary_match": 288,
+    "capacity": 289
+  },
+  "new_public_abi": false,
+  "new_descriptor_bank": false,
+  "whole_unchanged_shader_proof_repeated": false,
+  "gpu_run": false,
+  "game_run": false,
+  "gpu_cost_ms": null,
+  "private_evidence": "captures/native-hit-tileset-glue-20261031"
+}

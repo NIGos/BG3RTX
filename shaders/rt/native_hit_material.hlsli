@@ -3,12 +3,19 @@
 #include "../../common/native_opaque_transport.h"
 #include "../../common/native_vt_fields.h"
 #include "../../common/native_hit_records.h"
+#ifdef RT_NATIVE_TILESET
+#include "../../common/native_hit_tileset_fields.h"
+#endif
 // Main AlphaDSL ONLY. Private current-Sun binding14 has a different contract.
 [[vk::binding(12,1)]] ByteAddressBuffer gHitRecords;
 [[vk::binding(13,1)]] ByteAddressBuffer gHitBasis;
 [[vk::binding(14,1)]] Texture2DArray<float4> gHitCache[64];
 [[vk::binding(15,1)]] SamplerState gHitSampler[16];
-struct NativeHitMaterial {NtResult parameters;NtFresnelBlendResult scattering;float3 normal;uint status,channel;};
+struct NativeHitMaterial {NtResult parameters;NtFresnelBlendResult scattering;float3 normal;uint status,channel;
+#ifdef RT_NATIVE_TILESET
+ uint family;
+#endif
+};
 bool hit_material_publication_ready(){
  uint bytes;gHitRecords.GetDimensions(bytes);const uint control=16u+nh_material_rows*256u;
  return bytes>=control+4u && gHitRecords.Load(control)==1u;
@@ -53,6 +60,16 @@ NativeLayer hit_material_layer(uint row,float2 uv,float g,uint table,uint cache,
  result.value=gHitCache[NonUniformResourceIndex(cache)].SampleGrad(gHitSampler[NonUniformResourceIndex(sampler)],float3(c,float(layer)),dx*gradient,dy*gradient);
  result.known=all(isfinite(result.value));return result;
 }
+#ifdef RT_NATIVE_TILESET
+NativeLayer hit_material_tileset_layer(uint row,uint layer,float2 uv,float g,float tiling,uint sampler){
+ NativeLayer result=(NativeLayer)0;uint index=gHitRecords.Load(row+80u+4u*layer);
+ if(index==0 || index>=4096 || sampler>=16 || !(g>0) || !isfinite(g) || !isfinite(tiling))return result;
+ float2 u=uv*tiling,dx=float2(g*tiling,0),dy=float2(0,g*tiling);
+ if(!all(isfinite(u)) || !all(isfinite(dx)) || !all(isfinite(dy)))return result;
+ result.value=gAlphaTex[NonUniformResourceIndex(index)].SampleGrad(gHitSampler[NonUniformResourceIndex(sampler)],u,dx,dy);
+ result.known=all(isfinite(result.value));return result;
+}
+#endif
 NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if(!hit_material_publication_ready())return hit_material_unknown(1);
  NativeHitMaterial result=hit_material_unknown(1);
@@ -71,6 +88,9 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if(header.w!=1 || header.x!=pc.frame || header.y==0 || header.y!=gSceneStamp.Load(0) || header.y!=gSceneStamp.Load(4))return hit_material_unknown(2);
  uint row=16u+record*256u;uint4 h0=gHitRecords.Load4(row),h1=gHitRecords.Load4(row+16),h2=gHitRecords.Load4(row+32);
  if(h0.x!=record+1u || hit.prim>=h0.y || h1.w!=pc.frame || h1.x<64 || h1.x!=(ii.meta&255u))return hit_material_unknown(3);
+ #ifdef RT_NATIVE_TILESET
+ bool tileset=h2.w==2u;if(tileset && h1.x<NtsMinimumStride)return result;
+#endif
  uint bbytes;gHitBasis.GetDimensions(bbytes);uint size=h0.y*3u*h1.x;
  if(h0.y>0xffffffffu/(3u*h1.x) || h0.z>bbytes || size>bbytes-h0.z || h0.w>bbytes || size>bbytes-h0.w)return result;
  // Actual native positions and UVs, not a mesh/hash-only proof. Exact comparison
@@ -78,6 +98,9 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  [unroll]for(uint v=0;v<3;++v){
   uint pre=h0.z+(hit.prim*3u+v)*h1.x,def=h0.w+(hit.prim*3u+v)*h1.x;
   if(any(gHitBasis.Load4(pre)!=gHitBasis.Load4(def)) || any(gHitBasis.Load2(pre+16)!=gHitBasis.Load2(def+16)))return hit_material_unknown(4);
+#ifdef RT_NATIVE_TILESET
+  if(tileset && any(gHitBasis.Load4(pre+NtsColorOffset)!=gHitBasis.Load4(def+NtsColorOffset)))return hit_material_unknown(4);
+#endif
  }
  float2 uv[3];float3 position[3];float3 basis[3];
  [unroll]for(uint v=0;v<3;++v){
@@ -88,14 +111,32 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  float2 d1=uv[1]-uv[0],d2=uv[2]-uv[0];float uvarea=abs(d1.x*d2.y-d1.y*d2.x);
  if(!(area>0 && uvarea>0) || !isfinite(area+uvarea))return hit_material_unknown(5);
  float g=footprint*sqrt(uvarea/area);float2 u=uv[0]+d1*hit.bary.x+d2*hit.bary.y;
- NativeLayer a=hit_material_layer(row,u,g,h1.y,h2.y,h1.z,0);
- NativeLayer n=hit_material_layer(row,u,g,h1.y,h2.x,h1.z,1);
- NativeLayer p=hit_material_layer(row,u,g,h1.y,h2.z,h1.z,2);
+ NativeLayer a,n,p;
+#ifdef RT_NATIVE_TILESET
+ if(tileset){
+  uint at=h0.w+hit.prim*3u*h1.x+NtsColorOffset;
+  float4 c0=asfloat(gHitBasis.Load4(at)),c1=asfloat(gHitBasis.Load4(at+h1.x)),c2=asfloat(gHitBasis.Load4(at+2u*h1.x));
+  float4 color=c0+(c1-c0)*hit.bary.x+(c2-c0)*hit.bary.y;
+  float4 params=asfloat(gHitRecords.Load4(row+48));NtsPlan plan=nts_plan(color.x,color.y,params.xyz);
+  if(plan.status!=0)return hit_material_unknown(6);
+  n=hit_material_tileset_layer(row,plan.branch,u,g,plan.tiling,h1.z);
+  a=hit_material_tileset_layer(row,3u+plan.branch,u,g,plan.tiling,h1.z);
+  p=hit_material_tileset_layer(row,6u+plan.branch,u,g,plan.tiling,h1.z);
+ }else
+#endif
+ {
+  a=hit_material_layer(row,u,g,h1.y,h2.y,h1.z,0);
+  n=hit_material_layer(row,u,g,h1.y,h2.x,h1.z,1);
+  p=hit_material_layer(row,u,g,h1.y,h2.z,h1.z,2);
+ }
  if(!a.known || !n.known || !p.known)return hit_material_unknown(6);
  NvFields fields=nv_fields(a.value.rgb,n.value.wzy,p.value.xyz,asfloat(gHitRecords.Load(row+208u)));
  if(fields.status!=0)return hit_material_unknown(7);
  [unroll]for(uint component=0;component<3;++component){
   uint start=h0.w+hit.prim*3u*h1.x+24u+12u*component;
+#ifdef RT_NATIVE_TILESET
+  if(tileset)start=h0.w+hit.prim*3u*h1.x+NtsBasisOffset+12u*component;
+#endif
   float3 b0=asfloat(gHitBasis.Load3(start)),b1=asfloat(gHitBasis.Load3(start+h1.x)),b2=asfloat(gHitBasis.Load3(start+2u*h1.x));
   basis[component]=b0+(b1-b0)*hit.bary.x+(b2-b0)*hit.bary.y;
  }
@@ -106,6 +147,9 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  input.material_class=0;input.evidence=NtSamplesKnown|NtLinearColorKnown|NtOpaqueCoverageKnown|NtLobesKnown;
  result.parameters=nt_class0_parameters(input);result.scattering=nt_to_fresnel_blend(result.parameters);result.normal=normalize(normal);
  result.channel=gHitRecords.Load(row+212u);
+#ifdef RT_NATIVE_TILESET
+ result.family=tileset?NtsRecipe:0u;
+#endif
  result.status=(result.parameters.status==NtOk && result.scattering.status==NtOk)?0:9;return result;
 }
 #endif

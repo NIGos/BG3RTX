@@ -15,6 +15,10 @@
 #include "gi_common.hlsli"
 #include "../rt/rt_common.hlsli"
 
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+#include "../rt/hair_receiver.hlsli"
+#endif
+
 // The depth buffer's geometric normal: depth_geo_normal (rt/depth_tol.hlsli).
 
 [numthreads(8, 8, 1)]
@@ -74,8 +78,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
       Ng /= l;
       o = float4(dot(Ng, V) < 0.0 ? -Ng : Ng, h.t / dist - 1.0);
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
-      // Native Hair/Pubes deferred writers encode class 5. A nearby card can
-      // depth-match skin at an edge, but must never move that raster receiver.
+      // Class 5 also includes Scalp; class alone is not receiver identity.
+      // A competing depth-compatible surface prevents physical publication.
       if(mat_class(gMaterial.Load(int3(fp,0)))==kMatHair &&
          (inst_info(h.inst).meta&kInfoHairProcedural)!=0u) {
         HairPrimitive primitive=hair_primitive(h.inst,h.prim);
@@ -86,7 +90,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #ifdef RT_SCENE_REBASE
         physical_o=rt_scene_ray_origin(physical_o);
 #endif
-        if(primitive.valid && !primitive.inactive && primitive.camera) {
+        if(primitive.valid && !primitive.inactive && primitive.camera &&
+           !hpo_competing_receiver(-V*t0,-V,t0,dist+w)) {
           HairTriangleHit card=hm_ray_triangle(primitive.p0,primitive.p1,primitive.p2,physical_o,-V);
           float physical_t=card.t;
           float3 physical_n=normalize(primitive.n);

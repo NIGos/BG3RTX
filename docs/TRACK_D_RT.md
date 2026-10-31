@@ -3758,3 +3758,28 @@ all traces, all modules dumped):
 private same-submit build insertion, cloned alpha/stamp, strict whole-ray coverage.
 Design, tests and remaining material/LOD/volume gates: docs/SUN_CURRENT_SCENE.md.
 This is not a passing exploration-shadow gate; zero certified pixels is INVALID.
+
+
+## Split capture partition spill (2026-10-31, offline candidate)
+
+Key rt_alpha_spill=0 is Experimental and live; OFF in defaults/presets. Existing
+alpha overflow captured a draw as opaque even when the opaque storage range had
+room. Exact triangle-list split captures with a direct record now may use that
+space without losing alpha semantics. The actual absolute offset, AlphaRec,
+Hair procedural bounds and alpha instance flags survive. Only the storage cursor
+changes; no geometry, coverage, memory limit, shader or public ABI changes.
+
+105 CPU budget checks and 335 settings checks pass; six targeted CTests and the
+host/launcher build pass. Independent conversion/binding/Hair/lifetime review is
+clear. No GPU/game participation, image quality or cost measured. Log rescued
+spills separately from residual opaque substitution; remove their bytes from the
+next intrinsic opaque reserve. Record/material failures and both ranges full
+retain their existing behavior; UNKNOWN policies are not universally native fallback.
+
+User check after a qualified automatic comparison: camp rug fringes and planks,
+no new dark card rectangles or flicker; actual save identity still unspecified.
+Require nonzero rescued draws, zero residual substitutions, RT active and stable
+G-buffer/primary matching in one OFF/ON run. Unaffected regions preserve energy
+within OFF-repeat noise; removal of false occlusion may legitimately brighten
+the affected region. Screenshots alone do not identify the
+pictured mesh or prove allocation overflow caused those particular rectangles.

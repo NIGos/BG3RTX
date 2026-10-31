@@ -2,13 +2,53 @@
 struct ProbePC {uint frame,rt_stats,rt_max_cand,rt_origin;float rt_bias;uint pad0,pad1,pad2;};
 [[vk::push_constant]] ProbePC pc;
 uint3 pcg3d(uint3 v){v=v*1664525u+1013904223u;v.x+=v.y*v.z;v.y+=v.z*v.x;v.z+=v.x*v.y;v^=v>>16;v.x+=v.y*v.z;v.y+=v.z*v.x;v.z+=v.x*v.y;return v;}
+#if defined(NATIVE_TILESET_PROBE) || defined(NATIVE_MATERIAL_PROBE)
+#define RT_NATIVE_TILESET 1
+#else
 #define RT_NATIVE_SCALP 1
 #define RT_NATIVE_HAIR 1
+#endif
+#ifdef NATIVE_MATERIAL_PROBE
+#define RT_HIT_MATERIAL 1
+#endif
+#ifdef NATIVE_RECEIVER_PROBE
+#define RT_HAIR_PHYSICAL_ORIGIN 1
+#endif
 #include "../shaders/rt/rt_common.hlsli"
+#ifdef NATIVE_RECEIVER_PROBE
+#include "../shaders/rt/hair_receiver.hlsli"
+#endif
+#ifdef NATIVE_MATERIAL_PROBE
+#include "../shaders/rt/native_hit_material.hlsli"
+#endif
 [[vk::binding(21,0)]] RWByteAddressBuffer Result;
 [numthreads(1,1,1)]
 void main(){
  RtCone cone={0,1.0/1024.0};float3 origin=0.0.xxx,direction=float3(0,0,1);bool aborted;
+#ifdef NATIVE_RECEIVER_PROBE
+ float start=asfloat(pc.pad0),end=asfloat(pc.pad1);
+ Result.Store(0,uint(hpo_competing_receiver(float3(0,0,start),direction,start,end)));
+ Result.Store(4,uint(hpr_window(start,end)));
+#elif defined(NATIVE_MATERIAL_PROBE)
+ RtHit hit=rt_closest_hit(origin,direction,10,cone);
+ NativeHitMaterial material=rt_hit_material(hit,cone.spread*max(hit.t,0));
+ Result.Store4(0,uint4(material.status,asuint(hit.t),material.channel,material.family));
+ Result.Store3(16,asuint(material.parameters.value.linear_albedo));
+ Result.Store(28,asuint(material.parameters.value.perceptual_roughness));
+ Result.Store2(32,asuint(float2(material.parameters.value.metalness,material.parameters.value.reflectance)));
+ Result.Store3(40,asuint(material.normal));Result.Store(52,gHitRecords.Load(16));
+ Result.Store4(56,gHitRecords.Load4(16u+48u));
+#elif defined(NATIVE_TILESET_PROBE)
+ Result.Store(0,rt_visibility(origin,direction,10,cone));
+ float distance=rt_closest(origin,direction,10,cone,aborted);Result.Store(4,asuint(distance));Result.Store(8,uint(aborted));
+ RtHit hit=rt_closest_hit(origin,direction,10,cone);Result.Store(12,asuint(hit.t));Result.Store(16,uint(hit.aborted));
+ RtDebugHit debug=rt_closest_debug(origin,direction,10,cone);Result.Store(20,asuint(debug.t));Result.Store(24,uint(debug.aborted));
+ Result.Store(28,uint(rt_scene_ok()));
+ // Same texture, deliberately contrasting sampler: real kind5 uses binding19;
+ // legacy wrap would sample alpha0 instead of native opaque-white border1.
+ Result.Store(32,asuint(gAlphaTex[1].SampleLevel(gAlphaWrap,2.5.xx,0).a));
+ Result.Store(36,asuint(gAlphaTex[1].SampleLevel(gNativeTilesetSampler[1],2.5.xx,0).a));
+#else
  Result.Store(0,rt_visibility(origin,direction,10,cone));
  float distance=rt_closest(origin,direction,10,cone,aborted);Result.Store(4,asuint(distance));Result.Store(8,uint(aborted));
  RtHit physical=rt_closest_hit(origin,direction,10,cone);Result.Store(12,asuint(physical.t));Result.Store(16,uint(physical.aborted));
@@ -50,4 +90,5 @@ void main(){
   precise float rounded=base*angular;
   Result.Store(108,asuint(frame.y!=0?mad(rounded,1.0,noise-0.6667):rounded));
  }
+#endif
 }

@@ -1,5 +1,86 @@
 # BG3RTX progress
 
+## Preserve alpha semantics on partition overflow - offline candidate, 2026-10-31
+
+rt_alpha_spill=0 is a new Experimental live control, OFF in defaults/presets.
+When the alpha partition fills, an exact split draw with a direct record can
+use free opaque storage while keeping its AlphaRec, alpha BLAS/TLAS flags and
+procedural Hair bounds. Storage cursor and alpha semantics are independent.
+Total memory/partition settings, occluders, shaders and public ABI are unchanged.
+Spill accounting is separate from residual made-opaque failures and is excluded
+from intrinsic opaque demand. Legacy lookup, invalid records and two-full-range
+failures are not rescued. Independent source/lifetime/routing review is clear.
+
+Host DLL/launcher build; 105 capture-budget and 335 settings checks pass, schema
+regenerated; six targeted CTests pass. Combined guard/spill build and all 60
+CTests also pass. Spill itself changes no HLSL. Game participation,
+image effect, GPU cost and CPU cost are unmeasured. No installation or launch.
+Future check: same-run OFF/ON in camp with nonzero spill participation, residual
+made-opaque zero, RT active, stable G-buffer/primary matching and no new flicker.
+Unaffected regions must retain energy within OFF-repeat noise; legitimate removal
+of false occlusion must not be rejected merely because those affected pixels brighten.
+This fixes a proven allocation path, not a proven attribution of the rug screenshot.
+
+## User trial regression: camp rectangles and hairline - 2026-10-31
+
+User reports foliage flicker improved and hair color closer to native, but dark
+rectangles extend beyond rugs, planks have dark patches, and Astarion has a fixed
+stair-stepped hairline band. Installed trial is 047e105, native Hair/Scalp/physical
+origin ON, RR 1, FG 2, OMM/current-Sun OFF. New tileset/material work is not installed.
+Preserved 10:28-10:38 log/config under root captures/user-camp-regression-20261031;
+manifest: docs/evidence/user-camp-regression-20261031.json. Of 77 capacity windows,
+11 retain alpha-overflow substitutions (0.01-0.92 draws/frame), none drop opaque
+draws; last three windows have neither. Capacity is not globally ruled out.
+
+Concrete source issue under review: physical-origin raster class 5 is shared by
+native Hair/Pubes AND Scalp (FS 600446334bc7d478 / 87aab1f9603cf4a9). Class 5 alone
+cannot prove a hair receiver; an ambiguous nearby hair hit can authorize rebasing.
+This is a confirmed identity gap, not yet proof of this screenshot's cause.
+Guard 532879c/c0aa8ec now rejects competing Scalp, unreadable source ranges,
+unknown record kinds, candidate cap or pruned traversal before publishing the
+physical origin. Existing virtual origin and all occluders stay unchanged.
+31 CPU checks and 16 actual off shader identities/on validations pass; query-helper
+GPU fixture passed 22 cases with zero validation errors; root inspected raw
+results, including a nonzero rebase and its negative control. M2 implements the exact retained TileBlend camera recipe;
+its object association to the pictured rugs/planks remains unknown. No bias, opacity workaround,
+trial edit or live action. Prioritize these regressions before feature promotion.
+
+## Native tileset materials and static depth integrated offline - 2026-10-31
+
+Main d31633b already contains M1 coverage and capture-budget fixes: 58 CTests,
+1231 shader files and QA passed. Candidate 2ad5b4e adds the checked STI material
+provider (309b9dd), exact ST depth coverage (35f837d) and windowless GPU probe.
+Main integration stopped before mutation because BG3 PID 41420 was running.
+The isolated combined build links both DLLs and launcher; all 59 CTests and QA
+detectors pass. Independent runtime source review is clear. Full shader check found the isolated checkout missing its SHaRC SDK junction:
+984/1232 files compiled initially; all 248 SHaRC-dependent failures then passed
+with the existing SDK linked. The checker also validates the remaining 24 GI
+interfaces per feature. Only sharc_common tests that SDK define, so other modules
+are unaffected by the repaired include path. No BG3 launch,
+attachment or personal trial changes.
+
+STI uses actual nine native 2D views, owned sampler, independent scalar gather,
+and clip/UV/COLOR publication checks. Native N/B/T use an 80-byte capture layout;
+Hair 88 stays 88. Both DLLs link; 785 CPU cases (816 with native module), 96
+key-OFF shader identities, 96 key-ON compilations and 80 interfaces pass.
+Counters 287/288 identify family-2 acquisitions/matches; capacity is 289.
+ST depth has separate exact bindings; its material decoder remains unsupported.
+The existing rt_native_tileset key remains OFF; public ABI remains 21.
+
+One standalone GPU invocation passed 32 synthetic cases through all four real
+queries with zero Vulkan validation errors, including cutoff, UNKNOWN and native
+sampler routing. This is not native graphics-XFB execution, game participation,
+material-field agreement or image quality. GPU pass cost remains unmeasured.
+Evidence: docs/evidence/native-tileset-windowless-gpu-20261031.json and
+native-hit-tileset-20261031.md. The material-field fixture (1a44454/import 0f31a69) also passed 14 synthetic
+cases with zero validation errors. Coordinator inspected raw fields and assertions:
+Green/Red/Base RGB, roughness, metalness, reflectance, normal, native sampler and
+clip/UV/COLOR/publication rejection. It uses closest_hit only, not all four queries;
+the raw footer overstates this and the source label was corrected CPU-only. No
+host capture/producer, native image agreement or pass cost is certified.
+Old GI R2 images remain rejected; corrected GI image recheck is not yet run.
+All new runtime features stay experimental and OFF. Latest work is not user-tested.
+
 ## Native tileset coverage implemented offline; no BG3 launch - 2026-10-31
 
 Latest user steering: standalone GPU tests are allowed; BG3/game launches are
