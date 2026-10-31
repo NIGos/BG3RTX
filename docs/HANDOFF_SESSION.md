@@ -3,6 +3,19 @@
 Read PROGRESS_CODEX.md next. History is preserved verbatim in
 archive/PROGRESS_CODEX_2026-10-31.md. Full rendering program is incomplete and PAUSED by the user.
 
+## Consolidation done (2026-10-31, main fc34604) - read before resuming
+
+Plan and decisions: docs/CONSOLIDATION.md. All steps merged through merge-green; none tested in game yet.
+- ABI is now 23: rebuild both DLLs together. Shader variants are defines (`gi/x.hlsl?NAME=V;...`,
+  list in shaders/variants.txt, checked by shader_variant_test); the per-flag wrapper folders are gone.
+- 20 rejected keys removed (rt_scene_rebase, rt_scene_camera_match, rt_ao, ls_k, rf_so, ...): rebase
+  open branches on main before merging; old jobs that set them are harmless no-ops.
+- Hot-path settings use cfg_hot() (refreshed once per frame in cfg_poll); BG3RTX_DIAGNOSTICS CMake
+  option compiles diagnostic host code out; sun packets, hit-material rules and emissive formulas
+  are pure functions in common/ with tests (emissive move to core: TRACK_D_RT.md 13.21).
+- Pending live batch (needs the user's go): regression check with FG on and RT A/B, shader define
+  hot reload, rt_scene_wait 0/1 fps, rt_cascade_casters and ls_box promotion gates, dialogue flicker.
+
 ## Latest steering and user evidence
 
 User requested safe shutdown and documentation handoff. No more work or launches.
