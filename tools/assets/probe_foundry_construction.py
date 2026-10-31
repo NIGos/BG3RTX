@@ -247,7 +247,11 @@ def vertical_hits(meshes,x,z):
             if min(v,w,q)<-3*error:continue
             if min(v,w,q)<=3*error:uncertain+=1;continue
             height=a[1]+(v*(b[1]-a[1])+w*(c[1]-a[1]))/den
-            hits.append(dict(height=height,tile_uuid=mesh.get('tile_uuid'),triangle=i//3,material_id=mesh['material_id']))
+            hit=dict(height=height,tile_uuid=mesh.get('tile_uuid'),triangle=i//3,material_id=mesh['material_id'])
+            if 'component_id' in mesh:hit['component_id']=mesh['component_id']
+            if 'native_triangle_ids' in mesh:
+                hit.update(native_draw=mesh['native_draw'],native_triangle_id=mesh['native_triangle_ids'][i//3])
+            hits.append(hit)
     return dict(interior_hits=hits,uncertain_projected_edge_candidates=uncertain)
 
 
