@@ -637,7 +637,7 @@ bool ensure_hair_pipeline() {
 }
 
 bool ensure_ring(uint32_t inst, uint32_t mats) {
-  const bool transfer=omm::available_for(g_dd) || cfg_int("rt_sun_cascade_current",0)!=0;
+  const bool transfer=omm::available_for(g_dd) || cfg_hot(CfgHot::rt_sun_cascade_current)!=0;
   if (g_ring.b && inst <= g_ring_inst && mats <= g_ring_mats && (!transfer || g_ring_transfer_source)) return true;
   uint32_t ni = (std::max)({inst + inst / 2, g_ring_inst, 4096u}), nm = (std::max)({mats + mats / 2, g_ring_mats, 1024u});
   VkDeviceSize ib = VkDeviceSize(ni) * 64, fb = VkDeviceSize(ni) * 16, mb = VkDeviceSize(nm) * 48;
@@ -1155,7 +1155,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
   }
   const VkDeviceAddress soup_addr = rt_buffer_address(cap.xfb);
-  const bool alpha_test = cfg_int("rt_alpha_test", 1) != 0;
+  const bool alpha_test = cfg_hot(CfgHot::rt_alpha_test) != 0;
   const int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
   // This command buffer's build record (bvh_on_submit marks it submitted).
   const uint64_t rec = bvh_rec_register(cmd);

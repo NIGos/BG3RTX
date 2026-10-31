@@ -877,9 +877,9 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   const VkDeviceSize base = VkDeviceSize(slot) * kRegion;
   // header: record count, the opaque soup's vertex stride (0: not bound), the
   // alpha-test policy bits (rt_common.hlsli kAlpha*; live switches)
-  const uint32_t policy = (cfg_int("rt_alpha_cut", 1) ? 1u : 0u) | (cfg_int("rt_alpha_stochastic", 1) ? 2u : 0u) |
-                          (cfg_int("rt_alpha_unknown", 1) ? 4u : 0u) |
-                          (geo_native_hair_enabled() && !cfg_int("rt_alpha_test",1) ? 8u : 0u);
+  const uint32_t policy = (cfg_hot(CfgHot::rt_alpha_cut) ? 1u : 0u) | (cfg_hot(CfgHot::rt_alpha_stochastic) ? 2u : 0u) |
+                          (cfg_hot(CfgHot::rt_alpha_unknown) ? 4u : 0u) |
+                          (geo_native_hair_enabled() && !cfg_hot(CfgHot::rt_alpha_test) ? 8u : 0u);
   g_set_records[slot]=uint32_t(g_recs.size());
   uint32_t header[4] = {uint32_t(g_recs.size()), (geo_native_hair_enabled() || g_tileset_layout) ? stride : (soup && opaque_bytes ? stride : 0u), policy, g_tileset_incomplete?native_tileset_coverage::NtcCaptureIncompleteBit:0u};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};

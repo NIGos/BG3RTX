@@ -20,6 +20,7 @@ static std::vector<uint32_t> contentShader;
 static CmdState smokeCommand;
 void log(const char* fmt,...){va_list ap;va_start(ap,fmt);std::vprintf(fmt,ap);std::puts("");va_end(ap);}
 int cfg_int(const char* key,int fallback){return !std::strcmp(key,"rt_omm")?1:fallback;}
+int cfg_hot(CfgHot key){return key==CfgHot::rt_omm?1:0;}
 DeviceData* device_of(const void*){return smokeDevice;}
 CmdState* cmd_state(VkCommandBuffer,bool){return &smokeCommand;}
 void restore_bindings(VkCommandBuffer,VkPipelineBindPoint){}

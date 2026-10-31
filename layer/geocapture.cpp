@@ -1075,14 +1075,14 @@ cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const Dr
 
 void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   const uint64_t f = frame_index();
-  const int want = cfg_int("rt_cascade_index", 1);
+  const int want = cfg_hot(CfgHot::rt_cascade_index);
   std::lock_guard<std::mutex> lock(g_cc_mu);
   if (layer < kCcLayers && !g_cc_seen[layer]) {
     g_cc_seen[layer] = true;
     log("[cascade] sun cascade pass found: layer %d of a %ux%u D16 array; %s", layer, s->pass.width, s->pass.height,
         layer == want ? "captured (rt_cascade_index)" : "its matrix is only read");
   }
-  const bool all_current=cfg_int("rt_sun_cascade_current",0)!=0 && layer>=0 && layer<4;
+  const bool all_current=cfg_hot(CfgHot::rt_sun_cascade_current)!=0 && layer>=0 && layer<4;
   if (layer != want && !all_current) {
     if (layer < kCcLayers) {
       Capture& p = g_cprobe[layer];
@@ -1182,7 +1182,7 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     return;
   }
   ++c->c_seen;
-  const bool current_sun = cfg_int("rt_sun_cascade_current", 0) != 0;
+  const bool current_sun = cfg_hot(CfgHot::rt_sun_cascade_current) != 0;
   if(current_sun && (!have || (b.range!=VK_WHOLE_SIZE && b.range<224) ||
       !geo_uniform_buffer_range(b.buffer,b.offset,224))) {++c->c_ubo;return;}
   if (current_sun) {
@@ -1369,7 +1369,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     legacy.sig=c->c_legacy_sig;legacy.sun={};
     g_cc_meta[f%3]=std::move(legacy);
   }
-  if(cfg_int("rt_sun_cascade_current",0) && c->layer>=0 && c->layer<4)
+  if(cfg_hot(CfgHot::rt_sun_cascade_current) && c->layer>=0 && c->layer<4)
     g_sun_meta[c->layer][f % 3]=meta;
   g_cc_cv.notify_all();
   CcStats& st = g_cc_st;
@@ -2398,7 +2398,7 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
       rc.alpha_draws = c->alpha_draws;
       rc.split = c->split;
       rc.xfb_size = c->xfb.size;
-      if (cfg_int("rt_sun_cascade_current",0))
+      if (cfg_hot(CfgHot::rt_sun_cascade_current))
         geo_native_frame_epoch(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,&rc.native_epoch,
                                 &rc.native_frame_buffer,&rc.native_frame_offset);
       rt_after_capture(cmd, rc);

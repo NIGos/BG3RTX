@@ -158,8 +158,9 @@ void device_created(DeviceData* dd, bool rtEnabled) {
   if(!content_device_created(dd))log("[omm content] unavailable; native asset content proof must decline");
   log("[omm] EXT backend available max_four_state_level=%u; no known-state quality gate passed",properties.maxOpacity4StateSubdivisionLevel);
 }
-bool available() {std::lock_guard lock(mutex);return enabled && !retained && cfg_int("rt_omm",0);}
-bool available_for(DeviceData* expected) {std::lock_guard lock(mutex);return expected && expected==device && enabled && !retained && cfg_int("rt_omm",0);}
+bool available() {if(!cfg_hot(CfgHot::rt_omm))return false;std::lock_guard lock(mutex);return enabled && !retained;}
+// rt_omm off (the default) answers before the lock: called per draw and per BLAS build.
+bool available_for(DeviceData* expected) {if(!expected || !cfg_hot(CfgHot::rt_omm))return false;std::lock_guard lock(mutex);return expected==device && enabled && !retained;}
 bool has_resources() {std::lock_guard lock(mutex);return !resources.empty();}
 void retain_until_idle() {std::lock_guard lock(mutex);if(!retained)log("[omm] resource provenance/completion unavailable; retaining until device idle");retained=true;}
 void reserve_submissions(std::span<const uint64_t> tickets) {
@@ -185,7 +186,7 @@ bool register_ticket_use(VkCommandBuffer cmd,uint64_t ticket) {
 
 Ticket record(VkCommandBuffer cmd,const Input& input) {
   std::lock_guard lock(mutex);
-  if (!enabled || retained || !cfg_int("rt_omm",0) || !cmd || device_of(cmd)!=device || !tracked_recording(cmd)) return 0;
+  if (!enabled || retained || !cfg_hot(CfgHot::rt_omm) || !cmd || device_of(cmd)!=device || !tracked_recording(cmd)) return 0;
   Plan plan;
   if (!make_plan(input.descriptors,input.dataBytes,properties.maxOpacity4StateSubdivisionLevel,plan) ||
       !input_ranges(plan,input.data,input.dataBytes,input.triangles,input.triangleBytes) ||
@@ -249,7 +250,7 @@ bool record_blas(VkCommandBuffer cmd,Ticket ticket,VkDeviceAddress vertices,VkDe
   if(output)*output={};
   if(!output || !blas_vertex_range(vertices,vertexBytes,stride,triangles))return false;
   std::lock_guard lock(mutex);auto it=resources.find(ticket);
-  if(!enabled || retained || !cfg_int("rt_omm",0) || device_of(cmd)!=device || !tracked_recording(cmd) ||
+  if(!enabled || retained || !cfg_hot(CfgHot::rt_omm) || device_of(cmd)!=device || !tracked_recording(cmd) ||
      it==resources.end() || !it->second.life.accepts_new_use() || it->second.triangles!=triangles || it->second.blas ||
      triangles>maxBlasPrimitives)return false;
   auto& r=it->second;
