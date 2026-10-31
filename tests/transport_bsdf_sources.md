@@ -5,6 +5,17 @@ into a renderer or the user trial. A separate explicit native-parameter adapter
 now targets the declared FresnelBlend model below. The compile
 fixture exercises dynamic eval/sample/PDF paths without creating a device.
 
+The shared `transport_frame.h` constructs a right-handed isotropic scattering
+frame from a finite nonzero world normal. It crosses the least-aligned axis,
+whose exact cross length is at least sqrt(2/3), avoiding either pole singularity.
+World/local transforms preserve vector magnitude and do not normalize directions.
+Invalid normals return an explicit status; callers must check it. This does not
+implement geometric/shading-normal correction or certify a native tangent frame.
+Independent CPU normalization, determinant, orthogonality, isometry and extreme
+input checks pass (4338); its dynamic HLSL fixture compiles and passes spirv-val.
+No GPU execution/precision claim is made by these offline checks. The runtime
+native-hit direct-light consumer is the intended first caller.
+
 ## Original convex model: physical convention and scope
 
 Local normal is +Z. Both input directions point away from the surface; finite,
