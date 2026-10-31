@@ -147,3 +147,14 @@ were changed during the user's play. Unsupported coverage is established, but it
 share of the observed face shadow and the distant-caster transition is not quantified.
 
 Artifact index and current log snapshot: captures/dialogue-shadow-review-20261030/.
+
+## User follow-up - 2026-10-31
+
+User reports OMM/Current Cascade Sun look encouraging, but a slight dialogue
+shadow flicker remains and may depend on environment. This is a temporal symptom,
+distinct from the older fixed hairstyle shadows above. No causal A/B is available.
+The full 12:14-12:18 personal-trial log has one window with 368956 actual Current
+Sun samples, then later scene-unready fallback windows with zero samples.
+Changing views and aggregate windows do not prove a flicker-causing transition.
+Separate native-mask visibility from added RT visibility before changing shaders.
+See docs/evidence/dialogue-flicker-user-feedback-20261031.json for all eight windows.
