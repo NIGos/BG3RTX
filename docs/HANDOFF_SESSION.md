@@ -37,11 +37,12 @@ Actual S1 trace proves prepass/deferred use different command buffers (866/835
 draws,100 static VT). Fix cross-CB association/ownership before any zero-record
 trial. Secondary-command no-write proof and Submit2 compute ordering need review.
 Shared frame de1ccdd has 4338 CPU checks and validated HLSL; real consumer pending.
-ABI20 provider R1 completed462s but FAILED acquisition: deferred CPU recording
-precedes source preparation by median4ms in88 actual pairs; no material GPU rows.
-Existing RT/FG stays healthy: static99.525%,displayed/rendered2.0,noNV153/dumps.
-Owner is fixing independent deferred packets/per-query guarded assembly; ABI21
-typed query-AlphaDSL output approved. Main stays20; personal Hair trial stays19.
+ABI 20 R1 failed: deferred recording precedes source preparation by median 4 ms.
+ABI 21 eb1ec4d R2 completed 460 s; camera/order now reaches the query, but all
+100 static draws fail pipeline-state qualification. Owner fixes actual state parser.
+No material GPU participation yet. Static primary 99.524/99.524/99.525%, FG ratio
+2.0, no NVIDIA 153/dumps/build drift. R2 immutable evidence is in root captures.
+Main stays ABI 20; personal Hair trial stays ABI 19. Do not rerun unchanged.
 89 actual S1 G-buffer VS/FS modules pass the read-only scanner. Non-watched
 360 s acquisition draft is under captures/native-hit-material-20261031/draft/.
 M2 native S1 reference completed in 53 s: 835 draws, no capture overflow.
@@ -58,9 +59,11 @@ one existing skip. Material64 partition feedback now shares the Hair88 correctio
 The open bay is now exported: 27 native-qualified components/24506 triangles,
 824 frozen terrain triangles, nine authored components separately UNKNOWN.
 All 16 low-vertex lines intersect real geometry, not an opacity/contact certificate.
-Two bounded persistent v8 render terrain patches exist; decode them next. No roof
-was invented; parent-level roof/current cutaway state stays unresolved. 62 asset
-checks pass with one existing skip. Source 00af160, development 5ec54cc.
+Persistent terrain now matches all 13512 active triangle IDs and 738 holes; local
+289 triangles replace frozen capture geometry. Shared CPU/HLSL terrain arithmetic
+has 1366 CPU checks, but real mask/brush packets remain missing. Seven authored
+cell lights exported with raw parameters; live activation/photometry UNKNOWN.
+74 asset checks: 73 pass, one skip. No invented roof or material defaults.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
 module-independent SHA256 are fixed and tested through actual simulated runner.

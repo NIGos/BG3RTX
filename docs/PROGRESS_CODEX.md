@@ -1,5 +1,29 @@
 # BG3RTX progress
 
+## Pragmatic checkpoint: second material smoke isolated the next defect - 2026-10-31
+
+Use scoped evidence; unrelated global thresholds do not block a demonstrated fix.
+R2 eb1ec4d/ABI 21 completed all five phases in 460 s, no NVIDIA 153, dumps or build
+changes. FAILED material acquisition: all 100 supported deferred draws are rejected
+by pipeline-state qualification, before any binding/snapshot. Camera and recording
+order now reach the query correctly. The owner is fixing the concrete state parser;
+no unchanged rerun and no material quality/cost claim. Evidence: omm-bake/BG3RTX/
+captures/native-hit-material-20261031/r2/analysis.json and immutable inputs beside it.
+
+Same-run primary OFF/ON/OFF: 99.524/99.524/99.525%. FG displayed/rendered 2.0,
+zero bad phase samples. Diagnostic cadence 36.26/35.62/36.23 rendered fps; stats-off
+89.30/84.32 fps, estimated from SDK logs. Existing RT median 0.833/0.878 ms in cost
+windows; material kernel never ran. Diagnostic ~18.4 ms is not production pass cost.
+
+Retained offline: native terrain arithmetic shared by CPU/HLSL, 1366 CPU checks,
+fresh registered CTest passes; 74 asset tests, 73 passed/one existing skip. Seven
+bounded authored light candidates now preserve real parameters and full placement
+chains; historical native positions agree, current activation/photometry unknown.
+Sources 9b78f6c and 0d44032, imports b419281 and 7fe18de. Runtime terrain packets,
+material participation and direct reference quality remain pending. User Hair trial
+047e105 stays unchanged; its latest capacity/physical-origin updates are NOT yet
+user-reviewed. No new release is ready for a user check from this material smoke.
+
 ## First material smoke failed clearly; recording-order fix in progress - 2026-10-31
 
 Main 9cb5a30 is pushed, ABI 20/default OFF, 48/48 CTests, 544 shader files/all
