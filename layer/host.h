@@ -17,6 +17,7 @@
 #include "../common/sun_caster_coverage.h"
 #include "../common/trace_sampled_view.h"
 #include <mutex>
+#include <memory>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -429,7 +430,11 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s);   // outside the pass, b
 void geo_pass_begun(VkCommandBuffer cmd, CmdState* s);    // inside, right after it
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s);
-bool geo_native_hair_enabled(); // Startup-fixed XFB/soup stride88; never hot-enable 24-byte scenes.
+bool geo_native_hair_enabled();
+bool geo_native_tileset_enabled();
+void geo_native_tileset_disable();
+bool geo_native_tileset_inputs(VkPipeline);
+void alpha_tileset_incomplete(); // Startup-fixed XFB/soup stride88; never hot-enable 24-byte scenes.
 void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags);
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right before the game's end
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right after the game's end
@@ -784,7 +789,9 @@ bool alpha_native_hair_record(uint32_t index,AlphaRec* out);
 bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset);
 bool alpha_hair_build_status(uint32_t slot,VkBuffer* buffer,VkDeviceSize* offset);
 // Captured material plus actual views; descriptor indices are local to a frame.
+struct NativeTilesetSampler;
 struct AlphaSnapshot {
+  std::shared_ptr<NativeTilesetSampler> native_sampler;
   AlphaRec rec{};
   VkImageView tex = VK_NULL_HANDLE, cache = VK_NULL_HANDLE;
   VkImageLayout tex_layout{}, cache_layout{};

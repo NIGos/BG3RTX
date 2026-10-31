@@ -1,0 +1,55 @@
+{
+  "scope": "Default-off STI camera-depth native coverage candidate; not a runtime material decoder or live quality gate",
+  "base_commit": "4b62c89",
+  "key": "rt_native_tileset",
+  "default": 0,
+  "host_abi_changed": false,
+  "native_vs": "689836dece58e778",
+  "native_fs": "781cd8d1d600117d",
+  "native_vs_sha256": "24926b433805884bff9dade1700ca063c9059b7784377e4f917915353310827f",
+  "capture_stride_min": 40,
+  "native_validated_strides": [
+    40,
+    64,
+    88
+  ],
+  "kind": 5,
+  "record_bytes": 208,
+  "sampler_binding": 19,
+  "sampler_table_entries": 16,
+  "sampler_real_slots": 15,
+  "fresh_dynamic_only": true,
+  "table_incomplete_control_byte": 12,
+  "tests": {
+    "ctest_passed": 58,
+    "ctest_failed": 0,
+    "coverage_cpu_checks": 171,
+    "coverage_with_native_module_checks": 193,
+    "settings_checks": 334,
+    "old_compute_entry_identities": 639,
+    "new_compute_entries_compiled_validated": 604,
+    "actual_gi_reference_interfaces_off": 80,
+    "actual_gi_reference_interfaces_on": 80,
+    "ordinary_contract_rejects_sampler19": true,
+    "native_off_patch_identities": 3,
+    "qa_detectors": "PASS"
+  },
+  "proof_setup_note": "Four deep baseline archive include-path errors retried only for affected pairs with each tree own shaders/gi include path; baseline=current=prior current SPV bytes. No borrowed changed current headers.",
+  "proof_dir": "captures/tileset-runtime-recipe/shader-proof",
+  "native_patch_proof": "captures/tileset-runtime-recipe/native-patch-checks.json",
+  "gpu_run": false,
+  "game_run": false,
+  "gpu_cost_ms": null,
+  "runtime_quality": "UNQUALIFIED",
+  "unsupported": [
+    "SeeThrough exactly1",
+    "missing/nonfinite native parameters, sampler, view or COLOR proof",
+    "static cached-position and other shader/pass families",
+    "native raster derivatives and filtering precision identity",
+    "static mesh cache reuse for kind5"
+  ],
+  "reviews": [
+    "Independent sampler lifecycle and binding19 ownership review clear",
+    "Independent COLOR cache exclusion and four-query UNKNOWN review clear"
+  ]
+}
