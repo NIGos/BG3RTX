@@ -60,7 +60,8 @@ not yet authorized are in [live-test-drafts/](live-test-drafts/).
 [archive/](archive/) holds superseded docs, kept for history. Do not treat them as current:
 old audits (AUDIT_ENGINE_DATA, AUDIT_RT, AUDIT_SOTA), ROADMAP, STATUS, research.md,
 closed phase notes (P1_PAN_FLASHES, P2_*, P3_NATIVE_DIRECT_VALIDATION), DEVICE_LOST_DLS,
-SUN_PENUMBRA_REVIEW, UI_CONTAMINATION_OFFLINE, the merged OMM and hair-origin notes,
+SUN_PENUMBRA_REVIEW, UI_CONTAMINATION_OFFLINE, the merged OMM and hair-origin notes, DISK_HYGIENE
+(the 2026-10-30 storage audit, done on 2026-10-31),
 GOAL_RENDERING_AGENT and the full progress history PROGRESS_CODEX_2026-10-31.md.
 
 ## Naming legend

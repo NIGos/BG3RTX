@@ -149,7 +149,7 @@ after the analysis; only the crops, the overview, the JSON and the report stay
 (a few MB per scene). `--keep-raw` keeps them for `analyze`. For unresolved work,
 use `--keep-raw`: the current analyzer's prune path also runs after incomplete
 analysis results. Keep decisive raw baseline/failure/control data until the owner
-classifies redundant outputs under [DISK_HYGIENE.md](DISK_HYGIENE.md). Do not
+classifies redundant outputs under [archive/DISK_HYGIENE.md](archive/DISK_HYGIENE.md). Do not
 request manual user cleanup or prune solely by age/result.json presence.
 The trace folders auto-run leaves in `captures/` are moved
 into the QA folder and their `frame.json`/shaders dropped at once.
