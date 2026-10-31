@@ -458,12 +458,13 @@ void alpha_device_destroyed(DeviceData* dd) {
 
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
-  if(!g_tileset_layout && fs==native_tileset_coverage::depth_fs && cfg_int("rt_native_tileset",0)){
+  if(!g_tileset_layout && native_tileset_coverage::lookup(fs)!=nullptr && cfg_int("rt_native_tileset",0)){
     static std::atomic<bool> warned{false};if(!warned.exchange(true))log("[alpha tileset] enable rejected: restart with rt_alpha=1 rt_bvh_split=1 and supported sampler limits");
   }
-  if(g_tileset_layout && cfg_int("rt_native_tileset",0) && fs==native_tileset_coverage::depth_fs) {
-    *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=1;out->tex_set=1;out->tex_bind=1;
-    out->ubo_set=1;out->ubo_bind=0;out->cut=out->cut_first=.5f;out->k=1;return true;
+  if(g_tileset_layout && cfg_int("rt_native_tileset",0) && native_tileset_coverage::lookup(fs)!=nullptr) {
+    const auto& recipe=*native_tileset_coverage::lookup(fs);
+    *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=1;out->tex_set=1;out->tex_bind=recipe.green_binding;
+    out->ubo_set=1;out->ubo_bind=recipe.material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
   }
   if (cfg_int("rt_native_hair", 0)) {
     if (const auto* recipe = native_hair::lookup(fs)) {
@@ -556,13 +557,13 @@ static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_
   r.scale[0] = r.scale[1] = a.k;
   if(a.kind==5) {
     auto* state=cmd_state(cmd);
-    const auto material=native_tileset_coverage::capture([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t size){return read_bound(cmd,set,binding,off,dst,size);});
+    const auto material=native_tileset_coverage::capture([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t size){return read_bound(cmd,set,binding,off,dst,size);},a.hash);
     uint32_t status=native_tileset_coverage::ntc_material(material.known,material.tiling,material.see_through);
     r.scale[0]=r.scale[1]=material.known && std::isfinite(material.tiling)?material.tiling:0;
     r.p0[0]=material.known && std::isfinite(material.see_through)?material.see_through:0;
-    if(!state || state->vs!=native_tileset_coverage::depth_vs || !geo_native_tileset_inputs(state->pipe[0]))status=native_tileset_coverage::NtcMissing;
-    const bool texture=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,1,0,&t) && t.view && view_image_id(t.view)!=0 &&
-      omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,1,0);
+    if(!state || state->fs!=a.hash || !native_tileset_coverage::matches(state->vs,a.hash) || !geo_native_tileset_inputs(state->pipe[0]))status=native_tileset_coverage::NtcMissing;
+    const bool texture=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,a.tex_set,a.tex_bind,0,&t) && t.view && view_image_id(t.view)!=0 &&
+      omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,a.tex_set,a.tex_bind,0);
     const auto owned=capture_native_sampler(cmd);if(sampler)*sampler=owned;
     if(!texture || !owned)status=native_tileset_coverage::NtcMissing;
     if(!texture)t={}; // Never publish an unidentified/unsupported view, even for UNKNOWN records.

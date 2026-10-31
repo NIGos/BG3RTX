@@ -51,6 +51,27 @@ int main(int argc,char** argv){
   check(bounded.known==(available==16));
   if(bounded.known)check(bounded.tiling==3 && bounded.see_through==0);
  }
+ // Exact two-pair table; ST shifts only its own material/Green bindings.
+ check(lookup(depth_fs)->material_binding==0 && lookup(depth_fs)->green_binding==1);
+ check(lookup(static_depth_fs)->material_binding==1 && lookup(static_depth_fs)->green_binding==2);
+ check(matches(depth_vs,depth_fs) && matches(static_depth_vs,static_depth_fs));
+ check(!matches(depth_vs,static_depth_fs) && !matches(static_depth_vs,depth_fs));
+ check(vertex(depth_vs) && vertex(static_depth_vs) && !vertex(0));
+ for(const auto& recipe:recipes){
+  for(size_t available=0;available<=16;++available){
+   unsigned reads=0;
+   const auto actual=capture([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes){
+    ++reads;check(set==1 && binding==recipe.material_binding && off==0 && bytes==16);
+    if(bytes>available)return false;
+    const float values[4]={4.f,71.f,91.f,0.f};std::memcpy(dst,values,bytes);return true;
+   },recipe.fs);
+   check(reads==1 && actual.known==(available==16));
+   if(actual.known)check(actual.tiling==4 && actual.see_through==0);
+  }
+ }
+ bool read_unknown=false;
+ const auto unsupported=capture([&](unsigned,unsigned,unsigned,void*,size_t){read_unknown=true;return true;},0);
+ check(!unsupported.known && !read_unknown && lookup(0)==nullptr);
  // Minimal parser fixture with COLOR0 vec4 and UV1 vec2, not executable GPU code.
  std::vector<uint32_t> code={0x07230203,0x10000,0,100,0};
  auto emit=[&](std::initializer_list<uint32_t> v){code.insert(code.end(),v);};
@@ -59,7 +80,7 @@ int main(int argc,char** argv){
  emit({(3u<<16)|22,1,32});emit({(4u<<16)|23,2,1,2});emit({(4u<<16)|23,4,1,4});
  emit({(4u<<16)|32,5,3,2});emit({(4u<<16)|32,7,3,4});
  emit({(4u<<16)|59,7,20,3});emit({(4u<<16)|59,7,30,3});emit({(4u<<16)|59,5,31,3});
- for(uint32_t stride:{40u,64u,88u}){
+ for(uint32_t stride:{40u,64u,80u,88u}){
   std::vector<uint32_t> patched,off,explicit_off;int uv=-1;uint32_t color=0,hair=0;
   check(bg3::patch_vs(code.data(),code.size(),patched,stride,&uv,&hair,false,nullptr,true,&color));
   check(uv==1 && color==1 && hair==0);
@@ -88,7 +109,7 @@ int main(int argc,char** argv){
   std::vector<char> bytes((std::istreambuf_iterator<char>(in)),{});
   check(bytes.size()>=20 && bytes.size()%4==0);
   std::vector<uint32_t> native(bytes.size()/4);std::memcpy(native.data(),bytes.data(),bytes.size());
-  for(uint32_t stride:{40u,64u,88u}){
+  for(uint32_t stride:{40u,64u,80u,88u}){
    std::vector<uint32_t> output,off,explicit_off;int uv=-1;uint32_t color=0,hair=0;
    check(bg3::patch_vs(native.data(),native.size(),output,stride,&uv,&hair,false,nullptr,true,&color));
    check(uv==1 && color==1 && hair==0);

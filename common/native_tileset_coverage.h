@@ -1,5 +1,5 @@
 #pragma once
-// Exact STI camera-depth FS781cd8d1d600117d / VS689836dece58e778.
+// Exact ST/STI camera-depth recipes below; same native coverage body.
 // Native samples/vertex interpolation are supplied by the caller. No sampler,
 // raster derivative or unknown SeeThrough policy is invented by this helper.
 #ifdef __cplusplus
@@ -19,12 +19,18 @@ static const NtcUint NtcHeaderControlOffset=12u,NtcCaptureIncompleteBit=1u;
 static const NtcUint NtcKnown=0u,NtcMissing=1u,NtcNonfinite=2u,NtcSeeThrough=3u;
 #ifdef __cplusplus
 inline constexpr uint64_t depth_vs=0x689836dece58e778ull,depth_fs=0x781cd8d1d600117dull;
+inline constexpr uint64_t static_depth_vs=0x4235ddab8aa759d0ull,static_depth_fs=0xca4bf1d78f6438feull;
+struct Recipe {uint64_t vs,fs;uint8_t material_binding,green_binding;};
+inline constexpr Recipe recipes[]={{depth_vs,depth_fs,0u,1u},{static_depth_vs,static_depth_fs,1u,2u}};
+inline const Recipe* lookup(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
+inline bool vertex(uint64_t vs){for(const auto& r:recipes)if(r.vs==vs)return true;return false;}
+inline bool matches(uint64_t vs,uint64_t fs){const auto* r=lookup(fs);return r&&r->vs==vs;}
 struct Material {float tiling{},see_through{};bool known{};};
-// The actual SAME-draw dynamic-offset UBO: set1/binding0,16 bytes. The
+// The actual SAME-draw dynamic-offset UBO: set1, recipe binding,16 bytes. The
 // Deferred UBO byte12 is Reflectance and must never be substituted here.
-template<class Read> inline Material capture(Read&& read){
- float packet[4]{};Material m;
- if(read(1u,0u,0u,packet,sizeof(packet))){m.tiling=packet[0];m.see_through=packet[3];m.known=true;}
+template<class Read> inline Material capture(Read&& read,uint64_t fs=depth_fs){
+ float packet[4]{};Material m;const auto* recipe=lookup(fs);if(!recipe)return m;
+ if(read(1u,recipe->material_binding,0u,packet,sizeof(packet))){m.tiling=packet[0];m.see_through=packet[3];m.known=true;}
  return m;
 }
 #endif

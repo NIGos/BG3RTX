@@ -1599,7 +1599,7 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   if(native_hit::enabled())t_last_no_writes=native_hit::no_graphics_storage_writes(ci->pCode,ci->codeSize/4);
   t_last_hash = hash64(ci->pCode, ci->codeSize);
   const bool vt_frame=native_hit::enabled() && t_last_hash==0x3812bc980438747full;
-  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && t_last_hash==native_tileset_coverage::depth_vs,&t_last_tileset_outputs,
+  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && native_tileset_coverage::vertex(t_last_hash),&t_last_tileset_outputs,
                      g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs);
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
@@ -2263,7 +2263,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->rt && !alpha && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
     ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
-  if(c->rt && g_tileset_capture && cfg_int("rt_native_tileset",0) && s->fs==native_tileset_coverage::depth_fs && (!alpha || !capture))alpha_tileset_incomplete();
+  if(c->rt && g_tileset_capture && cfg_int("rt_native_tileset",0) && native_tileset_coverage::lookup(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
   uint32_t materialRecord=UINT32_MAX;
   if(capture && c->rt && !alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
     materialRecord=native_hit::note_opaque_prepass(cmd,s,args,d.offset,g_stride,uint32_t(prims));
