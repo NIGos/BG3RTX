@@ -1131,6 +1131,12 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_epoch_motion.origin_motion_max,g_epoch_motion.origin_precision_bound,
               g_epoch_motion.previous[0],g_epoch_motion.previous[1],g_epoch_motion.previous[2],
               g_epoch_motion.previous_origin[0],g_epoch_motion.previous_origin[1],g_epoch_motion.previous_origin[2]);
+    // INN_ROTATION_MATCH next test: front/behind split by pool (static) and soup (per-draw) hits.
+    host->log("rt epoch split (%u frames): pool hits %llu, in front %.3f%%, behind %.3f%%; soup hits %llu, "
+              "in front %.3f%%, behind %.3f%% (shares of each class's hits)",
+              g_stats_n,(unsigned long long)t[136],t[136] ? 100.0*t[138]/double(t[136]) : 0.0,
+              t[136] ? 100.0*t[139]/double(t[136]) : 0.0,(unsigned long long)t[140],
+              t[140] ? 100.0*t[142]/double(t[140]) : 0.0,t[140] ? 100.0*t[143]/double(t[140]) : 0.0);
   }
   if (t[8]) {
     double r = double(t[8]), h = double(t[9] ? t[9] : 1);

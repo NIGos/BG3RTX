@@ -1,0 +1,73 @@
+{
+ "name": "m4r1-inn-identity-fg2",
+ "save": "The Blushing Mermaid - 96h 39m",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 394,
+ "repeat": 1,
+ "live_batch": "m4-round1",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_xfb_mb=1408,rt_cascade_mb=587,gi=1,gi_rt=1,gi_rt_fallback=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_scene_wait=1,cpu_timing=1",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/m4_round1/plans/m4r1_inn_identity.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "rt applied",
+  "primary-ray check",
+  "rt epoch",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[cpu\\] capture hooks",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[bvh\\]",
+  "rt stats",
+  "rt epoch split"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "\\[rt\\] scene wait: 600 frames",
+  "rt stats \\(120 frames, alpha test \\w+\\): primary-ray check match",
+  "rt epoch \\(120 frames\\)",
+  "rt epoch split \\(120 frames\\): pool hits [1-9]\\d*, in front [0-9.]+%, behind [0-9.]+%; soup hits [1-9]\\d*, in front [0-9.]+%, behind [0-9.]+%"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=4 label=shot-view repeat=0",
+  "\\[motion-trace\\] phase=5 label=diag-view-tlas-front repeat=0",
+  "\\[motion-trace\\] phase=6 label=diag-view-identity repeat=0",
+  "\\[motion-plan\\] complete phases=8\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "m4 round 1, docs/INN_ROTATION_MATCH.md next test: p11/p12 rotation pair (scene wait 1, diag on), then the p13 view: 15 s rt_stats + epoch with the pool/soup front/behind split, one PNG of the view, 3 rt_debug=8 traces (tlas_front), one rt_primary_identity=1 trace (instance id per front pixel). Confirmed if the front pixels are opaque, far in front and pool.",
+ "estimated_phase_seconds": 94
+}
