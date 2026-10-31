@@ -22,7 +22,8 @@ namespace bg3 {
 inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& out, uint32_t stride = 16,
                      int* uv_location = nullptr, uint32_t* native_hair_outputs = nullptr,
                      bool native_vt_frame = false, uint32_t* native_vt_outputs = nullptr,
-                     bool native_tileset_color = false, uint32_t* native_tileset_outputs = nullptr) {
+                     bool native_tileset_color = false, uint32_t* native_tileset_outputs = nullptr,
+                     bool native_tileset_material = false) {
   if (uv_location) *uv_location = -1;
   if (native_hair_outputs) *native_hair_outputs = 0;
   if (native_vt_outputs) *native_vt_outputs = 0;
@@ -148,7 +149,7 @@ inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& 
   }
   // Exact STI tileset depth: smooth COLOR at location0. Per-recipe layout,
   // byte24..39 never overlaps Hair attributes because these are disjoint VS.
-  if(native_tileset_color && stride>=40u && uv_loc==1 && hair_flags==0u) {
+  if((native_tileset_color || native_tileset_material) && stride>=40u && uv_loc==1 && hair_flags==0u) {
     uint32_t color=0;
     for(const auto& v:ins) {
       const uint32_t* a=code+v.pos;if(v.op!=59 || v.n<4 || a[3]!=3)continue;
@@ -165,6 +166,28 @@ inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& 
     }
     if(color){dec.insert(dec.end(),{(4u<<16)|71,color,36,0,(4u<<16)|71,color,37,stride,(4u<<16)|71,color,35,24u});
       if(native_tileset_outputs)*native_tileset_outputs=1u;}
+  }
+  // Exact a618 deferred material frame; COLOR0 uses24 above, native N/B/T
+  // locations2/3/4 use40/52/64. Disjoint from every Hair shader interface.
+  if(native_tileset_material && stride>=80u && uv_loc==1 && hair_flags==0u) {
+    uint32_t vars[3]={};
+    for(unsigned slot=0;slot<3;++slot)for(const auto& v:ins){
+      const uint32_t* a=code+v.pos;if(v.op!=59 || v.n<4 || a[3]!=3)continue;
+      uint32_t type=0,element=0;
+      for(const auto& p:ins)if(p.op==32 && p.n>=4 && code[p.pos+1]==a[1] && code[p.pos+2]==3)type=code[p.pos+3];
+      for(const auto& t:ins)if(t.op==23 && t.n>=4 && code[t.pos+1]==type && code[t.pos+3]==3)element=code[t.pos+2];
+      bool f32=false,located=false,unsafe=false;
+      for(const auto& t:ins)if(t.op==22 && t.n>=3 && code[t.pos+1]==element && code[t.pos+2]==32)f32=true;
+      for(const auto& d:ins)if(d.op==71 && d.n>=3 && code[d.pos+1]==a[2]){
+        const auto kind=code[d.pos+2];if(kind==30 && d.n>=4 && code[d.pos+3]==slot+2)located=true;
+        if(kind==31 || kind==35 || kind==36 || kind==37 || kind==13 || kind==14)unsafe=true;
+      }
+      if(f32 && located && !unsafe){if(vars[slot])return false;vars[slot]=a[2];}
+    }
+    if(vars[0] && vars[1] && vars[2]){
+      for(unsigned slot=0;slot<3;++slot)dec.insert(dec.end(),{(4u<<16)|71,vars[slot],36,0,(4u<<16)|71,vars[slot],37,stride,(4u<<16)|71,vars[slot],35,40u+slot*12u});
+      if(native_tileset_outputs)*native_tileset_outputs|=2u;
+    }
   }
   // Exact static VT VS 3812bc980438747f is authorized by the caller, not by
   // structural resemblance. It exports smooth N/B/T at locations1/2/3, no W.

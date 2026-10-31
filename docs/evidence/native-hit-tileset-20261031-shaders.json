@@ -1,0 +1,1840 @@
+{
+  "baseline": "4b62c89",
+  "scope": "pre-M1 global RT_NATIVE_TILESET compile; no GPU/runtime qualification",
+  "modules": 96,
+  "off_identical": 96,
+  "on_valid": 96,
+  "seconds": 437.974568605423,
+  "results": [
+    {
+      "path": "shaders/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "1346ab7441f0277826e31fe72a70b973be7ac7f58a9c878fc9e55454ca9a67c3",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "1346ab7441f0277826e31fe72a70b973be7ac7f58a9c878fc9e55454ca9a67c3",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "bea595a0e1ebef91cd19bbda70ed00b4b0ad38ea70e65f1cb31b5d5e2d8ee63a",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "612bd2310275baa021a84931f2f29af69befa1b78c2bb99c1f7011842b04b71e",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "612bd2310275baa021a84931f2f29af69befa1b78c2bb99c1f7011842b04b71e",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "05c3f65480479e1a978d983fc8e29c840f06183305e327315b4534ac13187f7b",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/cascade/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "a75ca26a3f38b7253474ba35858c0b89346654c28c4baaae88f57604c8a0f2b6",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "a75ca26a3f38b7253474ba35858c0b89346654c28c4baaae88f57604c8a0f2b6",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "8129f83566694f98695f006e3764c48eae03f9d111c2aa226bc1219f4d4f2411",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/cascade/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "1761cd9e8e4fa97b7f5a6fe233d1cc68ec5a60b1637a462d09402d62f51b7d3b",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "1761cd9e8e4fa97b7f5a6fe233d1cc68ec5a60b1637a462d09402d62f51b7d3b",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "cf41f7510f939f38c132af60a2dc19695e99d9c08a6ca598ea938c3c570a5a1d",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/cascade/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "afb4a76839c4ce834c7a0a6d4ea6611494964f0abf430188c99858e29e10ce9a",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "afb4a76839c4ce834c7a0a6d4ea6611494964f0abf430188c99858e29e10ce9a",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "b0cff6de6619dec7a0ed841f5c53f8514f8898d579228a98d9a23c3aaf930206",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "0d2a5c09aeb7b0636e2ee5b729cc5c58af9fe053ee445383fc99a77a6bc2cef9",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "0d2a5c09aeb7b0636e2ee5b729cc5c58af9fe053ee445383fc99a77a6bc2cef9",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "516ec8313d299c35dd283c3db1009da4c4b045f37ff1013da12f7b74b6b0b4b3",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "a9d48b3a2ef1d51829b022105858cb76ff4d54242d34513eda3257413d1c30f3",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "a9d48b3a2ef1d51829b022105858cb76ff4d54242d34513eda3257413d1c30f3",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "47ca8715292b2d5242bf2b9ae98a8720dbfedfc6311df6557f82f3ca1c516283",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "f5f9ee5fd8d3cdde2dc013c682b4bb88cff2833750993ba5dc771ec63ce79aa1",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "f5f9ee5fd8d3cdde2dc013c682b4bb88cff2833750993ba5dc771ec63ce79aa1",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "4b19e22a8d6b66d3a41b2453411138d23edf257098f45037d624eb977b09b09f",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/cascade_rebase/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "c1c9410b9d9d9ead29010ecd624c7f4f8dabb89af9739603609b27218e5e54d8",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "c1c9410b9d9d9ead29010ecd624c7f4f8dabb89af9739603609b27218e5e54d8",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "e32d2d858c352fb8d2710727d74d01990839b3823dbbcd46ddfcc30ecb08e615",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "fe7108d19db5bd0cb5414c497fbd218ec46a50e7e673c83cfa0f7a07cf54e089",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "fe7108d19db5bd0cb5414c497fbd218ec46a50e7e673c83cfa0f7a07cf54e089",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "390ad10071051ca2a2b8d70fc953328011e3c16867d8c2ac486ea82c900e40b5",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "91ea85d8106e62e7f9182301bca9c5190bbd640c2202f5cad6e742ffac0fe955",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "91ea85d8106e62e7f9182301bca9c5190bbd640c2202f5cad6e742ffac0fe955",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "d2038ef4e9d715fc2eefb07e61cf9a19cc989fa98320fb05adf7100c11f2177d",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "eab8e73a48e5431647663e27fdce884af5d7e87c6671aeb283a6cd177d240a17",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "eab8e73a48e5431647663e27fdce884af5d7e87c6671aeb283a6cd177d240a17",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "c1dd6f903d7e6ba9fa37e1be303632744eb55d6c5f05695e6bfc6f9d510b0ca0",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "10486220449eaa3b85dd75b8267e5fcfcc2e4ba7a7a707c717771ed5c90d7c4f",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "10486220449eaa3b85dd75b8267e5fcfcc2e4ba7a7a707c717771ed5c90d7c4f",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "446bbacacda05f3618d60a0e9c7cba2c7bf71429267a6673cf214e1bce5318b4",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "9647d5e7d4b40fdbb74947927c62e7d70867589362743c47c743905eb4d56337",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "9647d5e7d4b40fdbb74947927c62e7d70867589362743c47c743905eb4d56337",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "5e97b36a30b385843ba23adeb6f85777922bf3f8f3958a7eed2103f4b1d810bc",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/rebase/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "c80a84a1d39fa415d072d770a6fc766dd93050fc5cc1b971a1f31704fbe52583",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "c80a84a1d39fa415d072d770a6fc766dd93050fc5cc1b971a1f31704fbe52583",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "14858deb6015ad67f57b52cd4d6745bd557909557333475f3b792e0ce85a9f40",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/rebase/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "44199e2e30c1918711cfc35b2a5eaffb1e42f4fc30030cc4afc181031224157b",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "44199e2e30c1918711cfc35b2a5eaffb1e42f4fc30030cc4afc181031224157b",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "e2533f40bb5b1f3b18ab8a19589df13c5868d070e71186a6d3365a702fa399cc",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/rebase/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "77f2373fd016ebf8a0ad3e6f2b737c2c87003c4d130bbc383f3ffbf6b191b218",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "77f2373fd016ebf8a0ad3e6f2b737c2c87003c4d130bbc383f3ffbf6b191b218",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "6b002864b1c0cef8d736b36f7c2881e93e648183e435180334e264bf72666aab",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "c667bef31235f35edb9e55cf562d9cf1a446540df1230c0c105856a2d37ea594",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "c667bef31235f35edb9e55cf562d9cf1a446540df1230c0c105856a2d37ea594",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "71a15cdb2ed26141a67b06a2c062d54b4aabe8a76078524a3186f31ec3d03320",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "97a5578d36ed34c4a4a6bc832e86d516cd08a756bf2bea7003cd3e157b0953cf",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "97a5578d36ed34c4a4a6bc832e86d516cd08a756bf2bea7003cd3e157b0953cf",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "55180103325d89855475ef9ee13e492be342a2e3da67d935d3369f05ab76cb96",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/gi/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "203b76dfb5e33624a435961ca33caee9207d5bd6bc8c67ec78972b7ac023c88f",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "203b76dfb5e33624a435961ca33caee9207d5bd6bc8c67ec78972b7ac023c88f",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "1c24d3aa99ffc1b93f96b0543178a2b8a6eb806c4d58ddcae9dd3f1e3771434e",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "97d9ee502cd68803504321c46c8e12d5ab80d1a7d08037bfbaa38316a4b7b977",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "97d9ee502cd68803504321c46c8e12d5ab80d1a7d08037bfbaa38316a4b7b977",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "355ec5d13e81eebd4758ee9d2255cab21718ba2415b570392a2d13d5c65cfc54",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "6ac8e7deab5773b9e2824b475c6a266a959f0c3f1cc15e474242a76a7b4421c7",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "6ac8e7deab5773b9e2824b475c6a266a959f0c3f1cc15e474242a76a7b4421c7",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "65eba0d4a05a20931f6c6eb361d50d7d65f1c0070ad8de4080c4895d7f0114e3",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "141095f9b506cdbc8a4ca038609b41a1adc6ce4117a35a458ce634f2307ec2f0",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "141095f9b506cdbc8a4ca038609b41a1adc6ce4117a35a458ce634f2307ec2f0",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "b0faf8e408b238a37b5c1a1b8c338577abfe5624c9189133cd96bdc0b12359f1",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "7dd993d41cc1c54fa6282c9aa56880c48334f4c7454e41e370adf6259cab01c8",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "7dd993d41cc1c54fa6282c9aa56880c48334f4c7454e41e370adf6259cab01c8",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "8d6630f175e5a2aac838c203c9862e0733ef33494ae2930e138aee78256eea9b",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "eb8b8ab7fb02b1f2e0c8d4f1c8bc1e4fbfbed475973de89ea263ba4829db5e13",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "eb8b8ab7fb02b1f2e0c8d4f1c8bc1e4fbfbed475973de89ea263ba4829db5e13",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "e40aec083127899a4a3e715705635dbbe12126e471ba6af8cff41eb443cfb067",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "405e785b059f8feb81fa516970f707fdd507fb0d0128b5d0aeb4901ab12d3080",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "405e785b059f8feb81fa516970f707fdd507fb0d0128b5d0aeb4901ab12d3080",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "878cc9c5bff2f2a204740411ae55d45af111d715703749db9fbc37fe36468c80",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "54f44892c6baeba869fe4c83628c736807c0dfaec2c021bb75941396f4161f86",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "54f44892c6baeba869fe4c83628c736807c0dfaec2c021bb75941396f4161f86",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "e222aeb5c2aa5e12e7519023c870c0853dafeacf2d81a1dae2e911e082dff4a5",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "674b92b714c13fc5596c17470f4f92997d181d5830124c04a325af50620d08bd",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "674b92b714c13fc5596c17470f4f92997d181d5830124c04a325af50620d08bd",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "e4756d2fde43f5d24f5b9fff63be8d56097accf17d67744f771ade3b9ec2971b",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/omm/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "aee74619ab52d9918cbe240ff473dccfff276f8d3206e729c6ab2ea8ac9d212a",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "aee74619ab52d9918cbe240ff473dccfff276f8d3206e729c6ab2ea8ac9d212a",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "abc5243e3f6cc4a4e7e048e40ae9db3a6d59454def10ff0733c51047e4726db3",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/omm/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "d287085cc77809e0bb2b505ba3e23bf748ddda69787f35349fa1a22fbe2430b4",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "d287085cc77809e0bb2b505ba3e23bf748ddda69787f35349fa1a22fbe2430b4",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "2a37267b817ce1c812f4a8508bcf2fae7ad23b9f1feb30a138cc65236292fcee",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "a0b9882f1da02682e2638b10e9be7a8c204200682e230e92cf5fc2f1d5305ed3",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "a0b9882f1da02682e2638b10e9be7a8c204200682e230e92cf5fc2f1d5305ed3",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "17fae53444308b3dbda7904bbba20dc3a510cac1ab8d71b72f0372af2afdcb42",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "42b0366376c64e735b9e4436417c901c0f09645b6b1e77e99a36ab8d488e7739",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "42b0366376c64e735b9e4436417c901c0f09645b6b1e77e99a36ab8d488e7739",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "4b6c09b07bdcb3310a61aee9eb596e02f65ad1d3a5f8adda46aab135e66b3089",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/omm/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "61bf03af6b2a81de14238ad608c434a1b9b3a5d8282c2d5b562f6bc674c18725",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "61bf03af6b2a81de14238ad608c434a1b9b3a5d8282c2d5b562f6bc674c18725",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "c08f42db61f9a1a094066c34850e7b590c13ec3d391a728c222ced7499f80688",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/omm/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "1cd1f11f9058e0a0b97917236ed2c3542008874dcdf2d7f7078ac58722c1bf0f",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "1cd1f11f9058e0a0b97917236ed2c3542008874dcdf2d7f7078ac58722c1bf0f",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "716ac7eb8c433236eab6b2fa5dbb94df547938abbc243a90e7ebfa9d14d19f91",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/omm/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "40d16590eb51659b7c07e5698bd8ea2f58711fe4f374f6ef834fe56289887f2c",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "40d16590eb51659b7c07e5698bd8ea2f58711fe4f374f6ef834fe56289887f2c",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "4886386f11d855c1d4f85ec337e8c6c957bfa41f84745c7194a12ba547dd3f31",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/hair_origin/omm/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "b945adbeceef161b199e25002225bf7d824e6b2bd612df87d9d04943c80c8586",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "b945adbeceef161b199e25002225bf7d824e6b2bd612df87d9d04943c80c8586",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "ffcc0767da46b6bef51029e240df5b2ce1ff385565f293704135dfc80927b9e1",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "a5fe8a0fb7cdef4ad977d83b1891d33f6002ae545985d11900235706a246e9eb",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "a5fe8a0fb7cdef4ad977d83b1891d33f6002ae545985d11900235706a246e9eb",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "bae4841fa385c1594d30a0bb56fbc587c3bc54469a4d01d02393469131ac2827",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "a18d405db70d3f95f7ce3498cb65829e1b684b48b779da972768265ab0c3eb53",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "a18d405db70d3f95f7ce3498cb65829e1b684b48b779da972768265ab0c3eb53",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "718acaa4d97e8efc4ec31c15873ea30fbdedd3824ade1a7bdf051dae2af83720",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "f38914ce3105904941b35c47974b48514745b35822183a515b615ac6db74be5d",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "f38914ce3105904941b35c47974b48514745b35822183a515b615ac6db74be5d",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "f47731a7d053c7328652c9b0f91a4f575639d4cc0a19e129a163f0c2038983d6",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "03d4fd1a2aff940f41ed7e8e934a1e216bacb89668c87afd15287e498aaefc09",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "03d4fd1a2aff940f41ed7e8e934a1e216bacb89668c87afd15287e498aaefc09",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "a27497b2803b1e99b15b3cded10f769d376aa040e2b5b96f60cad416aa12b8e0",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "64331b8eb9b457df21736c8ac530cec5b8e768f34dd10d0a195e3568fb1d0f73",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "64331b8eb9b457df21736c8ac530cec5b8e768f34dd10d0a195e3568fb1d0f73",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "148d77ad8503fffeaf82940694ad91592d982447024d578fb8bf06aee988b682",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "9393c7a9f28a031901580a47136e7ba4915594a5e362293d6e7ede348230049e",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "9393c7a9f28a031901580a47136e7ba4915594a5e362293d6e7ede348230049e",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "415b12887ef05c9e44c8bf906fd1ec4bbdef80e93454c2eefd8dd9626864b855",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "fed6764c2d6decc3cdde96cf2830ecd499f73bd24e96f134772f7dd056d30bf7",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "fed6764c2d6decc3cdde96cf2830ecd499f73bd24e96f134772f7dd056d30bf7",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "76e55c04a7570e685bd0432f2f80fb9365597131b74f322f89e8da9681b4ff22",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "75b38b8dd364d658b23d3a22a0590259a846c3afb11ff7d393e145ad46d83742",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "75b38b8dd364d658b23d3a22a0590259a846c3afb11ff7d393e145ad46d83742",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "9e028b882fcc1826229c663ecb381dd24707351f658cbc1998d95e062c568e7b",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade_rebase/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "5be1f47be051fc42765dfe31b32e8d87578439cd69348e53438cd533d19c080f",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "5be1f47be051fc42765dfe31b32e8d87578439cd69348e53438cd533d19c080f",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "f43296552684f2375448d2b5a676517c8742f8394d013707f53ee0c0835556aa",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "78a631f8fa633d8a06b43a2f8180428659396c4c45406bd6971debdbd68b3038",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "78a631f8fa633d8a06b43a2f8180428659396c4c45406bd6971debdbd68b3038",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "31fbe443ee658f3951ff9948d40792797c0c146ab4364b7c4fbe2496163049b9",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "b1a3ddd64c2cde4c863451e65725509e7c1a86dc49c5a6cb210e2fdc974220e2",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "b1a3ddd64c2cde4c863451e65725509e7c1a86dc49c5a6cb210e2fdc974220e2",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "36cb61faacc99c57510fc6d71c2607421bea7843a055d0f8458ad56a3e048973",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "41171d9d8c56295e0dc16b796e67ad3b808e8895b3fde8b693f5066b7e96af66",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "41171d9d8c56295e0dc16b796e67ad3b808e8895b3fde8b693f5066b7e96af66",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "5aa2dabb486c6bc0c38ef56b929968a7faefe51cd4c6ccfbe4c391ec521d799a",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "4814d4e4d2ffd7b0214ef251ff940b6b839d15a2405f6f6dfb6bd5d477aca3c6",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "4814d4e4d2ffd7b0214ef251ff940b6b839d15a2405f6f6dfb6bd5d477aca3c6",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "d1790a3f2895c873049507d34e0c4e1be33da26660ff53aa4ef4b3871826a793",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "2db535ea5d4fbee292b4c60f0c2fad22a1b3282058cf5630cecf5757b4fbaf45",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "2db535ea5d4fbee292b4c60f0c2fad22a1b3282058cf5630cecf5757b4fbaf45",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "99c8e85603b2853eefb000caef7bdd8392fbff152f1b7a7772afe5b1bbc0f9b4",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "ce25f8a6a1f2d1ac57ad73d3351e818573524a97b8ae4b7ad38b65145f987ba3",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "ce25f8a6a1f2d1ac57ad73d3351e818573524a97b8ae4b7ad38b65145f987ba3",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "b684a1329a3e6699772becfb0732054cb350595a8ea2251e5e4e527f13d1f390",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/rebase/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "f479303b06168635f69c888c9e2496bf3ebe44badb21843823d7c26194134eb4",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "f479303b06168635f69c888c9e2496bf3ebe44badb21843823d7c26194134eb4",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "cfc68cc1144986f940a0c1dc96a83265d6dead9a783df2ac86738710697fa84c",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/rebase/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "18a9bcb25be9a640ae68801143d2f760054dacebf94f4c8459cb33f135b36003",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "18a9bcb25be9a640ae68801143d2f760054dacebf94f4c8459cb33f135b36003",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "a252a27cd466cdd661c5a092a8e6f494605227a28f920e70c2b118e693233529",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "54820fd79552489b851db565e94b03e17dcb222686ffaf673cab7ab6fd47d417",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "54820fd79552489b851db565e94b03e17dcb222686ffaf673cab7ab6fd47d417",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "3949b7532f0cc8b8bc468753a3eb29b6ff0358f60492701dcf2661e093e13496",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "c42a2062e9f1f0e182fd91feac48eb51a0f0ad99efcc32cba9f5fdccd43d66af",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "c42a2062e9f1f0e182fd91feac48eb51a0f0ad99efcc32cba9f5fdccd43d66af",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "1a94a8e6affaa8294b879b2426789d9b89ec235ee90337e2032224314781d482",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/native_scalp/gi/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "75c02a7abd598204a6066087481952109fde045cf6aca715f095b5fa111e173d",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "75c02a7abd598204a6066087481952109fde045cf6aca715f095b5fa111e173d",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "f7fac77210e6ccc648a3c60cba99d531c299e65d516e1997e6fc73bfedae253b",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "21c2931f8891147c943d308d036036fd04bf698b7e63d40258bba8520a8c68f9",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "21c2931f8891147c943d308d036036fd04bf698b7e63d40258bba8520a8c68f9",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "e194ef27de4b319dff62d082ed8cd1f76678014b34f3ee126c60aa07ab035d94",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "96b8af3babaa6114acf89960eee3297868872b5eef7a14f1d2b055776dff4f6c",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "96b8af3babaa6114acf89960eee3297868872b5eef7a14f1d2b055776dff4f6c",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "03759bbcc816b8363448365d474468a0100d0848611f06b1e2b2ab7ce5cb0839",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "9e8a5d9af18cb46068ab7d7e4e082c4b568b9f2b6a237e4826737938355a5562",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "9e8a5d9af18cb46068ab7d7e4e082c4b568b9f2b6a237e4826737938355a5562",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "1e8a71e64a01dffb2bd0be7951ccefb8c00e8cc97820b8acb4b58b78953cc0ec",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "2e3903222bdfe51ea8f9756a189a6cbdcdb0312286c4c59efaaf4485f44b0bad",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "2e3903222bdfe51ea8f9756a189a6cbdcdb0312286c4c59efaaf4485f44b0bad",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "0136e0a4b7c5e9a89b30d50fd1cf02f8b95f5199baede27197be7116fc9a132e",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "84f4cd954e484e73ebe019d2236cfc75bfad0caf297db2d1f8ca3da57e90ac01",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "84f4cd954e484e73ebe019d2236cfc75bfad0caf297db2d1f8ca3da57e90ac01",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "2f9d75eef8ccf77e88be39109b308372c158a341683295254ae41f1a123cdb99",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "d3c787821ee518753427779fd65cb201b49b504ce69144215c12ffa469ce7d6a",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "d3c787821ee518753427779fd65cb201b49b504ce69144215c12ffa469ce7d6a",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "8e0dcffc0a5a6fc3efae2e5c8696225bcf2db92a1a78d7948b8f76b9ed8a90ce",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "d5d4b4642aef842b9b138148853d1c7861f1f8035001d2a97b1563a733dfc77b",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "d5d4b4642aef842b9b138148853d1c7861f1f8035001d2a97b1563a733dfc77b",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "a787c5b3a28de690ad14606925bfe1eba37f9e680f79eec7c6729e2fd9f79aad",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "13a92c9a4fc2aefd62f971ac6f00df0011c5f3b3f93ffd50fc211be9601f5a8f",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "13a92c9a4fc2aefd62f971ac6f00df0011c5f3b3f93ffd50fc211be9601f5a8f",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "79d55014dd7d3a698da5ee8d4ce4a6fd930b84c267fae2bd3372668801ce5bc2",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade_rebase/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "4c7eec6646c99ec17d6c36227c3f0a7afa2ada212f19fff2e85c12e8aaacd9af",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "4c7eec6646c99ec17d6c36227c3f0a7afa2ada212f19fff2e85c12e8aaacd9af",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "256a993beb117427b4b535a760cc08ecbc3dfa74abeed25c3167ba7b48da1f94",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "6c581de118031123aa723678498449921444ef433133d8e58d8a2cf281b821d4",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "6c581de118031123aa723678498449921444ef433133d8e58d8a2cf281b821d4",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "1aa983f1cc5cc3a5a8ce313463757eb52a47439a69dbdfe095c52bfe004c7a9e",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "9618efa6fc0e0319e4b6e1682209eb2dd3b856a4520fc11b0b55c64126f1a8ec",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "9618efa6fc0e0319e4b6e1682209eb2dd3b856a4520fc11b0b55c64126f1a8ec",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "376317dfbf5c1002dd4cd4529139709726d559ad9ec3c719fa3e579880c418c2",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "fdbc6cbca6d1eca0cce4a2791e214eef4e53932bdf99744e1c6783fa6cff7402",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "fdbc6cbca6d1eca0cce4a2791e214eef4e53932bdf99744e1c6783fa6cff7402",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "b91be66243f24f68cb923e1df6292f978691773af372bc4eb4be8e00c6e9ad4c",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "d1ed9021678938624654d409e80e3d1b438f1086c82edd8b08969e1f7b5ad55a",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "d1ed9021678938624654d409e80e3d1b438f1086c82edd8b08969e1f7b5ad55a",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "33d57a26f6bb6744e28e84d493f5e72705d74a968b85dfe403510645c6f208c5",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "6c18ecfcfe7117b75b3e23be022e3e0e922768c420e23adf17fe86d2f99c08b8",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "6c18ecfcfe7117b75b3e23be022e3e0e922768c420e23adf17fe86d2f99c08b8",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "6961c015bf1f7259bedd574a5917b2c466b421470ba9bcc0b72c1296a7c044be",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/rebase/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "e82607e61630f37aaf7d94ab25da85612942da4e2913be0977c7d97d8920814b",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "e82607e61630f37aaf7d94ab25da85612942da4e2913be0977c7d97d8920814b",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "3532f66198de66afd6d6234fe300f1cf733acc8f57b0f2a9bc90269398820390",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/rebase/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "fc8080ba39f3c9d84e4983dada730d39ba479aa497721b0838ec8e8a99a61ae2",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "fc8080ba39f3c9d84e4983dada730d39ba479aa497721b0838ec8e8a99a61ae2",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "26c0f1a4f79386bea018fab58a06df15243e97edc428b254dcb7d8a0b13ed35b",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/rebase/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "314be35c29b2a6ec11bd0ade2b05cb0fb3dd68ef5c84c643d54b8cc2896f2d55",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "314be35c29b2a6ec11bd0ade2b05cb0fb3dd68ef5c84c643d54b8cc2896f2d55",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "a15f10e9084c84258be9453a368ea6303affe414cada3de9a64aec7f498d6233",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "f90b4532263af8ef2e760309b4ae946e0a6bf19dee18bb89cff8b86dd14c124c",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "f90b4532263af8ef2e760309b4ae946e0a6bf19dee18bb89cff8b86dd14c124c",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "fe51c280bebfd27067a6124fdad0c2b906e843dc712b6c19df75bc09c622492f",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "6dc3fadd95a8b72c56e5fbb5891a7c3697b4e09025f1177a27e2ae6a55b9d893",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "6dc3fadd95a8b72c56e5fbb5891a7c3697b4e09025f1177a27e2ae6a55b9d893",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "73ad37ef3f6c7f1fba1d3c8c728fd0ccbfcee452bdc3b6e8fb96a9e603cbd43f",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/gi/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "8636e05713702416cf54cdc682138639b995dae8b8edbd6e0b85762729f67126",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "8636e05713702416cf54cdc682138639b995dae8b8edbd6e0b85762729f67126",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "fd7c316e2208fc8b6aa95eec8d8a80cda2e220ee632c6ef48e86cfa359c3b8db",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "b5ea899cc14590f2fa212d962a8b5406c1fedc37f8316c042503e97d76b69b35",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "b5ea899cc14590f2fa212d962a8b5406c1fedc37f8316c042503e97d76b69b35",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "c9ffdc354b82d159312e22a402e7fbcd68ccff6dfb99a233f65361cabb7bc0ca",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "b62194045c87166242d2637a6543acee680acee67ea2b9087ad3fafda4d25515",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "b62194045c87166242d2637a6543acee680acee67ea2b9087ad3fafda4d25515",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "8b0c82be5df0e9cc742958f4ea676f0af2a5d2a20e12e574abac529aa7c4c454",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "76f5788fc419e625b252aec0d58bfdda2a3557089aaa96e6209a02fe5b1145c9",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "76f5788fc419e625b252aec0d58bfdda2a3557089aaa96e6209a02fe5b1145c9",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "8a6d2aa6bc701bd006a05d55fa48282bb1f8c37fc693a3c2665f313a2ceb6a78",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "004e3c63d660fc57088cd1acef863ed2ee67e7aae61fb3de04e6523611a748a6",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "004e3c63d660fc57088cd1acef863ed2ee67e7aae61fb3de04e6523611a748a6",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "76403936a252b1594adc4d9780df7b7c5b376cf65b13ecec095bd7691cd780ea",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "dd8866f8f2d57d79a0e8f1af81c94eaf503bb4ee9da99ac2c4f901425a5d2738",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "dd8866f8f2d57d79a0e8f1af81c94eaf503bb4ee9da99ac2c4f901425a5d2738",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "15b1d0bdd92256a8d0026a56c58c5ffd8d2c4513a42b73a1a9c59a90a6cff30e",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "acbeda9995e85018bd76c62fe487e12a7a73842830c912a4feb285cea87d9dfd",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "acbeda9995e85018bd76c62fe487e12a7a73842830c912a4feb285cea87d9dfd",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "5fc859dde7a7d7567d3d4fadc6c644dccc3d12ccd1ffda45ab17d6c8563fff66",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "1143c544a018894347dc45dc9676c21fce21bf91d2c17ad0060dbebb584f3a82",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "1143c544a018894347dc45dc9676c21fce21bf91d2c17ad0060dbebb584f3a82",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "58180877a267348aa30a39bf5e403f1b654a6bac2f25a121a1cecf5f1bced613",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "4ced5b6dbb34f9ae8e07e85e0fed9d234fe6e384ff9d3bcac88819f27315f515",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "4ced5b6dbb34f9ae8e07e85e0fed9d234fe6e384ff9d3bcac88819f27315f515",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "948144f75616b62cf128d21aa577109fdf6b03245bf05e92bdc7278d8d9484d3",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade_rebase/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "ddf1e58611ff9e811dd0155c72a1ed4b1832a206e21dab4a26632f96a353b9c4",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "ddf1e58611ff9e811dd0155c72a1ed4b1832a206e21dab4a26632f96a353b9c4",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "21f6b513ff63a05beb645fa957f44c8348e6346a531f6e294e0acbc9744c3a5a",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "e1137840965e98e2ae08c16ca1371c41d2a71420c4c17433eda1c979dc5e07db",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "e1137840965e98e2ae08c16ca1371c41d2a71420c4c17433eda1c979dc5e07db",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "3d43cdd9583f3dd257e0ae73a75a0df79d08a9c92f2116dd1952b56964a19ac1",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "de6c3dc3c0856cb00602ab3f64180ed7f9287d8fe100eb9e1997e8a038ae8d54",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "de6c3dc3c0856cb00602ab3f64180ed7f9287d8fe100eb9e1997e8a038ae8d54",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "025db4f3ca9fa3bd61e0b58e3a689a5a1e2ea048b70f6f3da5305676d2361b23",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "78f72b592d8f1d2185ce75230231cba0c7d4395cc2fdf599d7d81e3557e2260b",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "78f72b592d8f1d2185ce75230231cba0c7d4395cc2fdf599d7d81e3557e2260b",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "1b83a384c6a7ab144cfdf0e6e377aebad2031a396e7dbe1a46a7196b159fcd8e",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "1b964e2bc1ca8fb55b388edc951fb579fdebdf1c3d4cb06fad4a85b26859e5a0",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "1b964e2bc1ca8fb55b388edc951fb579fdebdf1c3d4cb06fad4a85b26859e5a0",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "4058acd17c0d548e10bc9314e435c35983d75af1831e4d979b3f29afeb8575c6",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "1ff0fbdc63f1667da3972410537d233690e424df28cbc576ed1baca0cb1daa4f",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "1ff0fbdc63f1667da3972410537d233690e424df28cbc576ed1baca0cb1daa4f",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "fd10e3cd2b0441393b2ce7a9bd2b9b317e8c965802b68b6139c8d1edb17eb634",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "d1d2894cd9d33d11ba80b012c234470bd00a2931881a032c6c72ae9f004c69f0",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "d1d2894cd9d33d11ba80b012c234470bd00a2931881a032c6c72ae9f004c69f0",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "32623bdbd960025720a3e8b826e9a8f1c118bc95b7a038bcd6be4b5a81392f17",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/rebase/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "3905890042d2e388e75864b9dd0b3cab83231936e42d4937aaed2db1f9be9234",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "3905890042d2e388e75864b9dd0b3cab83231936e42d4937aaed2db1f9be9234",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "85f2233776b80a659919f631c26eb48426e465d32f67965a92dfc9b5f589fb9d",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/rebase/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "c43308a9da7dd664c2a84e958a788b58fe8fb7ca004e2607da68fe7795aaf85a",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "c43308a9da7dd664c2a84e958a788b58fe8fb7ca004e2607da68fe7795aaf85a",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "7445e4e03e748b4d39b1afe411df13ed24864fbd740ea540c0ef1cfbbff6ab9d",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/rt_hit_direct.hlsl",
+      "baseline": {
+        "sha256": "aa90d43a242c741eddd8d0d78fb226294098876a4905f316a9664c403f6cbcab",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "aa90d43a242c741eddd8d0d78fb226294098876a4905f316a9664c403f6cbcab",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "fefe811e9f1306008dfc6ced852d930e30f8b61e434bd02373260e8f7239e1c7",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/rt_hit_material.hlsl",
+      "baseline": {
+        "sha256": "db6c2037e130d1afd5b63d1c4007ae2056d68a751cdf0362cdee4f1216cd2b88",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "db6c2037e130d1afd5b63d1c4007ae2056d68a751cdf0362cdee4f1216cd2b88",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "241c9c2ab9f983ed5e5d71e3e4695138b3bdadc6c6596e98c14d380dca16ff98",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    },
+    {
+      "path": "shaders/omm/native_scalp/gi/rt_hit_two_bounce.hlsl",
+      "baseline": {
+        "sha256": "08e2b7e0c4ac19cffcdccdcfa929808024d400a39f268a89fa5809647e977248",
+        "valid": true,
+        "error": ""
+      },
+      "off": {
+        "sha256": "08e2b7e0c4ac19cffcdccdcfa929808024d400a39f268a89fa5809647e977248",
+        "valid": true,
+        "error": ""
+      },
+      "on": {
+        "sha256": "f469066361c2c62eaad804375ac1dc5b93b6e27f320697236f86898ec391ce48",
+        "valid": true,
+        "error": ""
+      },
+      "identical": true
+    }
+  ],
+  "source_hashes": {
+    "shaders\\rt\\native_hit_material.hlsli": "767abf94cfe458c336ea51d2d6a8e29fe8aab3a8540763b064a3d30cd92e1575",
+    "shaders\\gi\\rt_hit_material.hlsl": "07f0beb6a66c90853b3ab59aeeb9f35f64dc9174899c4cd07e086d576486b525",
+    "shaders\\rt\\hit_material_join.hlsl": "a15ce015eda92f2adc60afd4412f9a980dad504ac6d3c53cd12d4dbe77cc52ad",
+    "shaders\\rt\\hit_material_tileset_gather.hlsl": "b66eade1ec8be2737733eb65b9887e6c759a01e307e4d1bbdda890e21571711a"
+  }
+}

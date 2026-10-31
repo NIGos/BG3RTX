@@ -1,4 +1,5 @@
 #include "../common/native_hit_gi_bindings.h"
+#include "../common/native_hit_tileset_fields.h"
 // Track C: screen-space GI for BG3 (docs/TRACK_C_GI.md).
 //
 // BG3's direct lighting is a tiled compute pass (about 15 dispatch_indirect
@@ -914,7 +915,7 @@ constexpr uint32_t kStatsRing = 8;
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
 // 136..152: primary pool/soup cohorts (HEAD); box diagnostics 200..252 (shifted +64 from the box branch).
-constexpr uint32_t kStatsCounters = 287; //253..268 material;269..281 reference;282..286 hidden-hit GI
+constexpr uint32_t kStatsCounters = bg3::transport::NtsStatsCount; //253..268 material;269..281 reference;282..286 GI;287..288 tileset
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -1063,6 +1064,9 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_stats_n, 100.0 * t[47] / px, 100.0 * t[45] / px, 100.0 * t[44] / px, 100.0 * t[46] / px,
               100.0 * t[40] / px, 100.0 * t[41] / tr, 100.0 * t[42] / tr, 100.0 * t[43] / tr);
   }
+  if(host->cfg_int("rt_native_tileset",0) && host->cfg_int("rt_hit_material",0))
+    host->log("hit material tileset (%u frames): qualified family2 %llu; native primary matches %llu",g_stats_n,
+      (unsigned long long)t[bg3::transport::NtsStatQualified],(unsigned long long)t[bg3::transport::NtsStatPrimaryMatch]);
   if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/256.0);
   uint64_t material_total=0;for(unsigned i=253;i<263;++i)material_total+=t[i];
   if(material_total)host->log("hit material (%u frames): attempted %llu qualified %llu unsupported %llu; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters %llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu",

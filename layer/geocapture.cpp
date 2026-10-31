@@ -29,6 +29,7 @@
 #include "../common/native_hit_pipeline.h"
 #include "../common/native_hit_inputs.h"
 #include "../common/native_tileset_coverage.h"
+#include "../common/native_hit_tileset_inputs.h"
 #include "../common/spirv_visibility.h"
 #include "spirv_xfb.h"
 #include "../common/cascade_casters.h"
@@ -136,6 +137,8 @@ struct PipeInfo {
   bool fragment_known = true;
   bool no_storage_writes = false;
   native_hit::StaticInputs material_inputs{};
+  native_hit::TilesetInputs tileset_material_inputs{};
+  uint8_t tileset_family=0;
   bool material_state = false;
   uint32_t material_reasons=0,raster_next=0,multisample_next=0,blend_next=0;
   bool native_view_known=false,dynamic_viewport=false,dynamic_scissor=false;
@@ -1555,7 +1558,7 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
     g_stride_without_tileset=g_stride;
     g_tileset_capture=g_alpha_mode && hair_split && cfg_int("rt_native_tileset",0)!=0;
     if(cfg_int("rt_native_tileset",0) && !g_tileset_capture)log("[geo] rt_native_tileset rejected: restart with rt_alpha=1 rt_bvh_split=1");
-    if(g_tileset_capture)g_stride=(std::max)(g_stride,40u);
+    if(g_tileset_capture)g_stride=(std::max)(g_stride,cfg_int("rt_hit_material",0)?80u:40u);
     log("[geo] transform feedback %s: vertex shaders get Position%s XFB decorations (stride %u)%s",
         g_on ? "enabled" : "FAILED to load", g_alpha_mode ? " + UV" : "", g_stride,
         g_alpha_mode ? "; ray tracing scene from the depth prepass" : "");
@@ -1596,7 +1599,8 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   if(native_hit::enabled())t_last_no_writes=native_hit::no_graphics_storage_writes(ci->pCode,ci->codeSize/4);
   t_last_hash = hash64(ci->pCode, ci->codeSize);
   const bool vt_frame=native_hit::enabled() && t_last_hash==0x3812bc980438747full;
-  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && t_last_hash==native_tileset_coverage::depth_vs,&t_last_tileset_outputs);
+  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && t_last_hash==native_tileset_coverage::depth_vs,&t_last_tileset_outputs,
+                     g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs);
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
   if (rt_enabled()) {
@@ -1750,6 +1754,10 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     pi.xfb = vs_patched && !other;
     pi.no_storage_writes=all_no_writes;
     if(native_hit::enabled())pi.material_inputs=native_hit::static_inputs(cis[i]);
+    if(native_hit::enabled() && g_tileset_capture && vio && fio){
+      pi.tileset_family=native_hit::tileset_depth(vio->hash,fio->hash)?1u:native_hit::tileset_deferred(vio->hash,fio->hash)?2u:0u;
+      if(pi.tileset_family)pi.tileset_material_inputs=native_hit::tileset_inputs(cis[i]);
+    }
     pi.material_reasons=native_hit::material_state_reasons(cis[i]);
     pi.material_state=pi.material_reasons==0;
     auto next_type=[](const void* chain){return chain?uint32_t(static_cast<const VkBaseInStructure*>(chain)->sType):0u;};
@@ -2101,15 +2109,17 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     bool exact=false;{std::lock_guard lock(g_mu);auto i=g_pipes.find(s->pipe[0]);if(i!=g_pipes.end()){
       s->geo_material_no_writes&=i->second.no_storage_writes;
       const auto& p=i->second;
-      exact=p.xfb && p.vt_outputs && p.material_state && p.depth_test==1 && p.blend_mask==0 &&
+      const bool tileset=native_hit::tileset_deferred(s->vs,s->fs);
+      const bool outputs=tileset ? g_tileset_capture && g_stride>=80u && p.tileset_outputs==3u && p.tileset_material_inputs.valid : p.vt_outputs!=0u;
+      exact=p.xfb && outputs && p.material_state && p.depth_test==1 && p.blend_mask==0 &&
         (p.color_mask&0xf73u)==0xf73u && p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && p.uv_match==UV_OK;
       // One sparse, exact state record per audited native pipeline. A later
       // unsupported term is visible without another blind attribution run.
       static std::unordered_set<uint64_t> reported;
-      if(native_hit::enabled() && cfg_int("rt_stats",0) && s->vs==0x3812bc980438747full && s->fs==0x8995da1e4060f53bull &&
+      if(native_hit::enabled() && cfg_int("rt_stats",0) && ((s->vs==0x3812bc980438747full && s->fs==0x8995da1e4060f53bull) || (g_tileset_capture && tileset)) &&
          reported.size()<16 && reported.insert(uint64_t(s->pipe[0])).second)
         log("[hit material pipeline] pipe %u accepted %u xfb %u basis %u static %u reasons 0x%x depth test %d blend 0x%x color 0x%x topo %u uv %u; raster/multisample/blend pNext %u/%u/%u",
-          s->pipe_id[0],unsigned(exact),unsigned(p.xfb),p.vt_outputs,unsigned(p.material_state),p.material_reasons,p.depth_test,p.blend_mask,p.color_mask,unsigned(p.topo),unsigned(p.uv_match),p.raster_next,p.multisample_next,p.blend_next);
+          s->pipe_id[0],unsigned(exact),unsigned(p.xfb),tileset?p.tileset_outputs:p.vt_outputs,unsigned(p.material_state),p.material_reasons,p.depth_test,p.blend_mask,p.color_mask,unsigned(p.topo),unsigned(p.uv_match),p.raster_next,p.multisample_next,p.blend_next);
 
     }else s->geo_material_no_writes=false;}
     VkBuffer buffer{};VkDeviceSize offset=0,bytes=0;
@@ -2664,7 +2674,16 @@ VkDeviceSize geo_buffer_size(VkBuffer b) {
 bool geo_native_tileset_inputs(VkPipeline pipeline) {
  std::lock_guard lock(g_mu);auto p=g_pipes.find(pipeline);
  return g_tileset_capture && p!=g_pipes.end() && p->second.xfb && p->second.tileset_outputs==1u &&
-   p->second.uv==1 && p->second.inst.ok;
+   p->second.uv==1;
+}
+bool geo_native_tileset_material_inputs(VkPipeline pipeline,native_hit::TilesetInputs* out) {
+ if(!out)return false;*out={};std::lock_guard lock(g_mu);auto p=g_pipes.find(pipeline);
+ if(!g_tileset_capture || g_stride<80u || !native_hit::enabled() || p==g_pipes.end())return false;
+ const auto& info=p->second;
+ if(!info.xfb || info.uv!=1 || !info.tileset_material_inputs.valid)return false;
+ if((info.tileset_family==1u && info.tileset_outputs!=1u) ||
+    (info.tileset_family==2u && info.tileset_outputs!=3u) || !info.tileset_family)return false;
+ *out=info.tileset_material_inputs;return true;
 }
 bool geo_native_hit_inputs(VkPipeline pipeline,native_hit::StaticInputs* out){
  if(!out)return false;std::lock_guard lock(g_mu);auto p=g_pipes.find(pipeline);if(p==g_pipes.end())return false;
