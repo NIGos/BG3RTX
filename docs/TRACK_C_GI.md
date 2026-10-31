@@ -105,6 +105,9 @@ contracted D-LS set0 layout/writes, missing GI output/history/MV bindings and th
 SHaRC/rebase camera. A source-only fix supplies one typed GI/native-light contract
 for both layout creation and pushed writes (19 descriptors, 20 with physical Hair).
 Actual compiled SPIR-V descriptor types/counts/push range are checked against it.
+The direct/two-surface experimental reference also uses its own typed 18-slot
+layout/write contract, including rebase camera 48; ordinary local shadows retain
+their existing contraction. Deep reference variants need fresh image validation.
 The key stays off pending a new authorized image A/B; compilation and positive
 radiance counters alone do not qualify image quality.
 

@@ -229,8 +229,8 @@ Pipe g_sun_resolve;       // rt_sun_replace: writes the trusted traced visibilit
 // SHaRC (sharc=1, core/sharc.h): the ray-traced push set, the host's set 1, empty sets 2-3 (D-RF: the
 // game's set 2) and the cache's set 4.
 VkDescriptorSetLayout g_empty_dsl = VK_NULL_HANDLE;
-VkDescriptorSetLayout g_hit_gi_set_layout=VK_NULL_HANDLE;
-VkPipelineLayout g_hit_gi_plain_layout=VK_NULL_HANDLE;
+VkDescriptorSetLayout g_hit_gi_set_layout=VK_NULL_HANDLE,g_hit_reference_set_layout=VK_NULL_HANDLE;
+VkPipelineLayout g_hit_gi_plain_layout=VK_NULL_HANDLE,g_hit_reference_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_rt_sharc_layout = VK_NULL_HANDLE, g_rf_sharc_layout = VK_NULL_HANDLE, g_hit_gi_layout=VK_NULL_HANDLE;
 Pipe g_trace_rt_sharc, g_rf_sharc, g_sharc_resolve, g_sharc_inject, g_sharc_inject_lock, g_sharc_debug, g_sharc_roof;
 bool g_sharc_logged = false, g_sharc_missing_logged = false, g_sharc_paused_logged = false, g_sharc_em_logged = false;
@@ -818,6 +818,8 @@ struct Bound {
   VkDescriptorImageInfo ximg[kNumExtras];
   VkDescriptorBufferInfo xbuf[kNumExtras];
 };
+
+bool gather_hit_gi_writes(const Bound&,VkWriteDescriptorSet*,uint32_t&,bool reference=false);
 
 // The extras' descriptors, with fallbacks when the game did not bind a source
 // (the shaders are told through Push::mat_classes bits 1-3).
@@ -1485,10 +1487,14 @@ bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
   VkDescriptorSet selected_alpha=b.alpha;
   if(material_use && (!host->rt_hit_material_use ||
      !host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&selected_alpha)))return false;
-  const VkPipelineLayout layout = box ? g_ls_box_layout : g_ls_layout;
+  const VkPipelineLayout layout = material_use ? g_hit_reference_layout : box ? g_ls_box_layout : g_ls_layout;
+  if(!layout || (material_use && box))return false;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   VkWriteDescriptorSet w[kLsBindings + kNumExtras];
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, kLsBindings, w), w);
+  uint32_t count=0;
+  if(material_use){if(!gather_hit_gi_writes(b,w,count,true))return false;}
+  else count=gather_writes(b,kLsBindings,w);
+  vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,count,w);
   VkDescriptorSet sets[2] = {selected_alpha, sun};
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, material_use ? 1u : 2u, sets, 0, nullptr);
   if (box) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 3, 1, &box->game_set1,
@@ -1534,22 +1540,25 @@ bool sharc_dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, VkDe
   return true;
 }
 
-bool ensure_hit_gi_layout(VkDescriptorSetLayout alpha,bool sharc){
- if(!g_hit_gi_set_layout){
+bool ensure_hit_gi_layout(VkDescriptorSetLayout alpha,bool sharc,bool reference=false){
+ if(reference && sharc)return false; // No reference shader/descriptor set4 contract.
+ auto& set_layout=reference?g_hit_reference_set_layout:g_hit_gi_set_layout;
+ auto& plain_layout=reference?g_hit_reference_layout:g_hit_gi_plain_layout;
+ if(!set_layout){
   VkDescriptorSetLayoutBinding entries[bg3::native_hit_gi::bindings.size()];uint32_t n=0;
-  for(const auto& b:bg3::native_hit_gi::bindings)if(bg3::native_hit_gi::enabled(b,g_hair_origin_cap))entries[n++]={b.binding,b.type,b.count,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+  for(const auto& b:bg3::native_hit_gi::slots(reference))if(bg3::native_hit_gi::enabled(b,g_hair_origin_cap))entries[n++]={b.binding,b.type,b.count,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
   if(n>32u)return false;
   VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};ci.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;ci.bindingCount=n;ci.pBindings=entries;
-  if(host->vk->CreateDescriptorSetLayout(host->device,&ci,nullptr,&g_hit_gi_set_layout)!=VK_SUCCESS)return false;
+  if(host->vk->CreateDescriptorSetLayout(host->device,&ci,nullptr,&set_layout)!=VK_SUCCESS)return false;
  }
- if(sharc)return make_sharc_layout(g_hit_gi_set_layout,alpha,VK_NULL_HANDLE,&g_hit_gi_layout);
- if(g_hit_gi_plain_layout)return true;
- VkDescriptorSetLayout sets[2]={g_hit_gi_set_layout,alpha};VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(Push)};
+ if(sharc)return make_sharc_layout(set_layout,alpha,VK_NULL_HANDLE,&g_hit_gi_layout);
+ if(plain_layout)return true;
+ VkDescriptorSetLayout sets[2]={set_layout,alpha};VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(Push)};
  VkPipelineLayoutCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};ci.setLayoutCount=2;ci.pSetLayouts=sets;ci.pushConstantRangeCount=1;ci.pPushConstantRanges=&push;
- return host->vk->CreatePipelineLayout(host->device,&ci,nullptr,&g_hit_gi_plain_layout)==VK_SUCCESS;
+ return host->vk->CreatePipelineLayout(host->device,&ci,nullptr,&plain_layout)==VK_SUCCESS;
 }
-bool gather_hit_gi_writes(const Bound& b,VkWriteDescriptorSet* writes,uint32_t& n){
- n=0;for(const auto& slot:bg3::native_hit_gi::bindings){
+bool gather_hit_gi_writes(const Bound& b,VkWriteDescriptorSet* writes,uint32_t& n,bool reference){
+ n=0;for(const auto& slot:bg3::native_hit_gi::slots(reference)){
   if(!bg3::native_hit_gi::enabled(slot,g_hair_origin_cap))continue;
   const VkWriteDescriptorSet* write=nullptr;
   if(slot.binding<kLsBindings)write=&b.w[slot.binding];
@@ -1558,7 +1567,12 @@ bool gather_hit_gi_writes(const Bound& b,VkWriteDescriptorSet* writes,uint32_t& 
   if(!write || write->dstBinding!=slot.binding || write->descriptorType!=slot.type || write->descriptorCount!=slot.count)return false;
   writes[n++]=*write;
  }
- return n==bg3::native_hit_gi::descriptor_count(g_hair_origin_cap);
+ return n==bg3::native_hit_gi::descriptor_count(g_hair_origin_cap,reference);
+}
+
+bool ensure_hit_reference_layout(){
+ VkDescriptorSetLayout alpha{};VkDescriptorSet unused{};
+ return host->rt_alpha && host->rt_alpha(&alpha,&unused) && alpha && ensure_hit_gi_layout(alpha,false,true);
 }
 
 // Qualified hidden-hit GI uses native local-light inputs, material set1 and
@@ -2250,10 +2264,10 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   // Normal RF/probe replacement remains separate and unchanged.
   const int reference_mode=host->cfg_int("rt_hit_reference",0);
   if(s.tlas && s.ls_ok && (pc.rf_debug==7 || reference_mode==1 || reference_mode==2) && host->cfg_int("rt_hit_material",0) &&
-     bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) && ensure_ls_layout()){
+     bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) && ensure_hit_reference_layout()){
     const bool two=reference_mode==2;
     Pipe& reference=two?g_hit_two_bounce:g_hit_direct;
-    if(refresh(reference,two?"gi/rt_hit_two_bounce.hlsl":"gi/rt_hit_direct.hlsl",g_ls_layout)){
+    if(refresh(reference,two?"gi/rt_hit_two_bounce.hlsl":"gi/rt_hit_direct.hlsl",g_hit_reference_layout)){
       Bound direct{};bind_all(direct,s);bind_rt(direct,s.tlas,s.alpha);bind_ls(direct,s);bind_extras(direct,s);
       memory_barrier(cmd,kCS,kCS);
       auto reference_pc=pc;reference_pc.rt_stats=host->cfg_int("rt_stats",0)?1u:0u;
@@ -2473,7 +2487,8 @@ void gi_release() {
   g_rt_layout = VK_NULL_HANDLE;
   g_rt_set_layout = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hit_gi_set_layout));g_hit_gi_set_layout=VK_NULL_HANDLE;
-  for (VkPipelineLayout* l : {&g_hit_gi_plain_layout, &g_hit_gi_layout, &g_rt_sharc_layout, &g_rf_sharc_layout}) {
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hit_reference_set_layout));g_hit_reference_set_layout=VK_NULL_HANDLE;
+  for (VkPipelineLayout* l : {&g_hit_reference_layout, &g_hit_gi_plain_layout, &g_hit_gi_layout, &g_rt_sharc_layout, &g_rf_sharc_layout}) {
     host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
     *l = VK_NULL_HANDLE;
   }
