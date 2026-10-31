@@ -1,5 +1,20 @@
 # Session handoff - 2026-10-30: UI fix confirmed; hair/cascade coverage open
 
+Latest user mandate: autonomous offline implementation/verification may be parallel;
+live ONLY after explicit steering for a prepared batch. No manual user A/B/INI edits.
+Read docs/RENDERING_EXECUTION_PLAN.md and docs/GOAL_RENDERING_AGENT.md. Experimental
+feature controls must stay synchronized with the GUI. Old queue/window exceptions
+are not authorization; keep drafts OUT of pending inboxes. Queue policy needs a
+small fake-tested correction before autonomous live release. No live grant exists
+for the new program. Current coverage fixes retain priority; reuse their owners.
+Milestones are independent increments, not a waterfall. M0 gates live release only.
+Request a ready candidate's live batch while unrelated offline lanes keep working.
+Pending/declined live permission blocks live only: reassign workers across useful
+offline increments before stopping. Record actual blockers; no repeated-test busywork.
+Storage: read docs/DISK_HYGIENE.md before cleanup. The active rendering coordinator
+listed protected evidence there; large historical P1 raw collections remain held.
+Bound new captures and retain decisive data; no blanket worktree/raw deletion.
+
 Main dd13361 includes `codex/native-coverage`, merged via merge-green and pushed:
 20/20 CTests, 202/202 shader files and QA pass. Default-off rt_native_scalp adds native scalp
 hard-cut scalar coverage/material capture; camera dither != 0 remains unsupported.

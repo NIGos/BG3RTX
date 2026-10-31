@@ -1,5 +1,121 @@
 # BG3RTX progress
 
+## Hair/Scalp capacity correction installed; user review pending - 2026-10-31
+
+The existing Desktop shortcut BG3RTX - Hair Scalp now selects isolated candidate
+hair-capacity-fix 859b879. Native Hair/Scalp remain ON; OMM/current Sun remain OFF.
+The prior a9f8688 trial and shortcut backup are retained. Main code/binaries and
+user saves are unchanged. Ctrl+Shift+F10 is restored through private dev=1.
+
+Confirmed regression: 24 -> 88 bytes per captured vertex exhausted the unchanged
+camera and legacy cascade buffers. Native88 reservation feedback was corrected;
+explicit capacities are now camera 1408 MiB and cascade 587 MiB, restoring prior
+vertex capacity (+2305 MiB total across one camera and three cascade buffers).
+Two presented FG2 Test1 runs completed: 485 s and 450 s, seven phases each,
+including slow/fast mouse rotations both ways. The second run has ZERO forced
+alpha, camera drops and cascade overflow in every measured steady window.
+RT and FG remained active; measured rotation cadence 45.4-48.2 rendered fps,
+displayed/rendered about 2, no interior FG toggles. Static RT cost without the
+primary diagnostic: 3.397 ms median. This is not total frame time or a controlled
+speedup claim. Queue reports zero NVIDIA 153 events/dumps and unchanged builds.
+The first run had a recovered startup stall before measurement, retained in evidence.
+
+Keep the capacity correction. It fixes demonstrated geometry loss; full flicker
+closure is not claimed. Global primary match is 97.410% static and 96.247-97.007%
+rotating in this scene; full P1/M1 is unqualified, but that unrelated threshold
+is not a veto on this capacity fix. Optional burst evidence is being kept small.
+Detailed numbers: omm-bake/captures/vegetation-regression-20261031/r3 and r4.
+
+User review status: UI descriptor fix confirmed; original Hair/Scalp trial reported
+improved faces with darker/dithered hair and vegetation regression. The capacity
+correction installed today is NOT YET TESTED BY THE USER. Physical Hair secondary
+origins are in offline development; OMM and current-Sun remain unqualified and
+OFF in the trial. RTX Hair is a scoped feasibility/prototype plan, not installed.
+The user explicitly permits autonomous advancement after adequate scoped checks;
+manual witnessing/confirmation is not an implementation or release prerequisite.
+
+
+## Hair/Scalp personal trial installed - 2026-10-30
+
+At the user's request, installation only; no agent game launch. Desktop shortcut
+BG3RTX - Hair Scalp points to the frozen isolated a9f8688 candidate (ABI 19,
+both matching DLLs). Native Hair/Scalp are on in its private user settings; OMM
+and current-cascade Sun are off. Other user choices were copied and preserved.
+Launcher dry-run passes and selects the trial layer. 39 CTests pass; prior native
+Hair/Pubes GPU fixture37cases passes. Actual user quality/cost is unqualified.
+Main binaries/source/prefs are unchanged. Rollback: use the original tool.
+Candidate: C:/Users/quali/.codex/worktrees/hair-user-trial/BG3RTX.
+Manifest: captures/trial-package.json in that candidate. Do not rebuild/edit it
+while the user's game runs. Development continues in the separate omm-bake tree.
+
+## Disk audit and cleanup coordination - 2026-10-30
+
+docs/DISK_HYGIENE.md records owner holds and disposal/retention rules. Active
+rendering coordinator notified and added protected datasets. Captures: en2-selfcheck
+128.13 GiB, pan-motion-vectors 49.05 GiB, old .claude trees 20.60 GiB, main 17.22 GiB.
+These include unresolved P1 evidence and are not wholesale disposal candidates.
+Synthetic queue/policy temp outputs are regenerable but total only 884,048 bytes.
+Bounded SHA-256 check found 2,675 PNG alias groups / 1,495.4 MiB redundant storage;
+names remain referenced, so no blind deletion. Exact paths/hashes and durable disk
+snapshot are linked from DISK_HYGIENE. Owner has not released old P1 raw sets.
+QA docs now warn that prune can run after incomplete analysis; preserve raw until
+classified. No captures/checkouts deleted and no live work requested by this audit.
+
+## Third plan review - 2026-10-30
+
+Independent read-only audit found no material blockers. Checked six handoff
+documents, 21 tool/source paths, M0-M6 dependencies, goal structure and offline/live
+boundaries; diff whitespace check passed. Ready to hand to the execution agent.
+This qualifies the plan only: M0 guard, rendering changes and live tests are not
+implemented or passed by this review. No new procedural gates added.
+
+## Execution plan agility review - 2026-10-30
+
+Latest steering: pending/declined live permission must not stop useful independent
+offline work. Plan/goal require a cross-milestone task scan and worker reassignment
+before stopping, with actual missing-input/resource blockers and no busywork.
+
+Independent read-only review identified avoidable serialization. Plan/goal now
+split M2 probes and M3 providers, allow supported M4 increments on existing geometry,
+and develop the minimal reference alongside M3/M4. M0 gates live release only and
+stays a small queue-policy change. Request candidate-ready live batches without
+waiting for unrelated offline work; authorized iterative windows need no per-build
+approval. Workers may own shared-file edits; only conflicts/integration serialize.
+Focused checks during edits, mandatory merge-green checks at integration, concise
+docs and feature-level GUI updates. Explicit user steering remains required for live.
+Documentation changes only; no implementation, build or live test performed.
+
+## Autonomous execution plan and receiving-agent goal - 2026-10-30
+
+docs/RENDERING_EXECUTION_PLAN.md defines M0-M6, tooling, ownership, GUI/settings,
+evidence gates and live authorization; docs/GOAL_RENDERING_AGENT.md is the prompt
+to activate in the receiving conversation. AGENTS/handoff link the new mandate.
+No renderer implementation or live test started by this planning task.
+
+Read-only tooling review found old queue permission exceptions and watched root/
+worktree pending inboxes. Keep unauthorized drafts outside those inboxes; M0 adds
+a minimal fail-closed batch authorization check with fake-runner tests. Existing
+experimental GUI metadata is reusable; schema currently omits experimental.
+Current hair/cascade work keeps priority. Parallel offline room/data proof follows;
+whole-game PT stays outside the required deliverable. No user live grant recorded.
+
+## Offline path tracing feasibility study - 2026-10-30
+
+User-requested study: docs/PT_FEASIBILITY_OFFLINE.md, with reproducible probe and
+JSON in docs/evidence/pt-feasibility-probe-20261030.*. No game/save access, runtime
+changes, build or GPU measurement. Package probe: 3,183 content banks parsed,
+zero errors. Foundry ordinary scenery resolves to 209 visual resources, 185 mesh
+paths and 79 material IDs; all referenced meshes/materials found. Three other
+resource IDs are effects (40 placements), not missing meshes. Reference/header
+availability only: no mesh export, texture decode or visual coverage claim.
+
+No hard impossibility found. Whole-game PT remains unqualified: construction and
+terrain reconstruction, dynamic offscreen state, full materials and light semantics
+are major risks. Recommend improved hybrid rendering, then a bounded opaque PT
+lighting proof with raster primary visibility. Current hair/cascade fixes retain
+priority; this study changes no implementation order or defaults. Historical
+5-8 ms PT estimates are not a measured budget for the proposed renderer.
+
 ## Solar shadow sharpness: native-mask restriction confirmed in logs - 2026-10-30
 
 Dedicated solar agent found correct finite-disc radius, normalization and changing
