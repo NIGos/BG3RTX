@@ -43,8 +43,10 @@ ABI 21 eb1ec4d R2 completed 460 s; camera/order now reaches the query, but all
 and logs exact predicates; integrated d8b70e3. Freeze matching ABI 21 binaries.
 No material GPU participation yet. Static primary 99.524/99.524/99.525%, FG ratio
 2.0, no NVIDIA 153/dumps/build drift. R2 immutable evidence is in root captures.
-R3 is RUNNING: private native-hit-provider-live dae7d32, queue exec 98743, batch
-native-hit-provider-20261031-r3. Keep candidate frozen; observe same process.
+R3 dae7d32 is TERMINAL: 448 s, parser fix confirmed actual, binding attempts
+still decline; no material GPU rows. Immutable root captures/r3 analysis retained.
+Owner fixes ordinary frozen sampler cloning/revalidation and logs capture stage.
+R4 is an unreleased 20/90/20 s acquisition-only draft, not yet authorized/frozen.
 Main is ABI 21; personal Hair trial stays ABI 19. Do not rerun unchanged.
 89 actual S1 G-buffer VS/FS modules pass the read-only scanner. Non-watched
 360 s acquisition draft is under captures/native-hit-material-20261031/draft/.

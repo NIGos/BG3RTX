@@ -1,5 +1,22 @@
 # BG3RTX progress
 
+## R3 confirms the parser correction; material binding fix next - 2026-10-31
+
+R3 dae7d32 completed 448 s, all five phases, no NVIDIA 153/dumps/build drift.
+Actual pipelines now accept the native depth-clip extension (type 1000102001),
+zero pipeline declines. Retain that correction. Acquisition still FAILED: 20
+unique binding attempts decline, zero snapshots/qualified material rows. This is
+not a too-tight numeric gate. Owner is supporting ordinary frozen sampler bindings
+with owned clones and exact descriptor/write-version revalidation; actual failed
+capture stage will be logged. Sampler causality remains unproven until that run.
+
+Primary OFF/ON/OFF: 99.525/99.524/99.525%; FG ratio 2.0, zero bad phase samples.
+Rendered log cadence 36.21/36.00/36.42 fps; existing RT diagnostic 18.48/18.39/18.32 ms.
+Stats-off existing RT 0.831/0.877 ms; no new material-cost or speedup claim. Immutable
+inputs and derived results: omm-bake/BG3RTX/captures/native-hit-material-20261031/r3/.
+Next acquisition-only draft is 20/90/20 s, no repeated cost windows until positive
+material participation. No user-trial changes or new user check requested.
+
 ## ABI 21 consolidated; changed material acquisition R3 running - 2026-10-31
 
 Main 90d7930, merged only through merge-green and pushed: 52/52 CTests,
