@@ -158,6 +158,8 @@ target_include_directories(material_submit_stages_test PRIVATE ${VULKAN_SDK}/Inc
 add_test(NAME material_submit_stages_test COMMAND material_submit_stages_test)
 add_executable(transport_bsdf_test tests/transport_bsdf_test.cpp)
 add_test(NAME transport_bsdf_test COMMAND transport_bsdf_test)
+add_executable(native_hit_direct_test tests/native_hit_direct_test.cpp)
+add_test(NAME native_hit_direct_test COMMAND native_hit_direct_test)
 add_executable(transport_frame_test tests/transport_frame_test.cpp)
 add_test(NAME transport_frame_test COMMAND transport_frame_test)
 add_executable(native_opaque_transport_test tests/native_opaque_transport_test.cpp)

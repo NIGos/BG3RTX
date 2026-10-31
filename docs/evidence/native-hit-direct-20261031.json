@@ -1,0 +1,178 @@
+{
+  "baseline_provider": "177ef6e",
+  "cpu_tests": {
+    "native_hit_direct_checks": 877,
+    "targeted_ctests_passed": 4,
+    "failed": 0
+  },
+  "shader": {
+    "files": [
+      "gi/cascade/rt_hit_direct.hlsl",
+      "gi/cascade_rebase/rt_hit_direct.hlsl",
+      "gi/rebase/rt_hit_direct.hlsl",
+      "gi/rt_hit_direct.hlsl",
+      "native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "native_scalp/gi/rt_hit_direct.hlsl",
+      "omm/gi/cascade/rt_hit_direct.hlsl",
+      "omm/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "omm/gi/rebase/rt_hit_direct.hlsl",
+      "omm/gi/rt_hit_direct.hlsl",
+      "omm/native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "omm/native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "omm/native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "omm/native_scalp/gi/rt_hit_direct.hlsl"
+    ],
+    "failures": [],
+    "validation": [
+      {
+        "file": "gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "b3418c6a74a8cc8d41c142f3dcfeae5e3625545fe035877ae553fe2b9bb89efa"
+      },
+      {
+        "file": "gi_cascade_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "617cf5b07c96f160ec5794e2b1e99f124199917a100ab813f3847bc6c944987e"
+      },
+      {
+        "file": "gi_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "b76865dc721e6140287223b4d95a6948b61c0a1735ed37d0f83a8d7a24dc0279"
+      },
+      {
+        "file": "gi_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "a6f164659f21bc7ad0ef55320fc3580e4d7a800825112c3b1355ae159fc55851"
+      },
+      {
+        "file": "native_scalp_gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "fc9ec203fa3c5c2ea516e61ea2145355945f3745b4bf0c785ee57219ece79595"
+      },
+      {
+        "file": "native_scalp_gi_cascade_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "ef08c0b3d78cb9662b0850b989c7dfeb18dd1024942847b6cd7bae934429e155"
+      },
+      {
+        "file": "native_scalp_gi_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "120c065545e55e1476239988bc738c9a25a0f93814f6ad0cb272029694fc9637"
+      },
+      {
+        "file": "native_scalp_gi_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "2828df47eafa7cea1c5fe4a7f8756a4dfa99137d2040c3618c1c2f8914165c9f"
+      },
+      {
+        "file": "omm_gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "7053ec3746f840ca5ec1590eb3fa2f4c99aa87c20e52d13fcbd629ac3f23b6b0"
+      },
+      {
+        "file": "omm_gi_cascade_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "f99fee8afb813bcbe74d5f608b8ff15013b4393873ffb18511d9eb4ffcf572af"
+      },
+      {
+        "file": "omm_gi_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "ddc91e9d5a2248deee0e599c15ed4155230d4c0021adbeeb3396f2c5a30e2b27"
+      },
+      {
+        "file": "omm_gi_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "d8700b76e9ce4afb12327bcfa726c51c14211fadf1185d833cc54c2eebc3ecef"
+      },
+      {
+        "file": "omm_native_scalp_gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "5beac5b80db7d75dd61a16357da16274517a380d38ca50cb2539eeabb0bafaa0"
+      },
+      {
+        "file": "omm_native_scalp_gi_cascade_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "0d82bca3a8a6298950bd50452588fff79891b6368b3f59cafa236bcdb54c1d8e"
+      },
+      {
+        "file": "omm_native_scalp_gi_rebase_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "f33cde74fd3a92a89b8e4a86e84ca6370c8952718b36e678c6616a1514ee58f7"
+      },
+      {
+        "file": "omm_native_scalp_gi_rt_hit_direct.hlsl.main.spv",
+        "returncode": 0,
+        "messages": "",
+        "sha256": "b72d0304bd99a67b279a7ecd02549e51569f2fb5c7fe2e1c1c85f274a96897e0"
+      }
+    ],
+    "scope": "CPU DXC and spirv-val only; no GPU"
+  },
+  "parity": {
+    "pairs": [
+      {
+        "file": "gi/rt_reflections.hlsl",
+        "baseline177ef6e": "934614ea091231a5efddca365ad5aa1f22f3de7e7ce7384c780159f2aef7375c",
+        "current": "934614ea091231a5efddca365ad5aa1f22f3de7e7ce7384c780159f2aef7375c",
+        "identical": true
+      },
+      {
+        "file": "gi/rt_shadow.hlsl",
+        "baseline177ef6e": "01fb8eddcf26e3fa835275e7306ea486138aa408da48af2fe19eeaffb62e888b",
+        "current": "01fb8eddcf26e3fa835275e7306ea486138aa408da48af2fe19eeaffb62e888b",
+        "identical": true
+      },
+      {
+        "file": "gi/gi_trace_rt.hlsl",
+        "baseline177ef6e": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+        "current": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+        "identical": true
+      },
+      {
+        "file": "gi/rt_hit_material.hlsl",
+        "baseline177ef6e": "927802081ebd3eefcfcf97e2debc2f7d1aff591dbdae67cafc8c76f3929c7269",
+        "current": "927802081ebd3eefcfcf97e2debc2f7d1aff591dbdae67cafc8c76f3929c7269",
+        "identical": true
+      },
+      {
+        "file": "omm/native_scalp/gi/cascade_rebase/rt_reflections.hlsl",
+        "baseline177ef6e": "46ddf2bcad631d28ad6a13dc14454be5fc3f29aded92d19e6148ed382944b431",
+        "current": "46ddf2bcad631d28ad6a13dc14454be5fc3f29aded92d19e6148ed382944b431",
+        "identical": true
+      }
+    ],
+    "compile_failures": [],
+    "scope": "Actual CPU DXC byte parity, 2 workers; no GPU"
+  },
+  "unchanged_inputs": {
+    "baseline": "177ef6e",
+    "existing_shader_and_common_files": 613,
+    "changed": [],
+    "scope": "Source byte comparison after CRLF normalization; all old compile inputs unchanged, so previous exact module hash evidence remains applicable. New consumers compiled independently."
+  },
+  "source_sha256": {
+    "common/native_hit_direct.h": "06da310e0140e12d8171e4cafec2bdb57064db0b6157c938c826e1696ff779d0",
+    "shaders/rt/native_hit_direct.hlsli": "de3ddd1dd23eed3c5f75a31bfc7b1b9002219861f4864c8bd06f346496d7e91b",
+    "shaders/gi/rt_hit_direct.hlsl": "44138b18e259308505e775a940bc3a388e35ad4cea85b18be7380b71da1b42cc"
+  },
+  "gpu_executed": false,
+  "gpu_ms": null,
+  "review": "Independent scoped LS-layout/material-use/lifetime and single-cosine review clear; authored spot normalization confirmed against bg3_lights.hlsli:165."
+}
