@@ -1,4 +1,5 @@
 #include "../common/native_hit_records.h"
+#include "../common/native_hit_pool.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
 // docs/archive/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
 //
@@ -303,6 +304,8 @@ VkDeviceSize as_bytes() {
 Buf g_pool;
 RangeAlloc g_pool_ra;
 bool g_pool_grew = false;
+uint64_t g_pool_epoch = 1;          // +1 whenever g_pool is replaced (hit material basis jobs, native_hit_pool.h)
+VkDeviceSize g_basis_bytes = 0;     // pool ranges holding hit-material UV/basis (native_hit::pool::kBasisCapBytes)
 
 bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
   if (g_pool.b && g_pool_ra.alloc(size, 16, off)) return true;
@@ -326,6 +329,7 @@ bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
     log("[bvh] mesh pool grown to %llu MB", (unsigned long long)(cap >> 20));
   }
   g_pool = nb;
+  ++g_pool_epoch;
   g_pool_ra.grow(cap);
   g_pool_grew = true;
   return g_pool_ra.alloc(size, 16, off);
@@ -356,6 +360,7 @@ struct Mesh {
   uint32_t instances_seen = 0;
   uint64_t gen = 0;                   // unique per created mesh: results of an evicted one never apply to a new one
   uint64_t geo_key = 0;               // native_hit pool material record (rt_hit_material; 0 none)
+  VkDeviceSize basis_off = 0, basis_size = 0;   // its UV/basis range in the pool (0: none)
   std::unique_ptr<std::vector<NativeOmmVariant>> omm;
 };
 uint64_t g_mesh_gen = 0;
@@ -867,6 +872,7 @@ void evict(uint64_t key) {
   if(m.omm)for(const auto& v:*m.omm)omm::release_ticket(v.baked.ticket);
   as_destroy(m.as);
   if (m.pool_size) g_pending_free.push_back({frame_index(), -1, m.pool_off, m.pool_size});
+  if (m.basis_size) { g_pending_free.push_back({frame_index(), -1, m.basis_off, m.basis_size}); g_basis_bytes -= (std::min)(g_basis_bytes, m.basis_size); }
   g_meshes.erase(it);
   g_any_mesh = !g_meshes.empty();
 }
@@ -950,6 +956,8 @@ void bvh_device_destroyed(DeviceData* dd) {
   g_dyn.clear();
   g_buf_meshes.clear();
   g_any_mesh = false;
+  g_basis_bytes = 0;
+  ++g_pool_epoch;
   for (auto& c : g_chunks)
     if (c.buf.b) free_buf(c.buf);
   g_chunks.clear();
@@ -1094,6 +1102,15 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     return BVH_CACHED_AUDIT;
   }
   return BVH_CACHED;
+}
+
+// The mesh pool as the hit-material basis jobs write it (native_hit_pool.h). The epoch changes
+// whenever the buffer is replaced (grown by copy): a job recorded before a change may have
+// written the old buffer, so its result is discarded (hit_material.cpp pool_jobs_poll).
+bool bvh_pool_target(VkBuffer* buffer, VkDeviceSize* bytes, uint64_t* epoch) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  *buffer = g_pool.b; *bytes = g_pool.size; *epoch = g_pool_epoch;
+  return g_pool.b != VK_NULL_HANDLE;
 }
 
 void bvh_set_record(uint32_t token, uint32_t rec) {
@@ -1486,9 +1503,24 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
                (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
     in.accelerationStructureReference = m.as.addr;
+    // Pool material records (native_hit_pool.h): counted per instance; a qualified record with
+    // an extracted UV/basis gives a non-alpha instance its pool material row (rec = flag | slot).
+    native_hit::PoolUse use{};
+    if (native_hit::enabled()) {
+      Mesh& mm = g_meshes[fd.mesh_key];
+      use = native_hit::pool_lookup(fd.geo_key, fd.pos_key, fd.instances,
+                                    {mm.gen, mm.pool_off, mm.tris, stride, mm.basis_off, mm.basis_size, g_pool_epoch});
+      const VkDeviceSize need = native_hit::pool::basis_bytes(mm.tris);
+      if (use.wants_basis && !alpha && !mm.basis_size && g_basis_bytes + need <= native_hit::pool::kBasisCapBytes &&
+          pool_alloc(cmd, need, &mm.basis_off)) {
+        mm.basis_size = need;   // passed to the record by the next lookup; extracted at its G-buffer draw
+        g_basis_bytes += need;
+      }
+    }
+    const bool pool_row = !alpha && use.slot < native_hit::nh_pool_rows;
     const uint32_t inf[4] = {uint32_t(m.pool_off), (stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u) |
-                             (fd.camera_fade ? kInfoCameraFade : 0u),
-                             alpha ? 16 + fd.rec * kRecBytes : 0, m.tris};
+                             (fd.camera_fade ? kInfoCameraFade : 0u) | (pool_row ? native_hit::nh_pool_meta : 0u),
+                             alpha ? 16 + fd.rec * kRecBytes : pool_row ? native_hit::nh_pool_rec_flag | use.slot : 0u, m.tris};
     if (fd.camera_fade) camera_fade_marked(fd.instances, uint64_t(m.tris) * fd.instances);
     for (uint32_t i = 0; i < fd.instances; ++i, ++n) {
       in.instanceCustomIndex = n;
@@ -1497,8 +1529,6 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       inst_ref.push_back(in.accelerationStructureReference);
       inst_flags.push_back(in.flags);
     }
-    // Pool material records: counted per instance (step 1: InstInfo and shaders unchanged).
-    if (native_hit::enabled()) native_hit::pool_lookup(fd.geo_key, fd.pos_key, m.gen, fd.instances);
     static_tris += uint64_t(m.tris) * fd.instances;
     ++g_st.cached_draws;
     g_st.static_inst += fd.instances;

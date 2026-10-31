@@ -9,10 +9,12 @@
 #include "native_vt_fields.h"
 namespace bg3::native_vt {
 using V3=std::array<float,3>;using V4=std::array<float,4>;
-struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset;};
+// Engine UBO (1:0) byte offsets: UV transform p0 (p1 = mip clamp follows at +16), tile-set
+// index, light channel word (&7). 8995: v[4]/v[5]/words.y/words.z; STI 14678345: _m0[0]/_m0[1]/_m1/_m2.
+struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset,channel_offset;};
 inline constexpr Recipe recipes[]={
- {0x8995da1e4060f53bull,0x3812bc980438747full,64,100},
- {0x14678345c10aefbcull,0x2d2ac3c38992b7f0ull,0,32}};
+ {0x8995da1e4060f53bull,0x3812bc980438747full,64,100,104},
+ {0x14678345c10aefbcull,0x2d2ac3c38992b7f0ull,0,32,36}};
 inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
 // Both deferred variants: sampler 1:2, table 1:3, normal 1:4, albedo 1:5,
 // physical 1:6; Reflectance is material UBO 1:1 byte 0. Engine UBO is 1:0.

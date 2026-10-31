@@ -9,10 +9,12 @@
 // Pure policy on plain numbers; the layer (hit_material.cpp, bvhsplit.cpp) keeps every
 // Vulkan object. tests/native_hit_pool_test.cpp pins it.
 #include "native_hit_qualify.h"
+#include "native_hit_records.h"
 #include "native_vt_surface.h"
 #include <algorithm>
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 namespace bg3::native_hit::pool {
 // The pool pair: a deferred recipe of native_vt_surface.h that is not the audited per-draw
 // pair (3812bc98/8995da1e, class B, never pooled). Today: VS 2d2ac3c3, FS 14678345.
@@ -20,9 +22,10 @@ inline const native_vt::Recipe* pool_recipe(uint64_t vs, uint64_t fs) {
   const auto* r = native_vt::recipe(fs);
   return r && r->vs == vs && !(vs == 0x3812bc980438747full && fs == 0x8995da1e4060f53bull) ? r : nullptr;
 }
-// Engine UBO (set 1 binding 0) bytes the recipe reads: the UV transform and the tile-set index.
+// Engine UBO (set 1 binding 0) bytes the recipe reads: the UV transform p0 and the mip clamp p1,
+// the tile-set index and the light channel word (STI: 40 of the UBO's 48 bytes).
 inline uint32_t engine_bytes(const native_vt::Recipe& r) {
-  return std::max(r.transform_offset + 16u, r.tileset_index_offset + 4u);
+  return std::max({r.transform_offset + 32u, r.tileset_index_offset + 4u, r.channel_offset + 4u});
 }
 // Pipeline state of the G-buffer draw. Same rule as exact_material_pipeline without the
 // XFB/basis terms (the pool record has no per-frame capture).
@@ -85,6 +88,70 @@ struct Counters {
   void clear() { *this = {}; }
 };
 struct Totals { uint64_t stored = 0, refreshed = 0, conflicts = 0, evicted = 0, replaced = 0, stale = 0, overflow = 0; };
+// ---- UV/basis of a pooled mesh (steps 2-4) ----
+// The audit (PLAN_M4 "Pool instances"): VS 2d2ac3c3 writes UV = vertex input 4 at location 0 and
+// N/B/T = normalize(A * b) at locations 1/2/3, b computed from the vertex quaternion (input 5) in
+// object space and A the 3x3 part of the instance matrix (rows = inputs 1..3, as the positions).
+// The class A depth VS 646a930e has no UV output, so the pool's own UV slot holds no data for these
+// meshes. One G-buffer XFB of instance 0 (the bound range holds exactly tris*3 vertices: later
+// instances overflow and are not written) is mapped back with A_0^-1 (shaders/rt/
+// mesh_extract_basis.hlsl): a hit on instance i then uses normalize(A_i * A_0^-1 * w_0), which is the
+// native normalize(A_i * b). The extraction compares the G-buffer positions with M_0 * P (P: the pool
+// vertex) under the mesh cache tolerance, so the XFB triangle order and matrix are those of the mesh.
+inline constexpr uint64_t kBasisCapBytes = 256ull << 20;   // all basis ranges in the mesh pool
+inline constexpr uint32_t kJobsPerFrame = 8;               // G-buffer captures per frame
+inline constexpr uint64_t kJobXfbBytes = 16ull << 20;      // one capture (instance 0)
+inline uint64_t basis_bytes(uint32_t tris) { return nh_pool_basis_header + uint64_t(tris) * 3u * nh_pool_basis_vertex; }
+enum class Basis : uint8_t { None, Pending, Ready, Failed };
+enum class BasisResult : uint8_t { Ok, Mismatch, Invalid, Lost, PoolMoved, Count };
+inline constexpr const char* kBasisResultName[] = {"ok", "position mismatch", "invalid", "lost", "pool moved"};
+static_assert(sizeof(kBasisResultName) / sizeof(kBasisResultName[0]) == size_t(BasisResult::Count));
+struct BasisTrack {
+  Basis state = Basis::None;
+  uint64_t gen = 0;        // mesh generation the state belongs to
+  uint64_t since = 0;      // Pending: job frame; Failed: retry frame
+  uint32_t failures = 0, slot = UINT32_MAX;
+};
+// A new mesh generation starts over; returns the previous slot to release (UINT32_MAX none).
+inline uint32_t basis_rebind(BasisTrack& t, uint64_t gen) {
+  if (t.gen == gen) return UINT32_MAX;
+  const uint32_t old = t.slot;
+  t = BasisTrack{};
+  t.gen = gen;
+  return old;
+}
+inline bool basis_due(const BasisTrack& t, uint64_t frame) {
+  return t.state == Basis::None || (t.state == Basis::Failed && frame >= t.since);
+}
+inline void basis_pending(BasisTrack& t, uint64_t frame) { t.state = Basis::Pending; t.since = frame; }
+// err: max |W - M_0 P| / (tol_abs + tol_rel |W|) over the vertices (the mesh cache's own check).
+inline BasisResult basis_result(bool done, bool ran, bool pool_moved, float err, uint32_t invalid) {
+  if (!done || !ran) return BasisResult::Lost;
+  if (pool_moved) return BasisResult::PoolMoved;
+  if (invalid) return BasisResult::Invalid;
+  return err <= 1.0f ? BasisResult::Ok : BasisResult::Mismatch;
+}
+// Failed: retried after 120 frames, doubling up to 64x.
+inline void basis_done(BasisTrack& t, BasisResult r, uint64_t frame) {
+  if (r == BasisResult::Ok) { t.state = Basis::Ready; t.failures = 0; return; }
+  t.state = Basis::Failed;
+  t.since = frame + (uint64_t(120) << std::min(t.failures, 6u));
+  ++t.failures;
+}
+// Row slots of the query's pool region (nh_pool_rows), stable while the record lives.
+class Slots {
+ public:
+  uint32_t acquire() {
+    if (!free_.empty()) { const uint32_t s = free_.back(); free_.pop_back(); return s; }
+    return next_ < nh_pool_rows ? next_++ : UINT32_MAX;
+  }
+  void release(uint32_t s) { if (s < next_) free_.push_back(s); }
+  uint32_t used() const { return next_ - uint32_t(free_.size()); }
+  void clear() { free_.clear(); next_ = 0; }
+ private:
+  std::vector<uint32_t> free_;
+  uint32_t next_ = 0;
+};
 template <class Payload> class Table {
  public:
   static constexpr size_t kMaxRecords = 16384;
@@ -129,7 +196,15 @@ template <class Payload> class Table {
     return s;
   }
   // The pool mesh with this geometry was evicted: its record no longer describes a mesh.
-  void evicted(uint64_t key) { if (records_.erase(key)) ++totals_.evicted; }
+  template <class F> void evicted(uint64_t key, F&& on_payload) {
+    auto it = records_.find(key);
+    if (it == records_.end()) return;
+    on_payload(it->second.payload);
+    records_.erase(it);
+    ++totals_.evicted;
+  }
+  void evicted(uint64_t key) { evicted(key, [](Payload&) {}); }
+  template <class F> void for_each(F&& f) { for (auto& [k, r] : records_) f(k, r); }
   const Counters& counters() const { return counters_; }
   const Totals& totals() const { return totals_; }
   size_t size() const { return records_.size(); }
