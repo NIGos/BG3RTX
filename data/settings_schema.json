@@ -102,10 +102,10 @@
        {"id": "boost", "label": "On + Boost", "caps": [], "keys": {"reflex": "2"}, "needs": {}}
      ]},
     {"id": "exp_roof_shadows", "label": "Roof sun shadows",
-     "description": "Captures the roofs the camera cuts away (from the game's sun shadow map) into the ray-traced scene, so ray-traced sun shadows also work under them. Look for: light through cut roofs (bad), sharper roof shadow edges (good). About +1.7 ms.",
-     "apply": "live", "apply_note": "experimental", "advanced": true, "experimental": true,
+     "description": "Captures the roofs the camera cuts away (from the game's sun shadow map) into the ray-traced scene, so ray-traced sun shadows also work under them. On in Ultra since 2026-10-31: physically correct, no regression in the camp and inn gates, about +0.3 to +1.3 ms.",
+     "apply": "live", "apply_note": "", "advanced": true, "experimental": false,
      "required_on": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_cascade_casters": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_cascade_casters": "1"}, "needs": {"rt_geometry": 1, "sun_shadows": 1}}
