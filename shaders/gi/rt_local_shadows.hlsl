@@ -158,7 +158,7 @@ uint trace_light(float3 P, float3 N, float4 org, float3 lpos, uint2 fp, uint key
   float tmax = length(lpos - o) - max(R, pc.ls_clear);
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
   if(physical_receiver){
-    HairLightSegment segment=hpo_light_segment(receiver,o,lpos,dir,R,pc.ls_clear);
+    HairLightSegment segment=hpo_light_segment(receiver,o,lpos,dir,pc.ls_soft!=0?R:0.0,pc.ls_soft!=0?pc.ls_clear:max(R,pc.ls_clear));
     if(!segment.valid)return kRtUnknown;dir=segment.direction;tmax=segment.tmax;
   }
 #endif

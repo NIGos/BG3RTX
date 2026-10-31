@@ -29,7 +29,8 @@ but both are anchored at the physical point. No bias value or guard is weakened.
 
 Sun, GI, AO, reflections and local visibility use this launch data. Finite-light
 segments use the physical receiver when choosing their direction/soft-light
-sample, then preserve the actual center or sampled near-sphere target after the
+sample, then preserve the actual center (including hard mode with nonzero
+source radius) or sampled near-sphere target after the
 origin offset. Box-light exit is already computed from the final origin. The
 shared CPU/HLSL segment helper rejects an unresolved sphere intersection; it
 does not invent a hit or a miss. Native shading parameters and the RT cone
@@ -61,10 +62,13 @@ scalp shader check, and `tests/hair_origin_shader_test.py`. The latter compares
 old/key-off SPIR-V byte-for-byte, validates feature modules and reflects every RF
 variant to prove binding 12 is unused. CMake registers the new CPU test. Actual
 GPU fixture and in-game A/B remain pending; no rendered-quality claim follows.
-The current offline gate passes 96 origin checks, 272 settings checks, a private
-full core DLL link, 112 ordinary byte-identical SPIR-V modules, 112 validated
+The current offline gate passes 100 origin checks, 272 settings checks, a private
+full host/core/launcher build and 43/43 CTests after merging main 5f3e93b,
+112 ordinary byte-identical SPIR-V modules, 112 validated
 feature modules, and binding-12 exclusion in all 16 RF variants. The independent
 existing scalp gate also passes 95 ordinary identity/95 capable validation cases.
+Independent review corrected hard nonzero-radius light targeting; all 48 affected
+local feature modules compile/validate again with frozen inputs.
 
 Later automated same-run checks need both mode markers, RT active, nonzero
 matched-Hair/available-origin counts, and recorded unresolved counts. Counters

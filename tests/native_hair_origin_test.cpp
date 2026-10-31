@@ -50,6 +50,16 @@ int main(){
  const double endpoint_bound=(32*0x1p-24/(1-32*0x1p-24))*4; // gamma32, coordinate/segment magnitudes <4.
  auto point_light=hpo_light_segment(receiver,origin,center,{0,0,1},0,0);
  CHECK(point_light.valid);
+ // A hard finite-radius source still targets its center, then stops R short.
+ // The offset is deliberately non-collinear so a near-sphere re-aim differs.
+ auto hard=hpo_light_segment(receiver,origin,center,{0,0,1},0,.5f);
+ CHECK(hard.valid);
+ double hard_dx=center.x-origin.x,hard_dz=center.z-origin.z;
+ double hard_length=std::sqrt(hard_dx*hard_dx+hard_dz*hard_dz);
+ CHECK(std::abs(hard.direction.x-hard_dx/hard_length)<=endpoint_bound);
+ CHECK(std::abs(hard.direction.z-hard_dz/hard_length)<=endpoint_bound);
+ CHECK(std::abs(hard.tmax-(hard_length-.5))<=endpoint_bound);
+
  CHECK(std::abs(origin.x+point_light.direction.x*point_light.tmax-center.x)<=endpoint_bound);
  CHECK(std::abs(origin.z+point_light.direction.z*point_light.tmax-center.z)<=endpoint_bound);
  float norm=std::sqrt(8.f);OriginVec3 sample={2/norm,0,2/norm};
