@@ -1698,8 +1698,13 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
             refresh(g_ao_apply, "gi/gi_ao_apply.hlsl") & refresh(g_composite, "gi/gi_composite.hlsl") &
             refresh(g_contact, "gi/gi_contact.hlsl");
   if (!ok) return false;
+  // Warmup and actual primary dispatch share one Pipe/variant cache slot.
+  // Select once so identity/epoch preparation cannot replace it with base
+  // every frame and force two pipeline creations at an unchanged generation.
+  const char* primary_shader=host->cfg_int("rt_primary_identity",0)?"gi/pan_primary_identity.hlsl":
+                             host->cfg_int("rt_primary_epoch",0)?"gi/pan_primary_epoch.hlsl":"gi/pan_primary.hlsl";
   if (host->cfg_int("pan_prepare", 0) && g_rt_layout) {
-    refresh(g_pan_primary, "gi/pan_primary.hlsl", g_rt_layout);
+    refresh(g_pan_primary, primary_shader, g_rt_layout);
     if (g_ls_layout) refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout);
   }
   if (!g_images_ready) {
@@ -1852,8 +1857,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     memory_barrier(cmd, kCS, kCS);
   }
   if ((s.pan || host->cfg_int("rt_primary_check", 0)) && tlas &&
-      refresh(g_pan_primary, host->cfg_int("rt_primary_identity",0) ? "gi/pan_primary_identity.hlsl" :
-              host->cfg_int("rt_primary_epoch",0) ? "gi/pan_primary_epoch.hlsl" : "gi/pan_primary.hlsl", g_rt_layout)) {
+      refresh(g_pan_primary, primary_shader, g_rt_layout)) {
     if(!dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true))return false;
     Bg3Binding im{};
     im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
