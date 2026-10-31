@@ -7,11 +7,10 @@
 #include <span>
 #include <unordered_set>
 namespace bg3::native_hit {
-struct Evidence {uint64_t recording{};bool submitted{};uint64_t queue{};};
+struct Evidence {uint64_t recording{};bool submitted{};uint64_t queue{};bool recorded_before_query{};};
 inline bool ordered_before_query(Evidence source,Evidence deferred,uint64_t queryRecording,
  uint64_t graphicsQueue,uint64_t currentQueue,std::span<const uint64_t> orderedRecordingIDs){
- if(!queryRecording || !source.recording || !deferred.recording || !graphicsQueue || currentQueue!=graphicsQueue ||
-    source.recording==queryRecording || deferred.recording==queryRecording)return false;
+ if(!queryRecording || !source.recording || !deferred.recording || !graphicsQueue || currentQueue!=graphicsQueue)return false;
  std::unordered_set<uint64_t> seen;size_t query=orderedRecordingIDs.size();
  for(size_t i=0;i<orderedRecordingIDs.size();++i){
   const auto id=orderedRecordingIDs[i];
@@ -22,6 +21,9 @@ inline bool ordered_before_query(Evidence source,Evidence deferred,uint64_t quer
  }
  if(query==orderedRecordingIDs.size())return false;
  auto before=[&](Evidence producer){
+  // Only the packet owner can assert actual earlier commands in THIS recording.
+  // Merely sharing a CB/recording ID is insufficient.
+  if(producer.recording==queryRecording)return producer.recorded_before_query && (!producer.submitted || producer.queue==graphicsQueue);
   if(producer.submitted)return producer.queue==graphicsQueue;
   for(size_t i=0;i<query;++i)if(orderedRecordingIDs[i]==producer.recording)return true;
   return false;

@@ -36,6 +36,12 @@ int main(){
  std::array<uint64_t,4> withUntracked{10,0,20,30};
  CHECK(ordered_before_query(source,deferred,30,graphics,graphics,withUntracked));
  CHECK(ordered_before_query(source,source,30,graphics,graphics,ordered)); // Both packets may originate in one earlier CB.
+ CHECK(ordered_before_query(Evidence{30,false,0,true},deferred,30,graphics,graphics,ordered));
+ CHECK(ordered_before_query(source,Evidence{30,false,0,true},30,graphics,graphics,ordered));
+ CHECK(ordered_before_query(Evidence{30,false,0,true},Evidence{30,false,0,true},30,graphics,graphics,queryOnly));
+ CHECK(!ordered_before_query(Evidence{30,false,0,true},Evidence{30,false,0,false},30,graphics,graphics,queryOnly));
+ CHECK(!ordered_before_query(Evidence{30,true,8,true},deferred,30,graphics,graphics,ordered));
+ CHECK(!ordered_before_query(Evidence{10,false,0,true},Evidence{20,false,0,true},30,graphics,graphics,reverse));
  PendingPublication retry;
  CHECK(retry.prepare(true)==1 && retry.pending && !retry.sealed);
  retry.finish(false);CHECK(!retry.pending && !retry.published && !retry.sealed);
