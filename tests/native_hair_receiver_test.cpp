@@ -11,6 +11,12 @@ int main(){
  check(!hpr_camera_scalp(0x45625c44,0x03a2d9f6));check(!hpr_camera_scalp(0,0));
  check(hpr_window(2.9f,3.1f));check(!hpr_window(3,3));check(!hpr_window(-1,3));
  check(!hpr_window(0,std::numeric_limits<float>::infinity()));
+ for(unsigned kind=1;kind<=5;++kind)check(hpr_readable_geometry(true,24,true,kind));
+ check(!hpr_readable_geometry(false,88,true,3));
+ check(!hpr_readable_geometry(true,23,true,3));
+ check(!hpr_readable_geometry(true,88,false,3));
+ check(!hpr_readable_geometry(true,88,true,0));
+ check(!hpr_readable_geometry(true,88,true,6));
  check(!hpr_reject(true,false,.1f,.2f,false));check(hpr_reject(true,true,.1f,.2f,false));
  check(hpr_reject(false,false,.1f,.2f,false));check(hpr_reject(true,false,.1f,.2f,true));
  check(hpr_reject(true,false,std::numeric_limits<float>::quiet_NaN(),.2f,false));

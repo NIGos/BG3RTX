@@ -29,6 +29,11 @@ bool hpo_competing_receiver(float3 origin,float3 direction,float t0,float t1){
     bool scalp=false;
     if(readable){
       const uint kind=gAlphaRec.Load(ii.rec+8u);
+      uint bytes;
+      if((ii.meta&kInfoPool)!=0u)gMeshPool.GetDimensions(bytes);
+      else gOpaqueSoup.GetDimensions(bytes);
+      readable=hpr_readable_geometry(readable,ii.meta&255u,
+          tri_in_range(ii.base,primitive,ii.meta&255u,bytes),kind);
       scalp=kind==3u && hpr_camera_scalp(gAlphaRec.Load(ii.rec+40u),gAlphaRec.Load(ii.rec+44u));
       // A kind3 record from an unrecognised writer is not an identity proof.
       if(kind==3u && !scalp)readable=false;

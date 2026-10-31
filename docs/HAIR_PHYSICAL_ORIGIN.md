@@ -118,7 +118,9 @@ capture-complete windows. Today's preserved trial has residual alpha-capacity
 fallbacks in 11 of 77 windows; the last zero windows do not erase that limitation.
 The installed trial/settings were not changed. No BG3/GPU execution was done.
 
-Checks: 21 CPU decision/finite-triangle cases plus 100 existing origin checks;
+Known non-Scalp candidates must also have a valid source triangle range, stride
+and known record kind 1..5; an AS candidate alone cannot prove metadata readable.
+Checks: 31 CPU decision/finite-triangle cases plus 100 existing origin checks;
 16 HPO-off SPVs byte-identical to 39e5475 and 16 HPO-on variants compile/validate.
 The shared include refactor is byte-identical in base and deepest checked
 Tile/OMM/cascade/rebase cases. This adds one bounded traversal only when an HPO

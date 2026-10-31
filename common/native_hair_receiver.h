@@ -18,6 +18,9 @@ inline bool hpr_camera_scalp(HprUint lo,HprUint hi){
 inline bool hpr_window(float minimum,float maximum){
  return hpr_finite(minimum)&&hpr_finite(maximum)&&minimum>=0&&maximum>minimum;
 }
+inline bool hpr_readable_geometry(bool metadata,HprUint stride,bool triangle_in_range,HprUint kind){
+ return metadata && stride>=24u && triangle_in_range && kind>=1u && kind<=5u;
+}
 inline bool hpr_reject(bool readable,bool camera_scalp,float local_t,float window_length,bool capped){
  if(capped || !readable || !hpr_finite(local_t) || !hpr_finite(window_length) ||
     local_t<0 || window_length<=0 || local_t>window_length)return true;

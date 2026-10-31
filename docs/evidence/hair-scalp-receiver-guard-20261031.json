@@ -3,106 +3,186 @@
   "key": "rt_hair_physical_origin (existing, default off)",
   "new_keys": [],
   "scope": "Conservative competing Scalp admission guard; not full raster writer identity or hairline image attribution",
-  "CPU_receiver_checks": 21,
+  "CPU_receiver_checks": 31,
   "existing_origin_checks": 100,
   "HPO_off_identical": 16,
   "HPO_on_valid": 16,
   "variants": [
     {
-      "name": "0_0_base",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "0_0_base",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "0_0_cascade",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "0_0_cascade",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_CASCADE_MASKS=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "0_0_cascade_rebase",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "0_0_rebase",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_SCENE_REBASE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "0_0_rebase",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "0_0_cascade_rebase",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_CASCADE_MASKS=1",
+        "RT_SCENE_REBASE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "0_1_base",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "0_1_base",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_OMM_SCENE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "0_1_cascade",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "0_1_cascade",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_OMM_SCENE=1",
+        "RT_CASCADE_MASKS=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "0_1_cascade_rebase",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "0_1_rebase",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_OMM_SCENE=1",
+        "RT_SCENE_REBASE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "0_1_rebase",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "0_1_cascade_rebase",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_OMM_SCENE=1",
+        "RT_CASCADE_MASKS=1",
+        "RT_SCENE_REBASE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "1_0_base",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "1_0_base",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_NATIVE_TILESET=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "1_0_cascade",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "1_0_cascade",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_NATIVE_TILESET=1",
+        "RT_CASCADE_MASKS=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "1_0_cascade_rebase",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "1_0_rebase",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_NATIVE_TILESET=1",
+        "RT_SCENE_REBASE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "1_0_rebase",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "1_0_cascade_rebase",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_NATIVE_TILESET=1",
+        "RT_CASCADE_MASKS=1",
+        "RT_SCENE_REBASE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "1_1_base",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "1_1_base",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_NATIVE_TILESET=1",
+        "RT_OMM_SCENE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "1_1_cascade",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "1_1_cascade",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_NATIVE_TILESET=1",
+        "RT_OMM_SCENE=1",
+        "RT_CASCADE_MASKS=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "1_1_cascade_rebase",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "1_1_rebase",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_NATIVE_TILESET=1",
+        "RT_OMM_SCENE=1",
+        "RT_SCENE_REBASE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     },
     {
-      "name": "1_1_rebase",
-      "on_valid": true,
-      "off_byte_identical": true,
-      "error": ""
+      "variant": "1_1_cascade_rebase",
+      "defines": [
+        "RT_NATIVE_SCALP=1",
+        "RT_NATIVE_HAIR=1",
+        "RT_NATIVE_TILESET=1",
+        "RT_OMM_SCENE=1",
+        "RT_CASCADE_MASKS=1",
+        "RT_SCENE_REBASE=1"
+      ],
+      "off_identical": true,
+      "on_valid": true
     }
   ],
   "shared_include_identity": [
@@ -121,5 +201,8 @@
   "GPU_or_BG3_run": false,
   "trial_changed": false,
   "capture_overflow_caveat": true,
-  "GPU_cost": "not measured"
+  "GPU_cost": "not measured",
+  "review_followup": "Validate actual soup/pool triangle range, stride >=24 and record kinds 1..5 before ignoring non-Scalp candidates. Unknown geometry/material remains conservative.",
+  "variant_proof_note": "Follow-up recompiles exact RT_CASCADE_MASKS define combinations against retained base source; prior named cascade artifacts did not apply that define.",
+  "shared_include_identity_scope": "Initial helper refactor only; later source-range follow-up intentionally changes HPO-on SPV."
 }
