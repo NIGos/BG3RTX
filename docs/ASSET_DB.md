@@ -443,3 +443,23 @@ to port into the launcher (C++). `layer/assetdb.cpp` already has the LSPK and LZ
   - `SREF` lists every template that shares a hash.
 - **Not decoded.** Terrain heightmaps, decals, fog volumes, scenery or HLOD geometry and
   virtual textures (AUDIT_ENGINE_DATA A6/A7/§2.6) are not in this database.
+
+
+## Bounded native geometry export: S1 board ground (2026-10-31)
+
+This private M2 export is separate from the packed asset database. Native snapshot
+20261031-022347 qualifies Floor_B POSITION: ScaleZ acts on local X; the observed
+Flip flag adds no position reflection. UV/normal/material equivalence is unproved.
+`python -m tools.assets.check_floor_b_positions --capture <S1 capture>` verifies
+ordered native vertices, then `probe_foundry_construction --construction
+floor-b-ground --lslib <existing Packed>` exports the nearby subset. Source hashes
+must match; no game launch, fitted transform, proxy geometry or snapping is used.
+
+Three native LOD1 Floor_B pieces plus the existing Floor_A corner (independently
+matched at draw 426 / instance 0 / LOD1) preserve topology/material IDs: 736 triangles,
+1191 vertices. Bounds select candidates; actual triangle interiors intersect 11/16
+low board-vertex lines for Floor_B, 13/16 combined. Both above/below heights are
+retained. Remaining samples 4, 5 and 12 have exact coordinates in
+`captures/m2-foundry/construction-native-ground/evidence.json`; other native draws
+can underlie them. This is not continuous footprint, contact, opacity or room
+closure. Existing Floor_C/wall exports remain adjacent; roof/opening closure is open.

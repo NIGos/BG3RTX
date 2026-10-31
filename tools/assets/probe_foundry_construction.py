@@ -267,9 +267,108 @@ def support_evidence(base,world_meshes):
         note='No opacity/collision or physical contact certification; triangle heights relative to authored board are retained, including penetration/gaps')
 
 
+
+def ground_candidate(bounds,board_bounds):
+    """Broad phase only; projected triangle hits, not boxes, establish support."""
+    return (bounds[0][1]<=board_bounds[0][1] and
+            all(bounds[0][j]<=board_bounds[1][j] and bounds[1][j]>=board_bounds[0][j] for j in (0,2)))
+
+
+def floor_b_ground_subset(base):
+    """Export native-qualified nearby Floor_B plus one existing Floor_A corner.
+
+    Exact captured LODs remain separate from the previous LOD0 alternatives.
+    Only POSITION correspondence is qualified. Height crossings are retained;
+    opacity, collision, UV and physical contact are not inferred.
+    """
+    import numpy as np
+    from scripts.geo_view import load
+    from .check_floor_b_positions import projection_bound
+    oracle_path=base/'floor-b-native-oracle/native-position-oracle.json'
+    oracle=json.loads(oracle_path.read_text())
+    for name,sha in oracle['source_hashes'].items():
+        if hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()!=sha:
+            raise ValueError('Rerun native Floor_B oracle for current source before ground export')
+    binary=Path(oracle['binary']['path'])
+    if hashlib.sha256(binary.read_bytes()).hexdigest()!=oracle['binary']['sha256']:
+        raise ValueError('Native snapshot changed')
+    native=load(binary);cam=native['ubo'][52:55].astype(np.float64)
+    board=json.loads((base/'world-lod0.json').read_text())
+    ps=PackageSet(find_data_dir(DEFAULT_GAME));parent=json.loads((base/'world-placement.json').read_text())
+    level,_=hierarchy(parent,ps)
+    records={n.get('MapKey'):n for n in lsf.parse(ps.read(SOURCE)).find_all('GameObjects')}
+    be=json.loads((base/'construction-floor-b-position/evidence.json').read_text())
+    vid=be['instances'][0]['visual_id'];folder=base/'construction-floor-b-position'/vid
+    for source in be['source_fingerprints']:
+        if hashlib.sha256(ps.read(source['path'])).hexdigest()!=source['sha256']:raise ValueError('Native Floor_B source changed')
+    for name,sha in be['assets'][vid]['fingerprints'].items():
+        if hashlib.sha256((folder/name).read_bytes()).hexdigest()!=sha:raise ValueError('Floor_B local export changed')
+    meshes=json.loads((folder/'mesh-decoded.json').read_text());selected=[];world=[]
+    for row in oracle['native_matches']:
+        record=records[row['record']];tiles=record.child('tiles')
+        tile=unique(tiles.children_named('tile'),'UUID',row['tile_uuid'])
+        affine=level.compose(tile_affine(tile,tiles,floor_b_position_only=True))
+        mesh=next(m for m in meshes if m['lod']==row['match']['lod'])
+        prepared=dict(mesh,attributes={k:v for k,v in mesh['attributes'].items() if k not in ('COLOR_0','JOINTS_0','WEIGHTS_0')})
+        transformed=transform_mesh(prepared,affine)
+        if not ground_candidate(transformed['bounds'],board['bounds']):continue
+        transformed.update(tile_uuid=row['tile_uuid'],visual_id=vid,native_draw=row['match']['draw'],native_instance=row['match']['instance'])
+        if 'COLOR_0' in mesh['attributes']:transformed['attributes']['COLOR_0']=mesh['attributes']['COLOR_0']
+        world.append(transformed);selected.append(dict(record=row['record'],tile_uuid=row['tile_uuid'],native=row['match'],bounds=transformed['bounds']))
+    floor_b_support=support_evidence(base,world)
+    # The already decoded Floor_A corner: validate its current native LOD using
+    # ordered positions and the same independent Camera packet, not AABB overlap.
+    ae_path=base/'construction-support-090d/evidence.json';ae=json.loads(ae_path.read_text());ai=ae['instances'][0]
+    for source in ae['source_fingerprints']:
+        if hashlib.sha256(ps.read(source['path'])).hexdigest()!=source['sha256']:raise ValueError('Native Floor_A source changed')
+    af=base/'construction-support-090d'/ai['visual_id']
+    for name,sha in ae['assets'][ai['visual_id']]['fingerprints'].items():
+        if hashlib.sha256((af/name).read_bytes()).hexdigest()!=sha:raise ValueError('Floor_A local export changed')
+    am=json.loads((af/'mesh-decoded.json').read_text())
+    a=Affine(tuple(map(tuple,ai['world_linear'])),tuple(ai['world_translation']));a_matches=[]
+    origin_error=np.array([.5*f32_ulp(float(v)) for v in cam])
+    for mesh in am:
+        local=np.asarray(mesh['attributes']['POSITION'])[mesh['indices']];expected=np.asarray([a.point(v) for v in local])
+        for di,d in enumerate(native['draws']):
+            if d['n']!=len(local) or d['count']!=d['n']*d['inst'] or d['skip']!=0:continue
+            for inst in range(int(d['inst'])):
+                start=int(d['first'])+inst*len(local);observed=native['world'][start:start+len(local)].astype(np.float64)
+                if not np.isfinite(observed).all():continue
+                envelope=np.asarray([a.fp32_application_bound(v) for v in local])+ae['max_raw_vs_normalized_position_delta']+origin_error+projection_bound(observed,native['ubo'])
+                envelope+=(2.**-24/(1-2.**-24))*(np.abs(expected)+np.abs(cam))
+                residual=np.abs(expected-cam-observed)
+                if np.all(residual<=envelope):a_matches.append((mesh,di,inst,float(residual.max()),float(envelope.max())))
+    if len(a_matches)!=1:raise ValueError('Existing Floor_A corner native identity absent/ambiguous')
+    mesh,di,inst,error,envelope=a_matches[0]
+    prepared=dict(mesh,attributes={k:v for k,v in mesh['attributes'].items() if k not in ('COLOR_0','JOINTS_0','WEIGHTS_0')})
+    aw=transform_mesh(prepared,a);aw.update(tile_uuid=ai['tile']['UUID'],visual_id=ai['visual_id'],native_draw=di,native_instance=inst)
+    if 'COLOR_0' in mesh['attributes']:aw['attributes']['COLOR_0']=mesh['attributes']['COLOR_0']
+    world.append(aw);combined=support_evidence(base,world)
+    out=base/'construction-native-ground';out.mkdir(exist_ok=True)
+    geometry=out/'world-native-lod.json';geometry.write_text(json.dumps(world,separators=(',',':'))+'\n')
+    summary=dict(scope='Three nearby native-qualified Floor_B POSITION pieces plus one independently matched existing Floor_A corner; NOT room closure',
+        selection='Native-oracle instances only; actual-mesh bounds overlap board XZ and extend to/below its minimum Y. Bounds select; triangle intersections measure.',
+        native_snapshot_sha256=oracle['binary']['sha256'],native_oracle_sha256=hashlib.sha256(oracle_path.read_bytes()).hexdigest(),
+        selected_floor_b=selected,floor_a_native=dict(draw=di,instance=inst,lod=mesh['lod'],max_residual=error,max_envelope=envelope),
+        floor_b_only_support=floor_b_support,combined_support=combined,
+        remaining_low_vertex_samples=[i for i,sample in enumerate(combined['low_vertex_samples']) if not sample['interior_hits']],
+        triangles=sum(m['triangles'] for m in world),vertices=sum(m['vertices'] for m in world),
+        native_material_ids=sorted({m['material_id'] for m in world}),output=dict(path=str(geometry),sha256=hashlib.sha256(geometry.read_bytes()).hexdigest()),
+        limits=['POSITION correspondence at captured native LODs only; no UV/normal/material equivalence',
+                'Strict vertical triangle hits at 16 low board vertices, not continuous footprint/opacity/contact certification',
+                'Surfaces above and below the board minimum are retained; no repair, snap or proxy geometry',
+                'Other native geometry can underlie remaining samples; no native hole claim',
+                'No roof/opening/wall enclosure or room closure proof'])
+    (out/'evidence.json').write_text(json.dumps(summary,indent=2)+'\n')
+    print(json.dumps({k:summary[k] for k in ('scope','triangles','vertices','floor_a_native','remaining_low_vertex_samples','native_material_ids')},indent=2))
+    print('Floor_B strict low-vertex hits:',floor_b_support['strict_interior_hit_samples'],'/',floor_b_support['sample_count'])
+    print('Combined strict low-vertex hits:',combined['strict_interior_hit_samples'],'/',combined['sample_count'])
+
+
 def main():
     ap=argparse.ArgumentParser(__doc__);ap.add_argument('--lslib',type=Path,required=True)
-    ap.add_argument('--construction',choices=('floor','wall','support','floor-b-position'),default='floor');args=ap.parse_args()
+    ap.add_argument('--construction',choices=('floor','wall','support','floor-b-position','floor-b-ground'),default='floor');args=ap.parse_args()
+    if args.construction=='floor-b-ground':return floor_b_ground_subset(ROOT/'captures/m2-foundry')
     wall=args.construction=='wall';support=args.construction=='support';floor_b=args.construction=='floor-b-position'
     record_id=FLOOR_B_RECORD if floor_b else SUPPORT_RECORD if support else WALL_RECORD if wall else RECORD
     bank_path=FLOOR_B_BANK if floor_b else SUPPORT_BANK if support else WALL_BANK if wall else BANK
@@ -358,10 +457,10 @@ def main():
         implementation_sha256={name:hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
             for name in ('probe_foundry_construction.py','probe_foundry_mesh.py','affine.py','place_foundry_mesh.py')},
         legacy_field_policy='Support selection ONLY: Point1/Point2/TwoSidedTileCount absent in fixed source version; nonstretchable, unit ScaleZ, Flipfalse, Bendfalse are explicit. No active spline/extra tile semantics inferred' if support else None,
-        limitations=['No runtime/XFB transform or visibility agreement','Literal identity weighted-joint ancestry/bind only; nonidentity used skin/animation rejected; unused authoring bones preserved',
+        limitations=['Native S1 POSITION correspondence qualified for Floor_B only; other modes retain authoring-only placement and visibility limits' if floor_b else 'No runtime/XFB transform or visibility agreement','Literal identity weighted-joint ancestry/bind only; nonidentity used skin/animation rejected; unused authoring bones preserved',
             'Material identity retained, construction material textures/recipe not decoded here',
             'HLOD/dynamic visibility/destruction/fade state unresolved; no opacity inferred from editor Opacity field',
-            'No bent/flipped/stretched/linked spline construction or regenerated tiles','No wall/roof/opening enclosure or room closure proof',
+            'Floor_B local-X stretch/no extra POSITION Flip qualified; UV Flip/linked/bent/regenerated geometry remain unsupported' if floor_b else 'No bent/flipped/stretched/linked spline construction or regenerated tiles','No wall/roof/opening enclosure or room closure proof',
             'Raw tile matrices preserved; normalized level quaternion convention and raw alternative retained',
             'DAE/glTF share upstream GR2 parser; native resource bounds are independent',
             'Floor_B mode qualifies POSITION only; UV/Flip texture, normals/materials and room closure remain separate' if floor_b else 'No additional native position qualification'])

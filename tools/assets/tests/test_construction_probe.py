@@ -4,7 +4,7 @@ import unittest
 from tools.assets.affine import Affine, UnsupportedAffine
 from tools.assets.resource import Node
 from tools.assets.probe_foundry_mesh import accessor
-from tools.assets.probe_foundry_construction import tile_affine, span_evidence, wall_span_evidence, vertical_hits, validate_export, unique, NULL, FLOOR_B_GUID, FLOOR_B_SET
+from tools.assets.probe_foundry_construction import tile_affine, span_evidence, wall_span_evidence, vertical_hits, validate_export, unique, NULL, FLOOR_B_GUID, FLOOR_B_SET, ground_candidate
 
 
 def node(name,**attrs):
@@ -34,6 +34,16 @@ def fixture():
 
 
 class ConstructionProbeTests(unittest.TestCase):
+    def test_ground_bounds_are_only_a_conservative_selection(self):
+        board=[[0,1,0],[2,3,2]]
+        self.assertTrue(ground_candidate([[-1,0,-1],[3,.9,3]],board))
+        self.assertTrue(ground_candidate([[2,0,2],[4,1,4]],board)) # boundary retained for triangle check
+        self.assertFalse(ground_candidate([[3,0,0],[4,.9,2]],board))
+        self.assertFalse(ground_candidate([[0,2,0],[2,3,2]],board))
+        # Very low geometry is retained; triangle height reports the real gap.
+        self.assertTrue(ground_candidate([[0,-100,0],[2,-99,2]],board))
+
+
     def test_native_floor_b_position_stretch_and_flip_scope(self):
         ts=node('tiles',ConstructionBend=False,ConstructionPlaceTwoTiles=False,TileSet=FLOOR_B_SET)
         t=tile(tile=FLOOR_B_GUID,Scale=.5,ScaleZ=1.25,Flip=True,Translate=[3.,4.,5.],Rotate=[0,0,-1,0,1,0,1,0,0])

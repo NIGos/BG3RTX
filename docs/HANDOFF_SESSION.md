@@ -6,7 +6,7 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main d4a1612 ABI 19 is merged via merge-green and pushed with codex/omm-bake.
+Main 06312ac ABI 19 is merged via merge-green and pushed with codex/omm-bake.
 Both DLLs rebuilt; 44/44 CTests, 527/527 runtime shaders and QA passed. Related
 user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
@@ -32,12 +32,19 @@ Native class 0 parameter mapping and declared shared FresnelBlend eval/sample/PD
 are implemented offline with tests. They are not native BSDF equivalence, a
 runtime hit provider or a complete reference renderer. The M3 owner is wiring
 actual static VT inputs and captured basis into qualified secondary-hit shading.
+Review found mutable CPU-read uniforms and borrowed sampler lifetime to fix before
+the next material live trial. No material quality/runtime participation claim yet.
 M2 native S1 reference completed in 53 s: 835 draws, no capture overflow.
 Floor_B POSITION matches 48 instances/20256 corners, max residual 3.22e-5.
 ScaleZ acts on local X; observed Flip does not reflect POSITION. Target residual
 2.10e-5 is inside the derived 2.20e-4 precision envelope. Old decorative-anchor
 tests were not a transform oracle. Room closure and UV/material parity stay open.
 Next: nearby qualified floor support and the actual runtime material consumer.
+Nearby ground is now 736 triangles/1191 vertices, preserving native material IDs:
+three Floor_B pieces plus matched Floor_A, 8/16 -> 13/16 low-vertex intersections.
+Three gaps and room wall/roof/opening closure remain explicit. 58 asset tests pass,
+one existing skip. Material64 partition feedback now shares the Hair88 correction
+(55 fresh CPU checks); unchanged16/24 policy and explicit budgets are preserved.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
 module-independent SHA256 are fixed and tested through actual simulated runner.

@@ -1,8 +1,28 @@
 # BG3RTX progress
 
+## Native ground expanded; material capture regression prevented - 2026-10-31
+
+Nearby S1 ground now exports three native-qualified Floor_B pieces plus a matched
+Floor_A corner: 736 triangles, 1191 vertices, original topology/material IDs.
+Strict vertical intersections at the board's low vertices improve from 8/16 to
+13/16 combined. The remaining three coordinates/heights stay explicit; this is
+not contact, continuous footprint, opacity or room closure. Source cd02690,
+development d960a3a. Asset checks: 58 passed, one existing skip. See ASSET_DB.md
+and m2-foundry-mesh/BG3RTX/captures/m2-foundry/construction-native-ground/evidence.json.
+
+The pending material provider introduces a 64-byte capture layout. Its partition
+feedback would otherwise repeat the previous wide-Hair capacity regression.
+4ecc19f extends the existing correction to explicit 64/88-byte layouts; ordinary
+16/24-byte paths and configured budgets stay unchanged. Fresh CPU checks: 55.
+Material-only equal vertex capacity requires explicit camera 1024 MiB/cascade
+427 MiB, not automatic resizing. GPU cost/participation is not yet measured.
+The separate runtime provider still needs execution-time uniform and owned-sampler
+fixes before its live trial. The user's installed Hair trial remains 047e105,
+not yet reviewed by the user. No trial/preferences/save changes in this increment.
+
 ## Native Floor_B positions qualified; practical checks retained - 2026-10-31
 
-Main d4a1612 is integrated and pushed: ABI 19, 44/44 CTests, 527/527 runtime
+Main 06312ac is integrated and pushed: ABI 19, 44/44 CTests, 527/527 runtime
 shader entries and QA passed. The installed personal Hair trial is 047e105;
 the user has NOT yet reviewed its capacity and physical-origin updates.
 
@@ -13,10 +33,13 @@ The selected tile residual is 2.10e-5 within its derived 2.20e-4 envelope.
 ScaleZ applies to local X; Flip does not reflect observed positions. Keep this
 scoped result; UV/normal/material equivalence and room closure remain open.
 Asset checks: 57 passed, one existing skip. No renderer or GPU cost change.
-Code: source 942113f, development import 33b14b0; not yet integrated into main.
+Code: source 942113f, development import 33b14b0, main merge 06312ac.
 Evidence: m2-foundry-mesh/BG3RTX/captures/m2-foundry/floor-b-native-oracle/native-position-oracle.json.
 Next: nearby floor support and the static-VT runtime hit-material consumer.
 No unrelated global match threshold will block a demonstrated local correction.
+Material review found two concrete pre-trial fixes: execution-time uniform capture
+and ownership of samplers through GPU retirement. The owner is implementing them;
+runtime material participation and cost remain unmeasured.
 
 ## Physical Hair origins kept and installed in the personal trial - 2026-10-31
 

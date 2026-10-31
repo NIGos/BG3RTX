@@ -1938,11 +1938,11 @@ void rt_capture_stats(const Capture& c) {
     log("[rt-capture] discard filter 1 frame %llu skipped %llu always-discard draws",
         (unsigned long long)c.record_frame, (unsigned long long)c.discard_skipped);
   g_alpha_demand_prev = c.alpha_demand;
-  // In the opt-in 88-byte stream, capacity-forced alpha fallbacks must not
+  // In the opt-in material/Hair streams, capacity-forced alpha fallbacks must not
   // reserve opaque space a second time and lock the next alpha partition down.
   // Logs below retain the total physical opaque/fallback stream and all drops.
   g_opaque_demand_prev=capture_budget::opaque_partition_demand(c.cursor+c.opaque_overflow_bytes,
-    c.alpha_overflow_bytes,geo_native_hair_enabled());
+    c.alpha_overflow_bytes,capture_budget::corrected_partition_feedback(g_stride));
   std::lock_guard<std::mutex> lock(g_drop_mu);
   RtDropLog& l = g_drop;
   ++l.frames;
