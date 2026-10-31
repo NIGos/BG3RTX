@@ -1165,14 +1165,21 @@ rays, assume 2-3× that.
 - Cost: 0.
 
 **D-EN2 Hit material.**
-- Capture the UV for **all** draws (stride 24, as `rt_alpha=1` does for the prepass)
-  and keep a per-draw material record for every VT draw, not only alpha-tested
-  ones: tile-set constants, UV transform, albedo layer.
-- `hit_base_colour(prim, bary, cone)` = the `vt_alpha()` lookup returning `.rgb`.
-- Plain-texture draws, and draws not recognised, get a per-draw average colour
-  (sampled once from the G-buffer where the draw is visible) or 0.5 grey.
-- Roughness/metal at hits: per-draw constants from the G-buffer median.
-- Normal: geometric, from the triangle.
+Updated 2026-10-31: source checkpoint 177ef6e replaces the old guessed-colour/
+G-buffer-median plan with an explicit native tuple. `rt_hit_material` is startup
+opt-in, OFF in presets; ABI 20 adds a typed query-use registration callback.
+The first domain is static VS3812/deferred FS8995, fresh dynamic alpha soup,
+16 accepted draws. Prepass/deferred/query may use separate one-time command
+recordings; actual camera/scene/draw identity and GPU clip/UV comparison join them.
+Execution-time gather retains native VT parameters; actual normal/albedo/physical
+views, sampler and deferred tangent frame feed native fields and the declared
+shared FresnelBlend model. Ray-cone gradients are explicit, not native raster
+quad derivatives. Unknown inputs remain unsupported, never default grey/material.
+`rt_debug=9` and `rt_stats` check acquisition/primary native-field residuals.
+Normal GI/reflections retain existing output; direct-only reference is next.
+Build/parity/source lifetime review pass; participation, quality and GPU cost
+remain unmeasured until the bounded S1 smoke. Exact tuple, capacities, tests and
+limits: [native material checkpoint](evidence/native-hit-material-20261031.md).
 
 **D-EN3 Geometry retention and closure.**
 - The static/dynamic split (6.7 item 3) plus **retention**: a static instance

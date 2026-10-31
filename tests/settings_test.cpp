@@ -350,9 +350,9 @@ static void test_dependencies_and_caps() {
 }
 
 static void test_rendering_experiments() {
-  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_omm","exp_current_sun"};
-  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_omm","rt_sun_cascade_current"};
-  for(int i=0;i<4;++i){
+  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_omm","exp_current_sun","exp_hit_material"};
+  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_omm","rt_sun_cascade_current","rt_hit_material"};
+  for(int i=0;i<5;++i){
     const auto* knob=find_knob(ids[i]);CHECK(knob!=nullptr);if(!knob)continue;
     CHECK(knob->experimental);CHECK(choice_count(*knob)==2);CHECK_EQ(code_default(keys[i]),"0");
     for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,keys[i]),"0");CHECK(knob->preset[p]==0);}
@@ -372,6 +372,7 @@ static void test_rendering_experiments() {
   CHECK(key_change_needs_restart("rt_native_hair","0","1"));
   CHECK(key_change_needs_restart("rt_omm","1","0"));
   CHECK(key_change_needs_restart("rt_sun_cascade_current","0","1"));
+  CHECK(key_change_needs_restart("rt_hit_material","0","1"));
   CHECK(!key_change_needs_restart("rt_native_scalp","0","1"));
   CHECK(find_knob("exp_native_scalp")->apply==Apply::Hitch);
   Gpu gpu{0x10de,0x2b85,"NVIDIA GeForce RTX 5090",true,true};

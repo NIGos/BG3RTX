@@ -19,6 +19,8 @@
 // textures, one for tile caches, the captured UV soup, and two samplers.
 // Every view in a set was bound by the game in the frame the set was written.
 #include "host.h"
+#include "hit_material.h"
+#include "../common/native_hit_capability.h"
 #include "../common/mapped_copy.h"
 #include "../common/native_scalp_coverage.h"
 #include "../common/native_scalp_capability.h"
@@ -285,7 +287,7 @@ void alpha_device_created(DeviceData* dd) {
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   ok = ok && vk.CreateSampler(dd->device, &si, nullptr, &g_clamp) == VK_SUCCESS;
   g_omm_layout=omm::available_for(dd) || omm::scene_capability(static_cast<uint32_t*>(persist(omm::scene_capability_key,sizeof(uint32_t))));
-  VkDescriptorSetLayoutBinding b[12] = {
+  VkDescriptorSetLayoutBinding b[16] = {
       {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},   // scene stamp
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -297,14 +299,21 @@ void alpha_device_created(DeviceData* dd) {
       {4, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_wrap},
       {5, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_clamp},
       {10,VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
+      {11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {12,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {13,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {14,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,native_hit::cache_slots,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+      {15,VK_DESCRIPTOR_TYPE_SAMPLER,native_hit::sampler_slots,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
+  std::vector<VkDescriptorSetLayoutBinding> bindings(b,b+10);
+  if(g_omm_layout)bindings.insert(bindings.end(),b+10,b+12);
+  if(native_hit::enabled())bindings.insert(bindings.end(),b+12,b+16);
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.bindingCount = g_omm_layout?12u:10u;
-  dci.pBindings = b;
+  dci.bindingCount = uint32_t(bindings.size());
+  dci.pBindings = bindings.data();
   ok = ok && vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) == VK_SUCCESS;
-  VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, (g_omm_layout?7u:6u) * kRing},
-                                {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches) * kRing},
-                                {VK_DESCRIPTOR_TYPE_SAMPLER, 2 * kRing},
+  VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, ((g_omm_layout?7u:6u)+(native_hit::enabled()?2u:0u)) * kRing},
+                                {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches+(native_hit::enabled()?native_hit::cache_slots:0u)) * kRing},
+                                {VK_DESCRIPTOR_TYPE_SAMPLER, (2+(native_hit::enabled()?native_hit::sampler_slots:0u)) * kRing},
                                 {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,kRing}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   pci.maxSets = kRing;
@@ -350,10 +359,12 @@ void alpha_device_created(DeviceData* dd) {
   }
   load_table();
   g_on = true;
+  native_hit::capability(static_cast<uint32_t*>(persist(native_hit::capability_key,sizeof(uint32_t))),native_hit::enabled());
 }
 
 void alpha_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
+  native_hit::capability(static_cast<uint32_t*>(persist(native_hit::capability_key,sizeof(uint32_t))),false);
   const VkDeviceFuncs& vk = dd->vk;
   for (SunAlphaSlot& s : g_sun_alpha) {
     if (s.pool) vk.DestroyDescriptorPool(dd->device,s.pool,nullptr);
@@ -859,6 +870,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
     omm::publish_scene_capability(static_cast<uint32_t*>(persist(omm::scene_capability_key,sizeof(uint32_t))));
   }
   g_current = int(slot);
+  if(native_hit::enabled() && !native_hit::attach(cmd,slot,g_sets[slot],g_dummy_buf,g_dummy_arr.view,g_clamp,g_stamp_gen))return VK_NULL_HANDLE;
 
   ++g_frames;
   g_draws += g_recs.size();
@@ -916,6 +928,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
 // that frame's present fence. (A destroy before any fence covers it cannot wait;
 // tracker.cpp counts it as "no fence yet".)
 void alpha_slot_in_use(uint32_t slot, uint64_t frame) {
+  native_hit::slot_in_use(slot,frame);
   if (!g_on || slot >= kRing) return;
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_set_extended[slot] >= frame) return;

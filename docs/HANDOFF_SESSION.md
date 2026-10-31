@@ -6,8 +6,8 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main 5fab4ba ABI 19 is merged via merge-green and pushed with codex/omm-bake.
-Both DLLs rebuilt; 44/44 CTests, 527/527 runtime shaders and QA passed. Related
+Main fd166bc ABI 19 is merged via merge-green and pushed with codex/omm-bake.
+Both DLLs rebuilt; 45/45 CTests, 527/527 runtime shaders and QA passed. Related
 user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
@@ -68,21 +68,12 @@ Only merge-green integrates main; the prior tracked-doc blocker is resolved.
 
 ## Current checkout and confirmed UI correction
 
-C:/Users/quali/Documents/Code Projects/BG3RTX. UI fix merged via merge-green onto
-main 7b9c1e4 and pushed with codex/ui-contamination-offline. 17fb500 fixes recycled descriptor-set tracking: successful
-new allocations clear old binding/dynamic-count maps before recording layout.
-No key, shader, ABI or GPU work changes. Built bin/VkLayer_bg3rtx.dll at 15:56:50;
-16/16 CTests and actual-function nine-case regression pass (old four failures).
-The user reports blue blocks/flicker no longer trigger; movement/face stability
-initially good. This is positive provisional confirmation, not every shadow issue.
-Evidence docs/evidence/ui-descriptor-trial-20261030.json; offline original analysis
-in docs/UI_CONTAMINATION_OFFLINE.md. Material-owner first-candidate freeze and RR
-exposure-helper fallback remain unchanged, to isolate this successful trial.
-Game/launcher were closed at integration. Merge gate passed 16/16 CTests,
-107/107 runtime compute shader compilations and QA detector tests. Test-main was
-refreshed to the same merge. No game was launched.
-Do not rebuild or change live shaders/settings/HEAD while a game JOB is running;
-new development below was isolated from the user's active build.
+17fb500/7b9c1e4 fixed recycled descriptor-set maps; new successful allocations
+clear old binding/dynamic-count tracking. User confirms blue blocks/flicker no
+longer trigger and initial movement/face stability improved. No shader/ABI/GPU
+work change. Evidence: docs/evidence/ui-descriptor-trial-20261030.json and
+docs/UI_CONTAMINATION_OFFLINE.md. Other shadow problems remain separate.
+Never change source/bin/settings/HEAD of an active user or queue candidate.
 
 ## New user report: two separate shadow problems
 
@@ -97,8 +88,9 @@ Actual close-ups -161818 and -161845 show hard face/neck patterns in diffuse
 before compose/DoF/RR/FG. Logs use current TLAS, zero waits/timeouts/skips around
 those frames. No old whole-scene lag evidence. Native prepass FS 5a03e5b678b2d040
 is CHAR_Hair:StaticDepth (1/3 draws), 9e77575a9f377ec5 is CHAR_Scalp:StaticDepth.
-Conditional alpha/depth recipes are absent from alpha_fs.txt, so capturable cards
-enter RT as OPAQUE. Always-discard filtering does not handle conditional cutouts.
+The original capture lacked conditional alpha/depth recipes and treated these
+cards as opaque. Selected native Hair/Scalp coverage now exists behind the keys
+above; do not redo that work. Always-discard filtering alone was insufficient.
 Hair needs dual-mask/noise/root/tangent/view/dither/depth coverage; scalp needs
 smoothstep/root-density. A plain alpha>=cut entry is NOT an exact implementation.
 Latest user steering: exhaust package/catalog shader discovery BEFORE workarounds.
@@ -114,8 +106,8 @@ missing three/two-texture environment cutouts, hair and skydome alpha. Dedupe ca
 switch a missing cutout from skipped to SOLID when its camera key disappears.
 F10 lacks VB/IB/placement/dedupe/depth-layer records: no exact tree/caster pixel
 was established. Do not lump nontexture fades or skydomes into foliage.
-User-led later SAME-pose A/B: RT sun off/on, local off/on, then boxes if needed;
-separate distant test cascade off/on, retention 0/4 only if justified. NOT run yet.
+Pending attribution: automated same-pose Sun/local/box and distant-caster checks
+where the existing evidence does not identify the responsible contribution.
 
 Sun already has radius 0.00459 rad half-angle (~0.526 deg diameter), uniform disc
 sample per pixel, RR reconstruction, plus native-mask fallback in untrusted zones.
@@ -126,41 +118,19 @@ guard retains native-dark sun edges. Six dialogue windows keep 94.6-98.1% of
 native-dark/RT-lit disagreements; fully replace 0.3-1.3%, with RR active. Establish
 actual caster-volume coverage before lifting trust; no radius/bias/blur change.
 
-## OMM OFFLINE milestone - not runtime integration
+## OMM: wired, OFF and not game-qualified
 
-CPU preparation merged via merge-green onto main e277548; main and branch pushed.
-Gate: 19/19 CTests, 107/107 shaders and QA; test-main refreshed. No GPU OMM enabled.
-Isolated C:/Users/quali/.codex/worktrees/p4-omm-domain/BG3RTX now includes main's
-UI fix after e79c49b; old pre-integration baseline DLLs must still not be deployed.
-- common/omm_classify.h imported from old 8d902d5; no production caller.
-- common/omm_alpha_bounds.h validates immutable selected LINEAR UNORM8 mip planes,
-  conservatively scans whole selected mips, checks missing/unsupported/budget/UV/LOD.
-  CompleteCodeCoverage is INTEGER support, NOT GPU sampler/numeric proof.
-- common/omm_bake_identity.h uses exact material/UV/geometry/descriptor/content/
-  residency/sampler/evaluator/microtriangle identity plus submitted-work timeline
-  completion. Live views and frame-age alone are insufficient for reuse.
-- OMM SDK 1.10 is already at main external/omm-sdk-1.10.0; no download needed.
-  Optional CMake BG3RTX_OMM_CPU_PROBE is OFF by default, enabled only in isolated tests.
-  ACTUAL CPU baker: 18 constant cases, SIX known-state equality contradictions:
-  SDK > makes alpha=cut transparent, native >= accepts it. Both nearest/linear.
-- Follow-up fixed-cut conservative CPU configuration keeps <= UNKNOWN and >
-  opaque: 1,532 UNORM8 equality/neighbor cases, ZERO contradictions, with opaque
-  AND unknown outputs. Sacrifices all known-transparent acceleration; not valid
-  for stochastic thresholds/GPU sampling. Four mixed texture tests use real
-  descriptors/arrays: 25,740 sample checks, 66 equality points, zero contradictions;
-  eight decoder bounds checks. CPU-only tests, not continuous/GPU proof.
-- FULL isolated build/CTest 19/19, 197621 classifier, 398526 code-support, 65 identity
-  checks pass. No shader/ABI/device/BLAS/runtime-setting changes, no GPU cost claims.
-  docs/P4_OMM.md and evidence p4-omm-domain-20261030.json in that worktree.
-Remaining: tight spatial support, GPU numeric/LOD/filter/VT proof, threshold adapter,
-consistent EXT backend (KHR API differs), GPU bake/build/BLAS and completion lifetime.
-Runtime priority now correct unsupported hair/cascade coverage before OMM acceleration.
-
-Dedicated capture branch codex/native-coverage in isolated native-coverage/BG3RTX:
-37299f2 adds six exact scalp shader recipes, bounded scalar-input capture and
-native smoothstep/root/dither CPU reference, 178,522 checks. No runtime fix in
-that commit. Agent continues opt-in runtime scalp hard-cut support without ABI
-layout changes; native camera dither and full strand/depth capture remain separate.
+Current main includes GPU bake/EXT backend/BLAS and lifetime wiring under ABI 19.
+SDK 1.10 is already at external/omm-sdk-1.10.0; no download is needed. CPU domain
+history remains in docs/P4_OMM.md and p4-omm-domain evidence. Native accepts
+alpha=cut while SDK fixed cut uses >; conservative equality must stay UNKNOWN.
+1532 equality/neighbor and 25740 mixed-texture checks had no contradictions;
+these are CPU support, not continuous GPU/filter/VT proof or game quality.
+Reuse needs exact coverage/material/UV/descriptor/content/residency/sampler and
+actual submitted-work completion. Handles or frame age alone are insufficient.
+Useful known coverage, same-ray/energy comparison and runtime cost remain open.
+The installed Hair trial keeps OMM OFF. Native inventory/source recipes are in
+the native-coverage branch/docs; selected runtime Hair/Scalp support is now main.
 
 ## Other plan/state
 
