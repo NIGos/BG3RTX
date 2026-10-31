@@ -140,7 +140,7 @@ claim about their cause or visual correction. The native shadow FS
 capture is not added by this camera-only allowlist. Legacy opaque cascade policy
 is unchanged and is not covered by this implementation claim.
 
-Validation: 1,015 CPU checks; 1,035 with the actual native VS. Host DLL builds;
+Validation: 1,014 CPU checks; 1,035 with the actual native VS. Host DLL builds;
 four selected CTests pass. Four native UV0 XFB patches (40/64/80/88 bytes) validate
 and are byte-identical to the frozen baseline patcher. 640 ordinary OFF
 preprocessed token inputs are unchanged; 42 representative OFF SPIR-V modules
