@@ -12,13 +12,18 @@
 //   vec4, MatrixStride 16) world -> box; 96 _m7 vec3 (unused by the lighting);
 //   108 _m8 uint (bit 0 casts a shadow, >> 2 atlas slot); 112 _m9 vec3 direction TO the
 //   light; 124 _m10 float (unused by the lighting).
-// These bindings live in the lighting's own set 1, bound as our set 3 (core/gi.cpp ls_box).
+// These bindings live in the lighting's own set 1, bound as our set 3 (core/gi.cpp ls_box), or
+// BG3_BOX_SET (rf_hit_shade: set 2, rt/native_hit_direct.hlsli NATIVE_HIT_BOXES).
 #pragma once
 #include "bg3_materials.hlsli"
 
-[[vk::binding(29, 3)]] ByteAddressBuffer lBoxes;        // b29: box lights (struct _53)
-[[vk::binding(16, 3)]] SamplerState lBoxCookieSmp;      // b16 (_7): the cookies' sampler
-[[vk::binding(45, 3)]] Texture2D<float4> lBoxCookies[]; // b45: bindless cookies (_25)
+// BG3_BOX_SET: the set the lighting's set 1 is bound as (3 in D-LS; rf_hit_shade binds it as 2).
+#ifndef BG3_BOX_SET
+#define BG3_BOX_SET 3
+#endif
+[[vk::binding(29, BG3_BOX_SET)]] ByteAddressBuffer lBoxes;        // b29: box lights (struct _53)
+[[vk::binding(16, BG3_BOX_SET)]] SamplerState lBoxCookieSmp;      // b16 (_7): the cookies' sampler
+[[vk::binding(45, BG3_BOX_SET)]] Texture2D<float4> lBoxCookies[]; // b45: bindless cookies (_25)
 
 static const uint kBoxStride = 128u;
 

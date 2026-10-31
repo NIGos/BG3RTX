@@ -34,6 +34,8 @@
 #include "../rt/rt_common.hlsli"
 #if RT_HIT_GI_DIRECT
 #include "../rt/native_hit_material.hlsli"
+// No box-light binding in this pipeline: the projector term is left out (counted), not the hit.
+#define NATIVE_HIT_PROJECTOR_SKIP 1
 #include "../rt/native_hit_direct.hlsli"
 #endif
 #if SHARC_QUERY_PASS
@@ -184,8 +186,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
       NativeHitMaterial material=rt_hit_material(hh,cone.f0+cone.spread*t);
       if(pc.rt_stats!=0u){stat_add(283u,material.status==0u,hit_bin);hit_material_count(hh,material.status,hit_bin);}
       if(material.status==0u){
-        // Counters 160-171 (native_hit_direct.hlsli g_hd_*; core/gi.cpp "GI hit direct lights").
-        g_hd_stats=pc.rt_stats!=0u;g_hd_base=160u;g_hd_bin=hit_bin;g_hd_inst=hh.inst;g_hd_prim=hh.prim;
+        // Counters 160-175 (native_hit_direct.hlsli g_hd_*; core/gi.cpp "GI hit direct lights").
+        g_hd_stats=pc.rt_stats!=0u;g_hd_base=160u;g_hd_xbase=172u;g_hd_bin=hit_bin;g_hd_inst=hh.inst;g_hd_prim=hh.prim;
         NativeHitDirect direct=native_hit_direct(material,native_hit_position(hh,o+dir*t),-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
         if(pc.rt_stats!=0u)stat_add(284u,direct.status==HdOk,hit_bin);
         if(direct.status==HdOk){

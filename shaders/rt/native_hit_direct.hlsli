@@ -11,9 +11,33 @@ static const uint kHitDirectSource=5u,kHitDirectProjector=6u,kHitDirectDomain=7u
 // supported hits whose froxel lists no point/spot, +6 listed lights evaluated, +7 of them a known
 // zero before the cosine (channel, range, cone), +8 positive but zero after it (N.L <= 0),
 // +9 unsupported: source (outside the frustum/froxel slices, bad index), +10 projector, +11 other.
+// 4 more from g_hd_xbase (the +12.. slots are taken): +0 occluded light rays whose blocker is
+// within 1 m of the light (its fixture, or the character carrying it), +1 light rays traced to
+// lights of radius >= 10 m (the darkvision pair has r = 18), +2 projector entries listed at a
+// hit whose lists are valid, +3 of them evaluated (NATIVE_HIT_BOXES; the rest skipped).
 static bool g_hd_stats=false;
-static uint g_hd_base=0u,g_hd_bin=0u,g_hd_inst=0xffffffffu,g_hd_prim=0xffffffffu;
+static uint g_hd_base=0u,g_hd_xbase=0u,g_hd_bin=0u,g_hd_inst=0xffffffffu,g_hd_prim=0xffffffffu;
 void hd_stat(uint k,bool c){if(g_hd_stats)stat_add(g_hd_base+k,c,g_hd_bin);}
+#if defined(NATIVE_HIT_BOXES) || defined(NATIVE_HIT_PROJECTOR_SKIP)
+void hd_xstat(uint k,bool c){if(g_hd_stats && g_hd_xbase!=0u)stat_add(g_hd_xbase+k,c,g_hd_bin);}
+#define HD_XSTAT(k,c) hd_xstat(k,c)
+#else
+#define HD_XSTAT(k,c)   // the reference passes (rt_hit_direct, two-bounce): unchanged SPIR-V
+#endif
+// Projector (box) lights in the hit's froxel (cluster.z bits 0-9; their b24 entries follow the
+// spot lights and index the box records b29):
+//   NATIVE_HIT_BOXES (the pipeline binds the lighting's set 1 as BG3_BOX_SET, rf_hit_shade):
+//     evaluated with rt/bg3_boxes.hlsli (channel, inside the box, box falloff, cookie at mip 0,
+//     direction _m9, b13[0] when _m1 bit 0) through the same declared BSDF, with D-LS's
+//     ls_box visibility rule: a box with a game shadow map (_m8 bit 0) gets one ray along _m9
+//     to where it leaves the box; one without keeps the game's look (unshadowed).
+//   NATIVE_HIT_PROJECTOR_SKIP (no box binding, gi_hit_direct): the projector term is left out
+//     (counted, xbase +2 - +3) and the point/spot term stays supported. Bias: darker by the
+//     projector light at such hits (never brighter).
+//   neither: the hit is unsupported (kHitDirectProjector), as before.
+#ifdef NATIVE_HIT_BOXES
+#include "bg3_boxes.hlsli"
+#endif
 #ifdef RT_HIT_MATERIAL
 // The hit point on its triangle (vertices x barycentrics, as rtOrigin gives D-LS its exact TLAS
 // surface point), not o + d t: Wachter & Binder's ULP offset (rt_offset_ray) assumes a point on
@@ -61,10 +85,15 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
  if(!isfinite(footprint) || footprint<0){result.status=kHitDirectDomain;return result;}
  if(material.status!=0){result.status=HdUnknownMaterial;return result;}
  uint4 cluster;if(!native_hit_cluster(surface_position,cluster))return result;
+#if !defined(NATIVE_HIT_BOXES) && !defined(NATIVE_HIT_PROJECTOR_SKIP)
  // The declared subset is the complete point+spot term only; do not silently
  // label a projector-bearing receiver as a complete local-light reference.
  if((cluster.z&1023u)!=0u){result.status=kHitDirectProjector;return result;}
  uint points=cluster.y&4095u,count=points+((cluster.y>>12)&4095u);
+#else
+ uint points=cluster.y&4095u,count=points+((cluster.y>>12)&4095u),projectors=cluster.z&1023u;
+ {uint indices;lIndex.GetDimensions(indices);if(projectors>indices/4u-cluster.x-count)return result;}   // list past b24: source
+#endif
  hd_stat(5u,count==0u);
  uint scale_bytes;lScale.GetDimensions(scale_bytes);if(scale_bytes<4)return result;
  float global_scale=asfloat(lScale.Load(0));
@@ -97,6 +126,7 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   float reach=distance-max(pc.ls_clear,0.0);
   RtCone cone={footprint,0};uint visibility=reach>0?rt_visibility(origin,delta/distance,reach,cone):kRtLit;
   hd_stat(0u,reach>0);hd_stat(1u,reach>0 && visibility==kRtLit);hd_stat(4u,visibility==kRtUnknown);
+  HD_XSTAT(1u,reach>0 && light.inv_r*10.0<=1.0);
   if(g_hd_stats){
    // What occludes: a first hit within 1 cm of the origin or on the hit's own triangle is
    // self-intersection, not a caster (stats key only; one extra closest-hit query).
@@ -104,6 +134,7 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
    if(visibility==kRtOccluded && reach>0){
     RtHit blocker=rt_closest_hit(origin,delta/distance,reach,cone);
     near=blocker.t>=0 && blocker.t<0.01;self=blocker.t>=0 && blocker.inst==g_hd_inst && blocker.prim==g_hd_prim;
+    HD_XSTAT(0u,blocker.t>=0 && distance-blocker.t<=1.0);
    }
    hd_stat(2u,near);hd_stat(3u,self);
   }
@@ -112,6 +143,43 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   if(term.status!=HdOk){result.status=term.status;return result;}
   result.radiance+=term.radiance;++result.lights;
  }
+#if defined(NATIVE_HIT_BOXES) || defined(NATIVE_HIT_PROJECTOR_SKIP)
+ [loop]for(uint p=0;p<projectors;++p){
+  HD_XSTAT(2u,true);
+#ifdef NATIVE_HIT_BOXES
+  uint bi=lIndex.Load((cluster.x+count+p)*4u);
+  if(!bg3_box_in(bi))return result;   // no record: source
+  Bg3Box box=load_box(bi);
+  HD_XSTAT(3u,true);
+  float3 uvw;
+  if(!bg3_box_reaches(box,material.channel,surface_position,uvw))continue;   // channel / outside: known zero
+  const float g=bg3_box_falloff(box,uvw);
+  if(!(g>0))continue;
+  if(!all(isfinite(box.dir)) || !(dot(box.dir,box.dir)>1e-20)){result.status=HdInvalid;return result;}
+  HdIncident incident;incident.direction=normalize(box.dir);incident.distance=0;incident.status=HdOk;
+  // f469db78's box loop: colour (x cookie) x falloff (x b13[0]), no 1/pi or 1/4pi; the cookie at
+  // mip 0 (zero gradients: the game's own rule for invalid quad differences).
+  incident.radiance=bg3_box_colour(box,uvw.xy,0.0.xx,0.0.xx)*(g*((box.m1&1u)!=0u?global_scale:1.0));
+  if(!all(isfinite(incident.radiance)) || any(incident.radiance<0)){result.status=HdInvalid;return result;}
+  HdDirect term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,1);
+  if(term.status!=HdOk){result.status=term.status;return result;}
+  if(!any(term.radiance>0))continue;
+  float3 normal=normalize(geometric_normal);
+  if(!(dot(normal,incident.direction)>0)){result.status=HdNormalDomain;return result;}
+  uint visibility=kRtLit;
+  if((box.flags&1u)!=0u){
+   float3 origin=rt_offset_ray(surface_position,normal);
+   const float tmax=bg3_box_exit(box,origin,incident.direction);   // the box is the light's extent
+   RtCone cone={footprint,0};
+   if(tmax>0)visibility=rt_visibility(origin,incident.direction,tmax,cone);
+  }
+  if(visibility==kRtUnknown){result.status=HdUnknownVisibility;return result;}
+  term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
+  if(term.status!=HdOk){result.status=term.status;return result;}
+  result.radiance+=term.radiance;++result.lights;
+#endif
+ }
+#endif
  result.status=all(isfinite(result.radiance))?HdOk:HdInvalid;return result;
 }
 NativeHitDirect native_hit_direct(NativeHitMaterial material,float3 surface_position,float3 outgoing,float3 geometric_normal,float footprint){

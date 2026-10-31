@@ -37,11 +37,13 @@ inline constexpr std::array<Binding,33> push={{
  {50,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1}
 }};
 inline constexpr bool push_enabled(const Binding& b,bool hair){return hair?b.binding!=12u:b.binding!=50u;}
-// The lighting's set 1 (f469db78) as the variant reads it: b6 AO, b16/b32 samplers, b33 probes,
-// b34/b36 sky irradiance (the diffuse ambient at the hit, verified in the dumped f469db78:265-267,
-// 969-994), b35/b37 specular cubes, b38 DFG LUT, b45 bindless probe cubes.
-inline constexpr std::array<Binding,10> game={{
- {6,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{16,VK_DESCRIPTOR_TYPE_SAMPLER,1},{32,VK_DESCRIPTOR_TYPE_SAMPLER,1},
+// The lighting's set 1 (f469db78) as the variant reads it: b6 AO, b16/b32 samplers, b29 box
+// (projector) lights (rt/bg3_boxes.hlsli; core/gi.cpp checks it is a bound storage buffer),
+// b33 probes, b34/b36 sky irradiance (the diffuse ambient at the hit, verified in the dumped
+// f469db78:265-267, 969-994), b35/b37 specular cubes, b38 DFG LUT, b45 bindless probe cubes and
+// the box cookies (2D views of the same array, rt/bg3_boxes.hlsli _25).
+inline constexpr std::array<Binding,11> game={{
+ {6,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{16,VK_DESCRIPTOR_TYPE_SAMPLER,1},{29,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1},{32,VK_DESCRIPTOR_TYPE_SAMPLER,1},
  {33,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1},{34,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{35,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
  {36,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{37,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{38,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
  {45,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,0}

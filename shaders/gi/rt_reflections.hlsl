@@ -58,6 +58,10 @@
 #define BG3_SUN_SET 3
 #include "../rt/bg3_sun.hlsli"
 #include "../rt/native_hit_material.hlsli"
+// Projector (box) lights at the hit: the box records b29 / cookies b45 / sampler b16 of the
+// game's set 1, which this variant binds as set 2 (common/native_hit_rf_bindings.h).
+#define BG3_BOX_SET 2
+#define NATIVE_HIT_BOXES 1
 #include "../rt/native_hit_direct.hlsli"
 #define NATIVE_HIT_SHADE_FULL 1
 #include "../rt/native_hit_shade.hlsli"
@@ -241,6 +245,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
           // Light / sun diagnostics 176-187, 191-195 (native_hit_direct.hlsli g_hd_*).
           g_hd_stats = pc.rf_stats != 0u;
           g_hd_base = 176u;
+          g_hd_xbase = 196u;
           g_hd_bin = (fp.x >> 3) * 7u + (fp.y >> 3) * 13u;
           NativeHitShade hs = native_hit_shade(hh, o + dir * t, -dir, cone.f0 + cone.spread * t);
           // Hit-material reasons (253+status, 127) for the normal stats windows; run_post's push

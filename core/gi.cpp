@@ -62,6 +62,7 @@ struct Snapshot {
   VkDescriptorSetLayout game_set1_layout;
   uint32_t game_set1_dyn[16], game_set1_ndyn;
   bool box_ready;                     // native box-light storage buffer is bound
+  bool boxes_bound;                   // set 1 b29 is a bound storage buffer (rf_hit_shade reads it, any ls_box)
   VkAccelerationStructureKHR tlas;   // the TLAS the ray-traced passes used (Track D)
   VkDescriptorSet alpha;             // the host's set 1 for them (alpha-tested geometry, phase 3)
   bool gi;                           // the GI passes ran (gi=1); otherwise only the sun shadow work
@@ -455,8 +456,8 @@ bool snapshot(VkCommandBuffer cmd, Snapshot& s) {
     s.game_set1_ndyn = 0;
   }
   Bg3Binding boxes{};
-  s.box_ready = host->cfg_int("ls_box", 0) && s.game_set1 && q(1, 29, boxes) &&
-                boxes.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && boxes.buffer && boxes.range >= 128;
+  s.boxes_bound = s.game_set1 && q(1, 29, boxes) && boxes.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && boxes.buffer;
+  s.box_ready = host->cfg_int("ls_box", 0) && s.boxes_bound && boxes.range >= 128;
   return s.nrm.width == s.dif.width && s.dep.width == s.dif.width && s.ao.width == s.dif.width && s.dif.width > 0;
 }
 
@@ -1175,13 +1176,17 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
       (unsigned long long)t[bg3::transport::NtsStatQualified],(unsigned long long)t[bg3::transport::NtsStatPrimaryMatch]);
   if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/8192.0,t[134],t[135]);
   // native_hit_direct.hlsli diagnostics: why a hit's point/spot term is zero or unsupported.
-  auto hd_log=[&](const char* who,unsigned b){
-    if(!(t[b+6]|t[b+9]|t[b+10]|t[b+11]|t[b+5]))return;
-    host->log("%s lights (%u frames): light rays traced %llu, lit %llu, occluded %llu (first hit within 1 cm %llu, on the hit's own triangle %llu), unknown %llu; "
+  // x: the 4 more counters (g_hd_xbase): blocker within 1 m of the light, rays to lights of
+  // radius >= 10 m, projector entries listed / evaluated (rf_hit_shade; gi_hit_direct skips them).
+  auto hd_log=[&](const char* who,unsigned b,unsigned x){
+    if(!(t[b+6]|t[b+9]|t[b+10]|t[b+11]|t[b+5]|t[x+2]))return;
+    host->log("%s lights (%u frames): light rays traced %llu, lit %llu, occluded %llu (first hit within 1 cm %llu, on the hit's own triangle %llu, "
+              "within 1 m of the light %llu), unknown %llu; rays to lights of radius >= 10 m %llu; "
               "froxel lists no point/spot %llu; lights evaluated %llu, zero before the cosine (channel/range/cone) %llu, N.L <= 0 %llu; "
-              "unsupported: source (frustum/froxel slice/index) %llu, projector %llu, other %llu",who,g_stats_n,t[b],t[b+1],t[b]-t[b+1]-t[b+4],t[b+2],t[b+3],t[b+4],
-              t[b+5],t[b+6],t[b+7],t[b+8],t[b+9],t[b+10],t[b+11]);};
-  hd_log("GI hit direct",160u);hd_log("rf hit shade",176u);
+              "projector entries %llu, evaluated %llu, skipped %llu; "
+              "unsupported: source (frustum/froxel slice/index) %llu, projector %llu, other %llu",who,g_stats_n,t[b],t[b+1],t[b]-t[b+1]-t[b+4],t[b+2],t[b+3],
+              t[x],t[b+4],t[x+1],t[b+5],t[b+6],t[b+7],t[b+8],t[x+2],t[x+3],t[x+2]-t[x+3],t[b+9],t[b+10],t[b+11]);};
+  hd_log("GI hit direct",160u,172u);hd_log("rf hit shade",176u,196u);
   if(t[191])host->log("rf hit shade sun (%u frames): evaluated %llu, zero sun colour x clouds x b13 %llu, N.L <= 0 %llu, traced lit %llu, traced occluded %llu",
                       g_stats_n,t[191],t[192],t[193],t[194],t[195]);
   uint64_t material_total=0;for(unsigned i=253;i<263;++i)material_total+=t[i];
@@ -1632,7 +1637,9 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
 // as set 1 and the sun set as set 3. False before anything is dispatched: the caller then runs the
 // ordinary D-RF, so a missing input keeps today's reflections exactly.
 bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& pc, VkDescriptorSet sun) {
-  if (!sun || !host->rt_hit_material_use ||
+  // The variant reads the box (projector) lights of set 1 b29 at the hits (native_hit_direct.hlsli
+  // NATIVE_HIT_BOXES): without that buffer the ordinary D-RF runs.
+  if (!sun || !s.boxes_bound || !host->rt_hit_material_use ||
       !bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t)))))
     return false;
   const bool sharc = s.rf_sharc;

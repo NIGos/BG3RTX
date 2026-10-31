@@ -25,10 +25,11 @@ NativeHitLit native_hit_lit(RtHit hit,float3 position,float3 outgoing,float foot
 // L_b at the hit = point/spot (native_hit_direct) + sun (replicated colour x clouds x b13[0],
 // one RT visibility ray instead of the native mask) + the game's ambient there with AO 1:
 // diffuse (sky irradiance x diffuse colour x DFG.z) and specular (bg3_spec_ambient at the hit,
-// its local probes included) x b13[0]*100. Not included: emission, projector lights (the hit
-// is then unsupported), local DIFFUSE probes (counted: local_probes), aerial perspective.
-// status 0 complete; 1 material unknown; 2 point/spot unsupported (outside the frustum,
-// projector, unknown visibility); 3 sun unsupported; 4 not finite.
+// its local probes included) x b13[0]*100, and the projector (box) lights of the hit's froxel
+// (native_hit_direct.hlsli NATIVE_HIT_BOXES, D-LS's ls_box visibility rule). Not included:
+// emission, aerial perspective.
+// status 0 complete; 1 material unknown; 2 local lights unsupported (outside the frustum,
+// bad list or record, unknown visibility); 3 sun unsupported; 4 not finite.
 static const uint kHitShadeOk=0u,kHitShadeMaterial=1u,kHitShadeDirect=2u,kHitShadeSun=3u,kHitShadeInvalid=4u;
 struct NativeHitShade {float3 radiance,direct,sun,ambient;uint status,material_status;bool local_probes;};   // material_status: rt_hit_material's
 
