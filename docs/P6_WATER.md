@@ -31,7 +31,7 @@ S5/S6 lava is an exclusion control, not a water reference.
 | Native water lighting terms | Forward shader and its retained lighting descriptors | Identify exact reflection, transmission, sun and local terms before replacing any of them |
 | Previous water motion | Previous object/deformation and flow/wave state | Not established by opaque camera MVs; changing wave normals need their own history validity |
 
-The source evidence is local: [AUDIT_ENGINE_DATA.md](AUDIT_ENGINE_DATA.md)
+The source evidence is local: [AUDIT_ENGINE_DATA.md](archive/AUDIT_ENGINE_DATA.md)
 sections 2.9, A8 and R5, [ASSET_DB.md](ASSET_DB.md),
 `common/assetdb_api.h` and `tools/assets/extract/materials.py`.
 The audit's feasibility assessment is not evidence that forward XFB or its

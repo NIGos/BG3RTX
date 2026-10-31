@@ -29,4 +29,4 @@ Use the **Vulkan** renderer (`bg3.exe`). The DX11 executable doesn't go through 
 To check that the layer works without starting BG3, run any Vulkan program:
 `.\scripts\launch-bg3.ps1 -Exe "$env:VULKAN_SDK\Bin\vkcube.exe"`.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/README.md](docs/README.md) (the docs index; the old roadmap is in [docs/archive/ROADMAP.md](docs/archive/ROADMAP.md)).

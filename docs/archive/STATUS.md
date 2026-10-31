@@ -96,7 +96,7 @@ State of each branch at the pause, as reported:
     missing-mods dialog (texture-only mod; Crèche: its non-ASCII name). Fix:
     `auto-run.ps1 -AcceptModWarning` (default auto), verification jobs pending
     (TEST_SCENES.md, "Saves made with mods").
-- **Rendering coverage matrix and ranked gaps:** [COVERAGE.md](COVERAGE.md) (2026-10-27).
+- **Rendering coverage matrix and ranked gaps:** [COVERAGE.md](../COVERAGE.md) (2026-10-27).
   Top gaps: forward water (89% of the S1 docks view), box lights (36.6% of placed lights,
   93% of the shadow-mapped ones, not traced), emission not bouncing in GI. Refresh with
   `python -m scripts.qa.coverage --update-doc`.
@@ -119,7 +119,7 @@ exclusive runs for timings.
 
 **Implementation-ready plans** for many-light sampling (D-LS exact-k + RIS remainder,
 a GPU light BVH, ReSTIR DI on evidence), a screen-injected SHaRC cache, and opacity
-micromaps are in [DESIGN_SOTA_NEXT.md](DESIGN_SOTA_NEXT.md) (2026-10-27).
+micromaps are in [DESIGN_SOTA_NEXT.md](../DESIGN_SOTA_NEXT.md) (2026-10-27).
 - Recommended order: 1a → 2 v1 → 3 → 1c → 2 v2 → 1b.
 - Downloads needed: SHaRC, the OMM SDK, and RTXDI (optional).
 - Done there: the CPU light-tree oracle (`common/light_tree.h`, `light_tree_test`).
