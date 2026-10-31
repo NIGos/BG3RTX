@@ -1,0 +1,78 @@
+{
+ "name": "cb3-cascade-roofs-inn-fg2",
+ "save": "The Blushing Mermaid - 96h 39m",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 695,
+ "repeat": 1,
+ "live_batch": "consolidation-20261031",
+ "window_mode": "visible_unfocused_fg",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,rt_order_trace=0,rt_stability_log=0,rt_cascade_casters=0,rt_stats=0,rt_primary_check=0,ls_box=0,fg_state_every=1,pan_prepare=1",
+ "args": [
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/consolidation/plans/cb3_cascade_roofs_inn.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "rt applied",
+  "primary-ray check",
+  "rt epoch",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[cpu\\] capture hooks",
+  "\\[cascade\\] casters",
+  "\\[cascade\\] matrix",
+  "sun stats",
+  "ls box",
+  "ls check",
+  "ls: local-light shadow pass GPU",
+  "\\[pan\\] burst",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cascade\\] sun cascade pass found",
+  "\\[cascade\\] casters: cascade \\d+",
+  "\\[cascade\\] matrix of cascade",
+  "sun stats \\(600 frames, replace 1",
+  "\\[rt\\] scene build GPU",
+  "\\[shaders\\] gi/\\S+\\?\\S*RT_CASCADE_MASKS=1\\S* compiled \\(generation",
+  "\\[pan\\] burst 83101 complete: 16 frames, [0-9]+ samples, transport ok",
+  "\\[pan\\] burst 83102 complete: 16 frames, [0-9]+ samples, transport ok",
+  "\\[pan\\] burst 83103 complete: 16 frames, [0-9]+ samples, transport ok"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed"
+ ],
+ "expect_runner": [
+  "\\[window-mode\\] visible_unfocused:.*preserve_fg=True",
+  "\\[motion-plan\\] complete phases=8\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "rt_cascade_casters promotion gate, interior half (TRACK_D 8.5 \"Gate (first plan)\"): inn with the roof cut away, same view OFF/ON/OFF, sun stats per 600 frames, cascade matrix/casters lines, K16 bursts for temporal/visual review.",
+ "estimated_phase_seconds": 395,
+ "requires_success_of": [
+  "cb1-regression-camp-fg2"
+ ]
+}

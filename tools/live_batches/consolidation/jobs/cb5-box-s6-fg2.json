@@ -1,0 +1,77 @@
+{
+ "name": "cb5-box-s6-fg2",
+ "save": "Adamantine Forge",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 665,
+ "repeat": 1,
+ "live_batch": "consolidation-20261031",
+ "window_mode": "visible_unfocused_fg",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,rt_order_trace=0,rt_stability_log=0,ls_box=0,ls_check=0,ls_stats=0,ls_samples=0,rt_stats=0,rt_primary_check=0,rt_cascade_casters=0,fg_state_every=30,pan_prepare=0",
+ "args": [
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/consolidation/plans/cb56_box_static.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "rt applied",
+  "primary-ray check",
+  "rt epoch",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[cpu\\] capture hooks",
+  "\\[cascade\\] casters",
+  "\\[cascade\\] matrix",
+  "sun stats",
+  "ls box",
+  "ls check",
+  "ls: local-light shadow pass GPU",
+  "\\[pan\\] burst",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "ls box: active",
+  "ls box stats \\(120 frames\\): evaluated (?!0\\.000)\\d+\\.\\d+/px, shadow-mapped \\d+\\.\\d+/px, traced (?!0\\.000)\\d+\\.\\d+/px",
+  "ls box precise",
+  "ls check \\(120 frames\\): [1-9]\\d* px written by the reference; outputs differ in any bit on 0 px, by more than 1e-5 relative on 0, written by only one of them on 0",
+  "ls: local-light shadow pass GPU median .*box 1\\)",
+  "ls: local-light shadow pass GPU median .*box 0\\)"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "ls check \\(\\d+ frames\\): \\d+ px written by the reference; outputs differ in any bit on [1-9]",
+  "ls box: requested but native set/layout or pipeline unavailable"
+ ],
+ "expect_runner": [
+  "\\[window-mode\\] visible_unfocused:.*preserve_fg=True",
+  "\\[motion-plan\\] complete phases=7\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "ls_box promotion gate on S6 (P3_BOX_LIGHTS \"Deciding queue work\" 1 and 3): default-path ls_check reference with boxes off, then same-view OFF/ON/OFF with ls_stats (activation, traced/occluded/unknown/cookie populations), then ON/OFF cost without stats.",
+ "estimated_phase_seconds": 365,
+ "requires_success_of": [
+  "cb1-regression-camp-fg2"
+ ]
+}
