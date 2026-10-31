@@ -1,5 +1,39 @@
 # BG3RTX progress
 
+## R8 material/reference participation passes; first production GI increment prepared - 2026-10-31
+
+Main a0bd782, ABI 21: merge-green 55/55 CTests, 579/579 shaders and QA; pushed.
+R8 completed 498 s, queue VALID, zero NVIDIA 153/dumps/build drift. Seven static
+same-run phases, S1 QuickSave_3784, foreground real presentation, FG2/RR1.
+Primary match OFF/material/direct/two/OFF: 99.525/99.524/99.524/99.522/99.527%.
+Material window median 2246464 qualified hits; native class0 median 2246341.
+Fresh opaque support and 128-record resource reuse retained, defaults OFF.
+No geometry/parameter/frame rejection in the inspected material window.
+
+Two-surface reference has 21 positive windows: 524-29722 completed paths and
+438-15389 positive indirect paths/window. This is LIMITED supported point/spot
+participation, not a full-room reference or visual-quality qualification.
+Stats-OFF whole GI median direct 2.429 ms / two-surface 2.442 ms; those overlapping
+ranges do not establish an isolated bounce cost. Existing RT pre interval
+0.903/0.916 ms excludes this reference. Stats-ON whole GI was about 24-25 ms.
+FG ratio 2.0 with zero bad phase samples; rendered SDK cadence direct/two cost
+77.25/79.21 fps versus about 30-31 fps with full diagnostics. No global FPS claim.
+Immutable logs, phases, frozen binaries manifest and analysis:
+omm-bake/BG3RTX/captures/native-hit-material-20261031/r8/.
+
+4e24157/import 1b34336 adds default-OFF Experimental gi_hit_direct: qualified
+hidden-hit local-light GI, successful screen/SHaRC priority and fallback0 ambient
+occlusion preserved. Unknown retains the old fallback; no full-probe replacement.
+48 new variants validate; all 48 ordinary variants byte-identical, four focused
+CTest targets pass and independent source review clear. Live contribution,
+energy accounting in output, motion and cost still need the next scoped trial.
+
+User Hair trial remains unchanged. User has NOT tested the latest capacity/
+physical-origin trial or the material/reference/GI increments. Terrain's actual
+mask/LUT evaluator is retained; runtime texture-to-DDS identity remains missing.
+No guessed texture mapping or photometry adapter was added.
+
+
 ## R7 acquisition passes; broader resource reuse and real terrain evaluation retained - 2026-10-31
 
 R7 3e9703d completed 229 s, queue VALID, zero NVIDIA 153/dumps/build drift.
