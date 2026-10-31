@@ -900,3 +900,31 @@ needs a game restart. No ABI change (23). Remaining plan, one ABI bump (24):
    compare under rt_stats, ls_check style), then remove the layer path.
 Risks: core hot-reload during a build (take the core lock), CB bytes must still be read at
 record time (the game rewrites them), views stay layer-owned.
+
+### 13.22 AF `304be1c7`: formula re-derived, family excluded (`rt_em_fx_pulse`, 2026-11-01)
+
+**The formula is exact.** The dumped fragment shader (`captures/alpha_cache/304be1c71df194cb.glsl`)
+emits `mix(m0 * glow.r, glow.rgb, clamp(floor(m4))) * m5 * mix(m2, m3, cos(time * m1) * 0.5 + 0.5)`:
+GlowColour s1b0+0, GlowMultiplier s1b0+28, the switch +24, the pulse +12/+16/+20, time set 0
+b0 [0], Glowmap s1b1 through the global sampler s0b7 (the one every passing family uses). No
+global scale, no second layer, no exposure term, alpha 1, blend off, depth EQUAL (run 295).
+`make_record` + `family_fixup` reproduce it term for term (`emissive_policy_test` 9b pins the
+record, switch off and on). The asset DB agrees (`py -3 -m tools.assets shader 304be1c71df194cb`).
+So the 0.36 is not a missing multiplier in the record.
+
+**Already rejected:** UV slot (13.19), filtering (13.17), pulse phase (s_w 0.006), captured
+overlap in front (13.18) and at equal depth (run 295: multi-draw receivers 0).
+
+**Still open, needs a live observable:** (a) an uncaptured draw (AF has 16 unclassified
+effects-pass draws per build) writing the same pixels later; (b) a mask-lookup pattern error
+(the em12 `af-view19/20` images, if not yet read); (c) back faces the native draw culls.
+Side finding: AF `159a6211` (same glow map, `_VT`, luminance) reads ours 0.000 (138 bright px,
+not gated): its luminance-scale copy reads 0 in AF. A lead for (a) if both draw the same mesh.
+
+**Exclusion.** `rt_em_fx_pulse=0` (default): `make_record` returns an empty record flagged
+`kFlagExcluded` (nothing read or bound); the layer does not capture the draw and counts it:
+`draws of excluded families (rt_em_fx_pulse=0: 304be1c7) N per build` on the `[em] soup` line;
+`[em] emissive families` shows its draws with 0 captured. It is hot (core cfg read per draw).
+This also drops it in GF, where it passed: conservative until the AF cause is known.
+**Live job:** `tools/live_batches/em_forge/` (0/1/0 in one AF run, record dump, rt_debug
+19/20 pair). Lift the exclusion only when em_gate passes AF and GF with `rt_em_fx_pulse=1`.

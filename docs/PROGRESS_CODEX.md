@@ -10,6 +10,11 @@
 - Offline: 741/741 compile, contracts pass; vs main 697 SPIR-V byte-identical, the 48 rf_hit_shade
   variants differ (roof rule, key off by default), 32 new gi_hit_sun variants; 67 CTests, QA detectors pass.
 - Live (pending): S3 OFF/ON/OFF gi_hit_sun; S8 rf_hit_shade tier (a) with rt_cascade_casters 0/1.
+## D-EM AF 304be1c7 (branch em-forge, offline, 2026-11-01)
+
+- Fragment shader re-derived: the record already matches it term for term (no missing intensity, layer or exposure). Cause of AF 0.36 not found offline.
+- Excluded: `rt_em_fx_pulse=0` (default; 1 captures it). Counter on the `[em] soup` line. rt_emissive stays 0. Tests: policy 9b pins the record; core test covers both values. No ABI or shader change.
+- READY_FOR_LIVE: `tools/live_batches/em_forge/` (one AF run, about 5 min; dry run passes). Details: TRACK_D_EMISSIVE 13.22.
 
 ## Stage 0 closed (Claude, /goal, 2026-10-31 evening)
 

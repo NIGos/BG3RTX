@@ -449,6 +449,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_em_fx_thr", "0.05"},
     {"rt_em_backdrop", "0"},
     {"rt_em_decal", "1"},
+    {"rt_em_fx_pulse", "0"},
     {"rt_alpha", "1"},
     {"rt_alpha_test", "1"},
     {"rt_alpha_cut", "1"},
