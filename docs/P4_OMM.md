@@ -217,3 +217,10 @@ performs 197,621 checks over 142 known interval cases (93 opaque, 49 transparent
 The asset DB test skips when the unversioned database is absent in this fresh
 checkout; the OMM oracle itself runs without SDK/data dependencies. No shader
 or runtime rendering source is changed by this step.
+
+## User smoke test - 2026-10-31 checkpoint
+
+User tried OMM and Current Cascade Sun together and reports encouraging visuals,
+no obvious new defects. This is not an isolated OMM A/B or performance gate.
+Slight dialogue shadow flicker predates this test; source remains unknown.
+No default promotion. User paused work; see current handoff for exact state.

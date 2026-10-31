@@ -1,0 +1,541 @@
+{
+  "queue_verdict": "Read authoritative captures/queue/results.jsonl; separate from image analysis",
+  "capture_verdict": "All3 retained manifests valid_transport=true,K16 consecutive required views,176samples each",
+  "bursts": [
+    {
+      "serial": 72401,
+      "frames": [
+        5347,
+        5348,
+        5349,
+        5350,
+        5351,
+        5352,
+        5353,
+        5354,
+        5355,
+        5356,
+        5357,
+        5358,
+        5359,
+        5360,
+        5361,
+        5362
+      ],
+      "samples": 176,
+      "valid_transport": true,
+      "stable_pixel_frames_to_anchor": 34417724,
+      "median_reprojection_motion": [
+        0.7029367424222548,
+        0.20155879349570702,
+        0.5978472724365076,
+        0.743390756386916,
+        0.26352690306607934,
+        0.6054346215739603,
+        0.9877858674760394,
+        1.048140854583481e-12,
+        0.41669445555576917,
+        0.7120385604847015,
+        0.39115892859575685,
+        0.4616788943851583,
+        0.7877811744954316,
+        0.43590502869448133,
+        0.7687189343743767,
+        0.889435548747046
+      ],
+      "frame_rows": [
+        {
+          "frame": 5347,
+          "stable_pixels_to_anchor": 1967986,
+          "gi_mean_on_frame_stable": 0.003567999927327037
+        },
+        {
+          "frame": 5348,
+          "stable_pixels_to_anchor": 2525368,
+          "gi_mean_on_frame_stable": 0.003624433185905218
+        },
+        {
+          "frame": 5349,
+          "stable_pixels_to_anchor": 1684340,
+          "gi_mean_on_frame_stable": 0.003416813910007477
+        },
+        {
+          "frame": 5350,
+          "stable_pixels_to_anchor": 2387980,
+          "gi_mean_on_frame_stable": 0.003627096302807331
+        },
+        {
+          "frame": 5351,
+          "stable_pixels_to_anchor": 2398960,
+          "gi_mean_on_frame_stable": 0.0035794563591480255
+        },
+        {
+          "frame": 5352,
+          "stable_pixels_to_anchor": 1737830,
+          "gi_mean_on_frame_stable": 0.003498150734230876
+        },
+        {
+          "frame": 5353,
+          "stable_pixels_to_anchor": 1915691,
+          "gi_mean_on_frame_stable": 0.0034361938014626503
+        },
+        {
+          "frame": 5354,
+          "stable_pixels_to_anchor": 2725300,
+          "gi_mean_on_frame_stable": 0.003814481198787689
+        },
+        {
+          "frame": 5355,
+          "stable_pixels_to_anchor": 2089065,
+          "gi_mean_on_frame_stable": 0.0035552247427403927
+        },
+        {
+          "frame": 5356,
+          "stable_pixels_to_anchor": 2086960,
+          "gi_mean_on_frame_stable": 0.0035510342568159103
+        },
+        {
+          "frame": 5357,
+          "stable_pixels_to_anchor": 2194411,
+          "gi_mean_on_frame_stable": 0.0035328646190464497
+        },
+        {
+          "frame": 5358,
+          "stable_pixels_to_anchor": 2003626,
+          "gi_mean_on_frame_stable": 0.0035826002713292837
+        },
+        {
+          "frame": 5359,
+          "stable_pixels_to_anchor": 2418553,
+          "gi_mean_on_frame_stable": 0.0036436719819903374
+        },
+        {
+          "frame": 5360,
+          "stable_pixels_to_anchor": 2089777,
+          "gi_mean_on_frame_stable": 0.0035013416782021523
+        },
+        {
+          "frame": 5361,
+          "stable_pixels_to_anchor": 1570217,
+          "gi_mean_on_frame_stable": 0.003362291492521763
+        },
+        {
+          "frame": 5362,
+          "stable_pixels_to_anchor": 2621660,
+          "gi_mean_on_frame_stable": 0.0037428420037031174
+        }
+      ]
+    },
+    {
+      "serial": 72402,
+      "frames": [
+        8625,
+        8626,
+        8627,
+        8628,
+        8629,
+        8630,
+        8631,
+        8632,
+        8633,
+        8634,
+        8635,
+        8636,
+        8637,
+        8638,
+        8639,
+        8640
+      ],
+      "samples": 176,
+      "valid_transport": true,
+      "stable_pixel_frames_to_anchor": 34611545,
+      "median_reprojection_motion": [
+        0.5978472790882776,
+        0.7433907539486521,
+        0.263526889264571,
+        0.6054346283602523,
+        0.9877858530575238,
+        1.048140854583481e-12,
+        0.4166944042199671,
+        0.7120385588469974,
+        0.39115898358043855,
+        0.4616788907871428,
+        0.7877811823971596,
+        0.43590501136643706,
+        0.7687189377697171,
+        0.8894355516277174,
+        0.2836778906830501,
+        0.3028573739470301
+      ],
+      "frame_rows": [
+        {
+          "frame": 8625,
+          "stable_pixels_to_anchor": 1683170,
+          "gi_mean_on_frame_stable": 0.0034137426409870386
+        },
+        {
+          "frame": 8626,
+          "stable_pixels_to_anchor": 2385649,
+          "gi_mean_on_frame_stable": 0.003618082031607628
+        },
+        {
+          "frame": 8627,
+          "stable_pixels_to_anchor": 2396682,
+          "gi_mean_on_frame_stable": 0.0035719687584787607
+        },
+        {
+          "frame": 8628,
+          "stable_pixels_to_anchor": 1734797,
+          "gi_mean_on_frame_stable": 0.0034842893946915865
+        },
+        {
+          "frame": 8629,
+          "stable_pixels_to_anchor": 1913173,
+          "gi_mean_on_frame_stable": 0.003422059118747711
+        },
+        {
+          "frame": 8630,
+          "stable_pixels_to_anchor": 2718380,
+          "gi_mean_on_frame_stable": 0.0038053670432418585
+        },
+        {
+          "frame": 8631,
+          "stable_pixels_to_anchor": 2084889,
+          "gi_mean_on_frame_stable": 0.0035466437693685293
+        },
+        {
+          "frame": 8632,
+          "stable_pixels_to_anchor": 2084022,
+          "gi_mean_on_frame_stable": 0.0035457881167531013
+        },
+        {
+          "frame": 8633,
+          "stable_pixels_to_anchor": 2190393,
+          "gi_mean_on_frame_stable": 0.003517064731568098
+        },
+        {
+          "frame": 8634,
+          "stable_pixels_to_anchor": 2002009,
+          "gi_mean_on_frame_stable": 0.003582670819014311
+        },
+        {
+          "frame": 8635,
+          "stable_pixels_to_anchor": 2416137,
+          "gi_mean_on_frame_stable": 0.003634890541434288
+        },
+        {
+          "frame": 8636,
+          "stable_pixels_to_anchor": 2088700,
+          "gi_mean_on_frame_stable": 0.0034929795656353235
+        },
+        {
+          "frame": 8637,
+          "stable_pixels_to_anchor": 1569309,
+          "gi_mean_on_frame_stable": 0.003372922772541642
+        },
+        {
+          "frame": 8638,
+          "stable_pixels_to_anchor": 2620531,
+          "gi_mean_on_frame_stable": 0.003732479875907302
+        },
+        {
+          "frame": 8639,
+          "stable_pixels_to_anchor": 2404146,
+          "gi_mean_on_frame_stable": 0.003585133235901594
+        },
+        {
+          "frame": 8640,
+          "stable_pixels_to_anchor": 2319558,
+          "gi_mean_on_frame_stable": 0.0036000253167003393
+        }
+      ]
+    },
+    {
+      "serial": 72403,
+      "frames": [
+        12025,
+        12026,
+        12027,
+        12028,
+        12029,
+        12030,
+        12031,
+        12032,
+        12033,
+        12034,
+        12035,
+        12036,
+        12037,
+        12038,
+        12039,
+        12040
+      ],
+      "samples": 176,
+      "valid_transport": true,
+      "stable_pixel_frames_to_anchor": 32676543,
+      "median_reprojection_motion": [
+        32.712115803078724,
+        33.07768946291854,
+        32.896554710233204,
+        32.55285707776149,
+        33.04439233984027,
+        32.71678941888973,
+        32.55689996127492,
+        33.16685295348051,
+        32.9437845100108,
+        32.594530158459236,
+        33.14242057280437,
+        32.82690171032357,
+        32.552449616417306,
+        32.92071372489638,
+        32.80820989891886,
+        32.441491925228505
+      ],
+      "frame_rows": [
+        {
+          "frame": 12025,
+          "stable_pixels_to_anchor": 2043463,
+          "gi_mean_on_frame_stable": 0.0036138517316430807
+        },
+        {
+          "frame": 12026,
+          "stable_pixels_to_anchor": 2041117,
+          "gi_mean_on_frame_stable": 0.0035888301208615303
+        },
+        {
+          "frame": 12027,
+          "stable_pixels_to_anchor": 2043927,
+          "gi_mean_on_frame_stable": 0.0036388523876667023
+        },
+        {
+          "frame": 12028,
+          "stable_pixels_to_anchor": 2043014,
+          "gi_mean_on_frame_stable": 0.003619259921833873
+        },
+        {
+          "frame": 12029,
+          "stable_pixels_to_anchor": 2041444,
+          "gi_mean_on_frame_stable": 0.003592534689232707
+        },
+        {
+          "frame": 12030,
+          "stable_pixels_to_anchor": 2042010,
+          "gi_mean_on_frame_stable": 0.0036222264170646667
+        },
+        {
+          "frame": 12031,
+          "stable_pixels_to_anchor": 2042320,
+          "gi_mean_on_frame_stable": 0.0036385413259267807
+        },
+        {
+          "frame": 12032,
+          "stable_pixels_to_anchor": 2041032,
+          "gi_mean_on_frame_stable": 0.0035875439643859863
+        },
+        {
+          "frame": 12033,
+          "stable_pixels_to_anchor": 2042018,
+          "gi_mean_on_frame_stable": 0.0036228676326572895
+        },
+        {
+          "frame": 12034,
+          "stable_pixels_to_anchor": 2043234,
+          "gi_mean_on_frame_stable": 0.003617005655542016
+        },
+        {
+          "frame": 12035,
+          "stable_pixels_to_anchor": 2041135,
+          "gi_mean_on_frame_stable": 0.0035883637610822916
+        },
+        {
+          "frame": 12036,
+          "stable_pixels_to_anchor": 2039999,
+          "gi_mean_on_frame_stable": 0.0036333221942186356
+        },
+        {
+          "frame": 12037,
+          "stable_pixels_to_anchor": 2043130,
+          "gi_mean_on_frame_stable": 0.003617933951318264
+        },
+        {
+          "frame": 12038,
+          "stable_pixels_to_anchor": 2041937,
+          "gi_mean_on_frame_stable": 0.003589556785300374
+        },
+        {
+          "frame": 12039,
+          "stable_pixels_to_anchor": 2042888,
+          "gi_mean_on_frame_stable": 0.0036315463948994875
+        },
+        {
+          "frame": 12040,
+          "stable_pixels_to_anchor": 2043875,
+          "gi_mean_on_frame_stable": 0.0036258588079363108
+        }
+      ]
+    }
+  ],
+  "anchor_frame": 5354,
+  "render_dimensions": [
+    2560,
+    1067
+  ],
+  "stable_all48": {
+    "pixels": 565595,
+    "gi": {
+      "off_a": 0.0030044117118484593,
+      "on": 0.0029992498061379995,
+      "off_b": 0.003048490238429554,
+      "on_minus_mean_off": -2.7201169001006792e-05,
+      "off_b_minus_a": 4.40785265810945e-05,
+      "mean_abs_off_repeat": 0.001354214619016539
+    },
+    "visibility": {
+      "off_a": 0.8509760010528211,
+      "on": 0.8511770523195522,
+      "off_b": 0.8510584069048976,
+      "on_minus_mean_off": 0.00015984834069288068,
+      "off_b_minus_a": 8.240585207658826e-05,
+      "mean_abs_off_repeat": 0.04257042381661294
+    },
+    "diffuse": {
+      "off_a": 0.04213826683296476,
+      "on": 0.04215190072051679,
+      "off_b": 0.042396031417914475,
+      "on_minus_mean_off": -0.0001152484049228256,
+      "off_b_minus_a": 0.00025776458494970945,
+      "mean_abs_off_repeat": 0.001421884698360492
+    },
+    "sun": {
+      "off_a": 0.7778350674952925,
+      "on": 0.7779026953915787,
+      "off_b": 0.7777495380970483,
+      "on_minus_mean_off": 0.00011039259540837526,
+      "off_b_minus_a": -8.552939824432677e-05,
+      "mean_abs_off_repeat": 0.0031880143919235495
+    },
+    "local": {
+      "off_a": 0.7045081790230205,
+      "on": 0.7045940576998911,
+      "off_b": 0.7045787652483639,
+      "on_minus_mean_off": 5.058556419887452e-05,
+      "off_b_minus_a": 7.058622534345936e-05,
+      "mean_abs_off_repeat": 0.020242614535817167
+    }
+  },
+  "stable_class0_all48": {
+    "pixels": 564886,
+    "gi": {
+      "off_a": 0.0029953406019404723,
+      "on": 0.0029894581660135063,
+      "off_b": 0.0030391588338528996,
+      "on_minus_mean_off": -2.7791551883179898e-05,
+      "off_b_minus_a": 4.381823191242705e-05,
+      "mean_abs_off_repeat": 0.001349989979002094
+    },
+    "visibility": {
+      "off_a": 0.8509470551579814,
+      "on": 0.8511511906148351,
+      "off_b": 0.8510302704713283,
+      "on_minus_mean_off": 0.0001625278001803052,
+      "off_b_minus_a": 8.321531334695187e-05,
+      "mean_abs_off_repeat": 0.04257285518263515
+    },
+    "diffuse": {
+      "off_a": 0.042051743206679044,
+      "on": 0.042065584622430784,
+      "off_b": 0.042309372270167754,
+      "on_minus_mean_off": -0.00011497311599261909,
+      "off_b_minus_a": 0.00025762906348871954,
+      "mean_abs_off_repeat": 0.0014202390469297507
+    },
+    "sun": {
+      "off_a": 0.7783306056443247,
+      "on": 0.7783984290635633,
+      "off_b": 0.7782448582545859,
+      "on_minus_mean_off": 0.0001106971141079793,
+      "off_b_minus_a": -8.574738973881456e-05,
+      "mean_abs_off_repeat": 0.003185487868348658
+    },
+    "local": {
+      "off_a": 0.7044646234320702,
+      "on": 0.7045532456652419,
+      "off_b": 0.7045382994052808,
+      "on_minus_mean_off": 5.1784246566376295e-05,
+      "off_b_minus_a": 7.36759732106817e-05,
+      "mean_abs_off_repeat": 0.020239691791848802
+    }
+  },
+  "GI_descriptive_envelope": {
+    "method": "abs(OFFBmean-OFFAmean)+max(OFFA/OFFB within-burst adjacent-frame absolute change)+per-pixel half-float component storage quantum; not formal confidence",
+    "positive_pixels": 21517,
+    "negative_pixels": 0,
+    "stable_denominator": 565595
+  },
+  "ROIs": [
+    {
+      "label": "positive",
+      "roi_internal_xyxy": [
+        320,
+        827,
+        640,
+        1067
+      ],
+      "flagged_pixels": 1018,
+      "summary": {
+        "pixels": 18871,
+        "gi": {
+          "off_a": 0.002062863432755849,
+          "on": 0.0020666035371119775,
+          "off_b": 0.0021222114615758927,
+          "on_minus_mean_off": -2.593391005389336e-05,
+          "off_b_minus_a": 5.9348028820043935e-05,
+          "mean_abs_off_repeat": 0.0012887829935756317
+        },
+        "visibility": {
+          "off_a": 0.9572001712582403,
+          "on": 0.9571398356803573,
+          "off_b": 0.9575857052688196,
+          "on_minus_mean_off": -0.00025310258317256504,
+          "off_b_minus_a": 0.00038553401057920183,
+          "mean_abs_off_repeat": 0.021822962792873837
+        },
+        "diffuse": {
+          "off_a": 0.08083066278034749,
+          "on": 0.08080596362086782,
+          "off_b": 0.08119084165907174,
+          "on_minus_mean_off": -0.0002047885988417947,
+          "off_b_minus_a": 0.0003601788787242545,
+          "mean_abs_off_repeat": 0.0020325380199865857
+        },
+        "sun": {
+          "off_a": 0.8853564993905993,
+          "on": 0.8853531874304489,
+          "off_b": 0.8852670764665359,
+          "on_minus_mean_off": 4.1399501881193364e-05,
+          "off_b_minus_a": -8.942292406337767e-05,
+          "mean_abs_off_repeat": 0.0016261724338932754
+        },
+        "local": {
+          "off_a": 0.8712534005340866,
+          "on": 0.8708003847823033,
+          "off_b": 0.872671747428265,
+          "on_minus_mean_off": -0.0011621891988725518,
+          "off_b_minus_a": 0.0014183468941784102,
+          "mean_abs_off_repeat": 0.025236150318832997
+        }
+      },
+      "contact_sheet": "C:\\Users\\quali\\.codex\\worktrees\\user-regression-ab\\BG3RTX\\captures\\gi-descriptor-r3\\analysis\\positive-off-on-off.png",
+      "signed_GI_scale": 0.046672564931213856
+    }
+  ],
+  "peak_working_set_GiB": null,
+  "threads": "BLAS/OMP/MKL/numexpr1, below-normal process priority",
+  "limitations": [
+    "Descriptive image comparison only; local final-image check also required. Stochastic frames and temporal histories differ.",
+    "Stable mask excludes geometry/material/normal changes; not whole-scene coverage.",
+    "GI is accumulated history; secondary provider map is not captured, so masks cannot attribute each changed pixel to a qualified secondary.",
+    "Final contact is native tonemapped output, not linear scene-energy evidence.",
+    "One OFF/ON/OFF sequence supplies descriptive repeat uncertainty, not independent statistical confidence or full visual quality/motion pass."
+  ]
+}

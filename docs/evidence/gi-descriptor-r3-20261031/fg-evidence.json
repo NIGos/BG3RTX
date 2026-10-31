@@ -1,0 +1,371 @@
+[
+  {
+    "serial": 72401,
+    "fg_frame_states": [
+      {
+        "time": 46288.931,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.015,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.065,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.112,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.208,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.258,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.319,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.376,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.427,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.491,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.539,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.595,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.748,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.796,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.862,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46289.928,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      }
+    ],
+    "fg_missing_frames": [],
+    "fg_duplicate_frames": [],
+    "fg_active_every_captured_frame": true,
+    "presentation_fps": 15.04513540617298,
+    "presentation_intervals_ms": [
+      84.00000000256114,
+      50.00000000291038,
+      46.999999998661224,
+      95.9999999977299,
+      50.00000000291038,
+      61.0000000015134,
+      56.999999993422534,
+      51.00000000675209,
+      63.9999999984866,
+      47.99999999522697,
+      56.000000004132744,
+      152.9999999984284,
+      48.00000000250293,
+      65.99999999889405,
+      65.99999999889405
+    ],
+    "presentation_evidence_source": "SDK present-end log rows matched to exact captured record-frame indices; no GPU scanout timing claim"
+  },
+  {
+    "serial": 72402,
+    "fg_frame_states": [
+      {
+        "time": 46404.014,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.056,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.081,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.113,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.148,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.182,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.213,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.249,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.281,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.322,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.347,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.381,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.414,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.446,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.481,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46404.517,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      }
+    ],
+    "fg_missing_frames": [],
+    "fg_duplicate_frames": [],
+    "fg_active_every_captured_frame": true,
+    "presentation_fps": 29.82107355882756,
+    "presentation_intervals_ms": [
+      41.99999999400461,
+      25.00000000145519,
+      31.9999999992433,
+      35.00000000349246,
+      33.999999999650754,
+      31.000000002677552,
+      36.00000000005821,
+      31.9999999992433,
+      40.99999999743886,
+      25.00000000145519,
+      33.999999999650754,
+      32.99999999580905,
+      32.00000000651926,
+      34.9999999962165,
+      36.00000000005821
+    ],
+    "presentation_evidence_source": "SDK present-end log rows matched to exact captured record-frame indices; no GPU scanout timing claim"
+  },
+  {
+    "serial": 72403,
+    "fg_frame_states": [
+      {
+        "time": 46519.12,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.149,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.182,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.214,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.251,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.281,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.32,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.347,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.378,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.414,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.445,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.48,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.518,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.551,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.592,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      },
+      {
+        "time": 46519.619,
+        "status": 0,
+        "presented": 2,
+        "api_errors": 0
+      }
+    ],
+    "fg_missing_frames": [],
+    "fg_duplicate_frames": [],
+    "fg_active_every_captured_frame": true,
+    "presentation_fps": 30.06012024071239,
+    "presentation_intervals_ms": [
+      28.99999999499414,
+      33.000000003085006,
+      31.9999999992433,
+      36.999999996623956,
+      30.000000006111804,
+      38.99999999703141,
+      27.000000001862645,
+      30.999999995401595,
+      36.00000000005821,
+      31.000000002677552,
+      35.00000000349246,
+      37.999999993189704,
+      33.000000003085006,
+      40.99999999743886,
+      27.000000001862645
+    ],
+    "presentation_evidence_source": "SDK present-end log rows matched to exact captured record-frame indices; no GPU scanout timing claim"
+  }
+]

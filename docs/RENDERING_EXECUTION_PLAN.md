@@ -3,6 +3,18 @@
 User mandate: 2026-10-30. Execution specification for the receiving agent.
 This file defines work and gates; it does not grant live permission.
 
+## Current checkpoint - 2026-10-31, user paused
+
+Stop development and live jobs until resumed. Handoff/progress are authoritative.
+Camp rectangles/hairline are no longer reproduced by the user; attribution open.
+OMM/Current Sun smoke test positive; slight dialogue flicker remains unresolved.
+GI R3 has valid corrected-contract OFF/ON/OFF acquisition and initial analysis,
+not full image/motion/gain qualification. No defaults or personal trial changed.
+Resume priority: visible defects; M3/M4 materials/lights/GI/reflections; M5 water
+(89% port screen), then environment by impact. M2 persistence only for a visible
+offscreen need; M6 opaque PT research last. At most two active work streams.
+New logic in core; keep ABI 21. See HANDOFF_SESSION.md and GI R3 evidence.
+
 ## Outcome and scope
 
 Improve BG3RTX through verified native coverage, reliable offscreen materials and

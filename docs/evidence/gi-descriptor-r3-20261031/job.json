@@ -1,0 +1,55 @@
+{
+  "name": "gi-descriptor-r3-static-off-on-off",
+  "tree": ".",
+  "save": "QuickSave_3784",
+  "session": false,
+  "traces": 0,
+  "timeout": 900,
+  "repeat": 1,
+  "live_batch": "gi-descriptor-r3-20261031",
+  "set": "preset=ultra,rt=1,rt_bvh_split=1,rt_alpha=1,rt_hit_material=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_xfb_mb=1408,rt_cascade_mb=587,rt_omm=0,rt_sun_cascade_current=0,fg=2,rr=1,headless=0,rt_timing_frames=120,rt_stats=1,ls_stats=0,rf_stats=0,rt_primary_check=1,rt_primary_epoch=1,pan_prepare=1,pan_inputs=0,pan_capture=0,fg_state_every=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,dump_raw=0,dump_images=0,dump_shaders=0,rt_order_trace=1,geo_capture=0,rt_hit_reference=0,rt_mesh_capture=0,gi=1,gi_rt=1,gi_rt_fallback=0,gi_hit_direct=1,sharc=0,rt_hair_receiver_guard=0,rt_native_tileset=0,rt_alpha_spill=0",
+  "args": [
+    "-Move",
+    "-MovePlan",
+    "C:\\Users\\quali\\.codex\\worktrees\\user-regression-ab\\BG3RTX\\captures\\gi-descriptor-r3\\motion.json",
+    "-AcceptModWarning",
+    "off"
+  ],
+  "patterns": [
+    "hit material",
+    "primary-ray check",
+    "rt passes: GPU cost",
+    "rt applied",
+    "DLSS-G frame",
+    "\\[geo\\] RT capture",
+    "\\[order\\]",
+    "query",
+    "publication",
+    "\\[terrain_packet\\]",
+    "hit reference two-surface",
+    "gi: GPU cost",
+    "GI hit direct",
+    "gi trace: GPU cost",
+    "\\[pan\\]",
+    "\\[pan-plan\\]"
+  ],
+  "expect": [
+    "GI hit direct \\([0-9]+ frames\\): candidates [1-9][0-9]* qualified [1-9][0-9]* direct supported [1-9][0-9]* nonzero [1-9][0-9]*",
+    "rt applied.*sun [1-9][0-9]* GI [1-9][0-9]* local [1-9][0-9]* reflections [1-9][0-9]*",
+    "DLSS-G frame.*status 0x0, presented per app frame 2",
+    "\\[pan\\] burst 72401 complete: 16 frames, [0-9]+ samples, transport ok",
+    "\\[pan\\] burst 72402 complete: 16 frames, [0-9]+ samples, transport ok",
+    "\\[pan\\] burst 72403 complete: 16 frames, [0-9]+ samples, transport ok"
+  ],
+  "expect_runner": [
+    "\\[motion-plan\\] complete phases=8\\b",
+    "foreground=False real_present=True visible_unfocused=True"
+  ],
+  "stop_on_dump": true,
+  "motion_plan_sha256": "f239ecaf5610df9c937a7aca2a05f2586e676dab12b7a68a511fa35cb6dbc2d8",
+  "estimated_raw_gib": 6.96,
+  "user_tested": false,
+  "purpose": "Corrected GI/native-light descriptor contract image qualification. Same-view OFF/ON/OFF; transport and nonzero counters are necessary but do not prove quality. Compare old R2 stipple ROI, final and GI radiance, stable G-buffer, OFF repeats; no unaccounted darkening. Separate from dialogue flicker.",
+  "estimated_phase_seconds": 440,
+  "window_mode": "visible_unfocused_fg"
+}

@@ -1,11 +1,12 @@
 # Session handoff - 2026-10-31
 
-Read PROGRESS_CODEX.md next (148 lines). History is preserved verbatim in
-archive/PROGRESS_CODEX_2026-10-31.md. Full rendering program remains active.
+Read PROGRESS_CODEX.md next. History is preserved verbatim in
+archive/PROGRESS_CODEX_2026-10-31.md. Full rendering program is incomplete and PAUSED by the user.
 
 ## Latest steering and user evidence
 
-User authorizes background live tests, without stealing focus. Queue only;
+User requested safe shutdown and documentation handoff. No more work or launches.
+The completed GI batch used explicit background live permission. Queue only;
 never start while USER_PLAYING or an unowned BG3 process exists. Preserve saves,
 D:/BG3_Tools backups, snapshot tags and junctions. No Ponytail.
 User now cannot reproduce camp rug/plank rectangles or Astarion hairline band.
@@ -25,7 +26,7 @@ Views changed and no time-aligned flicker burst exists. No causal verdict.
 
 ## Current candidate and test preparation
 
-Main efc27e7 is pushed; merge-green passed both DLLs/launcher, 60 CTests,
+Main d3e06e1 is pushed; merge-green passed both DLLs/launcher, 60 CTests,
 1232 shader files and QA. ABI 21. New experimental features remain OFF.
 Candidate codex/user-regression-ab in the matching isolated worktree contains
 09fc3eb (core-only receiver guard A/B switch) and 82cf690 (progress trim).
@@ -39,7 +40,29 @@ outside pending. Campsite - 27h, real FG 2 presentation, visible unfocused,
 RT-off reference then spill OFF/ON/OFF, three K16 bursts, about 10-13 minutes.
 Do not equate transport validity with quality. No artifact or no rescued draws
 means inconclusive. Do not launch an unrelated camp view merely to fill time.
-No game launched for this feedback update. No receipt prepared or job enqueued.
+GI R3 subsequently ran successfully; see completed batch below. No queued continuation.
+
+## Completed GI batch and exact resume state
+
+Candidate d19ecd7 in user-regression-ab, build identity
+34bfc5b637045a25e7e784b2c1395fce4cc1dafd6569089ef416ca10e31fa190.
+Job gi-descriptor-r3-static-off-on-off: VALID 580 seconds, no NVIDIA 153/dumps,
+no build drift. FG active all 48 captured frames, actual presentation, no focus
+activation. Runner handle 34268 terminal; game PID 19584 exited normally.
+Queue pending/running empty; gi-descriptor-r3-20261031 receipt closed/consumed.
+Three K16 bursts: pan-20261031-125128-72401, 125324-72402, 125519-72403.
+Raw captures/logs remain in candidate captures/. Derived JSON/contact sheets and
+exact job/motion/queue result copied to docs/evidence/gi-descriptor-r3-20261031/.
+Full-frame analysis process 84198 terminal. 565595 stable pixels, zero negative
+GI-envelope pixels, 21517 positive. Old failure ROI has 14/12812 final mean-low
+pixels versus old R2 1144/19043. Different sessions and denominators; no direct
+cross-run causal comparison. GI means 0.003004/0.002999/0.003048 OFF/ON/OFF;
+mean delta is smaller than observed OFF-repeat drift. No blanket energy/gain pass.
+Whole GI GPU medians 2.097/2.288/2.048 ms; no isolated bounce timing.
+Captured rendered cadence 15.05/29.82/30.06 fps; first OFF overlaps CPU shader
+compilation. No performance inference from those capture rates.
+No final broad image review or motion gate completed; do not promote GI defaults.
+Personal user's ABI 19 trial unchanged. Latest core guard switch is candidate-only.
 
 ## Prepared fixes and limits
 
@@ -60,6 +83,7 @@ Sun half-angle 0.00459 radians is correct; no arbitrary radius/blur/bias changes
 
 ## Next, in order
 
+Resume ONLY after the user resumes the goal. Then:
 1. Preserve user feedback; establish native versus added RT visibility for dialogue
    flicker with temporal evidence, one hypothesis at a time. Old F10 stills cannot
    certify flicker. Rug/hairline attribution stays unresolved, not declared fixed.

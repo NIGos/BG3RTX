@@ -1,5 +1,9 @@
 # Goal to give the execution agent
 
+Current thread is PAUSED by the user (2026-10-31). This transferable description
+does not resume it. On explicit resume, follow HANDOFF_SESSION.md and its current
+priority order/completed-batch checkpoint. Preserve the full goal scope.
+
 Paste the following into the intended BG3RTX agent. This file does not start a
 different conversation, transfer an existing Goal or authorize a game launch.
 

@@ -1,5 +1,10 @@
 # Solar penumbra review - 2026-10-30
 
+Follow-up 2026-10-31: user reports encouraging Current Sun visuals and slight
+dialogue flicker. One log window has actual RT samples; later GPU scene-readiness
+failures keep native visibility. No causal timing/epoch defect is established.
+See DIALOGUE_SHADOWS.md and current handoff. User paused further work.
+
 Offline source and retained-log audit. No game, settings, shaders or binaries
 changed. Save files were not accessed. This is a diagnosis of a current coverage
 limitation, not a measured physical sun-shadow gate or a proposed blur setting.
