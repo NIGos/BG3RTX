@@ -26,6 +26,7 @@
 #include "host.h"
 #include "hit_material.h"
 #include "../common/native_hit_writes.h"
+#include "../common/native_hit_pipeline.h"
 #include "../common/spirv_visibility.h"
 #include "spirv_xfb.h"
 #include "../common/cascade_casters.h"
@@ -128,6 +129,7 @@ struct PipeInfo {
   bool fragment_known = true;
   bool no_storage_writes = false;
   bool material_state = false;
+  uint32_t material_reasons=0,raster_next=0,multisample_next=0,blend_next=0;
   bool native_view_known=false,dynamic_viewport=false,dynamic_scissor=false;
   VkViewport native_viewport{};VkRect2D native_scissor{};
   bool finite_sun_clip = false; // observed Vulkan z=[0,1], clipping enabled, no clamp
@@ -1731,10 +1733,12 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     }
     pi.xfb = vs_patched && !other;
     pi.no_storage_writes=all_no_writes;
-    pi.material_state=cis[i].pRasterizationState && !cis[i].pRasterizationState->rasterizerDiscardEnable &&
-      !cis[i].pRasterizationState->pNext && cis[i].pMultisampleState && !cis[i].pMultisampleState->pNext &&
-      cis[i].pMultisampleState->rasterizationSamples==VK_SAMPLE_COUNT_1_BIT && !cis[i].pMultisampleState->alphaToCoverageEnable &&
-      cis[i].pColorBlendState && !cis[i].pColorBlendState->pNext;
+    pi.material_reasons=native_hit::material_state_reasons(cis[i]);
+    pi.material_state=pi.material_reasons==0;
+    auto next_type=[](const void* chain){return chain?uint32_t(static_cast<const VkBaseInStructure*>(chain)->sType):0u;};
+    pi.raster_next=cis[i].pRasterizationState?next_type(cis[i].pRasterizationState->pNext):0u;
+    pi.multisample_next=cis[i].pMultisampleState?next_type(cis[i].pMultisampleState->pNext):0u;
+    pi.blend_next=cis[i].pColorBlendState?next_type(cis[i].pColorBlendState->pNext):0u;
     pi.finite_sun_clip = sun_coverage::finite_native_clip(cis[i]);
     if(cis[i].pViewportState) {
       const auto& v=*cis[i].pViewportState;
@@ -1765,7 +1769,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
         if (state == VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE) pi.depth_test = -1;
         if(state==VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT || state==VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT ||
            state==VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT || state==VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE ||
-           state==VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT || state==VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT)pi.material_state=false;
+           state==VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT || state==VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT){pi.material_state=false;pi.material_reasons|=native_hit::MaterialDynamicState;}
       }
     const uint32_t overlap_family = (uint32_t(cfg_int("rt_em_dbg_fam_hi", 0) & 0xffff) << 16) |
                                      uint32_t(cfg_int("rt_em_dbg_fam_lo", 0) & 0xffff);
@@ -2082,6 +2086,14 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
       const auto& p=i->second;
       exact=p.xfb && p.vt_outputs && p.material_state && p.depth_test==1 && p.blend_mask==0 &&
         (p.color_mask&0xf73u)==0xf73u && p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && p.uv_match==UV_OK;
+      // One sparse, exact state record per audited native pipeline. A later
+      // unsupported term is visible without another blind attribution run.
+      static std::unordered_set<uint64_t> reported;
+      if(native_hit::enabled() && cfg_int("rt_stats",0) && s->vs==0x3812bc980438747full && s->fs==0x8995da1e4060f53bull &&
+         reported.size()<16 && reported.insert(uint64_t(s->pipe[0])).second)
+        log("[hit material pipeline] pipe %u accepted %u xfb %u basis %u static %u reasons 0x%x depth test %d blend 0x%x color 0x%x topo %u uv %u; raster/multisample/blend pNext %u/%u/%u",
+          s->pipe_id[0],unsigned(exact),unsigned(p.xfb),p.vt_outputs,unsigned(p.material_state),p.material_reasons,p.depth_test,p.blend_mask,p.color_mask,unsigned(p.topo),unsigned(p.uv_match),p.raster_next,p.multisample_next,p.blend_next);
+
     }else s->geo_material_no_writes=false;}
     VkBuffer buffer{};VkDeviceSize offset=0,bytes=0;
     if(native_hit::deferred_begin(cmd,s,args,exact,g_stride,&buffer,&offset,&bytes)){

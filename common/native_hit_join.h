@@ -42,11 +42,21 @@ public:
     auto i=rows_.find(key);if(i==rows_.end() || i->second.pre_count!=1)return false;
     i->second.record=record;return true;
   }
+  bool unique_source(const DrawKey& key,uint32_t& record) const {
+    auto i=rows_.find(key);if(i==rows_.end() || i->second.pre_count!=1 || i->second.record==UINT32_MAX)return false;
+    record=i->second.record;return true;
+  }
   bool unique(const DrawKey& key,uint32_t record) const {
     auto i=rows_.find(key);return i!=rows_.end() && i->second.record==record &&
       i->second.pre_count==1 && i->second.deferred_count==1;
   }
 };
+// Independent packets can be created in either CPU recording order. Local
+// deferred snapshot indices never substitute for source AlphaRec indices.
+inline bool join_packets(const DrawJoin& source,const DrawJoin& deferred,const DrawKey& key,
+                         uint32_t deferredRecord,uint32_t& sourceRecord){
+ return deferred.unique(key,deferredRecord) && source.unique_source(key,sourceRecord);
+}
 inline bool byte_range(uint64_t offset,uint64_t size,uint64_t total){return offset<=total && size<=total-offset;}
 // One-time native recording ownership. Submission reservations pin the exact
 // generation across the real driver call; failed submits never become complete.

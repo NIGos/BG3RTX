@@ -10,7 +10,7 @@ void material_sum(uint counter,uint value,uint bin){
 }
 [numthreads(8,8,1)]
 void main(uint3 id:SV_DispatchThreadID){
- uint2 fp=id.xy;if(any(fp>=pc.full))return;
+ uint2 fp=id.xy;if(any(fp>=pc.full) || !hit_material_publication_ready())return;
  float depth=gDepth.Load(int3(fp,0));if(!(depth>0))return;
  float2 uv=(float2(fp)+.5)/float2(pc.full);float3 p=ray_at(uv)*depth;float dist=length(p);
  RtCone cone={0,pixel_angle(uv)};

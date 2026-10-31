@@ -17,7 +17,7 @@
 // 19: sun-only current-caster scene and optional OMM same-ray reference callback.
 // 20: exact per-command hit-material tuple use registration (opaque VT subset).
 // Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
-#define BG3RTX_ABI_VERSION 20
+#define BG3RTX_ABI_VERSION 21
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 9) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -279,11 +279,11 @@ struct Bg3HostApi {
   // False with no reference means the tuple is unavailable, never a quality pass.
   bool (*rt_omm_scene_reference)(VkCommandBuffer cmd, VkAccelerationStructureKHR selected_tlas,
                                 VkAccelerationStructureKHR* reference_tlas, uint64_t* build_identity);
-  // ABI20: material-consuming dispatch only. Validate the exact selected tuple
-  // and generation, then retain material buffers/views for THIS recording.
+  // ABI21: material-consuming dispatch only. Validate the exact selected tuple
+  // and generation, then return query-owned AlphaDSL and retain THIS recording.
   // False means preserve existing output; ordinary/OMM dispatches do not call.
   bool (*rt_hit_material_use)(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,
-                             VkDescriptorSet selected_alpha,uint64_t build_identity);
+                             VkDescriptorSet selected_alpha,uint64_t build_identity,VkDescriptorSet* query_alpha);
 };
 
 struct Bg3CoreApi {
