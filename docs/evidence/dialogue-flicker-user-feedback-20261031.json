@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-31",
+  "source_log": "C:\\Users\\quali\\.codex\\worktrees\\hair-origin-live\\BG3RTX\\bg3rtx.log",
+  "source_sha256": "9193f74116e0182461128b9f9da5372291fd3a31d938461336cc713a0c152757",
+  "source_first_line": "12:14:35.340  [cfg] settings read: bg3rtx.ini (217 keys) + bg3rtx_user.ini (20 keys, preset=ultra) -> 219 keys",
+  "source_last_line": "12:18:25.210  [sl] [12-18-25][streamline][info][tid:40820][229s:867ms:737us]dlss_gEntry.cpp:1073[slHookVkDeviceWaitIdle] flush all current work before wait for idle",
+  "user_report": {
+    "omm_current_sun": "encouraging, no obvious new defects",
+    "dialogue_shadows": "slight flicker, possibly environment dependent; pre-existing",
+    "rug_plank_hairline": "not currently reproduced"
+  },
+  "native_domain_windows": [
+    {
+      "certified_pixels": 0,
+      "fallback_pixels": 0,
+      "scene_unready_pixels": 0,
+      "actual_ray_samples": 0,
+      "time": "12:15:46.412"
+    },
+    {
+      "certified_pixels": 2413435,
+      "fallback_pixels": 3778400,
+      "scene_unready_pixels": 3596987,
+      "actual_ray_samples": 368956,
+      "time": "12:16:20.651"
+    },
+    {
+      "certified_pixels": 0,
+      "fallback_pixels": 0,
+      "scene_unready_pixels": 0,
+      "actual_ray_samples": 0,
+      "time": "12:16:39.623"
+    },
+    {
+      "certified_pixels": 0,
+      "fallback_pixels": 0,
+      "scene_unready_pixels": 0,
+      "actual_ray_samples": 0,
+      "time": "12:17:06.955"
+    },
+    {
+      "certified_pixels": 0,
+      "fallback_pixels": 7154957,
+      "scene_unready_pixels": 7154957,
+      "actual_ray_samples": 0,
+      "time": "12:17:28.780"
+    },
+    {
+      "certified_pixels": 0,
+      "fallback_pixels": 21330202,
+      "scene_unready_pixels": 21330202,
+      "actual_ray_samples": 0,
+      "time": "12:17:44.565"
+    },
+    {
+      "certified_pixels": 0,
+      "fallback_pixels": 7387605,
+      "scene_unready_pixels": 7387605,
+      "actual_ray_samples": 0,
+      "time": "12:17:59.696"
+    },
+    {
+      "certified_pixels": 0,
+      "fallback_pixels": 28875274,
+      "scene_unready_pixels": 28875274,
+      "actual_ray_samples": 0,
+      "time": "12:18:14.108"
+    }
+  ],
+  "interpretation": "Of eight logged windows, one has 2413435 certified pixels and 368956 actual solar ray samples. Later windows have zero actual samples, including four with scene-unready fallback. Empty windows do not alone prove fallback. Current Sun participation is intermittent across changing views, not a quality pass or causal dialogue-flicker proof.",
+  "prior_stills": "captures/dialogue-shadow-review-20261030 are older static-shadow evidence, not temporal proof of this report.",
+  "renderer_changed": false,
+  "game_launched": false
+}
