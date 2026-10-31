@@ -14,6 +14,14 @@ floating-point self-intersection; it cannot remove a real material displacement.
 The candidate leaves `rtOrigin` unchanged for primary checks and history matching.
 Only after the existing virtual primary match succeeds does it reconstruct the
 physical point/normal from the **same selected procedural instance/primitive**.
+Auxiliary eligibility additionally requires raster material class 5. Audited
+native deferred FS `42a95e17ec3adc51` (Hair static), `0ca5ee93d0f33b8c`
+(Hair instanced), and `7362bcdec4c0415c` (Pubes static) always write
+`(5 | ((channel & 7) << 4)) / 255` to RT2.a. Depth-near skin/other
+receivers retain the original origin; class 5 does not prove same-card identity.
+Depth-only FS do not write the material class. The accepted Hair mathematics
+and ordinary virtual `rtOrigin` remain unchanged.
+
 The triangle test starts at camera zero, with the same scene rebase, avoiding
 cancellation from a virtual search window far behind the physical card. Ambiguous
 triangle edges and invalid source state retain the original path and are counted.

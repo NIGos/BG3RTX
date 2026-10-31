@@ -74,7 +74,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
       Ng /= l;
       o = float4(dot(Ng, V) < 0.0 ? -Ng : Ng, h.t / dist - 1.0);
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
-      if((inst_info(h.inst).meta&kInfoHairProcedural)!=0u) {
+      // Native Hair/Pubes deferred writers encode class 5. A nearby card can
+      // depth-match skin at an edge, but must never move that raster receiver.
+      if(mat_class(gMaterial.Load(int3(fp,0)))==kMatHair &&
+         (inst_info(h.inst).meta&kInfoHairProcedural)!=0u) {
         HairPrimitive primitive=hair_primitive(h.inst,h.prim);
         physical_candidate=primitive.camera;
         // Start from camera zero, not the restricted virtual search window:
