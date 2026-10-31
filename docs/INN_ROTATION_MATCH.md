@@ -1,0 +1,42 @@
+# Inn rotation primary match (~83.5%): what the mismatch is
+
+Source: `cb2-scene-wait-rotation-inn-fg2.1.182224` (inn, FG 2, 30 fps cap). The 120-frame `rt stats` and
+`rt epoch` windows are mapped to motion-plan phases. All stats-on rotation windows turn in direction -1.
+
+| window | match | in front | behind | miss | pool match (share of hits) | soup match |
+|---|---|---|---|---|---|---|
+| static, wait 1 (p00/p01) | 98.93-98.98 | 0.17 | 0.79 | 0.09 | 99.67 (79%) | 96.7 |
+| rotation, wait 0 (p03) | 30-31 | 40 | 24 | 4.4 | 23 (82%) | 72 |
+| rotation, wait 1 (p07, p19) | 82.4-87.1 | 11.5-16.2 | 0.6-1.0 | 0.6-1.1 | 80-86 (79%) | 94-97 |
+| rotation, wait 2 (p11, p15) | 80.9-92.0 | 6.4-17.6 | 0.5-0.8 | 0.8-1.0 | 79-92 (79%) | 93-97 |
+| static after rotation, wait 2 (p13) | 87.0-87.2 | 12.08 (+-0.01) | 0.55 | 0.25 | 85.2 (82%) | 96.7 |
+
+## What it is made of
+- Not camera or timing. A timing error is two-sided (wait 0: 40% in front, 24% behind). With wait 1/2, behind
+  and miss stay at the static level and only "in front" grows. Every window has scene wait 600/600 "got this
+  frame's scene", 0 timeouts, and "instance data changed between record and submit 0".
+- It persists at a static camera. p13, the view the rotation left behind, holds 12.08% in front, steady to
+  0.01 over ten windows. The mismatch belongs to the view, not to the motion.
+- Not capacity: geo drops 0, alpha region full 0, records full 0, 0 deferred by the build budget, 0 rejected,
+  0 results lost, TLAS "none 0". The mesh cache grows from 468 to 1778 meshes with no loss.
+- Not alpha leaks: "behind" (through a cutout) stays at 0.6%. The "opaque / vt / tex" split reads 0.000 because
+  `pan_primary.hlsl` never counts slots 5-7 (only `rt_shadow.hlsl` with rt_debug=3/5 does): no evidence there.
+- It is static (pool) geometry. Pool hits match 80-85%, the per-draw soup 94-97%, and pool is 79% of the hits.
+  0.79 x ~19% accounts for about the whole in-front share.
+
+## Most likely cause
+Screen-door dithered camera cut-away (occlusion fade) of inn walls, beams and pillars between the camera and the
+party. The game still issues these draws and discards most of their pixels with a `gl_FragCoord` dither. The
+capture keeps discarding FS that are not in the alpha table as solid (`layer/geocapture.cpp` near line 1233;
+QUALITY Q14; TRACK_D_ALPHA_GI 7.1), so the TLAS holds a wall that the raster shows through. Orbiting inside
+the inn keeps such occluders in view. Open scenes have few, hence ~97% elsewhere. A LOD cross-fade would give
+small in-front distances and a cut-away wall large ones; the next test separates the two.
+
+## Next test (one launch, inn, about 3 min, about 150 MB)
+Repeat the p11/p12 rotation pair (wait 1), then hold the p13 view: 15 s of rt_stats + epoch, one trace with
+`rt_debug=8` (tlas_front QA: log2 distance and opaque/alpha flag), one with `rt_primary_identity=1` (instance id
+per front pixel -> mesh key, VS/FS from the `[bvh]` draw sample). Core-only, hot-reloaded: also log the pool/soup
+front/behind counters 138/139/142/143, which are already counted. Confirmed if the front pixels are opaque, far in
+front (high e8) and their FS is a discarding non-alpha-table dither. Fix (QUALITY Q14 plan): detect camera-fade
+dither FS in `alpha_table.py`, record the per-draw fade, run the same dither hash in the any-hit of camera-coherent
+rays, behind a key (off by default). Gate: p13 front 12% -> ~0.2% in the same run, mean brightness unchanged.

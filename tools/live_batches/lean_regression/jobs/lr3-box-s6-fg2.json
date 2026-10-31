@@ -1,0 +1,79 @@
+{
+ "name": "lr3-box-s6-fg2",
+ "save": "Adamantine Forge",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 461,
+ "repeat": 1,
+ "live_batch": "lean-regression",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,ls_samples=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt=1,rt_scene_wait=1,rt_cascade_casters=0,ls_box=0,cpu_timing=1",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/lean_regression/plans/lr3_box_s6.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "rt applied",
+  "primary-ray check",
+  "rt epoch",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[cpu\\] capture hooks",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "ls box",
+  "ls check",
+  "ls stats",
+  "ls: local-light shadow pass GPU"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "ls box: active",
+  "ls box stats \\(120 frames\\): evaluated",
+  "ls check \\(120 frames\\): \\d+ px written by the reference",
+  "ls: local-light shadow pass GPU median .*box 1\\)",
+  "ls: local-light shadow pass GPU median .*box 0\\)",
+  "rt stats \\(120 frames, alpha test \\w+\\): primary-ray check match"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "ls box: requested but native set/layout or pipeline unavailable"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=6 label=shot-box-off repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-box-on repeat=0",
+  "\\[motion-plan\\] complete phases=10\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "Lean regression, box lights S6: default-path ls_check (boxes off), ls_box ON with ls_stats, ls_box OFF/ON/OFF cost (diag off), PNG trace pair box off/on, one short primary-match window.",
+ "estimated_phase_seconds": 161,
+ "requires_success_of": [
+  "lr1-camp-fg2"
+ ]
+}
