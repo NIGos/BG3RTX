@@ -76,7 +76,8 @@ constexpr VkPipelineStageFlags kCS = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags kXFB = VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
 
 // The record layout, its modes and flags, the radiance formulas and the calibration
-// rule are policy in common/emissive_policy.h (pure, unit-tested).
+// rule are policy in common/emissive_policy.h (pure, unit-tested), run by the core
+// (core/em_policy.cpp, ABI 24): here only the layout and flags are used.
 using em::EmRec;
 using em::kModeConst; using em::kModeMaskR; using em::kModeMaskRGB; using em::kModeBlackbody;
 using em::kFlagLuminance; using em::kFlagApprox; using em::kFlagPulse; using em::kFlagBaseMap; using em::kFlagVtAlbedo;
@@ -109,6 +110,7 @@ struct Census {
   uint32_t passes = 0, draws = 0, kinds[kMatKinds] = {}, captured = 0;
   uint32_t skip_xfb = 0, skip_indirect = 0, skip_topo = 0, skip_full = 0, skip_recs = 0, skip_tex = 0, no_ubo = 0;
   uint32_t global_conflicts = 0, vt_missing = 0, cb_unreadable = 0, pulse_no_time = 0;
+  uint32_t skip_core = 0;   // no core loaded (the record policy is the core's, ABI 24)
   uint64_t captured_tris = 0;
   void add(const Census& o) {
     passes += o.passes, draws += o.draws, captured += o.captured, captured_tris += o.captured_tris;
@@ -116,6 +118,7 @@ struct Census {
     skip_xfb += o.skip_xfb, skip_indirect += o.skip_indirect, skip_topo += o.skip_topo, skip_full += o.skip_full;
     skip_recs += o.skip_recs, skip_tex += o.skip_tex, no_ubo += o.no_ubo, global_conflicts += o.global_conflicts;
     vt_missing += o.vt_missing, cb_unreadable += o.cb_unreadable, pulse_no_time += o.pulse_no_time;
+    skip_core += o.skip_core;
   }
 };
 struct FsCount {
@@ -181,10 +184,17 @@ uint32_t g_win_frames = 0;                        // presents in the log window
 struct RecDbg { EmRec r{}; float m[6] = {}; float m45[2] = {}; float time = 0, pulse = -1; bool cb = false; };
 std::map<uint64_t, RecDbg> g_rec_dbg;
 
-// Per-family calibration against the game's effects target (rt_em_calib): em::Calib,
-// em::calib_first / calib_window / calib_apply (common/emissive_policy.h).
+// Per-family calibration against the game's effects target (rt_em_calib): the state is
+// kept here, the rule (em::calib_first / calib_window / calib_apply) runs in the core.
 using em::Calib;
 std::unordered_map<uint64_t, Calib> g_calib;
+// em::calib_first (first) or calib_window through the core; unchanged without a core.
+bool calib_update(Calib& cal, bool first, double ratio, uint32_t flags, uint64_t frames, double bright) {
+  Bg3EmCalib b{cal.scale, cal.updates, cal.log_u};
+  const bool changed = em_core_calib_update(&b, first, ratio, flags, frames, bright);
+  cal = Calib{b.scale, b.updates, b.log_u};
+  return changed;
+}
 uint32_t g_stride = 24;
 
 // ---- per build ----
@@ -308,21 +318,6 @@ void barrier(VkCommandBuffer cmd, VkPipelineStageFlags src, VkAccessFlags sa, Vk
   g_dd->vk.CmdPipelineBarrier(cmd, src, dst, 0, 1, &mb, 0, nullptr, 0, nullptr);
 }
 
-// Reads `n` bytes at `extra` of the buffer bound at (set, binding) of the graphics bind
-// point, from the game's host mapping (alphatest.cpp read_bound).
-bool read_bound(VkCommandBuffer cmd, uint32_t set, uint32_t binding, VkDeviceSize extra, void* dst, size_t n) {
-  Bg3Binding b;
-  if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, set, binding, 0, &b) || !b.buffer) return false;
-  if (b.range != VK_WHOLE_SIZE && extra + n > b.range) return false;
-  return read_mapped(b.buffer, b.offset + extra, dst, n);
-}
-
-View bound_view(VkCommandBuffer cmd, uint32_t set, uint32_t binding) {
-  Bg3Binding t;
-  if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, set, binding, 0, &t) && t.view) return View{t.view, t.layout};
-  return View{};
-}
-
 using em::finite;
 
 const Mat& material(uint64_t fs) {
@@ -350,55 +345,35 @@ const Mat& material(uint64_t fs) {
   return g_mats.emplace(fs, std::move(m)).first->second;
 }
 
-// The record of an emissive draw (caller holds g_mu): em::make_record with a reader of
-// this draw's bound constant buffers and views; the luminance-copy slots stay here.
-struct DrawReader {
-  VkCommandBuffer cmd;
-  PCmd& P;
-  PDraw& d;
-  bool read(uint32_t set, uint32_t binding, uint64_t offset, void* dst, size_t n) {
-    return read_bound(cmd, set, binding, VkDeviceSize(offset), dst, n);
-  }
-  View& slot(em::EmView which) {
-    switch (which) {
-      case em::EmView::Mask: return d.mask;
-      case em::EmView::Base: return d.base;
-      case em::EmView::VtIndirection: return d.vt_ind;
-      default: return d.vt_cache;
-    }
-  }
-  bool view(em::EmView which, uint32_t set, uint32_t binding) {
-    View& v = slot(which);
-    v = bound_view(cmd, set, binding);
-    return v.v != VK_NULL_HANDLE;
-  }
-  void drop_view(em::EmView which) { slot(which) = View{}; }
-  uint32_t luminance_slot() {
-    Bg3Binding g{};
-    if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 2, 0, 0, &g) || !g.buffer) return UINT32_MAX;
+// The record of an emissive draw (caller holds core_shared_lock, then g_mu): the core runs
+// em::make_record on the draw's bindings (Bg3CoreApi::em_record, ABI 24); the views it
+// hands back and the luminance-copy slots stay here. False without a core.
+bool make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDraw& d) {
+  const Bg3EmRecordIn in{cmd, fs, &mat.info, mat.name.c_str(), mat.kind == kMatForward, mat.kind == kMatDecal};
+  Bg3EmRecordOut o;
+  if (!em_core_record(&in, &o)) return false;
+  static_assert(sizeof o.rec == sizeof d.rec, "Bg3EmRecordOut::rec holds an EmRec");
+  std::memcpy(&d.rec, o.rec, sizeof d.rec);
+  View* v[4] = {&d.mask, &d.base, &d.vt_ind, &d.vt_cache};   // em::EmView order
+  for (int i = 0; i < 4; ++i) *v[i] = View{o.views[i].view, o.views[i].layout};
+  RecDbg& g = g_rec_dbg[fs];
+  std::memcpy(&g.r, o.dbg_rec, sizeof g.r);
+  if (o.lum_wanted) {
     // One slot per distinct binding in the pass.
     uint32_t slot = UINT32_MAX;
     for (const auto& c : P.copies)
-      if (c.first.buffer == g.buffer && c.first.offset == g.offset) slot = c.second;
+      if (c.first.buffer == o.luminance.buffer && c.first.offset == o.luminance.offset) slot = c.second;
     if (slot == UINT32_MAX) {
       slot = g_glob_next++ % kGlobSlots;
-      P.copies.push_back({g, slot});
+      P.copies.push_back({o.luminance, slot});
       if (P.copies.size() > 1) ++P.census.global_conflicts;   // (several bindings: counted, handled)
     }
-    return slot;
+    d.rec.glob = g.r.glob = slot;
   }
-  float lava_heat() { return cfg_float("rt_em_lava_heat", 0.5f); }
-};
-void make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDraw& d) {
-  DrawReader rd{cmd, P, d};
-  em::EmMaterial m{&mat.info, mat.name, mat.kind == kMatForward, mat.kind == kMatDecal};
-  em::EmRecordOut o;
-  d.rec = em::make_record(rd, fs, m, o);
   P.census.cb_unreadable += o.cb_unreadable;
   P.census.vt_missing += o.vt_missing;
   d.pulse_no_time += o.pulse_no_time;
   if (o.dbg_m) {
-    RecDbg& g = g_rec_dbg[fs];
     std::memcpy(g.m, o.m, sizeof g.m);
     g.cb = true;
     if (o.dbg_pulse) {
@@ -408,7 +383,7 @@ void make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDra
     }
   }
   P.census.pulse_no_time += d.pulse_no_time;
-  g_rec_dbg[fs].r = o.dbg_rec;
+  return true;
 }
 
 bool ensure_pipeline() {
@@ -824,7 +799,12 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
       r.draw = uint32_t(recs.size());
       if (r.flags & kFlagApprox) {
         auto cal = g_calib.find((uint64_t(r.fs_hi) << 32) | r.fs_lo);
-        em::calib_apply(r, cal != g_calib.end() ? &cal->second : nullptr);
+        Bg3EmCalib b{};
+        if (cal != g_calib.end()) b = Bg3EmCalib{cal->second.scale, cal->second.updates, cal->second.log_u};
+        uint32_t words[64];
+        static_assert(sizeof words == sizeof r, "EmRec is 64 words");
+        std::memcpy(words, &r, sizeof r);
+        if (em_core_calib_apply(words, cal != g_calib.end() ? &b : nullptr)) std::memcpy(&r, words, sizeof r);
       }
       r.tex = slot_of(tex, kMaxTex, d.mask);
       if (d.mask.v && !r.tex) ++census.skip_tex, r.mode = kModeConst, r.flags |= kFlagApprox;
@@ -1245,6 +1225,7 @@ void em_note_draw(const CmdState* s) {
 
 bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const EmDrawIn& in, VkBuffer* soup,
              VkDeviceSize* off, VkDeviceSize* bytes, uint32_t* prims_out) {
+  const auto core = core_shared_lock();   // the record policy is the core's (before g_mu)
   std::lock_guard<std::mutex> lock(g_mu);
   PCmd& P = g_pending[cmd];
   Census& C = P.census;
@@ -1288,9 +1269,9 @@ bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const Em
   g_demand += up256(need);   // what this frame asks for (the soup grows to it at the next build)
   // The ring: what the pending builds may still read stays (a third of the soup per build).
   if (g_soup_since + need > g_soup.size / 3) return ++C.skip_full, false;
-  if (g_soup_head + need > g_soup.size) g_soup_head = 0;
   PDraw d;
-  make_record(cmd, s->fs, mat, P, d);
+  if (!make_record(cmd, s->fs, mat, P, d)) return ++C.skip_core, false;
+  if (g_soup_head + need > g_soup.size) g_soup_head = 0;
   d.off = g_soup_head;
   d.soup = g_soup.b;
   d.prims = uint32_t(prims);
@@ -1405,6 +1386,7 @@ void em_forget_cmd(VkCommandBuffer cmd) {
 
 void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandBuffer>& cmds) {
   if (!g_on || dd != g_dd) return;
+  const auto core = core_shared_lock();   // the build applies the core's calibration (before g_mu)
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_pending.empty()) return;
   std::vector<PCmd> taken;
@@ -1532,6 +1514,7 @@ void em_on_present() {
       t = TsPair{};
     }
   }
+  const auto core = core_shared_lock();   // the calibration rule is the core's (before g_mu)
   std::lock_guard<std::mutex> lock(g_mu);
   // Command buffers the game never submitted (a dropped frame): their draws go.
   if (g_pending.size() > 256) g_pending.clear();
@@ -1610,7 +1593,7 @@ void em_on_present() {
           const Window::Cmp& cm = it->second;
           Calib& cal = g_calib[it->first];
           const double ratio = cm.game > 0 ? cm.ours / cm.game : 0.0;
-          if (em::calib_first(cal, ratio, cm.flags, w.dbg_frames, cm.bright)) {
+          if (calib_update(cal, true, ratio, cm.flags, w.dbg_frames, cm.bright)) {
             it = w.cmp.erase(it);
           } else {
             ++it;
@@ -1666,9 +1649,9 @@ void em_on_present() {
       c.skip_tex / nb, c.vt_missing / nb, c.global_conflicts / nb, g_stale, g_busy);
   log("[em] soup %llu MB, %u draws dropped by a soup resize; forward-pass emissive draws %.1f per build; triangles per "
       "light %u (last build); invalid soup triangles collapsed by the sanitize pass %.1f per build; material constants "
-      "not host-readable %.2f per build",
+      "not host-readable %.2f per build; draws without a core (no record) %.2f per build",
       (unsigned long long)(g_soup.size >> 20), g_regrown, c.kinds[kMatForward] / nb, g_last_cluster,
-      double(w.collapsed) / nb, c.cb_unreadable / nb);
+      double(w.collapsed) / nb, c.cb_unreadable / nb, c.skip_core / nb);
   {
     std::string line;
     for (auto& [fs, gl] : w.glob) {
@@ -1746,7 +1729,7 @@ void em_on_present() {
       // full step chased the animation (the scale rose while the ratio was > 1). The scale
       // is 1 / the exponential average of that ratio in log space (weight 1/2; the first
       // window sets it), i.e. it matches the time average.
-      if (calib) em::calib_window(cal, ratio, cm.flags, px);
+      if (calib) calib_update(cal, false, ratio, cm.flags, 0, px);
       // Two ratios: over every hit (the family's energy: what the light list carries and the
       // calibration matches) and over its bright hits only (the emission the player sees,
       // apart from dark texels and texels whose game pixel other emitters add to): the gate.

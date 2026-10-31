@@ -416,6 +416,12 @@ void core_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* pass);
 void core_on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* info);
 void core_on_cmd_end(VkCommandBuffer cmd);
 void core_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* info);
+// D-EM policy in the core (ABI 24): hold core_shared_lock() around these, taken before
+// emissive.cpp's own mutex (the order of em_scene, called by the core). False without a core.
+std::shared_lock<std::shared_mutex> core_shared_lock();
+bool em_core_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out);
+bool em_core_calib_update(Bg3EmCalib* cal, bool first, double ratio, uint32_t flags, uint64_t frames, double bright);
+bool em_core_calib_apply(uint32_t* rec, const Bg3EmCalib* cal);
 VkCommandBuffer core_dispatch_cmd();  // inside core on_dispatch/on_dispatch_pre on this thread, else null
 bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
                    Bg3Binding* out);
