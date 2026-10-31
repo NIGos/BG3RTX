@@ -91,7 +91,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
         physical_o=rt_scene_ray_origin(physical_o);
 #endif
         if(primitive.valid && !primitive.inactive && primitive.camera &&
-           !hpo_competing_receiver(-V*t0,-V,t0,dist+w)) {
+           ((pc.ls_flags & (1u << 21)) == 0u ||
+            !hpo_competing_receiver(-V*t0,-V,t0,dist+w))) {
           HairTriangleHit card=hm_ray_triangle(primitive.p0,primitive.p1,primitive.p2,physical_o,-V);
           float physical_t=card.t;
           float3 physical_n=normalize(primitive.n);
