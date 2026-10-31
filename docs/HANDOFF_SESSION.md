@@ -6,8 +6,8 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main c82fe8d ABI 21 is merged via merge-green and pushed with codex/omm-bake.
-Both DLLs rebuilt; 54/54 CTests, 577/577 runtime shaders and QA passed. Related
+Main a9ab6ba ABI 21 is merged via merge-green and pushed with codex/omm-bake.
+Both DLLs rebuilt; 55/55 CTests, 579/579 runtime shaders and QA passed. Related
 user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
@@ -53,7 +53,10 @@ clip/UV proof. No cache-
 only rerun: static source draws are not the instanced cached domain.
 Terrain UBO usage 16 lacks TRANSFER_SRC; fa3d9f4 shaderreadback built/validated,
 actual-submit pinning/stages fixed in 68321d0/import fe9f949, targeted checks pass.
-R5 same 130 s draft, normal cache/reference OFF, needs merge-green+freeze. No live job.
+R5 TERMINAL212s: terrain copied1/declined0/pending0 (25760B), sourceGPUmaterial0.
+NativeEngineaddresses arepass-local; 1018b07/import04e6e83 removesONLY their
+positive-pull equality, fullGPUproof unchanged. Fresh48case/host checks pass.
+R6 130s private draft (no repeat terraintrace) will testbeforemainintegration.
 Exact packet capture e3b238a/8a84f11 is opt-in only; R4 raw evidence is retained.
 Two-surface reference d74f766, rt_hit_reference=2, default OFF; CPU/shader checks
 pass, no GPU/path-quality claim. All consolidated via merge-green and pushed.

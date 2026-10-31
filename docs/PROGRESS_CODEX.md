@@ -1,5 +1,33 @@
 # BG3RTX progress
 
+## R5 terrain acquisition passes; next material join is a small CPU correction - 2026-10-31
+
+Main a9ab6ba, ABI 21, merged via merge-green and pushed: 55/55 CTests,
+579/579 runtime shader files/all entries and QA pass. An old asset DB fixture
+assumed incomplete exports prove absence; fdd7d79 now tests complete AND legacy
+policy through the real runtime-light merge, and passes. Installed Lua unchanged.
+
+R5 completed 212 s, no NVIDIA 153/dumps/build drift. Terrain acquisition PASSES:
+frame 4521 copied 1, declined 0, pending 0; exact 80/7168/16464/2048-byte files.
+Both native buffers require shader reads (usages 16/34). Base indices 0/255 are
+valid: native FS skips the second base when >=64. All three sampler metadata
+records are known. Raw bytes, hashes and derived results are preserved under
+omm-bake/BG3RTX/captures/native-hit-material-20261031/r5/. This is not terrain
+shading parity or runtime integration yet; real mask/brush/LUT bytes now exist.
+
+Material GPU acquisition still fails: 100 unique/0 duplicate candidates, 16 actual
+captures/snapshots, zero binding/pipeline declines, but no source association.
+Actual source/deferred Engine allocations differ; their addresses are pass-local.
+1018b07/import 04e6e83 omits ONLY that address equality for positive-pull physical
+candidates, retains SSBO/index/UV/indexed-draw identity and full GPU proof. Fresh
+host/core/launcher build and 48-case pipeline/input CTest pass. A private R6
+130 s OFF/ON/OFF draft tests this next; no repeated terrain trace or shader suite
+before that probe. Main stays at its prior consolidated revision until integration.
+
+R5 primary 99.527/99.525/99.5245%, FG ratio 2.0 with zero bad phase samples;
+rendered SDK log cadence 36.78/36.36/36.71 fps. RT diagnostic ~18.1 ms, not new
+reference cost. No user-trial updates or full material/lighting success claimed.
+
 ## Native input and terrain submit fixes prepared - 2026-10-31
 
 5b5c595/import bd6719f resolves actual native Engine, position and UV inputs for
