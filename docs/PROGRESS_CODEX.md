@@ -1,5 +1,15 @@
 # BG3RTX progress
 
+## Depth-clip material fix prepared; still default OFF - 2026-10-31
+
+Source dae7d32 integrated as d8b70e3. ABI 21 requires matching host/core/launcher.
+Accept only the known enabled depth-clip extension; unknown and duplicate state
+still rejects. 21 Vulkan-state cases and two targeted tests pass, host linked.
+R2 did not record each failing predicate, so the next changed acquisition run
+also prints the exact predicate and actual extension type. No GPU material pass
+is claimed. The separate ABI 20 terrain/direct/light increment is now main
+27462a9: 50/50 CTests, 560/560 shaders and QA passed, pushed.
+
 ## Pragmatic checkpoint: second material smoke isolated the next defect - 2026-10-31
 
 Use scoped evidence; unrelated global thresholds do not block a demonstrated fix.
