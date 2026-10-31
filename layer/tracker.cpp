@@ -480,11 +480,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
   VkShaderModuleCreateInfo pci;
   const bool geo = geo_patch_shader(ci, patched);
   // Startup-only diagnostic: constant native controls, never writes game UBOs.
+  native_light_validation::Result native;
+#if BG3RTX_DIAGNOSTICS
   static const bool native_requested=cfg_int("ls_native_direct_validate",0)!=0;
   static const int native_debug=cfg_int("ls_debug",0);
-  native_light_validation::Result native;
   if(native_requested && (native_debug==4 || native_debug==5) && !geo && ci->codeSize%4==0)
     native=native_light_validation::patch(ci->pCode,ci->codeSize/4);
+#endif
   const bool direct=native.status==native_light_validation::Status::Applied;
   if(direct)patched=std::move(native.words);
   if (geo || direct) {

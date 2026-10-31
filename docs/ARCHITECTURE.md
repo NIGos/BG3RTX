@@ -38,6 +38,12 @@ bg3.exe ──► Vulkan loader ──► VK_LAYER_BG3RTX_host (bin/VkLayer_bg3r
   uses it.
 - **Release profile.** `data/release.ini`, appended by `scripts/package.ps1`, turns the
   developer keys off (`dev=0` disables the trace hotkey, `dump_shaders=0`).
+- **Diagnostics build switch.** CMake `BG3RTX_DIAGNOSTICS` (default ON) compiles the
+  diagnostic-only host code into the layer: terrain packet dump, pan bursts, `rt_order_trace`,
+  the `cpu_timing` hook timers in `cmd.cpp`, `ls_native_direct_validate`. OFF turns their hooks
+  (`layer/host.h`) into inline no-ops; same ABI, about 120 KB smaller. `package.ps1` still ships
+  the ON layer from `bin/`; a lean layer: `cmake -B build-nodiag -DBG3RTX_DIAGNOSTICS=OFF
+  -DBG3RTX_BIN=<dir>` then `cmake --build build-nodiag --target VkLayer_bg3rtx`.
 - Player guide: `docs/USER_SETTINGS.md`. Design: `docs/SETTINGS_DESIGN.md`.
 
 ## Why a layer of our own and not a ReShade add-on

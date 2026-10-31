@@ -526,6 +526,7 @@ void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue)
   }
 }
 
+#if BG3RTX_DIAGNOSTICS
 // Pan bursts retain readbacks until all 16 frames have been submitted. There
 // is no QueueWaitIdle, PNG encoding or disk write between captured frames.
 // Record and submit indices are both retained: a present index is not a pose.
@@ -735,7 +736,10 @@ void pan_on_present(VkQueue queue) {
   pan_samples.clear();
   pan_finished = true;
 }
+#endif  // BG3RTX_DIAGNOSTICS
 
 }  // namespace bg3
 
+#if BG3RTX_DIAGNOSTICS
 #include "terrain_packet_dump.inl"
+#endif
