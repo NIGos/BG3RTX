@@ -2156,6 +2156,8 @@ the box's face on the light side (the box is the light's extent; casters outside
 shadow it); (4) the same delta and `ls_shadowed` logic, the same art-intent rule (the rim
 and fill rigs come from `CharacterLight` lists, owner character, flags from their
 templates). Validation as 9.3: `ls_debug=4` with the projector pixels included.
+(Implemented as `ls_box`: only box lights with a game shadow map are traced; the
+`ls_box_unshadowed` A/B key: removed 2026-10-31, see CONSOLIDATION.md C1.)
 
 **Forward receivers: design note (later).** Water, glass, particles and VFX are drawn after
 the deferred lighting by the game's forward passes, which evaluate the sun with the cascades
