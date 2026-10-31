@@ -522,8 +522,8 @@ independently tying the payload to native VS64e2568916ede3d6 texelFetch semantic
 and the already checked active native topology. RGB is retained without asserting
 that a compressed normal is a geometric face normal.
 
-Native FS6650c75f3d3e4968 consumes this normal/hole image at s4b3, two layer-mask
-images at s1b2/b3, brush records at s1b4 and bindless textures at s2b32. Its UVs
+Native FS6650c75f3d3e4968 consumes this normal/hole image at s4b3, a painted-layer mask
+at s1b2 and base slope/height curve LUT at s1b3, brush records at s1b4 and bindless textures at s2b32. Its UVs
 use local grid X/Z, normalized height converted with native terrain scale/bias,
 and signed triplanar weights derived from normalized (2*RGB-1), with the native
 0.576 weight threshold/rebalancing. Layer alpha-height tests and subsequent
@@ -535,3 +535,22 @@ This increment decodes native inputs, not complete material sampling. Native
 brush SSBO packing/upload, byte-plane-to-mask filtering/channel mapping,
 derivative/LOD-dependent triplanar sampling and current image content remain
 unimplemented. No opacity/material defaults or parent-terrain/roof claims follow.
+
+
+`tools.assets.terrain_material` implements the native post-sample UV projection,
+painted-layer alpha/height scores, competitive blend and base curve weighting.
+Its inputs explicitly name sampled values/native members; it never automatically
+binds authored field names to an unobserved upload layout. Native 0.001/0.01
+branches, epsilon contributions, base remainder and factor-two curve branch stay
+intact. CPU binary64 formula tests are not GPU FP32/fma or sampling equivalence.
+Undefined normal/weight/power domains are unsupported, not replaced by black.
+
+The S1 capture contains image metadata and geometry, not s1b4 brush bytes or
+s1b2/b3 pixels. Minimum future same-draw input capture: s4b0 80-byte UBO (blend
+width at byte72; two base indices at64/68), s1b4 descriptor offset/range and
+112-byte-stride records0..3 plus actual base indices<64; s1b2 RGBA8_UNORM49x84
+(16464 tightly packed bytes), s1b3 R16_UNORM256x4 (2048 bytes), and sampler/address
+states s4b4/s1b1/s0b7. Preserve format/view/swizzle/row pitch and same draw identity.
+The 256x4 s1b3 is a curve LUT, not a second painted mask: native textureGather
+uses (normalY,0.25) and (normalizedHeight,0.75). Exact native derivatives/LOD
+remain a separate missing raster observable. No generic capture system is added.

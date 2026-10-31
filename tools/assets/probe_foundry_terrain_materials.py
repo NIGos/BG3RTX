@@ -63,7 +63,7 @@ def main():
         p=args.native_cache/(shader+'.glsl');raw=p.read_bytes();native[shader]=dict(path=str(p),sha256=hashlib.sha256(raw).hexdigest())
     report=dict(scope='ONE persistent Foundry mainfloor native input recovery, not complete terrain shading',terrain_id=TERRAIN,
         source_fingerprints=sources,brushes=recovered,patches=patches,native_glsl=native,pillow_version=pillow_version,
-        native_bindings=dict(height='s4b2',normal_holes='s4b3',layer_masks=['s1b2','s1b3'],brush_records='s1b4',textures='s2b32[]'),
+        native_bindings=dict(height='s4b2',normal_holes='s4b3',painted_layer_mask='s1b2',base_curve_lut='s1b3',brush_records='s1b4',textures='s2b32[]'),
         limits=['Authored cell byte planes are not normalized blend weights or proved native channel mapping',
                 'Native brush record packing, mask upload/filtering and derivative-dependent triplanar sampling remain unimplemented',
                 'DDS byte decode is not native colour-space/normal/physical arithmetic equivalence',
