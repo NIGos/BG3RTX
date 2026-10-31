@@ -3630,7 +3630,8 @@ Scored with `scripts/qa/em_gate.py`.
 
 - The GF +3.8% and the AF 1.93 of `222986b8` were the all-hit metric, which includes the dark
   texels. On bright pixels both match.
-- **The filter stays 0** (the ray-cone LOD). Filters 1 and 2 remain as diagnostics.
+- **The filter stays 0** (the ray-cone LOD). `rt_em_filter` and `rt_em_aniso` (filters 1/2):
+  removed 2026-10-31, see CONSOLIDATION.md C1.
 
 **AF `304be1c7` at 0.42 is independent of filtering.**
 - The candidate: other emitters on the same ray, such as alpha-blended glows or particles

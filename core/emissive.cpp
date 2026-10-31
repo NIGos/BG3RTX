@@ -151,7 +151,7 @@ void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, 
     }
   }
   Push pc{{w, h}, mode, host->cfg_float("rt_em_tol", 0.01f), host->cfg_float("rt_em_fx_thr", 0.05f),
-          has_cam2 ? 1u : 0u, {float(host->cfg_int("rt_em_filter", 0)), host->cfg_float("rt_em_aniso", 16.0f)},
+          has_cam2 ? 1u : 0u, {0.0f, 0.0f},
           // The family's FS hash, top 32 bits, as two 16-bit decimal keys (cfg_int is decimal):
           // 304be1c7 is rt_em_dbg_fam_hi=12363 (0x304b), rt_em_dbg_fam_lo=57799 (0xe1c7).
           (uint32_t(host->cfg_int("rt_em_dbg_fam_hi", 0) & 0xffff) << 16) | uint32_t(host->cfg_int("rt_em_dbg_fam_lo", 0) & 0xffff),
