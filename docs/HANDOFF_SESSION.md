@@ -37,6 +37,9 @@ Actual S1 trace proves prepass/deferred use different command buffers (866/835
 draws,100 static VT). Fix cross-CB association/ownership before any zero-record
 trial. Secondary-command no-write proof and Submit2 compute ordering need review.
 Shared frame de1ccdd has 4338 CPU checks and validated HLSL; real consumer pending.
+Explicit ABI 20 material-use callback approved in development; main/trial stay19.
+89 actual S1 G-buffer VS/FS modules pass the read-only scanner. Non-watched
+360s acquisition draft is under captures/native-hit-material-20261031/draft/.
 M2 native S1 reference completed in 53 s: 835 draws, no capture overflow.
 Floor_B POSITION matches 48 instances/20256 corners, max residual 3.22e-5.
 ScaleZ acts on local X; observed Flip does not reflect POSITION. Target residual

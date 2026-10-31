@@ -20,6 +20,21 @@ coverage and Submit2 ordering for added compute, independently of OMM. No live
 material participation/cost or full probe replacement claim yet. Direct-only
 lighting remains a reference output; normal RF keeps its established policy.
 
+Actual S1 module check: all 89 recorded G-buffer VS/FS modules pass the shared
+read-only scanner; zero missing/declined. This is CPU source evidence, not a GPU
+dispatch or proof about unrecorded stages/secondary commands. Evidence next to
+the cross-command report: gbuffer-module-readonly-evidence.json.
+The coordinator approved ABI 20 with one explicit material-use callback; no hidden
+input mode on the existing OMM callback. Matching new DLLs are still in development;
+main and the installed personal trial remain ABI 19. Submit-hook commits 9b0881a
+and 92ea113 have 58 CPU checks/object compilation; full link awaits the provider.
+Non-watched acquisition draft: captures/native-hit-material-20261031/draft/.
+One S1 run, 360 s off/on/off plus cost plan, logs only; not released before freeze.
+Reader prerequisite 0f5406e imported as b85c580: conservative authoring bounds and
+exact cancelled translation ancestry are explicit export options. 59 asset checks
+pass, one existing skip. Runtime already rejects nonfinite original clip Z;
+the frozen terrain export guard does not establish a renderer terrain leak.
+
 ## Native ground expanded; material capture regression prevented - 2026-10-31
 
 Nearby S1 ground now exports three native-qualified Floor_B pieces plus a matched
