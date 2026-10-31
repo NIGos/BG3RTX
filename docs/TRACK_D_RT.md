@@ -719,7 +719,8 @@ Memory for 3.2M triangles: 384 MB XFB, 214 MB BLAS (capacity 3.6M), 13 MB scratc
   - The pass replaces the screen-space contact shadows whenever a TLAS exists.
     Without one (`rt=0`, loading screens) the contact shadows run as before.
   - It also works with `gi=0`.
-- **AO** (`rt_ao=1`, `gi/rt_ao.hlsl`, needs `gi=1`). Runs at half resolution on
+- **AO** (`rt_ao=1`, `gi/rt_ao.hlsl`, needs `gi=1`; superseded by `gi_rt`: removed
+  2026-10-31, see CONSOLIDATION.md C1). Runs at half resolution on
   exactly the samples `gi_trace` used, with `rt_ao_rays` (2) cosine rays of
   `rt_ao_radius` (1.0 world units).
   - Occlusion falls off smoothly with hit distance, `1 − (t/R)²`.
@@ -867,7 +868,6 @@ Settings (`bg3rtx.ini`):
 - `rt`, `rt_build`, `rt_refit`, `rt_rebuild_frames`, `rt_xfb_mb`,
   `rt_bda_core`;
 - `rt_shadows`, `rt_strength`, `rt_bias`, `rt_tmax`;
-- `rt_ao`, `rt_ao_rays`, `rt_ao_radius`;
 - `rt_debug`, `rt_timing_frames`.
 
 The log reports `[rt] scene build GPU …` (convert, BLAS, TLAS per rebuild/refit),

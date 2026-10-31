@@ -65,8 +65,8 @@ struct Push {
   float rt_tmax;      // shadow ray length (world units)
   uint rt_debug;      // 0 off, 1 visibility, 2 game mask (red) vs traced (green), 3 primary-ray depth check
   float rt_strength;  // how strongly traced visibility darkens the game's sun shadow mask
-  float rt_ao_radius; // ray-traced AO ray length (world units, rt_ao.hlsl)
-  uint rt_ao_rays;
+  float rt_ao_radius; // unused, 0 (rt_ao removed 2026-10-31)
+  uint rt_ao_rays;    // unused, 0
   uint ls_kmode;            // unused, 0 (the D-LS exact-k ls_k removed 2026-10-31)
   uint sharc_fx;           // sharc_inject.hlsl: 1 the D-EM effects target is bound at 49 (emission)
   // Hybrid ray-traced GI (gi_trace_rt.hlsl)

@@ -75,7 +75,7 @@ How settings work today:
 | `gi_rt` | 1 | L | trace 0.175 ms (vs 0.248 ms screen-space) | Needs `rt`, `gi` |
 | `gi_rays` / `gi_rr_rays` | 4 / 1 | L | 2 rays/12 steps 0.18 ms, 4/16 0.28 ms (half res, `rr=0`); RR path 1 ray full res ≈ the same | The RR mode uses `gi_rr_rays` |
 | `gi_steps` | 16 | L | see above | Screen-space path only |
-| `rt_ao`, `rt_ao_rays`, `rt_ao_radius` | 0 / 2 / 1.0 | L | +0.13 ms | Superseded by `gi_rt` (only used if `gi_rt=0`) |
+| `rt_ao`, `rt_ao_rays`, `rt_ao_radius` | — | — | — | Superseded by `gi_rt`: removed 2026-10-31, see CONSOLIDATION.md C1 (`gi_rt=0` keeps the screen-space AO) |
 | `rt_local_shadows` | 1 | L | **0.345 ms** foundry, 0.068 ms docks | Needs the light list bindings, `rt` |
 | `ls_samples` | 0 | L | 0 → 0.345 ms; 1 (RIS) → **0.219 ms** | RIS is the cheaper "Medium" mode, but noisier: needs RR |
 | `ls_shadowed` | 0 | L | unmeasured (no scene with shadow-casting lights yet) | 1 replaces the game's atlas (loses off-screen casters); 2 takes the min of both |
@@ -550,7 +550,7 @@ Changing any knob switches the preset combo to **Custom**. "Reset to preset" res
      and the GI drops to its half-resolution mode until RR runs again (logged
      as `gi: resources for ...`).
 2. **Derived `rt_build`.** Build the scene only if any RT consumer is on (`rt_shadows`,
-   `gi_rt`, `rt_ao`, `rt_local_shadows`, `rt_reflections`). Today `rt_build=1` with every
+   `gi_rt`, `rt_local_shadows`, `rt_reflections`). Today `rt_build=1` with every
    effect off still spends ≈ 1.9 ms static / 4.4 ms pan.
 3. **Layered config.** `cfg_raw` order: user ini → preset table (compiled) → `bg3rtx.ini`
    (dev/shipped defaults) → code fallback. Write the user ini atomically. `cfg_poll` already
@@ -610,7 +610,7 @@ So, among the user-facing knobs, only **"Ray-traced geometry: Full ↔ Opaque"**
 |---|---|---|
 | Settings table (single source of truth) | `common/settings.h` | Header-only, standard C++. It holds the entries of §6 (9 knobs + Reflex under Advanced; the preset is the combo), with labels, descriptions, choices → keys, per-preset values, apply class (live / hitch / partial restart), hardware caps per choice and dependencies between knobs. It also has the preset extras (Ultra: `rt_rebuild_frames=600`), `render_user_ini`, `suggest_preset` and `gpu_caps`. The phase-2 overlay can include it as is. `data/settings_schema.json` is the same table as JSON (also `BG3RTX.exe --dump-schema`); `settings_test` fails when the file is stale, and `settings_test.exe --write-schema` regenerates it |
 | Layered config | `layer/util.cpp` `cfg_poll` | Order: `bg3rtx.ini` → `bg3rtx_user.ini` (`%BG3RTX_USER_INI%` replaces the path; `none` skips it) → `%BG3RTX_INI%`. **Change from §7.3.3:** the preset is not a separate layer. Any file may contain `preset=`, which expands at that file's position before the file's own keys, so a later file (test overrides) beats a user preset. Each layer is hot-reloaded on its own mtime, and a truncated layer keeps its previous keys. The log prints `[cfg] settings read`, `[cfg] knobs:` (choices + matching preset) and `[cfg] keys:` |
-| Derived `rt_build` (§7.3.2, partly) | `settings::resolve_derived` | Presets write `rt_build=auto`, which resolves to 1 only while an RT consumer (`rt_shadows`, `rt_ao`, `gi_rt`, `rt_local_shadows`, `rt_reflections`, `rt_debug`) is on. `bg3rtx.ini` keeps `rt_build=1`, so the developer default is unchanged. `rtscene.cpp` is untouched |
+| Derived `rt_build` (§7.3.2, partly) | `settings::resolve_derived` | Presets write `rt_build=auto`, which resolves to 1 only while an RT consumer (`rt_shadows`, `gi_rt`, `rt_local_shadows`, `rt_reflections`, `rt_debug`) is on. `bg3rtx.ini` keeps `rt_build=1`, so the developer default is unchanged. `rtscene.cpp` is untouched |
 | `fps_cap` (§7.3.4) | `layer/streamline.cpp` `reflex_apply`, `layer/framecap.cpp` | With Streamline active, `slReflexSetOptions` gets `frameLimitUs = 1e6/fps_cap`, and `reflex`/`fps_cap` are re-applied whenever they change (Reflex used to be set once). Without Streamline, a sleep limiter (high-resolution waitable timer, then a spin) runs in `QueuePresentKHR` |
 | Release defaults (§7.3.5) | `data/release.ini`, `scripts/package.ps1`, `layer/tracer.cpp` | The trace hotkey needs `dev=1` (code default 0; the repository's `bg3rtx.ini` has `dev=1`). The `dump_shaders` code default is now 0; the repository ini keeps 1. `package.ps1` builds `dist/BG3RTX` with `bg3rtx.ini` = repository ini + `release.ini` (D keys off) |
 | Launcher | `tools/launcher` → `bin/BG3RTX.exe` (target `bg3rtx_launcher`, `build.ps1 -Launcher`) | The window is generated from the table: preset combo + "Use suggested", knobs, markers (live / brief hitch / restart required / unmet dependency / not supported), description panel, game folder (Steam registry + `libraryfolders.vdf`, or Browse), Save (atomic: temp + `MoveFileEx`), Save and launch. There is also a command line (`--launch`, `--dry-run`, `--preset`, `--detect`, `--dump-schema`) and a Steam `%command%` mode |

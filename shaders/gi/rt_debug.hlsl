@@ -6,8 +6,8 @@
 //   3 primary-ray check of the TLAS against the depth buffer: green match
 //     (within depth_tol + the measured 0.5% TLAS error, rt_shadow.hlsl), red geometry in
 //     front, blue behind, magenta miss or aborted
-//   4 accumulated ambient visibility as folded into the game's AO (ray-traced
-//     with rt_ao=1, screen-space otherwise)
+//   4 accumulated ambient visibility as folded into the game's AO (the GI trace's:
+//     ray-traced with gi_rt=1, screen-space otherwise)
 //   6 rt_sun_replace trust: red roof volume, blue off-screen fallback, green trusted, grey
 //     not traced, yellow ray aborted by the candidate cap (unknown: the game's mask kept;
 //     force with rt_max_candidates). (Magenta, "far from the game's lit mask", is gone with

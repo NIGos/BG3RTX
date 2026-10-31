@@ -332,7 +332,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 208 keys of bg3rtx.ini, in file order.
+// 205 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -405,9 +405,6 @@ inline constexpr KV kDefaults[] = {
     {"rt_cascade_alpha_dedupe", "1"},
     {"rt_cascade_refit", "1"},
     {"rt_cascade_rebuild_frames", "60"},
-    {"rt_ao", "0"},
-    {"rt_ao_rays", "2"},
-    {"rt_ao_radius", "1.0"},
     {"rt_debug", "0"},
     {"rt_stats", "0"},
     {"pan_capture", "0"},
@@ -743,7 +740,7 @@ inline int map_int(const Map& m, const char* key, int fallback) {
 inline bool resolve_derived(Map& m) {
   auto it = m.find("rt_build");
   if (it == m.end() || lower(it->second) != "auto") return false;
-  bool consumer = map_int(m, "rt_shadows", 0) || map_int(m, "rt_ao", 0) || map_int(m, "gi_rt", 0) ||
+  bool consumer = map_int(m, "rt_shadows", 0) || map_int(m, "gi_rt", 0) ||
                   map_int(m, "rt_local_shadows", 0) || map_int(m, "rt_reflections", 0) || map_int(m, "rt_debug", 0);
   it->second = consumer ? "1" : "0";
   return true;

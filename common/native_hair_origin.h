@@ -16,7 +16,7 @@ inline bool capability(uint32_t* state,bool requested) {
 }
 inline bool binding_enabled(bool capability,unsigned mask,unsigned binding){return !(capability&&mask==8u&&binding==12u);}
 inline bool alternate_entry(const char* file) {
- const char* names[]={"gi/rt_origin.hlsl","gi/rt_shadow.hlsl","gi/rt_ao.hlsl","gi/gi_trace_rt.hlsl","gi/gi_trace_rt_sharc.hlsl","gi/gi_trace_rt_hit_direct.hlsl","gi/gi_trace_rt_sharc_hit_direct.hlsl",
+ const char* names[]={"gi/rt_origin.hlsl","gi/rt_shadow.hlsl","gi/gi_trace_rt.hlsl","gi/gi_trace_rt_sharc.hlsl","gi/gi_trace_rt_hit_direct.hlsl","gi/gi_trace_rt_sharc_hit_direct.hlsl",
  "gi/rt_reflections.hlsl","gi/rt_reflections_sharc.hlsl","gi/rt_local_shadows.hlsl","gi/rt_local_shadows_full.hlsl",
  "gi/rt_local_shadows_box.hlsl","gi/rt_local_shadows_full_box.hlsl","gi/rt_local_shadows_native_full.hlsl",
  "gi/rt_local_shadows_native_full_box.hlsl","gi/rt_local_shadows_ref.hlsl","gi/rt_local_shadows_check.hlsl","gi/rt_local_shadows_full_check.hlsl"};

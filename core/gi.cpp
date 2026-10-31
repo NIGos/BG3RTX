@@ -117,8 +117,8 @@ struct Push {
   float rt_bias, rt_tmax;
   uint32_t rt_debug;
   float rt_strength;
-  float rt_ao_radius;
-  uint32_t rt_ao_rays;
+  float rt_ao_radius;   // unused, 0 (rt_ao removed 2026-10-31)
+  uint32_t rt_ao_rays;  // unused, 0
   uint32_t ls_kmode, sharc_fx;   // sharc_fx: sharc_inject.hlsl, the D-EM effects target is bound (49); ls_kmode: unused, 0 (ls_k removed 2026-10-31)
   float gi_rt_radius, gi_rt_tol;
   uint32_t gi_rt_fallback, rt_stats;
@@ -204,7 +204,7 @@ VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_H
 VkDescriptorSetLayout g_current_sun_set_layout=VK_NULL_HANDLE,g_current_sun_host_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_current_sun_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
-Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
+Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_trace_rt, g_ls, g_ls_prep;
 Pipe g_hit_material, g_hit_direct, g_hit_two_bounce, g_hit_gi, g_hit_gi_sharc;
 Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
@@ -709,7 +709,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   static const char* const rebased_files[] = {
       "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/gi_trace_rt_hit_direct.hlsl", "gi/gi_trace_rt_sharc_hit_direct.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
       "gi/pan_primary_identity.hlsl", "gi/pan_local.hlsl",
-      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
+      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_origin.hlsl",
       "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
       "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
       "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
@@ -1348,8 +1348,6 @@ Push make_push() {
   pc.rt_tmax = host->cfg_float("rt_tmax", 300.0f);
   pc.rt_debug = uint32_t(host->cfg_int("rt_debug", 0));
   pc.rt_strength = host->cfg_float("rt_strength", 1.0f);
-  pc.rt_ao_radius = host->cfg_float("rt_ao_radius", 1.0f);
-  pc.rt_ao_rays = uint32_t((std::max)(host->cfg_int("rt_ao_rays", 2), 1));
   pc.gi_rt_radius = (std::max)(host->cfg_float("gi_rt_radius", 1.0f), 0.01f);
   // Multiplier on the derived on-screen-hit depth tolerance (rt/depth_tol.hlsli), 1 = as
   // derived. New key: an old gi_rt_depth_tol=0.03 read as k would reject nearly every hit.
@@ -1694,7 +1692,7 @@ void ls_timing_collect() {
 // build's TLAS with another's InstInfo, records, soup or pool.
 VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity) {
   *omm_identity=0;
-  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("rt_ao", 0) && !host->cfg_int("gi_rt", 1) &&
+  if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("gi_rt", 1) &&
                           !host->cfg_int("rt_local_shadows", 1) && !host->cfg_int("rt_reflections", 1)))
     return VK_NULL_HANDLE;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
@@ -1783,14 +1781,13 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha,&s.omm_identity);
   b.omm_identity=s.omm_identity;
   if (tlas && (!ensure_rt_layout() || !refresh(g_rt_shadow, "gi/rt_shadow.hlsl", g_rt_layout) ||
-               !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) || !refresh(g_rt_ao, "gi/rt_ao.hlsl", g_rt_layout) ||
+               !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) ||
                !refresh(g_trace_rt, "gi/gi_trace_rt.hlsl", g_rt_layout) ||
                !refresh(g_rt_origin, "gi/rt_origin.hlsl", g_rt_layout) || !stats_init()))
     tlas = VK_NULL_HANDLE;   // (the statistics buffer is binding 20 and must exist)
   s.gi = host->cfg_int("gi", 1) != 0;
   // Hybrid GI: ray queries replace the screen-space march (and do the AO rays too).
   const bool gi_rt = tlas && s.gi && host->cfg_int("gi_rt", 1);
-  const bool rt_ao = tlas && s.gi && !gi_rt && host->cfg_int("rt_ao", 0);
   const bool rt_shadows = tlas && s.shadow.view && host->cfg_int("rt_shadows", 1) && g_sunt_ok;
   // D-LS runs after the lighting (run_post); it needs the TLAS and the light list.
   s.ls = tlas && host->cfg_int("rt_local_shadows", 1) && s.ls_ok && ensure_ls_layout() &&
@@ -1854,8 +1851,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
-      host->log("rt: first traced frame at %ux%u (TLAS %p, shadows %d, AO %d, GI %d)", g_w, g_h, (void*)tlas, rt_shadows,
-                rt_ao, gi_rt);
+      host->log("rt: first traced frame at %ux%u (TLAS %p, shadows %d, GI %d)", g_w, g_h, (void*)tlas, rt_shadows,
+                gi_rt);
     }
   }
   bool rt_started = false;
@@ -1925,12 +1922,6 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     trace_timestamp(cmd, 1, s.rt_gi_applied);
     memory_barrier(cmd, kCS, kCS);
-    if (rt_ao) {
-      // Ray-traced visibility replaces the screen-space one before accumulation.
-      rt_begin();
-      dispatch(cmd, g_rt_ao, b, pc, g_hw, g_hh, true);
-      memory_barrier(cmd, kCS, kCS);
-    }
     dispatch(cmd, g_temporal, b, pc, g_hw, g_hh);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
@@ -2422,7 +2413,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
-  for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
+  for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
