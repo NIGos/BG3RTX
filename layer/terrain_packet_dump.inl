@@ -15,6 +15,11 @@ struct TerrainPacket {
  std::array<TerrainCopy,4> copies{};std::string reason,metadata;bool recorded{};
 };
 std::mutex terrain_mu;std::vector<TerrainPacket> terrain_packets;uint64_t terrain_next_token=1;
+// !terrain_packets.empty(), stored under terrain_mu after every change: the per-submit and
+// per-begin/reset hooks return before the lock when no packet exists (nearly always).
+std::atomic<bool> terrain_any{false};
+void terrain_sync(){terrain_any.store(!terrain_packets.empty(),std::memory_order_release);}
+bool terrain_none(){return !terrain_any.load(std::memory_order_acquire);}
 std::string tn(uint64_t v){return std::to_string(v);}
 std::string tf(float v){char b[32];snprintf(b,sizeof b,"%.9g",double(v));return b;}
 bool terrain_buffer_pipeline(DeviceData* dd,TerrainCopy& c){
@@ -156,23 +161,26 @@ std::string terrain_capture_note(VkCommandBuffer cmd,CmdState* s){
  if(!(s->begin_flags&VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)||(s->begin_flags&VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT))p.reason="requires_one_time_non_simultaneous_recording";
  if(s->begin_flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)p.reason="secondary_target_unsupported";
  if(!p.reason.empty())log("[terrain_packet] candidate %u declined: %s",p.id,p.reason.c_str());
- const auto id=p.id;terrain_packets.push_back(std::move(p));return tn(id);
+ const auto id=p.id;terrain_packets.push_back(std::move(p));terrain_sync();return tn(id);
 }
 void terrain_capture_discard(VkCommandBuffer cmd){
  // Reset/free may legally happen before vkQueueSubmit returns after execution.
  // A reservation therefore retains the packet until the actual result arrives.
+ if(terrain_none())return;
  std::lock_guard lock(terrain_mu);
  for(auto it=terrain_packets.begin();it!=terrain_packets.end();){
   if(it->cmd==cmd){it->lifetime.discard();
    if(it->lifetime.release_unsubmitted()){for(auto& c:it->copies)terrain_release(c);it=terrain_packets.erase(it);continue;}
   }++it;
  }
+ terrain_sync();
 }
 void terrain_capture_secondary(VkCommandBuffer cmd,CmdState* s){
- if(!s)return;std::lock_guard lock(terrain_mu);
+ if(!s||terrain_none())return;std::lock_guard lock(terrain_mu);
  for(auto& p:terrain_packets)if(p.cmd==cmd&&p.recording==s->recording&&p.ordinal==s->pass.ordinal&&!p.recorded&&p.reason.empty())p.reason="secondary_execution_after_target";
 }
 void terrain_capture_pass(VkCommandBuffer cmd,CmdState* s){
+ if(terrain_none())return;
  std::lock_guard lock(terrain_mu);auto* dd=device_of(cmd);
  for(auto& p:terrain_packets)if(p.cmd==cmd&&p.recording==s->recording&&p.ordinal==s->pass.ordinal&&!p.recorded&&p.reason.empty()){
   // Prepare every resource before recording ANY command, so setup failure can
@@ -201,13 +209,14 @@ void terrain_capture_pass(VkCommandBuffer cmd,CmdState* s){
  }
 }
 bool terrain_capture_needs_submit_promotion(VkCommandBuffer cmd){
+ if(terrain_none())return false;
  const uint64_t recording=cmd_recording(cmd);if(!recording)return false;
  std::lock_guard lock(terrain_mu);
  for(const auto& p:terrain_packets)if(p.cmd==cmd && p.recording==recording && p.recorded && !p.lifetime.discarded)return true;
  return false;
 }
 TerrainSubmission terrain_capture_before_submit(const std::vector<VkCommandBuffer>& cmds){
- TerrainSubmission batch;batch.frame=frame_index();std::lock_guard lock(terrain_mu);batch.packets.reserve(terrain_packets.size());
+ TerrainSubmission batch;batch.frame=frame_index();if(terrain_none())return batch;std::lock_guard lock(terrain_mu);batch.packets.reserve(terrain_packets.size());
  // Iterate packets, not input commands: a duplicate CB cannot reserve twice.
  for(auto& p:terrain_packets){
   if(std::find(cmds.begin(),cmds.end(),p.cmd)==cmds.end())continue;
@@ -216,6 +225,7 @@ TerrainSubmission terrain_capture_before_submit(const std::vector<VkCommandBuffe
  return batch;
 }
 void terrain_capture_after_submit(const TerrainSubmission& batch,VkQueue queue,bool success){
+ if(batch.packets.empty()&&terrain_none())return;
  std::lock_guard lock(terrain_mu);
  for(auto token:batch.packets){auto it=std::find_if(terrain_packets.begin(),terrain_packets.end(),[&](const auto& p){return p.token==token;});
   if(it==terrain_packets.end())continue;
@@ -226,6 +236,7 @@ void terrain_capture_after_submit(const TerrainSubmission& batch,VkQueue queue,b
  // attempt stays in the registry and may be retried with all objects intact.
  for(auto it=terrain_packets.begin();it!=terrain_packets.end();)
   if(it->lifetime.release_unsubmitted()){for(auto& c:it->copies)terrain_release(c);it=terrain_packets.erase(it);}else ++it;
+ terrain_sync();
 }
 void terrain_capture_device_destroyed(DeviceData* dd){
  if(!dd || dd!=main_device())return;
@@ -233,7 +244,7 @@ void terrain_capture_device_destroyed(DeviceData* dd){
  const auto result=dd->vk.DeviceWaitIdle(dd->device);
  log("[terrain_packet] shutdown cleanup %zu packets after device idle result %d",terrain_packets.size(),int(result));
  for(auto& p:terrain_packets)for(auto& c:p.copies)terrain_release(c);
- terrain_packets.clear();
+ terrain_packets.clear();terrain_sync();
 }
 void terrain_capture_finish(uint64_t frame,const std::string& dir,VkQueue queue){
  std::vector<TerrainPacket> packets;size_t waiting=0;
@@ -243,7 +254,7 @@ void terrain_capture_finish(uint64_t frame,const std::string& dir,VkQueue queue)
   // still find their exact token, including while a reset waits for its pin.
   for(auto it=terrain_packets.begin();it!=terrain_packets.end();)
    if(it->lifetime.finishable()){packets.push_back(std::move(*it));it=terrain_packets.erase(it);}else ++it;
-  waiting=terrain_packets.size();
+  waiting=terrain_packets.size();terrain_sync();
  }
  if(packets.empty() && !waiting){
   if(file_mtime(root_dir()+"\\trace_terrain_packet.request")){
@@ -261,7 +272,7 @@ void terrain_capture_finish(uint64_t frame,const std::string& dir,VkQueue queue)
  }
  if(!idle){
   std::lock_guard lock(terrain_mu);
-  for(auto& p:packets){p.reason="queue_idle_failed";terrain_packets.push_back(std::move(p));}
+  for(auto& p:packets){p.reason="queue_idle_failed";terrain_packets.push_back(std::move(p));}terrain_sync();
   log("[terrain_packet] frame %llu: queue idle failed; packets retained",(unsigned long long)frame);return;
  }
  std::string folder=dir+"\\terrain_packet";make_dirs(folder);std::string json="{\"schema\":1,\"frame\":"+tn(frame)+",\"pending_packets\":"+tn(waiting)+",\"packets\":[";bool first=true;uint32_t copied=0,declined=0;
