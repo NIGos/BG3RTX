@@ -10,12 +10,15 @@ import subprocess
 import tempfile
 import zipfile
 
+from shader_baseline import default_baseline
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument('--baseline', default='92183e7')
+    parser.add_argument('--baseline', default=default_baseline(),
+                        help='Commit of the key-off reference (default: merge-base with main)')
     parser.add_argument('--dxc', required=True)
     parser.add_argument('--spirv-val', required=True)
     parser.add_argument('--sharc', required=True)

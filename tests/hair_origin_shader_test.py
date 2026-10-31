@@ -15,6 +15,8 @@ import subprocess
 import tempfile
 import zipfile
 
+from shader_baseline import default_baseline
+
 ROOT=Path(__file__).resolve().parents[1]
 
 
@@ -31,7 +33,7 @@ def bindings(raw):
 
 def main():
     ap=argparse.ArgumentParser(__doc__);ap.add_argument('--dxc',required=True);ap.add_argument('--sharc',required=True)
-    ap.add_argument('--baseline',default='64fe56e');args=ap.parse_args()
+    ap.add_argument('--baseline',default=default_baseline(),help='Commit of the key-off reference (default: merge-base with main)');args=ap.parse_args()
     out=ROOT/'captures/hair-physical-origin/shaders';out.mkdir(parents=True,exist_ok=True)
     inputs=list((ROOT/'common').glob('*.h'))+list((ROOT/'shaders').rglob('*.hlsl'))+list((ROOT/'shaders').rglob('*.hlsli'))
     frozen={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}

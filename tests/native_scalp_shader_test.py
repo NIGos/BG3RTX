@@ -12,6 +12,8 @@ import shlex
 import subprocess
 import zipfile
 
+from shader_baseline import default_baseline
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -20,7 +22,7 @@ def main():
     parser.add_argument("--dxc", required=True)
     parser.add_argument("--sharc", required=True)
     parser.add_argument("--spirv-val", help="Defaults to spirv-val beside DXC")
-    parser.add_argument("--baseline", default="37299f2")
+    parser.add_argument("--baseline", default=default_baseline(), help="Commit of the key-off reference (default: merge-base with main)")
     args = parser.parse_args()
     validator = args.spirv_val or str(Path(args.dxc).with_name("spirv-val" + Path(args.dxc).suffix))
     out = ROOT / "build-native/shader-check"

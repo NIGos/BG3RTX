@@ -10,11 +10,13 @@ import shlex
 import subprocess
 import tempfile
 import zipfile
+
+from shader_baseline import default_baseline
 ROOT=Path(__file__).resolve().parents[1]
 def main():
     parser=argparse.ArgumentParser(__doc__)
     parser.add_argument('--dxc',type=Path,required=True)
-    parser.add_argument('--baseline',default='90d7930')
+    parser.add_argument('--baseline',default=default_baseline(),help='Commit of the key-off reference (default: merge-base with main)')
     args=parser.parse_args()
     out=ROOT/'captures/opaque-two-bounce';out.mkdir(parents=True,exist_ok=True)
     frozen={p:hashlib.sha256(p.read_bytes()).hexdigest() for folder in ('shaders','common') for p in (ROOT/folder).rglob('*') if p.is_file()}
