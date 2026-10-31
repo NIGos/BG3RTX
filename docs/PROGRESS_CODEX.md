@@ -2,6 +2,13 @@
 
 ## Latest user steering
 
+User now reports rugs, plank rectangles and Astarion's hairline band not reproduced.
+No new candidate was installed: personal trial remains 047e105, ABI 19.
+OMM and Current Cascade Sun look encouraging in the user's trial, but a slight
+environment-dependent dialogue shadow flicker remains; attribution is unknown.
+The full 12:14-12:18 log has one window with 368956 actual solar ray samples;
+later windows have zero and native fallback. This is not yet a quality pass.
+
 User reports good results with FG 2.0 and about 85 fps without diagnostics.
 Rotation artifacts were attributed to cascade capacity. Do not reopen camera/TLAS
 lag or add selectors without new contradictory evidence. The 85 fps is the user's
@@ -59,23 +66,22 @@ Offline evidence: 31 CPU checks; 16 ordinary shader identities and 16 enabled
 validations; 22 standalone GPU cases with zero validation errors. The GPU test
 includes nonzero rebasing and a negative control, not real native raster pixels.
 
-Next: core-only diagnostic switch using unused Push.ls_flags bit 21, with unchanged
+Prepared: core-only diagnostic switch using unused Push.ls_flags bit 21, with unchanged
 push size and ABI. Keep physical origins ON in both phases; compare only guard
 OFF/ON/OFF. Toggling physical origins themselves would confound this hypothesis.
-After the same-run image result, prepare an isolated user trial and explicit flags.
+Candidate 09fc3eb builds; all 60 CTests pass. Image A/B remains unmeasured.
 
 ## Live boundary and trial
 
-Earlier steering forbids game launches while the user uses the PC/another game.
-The new request defines the required A/B workflow; confirm the available test
-window when the concrete candidate and batch are ready. No game was launched.
+Latest user steering authorizes background live tests without stealing focus.
+No new game was launched for this update. Do not interrupt a user-owned game.
 Use scripts/test-queue.ps1 only. Keep unapproved drafts outside pending inboxes.
 Never interrupt an unowned game, erase USER_PLAYING or manufacture USER_AWAY.
 
 The last recorded personal trial is hair-origin-live 047e105, ABI 19. It has native
 Hair/Scalp/physical origins ON, camera/cascade budgets 1408/587 MiB, OMM/current Sun
 OFF and dev 1. It remains unchanged. Do not mix its DLLs with ABI 21 components.
-The user reports improved foliage flicker and hair color; these new fixes are untested.
+The user reports improved foliage and hair, plus no current rug/hairline reproduction.
 Do not ask the user to edit INI files or perform test toggles.
 
 ## Verified source state
@@ -89,7 +95,7 @@ Development: codex/omm-bake in C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX.
 Reviewed current-Sun-only shadow recipe 2e01c3c/92f9995 is beyond main.
 It reads seven native floats (28 bytes), preserves camera/legacy classification,
 and reuses two views and owned sampler 19. Five combined CTests pass.
-The separate legacy bridge is under review; keep its source generation, ranges,
+The separate legacy bridge is reviewed but parked; keep its source generation, ranges,
 opaque complements, pool/BLAS retirement and per-scene completeness explicit.
 
 Standalone GPU coverage proofs passed with zero validation errors:
@@ -110,7 +116,7 @@ The full RENDERING_EXECUTION_PLAN remains active; it has not been narrowed.
 | M2 | 27 native-matched components, 24506 triangles; room closure unproven. |
 | M3 | Supported hit materials; persistent materials, world lights and state open. |
 | M4 | GI descriptor fix implemented; corrected image recheck still pending. |
-| M5 | OMM OFF and unqualified; water/environment selected by measured impact. |
+| M5 | OMM user smoke test positive, quality unqualified; water next after M3/M4. |
 | M6 | Shared direct/two-surface reference; opaque-room PT and feasibility undecided. |
 
 Persistent terrain has 13512 triangles and 738 holes; its actual texture identity,
@@ -131,9 +137,12 @@ GPU pass costs of the new fixes are unmeasured. Fixture wall times are not costs
 Measure timing separately from diagnostics, capture and validation overhead.
 Keep rendered and displayed FG rates separate; missing RT never passes a test.
 
-Next decisions: complete the core guard switch and prepare the two isolated A/B
-comparisons; establish the PC test window; keep or reject each hypothesis from
-its own result; then ship one reviewed user trial. Promote no default from proxies.
+Prepared camp batch: Campsite - 27h, about 10-13 minutes, real FG 2 presentation.
+RT-off reference, then spill OFF/ON/OFF; three K16 bursts, stable static view.
+Draft stays outside pending while the original defect is not reproduced.
+No rescued draws or no defect means inconclusive, not a fixed regression.
+Dialogue flicker needs temporal captures; older F10 stills cannot establish it.
+First separate native mask from added RT visibility; do not add blur or change bias.
 Preserve saves, backup files, snapshot tags and shared junction targets.
 
 History: [pre-trim progress archive](archive/PROGRESS_CODEX_2026-10-31.md).
