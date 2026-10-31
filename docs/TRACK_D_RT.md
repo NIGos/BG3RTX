@@ -476,8 +476,8 @@ to any depth bias. The residual on z then flags such vertices (3,072 sky vertice
 
 Settings: `geo_capture`, `geo_xfb_mb` (768), `geo_max_draws` (16384), `geo_depth_tol`
 (0.002), `geo_obj`, `geo_timing` (G-buffer pass GPU time, logged every
-`geo_timing_frames`), `geo_xfb_always` (XFB into device memory every frame, for the cost
-measurement), `geo_patch_dump=N`.
+`geo_timing_frames`), `geo_patch_dump=N`. `geo_xfb_always` (the cost probe below): removed
+2026-10-31, see CONSOLIDATION.md C1.
 
 ## 3. Results
 
@@ -541,8 +541,8 @@ device so that it measures the same hardware without touching the game. Enabling
   - Only the G-buffer pass is captured. Forward/transparent passes, decals and the
     depth-only prepass are not.
   - No UVs or material IDs yet.
-  - The capture runs in traced frames only. `geo_xfb_always` is a cost probe and writes
-    to a scratch buffer nobody reads.
+  - The capture runs in traced frames only. (The `geo_xfb_always` cost probe was removed
+    2026-10-31.)
 
 ## 4. Validation
 

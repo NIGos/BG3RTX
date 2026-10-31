@@ -332,7 +332,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 222 keys of bg3rtx.ini, in file order.
+// 221 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -366,7 +366,6 @@ inline constexpr KV kDefaults[] = {
     {"gi_debug", "0"},
     {"geo_capture", "0"},
     {"geo_timing", "0"},
-    {"geo_xfb_always", "0"},
     {"rt", "1"},
     {"rt_build", "auto"},
     {"rt_refit", "1"},
@@ -557,7 +556,7 @@ inline constexpr KV kDefaults[] = {
     {"fg_tag_ui", "1"},
     {"fg_ui_pq", "0"},
 };
-// 24 keys of data/release.ini, in file order.
+// 23 keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {
     {"dev", "0"},
     {"dump_shaders", "0"},
@@ -565,7 +564,6 @@ inline constexpr KV kReleaseDefaults[] = {
     {"census_dump", "0"},
     {"geo_capture", "0"},
     {"geo_timing", "0"},
-    {"geo_xfb_always", "0"},
     {"rr_show", "0"},
     {"rr_dump_gbuffer", "0"},
     {"gi_debug", "0"},

@@ -127,7 +127,7 @@ is capped at 1.0.
     `sl_app_id`).
 - **Hooks / compatibility** (R, static): `ngx_hook`, `core`, `rt_bda_core`,
   `force_transfer_src`, `force_storage_rgb10a2`, `force_storage_r8`, `force_present_mode`,
-  `rt_alpha_capture`, `geo_capture`, `geo_xfb_always`, `headless`.
+  `rt_alpha_capture`, `geo_capture`, `headless`. (`geo_xfb_always`: removed 2026-10-31, see CONSOLIDATION.md C1.)
 
 ### 1.4 Debug / dev (class D: stripped from the shipped ini, defaults off)
 

@@ -307,7 +307,7 @@ RtDropLog g_drop;
 
 std::mutex g_cap_mu;
 Capture g_cap;                 // the readback capture (one per trace)
-Capture g_scratch;             // geo_xfb_always
+Capture g_scratch;             // the device-memory capture (the RT scene source)
 std::atomic<bool> g_submit_wanted{false};
 
 // An effects pass of the emissive capture (D-EM, emissive.cpp): CmdState::geo holds
@@ -1944,7 +1944,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
         g_submit_wanted = true;
         g_dd->vk.CmdResetQueryPool(cmd, g_cap.qp, 0, g_cap.max_slots);
       }
-    } else if (g_scratch.state != 1 && ((rt_src && rt_capture_wanted()) || (gbuf && cfg_hot(CfgHot::geo_xfb_always)))) {
+    } else if (g_scratch.state != 1 && rt_src && rt_capture_wanted()) {
       if (start_capture(g_scratch, false, s->pass.width, s->pass.height)) {
         g_scratch.cmd = cmd;
         g_scratch.rt = rt_src && rt_capture_wanted();
