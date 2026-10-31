@@ -2508,27 +2508,6 @@ bool geo_native_frame_epoch(VkCommandBuffer cmd, VkPipelineBindPoint bind,
   *buffer=b.buffer;*offset=b.offset;return true;
 }
 
-bool geo_sun_cascade(const sun_coverage::NativeEpoch& epoch, SunCascadeCapture* out) {
-  if (!out || !sun_coverage::valid(epoch)) return false;
-  *out={};
-  std::unique_lock<std::mutex> lock(g_cc_mu);
-  auto find=[&]() {
-    const CcMeta* best=nullptr;
-    const int layer=cfg_int("rt_cascade_index",1);
-    if(layer<0 || layer>=4) return false;
-    for(const CcMeta& m:g_sun_meta[layer])
-      if(m.tris && sun_coverage::same_epoch(m.sun.native_epoch,epoch) &&
-         bvh_rec_state(m.rec)>=0 && bvh_rec_state(m.rec)!=2 && (!best || m.rec>best->rec)) best=&m;
-    if(best) *out=best->sun;
-    return best!=nullptr;
-  };
-  if (find()) return true;
-  // Worker recording order differs from GPU submission order. Never wait for
-  // GPU completion here or for a future presentation/native epoch.
-  const int ms=(std::clamp)(cfg_int("rt_scene_wait_ms",12),0,50);
-  return ms>0 && g_cc_cv.wait_for(lock,std::chrono::milliseconds(ms),find);
-}
-
 bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCascadeCapture,4>* out) {
   if(!out || !sun_coverage::valid(epoch)) return false;
   *out={};
@@ -2547,6 +2526,8 @@ bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCasc
     *out=std::move(found);return true;
   };
   if(find()) return true;
+  // Worker recording order differs from GPU submission order. Never wait for
+  // GPU completion here or for a future presentation/native epoch.
   const int ms=(std::clamp)(cfg_int("rt_scene_wait_ms",12),0,50);
   return ms>0 && g_cc_cv.wait_for(lock,std::chrono::milliseconds(ms),find);
 }

@@ -557,7 +557,6 @@ struct SunCascadeCapture {
 };
 // Exact native Frame packet, independent of presentation-frame tag. Pending
 // conversions are returned for private-build scheduling, never as submitted proof.
-bool geo_sun_cascade(const sun_coverage::NativeEpoch& epoch, SunCascadeCapture* out);
 // Four separate native draw domains; never infer near-layer membership from far.
 bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCascadeCapture,4>* out);
 bool geo_sun_captures_owned(std::span<const SunCascadeCapture> captures);
