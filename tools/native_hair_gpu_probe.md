@@ -96,3 +96,41 @@ the executable rebuilt without another GPU invocation. Versioned JSON records
 both tested and rebuilt binary hashes, the exact fields, module hashes and this
 exclusion. The tested executable remains beside the raw run. See
 `docs/evidence/native-hit-material-windowless-gpu-20261031.json`.
+
+## Optional receiver guard mode
+
+`--receiver` reuses the same device, validation layer, triangle BLAS/TLAS and
+existing descriptor layouts. Compile the probe with `NATIVE_RECEIVER_PROBE=1`
+(and additionally `RT_SCENE_REBASE=1` for its second query module). It invokes
+Sun's actual `hpo_competing_receiver` from `rt/hair_receiver.hlsli`; it does not
+reimplement the predicate or run the four ordinary alpha queries.
+
+```text
+native_hair_gpu_probe.exe bounds.spv receiver.spv receiver_rebase.spv --receiver
+```
+
+One authorized invocation passed 22 cases on RTX 5090 in 0.617 s wall time,
+with zero validation errors through destruction. At most two instances of a
+three-triangle BLAS are used, with a declared depth window [2.9, 3.1]. Both
+camera-Scalp hashes reject physical substitution, as do unknown record/kind,
+bad stride, truncated soup/pool, invalid base/primitive, invalid scene/window,
+legacy metadata and a forced candidate cap. Known non-Scalp and valid pool
+metadata permit it, and Scalp outside the finite window does not block it.
+A nearer known non-Scalp does not hide the Scalp instance behind it.
+
+The nonzero rebase pair uses a TLAS translated by +2 X and native camera origins
+102/current versus 100/source. The rebase shader detects Scalp; the ordinary
+shader negative control misses it. Force-opaque instance cases also pass,
+including a nearer forced-opaque instance before Scalp. This records the input
+instance flag and result, not which internal auto-commit/candidate path the GPU
+used. The raw `autoopaque_metadata` case label was renamed to the precise
+`forceopaque_instance_metadata` in a log-only rebuild; that rebuilt executable
+was not GPU-run. No second GPU invocation occurred.
+
+Raw logs and the tested executable are in `captures/hair-receiver-gpu-20261031/`.
+Versioned hashes, exact cases and exclusions are in
+`docs/evidence/hair-receiver-windowless-gpu-20261031.json`. Six pre-existing Hair,
+tileset and material ordinary/rebase shaders remain byte-identical. This proves
+the shared helper on declared synthetic inputs, not actual native graphics/XFB,
+Hair geometry, raster receiver identity, rt_origin publication, image quality,
+OMM/current-Sun behavior or renderer GPU cost. No BG3/window/presentation.

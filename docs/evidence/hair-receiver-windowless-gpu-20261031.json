@@ -1,0 +1,285 @@
+{
+  "implicit_layers": "disabled",
+  "priority": "BelowNormal",
+  "exit": 0,
+  "elapsed_seconds": 0.6166865,
+  "window": false,
+  "pid": 38660,
+  "cases_planned": 22,
+  "presentation": false,
+  "gpu_invocations": 1,
+  "tested_binary_sha256": "21da579af45c7d6ffc901ac687b64501a8b3b6a18d012fc30c3d80346157764e",
+  "tested_cpp_sha256": "195fe7d62907d960c2389289f3e4e32bd09e2cfad361f7eba221d2eaec5c779c",
+  "shader_sha256": "5f62dc7608195ed32d6da7bb0c9a8dd072ab3952f7d97238b9afcbd1db68f179",
+  "guard_commits": [
+    "0a35fe7",
+    "f883d62"
+  ],
+  "spv_sha256": {
+    "bounds.spv": "6cd0808800e616eefe718166af73a0f46a3ffe965325c23d5fc2620cefd451c5",
+    "query-rebase.spv": "e65145c8f98cb341ec7e824452bb33908ea82ee691e9d6725b94e07741a5383e",
+    "query.spv": "0b3a626e918de3268711f9a9a43e1a34187502f9c4c0a500131a05a6964ac5df"
+  },
+  "raw_stdout_sha256": "8369044244cca8a841decae7ec6b98a966eda289b8ee00645041b05b4c7a2868",
+  "raw_stderr_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+  "cases": [
+    {
+      "receiver": "camera_scalp",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "known_non_scalp",
+      "reject_physical": "0",
+      "expected": "0",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "scalp_outside_window",
+      "reject_physical": "0",
+      "expected": "0",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "bad_stride",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "truncated_soup",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "base_out_of_range",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "primitive_out_of_range",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "record_out_of_range",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "unsupported_kind",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "unrecognised_kind3",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "legacy_unreadable",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "autoopaque_metadata",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "invalid_scene",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "candidate_cap",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "1"
+    },
+    {
+      "receiver": "nearer_non_scalp_then_scalp",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "2",
+      "cap": "8"
+    },
+    {
+      "receiver": "nonzero_rebase",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "1",
+      "camera_delta_x": "2",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "nonzero_rebase_negative_control",
+      "reject_physical": "0",
+      "expected": "0",
+      "shader_rebase": "0",
+      "camera_delta_x": "2",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "truncated_pool",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "second_camera_scalp",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "invalid_window",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "known_pool_non_scalp",
+      "reject_physical": "0",
+      "expected": "0",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "1",
+      "cap": "8"
+    },
+    {
+      "receiver": "nearer_forceopaque_then_scalp",
+      "reject_physical": "1",
+      "expected": "1",
+      "shader_rebase": "0",
+      "camera_delta_x": "0",
+      "instances": "2",
+      "cap": "8"
+    }
+  ],
+  "device_line": "GPU=NVIDIA GeForce RTX 5090 driver=2604679168 implicit_layers=disabled validation=1 real_presentation=none",
+  "validation_errors": 0,
+  "ordinary_shader_identity": [
+    {
+      "mode": "hair",
+      "rebase": false,
+      "old_sha256": "8e3f6891b8bf0c0dd9bd174f9f59c05815f5e935b0c35363218af5a43d936c59",
+      "current_sha256": "8e3f6891b8bf0c0dd9bd174f9f59c05815f5e935b0c35363218af5a43d936c59",
+      "identical": true
+    },
+    {
+      "mode": "hair",
+      "rebase": true,
+      "old_sha256": "66494e59d7bf97aca14e85b4b27512686efc6d20d61cd235e72391e4eaacd2af",
+      "current_sha256": "66494e59d7bf97aca14e85b4b27512686efc6d20d61cd235e72391e4eaacd2af",
+      "identical": true
+    },
+    {
+      "mode": "tileset",
+      "rebase": false,
+      "old_sha256": "456c5011927c83356362136d229e7393608e5bb62d5df9e44fac7c4e384cda1e",
+      "current_sha256": "456c5011927c83356362136d229e7393608e5bb62d5df9e44fac7c4e384cda1e",
+      "identical": true
+    },
+    {
+      "mode": "tileset",
+      "rebase": true,
+      "old_sha256": "cfce44fd55a7d3f0e5b861ff6249303fd31fb460e3ea76ef046148002c89ab2c",
+      "current_sha256": "cfce44fd55a7d3f0e5b861ff6249303fd31fb460e3ea76ef046148002c89ab2c",
+      "identical": true
+    },
+    {
+      "mode": "material",
+      "rebase": false,
+      "old_sha256": "70ba507fb518216291cac4d15469e233d43776aec80a836bae6211469c33de05",
+      "current_sha256": "70ba507fb518216291cac4d15469e233d43776aec80a836bae6211469c33de05",
+      "identical": true
+    },
+    {
+      "mode": "material",
+      "rebase": true,
+      "old_sha256": "263a578c026e9726000062583705ae7d98b35b77b509ce9da1a21b8f6dde9f73",
+      "current_sha256": "263a578c026e9726000062583705ae7d98b35b77b509ce9da1a21b8f6dde9f73",
+      "identical": true
+    }
+  ],
+  "scope": "Actual production hpo_competing_receiver helper on synthetic triangle AS metadata; no BG3, presentation, native graphics/XFB or actual Hair receiver publication.",
+  "forceopaque_scope": "Instance FORCE_OPAQUE flag and actual no-alpha metadata tested; no instrumentation proves whether hardware auto-committed or FORCE_NON_OPAQUE exposed candidates. No auto-commit-path claim.",
+  "nonzero_rebase": "TLAS translated+2 X; current native origin102 minus source100; rebase helper detects Scalp, ordinary shader negative control misses.",
+  "log_label_correction": "Raw autoopaque_metadata case is a force-opaque-instance metadata test. Source case label renamed forceopaque_instance_metadata after the single run; log-only rebuilt binary is not GPU-run.",
+  "exclusions": [
+    "No actual native Hair procedural geometry/graphics/raster depth-match input",
+    "No actual rt_origin publication, G-buffer/image-quality or GPU pass-cost measurement",
+    "No all-four-query, OMM or current-Sun GPU claim; production helper only",
+    "No native alpha/occluder changes or global RT disable"
+  ],
+  "log_only_rebuilt_binary_sha256": "f778d4eed5151845d3df226ee254d61e4fd26d1d02b50ff8292818f60e4171bd",
+  "log_only_rebuilt_cpp_sha256": "4fa73dc65f547c7807ec5954237ce7f5b7c7025e9cb2c96aef0744b7f39c70f0",
+  "rebuilt_binary_ran_on_gpu": false,
+  "asserted_receiver_cases": 22
+}

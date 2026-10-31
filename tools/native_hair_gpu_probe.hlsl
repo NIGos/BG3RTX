@@ -11,7 +11,13 @@ uint3 pcg3d(uint3 v){v=v*1664525u+1013904223u;v.x+=v.y*v.z;v.y+=v.z*v.x;v.z+=v.x
 #ifdef NATIVE_MATERIAL_PROBE
 #define RT_HIT_MATERIAL 1
 #endif
+#ifdef NATIVE_RECEIVER_PROBE
+#define RT_HAIR_PHYSICAL_ORIGIN 1
+#endif
 #include "../shaders/rt/rt_common.hlsli"
+#ifdef NATIVE_RECEIVER_PROBE
+#include "../shaders/rt/hair_receiver.hlsli"
+#endif
 #ifdef NATIVE_MATERIAL_PROBE
 #include "../shaders/rt/native_hit_material.hlsli"
 #endif
@@ -19,7 +25,11 @@ uint3 pcg3d(uint3 v){v=v*1664525u+1013904223u;v.x+=v.y*v.z;v.y+=v.z*v.x;v.z+=v.x
 [numthreads(1,1,1)]
 void main(){
  RtCone cone={0,1.0/1024.0};float3 origin=0.0.xxx,direction=float3(0,0,1);bool aborted;
-#ifdef NATIVE_MATERIAL_PROBE
+#ifdef NATIVE_RECEIVER_PROBE
+ float start=asfloat(pc.pad0),end=asfloat(pc.pad1);
+ Result.Store(0,uint(hpo_competing_receiver(float3(0,0,start),direction,start,end)));
+ Result.Store(4,uint(hpr_window(start,end)));
+#elif defined(NATIVE_MATERIAL_PROBE)
  RtHit hit=rt_closest_hit(origin,direction,10,cone);
  NativeHitMaterial material=rt_hit_material(hit,cone.spread*max(hit.t,0));
  Result.Store4(0,uint4(material.status,asuint(hit.t),material.channel,material.family));
