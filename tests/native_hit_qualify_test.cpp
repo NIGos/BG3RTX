@@ -76,6 +76,18 @@ int main(){
  CHECK(!opaque_prepass_geometry_ok(0,2,300,100,64));
  CHECK(!opaque_prepass_geometry_ok(0,1,301,100,64));
  CHECK(!opaque_prepass_geometry_ok(0,1,300,100,63));
+ // Instanced draws stay declined for the audited static pair (a per-draw UBO-matrix VS).
+ CHECK(deferred_qualify(true,false,true,0,2,64)==DeferredQualify::PipelineDeclined);
+ CHECK(!opaque_prepass_geometry_ok(0,2,300,200,64));
+ // Family census: per-pair counts, instanced and STI totals, bounded entries, top by vertices.
+ {FamilyCensus c;c.add(1,2,1,300);c.add(1,2,4,1200);c.add(3,kVtStiDeferredFs,8,2400);c.add(5,6,1,30);
+  CHECK(c.draws==4 && c.instanced==2 && c.sti==1 && c.entries.size()==3 && c.other==0);
+  auto t=c.top(2);CHECK(t.size()==2 && t[0].fs==kVtStiDeferredFs && t[0].vertices==2400 && t[1].vs==1 && t[1].draws==2 && t[1].instanced==1 && t[1].vertices==1500);
+  CHECK(c.top(10).size()==3);
+  FamilyCensus full;for(uint32_t i=0;i<FamilyCensus::kMaxEntries+5;++i)full.add(i,i,1,3);
+  CHECK(full.entries.size()==FamilyCensus::kMaxEntries && full.other==5 && full.draws==FamilyCensus::kMaxEntries+5);
+  full.add(0,0,1,3);CHECK(full.entries[0].draws==2 && full.other==5);
+  FamilyCensus tie;tie.add(1,1,1,6);tie.add(2,2,1,3);tie.add(2,2,1,3);auto u=tie.top(1);CHECK(u[0].vs==2);}
  std::printf("native_hit_qualify_test: %u checks passed\n",checks);
  return 0;
 }

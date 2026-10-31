@@ -3,6 +3,7 @@
 //   native_hit_rf_bindings_test [--sharc] [--tileset] [--hair] a.spv ...   + every module given
 // (tools/compile_shaders.py passes every compiled gi/rt_reflections*_hit_shade.hlsl request).
 #include "../common/native_hit_rf_bindings.h"
+#include "../common/native_hit_records.h"
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -50,8 +51,8 @@ static void module(const char* file,bool sharc,bool tileset,bool hair){
    // The host's main material AlphaDSL (as tests/native_hit_gi_bindings_test.cpp).
    check(slot<=15 || (tileset && slot==19),"material AlphaDSL slot range");
    VkDescriptorType e=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;uint32_t c=1;
-   if(slot==2||slot==3||slot==14){e=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;c=slot==2?4096u:slot==3?16u:64u;}
-   if(slot==4||slot==5||slot==15){e=VK_DESCRIPTOR_TYPE_SAMPLER;c=slot==15?16u:1u;}
+   if(slot==2||slot==3||slot==14){e=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;c=slot==2?4096u:slot==3?16u:bg3::native_hit::nh_cache_slots;}
+   if(slot==4||slot==5||slot==15){e=VK_DESCRIPTOR_TYPE_SAMPLER;c=slot==15?bg3::native_hit::nh_sampler_slots:1u;}
    if(slot==10)e=VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
    if(tileset && slot==19){e=VK_DESCRIPTOR_TYPE_SAMPLER;c=16u;}
    check(type==e && count==c,"material AlphaDSL type and count");seen.insert({set,slot});continue;

@@ -1,4 +1,5 @@
 #include "../common/native_hit_gi_bindings.h"
+#include "../common/native_hit_records.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -49,8 +50,8 @@ static void module(const char* file,bool reference,bool tileset){
   if(set!=0){
    VkDescriptorType expected=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;uint32_t expected_count=1;
    if(set==1){check(slot<=15 || (tileset && slot==19),"feature-specific main material AlphaDSL slot range");
-    if(slot==2||slot==3||slot==14){expected=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;expected_count=slot==2?4096u:slot==3?16u:64u;}
-    if(slot==4||slot==5||slot==15){expected=VK_DESCRIPTOR_TYPE_SAMPLER;expected_count=slot==15?16u:1u;}
+    if(slot==2||slot==3||slot==14){expected=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;expected_count=slot==2?4096u:slot==3?16u:bg3::native_hit::nh_cache_slots;}
+    if(slot==4||slot==5||slot==15){expected=VK_DESCRIPTOR_TYPE_SAMPLER;expected_count=slot==15?bg3::native_hit::nh_sampler_slots:1u;}
     if(slot==10)expected=VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
     if(tileset && slot==19){expected=VK_DESCRIPTOR_TYPE_SAMPLER;expected_count=16u;}
    }else{check(slot<=5,"SHaRC slot range");if(slot==3)expected=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;}

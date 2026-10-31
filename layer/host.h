@@ -922,6 +922,7 @@ bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDe
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);
 // Query-owned clone of the exact main AlphaDSL; caller retires its pool.
 bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescriptorSet* set,std::span<const VkDescriptorImageInfo> tables={},uint32_t* firstTable=nullptr);
+uint32_t alpha_hit_table_free(VkDescriptorSet source);
 
 // ---- device-fault diagnostics (devfault.cpp, VK_EXT_device_fault) ----
 const VkDeviceCreateInfo* fault_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,

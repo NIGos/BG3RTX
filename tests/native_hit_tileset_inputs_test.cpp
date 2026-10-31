@@ -40,7 +40,7 @@ int main(int argc,char** argv){
  ResourceBudget budget;ResourceIndices indices;
  for(unsigned i=0;i<material_slots;++i){check(budget.reserve_sampler(7,indices));check(indices.sampler==0 && indices.new_sampler==(i==0));check(budget.cache_count==0);}
  auto full=budget;indices.sampler=77;check(!budget.reserve_sampler(8,indices));check(budget.material_count==full.material_count&&budget.sampler_count==full.sampler_count&&indices.sampler==77);
- ResourceBudget unique;for(unsigned i=1;i<=16;++i)check(unique.reserve_sampler(i,indices));check(!unique.reserve_sampler(17,indices));check(unique.material_count==16&&unique.sampler_count==16&&unique.cache_count==0);check(unique.reserve_sampler(1,indices)&&indices.sampler==0&&!indices.new_sampler);
+ ResourceBudget unique;for(unsigned i=1;i<=nh_sampler_slots;++i)check(unique.reserve_sampler(i,indices));check(!unique.reserve_sampler(nh_sampler_slots+1,indices));check(unique.material_count==nh_sampler_slots&&unique.sampler_count==nh_sampler_slots&&unique.cache_count==0);check(unique.reserve_sampler(1,indices)&&indices.sampler==0&&!indices.new_sampler);
  for(auto state: {std::pair{false,true},std::pair{true,false}}){
   ResourceBudget gated;for(unsigned draw=0;draw<300;++draw)if(tileset_material_enabled(state.first,state.second))check(gated.reserve_sampler(draw+1,indices));
   const CacheIdentity image{1,2,3,4,5};
