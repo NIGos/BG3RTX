@@ -95,3 +95,41 @@ def heightfield_mesh(field):
                 material_status=field['material_status'],position_source='PERSISTENT_RENDER_PATCH_AUTHORED_FLOAT32',
                 limits=['No physics mesh substitution','Not bit-identical native R16 quantization/filtering',
                         'No terrain material/UV/layer-tail or dynamic-state qualification'])
+
+
+def read_foundry_layer_inputs(patch,ordered_brush_ids):
+    """Four authored cell-byte planes followed by the observed BC7 normal/hole map.
+
+    Byte planes are NOT normalized blend weights: height/threshold native rules
+    still apply. Require the actual LSF order; no inferred UUID or channel binding.
+    """
+    if len(ordered_brush_ids)!=4 or len(set(ordered_brush_ids))!=4:
+        raise TerrainPatchError('Expected four distinct native brush identities')
+    tail=patch.material_tail;offset=0;planes=[]
+    cells=(patch.sample_width-1)*(patch.sample_height-1)
+    for expected in ordered_brush_ids:
+        if offset+44>len(tail):raise TerrainPatchError('Truncated layer header')
+        length=struct.unpack_from('<I',tail,offset)[0];offset+=4
+        if length!=36:raise TerrainPatchError('Unexpected brush identifier encoding')
+        try:identity=tail[offset:offset+36].decode('ascii')
+        except UnicodeDecodeError as exc:raise TerrainPatchError('Non-ASCII brush identity') from exc
+        offset+=36;count=struct.unpack_from('<I',tail,offset)[0];offset+=4
+        if identity!=expected or count!=cells:raise TerrainPatchError('Brush order/cell plane differs from native LSF profile')
+        if offset+count>len(tail):raise TerrainPatchError('Truncated authored layer plane')
+        planes.append(dict(brush_id=identity,cell_bytes=tail[offset:offset+count]));offset+=count
+    if offset+4>len(tail):raise TerrainPatchError('Missing normal/hole block payload')
+    count=struct.unpack_from('<I',tail,offset)[0];offset+=4
+    width=52;height=68 if patch.patch_z==0 else 24
+    if count!=(width//4)*(height//4)*16 or offset+count!=len(tail):
+        raise TerrainPatchError('Unexpected BC7 payload size or trailing data')
+    return dict(layers=planes,cell_width=49,cell_height=patch.sample_height-1,
+                normal_hole_bc7=tail[offset:],image_width=width,image_height=height)
+
+
+def bc7_dds(payload,width,height):
+    """Wrap an already identified BC7 UNORM block stream; no recompression."""
+    if width<=0 or height<=0 or width>4096 or height>4096 or len(payload)!=((width+3)//4)*((height+3)//4)*16:
+        raise TerrainPatchError('Invalid bounded BC7 image dimensions/size')
+    header=[124,0x81007,height,width,len(payload),0,0]+[0]*11
+    header += [32,4,struct.unpack('<I',b'DX10')[0],0,0,0,0,0]+[0x1000,0,0,0,0]
+    return b'DDS '+struct.pack('<31I',*header)+struct.pack('<5I',98,3,0,1,0)+payload

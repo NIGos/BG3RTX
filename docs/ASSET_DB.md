@@ -501,3 +501,37 @@ All 16 low-vertex lines still intersect geometry. Terrain material/layer/UV tail
 current destruction/deformation and parent roof state remain open; geometry is
 not silently classified opaque. The reader intentionally rejects other patch
 versions/dimensions rather than claiming a general terrain importer.
+
+
+### Mainfloor terrain material inputs
+
+`python -m tools.assets.probe_foundry_terrain_materials --native-cache <alpha_cache>`
+recovers the same terrain's four ordered brush resources: SharTemple_C,
+SharTemple_C_Broken_A, Gravel_B_Grey and Coastal_Sand_Grey_B. Their actual
+albedo/normal/physical/detail texture UUIDs resolve to 14 distinct DDS resources
+in the TerrainTextures and Engine banks; all decode with installed Pillow 12.3.0.
+DDS bytes/dimensions remain authoritative export evidence; Coastal Sand albedo
+LSF metadata says 128x128 while the actual DDS is 1024x1024, recorded rather than
+rescaled or silently declared equivalent to current native image dimensions.
+
+The bounded v8 tail decoder requires the exact LSF brush order and four
+49x64 / 49x20 authored byte planes. These are not normalized blend weights.
+The following length-prefixed BC7 UNORM images decode to 52x68 / 52x24 RGBA.
+Alpha < 0.5 at integer cell coordinates reproduces 575 / 163 holes exactly,
+independently tying the payload to native VS64e2568916ede3d6 texelFetch semantics
+and the already checked active native topology. RGB is retained without asserting
+that a compressed normal is a geometric face normal.
+
+Native FS6650c75f3d3e4968 consumes this normal/hole image at s4b3, two layer-mask
+images at s1b2/b3, brush records at s1b4 and bindless textures at s2b32. Its UVs
+use local grid X/Z, normalized height converted with native terrain scale/bias,
+and signed triplanar weights derived from normalized (2*RGB-1), with the native
+0.576 weight threshold/rebalancing. Layer alpha-height tests and subsequent
+height contrast/offset decide contributions; summing/normalizing raw bytes would
+be wrong. Shader source fingerprints and actual resource identities are retained
+in `captures/m2-foundry/terrain-material-inputs/evidence.json`.
+
+This increment decodes native inputs, not complete material sampling. Native
+brush SSBO packing/upload, byte-plane-to-mask filtering/channel mapping,
+derivative/LOD-dependent triplanar sampling and current image content remain
+unimplemented. No opacity/material defaults or parent-terrain/roof claims follow.

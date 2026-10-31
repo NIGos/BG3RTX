@@ -2,7 +2,7 @@ import math
 import struct
 import unittest
 from tools.assets.terrain_patch import (read_foundry_render_patch,assemble_foundry_heightfield,
-    heightfield_mesh,TerrainPatchError,FAN_PATTERNS)
+    heightfield_mesh,TerrainPatchError,FAN_PATTERNS,read_foundry_layer_inputs,bc7_dds)
 
 
 def patch(z,holes=()):
@@ -34,6 +34,21 @@ class TerrainPatchTests(unittest.TestCase):
         bad=bytearray(good);struct.pack_into('<f',bad,88,float('nan'))
         with self.assertRaises(TerrainPatchError):read_foundry_render_patch(bad)
         with self.assertRaises(TerrainPatchError):assemble_foundry_heightfield([read_foundry_render_patch(good)])
+
+    def test_layer_identity_planes_and_exact_block_extent(self):
+        from dataclasses import replace
+        ids=['00000000-0000-0000-0000-00000000000'+str(i) for i in range(4)]
+        p=read_foundry_render_patch(patch(1));count=49*20
+        tail=b''.join(struct.pack('<I',36)+u.encode()+struct.pack('<I',count)+bytes([i])*count for i,u in enumerate(ids))
+        blocks=bytes(13*6*16);tail+=struct.pack('<I',len(blocks))+blocks
+        p=replace(p,material_tail=tail);decoded=read_foundry_layer_inputs(p,ids)
+        self.assertEqual(decoded['layers'][2]['cell_bytes'],bytes([2])*980)
+        self.assertEqual((decoded['image_width'],decoded['image_height']),(52,24))
+        self.assertEqual(len(bc7_dds(blocks,52,24)),148+1248)
+        for bad in [tail[:-1],tail+b'x',b'wrong'+tail[5:]]:
+            with self.assertRaises(TerrainPatchError):read_foundry_layer_inputs(replace(p,material_tail=bad),ids)
+        with self.assertRaises(TerrainPatchError):read_foundry_layer_inputs(p,list(reversed(ids)))
+        with self.assertRaises(TerrainPatchError):bc7_dds(blocks,4097,24)
 
     def test_invalid_global_holes_and_seam_never_repaired(self):
         for z,holes in [(1,(0,)),(0,(49,)),(0,(1,1))]:
