@@ -253,6 +253,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hit_material", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Native prepass capture"},{"rt_bvh_split","1","Split hit identity"}}},
 
+  {"exp_gi_hit_direct", "Shaded hidden-surface bounce",
+   "Adds physically shadowed point/spot bounce from verified hidden native VT surfaces. "
+   "Keeps successful screen and radiance-cache hits, and the existing ambient occlusion. "
+   "Unsupported materials or lights retain the current GI fallback. Requires Native hit materials at startup "
+   "and GI fallback 0. True offscreen light coverage, quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   {{"off", "Off", 0, {{"gi_hit_direct", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"gi_hit_direct", "1"}}, {{"exp_hit_material",1},{"gi",1}}}},
+   {}, {0,0,0,0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"},{"gi_rt","1","Ray-traced GI"},{"gi_rt_fallback","0","Zero-bounce hidden-hit fallback"}}},
+
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
    "Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. "
@@ -304,7 +314,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 219 keys of bg3rtx.ini, in file order.
+// 220 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -431,6 +441,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt_radius", "1.0"},
     {"gi_rt_depth_k", "1.0"},
     {"gi_rt_fallback", "0"},
+    {"gi_hit_direct", "0"},
     {"gi_bounce_spec", "0"},
     {"sharc", "0"},
     {"sharc_log2", "22"},

@@ -1,0 +1,27 @@
+{
+  "scope": "Offline default-off production GI hidden-hit direct contribution; no game/GPU/live/candidate or main edits; ABI21 unchanged",
+  "key": "gi_hit_direct=0; Experimental generated GUI/schema control, Live with shader compile on first enable; native material resources must be enabled at startup",
+  "domain": "gi_rt=1,gi_rt_fallback=0,qualified current scene/native VT provider,complete supported point/spot froxel domain; source unknown preserves old trace/fallback; screen and successful SHaRC hits retain priority",
+  "accounting": "At a hidden known hit replace only prior zero bounce with Ldirect*w and retain occ+=w exactly once. No full RF/probe/cache radiance replacement, no invented ambient/emission/environment. Existing primary diffuse-colour/GI-strength composite once. Secondary FresnelBlend includes directional specular even when screen-source gi_bounce_spec=0.",
+  "binding_lifetime": "Existing ABI21 material-use callback validates exact TLAS/build tuple and returns query-owned materialAlpha. Expanded LS set0 + material1; optional SHaRC4. OMM SceneBinding retained. Registration/feature/layout failure falls back to original GI dispatch. Existing ONE_TIME primary producer/query and fresh static VT provider constraints remain; no dynamic/held/cache source expansion.",
+  "observability": "Existing rt_stats counters282..286 record candidates/material-qualified/direct-supported/nonzero/weighted-luminance; existing GI trace GPU interval includes material assembly and direct visibility work",
+  "validation": {
+    "core_launcher": "linked",
+    "settings_checks": 315,
+    "native_hair_origin_checks": 102,
+    "native_incident_scatter_checks": 877,
+    "native_parameter_checks": 786570,
+    "targeted_ctests": "4/4",
+    "defaults_generator": "matches",
+    "affected_shader_variants": 48,
+    "ordinary_gi_variants_byte_identical": 48,
+    "SPIRV_validations": 96
+  },
+  "review": "Independent scoped source review clear for accounting, exact tuple/layout and lifetime. Screen/cache priority, single occ increment and unknown fallback preserved.",
+  "remaining": "No live visible-quality, motion, contribution or cost claim. Current froxel provider supports hidden points within native frustum; true offscreen lighting/world completeness remains unsupported. Same-run A/B with actual positive contribution and measured GI cost is next; no full M4/M6 completion claim.",
+  "source_sha256": {
+    "core/gi.cpp": "80dab3d368b1731701bb52886517d59d9b1620c43d4274a39a7869f315d97311",
+    "shaders/gi/gi_trace_rt.hlsl": "e9f02badb9932d276b43e27e79e70b5b2051dd33ea403a9b09383cd0b7033663",
+    "common/settings.h": "77e18412b248a77cfcf5a9ba20cf568a0aa4d31bad34f6e5a7d4990ebf8eb03e"
+  }
+}

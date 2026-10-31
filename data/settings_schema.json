@@ -155,6 +155,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material": "1"}, "needs": {"rt_geometry": 2}}
      ]},
+    {"id": "exp_gi_hit_direct", "label": "Shaded hidden-surface bounce",
+     "description": "Adds physically shadowed point/spot bounce from verified hidden native VT surfaces. Keeps successful screen and radiance-cache hits, and the existing ambient occlusion. Unsupported materials or lights retain the current GI fallback. Requires Native hit materials at startup and GI fallback 0. True offscreen light coverage, quality and GPU cost remain unqualified.",
+     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_hit_material": "1", "gi_rt": "1", "gi_rt_fallback": "0"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"gi_hit_direct": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"gi_hit_direct": "1"}, "needs": {"exp_hit_material": 1, "gi": 1}}
+     ]},
     {"id": "exp_hit_reference", "label": "Experimental lighting reference",
      "description": "Shows a limited reference using point and spot lights on supported opaque surfaces. Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. Requires Native hit materials at startup. No sunlight, sky, emission or full-scene quality claim. This replaces the display for inspection; it is not a gameplay quality preset.",
      "apply": "live", "apply_note": "live; native materials need startup", "advanced": true, "experimental": true,

@@ -1,0 +1,922 @@
+{
+  "scope": "Offline two-worker CPU DXC/SPIR-V validation and actual byte identity; no GPU",
+  "new_files": [
+    "gi/cascade/gi_trace_rt_hit_direct.hlsl",
+    "gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+    "gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+    "gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "gi/gi_trace_rt_hit_direct.hlsl",
+    "gi/gi_trace_rt_sharc_hit_direct.hlsl",
+    "gi/rebase/gi_trace_rt_hit_direct.hlsl",
+    "gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "hair_origin/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+    "hair_origin/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+    "hair_origin/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+    "hair_origin/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "hair_origin/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+    "hair_origin/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+    "hair_origin/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+    "hair_origin/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "hair_origin/omm/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+    "hair_origin/omm/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+    "hair_origin/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+    "hair_origin/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "hair_origin/omm/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+    "hair_origin/omm/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+    "hair_origin/omm/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+    "hair_origin/omm/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+    "native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+    "native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+    "native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+    "native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+    "native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+    "native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "omm/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+    "omm/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+    "omm/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+    "omm/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "omm/gi/gi_trace_rt_hit_direct.hlsl",
+    "omm/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+    "omm/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+    "omm/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "omm/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+    "omm/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+    "omm/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+    "omm/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+    "omm/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+    "omm/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+    "omm/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+    "omm/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl"
+  ],
+  "ordinary_pairs": [
+    {
+      "file": "gi/cascade/gi_trace_rt.hlsl",
+      "baseline": "988dfd4865c8d1d2b74d7279e5d2432538f2945aead5b767c5e3d91c273abc88",
+      "current": "988dfd4865c8d1d2b74d7279e5d2432538f2945aead5b767c5e3d91c273abc88",
+      "identical": true
+    },
+    {
+      "file": "gi/cascade/gi_trace_rt_sharc.hlsl",
+      "baseline": "e3b59cdf0bca48f5471f83965bff2166513d8a196d21389d78b4f3049bc16200",
+      "current": "e3b59cdf0bca48f5471f83965bff2166513d8a196d21389d78b4f3049bc16200",
+      "identical": true
+    },
+    {
+      "file": "gi/cascade_rebase/gi_trace_rt.hlsl",
+      "baseline": "7e7f93678963baf5d1de0e1bd01f6ce4f87634b14908e38763a6aab0bfaca70d",
+      "current": "7e7f93678963baf5d1de0e1bd01f6ce4f87634b14908e38763a6aab0bfaca70d",
+      "identical": true
+    },
+    {
+      "file": "gi/cascade_rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "73c3b54403a264d300efdf54dfa07d37037b1e6401265d3700201e530c451469",
+      "current": "73c3b54403a264d300efdf54dfa07d37037b1e6401265d3700201e530c451469",
+      "identical": true
+    },
+    {
+      "file": "gi/gi_trace_rt.hlsl",
+      "baseline": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+      "current": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+      "identical": true
+    },
+    {
+      "file": "gi/gi_trace_rt_sharc.hlsl",
+      "baseline": "ef7067cddf1c46b61962639b6b129192bc3023362d40a05c56da7aefb7c8940b",
+      "current": "ef7067cddf1c46b61962639b6b129192bc3023362d40a05c56da7aefb7c8940b",
+      "identical": true
+    },
+    {
+      "file": "gi/rebase/gi_trace_rt.hlsl",
+      "baseline": "b32dbd30d23d46887bf160cdf82d6623b9f4441fd9540158378da408d0a1cefa",
+      "current": "b32dbd30d23d46887bf160cdf82d6623b9f4441fd9540158378da408d0a1cefa",
+      "identical": true
+    },
+    {
+      "file": "gi/rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "cf116fdcd2cab71118caf76373b3869cac98c77d1a21c831bba329403689e97c",
+      "current": "cf116fdcd2cab71118caf76373b3869cac98c77d1a21c831bba329403689e97c",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/native_scalp/gi/cascade/gi_trace_rt.hlsl",
+      "baseline": "3a2acd07b8625594534018a891bea92541bba9b2fbaa4017240ef01b604095cd",
+      "current": "3a2acd07b8625594534018a891bea92541bba9b2fbaa4017240ef01b604095cd",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/native_scalp/gi/cascade/gi_trace_rt_sharc.hlsl",
+      "baseline": "de2d1ccda97fbcabfea08ca7b3db4b88400b5fc05b04c87749d1d7a0292f9c1a",
+      "current": "de2d1ccda97fbcabfea08ca7b3db4b88400b5fc05b04c87749d1d7a0292f9c1a",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/native_scalp/gi/cascade_rebase/gi_trace_rt.hlsl",
+      "baseline": "dda2524278f2917326cab05f61b6ad3d1c7cccc217794dcd0ec9dd75727174bd",
+      "current": "dda2524278f2917326cab05f61b6ad3d1c7cccc217794dcd0ec9dd75727174bd",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "dc0c5cdb50aa36a8abbcbfcf2464138a19c7462eccbd9824f02e59ceef910f87",
+      "current": "dc0c5cdb50aa36a8abbcbfcf2464138a19c7462eccbd9824f02e59ceef910f87",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/native_scalp/gi/gi_trace_rt.hlsl",
+      "baseline": "1021276c577e1dce56da4381b4ed7db115de87c3fa5e7ce2412d1df35bae896f",
+      "current": "1021276c577e1dce56da4381b4ed7db115de87c3fa5e7ce2412d1df35bae896f",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/native_scalp/gi/gi_trace_rt_sharc.hlsl",
+      "baseline": "79dcfc425ad8edd8d6392b8fb069fdd725f74b645c43732ef66c5914fc9c8919",
+      "current": "79dcfc425ad8edd8d6392b8fb069fdd725f74b645c43732ef66c5914fc9c8919",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/native_scalp/gi/rebase/gi_trace_rt.hlsl",
+      "baseline": "9fca41b9ece8479d04306de7e2d82eb9ef07fffef0fd2dd186741f7546328753",
+      "current": "9fca41b9ece8479d04306de7e2d82eb9ef07fffef0fd2dd186741f7546328753",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/native_scalp/gi/rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "d7b1311c6639025633c16871322a637c745b4ed64c4cbacdd52010f7539fdf55",
+      "current": "d7b1311c6639025633c16871322a637c745b4ed64c4cbacdd52010f7539fdf55",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/omm/native_scalp/gi/cascade/gi_trace_rt.hlsl",
+      "baseline": "612b34ebe34cb61ca1440d7b0d86f75283d44cc685974d8c9f53f6504ea44e95",
+      "current": "612b34ebe34cb61ca1440d7b0d86f75283d44cc685974d8c9f53f6504ea44e95",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/omm/native_scalp/gi/cascade/gi_trace_rt_sharc.hlsl",
+      "baseline": "cf4588ce15de3d67554dddb0545f58e49b8e84c82bfcfc906a8ad2cd01b03b57",
+      "current": "cf4588ce15de3d67554dddb0545f58e49b8e84c82bfcfc906a8ad2cd01b03b57",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/omm/native_scalp/gi/cascade_rebase/gi_trace_rt.hlsl",
+      "baseline": "bb8e3e07c7402ce37e030f38ec9f3218c9f4381571b151f852613434dcbd8446",
+      "current": "bb8e3e07c7402ce37e030f38ec9f3218c9f4381571b151f852613434dcbd8446",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "4826e5a34a1f0e8ab2a6004e8c36d7c5bdf0a59a49e9ad5738234a2d549011d6",
+      "current": "4826e5a34a1f0e8ab2a6004e8c36d7c5bdf0a59a49e9ad5738234a2d549011d6",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/omm/native_scalp/gi/gi_trace_rt.hlsl",
+      "baseline": "ae651a8d75fc46eea7864d615613463207955b1bf9bb89cd039581bce0c2255d",
+      "current": "ae651a8d75fc46eea7864d615613463207955b1bf9bb89cd039581bce0c2255d",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/omm/native_scalp/gi/gi_trace_rt_sharc.hlsl",
+      "baseline": "5a983306ac576e0f5d41b159b5c841e4ef5b640789253537f259b25da51e2a15",
+      "current": "5a983306ac576e0f5d41b159b5c841e4ef5b640789253537f259b25da51e2a15",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/omm/native_scalp/gi/rebase/gi_trace_rt.hlsl",
+      "baseline": "9c583c7c0df602d470439bfec8e9f117ee7672f7905e6f7b4ed097e2e9673985",
+      "current": "9c583c7c0df602d470439bfec8e9f117ee7672f7905e6f7b4ed097e2e9673985",
+      "identical": true
+    },
+    {
+      "file": "hair_origin/omm/native_scalp/gi/rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "d4dae4b28ca1d461978a28786a1850ff1bb0b28ee9784162436dbfe18d686526",
+      "current": "d4dae4b28ca1d461978a28786a1850ff1bb0b28ee9784162436dbfe18d686526",
+      "identical": true
+    },
+    {
+      "file": "native_scalp/gi/cascade/gi_trace_rt.hlsl",
+      "baseline": "3276a02e431c94abaaa27241de9134d13a84666e99bbeba87d26c0af73a81e03",
+      "current": "3276a02e431c94abaaa27241de9134d13a84666e99bbeba87d26c0af73a81e03",
+      "identical": true
+    },
+    {
+      "file": "native_scalp/gi/cascade/gi_trace_rt_sharc.hlsl",
+      "baseline": "193da7f072c0101e21653f2eaaa511e0ba17ffe33919bd644c2b7046658c8091",
+      "current": "193da7f072c0101e21653f2eaaa511e0ba17ffe33919bd644c2b7046658c8091",
+      "identical": true
+    },
+    {
+      "file": "native_scalp/gi/cascade_rebase/gi_trace_rt.hlsl",
+      "baseline": "18b279a37543300d5af350b89d3f6094efe6d770f594771fc6f04dac564adf33",
+      "current": "18b279a37543300d5af350b89d3f6094efe6d770f594771fc6f04dac564adf33",
+      "identical": true
+    },
+    {
+      "file": "native_scalp/gi/cascade_rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "bfadc9c9cdee166c27d70045a3dcabd77cb29fc5808b2fc13eb5bce1b79d75de",
+      "current": "bfadc9c9cdee166c27d70045a3dcabd77cb29fc5808b2fc13eb5bce1b79d75de",
+      "identical": true
+    },
+    {
+      "file": "native_scalp/gi/gi_trace_rt.hlsl",
+      "baseline": "e07f61c36aeb4c0dc6da696f265fe533eee37148b49979990022a0b3a281f2a6",
+      "current": "e07f61c36aeb4c0dc6da696f265fe533eee37148b49979990022a0b3a281f2a6",
+      "identical": true
+    },
+    {
+      "file": "native_scalp/gi/gi_trace_rt_sharc.hlsl",
+      "baseline": "b606f12e4f5bdcbab7243d892a3e7caf4c757f643a8be2a96b46d8e08b607bc0",
+      "current": "b606f12e4f5bdcbab7243d892a3e7caf4c757f643a8be2a96b46d8e08b607bc0",
+      "identical": true
+    },
+    {
+      "file": "native_scalp/gi/rebase/gi_trace_rt.hlsl",
+      "baseline": "523ce3caf93a1b64ac8e6ceadf8c66b57dc99418497b5edd23bccc7791ab76da",
+      "current": "523ce3caf93a1b64ac8e6ceadf8c66b57dc99418497b5edd23bccc7791ab76da",
+      "identical": true
+    },
+    {
+      "file": "native_scalp/gi/rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "356a2dcafcbe01fbb33fbdd05eef3937a9bc2b914cb379aeafc1338dcdc4d5fc",
+      "current": "356a2dcafcbe01fbb33fbdd05eef3937a9bc2b914cb379aeafc1338dcdc4d5fc",
+      "identical": true
+    },
+    {
+      "file": "omm/gi/cascade/gi_trace_rt.hlsl",
+      "baseline": "44df79b4b87292a974e9e42acefb5094a749ed445939657decf60259fb6aa46f",
+      "current": "44df79b4b87292a974e9e42acefb5094a749ed445939657decf60259fb6aa46f",
+      "identical": true
+    },
+    {
+      "file": "omm/gi/cascade/gi_trace_rt_sharc.hlsl",
+      "baseline": "f7568aecc776e827cfb4b73b428c558c3f2271dac881169be30f03bf6fd21413",
+      "current": "f7568aecc776e827cfb4b73b428c558c3f2271dac881169be30f03bf6fd21413",
+      "identical": true
+    },
+    {
+      "file": "omm/gi/cascade_rebase/gi_trace_rt.hlsl",
+      "baseline": "b52a04ddd085c79165a95bb2a1c2bb2e03821c6cd4ba1369024bd151dac0116e",
+      "current": "b52a04ddd085c79165a95bb2a1c2bb2e03821c6cd4ba1369024bd151dac0116e",
+      "identical": true
+    },
+    {
+      "file": "omm/gi/cascade_rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "1a1c2e1c20113077f2182138e6b63c7590971b239b07fe7f46d782d0ba4eb7fc",
+      "current": "1a1c2e1c20113077f2182138e6b63c7590971b239b07fe7f46d782d0ba4eb7fc",
+      "identical": true
+    },
+    {
+      "file": "omm/gi/gi_trace_rt.hlsl",
+      "baseline": "cd84103f0a78d141a81400d773962de4496509964f186fbb4f14b4ea7891fcd6",
+      "current": "cd84103f0a78d141a81400d773962de4496509964f186fbb4f14b4ea7891fcd6",
+      "identical": true
+    },
+    {
+      "file": "omm/gi/gi_trace_rt_sharc.hlsl",
+      "baseline": "eb695406ae8e85edea7a5f7bf0c7dc3638e7da92ada4b00bff474e1fe21e9997",
+      "current": "eb695406ae8e85edea7a5f7bf0c7dc3638e7da92ada4b00bff474e1fe21e9997",
+      "identical": true
+    },
+    {
+      "file": "omm/gi/rebase/gi_trace_rt.hlsl",
+      "baseline": "4a343b10927efad2288e7e859685003e63c9acba92cbc03438cde0c59f0c96ca",
+      "current": "4a343b10927efad2288e7e859685003e63c9acba92cbc03438cde0c59f0c96ca",
+      "identical": true
+    },
+    {
+      "file": "omm/gi/rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "f32e8d2dc16a3318a60544150bca75bf9222cad953804282a2c980ba29d078e9",
+      "current": "f32e8d2dc16a3318a60544150bca75bf9222cad953804282a2c980ba29d078e9",
+      "identical": true
+    },
+    {
+      "file": "omm/native_scalp/gi/cascade/gi_trace_rt.hlsl",
+      "baseline": "f03c16af267cb7e49986b1c395efbdec56ff5349e94849db3ebd1f9453bfd0df",
+      "current": "f03c16af267cb7e49986b1c395efbdec56ff5349e94849db3ebd1f9453bfd0df",
+      "identical": true
+    },
+    {
+      "file": "omm/native_scalp/gi/cascade/gi_trace_rt_sharc.hlsl",
+      "baseline": "baa53a5ec85a46cbfc82f57e5b25e834c8cf7e785c708d7dd3e58ec3c0f055a3",
+      "current": "baa53a5ec85a46cbfc82f57e5b25e834c8cf7e785c708d7dd3e58ec3c0f055a3",
+      "identical": true
+    },
+    {
+      "file": "omm/native_scalp/gi/cascade_rebase/gi_trace_rt.hlsl",
+      "baseline": "af30d14aa17ad3c4799737f5188a919199994881204f962ac4681082cce2ffc3",
+      "current": "af30d14aa17ad3c4799737f5188a919199994881204f962ac4681082cce2ffc3",
+      "identical": true
+    },
+    {
+      "file": "omm/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "ebd9e0a846c6a7b3bb25fdec1253cdbd4c37f1fef6f2b361d319f6f68a64d109",
+      "current": "ebd9e0a846c6a7b3bb25fdec1253cdbd4c37f1fef6f2b361d319f6f68a64d109",
+      "identical": true
+    },
+    {
+      "file": "omm/native_scalp/gi/gi_trace_rt.hlsl",
+      "baseline": "ff282bfb1b8300be459104bcc8e93629c69876c8ce0c1ab5cd59282a7b6165af",
+      "current": "ff282bfb1b8300be459104bcc8e93629c69876c8ce0c1ab5cd59282a7b6165af",
+      "identical": true
+    },
+    {
+      "file": "omm/native_scalp/gi/gi_trace_rt_sharc.hlsl",
+      "baseline": "861bbabcc1f6c8edfe592380a3b208bc19d5d9631370a2a4b8bba78e3bc44af2",
+      "current": "861bbabcc1f6c8edfe592380a3b208bc19d5d9631370a2a4b8bba78e3bc44af2",
+      "identical": true
+    },
+    {
+      "file": "omm/native_scalp/gi/rebase/gi_trace_rt.hlsl",
+      "baseline": "04bcb19160e39ddd623375d7d7077e759ffae704fd51b0611fc226065ad0749f",
+      "current": "04bcb19160e39ddd623375d7d7077e759ffae704fd51b0611fc226065ad0749f",
+      "identical": true
+    },
+    {
+      "file": "omm/native_scalp/gi/rebase/gi_trace_rt_sharc.hlsl",
+      "baseline": "0369718b86da654cc3a6d5d0b18dbc08697712e966e2303320ef2998dbac8dfa",
+      "current": "0369718b86da654cc3a6d5d0b18dbc08697712e966e2303320ef2998dbac8dfa",
+      "identical": true
+    }
+  ],
+  "compile_failures": [],
+  "validation": [
+    {
+      "file": "gi_cascade_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "988dfd4865c8d1d2b74d7279e5d2432538f2945aead5b767c5e3d91c273abc88",
+      "messages": ""
+    },
+    {
+      "file": "gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "1346ab7441f0277826e31fe72a70b973be7ac7f58a9c878fc9e55454ca9a67c3",
+      "messages": ""
+    },
+    {
+      "file": "gi_cascade_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "e3b59cdf0bca48f5471f83965bff2166513d8a196d21389d78b4f3049bc16200",
+      "messages": ""
+    },
+    {
+      "file": "gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "612bd2310275baa021a84931f2f29af69befa1b78c2bb99c1f7011842b04b71e",
+      "messages": ""
+    },
+    {
+      "file": "gi_cascade_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "7e7f93678963baf5d1de0e1bd01f6ce4f87634b14908e38763a6aab0bfaca70d",
+      "messages": ""
+    },
+    {
+      "file": "gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "0d2a5c09aeb7b0636e2ee5b729cc5c58af9fe053ee445383fc99a77a6bc2cef9",
+      "messages": ""
+    },
+    {
+      "file": "gi_cascade_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "73c3b54403a264d300efdf54dfa07d37037b1e6401265d3700201e530c451469",
+      "messages": ""
+    },
+    {
+      "file": "gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "a9d48b3a2ef1d51829b022105858cb76ff4d54242d34513eda3257413d1c30f3",
+      "messages": ""
+    },
+    {
+      "file": "gi_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+      "messages": ""
+    },
+    {
+      "file": "gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "91ea85d8106e62e7f9182301bca9c5190bbd640c2202f5cad6e742ffac0fe955",
+      "messages": ""
+    },
+    {
+      "file": "gi_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "ef7067cddf1c46b61962639b6b129192bc3023362d40a05c56da7aefb7c8940b",
+      "messages": ""
+    },
+    {
+      "file": "gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "eab8e73a48e5431647663e27fdce884af5d7e87c6671aeb283a6cd177d240a17",
+      "messages": ""
+    },
+    {
+      "file": "gi_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "b32dbd30d23d46887bf160cdf82d6623b9f4441fd9540158378da408d0a1cefa",
+      "messages": ""
+    },
+    {
+      "file": "gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "10486220449eaa3b85dd75b8267e5fcfcc2e4ba7a7a707c717771ed5c90d7c4f",
+      "messages": ""
+    },
+    {
+      "file": "gi_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "cf116fdcd2cab71118caf76373b3869cac98c77d1a21c831bba329403689e97c",
+      "messages": ""
+    },
+    {
+      "file": "gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "9647d5e7d4b40fdbb74947927c62e7d70867589362743c47c743905eb4d56337",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "3a2acd07b8625594534018a891bea92541bba9b2fbaa4017240ef01b604095cd",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "97d9ee502cd68803504321c46c8e12d5ab80d1a7d08037bfbaa38316a4b7b977",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "de2d1ccda97fbcabfea08ca7b3db4b88400b5fc05b04c87749d1d7a0292f9c1a",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "6ac8e7deab5773b9e2824b475c6a266a959f0c3f1cc15e474242a76a7b4421c7",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "dda2524278f2917326cab05f61b6ad3d1c7cccc217794dcd0ec9dd75727174bd",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "141095f9b506cdbc8a4ca038609b41a1adc6ce4117a35a458ce634f2307ec2f0",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "dc0c5cdb50aa36a8abbcbfcf2464138a19c7462eccbd9824f02e59ceef910f87",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "7dd993d41cc1c54fa6282c9aa56880c48334f4c7454e41e370adf6259cab01c8",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "1021276c577e1dce56da4381b4ed7db115de87c3fa5e7ce2412d1df35bae896f",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "eb8b8ab7fb02b1f2e0c8d4f1c8bc1e4fbfbed475973de89ea263ba4829db5e13",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "79dcfc425ad8edd8d6392b8fb069fdd725f74b645c43732ef66c5914fc9c8919",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "405e785b059f8feb81fa516970f707fdd507fb0d0128b5d0aeb4901ab12d3080",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "9fca41b9ece8479d04306de7e2d82eb9ef07fffef0fd2dd186741f7546328753",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "54f44892c6baeba869fe4c83628c736807c0dfaec2c021bb75941396f4161f86",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "d7b1311c6639025633c16871322a637c745b4ed64c4cbacdd52010f7539fdf55",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "674b92b714c13fc5596c17470f4f92997d181d5830124c04a325af50620d08bd",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "612b34ebe34cb61ca1440d7b0d86f75283d44cc685974d8c9f53f6504ea44e95",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "aee74619ab52d9918cbe240ff473dccfff276f8d3206e729c6ab2ea8ac9d212a",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "cf4588ce15de3d67554dddb0545f58e49b8e84c82bfcfc906a8ad2cd01b03b57",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "d287085cc77809e0bb2b505ba3e23bf748ddda69787f35349fa1a22fbe2430b4",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "bb8e3e07c7402ce37e030f38ec9f3218c9f4381571b151f852613434dcbd8446",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "a0b9882f1da02682e2638b10e9be7a8c204200682e230e92cf5fc2f1d5305ed3",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "4826e5a34a1f0e8ab2a6004e8c36d7c5bdf0a59a49e9ad5738234a2d549011d6",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "42b0366376c64e735b9e4436417c901c0f09645b6b1e77e99a36ab8d488e7739",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "ae651a8d75fc46eea7864d615613463207955b1bf9bb89cd039581bce0c2255d",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "61bf03af6b2a81de14238ad608c434a1b9b3a5d8282c2d5b562f6bc674c18725",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "5a983306ac576e0f5d41b159b5c841e4ef5b640789253537f259b25da51e2a15",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "1cd1f11f9058e0a0b97917236ed2c3542008874dcdf2d7f7078ac58722c1bf0f",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "9c583c7c0df602d470439bfec8e9f117ee7672f7905e6f7b4ed097e2e9673985",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "40d16590eb51659b7c07e5698bd8ea2f58711fe4f374f6ef834fe56289887f2c",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "d4dae4b28ca1d461978a28786a1850ff1bb0b28ee9784162436dbfe18d686526",
+      "messages": ""
+    },
+    {
+      "file": "hair_origin_omm_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "b945adbeceef161b199e25002225bf7d824e6b2bd612df87d9d04943c80c8586",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_cascade_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "3276a02e431c94abaaa27241de9134d13a84666e99bbeba87d26c0af73a81e03",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "a5fe8a0fb7cdef4ad977d83b1891d33f6002ae545985d11900235706a246e9eb",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_cascade_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "193da7f072c0101e21653f2eaaa511e0ba17ffe33919bd644c2b7046658c8091",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "a18d405db70d3f95f7ce3498cb65829e1b684b48b779da972768265ab0c3eb53",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_cascade_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "18b279a37543300d5af350b89d3f6094efe6d770f594771fc6f04dac564adf33",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "9393c7a9f28a031901580a47136e7ba4915594a5e362293d6e7ede348230049e",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_cascade_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "bfadc9c9cdee166c27d70045a3dcabd77cb29fc5808b2fc13eb5bce1b79d75de",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "fed6764c2d6decc3cdde96cf2830ecd499f73bd24e96f134772f7dd056d30bf7",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "e07f61c36aeb4c0dc6da696f265fe533eee37148b49979990022a0b3a281f2a6",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "b1a3ddd64c2cde4c863451e65725509e7c1a86dc49c5a6cb210e2fdc974220e2",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "b606f12e4f5bdcbab7243d892a3e7caf4c757f643a8be2a96b46d8e08b607bc0",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "41171d9d8c56295e0dc16b796e67ad3b808e8895b3fde8b693f5066b7e96af66",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "523ce3caf93a1b64ac8e6ceadf8c66b57dc99418497b5edd23bccc7791ab76da",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "4814d4e4d2ffd7b0214ef251ff940b6b839d15a2405f6f6dfb6bd5d477aca3c6",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "356a2dcafcbe01fbb33fbdd05eef3937a9bc2b914cb379aeafc1338dcdc4d5fc",
+      "messages": ""
+    },
+    {
+      "file": "native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "2db535ea5d4fbee292b4c60f0c2fad22a1b3282058cf5630cecf5757b4fbaf45",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_cascade_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "44df79b4b87292a974e9e42acefb5094a749ed445939657decf60259fb6aa46f",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "21c2931f8891147c943d308d036036fd04bf698b7e63d40258bba8520a8c68f9",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_cascade_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "f7568aecc776e827cfb4b73b428c558c3f2271dac881169be30f03bf6fd21413",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "96b8af3babaa6114acf89960eee3297868872b5eef7a14f1d2b055776dff4f6c",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_cascade_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "b52a04ddd085c79165a95bb2a1c2bb2e03821c6cd4ba1369024bd151dac0116e",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "d3c787821ee518753427779fd65cb201b49b504ce69144215c12ffa469ce7d6a",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_cascade_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "1a1c2e1c20113077f2182138e6b63c7590971b239b07fe7f46d782d0ba4eb7fc",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "d5d4b4642aef842b9b138148853d1c7861f1f8035001d2a97b1563a733dfc77b",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "cd84103f0a78d141a81400d773962de4496509964f186fbb4f14b4ea7891fcd6",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "9618efa6fc0e0319e4b6e1682209eb2dd3b856a4520fc11b0b55c64126f1a8ec",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "eb695406ae8e85edea7a5f7bf0c7dc3638e7da92ada4b00bff474e1fe21e9997",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "fdbc6cbca6d1eca0cce4a2791e214eef4e53932bdf99744e1c6783fa6cff7402",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "4a343b10927efad2288e7e859685003e63c9acba92cbc03438cde0c59f0c96ca",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "d1ed9021678938624654d409e80e3d1b438f1086c82edd8b08969e1f7b5ad55a",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "f32e8d2dc16a3318a60544150bca75bf9222cad953804282a2c980ba29d078e9",
+      "messages": ""
+    },
+    {
+      "file": "omm_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "6c18ecfcfe7117b75b3e23be022e3e0e922768c420e23adf17fe86d2f99c08b8",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "f03c16af267cb7e49986b1c395efbdec56ff5349e94849db3ebd1f9453bfd0df",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "b5ea899cc14590f2fa212d962a8b5406c1fedc37f8316c042503e97d76b69b35",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "baa53a5ec85a46cbfc82f57e5b25e834c8cf7e785c708d7dd3e58ec3c0f055a3",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "b62194045c87166242d2637a6543acee680acee67ea2b9087ad3fafda4d25515",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "af30d14aa17ad3c4799737f5188a919199994881204f962ac4681082cce2ffc3",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "acbeda9995e85018bd76c62fe487e12a7a73842830c912a4feb285cea87d9dfd",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "ebd9e0a846c6a7b3bb25fdec1253cdbd4c37f1fef6f2b361d319f6f68a64d109",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "1143c544a018894347dc45dc9676c21fce21bf91d2c17ad0060dbebb584f3a82",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "ff282bfb1b8300be459104bcc8e93629c69876c8ce0c1ab5cd59282a7b6165af",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "de6c3dc3c0856cb00602ab3f64180ed7f9287d8fe100eb9e1997e8a038ae8d54",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "861bbabcc1f6c8edfe592380a3b208bc19d5d9631370a2a4b8bba78e3bc44af2",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "78f72b592d8f1d2185ce75230231cba0c7d4395cc2fdf599d7d81e3557e2260b",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_rebase_gi_trace_rt.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "04bcb19160e39ddd623375d7d7077e759ffae704fd51b0611fc226065ad0749f",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "1b964e2bc1ca8fb55b388edc951fb579fdebdf1c3d4cb06fad4a85b26859e5a0",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_rebase_gi_trace_rt_sharc.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "0369718b86da654cc3a6d5d0b18dbc08697712e966e2303320ef2998dbac8dfa",
+      "messages": ""
+    },
+    {
+      "file": "omm_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.main.spv",
+      "rc": 0,
+      "sha256": "1ff0fbdc63f1667da3972410537d233690e424df28cbc576ed1baca0cb1daa4f",
+      "messages": ""
+    }
+  ]
+}

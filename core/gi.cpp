@@ -202,7 +202,7 @@ VkDescriptorSetLayout g_current_sun_set_layout=VK_NULL_HANDLE,g_current_sun_host
 VkPipelineLayout g_current_sun_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
-Pipe g_hit_material, g_hit_direct, g_hit_two_bounce;
+Pipe g_hit_material, g_hit_direct, g_hit_two_bounce, g_hit_gi, g_hit_gi_sharc;
 Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
 Pipe g_rt_shadow_current; // private current-caster tuple; ordinary sun pipe stays untouched
@@ -228,7 +228,7 @@ Pipe g_sun_resolve;       // rt_sun_replace: writes the trusted traced visibilit
 // SHaRC (sharc=1, core/sharc.h): the ray-traced push set, the host's set 1, empty sets 2-3 (D-RF: the
 // game's set 2) and the cache's set 4.
 VkDescriptorSetLayout g_empty_dsl = VK_NULL_HANDLE;
-VkPipelineLayout g_rt_sharc_layout = VK_NULL_HANDLE, g_rf_sharc_layout = VK_NULL_HANDLE;
+VkPipelineLayout g_rt_sharc_layout = VK_NULL_HANDLE, g_rf_sharc_layout = VK_NULL_HANDLE, g_hit_gi_layout=VK_NULL_HANDLE;
 Pipe g_trace_rt_sharc, g_rf_sharc, g_sharc_resolve, g_sharc_inject, g_sharc_inject_lock, g_sharc_debug, g_sharc_roof;
 bool g_sharc_logged = false, g_sharc_missing_logged = false, g_sharc_paused_logged = false, g_sharc_em_logged = false;
 bool g_ls_logged = false, g_ls_missing_logged = false;
@@ -702,7 +702,7 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
   static const char* const rebased_files[] = {
-      "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
+      "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/gi_trace_rt_hit_direct.hlsl", "gi/gi_trace_rt_sharc_hit_direct.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
       "gi/pan_primary_identity.hlsl", "gi/pan_local.hlsl",
       "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
       "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
@@ -906,7 +906,7 @@ constexpr uint32_t kStatsRing = 8;
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
 // 136..152: primary pool/soup cohorts (HEAD); box diagnostics 200..252 (shifted +64 from the box branch).
-constexpr uint32_t kStatsCounters = 282; //253..268: qualified hit-material results/native residuals
+constexpr uint32_t kStatsCounters = 287; //253..268 material;269..281 reference;282..286 hidden-hit GI
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -1055,6 +1055,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_stats_n, 100.0 * t[47] / px, 100.0 * t[45] / px, 100.0 * t[44] / px, 100.0 * t[46] / px,
               100.0 * t[40] / px, 100.0 * t[41] / tr, 100.0 * t[42] / tr, 100.0 * t[43] / tr);
   }
+  if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/256.0);
   uint64_t material_total=0;for(unsigned i=253;i<263;++i)material_total+=t[i];
   if(material_total)host->log("hit material (%u frames): attempted %llu qualified %llu unsupported %llu; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters %llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu",
     g_stats_n,material_total,t[253],material_total-t[253],t[254],t[255],t[256],t[257],t[258],t[259],t[260],t[261],t[262]);
@@ -1530,6 +1531,29 @@ bool sharc_dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, VkDe
   return true;
 }
 
+// Qualified hidden-hit GI uses native local-light inputs, material set1 and
+// optional SHaRC set4. No private Sun descriptor contract is used by this shader.
+bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& pc){
+ if(!bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))))return false;
+ VkDescriptorSetLayout alpha_layout{};VkDescriptorSet unused{};
+ if(!s.ls_ok || !host->rt_hit_material_use || !ensure_ls_layout() || !host->rt_alpha ||
+    !host->rt_alpha(&alpha_layout,&unused))return false;
+ if(s.sharc && !make_sharc_layout(g_ls_set_layout,alpha_layout,VK_NULL_HANDLE,&g_hit_gi_layout))return false;
+ VkPipelineLayout layout=s.sharc?g_hit_gi_layout:g_ls_layout;
+ Pipe& p=s.sharc?g_hit_gi_sharc:g_hit_gi;
+ if(!refresh(p,s.sharc?"gi/gi_trace_rt_sharc_hit_direct.hlsl":"gi/gi_trace_rt_hit_direct.hlsl",layout))return false;
+ auto traversal=prepare_omm_traversal(cmd,b,p.pipeline);if(!traversal.valid())return false;
+ VkDescriptorSet material_alpha=b.alpha;
+ if(!host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&material_alpha))return false;
+ bind_ls(b,s);const auto& vk=*host->vk;VkWriteDescriptorSet writes[kLsBindings+kNumExtras];
+ vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,p.pipeline);
+ vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,gather_writes(b,kLsBindings,writes),writes);
+ vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,1,1,&material_alpha,0,nullptr);
+ if(s.sharc)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,4,1,&s.sh.set,0,nullptr);
+ vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof pc,&pc);
+ vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);return true;
+}
+
 // D-RF pass alone, 2 timestamps per frame, medians over 300 frames.
 VkQueryPool g_rf_queries = VK_NULL_HANDLE;
 uint32_t g_rf_slot = 0;
@@ -1854,7 +1878,9 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     trace_timestamp(cmd, 0);
     if (gi_rt) {
       rt_begin();
-      s.rt_gi_applied=s.sharc?sharc_dispatch(cmd,g_trace_rt_sharc,b,pc,s.sh.set,(g_hw+7)/8,(g_hh+7)/8):
+      const bool hit_direct=host->cfg_int("gi_hit_direct",0) && host->cfg_int("rt_hit_material",0) && pc.gi_rt_fallback==0u;
+      s.rt_gi_applied=hit_direct && hit_gi_dispatch(cmd,b,s,pc);
+      if(!s.rt_gi_applied)s.rt_gi_applied=s.sharc?sharc_dispatch(cmd,g_trace_rt_sharc,b,pc,s.sh.set,(g_hw+7)/8,(g_hh+7)/8):
                                   dispatch(cmd,g_trace_rt,b,pc,g_hw,g_hh,true);
       if(!s.rt_gi_applied){if(s.sharc)sharc_end(cmd);s.sharc=false;s.rf_sharc=false;dispatch(cmd,g_trace,b,pc,g_hw,g_hh);}
     } else {
@@ -2359,7 +2385,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
-  for (Pipe* p : {&g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
+  for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
@@ -2412,7 +2438,7 @@ void gi_release() {
   g_set_layout = VK_NULL_HANDLE;
   g_rt_layout = VK_NULL_HANDLE;
   g_rt_set_layout = VK_NULL_HANDLE;
-  for (VkPipelineLayout* l : {&g_rt_sharc_layout, &g_rf_sharc_layout}) {
+  for (VkPipelineLayout* l : {&g_hit_gi_layout, &g_rt_sharc_layout, &g_rf_sharc_layout}) {
     host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
     *l = VK_NULL_HANDLE;
   }
