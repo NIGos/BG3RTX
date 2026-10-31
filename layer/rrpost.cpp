@@ -2,7 +2,7 @@
 //
 // BG3 feeds DLSS its *graded* image: god rays, depth of field, a dither
 // resolve, exposure, bloom and a PQ-space 3D-LUT grade all run before the
-// evaluate (docs/FRAME_MAP.md, docs/AUDIT_RT.md part 8). The RR guide wants RR
+// evaluate (docs/FRAME_MAP.md, docs/archive/AUDIT_RT.md part 8). The RR guide wants RR
 // "as close to the start of post-processing as possible", and DoF after it.
 //
 // This file follows the game's post chain while it is recorded and carries it

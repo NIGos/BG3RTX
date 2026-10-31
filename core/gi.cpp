@@ -132,7 +132,7 @@ struct Push {
   uint32_t ls_has_mask, ls_flags;   // ls_flags: bit 0 per-light data (ls_lights), bits 8-12 owners traced (ls_owners)
   float rf_max_rough, rf_mirror_rough, rf_tmax, rf_depth_tol, rf_edge, rf_strength;
   uint32_t rf_debug, rf_sample, rf_so, rf_validate, rf_models, rf_stats;   // rf_so: unused, 0 (removed 2026-10-31)
-  // RT audit fixes (docs/AUDIT_RT.md)
+  // RT audit fixes (docs/archive/AUDIT_RT.md)
   uint32_t rt_backlit, mat_classes, ao_direct, rt_origin;
 };
 static_assert(sizeof(Push) == bg3::native_hit_gi::push_bytes, "Push must match gi_common.hlsli");
@@ -149,7 +149,7 @@ constexpr uint32_t kLsBindings = kRtBindings + 9;
 // descriptors, within the 32 every device must support.
 constexpr uint32_t kRfBindings = kLsBindings + 1;
 
-// Bindings past the contiguous ranges (docs/AUDIT_RT.md fixes), in every layout whose
+// Bindings past the contiguous ranges (docs/archive/AUDIT_RT.md fixes), in every layout whose
 // bit is set: 1 base, 2 ray-traced, 4 D-LS.
 struct ExtraBinding {
   uint32_t binding;

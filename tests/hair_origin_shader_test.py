@@ -15,6 +15,8 @@ import subprocess
 import tempfile
 import zipfile
 
+from shader_baseline import default_baseline
+
 ROOT=Path(__file__).resolve().parents[1]
 
 
@@ -31,7 +33,7 @@ def bindings(raw):
 
 def main():
     ap=argparse.ArgumentParser(__doc__);ap.add_argument('--dxc',required=True);ap.add_argument('--sharc',required=True)
-    ap.add_argument('--baseline',default='64fe56e');args=ap.parse_args()
+    ap.add_argument('--baseline',default=default_baseline(),help='Commit of the key-off reference (default: merge-base with main)');args=ap.parse_args()
     out=ROOT/'captures/hair-physical-origin/shaders';out.mkdir(parents=True,exist_ok=True)
     inputs=list((ROOT/'common').glob('*.h'))+list((ROOT/'shaders').rglob('*.hlsl'))+list((ROOT/'shaders').rglob('*.hlsli'))
     frozen={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
@@ -55,11 +57,13 @@ def main():
         return dest.read_bytes()
     def check(wrapper):
         # The physical-origin request and the same request without it (the key-off path).
-        target=wrapper.replace('RT_HAIR_PHYSICAL_ORIGIN=1;','');name=Path(wrapper.partition('?')[0]+'.'+hashlib.sha1(wrapper.encode()).hexdigest()[:12])
-        old=compile_one(baseline/'shaders',target,out/'old'/name.with_suffix('.spv'))
-        off=compile_one(ROOT/'shaders',target,out/'off'/name.with_suffix('.spv'))
+        # One output per request: with_suffix() would drop the hash and let the variants of
+        # one file (shaders/variants.txt) overwrite each other across the two workers.
+        target=wrapper.replace('RT_HAIR_PHYSICAL_ORIGIN=1;','');name=Path(wrapper.partition('?')[0]+'.'+hashlib.sha1(wrapper.encode()).hexdigest()[:12]+'.spv')
+        old=compile_one(baseline/'shaders',target,out/'old'/name)
+        off=compile_one(ROOT/'shaders',target,out/'off'/name)
         if old!=off:raise RuntimeError(f'Key-off SPIR-V changed: {target}')
-        dest=out/'on'/name.with_suffix('.spv');on=compile_one(ROOT/'shaders',wrapper,dest)
+        dest=out/'on'/name;on=compile_one(ROOT/'shaders',wrapper,dest)
         validation=subprocess.run([validator,'--target-env','vulkan1.3',str(dest)],capture_output=True,text=True)
         if validation.returncode:raise RuntimeError(f'{wrapper}: {validation.stdout}\n{validation.stderr}')
         on_bindings,off_bindings=bindings(on),bindings(off)

@@ -1,4 +1,4 @@
-// Robust secondary-ray origins (rt_origin=1; docs/QUALITY.md Q10, docs/AUDIT_RT.md fix 6).
+// Robust secondary-ray origins (rt_origin=1; docs/QUALITY.md Q10, docs/archive/AUDIT_RT.md fix 6).
 // Full resolution, first of the ray-traced passes. Per pixel it finds the TLAS
 // triangle the camera sees there (a primary ray, alpha-tested) and writes into
 // rtOrigin (binding 40, rt/rt_common.hlsli):

@@ -287,7 +287,7 @@ void ls_finish(uint2 fp, Bg3Surface sf, Bg3Mat mt, float3 dd, float3 ds, float3 
   if ((pc.ao_direct & 8u) != 0u && ((ao_mode != 0u && (pc.ao_direct & 4u) != 0u) || ao_mode == 2u) &&
       (ao_mode == 2u || fdif != 1.0 || fspec != 1.0))
     ls_sun(fp, sf, mt, sund, suns);
-  // ---- AO on direct light (docs/AUDIT_RT.md fix 4; the modes are listed under LS_FULL) ----
+  // ---- AO on direct light (docs/archive/AUDIT_RT.md fix 4; the modes are listed under LS_FULL) ----
   // (The same expressions as the LS_FULL path, so that the arithmetic is the same.)
   float3 xd = 0, xs = 0;
   if (ao_mode != 0u) {
@@ -841,7 +841,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       ms += suns;
     }
   }
-  // ---- AO on direct light (docs/AUDIT_RT.md fix 4) ----
+  // ---- AO on direct light (docs/archive/AUDIT_RT.md fix 4) ----
   // The lighting gives direct light mix(1, AO, m0.y) of the AO in b6, which holds
   // our 1-ray RT visibility once gi_ao_apply has run. ao_direct:
   //   0 leave it (the RT visibility darkens direct light, noisily, and contacts

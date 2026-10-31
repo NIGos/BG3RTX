@@ -105,7 +105,7 @@ bool ensure_pipeline(DeviceData* dd) {
 
 bool allocate_plain_vertices(VkCommandBuffer cmd,VkDeviceSize bytes,PlainVertices* out) {
   if(!out)return false;*out={};
-  if(!bytes || bytes%4 || bytes>UINT32_MAX || !available() || !cfg_int("rt_omm",0) || !tracked_recording(cmd))return false;
+  if(!bytes || bytes%4 || bytes>UINT32_MAX || !available() || !tracked_recording(cmd))return false;
   DeviceData* dd=device_of(cmd);if(!available_for(dd))return false;
   std::lock_guard lock(bake_mutex);if(producer_failed)return false;
   VkPhysicalDeviceProperties props{};dd->inst->GetPhysicalDeviceProperties(dd->physical,&props);
@@ -120,7 +120,7 @@ bool allocate_plain_vertices(VkCommandBuffer cmd,VkDeviceSize bytes,PlainVertice
 
 Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output) {
   if (output) *output={};
-  if (!available() || !cfg_int("rt_omm",0) || !tracked_recording(cmd) || !in.vertices || !in.mask ||
+  if (!available() || !tracked_recording(cmd) || !in.vertices || !in.mask ||
       !in.sampled_owner || !valid_plain_push(in.push) || in.vertex_bytes<in.push.source_bytes ||
       (in.layout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && in.layout!=VK_IMAGE_LAYOUT_GENERAL)) return 0;
   if(in.copy_source) {

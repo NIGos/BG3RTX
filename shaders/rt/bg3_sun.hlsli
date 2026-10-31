@@ -1,7 +1,7 @@
 // BG3's sun term, replicated from the tiled lighting (f469db78:1345-1452 class 0;
 // the class variants from 4265b844, 118833ff, 19763259, 3033c895, 95af6e4f, 7f110c00),
 // so that the D-LS post pass knows the sun's direct light exactly and can give
-// it the AO-on-direct factor that ao_direct asks for (docs/AUDIT_RT.md fix 4).
+// it the AO-on-direct factor that ao_direct asks for (docs/archive/AUDIT_RT.md fix 4).
 //
 // sun radiance = colour (per frame: _m2, or the atmosphere's transmittance LUT)
 //              x mask (b7, after our RT fold) x cloud shadows (two layers) x b13[0].

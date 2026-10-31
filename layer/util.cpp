@@ -365,7 +365,8 @@ static const CfgHotKey kCfgHot[] = {
   {"pan_inputs", 0}, {"rt_event_flush", 1}, {"sl_log_barriers", 0}, {"rt_build", 1},
   {"rt_bvh_split", 1}, {"rt_omm", 0}, {"rt_hit_material", 0}, {"rt_native_hair", 0},
   {"rt_native_scalp", 0}, {"rt_mesh_audit_frames", 600}, {"rt_mesh_audits", 2}, {"rt_emissive", 0},
-  {"rt_em_backdrop", 0}, {"rt_em_decal", 1},
+  {"rt_em_backdrop", 0}, {"rt_em_decal", 1}, {"rt_sun_cascade_current", 0}, {"rt_cascade_index", 1},
+  {"rt_alpha_cut", 1}, {"rt_alpha_stochastic", 1}, {"rt_alpha_unknown", 1}, {"rt_alpha_test", 1},
 };
 static_assert(sizeof kCfgHot / sizeof kCfgHot[0] == size_t(CfgHot::Count), "kCfgHot must list every CfgHot");
 static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];

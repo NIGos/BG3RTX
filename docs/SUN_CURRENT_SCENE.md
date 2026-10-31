@@ -2,8 +2,9 @@
 
 Status: offline candidate, default off; no game/GPU quality or cost gate passed.
 Key: rt_sun_cascade_current=0. Requires rt=1, rt_cascade_casters=1 and
-rt_bvh_split=1. Experimental GUI control requires restart. Both DLLs must match (ABI 21 today).
-Main/user build is unchanged; this source composition is isolated on codex/omm-bake.
+rt_bvh_split=1. Experimental GUI control requires restart. Both DLLs must match (ABI 23 today).
+On main since the codex/omm-bake merge (efc27e7, 2026-10-31), off by default: the user build
+is unchanged while the key stays 0.
 
 ## Supported recording and query path
 

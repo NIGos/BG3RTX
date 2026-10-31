@@ -70,7 +70,8 @@ enum class CfgHot : int {
   rt_em_overlap_check, rt_cascade_casters, geo_capture, pan_capture,
   fg_input_copy, pan_inputs, rt_event_flush, sl_log_barriers, rt_build, rt_bvh_split, rt_omm,
   rt_hit_material, rt_native_hair, rt_native_scalp, rt_mesh_audit_frames, rt_mesh_audits,
-  rt_emissive, rt_em_backdrop, rt_em_decal,
+  rt_emissive, rt_em_backdrop, rt_em_decal, rt_sun_cascade_current, rt_cascade_index, rt_alpha_cut,
+  rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test,
   Count
 };
 int cfg_hot(CfgHot key);
