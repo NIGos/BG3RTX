@@ -95,9 +95,11 @@ def hierarchy(parent, ps):
     return a,raw
 
 
-def validate_export(doc, visual, buffers):
+def validate_export(doc, visual, buffers, allow_cancelled_translations=False):
     # These resources carry authoring skeletons. Accept only literally identity
     # weighted-joint ancestry/bind matrices and a single unit-weight joint.
+    # Cell-only opt-in also proves exact cancellation of translation-only
+    # ancestors with rational arithmetic; no nonidentity net pose is discarded.
     # Never treat arbitrary skinned resources as static by discarding their pose.
     if doc.get('animations'):raise UnsupportedAffine('Animated resource not represented')
     identity=(1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.)
@@ -107,13 +109,20 @@ def validate_export(doc, visual, buffers):
             if child in parents or child<0 or child>=len(doc['nodes']):raise UnsupportedAffine('Invalid/shared node ancestry')
             parents[child]=i
     def require_identity_chain(index):
+        from fractions import Fraction
+        translation=[Fraction(0),Fraction(0),Fraction(0)]
         seen=set()
         while True:
             if index in seen:raise UnsupportedAffine('Cyclic weighted-joint ancestry')
             seen.add(index);n=doc['nodes'][index]
-            if set(n)-{'mesh','skin','name','children'}:raise UnsupportedAffine('Nonidentity used node pose')
+            allowed={'mesh','skin','name','children'}|({'translation'} if allow_cancelled_translations else set())
+            if set(n)-allowed:raise UnsupportedAffine('Nonidentity used node pose')
+            if 'translation' in n:
+                t=vec(n['translation'],3)
+                translation=[a+Fraction.from_float(v) for a,v in zip(translation,t)]
             if index not in parents:break
             index=parents[index]
+        if any(translation):raise UnsupportedAffine('Nonidentity net node translation')
     for skin in doc.get('skins',[]):
         if any(j<0 or j>=len(doc['nodes']) for j in skin['joints']):raise ValueError('Invalid skin joint')
         matrices=accessor(doc,buffers,skin['inverseBindMatrices'])

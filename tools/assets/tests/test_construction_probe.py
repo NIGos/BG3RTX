@@ -170,6 +170,13 @@ class ConstructionProbeTests(unittest.TestCase):
         validate_export(d,node('Visual'),[raw])
         unused=copy.deepcopy(d);unused['nodes'].append({'name':'unweighted authoring bone','translation':[7,8,9]})
         validate_export(unused,node('Visual'),[raw])
+        cancelled=copy.deepcopy(d)
+        cancelled['nodes'][0]['translation']=[0,0,1]
+        cancelled['nodes'].append({'name':'cancelled dummy','translation':[0,0,-1],'children':[0]})
+        with self.assertRaises(UnsupportedAffine):validate_export(cancelled,node('Visual'),[raw])
+        validate_export(cancelled,node('Visual'),[raw],allow_cancelled_translations=True)
+        cancelled['nodes'][-1]['translation']=[0,0,-.5]
+        with self.assertRaises(UnsupportedAffine):validate_export(cancelled,node('Visual'),[raw],allow_cancelled_translations=True)
         # The same extra bone becomes relevant as soon as it is an ancestor of
         # the weighted joint. It must never be discarded as a harmless helper.
         unused['nodes'][-1]['children']=[0]

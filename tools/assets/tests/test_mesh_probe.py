@@ -5,11 +5,22 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
-from tools.assets.probe_foundry_mesh import accessor, check_collada, decode_mesh
+from tools.assets.probe_foundry_mesh import accessor, check_collada, decode_mesh, check_native_bounds
 from tools.assets.resource import Node
 
 
 class MeshProbeTests(unittest.TestCase):
+    def test_explicit_loose_bounds_enclose_without_resizing_geometry(self):
+        union=[[-1.,0.,-1.],[1.4142135,.09,1.4142135]]
+        original=copy.deepcopy(union);v=Node('Resource');v.attrs.update(BoundsMin=[-1.,0.,-1.],BoundsMax=[1.4142135,.09,2.4142134])
+        with self.assertRaises(ValueError):check_native_bounds(union,v)
+        check_native_bounds(union,v,allow_loose=True)
+        self.assertEqual(union,original)
+        for bounds in ([1.4142135,.08,2.4142134],[1.4142135,float('nan'),2.4142134]):
+            v.attrs['BoundsMax']=bounds
+            with self.assertRaises(ValueError):check_native_bounds(union,v,allow_loose=True)
+
+
     def setUp(self):
         self.raw=b'\0'*4+struct.pack('<3fI3fI',1,2,3,0,4,5,6,0)
         self.doc={'accessors':[{'bufferView':0,'componentType':5126,'type':'VEC3','count':2}],
