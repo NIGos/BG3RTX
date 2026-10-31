@@ -1303,7 +1303,7 @@ VkBuffer rt_scene_pose() {
 
 // Caller holds `lock` (g_mu). Waits (bounded) for this frame's scene commit; see g_scene_cv.
 void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
-  const int ms = cfg_int("rt_scene_wait_ms", 8);
+  const int ms = cfg_int("rt_scene_wait_ms", 12);
   const uint64_t now = frame_index();
   auto current = [&] { return g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built >= now; };
   ++g_wait.calls;
