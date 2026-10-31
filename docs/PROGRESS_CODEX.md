@@ -1,5 +1,35 @@
 # BG3RTX progress
 
+## GI descriptor fixes verified offline; live recheck deferred while user is at PC - 2026-10-31
+
+9d455ca/import b231eb8 fixes the experimental GI descriptor contract: dedicated
+19/20-slot layout and matching writes restore raw GI, previous radiance, depth and
+motion inputs. 8fb805a/import 1ca79d5 fixes the separate direct/two-surface rebase
+reference contract, including camera binding 48. Ordinary local shadows unchanged.
+Core links, three targeted tests and 80 actual compiled shader-interface checks
+pass; independent source review clear. No shader math, public ABI or default change.
+The existing shader compiler now checks these host interfaces after a normal build.
+
+R2's OLD key-on image quality remains REJECTED. New source is not yet image-qualified;
+gi_hit_direct and rt_hit_reference stay OFF. Cost numbers below belong to the old
+invalid-layout candidate and are not post-fix performance evidence. No focused
+FG/SE launch while the user is at the PC. Personal Hair trial unchanged.
+Contact: [OFF / ON / OFF stipple evidence](C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX/captures/gi-hit-direct-20261031/r2/gi-stipple-off-on-off.png).
+
+Next offline increment owns the actual S1 instanced tileset depth family, not an
+unknown-shader workaround: VS689836de/FS781cd8d1 tests Green alpha at fixed 0.5.
+105 deferred draws and four exact Green texture joins were found in retained
+frames. New rt_native_tileset coverage is being implemented in an isolated tree,
+default OFF, with actual COLOR/UV, native sampler and explicit UNKNOWN for incomplete
+inputs/unsupported SeeThrough. It will not silently treat those surfaces as opaque.
+Ordinary key-OFF shaders, existing Hair data and public ABI must remain unchanged.
+
+Terrain descriptor metadata and one authored Hair audit are retained offline.
+No true strand provider was established from the decoded Shadowheart triangle
+assets; OMM remains OFF and not game-qualified. User has not tested the latest
+Hair capacity/physical-origin update or any new material/reference/GI increment.
+
+
 ## GI image review finds a real host binding defect; fix in progress - 2026-10-31
 
 User at PC: offline work only, no focused launches. Personal Hair trial unchanged.
