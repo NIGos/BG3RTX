@@ -246,3 +246,49 @@ the light buffer is the game's (read-only to us), and the prep pass runs without
    stays lit is sun, ambient, projector lights, fog and emissives. `ls_debug=1` counts the
    lights per pixel for comparison. `ls_check=1` with `qa_zero=2`: rtStats 81 (differing px)
    must stay at its usual floor.
+
+## 14. Tier (b): `rf_hit_shade` (M4.2, 2026-10-31; offline done, READY_FOR_LIVE, not qualified)
+
+Key `rf_hit_shade=0` (live; GUI Experimental "Shaded hidden-surface reflections",
+`exp_rf_hit_shade`, needs `exp_hit_material` = startup `rt_hit_material=1`). Plan:
+PLAN_M4_REFLECTIONS_GI.md M4.2.
+
+- **What.** A hidden (tier 2) or off-screen (tier 3) hit inside the frustum on a qualified native
+  material takes L_b instead of the probe: `native_hit_direct` (point/spot, RT-shadowed) + the
+  sun (replicated `bg3_sun_colour()` x clouds x b13[0], one RT visibility ray, same FresnelBlend
+  BSDF as the point/spot term) + the game's ambient at the hit with AO 1 (sky irradiance
+  b34/b36 x diffuse colour x DFG.z, and `bg3_spec_ambient` at the hit with its local probes)
+  x b13[0]*100. w = rough_w x rf_strength (no edge fade). Unknown material, projector light in
+  the hit's froxel, hit outside the frustum, unknown visibility, backface: the probe stays.
+- **Code.** `shaders/rt/native_hit_shade.hlsli` (`native_hit_lit` = gi_hit_direct's
+  `rt_hit_material` + `native_hit_direct`; gi_trace_rt.hlsl keeps its inline calls so its SPIR-V
+  stays byte-identical while M4.1 qualifies it, M4.3 moves it onto the include),
+  `gi/rt_reflections_hit_shade.hlsl` and `gi/rt_reflections_sharc_hit_shade.hlsl` (define
+  `RF_HIT_SHADE`; with SHaRC a hit the material cannot shade still asks the cache),
+  `core/gi.cpp` `rf_hit_dispatch` / `ensure_rf_hit_layout`, contract
+  `common/native_hit_rf_bindings.h` + `tests/native_hit_rf_bindings_test.cpp`.
+- **Layout.** No new push descriptor, no ABI change: set 0 the D-RF push set (32), set 1 the
+  material AlphaDSL from `rt_hit_material_use` (same layout as the host alpha set), set 2 the
+  game's lighting set 1, set 3 the D-LS sun set (`BG3_SUN_SET 3`; this frame's D-LS set, else
+  a fresh ring slot), set 4 SHaRC. Any missing input runs the ordinary D-RF unchanged.
+- **Same-frame check.** With `rf_stats=1` the tier (a) hits also compute L_b; their output is
+  unchanged (energy). Every 300 frames:
+  `rf hit shade (300 frames): tier b hidden hits N, shaded N (P%), unknown material N,
+  unsupported lighting N, shaded with local probes listed N, shaded mean luminance X; tier a
+  check: N hits (N unsupported), mean L_b X, mean L_a X, mean (L_b - L_a) per frame X, standard
+  error X (N frames), mean |L_b - L_a| X; L_b terms direct X, sun X, ambient X; clipped N`.
+  `rf_debug=8`: tier (a) red L_a, green L_b (yellow = equal), tier (b) blue L_b; `rf_debug=1`
+  shows shaded tier (b) white.
+- **Expected bias of L_b vs L_a** (the gate measures it): L_a carries the GI/RT AO darkening,
+  the game's native sun mask and D-RF's own reflections at the hit; L_b has AO 1 and the
+  probe. Emission and local diffuse probes are missing from L_b (counted). The sun ray traces
+  mask 0x01 in the cascade variants (no off-camera cascade casters).
+- **Offline gates.** `py -3 tests/rf_hit_shade_shader_test.py`: every key-off request of the
+  merge-base compiles byte-identical (rt_reflections, its SHaRC variant, D-LS, gi_hit_direct: 644/644);
+  every rf_hit_shade request compiles, passes spirv-val and its descriptor contract.
+- **Cost.** Expected +0.2 to 0.4 ms on `rf: reflection pass GPU median` (one material fetch,
+  the froxel's shadow rays and one sun ray per tier (b) hit, 27% of the foundry's traced rays);
+  `rf_stats=1` adds the tier (a) checks (measurement only). Not measured.
+- **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
+  mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
+  hard_dark on tier (b) pixels and crops.

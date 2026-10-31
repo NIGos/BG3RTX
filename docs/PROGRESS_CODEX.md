@@ -20,6 +20,15 @@ Whole GI median OFF A/ON/OFF B: 2.097/2.288/2.048 ms. Not isolated bounce cost.
 Evidence/contact sheets: docs/evidence/gi-descriptor-r3-20261031/.
 New logic in core where possible. ABI 21. Merge once per verified milestone.
 
+## M4.2 rf_hit_shade (branch rf-hit-shade, offline only)
+
+Key `rf_hit_shade=0` (live, GUI `exp_rf_hit_shade`, needs startup `rt_hit_material=1`).
+Hidden/off-screen reflection hits on qualified materials get L_b (point/spot + sun ray +
+the game's ambient at AO 1) instead of the probe. No ABI change, no new push descriptor.
+Offline: key-off SPIR-V byte-identical, contract test, settings test. READY_FOR_LIVE:
+gate is the `rf hit shade` line (tier a mean L_b - L_a within z x SE). Cost not measured
+(expected +0.2-0.4 ms). Details: TRACK_D_REFLECTIONS 14.
+
 ## Camp rugs and planks
 
 Status: not reproducible since 10-31, kept as a watch item.

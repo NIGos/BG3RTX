@@ -1,4 +1,5 @@
 #include "../common/native_hit_gi_bindings.h"
+#include "../common/native_hit_rf_bindings.h"
 #include "../common/native_hit_tileset_fields.h"
 // Track C: screen-space GI for BG3 (docs/TRACK_C_GI.md).
 //
@@ -15,6 +16,7 @@
 //       add one-bounce radiance into the diffuse buffer before SSS and fog,
 //       and keep the lit radiance for next frame's ray hits.
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -242,6 +244,12 @@ bool g_ls_logged = false, g_ls_missing_logged = false;
 VkDescriptorSetLayout g_rf_set_layout = VK_NULL_HANDLE, g_rf_game_layout = VK_NULL_HANDLE;
 VkPipelineLayout g_rf_layout = VK_NULL_HANDLE;
 Pipe g_rf;
+// rf_hit_shade (M4.2 tier b, common/native_hit_rf_bindings.h): D-RF's push set, the material
+// AlphaDSL as set 1, the game's lighting set 1 as set 2, the D-LS sun set as set 3 (+ SHaRC set 4).
+// Built over g_rf_set_layout and g_rf_game_layout: ensure_rf_layout drops them with those.
+Pipe g_rf_shade, g_rf_shade_sharc;
+VkPipelineLayout g_rf_shade_layout = VK_NULL_HANDLE, g_rf_shade_sharc_layout = VK_NULL_HANDLE;
+bool g_rf_hit_logged = false, g_rf_hit_contract_logged = false;
 bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
@@ -588,6 +596,14 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
     host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_sharc_layout);
     g_rf_sharc = Pipe{};
     g_rf_sharc_layout = VK_NULL_HANDLE;
+    for (Pipe* p : {&g_rf_shade, &g_rf_shade_sharc}) {
+      for (VkPipeline v : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
+      *p = Pipe{};
+    }
+    for (VkPipelineLayout* l : {&g_rf_shade_layout, &g_rf_shade_sharc_layout}) {
+      host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
+      *l = VK_NULL_HANDLE;
+    }
     host->log("rf: the lighting's set 1 layout changed (%p -> %p); rebuilding", (void*)g_rf_game_layout, (void*)game);
   }
   if (!make_layout(kRfBindings, &g_rf_set_layout, &g_rf_layout, host_layout, game)) {
@@ -702,6 +718,44 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
     return false;
   }
   g_ls_box_game = game;
+  return true;
+}
+
+// rf_hit_shade: D-RF's push set 0, the host alpha layout (the material AlphaDSL has it) as set 1,
+// the game's lighting layout as set 2, the sun set 3 (g_sun_dsl), the SHaRC set 4. The push set
+// is D-RF's own: the contract's push table must be exactly what binding_type() builds.
+bool ensure_rf_hit_layout(bool sharc) {
+  namespace rfh = bg3::native_hit_rf;
+  VkPipelineLayout& out = sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
+  if (out) return true;
+  if (!g_rf_set_layout || !g_rf_game_layout || !ensure_ls_layout() || !g_sun_dsl) return false;
+  for (const auto& b : rfh::push) {
+    const VkDescriptorType t = b.binding < kRfBindings ? binding_type(b.binding)
+                             : b.binding == 40u || b.binding == 50u ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+                                                                    : VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    if (t != b.type || b.count != 1u) {
+      if (!g_rf_hit_contract_logged) host->log("rf hit shade: push binding %u differs from the D-RF layout; off", b.binding);
+      g_rf_hit_contract_logged = true;
+      return false;
+    }
+  }
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
+  VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : VK_NULL_HANDLE;
+  if (sharc && !sh) return false;
+  VkDescriptorSetLayout sets[5] = {g_rf_set_layout, host_layout, g_rf_game_layout, g_sun_dsl, sh};
+  static_assert(rfh::kSetPush == 0 && rfh::kSetMaterial == 1 && rfh::kSetGame == 2 && rfh::kSetSun == 3 && rfh::kSetSharc == 4);
+  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
+  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  lci.setLayoutCount = rfh::set_count(sharc);
+  lci.pSetLayouts = sets;
+  lci.pushConstantRangeCount = 1;
+  lci.pPushConstantRanges = &pc;
+  if (host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &out) != VK_SUCCESS) {
+    out = VK_NULL_HANDLE;
+    return false;
+  }
   return true;
 }
 
@@ -897,7 +951,13 @@ constexpr uint32_t kStatsRing = 8;
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
 // 136..152: primary pool/soup cohorts (HEAD); box diagnostics 200..252 (shifted +64 from the box branch).
-constexpr uint32_t kStatsCounters = bg3::transport::NtsStatsCount; //253..268 material;269..281 reference;282..286 GI;287..288 tileset
+// [289..303] rf_hit_shade (rt_reflections.hlsl RF_HIT_SHADE, rf_stats=1): tier (b) hidden hits
+// asked / shaded / unknown material / unsupported lighting / local probes listed / sum L_b; the
+// tier (a) check: complete / unsupported / sums L_b, L_a, |L_b - L_a| and the L_b terms direct,
+// sun, ambient; clipped values. Luminance x 128 (fxh). Logged every 300 frames ("rf hit shade").
+constexpr uint32_t kRfHitFirst = 289, kRfHitCount = 15;
+static_assert(bg3::transport::NtsStatsCount == kRfHitFirst, "rf hit shade counters follow the tileset ones");
+constexpr uint32_t kStatsCounters = kRfHitFirst + kRfHitCount; //253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..303 rf hit shade
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -915,6 +975,45 @@ float g_ls_raw[4] = {};   // set1/b0 m0.x, m0.y, m0.w, b13[0] as last written
 float g_frame_m4 = 0;     // set0/b0 _m4 (skin shaded white), raw counter 54
 uint32_t g_stats_n = 0;
 CameraMotionWindow g_epoch_motion;
+// rf hit shade: its own 300-frame window, with the per-frame mean (L_b - L_a) of the tier (a)
+// check for a frame-to-frame standard error (the live gate: mean within z x that error).
+struct RfHitWindow {
+  uint64_t sum[kRfHitCount] = {};
+  double d_sum = 0, d_sq = 0;
+  uint32_t d_frames = 0, frames = 0;
+} g_rfh;
+
+void rf_hit_fold(const uint32_t* c) {
+  uint64_t f[kRfHitCount] = {};
+  for (uint32_t i = 0; i < kRfHitCount; ++i)
+    for (int b = 0; b < 64; ++b) f[i] += c[(kRfHitFirst + i) * 64 + b];
+  for (uint32_t i = 0; i < kRfHitCount; ++i) g_rfh.sum[i] += f[i];
+  if (f[6]) {   // checked tier (a) hits this frame
+    const double d = (double(f[8]) - double(f[9])) / 128.0 / double(f[6]);
+    g_rfh.d_sum += d;
+    g_rfh.d_sq += d * d;
+    ++g_rfh.d_frames;
+  }
+  if (++g_rfh.frames < 300) return;
+  const uint64_t* t = g_rfh.sum;
+  if (t[0] || t[6] || t[7]) {
+    const double q = 1.0 / 128.0, n = double(g_rfh.d_frames);
+    const double mean = n > 0 ? g_rfh.d_sum / n : 0.0;
+    const double se = n > 1 ? std::sqrt((std::max)(g_rfh.d_sq / n - mean * mean, 0.0) / (n - 1.0)) : 0.0;
+    const double ck = t[6] ? double(t[6]) : 1.0;
+    host->log("rf hit shade (%u frames): tier b hidden hits %llu, shaded %llu (%.1f%%), unknown material %llu, "
+              "unsupported lighting %llu, shaded with local probes listed %llu, shaded mean luminance %.5f; "
+              "tier a check: %llu hits (%llu unsupported), mean L_b %.5f, mean L_a %.5f, mean (L_b - L_a) per frame "
+              "%.5f, standard error %.5f (%u frames), mean |L_b - L_a| %.5f; L_b terms direct %.5f, sun %.5f, "
+              "ambient %.5f; clipped %llu",
+              g_rfh.frames, (unsigned long long)t[0], (unsigned long long)t[1], t[0] ? 100.0 * t[1] / double(t[0]) : 0.0,
+              (unsigned long long)t[2], (unsigned long long)t[3], (unsigned long long)t[4],
+              t[1] ? t[5] * q / double(t[1]) : 0.0, (unsigned long long)t[6], (unsigned long long)t[7], t[8] * q / ck,
+              t[9] * q / ck, mean, se, g_rfh.d_frames, t[10] * q / ck, t[11] * q / ck, t[12] * q / ck, t[13] * q / ck,
+              (unsigned long long)t[14]);
+  }
+  g_rfh = RfHitWindow{};
+}
 
 bool stats_init() {
   if (g_stats_buf) return true;
@@ -984,6 +1083,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
       if ((i < 27 || i > 30) && i != 70 && (i < 144 || i > 150) && (i < 155 || i > 157))
         for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
     for (int i = 27; i <= 30; ++i) std::memcpy(&g_ls_raw[i - 27], &c[i * 64], 4);   // raw floats (latest)
+    rf_hit_fold(c);
     std::memcpy(&g_frame_m4, &c[70 * 64], 4);
     if (c[152 * 64]) {
       float pose[7];
@@ -1489,6 +1589,36 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 2, sets, s.game_set1_ndyn,
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
   if (s.rf_sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
+  vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  return true;
+}
+
+// rf_hit_shade (M4.2 tier b): the D-RF dispatch with the material AlphaDSL (rt_hit_material_use)
+// as set 1 and the sun set as set 3. False before anything is dispatched: the caller then runs the
+// ordinary D-RF, so a missing input keeps today's reflections exactly.
+bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& pc, VkDescriptorSet sun) {
+  if (!sun || !host->rt_hit_material_use ||
+      !bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t)))))
+    return false;
+  const bool sharc = s.rf_sharc;
+  if (!ensure_rf_hit_layout(sharc)) return false;
+  const VkPipelineLayout layout = sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
+  Pipe& p = sharc ? g_rf_shade_sharc : g_rf_shade;
+  if (!refresh(p, sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl", layout)) return false;
+  auto traversal = prepare_omm_traversal(cmd, b, p.pipeline);
+  if (!traversal.valid()) return false;
+  VkDescriptorSet material_alpha = b.alpha;
+  if (!host->rt_hit_material_use(cmd, b.tlas, b.alpha, b.omm_identity, &material_alpha) || !material_alpha) return false;
+  const VkDeviceFuncs& vk = *host->vk;
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p.pipeline);
+  VkWriteDescriptorSet w[kRfBindings + kNumExtras];
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, kRfBindings, w), w);
+  VkDescriptorSet sets[3] = {material_alpha, s.game_set1, sun};
+  // Dynamic offsets: only the game's set has dynamic bindings (as rf_dispatch).
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 3, sets, s.game_set1_ndyn,
+                           s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
+  if (sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
   return true;
@@ -2175,7 +2305,20 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     bool mv_move = rp.has_mv && g_mv_image && g_mv_layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     if (mv_move) image_layout(cmd, g_mv_image, g_mv_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, kAll, kCS);
     rf_timestamp(cmd, 0);
-    reflection_applied=rf_dispatch(cmd, rb, s, rp);
+    // rf_hit_shade (M4.2): tier (b) hits shaded with their native material and lighting. It
+    // needs the startup material provider and the sun set (D-LS's of this frame, else a fresh
+    // one); without them, or when the variant cannot run, the ordinary D-RF runs unchanged.
+    bool hit_shade = false;
+    if (host->cfg_int("rf_hit_shade", 0) && host->cfg_int("rt_hit_material", 0) && !s.rf_validate) {
+      const VkDescriptorSet sun = sun_set ? sun_set : (ensure_ls_layout() ? write_sun_set(s) : VK_NULL_HANDLE);
+      hit_shade = rf_hit_dispatch(cmd, rb, s, rp, sun);
+      if (!g_rf_hit_logged) {
+        g_rf_hit_logged = true;
+        host->log("rf hit shade: first request: %s (sun set %p, sharc %d)", hit_shade ? "tier (b) variant dispatched"
+                  : "variant unavailable, ordinary D-RF", (void*)sun, s.rf_sharc);
+      }
+    }
+    reflection_applied = hit_shade || rf_dispatch(cmd, rb, s, rp);
     rf_timestamp(cmd, 1);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
@@ -2396,7 +2539,7 @@ void gi_release() {
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
   for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
-                  &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
+                  &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_rf_shade, &g_rf_shade_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
     for (VkPipeline variant : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant);
     *p = Pipe{};
@@ -2409,6 +2552,11 @@ void gi_release() {
   g_rf_layout = VK_NULL_HANDLE;
   g_rf_set_layout = VK_NULL_HANDLE;
   g_rf_game_layout = VK_NULL_HANDLE;
+  for (VkPipelineLayout* l : {&g_rf_shade_layout, &g_rf_shade_sharc_layout}) {
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
+    *l = VK_NULL_HANDLE;
+  }
+  g_rf_hit_logged = g_rf_hit_contract_logged = false;
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_queries);
   g_queries = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_rt_queries);

@@ -84,6 +84,23 @@ with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor(8) as pool:
                 print(f"GI/reference host descriptor interface checked: {len(gi)} GI + {len(refs)} reference SPIR-V modules; native tileset={tileset}")
     elif material_gi or references:
         print("SKIP GI/reference host descriptor interface: build native_hit_gi_bindings_test first; shader compilation alone is not interface validation")
+    # rf_hit_shade (common/native_hit_rf_bindings.h): each compiled tier (b) module against its layout.
+    rf_hit = [(f, str(Path(tmp) / spv_name(f, "main"))) for f, rc, _ in res if not rc and
+              f.partition("?")[0] in ("gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl")]
+    rf_checker = root / "bin" / "native_hit_rf_bindings_test.exe"
+    if rf_hit and rf_checker.exists():
+        for f, spv in rf_hit:
+            d = defines(f)
+            flags = (["--sharc"] if "sharc" in f.partition("?")[0] else []) + \
+                    (["--tileset"] if "RT_NATIVE_TILESET=1" in d else []) + \
+                    (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else [])
+            result = subprocess.run([str(rf_checker), *flags, spv], capture_output=True, text=True)
+            if result.returncode:
+                res.append(("rf hit shade descriptor interface " + f, result.returncode, result.stdout + result.stderr))
+        if not any(r[1] and r[0].startswith("rf hit shade") for r in res):
+            print(f"rf hit shade descriptor interface checked: {len(rf_hit)} SPIR-V modules")
+    elif rf_hit:
+        print("SKIP rf hit shade descriptor interface: build native_hit_rf_bindings_test first")
 bad = [r for r in res if r[1]]
 for f, rc, msg in res:
     print(f"{'ok  ' if not rc else 'FAIL'} {f}")

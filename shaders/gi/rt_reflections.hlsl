@@ -17,7 +17,13 @@
 //   tier (c) a miss, a hit off screen or hidden on screen, or a query the candidate cap
 //            aborted (closest hit unknown, rt_common.hlsli): w = 0, the game's probe
 //            stays exactly as it was (a TLAS miss is not sky: roofs are cut away).
-// Tier (b), shading off-screen hits, needs the hit material (D-EN2) and is not done.
+//   tier (b) RF_HIT_SHADE (rt_reflections_hit_shade.hlsl, rf_hit_shade=1, needs rt_hit_material=1):
+//            a hidden or off-screen hit inside the frustum on a qualified native material
+//            takes L_b, its full shaded radiance (rt/native_hit_shade.hlsli: point/spot RT-
+//            shadowed, sun with one RT ray, the game's diffuse + specular ambient at AO 1),
+//            w = 1 faded towards rf_max_rough; anything unsupported keeps the probe (tier c).
+//            With rf_stats=1 the tier (a) hits also compute L_b and count it against the
+//            screen's L_a (logged "rf hit shade"); their output is unchanged.
 // The game's specular occlusion is not applied to traced hits: the ray
 // already found the occluder and returns its radiance.
 //
@@ -45,6 +51,17 @@
 #define SHARC_CAM_FROM_LIGHTS 1
 #include "sharc_common.hlsli"
 #endif
+#if RF_HIT_SHADE
+// Layout (core/gi.cpp rf_hit_dispatch, common/native_hit_rf_bindings.h): the D-RF push set, the
+// material AlphaDSL (rt_hit_material_use) as set 1, the game's lighting set 1 as set 2, the D-LS
+// sun set as set 3 (and the SHaRC set 4).
+#define BG3_SUN_SET 3
+#include "../rt/bg3_sun.hlsli"
+#include "../rt/native_hit_material.hlsli"
+#include "../rt/native_hit_direct.hlsli"
+#define NATIVE_HIT_SHADE_FULL 1
+#include "../rt/native_hit_shade.hlsli"
+#endif
 
 [[vk::binding(30, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> rfHitDist;
 
@@ -63,6 +80,10 @@ void stat_addv(uint index, uint v, uint bin) {
   if (WaveIsFirstLane() && n) rtStats.InterlockedAdd((index * 64 + b) * 4, n);
 }
 uint fxl(float v) { return uint(clamp(v, 0.0, 4.0) * 4096.0 + 0.5); }
+#if RF_HIT_SHADE
+// rf hit shade counters (core/gi.cpp kRfHitFirst): luminance x 128, clamped at 32 (clip counted).
+uint fxh(float v) { return uint(clamp(v, 0.0, 32.0) * 128.0 + 0.5); }
+#endif
 
 // GGX visible normals within the spherical cap that keeps the reflection above the
 // horizon (Eto & Tokuyoshi 2023, isotropic). wi in tangent space (z = normal).
@@ -136,6 +157,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float w = 0.0, hit_t = kNoHit;
   float3 Lrt = 0;
   bool cached = false;   // tier 2/3 shaded from the radiance cache (SHARC_QUERY_PASS)
+#if RF_HIT_SHADE
+  bool shaded = false;   // tier (b): a hidden / off-screen hit shaded with its material
+  // counters: hidden hits asked, unknown material, unsupported lighting, local probes listed at a
+  // shaded hit; the tier (a) check: complete, unsupported
+  uint hs_asked = 0, hs_material = 0, hs_light = 0, hs_probes = 0, hs_checked = 0, hs_check_fail = 0;
+  float3 hs_Lb = 0, hs_La = 0, hs_direct = 0, hs_sun = 0, hs_amb = 0;
+#endif
   if (eligible) {
     float3 Nn = normalize(sf.N);
     float3 dir = reflect(-sf.V, Nn);
@@ -161,7 +189,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       // normal disagree, 2 footprints along Nn).
       float3 o = rt_ray_origin(fp, sf.P, Nn, sf.dist * pa, dir);
       bool aborted;
-#if SHARC_QUERY_PASS
+#if SHARC_QUERY_PASS || RF_HIT_SHADE
       RtHit hh = rt_closest_hit(o, dir, pc.rf_tmax, cone);
       float t = hh.t;
       aborted = hh.aborted;
@@ -204,8 +232,45 @@ void main(uint3 tid : SV_DispatchThreadID) {
             }
           }
         }
+#if RF_HIT_SHADE
+        // Tier (b) on hidden / off-screen hits; the same shading on tier (a) hits only checks it
+        // against the screen (rf_stats=1 or rf_debug=8): their output stays the screen's.
+        const bool hs_check = tier == 1 && (pc.rf_stats != 0u || pc.rf_debug == 8u);
+        if ((tier == 2 || tier == 3 || hs_check) && hit_material_publication_ready()) {
+          NativeHitShade hs = native_hit_shade(hh, o + dir * t, -dir, cone.f0 + cone.spread * t);
+          if (tier == 1) {
+            hs_checked = hs.status == kHitShadeOk ? 1u : 0u;
+            hs_check_fail = 1u - hs_checked;
+            if (hs_checked != 0u) {
+              hs_Lb = hs.radiance;
+              hs_La = Lrt;
+              hs_direct = hs.direct;
+              hs_sun = hs.sun;
+              hs_amb = hs.ambient;
+            }
+          } else {
+            hs_asked = 1u;
+            hs_material = hs.status == kHitShadeMaterial ? 1u : 0u;
+            hs_light = hs.status != kHitShadeOk && hs.status != kHitShadeMaterial ? 1u : 0u;
+            if (hs.status == kHitShadeOk) {
+              // The probe is replaced only by the hit's complete supported radiance (no edge
+              // fade: the hit is not read from the screen).
+              w = rough_w * saturate(pc.rf_strength);
+              Lrt = hs.radiance;
+              hit_t = t;
+              shaded = true;
+              hs_probes = hs.local_probes ? 1u : 0u;
+              hs_Lb = hs.radiance;
+            }
+          }
+        }
+#endif
 #if SHARC_QUERY_PASS
+#if RF_HIT_SHADE
+        if (tier != 1 && !shaded && (shc.flags & 4u) != 0u && sf.a >= shc.rf_rough) {
+#else
         if (tier != 1 && (shc.flags & 4u) != 0u && sf.a >= shc.rf_rough) {
+#endif
           const float3 cam_abs = sharc_cam();
           const float3 ph = o + dir * t;
           sharc_bin = (fp.x >> 3) * 7u + (fp.y >> 3) * 13u;
@@ -273,12 +338,23 @@ void main(uint3 tid : SV_DispatchThreadID) {
     od = (tier == 1 || cached ? saturate(hit_t / 10.0) : 0.0).xxx * 0.5;
     os = 0;
   }
+#if RF_HIT_SHADE
+  if (pc.rf_debug == 1 && shaded) od = float3(0.25, 0.25, 0.25);   // tier (b): white (x 0.25)
+  if (pc.rf_debug == 8) {   // rf_hit_shade check: tier (a) red L_a, green L_b (yellow = equal); tier (b) blue L_b
+    od = hs_checked != 0u ? float3(lum(hs_La), lum(hs_Lb), 0.0) : shaded ? float3(0.0, 0.0, lum(hs_Lb)) : 0.0.xxx;
+    os = 0;
+  }
+#endif
   // Never hand the game a non-finite value.
   if (any(!isfinite(os))) os = gs;
   if (any(!isfinite(od))) od = gd;
   gSpecular[fp] = os;
   if (pc.rf_debug != 0) gDiffuse[fp] = od;
+#if RF_HIT_SHADE
+  rfHitDist[fp] = (tier == 1 || cached || shaded) && w > 0.0 ? min(hit_t, kNoHit) : kNoHit;
+#else
   rfHitDist[fp] = (tier == 1 || cached) && w > 0.0 ? min(hit_t, kNoHit) : kNoHit;
+#endif
 
   if (pc.rf_stats != 0) {
     uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
@@ -300,5 +376,24 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_addv(61, vpx ? fxl(lum(ms + Tp)) : 0u, bin);
     stat_addv(62, vpx ? fxl(lum(abs(gs - ms - Tp))) : 0u, bin);
     stat_addv(63, vpx ? fxl(lum(max(ms + Tp - gs, 0.0))) : 0u, bin);
+#if RF_HIT_SHADE
+    // rf hit shade (core/gi.cpp kRfHitFirst = 289, logged every 300 frames as "rf hit shade")
+    const bool clip = any(max(max(hs_Lb, hs_La), max(max(hs_direct, hs_sun), hs_amb)) > 32.0);
+    stat_addv(289, hs_asked, bin);
+    stat_addv(290, shaded ? 1u : 0u, bin);
+    stat_addv(291, hs_material, bin);
+    stat_addv(292, hs_light, bin);
+    stat_addv(293, hs_probes, bin);
+    stat_addv(294, shaded ? fxh(lum(hs_Lb)) : 0u, bin);
+    stat_addv(295, hs_checked, bin);
+    stat_addv(296, hs_check_fail, bin);
+    stat_addv(297, hs_checked != 0u ? fxh(lum(hs_Lb)) : 0u, bin);
+    stat_addv(298, hs_checked != 0u ? fxh(lum(hs_La)) : 0u, bin);
+    stat_addv(299, hs_checked != 0u ? fxh(abs(lum(hs_Lb) - lum(hs_La))) : 0u, bin);
+    stat_addv(300, hs_checked != 0u ? fxh(lum(hs_direct)) : 0u, bin);
+    stat_addv(301, hs_checked != 0u ? fxh(lum(hs_sun)) : 0u, bin);
+    stat_addv(302, hs_checked != 0u ? fxh(lum(hs_amb)) : 0u, bin);
+    stat_addv(303, (hs_checked != 0u || shaded) && clip ? 1u : 0u, bin);
+#endif
   }
 }

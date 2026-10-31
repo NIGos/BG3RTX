@@ -9,7 +9,7 @@ Runs after the consolidation live batch passes. Live jobs for increment 1:
 | Part | Key, default | State |
 |---|---|---|
 | D-RF reflections, tiers (a) on-screen hit and (c) probe | `rt_reflections=1` (on), `rf_max_rough` 0.6, `rf_*` | Qualified 10-26 (TRACK_D_REFLECTIONS 10). 0.33 ms foundry |
-| D-RF tier (b), shaded hidden/offscreen hits | none | Not implemented. Foundry: 21% hidden, 6% offscreen, 28% miss keep the probe |
+| D-RF tier (b), shaded hidden/offscreen hits | `rf_hit_shade=0`, live, GUI `exp_rf_hit_shade` | Offline done, READY_FOR_LIVE (TRACK_D_REFLECTIONS 14). Foundry: 21% hidden, 6% offscreen, 28% miss keep the probe |
 | D-RF + SHaRC for glossy hidden hits | `sharc=1`, `sharc_query` bit 2 (`gi/rt_reflections_sharc.hlsl`) | Off, cache not qualified (fine-cell gate open) |
 | Hit-material provider (M3a) | `rt_hit_material=0`, restart, GUI `exp_hit_material` | Static native VT opaque, verified draw join. R8 median 2246464 qualified/window |
 | GI hidden-hit point/spot bounce | `gi_hit_direct=0`, live, GUI `exp_gi_hit_direct`; needs `rt_hit_material=1`, `gi_rt=1`, `gi_rt_fallback=0` | GI R3 VALID (static OFF/ON/OFF): 0 negative px, 21517 positive; motion, visible gain and isolated cost not qualified |
@@ -59,8 +59,9 @@ Limits that decide the order:
   the froxel, finite inputs. Anything else keeps the probe (tier c), as now.
 - Radiance: L_b = `native_hit_direct` (point/spot, already RT-shadowed) + sun at the hit (the
   replicated `bg3_sun_colour()` x one RT visibility ray, no native mask there) + diffuse ambient
-  at the hit (sky irradiance b34 x diffuse colour x DFG.z, AO 1). The hit's own specular ambient
-  is not included: count those hits, do not hide the bias.
+  at the hit (sky irradiance b34 x diffuse colour x DFG.z, AO 1). Built (2026-10-31): the hit's
+  specular ambient (`bg3_spec_ambient` at the hit, local probes included) is in L_b too, since it
+  is the same set-2 code; local DIFFUSE probes are not (counted).
 - Inputs: material set via `rt_hit_material_use` as set 1, the game's lighting set 1 as set 2
   (already bound by D-RF), the D-LS sun set as set 3 (the EN2 layout note in DESIGN_SOTA_NEXT 2.16).
   No new push descriptors. No ABI change.
@@ -109,9 +110,12 @@ probe. GI additions replace only a zero fallback. Unknown traversal (candidate c
 old term (TRACK_D_REFLECTIONS 13). Report the pass GPU ms from the existing `gpu` lines.
 After a pass: key, gate numbers, cost and the user check go to PROGRESS_CODEX and the TRACK doc.
 
-## Open questions
+## Open questions (answered 2026-10-31 by reading the code, for M4.2)
 
-- Does the D-LS sun set fit in the D-RF layout next to the game's set 1 at set 2? Check
-  `maxBoundDescriptorSets` and the SHaRC variant (set 4) before writing M4.2.
-- Is the sky irradiance b34 the same binding in the lighting set 1 that D-RF binds? Verify in
-  the dumped `f469db78` before using it at hits.
+- Sets: yes. The material set is the host alpha set's layout (`rt_hit_material_use` returns a
+  query-owned AlphaDSL), so it replaces set 1; the game's set 1 stays set 2; the D-LS sun set
+  goes to the free set 3 (`BG3_SUN_SET`); SHaRC keeps set 4. 5 sets, as the existing SHaRC D-RF
+  variant; `maxBoundDescriptorSets` is 32 on the RTX 5090. Push set unchanged (32).
+- b34: yes. The dumped f469db78 declares set 1 b34 `textureCube _14` (b36 `_16`), read at N,
+  mip 0, x `_m27`/`_m28`, blended by `_m29`, x diffuse colour x DFG.z (lines 265-267, 969-994);
+  D-RF binds that exact set as set 2. Implemented: TRACK_D_REFLECTIONS 14.
