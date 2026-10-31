@@ -1,5 +1,24 @@
 # BG3RTX progress
 
+## User trial regression: camp rectangles and hairline - 2026-10-31
+
+User reports foliage flicker improved and hair color closer to native, but dark
+rectangles extend beyond rugs, planks have dark patches, and Astarion has a fixed
+stair-stepped hairline band. Installed trial is 047e105, native Hair/Scalp/physical
+origin ON, RR 1, FG 2, OMM/current-Sun OFF. New tileset/material work is not installed.
+Preserved 10:28-10:38 log/config under root captures/user-camp-regression-20261031;
+manifest: docs/evidence/user-camp-regression-20261031.json. Of 77 capacity windows,
+11 retain alpha-overflow substitutions (0.01-0.92 draws/frame), none drop opaque
+draws; last three windows have neither. Capacity is not globally ruled out.
+
+Concrete source issue under review: physical-origin raster class 5 is shared by
+native Hair/Pubes AND Scalp (FS 600446334bc7d478 / 87aab1f9603cf4a9). Class 5 alone
+cannot prove a hair receiver; an ambiguous nearby hair hit can authorize rebasing.
+This is a confirmed identity gap, not yet proof of this screenshot's cause.
+Owner Sun seeks exact native receiver evidence/conservative ambiguous rejection;
+M2 owner audits rug/plank coverage and cascade paths. No bias, opacity workaround,
+trial edit or live action. Prioritize these regressions before feature promotion.
+
 ## Native tileset materials and static depth integrated offline - 2026-10-31
 
 Main d31633b already contains M1 coverage and capture-budget fixes: 58 CTests,

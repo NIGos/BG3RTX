@@ -1,0 +1,418 @@
+{
+  "date": "2026-10-31",
+  "candidate": "047e1051413cb93a931f29bd03ccebd76fea9e9e",
+  "source_log_sha256": "5777b4dbd356799de76a8991320f71bf1ca2de0b40e668d5311bca0ad07c7d78",
+  "source_log_local": "C:\\Users\\quali\\.codex\\worktrees\\omm-bake\\BG3RTX\\captures\\user-camp-regression-20261031\\trial-1028-1038.log",
+  "session": "10:28:27 to 10:38:19",
+  "effective": {
+    "rt_native_hair": 1,
+    "rt_native_scalp": 1,
+    "rt_hair_physical_origin": 1,
+    "rr": 1,
+    "fg": 2,
+    "rt_omm": 0,
+    "rt_sun_cascade_current": 0,
+    "rt_cascade_casters": 1,
+    "rt_xfb_mb": 1408,
+    "rt_cascade_mb": 587
+  },
+  "observed": [
+    "User reports vegetation flicker improved and hair color closer to original.",
+    "Rug dark rectangle extends past visible fringe; planks have dark patches.",
+    "Astarion has fixed stair-stepped hairline band."
+  ],
+  "capture_capacity_windows": [
+    {
+      "time": "10:29:17.253",
+      "alpha_opaque": 0.08,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:29:28.758",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:29:32.277",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:29:35.967",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:29:39.581",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:29:43.053",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:29:46.555",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:29:50.201",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:29:54.261",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:30:09.777",
+      "alpha_opaque": 0.05,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:30:19.775",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:30:26.536",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:30:31.910",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:30:37.703",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:30:44.679",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:30:52.265",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:30:58.806",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:04.390",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:09.960",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:15.614",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:21.855",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:27.654",
+      "alpha_opaque": 0.33,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:33.086",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:40.859",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:45.767",
+      "alpha_opaque": 0.75,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:52.905",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:31:59.055",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:32:06.611",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:32:14.877",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:32:22.273",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:32:30.335",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:32:50.873",
+      "alpha_opaque": 0.01,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:32:58.159",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:05.861",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:13.292",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:17.218",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:21.683",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:26.330",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:30.646",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:36.687",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:42.159",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:46.645",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:51.599",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:33:57.335",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:34:05.304",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:34:11.765",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:34:18.423",
+      "alpha_opaque": 0.31,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:34:27.031",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:34:37.029",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:34:47.030",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:34:57.029",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:35:05.305",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:35:16.171",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:35:24.072",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:35:31.849",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:35:41.843",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:35:51.842",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:36:01.409",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:36:10.020",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:36:20.331",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:36:29.161",
+      "alpha_opaque": 0.14,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:36:39.161",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:36:45.800",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:36:53.270",
+      "alpha_opaque": 0.92,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:36:59.116",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:37:04.792",
+      "alpha_opaque": 0.27,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:37:09.861",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:37:14.911",
+      "alpha_opaque": 0.32,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:37:19.944",
+      "alpha_opaque": 0.29,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:37:27.069",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:37:33.273",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:37:39.925",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:37:46.511",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:37:52.607",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:38:01.098",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:38:10.481",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    },
+    {
+      "time": "10:38:18.605",
+      "alpha_opaque": 0.0,
+      "opaque_dropped": 0.0
+    }
+  ],
+  "limitations": [
+    "No same-run effect A/B or debug attribution for screenshots.",
+    "No 10:28-10:38 F10 frame packet found in trial captures.",
+    "No proven material/shader identity for rug or planks.",
+    "Current experimental M3 changes were not installed in this trial."
+  ],
+  "next": "Offline native coverage/caster audit; preserve installed trial and do not mask with bias or exclusions."
+}

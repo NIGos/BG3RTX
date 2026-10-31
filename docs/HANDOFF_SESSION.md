@@ -7,6 +7,16 @@ other windows. NO BG3/game launches now. Standalone GPU tests are allowed (lates
 keep CPU/GPU loads short/low priority while the user plays another game.
 Existing foreground batch receipts are terminal, not authority for another run.
 
+## Current regression priority
+
+User trial 047e105: foliage flicker improved, hair color more native; camp rug/plank
+rectangles and fixed Astarion hairline band remain. Preserve trial. Sun found real
+receiver-identity hole: raster class 5 also used by Scalp; physical-origin guard
+cannot prove Hair identity. Exact/ambiguous receiver proof under review, not yet
+image-causal proof. M2 audits rug/plank coverage. Root preserved session log/config;
+77 capacity windows, 11 residual alpha substitutions, last three zero; opaque drops
+all zero. See progress and docs/evidence/user-camp-regression-20261031.json.
+
 ## Trees and immediate next action
 
 Main d31633b, ABI 21: M1 coverage/capture budget merged through merge-green and
