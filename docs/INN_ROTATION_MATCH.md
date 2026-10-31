@@ -1,7 +1,6 @@
 # Inn rotation primary match (~83.5%): what the mismatch is
 
-Source: `cb2-scene-wait-rotation-inn-fg2.1.182224` (inn, FG 2, 30 fps cap). The 120-frame `rt stats` and
-`rt epoch` windows are mapped to motion-plan phases. All stats-on rotation windows turn in direction -1.
+Source: `cb2-scene-wait-rotation-inn-fg2.1.182224` (inn, FG 2, 30 fps cap), 120-frame `rt stats`/`rt epoch` windows per phase.
 
 | window | match | in front | behind | miss | pool match (share of hits) | soup match |
 |---|---|---|---|---|---|---|
@@ -17,8 +16,7 @@ Source: `cb2-scene-wait-rotation-inn-fg2.1.182224` (inn, FG 2, 30 fps cap). The 
   frame's scene", 0 timeouts, and "instance data changed between record and submit 0".
 - It persists at a static camera. p13, the view the rotation left behind, holds 12.08% in front, steady to
   0.01 over ten windows. The mismatch belongs to the view, not to the motion.
-- Not capacity: geo drops 0, alpha region full 0, records full 0, 0 deferred by the build budget, 0 rejected,
-  0 results lost, TLAS "none 0". The mesh cache grows from 468 to 1778 meshes with no loss.
+- Not capacity: geo drops 0, alpha/records full 0, 0 deferred, 0 rejected, 0 lost, TLAS "none 0" (cache 468 -> 1778 meshes).
 - Not alpha leaks: "behind" (through a cutout) stays at 0.6%. The "opaque / vt / tex" split reads 0.000 because
   `pan_primary.hlsl` never counts slots 5-7 (only `rt_shadow.hlsl` with rt_debug=3/5 does): no evidence there.
 - It is static (pool) geometry. Pool hits match 80-85%, the per-draw soup 94-97%, and pool is 79% of the hits.
