@@ -42,6 +42,19 @@
 #define NATIVE_HIT_SLOTS_SET 0
 #define NATIVE_HIT_SLOTS_BINDING 46
 #include "../rt/native_hit_direct.hlsli"
+#if RT_HIT_GI_SUN
+// gi_hit_sun (gi_trace_rt_hit_sun.hlsl, docs/PLAN_M4_REFLECTIONS_GI.md M4.3): the sun at the
+// same qualified hidden hits, rf_hit_shade's code (rt/native_hit_sun.hlsli) with the sun pass's
+// disc sampling. The D-LS sun set (core/gi.cpp g_sun_dsl, write_sun_set) is set 3, as D-RF's.
+#define BG3_SUN_SET 3
+#include "../rt/bg3_sun.hlsli"
+// The R0 roof rule (shared with rf_hit_shade) and the sun pass's disc sampling.
+#define NATIVE_HIT_SUN_ROOF 1
+#define NATIVE_HIT_SUN_DISC 1
+#define NATIVE_HIT_SUN_STAT_BASE 320u
+#define NATIVE_HIT_SUN_XBASE 325u
+#include "../rt/native_hit_sun.hlsli"
+#endif
 #endif
 #if SHARC_QUERY_PASS
 #define SHARC_RT_QUERY 1
@@ -197,10 +210,37 @@ void main(uint3 tid : SV_DispatchThreadID) {
         NativeHitDirect direct=native_hit_direct(material,hit_p,-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
         if(pc.rt_stats!=0u)stat_add(284u,direct.status==HdOk,hit_bin);
         if(direct.status==HdOk){
+#if RT_HIT_GI_SUN
+          // gi_hit_sun: the sun at the same hit (counters 320-328, core/gi.cpp "GI hit sun"). It
+          // joins the point/spot term in the same zero-fallback replacement (the fallback added no
+          // bounce here, and the screen's prevRadiance / SHaRC paths above never reach this code),
+          // so it is never counted twice. Unsupported (roof, unknown visibility, missing sun inputs:
+          // Push::ao_direct bit 3) leaves the sun out: the point/spot term alone, as gi_hit_direct.
+          const float3 hit_n=rt_hit_normal(hh);const float hit_f=cone.f0+cone.spread*t;
+          g_hs_seed=pcg3d(uint3(fp,pc.frame*8u+r)^uint3(0x6a09e667u,0xbb67ae85u,0x3c6ef372u)).x;
+          HdDirect sun;sun.radiance=0;sun.status=HdInvalid;
+          if((pc.ao_direct&8u)!=0u)sun=native_hit_sun(material,hit_p,-dir,hit_n,hit_f);
+          const bool sun_ok=sun.status==HdOk;
+          if(pc.rt_stats!=0u)stat_add(327u,!sun_ok && sun.status!=kHitSunRoof && sun.status!=HdUnknownVisibility,hit_bin);
+          // The AO-on-direct factor as rf_hit_shade applies it to the sun (native_hit_shade.hlsli):
+          // mix(1, AO, m0.y) unless ao_direct=1 gives the traced sun its full value back.
+          const bool sun_ao=sun_ok && any(sun.radiance>0) && !((pc.ao_direct&3u)==1u && (pc.ao_direct&12u)==12u);
+          float hit_a=1.0;
+          if(any(direct.native>0) || ((pc.ao_direct&3u)!=1u && any(direct.radiance>0)) || sun_ao){
+            hit_a=native_hit_ao(hit_p,hit_n,hit_f,uint3(fp,pc.frame*8u+r));
+            direct.radiance=native_hit_ao_direct(direct,hit_a);
+          }
+          const float3 sun_l=sun_ok?sun.radiance*(sun_ao?native_hit_ao_factor(hit_a):1.0):0.0.xxx;
+          if(pc.rt_stats!=0u){
+            uint sv=uint(clamp(dot(sun_l*w,float3(.2126,.7152,.0722)),0.0,8.0)*8192.0+0.5);
+            uint ss=WaveActiveSum(sv);if(WaveIsFirstLane() && ss)rtStats.InterlockedAdd((328u*64u+(WaveReadLaneFirst(hit_bin)&63u))*4u,ss);
+          }
+#else
           // The screen's AO-on-direct factor (native_hit_ao_direct): its AO rays only where a
           // factor applies (lights at the game's visibility, or ao_direct != 1).
           if(any(direct.native>0) || ((pc.ao_direct&3u)!=1u && any(direct.radiance>0)))
             direct.radiance=native_hit_ao_direct(direct,native_hit_ao(hit_p,rt_hit_normal(hh),cone.f0+cone.spread*t,uint3(fp,pc.frame*8u+r)));
+#endif
           if(pc.rt_stats!=0u){
             stat_add(285u,any(direct.radiance>0),hit_bin);
             // Zero direct split: 134 no positive unshadowed point/spot term (empty froxel, or
@@ -212,7 +252,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
             uint value=uint(clamp(dot(direct.radiance*w,float3(.2126,.7152,.0722)),0.0,8.0)*8192.0+0.5);
             uint sum=WaveActiveSum(value);if(WaveIsFirstLane() && sum)rtStats.InterlockedAdd((286u*64u+(WaveReadLaneFirst(hit_bin)&63u))*4u,sum);
           }
+#if RT_HIT_GI_SUN
+          bounce+=(direct.radiance+sun_l)*w;occ+=w;continue;
+#else
           bounce+=direct.radiance*w;occ+=w;continue;
+#endif
         }
       }
     }

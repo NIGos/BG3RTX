@@ -68,6 +68,10 @@
 #define NATIVE_HIT_SLOTS_SET 3
 #define NATIVE_HIT_SLOTS_BINDING 7
 #include "../rt/native_hit_direct.hlsli"
+// The sun at the hit follows the R0 roof rule (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF; roof
+// volumes in the sun set b8): under a roof the TLAS may lack, the sun is unsupported and the
+// hit keeps the probe (tier c).
+#define NATIVE_HIT_SUN_ROOF 1
 #define NATIVE_HIT_SHADE_FULL 1
 #include "../rt/native_hit_shade.hlsli"
 #endif

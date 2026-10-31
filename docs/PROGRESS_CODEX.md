@@ -1,5 +1,15 @@
 # BG3RTX current progress — 2026-10-31
 
+## M4.3 gi_hit_sun + shared sun roof rule (branch gi-hit-sun, offline, READY_FOR_LIVE)
+
+- `gi_hit_sun=0` (GUI `exp_gi_hit_sun`): the sun at gi_hit_direct's supported hidden hits, rf_hit_shade's
+  code (`rt/native_hit_sun.hlsli`) + sun-disc sampling; still only the zero fallback is replaced.
+- R0 roof rule shared by gi_hit_sun and rf_hit_shade: no casters + hit under a roof volume (or volumes
+  unknown) = sun unsupported, counted (`GI hit sun`, `rf hit shade sun` roof-unsupported). Answers the S8
+  tier (a) x 1.26 (sun 0.037 at hits ~95% under roofs).
+- Offline: 741/741 compile, contracts pass; vs main 697 SPIR-V byte-identical, the 48 rf_hit_shade
+  variants differ (roof rule, key off by default), 32 new gi_hit_sun variants; 67 CTests, QA detectors pass.
+- Live (pending): S3 OFF/ON/OFF gi_hit_sun; S8 rf_hit_shade tier (a) with rt_cascade_casters 0/1.
 ## D-EM AF 304be1c7 (branch em-forge, offline, 2026-11-01)
 
 - Fragment shader re-derived: the record already matches it term for term (no missing intensity, layer or exposure). Cause of AF 0.36 not found offline.

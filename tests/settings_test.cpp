@@ -350,8 +350,8 @@ static void test_dependencies_and_caps() {
 }
 
 static void test_rendering_experiments() {
-  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_gi_hit_direct","exp_rf_hit_shade"};
-  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","gi_hit_direct","rf_hit_shade"};
+  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_gi_hit_direct","exp_gi_hit_sun","exp_rf_hit_shade"};
+  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","gi_hit_direct","gi_hit_sun","rf_hit_shade"};
   static_assert(std::size(ids)==std::size(keys));
   for(size_t i=0;i<std::size(ids);++i){
     const auto* knob=find_knob(ids[i]);CHECK(knob!=nullptr);if(!knob)continue;
@@ -381,6 +381,11 @@ static void test_rendering_experiments() {
   gi_sources["gi_rt_fallback"]="0";CHECK(unmet_key_need(*find_knob("exp_gi_hit_direct"),1,gi_sources).empty());
   gi_sources["rt_hit_material"]="0";CHECK(!unmet_key_need(*find_knob("exp_gi_hit_direct"),1,gi_sources).empty());
   CHECK(unmet_key_need(*find_knob("exp_gi_hit_direct"),0,gi_sources).empty());
+  CHECK(!key_change_needs_restart("gi_hit_sun","0","1"));
+  auto sun_sources=code_defaults();
+  CHECK(!unmet_key_need(*find_knob("exp_gi_hit_sun"),1,sun_sources).empty());   // gi_hit_direct=0 by default
+  sun_sources["gi_hit_direct"]="1";CHECK(unmet_key_need(*find_knob("exp_gi_hit_sun"),1,sun_sources).empty());
+  CHECK(unmet_key_need(*find_knob("exp_gi_hit_sun"),0,sun_sources).empty());
   CHECK(!key_change_needs_restart("rf_hit_shade","0","1"));
   auto rf_sources=code_defaults();
   CHECK(!unmet_key_need(*find_knob("exp_rf_hit_shade"),1,rf_sources).empty());   // rt_hit_material=0 by default

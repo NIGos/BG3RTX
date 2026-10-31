@@ -40,30 +40,7 @@ static const uint kHitShadeOk=0u,kHitShadeMaterial=1u,kHitShadeDirect=2u,kHitSha
 // radiance_ao1: the same hit at AO 1 (the L_b before hit_ao_rays, for the tier (a) log); ao: A.
 struct NativeHitShade {float3 radiance,direct,sun,ambient,native,ambient_d,ambient_s,radiance_ao1;float ao;uint status,material_status;bool local_probes;};
 
-// Sun diagnostics (g_hd_stats; counters 191-195, core/gi.cpp): evaluated, a zero incident
-// (sun colour x clouds x b13[0]: below the horizon, night, full cloud), a known zero after the
-// cosine (N.L <= 0), traced lit, traced occluded.
-void hs_sun_stat(uint k,bool c){if(g_hd_stats)stat_add(191u+k,c,g_hd_bin);}
-// The sun at a qualified hit, through the same declared BSDF as the point/spot term.
-HdDirect native_hit_sun(NativeHitMaterial material,float3 position,float3 outgoing,float3 geometric_normal,float footprint){
- HdDirect r;r.radiance=0;r.status=HdOk;
- if((pc.qa_zero&1u)!=0u)return r;   // QA ambient floor: no direct sun (as rt_shadow.hlsl)
- const float3 L=normalize(cam.v0.xyz);
- HdIncident incident;incident.direction=L;incident.distance=0;incident.status=HdOk;
- incident.radiance=bg3_sun_colour()*(bg3_cloud_shadow(position)*asfloat(lScale.Load(0)));
- if(!all(isfinite(incident.radiance)) || any(incident.radiance<0)){r.status=HdInvalid;return r;}
- HdDirect term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,1);
- hs_sun_stat(0u,true);hs_sun_stat(1u,!any(incident.radiance>0));
- hs_sun_stat(2u,term.status==HdOk && any(incident.radiance>0) && !any(term.radiance>0));
- if(term.status!=HdOk || !any(term.radiance>0))return term;
- float3 normal=normalize(geometric_normal);
- if(!(dot(normal,L)>0)){r.status=HdNormalDomain;return r;}
- RtCone cone={footprint,0};
- uint visibility=rt_visibility(rt_offset_ray(position,normal),L,pc.rt_tmax,cone);
- hs_sun_stat(3u,visibility==kRtLit);hs_sun_stat(4u,visibility==kRtOccluded);
- if(visibility==kRtUnknown){r.status=HdUnknownVisibility;return r;}
- return hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
-}
+#include "native_hit_sun.hlsli"
 
 // The game's local DIFFUSE probes over the sky irradiance (f469db78:994-1178, _1687): every
 // probe listed in the hit's froxel with a diffuse cube ((m5 >> 1) & 1; cube pair from m5 bits
