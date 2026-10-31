@@ -19,6 +19,15 @@ static uint64_t g_loaded_mtime = 0, g_seen_mtime = 0;
 static ULONGLONG g_seen_tick = 0, g_last_check = 0;
 static uint32_t g_generation = 0;
 static bool g_faulted = false;
+// The command buffer of the core dispatch callback running on this thread (rt_scene_wait=2 reads
+// its compute camera binding when the core asks for the frame's scene); null outside one.
+static thread_local VkCommandBuffer t_core_cmd = VK_NULL_HANDLE;
+struct CoreCmdScope {
+  VkCommandBuffer prev;
+  explicit CoreCmdScope(VkCommandBuffer cmd) : prev(t_core_cmd) { t_core_cmd = cmd; }
+  ~CoreCmdScope() { t_core_cmd = prev; }
+};
+VkCommandBuffer core_dispatch_cmd() { return t_core_cmd; }
 
 static std::string core_path() { return bin_dir() + "\\bg3rtx_core.dll"; }
 
@@ -272,6 +281,7 @@ void core_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* pass) {
 void core_on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* info) {
   std::shared_lock<std::shared_mutex> lock(g_core_mu);
   if (!g_core || g_faulted || !g_core->on_dispatch) return;
+  CoreCmdScope scope(cmd);
   fault_checkpoint(cmd, kCkDispPre, uint32_t(info->cs_hash));
   if (!seh_dispatch(g_core, cmd, info)) fault("on_dispatch");
   fault_checkpoint(cmd, kCkDispPost, uint32_t(info->cs_hash));
@@ -280,6 +290,7 @@ void core_on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* info) {
 void core_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* info) {
   std::shared_lock<std::shared_mutex> lock(g_core_mu);
   if (!g_core || g_faulted || !g_core->on_dispatch_pre) return;
+  CoreCmdScope scope(cmd);
   fault_checkpoint(cmd, kCkDispPrePre, uint32_t(info->cs_hash));
   if (!seh_dispatch_pre(g_core, cmd, info)) fault("on_dispatch_pre");
   fault_checkpoint(cmd, kCkDispPrePost, uint32_t(info->cs_hash));

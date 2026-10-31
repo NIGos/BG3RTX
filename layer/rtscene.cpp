@@ -33,6 +33,7 @@
 #include "omm_sampler.h"
 #include "omm_bake.h"
 #include "../common/cascade_casters.h"
+#include "../common/scene_wait.h"
 
 #include <intrin.h>
 
@@ -1297,7 +1298,8 @@ VkBuffer rt_scene_pose() {
 }
 
 // Caller holds `lock` (g_mu). Waits (bounded) for this frame's scene commit; see g_scene_cv.
-void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
+// rt_scene_wait=2 passes `outcome` (filled, and the mode 1 line is left to its own log).
+void wait_for_frame_scene(std::unique_lock<std::mutex>& lock, scene_wait::WaitOutcome* outcome = nullptr) {
   const int ms = cfg_int("rt_scene_wait_ms", 12);
   const uint64_t now = frame_index();
   auto current = [&] { return g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built >= now; };
@@ -1310,6 +1312,7 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
     if (recent) g_wait_misses = (std::min)(g_wait_misses, 7u);
     if (g_wait_misses >= 8 && now % 64 != 0) {
       ++g_wait.skipped;   // no capture lately (menus, loading): probe once every 64 frames
+      if (outcome) outcome->skipped = true;
     } else {
       const auto t0 = std::chrono::steady_clock::now();
       const bool ok = g_scene_cv.wait_for(lock, std::chrono::milliseconds(ms > 0 ? ms : 1), current);
@@ -1318,8 +1321,10 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
       g_wait.ms += dt;
       g_wait.ms_max = (std::max)(g_wait.ms_max, dt);
       if (ok) { ++g_wait.got; g_wait_misses = 0; } else { ++g_wait.timeouts; ++g_wait_misses; }
+      if (outcome) { outcome->waited = true; outcome->got = ok; outcome->ms = dt; }
     }
   }
+  if (outcome) return;
   if (g_wait.calls >= 600) {
     log("[rt] scene wait: %llu frames, %llu waited (%llu got this frame's scene, %llu timeouts, %llu skipped), "
         "wait mean %.3f ms, max %.3f ms",
@@ -1330,11 +1335,63 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
   }
 }
 
+// rt_scene_wait=2: frame N's lighting camera, read from the compute camera binding (set 0
+// binding 2, as sun_scene.cpp) of the core dispatch recording on this thread. Before g_mu.
+static bool lighting_camera_pose(float pose[56]) {
+  const VkCommandBuffer cmd = core_dispatch_cmd();
+  Bg3Binding cb{};
+  return cmd && query_binding(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, 0, 2, 0, &cb) && cb.buffer &&
+         (cb.range == VK_WHOLE_SIZE || cb.range >= 56 * sizeof(float)) &&
+         read_mapped(cb.buffer, cb.offset, pose, 56 * sizeof(float));
+}
+
+static scene_wait::Stats g_wait2;
+static std::atomic<uint64_t> g_wait2_pose_frame{UINT64_MAX};
+
+// Caller holds `lock` (g_mu). The first RT query of a frame in rt_scene_wait=2 (common/scene_wait.h).
+static void wait_for_frame_scene_mode2(std::unique_lock<std::mutex>& lock, const float* lighting) {
+  const uint64_t now = frame_index();
+  scene_wait::Inputs in;
+  if (g_scene_cur >= 0) {
+    const SceneSlot& s = g_scene[g_scene_cur];
+    in.scene_used = s.used;
+    in.built = s.built;
+    in.scene_pose = s.camera_pose_valid ? s.camera_pose : nullptr;
+  }
+  in.now = now;
+  in.lighting_pose = lighting;
+  in.sun_current = cfg_int("rt_sun_cascade_current", 0) != 0;
+  const scene_wait::Decision d = scene_wait::decide(in);
+  scene_wait::WaitOutcome w;
+  if (scene_wait::waits(d)) wait_for_frame_scene(lock, &w);
+  g_wait2.add(d, w);
+  if (g_wait2.due()) {
+    char line[512];
+    g_wait2.format(line, sizeof line);
+    log("%s", line);
+    g_wait2.reset_window();
+    g_wait = WaitStats{};   // the mode 1 counters, also run by the fallback waits
+  }
+}
+
 bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {
   if (!g_rt) return false;
+  const int wait_mode = cfg_int("rt_scene_wait", 1);
+  float lighting[56];
+  bool lighting_ok = false;
+  if (wait_mode == 2) {   // once per frame, before g_mu (query_binding takes the command lock)
+    const uint64_t f = frame_index();
+    if (g_wait2_pose_frame.exchange(f) != f) lighting_ok = lighting_camera_pose(lighting);
+  }
   std::unique_lock<std::mutex> lock(g_mu);
   *set = VK_NULL_HANDLE;
-  if (cfg_int("rt_scene_wait", 1)) {
+  if (wait_mode == 2) {
+    static uint64_t last_frame2 = 0;
+    if (last_frame2 != frame_index()) {
+      last_frame2 = frame_index();
+      wait_for_frame_scene_mode2(lock, lighting_ok ? lighting : nullptr);
+    }
+  } else if (cfg_int("rt_scene_wait", 1)) {
     static uint64_t last_frame = 0;   // the first RT query of a frame waits; later ones reuse its result
     if (last_frame != frame_index()) {
       last_frame = frame_index();
