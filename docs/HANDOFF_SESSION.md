@@ -1,4 +1,4 @@
-# Session handoff - 2026-10-31: capacity regression corrected; Hair origins next
+# Session handoff - 2026-10-31: Hair trial installed; native Floor_B qualified
 
 Full rendering execution plan M0-M6 remains active; do not claim completion.
 User permits live diagnostics now, queue-only with finite scoped receipts and
@@ -6,8 +6,8 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main f1402ec ABI 19 is merged via merge-green and pushed with codex/omm-bake.
-Both DLLs rebuilt; 42/42 CTests, 415/415 runtime shaders and QA passed. Related
+Main d4a1612 ABI 19 is merged via merge-green and pushed with codex/omm-bake.
+Both DLLs rebuilt; 44/44 CTests, 527/527 runtime shaders and QA passed. Related
 user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
@@ -30,10 +30,14 @@ and contact output are live verified. See PROGRESS and hair-origin captures.
 
 Native class 0 parameter mapping and declared shared FresnelBlend eval/sample/PDF
 are implemented offline with tests. They are not native BSDF equivalence, a
-runtime hit provider or a complete reference renderer. M2 still needs one actual
-native Floor_B vertex oracle; the old 7/9 anchor test is not a transform oracle.
-Existing captures across 28 Git worktrees have no scene.bin. A bounded S1 native
-geometry draft is prepared outside inboxes; no additional launch yet.
+runtime hit provider or a complete reference renderer. The M3 owner is wiring
+actual static VT inputs and captured basis into qualified secondary-hit shading.
+M2 native S1 reference completed in 53 s: 835 draws, no capture overflow.
+Floor_B POSITION matches 48 instances/20256 corners, max residual 3.22e-5.
+ScaleZ acts on local X; observed Flip does not reflect POSITION. Target residual
+2.10e-5 is inside the derived 2.20e-4 precision envelope. Old decorative-anchor
+tests were not a transform oracle. Room closure and UV/material parity stay open.
+Next: nearby qualified floor support and the actual runtime material consumer.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
 module-independent SHA256 are fixed and tested through actual simulated runner.

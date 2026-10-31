@@ -1,5 +1,23 @@
 # BG3RTX progress
 
+## Native Floor_B positions qualified; practical checks retained - 2026-10-31
+
+Main d4a1612 is integrated and pushed: ABI 19, 44/44 CTests, 527/527 runtime
+shader entries and QA passed. The installed personal Hair trial is 047e105;
+the user has NOT yet reviewed its capacity and physical-origin updates.
+
+A bounded S1 native geometry capture completed in 53 s, with 835/835 draws and
+zero overflow. Floor_B export matches 48 native instances (47 held out), including
+12 Flip cases: 20256 ordered corners, maximum POSITION residual 3.22e-5.
+The selected tile residual is 2.10e-5 within its derived 2.20e-4 envelope.
+ScaleZ applies to local X; Flip does not reflect observed positions. Keep this
+scoped result; UV/normal/material equivalence and room closure remain open.
+Asset checks: 57 passed, one existing skip. No renderer or GPU cost change.
+Code: source 942113f, development import 33b14b0; not yet integrated into main.
+Evidence: m2-foundry-mesh/BG3RTX/captures/m2-foundry/floor-b-native-oracle/native-position-oracle.json.
+Next: nearby floor support and the static-VT runtime hit-material consumer.
+No unrelated global match threshold will block a demonstrated local correction.
+
 ## Physical Hair origins kept and installed in the personal trial - 2026-10-31
 
 Desktop BG3RTX - Hair Scalp now selects frozen hair-origin-live 047e105, with
