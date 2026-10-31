@@ -11,10 +11,10 @@ struct TerrainCopy {
  std::string slot,metadata;
 };
 struct TerrainPacket {
- uint64_t recording{},frame=UINT64_MAX;VkCommandBuffer cmd{};uint32_t ordinal{},draw{},id{};
+ uint64_t recording{},frame=UINT64_MAX,token{};VkCommandBuffer cmd{};VkQueue submitted_queue{};terrain_packet::Lifetime lifetime;uint32_t ordinal{},draw{},id{};
  std::array<TerrainCopy,4> copies{};std::string reason,metadata;bool recorded{};
 };
-std::mutex terrain_mu;std::vector<TerrainPacket> terrain_packets;
+std::mutex terrain_mu;std::vector<TerrainPacket> terrain_packets;uint64_t terrain_next_token=1;
 std::string tn(uint64_t v){return std::to_string(v);}
 std::string tf(float v){char b[32];snprintf(b,sizeof b,"%.9g",double(v));return b;}
 bool terrain_buffer_pipeline(DeviceData* dd,TerrainCopy& c){
@@ -76,14 +76,16 @@ bool terrain_binding(VkCommandBuffer cmd,CmdState* s,uint32_t set,uint32_t bindi
  }
  return true;
 }
-void terrain_release(TerrainCopy& c,bool deferred){
+void terrain_release(TerrainCopy& c){
+ // Only setup failure, known unsubmitted discard, successful queue idle or
+ // final device teardown reach this function. Pending packets stay registered.
  auto* dd=main_device();if(c.mapped)dd->vk.UnmapMemory(dd->device,c.memory);c.mapped=nullptr;
- if(deferred){if(c.copy_pipeline)defer_destroy(BG3_DEFER_PIPELINE,uint64_t(c.copy_pipeline));if(c.copy_layout)defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(c.copy_layout));if(c.copy_set)defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(c.copy_set));}
- else{if(c.copy_pipeline)dd->vk.DestroyPipeline(dd->device,c.copy_pipeline,nullptr);if(c.copy_layout)dd->vk.DestroyPipelineLayout(dd->device,c.copy_layout,nullptr);if(c.copy_set)dd->vk.DestroyDescriptorSetLayout(dd->device,c.copy_set,nullptr);}
- c.copy_pipeline={};c.copy_layout={};c.copy_set={};
- if(deferred){if(c.buffer)defer_destroy(BG3_DEFER_BUFFER,uint64_t(c.buffer));if(c.memory)defer_destroy(BG3_DEFER_MEMORY,uint64_t(c.memory));}
- else{if(c.buffer)dd->vk.DestroyBuffer(dd->device,c.buffer,nullptr);if(c.memory)dd->vk.FreeMemory(dd->device,c.memory,nullptr);}
- c.buffer=VK_NULL_HANDLE;c.memory=VK_NULL_HANDLE;
+ if(c.copy_pipeline)dd->vk.DestroyPipeline(dd->device,c.copy_pipeline,nullptr);
+ if(c.copy_layout)dd->vk.DestroyPipelineLayout(dd->device,c.copy_layout,nullptr);
+ if(c.copy_set)dd->vk.DestroyDescriptorSetLayout(dd->device,c.copy_set,nullptr);
+ if(c.buffer)dd->vk.DestroyBuffer(dd->device,c.buffer,nullptr);
+ if(c.memory)dd->vk.FreeMemory(dd->device,c.memory,nullptr);
+ c.copy_pipeline={};c.copy_layout={};c.copy_set={};c.buffer={};c.memory={};
 }
 }
 std::string terrain_capture_note(VkCommandBuffer cmd,CmdState* s){
@@ -112,8 +114,8 @@ std::string terrain_capture_note(VkCommandBuffer cmd,CmdState* s){
    }
   }
  }
- if(!family || terrain_packets.size()>=8 || !file_mtime(root_dir()+"\\trace_terrain_packet.request"))return {};
- TerrainPacket p;p.cmd=cmd;p.recording=s->recording;p.ordinal=s->pass.ordinal;p.draw=s->pass.draw_count;p.id=uint32_t(terrain_packets.size()+1);
+ if(!family || terrain_packets.size()>=8 || terrain_next_token>UINT32_MAX || !file_mtime(root_dir()+"\\trace_terrain_packet.request"))return {};
+ TerrainPacket p;p.cmd=cmd;p.recording=s->recording;p.ordinal=s->pass.ordinal;p.draw=s->pass.draw_count;p.token=terrain_next_token++;p.id=uint32_t(p.token);p.lifetime.owner.command=uint64_t(reinterpret_cast<uintptr_t>(cmd));p.lifetime.owner.recording=s->recording;
  const uint32_t sets[]={4,1,1,1},bindings[]={0,4,2,3};const char* slots[]={"s4b0","s1b4","s1b2","s1b3"};
  for(size_t k=0;k<4;++k){auto& c=p.copies[k];c.slot=slots[k];
   if(!terrain_binding(cmd,s,sets[k],bindings[k],c)){p.reason="missing_or_mutable_binding";break;}
@@ -157,12 +159,13 @@ std::string terrain_capture_note(VkCommandBuffer cmd,CmdState* s){
  const auto id=p.id;terrain_packets.push_back(std::move(p));return tn(id);
 }
 void terrain_capture_discard(VkCommandBuffer cmd){
- // Existing native successful reset/free hooks prove the old recording can no
- // longer execute. Submitted snapshots stay alive until the tracer saves them.
+ // Reset/free may legally happen before vkQueueSubmit returns after execution.
+ // A reservation therefore retains the packet until the actual result arrives.
  std::lock_guard lock(terrain_mu);
  for(auto it=terrain_packets.begin();it!=terrain_packets.end();){
-  if(it->cmd==cmd&&it->frame==UINT64_MAX){if(it->recorded)log("[terrain_packet] discarded unsubmitted recording %llu",(unsigned long long)it->recording);for(auto& c:it->copies)terrain_release(c,true);it=terrain_packets.erase(it);}
-  else ++it;
+  if(it->cmd==cmd){it->lifetime.discard();
+   if(it->lifetime.release_unsubmitted()){for(auto& c:it->copies)terrain_release(c);it=terrain_packets.erase(it);continue;}
+  }++it;
  }
 }
 void terrain_capture_secondary(VkCommandBuffer cmd,CmdState* s){
@@ -175,7 +178,7 @@ void terrain_capture_pass(VkCommandBuffer cmd,CmdState* s){
   // Prepare every resource before recording ANY command, so setup failure can
   // release it immediately without leaving executable commands referencing it.
   bool allocated=true;for(auto& c:p.copies)if(!alloc_host_buffer(c.bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,&c.buffer,&c.memory,&c.mapped)||!terrain_buffer_pipeline(dd,c)){allocated=false;break;}
-  if(!allocated){p.reason="staging_or_shader_setup_failed";for(auto& c:p.copies)terrain_release(c,false);continue;}
+  if(!allocated){p.reason="staging_or_shader_setup_failed";for(auto& c:p.copies)terrain_release(c);continue;}
   // Legal only after the native render pass. No native command can intervene
   // between its end and these copies. Source identities/ranges were frozen.
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};mb.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;mb.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_UNIFORM_READ_BIT;
@@ -197,21 +200,71 @@ void terrain_capture_pass(VkCommandBuffer cmd,CmdState* s){
   if(compute)restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);p.recorded=true;
  }
 }
-void terrain_capture_submit(const std::vector<VkCommandBuffer>& cmds,uint64_t frame){
- std::lock_guard lock(terrain_mu);for(auto cmd:cmds)for(auto& p:terrain_packets)if(p.cmd==cmd&&p.recording==cmd_recording(cmd)&&p.frame==UINT64_MAX)p.frame=frame;
+bool terrain_capture_needs_submit_promotion(VkCommandBuffer cmd){
+ const uint64_t recording=cmd_recording(cmd);if(!recording)return false;
+ std::lock_guard lock(terrain_mu);
+ for(const auto& p:terrain_packets)if(p.cmd==cmd && p.recording==recording && p.recorded && !p.lifetime.discarded)return true;
+ return false;
+}
+TerrainSubmission terrain_capture_before_submit(const std::vector<VkCommandBuffer>& cmds){
+ TerrainSubmission batch;batch.frame=frame_index();std::lock_guard lock(terrain_mu);batch.packets.reserve(terrain_packets.size());
+ // Iterate packets, not input commands: a duplicate CB cannot reserve twice.
+ for(auto& p:terrain_packets){
+  if(std::find(cmds.begin(),cmds.end(),p.cmd)==cmds.end())continue;
+  if(p.lifetime.reserve(cmd_recording(p.cmd)))batch.packets.push_back(p.token);
+ }
+ return batch;
+}
+void terrain_capture_after_submit(const TerrainSubmission& batch,VkQueue queue,bool success){
+ std::lock_guard lock(terrain_mu);
+ for(auto token:batch.packets){auto it=std::find_if(terrain_packets.begin(),terrain_packets.end(),[&](const auto& p){return p.token==token;});
+  if(it==terrain_packets.end())continue;
+  it->lifetime.finish(success,batch.frame);
+  if(success){it->frame=batch.frame;it->submitted_queue=queue;}
+ }
+ // A failed reset/discarded attempt has no GPU users. A failed executable
+ // attempt stays in the registry and may be retried with all objects intact.
+ for(auto it=terrain_packets.begin();it!=terrain_packets.end();)
+  if(it->lifetime.release_unsubmitted()){for(auto& c:it->copies)terrain_release(c);it=terrain_packets.erase(it);}else ++it;
+}
+void terrain_capture_device_destroyed(DeviceData* dd){
+ if(!dd || dd!=main_device())return;
+ std::lock_guard lock(terrain_mu);if(terrain_packets.empty())return;
+ const auto result=dd->vk.DeviceWaitIdle(dd->device);
+ log("[terrain_packet] shutdown cleanup %zu packets after device idle result %d",terrain_packets.size(),int(result));
+ for(auto& p:terrain_packets)for(auto& c:p.copies)terrain_release(c);
+ terrain_packets.clear();
 }
 void terrain_capture_finish(uint64_t frame,const std::string& dir,VkQueue queue){
- std::vector<TerrainPacket> packets;{std::lock_guard lock(terrain_mu);packets.swap(terrain_packets);}
- if(packets.empty()){
+ std::vector<TerrainPacket> packets;size_t waiting=0;
+ {
+  std::lock_guard lock(terrain_mu);
+  // Never swap out executable or pinned packets: driver-return callbacks must
+  // still find their exact token, including while a reset waits for its pin.
+  for(auto it=terrain_packets.begin();it!=terrain_packets.end();)
+   if(it->lifetime.finishable()){packets.push_back(std::move(*it));it=terrain_packets.erase(it);}else ++it;
+  waiting=terrain_packets.size();
+ }
+ if(packets.empty() && !waiting){
   if(file_mtime(root_dir()+"\\trace_terrain_packet.request")){
    const std::string missing="{\"status\":\"no_exact_family_candidate\"}\n";write_file(dir+"\\terrain_packet_missing.json",missing.data(),missing.size());
    log("[terrain_packet] frame %llu: no exact-family candidate",(unsigned long long)frame);
   }return;
  }
- auto* dd=main_device();bool idle=dd->vk.QueueWaitIdle(queue)==VK_SUCCESS;
- if(dd->graphics_queue&&dd->graphics_queue!=queue)idle=(dd->vk.QueueWaitIdle(dd->graphics_queue)==VK_SUCCESS)&&idle;
- if(!idle)for(auto& p:packets){p.reason="queue_idle_failed";p.recorded=false;}
- std::string folder=dir+"\\terrain_packet";make_dirs(folder);std::string json="{\"schema\":1,\"frame\":"+tn(frame)+",\"packets\":[";bool first=true;uint32_t copied=0,declined=0;
+ auto* dd=main_device();
+ // Each successful packet records its actual queue. A present/graphics queue
+ // heuristic is not completion proof for a packet submitted elsewhere.
+ std::vector<VkQueue> waited;bool idle=true;
+ for(const auto& p:packets){const auto submitted=p.submitted_queue;
+  if(!submitted){idle=false;continue;}
+  if(std::find(waited.begin(),waited.end(),submitted)==waited.end()){waited.push_back(submitted);idle=(dd->vk.QueueWaitIdle(submitted)==VK_SUCCESS)&&idle;}
+ }
+ if(!idle){
+  std::lock_guard lock(terrain_mu);
+  for(auto& p:packets){p.reason="queue_idle_failed";terrain_packets.push_back(std::move(p));}
+  log("[terrain_packet] frame %llu: queue idle failed; packets retained",(unsigned long long)frame);return;
+ }
+ std::string folder=dir+"\\terrain_packet";make_dirs(folder);std::string json="{\"schema\":1,\"frame\":"+tn(frame)+",\"pending_packets\":"+tn(waiting)+",\"packets\":[";bool first=true;uint32_t copied=0,declined=0;
  for(auto& p:packets){if(p.frame==frame){
   if(!p.recorded&&p.reason.empty())p.reason="pass_not_completed";
   if(p.recorded&&p.copies[0].mapped){const auto* data=static_cast<const uint32_t*>(p.copies[0].mapped);for(unsigned offset:{16u,17u})if(data[offset]<64 && uint64_t(data[offset]+1)*112>p.copies[1].bytes)p.reason="base_brush_outside_copied_range";}
@@ -222,11 +275,10 @@ void terrain_capture_finish(uint64_t frame,const std::string& dir,VkQueue queue)
    json+=(k?",":"")+std::string("{\"slot\":\"")+c.slot+"\",\"file\":"+(p.recorded?"\""+name+"\"":"null")+",\"bytes\":"+tn(c.bytes)+(c.metadata.empty()?"":","+c.metadata)+"}";
   }json+="]}";
  }
-  if(p.recorded&&p.frame==UINT64_MAX&&cmd_recording(p.cmd)==p.recording){
-   // Still executable but not yet submitted: frame-count retirement is unsafe.
-   std::lock_guard lock(terrain_mu);terrain_packets.push_back(std::move(p));
-  }else for(auto& c:p.copies)terrain_release(c,true);
+  // Actual submit success plus idle covers pipeline/layout/staging destruction.
+  for(auto& c:p.copies)terrain_release(c);
  }
- json+="]}\n";write_file(folder+"\\manifest.json",json.data(),json.size());log("[terrain_packet] frame %llu: copied %u, declined %u -> %s",(unsigned long long)frame,copied,declined,folder.c_str());
+ json+="]}\n";write_file(folder+"\\manifest.json",json.data(),json.size());log("[terrain_packet] frame %llu: copied %u, declined %u, pending %zu -> %s",(unsigned long long)frame,copied,declined,waiting,folder.c_str());
+ (void)queue; // Existing tracer signature; packet queues above are authoritative.
 }
 } // namespace bg3

@@ -292,7 +292,11 @@ std::string terrain_capture_note(VkCommandBuffer cmd, CmdState* s);
 void terrain_capture_pass(VkCommandBuffer cmd, CmdState* s);
 void terrain_capture_secondary(VkCommandBuffer cmd, CmdState* s);
 void terrain_capture_discard(VkCommandBuffer cmd);
-void terrain_capture_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
+struct TerrainSubmission {std::vector<uint64_t> packets;uint64_t frame{};};
+bool terrain_capture_needs_submit_promotion(VkCommandBuffer cmd);
+TerrainSubmission terrain_capture_before_submit(const std::vector<VkCommandBuffer>& cmds);
+void terrain_capture_after_submit(const TerrainSubmission&, VkQueue queue, bool success);
+void terrain_capture_device_destroyed(DeviceData* dd);
 void terrain_capture_finish(uint64_t frame, const std::string& dir, VkQueue queue);
 void count_pass();
 // Diagnostic counters, logged with the periodic [auto] line.

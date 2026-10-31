@@ -337,6 +337,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   sl_device_destroy(dd);
   if (dd == g_main) {
     core_shutdown();
+    terrain_capture_device_destroyed(dd);
     em_device_destroyed(dd);
     bvh_device_destroyed(dd);
     alpha_device_destroyed(dd);
@@ -456,6 +457,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto terrainWork=terrain_capture_before_submit(cmds);
   const auto materialWork=native_hit::before_submit(queue,cmds);
   const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
@@ -463,6 +465,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM: the emissive scene of this batch's effects passes
   omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
+  terrain_capture_after_submit(terrainWork,queue,r==VK_SUCCESS);
   return r;
 }
 
@@ -484,13 +487,14 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   native_hit::SubmitStages content;
   std::vector<VkCommandBuffer> entry;
   for(uint32_t i=0;i<count;++i) {
-    const auto& s=submits[i];entry.clear();bool material=false;
+    const auto& s=submits[i];entry.clear();bool material=false,terrain=false;
     for(uint32_t j=0;j<s.commandBufferInfoCount;++j){
       const auto cmd=s.pCommandBufferInfos[j].commandBuffer;entry.push_back(cmd);
       material=material || native_hit::recording_needs_submit_promotion(cmd);
+      terrain=terrain || terrain_capture_needs_submit_promotion(cmd);
     }
     const bool omm_content=omm::content_dispatch_in_submit(entry);
-    content.promote(submits,count,i,material,material || omm_content);
+    content.promote(submits,count,i,material || terrain,material || terrain || omm_content);
   }
   submits=content.data_or(submits);
   order_log_submit("submit", cmds);
@@ -501,6 +505,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
   auto lock = queue_lock();
+  const auto terrainWork=terrain_capture_before_submit(cmds);
   const auto materialWork=native_hit::before_submit(queue,cmds);
   const auto ommWork=omm::before_submit(dd,cmds);
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
@@ -508,6 +513,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM (our build goes through vkQueueSubmit)
   omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
+  terrain_capture_after_submit(terrainWork,queue,r==VK_SUCCESS);
   return r;
 }
 
