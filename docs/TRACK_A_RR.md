@@ -478,9 +478,8 @@ code values):
 RR's input (both the old graded colour and the new `X`) is therefore already
 eye-adapted. The RR guide 3.7 says the exposure parameters (DLSS guide 3.9,
 which includes the pre-exposure factor) are not supported by RR, so
-`DLSS.Pre.Exposure` stays the game's 1. `rr_pre_exposure=1` passes
-`s1b13[0]` (read back a frame or two late) for an A/B; **that A/B has not been
-run**.
+`DLSS.Pre.Exposure` stays the game's 1. The `rr_pre_exposure` A/B key was never run:
+removed 2026-10-31, see CONSOLIDATION.md C1.
 
 **Cost** (RTX 5090, 2560x1067 → 3840x1600, GPU timestamps, `[rrpost] gpu`,
 foundry): render-resolution steps (snapshot, DoF weights, resolve, exposure,
@@ -652,7 +651,7 @@ player's `fg=2` setup can run different RR versions.
 - **RR before post, not verified:** a DoF frame on the final build (the DoF
   weights were checked only on an earlier build); a motion/temporal quality
   metric (the expected gains are in motion, dark 1-spp areas and DoF scenes);
-  the `rr_pre_exposure=1` A/B; whether 310.7.129 runs RR2 for preset F; the
+  whether 310.7.129 runs RR2 for preset F; the
   SSS guide's effect on skin (it is set, non-finite-free, but not A/B'd).
 - **RR before post, fallbacks:** effects the chain does not model (the Goblin
   Camp cinematic's chromatic aberration, tint vignette and overlay, and the
