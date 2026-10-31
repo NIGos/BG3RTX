@@ -52,16 +52,17 @@ NativeHitDirect native_hit_direct(NativeHitMaterial material,float3 surface_posi
   HdDirect term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,1);
   if(term.status!=HdOk){result.status=term.status;return result;}
   if(!any(term.radiance>0))continue;
-  if((light.flags&1u)!=0u){
-   float3 normal=normalize(geometric_normal);
-   if(!(dot(normal,incident.direction)>0)){result.status=HdNormalDomain;return result;}
-   float3 origin=rt_offset_ray(surface_position,normal),delta=light.pos-origin;
-   float distance=length(delta);if(!(distance>0) || !isfinite(distance)){result.status=kHitDirectDomain;return result;}
-   RtCone cone={footprint,0};uint visibility=rt_visibility(origin,delta/distance,distance,cone);
-   if(visibility==kRtUnknown){result.status=HdUnknownVisibility;return result;}
-   term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
-   if(term.status!=HdOk){result.status=term.status;return result;}
-  }
+  // flags bit0 means native atlas presence, not physical transparency to the
+  // light. The physical point/spot reference tests every positive term,
+  // including lights that the native renderer originally left unshadowed.
+  float3 normal=normalize(geometric_normal);
+  if(!(dot(normal,incident.direction)>0)){result.status=HdNormalDomain;return result;}
+  float3 origin=rt_offset_ray(surface_position,normal),delta=light.pos-origin;
+  float distance=length(delta);if(!(distance>0) || !isfinite(distance)){result.status=kHitDirectDomain;return result;}
+  RtCone cone={footprint,0};uint visibility=rt_visibility(origin,delta/distance,distance,cone);
+  if(visibility==kRtUnknown){result.status=HdUnknownVisibility;return result;}
+  term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
+  if(term.status!=HdOk){result.status=term.status;return result;}
   result.radiance+=term.radiance;++result.lights;
  }
  result.status=all(isfinite(result.radiance))?HdOk:HdInvalid;return result;

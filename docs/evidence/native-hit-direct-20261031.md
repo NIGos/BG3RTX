@@ -1,4 +1,4 @@
-# Native-hit direct-only reference — 2026-10-31
+# Native-hit direct-only reference â€” 2026-10-31
 
 Offline implementation following provider `177ef6e`. No game/GPU call or live
 candidate change. The provider's `NativeHitMaterial` and `rt_hit_material`
@@ -33,9 +33,10 @@ froxel slice range, valid buffer ranges and the existing 1024-light bound.
 Projector-bearing receiver lists explicitly return unsupported. Sun,
 environment/probes, emission, AO multipliers and indirect bounces are omitted
 by this declared point/spot contract; their absence must never justify replacing
-full probe radiance. Native shadow-casting flags select binary RT visibility;
-UNKNOWN visibility rejects the result. This follows the current physical RT
-local-shadow policy rather than copying atlas fade/artistic shadow strength.
+full probe radiance. Every positive point/spot term gets binary RT visibility, including sources
+without a native shadow atlas. Native flag bit0 indicates atlas presence and does
+not disable this physical visibility test. UNKNOWN visibility rejects the result.
+No atlas fade or artistic shadow-strength multiplier is copied.
 Standard shared ray offsets move the geometric surface origin; no arbitrary
 ray-distance selector or ambient floor is added.
 
