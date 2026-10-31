@@ -1,5 +1,17 @@
 # BG3RTX progress
 
+## R4 brief acquisition running on consolidated c82fe8d - 2026-10-31
+
+Main c82fe8d is merged via merge-green and pushed: 54/54 CTests, 577/577 runtime
+shader files/all entries and QA pass. A fixture still using the old helper signature
+caused the first build failure; cbc0723 updates it, fresh fixture test passes and
+full integration then passes. Independent sampler/key/ownership review is clear.
+
+Private R4 c82fe8d has matching copied ABI 21 host/core/launcher hashes and a finite
+one-run receipt. Real-present FG2/RR1 S1: 20/90/20 s; one trace at ON+30 s requests
+exact terrain bytes. Reference stays OFF. No verdict yet; runner session 60673.
+New features remain OFF in presets; the separate user Hair trial stays unchanged.
+
 ## Bounded reference and acquisition fixes ready for consolidation - 2026-10-31
 
 Default-OFF `rt_hit_reference=2` extends the SAME direct reference by one BSDF

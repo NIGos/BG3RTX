@@ -6,8 +6,8 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main 90d7930 ABI 21 is merged via merge-green and pushed with codex/omm-bake.
-Both DLLs rebuilt; 52/52 CTests, 561/561 runtime shaders and QA passed. Related
+Main c82fe8d ABI 21 is merged via merge-green and pushed with codex/omm-bake.
+Both DLLs rebuilt; 54/54 CTests, 577/577 runtime shaders and QA passed. Related
 user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
@@ -46,10 +46,12 @@ No material GPU participation yet. Static primary 99.524/99.524/99.525%, FG rati
 R3 dae7d32 is TERMINAL: 448 s, parser fix confirmed actual, binding attempts
 still decline; no material GPU rows. Immutable root captures/r3 analysis retained.
 76ef799/import d8510b1 fixes eligibility-before-key and ordinary frozen samplers.
-R4 unreleased draft: 20/90/20 s plus one ON+30 s existing trace for terrain packet.
+R4 RUNNING: native-hit-provider-live c82fe8d ABI21, queue session 60673, batch
+native-hit-provider-20261031-r4. Plan 20/90/20 s, trace at ON+30 s for terrain.
+Candidate/source/bin/input files stay frozen; follow same runner handle.
 Exact packet capture e3b238a/8a84f11 linked/tested, opt-in request marker.
 Two-surface reference d74f766, rt_hit_reference=2, default OFF; CPU/shader checks
-pass, no GPU/path-quality claim. Consolidate via merge-green before candidate.
+pass, no GPU/path-quality claim. All consolidated via merge-green and pushed.
 Main is ABI 21; personal Hair trial stays ABI 19. Do not rerun unchanged.
 89 actual S1 G-buffer VS/FS modules pass the read-only scanner. Non-watched
 360 s acquisition draft is under captures/native-hit-material-20261031/draft/.
