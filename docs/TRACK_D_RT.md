@@ -1347,6 +1347,20 @@ and the steps. Priority: P1 next, P2 after P1, P3 later, P4 not recommended.
   5. Compare its variance with D-LS v2 at equal cost. Keep it only if it wins in
      scenes with more than 8 lights per pixel.
 
+#### Cache-free direct / two-surface reference increment (2026-10-31)
+
+Default-off `rt_hit_reference=0` now selects the existing native-hit reference's
+Direct only or Two surfaces mode through one Experimental control. Two surfaces
+adds one shared FresnelBlend BSDF continuation with f*cos/pdf throughput and
+secondary point/spot NEE, then explicit depth2 termination. Null samples retain
+their probability; unavailable geometry/material/light inputs remain incomplete
+and keep the direct prefix. This is a bounded class0/in-frustum reference, not
+complete hit radiance or full M6, and it is not injected into RF's probe delta.
+Six targeted CTests pass; 334 new CPU checks, 292 settings checks and 16 ordinary
+reference SPIR-V identities / 16 new feature validations pass. GPU cost/runtime
+participation are unknown; acquisition and later same-run image checks remain
+open. Details and exact limits: [OPAQUE_TWO_SURFACE_REFERENCE.md](OPAQUE_TWO_SURFACE_REFERENCE.md).
+
 #### D-RF: ray-traced reflections (P1)
 - **Status (2026-10-26): tiers (a) + (c) implemented with D-EN4 and the RR hit distance.**
   Results in [section 10](#10-d-rf-ray-traced-reflections-implemented-tiers-a-and-c). The plan below is kept as written.

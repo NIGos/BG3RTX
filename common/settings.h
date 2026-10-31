@@ -253,6 +253,17 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hit_material", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Native prepass capture"},{"rt_bvh_split","1","Split hit identity"}}},
 
+  {"exp_hit_reference", "Experimental lighting reference",
+   "Shows a limited reference using point and spot lights on supported opaque surfaces. "
+   "Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. "
+   "Requires Native hit materials at startup. No sunlight, sky, emission or full-scene quality claim. "
+   "This replaces the display for inspection; it is not a gameplay quality preset.",
+   Kind::Choice, Apply::Live, "live; native materials need startup", true,
+   {{"off", "Off", 0, {{"rt_hit_reference", "0"}}, {}},
+    {"direct", "Direct only", kCapRayQuery, {{"rt_hit_reference", "1"}}, {{"rt_geometry", 2}, {"exp_hit_material",1}}},
+    {"two", "Two surfaces", kCapRayQuery, {{"rt_hit_reference", "2"}}, {{"rt_geometry", 2}, {"exp_hit_material",1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"}}},
+
   {"exp_omm", "Opacity micromaps",
    "Experimental hardware opacity micromaps for the audited static alpha-material subset. "
    "Requires Full ray-traced geometry, Vulkan 1.3, EXT opacity micromaps, buffer device "
@@ -293,7 +304,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 218 keys of bg3rtx.ini, in file order.
+// 219 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -408,6 +419,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_alpha_stochastic", "1"},
     {"rt_native_scalp", "0"},
     {"rt_hit_material", "0"},
+    {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
     {"rt_native_hair", "0"},
     {"rt_hair_physical_origin", "0"},

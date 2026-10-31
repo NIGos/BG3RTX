@@ -202,7 +202,7 @@ VkDescriptorSetLayout g_current_sun_set_layout=VK_NULL_HANDLE,g_current_sun_host
 VkPipelineLayout g_current_sun_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
-Pipe g_hit_material, g_hit_direct;
+Pipe g_hit_material, g_hit_direct, g_hit_two_bounce;
 Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
 Pipe g_rt_shadow_current; // private current-caster tuple; ordinary sun pipe stays untouched
@@ -906,7 +906,7 @@ constexpr uint32_t kStatsRing = 8;
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
 // 136..152: primary pool/soup cohorts (HEAD); box diagnostics 200..252 (shifted +64 from the box branch).
-constexpr uint32_t kStatsCounters = 269; //253..268: qualified hit-material results/native residuals
+constexpr uint32_t kStatsCounters = 282; //253..268: qualified hit-material results/native residuals
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -1060,6 +1060,9 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
     g_stats_n,material_total,t[253],material_total-t[253],t[254],t[255],t[256],t[257],t[258],t[259],t[260],t[261],t[262]);
   if(t[263])host->log("hit material native compare (%u frames): matched class0 %llu; mean raw albedo/normal/roughness/reflectance/metalness %.7f/%.7f/%.7f/%.7f/%.7f; sum quantization1/256; cone vs raster footprint, NOT equality gate",
     g_stats_n,t[263],double(t[264])/t[263]/256.0,double(t[265])/t[263]/256.0,double(t[266])/t[263]/256.0,double(t[267])/t[263]/256.0,double(t[268])/t[263]/256.0);
+  uint64_t bounce_total=0;for(unsigned i=269;i<=280;++i)bounce_total+=t[i];
+  if(bounce_total)host->log("hit reference two-surface (%u frames): paths %llu depth2 complete %llu (positive indirect %llu), BSDF null %llu; incomplete primary material/direct %llu/%llu, sample/domain %llu/%llu, traversal/no secondary %llu/%llu, secondary material/direct %llu/%llu, numeric/primary mismatch %llu/%llu; direct-prefix fallback is NOT complete",
+    g_stats_n,bounce_total,t[269],t[281],t[270],t[271],t[272],t[273],t[274],t[275],t[276],t[277],t[278],t[279],t[280]);
   if (t[16]) {   // rt_local_shadows.hlsl, ao_direct (AUDIT_RT fix 4)
     double px = double(t[16]), lit = double(t[21] ? t[21] : 1);
     host->log("ls stats (%u frames): ao_direct %d gives back %.5f per px (%.2f%% of the lit luminance); the sun as "
@@ -2180,14 +2183,18 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     memory_barrier(cmd,kCS,kCS);bind_rt(b,s.tlas,s.alpha);
     (void)dispatch(cmd,g_hit_material,b,pc,g_w,g_h,true); // optional: unsupported keeps remaining passes
   }
-  // Explicit primary-hit point/spot DIRECT-ONLY reference. This is independent
-  // of normal RF's probe replacement and requires the actual native light tuple.
-  if(s.tlas && s.ls_ok && pc.rf_debug==7 && host->cfg_int("rt_hit_material",0) &&
-     bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) &&
-     ensure_ls_layout() && refresh(g_hit_direct,"gi/rt_hit_direct.hlsl",g_ls_layout)){
-    Bound direct{};bind_all(direct,s);bind_rt(direct,s.tlas,s.alpha);bind_ls(direct,s);bind_extras(direct,s);
-    memory_barrier(cmd,kCS,kCS);
-    (void)ls_dispatch(cmd,direct,pc,VK_NULL_HANDLE,g_hit_direct.pipeline,(g_w+7)/8,(g_h+7)/8,nullptr,true);
+  // One cache-free reference renderer: direct or finite two-surface subset.
+  // Normal RF/probe replacement remains separate and unchanged.
+  const int reference_mode=host->cfg_int("rt_hit_reference",0);
+  if(s.tlas && s.ls_ok && (pc.rf_debug==7 || reference_mode==1 || reference_mode==2) && host->cfg_int("rt_hit_material",0) &&
+     bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) && ensure_ls_layout()){
+    const bool two=reference_mode==2;
+    Pipe& reference=two?g_hit_two_bounce:g_hit_direct;
+    if(refresh(reference,two?"gi/rt_hit_two_bounce.hlsl":"gi/rt_hit_direct.hlsl",g_ls_layout)){
+      Bound direct{};bind_all(direct,s);bind_rt(direct,s.tlas,s.alpha);bind_ls(direct,s);bind_extras(direct,s);
+      memory_barrier(cmd,kCS,kCS);
+      (void)ls_dispatch(cmd,direct,pc,VK_NULL_HANDLE,reference.pipeline,(g_w+7)/8,(g_h+7)/8,nullptr,true);
+    }
   }
   // Capture after the RT debug overlay so debug 8 bursts contain its QA encoding.
   if (s.pan) host->pan_capture(cmd, "diffuse", &s.dif);
@@ -2348,7 +2355,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
-  for (Pipe* p : {&g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
+  for (Pipe* p : {&g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
