@@ -57,3 +57,16 @@ closed phase notes (P1_PAN_FLASHES, P2_*, P3_NATIVE_DIRECT_VALIDATION), DEVICE_L
 SUN_PENUMBRA_REVIEW, UI_CONTAMINATION_OFFLINE, the merged OMM and hair-origin notes,
 GOAL_RENDERING_AGENT and the full progress history PROGRESS_CODEX_2026-10-31.md.
 
+## Naming legend
+
+The same letters mean different things in different docs:
+
+| Name | Meaning | Defined in |
+|---|---|---|
+| P1 to P6 | Old work phases (before 2026-10-30): P1 motion/pan correctness, P2 pending merges and emissive (D-EM), P3 box lights, P4 OMM, P5 SHaRC v2 and light tree, P6 water | archive/PROGRESS_CODEX_2026-10-31.md ("Next phases"); doc names P3_, P4_, P6_ |
+| M0 to M6 | Milestones of the current rendering program (replace the P phases) | RENDERING_EXECUTION_PLAN.md |
+| S1 to S14 | Test scenes (player saves) | TEST_SCENES.md |
+| R0 to R10 | Quality rules (R0 physically correct, R5 validation, R7 cost budget, ...) | QUALITY.md |
+| R1, R2, R3, ... after a feature name | Numbered live runs of one feature's test batch, for example "GI R3", "material R1/R2", "R8" in the plan's milestone table, D-EM R4/R5 | PROGRESS_CODEX.md, HANDOFF_SESSION.md, RENDERING_EXECUTION_PLAN.md, TRACK_D_RT.md 13.20 |
+
+So "R3" alone is ambiguous: write "QUALITY R3" for the rule and "GI R3" for the run.
