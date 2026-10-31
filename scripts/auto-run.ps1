@@ -40,6 +40,8 @@ param(
   [switch]$Foreground,
   # Visible, real-present owned window behind other windows; never activate it.
   [switch]$NoActivate,
+  # One-shot read-only native light fields via SE console; exclusive static foreground only.
+  [switch]$SELightProbe,
   # Legacy window behavior only; never bypasses queue authorization.
   [switch]$UnfocusedFG,
   # Hold a camera-pan key (default D) once gameplay is reached, so the
@@ -121,6 +123,7 @@ function Assert-QueueLaunchProcesses {
 }
 Assert-QueueLaunchProcesses
 $markerRoot = if ($env:BG3RTX_QUEUE_ROOT) { $env:BG3RTX_QUEUE_ROOT } else { $root }
+if($SELightProbe -and (-not $Foreground -or $NoActivate -or $Shared -or $Move -or $MovePlan)){throw '-SELightProbe requires an exclusive static foreground queue run'}
 $playing=Get-QueueUserPlayingBlock $markerRoot $root
 if ($playing) { throw $playing }
 $caps = Join-Path $root "captures"
@@ -165,6 +168,7 @@ $slot = $lock.Slot
 $lockedAt = Get-Date
 Write-Host "Run mode: $runMode$(if ($slot -ge 0) { " (slot $slot): timings are not exclusive" }) (lock at $($lockedAt.ToString("o")))"
 $game = $null
+$seLaunchShiftInjected=$false; $seProbeDone=$false
 $cleanedUp = $false
 $scriptCloseRequested = $false
 $observedExitCode = $null
@@ -181,6 +185,7 @@ Add-Type -Namespace BG3RTX -Name Win -MemberDefinition @"
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr h);
 [DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int cmd);
 [DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
 [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, System.UIntPtr extra);
 [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
 [DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, System.UIntPtr extra);
@@ -474,6 +479,27 @@ if($env:BG3RTX_QUEUE_QUIT_FILE -and (Test-Path -LiteralPath $env:BG3RTX_QUEUE_QU
 $childBlock=Get-QueueChildPermissionBlock $root
 if($childBlock){throw $childBlock}
 Assert-QueueLaunchProcesses
+function Invoke-SEProbeChild([string]$mode) {
+  $block=Get-QueueChildPermissionBlock $root -ReceiptOnly;if($block){throw $block}
+  $resultPath=Tagged $caps ("se-light-probe-"+$mode) '.json'
+  $exe=(Get-Process -Id $PID).Path
+  $script=Join-Path $PSScriptRoot 'se-console-probe.ps1'
+  $arguments=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',('"'+$script+'"'),'-Mode',$mode,
+   '-GamePid',$game.Id,'-GameStartTicks',$game.StartTime.ToUniversalTime().Ticks,'-OwnerPid',$PID,'-OwnerStartTicks',(Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks,
+   '-PidFile',('"'+$pidFile+'"'),'-MarkerRoot',('"'+$markerRoot+'"'),'-ResultPath',('"'+$resultPath+'"'))
+  $child=Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru `
+   -RedirectStandardOutput ($resultPath+'.stdout.txt') -RedirectStandardError ($resultPath+'.stderr.txt')
+  if(-not $child.WaitForExit(20000)){$child.Kill();throw 'Bounded SE probe helper timed out'}
+  $child.WaitForExit();$result=Get-Content -LiteralPath $resultPath -Raw|ConvertFrom-Json
+  if($child.ExitCode -ne 0){throw ("SE probe declined: "+$result.error)}
+  Write-Host "[se-probe] mode=$mode status=$($result.status) records=$($result.records) known_blackbody=$($result.known_blackbody_records) result=$resultPath"
+}
+if($SELightProbe){
+  if(([int][BG3RTX.Win]::GetAsyncKeyState(0xA0) -band 0x8000) -or ([int][BG3RTX.Win]::GetAsyncKeyState(0xA1) -band 0x8000)){throw 'SE probe launch declined: user Shift already held'}
+  # Only our RightShift event is released; never release an initially held user key.
+  [BG3RTX.Win]::keybd_event(0xA1,0x36,0,[UIntPtr]::Zero);$seLaunchShiftInjected=$true
+}
+try {
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
 $game.EnableRaisingEvents = $true
@@ -481,6 +507,8 @@ $game.EnableRaisingEvents = $true
 [void]$game.Handle
 @{ pid = $game.Id; start = (Get-ProcStart $game); tag = $Tag; mode = $runMode; slot = $slot;
    visible_present = [bool]$RealPresent; foreground = [bool]$Foreground; visible_unfocused=[bool]$NoActivate } | ConvertTo-Json | Set-Content $pidFile
+if($SELightProbe){Invoke-SEProbeChild 'WaitConsole'}
+}finally{if($seLaunchShiftInjected){[BG3RTX.Win]::keybd_event(0xA1,0x36,0x0002,[UIntPtr]::Zero);$seLaunchShiftInjected=$false}}
 if ($Background) { Set-DisplayUserGame $displayUser $game }
 Write-Host "Game pid $($game.Id)"
 
@@ -746,6 +774,7 @@ while ((Get-Date) -lt $deadline) {
     }
     if ($moving) { Send-MoveKey $true }
   }
+  if($SELightProbe -and -not $seProbeDone -and (Test-Path $doneFile)){Invoke-SEProbeChild 'Probe';$seProbeDone=$true}
   if ($Session) {
     if (-not $sessionReady -and (Test-Path $doneFile)) {
       $sessionReady = $true
@@ -797,6 +826,7 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
   $result = 'runner exception: '+$_.Exception.Message
   throw
 } finally {
+  if($seLaunchShiftInjected){[BG3RTX.Win]::keybd_event(0xA1,0x36,0x0002,[UIntPtr]::Zero);$seLaunchShiftInjected=$false}
   if (Get-Command Release-Rotation -ErrorAction SilentlyContinue) { Release-Rotation }
   # Also on errors and Ctrl+C. A killed script skips this: its locks are released by
   # Windows. A later run refuses any surviving game rather than closing it. The next
