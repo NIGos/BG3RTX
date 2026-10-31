@@ -24,6 +24,7 @@ struct Fake {
   std::map<EmView, std::pair<uint32_t, uint32_t>> bound;
   uint32_t lum = UINT32_MAX;
   float heat = 0.5f;
+  bool pulse_fx = false;   // rt_em_fx_pulse
   bool read(uint32_t set, uint32_t binding, uint64_t offset, void* dst, size_t n) {
     auto it = cb.find({set, binding});
     if (it == cb.end() || offset + n > it->second.size()) return false;
@@ -38,6 +39,7 @@ struct Fake {
   void drop_view(EmView w) { bound.erase(w); }
   uint32_t luminance_slot() { return lum; }
   float lava_heat() { return heat; }
+  bool fx_pulse() { return pulse_fx; }
   void floats(uint32_t set, uint32_t binding, std::vector<float> v) {
     auto& b = cb[{set, binding}];
     b.resize(v.size() * 4);
@@ -176,6 +178,39 @@ int main() {
     ab.material_cb_binding = 1; ab.slot[BG3_MAT_EMISSIVE_INTENSITY] = cb_slot(BG3_MAT_KIND_SCALAR, 1, 1, 24);
     EmRecordOut o3; r = run(g, 0xa201d82500000000ull, ab, "FX_GM_Pulse_AlphaBlend", o3);
     CHECK(r.mode == kModeConst && near(r.radiance[0], 8) && (r.flags & kFlagPulse));
+  }
+  // 9b. 304be1c7 Base_GM_Pulse_FX, the asset DB's layout (tools.assets shader 304be1c71df194cb:
+  // GlowColour s1b0+0, GlowMultiplier s1b0+28, Glowmap s1b1, not luminance-emissive) and its
+  // fragment shader (captures/alpha_cache/304be1c71df194cb.glsl):
+  //   mix(m0 * glow.r, glow.rgb, clamp(floor(m4))) * m5 * mix(m2, m3, cos(time * m1) * 0.5 + 0.5)
+  // Default rt_em_fx_pulse=0: excluded (empty record, nothing read or bound).
+  {
+    auto fx = generic_info();
+    fx.slot[BG3_MAT_EMISSIVE_INTENSITY] = cb_slot(BG3_MAT_KIND_SCALAR, 1, 0, 28, 1.f);
+    fx.slot[BG3_MAT_EMISSIVE_MAP] = tex_slot(1, 1);
+    const uint64_t fs = 0x304be1c71df194cbull;
+    // CB words: colour (0.8, 0.4, 0.2), m1 2 (rad/s), m2 0.5, m3 1.5, m4 0 (switch off), m5 4.
+    Fake f; f.floats(1, 0, {0.8f, 0.4f, 0.2f, 2, 0.5f, 1.5f, 0, 4}); f.floats(0, 0, {1.0f}); f.views.insert({1, 1});
+    EmRecordOut ox; EmRec r = run(f, fs, fx, "Base/Base_GM_Pulse_FX", ox);
+    CHECK(r.flags == kFlagExcluded && ox.excluded == 1 && r.radiance[0] == 0 && r.radiance[1] == 0 && r.radiance[2] == 0);
+    CHECK(r.mode == kModeConst && r.tex == 0 && r.glob == UINT32_MAX && r.fs_hi == 0x304be1c7u && !ox.dbg_m && f.bound.empty());
+    // A different FS of the same template is not excluded.
+    EmRecordOut oo; CHECK(!(run(f, 0x159a621100000000ull, fx, "Base/Base_GM_Pulse_FX", oo).flags & kFlagExcluded));
+    // rt_em_fx_pulse=1: the exact record (no approx, no luminance), pulse at time 1.
+    f.pulse_fx = true; f.bound.clear();
+    const float pulse = 0.5f + (1.5f - 0.5f) * (std::cos(1.0f * 2.0f) * 0.5f + 0.5f);
+    EmRecordOut o; r = run(f, fs, fx, "Base/Base_GM_Pulse_FX", o);
+    CHECK(r.mode == kModeMaskR && r.flags == kFlagPulse && o.excluded == 0 && r.glob == UINT32_MAX);
+    CHECK(near(o.pulse, pulse) && near(r.radiance[0], 0.8f * 4 * pulse) && near(r.radiance[1], 0.4f * 4 * pulse) &&
+          near(r.radiance[2], 0.2f * 4 * pulse));
+    CHECK(f.bound.count(EmView::Mask) && f.bound[EmView::Mask] == std::make_pair(1u, 1u));
+    // Switch on (m4 = 1): glow.rgb x m5 x pulse.
+    f.floats(1, 0, {0.8f, 0.4f, 0.2f, 2, 0.5f, 1.5f, 1, 4}); EmRecordOut o2; r = run(f, fs, fx, "Base/Base_GM_Pulse_FX", o2);
+    CHECK(r.mode == kModeMaskRGB && near(r.radiance[0], 4 * pulse) && near(r.radiance[2], 4 * pulse) && r.flags == kFlagPulse);
+    // The same CB under 159a6211 _VT gives the same record, times the global scale (luminance slot).
+    auto vt = fx; vt.flags = BG3_MAT_F_LUMINANCE_EMISSIVE; f.lum = 3;
+    EmRecordOut o3; EmRec rv = run(f, 0x159a6211a89e8abdull, vt, "Base/Base_GM_Pulse_VT", o3);
+    CHECK(rv.radiance[0] == r.radiance[0] && rv.mode == r.mode && rv.flags == (kFlagPulse | kFlagLuminance) && rv.glob == 3);
   }
   // 10. ENV_Base_MutipleUV: intensity +16 x 0.75, map dropped; else radiance x 0.75.
   {

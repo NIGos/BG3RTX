@@ -14,6 +14,7 @@
 //   void drop_view(EmView which);
 //   uint32_t luminance_slot();   // set 2 b0 copy slot, UINT32_MAX when not bound
 //   float lava_heat();           // rt_em_lava_heat
+//   bool fx_pulse();             // rt_em_fx_pulse: capture family 304be1c7 (off: excluded)
 #include "assetdb_api.h"
 
 #include <algorithm>
@@ -40,7 +41,7 @@ struct EmRec {
 static_assert(sizeof(EmRec) == 256, "EmRec must match em_common.hlsli");
 enum : uint32_t { kModeConst = 0, kModeMaskR = 1, kModeMaskRGB = 2, kModeBlackbody = 3 };
 enum : uint32_t { kFlagLuminance = 1, kFlagApprox = 2, kFlagPulse = 4, kFlagBaseMap = 8, kFlagVtAlbedo = 16,
-                  kFlagForward = 32, kFlagCalibrated = 64 };
+                  kFlagForward = 32, kFlagCalibrated = 64, kFlagExcluded = 128 };
 enum class EmView : uint8_t { Mask, Base, VtIndirection, VtCache };
 
 // The material as the layer classified it (asset DB info, template name).
@@ -53,6 +54,7 @@ struct EmMaterial {
 // Side outputs of one record: census counters and the diagnostics the layer logs.
 struct EmRecordOut {
   uint32_t cb_unreadable = 0, vt_missing = 0, pulse_no_time = 0;
+  uint32_t excluded = 0;    // the draw's family is excluded (kFlagExcluded): not captured
   bool dbg_m = false;       // m (and cb = true) were read: store them
   bool dbg_pulse = false;   // m45, time and pulse too
   float m[6] = {}, m45[2] = {}, time = 0, pulse = -1;
@@ -163,12 +165,37 @@ void family_fixup(Reader& rd, uint64_t fs, const EmMaterial& mat, EmRec& r, EmRe
   }
 }
 
+// Families left out of the capture until their exact gate passes (TRACK_D 13.22):
+//   304be1c7 Base_GM_Pulse_FX: its record reproduces the fragment shader term for term
+//   (captures/alpha_cache/304be1c71df194cb.glsl: mix(c * glow.r, glow.rgb, floor(m4)) * m5 *
+//   mix(m2, m3, cos(time * m1) * 0.5 + 0.5), no global scale, blend off, depth EQUAL), and
+//   it passes in Grymforge (0.999), yet Adamantine Forge reads 0.36 on its bright pixels with
+//   no captured emitter overlapping it. Until the AF cause is measured (em_forge live batch)
+//   its draws are not captured: rt_em_fx_pulse=1 captures it again (the A/B).
+inline constexpr uint32_t kFamPulseFx = 0x304be1c7u;
+template <class Reader>
+bool excluded_family(Reader& rd, uint64_t fs) {
+  return uint32_t(fs >> 32) == kFamPulseFx && !rd.fx_pulse();
+}
+
 // The record of an emissive draw: radiance from the asset DB roles read from the
-// game's constant buffers at record time, then the family fixups.
+// game's constant buffers at record time, then the family fixups. An excluded family
+// gets an empty record flagged kFlagExcluded (radiance 0, nothing read or bound): the
+// layer counts the draw and does not capture it.
 template <class Reader>
 EmRec make_record(Reader& rd, uint64_t fs, const EmMaterial& mat, EmRecordOut& o) {
   const Bg3MaterialInfo& mi = *mat.info;
   EmRec r{};
+  if (excluded_family(rd, fs)) {
+    r.fs_lo = uint32_t(fs);
+    r.fs_hi = uint32_t(fs >> 32);
+    r.cls = mi.cls;
+    r.glob = UINT32_MAX;
+    r.flags = kFlagExcluded;
+    o.excluded = 1;
+    o.dbg_rec = r;
+    return r;
+  }
   r.radiance[0] = r.radiance[1] = r.radiance[2] = 1.0f;
   r.uv[0] = r.uv[1] = 1.0f;
   r.uv2[0] = r.uv2[1] = 1.0f;

@@ -41,6 +41,7 @@ struct CoreReader {
     return 0;
   }
   float lava_heat() { return host->cfg_float("rt_em_lava_heat", 0.5f); }
+  bool fx_pulse() { return host->cfg_int && host->cfg_int("rt_em_fx_pulse", 0) != 0; }
 };
 
 Calib to_calib(const Bg3EmCalib& c) { return Calib{c.scale, c.updates, c.log_u}; }
