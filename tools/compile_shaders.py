@@ -56,11 +56,16 @@ with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor(8) as pool:
                       ("rt_hit_direct.hlsl", "rt_hit_two_bounce.hlsl")]
     checker = root / "bin" / "native_hit_gi_bindings_test.exe"
     if (material_gi or references) and checker.exists():
-        result = subprocess.run([str(checker), *material_gi, "--reference", *references], capture_output=True, text=True)
-        if result.returncode:
-            res.append(("GI host descriptor interface", result.returncode, result.stdout + result.stderr))
-        else:
-            print(f"GI/reference host descriptor interface checked: {len(material_gi)} GI + {len(references)} reference SPIR-V modules")
+        for tileset in (False, True):
+            gi = [p for p in material_gi if Path(p).name.startswith("native_tileset_") == tileset]
+            refs = [p for p in references if Path(p).name.startswith("native_tileset_") == tileset]
+            if not gi and not refs:
+                continue
+            result = subprocess.run([str(checker), *(["--tileset"] if tileset else []), *gi, "--reference", *refs], capture_output=True, text=True)
+            if result.returncode:
+                res.append(("GI host descriptor interface", result.returncode, result.stdout + result.stderr))
+            else:
+                print(f"GI/reference host descriptor interface checked: {len(gi)} GI + {len(refs)} reference SPIR-V modules; native tileset={tileset}")
     elif material_gi or references:
         print("SKIP GI/reference host descriptor interface: build native_hit_gi_bindings_test first; shader compilation alone is not interface validation")
 bad = [r for r in res if r[1]]

@@ -11,6 +11,13 @@
 // (below) says where each instance's vertices and alpha record are.
 #pragma once
 
+#ifdef RT_NATIVE_TILESET
+#include "../../common/native_tileset_coverage.h"
+[[vk::binding(19,1)]] SamplerState gNativeTilesetSampler[16];
+static bool gTilesetUnknown=false,gTilesetColorKnown=false;
+static float gTilesetGreen=0.0;
+#endif
+
 [[vk::binding(18, 0)]] RaytracingAccelerationStructure gScene;
 // Counters read back by the core (rt_stats=1, core/gi.cpp lists them).
 [[vk::binding(20, 0)]] RWByteAddressBuffer rtStats;
@@ -291,6 +298,9 @@ float alpha_hash(float2 uv, uint prim) {
 // An alpha read: the value, the blur level of the data it came from (log2 of mip-0
 // texels per texel: the mip, or the level of the coarser page that stood in), and
 // whether it could be read at all.
+#ifdef RT_NATIVE_TILESET
+bool tileset_scene_complete(){uint bytes;gAlphaRec.GetDimensions(bytes);return bytes>=16u && (gAlphaRec.Load(NtcHeaderControlOffset)&NtcCaptureIncompleteBit)==0u;}
+#endif
 struct AlphaRead { float a; float lvl; bool ok; bool coarser; };
 
 // BG3's Granite lookup, as in its prepass fragment shaders (e.g. 84d5df19):
@@ -567,6 +577,9 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   float area_w = length(cross(p1 - p0, p2 - p0));
   float g = footprint * sqrt(area_uv / max(area_w, 1e-12));   // uv change across the footprint
   if (!all(isfinite(uv)) || !isfinite(g)) {
+#ifdef RT_NATIVE_TILESET
+    if(h0.z==5u)gTilesetUnknown=true;
+#endif
     alpha_stat(4, true, prim);
 #ifdef RT_SUN_CURRENT
     gSunAlphaKnown=false;
@@ -574,6 +587,25 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
     return alpha_unknown(flags);
   }
   uint tex = min(h0.w, 4095u), cache = min(h1.x, 15u);
+#ifdef RT_NATIVE_TILESET
+  if(h0.z==5u){
+    uint status=uint(asfloat(gAlphaRec.Load(a+52u)));
+    float tiling=asfloat(gAlphaRec.Load(a+32u));
+    bool sampled=false;float alpha=0.0;
+    if(status==NtcKnown && gTilesetColorKnown && isfinite(gTilesetGreen) && gTilesetGreen>0.0){
+      if(h0.w>0u && h0.w<4096u && h1.x>0u && h1.x<16u && isfinite(tiling)){
+        float2 scaled=uv*tiling;float gradient=g*abs(tiling);
+        if(all(isfinite(scaled)) && isfinite(gradient)){
+          alpha=gAlphaTex[NonUniformResourceIndex(h0.w)].SampleGrad(gNativeTilesetSampler[NonUniformResourceIndex(h1.x)],scaled,float2(gradient,0),float2(0,gradient)).a;
+          sampled=true;
+        }
+      }
+    }
+    NtcResult result=ntc_evaluate(status,gTilesetColorKnown,gTilesetGreen,sampled,alpha);
+    if(result.status!=NtcKnown){gTilesetUnknown=true;return false;}
+    alpha_stat(8,result.solid,prim);alpha_stat(9,!result.solid,prim);return result.solid;
+  }
+#endif
   const bool vt = h0.z == 1;
   AlphaRead r = (AlphaRead)0;
   if (vt) r = vt_alpha(a, uv, g, tex, cache, min(h1.y, 3u));
@@ -676,9 +708,21 @@ uint sun_caster_visibility(uint layer,uint prim,float2 bary,float footprint,floa
       all(isfinite(gNativeHair.b)) && all(isfinite(gNativeHair.p));
   }
 #endif
+#ifdef RT_NATIVE_TILESET
+  if(kind==5u){
+    gTilesetColorKnown=stride>=40u;
+    if(gTilesetColorKnown){float c0=asfloat(sun_load2(layer,offset+28u).x),c1=asfloat(sun_load2(layer,offset+stride+28u).x),c2=asfloat(sun_load2(layer,offset+2u*stride+28u).x);
+      gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
+  }
+  if(kind<1u || kind>5u)return kRtUnknown;
+#else
   if(kind<1u || kind>4u)return kRtUnknown;
+#endif
   gSunAlphaKnown=true;
   bool solid=alpha_eval(record.z,p0,p1,p2,u0,u1,u2,bary,footprint,prim);
+#ifdef RT_NATIVE_TILESET
+  if(gTilesetUnknown)return kRtUnknown;
+#endif
   return !gSunAlphaKnown?kRtUnknown:solid?kRtOccluded:kRtLit;
 }
 #endif
@@ -693,33 +737,46 @@ bool alpha_pass(uint prim, float2 bary, float footprint) {
   }
   uint4 h0 = gAlphaRec.Load4(a);
   if (prim < h0.x || prim - h0.x >= h0.y) {
+#ifdef RT_NATIVE_TILESET
+    if(h0.z==5u)gTilesetUnknown=true;
+#endif
     alpha_stat(1, true, prim);
     return alpha_unknown(alpha_flags());
   }
-#ifdef RT_NATIVE_HAIR
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_TILESET)
   uint stride=gAlphaRec.Load(4),vb=prim*3u*stride,sbytes;
 #else
   uint vb = prim * 72, sbytes;
 #endif
   gAlphaSoup.GetDimensions(sbytes);
-#ifdef RT_NATIVE_HAIR
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_TILESET)
   if (!tri_in_range(0,prim,stride,sbytes)) {
 #else
   if (vb + 72u > sbytes) {
 #endif
     alpha_stat(3, true, prim);
+#ifdef RT_NATIVE_TILESET
+    if(h0.z==5u)gTilesetUnknown=true;
+#endif
     return alpha_unknown(alpha_flags());
   }
-#ifdef RT_NATIVE_HAIR
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_TILESET)
   float3 p0=asfloat(gAlphaSoup.Load3(vb)),p1=asfloat(gAlphaSoup.Load3(vb+stride)),p2=asfloat(gAlphaSoup.Load3(vb+2u*stride));
   float2 u0=asfloat(gAlphaSoup.Load2(vb+16)),u1=asfloat(gAlphaSoup.Load2(vb+stride+16)),u2=asfloat(gAlphaSoup.Load2(vb+2u*stride+16));
+  #ifdef RT_NATIVE_HAIR
   if(h0.z==4u) {
     float3 ray=gNativeHair.ray;
     hair_inputs(0,stride,prim,bary,ray,true,gAlphaRec.Load(a+20u)!=0u);
   }
+  #endif
 #else
   float3 p0 = asfloat(gAlphaSoup.Load3(vb)), p1 = asfloat(gAlphaSoup.Load3(vb + 24)), p2 = asfloat(gAlphaSoup.Load3(vb + 48));
   float2 u0 = asfloat(gAlphaSoup.Load2(vb + 16)), u1 = asfloat(gAlphaSoup.Load2(vb + 40)), u2 = asfloat(gAlphaSoup.Load2(vb + 64));
+#endif
+#ifdef RT_NATIVE_TILESET
+  gTilesetColorKnown=h0.z==5u && stride>=40u;
+  if(gTilesetColorKnown){float c0=asfloat(gAlphaSoup.Load(vb+28u)),c1=asfloat(gAlphaSoup.Load(vb+stride+28u)),c2=asfloat(gAlphaSoup.Load(vb+2u*stride+28u));
+    gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
 #endif
   return alpha_eval(a, p0, p1, p2, u0, u1, u2, bary, footprint, prim);
 }
@@ -737,6 +794,9 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
   if ((ii.meta & kInfoLegacy) != 0u) return geom == 1u ? alpha_pass(prim, bary, footprint) : true;
   alpha_stat(0, true, prim);
   if ((ii.meta & kInfoAlpha) == 0u || ii.rec == 0u || prim >= ii.tris || (ii.meta & 0xffu) < 24u) {
+#ifdef RT_NATIVE_TILESET
+    if(ii.rec && rec_in_range(ii.rec) && gAlphaRec.Load(ii.rec+8u)==5u)gTilesetUnknown=true;
+#endif
     if (pc.rt_stats != 0u) {
       const bool norec = (ii.meta & kInfoAlpha) == 0u || ii.rec == 0u;
       alpha_stat(1, norec, prim);
@@ -750,6 +810,9 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
   if ((ii.meta & kInfoPool) != 0u) gMeshPool.GetDimensions(vbytes);
   else gOpaqueSoup.GetDimensions(vbytes);
   if (!tri_in_range(ii.base, prim, ii.meta & 0xffu, vbytes) || !rec_in_range(ii.rec)) {
+#ifdef RT_NATIVE_TILESET
+    if(rec_in_range(ii.rec) && gAlphaRec.Load(ii.rec+8u)==5u)gTilesetUnknown=true;
+#endif
     guard_count(kGuardSet1);
     alpha_stat(3, true, prim);
     return alpha_unknown(alpha_flags());
@@ -763,6 +826,14 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
 #ifdef RT_NATIVE_HAIR
   if(gAlphaRec.Load(ii.rec+8u)==4u)
     hair_inputs(ii.base,ii.meta,prim,bary,hair_ray,false,gAlphaRec.Load(ii.rec+20u)!=0u);
+#endif
+#ifdef RT_NATIVE_TILESET
+  gTilesetColorKnown=gAlphaRec.Load(ii.rec+8u)==5u && (ii.meta&255u)>=40u;
+  if(gTilesetColorKnown){uint stride=ii.meta&255u,at=ii.base+prim*3u*stride+28u;
+    float c0,c1,c2;
+    if((ii.meta&kInfoPool)!=0u){c0=asfloat(gMeshPool.Load(at));c1=asfloat(gMeshPool.Load(at+stride));c2=asfloat(gMeshPool.Load(at+2u*stride));}
+    else{c0=asfloat(gOpaqueSoup.Load(at));c1=asfloat(gOpaqueSoup.Load(at+stride));c2=asfloat(gOpaqueSoup.Load(at+2u*stride));}
+    gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
 #endif
   return alpha_eval(ii.rec, p0, p1, p2, inst_uv(ii, prim, 0), inst_uv(ii, prim, 1), inst_uv(ii, prim, 2), bary, footprint,
                     prim);
@@ -814,6 +885,9 @@ bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
 // real occluder: kRtOccluded). Invalid rays and an unbuilt scene stay kRtLit as before
 // (rt_ray_valid / rt_scene_ok, counted guards).
 uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
+#ifdef RT_NATIVE_TILESET
+  gTilesetUnknown=!tileset_scene_complete();
+#endif
 #ifdef RT_NATIVE_SCALP
   gNativeCameraQuery=false;
 #endif
@@ -826,6 +900,9 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=false;
   if(!hair_bounds_ok()){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
+#endif
+#ifdef RT_NATIVE_TILESET
+  if(gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
 #endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return kRtLit;
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RT_SKIP_PROCEDURAL> q;
@@ -892,6 +969,9 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
 #endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+#ifdef RT_NATIVE_TILESET
+  if(gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
+#endif
   if (RT_HAS_COMMITTED(q)) return kRtOccluded;
   if (aborted) {
     rt_count_unknown(asuint(o.x) ^ asuint(o.z));
@@ -976,6 +1056,9 @@ NativeSunResult sun_native_visibility(float3 P,float depth,float3 origin,float3 
 // aborted: the candidate cap ended the query; t, alpha and hit_kind are then unreliable.
 struct RtDebugHit { float t; bool alpha; uint near_kind; uint hit_kind; bool aborted; };
 RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
+#ifdef RT_NATIVE_TILESET
+  gTilesetUnknown=!tileset_scene_complete();
+#endif
 #ifdef RT_NATIVE_SCALP
   gNativeCameraQuery=true;
 #endif
@@ -983,6 +1066,9 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   RtDebugHit h = (RtDebugHit)0;
   h.near_kind = 0;
   h.aborted = false;
+#ifdef RT_NATIVE_TILESET
+  if(gTilesetUnknown){h.t=-1;h.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return h;}
+#endif
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=true;
   if(!hair_bounds_ok()){h.t=-1;h.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return h;}
@@ -1039,6 +1125,9 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
     }
     if (RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+#ifdef RT_NATIVE_TILESET
+  h.aborted=h.aborted||gTilesetUnknown;
+#endif
   bool hit = RT_HAS_COMMITTED(q);
   h.t = hit ? q.CommittedRayT() : -1.0;
   h.alpha = hit && alpha_instance(q.CommittedInstanceIndex(), q.CommittedGeometryIndex());
@@ -1063,6 +1152,9 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
                      ,bool camera_primary=false
 #endif
                      ) {
+#ifdef RT_NATIVE_TILESET
+  gTilesetUnknown=!tileset_scene_complete();
+#endif
 #ifdef RT_NATIVE_SCALP
   gNativeCameraQuery=camera_primary;
 #endif
@@ -1070,6 +1162,9 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=camera_primary;
   if(!hair_bounds_ok()){RtHit bad=(RtHit)0;bad.t=-1;bad.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return bad;}
+#endif
+#ifdef RT_NATIVE_TILESET
+  if(gTilesetUnknown){RtHit bad=(RtHit)0;bad.t=-1;bad.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return bad;}
 #endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
     RtHit m = (RtHit)0;
@@ -1119,6 +1214,9 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
 #endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+#ifdef RT_NATIVE_TILESET
+  aborted=aborted||gTilesetUnknown;
+#endif
   if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
   RtHit h = (RtHit)0;
   h.aborted = aborted;
@@ -1276,6 +1374,9 @@ float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
 // Closest alpha-tested hit distance, or -1. `aborted`: the candidate cap ended the
 // query; the distance is then unknown (-1, or a hit farther than the closest one).
 float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) {
+#ifdef RT_NATIVE_TILESET
+  gTilesetUnknown=!tileset_scene_complete();
+#endif
 #ifdef RT_NATIVE_SCALP
   gNativeCameraQuery=false;
 #endif
@@ -1284,6 +1385,9 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=false;
   if(!hair_bounds_ok()){aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return -1.0;}
+#endif
+#ifdef RT_NATIVE_TILESET
+  if(gTilesetUnknown){aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return -1.0;}
 #endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return -1.0;
   RayQuery<RT_SKIP_PROCEDURAL> q;
@@ -1325,6 +1429,9 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
 #endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+#ifdef RT_NATIVE_TILESET
+  aborted=aborted||gTilesetUnknown;
+#endif
   if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
   return RT_HAS_COMMITTED(q) ? q.CommittedRayT() : -1.0;
 }

@@ -11,7 +11,7 @@ using namespace bg3::native_hit_gi;
 static unsigned checks;
 static void check(bool ok,const char* reason){++checks;if(!ok){std::fprintf(stderr,"FAIL %s\n",reason);std::exit(1);}}
 struct Instruction{uint32_t op;std::vector<uint32_t> a;};
-static void module(const char* file,bool reference){
+static void module(const char* file,bool reference,bool tileset){
  std::ifstream f(file,std::ios::binary|std::ios::ate);check(bool(f),file);auto bytes=f.tellg();check(bytes>=20 && bytes%4==0,"SPIR-V byte range");f.seekg(0);
  std::vector<uint32_t>w(size_t(bytes)/4);f.read(reinterpret_cast<char*>(w.data()),bytes);check(bool(f)&&w[0]==0x07230203u,"SPIR-V header");
  std::unordered_map<uint32_t,Instruction> types;std::unordered_map<uint32_t,uint32_t> sets,bindings,constants,pointers,strides;
@@ -48,10 +48,11 @@ static void module(const char* file,bool reference){
   const uint32_t slot=bindings[v[1]];
   if(set!=0){
    VkDescriptorType expected=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;uint32_t expected_count=1;
-   if(set==1){check(slot<=15,"main material AlphaDSL slot range");
+   if(set==1){check(slot<=15 || (tileset && slot==19),"feature-specific main material AlphaDSL slot range");
     if(slot==2||slot==3||slot==14){expected=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;expected_count=slot==2?4096u:slot==3?16u:64u;}
     if(slot==4||slot==5||slot==15){expected=VK_DESCRIPTOR_TYPE_SAMPLER;expected_count=slot==15?16u:1u;}
     if(slot==10)expected=VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    if(tileset && slot==19){expected=VK_DESCRIPTOR_TYPE_SAMPLER;expected_count=16u;}
    }else{check(slot<=5,"SHaRC slot range");if(slot==3)expected=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;}
    check(type==expected && count==expected_count,"existing material/SHaRC descriptor type and array count");continue;
   }
@@ -74,5 +75,5 @@ int main(int argc,char**argv){
  check(descriptor_count(false,true)==18 && descriptor_count(true,true)==18,"bounded dedicated reference union");
  check(find(48,false,true)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,"reference rebase camera retained");
  check(!find(50,true,true),"no hypothetical physical-origin reference descriptor");
- bool reference=false;for(int i=1;i<argc;++i){if(std::strcmp(argv[i],"--reference")==0){reference=true;continue;}module(argv[i],reference);}std::printf("PASS %u GI host/interface checks\n",checks);
+ bool reference=false,tileset=false;for(int i=1;i<argc;++i){if(std::strcmp(argv[i],"--reference")==0){reference=true;continue;}if(std::strcmp(argv[i],"--tileset")==0){tileset=true;continue;}module(argv[i],reference,tileset);}std::printf("PASS %u GI host/interface checks\n",checks);
 }

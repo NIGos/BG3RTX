@@ -26,6 +26,9 @@
 #include "../common/native_scalp_coverage.h"
 #include "../common/native_scalp_capability.h"
 #include "../common/native_hair.h"
+#include "../common/native_tileset_coverage.h"
+#include "../common/native_tileset_capability.h"
+#include "omm_sampler.h"
 #include "../common/omm_scene_capability.h"
 #include "omm_backend.h"
 #include "omm_content.h"
@@ -36,7 +39,10 @@
 #include <sstream>
 
 namespace bg3 {
-
+struct NativeTilesetSampler {
+ DeviceData* device{};VkSampler handle{};uint64_t source{};
+ ~NativeTilesetSampler(){if(handle)device->vk.DestroySampler(device->device,handle,nullptr);}
+};
 namespace {
 bool g_stream_reads = false;
 
@@ -52,6 +58,35 @@ constexpr VkDeviceSize kRegion = 16 + VkDeviceSize(kMaxRecords) * sizeof(AlphaRe
 DeviceData* g_dd = nullptr;
 bool g_on = false;
 bool g_omm_layout = false;
+bool g_tileset_layout = false;
+bool g_tileset_incomplete = false;
+constexpr uint32_t kNativeSamplers=16;
+std::mutex g_native_sampler_mu;
+std::unordered_map<uint64_t,std::weak_ptr<NativeTilesetSampler>> g_native_sampler_cache;
+std::vector<std::shared_ptr<NativeTilesetSampler>> g_native_samplers;
+std::vector<std::shared_ptr<NativeTilesetSampler>> g_slot_native_samplers[kRing];
+std::shared_ptr<NativeTilesetSampler> capture_native_sampler(VkCommandBuffer cmd) {
+ omm::BoundSampler b;omm::OrdinaryBindingFacts f;
+ if(!omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,b) ||
+    !omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,&f) ||
+    !omm::ordinary_sampler_current(b))return {};
+ const auto& m=b.sampler;
+ if(!m.complete || m.info.flags || m.info.compareEnable || m.info.unnormalizedCoordinates ||
+    m.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)return {};
+ std::lock_guard lock(g_native_sampler_mu);
+ if(auto existing=g_native_sampler_cache[m.id].lock())return existing;
+ // No append-only weak registry: retired source generations must not accumulate.
+ for(auto it=g_native_sampler_cache.begin();it!=g_native_sampler_cache.end();)
+   if(it->second.expired())it=g_native_sampler_cache.erase(it);else ++it;
+ auto sampler=std::make_shared<NativeTilesetSampler>();sampler->device=g_dd;sampler->source=m.id;
+ auto info=m.info;info.pNext=nullptr;
+ if(g_dd->vk.CreateSampler(g_dd->device,&info,nullptr,&sampler->handle)!=VK_SUCCESS)return {};
+ g_native_sampler_cache[m.id]=sampler;return sampler;
+}
+uint32_t native_sampler_slot(std::vector<std::shared_ptr<NativeTilesetSampler>>& list,const std::shared_ptr<NativeTilesetSampler>& sampler) {
+ if(!sampler)return 0;for(uint32_t i=0;i<list.size();++i)if(list[i]==sampler)return i+1u;
+ if(list.size()>=kNativeSamplers-1u)return 0;list.push_back(sampler);return uint32_t(list.size());
+}
 std::atomic<uint32_t> g_stale_views{0};   // held alpha records dropped: a view was destroyed/reused
 std::mutex g_mu;
 std::unordered_map<uint64_t, AlphaFs> g_table;
@@ -87,6 +122,7 @@ struct SunAlphaSlot {
   VkBuffer records=VK_NULL_HANDLE, dispatch=VK_NULL_HANDLE, parameters=VK_NULL_HANDLE;
   VkDeviceMemory records_memory=VK_NULL_HANDLE, dispatch_memory=VK_NULL_HANDLE, parameters_memory=VK_NULL_HANDLE;
   VkDeviceSize record_bytes=0, dispatch_bytes=0, parameter_bytes=0;
+  std::vector<std::shared_ptr<NativeTilesetSampler>> native_samplers;
 };
 SunAlphaSlot g_sun_alpha[kRing];
 VkDescriptorSetLayout g_sun_dsl=VK_NULL_HANDLE;
@@ -278,6 +314,15 @@ bool finite(const float* f, size_t n) {
 void alpha_device_created(DeviceData* dd) {
   if (g_dd || !cfg_int("rt", 1)) return;
   g_dd = dd;
+  g_tileset_layout=geo_native_tileset_enabled();
+  if(g_tileset_layout){
+    VkPhysicalDeviceProperties props{};dd->inst->GetPhysicalDeviceProperties(dd->physical,&props);
+    const uint32_t total=2u+(native_hit::enabled()?native_hit::sampler_slots:0u)+kNativeSamplers;
+    if(props.limits.maxPerStageDescriptorSamplers<total || props.limits.maxDescriptorSetSamplers<total){
+      log("[alpha tileset] rejected native sampler layout: device limit below %u",total);g_tileset_layout=false;geo_native_tileset_disable();
+    }
+
+  }
   const VkDeviceFuncs& vk = dd->vk;
   VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
   si.magFilter = si.minFilter = VK_FILTER_LINEAR;
@@ -308,13 +353,14 @@ void alpha_device_created(DeviceData* dd) {
   std::vector<VkDescriptorSetLayoutBinding> bindings(b,b+10);
   if(g_omm_layout)bindings.insert(bindings.end(),b+10,b+12);
   if(native_hit::enabled())bindings.insert(bindings.end(),b+12,b+16);
+  if(g_tileset_layout)bindings.push_back({19,VK_DESCRIPTOR_TYPE_SAMPLER,kNativeSamplers,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   dci.bindingCount = uint32_t(bindings.size());
   dci.pBindings = bindings.data();
   ok = ok && vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) == VK_SUCCESS;
   VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, ((g_omm_layout?7u:6u)+(native_hit::enabled()?2u:0u)) * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches+(native_hit::enabled()?native_hit::cache_slots:0u)) * kRing},
-                                {VK_DESCRIPTOR_TYPE_SAMPLER, (2+(native_hit::enabled()?native_hit::sampler_slots:0u)) * kRing},
+                                {VK_DESCRIPTOR_TYPE_SAMPLER, (2+(native_hit::enabled()?native_hit::sampler_slots:0u)+(g_tileset_layout?kNativeSamplers:0u)) * kRing},
                                 {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,kRing}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   pci.maxSets = kRing;
@@ -360,6 +406,7 @@ void alpha_device_created(DeviceData* dd) {
   }
   load_table();
   g_on = true;
+  if(g_tileset_layout)native_tileset::publish(static_cast<uint32_t*>(persist(native_tileset::capability_key,sizeof(uint32_t))));
   native_hit::capability(static_cast<uint32_t*>(persist(native_hit::capability_key,sizeof(uint32_t))),native_hit::enabled());
 }
 
@@ -367,6 +414,10 @@ void alpha_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   native_hit::capability(static_cast<uint32_t*>(persist(native_hit::capability_key,sizeof(uint32_t))),false);
   const VkDeviceFuncs& vk = dd->vk;
+  {std::lock_guard lock(g_native_sampler_mu);for(auto& [id,weak]:g_native_sampler_cache)if(auto sampler=weak.lock()){
+    if(sampler->handle)vk.DestroySampler(dd->device,sampler->handle,nullptr);sampler->handle=VK_NULL_HANDLE;}
+   g_native_sampler_cache.clear();}
+  g_native_samplers.clear();for(auto& list:g_slot_native_samplers)list.clear();
   for (SunAlphaSlot& s : g_sun_alpha) {
     if (s.pool) vk.DestroyDescriptorPool(dd->device,s.pool,nullptr);
     if (s.stamp) vk.DestroyBuffer(dd->device,s.stamp,nullptr);
@@ -407,6 +458,13 @@ void alpha_device_destroyed(DeviceData* dd) {
 
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
+  if(!g_tileset_layout && fs==native_tileset_coverage::depth_fs && cfg_int("rt_native_tileset",0)){
+    static std::atomic<bool> warned{false};if(!warned.exchange(true))log("[alpha tileset] enable rejected: restart with rt_alpha=1 rt_bvh_split=1 and supported sampler limits");
+  }
+  if(g_tileset_layout && cfg_int("rt_native_tileset",0) && fs==native_tileset_coverage::depth_fs) {
+    *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=1;out->tex_set=1;out->tex_bind=1;
+    out->ubo_set=1;out->ubo_bind=0;out->cut=out->cut_first=.5f;out->k=1;return true;
+  }
   if (cfg_int("rt_native_hair", 0)) {
     if (const auto* recipe = native_hair::lookup(fs)) {
       if (!geo_native_hair_enabled()) {
@@ -447,6 +505,8 @@ bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   return true;
 }
 
+void alpha_tileset_incomplete(){std::lock_guard lock(g_mu);g_tileset_incomplete=true;}
+
 bool alpha_native_hair_record(uint32_t index,AlphaRec* out) {
   std::lock_guard<std::mutex> lock(g_mu);
   if(index>=g_recs.size() || g_recs[index].kind!=4)return false;
@@ -474,6 +534,8 @@ void alpha_begin_capture() {
     native_scalp::publish_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t))));
   g_stream_reads = cfg_int("rt_alpha_stream", 0) != 0;
   g_recs.clear();
+  g_tileset_incomplete=false;
+  g_native_samplers.clear();
   g_tex.clear();
   g_cache.clear();
 }
@@ -481,7 +543,7 @@ void alpha_begin_capture() {
 // Shared canonical capture: never touches the camera capture's mutable record
 // or descriptor-index arrays. Ordinary camera adds use the same raw bindings.
 static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint32_t tris,
-                                    AlphaRec& r,Bg3Binding& t,Bg3Binding& c) {
+                                    AlphaRec& r,Bg3Binding& t,Bg3Binding& c,std::shared_ptr<NativeTilesetSampler>* sampler=nullptr) {
   r={};t={};c={};
   r.first_tri = first_tri;
   r.tris = tris;
@@ -492,6 +554,20 @@ static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_
   r.fs_lo = uint32_t(a.hash);
   r.fs_hi = uint32_t(a.hash >> 32);
   r.scale[0] = r.scale[1] = a.k;
+  if(a.kind==5) {
+    auto* state=cmd_state(cmd);
+    const auto material=native_tileset_coverage::capture([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t size){return read_bound(cmd,set,binding,off,dst,size);});
+    uint32_t status=native_tileset_coverage::ntc_material(material.known,material.tiling,material.see_through);
+    r.scale[0]=r.scale[1]=material.known && std::isfinite(material.tiling)?material.tiling:0;
+    r.p0[0]=material.known && std::isfinite(material.see_through)?material.see_through:0;
+    if(!state || state->vs!=native_tileset_coverage::depth_vs || !geo_native_tileset_inputs(state->pipe[0]))status=native_tileset_coverage::NtcMissing;
+    const bool texture=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,1,0,&t) && t.view && view_image_id(t.view)!=0 &&
+      omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,1,0);
+    const auto owned=capture_native_sampler(cmd);if(sampler)*sampler=owned;
+    if(!texture || !owned)status=native_tileset_coverage::NtcMissing;
+    if(!texture)t={}; // Never publish an unidentified/unsupported view, even for UNKNOWN records.
+    r.p0[1]=float(status);return true; // Explicit incomplete kind5 survives as UNKNOWN.
+  }
   if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, a.tex_set, a.tex_bind, 0, &t) || !t.view) {
     ++g_fail[0];
     return false;
@@ -587,21 +663,22 @@ bool alpha_capture_source(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tr
   if(!out) return false;
   *out={};
   Bg3Binding t{},c{};
-  if(!capture_source_material(cmd,a,first_tri,tris,out->rec,t,c)) return false;
+  if(!capture_source_material(cmd,a,first_tri,tris,out->rec,t,c,&out->native_sampler)) return false;
   out->tex=t.view;out->tex_layout=t.layout;out->tex_id=view_image_id(t.view);
   if(a.kind==1 || a.kind==4) {
     out->cache=c.view;out->cache_layout=c.layout;out->cache_id=view_image_id(c.view);
   }
   // Reject unidentified/recycled resources before a private descriptor tuple can
   // be published. Camera ordinary adds retain their previous lookup/cost path.
-  return out->tex_id && ((a.kind!=1 && a.kind!=4) || out->cache_id);
+  return a.kind==5 || (out->tex_id && ((a.kind!=1 && a.kind!=4) || out->cache_id));
 }
 
 bool alpha_add_draw(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint32_t tris,uint32_t* rec_index) {
-  AlphaRec r{};Bg3Binding t{},c{};
-  if(!capture_source_material(cmd,a,first_tri,tris,r,t,c)) return false;
+  AlphaRec r{};Bg3Binding t{},c{};std::shared_ptr<NativeTilesetSampler> sampler;
+  if(!capture_source_material(cmd,a,first_tri,tris,r,t,c,&sampler)) return false;
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_recs.size() >= kMaxRecords) {
+    if(a.kind==5)g_tileset_incomplete=true;
     ++g_fail[4];
     if (!g_full_logged) {
       g_full_logged = true;
@@ -612,7 +689,8 @@ bool alpha_add_draw(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint
   r.tex = slot_of(g_tex, kTextures, t.view, t.layout);
   r.cache = a.kind == 1 ? slot_of(g_cache, kCaches, c.view, c.layout) :
             a.kind == 4 ? slot_of(g_tex, kTextures, c.view, c.layout) : 0;
-  if (!r.tex || ((a.kind == 1 || a.kind == 4) && !r.cache)) {
+  if(a.kind==5){r.cache=native_sampler_slot(g_native_samplers,sampler);if(!r.tex || !r.cache)r.p0[1]=float(native_tileset_coverage::NtcMissing);}
+  if ((a.kind!=5 && !r.tex) || ((a.kind == 1 || a.kind == 4) && !r.cache)) {
     ++g_fail[5];
     if (!g_full_logged) {
       g_full_logged = true;
@@ -667,6 +745,11 @@ bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (index >= g_recs.size()) return false;
   const AlphaRec& r = g_recs[index];
+  *out={};out->rec=r;
+  if(r.kind==5){
+    if(r.cache && r.cache<=g_native_samplers.size())out->native_sampler=g_native_samplers[r.cache-1u];
+    if(r.p0[1]!=0.0f || !r.tex || r.tex>g_tex.size()){out->rec.p0[1]=float(native_tileset_coverage::NtcMissing);return true;}
+  }
   if (!r.tex || r.tex > g_tex.size() || (r.kind == 1 && (!r.cache || r.cache > g_cache.size())) ||
       (r.kind == 4 && (!r.cache || r.cache > g_tex.size()))) return false;
   out->rec = r;
@@ -694,6 +777,15 @@ bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
 }
 
 uint32_t alpha_restore(const AlphaSnapshot& saved) {
+  if(saved.rec.kind==5){
+    std::lock_guard lock(g_mu);if(g_recs.size()>=kMaxRecords){g_tileset_incomplete=true;return UINT32_MAX;}
+    AlphaRec r=saved.rec;r.tex=0;r.cache=0;
+    if(saved.tex_id && view_image_id(saved.tex)==saved.tex_id && saved.native_sampler && saved.native_sampler->handle){
+      r.tex=slot_of(g_tex,kTextures,saved.tex,saved.tex_layout);r.cache=native_sampler_slot(g_native_samplers,saved.native_sampler);
+    }
+    if(!r.tex || !r.cache)r.p0[1]=float(native_tileset_coverage::NtcMissing);
+    const auto index=uint32_t(g_recs.size());g_recs.push_back(r);return index;
+  }
   // A view destroyed during the hold (its handle possibly reused for another image,
   // e.g. a glyph or UI texture) must not be bound: the held draw is dropped instead.
   if (view_image_id(saved.tex) != saved.tex_id || !saved.tex_id ||
@@ -762,7 +854,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
                           (cfg_int("rt_alpha_unknown", 1) ? 4u : 0u) |
                           (geo_native_hair_enabled() && !cfg_int("rt_alpha_test",1) ? 8u : 0u);
   g_set_records[slot]=uint32_t(g_recs.size());
-  uint32_t header[4] = {uint32_t(g_recs.size()), geo_native_hair_enabled() ? stride : (soup && opaque_bytes ? stride : 0u), policy, 0};
+  uint32_t header[4] = {uint32_t(g_recs.size()), (geo_native_hair_enabled() || g_tileset_layout) ? stride : (soup && opaque_bytes ? stride : 0u), policy, g_tileset_incomplete?native_tileset_coverage::NtcCaptureIncompleteBit:0u};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -854,6 +946,18 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   w[2].descriptorCount = ntex, w[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[2].pImageInfo = tex.data();
   w[3].descriptorCount = ncache, w[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[3].pImageInfo = cache.data();
   vk.UpdateDescriptorSets(g_dd->device, 8, w, 0, nullptr);
+  if(g_tileset_layout){
+    if(cfg_int("rt_stats",0) && frame_index()%120u==0u){uint32_t complete=0,unknown=0;
+      for(const auto& record:g_recs)if(record.kind==5)(record.p0[1]==0.0f?complete:unknown)++;
+      log("[alpha tileset] records complete %u unknown %u native samplers %zu capture-incomplete %u stride %u",complete,unknown,g_native_samplers.size(),unsigned(g_tileset_incomplete),stride);
+    }
+    g_slot_native_samplers[slot]=g_native_samplers;
+    VkDescriptorImageInfo samplers[kNativeSamplers]{};
+    for(uint32_t i=0;i<kNativeSamplers;++i)samplers[i].sampler=i && i<=g_native_samplers.size()?g_native_samplers[i-1]->handle:g_wrap;
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=g_sets[slot];write.dstBinding=19;
+    write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLER;write.descriptorCount=kNativeSamplers;write.pImageInfo=samplers;
+    vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);
+  }
   if(g_omm_layout){
     // No capable shader may execute before both additional bindings are valid.
     if(!ab.reference_tlas)return VK_NULL_HANDLE;
@@ -951,7 +1055,7 @@ bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescrip
   if(!*pool){
     VkDescriptorPoolSize sizes[4]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,g_omm_layout?9u:8u},
       {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches+native_hit::cache_slots},
-      {VK_DESCRIPTOR_TYPE_SAMPLER,2+native_hit::sampler_slots},{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1}};
+      {VK_DESCRIPTOR_TYPE_SAMPLER,2+native_hit::sampler_slots+(g_tileset_layout?kNativeSamplers:0u)},{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1}};
     VkDescriptorPoolCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};info.maxSets=1;
     info.poolSizeCount=g_omm_layout?4u:3u;info.pPoolSizes=sizes;
     if(vk.CreateDescriptorPool(g_dd->device,&info,nullptr,pool)!=VK_SUCCESS)return false;
@@ -962,12 +1066,13 @@ bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescrip
   }
   // Immutable samplers 4/5 are inherited from the SAME layout. Do not copy
   // nonexistent optional OMM bindings, or uninitialized material bindings.
-  VkCopyDescriptorSet copies[10]{};uint32_t count=0;
-  for(uint32_t binding:{0u,1u,2u,3u,6u,7u,8u,9u,10u,11u}){
-    if(binding>=10 && !g_omm_layout)continue;
+  VkCopyDescriptorSet copies[11]{};uint32_t count=0;
+  for(uint32_t binding:{0u,1u,2u,3u,6u,7u,8u,9u,10u,11u,19u}){
+    if(binding==19 && !g_tileset_layout)continue;
+    if((binding==10 || binding==11) && !g_omm_layout)continue;
     auto& copy=copies[count++];copy={VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
     copy.srcSet=source;copy.dstSet=*set;copy.srcBinding=copy.dstBinding=binding;
-    copy.descriptorCount=binding==2?kTextures:binding==3?kCaches:1u;
+    copy.descriptorCount=binding==19?kNativeSamplers:binding==2?kTextures:binding==3?kCaches:1u;
   }
   vk.UpdateDescriptorSets(g_dd->device,0,nullptr,count,copies);
   if(!tables.empty()){VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=*set;write.dstBinding=2;write.dstArrayElement=first;write.descriptorCount=uint32_t(tables.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;write.pImageInfo=tables.data();vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);}
@@ -1011,7 +1116,7 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
   SunAlphaSlot& s=g_sun_alpha[slot];
   const auto& vk=g_dd->vk;
   if(!g_sun_dsl) {
-    VkDescriptorSetLayoutBinding bindings[18]={
+    std::vector<VkDescriptorSetLayoutBinding> bindings={
       {0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
       {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
       {2,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
@@ -1031,9 +1136,11 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
       {10,VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
       {11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
     VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    ci.bindingCount=18;ci.pBindings=bindings;
+    if(g_tileset_layout)bindings.push_back({19,VK_DESCRIPTOR_TYPE_SAMPLER,kNativeSamplers,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
+    ci.bindingCount=uint32_t(bindings.size());ci.pBindings=bindings.data();
     if(vk.CreateDescriptorSetLayout(g_dd->device,&ci,nullptr,&g_sun_dsl)!=VK_SUCCESS) return false;
   }
+  auto native_samplers=g_slot_native_samplers[slot];
   std::vector<AlphaRec> extra;
   std::vector<std::pair<VkImageView,VkImageLayout>> textures,caches;
   std::vector<uint32_t> dispatch(16,0);
@@ -1053,13 +1160,16 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
       if(snapshot.tex_id && snapshot.tex_id==view_image_id(snapshot.tex) &&
          ((source.kind!=1 && source.kind!=4) || (snapshot.cache_id && snapshot.cache_id==view_image_id(snapshot.cache)))) {
         AlphaRec r=source;
+        if(source.kind==5){r.cache=native_sampler_slot(native_samplers,snapshot.native_sampler);
+          if(!r.cache)r.p0[1]=float(native_tileset_coverage::NtcMissing);}
+
         const uint32_t t=slot_of(textures,kTextures-g_set_tex[slot],snapshot.tex,snapshot.tex_layout);
         uint32_t c=0;
         if(source.kind==1) c=slot_of(caches,kCaches-g_set_cache[slot],snapshot.cache,snapshot.cache_layout);
         if(source.kind==4) c=slot_of(textures,kTextures-g_set_tex[slot],snapshot.cache,snapshot.cache_layout);
         if(t && ((source.kind!=1 && source.kind!=4) || c)) {
           r.tex=g_set_tex[slot]+t;
-          r.cache=source.kind==1?g_set_cache[slot]+c:source.kind==4?g_set_tex[slot]+c:0;
+          r.cache=source.kind==1?g_set_cache[slot]+c:source.kind==4?g_set_tex[slot]+c:source.kind==5?r.cache:0;
           record=16u+uint32_t((uint64_t(g_set_records[slot])+extra.size())*sizeof(AlphaRec));
           extra.push_back(r);state=1;
           const uint64_t until=frame_index()+kRing+uint64_t((std::clamp)(cfg_int("rt_dyn_hold",0),0,120));
@@ -1093,7 +1203,7 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
      !ensure(s.parameters,s.parameters_memory,s.parameter_bytes,1232)) return false;
   if (!s.pool) {
     VkDescriptorPoolSize sizes[4]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,13},
-      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches},{VK_DESCRIPTOR_TYPE_SAMPLER,2},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches},{VK_DESCRIPTOR_TYPE_SAMPLER,2+(g_tileset_layout?kNativeSamplers:0u)},
       {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1}};
     VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pi.maxSets=1;pi.poolSizeCount=4;pi.pPoolSizes=sizes;
@@ -1125,6 +1235,13 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
   }
   // Copy first: Vulkan applies descriptor copies AFTER writes in one call.
   vk.UpdateDescriptorSets(g_dd->device,0,nullptr,6,copies);
+  if(g_tileset_layout){
+    s.native_samplers=native_samplers;VkDescriptorImageInfo samplers[kNativeSamplers]{};
+    for(uint32_t i=0;i<kNativeSamplers;++i)samplers[i].sampler=i && i<=native_samplers.size()?native_samplers[i-1]->handle:g_wrap;
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=s.set;write.dstBinding=19;
+    write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLER;write.descriptorCount=kNativeSamplers;write.pImageInfo=samplers;
+    vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);
+  }
   VkDescriptorBufferInfo buffers[9]={{s.stamp,0,kStampStride},{s.records,0,record_bytes},{s.dispatch,0,dispatch.size()*4ull}};
   for(unsigned layer=0;layer<4;++layer) {
     const auto& soup=cascades[layer].soup;buffers[3+layer]={soup.xfb,0,VkDeviceSize(soup.tris)*3*soup.stride};
