@@ -1,12 +1,33 @@
 # BG3RTX progress
 
+## Bounded reference and acquisition fixes ready for consolidation - 2026-10-31
+
+Default-OFF `rt_hit_reference=2` extends the SAME direct reference by one BSDF
+continuation and secondary point/spot direct lighting. Source 3e185b2/import
+d74f766: 334 CPU checks, 292 settings checks, six targeted tests, 16 existing
+direct shader identities and 16 new validated variants pass. Explicit counters
+separate supported two-hit/null/incomplete paths; fallback is not unbiased ground
+truth. No environment/emission/MIS/full-room PT or GPU cost/quality claim.
+
+76ef799/import d8510b1 fixes unaudited draws reserving valid material identities
+and supports ordinary frozen samplers via owned clones/exact version checks.
+Three targeted tests and 65 production sampler checks pass. New diagnostics report
+all binding prerequisites plus real source/deferred candidate association.
+
+Exact terrain packet capture 00c6f43+22eda2c/imports e3b238a+8a84f11 reuses the
+tracer after the native pass, opt-in `trace_terrain_packet.request`. Fresh ABI 21
+host/core/launcher link and registered 13-case contract test pass in root. Bound:
+8 packets x 25760 bytes; native image transfer support exists, buffer support is
+not yet proven. First targeted packet attempt can share the brief S1 acquisition.
+No user-profile changes. All three increments still require their actual GPU evidence.
+
 ## R3 confirms the parser correction; material binding fix next - 2026-10-31
 
 R3 dae7d32 completed 448 s, all five phases, no NVIDIA 153/dumps/build drift.
 Actual pipelines now accept the native depth-clip extension (type 1000102001),
-zero pipeline declines. Retain that correction. Acquisition still FAILED: 20
-unique binding attempts decline, zero snapshots/qualified material rows. This is
-not a too-tight numeric gate. Owner is supporting ordinary frozen sampler bindings
+zero pipeline declines. Retain that correction. Acquisition still FAILED: zero snapshots/qualified material rows. Counter 20 also
+includes unaudited families; it does NOT prove 20 audited resource failures. Owner
+is correcting eligibility-before-key bookkeeping and ordinary frozen sampler bindings
 with owned clones and exact descriptor/write-version revalidation; actual failed
 capture stage will be logged. Sampler causality remains unproven until that run.
 

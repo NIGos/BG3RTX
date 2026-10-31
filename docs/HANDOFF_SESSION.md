@@ -1,4 +1,4 @@
-# Session handoff - 2026-10-31: Hair trial installed; native Floor_B qualified
+# Session handoff - 2026-10-31: material acquisition and bounded reference
 
 Full rendering execution plan M0-M6 remains active; do not claim completion.
 User permits live diagnostics now, queue-only with finite scoped receipts and
@@ -45,8 +45,11 @@ No material GPU participation yet. Static primary 99.524/99.524/99.525%, FG rati
 2.0, no NVIDIA 153/dumps/build drift. R2 immutable evidence is in root captures.
 R3 dae7d32 is TERMINAL: 448 s, parser fix confirmed actual, binding attempts
 still decline; no material GPU rows. Immutable root captures/r3 analysis retained.
-Owner fixes ordinary frozen sampler cloning/revalidation and logs capture stage.
-R4 is an unreleased 20/90/20 s acquisition-only draft, not yet authorized/frozen.
+76ef799/import d8510b1 fixes eligibility-before-key and ordinary frozen samplers.
+R4 unreleased draft: 20/90/20 s plus one ON+30 s existing trace for terrain packet.
+Exact packet capture e3b238a/8a84f11 linked/tested, opt-in request marker.
+Two-surface reference d74f766, rt_hit_reference=2, default OFF; CPU/shader checks
+pass, no GPU/path-quality claim. Consolidate via merge-green before candidate.
 Main is ABI 21; personal Hair trial stays ABI 19. Do not rerun unchanged.
 89 actual S1 G-buffer VS/FS modules pass the read-only scanner. Non-watched
 360 s acquisition draft is under captures/native-hit-material-20261031/draft/.
