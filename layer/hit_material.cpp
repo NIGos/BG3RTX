@@ -3,6 +3,7 @@
 #include "../common/native_hit_join.h"
 #include "../common/native_hit_order.h"
 #include "../common/native_hit_inputs.h"
+#include "../common/native_hit_resources.h"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -13,7 +14,8 @@ namespace {
 constexpr VkDeviceSize stream_bytes=32u<<20;
 constexpr VkDeviceSize row_payload=16u+VkDeviceSize(record_bytes)*max_records;
 constexpr VkDeviceSize row_bytes=row_payload+16u;
-constexpr VkDeviceSize packet_rows=16u+VkDeviceSize(record_bytes)*sampler_slots;
+static_assert(ResourceBudget{}.samplers.size()==sampler_slots && ResourceBudget{}.caches.size()==cache_slots);
+constexpr VkDeviceSize packet_rows=16u+VkDeviceSize(record_bytes)*material_slots;
 struct Buffer {VkBuffer b{};VkDeviceMemory m{};void* mapped{};};
 struct Row {
  uint32_t valid{},triangles{},pre{},deferred{};
@@ -30,7 +32,7 @@ struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{}
 struct Material {uint32_t source_raw{},deferred_raw{},snapshot{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;};
 struct Deferred {
  Buffer data,rows;uint64_t command{},recording{},frame{};VkBuffer camera{};VkDeviceSize camera_offset{},cursor{};
- DrawJoin join;std::vector<Material> materials;std::vector<VkSampler> samplers;
+ DrawJoin join;std::vector<Material> materials;std::vector<VkSampler> samplers;ResourceBudget resources;
  bool finalized{},valid{true};uint32_t seen{},audited_unique{},audited_duplicate{},family_declined{},pipeline_declined{},binding_declined{};
 };
 struct Slot {
@@ -336,15 +338,21 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;
  // Count real audited duplicates even beyond the storage bound. Unrelated
  // shader families never reserve an audited candidate's geometry identity.
- if(p.materials.size()>=sampler_slots)return false;
+ if(p.materials.size()>=material_slots)return false;
  Material material{};if(!capture(cmd,material)){++p.binding_declined;return false;}
  *bytes=VkDeviceSize(args.count)*stride;if(!args.count || args.count%3 || !byte_range(p.cursor,*bytes,stream_bytes))return false;
  if(!own(cmd))return false;
- auto sampler_info=material.sampler.sampler.info;sampler_info.pNext=nullptr;VkSampler sampler{};
- if(dd->vk.CreateSampler(dd->device,&sampler_info,nullptr,&sampler)!=VK_SUCCESS)return false;
- uint32_t local=uint32_t(p.materials.size());p.samplers.push_back(sampler);
+ auto identity=[](const View& v){return CacheIdentity{uint64_t(v.view),v.id,uint64_t(v.image),v.image_id,uint64_t(v.layout)};};
+ auto resources=p.resources;ResourceIndices indices{};
+ if(!resources.reserve(material.sampler.sampler.id,{identity(material.normal),identity(material.albedo),identity(material.physical)},indices))return false;
+ if(indices.new_sampler){
+  auto sampler_info=material.sampler.sampler.info;sampler_info.pNext=nullptr;VkSampler sampler{};
+  if(dd->vk.CreateSampler(dd->device,&sampler_info,nullptr,&sampler)!=VK_SUCCESS)return false;
+  p.samplers.push_back(sampler);
+ }
+ p.resources=resources;uint32_t local=uint32_t(p.materials.size());
  material.key=draw;material.row.valid=local+1;material.row.triangles=args.count/3;material.row.deferred=uint32_t(p.cursor);material.row.stride=stride;material.row.frame=uint32_t(p.frame);
- material.row.sampler=local;material.row.normal=local*3;material.row.albedo=local*3+1;material.row.physical=local*3+2;
+ material.row.sampler=indices.sampler;material.row.normal=indices.normal;material.row.albedo=indices.albedo;material.row.physical=indices.physical;
  p.join.assign(p.command,p.recording,draw,local);p.materials.push_back(material);*buffer=p.data.b;*offset=p.cursor;p.cursor+=*bytes;return true;
 }
 void deferred_finish(VkCommandBuffer cmd,bool readonly){
@@ -365,8 +373,8 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
  }
  barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
  if(p.valid)restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
- if(cfg_int("rt_stats",0) && p.frame%120==0)log("[hit material deferred packet] frame %llu cmd %p recording %llu level %u flags 0x%x static seen %u audited unique/duplicate %u/%u other family %u pipeline declined %u binding declined %u captured %zu snapshots %u bytes %llu valid %u readonly %u camera %p+%llu; source preparation not required",
-  (unsigned long long)p.frame,(void*)cmd,(unsigned long long)p.recording,unsigned(state->level),unsigned(state->begin_flags),p.seen,p.audited_unique,p.audited_duplicate,p.family_declined,p.pipeline_declined,p.binding_declined,p.materials.size(),captured,(unsigned long long)p.cursor,unsigned(p.valid),unsigned(readonly),(void*)p.camera,(unsigned long long)p.camera_offset);
+ if(cfg_int("rt_stats",0) && p.frame%120==0)log("[hit material deferred packet] frame %llu cmd %p recording %llu level %u flags 0x%x static seen %u audited unique/duplicate %u/%u other family %u pipeline declined %u binding declined %u captured %zu snapshots %u unique samplers/cache views %u/%u bytes %llu valid %u readonly %u camera %p+%llu; source preparation not required",
+  (unsigned long long)p.frame,(void*)cmd,(unsigned long long)p.recording,unsigned(state->level),unsigned(state->begin_flags),p.seen,p.audited_unique,p.audited_duplicate,p.family_declined,p.pipeline_declined,p.binding_declined,p.materials.size(),captured,p.resources.sampler_count,p.resources.cache_count,(unsigned long long)p.cursor,unsigned(p.valid),unsigned(readonly),(void*)p.camera,(unsigned long long)p.camera_offset);
 }
 void slot_in_use(uint32_t index,uint64_t frame){if(!on || index>=kSceneSlots)return;std::lock_guard lock(mutex);for(auto h:slots[index].handles)life_extend(h,frame);}
 bool slot_reusable(uint32_t index,uint64_t gpuDone){if(!on || index>=kSceneSlots)return true;std::lock_guard lock(mutex);

@@ -1,0 +1,30 @@
+{
+  "scope": "Offline material coverage increment from root3e9703d; no a15 diagnostic counters, shader changes, ABI changes, game/GPU calls or candidate edits",
+  "budgets": {
+    "material_records": 128,
+    "unique_samplers": 16,
+    "unique_cache_views": 64,
+    "packet_rows_bytes": 32784,
+    "geometry_stream_bytes": 33554432
+  },
+  "identities": {
+    "sampler": "Captured live never-reused sampler generation ID; owned clone shared within exact packet lifetime",
+    "cache_view": "View handle and generation, backing image handle and generation, actual sampled layout; native view preserves format/swizzle/range"
+  },
+  "publication": "Plan resource assignment on a copy. Only after all capacity/geometry checks and a successful new sampler clone is the packet accounting published. Existing per-material descriptor-version/view/sampler checks and GPU clip/UV/execution-parameter certificate remain unchanged. Late genuine duplicate draw keys remain unsupported.",
+  "validation": {
+    "host_compile_link": "pass",
+    "actual_pipeline_input_resource_cases": 372,
+    "targeted_ctests": "3/3",
+    "resource_cases": [
+      "100 draws reuse one sampler and three cache views",
+      "material128 bound",
+      "unique sampler16 bound while existing sampler remains reusable",
+      "unique cache64 bound",
+      "failed multi-view reservation leaves all counts unchanged",
+      "unpublished clone/allocation-failure plan cannot consume capacity",
+      "view generation/image generation/layout distinctions"
+    ]
+  },
+  "remaining": "Coverage, GPU cost and secondary-hit participation require the next authorized run. Existing geometry byte bounds and fresh-only provider scope remain explicit; no whole-world material completeness claim."
+}

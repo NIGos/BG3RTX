@@ -1,5 +1,6 @@
 #include "../common/native_hit_pipeline.h"
 #include "../common/native_hit_inputs.h"
+#include "../common/native_hit_resources.h"
 #include <cstdio>
 #include <initializer_list>
 #include <cstdlib>
@@ -67,5 +68,24 @@ int main(){
  a.pull_hint_known=false;different=a;different.position.buffer=4;check(canonical_static_key(ordinary,a,source));check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
  a.pull_hint_known=true;a.pull_index=0;check(canonical_static_key(ordinary,a,source));different=a;different.position.buffer=4;check(canonical_static_key(ordinary,different,deferred) && !(source==deferred));
  check(static_depth_family(0x8975ea2744c12a74ull,0xe2ecf65a7810b23bull));check(!static_depth_family(0x3812bc980438747full,0x8995da1e4060f53bull));
+ // Actual packet resource limits apply to unique immutable identities, not draws.
+ CacheIdentity normal{1,11,21,31,5},albedo{2,12,21,31,5},physical{3,13,21,31,5};
+ std::array<CacheIdentity,3> views{normal,albedo,physical};ResourceBudget budget;ResourceIndices indices{};
+ for(unsigned i=0;i<100;++i){check(budget.reserve(7,views,indices));check(indices.sampler==0 && indices.normal==0 && indices.albedo==1 && indices.physical==2 && indices.new_sampler==(i==0));}
+ check(budget.material_count==100 && budget.sampler_count==1 && budget.cache_count==3);
+ // Planning a new sampler then failing clone/allocation leaves published state unchanged.
+ auto unpublished=budget;check(unpublished.reserve(8,views,indices));check(budget.sampler_count==1 && budget.material_count==100);
+ for(unsigned i=100;i<material_slots;++i)check(budget.reserve(7,views,indices));
+ auto unchanged=budget;check(!budget.reserve(7,views,indices));check(budget.material_count==unchanged.material_count && budget.cache_count==unchanged.cache_count);
+ ResourceBudget samplers;for(unsigned i=1;i<=16;++i)check(samplers.reserve(i,views,indices));
+ check(!samplers.reserve(17,views,indices));check(samplers.material_count==16 && samplers.sampler_count==16);check(samplers.reserve(1,views,indices) && !indices.new_sampler);
+ ResourceBudget caches;for(unsigned i=1;i<=64;++i){auto v=normal;v.view=i;v.view_generation=i+100;check(caches.reserve(7,{v,v,v},indices));}
+ auto newview=normal;newview.view=999;newview.view_generation=999;
+ check(!caches.reserve(7,{normal,newview,newview},indices));check(caches.cache_count==64 && caches.material_count==64);
+ ResourceBudget atomic;auto invalid=physical;invalid.image_generation=0;
+ check(!atomic.reserve(7,{normal,albedo,invalid},indices));check(atomic.material_count==0 && atomic.cache_count==0 && atomic.sampler_count==0);
+ check(atomic.reserve(7,views,indices));auto generation=normal;generation.view_generation++;check(atomic.reserve(7,{generation,albedo,physical},indices) && indices.normal==3);
+ generation=normal;generation.image_generation++;check(atomic.reserve(7,{generation,albedo,physical},indices) && indices.normal==4);
+ generation=normal;generation.layout++;check(atomic.reserve(7,{generation,albedo,physical},indices) && indices.normal==5);
  std::printf("PASS %u actual Vulkan material-state cases; no GPU\n",checks);
 }
