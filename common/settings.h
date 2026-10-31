@@ -243,6 +243,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_physical_origin", "1"}}, {{"rt_geometry", 2}, {"exp_native_hair",1}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"},{"rt_origin","1","Primary origin matching"}}},
 
+  {"exp_hit_material", "Native hit materials",
+   "Captures the audited static virtual-texture material views, reflectance and native tangent frame for ray hits. "
+   "Only fresh triangles with verified native draw correspondence are supported; unknown inputs keep the current renderer. "
+   "This supplies material parameters, not offscreen lighting or a replacement BSDF. Restart required. "
+   "Actual gameplay participation, quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Restart, "restart required", true,
+   {{"off", "Off", 0, {{"rt_hit_material", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_hit_material", "1"}}, {{"rt_geometry", 2}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Native prepass capture"},{"rt_bvh_split","1","Split hit identity"}}},
+
   {"exp_omm", "Opacity micromaps",
    "Experimental hardware opacity micromaps for the audited static alpha-material subset. "
    "Requires Full ray-traced geometry, Vulkan 1.3, EXT opacity micromaps, buffer device "
@@ -283,7 +293,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 217 keys of bg3rtx.ini, in file order.
+// 218 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -397,6 +407,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_alpha_cut", "1"},
     {"rt_alpha_stochastic", "1"},
     {"rt_native_scalp", "0"},
+    {"rt_hit_material", "0"},
     {"rt_omm", "0"},
     {"rt_native_hair", "0"},
     {"rt_hair_physical_origin", "0"},
@@ -554,7 +565,7 @@ inline Map code_defaults() {
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
-                                         "sharc_device", "rt_native_hair", "rt_omm", "rt_sun_cascade_current"};
+                                         "sharc_device", "rt_native_hair", "rt_omm", "rt_sun_cascade_current", "rt_hit_material"};
   for (const char* k : kRestart)
     if (key == k) return from != to;
   return false;

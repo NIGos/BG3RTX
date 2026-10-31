@@ -25,6 +25,7 @@
 //   3. a one-instance TLAS (identity transform: the space is already camera-relative).
 // The core traces against the TLAS in the tiled lighting (rt_shadow.hlsl).
 #include "host.h"
+#include "hit_material.h"
 #include "omm_backend.h"
 #include "omm_submit.h"
 #include "../common/omm_scene_capability.h"
@@ -126,6 +127,7 @@ bool g_split_valid = false;
 // reused, and a slot is not handed out once stale (built + 1 < now, as
 // core/gi.cpp rt_tlas), so a retired slot cannot come back into use.
 struct SceneSlot {
+  uint64_t material_record = 0; // includes pre-conversion copies even if AS build later fails
   bool used = false;
   uint64_t built = 0, last_use = 0;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
@@ -168,9 +170,15 @@ uint64_t g_scene_skipped = 0, g_scene_skip_logged = 0;
 std::atomic<uint64_t> g_oldest_live{UINT64_MAX};
 
 bool slot_retired(const SceneSlot& s, uint64_t gpu_done, uint64_t now) {
+  if(!native_hit::slot_reusable(uint32_t(&s-g_scene),gpu_done))return false;
+  if(native_hit::enabled() && s.material_record){
+    const int state=bvh_rec_state(s.material_record);
+    if(state==0 || state<0)return false;
+    if(state==2)return true; // one-time recording dropped before execution
+  }
   if (!s.used) return true;
   if (gpu_done >= s.last_use + 2) return true;
-  if (omm::has_resources()) return false; // OMM never substitutes frame age for completion.
+  if (omm::has_resources() || native_hit::enabled()) return false; // Neither provider substitutes age for completion.
   // No present fence completed for 240 frames (as defer_tick's fallback).
   return now >= s.last_use + 240;
 }
@@ -750,13 +758,15 @@ void rt_device_created(DeviceData* dd, bool enabled) {
   if (dd->vk.CreateQueryPool(dd->device, &qi, nullptr, &g_qp) != VK_SUCCESS) g_qp = VK_NULL_HANDLE;
   g_rt = true;
   omm::device_created(dd, true);
-  if(omm::available())omm::sampler_device_created(dd);
+  if(omm::available() || cfg_int("rt_hit_material",0))omm::sampler_device_created(dd);
+  native_hit::device_created(dd);
   log("[rt] acceleration structures + ray query enabled on the game's device (scratch alignment %llu)",
       (unsigned long long)g_scratch_align);
 }
 
 void rt_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
+  native_hit::device_destroyed(dd);
   sun_device_destroyed(dd);
   omm::device_destroyed(dd);
   omm::bake_device_destroyed(dd);
@@ -1006,6 +1016,11 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   const int scene_slot = pick_scene_slot();
   if (scene_slot < 0) return;
   SceneSlot& scene = g_scene[scene_slot];
+  if(native_hit::enabled()){
+    scene.used=true;scene.last_use=frame_index();scene.tlas=VK_NULL_HANDLE;scene.set=VK_NULL_HANDLE;
+    scene.material_record=bvh_rec_register(cmd);
+  }
+  native_hit::scene_prepare(cmd,uint32_t(scene_slot),cap);
   float source_camera[56]{};
   const bool source_camera_valid = read_mapped(cap.ubo, cap.ubo_offset, source_camera, sizeof source_camera);
   scene.pose_valid = false;
@@ -1388,6 +1403,16 @@ bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selec
 }
 
 uint64_t rt_scene_oldest_live() { return g_oldest_live.load(); }
+bool rt_hit_material_use(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkDescriptorSet alpha,uint64_t identity){
+  if(!g_rt || !native_hit::enabled() || !cfg_int("rt_hit_material",0) || !cmd || !selected || !alpha || !identity)return false;
+  std::lock_guard lock(g_mu);
+  for(uint32_t i=0;i<kSceneSlots;++i){auto& s=g_scene[i];
+    if(!s.used || s.rec!=identity || s.set!=alpha || (s.tlas!=selected && s.omm_reference!=selected) ||
+       slot_retired(s,life_gpu_done(),frame_index()) || bvh_rec_state(s.rec)==2)continue;
+    if(!native_hit::register_use(cmd,i))return false;
+    s.last_use=(std::max)(s.last_use,frame_index());alpha_slot_in_use(i,s.last_use);return true;
+  }return false;
+}
 
 bool rt_sun_base_capture(VkAccelerationStructureKHR selected_tlas, VkDescriptorSet selected_alpha, SunBaseCapture* out) {
   if(!out) return false;

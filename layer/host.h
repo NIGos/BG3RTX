@@ -165,6 +165,8 @@ std::vector<DescEntry> decode_push_template(VkDescriptorUpdateTemplate tpl, cons
 
 // ---- command buffer state (cmd.cpp) ----
 struct CmdState {
+  VkDevice allocation_device = VK_NULL_HANDLE;
+  VkCommandPool allocation_pool = VK_NULL_HANDLE;
   bool in_pass = false;
   // Work of ours (rrpost steps) recorded since the game's last vkCmdSetEvent: the
   // game's vkCmdWaitEvents does not cover it (cmd.cpp inserts a barrier first).
@@ -205,6 +207,8 @@ struct CmdState {
   uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
   uint64_t recording = 0;              // unique per vkBeginCommandBuffer (rrpost chains)
+  VkCommandBufferUsageFlags begin_flags = 0; // exact native recording contract
+  VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_SECONDARY; // unknown stays unsupported
   PanEpoch pan_epoch{};                // depth-to-tonemap identity within this recording
   bool game_alloc = false;             // allocated through this layer (not by Streamline below it)
   std::vector<std::string> events;     // pre-rendered JSON objects, one per event
@@ -215,6 +219,8 @@ struct CmdState {
   // Track D geometry capture (geocapture.cpp)
   void* geo = nullptr;                 // capture active in the current pass
   bool geo_em = false;                 // ... and it is an effects pass of the emissive capture (D-EM)
+  bool geo_material = false, geo_material_active = false; // opt-in exact deferred VT stream
+  bool geo_material_no_writes = false;
   int geo_ts = -1;                     // timestamp slot of the current pass
   VkViewport viewport{};               // last vkCmdSetViewport(first = 0)
   bool has_viewport = false;
@@ -243,6 +249,7 @@ struct DrawArgs {
   uint32_t first_instance;
 };
 CmdState* cmd_state(VkCommandBuffer cmd, bool create = false);
+uint64_t cmd_recording(VkCommandBuffer cmd); // locked copy; safe across reset/free
 void cmd_forget(VkCommandBuffer cmd);
 
 // ---- lifetime of game objects our GPU work references (tracker.cpp) ----
@@ -668,6 +675,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
 VkAccelerationStructureKHR bvh_omm_scene(uint32_t slot,VkAccelerationStructureKHR reference);
 bool bvh_omm_use(VkCommandBuffer cmd,uint32_t slot,VkAccelerationStructureKHR selected,uint64_t* identity);
 bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkAccelerationStructureKHR* reference,uint64_t* identity);
+bool rt_hit_material_use(VkCommandBuffer,VkAccelerationStructureKHR,VkDescriptorSet,uint64_t);
 bool bvh_omm_commit(VkCommandBuffer cmd,uint32_t slot,VkBuffer stamp,VkDeviceSize base,uint32_t generation,const uint32_t* mapped);
 void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 // Build records: work of ours recorded into a game command buffer counts only once

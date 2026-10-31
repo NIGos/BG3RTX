@@ -24,6 +24,8 @@
 // triangles are rasterised on the CPU and compared with the frame's own depth
 // buffer, and the world-space triangle normals with the G-buffer normals.
 #include "host.h"
+#include "hit_material.h"
+#include "../common/native_hit_writes.h"
 #include "../common/spirv_visibility.h"
 #include "spirv_xfb.h"
 #include "../common/cascade_casters.h"
@@ -79,6 +81,8 @@ std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the
 std::atomic<uint64_t> g_gbuf_depth{0};            // the last G-buffer pass's depth image (the prepass writes it)
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
 thread_local uint32_t t_last_hair_outputs = 0;
+thread_local uint32_t t_last_vt_outputs = 0;
+thread_local bool t_last_no_writes = false;
 thread_local VsInstancing t_last_inst; // its instancing analysis (bvhsplit.cpp)
 thread_local uint64_t t_last_hash = 0;
 thread_local bool t_last_discard = false;   // the module last scanned on this thread is a fragment shader that discards
@@ -89,7 +93,7 @@ thread_local int t_last_model = -1;
 
 std::mutex g_mu;  // modules, pipelines, buffers
 // Interface of every module (the UV-slot check): execution model, user inputs/outputs, hash.
-struct ModIo { int model = -1; std::vector<StageIo> io; uint64_t hash = 0; };
+struct ModIo { int model = -1; std::vector<StageIo> io; uint64_t hash = 0; bool no_writes=false; };
 std::unordered_map<VkShaderModule, ModIo> g_mod_io;
 // UV-slot verdicts over every pipeline created, and the distinct mismatching VS/FS pairs.
 std::atomic<uint32_t> g_uv_count[5];
@@ -99,17 +103,20 @@ struct ModInfo {
   VsInstancing inst;         // class-A position path (spirv_xfb.h)
   uint64_t hash = 0;         // SPIR-V hash of the game's module
   uint32_t hair_outputs = 0;
+  uint32_t vt_outputs = 0;
 };
 std::unordered_map<VkShaderModule, ModInfo> g_patched;
 std::unordered_set<VkShaderModule> g_discard_mods;   // fragment shaders that can discard (alpha test)
 std::unordered_set<VkShaderModule> g_always_discard_mods;
 std::unordered_set<VkShaderModule> g_fragment_depth_mods;
 struct PipeInfo {
+  // Populated after aggregate initialization below, keeps legacy field order.
   bool xfb;                  // VS patched, VS is the last pre-raster stage
   bool triangles;            // triangle topology (list/strip/fan, with or without adjacency)
   VkPrimitiveTopology topo;
   int uv = -1;               // VS output location captured as UV (stride 24)
   uint32_t hair_outputs = 0;
+  uint32_t vt_outputs = 0;
   uint8_t uv_match = 0;      // UvMatch of the VS/FS pair (spirv_xfb.h)
   int8_t uv_fs = -1;         // the FS's float2 input location
   uint8_t uv_vs_comps = 0;   // components the VS writes there
@@ -119,6 +126,8 @@ struct PipeInfo {
   bool always_discard = false;
   bool fragment_depth = false;
   bool fragment_known = true;
+  bool no_storage_writes = false;
+  bool material_state = false;
   bool native_view_known=false,dynamic_viewport=false,dynamic_scissor=false;
   VkViewport native_viewport{};VkRect2D native_scissor{};
   bool finite_sun_clip = false; // observed Vulkan z=[0,1], clipping enabled, no clamp
@@ -1532,7 +1541,7 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
     const bool hair_split=cfg_int("rt_bvh_split",1)!=0;
     if(hair_requested && !hair_split)
       log("[geo] rt_native_hair rejected: requires rt_bvh_split=1 at startup; legacy procedural range not implemented");
-    g_stride = g_alpha_mode ? (hair_requested && hair_split ? 88 : 24) : 16;
+    g_stride = g_alpha_mode ? (hair_requested && hair_split ? 88 : cfg_int("rt_hit_material",0) && hair_split ? 64 : 24) : 16;
     log("[geo] transform feedback %s: vertex shaders get Position%s XFB decorations (stride %u)%s",
         g_on ? "enabled" : "FAILED to load", g_alpha_mode ? " + UV" : "", g_stride,
         g_alpha_mode ? "; ray tracing scene from the depth prepass" : "");
@@ -1551,6 +1560,8 @@ bool geo_native_hair_enabled() { return g_stride >= 88u && g_alpha_mode; }
 bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>& out) {
   t_last_uv = -1;
   t_last_hair_outputs = 0;
+  t_last_vt_outputs = 0;
+  t_last_no_writes = false;
   t_last_inst = VsInstancing{};
   t_last_hash = 0;
   t_last_discard = false;
@@ -1564,8 +1575,10 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   t_last_fragment_depth = sun_coverage::fragment_depth_replacing(ci->pCode, ci->codeSize / 4);
   // Every module's interface (vertex and fragment): the UV-slot check at pipeline creation.
   t_last_model = stage_io(ci->pCode, ci->codeSize / 4, t_last_io);
+  if(native_hit::enabled())t_last_no_writes=native_hit::no_graphics_storage_writes(ci->pCode,ci->codeSize/4);
   t_last_hash = hash64(ci->pCode, ci->codeSize);
-  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs);
+  const bool vt_frame=native_hit::enabled() && t_last_hash==0x3812bc980438747full;
+  bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs);
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
   if (rt_enabled()) {
@@ -1593,9 +1606,9 @@ void geo_note_module(VkShaderModule m, bool patched) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (t_last_always_discard && !patched) g_always_discard_mods.insert(m);
   if (t_last_fragment_depth && !patched) g_fragment_depth_mods.insert(m);
-  if (t_last_model == 0 || t_last_model == 4) g_mod_io[m] = ModIo{t_last_model, std::move(t_last_io), t_last_hash};
+  if (t_last_model == 0 || t_last_model == 4) g_mod_io[m] = ModIo{t_last_model, std::move(t_last_io), t_last_hash,t_last_no_writes};
   if (!patched) return;
-  g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash, t_last_hair_outputs};
+  g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash, t_last_hair_outputs,t_last_vt_outputs};
 }
 
 void geo_forget_module(VkShaderModule m) {
@@ -1690,10 +1703,12 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     if (!out[i]) continue;
     PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
     bool vs_patched = false, other = false;
+    bool all_no_writes=cis[i].stageCount!=0;
     const ModIo *vio = nullptr, *fio = nullptr;
     for (uint32_t s = 0; s < cis[i].stageCount; ++s) {
       const auto& st = cis[i].pStages[s];
       auto io = st.module ? g_mod_io.find(st.module) : g_mod_io.end();
+      all_no_writes&=io!=g_mod_io.end() && io->second.no_writes;
       if (io != g_mod_io.end()) (st.stage == VK_SHADER_STAGE_VERTEX_BIT ? vio : fio) = &io->second;
       if (st.stage == VK_SHADER_STAGE_VERTEX_BIT) {
         auto it = st.module ? g_patched.find(st.module) : g_patched.end();
@@ -1701,6 +1716,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
         if (vs_patched) {
           pi.uv = it->second.uv;
           pi.hair_outputs = it->second.hair_outputs;
+          pi.vt_outputs = it->second.vt_outputs;
           pi.inst = make_inst_pipe(cis[i], it->second);
           if (pi.inst.ok) ++g_inst_pipes;
         }
@@ -1714,6 +1730,11 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
       }
     }
     pi.xfb = vs_patched && !other;
+    pi.no_storage_writes=all_no_writes;
+    pi.material_state=cis[i].pRasterizationState && !cis[i].pRasterizationState->rasterizerDiscardEnable &&
+      !cis[i].pRasterizationState->pNext && cis[i].pMultisampleState && !cis[i].pMultisampleState->pNext &&
+      cis[i].pMultisampleState->rasterizationSamples==VK_SAMPLE_COUNT_1_BIT && !cis[i].pMultisampleState->alphaToCoverageEnable &&
+      cis[i].pColorBlendState && !cis[i].pColorBlendState->pNext;
     pi.finite_sun_clip = sun_coverage::finite_native_clip(cis[i]);
     if(cis[i].pViewportState) {
       const auto& v=*cis[i].pViewportState;
@@ -1742,6 +1763,9 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
         const auto state = cis[i].pDynamicState->pDynamicStates[k];
         if (state == VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE) pi.depth_write = -1;
         if (state == VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE) pi.depth_test = -1;
+        if(state==VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT || state==VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT ||
+           state==VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT || state==VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE ||
+           state==VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT || state==VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT)pi.material_state=false;
       }
     const uint32_t overlap_family = (uint32_t(cfg_int("rt_em_dbg_fam_hi", 0) & 0xffff) << 16) |
                                      uint32_t(cfg_int("rt_em_dbg_fam_lo", 0) & 0xffff);
@@ -1814,6 +1838,7 @@ void geo_forget_pipeline(VkPipeline p) {
 void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
   s->geo = nullptr;
   s->geo_em = false;
+  s->geo_material = s->geo_material_active = false;
   s->geo_ts = -1;
   if (!g_dd) return;
   // rt_cascade_casters: a sun shadow cascade pass (a depth-only D16 layer of the cascade array).
@@ -1863,6 +1888,9 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
       (by_ordinal ? (g_prepass_ordinal < 0 || int(s->pass.ordinal) == g_prepass_ordinal)
                   : g_scene_frame1.load() != frame_index() + 1);
   const bool rt_src = g_alpha_mode ? prepass : gbuf;
+  if(g_on && gbuf && !rt_src && native_hit::enabled() && !trace_recording()) {
+    s->geo=s;s->geo_material=true;s->geo_material_no_writes=true;return;
+  }
   if (!gbuf && !rt_src) return;
   bool xfb = false;
   if (g_on) {
@@ -1884,6 +1912,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
         g_scratch.split = g_scratch.rt && bvh_split_wanted();
         g_scratch.cascade = false;
         g_scratch.cc_keys = g_scratch.rt && cfg_int("rt_cascade_casters", 0) != 0;
+        if(g_scratch.rt)native_hit::prepass_begin(cmd);
         s->geo = &g_scratch;
         // The previous frame's AS build read this buffer.
         if (g_scratch.rt) rt_before_capture(cmd);
@@ -1911,6 +1940,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
 
 // Right after the game's vkCmdBeginRenderPass (inside the pass).
 void geo_pass_begun(VkCommandBuffer cmd, CmdState* s) {
+  if(s->geo_material)return;
   if (s->geo_em) return;
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
@@ -1920,6 +1950,7 @@ void geo_pass_begun(VkCommandBuffer cmd, CmdState* s) {
 
 // Right before the game's vkCmdEndRenderPass / vkCmdEndRendering (inside the pass).
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s) {
+  if(s->geo_material){if(s->geo_material_active)p_end_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=false;return;}
   if (s->geo_em) {
     auto* e = static_cast<EmPass*>(s->geo);
     if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
@@ -2045,10 +2076,23 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
 }
 
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+  if(s->geo_material){
+    bool exact=false;{std::lock_guard lock(g_mu);auto i=g_pipes.find(s->pipe[0]);if(i!=g_pipes.end()){
+      s->geo_material_no_writes&=i->second.no_storage_writes;
+      const auto& p=i->second;
+      exact=p.xfb && p.vt_outputs && p.material_state && p.depth_test==1 && p.blend_mask==0 &&
+        (p.color_mask&0xf73u)==0xf73u && p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && p.uv_match==UV_OK;
+    }else s->geo_material_no_writes=false;}
+    VkBuffer buffer{};VkDeviceSize offset=0,bytes=0;
+    if(native_hit::deferred_begin(cmd,s,args,exact,g_stride,&buffer,&offset,&bytes)){
+      p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;
+    }return;
+  }
   if (s->geo_em) return em_pre_draw(cmd, s, args);
   auto* c = static_cast<Capture*>(s->geo);
   if (!c) return;
   const uint32_t kind = args.kind, count = args.count, instances = args.instances;
+  if(c->rt)native_hit::prepass_observe(cmd,s,args);
   DrawRec d{kind, s->pipe_id[0], s->vs, s->fs, count, instances, -1, 0, VK_NULL_HANDLE, 0, 0, 0};
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
   {
@@ -2193,6 +2237,8 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     c->alpha_draws += alpha;
   }
   if (capture) {
+    if(c->rt && alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+      native_hit::note_prepass(cmd,s,args,rec,d.offset,g_stride,uint32_t(prims));
     VkDeviceSize off = d.offset, size = d.reserved;
     p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
     p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
@@ -2208,6 +2254,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
 }
 
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
+  if(s->geo_material){if(s->geo_material_active)p_end_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=false;return;}
   if (s->geo_em) {
     auto* e = static_cast<EmPass*>(s->geo);
     if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
@@ -2228,6 +2275,7 @@ void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
 
 // After the game's vkCmdEndRenderPass (outside the pass).
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
+  if(s->geo_material){native_hit::deferred_finish(cmd,s->geo_material_no_writes);s->geo_material=false;s->geo_material_active=false;s->geo=nullptr;return;}
   if (s->geo_em) {
     auto* e = static_cast<EmPass*>(s->geo);
     s->geo = nullptr;

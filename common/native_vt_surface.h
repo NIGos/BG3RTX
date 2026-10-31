@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include "native_vt_fields.h"
 namespace bg3::native_vt {
 using V3=std::array<float,3>;using V4=std::array<float,4>;
 struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset;};
@@ -40,16 +41,14 @@ inline Status decode_sample_fields(const Samples& in,Surface& result){
  for(const auto* layer:{&in.albedo,&in.normal,&in.physical})for(float x:*layer)if(!std::isfinite(x))return Status::InvalidSample;
  if(!std::isfinite(in.reflectance))return Status::InvalidSample;
  // Native FS: (_normal.wzy*2-1), then negate third component, normalize.
- V3 n{in.normal[3]*2-1,in.normal[2]*2-1,1-in.normal[1]*2};
- float length2=(n[0]*n[0]+n[1]*n[1])+n[2]*n[2];
- if(!std::isfinite(length2) || length2<=0)return Status::InvalidNormal;
- float length=std::sqrt(length2);for(float& x:n)x/=length;
- Surface decoded{};decoded.native_frame_normal=n;
- for(unsigned i=0;i<3;++i)decoded.albedo[i]=std::clamp(in.albedo[i],0.f,1.f);
- decoded.perceptual_roughness=std::clamp(in.physical[1],0.f,1.f);
- decoded.reflectance=std::clamp(in.reflectance,0.f,1.f);
- decoded.metalness=std::clamp(in.physical[0],0.f,1.f);
- decoded.albedo_aux=in.physical[2]; // Native albedo target alpha; no invented AO meaning.
+ const auto fields=transport::nv_fields({in.albedo[0],in.albedo[1],in.albedo[2]},
+   {in.normal[3],in.normal[2],in.normal[1]},{in.physical[0],in.physical[1],in.physical[2]},in.reflectance);
+ if(fields.status==2)return Status::InvalidNormal;
+ if(fields.status)return Status::InvalidSample;
+ Surface decoded{};decoded.native_frame_normal={fields.frame_normal.x,fields.frame_normal.y,fields.frame_normal.z};
+ decoded.albedo={fields.albedo.x,fields.albedo.y,fields.albedo.z};
+ decoded.perceptual_roughness=fields.roughness;decoded.reflectance=fields.reflectance;decoded.metalness=fields.metalness;
+ decoded.albedo_aux=fields.aux; // Native albedo target alpha; no invented AO meaning.
  result=decoded;return Status::SupportedFields;
 }
 inline Status decode(uint64_t fs,const Samples& in,Surface& result){
