@@ -3786,7 +3786,7 @@ Foundry families seen in round 1: `20864dc6` exact, `7085eee7` exact (VT albedo)
 - Not captured: candles and fire (forward particles) and the unit-58 VFX planes.
 - One frame of latency: consumers apply `em_shift()`.
 
-## Current native-caster sun scene (ABI 19, default off)
+## Current native-caster sun scene (default off)
 
 `rt_sun_cascade_current=0`: source/record-order-correct sun-only TLAS clone,
 private same-submit build insertion, cloned alpha/stamp, strict whole-ray coverage.

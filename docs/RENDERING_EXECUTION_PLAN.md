@@ -433,7 +433,7 @@ mandatory second agent for every locally unsupported case.
 - Current live window: user explicitly permits autonomous live diagnostics and
   progression without witnessing. Queue-only, frozen finite batches and player
   ownership guards remain. This supersedes the initial no-authorization state.
-- Current checkpoint: main 90d7930, ABI 21; 52 CTests/561 shaders/QA pass. M0 guards
+- Current checkpoint (main commit, ABI, test counts): see HANDOFF_SESSION.md. M0 guards
   operate in the runner; M1 K16 transport is live verified with scoped limitations.
   M2 has native-qualified cell geometry, persistent terrain and authored lights;
   runtime terrain packets/state remain open. M3 material R1/R2 failed acquisition;

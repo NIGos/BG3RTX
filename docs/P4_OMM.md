@@ -9,8 +9,8 @@ Contents: 1 status, 2 native alpha predicate, 3 CPU groundwork, 4 EXT backend,
 
 ## 1. Status: isolated runtime candidate
 
-Default rt_omm=0, Experimental GUI off in all presets. ABI remains 19; both DLLs
-must travel together. Main/user build is unchanged. No current game/GPU validation
+Default rt_omm=0, Experimental GUI off in all presets. Both DLLs must match
+(ABI 21 today, `BG3RTX_ABI_VERSION` in `common/host_api.h`). Main/user build is unchanged. No current game/GPU validation
 or measured acceleration/cost is claimed. Restart is required to request the extension.
 
 The isolated renderer now wires alpha bindings 10/11 (original micromap-free
