@@ -5,6 +5,9 @@
 namespace bg3::capture_budget {
 inline constexpr uint64_t mib=uint64_t(1)<<20;
 inline bool storage_range_supported(uint64_t size,uint64_t limit){return size && limit && size<=limit;}
+// Explicit opt-in layouts: native material basis (64), native Hair (88).
+// Ordinary POSITION and POSITION/UV layouts retain their established policy.
+inline bool corrected_partition_feedback(uint32_t stride){return stride==64u || stride==88u;}
 
 // Existing per-frame alpha partition arithmetic. Physical MB limits and the
 // 1.5x alpha / 1.1x opaque reserves are unchanged.
