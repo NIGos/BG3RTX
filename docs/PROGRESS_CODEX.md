@@ -9,6 +9,7 @@
 - rt_scene_wait=2 removed (stale scene after rotation). Lean batches: ~11 min and 0.4 GB instead of 90 min and 35 GB.
 - Open, being fixed: inn rotation mismatch is the static POOL geometry lagging in rotation (static 99%, rotation 83%; pool in front 17-19%), not camera-fade walls (they keep casting shadows, by design).
 - Open: M4 features barely participate (hit material qualifies <1% of hits; gi_hit_direct nonzero 0; rf_hit_shade 0.05%): diagnosing.
+- Branch hit-lighting (offline, not live): rf_hit_shade ambient now has the game's local diffuse probes (they replace the sky irradiance indoors); the "60x" L_a was the rf_debug=8 window (valid window: L_b 0.077 vs L_a 0.047); term counters x 8192 (x 128 rounded direct/sun to 0); hit point from barycentrics; new `GI hit direct lights`, `rf hit shade lights`, `rf hit shade sun` lines. Next live run: those lines decide whether "all occluded" is self-intersection and why the sun is 0.
 - Meta-audit: docs/META_AUDIT_20261031.md. Try in game: roof shadows outdoors (Ultra), nothing else new yet.
 
 ## Paused at the user's request - latest checkpoint

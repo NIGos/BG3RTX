@@ -959,8 +959,10 @@ constexpr uint32_t kStatsRing = 8;
 // [289..303] rf_hit_shade (rt_reflections.hlsl RF_HIT_SHADE, rf_stats=1): tier (b) hidden hits
 // asked / shaded / unknown material / unsupported lighting / local probes listed / sum L_b; the
 // tier (a) check: complete / unsupported / sums L_b, L_a, |L_b - L_a| and the L_b terms direct,
-// sun, ambient; clipped values. Luminance x 128 (fxh). Logged every 300 frames ("rf hit shade").
+// sun, ambient; clipped values. Luminance x 8192 (fxh, clamped at 8). Logged every 300 frames ("rf hit shade").
+// [160..171] GI / [176..187] rf_hit_shade light diagnostics (native_hit_direct.hlsli g_hd_*), [191..195] rf sun.
 constexpr uint32_t kRfHitFirst = 289, kRfHitCount = 15;
+constexpr double kRfHitScale = 8192.0;   // fxh in rt_reflections.hlsl
 static_assert(bg3::transport::NtsStatsCount == kRfHitFirst, "rf hit shade counters follow the tileset ones");
 constexpr uint32_t kStatsCounters = kRfHitFirst + kRfHitCount; //253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..303 rf hit shade
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
@@ -994,7 +996,7 @@ void rf_hit_fold(const uint32_t* c) {
     for (int b = 0; b < 64; ++b) f[i] += c[(kRfHitFirst + i) * 64 + b];
   for (uint32_t i = 0; i < kRfHitCount; ++i) g_rfh.sum[i] += f[i];
   if (f[6]) {   // checked tier (a) hits this frame
-    const double d = (double(f[8]) - double(f[9])) / 128.0 / double(f[6]);
+    const double d = (double(f[8]) - double(f[9])) / kRfHitScale / double(f[6]);
     g_rfh.d_sum += d;
     g_rfh.d_sq += d * d;
     ++g_rfh.d_frames;
@@ -1002,7 +1004,7 @@ void rf_hit_fold(const uint32_t* c) {
   if (++g_rfh.frames < 300) return;
   const uint64_t* t = g_rfh.sum;
   if (t[0] || t[6] || t[7]) {
-    const double q = 1.0 / 128.0, n = double(g_rfh.d_frames);
+    const double q = 1.0 / kRfHitScale, n = double(g_rfh.d_frames);
     const double mean = n > 0 ? g_rfh.d_sum / n : 0.0;
     const double se = n > 1 ? std::sqrt((std::max)(g_rfh.d_sq / n - mean * mean, 0.0) / (n - 1.0)) : 0.0;
     const double ck = t[6] ? double(t[6]) : 1.0;
@@ -1171,7 +1173,17 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   if(host->cfg_int("rt_native_tileset",0) && host->cfg_int("rt_hit_material",0))
     host->log("hit material tileset (%u frames): qualified family2 %llu; native primary matches %llu",g_stats_n,
       (unsigned long long)t[bg3::transport::NtsStatQualified],(unsigned long long)t[bg3::transport::NtsStatPrimaryMatch]);
-  if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/256.0,t[134],t[135]);
+  if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/8192.0,t[134],t[135]);
+  // native_hit_direct.hlsli diagnostics: why a hit's point/spot term is zero or unsupported.
+  auto hd_log=[&](const char* who,unsigned b){
+    if(!(t[b+6]|t[b+9]|t[b+10]|t[b+11]|t[b+5]))return;
+    host->log("%s lights (%u frames): light rays traced %llu, lit %llu, occluded %llu (first hit within 1 cm %llu, on the hit's own triangle %llu), unknown %llu; "
+              "froxel lists no point/spot %llu; lights evaluated %llu, zero before the cosine (channel/range/cone) %llu, N.L <= 0 %llu; "
+              "unsupported: source (frustum/froxel slice/index) %llu, projector %llu, other %llu",who,g_stats_n,t[b],t[b+1],t[b]-t[b+1]-t[b+4],t[b+2],t[b+3],t[b+4],
+              t[b+5],t[b+6],t[b+7],t[b+8],t[b+9],t[b+10],t[b+11]);};
+  hd_log("GI hit direct",160u);hd_log("rf hit shade",176u);
+  if(t[191])host->log("rf hit shade sun (%u frames): evaluated %llu, zero sun colour x clouds x b13 %llu, N.L <= 0 %llu, traced lit %llu, traced occluded %llu",
+                      g_stats_n,t[191],t[192],t[193],t[194],t[195]);
   uint64_t material_total=0;for(unsigned i=253;i<263;++i)material_total+=t[i];
   if(material_total)host->log("hit material (%u frames): attempted %llu qualified %llu unsupported %llu; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters %llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu; of base, instance without a material record %llu",
     g_stats_n,material_total,t[253],material_total-t[253],t[254],t[255],t[256],t[257],t[258],t[259],t[260],t[261],t[262],t[127]);

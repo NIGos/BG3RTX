@@ -81,8 +81,9 @@ void stat_addv(uint index, uint v, uint bin) {
 }
 uint fxl(float v) { return uint(clamp(v, 0.0, 4.0) * 4096.0 + 0.5); }
 #if RF_HIT_SHADE
-// rf hit shade counters (core/gi.cpp kRfHitFirst): luminance x 128, clamped at 32 (clip counted).
-uint fxh(float v) { return uint(clamp(v, 0.0, 32.0) * 128.0 + 0.5); }
+// rf hit shade counters (core/gi.cpp kRfHitFirst): luminance x 8192, clamped at 8 (clip counted).
+// x 128 rounded every b13[0]-scaled direct and sun term (~1e-3) to 0 (live S8: "direct 0, sun 0").
+uint fxh(float v) { return uint(clamp(v, 0.0, 8.0) * 8192.0 + 0.5); }
 #endif
 
 // GGX visible normals within the spherical cap that keeps the reflection above the
@@ -237,6 +238,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
         // against the screen (rf_stats=1 or rf_debug=8): their output stays the screen's.
         const bool hs_check = tier == 1 && (pc.rf_stats != 0u || pc.rf_debug == 8u);
         if ((tier == 2 || tier == 3 || hs_check) && hit_material_publication_ready()) {
+          // Light / sun diagnostics 176-187, 191-195 (native_hit_direct.hlsli g_hd_*).
+          g_hd_stats = pc.rf_stats != 0u;
+          g_hd_base = 176u;
+          g_hd_bin = (fp.x >> 3) * 7u + (fp.y >> 3) * 13u;
           NativeHitShade hs = native_hit_shade(hh, o + dir * t, -dir, cone.f0 + cone.spread * t);
           // Hit-material reasons (253+status, 127) for the normal stats windows; run_post's push
           // has rt_stats 0, so the D-RF stats key gates it (core/gi.cpp "hit material" line).
@@ -381,13 +386,19 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_addv(63, vpx ? fxl(lum(max(ms + Tp - gs, 0.0))) : 0u, bin);
 #if RF_HIT_SHADE
     // rf hit shade (core/gi.cpp kRfHitFirst = 289, logged every 300 frames as "rf hit shade")
-    const bool clip = any(max(max(hs_Lb, hs_La), max(max(hs_direct, hs_sun), hs_amb)) > 32.0);
+    const bool clip = any(max(max(hs_Lb, hs_La), max(max(hs_direct, hs_sun), hs_amb)) > 8.0);
     stat_addv(289, hs_asked, bin);
     stat_addv(290, shaded ? 1u : 0u, bin);
     stat_addv(291, hs_material, bin);
     stat_addv(292, hs_light, bin);
     stat_addv(293, hs_probes, bin);
     stat_addv(294, shaded ? fxh(lum(hs_Lb)) : 0u, bin);
+    // The tier (a) check reads L_a from prevRadiance: under any rf_debug view that is last
+    // frame's debug image (live S8 rf_debug=8: L_a 0.0019 against 0.047), so it is not counted.
+    if (pc.rf_debug != 0u) {
+      hs_checked = 0u;
+      hs_check_fail = 0u;
+    }
     stat_addv(295, hs_checked, bin);
     stat_addv(296, hs_check_fail, bin);
     stat_addv(297, hs_checked != 0u ? fxh(lum(hs_Lb)) : 0u, bin);
