@@ -2,6 +2,9 @@
 
 ## Real S1 open-bay reference geometry exported - 2026-10-31
 
+Merged via merge-green onto fd166bc and pushed main/codex/omm-bake. ABI 19;
+45/45 CTests, 527/527 runtime shader files (all entry points) and QA passed.
+
 00af160 imported as 5ec54cc: 27 native-qualified package components, 24506 triangles,
 plus 824 frozen/current-capture terrain triangles with original draw/triangle IDs.
 Nine authored components remain separate with UNKNOWN native correspondence.
@@ -13,7 +16,7 @@ Asset tests: 62 passed, one existing skip. No renderer/GPU or user-trial change.
 Design: ASSET_DB.md. Outputs: m2-foundry-mesh/BG3RTX/captures/m2-foundry/reference-cell/
 world-native-qualified.json, world-authoring-visibility-unknown.json,
 world-frozen-terrain.json and evidence.json. Shared scattering-frame source is
-also ready for integration; actual runtime material acquisition is still pending.
+also integrated; actual runtime material acquisition is still pending.
 
 ## Material integration: actual command-buffer split found offline - 2026-10-31
 
