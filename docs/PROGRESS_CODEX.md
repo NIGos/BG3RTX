@@ -1,5 +1,33 @@
 # BG3RTX progress
 
+## GI image review finds a real host binding defect; fix in progress - 2026-10-31
+
+User at PC: offline work only, no focused launches. Personal Hair trial unchanged.
+The new GI remains OFF. R1 contribution counters passed; R2 IMAGE QUALITY FAILS
+in a localized crop: ON has dark stipple absent from both OFF frames. Do not
+promote from positive mean GI. The 48-frame stable intersection has 769563 pixels;
+GI mean +0.495% and no negative GI envelope pixels do NOT rule out final damage.
+Crop analysis finds 1144 stable pixels below both OFF means/envelope in final;
+GI visibility alpha and diffuse are also affected, unlike GI radiance itself.
+Contact: omm-bake/BG3RTX/captures/gi-hit-direct-20261031/r2/gi-stipple-off-on-off.png.
+
+Independent review identifies a concrete descriptor contract defect: the GI hit
+pass reused a filtered local-shadow layout, omitting required GI bindings 8, 11,
+13 and 17 (raw GI, prior radiance, raw depth and motion vectors). Shader compilation
+alone missed the host mismatch. The owner is building a dedicated bounded layout
+and writes from one contract, checked against actual compiled shader interfaces.
+No blur, bias, dark history or shader selector workaround. Future live image A/B
+is still required after the source fix; counters alone will not close this defect.
+
+Offline terrain metadata extension 045af02/import eb531fe is prepared: actual
+bounded set2/binding32 entries on the existing explicit terrain request only;
+ordinary tracing unchanged, no guessed texture mapping. Two focused tests pass.
+Authored Hair audit a37c1ae/import 30e08fa decoded one real Shadowheart style:
+skinned triangle meshes/material presets, no proven fiber endpoints/radii or
+deformation correspondence. Native cards stay supported; true RTX strands remain
+unsupported for that inspected tuple, not declared impossible for every resource.
+
+
 ## User at PC: offline work; three complete GI image bursts retained - 2026-10-31
 
 User requests background windows. No game is running; no further focused FG or
