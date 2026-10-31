@@ -11,7 +11,8 @@ endif()
 file(TO_CMAKE_PATH "$ENV{VULKAN_SDK}" VULKAN_SDK)
 
 # Everything lands in bin/ so the layer runs straight from the repository.
-set(BG3RTX_BIN ${CMAKE_SOURCE_DIR}/bin)
+# A second build tree (for example BG3RTX_DIAGNOSTICS=OFF) can point it elsewhere.
+set(BG3RTX_BIN ${CMAKE_SOURCE_DIR}/bin CACHE PATH "Output folder of the DLLs and executables")
 foreach(cfg "" _DEBUG _RELEASE _RELWITHDEBINFO)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY${cfg} ${BG3RTX_BIN})
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY${cfg} ${CMAKE_BINARY_DIR}/lib)
@@ -58,6 +59,10 @@ add_library(VkLayer_bg3rtx SHARED
   layer/framecap.cpp
   layer/layer.def)
 target_include_directories(VkLayer_bg3rtx PRIVATE ${VULKAN_SDK}/Include)
+# Diagnostic-only host code (terrain packet dump, pan bursts, rt_order_trace, cpu_timing
+# hook timers, ls_native_direct_validate). OFF compiles it out; the hooks become no-ops.
+option(BG3RTX_DIAGNOSTICS "Compile diagnostic-only host code into the layer" ON)
+target_compile_definitions(VkLayer_bg3rtx PRIVATE BG3RTX_DIAGNOSTICS=$<BOOL:${BG3RTX_DIAGNOSTICS}>)
 
 # NVIDIA Nsight Aftermath SDK (optional, aftermath=1 in bg3rtx.ini): headers at build
 # time; GFSDK_Aftermath_Lib.x64.dll is copied into bin/ for development and loaded at

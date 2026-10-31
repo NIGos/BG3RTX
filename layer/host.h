@@ -25,6 +25,13 @@
 
 #include "../common/host_api.h"
 
+// BG3RTX_DIAGNOSTICS (CMake option, default ON): 0 compiles out diagnostic-only host
+// code (terrain packet dump, pan bursts, rt_order_trace, cpu_timing hook timers, the
+// ls_native_direct_validate SPIR-V patch). Its hooks below become inline no-ops.
+#ifndef BG3RTX_DIAGNOSTICS
+#define BG3RTX_DIAGNOSTICS 1
+#endif
+
 namespace bg3 {
 
 // ---- logging / paths (util.cpp) ----
@@ -49,7 +56,11 @@ void cfg_poll();                       // re-reads bg3rtx.ini when it changes
 int cfg_int(const char* key, int fallback);
 // rt_order_trace=N: log record/submit order of the scene build and the RT passes for N
 // frames every 600 frames (P1 frame-lag diagnosis).
+#if BG3RTX_DIAGNOSTICS
 bool order_trace_active();
+#else
+inline bool order_trace_active() { return false; }
+#endif
 float cfg_float(const char* key, float fallback);
 // Hot-path settings (per draw, per pass, per submit): cfg_hot(CfgHot::k) is exactly
 // cfg_int("k", fallback in util.cpp's kCfgHot), cached by every cfg_poll (once per present,
@@ -309,16 +320,29 @@ std::string view_ref(VkImageView view);
 // Records copies of the pass's attachments into readback buffers; returns
 // the dump ids as a JSON array fragment for the pass's "end" event.
 std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s);
+// Terrain packet dump (terrain_packet_dump.inl, diagnostic only).
+struct TerrainSubmission {std::vector<uint64_t> packets;uint64_t frame{};};
+#if BG3RTX_DIAGNOSTICS
 std::string terrain_capture_note(VkCommandBuffer cmd, CmdState* s);
 void terrain_capture_pass(VkCommandBuffer cmd, CmdState* s);
 void terrain_capture_secondary(VkCommandBuffer cmd, CmdState* s);
 void terrain_capture_discard(VkCommandBuffer cmd);
-struct TerrainSubmission {std::vector<uint64_t> packets;uint64_t frame{};};
 bool terrain_capture_needs_submit_promotion(VkCommandBuffer cmd);
 TerrainSubmission terrain_capture_before_submit(const std::vector<VkCommandBuffer>& cmds);
 void terrain_capture_after_submit(const TerrainSubmission&, VkQueue queue, bool success);
 void terrain_capture_device_destroyed(DeviceData* dd);
 void terrain_capture_finish(uint64_t frame, const std::string& dir, VkQueue queue);
+#else
+inline std::string terrain_capture_note(VkCommandBuffer, CmdState*) { return {}; }
+inline void terrain_capture_pass(VkCommandBuffer, CmdState*) {}
+inline void terrain_capture_secondary(VkCommandBuffer, CmdState*) {}
+inline void terrain_capture_discard(VkCommandBuffer) {}
+inline bool terrain_capture_needs_submit_promotion(VkCommandBuffer) { return false; }
+inline TerrainSubmission terrain_capture_before_submit(const std::vector<VkCommandBuffer>&) { return {}; }
+inline void terrain_capture_after_submit(const TerrainSubmission&, VkQueue, bool) {}
+inline void terrain_capture_device_destroyed(DeviceData*) {}
+inline void terrain_capture_finish(uint64_t, const std::string&, VkQueue) {}
+#endif
 void count_pass();
 // Diagnostic counters, logged with the periodic [auto] line.
 enum DiagCounter { DIAG_PRESENT, DIAG_PIPELINES, DIAG_PIPELINE_US, DIAG_DESC_WRITES, DIAG_SHADER_MODULES, DIAG_SUBMIT, DIAG_BEGIN_CMD, DIAG_BEGIN_PASS, DIAG_BEGIN_RENDERING, DIAG_BIND_PIPE, DIAG_DRAW,
@@ -328,10 +352,19 @@ void watchdog_start();                     // passes per frame feed the auto tri
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
 void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue);
 bool write_png_rgb(const std::string& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb);
+// Pan bursts (dump.cpp, diagnostic only). Off: Bg3HostApi::pan_capture stays a valid
+// pointer that always answers false (no ABI change).
+#if BG3RTX_DIAGNOSTICS
 bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* resource);
 void pan_on_submit(const std::vector<VkCommandBuffer>& cmds);
 void pan_on_present(VkQueue queue);
 void pan_pass_end(VkCommandBuffer cmd, CmdState* s);
+#else
+inline bool pan_capture(VkCommandBuffer, const char*, const Bg3Binding*) { return false; }
+inline void pan_on_submit(const std::vector<VkCommandBuffer>&) {}
+inline void pan_on_present(VkQueue) {}
+inline void pan_pass_end(VkCommandBuffer, CmdState*) {}
+#endif
 bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,
                      VkDeviceSize destination_offset = 0);
 VkBuffer rt_scene_pose();

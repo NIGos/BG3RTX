@@ -8,6 +8,7 @@
 #include <cstring>
 
 namespace bg3 {
+#if BG3RTX_DIAGNOSTICS
 // cpu_timing=1: CPU time our geometry-capture hooks add while recording (P3 base frame rate).
 // Slots: pass begin, pre-draw, the driver's draw call itself on captured draws, post-draw, pass end.
 std::atomic<bool> g_cpu_timing{false};
@@ -36,6 +37,12 @@ void cmd_cpu_report(uint64_t frames) {
   log("[cpu] capture hooks over %llu frames, ms/frame (all threads): total %.3f; %s; captured draws %.1f/frame",
       (unsigned long long)n, total, o.c_str(), double(g_cpu_draws.exchange(0)) / double(n));
 }
+#else
+// Diagnostics compiled out: no timers, cpu_timing has no effect on these hooks.
+struct CpuTimer { explicit CpuTimer(int) {} };
+static void count_cpu_draw() {}
+void cmd_cpu_report(uint64_t) {}
+#endif
 }  // namespace bg3
 
 namespace bg3 {

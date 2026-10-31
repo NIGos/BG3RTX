@@ -41,10 +41,12 @@ DeviceData* main_device() { return g_main; }
 uint64_t frame_index() { return g_frame.load(); }
 void cmd_cpu_report(uint64_t frames);
 
+#if BG3RTX_DIAGNOSTICS
 bool order_trace_active() {
   const int n = cfg_int("rt_order_trace", 0);
   return n > 0 && frame_index() > 600 && frame_index() % 600 < uint64_t(n);
 }
+#endif
 
 static void order_log_submit(const char* what, const std::vector<VkCommandBuffer>& cmds) {
   if (!order_trace_active()) return;
