@@ -2181,7 +2181,10 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
      bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) &&
      refresh(g_hit_material,"gi/rt_hit_material.hlsl",g_rt_layout)){
     memory_barrier(cmd,kCS,kCS);bind_rt(b,s.tlas,s.alpha);
-    (void)dispatch(cmd,g_hit_material,b,pc,g_w,g_h,true); // optional: unsupported keeps remaining passes
+    // run_post has its own zero-initialized Push; pre-pass statistics flags
+    // are not carried here. Enable only this optional provider view's counters.
+    auto material_pc=pc;material_pc.rt_stats=host->cfg_int("rt_stats",0)?1u:0u;
+    (void)dispatch(cmd,g_hit_material,b,material_pc,g_w,g_h,true); // optional: unsupported keeps remaining passes
   }
   // One cache-free reference renderer: direct or finite two-surface subset.
   // Normal RF/probe replacement remains separate and unchanged.
@@ -2193,7 +2196,8 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if(refresh(reference,two?"gi/rt_hit_two_bounce.hlsl":"gi/rt_hit_direct.hlsl",g_ls_layout)){
       Bound direct{};bind_all(direct,s);bind_rt(direct,s.tlas,s.alpha);bind_ls(direct,s);bind_extras(direct,s);
       memory_barrier(cmd,kCS,kCS);
-      (void)ls_dispatch(cmd,direct,pc,VK_NULL_HANDLE,reference.pipeline,(g_w+7)/8,(g_h+7)/8,nullptr,true);
+      auto reference_pc=pc;reference_pc.rt_stats=host->cfg_int("rt_stats",0)?1u:0u;
+      (void)ls_dispatch(cmd,direct,reference_pc,VK_NULL_HANDLE,reference.pipeline,(g_w+7)/8,(g_h+7)/8,nullptr,true);
     }
   }
   // Capture after the RT debug overlay so debug 8 bursts contain its QA encoding.

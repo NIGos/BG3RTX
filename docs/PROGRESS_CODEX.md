@@ -1,5 +1,63 @@
 # BG3RTX progress
 
+## R7 acquisition passes; broader resource reuse and real terrain evaluation retained - 2026-10-31
+
+R7 3e9703d completed 229 s, queue VALID, zero NVIDIA 153/dumps/build drift.
+Existing GPU counters now report 110849-573352 qualified hits per 120-frame
+window, with 6248598 native opaque matches across 22 reported windows. One window:
+379103 qualified/379084 matched; mean albedo/normal/roughness/reflectance/metalness
+0.0100809/0.0632351/0.0050615/0.0039062/0.0052227. Clip/geometry/sampling/field/frame/
+parameter rejects are zero in that window. Cone-vs-raster sampling and 1/256 sums
+make this acquisition evidence, not native equality, whole-scene coverage or cost.
+Full immutable inputs/results: omm-bake/BG3RTX/captures/native-hit-material-20261031/r7/.
+No extra shader-counter patch was imported: the proven post Push flag fix sufficed.
+
+f121f70/import 80acccf separates 128 material records from existing 16 sampler/
+64 cache limits, reusing exact resource generations and owned clones. Host links,
+372 bounded-resource cases and three targeted tests pass. Per-material current
+checks, duplicate rejection and complete GPU proof remain. Coverage/cost still
+need the changed reference run; all defaults remain OFF.
+
+78b12e2/import ec1b0c8 feeds actual R5 packet masks/scalars/LUT into the EXISTING
+terrain evaluator. All 16464 mask bytes and 12 scalars/two RGB colors per layer
+match authored exports exactly. Ten focused tests pass; root full asset suite:
+80 tests, 79 pass/one existing skip. Native base 0/255 disables the second base
+LUT branch in this packet; gather is separately tested. BMA alpha is explicit,
+not invented. Texture mapping/derivatives/normal projection/final shading remain.
+
+Next: consolidate these verified increments via merge-green, then one same-run
+material coverage/direct/two-surface reference check, with real RT/FG and positive
+supported indirect required. Keep main a9ab6ba until consolidation passes. Separate
+user Hair trial unchanged; new material/reference work has NOT been user-tested.
+
+## R5 terrain acquisition passes; next material join is a small CPU correction - 2026-10-31
+
+Main a9ab6ba, ABI 21, merged via merge-green and pushed: 55/55 CTests,
+579/579 runtime shader files/all entries and QA pass. An old asset DB fixture
+assumed incomplete exports prove absence; fdd7d79 now tests complete AND legacy
+policy through the real runtime-light merge, and passes. Installed Lua unchanged.
+
+R5 completed 212 s, no NVIDIA 153/dumps/build drift. Terrain acquisition PASSES:
+frame 4521 copied 1, declined 0, pending 0; exact 80/7168/16464/2048-byte files.
+Both native buffers require shader reads (usages 16/34). Base indices 0/255 are
+valid: native FS skips the second base when >=64. All three sampler metadata
+records are known. Raw bytes, hashes and derived results are preserved under
+omm-bake/BG3RTX/captures/native-hit-material-20261031/r5/. This is not terrain
+shading parity or runtime integration yet; real mask/brush/LUT bytes now exist.
+
+Material GPU acquisition still fails: 100 unique/0 duplicate candidates, 16 actual
+captures/snapshots, zero binding/pipeline declines, but no source association.
+Actual source/deferred Engine allocations differ; their addresses are pass-local.
+1018b07/import 04e6e83 omits ONLY that address equality for positive-pull physical
+candidates, retains SSBO/index/UV/indexed-draw identity and full GPU proof. Fresh
+host/core/launcher build and 48-case pipeline/input CTest pass. A private R6
+130 s OFF/ON/OFF draft tests this next; no repeated terrain trace or shader suite
+before that probe. Main stays at its prior consolidated revision until integration.
+
+R5 primary 99.527/99.525/99.5245%, FG ratio 2.0 with zero bad phase samples;
+rendered SDK log cadence 36.78/36.36/36.71 fps. RT diagnostic ~18.1 ms, not new
+reference cost. No user-trial updates or full material/lighting success claimed.
+
 ## Native input and terrain submit fixes prepared - 2026-10-31
 
 5b5c595/import bd6719f resolves actual native Engine, position and UV inputs for

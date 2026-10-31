@@ -6,8 +6,8 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main c82fe8d ABI 21 is merged via merge-green and pushed with codex/omm-bake.
-Both DLLs rebuilt; 54/54 CTests, 577/577 runtime shaders and QA passed. Related
+Main a9ab6ba ABI 21 is merged via merge-green and pushed with codex/omm-bake.
+Both DLLs rebuilt; 55/55 CTests, 579/579 runtime shaders and QA passed. Related
 user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
@@ -53,7 +53,15 @@ clip/UV proof. No cache-
 only rerun: static source draws are not the instanced cached domain.
 Terrain UBO usage 16 lacks TRANSFER_SRC; fa3d9f4 shaderreadback built/validated,
 actual-submit pinning/stages fixed in 68321d0/import fe9f949, targeted checks pass.
-R5 same 130 s draft, normal cache/reference OFF, needs merge-green+freeze. No live job.
+R5 completed 212 s: terrain copied 1, declined 0, pending 0 (25760 bytes).
+R6 proved source association (16 copies/mapped) but post counters were disabled.
+3e9703d fixes only optional material/reference Push statistics. R7 completed
+229 s VALID: 110849-573352 qualified hits/window, 6248598 native opaque matches.
+Raw/derived R5-R7 evidence is retained. No native equality/full-coverage claim.
+80acccf raises material records to 128 with exact resource reuse; CPU/host pass.
+ec1b0c8 consumes real terrain mask/brush/LUT bytes; all painted bytes match
+archives, 80 asset tests (79 pass/one skip). Final terrain shading still open.
+Next: merge-green, then same-run direct/two-surface coverage/cost test. No game now.
 Exact packet capture e3b238a/8a84f11 is opt-in only; R4 raw evidence is retained.
 Two-surface reference d74f766, rt_hit_reference=2, default OFF; CPU/shader checks
 pass, no GPU/path-quality claim. All consolidated via merge-green and pushed.

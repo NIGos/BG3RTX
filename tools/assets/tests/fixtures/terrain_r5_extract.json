@@ -1,0 +1,450 @@
+{
+  "source": "R5 frame4521 packet2 recording113450 pass0 draw801",
+  "manifest": {
+    "schema": 1,
+    "frame": 4521,
+    "pending_packets": 0,
+    "packets": [
+      {
+        "id": 2,
+        "recording": 113450,
+        "pass": 0,
+        "draw": 801,
+        "status": "copied",
+        "capture_point": "immediately_after_native_pass",
+        "vs": "64e2568916ede3d6",
+        "fs": "6650c75f3d3e4968",
+        "sampler_scope": "metadata_not_sampling_certificate",
+        "samplers": [
+          {
+            "set": 4,
+            "binding": 4,
+            "known": true,
+            "status": 1,
+            "sampler_id": 41,
+            "descriptor_set_id": 2422,
+            "write_version": 1,
+            "mag": 1,
+            "min": 1,
+            "mipmap": 0,
+            "address": [
+              2,
+              2,
+              2
+            ],
+            "bias": -0.584962428,
+            "min_lod": 0,
+            "max_lod": 16,
+            "anisotropy": 0,
+            "max_anisotropy": 1,
+            "compare": 0,
+            "compare_op": 0,
+            "border": 0,
+            "unnormalized": 0,
+            "reduction": 0
+          },
+          {
+            "set": 1,
+            "binding": 1,
+            "known": true,
+            "status": 1,
+            "sampler_id": 45,
+            "descriptor_set_id": 2421,
+            "write_version": 1,
+            "mag": 1,
+            "min": 1,
+            "mipmap": 1,
+            "address": [
+              2,
+              2,
+              2
+            ],
+            "bias": -0.584962428,
+            "min_lod": 0,
+            "max_lod": 16,
+            "anisotropy": 0,
+            "max_anisotropy": 1,
+            "compare": 0,
+            "compare_op": 0,
+            "border": 0,
+            "unnormalized": 0,
+            "reduction": 0
+          },
+          {
+            "set": 0,
+            "binding": 7,
+            "known": true,
+            "status": 1,
+            "sampler_id": 60,
+            "descriptor_set_id": 4643,
+            "write_version": 4,
+            "mag": 1,
+            "min": 1,
+            "mipmap": 1,
+            "address": [
+              0,
+              0,
+              0
+            ],
+            "bias": -0.584962428,
+            "min_lod": 0,
+            "max_lod": 16,
+            "anisotropy": 1,
+            "max_anisotropy": 16,
+            "compare": 0,
+            "compare_op": 0,
+            "border": 0,
+            "unnormalized": 0,
+            "reduction": 0
+          }
+        ],
+        "resources": [
+          {
+            "slot": "s4b0",
+            "file": "2_s4b0.bin",
+            "bytes": 80,
+            "descriptor_offset": 0,
+            "descriptor_range": 80,
+            "effective_offset": 370496,
+            "validated_range": 80,
+            "buffer_usage": 16,
+            "readback": "shader"
+          },
+          {
+            "slot": "s1b4",
+            "file": "2_s1b4.bin",
+            "bytes": 7168,
+            "descriptor_offset": 0,
+            "descriptor_range": 7168,
+            "effective_offset": 0,
+            "validated_range": 7168,
+            "buffer_usage": 34,
+            "readback": "shader"
+          },
+          {
+            "slot": "s1b2",
+            "file": "2_s1b2.bin",
+            "bytes": 16464,
+            "view": {
+              "status": "known",
+              "view_id": 8439,
+              "image_id": 8117,
+              "current_image_id": 8117,
+              "format": 37,
+              "type": 1,
+              "components": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "flags": 0,
+              "extension_first": null,
+              "descriptor_type": 2,
+              "descriptor_layout": 5,
+              "range": {
+                "aspect": 1,
+                "base_mip": 0,
+                "mips": 4294967295,
+                "base_layer": 0,
+                "layers": 4294967295,
+                "resolved_mips": 1,
+                "resolved_layers": 1
+              },
+              "image_format": 37,
+              "image_flags": 0,
+              "image_mips": 1,
+              "image_layers": 1
+            },
+            "width": 49,
+            "height": 84,
+            "row_pitch": 196
+          },
+          {
+            "slot": "s1b3",
+            "file": "2_s1b3.bin",
+            "bytes": 2048,
+            "view": {
+              "status": "known",
+              "view_id": 8440,
+              "image_id": 8118,
+              "current_image_id": 8118,
+              "format": 70,
+              "type": 1,
+              "components": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "flags": 0,
+              "extension_first": null,
+              "descriptor_type": 2,
+              "descriptor_layout": 5,
+              "range": {
+                "aspect": 1,
+                "base_mip": 0,
+                "mips": 4294967295,
+                "base_layer": 0,
+                "layers": 4294967295,
+                "resolved_mips": 1,
+                "resolved_layers": 1
+              },
+              "image_format": 70,
+              "image_flags": 0,
+              "image_mips": 1,
+              "image_layers": 1
+            },
+            "width": 256,
+            "height": 4,
+            "row_pitch": 512
+          }
+        ]
+      }
+    ]
+  },
+  "sha256": {
+    "2_s1b2.bin": "5dda73c787a509ad0214b5aa92c7381ce8d452feae250969b69fdcdf4a2c4038",
+    "2_s1b3.bin": "b5af2a0fb027ce1c505cab59c232db5f7621bd7296b9eb8fa307ae889cd5fdfb",
+    "2_s1b4.bin": "afe7ff3006eef20180cf077ebc395e6210e89e86a78acfe7a4b6d102b7b7024a",
+    "2_s4b0.bin": "016f1e218bfdc856436f883728792ec5459437ee8fc5a516b70d69d0ad016bfb",
+    "manifest.json": "e5dc52cfec02c8466142f390080e35cf57563353f6dec0aa596e5f771397cc98"
+  },
+  "ubo_hex": "d9899d3c8c2e3a3c052fa73c310c433c000080c6000080c60000000000000000000080c6000080c6000000000000000075caad40595955bf000044420000a84200000000ff000000cdcc4c3e00000000",
+  "brushes_hex": "000050430000514300005243000080bf04560e3e2db21d3ef853e33d0000803f8195233f91edfc3e295c8f3e0000803f0000a0400000a0400000803f00000000b81e053ed3bce33c9a99193f000080becdcccc3d00002841cdcccc3e0000a040000000002100000000000000000000000000c4420000c6420000c842000080bf04560e3e2db21d3ef853e33d0000803f8195233f91edfc3e295c8f3e0000803f0000a040000020410000803f00000000b81e053ed3bce33c9a99193f000080becdcccc3d00002841cdcccc3e0000a0400000000021000000000000000000000000007c4200008042000082420000c04104560e3e2db21d3ef853e33d0000803f8195233f91edfc3e295c8f3e0000803f00006040000000000000803f00000000ae47613e6f12033dcdcc4c3e000080becdcccc3d00002841cdcccc3e0000a040010000000700000000000000000000000080bf430000c0430080c0430000c04104560e3e2db21d3ef853e33d0000803f8195233f91edfc3e295c8f3e0000803f00006040000000000000803f00000000ec51b83d5839343c0000403f000080becdcccc3d00002841cdcccc3e0000a04001000000010000000000000000000000",
+  "mask_extract": {
+    "origin": [
+      8,
+      2
+    ],
+    "width": 2,
+    "height": 2,
+    "rgba": [
+      0,
+      58,
+      75,
+      0,
+      0,
+      18,
+      255,
+      0,
+      0,
+      69,
+      51,
+      0,
+      0,
+      22,
+      0,
+      0
+    ]
+  },
+  "lut_constant_rows": [
+    65535,
+    0,
+    65535,
+    0
+  ],
+  "authored": [
+    {
+      "id": "9ca6f213-34f7-65be-f06c-ea838e03db7a",
+      "name": "TT_Paving_Dungeon_SharTemple_C",
+      "brush": {
+        "AlphaThreshold": 0.0,
+        "DetailNormalScale": 0.6000000238418579,
+        "DetailNormalTiling": 0.027799999341368675,
+        "GradientBottomHeightColor": [
+          0.13899999856948853,
+          0.15399999916553497,
+          0.11100000143051147
+        ],
+        "GradientHeightBottom": -0.25,
+        "GradientHeightMidPoint": 0.10000000149011612,
+        "GradientHeightTop": 10.5,
+        "GradientMidHeightColor": [
+          0.6389999985694885,
+          0.49399998784065247,
+          0.2800000011920929
+        ],
+        "GradientRoughnessPower": 5.0,
+        "GradientRoughnessReach": 0.4000000059604645,
+        "HeightContrast": 1.0,
+        "HeightOffset": 5.0,
+        "HeightScale": 5.0,
+        "IsBlackBrush": false,
+        "Localized": false,
+        "MaterialType": 33,
+        "Tiling": 0.12999999523162842,
+        "UseDetailNormalMap": false,
+        "UseHeightGradient": false,
+        "_OriginalFileVersion_": 144115205255725656
+      },
+      "overrides": {
+        "_": "TerrainLayer",
+        "ParamOverrides1": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "ParamOverrides2": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "ParamOverridesMask": 0,
+        "TerrainBrushResource": "9ca6f213-34f7-65be-f06c-ea838e03db7a"
+      }
+    },
+    {
+      "id": "2f95c929-8c5a-8d55-0e7f-4feb2103faeb",
+      "name": "TT_Paving_Dungeon_SharTemple_C_Broken_A",
+      "brush": {
+        "AlphaThreshold": 0.0,
+        "DetailNormalScale": 0.6000000238418579,
+        "DetailNormalTiling": 0.027799999341368675,
+        "GradientBottomHeightColor": [
+          0.13899999856948853,
+          0.15399999916553497,
+          0.11100000143051147
+        ],
+        "GradientHeightBottom": -0.25,
+        "GradientHeightMidPoint": 0.10000000149011612,
+        "GradientHeightTop": 10.5,
+        "GradientMidHeightColor": [
+          0.6389999985694885,
+          0.49399998784065247,
+          0.2800000011920929
+        ],
+        "GradientRoughnessPower": 5.0,
+        "GradientRoughnessReach": 0.4000000059604645,
+        "HeightContrast": 1.0,
+        "HeightOffset": 10.0,
+        "HeightScale": 5.0,
+        "Localized": false,
+        "MaterialType": 33,
+        "Tiling": 0.12999999523162842,
+        "UseDetailNormalMap": false,
+        "UseHeightGradient": false,
+        "_OriginalFileVersion_": 144115188075855895
+      },
+      "overrides": {
+        "_": "TerrainLayer",
+        "ParamOverrides1": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "ParamOverrides2": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "ParamOverridesMask": 0,
+        "TerrainBrushResource": "2f95c929-8c5a-8d55-0e7f-4feb2103faeb"
+      }
+    },
+    {
+      "id": "f46a715f-dd5d-2a1e-1c7c-86a6a482a461",
+      "name": "TT_Gravel_B_Grey",
+      "brush": {
+        "AlphaThreshold": 0.0,
+        "DetailNormalScale": 0.20000000298023224,
+        "DetailNormalTiling": 0.03200000151991844,
+        "GradientBottomHeightColor": [
+          0.13899999856948853,
+          0.15399999916553497,
+          0.11100000143051147
+        ],
+        "GradientHeightBottom": -0.25,
+        "GradientHeightMidPoint": 0.10000000149011612,
+        "GradientHeightTop": 10.5,
+        "GradientMidHeightColor": [
+          0.6389999985694885,
+          0.49399998784065247,
+          0.2800000011920929
+        ],
+        "GradientRoughnessPower": 5.0,
+        "GradientRoughnessReach": 0.4000000059604645,
+        "HeightContrast": 1.0,
+        "HeightOffset": 0.0,
+        "HeightScale": 3.5,
+        "Localized": false,
+        "MaterialType": 7,
+        "Tiling": 0.2199999988079071,
+        "UseDetailNormalMap": true,
+        "UseHeightGradient": false,
+        "_OriginalFileVersion_": 144115188075855888
+      },
+      "overrides": {
+        "_": "TerrainLayer",
+        "ParamOverrides1": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "ParamOverrides2": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "ParamOverridesMask": 0,
+        "TerrainBrushResource": "f46a715f-dd5d-2a1e-1c7c-86a6a482a461"
+      }
+    },
+    {
+      "id": "f80dab5d-01b8-1c60-295c-1f8ca47c87da",
+      "name": "TT_Coastal_Sand_Grey_B",
+      "brush": {
+        "AlphaThreshold": 0.0,
+        "DetailNormalScale": 0.75,
+        "DetailNormalTiling": 0.010999999940395355,
+        "GradientBottomHeightColor": [
+          0.13899999856948853,
+          0.15399999916553497,
+          0.11100000143051147
+        ],
+        "GradientHeightBottom": -0.25,
+        "GradientHeightMidPoint": 0.10000000149011612,
+        "GradientHeightTop": 10.5,
+        "GradientMidHeightColor": [
+          0.6389999985694885,
+          0.49399998784065247,
+          0.2800000011920929
+        ],
+        "GradientRoughnessPower": 5.0,
+        "GradientRoughnessReach": 0.4000000059604645,
+        "HeightContrast": 1.0,
+        "HeightOffset": 0.0,
+        "HeightScale": 3.5,
+        "Localized": false,
+        "MaterialType": 1,
+        "Tiling": 0.09000000357627869,
+        "UseDetailNormalMap": true,
+        "UseHeightGradient": false,
+        "_OriginalFileVersion_": 144115188075855888
+      },
+      "overrides": {
+        "_": "TerrainLayer",
+        "ParamOverrides1": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "ParamOverrides2": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "ParamOverridesMask": 0,
+        "TerrainBrushResource": "f80dab5d-01b8-1c60-295c-1f8ca47c87da"
+      }
+    }
+  ]
+}

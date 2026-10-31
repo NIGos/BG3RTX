@@ -35,7 +35,10 @@ inline bool canonical_static_key(const DrawKey& ordinary,const StaticKeyInputs& 
  }else if(!position.buffer || !position.stride || !position.format)return false;
  out=ordinary;for(size_t i=9;i<out.words.size();++i)out.words[i]=0;
  if(out.words[0]==0)out.words[6]=out.words[7]=out.words[8]=0; // Non-indexed input does not use the index binding.
- out.words[9]=in.engine_buffer;out.words[10]=in.engine_offset;out.words[11]=pull?1u:0u;
+ // Positive-pull candidates use actual geometry inputs across pass-local UBO
+ // allocations. Engine identity remains diagnostic; GPU clip/UV/params still
+ // certify equivalence, and duplicate candidates remain unsupported.
+ out.words[9]=pull?0u:in.engine_buffer;out.words[10]=pull?0u:in.engine_offset;out.words[11]=pull?1u:0u;
  out.words[12]=position.buffer;out.words[13]=position.offset;out.words[14]=position.stride;out.words[15]=position.format;
  out.words[16]=in.uv.buffer;out.words[17]=in.uv.offset;out.words[18]=in.uv.stride;out.words[19]=in.uv.format;
  out.words[20]=0x4e484b31u;out.words[21]=pull?in.pull_index:0u;return true;
