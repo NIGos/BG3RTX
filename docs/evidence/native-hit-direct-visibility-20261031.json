@@ -1,0 +1,73 @@
+{
+  "scope": "Physical direct-only point/spot visibility: all positive terms, independent of native atlas flag. CPU compile/validation only; no GPU quality/cost claim.",
+  "source_base": "003959f plus the visibility-policy patch",
+  "shader_header_sha256": "9c8c9da084c2d2895059fde84986206dc952efef39f65518eb5a2720f97e72e0",
+  "compiled": 16,
+  "validated": 16,
+  "modules": [
+    {
+      "shader": "gi/cascade/rt_hit_direct.hlsl",
+      "sha256": "83f2ab6ab2821bee780dede4678f43657294b5f8b098433534e1421ca8a5a9f3"
+    },
+    {
+      "shader": "gi/cascade_rebase/rt_hit_direct.hlsl",
+      "sha256": "ef39ece068952aeb18129b1be5004efededf35ae55bbd6e1dafe6c471bd261b6"
+    },
+    {
+      "shader": "gi/rebase/rt_hit_direct.hlsl",
+      "sha256": "335e68475db92949a462fd09ea7c70b80e508757b3408d6ed017b06d1bb4612b"
+    },
+    {
+      "shader": "gi/rt_hit_direct.hlsl",
+      "sha256": "72c8cfbf154e391570223246450037804fdd1eb4319d820d04c8b526442dc7b7"
+    },
+    {
+      "shader": "native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "sha256": "1c743af5fb2d02c4fcc34eeb72574d030f1835e97e7019dd846ce889d754b2f7"
+    },
+    {
+      "shader": "native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "sha256": "5e05cf4a62847f6d5b3efba954975e5220994ac6a09035b9a019aeafb0ba4d69"
+    },
+    {
+      "shader": "native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "sha256": "b4a9c309b6474c43f15cd8f5f15d5b298f1960f12e86c17e0b8fb531cc2ef3c7"
+    },
+    {
+      "shader": "native_scalp/gi/rt_hit_direct.hlsl",
+      "sha256": "845943b28ca62822f1cb44be10c329fd31e868afe568cb8998446ba48ca24eb6"
+    },
+    {
+      "shader": "omm/gi/cascade/rt_hit_direct.hlsl",
+      "sha256": "f22b1660997d52cfa71f1cc88769d2ffd0ab9c72426160027d20bda12892aa40"
+    },
+    {
+      "shader": "omm/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "sha256": "0f53bb956be27e4bd43aad98eea634ed2db6645762ca8e0fc12eacfa9b579d0f"
+    },
+    {
+      "shader": "omm/gi/rebase/rt_hit_direct.hlsl",
+      "sha256": "7d1ee84a90e195699f145fc041cf33d681b4940f26c8436cc376cbe0e061c9d1"
+    },
+    {
+      "shader": "omm/gi/rt_hit_direct.hlsl",
+      "sha256": "c89a3b692ff84dd4321b184364abfe49cfe091c70144aff316435c4ac8e381fa"
+    },
+    {
+      "shader": "omm/native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "sha256": "a08fc75f764802dc8e1a959fa1d38efc9a77bac79346050a63540eabf1271001"
+    },
+    {
+      "shader": "omm/native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "sha256": "08f0a5bf91dc64a209e9b58174ab8debfec89529fbc2b869b118d840e8902e23"
+    },
+    {
+      "shader": "omm/native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "sha256": "fa4fd508a2a25fb3c34b228f97bde7a5e14efca90153fd283150bca88a6de209"
+    },
+    {
+      "shader": "omm/native_scalp/gi/rt_hit_direct.hlsl",
+      "sha256": "05090f27be86ba7c2addf21b3c69f533e666b0f34973899b42518aaab7ade36d"
+    }
+  ]
+}
