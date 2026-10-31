@@ -69,5 +69,131 @@
       "shader": "omm/native_scalp/gi/rt_hit_direct.hlsl",
       "sha256": "05090f27be86ba7c2addf21b3c69f533e666b0f34973899b42518aaab7ade36d"
     }
-  ]
+  ],
+  "abi21_packet_revalidation": {
+    "packet_commit": "eb1ec4d",
+    "imported_policy_commit": "d68efde",
+    "abi": 21,
+    "compiler": {
+      "files": [
+        "gi/cascade/rt_hit_direct.hlsl",
+        "gi/cascade_rebase/rt_hit_direct.hlsl",
+        "gi/rebase/rt_hit_direct.hlsl",
+        "gi/rt_hit_direct.hlsl",
+        "native_scalp/gi/cascade/rt_hit_direct.hlsl",
+        "native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+        "native_scalp/gi/rebase/rt_hit_direct.hlsl",
+        "native_scalp/gi/rt_hit_direct.hlsl",
+        "omm/gi/cascade/rt_hit_direct.hlsl",
+        "omm/gi/cascade_rebase/rt_hit_direct.hlsl",
+        "omm/gi/rebase/rt_hit_direct.hlsl",
+        "omm/gi/rt_hit_direct.hlsl",
+        "omm/native_scalp/gi/cascade/rt_hit_direct.hlsl",
+        "omm/native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+        "omm/native_scalp/gi/rebase/rt_hit_direct.hlsl",
+        "omm/native_scalp/gi/rt_hit_direct.hlsl"
+      ],
+      "failures": [],
+      "validation": [
+        {
+          "file": "gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "5f64f83e0a3127c890b843e772153a10e78555bc390dbf24c1cd4a709b365127"
+        },
+        {
+          "file": "gi_cascade_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "85d181b9a3d89d1c0d390ecff22f9ff37a331d5c1309977943e627e53ca7a90e"
+        },
+        {
+          "file": "gi_rebase_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "ccdabce1511cd4eea895a558fd2b3d5f8b7d357949847d7169aadfa94c83bb8c"
+        },
+        {
+          "file": "gi_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "11fbec69d82a69329ae9ca8d2fff2ff2bd171906943bb828184cdc401a95b612"
+        },
+        {
+          "file": "native_scalp_gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "3f19c450ee550ea627f02ee51325e155870c1103299ef49d6a8a26b10574323f"
+        },
+        {
+          "file": "native_scalp_gi_cascade_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "ef808019429c7e5e01046fdb0334c4e3cd41f56d405febd04faff08eb554b268"
+        },
+        {
+          "file": "native_scalp_gi_rebase_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "31be2184fa241622d500d5ba94c840db864c7fe4b59d98dab68cbe0e3d89c7c7"
+        },
+        {
+          "file": "native_scalp_gi_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "5565bd2c8cdf4791c3b45ad62282538d2e1875f34ce9173670d981b9b3c526d3"
+        },
+        {
+          "file": "omm_gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "103af768db24e491f7eddb0c19ce4bedb65a890d2634e1df0b56356eb73cc8b8"
+        },
+        {
+          "file": "omm_gi_cascade_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "caa7bdebb20950bd7f341f71f0b4589060b64d0077f4eb4183aeaf235d664c8c"
+        },
+        {
+          "file": "omm_gi_rebase_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "561c2cc14cc1f62439bc149e2bc85610faabfa3c6ccba2ac00d5c12ac299f217"
+        },
+        {
+          "file": "omm_gi_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "fb077902dc9687d0315a78adc0fc65dc42a95b694fa9d59bca7c46024e6a6d32"
+        },
+        {
+          "file": "omm_native_scalp_gi_cascade_rebase_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "9f56139c3fdecaa80997b4ff96e484e69dd123a8cf7546d7cb181f21149a1d3c"
+        },
+        {
+          "file": "omm_native_scalp_gi_cascade_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "8c1dd36d8bd356b01b92aaf3ab0f63c612c9e9eb54dee638c54877addc55f6a2"
+        },
+        {
+          "file": "omm_native_scalp_gi_rebase_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "64b31dd281deee69a1924a74ffda5d7fab71a3e93fcbb5149b3264cdc86d8ce6"
+        },
+        {
+          "file": "omm_native_scalp_gi_rt_hit_direct.hlsl.main.spv",
+          "returncode": 0,
+          "messages": "",
+          "sha256": "edaf1c6114527631f0669a4d2ec56441e09e7a56dd19b4e99df58cdea38e109b"
+        }
+      ],
+      "scope": "CPU DXC and spirv-val only; no GPU"
+    },
+    "scope": "Only the 16 affected direct variants recompiled and spirv-val checked on the query-owned ABI21 publication schema. CPU only; no game/GPU execution; R2 rt_debug9 candidate untouched."
+  }
 }

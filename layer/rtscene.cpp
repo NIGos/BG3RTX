@@ -1403,13 +1403,21 @@ bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selec
 }
 
 uint64_t rt_scene_oldest_live() { return g_oldest_live.load(); }
-bool rt_hit_material_use(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkDescriptorSet alpha,uint64_t identity){
-  if(!g_rt || !native_hit::enabled() || !cfg_int("rt_hit_material",0) || !cmd || !selected || !alpha || !identity)return false;
+bool rt_hit_material_use(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkDescriptorSet alpha,uint64_t identity,VkDescriptorSet* query_alpha){
+  if(query_alpha)*query_alpha={};
+  static std::atomic<uint64_t> last_query_log{UINT64_MAX};const auto now=frame_index();
+  if(cfg_int("rt_stats",0) && now%120==0 && last_query_log.exchange(now)!=now){
+    const auto* state=cmd?cmd_state(cmd):nullptr;Bg3Binding camera{};const bool bound=cmd && query_binding(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,0,2,0,&camera);
+    log("[hit material query entry] frame %llu cmd %p level %u flags 0x%x recording %llu selected %p alpha %p identity %llu capability %u requested %u camera bound %u %p+%llu",
+      (unsigned long long)now,(void*)cmd,state?unsigned(state->level):UINT32_MAX,state?unsigned(state->begin_flags):0u,(unsigned long long)(state?state->recording:0),
+      (void*)selected,(void*)alpha,(unsigned long long)identity,unsigned(native_hit::enabled()),unsigned(cfg_int("rt_hit_material",0)!=0),unsigned(bound),(void*)camera.buffer,(unsigned long long)camera.offset);
+  }
+  if(!query_alpha || !g_rt || !native_hit::enabled() || !cfg_int("rt_hit_material",0) || !cmd || !selected || !alpha || !identity)return false;
   std::lock_guard lock(g_mu);
   for(uint32_t i=0;i<kSceneSlots;++i){auto& s=g_scene[i];
     if(!s.used || s.rec!=identity || s.set!=alpha || (s.tlas!=selected && s.omm_reference!=selected) ||
        slot_retired(s,life_gpu_done(),frame_index()) || bvh_rec_state(s.rec)==2)continue;
-    if(!native_hit::register_use(cmd,i))return false;
+    if(!native_hit::register_use(cmd,i,query_alpha))return false;
     s.last_use=(std::max)(s.last_use,frame_index());alpha_slot_in_use(i,s.last_use);return true;
   }return false;
 }

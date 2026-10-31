@@ -939,6 +939,33 @@ void alpha_slot_in_use(uint32_t slot, uint64_t frame) {
 // The set layout is fixed for the device's lifetime; the set is the one of the
 // latest scene build (VK_NULL_HANDLE before the first), from the same scene
 // slot as rt_scene's TLAS (rt_scene_set returns both as one pair).
+bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescriptorSet* set) {
+  if(!native_hit::enabled() || !g_dd || !g_dsl || !source || !pool || !set)return false;
+  const auto& vk=g_dd->vk;
+  if(!*pool){
+    VkDescriptorPoolSize sizes[4]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,g_omm_layout?9u:8u},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches+native_hit::cache_slots},
+      {VK_DESCRIPTOR_TYPE_SAMPLER,2+native_hit::sampler_slots},{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1}};
+    VkDescriptorPoolCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};info.maxSets=1;
+    info.poolSizeCount=g_omm_layout?4u:3u;info.pPoolSizes=sizes;
+    if(vk.CreateDescriptorPool(g_dd->device,&info,nullptr,pool)!=VK_SUCCESS)return false;
+  }
+  if(!*set){VkDescriptorSetAllocateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    info.descriptorPool=*pool;info.descriptorSetCount=1;info.pSetLayouts=&g_dsl;
+    if(vk.AllocateDescriptorSets(g_dd->device,&info,set)!=VK_SUCCESS)return false;
+  }
+  // Immutable samplers 4/5 are inherited from the SAME layout. Do not copy
+  // nonexistent optional OMM bindings, or uninitialized material bindings.
+  VkCopyDescriptorSet copies[10]{};uint32_t count=0;
+  for(uint32_t binding:{0u,1u,2u,3u,6u,7u,8u,9u,10u,11u}){
+    if(binding>=10 && !g_omm_layout)continue;
+    auto& copy=copies[count++];copy={VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
+    copy.srcSet=source;copy.dstSet=*set;copy.srcBinding=copy.dstBinding=binding;
+    copy.descriptorCount=binding==2?kTextures:binding==3?kCaches:1u;
+  }
+  vk.UpdateDescriptorSets(g_dd->device,0,nullptr,count,copies);return true;
+}
+
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set) {
   if (!g_on) return false;
   {

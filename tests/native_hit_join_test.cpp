@@ -65,6 +65,20 @@ int main(int argc,char** argv){
   assert(j.claim(4,5,a,rec)&&rec==1);assert(j.claim(4,5,b,rec)&&rec==2);
   assert(j.unique(a,1)&&j.unique(b,2));
  }
+ // Source/deferred packets are independent and their local indices differ.
+ for(bool deferredFirst:{false,true}){
+  DrawJoin source,packet;DrawKey shared{};shared.words[0]=19;uint32_t mapped=0;
+  auto prepareSource=[&](){source.begin(10,100);assert(source.note(10,100,shared,UINT32_MAX));assert(source.assign(10,100,shared,739));};
+  auto prepareDeferred=[&](){packet.begin(20,200);assert(packet.note(20,200,shared,UINT32_MAX));assert(packet.assign(20,200,shared,3));uint32_t local=0;assert(packet.claim(20,200,shared,local)&&local==3);};
+  if(deferredFirst){prepareDeferred();prepareSource();}else{prepareSource();prepareDeferred();}
+  assert(join_packets(source,packet,shared,3,mapped)&&mapped==739);
+  assert(!join_packets(source,packet,shared,739,mapped));
+  // Queries do not consume/mutate a source claim; independent query packets
+  // must obtain the same mapping while late duplicates revoke every query.
+  assert(join_packets(source,packet,shared,3,mapped)&&mapped==739);
+  auto different=shared;different.words[9]=1;assert(!join_packets(source,packet,different,3,mapped));
+  assert(!source.note(10,100,shared,740));assert(!join_packets(source,packet,shared,3,mapped));
+ }
  puts("PASS exact current-recording material draw join, duplicates/reuse/range checks");
  for(int i=1;i<argc;++i){std::ifstream f(argv[i],std::ios::binary|std::ios::ate);assert(f);auto bytes=f.tellg();assert(bytes>0 && size_t(bytes)%4==0);
   std::vector<uint32_t> words(size_t(bytes)/4);f.seekg(0);f.read(reinterpret_cast<char*>(words.data()),bytes);assert(f);

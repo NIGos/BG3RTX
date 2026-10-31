@@ -1415,12 +1415,13 @@ bool dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w
   if(!p.pipeline)return false;
   auto traversal=prepare_omm_traversal(cmd,b,p.pipeline,rt && &p!=&g_rt_shadow_current);
   if(!traversal.valid())return false;
-  if(&p==&g_hit_material && (!host->rt_hit_material_use || !host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity)))return false;
+  VkDescriptorSet selected_alpha=b.alpha;
+  if(&p==&g_hit_material && (!host->rt_hit_material_use || !host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&selected_alpha)))return false;
   VkPipelineLayout layout = private_layout?private_layout:rt ? g_rt_layout : g_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p.pipeline);
   VkWriteDescriptorSet wr[kLsBindings + kNumExtras];
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, rt ? kRtBindings : kBindings, wr), wr);
-  if (rt) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 1, &b.alpha, 0, nullptr);
+  if (rt) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 1, &selected_alpha, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
   return true;
@@ -1474,13 +1475,14 @@ bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
   auto traversal=prepare_omm_traversal(cmd,b,pipe);
   if(!traversal.valid())return false;
   const VkDeviceFuncs& vk = *host->vk;
+  VkDescriptorSet selected_alpha=b.alpha;
   if(material_use && (!host->rt_hit_material_use ||
-     !host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity)))return false;
+     !host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&selected_alpha)))return false;
   const VkPipelineLayout layout = box ? g_ls_box_layout : g_ls_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   VkWriteDescriptorSet w[kLsBindings + kNumExtras];
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, kLsBindings, w), w);
-  VkDescriptorSet sets[2] = {b.alpha, sun};
+  VkDescriptorSet sets[2] = {selected_alpha, sun};
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, material_use ? 1u : 2u, sets, 0, nullptr);
   if (box) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 3, 1, &box->game_set1,
                                    box->game_set1_ndyn, box->game_set1_ndyn ? box->game_set1_dyn : nullptr);
