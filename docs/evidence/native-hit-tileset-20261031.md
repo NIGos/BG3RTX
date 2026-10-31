@@ -42,8 +42,11 @@ Counter 287 counts qualified family-2 acquisitions; 288 counts their same-frame
 primary matches. CPU row counts alone do not qualify runtime material coverage.
 
 Validation checkpoint: 754 MSVC CPU cases and registered CTest pass. Host provider
-object and new scalar gather compile; gather SPIR-V validates. All96 affected TileOFF modules are byte-identical to4b62c89; all96 TileON
+object and new scalar gather compile; gather SPIR-V validates. All 96 affected TileOFF modules are byte-identical to 4b62c89; all 96 TileON
 prototypes compile and validate before M1 integration. Exact hashes and scope are
-in native-hit-tileset-20261031-shaders.json. Combined M2 getter,80-byte capture
-routing, combined TileON proof and full host link are pending.
+in native-hit-tileset-20261031-shaders.json. After merging M1 224b864, all 96
+actual native_tileset material wrappers compile and validate; 48 GI and 32
+reference interfaces pass 2,456,696 production interface checks. Combined hashes
+are in native-hit-tileset-20261031-combined.json. The M2 getter and 80-byte capture
+routing, core stats capacity 289 and full host link are still pending.
 No live participation, field agreement, quality or performance claim is made.

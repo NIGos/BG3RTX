@@ -1,0 +1,595 @@
+{
+  "source": "6bde2802e21a2611e9bc93c37f77b0f4a76f941f",
+  "scope": "combined actual native_tileset wrappers; CPU compilation only, no GPU/game",
+  "count": 96,
+  "valid": 96,
+  "gi_interfaces": 48,
+  "reference_interfaces": 32,
+  "interface_pass": true,
+  "interface_output": "PASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_cascade_gi_trace_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_gi_trace_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_rebase_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_omm_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_omm_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_omm_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_omm_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_omm_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_omm_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_omm_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_hair_origin_omm_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 20 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_cascade_gi_trace_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_gi_trace_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_rebase_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_cascade_gi_trace_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_cascade_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_cascade_rebase_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_cascade_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_gi_trace_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_rebase_gi_trace_rt_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_rebase_gi_trace_rt_sharc_hit_direct.hlsl.spv: 19 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_cascade_rt_hit_direct.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_cascade_rt_hit_two_bounce.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_cascade_rebase_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_cascade_rebase_rt_hit_two_bounce.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_rebase_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_rebase_rt_hit_two_bounce.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_rt_hit_direct.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_gi_rt_hit_two_bounce.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_cascade_rt_hit_direct.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_cascade_rt_hit_two_bounce.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_cascade_rebase_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_cascade_rebase_rt_hit_two_bounce.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_rebase_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_rebase_rt_hit_two_bounce.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_rt_hit_direct.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_native_scalp_gi_rt_hit_two_bounce.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_cascade_rt_hit_direct.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_cascade_rt_hit_two_bounce.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_cascade_rebase_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_cascade_rebase_rt_hit_two_bounce.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_rebase_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_rebase_rt_hit_two_bounce.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_rt_hit_direct.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_gi_rt_hit_two_bounce.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_cascade_rt_hit_direct.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_cascade_rt_hit_two_bounce.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_cascade_rebase_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_cascade_rebase_rt_hit_two_bounce.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_rebase_rt_hit_direct.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_rebase_rt_hit_two_bounce.hlsl.spv: 18 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_rt_hit_direct.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS C:\\Users\\quali\\.codex\\worktrees\\native-hit-material\\BG3RTX\\captures\\native-hit-tileset-20261031\\combined\\shaders_native_tileset_omm_native_scalp_gi_rt_hit_two_bounce.hlsl.spv: 17 unique set0 descriptors, push 256 bytes\nPASS 2456696 GI host/interface checks\n",
+  "seconds": 336.65521216392517,
+  "results": [
+    {
+      "path": "shaders/native_tileset/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "7eb68c83aac29dc605383d7701211647e8856dd7696a635772f16ecbbde55e6c"
+    },
+    {
+      "path": "shaders/native_tileset/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "7be08ef9e0199da4b8f813779d0ec894c9007c78c5a84152555bec21a6343334"
+    },
+    {
+      "path": "shaders/native_tileset/gi/cascade/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "1c432c8c76479ec9920c49713e5f972ea49c4bc4509b349c82a863855a687981"
+    },
+    {
+      "path": "shaders/native_tileset/gi/cascade/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "5c243d7f7ea5bffc09f12324dfea5cc5dd62a19215eebb9c66d213e8fbd233b1"
+    },
+    {
+      "path": "shaders/native_tileset/gi/cascade/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "706e98165ead3ff3cf5514ef07d2af6bcd7a5fe74e635c28cbb30aa5fbededa8"
+    },
+    {
+      "path": "shaders/native_tileset/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "18646e24209b63fdafdb2ad8196fae08e34767158d56446ae00daf756154871b"
+    },
+    {
+      "path": "shaders/native_tileset/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "f6f87a82166c794e009fff2be1f8b46e5b94793a3cb992dbe15ea1700aea6a18"
+    },
+    {
+      "path": "shaders/native_tileset/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "8ecc9b6de419c9dd802fbabb579d3ffbf6060ebb9cb48821e30f820133bbbd59"
+    },
+    {
+      "path": "shaders/native_tileset/gi/cascade_rebase/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "3aca30e95183f24d7b07a3497f9e6b5d35d7406ee41d9eda9f72dfe89cfa0298"
+    },
+    {
+      "path": "shaders/native_tileset/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "d785c6824f0931dabb0642eb2180e11773a9233a3b4de36c10c4b085c7211b1d"
+    },
+    {
+      "path": "shaders/native_tileset/gi/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "adde201a369f778b52c7a200de5cafd376f03195e2098b4e5c83f73972634526"
+    },
+    {
+      "path": "shaders/native_tileset/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "8a95064d8a838ade98c50e1c772a2d341e355025c767559751b8afb4f8093fc5"
+    },
+    {
+      "path": "shaders/native_tileset/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "b8cf1b86ca79d018dcb3a0c14e6bdc146a0c84e722fce21e22f87fe3d9792854"
+    },
+    {
+      "path": "shaders/native_tileset/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "89042b08ea0615bb705e5d083703f32262a14e6fbc2f791432020b2a6bce5996"
+    },
+    {
+      "path": "shaders/native_tileset/gi/rebase/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "6b3adb7d682fc4584dbd2faaf723eeba67cd58f165fa7e1973d5caed126bf9b0"
+    },
+    {
+      "path": "shaders/native_tileset/gi/rebase/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "eb6b5a5c01111971875c70934dc514dc876578847f54fb78a29cd71049678603"
+    },
+    {
+      "path": "shaders/native_tileset/gi/rebase/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "d9ab10817c21077fbbfaa177b2d1d95e3c9a571c1343fbb1871efe7588ee9778"
+    },
+    {
+      "path": "shaders/native_tileset/gi/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "d8e6a60b47855953db9a3db8c2219892dbf33eae0d5d4bd261b59f83b047611a"
+    },
+    {
+      "path": "shaders/native_tileset/gi/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "65ffe470211f6f81b2eac3b2af9440d5b3b8563538a3d77810d5002c0666fea2"
+    },
+    {
+      "path": "shaders/native_tileset/gi/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "23d306969f2d79f213ea8473fa3486bd8f65bad4925bf5d4410edc65da69aa4a"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "22354844d3069616031d5e431bed792b3e6b287ea65eb13e17d2cb09ec57b785"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "6f72426ba62caeec93ba3aecf7862f29826bffc5d77997815bb65a4e68705a7a"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "812086d6227b7513e63585485d9df4919448ec3664d9ef9723224c11844156af"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "3ec467e0e806a7a162579d6eec8b0db60b0dcdc47fcb74b073387fc2cdc761c0"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "4ca2a7bc6e69635cf3f12319983f1f06b73b57e54cfbb9258d8b0e5bd9ad9269"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "2dd6245ed0e53c4f7ac34b3a92041d88da530be0eb5e42dd22392eab16515a20"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "b8ab07fff8def5f8e082cddf61ad699b927e1e9fb8737ceb77c922d18045ff2d"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "f2aba1706fe21fca7303ce175a8f753255514ff4955bd126473542d811b26c23"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/omm/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "2ba166331f3bc4896050c488c582ef5ffeb1f57e11e34797a29a289ca5e2c81b"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/omm/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "3f8a9ec75c659ab0dfae8366a831ca8cce4f2508391ace5c930c7412698cc11e"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "31fe0e6e0e3abdc7d3c087caea6b00952f150e12c159d8e654870965290aba4e"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "373b5195218e90f855ae0b957eb3bd508effafe0579376f9e0e3a960485d799d"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/omm/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "bfddd6162ab38ab13596048f1e05883071d6674e0e19d295b13116b317157390"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/omm/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "1cd40e3b9bd4926ef3fb2ee7a549e19ba7693d6ed58548f6ddf747b0af0281cb"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/omm/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "faa80a4deec9e369563cb6875f3cd6f096adaa8cde859f838b9ccbc0fdae34cb"
+    },
+    {
+      "path": "shaders/native_tileset/hair_origin/omm/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "3fe195f1f02ab452d0338bf8a49e1d9351d19c776a11e4c18d194eb78484bce4"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "e5b05e9803cda95a436d9f667ca543ace110c832e6cb27050c339a782952a19c"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "e8bd3d3caa14006de07dd7f8b46d3f5a6b80ffd4477b1774813e9a33f4a961e2"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "3b7d2099ee151b5b229d344006d93149ab0c5074fd6b31a3c5bacbd5dc965177"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "5fdee997700bf4379f38a5e84b6e05fb93f8c065bd1ffaad080266d5c66905b9"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "bf75193e883f4c67df07eaa42625fe865ec923ba5491d08fb077f56187899bc2"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "1cfa8da783c0463eb43ba515d3f61b8f3c4cd9a077a3e2ec80ef790993d4e9c3"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "909930838d4b2ef1c107df9ac207719a4ba15d60543b2d65284605aadf48e3c3"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "c2e30b27bdbbdf80a361c29d8095d06e30fbcd4dfc19ad5682c465c3dc9d7f41"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade_rebase/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "7dcaf1a436b18b33c944692b8f60bb4d7b2a3716e2ce7b01366596210e74ec80"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "1403a6aec7fc774b1fe5e93698426cab51b395f72b10ce572d97a72daf639204"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "2ebdf1d97b5bd0b7f6026646e3303ba54e818cbd39794ed3e5952a0870c47130"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "7133d0820298769d214601dda1264110d2524ac8302719a56af97d5bfa52b0e4"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "69fa2672c5f5b1b116bf8150a3e894578f42760009971701d206cc8e8bcf5760"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "f4acaabcc88fdff7a93d3c55a655179ac439cc931da309653582fbb406e77227"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "4329735c5322e02c6555ac83a04020d5f58f637446acf7a25adbffe9f96815a3"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/rebase/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "1273a304de487938594483330cccd5112c10c9060bee5c3e35381e40f8c831a4"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/rebase/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "e79b0ab49d708abedcef1ecf2a162f9cbf43e391c82463cff33a2e244fce11c2"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "fc00b70207b1cba5b10ab0cccf4b83e934b960c759c7bb17d17e6563b216fbf5"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "a1bd49df81409f5bef24a49760b8b202b05355b2afc7b554ebe61b59987c833f"
+    },
+    {
+      "path": "shaders/native_tileset/native_scalp/gi/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "f3f600ed8143139b9e16507cfb97026d3746d22bd450264037612ba3d7e25e0c"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "afb4355f9e5fdbc5d1d4a94ce4c60910dc484a8c66c0ab06f5bdfd4c41462ac0"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "6392632f9af5571ed9cedc0739d9ab63ca432316fcb62e8cd8872d96f8f14638"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "0b9789d529b641ab03b70b828ffa1443d7107b4f676e34e46888c14b25e4fffe"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "2684ea77908f53284d67d597a7631faafc7dfa1461ee0fc845d76188aeb5068a"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "fe58875b25ed53114dbd718d492eb71ddec5377f02ef9a7dcf2b1c49d9ce0e9f"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "a41f75e049a045900f1c096f80ef25c8edd195c15642a24caa234e629b69aee3"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "2acf9f944925251b63b9160defa0ad547f6da34239cf9676f2e48721ebe894bc"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "7194ad8816f501824216bbb0e2632c99112c7a8d9d1c963b08c390eb73367e12"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade_rebase/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "3fda4a988192d90f066a7096fc563fa37c0e56edb12eeb671b9966da32ad1dde"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "e0e5c576b3aea9cfa473074c04afd1f70eba02526c9281a3c52774fa92e4efeb"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "0ca3ad3b185b780758f9459fd60b8d8d6cc76eb6b776c8faf8271686c0f8bba1"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "3d34d266473dd3898e8b2b80a5c1a3ae1067aad80a2a3fee5e3bb2806992c46e"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "4077299b027f041821086a3177a8fb956a0e21d40c4ad908465b9b12d1340952"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "0fa21b0f41aa589bfac8a1a05bb60b78508869b6b57c6cc40f3e885f96e87101"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/rebase/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "1e4e77332c48c27edafe47148244a1509d98b09292e9cbb4dd946c19198af581"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/rebase/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "368b24bc767c8d01b5b1ddbe816513cd1baa5023177693a69b44ed2a3c6bedfe"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/rebase/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "19052acdb297e5f06ad838d60c68ec840caf1fa7bc7920b82b8f6b16f4eca3fb"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "877c6d31b64706781f168b524cefb3ae2588f88408a7400843e19f14dc61fdb4"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "d73f30faa93b906c58f8bfad88862b897ad55ac0de16ca4ef8309f7e501d2ded"
+    },
+    {
+      "path": "shaders/native_tileset/omm/gi/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "76660a713112a7a01564d0f09cb3c7ac716351230ada25ba56f11280d037d4ea"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "741dd3f4fe56b2f78c520e1e337665875028e4576dd127ce835d4520c5877766"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "d3dbc824df002a38c31520dde82d65ff63a0cd03236e64460bbc4ca425a7b314"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "6ad5ddf34030864d9cafd8b42076f57445e9ba7a96711bfb6aef25cb69e86bee"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "3609cf0fc6595029ebeb3a858037027619e3f012c660bbfd32df73c2b41c378e"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "7cf46e0d226682ee1d99f4a000325e9d40ef68aa40b55e697355e73d1acdd9c6"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "a75aa0e9024e5998fe16a23b52aa08e9169f541c80c969470b4e72bfd8a290da"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade_rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "30217cfa0ecc551ff8dde522022bf3a9b04255a548311ef8cca82fb5c525686d"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade_rebase/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "4f31f964a880bd38bbb837a6f7a033b05080d3c213a9a04d11cb74c06593da49"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade_rebase/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "86ceb5646d0e06e036731b2c261adb954f0eed02bbaa494a439edd1191245499"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "ba89b960623ffb9dc125947cc886814cc5756487d4766cd7e8541604081b1ab0"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "b162720a37505ed3ace232001a3154851356efdb40d24fb18110f265f26c6be5"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "30da302badd8ad9e7d700da1231c462181e162611e87ece4179db022fc3b748d"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/rebase/gi_trace_rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "d96592481a9e9d047376621db05220d1dc3a0f0132bc6ab8b73689ac16913425"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/rebase/gi_trace_rt_sharc_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "1aad911b6e4bf1e13f5acc094a3fc239ba4163a54bc726763383fcd658ff5131"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/rebase/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "f3c23068d777d8dcbfca867d25470ef528c574a1efbf9c95aee65e6031e9ca1c"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/rebase/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "d8ece5b8cc7d0d1cfd06b5863704b05017b3549d77206c9585cb8878a654d775"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/rebase/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "b2e8f68211ea3bc39e4aea5e6dc322bb6e10de81fda3cfaaa5fbc3aef8b79f81"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/rt_hit_direct.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "c70cb091b4f7a45e6746b4e9338ada6ab6eca93720a9c1181dd21f592dd27dea"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/rt_hit_material.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "81c41708a6270a128e0a35169c2911b1b1b46e48c06a53f0003e50b8be0f04b7"
+    },
+    {
+      "path": "shaders/native_tileset/omm/native_scalp/gi/rt_hit_two_bounce.hlsl",
+      "compile": true,
+      "valid": true,
+      "sha256": "81c0336508c10185866ecf09d2505a83339db04e2ba1d5dacf8b2eb0b88bca92"
+    }
+  ],
+  "source_hashes": {
+    "shaders\\rt\\rt_common.hlsli": "b9a5373948db4bc1f3b4d0cff48d0282396bb85abe26bdfc144547b9402305ff",
+    "shaders\\rt\\native_hit_material.hlsli": "767abf94cfe458c336ea51d2d6a8e29fe8aab3a8540763b064a3d30cd92e1575",
+    "shaders\\gi\\rt_hit_material.hlsl": "07f0beb6a66c90853b3ab59aeeb9f35f64dc9174899c4cd07e086d576486b525",
+    "common\\native_hit_tileset_fields.h": "328a095da9caaf4de850dc6f5961de1f792c2957379639ec85dff940e7329956"
+  }
+}
