@@ -12,6 +12,9 @@ Existing foreground batch receipts are terminal, not authority for another run.
 Main d31633b, ABI 21: M1 coverage/capture budget merged through merge-green and
 pushed; 58 CTests, 1231 shader files and QA pass. Root development:
 C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX, codex/omm-bake, 2ad5b4e.
+Main integration deferred: actual BG3 PID 41420 was open; merge-green refused
+before mutation. Isolated combined build, 59 CTests and QA pass; independent
+runtime source review is clear. Full shader compilation is running.
 Pending integration: M3 STI material producer/glue (309b9dd), ST depth extension
 (35f837d), existing windowless GPU fixture extension (2ad5b4e). Both DLLs link;
 785 CPU cases / 816 with native VS; 96 key-OFF identities, 96 key-ON compilations,

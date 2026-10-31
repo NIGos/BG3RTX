@@ -68,7 +68,10 @@ The existing `[alpha tileset]` stats line reports complete/unknown records, nati
 sampler count, capture-incomplete state and actual stride. Live qualification must
 confirm nonzero complete participation, no capture overflow, native cutout
 appearance and pass cost from the existing gpu lines in one controlled run.
-No GPU/game run is included in the offline candidate checks.
+A separate synthetic windowless GPU probe passed 32 cases through the four
+production queries with zero validation errors. It does not prove native XFB,
+game participation or image quality. See
+[evidence](evidence/native-tileset-windowless-gpu-20261031.json). No game run occurred.
 
 Offline checks: both DLLs and launcher build; 58/58 CTests and QA pass. The
 coverage test has 171 CPU checks, 193 with the retained native module. All 639

@@ -5,7 +5,11 @@
 Main d31633b already contains M1 coverage and capture-budget fixes: 58 CTests,
 1231 shader files and QA passed. Candidate 2ad5b4e adds the checked STI material
 provider (309b9dd), exact ST depth coverage (35f837d) and windowless GPU probe.
-Full integration checks are next. No BG3 launch or personal trial changes.
+Main integration stopped before mutation because BG3 PID 41420 was running.
+The isolated combined build links both DLLs and launcher; all 59 CTests and QA
+detectors pass. Independent runtime source review is clear. Full shader compilation
+is running. No BG3 launch,
+attachment or personal trial changes.
 
 STI uses actual nine native 2D views, owned sampler, independent scalar gather,
 and clip/UV/COLOR publication checks. Native N/B/T use an 80-byte capture layout;
