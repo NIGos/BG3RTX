@@ -4,6 +4,8 @@
 // captures/shaders/<hash>.spv as the game creates them.
 #include "host.h"
 #include "../common/native_vt_surface.h"
+#include "../common/trace_terrain_table.h"
+#include "omm_sampler.h"
 
 #include <thread>
 #include <unordered_set>
@@ -106,8 +108,12 @@ static const char* desc_tag(VkDescriptorType t) {
 
 void trace_note_draw(VkCommandBuffer cmd, CmdState* s, int bp, const char* kind, const char* extra) {
   const std::string terrain = bp == 0 ? terrain_capture_note(cmd,s) : std::string();
+  const bool terrainTable=trace_terrain::requested(bp==0,trace_recording(),true,s->vs,s->fs) &&
+      file_mtime(root_dir()+"\\trace_terrain_packet.request")!=0;
+  omm::OrdinaryBindingFacts tableFacts{};
+  const bool tableFrozen=terrainTable && omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,2,32,0,&tableFacts);
   const uint32_t kMaxPerSet = 32;
-  std::string res, sampledViews;
+  std::string res, sampledViews, terrainViews;
   {
     std::shared_lock<std::shared_mutex> lock(tracker().mu);
     auto add = [&](const std::string& slot, const DescEntry& e) {
@@ -157,9 +163,44 @@ void trace_note_draw(VkCommandBuffer cmd, CmdState* s, int bp, const char* kind,
       sampledViews+=(sampledViews.empty()?"":",")+std::string("\"s1b")+std::to_string(binding)+"\":"+value;
     }
 
+    if(terrainTable){
+      const bool declaredKnown=tableFacts.allocated && tableFacts.layout_complete && !tableFacts.push &&
+          tableFacts.count!=0 && tableFacts.type==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+      const auto range=trace_terrain::range(declaredKnown,tableFacts.count);
+      uint32_t missing=0,unavailable=0;std::string entries;
+      auto set=tracker().sets.find(s->sets[0][2]);
+      for(uint32_t element=0;element<range.emitted;++element){
+        const DescEntry* entry=nullptr;
+        if(set!=tracker().sets.end()){
+          auto found=set->second.find(desc_key(32,element));if(found!=set->second.end())entry=&found->second;
+        }
+        std::string value;
+        if(!entry || !entry->view){value="{\"status\":\"unwritten_or_null\"}";++missing;}
+        else if(auto view=tracker().views.find(entry->view);view==tracker().views.end()){
+          value="{\"status\":\"unavailable_view\"}";++unavailable;
+        }else{
+          const auto& v=view->second;const auto image=tracker().images.find(v.image);
+          value=trace_view::json(v.format,v.range,v.creation,image==tracker().images.end()?0:image->second.id,
+              image==tracker().images.end()?nullptr:&image->second.ci,entry->type,entry->layout);
+          ref_locked(v.image);
+        }
+        entries+=(entries.empty()?"":",")+std::string("\"")+std::to_string(element)+"\":"+value;
+      }
+      const char* status=!declaredKnown?"unknown_declared_range":!tableFrozen?"unsupported_or_mutable_layout":
+          range.truncated?"truncated":missing||unavailable?"incomplete_entries":"recorded";
+      terrainViews="{\"scope\":\"CPU_recording_metadata_not_execution_or_DDS_identity\",\"status\":\""+std::string(status)+
+        "\",\"set\":2,\"binding\":32,\"descriptor_set_id\":"+std::to_string(tableFacts.set_id)+
+        ",\"layout_id\":"+std::to_string(tableFacts.layout_id)+",\"write_version\":"+std::to_string(tableFacts.version)+
+        ",\"binding_flags\":"+std::to_string(tableFacts.flags)+",\"declared_count\":"+(declaredKnown?std::to_string(range.declared):"null")+
+        ",\"cap\":"+std::to_string(trace_terrain::table_cap)+",\"emitted\":"+std::to_string(range.emitted)+
+        ",\"truncated\":"+std::to_string(range.truncated)+",\"unwritten_or_null\":"+std::to_string(missing)+
+        ",\"unavailable_views\":"+std::to_string(unavailable)+",\"entries\":{"+entries+"}}";
+    }
+
   }
 
   std::string key = std::string(kind) + "|" + std::to_string(s->pipe_id[bp]) + "|" + res + "|" + sampledViews + "|" + (extra ? extra : "") + terrain;
+  if(!terrainViews.empty())key+="|terrain_texture_table|"+terrainViews;
   if (key == s->seg_key) {
     ++s->seg_count;
     return;
@@ -174,6 +215,7 @@ void trace_note_draw(VkCommandBuffer cmd, CmdState* s, int bp, const char* kind,
   if(!sampledViews.empty())j+=",\"sampled_views_scope\":\"Base_AlphaTest_VT_DEF_recording\",\"sampled_views\":{"+sampledViews+"}";
   if (extra) j += std::string(",") + extra;
   if (!terrain.empty()) j += ",\"terrain_packet\":" + terrain;
+  if(!terrainViews.empty())j+=",\"terrain_texture_table\":"+terrainViews;
   s->seg_json = std::move(j);
 }
 

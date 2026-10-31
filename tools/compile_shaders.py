@@ -46,6 +46,23 @@ def build(f, tmp):
 
 with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor(8) as pool:
     res = list(pool.map(lambda f: build(f, tmp), files))
+    # These production GI variants need their dedicated host interface, not
+    # the contracted local-shadow layout. Check the actual compiled modules.
+    material_gi = [str(Path(tmp) / (f.replace("/", "_") + ".main.spv"))
+                   for f, rc, _ in res if not rc and f.endswith(
+                       ("gi_trace_rt_hit_direct.hlsl", "gi_trace_rt_sharc_hit_direct.hlsl"))]
+    references = [str(Path(tmp) / (f.replace("/", "_") + ".main.spv"))
+                  for f, rc, _ in res if not rc and f.rsplit("/", 1)[-1] in
+                      ("rt_hit_direct.hlsl", "rt_hit_two_bounce.hlsl")]
+    checker = root / "bin" / "native_hit_gi_bindings_test.exe"
+    if (material_gi or references) and checker.exists():
+        result = subprocess.run([str(checker), *material_gi, "--reference", *references], capture_output=True, text=True)
+        if result.returncode:
+            res.append(("GI host descriptor interface", result.returncode, result.stdout + result.stderr))
+        else:
+            print(f"GI/reference host descriptor interface checked: {len(material_gi)} GI + {len(references)} reference SPIR-V modules")
+    elif material_gi or references:
+        print("SKIP GI/reference host descriptor interface: build native_hit_gi_bindings_test first; shader compilation alone is not interface validation")
 bad = [r for r in res if r[1]]
 for f, rc, msg in res:
     print(f"{'ok  ' if not rc else 'FAIL'} {f}")

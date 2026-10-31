@@ -44,3 +44,58 @@ Green precedence, selected-only tiling validation, both shader pairs, missing
 view/sample/scalar refusal and three actual normal/physical point-code fixtures
 against double arithmetic. Existing VT test still passes all 164,188 checks.
 No CMake, runtime integration, shader, ABI or settings change; no GPU/live work.
+
+## Retained S1 runtime recipe - 2026-10-31
+
+The actual R8 frame `20261031-064118` contains STI Deferred VS/FS
+`a618ddae98c2d1cf/cad41eff979970e4` in two resource groups (48 and 57 draws).
+Its prepass is `689836dece58e778/781cd8d1d600117d` (49 and 61).
+Prepass Green albedo `s1b1` equals Deferred `s1b5` exactly:
+`i12664` and `i12460`. Earlier frame `20261031-055814` independently repeats
+the relationship (`i12712`, `i12480`). These four identity checks establish the
+live family/resource relationship, not a unique geometry/material-UUID join.
+The aggregated frame omits per-draw vertex bindings, scalar bytes, view ranges
+and sampler state. Unequal group counts forbid ordinal pairing.
+
+| Native vertex path | Position | Color / UV / quaternion frame |
+|---|---|---|
+| ST Deferred af1d30a1 | loc0 or cached `s0b13`, then engine `s1b0` matrix | loc1 / loc2 / loc3 |
+| ST Depth 4235ddab | same cached/native position and matrix | loc1 / loc2 / absent |
+| STI Deferred a618ddae | loc0 times instance rows loc1..3 | loc4 / loc5 / loc6 |
+| STI Depth 689836de | same position and instance rows loc1..3 | loc4 / loc5 / absent |
+
+ST cache index is engine uint byte64; positive index selects
+`(gl_VertexIndex + index - 1) * 20` bytes, float3 position followed by two packed
+SNORM16 quaternion words. UV/color remain ordinary streams. Deferred outputs
+COLOR/UV/N/B/T at loc0/1/2/3/4, with native normalized quaternion/instance frame;
+capture these actual outputs rather than reconstructing tangents from triangles.
+Native Vulkan input formats/strides must come from the actual pipeline, not the
+GLSL vector types or package accessor formats.
+
+Crucial coverage difference: neither Deferred FS discards, but native Depth FS
+does. Green (`COLOR.y > 0`) samples Green albedo alpha at UV times Green tiling;
+other branches use alpha1. Cut is 0.5. ST Depth uses texture `s1b2`, UBO `s1b1`;
+STI Depth uses texture `s1b1`, UBO `s1b0`. Their UBO byte12 is **SeeThrough**, not
+Deferred Reflectance. If it equals1, `s0b6` capsule parameters, camera origin and
+a separate noise texture enter coverage. Neither depth hash is in alpha_fs.txt.
+Do not mark the whole family opaque because its Deferred shader has no discard.
+
+Smallest next runtime slice: STI first, actual SeeThrough !=1 only; snapshot
+depth COLOR/UV and its Green alpha/tiling, plus Deferred COLOR/UV/N/B/T, three
+tilings/Reflectance and all nine actual Texture2D views with `s0b7` sampler.
+Retain original view formats/swizzles/subresources and clone the actual sampler;
+image fmt137/138 etc in frame.json is image metadata, not sampled-view proof.
+Extend existing recording-owned unique draw association to per-instance geometry,
+then require same post-VS clip/UV/color at publication. The current VT-only
+position/UV join, single-instance restriction and loc0 UV/frame offsets cannot be
+reused unchanged. COLOR needs explicit storage; no host ABI bump is implied by
+this layer-private packet change. Use the already derived strict branch/field
+helper and declared ray footprint; raster implicit derivatives are not available.
+ST additionally needs cached-P/frame and pass-local-engine normalization; defer
+that distinct path until its actual inputs are captured. SeeThrough remains
+unsupported until its complete native inputs/policy are represented, not opaque.
+
+Read-only proof artifacts: isolated `captures/tileset-runtime-recipe/` contains
+15 priority-resolved native module pairs, eight cached source fingerprints and
+the four retained image-identity checks. No renderer/source integration, settings,
+ABI, game or GPU work was performed for this recipe audit.
