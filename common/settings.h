@@ -291,6 +291,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"gi_hit_direct", "1"}}, {{"exp_hit_material",1},{"gi",1}}}},
    {}, {0,0,0,0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"},{"gi_rt","1","Ray-traced GI"},{"gi_rt_fallback","0","Zero-bounce hidden-hit fallback"}}},
 
+  {"exp_rf_hit_shade", "Shaded hidden-surface reflections",
+   "Reflection rays that hit a surface hidden from the camera are shaded with that surface's verified native "
+   "material and lighting (point and spot lights, the sun with a traced shadow ray, the game's ambient) "
+   "instead of keeping the reflection probe. Unsupported materials or lights keep the probe. Requires "
+   "Native hit materials at startup. No emission at hits; quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   {{"off", "Off", 0, {{"rf_hit_shade", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rf_hit_shade", "1"}}, {{"exp_hit_material",1},{"reflections",1}}}},
+   {}, {0,0,0,0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"},{"rt_reflections","1","Ray-traced reflections"}}},
+
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
    "Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. "
@@ -342,7 +352,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 203 keys of bg3rtx.ini, in file order.
+// 204 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -522,6 +532,7 @@ inline constexpr KV kDefaults[] = {
     {"rf_debug", "0"},
     {"rf_stats", "0"},
     {"rf_validate", "0"},
+    {"rf_hit_shade", "0"},
     {"rr_spec_hit_distance", "1"},
     {"fg", "2"},
     {"reflex", "1"},
