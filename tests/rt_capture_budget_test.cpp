@@ -20,7 +20,9 @@ int main(){
  check(opaque_partition_demand(700*mib,701*mib,true)==0); // Saturate; never wrap the reservation.
  check(!corrected_partition_feedback(16));
  check(!corrected_partition_feedback(24));
+ check(corrected_partition_feedback(40));
  check(corrected_partition_feedback(64));
+ check(corrected_partition_feedback(80));
  check(corrected_partition_feedback(88));
  check(!corrected_partition_feedback(0));
  check(!corrected_partition_feedback(32));
@@ -71,6 +73,26 @@ int main(){
   check(intrinsic==material_o);
   material_region=alpha_region(1024*mib,floor,material_region,material_a,intrinsic,true,60);
   check(material_region>=material_a && 1024*mib-material_region>=material_o);
+ }
+
+ // New native tileset layouts must not resurrect the same double-counting.
+ // Synthetic demands preserve the tested geometric load by scaling byte counts;
+ // explicit configured MB limits are inputs, never rewritten by the helper.
+ for(uint32_t stride:{40u,80u}){
+  const auto demand_a=(a*stride+87)/88,demand_o=(o*stride+87)/88;
+  const uint64_t capacity=uint64_t(384)*mib*stride/24;
+  uint64_t legacy=floor,corrected=floor;
+  for(unsigned frame=0;frame<4;++frame){
+   auto lost=demand_a>legacy?demand_a-legacy:0;
+   legacy=alpha_region(capacity,floor,legacy,demand_a,opaque_partition_demand(demand_o+lost,lost,false),true,60);
+   check(legacy==floor);
+   auto fallback=demand_a>corrected?demand_a-corrected:0;
+   const auto intrinsic=opaque_partition_demand(demand_o+fallback,fallback,corrected_partition_feedback(stride));
+   check(intrinsic==demand_o);
+   corrected=alpha_region(capacity,floor,corrected,demand_a,intrinsic,true,60);
+   check(corrected>=demand_a && capacity-corrected>=demand_o);
+   check(alpha_region(capacity,floor,corrected,demand_a,intrinsic,false,60)==floor);
+  }
  }
 
  // Existing shader/host addressing: InstInfo base and HLSL byte offsets are
