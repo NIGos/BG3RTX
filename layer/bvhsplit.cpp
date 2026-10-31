@@ -1,6 +1,6 @@
 #include "../common/native_hit_records.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
-// docs/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
+// docs/archive/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
 //
 // The old scene was one BLAS over the whole per-frame transform-feedback soup,
 // refit while the draw sequence held and rebuilt whenever it changed, i.e. on
@@ -2436,7 +2436,7 @@ void bvh_on_present() {
   // Ranges of evicted meshes and slots, once no frame in flight can use them:
   // the GPU must have finished frame + 2 (as defer_tick), not just 6 presents
   // passed. Reusing a range a trace still reads was the intermittent device
-  // lost a few seconds into gameplay (docs/STATUS.md, "render stall").
+  // lost a few seconds into gameplay (docs/archive/STATUS.md, "render stall").
   {
     // Also: no scene slot the GPU may still read was built at or before the free
     // (its TLAS can reference the range: an older TLAS is traced up to a frame later).

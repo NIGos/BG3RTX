@@ -1,4 +1,4 @@
-// DLSS Ray Reconstruction at the start of post-processing (docs/AUDIT_SOTA.md #1,
+// DLSS Ray Reconstruction at the start of post-processing (docs/archive/AUDIT_SOTA.md #1,
 // docs/TRACK_A_RR.md "RR before post").
 //
 // BG3 runs its post chain at render resolution and hands DLSS the *graded*

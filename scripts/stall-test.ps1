@@ -1,6 +1,6 @@
 # Repeats short Campsite runs (load + 2 traces) per setting variant and counts
 # how many stall (auto-run "Run ended: stalled"). For bisecting the intermittent
-# render stall (docs/STATUS.md).
+# render stall (docs/archive/STATUS.md).
 #   .\scripts\stall-test.ps1 -Variants "rr_post=0","rr_post=1" -Runs 3
 param([string[]]$Variants = @("rr_post=0", "rr_post=1"), [int]$Runs = 3, [string]$Save = "Campsite - 27h")
 $ErrorActionPreference = "Continue"

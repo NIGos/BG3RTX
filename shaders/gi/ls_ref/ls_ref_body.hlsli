@@ -502,7 +502,7 @@ bool lsref_bg3_light_eval_mat(lsref_Bg3Light l, bool spot, lsref_Bg3Surface sf, 
 // BG3's sun term, replicated from the tiled lighting (f469db78:1345-1452 class 0;
 // the class variants from 4265b844, 118833ff, 19763259, 3033c895, 95af6e4f, 7f110c00),
 // so that the D-LS post pass knows the sun's direct light exactly and can give
-// it the AO-on-direct factor that ao_direct asks for (docs/AUDIT_RT.md fix 4).
+// it the AO-on-direct factor that ao_direct asks for (docs/archive/AUDIT_RT.md fix 4).
 //
 // sun radiance = colour (per frame: _m2, or the atmosphere's transmittance LUT)
 //              x mask (b7, after our RT fold) x cloud shadows (two layers) x b13[0].
@@ -889,7 +889,7 @@ bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
       ms += suns;
     }
   }
-  // ---- AO on direct light (docs/AUDIT_RT.md fix 4) ----
+  // ---- AO on direct light (docs/archive/AUDIT_RT.md fix 4) ----
   // The lighting gives direct light mix(1, AO, m0.y) of the AO in b6, which holds
   // our 1-ray RT visibility once gi_ao_apply has run. ao_direct:
   //   0 leave it (the RT visibility darkens direct light, noisily, and contacts

@@ -105,7 +105,7 @@ struct Push {
   uint rf_validate;       // 1 EN4 check: the lighting ran with AO 1 and no sun (prep pass)
   uint rf_models;         // bit mask of the shading models (RT2.w & 7) that get reflections
   uint rf_stats;
-  // RT audit fixes (docs/AUDIT_RT.md)
+  // RT audit fixes (docs/archive/AUDIT_RT.md)
   uint rt_backlit;   // 1: trace the sun for back-lit skin/translucent/hair pixels (0: zero their mask)
   uint mat_classes;  // 1: material classes in D-LS and the GI composite (0: everything class 0)
   uint ao_direct;    // AO on direct light: 0 the game's mix(1, AO, m0.y) on what b6 holds, 1 none on traced lights
