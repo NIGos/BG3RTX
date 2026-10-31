@@ -9,8 +9,8 @@
 // Main AlphaDSL ONLY. Private current-Sun binding14 has a different contract.
 [[vk::binding(12,1)]] ByteAddressBuffer gHitRecords;
 [[vk::binding(13,1)]] ByteAddressBuffer gHitBasis;
-[[vk::binding(14,1)]] Texture2DArray<float4> gHitCache[64];
-[[vk::binding(15,1)]] SamplerState gHitSampler[16];
+[[vk::binding(14,1)]] Texture2DArray<float4> gHitCache[nh_cache_slots];
+[[vk::binding(15,1)]] SamplerState gHitSampler[nh_sampler_slots];
 struct NativeHitMaterial {NtResult parameters;NtFresnelBlendResult scattering;float3 normal;uint status,channel;
 #ifdef RT_NATIVE_TILESET
  uint family;
@@ -31,7 +31,7 @@ struct NativeLayer {float4 value;bool known;};
 // views, resident indirection channel and per-layer tile offsets are retained.
 NativeLayer hit_material_layer(uint row,float2 uv,float g,uint table,uint cache,uint sampler,uint col){
  NativeLayer result=(NativeLayer)0;
- if(table==0 || table>=4096 || cache>=64 || sampler>=16 || col>2 || !(g>0) || !isfinite(g) || !all(isfinite(uv)))return result;
+ if(table==0 || table>=4096 || cache>=nh_cache_slots || sampler>=nh_sampler_slots || col>2 || !(g>0) || !isfinite(g) || !all(isfinite(uv)))return result;
  if(hm_t(row,0,2,3)!=2202.0)return result;
  float4 p0=asfloat(gHitRecords.Load4(row+48)),p1=asfloat(gHitRecords.Load4(row+64));
  float2 dx=p0.zw*float2(g,0),dy=p0.zw*float2(0,g);
@@ -63,7 +63,7 @@ NativeLayer hit_material_layer(uint row,float2 uv,float g,uint table,uint cache,
 #ifdef RT_NATIVE_TILESET
 NativeLayer hit_material_tileset_layer(uint row,uint layer,float2 uv,float g,float tiling,uint sampler){
  NativeLayer result=(NativeLayer)0;uint index=gHitRecords.Load(row+80u+4u*layer);
- if(index==0 || index>=4096 || sampler>=16 || !(g>0) || !isfinite(g) || !isfinite(tiling))return result;
+ if(index==0 || index>=4096 || sampler>=nh_sampler_slots || !(g>0) || !isfinite(g) || !isfinite(tiling))return result;
  float2 u=uv*tiling,dx=float2(g*tiling,0),dy=float2(0,g*tiling);
  if(!all(isfinite(u)) || !all(isfinite(dx)) || !all(isfinite(dy)))return result;
  result.value=gAlphaTex[NonUniformResourceIndex(index)].SampleGrad(gHitSampler[NonUniformResourceIndex(sampler)],u,dx,dy);

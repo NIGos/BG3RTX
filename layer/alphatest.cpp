@@ -1207,6 +1207,15 @@ bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescrip
   if(firstTable)*firstTable=first;return true;
 }
 
+// Free texture-table slots alpha_clone_hit_set can still append after the scene set's
+// real views (0 when the set is unknown): the hit-material query drops whole materials
+// beyond it instead of failing the query.
+uint32_t alpha_hit_table_free(VkDescriptorSet source) {
+  if(!native_hit::enabled() || !source)return 0;
+  for(uint32_t slot=0;slot<kRing;++slot)if(g_sets[slot]==source && g_set_init[slot])return g_set_tex[slot]+1u<kTextures?kTextures-g_set_tex[slot]-1u:0u;
+  return 0;
+}
+
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set) {
   if (!g_on) return false;
   {

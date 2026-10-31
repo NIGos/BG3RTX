@@ -78,11 +78,42 @@ int main(){
  auto unpublished=budget;check(unpublished.reserve(8,views,indices));check(budget.sampler_count==1 && budget.material_count==100);
  for(unsigned i=100;i<material_slots;++i)check(budget.reserve(7,views,indices));
  auto unchanged=budget;check(!budget.reserve(7,views,indices));check(budget.material_count==unchanged.material_count && budget.cache_count==unchanged.cache_count);
- ResourceBudget samplers;for(unsigned i=1;i<=16;++i)check(samplers.reserve(i,views,indices));
- check(!samplers.reserve(17,views,indices));check(samplers.material_count==16 && samplers.sampler_count==16);check(samplers.reserve(1,views,indices) && !indices.new_sampler);
- ResourceBudget caches;for(unsigned i=1;i<=64;++i){auto v=normal;v.view=i;v.view_generation=i+100;check(caches.reserve(7,{v,v,v},indices));}
+ ResourceBudget samplers;for(unsigned i=1;i<=nh_sampler_slots;++i)check(samplers.reserve(i,views,indices));
+ check(!samplers.reserve(nh_sampler_slots+1,views,indices));check(samplers.material_count==nh_sampler_slots && samplers.sampler_count==nh_sampler_slots);check(samplers.reserve(1,views,indices) && !indices.new_sampler);
+ ResourceBudget caches;for(unsigned i=1;i<=nh_cache_slots;++i){auto v=normal;v.view=i;v.view_generation=i+100;check(caches.reserve(7,{v,v,v},indices));}
  auto newview=normal;newview.view=999;newview.view_generation=999;
- check(!caches.reserve(7,{normal,newview,newview},indices));check(caches.cache_count==64 && caches.material_count==64);
+ check(!caches.reserve(7,{normal,newview,newview},indices));check(caches.cache_count==nh_cache_slots && caches.material_count==nh_cache_slots);
+ // Capacity (2026-10-31): the caps are the shared HLSL/C++ constants, raised from 128/128/16/64.
+ check(nh_opaque_rows==4096 && material_slots==4096 && nh_sampler_slots==64 && nh_cache_slots==256 && nh_material_rows==8192u+4096u);
+ // Planning names the exhausted resource and never publishes; commit publishes exactly the plan.
+ {ResourcePlan plan;check(!samplers.plan(nh_sampler_slots+5,views,plan) && plan.failure==ResourceFailure::Samplers);
+  check(!caches.plan(7,{normal,newview,newview},plan) && plan.failure==ResourceFailure::Caches && caches.cache_count==nh_cache_slots);
+  ResourceBudget fresh;check(fresh.plan(7,{normal,albedo,normal},plan) && plan.added_count==2 && plan.indices.normal==0 && plan.indices.albedo==1 && plan.indices.physical==0);
+  check(fresh.material_count==0 && fresh.cache_count==0 && fresh.sampler_count==0);fresh.commit(plan);
+  check(fresh.material_count==1 && fresh.cache_count==2 && fresh.sampler_count==1 && fresh.samplers.size()==1 && fresh.caches.size()==2);
+  auto bad=normal;bad.view=0;check(!fresh.plan(7,{bad,albedo,normal},plan) && plan.failure==ResourceFailure::Invalid);
+  check(!fresh.plan(0,views,plan) && plan.failure==ResourceFailure::Invalid);
+  // One free cache slot left: a plan adding two distinct new views fails, one new view (used twice) fits.
+  ResourceBudget edge;for(unsigned i=1;i<nh_cache_slots;++i){auto v=normal;v.view=i;v.view_generation=i;check(edge.reserve(7,{v,v,v},indices));}
+  auto a=normal;a.view=5000;a.view_generation=1;auto b=normal;b.view=5001;b.view_generation=1;
+  check(!edge.plan(7,{a,b,a},plan) && plan.failure==ResourceFailure::Caches);check(edge.plan(7,{a,a,a},plan) && plan.added_count==1 && plan.indices.normal==nh_cache_slots-1);
+  ResourceBudget rows;for(unsigned i=0;i<material_slots;++i)check(rows.reserve(7,views,indices));
+  check(!rows.plan(7,views,plan) && plan.failure==ResourceFailure::Slots);check(!rows.plan_sampler(7,plan) && plan.failure==ResourceFailure::Slots);}
+ // Deferred XFB chunks: a draw never straddles a chunk, chunks are added on demand up to the cap.
+ {ChunkPlacement at;const uint64_t chunk=32ull<<20;
+  check(place_in_chunks(0,0,100,chunk,4,at) && at.new_chunk && at.chunk==0 && at.offset==0);
+  check(place_in_chunks(1,100,200,chunk,4,at) && !at.new_chunk && at.chunk==0 && at.offset==100);
+  check(place_in_chunks(1,chunk-8,8,chunk,4,at) && !at.new_chunk && at.offset==chunk-8);
+  check(place_in_chunks(1,chunk-8,12,chunk,4,at) && at.new_chunk && at.chunk==1 && at.offset==0);
+  check(!place_in_chunks(4,chunk-8,12,chunk,4,at));check(place_in_chunks(4,0,chunk,chunk,4,at) && at.chunk==3 && !at.new_chunk);
+  check(!place_in_chunks(0,0,chunk+4,chunk,4,at));check(!place_in_chunks(0,0,0,chunk,4,at));check(!place_in_chunks(0,0,4,chunk,0,at));
+  check(!place_in_chunks(1,chunk+4,4,chunk,4,at) || at.new_chunk);}
+ // Source stream: exact need rounded to the granule, never above the cap.
+ {const uint64_t g=32ull<<20,cap=128ull<<20;check(source_stream_bytes(0,g,cap)==g && source_stream_bytes(1,g,cap)==g && source_stream_bytes(g,g,cap)==g);
+  check(source_stream_bytes(g+1,g,cap)==2*g && source_stream_bytes(cap,g,cap)==cap && source_stream_bytes(cap+1,g,cap)==0 && source_stream_bytes(5,0,cap)==0);
+  check(source_stream_bytes(100ull<<20,g,cap)==cap);}
+ // Query rows buffer (host visible, one per live query): 16 + 256 x rows + control word.
+ check(16ull+uint64_t(nh_material_rows)*256u+16u==3145760ull);
  ResourceBudget atomic;auto invalid=physical;invalid.image_generation=0;
  check(!atomic.reserve(7,{normal,albedo,invalid},indices));check(atomic.material_count==0 && atomic.cache_count==0 && atomic.sampler_count==0);
  check(atomic.reserve(7,views,indices));auto generation=normal;generation.view_generation++;check(atomic.reserve(7,{generation,albedo,physical},indices) && indices.normal==3);

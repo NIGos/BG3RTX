@@ -1,9 +1,10 @@
 #pragma once
 #include "host.h"
 #include "hit_material_submit.h"
+#include "../common/native_hit_records.h"
 namespace bg3::native_hit {
 // Internal main-AlphaDSL extension. Never part of the public host/core ABI.
-inline constexpr uint32_t cache_slots=64,sampler_slots=16,record_bytes=256,max_records=8192;
+inline constexpr uint32_t cache_slots=nh_cache_slots,sampler_slots=nh_sampler_slots,record_bytes=256,max_records=nh_alpha_rows;
 bool enabled();
 void device_created(DeviceData*);
 void device_destroyed(DeviceData*);
