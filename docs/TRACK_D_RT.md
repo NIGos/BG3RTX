@@ -3829,3 +3829,20 @@ G-buffer/primary matching in one OFF/ON run. Unaffected regions preserve energy
 within OFF-repeat noise; removal of false occlusion may legitimately brighten
 the affected region. Screenshots alone do not identify the
 pictured mesh or prove allocation overflow caused those particular rectangles.
+
+### 13.21 Policy out of the host (2026-10-31, partial step done)
+
+Done: the record formulas (make_record, family_fixup), the EmRec layout and the rt_em_calib
+rule are pure functions in `common/emissive_policy.h`, pinned by `emissive_policy_test`. The
+layer still calls them through a reader of the draw's bound CBs and views: a change still
+needs a game restart. No ABI change (23). Remaining plan, one ABI bump (24):
+1. Layer captures raw inputs per draw instead of a record: the material CB (set 1 b0/b1,
+   96 B), the time word, the VT engine CB words and SSBO entry (128 B), which views were
+   bound, the luminance slot. A fixed `Bg3EmRawDraw` (~512 B) in PDraw.
+2. `Bg3CoreApi::em_records(raw, n, out)` and `em_calibrate(family ratios -> scales)`, called
+   by the layer's build at submit (core lock held); without them (old core) the layer runs
+   `em::make_record` itself, so behaviour is unchanged.
+3. Gate: with rt_emissive=1 the core's records equal the layer's byte for byte (an in-frame
+   compare under rt_stats, ls_check style), then remove the layer path.
+Risks: core hot-reload during a build (take the core lock), CB bytes must still be read at
+record time (the game rewrites them), views stay layer-owned.

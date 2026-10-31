@@ -48,6 +48,7 @@
 #include <unordered_set>
 
 #include "assetdb.h"
+#include "../common/emissive_policy.h"
 
 namespace bg3 {
 
@@ -74,22 +75,13 @@ constexpr VkPipelineStageFlags kAS = VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BU
 constexpr VkPipelineStageFlags kCS = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags kXFB = VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
 
-// Must match shaders/rt/em_common.hlsli.
-struct EmRec {
-  float radiance[3];
-  uint32_t mode;
-  uint32_t tex, flags, fs_lo, fs_hi;
-  float uv[4];
-  uint32_t tex2, vt_tex, vt_cache, draw;
-  float uv2[4];
-  float vt_p0[4], vt_p1[4];
-  float vt_t[32];
-  uint32_t cls, glob, pad[2];   // glob: luminance-scale slot in g_globals (UINT32_MAX: none)
-};
+// The record layout, its modes and flags, the radiance formulas and the calibration
+// rule are policy in common/emissive_policy.h (pure, unit-tested).
+using em::EmRec;
+using em::kModeConst; using em::kModeMaskR; using em::kModeMaskRGB; using em::kModeBlackbody;
+using em::kFlagLuminance; using em::kFlagApprox; using em::kFlagPulse; using em::kFlagBaseMap; using em::kFlagVtAlbedo;
+using em::kFlagForward; using em::kFlagCalibrated;
 static_assert(sizeof(EmRec) == kRecBytes, "EmRec must match em_common.hlsli");
-enum : uint32_t { kModeConst = 0, kModeMaskR = 1, kModeMaskRGB = 2, kModeBlackbody = 3 };
-enum : uint32_t { kFlagLuminance = 1, kFlagApprox = 2, kFlagPulse = 4, kFlagBaseMap = 8, kFlagVtAlbedo = 16,
-                  kFlagForward = 32, kFlagCalibrated = 64 };
 
 struct Buf {
   VkBuffer b = VK_NULL_HANDLE;
@@ -189,12 +181,9 @@ uint32_t g_win_frames = 0;                        // presents in the log window
 struct RecDbg { EmRec r{}; float m[6] = {}; float m45[2] = {}; float time = 0, pulse = -1; bool cb = false; };
 std::map<uint64_t, RecDbg> g_rec_dbg;
 
-// Per-family calibration against the game's effects target (rt_em_calib): for families whose
-// formula is not fully reproduced (kFlagApprox), the radiance is scaled by game/ours as the
-// projected check measures it on screen (damped, clamped to [1/64, 64]); exact families are
-// never scaled (their ratio is the validation). Forward-pass families are not in the effects
-// target and are not calibrated.
-struct Calib { float scale = 1.0f; uint32_t updates = 0; double log_u = 0.0; };
+// Per-family calibration against the game's effects target (rt_em_calib): em::Calib,
+// em::calib_first / calib_window / calib_apply (common/emissive_policy.h).
+using em::Calib;
 std::unordered_map<uint64_t, Calib> g_calib;
 uint32_t g_stride = 24;
 
@@ -334,11 +323,7 @@ View bound_view(VkCommandBuffer cmd, uint32_t set, uint32_t binding) {
   return View{};
 }
 
-bool finite(const float* f, size_t n) {
-  for (size_t i = 0; i < n; ++i)
-    if (!(f[i] > -1e30f && f[i] < 1e30f)) return false;
-  return true;
-}
+using em::finite;
 
 const Mat& material(uint64_t fs) {
   auto it = g_mats.find(fs);
@@ -365,203 +350,65 @@ const Mat& material(uint64_t fs) {
   return g_mats.emplace(fs, std::move(m)).first->second;
 }
 
-// Families whose radiance is more than the generic colour x intensity x glow map (x base
-// colour for BGM), decompiled from the captures (offsets in the material CB, set 1 b0):
-//   222986b8 Base_GM_VT: mix(c * glow.r, glow.rgb, floor(m1)) * m2
-//   159a6211 Base_GM_Pulse_VT: mix(c * glow.r, glow.rgb, floor(m4)) * m5
-//            * mix(m2, m3, cos(time * m1) * 0.5 + 0.5) * global[0]   (time: set 0 b0 [0])
-//   aab75fed ENV_Tileset_MultipleTextures_BGM_MaskedShadows:
-//            mix(mix(b2(uv m0), b3(uv m1), vc.x), b4(uv m2), vc.y).rgb * glow.r * m3 * (1 - max(vc.x, vc.y))
-//            The vertex colour vc is not captured: vc = 0 (the base map b2 at uv * m0) is taken,
-//            the upper bound of the game's value (flagged approximate).
-//   GM_Pulse (159a6211 _VT, 304be1c7 _FX, their aliases): the same constant buffer; only
-//            the luminance-emissive ones (_VT) multiply by the global scale.
-//   1a81f41b FLUID_Lava_Plane_Flowmap: blackbody(T) * m23 * (1, 2.5, 0), the LUT at set 0
-//            b11 at u = (m0 + (m1 - m0) * h * m22) / 12000, h a heat field from flow noise,
-//            vertex colour and distance. h is not reproduced: a constant rt_em_lava_heat
-//            (0.5) is taken and the scale is left to the on-screen calibration.
-//   The Pulse templates differ in where their constants are: 159a6211 _VT / 304be1c7 _FX at
-//   set 1 b0 with the texture-colour switch at +24 and the intensity at +28; a201d825
-//   _AlphaBlend at set 1 b1, intensity at +24 and no switch. The pulse terms are +12/+16/+20
-//   of the material CB in all of them: the DB's material CB binding and intensity offset
-//   say which layout a shader has.
-void family_fixup(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, EmRec& r, PDraw& d) {
-  const uint32_t fam = uint32_t(fs >> 32);
-  const std::string& name = mat.name;
-  const uint32_t cbs = mat.info.material_cb_set, cbb = mat.info.material_cb_binding;
-  const bool cb_ok = cbs < 8 && cbb < 64;
-  float m[6] = {};
-  const bool pulse = fam == 0x159a6211u || name.find("_GM_Pulse") != std::string::npos;
-  if (fam == 0x1a81f41bu) {
-    float lv[24] = {};
-    if (read_bound(cmd, 1, 0, 0, lv, 96) && finite(lv, 24)) {
-      d.mask = bound_view(cmd, 0, 11);   // the blackbody LUT
-      r.mode = d.mask.v ? kModeBlackbody : kModeConst;
-      r.uv[0] = lv[0] / 12000.0f;
-      r.uv[1] = (lv[1] - lv[0]) / 12000.0f * lv[22];
-      r.uv[2] = cfg_float("rt_em_lava_heat", 0.5f);
-      r.uv[3] = 0.0f;
-      r.radiance[0] = lv[23];
-      r.radiance[1] = 2.5f * lv[23];
-      r.radiance[2] = 0.0f;
-    }
-    r.flags |= kFlagApprox;
-    return;
+// The record of an emissive draw (caller holds g_mu): em::make_record with a reader of
+// this draw's bound constant buffers and views; the luminance-copy slots stay here.
+struct DrawReader {
+  VkCommandBuffer cmd;
+  PCmd& P;
+  PDraw& d;
+  bool read(uint32_t set, uint32_t binding, uint64_t offset, void* dst, size_t n) {
+    return read_bound(cmd, set, binding, VkDeviceSize(offset), dst, n);
   }
-  if (fam == 0x222986b8u && read_bound(cmd, 1, 0, 0, m, 24)) {
-    RecDbg& g = g_rec_dbg[fs];
-    std::memcpy(g.m, m, sizeof m);
-    g.cb = true;
-    if (std::floor(m[3]) >= 1.0f) {
-      r.mode = kModeMaskRGB;
-      r.radiance[0] = r.radiance[1] = r.radiance[2] = m[4];
+  View& slot(em::EmView which) {
+    switch (which) {
+      case em::EmView::Mask: return d.mask;
+      case em::EmView::Base: return d.base;
+      case em::EmView::VtIndirection: return d.vt_ind;
+      default: return d.vt_cache;
     }
-  } else if (pulse && cb_ok && read_bound(cmd, cbs, cbb, 0, m, 24)) {
-    float m45[2] = {}, time = 0.0f;
-    const bool has_switch = mat.info.slot[BG3_MAT_EMISSIVE_INTENSITY].offset == 28;
-    if (has_switch && read_bound(cmd, cbs, cbb, 24, m45, 8) && std::floor(m45[0]) >= 1.0f) {
-      r.mode = kModeMaskRGB;
-      for (float& c : r.radiance) c = m45[1];
-    }
-    // The pulse at the draw's time (set 0 b0 [0]); when that constant buffer is not
-    // host-readable, its time average (m2 + m3) / 2: without it the radiance missed the
-    // factor altogether (a201d825 read a stable 1.41).
-    float pulse = 0.5f * (m[4] + m[5]);
-    if (read_bound(cmd, 0, 0, 0, &time, 4) && std::isfinite(time)) {
-      pulse = m[4] + (m[5] - m[4]) * (std::cos(time * m[3]) * 0.5f + 0.5f);
-    } else {
-      ++d.pulse_no_time;
-    }
-    RecDbg& g = g_rec_dbg[fs];
-    std::memcpy(g.m, m, sizeof m);
-    std::memcpy(g.m45, m45, sizeof m45);
-    g.time = time;
-    g.pulse = pulse;
-    g.cb = true;
-    if (std::isfinite(pulse) && pulse >= 0.0f) {
-      for (float& c : r.radiance) c *= pulse;
-      r.flags |= kFlagPulse;
-    }
-  } else if (name.find("MutipleUV") != std::string::npos || name.find("MultipleUV") != std::string::npos) {
-    // f298bf4d ENV_Base_MutipleUV: glow(uv1).rgb * noise(scrolled uv0) * 1.5 * m2 * global. The
-    // glow map reads the second UV, which XFB does not capture: the map is dropped (its mean
-    // and the noise's (0.5 x 1.5) go to the calibration).
-    // Its intensity is the material CB's +16 (_m2; the DB's slot read 0: em8 dump), its
-    // colour the glow map alone.
-    float k2 = 0.0f;
-    if (read_bound(cmd, cb_ok ? cbs : 1, cb_ok ? cbb : 0, 16, &k2, 4) && std::isfinite(k2) && k2 >= 0.0f)
-      for (float& c : r.radiance) c = 0.75f * k2;
-    else
-      for (float& c : r.radiance) c *= 0.75f;
-    r.mode = kModeConst;
-    d.mask = View{};
-    r.flags |= kFlagApprox;
-  } else if (fam == 0xaab75fedu && read_bound(cmd, 1, 0, 0, m, 4) && std::isfinite(m[0])) {
-    r.uv2[0] = r.uv2[1] = m[0];
-    r.flags |= kFlagApprox;   // vertex colour
   }
-}
-
-// The record of an emissive draw (caller holds g_mu).
-void make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDraw& d) {
-  const Bg3MaterialInfo& mi = mat.info;
-  EmRec& r = d.rec;
-  r = EmRec{};
-  r.radiance[0] = r.radiance[1] = r.radiance[2] = 1.0f;
-  r.uv[0] = r.uv[1] = 1.0f;
-  r.uv2[0] = r.uv2[1] = 1.0f;
-  r.fs_lo = uint32_t(fs);
-  r.fs_hi = uint32_t(fs >> 32);
-  r.cls = mi.cls;
-  auto rd = [&](const Bg3MatSlot& s, void* dst, size_t n) {
-    return s.kind >= BG3_MAT_KIND_SCALAR && s.offset != 0xFFFF && read_bound(cmd, s.set, s.binding, s.offset, dst, n);
-  };
-  const Bg3MatSlot& col = mi.slot[BG3_MAT_EMISSIVE_COLOR];
-  const Bg3MatSlot& base = mi.slot[BG3_MAT_BASE_COLOR];
-  const bool bgm = mat.name.find("BGM") != std::string::npos;   // base colour x glow map templates
-  float c[3] = {1, 1, 1};
-  if (col.kind == BG3_MAT_KIND_VEC3 || col.kind == BG3_MAT_KIND_VEC4) {
-    if (!rd(col, c, 12)) std::memcpy(c, col.value, 12), r.flags |= kFlagApprox, ++P.census.cb_unreadable;
-  } else if ((mi.flags & BG3_MAT_F_UNLIT) && (base.kind == BG3_MAT_KIND_VEC3 || base.kind == BG3_MAT_KIND_VEC4)) {
-    if (!rd(base, c, 12)) std::memcpy(c, base.value, 12), r.flags |= kFlagApprox;
-  } else if (!bgm) {
-    r.flags |= kFlagApprox;   // the colour comes from elsewhere
+  bool view(em::EmView which, uint32_t set, uint32_t binding) {
+    View& v = slot(which);
+    v = bound_view(cmd, set, binding);
+    return v.v != VK_NULL_HANDLE;
   }
-  float k = 1.0f;
-  const Bg3MatSlot& in = mi.slot[BG3_MAT_EMISSIVE_INTENSITY];
-  if (in.kind == BG3_MAT_KIND_SCALAR && !rd(in, &k, 4)) k = in.value[0], r.flags |= kFlagApprox, ++P.census.cb_unreadable;
-  for (int i = 0; i < 3; ++i) r.radiance[i] = c[i] * k;
-  const Bg3MatSlot& map = mi.slot[BG3_MAT_EMISSIVE_MAP];
-  if (map.kind == BG3_MAT_KIND_TEXTURE) {
-    d.mask = bound_view(cmd, map.set, map.binding);
-    if (d.mask.v) r.mode = kModeMaskR;
-    else r.flags |= kFlagApprox;
-  }
-  // The game's luminance scale (set 2 b0 [0], a storage buffer in device memory). The game
-  // rewrites that buffer later in the same batch, so the value is copied on the GPU right
-  // after this draw's pass (em_pass_done, em_copy.hlsl) into a slot of our own buffer.
-  r.glob = UINT32_MAX;
-  if (mi.flags & BG3_MAT_F_LUMINANCE_EMISSIVE) {
-    r.flags |= kFlagLuminance;
+  void drop_view(em::EmView which) { slot(which) = View{}; }
+  uint32_t luminance_slot() {
     Bg3Binding g{};
-    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 2, 0, 0, &g) && g.buffer) {
-      // One slot per distinct binding in the pass.
-      uint32_t slot = UINT32_MAX;
-      for (const auto& c : P.copies)
-        if (c.first.buffer == g.buffer && c.first.offset == g.offset) slot = c.second;
-      if (slot == UINT32_MAX) {
-        slot = g_glob_next++ % kGlobSlots;
-        P.copies.push_back({g, slot});
-        if (P.copies.size() > 1) ++P.census.global_conflicts;   // (several bindings: counted, handled)
-      }
-      r.glob = slot;
-    } else {
-      r.flags |= kFlagApprox;
+    if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 2, 0, 0, &g) || !g.buffer) return UINT32_MAX;
+    // One slot per distinct binding in the pass.
+    uint32_t slot = UINT32_MAX;
+    for (const auto& c : P.copies)
+      if (c.first.buffer == g.buffer && c.first.offset == g.offset) slot = c.second;
+    if (slot == UINT32_MAX) {
+      slot = g_glob_next++ % kGlobSlots;
+      P.copies.push_back({g, slot});
+      if (P.copies.size() > 1) ++P.census.global_conflicts;   // (several bindings: counted, handled)
+    }
+    return slot;
+  }
+  float lava_heat() { return cfg_float("rt_em_lava_heat", 0.5f); }
+};
+void make_record(VkCommandBuffer cmd, uint64_t fs, const Mat& mat, PCmd& P, PDraw& d) {
+  DrawReader rd{cmd, P, d};
+  em::EmMaterial m{&mat.info, mat.name, mat.kind == kMatForward, mat.kind == kMatDecal};
+  em::EmRecordOut o;
+  d.rec = em::make_record(rd, fs, m, o);
+  P.census.cb_unreadable += o.cb_unreadable;
+  P.census.vt_missing += o.vt_missing;
+  d.pulse_no_time += o.pulse_no_time;
+  if (o.dbg_m) {
+    RecDbg& g = g_rec_dbg[fs];
+    std::memcpy(g.m, o.m, sizeof g.m);
+    g.cb = true;
+    if (o.dbg_pulse) {
+      std::memcpy(g.m45, o.m45, sizeof g.m45);
+      g.time = o.time;
+      g.pulse = o.pulse;
     }
   }
-  if (bgm) {
-    if (mi.flags & BG3_MAT_F_VIRTUAL_TEXTURE) {
-      // The VT albedo: uv transform and tile-set index from the engine CB, the tile-set
-      // constants from the SSBO at set 0 b12, indirection and cache from the DB's slots.
-      const Bg3MatSlot& xf = mi.slot[BG3_MAT_VT_UV_TRANSFORM];
-      const Bg3MatSlot& ix = mi.slot[BG3_MAT_VT_TILESET_INDEX];
-      const Bg3MatSlot& tb = mi.slot[BG3_MAT_VT_TABLE];
-      const Bg3MatSlot& al = mi.slot[BG3_MAT_VT_ALBEDO];
-      float p[8] = {};
-      uint32_t idx = 0;
-      bool ok = xf.kind && ix.kind && tb.kind && al.kind && rd(xf, p, 32) && rd(ix, &idx, 4) && idx < (1u << 20) &&
-                read_bound(cmd, 0, 12, VkDeviceSize(idx) * 128, r.vt_t, 128) && finite(p, 8) && finite(r.vt_t, 32);
-      if (ok) {
-        std::memcpy(r.vt_p0, p, 16);
-        std::memcpy(r.vt_p1, p + 4, 16);
-        d.vt_ind = bound_view(cmd, tb.set, tb.binding);
-        d.vt_cache = bound_view(cmd, al.set, al.binding);
-        ok = d.vt_ind.v && d.vt_cache.v;
-      }
-      if (ok) r.flags |= kFlagVtAlbedo;
-      else ++P.census.vt_missing, r.flags |= kFlagApprox;
-    } else {
-      const Bg3MatSlot& bm = mi.slot[BG3_MAT_BASE_COLOR_MAP];
-      if (bm.kind == BG3_MAT_KIND_TEXTURE) d.base = bound_view(cmd, bm.set, bm.binding);
-      if (d.base.v) r.flags |= kFlagBaseMap;
-      else r.flags |= kFlagApprox;
-    }
-  }
-  family_fixup(cmd, fs, mat, r, d);
-  if (mat.kind == kMatForward) r.flags |= kFlagForward | kFlagApprox;
-  // E: vertex-colour-cut templates (VertCut) gate their emission by a vertex-colour mask that
-  // is not captured; decals are box volumes, not the surfaces they light.
-  // Fresnel templates (7123ab1d Base_Fresnel_GM_VT) scale their emission by a view-angle
-  // term that the records do not model.
-  if (mat.name.find("VertCut") != std::string::npos || mat.name.find("Fresnel") != std::string::npos ||
-      mat.kind == kMatDecal)
-    r.flags |= kFlagApprox;
   P.census.pulse_no_time += d.pulse_no_time;
-  g_rec_dbg[fs].r = r;
-  if (!finite(r.radiance, 3) || r.radiance[0] < 0 || r.radiance[1] < 0 || r.radiance[2] < 0) {
-    r.radiance[0] = r.radiance[1] = r.radiance[2] = 0.0f;
-    r.flags |= kFlagApprox;
-  }
+  g_rec_dbg[fs].r = o.dbg_rec;
 }
 
 bool ensure_pipeline() {
@@ -977,10 +824,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
       r.draw = uint32_t(recs.size());
       if (r.flags & kFlagApprox) {
         auto cal = g_calib.find((uint64_t(r.fs_hi) << 32) | r.fs_lo);
-        if (cal != g_calib.end() && cal->second.updates) {
-          for (float& c : r.radiance) c *= cal->second.scale;
-          r.flags |= kFlagCalibrated;
-        }
+        em::calib_apply(r, cal != g_calib.end() ? &cal->second : nullptr);
       }
       r.tex = slot_of(tex, kMaxTex, d.mask);
       if (d.mask.v && !r.tex) ++census.skip_tex, r.mode = kModeConst, r.flags |= kFlagApprox;
@@ -1766,11 +1610,7 @@ void em_on_present() {
           const Window::Cmp& cm = it->second;
           Calib& cal = g_calib[it->first];
           const double ratio = cm.game > 0 ? cm.ours / cm.game : 0.0;
-          if (!cal.updates && (cm.flags & kFlagApprox) && !(cm.flags & kFlagForward) && w.dbg_frames >= 4 &&
-              cm.bright >= 200.0 * 4 && ratio > 0.02 && ratio < 50.0) {
-            cal.log_u = std::log(ratio);
-            cal.scale = float((std::min)((std::max)(std::exp(-cal.log_u), 1.0 / 64), 64.0));
-            cal.updates = 1;
+          if (em::calib_first(cal, ratio, cm.flags, w.dbg_frames, cm.bright)) {
             it = w.cmp.erase(it);
           } else {
             ++it;
@@ -1898,20 +1738,15 @@ void em_on_present() {
       const double ratio = cm.game > 0 ? cm.ours / cm.game : 0.0;
       const double px = cm.bright / double(w.dbg_frames);   // bright hits per frame: the gate
       Calib& cal = g_calib[fs];
-      const float before = cal.updates ? cal.scale : 1.0f;
+      const float before = em::calib_scale(cal);
       // Calibrate approximate families seen on enough pixels, in the effects target (a
       // forward family's emission is not there: ours >> game).
       // The family's own ratio at scale 1 is ratio / scale (ours scales with it). Animated
       // emitters (the lava's heat flow) swing it 1.0-2.1 between 300-build windows, so a
       // full step chased the animation (the scale rose while the ratio was > 1). The scale
-      // is 1 / the exponential average of that ratio in log space (weight 1/4; the first
+      // is 1 / the exponential average of that ratio in log space (weight 1/2; the first
       // window sets it), i.e. it matches the time average.
-      if (calib && (cm.flags & kFlagApprox) && !(cm.flags & kFlagForward) && px >= 200 && ratio > 0.02 && ratio < 50.0) {
-        const double lu = std::log(ratio / double(before));
-        cal.log_u = cal.updates ? cal.log_u + 0.5 * (lu - cal.log_u) : lu;
-        cal.scale = float((std::min)((std::max)(std::exp(-cal.log_u), 1.0 / 64), 64.0));
-        ++cal.updates;
-      }
+      if (calib) em::calib_window(cal, ratio, cm.flags, px);
       // Two ratios: over every hit (the family's energy: what the light list carries and the
       // calibration matches) and over its bright hits only (the emission the player sees,
       // apart from dark texels and texels whose game pixel other emitters add to): the gate.

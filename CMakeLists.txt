@@ -320,6 +320,8 @@ add_executable(native_sun_packets_test tests/native_sun_packets_test.cpp)
 add_test(NAME native_sun_packets_test COMMAND native_sun_packets_test)
 add_executable(native_hit_qualify_test tests/native_hit_qualify_test.cpp)
 add_test(NAME native_hit_qualify_test COMMAND native_hit_qualify_test)
+add_executable(emissive_policy_test tests/emissive_policy_test.cpp)
+add_test(NAME emissive_policy_test COMMAND emissive_policy_test)
 
 # Hot-reloadable core: rebuild while the game runs.
 option(BG3RTX_HAIR_GPU_PROBE "Build the isolated, windowless native Hair Vulkan probe" OFF)
