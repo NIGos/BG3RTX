@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from tools.assets.probe_foundry_cell import candidate_pose,finite_triangle_slice,native_window_matches
+from tools.assets.probe_foundry_cell import candidate_pose,finite_triangle_slice,native_window_matches,select_archive_terrain
 from tools.assets.affine import UnsupportedAffine
 
 
@@ -28,6 +28,19 @@ class FoundryCellTests(unittest.TestCase):
         self.assertEqual(native_window_matches(bad,np.zeros((3,3)),native),[])
         native['clip'][4,2]=float('nan')
         self.assertEqual(native_window_matches(world[3:],np.zeros((3,3)),native),[])
+
+    def test_archive_crop_keeps_source_topology_and_native_identity(self):
+        mesh=dict(attributes=dict(POSITION=[[9,0,9],[10,0,9],[9,0,10],[0,2,0],[1,2,0],[0,2,1]],TERRAIN_GRID_HALF=[[i,i] for i in range(6)]),
+                  indices=[0,1,2,5,3,4],source_cell_indices=[9,21],source_fan_indices=[1,3])
+        evidence=dict(native_primitive_mapping=[dict(source_cell=9,source_fan=1,native_primitive=101),dict(source_cell=21,source_fan=3,native_primitive=47)])
+        cropped=select_archive_terrain(mesh,evidence,np.array([[0,0],[1,1]]))
+        self.assertEqual(cropped['indices'],[2,0,1])
+        self.assertEqual(cropped['source_vertex_ids'],[3,4,5])
+        self.assertEqual(cropped['source_triangle_ids'],[1])
+        self.assertEqual(cropped['native_triangle_ids'],[47])
+        self.assertEqual(cropped['attributes']['TERRAIN_GRID_HALF'],[[3,3],[4,4],[5,5]])
+        self.assertEqual(cropped['bounds'],[[0.,2.,0.],[1.,2.,1.]])
+        with self.assertRaises(ValueError):select_archive_terrain(mesh,evidence,np.array([[30,30],[31,31]]))
 
     def test_native_terrain_slice_preserves_full_finite_triangles(self):
         tri=np.array([[[0,0,0],[1,0,0],[0,0,1]],

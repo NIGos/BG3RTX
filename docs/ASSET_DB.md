@@ -482,5 +482,22 @@ retain inactive Z-NaN vertices. Runtime XFB already rejects finite4 failures;
 this is an offline export guard. Unknown terrain material never means opaque.
 The expanded geometry intersects all 16 low board-vertex lines; signed heights
 remain unmodified and do not certify contact/opacity/continuous support.
-Persistent foundry terrain is a local remaining reader task: two existing v8
-render `.patch` files, distinct from physics `.bin`; no missing-resource claim.
+The optional `--persistent-foundry-terrain` writes a separate
+`reference-cell-archive-terrain/` bundle after
+`python -m tools.assets.probe_foundry_terrain --capture <S1 capture>` qualifies
+both v8 render `.patch` files for terrain 6675c295-3445-49ef-92ec-1b27be2c48c5.
+The bounded reader preserves authored float32 heights and opaque material tails;
+physics SEBD `.bin` is rejected. Its full 7628 vertices / 13512 triangles and
+738 holes correspond exactly to all active native draw 803 grid/cell/fan identities.
+Native R16 height-image differences reach 0.000097275 world units, within the
+declared registered-height-domain code plus FP32 transform/projection enclosure
+(maximum 0.000210342); the actual GPU quantizer/filter is not certified.
+
+The local bundle replaces only the 289 mainfloor triangles with persistent
+render geometry; 535 parent-terrain triangles remain frozen. Original source
+vertex/triangle, cell/fan and native primitive IDs survive selection/remapping.
+Source/archive/implementation hashes must match the qualification evidence.
+All 16 low-vertex lines still intersect geometry. Terrain material/layer/UV tails,
+current destruction/deformation and parent roof state remain open; geometry is
+not silently classified opaque. The reader intentionally rejects other patch
+versions/dimensions rather than claiming a general terrain importer.
