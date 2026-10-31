@@ -202,7 +202,7 @@ VkDescriptorSetLayout g_current_sun_set_layout=VK_NULL_HANDLE,g_current_sun_host
 VkPipelineLayout g_current_sun_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
-Pipe g_hit_material;
+Pipe g_hit_material, g_hit_direct;
 Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
 Pipe g_rt_shadow_current; // private current-caster tuple; ordinary sun pipe stays untouched
@@ -704,7 +704,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   static const char* const rebased_files[] = {
       "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
       "gi/pan_primary_identity.hlsl", "gi/pan_local.hlsl",
-      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
+      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
       "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
       "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
       "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
@@ -1469,17 +1469,19 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
 }
 
 bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet sun, VkPipeline pipe, uint32_t gx,
-                 uint32_t gy, const Snapshot* box = nullptr) {
+                 uint32_t gy, const Snapshot* box = nullptr, bool material_use = false) {
   if(!pipe)return false;
   auto traversal=prepare_omm_traversal(cmd,b,pipe);
   if(!traversal.valid())return false;
   const VkDeviceFuncs& vk = *host->vk;
+  if(material_use && (!host->rt_hit_material_use ||
+     !host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity)))return false;
   const VkPipelineLayout layout = box ? g_ls_box_layout : g_ls_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   VkWriteDescriptorSet w[kLsBindings + kNumExtras];
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, kLsBindings, w), w);
   VkDescriptorSet sets[2] = {b.alpha, sun};
-  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 2, sets, 0, nullptr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, material_use ? 1u : 2u, sets, 0, nullptr);
   if (box) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 3, 1, &box->game_set1,
                                    box->game_set1_ndyn, box->game_set1_ndyn ? box->game_set1_dyn : nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
@@ -2176,6 +2178,15 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     memory_barrier(cmd,kCS,kCS);bind_rt(b,s.tlas,s.alpha);
     (void)dispatch(cmd,g_hit_material,b,pc,g_w,g_h,true); // optional: unsupported keeps remaining passes
   }
+  // Explicit primary-hit point/spot DIRECT-ONLY reference. This is independent
+  // of normal RF's probe replacement and requires the actual native light tuple.
+  if(s.tlas && s.ls_ok && pc.rf_debug==7 && host->cfg_int("rt_hit_material",0) &&
+     bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) &&
+     ensure_ls_layout() && refresh(g_hit_direct,"gi/rt_hit_direct.hlsl",g_ls_layout)){
+    Bound direct{};bind_all(direct,s);bind_rt(direct,s.tlas,s.alpha);bind_ls(direct,s);bind_extras(direct,s);
+    memory_barrier(cmd,kCS,kCS);
+    (void)ls_dispatch(cmd,direct,pc,VK_NULL_HANDLE,g_hit_direct.pipeline,(g_w+7)/8,(g_h+7)/8,nullptr,true);
+  }
   // Capture after the RT debug overlay so debug 8 bursts contain its QA encoding.
   if (s.pan) host->pan_capture(cmd, "diffuse", &s.dif);
   // D-EM (core/emissive.cpp): rt_debug 16-18 are its views (its modes 6-8), else the check.
@@ -2335,7 +2346,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
-  for (Pipe* p : {&g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
+  for (Pipe* p : {&g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
