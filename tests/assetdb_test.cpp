@@ -179,7 +179,7 @@ int main() {
     CHECK(n_db == a->lights_near(cam, 40.0f, idx, 256) && n_db > 0);
     CHECK(n_db && (rl[0].flags & BG3_RTL_FROM_DB) && rl[0].owner == BG3_RTL_OWNER_PLACED && rl[0].db_index == idx[0]);
 
-    // With an export (written after the process started, so it counts as fresh): a
+    // With a complete export (written after process start, so it is fresh): a
     // placed light at a database light's position, an item lamp, the character light.
     const Bg3DbLight* D = a->light(idx[0]);
     char dir[MAX_PATH];
@@ -188,7 +188,7 @@ int main() {
     CreateDirectoryA(se_dir.c_str(), nullptr);
     char text[2048];
     snprintf(text, sizeof text,
-             "BG3RTX_SE 1\nseq 3 ms 0 level CTY_Main_A host %.3f %.3f %.3f avg_us 1 max_us 2 all 3 out 3\n"
+             "BG3RTX_SE 1\nseq 3 ms 0 level CTY_Main_A host %.3f %.3f %.3f avg_us 1 max_us 2 all 3 classified 3 pending 0 out 3\n"
              "L 11 1 0 %.4f %.4f %.4f %.3f 1 1 1 1000 0 1 191 0 0 0 0 %s\n"
              "L 12 2 0 %.4f %.4f %.4f 6 1 1 1 30000 0 9 191 4 0 0 0 LightSources_GEN_Glasshouse_Lamp_A\n"
              "L 13 4 1 %.4f %.4f %.4f 24 1 1 1 4000 0 257 129 0 0 0 0 Light_Player_Darkvision_Spot_Drow\nEND\n",
@@ -214,6 +214,23 @@ int main() {
           rl[placed].db_index == idx[0]);
     CHECK(item >= 0 && std::fabs(rl[item].source_radius - 0.10f) < 1e-6f && (rl[item].flags & BG3_RTL_FLICKER));
     CHECK(chr >= 0 && (rl[chr].flags & BG3_RTL_PLAYER_LIGHT) && rl[chr].type == 1);
+    // Legacy/partial exports still supply their explicit records, but cannot
+    // remove the database lights that they did not report.
+    std::string legacy(text);
+    legacy.replace(legacy.find("seq 3"), 5, "seq 4");
+    const auto completeness = legacy.find(" classified 3 pending 0");
+    CHECK(completeness != std::string::npos);
+    legacy.erase(completeness, strlen(" classified 3 pending 0"));
+    f = fopen((se_dir + "\\lights.txt").c_str(), "wb");
+    fwrite(legacy.data(), 1, legacy.size(), f);
+    fclose(f);
+    for (int i = 0; i < 50 && (!a->se_info(&info) || info.seq != 4); ++i) Sleep(50);
+    CHECK(info.active && info.seq == 4 && info.lights_out == 3);
+    const uint32_t n_legacy = a->runtime_lights(cam, 40.0f, rl, 256);
+    CHECK(n_legacy == n_db + 2); // One matched DB placement, two additional explicit lights.
+    uint32_t explicit_count = 0;
+    for (uint32_t i = 0; i < n_legacy; ++i) explicit_count += (rl[i].flags & BG3_RTL_FROM_SE) != 0;
+    CHECK(explicit_count == 3);
     const char *atm = nullptr, *lit = nullptr;
     a->se_environment(cam, &atm, &lit);
     printf("se: %u runtime lights; environment at the camera: atmosphere '%s', lighting '%s'\n", n_se, atm, lit);
