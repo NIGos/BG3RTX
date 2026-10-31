@@ -31,31 +31,46 @@ def main():
     with zipfile.ZipFile(archive) as z:
         z.extractall(old)
 
-    def compile_one(source, dest, include):
+    def compile_one(request, dest, include):
+        # request: "<file>?NAME=VALUE;..." (common/shader_variant.h), the defines as -D.
+        file, _, defs = request.partition("?")
+        source = include / file
         dest.parent.mkdir(parents=True, exist_ok=True)
         first = source.read_text().splitlines()[0]
         extra = shlex.split(first[len("// dxc:"):]) if first.startswith("// dxc:") else []
         command = [args.dxc, str(source), "-spirv", "-fspv-target-env=vulkan1.3", "-HV", "2021",
                    "-T", "cs_6_6", "-E", "main", "-I", str(include), "-I", args.sharc,
-                   "-D", "BG3RTX=1", "-D", "BG3RTX_SHARC_SDK=1", "-Fo", str(dest), *extra]
+                   "-D", "BG3RTX=1", "-D", "BG3RTX_SHARC_SDK=1",
+                   *[a for d in defs.split(";") if d for a in ("-D", d)], "-Fo", str(dest), *extra]
         p = subprocess.run(command, capture_output=True, text=True)
         if p.returncode:
-            raise RuntimeError(f"{source}: {p.stdout}\n{p.stderr}")
+            raise RuntimeError(f"{request}: {p.stdout}\n{p.stderr}")
         return hashlib.sha256(dest.read_bytes()).hexdigest()
 
+    scalp = ["RT_NATIVE_SCALP=1", "RT_NATIVE_HAIR=1"]
+
+    def ordinary(request):
+        file, _, defs = request.partition("?")
+        rest = [d for d in defs.split(";") if d not in scalp]
+        return file + ("?" + ";".join(rest) if rest else "")
+
     def check(wrapper):
-        relative = wrapper.relative_to(ROOT / "shaders/native_scalp")
-        current = compile_one(ROOT / "shaders" / relative, out / "current" / relative.with_suffix(".spv"), ROOT / "shaders")
-        baseline = compile_one(old / "shaders" / relative, out / "old" / relative.with_suffix(".spv"), old / "shaders")
+        relative = ordinary(wrapper)
+        name = Path(wrapper.partition("?")[0] + "." + hashlib.sha1(wrapper.encode()).hexdigest()[:12] + ".spv")
+        current = compile_one(relative, out / "current" / name, ROOT / "shaders")
+        baseline = compile_one(relative, out / "old" / name, old / "shaders")
         if current != baseline:
             raise RuntimeError(f"Ordinary SPIR-V changed: {relative}")
-        capable = compile_one(wrapper, out / "capable" / relative.with_suffix(".spv"), ROOT / "shaders")
-        validation = subprocess.run([validator, "--target-env", "vulkan1.3", str(out / "capable" / relative.with_suffix(".spv"))], capture_output=True, text=True)
+        capable = compile_one(wrapper, out / "capable" / name, ROOT / "shaders")
+        validation = subprocess.run([validator, "--target-env", "vulkan1.3", str(out / "capable" / name)], capture_output=True, text=True)
         if validation.returncode:
             raise RuntimeError(f"{wrapper}: {validation.stdout}\n{validation.stderr}")
-        return {"entry": relative.as_posix(), "ordinary_sha256": current, "capable_sha256": capable}
+        return {"entry": relative, "ordinary_sha256": current, "capable_sha256": capable}
 
-    wrappers = sorted((ROOT / "shaders/native_scalp").rglob("*.hlsl"))
+    # The old shaders/native_scalp/ wrappers: the scalp alone or with the cascade masks.
+    wrappers = [l for l in (ROOT / "shaders/variants.txt").read_text().splitlines()
+                if "?" in l and all(d in scalp or d == "RT_CASCADE_MASKS=1" or (d == "RT_CASCADE_SUN=1" and l.startswith("gi/rt_shadow.hlsl?"))
+                                    for d in l.partition("?")[2].split(";")) and scalp[0] in l]
     # Two CPU compiler processes maximum, including baseline/current per entry.
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         records = list(pool.map(check, wrappers))

@@ -2,6 +2,8 @@
 
     py -3 tools/pipeline_stats.py [--shaders DIR] gi/rt_local_shadows.hlsl [...]
 
+A variant is its request "<file>?NAME=VALUE;..." (shaders/variants.txt): each pair is a -D.
+
 Compiles each file as layer/shaders.cpp does (DXC from the Vulkan SDK, cs_6_6, -O3),
 reflects its descriptors with spirv-cross and creates the pipeline on this machine's GPU
 with bin/pipeline_stats.exe (tools/pipeline_stats.cpp). Needs no game.
@@ -31,12 +33,14 @@ for c in (root / "external" / "sharc-1.8.3" / "include", root.parents[2] / "exte
         break
 rc = 0
 with tempfile.TemporaryDirectory() as tmp:
-    for f in args:
-        spv = Path(tmp) / (Path(f).stem + ".spv")
+    for i, request in enumerate(args):
+        f, _, defs = request.partition("?")
+        defines = [a for d in defs.split(";") if d for a in ("-D", d)]
+        spv = Path(tmp) / (f"{i}_" + Path(f).stem + ".spv")
         first = (shaders / f).read_text(errors="replace").split("\n", 1)[0].strip()
         extra = first[len("// dxc:"):].split() if first.startswith("// dxc:") else []
         r = subprocess.run([str(sdk / "dxc.exe"), str(shaders / f), "-spirv", "-fspv-target-env=vulkan1.3", "-HV", "2021",
-                            "-T", "cs_6_6", "-E", "main", "-I", str(shaders), "-D", "BG3RTX=1", "-O3"] + sharc + extra +
+                            "-T", "cs_6_6", "-E", "main", "-I", str(shaders), "-D", "BG3RTX=1", "-O3"] + sharc + defines + extra +
                            ["-Fo", str(spv)], capture_output=True, text=True)
         if r.returncode:
             print(f"{f}: compile failed\n{r.stdout}{r.stderr}")
@@ -48,9 +52,9 @@ with tempfile.TemporaryDirectory() as tmp:
         for k, t in kind.items():
             for v in refl.get(k, []):
                 lines.append(f"{v['set']} {v['binding']} {t} {(v.get('array') or [1])[0]}")
-        lay = Path(tmp) / (Path(f).stem + ".txt")
+        lay = Path(tmp) / (f"{i}_" + Path(f).stem + ".txt")
         lay.write_text("\n".join(lines) + "\n")
         r = subprocess.run([str(root / "bin" / "pipeline_stats.exe"), str(spv), str(lay)], capture_output=True, text=True)
-        print(f"== {f}\n{r.stdout}{r.stderr}", end="")
+        print(f"== {request}\n{r.stdout}{r.stderr}", end="")
         rc |= r.returncode
 sys.exit(rc)

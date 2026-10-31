@@ -18,8 +18,9 @@
 // 20: exact per-command hit-material tuple use registration (opaque VT subset).
 // 21: Bg3HostApi::rt_hit_material_use (material-consuming dispatches).
 // 22: Bg3HostApi::rt_scene_camera removed (ABI 16; rt_scene_camera_match, CONSOLIDATION C1).
+// 23: get_shader accepts "<file>?NAME=VALUE;..." defines (common/shader_variant.h); no layout change.
 // Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
-#define BG3RTX_ABI_VERSION 22
+#define BG3RTX_ABI_VERSION 23
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -165,6 +166,8 @@ struct Bg3HostApi {
 
   // Compiles shaders/<file> with DXC to SPIR-V on first request and again whenever
   // anything under shaders/ changes. Returns false if it has never compiled.
+  // "<file>?NAME=VALUE;NAME=VALUE" adds each pair as a -D define (ABI 23); the whole
+  // string is the cache key, so every define set is its own entry.
   bool (*get_shader)(const char* file, const char* entry, const char* profile, Bg3ShaderBlob* out);
 
   // bg3rtx.ini, re-read when it changes on disk.

@@ -1,6 +1,8 @@
 // Runtime HLSL -> SPIR-V through dxcompiler.dll (bin/ first, then the Vulkan
 // SDK). Every requested entry is recompiled when anything under shaders/
 // changes; a failed compile keeps the previous SPIR-V and logs the errors.
+// A request "<file>?NAME=VALUE;NAME=VALUE" (ABI 23, common/shader_variant.h) compiles
+// <file> with each pair as a -D define; the whole string is the cache key.
 #include "host.h"
 
 #include <unknwn.h>
@@ -103,7 +105,14 @@ static std::vector<std::wstring> first_line_args(IDxcBlobEncoding* src) {
 
 static bool compile(ShaderEntry& e) {
   if (!init_dxc()) return false;
-  std::wstring path = widen(shaders_dir() + "\\" + e.file);
+  const size_t q = e.file.find('?');
+  std::vector<std::wstring> defines;
+  for (size_t a = q; a != std::string::npos && a + 1 < e.file.size();) {
+    const size_t b = e.file.find(';', a + 1);
+    defines.push_back(widen(e.file.substr(a + 1, b == std::string::npos ? std::string::npos : b - a - 1)));
+    a = b;
+  }
+  std::wstring path = widen(shaders_dir() + "\\" + e.file.substr(0, q));
   IDxcBlobEncoding* src = nullptr;
   if (FAILED(g_utils->LoadFile(path.c_str(), nullptr, &src))) {
     log("[shaders] cannot read %s", e.file.c_str());
@@ -119,6 +128,10 @@ static bool compile(ShaderEntry& e) {
     args.push_back(sharc.c_str());
     args.push_back(L"-D");
     args.push_back(L"BG3RTX_SHARC_SDK=1");
+  }
+  for (const std::wstring& d : defines) {
+    args.push_back(L"-D");
+    args.push_back(d.c_str());
   }
   const std::vector<std::wstring> extra = first_line_args(src);
   for (const std::wstring& a : extra) args.push_back(a.c_str());

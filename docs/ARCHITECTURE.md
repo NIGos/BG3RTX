@@ -77,6 +77,9 @@ bg3.exe ──► Vulkan loader ──► VK_LAYER_BG3RTX_host (bin/VkLayer_bg3r
 - **Shaders.** The core asks `get_shader(file, entry, profile)` for a shader and
   rebuilds its pipeline whenever `generation` changes. A shader that fails to
   compile keeps its last good SPIR-V, and the error goes to the log.
+  Variants are defines, not files: `file` may be `"<file>?NAME=VALUE;..."` (ABI 23), each
+  pair a `-D`, the whole string the cache key. `common/shader_variant.h` builds the GI
+  requests; `shaders/variants.txt` lists them all (CTest `shader_variant_test`) for the compile check.
 
 ## Identifying passes
 

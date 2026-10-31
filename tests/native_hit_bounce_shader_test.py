@@ -23,24 +23,27 @@ def main():
     baseline=Path(tempfile.mkdtemp(prefix='bg3-bounce-'))
     with zipfile.ZipFile(archive) as data:data.extractall(baseline)
     validator=args.dxc.with_name('spirv-val'+args.dxc.suffix)
-    def compile_one(source,destination,includes):
+    def compile_one(request,destination,includes):
+        # request: "<file>?NAME=VALUE;..." (common/shader_variant.h), the defines as -D.
+        file,_,defs=request.partition('?');source=includes/file
         destination.parent.mkdir(parents=True,exist_ok=True)
         first=source.read_text(encoding='utf-8').splitlines()[0]
         options=shlex.split(first[len('// dxc:'):]) if first.startswith('// dxc:') else []
-        result=subprocess.run([str(args.dxc),str(source),'-spirv','-fspv-target-env=vulkan1.3','-HV','2021','-T','cs_6_6','-E','main','-I',str(includes),'-D','BG3RTX=1','-Fo',str(destination),*options],capture_output=True,text=True)
-        if result.returncode:raise RuntimeError(str(source)+'\n'+result.stdout+result.stderr)
+        result=subprocess.run([str(args.dxc),str(source),'-spirv','-fspv-target-env=vulkan1.3','-HV','2021','-T','cs_6_6','-E','main','-I',str(includes),'-D','BG3RTX=1',*[a for d in defs.split(';') if d for a in ('-D',d)],'-Fo',str(destination),*options],capture_output=True,text=True)
+        if result.returncode:raise RuntimeError(request+'\n'+result.stdout+result.stderr)
         return destination.read_bytes()
     def check(source):
-        relative=source.relative_to(ROOT/'shaders');ordinary=relative.with_name('rt_hit_direct.hlsl')
-        old=compile_one(baseline/'shaders'/ordinary,out/'old'/ordinary.with_suffix('.spv'),baseline/'shaders')
-        off=compile_one(ROOT/'shaders'/ordinary,out/'off'/ordinary.with_suffix('.spv'),ROOT/'shaders')
-        if old!=off:raise RuntimeError('Ordinary direct SPIR-V changed: '+str(ordinary))
-        destination=out/'on'/relative.with_suffix('.spv')
+        ordinary=source.replace('rt_hit_two_bounce.hlsl','rt_hit_direct.hlsl');name=lambda r:Path(r.partition('?')[0]+'.'+hashlib.sha1(r.encode()).hexdigest()[:12]+'.spv')
+        old=compile_one(ordinary,out/'old'/name(ordinary),baseline/'shaders')
+        off=compile_one(ordinary,out/'off'/name(ordinary),ROOT/'shaders')
+        if old!=off:raise RuntimeError('Ordinary direct SPIR-V changed: '+ordinary)
+        destination=out/'on'/name(source)
         feature=compile_one(source,destination,ROOT/'shaders')
         result=subprocess.run([str(validator),'--target-env','vulkan1.3',str(destination)],capture_output=True,text=True)
-        if result.returncode:raise RuntimeError(str(source)+'\n'+result.stdout+result.stderr)
-        return dict(file=relative.as_posix(),ordinary_sha256=hashlib.sha256(off).hexdigest(),feature_sha256=hashlib.sha256(feature).hexdigest())
-    sources=sorted((ROOT/'shaders').rglob('rt_hit_two_bounce.hlsl'))
+        if result.returncode:raise RuntimeError(source+'\n'+result.stdout+result.stderr)
+        return dict(file=source,ordinary_sha256=hashlib.sha256(off).hexdigest(),feature_sha256=hashlib.sha256(feature).hexdigest())
+    # The ordinary two-bounce entry and every variant request of it (shaders/variants.txt).
+    sources=['gi/rt_hit_two_bounce.hlsl']+[l for l in (ROOT/'shaders/variants.txt').read_text().splitlines() if l.startswith('gi/rt_hit_two_bounce.hlsl?')]
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:records=list(pool.map(check,sources))
     if any(hashlib.sha256(p.read_bytes()).hexdigest()!=digest for p,digest in frozen.items()):raise RuntimeError('Source changed during shader gate')
     result=dict(baseline=args.baseline,ordinary_identical=len(records),feature_validated=len(records),entries=records,game_launched=False,gpu_executed=False)
