@@ -1,5 +1,35 @@
 # BG3RTX progress
 
+## R7 acquisition passes; broader resource reuse and real terrain evaluation retained - 2026-10-31
+
+R7 3e9703d completed 229 s, queue VALID, zero NVIDIA 153/dumps/build drift.
+Existing GPU counters now report 110849-573352 qualified hits per 120-frame
+window, with 6248598 native opaque matches across 22 reported windows. One window:
+379103 qualified/379084 matched; mean albedo/normal/roughness/reflectance/metalness
+0.0100809/0.0632351/0.0050615/0.0039062/0.0052227. Clip/geometry/sampling/field/frame/
+parameter rejects are zero in that window. Cone-vs-raster sampling and 1/256 sums
+make this acquisition evidence, not native equality, whole-scene coverage or cost.
+Full immutable inputs/results: omm-bake/BG3RTX/captures/native-hit-material-20261031/r7/.
+No extra shader-counter patch was imported: the proven post Push flag fix sufficed.
+
+f121f70/import 80acccf separates 128 material records from existing 16 sampler/
+64 cache limits, reusing exact resource generations and owned clones. Host links,
+372 bounded-resource cases and three targeted tests pass. Per-material current
+checks, duplicate rejection and complete GPU proof remain. Coverage/cost still
+need the changed reference run; all defaults remain OFF.
+
+78b12e2/import ec1b0c8 feeds actual R5 packet masks/scalars/LUT into the EXISTING
+terrain evaluator. All 16464 mask bytes and 12 scalars/two RGB colors per layer
+match authored exports exactly. Ten focused tests pass; root full asset suite:
+80 tests, 79 pass/one existing skip. Native base 0/255 disables the second base
+LUT branch in this packet; gather is separately tested. BMA alpha is explicit,
+not invented. Texture mapping/derivatives/normal projection/final shading remain.
+
+Next: consolidate these verified increments via merge-green, then one same-run
+material coverage/direct/two-surface reference check, with real RT/FG and positive
+supported indirect required. Keep main a9ab6ba until consolidation passes. Separate
+user Hair trial unchanged; new material/reference work has NOT been user-tested.
+
 ## R5 terrain acquisition passes; next material join is a small CPU correction - 2026-10-31
 
 Main a9ab6ba, ABI 21, merged via merge-green and pushed: 55/55 CTests,
