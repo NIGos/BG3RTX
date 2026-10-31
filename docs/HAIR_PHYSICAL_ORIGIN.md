@@ -85,3 +85,41 @@ must be compared to this scene's actual off/off repeat baseline, not an assumed
 99.5%. Compare Hair-local visibility/final energy and unchanged non-Hair pixels;
 report existing `rt passes` GPU cost. Missing RT or absent affected Hair cannot
 pass. The user has not tested this feature; automated work can continue.
+
+
+## Competing Scalp receivers (source correction, not game-qualified)
+
+Native Hair FS 42a95e17ec3adc51/0ca5ee93d0f33b8c, Pubes 7362bcdec4c0415c and
+Scalp 600446334bc7d478/87aab1f9603cf4a9 all encode material class 5 and the same
+channel bits. Normal, albedo alpha and RT3 fields supply no categorical writer
+ID. Therefore class 5 plus a nearby Hair depth match alone cannot establish
+that the raster receiver was Hair rather than Scalp.
+
+Within the existing default-off `rt_hair_physical_origin` variant, physical
+publication now checks for a competing receiver. It scans triangles over the
+SAME existing `[t0, dist+w]` depth interval, without committing hits or changing
+its derived tolerance. Native camera Scalp records 9e77575a9f377ec5 and
+36eeb96ba83ea027, unreadable identity, candidate-cap exhaustion or a pruning
+automatic opaque commitment retain the virtual origin (physical auxiliary 0).
+The scan uses the reference AS when OMM is active. All four ordinary RT query
+entry points, actual alpha/occluders and bias are untouched. No new setting.
+
+Pixel-centre alpha rejection cannot prove that Scalp did not write the jittered
+raster sample with native derivatives. The guard consequently rejects that
+ambiguous substitution instead of inventing an absence test or removing Scalp
+from shadow rays. It can conservatively reject valid Hair receivers near other
+surfaces. Existing counters 188/189/190 still count candidates, publications and
+failed publications; no new attribution claim comes from those counts.
+
+This closes the identified competing-surface admission hole. It is NOT a full
+raster-writer identity certificate or proof of the user's hairline image cause.
+Dropped geometry/opaque fallbacks can destroy identity; A/B evidence must use
+capture-complete windows. Today's preserved trial has residual alpha-capacity
+fallbacks in 11 of 77 windows; the last zero windows do not erase that limitation.
+The installed trial/settings were not changed. No BG3/GPU execution was done.
+
+Checks: 21 CPU decision/finite-triangle cases plus 100 existing origin checks;
+16 HPO-off SPVs byte-identical to 39e5475 and 16 HPO-on variants compile/validate.
+The shared include refactor is byte-identical in base and deepest checked
+Tile/OMM/cascade/rebase cases. This adds one bounded traversal only when an HPO
+candidate could publish. Its GPU cost and game behavior remain unmeasured.
