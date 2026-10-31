@@ -2,7 +2,7 @@
 #include "../common/host_api.h"
 #include <type_traits>
 #include <cstdio>
-static_assert(BG3RTX_ABI_VERSION==22);
+static_assert(BG3RTX_ABI_VERSION==23);
 using MaterialUse=bool(*)(VkCommandBuffer,VkAccelerationStructureKHR,VkDescriptorSet,uint64_t,VkDescriptorSet*);
 static_assert(std::is_same_v<decltype(Bg3HostApi::rt_hit_material_use),MaterialUse>);
 static_assert(offsetof(Bg3HostApi,rt_hit_material_use)==offsetof(Bg3HostApi,rt_omm_scene_reference)+sizeof(Bg3HostApi::rt_omm_scene_reference));
