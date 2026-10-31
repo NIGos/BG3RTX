@@ -20,8 +20,10 @@ Dedicated 15-second static phases settle each live cascade allocation change;
 bursts start 18 seconds into the test window, three seconds after rotation starts.
 The diagnostic pass is prewarmed. Primary epoch counters are enabled while
 expensive per-effect atomic statistics remain off, matching R4. The private
-UserIni preserves the trial quality settings. The queue already supplies NoBuild. `pan_inputs=0` is required: setting it to 1
-changes the producer to 17 frames and adds FG/RR inputs this detector does not need.
+UserIni preserves the trial quality settings. The queue already supplies NoBuild.
+`pan_inputs=0` avoids extra FG/RR inputs this detector does not need. The corrected
+producer records 17 raw frames, explicitly omits the first warmup, and verifies
+16 complete retained frames in either mode.
 Primary difference, G-buffer, sun visibility, local visibility, GI and hudless
 native-tonemap final are captured by the existing path. Extra diffuse is retained.
 These are app-rendered frames, not generated FG frames or the final UI composite.

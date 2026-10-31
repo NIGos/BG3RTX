@@ -201,10 +201,11 @@ def positive_control_status(reports, minimum_fps=18):
     return 'NOT_REPRODUCED' if evaluated else 'INCOMPLETE: no calibrated pan at comparable cadence'
 
 
-def load_burst(directory):
-    meta = json.loads((directory/'burst.json').read_text())
+def index_burst_samples(meta):
     if not meta['valid_transport']:
         raise ValueError('transport invalid')
+    if meta.get('K', 16) != 16:
+        raise ValueError('burst does not declare K16')
     frames = {}
     for e in meta['samples']:
         if e['name'] not in REQUIRED:
@@ -212,16 +213,37 @@ def load_burst(directory):
         f = frames.setdefault(e['record_frame'], {})
         generation = e.get('command_recording')
         if generation is not None:
-            if not generation or f.setdefault('command_recording', generation) != generation:
+            if not generation:
+                raise ValueError('invalid command recording')
+            # G-buffer, RT debug masks and pose share one lighting recording.
+            # Native final tonemap is intentionally recorded in another CB.
+            if e['name'] != 'final' and f.setdefault('command_recording', generation) != generation:
                 raise ValueError('mixed command recordings in one captured frame')
-        # Native tonemap output, associated with the depth command recording.
-        f[e['name']] = decode(directory/e['file'], e)
-        f.setdefault('formats', {})[e['name']] = e['format']
-        f.setdefault('submits', {})[e['name']] = e['submit_frame']
-        if e['name'] == 'depth': f['time_ms'] = e.get('time_ms')
+        if e['name'] in f:
+            raise ValueError('duplicate captured view in one frame')
+        f[e['name']] = e
     indices = sorted(frames)
     if len(indices) != 16 or np.any(np.diff(indices) != 1):
         raise ValueError('burst is not 16 consecutive frames')
+    for i in indices:
+        missing = REQUIRED-frames[i].keys()
+        if missing:
+            raise ValueError(f'frame {i}: missing {sorted(missing)}')
+    return indices, frames
+
+
+def load_burst(directory):
+    meta = json.loads((directory/'burst.json').read_text())
+    indices, entries = index_burst_samples(meta)
+    frames = {}
+    for i in indices:
+        f = frames.setdefault(i, {})
+        for name in REQUIRED:
+            e = entries[i][name]
+            f[name] = decode(directory/e['file'], e)
+            f.setdefault('formats', {})[name] = e['format']
+            f.setdefault('submits', {})[name] = e['submit_frame']
+            if name == 'depth': f['time_ms'] = e.get('time_ms')
     for i in indices:
         f = frames[i]
         missing = REQUIRED-f.keys()

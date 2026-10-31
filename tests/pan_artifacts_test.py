@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 from scripts.qa.pan_artifacts import (transient, reproject, camera, decode, load_burst,
                                      scene_camera_origin, texture_compatible, static_camera,
-                                     calibration_noise, storage_quantum, positive_control_status)
+                                     calibration_noise, storage_quantum, positive_control_status,
+                                     index_burst_samples, REQUIRED)
 
 
 class PanTests(unittest.TestCase):
@@ -17,10 +18,33 @@ class PanTests(unittest.TestCase):
             samples = [dict(name=name, file='image.raw', record_frame=9,
                             command_recording=rec, submit_frame=10,
                             width=3, height=2, format=100)
-                       for name, rec in [('depth', 100), ('final', 101)]]
+                       for name, rec in [('depth', 100), ('normal', 101)]]
             (root/'burst.json').write_text(json.dumps(dict(valid_transport=True, samples=samples)))
             with self.assertRaisesRegex(ValueError, 'mixed command recordings'):
                 load_burst(root)
+
+    def complete_entries(self):
+        return dict(valid_transport=True,K=16,samples=[dict(name=name,record_frame=frame,
+                    command_recording=1000+frame+(500 if name=='final' else 0))
+                    for frame in range(10,26) for name in REQUIRED])
+
+    def test_distinct_tonemap_recording_is_valid_same_frame(self):
+        ids,frames=index_burst_samples(self.complete_entries())
+        self.assertEqual(ids,list(range(10,26)))
+        self.assertNotEqual(frames[10]['depth']['command_recording'],frames[10]['final']['command_recording'])
+
+    def test_first_final_missing_never_claims_k16(self):
+        meta=self.complete_entries()
+        meta['samples']=[e for e in meta['samples'] if not(e['record_frame']==10 and e['name']=='final')]
+        with self.assertRaisesRegex(ValueError,'frame 10: missing.*final'):
+            index_burst_samples(meta)
+
+    def test_mixed_rt_recording_and_duplicate_final_are_invalid(self):
+        meta=self.complete_entries()
+        next(e for e in meta['samples'] if e['name']=='sun')['command_recording']=999
+        with self.assertRaisesRegex(ValueError,'mixed command recordings'):index_burst_samples(meta)
+        meta=self.complete_entries();meta['samples'].append(next(e for e in meta['samples'] if e['name']=='final'))
+        with self.assertRaisesRegex(ValueError,'duplicate captured view'):index_burst_samples(meta)
 
     def test_positive_control_needs_both_symptoms_and_comparable_cadence(self):
         control = dict(role='static-evaluation', calibrated_pixel_frames=1000,
