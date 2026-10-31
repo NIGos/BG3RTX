@@ -3,7 +3,13 @@
 // environment/probe, emission, AO multiplier or multiple-bounce energy implied.
 #include "bg3_lights.hlsli"
 #include "../../common/native_hit_direct.h"
+#ifdef NATIVE_HIT_DLS_POLICY
+// native: the part of radiance from lights the screen leaves at the game's own visibility (the
+// D-LS policy below); the caller applies the game's AO-on-direct factor to it (native_hit_ao_direct).
+struct NativeHitDirect {float3 radiance;uint status;uint lights;float3 native;};
+#else
 struct NativeHitDirect {float3 radiance;uint status;uint lights;};
+#endif
 static const uint kHitDirectSource=5u,kHitDirectProjector=6u,kHitDirectDomain=7u;
 // Diagnostics, off unless the caller sets g_hd_stats (its stats key): 12 counters from g_hd_base
 // (core/gi.cpp hd_log): +0 light rays traced, +1 lit, +2 occluded with the first hit within 1 cm
@@ -37,6 +43,59 @@ void hd_xstat(uint k,bool c){if(g_hd_stats && g_hd_xbase!=0u)stat_add(g_hd_xbase
 //   neither: the hit is unsupported (kHitDirectProjector), as before.
 #ifdef NATIVE_HIT_BOXES
 #include "bg3_boxes.hlsli"
+#endif
+#ifdef NATIVE_HIT_DLS_POLICY
+// The screen's light policy at hits (gi_hit_direct, rf_hit_shade; hit_ls_policy=1, Push::ls_flags
+// bit 24; docs/TRACK_D_REFLECTIONS.md 14). D-LS (rt_local_shadows.hlsl ls_light_traced) decides
+// per light what the screen shows; the hit follows it, so a point lit on screen and the same
+// point seen in a reflection or a bounce get the same light:
+//   - a light without a game shadow map that D-LS leaves to the game (range below ls_min_radius,
+//     or a matched light ls_skip_light skips: ls_owners, the art-intent rule ls_noshadow, by
+//     default the darkvision pair) keeps the game's visibility: UNSHADOWED, no ray. Its term is
+//     also returned in .native for the game's AO-on-direct factor mix(1, AO, m0.y);
+//   - a traced light stops max(R, ls_clear) short of its centre, R its source radius from the
+//     per-light data (lsSlots row 0 .x: asset DB / SE bridge), else ls_source_radius (D-LS's
+//     hard-shadow rule);
+//   - a light with a game shadow map is traced (the hit has no atlas sample; D-LS replaces the
+//     atlas by the traced visibility by default, ls_shadowed=3).
+// Per-light data: the includer binds lsSlots as hdSlots (GI: set 0 b46, its push set; D-RF: the
+// sun set b7, D-RF's push set is full) and sets ls_flags bit 0 when it holds a join. A slot is
+// used only while its key (row 1: absolute position, radius) is this light's: the GI runs before
+// this frame's join, so a slot may hold last frame's light (a character light moves <= 0.25 m
+// per frame at 15 m/s and 60 fps; another light of the same radius that close is harmless).
+[[vk::binding(NATIVE_HIT_SLOTS_BINDING, NATIVE_HIT_SLOTS_SET)]] [[vk::image_format("rgba32ui")]] RWTexture2D<uint4> hdSlots;
+static const uint kHdRtlShadow=32u,kHdRtlCastShadow=64u,kHdRtlPlayer=256u;
+// Policy counters (core/gi.cpp kHitPolicyFirst): g_hd_pbase +0 lights left at the game's
+// visibility, +1 traced with a per-light R; +2 hits with an AO estimate, +3 its sum x 8192.
+static uint g_hd_pbase=0u;
+void hd_pstat(uint k,bool c){if(g_hd_stats && g_hd_pbase!=0u)stat_add(g_hd_pbase+k,c,g_hd_bin);}
+bool hd_policy_on(){return (pc.ls_flags&(1u<<24))!=0u;}
+// ls_skip_light (rt_local_shadows.hlsl), on the same Push bits.
+bool hd_skip_light(uint4 si){
+ if(((pc.ls_flags>>(8u+min(si.z&255u,4u)))&1u)==0u)return true;
+ const uint rule=(pc.ls_flags>>16)&3u;
+ const bool noshadow=(si.y&(kHdRtlShadow|kHdRtlCastShadow))==0u;
+ return noshadow && (rule==2u || (rule==1u && (si.y&kHdRtlPlayer)!=0u));
+}
+// True: the screen keeps this light's own (unshadowed) visibility. R: the stop-short radius.
+bool hd_light_policy(uint index,Bg3Light light,out float R,out bool slot_r){
+ R=pc.ls_source_radius;slot_r=false;
+ const bool mapped=(light.flags&1u)!=0u;
+ bool game=!mapped && !(1.0/max(light.inv_r,1e-12)>=pc.ls_min_radius);
+ if((pc.ls_flags&1u)!=0u && index<4096u){
+  const uint4 si=hdSlots[uint2(index,0u)];
+  const uint4 key=hdSlots[uint2(index,1u)];
+  const float r=1.0/max(light.inv_r,1e-12);
+  const float3 w=light.pos+cam2.c[13].xyz,d=asfloat(key.xyz)-w;
+  const bool same=all(isfinite(d)) && dot(d,d)<=0.0625 && abs(asfloat(key.w)-r)<=1e-3+1e-4*r;
+  if((si.z&0x10000u)!=0u && same){
+   const float sr=asfloat(si.x);
+   if(isfinite(sr) && sr>=0){R=sr;slot_r=true;}
+   if(!mapped && hd_skip_light(si))game=true;
+  }
+ }
+ return game;
+}
 #endif
 #ifdef RT_HIT_MATERIAL
 // The hit point on its triangle (vertices x barycentrics, as rtOrigin gives D-LS its exact TLAS
@@ -82,6 +141,9 @@ bool native_hit_cluster(float3 surface_position,out uint4 cluster){
 }
 NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface_position,float3 outgoing,float3 geometric_normal,float footprint){
  NativeHitDirect result;result.radiance=0;result.status=kHitDirectSource;result.lights=0;
+#ifdef NATIVE_HIT_DLS_POLICY
+ result.native=0;
+#endif
  if(!isfinite(footprint) || footprint<0){result.status=kHitDirectDomain;return result;}
  if(material.status!=0){result.status=HdUnknownMaterial;return result;}
  uint4 cluster;if(!native_hit_cluster(surface_position,cluster))return result;
@@ -119,11 +181,25 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   if(!(dot(normal,incident.direction)>0)){result.status=HdNormalDomain;return result;}
   float3 origin=rt_offset_ray(surface_position,normal),delta=light.pos-origin;
   float distance=length(delta);if(!(distance>0) || !isfinite(distance)){result.status=kHitDirectDomain;return result;}
+#ifdef NATIVE_HIT_DLS_POLICY
+  float clear=max(pc.ls_clear,0.0);
+  if(hd_policy_on()){
+   float R;bool slot_r;
+   const bool game=hd_light_policy(index,light,R,slot_r);
+   hd_pstat(0u,game);hd_pstat(1u,!game && slot_r);
+   if(game){   // the screen's visibility for this light: unshadowed (no ray)
+    result.radiance+=term.radiance;result.native+=term.radiance;++result.lights;continue;
+   }
+   clear=max(R,clear);
+  }
+  float reach=distance-clear;
+#else
   // Stop ls_clear short of the light, as D-LS trace_light (rt_local_shadows.hlsl): BG3 lights
   // sit inside their own lamp/sconce/candle geometry, which is in the BVH. A ray to the light
   // centre hits that fixture and every such light reads occluded (live S8: 22871 supported
   // GI hits, 0 nonzero; rf tier (a) check direct term 0). Within ls_clear: lit, as D-LS.
   float reach=distance-max(pc.ls_clear,0.0);
+#endif
   RtCone cone={footprint,0};uint visibility=reach>0?rt_visibility(origin,delta/distance,reach,cone):kRtLit;
   hd_stat(0u,reach>0);hd_stat(1u,reach>0 && visibility==kRtLit);hd_stat(4u,visibility==kRtUnknown);
   HD_XSTAT(1u,reach>0 && light.inv_r*10.0<=1.0);
@@ -188,3 +264,49 @@ NativeHitDirect native_hit_direct(NativeHitMaterial material,float3 surface_posi
  hd_stat(11u,r.status!=HdOk && r.status!=kHitDirectSource && r.status!=kHitDirectProjector);
  return r;
 }
+
+#ifdef NATIVE_HIT_DLS_POLICY
+// AO at the hit (hit_ao_rays > 0, Push::rt_ao_rays): the screen's lighting multiplies the
+// game's ambient by the AO target b6 (diffuse x AO, specular x Lagarde's SO) and direct light by
+// mix(1, AO, m0.y), and with GI on that AO is the hybrid GI's ray-traced visibility
+// (gi_ao_apply.hlsl, gi_ao 1). A hit has no AO target: this is the same estimator at the hit,
+// rays cosine-distributed about the geometric normal, gi_rt_radius long, a hit at t weighing
+// 1 - (t / R)^2 and an aborted query the GI's mean fade 1 - u^2 / 3 (gi_trace_rt.hlsl):
+// A = 1 - mean weight, the expected value of the screen's AO at the same point. 1 when the game
+// does not use its AO texture (m0.x <= 0) or with 0 rays (AO 1, as before).
+float native_hit_ao(float3 position,float3 geometric_normal,float footprint,uint3 key){
+ const uint rays=min(pc.rt_ao_rays,8u);
+ if(rays==0u || !(lFlags.m0.x>0.0))return 1.0;
+ const float3 n=normalize(geometric_normal);
+ const float R=max(pc.gi_rt_radius,0.01);
+ const float3 o=rt_offset_ray(position,n);
+ RtCone cone={footprint,0};
+ uint seed=pcg3d(key^uint3(0x510e527fu,0x9b05688cu,0x1f83d9abu)).x;
+ float occ=0;
+ [loop]for(uint i=0;i<rays;++i){
+  float3 dir=cosine_hemisphere(n,rand01(seed),rand01(seed));
+  bool aborted;
+  float t=rt_closest(o,dir,R,cone,aborted);
+  const float u=aborted?(t>=0.0?saturate(t/R):1.0):0.0;
+  const float k=saturate(t/R);
+  occ+=aborted?1.0-u*u/3.0:(t>=0.0?1.0-k*k:0.0);
+ }
+ const float A=saturate(1.0-occ/float(rays));
+ hd_pstat(2u,true);
+ if(g_hd_stats && g_hd_pbase!=0u){
+  uint v=WaveActiveSum(uint(A*8192.0+0.5));
+  if(WaveIsFirstLane() && v)rtStats.InterlockedAdd(((g_hd_pbase+3u)*64u+(WaveReadLaneFirst(g_hd_bin)&63u))*4u,v);
+ }
+ return A;
+}
+// The game's AO-on-direct factor mix(1, AO, m0.y) at AO A (f469db78; D-LS ls_ao_factors).
+float native_hit_ao_factor(float A){return lerp(1.0,lFlags.m0.x>0.0?A:1.0,lFlags.m0.y);}
+// The direct term as the screen gives it: the lights at the game's visibility x the factor; the
+// traced ones x it unless ao_direct=1 (the default: traced lights get their full value back;
+// 2 uses the game's SSAO, here A).
+float3 native_hit_ao_direct(NativeHitDirect d,float A){
+ const float f=native_hit_ao_factor(A);
+ const float ft=(pc.ao_direct&3u)==1u?1.0:f;
+ return (d.radiance-d.native)*ft+d.native*f;
+}
+#endif

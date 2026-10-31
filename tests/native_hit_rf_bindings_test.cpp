@@ -81,6 +81,7 @@ int main(int argc,char** argv){
  check(find_in(game,34)->type==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE && find_in(game,36)->type==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,"sky irradiance cubes");
  check(find_in(game,45)->count==0,"bindless probe cubes");
  check(find_in(sun,0)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && find_in(sun,6)->type==VK_DESCRIPTOR_TYPE_SAMPLER,"sun set");
+ check(find_in(sun,7)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && sun.size()==8,"sun set b7: the per-light data for the hit light policy");
  bool sharc=false,tileset=false,hair=false;
  for(int i=1;i<argc;++i){
   if(std::strcmp(argv[i],"--sharc")==0){sharc=true;continue;}

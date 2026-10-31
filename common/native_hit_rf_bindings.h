@@ -48,11 +48,13 @@ inline constexpr std::array<Binding,11> game={{
  {36,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{37,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{38,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
  {45,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,0}
 }};
-// The D-LS sun set (core/gi.cpp ensure_ls_layout g_sun_dsl): 0 atmosphere UBO, 1-5 images, 6 sampler.
-inline constexpr std::array<Binding,7> sun={{
+// The D-LS sun set (core/gi.cpp ensure_ls_layout g_sun_dsl): 0 atmosphere UBO, 1-5 images, 6 sampler,
+// 7 the D-LS per-light data lsSlots (RGBA32UI storage; the hit light policy, native_hit_direct.hlsli
+// NATIVE_HIT_DLS_POLICY: D-RF's push set has no room; D-LS reads it at push b46 and ignores b7).
+inline constexpr std::array<Binding,8> sun={{
  {0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{1,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{2,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
  {3,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{4,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{5,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
- {6,VK_DESCRIPTOR_TYPE_SAMPLER,1}
+ {6,VK_DESCRIPTOR_TYPE_SAMPLER,1},{7,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1}
 }};
 template<size_t N> inline constexpr const Binding* find_in(const std::array<Binding,N>& t,uint32_t slot){
  for(const auto& b:t)if(b.binding==slot)return &b;return nullptr;

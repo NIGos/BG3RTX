@@ -36,6 +36,11 @@
 #include "../rt/native_hit_material.hlsli"
 // No box-light binding in this pipeline: the projector term is left out (counted), not the hit.
 #define NATIVE_HIT_PROJECTOR_SKIP 1
+// The screen's light policy and AO at hits (native_hit_direct.hlsli NATIVE_HIT_DLS_POLICY): lsSlots
+// at b46 of this pipeline's push set (common/native_hit_gi_bindings.h).
+#define NATIVE_HIT_DLS_POLICY 1
+#define NATIVE_HIT_SLOTS_SET 0
+#define NATIVE_HIT_SLOTS_BINDING 46
 #include "../rt/native_hit_direct.hlsli"
 #endif
 #if SHARC_QUERY_PASS
@@ -187,10 +192,15 @@ void main(uint3 tid : SV_DispatchThreadID) {
       if(pc.rt_stats!=0u){stat_add(283u,material.status==0u,hit_bin);hit_material_count(hh,material.status,hit_bin);}
       if(material.status==0u){
         // Counters 160-175 (native_hit_direct.hlsli g_hd_*; core/gi.cpp "GI hit direct lights").
-        g_hd_stats=pc.rt_stats!=0u;g_hd_base=160u;g_hd_xbase=172u;g_hd_bin=hit_bin;g_hd_inst=hh.inst;g_hd_prim=hh.prim;
-        NativeHitDirect direct=native_hit_direct(material,native_hit_position(hh,o+dir*t),-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
+        g_hd_stats=pc.rt_stats!=0u;g_hd_base=160u;g_hd_xbase=172u;g_hd_pbase=312u;g_hd_bin=hit_bin;g_hd_inst=hh.inst;g_hd_prim=hh.prim;
+        const float3 hit_p=native_hit_position(hh,o+dir*t);
+        NativeHitDirect direct=native_hit_direct(material,hit_p,-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
         if(pc.rt_stats!=0u)stat_add(284u,direct.status==HdOk,hit_bin);
         if(direct.status==HdOk){
+          // The screen's AO-on-direct factor (native_hit_ao_direct): its AO rays only where a
+          // factor applies (lights at the game's visibility, or ao_direct != 1).
+          if(any(direct.native>0) || ((pc.ao_direct&3u)!=1u && any(direct.radiance>0)))
+            direct.radiance=native_hit_ao_direct(direct,native_hit_ao(hit_p,rt_hit_normal(hh),cone.f0+cone.spread*t,uint3(fp,pc.frame*8u+r)));
           if(pc.rt_stats!=0u){
             stat_add(285u,any(direct.radiance>0),hit_bin);
             // Zero direct split: 134 no positive unshadowed point/spot term (empty froxel, or
