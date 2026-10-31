@@ -74,6 +74,24 @@ def finite_triangle_slice(triangles,xz_bounds,clip=None):
     return np.flatnonzero(finite & np.all(hi>=xz_bounds[0],axis=1) & np.all(lo<=xz_bounds[1],axis=1))
 
 
+def select_archive_terrain(mesh,evidence,xz_bounds):
+    """Keep complete source triangles, indices and native primitive provenance."""
+    positions=np.asarray(mesh['attributes']['POSITION'],dtype=float)
+    indices=np.asarray(mesh['indices'],dtype=int).reshape(-1,3)
+    kept=finite_triangle_slice(positions[indices],xz_bounds)
+    if not len(kept):raise ValueError('Persistent terrain misses selected cell')
+    used=np.unique(indices[kept]);remap={int(old):i for i,old in enumerate(used)}
+    mapping={(r['source_cell'],r['source_fan']):r['native_primitive'] for r in evidence['native_primitive_mapping']}
+    cells=[mesh['source_cell_indices'][i] for i in kept];fans=[mesh['source_fan_indices'][i] for i in kept]
+    result=dict(mesh,component_id='archive_mainfloor',source_vertex_ids=used.tolist(),source_triangle_ids=kept.tolist(),
+                attributes={k:[v[i] for i in used] for k,v in mesh['attributes'].items()},
+                indices=[remap[int(i)] for i in indices[kept].ravel()],vertices=len(used),triangles=len(kept),
+                source_cell_indices=cells,source_fan_indices=fans,
+                native_triangle_ids=[mapping[(c,f)] for c,f in zip(cells,fans)])
+    result['bounds']=[[float(f(positions[used,j])) for j in range(3)] for f in (np.min,np.max)]
+    return result
+
+
 
 def native_window_matches(wanted,base_error,native):
     """Exact ordered geometry inside a merged draw; no transform is fitted."""
@@ -111,7 +129,8 @@ def native_window_matches(wanted,base_error,native):
 def main():
     ap=argparse.ArgumentParser(__doc__);ap.add_argument('--capture',type=Path,required=True)
     ap.add_argument('--lslib',type=Path,required=True);ap.add_argument('--assets',type=Path,default=Path('captures/m2-foundry'))
-    args=ap.parse_args();base=args.assets.resolve();out=base/'reference-cell';out.mkdir(exist_ok=True)
+    ap.add_argument('--persistent-foundry-terrain',action='store_true',help='Use separately qualified authored render patches for draw803 only')
+    args=ap.parse_args();base=args.assets.resolve();out=base/('reference-cell-archive-terrain' if args.persistent_foundry_terrain else 'reference-cell');out.mkdir(exist_ok=True)
     binary=args.capture/'geo/scene.bin'
     # Check declared counts/bytes before the existing bulk loader allocates arrays.
     oracle=json.loads((base/'floor-b-native-oracle/native-position-oracle.json').read_text())
@@ -188,8 +207,20 @@ def main():
     # Selection window is derived from real component bounds, not emitted as a box.
     all_components=qualified+authoring;bounds=[[f(m['bounds'][side][j] for m in all_components) for j in range(3)] for side,f in enumerate((min,max))]
     terrain_draws=[(i,d) for i,d in enumerate(native['draws']) if f'{d["vs"]:016x}'=='64e2568916ede3d6']
+    archive=[];terrain_evidence=None
+    if args.persistent_foundry_terrain:
+        folder=base/'construction-archive-terrain';terrain_evidence=json.loads((folder/'evidence.json').read_text())
+        if terrain_evidence['native_snapshot_sha256']!=oracle['binary']['sha256']:raise ValueError('Persistent terrain has another native oracle')
+        geometry=folder/'world-render-terrain.json';raw=geometry.read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=terrain_evidence['geometry_output']['sha256']:raise ValueError('Persistent terrain geometry changed')
+        for name,expected in terrain_evidence['implementation_sha256'].items():
+            if hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()!=expected:raise ValueError('Persistent terrain implementation changed')
+        for name,expected in terrain_evidence['source_fingerprints'].items():
+            if hashlib.sha256(read(name)).hexdigest()!=expected['sha256']:raise ValueError('Persistent terrain archive changed')
+        archive=[select_archive_terrain(json.loads(raw),terrain_evidence,np.asarray(bounds)[:,[0,2]])]
     frozen=[]
     for di,d in terrain_draws:
+        if archive and di==803:continue
         points=native['world'][int(d['first']):int(d['first']+d['count'])].astype(float)+cam;tri=points.reshape(-1,3,3)
         source_clip=native['clip'][int(d['first']):int(d['first']+d['count'])].reshape(-1,3,4)
         world_finite=finite_triangle_slice(tri,np.asarray(bounds)[:,[0,2]])
@@ -205,22 +236,22 @@ def main():
         if np.any(np.abs(z-z_source)>z_bound):raise ValueError('Unsupported terrain clip-depth modification/camera frame')
         if not len(selected):continue
         frozen.append(dict(name=f'native_terrain_draw{di}',component_id=f'frozen_native_terrain_draw{di}',position_source='FROZEN_CURRENT_CAPTURE_ONLY',material_id=None,material_status='UNKNOWN_NOT_DEFAULT_OPAQUE',native_vs=f'{d["vs"]:016x}',native_fs=f'{d["fs"]:016x}',native_draw=di,excluded_nonfinite_clip_triangles=len(world_finite)-len(kept),z_residual_max=float(np.max(np.abs(z-z_source))) if len(z) else 0.,native_triangle_ids=kept.tolist(),native_first_vertex=int(d['first']),native_vertices_per_instance=int(d['n']),attributes=dict(POSITION=selected.tolist()),indices=list(range(len(selected))),vertices=len(selected),triangles=len(selected)//3,bounds=[[float(f(selected[:,j])) for j in range(3)] for f in (np.min,np.max)]))
-    for name,meshes in [('world-native-qualified.json',qualified),('world-authoring-visibility-unknown.json',authoring),('world-frozen-terrain.json',frozen)]:
+    for name,meshes in [('world-native-qualified.json',qualified),('world-authoring-visibility-unknown.json',authoring),('world-frozen-terrain.json',frozen),('world-archive-terrain.json',archive)]:
         (out/name).write_text(json.dumps(meshes,separators=(',',':'))+'\n')
     # Surface intersections, not collision/contact or an opacity certificate.
-    ground=support_evidence(base,[m for m in qualified if m['role']!='reference-board']+frozen)
+    ground=support_evidence(base,[m for m in qualified if m['role']!='reference-board']+frozen+archive)
     terrain_path='Mods/GustavDev/Levels/BGH_SteelWatchFoundry_B/Terrains/_merged.lsf'
     terrain_node=unique(lsf.parse(read(terrain_path)).find_all('GameObjects'),'MapKey','6675c295-3445-49ef-92ec-1b27be2c48c5')
     terrain_files=[n for n in ps.index if 'BGH_SteelWatchFoundry_B/Terrains/6675c295-3445-49ef-92ec-1b27be2c48c5_' in n]
     for path in terrain_files:read(path)
     result=dict(implementation_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),scope='ONE real open foundry bay; no invented enclosure',native_snapshot=oracle['binary'],camera_origin=cam.tolist(),selection_bounds=bounds,placements=records,unresolved=unresolved,
         assets={k:{n:v for n,v in a.items() if n!='meshes'} for k,a in assets.items()},source_fingerprints=sources,
-        terrain_package_inputs=dict(record=terrain_node.to_dict(),files=terrain_files,status='ARCHIVES_PRESENT_RENDER_HEIGHT_UV_MATERIAL_DECODE_NOT_IMPLEMENTED'),
-        qualified_components=len(qualified),qualified_triangles=sum(m['triangles'] for m in qualified),authoring_unknown_components=len(authoring),frozen_terrain_triangles=sum(m['triangles'] for m in frozen),ground=ground,
-        limits=['POSITION only; native shading normals/material/UV equivalence not certified','Terrain is frozen/current-capture only, not persistent package heightfield reconstruction','No overhead roof was invented; support arch is not a ceiling','Parent-level roof/current cutaway state remains unresolved',
+        terrain_package_inputs=dict(record=terrain_node.to_dict(),files=terrain_files,status='PERSISTENT_MAINFLOOR_POSITION_QUALIFIED_MATERIAL_UNKNOWN' if archive else 'ARCHIVES_PRESENT_RENDER_HEIGHT_UV_MATERIAL_DECODE_NOT_IMPLEMENTED'),
+        archive_terrain_triangles=sum(m['triangles'] for m in archive),archive_terrain_evidence=terrain_evidence,qualified_components=len(qualified),qualified_triangles=sum(m['triangles'] for m in qualified),authoring_unknown_components=len(authoring),frozen_terrain_triangles=sum(m['triangles'] for m in frozen),ground=ground,
+        limits=['POSITION only; native shading normals/material/UV equivalence not certified','Mainfloor uses authored float32 render heights when explicitly selected; GPU R16 quantizer not certified; remaining parent terrain stays frozen' if archive else 'Terrain is frozen/current-capture only, not persistent package heightfield reconstruction','No overhead roof was invented; support arch is not a ceiling','Parent-level roof/current cutaway state remains unresolved',
                'Absent native correspondence is unknown visibility/pose/submission, not proof of culling','Unknown material is not silently treated as opaque','No closed-room or contact/opacity claim'])
     (out/'evidence.json').write_text(json.dumps(result,indent=2)+'\n')
-    print(json.dumps({k:result[k] for k in ('scope','selection_bounds','qualified_components','qualified_triangles','authoring_unknown_components','frozen_terrain_triangles','unresolved')},indent=2))
+    print(json.dumps({k:result[k] for k in ('scope','selection_bounds','qualified_components','qualified_triangles','authoring_unknown_components','frozen_terrain_triangles','archive_terrain_triangles','unresolved')},indent=2))
     print('Strict low-vertex intersections:',ground['strict_interior_hit_samples'],'/',ground['sample_count'])
 
 

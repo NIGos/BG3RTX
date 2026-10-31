@@ -1,5 +1,64 @@
 # BG3RTX progress
 
+## Pragmatic checkpoint: second material smoke isolated the next defect - 2026-10-31
+
+Use scoped evidence; unrelated global thresholds do not block a demonstrated fix.
+R2 eb1ec4d/ABI 21 completed all five phases in 460 s, no NVIDIA 153, dumps or build
+changes. FAILED material acquisition: all 100 supported deferred draws are rejected
+by pipeline-state qualification, before any binding/snapshot. Camera and recording
+order now reach the query correctly. The owner is fixing the concrete state parser;
+no unchanged rerun and no material quality/cost claim. Evidence: omm-bake/BG3RTX/
+captures/native-hit-material-20261031/r2/analysis.json and immutable inputs beside it.
+
+Same-run primary OFF/ON/OFF: 99.524/99.524/99.525%. FG displayed/rendered 2.0,
+zero bad phase samples. Diagnostic cadence 36.26/35.62/36.23 rendered fps; stats-off
+89.30/84.32 fps, estimated from SDK logs. Existing RT median 0.833/0.878 ms in cost
+windows; material kernel never ran. Diagnostic ~18.4 ms is not production pass cost.
+
+Retained offline: native terrain arithmetic shared by CPU/HLSL, 1366 CPU checks,
+fresh registered CTest passes; 74 asset tests, 73 passed/one existing skip. Seven
+bounded authored light candidates now preserve real parameters and full placement
+chains; historical native positions agree, current activation/photometry unknown.
+Sources 9b78f6c and 0d44032, imports b419281 and 7fe18de. Runtime terrain packets,
+material participation and direct reference quality remain pending. User Hair trial
+047e105 stays unchanged; its latest capacity/physical-origin updates are NOT yet
+user-reviewed. No new release is ready for a user check from this material smoke.
+
+## First material smoke failed clearly; recording-order fix in progress - 2026-10-31
+
+Main 9cb5a30 is pushed, ABI 20/default OFF, 48/48 CTests, 544 shader files/all
+entries and QA pass. Frozen177ef6e S1 FG2 job completed all five phases in 462 s:
+zero NVIDIA153/dumps/build drift, but INVALID for missing GPU material/native-
+comparison records. No material quality/coverage success is claimed.
+
+Cause: 88 same-frame pairs show deferred CPU recording before source preparation
+(median 4 ms). Both use real primary ONE_TIME recordings. The source repeatedly
+filled 16 MiB with 20 generic VT records; no source was available when deferred
+capture tried to attach. This is a concrete assumption failure, not a threshold.
+Evidence: omm-bake/BG3RTX/captures/native-hit-material-20261031/r1/analysis.json
+and immutable log/runner/status/job/candidate copies beside it.
+
+Existing RT remained active (Sun/GI/local/reflections120/120), static primary
+99.525% throughout. SDK displayed/rendered2.0, no bad phase FG samples or interior
+SetOptions calls. Rendered log cadence: 36.65/36.09/36.76 fps in diagnostic phases,
+89.34/89.37 fps in stats-off cost windows. Diagnostic RT medians ~18 ms versus
+existing stats-off 0.831/0.842 ms; new material code never ran, so this is NOT its
+cost or speedup. Static S1 only, not a motion or cross-scene performance claim.
+
+Owner now implements independent deferred packets and per-query guarded assembly,
+with an explicit ABI 21 query-owned AlphaDSL output. Actual-submit source/deferred
+ordering and failure/retry publication are checked per query (131 CPU cases).
+The user's Hair trial stays frozen ABI 19 and is still not user-reviewed.
+
+Offline reference/asset increments retained: d0c38bc direct-only point/spot view,
+dd11a5b physical visibility for EVERY positive light (native atlas flag is not a
+shadow exemption), 16 changed variants compile/validate. Normal RF is unchanged.
+Persistent mainfloor terrain ec8a654/c07f4ab: exact 13512 active triangle identities,
+738 holes; local cell replaces 289 frozen triangles with archive geometry.
+921fd9e/60950b6 recovers four layers/14 textures and exact BC7 alpha holes.
+67 asset tests pass, one existing skip. UV/upload/complete shading and roof state
+stay open. No grey/opaque material defaults or invented enclosure.
+
 ## Native VT material provider frozen for acquisition smoke - 2026-10-31
 
 Source 177ef6e, private candidate native-hit-provider-live/BG3RTX at that revision.

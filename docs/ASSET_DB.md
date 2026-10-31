@@ -482,5 +482,98 @@ retain inactive Z-NaN vertices. Runtime XFB already rejects finite4 failures;
 this is an offline export guard. Unknown terrain material never means opaque.
 The expanded geometry intersects all 16 low board-vertex lines; signed heights
 remain unmodified and do not certify contact/opacity/continuous support.
-Persistent foundry terrain is a local remaining reader task: two existing v8
-render `.patch` files, distinct from physics `.bin`; no missing-resource claim.
+The optional `--persistent-foundry-terrain` writes a separate
+`reference-cell-archive-terrain/` bundle after
+`python -m tools.assets.probe_foundry_terrain --capture <S1 capture>` qualifies
+both v8 render `.patch` files for terrain 6675c295-3445-49ef-92ec-1b27be2c48c5.
+The bounded reader preserves authored float32 heights and opaque material tails;
+physics SEBD `.bin` is rejected. Its full 7628 vertices / 13512 triangles and
+738 holes correspond exactly to all active native draw 803 grid/cell/fan identities.
+Native R16 height-image differences reach 0.000097275 world units, within the
+declared registered-height-domain code plus FP32 transform/projection enclosure
+(maximum 0.000210342); the actual GPU quantizer/filter is not certified.
+
+The local bundle replaces only the 289 mainfloor triangles with persistent
+render geometry; 535 parent-terrain triangles remain frozen. Original source
+vertex/triangle, cell/fan and native primitive IDs survive selection/remapping.
+Source/archive/implementation hashes must match the qualification evidence.
+All 16 low-vertex lines still intersect geometry. Terrain material/layer/UV tails,
+current destruction/deformation and parent roof state remain open; geometry is
+not silently classified opaque. The reader intentionally rejects other patch
+versions/dimensions rather than claiming a general terrain importer.
+
+
+### Mainfloor terrain material inputs
+
+`python -m tools.assets.probe_foundry_terrain_materials --native-cache <alpha_cache>`
+recovers the same terrain's four ordered brush resources: SharTemple_C,
+SharTemple_C_Broken_A, Gravel_B_Grey and Coastal_Sand_Grey_B. Their actual
+albedo/normal/physical/detail texture UUIDs resolve to 14 distinct DDS resources
+in the TerrainTextures and Engine banks; all decode with installed Pillow 12.3.0.
+DDS bytes/dimensions remain authoritative export evidence; Coastal Sand albedo
+LSF metadata says 128x128 while the actual DDS is 1024x1024, recorded rather than
+rescaled or silently declared equivalent to current native image dimensions.
+
+The bounded v8 tail decoder requires the exact LSF brush order and four
+49x64 / 49x20 authored byte planes. These are not normalized blend weights.
+The following length-prefixed BC7 UNORM images decode to 52x68 / 52x24 RGBA.
+Alpha < 0.5 at integer cell coordinates reproduces 575 / 163 holes exactly,
+independently tying the payload to native VS64e2568916ede3d6 texelFetch semantics
+and the already checked active native topology. RGB is retained without asserting
+that a compressed normal is a geometric face normal.
+
+Native FS6650c75f3d3e4968 consumes this normal/hole image at s4b3, a painted-layer mask
+at s1b2 and base slope/height curve LUT at s1b3, brush records at s1b4 and bindless textures at s2b32. Its UVs
+use local grid X/Z, normalized height converted with native terrain scale/bias,
+and signed triplanar weights derived from normalized (2*RGB-1), with the native
+0.576 weight threshold/rebalancing. Layer alpha-height tests and subsequent
+height contrast/offset decide contributions; summing/normalizing raw bytes would
+be wrong. Shader source fingerprints and actual resource identities are retained
+in `captures/m2-foundry/terrain-material-inputs/evidence.json`.
+
+This increment decodes native inputs, not complete material sampling. Native
+brush SSBO packing/upload, byte-plane-to-mask filtering/channel mapping,
+derivative/LOD-dependent triplanar sampling and current image content remain
+unimplemented. No opacity/material defaults or parent-terrain/roof claims follow.
+
+
+`tools.assets.terrain_material` implements the native post-sample UV projection,
+painted-layer alpha/height scores, competitive blend and base curve weighting.
+Its inputs explicitly name sampled values/native members; it never automatically
+binds authored field names to an unobserved upload layout. Native 0.001/0.01
+branches, epsilon contributions, base remainder and factor-two curve branch stay
+intact. CPU binary64 formula tests are not GPU FP32/fma or sampling equivalence.
+Undefined normal/weight/power domains are unsupported, not replaced by black.
+
+The S1 capture contains image metadata and geometry, not s1b4 brush bytes or
+s1b2/b3 pixels. Minimum future same-draw input capture: s4b0 80-byte UBO (blend
+width at byte72; two base indices at64/68), s1b4 descriptor offset/range and
+112-byte-stride records0..3 plus actual base indices<64; s1b2 RGBA8_UNORM49x84
+(16464 tightly packed bytes), s1b3 R16_UNORM256x4 (2048 bytes), and sampler/address
+states s4b4/s1b1/s0b7. Preserve format/view/swizzle/row pitch and same draw identity.
+The 256x4 s1b3 is a curve LUT, not a second painted mask: native textureGather
+uses (normalY,0.25) and (normalizedHeight,0.75). Exact native derivatives/LOD
+remain a separate missing raster observable. No generic capture system is added.
+
+
+### Authored open-bay light candidates
+
+`python -m tools.assets.probe_foundry_lights --join-dir <existing captures>`
+reuses the existing light/world/template extractor for CTY_Main_A. The fixed cell
+bounds select seven authored support-sphere candidates out of 3886 world lights:
+five point and two box, no spot. All seven belong to the parent LowerCity level;
+full affine recomputation agrees exactly with the extractor positions for these
+instances. Raw placement/template/level chains, resource IDs, complete resolved
+fields, default provenance and all transforms remain in
+`captures/m2-foundry/cell-lights/evidence.json`. Archive Enabled is true for these
+seven, but runtime activation/state and native photometric parameters stay UNKNOWN.
+
+Five retained assetdb_join CSVs dated 2026-10-26 contain seven distinct historical
+name+position candidates, one for each placement. Decimal CSV rounding plus the
+existing FP32 affine evaluation enclosure separates two same-name lights without
+an arbitrary join tolerance. This is historical reconciliation evidence, not an
+S1 same-frame/native UUID/current activation certificate. Candidate selection
+retains the existing extractor point/spot radius and box half-diagonal+att_end
+policy; cone/OBB, generic nonuniform-transform/range completeness and native
+colour-temperature/exposure/cookie/occlusion/shadow behavior remain unqualified.
+No emissive surface is promoted into a runtime light and no radiance is guessed.
