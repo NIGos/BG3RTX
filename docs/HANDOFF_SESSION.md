@@ -46,10 +46,13 @@ No material GPU participation yet. Static primary 99.524/99.524/99.525%, FG rati
 R3 dae7d32 is TERMINAL: 448 s, parser fix confirmed actual, binding attempts
 still decline; no material GPU rows. Immutable root captures/r3 analysis retained.
 76ef799/import d8510b1 fixes eligibility-before-key and ordinary frozen samplers.
-R4 RUNNING: native-hit-provider-live c82fe8d ABI21, queue session 60673, batch
-native-hit-provider-20261031-r4. Plan 20/90/20 s, trace at ON+30 s for terrain.
-Candidate/source/bin/input files stay frozen; follow same runner handle.
-Exact packet capture e3b238a/8a84f11 linked/tested, opt-in request marker.
+R4 c82fe8d is TERMINAL (230 s): captured 16, snapshots 12, no GPU association.
+Actual8975/e2ec and3812/8995 use conditional SSBO0.13 position pulling; owner fixes
+canonical Engine/active-stream keys, retaining exact GPU clip/UV proof. No cache-
+only rerun: static source draws are not the instanced cached domain.
+Terrain UBO usage16 lacksTRANSFER_SRC; fa3d9f4 shaderreadback built/validated,
+actual-submit pinning/stage patch active before release. No live job now.
+Exact packet capture e3b238a/8a84f11 is opt-in only; R4 raw evidence is retained.
 Two-surface reference d74f766, rt_hit_reference=2, default OFF; CPU/shader checks
 pass, no GPU/path-quality claim. All consolidated via merge-green and pushed.
 Main is ABI 21; personal Hair trial stays ABI 19. Do not rerun unchanged.
@@ -73,7 +76,9 @@ Persistent terrain now matches all 13512 active triangle IDs and 738 holes; loca
 289 triangles replace frozen capture geometry. Shared CPU/HLSL terrain arithmetic
 has 1366 CPU checks, but real mask/brush packets remain missing. Seven authored
 cell lights exported with raw parameters; live activation/photometry UNKNOWN.
-74 asset checks: 73 pass, one skip. No invented roof or material defaults.
+74 asset checks: 73 pass, one skip. SE absence fix 59a4e56/2a708a3 has 16 fresh
+checks; Lua install unchanged. Actual exports contain 124/89 lights; native/DB
+CSV photometry adapter task active. No invented roof or material defaults.
 
 Queue child ownership/late-game guards, ordinal cross-PowerShell hashing and
 module-independent SHA256 are fixed and tested through actual simulated runner.

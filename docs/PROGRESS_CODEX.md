@@ -1,5 +1,37 @@
 # BG3RTX progress
 
+## R4 completed: real deferred snapshots; canonical input fix next - 2026-10-31
+
+R4 c82fe8d completed 230 s, all three phases, zero NVIDIA 153/dumps/build drift.
+Retain eligibility/sampler fixes: 100 audited draws now yield 20 unique candidates,
+16 captures and 12 execution-time snapshots, zero pipeline/binding declines.
+GPU material acquisition still FAILED: no source association/qualified rows.
+Primary OFF/ON/OFF 99.525/99.524/99.5265%; FG ratio 2.0, no bad phase samples,
+rendered SDK log cadence 36.11/35.57/35.83 fps. Diagnostic RT 18.50/18.33/18.45 ms;
+not production/new-reference cost. Raw/derived evidence: omm-bake/BG3RTX/captures/
+native-hit-material-20261031/r4/ including the exact trace.
+
+Actual native shader pair StaticDepth 8975/e2ec and Deferred 3812/8995 can pull
+positions from SSBO 0.13 via Engine UBO uint at byte 96; location 0 may be inactive.
+Old geometry key used VB0 and collapsed instances. Owner implements canonical
+actual input/Engine/UV identity with explicit branch hints and unchanged FULL GPU
+clip/UV/parameter proof. A cache-only rerun is NOT being launched: native evidence
+shows the corresponding static depth draws are not the cached instancing domain.
+
+Terrain attempt copied 0: native UBO usage 16 has no TRANSFER_SRC. fa3d9f4 adds
+80-byte uniform/7168-byte bounded storage raw shader readback to the same tracer.
+Host links; two new modules compile/validate; ordinary shader files untouched.
+Review identified actual-submit success/pinning and Submit2 stage coverage to fix
+before release; that narrow patch is active. No terrain bytes/GPU success yet.
+
+SE fb3f98c/import 59a4e56 + test registration 2a708a3 fixes premature absent-light
+claims during incomplete current classification; 16 fresh parser/coverage tests
+pass. Existing exports contain 124/89 real records, not zero. Existing se_bridge=1
+stays; new Lua/C++ sources are together, installed Lua/profile unchanged. Legacy
+records remain usable but cannot prove absence without completeness. Native world
+photometry mapping now reuses the five retained native/DB CSVs; no old light list
+is replayed. Separate user Hair trial remains untouched and not newly user-tested.
+
 ## R4 brief acquisition running on consolidated c82fe8d - 2026-10-31
 
 Main c82fe8d is merged via merge-green and pushed: 54/54 CTests, 577/577 runtime
