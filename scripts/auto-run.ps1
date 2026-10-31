@@ -223,8 +223,15 @@ function Focus-Game {
       $script:unfocusedViolation='owned game unexpectedly activated'
       throw $script:unfocusedViolation
     }
-    [BG3RTX.UnfocusedWindow]::ShowBehind($h)
-    $pixels=[BG3RTX.UnfocusedWindow]::VisibleClientPixels($h)
+    # During startup the game creates and destroys a temporary window: a handle
+    # read a moment ago can already be gone. Retry at the next check.
+    try {
+      [BG3RTX.UnfocusedWindow]::ShowBehind($h)
+      $pixels=[BG3RTX.UnfocusedWindow]::VisibleClientPixels($h)
+    } catch [System.Management.Automation.MethodInvocationException] {
+      if ($_.Exception.InnerException -is [System.ComponentModel.Win32Exception]) { return }
+      throw
+    }
     if ($pixels -le 0 -and -not $UnfocusedFG) {
       $script:unfocusedViolation='owned game fully occluded, minimized or off-screen'
       throw $script:unfocusedViolation
