@@ -233,6 +233,19 @@ Lightweight primary/epoch producer now counts with full stats off, with no
 lighting change: 21 ordinary SPIR-V byte identities, 20 variants validate.
 
 
+## P1 rt_scene_wait modes — 2026-10-31, mode 2 READY_FOR_LIVE
+
+`rt_scene_wait=1` (default) fixed the rotation detachment (primary match 33% -> 97%): the first RT query
+of frame N blocks the lighting recording thread (at most `rt_scene_wait_ms=12`, mean 4.6-4.9 ms) until the
+G-buffer thread commits frame N's scene slot. GPU order is already right (one vkQueueSubmit, G-buffer first);
+the wait orders CPU recording: the RT passes bind the slot's TLAS and set 1 when recorded, and frame N's slot,
+TLAS and set exist only after the build is recorded. A semaphore cannot rebind recorded handles; a full GPU-side
+fix needs descriptor indirection (update-after-bind sets or a proxy TLAS), not attempted.
+`rt_scene_wait=2` (GUI Experimental "Non-blocking scene sync", common/scene_wait.h, scene_wait_test): no wait
+when frame N's lighting camera is bit-equal to the previous scene's camera (same camera-relative space); else
+the mode 1 wait. Live gates: `[rt] scene wait mode 2:` CPU saved and fps vs mode 1; primary match on a static
+camera with animated characters (they may lag one frame) and in rotation equal to mode 1.
+
 ## P1 deciding configuration is FG ON — 2026-10-29
 
 Latest steering supersedes the FG-off-only gate below: the visible symptom is
