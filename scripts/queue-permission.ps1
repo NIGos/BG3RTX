@@ -1,3 +1,40 @@
+# A private queue must also respect the user's marker in its canonical checkout.
+# Cache repository locations only: marker existence is always read again.
+$script:queueMarkerRoots=@{}
+function Get-QueueUserPlayingBlock([string]$queueRoot,[string]$tree='') {
+  try {
+    $roots=@{}
+    foreach($source in @($queueRoot,$tree)) {
+      if(-not $source){continue}
+      $path=[IO.Path]::GetFullPath($source)
+      $roots[$path]=$true
+      if(-not $script:queueMarkerRoots.ContainsKey($path)) {
+        $canonical=''
+        if(Test-Path -LiteralPath (Join-Path $path '.git')) {
+          $common=(& git -C $path rev-parse --path-format=absolute --git-common-dir 2>$null) -join ''
+          if($LASTEXITCODE -ne 0 -or -not $common){return 'Cannot resolve shared USER_PLAYING root'}
+          if((Split-Path $common -Leaf) -eq '.git') {$canonical=Split-Path $common -Parent}
+          else {
+            $worktrees=@(& git -C $path worktree list --porcelain 2>$null)
+            if($LASTEXITCODE -ne 0){return 'Cannot resolve shared USER_PLAYING root'}
+            $first=@($worktrees | Where-Object {$_ -like 'worktree *'} | Select-Object -First 1)
+            if(-not $first.Count){return 'Cannot resolve shared USER_PLAYING root'}
+            $canonical=$first[0].Substring(9)
+          }
+          $canonical=[IO.Path]::GetFullPath($canonical)
+        }
+        $script:queueMarkerRoots[$path]=$canonical
+      }
+      $canonical=$script:queueMarkerRoots[$path]
+      if($canonical){$roots[$canonical]=$true}
+    }
+    foreach($path in $roots.Keys) {
+      if(Test-Path -LiteralPath (Join-Path $path 'captures/queue/USER_PLAYING')){return "USER_PLAYING exists: $path"}
+    }
+    return ''
+  } catch {return 'Cannot resolve shared USER_PLAYING root'}
+}
+
 # Receipts RECORD actual explicit user steering; writing one never creates authority.
 # No function here issues a grant. Coordinator prepares receipts only after consent.
 # Schema1: status, user_steering, steering_source, expires_utc, runner_session,
@@ -47,7 +84,8 @@ function Get-QueueBuildIdentity([string]$tree) {
 }
 function Get-QueuePermissionBlock($job,[string]$queueRoot,[string]$tree='', [string]$build='',
     [string]$session='', [string]$runner='', [switch]$InFlight) {
-  if(Test-Path -LiteralPath (Join-Path $queueRoot 'captures/queue/USER_PLAYING')){return 'USER_PLAYING exists'}
+  $playing=Get-QueueUserPlayingBlock $queueRoot $tree
+  if($playing){return $playing}
   if([string]$job.live_batch -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$'){return 'Explicit live batch authorization required'}
   if(-not $tree -or -not $build -or -not $session -or -not $runner){return 'Missing authorized tree/build/runner session'}
   $path=Join-Path $queueRoot "captures/queue/authorizations/$($job.live_batch).json"
