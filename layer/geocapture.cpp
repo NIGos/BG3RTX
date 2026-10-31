@@ -259,6 +259,8 @@ struct Capture {
   // did not fit; draws left out of the RT soup (fix 7).
   VkDeviceSize alpha_demand = 0, alpha_overflow_bytes = 0, opaque_overflow_bytes = 0;
   uint32_t alpha_overflow = 0, opaque_overflow = 0;
+  VkDeviceSize alpha_spill_bytes = 0;
+  uint32_t alpha_spills = 0;
   uint32_t drop_indirect = 0, drop_topo = 0, strips = 0;
   uint64_t drop_topo_tris = 0, strip_tris = 0;
   // rt_cascade_casters. Camera source pass: its draw keys are recorded (cc_keys). A cascade
@@ -296,7 +298,7 @@ std::atomic<uint64_t> g_alpha_region{0}, g_alpha_demand_prev{0}, g_opaque_demand
 struct RtDropLog {
   uint64_t frames = 0, alpha_overflow = 0, alpha_overflow_mb = 0, opaque_overflow = 0, drop_indirect = 0, drop_topo = 0,
            drop_topo_tris = 0, strips = 0, strip_tris = 0;
-  uint64_t peak_alpha = 0, peak_opaque = 0;
+  uint64_t peak_alpha = 0, peak_opaque = 0, alpha_spills = 0, alpha_spill_bytes = 0;
   uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0, depth_skipped = 0;
   bool first_alpha = false, first_opaque = false, first_drop = false;
 };
@@ -476,6 +478,7 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.alpha_draws = 0;
   c.alpha_demand = c.alpha_overflow_bytes = c.opaque_overflow_bytes = 0;
   c.alpha_overflow = c.opaque_overflow = 0;
+  c.alpha_spill_bytes = 0; c.alpha_spills = 0;
   c.drop_indirect = c.drop_topo = c.strips = 0;
   c.drop_topo_tris = c.strip_tris = 0;
   if (!readback && g_alpha_mode && rt_enabled()) {
@@ -2002,12 +2005,14 @@ void rt_capture_stats(const Capture& c) {
   // reserve opaque space a second time and lock the next alpha partition down.
   // Logs below retain the total physical opaque/fallback stream and all drops.
   g_opaque_demand_prev=capture_budget::opaque_partition_demand(c.cursor+c.opaque_overflow_bytes,
-    c.alpha_overflow_bytes,capture_budget::corrected_partition_feedback(g_stride));
+    c.alpha_overflow_bytes+c.alpha_spill_bytes,capture_budget::corrected_partition_feedback(g_stride) || c.alpha_spills!=0);
   std::lock_guard<std::mutex> lock(g_drop_mu);
   RtDropLog& l = g_drop;
   ++l.frames;
   l.alpha_overflow += c.alpha_overflow;
   l.alpha_overflow_mb += c.alpha_overflow_bytes >> 20;
+  l.alpha_spills += c.alpha_spills;
+  l.alpha_spill_bytes += c.alpha_spill_bytes;
   l.opaque_overflow += c.opaque_overflow;
   l.drop_indirect += c.drop_indirect;
   l.drop_topo += c.drop_topo;
@@ -2058,6 +2063,8 @@ void rt_capture_stats(const Capture& c) {
         double(l.peak_opaque) * mb, double(c.xfb.size) * mb, double(l.alpha_overflow) / l.frames,
         double(l.opaque_overflow) / l.frames, double(l.drop_indirect) / l.frames, double(l.drop_topo) / l.frames,
         double(l.drop_topo_tris) / l.frames, double(l.strips) / l.frames, double(l.strip_tris) / l.frames);
+    if(l.alpha_spills)log("[geo] alpha partition spill: %.2f draws/frame, %.3f MB/frame; direct alpha records retained; residual made opaque %.2f draws/frame",
+      double(l.alpha_spills)/l.frames,double(l.alpha_spill_bytes)*mb/l.frames,double(l.alpha_overflow)/l.frames);
     l = RtDropLog{};
     l.first_alpha = l.first_opaque = l.first_drop = true;   // only the first occurrence is logged at once
   }
@@ -2248,13 +2255,26 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   // Alpha-tested draws go into the alpha region.
   bool alpha = false;
+  bool alpha_spill = false; // Storage ownership is separate from alpha semantics.
   uint32_t rec = UINT32_MAX;
   if (alpha_fs && !audit) {
     c->alpha_demand += d.reserved;
     if (c->alpha_cursor + d.reserved > c->xfb.size) {
-      // Region full: the draw would silently turn opaque. Counted and logged.
-      ++c->alpha_overflow;
-      c->alpha_overflow_bytes += d.reserved;
+      uint64_t spill_offset=0;
+      if(capture_budget::alpha_spill_offset(cfg_int("rt_alpha_spill",0)!=0,c->split,
+          token!=UINT32_MAX,pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && kind<=1,
+          c->cursor,c->opaque_end,d.reserved,spill_offset) &&
+          alpha_add_draw(cmd,a,0,uint32_t(prims),&rec)) {
+        // Split-only direct record: first_tri is unused. Never publish this
+        // draw through the legacy first_tri lookup or consume alpha_cursor.
+        alpha=alpha_spill=true;capture=true;d.offset=spill_offset;
+        ++c->alpha_spills;c->alpha_spill_bytes+=d.reserved;
+      } else {
+        // Both ranges or material/record capacity failed. Preserve the existing
+        // counted fallback; this increment does not invent missing coverage.
+        ++c->alpha_overflow;
+        c->alpha_overflow_bytes += d.reserved;
+      }
     } else if (alpha_add_draw(cmd, a, uint32_t((c->alpha_cursor - c->alpha_base) / tri_bytes), uint32_t(prims), &rec)) {
       alpha = true;
       capture = true;
@@ -2286,7 +2306,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
     p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
     c->xfb_active = true;
-    (alpha ? c->alpha_cursor : c->cursor) += d.reserved;
+    (alpha && !alpha_spill ? c->alpha_cursor : c->cursor) += d.reserved;
   }
   if (capture && c->readback) {
     d.slot = int32_t(c->slots);

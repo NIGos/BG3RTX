@@ -1,0 +1,22 @@
+{
+  "key": "rt_alpha_spill",
+  "default": 0,
+  "game_run": false,
+  "GPU_cost_ms": null,
+  "CPU_cost_ms": null,
+  "public_ABI": 21,
+  "tests": {
+    "capture_budget_checks": 105,
+    "settings_checks": 335,
+    "targeted_ctests": 6
+  },
+  "review": "Independent conversion, descriptor range, direct record, Hair bounds, cursor, lifetime and demand accounting review clear.",
+  "supported": "Exact triangle-list split captures with valid direct BVH token and free opaque storage; successful native record publication required.",
+  "unfixed": [
+    "Missing recipe/record capacity",
+    "Both ranges full",
+    "Legacy first_tri lookup",
+    "AO/GI UNKNOWN conservative policies"
+  ],
+  "runtime_proof": "Pending nonzero rescued draws and zero residual substitutions; no screenshot attribution yet."
+}

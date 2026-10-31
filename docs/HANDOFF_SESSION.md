@@ -1,4 +1,4 @@
-# Session handoff - 2026-10-31: fix the experimental GI descriptor contract
+# Session handoff - 2026-10-31: native coverage and user trial regressions
 
 Read PROGRESS_CODEX.md next. Full RENDERING_EXECUTION_PLAN M0-M6 remains active,
 not complete. User wants pragmatic scoped checks, autonomous progress and useful
@@ -17,6 +17,11 @@ image-causal proof. M2 audits rug/plank coverage. Root preserved session log/con
 77 capacity windows, 11 residual alpha substitutions, last three zero; opaque drops
 all zero. See progress and docs/evidence/user-camp-regression-20261031.json.
 
+Root rt_alpha_spill=0 candidate now preserves direct alpha records/Hair bounds
+when free opaque storage can rescue an alpha-partition overflow. No shader/ABI
+change. Host build, 105 budget checks, 335 settings checks, six CTests and source
+review pass. Not game-qualified. Experimental control/schema included; trial untouched.
+
 ## Trees and immediate next action
 
 Main d31633b, ABI 21: M1 coverage/capture budget merged through merge-green and
@@ -24,7 +29,9 @@ pushed; 58 CTests, 1231 shader files and QA pass. Root development:
 C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX, codex/omm-bake, 2ad5b4e.
 Main integration deferred: actual BG3 PID 41420 was open; merge-green refused
 before mutation. Isolated combined build, 59 CTests and QA pass; independent
-runtime source review is clear. Full shader compilation is running.
+runtime source review is clear. Full compile: 984/1232, 248 SHaRC failures due
+to missing isolated SDK path; existing SDK junction restored, retry248 running
+(session2686, captures/sharc-dependency-retry-20261031.log). Do not restart it.
 Pending integration: M3 STI material producer/glue (309b9dd), ST depth extension
 (35f837d), existing windowless GPU fixture extension (2ad5b4e). Both DLLs link;
 785 CPU cases / 816 with native VS; 96 key-OFF identities, 96 key-ON compilations,

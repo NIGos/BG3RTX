@@ -1,5 +1,23 @@
 # BG3RTX progress
 
+## Preserve alpha semantics on partition overflow - offline candidate, 2026-10-31
+
+rt_alpha_spill=0 is a new Experimental live control, OFF in defaults/presets.
+When the alpha partition fills, an exact split draw with a direct record can
+use free opaque storage while keeping its AlphaRec, alpha BLAS/TLAS flags and
+procedural Hair bounds. Storage cursor and alpha semantics are independent.
+Total memory/partition settings, occluders, shaders and public ABI are unchanged.
+Spill accounting is separate from residual made-opaque failures and is excluded
+from intrinsic opaque demand. Legacy lookup, invalid records and two-full-range
+failures are not rescued. Independent source/lifetime/routing review is clear.
+
+Host DLL/launcher build; 105 capture-budget and 335 settings checks pass, schema
+regenerated; six targeted CTests pass. No HLSL files changed. Game participation,
+image effect, GPU cost and CPU cost are unmeasured. No installation or launch.
+Future check: same-run OFF/ON in camp with nonzero spill participation, residual
+made-opaque zero, RT active, unchanged primary coverage/energy and no new flicker.
+This fixes a proven allocation path, not a proven attribution of the rug screenshot.
+
 ## User trial regression: camp rectangles and hairline - 2026-10-31
 
 User reports foliage flicker improved and hair color closer to native, but dark
@@ -26,8 +44,9 @@ Main d31633b already contains M1 coverage and capture-budget fixes: 58 CTests,
 provider (309b9dd), exact ST depth coverage (35f837d) and windowless GPU probe.
 Main integration stopped before mutation because BG3 PID 41420 was running.
 The isolated combined build links both DLLs and launcher; all 59 CTests and QA
-detectors pass. Independent runtime source review is clear. Full shader compilation
-is running. No BG3 launch,
+detectors pass. Independent runtime source review is clear. Full shader check found the isolated checkout missing its SHaRC SDK junction:
+984/1232 files compiled; all 248 SHaRC-dependent failures are being retried after
+linking the existing SDK. This is a test setup failure, not a rendering verdict. No BG3 launch,
 attachment or personal trial changes.
 
 STI uses actual nine native 2D views, owned sampler, independent scalar gather,

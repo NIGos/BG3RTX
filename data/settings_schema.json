@@ -128,6 +128,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_native_scalp": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_native_scalp": "1"}, "needs": {"rt_geometry": 2}}
      ]},
+    {"id": "exp_alpha_spill", "label": "Preserve cutout capture on overflow",
+     "description": "Uses free space in the existing capture buffer when its cutout partition fills. Retains native coverage and hair geometry for exact split draws. Does not increase memory limits or fix missing material inputs. Experimental: game quality and GPU cost are unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_alpha_spill": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_alpha_spill": "1"}, "needs": {"rt_geometry": 2}}
+     ]},
     {"id": "exp_native_tileset", "label": "Native tileset coverage",
      "description": "Captures native instanced floor and wall coverage for ray queries. Requires a restart and Full ray-traced geometry. SeeThrough and missing native inputs remain unknown. Experimental: quality and GPU cost are unqualified.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
