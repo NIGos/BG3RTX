@@ -6,8 +6,8 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main 27462a9 ABI 20 is merged via merge-green and pushed with codex/omm-bake.
-Both DLLs rebuilt; 50/50 CTests, 560/560 runtime shaders and QA passed. Related
+Main 90d7930 ABI 21 is merged via merge-green and pushed with codex/omm-bake.
+Both DLLs rebuilt; 52/52 CTests, 561/561 runtime shaders and QA passed. Related
 user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
@@ -43,7 +43,9 @@ ABI 21 eb1ec4d R2 completed 460 s; camera/order now reaches the query, but all
 and logs exact predicates; integrated d8b70e3. Freeze matching ABI 21 binaries.
 No material GPU participation yet. Static primary 99.524/99.524/99.525%, FG ratio
 2.0, no NVIDIA 153/dumps/build drift. R2 immutable evidence is in root captures.
-Main stays ABI 20; personal Hair trial stays ABI 19. Do not rerun unchanged.
+R3 is RUNNING: private native-hit-provider-live dae7d32, queue exec 98743, batch
+native-hit-provider-20261031-r3. Keep candidate frozen; observe same process.
+Main is ABI 21; personal Hair trial stays ABI 19. Do not rerun unchanged.
 89 actual S1 G-buffer VS/FS modules pass the read-only scanner. Non-watched
 360 s acquisition draft is under captures/native-hit-material-20261031/draft/.
 M2 native S1 reference completed in 53 s: 835 draws, no capture overflow.

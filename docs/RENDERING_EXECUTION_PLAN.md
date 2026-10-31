@@ -417,9 +417,15 @@ mandatory second agent for every locally unsupported case.
 - 2026-10-30 final review: independent read-only audit found no material blockers.
   Handoff consistency and 21 tool/source paths checked. Ready for offline execution;
   M0's runtime policy correction still needs implementation, not presumed complete.
-- Live authorization: NONE for this plan. Historical exceptions are insufficient.
-- Next receiving-agent action: reconcile existing owners; select the smallest M0
-  and M1 offline increments, plus the bounded M2 export task if resources permit.
+- Current live window: user explicitly permits autonomous live diagnostics and
+  progression without witnessing. Queue-only, frozen finite batches and player
+  ownership guards remain. This supersedes the initial no-authorization state.
+- Current checkpoint: main 90d7930, ABI 21; 52 CTests/561 shaders/QA pass. M0 guards
+  operate in the runner; M1 K16 transport is live verified with scoped limitations.
+  M2 has native-qualified cell geometry, persistent terrain and authored lights;
+  runtime terrain packets/state remain open. M3 material R1/R2 failed acquisition;
+  R3 tests the corrected parser. M4-M6 are not complete. Read current handoff for
+  the actual active process/owner before doing any new work.
 - Owner/revision/evidence ledger: receiving coordinator fills this section as work
   proceeds; an empty ledger is not evidence that implementation is complete.
 

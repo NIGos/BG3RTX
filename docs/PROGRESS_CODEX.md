@@ -1,5 +1,16 @@
 # BG3RTX progress
 
+## ABI 21 consolidated; changed material acquisition R3 running - 2026-10-31
+
+Main 90d7930, merged only through merge-green and pushed: 52/52 CTests,
+561/561 runtime shader files/all entries and QA passed. Runtime key remains OFF.
+R3 private dae7d32 candidate is frozen with matching host/core/launcher hashes.
+Queue-only S1 real-present FG2 test: one 360 s plan, 660 s hard limit, logs only.
+Tests narrow depth-clip correction against actual pipeline diagnostics/material
+participation. No user witnessing required; no visual pass inferred from tests.
+R3 has no verdict yet. Observe existing runner session 98743; never relaunch merely
+because observation times out. The user's separate Hair profile remains unchanged.
+
 ## Depth-clip material fix prepared; still default OFF - 2026-10-31
 
 Source dae7d32 integrated as d8b70e3. ABI 21 requires matching host/core/launcher.
