@@ -84,10 +84,10 @@ uint64_t current_recording(uint64_t command){return cmd_recording(reinterpret_ca
 DrawKey key(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  DrawKey k;size_t i=0;for(uint64_t v:{uint64_t(a.kind),uint64_t(a.count),uint64_t(a.instances),uint64_t(a.first),uint64_t(uint32_t(a.vertex_offset)),uint64_t(a.first_instance)})k.words[i++]=v;
  k.words[i++]=uint64_t(s.ib);k.words[i++]=s.ib_offset;k.words[i++]=uint64_t(s.ib_type);
- // Canonical vertex stream0 + index/draw identity select candidates. Unused
- // higher binding state differs across depth/deferred pipelines and is NOT a
- // geometry certificate. Exact post-VS clip/UV comparison is the certificate;
- // duplicate candidate identities remain unsupported.
+ // Legacy candidate for other shader families. The audited static pair below
+ // resolves its actual active inputs instead of assuming vertex stream 0.
+ // Neither CPU identity is a certificate: exact GPU clip/UV/parameter checks
+ // remain mandatory, and duplicate candidate identities stay unsupported.
  const auto& v=s.vb[0];k.words[i++]=uint64_t(v.buffer);k.words[i++]=v.offset;k.words[i++]=v.stride;
  const bool depth=static_depth_family(s.vs,s.fs),deferred=audited_static_family(s.vs,s.fs);
  if(!depth && !deferred)return k;
@@ -113,7 +113,7 @@ DrawKey key(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  // Mapped index is a candidate hint, never an execution-time certificate.
  // Unknown/zero retains the actual position attribute. GPU clip/UV/parameter
  // equality remains mandatory even when an inactive position stream is omitted.
- static uint64_t logged_frame=UINT64_MAX;static uint32_t logged[2]{};const auto frame=frame_index();
+ static thread_local uint64_t logged_frame=UINT64_MAX;static thread_local uint32_t logged[2]{};const auto frame=frame_index();
  if(cfg_int("rt_stats",0) && frame%120==0){if(logged_frame!=frame){logged_frame=frame;logged[0]=logged[1]=0;}
   if(logged[deferred?1:0]++<4)log("[hit material canonical inputs] frame %llu %s ready %u input layout known %u engine %p+%llu range %llu pull hint known/index %u/%u SSBO0.13 %p+%llu range %llu; position location0 binding/format/stride %u/%u/%llu UV location1 binding/format/stride %u/%u/%llu; draw count %u first %u vertex %d; CPU hints only, GPU clip/UV/params required",
    (unsigned long long)frame,depth?"source":"deferred",unsigned(ready),unsigned(attributes.valid),(void*)engine.buffer,(unsigned long long)engine.offset,(unsigned long long)engine.range,unsigned(inputs.pull_hint_known),inputs.pull_index,(void*)pulled.buffer,(unsigned long long)pulled.offset,(unsigned long long)pulled.range,
