@@ -43,7 +43,12 @@ queries with zero Vulkan validation errors, including cutoff, UNKNOWN and native
 sampler routing. This is not native graphics-XFB execution, game participation,
 material-field agreement or image quality. GPU pass cost remains unmeasured.
 Evidence: docs/evidence/native-tileset-windowless-gpu-20261031.json and
-native-hit-tileset-20261031.md. A bounded material-field GPU fixture is in progress.
+native-hit-tileset-20261031.md. The material-field fixture (1a44454/import 0f31a69) also passed 14 synthetic
+cases with zero validation errors. Coordinator inspected raw fields and assertions:
+Green/Red/Base RGB, roughness, metalness, reflectance, normal, native sampler and
+clip/UV/COLOR/publication rejection. It uses closest_hit only, not all four queries;
+the raw footer overstates this and the source label was corrected CPU-only. No
+host capture/producer, native image agreement or pass cost is certified.
 Old GI R2 images remain rejected; corrected GI image recheck is not yet run.
 All new runtime features stay experimental and OFF. Latest work is not user-tested.
 

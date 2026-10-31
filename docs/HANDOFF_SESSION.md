@@ -32,7 +32,8 @@ Pending integration: M3 STI material producer/glue (309b9dd), ST depth extension
 M1 has 639 old-entry identities, 604 new validated entries, 160 interfaces.
 Windowless RTX 5090 fixture passed 32 cases, four real queries, zero validation
 errors. Native graphics-XFB, runtime participation, field agreement, quality and
-GPU pass cost are NOT proved. Material GPU fixture owner: omm_contract_review.
+GPU pass cost are NOT proved. Material GPU fixture 1a44454 passes 14 synthetic closest_hit cases, zero
+validation errors; root inspected raw/assertions. Not host capture or quality proof.
 ST depth coverage has its own bindings; ST material decoder is unsupported.
 All experimental defaults remain OFF. Private native-hit-provider-live stays
 frozen d894b06; personal Hair trial stays 047e105. No game launches now.
