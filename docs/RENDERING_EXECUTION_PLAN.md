@@ -2,6 +2,7 @@
 
 User mandate: 2026-10-30. Execution specification for the receiving agent.
 This file defines work and gates; it does not grant live permission.
+The old pasteable goal prompt is archived: [archive/GOAL_RENDERING_AGENT.md](archive/GOAL_RENDERING_AGENT.md).
 
 ## Current checkpoint - 2026-10-31, user paused
 

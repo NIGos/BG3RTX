@@ -1033,7 +1033,7 @@ Documentation changes only; no implementation, build or live test performed.
 ## Autonomous execution plan and receiving-agent goal - 2026-10-30
 
 docs/RENDERING_EXECUTION_PLAN.md defines M0-M6, tooling, ownership, GUI/settings,
-evidence gates and live authorization; docs/GOAL_RENDERING_AGENT.md is the prompt
+evidence gates and live authorization; docs/archive/GOAL_RENDERING_AGENT.md is the prompt
 to activate in the receiving conversation. AGENTS/handoff link the new mandate.
 No renderer implementation or live test started by this planning task.
 
