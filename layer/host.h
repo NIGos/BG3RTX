@@ -422,7 +422,6 @@ std::shared_lock<std::shared_mutex> core_shared_lock();
 bool em_core_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out);
 bool em_core_calib_update(Bg3EmCalib* cal, bool first, double ratio, uint32_t flags, uint64_t frames, double bright);
 bool em_core_calib_apply(uint32_t* rec, const Bg3EmCalib* cal);
-VkCommandBuffer core_dispatch_cmd();  // inside core on_dispatch/on_dispatch_pre on this thread, else null
 bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
                    Bg3Binding* out);
 bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out);

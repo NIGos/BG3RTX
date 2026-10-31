@@ -110,15 +110,6 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_cascade_casters": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_cascade_casters": "1"}, "needs": {"rt_geometry": 1, "sun_shadows": 1}}
      ]},
-    {"id": "exp_scene_wait", "label": "Non-blocking scene sync",
-     "description": "The ray-traced passes normally wait on the CPU (up to 12 ms, mean about 5) for this frame's scene build. Camera match skips that wait whenever the camera did not move since the last build, and waits as before otherwise. Look for: higher frame rate while standing still; character shadows may lag one frame then. Experimental: frame rate gain unmeasured.",
-     "apply": "live", "apply_note": "experimental", "advanced": true, "experimental": true,
-     "required_on": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "wait", "label": "Always wait", "caps": [], "keys": {"rt_scene_wait": "1"}, "needs": {}},
-       {"id": "camera", "label": "Camera match", "caps": ["ray_query"], "keys": {"rt_scene_wait": "2"}, "needs": {"rt_geometry": 1}}
-     ]},
     {"id": "exp_box_lights", "label": "Box light shadows",
      "description": "Ray-traced shadows for the game's box (projector) lights, 37% of its placed lights. Look at lit interiors: shadows of furniture and characters from these lights. About +0.25 ms.",
      "apply": "live", "apply_note": "experimental", "advanced": true, "experimental": true,

@@ -67,6 +67,17 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Background stats lines that need 120 frames need `"hold": 90` or more in the job.
 - Give every queue job `patterns` and `expect`; a run without its expect lines is INVALID.
 
+## Lean live tests
+- One game launch per save: group jobs by scene, use session jobs where the queue supports them.
+- A/B by toggling keys inside one run, never by relaunching.
+- Size phases in frames (a few 120-frame windows), not long fixed seconds.
+- Expensive diagnostics (`rt_stats` + `rt_primary_check` cost ~80 ms/frame, measured 2026-10-31)
+  only in short dedicated windows, never in fps/cost windows.
+- PNG pairs instead of float bursts, unless a flicker analysis needs bursts.
+- Disk budget ~2 GB per batch; delete raw dumps after analysis, keep the summaries.
+- Target 2-5 minutes per scene.
+- The window may take focus when the user allows it (removes the unfocused 30 fps cap).
+
 ## Merging
 - Only `scripts/merge-green.ps1`, after reading the deciding log numbers yourself.
 - Features stay off by default until their gates pass. Push main and the branch after a merge.

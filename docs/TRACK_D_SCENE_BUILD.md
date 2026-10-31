@@ -801,7 +801,7 @@ within OFF-repeat noise; removal of false occlusion may legitimately brighten
 the affected region. Screenshots alone do not identify the
 pictured mesh or prove allocation overflow caused those particular rectangles.
 
-## P1 rt_scene_wait modes — 2026-10-31, mode 2 READY_FOR_LIVE
+## P1 rt_scene_wait modes — 2026-10-31
 
 `rt_scene_wait=1` (default) fixed the rotation detachment (primary match 33% -> 97%): the first RT query
 of frame N blocks the lighting recording thread (at most `rt_scene_wait_ms=12`, mean 4.6-4.9 ms) until the
@@ -809,10 +809,8 @@ G-buffer thread commits frame N's scene slot. GPU order is already right (one vk
 the wait orders CPU recording: the RT passes bind the slot's TLAS and set 1 when recorded, and frame N's slot,
 TLAS and set exist only after the build is recorded. A semaphore cannot rebind recorded handles; a full GPU-side
 fix needs descriptor indirection (update-after-bind sets or a proxy TLAS), not attempted.
-`rt_scene_wait=2` (GUI Experimental "Non-blocking scene sync", common/scene_wait.h, scene_wait_test): no wait
-when frame N's lighting camera is bit-equal to the previous scene's camera (same camera-relative space); else
-the mode 1 wait. Live gates: `[rt] scene wait mode 2:` CPU saved and fps vs mode 1; primary match on a static
-camera with animated characters (they may lag one frame) and in rotation equal to mode 1.
+`rt_scene_wait` is 0 (no wait, traces the previous frame's scene) or 1 (default).
+Mode 2 removed 2026-10-31: stale scene after rotation; see live batch consolidation-20261031d job cb2.
 
 ## Base frame CPU cost - 2026-10-30, default-off candidate
 
