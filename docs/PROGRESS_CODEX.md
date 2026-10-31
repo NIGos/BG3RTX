@@ -1,5 +1,33 @@
 # BG3RTX progress
 
+## Production GI participation passes; output captures running - 2026-10-31
+
+Main d894b06, ABI 21: merge-green 55/55 CTests, 627/627 shaders and QA; pushed.
+R1 gi_hit_direct completed 504 s VALID, no NVIDIA 153/dumps/build drift.
+S1 FG2/RR1, real presentation: static primary OFF/ON/OFF 99.524/99.524/99.525%.
+Twenty-five ON windows contain 2941129 nonzero hidden-hit light additions;
+OFF windows contain none. Both rotation directions also produce positive light.
+This passes actual contribution, not final visual/motion qualification.
+Stats-OFF whole GI median OFF 2.380 ms / ON 2.243 ms, overlapping ranges:
+no speedup claim. Rendered SDK cadence instead falls 84.14 to 75.56 fps;
+total overhead is not explained by that broad GI interval alone.
+
+Rotation comparison is CONFOUNDED by synthetic reset jumps (up to 78.884 deg/frame,
+15.247 m/frame), present in baseline too. Primary ranges already reach about
+91-99% with key OFF. Fix input sequencing, not another renderer selector; no
+P1/motion gate pass is claimed. An offline agent owns release/reset/press timing.
+Raw logs/phases/candidate manifest and analysis: omm-bake/BG3RTX/captures/
+gi-hit-direct-20261031/r1/. Current static K16 OFF/ON/OFF batch uses the SAME
+frozen d894b06 candidate, eight phases/305 s plus loading, <=7 GiB raw;
+private native-hit-provider-live, queue session gi-hit-direct-20261031-r2.
+No renderer rebuild or personal Hair-trial changes. User has not tested this GI.
+
+196f869/28430ff imports the reviewed opt-in SE Blackbody console reader and its
+canonical authorization/fresh-prompt fixes. Focused local 22 helper/12 permission
+checks pass; independent review clear. Not main-integrated or live-qualified yet.
+No installed Lua/config/mod/profile edits; prospective light adapter remains open.
+
+
 ## R8 material/reference participation passes; first production GI increment prepared - 2026-10-31
 
 Main a0bd782, ABI 21: merge-green 55/55 CTests, 579/579 shaders and QA; pushed.

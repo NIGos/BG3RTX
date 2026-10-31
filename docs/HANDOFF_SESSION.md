@@ -11,13 +11,18 @@ Main a0bd782, ABI 21, merged via merge-green and pushed with source branches:
 launcher rebuilt. No defaults promoted. No Ponytail.
 Root development: C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX, codex/omm-bake.
 Private queue candidate: native-hit-provider-live/BG3RTX, frozen a0bd782 ABI 21.
-R8 is TERMINAL VALID498 s: no NVIDIA153/dumps/build drift. FG2/RR1 real present.
-Primary OFF/material/direct/two/OFF99.525/99.524/99.524/99.522/99.527%.
-Qualified median2246464/window; two-surface positive438..15389/window.
-Whole GI statsOFFdirect2.429ms/two2.442ms; overlapping ranges, not isolated cost.
-Full immutable root captures/native-hit-material-20261031/r8/. No game now.
-Next production GI1b34336 defaultOFF is imported locally, not main yet;
-confirm pre-pass packet eligibility, consolidate, then scoped same-run live.
+R8 TERMINAL VALID498 s: FG2/RR1, positive two-surface paths; root material/r8 evidence.
+Main now d894b06, GI defaultOFF integrated, 55 tests/627 shaders/QA pass and pushed.
+GI R1 TERMINAL VALID504 s: static primary99.524/99.524/99.525%, 2941129 positive
+additions across25ONwindows, OFFnone. WholeGI2.380/2.243msOFF/ON, no speedup;
+rendered cadence84.14/75.56fps. Rotation reset jumps confound quality (78.884deg).
+GI R2 static K16 OFF/ON/OFF ACTIVE on frozen d894b06, private candidate unchanged.
+Queue session gi-hit-direct-20261031-r2; exec76473; eight305sphases/660shardlimit,
+<=7GiB raw,12GiB reserve. Never edit active private tree. User Hair trial unchanged.
+Root GI captures/r1 immutable; bursts-draft contains R2 freeze/receipt inputs.
+Root imports SE reader196f869/28430ff, offline tested/reviewed, not main yet.
+Next: finishR2, analyze existing stable-surface transport/noise without global
+energy-equality gate for added lighting; consolidate SE after terminal, then probe.
 
 Only test-queue launches games. Canonical USER_PLAYING and unowned-game guards
 always apply. Receipts record current explicit steering, never create authority.
@@ -29,8 +34,8 @@ Existing workers: omm_contract_review implements default-off gi_hit_direct in
 native-hit-material tree: qualified hidden-hit local-light GI, fallback0 only,
 successful screen/SHaRC priority preserved. Owns settings/GUI and stats282..286.
 Do not import old a15 counters269..271 (collide with reference).
-omm_alpha_bounds fixes SE probe94759b7 canonical guards/fresh prompt protocol;
-not imported/live yet. sun_penumbra_review scoped opaque review clear, terrain
+omm_alpha_bounds fixes concrete rotation input reset jumps in an isolated branch;
+SE reader safety fixes are imported locally and reviewed, not live yet. sun_penumbra_review scoped opaque review clear, terrain
 texture mapping investigation finished: exact runtime-to-DDS identity absent.
 Use existing agents, disjoint branches; no parallel live instances.
 
@@ -93,6 +98,5 @@ Official v33 exposes Blackbody vec3. Probe94759b7 uses transient Shift console,
 no installed config/mod changes; fix canonical cancellation and fresh prompt first.
 Actual exports124/89 records are nonzero; initial startup seq1 zero is not absence.
 
-Next: finish R8 and preserve immutable evidence; update progress with scoped verdict
-and real FG/RT/cost. Integrate focused GI consumer after tests/review, then smallest
-same-run trial. M4 production offscreen gains/full M6 PT decision still incomplete.
+Next: finish GI static output evidence and preserve the scoped verdict.
+Fix rotation input; integrate/run the separately scoped SE native-light reader. M4 production offscreen gains/full M6 PT decision still incomplete.
