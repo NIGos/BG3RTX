@@ -1,5 +1,29 @@
 # BG3RTX progress
 
+## Native tileset materials and static depth integrated offline - 2026-10-31
+
+Main d31633b already contains M1 coverage and capture-budget fixes: 58 CTests,
+1231 shader files and QA passed. Candidate 2ad5b4e adds the checked STI material
+provider (309b9dd), exact ST depth coverage (35f837d) and windowless GPU probe.
+Full integration checks are next. No BG3 launch or personal trial changes.
+
+STI uses actual nine native 2D views, owned sampler, independent scalar gather,
+and clip/UV/COLOR publication checks. Native N/B/T use an 80-byte capture layout;
+Hair 88 stays 88. Both DLLs link; 785 CPU cases (816 with native module), 96
+key-OFF shader identities, 96 key-ON compilations and 80 interfaces pass.
+Counters 287/288 identify family-2 acquisitions/matches; capacity is 289.
+ST depth has separate exact bindings; its material decoder remains unsupported.
+The existing rt_native_tileset key remains OFF; public ABI remains 21.
+
+One standalone GPU invocation passed 32 synthetic cases through all four real
+queries with zero Vulkan validation errors, including cutoff, UNKNOWN and native
+sampler routing. This is not native graphics-XFB execution, game participation,
+material-field agreement or image quality. GPU pass cost remains unmeasured.
+Evidence: docs/evidence/native-tileset-windowless-gpu-20261031.json and
+native-hit-tileset-20261031.md. A bounded material-field GPU fixture is in progress.
+Old GI R2 images remain rejected; corrected GI image recheck is not yet run.
+All new runtime features stay experimental and OFF. Latest work is not user-tested.
+
 ## Native tileset coverage implemented offline; no BG3 launch - 2026-10-31
 
 Latest user steering: standalone GPU tests are allowed; BG3/game launches are

@@ -9,20 +9,20 @@ Existing foreground batch receipts are terminal, not authority for another run.
 
 ## Trees and immediate next action
 
-Main 4b62c89, ABI 21, merged through merge-green and pushed: 57/57 CTests,
-627/627 runtime shaders and QA pass. Includes GI default OFF, SE reader safety,
-rotation release/reset/press fix and primary warmup pipeline-churn fix.
-Root development: C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX, codex/omm-bake.
-Root pending main: M1 native tileset coverage1fec3d3 (224b864) and capacitye16f645
-(1676c0e), docs. Existing metadata/Hair audits are already in main. Private
-native-hit-provider-live stays frozen d894b06; all game jobs terminal.
-M1 source offline passes58CTests/QA/334settings,639prior-entry byte identities,
-604newvalidentries,160interfaces; coordinator inspected prooffiles. Cost/game
-quality pending. Sun extends existing WINDOWLESS GPU fixture, no game required.
-M3 family2 2a9bf65/adca0d5 producer/helper is isolated,754CPUcases/3tests and96off
-identities pass; min80/getter glue +combinedlink pending. It reuses privatebinding2
-for9native2Dviews; descriptor16 extension is NOT needed. M2owns nextglue afterM1.
-Reserve287/288 family2GPUcounters; core capacity289 required before execution.
+Main d31633b, ABI 21: M1 coverage/capture budget merged through merge-green and
+pushed; 58 CTests, 1231 shader files and QA pass. Root development:
+C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX, codex/omm-bake, 2ad5b4e.
+Pending integration: M3 STI material producer/glue (309b9dd), ST depth extension
+(35f837d), existing windowless GPU fixture extension (2ad5b4e). Both DLLs link;
+785 CPU cases / 816 with native VS; 96 key-OFF identities, 96 key-ON compilations,
+80 interfaces pass. Family counters 287/288 and capacity 289 are wired.
+M1 has 639 old-entry identities, 604 new validated entries, 160 interfaces.
+Windowless RTX 5090 fixture passed 32 cases, four real queries, zero validation
+errors. Native graphics-XFB, runtime participation, field agreement, quality and
+GPU pass cost are NOT proved. Material GPU fixture owner: omm_contract_review.
+ST depth coverage has its own bindings; ST material decoder is unsupported.
+All experimental defaults remain OFF. Private native-hit-provider-live stays
+frozen d894b06; personal Hair trial stays 047e105. No game launches now.
 
 CRITICAL: old experimental GI used filtered LS set0, omitting GI 8/11/13/17;
 R2 ON images have dark stipple. Source FIXED in 9d455ca (b231eb8) with a dedicated
@@ -36,16 +36,11 @@ Sun independently found both defects and reviewed both fixes clear.
 No source edits in the frozen private tree; future fixed image A/B needs new
 appropriate live steering. Do not close visual quality from positive counters.
 
-Active worker omm_alpha_bounds implements actual STI tileset native coverage in a
-fresh tree: source recipe 278f2b2/import 18b224e. M1 sampler binding 19 (18 is
-Sun storage), 16 owned slots approved; separate RT_NATIVE_TILESET capability/
-wrappers, ordinary key-OFF identities, AlphaRec 208 unchanged, stride max(old,40)
-with actual COLOR at 24 only for this family. SeeThrough/missing input -> UNKNOWN
-in all four queries, not solid/discard. No public ABI without coordinator. Merge
-new main before core variant changes to preserve GI/reference contracts/checker.
-Sun metadata extension eb531fe/import 045af02 and Hair audit30e/import a37 are
-complete offline. M3/Sun can review the tileset implementation when ready.
-Coordinator owns ABI, main integration and shared progress. No Ponytail.
+M1/M3 source and ST extension owners have completed their source work. Root owns
+main integration and concise shared docs; omm_contract_review extends the existing
+compute-only GPU fixture for actual material fields, not a new renderer/harness.
+Sun optional native graphics-XFB fixture exceeded a small extension and stopped;
+this is a fixture scope limit, not a rendering impossibility. No Ponytail.
 
 ## Actual GI/reference evidence
 
