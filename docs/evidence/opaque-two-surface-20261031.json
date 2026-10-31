@@ -1,0 +1,122 @@
+{
+  "baseline": "90d7930",
+  "ordinary_identical": 16,
+  "feature_validated": 16,
+  "entries": [
+    {
+      "file": "gi/cascade/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "85d181b9a3d89d1c0d390ecff22f9ff37a331d5c1309977943e627e53ca7a90e",
+      "feature_sha256": "c7a852d602a0922ec9aa0bf5801f89bdfadb1f99bb37587ffe609ed6d19ace33"
+    },
+    {
+      "file": "gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "5f64f83e0a3127c890b843e772153a10e78555bc390dbf24c1cd4a709b365127",
+      "feature_sha256": "bcfb3065fb292e3ed987a042f47bc5755f63fb8ba06c159511741f301678cc3d"
+    },
+    {
+      "file": "gi/rebase/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "ccdabce1511cd4eea895a558fd2b3d5f8b7d357949847d7169aadfa94c83bb8c",
+      "feature_sha256": "5f571b6ab3921e6a9ed315b6d9c3265786e90730f5f103875081c5ff2042608d"
+    },
+    {
+      "file": "gi/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "11fbec69d82a69329ae9ca8d2fff2ff2bd171906943bb828184cdc401a95b612",
+      "feature_sha256": "ce43054cddd9b85584435c29bcc40844afd53f58fb68c4873f632a8f55b8b63b"
+    },
+    {
+      "file": "native_scalp/gi/cascade/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "ef808019429c7e5e01046fdb0334c4e3cd41f56d405febd04faff08eb554b268",
+      "feature_sha256": "3b13a72cbbab1d8bba7a43186c91867073ddfb90ebbedc064bb5114b32d4c76d"
+    },
+    {
+      "file": "native_scalp/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "3f19c450ee550ea627f02ee51325e155870c1103299ef49d6a8a26b10574323f",
+      "feature_sha256": "e0d415f703bc456bdcc1de97708ac97075beef0fd3cf9a096d1008e7689e9683"
+    },
+    {
+      "file": "native_scalp/gi/rebase/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "31be2184fa241622d500d5ba94c840db864c7fe4b59d98dab68cbe0e3d89c7c7",
+      "feature_sha256": "086383eb1fba65921f2c87fd15a738f01684f6bd12a78ba3bfbb759f148ec79c"
+    },
+    {
+      "file": "native_scalp/gi/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "5565bd2c8cdf4791c3b45ad62282538d2e1875f34ce9173670d981b9b3c526d3",
+      "feature_sha256": "3aecbe6ac4a818b8bd0f02cb494e33dbcff42148e91f646dbb251981e911254b"
+    },
+    {
+      "file": "omm/gi/cascade/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "caa7bdebb20950bd7f341f71f0b4589060b64d0077f4eb4183aeaf235d664c8c",
+      "feature_sha256": "124b9c18b1400dfced64657a629234d0433b46bae2525fecdc2e2977bc574f03"
+    },
+    {
+      "file": "omm/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "103af768db24e491f7eddb0c19ce4bedb65a890d2634e1df0b56356eb73cc8b8",
+      "feature_sha256": "cf22972b6345e857bc1669da8493a638528f9cf59ec0c460a8cbc3f62c26531f"
+    },
+    {
+      "file": "omm/gi/rebase/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "561c2cc14cc1f62439bc149e2bc85610faabfa3c6ccba2ac00d5c12ac299f217",
+      "feature_sha256": "bbc260ba402c75642ddcd6316b572baa350cdb3bd1818c3d6c64dcd86624b5b5"
+    },
+    {
+      "file": "omm/gi/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "fb077902dc9687d0315a78adc0fc65dc42a95b694fa9d59bca7c46024e6a6d32",
+      "feature_sha256": "a457c2948c9d6e4cae716ec57dd8da607bf5c9077ec0d1b7a669fab9b0600ac7"
+    },
+    {
+      "file": "omm/native_scalp/gi/cascade/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "8c1dd36d8bd356b01b92aaf3ab0f63c612c9e9eb54dee638c54877addc55f6a2",
+      "feature_sha256": "3dde3925962f1b454c3f0b01b99a0d8ff5705411b210155e4e82e4f72dfa4486"
+    },
+    {
+      "file": "omm/native_scalp/gi/cascade_rebase/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "9f56139c3fdecaa80997b4ff96e484e69dd123a8cf7546d7cb181f21149a1d3c",
+      "feature_sha256": "ee298b2fa91ba2a56436c3eda42f0a9cc78f4bf9798ffc665ad72ad551fa6f4e"
+    },
+    {
+      "file": "omm/native_scalp/gi/rebase/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "64b31dd281deee69a1924a74ffda5d7fab71a3e93fcbb5149b3264cdc86d8ce6",
+      "feature_sha256": "7702cc5bb51501981ada623f2f945178f7fd5eb85c37e685d92f351a0c7d0beb"
+    },
+    {
+      "file": "omm/native_scalp/gi/rt_hit_two_bounce.hlsl",
+      "ordinary_sha256": "edaf1c6114527631f0669a4d2ec56441e09e7a56dd19b4e99df58cdea38e109b",
+      "feature_sha256": "7152bb03ff557634382e4587d20571aaede8d651da356de395b487c00c85a658"
+    }
+  ],
+  "game_launched": false,
+  "gpu_executed": false,
+  "scope": "Default-off finite two-surface point/spot reference; not full M6 or complete hit radiance",
+  "key": "rt_hit_reference",
+  "modes": {
+    "0": "Off",
+    "1": "Direct only",
+    "2": "Two surfaces"
+  },
+  "startup_dependency": "rt_hit_material=1 with matching ABI21 provider",
+  "cpu_checks": 334,
+  "settings_checks": 292,
+  "ctest_targets_passed": 6,
+  "core_link": true,
+  "launcher_link": true,
+  "actual_gpu_ms": null,
+  "actual_runtime_participation": null,
+  "actual_image_quality": null,
+  "acquisition_status": "Coordinator earlier binding smoke still unqualified; this step changes no acquisition code",
+  "source_hashes": {
+    "common/native_hit_bounce.h": "5714f8c87fba65ded34c68b82cc4171044f959c6fb4f059d63287b80ba6cb971",
+    "shaders/rt/native_hit_bounce.hlsli": "736326ee336fd50d84b45093c0381d9f12f2ca9a12b451cbe24fe520c7bca945",
+    "shaders/gi/rt_hit_direct.hlsl": "85c360a1dccad6ea249d286008a9859eac38dea286898b6423917696030db6b1",
+    "core/gi.cpp": "5fc0a0fba702ab75875a01aacb9c3f5ca400d1e48186b769232ec06bb33a61e6",
+    "common/settings.h": "8eae7bbd010d1691c9cfd088068219ee430900d6beba26aed0c0592dd33b27e2",
+    "tests/native_hit_bounce_test.cpp": "e2e24be93cf7d404d536d15936f937115a7bcb164e2526a9fd0c722ac1e0a7a4"
+  },
+  "limitations": [
+    "Point/spot native froxel domain at both vertices only",
+    "Declared Nt-to-FresnelBlend model, not exact native BRDF",
+    "No environment, emission, MIS, transmission, third bounce or room closure",
+    "Incomplete continuation keeps direct prefix and never counts complete",
+    "Mixed supported/fallback image is not unbiased full-scene two-bounce ground truth",
+    "Native postprocessing may filter display; kernel has no accumulation/filter"
+  ]
+}

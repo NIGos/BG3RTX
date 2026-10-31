@@ -101,10 +101,29 @@ bool immutable_sampler_current(const BoundSampler& saved){
   const auto& expected=def->immutable[saved.element];const auto* live=samplers.lookup(key(expected.sampler));
   return live && live->complete && live->id==expected.id && live->id==saved.sampler.id;
 }
-bool ordinary_frozen_binding(VkCommandBuffer cmd,VkPipelineBindPoint bp,uint32_t set,uint32_t b,uint32_t element){
-  if(!active.load() || device_of(cmd)!=owner || (bp!=VK_PIPELINE_BIND_POINT_GRAPHICS && bp!=VK_PIPELINE_BIND_POINT_COMPUTE))return false;
-  CmdState* state=cmd_state(cmd);if(!state || set>=state->sets[0].size())return false;const unsigned bi=bp==VK_PIPELINE_BIND_POINT_COMPUTE?1:0;if(state->push_set[bi]==set)return false;
-  std::lock_guard lock(samplerMutex);auto s=sets.find(state->sets[bi][set]);if(s==sets.end() || !s->second.id || s->second.unsupported || !s->second.layout || !s->second.layout->complete)return false;
-  const auto* def=binding(s->second,b);return def && element<def->count && def->flags==0;
+bool ordinary_sampler_current(const BoundSampler& saved){
+  if(saved.immutable)return immutable_sampler_current(saved);
+  if(!active.load() || saved.bindingFlags || !saved.sampler.complete)return false;
+  std::shared_lock tracked(tracker().mu);std::lock_guard lock(samplerMutex);auto s=sets.find(saved.descriptorSet);
+  if(s==sets.end() || s->second.id!=saved.descriptorSetId || s->second.version!=saved.writeVersion || s->second.unsupported ||
+     !s->second.layout || !s->second.layout->complete || s->second.layout->id!=saved.layoutId)return false;
+  const auto* def=binding(s->second,saved.binding);
+  if(!def || def->flags || !def->immutable.empty() || !sampler_type(def->type) || saved.element>=def->count)return false;
+  auto entries=tracker().sets.find(saved.descriptorSet);if(entries==tracker().sets.end())return false;
+  auto entry=entries->second.find(desc_key(saved.binding,saved.element));if(entry==entries->second.end())return false;
+  const auto* live=samplers.lookup(key(entry->second.sampler));
+  return live && live->complete && live->sampler==saved.sampler.sampler && live->id==saved.sampler.id && entry->second.sampler_id==live->id;
+}
+bool ordinary_frozen_binding(VkCommandBuffer cmd,VkPipelineBindPoint bp,uint32_t set,uint32_t b,uint32_t element,OrdinaryBindingFacts* facts){
+  OrdinaryBindingFacts value{};auto finish=[&](bool ok){if(facts)*facts=value;return ok;};value.active=active.load();
+  if(!value.active || device_of(cmd)!=owner || (bp!=VK_PIPELINE_BIND_POINT_GRAPHICS && bp!=VK_PIPELINE_BIND_POINT_COMPUTE))return finish(false);
+  CmdState* state=cmd_state(cmd);value.command=state!=nullptr;
+  if(!state || set>=state->sets[0].size())return finish(false);const unsigned bi=bp==VK_PIPELINE_BIND_POINT_COMPUTE?1:0;
+  value.push=state->push_set[bi]==set;value.set=state->sets[bi][set];if(value.push)return finish(false);
+  std::lock_guard lock(samplerMutex);auto s=sets.find(value.set);if(s==sets.end())return finish(false);
+  value.allocated=true;value.set_id=s->second.id;value.version=s->second.version;value.supported=!s->second.unsupported;
+  if(s->second.layout){value.layout_id=s->second.layout->id;value.layout_complete=s->second.layout->complete;}
+  const auto* def=binding(s->second,b);if(def){value.type=def->type;value.flags=def->flags;value.count=def->count;}
+  return finish(s->second.id && !s->second.unsupported && s->second.layout && s->second.layout->complete && def && element<def->count && def->flags==0);
 }
 }

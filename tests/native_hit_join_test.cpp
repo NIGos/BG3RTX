@@ -65,6 +65,15 @@ int main(int argc,char** argv){
   assert(j.claim(4,5,a,rec)&&rec==1);assert(j.claim(4,5,b,rec)&&rec==2);
   assert(j.unique(a,1)&&j.unique(b,2));
  }
+ // Other shader families and unsupported pipelines must not reserve an
+ // audited static candidate's geometry key. Actual audited duplicates still do.
+ {DrawJoin packet;DrawKey geometry{};packet.begin(50,60);uint32_t local=0;
+  assert(!observe_static_deferred(packet,50,60,geometry,0x3812bc980438747full,7,true));
+  assert(!observe_static_deferred(packet,50,60,geometry,0x3812bc980438747full,0x8995da1e4060f53bull,false));
+  assert(observe_static_deferred(packet,50,60,geometry,0x3812bc980438747full,0x8995da1e4060f53bull,true));
+  assert(packet.assign(50,60,geometry,4));assert(packet.claim(50,60,geometry,local)&&local==4);assert(packet.unique(geometry,4));
+  assert(!observe_static_deferred(packet,50,60,geometry,0x3812bc980438747full,0x8995da1e4060f53bull,true));assert(!packet.unique(geometry,4));
+ }
  // Source/deferred packets are independent and their local indices differ.
  for(bool deferredFirst:{false,true}){
   DrawJoin source,packet;DrawKey shared{};shared.words[0]=19;uint32_t mapped=0;

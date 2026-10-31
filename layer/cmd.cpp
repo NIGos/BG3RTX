@@ -59,6 +59,7 @@ uint64_t cmd_recording(VkCommandBuffer cmd){
   return i==g_cmds.end()?0:std::atomic_ref<uint64_t>(i->second->recording).load(std::memory_order_acquire);
 }
 void cmd_forget(VkCommandBuffer cmd) {
+  terrain_capture_discard(cmd);
   std::unique_lock<std::shared_mutex> lock(g_cmd_mu);
   auto it = g_cmds.find(cmd);
   if (it == g_cmds.end()) return;
@@ -81,9 +82,10 @@ static void discard_recordings(VkDevice device, VkCommandPool pool, bool destroy
       else { state->begin_flags=0; ++it; }
     }
   }
-  for (auto command:commands) bvh_cmd_reset(command);
+  for (auto command:commands) { terrain_capture_discard(command); bvh_cmd_reset(command); }
 }
 static void discard_recording(VkCommandBuffer command) {
+  terrain_capture_discard(command);
   {
     std::unique_lock lock(g_cmd_mu);
     auto it=g_cmds.find(command);
@@ -227,7 +229,7 @@ static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra =
     }
     s->pass.last_fs_hash = s->fs;
   }
-  if (s->tracing) trace_note_draw(s, 0, kind, extra);
+  if (s->tracing) trace_note_draw(cmd, s, 0, kind, extra);
 }
 
 static void after_dispatch(VkCommandBuffer cmd, CmdState* s, bool indirect, uint32_t x, uint32_t y, uint32_t z) {
@@ -414,7 +416,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   diag(DIAG_BEGIN_CMD);
   bvh_cmd_reset(cmd);   // recorded again: a previous recording not submitted is dropped
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
-  if(r==VK_SUCCESS){omm::command_discard(cmd);omm::command_begin(cmd,(bi->flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)==0);}
+  if(r==VK_SUCCESS){terrain_capture_discard(cmd);omm::command_discard(cmd);omm::command_begin(cmd,(bi->flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)==0);}
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
   std::atomic_ref<uint64_t>(s->recording).store(++recordings,std::memory_order_release);
@@ -799,7 +801,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, u
   if (s->tracing) {
     char dims[64];
     snprintf(dims, sizeof dims, "\"groups\":[%u,%u,%u]", x, y, z);
-    trace_note_draw(s, 1, "dispatch", dims);
+    trace_note_draw(cmd, s, 1, "dispatch", dims);
   }
   after_dispatch(cmd, s, false, x, y, z);
 }
@@ -816,7 +818,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuf
   CmdState* s = cmd_state(cmd);
   if (!s) return;
   rrpost_dispatch_post(cmd, s->cs);
-  if (s->tracing) trace_note_draw(s, 1, "dispatch_indirect", nullptr);
+  if (s->tracing) trace_note_draw(cmd, s, 1, "dispatch_indirect", nullptr);
   after_dispatch(cmd, s, true, 0, 0, 0);
 }
 
@@ -898,6 +900,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectKHR(VkCommandBuffe
 static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32_t n, const VkCommandBuffer* cmds) {
   if(auto* state=cmd_state(cmd);state && state->geo_material)state->geo_material_no_writes=false;
   diag(DIAG_EXEC);
+  if(auto* state=cmd_state(cmd);state&&state->tracing&&state->in_pass)terrain_capture_secondary(cmd,state);
   vk(cmd).CmdExecuteCommands(cmd, n, cmds);
   omm::command_execute(cmd,{cmds,n});
   CmdState* s = cmd_state(cmd);

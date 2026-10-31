@@ -577,3 +577,38 @@ retains the existing extractor point/spot radius and box half-diagonal+att_end
 policy; cone/OBB, generic nonuniform-transform/range completeness and native
 colour-temperature/exposure/cookie/occlusion/shadow behavior remain unqualified.
 No emissive surface is promoted into a runtime light and no radiance is guessed.
+
+
+### Opt-in exact native mainfloor packet capture (not yet run)
+
+In a frozen candidate root, create `trace_terrain_packet.request` before the
+existing queued S1 run, then use its normal `trace.request` / F10 trace trigger.
+The marker alone does not capture outside a trace. No new settings/host ABI or
+queue path is added. `dump_images=0` does not suppress this explicit tiny packet.
+Remove the marker from the candidate after that run; agents do not launch live.
+
+Only VS64e2568916ede3d6 / FS6650c75f3d3e4968 with the exact native image profile is
+supported. The draw event records a terrain_packet ID. Existing end-pass hooks
+copy s4b0 bytes80, up to64 s1b4 records at stride112 (bounded by actual descriptor
+range), s1b2 RGBA8_UNORM49x84 and s1b3 R16_UNORM256x4. Maximum25760 bytes/packet,
+eight outstanding packets/trace (201.25 KiB). Source offsets/ranges/dynamic
+resolution, view/swizzle/row pitch and available sampler metadata are retained in
+`captures/<trace>/terrain_packet/manifest.json`; exact binaries sit beside it.
+The deciding log is `[terrain_packet] frame F: copied N, declined M`. This is raw
+input acquisition, not a native derivative/LOD/shading certificate.
+
+No transfers occur inside a render pass and no native pass is split. The narrow
+path requires a known single-subpass native pass, frozen ordinary descriptors,
+nonattachment input images with the exact simple profile and TRANSFER_SRC usage,
+and TRANSFER_SRC on the actual source buffers. Later storage aliases, push-storage
+uncertainty and secondary execution decline. Native ONE_TIME_SUBMIT without
+SIMULTANEOUS_USE is required; unsubmitted allocations stay alive until submit or
+successful native reset/free. Submitted copies retire only after queue idle.
+Missing/unsupported paths produce explicit status/logs rather than unsafe copies.
+
+Retained S1 proves both source images have TRANSFER_SRC (usage23/7), but contains
+no terrain buffer usage metadata. Therefore actual buffer support remains
+UNPROVEN until the first targeted run. No compute-copy fallback is guessed;
+only a real missing-transfer-source decline would justify that next change.
+Offline verification: all four touched layer translation units compile, and13
+standalone CPU range/overflow/alias checks pass. No GPU or game execution yet.

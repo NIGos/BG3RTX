@@ -30,7 +30,15 @@ struct BoundSampler {
 // descriptors require caller pinning/revalidation; unknown/push bindings decline.
 bool bound_sampler(VkCommandBuffer,VkPipelineBindPoint,uint32_t set,uint32_t binding,uint32_t element,BoundSampler&);
 bool immutable_sampler_current(const BoundSampler&);
+// Native hit capture also accepts ordinary mutable sampler descriptors: their
+// exact set/layout/version and live sampler generation must remain unchanged.
+bool ordinary_sampler_current(const BoundSampler&);
+struct OrdinaryBindingFacts {
+ bool active{},command{},push{},allocated{},supported{},layout_complete{};
+ uint64_t set_id{},layout_id{},version{};VkDescriptorSet set{};
+ VkDescriptorType type{VK_DESCRIPTOR_TYPE_MAX_ENUM};VkDescriptorBindingFlags flags{};uint32_t count{};
+};
 // Standard descriptor lifetime rules freeze this used binding through execution;
 // update-after-bind, push, unknown layouts and variable allocation decline.
-bool ordinary_frozen_binding(VkCommandBuffer,VkPipelineBindPoint,uint32_t set,uint32_t binding,uint32_t element);
+bool ordinary_frozen_binding(VkCommandBuffer,VkPipelineBindPoint,uint32_t set,uint32_t binding,uint32_t element,OrdinaryBindingFacts* facts=nullptr);
 }

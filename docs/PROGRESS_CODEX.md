@@ -1,5 +1,54 @@
 # BG3RTX progress
 
+## Bounded reference and acquisition fixes ready for consolidation - 2026-10-31
+
+Default-OFF `rt_hit_reference=2` extends the SAME direct reference by one BSDF
+continuation and secondary point/spot direct lighting. Source 3e185b2/import
+d74f766: 334 CPU checks, 292 settings checks, six targeted tests, 16 existing
+direct shader identities and 16 new validated variants pass. Explicit counters
+separate supported two-hit/null/incomplete paths; fallback is not unbiased ground
+truth. No environment/emission/MIS/full-room PT or GPU cost/quality claim.
+
+76ef799/import d8510b1 fixes unaudited draws reserving valid material identities
+and supports ordinary frozen samplers via owned clones/exact version checks.
+Three targeted tests and 65 production sampler checks pass. New diagnostics report
+all binding prerequisites plus real source/deferred candidate association.
+
+Exact terrain packet capture 00c6f43+22eda2c/imports e3b238a+8a84f11 reuses the
+tracer after the native pass, opt-in `trace_terrain_packet.request`. Fresh ABI 21
+host/core/launcher link and registered 13-case contract test pass in root. Bound:
+8 packets x 25760 bytes; native image transfer support exists, buffer support is
+not yet proven. First targeted packet attempt can share the brief S1 acquisition.
+No user-profile changes. All three increments still require their actual GPU evidence.
+
+## R3 confirms the parser correction; material binding fix next - 2026-10-31
+
+R3 dae7d32 completed 448 s, all five phases, no NVIDIA 153/dumps/build drift.
+Actual pipelines now accept the native depth-clip extension (type 1000102001),
+zero pipeline declines. Retain that correction. Acquisition still FAILED: zero snapshots/qualified material rows. Counter 20 also
+includes unaudited families; it does NOT prove 20 audited resource failures. Owner
+is correcting eligibility-before-key bookkeeping and ordinary frozen sampler bindings
+with owned clones and exact descriptor/write-version revalidation; actual failed
+capture stage will be logged. Sampler causality remains unproven until that run.
+
+Primary OFF/ON/OFF: 99.525/99.524/99.525%; FG ratio 2.0, zero bad phase samples.
+Rendered log cadence 36.21/36.00/36.42 fps; existing RT diagnostic 18.48/18.39/18.32 ms.
+Stats-off existing RT 0.831/0.877 ms; no new material-cost or speedup claim. Immutable
+inputs and derived results: omm-bake/BG3RTX/captures/native-hit-material-20261031/r3/.
+Next acquisition-only draft is 20/90/20 s, no repeated cost windows until positive
+material participation. No user-trial changes or new user check requested.
+
+## ABI 21 consolidated; changed material acquisition R3 running - 2026-10-31
+
+Main 90d7930, merged only through merge-green and pushed: 52/52 CTests,
+561/561 runtime shader files/all entries and QA passed. Runtime key remains OFF.
+R3 private dae7d32 candidate is frozen with matching host/core/launcher hashes.
+Queue-only S1 real-present FG2 test: one 360 s plan, 660 s hard limit, logs only.
+Tests narrow depth-clip correction against actual pipeline diagnostics/material
+participation. No user witnessing required; no visual pass inferred from tests.
+R3 has no verdict yet. Observe existing runner session 98743; never relaunch merely
+because observation times out. The user's separate Hair profile remains unchanged.
+
 ## Depth-clip material fix prepared; still default OFF - 2026-10-31
 
 Source dae7d32 integrated as d8b70e3. ABI 21 requires matching host/core/launcher.

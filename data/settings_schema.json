@@ -155,6 +155,16 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material": "1"}, "needs": {"rt_geometry": 2}}
      ]},
+    {"id": "exp_hit_reference", "label": "Experimental lighting reference",
+     "description": "Shows a limited reference using point and spot lights on supported opaque surfaces. Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. Requires Native hit materials at startup. No sunlight, sky, emission or full-scene quality claim. This replaces the display for inspection; it is not a gameplay quality preset.",
+     "apply": "live", "apply_note": "live; native materials need startup", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_hit_material": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_reference": "0"}, "needs": {}},
+       {"id": "direct", "label": "Direct only", "caps": ["ray_query"], "keys": {"rt_hit_reference": "1"}, "needs": {"rt_geometry": 2, "exp_hit_material": 1}},
+       {"id": "two", "label": "Two surfaces", "caps": ["ray_query"], "keys": {"rt_hit_reference": "2"}, "needs": {"rt_geometry": 2, "exp_hit_material": 1}}
+     ]},
     {"id": "exp_omm", "label": "Opacity micromaps",
      "description": "Experimental hardware opacity micromaps for the audited static alpha-material subset. Requires Full ray-traced geometry, Vulkan 1.3, EXT opacity micromaps, buffer device address, timeline semaphores, synchronization2 and the static BVH split. Unsupported or stale inputs use the reference scene. Useful in-game coverage and speed are not qualified. Restart required to negotiate device features.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,

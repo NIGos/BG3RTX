@@ -5,6 +5,10 @@
 #include "../rt/rt_common.hlsli"
 #include "../rt/native_hit_material.hlsli"
 #include "../rt/native_hit_direct.hlsli"
+#ifdef RT_HIT_TWO_BOUNCE
+#include "../rt/native_hit_bounce.hlsli"
+void bounce_status(uint status,uint2 fp){if(pc.rt_stats!=0)stat_add(269u+min(status,11u),true,fp.x^fp.y);}
+#endif
 void material_sum(uint counter,uint value,uint bin){
  uint sum=WaveActiveSum(value);if(WaveIsFirstLane() && sum)rtStats.InterlockedAdd((counter*64u+(WaveReadLaneFirst(bin)&63u))*4u,sum);
 }
@@ -21,7 +25,19 @@ void main(uint3 id:SV_DispatchThreadID){
 #endif
  NativeHitMaterial material=rt_hit_material(hit,cone.spread*max(hit.t,0));
  if(pc.rt_stats!=0){[unroll]for(uint status=0;status<10;++status)stat_add(253u+status,material.status==status,fp.x^fp.y);}
- if(material.status!=0)return;
+ if(material.status!=0){
+#ifdef RT_HIT_TWO_BOUNCE
+  bounce_status(HbPathPrimaryMaterial,fp);
+#endif
+  return;
+ }
+#ifdef RT_HIT_TWO_BOUNCE
+ // This reference starts on the actual raster primary, not a different layer
+ // behind it. The tolerance is the existing native encoding/footprint bound.
+ float3 ng=rt_hit_normal(hit);float nl=length(ng);
+ float tolerance=depth_tol(dist,cone.spread,dot(ng/max(nl,1e-30),p)/dist,kJitterPx,1.0)+kTlasRel*dist;
+ if(mat_class(gMaterial.Load(int3(fp,0)))!=0 || !(nl>0) || !all(isfinite(ng)) || abs(hit.t-dist)>tolerance){bounce_status(HbPathPrimaryMismatch,fp);return;}
+#endif
  if(pc.rt_stats!=0){
   float3 ng=normalize(rt_hit_normal(hit));float tol=depth_tol(dist,cone.spread,dot(ng,p)/dist,kJitterPx,1.0)+kTlasRel*dist;
   bool matched=mat_class(gMaterial.Load(int3(fp,0)))==0 && abs(hit.t-dist)<=tol;
@@ -39,8 +55,21 @@ void main(uint3 id:SV_DispatchThreadID){
   }
  }
  NativeHitDirect direct=native_hit_direct(material,(p/dist)*hit.t,-p/dist,rt_hit_normal(hit),cone.spread*hit.t);
- if(direct.status!=HdOk)return;
+ if(direct.status!=HdOk){
+#ifdef RT_HIT_TWO_BOUNCE
+  bounce_status(HbPathPrimaryDirect,fp);
+#endif
+  return;
+ }
  // This is an explicit direct-only view; the normal RF/probe delta is unchanged.
+#ifdef RT_HIT_TWO_BOUNCE
+ RtCone bounce_cone={cone.spread*hit.t,cone.spread};
+ NativeHitBounce bounce=native_hit_bounce(fp,material,(p/dist)*hit.t,-p/dist,rt_hit_normal(hit),bounce_cone,direct.radiance);
+ bounce_status(bounce.status,fp);
+ if(pc.rt_stats!=0)stat_add(281u,bounce.status==HbPathComplete && bounce.positive_indirect,fp.x^fp.y);
+ gDiffuse[fp]=bounce.radiance; // Incomplete paths retain direct prefix, never a completed estimate.
+#else
  gDiffuse[fp]=direct.radiance;
+#endif
  gSpecular[fp]=0;
 }

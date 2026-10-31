@@ -1,0 +1,37 @@
+{
+  "scope": "Offline ABI21 source fix; no game/GPU/candidate edits",
+  "r3": {
+    "pipeline_accepted": true,
+    "actual_raster_pnext": 1000102001,
+    "static_seen": 100,
+    "old_binding_declined": 20,
+    "captured": 0,
+    "snapshots": 0,
+    "correction": "Old binding-declined included unsupported shader families. It does not establish 20 audited resource/sampler failures. S1 trace does not serialize sampler or DSL immutability."
+  },
+  "changes": [
+    "Reject unaudited/noncapturable deferred families before reserving material join keys; source keys reserved only for actual captured fresh VT records. Genuine audited duplicates remain unsupported.",
+    "Accept complete ordinary mutable sampler descriptors with exact set/layout/write-version and live sampler generation; use owned clones; revalidate at deferred end. Push/UAB/unknown remain unsupported.",
+    "Bounded full prerequisite facts expose buffer/view/sampler failures together. Counters distinguish audited unique/duplicate and other-family draws; zero source association includes explicitly unpaired raw key samples."
+  ],
+  "tests": {
+    "targeted_ctests_passed": 3,
+    "production_sampler_registry_checks": 65,
+    "join_regression": "Other family and unsupported pipeline before valid candidate; genuine late audited duplicate revokes; both source/deferred recording orders retained",
+    "host_link": true,
+    "shader_inputs_changed": false
+  },
+  "source_sha256_lf": {
+    "common/native_hit_join.h": "30d4f712dbfc7c9b96baa361e443628d0acd58c5829e30b8c1d7793b57e2744b",
+    "layer/hit_material.cpp": "862179b998722b94c967247d507867ffef0abb424370844763f93959ce6f8ddb",
+    "layer/omm_sampler.cpp": "769ba0c0bd6e7cbff460f8b09199e0b28fff368ff8fba127e6419a11192657ac",
+    "layer/omm_sampler.h": "ea954047b4af4cc590191a1d46929de1974858c597c51138c9f88e9a5bb88aac"
+  },
+  "binary_sha256": {
+    "VkLayer_bg3rtx.dll": "8a873be0d24528dbea4c92d31992e54f56322292ca1fa1b0f92af14eca947f16",
+    "bg3rtx_core.dll": "2f2ba31b26a4d16405eb16021af2a4fd70c9f7d83b878f941b99f25cbddd7c1f",
+    "BG3RTX.exe": "d55b8f4c0250a1ab41249d16a344685718a8ab627f34917f7d7d6227ae63ec99",
+    "VkLayer_bg3rtx.json": "e62ad6e9d788efde539c7239a100f4e69223493b51be6c416fbb2122528a3a70"
+  },
+  "qualification": "No positive runtime material tuple or native field agreement is claimed. Next brief acquisition must report actual new counters."
+}

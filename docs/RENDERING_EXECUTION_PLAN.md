@@ -161,15 +161,15 @@ The receiving agent updates this table with revisions, evidence paths and next w
 Use NOT_REACHED for a dependent milestone stopped by a demonstrated prerequisite
 blocker; name that blocker. Missing live permission is waiting, not a technical no-go.
 
-| ID | Initial state | Deliverable and acceptance |
+| ID | Current state | Deliverable and acceptance |
 |---|---|---|
-| M0 | OFFLINE_VERIFIED isolated receipt/cancellation; main release pending | Reconcile owners/baseline; make live release fail closed; prove authorization and draft isolation with fake tests. Preserve the existing runner. |
-| M1 | OFFLINE_VERIFIED subsets; combined Sun/Hair/material build 36/36, live gates pending | Complete faithful Hair/Scalp/cascade cutout support and query consistency. Keep existing agents' ownership; reuse their work. Offline scalar/shader tests, missing-input rejection and default-off parity first; automated Test1 and distant-shadow qualification only when authorized. |
-| M2 | OFFLINE_VERIFIED one mesh/VT + affine export (7259c21); room construction open | First export one ordinary GR2 and decode its material/VT mapping. Build the smallest useful room subset with correct affine transforms, identities and bounds. Probe construction, terrain and HLOD separately; require each only where the selected scene/rays actually depend on it. Validate against native/captured evidence where available. No room-closure claim from reference counts alone. |
-| M3 | OFFLINE_VERIFIED post-sampler VT fields (56ab2de); runtime providers open | M3a: supported hit-material provider; M3b: world-light provider; M3c: persistent static subset; M3d: runtime reconciliation. Start with declared subsets and independent contracts. Prove no duplicates/stale doors/removed objects and no camera-driven light/material loss where the consumer depends on those inputs. M3a/b do not wait for a complete world baker or every dynamic class. |
-| M4 | TODO | Deliver offscreen shaded reflections and emissive/direct-hit GI, then traced SHaRC updates. Replace accounted native terms, avoid double counting, handle unknown traversal explicitly. Compare cache/reuse against a cache-free supported reference; validate motion, energy and cost. Small increments, not one cache-plus-lighting rewrite. |
+| M0 | MAIN_MERGED finite receipts/cancellation/ownership; fake tests and actual queue batches exercised | Reconcile owners/baseline; make live release fail closed; prove authorization and draft isolation with fake tests. Preserve the existing runner. |
+| M1 | SCOPED_LIVE_EVIDENCE Hair coverage/capacity/physical origin; remaining cascade/Sun qualification open | Complete faithful Hair/Scalp/cascade cutout support and query consistency. Keep existing agents' ownership; reuse their work. Offline scalar/shader tests, missing-input rejection and default-off parity first; automated Test1 and distant-shadow qualification only when authorized. |
+| M2 | OFFLINE_VERIFIED 27 cell components/24506 triangles, persistent terrain/738 holes; roof/state/material packets open | First export one ordinary GR2 and decode its material/VT mapping. Build the smallest useful room subset with correct affine transforms, identities and bounds. Probe construction, terrain and HLOD separately; require each only where the selected scene/rays actually depend on it. Validate against native/captured evidence where available. No room-closure claim from reference counts alone. |
+| M3 | IN_PROGRESS ABI 21 provider main 90d7930; R1/R2 failed acquisition, R3 changed run active; seven authored lights exported | M3a: supported hit-material provider; M3b: world-light provider; M3c: persistent static subset; M3d: runtime reconciliation. Start with declared subsets and independent contracts. Prove no duplicates/stale doors/removed objects and no camera-driven light/material loss where the consumer depends on those inputs. M3a/b do not wait for a complete world baker or every dynamic class. |
+| M4 | OFFLINE_VERIFIED direct-only supported-source reference; production offscreen GI/reflection gains pending | Deliver offscreen shaded reflections and emissive/direct-hit GI, then traced SHaRC updates. Replace accounted native terms, avoid double counting, handle unknown traversal explicitly. Compare cache/reuse against a cache-free supported reference; validate motion, energy and cost. Small increments, not one cache-plus-lighting rewrite. |
 | M5 | TODO, impact-dependent | Implement P6 water as a distinct interface/receiver; select cloud/environment and volume-shadow improvements by measured scene impact. Keep native unsupported components. M5 is not a prerequisite for an opaque-room PT reference. OMM is a separate measured optimization after alpha correctness and GPU proof, not a prerequisite to PT. |
-| M6 | CONDITIONAL | Build a simple cache-free, unfiltered multi-bounce opaque PT reference over the verified room using raster primary hits; test BSDF sampling/evaluation/PDF, emission, MIS and termination. Then qualify an optional real-time candidate only if input, temporal and cost gates pass. Otherwise deliver the reference plus a precise go/no-go report and preserve the improved hybrid renderer. |
+| M6 | IN_PROGRESS shared two-surface reference extension; room PT and real-time decision not achieved | Build a simple cache-free, unfiltered multi-bounce opaque PT reference over the verified room using raster primary hits; test BSDF sampling/evaluation/PDF, emission, MIS and termination. Then qualify an optional real-time candidate only if input, temporal and cost gates pass. Otherwise deliver the reference plus a precise go/no-go report and preserve the improved hybrid renderer. |
 
 M0 protects autonomous execution, not a reason to delay reading/fixing known M1
 code. M2 starts as a small decisive offline probe, not a whole-level world baker.
@@ -417,9 +417,15 @@ mandatory second agent for every locally unsupported case.
 - 2026-10-30 final review: independent read-only audit found no material blockers.
   Handoff consistency and 21 tool/source paths checked. Ready for offline execution;
   M0's runtime policy correction still needs implementation, not presumed complete.
-- Live authorization: NONE for this plan. Historical exceptions are insufficient.
-- Next receiving-agent action: reconcile existing owners; select the smallest M0
-  and M1 offline increments, plus the bounded M2 export task if resources permit.
+- Current live window: user explicitly permits autonomous live diagnostics and
+  progression without witnessing. Queue-only, frozen finite batches and player
+  ownership guards remain. This supersedes the initial no-authorization state.
+- Current checkpoint: main 90d7930, ABI 21; 52 CTests/561 shaders/QA pass. M0 guards
+  operate in the runner; M1 K16 transport is live verified with scoped limitations.
+  M2 has native-qualified cell geometry, persistent terrain and authored lights;
+  runtime terrain packets/state remain open. M3 material R1/R2 failed acquisition;
+  R3 tests the corrected parser. M4-M6 are not complete. Read current handoff for
+  the actual active process/owner before doing any new work.
 - Owner/revision/evidence ledger: receiving coordinator fills this section as work
   proceeds; an empty ledger is not evidence that implementation is complete.
 
