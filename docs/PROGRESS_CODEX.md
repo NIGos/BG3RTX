@@ -1,5 +1,38 @@
 # BG3RTX progress
 
+## Native tileset coverage implemented offline; no BG3 launch - 2026-10-31
+
+Latest user steering: standalone GPU tests are allowed; BG3/game launches are
+forbidden while another game is running. Work stays low priority. Personal Hair
+trial remains unchanged, and all new features stay OFF until qualified.
+
+1fec3d3/import 224b864 implements rt_native_tileset=0 (Experimental, restart to
+enable): actual STI COLOR/UV capture, fixed native Green alpha cutoff 0.5, owned
+native sampler19 and UNKNOWN in all four query entry points for incomplete input.
+Fresh per-instance capture avoids first-instance COLOR reuse. Explicit overflow
+control survives main/query/private-Sun snapshots; AlphaRec remains 208 bytes,
+public ABI remains 21. Independent sampler-lifetime and query-path reviews clear.
+Both DLLs/launcher build; 58 CTests, QA and 334 settings checks pass in the isolated
+source. Coordinator inspected all 639 old-entry byte identities, 604 new validated
+entries, 160 actual shader interfaces and the rejecting missing-feature case.
+Native source VS patches validate at strides40/64/88 with unchanged key-OFF patches.
+
+Capacity fix e16f645/import 1676c0e includes40/80 in the existing corrected overflow
+feedback policy. Its test reproduces old floor-lock/double-counted demand and
+checks recovery/fixed-budget behavior. No MB limits or new allocator changed.
+GPU coverage, actual participation, game quality and pass cost remain UNMEASURED.
+A small extension of the existing windowless GPU fixture is being prepared;
+it will exercise the real four queries without BG3 or presentation.
+
+Next M3 family2 producer/decoder is isolated and not yet linked: actual native
+nine2D views reuse query-private binding2, not a new descriptor bank. It preserves
+native scalar snapshots, per-instance clip/UV/COLOR proof and sampler ownership.
+M2 owns the pending80-byte XFB/getter hook after this M1 checkpoint; core stats
+capacity must reach289 before the new family287/288 counters can execute.
+The corrected GI 4b62c89 same-run image recheck is drafted outside inboxes and
+will not launch without an appropriate later game-testing window.
+
+
 ## GI descriptor fixes verified offline; live recheck deferred while user is at PC - 2026-10-31
 
 9d455ca/import b231eb8 fixes the experimental GI descriptor contract: dedicated

@@ -3,18 +3,26 @@
 Read PROGRESS_CODEX.md next. Full RENDERING_EXECUTION_PLAN M0-M6 remains active,
 not complete. User wants pragmatic scoped checks, autonomous progress and useful
 parallel offline work. Latest steering: user is at the PC; keep windows behind
-other windows. NO further focused FG or SE console launch now. No game is running.
+other windows. NO BG3/game launches now. Standalone GPU tests are allowed (latest clarification);
+keep CPU/GPU loads short/low priority while the user plays another game.
 Existing foreground batch receipts are terminal, not authority for another run.
 
 ## Trees and immediate next action
 
-Main 07e5838, ABI 21, merged through merge-green and pushed: 55/55 CTests,
+Main 4b62c89, ABI 21, merged through merge-green and pushed: 57/57 CTests,
 627/627 runtime shaders and QA pass. Includes GI default OFF, SE reader safety,
 rotation release/reset/press fix and primary warmup pipeline-churn fix.
 Root development: C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX, codex/omm-bake.
-Root pending main: terrain descriptor metadata 045af02, Hair provider audit a37c1ae,
-and current progress notes. Private native-hit-provider-live stays frozen d894b06;
-R1/R2 are terminal. Never edit an active player or queue candidate.
+Root pending main: M1 native tileset coverage1fec3d3 (224b864) and capacitye16f645
+(1676c0e), docs. Existing metadata/Hair audits are already in main. Private
+native-hit-provider-live stays frozen d894b06; all game jobs terminal.
+M1 source offline passes58CTests/QA/334settings,639prior-entry byte identities,
+604newvalidentries,160interfaces; coordinator inspected prooffiles. Cost/game
+quality pending. Sun extends existing WINDOWLESS GPU fixture, no game required.
+M3 family2 2a9bf65/adca0d5 producer/helper is isolated,754CPUcases/3tests and96off
+identities pass; min80/getter glue +combinedlink pending. It reuses privatebinding2
+for9native2Dviews; descriptor16 extension is NOT needed. M2owns nextglue afterM1.
+Reserve287/288 family2GPUcounters; core capacity289 required before execution.
 
 CRITICAL: old experimental GI used filtered LS set0, omitting GI 8/11/13/17;
 R2 ON images have dark stipple. Source FIXED in 9d455ca (b231eb8) with a dedicated
@@ -24,12 +32,12 @@ independent review clear. Image recheck pending; keep both keys OFF. Existing sh
 compiler now checks these host interfaces after a normal build. Include Hair/physical-origin/OMM/SHaRC variants and actual descriptor count
 <=32. Do not merely add four bindings to the filtered LS mask: extra-image masks
 also differ for GI versus LS. No shader math, blur, bias or proof relaxation.
-Sun reviewer independently found the defect and should review the actual fix.
+Sun independently found both defects and reviewed both fixes clear.
 No source edits in the frozen private tree; future fixed image A/B needs new
 appropriate live steering. Do not close visual quality from positive counters.
 
 Active worker omm_alpha_bounds implements actual STI tileset native coverage in a
-fresh tree: source recipe 278f2b2/import 18b224e. Private sampler binding 19 (18 is
+fresh tree: source recipe 278f2b2/import 18b224e. M1 sampler binding 19 (18 is
 Sun storage), 16 owned slots approved; separate RT_NATIVE_TILESET capability/
 wrappers, ordinary key-OFF identities, AlphaRec 208 unchanged, stride max(old,40)
 with actual COLOR at 24 only for this family. SeeThrough/missing input -> UNKNOWN
