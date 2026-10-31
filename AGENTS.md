@@ -24,8 +24,9 @@ These rules come from mistakes already made in this repo. They apply on every br
   the core truly needs new host data; bump the version, rebuild both DLLs, say so in the commit.
   Every branch that bumps it conflicts with the others: keep ABI changes few and merge them early.
 - `shaders/` = HLSL compiled at runtime by DXC (edit, save, the pipeline rebuilds in game).
-  Variants via small wrapper files and defines. With a new key off, the ordinary shaders must
-  compile to byte-identical SPIR-V (check it): that proves the default path is untouched.
+  Variants are defines in the request (`gi/x.hlsl?RT_A=1;RT_B=1`, `common/shader_variant.h`,
+  all listed in `shaders/variants.txt`), not wrapper files. With a new key off, the ordinary
+  shaders must compile to byte-identical SPIR-V (check it): that proves the default path is untouched.
 - `common/settings.h` = the one table of settings. New key: add it to `bg3rtx.ini`, run
   `python scripts/gen_settings_defaults.py`, and the settings test must pass.
 - `data/assetdb` = offline game data (lights, materials, roofs, probes); `tools/assets` builds it.

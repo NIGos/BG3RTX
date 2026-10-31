@@ -1271,7 +1271,7 @@ cut-away roofs, so the RT sun can replace the game's mask under roofs too.
   with alpha holds 1.47M triangles (~100 MB); cascade 3 overflows (340 draws dropped).
 - **Shaders.** `RT_VIS_MASK` / `RT_HIT_MASK` in `rt_common.hlsli` are the literal 0xFF in
   ordinary builds (SPIR-V of all 66 existing outputs byte-identical). The core picks
-  `gi/cascade/` variants with the key on:
+  the `RT_CASCADE_MASKS` variants (`common/shader_variant.h`; once `gi/cascade/` wrappers) with the key on:
   mask 0x01 for GI, reflections, AO, local lights, origin and primary checks; the sun
   ray (`rt_shadow.hlsl`) traces 0xFF and ignores cascade hits nearer than
   `RT_CASCADE_TMIN` = 0.5 m (a coarser copy of the shaded surface; a roof is >= 2 m up).
