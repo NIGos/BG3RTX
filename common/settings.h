@@ -281,6 +281,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"gi_hit_direct", "1"}}, {{"exp_hit_material",1},{"gi",1}}}},
    {}, {0,0,0,0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"},{"gi_rt","1","Ray-traced GI"},{"gi_rt_fallback","0","Zero-bounce hidden-hit fallback"}}},
 
+  {"exp_gi_hit_sun", "Sunlit hidden-surface bounce",
+   "Adds the sun's direct light, with a ray-traced shadow, to the shaded hidden-surface bounce. "
+   "Added only where the GI fallback added no bounce. Under roofs the camera cut away the sun is left out "
+   "unless Roof sun shadows (cascade casters) is on. Requires Shaded hidden-surface bounce. "
+   "Quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   {{"off", "Off", 0, {{"gi_hit_sun", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"gi_hit_sun", "1"}}, {{"exp_gi_hit_direct",1}}}},
+   {}, {0,0,0,0}, true, {{"gi_hit_direct","1","Shaded hidden-surface bounce"}}},
+
   {"exp_rf_hit_shade", "Shaded hidden-surface reflections",
    "Reflection rays that hit a surface hidden from the camera are shaded with that surface's verified native "
    "material and lighting (point and spot lights, the sun with a traced shadow ray, the game's ambient) "
@@ -342,7 +352,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 207 keys of bg3rtx.ini, in file order.
+// 208 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -461,6 +471,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt_depth_k", "1.0"},
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},
+    {"gi_hit_sun", "0"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},

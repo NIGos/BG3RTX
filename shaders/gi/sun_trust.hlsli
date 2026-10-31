@@ -9,7 +9,13 @@
 // (Bg3DbVolume: centre, kind, rotation quaternion, half extents, trigger; absolute world).
 #pragma once
 
-[[vk::binding(47, 0)]] [[vk::image_format("r32ui")]] RWTexture2D<uint> sunTrust;
+// The hidden-hit sun (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF) reads the same image from the
+// D-LS sun set's b8 (D-RF's push set is full): SUN_TRUST_BINDING / SUN_TRUST_SET.
+#ifndef SUN_TRUST_BINDING
+#define SUN_TRUST_BINDING 47
+#define SUN_TRUST_SET 0
+#endif
+[[vk::binding(SUN_TRUST_BINDING, SUN_TRUST_SET)]] [[vk::image_format("r32ui")]] RWTexture2D<uint> sunTrust;
 
 uint st_u(uint byte_off) { return sunTrust[uint2(byte_off >> 2, 0)]; }
 float st_f(uint byte_off) { return asfloat(st_u(byte_off)); }

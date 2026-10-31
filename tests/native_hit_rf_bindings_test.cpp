@@ -1,6 +1,6 @@
 // rf_hit_shade descriptor contract (common/native_hit_rf_bindings.h) against compiled SPIR-V.
 //   native_hit_rf_bindings_test                       table checks (ctest)
-//   native_hit_rf_bindings_test [--sharc] [--tileset] [--hair] a.spv ...   + every module given
+//   native_hit_rf_bindings_test [--sharc] [--tileset] [--hair] [--cascade] a.spv ...   + every module given
 // (tools/compile_shaders.py passes every compiled gi/rt_reflections*_hit_shade.hlsl request).
 #include "../common/native_hit_rf_bindings.h"
 #include "../common/native_hit_records.h"
@@ -18,7 +18,7 @@ static unsigned checks;
 static void check(bool ok,const char* reason){++checks;if(!ok){std::fprintf(stderr,"FAIL %s\n",reason);std::exit(1);}}
 struct Instruction{uint32_t op;std::vector<uint32_t> a;};
 
-static void module(const char* file,bool sharc,bool tileset,bool hair){
+static void module(const char* file,bool sharc,bool tileset,bool hair,bool cascade){
  std::ifstream f(file,std::ios::binary|std::ios::ate);check(bool(f),file);auto bytes=f.tellg();
  check(bytes>=20 && bytes%4==0,"SPIR-V byte range");f.seekg(0);
  std::vector<uint32_t> w(size_t(bytes)/4);f.read(reinterpret_cast<char*>(w.data()),bytes);check(bool(f) && w[0]==0x07230203u,"SPIR-V header");
@@ -68,6 +68,9 @@ static void module(const char* file,bool sharc,bool tileset,bool hair){
  check(push_descriptors<=32,"push descriptors within the device's 32");
  // The feature is really there: material records, sky irradiance, the sun's atmosphere.
  check(seen.contains({kSetMaterial,12u}) && seen.contains({kSetGame,34u}) && seen.contains({kSetSun,0u}),"material, irradiance and sun inputs used");
+ // The roof rule (native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF) reads the roof volumes unless the cascade
+ // casters (RT_CASCADE_MASKS, --cascade) hold the cut-away roofs.
+ check(seen.contains({kSetSun,8u})!=cascade,"roof volumes read exactly without the cascade casters");
  check(seen.contains({kSetPush,7u}) && seen.contains({kSetPush,30u}),"D-RF outputs retained");
  if(sharc)check(seen.contains({kSetSharc,0u}) || seen.contains({kSetSharc,1u}),"SHaRC set used by the SHaRC variant");
  std::printf("PASS %s: %u push descriptors, %zu bindings\n",file,push_descriptors,seen.size());
@@ -81,8 +84,9 @@ int main(int argc,char** argv){
  check(find_in(game,34)->type==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE && find_in(game,36)->type==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,"sky irradiance cubes");
  check(find_in(game,45)->count==0,"bindless probe cubes");
  check(find_in(sun,0)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && find_in(sun,6)->type==VK_DESCRIPTOR_TYPE_SAMPLER,"sun set");
- check(find_in(sun,7)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && sun.size()==8,"sun set b7: the per-light data for the hit light policy");
- bool sharc=false,tileset=false,hair=false;
+ check(find_in(sun,7)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && sun.size()==9,"sun set b7: the per-light data for the hit light policy");
+ check(find_in(sun,8)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,"sun set b8: the roof volumes (sun trust image)");
+ bool sharc=false,tileset=false,hair=false,cascade=false;
  for(int i=1;i<argc;++i){
   if(std::strcmp(argv[i],"--sharc")==0){sharc=true;continue;}
   if(std::strcmp(argv[i],"--plain")==0){sharc=false;continue;}
@@ -90,7 +94,9 @@ int main(int argc,char** argv){
   if(std::strcmp(argv[i],"--hair")==0){hair=true;continue;}
   if(std::strcmp(argv[i],"--nohair")==0){hair=false;continue;}
   if(std::strcmp(argv[i],"--notileset")==0){tileset=false;continue;}
-  module(argv[i],sharc,tileset,hair);
+  if(std::strcmp(argv[i],"--cascade")==0){cascade=true;continue;}
+  if(std::strcmp(argv[i],"--nocascade")==0){cascade=false;continue;}
+  module(argv[i],sharc,tileset,hair,cascade);
  }
  std::printf("PASS %u rf hit shade interface checks\n",checks);
 }

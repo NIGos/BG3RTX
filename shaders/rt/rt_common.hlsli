@@ -144,6 +144,12 @@ float3 rt_scene_ray_origin(float3 lighting_origin) { return lighting_origin + rt
 #define RT_HIT_MASK 0x01
 #ifdef RT_CASCADE_SUN
 #define RT_VIS_MASK 0xFF
+#elif defined(RT_CASCADE_SUN_HIT)
+// gi_hit_sun (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_GI): only the sun ray at a GI hit sees the
+// cascade's casters (it sets g_rt_cascade_ray around its rt_visibility); every other ray of
+// the pass traces 0x01 as in the other cascade variants.
+static bool g_rt_cascade_ray = false;
+#define RT_VIS_MASK (g_rt_cascade_ray ? 0xFFu : 0x01u)
 #else
 #define RT_VIS_MASK 0x01
 #endif
@@ -155,7 +161,7 @@ float3 rt_scene_ray_origin(float3 lighting_origin) { return lighting_origin + rt
 #undef RT_VIS_MASK
 #define RT_VIS_MASK (2u<<gSunLayer)
 #endif
-#ifdef RT_CASCADE_SUN
+#if defined(RT_CASCADE_SUN) || (defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS))
 static const uint kRtCascadeId = 0xFFFFFFu;   // common/cascade_casters.h kCustomIndex
 // The cascade soup holds the casters again where the camera drew them too, at the shadow
 // LOD: its hits nearer than this to the ray origin are ignored (no self-shadowing by a
@@ -967,7 +973,7 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
       continue;
     }
 #endif
-#ifdef RT_CASCADE_SUN
+#if defined(RT_CASCADE_SUN) || (defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS))
     // The cascade instance is not opaque only for this test (no alpha: its triangles are solid).
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
 #ifdef RT_SUN_CURRENT

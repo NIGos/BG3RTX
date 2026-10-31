@@ -33,6 +33,18 @@ inline constexpr std::array<Binding,18> reference_bindings={{
  {25,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1},{26,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
  {29,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{48,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1}
 }};
+// gi_hit_sun (gi/gi_trace_rt_hit_sun.hlsl and its SHaRC twin): the D-LS sun set (core/gi.cpp
+// g_sun_dsl, write_sun_set) as set 3, as rf_hit_shade binds it (native_hit_rf_bindings.h sun):
+// 0 atmosphere UBO, 1-5 the transmittance LUT and cloud maps, 6 sampler, 8 the sun trust image
+// (roof volumes, rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF); b7 (lsSlots) is in the set but the
+// GI reads the per-light data at push b46. Set 2 is empty; SHaRC stays set 4.
+inline constexpr uint32_t kSetSun=3;
+inline constexpr std::array<Binding,8> sun={{
+ {0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{1,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{2,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
+ {3,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{4,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{5,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
+ {6,VK_DESCRIPTOR_TYPE_SAMPLER,1},{8,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1}
+}};
+inline constexpr const Binding* find_sun(uint32_t slot){for(const auto& b:sun)if(b.binding==slot)return &b;return nullptr;}
 inline constexpr std::span<const Binding> slots(bool reference=false){return reference?std::span<const Binding>(reference_bindings):std::span<const Binding>(bindings);}
 inline constexpr uint32_t push_bytes=256;
 inline constexpr bool enabled(const Binding& b,bool hair){return b.binding!=50u || hair;}

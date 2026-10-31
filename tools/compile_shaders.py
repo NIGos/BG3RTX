@@ -67,22 +67,27 @@ with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor(8) as pool:
     material_gi = [(str(Path(tmp) / spv_name(f, "main")), "RT_NATIVE_TILESET=1" in defines(f))
                    for f, rc, _ in res if not rc and f.partition("?")[0].endswith(
                        ("gi_trace_rt_hit_direct.hlsl", "gi_trace_rt_sharc_hit_direct.hlsl"))]
+    # gi_hit_sun: the same contract plus the sun set 3 and the roof volumes b47 (--sun).
+    sun_gi = [(str(Path(tmp) / spv_name(f, "main")), "RT_NATIVE_TILESET=1" in defines(f))
+              for f, rc, _ in res if not rc and f.partition("?")[0].endswith(
+                  ("gi_trace_rt_hit_sun.hlsl", "gi_trace_rt_sharc_hit_sun.hlsl"))]
     references = [(str(Path(tmp) / spv_name(f, "main")), "RT_NATIVE_TILESET=1" in defines(f))
                   for f, rc, _ in res if not rc and f.partition("?")[0].rsplit("/", 1)[-1] in
                       ("rt_hit_direct.hlsl", "rt_hit_two_bounce.hlsl")]
     checker = root / "bin" / "native_hit_gi_bindings_test.exe"
-    if (material_gi or references) and checker.exists():
+    if (material_gi or references or sun_gi) and checker.exists():
         for tileset in (False, True):
             gi = [p for p, t in material_gi if t == tileset]
+            sgi = [p for p, t in sun_gi if t == tileset]
             refs = [p for p, t in references if t == tileset]
-            if not gi and not refs:
+            if not gi and not refs and not sgi:
                 continue
-            result = subprocess.run([str(checker), *(["--tileset"] if tileset else []), *gi, "--reference", *refs], capture_output=True, text=True)
+            result = subprocess.run([str(checker), *(["--tileset"] if tileset else []), *gi, "--sun", *sgi, "--reference", *refs], capture_output=True, text=True)
             if result.returncode:
                 res.append(("GI host descriptor interface", result.returncode, result.stdout + result.stderr))
             else:
-                print(f"GI/reference host descriptor interface checked: {len(gi)} GI + {len(refs)} reference SPIR-V modules; native tileset={tileset}")
-    elif material_gi or references:
+                print(f"GI/reference host descriptor interface checked: {len(gi)} GI + {len(sgi)} GI sun + {len(refs)} reference SPIR-V modules; native tileset={tileset}")
+    elif material_gi or references or sun_gi:
         print("SKIP GI/reference host descriptor interface: build native_hit_gi_bindings_test first; shader compilation alone is not interface validation")
     # rf_hit_shade (common/native_hit_rf_bindings.h): each compiled tier (b) module against its layout.
     rf_hit = [(f, str(Path(tmp) / spv_name(f, "main"))) for f, rc, _ in res if not rc and
@@ -93,7 +98,7 @@ with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor(8) as pool:
             d = defines(f)
             flags = (["--sharc"] if "sharc" in f.partition("?")[0] else []) + \
                     (["--tileset"] if "RT_NATIVE_TILESET=1" in d else []) + \
-                    (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else [])
+                    (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else []) +                     (["--cascade"] if "RT_CASCADE_MASKS=1" in d else [])
             result = subprocess.run([str(rf_checker), *flags, spv], capture_output=True, text=True)
             if result.returncode:
                 res.append(("rf hit shade descriptor interface " + f, result.returncode, result.stdout + result.stderr))

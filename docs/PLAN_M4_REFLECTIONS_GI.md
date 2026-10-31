@@ -164,6 +164,9 @@ Limits that decide the order:
 - Live gate: as M4.1, at S3 Campsite (outdoor). `GI hit direct` line gains a sun count.
 - Cost: one more ray per qualified hit. Expected +0.1 ms.
 
+- Built 2026-11-01 (branch gi-hit-sun, offline, READY_FOR_LIVE): TRACK_C_GI "Sun at qualified
+  hidden hits". The roof rule is shared with rf_hit_shade (TRACK_D_REFLECTIONS 14).
+
 ### M4.4 Emission at hits (GI and reflections): `rt_hit_emission=0`
 - A hit on an emissive surface adds its D-EM record radiance (emissive TLAS, core policy ABI 24),
   for both consumers. The probe and the native bounce never count it twice: tier (a) and screen

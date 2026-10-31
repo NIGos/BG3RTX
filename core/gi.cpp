@@ -201,10 +201,12 @@ uint64_t g_sun_used[kSunRing] = {};
 uint64_t g_sun_full = 0;
 uint32_t g_sun_slot = 0;
 bool g_sun_slots[kSunRing] = {};   // the set's b7 holds the per-light data image (else the 1x1 fallback)
-constexpr uint32_t kSunBindings = 8;
+// b8: the sun trust image (core/sun_trust.h: header and roof volumes) for the hidden-hit sun's
+// roof rule (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF: rf_hit_shade, gi_hit_sun). D-LS ignores it.
+constexpr uint32_t kSunBindings = 9;
 VkDescriptorType sun_binding_type(uint32_t i) {
   return i == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : i == 6 ? VK_DESCRIPTOR_TYPE_SAMPLER
-       : i == 7 ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+       : i == 7 || i == 8 ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 }
 constexpr uint32_t kNumExtras = sizeof kExtras / sizeof kExtras[0];
 
@@ -216,6 +218,7 @@ VkPipelineLayout g_current_sun_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_trace_rt, g_ls, g_ls_prep;
 Pipe g_hit_material, g_hit_direct, g_hit_two_bounce, g_hit_gi, g_hit_gi_sharc;
+Pipe g_hit_gi_sun, g_hit_gi_sun_sharc;   // gi_hit_sun (gi_trace_rt_hit_sun.hlsl): + the sun set 3
 Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
 Pipe g_rt_shadow_current; // private current-caster tuple; ordinary sun pipe stays untouched
@@ -244,6 +247,8 @@ VkDescriptorSetLayout g_empty_dsl = VK_NULL_HANDLE;
 VkDescriptorSetLayout g_hit_gi_set_layout=VK_NULL_HANDLE,g_hit_reference_set_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_hit_gi_plain_layout=VK_NULL_HANDLE,g_hit_reference_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_rt_sharc_layout = VK_NULL_HANDLE, g_rf_sharc_layout = VK_NULL_HANDLE, g_hit_gi_layout=VK_NULL_HANDLE;
+VkPipelineLayout g_hit_gi_sun_layout=VK_NULL_HANDLE,g_hit_gi_sun_sharc_layout=VK_NULL_HANDLE;
+bool g_hit_gi_sun_logged=false;
 Pipe g_trace_rt_sharc, g_rf_sharc, g_sharc_resolve, g_sharc_inject, g_sharc_inject_lock, g_sharc_debug, g_sharc_roof;
 bool g_sharc_logged = false, g_sharc_missing_logged = false, g_sharc_paused_logged = false, g_sharc_em_logged = false;
 bool g_ls_logged = false, g_ls_missing_logged = false;
@@ -678,7 +683,7 @@ bool ensure_ls_layout() {
     VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kSunRing},
                                   {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 5 * kSunRing},
                                   {VK_DESCRIPTOR_TYPE_SAMPLER, kSunRing},
-                                  {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, kSunRing}};
+                                  {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2 * kSunRing}};
     VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pci.maxSets = kSunRing;
     pci.poolSizeCount = 4;
@@ -976,11 +981,17 @@ constexpr uint32_t kStatsRing = 8;
 // the hit's pixel; L_a diffuse part, L_a specular part.
 // [312..319] hit light policy / AO (native_hit_direct.hlsli g_hd_pbase): GI 312.., rf_hit_shade 316..:
 // lights left at the game's visibility, traced with a per-light R, hits with an AO estimate, sum A x 8192.
+// [320..328] gi_hit_sun (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_STAT_BASE 320, gi_trace_rt.hlsl): sun
+// evaluated, zero incident, N.L <= 0, traced lit, traced occluded, roof-unsupported, unknown
+// visibility, other unsupported (sun inputs missing, normal domain, invalid), added luminance x 8192.
+// [329..330] rf_hit_shade's sun (native_hit_sun.hlsli NATIVE_HIT_SUN_XBASE 329): roof-unsupported, unknown visibility.
 constexpr uint32_t kRfHitFirst = 289, kRfHitCount = 23;
 constexpr uint32_t kHitPolicyFirst = kRfHitFirst + kRfHitCount, kHitPolicyCount = 8;
 constexpr double kRfHitScale = 8192.0;   // fxh in rt_reflections.hlsl
 static_assert(bg3::transport::NtsStatsCount == kRfHitFirst, "rf hit shade counters follow the tileset ones");
-constexpr uint32_t kStatsCounters = kHitPolicyFirst + kHitPolicyCount; //253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy
+constexpr uint32_t kGiSunFirst = kHitPolicyFirst + kHitPolicyCount, kGiSunCount = 11;
+static_assert(kGiSunFirst == 320, "native_hit_sun.hlsli NATIVE_HIT_SUN_STAT_BASE 320 (gi_trace_rt.hlsl RT_HIT_GI_SUN)");
+constexpr uint32_t kStatsCounters = kGiSunFirst + kGiSunCount; //253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
@@ -1200,6 +1211,13 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
     host->log("hit material tileset (%u frames): qualified family2 %llu; native primary matches %llu",g_stats_n,
       (unsigned long long)t[bg3::transport::NtsStatQualified],(unsigned long long)t[bg3::transport::NtsStatPrimaryMatch]);
   if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/8192.0,t[134],t[135]);
+  // gi_hit_sun: the sun at the same hits (native_hit_sun.hlsli, counters 320-328). Evaluated = qualified
+  // hits with a supported point/spot term whose sun inputs are bound; the added luminance is the
+  // sun's share of the GI bounce sum (x the ray fade w, as the direct sum above).
+  if(t[kGiSunFirst]|t[kGiSunFirst+7])host->log("GI hit sun (%u frames): evaluated %llu, zero sun colour x clouds x b13 %llu, N.L <= 0 %llu, traced lit %llu, traced occluded %llu, "
+    "roof-unsupported (no cut-away roofs in the TLAS) %llu, unknown visibility %llu, other unsupported %llu; added weighted luminance sum %.7f",
+    g_stats_n,t[kGiSunFirst],t[kGiSunFirst+1],t[kGiSunFirst+2],t[kGiSunFirst+3],t[kGiSunFirst+4],t[kGiSunFirst+5],t[kGiSunFirst+6],t[kGiSunFirst+7],
+    double(t[kGiSunFirst+8])/8192.0);
   // native_hit_direct.hlsli diagnostics: why a hit's point/spot term is zero or unsupported.
   // x: the 4 more counters (g_hd_xbase): blocker within 1 m of the light, rays to lights of
   // radius >= 10 m, projector entries listed / evaluated (rf_hit_shade; gi_hit_direct skips them).
@@ -1217,8 +1235,9 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
     if(t[p]|t[p+1]|t[p+2])host->log("%s policy (%u frames): lights at the game's visibility (unshadowed, as D-LS leaves them) %llu, "
       "traced with a per-light radius %llu; AO estimates %llu, mean AO %.4f",k?"rf hit shade":"GI hit direct",g_stats_n,
       t[p],t[p+1],t[p+2],t[p+2]?double(t[p+3])/8192.0/double(t[p+2]):0.0);}
-  if(t[191])host->log("rf hit shade sun (%u frames): evaluated %llu, zero sun colour x clouds x b13 %llu, N.L <= 0 %llu, traced lit %llu, traced occluded %llu",
-                      g_stats_n,t[191],t[192],t[193],t[194],t[195]);
+  if(t[191])host->log("rf hit shade sun (%u frames): evaluated %llu, zero sun colour x clouds x b13 %llu, N.L <= 0 %llu, traced lit %llu, traced occluded %llu, "
+                      "roof-unsupported (no cut-away roofs in the TLAS) %llu, unknown visibility %llu",
+                      g_stats_n,t[191],t[192],t[193],t[194],t[195],t[kGiSunFirst+9],t[kGiSunFirst+10]);
   uint64_t material_total=0;for(unsigned i=253;i<263;++i)material_total+=t[i];
   if(material_total)host->log("hit material (%u frames): attempted %llu qualified %llu unsupported %llu; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters %llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu; of base, instance without a material record %llu",
     g_stats_n,material_total,t[253],material_total-t[253],t[254],t[255],t[256],t[257],t[258],t[259],t[260],t[261],t[262],t[127]);
@@ -1604,7 +1623,7 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
   VkDescriptorBufferInfo ubo = s.x_atmo.buffer ? VkDescriptorBufferInfo{s.x_atmo.buffer, s.x_atmo.offset, (std::min)(s.x_atmo.range, VkDeviceSize(65536))}
                                                : VkDescriptorBufferInfo{s.cam.buffer, s.cam.offset, s.cam.range};
   const Bg3Binding* src[5] = {&s.x_tlut, &s.x_ca0, &s.x_ca1, &s.x_cb0, &s.x_cb1};
-  VkDescriptorImageInfo img[7];
+  VkDescriptorImageInfo img[8];
   for (int i = 0; i < 5; ++i)
     img[i] = src[i]->view ? VkDescriptorImageInfo{VK_NULL_HANDLE, src[i]->view, src[i]->layout}
                           : VkDescriptorImageInfo{VK_NULL_HANDLE, s.alb.view, s.alb.layout};
@@ -1613,17 +1632,23 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
   // shader checks each slot's key), else the 1x1 fallback, never read (Push::ls_flags bit 0 clear).
   g_sun_slots[pick] = g_lsl.slots_view != VK_NULL_HANDLE;
   img[6] = {VK_NULL_HANDLE, g_sun_slots[pick] ? g_lsl.slots_view : g_ls_nodata.view, VK_IMAGE_LAYOUT_GENERAL};
+  // b8: this frame's trust slot (staged by sunt_begin before the GI), else the 1x1 fallback, never
+  // read as roofs (Push::ls_flags bit 25 clear: the hit's sun is then unsupported, not lit).
+  img[7] = {VK_NULL_HANDLE, g_sunt_ok && g_sunt.view ? g_sunt.view : g_ls_nodata.view, VK_IMAGE_LAYOUT_GENERAL};
   VkWriteDescriptorSet w[kSunBindings];
+  uint32_t n = 0;
   for (uint32_t i = 0; i < kSunBindings; ++i) {
-    w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    w[i].dstSet = set;
-    w[i].dstBinding = i;
-    w[i].descriptorCount = 1;
-    w[i].descriptorType = sun_binding_type(i);
-    if (i == 0) w[i].pBufferInfo = &ubo;
-    else w[i].pImageInfo = &img[i - 1];
+    if (i > 0 && !img[i - 1].imageView && sun_binding_type(i) == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) continue;
+    w[n] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    w[n].dstSet = set;
+    w[n].dstBinding = i;
+    w[n].descriptorCount = 1;
+    w[n].descriptorType = sun_binding_type(i);
+    if (i == 0) w[n].pBufferInfo = &ubo;
+    else w[n].pImageInfo = &img[i - 1];
+    ++n;
   }
-  host->vk->UpdateDescriptorSets(host->device, img[6].imageView ? kSunBindings : kSunBindings - 1, w, 0, nullptr);
+  host->vk->UpdateDescriptorSets(host->device, n, w, 0, nullptr);
   return set;
 }
 
@@ -1679,7 +1704,8 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
 bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& pc, VkDescriptorSet sun) {
   // The variant reads the box (projector) lights of set 1 b29 at the hits (native_hit_direct.hlsli
   // NATIVE_HIT_BOXES): without that buffer the ordinary D-RF runs.
-  if (!sun || !s.boxes_bound || !host->rt_hit_material_use ||
+  // The sun set's b8 (roof volumes, native_hit_sun.hlsli) must hold an image: the trust slot or the fallback.
+  if (!sun || !s.boxes_bound || !host->rt_hit_material_use || !((g_sunt_ok && g_sunt.view) || g_ls_nodata.view) ||
       !bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t)))))
     return false;
   const bool sharc = s.rf_sharc;
@@ -1707,6 +1733,8 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
   for (uint32_t i = 0; i < kSunRing; ++i)
     if (g_sun_sets[i] == sun) slots = g_sun_slots[i];
   hp.ls_flags = (hp.ls_flags & ~1u) | (slots && g_lsl_ok && host->cfg_int("ls_lights", 1) ? 1u : 0u);
+  // Bit 25: the sun set's b8 holds this frame's trust slot (roof volumes; native_hit_sun.hlsli).
+  hp.ls_flags |= g_sunt_ok && g_sunt.view ? (1u << 25) : 0u;
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof hp, &hp);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
   return true;
@@ -1763,16 +1791,45 @@ bool ensure_hit_reference_layout(){
  return host->rt_alpha && host->rt_alpha(&alpha,&unused) && alpha && ensure_hit_gi_layout(alpha,false,true);
 }
 
+// gi_hit_sun: the GI hit push set, the material AlphaDSL set 1, an empty set 2, the D-LS sun set 3
+// (g_sun_dsl; common/native_hit_gi_bindings.h kSetSun), SHaRC's set 4 in the SHaRC variant.
+bool ensure_hit_gi_sun_layout(VkDescriptorSetLayout alpha,bool sharc){
+ VkPipelineLayout& out=sharc?g_hit_gi_sun_sharc_layout:g_hit_gi_sun_layout;
+ if(out)return true;
+ if(!ensure_hit_gi_layout(alpha,sharc) || !g_hit_gi_set_layout || !ensure_ls_layout() || !g_sun_dsl)return false;
+ if(!g_empty_dsl){
+  VkDescriptorSetLayoutCreateInfo ei{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+  if(host->vk->CreateDescriptorSetLayout(host->device,&ei,nullptr,&g_empty_dsl)!=VK_SUCCESS)return false;
+ }
+ VkDescriptorSetLayout sh=sharc?sharc_set_layout():VK_NULL_HANDLE;
+ if(sharc && !sh)return false;
+ static_assert(bg3::native_hit_gi::kSetSun==3);
+ VkDescriptorSetLayout sets[5]={g_hit_gi_set_layout,alpha,g_empty_dsl,g_sun_dsl,sh};
+ VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(Push)};
+ VkPipelineLayoutCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};ci.setLayoutCount=sharc?5u:4u;ci.pSetLayouts=sets;
+ ci.pushConstantRangeCount=1;ci.pPushConstantRanges=&push;
+ if(host->vk->CreatePipelineLayout(host->device,&ci,nullptr,&out)!=VK_SUCCESS){out=VK_NULL_HANDLE;return false;}
+ return true;
+}
+
 // Qualified hidden-hit GI uses native local-light inputs, material set1 and
-// optional SHaRC set4. No private Sun descriptor contract is used by this shader.
+// optional SHaRC set4. gi_hit_sun adds the D-LS sun set as set 3 (this frame's write_sun_set);
+// without it (ring full, layout failure) the direct-only variant runs, as gi_hit_sun=0.
 bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& pc){
  if(!bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))))return false;
  VkDescriptorSetLayout alpha_layout{};VkDescriptorSet unused{};
  if(!s.ls_ok || !host->rt_hit_material_use || !host->rt_alpha ||
     !host->rt_alpha(&alpha_layout,&unused) || !alpha_layout || !ensure_hit_gi_layout(alpha_layout,s.sharc))return false;
- VkPipelineLayout layout=s.sharc?g_hit_gi_layout:g_hit_gi_plain_layout;
- Pipe& p=s.sharc?g_hit_gi_sharc:g_hit_gi;
- if(!refresh(p,s.sharc?"gi/gi_trace_rt_sharc_hit_direct.hlsl":"gi/gi_trace_rt_hit_direct.hlsl",layout))return false;
+ VkDescriptorSet sun=VK_NULL_HANDLE;
+ if(host->cfg_int("gi_hit_sun",0)){
+  if(((g_sunt_ok && g_sunt.view) || g_ls_nodata.view) && ensure_hit_gi_sun_layout(alpha_layout,s.sharc))sun=write_sun_set(s);
+  if(!sun && !g_hit_gi_sun_logged)host->log("gi: gi_hit_sun: no sun set or layout this frame; the direct-only hit GI runs");
+  g_hit_gi_sun_logged=g_hit_gi_sun_logged || !sun;
+ }
+ VkPipelineLayout layout=sun?(s.sharc?g_hit_gi_sun_sharc_layout:g_hit_gi_sun_layout):(s.sharc?g_hit_gi_layout:g_hit_gi_plain_layout);
+ Pipe& p=sun?(s.sharc?g_hit_gi_sun_sharc:g_hit_gi_sun):(s.sharc?g_hit_gi_sharc:g_hit_gi);
+ if(!refresh(p,sun?(s.sharc?"gi/gi_trace_rt_sharc_hit_sun.hlsl":"gi/gi_trace_rt_hit_sun.hlsl")
+                  :(s.sharc?"gi/gi_trace_rt_sharc_hit_direct.hlsl":"gi/gi_trace_rt_hit_direct.hlsl"),layout))return false;
  auto traversal=prepare_omm_traversal(cmd,b,p.pipeline);if(!traversal.valid())return false;
  VkDescriptorSet material_alpha=b.alpha;
  if(!host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&material_alpha))return false;
@@ -1781,10 +1838,13 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,p.pipeline);
  vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,write_count,writes);
  vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,1,1,&material_alpha,0,nullptr);
+ if(sun)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,bg3::native_hit_gi::kSetSun,1,&sun,0,nullptr);
  if(s.sharc)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,4,1,&s.sh.set,0,nullptr);
  // The hit light policy's per-light data (b46): the latest join's, the GI runs before this
  // frame's (native_hit_direct.hlsli checks each slot's key).
  Push hp=pc;hp.ls_flags=(hp.ls_flags&~1u)|(g_lsl_ok && host->cfg_int("ls_lights",1)?1u:0u);
+ // gi_hit_sun: bit 25, the sun set b8 holds this frame's trust slot (header and roof volumes).
+ if(sun)hp.ls_flags|=g_sunt_ok && g_sunt.view?(1u<<25):0u;
  vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof hp,&hp);
  vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);return true;
 }
@@ -2630,7 +2690,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
-  for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
+  for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_rf_shade, &g_rf_shade_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
@@ -2690,7 +2750,7 @@ void gi_release() {
   g_rt_set_layout = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hit_gi_set_layout));g_hit_gi_set_layout=VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hit_reference_set_layout));g_hit_reference_set_layout=VK_NULL_HANDLE;
-  for (VkPipelineLayout* l : {&g_hit_reference_layout, &g_hit_gi_plain_layout, &g_hit_gi_layout, &g_rt_sharc_layout, &g_rf_sharc_layout}) {
+  for (VkPipelineLayout* l : {&g_hit_reference_layout, &g_hit_gi_plain_layout, &g_hit_gi_layout, &g_hit_gi_sun_layout, &g_hit_gi_sun_sharc_layout, &g_rt_sharc_layout, &g_rf_sharc_layout}) {
     host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
     *l = VK_NULL_HANDLE;
   }

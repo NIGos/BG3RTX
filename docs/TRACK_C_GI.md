@@ -156,6 +156,25 @@ the existing GI trace interval. Live contribution, motion and cost remain
 unqualified until same-run A/B. This changes lighting by an accounted addition;
 it does not claim unchanged-transport energy preservation or full M4 completion.
 
+## Sun at qualified hidden hits (`gi_hit_sun=0`, M4.3, 2026-11-01; offline, READY_FOR_LIVE)
+
+Key `gi_hit_sun=0` (live; GUI Experimental "Sunlit hidden-surface bounce", `exp_gi_hit_sun`,
+needs `exp_gi_hit_direct`). Variant `gi_trace_rt_hit_sun.hlsl` (+ SHaRC twin), chosen by the
+core only with the key on: key off runs the unchanged `gi_hit_direct` SPIR-V.
+- What: at a hit where `gi_hit_direct` has a supported point/spot term, the sun is added with
+  rf_hit_shade's code (`rt/native_hit_sun.hlsli`): colour x clouds x b13[0], the same BSDF,
+  one RT shadow ray sampling the sun disc as rt_shadow.hlsl (sun_radius), the AO-on-direct
+  factor rule of rf_hit_shade. bounce += (direct + sun) x w, occ += w as before.
+- Energy: still only the fallback-0 zero bounce is replaced (screen and SHaRC hits never reach
+  this code), so no light already in the screen-space or cache radiance is counted twice.
+  Unsupported sun (roof, unknown visibility, missing sun inputs) leaves the direct term alone.
+- R0 roofs: without `rt_cascade_casters` a hit whose sun ray passes a roof volume, or any hit
+  while the volumes are unknown, has no sun (counted). With the casters the sun ray sees them.
+- Layout: GI push set (unchanged), material set 1, empty set 2, D-LS sun set 3 (b8 roof volumes,
+  common/native_hit_gi_bindings.h `sun`), SHaRC set 4. Counters 320-328, log `GI hit sun`.
+- Live gate: as M4.1 at S3 Campsite; cost = `gi: trace pass` GPU median ON minus OFF (one more
+  ray per supported hit, expected +0.1 ms).
+
 ## Next
 - QA and defaults for the radiance cache (above); its traced update (v2).
 - ReSTIR-style reuse.

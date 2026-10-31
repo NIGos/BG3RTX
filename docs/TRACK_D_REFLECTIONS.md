@@ -359,6 +359,17 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Cost (not measured): 2 rays <= 1 m per shaded hit (+ fewer light rays: the darkvision pair
     is no longer traced); `rf: reflection pass GPU median` and the GI trace median tell.
   - A/B in one run: `hit_ao_rays` 2 / 0 and `hit_ls_policy` 1 / 0 (both live).
+- **Sun roof rule (2026-11-01, branch gi-hit-sun; offline, READY_FOR_LIVE).** Live S8 at f98179f:
+  tier (a) L_b sun 0.037 + direct 0.005 + ambient diffuse 0.069 vs L_a diffuse 0.085 (x 1.26),
+  S8 ~95% under roofs: the hit's sun ray went through roofs the camera cut away. Now
+  `rt/native_hit_sun.hlsli` (`NATIVE_HIT_SUN_ROOF`, shared with `gi_hit_sun`): without the
+  cascade casters (no `RT_CASCADE_MASKS`) a hit whose sun ray passes a roof volume (the sun
+  pass's test, `gi/sun_roof.hlsli`; volumes from the sun set b8), or any hit while the volumes
+  are unknown (Push ls_flags bit 25 / header flag 2), has an unsupported sun: tier (b) keeps the
+  probe, the tier (a) check skips it (unsupported). With the casters the sun ray (only:
+  `RT_CASCADE_SUN_HIT`) traces mask 0xFF with the cascade filter, as rt_shadow.hlsl. The
+  `rf hit shade sun` line adds `roof-unsupported N, unknown visibility N` (counters 329-330).
+  Live check: S8 tier (a) mean(L_b - L_a) with `rt_cascade_casters` 0 and 1.
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.
