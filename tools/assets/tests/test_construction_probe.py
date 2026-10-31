@@ -4,7 +4,7 @@ import unittest
 from tools.assets.affine import Affine, UnsupportedAffine
 from tools.assets.resource import Node
 from tools.assets.probe_foundry_mesh import accessor
-from tools.assets.probe_foundry_construction import tile_affine, span_evidence, wall_span_evidence, vertical_hits, validate_export, unique, NULL
+from tools.assets.probe_foundry_construction import tile_affine, span_evidence, wall_span_evidence, vertical_hits, validate_export, unique, NULL, FLOOR_B_GUID, FLOOR_B_SET
 
 
 def node(name,**attrs):
@@ -34,6 +34,20 @@ def fixture():
 
 
 class ConstructionProbeTests(unittest.TestCase):
+    def test_native_floor_b_position_stretch_and_flip_scope(self):
+        ts=node('tiles',ConstructionBend=False,ConstructionPlaceTwoTiles=False,TileSet=FLOOR_B_SET)
+        t=tile(tile=FLOOR_B_GUID,Scale=.5,ScaleZ=1.25,Flip=True,Translate=[3.,4.,5.],Rotate=[0,0,-1,0,1,0,1,0,0])
+        for k in ('Point1','Point2','TwoSidedTileCount'):del t[k]
+        with self.assertRaises(UnsupportedAffine):tile_affine(t,ts)
+        a=tile_affine(t,ts,floor_b_position_only=True)
+        # Independent basis vectors: local X stretch before the raw rotation.
+        self.assertEqual(a.point((4,2,-1)),(2.5,5.,2.5))
+        unflipped=dict(t,Flip=False)
+        self.assertEqual(a,tile_affine(unflipped,ts,floor_b_position_only=True))
+        for change in ({'tile':'unknown'},{'ScaleZ':0.},{'ScaleZ':float('nan')},{'Point1':'linked'},{'TwoSidedTileCount':1}):
+            with self.assertRaises(UnsupportedAffine):tile_affine(dict(t,**change),ts,floor_b_position_only=True)
+
+
     def test_native_column_major_and_no_parent_pivot(self):
         t=tile();ts=node('tiles',ConstructionBend=False,ConstructionPlaceTwoTiles=False)
         a=tile_affine(t,ts)
