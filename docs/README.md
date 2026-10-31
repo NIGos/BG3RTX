@@ -38,6 +38,8 @@ not yet authorized are in [live-test-drafts/](live-test-drafts/).
 
 - [P3_BOX_LIGHTS.md](P3_BOX_LIGHTS.md): box lights integration candidate.
 - [P4_OMM.md](P4_OMM.md): opacity micromaps: predicate, EXT backend, GPU producer, content epochs.
+- [PLAN_M4_REFLECTIONS_GI.md](PLAN_M4_REFLECTIONS_GI.md): M4 increments: GI hit-direct qualification, reflection tier (b), sun and emission at hits.
+- [PLAN_M5_WATER.md](PLAN_M5_WATER.md): M5 water increments on the current architecture (updates P6_WATER).
 - [P6_WATER.md](P6_WATER.md): water design for coverage gap 1.
 - [NATIVE_HAIR.md](NATIVE_HAIR.md): native CHAR_Hair/Pubes coverage, depth and the physical secondary origin.
 - [NATIVE_TILESET.md](NATIVE_TILESET.md): native tileset depth coverage.

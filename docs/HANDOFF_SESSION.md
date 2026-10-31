@@ -102,7 +102,9 @@ Resume ONLY after the user resumes the goal. Then:
    certify flicker. Rug/hairline attribution stays unresolved, not declared fixed.
 2. M3/M4: corrected GI descriptor image recheck, visible materials/world lights,
    offscreen reflections. Old R2 dark-stipple images rejected. Both new GI keys OFF.
+   Increments and gates: PLAN_M4_REFLECTIONS_GI.md; first job tools/live_batches/m4_m5_first (mm1).
 3. M5 water (89% port screen), then environment by measured screen impact.
+   Increments and gates: PLAN_M5_WATER.md; M5.1 job mm2 needs its code first.
 4. M2 persistence only when visible offscreen need requires it. Native board data
    lacks authored UV/NBT; do not infer them from positions or file order.
 5. M6 shared opaque reference/PT research last. Never mark whole program complete.

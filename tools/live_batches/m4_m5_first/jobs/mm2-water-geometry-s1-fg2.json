@@ -1,0 +1,68 @@
+{
+ "name": "mm2-water-geometry-s1-fg2",
+ "save": "QuickSave_3784",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 815,
+ "repeat": 1,
+ "live_batch": "m4m5-first",
+ "window_mode": "visible_unfocused_fg",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=1,pan_prepare=1,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=0,rt_stats=0",
+ "args": [
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/m4_m5_first/plans/mm2_water_geometry_s1.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "rt applied",
+  "gi: GPU cost",
+  "gi: trace pass",
+  "\\[rt\\] scene build GPU",
+  "\\[pan\\] burst",
+  "\\[shaders\\]",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[water\\]"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[water\\] capture \\(\\d+ frames\\): supported draws [1-9]\\d*, unknown \\d+, triangles [1-9]\\d*, overflow 0",
+  "\\[water\\] coverage \\(\\d+ frames\\): water px [1-9]\\d*, in front \\d+, behind opaque \\d+, empty G-buffer \\d+",
+  "\\[water\\] build GPU [0-9.]+ ms",
+  "\\[pan\\] burst 88101 complete: 16 frames, [0-9]+ samples, transport ok",
+  "\\[pan\\] burst 88102 complete: 16 frames, [0-9]+ samples, transport ok",
+  "\\[pan\\] burst 88103 complete: 16 frames, [0-9]+ samples, transport ok"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed"
+ ],
+ "expect_runner": [
+  "\\[window-mode\\] visible_unfocused:.*preserve_fg=True",
+  "\\[motion-plan\\] complete phases=10\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "PLAN_M5 M5.1: water geometry capture and same-frame coverage with no colour change. NEEDS the M5.1 implementation: its [water] log lines are the contract below. Gate: supported draws > 0 (else wrong view: INVALID), behind-opaque violations 0 beyond depth_tol, final image OFF/ON/OFF equal within the OFF-repeat noise, build GPU ms reported.",
+ "estimated_phase_seconds": 535,
+ "requires_success_of": [
+  "mm1-gi-hit-direct-motion-s1-fg2"
+ ]
+}
