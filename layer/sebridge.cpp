@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <charconv>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
@@ -134,7 +135,7 @@ void reader() {
   double t_lights = -1, t_world = -1;
   SeSnapshot cur;   // the merged state being built
   Motion motion;
-  bool logged_first = false, logged_bad = false;
+  bool logged_first = false, logged_bad = false, logged_complete = false;
   for (;;) {
     {
       std::unique_lock<std::mutex> lk(g_stop_mu);
@@ -167,9 +168,15 @@ void reader() {
         if (cur.time > 0) note_motion(motion, cur, s);
         s.region = cur.region;
         s.triggers = std::move(cur.triggers);
+        if (std::strcmp(s.level, cur.level) != 0) logged_complete = false;
         cur = std::move(s);
         changed = true;
         g_reads.fetch_add(1, std::memory_order_relaxed);
+        if (!logged_complete && t >= g_process_start && se_classification_complete(cur)) {
+          logged_complete = true;
+          log("[se] classification complete: export %u, level %s, %u current light entities, %zu explicit records",
+              cur.seq, cur.level, cur.all, cur.lights.size());
+        }
         if (!logged_first && t >= g_process_start) {
           logged_first = true;
           log("[se] bridge export %u read: level %s, %zu lights (of %u light entities), Lua %.0f us avg / %.0f us max "
@@ -250,8 +257,17 @@ std::string se_dir() {
   return se_token().empty() ? d : d + "\\" + se_token();
 }
 
+static bool read_count(std::istringstream& in, uint32_t& value) {
+  std::string token;
+  if (!(in >> token) || token.empty()) return false;
+  for (char c : token) if (c < '0' || c > '9') return false;
+  auto parsed = std::from_chars(token.data(), token.data() + token.size(), value);
+  return parsed.ec == std::errc{} && parsed.ptr == token.data() + token.size();
+}
+
 bool se_parse_lights(const std::string& text, SeSnapshot& out) {
   if (text.compare(0, 11, "BG3RTX_SE 1") != 0 || !ends_with_end(text)) return false;
+  out.all_known = out.classified_known = out.pending_known = out.out_known = false;
   std::istringstream in(text);
   std::string line;
   std::getline(in, line);   // magic
@@ -269,8 +285,10 @@ bool se_parse_lights(const std::string& text, SeSnapshot& out) {
         else if (k == "scan_us") h >> out.scan_us;
         else if (k == "avg_us") h >> out.avg_us;
         else if (k == "max_us") h >> out.max_us;
-        else if (k == "all") h >> out.all;
-        else if (k == "out") h >> out.out;
+        else if (k == "all") { out.all_known = read_count(h, out.all); if (!out.all_known) return false; }
+        else if (k == "classified") { out.classified_known = read_count(h, out.classified); if (!out.classified_known) return false; }
+        else if (k == "pending") { out.pending_known = read_count(h, out.pending); if (!out.pending_known) return false; }
+        else if (k == "out") { out.out_known = read_count(h, out.out); if (!out.out_known) return false; }
         else if (k == "classify_us") h >> out.classify_us;
         else { std::string skip; h >> skip; }
       }
@@ -384,7 +402,13 @@ float se_static_radius_tol(float r) { return kSeRadiusQuant + 4.0f * se_ulp(r); 
 
 float se_moving_radius_tol(float r) { return 0.02f * (std::max)(r, 0.1f) + 0.01f; }
 
+bool se_classification_complete(const SeSnapshot& s) {
+  return s.all_known && s.classified_known && s.pending_known && s.out_known &&
+         s.classified == s.all && s.pending == 0 && s.out <= s.classified && s.out == s.lights.size();
+}
+
 bool se_covers(const SeSnapshot& s, const float p[3]) {
+  if (!se_classification_complete(s)) return false; // Unknown absence retains the database fallback.
   const float e = kSeHostQuant;
   float d2 = 0;
   for (int k = 0; k < 3; ++k) d2 += (p[k] - s.host[k]) * (p[k] - s.host[k]);

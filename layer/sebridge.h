@@ -30,7 +30,8 @@ struct SeSnapshot {
   double time = 0;           // file write time (seconds since 1601, FILETIME / 1e7)
   float host[3] = {};
   const char* level = "";
-  uint32_t all = 0, out = 0;
+  uint32_t all = 0, out = 0, classified = 0, pending = 0;
+  bool all_known = false, classified_known = false, pending_known = false, out_known = false;
   float scan_us = 0, avg_us = 0, max_us = 0, classify_us = 0;
   std::vector<SeLight> lights;
   // world.txt
@@ -76,6 +77,9 @@ float se_static_radius_tol(float r);
 // VFX light's radius may be animated, and no capture holds both values of a moving light);
 // the old 2% + 1 cm, and the "[se] join" line logs the largest disagreement it accepted.
 float se_moving_radius_tol(float r);
+// Exact protocol property. Partial/legacy exports still supply their explicit
+// light records, but cannot prove that an omitted database light is absent.
+bool se_classification_complete(const SeSnapshot& s);
 // True when the bridge's export would hold a placed light at `p` if that light were loaded:
 // within kSeRange of the export's host and inside the Lua's vertical cell range, with the
 // host's %.3f rounding as margin. A database light there that the bridge did not report is
