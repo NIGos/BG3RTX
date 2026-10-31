@@ -146,6 +146,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hair_physical_origin": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hair_physical_origin": "1"}, "needs": {"rt_geometry": 2, "exp_native_hair": 1}}
      ]},
+    {"id": "exp_hit_material", "label": "Native hit materials",
+     "description": "Captures the audited static virtual-texture material views, reflectance and native tangent frame for ray hits. Only fresh triangles with verified native draw correspondence are supported; unknown inputs keep the current renderer. This supplies material parameters, not offscreen lighting or a replacement BSDF. Restart required. Actual gameplay participation, quality and GPU cost remain unqualified.",
+     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material": "1"}, "needs": {"rt_geometry": 2}}
+     ]},
     {"id": "exp_omm", "label": "Opacity micromaps",
      "description": "Experimental hardware opacity micromaps for the audited static alpha-material subset. Requires Full ray-traced geometry, Vulkan 1.3, EXT opacity micromaps, buffer device address, timeline semaphores, synchronization2 and the static BVH split. Unsupported or stale inputs use the reference scene. Useful in-game coverage and speed are not qualified. Restart required to negotiate device features.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,

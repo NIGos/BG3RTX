@@ -1053,7 +1053,11 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
 // (nothing committed yet) or a hit farther than the true closest one, and geom / prim /
 // inst / o2w are that hit's. Treat it like a hidden / off-screen hit (the game's own
 // term for the pixel), never as a miss or as the closest surface.
-struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; bool aborted; };
+struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; bool aborted;
+#ifdef RT_HIT_MATERIAL
+  float2 bary;
+#endif
+};
 RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
 #if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_SCALP)
                      ,bool camera_primary=false
@@ -1124,6 +1128,9 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
   h.prim = hit ? q.CommittedPrimitiveIndex() : 0u;
   h.inst = hit ? q.CommittedInstanceIndex() : 0u;
   h.o2w = hit ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+#ifdef RT_HIT_MATERIAL
+  [branch]if(q.CommittedStatus()==COMMITTED_TRIANGLE_HIT)h.bary=q.CommittedTriangleBarycentrics();
+#endif
 #ifdef RT_SCENE_REBASE
   // Ray t is translation-invariant. Return transforms in lighting space so
   // callers reconstruct lighting-relative hit positions as before.

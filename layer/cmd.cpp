@@ -54,12 +54,45 @@ CmdState* cmd_state(VkCommandBuffer cmd, bool create) {
   return s;
 }
 
+uint64_t cmd_recording(VkCommandBuffer cmd){
+  std::shared_lock lock(g_cmd_mu);auto i=g_cmds.find(cmd);
+  return i==g_cmds.end()?0:std::atomic_ref<uint64_t>(i->second->recording).load(std::memory_order_acquire);
+}
 void cmd_forget(VkCommandBuffer cmd) {
   std::unique_lock<std::shared_mutex> lock(g_cmd_mu);
   auto it = g_cmds.find(cmd);
   if (it == g_cmds.end()) return;
   delete it->second;
   g_cmds.erase(it);
+}
+
+// Successful Vulkan reset/discard invalidates the exact recording even if the
+// application never begins another one. Do not call BVH bookkeeping under cmd_mu.
+static void discard_recordings(VkDevice device, VkCommandPool pool, bool destroy) {
+  std::vector<VkCommandBuffer> commands;
+  {
+    std::unique_lock lock(g_cmd_mu);
+    for (auto it=g_cmds.begin(); it!=g_cmds.end();) {
+      auto* state=it->second;
+      if (state->allocation_device!=device || state->allocation_pool!=pool) { ++it; continue; }
+      commands.push_back(it->first);
+      std::atomic_ref<uint64_t>(state->recording).store(0,std::memory_order_release);
+      if (destroy) { delete state; it=g_cmds.erase(it); }
+      else { state->begin_flags=0; ++it; }
+    }
+  }
+  for (auto command:commands) bvh_cmd_reset(command);
+}
+static void discard_recording(VkCommandBuffer command) {
+  {
+    std::unique_lock lock(g_cmd_mu);
+    auto it=g_cmds.find(command);
+    if (it!=g_cmds.end()) {
+      std::atomic_ref<uint64_t>(it->second->recording).store(0,std::memory_order_release);
+      it->second->begin_flags=0;
+    }
+  }
+  bvh_cmd_reset(command);
 }
 
 static VkDeviceFuncs& vk(VkCommandBuffer cmd) { return device_of(cmd)->vk; }
@@ -338,15 +371,16 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateCommandPool(VkDevice device,const Vk
 static VKAPI_ATTR void VKAPI_CALL DestroyCommandPool(VkDevice device,VkCommandPool pool,const VkAllocationCallbacks* allocator) {
   device_of(device)->vk.DestroyCommandPool(device,pool,allocator);
   omm::pool_discard(pool,true);
+  discard_recordings(device,pool,true);
 }
 static VKAPI_ATTR VkResult VKAPI_CALL ResetCommandPool(VkDevice device,VkCommandPool pool,VkCommandPoolResetFlags flags) {
   const auto r=device_of(device)->vk.ResetCommandPool(device,pool,flags);
-  if(r==VK_SUCCESS)omm::pool_discard(pool,false);
+  if(r==VK_SUCCESS) { omm::pool_discard(pool,false); discard_recordings(device,pool,false); }
   return r;
 }
 static VKAPI_ATTR VkResult VKAPI_CALL ResetCommandBuffer(VkCommandBuffer cmd,VkCommandBufferResetFlags flags) {
   const auto r=vk(cmd).ResetCommandBuffer(cmd,flags);
-  if(r==VK_SUCCESS)omm::command_discard(cmd);
+  if(r==VK_SUCCESS) { omm::command_discard(cmd); discard_recording(cmd); }
   return r;
 }
 
@@ -358,6 +392,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateCommandBuffers(VkDevice device, co
       omm::command_allocated(ai->commandPool,out[i]);
       bvh_cmd_reset(out[i]);   // a handle reused after its pool was destroyed: old records are dropped
       cmd_state(out[i], true)->game_alloc = true;
+      cmd_state(out[i], true)->level = ai->level;
+      cmd_state(out[i], true)->allocation_device = device;
+      cmd_state(out[i], true)->allocation_pool = ai->commandPool;
     }
   return r;
 }
@@ -380,7 +417,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   if(r==VK_SUCCESS){omm::command_discard(cmd);omm::command_begin(cmd,(bi->flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)==0);}
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
-  s->recording = ++recordings;
+  std::atomic_ref<uint64_t>(s->recording).store(++recordings,std::memory_order_release);
+  s->begin_flags = r==VK_SUCCESS && bi ? bi->flags : 0;
   s->ours_since_event = false;
   if (r == VK_SUCCESS) fault_checkpoint(cmd, kCkCmdBegin, uint32_t(s->recording));
   s->in_pass = false;
@@ -406,6 +444,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->seg_count = 0;
   s->geo = nullptr;   // (an effects pass left open by a reset buffer leaks its small EmPass)
   s->geo_em = false;
+  s->geo_material=s->geo_material_active=s->geo_material_no_writes=false;
   em_forget_cmd(cmd);   // D-EM: draws of an earlier recording that was never submitted
   s->geo_ts = -1;
   s->vb.fill({});
@@ -857,6 +896,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectKHR(VkCommandBuffe
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32_t n, const VkCommandBuffer* cmds) {
+  if(auto* state=cmd_state(cmd);state && state->geo_material)state->geo_material_no_writes=false;
   diag(DIAG_EXEC);
   vk(cmd).CmdExecuteCommands(cmd, n, cmds);
   omm::command_execute(cmd,{cmds,n});

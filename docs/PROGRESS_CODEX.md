@@ -1,5 +1,26 @@
 # BG3RTX progress
 
+## Native VT material provider frozen for acquisition smoke - 2026-10-31
+
+Source 177ef6e, private candidate native-hit-provider-live/BG3RTX at that revision.
+ABI 20 host/core/launcher and manifest were copied with matching SHA256 before/
+after; source development is separate. `rt_hit_material` stays OFF in presets.
+Native actual VT views/parameters/frame now reach shared native parameters and
+FresnelBlend through cross-command ownership, execution-time gather and owned
+samplers. Exact reset/free/pool invalidation closes the final review finding.
+Normal GI/reflections remain unchanged; this is not yet a rendering quality pass.
+
+Eight targeted tests pass. All 544 shader files compile; all 539 ordinary entry
+points are byte-identical. 17 new modules pass spirv-val. Four baseline path-length
+failures were corrected by rerunning only those files from a short path.
+Review found no remaining actionable lifecycle blocker in this scoped slice.
+Next: one real-present FG2 S1 acquisition run, 360 s off/on/off plus cost phases.
+Require positive GPU-qualified/material-vs-native samples and active RT/FG, not
+global 99% match. Cone-vs-quad footprint differences remain explicit; no false
+field-equality, full-lighting or GPU-cost claim. Personal Hair trial 047e105 stays
+ABI 19 and has NOT yet been user-reviewed. Detailed source: TRACK_D_RT.md D-EN2
+and docs/evidence/native-hit-material-20261031.md.
+
 ## Real S1 open-bay reference geometry exported - 2026-10-31
 
 Merged via merge-green onto fd166bc and pushed main/codex/omm-bake. ABI 19;

@@ -17,6 +17,7 @@
 #include <cstring>
 #include <mutex>
 #include "../common/native_hair_origin.h"
+#include "../common/native_hit_capability.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -201,6 +202,7 @@ VkDescriptorSetLayout g_current_sun_set_layout=VK_NULL_HANDLE,g_current_sun_host
 VkPipelineLayout g_current_sun_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_rt_ao, g_trace_rt, g_ls, g_ls_prep;
+Pipe g_hit_material;
 Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
 Pipe g_rt_shadow_current; // private current-caster tuple; ordinary sun pipe stays untouched
@@ -702,7 +704,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   static const char* const rebased_files[] = {
       "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
       "gi/pan_primary_identity.hlsl", "gi/pan_local.hlsl",
-      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
+      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_ao.hlsl", "gi/rt_origin.hlsl",
       "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
       "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
       "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
@@ -904,7 +906,7 @@ constexpr uint32_t kStatsRing = 8;
 // hybrid GI; always counted like the guards and logged in the "[core] guard:" lines. Each
 // such query fell back to the game's own term (or counted as occluded): not a leak.
 // 136..152: primary pool/soup cohorts (HEAD); box diagnostics 200..252 (shifted +64 from the box branch).
-constexpr uint32_t kStatsCounters = 253;
+constexpr uint32_t kStatsCounters = 269; //253..268: qualified hit-material results/native residuals
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
 uint64_t g_unk_sum[kUnknownPasses] = {}, g_unk_total[kUnknownPasses] = {};
@@ -1053,6 +1055,11 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_stats_n, 100.0 * t[47] / px, 100.0 * t[45] / px, 100.0 * t[44] / px, 100.0 * t[46] / px,
               100.0 * t[40] / px, 100.0 * t[41] / tr, 100.0 * t[42] / tr, 100.0 * t[43] / tr);
   }
+  uint64_t material_total=0;for(unsigned i=253;i<263;++i)material_total+=t[i];
+  if(material_total)host->log("hit material (%u frames): attempted %llu qualified %llu unsupported %llu; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters %llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu",
+    g_stats_n,material_total,t[253],material_total-t[253],t[254],t[255],t[256],t[257],t[258],t[259],t[260],t[261],t[262]);
+  if(t[263])host->log("hit material native compare (%u frames): matched class0 %llu; mean raw albedo/normal/roughness/reflectance/metalness %.7f/%.7f/%.7f/%.7f/%.7f; sum quantization1/256; cone vs raster footprint, NOT equality gate",
+    g_stats_n,t[263],double(t[264])/t[263]/256.0,double(t[265])/t[263]/256.0,double(t[266])/t[263]/256.0,double(t[267])/t[263]/256.0,double(t[268])/t[263]/256.0);
   if (t[16]) {   // rt_local_shadows.hlsl, ao_direct (AUDIT_RT fix 4)
     double px = double(t[16]), lit = double(t[21] ? t[21] : 1);
     host->log("ls stats (%u frames): ao_direct %d gives back %.5f per px (%.2f%% of the lit luminance); the sun as "
@@ -1408,6 +1415,7 @@ bool dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w
   if(!p.pipeline)return false;
   auto traversal=prepare_omm_traversal(cmd,b,p.pipeline,rt && &p!=&g_rt_shadow_current);
   if(!traversal.valid())return false;
+  if(&p==&g_hit_material && (!host->rt_hit_material_use || !host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity)))return false;
   VkPipelineLayout layout = private_layout?private_layout:rt ? g_rt_layout : g_layout;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p.pipeline);
   VkWriteDescriptorSet wr[kLsBindings + kNumExtras];
@@ -1635,7 +1643,8 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,u
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
   }
-  if(bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))))){
+  if(bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t)))) ||
+     bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t))))){
     VkAccelerationStructureKHR reference{};
     const bool fast=host->rt_omm_scene_reference && host->rt_omm_scene_reference(cmd,tlas,&reference,omm_identity);
     if(!reference || !*omm_identity){++g_rt_frames_missing;return VK_NULL_HANDLE;}
@@ -2161,6 +2170,12 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     bind_rt(b, s.tlas, s.alpha);
     if(!dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true))return;
   }
+  if(s.tlas && pc.rt_debug==9 && host->cfg_int("rt_hit_material",0) &&
+     bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) &&
+     refresh(g_hit_material,"gi/rt_hit_material.hlsl",g_rt_layout)){
+    memory_barrier(cmd,kCS,kCS);bind_rt(b,s.tlas,s.alpha);
+    (void)dispatch(cmd,g_hit_material,b,pc,g_w,g_h,true); // optional: unsupported keeps remaining passes
+  }
   // Capture after the RT debug overlay so debug 8 bursts contain its QA encoding.
   if (s.pan) host->pan_capture(cmd, "diffuse", &s.dif);
   // D-EM (core/emissive.cpp): rt_debug 16-18 are its views (its modes 6-8), else the check.
@@ -2320,7 +2335,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
-  for (Pipe* p : {&g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
+  for (Pipe* p : {&g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug, &g_rt_ao,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {

@@ -20,9 +20,11 @@ namespace bg3 {
 // `stride` is 16 (Position only) or 24 (Position + UV); `uv_location`
 // receives the location of the captured UV output, or -1.
 inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& out, uint32_t stride = 16,
-                     int* uv_location = nullptr, uint32_t* native_hair_outputs = nullptr) {
+                     int* uv_location = nullptr, uint32_t* native_hair_outputs = nullptr,
+                     bool native_vt_frame = false, uint32_t* native_vt_outputs = nullptr) {
   if (uv_location) *uv_location = -1;
   if (native_hair_outputs) *native_hair_outputs = 0;
+  if (native_vt_outputs) *native_vt_outputs = 0;
   if (words < 5 || code[0] != 0x07230203) return false;
   struct Ins { size_t pos; uint32_t op, n; };
   std::vector<Ins> ins;
@@ -140,6 +142,32 @@ inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& 
         const uint32_t offset = slot == 4 ? 72u : 24u + slot * 12u;
         dec.insert(dec.end(), {(4u<<16)|71,vars[slot],36,0,(4u<<16)|71,vars[slot],37,stride,(4u<<16)|71,vars[slot],35,offset});
       }
+    }
+  }
+  // Exact static VT VS 3812bc980438747f is authorized by the caller, not by
+  // structural resemblance. It exports smooth N/B/T at locations1/2/3, no W.
+  // Capture the original values; do not reconstruct its quaternion/frame math.
+  if(native_vt_frame && stride>=64u && uv_loc==0 && hair_flags==0u) {
+    uint32_t vars[3]={};
+    for(unsigned slot=0;slot<3;++slot) for(const auto& v:ins) {
+      const uint32_t* a=code+v.pos;
+      if(v.op!=59 || v.n<4 || a[3]!=3)continue;
+      uint32_t type=0,element=0;
+      for(const auto& p:ins)if(p.op==32 && p.n>=4 && code[p.pos+1]==a[1] && code[p.pos+2]==3)type=code[p.pos+3];
+      for(const auto& t:ins)if(t.op==23 && t.n>=4 && code[t.pos+1]==type && code[t.pos+3]==3)element=code[t.pos+2];
+      bool f32=false,located=false,unsafe=false;
+      for(const auto& t:ins)if(t.op==22 && t.n>=3 && code[t.pos+1]==element && code[t.pos+2]==32)f32=true;
+      for(const auto& d:ins)if(d.op==71 && d.n>=3 && code[d.pos+1]==a[2]){
+        const auto kind=code[d.pos+2];
+        if(kind==30 && d.n>=4 && code[d.pos+3]==slot+1)located=true;
+        if(kind==31 || kind==35 || kind==36 || kind==37 || kind==13 || kind==14)unsafe=true;
+      }
+      if(f32 && located && !unsafe){if(vars[slot])return false;vars[slot]=a[2];}
+    }
+    if(vars[0] && vars[1] && vars[2]){
+      for(unsigned slot=0;slot<3;++slot)
+        dec.insert(dec.end(),{(4u<<16)|71,vars[slot],36,0,(4u<<16)|71,vars[slot],37,stride,(4u<<16)|71,vars[slot],35,24u+slot*12u});
+      if(native_vt_outputs)*native_vt_outputs=1;
     }
   }
   if (pos_struct) dec.insert(dec.end(), {(5u << 16) | 72, pos_struct, pos_member, 35, 0});

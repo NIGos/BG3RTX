@@ -44,6 +44,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/omm_native_plain.cpp
   layer/omm_bake.cpp
   layer/alphatest.cpp
+  layer/hit_material.cpp
   layer/bvhsplit.cpp
   layer/emissive.cpp
   layer/devfault.cpp
@@ -147,6 +148,14 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(native_hit_join_test tests/native_hit_join_test.cpp)
+add_test(NAME native_hit_join_test COMMAND native_hit_join_test)
+add_executable(native_hit_abi_test tests/native_hit_abi_test.cpp)
+target_include_directories(native_hit_abi_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME native_hit_abi_test COMMAND native_hit_abi_test)
+add_executable(material_submit_stages_test tests/material_submit_stages_test.cpp)
+target_include_directories(material_submit_stages_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME material_submit_stages_test COMMAND material_submit_stages_test)
 add_executable(transport_bsdf_test tests/transport_bsdf_test.cpp)
 add_test(NAME transport_bsdf_test COMMAND transport_bsdf_test)
 add_executable(transport_frame_test tests/transport_frame_test.cpp)
