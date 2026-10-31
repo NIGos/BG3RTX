@@ -807,6 +807,7 @@ bool alpha_snapshot(uint32_t index, AlphaSnapshot* out);
 uint32_t alpha_restore(const AlphaSnapshot& saved);   // UINT32_MAX on failure
 void alpha_device_created(DeviceData* dd);
 void alpha_device_destroyed(DeviceData* dd);
+bool alpha_lookup_native_tileset_shadow(uint64_t fs_hash,AlphaFs* out); // current-Sun per-draw material path only
 bool alpha_lookup(uint64_t fs_hash, AlphaFs* out);   // copied: the table may be reloaded
 void alpha_begin_capture();
 // `rec_index` (optional) receives the record's index (split mode: referenced per TLAS instance).

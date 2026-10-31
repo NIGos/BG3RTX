@@ -1,0 +1,184 @@
+{
+  "scope": "Exact native TileBlend DEPS support in material-aware current-Sun capture only",
+  "key": "rt_native_tileset",
+  "default": 0,
+  "also_requires": "rt_sun_cascade_current",
+  "public_abi_changed": false,
+  "hlsl_changed": false,
+  "native": {
+    "path": "Public/Shared/Assets/Materials/Environment/ENV_Base_TileBlend_Test_Alphatest_2s_Translucency_STI_DEPS_Vulkan.bshd",
+    "package": "Materials.pak",
+    "bshd_sha256": "4452d7e6b35481518039b2df03b3332312bddfa606d3540503c03a332983477b",
+    "modules": [
+      {
+        "hash": "f4b35620d54abc6c",
+        "bytes": 1496,
+        "sha256": "888f5f0fdd3ba159a39bcc093957e4b16ddc6dbfbd49d7815d20df6ae3de5484",
+        "bindings": [
+          {
+            "id": 9,
+            "set": 0,
+            "binding": 2
+          }
+        ],
+        "member_offsets": {
+          "(10, 0)": 0,
+          "(10, 1)": 64,
+          "(10, 2)": 128,
+          "(10, 3)": 192,
+          "(10, 4)": 196,
+          "(10, 5)": 200,
+          "(10, 6)": 208,
+          "(10, 7)": 220
+        },
+        "uniform_access_members": {
+          "9": [
+            2
+          ]
+        }
+      },
+      {
+        "hash": "5c37b87299d86ce1",
+        "bytes": 1700,
+        "sha256": "9697f0821cb871a43446e8234893b42f0c9d545cdba5026aa2a9fe72f18781cd",
+        "bindings": [
+          {
+            "id": 4,
+            "set": 0,
+            "binding": 7
+          },
+          {
+            "id": 5,
+            "set": 1,
+            "binding": 0
+          },
+          {
+            "id": 6,
+            "set": 1,
+            "binding": 1
+          },
+          {
+            "id": 7,
+            "set": 1,
+            "binding": 2
+          }
+        ],
+        "member_offsets": {
+          "(8, 0)": 0,
+          "(8, 1)": 8,
+          "(8, 2)": 12,
+          "(8, 3)": 16,
+          "(8, 4)": 20,
+          "(8, 5)": 24,
+          "(8, 6)": 28
+        },
+        "uniform_access_members": {
+          "5": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      }
+    ]
+  },
+  "packet": {
+    "declared_bytes": 32,
+    "used_bytes": 28,
+    "used_float_count": 7,
+    "unused_record_word_7": 0,
+    "unused_word_note": "Native DEPS does not read member6 at byte28; no authored SeeThrough mode is substituted or inferred"
+  },
+  "lookup": {
+    "camera": false,
+    "current_sun_material": true,
+    "legacy_classifier_changed": false
+  },
+  "validation": {
+    "cpu": "1687 native tileset coverage checks passed",
+    "with_actual_native_vs": "1708 native tileset coverage checks passed",
+    "host_dll_linked": true,
+    "selected_ctests_passed": 4,
+    "native_patches": [
+      {
+        "stride": 40,
+        "valid": true,
+        "byte_identical_to_frozen_baseline": true,
+        "sha256": "5dc68fb4ce6f1bb009f31a36acfaf79f46ff51d9ba06aace3311809e5cb9741a"
+      },
+      {
+        "stride": 64,
+        "valid": true,
+        "byte_identical_to_frozen_baseline": true,
+        "sha256": "f72209f344e4856a27ac7e9244f3fe9d7c4121f5c933e3068745845b4b8f4a68"
+      },
+      {
+        "stride": 80,
+        "valid": true,
+        "byte_identical_to_frozen_baseline": true,
+        "sha256": "d160d8614ffa2a55460a801ccd1e9c4c981980bf142cf98416ef273f6afb3107"
+      },
+      {
+        "stride": 88,
+        "valid": true,
+        "byte_identical_to_frozen_baseline": true,
+        "sha256": "7ee0d36a168bd2c5da19629997d7b44d4e9d81e831e4674625f6c014dfd579b6"
+      }
+    ],
+    "targeted_shader_identities": [
+      {
+        "path": "native_tileset/hair_origin/sun_current/native_scalp/gi/rt_shadow.hlsl",
+        "sha256": "1ca07a86f00cdccb828661de6ab8f659e71e2bce29af25f412416708a26cc04d",
+        "byte_identical": true,
+        "valid": true
+      },
+      {
+        "path": "native_tileset/omm/sun_current/native_scalp/gi/rt_shadow.hlsl",
+        "sha256": "600bfb42ee3136175d8b2813c67d5677a909f9d4cd8eb226be8a9cc8851a92d4",
+        "byte_identical": true,
+        "valid": true
+      },
+      {
+        "path": "native_tileset/sun_current/gi/rt_shadow.hlsl",
+        "sha256": "1899dd500ac8f4f620b64574b7c257a499dd7fdd4f8bd57126870e3a0e6c4bcf",
+        "byte_identical": true,
+        "valid": true
+      },
+      {
+        "path": "native_tileset/sun_current/native_scalp/gi/rt_shadow.hlsl",
+        "sha256": "ce88dad81f9b0e2d0249c5767f665751be367425f878dbc01dcd19dc08a9db5f",
+        "byte_identical": true,
+        "valid": true
+      },
+      {
+        "path": "gi/rt_shadow.hlsl",
+        "sha256": "01fb8eddcf26e3fa835275e7306ea486138aa408da48af2fe19eeaffb62e888b",
+        "byte_identical": true,
+        "valid": true
+      }
+    ],
+    "reused_camera_shader_proof": "640 ordinary OFF token identities,42 actual OFF identities,604 ON validations,80 GI/reference interfaces; HLSL/effective shader changes absent"
+  },
+  "limitations": [
+    "Legacy F-1 cascade has no per-draw material/UV association and remains unsupported for this cutout",
+    "Current-Sun runtime image quality and GPU cost unqualified",
+    "No association to user rug/walkway screenshots"
+  ],
+  "legacy_bridge_missing": [
+    "CascadeSoup/attach_cascade currently exports only buffer,stride,triangles,origin,signature and producer; need exact triangle-range-to-snapshot mapping with converted-geometry owner",
+    "Ordinary legacy InstInfo has no readable triangle/UV range; source cascade UV buffer and descriptor-local material records/sampler owners must be exposed and retired together",
+    "Compacted legacy ranges need matching material-range remap; do not reuse raw current-Sun triangle offsets after compaction"
+  ],
+  "source_sha256": {
+    "common/native_tileblend_coverage.h": "0b5893eb9c37fea6ee6db86533bace2349db7b659cf7f11a05a93065f946690a",
+    "common/native_tileset_coverage.h": "65ddfa4770f52c9b24853a2777e307222917aa3d284fe7fc7b00011c4e6ca346",
+    "layer/alphatest.cpp": "5573f75efb1ffc073db90a104ad8a80b765f2ac2b370ce58b1fbe04af768d13f",
+    "layer/geocapture.cpp": "a4837df0b25ce23b1a3533b137f7e429b65271cf919ed6a57fb3c93edd6249b9",
+    "layer/host.h": "1cc8d8d43769f6dd0bf9123997a3924b31c7a2de18ddb00185e3fc5fd9e40770",
+    "tests/native_tileset_coverage_test.cpp": "e3af5c231fdbcb674a27559faeb9ffad19a434f8da85055982011a531ddcfc2e"
+  },
+  "proof_directory": "C:\\Users\\quali\\.codex\\worktrees\\m2-foundry-mesh\\BG3RTX\\captures\\tileblend-shadow-20261031"
+}
