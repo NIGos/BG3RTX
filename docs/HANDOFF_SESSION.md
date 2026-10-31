@@ -47,11 +47,13 @@ R3 dae7d32 is TERMINAL: 448 s, parser fix confirmed actual, binding attempts
 still decline; no material GPU rows. Immutable root captures/r3 analysis retained.
 76ef799/import d8510b1 fixes eligibility-before-key and ordinary frozen samplers.
 R4 c82fe8d is TERMINAL (230 s): captured 16, snapshots 12, no GPU association.
-Actual8975/e2ec and3812/8995 use conditional SSBO0.13 position pulling; owner fixes
-canonical Engine/active-stream keys, retaining exact GPU clip/UV proof. No cache-
+Actual 8975/e2ec and 3812/8995 use conditional SSBO 0.13 position pulling; owner fixes
+canonical Engine/active-stream keys (5b5c595/import bd6719f), retaining exact GPU
+clip/UV proof. No cache-
 only rerun: static source draws are not the instanced cached domain.
-Terrain UBO usage16 lacksTRANSFER_SRC; fa3d9f4 shaderreadback built/validated,
-actual-submit pinning/stage patch active before release. No live job now.
+Terrain UBO usage 16 lacks TRANSFER_SRC; fa3d9f4 shaderreadback built/validated,
+actual-submit pinning/stages fixed in 68321d0/import fe9f949, targeted checks pass.
+R5 same 130 s draft, normal cache/reference OFF, needs merge-green+freeze. No live job.
 Exact packet capture e3b238a/8a84f11 is opt-in only; R4 raw evidence is retained.
 Two-surface reference d74f766, rt_hit_reference=2, default OFF; CPU/shader checks
 pass, no GPU/path-quality claim. All consolidated via merge-green and pushed.

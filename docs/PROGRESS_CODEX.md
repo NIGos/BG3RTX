@@ -1,5 +1,25 @@
 # BG3RTX progress
 
+## Native input and terrain submit fixes prepared - 2026-10-31
+
+5b5c595/import bd6719f resolves actual native Engine, position and UV inputs for
+8975/e2ec and 3812/8995. Positive mapped pull index is only a candidate hint; full
+GPU clip/UV/parameter proof remains required. Host links, 44 pipeline/input cases
+and two targeted tests pass. fe645b7 makes concurrent diagnostic counters thread
+local; gameplay/shader behavior is unchanged by that follow-up.
+
+68321d0/import fe9f949 pins exact terrain packet owners before the real driver
+call, stamps actual successful submissions/queues and keeps failed executable
+attempts retryable. Submit2 waits/signals cover the injected work independently
+of RT/OMM; device cleanup handles remaining objects. Host links and 41 terrain
+lifetime/range, 131 order and 58 stage checks pass. No additional shader/ABI key.
+
+Next changed S1 acquisition R5 remains a non-watched draft: same 130 s OFF/ON/OFF,
+one terrain trace, real FG2/RR1, reference OFF. Normal cache mode is retained;
+no unrelated selector or capacity change. Require positive GPU-qualified material
+rows AND actual copied terrain bytes; absence cannot pass. Main remains c82fe8d
+until this consolidation passes merge-green. No game currently running.
+
 ## R4 completed: real deferred snapshots; canonical input fix next - 2026-10-31
 
 R4 c82fe8d completed 230 s, all three phases, zero NVIDIA 153/dumps/build drift.
