@@ -6,6 +6,8 @@ namespace {
 struct TerrainCopy {
  Bg3Binding source{};ViewRec view{};ImageRec image{};
  VkBuffer buffer{};VkDeviceMemory memory{};void* mapped{};VkDeviceSize bytes{};
+ VkDescriptorSetLayout copy_set{};VkPipelineLayout copy_layout{};VkPipeline copy_pipeline{};
+ bool shader_copy{};
  std::string slot,metadata;
 };
 struct TerrainPacket {
@@ -15,6 +17,37 @@ struct TerrainPacket {
 std::mutex terrain_mu;std::vector<TerrainPacket> terrain_packets;
 std::string tn(uint64_t v){return std::to_string(v);}
 std::string tf(float v){char b[32];snprintf(b,sizeof b,"%.9g",double(v));return b;}
+bool terrain_buffer_pipeline(DeviceData* dd,TerrainCopy& c){
+ if(!c.shader_copy)return true;
+ if(!dd->vk.CmdPushDescriptorSet)return false;
+ const bool uniform=c.slot=="s4b0";
+ VkPhysicalDeviceProperties properties{};
+ if(!dd->inst || !dd->inst->GetPhysicalDeviceProperties)return false;
+ dd->inst->GetPhysicalDeviceProperties(dd->physical,&properties);
+ const auto alignment=uniform?properties.limits.minUniformBufferOffsetAlignment:properties.limits.minStorageBufferOffsetAlignment;
+ if(!alignment || c.source.offset%alignment || !c.bytes || c.bytes%4 || (uniform?c.bytes!=80:c.bytes>7168))return false;
+ Bg3ShaderBlob blob{};
+ if(!shader_get(uniform?"rt/terrain_packet_ubo.hlsl":"rt/terrain_packet_ssbo.hlsl","main","cs_6_0",&blob))return false;
+ VkDescriptorSetLayoutBinding bindings[2]={{0,uniform?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
+  {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
+ VkDescriptorSetLayoutCreateInfo descriptor{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};descriptor.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;descriptor.bindingCount=2;descriptor.pBindings=bindings;
+ if(dd->vk.CreateDescriptorSetLayout(dd->device,&descriptor,nullptr,&c.copy_set)!=VK_SUCCESS)return false;
+ VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT,0,4};
+ VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};layout.setLayoutCount=1;layout.pSetLayouts=&c.copy_set;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&push;
+ if(dd->vk.CreatePipelineLayout(dd->device,&layout,nullptr,&c.copy_layout)!=VK_SUCCESS)return false;
+ VkShaderModuleCreateInfo module_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};module_info.codeSize=blob.size_bytes;module_info.pCode=blob.code;VkShaderModule module{};
+ if(dd->vk.CreateShaderModule(dd->device,&module_info,nullptr,&module)!=VK_SUCCESS)return false;
+ VkComputePipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};pipeline.layout=c.copy_layout;pipeline.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_COMPUTE_BIT,module,"main"};
+ const auto result=dd->vk.CreateComputePipelines(dd->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&c.copy_pipeline);dd->vk.DestroyShaderModule(dd->device,module,nullptr);
+ return result==VK_SUCCESS;
+}
+void terrain_buffer_dispatch(VkCommandBuffer cmd,DeviceData* dd,const TerrainCopy& c){
+ VkDescriptorBufferInfo buffers[2]={{c.source.buffer,c.source.offset,c.bytes},{c.buffer,0,c.bytes}};
+ VkWriteDescriptorSet writes[2]{};for(unsigned i=0;i<2;++i){writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstBinding=i;writes[i].descriptorCount=1;writes[i].descriptorType=i==0&&c.slot=="s4b0"?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=buffers+i;}
+ const uint32_t words=uint32_t(c.bytes/4);
+ dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,c.copy_pipeline);dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,c.copy_layout,0,2,writes);
+ dd->vk.CmdPushConstants(cmd,c.copy_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,4,&words);dd->vk.CmdDispatch(cmd,(words+63u)/64u,1,1);
+}
 std::string terrain_sampler(VkCommandBuffer cmd,uint32_t set,uint32_t binding){
  omm::BoundSampler s;const bool known=omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,binding,0,s);
  const auto& c=s.sampler.info;
@@ -45,6 +78,9 @@ bool terrain_binding(VkCommandBuffer cmd,CmdState* s,uint32_t set,uint32_t bindi
 }
 void terrain_release(TerrainCopy& c,bool deferred){
  auto* dd=main_device();if(c.mapped)dd->vk.UnmapMemory(dd->device,c.memory);c.mapped=nullptr;
+ if(deferred){if(c.copy_pipeline)defer_destroy(BG3_DEFER_PIPELINE,uint64_t(c.copy_pipeline));if(c.copy_layout)defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(c.copy_layout));if(c.copy_set)defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(c.copy_set));}
+ else{if(c.copy_pipeline)dd->vk.DestroyPipeline(dd->device,c.copy_pipeline,nullptr);if(c.copy_layout)dd->vk.DestroyPipelineLayout(dd->device,c.copy_layout,nullptr);if(c.copy_set)dd->vk.DestroyDescriptorSetLayout(dd->device,c.copy_set,nullptr);}
+ c.copy_pipeline={};c.copy_layout={};c.copy_set={};
  if(deferred){if(c.buffer)defer_destroy(BG3_DEFER_BUFFER,uint64_t(c.buffer));if(c.memory)defer_destroy(BG3_DEFER_MEMORY,uint64_t(c.memory));}
  else{if(c.buffer)dd->vk.DestroyBuffer(dd->device,c.buffer,nullptr);if(c.memory)dd->vk.FreeMemory(dd->device,c.memory,nullptr);}
  c.buffer=VK_NULL_HANDLE;c.memory=VK_NULL_HANDLE;
@@ -85,7 +121,12 @@ std::string terrain_capture_note(VkCommandBuffer cmd,CmdState* s){
    const bool typeOk=k==0?(c.source.type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER||c.source.type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC):(c.source.type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER||c.source.type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC);
    if(!typeOk){p.reason="unsupported_buffer_descriptor_type";break;}
    const auto usage=geo_buffer_usage(c.source.buffer);c.metadata+=",\"buffer_usage\":"+tn(usage);
-   if(!(usage&VK_BUFFER_USAGE_TRANSFER_SRC_BIT)){p.reason="buffer_missing_transfer_src_"+c.slot+"_usage"+tn(usage);break;}
+   if(!(usage&VK_BUFFER_USAGE_TRANSFER_SRC_BIT)){
+    const auto required=k==0?VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT:VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    if(!(usage&required)){p.reason="buffer_missing_read_usage_"+c.slot+"_usage"+tn(usage);break;}
+    c.shader_copy=true;
+   }
+   c.metadata+=",\"readback\":\""+std::string(c.shader_copy?"shader":"transfer")+"\"";
    c.bytes=terrain_packet::buffer_prefix(geo_buffer_size(c.source.buffer),c.source.offset,c.source.range,k?448:80,k?7168:80,k?112:80);
    if(!c.bytes){p.reason="unsupported_buffer_range";break;}
   }else{
@@ -131,13 +172,16 @@ void terrain_capture_secondary(VkCommandBuffer cmd,CmdState* s){
 void terrain_capture_pass(VkCommandBuffer cmd,CmdState* s){
  std::lock_guard lock(terrain_mu);auto* dd=device_of(cmd);
  for(auto& p:terrain_packets)if(p.cmd==cmd&&p.recording==s->recording&&p.ordinal==s->pass.ordinal&&!p.recorded&&p.reason.empty()){
-  bool allocated=true;for(auto& c:p.copies)if(!alloc_host_buffer(c.bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT,&c.buffer,&c.memory,&c.mapped)){allocated=false;break;}
-  if(!allocated){p.reason="staging_allocation_failed";for(auto& c:p.copies)terrain_release(c,false);continue;}
+  // Prepare every resource before recording ANY command, so setup failure can
+  // release it immediately without leaving executable commands referencing it.
+  bool allocated=true;for(auto& c:p.copies)if(!alloc_host_buffer(c.bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,&c.buffer,&c.memory,&c.mapped)||!terrain_buffer_pipeline(dd,c)){allocated=false;break;}
+  if(!allocated){p.reason="staging_or_shader_setup_failed";for(auto& c:p.copies)terrain_release(c,false);continue;}
   // Legal only after the native render pass. No native command can intervene
   // between its end and these copies. Source identities/ranges were frozen.
-  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};mb.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;mb.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
-  dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&mb,0,nullptr,0,nullptr);
-  for(auto& c:p.copies){if(c.source.buffer){VkBufferCopy copy{c.source.offset,0,c.bytes};dd->vk.CmdCopyBuffer(cmd,c.source.buffer,c.buffer,1,&copy);}
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};mb.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;mb.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_UNIFORM_READ_BIT;
+  dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&mb,0,nullptr,0,nullptr);
+  bool compute=false;
+  for(auto& c:p.copies){if(c.source.buffer){if(c.shader_copy){terrain_buffer_dispatch(cmd,dd,c);compute=true;}else{VkBufferCopy copy{c.source.offset,0,c.bytes};dd->vk.CmdCopyBuffer(cmd,c.source.buffer,c.buffer,1,&copy);}}
    else{
     VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.srcAccessMask=VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT;b.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
     b.oldLayout=c.source.layout;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=c.source.image;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
@@ -148,8 +192,9 @@ void terrain_capture_pass(VkCommandBuffer cmd,CmdState* s){
     dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,0,0,nullptr,0,nullptr,1,&b);
    }
   }
-  mb.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;mb.dstAccessMask=VK_ACCESS_HOST_READ_BIT;
-  dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&mb,0,nullptr,0,nullptr);p.recorded=true;
+  mb.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT;mb.dstAccessMask=VK_ACCESS_HOST_READ_BIT;
+  dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&mb,0,nullptr,0,nullptr);
+  if(compute)restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);p.recorded=true;
  }
 }
 void terrain_capture_submit(const std::vector<VkCommandBuffer>& cmds,uint64_t frame){
