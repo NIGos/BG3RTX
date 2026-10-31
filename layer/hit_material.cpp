@@ -46,6 +46,7 @@ struct Deferred {
  DrawJoin join;std::vector<Material> materials;std::vector<VkSampler> samplers;ResourceBudget resources;
  bool finalized{},valid{true};uint32_t seen{},audited_unique{},audited_duplicate{},family_declined{},pipeline_declined{},binding_declined{};
  uint32_t slot_overflow{},sampler_overflow{},cache_overflow{},stream_overflow{};
+ FamilyCensus declined; // G-buffer draws of other native pairs (what to qualify next)
 };
 struct Slot {
  Buffer data;VkDeviceSize data_bytes{};VkDescriptorSet set{};uint64_t command{},recording{},frame{};uint32_t generation{};
@@ -416,7 +417,8 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  if(p.finalized || p.frame!=frame_index() || p.camera!=camera.buffer || p.camera_offset!=camera.offset){p.valid=false;return false;}
  const bool tileset=tileset_deferred(state->vs,state->fs);const bool audited=audited_static_family(state->vs,state->fs)||tileset;
  const auto qualify=deferred_qualify(audited,tileset,exactPipeline,args.kind,args.instances,stride);
- if(qualify==DeferredQualify::FamilyDeclined){++p.family_declined;return false;}++p.seen;
+ if(qualify==DeferredQualify::FamilyDeclined){++p.family_declined;
+  if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0)p.declined.add(state->vs,state->fs,args.instances,uint64_t(args.count)*args.instances);return false;}++p.seen;
  if(qualify==DeferredQualify::PipelineDeclined){++p.pipeline_declined;return false;}
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
  if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;
@@ -468,6 +470,14 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
  if(p.valid)restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
  if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0)log("[hit material deferred packet] frame %llu cmd %p recording %llu level %u flags 0x%x static seen %u audited unique/duplicate %u/%u other family %u pipeline declined %u binding declined %u captured %zu snapshots %u unique samplers/cache views %u/%u bytes %llu valid %u readonly %u camera %p+%llu; source preparation not required",
   (unsigned long long)p.frame,(void*)cmd,(unsigned long long)p.recording,unsigned(state->level),unsigned(state->begin_flags),p.seen,p.audited_unique,p.audited_duplicate,p.family_declined,p.pipeline_declined,p.binding_declined,p.materials.size(),captured,p.resources.sampler_count,p.resources.cache_count,(unsigned long long)p.total,unsigned(p.valid),unsigned(readonly),(void*)p.camera,(unsigned long long)p.camera_offset);
+ if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0 && p.declined.draws){
+  // Coverage census of the declined families: instanced (Base_VT_STI_DEF) statics,
+  // tileblend/terrain, skinned characters and decals each appear here as their own pair.
+  log("[hit material families] frame %llu declined draws %u instanced %u VT STI (FS 14678345) %u pairs %zu (+%u unlisted); top by vertices:",
+   (unsigned long long)p.frame,p.declined.draws,p.declined.instanced,p.declined.sti,p.declined.entries.size(),p.declined.other);
+  for(const auto& e:p.declined.top(8))log("[hit material families]   vs/fs %016llx/%016llx draws %u instanced %u vertices %llu",
+   (unsigned long long)e.vs,(unsigned long long)e.fs,e.draws,e.instanced,(unsigned long long)e.vertices);
+ }
 }
 void slot_in_use(uint32_t index,uint64_t frame){if(!on || index>=kSceneSlots)return;std::lock_guard lock(mutex);for(auto h:slots[index].handles)life_extend(h,frame);}
 bool slot_reusable(uint32_t index,uint64_t gpuDone){if(!on || index>=kSceneSlots)return true;std::lock_guard lock(mutex);

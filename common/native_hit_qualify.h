@@ -4,7 +4,9 @@
 // (layer/geocapture.cpp geo_pre_draw, layer/hit_material.cpp). No Vulkan types:
 // the layer keeps every Vulkan object and only passes numbers and flags here.
 // tests/native_hit_qualify_test.cpp pins the current decisions.
+#include <algorithm>
 #include <cstdint>
+#include <vector>
 namespace bg3::native_hit {
 inline constexpr uint32_t kColorMaskRequired = 0xf73u;  // all audited colour targets written
 inline constexpr uint32_t kTilesetMinStride = 80u, kStaticMinStride = 64u;
@@ -59,4 +61,35 @@ inline bool opaque_prepass_geometry_ok(uint32_t kind, uint32_t instances, uint32
                                        uint32_t stride) {
   return kind <= 1 && instances == 1 && count == uint64_t(triangles) * 3 && stride >= kStaticMinStride;
 }
+// Instanced static VT draws are a different native pair: the audited deferred VS 3812bc98
+// is a per-draw UBO-matrix VS (class B, docs/TRACK_D_SCENE_BUILD.md) with FS 8995da1e
+// (Base_VT_ST_DEF); instanced statics draw Base_VT_STI_DEF (FS 14678345c10aefbc) with the
+// class A instance-matrix VSs, and their meshes are BVH-cached (pool, no per-frame XFB).
+inline constexpr uint64_t kVtStiDeferredFs = 0x14678345c10aefbcull;
+// Census of the G-buffer draws the provider declines by family, per deferred packet: which
+// native pairs to qualify next, by draw and vertex count (logged with rt_stats).
+struct FamilyCensus {
+  struct Entry { uint64_t vs = 0, fs = 0; uint32_t draws = 0, instanced = 0; uint64_t vertices = 0; };
+  static constexpr uint32_t kMaxEntries = 256;  // distinct pairs kept; the rest only in `other`
+  std::vector<Entry> entries;
+  uint32_t draws = 0, instanced = 0, sti = 0, other = 0;
+  void add(uint64_t vs, uint64_t fs, uint32_t instances, uint64_t vertices) {
+    ++draws;
+    if (instances > 1) ++instanced;
+    if (fs == kVtStiDeferredFs) ++sti;
+    for (auto& e : entries)
+      if (e.vs == vs && e.fs == fs) { ++e.draws; e.instanced += instances > 1; e.vertices += vertices; return; }
+    if (entries.size() >= kMaxEntries) { ++other; return; }
+    entries.push_back({vs, fs, 1u, instances > 1 ? 1u : 0u, vertices});
+  }
+  // The n pairs with the most vertices (ties: more draws), largest first.
+  std::vector<Entry> top(uint32_t n) const {
+    auto sorted = entries;
+    std::sort(sorted.begin(), sorted.end(), [](const Entry& a, const Entry& b) {
+      return a.vertices != b.vertices ? a.vertices > b.vertices : a.draws > b.draws;
+    });
+    if (sorted.size() > n) sorted.resize(n);
+    return sorted;
+  }
+};
 } // namespace bg3::native_hit
