@@ -6,7 +6,7 @@ archive/PROGRESS_CODEX_2026-10-31.md. Full rendering program is incomplete and P
 ## Consolidation done (2026-10-31, main fc34604) - read before resuming
 
 Plan and decisions: docs/CONSOLIDATION.md. All steps merged through merge-green; none tested in game yet.
-- ABI is now 23: rebuild both DLLs together. Shader variants are defines (`gi/x.hlsl?NAME=V;...`,
+- ABI is now 24 (23 for shader defines, 24 for the emissive policy in core): rebuild both DLLs together. Shader variants are defines (`gi/x.hlsl?NAME=V;...`,
   list in shaders/variants.txt, checked by shader_variant_test); the per-flag wrapper folders are gone.
 - 20 rejected keys removed (rt_scene_rebase, rt_scene_camera_match, rt_ao, ls_k, rf_so, ...): rebase
   open branches on main before merging; old jobs that set them are harmless no-ops.
