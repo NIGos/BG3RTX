@@ -2,13 +2,17 @@
 #include "../common/native_hit_tileset_fields.h"
 #include "../common/native_tileset_surface.h"
 #include "../common/native_hit_resources.h"
+#include "../layer/spirv_xfb.h"
+#include <fstream>
+#include <cstring>
+#include <string>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
 using namespace bg3::native_hit;
 static unsigned checks;
-static void check(bool p){++checks;if(!p)std::abort();}
-int main(){
+static void check(bool p){++checks;if(!p){std::fprintf(stderr,"FAIL tileset check %u\n",checks);std::abort();}}
+int main(int argc,char** argv){
  check(!tileset_material_enabled(false,false));check(!tileset_material_enabled(false,true));check(!tileset_material_enabled(true,false));check(tileset_material_enabled(true,true));
  VkVertexInputBindingDescription b[6]{};VkVertexInputAttributeDescription a[6]{};
  for(unsigned i=0;i<6;++i){b[i]={i,32,i>=1&&i<=3?VK_VERTEX_INPUT_RATE_INSTANCE:VK_VERTEX_INPUT_RATE_VERTEX};a[i]={i,i, VK_FORMAT_R32G32B32A32_SFLOAT,0};}
@@ -43,5 +47,46 @@ int main(){
   for(unsigned draw=0;draw<material_slots;++draw)check(gated.reserve(8,{image,image,image},indices));
   check(gated.material_count==material_slots && gated.sampler_count==1 && gated.cache_count==1);
  }
- std::printf("%u tileset input/selector checks passed\n",checks);
+ // Deferred output packet: validate actual SPIR-V decoration offsets, not a
+ // reconstructed tangent frame. This minimal interface is parser-only.
+ std::vector<uint32_t> code={0x07230203,0x10000,0,100,0};
+ auto emit=[&](std::initializer_list<uint32_t> v){code.insert(code.end(),v);};
+ emit({(2u<<16)|17,1});emit({(5u<<16)|15,0,50,0x6e69616d,0});emit({(4u<<16)|71,20,11,0});
+ for(uint32_t i=0;i<5;++i)emit({(4u<<16)|71,30+i,30,i});
+ emit({(3u<<16)|22,1,32});emit({(4u<<16)|23,2,1,2});emit({(4u<<16)|23,3,1,3});emit({(4u<<16)|23,4,1,4});
+ emit({(4u<<16)|32,5,3,2});emit({(4u<<16)|32,6,3,3});emit({(4u<<16)|32,7,3,4});emit({(4u<<16)|59,7,20,3});
+ for(uint32_t i=0;i<5;++i)emit({(4u<<16)|59,i==0?7u:i==1?5u:6u,30+i,3});
+ auto packet=[&](const std::vector<uint32_t>& input,uint32_t stride,const std::string& prefix){
+  std::vector<uint32_t> patched,off,explicit_off;int uv=-1;uint32_t flags=0,hair=0;
+  check(bg3::patch_vs(input.data(),input.size(),patched,stride,&uv,&hair,false,nullptr,false,&flags,true));
+  check(uv==1 && flags==3 && hair==0);
+  std::vector<uint32_t> outputs;std::array<uint32_t,5> locations{};
+  for(size_t i=5;i<input.size();i+=input[i]>>16)if((input[i]&65535)==59 && (input[i]>>16)>=4 && input[i+3]==3)outputs.push_back(input[i+2]);
+  for(size_t i=5;i<input.size();i+=input[i]>>16)if((input[i]&65535)==71 && (input[i]>>16)==4 && input[i+2]==30 && input[i+3]<5 &&
+      std::find(outputs.begin(),outputs.end(),input[i+1])!=outputs.end())locations[input[i+3]]=input[i+1];
+  for(auto expected: {std::pair{0u,24u},std::pair{2u,40u},std::pair{3u,52u},std::pair{4u,64u}}){
+   auto target=std::pair{locations[expected.first],expected.second};check(target.first!=0);
+   bool offset=false,step=false;
+   for(size_t i=5;i<patched.size();i+=patched[i]>>16)if((patched[i]&65535)==71 && (patched[i]>>16)==4 && patched[i+1]==target.first){
+    offset|=patched[i+2]==35 && patched[i+3]==target.second;step|=patched[i+2]==37 && patched[i+3]==stride;
+   }check(offset&&step);
+  }
+  check(bg3::patch_vs(input.data(),input.size(),off,stride));
+  check(bg3::patch_vs(input.data(),input.size(),explicit_off,stride,nullptr,nullptr,false,nullptr,false,nullptr,false));check(off==explicit_off);
+  if(!prefix.empty())for(auto data:{std::pair{&patched,".spv"},std::pair{&off,".off.spv"}}){
+   std::ofstream f(prefix+std::to_string(stride)+data.second,std::ios::binary);f.write(reinterpret_cast<const char*>(data.first->data()),data.first->size()*4);check(bool(f));
+  }
+ };
+ for(uint32_t stride:{80u,88u})packet(code,stride,"");
+ std::vector<uint32_t> partial;uint32_t flags=0;
+ check(bg3::patch_vs(code.data(),code.size(),partial,79,nullptr,nullptr,false,nullptr,false,&flags,true));check(flags==1);
+ emit({(3u<<16)|71,32,14}); // Flat N must not be accepted as the smooth frame.
+ check(bg3::patch_vs(code.data(),code.size(),partial,80,nullptr,nullptr,false,nullptr,false,&flags,true));check(flags==1);
+ check(bg3::transport::NtsStatQualified==287 && bg3::transport::NtsStatPrimaryMatch==288 && bg3::transport::NtsStatsCount==289);
+ if(argc==3){
+  std::ifstream f(argv[1],std::ios::binary);std::vector<char> bytes((std::istreambuf_iterator<char>(f)),{});
+  check(bytes.size()>=20 && bytes.size()%4==0);std::vector<uint32_t> native(bytes.size()/4);std::memcpy(native.data(),bytes.data(),bytes.size());
+  for(uint32_t stride:{80u,88u})packet(native,stride,argv[2]);
+ }
+ std::printf("%u tileset input/selector/capture checks passed\n",checks);
 }

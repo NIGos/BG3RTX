@@ -4,6 +4,13 @@
 #ifdef __cplusplus
 namespace bg3::transport {
 #endif
+#ifdef __cplusplus
+static constexpr NvUint NtsStatQualified=287u,NtsStatPrimaryMatch=288u,NtsStatsCount=289u;
+#else
+// Macro expansion leaves the already-qualified shader arithmetic byte-identical.
+#define NtsStatQualified 287u
+#define NtsStatPrimaryMatch 288u
+#endif
 static const NvUint NtsRecipe=2u,NtsColorOffset=24u,NtsBasisOffset=40u,NtsMinimumStride=80u;
 struct NtsPlan {NvUint branch,status;float tiling;};
 inline NtsPlan nts_plan(float red,float green,NvVec3 tilings){

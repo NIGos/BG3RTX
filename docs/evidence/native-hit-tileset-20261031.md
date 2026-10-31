@@ -47,6 +47,36 @@ prototypes compile and validate before M1 integration. Exact hashes and scope ar
 in native-hit-tileset-20261031-shaders.json. After merging M1 224b864, all 96
 actual native_tileset material wrappers compile and validate; 48 GI and 32
 reference interfaces pass 2,456,696 production interface checks. Combined hashes
-are in native-hit-tileset-20261031-combined.json. The M2 getter and 80-byte capture
-routing, core stats capacity 289 and full host link are still pending.
+are in native-hit-tileset-20261031-combined.json. The getter, 80-byte capture routing and core stats capacity 289 are integrated
+in the checkpoint below. Runtime participation remains unqualified.
 No live participation, field agreement, quality or performance claim is made.
+
+
+## Combined capture glue checkpoint
+
+The layer now exposes the validated six-stream pipeline getter for the exact
+6898/781c depth and a618/cad4 deferred pairs. Both startup controls
+`rt_native_tileset=1` and `rt_hit_material=1` reserve at least 80 bytes per vertex;
+Hair 88 remains 88. The deferred native outputs are captured directly: COLOR 24,
+N 40, B 52, T 64, with clip 0/UV 16. All outputs must be present and smooth before
+flags 3 authorizes material capture. Depth keeps separate flags 1 and its original
+COLOR 24 coverage contract. Missing or incomplete interfaces do not qualify.
+Fresh coverage correctly has no dependency on the static-cache instancing
+analyzer; the material join separately validates its six actual input streams.
+
+The existing deferred_begin route and typed query tuple are reused. There is no
+new descriptor bank, public ABI or installed setting. Shared counter symbols
+reserve 287/288 and core capacity 289; the existing stats report adds qualified
+family 2 acquisitions and their native primary matches. These are participation
+and geometry/class checks, not a material-field equality or quality gate.
+
+Both DLLs link. Five targeted CTests pass, including unchanged Hair coverage and
+M1 coverage, capture budget and actual descriptor contracts. The extended fixture
+passes 785 CPU cases, 816 with the retained 2848-byte a618 native module. Its native
+80/88-byte patches validate and two ordinary patch outputs match the frozen main
+tool. All 16 affected acquisition shaders validate and remain byte-identical to
+the retained combined producer proof after symbolic counter substitution; no
+whole unchanged shader proof was repeated. Checks ran offline BelowNormal with
+at most two compiler jobs. No game or GPU execution, runtime field agreement or
+GPU cost measurement was performed. Private evidence is under
+`captures/native-hit-tileset-glue-20261031/`.
