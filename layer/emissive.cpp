@@ -1212,7 +1212,7 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
 // ================= entry points =================
 
 void em_device_created(DeviceData* dd) {
-  if (g_dd || !cfg_int("rt_emissive", 0)) return;
+  if (g_dd || !cfg_hot(CfgHot::rt_emissive)) return;
   g_dd = dd;
   const VkDeviceFuncs& vk = dd->vk;
   VkPhysicalDeviceProperties props{};
@@ -1309,7 +1309,7 @@ void em_device_created(DeviceData* dd) {
   if (ok && vk.CreateQueryPool(dd->device, &qi, nullptr, &g_qp) != VK_SUCCESS) g_qp = VK_NULL_HANDLE;
   g_on = ok;
   log("[em] emissive capture %s (rt_emissive=%d): soup %llu MB, light list %u triangles (%llu MB), %u KB host ring",
-      ok ? "available" : "UNAVAILABLE", cfg_int("rt_emissive", 0), (unsigned long long)soup_mb, g_max_lights,
+      ok ? "available" : "UNAVAILABLE", cfg_hot(CfgHot::rt_emissive), (unsigned long long)soup_mb, g_max_lights,
       (unsigned long long)((VkDeviceSize(g_max_lights) * 80) >> 20), unsigned((kRegion * kRing) >> 10));
 }
 
@@ -1367,7 +1367,7 @@ void em_device_destroyed(DeviceData* dd) {
 }
 
 // Needs RT only: the emissive scene has its own acceleration structures (em_as_build).
-bool em_wanted() { return g_on && rt_enabled() && cfg_int("rt_emissive", 0) != 0; }
+bool em_wanted() { return g_on && rt_enabled() && cfg_hot(CfgHot::rt_emissive) != 0; }
 
 bool em_is_fx_pass(const Bg3PassInfo& p, uint32_t gw, uint32_t gh) {
   return g_on && p.color_count == 1 && p.color_formats[0] == VK_FORMAT_B10G11R11_UFLOAT_PACK32 &&
@@ -1416,13 +1416,13 @@ bool em_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const Em
   }
   // rt_em_backdrop=1 (a measurement): skydome backdrops are captured too, so the projected
   // check shows their share of the effects target.
-  const bool backdrop = mat.kind == kMatBackdrop && cfg_int("rt_em_backdrop", 0) != 0;
+  const bool backdrop = mat.kind == kMatBackdrop && cfg_hot(CfgHot::rt_em_backdrop) != 0;
   // rt_em_decal=1 (default): emissive deferred decals are captured too. Their geometry is
   // the projection box, not the surface they light, so they are flagged approximate (the
   // calibration sets their level) and the check counts the pixels they light as covered by
   // an emitter in front of the depth. In Water Queen's House they are 55% of the effects
   // target's bright pixels.
-  const bool decal = mat.kind == kMatDecal && cfg_int("rt_em_decal", 1) != 0;
+  const bool decal = mat.kind == kMatDecal && cfg_hot(CfgHot::rt_em_decal) != 0;
   if (mat.kind != kMatEmissive && mat.kind != kMatForward && !backdrop && !decal) return false;
   FsCount& fc = g_fs_window[s->fs];
   ++fc.draws;

@@ -893,7 +893,7 @@ void bvh_device_created(DeviceData* dd) {
   qi.queryCount = kCompactSlots;
   ok = ok && dd->vk.CreateQueryPool(dd->device, &qi, nullptr, &g_compact_qp) == VK_SUCCESS;
   g_on = ok;
-  log("[bvh] static/dynamic BVH split %s (rt_bvh_split=%d)", ok ? "available" : "UNAVAILABLE", cfg_int("rt_bvh_split", 1));
+  log("[bvh] static/dynamic BVH split %s (rt_bvh_split=%d)", ok ? "available" : "UNAVAILABLE", cfg_hot(CfgHot::rt_bvh_split));
 }
 
 void bvh_device_destroyed(DeviceData* dd) {
@@ -966,7 +966,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   g_dd = nullptr;
 }
 
-bool bvh_split_wanted() { return g_on && !g_failed && cfg_int("rt_bvh_split", 1) != 0; }
+bool bvh_split_wanted() { return g_on && !g_failed && cfg_hot(CfgHot::rt_bvh_split) != 0; }
 
 void bvh_begin_capture(VkCommandBuffer) {
   std::lock_guard<std::mutex> lock(g_mu);
@@ -1052,7 +1052,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   // Capture while the exact native draw is still bound, including cached draws
   // that skip transform feedback. Build-time tracker state belongs to another
   // pipeline and cannot recover this material's sampler/descriptor identity.
-  if(d.alpha && ip.uv_ok && cfg_int("rt_omm",0) && omm::available_for(g_dd)) {
+  if(d.alpha && ip.uv_ok && cfg_hot(CfgHot::rt_omm) && omm::available_for(g_dd)) {
     AlphaFs fs{};AlphaSnapshot source{};omm::NativePlainCapture captured{};
     if(alpha_lookup(s->fs,&fs) && alpha_capture_source(cmd,fs,0,fd.tris_per_instance,&source) &&
        omm::capture_native_plain(cmd,fs,d.vs,source,&captured))
@@ -1072,9 +1072,9 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   fd.cached = true;
   *mesh_tris = m.tris;
   // A periodic audit: the cached draw is captured once more and compared.
-  const int audit_frames = cfg_int("rt_mesh_audit_frames", 600);
+  const int audit_frames = cfg_hot(CfgHot::rt_mesh_audit_frames);
   if (audit_frames > 0 && frame_index() >= m.last_audit + uint64_t(audit_frames) &&
-      g_audits_this_frame < uint32_t((std::max)(cfg_int("rt_mesh_audits", 2), 0))) {
+      g_audits_this_frame < uint32_t((std::max)(cfg_hot(CfgHot::rt_mesh_audits), 0))) {
     ++g_audits_this_frame;
     m.last_audit = frame_index();
     fd.audit = true;
@@ -2037,7 +2037,7 @@ bool bvh_omm_use(VkCommandBuffer cmd,uint32_t slot,VkAccelerationStructureKHR se
   if(!identity)return false;*identity=0;
   std::lock_guard lock(g_mu);
   if(slot>=kSceneSlots || !selected || selected!=g_omm_tlas[slot].as || !g_omm_expected[slot] ||
-     !cfg_int("rt_omm",0) || !omm::available_for(g_dd) || g_omm_ranges[slot].empty() ||
+     !cfg_hot(CfgHot::rt_omm) || !omm::available_for(g_dd) || g_omm_ranges[slot].empty() ||
      !omm::cached_bake_ready(g_omm_records[slot],g_omm_records[slot],bvh_rec_state(g_omm_records[slot])))return false;
   for(const auto& source:g_omm_ranges[slot])if(!omm::register_ticket_use(cmd,source.baked.ticket))return false;
   *identity=g_omm_records[slot];return true;

@@ -217,7 +217,7 @@ bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,V
                    Bg3SunSceneInfo* out) {
   if(!out) return false;*out={};
   if(!cfg_int("rt_sun_cascade_current",0) || !cfg_int("rt_cascade_casters",0) || !cmd) return false;
-  std::lock_guard<std::mutex> lock(g_sun_mutex);
+  std::unique_lock<std::mutex> lock(g_sun_mutex);
   ++g_calls;stats();
   DeviceData* dd=main_device();if(!dd || dd->graphics_family==UINT32_MAX) return false;
   if(g_sun_dd && g_sun_dd!=dd) return false;g_sun_dd=dd;
@@ -233,7 +233,14 @@ bool rt_sun_scene(VkCommandBuffer cmd,VkAccelerationStructureKHR selected_tlas,V
      !read_mapped(lighting_cb.buffer,lighting_cb.offset,lighting_camera,sizeof lighting_camera) ||
      !same_camera_pose(base.camera,lighting_camera)) {++g_failed_epoch;return false;}
   std::array<SunCascadeCapture,4> cascades;
-  if(!geo_sun_cascades(lighting_epoch,&cascades)) {++g_failed_epoch;return false;}
+  // geo_sun_cascades may wait (rt_scene_wait_ms) for the cascade passes recorded on other
+  // threads: g_sun_mutex is not held across that wait (every graphics submit takes it in
+  // sun_prepare_submit). Only locals carry over; the device is checked again after it.
+  lock.unlock();
+  const bool have_cascades=geo_sun_cascades(lighting_epoch,&cascades);
+  lock.lock();
+  if(g_sun_dd!=dd) return false;
+  if(!have_cascades) {++g_failed_epoch;return false;}
   for(const auto& c:cascades) {
     if(!c.geometry_complete || !c.materials_complete || !c.finite_native_clip || !c.native_raster_valid || !c.fresh_depth || !c.camera_buffer) {++g_failed_material;return false;}
     if(base.producer==cmd || c.soup.producer==cmd) {++g_failed_order;return false;}

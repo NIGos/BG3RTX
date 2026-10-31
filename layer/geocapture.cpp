@@ -310,8 +310,8 @@ Capture g_cap;                 // the readback capture (one per trace)
 Capture g_scratch;             // geo_xfb_always
 std::atomic<bool> g_submit_wanted{false};
 
-// An effects pass of the emissive capture (D-EM, emissive.cpp): CmdState::geo points
-// to one while CmdState::geo_em is set. Passes are recorded on several threads.
+// An effects pass of the emissive capture (D-EM, emissive.cpp): CmdState::geo holds
+// one with Kind::Em. Passes are recorded on several threads.
 struct EmPass {
   bool capture = false;      // rt_emissive: draws are captured (otherwise only timed)
   bool xfb_active = false;
@@ -320,6 +320,14 @@ struct EmPass {
   VkDeviceSize ubo_off = 0;
   std::vector<std::pair<VkDeviceSize, uint32_t>> ranges;   // captured (offset, triangles)
 };
+
+// CmdState::geo, typed by its kind.
+using GeoKind = CmdState::GeoPass::Kind;
+bool geo_is(const CmdState* s, GeoKind k) { return s->geo.kind == k; }
+Capture* geo_capture(CmdState* s) { return geo_is(s, GeoKind::Capture) ? static_cast<Capture*>(s->geo.object) : nullptr; }
+EmPass* geo_empass(CmdState* s) { return geo_is(s, GeoKind::Em) ? static_cast<EmPass*>(s->geo.object) : nullptr; }
+void set_geo(CmdState* s, Capture* c) { s->geo = c ? CmdState::GeoPass{GeoKind::Capture, c} : CmdState::GeoPass{}; }
+void set_geo(CmdState* s, EmPass* e) { s->geo = e ? CmdState::GeoPass{GeoKind::Em, e} : CmdState::GeoPass{}; }
 
 // ---- timing ----
 constexpr uint32_t kTsSlots = 64;
@@ -1082,7 +1090,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
       Capture& p = g_cprobe[layer];
       p.cascade = p.probe = true;
       p.layer = layer;
-      s->geo = &p;
+      set_geo(s, &p);
     }
     return;
   }
@@ -1158,7 +1166,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
     g_dd->vk.CmdResetQueryPool(cmd, g_cc_qp, slot * 2, 2);
     g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, g_cc_qp, slot * 2);
   }
-  s->geo = &c;
+  set_geo(s, &c);
 }
 
 void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawArgs& args, const PipeInfo& pi) {
@@ -1172,7 +1180,7 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
       std::lock_guard<std::mutex> lock(g_cc_mu);
       g_cc_mat[c->layer] = m;
     }
-    s->geo = nullptr;
+    s->geo = {};
     return;
   }
   ++c->c_seen;
@@ -1493,7 +1501,7 @@ bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, 
 const VkDeviceCreateInfo* geo_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
                                                  VkDeviceCreateInfo* scratch) {
   g_timing = cfg_int("geo_timing", 0) != 0;
-  if ((!cfg_int("geo_capture", 0) && !cfg_int("rt", 1)) || !id) return ci;
+  if ((!cfg_hot(CfgHot::geo_capture) && !cfg_int("rt", 1)) || !id) return ci;
   uint32_t n = 0;
   id->EnumerateDeviceExtensionProperties(phys, nullptr, &n, nullptr);
   std::vector<VkExtensionProperties> props(n);
@@ -1560,8 +1568,8 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
       log("[geo] rt_native_hair rejected: requires rt_bvh_split=1 at startup; legacy procedural range not implemented");
     g_stride = g_alpha_mode ? (hair_requested && hair_split ? 88 : cfg_int("rt_hit_material",0) && hair_split ? 64 : 24) : 16;
     g_stride_without_tileset=g_stride;
-    g_tileset_capture=g_alpha_mode && hair_split && cfg_int("rt_native_tileset",0)!=0;
-    if(cfg_int("rt_native_tileset",0) && !g_tileset_capture)log("[geo] rt_native_tileset rejected: restart with rt_alpha=1 rt_bvh_split=1");
+    g_tileset_capture=g_alpha_mode && hair_split && cfg_hot(CfgHot::rt_native_tileset)!=0;
+    if(cfg_hot(CfgHot::rt_native_tileset) && !g_tileset_capture)log("[geo] rt_native_tileset rejected: restart with rt_alpha=1 rt_bvh_split=1");
     if(g_tileset_capture)g_stride=(std::max)(g_stride,cfg_int("rt_hit_material",0)?80u:40u);
     log("[geo] transform feedback %s: vertex shaders get Position%s XFB decorations (stride %u)%s",
         g_on ? "enabled" : "FAILED to load", g_alpha_mode ? " + UV" : "", g_stride,
@@ -1802,7 +1810,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
       }
     const uint32_t overlap_family = (uint32_t(cfg_int("rt_em_dbg_fam_hi", 0) & 0xffff) << 16) |
                                      uint32_t(cfg_int("rt_em_dbg_fam_lo", 0) & 0xffff);
-    if (cfg_int("rt_em_overlap_check", 0) && fio && uint32_t(fio->hash >> 32) == overlap_family &&
+    if (cfg_hot(CfgHot::rt_em_overlap_check) && fio && uint32_t(fio->hash >> 32) == overlap_family &&
         cis[i].pColorBlendState && cis[i].pColorBlendState->attachmentCount &&
         cis[i].pRasterizationState && cis[i].pDepthStencilState) {
       const auto& b = cis[i].pColorBlendState->pAttachments[0];
@@ -1869,14 +1877,13 @@ void geo_forget_pipeline(VkPipeline p) {
 
 // Before the game's vkCmdBeginRenderPass (outside the pass).
 void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
-  s->geo = nullptr;
-  s->geo_em = false;
-  s->geo_material = s->geo_material_active = false;
+  s->geo = {};
+  s->geo_material_active = false;
   s->geo_ts = -1;
   if (!g_dd) return;
   // rt_cascade_casters: a sun shadow cascade pass (a depth-only D16 layer of the cascade array).
   if (g_on && s->pass.color_count == 0 && s->pass.depth_format == VK_FORMAT_D16_UNORM && rt_enabled() &&
-      cfg_int("rt_cascade_casters", 0)) {
+      cfg_hot(CfgHot::rt_cascade_casters)) {
     const int layer = cascade_layer(s->pass);
     if (layer >= 0) {
       cascade_pass_before(cmd, s, layer);
@@ -1896,8 +1903,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
     auto* e = new EmPass;
     e->capture = em_pass_begin(cmd, s, &e->ts);
     if (e->capture || e->ts >= 0) {
-      s->geo = e;
-      s->geo_em = true;
+      set_geo(s, e);
     } else {
       delete e;
     }
@@ -1922,37 +1928,37 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
                   : g_scene_frame1.load() != frame_index() + 1);
   const bool rt_src = g_alpha_mode ? prepass : gbuf;
   if(g_on && gbuf && !rt_src && native_hit::enabled() && !trace_recording()) {
-    s->geo=s;s->geo_material=true;s->geo_material_no_writes=true;return;
+    s->geo={GeoKind::Material,nullptr};s->geo_material_no_writes=true;return;
   }
   if (!gbuf && !rt_src) return;
   bool xfb = false;
   if (g_on) {
     std::lock_guard<std::mutex> lock(g_cap_mu);
     if (gbuf && trace_recording() && s->tracing && g_cap.state == 0 && frame_index() >= trace_start_frame() + 1 &&
-        cfg_int("geo_capture", 0)) {
+        cfg_hot(CfgHot::geo_capture)) {
       if (start_capture(g_cap, true, s->pass.width, s->pass.height)) {
         g_cap.cmd = cmd;
         g_cap.cc_keys = g_cap.cascade = false;
         g_cap.viewport = {};
-        s->geo = &g_cap;
+        set_geo(s, &g_cap);
         g_submit_wanted = true;
         g_dd->vk.CmdResetQueryPool(cmd, g_cap.qp, 0, g_cap.max_slots);
       }
-    } else if (g_scratch.state != 1 && ((rt_src && rt_capture_wanted()) || (gbuf && cfg_int("geo_xfb_always", 0)))) {
+    } else if (g_scratch.state != 1 && ((rt_src && rt_capture_wanted()) || (gbuf && cfg_hot(CfgHot::geo_xfb_always)))) {
       if (start_capture(g_scratch, false, s->pass.width, s->pass.height)) {
         g_scratch.cmd = cmd;
         g_scratch.rt = rt_src && rt_capture_wanted();
         g_scratch.split = g_scratch.rt && bvh_split_wanted();
         g_scratch.cascade = false;
-        g_scratch.cc_keys = g_scratch.rt && cfg_int("rt_cascade_casters", 0) != 0;
+        g_scratch.cc_keys = g_scratch.rt && cfg_hot(CfgHot::rt_cascade_casters) != 0;
         if(g_scratch.rt)native_hit::prepass_begin(cmd);
-        s->geo = &g_scratch;
+        set_geo(s, &g_scratch);
         // The previous frame's AS build read this buffer.
         if (g_scratch.rt) rt_before_capture(cmd);
         if (g_scratch.split) bvh_begin_capture(cmd);
       }
     }
-    xfb = s->geo != nullptr;
+    xfb = bool(s->geo);
   }
   // Timed: the ray tracing source pass (the G-buffer without rt_alpha).
   // (the small passes before the scene's are captured too: time the usual scene ordinal only)
@@ -1973,9 +1979,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
 
 // Right after the game's vkCmdBeginRenderPass (inside the pass).
 void geo_pass_begun(VkCommandBuffer cmd, CmdState* s) {
-  if(s->geo_material)return;
-  if (s->geo_em) return;
-  auto* c = static_cast<Capture*>(s->geo);
+  auto* c = geo_capture(s);
   if (!c) return;
   // Buffers are bound per draw (geo_pre_draw).
   (void)cmd;
@@ -1983,13 +1987,13 @@ void geo_pass_begun(VkCommandBuffer cmd, CmdState* s) {
 
 // Right before the game's vkCmdEndRenderPass / vkCmdEndRendering (inside the pass).
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s) {
-  if(s->geo_material){if(s->geo_material_active)p_end_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=false;return;}
-  if (s->geo_em) {
-    auto* e = static_cast<EmPass*>(s->geo);
+  if(geo_is(s,GeoKind::Material)){if(s->geo_material_active)p_end_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=false;return;}
+  if (geo_is(s, GeoKind::Em)) {
+    auto* e = geo_empass(s);
     if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
     return;
   }
-  auto* c = static_cast<Capture*>(s->geo);
+  auto* c = geo_capture(s);
   if (!c || !c->xfb_active) return;
   p_end_xfb(cmd, 0, 0, nullptr, nullptr);
   c->xfb_active = false;
@@ -2074,7 +2078,7 @@ void rt_capture_stats(const Capture& c) {
 // D-EM: a draw of an effects pass. Emissive material draws that are not cached meshes
 // are captured into the emissive soup (emissive.cpp decides).
 static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
-  auto* e = static_cast<EmPass*>(s->geo);
+  auto* e = geo_empass(s);
   if (e && !e->capture) return em_note_draw(s);   // timed only (rt_emissive=0)
   if (!e) return;
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
@@ -2083,7 +2087,7 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
     auto it = g_pipes.find(s->pipe[0]);
     if (it != g_pipes.end()) pi = it->second;
   }
-  if (pi.em_state && cfg_int("rt_em_overlap_check", 0)) {
+  if (pi.em_state && cfg_hot(CfgHot::rt_em_overlap_check)) {
     static thread_local std::unordered_set<uint64_t> seen;
     if (seen.insert(s->pipe_id[0]).second && seen.size() <= 16)
       log("[em-overlap] native draw pipe %llu FS %016llx blend/src/dst/op/mask %u/%u/%u/%u/%u cull %u depth test/write/compare %u/%u/%u dynamic %u",
@@ -2113,7 +2117,7 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
 }
 
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
-  if(s->geo_material){
+  if(geo_is(s,GeoKind::Material)){
     bool exact=false;{std::lock_guard lock(g_mu);auto i=g_pipes.find(s->pipe[0]);if(i!=g_pipes.end()){
       s->geo_material_no_writes&=i->second.no_storage_writes;
       const auto& p=i->second;
@@ -2124,7 +2128,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
       // One sparse, exact state record per audited native pipeline. A later
       // unsupported term is visible without another blind attribution run.
       static std::unordered_set<uint64_t> reported;
-      if(native_hit::enabled() && cfg_int("rt_stats",0) && ((s->vs==0x3812bc980438747full && s->fs==0x8995da1e4060f53bull) || (g_tileset_capture && tileset)) &&
+      if(native_hit::enabled() && cfg_hot(CfgHot::rt_stats) && ((s->vs==0x3812bc980438747full && s->fs==0x8995da1e4060f53bull) || (g_tileset_capture && tileset)) &&
          reported.size()<16 && reported.insert(uint64_t(s->pipe[0])).second)
         log("[hit material pipeline] pipe %u accepted %u xfb %u basis %u static %u reasons 0x%x depth test %d blend 0x%x color 0x%x topo %u uv %u; raster/multisample/blend pNext %u/%u/%u",
           s->pipe_id[0],unsigned(exact),unsigned(p.xfb),tileset?p.tileset_outputs:p.vt_outputs,unsigned(p.material_state),p.material_reasons,p.depth_test,p.blend_mask,p.color_mask,unsigned(p.topo),unsigned(p.uv_match),p.raster_next,p.multisample_next,p.blend_next);
@@ -2135,8 +2139,8 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
       p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;
     }return;
   }
-  if (s->geo_em) return em_pre_draw(cmd, s, args);
-  auto* c = static_cast<Capture*>(s->geo);
+  if (geo_is(s, GeoKind::Em)) return em_pre_draw(cmd, s, args);
+  auto* c = geo_capture(s);
   if (!c) return;
   const uint32_t kind = args.kind, count = args.count, instances = args.instances;
   if(c->rt)native_hit::prepass_observe(cmd,s,args);
@@ -2190,7 +2194,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     }
     prims *= instances;
   } else {
-    prims = (uint64_t((std::max)(cfg_int("geo_indirect_mb", 8), 1)) << 20) / (3ull * g_stride);
+    prims = (uint64_t((std::max)(cfg_hot(CfgHot::geo_indirect_mb), 1)) << 20) / (3ull * g_stride);
   }
   const uint64_t tri_bytes = 3ull * g_stride;
   if (c->rt && pi.xfb && pi.triangles && prims && kind <= 1) {
@@ -2220,7 +2224,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   else if (c->rt && kind > 1) d.skip = 4, ++c->drop_indirect;
   else if (c->rt && pi.topo != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST &&
            !((pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP || pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN) &&
-             (kind == 0 || !pi.restart) && cfg_int("rt_strips", 1)))
+             (kind == 0 || !pi.restart) && cfg_hot(CfgHot::rt_strips)))
     d.skip = 4, ++c->drop_topo, c->drop_topo_tris += prims;
   else if ((c->readback && c->slots >= c->max_slots) || c->cursor + d.reserved > c->opaque_end) d.skip = 3;
   bool capture = d.skip == 0 && d.reserved > 0;
@@ -2231,7 +2235,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   AlphaFs a{};
   const bool alpha_fs = capturable && g_alpha_mode && alpha_lookup(s->fs, &a) && (a.kind==5 || (a.uv == pi.uv && pi.uv >= 0)) &&
                         (a.kind != 4 || (pi.hair_outputs & (a.channel ? 3u : 1u)) == (a.channel ? 3u : 1u)) &&
-                        cfg_int("rt_alpha_capture", 1);
+                        cfg_hot(CfgHot::rt_alpha_capture);
   if(a.kind==4 && (pi.hair_outputs & (a.channel?3u:1u)) != (a.channel?3u:1u))
     alpha_native_hair_missing_attributes(s->fs,s->vs,pi.hair_outputs);
   // Track D BVH split: a draw of a cached instanced mesh is not captured; its
@@ -2262,7 +2266,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     c->alpha_demand += d.reserved;
     if (c->alpha_cursor + d.reserved > c->xfb.size) {
       uint64_t spill_offset=0;
-      if(capture_budget::alpha_spill_offset(cfg_int("rt_alpha_spill",0)!=0,c->split,
+      if(capture_budget::alpha_spill_offset(cfg_hot(CfgHot::rt_alpha_spill)!=0,c->split,
           token!=UINT32_MAX,pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && kind<=1,
           c->cursor,c->opaque_end,d.reserved,spill_offset) &&
           alpha_add_draw(cmd,a,0,uint32_t(prims),&rec)) {
@@ -2284,7 +2288,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->rt && !alpha && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
     ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
-  if(c->rt && g_tileset_capture && cfg_int("rt_native_tileset",0) && native_tileset_coverage::lookup_camera(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
+  if(c->rt && g_tileset_capture && cfg_hot(CfgHot::rt_native_tileset) && native_tileset_coverage::lookup_camera(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
   uint32_t materialRecord=UINT32_MAX;
   if(capture && c->rt && !alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
     materialRecord=native_hit::note_opaque_prepass(cmd,s,args,d.offset,g_stride,uint32_t(prims));
@@ -2318,13 +2322,13 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
 }
 
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
-  if(s->geo_material){if(s->geo_material_active)p_end_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=false;return;}
-  if (s->geo_em) {
-    auto* e = static_cast<EmPass*>(s->geo);
+  if(geo_is(s,GeoKind::Material)){if(s->geo_material_active)p_end_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=false;return;}
+  if (geo_is(s, GeoKind::Em)) {
+    auto* e = geo_empass(s);
     if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
     return;
   }
-  auto* c = static_cast<Capture*>(s->geo);
+  auto* c = geo_capture(s);
   if (!c) return;
   if (c->active_slot >= 0) {
     p_end_query(cmd, c->qp, uint32_t(c->active_slot));
@@ -2337,13 +2341,20 @@ void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
   }
 }
 
+// The command buffer is begun again, reset or freed with an effects pass still open (its
+// recording is never submitted): its EmPass is freed (geo_pass_after never runs for it).
+void geo_cmd_discard(CmdState* s) {
+  if (!geo_is(s, GeoKind::Em)) return;
+  delete geo_empass(s);
+  s->geo = {};
+}
+
 // After the game's vkCmdEndRenderPass (outside the pass).
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
-  if(s->geo_material){native_hit::deferred_finish(cmd,s->geo_material_no_writes);s->geo_material=false;s->geo_material_active=false;s->geo=nullptr;return;}
-  if (s->geo_em) {
-    auto* e = static_cast<EmPass*>(s->geo);
-    s->geo = nullptr;
-    s->geo_em = false;
+  if(geo_is(s,GeoKind::Material)){native_hit::deferred_finish(cmd,s->geo_material_no_writes);s->geo_material_active=false;s->geo={};return;}
+  if (geo_is(s, GeoKind::Em)) {
+    auto* e = geo_empass(s);
+    s->geo = {};
     if (e) em_pass_done(cmd, s, e->ubo, e->ubo_off, g_stride, e->ranges, e->ts);
     delete e;
     return;
@@ -2351,7 +2362,7 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
   if (s->geo_ts >= 0 && g_qp) g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->geo_ts * 2 + 1);
   const int ts_slot = s->geo_ts;
   s->geo_ts = -1;
-  auto* c = static_cast<Capture*>(s->geo);
+  auto* c = geo_capture(s);
   // The pass's timing sample is classified by camera motion once the scene build
   // below has looked at the camera (static vs pan medians, TRACK_D_RT.md 11).
   struct MotionTag {
@@ -2363,7 +2374,7 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
       g_ts_split[slot] = bvh_split_wanted();
     }
   } motion_tag{ts_slot};
-  s->geo = nullptr;
+  s->geo = {};
   if (!c) return;
   if (c->cascade) {
     cascade_pass_after(cmd, c);
@@ -2497,27 +2508,6 @@ bool geo_native_frame_epoch(VkCommandBuffer cmd, VkPipelineBindPoint bind,
   *buffer=b.buffer;*offset=b.offset;return true;
 }
 
-bool geo_sun_cascade(const sun_coverage::NativeEpoch& epoch, SunCascadeCapture* out) {
-  if (!out || !sun_coverage::valid(epoch)) return false;
-  *out={};
-  std::unique_lock<std::mutex> lock(g_cc_mu);
-  auto find=[&]() {
-    const CcMeta* best=nullptr;
-    const int layer=cfg_int("rt_cascade_index",1);
-    if(layer<0 || layer>=4) return false;
-    for(const CcMeta& m:g_sun_meta[layer])
-      if(m.tris && sun_coverage::same_epoch(m.sun.native_epoch,epoch) &&
-         bvh_rec_state(m.rec)>=0 && bvh_rec_state(m.rec)!=2 && (!best || m.rec>best->rec)) best=&m;
-    if(best) *out=best->sun;
-    return best!=nullptr;
-  };
-  if (find()) return true;
-  // Worker recording order differs from GPU submission order. Never wait for
-  // GPU completion here or for a future presentation/native epoch.
-  const int ms=(std::clamp)(cfg_int("rt_scene_wait_ms",12),0,50);
-  return ms>0 && g_cc_cv.wait_for(lock,std::chrono::milliseconds(ms),find);
-}
-
 bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCascadeCapture,4>* out) {
   if(!out || !sun_coverage::valid(epoch)) return false;
   *out={};
@@ -2536,6 +2526,8 @@ bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCasc
     *out=std::move(found);return true;
   };
   if(find()) return true;
+  // Worker recording order differs from GPU submission order. Never wait for
+  // GPU completion here or for a future presentation/native epoch.
   const int ms=(std::clamp)(cfg_int("rt_scene_wait_ms",12),0,50);
   return ms>0 && g_cc_cv.wait_for(lock,std::chrono::milliseconds(ms),find);
 }
@@ -2599,7 +2591,7 @@ void geo_finish(uint64_t frame, const std::string& dir, VkQueue queue) {
   {
     std::lock_guard<std::mutex> lock(g_cap_mu);
     if (g_cap.state == 0) {
-      if (g_on && cfg_int("geo_capture", 0)) log("[geo] no G-buffer pass was captured in frame %llu", (unsigned long long)frame);
+      if (g_on && cfg_hot(CfgHot::geo_capture)) log("[geo] no G-buffer pass was captured in frame %llu", (unsigned long long)frame);
       return;
     }
     g_cap.dir = dir;

@@ -9,6 +9,10 @@ namespace bg3::omm {
 namespace {
 std::mutex contentMutex;
 DeviceData* owner{};std::atomic<bool> active{};bool recorded{},cpuUnsupported{};
+// rt_omm switched off at runtime: image writes are no longer tracked (no OMM consumes the
+// epochs). A write missed then would make a later epoch lie, so content proof declines
+// for the rest of the session: content-certified OMMs after re-enabling need a restart.
+std::atomic<bool> untracked{};
 ContentRegistry registry;
 std::unordered_map<VkDeviceMemory,bool> memorySafe;
 std::unordered_map<VkImage,VkDeviceMemory> imageMemory;
@@ -137,19 +141,21 @@ void content_image_bound(DeviceData* dd,VkImage image,VkDeviceMemory memory,bool
 }
 bool content_source(VkImage image,ContentSource& out){
   out={};if(!active.load())return false;std::lock_guard lock(contentMutex);const auto* e=registry.lookup(key(image));
-  if(cpuUnsupported || !e || !e->boundSafe)return false;
+  if(cpuUnsupported || untracked.load() || !e || !e->boundSafe)return false;
   out={counters,bytes,(VkDeviceSize(e->slot)+1)*stride,e->imageId,e->slot};out.requiredSamplingCertificate=e->requiredSamplingCertificate;return true;
 }
 bool content_source_view(VkImageView view,ContentSource& out){
   out={};if(!active.load())return false;std::lock_guard lock(contentMutex);const auto* v=registry.lookup_view(view_key(view));
-  if(cpuUnsupported || !v)return false;const auto* image=registry.lookup(v->image);if(!image || !image->boundSafe)return false;
+  if(cpuUnsupported || untracked.load() || !v)return false;const auto* image=registry.lookup(v->image);if(!image || !image->boundSafe)return false;
   out={counters,bytes,(VkDeviceSize(image->slot)+1)*stride,image->imageId,image->slot,v->viewId,v->baseMip,v->levelCount,VkFormat(v->format),
     {VkComponentSwizzle(v->components[0]),VkComponentSwizzle(v->components[1]),VkComponentSwizzle(v->components[2]),VkComponentSwizzle(v->components[3])}};
   out.requiredSamplingCertificate=image->requiredSamplingCertificate;
   return true;
 }
 bool content_before_image_write(VkCommandBuffer cmd,VkImage image,bool unsupported){
-  if(!active.load() || device_of(cmd)!=owner)return false;std::lock_guard lock(contentMutex);const auto* e=registry.lookup(key(image));if(!e || !e->boundSafe)return false;
+  if(!active.load() || device_of(cmd)!=owner)return false;
+  if(!cfg_hot(CfgHot::rt_omm)){if(!untracked.exchange(true))log("[omm content] rt_omm=0 at runtime: image writes untracked, content proof declines until restart");return false;}
+  std::lock_guard lock(contentMutex);const auto* e=registry.lookup(key(image));if(!e || !e->boundSafe)return false;
   uint32_t family{};CmdState* state=cmd_state(cmd);
   const bool tracked=mark_content_dispatch(cmd);
   if(!tracked)cpuUnsupported=true;

@@ -801,7 +801,7 @@ void rt_device_destroyed(DeviceData* dd) {
 bool rt_enabled() { return g_rt.load(); }
 
 bool rt_capture_wanted() {
-  if (!g_rt || g_failed || !cfg_int("rt_build", 1)) return false;
+  if (!g_rt || g_failed || !cfg_hot(CfgHot::rt_build)) return false;
   std::lock_guard<std::mutex> lock(g_mu);
   return g_last_frame != frame_index();
 }
@@ -1303,7 +1303,7 @@ VkBuffer rt_scene_pose() {
 
 // Caller holds `lock` (g_mu). Waits (bounded) for this frame's scene commit; see g_scene_cv.
 void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
-  const int ms = cfg_int("rt_scene_wait_ms", 8);
+  const int ms = cfg_int("rt_scene_wait_ms", 12);
   const uint64_t now = frame_index();
   auto current = [&] { return g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built >= now; };
   ++g_wait.calls;
@@ -1475,7 +1475,7 @@ void rt_on_present() {
   std::lock_guard<std::mutex> lock(g_mu);
   // Compile (and recompile after edits) on the present thread, not while
   // the game records.
-  if (!g_failed && cfg_int("rt_build", 1)) ensure_pipeline();
+  if (!g_failed && cfg_hot(CfgHot::rt_build)) ensure_pipeline();
   if (!g_failed && cfg_int("rt_cascade_casters", 0) &&
       ensure_pipeline_file("rt/xfb_to_world_ortho.hlsl", g_ortho_pipe, g_ortho_gen)) {
     g_pl_live = g_pl;

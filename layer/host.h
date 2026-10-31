@@ -51,6 +51,18 @@ int cfg_int(const char* key, int fallback);
 // frames every 600 frames (P1 frame-lag diagnosis).
 bool order_trace_active();
 float cfg_float(const char* key, float fallback);
+// Hot-path settings (per draw, per pass, per submit): cfg_hot(CfgHot::k) is exactly
+// cfg_int("k", fallback in util.cpp's kCfgHot), cached by every cfg_poll (once per present,
+// the only place the merged settings and the A/B hotkey change), read without a lock.
+enum class CfgHot : int {
+  geo_indirect_mb, rt_strips, rt_alpha_capture, rt_alpha_spill, rt_native_tileset, rt_stats,
+  rt_em_overlap_check, rt_cascade_casters, geo_capture, geo_xfb_always, pan_capture,
+  fg_input_copy, pan_inputs, rt_event_flush, sl_log_barriers, rt_build, rt_bvh_split, rt_omm,
+  rt_hit_material, rt_native_hair, rt_native_scalp, rt_mesh_audit_frames, rt_mesh_audits,
+  rt_emissive, rt_em_backdrop, rt_em_decal,
+  Count
+};
+int cfg_hot(CfgHot key);
 
 // ---- frame cap (framecap.cpp; fps_cap) ----
 void framecap_on_present();            // sleep limiter when Streamline's Reflex limiter is not active
@@ -218,9 +230,17 @@ struct CmdState {
   uint32_t seg_count = 0;
   std::string seg_json;
   // Track D geometry capture (geocapture.cpp)
-  void* geo = nullptr;                 // capture active in the current pass
-  bool geo_em = false;                 // ... and it is an effects pass of the emissive capture (D-EM)
-  bool geo_material = false, geo_material_active = false; // opt-in exact deferred VT stream
+  // The capture active in the current pass. Kind::Capture: `object` is geocapture.cpp's
+  // Capture; Kind::Em: its EmPass (an effects pass of the emissive capture, D-EM);
+  // Kind::Material: the opt-in exact deferred VT stream (no object). Only geocapture.cpp
+  // reads `object`, through the kind.
+  struct GeoPass {
+    enum class Kind : uint8_t { None, Capture, Em, Material };
+    Kind kind = Kind::None;
+    void* object = nullptr;
+    explicit operator bool() const { return kind != Kind::None; }
+  } geo;
+  bool geo_material_active = false;   // Kind::Material: its XFB is active
   bool geo_material_no_writes = false;
   int geo_ts = -1;                     // timestamp slot of the current pass
   VkViewport viewport{};               // last vkCmdSetViewport(first = 0)
@@ -438,6 +458,7 @@ void alpha_tileset_incomplete(); // Startup-fixed XFB/soup stride88; never hot-e
 void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags);
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right before the game's end
 void geo_pass_after(VkCommandBuffer cmd, CmdState* s);    // outside, right after the game's end
+void geo_cmd_discard(CmdState* s);   // begin/reset/free with a pass still open: frees its EmPass
 void geo_forget_buffer(VkBuffer b);
 VkBufferUsageFlags geo_buffer_usage(VkBuffer b); // readonly tracked create usage; 0 if unknown
 VkDeviceSize geo_buffer_size(VkBuffer b);                   // 0 if unknown
@@ -536,7 +557,6 @@ struct SunCascadeCapture {
 };
 // Exact native Frame packet, independent of presentation-frame tag. Pending
 // conversions are returned for private-build scheduling, never as submitted proof.
-bool geo_sun_cascade(const sun_coverage::NativeEpoch& epoch, SunCascadeCapture* out);
 // Four separate native draw domains; never infer near-layer membership from far.
 bool geo_sun_cascades(const sun_coverage::NativeEpoch& epoch, std::array<SunCascadeCapture,4>* out);
 bool geo_sun_captures_owned(std::span<const SunCascadeCapture> captures);

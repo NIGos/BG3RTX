@@ -18,6 +18,10 @@ struct CpuTimer {
   explicit CpuTimer(int s) : slot(s) { if (g_cpu_timing.load(std::memory_order_relaxed)) QueryPerformanceCounter(&t0); else slot = -1; }
   ~CpuTimer() { if (slot >= 0) { LARGE_INTEGER t1; QueryPerformanceCounter(&t1); g_cpu_ticks[slot].fetch_add(uint64_t(t1.QuadPart - t0.QuadPart), std::memory_order_relaxed); } }
 };
+// Captured draws, counted only while cpu_timing=1 (the only reader is the report below).
+static void count_cpu_draw() {
+  if (g_cpu_timing.load(std::memory_order_relaxed)) g_cpu_draws.fetch_add(1, std::memory_order_relaxed);
+}
 void cmd_cpu_report(uint64_t frames) {
   g_cpu_timing.store(cfg_int("cpu_timing", 0) != 0, std::memory_order_relaxed);
   static uint64_t last = 0;
@@ -63,6 +67,7 @@ void cmd_forget(VkCommandBuffer cmd) {
   std::unique_lock<std::shared_mutex> lock(g_cmd_mu);
   auto it = g_cmds.find(cmd);
   if (it == g_cmds.end()) return;
+  geo_cmd_discard(it->second);
   delete it->second;
   g_cmds.erase(it);
 }
@@ -78,6 +83,7 @@ static void discard_recordings(VkDevice device, VkCommandPool pool, bool destroy
       if (state->allocation_device!=device || state->allocation_pool!=pool) { ++it; continue; }
       commands.push_back(it->first);
       std::atomic_ref<uint64_t>(state->recording).store(0,std::memory_order_release);
+      geo_cmd_discard(state);
       if (destroy) { delete state; it=g_cmds.erase(it); }
       else { state->begin_flags=0; ++it; }
     }
@@ -92,6 +98,7 @@ static void discard_recording(VkCommandBuffer command) {
     if (it!=g_cmds.end()) {
       std::atomic_ref<uint64_t>(it->second->recording).store(0,std::memory_order_release);
       it->second->begin_flags=0;
+      geo_cmd_discard(it->second);
     }
   }
   bvh_cmd_reset(command);
@@ -444,9 +451,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->dumps.clear();
   s->seg_key.clear();
   s->seg_count = 0;
-  s->geo = nullptr;   // (an effects pass left open by a reset buffer leaks its small EmPass)
-  s->geo_em = false;
-  s->geo_material=s->geo_material_active=s->geo_material_no_writes=false;
+  geo_cmd_discard(s);   // an effects pass left open by the previous recording
+  s->geo = {};
+  s->geo_material_active=s->geo_material_no_writes=false;
   em_forget_cmd(cmd);   // D-EM: draws of an earlier recording that was never submitted
   s->geo_ts = -1;
   s->vb.fill({});
@@ -581,7 +588,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(VkCommandBuffer cmd, VkP
 static void log_foreign_barrier(VkCommandBuffer cmd, const char* kind, VkImage img, VkImageLayout from, VkImageLayout to,
                                 uint32_t aspect, uint32_t qsrc, uint32_t qdst, uint32_t mips, uint32_t layers) {
   static std::atomic<int> n{0};
-  if (n >= cfg_int("sl_log_barriers", 0)) return;
+  if (n >= cfg_hot(CfgHot::sl_log_barriers)) return;
   CmdState* s = cmd_state(cmd);
   if (s && s->game_alloc) return;
   ++n;
@@ -659,7 +666,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate(VkCommandBuff
 static VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cmd, uint32_t vc, uint32_t ic, uint32_t fv, uint32_t fi) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{0, vc, ic, fv, 0, fi}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{0, vc, ic, fv, 0, fi}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDraw(cmd, vc, ic, fv, fi); } else vk(cmd).CmdDraw(cmd, vc, ic, fv, fi);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw");
@@ -669,7 +676,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cmd, uint32_t n
                                                  uint32_t fin) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin); } else vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw");
@@ -750,7 +757,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(VkCommandBuffer cmd, VkBuffer 
                                                   uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{2, 0, 0, 0, 0, 0}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{2, 0, 0, 0, 0, 0}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndirect(cmd, b, o, n, st); } else vk(cmd).CmdDrawIndirect(cmd, b, o, n, st);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw_indirect");
@@ -760,7 +767,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(VkCommandBuffer cmd, Vk
                                                          uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{3, 0, 0, 0, 0, 0}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{3, 0, 0, 0, 0, 0}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexedIndirect(cmd, b, o, n, st); } else vk(cmd).CmdDrawIndexedIndirect(cmd, b, o, n, st);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw_indirect");
@@ -770,7 +777,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectCount(VkCommandBuffer cmd, VkBu
                                                        VkDeviceSize co, uint32_t mx, uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{4, 0, 0, 0, 0, 0}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{4, 0, 0, 0, 0, 0}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndirectCount(cmd, b, o, cb, co, mx, st); } else vk(cmd).CmdDrawIndirectCount(cmd, b, o, cb, co, mx, st);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw_indirect");
@@ -780,7 +787,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cm
                                                               VkBuffer cb, VkDeviceSize co, uint32_t mx, uint32_t st) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
-  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{5, 0, 0, 0, 0, 0}); g_cpu_draws.fetch_add(1, std::memory_order_relaxed); }
+  if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{5, 0, 0, 0, 0, 0}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexedIndirectCount(cmd, b, o, cb, co, mx, st); } else vk(cmd).CmdDrawIndexedIndirectCount(cmd, b, o, cb, co, mx, st);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
   note_draw(cmd, "draw_indirect");
@@ -898,7 +905,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectKHR(VkCommandBuffe
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32_t n, const VkCommandBuffer* cmds) {
-  if(auto* state=cmd_state(cmd);state && state->geo_material)state->geo_material_no_writes=false;
+  if(auto* state=cmd_state(cmd);state && state->geo.kind==CmdState::GeoPass::Kind::Material)state->geo_material_no_writes=false;
   diag(DIAG_EXEC);
   if(auto* state=cmd_state(cmd);state&&state->tracing&&state->in_pass)terrain_capture_secondary(cmd,state);
   vk(cmd).CmdExecuteCommands(cmd, n, cmds);
@@ -955,12 +962,12 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
 //     every stage we use orders it before the wait and its transitions.
 static void flush_ours_before_event(VkCommandBuffer cmd) {
   CmdState* s = cmd_state(cmd);
-  if (s && !s->in_pass && cfg_int("rt_event_flush", 1)) core_on_cmd_end(cmd);
+  if (s && !s->in_pass && cfg_hot(CfgHot::rt_event_flush)) core_on_cmd_end(cmd);
 }
 
 static void barrier_ours_before_wait(VkCommandBuffer cmd) {
   CmdState* s = cmd_state(cmd);
-  if (!s || !s->ours_since_event || !cfg_int("rt_event_flush", 1)) return;
+  if (!s || !s->ours_since_event || !cfg_hot(CfgHot::rt_event_flush)) return;
   s->ours_since_event = false;
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
@@ -988,7 +995,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents(VkCommandBuffer cmd, uint32_t n,
   vk(cmd).CmdWaitEvents(cmd, n, ev, src, dst, mbc, mb, bbc, bb, ibc, ib);
   // BG3 performs sampled-input transitions in event waits too. Tracking only
   // pipeline barriers left FG/deferred readbacks with stale attachment layouts.
-  if (cfg_int("fg_input_copy", 0) || cfg_int("pan_inputs", 0)) {
+  if (cfg_hot(CfgHot::fg_input_copy) || cfg_hot(CfgHot::pan_inputs)) {
     CmdState* s = cmd_state(cmd, true);
     for (uint32_t i = 0; i < ibc; ++i) sl_note_event_barrier(s, ib[i].image, ib[i].newLayout);
   }
@@ -998,7 +1005,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents2(VkCommandBuffer cmd, uint32_t n
                                                  const VkDependencyInfo* deps) {
   barrier_ours_before_wait(cmd);
   vk(cmd).CmdWaitEvents2(cmd, n, ev, deps);
-  if (cfg_int("fg_input_copy", 0) || cfg_int("pan_inputs", 0)) {
+  if (cfg_hot(CfgHot::fg_input_copy) || cfg_hot(CfgHot::pan_inputs)) {
     CmdState* s = cmd_state(cmd, true);
     for (uint32_t event = 0; event < n; ++event)
       for (uint32_t i = 0; i < deps[event].imageMemoryBarrierCount; ++i) {
