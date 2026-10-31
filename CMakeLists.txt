@@ -149,6 +149,8 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 enable_testing()
 add_executable(transport_bsdf_test tests/transport_bsdf_test.cpp)
 add_test(NAME transport_bsdf_test COMMAND transport_bsdf_test)
+add_executable(transport_frame_test tests/transport_frame_test.cpp)
+add_test(NAME transport_frame_test COMMAND transport_frame_test)
 add_executable(native_opaque_transport_test tests/native_opaque_transport_test.cpp)
 add_test(NAME native_opaque_transport_test COMMAND native_opaque_transport_test)
 add_executable(omm_scene_binding_test tests/omm_scene_binding_test.cpp)

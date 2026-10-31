@@ -463,3 +463,24 @@ retained. Remaining samples 4, 5 and 12 have exact coordinates in
 `captures/m2-foundry/construction-native-ground/evidence.json`; other native draws
 can underlie them. This is not continuous footprint, contact, opacity or room
 closure. Existing Floor_C/wall exports remain adjacent; roof/opening closure is open.
+
+
+### Fixed S1 open-bay geometry bundle
+
+`python -m tools.assets.probe_foundry_cell --capture <S1 capture> --lslib <Packed>`
+exports `captures/m2-foundry/reference-cell/`: 27 native-qualified mesh components /
+24506 package triangles (board, seven floor pieces, corner, platform, west wall,
+opening frame, pillars and beam). Nine additional authored components have no
+unique native correspondence, even after ordered merged-window checks; they stay
+in a separate visibility-unknown file, not an invented enclosure. No GR2 source
+is missing. Shader/material/UV equivalence and parent-level roof state remain open.
+
+A separate frozen/current-capture-only file contains 824 real heightfield
+triangles with original draw/triangle provenance. Both original clip coordinates
+and world positions must be finite; geo unprojection ignores Z and alone would
+retain inactive Z-NaN vertices. Runtime XFB already rejects finite4 failures;
+this is an offline export guard. Unknown terrain material never means opaque.
+The expanded geometry intersects all 16 low board-vertex lines; signed heights
+remain unmodified and do not certify contact/opacity/continuous support.
+Persistent foundry terrain is a local remaining reader task: two existing v8
+render `.patch` files, distinct from physics `.bin`; no missing-resource claim.

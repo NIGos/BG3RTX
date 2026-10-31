@@ -1,5 +1,55 @@
 # BG3RTX progress
 
+## Real S1 open-bay reference geometry exported - 2026-10-31
+
+00af160 imported as 5ec54cc: 27 native-qualified package components, 24506 triangles,
+plus 824 frozen/current-capture terrain triangles with original draw/triangle IDs.
+Nine authored components remain separate with UNKNOWN native correspondence.
+All 16 low board-vertex lines intersect real geometry. This does not certify
+contact, opacity, continuous footprint or a closed room. No proxy roof/enclosure.
+The two small v8 render terrain patches are present; persistent height/UV/material
+decoding is the next concrete asset step, separately from physics and parent roof.
+Asset tests: 62 passed, one existing skip. No renderer/GPU or user-trial change.
+Design: ASSET_DB.md. Outputs: m2-foundry-mesh/BG3RTX/captures/m2-foundry/reference-cell/
+world-native-qualified.json, world-authoring-visibility-unknown.json,
+world-frozen-terrain.json and evidence.json. Shared scattering-frame source is
+also ready for integration; actual runtime material acquisition is still pending.
+
+## Material integration: actual command-buffer split found offline - 2026-10-31
+
+Main is 5fab4ba (merge-green, pushed): 44/44 CTests, 527/527 shaders and QA.
+The pending material provider's initial same-command-buffer restriction cannot
+participate in actual S1: frame 3242 has an 866-draw depth prepass and an 835-draw
+G-buffer in different command buffers, with 100 supported static VT draws.
+Both occur in the same traced submit; CPU recording order is not established.
+Keep triangle/UV and submission ownership checks, but fix the association before
+launching a zero-record live test. Evidence: omm-bake/BG3RTX/captures/
+native-hit-material-20261031/cross-command-buffer-evidence.json.
+
+de1ccdd adds the shared right-handed scattering frame requested by the direct-hit
+consumer: 4338 CPU checks plus DXC/spirv-val pass. No pole singularity or implicit
+direction normalization; not a shading-normal correction/GPU precision claim.
+The runtime owner will consume it; it is not yet a delivered GI/reflection gain.
+Sampler ownership is corrected. Review still requires secondary-command no-write
+coverage and Submit2 ordering for added compute, independently of OMM. No live
+material participation/cost or full probe replacement claim yet. Direct-only
+lighting remains a reference output; normal RF keeps its established policy.
+
+Actual S1 module check: all 89 recorded G-buffer VS/FS modules pass the shared
+read-only scanner; zero missing/declined. This is CPU source evidence, not a GPU
+dispatch or proof about unrecorded stages/secondary commands. Evidence next to
+the cross-command report: gbuffer-module-readonly-evidence.json.
+The coordinator approved ABI 20 with one explicit material-use callback; no hidden
+input mode on the existing OMM callback. Matching new DLLs are still in development;
+main and the installed personal trial remain ABI 19. Submit-hook commits 9b0881a
+and 92ea113 have 58 CPU checks/object compilation; full link awaits the provider.
+Non-watched acquisition draft: captures/native-hit-material-20261031/draft/.
+One S1 run, 360 s off/on/off plus cost plan, logs only; not released before freeze.
+Reader prerequisite 0f5406e imported as b85c580: conservative authoring bounds and
+exact cancelled translation ancestry are explicit export options. 59 asset checks
+pass, one existing skip. Runtime already rejects nonfinite original clip Z;
+the frozen terrain export guard does not establish a renderer terrain leak.
+
 ## Native ground expanded; material capture regression prevented - 2026-10-31
 
 Nearby S1 ground now exports three native-qualified Floor_B pieces plus a matched

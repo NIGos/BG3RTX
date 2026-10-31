@@ -50,7 +50,20 @@ def accessor(doc, buffers, index, allow_unorm8=False):
     return values
 
 
-def decode_mesh(path, visual, allow_color_unorm8=False):
+
+def check_native_bounds(union,visual,allow_loose=False):
+    """Native bounds may enclose unused authoring space; never resize vertices."""
+    bounds=[visual.get('BoundsMin'),visual.get('BoundsMax')]
+    if not allow_loose:
+        if union!=bounds:raise ValueError(f'LOD union disagrees with native local bounds: {union}')
+        return
+    if (any(not isinstance(row,(list,tuple)) or len(row)!=3 for row in bounds) or
+        any(not math.isfinite(x) for row in bounds for x in row) or
+        any(not(bounds[0][j]<=union[0][j]<=union[1][j]<=bounds[1][j]) for j in range(3))):
+        raise ValueError('Exported geometry escapes native conservative bounds')
+
+
+def decode_mesh(path, visual, allow_color_unorm8=False, allow_loose_native_bounds=False):
     doc = json.loads(path.read_text())
     buffers = []
     for b in doc['buffers']:
@@ -91,8 +104,7 @@ def decode_mesh(path, visual, allow_color_unorm8=False):
         raise ValueError('Export omitted a native resource object/LOD')
     union = [[f(m['bounds'][side][j] for m in meshes) for j in range(3)] for side, f in enumerate((min, max))]
     # Independent native bank metadata, not the glTF accessor's own min/max.
-    if union != [visual.get('BoundsMin'), visual.get('BoundsMax')]:
-        raise ValueError(f'LOD union disagrees with native local bounds: {union}')
+    check_native_bounds(union,visual,allow_loose_native_bounds)
     return meshes
 
 
