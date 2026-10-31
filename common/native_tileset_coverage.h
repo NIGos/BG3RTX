@@ -21,9 +21,12 @@ static const NtcUint NtcKnown=0u,NtcMissing=1u,NtcNonfinite=2u,NtcSeeThrough=3u;
 inline constexpr uint64_t depth_vs=0x689836dece58e778ull,depth_fs=0x781cd8d1d600117dull;
 inline constexpr uint64_t static_depth_vs=0x4235ddab8aa759d0ull,static_depth_fs=0xca4bf1d78f6438feull;
 inline constexpr uint64_t tileblend_vs=0xe6fc6bf6ed441be5ull,tileblend_fs=0x0f64d3a9dd86ff98ull;
-struct Recipe {uint64_t vs,fs;uint8_t material_binding,green_binding,subtype=0,uv=1;};
-inline constexpr Recipe recipes[]={{depth_vs,depth_fs,0u,1u},{static_depth_vs,static_depth_fs,1u,2u},{tileblend_vs,tileblend_fs,0u,1u,1u,0u}};
+inline constexpr uint64_t tileblend_shadow_vs=0xf4b35620d54abc6cull,tileblend_shadow_fs=0x5c37b87299d86ce1ull;
+struct Recipe {uint64_t vs,fs;uint8_t material_binding,green_binding,subtype=0,uv=1;bool shadow=false;};
+inline constexpr Recipe recipes[]={{depth_vs,depth_fs,0u,1u},{static_depth_vs,static_depth_fs,1u,2u},{tileblend_vs,tileblend_fs,0u,1u,1u,0u},{tileblend_shadow_vs,tileblend_shadow_fs,0u,1u,1u,0u,true}};
 inline const Recipe* lookup(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
+inline const Recipe* lookup_camera(uint64_t fs){const auto* r=lookup(fs);return r&&!r->shadow?r:nullptr;}
+inline const Recipe* lookup_shadow(uint64_t fs){const auto* r=lookup(fs);return r&&r->shadow?r:nullptr;}
 inline bool vertex(uint64_t vs){for(const auto& r:recipes)if(!r.subtype && r.vs==vs)return true;return false;}
 inline bool matches(uint64_t vs,uint64_t fs){const auto* r=lookup(fs);return r&&r->vs==vs;}
 struct Material {float tiling{},see_through{};bool known{};};

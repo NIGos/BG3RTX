@@ -6,14 +6,17 @@
 #include <algorithm>
 #include <cmath>
 namespace bg3::native_tileset_coverage {
-struct BlendMaterial {float packet[8]{};bool known{};};
-template<class Read> inline BlendMaterial capture_blend(Read&& read){
- BlendMaterial m;m.known=read(1u,0u,0u,m.packet,sizeof(m.packet));return m;
+struct BlendMaterial {float packet[8]{};bool known{},native_shadow{};};
+template<class Read> inline BlendMaterial capture_blend(Read&& read,bool native_shadow=false){
+ BlendMaterial m;m.native_shadow=native_shadow;
+ // DEPS never reads SeeThrough@28. Unused record word7 remains zero; it is
+ // not a substituted authored mode. Camera still requires the full32B.
+ m.known=read(1u,0u,0u,m.packet,native_shadow?28u:sizeof(m.packet));return m;
 }
 inline NtcUint ntb_material(const BlendMaterial& m){
  if(!m.known)return NtcMissing;
- for(float x:m.packet)if(!ntc_finite(x))return NtcNonfinite;
- if(m.packet[7]==1.f)return NtcSeeThrough;
+ for(unsigned i=0;i<(m.native_shadow?7u:8u);++i)if(!ntc_finite(m.packet[i]))return NtcNonfinite;
+ if(!m.native_shadow && m.packet[7]==1.f)return NtcSeeThrough;
  return m.packet[5]>m.packet[6]?NtcMissing:NtcKnown;
 }
 inline float ntb_pow(float x,float y){return std::pow(x,y);}

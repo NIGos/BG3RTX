@@ -134,3 +134,42 @@ tileset and material ordinary/rebase shaders remain byte-identical. This proves
 the shared helper on declared synthetic inputs, not actual native graphics/XFB,
 Hair geometry, raster receiver identity, rt_origin publication, image quality,
 OMM/current-Sun behavior or renderer GPU cost. No BG3/window/presentation.
+
+## Optional two-texture TileBlend coverage mode
+
+```text
+native_hair_gpu_probe.exe bounds.spv tileset.spv tileset_rebase.spv --tileblend
+```
+
+This mode uses the UNCHANGED four-query tileset probe shader compiled with
+`NATIVE_TILESET_PROBE=1`. It adds no shader, descriptor layout or production
+renderer change. The optional C++ path reuses the material fixture's tiny image
+allocation: distinct RGBA32F 2D base-alpha and mask-RG views occupy binding 2
+indices 1/2, with the actual native sampler array at binding 19. Authored fixture
+records use kind 5/subtype 1, mask index in channel and the full t[8] packet.
+
+One authorized windowless invocation on RTX 5090 passed 53 cases through all four
+actual production queries in 2.092 s wall time, with zero validation errors through
+teardown. Strides 40/64/80/88 check the nearest reachable float-alpha cutoff sides,
+exact 0.5, independent mask R/G effects, authored upper clamp, missing second view
+and unsupported subtype. Additional cases exercise bias, absolute shift, exponent,
+the native epsilon floor, lower clamp, UV scale/tiling, scaled base versus unscaled
+mask, and the actual native-border versus repeat-sampler contrast. The independent
+oracle uses double arithmetic and the analytic one-texel bilinear border weights;
+logged expected_alpha is that oracle, not a GPU numeric-alpha readback.
+
+All 18 invalid/missing cases returned UNKNOWN/aborted, including bad mask/sampler
+indices, invalid clamp domain, nonfinite bias/UV scale, declared missing/SeeThrough
+status, capture-incomplete header and invalid geometry range. An aborted distance
+can retain 3 and must not be consumed as known geometry. Held-pool and zero-origin
+rebase cases pass. The SeeThrough case supplies the producer's explicit unsupported
+status; it does not claim the shader reads native mode word 7 itself.
+
+Eight prior Hair, tileset, material and receiver base/rebase modules remain
+byte-identical to e660cf8. Raw logs, exact executable and module hashes are retained
+in `captures/tileblend-gpu-20261031/`; versioned evidence is
+`docs/evidence/native-tileblend-windowless-gpu-20261031.json`. Exactly one GPU
+invocation ran. No BG3/window/presentation, native graphics/XFB or host capture,
+compressed/sRGB/mip-domain certification, current-Sun/legacy material bridge,
+image-quality, AO/GI fallback or renderer pass-cost claim is made. The rebase case
+uses zero origins and does not certify coordinate conversion.

@@ -102,6 +102,26 @@ int main(int argc,char** argv){
  check(ntb_evaluate(NtcSeeThrough,true,1,0,0,0,1,0,1).status==NtcSeeThrough);
  check(ntb_evaluate(NtcKnown,true,.5f,0,1,0,1,0,1).solid);
  check(!ntb_evaluate(NtcKnown,true,std::nextafter(.5f,0.f),0,1,0,1,0,1).solid);
+ // Native DEPS uses only28B; camera-only SeeThrough must not affect it.
+ check(lookup_shadow(tileblend_shadow_fs) && !lookup_camera(tileblend_shadow_fs));
+ check(lookup_camera(tileblend_fs) && !lookup_shadow(tileblend_fs));
+ check(matches(tileblend_shadow_vs,tileblend_shadow_fs) && !matches(tileblend_vs,tileblend_shadow_fs));
+ check(!matches(tileblend_shadow_vs,tileblend_fs) && !vertex(tileblend_shadow_vs));
+ for(float unused_mode:{0.f,1.f,2.f,nan,inf}){
+  auto source=blendPacket;source[7]=unused_mode;
+  for(size_t available=0;available<=32;++available){
+   auto shadow=capture_blend([&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes){
+    check(set==1 && binding==0 && off==0 && bytes==28);
+    if(bytes>available)return false;std::memcpy(dst,source.data(),bytes);return true;
+   },true);
+   check(shadow.known==(available>=28));check(shadow.native_shadow && shadow.packet[7]==0.f);
+   check(ntb_material(shadow)==(available>=28?NtcKnown:NtcMissing));
+  }
+ }
+ for(unsigned i=0;i<7;++i){auto bad=capture_blend([&](unsigned,unsigned,unsigned,void* dst,size_t bytes){std::memcpy(dst,blendPacket.data(),bytes);static_cast<float*>(dst)[i]=nan;return true;},true);check(ntb_material(bad)==NtcNonfinite);}
+ BlendMaterial shadow;shadow.known=shadow.native_shadow=true;std::memcpy(shadow.packet,blendPacket.data(),32);shadow.packet[7]=nan;
+ check(ntb_material(shadow)==NtcKnown); // deliberately ignored, never copied torecord
+ shadow.packet[5]=2.f;shadow.packet[6]=1.f;check(ntb_material(shadow)==NtcMissing);
  // Minimal parser fixture with COLOR0 vec4 and UV1 vec2, not executable GPU code.
  std::vector<uint32_t> code={0x07230203,0x10000,0,100,0};
  auto emit=[&](std::initializer_list<uint32_t> v){code.insert(code.end(),v);};
