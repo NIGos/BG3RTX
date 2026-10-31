@@ -6,8 +6,8 @@ unowned-game/USER_PLAYING guards. No need for user witnessing or manual approval
 after adequate scoped checks. Be pragmatic: unrelated global gates do not veto
 a demonstrated local fix. Track what the user has not yet reviewed in PROGRESS.
 
-Main fd166bc ABI 19 is merged via merge-green and pushed with codex/omm-bake.
-Both DLLs rebuilt; 45/45 CTests, 527/527 runtime shaders and QA passed. Related
+Main 9cb5a30 ABI 20 is merged via merge-green and pushed with codex/omm-bake.
+Both DLLs rebuilt; 48/48 CTests, 544/544 runtime shaders and QA passed. Related
 user mandate docs were preserved in history; unrelated disk-audit files untouched. OMM is wired offline,
 not game-qualified. Ordinary 229 shader identities and 198 OMM compilations pass.
 Latest M1 analyzer adds 27 passing tests; full M1 lacks automatic ROI/pose proof.
@@ -37,7 +37,11 @@ Actual S1 trace proves prepass/deferred use different command buffers (866/835
 draws,100 static VT). Fix cross-CB association/ownership before any zero-record
 trial. Secondary-command no-write proof and Submit2 compute ordering need review.
 Shared frame de1ccdd has 4338 CPU checks and validated HLSL; real consumer pending.
-Explicit ABI 20 material-use callback approved in development; main/trial stay ABI 19.
+ABI20 provider R1 completed462s but FAILED acquisition: deferred CPU recording
+precedes source preparation by median4ms in88 actual pairs; no material GPU rows.
+Existing RT/FG stays healthy: static99.525%,displayed/rendered2.0,noNV153/dumps.
+Owner is fixing independent deferred packets/per-query guarded assembly; ABI21
+typed query-AlphaDSL output approved. Main stays20; personal Hair trial stays19.
 89 actual S1 G-buffer VS/FS modules pass the read-only scanner. Non-watched
 360 s acquisition draft is under captures/native-hit-material-20261031/draft/.
 M2 native S1 reference completed in 53 s: 835 draws, no capture overflow.
