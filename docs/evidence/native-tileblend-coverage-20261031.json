@@ -132,7 +132,7 @@
       "references": 32,
       "exit": 0
     },
-    "scope_note": "All ordinary OFF preprocessed compiler token inputs match with the same options; direct SPIR-V byte identity is measured only for the42 listed representatives. No claim of recompiling every OFF module."
+    "scope_note": "All ordinary OFF preprocessed compiler token inputs match with the same options; direct SPIR-V byte identity is measured only for the 42 listed representatives. No claim of recompiling every OFF module."
   },
   "native_patch": [
     {
