@@ -4,8 +4,11 @@
 
 DXC from the Vulkan SDK, -spirv vulkan1.3, HLSL 2021, cs_6_6, -O3, the SHaRC headers (this
 checkout's external/, else the main checkout's) and a first line "// dxc: <arguments>".
-Without arguments: every shaders/**/*.hlsl. Exit code 1 if any fails.
+A request "<file>?NAME=VALUE;NAME=VALUE" adds each pair as -D (common/shader_variant.h).
+Without arguments: every shaders/**/*.hlsl plus every GI variant request in shaders/variants.txt.
+Exit code 1 if any fails.
 """
+import hashlib
 import os
 import re
 import subprocess
@@ -22,11 +25,23 @@ for c in (root / "external" / "sharc-1.8.3" / "include", root.parents[2] / "exte
     if (c / "SharcCommon.h").exists():
         sharc = ["-I", str(c), "-D", "BG3RTX_SHARC_SDK=1"]
         break
-files = sys.argv[1:] or sorted(str(p.relative_to(shaders)).replace("\\", "/") for p in shaders.rglob("*.hlsl"))
+files = sys.argv[1:] or (sorted(str(p.relative_to(shaders)).replace("\\", "/") for p in shaders.rglob("*.hlsl")) +
+                         [l.strip() for l in (shaders / "variants.txt").read_text().splitlines()
+                          if l.strip() and not l.startswith("#")])
+
+
+def defines(f):
+    """The -D pairs of a request "<file>?A=1;B=2"."""
+    return [d for d in f.partition("?")[2].split(";") if d]
+
+
+def spv_name(f, e):
+    # Short: a request with defines would pass MAX_PATH spelled out.
+    return f.partition("?")[0].replace("/", "_") + "." + hashlib.sha1(f.encode()).hexdigest()[:12] + f".{e}.spv"
 
 
 def build(f, tmp):
-    src = shaders / f
+    src = shaders / f.partition("?")[0]
     text = src.read_text(errors="replace")
     first = text.split("\n", 1)[0].strip()
     extra = first[len("// dxc:"):].split() if first.startswith("// dxc:") else []
@@ -34,9 +49,10 @@ def build(f, tmp):
     entries = re.findall(r"\[numthreads\([^)]*\)\]\s*void\s+(\w+)", text) or ["main"]
     rc, msgs = 0, []
     for e in entries:
-        out = Path(tmp) / (f.replace("/", "_") + f".{e}.spv")
+        out = Path(tmp) / spv_name(f, e)
         r = subprocess.run([str(dxc), str(src), "-spirv", "-fspv-target-env=vulkan1.3", "-HV", "2021", "-T", "cs_6_6",
-                            "-E", e, "-I", str(shaders), "-D", "BG3RTX=1", "-O3"] + sharc + extra + ["-Fo", str(out)],
+                            "-E", e, "-I", str(shaders), "-D", "BG3RTX=1", "-O3"] + sharc +
+                           [a for d in defines(f) for a in ("-D", d)] + extra + ["-Fo", str(out)],
                            capture_output=True, text=True)
         rc |= r.returncode
         if r.returncode:
@@ -48,17 +64,17 @@ with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor(8) as pool:
     res = list(pool.map(lambda f: build(f, tmp), files))
     # These production GI variants need their dedicated host interface, not
     # the contracted local-shadow layout. Check the actual compiled modules.
-    material_gi = [str(Path(tmp) / (f.replace("/", "_") + ".main.spv"))
-                   for f, rc, _ in res if not rc and f.endswith(
+    material_gi = [(str(Path(tmp) / spv_name(f, "main")), "RT_NATIVE_TILESET=1" in defines(f))
+                   for f, rc, _ in res if not rc and f.partition("?")[0].endswith(
                        ("gi_trace_rt_hit_direct.hlsl", "gi_trace_rt_sharc_hit_direct.hlsl"))]
-    references = [str(Path(tmp) / (f.replace("/", "_") + ".main.spv"))
-                  for f, rc, _ in res if not rc and f.rsplit("/", 1)[-1] in
+    references = [(str(Path(tmp) / spv_name(f, "main")), "RT_NATIVE_TILESET=1" in defines(f))
+                  for f, rc, _ in res if not rc and f.partition("?")[0].rsplit("/", 1)[-1] in
                       ("rt_hit_direct.hlsl", "rt_hit_two_bounce.hlsl")]
     checker = root / "bin" / "native_hit_gi_bindings_test.exe"
     if (material_gi or references) and checker.exists():
         for tileset in (False, True):
-            gi = [p for p in material_gi if Path(p).name.startswith("native_tileset_") == tileset]
-            refs = [p for p in references if Path(p).name.startswith("native_tileset_") == tileset]
+            gi = [p for p, t in material_gi if t == tileset]
+            refs = [p for p, t in references if t == tileset]
             if not gi and not refs:
                 continue
             result = subprocess.run([str(checker), *(["--tileset"] if tileset else []), *gi, "--reference", *refs], capture_output=True, text=True)

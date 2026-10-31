@@ -42,30 +42,36 @@ def main():
     subprocess.run(['git','archive','--format=zip','--output',str(archive),args.baseline,'shaders','common'],cwd=ROOT,check=True)
     with zipfile.ZipFile(archive) as z:z.extractall(baseline)
     validator=str(Path(args.dxc).with_name('spirv-val'+Path(args.dxc).suffix))
-    def compile_one(src,dest,includes):
+    def compile_one(includes,request,dest):
+        # request: "<file>?NAME=VALUE;..." (common/shader_variant.h), the defines as -D.
+        file,_,defs=request.partition('?');src=includes/file
         dest.parent.mkdir(parents=True,exist_ok=True);first=src.read_text().splitlines()[0]
         extra=shlex.split(first[len('// dxc:'):]) if first.startswith('// dxc:') else []
         command=[args.dxc,str(src),'-spirv','-fspv-target-env=vulkan1.3','-HV','2021','-T','cs_6_6','-E','main',
-                 '-I',str(includes),'-I',args.sharc,'-D','BG3RTX=1','-D','BG3RTX_SHARC_SDK=1','-Fo',str(dest),*extra]
+                 '-I',str(includes),'-I',args.sharc,'-D','BG3RTX=1','-D','BG3RTX_SHARC_SDK=1',
+                 *[a for d in defs.split(';') if d for a in ('-D',d)],'-Fo',str(dest),*extra]
         result=subprocess.run(command,capture_output=True,text=True)
-        if result.returncode:raise RuntimeError(f'{src}: {result.stdout}\n{result.stderr}')
+        if result.returncode:raise RuntimeError(f'{request}: {result.stdout}\n{result.stderr}')
         return dest.read_bytes()
     def check(wrapper):
-        target=Path(re.search(r'#include <(.+)>',wrapper.read_text())[1]);name=wrapper.relative_to(ROOT/'shaders/hair_origin')
-        old=compile_one(baseline/'shaders'/target,out/'old'/name.with_suffix('.spv'),baseline/'shaders')
-        off=compile_one(ROOT/'shaders'/target,out/'off'/name.with_suffix('.spv'),ROOT/'shaders')
+        # The physical-origin request and the same request without it (the key-off path).
+        target=wrapper.replace('RT_HAIR_PHYSICAL_ORIGIN=1;','');name=Path(wrapper.partition('?')[0]+'.'+hashlib.sha1(wrapper.encode()).hexdigest()[:12])
+        old=compile_one(baseline/'shaders',target,out/'old'/name.with_suffix('.spv'))
+        off=compile_one(ROOT/'shaders',target,out/'off'/name.with_suffix('.spv'))
         if old!=off:raise RuntimeError(f'Key-off SPIR-V changed: {target}')
-        dest=out/'on'/name.with_suffix('.spv');on=compile_one(wrapper,dest,ROOT/'shaders')
+        dest=out/'on'/name.with_suffix('.spv');on=compile_one(ROOT/'shaders',wrapper,dest)
         validation=subprocess.run([validator,'--target-env','vulkan1.3',str(dest)],capture_output=True,text=True)
         if validation.returncode:raise RuntimeError(f'{wrapper}: {validation.stdout}\n{validation.stderr}')
         on_bindings,off_bindings=bindings(on),bindings(off)
         if (0,50) not in on_bindings:raise RuntimeError(f'Feature image not used: {wrapper}')
         if (0,50) in off_bindings:raise RuntimeError(f'Feature image leaked into off path: {target}')
-        rf=target.name in ('rt_reflections.hlsl','rt_reflections_sharc.hlsl')
+        rf=target.partition('?')[0].rsplit('/',1)[-1] in ('rt_reflections.hlsl','rt_reflections_sharc.hlsl')
         if rf and ((0,12) in on_bindings or (0,12) in off_bindings):
             raise RuntimeError(f'Cannot omit RF binding12: {target}')
-        return dict(file=target.as_posix(),off_sha256=hashlib.sha256(off).hexdigest(),on_sha256=hashlib.sha256(on).hexdigest(),rf_binding12_unused=rf)
-    wrappers=sorted((ROOT/'shaders/hair_origin').rglob('*.hlsl'))
+        return dict(file=target,off_sha256=hashlib.sha256(off).hexdigest(),on_sha256=hashlib.sha256(on).hexdigest(),rf_binding12_unused=rf)
+    # The old shaders/hair_origin/ wrappers: every Hair-origin variant without the tileset.
+    wrappers=[l for l in (ROOT/'shaders/variants.txt').read_text().splitlines()
+              if 'RT_HAIR_PHYSICAL_ORIGIN=1;' in l and 'RT_NATIVE_TILESET=1' not in l]
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:records=list(pool.map(check,wrappers))
     if any(hashlib.sha256(Path(p).read_bytes()).hexdigest()!=sha for p,sha in frozen.items()):
         raise RuntimeError('Shader/common source changed during proof; rerun a frozen gate')
