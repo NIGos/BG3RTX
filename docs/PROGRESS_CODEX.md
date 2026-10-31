@@ -12,10 +12,13 @@ from intrinsic opaque demand. Legacy lookup, invalid records and two-full-range
 failures are not rescued. Independent source/lifetime/routing review is clear.
 
 Host DLL/launcher build; 105 capture-budget and 335 settings checks pass, schema
-regenerated; six targeted CTests pass. No HLSL files changed. Game participation,
+regenerated; six targeted CTests pass. Combined guard/spill build and all 60
+CTests also pass. Spill itself changes no HLSL. Game participation,
 image effect, GPU cost and CPU cost are unmeasured. No installation or launch.
 Future check: same-run OFF/ON in camp with nonzero spill participation, residual
-made-opaque zero, RT active, unchanged primary coverage/energy and no new flicker.
+made-opaque zero, RT active, stable G-buffer/primary matching and no new flicker.
+Unaffected regions must retain energy within OFF-repeat noise; legitimate removal
+of false occlusion must not be rejected merely because those affected pixels brighten.
 This fixes a proven allocation path, not a proven attribution of the rug screenshot.
 
 ## User trial regression: camp rectangles and hairline - 2026-10-31
@@ -37,7 +40,8 @@ Guard 532879c/c0aa8ec now rejects competing Scalp, unreadable source ranges,
 unknown record kinds, candidate cap or pruned traversal before publishing the
 physical origin. Existing virtual origin and all occluders stay unchanged.
 31 CPU checks and 16 actual off shader identities/on validations pass; query-helper
-GPU fixture is next. M2 implements the exact retained TileBlend camera recipe;
+GPU fixture passed 22 cases with zero validation errors; root inspected raw
+results, including a nonzero rebase and its negative control. M2 implements the exact retained TileBlend camera recipe;
 its object association to the pictured rugs/planks remains unknown. No bias, opacity workaround,
 trial edit or live action. Prioritize these regressions before feature promotion.
 
@@ -49,8 +53,10 @@ provider (309b9dd), exact ST depth coverage (35f837d) and windowless GPU probe.
 Main integration stopped before mutation because BG3 PID 41420 was running.
 The isolated combined build links both DLLs and launcher; all 59 CTests and QA
 detectors pass. Independent runtime source review is clear. Full shader check found the isolated checkout missing its SHaRC SDK junction:
-984/1232 files compiled; all 248 SHaRC-dependent failures are being retried after
-linking the existing SDK. This is a test setup failure, not a rendering verdict. No BG3 launch,
+984/1232 files compiled initially; all 248 SHaRC-dependent failures then passed
+with the existing SDK linked. The checker also validates the remaining 24 GI
+interfaces per feature. Only sharc_common tests that SDK define, so other modules
+are unaffected by the repaired include path. No BG3 launch,
 attachment or personal trial changes.
 
 STI uses actual nine native 2D views, owned sampler, independent scalar gather,

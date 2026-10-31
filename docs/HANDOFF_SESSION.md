@@ -14,7 +14,8 @@ rectangles and fixed Astarion hairline band remain. Preserve trial. Sun found re
 receiver-identity hole: raster class 5 also used by Scalp; physical-origin guard
 cannot prove Hair identity. Conservative competing-Scalp guard implemented and
 reviewed; 31 CPU checks, 16 actual off identities/on compiles. Not image-causal
-proof. Existing GPU probe owner tests the actual query helper next. M2 implements
+proof. Existing GPU probe passed 22 actual-helper cases, zero validation errors, including
+nonzero rebase/negative control. Root inspected raw; tools commit pending. M2 implements
 exact native TileBlend camera coverage, not yet attributed to pictured rug/planks. Root preserved session log/config;
 77 capacity windows, 11 residual alpha substitutions, last three zero; opaque drops
 all zero. See progress and docs/evidence/user-camp-regression-20261031.json.
@@ -33,8 +34,8 @@ Root source c0aa8ec includes split spill 7785ba1 and receiver guard 532879c/c0aa
 Main integration deferred: actual BG3 PID 41420 was open; merge-green refused
 before mutation. Isolated combined build, 59 CTests and QA pass; independent
 runtime source review is clear. Full compile: 984/1232, 248 SHaRC failures due
-to missing isolated SDK path; existing SDK junction restored, retry248 running
-(session2686, captures/sharc-dependency-retry-20261031.log). Do not restart it.
+to missing isolated SDK path; existing SDK junction restored, retry248/248 PASS
+(captures/sharc-dependency-retry-20261031.log). Both processes terminal.
 Pending integration: M3 STI material producer/glue (309b9dd), ST depth extension
 (35f837d), existing windowless GPU fixture extension (2ad5b4e). Both DLLs link;
 785 CPU cases / 816 with native VS; 96 key-OFF identities, 96 key-ON compilations,
@@ -63,7 +64,7 @@ appropriate live steering. Do not close visual quality from positive counters.
 Active lanes: M2 (omm_alpha_bounds) TileBlend camera coverage and 604 ON shader
 proof; omm_contract_review production receiver-helper GPU fixture/reviews. Sun
 receiver source and split-spill review complete. Root owns integration/shared docs.
-Root combined guard/spill build session 11653 runs -Test in isolated tree; log
+Root combined guard/spill build and all 60 CTests pass; log
 captures/combined-guard-spill-build-20261031.log. No game/installation.
 Sun optional native graphics-XFB fixture exceeded a small extension and stopped;
 this is a fixture scope limit, not a rendering impossibility. No Ponytail.

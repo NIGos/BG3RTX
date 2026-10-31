@@ -3779,5 +3779,7 @@ retain their existing behavior; UNKNOWN policies are not universally native fall
 User check after a qualified automatic comparison: camp rug fringes and planks,
 no new dark card rectangles or flicker; actual save identity still unspecified.
 Require nonzero rescued draws, zero residual substitutions, RT active and stable
-primary/energy behavior in one OFF/ON run. Screenshots alone do not identify the
+G-buffer/primary matching in one OFF/ON run. Unaffected regions preserve energy
+within OFF-repeat noise; removal of false occlusion may legitimately brighten
+the affected region. Screenshots alone do not identify the
 pictured mesh or prove allocation overflow caused those particular rectangles.
