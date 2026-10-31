@@ -581,7 +581,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(VkCommandBuffer cmd, VkP
 static void log_foreign_barrier(VkCommandBuffer cmd, const char* kind, VkImage img, VkImageLayout from, VkImageLayout to,
                                 uint32_t aspect, uint32_t qsrc, uint32_t qdst, uint32_t mips, uint32_t layers) {
   static std::atomic<int> n{0};
-  if (n >= cfg_int("sl_log_barriers", 0)) return;
+  if (n >= cfg_hot(CfgHot::sl_log_barriers)) return;
   CmdState* s = cmd_state(cmd);
   if (s && s->game_alloc) return;
   ++n;
@@ -955,12 +955,12 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
 //     every stage we use orders it before the wait and its transitions.
 static void flush_ours_before_event(VkCommandBuffer cmd) {
   CmdState* s = cmd_state(cmd);
-  if (s && !s->in_pass && cfg_int("rt_event_flush", 1)) core_on_cmd_end(cmd);
+  if (s && !s->in_pass && cfg_hot(CfgHot::rt_event_flush)) core_on_cmd_end(cmd);
 }
 
 static void barrier_ours_before_wait(VkCommandBuffer cmd) {
   CmdState* s = cmd_state(cmd);
-  if (!s || !s->ours_since_event || !cfg_int("rt_event_flush", 1)) return;
+  if (!s || !s->ours_since_event || !cfg_hot(CfgHot::rt_event_flush)) return;
   s->ours_since_event = false;
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
@@ -988,7 +988,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents(VkCommandBuffer cmd, uint32_t n,
   vk(cmd).CmdWaitEvents(cmd, n, ev, src, dst, mbc, mb, bbc, bb, ibc, ib);
   // BG3 performs sampled-input transitions in event waits too. Tracking only
   // pipeline barriers left FG/deferred readbacks with stale attachment layouts.
-  if (cfg_int("fg_input_copy", 0) || cfg_int("pan_inputs", 0)) {
+  if (cfg_hot(CfgHot::fg_input_copy) || cfg_hot(CfgHot::pan_inputs)) {
     CmdState* s = cmd_state(cmd, true);
     for (uint32_t i = 0; i < ibc; ++i) sl_note_event_barrier(s, ib[i].image, ib[i].newLayout);
   }
@@ -998,7 +998,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents2(VkCommandBuffer cmd, uint32_t n
                                                  const VkDependencyInfo* deps) {
   barrier_ours_before_wait(cmd);
   vk(cmd).CmdWaitEvents2(cmd, n, ev, deps);
-  if (cfg_int("fg_input_copy", 0) || cfg_int("pan_inputs", 0)) {
+  if (cfg_hot(CfgHot::fg_input_copy) || cfg_hot(CfgHot::pan_inputs)) {
     CmdState* s = cmd_state(cmd, true);
     for (uint32_t event = 0; event < n; ++event)
       for (uint32_t i = 0; i < deps[event].imageMemoryBarrierCount; ++i) {

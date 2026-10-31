@@ -223,8 +223,16 @@ static void ab_poll_hotkey() {
   was_down = down;
 }
 
+static void cfg_read_files();
+static void cfg_hot_refresh();
+
 void cfg_poll() {
   ab_poll_hotkey();
+  cfg_read_files();
+  cfg_hot_refresh();
+}
+
+static void cfg_read_files() {
   std::lock_guard<std::mutex> poll_lock(g_cfg_poll_mu);
   std::string user = env_str("BG3RTX_USER_INI");
   if (user.empty()) user = root_dir() + "\\bg3rtx_user.ini";
@@ -346,6 +354,33 @@ float cfg_float(const char* key, float fallback) {
     cfg_check_literal(key, *d, lit);
   }
   return have ? float(std::atof(v.c_str())) : fallback;
+}
+
+// The hot keys of host.h's CfgHot, in its order, with the fallback literal of their call sites.
+struct CfgHotKey { const char* key; int fallback; };
+static const CfgHotKey kCfgHot[] = {
+  {"geo_indirect_mb", 8}, {"rt_strips", 1}, {"rt_alpha_capture", 1}, {"rt_alpha_spill", 0},
+  {"rt_native_tileset", 0}, {"rt_stats", 0}, {"rt_em_overlap_check", 0}, {"rt_cascade_casters", 0},
+  {"geo_capture", 0}, {"geo_xfb_always", 0}, {"pan_capture", 0}, {"fg_input_copy", 0},
+  {"pan_inputs", 0}, {"rt_event_flush", 1}, {"sl_log_barriers", 0}, {"rt_build", 1},
+  {"rt_bvh_split", 1}, {"rt_omm", 0}, {"rt_hit_material", 0}, {"rt_native_hair", 0},
+  {"rt_native_scalp", 0}, {"rt_mesh_audit_frames", 600}, {"rt_mesh_audits", 2}, {"rt_emissive", 0},
+  {"rt_em_backdrop", 0}, {"rt_em_decal", 1},
+};
+static_assert(sizeof kCfgHot / sizeof kCfgHot[0] == size_t(CfgHot::Count), "kCfgHot must list every CfgHot");
+static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];
+static std::atomic<bool> g_cfg_hot_ready{false};
+
+static void cfg_hot_refresh() {
+  for (size_t i = 0; i < size_t(CfgHot::Count); ++i)
+    g_cfg_hot[i].store(cfg_int(kCfgHot[i].key, kCfgHot[i].fallback), std::memory_order_relaxed);
+  g_cfg_hot_ready.store(true, std::memory_order_release);
+}
+
+int cfg_hot(CfgHot key) {
+  const size_t i = size_t(key);
+  if (!g_cfg_hot_ready.load(std::memory_order_acquire)) return cfg_int(kCfgHot[i].key, kCfgHot[i].fallback);
+  return g_cfg_hot[i].load(std::memory_order_relaxed);
 }
 
 // ---- memory that outlives core reloads ----

@@ -51,6 +51,18 @@ int cfg_int(const char* key, int fallback);
 // frames every 600 frames (P1 frame-lag diagnosis).
 bool order_trace_active();
 float cfg_float(const char* key, float fallback);
+// Hot-path settings (per draw, per pass, per submit): cfg_hot(CfgHot::k) is exactly
+// cfg_int("k", fallback in util.cpp's kCfgHot), cached by every cfg_poll (once per present,
+// the only place the merged settings and the A/B hotkey change), read without a lock.
+enum class CfgHot : int {
+  geo_indirect_mb, rt_strips, rt_alpha_capture, rt_alpha_spill, rt_native_tileset, rt_stats,
+  rt_em_overlap_check, rt_cascade_casters, geo_capture, geo_xfb_always, pan_capture,
+  fg_input_copy, pan_inputs, rt_event_flush, sl_log_barriers, rt_build, rt_bvh_split, rt_omm,
+  rt_hit_material, rt_native_hair, rt_native_scalp, rt_mesh_audit_frames, rt_mesh_audits,
+  rt_emissive, rt_em_backdrop, rt_em_decal,
+  Count
+};
+int cfg_hot(CfgHot key);
 
 // ---- frame cap (framecap.cpp; fps_cap) ----
 void framecap_on_present();            // sleep limiter when Streamline's Reflex limiter is not active

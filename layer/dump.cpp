@@ -549,12 +549,12 @@ std::string pan_dir;
 }
 
 bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
-  if (cfg_int("pan_capture", 0) <= 0 || !r || !r->image) return false;
+  if (cfg_hot(CfgHot::pan_capture) <= 0 || !r || !r->image) return false;
   std::lock_guard<std::mutex> lock(pan_mu);
   CmdState* state = cmd_state(cmd);
   if (!state) return false;
   uint64_t now = frame_index();
-  const int serial = cfg_int("pan_capture", 0);
+  const int serial = cfg_hot(CfgHot::pan_capture);
   if (std::strcmp(name, "depth") == 0) {
     state->pan_epoch.clear();
     if (serial != pan_serial && pan_finished) {
@@ -651,7 +651,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
 }
 
 void pan_pass_end(VkCommandBuffer cmd, CmdState* s) {
-  if (cfg_int("pan_capture", 0) <= 0) return;
+  if (cfg_hot(CfgHot::pan_capture) <= 0) return;
   // The game's final, hudless HDR image is the tonemap output (FRAME_MAP
   // step 16), before the UI composite. Streamline can present through an
   // interposed image which is never a native render-pass attachment.

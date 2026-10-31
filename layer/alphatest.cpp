@@ -460,7 +460,7 @@ void alpha_device_destroyed(DeviceData* dd) {
 // Only the rich current-Sun stream has per-draw material records. Do not add
 // these hashes to global alpha_lookup: legacy F-1 would merely skip cutouts.
 bool alpha_lookup_native_tileset_shadow(uint64_t fs,AlphaFs* out){
- if(!g_on || !g_tileset_layout || !cfg_int("rt_native_tileset",0))return false;
+ if(!g_on || !g_tileset_layout || !cfg_hot(CfgHot::rt_native_tileset))return false;
  const auto* recipe=native_tileset_coverage::lookup_shadow(fs);if(!recipe)return false;
  *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=recipe->uv;out->tex_set=1;out->tex_bind=recipe->green_binding;
  out->ubo_set=1;out->ubo_bind=recipe->material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
@@ -468,15 +468,15 @@ bool alpha_lookup_native_tileset_shadow(uint64_t fs,AlphaFs* out){
 
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
-  if(!g_tileset_layout && native_tileset_coverage::lookup_camera(fs)!=nullptr && cfg_int("rt_native_tileset",0)){
+  if(!g_tileset_layout && native_tileset_coverage::lookup_camera(fs)!=nullptr && cfg_hot(CfgHot::rt_native_tileset)){
     static std::atomic<bool> warned{false};if(!warned.exchange(true))log("[alpha tileset] enable rejected: restart with rt_alpha=1 rt_bvh_split=1 and supported sampler limits");
   }
-  if(g_tileset_layout && cfg_int("rt_native_tileset",0) && native_tileset_coverage::lookup_camera(fs)!=nullptr) {
+  if(g_tileset_layout && cfg_hot(CfgHot::rt_native_tileset) && native_tileset_coverage::lookup_camera(fs)!=nullptr) {
     const auto& recipe=*native_tileset_coverage::lookup_camera(fs);
     *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=recipe.uv;out->tex_set=1;out->tex_bind=recipe.green_binding;
     out->ubo_set=1;out->ubo_bind=recipe.material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
   }
-  if (cfg_int("rt_native_hair", 0)) {
+  if (cfg_hot(CfgHot::rt_native_hair)) {
     if (const auto* recipe = native_hair::lookup(fs)) {
       if (!geo_native_hair_enabled()) {
         static std::atomic<bool> warned{false};
@@ -491,7 +491,7 @@ bool alpha_lookup(uint64_t fs, AlphaFs* out) {
       return true;
     }
   }
-  if (cfg_int("rt_native_scalp", 0)) {
+  if (cfg_hot(CfgHot::rt_native_scalp)) {
     if (const auto* recipe = native_scalp::lookup(fs)) {
       // Before any possible kind3 publication. The core selects after acquiring
       // its actual scene; acquire of this sticky word survives core reloads.
@@ -541,7 +541,7 @@ void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags
 
 void alpha_begin_capture() {
   std::lock_guard<std::mutex> lock(g_mu);
-  if (cfg_int("rt_native_scalp", 0) || geo_native_hair_enabled())
+  if (cfg_hot(CfgHot::rt_native_scalp) || geo_native_hair_enabled())
     native_scalp::publish_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t))));
   g_stream_reads = cfg_int("rt_alpha_stream", 0) != 0;
   g_recs.clear();
@@ -974,7 +974,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   w[3].descriptorCount = ncache, w[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[3].pImageInfo = cache.data();
   vk.UpdateDescriptorSets(g_dd->device, 8, w, 0, nullptr);
   if(g_tileset_layout){
-    if(cfg_int("rt_stats",0) && frame_index()%120u==0u){uint32_t complete=0,unknown=0;
+    if(cfg_hot(CfgHot::rt_stats) && frame_index()%120u==0u){uint32_t complete=0,unknown=0;
       for(const auto& record:g_recs)if(record.kind==5)(record.p0[1]==0.0f?complete:unknown)++;
       log("[alpha tileset] records complete %u unknown %u native samplers %zu capture-incomplete %u stride %u",complete,unknown,g_native_samplers.size(),unsigned(g_tileset_incomplete),stride);
     }
