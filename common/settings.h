@@ -225,6 +225,15 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_native_scalp", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
 
+  {"exp_native_tileset", "Native tileset coverage",
+   "Captures native instanced floor and wall coverage for ray queries. Requires a restart "
+   "and Full ray-traced geometry. SeeThrough and missing native inputs remain unknown. "
+   "Experimental: quality and GPU cost are unqualified.",
+   Kind::Choice, Apply::Restart, "restart required", true,
+   {{"off", "Off", 0, {{"rt_native_tileset", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_native_tileset", "1"}}, {{"rt_geometry", 2}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
+
   {"exp_native_hair", "Native hair coverage",
    "Captures the audited CHAR_Hair strand coverage and depth for ray queries. Other hair "
    "families remain separate coverage gaps. Needs Full ray-traced geometry. Restart required "
@@ -314,7 +323,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 220 keys of bg3rtx.ini, in file order.
+// 221 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -428,6 +437,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_alpha_cut", "1"},
     {"rt_alpha_stochastic", "1"},
     {"rt_native_scalp", "0"},
+    {"rt_native_tileset", "0"},
     {"rt_hit_material", "0"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
@@ -588,7 +598,7 @@ inline Map code_defaults() {
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
-                                         "sharc_device", "rt_native_hair", "rt_omm", "rt_sun_cascade_current", "rt_hit_material"};
+                                         "sharc_device", "rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material"};
   for (const char* k : kRestart)
     if (key == k) return from != to;
   return false;

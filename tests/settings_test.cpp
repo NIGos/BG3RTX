@@ -350,9 +350,10 @@ static void test_dependencies_and_caps() {
 }
 
 static void test_rendering_experiments() {
-  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_omm","exp_current_sun","exp_hit_material","exp_gi_hit_direct"};
-  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_omm","rt_sun_cascade_current","rt_hit_material","gi_hit_direct"};
-  for(int i=0;i<6;++i){
+  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_gi_hit_direct"};
+  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","gi_hit_direct"};
+  static_assert(std::size(ids)==std::size(keys));
+  for(size_t i=0;i<std::size(ids);++i){
     const auto* knob=find_knob(ids[i]);CHECK(knob!=nullptr);if(!knob)continue;
     CHECK(knob->experimental);CHECK(choice_count(*knob)==2);CHECK_EQ(code_default(keys[i]),"0");
     for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,keys[i]),"0");CHECK(knob->preset[p]==0);}
@@ -370,6 +371,7 @@ static void test_rendering_experiments() {
   CHECK(unmet_key_need(*find_knob("exp_omm"),1,code_defaults()).empty());
   CHECK(schema_json().find("\"required_on\"")!=std::string::npos);
   CHECK(key_change_needs_restart("rt_native_hair","0","1"));
+  CHECK(key_change_needs_restart("rt_native_tileset","0","1"));
   CHECK(key_change_needs_restart("rt_omm","1","0"));
   CHECK(key_change_needs_restart("rt_sun_cascade_current","0","1"));
   CHECK(key_change_needs_restart("rt_hit_material","0","1"));
