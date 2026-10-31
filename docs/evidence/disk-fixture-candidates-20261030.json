@@ -1,0 +1,691 @@
+{
+  "mode": "inventory_only_not_cleanup_authorization",
+  "candidates": [
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-00558e9eccf64cafb28a9f9e106e8da3",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793356922705524600,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-09131634e1024eef92823e133ea5a0af",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793359062785059700,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-105870d956144037a58eb047767de24f",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793276357507173500,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-195b71f5cd61460cb0054450f6be864a",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793275904141232900,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-251e0a5cad9f43929d4e15b52ea080b9",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793276055686574900,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-2ae8df87ae214c66814e940410b8bdc8",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793354636635753800,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-665230f378fd461b9373239fa6291bb9",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793355109299616800,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-6e30779847d8482d933c2987cc9465c3",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793275210320217500,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-72c95346791d42bea75dfc19c08abc2f",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793285572705770400,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-7c1bc439550a432482463e7fc6ad1ab3",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793280769461349100,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-8f8b91ee7a7a42b2b09d13c145019f30",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793276752413280600,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-c8e564bf769e43c1999b0d8ab5d45886",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793358202526782800,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-ece227c6bdcb4536b5bc971cb6970b94",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793362188382717200,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-permission-f2db4fdb6dd34f1889530fe86be38294",
+      "bytes": 151,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793360400912620000,
+      "file_count": 3,
+      "extension_counts": {
+        ".jsonl": 1,
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-08f9f92718194074b78ccc733fd24226",
+      "bytes": 37583,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395654864154600,
+      "file_count": 36,
+      "extension_counts": {
+        "": 4,
+        ".dll": 4,
+        ".json": 11,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 1,
+        ".err": 1,
+        ".txt": 2,
+        ".stderr": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-0a1c39681e8d48a4aca1ce6ec915edf0",
+      "bytes": 9788,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793394223673155600,
+      "file_count": 33,
+      "extension_counts": {
+        "": 3,
+        ".dll": 4,
+        ".json": 9,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 2,
+        ".err": 2,
+        ".txt": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-16ac70c12b8f4cc4a6f71f6f8bee64be",
+      "bytes": 11476,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793394502120097100,
+      "file_count": 34,
+      "extension_counts": {
+        "": 4,
+        ".dll": 4,
+        ".json": 11,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 1,
+        ".err": 1,
+        ".txt": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-308901cbfc3e4a48a398274ccda2c21b",
+      "bytes": 11359,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793394448192239300,
+      "file_count": 34,
+      "extension_counts": {
+        "": 4,
+        ".dll": 4,
+        ".json": 11,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 1,
+        ".err": 1,
+        ".txt": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-82231e27dd3b46de986be4804caaf1f0",
+      "bytes": 37824,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395948001078500,
+      "file_count": 38,
+      "extension_counts": {
+        "": 4,
+        ".dll": 4,
+        ".json": 13,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 1,
+        ".err": 1,
+        ".txt": 2,
+        ".stderr": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-9e5e04fd1b9d493e92e79f0f98dce209",
+      "bytes": 11359,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793394531394704300,
+      "file_count": 34,
+      "extension_counts": {
+        "": 4,
+        ".dll": 4,
+        ".json": 11,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 1,
+        ".err": 1,
+        ".txt": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-c18b5e9adffc40b0986bcb9714ff8921",
+      "bytes": 11464,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793394388924615500,
+      "file_count": 34,
+      "extension_counts": {
+        "": 4,
+        ".dll": 4,
+        ".json": 11,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 1,
+        ".err": 1,
+        ".txt": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-c3fd13f8caba41f39fcee2eecd651a97",
+      "bytes": 37813,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793396458341298400,
+      "file_count": 38,
+      "extension_counts": {
+        "": 4,
+        ".dll": 4,
+        ".json": 13,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 1,
+        ".err": 1,
+        ".txt": 2,
+        ".stderr": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-cad8590f4921417d99215ec390ed6a93",
+      "bytes": 37643,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395792707546000,
+      "file_count": 38,
+      "extension_counts": {
+        "": 4,
+        ".dll": 4,
+        ".json": 13,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 1,
+        ".err": 1,
+        ".txt": 2,
+        ".stderr": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-auth-eb20eb2f746e49f3883325ed7c03a1dd",
+      "bytes": 10271,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793394271164629200,
+      "file_count": 31,
+      "extension_counts": {
+        "": 3,
+        ".dll": 4,
+        ".json": 9,
+        ".lock": 2,
+        ".log": 4,
+        ".ini": 2,
+        ".done": 1,
+        ".jsonl": 1,
+        ".md": 1,
+        ".out": 1,
+        ".err": 1,
+        ".txt": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-cancel-3d4e5ade3fc24c0f9c23fd90f0fc428d",
+      "bytes": 39633,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395911785062400,
+      "file_count": 86,
+      "extension_counts": {
+        "": 5,
+        ".ps1": 1,
+        ".started": 1,
+        ".stopped": 1,
+        ".pid": 4,
+        ".json": 16,
+        ".err": 4,
+        ".txt": 8,
+        ".dll": 8,
+        ".ini": 4,
+        ".out": 4,
+        ".jsonl": 4,
+        ".md": 4,
+        ".quit": 4,
+        ".lock": 4,
+        ".stderr": 4,
+        ".py": 4,
+        ".log": 6
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-cancel-430899eb7e6243d6b2a7cc192b5cf523",
+      "bytes": 46610,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395993273992100,
+      "file_count": 129,
+      "extension_counts": {
+        "": 8,
+        ".ps1": 1,
+        ".started": 1,
+        ".stopped": 1,
+        ".pid": 6,
+        ".json": 24,
+        ".err": 6,
+        ".txt": 12,
+        ".dll": 12,
+        ".ini": 6,
+        ".out": 6,
+        ".jsonl": 6,
+        ".md": 6,
+        ".quit": 6,
+        ".lock": 6,
+        ".stderr": 6,
+        ".py": 6,
+        ".log": 10
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-cancel-5830648b370c4c97819e99f6069520c6",
+      "bytes": 39631,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395766380670200,
+      "file_count": 86,
+      "extension_counts": {
+        "": 5,
+        ".ps1": 1,
+        ".started": 1,
+        ".stopped": 1,
+        ".pid": 4,
+        ".json": 16,
+        ".err": 4,
+        ".txt": 8,
+        ".dll": 8,
+        ".ini": 4,
+        ".out": 4,
+        ".jsonl": 4,
+        ".md": 4,
+        ".quit": 4,
+        ".lock": 4,
+        ".stderr": 4,
+        ".py": 4,
+        ".log": 6
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-cancel-5f801fb306214d08ad2b8911c92aafe0",
+      "bytes": 39612,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395751630117800,
+      "file_count": 86,
+      "extension_counts": {
+        "": 5,
+        ".ps1": 1,
+        ".started": 1,
+        ".stopped": 1,
+        ".pid": 4,
+        ".json": 16,
+        ".err": 4,
+        ".txt": 8,
+        ".dll": 8,
+        ".ini": 4,
+        ".out": 4,
+        ".jsonl": 4,
+        ".md": 4,
+        ".quit": 4,
+        ".lock": 4,
+        ".stderr": 4,
+        ".py": 4,
+        ".log": 6
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-cancel-65ca1f964e914bf2845843b800a065b1",
+      "bytes": 46598,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793396461734557800,
+      "file_count": 129,
+      "extension_counts": {
+        "": 8,
+        ".ps1": 1,
+        ".started": 1,
+        ".stopped": 1,
+        ".pid": 6,
+        ".json": 24,
+        ".err": 6,
+        ".txt": 12,
+        ".dll": 12,
+        ".ini": 6,
+        ".out": 6,
+        ".jsonl": 6,
+        ".md": 6,
+        ".quit": 6,
+        ".lock": 6,
+        ".stderr": 6,
+        ".py": 6,
+        ".log": 10
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-cancel-d131594b90ed4acfa2be756c4786176a",
+      "bytes": 39398,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395785022615700,
+      "file_count": 86,
+      "extension_counts": {
+        "": 5,
+        ".ps1": 1,
+        ".started": 1,
+        ".stopped": 1,
+        ".pid": 4,
+        ".json": 16,
+        ".err": 4,
+        ".txt": 8,
+        ".dll": 8,
+        ".ini": 4,
+        ".out": 4,
+        ".jsonl": 4,
+        ".md": 4,
+        ".quit": 4,
+        ".lock": 4,
+        ".stderr": 4,
+        ".py": 4,
+        ".log": 6
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-source-2e16769927434763a62c4ed631a18ef0",
+      "bytes": 74,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793396447868314900,
+      "file_count": 3,
+      "extension_counts": {
+        ".dll": 2,
+        ".cs": 1
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-queue-source-d25347eedc53424d890927e0ebb1bea6",
+      "bytes": 74,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793396342811106400,
+      "file_count": 3,
+      "extension_counts": {
+        ".dll": 2,
+        ".cs": 1
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-0dc2e03dac104dee9f11fdd666e6ee9c",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793281845090827400,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-2450bc4d6bb2422e90d14f1bf090b6e5",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793278824428824500,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-326346382c86411d8e8b16e0db06d9c8",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395903909606100,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-3feb517ff69c4f36af3cc39f48a45f69",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793285572333909200,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-495b91b45abf4fd19cf8323d693c3865",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793278589672917600,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-6002a8ceebc14f0ba37d9c82c00e908d",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793280768935174500,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-6d48b77a43664986975d7409b53143bd",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793281571590009600,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-b23b31f7ab6b48ac8c404fa64eb9826b",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793394448872107100,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-cb9f13385e444bf58bfa859824286f35",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793394532069200500,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-f08c010086f24263ab65183ac5771b55",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793396586850218700,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3-unfocused-policy-f975d8d1853d438286a1bab1fd3bf5d2",
+      "bytes": 56,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793394271722032800,
+      "file_count": 2,
+      "extension_counts": {
+        "": 2
+      }
+    },
+    {
+      "root": "C:\\Users\\quali\\AppData\\Local\\Temp\\bg3rtx-queue-dryrun",
+      "bytes": 413108,
+      "reparse_points": [],
+      "newest_mtime_ns": 1793395897470592000,
+      "file_count": 879,
+      "extension_counts": {
+        ".log": 205,
+        ".dll": 28,
+        ".json": 183,
+        ".done": 13,
+        ".ini": 14,
+        ".txt": 201,
+        ".out": 98,
+        ".jsonl": 14,
+        ".md": 14,
+        ".err": 84,
+        ".py": 14,
+        "": 3,
+        ".lock": 3,
+        ".stderr": 5
+      }
+    }
+  ],
+  "classification": "Regenerable synthetic queue/policy test output only; 884048 bytes total at inventory. No cleanup executed; producer liveness must be checked before removal."
+}

@@ -389,7 +389,7 @@ status, commands and evidence, numbers/units, cost or unmeasured, pass/reject/pe
 rollback and next action. Keep handoff short and progress entries concise; link
 detailed evidence rather than duplicating logs. The coordinator alone edits the
 shared progress/decision ledger. No blanket deletion of shared captures/caches.
-For the user's storage-cleanup request, follow docs/DISK_HYGIENE.md: preserve owner
+For the user's storage-cleanup request, follow docs/archive/DISK_HYGIENE.md (superseded, kept for history): preserve owner
 holds and decisive raw evidence, and remove only classified redundant/regenerable
 outputs from idle locations. This does not require pausing unrelated implementation.
 For a small increment this is one concise row/note plus links to existing output,

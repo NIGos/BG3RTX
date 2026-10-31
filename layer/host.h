@@ -773,7 +773,7 @@ void bvh_forget_buffer(VkBuffer b);
 std::string bvh_describe_address(VkDeviceAddress a);   // device-fault reports ("" if not the split's)
 void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size);
 
-// ---- Track D D-EM: emissive geometry (emissive.cpp, docs/TRACK_D_RT.md 12) ----
+// ---- Track D D-EM: emissive geometry (emissive.cpp, docs/TRACK_D_EMISSIVE.md section 13) ----
 // The game redraws its emissive meshes into the effects target (B10G11R11 + the
 // G-buffer depth, before the tiled lighting). Those draws are captured (XFB) with a per-draw
 // record (radiance, mask texture); at

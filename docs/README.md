@@ -38,6 +38,8 @@ not yet authorized are in [live-test-drafts/](live-test-drafts/).
 
 - [P3_BOX_LIGHTS.md](P3_BOX_LIGHTS.md): box lights integration candidate.
 - [P4_OMM.md](P4_OMM.md): opacity micromaps: predicate, EXT backend, GPU producer, content epochs.
+- [PLAN_M4_REFLECTIONS_GI.md](PLAN_M4_REFLECTIONS_GI.md): M4 increments: GI hit-direct qualification, reflection tier (b), sun and emission at hits.
+- [PLAN_M5_WATER.md](PLAN_M5_WATER.md): M5 water increments on the current architecture (updates P6_WATER).
 - [P6_WATER.md](P6_WATER.md): water design for coverage gap 1.
 - [NATIVE_HAIR.md](NATIVE_HAIR.md): native CHAR_Hair/Pubes coverage, depth and the physical secondary origin.
 - [NATIVE_TILESET.md](NATIVE_TILESET.md): native tileset depth coverage.
@@ -60,7 +62,8 @@ not yet authorized are in [live-test-drafts/](live-test-drafts/).
 [archive/](archive/) holds superseded docs, kept for history. Do not treat them as current:
 old audits (AUDIT_ENGINE_DATA, AUDIT_RT, AUDIT_SOTA), ROADMAP, STATUS, research.md,
 closed phase notes (P1_PAN_FLASHES, P2_*, P3_NATIVE_DIRECT_VALIDATION), DEVICE_LOST_DLS,
-SUN_PENUMBRA_REVIEW, UI_CONTAMINATION_OFFLINE, the merged OMM and hair-origin notes,
+SUN_PENUMBRA_REVIEW, UI_CONTAMINATION_OFFLINE, the merged OMM and hair-origin notes, DISK_HYGIENE
+(the 2026-10-30 storage audit, done on 2026-10-31),
 GOAL_RENDERING_AGENT and the full progress history PROGRESS_CODEX_2026-10-31.md.
 
 ## Naming legend

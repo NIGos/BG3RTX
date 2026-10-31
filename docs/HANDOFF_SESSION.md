@@ -6,7 +6,7 @@ archive/PROGRESS_CODEX_2026-10-31.md. Full rendering program is incomplete and P
 ## Consolidation done (2026-10-31, main fc34604) - read before resuming
 
 Plan and decisions: docs/CONSOLIDATION.md. All steps merged through merge-green; none tested in game yet.
-- ABI is now 23: rebuild both DLLs together. Shader variants are defines (`gi/x.hlsl?NAME=V;...`,
+- ABI is now 24 (23 for shader defines, 24 for the emissive policy in core): rebuild both DLLs together. Shader variants are defines (`gi/x.hlsl?NAME=V;...`,
   list in shaders/variants.txt, checked by shader_variant_test); the per-flag wrapper folders are gone.
 - 20 rejected keys removed (rt_scene_rebase, rt_scene_camera_match, rt_ao, ls_k, rf_so, ...): rebase
   open branches on main before merging; old jobs that set them are harmless no-ops.
@@ -102,7 +102,9 @@ Resume ONLY after the user resumes the goal. Then:
    certify flicker. Rug/hairline attribution stays unresolved, not declared fixed.
 2. M3/M4: corrected GI descriptor image recheck, visible materials/world lights,
    offscreen reflections. Old R2 dark-stipple images rejected. Both new GI keys OFF.
+   Increments and gates: PLAN_M4_REFLECTIONS_GI.md; first job tools/live_batches/m4_m5_first (mm1).
 3. M5 water (89% port screen), then environment by measured screen impact.
+   Increments and gates: PLAN_M5_WATER.md; M5.1 job mm2 needs its code first.
 4. M2 persistence only when visible offscreen need requires it. Native board data
    lacks authored UV/NBT; do not infer them from positions or file order.
 5. M6 shared opaque reference/PT research last. Never mark whole program complete.
