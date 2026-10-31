@@ -491,6 +491,7 @@ void geo_pass_begun(VkCommandBuffer cmd, CmdState* s);    // inside, right after
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void geo_post_draw(VkCommandBuffer cmd, CmdState* s);
 bool geo_native_hair_enabled();
+VkDeviceSize geo_ubo_align();   // minUniformBufferOffsetAlignment of the device
 bool geo_native_tileset_enabled();
 void geo_native_tileset_disable();
 bool geo_native_tileset_inputs(VkPipeline,uint32_t subtype=0);
@@ -671,6 +672,8 @@ enum BvhVerdict { BVH_CAPTURE = 0, BVH_CACHED = 1, BVH_CACHED_AUDIT = 2 };
 BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris);
 // The draw's alpha record (cached draws; UINT32_MAX: none, made opaque).
 void bvh_set_record(uint32_t token, uint32_t rec);
+// The mesh pool buffer, its size and replacement epoch (hit-material pool basis jobs).
+bool bvh_pool_target(VkBuffer* buffer, VkDeviceSize* bytes, uint64_t* epoch);
 // The draw was captured into the soup at `offset` (`prims` triangles, all instances).
 void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec, uint32_t materialRecord=UINT32_MAX);
 // Uncaptured draw that is not instanceable (counted only).

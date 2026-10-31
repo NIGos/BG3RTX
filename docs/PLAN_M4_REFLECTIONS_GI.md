@@ -59,17 +59,29 @@ Limits that decide the order:
   (`common/native_hit_pool.h`); STI bindings (same set 1 map) + engine/reflectance bytes go into a
   persistent record (refresh every 30 frames, dropped on mesh eviction, "stale" when a view/sampler
   dies, "ambiguous" for two materials on one geometry). `[hit material pool]` (rt_stats) gives
-  pool instances qualified/without by reason. Hits still use no pool record. Remaining:
-  1. Audit the 2d2ac3c3 G-buffer XFB patch (`vt_frame` today only for 3812bc98): UV + T/N/B outputs.
-  2. At record creation, one XFB of that draw; a `mesh_extract` mode maps instance 0's UV + basis to
-     object space (inverse matrix, as positions) into a pool range (44 B/vertex, ~130 B/triangle:
-     ~200 MB at 1.5M triangles; only qualified meshes, under `rt_mesh_pool_max_mb`).
-  3. Per frame, register_use appends the current qualified records as rows (same 256 B layout, a
-     gather dispatch for t/p0/p1 from the record's engine bytes), views into the cloned set.
-  4. InstInfo: the material row in a side buffer indexed by instance (rec stays the alpha record);
-     the shader path for kInfoPool reads UV/basis from the pool and replaces the prepass/deferred
-     clip check by an exact UV check (pool UV vs the G-buffer XFB UV at extraction).
-  5. Ordinary shaders byte-identical with rt_hit_material=0 (variant define); one A/B on S6/S8.
+  pool instances qualified/without by reason.
+- Pool instances, steps 1-4 (branch pool-hit-path, READY_FOR_LIVE, no ABI change, behind
+  `rt_hit_material`):
+  1. Audit (dumped SPIR-V, `native_hit_pool_test <2d2ac3c3.spv>`, spirv-val): 2d2ac3c3 writes UV =
+     input 4 at location 0 and N/B/T = normalize(A b) at 1/2/3 (b from the vertex quaternion, A the
+     instance 3x3); `vt_frame` now patches it too (16/24/36/48, stride >= 64). FS 14678345 = the 8995
+     recipe with engine p0 0, p1 16, tile-set index 32, channel 36 (`Recipe::channel_offset`).
+     The class A depth VS 646a930e has no UV output: the pool UV slot is empty for these meshes, so
+     an exact pool-UV check is impossible. Replaced by the extraction position check below.
+  2. A qualified record's mesh gets a basis range in the mesh pool (16 B header + 44 B/vertex,
+     132 B/triangle, all ranges <= 256 MB = ~2M triangles, freed with the mesh). At its next STI
+     G-buffer draw one XFB of instance 0 only (the bound range holds tris*3 vertices) is taken;
+     `rt/mesh_extract_basis.hlsl` (after the pass) compares W with M_0 P under the mesh cache
+     tolerance, writes UV + A_0^-1 N/B/T, and a header only if every vertex passed. Result read back
+     (`[hit material pool basis]`); fail -> retry with backoff; a pool growth discards the result.
+  3. register_use appends each ready record as a row in a pool region after the publication word
+     (slot = stable index <= 4096), gathered by `hit_material_gather.hlsl` from the record's bytes.
+  4. InstInfo of a non-alpha pool instance: meta bit 15, rec = 1<<31 | slot. `rt_hit_material_pool`
+     checks row/InstInfo base+tris, basis header magic/generation, then samples as the per-draw path
+     with per-vertex normalize(A_i A_0^-1 w_0). Same status codes. Non-hit-material SPIR-V identical.
+  Remaining: live gate on S6/S8 (`[hit material pool basis]` ok > 0, mismatch 0; `hit material`
+  qualified up, base/without record down; GI/RF A/B energy rule). Alpha pool instances: none (STI
+  is opaque); other class A pairs need their own recipe audit.
 - Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;
   terrain draws patches from `_m0[gl_InstanceIndex]` + a heightmap, needs its own recipe.
 - Skinned characters (class B always-skinned VSs, CHAR_* STI FSs): positions from the skinning

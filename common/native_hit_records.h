@@ -17,6 +17,18 @@ NH_UINT nh_deferred_rows=4096u;
 NH_UINT nh_cache_slots=256u;
 NH_UINT nh_sampler_slots=64u;
 NH_UINT nh_opaque_meta=1u<<13;
+// Pool instances with a material row (native_hit_pool.h steps 2-4): InstInfo meta bit 15 on a
+// non-alpha kInfoPool instance; rec = nh_pool_rec_flag | slot (never a valid alpha record
+// address). The slot's 256 B row follows the query's control word at nh_pool_row_base; its
+// UV/basis lives in the mesh pool (binding 8): a 16 B header {magic, mesh generation low 32,
+// triangles, 1} and per vertex UV (8 B) + object-space N/B/T (VS locations 1/2/3, 36 B).
+NH_UINT nh_pool_meta=1u<<15;
+NH_UINT nh_pool_rec_flag=1u<<31;
+NH_UINT nh_pool_rows=4096u;
+NH_UINT nh_pool_row_base=32u+nh_material_rows*256u;
+NH_UINT nh_pool_basis_header=16u;
+NH_UINT nh_pool_basis_vertex=44u;
+NH_UINT nh_pool_basis_magic=0x53414250u; // "PBAS"
 #undef NH_UINT
 #ifdef __cplusplus
 inline bool opaque_material_record(uint32_t ordinal,uint32_t& record){if(ordinal>=nh_opaque_rows)return false;record=nh_alpha_rows+ordinal;return true;}

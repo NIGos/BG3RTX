@@ -70,11 +70,65 @@ NativeLayer hit_material_tileset_layer(uint row,uint layer,float2 uv,float g,flo
  result.known=all(isfinite(result.value));return result;
 }
 #endif
+// Pool instance with a material row (native_hit_records.h nh_pool_meta, native_hit_pool.h): the
+// qualified STI record (pair 2d2ac3c3/14678345, same sampling recipe and FS frame as 8995) in the
+// query's pool region, its UV and object-space N/B/T in the mesh pool. The basis was extracted
+// from the G-buffer XFB of instance 0 after the positions matched M_0 * P within the mesh cache
+// tolerance (rt/mesh_extract_basis.hlsl); the row binds it to this mesh by pool base, triangle
+// count and mesh generation. Instance i: per vertex normalize(A_i * A_0^-1 * w_0), the native
+// normalize(A_i * b), then interpolated as the rasterizer does. Same status codes as below.
+NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
+ NativeHitMaterial result=hit_material_unknown(1);
+ const uint slot=ii.rec&~nh_pool_rec_flag,stride=ii.meta&255u;
+ if((ii.meta&kInfoAlpha)!=0 || (ii.rec&nh_pool_rec_flag)==0 || slot>=nh_pool_rows || hit.prim>=ii.tris || stride<16u)return result;
+ uint bytes,pbytes;gHitRecords.GetDimensions(bytes);gMeshPool.GetDimensions(pbytes);
+ const uint row=nh_pool_row_base+slot*256u;
+ if(bytes<row+256u || !tri_in_range(ii.base,hit.prim,stride,pbytes))return result;
+ uint4 header=gHitRecords.Load4(0);
+ if(header.w!=1 || header.x!=pc.frame || header.y==0 || header.y!=gSceneStamp.Load(0) || header.y!=gSceneStamp.Load(4))return hit_material_unknown(2);
+ uint4 h0=gHitRecords.Load4(row),h1=gHitRecords.Load4(row+16),h2=gHitRecords.Load4(row+32);
+ if(h0.x!=slot+1u || h0.y!=ii.tris || h0.z!=ii.base || h1.w!=pc.frame || h1.x!=nh_pool_basis_vertex || h2.w!=3u)return hit_material_unknown(3);
+ if(h0.y>(0xffffffffu-nh_pool_basis_header)/(3u*nh_pool_basis_vertex) || h0.w>pbytes || nh_pool_basis_header+h0.y*3u*nh_pool_basis_vertex>pbytes-h0.w)return result;
+ uint4 bh=gMeshPool.Load4(h0.w);
+ if(bh.x!=nh_pool_basis_magic || bh.y!=gHitRecords.Load(row+216u) || bh.z!=h0.y || bh.w!=1u)return hit_material_unknown(4);
+ const uint first=h0.w+nh_pool_basis_header+hit.prim*3u*nh_pool_basis_vertex;
+ const float3x3 a=(float3x3)hit.o2w;
+ float2 uv[3];float3 position[3];
+ [unroll]for(uint v=0;v<3;++v){
+  uv[v]=asfloat(gMeshPool.Load2(first+v*nh_pool_basis_vertex));position[v]=mul(hit.o2w,float4(inst_pos(ii,hit.prim,v),1.0));
+ }
+ float area=length(cross(position[1]-position[0],position[2]-position[0]));
+ float2 d1=uv[1]-uv[0],d2=uv[2]-uv[0];float uvarea=abs(d1.x*d2.y-d1.y*d2.x);
+ if(!(area>0 && uvarea>0) || !isfinite(area+uvarea))return hit_material_unknown(5);
+ float g=footprint*sqrt(uvarea/area);float2 u=uv[0]+d1*hit.bary.x+d2*hit.bary.y;
+ NativeLayer al=hit_material_layer(row,u,g,h1.y,h2.y,h1.z,0),nl=hit_material_layer(row,u,g,h1.y,h2.x,h1.z,1),pl=hit_material_layer(row,u,g,h1.y,h2.z,h1.z,2);
+ if(!al.known || !nl.known || !pl.known)return hit_material_unknown(6);
+ NvFields fields=nv_fields(al.value.rgb,nl.value.wzy,pl.value.xyz,asfloat(gHitRecords.Load(row+208u)));
+ if(fields.status!=0)return hit_material_unknown(7);
+ float3 basis[3];
+ [unroll]for(uint component=0;component<3;++component){
+  float3 w[3];
+  [unroll]for(uint v=0;v<3;++v){float3 b=mul(a,asfloat(gMeshPool.Load3(first+v*nh_pool_basis_vertex+8u+12u*component)));w[v]=b*rsqrt(dot(b,b));}
+  basis[component]=w[0]+(w[1]-w[0])*hit.bary.x+(w[2]-w[0])*hit.bary.y;
+ }
+ // Native FS mat3(T,N,B) with the VS outputs at locations 3/1/2 (FS 14678345 _237, as 8995).
+ float3 normal=basis[2]*fields.frame_normal.x+basis[0]*fields.frame_normal.y+basis[1]*fields.frame_normal.z;
+ if(!all(isfinite(normal)) || !(dot(normal,normal)>0))return hit_material_unknown(8);
+ NtInput input;input.linear_albedo=fields.albedo;input.roughness=fields.roughness;input.reflectance=fields.reflectance;input.metalness=fields.metalness;
+ input.material_class=0;input.evidence=NtSamplesKnown|NtLinearColorKnown|NtOpaqueCoverageKnown|NtLobesKnown;
+ result.parameters=nt_class0_parameters(input);result.scattering=nt_to_fresnel_blend(result.parameters);result.normal=normalize(normal);
+ result.channel=gHitRecords.Load(row+212u);
+#ifdef RT_NATIVE_TILESET
+ result.family=0u;
+#endif
+ result.status=(result.parameters.status==NtOk && result.scattering.status==NtOk)?0:9;return result;
+}
 NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if(!hit_material_publication_ready())return hit_material_unknown(1);
  NativeHitMaterial result=hit_material_unknown(1);
  if(hit.t<0 || hit.aborted || !isfinite(footprint) || footprint<=0 || !rt_scene_ok())return result;
  InstInfo ii=inst_info(hit.inst);
+ if((ii.meta&(nh_pool_meta|kInfoPool|kInfoLegacy))==(nh_pool_meta|kInfoPool))return rt_hit_material_pool(hit,footprint,ii);
  bool opaque=(ii.meta&nh_opaque_meta)!=0;
  if((ii.meta&(kInfoLegacy|kInfoPool))!=0 || hit.prim>=ii.tris)return result;
  if(opaque){if((ii.meta&kInfoAlpha)!=0 || ii.rec<nh_alpha_rows || ii.rec>=nh_material_rows)return result;}
@@ -155,12 +209,14 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
 // Reason histogram of one lookup (core/gi.cpp "hit material" line): counter 253+status
 // (0 qualified; 1 base, 2 epoch, 3 row, 4 clip, 5 geometry, 6 sampling, 7 fields, 8 frame,
 // 9 parameters) and 127: status 1 because the hit instance carries no material record at
-// all (neither nh_opaque_meta nor kInfoAlpha in its BVH-split info: a draw family, instancing
-// or pool the provider does not cover). Callers gate it on their stats key.
+// all (neither nh_opaque_meta nor kInfoAlpha in its BVH-split info, nor a pool row: a draw
+// family, instancing or pool the provider does not cover). Callers gate it on their stats key.
 void hit_material_count(RtHit hit,uint status,uint bin){
  [unroll]for(uint s=0;s<10;++s)stat_add(253u+s,status==s,bin);
  bool uncovered=false;
- if(status==1u && hit.t>=0 && !hit.aborted){InstInfo ii=inst_info(hit.inst);uncovered=(ii.meta&(nh_opaque_meta|kInfoAlpha))==0u || (ii.meta&(kInfoLegacy|kInfoPool))!=0u;}
+ if(status==1u && hit.t>=0 && !hit.aborted){InstInfo ii=inst_info(hit.inst);
+  const bool pool_row=(ii.meta&(nh_pool_meta|kInfoPool|kInfoLegacy))==(nh_pool_meta|kInfoPool);
+  uncovered=!pool_row && ((ii.meta&(nh_opaque_meta|kInfoAlpha))==0u || (ii.meta&(kInfoLegacy|kInfoPool))!=0u);}
  stat_add(127u,uncovered,bin);
 }
 #endif

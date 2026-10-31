@@ -24,9 +24,16 @@ bool register_use(VkCommandBuffer,uint32_t slot,VkDescriptorSet* query_alpha);
 // Pool material records (common/native_hit_pool.h, PLAN_M4 "Hit material on pool
 // instances"). Geometry/position keys of a class A draw (false: not keyable).
 bool pool_keys(const InstPipe&,const CmdState&,const DrawArgs&,uint64_t* geometry,uint64_t* position);
-// Every G-buffer draw of a class A pipeline; poolPipeline: pool::pool_material_pipeline.
-void pool_observe(VkCommandBuffer,CmdState*,const DrawArgs&,const InstPipe&,bool poolPipeline);
-// One cached (pool) draw of the BVH build: returns its pool::Status, counts it per instance.
-uint32_t pool_lookup(uint64_t geometry,uint64_t position,uint64_t meshGeneration,uint32_t instances);
+// Every G-buffer draw of a class A pipeline; poolPipeline: pool::pool_material_pipeline;
+// basisPipeline: it also has the XFB patch with the UV + N/B/T outputs (stride >= 64). True:
+// the caller binds and begins this XFB range for the draw (one UV/basis capture of instance 0).
+bool pool_observe(VkCommandBuffer,CmdState*,const DrawArgs&,const InstPipe&,bool poolPipeline,bool basisPipeline,
+                  uint32_t stride,VkBuffer* xfb,VkDeviceSize* offset,VkDeviceSize* bytes);
+// The pool mesh of a cached draw as the BVH build has it (epoch: bvh_pool_epoch, under its lock).
+struct PoolMesh {uint64_t gen{};VkDeviceSize pool_off{};uint32_t tris{},stride{};VkDeviceSize basis_off{},basis_bytes{};uint64_t epoch{};};
+// status: pool::Status (counted per instance); slot: its pool material row (nh_pool_rows: none);
+// wants_basis: qualified without a UV/basis range (the build allocates one in the pool).
+struct PoolUse {uint32_t status{};uint32_t slot{UINT32_MAX};bool wants_basis{};};
+PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const PoolMesh&);
 void pool_evicted(uint64_t geometry);
 }

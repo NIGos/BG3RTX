@@ -59,7 +59,12 @@ struct Query {
  Buffer data,rows;VkDescriptorPool pool{};VkDescriptorSet set{};
  uint64_t command{},recording{},source{};uint32_t slot{},generation{};std::shared_ptr<Deferred> deferred;
  PendingPublication publication;std::vector<Material> materials;
+ // Pool material rows (row.reserved 3, row.valid = slot + 1): their gather inputs (engine and
+ // physical UBO images of the record's captured bytes, 512 B each) and the samplers they add.
+ std::vector<Material> pool_rows;Buffer pool_ubo;std::vector<VkSampler> pool_samplers;VkDeviceSize rows_bytes{};
 };
+constexpr VkDeviceSize pool_rows_bytes=VkDeviceSize(nh_pool_rows)*record_bytes;
+static_assert(nh_pool_row_base==row_bytes,"pool rows follow the publication word");
 DeviceData* dd{};bool on{};std::mutex mutex;
 struct Pending {uint64_t command{},recording{};uint32_t candidate_draws{},opaque_count{},opaque_overflow{};DrawJoin join;std::vector<Pre> pre;};
 std::unordered_map<uint64_t,Pending> pending;
@@ -71,6 +76,8 @@ std::unordered_map<uint64_t,std::unique_ptr<Query>> queries;
 Slot slots[kSceneSlots];
 VkDescriptorSetLayout gather_dsl{},join_dsl{};VkPipelineLayout gather_layout{},join_layout{};VkPipeline gather_pipeline{},join_pipeline{};
 VkPipeline tileset_gather_pipeline{};
+// rt/mesh_extract_basis.hlsl (pool UV/basis captures): camera UBO, XFB, mesh pool, job status.
+VkDescriptorSetLayout basis_dsl{};VkPipelineLayout basis_layout{};VkPipeline basis_pipeline{};
 bool compute_ready(bool join,bool tileset=false){
  auto& pipeline=join?join_pipeline:(tileset?tileset_gather_pipeline:gather_pipeline);auto& dsl=join?join_dsl:gather_dsl;auto& layout=join?join_layout:gather_layout;
  if(pipeline)return true;
@@ -85,6 +92,19 @@ bool compute_ready(bool join,bool tileset=false){
  if(dd->vk.CreateShaderModule(dd->device,&m,nullptr,&module)!=VK_SUCCESS)return false;
  VkComputePipelineCreateInfo p{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};p.layout=layout;p.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_COMPUTE_BIT,module,"main"};
  auto result=dd->vk.CreateComputePipelines(dd->device,VK_NULL_HANDLE,1,&p,nullptr,&pipeline);dd->vk.DestroyShaderModule(dd->device,module,nullptr);return result==VK_SUCCESS;
+}
+bool basis_ready(){
+ if(basis_pipeline)return true;
+ Bg3ShaderBlob blob{};if(!dd->vk.CmdPushDescriptorSet || !shader_get("rt/mesh_extract_basis.hlsl","main","cs_6_6",&blob))return false;
+ VkDescriptorSetLayoutBinding bindings[4]{};for(uint32_t i=0;i<4;++i)bindings[i]={i,i?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT};
+ VkDescriptorSetLayoutCreateInfo d{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};d.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;d.bindingCount=4;d.pBindings=bindings;
+ if(!basis_dsl && dd->vk.CreateDescriptorSetLayout(dd->device,&d,nullptr,&basis_dsl)!=VK_SUCCESS)return false;
+ VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT,0,48};VkPipelineLayoutCreateInfo l{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};l.setLayoutCount=1;l.pSetLayouts=&basis_dsl;l.pushConstantRangeCount=1;l.pPushConstantRanges=&range;
+ if(!basis_layout && dd->vk.CreatePipelineLayout(dd->device,&l,nullptr,&basis_layout)!=VK_SUCCESS)return false;
+ VkShaderModuleCreateInfo m{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};m.codeSize=blob.size_bytes;m.pCode=blob.code;VkShaderModule module{};
+ if(dd->vk.CreateShaderModule(dd->device,&m,nullptr,&module)!=VK_SUCCESS)return false;
+ VkComputePipelineCreateInfo p{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};p.layout=basis_layout;p.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_COMPUTE_BIT,module,"main"};
+ auto result=dd->vk.CreateComputePipelines(dd->device,VK_NULL_HANDLE,1,&p,nullptr,&basis_pipeline);dd->vk.DestroyShaderModule(dd->device,module,nullptr);return result==VK_SUCCESS;
 }
 uint64_t handle(VkCommandBuffer cmd){return uint64_t(reinterpret_cast<uintptr_t>(cmd));}
 uint64_t queue_handle(VkQueue queue){return uint64_t(reinterpret_cast<uintptr_t>(queue));}
@@ -277,7 +297,8 @@ bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* rec
  }
  return false;
 }
-void destroy_query(Query& q){if(q.pool)dd->vk.DestroyDescriptorPool(dd->device,q.pool,nullptr);destroy(q.data);destroy(q.rows);}
+void destroy_query(Query& q){if(q.pool)dd->vk.DestroyDescriptorPool(dd->device,q.pool,nullptr);destroy(q.data);destroy(q.rows);destroy(q.pool_ubo);
+ for(auto sampler:q.pool_samplers)dd->vk.DestroySampler(dd->device,sampler,nullptr);q.pool_samplers.clear();}
 void destroy_packet(Deferred& p){for(auto sampler:p.samplers)dd->vk.DestroySampler(dd->device,sampler,nullptr);for(auto& c:p.chunks)destroy(c);p.chunks.clear();destroy(p.rows);}
 bool retired(uint64_t id){auto i=owners.find(id);return i!=owners.end() && i->second.retired(current_recording(i->second.command),life_gpu_done());}
 void collect(){
@@ -304,9 +325,28 @@ void publish_word(Query& query,uint32_t value){
 struct PoolMaterial {
  View table,normal,albedo,physical;omm::BoundSampler sampler;uint32_t engine[12]{},reflectance{};
  uint64_t checked{};bool current{}; // currency of the last check (once per frame per record)
+ // Persistent across material refreshes: the pool mesh (from the BVH build) and its UV/basis.
+ PoolMesh mesh{};pool::BasisTrack basis{};
 };
+// A refresh replaces the captured material, never the mesh/basis state.
+void assign_material(PoolMaterial& to,const PoolMaterial& from){const auto mesh=to.mesh;const auto basis=to.basis;to=from;to.mesh=mesh;to.basis=basis;}
 std::mutex pool_mutex;
 pool::Table<PoolMaterial> pool_table;
+pool::Slots pool_slots;
+// One UV/basis capture (native_hit_pool.h): the G-buffer XFB of instance 0, the instance-0
+// matrix (read at record, verified on the GPU by the position check) and the GPU status, in
+// `host`: matrix 0..47, max error 48, invalid 52, done 56, ran 60.
+struct PoolJob {
+ uint64_t geometry{},gen{},recording{},frame{},epoch{};Buffer xfb,host;
+ uint32_t tris{},xfb_stride{},pool_stride{};VkDeviceSize pool_off{},basis_off{},xfb_bytes{};Bg3Binding camera{};
+ bool recorded{},resolved{};
+};
+std::vector<PoolJob> pool_jobs;
+struct PoolBasisStats {uint64_t jobs{},results[size_t(pool::BasisResult::Count)]{},rows{},row_instances{},no_slot{};float err_max{};uint64_t frame{};uint32_t frame_jobs{};};
+PoolBasisStats pool_basis;
+// This frame's tile-set table binding (set 0 binding 12) of the STI G-buffer draws (pool rows' gather).
+struct PoolTilesets {Bg3Binding binding{};uint64_t frame{};} pool_tilesets;
+constexpr uint32_t kPoolDone=0x454e4f44u,kPoolRan=0x42564853u;
 struct PoolObserved {uint64_t frame{};uint32_t draws{},recipe{},captured{},throttled{},no_key{},overflow{};uint32_t failures[12]{};};
 PoolObserved pool_obs[2]; // this frame and the previous one (the G-buffer may record after the BVH build)
 uint64_t pool_counter_frame{};
@@ -321,7 +361,7 @@ void pool_log(uint64_t frame){
  const PoolObserved empty{};
  const PoolObserved* o=pool_obs[0].frame==frame?&pool_obs[0]:pool_obs[1].frame==frame?&pool_obs[1]:&empty;
  const auto q=size_t(pool::Status::Qualified);
- log("[hit material pool] frame %llu pool draws %llu instances %llu; qualified draws %llu instances %llu (%.1f%% of pool instances); records %zu stored %llu refreshed %llu conflicts %llu evicted %llu mesh replaced %llu invalidated (stale views) %llu overflow %llu; lookup at hits not wired (step 1)",
+ log("[hit material pool] frame %llu pool draws %llu instances %llu; qualified draws %llu instances %llu (%.1f%% of pool instances); records %zu stored %llu refreshed %llu conflicts %llu evicted %llu mesh replaced %llu invalidated (stale views) %llu overflow %llu; hits use a pool row once its UV/basis is ready ([hit material pool basis])",
   (unsigned long long)frame,(unsigned long long)draws,(unsigned long long)instances,(unsigned long long)c.draws[q],(unsigned long long)c.instances[q],
   instances?100.0*double(c.instances[q])/double(instances):0.0,pool_table.size(),(unsigned long long)t.stored,(unsigned long long)t.refreshed,(unsigned long long)t.conflicts,
   (unsigned long long)t.evicted,(unsigned long long)t.replaced,(unsigned long long)t.stale,(unsigned long long)t.overflow);
@@ -332,13 +372,44 @@ void pool_log(uint64_t frame){
  log("[hit material pool] frame %llu G-buffer class A draws %u, STI pair %u, captured %u, refresh not due %u, no geometry key %u, table full %u; capture failures by bit (0..2 buffers, 3..6 views, 7..9 sampler, 10 parameters) %u/%u/%u %u/%u/%u/%u %u/%u/%u %u",
   (unsigned long long)frame,o->draws,o->recipe,o->captured,o->throttled,o->no_key,o->overflow,o->failures[0],o->failures[1],o->failures[2],o->failures[3],o->failures[4],o->failures[5],o->failures[6],
   o->failures[7],o->failures[8],o->failures[9],o->failures[10]);
+ uint64_t ranges=0,bytes=0,ready=0,pending=0,failed=0;
+ pool_table.for_each([&](uint64_t,const auto& r){const auto& m=r.payload;if(m.mesh.basis_bytes){++ranges;bytes+=m.mesh.basis_bytes;}
+  ready+=m.basis.state==pool::Basis::Ready;pending+=m.basis.state==pool::Basis::Pending;failed+=m.basis.state==pool::Basis::Failed;});
+ const auto& b=pool_basis;
+ log("[hit material pool basis] frame %llu UV/basis ranges %llu (%.1f/%.0f MB in the mesh pool) ready %llu pending %llu failed %llu; captures %llu: ok %llu position mismatch %llu invalid %llu lost %llu pool moved %llu, max error %.3f (1 = mesh cache tolerance); rows %u/%u slots, this frame instances with a pool row %llu (draws %llu), ready without slot %llu",
+  (unsigned long long)frame,(unsigned long long)ranges,double(bytes)/1048576.0,double(pool::kBasisCapBytes)/1048576.0,(unsigned long long)ready,(unsigned long long)pending,(unsigned long long)failed,
+  (unsigned long long)b.jobs,(unsigned long long)b.results[0],(unsigned long long)b.results[1],(unsigned long long)b.results[2],(unsigned long long)b.results[3],(unsigned long long)b.results[4],double(b.err_max),
+  pool_slots.used(),nh_pool_rows,(unsigned long long)b.row_instances,(unsigned long long)b.rows,(unsigned long long)b.no_slot);
+}
+void pool_release_slot(PoolMaterial& m){if(m.basis.slot<nh_pool_rows)pool_slots.release(m.basis.slot);m.basis.slot=UINT32_MAX;}
+// Results of recorded captures (under pool_mutex, once per frame from the build's first lookup).
+// epoch: the mesh pool's replacement epoch now (the build holds its lock).
+void pool_jobs_poll(uint64_t frame,uint64_t epoch){
+ const uint64_t gpu=life_gpu_done();
+ for(auto& j:pool_jobs){
+  if(j.resolved)continue;
+  const auto* st=static_cast<const volatile uint32_t*>(j.host.mapped);
+  // Not done within 240 frames (never recorded, or its command buffer dropped): lost.
+  const bool done=st[14]==kPoolDone,timeout=frame>=j.frame+240;
+  if(!done && !timeout)continue;
+  float err;const uint32_t bits=st[12];std::memcpy(&err,&bits,4);
+  const auto result=pool::basis_result(done,st[15]==kPoolRan,j.epoch!=epoch,err,st[13]);
+  ++pool_basis.results[size_t(result)];if(result==pool::BasisResult::Ok)pool_basis.err_max=std::max(pool_basis.err_max,err);
+  if(auto* r=pool_table.find(j.geometry);r && r->payload.basis.gen==j.gen && r->payload.basis.state==pool::Basis::Pending){
+   auto& m=r->payload;pool::basis_done(m.basis,result,frame);
+   if(result==pool::BasisResult::Ok && m.basis.slot>=nh_pool_rows)m.basis.slot=pool_slots.acquire();
+  }
+  j.resolved=true;j.frame=frame; // destroyed once the GPU is past this frame
+ }
+ std::erase_if(pool_jobs,[&](PoolJob& j){if(!j.resolved || gpu<j.frame+2)return false;destroy(j.xfb);destroy(j.host);return true;});
 }
 // Counters cover one frame: the first lookup of a new frame logs the previous one (rt_stats,
 // every 120 frames) and starts over.
-void pool_rollover(uint64_t frame){
+void pool_rollover(uint64_t frame,uint64_t epoch){
  if(pool_counter_frame==frame)return;
  if(pool_counter_frame && pool_counter_frame%120==0 && cfg_hot(CfgHot::rt_stats))pool_log(pool_counter_frame);
- pool_table.end_frame();pool_counter_frame=frame;
+ pool_table.end_frame();pool_counter_frame=frame;pool_basis.rows=pool_basis.row_instances=0;
+ pool_jobs_poll(frame,epoch);
 }
 bool pool_current(PoolMaterial& m,uint64_t frame){
  if(m.checked!=frame){m.checked=frame;m.current=current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical)&&omm::ordinary_sampler_current(m.sampler);}
@@ -351,10 +422,12 @@ void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);if(dd!=dev
  for(auto& [id,q]:queries)destroy_query(*q);queries.clear();
  for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();
  for(auto& s:slots){destroy(s.data);s={};}
- for(auto pipeline:{gather_pipeline,join_pipeline,tileset_gather_pipeline})if(pipeline)dd->vk.DestroyPipeline(dd->device,pipeline,nullptr);
- for(auto layout:{gather_layout,join_layout})if(layout)dd->vk.DestroyPipelineLayout(dd->device,layout,nullptr);
- for(auto dsl:{gather_dsl,join_dsl})if(dsl)dd->vk.DestroyDescriptorSetLayout(dd->device,dsl,nullptr);
- {std::lock_guard pool(pool_mutex);pool_table.clear();for(auto& o:pool_obs)o={};pool_counter_frame=0;}
+ for(auto pipeline:{gather_pipeline,join_pipeline,tileset_gather_pipeline,basis_pipeline})if(pipeline)dd->vk.DestroyPipeline(dd->device,pipeline,nullptr);
+ for(auto layout:{gather_layout,join_layout,basis_layout})if(layout)dd->vk.DestroyPipelineLayout(dd->device,layout,nullptr);
+ for(auto dsl:{gather_dsl,join_dsl,basis_dsl})if(dsl)dd->vk.DestroyDescriptorSetLayout(dd->device,dsl,nullptr);
+ basis_pipeline={};basis_layout={};basis_dsl={};
+ {std::lock_guard pool(pool_mutex);pool_table.clear();pool_slots.clear();for(auto& j:pool_jobs){destroy(j.xfb);destroy(j.host);}pool_jobs.clear();
+  pool_basis={};pool_tilesets={};for(auto& o:pool_obs)o={};pool_counter_frame=0;}
  gather_pipeline={};join_pipeline={};tileset_gather_pipeline={};gather_layout={};join_layout={};gather_dsl={};join_dsl={};pending.clear();owners.clear();submitted_queues.clear();marked.clear();dd=nullptr;on=false;
 }
 void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(!one_time(s))return;std::lock_guard lock(mutex);collect();
@@ -499,8 +572,9 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  material.row.sampler=indices.sampler;material.row.normal=indices.normal;material.row.albedo=indices.albedo;material.row.physical=indices.physical;
  p.join.assign(p.command,p.recording,draw,local);p.materials.push_back(material);*buffer=p.chunks[place.chunk].b;*offset=place.offset;p.cursor=place.offset+*bytes;p.total+=*bytes;return true;
 }
+void pool_jobs_record(VkCommandBuffer,CmdState*);
 void deferred_finish(VkCommandBuffer cmd,bool readonly){
- if(!on)return;auto* state=cmd_state(cmd);if(!one_time(state))return;std::lock_guard lock(mutex);auto i=packets.find(state->recording);if(i==packets.end())return;auto& p=*i->second;
+ if(!on)return;auto* state=cmd_state(cmd);if(!one_time(state))return;pool_jobs_record(cmd,state);std::lock_guard lock(mutex);auto i=packets.find(state->recording);if(i==packets.end())return;auto& p=*i->second;
  if(p.finalized){p.valid=false;return;}p.finalized=true;p.valid=p.valid && readonly && cfg_hot(CfgHot::rt_hit_material)!=0 && compute_ready(false);
  if(!own(cmd)){p.valid=false;return;}
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -540,15 +614,58 @@ bool pool_keys(const InstPipe& inst,const CmdState& s,const DrawArgs& args,uint6
  if(!g.indexed && !g.position_buffer)return false;
  *geometry=pool::geometry_key(g);*position=pool::position_key(g);return true;
 }
-void pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const InstPipe& inst,bool poolPipeline){
- if(!on || !state || !cfg_hot(CfgHot::rt_hit_material))return;const auto frame=frame_index();
+// A UV/basis capture is due for this draw's record (under pool_mutex; cheap, every STI draw).
+PoolMaterial* pool_job_due(uint64_t geometry,uint64_t frame,const DrawArgs& args,uint32_t stride){
+ auto* r=pool_table.find(geometry);if(!r || r->seen.status!=pool::Status::Qualified || r->conflict || r->prev_conflict)return nullptr;
+ auto& m=r->payload;
+ if(!m.mesh.basis_bytes || m.basis.gen!=m.mesh.gen || !pool::basis_due(m.basis,frame) || m.mesh.basis_bytes!=pool::basis_bytes(m.mesh.tris) ||
+    args.count!=m.mesh.tris*3u || !args.instances || stride<64u || VkDeviceSize(m.mesh.tris)*3u*stride>pool::kJobXfbBytes)return nullptr;
+ if(pool_basis.frame!=frame){pool_basis.frame=frame;pool_basis.frame_jobs=0;}
+ return pool_basis.frame_jobs<pool::kJobsPerFrame?&m:nullptr;
+}
+// One capture (true: binds `xfb` for this draw). Its inputs are read without pool_mutex (the
+// buffer-size and mapping lookups take other layer locks), then the record is checked again.
+// Instance 0's matrix rows come from the game's mapped instance stream at record; a stale or
+// different matrix fails the GPU position check (fail closed, retried later).
+bool pool_job(VkCommandBuffer cmd,CmdState* s,const DrawArgs& args,const InstPipe& inst,uint64_t geometry,uint64_t frame,uint32_t stride,
+              VkBuffer* xfb,VkDeviceSize* offset,VkDeviceSize* bytes){
+ if(!one_time(s))return false;
+ Bg3Binding camera{};if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera) || !camera.buffer)return false;
+ if(camera.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(camera.buffer);camera.range=camera.offset<size?size-camera.offset:0;}
+ if(camera.range<224 || camera.offset%geo_ubo_align())return false; // 14 float4: _m2 rows at 128 (xfb_to_world.hlsl)
+ float rows[12];
+ for(uint32_t k=0;k<3;++k){
+  if(inst.row_binding[k]>=CmdState::kMaxVertexBindings)return false;const auto& vb=s->vb[inst.row_binding[k]];
+  const uint32_t st=inst.row_stride[k]?inst.row_stride[k]:uint32_t(vb.stride);const VkDeviceSize size=vb.buffer?geo_buffer_size(vb.buffer):0;
+  const VkDeviceSize first=vb.offset+VkDeviceSize(args.first_instance)*st+inst.row_offset[k];
+  const uint8_t* p=vb.buffer && st && first+16<=size?mapped_ptr(vb.buffer,first):nullptr;if(!p)return false;std::memcpy(rows+4*k,p,16);
+ }
+ PoolJob j{};j.geometry=geometry;j.recording=s->recording;j.frame=frame;j.xfb_stride=stride;j.camera=camera;
+ j.tris=args.count/3u;j.xfb_bytes=VkDeviceSize(j.tris)*3u*stride;
+ if(!create(j.xfb,j.xfb_bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT) || !create(j.host,64,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,true)){destroy(j.xfb);destroy(j.host);return false;}
+ std::memset(j.host.mapped,0,64);std::memcpy(j.host.mapped,rows,48);
+ std::lock_guard lock(pool_mutex);auto* m=pool_job_due(geometry,frame,args,stride);
+ if(!m || m->mesh.tris!=j.tris){destroy(j.xfb);destroy(j.host);return false;}
+ j.gen=m->mesh.gen;j.pool_stride=m->mesh.stride;j.pool_off=m->mesh.pool_off;j.basis_off=m->mesh.basis_off;
+ *xfb=j.xfb.b;*offset=0;*bytes=j.xfb_bytes;pool_jobs.push_back(j);
+ pool::basis_pending(m->basis,frame);++pool_basis.frame_jobs;++pool_basis.jobs;return true;
+}
+bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const InstPipe& inst,bool poolPipeline,bool basisPipeline,
+                  uint32_t stride,VkBuffer* xfb,VkDeviceSize* offset,VkDeviceSize* bytes){
+ if(!on || !state || !cfg_hot(CfgHot::rt_hit_material))return false;const auto frame=frame_index();
  uint64_t geometry=0,position=0;const bool keyed=pool_keys(inst,*state,args,&geometry,&position);
  const auto* recipe=pool::pool_recipe(state->vs,state->fs);
  pool::Observation o{pool::mix(state->vs,state->fs),position,pool::Status::Family};PoolMaterial payload{};uint32_t failures=0;
+ bool due=false,throttled=false;
  if(keyed && recipe && poolPipeline){
+  Bg3Binding tilesets{};const bool table=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,12,0,&tilesets) && tilesets.buffer;
+  if(table && tilesets.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(tilesets.buffer);tilesets.range=tilesets.offset<size?size-tilesets.offset:0;}
   // A current qualified record is not captured again before its refresh frame.
-  std::lock_guard lock(pool_mutex);if(!pool_table.capture_due(geometry,frame)){auto& seen=pool_observed(frame);++seen.draws;++seen.recipe;++seen.throttled;return;}
+  std::lock_guard lock(pool_mutex);if(table)pool_tilesets={tilesets,frame};
+  if(!pool_table.capture_due(geometry,frame)){auto& seen=pool_observed(frame);++seen.draws;++seen.recipe;++seen.throttled;
+   due=basisPipeline && pool_job_due(geometry,frame,args,stride);throttled=true;}
  }
+ if(throttled)return due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes);
  if(keyed && recipe){
   if(!poolPipeline)o.status=pool::Status::Pipeline;
   else{
@@ -567,19 +684,70 @@ void pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
    }
   }
  }
- std::lock_guard lock(pool_mutex);auto& seen=pool_observed(frame);++seen.draws;
- if(!keyed){++seen.no_key;return;}
- if(recipe){++seen.recipe;pool_capture_bits(failures,seen.failures);seen.captured+=o.status==pool::Status::Qualified;}
- const auto stored=pool_table.observe(geometry,frame,o);
- if(stored==pool::Table<PoolMaterial>::Store::Full)++seen.overflow;
- else if(stored==pool::Table<PoolMaterial>::Store::Fresh)pool_table.find(geometry)->payload=payload;
+ {std::lock_guard lock(pool_mutex);auto& seen=pool_observed(frame);++seen.draws;
+  if(!keyed){++seen.no_key;return false;}
+  if(recipe){++seen.recipe;pool_capture_bits(failures,seen.failures);seen.captured+=o.status==pool::Status::Qualified;}
+  const auto stored=pool_table.observe(geometry,frame,o);
+  if(stored==pool::Table<PoolMaterial>::Store::Full){++seen.overflow;return false;}
+  if(stored==pool::Table<PoolMaterial>::Store::Fresh)assign_material(pool_table.find(geometry)->payload,payload);
+  due=recipe && basisPipeline && pool_job_due(geometry,frame,args,stride);
+ }
+ return due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes);
 }
-uint32_t pool_lookup(uint64_t geometry,uint64_t position,uint64_t mesh,uint32_t instances){
- if(!on || !cfg_hot(CfgHot::rt_hit_material))return uint32_t(pool::Status::NoDeferred);const auto frame=frame_index();
- std::lock_guard lock(pool_mutex);pool_rollover(frame);
- return uint32_t(pool_table.lookup(geometry,mesh,position,frame,instances,[&](PoolMaterial& m){return pool_current(m,frame);}));
+PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const PoolMesh& mesh){
+ PoolUse use{uint32_t(pool::Status::NoDeferred),UINT32_MAX,false};
+ if(!on || !cfg_hot(CfgHot::rt_hit_material))return use;const auto frame=frame_index();
+ std::lock_guard lock(pool_mutex);pool_rollover(frame,mesh.epoch);
+ const auto status=pool_table.lookup(geometry,mesh.gen,position,frame,instances,[&](PoolMaterial& m){return pool_current(m,frame);});
+ use.status=uint32_t(status);
+ auto* r=pool_table.find(geometry);if(!r)return use;
+ auto& m=r->payload;
+ if(const uint32_t old=pool::basis_rebind(m.basis,mesh.gen);old<nh_pool_rows)pool_slots.release(old);
+ m.mesh=mesh;
+ if(status!=pool::Status::Qualified)return use;
+ use.wants_basis=!mesh.basis_bytes;
+ if(m.basis.state==pool::Basis::Ready){
+  if(m.basis.slot>=nh_pool_rows)m.basis.slot=pool_slots.acquire();
+  if(m.basis.slot<nh_pool_rows){use.slot=m.basis.slot;++pool_basis.rows;pool_basis.row_instances+=instances;}else ++pool_basis.no_slot;
+ }
+ return use;
 }
-void pool_evicted(uint64_t geometry){if(!on || !geometry)return;std::lock_guard lock(pool_mutex);pool_table.evicted(geometry);}
+void pool_evicted(uint64_t geometry){if(!on || !geometry)return;std::lock_guard lock(pool_mutex);pool_table.evicted(geometry,[](PoolMaterial& m){pool_release_slot(m);});}
+// The captures recorded in this G-buffer command buffer (after its render pass): mode 0 maps the
+// XFB to object space and checks the positions, mode 1 writes the basis header only when that
+// check passed (fail closed: the shader also checks it). Takes no hit-material lock while asking
+// the BVH split for its pool (its lock is taken before pool_mutex in the build).
+void pool_jobs_record(VkCommandBuffer cmd,CmdState* state){
+ {std::lock_guard pool(pool_mutex);if(std::none_of(pool_jobs.begin(),pool_jobs.end(),[&](const PoolJob& j){return !j.recorded && j.recording==state->recording;}))return;}
+ VkBuffer pool_buffer{};VkDeviceSize pool_bytes=0;uint64_t epoch=0;const bool have_pool=bvh_pool_target(&pool_buffer,&pool_bytes,&epoch);
+ bool ready;{std::lock_guard lock(mutex);ready=basis_ready();}
+ std::vector<PoolJob> work;
+ {std::lock_guard pool(pool_mutex);
+  for(auto& j:pool_jobs)if(!j.recorded && j.recording==state->recording){
+   j.recorded=true;j.epoch=epoch;
+   const bool fits=have_pool && byte_range(j.pool_off,VkDeviceSize(j.tris)*3u*j.pool_stride,pool_bytes) && byte_range(j.basis_off,pool::basis_bytes(j.tris),pool_bytes);
+   if(ready && fits)work.push_back(j);
+   else static_cast<uint32_t*>(j.host.mapped)[14]=kPoolDone; // never runs: lost at the next poll (no ran marker)
+  }
+ }
+ if(work.empty())return;
+ barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
+ dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,basis_pipeline);
+ const float tol_abs=cfg_float("rt_mesh_tol_abs",2e-3f),tol_rel=cfg_float("rt_mesh_tol_rel",4e-5f);
+ for(uint32_t mode=0;mode<2;++mode){
+  for(const auto& j:work){
+   VkDescriptorBufferInfo info[4]={{j.camera.buffer,j.camera.offset,224},{j.xfb.b,0,j.xfb_bytes},{pool_buffer,0,pool_bytes},{j.host.b,0,64}};
+   VkWriteDescriptorSet writes[4]{};for(uint32_t n=0;n<4;++n){writes[n]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=n?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;writes[n].pBufferInfo=info+n;}
+   const uint32_t groups=mode?1u:std::min((j.tris+255u)/256u,1024u);
+   uint32_t push[12]={j.tris,groups*256u,j.xfb_stride,j.pool_stride,uint32_t(j.pool_off),uint32_t(j.basis_off),uint32_t(j.gen),mode,0,0,0,0};
+   std::memcpy(push+8,&tol_abs,4);std::memcpy(push+9,&tol_rel,4);
+   dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,basis_layout,0,4,writes);
+   dd->vk.CmdPushConstants(cmd,basis_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,48,push);dd->vk.CmdDispatch(cmd,groups,1,1);
+  }
+  barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT|VK_PIPELINE_STAGE_HOST_BIT,VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_HOST_READ_BIT);
+ }
+ restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
+}
 bool slot_reusable(uint32_t index,uint64_t gpuDone){if(!on || index>=kSceneSlots)return true;std::lock_guard lock(mutex);
  for(auto id:slots[index].owners){auto i=owners.find(id);if(i==owners.end() || !i->second.retired(current_recording(i->second.command),gpuDone))return false;}return true;
 }
@@ -636,7 +804,42 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   if(!source->opaque && m.row.reserved!=2){m.row.table=source->alpha.rec.tex;std::memcpy(m.row.p0,source->alpha.rec.p0,32);std::memcpy(m.row.t,source->alpha.rec.t,128);}
   cursor+=bytes*2;q.materials.push_back(m);
  }
- if(q.materials.empty()){
+ // Pool rows (native_hit_pool.h step 3): every ready record with a slot whose views and
+ // sampler are current, against this frame's tile-set table. Same 256 B row; its t/p0/p1,
+ // reflectance and channel come from the gather below (the record's captured engine bytes).
+ Bg3Binding pool_table_binding{};uint32_t pool_overflow=0;
+ std::vector<std::array<uint32_t,12>> pool_engine;
+ if(compute_ready(false)){
+  std::lock_guard pool(pool_mutex);
+  if(pool_tilesets.frame==slot.frame)pool_table_binding=pool_tilesets.binding;
+  const auto* recipe=pool::pool_recipe(0x2d2ac3c38992b7f0ull,0x14678345c10aefbcull);
+  if(pool_table_binding.buffer && pool_table_binding.range>=128 && recipe)pool_table.for_each([&](uint64_t,auto& r){auto& m=r.payload;
+   if(m.basis.state!=pool::Basis::Ready || m.basis.slot>=nh_pool_rows || m.basis.gen!=m.mesh.gen || !m.mesh.basis_bytes ||
+      r.seen.status!=pool::Status::Qualified || r.conflict || r.prev_conflict || !pool_current(m,frame_index()))return;
+   Material x{};x.table=m.table;x.normal=m.normal;x.albedo=m.albedo;x.physical=m.physical;x.sampler=m.sampler;
+   x.row.valid=m.basis.slot+1;x.row.triangles=m.mesh.tris;x.row.pre=uint32_t(m.mesh.pool_off);x.row.deferred=uint32_t(m.mesh.basis_off);
+   x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=3;
+   const uint32_t gen=uint32_t(m.mesh.gen);std::memcpy(&x.row.parameters[2],&gen,4);
+   std::array<uint32_t,12> e{};const uint32_t t=recipe->transform_offset/4u;
+   for(uint32_t w=0;w<8;++w)e[w]=m.engine[t+w];e[8]=m.engine[recipe->tileset_index_offset/4u];e[9]=m.engine[recipe->channel_offset/4u];e[10]=m.reflectance;
+   q.pool_rows.push_back(x);pool_engine.push_back(e);
+  });
+ }
+ // Their sampler/cache indices extend the packet's (bindings 14/15); new samplers are cloned per query.
+ if(!q.pool_rows.empty()){
+  ResourceBudget budget=packet->resources;budget.material_count=0;
+  auto identity=[](const View& v){return CacheIdentity{uint64_t(v.view),v.id,uint64_t(v.image),v.image_id,uint64_t(v.layout)};};
+  size_t w=0;
+  for(size_t i=0;i<q.pool_rows.size();++i){auto& m=q.pool_rows[i];ResourcePlan plan{};
+   if(!budget.plan(m.sampler.sampler.id,{identity(m.normal),identity(m.albedo),identity(m.physical)},plan)){++pool_overflow;continue;}
+   if(plan.indices.new_sampler){auto info=m.sampler.sampler.info;info.pNext=nullptr;VkSampler sampler{};
+    if(dd->vk.CreateSampler(dd->device,&info,nullptr,&sampler)!=VK_SUCCESS){++pool_overflow;continue;}q.pool_samplers.push_back(sampler);}
+   budget.commit(plan);m.row.sampler=plan.indices.sampler;m.row.normal=plan.indices.normal;m.row.albedo=plan.indices.albedo;m.row.physical=plan.indices.physical;
+   q.pool_rows[w]=m;pool_engine[w]=pool_engine[i];++w;
+  }
+  q.pool_rows.resize(w);pool_engine.resize(w);
+ }
+ if(q.materials.empty() && q.pool_rows.empty()){
   log_capacity("no exact mapping");
   if(cfg_hot(CfgHot::rt_stats) && slot.frame%120==0)log("[hit material query] no exact mapping frame %llu source records %zu deferred records %zu; camera %p+%llu",
    (unsigned long long)slot.frame,slot.pre.size(),packet->materials.size(),(void*)slot.camera,(unsigned long long)slot.camera_offset);return false;
@@ -647,31 +850,40 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  std::vector<VkDescriptorImageInfo> tables;std::vector<View> table_views;
  auto same=[](const View& a,const View& b){return a.view==b.view && a.id==b.id && a.image_id==b.image_id && a.layout==b.layout;};
  auto fits=[&](const Material& m){
-  if(m.row.reserved!=1 && m.row.reserved!=2)return true;
+  if(m.row.reserved!=1 && m.row.reserved!=2 && m.row.reserved!=3)return true;
   std::vector<const View*> added;auto need=[&](const View& v){
    if(std::any_of(table_views.begin(),table_views.end(),[&](const View& t){return same(t,v);}) || std::any_of(added.begin(),added.end(),[&](const View* t){return same(*t,v);}))return;
    added.push_back(&v);};
-  if(m.row.reserved==1)need(m.table);else for(const auto& v:m.tileset_views)need(v);
+  if(m.row.reserved!=2)need(m.table);else for(const auto& v:m.tileset_views)need(v);
   if(table_views.size()+added.size()>table_free)return false;
   for(const View* v:added){table_views.push_back(*v);tables.push_back({VK_NULL_HANDLE,v->view,v->layout});}
   return true;
  };
  std::erase_if(q.materials,[&](const Material& m){if(fits(m))return false;++table_overflow;return true;});
+ {size_t w=0;for(size_t i=0;i<q.pool_rows.size();++i)if(fits(q.pool_rows[i])){q.pool_rows[w]=q.pool_rows[i];pool_engine[w]=pool_engine[i];++w;}else ++table_overflow;
+  q.pool_rows.resize(w);pool_engine.resize(w);}
  auto table_index=[&](const View& v){return uint32_t(std::find_if(table_views.begin(),table_views.end(),[&](const View& t){return same(t,v);})-table_views.begin());};
  for(auto& m:q.materials){
   if(m.row.reserved==1)m.row.table=table_index(m.table);
   if(m.row.reserved==2)for(uint32_t n=0;n<9;++n){uint32_t index=table_index(m.tileset_views[n]);std::memcpy(m.row.t+n,&index,4);}
  }
- tables_used=uint32_t(tables.size());log_capacity(q.materials.empty()?"tables full":"mapped");
- if(q.materials.empty())return false;
- uint32_t first_table=0;
- if(!create(q.rows,row_bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,true) ||
-    !create(q.data,cursor,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) || !alpha_clone_hit_set(slot.set,&q.pool,&q.set,tables,&first_table)){
+ for(auto& m:q.pool_rows)m.row.table=table_index(m.table);
+ tables_used=uint32_t(tables.size());log_capacity(q.materials.empty() && q.pool_rows.empty()?"tables full":"mapped");
+ if(q.materials.empty() && q.pool_rows.empty())return false;
+ uint32_t first_table=0;q.rows_bytes=q.pool_rows.empty()?row_bytes:row_bytes+pool_rows_bytes;
+ if(!create(q.rows,q.rows_bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,true) ||
+    !create(q.data,std::max<VkDeviceSize>(cursor,256),VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) || !alpha_clone_hit_set(slot.set,&q.pool,&q.set,tables,&first_table) ||
+    (!q.pool_rows.empty() && !create(q.pool_ubo,VkDeviceSize(q.pool_rows.size())*512u,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,true))){
   destroy_query(q);return false;
  }
  for(auto& m:q.materials){if(m.row.reserved==1)m.row.table+=first_table;
   if(m.row.reserved==2)for(uint32_t n=0;n<9;++n){uint32_t index;std::memcpy(&index,m.row.t+n,4);index+=first_table;std::memcpy(m.row.t+n,&index,4);}
  }
+ for(auto& m:q.pool_rows)m.row.table+=first_table;
+ // Gather inputs in the layout of hit_material_gather.hlsl's Engine (v[4] p0, v[5] p1, words.y
+ // tile-set index, words.z channel) and Physical (x reflectance).
+ for(size_t i=0;i<q.pool_rows.size();++i){auto* at=static_cast<unsigned char*>(q.pool_ubo.mapped)+i*512u;std::memset(at,0,512);
+  std::memcpy(at+64,pool_engine[i].data(),32);std::memcpy(at+100,&pool_engine[i][8],8);std::memcpy(at+256,&pool_engine[i][10],4);}
  publish_word(q,0); // initialized before any GPU use; never rewritten after success.
  if(!mark_owner(cmd,slot)){destroy_query(q);return false;}
  if(std::find(slot.owners.begin(),slot.owners.end(),packet->recording)==slot.owners.end())slot.owners.push_back(packet->recording);
@@ -682,7 +894,14 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   std::vector<View> retained;if(m.row.reserved==2)retained.assign(m.tileset_views.begin(),m.tileset_views.end());else retained={m.table,m.normal,m.albedo,m.physical};
   for(const auto& view:retained){slot.handles.push_back(uint64_t(view.view));slot.handles.push_back(uint64_t(view.image));life_note(cmd,uint64_t(view.view));life_note(cmd,uint64_t(view.image));}
  }
- VkDescriptorBufferInfo buffers[2]={{q.rows.b,0,row_bytes},{q.data.b,0,cursor}};
+ for(const auto& m:q.pool_rows){
+  caches[m.row.normal]={VK_NULL_HANDLE,m.normal.view,m.normal.layout};caches[m.row.albedo]={VK_NULL_HANDLE,m.albedo.view,m.albedo.layout};caches[m.row.physical]={VK_NULL_HANDLE,m.physical.view,m.physical.layout};
+  const size_t shared=packet->samplers.size();
+  samplers[m.row.sampler]={m.row.sampler<shared?packet->samplers[m.row.sampler]:q.pool_samplers[m.row.sampler-shared],VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};
+  for(const View* view:{&m.table,&m.normal,&m.albedo,&m.physical}){slot.handles.push_back(uint64_t(view->view));slot.handles.push_back(uint64_t(view->image));life_note(cmd,uint64_t(view->view));life_note(cmd,uint64_t(view->image));}
+ }
+ if(!q.pool_rows.empty())life_note(cmd,uint64_t(pool_table_binding.buffer));
+ VkDescriptorBufferInfo buffers[2]={{q.rows.b,0,q.rows_bytes},{q.data.b,0,std::max<VkDeviceSize>(cursor,256)}};
  VkWriteDescriptorSet writes[4]{};for(uint32_t i=0;i<4;++i){writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=q.set;writes[i].dstBinding=12+i;writes[i].descriptorCount=1;}
  for(uint32_t i=0;i<2;++i){writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=buffers+i;}
  writes[2].descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;writes[2].descriptorCount=cache_slots;writes[2].pImageInfo=caches.data();
@@ -691,10 +910,12 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  // publication word zero, so the assembly cannot read unfinished producers.
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
  dd->vk.CmdFillBuffer(cmd,q.rows.b,0,row_payload,0);
+ if(!q.pool_rows.empty())dd->vk.CmdFillBuffer(cmd,q.rows.b,nh_pool_row_base,pool_rows_bytes,0);
  uint32_t header[4]={uint32_t(slot.frame),slot.generation,uint32_t(q.materials.size()),1};dd->vk.CmdUpdateBuffer(cmd,q.rows.b,0,16,header);
  for(const auto& m:q.materials){auto staged=m.row;staged.valid=0;dd->vk.CmdUpdateBuffer(cmd,q.rows.b,16+VkDeviceSize(m.row.valid-1)*record_bytes,record_bytes,&staged);}
+ for(const auto& m:q.pool_rows){auto staged=m.row;staged.valid=0;dd->vk.CmdUpdateBuffer(cmd,q.rows.b,nh_pool_row_base+VkDeviceSize(m.row.valid-1)*record_bytes,record_bytes,&staged);}
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT|VK_PIPELINE_STAGE_HOST_BIT,VK_ACCESS_MEMORY_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
- VkDescriptorBufferInfo inputs[5]={{slot.data.b,0,slot.data_bytes},{VK_NULL_HANDLE,0,stream_bytes},{packet->rows.b,0,packet_rows},{q.rows.b,0,row_bytes},{q.data.b,0,cursor}};
+ VkDescriptorBufferInfo inputs[5]={{slot.data.b,0,slot.data_bytes},{VK_NULL_HANDLE,0,stream_bytes},{packet->rows.b,0,packet_rows},{q.rows.b,0,row_bytes},{q.data.b,0,std::max<VkDeviceSize>(cursor,256)}};
  VkWriteDescriptorSet join_writes[5]{};for(uint32_t i=0;i<5;++i){join_writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};join_writes[i].dstBinding=i;join_writes[i].descriptorCount=1;join_writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;join_writes[i].pBufferInfo=inputs+i;}
  dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,join_pipeline);uint32_t bound_chunk=UINT32_MAX;
  for(const auto& m:q.materials){uint32_t bytes=m.row.triangles*3u*m.row.stride;
@@ -703,10 +924,20 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   uint32_t push[8]={16u+(m.row.valid-1)*record_bytes,16u+m.snapshot*record_bytes,m.source_raw,m.deferred_raw,bytes,uint32_t(row_payload),m.row.valid-1,m.snapshot};
   dd->vk.CmdPushConstants(cmd,join_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,32,push);dd->vk.CmdDispatch(cmd,(bytes/4u+63u)/64u,1,1);
  }
+ // Pool rows: hit_material_gather.hlsl in its packet mode (reserved0 1) on the record's bytes and
+ // this frame's tile-set table; it publishes valid = slot + 1 only with a finite reflectance.
+ if(!q.pool_rows.empty())dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,gather_pipeline);
+ for(size_t i=0;i<q.pool_rows.size();++i){const auto& m=q.pool_rows[i];
+  VkDescriptorBufferInfo info[4]={{q.pool_ubo.b,i*512u,112},{q.pool_ubo.b,i*512u+256u,16},{pool_table_binding.buffer,pool_table_binding.offset,pool_table_binding.range},{q.rows.b,0,q.rows_bytes}};
+  VkWriteDescriptorSet writes[4]{};for(uint32_t n=0;n<4;++n){writes[n]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=n<2?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[n].pBufferInfo=info+n;}
+  uint32_t push[4]={uint32_t(nh_pool_row_base+VkDeviceSize(m.row.valid-1)*record_bytes),m.row.valid-1,1,0};
+  dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,gather_layout,0,4,writes);
+  dd->vk.CmdPushConstants(cmd,gather_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,16,push);dd->vk.CmdDispatch(cmd,1,1,1);
+ }
  barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
  *query_alpha=q.set;
- if(cfg_hot(CfgHot::rt_stats) && slot.frame%120==0)log("[hit material query] frame %llu scene %u query cmd %p recording %llu source %llu deferred %llu mapped %zu bytes %llu; publication awaits actual submit order",
-  (unsigned long long)slot.frame,slot.generation,(void*)cmd,(unsigned long long)q.recording,(unsigned long long)q.source,(unsigned long long)packet->recording,q.materials.size(),(unsigned long long)cursor);
+ if(cfg_hot(CfgHot::rt_stats) && slot.frame%120==0)log("[hit material query] frame %llu scene %u query cmd %p recording %llu source %llu deferred %llu mapped %zu pool rows %zu (resource overflow %u) bytes %llu; publication awaits actual submit order",
+  (unsigned long long)slot.frame,slot.generation,(void*)cmd,(unsigned long long)q.recording,(unsigned long long)q.source,(unsigned long long)packet->recording,q.materials.size(),q.pool_rows.size(),pool_overflow,(unsigned long long)cursor);
  queries.emplace(q.recording,std::move(query));return true;
 }
 bool recording_needs_submit_promotion(VkCommandBuffer cmd){if(!on)return false;auto recording=cmd_recording(cmd);if(!recording)return false;std::lock_guard lock(mutex);auto i=marked.find(cmd);return i!=marked.end() && i->second==recording;}

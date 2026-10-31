@@ -1589,6 +1589,7 @@ bool geo_native_tileset_enabled() { return g_tileset_capture; }
 void geo_native_tileset_disable(){g_tileset_capture=false;g_stride=g_stride_without_tileset;}
 
 bool geo_native_hair_enabled() { return g_stride >= 88u && g_alpha_mode; }
+VkDeviceSize geo_ubo_align() { return g_ubo_align ? g_ubo_align : 256; }
 
 bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>& out) {
   t_last_uv = -1;
@@ -1611,7 +1612,9 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   t_last_model = stage_io(ci->pCode, ci->codeSize / 4, t_last_io);
   if(native_hit::enabled())t_last_no_writes=native_hit::no_graphics_storage_writes(ci->pCode,ci->codeSize/4);
   t_last_hash = hash64(ci->pCode, ci->codeSize);
-  const bool vt_frame=native_hit::enabled() && t_last_hash==0x3812bc980438747full;
+  // Smooth N/B/T at locations 1/2/3 (offsets 24/36/48): the audited per-draw VS and the STI pool
+  // VS 2d2ac3c3 (same output interface, native_hit_pool.h; its UV/basis capture of instance 0).
+  const bool vt_frame=native_hit::enabled() && (t_last_hash==0x3812bc980438747full || t_last_hash==0x2d2ac3c38992b7f0ull);
   bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && native_tileset_coverage::vertex(t_last_hash),&t_last_tileset_outputs,
                      g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs);
   if (!ok) return false;
@@ -2112,7 +2115,7 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
 
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if(geo_is(s,GeoKind::Material)){
-    bool exact=false,pool_pipeline=false;InstPipe pool_inst{};
+    bool exact=false,pool_pipeline=false,basis_pipeline=false;InstPipe pool_inst{};
     {std::lock_guard lock(g_mu);auto i=g_pipes.find(s->pipe[0]);if(i!=g_pipes.end()){
       s->geo_material_no_writes&=i->second.no_storage_writes;
       const auto& p=i->second;
@@ -2124,7 +2127,8 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
       facts.color_mask=p.color_mask;facts.triangle_list=p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;facts.uv_ok=p.uv_match==UV_OK;
       exact=native_hit::exact_material_pipeline(facts);
       // Class A G-buffer draws feed the pool material records (their meshes are BVH-cached).
-      if(native_hit::enabled() && p.inst.ok){pool_inst=p.inst;pool_pipeline=native_hit::pool::pool_material_pipeline(facts);}
+      if(native_hit::enabled() && p.inst.ok){pool_inst=p.inst;pool_pipeline=native_hit::pool::pool_material_pipeline(facts);
+        basis_pipeline=pool_pipeline && p.xfb && p.vt_outputs==1u && g_stride>=64u;}
       // One sparse, exact state record per audited native pipeline. A later
       // unsupported term is visible without another blind attribution run.
       static std::unordered_set<uint64_t> reported;
@@ -2134,8 +2138,10 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
           s->pipe_id[0],unsigned(exact),unsigned(p.xfb),tileset?p.tileset_outputs:p.vt_outputs,unsigned(p.material_state),p.material_reasons,p.depth_test,p.blend_mask,p.color_mask,unsigned(p.topo),unsigned(p.uv_match),p.raster_next,p.multisample_next,p.blend_next);
 
     }else s->geo_material_no_writes=false;}
-    if(pool_inst.ok)native_hit::pool_observe(cmd,s,args,pool_inst,pool_pipeline);
     VkBuffer buffer{};VkDeviceSize offset=0,bytes=0;
+    if(pool_inst.ok && native_hit::pool_observe(cmd,s,args,pool_inst,pool_pipeline,basis_pipeline,g_stride,&buffer,&offset,&bytes)){
+      p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;return;
+    }
     if(native_hit::deferred_begin(cmd,s,args,exact,g_stride,&buffer,&offset,&bytes)){
       p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;
     }return;
