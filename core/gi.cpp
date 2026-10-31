@@ -19,6 +19,7 @@
 #include <cstring>
 #include <mutex>
 #include "../common/native_hair_origin.h"
+#include "../common/shader_variant.h"
 #include "../common/native_hit_capability.h"
 #include <unordered_map>
 #include <unordered_set>
@@ -705,37 +706,23 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
-  // The RT passes that have cascade/OMM/Hair/tileset variants.
-  static const char* const rt_files[] = {
-      "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/gi_trace_rt_hit_direct.hlsl", "gi/gi_trace_rt_sharc_hit_direct.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
-      "gi/pan_primary_identity.hlsl", "gi/pan_local.hlsl",
-      "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_origin.hlsl",
-      "gi/rt_local_shadows.hlsl", "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl",
-      "gi/rt_local_shadows_check.hlsl", "gi/rt_local_shadows_full_check.hlsl",
-      "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
-      "gi/rt_sun_resolve.hlsl", "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl"};
-  bool listed = false;
-  for (const char* candidate : rt_files) listed |= std::strcmp(file, candidate) == 0;
+  namespace sv = bg3::shader_variant;
   // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
   // casters as instance mask 0x02; these variants trace 0x01 except the sun ray
-  // (gi/cascade*/, shaders/rt/rt_common.hlsli). rt_sun_resolve traces nothing.
-  const bool cascade = listed && host->cfg_int("rt_cascade_casters", 0) != 0 &&
-                       std::strcmp(file, "gi/rt_sun_resolve.hlsl") != 0;
+  // (RT_CASCADE_MASKS, shaders/rt/rt_common.hlsli). rt_sun_resolve traces nothing.
+  const bool cascade = sv::cascade_entry(file) && host->cfg_int("rt_cascade_casters", 0) != 0;
   // Include box/native/check helpers too: each may reach rt_common through
   // includes even when it is outside the variant list.
   const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
       host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
-  const std::string base = cascade ? std::string("gi/cascade/") + (file + 3) : std::string(file);
-  const std::string material_selected = scalp ? "native_scalp/" + base : base;
-  const std::string scene_selected = &p == &g_rt_shadow_current ? "sun_current/" + material_selected : material_selected;
+  const bool sun_current = &p == &g_rt_shadow_current;
   const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
-  const std::string original_selected=omm?"omm/"+scene_selected:scene_selected;
   const bool physical_origin=scalp && g_hair_origin_frame && bg3::hair_origin::alternate_entry(file);
-  const std::string before_tileset=physical_origin?"hair_origin/"+original_selected:original_selected;
   const bool tileset=std::strncmp(file,"gi/",3)==0 && bg3::native_tileset::enabled(static_cast<uint32_t*>(host->persist(bg3::native_tileset::capability_key,sizeof(uint32_t))));
-  const std::string selected=tileset?"native_tileset/"+before_tileset:before_tileset;
   const unsigned variant = (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
+  const std::string selected = sv::request(file, variant | (sun_current ? unsigned(sv::kSunCurrent) : 0u));
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset) p.pipeline = p.variants[variant];
