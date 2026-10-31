@@ -305,7 +305,7 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
  const bool tileset=tileset_depth(state->vs,state->fs);if(tileset && !tileset_active())return;uint32_t vertices=0;
  if(!tileset_vertex_count(args.count,args.instances,vertices) || vertices!=uint64_t(triangles)*3 || (!tileset && args.instances!=1) || (tileset && stride<80))return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
- if(tileset){if(snapshot.rec.kind!=5 || snapshot.rec.p0[1]!=0.f)return;}else if(snapshot.rec.kind!=1 || snapshot.rec.channel!=0)return;
+ if(tileset){if(snapshot.rec.kind!=5 || snapshot.rec.p0[2]!=0.f || snapshot.rec.p0[1]!=0.f)return;}else if(snapshot.rec.kind!=1 || snapshot.rec.channel!=0)return;
  Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
  ++p->second.candidate_draws;
  if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record))p->second.pre.push_back(pre);
@@ -476,7 +476,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   uint32_t record=0;if(!join_packets(slot.join,packet->join,deferred.key,deferred.row.valid-1,record))continue;
   auto source=std::find_if(slot.pre.begin(),slot.pre.end(),[&](const auto& pre){return pre.record==record;});
   if(source==slot.pre.end() || source->stride!=deferred.row.stride || source->triangles!=deferred.row.triangles ||
-     (deferred.row.reserved==2 ? (source->alpha.rec.kind!=5 || source->alpha.rec.p0[1]!=0.f || source->alpha.tex!=deferred.tileset_views[3].view || source->alpha.tex_id!=deferred.tileset_views[3].image_id) :
+     (deferred.row.reserved==2 ? (source->alpha.rec.kind!=5 || source->alpha.rec.p0[2]!=0.f || source->alpha.rec.p0[1]!=0.f || source->alpha.tex!=deferred.tileset_views[3].view || source->alpha.tex_id!=deferred.tileset_views[3].image_id) :
       (!source->opaque && (source->alpha.tex!=deferred.table.view || source->alpha.cache!=deferred.albedo.view))) || !material_current(deferred))continue;
   VkDeviceSize bytes=VkDeviceSize(source->triangles)*3*source->stride;
   if(!byte_range(cursor,bytes*2,stream_bytes))continue;

@@ -1,0 +1,477 @@
+{
+  "scope": "Exact STI camera TileBlend coverage; not screenshot attribution or runtime image qualification",
+  "base": "5c17bb5e9d8d9f6193bd6920a79757ee8c6d9a8c",
+  "key": "rt_native_tileset",
+  "default": 0,
+  "public_abi_changed": false,
+  "subtype": 1,
+  "native": {
+    "path": "Public/Shared/Assets/Materials/Environment/ENV_Base_TileBlend_Test_Alphatest_2s_Translucency_STI_DEP_Vulkan.bshd",
+    "package": "Materials.pak",
+    "bshd_sha256": "d44daac6294e094f20a05f8805a4edc15c6405230ce0fca037eb03baea39602a",
+    "modules": [
+      {
+        "hash": "e6fc6bf6ed441be5",
+        "bytes": 1592,
+        "sha256": "9adaf1f9be9b528e55ea58ad44806510589ad7ed1a0f4c1eb2efa8210eb578d1",
+        "bindings": [
+          {
+            "id": 10,
+            "set": 0,
+            "binding": 2
+          }
+        ],
+        "locations": {
+          "2": 0,
+          "3": 1,
+          "4": 2,
+          "5": 3,
+          "6": 4,
+          "8": 0,
+          "9": 1
+        },
+        "member_offsets": {
+          "(11, 0)": 0,
+          "(11, 1)": 64,
+          "(11, 2)": 128,
+          "(11, 3)": 192,
+          "(11, 4)": 196,
+          "(11, 5)": 200,
+          "(11, 6)": 208,
+          "(11, 7)": 220
+        }
+      },
+      {
+        "hash": "0f64d3a9dd86ff98",
+        "bytes": 3964,
+        "sha256": "40bc7f1c44db8e316a2a69747ed43276cf19554e41f29d4f664d1048c53d35e4",
+        "bindings": [
+          {
+            "id": 5,
+            "set": 0,
+            "binding": 2
+          },
+          {
+            "id": 6,
+            "set": 0,
+            "binding": 6
+          },
+          {
+            "id": 7,
+            "set": 0,
+            "binding": 7
+          },
+          {
+            "id": 8,
+            "set": 1,
+            "binding": 0
+          },
+          {
+            "id": 9,
+            "set": 1,
+            "binding": 1
+          },
+          {
+            "id": 10,
+            "set": 1,
+            "binding": 2
+          },
+          {
+            "id": 11,
+            "set": 1,
+            "binding": 3
+          }
+        ],
+        "locations": {
+          "3": 0,
+          "4": 1
+        },
+        "member_offsets": {
+          "(12, 0)": 0,
+          "(12, 1)": 64,
+          "(12, 2)": 128,
+          "(12, 3)": 192,
+          "(12, 4)": 196,
+          "(12, 5)": 200,
+          "(12, 6)": 208,
+          "(12, 7)": 220,
+          "(13, 0)": 0,
+          "(13, 1)": 12,
+          "(13, 2)": 16,
+          "(13, 3)": 28,
+          "(13, 4)": 32,
+          "(13, 5)": 44,
+          "(13, 6)": 48,
+          "(13, 7)": 64,
+          "(13, 8)": 80,
+          "(13, 9)": 96,
+          "(13, 10)": 112,
+          "(14, 0)": 0,
+          "(14, 1)": 8,
+          "(14, 2)": 12,
+          "(14, 3)": 16,
+          "(14, 4)": 20,
+          "(14, 5)": 24,
+          "(14, 6)": 28
+        }
+      }
+    ]
+  },
+  "cpu": "1014 native tileset coverage checks passed",
+  "actual_native_cpu": "1035 native tileset coverage checks passed",
+  "ctests": {
+    "selected": 4,
+    "passed": 4
+  },
+  "shader_validation": {
+    "ordinary_off_token_inputs_identical": 640,
+    "actual_off_spv_byte_identities": 42,
+    "native_tileset_on_validated": 604,
+    "interfaces": {
+      "gi": 48,
+      "references": 32,
+      "exit": 0
+    },
+    "scope_note": "All ordinary OFF preprocessed compiler token inputs match with the same options; direct SPIR-V byte identity is measured only for the42 listed representatives. No claim of recompiling every OFF module."
+  },
+  "native_patch": [
+    {
+      "stride": 40,
+      "valid": true,
+      "identical_to_frozen_baseline": true,
+      "sha256": "1b0b7bdb966c063fa80792d593ea9edd845a6422bf262721bafb357d67131d17"
+    },
+    {
+      "stride": 64,
+      "valid": true,
+      "identical_to_frozen_baseline": true,
+      "sha256": "a9fd6f24218d03a20bbb0ac22502f72d4bd57923df49b114ac2ab7e89854c2c1"
+    },
+    {
+      "stride": 80,
+      "valid": true,
+      "identical_to_frozen_baseline": true,
+      "sha256": "158b35a65f08b8f82a9cfeca3f578f62c267937f3aabc9606bcf7775015cf1a6"
+    },
+    {
+      "stride": 88,
+      "valid": true,
+      "identical_to_frozen_baseline": true,
+      "sha256": "81af420551f49801e5209859f17be1a399a44e84092c323e295a8c4cd25f1d31"
+    }
+  ],
+  "remaining": [
+    "Camera SeeThrough==1 view/noise fade unsupported -> UNKNOWN",
+    "Legacy opaque cascade material handling unchanged; shadow FS not added",
+    "Raster derivatives differ from established ray footprint; no raster numeric identity certificate",
+    "No same-frame mesh association to user rug/walkway screenshots",
+    "No runtime/GPU image or GPU-ms qualification"
+  ],
+  "extra_image_allocation_bytes": 0,
+  "cost": "GPU cost unmeasured; second native sampled view and post-sample arithmetic only for subtype1",
+  "proof_directory": "C:\\Users\\quali\\.codex\\worktrees\\m2-foundry-mesh\\BG3RTX\\captures\\tileblend-20261031",
+  "off_representatives": [
+    {
+      "path": "gi/cascade/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "988dfd4865c8d1d2b74d7279e5d2432538f2945aead5b767c5e3d91c273abc88",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/cascade/pan_primary.hlsl",
+      "entry": "main",
+      "sha256": "77a4d314fd7db2c759aa85b6756aa4425da1357d3b1f824e1b34839e833725e2",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/cascade/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "aec0f87b21e21aa81fbed44b81e8812428fc215eba44e07148008ae54a2b30cf",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/cascade/rt_reflections_sharc.hlsl",
+      "entry": "main",
+      "sha256": "fedff84455f4c8cc8707d95b51db3d756a41f5d141d7b36697ed3509e7ee56d3",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/cascade/rt_shadow.hlsl",
+      "entry": "main",
+      "sha256": "803954f7d55a2d5357595b70205bd5a3b883ca82cdd6d759bfd24f8f14586677",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/cascade_rebase/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "7e7f93678963baf5d1de0e1bd01f6ce4f87634b14908e38763a6aab0bfaca70d",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/cascade_rebase/pan_primary.hlsl",
+      "entry": "main",
+      "sha256": "227c013ee9cd8e5c03f2dbb1f7d604bfd13a3c4f38045a63253445df03cc12e1",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/cascade_rebase/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "fcd130070617b7bdb076a69d5d8e8bbdfc81eb3d1a3033a620d02ca076c7a52b",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "native_scalp/gi/cascade/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "3276a02e431c94abaaa27241de9134d13a84666e99bbeba87d26c0af73a81e03",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "native_scalp/gi/cascade/pan_primary.hlsl",
+      "entry": "main",
+      "sha256": "ecb8cd5f09e1f48d1d3e18f8952b5df241b2a78ef0c039f7550f6b60b9cb8e80",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "native_scalp/gi/cascade/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "4ffc3295bfdca27123a30d98f7b8e7d269003eada70a40a05e20d1e814ca9177",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "native_scalp/gi/cascade/rt_reflections_sharc.hlsl",
+      "entry": "main",
+      "sha256": "f1ef8f9750b1354bbfe1c63e0a54d0dff194126748ae2a5957e8eb0716bdffe0",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "native_scalp/gi/cascade/rt_shadow.hlsl",
+      "entry": "main",
+      "sha256": "c3737aa2e99dba69e405b9b52f5fb2756ce9066142d3f1f144abfe158b57c089",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "native_scalp/gi/cascade_rebase/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "18b279a37543300d5af350b89d3f6094efe6d770f594771fc6f04dac564adf33",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "native_scalp/gi/cascade_rebase/pan_primary.hlsl",
+      "entry": "main",
+      "sha256": "3cf7e686de1ce1b421cfb42436d120b4e98a2b0e654b898a3d2fd50b4133a8e7",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "native_scalp/gi/cascade_rebase/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "6ecf48a76a19c595baa1625d378183f6e6c3aaeff09d8c2bc9ca542170896836",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/gi/cascade/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "44df79b4b87292a974e9e42acefb5094a749ed445939657decf60259fb6aa46f",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/gi/cascade/pan_primary.hlsl",
+      "entry": "main",
+      "sha256": "97c0b9c08a81e917ce8abb2ca56fcb94eeb96fcd778a11afd9cd375d6210d677",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/gi/cascade/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "6db2df393f60a52f8938234e530d50271a4b4aed0160e78a43bc3c57781cafdd",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/gi/cascade/rt_reflections_sharc.hlsl",
+      "entry": "main",
+      "sha256": "65c5564ca37c110cea79d9a9e5858898747585570b433875a4008bf56a8fbc7e",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/gi/cascade/rt_shadow.hlsl",
+      "entry": "main",
+      "sha256": "1a20e2339c15f3ab66da3547002d78c05be7764bf0917192e7f33301e1855429",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/gi/cascade_rebase/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "b52a04ddd085c79165a95bb2a1c2bb2e03821c6cd4ba1369024bd151dac0116e",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/gi/cascade_rebase/pan_primary.hlsl",
+      "entry": "main",
+      "sha256": "4f0970f51eba3d18ddc963acf6b91cd34394e7d3131fbb17e1c02a7be333179f",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/gi/cascade_rebase/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "4cad22d075d080e075dc03fc1615db5670d8be7253b07eef841275cfbd0ea2a2",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/native_scalp/gi/cascade/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "f03c16af267cb7e49986b1c395efbdec56ff5349e94849db3ebd1f9453bfd0df",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/native_scalp/gi/cascade/pan_primary.hlsl",
+      "entry": "main",
+      "sha256": "dcbf1274208fdca4d064acdeed13e7441f7c970015fff785a770092ca7cf344b",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/native_scalp/gi/cascade/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "15f55da9daa0ad04fb9a51c16136c54e4f84cae2d20b38db6e775dcf5d9e69c0",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/native_scalp/gi/cascade/rt_reflections_sharc.hlsl",
+      "entry": "main",
+      "sha256": "135b81db6e7643760c93db8f7b022c1338680caf32ce36e1b65fd89eaed12e17",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/native_scalp/gi/cascade/rt_shadow.hlsl",
+      "entry": "main",
+      "sha256": "a36e58161317cac123f1a31883d33b0798af7b6a9515b5a4a1877022b0e5b529",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/native_scalp/gi/cascade_rebase/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "af30d14aa17ad3c4799737f5188a919199994881204f962ac4681082cce2ffc3",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/native_scalp/gi/cascade_rebase/pan_primary.hlsl",
+      "entry": "main",
+      "sha256": "b735ab45f1255b0d9a1c440df1fca6aa12a2d3c8a9d4d6c7aa73ae22674018c9",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "omm/native_scalp/gi/cascade_rebase/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "46ddf2bcad631d28ad6a13dc14454be5fc3f29aded92d19e6148ed382944b431",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/rt_shadow.hlsl",
+      "entry": "main",
+      "sha256": "01fb8eddcf26e3fa835275e7306ea486138aa408da48af2fe19eeaffb62e888b",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/rt_local_shadows.hlsl",
+      "entry": "main",
+      "sha256": "1f96d88691c3ec284cee057c100cea11d8acf2552ba117c45febf34e373f5d39",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "934614ea091231a5efddca365ad5aa1f22f3de7e7ce7384c780159f2aef7375c",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "b261360099042e0236bd14b02731545a82e4b4844f4853dbbc70cae5cd809d73",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "gi/pan_primary.hlsl",
+      "entry": "main",
+      "sha256": "105eeed85eb535c14d5e2ae6a77e062ec530e1a649eb4c9b9c8fdddfc4834a54",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "hair_origin/native_scalp/gi/rt_shadow.hlsl",
+      "entry": "main",
+      "sha256": "4e705ddbff2bf1d970033f7f4b257dafc1da7d4fc1c7280cbdf9da6c008b6cde",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "hair_origin/native_scalp/gi/rt_local_shadows.hlsl",
+      "entry": "main",
+      "sha256": "1202bd4ce130a810ff4ef249fb841d9f864e5614ff5bf6c6fef420f493acdb34",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "hair_origin/native_scalp/gi/rt_reflections.hlsl",
+      "entry": "main",
+      "sha256": "2ce8eb1c8be32050dfdc93a50d8c7696e761d27f2c1ad852ec4f972f3e66fdc4",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "hair_origin/native_scalp/gi/gi_trace_rt.hlsl",
+      "entry": "main",
+      "sha256": "1021276c577e1dce56da4381b4ed7db115de87c3fa5e7ce2412d1df35bae896f",
+      "valid": true,
+      "byte_identical": true
+    },
+    {
+      "path": "sun_current/gi/rt_shadow.hlsl",
+      "entry": "main",
+      "sha256": "09e7d4eed8f7fde75c2407436a8a75318bd8a82af986f43d1e6619ede6b2d621",
+      "valid": true,
+      "byte_identical": true
+    }
+  ],
+  "source_sha256": {
+    "common/native_tileblend_coverage.h": "da0d6e812a74970b87736ab672a64499aec2f551cc5626365e25cbc974f5bd11",
+    "common/native_tileset_coverage.h": "fdc00a94146ea81b15b1caa79be40495bca759be74acb01ff5308288b9c809c3",
+    "layer/alphatest.cpp": "b719b345cbf38d07b57800b207670d9bbdae3a4f1544bac78971436276fa9cba",
+    "layer/geocapture.cpp": "2f87b83c241f9237a7e99bd100e63e59ece70f90895c79ccac92ca347636eed0",
+    "layer/hit_material.cpp": "c953f1c057811f45bda6fa2c10d5318839116b7ac4c9ff21236950cd15d433bf",
+    "shaders/rt/rt_common.hlsli": "fd38d9c90986cf3cdd0c699444d935fe3faf282665f0138fe5688bbf913f257b"
+  }
+}

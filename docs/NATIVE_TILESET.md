@@ -102,3 +102,48 @@ CTests and the host DLL build pass. HLSL/core are unchanged, so the previous
 participation and GPU cost remain unqualified. The ST material decoder is still
 unsupported; the separate M3 provider remains STI-only.
 [Exact source/check evidence](evidence/native-tileset-st-depth-20261031.json).
+
+## Exact TileBlend camera coverage extension - 2026-10-31
+
+The existing experimental `rt_native_tileset=0` control also covers the exact
+STI pair VS `e6fc6bf6ed441be5` / FS `0f64d3a9dd86ff98`, family
+`ENV_Base_TileBlend_Test_Alphatest_2s_Translucency`. Startup capability, native
+sampler table and all four shared ray-query entry points are reused. No public
+ABI, descriptor layout, global capture stride or new shader-variant dimension.
+
+Native UV is output location 0. Its existing post-VS capture is used unchanged;
+COLOR is not needed. Same-draw material set 1 binding 0 supplies exactly 32 bytes:
+tiling XY at 0, scale at 8, mask bias at 12, power at 16, clamp limits at 20/24,
+SeeThrough at 28. Native sampler is set 0 binding 7. Base RGBA is set 1 binding 1
+at `(UV * tiling) * scale`; mask RG is set 1 binding 2 at UV. Coverage is
+`mix(1, base.A, clamp(pow(max(abs(mask.G+bias),1e-4),power),lo,hi))*(1-mask.R)`;
+the native hard threshold is 0.5. This is not a plain-alpha recipe.
+
+Only finite SeeThrough modes other than exactly 1 are supported. Mode 1 requires
+the native view/noise fade inputs and remains UNKNOWN. Missing resources,
+undefined clamp domains, nonfinite intermediates and invalid internal subtypes
+also remain UNKNOWN, independent of the legacy unknown-alpha lit/solid choice.
+Sampling retains the established ray-footprint SampleGrad policy with the actual
+owned native sampler; this does not certify identity to raster derivatives.
+
+AlphaRec remains 208 bytes: kind 5 subtype 0 is the original MultipleTextures
+recipe; subtype 1 is TileBlend (`p0[2]`). Completeness stays in `p0[1]`. `tex`
+indexes base, `channel` indexes mask, `cache` indexes the owned native sampler,
+and `t[0..7]` retains the native material packet. Fresh, held and private-Sun
+records remap both views independently; query clones copy both existing image
+slots. M3's nine-texture material producer explicitly accepts subtype 0 only.
+
+Retained S3 frame 1329 contains this native camera/shadow family. It does not
+identify the rug or walkway in the user's screenshots. This increment makes no
+claim about their cause or visual correction. The native shadow FS
+`5c37b87299d86ce1` has the same hard formula without camera fade, but its cascade
+capture is not added by this camera-only allowlist. Legacy opaque cascade policy
+is unchanged and is not covered by this implementation claim.
+
+Validation: 1,015 CPU checks; 1,035 with the actual native VS. Host DLL builds;
+four selected CTests pass. Four native UV0 XFB patches (40/64/80/88 bytes) validate
+and are byte-identical to the frozen baseline patcher. 640 ordinary OFF
+preprocessed token inputs are unchanged; 42 representative OFF SPIR-V modules
+are byte-identical. 604 feature-ON wrappers validate; 48 GI and 32 reference
+interfaces pass. No GPU or game was run. Extra image allocation is 0 bytes; GPU
+cost remains unmeasured. [Exact evidence](evidence/native-tileblend-coverage-20261031.json).

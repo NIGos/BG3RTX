@@ -2691,10 +2691,11 @@ VkDeviceSize geo_buffer_size(VkBuffer b) {
   return it == g_buffer_size.end() ? 0 : it->second;
 }
 
-bool geo_native_tileset_inputs(VkPipeline pipeline) {
+bool geo_native_tileset_inputs(VkPipeline pipeline,uint32_t subtype) {
  std::lock_guard lock(g_mu);auto p=g_pipes.find(pipeline);
- return g_tileset_capture && p!=g_pipes.end() && p->second.xfb && p->second.tileset_outputs==1u &&
-   p->second.uv==1;
+ if(!g_tileset_capture || p==g_pipes.end() || !p->second.xfb)return false;
+ if(subtype==1u)return p->second.uv==0; // exact VS/FS checked by canonical capture
+ return subtype==0u && p->second.tileset_outputs==1u && p->second.uv==1;
 }
 bool geo_native_tileset_material_inputs(VkPipeline pipeline,native_hit::TilesetInputs* out) {
  if(!out)return false;*out={};std::lock_guard lock(g_mu);auto p=g_pipes.find(pipeline);

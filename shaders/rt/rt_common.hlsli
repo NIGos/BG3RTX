@@ -13,6 +13,7 @@
 
 #ifdef RT_NATIVE_TILESET
 #include "../../common/native_tileset_coverage.h"
+#include "../../common/native_tileblend_coverage.h"
 [[vk::binding(19,1)]] SamplerState gNativeTilesetSampler[16];
 static bool gTilesetUnknown=false,gTilesetColorKnown=false;
 static float gTilesetGreen=0.0;
@@ -590,6 +591,23 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
 #ifdef RT_NATIVE_TILESET
   if(h0.z==5u){
     uint status=uint(asfloat(gAlphaRec.Load(a+52u)));
+    float subtype=asfloat(gAlphaRec.Load(a+56u));
+    if(subtype==1.f){
+      float4 m0=asfloat(gAlphaRec.Load4(a+80u)),m1=asfloat(gAlphaRec.Load4(a+96u));
+      bool sampled=false;float baseAlpha=0,maskR=0,maskG=0;
+      float2 scale=m0.xy*m0.z;
+      float2 scaled=(uv*m0.xy)*m0.z;
+      float2 gradient=g*abs(scale);
+      if(status==NtcKnown && h0.w>0u && h0.w<4096u && h1.y>0u && h1.y<4096u && h1.x>0u && h1.x<16u && all(isfinite(scaled)) && all(isfinite(gradient))){
+        baseAlpha=gAlphaTex[NonUniformResourceIndex(h0.w)].SampleGrad(gNativeTilesetSampler[NonUniformResourceIndex(h1.x)],scaled,float2(gradient.x,0),float2(0,gradient.y)).a;
+        float2 mask=gAlphaTex[NonUniformResourceIndex(h1.y)].SampleGrad(gNativeTilesetSampler[NonUniformResourceIndex(h1.x)],uv,float2(g,0),float2(0,g)).rg;
+        maskR=mask.r;maskG=mask.g;sampled=true;
+      }
+      NtcResult result=ntb_evaluate(status,sampled,baseAlpha,maskR,maskG,m0.w,m1.x,m1.y,m1.z);
+      if(result.status!=NtcKnown){gTilesetUnknown=true;return false;}
+      alpha_stat(8,result.solid,prim);alpha_stat(9,!result.solid,prim);return result.solid;
+    }
+    if(subtype!=0.f){gTilesetUnknown=true;return false;}
     float tiling=asfloat(gAlphaRec.Load(a+32u));
     bool sampled=false;float alpha=0.0;
     if(status==NtcKnown && gTilesetColorKnown && isfinite(gTilesetGreen) && gTilesetGreen>0.0){
@@ -710,7 +728,7 @@ uint sun_caster_visibility(uint layer,uint prim,float2 bary,float footprint,floa
 #endif
 #ifdef RT_NATIVE_TILESET
   if(kind==5u){
-    gTilesetColorKnown=stride>=40u;
+    gTilesetColorKnown=stride>=40u && asfloat(gAlphaRec.Load(record.z+56u))==0.f;
     if(gTilesetColorKnown){float c0=asfloat(sun_load2(layer,offset+28u).x),c1=asfloat(sun_load2(layer,offset+stride+28u).x),c2=asfloat(sun_load2(layer,offset+2u*stride+28u).x);
       gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
   }
@@ -774,7 +792,7 @@ bool alpha_pass(uint prim, float2 bary, float footprint) {
   float2 u0 = asfloat(gAlphaSoup.Load2(vb + 16)), u1 = asfloat(gAlphaSoup.Load2(vb + 40)), u2 = asfloat(gAlphaSoup.Load2(vb + 64));
 #endif
 #ifdef RT_NATIVE_TILESET
-  gTilesetColorKnown=h0.z==5u && stride>=40u;
+  gTilesetColorKnown=h0.z==5u && stride>=40u && asfloat(gAlphaRec.Load(a+56u))==0.f;
   if(gTilesetColorKnown){float c0=asfloat(gAlphaSoup.Load(vb+28u)),c1=asfloat(gAlphaSoup.Load(vb+stride+28u)),c2=asfloat(gAlphaSoup.Load(vb+2u*stride+28u));
     gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
 #endif
@@ -828,7 +846,7 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
     hair_inputs(ii.base,ii.meta,prim,bary,hair_ray,false,gAlphaRec.Load(ii.rec+20u)!=0u);
 #endif
 #ifdef RT_NATIVE_TILESET
-  gTilesetColorKnown=gAlphaRec.Load(ii.rec+8u)==5u && (ii.meta&255u)>=40u;
+  gTilesetColorKnown=gAlphaRec.Load(ii.rec+8u)==5u && (ii.meta&255u)>=40u && asfloat(gAlphaRec.Load(ii.rec+56u))==0.f;
   if(gTilesetColorKnown){uint stride=ii.meta&255u,at=ii.base+prim*3u*stride+28u;
     float c0,c1,c2;
     if((ii.meta&kInfoPool)!=0u){c0=asfloat(gMeshPool.Load(at));c1=asfloat(gMeshPool.Load(at+stride));c2=asfloat(gMeshPool.Load(at+2u*stride));}

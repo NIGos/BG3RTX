@@ -433,7 +433,7 @@ void geo_post_draw(VkCommandBuffer cmd, CmdState* s);
 bool geo_native_hair_enabled();
 bool geo_native_tileset_enabled();
 void geo_native_tileset_disable();
-bool geo_native_tileset_inputs(VkPipeline);
+bool geo_native_tileset_inputs(VkPipeline,uint32_t subtype=0);
 void alpha_tileset_incomplete(); // Startup-fixed XFB/soup stride88; never hot-enable 24-byte scenes.
 void alpha_native_hair_missing_attributes(uint64_t fs,uint64_t vs,uint32_t flags);
 void geo_pass_ending(VkCommandBuffer cmd, CmdState* s);   // inside, right before the game's end
