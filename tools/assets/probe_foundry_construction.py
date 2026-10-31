@@ -1,4 +1,4 @@
-"""Decode ONE of THREE explicit, undeformed foundry selections (not a room).
+"""Decode ONE explicit bounded foundry selection (not a room).
 
 Uses the already pinned portable LSLib; package reads and CPU exports only.
 Generated meshes/JSON remain private in captures/m2-foundry/construction-96ed.
@@ -27,27 +27,50 @@ SUPPORT_RECORD='090da40c-0519-44ce-a6cb-bff11a194484'
 SUPPORT_BANK='Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Floor_A_4D_0n5H_A/_merged.lsf'
 SUPPORT_TILE='bfe78877-3d4b-b5c4-6522-2f7e83ae7de3'
 NULL='00000000-0000-0000-0000-000000000000'
+FLOOR_B_RECORD='2caca96a-a623-4bd6-81be-432788285a8b'
+FLOOR_B_TILE='21cfceda-36af-b591-588c-93b7a32be058'
+FLOOR_B_GUID='d9b38c0e-6755-4c05-9a4a-1e91aad64de5'
+FLOOR_B_SET='2fdf2f54-687f-8894-4ac7-b7ffbe01bb22'
+FLOOR_B_BANK='Public/SharedDev/Content/Assets/Tilesets/Generic/[PAK]_WALL_GEN_Glasshouse_Floor_B_2D_0n5H_A/_merged.lsf'
 
 
-def tile_affine(tile, tiles, legacy_inactive=False):
+def tile_affine(tile, tiles, legacy_inactive=False, floor_b_position_only=False):
     """Selected native Rotate is column-major; preserve its raw coefficients.
 
     This supports only explicit generated, unbent/unflipped unit-stretch tiles.
     Stretchable is a capability, not an applied factor; both point refs must be
-    null and ScaleZ exactly one. No tile-spline/editor regeneration is attempted.
+    null and ScaleZ exactly one. The explicit Floor_B POSITION opt-in below
+    uses the native vertex oracle; it does not qualify UV/Flip texture semantics.
+    No tile-spline/editor regeneration is attempted.
     """
     if tiles.get('ConstructionBend') is not False or tiles.get('ConstructionPlaceTwoTiles') is not False:
         raise UnsupportedAffine('Bend/two-tile construction is not represented')
     missing=object()
     missing_legacy=legacy_inactive and tile.get('Stretchable') is False and all(tile.get(k,missing) is missing for k in ('Point1','Point2','TwoSidedTileCount'))
-    if tile.get('Flip') is not False or tile.get('ScaleZ')!=1 or (tile.get('TwoSidedTileCount')!=0 and not missing_legacy):
+    # Opt-in native POSITION evidence: S1 snapshot 20261031-022347, exact
+    # Floor_B resource, unique board-anchored ordered vertex correspondence.
+    # ScaleZ acts on local X. Flip does not modify observed POSITION; its UV
+    # semantics are not certified here. Keep the default strict path unchanged.
+    if floor_b_position_only:
+        if tile.get('tile')!=FLOOR_B_GUID or tiles.get('TileSet')!=FLOOR_B_SET:
+            raise UnsupportedAffine('Position-only Floor_B evidence does not cover this resource')
+        if not isinstance(tile.get('Flip'),bool) or not isinstance(tile.get('Stretchable'),bool):
+            raise UnsupportedAffine('Incomplete Floor_B flags')
+        if tile.get('TwoSidedTileCount',0)!=0 or any(tile.get(k,NULL)!=NULL for k in ('Point1','Point2')):
+            raise UnsupportedAffine('Linked/two-sided Floor_B deformation not represented')
+        stretch=tile.get('ScaleZ')
+        if not isinstance(stretch,(float,int)) or not math.isfinite(stretch) or stretch<=0:
+            raise UnsupportedAffine('Invalid Floor_B local-X stretch')
+    else:
+        stretch=1.
+    if not floor_b_position_only and (tile.get('Flip') is not False or tile.get('ScaleZ')!=1 or (tile.get('TwoSidedTileCount')!=0 and not missing_legacy)):
         raise UnsupportedAffine('Flip/stretch/two-sided authoring semantics not represented')
-    if any(tile.get(k)!=NULL for k in ('Point1','Point2')) and not missing_legacy:
+    if any(tile.get(k)!=NULL for k in ('Point1','Point2')) and not missing_legacy and not floor_b_position_only:
         raise UnsupportedAffine('Linked spline deformation not represented')
     r=vec(tile.get('Rotate',()),9);p=vec(tile.get('Translate',()),3);s=tile.get('Scale')
     if not isinstance(s,(float,int)) or not math.isfinite(s) or s<=0:
         raise UnsupportedAffine('Unsupported tile scale')
-    a=Affine(tuple(tuple(r[col*3+row]*s for col in range(3)) for row in range(3)),p)
+    a=Affine(tuple(tuple(r[col*3+row]*s*(stretch if col==0 else 1.) for col in range(3)) for row in range(3)),p)
     # Inverse-transpose validation rejects a singular/degenerate authored frame.
     a.normal((0,1,0))
     return a
@@ -246,12 +269,12 @@ def support_evidence(base,world_meshes):
 
 def main():
     ap=argparse.ArgumentParser(__doc__);ap.add_argument('--lslib',type=Path,required=True)
-    ap.add_argument('--construction',choices=('floor','wall','support'),default='floor');args=ap.parse_args()
-    wall=args.construction=='wall';support=args.construction=='support'
-    record_id=SUPPORT_RECORD if support else WALL_RECORD if wall else RECORD
-    bank_path=SUPPORT_BANK if support else WALL_BANK if wall else BANK
-    count=1 if support else 8 if wall else 5
-    base=ROOT/'captures/m2-foundry';out=base/('construction-support-090d' if support else 'construction-569b-wall' if wall else 'construction-96ed');out.mkdir(parents=True,exist_ok=True)
+    ap.add_argument('--construction',choices=('floor','wall','support','floor-b-position'),default='floor');args=ap.parse_args()
+    wall=args.construction=='wall';support=args.construction=='support';floor_b=args.construction=='floor-b-position'
+    record_id=FLOOR_B_RECORD if floor_b else SUPPORT_RECORD if support else WALL_RECORD if wall else RECORD
+    bank_path=FLOOR_B_BANK if floor_b else SUPPORT_BANK if support else WALL_BANK if wall else BANK
+    count=1 if support or floor_b else 8 if wall else 5
+    base=ROOT/'captures/m2-foundry';out=base/('construction-floor-b-position' if floor_b else 'construction-support-090d' if support else 'construction-569b-wall' if wall else 'construction-96ed');out.mkdir(parents=True,exist_ok=True)
     packed=args.lslib.resolve();tools=packed/'Tools'
     if hashlib.sha256((tools/'LSLib.dll').read_bytes()).hexdigest()!='5dfe246b93cbc95531e011dbf18478c665a9de4f922f8b4a2b73da5a865c76d0':
         raise ValueError('Requires previously verified LSLib v1.20.4')
@@ -265,6 +288,9 @@ def main():
     record=unique(lsf.parse(read(SOURCE)).find_all('GameObjects'),'MapKey',record_id)
     tiles=record.child('tiles');native_tiles=tiles.children_named('tile')
     omitted=[]
+    if floor_b:
+        omitted=[n.to_dict() for n in native_tiles if n.get('UUID')!=FLOOR_B_TILE]
+        native_tiles=[unique(native_tiles,'UUID',FLOOR_B_TILE)]
     if support:
         if len(native_tiles)!=18 or record.get('_OriginalFileVersion_')!=144115207403209018:
             raise ValueError('Selected legacy support record changed')
@@ -276,7 +302,7 @@ def main():
     if len(tile_map)!=len(list(tile_set.find_all('Tile'))):raise ValueError('Duplicate native TileGUID')
     folded={n.casefold():n for n in ps.index};assets={}
     for tile in native_tiles:
-        tile_affine(tile,tiles,legacy_inactive=support)
+        tile_affine(tile,tiles,legacy_inactive=support,floor_b_position_only=floor_b)
         ref=tile_map[tile.get('tile')];vid=ref.get('VisualGUID')
         if vid in assets:continue
         visual=unique(bank.region('VisualBank').children,'ID',vid)
@@ -298,7 +324,7 @@ def main():
     parent=json.loads((base/'world-placement.json').read_text());level,raw_level=hierarchy(parent,ps)
     instances=[];world_meshes=[];raw_delta=[];fp32_bounds=[]
     for tile in native_tiles:
-        vid=tile_map[tile.get('tile')].get('VisualGUID');asset=assets[vid];local=tile_affine(tile,tiles,legacy_inactive=support)
+        vid=tile_map[tile.get('tile')].get('VisualGUID');asset=assets[vid];local=tile_affine(tile,tiles,legacy_inactive=support,floor_b_position_only=floor_b)
         world=level.compose(local);raw=raw_level.compose(local)
         instance=dict(tile=tile.to_dict(),visual_id=vid,meshes=asset['meshes'],world_linear=world.linear,world_translation=world.translation)
         instances.append(instance)
@@ -314,12 +340,13 @@ def main():
             for p,w in zip(mesh['attributes']['POSITION'],transformed['attributes']['POSITION']):
                 raw_delta.append(max(abs(a-b) for a,b in zip(raw.point(p),w)))
                 fp32_bounds.append(max(world.fp32_application_bound(p)))
-    span=support_evidence(base,world_meshes) if support else wall_span_evidence(record,instances) if wall else span_evidence(record,instances)
+    span=dict(scope='POSITION-only Floor_B; native ordered vertex oracle, not decorative-bound anchors',native_snapshot='20261031-022347',uv_flip='UNVERIFIED',native_target_lod=1) if floor_b else support_evidence(base,world_meshes) if support else wall_span_evidence(record,instances) if wall else span_evidence(record,instances)
     geometry=out/'world-lod0.json';geometry.write_text(json.dumps(world_meshes,separators=(',',':'))+'\n')
     summary=dict(scope=f'ONE explicit foundry {args.construction} construction; {count} instances/{len(assets)} native resources; NOT a room or closure certificate',
         record=record.to_dict(),source_fingerprints=sources,assets={vid:{k:v for k,v in a.items() if k!='meshes'} for vid,a in assets.items()},
         active_lod=0,instances=[{k:v for k,v in n.items() if k!='meshes'} for n in instances],
         omitted_native_tiles=omitted,
+        position_policy='Verified local-X ScaleZ, no extra POSITION Flip; native snapshot target is LOD1, export below is LOD0; UV/normal/material equivalence not claimed' if floor_b else 'Original strict unit-stretch selection',
         triangles=sum(m['triangles'] for m in world_meshes),vertices=sum(m['vertices'] for m in world_meshes),
         bounds=[[f(m['bounds'][side][j] for m in world_meshes) for j in range(3)] for side,f in enumerate((min,max))],
         native_material_ids=sorted({m['material_id'] for m in world_meshes}),
@@ -336,7 +363,8 @@ def main():
             'HLOD/dynamic visibility/destruction/fade state unresolved; no opacity inferred from editor Opacity field',
             'No bent/flipped/stretched/linked spline construction or regenerated tiles','No wall/roof/opening enclosure or room closure proof',
             'Raw tile matrices preserved; normalized level quaternion convention and raw alternative retained',
-            'DAE/glTF share upstream GR2 parser; native resource bounds are independent'])
+            'DAE/glTF share upstream GR2 parser; native resource bounds are independent',
+            'Floor_B mode qualifies POSITION only; UV/Flip texture, normals/materials and room closure remain separate' if floor_b else 'No additional native position qualification'])
     (out/'evidence.json').write_text(json.dumps(summary,indent=2)+'\n')
     print(json.dumps({k:summary[k] for k in ('scope','triangles','vertices','bounds','native_material_ids','span_evidence','max_raw_vs_normalized_position_delta')},indent=2))
 
