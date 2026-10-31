@@ -1272,12 +1272,12 @@ cut-away roofs, so the RT sun can replace the game's mask under roofs too.
   `RT_CASCADE_TMIN` = 0.5 m (a coarser copy of the shaded surface; a roof is >= 2 m up).
 - **Trust** (`core/sun_trust.cpp`). With `rt_cascade_roofs_trust=1` the roof volumes are
   not uploaded: roofs no longer stop the replace. The off-screen test stays.
+  `rt_cascade_roofs_trust` (rejected, interior leak): removed 2026-10-31, see CONSOLIDATION.md C1.
 - **Logs.** `[cascade] sun cascade pass found` once per layer; every `rt_timing_frames`:
   `[cascade] casters:` (draws seen / duplicates / alpha / added, triangles, MB, builds with
   the instance and why not, captured pass GPU ms) and `[cascade] matrix of cascade k`
   (w column error, det, extents of every cascade, UBO origin vs camera in m: the
-  inversion's premises). `sun: roof volumes TRUSTED` on toggle; `sun stats` ends with
-  `roof volumes trusted (cascade casters) 1`.
+  inversion's premises).
 - **Gate result 2026-10-29 (S7 Blushing Mermaid, static, FG 2, live A/B in one run,
   sup-cascade2/3/4-s7-fg2).** Sun stats per 600 frames: key off (roof volumes): game dark &
   RT lit 29-31% of traced px, kept by roofs 99%, mean brightening 0.0004-0.0005/px. Key on
@@ -2828,6 +2828,7 @@ and what the trust did with them (`sun stats`, 600-frame windows):
   `rt_sun_top=0` (new) drops the scene top and asks only for `rt_sun_rise` above the pixel;
   the proximity test (`rt_sun_near`) still limits any leak to bands at the game's shadow
   edges. Which default is right needs the in-frame A/B (HANDOFF.md).
+  `rt_sun_top` and `rt_sun_top_pad` (0 kept): removed 2026-10-31, see CONSOLIDATION.md C1.
 - The `brightening rt_sun_replace` crops of that run were animation (waves in S8, swaying
   foliage in S3), which is why that comparison is gone.
 - Cost: `rt passes` 0.5-0.7 ms in total in S7 (the sun passes are not timed on their own).

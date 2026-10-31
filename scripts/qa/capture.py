@@ -169,7 +169,7 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
         # on0 is the cache-off baseline; 60-frame stats windows close several times inside each
         # 240-present phase, so the last line logged in a phase covers that phase alone.
         sets += ["sharc=0", "sharc_debug=0", "sharc_stats=1", "sharc_stats_frames=60"]
-    sets += list(extra)   # --set: keys for every trace of the run (e.g. rt_sun_top=0)
+    sets += list(extra)   # --set: keys for every trace of the run (e.g. rt_sun_near=1)
     if raw:
         # Exact float32 of the final frame (and RR/rr_post images): about 1 GB per trace
         # at 3840x1600, and slower traces. The 8-bit PQ previews suffice for the detectors.

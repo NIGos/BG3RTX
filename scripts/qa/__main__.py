@@ -37,7 +37,7 @@ def main():
                    help="add the SHaRC radiance cache traces (sharc_on, sharc_refl_off, sharc_roof) and its leak gate")
     r.add_argument("--no-floors", action="store_true",
                    help="skip the four light-off traces (qa_zero) of the hard_dark energy bound (its gate then reviews only)")
-    r.add_argument("--set", default="", help="extra bg3rtx.ini keys for every trace, e.g. rt_sun_top=0,rt_sun_near=1")
+    r.add_argument("--set", default="", help="extra bg3rtx.ini keys for every trace, e.g. rt_sun_margin=0.05,rt_sun_near=1")
     r.add_argument("--parallel", type=int, default=1, choices=(1, 2),
                    help="scenes captured at once; 2 = shared background games (experimental)")
     r.add_argument("--exclusive", action="store_true",
