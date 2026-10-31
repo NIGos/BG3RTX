@@ -278,6 +278,9 @@ rays only. TRACK_D_ALPHA_GI.md 7.1b, `img/alpha_campsite_*`.
     instance's fade value captured per draw), or keep only the incoming LOD;
   - add opacity micromaps later, for cost.
 - **Expected gain:** small. Removes rare acne during LOD transitions.
+- **Camera cut-away (2026-10-31):** not a dither but a world-space capsule cut, camera-only by
+  design; the walls stay in the TLAS (user decision). Measured apart by `rt_primary_fade_class`
+  (docs/INN_ROTATION_MATCH.md).
 
 **Open: the alpha set's game texture views, one frame late (robustness).**
 - The core's RT passes accept a scene up to one frame old (`built + 1 >= now`,

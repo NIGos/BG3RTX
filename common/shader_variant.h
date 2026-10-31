@@ -22,7 +22,7 @@ inline bool cascade_entry(const char* file) {
   static const char* const names[] = {
       "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/gi_trace_rt_hit_direct.hlsl",
       "gi/gi_trace_rt_sharc_hit_direct.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
-      "gi/pan_primary_identity.hlsl", "gi/pan_local.hlsl", "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl",
+      "gi/pan_primary_identity.hlsl", "gi/pan_primary_fade.hlsl", "gi/pan_local.hlsl", "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl",
       "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_origin.hlsl", "gi/rt_local_shadows.hlsl",
       "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl", "gi/rt_local_shadows_check.hlsl",
       "gi/rt_local_shadows_full_check.hlsl", "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",

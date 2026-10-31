@@ -75,6 +75,9 @@ void bvh_cpu_mark(int phase) {   // phase -1 closes the build
 
 constexpr uint32_t kInfoPool = 1u << 8, kInfoLegacy = 1u << 9, kInfoAlpha = 1u << 10;   // rt_common.hlsli
 constexpr uint32_t kInfoHairProcedural = 1u << 12;
+// rt_primary_fade_class (diagnostics): the draw's camera-occlusion fade cut is enabled
+// (gi/pan_primary.hlsl RT_PRIMARY_FADE). Set only with the key on; no ray reads it otherwise.
+constexpr uint32_t kInfoCameraFade = 1u << 14;
 constexpr uint32_t kRecBytes = 208;                // AlphaRec, rt_common.hlsli
 constexpr uint32_t kRingSlots = kSceneSlots;       // per-build regions of the host ring (= scene slots, rtscene.cpp)
 constexpr uint32_t kStatusSlots = 16384;           // validation results (16 B each)
@@ -420,6 +423,7 @@ struct FrameDraw {
   bool cached = false, audit = false, extract = false, check = false;
   bool captured = false, cap_alpha = false;
   bool held = false;
+  bool camera_fade = false;   // rt_primary_fade_class
   VkDeviceSize soup_off = 0;
   uint32_t prims = 0;
   uint32_t rec = kNone,material_record=kNone;
@@ -1100,6 +1104,11 @@ void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alph
   if (!fd.cached) fd.rec = alpha ? rec : kNone;
 }
 
+void bvh_set_camera_fade(uint32_t token) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (token < g_draws.size()) g_draws[token].camera_fade = true;
+}
+
 void bvh_note_skipped(uint32_t token) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (token < g_draws.size()) g_draws[token].captured = false;
@@ -1467,8 +1476,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
                (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
     in.accelerationStructureReference = m.as.addr;
-    const uint32_t inf[4] = {uint32_t(m.pool_off), (stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u),
+    const uint32_t inf[4] = {uint32_t(m.pool_off), (stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u) |
+                             (fd.camera_fade ? kInfoCameraFade : 0u),
                              alpha ? 16 + fd.rec * kRecBytes : 0, m.tris};
+    if (fd.camera_fade) camera_fade_marked(fd.instances, uint64_t(m.tris) * fd.instances);
     for (uint32_t i = 0; i < fd.instances; ++i, ++n) {
       in.instanceCustomIndex = n;
       std::memcpy(inst_out + n, &in, sizeof in);
@@ -1499,8 +1510,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
     in.accelerationStructureReference = s.as.addr;
     const bool opaque_material=!alpha && !fd.held && fd.material_record>=native_hit::nh_alpha_rows && fd.material_record<native_hit::nh_material_rows;
-    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u),
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u),
                              alpha ? 16 + fd.rec * kRecBytes : opaque_material?fd.material_record:0u, fd.prims};
+    if (fd.camera_fade) camera_fade_marked(1, fd.prims);
     std::memcpy(inst_out + n, &in, sizeof in);
     std::memcpy(info_out + n * 4, inf, sizeof inf);
     inst_ref.push_back(in.accelerationStructureReference);

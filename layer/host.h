@@ -673,6 +673,8 @@ void bvh_set_record(uint32_t token, uint32_t rec);
 void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec, uint32_t materialRecord=UINT32_MAX);
 // Uncaptured draw that is not instanceable (counted only).
 void bvh_note_skipped(uint32_t token);
+// rt_primary_fade_class: the draw's camera-fade cut is enabled (InstInfo kInfoCameraFade).
+void bvh_set_camera_fade(uint32_t token);
 // After the pass: object-space extraction, BLAS builds/refits, compaction, TLAS.
 // `stamp(i)` writes the timing timestamps 1..3.
 // Immutable instance input of a retired-slot build, before its optional OLD
@@ -867,6 +869,11 @@ void alpha_device_created(DeviceData* dd);
 void alpha_device_destroyed(DeviceData* dd);
 bool alpha_lookup_native_tileset_shadow(uint64_t fs_hash,AlphaFs* out); // current-Sun per-draw material path only
 bool alpha_lookup(uint64_t fs_hash, AlphaFs* out);   // copied: the table may be reloaded
+// rt_primary_fade_class (diagnostics only, shaders/rt/camera_fade_fs.txt): true if `fs` has
+// BG3's camera-occlusion capsule fade; *enabled: this draw's flag enables the cut. The first
+// enabled draw of a capture snapshots the capsule (frame UBO set 0 binding 6) for the stamp.
+bool camera_fade_draw(VkCommandBuffer cmd, uint64_t fs, uint64_t tris, bool* enabled);
+void camera_fade_marked(uint32_t instances, uint64_t tris);   // TLAS instances given kInfoCameraFade
 void alpha_begin_capture();
 // `rec_index` (optional) receives the record's index (split mode: referenced per TLAS instance).
 bool alpha_add_draw(VkCommandBuffer cmd, const AlphaFs& a, uint32_t first_tri, uint32_t tris,

@@ -35,6 +35,7 @@
 #include "omm_content.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -92,6 +93,20 @@ std::atomic<uint32_t> g_stale_views{0};   // held alpha records dropped: a view 
 std::mutex g_mu;
 std::unordered_map<uint64_t, AlphaFs> g_table;
 uint64_t g_table_mtime = 0;
+
+// rt_primary_fade_class (diagnostics only): BG3's camera-occlusion capsule fade
+// (scripts/camera_fade_table.py, shaders/rt/camera_fade_fs.txt). Per fragment shader the
+// per-draw enable flag (a float, 1.0 = cut) in a set 1 UBO; the capsule itself is the
+// frame UBO at set 0 binding 6 (vec3 m0; float m1; vec3 m2; float m3; vec3 m4; float m5).
+struct FadeFs { uint8_t set, bind; uint32_t off; };
+std::mutex g_fade_mu;
+std::unordered_map<uint64_t, FadeFs> g_fade_table;
+uint64_t g_fade_mtime = 0;
+float g_fade_capsule[12] = {};   // this capture's frame UBO (first enabled draw)
+bool g_fade_capsule_ok = false;
+struct FadeCount { uint64_t seen = 0, seen_tris = 0, enabled = 0, enabled_tris = 0, flag_unread = 0,
+                   marked_inst = 0, marked_tris = 0, captures = 0, capsule = 0; };
+FadeCount g_fade_now, g_fade_window;   // this capture; the log window (300 captures)
 
 VkDescriptorSetLayout g_dsl = VK_NULL_HANDLE;
 VkDescriptorPool g_pool = VK_NULL_HANDLE;
@@ -217,8 +232,30 @@ bool make_image(bool array, Img& out) {
   return dd->vk.CreateImageView(dd->device, &vci, nullptr, &out.view) == VK_SUCCESS;
 }
 
+// "<hash> flag=1.1 off=12" (scripts/camera_fade_table.py)
+void load_fade_table() {
+  std::string path = root_dir() + "\\shaders\\rt\\camera_fade_fs.txt";
+  uint64_t mt = file_mtime(path);
+  if (!mt || mt == g_fade_mtime) return;
+  g_fade_mtime = mt;
+  std::ifstream f(path);
+  std::unordered_map<uint64_t, FadeFs> t;
+  std::string line;
+  while (std::getline(f, line)) {
+    if (line.empty() || line[0] == '#') continue;
+    unsigned long long h = 0;
+    unsigned s = 0, b = 0, off = 0;
+    if (std::sscanf(line.c_str(), "%llx flag=%u.%u off=%u", &h, &s, &b, &off) != 4 || s > 3 || b > 255) continue;
+    t[uint64_t(h)] = FadeFs{uint8_t(s), uint8_t(b), off};
+  }
+  std::lock_guard<std::mutex> lock(g_fade_mu);
+  g_fade_table.swap(t);
+  log("[camera fade] %zu camera-fade fragment shaders in %s", g_fade_table.size(), path.c_str());
+}
+
 // "<hash> vt uv=0 cut=0.5 [cut0=0.001] ubo=1.0 p0=0 idx=32 ssbo=0.12 ind=1.3 cache=1.4 col=0"
 void load_table() {
+  if (cfg_int("rt_primary_fade_class", 0)) load_fade_table();
   std::string path = root_dir() + "\\shaders\\rt\\alpha_fs.txt";
   uint64_t mt = file_mtime(path);
   if (!mt || mt == g_table_mtime) return;
@@ -466,6 +503,40 @@ bool alpha_lookup_native_tileset_shadow(uint64_t fs,AlphaFs* out){
  out->ubo_set=1;out->ubo_bind=recipe->material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
 }
 
+bool camera_fade_draw(VkCommandBuffer cmd, uint64_t fs, uint64_t tris, bool* enabled) {
+  *enabled = false;
+  FadeFs f{};
+  {
+    std::lock_guard<std::mutex> lock(g_fade_mu);
+    auto it = g_fade_table.find(fs);
+    if (it == g_fade_table.end()) return false;
+    f = it->second;
+  }
+  float flag = 0.0f;
+  const bool read = read_bound(cmd, f.set, f.bind, f.off, &flag, sizeof flag);
+  float capsule[12];
+  const bool need_capsule = read && flag == 1.0f && !g_fade_capsule_ok;
+  const bool capsule_ok = need_capsule && read_bound(cmd, 0, 6, 0, capsule, sizeof capsule);
+  std::lock_guard<std::mutex> lock(g_fade_mu);
+  ++g_fade_now.seen;
+  g_fade_now.seen_tris += tris;
+  if (!read) { ++g_fade_now.flag_unread; return true; }
+  // The shader's own test: `if (flag == 1.0)` (camera_fade_table.py).
+  *enabled = flag == 1.0f;
+  if (*enabled) ++g_fade_now.enabled, g_fade_now.enabled_tris += tris;
+  if (capsule_ok && !g_fade_capsule_ok) {
+    std::memcpy(g_fade_capsule, capsule, sizeof capsule);
+    g_fade_capsule_ok = true;
+  }
+  return true;
+}
+
+void camera_fade_marked(uint32_t instances, uint64_t tris) {
+  std::lock_guard<std::mutex> lock(g_fade_mu);
+  g_fade_now.marked_inst += instances;
+  g_fade_now.marked_tris += tris;
+}
+
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
   if(!g_tileset_layout && native_tileset_coverage::lookup_camera(fs)!=nullptr && cfg_hot(CfgHot::rt_native_tileset)){
@@ -549,6 +620,9 @@ void alpha_begin_capture() {
   g_native_samplers.clear();
   g_tex.clear();
   g_cache.clear();
+  std::lock_guard<std::mutex> fade(g_fade_mu);
+  g_fade_now = {};
+  g_fade_capsule_ok = false;
 }
 
 // Shared canonical capture: never touches the camera capture's mutable record
@@ -909,6 +983,33 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
                                                stamp_base + kStampCameraOffset);
   const uint32_t gpu_stamp[2] = {g_stamp_gen, pose_ok ? g_stamp_gen : 0};
   vk.CmdUpdateBuffer(cmd, g_stamp_buf, stamp_base + 4, sizeof gpu_stamp, gpu_stamp);
+  if (cfg_int("rt_primary_fade_class", 0)) {
+    // Stamp bytes 192..255: this capture's camera-fade capsule (12 floats) and a valid
+    // word, for the primary-ray check (gi/pan_primary.hlsl RT_PRIMARY_FADE). Diagnostics only.
+    std::lock_guard<std::mutex> fade(g_fade_mu);
+    uint32_t words[16] = {};
+    if (g_fade_capsule_ok) std::memcpy(words, g_fade_capsule, sizeof g_fade_capsule), words[12] = 1;
+    vk.CmdUpdateBuffer(cmd, g_stamp_buf, stamp_base + 192, sizeof words, words);
+    FadeCount& w = g_fade_window;
+    w.seen += g_fade_now.seen; w.seen_tris += g_fade_now.seen_tris;
+    w.enabled += g_fade_now.enabled; w.enabled_tris += g_fade_now.enabled_tris;
+    w.flag_unread += g_fade_now.flag_unread;
+    w.marked_inst += g_fade_now.marked_inst; w.marked_tris += g_fade_now.marked_tris;
+    ++w.captures;
+    w.capsule += g_fade_capsule_ok;
+    if (w.captures >= 300) {
+      const double n = double(w.captures);
+      log("[camera fade] %llu captures, per capture: fade-shader draws %.1f (%.0f tris), cut enabled %.1f "
+          "(%.0f tris), flag unreadable %.1f; TLAS instances marked %.1f (%.0f tris); capsule read in %llu captures; "
+          "last capsule A [%.3f %.3f %.3f] r %.3f, B [%.3f %.3f %.3f] r %.3f, from [%.3f %.3f %.3f]",
+          (unsigned long long)w.captures, w.seen / n, w.seen_tris / n, w.enabled / n, w.enabled_tris / n,
+          w.flag_unread / n, w.marked_inst / n, w.marked_tris / n, (unsigned long long)w.capsule,
+          g_fade_capsule[0], g_fade_capsule[1], g_fade_capsule[2], g_fade_capsule[3], g_fade_capsule[4],
+          g_fade_capsule[5], g_fade_capsule[6], g_fade_capsule[7], g_fade_capsule[8], g_fade_capsule[9],
+          g_fade_capsule[10]);
+      w = {};
+    }
+  }
   if(g_omm_layout)vk.CmdFillBuffer(cmd,g_stamp_buf,stamp_base+128u,32u,0u);
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;

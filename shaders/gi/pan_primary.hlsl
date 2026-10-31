@@ -4,6 +4,24 @@
 #include "../rt/rt_common.hlsli"
 struct PanCamera { float4 c[14]; };
 [[vk::binding(48, 0)]] ConstantBuffer<PanCamera> panCamera;
+#ifdef RT_PRIMARY_FADE
+// rt_primary_fade_class (diagnostics only, docs/INN_ROTATION_MATCH.md). BG3 cuts walls between
+// the camera and the party in its depth prepass only (scripts/camera_fade_table.py):
+// f = min over the two segments (m4 -> m0, radius m1; m4 -> m2, radius m3) of
+// clamp(max(0.5 n + d, 0) / r, 0, 1), n in [-1, 1] an edge noise, d the distance of the world
+// position to the segment (clamped to the segment's box, as the game does); discard when
+// alpha * f < cut. A pixel can be cut only where 0.5 n + d < r for some n: d < r + 0.5.
+// The layer stores the capture's capsule at stamp bytes 192..239 (valid word at 240) and
+// marks the draws with the cut enabled (InstInfo kInfoCameraFade).
+static const uint kInfoCameraFade = 1u << 14;   // layer/bvhsplit.cpp
+bool fade_envelope(float3 w, float3 o, float4 s) {
+  const float3 e = s.xyz - o;
+  const float ee = dot(e, e);
+  if (!(s.w > 0) || !(ee > 0)) return false;
+  const float3 q = clamp(o + e * (dot(w - o, e) / ee), min(o, s.xyz), max(o, s.xyz));
+  return distance(w, q) < s.w + 0.5;
+}
+#endif
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -52,6 +70,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
     gAux[p] = float4(bits & 255u,(bits >> 8) & 255u,(bits >> 16) & 255u,bits >> 24);
     return;
   }
+#ifdef RT_PRIMARY_FADE
+  stat_add(126, all(p == uint2(0, 1)) && gSceneStamp.Load(240u) == 1u, 0);
+#endif
   float d = gDepth.Load(int3(p,0));
   if (d <= 0) { gAux[p] = 0; return; }
   float2 uv = (float2(p)+0.5)/float2(pc.full);
@@ -102,6 +123,22 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_add(141,valid && !pool && abs(hit.t-dist)<tol,bin);
     stat_add(142,valid && !pool && hit.t-dist<=-tol,bin);
     stat_add(143,valid && !pool && hit.t-dist>=tol,bin);
+#endif
+#ifdef RT_PRIMARY_FADE
+    // Hits on draws with the camera-fade cut enabled; in front of the raster inside the cut
+    // envelope = a faded occluder (expected: the wall stays in the TLAS for all lighting).
+    const bool fade = valid && (inst_info(hit.inst).meta & kInfoCameraFade) != 0u;
+    const bool front = valid && hit.t-dist <= -tol;
+    bool cut = false;
+    if (fade && gSceneStamp.Load(240u) == 1u) {
+      const float3 w = (P/dist)*hit.t + panCamera.c[13].xyz;
+      const float3 o = asfloat(gSceneStamp.Load3(224u));
+      cut = fade_envelope(w,o,asfloat(gSceneStamp.Load4(192u))) || fade_envelope(w,o,asfloat(gSceneStamp.Load4(208u)));
+    }
+    stat_add(122,fade,bin);
+    stat_add(123,fade && front && cut,bin);
+    stat_add(124,fade && front && !cut,bin);
+    stat_add(125,fade && !front && cut,bin);
 #endif
   }
 }

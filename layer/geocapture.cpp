@@ -248,6 +248,7 @@ struct Capture {
   uint32_t rt_draws = 0;
   bool state_log = false, state_sample = false;
   bool discard_filter = false;
+  bool fade_class = false;   // rt_primary_fade_class: mark camera-fade draws (diagnostics only)
   uint64_t discard_skipped = 0;
   uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0;
   struct StateCount { uint64_t fs = 0, draws = 0, tris = 0; PipeInfo pipe{}; };
@@ -476,6 +477,7 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.state_log = cfg_int("rt_capture_state_log", 0) != 0;
   c.state_sample = c.state_log && c.record_frame % (std::max)(cfg_int("rt_timing_frames", 300), 30) == 0;
   c.discard_filter = cfg_int("rt_capture_discard", 1) != 0;
+  c.fade_class = cfg_int("rt_primary_fade_class", 0) != 0;
   c.discard_skipped = 0;
   c.source_draws = c.no_depth_draws = c.no_depth_tris = 0;
   c.states.clear();
@@ -2228,6 +2230,11 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   // instances go into the TLAS with the matrices of the game's instance stream.
   uint32_t token = UINT32_MAX;
   bool audit = false;
+  // rt_primary_fade_class (diagnostics only): a draw whose FS has BG3's camera-occlusion
+  // capsule fade with its cut enabled is marked in InstInfo (kInfoCameraFade) for the
+  // primary-ray check. Its capture is unchanged: the wall still occludes every ray.
+  bool camera_fade = false;
+  if (c->fade_class && capturable) camera_fade_draw(cmd, s->fs, prims, &camera_fade);
   if (c->split && capturable) {
     const bool list = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && kind <= 1;
     // Native camera cutouts retain their original projection/Frame packet.
@@ -2236,6 +2243,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
                args, s};
     uint32_t mesh_tris = 0;
     BvhVerdict v = bvh_classify(cmd, bd, &token, &mesh_tris);
+    if (camera_fade) bvh_set_camera_fade(token);
     if (v != BVH_CAPTURE) {
       uint32_t rec = UINT32_MAX;
       if (alpha_fs && !alpha_add_draw(cmd, a, 0, mesh_tris, &rec)) rec = UINT32_MAX;
