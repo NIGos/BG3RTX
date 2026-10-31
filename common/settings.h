@@ -201,12 +201,12 @@ inline constexpr Knob kKnobs[] = {
   // what to look at). Live: toggling them in game takes effect at once.
   {"exp_roof_shadows", "Roof sun shadows",
    "Captures the roofs the camera cuts away (from the game's sun shadow map) into the ray-traced scene, "
-   "so ray-traced sun shadows also work under them. Look for: light through cut roofs (bad), sharper roof "
-   "shadow edges (good). About +1.7 ms.",
-   Kind::Choice, Apply::Live, "experimental", true,
+   "so ray-traced sun shadows also work under them. On in Ultra since 2026-10-31: physically correct, no "
+   "regression in the camp and inn gates, about +0.3 to +1.3 ms.",
+   Kind::Choice, Apply::Live, "", true,
    {{"off", "Off", 0, {{"rt_cascade_casters", "0"}}, {}},
     {"on", "On", kCapRayQuery, {{"rt_cascade_casters", "1"}}, {{"rt_geometry", 1}, {"sun_shadows", 1}}}},
-   {}, {0, 0, 0, 0}, true},
+   {}, {0, 0, 0, 1}, false},
 
   {"exp_box_lights", "Box light shadows",
    "Ray-traced shadows for the game's box (projector) lights, 37% of its placed lights. Look at lit "

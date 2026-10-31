@@ -1,5 +1,16 @@
 # BG3RTX current progress — 2026-10-31
 
+## Stage 0 closed (Claude, /goal, 2026-10-31 evening)
+
+- Done: consolidation (CONSOLIDATION.md), live batch cb1-cb7 + lean regression lr1-lr3: no regression vs pre-consolidation (same pass costs, same primary match). Real fps, focused, diagnostics off: camp 60 RT on / 93 off, inn ~71 / 89, forge ~100.
+- Diagnostics rt_stats + rt_primary_check cost ~80 ms/frame: never in cost windows (AGENTS.md "Lean live tests").
+- rt_cascade_casters ON in Ultra (physically correct, no regression, +0.3 to +1.3 ms; user saw outdoor roof shadows change correctly).
+- ls_box stays Experimental: S6 occluded = traced on 99.999% of box rays (suspect), no projector population for the accuracy gate.
+- rt_scene_wait=2 removed (stale scene after rotation). Lean batches: ~11 min and 0.4 GB instead of 90 min and 35 GB.
+- Open, being fixed: inn rotation mismatch is the static POOL geometry lagging in rotation (static 99%, rotation 83%; pool in front 17-19%), not camera-fade walls (they keep casting shadows, by design).
+- Open: M4 features barely participate (hit material qualifies <1% of hits; gi_hit_direct nonzero 0; rf_hit_shade 0.05%): diagnosing.
+- Meta-audit: docs/META_AUDIT_20261031.md. Try in game: roof shadows outdoors (Ultra), nothing else new yet.
+
 ## Paused at the user's request - latest checkpoint
 
 No further development or live jobs until the user resumes. Test game is closed;
