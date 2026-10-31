@@ -140,6 +140,16 @@ frustum. True offscreen lights, sunlight, projector and emissive terms remain
 unsupported. ABI 21 registers the exact tuple and returns its query-owned set
 before tracing; startup-off material resources still require restart.
 
+Hit lighting diagnosis (2026-10-31, branch hit-lighting, offline). The froxel lists are not
+depth-bounded: the cluster build (cs 20aea152, captures/alpha_cache:403/665) tests light spheres
+against the froxel planes, with no depth input, so a hidden in-frustum point gets its froxel's full
+list. Falloff, cone, channel (native UBO 104, as the G-buffer FS 8995da1e writes RT2.w) and b13[0]
+match bg3_light_eval. The hit point is now the triangle point (`native_hit_position`), the weighted
+luminance sum is x 8192 (x 256 rounded to 0), and `GI hit direct lights` logs what zeroes the term:
+rays traced/lit/occluded, occluded with the first hit within 1 cm or on the hit's own triangle
+(self-intersection), empty froxel, channel/range/cone zero, N.L <= 0, unsupported by reason
+(S6: 0 supported of 260k qualified; the reason split answers it).
+
 `rt_stats=1` reports candidates, qualified materials, supported direct terms,
 nonzero additions and weighted luminance as `GI hit direct`. Cost remains inside
 the existing GI trace interval. Live contribution, motion and cost remain

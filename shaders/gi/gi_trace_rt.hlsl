@@ -184,7 +184,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
       NativeHitMaterial material=rt_hit_material(hh,cone.f0+cone.spread*t);
       if(pc.rt_stats!=0u){stat_add(283u,material.status==0u,hit_bin);hit_material_count(hh,material.status,hit_bin);}
       if(material.status==0u){
-        NativeHitDirect direct=native_hit_direct(material,o+dir*t,-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
+        // Counters 160-171 (native_hit_direct.hlsli g_hd_*; core/gi.cpp "GI hit direct lights").
+        g_hd_stats=pc.rt_stats!=0u;g_hd_base=160u;g_hd_bin=hit_bin;g_hd_inst=hh.inst;g_hd_prim=hh.prim;
+        NativeHitDirect direct=native_hit_direct(material,native_hit_position(hh,o+dir*t),-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
         if(pc.rt_stats!=0u)stat_add(284u,direct.status==HdOk,hit_bin);
         if(direct.status==HdOk){
           if(pc.rt_stats!=0u){
@@ -193,7 +195,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
             // every listed light out of range/channel/cone), 135 positive terms all traced occluded.
             stat_add(134u,!any(direct.radiance>0) && direct.lights==0u,hit_bin);
             stat_add(135u,!any(direct.radiance>0) && direct.lights!=0u,hit_bin);
-            uint value=uint(round(dot(direct.radiance*w,float3(.2126,.7152,.0722))*256.0));
+            // Luminance x 8192, clamped at 8: hit radiance is b13[0]-scaled (~1e-3), below the
+            // old x 256 step (live S8: a sum of 0 could not tell zero from small).
+            uint value=uint(clamp(dot(direct.radiance*w,float3(.2126,.7152,.0722)),0.0,8.0)*8192.0+0.5);
             uint sum=WaveActiveSum(value);if(WaveIsFirstLane() && sum)rtStats.InterlockedAdd((286u*64u+(WaveReadLaneFirst(hit_bin)&63u))*4u,sum);
           }
           bounce+=direct.radiance*w;occ+=w;continue;

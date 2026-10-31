@@ -289,6 +289,23 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
 - **Cost.** Expected +0.2 to 0.4 ms on `rf: reflection pass GPU median` (one material fetch,
   the froxel's shadow rays and one sun ray per tier (b) hit, 27% of the foundry's traced rays);
   `rf_stats=1` adds the tier (a) checks (measurement only). Not measured.
+- **Hit lighting fixes (2026-10-31, branch hit-lighting; offline, not live).** From live S8/S6
+  (main 1e90cd0): terms direct 0, sun 0, ambient 0.111; tier (a) L_b 0.111 vs L_a 0.0019.
+  - L_a 0.0019 was the `rf_debug=8` window: the check read last frame's debug image from
+    prevRadiance. Valid window (rf_debug 0): L_b 0.0774 vs L_a 0.0468. The check is no longer
+    counted under any rf_debug.
+  - The counters were luminance x 128: b13[0]-scaled direct/sun terms (~1e-3) rounded to 0.
+    Now x 8192, clamped at 8 (clip counted above 8).
+  - Ambient lacked the game's local DIFFUSE probes (f469db78:994-1178): indoors they replace the
+    outdoor sky irradiance; every shaded S8 hit lists local probes. Now replicated
+    (`native_hit_diffuse_probes`, m5 bit 1, cube pair m5 bits 3-16 / 17-30, mip 0).
+  - The hit point is the triangle point (barycentrics), not o + d t (`native_hit_position`).
+  - New lines: `rf hit shade lights` (rays traced/lit/occluded, first hit within 1 cm, own
+    triangle, empty froxel, channel/range/cone zero, N.L <= 0, unsupported by reason) and
+    `rf hit shade sun` (zero colour x clouds x b13, N.L <= 0, traced lit/occluded).
+  - Known risk: the sun ray at hits has no roof-volume test (the TLAS lacks cut-away roofs; S8
+    has 95% of pixels under roofs). If the sun line shows lit rays indoors, tier (b) must treat
+    roofed hits as unsupported before it can pass.
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.

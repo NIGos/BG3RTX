@@ -5,6 +5,34 @@
 #include "../../common/native_hit_direct.h"
 struct NativeHitDirect {float3 radiance;uint status;uint lights;};
 static const uint kHitDirectSource=5u,kHitDirectProjector=6u,kHitDirectDomain=7u;
+// Diagnostics, off unless the caller sets g_hd_stats (its stats key): 12 counters from g_hd_base
+// (core/gi.cpp hd_log): +0 light rays traced, +1 lit, +2 occluded with the first hit within 1 cm
+// of the origin, +3 occluded by the hit's own triangle (g_hd_inst/g_hd_prim), +4 unknown, +5
+// supported hits whose froxel lists no point/spot, +6 listed lights evaluated, +7 of them a known
+// zero before the cosine (channel, range, cone), +8 positive but zero after it (N.L <= 0),
+// +9 unsupported: source (outside the frustum/froxel slices, bad index), +10 projector, +11 other.
+static bool g_hd_stats=false;
+static uint g_hd_base=0u,g_hd_bin=0u,g_hd_inst=0xffffffffu,g_hd_prim=0xffffffffu;
+void hd_stat(uint k,bool c){if(g_hd_stats)stat_add(g_hd_base+k,c,g_hd_bin);}
+#ifdef RT_HIT_MATERIAL
+// The hit point on its triangle (vertices x barycentrics, as rtOrigin gives D-LS its exact TLAS
+// surface point), not o + d t: Wachter & Binder's ULP offset (rt_offset_ray) assumes a point on
+// the plane, and o + d t carries the ray's float error and the hardware t error. Kept only where
+// it agrees with the ray point (same triangle): 1 mm + 1e-5 of the distance.
+float3 native_hit_position(RtHit hit,float3 ray_point){
+ InstInfo ii=inst_info(hit.inst);uint stride=ii.meta&0xffu,bytes;
+ if((ii.meta&kInfoLegacy)!=0u || hit.prim>=ii.tris || stride<16u || hit.aborted || !(hit.t>=0))return ray_point;
+#ifdef RT_NATIVE_HAIR
+ if((ii.meta&kInfoHairProcedural)!=0u)return ray_point;
+#endif
+ if((ii.meta&kInfoPool)!=0u)gMeshPool.GetDimensions(bytes);else gOpaqueSoup.GetDimensions(bytes);
+ if(!tri_in_range(ii.base,hit.prim,stride,bytes))return ray_point;
+ float3 p0=inst_pos(ii,hit.prim,0),p1=inst_pos(ii,hit.prim,1),p2=inst_pos(ii,hit.prim,2);
+ if((ii.meta&kInfoPool)!=0u){p0=mul(hit.o2w,float4(p0,1.0));p1=mul(hit.o2w,float4(p1,1.0));p2=mul(hit.o2w,float4(p2,1.0));}
+ float3 p=p0+(p1-p0)*hit.bary.x+(p2-p0)*hit.bary.y;
+ return all(isfinite(p)) && length(p-ray_point)<=1e-3+1e-5*length(ray_point)?p:ray_point;
+}
+#endif
 // Unlike bg3_cluster_raw's renderer fallback, missing/overflowed sources cannot
 // certify a zero direct term. Native frustum/froxel membership is required.
 bool native_hit_cluster(float3 surface_position,out uint4 cluster){
@@ -28,7 +56,7 @@ bool native_hit_cluster(float3 surface_position,out uint4 cluster){
  if(count>kMaxFroxelLights || cluster.x>indices/4u || count>indices/4u-cluster.x)return false;
  return true;
 }
-NativeHitDirect native_hit_direct(NativeHitMaterial material,float3 surface_position,float3 outgoing,float3 geometric_normal,float footprint){
+NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface_position,float3 outgoing,float3 geometric_normal,float footprint){
  NativeHitDirect result;result.radiance=0;result.status=kHitDirectSource;result.lights=0;
  if(!isfinite(footprint) || footprint<0){result.status=kHitDirectDomain;return result;}
  if(material.status!=0){result.status=HdUnknownMaterial;return result;}
@@ -37,6 +65,7 @@ NativeHitDirect native_hit_direct(NativeHitMaterial material,float3 surface_posi
  // label a projector-bearing receiver as a complete local-light reference.
  if((cluster.z&1023u)!=0u){result.status=kHitDirectProjector;return result;}
  uint points=cluster.y&4095u,count=points+((cluster.y>>12)&4095u);
+ hd_stat(5u,count==0u);
  uint scale_bytes;lScale.GetDimensions(scale_bytes);if(scale_bytes<4)return result;
  float global_scale=asfloat(lScale.Load(0));
  [loop]for(uint item=0;item<count;++item){
@@ -51,6 +80,8 @@ NativeHitDirect native_hit_direct(NativeHitMaterial material,float3 surface_posi
   // Validate material/normal domain before spending a visibility ray.
   HdDirect term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,1);
   if(term.status!=HdOk){result.status=term.status;return result;}
+  const bool incident_zero=!any(incident.radiance>0);
+  hd_stat(6u,true);hd_stat(7u,incident_zero);hd_stat(8u,!incident_zero && !any(term.radiance>0));
   if(!any(term.radiance>0))continue;
   // flags bit0 means native atlas presence, not physical transparency to the
   // light. The physical point/spot reference tests every positive term,
@@ -65,10 +96,27 @@ NativeHitDirect native_hit_direct(NativeHitMaterial material,float3 surface_posi
   // GI hits, 0 nonzero; rf tier (a) check direct term 0). Within ls_clear: lit, as D-LS.
   float reach=distance-max(pc.ls_clear,0.0);
   RtCone cone={footprint,0};uint visibility=reach>0?rt_visibility(origin,delta/distance,reach,cone):kRtLit;
+  hd_stat(0u,reach>0);hd_stat(1u,reach>0 && visibility==kRtLit);hd_stat(4u,visibility==kRtUnknown);
+  if(g_hd_stats){
+   // What occludes: a first hit within 1 cm of the origin or on the hit's own triangle is
+   // self-intersection, not a caster (stats key only; one extra closest-hit query).
+   bool near=false,self=false;
+   if(visibility==kRtOccluded && reach>0){
+    RtHit blocker=rt_closest_hit(origin,delta/distance,reach,cone);
+    near=blocker.t>=0 && blocker.t<0.01;self=blocker.t>=0 && blocker.inst==g_hd_inst && blocker.prim==g_hd_prim;
+   }
+   hd_stat(2u,near);hd_stat(3u,self);
+  }
   if(visibility==kRtUnknown){result.status=HdUnknownVisibility;return result;}
   term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
   if(term.status!=HdOk){result.status=term.status;return result;}
   result.radiance+=term.radiance;++result.lights;
  }
  result.status=all(isfinite(result.radiance))?HdOk:HdInvalid;return result;
+}
+NativeHitDirect native_hit_direct(NativeHitMaterial material,float3 surface_position,float3 outgoing,float3 geometric_normal,float footprint){
+ NativeHitDirect r=native_hit_direct_eval(material,surface_position,outgoing,geometric_normal,footprint);
+ hd_stat(9u,r.status==kHitDirectSource);hd_stat(10u,r.status==kHitDirectProjector);
+ hd_stat(11u,r.status!=HdOk && r.status!=kHitDirectSource && r.status!=kHitDirectProjector);
+ return r;
 }
