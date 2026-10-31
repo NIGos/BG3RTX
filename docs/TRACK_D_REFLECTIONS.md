@@ -306,6 +306,27 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Known risk: the sun ray at hits has no roof-volume test (the TLAS lacks cut-away roofs; S8
     has 95% of pixels under roofs). If the sun line shows lit rays indoors, tier (b) must treat
     roofed hits as unsupported before it can pass.
+- **Hit lights: space check and projector lights (2026-10-31, branch hit-light-space; offline).**
+  Live S8 (main c3f406f): light rays at hits lit 0 of ~4.4k (RF) / ~12k (GI), N.L <= 0 91% (RF)
+  vs 25% (GI), zero before the cosine 0; S6 every hit unsupported by projector or source.
+  - No space mismatch: hit points (`o + d t`, `native_hit_position`), `rt_hit_normal` and the
+    froxel lookup are in the camera-relative lighting space of `ray_at` (gi_common.hlsli:132),
+    the same space D-LS uses for P (rt_local_shadows.hlsl:186) with the same b25 positions
+    (`load_light`) and TLAS; `native_hit_cluster` is `bg3_cluster` on the projected point.
+    The GI N.L <= 0 share (25%) shows the RF 91% is the reflection hits' geometry, not a frame error.
+  - The difference left from D-LS is the visibility rule: D-LS skips the darkvision pair by
+    art intent (`ls_noshadow=1`: 86% of S8's light evaluations, r = 18, TRACK_D_LOCAL_LIGHTS)
+    and clears max(R, ls_clear) with the per-light radius R; the hit path traces every light
+    with ls_clear only (lsSlots is not bound in D-RF / GI). New counters tell which: occluded
+    with the blocker within 1 m of the light, rays to lights of radius >= 10 m.
+  - Projector (box) lights: rf_hit_shade evaluates them (`NATIVE_HIT_BOXES`, set 1 b29/b45/b16
+    as set 2; channel, box falloff, cookie at mip 0, _m9, D-LS ls_box visibility: traced to the
+    box exit only with a game shadow map). gi_hit_direct has no box binding: it skips the
+    projector term (`NATIVE_HIT_PROJECTOR_SKIP`, counted; bias: darker, never brighter) instead
+    of the whole hit. The `lights` line adds `projector entries N, evaluated N, skipped N`.
+  - Offline: 708/708 compile; 612/708 key-off requests byte-identical to c3f406f, the 96 others
+    are exactly the gi_hit_direct and rf_hit_shade variants; 48/48 rf_hit_shade pass spirv-val
+    and the descriptor contract (set 2 b29 added); build + 67 CTests pass.
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.
