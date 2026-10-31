@@ -115,7 +115,7 @@ and reciprocity, normal-incidence analytic f/PDF cases, exact diffuse normalizat
 analytic rough-white specular integral, independently enclosed oblique PDF mass,
 and explicit null sampling. Fifty white-furnace endpoint cases cover alpha
 {0.0081,0.05,0.2,0.6,1} and No {0.001,0.02,0.2,0.6,1}, Rd=1 and Rs={0,1}.
-The model is linear per channel in Rd and Rs (with nonnegative diffuse), so
+The model is separately affine in each channel of Rd and Rs (with nonnegative diffuse), so
 these are the worst reflectance corners at the tested alpha/No values.
 Specular integrates actual shared eval in NDF-CDF coordinates to resolve narrow
 lobes; diffuse uses separate cosine quadrature. Refinement 256 -> 512 gives an
