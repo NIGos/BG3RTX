@@ -17,7 +17,7 @@ Code:
 - `common/assetdb_api.h` is the core's view (`Bg3HostApi::assetdb`, ABI 6; table
   version 2 adds the runtime lights of the Script Extender bridge, docs/SE_BRIDGE.md).
 
-D-LS uses it for each light's source radius and owner (TRACK_D 9.8), merged with the
+D-LS uses it for each light's source radius and owner (TRACK_D_LOCAL_LIGHTS.md 9.8), merged with the
 Script Extender bridge when that runs. Hit materials and emissives come later.
 
 ## Build

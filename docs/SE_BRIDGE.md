@@ -10,7 +10,7 @@ The bridge carries game state that the GPU never sees from the BG3 Script Extend
 - the atmosphere and lighting resource each trigger is set to (BG3 has no time of day).
 
 It implements AUDIT_ENGINE_DATA §2.3 route (b) and round 2 S2/S3/S5, and feeds D-LS
-(TRACK_D 9.8).
+(TRACK_D_LOCAL_LIGHTS.md 9.8).
 
 Code:
 - `mods/BG3RTX_Bridge/` is the Lua mod (client and server contexts).
@@ -188,7 +188,7 @@ The region is `Osi.GetRegion` (server). In the foundry both are `CTY_Main_A`.
 - The render thread pays one `shared_ptr` copy per query. The core re-queries
   `runtime_lights` every 8 frames, or when a new export arrives.
 
-**GPU.** The join pass (4096 threads × up to 1,024 uploaded lights) is in TRACK_D 9.8.
+**GPU.** The join pass (4096 threads × up to 1,024 uploaded lights) is in TRACK_D_LOCAL_LIGHTS.md 9.8.
 
 ## API (`Bg3AssetDbApi` v2)
 
@@ -223,7 +223,7 @@ Anything else gets `ls_source_radius` (0.05).
   A large radius gives them the soft, broad occlusion such light has.
 - **Not exact.** These are typical fixture sizes, not measured meshes. The next step is
   to measure each light's fixture from the TLAS (the distance from the light to the
-  enclosing geometry; TRACK_D 9.8).
+  enclosing geometry; TRACK_D_LOCAL_LIGHTS.md 9.8).
 
 ## Coverage of the runtime lights
 

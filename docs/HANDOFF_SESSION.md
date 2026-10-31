@@ -12,7 +12,7 @@ Plan and decisions: docs/CONSOLIDATION.md. All steps merged through merge-green;
   open branches on main before merging; old jobs that set them are harmless no-ops.
 - Hot-path settings use cfg_hot() (refreshed once per frame in cfg_poll); BG3RTX_DIAGNOSTICS CMake
   option compiles diagnostic host code out; sun packets, hit-material rules and emissive formulas
-  are pure functions in common/ with tests (emissive move to core: TRACK_D_RT.md 13.21).
+  are pure functions in common/ with tests (emissive move to core: TRACK_D_EMISSIVE.md 13.21).
 - Pending live batch (needs the user's go): regression check with FG on and RT A/B, shader define
   hot reload, rt_scene_wait 0/1 fps, rt_cascade_casters and ls_box promotion gates, dialogue flicker.
 
