@@ -61,3 +61,14 @@ front/behind counters 138/139/142/143, which are already counted. Confirmed if t
 front (high e8) and their FS is a discarding non-alpha-table dither. Fix (QUALITY Q14 plan): detect camera-fade
 dither FS in `alpha_table.py`, record the per-draw fade, run the same dither hash in the any-hit of camera-coherent
 rays, behind a key (off by default). Gate: p13 front 12% -> ~0.2% in the same run, mean brightness unchanged.
+
+## Pool lag check (2026-10-31, branch pool-lag)
+- Hypothesis: pool instances use a camera origin from another frame. The code has none to get wrong. The TLAS
+  matrix is the game's camera-relative instance row, copied verbatim at vkQueueSubmit (`bvh_on_submit`), the same
+  memory the G-buffer VS reads; the BLAS is object space (`mesh_extract.hlsl`: P = M0^-1 W0, W0 from the soup).
+  The class-A VS (`646a930e`) multiplies by set 0 binding 2 `_m2`, the same matrix `xfb_to_world` inverts.
+  Holds (`rt_dyn_hold`, also marked pool) are dropped while the camera moves.
+- A slide would be two-sided (front and behind); the rotation excess is front only.
+- The mesh audit already compares the submit-time matrix with the same frame's raster capture. New layer line:
+  `[bvh] audits while the camera moved: N ok, M failed, max error E x tolerance`. No key, no behaviour change.
+- Live test: tools/live_batches/pool_lag (README has the gates).

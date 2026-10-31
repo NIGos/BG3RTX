@@ -1,0 +1,73 @@
+{
+ "name": "pl1-inn-pool-lag-fg2",
+ "save": "The Blushing Mermaid - 96h 39m",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 360,
+ "repeat": 1,
+ "live_batch": "pool-lag",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_omm=0,rt_cascade_casters=0,ls_box=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,gi=1,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_primary_fade_class=1,rt_mesh_audits=2,rt_mesh_audit_frames=600,rt_scene_wait=1,cpu_timing=1",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/pool_lag/plans/pl1_inn.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "primary-ray check",
+  "rt epoch",
+  "rt fade class",
+  "\\[camera fade\\]",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[bvh\\] mesh cache",
+  "\\[bvh\\] instance matrices",
+  "\\[bvh\\] audits while",
+  "\\[bvh\\] WARNING",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[rt\\] scene wait: 600 frames",
+  "rt stats \\(120 frames, alpha test \\w+\\): primary-ray check match",
+  "rt epoch \\(120 frames\\)",
+  "rt epoch split \\(120 frames\\): pool hits [1-9]\\d*, in front [0-9.]+%, behind [0-9.]+%; soup hits [1-9]\\d*",
+  "\\[camera fade\\] \\d+ camera-fade fragment shaders",
+  "rt fade class \\(120 frames",
+  "\\[bvh\\] mesh cache: .* [1-9]\\d* audits ok",
+  "\\[bvh\\] audits while the camera moved: \\d+ ok, \\d+ failed, max error [0-9.]+ x tolerance"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-plan\\] complete phases=7\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "Pool lag test (docs/INN_ROTATION_MATCH.md): are cached static (pool) instances displaced from the raster while the camera orbits? Static / Q / E / Q / static windows with rt_stats + primary check + epoch, rt_primary_fade_class=1 and raised mesh audits (8 per frame, each mesh every 120 frames). The new layer line '[bvh] audits while the camera moved' compares the TLAS matrices read at submit with the same frame's raster capture of the draw.",
+ "estimated_phase_seconds": 100
+}
