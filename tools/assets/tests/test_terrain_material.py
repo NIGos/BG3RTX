@@ -18,6 +18,7 @@ class TerrainMaterialTests(unittest.TestCase):
         self.assertEqual(height_score(.25,.5,1,5,5,0),-1)
         self.assertEqual(height_score(.25,.9,1,5,5,0),6.125)
         self.assertEqual(height_score(.0010000000474974513,1,1,5,5,0),-1)
+        with self.assertRaises(UnsupportedTerrainArithmetic):height_score(1,0,0,1,0,-2)
         # Offset must not revive a contribution below the native scale test.
         self.assertEqual(height_score(1,.5,1,0,100,0),-1)
         with self.assertRaises(UnsupportedTerrainArithmetic):height_score(1,.5,-1,5,0,0)

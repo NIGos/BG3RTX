@@ -45,6 +45,8 @@ def height_score(mask,albedo_alpha,contrast,scale,offset,threshold):
     if not 0<=mask<=1 or not 0<=albedo_alpha<=1 or contrast<0:
         raise UnsupportedTerrainArithmetic('Unsupported mask/alpha/power domain')
     if mask<=0.0010000000474974513:return -1.
+    if albedo_alpha==0 and contrast==0 and (albedo_alpha-1.)+mask>threshold:
+        raise UnsupportedTerrainArithmetic('Undefined native pow(0,0) domain')
     h=0. if (albedo_alpha-1.)+mask<=threshold else abs(albedo_alpha)**contrast*mask
     h=h*scale+offset if h*scale>0.009999999776482582 else h*scale
     _finite((h,))
