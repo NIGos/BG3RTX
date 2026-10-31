@@ -322,6 +322,10 @@ add_executable(native_hit_qualify_test tests/native_hit_qualify_test.cpp)
 add_test(NAME native_hit_qualify_test COMMAND native_hit_qualify_test)
 add_executable(emissive_policy_test tests/emissive_policy_test.cpp)
 add_test(NAME emissive_policy_test COMMAND emissive_policy_test)
+# D-EM policy in the core (ABI 24): core/em_policy.cpp against the former layer path, bit for bit.
+add_executable(emissive_core_test tests/emissive_core_test.cpp core/em_policy.cpp)
+target_include_directories(emissive_core_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME emissive_core_test COMMAND emissive_core_test)
 add_executable(scene_wait_test tests/scene_wait_test.cpp)
 add_test(NAME scene_wait_test COMMAND scene_wait_test)
 
@@ -334,7 +338,7 @@ if(BG3RTX_HAIR_GPU_PROBE)
   target_link_libraries(native_hair_gpu_probe PRIVATE vulkan-1)
 endif()
 
-add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp)
+add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp core/em_policy.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # SHaRC radiance cache: inject the D-EM effects-target emission. AUTO follows whether
 # common/host_api.h defines BG3RTX_HOST_HAS_RT_EMISSIVE (D-EM's Bg3HostApi::rt_emissive);

@@ -142,7 +142,8 @@ static void unload() {
   host->log("core unloading");
 }
 
-static const Bg3CoreApi g_api = {BG3RTX_ABI_VERSION, &unload, &on_frame, &on_pass_end, &on_pass_begin, &on_dispatch, &on_cmd_end, &on_dispatch_pre};
+static const Bg3CoreApi g_api = {BG3RTX_ABI_VERSION, &unload, &on_frame, &on_pass_end, &on_pass_begin, &on_dispatch, &on_cmd_end, &on_dispatch_pre,
+                                  &core_em_record, &core_em_calib_update, &core_em_calib_apply};
 
 extern "C" __declspec(dllexport) const Bg3CoreApi* bg3rtx_core_load(const Bg3HostApi* h) {
   host = h;
