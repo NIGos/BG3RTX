@@ -32,7 +32,6 @@
 #include "omm_content.h"
 #include "omm_sampler.h"
 #include "omm_bake.h"
-#include "../common/camera_epoch.h"
 #include "../common/cascade_casters.h"
 
 #include <intrin.h>
@@ -1265,16 +1264,13 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
 
 // Caller holds g_mu. The current slot, stamped as handed out in this frame;
 // false before the first build and once it is stale (it may be retired then).
-bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame,
-              int slot = -1, bool exact_camera = false) {
-  if (slot < 0) slot = g_scene_cur;
+bool hand_out(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {
+  const int slot = g_scene_cur;
   if (slot < 0) return false;
   SceneSlot& s = g_scene[slot];
   const uint64_t now = frame_index();
   if (!s.used || !s.tlas) return false;
-  // Exact camera selection can legitimately refer to a build stamped two
-  // presents earlier. A present on another thread is not a camera epoch.
-  if (exact_camera ? slot_retired(s, life_gpu_done(), now) : s.built + 1 < now) return false;
+  if (s.built + 1 < now) return false;
   // Its command buffer was dropped without a submit: the TLAS was never built.
   if (bvh_rec_state(s.rec) == 2) return false;
   if (s.split ? !g_split_valid : !g_blas_valid) return false;
@@ -1346,41 +1342,6 @@ bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64
     }
   }
   return hand_out(tlas, set, built_frame);
-}
-
-bool rt_scene_camera(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas, VkDescriptorSet* set,
-                     uint64_t* built_frame) {
-  if (!g_rt) return false;
-  Bg3Binding camera{};
-  if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, 0, 2, 0, &camera) || !camera.buffer) return false;
-  float lighting_camera[56]{};
-  if (!read_mapped(camera.buffer, camera.offset, lighting_camera, sizeof lighting_camera)) return false;
-  std::lock_guard<std::mutex> lock(g_mu);
-  int matched = -1;
-  for (uint32_t i = 0; i < kSceneSlots; ++i) {
-    const SceneSlot& s = g_scene[i];
-    if (s.used && s.camera_pose_valid && !slot_retired(s, life_gpu_done(), frame_index()) &&
-        same_camera_pose(s.camera_pose, lighting_camera) &&
-        (matched < 0 || s.rec > g_scene[matched].rec)) matched = int(i);
-  }
-  static uint64_t count = 0, redirected = 0, missing = 0;
-  ++count;
-  redirected += matched >= 0 && matched != g_scene_cur;
-  missing += matched < 0;
-  if (count % 300 == 0) {
-    log("[rt] camera scene identity: %llu queries, %llu redirected, %llu no match; lighting %p+%llu, latest %p+%llu; matched built %llu, present %llu; origin %.6f %.6f %.6f, latest origin %.6f %.6f %.6f",
-        (unsigned long long)count, (unsigned long long)redirected, (unsigned long long)missing,
-        (void*)camera.buffer, (unsigned long long)camera.offset,
-        g_scene_cur >= 0 ? (void*)g_scene[g_scene_cur].camera : nullptr,
-        g_scene_cur >= 0 ? (unsigned long long)g_scene[g_scene_cur].camera_offset : 0,
-        matched >= 0 ? (unsigned long long)g_scene[matched].built : 0,
-        (unsigned long long)frame_index(), lighting_camera[52], lighting_camera[53], lighting_camera[54],
-        g_scene_cur >= 0 ? g_scene[g_scene_cur].camera_pose[52] : 0,
-        g_scene_cur >= 0 ? g_scene[g_scene_cur].camera_pose[53] : 0,
-        g_scene_cur >= 0 ? g_scene[g_scene_cur].camera_pose[54] : 0);
-  }
-  *set = VK_NULL_HANDLE;
-  return matched >= 0 && hand_out(tlas, set, built_frame, matched, true);
 }
 
 bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkAccelerationStructureKHR* reference,uint64_t* identity){

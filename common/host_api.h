@@ -16,9 +16,11 @@
 // 18: Bg3HostApi::rt_emissive (D-EM, codex/p2-emissive's 9, merged after pan_capture/rt_scene_camera).
 // 19: sun-only current-caster scene and optional OMM same-ray reference callback.
 // 20: exact per-command hit-material tuple use registration (opaque VT subset).
+// 21: Bg3HostApi::rt_hit_material_use (material-consuming dispatches).
+// 22: Bg3HostApi::rt_scene_camera removed (ABI 16; rt_scene_camera_match, CONSOLIDATION C1).
 // Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
-#define BG3RTX_ABI_VERSION 21
-// D-EM is in this host: Bg3HostApi::rt_emissive (ABI 9) and Bg3EmissiveInfo exist. The core's
+#define BG3RTX_ABI_VERSION 22
+// D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
 
@@ -105,7 +107,7 @@ struct Bg3DeviceInfo {
   VkPhysicalDeviceMemoryProperties memory;   // for the core's own device-local buffers
 };
 
-// D-EM (ABI 9): the emissive scene of the latest build (docs/TRACK_D_RT.md 13). The
+// D-EM (ABI 18): the emissive scene of the latest build (docs/TRACK_D_RT.md 13). The
 // descriptor set's layout is in shaders/rt/em_common.hlsli: the emissive TLAS, its
 // per-instance InstInfo, the mesh pool and emissive soup, the per-draw records, the
 // light list, the mask textures and a statistics buffer for debug views.
@@ -255,11 +257,8 @@ struct Bg3HostApi {
   // Images require TRANSFER_SRC usage. Buffer samples are copied on the GPU.
   // Returns false outside a burst or when a resource cannot be captured.
   bool (*pan_capture)(VkCommandBuffer cmd, const char* name, const Bg3Binding* resource);
-  // ABI 16: select a live scene by the lighting camera's actual native pose.
-  bool (*rt_scene_camera)(VkCommandBuffer cmd, VkAccelerationStructureKHR* tlas,
-                          VkDescriptorSet* set, uint64_t* built_frame);
 
-  // ABI 9 (D-EM): the emissive scene (set 3 of shaders/rt/em_common.hlsli) of the latest
+  // ABI 18 (D-EM): the emissive scene (set 3 of shaders/rt/em_common.hlsli) of the latest
   // build (the previous submitted frame). False when RT or the capture is off; `set` is
   // VK_NULL_HANDLE before the first build. Pass the command buffer the set will be bound in:
   // the game images and buffers it reads (glow maps, the effects target) are then kept

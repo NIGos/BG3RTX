@@ -293,6 +293,11 @@ checks and 20 variant validations pass. No promotion or merge.
 
 ## P1 lighting-to-scene translation — 2026-10-29, gate incomplete
 
+`rt_scene_rebase` (its gi/rebase and gi/cascade_rebase wrappers), `rt_scene_camera_match` and
+the host's `rt_scene_camera` (ABI 16): removed 2026-10-31, see CONSOLIDATION.md C1 (ABI 22).
+The `RT_SCENE_REBASE` blocks of rt_common.hlsli and hair_receiver.hlsli stay for
+tools/native_hair_gpu_probe's rebase cases; no runtime variant defines it.
+
 314840d: one real-present foreground FG-off job exited before slow/fast windows.
 Late static primary match off 99.164-99.177%, on 99.157-99.177%, RT active and no
 missing scene in interior windows. Median cadence 17.60 / 17.50 fps. Initial
@@ -1266,7 +1271,7 @@ cut-away roofs, so the RT sun can replace the game's mask under roofs too.
   with alpha holds 1.47M triangles (~100 MB); cascade 3 overflows (340 draws dropped).
 - **Shaders.** `RT_VIS_MASK` / `RT_HIT_MASK` in `rt_common.hlsli` are the literal 0xFF in
   ordinary builds (SPIR-V of all 66 existing outputs byte-identical). The core picks
-  `gi/cascade/` (`gi/cascade_rebase/` with `rt_scene_rebase`) variants with the key on:
+  `gi/cascade/` variants with the key on:
   mask 0x01 for GI, reflections, AO, local lights, origin and primary checks; the sun
   ray (`rt_shadow.hlsl`) traces 0xFF and ignores cascade hits nearer than
   `RT_CASCADE_TMIN` = 0.5 m (a coarser copy of the shaded surface; a roof is >= 2 m up).

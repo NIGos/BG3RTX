@@ -87,9 +87,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
         // Start from camera zero, not the restricted virtual search window:
         // a large virtual displacement must not cause cancellation of tBase.
         float3 physical_o=0.0.xxx;
-#ifdef RT_SCENE_REBASE
-        physical_o=rt_scene_ray_origin(physical_o);
-#endif
         if(primitive.valid && !primitive.inactive && primitive.camera &&
            ((pc.ls_flags & (1u << 21)) == 0u ||
             !hpo_competing_receiver(-V*t0,-V,t0,dist+w))) {

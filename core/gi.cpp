@@ -85,11 +85,10 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
-  // Variant bits: 1 rebase, 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset.
+  // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset (1 was rt_scene_rebase).
   VkPipeline variants[64] = {};
   uint64_t variant_generations[64] = {};
   std::string variant_files[64];
-  bool rebased = false;
 };
 
 // Bound pipeline capability, including a first-frame capability publication race.
@@ -706,7 +705,8 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
-  static const char* const rebased_files[] = {
+  // The RT passes that have cascade/OMM/Hair/tileset variants.
+  static const char* const rt_files[] = {
       "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/gi_trace_rt_hit_direct.hlsl", "gi/gi_trace_rt_sharc_hit_direct.hlsl", "gi/pan_primary.hlsl", "gi/pan_primary_epoch.hlsl",
       "gi/pan_primary_identity.hlsl", "gi/pan_local.hlsl",
       "gi/rt_shadow.hlsl", "gi/rt_debug.hlsl", "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_origin.hlsl",
@@ -715,20 +715,17 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
       "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
       "gi/rt_sun_resolve.hlsl", "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl"};
   bool listed = false;
-  for (const char* candidate : rebased_files) listed |= std::strcmp(file, candidate) == 0;
-  const bool rebase = listed && host->cfg_int("rt_scene_rebase", 0) != 0;
+  for (const char* candidate : rt_files) listed |= std::strcmp(file, candidate) == 0;
   // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
   // casters as instance mask 0x02; these variants trace 0x01 except the sun ray
   // (gi/cascade*/, shaders/rt/rt_common.hlsli). rt_sun_resolve traces nothing.
   const bool cascade = listed && host->cfg_int("rt_cascade_casters", 0) != 0 &&
                        std::strcmp(file, "gi/rt_sun_resolve.hlsl") != 0;
   // Include box/native/check helpers too: each may reach rt_common through
-  // includes even when it is outside the origin-rebase variant list.
+  // includes even when it is outside the variant list.
   const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
       host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
-  const std::string base = cascade ? std::string(rebase ? "gi/cascade_rebase/" : "gi/cascade/") + (file + 3)
-                               : rebase ? std::string("gi/rebase/") + (file + 3)
-                                        : std::string(file);
+  const std::string base = cascade ? std::string("gi/cascade/") + (file + 3) : std::string(file);
   const std::string material_selected = scalp ? "native_scalp/" + base : base;
   const std::string scene_selected = &p == &g_rt_shadow_current ? "sun_current/" + material_selected : material_selected;
   const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
@@ -738,14 +735,14 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const std::string before_tileset=physical_origin?"hair_origin/"+original_selected:original_selected;
   const bool tileset=std::strncmp(file,"gi/",3)==0 && bg3::native_tileset::enabled(static_cast<uint32_t*>(host->persist(bg3::native_tileset::capability_key,sizeof(uint32_t))));
   const std::string selected=tileset?"native_tileset/"+before_tileset:before_tileset;
-  const unsigned variant = (tileset?32u:0u) | (physical_origin?16u:0u) | (rebase ? 1u : 0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  const unsigned variant = (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset) p.pipeline = p.variants[variant];
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
+  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == selected;
   if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
-    p.pipeline = p.variants[variant]; p.generation = blob.generation; p.rebased = rebase;
+    p.pipeline = p.variants[variant]; p.generation = blob.generation;
     return true;
   }
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
@@ -756,7 +753,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   VkShaderModule mod = VK_NULL_HANDLE;
   if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
     host->log("gi: %s shader module creation failed; keeping the previous pipeline", file);
-    return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
+    return p.pipeline && p.variant_files[variant] == selected;
   }
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
@@ -767,7 +764,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
   if (pr != VK_SUCCESS) {
     host->log("gi: %s pipeline creation failed; keeping the previous one", file);
-    return p.pipeline && p.rebased == rebase && p.variant_files[variant] == selected;
+    return p.pipeline && p.variant_files[variant] == selected;
   }
   g_omm_pipelines.erase(p.variants[variant]);
   if(omm)g_omm_pipelines.insert(np);
@@ -775,7 +772,6 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   p.variants[variant] = np;
   p.variant_generations[variant] = blob.generation;
   p.variant_files[variant] = selected;
-  p.rebased = rebase;
   p.pipeline = np;
   p.generation = blob.generation;
   host->log("gi: %s generation %llu", selected.c_str(), (unsigned long long)blob.generation);
@@ -1698,10 +1694,8 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,u
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
   uint64_t built = 0, now = host->frame_index();
   *alpha = VK_NULL_HANDLE;
-  const bool matched = host->cfg_int("rt_scene_camera_match", 0) != 0;
-  bool scene_ok = matched ? host->rt_scene_camera && host->rt_scene_camera(cmd, &tlas, alpha, &built)
-                          : host->rt_scene_set && host->rt_scene_set(&tlas, alpha, &built);
-  if (!scene_ok || !tlas || (!matched && built + 1 < now) || !*alpha) {
+  const bool scene_ok = host->rt_scene_set && host->rt_scene_set(&tlas, alpha, &built);
+  if (!scene_ok || !tlas || built + 1 < now || !*alpha) {
     ++g_rt_frames_missing;
     return VK_NULL_HANDLE;
   }

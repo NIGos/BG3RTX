@@ -902,10 +902,10 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   const VkDeviceSize stamp_base = VkDeviceSize(slot) * kStampStride;
   if(geo_native_hair_enabled())g_hair_bounds_invalid.fetch_add(g_stamp_map[stamp_base/4+3]);
   g_stamp_map[stamp_base / 4] = g_stamp_gen;
-  // Snapshot the very same native UBO used by XFB conversion. This read is
-  // executed on the GPU with the build, not a CPU observation at record time.
-  const bool rebase = cfg_int("rt_scene_rebase", 0) != 0 || cfg_int("rt_primary_epoch", 0) != 0;
-  const bool pose_ok = rebase && geo_copy_camera(cmd, ab.camera, ab.camera_offset, g_stamp_buf,
+  // Snapshot the very same native UBO used by XFB conversion (rt_primary_epoch). This read
+  // is executed on the GPU with the build, not a CPU observation at record time.
+  const bool pose_wanted = cfg_int("rt_primary_epoch", 0) != 0;
+  const bool pose_ok = pose_wanted && geo_copy_camera(cmd, ab.camera, ab.camera_offset, g_stamp_buf,
                                                stamp_base + kStampCameraOffset);
   const uint32_t gpu_stamp[2] = {g_stamp_gen, pose_ok ? g_stamp_gen : 0};
   vk.CmdUpdateBuffer(cmd, g_stamp_buf, stamp_base + 4, sizeof gpu_stamp, gpu_stamp);
