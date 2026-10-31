@@ -1,0 +1,383 @@
+{
+  "scope": "Offline CPU numerical evidence and HLSL compilation only; no runtime/native-BRDF equivalence or continuous-domain energy proof",
+  "model": "PBRT/Ashikhmin-Shirley FresnelBlend with isotropic GGX, full-NDF/cosine sampling probabilities 0.5 each; no BRDF/material weights",
+  "adapter": "Qualified native diffuse_color->Rd,F0->Rs,intrinsic base_alpha->alpha; unknown native status propagates",
+  "pointwise_cases": 1700,
+  "maximum_pointwise_relative_error": 5.78725554e-07,
+  "white_furnace_max_energy": 0.999126497,
+  "max_refinement_delta": 0.000302553658,
+  "white_furnace_Rd": 1,
+  "furnace": [
+    {
+      "alpha": 0.0081,
+      "No": 0.001,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.49666626,
+      "refinement_delta": 3.76867028e-05
+    },
+    {
+      "alpha": 0.0081,
+      "No": 0.001,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.515578026,
+      "refinement_delta": 4.38077044e-05
+    },
+    {
+      "alpha": 0.0081,
+      "No": 0.02,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.702189547,
+      "refinement_delta": 1.88593132e-06
+    },
+    {
+      "alpha": 0.0081,
+      "No": 0.02,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.738562457,
+      "refinement_delta": 7.96106609e-06
+    },
+    {
+      "alpha": 0.0081,
+      "No": 0.2,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.723496964,
+      "refinement_delta": 5.36972899e-09
+    },
+    {
+      "alpha": 0.0081,
+      "No": 0.2,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.961812656,
+      "refinement_delta": 2.01825899e-06
+    },
+    {
+      "alpha": 0.0081,
+      "No": 0.6,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.842115216,
+      "refinement_delta": 3.55533588e-08
+    },
+    {
+      "alpha": 0.0081,
+      "No": 0.6,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.98908396,
+      "refinement_delta": 4.27198797e-07
+    },
+    {
+      "alpha": 0.0081,
+      "No": 1.0,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.968750006,
+      "refinement_delta": 3.16097126e-09
+    },
+    {
+      "alpha": 0.0081,
+      "No": 1.0,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.999126497,
+      "refinement_delta": 5.07976793e-06
+    },
+    {
+      "alpha": 0.05,
+      "No": 0.001,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.410825249,
+      "refinement_delta": 0.000221175085
+    },
+    {
+      "alpha": 0.05,
+      "No": 0.001,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.506978213,
+      "refinement_delta": 0.000259483117
+    },
+    {
+      "alpha": 0.05,
+      "No": 0.02,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.46179427,
+      "refinement_delta": 3.8711213e-06
+    },
+    {
+      "alpha": 0.05,
+      "No": 0.02,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.55368881,
+      "refinement_delta": 3.06525979e-05
+    },
+    {
+      "alpha": 0.05,
+      "No": 0.2,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.65507141,
+      "refinement_delta": 2.23353021e-08
+    },
+    {
+      "alpha": 0.05,
+      "No": 0.2,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.812455154,
+      "refinement_delta": 3.75784464e-06
+    },
+    {
+      "alpha": 0.05,
+      "No": 0.6,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.842235795,
+      "refinement_delta": 1.52999226e-08
+    },
+    {
+      "alpha": 0.05,
+      "No": 0.6,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.933328484,
+      "refinement_delta": 1.74029539e-06
+    },
+    {
+      "alpha": 0.05,
+      "No": 1.0,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.968750491,
+      "refinement_delta": 4.51851878e-09
+    },
+    {
+      "alpha": 0.05,
+      "No": 1.0,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.980342708,
+      "refinement_delta": 2.87337009e-06
+    },
+    {
+      "alpha": 0.2,
+      "No": 0.001,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.275771104,
+      "refinement_delta": 0.000154846536
+    },
+    {
+      "alpha": 0.2,
+      "No": 0.001,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.546949235,
+      "refinement_delta": 0.000301506571
+    },
+    {
+      "alpha": 0.2,
+      "No": 0.02,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.304934109,
+      "refinement_delta": 6.93227383e-06
+    },
+    {
+      "alpha": 0.2,
+      "No": 0.02,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.555931843,
+      "refinement_delta": 0.000157151656
+    },
+    {
+      "alpha": 0.2,
+      "No": 0.2,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.535986534,
+      "refinement_delta": 6.27177897e-08
+    },
+    {
+      "alpha": 0.2,
+      "No": 0.2,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.641730135,
+      "refinement_delta": 5.10729356e-06
+    },
+    {
+      "alpha": 0.2,
+      "No": 0.6,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.841235069,
+      "refinement_delta": 9.04532049e-09
+    },
+    {
+      "alpha": 0.2,
+      "No": 0.6,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.774216861,
+      "refinement_delta": 2.27289732e-07
+    },
+    {
+      "alpha": 0.2,
+      "No": 1.0,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.968756845,
+      "refinement_delta": 7.6257809e-09
+    },
+    {
+      "alpha": 0.2,
+      "No": 1.0,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.843263029,
+      "refinement_delta": 3.61935487e-06
+    },
+    {
+      "alpha": 0.6,
+      "No": 0.001,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.177944504,
+      "refinement_delta": 8.50777139e-05
+    },
+    {
+      "alpha": 0.6,
+      "No": 0.001,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.745847737,
+      "refinement_delta": 0.000302553658
+    },
+    {
+      "alpha": 0.6,
+      "No": 0.02,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.202980355,
+      "refinement_delta": 2.80753133e-06
+    },
+    {
+      "alpha": 0.6,
+      "No": 0.02,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.73006668,
+      "refinement_delta": 9.35983841e-06
+    },
+    {
+      "alpha": 0.6,
+      "No": 0.2,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.465762101,
+      "refinement_delta": 3.34454005e-08
+    },
+    {
+      "alpha": 0.6,
+      "No": 0.2,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.653870331,
+      "refinement_delta": 2.35942543e-07
+    },
+    {
+      "alpha": 0.6,
+      "No": 0.6,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.83649122,
+      "refinement_delta": 6.59559019e-09
+    },
+    {
+      "alpha": 0.6,
+      "No": 0.6,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.563567022,
+      "refinement_delta": 1.23398607e-07
+    },
+    {
+      "alpha": 0.6,
+      "No": 1.0,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.968775948,
+      "refinement_delta": 7.26052307e-09
+    },
+    {
+      "alpha": 0.6,
+      "No": 1.0,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.480350686,
+      "refinement_delta": 3.3805254e-06
+    },
+    {
+      "alpha": 1.0,
+      "No": 0.001,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.16632272,
+      "refinement_delta": 0.000296327178
+    },
+    {
+      "alpha": 1.0,
+      "No": 0.001,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.996482749,
+      "refinement_delta": 0.000218386497
+    },
+    {
+      "alpha": 1.0,
+      "No": 0.02,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.181562696,
+      "refinement_delta": 8.16236055e-07
+    },
+    {
+      "alpha": 1.0,
+      "No": 0.02,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.950024245,
+      "refinement_delta": 8.05555796e-05
+    },
+    {
+      "alpha": 1.0,
+      "No": 0.2,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.446186722,
+      "refinement_delta": 1.49461173e-07
+    },
+    {
+      "alpha": 1.0,
+      "No": 0.2,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.718012477,
+      "refinement_delta": 1.36916334e-06
+    },
+    {
+      "alpha": 1.0,
+      "No": 0.6,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.834429628,
+      "refinement_delta": 3.47839502e-09
+    },
+    {
+      "alpha": 1.0,
+      "No": 0.6,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.445267158,
+      "refinement_delta": 6.56887515e-08
+    },
+    {
+      "alpha": 1.0,
+      "No": 1.0,
+      "Rs": 0.0,
+      "hemispherical_energy": 0.96877619,
+      "refinement_delta": 7.13450254e-09
+    },
+    {
+      "alpha": 1.0,
+      "No": 1.0,
+      "Rs": 1.0,
+      "hemispherical_energy": 0.276143475,
+      "refinement_delta": 3.31053496e-06
+    }
+  ],
+  "original_transport_point_cases": 832,
+  "native_parameter_CPU_checks": 786570,
+  "shader_compile": {
+    "profile": "cs_6_6",
+    "target": "Vulkan1.3",
+    "GPU_dispatch": false,
+    "spirv_val": "PASS",
+    "fixtures": [
+      "tests/transport_bsdf_compile.hlsl",
+      "tests/native_opaque_transport_compile.hlsl"
+    ]
+  },
+  "source_sha256_lf": {
+    "common/transport_bsdf.h": "4442f324cd77341305bade6f62937c7d79da5eec57c6ab4b287fa4a6daf3a343",
+    "common/native_opaque_transport.h": "214f63fcaedbfc8cef8f3e3a42b43dd6dd9b5334be98bd6890679086646c3f19",
+    "tests/transport_bsdf_test.cpp": "88296fed8959d0acfe35b87a515e8e2d54163a57404909d40fa840532cd22f03"
+  },
+  "shader_sha256": {
+    "native_opaque_transport.spv": "39f32ba9d15ea82b122d90f8d6018c44d17a0bba8ece838986deffcceb4ecf56",
+    "transport_bsdf.spv": "7909a0312a1c761a2b2b84fb618c6dd2f5285e77af3d709cb53d141c1c17aef3"
+  }
+}

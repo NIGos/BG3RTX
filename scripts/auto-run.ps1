@@ -121,8 +121,8 @@ function Assert-QueueLaunchProcesses {
 }
 Assert-QueueLaunchProcesses
 $markerRoot = if ($env:BG3RTX_QUEUE_ROOT) { $env:BG3RTX_QUEUE_ROOT } else { $root }
-$playingMarker = Join-Path $markerRoot 'captures\queue\USER_PLAYING'
-if (Test-Path -LiteralPath $playingMarker) { throw 'USER_PLAYING exists; no launch' }
+$playing=Get-QueueUserPlayingBlock $markerRoot $root
+if ($playing) { throw $playing }
 $caps = Join-Path $root "captures"
 New-Item -ItemType Directory -Force $caps | Out-Null
 . (Join-Path $PSScriptRoot "gamelock.ps1")
@@ -581,7 +581,7 @@ while ((Get-Date) -lt $deadline) {
   if($env:BG3RTX_QUEUE_QUIT_FILE -and (Test-Path -LiteralPath $env:BG3RTX_QUEUE_QUIT_FILE)){
     $result='queue cancelled';break
   }
-  if (Test-Path -LiteralPath $playingMarker) {
+  if (Get-QueueUserPlayingBlock $markerRoot $root) {
     $result = 'user playing marker; test stopped'; break
   }
   if ((Get-Date) -ge $nextOwnershipCheck) {

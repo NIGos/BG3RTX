@@ -90,6 +90,12 @@ void rt_count_unknown(uint bin) { stat_add(kStatUnknown + min(g_rt_pass, kRtPass
 // camera, w = t_hit / |P| - 1 of the TLAS surface under the pixel, or kOriginNoHit.
 [[vk::binding(40, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> rtOrigin;
 static const float kOriginNoHit = 1000.0;
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+#include <../common/native_hair_origin.h>
+// Separate physical launch data. rtOrigin remains the native virtual surface
+// used by primary checks and history correspondence. Selected by ENTRY, not PC.
+[[vk::binding(50, 0)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> rtHairOrigin;
+#endif
 
 // The scene stamp of this set's build (layer/alphatest.cpp): uint 0 the generation
 // the host expects, uint 1 the one the build's command buffer wrote when it ran.
@@ -1232,8 +1238,32 @@ float3 rt_ray_origin_o(float4 o, float3 P, float3 Ns, float foot, float3 dir) {
   // A non-finite ray origin is undefined behaviour for ray queries.
   return all(isfinite(r)) ? r : P + Ns * (2.0 * foot * ss);
 }
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+bool rt_hair_receiver(uint2 fp,float3 P,out float3 receiver) {
+  receiver=P;
+  if(pc.rt_origin==0u)return false;
+  float4 physical=rtHairOrigin[fp];
+  if(physical.w<=0.0 || !all(isfinite(physical)) || !hpo_unit_normal(physical.xyz))return false;
+  receiver=hpo_reconstruct(P,physical.w);return all(isfinite(receiver));
+}
+float3 rt_secondary_ray_origin_o(uint2 fp,float4 virtual_origin,float3 P,float3 Ns,float foot,float3 dir) {
+  if(pc.rt_origin!=0u) {
+    float4 physical=rtHairOrigin[fp];
+    if(physical.w>0.0 && all(isfinite(physical)) && hpo_unit_normal(physical.xyz)) {
+      // Direct float32 distance: error scales with physical position, not the
+      // possibly much larger virtual point. No offset-ratio cancellation.
+      float3 base=hpo_reconstruct(P,physical.w);
+      if(all(isfinite(base)))return rt_ray_origin_o(float4(physical.xyz,0.0),base,Ns,foot,dir);
+    }
+  }
+  return rt_ray_origin_o(virtual_origin,P,Ns,foot,dir);
+}
+#define RT_SECONDARY_ORIGIN(fp,o,P,N,f,d) rt_secondary_ray_origin_o(fp,o,P,N,f,d)
+#else
+#define RT_SECONDARY_ORIGIN(fp,o,P,N,f,d) rt_ray_origin_o(o,P,N,f,d)
+#endif
 float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
-  return rt_ray_origin_o(rt_origin_at(fp), P, Ns, foot, dir);
+  return RT_SECONDARY_ORIGIN(fp,rt_origin_at(fp), P, Ns, foot, dir);
 }
 
 // Closest alpha-tested hit distance, or -1. `aborted`: the candidate cap ended the

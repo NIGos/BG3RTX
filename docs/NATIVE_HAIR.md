@@ -1,5 +1,9 @@
 # Native hair runtime coverage and depth
 
+Default-off physical secondary-origin candidate: [HAIR_PHYSICAL_ORIGIN.md](HAIR_PHYSICAL_ORIGIN.md).
+It preserves virtual primary/history depth. CPU/shader qualification is separate
+from the pending actual GPU/in-game gate and the user's darker-Hair attribution.
+
 ## Status: procedural CHAR_Hair/Pubes candidate, family and live gates remain open
 
 `rt_native_hair=0` is default. Enabling requires a restart with `rt_alpha=1` and

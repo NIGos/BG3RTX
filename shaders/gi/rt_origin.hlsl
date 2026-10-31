@@ -24,6 +24,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) {
     rtOrigin[fp] = float4(0, 0, 0, kOriginNoHit);
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+    rtHairOrigin[fp]=0.0.xxxx;
+#endif
     return;
   }
   float2 uv = (float2(fp) + 0.5) / float2(pc.full);
@@ -34,6 +37,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 Ns = to_lighting_space(decode_normal(gNormal.Load(int3(fp, 0)).xy));
 
   float4 o = float4(depth_geo_normal(int2(fp), P), kOriginNoHit);
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+  float4 physical_origin=0.0.xxxx;
+  bool physical_candidate=false;
+#endif
   // The TLAS surface is the depth buffer's when they differ along this pixel's ray by no
   // more than (rt/depth_tol.hlsli) the slope + curvature over the jitter (the raster depth
   // is the jittered sample's, the primary ray goes through the pixel centre: kJitterPx),
@@ -66,16 +73,47 @@ void main(uint3 tid : SV_DispatchThreadID) {
     if (l > 0.0 && !h.aborted && abs(h.t - dist) < tol) {
       Ng /= l;
       o = float4(dot(Ng, V) < 0.0 ? -Ng : Ng, h.t / dist - 1.0);
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+      // Native Hair/Pubes deferred writers encode class 5. A nearby card can
+      // depth-match skin at an edge, but must never move that raster receiver.
+      if(mat_class(gMaterial.Load(int3(fp,0)))==kMatHair &&
+         (inst_info(h.inst).meta&kInfoHairProcedural)!=0u) {
+        HairPrimitive primitive=hair_primitive(h.inst,h.prim);
+        physical_candidate=primitive.camera;
+        // Start from camera zero, not the restricted virtual search window:
+        // a large virtual displacement must not cause cancellation of tBase.
+        float3 physical_o=0.0.xxx;
+#ifdef RT_SCENE_REBASE
+        physical_o=rt_scene_ray_origin(physical_o);
+#endif
+        if(primitive.valid && !primitive.inactive && primitive.camera) {
+          HairTriangleHit card=hm_ray_triangle(primitive.p0,primitive.p1,primitive.p2,physical_o,-V);
+          float physical_t=card.t;
+          float3 physical_n=normalize(primitive.n);
+          if(card.status==1u && physical_t>0.0 && isfinite(physical_t) && all(isfinite(physical_n)) && hpo_unit_normal(physical_n)) {
+            physical_origin=float4(dot(physical_n,V)<0?-physical_n:physical_n,physical_t);
+          }
+        }
+      }
+#endif
     }
   }
   if (dot(o.xyz, o.xyz) < 0.5) o.xyz = Ns;   // degenerate: fall back to the shading normal
   else if (dot(o.xyz, V) < 0.0) o.xyz = -o.xyz;
   if (!all(isfinite(o))) o = float4(Ns, kOriginNoHit);
   rtOrigin[fp] = o;
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+  rtHairOrigin[fp]=physical_origin;
+#endif
   if (pc.rt_stats != 0) {
     uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
     stat_add(71, true, bin);
     stat_add(72, o.w != kOriginNoHit, bin);
     stat_add(73, dot(o.xyz, Ns) < 0.9, bin);
+#ifdef RT_HAIR_PHYSICAL_ORIGIN
+    stat_add(188,physical_candidate,bin);
+    stat_add(189,physical_origin.w>0.0,bin);
+    stat_add(190,physical_candidate && physical_origin.w<=0.0,bin);
+#endif
   }
 }

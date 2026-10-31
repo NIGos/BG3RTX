@@ -59,14 +59,16 @@ $script:permissionRunner="$PID|$([guid]::NewGuid().ToString('N'))"
 $script:permissionStates=@()
 $script:minimizer=$null
 function Assert-QueueRuntime {
-  if(Test-Path -LiteralPath (Join-Path $root 'captures/queue/USER_PLAYING')){throw 'USER_PLAYING exists'}
+  $playing=Get-QueueUserPlayingBlock $root
+  if($playing){throw $playing}
   if($DryRun){if(Test-Path -LiteralPath (Join-Path $root 'fake_unowned_game')){throw 'Unowned game exists'};return}
   foreach($game in @(Get-Process bg3,bg3_dx11 -ErrorAction SilentlyContinue)){
     if(-not $script:sess -or $game.Id -ne $script:sess.gamePid -or $game.StartTime.ToUniversalTime().Ticks -ne $script:sess.gameStart){throw 'An unowned game exists'}
   }
 }
-if (-not $DryRun -and (Test-Path -LiteralPath (Join-Path $root 'captures\queue\USER_PLAYING'))) {
-  throw 'USER_PLAYING exists; runner must not start'
+if (-not $DryRun) {
+  $playing=Get-QueueUserPlayingBlock $root
+  if($playing){throw $playing}
 }
 $env:BG3RTX_QUEUE_ROOT = $root
 if (-not $DryRun -and (Get-Process bg3,bg3_dx11 -ErrorAction SilentlyContinue)) {
