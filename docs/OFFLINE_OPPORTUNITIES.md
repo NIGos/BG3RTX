@@ -37,9 +37,16 @@ days), L (a week or more). Live tests still need explicit user steering (AGENTS.
   `shaders/replay_image.hlsl` through a sampled view and stored decoded (BC1/2/3/7 as RGBA8, sRGB kept;
   BC4/BC5 as R8/RG8; BC6H as RGBA16F; `image ... SOURCE` names the game format). Self-test on the RTX
   5090: BC1/2/3/7 and BC6H bit-exact, BC4/BC5 within 0.5/255. Textures now fill the pack up to the
-  2 GB cap (alpha-only ones dropped first); integer formats stay omitted. READY_FOR_LIVE: the job
-  `rc1-replay-s8-fg2` checks `written: ... (<n> images omitted, <r> read by shader)`; offline, the
-  replay must show hit material qualified > 0 and sampling near 0.
+  2 GB cap; integer formats stay omitted.
+- Second S8 pack (055812, 906 MB): no texture kept (`budget 4098`, `images copied 7, read by
+  shader 1`; replay 94.9% bit-equal, qualified 0, sampling 125767). Real textures have TRANSFER_SRC
+  (raw copies); the dropping order emptied the pack for a hit cache (b14[1]) larger than the 1142 MB
+  left, and b14[0] was a second view of the alpha cache. Now (`rp::fill_budget`): the hit bindings
+  first, smallest first, each image that fits; raw-compatible second views share the capture; a
+  `textures` line measures every droppable image. Expected next pack: tables and the alpha cache
+  kept, b14[1] dropped; the two caches exceed the 2 GB cap together, so qualified hits need either
+  a larger cap for this job or a tile capture of the pages the hits sample (decision after the
+  next pack's sizes). READY_FOR_LIVE: `rc1-replay-s8-fg2` (gates in its README).
 
 ## E. Re-analysis of existing captures (S, low gain)
 - Mine `captures/` logs and dumps for numbers not yet extracted.
