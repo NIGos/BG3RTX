@@ -361,12 +361,17 @@ level objects with `captures/assetdb_join_*.csv`:
   - One check of an earlier run listed 59 projectors of which only 2 matched. This was not
     reproduced in the next run (7 valid, both listed ones matched), and remains unexplained.
 
+**Projector rate denominator.** The b29 counts above are over every valid slot, not the
+froxel-listed ones (`layer/assetdb.cpp` counts `m_proj` without `pref`), so they
+understate the listed rate (docs/LIGHT_CONVENTIONS.md 2).
+
 **Projector anchor.** For box lights, the editor's position is the **centre of the box's
 near face** (box space (0.5, 0.5, 0)). The box centre and far face never match.
 
 **Colour model.** The runtime chromaticity is the black-body colour of `Kelvin` for lights
-with `UseTemperature`, and `Color` otherwise. `Color × Kelvin` matches every light,
-because Kelvin lights keep `Color` = white.
+with `UseTemperature`, and `Color` otherwise. `Color × Kelvin` matches every light.
+The matched lights kept `Color` = white, but 3,450 of the 9,616 Kelvin lights in the
+database do not (docs/LIGHT_CONVENTIONS.md): keep `Color × Kelvin`.
 
 **Intensity.** The runtime magnitude `max(m1.rgb)` ≈ `Intensity` × 1.00-1.19 (median;
 range 0.97-1.77). A proper fit, including `Gain` and the global scale `b13`, is left to the
