@@ -26,7 +26,7 @@ m5w3 ran at S8 on 2026-11-01: patching worked (`water draws on a variant 174, wi
 - Key off is the game: `shot-off-a` vs `shot-off-b` within the OFF repeat noise (QA detectors as in lean_regression).
 - Image: `shot-on` minus `shot-off-a` only on water pixels (the delta view's coloured pixels); the docks' piers and hulls reflected the right way up on the water. Review against the `diag-view-delta` PNG.
 - Composition: `owned` share (not owned is overlapping water), `unresolved (probe kept)` share, `kept: rough` share, tiers; `compose energy`: B removed vs A L added, mean delta per composed pixel and over owned as % of mean C (reported: the traced reflection is meant to differ from the probe; no brightness gate on a correction of the probe's error), `clamped` near 0.
-- Cost: `[water] compose GPU` median and p90 (copy + compose dispatches); cost-on minus cost-off frame time against the OFF spread.
+- Cost: `[water] compose GPU` median and p90 (copy + compose dispatches, now also split: `copy` and `compose dispatches`); the expect line needs a median below 0.5 ms (the 7.2-8.2 ms of the m5w3-fg2 rerun were the statistics' atomics in host-visible memory, moved device-local and group-reduced: PLAN_M5 "M5.3 compose cost"); cost-on minus cost-off frame time against the OFF spread.
 
 Not in this batch: motion (one moving run with the key toggled, where the one-frame water geometry latency and the screen-space resolve matter to the image); the other six audited water FS (no id table yet: they keep the probe; mapped: 7b44a567, 99c1fcef, c4e92ccd).
 

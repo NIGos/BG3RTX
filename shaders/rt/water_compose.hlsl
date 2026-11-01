@@ -33,6 +33,14 @@
 //   16/17 sum lum(C) over owned, 18/19 sum lum(B) over composed, 20/21 sum lum(A L) over composed,
 //   22/23 sum positive lum(C' - C), 24/25 sum negative |lum(C' - C)|, 26/27 sum lum(B) over owned,
 //   28 composed, 29/30/31 composed with A L / B below 0.5 / 0.5..2 / above 2; sums x 4096 (64-bit).
+//   cStats is a DEVICE-LOCAL slot (core/water.cpp copies it to the host slot after the dispatch,
+//   outside the timed region), and every word is reduced per 8x8 group in groupshared first: one
+//   global atomic per non-zero word per group. m5w3-fg2 (11-01) had cStats in host-visible memory:
+//   ~25 per-wave atomics (6 of them returning the old value for the 64-bit carry, a PCIe round
+//   trip each) cost 7.2 ms at 275k records and 2.0 ms at 85k (proportional to the record waves),
+//   while M5.2 traced the same rays in 0.12 ms. The group sum of a 64-bit word's quantised values
+//   is exact in 32 bits (64 lanes x (1e4 x 4096 + 1) < 2^32, common/water_compose.h
+//   kCsGroupSumMax), so the logged sums are the same integers as the per-wave adds.
 // Key off: nothing of this runs (no ordinary shader includes this file).
 #include "../gi/gi_common.hlsli"
 #include "rt_common.hlsli"
@@ -52,17 +60,34 @@ struct ComposeParams {
 static const uint kHeaderBytes = 64u, kRecordBytes = 32u;   // common/water_compose.h
 static const uint kVpOffset = 512u;                         // cCam: CameraCB (25 float4) at 0, ViewportCB here
 
+// Group-reduced statistics (words 1..31; word 0 is one add per dispatch): cstat / csum64 add a
+// wave's count / sum into gsStat, cstat_flush (after a group barrier every thread reaches) adds the
+// group's non-zero words to cStats, with the carry into the high word for the 64-bit sums.
+static const uint kGsWords = 32u;
+groupshared uint gsStat[kGsWords];
 void cstat(uint word, bool cond) {
   const uint n = WaveActiveCountBits(cond);
-  if (WaveIsFirstLane() && n != 0u) cStats.InterlockedAdd(word * 4u, n);
+  if (WaveIsFirstLane() && n != 0u) InterlockedAdd(gsStat[word], n);
 }
 void csum64(uint word, float v, bool cond) {
   const uint q = cond ? uint(clamp(v, 0.0, 1e4) * 4096.0 + 0.5) : 0u;
   const uint s = WaveActiveSum(q);
-  if (WaveIsFirstLane() && s != 0u) {
-    uint old;
-    cStats.InterlockedAdd(word * 4u, s, old);
-    if (old + s < old) cStats.InterlockedAdd(word * 4u + 4u, 1u);
+  if (WaveIsFirstLane() && s != 0u) InterlockedAdd(gsStat[word], s);
+}
+bool is_sum_lo(uint w) { return w >= 16u && w <= 26u && (w & 1u) == 0u; }   // 16, 18, .. 26 (hi = w + 1)
+void cstat_flush(uint gi) {
+  GroupMemoryBarrierWithGroupSync();
+  if (gi >= 1u && gi < kGsWords) {
+    const uint s = gsStat[gi];
+    if (s != 0u) {
+      if (is_sum_lo(gi)) {
+        uint old;
+        cStats.InterlockedAdd(gi * 4u, s, old);
+        if (old + s < old) cStats.InterlockedAdd(gi * 4u + 4u, 1u);
+      } else {
+        cStats.InterlockedAdd(gi * 4u, s);
+      }
+    }
   }
 }
 float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
@@ -94,10 +119,12 @@ bool same_encoded(float c, float t, int mbits) {
 }
 
 [numthreads(8, 8, 1)]
-void water_compose(uint3 tid : SV_DispatchThreadID) {
+void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   g_rt_pass = kRtPassRefl;
   const uint2 fp = tid.xy;
   if (all(fp == 0)) cStats.InterlockedAdd(0, 1u);
+  if (gi < kGsWords) gsStat[gi] = 0u;
+  GroupMemoryBarrierWithGroupSync();
   const bool inside = all(fp < pc.full);
   const uint idx = fp.y * cp.a.x + fp.x;
   bool has = inside && fp.x < cp.a.x && idx < cp.a.y;
@@ -200,6 +227,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID) {
   cstat(29, composed && rb > 0.0 && rr < 0.5);
   cstat(30, composed && rb > 0.0 && rr >= 0.5 && rr <= 2.0);
   cstat(31, composed && rb > 0.0 && rr > 2.0);
+  cstat_flush(gi);
   if (!has) return;
   // rt_debug 25, over every record of this pass (exact codes, no tonemap of ours):
   //   composed: green = the relative brightening d / lum(C), red = the relative darkening;
