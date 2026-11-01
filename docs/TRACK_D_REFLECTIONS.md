@@ -390,9 +390,10 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     checks p0/p1 and the tile-set matrices against the depth draw's alpha record, and each hit checks clip + UV
     per vertex (fail closed). Alpha cut: these hits come from the traversal's alpha test of that same record.
   - Two-sided (923131c7): row word 220 bit 0; the per-draw consumer scales the N column by
-    `nv_two_sided_sign(ng, N, RtHit.dir)` (`RtHit.dir`, new under `RT_HIT_MATERIAL`). Word 220 is 0 on every other
-    per-draw row, so key off the consumers behave as before; their SPIR-V changes, every other module is
-    byte-identical (576 of 872 requests vs 2bf305e; the 296 others are exactly the 15 hit-material consumer files, all pass spirv-val).
+    `nv_two_sided_sign(ng, N, RtHit.dir)`, both only in the `RT_HIT_INSTANCED=1` variants of the 15 consumer files
+    (`common/shader_variant.h` kHitInstanced, core slot bit 64). The core requests them when the layer's startup
+    capability `native-hit-instanced-v1` is set; the live key only gates the rows (word 220 is 0 on every other row).
+    Key off: all 872 requests of 2bf305e byte-identical; the 296 new variants compile and pass spirv-val.
   - Offline: `native_hit_instanced_test` (54 checks: families, key, geometry, staging, flags), recipe test, GPU
     fixture 8a/8b (12 rays, both sides), 73 CTests. Log (`rt_stats`): `[hit material instanced] frame F key K; wind:
     prepass N, G-buffer N (pipeline N, bindings N, stream N) captured N, mapped N rows N triangles; alpha-test 2S: ...`.

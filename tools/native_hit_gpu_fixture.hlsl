@@ -5,6 +5,7 @@
 // is the real gi_common.hlsli one. Nothing here is a copy of production shading code: every call below is
 // the production function; this file only builds the material and stores results.
 #define RT_HIT_MATERIAL 1   // as rf_hit_shade / gi_hit_sun (RtHit.bary, native_hit_position)
+#define RT_HIT_INSTANCED 1  // the rt_hit_material_instanced variants (RtHit.dir, case 8)
 #include "../shaders/gi/gi_common.hlsli"
 #include "../shaders/rt/rt_common.hlsli"
 #include "../shaders/rt/bg3_lights.hlsli"

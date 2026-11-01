@@ -14,7 +14,23 @@ namespace bg3::shader_variant {
 
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
-enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64 };
+enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128 };
+
+// rt_hit_material_instanced at startup (common/native_hit_instanced.h): the files that include
+// rt/native_hit_material.hlsli get RT_HIT_INSTANCED=1 (RtHit.dir, the two-sided N column of row word
+// 220). Without it they compile as before.
+inline bool hit_material_entry(const char* file) {
+  static const char* const names[] = {
+      "gi/gi_trace_rt_hit_direct.hlsl", "gi/gi_trace_rt_hit_direct_em.hlsl", "gi/gi_trace_rt_hit_sun.hlsl",
+      "gi/gi_trace_rt_hit_sun_em.hlsl", "gi/gi_trace_rt_sharc_hit_direct.hlsl", "gi/gi_trace_rt_sharc_hit_direct_em.hlsl",
+      "gi/gi_trace_rt_sharc_hit_sun.hlsl", "gi/gi_trace_rt_sharc_hit_sun_em.hlsl", "gi/rt_hit_direct.hlsl",
+      "gi/rt_hit_material.hlsl", "gi/rt_hit_two_bounce.hlsl", "gi/rt_reflections_hit_shade.hlsl",
+      "gi/rt_reflections_hit_shade_em.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
+      "gi/rt_reflections_sharc_hit_shade_em.hlsl"};
+  for (const char* n : names)
+    if (std::strcmp(n, file) == 0) return true;
+  return false;
+}
 
 // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the RT passes that trace the cascade's
 // instance masks. rt_sun_resolve traces nothing.
@@ -47,6 +63,7 @@ inline unsigned allowed(const char* file) {
   if (cascade_entry(file)) f |= kCascade;
   if (hair_origin::alternate_entry(file)) f |= kHairOrigin;
   if (sun_current_entry(file)) f |= kSunCurrent;
+  if (hit_material_entry(file)) f |= kHitInstanced;
   return f;
 }
 
@@ -82,6 +99,7 @@ inline std::string request(const char* file, unsigned flags) {
     add("RT_NATIVE_SCALP=1");
     add("RT_NATIVE_HAIR=1");
   }
+  if (flags & kHitInstanced) add("RT_HIT_INSTANCED=1");
   if (flags & kCascade) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF

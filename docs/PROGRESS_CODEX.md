@@ -8,7 +8,8 @@
   the per-draw path took one instance only. Now depth alpha record + G-buffer XFB of all instances, joined by
   draw words + index range; per-hit clip/UV check unchanged; 2S flips N with `nv_two_sided_sign`.
 - Classifier built share 48.2% -> 54.4% (+6.2, same 139 traces). No ABI change. 73 CTests (new
-  `native_hit_instanced_test`), GPU fixture 8a/8b. SPIR-V vs 2bf305e: 576/872 requests byte-identical, the 296 others are the hit-material consumers (two-sided N + RtHit.dir), spirv-val clean.
+  `native_hit_instanced_test`), GPU fixture 8a/8b. SPIR-V vs 2bf305e: 872/872 requests byte-identical (the flip and RtHit.dir are in
+  new `RT_HIT_INSTANCED=1` consumer variants, requested only with the startup key; 296 new, spirv-val clean).
 - Live (prepared, not queued): `tools/live_batches/m4_instanced` job `m4i-instanced-s14-fg2` (S14, 149 s, dry run
   passes). Deciding: `[hit material instanced]` mapped > 0 per family; `hit material` qualified share ON - OFF;
   reasons row/clip ON - OFF; cost ON - OFF on `[pace]` and `gi: trace pass`. Details: TRACK_D_REFLECTIONS 14.
