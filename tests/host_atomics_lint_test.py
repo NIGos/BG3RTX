@@ -42,6 +42,9 @@ def check(name, ok, info=""):
 H, D = "host", "device"
 # key "declaring shader:resource" -> [(C++ file, exact evidence substring, memory, note)]
 ATOMIC_TARGETS = {
+    "shaders/rt/hit_material_instanced_remap.hlsl:remap": [
+        ("layer/hit_material.cpp", "if(!remaps.empty() && remap_ready() && create(q.remap,perm,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,true)){",
+         H, "q.remap counters + permutations (rt_hit_material_instanced only; one atomic per instance, not per pixel)")],
     "shaders/rt/rt_common.hlsli:rtStats": [
         ("core/gi.cpp", "if (!host->alloc_host_buffer(kStatsSlot * kStatsRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,",
          H, "g_stats_buf bound at set 0 binding 20 for every gi.cpp pipeline (rt_stats=1)"),
@@ -102,6 +105,7 @@ ATOMIC_TARGETS = {
 # Host-visible atomic targets on 2026-11-01 (META_AUDIT_20261101 section 5). Fix: device-local
 # counters, group-reduced, copied to the host outside the timed region; then delete the entry.
 KNOWN_HOST_ATOMICS = {
+    ("shaders/rt/hit_material_instanced_remap.hlsl:remap", "layer/hit_material.cpp"): "instanced remap counters (added 2026-11-01 after review: per instance, a few hundred atomics per frame, key off by default; move to device-local with the next hit_material change)",
     ("shaders/rt/rt_common.hlsli:rtStats", "core/gi.cpp"): "rt_stats counters (~80 ms/frame with rt_primary_check)",
     ("shaders/rt/em_common.hlsli:emStats", "layer/emissive.cpp"): "D-EM debug-view statistics",
     ("shaders/rt/em_sanitize.hlsl:Header", "layer/emissive.cpp"): "D-EM build header (collapsed triangles)",
@@ -120,6 +124,7 @@ KNOWN_HOST_ATOMICS = {
 # Host-visible STORAGE allocations: (file, substring of the call) -> ("atomic", [targets]) or
 # ("plain", [shader resources "file:name" it backs, none of them an atomic target]).
 HOST_STORAGE = {
+    ("layer/hit_material.cpp", "create(q.remap,perm,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,true)"): ("atomic", ["shaders/rt/hit_material_instanced_remap.hlsl:remap"]),
     ("core/gi.cpp", "&g_stats_buf"): ("atomic", ["shaders/rt/rt_common.hlsli:rtStats"]),
     ("core/ls_lights.cpp", "&g_buf"): ("plain", ["shaders/gi/rt_local_shadows_match.hlsl:lsKnown"]),
     ("core/water.cpp", "&g_host"): ("plain", ["shaders/rt/water_reflect.hlsl:wp"]),
