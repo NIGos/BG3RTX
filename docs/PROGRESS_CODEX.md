@@ -1,5 +1,19 @@
 # BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 24)
 
+## M4.4 rt_hit_emission (branch hit-emission, offline, READY_FOR_LIVE, 2026-11-01)
+
+- `rt_hit_emission=0` (GUI `exp_hit_emission`: Off / Hidden hits / All hits; live; needs `rt_emissive=1`,
+  `rt_hit_material=1`, acts through `gi_hit_direct` and/or `rf_hit_shade`): a GI bounce or reflection ray
+  hitting a captured emitter adds its D-EM record radiance, with the projected check's own lookup
+  (`rt/native_hit_emission.hlsli`). Exact families, calibrated approximate ones; excluded never.
+- Finding: the screen value has no emission (prevRadiance is before compose adds the effects target), so
+  `1` = hidden hits (GI zero-fallback hits, shaded D-RF tier b), `2` = also GI screen hits and tier (a).
+  SHaRC hits untouched (already injected). No ABI change: host emissive set as GI set 2 / D-RF set 5.
+- Offline: key off byte-identical (`tests/hit_emission_shader_test.py`), every `*_em` variant compiles and
+  matches its contract (`--em`); GPU fixture case 7 (emissive quads) 5/5 PASS; 71 CTests pass.
+- Not built: emitters as light sources at hidden hits (no CDF in the light list; double count with the
+  game's authored lights near lava/braziers): TRACK_D_EMISSIVE 13.23. Cost not measured. Live gate there.
+
 ## M5.1 water geometry (branch m5-water, offline, READY_FOR_LIVE, 2026-11-01)
 
 - `rt_water_geometry=0` (GUI `exp_water_geometry`, live): forward water draws of the 7 audited FLUID_Water_Plane
@@ -30,6 +44,9 @@ Plan: [RENDERING_EXECUTION_PLAN.md](RENDERING_EXECUTION_PLAN.md). Resume: [HANDO
 ## Open questions for the user
 
 - None blocking. Promotion of any M4 key to the Ultra preset waits for its gates (below).
+- Not blocking (M4.4): the plan said screen hits already contain emission; the code says they do not
+  (prevRadiance is before compose). `rt_hit_emission=2` adds it at screen hits too. The live gate tests 1
+  and 2; which one to qualify for presets is your call after it (conservative default: 1).
 
 ## Stage 0: closed (2026-10-31 evening)
 

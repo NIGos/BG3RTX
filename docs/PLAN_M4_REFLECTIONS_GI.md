@@ -199,6 +199,12 @@ Limits that decide the order:
   for both consumers. The probe and the native bounce never count it twice: tier (a) and screen
   hits already contain the emission, so only tier (b) and hidden GI hits take it.
 - Gate: S5/S6 lava and S3 braziers; same-run A/B; the `rt_debug` 16-18 D-EM checks stay clean.
+- Correction (2026-11-01, read in the code): the screen value has no emission either. `prevRadiance` is the
+  lit diffuse + specular kept by `gi_composite.hlsl` before compose adds the effects target, so tier (a) and
+  GI screen hits lack it too. Hence `rt_hit_emission=1` hidden hits only (the planned domain), `=2` also
+  screen hits. SHaRC hits already carry it (the injection adds the effects target).
+- Built 2026-11-01 (branch hit-emission, offline, READY_FOR_LIVE): TRACK_D_EMISSIVE 13.23. Emitters as
+  light sources at hidden hits (light-list sampling) not built; why and the next step there.
 
 ### M4.5 Lights outside the frustum (needs M3b)
 - Replace the froxel walk at hits by the world-light provider (asset DB + SE bridge lights,

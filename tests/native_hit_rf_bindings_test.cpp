@@ -1,6 +1,6 @@
 // rf_hit_shade descriptor contract (common/native_hit_rf_bindings.h) against compiled SPIR-V.
 //   native_hit_rf_bindings_test                       table checks (ctest)
-//   native_hit_rf_bindings_test [--sharc] [--tileset] [--hair] [--cascade] a.spv ...   + every module given
+//   native_hit_rf_bindings_test [--sharc] [--tileset] [--hair] [--cascade] [--em] a.spv ...   + every module given
 // (tools/compile_shaders.py passes every compiled gi/rt_reflections*_hit_shade.hlsl request).
 #include "../common/native_hit_rf_bindings.h"
 #include "../common/native_hit_records.h"
@@ -18,7 +18,7 @@ static unsigned checks;
 static void check(bool ok,const char* reason){++checks;if(!ok){std::fprintf(stderr,"FAIL %s\n",reason);std::exit(1);}}
 struct Instruction{uint32_t op;std::vector<uint32_t> a;};
 
-static void module(const char* file,bool sharc,bool tileset,bool hair,bool cascade){
+static void module(const char* file,bool sharc,bool tileset,bool hair,bool cascade,bool em){
  std::ifstream f(file,std::ios::binary|std::ios::ate);check(bool(f),file);auto bytes=f.tellg();
  check(bytes>=20 && bytes%4==0,"SPIR-V byte range");f.seekg(0);
  std::vector<uint32_t> w(size_t(bytes)/4);f.read(reinterpret_cast<char*>(w.data()),bytes);check(bool(f) && w[0]==0x07230203u,"SPIR-V header");
@@ -44,6 +44,12 @@ static void module(const char* file,bool sharc,bool tileset,bool hair,bool casca
   else if(t.op==5341)type=VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
   else if(t.op==25 && t.a.size()>=7)type=t.a[5]==1?VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
   else if(t.op==26)type=VK_DESCRIPTOR_TYPE_SAMPLER;
+  if(set==kSetEmissive){
+   check(em,"only rt_hit_emission variants read the emissive set 5");
+   const auto* b=bg3::hit_emission::find(slot);check(b!=nullptr,"rt_hit_emission: emissive set binding in the contract");
+   check(type==b->type && count==b->count,"rt_hit_emission: emissive set descriptor type/array count");
+   seen.insert({set,slot});continue;
+  }
   check(set<set_count(sharc),"only the declared sets are used");
   const Binding* want=nullptr;
   if(set==kSetPush){want=find_in(push,slot);check(want && push_enabled(*want,hair),"set 0 binding is in D-RF's push set");}
@@ -59,7 +65,7 @@ static void module(const char* file,bool sharc,bool tileset,bool hair,bool casca
   }
   else if(set==kSetGame){want=find_in(game,slot);check(want!=nullptr,"set 2 binding is a declared lighting set 1 input");}
   else if(set==kSetSun){want=find_in(sun,slot);check(want!=nullptr,"set 3 binding is in the sun set");}
-  else {check(sharc && slot<=5,"SHaRC slot range");seen.insert({set,slot});continue;}
+  else {check(sharc && set==kSetSharc && slot<=5,"SHaRC slot range");seen.insert({set,slot});continue;}
   check(type==want->type,"descriptor type matches the contract");
   check(count==want->count,"descriptor array count matches the contract");
   if(set==kSetPush && seen.insert({set,slot}).second)push_descriptors+=count;
@@ -73,6 +79,7 @@ static void module(const char* file,bool sharc,bool tileset,bool hair,bool casca
  check(seen.contains({kSetSun,8u})!=cascade,"roof volumes read exactly without the cascade casters");
  check(seen.contains({kSetPush,7u}) && seen.contains({kSetPush,30u}),"D-RF outputs retained");
  if(sharc)check(seen.contains({kSetSharc,0u}) || seen.contains({kSetSharc,1u}),"SHaRC set used by the SHaRC variant");
+ if(em)for(uint32_t slot:bg3::hit_emission::required)check(seen.contains({kSetEmissive,slot}),"rt_hit_emission variants read the emissive TLAS, InstInfo, soup, records and header");
  std::printf("PASS %s: %u push descriptors, %zu bindings\n",file,push_descriptors,seen.size());
 }
 
@@ -86,7 +93,8 @@ int main(int argc,char** argv){
  check(find_in(sun,0)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && find_in(sun,6)->type==VK_DESCRIPTOR_TYPE_SAMPLER,"sun set");
  check(find_in(sun,7)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && sun.size()==9,"sun set b7: the per-light data for the hit light policy");
  check(find_in(sun,8)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,"sun set b8: the roof volumes (sun trust image)");
- bool sharc=false,tileset=false,hair=false,cascade=false;
+ check(kSetEmissive==5 && kSetEmissive>=set_count(true),"rt_hit_emission: the emissive set after SHaRC's");
+ bool sharc=false,tileset=false,hair=false,cascade=false,em=false;
  for(int i=1;i<argc;++i){
   if(std::strcmp(argv[i],"--sharc")==0){sharc=true;continue;}
   if(std::strcmp(argv[i],"--plain")==0){sharc=false;continue;}
@@ -96,7 +104,9 @@ int main(int argc,char** argv){
   if(std::strcmp(argv[i],"--notileset")==0){tileset=false;continue;}
   if(std::strcmp(argv[i],"--cascade")==0){cascade=true;continue;}
   if(std::strcmp(argv[i],"--nocascade")==0){cascade=false;continue;}
-  module(argv[i],sharc,tileset,hair,cascade);
+  if(std::strcmp(argv[i],"--em")==0){em=true;continue;}
+  if(std::strcmp(argv[i],"--noem")==0){em=false;continue;}
+  module(argv[i],sharc,tileset,hair,cascade,em);
  }
  std::printf("PASS %u rf hit shade interface checks\n",checks);
 }

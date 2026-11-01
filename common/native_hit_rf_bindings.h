@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.h>
 #include <array>
 #include <cstdint>
+#include "hit_emission_bindings.h"
 namespace bg3::native_hit_rf {
 struct Binding {uint32_t binding;VkDescriptorType type;uint32_t count;};   // count 0: runtime array
 // 0 D-RF push set; 1 the material AlphaDSL (Bg3HostApi::rt_hit_material_use, the host alpha
@@ -15,6 +16,10 @@ struct Binding {uint32_t binding;VkDescriptorType type;uint32_t count;};   // co
 // (the SHaRC D-RF variant already binds 5).
 inline constexpr uint32_t kSetPush=0,kSetMaterial=1,kSetGame=2,kSetSun=3,kSetSharc=4;
 inline constexpr uint32_t set_count(bool sharc){return sharc?5u:4u;}
+// rt_hit_emission (gi/rt_reflections*_hit_shade_em.hlsl): the host's D-EM emissive scene set
+// (hit_emission_bindings.h) as set 5, after SHaRC's set 4 (an empty set 4 without SHaRC;
+// core/gi.cpp ensure_rf_hit_em_layout).
+inline constexpr uint32_t kSetEmissive=5;
 // D-RF's push set: core/gi.cpp kRfBindings (0-30, binding_type()) + rtOrigin 40. With the
 // physical Hair origin, 12 (gAO) leaves and 50 joins (native_hair_origin.h binding_enabled).
 inline constexpr std::array<Binding,33> push={{
