@@ -25,7 +25,8 @@
 - **Why 16/25 and 16/58.** `layer/assetdb.cpp` counts box matches over every *valid* b29 slot
   (`n_proj`), not the froxel-listed ones (`pref` is only summed). b25 shows how many stale
   slots that can be (Grymforge: 1,182 valid, 39 listed). Both rates understate the listed
-  set; fix: count `m_proj` for `pref[i]` slots only. Other suspects: 685 boxes are
+  set; fix: count `m_proj` for `pref[i]` slots only (done 2026-11-01: the log now reads
+  "froxel-listed matched", over `n_proj_ref`). Other suspects: 685 boxes are
   CombinedLights, 32 in not-starting-loaded sub-levels, 15 moving; character rigs are not placed.
 
 ## 3. Lights inside roofed rooms (sun roof rule context)
