@@ -16,6 +16,11 @@ Gates printed (the coordinator decides):
   OFF-a/OFF-b: `within` if |ON - OFF| <= |OFF-b - OFF-a|; `brighter`/`darker` otherwise (a change that
   needs its physical explanation; darker is the energy-rule failure: the bundle only adds light where
   the old term was zero or replaces a probe by a shaded hit).
+  Exposure: the lighting is pre-exposed by s1b13[0] = 0.8333 / 2^EV (TRACK_A_RR "Pre-exposure"), so the
+  game's eye adaptation scales every buffer before post. Each trace's value is the `[rrpost] exposure
+  probe (frame N)` line of the trace frame (`lighting s1b13 = [x ...]`); with all three present the
+  verdict is on scene colour / s1b13[0] (raw change and the exposure ratio printed beside it). gi_far
+  S8 2026-11-01: raw +2.87%, exposure ON / OFF 1.032, normalised -0.32% (the sign flip was the adaptation).
 - Cost: every GPU line, ON minus the mean of OFF-a/OFF-b, against |OFF-b - OFF-a|.
 - Participation and bias: the last diag-* window's hit material, GI hit direct/sun, rf hit shade (tier a
   ratio L_b / L_a, mean (L_b - L_a) / standard error), hit emission, instanced clip lines.
@@ -36,7 +41,10 @@ SCENE_FS = "5c3fdabc"   # BG3 compose: lit HDR scene colour before transparents 
 
 TS = re.compile(r"^(\d\d):(\d\d):(\d\d)\.(\d{3})\s+(.*)$")
 WINDOW = re.compile(r"^(\d\d:\d\d:\d\d\.\d{3}) \[pan-plan\] window (\d+) ")
-TRACE = re.compile(r"\[trace\] frame \d+ written: .* -> (.+)$")
+TRACE = re.compile(r"\[trace\] frame (\d+) written: .* -> (.+)$")
+# layer/rrpost.cpp rrpost_on_present: the pre-exposure the lighting used (s1b13[0]), per present.
+EXPOSURE = re.compile(r"\[rrpost\] exposure probe \(frame (\d+)\):.* lighting s1b13 = \[([-+0-9.eE]+)")
+EXPOSURE_FRAMES = 2   # the probe reads the latest write, "a frame or two old" (rrpost.cpp)
 
 # name -> (regex, value group, frames group or None). Frames only document the window size.
 COST = {
@@ -179,7 +187,19 @@ class Run:
                     hit = m
         return hit
 
-    def scene_colour(self, label):
+    def pre_exposure(self, frame: int):
+        """s1b13[0] of the probe line at `frame`, else the nearest within EXPOSURE_FRAMES; None if absent."""
+        best = None
+        for _, txt in self.lines:
+            m = EXPOSURE.search(txt)
+            if m:
+                df = abs(int(m.group(1)) - frame)
+                if df <= EXPOSURE_FRAMES and (best is None or df < best[0]):
+                    best = (df, float(m.group(2)))
+        return best[1] if best and best[1] > 0 else None
+
+    def scene_colour(self, label, fs=SCENE_FS):
+        """(luminance, nonfinite dumps, pre-exposure or None) of the phase's trace (last dump of pass fs, slot 0)."""
         p = self.phase_of(label)
         if not p:
             return None
@@ -187,7 +207,8 @@ class Run:
             if p[1] <= t <= p[2] + 2.0:
                 m = TRACE.search(txt)
                 if m:
-                    cap = Path(m.group(1).strip())
+                    frame = int(m.group(1))
+                    cap = Path(m.group(2).strip())
                     if self.captures_root:
                         cap = self.captures_root / cap.name
                     f = cap / "dumps.json"
@@ -195,13 +216,13 @@ class Run:
                         return ("missing", str(f))
                     dumps = json.loads(f.read_text(encoding="utf-8"))
                     cand = [(int(k[1:]), d) for k, d in dumps.items()
-                            if str(d.get("pass_fs", "")).startswith(SCENE_FS) and d.get("slot") == 0 and d.get("mean")]
+                            if str(d.get("pass_fs", "")).startswith(fs) and d.get("slot") == 0 and d.get("mean")]
                     if not cand:
                         return ("no scene-colour dump", str(f))
                     _, d = max(cand, key=lambda c: c[0])
                     r, g, b = d["mean"][:3]
                     nonfinite = sum(int(x.get("nonfinite", 0) or 0) for x in dumps.values())
-                    return (0.2126 * r + 0.7152 * g + 0.0722 * b, nonfinite)
+                    return (0.2126 * r + 0.7152 * g + 0.0722 * b, nonfinite, self.pre_exposure(frame))
         return None
 
     def capacity(self):
@@ -249,9 +270,39 @@ def energy(run):
             continue
         va, vo, vb = (v[0] for v in vals)
         off = (va + vb) / 2
-        d, s = (vo - off) / off, abs(vb - va) / off
-        out.append({"a": a, "on": on, "b": b, "values": (va, vo, vb), "d": d, "s": s,
-                    "verdict": energy_verdict(d, s), "nonfinite": sum(v[1] for v in vals)})
+        raw_d, raw_s = (vo - off) / off, abs(vb - va) / off
+        pre = [v[2] if len(v) > 2 else None for v in vals]
+        e = {"a": a, "on": on, "b": b, "values": (va, vo, vb), "raw_d": raw_d, "raw_s": raw_s,
+             "nonfinite": sum(v[1] for v in vals), "pre": pre, "exposure": None}
+        if all(pre):
+            # Verdict on scene colour / pre-exposure: the eye adaptation scales the whole lit image.
+            na, no, nb = va / pre[0], vo / pre[1], vb / pre[2]
+            noff = (na + nb) / 2
+            e["d"], e["s"] = (no - noff) / noff, abs(nb - na) / noff
+            e["exposure"] = pre[1] / ((pre[0] + pre[2]) / 2)
+        else:
+            e["d"], e["s"] = raw_d, raw_s
+        e["verdict"] = energy_verdict(e["d"], e["s"])   # on the raw change when an exposure is unknown
+        out.append(e)
+    return out
+
+
+DIFFUSE_FS = "d1669194"   # the SSS pass: the diffuse light after our composite (RR's diffuse input side)
+GIVEBACK = re.compile(r"ls stats \(\d+ frames\): ao_direct \d gives back ([0-9.]+) per px \(([0-9.]+)% of the lit luminance\)")
+
+
+def stages(run):
+    """gi_far stage windows (tools/live_batches/gi_far README): view-<x>-off / view-<x>-on pairs (gi_debug views:
+    the diffuse buffer's float mean, ON / OFF), and diag-<x>-off / diag-<x>-on ls stats give-back lines."""
+    out = []
+    for l in run.labels:
+        if l.startswith("view-") and l.endswith("-off") and l[:-4] + "-on" in run.labels:
+            off, on = (run.scene_colour(x, DIFFUSE_FS) for x in (l, l[:-4] + "-on"))
+            ok = all(v and not isinstance(v[0], str) for v in (off, on))
+            out.append(("view", l[5:-4], off[0] if ok else None, on[0] if ok else None))
+        if l.startswith("diag-") and l.endswith("-off") and l[:-4] + "-on" in run.labels:
+            off, on = (run.last_in(x, GIVEBACK) for x in (l, l[:-4] + "-on"))
+            out.append(("giveback", l[5:-4], float(off.group(1)) if off else None, float(on.group(1)) if on else None))
     return out
 
 
@@ -263,16 +314,27 @@ def report(run: Run):
     print(f"\n## {run.name} ({run.job.get('save', '?')}) - {run.log.name}")
     print(f"phases {len(run.phases)}/{len(run.plan)}: " + ", ".join(p[0] for p in run.phases))
 
-    print("\n### Energy: scene colour before post (5c3fdabc float mean luminance)")
-    print("| comparison | OFF-a | ON | OFF-b | ON vs mean OFF | OFF spread | verdict |")
-    print("|---|---|---|---|---|---|---|")
+    print("\n### Energy: scene colour before post (5c3fdabc float mean luminance) / pre-exposure s1b13[0]")
+    print("| comparison | OFF-a | ON | OFF-b | raw ON vs OFF | exposure ON / OFF | ON vs mean OFF | OFF spread | verdict |")
+    print("|---|---|---|---|---|---|---|---|---|")
     for e in energy(run):
         if e["verdict"] == "INCOMPLETE":
-            print(f"| {e['on']} | {e['values']} | | | | | INCOMPLETE |")
+            print(f"| {e['on']} | {e['values']} | | | | | | | INCOMPLETE |")
             continue
         va, vo, vb = e["values"]
-        print(f"| {e['on']} vs {e['a']}/{e['b']} | {va:.5f} | {vo:.5f} | {vb:.5f} | {100 * e['d']:+.2f}% | {100 * e['s']:.2f}% | "
+        ex = "unknown (raw verdict)" if e["exposure"] is None else f"{e['exposure']:.4f}"
+        print(f"| {e['on']} vs {e['a']}/{e['b']} | {va:.5f} | {vo:.5f} | {vb:.5f} | {100 * e['raw_d']:+.2f}% | {ex} | "
+              f"{100 * e['d']:+.2f}% | {100 * e['s']:.2f}% | "
               f"{e['verdict']}{'' if e['nonfinite'] == 0 else ', nonfinite %d' % e['nonfinite']} |")
+
+    st = stages(run)
+    if st:
+        print("\n### Stages (view: diffuse after SSS, d1669194 float mean; giveback: ls stats ao_direct per px)")
+        print("| stage | OFF | ON | ON / OFF |")
+        print("|---|---|---|---|")
+        for kind, name, off, on in st:
+            ratio = f"{on / off:.4f}" if off and on is not None else "n/a"
+            print(f"| {kind} {name} | {fmt(off, 5)} | {fmt(on, 5)} | {ratio} |")
 
     print("\n### Cost (GPU ms, medians of the windows fully inside each phase; n = windows)")
     for a, on, b in triples(run.labels, "cost"):
