@@ -224,8 +224,35 @@ inline constexpr Knob kKnobs[] = {
     {"boost", "On + Boost", 0, {{"reflex", "2"}}, {}}},
    {}, {1, 1, 1, 1}},
 
+  // M5 water chain (docs/PLAN_M5_WATER.md "Promotion": m5_promotion passed at S8, Flymm and camp, 11-01): Advanced,
+  // before the Experimental section; "+ Refraction" in Ultra, Off elsewhere. The compose levels patch the
+  // audited water FS at pipeline creation (restart to turn on, key_change_needs_restart) and need 64-bit
+  // shader integers at device creation (sharc_device=1).
+  {"exp_water", "RT water",
+   "Ray-traced water. Reflections: the docks, piers and boats reflected in the water where the reflected point is "
+   "on screen, with the water's own Fresnel, opacity and fog (about 0.1 ms; the game's probe elsewhere). "
+   "+ Shadows: ray-traced sun and local-light shadows on the water, and the game's own sun shadow on the few "
+   "water surfaces that have one (the camp's pond) replaced by the traced one. + Refraction: the pool or sea bed "
+   "seen through the bent ray (Snell's law), so it looks shallower and moves with the waves. All levels together "
+   "about 0.5-0.7 ms (Water Queens House) and up to 520 MB of video memory for the water records. "
+   "Turning a level on needs a restart (the water shaders are prepared at load); turning it down is live. "
+   "On in Ultra. Debug views rt_debug 25-28.",
+   Kind::Choice, Apply::Partial, "on: restart; off: live", true,
+   {{"off", "Off", 0, {{"rt_water_geometry", "0"}, {"rt_water_reflections", "0"}, {"rt_water_compose", "0"},
+      {"rt_water_shadows", "0"}, {"rt_water_ls_shadows", "0"}, {"rt_water_game_shadow", "0"}, {"rt_water_refraction", "0"}}, {}},
+    {"reflections", "Reflections", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
+      {"rt_water_shadows", "0"}, {"rt_water_ls_shadows", "0"}, {"rt_water_game_shadow", "0"}, {"rt_water_refraction", "0"}},
+     {{"rt_geometry", 1}}, {"rt_water_compose", "rt_water_reflections", "rt_water_geometry"}},
+    {"shadows", "+ Shadows", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
+      {"rt_water_shadows", "1"}, {"rt_water_ls_shadows", "1"}, {"rt_water_game_shadow", "1"}, {"rt_water_refraction", "0"}},
+     {{"rt_geometry", 1}}, {"rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"}},
+    {"refraction", "+ Refraction", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
+      {"rt_water_shadows", "1"}, {"rt_water_ls_shadows", "1"}, {"rt_water_game_shadow", "1"}, {"rt_water_refraction", "1"}},
+     {{"rt_geometry", 1}}, {"rt_water_refraction"}}},
+   {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}},
+
   // Experimental: features being tested, off in every preset (docs/GUI_AUDIT_20261101.md: 28 entries
-  // became these 8). Each level writes every key it covers, so a file reads back as one level.
+  // became these 8, 7 since RT water left). Each level writes every key it covers, so a file reads back as one level.
   {"exp_hidden_surface", "Hidden-surface shading",
    "Gives ray hits on surfaces the camera does not see their verified native material (static virtual-texture "
    "views, reflectance, tangent frame), including the wind-animated and two-sided foliage rows, with the capture "
@@ -271,28 +298,6 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"gi_far", "0"}}, {}},
     {"m6", "6 m", kCapRayQuery, {{"gi_far", "1"}, {"gi_far_m", "6"}}, {{"exp_hidden_surface", 2}}, {"gi_far"}}},
    {}, {0, 0, 0, 0}, true, {}},
-
-  {"exp_water", "RT water",
-   "Ray-traced water. Reflections: the docks, piers and boats reflected in the water where the reflected point is "
-   "on screen, with the water's own Fresnel, opacity and fog (about 0.1 ms; the game's probe elsewhere). "
-   "+ Shadows: ray-traced sun and local-light shadows on the water, and the game's own sun shadow on the few "
-   "water surfaces that have one (the camp's pond) replaced by the traced one. + Refraction: the pool or sea bed "
-   "seen through the bent ray (Snell's law), so it looks shallower and moves with the waves (about 0.24 ms). "
-   "Turning a level on needs a restart (the water shaders are prepared at load); turning it down is live. "
-   "Debug views rt_debug 25-28. Experimental: unqualified.",
-   Kind::Choice, Apply::Partial, "on: restart; off: live", false,
-   {{"off", "Off", 0, {{"rt_water_geometry", "0"}, {"rt_water_reflections", "0"}, {"rt_water_compose", "0"},
-      {"rt_water_shadows", "0"}, {"rt_water_ls_shadows", "0"}, {"rt_water_game_shadow", "0"}, {"rt_water_refraction", "0"}}, {}},
-    {"reflections", "Reflections", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
-      {"rt_water_shadows", "0"}, {"rt_water_ls_shadows", "0"}, {"rt_water_game_shadow", "0"}, {"rt_water_refraction", "0"}},
-     {{"rt_geometry", 1}}, {"rt_water_compose", "rt_water_reflections", "rt_water_geometry"}},
-    {"shadows", "+ Shadows", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
-      {"rt_water_shadows", "1"}, {"rt_water_ls_shadows", "1"}, {"rt_water_game_shadow", "1"}, {"rt_water_refraction", "0"}},
-     {{"rt_geometry", 1}}, {"rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"}},
-    {"refraction", "+ Refraction", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
-      {"rt_water_shadows", "1"}, {"rt_water_ls_shadows", "1"}, {"rt_water_game_shadow", "1"}, {"rt_water_refraction", "1"}},
-     {{"rt_geometry", 1}}, {"rt_water_refraction"}}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
 
   {"exp_native_coverage", "Native coverage",
    "Uses the game's own coverage for ray queries where the audit verified it. Hair + scalp: the CHAR_Hair strand "

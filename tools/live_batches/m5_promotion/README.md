@@ -7,10 +7,11 @@ toggling keys inside the run, `rt_stats` only in `diag-stats-on`, diag-off 20 s 
 `shot-*`, `diag-view-*` and the first pan of each pair. Independent jobs. Receipt `m5-promotion.json`; plans go to
 test-main `captures\live_batches\m5_promotion\plans`.
 
-Startup (all jobs): `preset=ultra` (main's Ultra, so roof casters on) plus the whole water chain as the preset
-commit sets it: `rt_water_geometry=1 rt_water_reflections=1 rt_water_compose=1 rt_water_shadows=1
-rt_water_ls_shadows=1 rt_water_refraction=1 sharc_device=1`. The four restart keys patch the audited water FS with the
-104-B record at pipeline creation; afterwards each key is a live switch. The test tree is main: the keys are explicit.
+Startup (all jobs): `preset=ultra` plus `sharc_device=1`. Since branch ultra-water-preset (11-01, stage 3) Ultra
+itself sets RT water "+ Refraction": `rt_water_geometry rt_water_reflections rt_water_compose rt_water_shadows
+rt_water_ls_shadows rt_water_game_shadow rt_water_refraction` = 1, so the jobs no longer list them (the test tree
+must hold that branch or a main that has it). The restart keys patch the audited water FS with the 104-B record at
+pipeline creation; afterwards each key is a live switch (the plans toggle them per phase).
 - Chain ON: all six 1. Chain OFF: all six 0 (geometry and measured reflections included: their cost is part of the chain).
 - `qa_exposure_hold=1` from `cost-off-a` to `shot-off-b`: one pre-exposure for every compared frame (docs/QA.md
   "Exposure hold"). Without it the darker water raises the eye adaptation: m5w4 read "+2.2% brighter" before the water.

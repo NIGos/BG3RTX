@@ -132,6 +132,18 @@
        {"id": "on", "label": "On", "caps": [], "keys": {"reflex": "1"}, "needs": {}, "migrate_from": [], "developer": false},
        {"id": "boost", "label": "On + Boost", "caps": [], "keys": {"reflex": "2"}, "needs": {}, "migrate_from": [], "developer": false}
      ]},
+    {"id": "exp_water", "label": "RT water",
+     "description": "Ray-traced water. Reflections: the docks, piers and boats reflected in the water where the reflected point is on screen, with the water's own Fresnel, opacity and fog (about 0.1 ms; the game's probe elsewhere). + Shadows: ray-traced sun and local-light shadows on the water, and the game's own sun shadow on the few water surfaces that have one (the camp's pond) replaced by the traced one. + Refraction: the pool or sea bed seen through the bent ray (Snell's law), so it looks shallower and moves with the waves. All levels together about 0.5-0.7 ms (Water Queens House) and up to 520 MB of video memory for the water records. Turning a level on needs a restart (the water shaders are prepared at load); turning it down is live. On in Ultra. Debug views rt_debug 25-28.",
+     "apply": "partial", "apply_note": "on: restart; off: live", "advanced": true, "experimental": false, "developer": false,
+     "required_on": {"rt": "1", "sharc_device": "1"},
+     "required_from_choice": {"rt": 1, "sharc_device": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 3},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_geometry": "0", "rt_water_reflections": "0", "rt_water_compose": "0", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "reflections", "label": "Reflections", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_compose", "rt_water_reflections", "rt_water_geometry"], "developer": false},
+       {"id": "shadows", "label": "+ Shadows", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"], "developer": false},
+       {"id": "refraction", "label": "+ Refraction", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false}
+     ]},
     {"id": "exp_hidden_surface", "label": "Hidden-surface shading",
      "description": "Gives ray hits on surfaces the camera does not see their verified native material (static virtual-texture views, reflectance, tangent frame), including the wind-animated and two-sided foliage rows, with the capture buffers reused (no stale scene). Materials: the material data only. + Bounce: the GI bounce from those hidden surfaces is shaded with point, spot and sun light and traced shadows (never darker; about +0.5 ms with sun). + Reflections: reflection rays that hit them are shaded with that material and lighting, and get the screen's bounce light, instead of keeping the reflection probe (about +1.4 to +1.8 ms). Unsupported materials or lights keep the current renderer. The first enable needs a restart; the levels above Materials are live. Experimental: quality and GPU cost remain partly unqualified.",
      "apply": "partial", "apply_note": "first enable: restart; levels live", "advanced": false, "experimental": true, "developer": false,
@@ -164,18 +176,6 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "caps": [], "keys": {"gi_far": "0"}, "needs": {}, "migrate_from": [], "developer": false},
        {"id": "m6", "label": "6 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "6"}, "needs": {"exp_hidden_surface": 2}, "migrate_from": ["gi_far"], "developer": false}
-     ]},
-    {"id": "exp_water", "label": "RT water",
-     "description": "Ray-traced water. Reflections: the docks, piers and boats reflected in the water where the reflected point is on screen, with the water's own Fresnel, opacity and fog (about 0.1 ms; the game's probe elsewhere). + Shadows: ray-traced sun and local-light shadows on the water, and the game's own sun shadow on the few water surfaces that have one (the camp's pond) replaced by the traced one. + Refraction: the pool or sea bed seen through the bent ray (Snell's law), so it looks shallower and moves with the waves (about 0.24 ms). Turning a level on needs a restart (the water shaders are prepared at load); turning it down is live. Debug views rt_debug 25-28. Experimental: unqualified.",
-     "apply": "partial", "apply_note": "on: restart; off: live", "advanced": false, "experimental": true, "developer": false,
-     "required_on": {"rt": "1"},
-     "required_from_choice": {"rt": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_geometry": "0", "rt_water_reflections": "0", "rt_water_compose": "0", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {}, "migrate_from": [], "developer": false},
-       {"id": "reflections", "label": "Reflections", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_compose", "rt_water_reflections", "rt_water_geometry"], "developer": false},
-       {"id": "shadows", "label": "+ Shadows", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"], "developer": false},
-       {"id": "refraction", "label": "+ Refraction", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false}
      ]},
     {"id": "exp_native_coverage", "label": "Native coverage",
      "description": "Uses the game's own coverage for ray queries where the audit verified it. Hair + scalp: the CHAR_Hair strand coverage and depth, and the scalp coverage (other hair families remain gaps). + Tilesets: also the instanced floor and wall coverage (SeeThrough and missing native inputs remain unknown). Needs Full ray-traced geometry. Restart required (the captured vertex layout changes). Experimental: quality and GPU cost are unqualified.",
