@@ -121,6 +121,7 @@ static void on_frame(uint64_t frame) {
 
 static void on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   gi_on_pass_end(cmd, p);
+  water_on_pass_end(cmd, p);
   PassKey k{p->first_fs_hash, p->width, p->height, p->color_count, p->color_count ? p->color_formats[0] : VK_FORMAT_UNDEFINED,
             p->depth_format};
   std::lock_guard<std::mutex> lock(g_census_mu);
@@ -138,6 +139,7 @@ static void on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) { gi_
 static void unload() {
   gi_release();
   em_release();
+  water_release();
   compute_release(g_probe);
   host->log("core unloading");
 }

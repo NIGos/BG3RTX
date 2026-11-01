@@ -11,6 +11,10 @@
 // Water has its own soup, records and acceleration structures: it is never in the opaque or
 // emissive TLAS (no water-shaped blockers in other queries).
 //
+// M5.2 (rt_water_reflections, core/water.cpp): each submitted build is published to the core
+// through persist memory (common/water_scene.h, no ABI change): the TLAS, the build's absolute
+// camera (the pass's camera UBO, byte 208) and the roles of its first supported draw.
+//
 // Classification and record are policy (common/water_policy.h), run by the core through
 // Bg3CoreApi::em_record with forward == BG3_EM_REQ_WATER (hot-reloaded, no ABI change). Here:
 // the asset-DB lookup, the capture, the build, the counters and the "[water]" log lines.
@@ -27,6 +31,7 @@
 
 #include "assetdb.h"
 #include "../common/water_policy.h"
+#include "../common/water_scene.h"
 
 namespace bg3 {
 
@@ -107,6 +112,8 @@ struct PDraw {
 struct PCmd {
   std::vector<PDraw> draws;
   Census census;
+  float cam[3] = {};     // absolute camera of the first converted pass (M5.2 scene shift)
+  bool cam_ok = false;
 };
 std::unordered_map<VkCommandBuffer, PCmd> g_pending;
 
@@ -540,6 +547,15 @@ void water_pass_done(VkCommandBuffer cmd, VkBuffer ubo, VkDeviceSize ubo_off, ui
     if (!ranges.empty() && !ubo) ++C.no_ubo;
   }
   if (ranges.empty()) return;
+  if (ubo) {   // the build camera for the core's shift (common/water_scene.h)
+    float cam[3];
+    if (read_mapped(ubo, ubo_off + 208, cam, sizeof cam) && std::isfinite(cam[0]) && std::isfinite(cam[1]) &&
+        std::isfinite(cam[2])) {
+      std::lock_guard<std::mutex> lock(g_mu);
+      PCmd& P = g_pending[cmd];
+      if (!P.cam_ok) std::memcpy(P.cam, cam, sizeof cam), P.cam_ok = true;
+    }
+  }
   barrier(cmd, kXFB, VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT, kCS | kXfer,
           VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
   for (const WaterRange& r : ranges) {
@@ -650,6 +666,30 @@ void water_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkComma
   s.harvest = s.used && built;
   if (r != VK_SUCCESS) log("[water] build submission failed (%d)", r);
   else g_latest_build = frame_index() + 1;
+  if (s.used && built) {   // M5.2: the scene for the core (common/water_scene.h)
+    water::Scene sc{};
+    sc.tlas = uint64_t(s.tlas);
+    sc.built_frame = frame_index();
+    for (const PCmd& P : taken)
+      if (P.cam_ok) {
+        std::memcpy(sc.cam, P.cam, sizeof sc.cam);
+        sc.cam_ok = 1;
+        break;
+      }
+    sc.family = UINT32_MAX;
+    sc.reflectance = 0.0f;
+    sc.roughness = 0.0f;
+    for (const PDraw* d : draws)
+      if (d->rec.family != water::kNoFamily) {
+        sc.family = d->rec.family;
+        sc.reflectance = d->rec.reflectance;
+        sc.roughness = d->rec.roughness;
+        break;
+      }
+    sc.draws = s.geos;
+    sc.triangles = s.tris;
+    water::publish(static_cast<water::Scene*>(persist(water::kSceneKey, sizeof(water::Scene))), sc);
+  }
 }
 
 void water_on_present() {

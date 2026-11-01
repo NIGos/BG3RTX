@@ -382,7 +382,7 @@ set_tests_properties(frame_replay_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 18
 add_executable(replay_pack_test tests/replay_pack_test.cpp)
 add_test(NAME replay_pack_test COMMAND replay_pack_test)
 
-add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp core/em_policy.cpp)
+add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp core/em_policy.cpp core/water.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # SHaRC radiance cache: inject the D-EM effects-target emission. AUTO follows whether
 # common/host_api.h defines BG3RTX_HOST_HAS_RT_EMISSIVE (D-EM's Bg3HostApi::rt_emissive);

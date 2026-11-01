@@ -3,7 +3,9 @@
 // evidence block of the header), the audited FS/VS pairs, and the per-draw record (roles read
 // from the bound material CB at the DB offsets, defaults and flags when unreadable).
 #include "../common/water_policy.h"
+#include "../common/water_scene.h"
 
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -11,6 +13,7 @@
 #include <limits>
 #include <map>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -160,6 +163,81 @@ int main() {
     CHECK(r.magic == kMagic && r.cls == kUnknown && r.family == kNoFamily && f.reads == 0 && r.reflectance == 0.0f);
     const WaterRec n = make_record(f, 1, 2, nullptr, "");
     CHECK(n.magic == kMagic && n.cls == kNotWater && n.mat_flags == 0 && f.reads == 0);
+  }
+  // 5. M5.2 scene publication (common/water_scene.h): the layer -> core channel without ABI.
+  {
+    Scene pub{};
+    Scene got{};
+    CHECK(read(&pub, got) && usable(true, got, 10) == kNoScene);   // never published: version 0
+    Scene a{};
+    a.tlas = 0x1234;
+    a.built_frame = 100;
+    a.cam[0] = 1000.0f, a.cam[1] = 20.0f, a.cam[2] = -3000.0f;
+    a.cam_ok = 1;
+    a.reflectance = 0.35f;
+    a.draws = 2;
+    a.triangles = 1450000;
+    publish(&pub, a);
+    CHECK(pub.seq == 2 && pub.version == kSceneVersion);
+    CHECK(read(&pub, got) && got.tlas == 0x1234 && got.built_frame == 100 && got.draws == 2 && got.triangles == 1450000);
+    CHECK(usable(true, got, 100) == kUsable && usable(true, got, 102) == kUsable);
+    CHECK(usable(true, got, 103) == kStale && usable(true, got, 99) == kStale);   // too old / from the future
+    CHECK(usable(false, got, 100) == kTorn);
+    Scene none = got;
+    none.tlas = 0;
+    CHECK(usable(true, none, 100) == kNoTlas);
+    // A write in progress (odd seq) is never read.
+    pub.seq |= 1u;
+    CHECK(!read(&pub, got));
+    pub.seq += 1u;
+    publish(&pub, a);
+    CHECK((pub.seq & 1u) == 0 && read(&pub, got));
+    // Concurrent writer and reader: every successful read is a complete publication.
+    Scene live{};
+    std::atomic<bool> stop{false};
+    std::thread w([&] {
+      for (uint64_t i = 1; i <= 20000; ++i) {
+        Scene s{};
+        s.tlas = i;
+        s.built_frame = i;
+        s.triangles = i * 3;
+        publish(&live, s);
+      }
+      stop.store(true, std::memory_order_release);
+    });
+    unsigned ok = 0, bad = 0;
+    while (!stop.load(std::memory_order_acquire)) {
+      Scene s{};
+      if (read(&live, s) && s.version == kSceneVersion) {
+        ++ok;
+        if (s.tlas != s.built_frame || s.triangles != s.tlas * 3) ++bad;
+      }
+    }
+    w.join();
+    CHECK(bad == 0);
+    CHECK(read(&live, got) && got.tlas == 20000);
+    (void)ok;
+    // The camera shift: p_build = p_now + (cam_now - cam_build); 0 when unknown or absurd.
+    float sh[3];
+    const float now[3] = {1001.5f, 20.0f, -2999.0f};
+    shift(a, now, true, sh);
+    CHECK(sh[0] == 1.5f && sh[1] == 0.0f && sh[2] == 1.0f);
+    shift(a, now, false, sh);
+    CHECK(sh[0] == 0.0f && sh[1] == 0.0f && sh[2] == 0.0f);
+    Scene nc = a;
+    nc.cam_ok = 0;
+    shift(nc, now, true, sh);
+    CHECK(sh[0] == 0.0f && sh[2] == 0.0f);
+    const float far[3] = {3e6f, 0.0f, 0.0f};
+    shift(a, far, true, sh);
+    CHECK(sh[0] == 0.0f);
+    const float nan[3] = {std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f};
+    shift(a, nan, true, sh);
+    CHECK(sh[0] == 0.0f);
+    // F0 in the game's convention: 0.16 r^2; S1 docks 0.35 -> 0.0196; bad roles -> IOR 1.33.
+    CHECK(std::fabs(f0_of(0.35f) - 0.0196f) < 1e-7f);
+    CHECK(f0_of(0.0f) == 0.0f && std::fabs(f0_of(1.0f) - 0.16f) < 1e-7f);
+    CHECK(f0_of(-0.1f) == 0.02f && f0_of(1.5f) == 0.02f && f0_of(std::numeric_limits<float>::quiet_NaN()) == 0.02f);
   }
   std::printf("water_policy_test: %u checks passed (%u audited pipelines, %zu families)\n", checks, kAuditedCount,
               sizeof cases / sizeof cases[0]);

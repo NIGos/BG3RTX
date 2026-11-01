@@ -23,3 +23,18 @@ bool core_em_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out);
 bool core_em_calib_update(Bg3EmCalib* cal, uint32_t first, double ratio, uint32_t flags, uint64_t frames, double bright);
 void core_em_calib_apply(uint32_t* rec, const Bg3EmCalib* cal);
 bool em_check_due();
+
+// water.cpp (M5.2 water reflections, rt_water_reflections; docs/PLAN_M5_WATER.md): the trace in
+// run_post (after the views), its views (rt_debug 21-24) at the end of the forward water pass.
+struct WaterRfIn {
+  Bg3Binding cam, vp, mat, dep, dif, spe, cam2;   // the lighting's (core/gi.cpp Snapshot)
+  VkAccelerationStructureKHR scene_tlas;          // the TLAS + alpha set the RT passes used
+  VkDescriptorSet alpha;
+  const void* push;                               // core/gi.cpp Push (gi_common.hlsli), rt_stats 0
+  uint32_t push_bytes;
+  uint32_t w, h;
+};
+bool water_rf_wanted();
+void water_rf(VkCommandBuffer cmd, const WaterRfIn& in);
+void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p);
+void water_release();
