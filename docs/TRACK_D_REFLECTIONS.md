@@ -456,6 +456,37 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     differs, rigid 0 as live; after the remap all bit-exact; a replaced instance stays rejected; pair_check per
     input). No existing shader changed. Cost (not measured): mode 0 is O(instances) in the same order, at most
     instances^2 first-vertex compares; mode 1 one 4 B copy per word of the reordered instances.
+- **Cost and bias breakdown (2026-11-01; offline, READY_FOR_LIVE).** Live (m4r1 030749/031149, m4p 11xxxx,
+  diagnostics off): rf pass +1.5-1.6 ms at S6 (0.42 -> 1.94-2.0), +2.0 at S8 (0.57 -> 2.55), budget 0.2-0.4.
+  - Where it goes (counts per frame from the stats windows, which include the tier (a) checks): S6 has
+    1.23M tier (b) candidates (hidden 11%, off screen 46% of 2.15M rays), S8 0.46M (13% + 12%). The material
+    lookup qualifies 26% (S6) / 55% (S8); about 60% of the qualified S6 decodes then failed `native_hit_cluster`
+    (off screen: "source" 176k/frame), after paying 3 VT layers. Per hit reaching the light loop: S6 ~5 point/spot
+    evaluations and ~2.3 long shadow rays (90% to lights of radius >= 10 m), S8 ~0.6 rays but ~2 projector entries
+    (739k box evaluations/frame); AO 2 closest-hit rays per hit reaching the end (`hit_ao_rays=2`: S8 ~234k,
+    S6 ~70k rays/frame); one sun ray (S8 ~1/3 of hits). The rest is divergence: 25% of S8's traced lanes take
+    the shading branch, so nearly every warp waits for its slowest shaded lane. Register count not measured
+    (`tools/pipeline_stats.py` needs the GPU; not run while the live batch runs).
+  - Exact cuts (image unchanged, no key): `native_hit_shade` tests the froxel (`native_hit_cluster` at
+    `native_hit_position`) before the material decode when `rf_stats=0` (the reason counters stay as before
+    with stats on); the box loop tests channel and inside-box from 4 words of the record before loading the rest
+    and the cookie (`native_hit_direct.hlsli`, same arithmetic as `bg3_box_reaches`). Expected (not measured):
+    S6 -0.2 to -0.5 ms (most off-screen decodes gone), S8 -0.1 to -0.3 ms. Default and gi_hit_direct SPIR-V
+    byte-identical (rf_hit_shade_shader_test). Next, if more is needed: compact the tier (b) lanes per group
+    (groupshared job list) to remove the divergence; a 3-phase direct loop (domain checks before rays) saves the
+    S6 rays of hits that fail later ("other" 24k hits/frame).
+  - New counters 372-373, log `rf hit shade boxes`: L_b's projector (box) part at tier (a) checks and shaded
+    tier (b) hits. The m4_promotion S6/S8 plans add `cost-ao0` (bundle ON, `hit_ao_rays=0`).
+  - Bias (tier (a), L_b / L_a). S8 0.925: diffuse-like L_b (direct 0.0019 + sun 0.0038 + ambient diffuse 0.0954)
+    = 0.101 vs L_a diffuse 0.115 (-0.014): the screen's diffuse includes the hybrid GI bounce that replaces part
+    of the AO-occluded ambient (the hit has ambient x A only; A 0.773 vs screen 0.779 is within 1%). Specular
+    L_b 0.0173 vs L_a 0.0133 (+0.004): view-dependent (outgoing = -ray, more grazing than the camera) and the
+    screen's own D-RF (probe term -9% after D-RF on screen, none at the hit). Emission: neither side. S6 1.089:
+    direct-dominated (0.066 of 0.076; lights at the game's visibility 0.005), L_b direct + ambient diffuse 0.073
+    vs L_a diffuse 0.059 (+0.014), specular 0.003 vs 0.011 (-0.008). Candidates for the excess: the box lights
+    (30% of S6's light evaluations; the box AO fix alone moved 1.48 -> 1.09; the new boxes line measures their
+    share), the lights' specular lobe toward the reflection ray (hd_scatter returns diffuse + specular), and the
+    GI bounce working the other way (L_a has it). The AO estimator is not the cause (0.804 vs 0.794).
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.

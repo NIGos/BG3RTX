@@ -12,7 +12,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_stats=0,rf_stats=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_stats=0,rf_stats=0,hit_ao_rays=2"
  },
  {
   "label": "diag-on",
@@ -27,7 +27,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_stats=1,rf_stats=1"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_stats=1,rf_stats=1,hit_ao_rays=2"
  },
  {
   "label": "cost-off-a",
@@ -42,7 +42,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0"
+  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0,hit_ao_rays=2"
  },
  {
   "label": "shot-off-a",
@@ -57,7 +57,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0",
+  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0,hit_ao_rays=2",
   "trace_at": [
    4
   ]
@@ -75,7 +75,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0,hit_ao_rays=2",
   "trace_at": [
    4
   ]
@@ -93,7 +93,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0,hit_ao_rays=2",
   "trace_at": [
    4
   ]
@@ -111,7 +111,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0,hit_ao_rays=2",
   "trace_at": [
    4
   ]
@@ -129,7 +129,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0,hit_ao_rays=2",
   "trace_at": [
    4
   ]
@@ -147,7 +147,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=1,rt_stats=0,rf_stats=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=1,rt_stats=0,rf_stats=0,hit_ao_rays=2"
  },
  {
   "label": "shot-em-off-a",
@@ -162,7 +162,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=1,rt_stats=0,rf_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=1,rt_stats=0,rf_stats=0,hit_ao_rays=2",
   "trace_at": [
    4
   ]
@@ -180,7 +180,22 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_stats=0,rf_stats=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_stats=0,rf_stats=0,hit_ao_rays=2"
+ },
+ {
+  "label": "cost-ao0",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 20,
+  "motion_end": 20,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_stats=0,rf_stats=0,hit_ao_rays=0"
  },
  {
   "label": "shot-on",
@@ -195,7 +210,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_stats=0,rf_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_stats=0,rf_stats=0,hit_ao_rays=2",
   "trace_at": [
    4
   ]
@@ -213,7 +228,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=1,rt_stats=0,rf_stats=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=1,rt_stats=0,rf_stats=0,hit_ao_rays=2"
  },
  {
   "label": "shot-em-off-b",
@@ -228,7 +243,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=1,rt_stats=0,rf_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=0,rt_emissive=1,rt_stats=0,rf_stats=0,hit_ao_rays=2",
   "trace_at": [
    4
   ]
@@ -246,7 +261,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0"
+  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0,hit_ao_rays=2"
  },
  {
   "label": "shot-off-b",
@@ -261,7 +276,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0",
+  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0,hit_ao_rays=2",
   "trace_at": [
    4
   ]
@@ -279,6 +294,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0"
+  "set": "gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_material_instanced=0,rt_hit_emission=0,rt_emissive=0,rt_stats=0,rf_stats=0,hit_ao_rays=2"
  }
 ]

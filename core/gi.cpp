@@ -1024,7 +1024,11 @@ static_assert(kLsKFirst == bg3::ls_exact_k::kLkStatFirst, "common/ls_exact_k.h k
 // tolerance, UV differs, beyond x1-16, x16-256, over x256, rigid offset. Logged as "hit material instanced clip".
 constexpr uint32_t kHitClipFirst = kLsKFirst + kLsKCount, kHitClipCount = 16;
 static_assert(kHitClipFirst == 356, "native_hit_material.hlsli hit_material_count base 356");
-constexpr uint32_t kStatsCounters = kHitClipFirst + kHitClipCount; //356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+// [372..373] rf_hit_shade bias breakdown (rt_reflections.hlsl NATIVE_HIT_BOX_TERM): L_b's projector (box) part
+// x 8192 at checked tier (a) hits / at shaded tier (b) hits (logged with the rf hit shade window).
+constexpr uint32_t kRfBoxFirst = kHitClipFirst + kHitClipCount, kRfBoxCount = 2;
+static_assert(kRfBoxFirst == 372, "rt_reflections.hlsl stat_addv(372/373) rf hit shade box part");
+constexpr uint32_t kStatsCounters = kRfBoxFirst + kRfBoxCount; //372..373 rf box part;356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
@@ -1047,6 +1051,7 @@ CameraMotionWindow g_epoch_motion;
 // check for a frame-to-frame standard error (the live gate: mean within z x that error).
 struct RfHitWindow {
   uint64_t sum[kRfHitCount] = {};
+  uint64_t box[kRfBoxCount] = {};
   double d_sum = 0, d_sq = 0;
   uint32_t d_frames = 0, frames = 0;
 } g_rfh;
@@ -1056,6 +1061,8 @@ void rf_hit_fold(const uint32_t* c) {
   for (uint32_t i = 0; i < kRfHitCount; ++i)
     for (int b = 0; b < 64; ++b) f[i] += c[(kRfHitFirst + i) * 64 + b];
   for (uint32_t i = 0; i < kRfHitCount; ++i) g_rfh.sum[i] += f[i];
+  for (uint32_t i = 0; i < kRfBoxCount; ++i)
+    for (int b = 0; b < 64; ++b) g_rfh.box[i] += c[(kRfBoxFirst + i) * 64 + b];
   if (f[6]) {   // checked tier (a) hits this frame
     const double d = (double(f[8]) - double(f[9])) / kRfHitScale / double(f[6]);
     g_rfh.d_sum += d;
@@ -1088,6 +1095,12 @@ void rf_hit_fold(const uint32_t* c) {
                 g_rfh.frames, (unsigned long long)t[6], t[11] * q / ck, t[15] * q / ck, t[12] * q / ck, t[16] * q / ck,
                 t[17] * q / ck, t[18] * q / ck, t[19] * q / ck, t[20] * q / ck, t[21] * q / ck, t[22] * q / ck,
                 t[9] ? double(t[8]) / double(t[9]) : 0.0, t[9] ? double(t[18]) / double(t[9]) : 0.0);
+    // The projector (box) part of L_b (after its AO-on-direct factor), the bias breakdown's missing term:
+    // a share of "L_b direct" above (tier a) and of the shaded mean (tier b).
+    host->log("rf hit shade boxes (%u frames): tier a L_b projector lights %.5f of L_b %.5f; tier b shaded L_b projector "
+              "lights %.5f of %.5f",
+              g_rfh.frames, g_rfh.box[0] * q / ck, t[8] * q / ck, t[1] ? g_rfh.box[1] * q / double(t[1]) : 0.0,
+              t[1] ? t[5] * q / double(t[1]) : 0.0);
   }
   g_rfh = RfHitWindow{};
 }
