@@ -141,7 +141,8 @@ def check(gates, game_text, runner_text="", plan=None):
 
 
 def _read(path):
-    return Path(path).read_text(encoding="utf-8", errors="replace") if path and Path(path).exists() else ""
+    # utf-8-sig: Windows PowerShell 5 writes JSON with a BOM.
+    return Path(path).read_text(encoding="utf-8-sig", errors="replace") if path and Path(path).exists() else ""
 
 
 def main(argv=None):

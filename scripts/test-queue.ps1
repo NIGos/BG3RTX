@@ -547,8 +547,11 @@ function Run-Job($file) {
         if ($r.runner_log) { $gateArgs += @('--runner', [string]$r.runner_log) }
         $ix = [array]::IndexOf([string[]]@($job.args), '-MovePlan')
         if ($ix -ge 0 -and $ix + 1 -lt @($job.args).Count) { $gateArgs += @('--plan', (Join-Path $tree @($job.args)[$ix + 1])) }
-        $gateOut = @(& py -3 @gateArgs 2>&1 | ForEach-Object { "$_" })
-        if ($LASTEXITCODE -ne 0) {
+        # A traceback on stderr must make the run INVALID, not stop the runner ("Stop" above).
+        $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        try { $gateOut = @(& py -3 @gateArgs 2>&1 | ForEach-Object { "$_" }); $gateExit = $LASTEXITCODE }
+        finally { $ErrorActionPreference = $eap }
+        if ($gateExit -ne 0) {
           $missing += @($gateOut | Where-Object { $_ } | Select-Object -First 6)
           if (-not $gateOut) { $missing += 'every-window gates did not run' }
         }

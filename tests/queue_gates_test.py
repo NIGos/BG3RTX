@@ -91,7 +91,8 @@ def main():
 
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)
-        (d / "g.json").write_text(json.dumps(gate(windows=["diag-on"])), encoding="utf-8")
+        # With a BOM, as Windows PowerShell 5 (test-queue.ps1) writes it.
+        (d / "g.json").write_text(json.dumps(gate(windows=["diag-on"])), encoding="utf-8-sig")
         (d / "run.log").write_text(bad_run, encoding="utf-8")
         (d / "runner.txt").write_text(RUNNER, encoding="utf-8")
         (d / "plan.json").write_text(json.dumps(PLAN), encoding="utf-8")
