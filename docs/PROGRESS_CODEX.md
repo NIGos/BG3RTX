@@ -1,5 +1,17 @@
 # BG3RTX progress - 2026-11-01 (main f31c62b, ABI 25)
 
+## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01)
+
+- Live S14 (m4i 07:46): instanced key ON raised qualified 22% -> 36-40% but reason `clip` 0 -> 0.4-1.9M per 120
+  frames. Static camera, qualified + clip constant, clip varying: the wind rows (2S is all `precise`, static). The
+  wind VSs' non-`precise` displacement may be fused differently in the depth and the G-buffer module.
+- Fix (RT_HIT_INSTANCED variants, layer + core): the layer reads the wind VS inputs at both draws; equal (or time
+  only) -> the row compares clip within a derived fp32 tolerance (`wind_clip_tolerance`), UV bit-exact; 2S and
+  other input differences stay bit-exact. New lines: wind inputs match, `hit material instanced clip` per family.
+- Offline: 71 checks (fp32 simulation of both VSs: 13% of vertices flip bits, all within tau, another instance
+  5 cm away always outside), 75 CTests, key-off shaders byte-identical, m4_instanced dry run passes; job expect:
+  rejected < 0.04% of lookups. Layer change: restart. TRACK_D_REFLECTIONS 14.
+
 ## Live 2026-11-01 ~07:10 (main f31c62b): water S8 valid, ls_k biased, replay sizes
 
 - Water S8 (audit merged): both planes captured (7b44a567 + c4e92ccd NoCaustics_Waves), views 120/120, reflections 0.12 ms.

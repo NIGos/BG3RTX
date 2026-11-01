@@ -1019,7 +1019,12 @@ static_assert(kHitEmFirst == 331, "native_hit_emission.hlsli kHitEmStatFirst 331
 // remainder lights, remainder rays, their occluded ones, the remainder's weight share on capped px (x256).
 constexpr uint32_t kLsKFirst = kHitEmFirst + kHitEmCount, kLsKCount = bg3::ls_exact_k::kLkStatCount;
 static_assert(kLsKFirst == bg3::ls_exact_k::kLkStatFirst, "common/ls_exact_k.h kLkStatFirst 350");
-constexpr uint32_t kStatsCounters = kLsKFirst + kLsKCount; //350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+// [356..371] rt_hit_material_instanced clip check per family (native_hit_material.hlsli hit_material_count,
+// RT_HIT_INSTANCED variants; wind 356.., alpha-test 2S 364..): checked, bit-exact, within the derived
+// tolerance, UV differs, beyond x1-16, x16-256, over x256, rigid offset. Logged as "hit material instanced clip".
+constexpr uint32_t kHitClipFirst = kLsKFirst + kLsKCount, kHitClipCount = 16;
+static_assert(kHitClipFirst == 356, "native_hit_material.hlsli hit_material_count base 356");
+constexpr uint32_t kStatsCounters = kHitClipFirst + kHitClipCount; //356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
@@ -1296,6 +1301,15 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   uint64_t material_total=0;for(unsigned i=253;i<263;++i)material_total+=t[i];
   if(material_total)host->log("hit material (%u frames): attempted %llu qualified %llu unsupported %llu; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters %llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu; of base, instance without a material record %llu",
     g_stats_n,material_total,t[253],material_total-t[253],t[254],t[255],t[256],t[257],t[258],t[259],t[260],t[261],t[262],t[127]);
+  // The instanced rows' clip check per family; rejected = UV differs + beyond the tolerance (reason clip).
+  if(material_total && (t[kHitClipFirst]|t[kHitClipFirst+8])){
+    const uint64_t* w=t+kHitClipFirst;const uint64_t* a=t+kHitClipFirst+8;
+    const uint64_t rejected=w[3]+w[4]+w[5]+w[6]+a[3]+a[4]+a[5]+a[6];
+    host->log("hit material instanced clip (%u frames): wind: checked %llu, bit-exact %llu, within the derived tolerance %llu, UV differs %llu, beyond x1-16 %llu, "
+              "x16-256 %llu, over x256 %llu, rigid offset %llu; alpha-test 2S: checked %llu, bit-exact %llu, UV differs %llu, differs %llu, rigid offset %llu; "
+              "rejected %llu = %.4f%% of all lookups",g_stats_n,w[0],w[1],w[2],w[3],w[4],w[5],w[6],w[7],a[0],a[1],a[3],a[4]+a[5]+a[6],a[7],
+              rejected,100.0*double(rejected)/double(material_total));
+  }
   if(t[263])host->log("hit material native compare (%u frames): matched class0 %llu; mean raw albedo/normal/roughness/reflectance/metalness %.7f/%.7f/%.7f/%.7f/%.7f; sum quantization1/256; cone vs raster footprint, NOT equality gate",
     g_stats_n,t[263],double(t[264])/t[263]/256.0,double(t[265])/t[263]/256.0,double(t[266])/t[263]/256.0,double(t[267])/t[263]/256.0,double(t[268])/t[263]/256.0);
   uint64_t bounce_total=0;for(unsigned i=269;i<=280;++i)bounce_total+=t[i];

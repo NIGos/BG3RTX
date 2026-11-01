@@ -172,7 +172,38 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
 #endif
  result.status=(result.parameters.status==NtOk && result.scattering.status==NtOk)?0:9;return result;
 }
+#ifdef RT_HIT_INSTANCED
+// The clip check of the last rt_hit_material lookup on an instanced row (0: none): family (bits 0..1),
+// outcome (bits 2..4: 1 bit-exact, 2 within the derived tolerance, 3 UV differs, 4/5/6 beyond it by at
+// most 16x / 256x / more), bit 5 rigid offset (the three vertices moved by one clip vector: another
+// instance). hit_material_count counts it (counters 356..371).
+static uint g_hm_clip=0u;
+// Per vertex: UV bit-exact; clip positions bit-exact, or, on a wind row with the tolerance (word 220 bit 1;
+// common/native_hit_instanced.h wind_clip_tolerance), |c - c'| <= a + b |W|inf per component with a/b
+// from words 224/240 and W the BVH vertex. NaN fails (fail closed). Returns the outcome | 8 (rigid).
+uint hm_clip_instanced(uint row,uint4 h0,uint stride,InstInfo ii,uint prim,bool tolerant){
+ const float4 ta=tolerant?asfloat(gHitRecords.Load4(row+224u)):float4(0,0,0,0),tb=tolerant?asfloat(gHitRecords.Load4(row+240u)):float4(0,0,0,0);
+ bool exact=true,uv=true,within=true;float worst=0.0;float4 d[3],tau[3];
+ [unroll]for(uint v=0;v<3;++v){
+  const uint pre=h0.z+(prim*3u+v)*stride,def=h0.w+(prim*3u+v)*stride;
+  const uint4 a=gHitBasis.Load4(pre),b=gHitBasis.Load4(def);
+  uv=uv && all(gHitBasis.Load2(pre+16)==gHitBasis.Load2(def+16));
+  const bool same=all(a==b);exact=exact && same;
+  const float3 p=abs(inst_pos(ii,prim,v));
+  tau[v]=ta+tb*max(p.x,max(p.y,p.z));d[v]=same?float4(0,0,0,0):asfloat(a)-asfloat(b);
+  const float4 e=abs(d[v]);within=within && (same || (tolerant && all(e<=tau[v])));
+  const float4 r=e/max(tau[v],float4(1e-30,1e-30,1e-30,1e-30));
+  worst=max(worst,(same || !all(isfinite(e)))?(same?0.0:3.0e38):max(max(r.x,r.y),max(r.z,r.w)));
+ }
+ const bool rigid=!exact && all(abs(d[1]-d[0])<=tau[0]+tau[1]) && all(abs(d[2]-d[0])<=tau[0]+tau[2]);
+ const uint outcome=!uv?3u:exact?1u:within?2u:worst<=16.0?4u:worst<=256.0?5u:6u;
+ return outcome|(rigid && outcome>=4u?8u:0u);
+}
+#endif
 NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
+#ifdef RT_HIT_INSTANCED
+ g_hm_clip=0u;
+#endif
  if(!hit_material_publication_ready())return hit_material_unknown(1);
  NativeHitMaterial result=hit_material_unknown(1);
  if(hit.t<0 || hit.aborted || !isfinite(footprint) || footprint<=0 || !rt_scene_ok())return result;
@@ -198,6 +229,15 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if(h0.y>0xffffffffu/(3u*h1.x) || h0.z>bbytes || size>bbytes-h0.z || h0.w>bbytes || size>bbytes-h0.w)return result;
  // Actual native positions and UVs, not a mesh/hash-only proof. Exact comparison
  // intentionally declines even harmless arithmetic differences in this slice.
+#ifdef RT_HIT_INSTANCED
+ // Instanced rows (word 220 bits 8..9 = family): hm_clip_instanced, the wind rows within their derived tolerance.
+ const uint hm_flags=gHitRecords.Load(row+220u),hm_family=(hm_flags>>8)&3u;
+ if(hm_family!=0u){
+  const uint outcome=hm_clip_instanced(row,h0,h1.x,ii,hit.prim,(hm_flags&2u)!=0u);
+  g_hm_clip=hm_family|((outcome&7u)<<2)|(outcome&8u)<<2;
+  if((outcome&7u)>=3u)return hit_material_unknown(4);
+ }else
+#endif
  [unroll]for(uint v=0;v<3;++v){
   uint pre=h0.z+(hit.prim*3u+v)*h1.x,def=h0.w+(hit.prim*3u+v)*h1.x;
   if(any(gHitBasis.Load4(pre)!=gHitBasis.Load4(def)) || any(gHitBasis.Load2(pre+16)!=gHitBasis.Load2(def+16)))return hit_material_unknown(4);
@@ -273,5 +313,14 @@ void hit_material_count(RtHit hit,uint status,uint bin){
   const bool pool_row=(ii.meta&(nh_pool_meta|kInfoPool|kInfoLegacy))==(nh_pool_meta|kInfoPool);
   uncovered=!pool_row && ((ii.meta&(nh_opaque_meta|kInfoAlpha))==0u || (ii.meta&(kInfoLegacy|kInfoPool))!=0u);}
  stat_add(127u,uncovered,bin);
+#ifdef RT_HIT_INSTANCED
+ // The clip check per instanced family (core/gi.cpp kHitClipFirst 356: wind 356.., 2S 364..): checked,
+ // bit-exact, within the derived tolerance, UV differs, beyond x1-16, x16-256, over x256, rigid offset.
+ const uint family=g_hm_clip&3u,outcome=(g_hm_clip>>2)&7u;
+ [unroll]for(uint f=1;f<3;++f){const uint base=356u+(f-1u)*8u;const bool mine=family==f;
+  stat_add(base,mine,bin);
+  [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
+  stat_add(base+7u,mine && (g_hm_clip&32u)!=0u,bin);}
+#endif
 }
 #endif

@@ -42,7 +42,7 @@ static_assert(sizeof(Row)==record_bytes);
 static_assert(offsetof(Row,pre)==8 && offsetof(Row,deferred)==12 && offsetof(Row,stride)==16);
 static_assert(offsetof(Row,p0)==48 && offsetof(Row,t)==80 && offsetof(Row,parameters)==208);
 struct View {VkImageView view{};VkImage image{};VkImageLayout layout{};uint64_t id{};uint32_t image_id{};};
-struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};uint64_t vs{},fs{};bool opaque{};uint32_t family{};};
+struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};uint64_t vs{},fs{};bool opaque{};uint32_t family{};instanced::WindInputs wind;};
 // rt_hit_material_instanced (native_hit_instanced.h) counters per family (0 unused, 1 wind, 2 alpha-test 2S).
 struct InstancedCount {uint32_t prepass{},seen{},pipeline{},bindings{},stream{},captured{},mapped{};uint64_t triangles{};};
 struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{},reflectance{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;std::array<View,9> tileset_views{};
@@ -53,7 +53,8 @@ struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{},reflect
  std::array<View,5> plain{};uint32_t plain_floats[6]{};
  // Instanced per-draw rows (native_hit_instanced.h): family, and whether the gather reads the
  // packet's staged engine/1:1 bytes (Deferred::staged at local x 512) instead of the draw's UBOs.
- uint32_t family{};bool staged{};};
+ // Wind: the VS inputs at record (native_hit_instanced.h wind_clip_tolerance).
+ uint32_t family{};bool staged{};instanced::WindInputs wind;};
 struct Deferred {
  std::vector<Buffer> chunks;Buffer rows;uint64_t command{},recording{},frame{};VkBuffer camera{};VkDeviceSize camera_offset{},cursor{},total{};
  DrawJoin join;std::vector<Material> materials;std::vector<VkSampler> samplers;ResourceBudget resources;
@@ -83,6 +84,18 @@ DeviceData* dd{};bool on{};std::mutex mutex;
 // rt_hit_material_instanced: its startup value (the G-buffer VS frame patch), then the live key.
 bool instanced_on{};
 bool instanced_live(){return instanced_on && cfg_hot(CfgHot::rt_hit_material_instanced)!=0;}
+// The wind VS inputs of this draw (native_hit_instanced.h WindInputs), read from the game's mapped UBOs
+// at record: frame 0:0 word 0, scene 0:1 wind words, camera 0:2 _m2/_m6, material 1:1 _m0.._m3.
+instanced::WindInputs read_wind(VkCommandBuffer cmd){
+ instanced::WindInputs w{};Bg3Binding frame{},scene{},camera{},material{};
+ auto bound=[&](uint32_t set,uint32_t binding,Bg3Binding& b){return query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,binding,0,&b) && b.buffer;};
+ if(!bound(0,0,frame) || !bound(0,1,scene) || !bound(0,2,camera) || !bound(1,1,material))return w;
+ bool ok=read_mapped(frame.buffer,frame.offset,&w.time,4) && read_mapped(material.buffer,material.offset,w.material,16) &&
+  read_mapped(camera.buffer,camera.offset+instanced::kCameraViewProjOffset,w.viewproj,64) &&
+  read_mapped(camera.buffer,camera.offset+instanced::kCameraPositionOffset,w.camera,12);
+ for(uint32_t i=0;ok && i<3;++i)ok=read_mapped(scene.buffer,scene.offset+instanced::kSceneWindOffsets[i],w.scene+i,4);
+ w.ok=ok;return w;
+}
 struct Pending {uint64_t command{},recording{};uint32_t candidate_draws{},opaque_count{},opaque_overflow{};DrawJoin join;std::vector<Pre> pre;uint32_t instanced_prepass[3]{};};
 std::unordered_map<uint64_t,Pending> pending;
 std::unordered_map<uint64_t,RecordingOwner> owners;
@@ -504,7 +517,7 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
     !(family!=instanced::None?instanced::prepass_geometry_ok(vertices,args.instances,triangles,stride):prepass_geometry_ok(tileset,vertices,args.instances,triangles,stride)))return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
  if(!prepass_alpha_ok(tileset,snapshot.rec.kind,snapshot.rec.channel,snapshot.rec.p0[1],snapshot.rec.p0[2]))return;
- Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
+ Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family==instanced::Wind)pre.wind=read_wind(cmd);std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
  ++p->second.candidate_draws;
  if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record)){
   p->second.pre.push_back(pre);if(family!=instanced::None)++p->second.instanced_prepass[family];}
@@ -625,8 +638,8 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  if(irecipe){uint32_t engine[16]{},ubo[8]{};const uint32_t eb=pool::engine_bytes(*irecipe),mb=native_vt::material_bytes(*irecipe);
   if(eb>sizeof engine || mb>sizeof ubo || !read_mapped(material.engine.buffer,material.engine.offset,engine,eb) || !read_mapped(material.physical_ubo.buffer,material.physical_ubo.offset,ubo,mb) ||
      !instanced::stage(*irecipe,engine,eb/4u,ubo,mb/4u,stage)){++p.binding_declined;++counts->bindings;return false;}
-  material.family=family;material.staged=true;
-  const uint32_t flags=instanced::row_flags(*irecipe);std::memcpy(&material.row.parameters[3],&flags,4); // row word 220
+  material.family=family;material.staged=true;if(family==instanced::Wind)material.wind=read_wind(cmd);
+  const uint32_t flags=instanced::row_flags(*irecipe)|instanced::family_flags(family);std::memcpy(&material.row.parameters[3],&flags,4); // row word 220
  }
  uint32_t vertices=0;if(!tileset_vertex_count(args.count,args.instances,vertices))return false;
  *bytes=VkDeviceSize(vertices)*stride;ChunkPlacement place{};
@@ -896,6 +909,9 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  };
  // rt_hit_material_instanced (native_hit_instanced.h): per family, the prepass alpha candidates, the
  // G-buffer draws (declined by pipeline / bindings / stream, captured) and the rows this query maps.
+ // Wind pairs: the two draws' VS inputs (native_hit_instanced.h wind_match) and the rows given the
+ // derived clip tolerance (word 220 bit 1, words 224..255).
+ uint32_t wind_inputs[4]{},wind_tolerant=0;float wind_dt=0;
  auto log_instanced=[&](){
   if(!instanced_on || !cfg_hot(CfgHot::rt_stats) || slot.frame%120!=0)return;
   InstancedCount c[3]{};for(uint32_t f=1;f<3;++f){c[f]=packet->instanced[f];c[f].prepass=slot.instanced_prepass[f];}
@@ -904,6 +920,9 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
       "alpha-test 2S: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles",
    (unsigned long long)slot.frame,unsigned(instanced_live()),c[1].prepass,c[1].seen,c[1].pipeline,c[1].bindings,c[1].stream,c[1].captured,c[1].mapped,(unsigned long long)c[1].triangles,
    c[2].prepass,c[2].seen,c[2].pipeline,c[2].bindings,c[2].stream,c[2].captured,c[2].mapped,(unsigned long long)c[2].triangles);
+  if(c[1].mapped)log("[hit material instanced] frame %llu wind inputs prepass vs G-buffer: equal %u, time only %u (max |dt| %.6g), other differ %u, unread %u; rows with the derived clip tolerance %u",
+   (unsigned long long)slot.frame,wind_inputs[instanced::MatchEqual],wind_inputs[instanced::MatchTimeOnly],double(wind_dt),wind_inputs[instanced::MatchDiffer],
+   wind_inputs[instanced::MatchUnread],wind_tolerant);
  };
  for(const auto& deferred:packet->materials){
   uint32_t record=0;if(!join_packets(slot.join,packet->join,deferred.key,deferred.row.valid-1,record))continue;
@@ -916,6 +935,13 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   auto m=deferred;m.snapshot=deferred.row.valid-1;m.source_raw=uint32_t(source->raw);m.deferred_raw=deferred.row.deferred;
   m.row.valid=record+1;m.row.pre=uint32_t(cursor);m.row.deferred=uint32_t(cursor+bytes);m.row.reserved=deferred.row.reserved==2?2u:source->opaque?1u:0u;
   if(!source->opaque && m.row.reserved!=2){m.row.table=source->alpha.rec.tex;std::memcpy(m.row.p0,source->alpha.rec.p0,32);std::memcpy(m.row.t,source->alpha.rec.t,128);}
+  // Wind rows: the clip check's derived tolerance when both draws had the same VS inputs (or only the
+  // time differs); otherwise the row keeps the bit-exact check (fail closed).
+  if(m.family==instanced::Wind && source->family==instanced::Wind){const auto match=instanced::wind_match(source->wind,deferred.wind);++wind_inputs[match];
+   instanced::ClipTolerance tol{};
+   if(instanced::wind_clip_tolerance(source->wind,deferred.wind,tol)){uint32_t flags;std::memcpy(&flags,&m.row.parameters[3],4);flags|=instanced::kRowTolerant;
+    std::memcpy(&m.row.parameters[3],&flags,4);std::memcpy(m.row.padding,tol.a,16);std::memcpy(m.row.padding+4,tol.b,16);++wind_tolerant;
+    if(match==instanced::MatchTimeOnly)wind_dt=std::max(wind_dt,std::fabs(source->wind.time-deferred.wind.time));}}
   cursor+=bytes*2;q.materials.push_back(m);
  }
  // Pool rows (native_hit_pool.h step 3): every ready record with a slot whose views and
