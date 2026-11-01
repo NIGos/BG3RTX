@@ -428,6 +428,34 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Expected live: wind inputs equal (time only at most), clip rejects < 0.04% of lookups (job expect line), and
     the qualified share up by about the old clip share (+1.9 to +6 points). Cost: none measurable (3 more loads and a
     compare per instanced hit; 8 mapped UBO reads per wind draw).
+  - Live result (m4i 09:39): not the cause. Wind "within the derived tolerance 0, over x256", 2S "differs", UV
+    differs 0, rigid 0, wind inputs equal on the logged frames.
+- **Pairing and instance order (2026-11-01; offline, READY_FOR_LIVE).** The rejects of that run: 2.6%, 3.1%, 0%,
+  0.4% of all lookups per window at a static camera; per family the same share of its checked hits in each window
+  (wind/2S 24/27%, 10/16%, 2.2/2.4%); 0 clip rejects on the static per-draw rows in the same frames. So whole frames
+  held rows whose two XFBs place the same mesh (UV bit-exact) at other instance positions.
+  - Cause 1, frames: the instanced key (draw words + index range) is the same every frame, and the slot <-> packet
+    epoch is `frame_index()`, which counts presents and moves mid-frame (same log: `query reject source epoch
+    current 4320 source 4319`). When the current G-buffer packet is recorded after the query, the previous frame's
+    packet carries the source's index and joins. Fix: both draws read their VS inputs at record (frame time 0:0
+    word 0, camera 0:2 _m2/_m6; 2S the per-draw translation 1:0 @32; wind the scene/material words) and
+    `pair_check` maps the row only when all are equal (time differs = another game frame). The wind tolerance now
+    only covers equal inputs.
+  - Cause 2, order: the two passes upload their instance streams separately; the rows are instance-major, so
+    every instance in another order fails at the hit. Fix: `rt/hit_material_instanced_remap.hlsl` after the join,
+    per instanced row: mode 0 maps depth instance i to the first G-buffer instance (from i, wrapping) whose first
+    triangle has i's clip + UV bit for bit; mode 1 copies that instance's block into the row's deferred copy. An
+    instance without a match keeps its own block, so the hit check rejects it (fail closed). CPU reference:
+    `match_instance` / `remap_instances`. The per-hit check is unchanged.
+  - Log (per window, all queries): `[hit material instanced] frame F pairs since the last line (wind/2S): same
+    frame, other frame (time), camera, placement, wind inputs, unread; wind rows with the derived clip tolerance`
+    and `... instance order since the last line (wind/2S, retired queries): rows, instances in the same order,
+    permuted, unmatched` (the remap shader's counters, read when the query retires). Deciding: clip rejects < 0.04%
+    in every ON window; `other frame` > 0 or `permuted` > 0 says which cause was live.
+  - Offline: `native_hit_instanced_test` 128 checks (2S VS in fp32: 9 instances, 3 reordered -> UV equal, clip
+    differs, rigid 0 as live; after the remap all bit-exact; a replaced instance stays rejected; pair_check per
+    input). No existing shader changed. Cost (not measured): mode 0 is O(instances) in the same order, at most
+    instances^2 first-vertex compares; mode 1 one 4 B copy per word of the reordered instances.
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.

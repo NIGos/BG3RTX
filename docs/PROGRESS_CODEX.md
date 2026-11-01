@@ -12,7 +12,26 @@
   OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
   Merge the branch only if the energy and capacity gates pass.
 
-## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01)
+## rt_hit_material_instanced clip rejects: pairing and instance order (offline, READY_FOR_LIVE, 2026-11-01)
+
+- Live S14 (m4i 09:39) disproved the rounding theory: wind "within tolerance 0, over x256", 2S "differs", UV
+  differs 0, rigid 0; 2.6%, 3.1%, 0%, 0.4% of lookups per window at a static camera, the same share for both
+  families (24/27%, 10/16%, 2.2/2.4% of their hits) and 0 on the static per-draw rows. Same mesh, other instance
+  positions, whole frames. Causes in the pairing: (1) the instanced key has no frame identity and the packet /
+  source epoch `frame_index()` counts presents, which moves mid-frame (same log: "query reject source epoch
+  current 4320 source 4319"), so a previous-frame G-buffer packet can join; (2) the two passes may upload the same
+  instances in another order (rows are instance-major).
+- Fix (layer only, instanced rows only): both draws' VS inputs are read at record (frame time 0:0, camera 0:2;
+  2S translation 1:0 @32; wind UBO words) and must be equal (`pair_check`), else the row is not mapped; a new
+  `rt/hit_material_instanced_remap.hlsl` maps each depth instance to the G-buffer instance with the same first
+  triangle (clip + UV bit-exact) and copies that block. Per-hit check unchanged (bit-exact, fail closed).
+- New lines (per window): `pairs since the last line (wind/2S): same frame, other frame (time), camera,
+  placement, wind inputs, unread` and `instance order ...: rows, same order, permuted, unmatched`; they replace
+  the per-frame wind inputs line. 128 checks (reproduces the live signature: UV equal, clip differs, not rigid,
+  then all bit-exact after the remap), 75 CTests; no existing shader changed. Layer change: restart. Gate: clip
+  rejects < 0.04% in every ON window. Cost not measured (two small dispatches per instanced row).
+
+## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01; live: not the cause)
 
 - Live S14 (m4i 07:46): instanced key ON raised qualified 22% -> 36-40% but reason `clip` 0 -> 0.4-1.9M per 120
   frames. Static camera, qualified + clip constant, clip varying: the wind rows (2S is all `precise`, static). The
