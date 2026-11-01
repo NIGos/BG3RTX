@@ -19,6 +19,7 @@
 
 #include "../core/core.h"
 #include "../common/emissive_policy.h"
+#include "../common/water_policy.h"
 
 const Bg3HostApi* host = nullptr;
 
@@ -440,6 +441,38 @@ int main() {
     calib_apply(r, use ? &a : nullptr);
     core.em_calib_apply(words, use ? &b : nullptr);
     CHECK(std::memcmp(words, &r, sizeof r) == 0);
+  }
+  // 4. M5.1 water through the same entry (forward == BG3_EM_REQ_WATER): the record equals
+  // water::make_record on the same bindings, carries water::kMagic, and the S1 docks plane reads
+  // its roles from set 1 b1.
+  {
+    namespace wp = bg3::water;
+    struct Rd { bool read(uint32_t set, uint32_t binding, uint64_t offset, void* dst, size_t n) {
+      return host->read_bound(nullptr, VK_PIPELINE_BIND_POINT_GRAPHICS, set, binding, offset, dst, n); } };
+    for (int it = 0; it < 2000; ++it) {
+      ++g_case;
+      g_bind.clear();
+      std::vector<float> m(80);
+      for (float& v : m) v = rnd(4) ? float(rnd(1000)) / 1000.0f : rnd_float();
+      if (rnd(3)) bind_cb(1, 1, m, rnd(4) ? VK_WHOLE_SIZE : VkDeviceSize(4 * rnd(80)), 0, rnd(5) != 0);
+      Bg3MaterialInfo mi{};
+      const wp::Audited& a = wp::kAudited[rnd(wp::kAuditedCount)];
+      const std::string name = std::string(rnd(5) ? "Fluids/" : "Effects/") + a.name;
+      mi.template_name = name.c_str();
+      mi.pass = rnd(6) ? 1 : 0;
+      mi.flags = BG3_MAT_F_WATER | (rnd(5) ? 0u : uint32_t(BG3_MAT_F_VFX));
+      mi.cls = BG3_MAT_CLASS_REFRACTIVE;
+      mi.slot[BG3_MAT_REFLECTANCE] = cb_slot(BG3_MAT_KIND_SCALAR, 1, 1, uint16_t(4 * rnd(70)), 0.35f);
+      if (rnd(4)) mi.slot[BG3_MAT_ROUGHNESS] = cb_slot(BG3_MAT_KIND_SCALAR, 1, 1, uint16_t(4 * rnd(70)), 0.0f);
+      const uint32_t vs_hi = rnd(4) ? uint32_t(a.vs >> 32) : uint32_t(rnd());
+      const Bg3EmRecordIn in{nullptr, a.fs, &mi, mi.template_name, BG3_EM_REQ_WATER, vs_hi};
+      Bg3EmRecordOut out;
+      CHECK(core.em_record(&in, &out));
+      Rd rd;
+      const wp::WaterRec want = wp::make_record(rd, a.fs, vs_hi, &mi, name);
+      CHECK(std::memcmp(out.rec, &want, sizeof want) == 0 && want.magic == wp::kMagic);
+      CHECK(out.lum_wanted == 0 && out.views[0].view == VK_NULL_HANDLE);
+    }
   }
   std::printf("emissive_core_test: %u checks passed (%zu families, %u fuzzed passes), records bit-identical\n", checks,
               fams.size(), per_family);

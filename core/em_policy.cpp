@@ -4,15 +4,19 @@
 // core rebuild. The host (layer/emissive.cpp) classifies the draw, keeps the views it is
 // handed back, allocates the luminance-copy slot and builds the scene.
 // tests/emissive_core_test.cpp compares these records bit for bit with the former layer path.
+// The same entry carries the M5.1 water policy (common/water_policy.h): forward ==
+// BG3_EM_REQ_WATER returns a water::WaterRec (layer/water.cpp captures by its class).
 #include <cstring>
 
 #include "core.h"
 #include "../common/emissive_policy.h"
+#include "../common/water_policy.h"
 
 namespace {
 
 using namespace bg3::em;
 static_assert(sizeof(Bg3EmRecordOut::rec) == sizeof(EmRec), "Bg3EmRecordOut::rec holds an EmRec");
+static_assert(sizeof(Bg3EmRecordOut::rec) >= sizeof(bg3::water::WaterRec), "Bg3EmRecordOut::rec holds a WaterRec");
 static_assert(sizeof(Bg3EmCalib) == sizeof(Calib) && offsetof(Bg3EmCalib, log_u) == offsetof(Calib, log_u),
               "Bg3EmCalib mirrors em::Calib");
 
@@ -52,6 +56,11 @@ bool core_em_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out) {
   std::memset(out, 0, sizeof *out);
   if (!in || !in->info || !host->read_bound || !host->query_binding) return false;
   CoreReader rd{in->cmd, *out};
+  if (in->forward == BG3_EM_REQ_WATER) {   // M5.1: the water class and record of a forward draw
+    const bg3::water::WaterRec w = bg3::water::make_record(rd, in->fs, in->decal, in->info, in->name ? in->name : "");
+    std::memcpy(out->rec, &w, sizeof w);
+    return true;
+  }
   const EmMaterial mat{in->info, in->name ? in->name : "", in->forward != 0, in->decal != 0};
   EmRecordOut o;
   const EmRec r = make_record(rd, in->fs, mat, o);

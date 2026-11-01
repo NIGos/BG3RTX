@@ -59,6 +59,35 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
 - Cost: `[water] build GPU` ms (capture + convert + BLAS + TLAS). D-EM built 36k triangles in
   0.31 ms; the "huge" plane's triangle count is unknown, report it.
 
+#### M5.1 status (2026-11-01, branch m5-water, offline; READY_FOR_LIVE)
+- Built: `rt_water_geometry` (live, GUI `exp_water_geometry`, `rt_water_xfb_mb=32`/`_max_mb=256`). The D-EM
+  pass hook (geocapture `em_pre_draw`, the B10G11R11 + D24S8 forward/effects signature) hands each draw to
+  `layer/water.cpp`; audited draws get per-draw XFB into the water soup, rt_convert with the pass camera
+  (set 0 b2), one BLAS (a geometry per draw) + a one-instance TLAS in a fenced command buffer of ours after
+  the game's submit. Nothing binds it (no image change). Key off: no hook, nothing allocated.
+- Policy in the core without an ABI bump: `common/water_policy.h` via `Bg3CoreApi::em_record` with
+  `forward == BG3_EM_REQ_WATER` (VS hash >> 32 in `decal`); a core without it returns no `WATR` magic and
+  nothing is captured. Classes: supported (7 audited FS/VS pairs, below), unknown (other forward Fluids
+  water variants), excluded flow (falls, mist, foam, bridges), excluded VFX; lava, glass are not water.
+- Audited pairs (traced 2026-10-30, each VS read): 7b44a567/60d4357d huge_PixelLighting (S1 docks),
+  1d4bff2e/824dcd7b flowmap (S1), fda628a5/b02e4616 flowmap_PixelLighting, 64d9cb77/f0491919 huge_PL_V2,
+  06e66a6f/7a485e6a PL_noCaustics_Shadows, 857ccb90/ffc5bb29 flowmap_noCaustics, 68068cab/bbdf7b8a Water_Plane.
+  The DB has 31 Fluids templates; FLUID_Water_Plane* forward FS without a trace are counted as unknown.
+- Vertex shaders: world Y displacement only (flowmap at the mesh UV, noise at world xz * m10 + time * m11,
+  set 1 b1), gl_Position = camera-relative world * `_m2`: XFB captures the animated surface. The normal is
+  the vertex frame (not the displaced one): M5.2 takes the shading normal from the FS.
+- Depth (open question answered): water does not write depth. No water FS writes FragDepth, and the
+  D24S8 attachment is bit-identical before and after all ten traced water-only forward passes (DB
+  DepthStateID 6 for these templates); mixed passes changed 13 and 427 of 682k px (other draws). The
+  coverage gate compares t_w with the bed depth: visible water must be in front of it. The live log counts
+  the pipelines' depth-write state (`depth write on/off/dynamic`).
+- Log: `[water] capture` (supported/unknown/excluded draws, triangles, overflow, failures),
+  `[water] coverage` (captured share of water draws and triangles, depth-write state, sampled positions:
+  non-finite, collapsed, height range), `[water] build GPU` (median, p90, geometries, triangles per build),
+  `[water] families`.
+- Not done: the per-pixel coverage pass (needs the water scene in the core: ABI 25) and the record buffer
+  on the GPU (no consumer). Live job: `tools/live_batches/m5_water/` (replaces the `mm2` draft).
+
 ### M5.2 Native water term recompute, replacement disabled: `rt_water_check=0`
 - Extract the forward FLUID shader's reflection, sun and local terms from the dumped SPIR-V
   (`captures/shaders`), recompute the reflection term at water pixels with the same resources
@@ -77,8 +106,8 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
 
 ## Open questions
 
-- Does the water pipeline write depth? Read its depth state in a trace graph before M5.1: if it
-  does, the coverage gate compares t_w to that depth directly.
+- Does the water pipeline write depth? Answered offline (M5.1 status): no; the gate compares t_w with
+  the bed depth. The live `depth write` counts confirm it per pipeline.
 - S1 QuickSave_3784 is labelled the foundry (TEST_SCENES) but COVERAGE measured the sea there.
   The `mm2` expect line requires supported water draws, so a view without water is INVALID.
 - Previous-frame water reuse needs a deformation/flow motion contract; M5.1 measures static only.

@@ -139,6 +139,10 @@ struct Bg3EmRecordIn {
   const char* name;              // its template name
   uint32_t forward, decal;       // forward-pass emissive / deferred decal
 };
+// M5.1 water (common/water_policy.h, no layout change): forward == BG3_EM_REQ_WATER asks for a
+// water::WaterRec in Bg3EmRecordOut::rec (decal = the draw's VS hash >> 32). A core without the
+// route returns an EmRec, which lacks water::kMagic: the host then captures nothing.
+#define BG3_EM_REQ_WATER 2u
 struct Bg3EmView { VkImageView view; VkImageLayout layout; };
 struct Bg3EmRecordOut {
   uint32_t rec[64];              // em::EmRec (shaders/rt/em_common.hlsli); glob 0 when lum_wanted

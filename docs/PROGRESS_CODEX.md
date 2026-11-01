@@ -1,5 +1,17 @@
 # BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 24)
 
+## M5.1 water geometry (branch m5-water, offline, READY_FOR_LIVE, 2026-11-01)
+
+- `rt_water_geometry=0` (GUI `exp_water_geometry`, live): forward water draws of the 7 audited FLUID_Water_Plane
+  FS/VS pairs go through the D-EM pass hook into their own XFB soup, BLAS and TLAS per submission
+  (`layer/water.cpp`), with a record per draw (Roughness_Base, Reflectance_Base). Policy `common/water_policy.h`,
+  run by the core via em_record (`BG3_EM_REQ_WATER`): no ABI change. Bound nowhere: no image change.
+- Offline answers: water VS displace Y only (flowmap + scrolling noise), XFB gets the animated positions; water
+  writes no depth (D24S8 identical across all ten traced water passes).
+- Key off: no hook, no allocation; no shader changed (741/741 compile). 69 CTests (+water_policy_test), QA pass.
+- Live: `tools/live_batches/m5_water/` (5 min, dry run passes). Details: PLAN_M5_WATER "M5.1 status".
+
+## M4.3 gi_hit_sun + shared sun roof rule (branch gi-hit-sun, offline, READY_FOR_LIVE)
 One current summary. Older entries, verbatim: [archive/PROGRESS_CODEX_2026-11-01.md](archive/PROGRESS_CODEX_2026-11-01.md)
 (10-31 evening to 11-01) and [archive/PROGRESS_CODEX_2026-10-31.md](archive/PROGRESS_CODEX_2026-10-31.md) (before).
 Plan: [RENDERING_EXECUTION_PLAN.md](RENDERING_EXECUTION_PLAN.md). Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md).

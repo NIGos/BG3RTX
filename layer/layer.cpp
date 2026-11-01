@@ -327,6 +327,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     if (rt_on && rt_enabled()) alpha_device_created(dd);
     if (rt_on && rt_enabled()) bvh_device_created(dd);
     if (rt_on && rt_enabled()) em_device_created(dd);
+    if (rt_on && rt_enabled()) water_device_created(dd);   // M5.1: allocates only once rt_water_geometry=1
   }
   sl_device_post(sl_scratch, dd, VK_SUCCESS);
   watchdog_start();
@@ -341,6 +342,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
     core_shutdown();
     terrain_capture_device_destroyed(dd);
     em_device_destroyed(dd);
+    water_device_destroyed(dd);
     bvh_device_destroyed(dd);
     alpha_device_destroyed(dd);
     rt_device_destroyed(dd);
@@ -465,6 +467,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM: the emissive scene of this batch's effects passes
+  if (r == VK_SUCCESS) water_after_submit(dd, queue, cmds);   // M5.1: the water scene of this batch's forward passes
   omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
   terrain_capture_after_submit(terrainWork,queue,r==VK_SUCCESS);
@@ -513,6 +516,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
   fault_on_result(dd, r, "vkQueueSubmit2");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM (our build goes through vkQueueSubmit)
+  if (r == VK_SUCCESS) water_after_submit(dd, queue, cmds);   // M5.1 (likewise)
   omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
   native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
   terrain_capture_after_submit(terrainWork,queue,r==VK_SUCCESS);
@@ -569,6 +573,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     geo_on_present(queue);
     rt_on_present();
     em_on_present();
+    water_on_present();
     assetdb_on_present(frame);
   }
   trace_on_present(queue, info);

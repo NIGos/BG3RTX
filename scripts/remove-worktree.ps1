@@ -1,7 +1,7 @@
 # Remove a worktree under .claude/worktrees safely: unlink every junction without following it
 # ([IO.Directory]::Delete(path,false)), check that the shared external/ + data/assetdb file count is
 # unchanged before and after, then git worktree remove. Never use rm -rf / git worktree remove directly.
-#   .scriptsemove-worktree.ps1 -Name <worktree folder name>
+#   powershell -File scripts/remove-worktree.ps1 -Name <folder>
 param([Parameter(Mandatory = $true)][string]$Name)
 $ErrorActionPreference = 'Stop'
 $m = 'C:\Users\quali\Documents\Code Projects\BG3RTX'

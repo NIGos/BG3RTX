@@ -323,6 +323,15 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery | kCapOpacityMicromap, {{"rt_omm", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_bvh_split","1","Static geometry cache"}}},
 
+  {"exp_water_geometry", "Water geometry capture",
+   "Captures the game's forward water surfaces (docks, rivers, lakes) into a ray-tracing scene of their own, "
+   "with a record per surface. Data only: nothing is drawn differently yet (first water step). Look at the "
+   "log's [water] lines; the picture must not change. Experimental: coverage and GPU cost are unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_water_geometry", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_water_geometry", "1"}}, {{"rt_geometry", 1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
+
   {"exp_current_sun", "Current cascade sun shadows",
    "Uses the current four native sun-caster domains with finite per-layer rays and native "
    "receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the "
@@ -352,7 +361,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 208 keys of bg3rtx.ini, in file order.
+// 212 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -450,6 +459,9 @@ inline constexpr KV kDefaults[] = {
     {"rt_em_backdrop", "0"},
     {"rt_em_decal", "1"},
     {"rt_em_fx_pulse", "0"},
+    {"rt_water_geometry", "0"},
+    {"rt_water_xfb_mb", "32"},
+    {"rt_water_xfb_max_mb", "256"},
     {"rt_alpha", "1"},
     {"rt_alpha_test", "1"},
     {"rt_alpha_cut", "1"},
