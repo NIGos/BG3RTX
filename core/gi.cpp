@@ -1034,7 +1034,12 @@ static_assert(kHitClipFirst == 356, "native_hit_material.hlsli hit_material_coun
 // Logged as "GI far".
 constexpr uint32_t kGiFarFirst = kHitClipFirst + kHitClipCount, kGiFarCount = 11;
 static_assert(kGiFarFirst == 372, "gi_trace_rt.hlsl kGiFarStatFirst 372");
-constexpr uint32_t kStatsCounters = kGiFarFirst + kGiFarCount; //372..382 gi_far;356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+// [383..384] qualified-hit GI non-finite guard (gi_trace_rt.hlsl kGiHitNfFirst, RT_HIT_GI_DIRECT variants):
+// rays whose hit term was not finite and >= 0 (they took fallback0), pixels whose mean bounce exceeded the
+// RGBA16F maximum (stored as 65504). On the "GI hit direct" line.
+constexpr uint32_t kGiHitNfFirst = kGiFarFirst + kGiFarCount, kGiHitNfCount = 2;
+static_assert(kGiHitNfFirst == 383, "gi_trace_rt.hlsl kGiHitNfFirst 383");
+constexpr uint32_t kStatsCounters = kGiHitNfFirst + kGiHitNfCount; //383..384 GI hit non-finite;372..382 gi_far;356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
@@ -1280,7 +1285,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   if(host->cfg_int("rt_native_tileset",0) && host->cfg_int("rt_hit_material",0))
     host->log("hit material tileset (%u frames): qualified family2 %llu; native primary matches %llu",g_stats_n,
       (unsigned long long)t[bg3::transport::NtsStatQualified],(unsigned long long)t[bg3::transport::NtsStatPrimaryMatch]);
-  if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/8192.0,t[134],t[135]);
+  if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu; non-finite hit terms (fallback0) %llu, bounce over the half-float max (stored 65504) %llu px",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/8192.0,t[134],t[135],t[kGiHitNfFirst],t[kGiHitNfFirst+1]);
   // gi_hit_sun: the sun at the same hits (native_hit_sun.hlsli, counters 320-328). Evaluated = qualified
   // hits with a supported point/spot term whose sun inputs are bound; the added luminance is the
   // sun's share of the GI bounce sum (x the ray fade w, as the direct sum above).

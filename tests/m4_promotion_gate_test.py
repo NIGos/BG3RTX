@@ -53,7 +53,12 @@ def main():
             cap.mkdir()
             dumps = {"d1": {"pass_fs": "5c3fdabc477f316a", "slot": 0, "mean": [lum[label] * 9, 0, 0], "nonfinite": 0},
                      "d2": {"pass_fs": "5c3fdabc477f316a", "slot": 0, "mean": [lum[label], lum[label], lum[label]], "nonfinite": 0},
-                     "d3": {"pass_fs": "3434e561aaaaaaaa", "slot": 0, "mean": [9, 9, 9], "nonfinite": 0}}
+                     "d3": {"pass_fs": "3434e561aaaaaaaa", "slot": 0, "mean": [9, 9, 9], "nonfinite": 0},
+                     # S6's game-owned D32F depth: non-finite in every trace, the bundle OFF too (never the
+                     # measured buffer); and one dump non-finite only with the bundle ON (ours).
+                     "d4": {"pass_fs": "76433aef79eadc86", "slot": "depth", "fmt": "D32F", "mean": [1], "nonfinite": 2900 + i}}
+            if label == "shot-on":
+                dumps["d5"] = {"pass_fs": "abcdef0123456789", "slot": 0, "fmt": "RGBA16F", "mean": [1, 1, 1], "nonfinite": 7}
             (cap / "dumps.json").write_text(json.dumps(dumps))
             log.append(f"{hms(t + 4)}  [trace] frame {i} written: 4 submits, 10 images -> {cap}")
         if label == "diag-on":
@@ -74,6 +79,15 @@ def main():
     rows = {(e["a"], e["on"]): e for e in g.energy(run)}
     bundle = rows[("shot-off-a", "shot-on")]
     check("bundle +0.90% vs spread 0.20%: brighter, explain", abs(bundle["d"] - 0.0018 / 0.2002) < 1e-9 and abs(bundle["s"] - 0.0004 / 0.2002) < 1e-9 and bundle["verdict"] == "brighter: explain")
+    # The m4p3 S6 false alarm: 2917 + 2865 + 2910 of the game's depth summed over three traces read as
+    # 8692 non-finite scene-colour values. The scene colour's own count is per trace and separate.
+    check("scene colour non-finite per trace, not summed with other dumps: (0, 0, 0)", bundle["nonfinite"] == (0, 0, 0))
+    other = g.other_nonfinite(run)
+    depth = other.get("76433aef D32F", {})
+    check("game depth listed per trace and game-owned", len(depth) == 5 and all(game for _, game in depth.values())
+          and depth["shot-off-a"][0] == 2903)
+    ours = other.get("abcdef01 RGBA16F", {})
+    check("a dump non-finite only with the bundle ON is ours", ours.get("shot-on") == (7, False))
     em = rows.get(("shot-em-off-a", "shot-on"))
     check("emission triple found; ON 0.2020 vs 0.2020 mean within spread 0.99%", em is not None and em["verdict"] == "within")
     check("energy_verdict darker", g.energy_verdict(-0.02, 0.01) == "DARKER: energy rule" and g.energy_verdict(0.005, 0.01) == "within")

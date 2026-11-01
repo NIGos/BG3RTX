@@ -441,8 +441,9 @@ std::vector<std::string> gi_hit_direct_lines(const Stats& s) {
   }
   if (t[282]) {
     std::snprintf(line, sizeof line, "GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; "
-                  "fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu",
-                  n, u(t[282]), u(t[283]), u(t[284]), u(t[285]), double(t[286]) / 8192.0, u(t[134]), u(t[135]));
+                  "fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu; "
+                  "non-finite hit terms (fallback0) %llu, bounce over the half-float max (stored 65504) %llu px",
+                  n, u(t[282]), u(t[283]), u(t[284]), u(t[285]), double(t[286]) / 8192.0, u(t[134]), u(t[135]), u(t[383]), u(t[384]));
     out.push_back(line);
   }
   const unsigned b = 160, x = 172;
