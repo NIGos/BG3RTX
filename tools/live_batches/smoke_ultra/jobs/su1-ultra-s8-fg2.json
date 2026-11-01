@@ -107,7 +107,8 @@
     "rotate-r",
     "rotate-l",
     "static-b"
-   ]
+   ],
+   "when_present": true
   },
   {
    "name": "scene wait: 0 timeouts in every smoke window (static, pan, rotation)",

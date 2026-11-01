@@ -113,7 +113,8 @@
     "cost-off-a",
     "cost-on",
     "cost-off-b"
-   ]
+   ],
+   "when_present": true
   }
  ]
 }

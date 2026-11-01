@@ -17,7 +17,12 @@ phase only when its whole window lies inside the phase). What is water-specific:
 - Control. 5c3fdabc / b0[0] cannot change with a water key (water is in no TLAS the lighting traces):
   its ON-vs-OFF change is the error of the normalisation, measured in the same run.
 - Prediction (two-sided). The compose logs its own accounting per 120-frame window: reflections
-  `compose energy ... mean delta over owned`, sun `shadows ... mean removed over owned`, local lights
+  `compose energy ... traced added (A L) - probe removed (B)` per composed pixel times the composed share
+  of owned. NOT its `mean delta over owned`: that is lum(C') - lum(C) of the composed pixels with every
+  term of the variant (shaders/rt/water_compose.hlsl d), so with the sun shadows on it also holds their
+  sun removal on those pixels, which the shadows line counts again (m5p1 S8 11-01: -0.137 of the -0.343
+  per owned pixel; predicted -18.6% for a measured -10.8%; the reflection's own term is -0.0014). Sun
+  `shadows ... mean removed over owned`, local lights
   `local shadows ... mean removed over owned`, refraction `refraction ... mean delta over owned`. The
   predicted change of the image mean is their sum times owned pixels per pass over the render size
   (`compose images WxH`), per complete window of the shot phase (or of the cost phase before it in the
@@ -66,7 +71,8 @@ W = {
     "compose": re.compile(r"\[water\] compose \((?P<f>\d+) frames, (?P<comp>\d+) composed, (?P<ppf>[0-9.]+) passes/frame\): "
                           r"records (?P<rec>[0-9.]+)/frame, owned (?P<own>[0-9.]+)% .*unresolved \(probe kept\) (?P<unres>[0-9.]+)% "
                           r"of owned; clamped (?P<cl>\d+);.*refused: no recent lighting (?P<nolight>\d+), no scene (?P<noscene>\d+)"),
-    "energy": re.compile(r"\[water\] compose energy: mean C (?P<C>[0-9.]+) over owned; composed (?P<compown>[0-9.]+)% of owned: .*"
+    "energy": re.compile(r"\[water\] compose energy: mean C (?P<C>[0-9.]+) over owned; composed (?P<compown>[0-9.]+)% of owned: "
+                         r"probe removed \(B\) (?P<B>[0-9.]+), traced added \(A L\) (?P<AL>[0-9.]+), .*"
                          r"mean delta over owned (?P<d>[-+][0-9.]+) = (?P<dpct>[-+][0-9.]+)% of mean C"),
     "ratio": re.compile(r"\[water\] compose ratio A L / B over (?P<n>\d+) composed px: below 0\.5 (?P<lo>[0-9.]+)%, 0\.5\.\.2\.0 "
                         r"(?P<mid>[0-9.]+)%, above 2\.0 (?P<hi>[0-9.]+)%; ratio of the means (?P<r>[0-9.]+)"),
@@ -234,8 +240,9 @@ def predicted_raw(run, label):
     for i, c in enumerate(comps):
         own_px = float(c.group("rec")) * float(c.group("own")) / 100.0 / max(float(c.group("ppf")), 1.0)
         s = 0.0
-        if i < len(groups["energy"]):
-            s += float(groups["energy"][i].group("d"))
+        if i < len(groups["energy"]):   # the reflection's own term (A L - B) x the composed share (docstring)
+            e = groups["energy"][i]
+            s += (float(e.group("AL")) - float(e.group("B"))) * float(e.group("compown")) / 100.0
         if i < len(groups["shadows"]):
             s -= float(groups["shadows"][i].group("d"))
         if i < len(groups["local"]):

@@ -147,7 +147,8 @@
     "cost-on-static",
     "cost-on-q",
     "cost-on-e"
-   ]
+   ],
+   "when_present": true
   }
  ]
 }
