@@ -118,7 +118,7 @@ static const uint kGiFarStatFirst = 372u, kGiFarStatCount = 11u;
 bool gi_far_roof_clear(float3 o, float3 d, float t) {
   if ((pc.ls_flags & (1u << 25)) == 0u || (st_u(4) & 2u) == 0u) return false;
   const float3 cam_abs = cam2.c[13].xyz;
-  const uint n = min(st_u(0), 256u);
+  const uint n = min(st_u(0), SUN_MAX_VOLUMES);
   for (uint i = 0; i < n; ++i) {
     const uint a = 192u + i * 48u;   // kSunHeader
     const float4 c = st_f4(a), q = st_f4(a + 16u);

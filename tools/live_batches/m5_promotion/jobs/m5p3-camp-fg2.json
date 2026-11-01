@@ -193,7 +193,7 @@
   "\\[rrpost\\] exposure hold REFUSED",
   "\\[cascade\\] could not allocate",
   "\\[water\\] rt/water_\\w+\\.hlsl\\S* \\w+: pipeline creation failed",
-  "\\[water\\] reflections skipped: no water variant"
+  "skipped: no variant for"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",

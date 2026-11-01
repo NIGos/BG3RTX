@@ -29,7 +29,20 @@ from tools.assets import dbformat  # noqa: E402
 
 KIND_ROOM, KIND_PORTAL, KIND_FLOOR = 0, 1, 2
 TF_ROOF, TF_ROOM_HAS_ROOF, TF_COVERED = 1, 16, 32
-K_MAX_VOLUMES = 256   # core/sun_trust.h kSunMaxVolumes
+
+
+def read_cap(root=None):
+    """core/sun_trust.h kSunMaxVolumes (the upload cap) and shaders/gi/sun_trust.hlsli SUN_MAX_VOLUMES."""
+    import re
+    root = root or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    with open(os.path.join(root, "core", "sun_trust.h"), encoding="utf-8") as f:
+        cpp = int(re.search(r"constexpr uint32_t kSunMaxVolumes = (\d+);", f.read()).group(1))
+    with open(os.path.join(root, "shaders", "gi", "sun_trust.hlsli"), encoding="utf-8") as f:
+        hlsl = int(re.search(r"#define SUN_MAX_VOLUMES (\d+)u", f.read()).group(1))
+    return cpp, hlsl
+
+
+K_MAX_VOLUMES = read_cap()[0]
 
 
 def qrot(q, v):
@@ -88,6 +101,8 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     ap.add_argument("db", nargs="?", default=os.path.join(here, "..", "data", "assetdb", "bg3rtx_assetdb.bin"))
     ap.add_argument("--json")
+    ap.add_argument("--check", action="store_true",
+                    help="exit 1 unless every level's roof volumes fit kSunMaxVolumes (none can be dropped)")
     a = ap.parse_args()
     with open(a.db, "rb") as f:
         r = dbformat.Reader(f.read())
@@ -201,7 +216,13 @@ def main():
     if a.json:
         with open(a.json, "w") as f:
             json.dump(out, f, indent=1)
+    if a.check:
+        worst = out["all"]["max_volumes_per_level"]
+        print(f"roof cap: at most {worst} volumes in a level, kSunMaxVolumes {K_MAX_VOLUMES}: "
+              f"{'ok' if worst <= K_MAX_VOLUMES else 'TOO SMALL (volumes are dropped, pixels under them leak)'}")
+        return 0 if worst <= K_MAX_VOLUMES else 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
