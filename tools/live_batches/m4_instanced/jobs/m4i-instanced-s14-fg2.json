@@ -50,6 +50,8 @@
   "\\[hit material instanced\\] frame \\d+ key 1; wind: prepass [1-9]\\d*, G-buffer [1-9]\\d* ",
   "\\[hit material instanced\\] frame \\d+ key 1; .*alpha-test 2S: prepass [1-9]\\d*, G-buffer [1-9]\\d* ",
   "\\[hit material instanced\\] frame \\d+ key 0; wind: prepass 0, G-buffer 0 ",
+  "\\[hit material instanced\\] frame \\d+ wind inputs prepass vs G-buffer: equal \\d+, time only \\d+ \\(max \\|dt\\| [^)]*\\), other differ \\d+, unread \\d+; rows with the derived clip tolerance \\d+",
+  "hit material instanced clip \\(\\d+ frames\\): wind: checked [1-9]\\d*, .*; rejected \\d+ = 0\\.0[0-3]\\d\\d% of all lookups",
   "\\[hit material capacity\\] frame \\d+ ",
   "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified \\d+ unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters \\d+(/\\d+){8}; of base, instance without a material record \\d+",
   "GI hit direct \\([0-9]+ frames\\): candidates [1-9]\\d* qualified \\d+",
