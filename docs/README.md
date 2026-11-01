@@ -21,6 +21,8 @@ not yet authorized are in [live-test-drafts/](live-test-drafts/).
 - [SETTINGS_DESIGN.md](SETTINGS_DESIGN.md): settings table, presets, layered ini, launcher, cost budget.
 - [COVERAGE.md](COVERAGE.md): what the game draws against what our RT handles, gaps ranked by screen impact.
 - [MATERIAL_FAMILIES.md](MATERIAL_FAMILIES.md): G-buffer shader families ranked for the hit-material provider (world, scenes, traces) with their recipe class (`python -m tools.material_families`).
+- [LIGHT_CONVENTIONS.md](LIGHT_CONVENTIONS.md): asset-DB light conventions (flags, units, box ramps, roofed rooms) and the S6 direct-bias analysis (`python -m tools.assets.check_conventions`).
+- [INN_ROTATION_MATCH.md](INN_ROTATION_MATCH.md): the inn rotation primary mismatch: pool geometry, camera-faded walls, pool lag check.
 
 ## Per-effect TRACK docs
 
@@ -51,6 +53,8 @@ not yet authorized are in [live-test-drafts/](live-test-drafts/).
 - [PT_FEASIBILITY_OFFLINE.md](PT_FEASIBILITY_OFFLINE.md): path tracing feasibility and rendering ceiling.
 - [DESIGN_SOTA_NEXT.md](DESIGN_SOTA_NEXT.md): study of the next three state-of-the-art items (many lights, radiance cache, OMM).
 - [CONSOLIDATION.md](CONSOLIDATION.md): repo consolidation plan of 2026-10-31.
+- [META_AUDIT_20261031.md](META_AUDIT_20261031.md): meta-audit of coverage, weak decisions, silent fallbacks and R0 gaps (repeat at each consolidation pause).
+- [OFFLINE_OPPORTUNITIES.md](OFFLINE_OPPORTUNITIES.md): ranked work that needs no game launch (recipes, GPU fixtures, asset-DB checks, frame replay).
 
 ## Testing and QA
 
@@ -65,7 +69,7 @@ old audits (AUDIT_ENGINE_DATA, AUDIT_RT, AUDIT_SOTA), ROADMAP, STATUS, research.
 closed phase notes (P1_PAN_FLASHES, P2_*, P3_NATIVE_DIRECT_VALIDATION), DEVICE_LOST_DLS,
 SUN_PENUMBRA_REVIEW, UI_CONTAMINATION_OFFLINE, the merged OMM and hair-origin notes, DISK_HYGIENE
 (the 2026-10-30 storage audit, done on 2026-10-31),
-GOAL_RENDERING_AGENT and the full progress history PROGRESS_CODEX_2026-10-31.md.
+GOAL_RENDERING_AGENT and the progress history PROGRESS_CODEX_2026-10-31.md and PROGRESS_CODEX_2026-11-01.md.
 
 ## Naming legend
 
