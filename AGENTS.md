@@ -61,6 +61,10 @@ These rules come from mistakes already made in this repo. They apply on every br
 - A failed or confounded measurement: note it in one line and fix the test, not the theory.
 
 ## Measuring correctly
+- Tools that run more than a minute print progress at least every ~30 s (done/total, rate, ETA, failures
+  so far, flushed) and cache what does not change (e.g. baseline SPIR-V hashes per commit; compile only
+  requests whose sources or includes changed). A silent, recompute-everything tool is a bug: fix it first.
+  One shared helper, not one copy per feature.
 - GPU statistics counters live in device-local memory, reduced per workgroup, copied to the host after
   the timed region: host-visible atomics cost 15 ms (water reflections) and 7 ms (water compose) in 2026-11.
   CTest `host_atomics_lint_test` fails on a new shader atomic into a host-visible buffer (classify it there).
