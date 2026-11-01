@@ -296,6 +296,27 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hit_material_instanced", "1"}}, {{"exp_hit_material",1}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"}}},
 
+  {"exp_hit_material_recycle", "Hit materials: reuse buffers (fixes stale scene)",
+   "Native hit materials allocated and freed hundreds of MB of GPU buffers every frame on the game's recording "
+   "threads, so the ray-traced passes often missed this frame's scene and traced the previous one: shadows detach "
+   "and flicker while the camera turns. This reuses the retired buffers instead (and records the material query "
+   "without the scene lock). Turn the camera with Q/E: shadows should stay on their casters. Live A/B; needs "
+   "Native hit materials. Experimental: the stale-scene gate has not run live yet.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hit_material_recycle", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_hit_material_recycle", "1"}}, {{"exp_hit_material",1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"}}},
+
+  {"exp_fg_letterbox", "Frame generation: letterboxed output",
+   "For borderless or fake fullscreen on a desktop larger than the game's resolution (for example 3840x1600 on a "
+   "3840x2160 screen): frame generation finds its inputs at the game's size and is told where the image sits in the "
+   "larger window. Without it frame generation stays off in that setup. Same-size windows are unaffected. Needs "
+   "Frame generation; the key is live, a layer update needs a game restart. Experimental: not checked live yet.",
+   Kind::Choice, Apply::Live, "live (a layer update needs a restart)", true,
+   {{"off", "Off", 0, {{"fg_letterbox", "0"}}, {}},
+    {"on", "On", kCapFg, {{"fg_letterbox", "1"}}, {{"frame_generation",1}}}},
+   {}, {0, 0, 0, 0}, true, {}},
+
   {"exp_hit_material_wind_rgb", "Native hit materials: RGB wind foliage",
    "Adds the instanced RGB wind, two-sided, translucent foliage (ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT) "
    "to the wind and two-sided foliage rows: its depth and G-buffer draws are joined per frame and every hit is checked "

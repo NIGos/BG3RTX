@@ -350,8 +350,8 @@ static void test_dependencies_and_caps() {
 }
 
 static void test_rendering_experiments() {
-  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_hit_material_instanced","exp_gi_hit_direct","exp_gi_hit_sun","exp_rf_hit_shade","exp_rf_hit_gi","exp_water_geometry","exp_water_reflections","exp_water_compose","exp_water_shadows","exp_water_ls_shadows","exp_water_refraction","exp_water_game_shadow"};
-  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","rt_hit_material_instanced","gi_hit_direct","gi_hit_sun","rf_hit_shade","rf_hit_gi","rt_water_geometry","rt_water_reflections","rt_water_compose","rt_water_shadows","rt_water_ls_shadows","rt_water_refraction","rt_water_game_shadow"};
+  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_hit_material_instanced","exp_gi_hit_direct","exp_gi_hit_sun","exp_rf_hit_shade","exp_rf_hit_gi","exp_water_geometry","exp_water_reflections","exp_water_compose","exp_water_shadows","exp_water_ls_shadows","exp_water_refraction","exp_water_game_shadow","exp_hit_material_recycle"};
+  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","rt_hit_material_instanced","gi_hit_direct","gi_hit_sun","rf_hit_shade","rf_hit_gi","rt_water_geometry","rt_water_reflections","rt_water_compose","rt_water_shadows","rt_water_ls_shadows","rt_water_refraction","rt_water_game_shadow","rt_hit_material_recycle"};
   static_assert(std::size(ids)==std::size(keys));
   for(size_t i=0;i<std::size(ids);++i){
     const auto* knob=find_knob(ids[i]);CHECK(knob!=nullptr);if(!knob)continue;
@@ -376,6 +376,19 @@ static void test_rendering_experiments() {
   CHECK(key_change_needs_restart("rt_sun_cascade_current","0","1"));
   CHECK(key_change_needs_restart("rt_hit_material","0","1"));
   CHECK(!key_change_needs_restart("gi_hit_direct","0","1"));
+  CHECK(!key_change_needs_restart("rt_hit_material_recycle","0","1"));
+  CHECK(!key_change_needs_restart("fg_letterbox","0","1"));
+  // fg_letterbox: experimental, off everywhere, live; needs Frame generation (on in every preset, so no Low check).
+  {
+    const auto* lb=find_knob("exp_fg_letterbox");CHECK(lb!=nullptr);
+    if(lb){
+      CHECK(lb->experimental);CHECK(choice_count(*lb)==2);CHECK_EQ(code_default("fg_letterbox"),"0");
+      for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,"fg_letterbox"),"0");CHECK(lb->preset[p]==0);}
+      KVList pairs;knob_kvs(*lb,1,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;CHECK_EQ(get(on,"fg_letterbox"),"1");
+      auto values=preset_values(kHigh);values[knob_index("frame_generation")]=0;
+      CHECK(!unmet_need(*lb,1,values).empty());
+    }
+  }
   CHECK(!key_change_needs_restart("rt_hit_material_instanced","1","0"));   // startup patch, then live
   CHECK(key_change_needs_restart("rt_water_compose","0","1"));    // variants are created with the pipelines
   CHECK(!key_change_needs_restart("rt_water_compose","1","0"));   // off is live (the game's pipeline)

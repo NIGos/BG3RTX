@@ -298,8 +298,11 @@ void destroy(Buffer& b){
 // Once per frame (from collect): idle buffers are freed, and all of them once the key is off.
 void recycle_trim(){
  static std::atomic<uint64_t> last{UINT64_MAX};const uint64_t now=frame_index();if(last.exchange(now)==now)return;
+ // Activation line on every change of the key (lean jobs expect it).
+ static std::atomic<int> logged{-1};const int live=recycle_live()?1:0;
+ if(logged.exchange(live)!=live)log("[hit material] buffer reuse %s (rt_hit_material_recycle=%d)",live?"on":"off",live);
  std::vector<Buffer> evict;
- {std::lock_guard lock(recycle_mutex);if(recycle_live())recycled.trim(now,evict);else recycled.clear(evict);}
+ {std::lock_guard lock(recycle_mutex);if(live)recycled.trim(now,evict);else recycled.clear(evict);}
  free_all(evict);
 }
 void barrier(VkCommandBuffer cmd,VkPipelineStageFlags source,VkAccessFlags access,VkPipelineStageFlags target,VkAccessFlags next){
