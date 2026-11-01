@@ -84,6 +84,11 @@ W = {
                              r".*screen hit \(composed\) (?P<hit>[0-9.]+)%, hidden (?P<hid>[0-9.]+)%.*screen shift (?P<shift>[0-9.]+) px.*"
                              r"ratio of the means (?P<ratio>[0-9.]+)\); mean delta over owned (?P<d>[-+][0-9.]+) = (?P<dpct>[-+][0-9.]+)% "
                              r"of mean C; clamped (?P<cl>\d+)"),
+    # M5.4c (rt_water_game_shadow): the sun light restored where the game's shadow map was replaced by a lit ray.
+    "gsh": re.compile(r"\[water\] game shadow \((?P<f>\d+) frames, variant (?P<v>\w+)\): game-shadowed records "
+                      r"(?P<rec>[0-9.]+)/frame = (?P<own>[0-9.]+)% of owned \(invalid (?P<inv>\d+)\), mean Vg (?P<vg>[0-9.]+); "
+                      r"lit by the traced ray \(restored C \+ Dg\) (?P<rest>[0-9.]+)% of them; .*mean restored over owned "
+                      r"(?P<d>[0-9.]+) = (?P<dpct>[0-9.]+)% of mean C"),
 }
 
 COST = {
@@ -224,7 +229,7 @@ def predicted_raw(run, label):
     comps = same_state_windows(run, label, "compose")
     if not px or not comps:
         return []
-    groups = {k: same_state_windows(run, label, k) for k in ("energy", "shadows", "local", "refraction")}
+    groups = {k: same_state_windows(run, label, k) for k in ("energy", "shadows", "local", "refraction", "gsh")}
     out = []
     for i, c in enumerate(comps):
         own_px = float(c.group("rec")) * float(c.group("own")) / 100.0 / max(float(c.group("ppf")), 1.0)
@@ -237,6 +242,8 @@ def predicted_raw(run, label):
             s -= float(groups["local"][i].group("d"))
         if i < len(groups["refraction"]):
             s += float(groups["refraction"][i].group("d"))
+        if i < len(groups["gsh"]):   # M5.4c: the sun light the game's shadow removed, restored where the ray is lit
+            s += float(groups["gsh"][i].group("d"))
         out.append(s * own_px / px)
     return out
 

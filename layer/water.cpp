@@ -28,6 +28,8 @@
 // created, the records get the FS's sun term too (40 B instead of 32: kRecordBytesSun).
 // M5.4b (rt_water_ls_shadows): likewise, with the sun and the local-light words (96 B: kRecordBytesLs).
 // M5.5 (rt_water_refraction): likewise, the local-light record plus the refraction words (104 B: kRecordBytesRefr).
+// M5.4c (rt_water_game_shadow, with a sun form): 8 more bytes per record (kGshBytes) for the FS that sample the
+// game's sun shadow map: the light it removed and Vg. Without it those FS record no sun term (the game's shadow stays).
 // Key off: no pass is hooked for water and nothing is allocated (resources are created at the
 // first enabled pass, so the key is live). rt_water_compose=0 and rt_water_shadows=0 when the water
 // pipelines are created (game start or level load): no module is patched, no buffer allocated, no
@@ -452,6 +454,8 @@ struct Compose {
   Buf buf;
   uint32_t cap = 0;
   uint32_t record_bytes = water::kRecordBytes;   // kRecordBytesSun: rt_water_shadows was on at the buffer's creation
+  bool gsh = false;     // M5.4c: rt_water_game_shadow too (a sun form): + kGshBytes per record
+  uint32_t stride = water::kRecordBytes;         // record_bytes + the M5.4c words
   uint64_t addr = 0;
   bool tried = false, ok = false;
   std::unordered_map<VkShaderModule, std::shared_ptr<const std::vector<uint32_t>>> mods;   // patched words
@@ -484,9 +488,11 @@ bool compose_buffer() {
                        : cfg_int("rt_water_ls_shadows", 0) != 0 ? water::kRecordBytesLs
                        : cfg_int("rt_water_shadows", 0) != 0    ? water::kRecordBytesSun
                                                                 : water::kRecordBytes;
-  g_cmp.cap = water::capacity_of_mb(water::record_mb(cfg_int("rt_water_compose_mb", 160), g_cmp.record_bytes),
-                                    g_cmp.record_bytes);
-  const VkDeviceSize bytes = water::buffer_bytes(g_cmp.cap, g_cmp.record_bytes);
+  // M5.4c: the game-shadow words (two more) with rt_water_game_shadow, on top of a sun form only.
+  g_cmp.gsh = g_cmp.record_bytes >= water::kRecordBytesSun && cfg_int("rt_water_game_shadow", 0) != 0;
+  g_cmp.stride = g_cmp.record_bytes + (g_cmp.gsh ? water::kGshBytes : 0u);
+  g_cmp.cap = water::capacity_of_mb(water::record_mb(cfg_int("rt_water_compose_mb", 160), g_cmp.stride), g_cmp.stride);
+  const VkDeviceSize bytes = water::buffer_bytes(g_cmp.cap, g_cmp.stride);
   if (!make_buf(g_cmp.buf, bytes,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 false)) {
@@ -502,10 +508,11 @@ bool compose_buffer() {
     return false;
   }
   water::publish_buffer(static_cast<water::ComposeBuffer*>(persist(water::kComposeKey, sizeof(water::ComposeBuffer))),
-                        uint64_t(g_cmp.buf.b), bytes, g_cmp.cap, g_cmp.record_bytes);
+                        uint64_t(g_cmp.buf.b), bytes, g_cmp.cap, g_cmp.record_bytes, g_cmp.gsh ? water::kBufGsh : 0u);
   g_cmp.ok = true;
-  log("[water] compose record buffer %llu MB (%u records of %u B: up to %.1f Mpx); patching the audited water FS",
-      (unsigned long long)(bytes >> 20), g_cmp.cap, g_cmp.record_bytes, double(g_cmp.cap) / 1e6);
+  log("[water] compose record buffer %llu MB (%u records of %u B%s: up to %.1f Mpx); patching the audited water FS",
+      (unsigned long long)(bytes >> 20), g_cmp.cap, g_cmp.stride, g_cmp.gsh ? ", with the game-shadow words" : "",
+      double(g_cmp.cap) / 1e6);
   return true;
 }
 
@@ -528,7 +535,8 @@ void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, si
   const bool refr = g_cmp.record_bytes == water::kRecordBytesRefr;  // M5.5: the local-light record + the refraction words
   const bool ls = refr || g_cmp.record_bytes == water::kRecordBytesLs;   // M5.4b: the sun and local-light words
   const bool sun = ls || g_cmp.record_bytes == water::kRecordBytesSun;   // M5.4: the record with the sun words
-  const water::PatchStatus st = water::patch_fs(code, bytes / 4, *ids, g_cmp.addr, g_cmp.cap, *words, sun, ls, refr);
+  // M5.4c: the game-shadow words; without them a game-shadowed FS (ids->vg) stores no sun term (kept as the game's).
+  const water::PatchStatus st = water::patch_fs(code, bytes / 4, *ids, g_cmp.addr, g_cmp.cap, *words, sun, ls, refr, g_cmp.gsh);
   if (st != water::PatchStatus::kApplied) {
     ++g_cmp.mods_refused;
     g_cmp.last_refusal = st;
@@ -537,8 +545,9 @@ void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, si
     return;
   }
   ++g_cmp.mods_patched;
-  log("[water] compose: FS %016llx patched (%zu -> %zu words%s)", (unsigned long long)hash, bytes / 4, words->size(),
-      refr ? ", with the sun, local-light and refraction terms" : ls ? ", with the sun and local-light terms" : sun ? ", with the sun term" : "");
+  log("[water] compose: FS %016llx patched (%zu -> %zu words%s%s)", (unsigned long long)hash, bytes / 4, words->size(),
+      refr ? ", with the sun, local-light and refraction terms" : ls ? ", with the sun and local-light terms" : sun ? ", with the sun term" : "",
+      !sun || !ids->vg ? "" : g_cmp.gsh ? "; the game's sun shadow Vg recorded" : "; the game's sun shadow kept (no sun term)");
   g_cmp.mods[m] = std::move(words);
   g_any_variant.store(true, std::memory_order_relaxed);   // from here on modules and pipelines are looked at
 }

@@ -65,6 +65,11 @@ struct FsIds {
   // colour copy (set 2 b4) that the end of main mixes: C = mix(Refr.xyz, surface, a). Defined at the top
   // level of main just before C (it is C's operand), so it dominates the stores.
   uint32_t refr;        // vec4: _4332 / _4530 / _3668
+  // M5.4c (record words +0..+1 after the form's last with `gsh`): the game's own sun visibility Vg, the
+  // scalar factor of Lsun of the FS that sample the game's cascade shadow map (tools/water_audit.py
+  // game_sun_shadow derives and checks it: every Dref sample reaches C only through Vg, and Vg only
+  // through Lsun's products, so the sun term D = Vg D_u exactly). 0: the FS has no game sun shadow (Vg 1).
+  uint32_t vg = 0;      // float: the phi(1, max(0, pow(PCF, 2.2))) of the cascade block (_1365 / _1869)
 };
 
 // The audited table. 7b44a567 FLUID_Water_Plane_flowmap_huge_PixelLighting (S1 docks), from
@@ -79,8 +84,7 @@ struct FsIds {
 //   c4e92ccd NoCaustics_Waves: _3671 = mix(_3668, fma(fma(_3322, _1484, _1483 e), _3510.www,
 //     _3510.xyz), _425) (no foam term), _3322 = direct + (_2803 + _2800) * _3220, F0 _2724, DFG _2773,
 //     N _665, roughness _899.
-// The other audited water FS are not in the table yet: their draws keep the game's pipeline
-// (counted by the layer as "no variant").
+// Audited water FS outside the table keep the game's pipeline (counted by the layer as "no variant").
 // M5.4 sun ids (2026-11-01, spirv-dis --raw-id of the three dumps): in each FS Lw =
 // ((Ld + Sd) + (Ls + Ss)) * m + (Kd + Ks) k with Sd = (Lsun * diffuse BRDF) * N.L and Ss = (Lsun *
 // specular BRDF) * N.L, Lsun = sun colour (atmosphere) * cloud shadow * exposure: the sun has no
@@ -106,6 +110,36 @@ inline constexpr FsIds kFsIds[] = {
      2772, 2770, 3057, 3055, 1665, 1668, 1664, 4, 4530},
     {0xc4e92ccdb08dd777ull, 425, 3510, 3220, 1484, 2800, 2724, 2773, 665, 3671, 899, 5, 3310, 3313, 3319,
      1995, 1993, 2280, 2278, 886, 889, 885, 4, 3668},
+    // Pre-audit (2026-11-01, offline): derived by tools/water_audit.py from the raw-id disassembly of each dump
+    // (the structure above, step by step; it reproduces the three tables above id for id, and water_audit_test
+    // keeps every row equal to its derivation). flowmap_PixelLighting and huge_PL_V2 (audited for capture),
+    // flowmap_Brine, huge_PL_SphereMask, and PL_noCaustics (Flymm Cargos basement): its instanced and static
+    // FS have the same ids (one body, another engine CB layout: the channel at +4 / +72). No shadow-map sample in
+    // any of them (the sun term has no game visibility, as above). PL_noCaustics_Shadows 06e66a6f and huge_PL_Shadow
+    // ced49ee3 (the same structure, but Lsun carries the game's cascade shadow Vg) are mapped below with their Vg
+    // (M5.4c). Not mapped: Debris 7813e701 (a debris mask scales the probe term and the direct factor),
+    // flowmap 1d4bff2e, flowmap_noCaustics 857ccb90, Water_Plane 68068cab, OnlyNormals 4af3450e (no light loops).
+    {0xfda628a5f89e5b6eull, 724, 3890, 3593, 1857, 3173, 3097, 3146, 1043, 4084, 1274, 5, 3683, 3686, 3692,
+     2368, 2366, 2653, 2651, 1261, 1264, 1260, 4, 4081},
+    {0x64d9cb772d595ce4ull, 776, 4128, 3831, 2095, 3411, 3335, 3384, 1211, 4368, 1512, 5, 3921, 3924, 3930,
+     2606, 2604, 2891, 2889, 1499, 1502, 1498, 4, 4365},
+    {0xd44c390bcbb9eea5ull, 430, 3688, 3398, 1662, 2978, 2902, 2951, 682, 3850, 1079, 9, 3488, 3491, 3497,
+     2173, 2171, 2458, 2456, 1066, 1069, 1065, 4, 3847},
+    {0xfb7cc2ea451d3e08ull, 795, 4043, 3746, 2010, 3326, 3250, 3299, 1196, 4280, 1427, 5, 3836, 3839, 3845,
+     2521, 2519, 2806, 2804, 1414, 1417, 1413, 4, 4277},
+    {0x2bd6cb9de954c2f9ull, 418, 3512, 3222, 1486, 2802, 2726, 2775, 670, 3674, 901, 9, 3312, 3315, 3321,
+     1997, 1995, 2282, 2280, 888, 891, 887, 4, 3671},
+    {0x269de9047e587ea2ull, 418, 3512, 3222, 1486, 2802, 2726, 2775, 670, 3674, 901, 9, 3312, 3315, 3321,
+     1997, 1995, 2282, 2280, 888, 891, 887, 4, 3671},
+    // M5.4c (2026-11-01, offline, water_audit game_sun_shadow): the two families that sample the game's cascade
+    // shadow map, with their Vg. PL_noCaustics_Shadows 06e66a6f (drawn at the S3 camp): Lsun _3707 = _1967 *
+    // (_2140 * b0), _2140 = _1365 * cloud layers (phi(p, p * (1 - c)) twice), _1365 = _38._m3 > 0 ? max(0,
+    // pow(PCF of 7 Dref samples over the cascades, 2.2)) : 1. huge_PL_Shadow ced49ee3: Lsun _4209 = _2469 *
+    // (_2642 * b0), _2642 = _1869 * clouds, _1869 the same cascade block. Everything else as the rows above.
+    {0x06e66a6fbd88a6b3ull, 569, 3993, 3703, 1966, 3283, 3207, 3256, 756, 4155, 1381, 6, 3793, 3796, 3802,
+     2478, 2476, 2763, 2761, 1368, 1371, 1367, 4, 4152, 1365},
+    {0xced49ee370940201ull, 791, 4502, 4205, 2468, 3785, 3709, 3758, 1214, 4741, 1885, 5, 4295, 4298, 4304,
+     2980, 2978, 3265, 3263, 1872, 1875, 1871, 4, 4738, 1869},
 };
 inline constexpr uint32_t kFsIdsCount = uint32_t(sizeof kFsIds / sizeof kFsIds[0]);
 
@@ -133,7 +167,7 @@ enum : uint32_t {
   OpConstantComposite = 44, OpConstantNull = 46, OpFunction = 54, OpFunctionEnd = 56, OpVariable = 59, OpLoad = 61, OpStore = 62,
   OpAccessChain = 65, OpDecorate = 71, OpMemberDecorate = 72, OpCompositeConstruct = 80,
   OpCompositeExtract = 81, OpConvertFToU = 109, OpConvertUToF = 112, OpConvertUToPtr = 120, OpBitcast = 124, OpIAdd = 128,
-  OpFAdd = 129, OpFSub = 131, OpIMul = 132, OpFMul = 133, OpVectorTimesScalar = 142, OpDot = 148, OpLogicalAnd = 167,
+  OpFAdd = 129, OpFSub = 131, OpIMul = 132, OpFMul = 133, OpFDiv = 136, OpVectorTimesScalar = 142, OpDot = 148, OpLogicalAnd = 167,
   OpSelect = 169, OpBitwiseAnd = 199,
   OpULessThan = 176, OpPhi = 245, OpLabel = 248, OpKill = 252, OpReturn = 253, OpTerminateInvocation = 4416,
   OpDemoteToHelperInvocation = 5380,
@@ -162,13 +196,17 @@ inline void emit_string(std::vector<uint32_t>& v, uint32_t op, const char* s) {
 // kRecordWordsSun words with the sun term; false emits exactly the M5.3 module. ls (M5.4b): the
 // record of kRecordWordsLs words, the sun's plus the local-light words (implies sun); false emits
 // exactly the M5.4 module. refr (M5.5 step 1): the record of kRecordWordsRefr words, the local-light
-// record's plus the refraction words (implies ls); false emits exactly the M5.4b module.
+// record's plus the refraction words (implies ls); false emits exactly the M5.4b module. gsh (M5.4c, implies
+// sun): two more words after the form's last, the sun light the game's shadow map removed Dg = D_u - D and Vg
+// (common/water_compose.h kGshBytes); false emits exactly the module without them, except that an FS with a
+// Vg then stores lum(D) = 0 (the sun step skips it: its game shadow stays, never shadowed twice).
 inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids, uint64_t addr, uint32_t capacity,
-                            std::vector<uint32_t>& out, bool sun = false, bool ls = false, bool refr = false) {
+                            std::vector<uint32_t>& out, bool sun = false, bool ls = false, bool refr = false,
+                            bool gsh = false) {
   using namespace fsp;
   out.clear();
   if (refr) ls = true;
-  if (ls) sun = true;
+  if (ls || gsh) sun = true;
   if (!code || words < 5 || code[0] != 0x07230203u) return PatchStatus::kNotSpirv;
   struct Ins { size_t at; uint32_t op, n; };
   std::vector<Ins> ins;
@@ -272,6 +310,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
              !is(ids.ls_dif, t_v3) || !is(ids.ls_f0, t_v3) || !is(ids.ls_chan, t_uint)))
     return PatchStatus::kIdMismatch;
   if (refr && !is(ids.refr, t_v4)) return PatchStatus::kIdMismatch;
+  if (sun && ids.vg && !is(ids.vg, t_float)) return PatchStatus::kIdMismatch;
   auto input_of = [&](uint32_t var, uint32_t pointee) {
     auto v = var_ptr.find(var);
     if (v == var_ptr.end()) return false;
@@ -305,7 +344,8 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   if (sun) {
     c_w9 = id(), c_stride = id();
     emit(types, OpConstant, {t_uint, c_w9, 9});
-    emit(types, OpConstant, {t_uint, c_stride, refr ? kRecordWordsRefr : ls ? kRecordWordsLs : kRecordWordsSun});
+    emit(types, OpConstant, {t_uint, c_stride, (refr ? kRecordWordsRefr : ls ? kRecordWordsLs : kRecordWordsSun) +
+                                                   (gsh ? kGshWords : 0u)});
     c_w8 = c_u[kRecordWords];   // 8
     const uint32_t lr = id(), lg = id(), lb = id();
     emit(types, OpConstant, {t_float, lr, 0x3e59b3d0u});   // 0.2126
@@ -328,6 +368,17 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     c_w24 = id(), c_w25 = id();
     emit(types, OpConstant, {t_uint, c_w24, 24});
     emit(types, OpConstant, {t_uint, c_w25, 25});
+  }
+  // M5.4c (after every M5.5 declaration: an FS without Vg and gsh = false are unchanged): a game-shadowed
+  // FS without the M5.4c words stores lum(D) = 0 (no sun term: the sun step skips it and its game shadow
+  // stays, never shadowed twice); with them, the word offsets of the two words after the form's last.
+  uint32_t c_f0 = 0, c_wg0 = 0, c_wg1 = 0;
+  if (sun && ids.vg && !gsh) c_f0 = id(), emit(types, OpConstantNull, {t_float, c_f0});
+  if (gsh) {
+    const uint32_t wg = refr ? kRecordWordsRefr : ls ? kRecordWordsLs : kRecordWordsSun;
+    c_wg0 = id(), c_wg1 = id();
+    emit(types, OpConstant, {t_uint, c_wg0, wg});
+    emit(types, OpConstant, {t_uint, c_wg1, wg + 1});
   }
   std::vector<uint32_t> decos;
   emit(decos, OpDecorate, {t_arr, DecArrayStride, 4});
@@ -401,7 +452,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     const uint32_t D = op2(OpFMul, t_v3, {G, S});
     const uint32_t R = op2(OpFSub, t_v3, {ids.C, D});
     const uint32_t lumD = op2(OpDot, t_float, {D, c_lum});
-    const uint32_t s8 = half2(c(R, 0), c(R, 1)), s9 = half2(c(R, 2), lumD);
+    const uint32_t s8 = half2(c(R, 0), c(R, 1)), s9 = half2(c(R, 2), c_f0 ? c_f0 : lumD);
     const uint32_t p8 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w8})});
     emit(body, OpStore, {p8, s8, MemAligned, 4});
     const uint32_t p9 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w9})});
@@ -438,6 +489,20 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
         const uint32_t p25 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w25})});
         emit(body, OpStore, {p25, s25, MemAligned, 4});
       }
+    }
+    if (gsh) {   // M5.4c: wG0 half2(Dg.r, Dg.g), wG1 half2(Dg.b, Vg) with Dg = D (1 - Vg) / Vg = D_u - D
+      uint32_t sg0, sg1;
+      if (ids.vg) {
+        const uint32_t q = op2(OpFDiv, t_float, {op2(OpFSub, t_float, {c_one, ids.vg}), ids.vg});
+        const uint32_t Dg = op2(OpVectorTimesScalar, t_v3, {D, q});
+        sg0 = half2(c(Dg, 0), c(Dg, 1)), sg1 = half2(c(Dg, 2), ids.vg);
+      } else {     // no game sun shadow: Vg = 1, nothing removed
+        sg0 = half2(c(c_zero3, 0), c(c_zero3, 1)), sg1 = half2(c(c_zero3, 2), c_one);
+      }
+      const uint32_t pg0 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_wg0})});
+      emit(body, OpStore, {pg0, sg0, MemAligned, 4});
+      const uint32_t pg1 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_wg1})});
+      emit(body, OpStore, {pg1, sg1, MemAligned, 4});
     }
   }
 
