@@ -270,7 +270,8 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
   (the M5.3 G = a T X times the FS's own SSA values; ids per FS in water_fs_patch.h kFsIds: 7b44a567
   %3889 %3892 %3898, 99c1fcef %4087 %4090 %4096, c4e92ccd %3310 %3313 %3319). Two more words per record
   (half3 D + a marker), 40 B instead of 32.
-- Replacement, visibility only: `C' = max(C - (1 - V) D, 0)`, V from one ray towards the sun disc from
+- Replacement, visibility only: `C' = max(C - (1 - V) D, 0)` (built as `V C + (1 - V) R`, R = C - D
+  recorded by the FS: see "M5.4 fix" below), V from one ray towards the sun disc from
   the FS's own surface point (P = t dir, its shading N for the offset; rt_shadow.hlsl's disc sample,
   `sun_radius`, `rt_tmax`) into the scene TLAS (no water in it: no self-shadow). Lit and unknown
   (aborted) rays keep C bit-identically; the clouds stay in D (they are the game's radiance, not
@@ -280,7 +281,8 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
 - Energy rule: the unshadowed radiance is the FS's own; only V changes. Static camera: ON can only be
   darker, by exactly the occluded records' D (logged as "removed"); V = 1 everywhere is the identity
   (unit test 4e). Brightening is impossible by construction (D >= 0, clamp at 0).
-- Local lights (M5.4b, not built): the loop sums are not separable per light in the record. Plan: record
+- Local lights (M5.4b, built 2026-11-01: see "M5.4b status" below; the design changed: every unshadowed
+  light is traced, not one RIS light, and the FS's own froxel list is walked): the loop sums are not separable per light in the record. Plan was: record
   Ld + Ls (G times, two more words) and reuse the D-LS selection (TRACK_D_LOCAL_LIGHTS RIS, one light
   per pixel) only for lights WITHOUT a game shadow map (V_game = 1 in the FS): evaluate that light's
   unshadowed term with the FS's own BRDF terms (Burley diffuse 0.3183, GGX with the FS's F0/roughness),
@@ -315,7 +317,180 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
   traced > 0 and occluded > 0 in the ON phase at S8 (the temple and columns over the pool), `removed`
   > 0 and only on water (shot-on minus shot-off-a coloured only where rt_debug 26 is red), shot-off-a vs
   shot-off-b within the OFF repeat noise, GPU median against the estimate.
+
+#### M5.4 fix: the record holds R = C - D (2026-11-01, branch worktree-agent-abd9303a6e22b012e, offline, READY_FOR_LIVE)
+- Live m5w4 at S8 (log `m5w4-water-shadows-s8-fg2.1.121950`): the shadow geometry is right (the far,
+  sun-side rim shadows the far half of the pool; the game's glint sat inside that shadow), the shadowed
+  half dark with black and bright specks. `clamped 145573` is the 120-frame total (the log prints the raw
+  window counter), not per frame: 1213 per frame = 0.44% of the sun records, 0.7% of the occluded ones.
+- Audit of the three dumps (spirv-dis --raw-id): D is exactly dC/dSun times the sun term. Sd = Lsun x
+  diffuse x N.L, Ss = Lsun x GGX x N.L, Lsun = sun colour x clouds x b0 (the probe has b0 x 100: both the
+  FS's own); C = mix(refr, fma(fma(Lw, X, e), T, S), a): a, T and X are all in G; no later multiply, no
+  exposure or fog mismatch, no ambient or caustics in Sd/Ss, M5.3's B is a disjoint term. So C - D is the
+  FS with the sun at 0 in exact arithmetic.
+- Root cause: precision. The compose formed C - D from the B10G11R11 target (one ulp 2^-6 of C for R/G,
+  2^-5 for B; the ownership check allows 1 ulp) and a half D. On the shadowed pool the sun is a median
+  66% of C (rt_debug 26 share; 10% of the pixels above 97%, the glint up to C ~ 976 with a rest ~0.05):
+  there the target's rounding is larger than the rest, so C - D clamps to black or keeps up to an ulp of
+  the glint (bright specks). The model test (4e) used exact floats and could not see it.
+- Fix (key-on path only): the FS stores R = C - D in f32 then half, and lum(D) (words 8-9:
+  `half2(R.r, R.g)`, `half2(R.b, lum D)`, no new words); the compose writes `V C + (1 - V) R` (+ A L - B
+  with M5.3, - F sum with M5.4b): R where occluded, C bit for bit where lit or unknown. Statistics: sun term
+  and removed from lum(D). Key off: the M5.3 patch FNV and the plain water_compose SPIR-V unchanged (SHA1
+  7695c1ff... before and after); the sun and LS compose variants change and pass spirv-val.
+- Test 4j (would have caught it): 20000 random FS terms (sun 1e-3..3e3, up to the glint) through the real
+  encodings (B10G11R11 6 / 5 bits, nearest and toward zero; the record in half): at V = 0 the compose equals
+  the FS evaluated with its sun colour set to 0 within the record's half rounding; the old C_target - D
+  fails it (counted) and clamps.
+- Expected live (same S8 view): occluded % of traced ~62.6%, sun term D ~0.22 per sun record, removed
+  ~80% of D and ~46% of mean C (the darkening is the FS's own sun share: unchanged), `clamped` 0 in every
+  ON window (was ~145k per 120 frames; gate below 120 per window, expect_every), no black or bright specks
+  in the shadowed half (shot-on). The shadowed half stays darker than the lit half: the FS's water there
+  is mostly sun (refraction of the shaded pool floor plus the sky probe remain, blue-tinted).
+- Open, same class: the M5.4b local-light removal still subtracts F sum (1 - V_k) c_k from the target's C,
+  so a pixel lit almost only by one occluded unshadowed lantern can speckle the same way. Not a small fix:
+  which lights are occluded is known only in the compose, so the FS would have to record Q = C - F L
+  (half3, two more words after main's refraction words 24-25: record 112 B, buffer sizing, offsets, pins)
+  and the compose write Q + F (sum_k s_k c_k - removed). Do it if m5w5 shows `clamped` above ~0.
+
+#### M5.4b status: local-light shadows (2026-11-01, branch worktree-agent-acc8d7bdca31e7569, offline, READY_FOR_LIVE)
+- What the FS does (spirv-dis --raw-id of the three dumps): three loops over the froxel's list (set 2 b10
+  froxels, b11 index list, b12 lights: points, then spots; b16 projectors), each carrying (specular,
+  diffuse) as loop header phis, with the game's atlas term (b27 views, b28 atlas) only for lights with
+  `m7` bit 0. The set 2 b10/b11/b12/b26/b27 decorations are the D-LS ones of f469db78 (b23/b24/b25/b39/b40;
+  same offsets, 80-B lights, 544-B std140 constants), and the loops' per-light terms are bg3_light_eval's.
+- Built: `rt_water_ls_shadows` (GUI `exp_water_ls_shadows`, Experimental; restart to enable, off is live;
+  alone or with the compose and sun keys). The record grows to 96 B (`kRecordBytesLs`, 3 x the MB of
+  `rt_water_compose_mb`): F = a T X m, F0, the points + spots sum L (the spot loop's header phis), the
+  channel, the diffuse colour, the projector share, the froxel depth input, P, N and roughness in f32
+  (ids per FS in water_fs_patch.h). The first water draw of a pass hands its own set 2 b0/b10/b11/b12/
+  b26/b27/b28 to the core (core/em_policy.cpp, at the draw: the pass end may have another draw's sets);
+  the WATER_LS compose binds them at 22..28 (bg3_lights.hlsli), walks the FS's froxel exactly as the FS
+  (log2 z slice, pixel tile, counts), recomputes c_k (bg3_light_eval) and s_k (bg3_atlas_shadow, the
+  12-tap PCF with the FS's IGN) and traces one hard ray to each unshadowed light's centre (ls_clear short).
+  `C' = max(C [+ A L - B] [- (1 - V) D] - F sum_k (1 - V_k) c_k, 0)`. Shadow-mapped, lit and unknown lights
+  keep their term: nothing occluded = the target is not written. Projector lights are not replaced.
+- Sum match (the gate first, as planned): per record `max_c |sum_k c_k s_k - L| / max_c` binned at 2^-10 (one
+  half ulp: the record's rounding, the f32 recompute ~1e-6) and 10%. Offline (water_compose_test 4g, the
+  FS's loops transcribed from the glsl against bg3_light_eval, random lists: channels, ranges, cones,
+  back-facing lights, both falloff models, the global scale, atlas-shadowed lights): 9124 of 9124 checked
+  records within 2^-10; a dropped light is never within (3965 cases), an extra light is far. Live: the
+  `sum check` bins of `[water] local shadows` (gate: within >= 99%, ratio of the means 1 within 0.1%).
+- Offline: 76 CTests (4g sum match, 4h removal algebra: identity at V = 1 bit for bit, F = dC/dL, with the
+  sun and reflection swaps; 4i words), the three LS-patched dumps pass spirv-val and decompile to the 14
+  stores; the sun-only patch equals the M5.4 module word for word (FNV pinned), the M5.3 one likewise; the
+  plain and WATER_SHADOWS compose SPIR-V byte-identical (SHA1 before / after), the LS variant validates.
+- Log `[water] local shadows`: passes with / without the light list, local records, lights evaluated /
+  shadow-mapped / traced per record, occluded % of traced, the sum check bins, removed % of F L and of mean
+  C, projector share, clamped, GPU. rt_debug 27: red occluded (share), green lit, dark magenta only
+  shadow-mapped lights, blue unknown, dark grey no local term, white sum check beyond 10%, yellow invalid.
+- Cost estimate: D-LS traces 2.31 rays/px over 2.73 Mpx in 0.34 ms; the water records (~290k at S8's main
+  view, ~10% of that) with the same list: ~0.04-0.08 ms, plus the atlas PCF of shadow-mapped lights for the
+  check. Expected compose GPU ON minus OFF < 0.15 ms.
+- Live: job `m5w5-water-ls-shadows-s8-fg2` (S8, 132 s, OFF/ON/OFF). If S8's water has no local light, its
+  precheck expect line fails (INVALID, not a pass): then a lantern-lit water scene is needed.
 ### M5.5 Transmission and absorption, only after medium and material mapping are proven.
+
+#### The game's medium (2026-11-01, from the three FS glsl and the Materials.pak templates)
+Template values via `python -m tools.assets dump Public/Shared/Assets/Materials/Fluids/<name>.lsf`; the CB offsets
+are the templates' StaticInstancedForward offsets (set 1 b1). Level instances may override them; the runtime CB
+is not logged yet.
+- Depth: `d = depth(set 2 b5) * _15._m4 - z`, the bed's linear depth minus the fragment's view depth (location 0):
+  a difference along the camera axis at the pixel, NOT the path length along any ray (unrefracted or refracted).
+- Opacity a (the mix weight of `C = mix(Refr, surface, a)`), with `ramp(x) = 1 - (1 - clamp(x))^2`:
+  7b44a567 huge (the S8 sea): `clamp(foam^Foam_Opacity_Exponent * Foam_Opacity + max(ramp(d / OpacityBlendDistance),
+  ramp(d / EdgeBlendDistance) * Opacity_Base) * Opacity + caustic mask) * FadeOpacity`; template OpacityBlendDistance
+  = 0, so a = 1 beyond 0.1 mm: an opaque sea (the S8 shot shows no wreck through it). c4e92ccd NoCaustics_Waves (the
+  S8 pool): `max(ramp(d / 4), ramp(d / 0.1) * 0.5 smoothstep(4096, 0, |P|^2)) * FadeOpacity`.
+- Transmittance of the column = 1 - a: one grey scalar for R, G, B, a quadratic ramp in d. No exp(-sigma L), no
+  wavelength. The water's colour comes from the lit surface instead: its diffuse albedo is
+  `mix(mix(ColorShallow, ColorDeep, 1 - (1 - clamp(d / ColorBlendDistance))^ColorBlendExp), Color_Foam, foam)`,
+  lit by the sun and local lights as a Burley surface at the wave normal (the in-scatter as a surface).
+- Refraction: Refr = the pre-water colour copy (set 2 b4) at the pixel's own uv plus `N.xz * clamp(d / 0.5) *
+  DistortWeightRefraction (0.1)` (a wave jitter of zero mean), applied only where the depth at the offset passes a
+  test against the fragment's (no foreground pulled in), mirror-wrapped at the viewport edge. No Snell bending: the
+  bed is seen where the VIEW ray meets it. An offset never leaves the screen (mirrored).
+- Caustics (7b44a567 only): an 8 x 8 flipbook (set 1 b8) sampled at the bed point along the view ray, masked by
+  CausticsMin/MaxDepth, ADDED to the surface colour (times CausticsStrength) and raised into a. No light transport.
+- Every surface term, the probe reflection Ks included, is multiplied by a: where the water is clear the
+  reflection fades (physically the interface reflects F(theta) at any depth), and the transmitted part is not
+  weighted by 1 - F.
+
+What is wrong against a ray-traced medium, in screen-impact order at S8: (1) no Snell displacement of the bed;
+(2) transmittance over the camera-axis depth difference, not the refracted path length, and grey; (3) the
+reflection scaled by a instead of a Fresnel split; (4) caustics as a texture; (5) screen-space limits (the bed
+under a rim cannot be seen).
+
+#### Quantified at S8 (offline, 2026-11-01)
+Replay pack `replay-20261101-113740-1` (S8, the static view of m5w2 / m5w3: same image): its gDepth (R32F) and
+camera rays give the bed; the water as flat planes at the logged heights (pool -10.97 m, sea -14.74 m from the
+camera). Visible water (bed below the plane) 9.66% of the view (pool 2.05%, sea 7.61%), the m5w3 log's `in front
+9.66%`. Refracted ray (n 1.326, flat normal) marched against the depth:
+
+| | screen hit | hidden | off screen | Snell shift (median, p90) | path L_t / game d (median) |
+|---|---|---|---|---|---|
+| pool (transmissive) | 65.0% | 35.0% | 0.0% | 52 px, 55 px | 1.19 (p10 0.67, p90 1.60) |
+| sea (a = 1, weight 0) | 60.2% | 37.8% | 2.0% | 19 px, 57 px | 0.91 |
+
+Weighted by the pool's transmittance 1 - a (mean 0.16, median 0: the deep part is opaque; 41% of pool pixels have
+1 - a > 0.05): screen hit 91.1%, hidden 8.9%, off screen 0%. Rays leaving the screen therefore change nothing at
+S8 (0% of the transmissive water); the visible error is the missing Snell shift (the bed drawn ~52 px too far from
+the camera). Hidden = the strip of bed under the near rim, which the camera cannot see directly. The game's ramp
+evaluated at L_t instead of d would lower the pool's mean 1 - a on the hit pixels from 0.225 to 0.157.
+Scripts: the session scratchpad (`refr.py`, `refr2.py`); not kept in the repo (one-off model, numbers above).
+
+#### M5.5 design (smallest physically meaningful steps, each its own key, off by default)
+1. Snell refraction through the game's medium (`rt_water_refraction`, BUILT, below). Only WHERE the bed is seen
+   changes; the medium (1 - a) is the game's. Fits the compose exactly: C is linear in Refr with dC/dRefr = 1 - a.
+2. Path-length medium (not built): record d and re-evaluate the family's own opacity ramp at the refracted path
+   length L_t (c4e92ccd: a depends on d and three constants only; 7b44a567 also on foam and caustics, so only the
+   ramp term is swapped). Identity: L_t = d at normal incidence under the camera axis. Gate: monotonic in L_t;
+   brightness changes by design (report), never above the opaque surface term. Needs the runtime CB values (log
+   the instance's OpacityBlendDistance / EdgeBlendDistance per draw first).
+3. Fresnel split (not built): the reflection weighted by F(N.V) instead of a, the transmitted part by 1 - F. Needs
+   the separation of a's "column opacity" from the surface terms; changes energy by design.
+4. Hidden refracted hits (8.9% transmission-weighted at S8): tier (b) shading at the lighting (the
+   `rt_water_hit_shade` plan of M5.3, refracted rays of the previous frame's records). Caustics stay out (P6: no
+   focused transport from one ray).
+
+#### M5.5 step 1 status (2026-11-01, branch worktree-agent-aa7c928fb45d26855 on M5.4b, offline, READY_FOR_LIVE)
+- Built: `rt_water_refraction` (GUI `exp_water_refraction`, Experimental, needs `exp_water_reflections`; enabling
+  needs a restart, off is live; alone or with the other water keys). Files: `common/water_compose.h` (104-B
+  record, `record_rw`, `refract_swap`, `ior_from_f0`, `refract_dir`, kCsRr* words 96..119, kFlagRefr),
+  `common/water_fs_patch.h` (`refr` id per FS: 7b44a567 %4332, 99c1fcef %4530, c4e92ccd %3668; words 24-25),
+  `layer/water.cpp` (104-B buffer and patch when the key is on at creation), `core/em_policy.cpp` (the first water
+  draw's set 2 b4, the colour copy), `core/water.cpp` (variant, binding 68, flags, `[water] refraction`),
+  `shaders/rt/water_compose.hlsl` `?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1`.
+- Record: the M5.4b record plus `w24 half2(Refr.r, Refr.g)`, `w25 half2(Refr.b, 1 - a)`. Compose: n from the FS's
+  own F0 (`n = (1 + sqrt F0) / (1 - sqrt F0)`, 0.0196 -> 1.326, water's 1.333 within the game's rounding of
+  Reflectance_Base: derived, not a constant of ours), `T = refract(-V, N, 1 / n)` with the FS's N, one ray into the
+  scene TLAS from the FS's surface point, tier (a) as the reflection (projects, depth_same_surface, faces the ray),
+  then the forward pass's own copy read bilinearly at the hit: `C' = max(C + (1 - a) (Copy(hit) - Refr), 0)`.
+  Hidden, off screen, miss, aborted, N.V <= 0, a copy of another size: Refr kept (C' = C). The copy is the FS's own
+  Refr source, so the units and whatever the copy already holds (exposure, any fog composited before the water)
+  are the game's; nothing is added for the extra path under water (the medium is step 2).
+- Energy rule: the medium is the FS's; Copy(hit) = Refr is the identity bit for bit, a = 1 never changes C (test
+  4j). ON minus OFF = (1 - a) (Copy(hit) - Refr): a displaced sample of the same bed, logged as `ratio of the
+  means` over composed records (no systematic brightening expected; reported, not gated: a geometry correction).
+- Offline: water_compose_test 4j (the FS model: the swap equals the FS with Refr replaced for any Lc, identity bit
+  for bit, opaque unchanged, dC/dRefr = 1 - a numerically, with the reflection swap together; n from F0 and back;
+  Snell's law, unit length, plane of incidence, total internal reflection water to air; words and buffer sizes);
+  the three refraction-patched dumps pass spirv-val and decompile to the two stores
+  (`packHalf2x16(vec2(_3668.z, 1.0 - _425))`); the M5.4b patch word for word (FNV pinned: 5389606c.., 9e156a50..,
+  092432cf..); plain, sun and LS compose SPIR-V byte-identical (SHA1 before / after); the REFR variant passes
+  spirv-val and binds only pushed bindings (68 the copy). 75 CPU CTests pass (the GPU fixture not run: a live
+  batch was on the PC).
+- Log `[water] refraction`: passes with / without the colour copy, transmissive records (opaque, invalid, no usable
+  copy), traced, tiers, transmission-weighted hidden share, screen shift px, (1 - a) Refr, game -> traced per
+  composed record and their ratio, mean delta % of mean C, clamped, GPU. rt_debug 28: green composed (brightness
+  1 - a), red hidden, blue off screen, magenta miss, white aborted, dark cyan not traced, dark grey opaque, orange no
+  usable copy, yellow not owned / invalid.
+- Cost estimate: one ray per transmissive record (S8: ~56k = the pool, 2.05% of 2.73 Mpx) plus 4 copy loads; M5.2
+  traces 264k reflection rays in 0.12 ms with the primary pass: expected compose GPU ON minus OFF < 0.05 ms. The
+  record grows 96 -> 104 B (the record buffer 480 -> 520 MB at the default `rt_water_compose_mb=160`).
+- Live: job `m5w6-water-refraction-s8-fg2` (S8, 132 s, OFF/ON/OFF, rt_debug 28; tools/live_batches/m5_water, dry
+  run passes, batch 21.1 min, 1.31 GB). User check: Water Queens House, the pool from the balcony: with the key on
+  the tiles and steps under the water move towards the camera (the pool looks shallower) and follow the waves.
 
 ## Open questions
 

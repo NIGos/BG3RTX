@@ -36,6 +36,20 @@
 // variant of the compose shader: one sun ray per record with a sun term, C' = max(C - (1 - V) D, 0)
 // (plus the reflection term when rt_water_compose is on too). "[water] shadows" every
 // rt_timing_frames; rt_debug 26 the shadow view.
+//
+// M5.4b water local-light shadows (rt_water_ls_shadows, default 0; the same needs, 96-byte records with
+// the sun's and the local-light words). The WATER_SHADOWS;WATER_LS compose walks each record's froxel
+// list in the first water draw's own set 2 light buffers (captured at that draw, core/em_policy.cpp,
+// pushed at 22..28), checks the recomputed sum against the FS's, and traces the lights the game leaves
+// unshadowed: C' = max(C - F sum (1 - V_k) c_k, 0). A pass without the list gets kFlagLs cleared.
+// "[water] local shadows" every rt_timing_frames; rt_debug 27 the view.
+//
+// M5.5 step 1 water refraction (rt_water_refraction, default 0; the same needs, 104-byte records: the
+// local-light record plus the FS's refraction sample and its weight 1 - a). The WATER_SHADOWS;WATER_LS;
+// WATER_REFR compose traces one refracted ray per transmissive record (Snell at the FS's N, n from its F0)
+// and, where the hit resolves on screen, reads the water draw's own colour copy (its set 2 b4, captured at
+// the draw, core/em_policy.cpp, pushed at 68) there: C' = max(C + (1 - a) (Copy(hit) - Refr), 0). A pass
+// without the copy gets kFlagRefr cleared. "[water] refraction" every rt_timing_frames; rt_debug 28 the view.
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -370,8 +384,11 @@ void maybe_log() {
 // ---- M5.3 composition (rt_water_compose; shaders/rt/water_compose.hlsl, common/water_compose.h) ----
 constexpr uint32_t kMaxComposePasses = 4;                 // timed compose dispatches per frame
 constexpr uint32_t kCQ = 2 + 2 * kMaxComposePasses;      // timestamps per frame slot
-constexpr uint32_t kCStatWords = bg3::water::kCsSunWords;   // 32 M5.3 words + the M5.4 sun words
-constexpr VkDeviceSize kCStatBytes = 256, kCParamBytes = 256, kCCamBytes = 768;   // cam at 0, vp at 512
+// 32 M5.3 words + the M5.4 sun words + the M5.4b local-light words (64..90) + the M5.5 refraction words
+// (96..119) of a 128-word slot.
+constexpr uint32_t kCStatWords = bg3::water::kCsRrWords;
+constexpr VkDeviceSize kCStatBytes = 512, kCParamBytes = 256, kCCamBytes = 768;   // cam at 0, vp at 512
+static_assert(kCStatBytes == bg3::water::kCsSlotWordsLs * 4 && kCStatWords * 4 <= kCStatBytes, "the slot holds every word");
 constexpr VkDeviceSize kCVpOff = 512, kCSlotBytes = kCStatBytes + kCParamBytes;
 // ONE camera block after the slots (common/water_compose.h lighting_use): every frame's copy
 // overwrites it, the compose reads the camera of the lighting the GPU ran last, as wRad / wDep.
@@ -400,6 +417,8 @@ VkBuffer g_chost = VK_NULL_HANDLE, g_cdev = VK_NULL_HANDLE;
 VkDeviceMemory g_chost_mem = VK_NULL_HANDLE, g_cdev_mem = VK_NULL_HANDLE;
 uint8_t* g_cmap = nullptr;
 bool g_csun = false;   // M5.4: the WATER_SHADOWS compose (40-byte records)
+bool g_cls = false;    // M5.4b: the WATER_SHADOWS;WATER_LS compose (96-byte records, bindings 22..28)
+bool g_crr = false;    // M5.5: the WATER_SHADOWS;WATER_LS;WATER_REFR compose (104-byte records, binding 68)
 VkQueryPool g_cqp = VK_NULL_HANDLE;
 uint32_t g_cslot = 0;
 bool g_cwritten[kRing] = {};
@@ -411,6 +430,7 @@ struct Stash {
   VkDescriptorSet alpha = VK_NULL_HANDLE;
   std::vector<uint8_t> push;
   uint32_t w = 0, h = 0, slot = 0;
+  uint32_t flags = 0;   // ComposeParams.a.w as the lighting wrote it
   bg3::water::ComposeBuffer buf{};
 };
 Stash g_st;
@@ -421,6 +441,15 @@ struct CWindow {
   double sumC = 0, sumB = 0, sumAL = 0, sumPos = 0, sumNeg = 0, sumBown = 0;
   double sumD = 0, sumRm = 0;   // M5.4: lum(D) and the removed lum((1 - V) D) over sun records
   uint64_t sun_passes = 0, no_sun_records = 0;
+  // M5.4b: lum(F L), removed, lum(F sum) and lum(F L) over checked records, the projector share;
+  // passes with the light list (and without: the flag cleared for that pass), buffers without the words.
+  double sumLsL = 0, sumLsRm = 0, sumLsChk = 0, sumLsChkL = 0, sumLsBox = 0;
+  uint64_t ls_passes = 0, ls_no_lights = 0, no_ls_records = 0;
+  // M5.5: lum((1 - a) Refr) and lum((1 - a) Copy(hit)) over composed, lum((1 - a) Refr) over transmissive
+  // records, the hit's screen shift (px) over composed, (1 - a) over hidden and over traced rays; passes
+  // with the water draw's colour copy (and without: the flag cleared for that pass), buffers without the words.
+  double sumRrGame = 0, sumRrNew = 0, sumRrAll = 0, sumRrShift = 0, sumRrWHidden = 0, sumRrWTraced = 0;
+  uint64_t rr_passes = 0, rr_no_copy = 0, no_rr_records = 0;
   std::vector<float> ms, ms_copy, ms_comp;   // per timed frame: total, the lighting copy, the compose dispatches
   uint64_t no_buffer = 0, layout = 0, size = 0, untimed = 0;
   // Passes: on this frame's lighting stash, on the previous lighting's (the pass recorded first),
@@ -433,6 +462,8 @@ VkDeviceSize cslot_off(uint32_t slot) { return VkDeviceSize(slot) * kCSlotBytes;
 
 bool compose_wanted() { return host->cfg_int("rt_water_compose", 0) != 0 && water_rf_wanted(); }
 bool shadows_wanted() { return host->cfg_int("rt_water_shadows", 0) != 0 && water_rf_wanted(); }
+bool ls_wanted() { return host->cfg_int("rt_water_ls_shadows", 0) != 0 && water_rf_wanted(); }
+bool refr_wanted() { return host->cfg_int("rt_water_refraction", 0) != 0 && water_rf_wanted(); }
 
 void release_compose_images() {
   for (Bg3Image* im : {&g_rad, &g_dep}) {
@@ -470,17 +501,40 @@ constexpr struct { uint32_t binding; VkDescriptorType type; } kCBind[] = {
     {62, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},   {63, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
     {64, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},  {66, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
     {67, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+    // M5.4b (WATER_LS only, the layout's tail): the water draw's set 2 light list (bg3_lights.hlsli 22..28).
+    {22, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},  {23, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    {24, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},  {25, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    {26, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER},  {27, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    {28, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
+    // M5.5 (WATER_REFR only, after the light list): the water draw's colour copy (its set 2 b4).
+    {68, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
 };
-constexpr uint32_t kNumCBind = uint32_t(sizeof kCBind / sizeof kCBind[0]);
+constexpr uint32_t kNumCBindRefr = uint32_t(sizeof kCBind / sizeof kCBind[0]);
+constexpr uint32_t kNumCBindLs = kNumCBindRefr - 1;   // M5.4b: the layout with the light list
+constexpr uint32_t kNumCBind = kNumCBindLs - 7;       // M5.3 / M5.4: the layout without the light list
+uint32_t g_cpush_nb = 0;   // the binding count g_cpush was made with
 
-bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, bool sun) {
+bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, bool sun, bool ls, bool refr) {
   const VkDeviceFuncs& vk = *host->vk;
   VkDevice dev = host->device;
-  if (g_compose.p && g_csun != sun) {   // the record layout of the buffer decides the variant
+  if (g_compose.p && (g_csun != sun || g_cls != ls || g_crr != refr)) {   // the record layout of the buffer decides the variant
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
     g_compose = Pipe{};
   }
+  const uint32_t nb = refr ? kNumCBindRefr : ls ? kNumCBindLs : kNumCBind;
+  if (g_cpush && nb != g_cpush_nb) {   // the push layout differs by the light list and the copy
+    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_copy.p);
+    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_clayout);
+    host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_cpush);
+    g_copy = g_compose = Pipe{};
+    g_clayout = VK_NULL_HANDLE;
+    g_cpush = VK_NULL_HANDLE;
+    g_cpush_nb = 0;
+  }
   g_csun = sun;
+  g_cls = ls;
+  g_crr = refr;
   if (!g_chost) {
     void* m = nullptr;
     if (!make_device_buffer(kCDevBytes,
@@ -510,13 +564,14 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
     g_clayout = VK_NULL_HANDLE;
   }
   if (!g_cpush) {
-    VkDescriptorSetLayoutBinding b[kNumCBind];
-    for (uint32_t i = 0; i < kNumCBind; ++i) b[i] = {kCBind[i].binding, kCBind[i].type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    VkDescriptorSetLayoutBinding b[kNumCBindRefr];
+    for (uint32_t i = 0; i < nb; ++i) b[i] = {kCBind[i].binding, kCBind[i].type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
     VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-    ci.bindingCount = kNumCBind;
+    ci.bindingCount = nb;
     ci.pBindings = b;
     if (vk.CreateDescriptorSetLayout(dev, &ci, nullptr, &g_cpush) != VK_SUCCESS) return g_cpush = VK_NULL_HANDLE, false;
+    g_cpush_nb = nb;
   }
   if (!g_clayout) {
     VkDescriptorSetLayout sets[2] = {g_cpush, alpha_layout};
@@ -531,8 +586,12 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
     g_cpush_bytes = push_bytes;
   }
   return make_pipe(g_copy, "rt/water_compose.hlsl", "water_copy", g_clayout) &&
-         make_pipe(g_compose, sun ? "rt/water_compose.hlsl?WATER_SHADOWS=1" : "rt/water_compose.hlsl", "water_compose",
-                   g_clayout);
+         make_pipe(g_compose,
+                   refr  ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1"
+                   : ls  ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1"
+                   : sun ? "rt/water_compose.hlsl?WATER_SHADOWS=1"
+                         : "rt/water_compose.hlsl",
+                   "water_compose", g_clayout);
 }
 
 // Reads the compose slot about to be reused (kRing frames later) into the window.
@@ -543,8 +602,12 @@ void collect_compose(uint32_t slot) {
   if (w[0]) {
     ++g_cwin.ran;
     g_cwin.passes += w[0];
-    for (uint32_t i = 0; i < kCStatWords; ++i)
-      if (i < 16 || (i > 27 && i < bg3::water::kCsSunSumD)) g_cwin.w[i] += w[i];
+    using bg3::water::kCsLsRec, bg3::water::kCsLsSumL, bg3::water::kCsLsChkShWithin;
+    using bg3::water::kCsRrRec, bg3::water::kCsRrSumGame;
+    for (uint32_t i = 0; i < kCStatWords; ++i)   // the counters (the 64-bit sums below)
+      if (i < 16 || (i > 27 && i < bg3::water::kCsSunSumD) || (i >= kCsLsRec && i < kCsLsSumL) || i == kCsLsChkShWithin ||
+          (i >= kCsRrRec && i < kCsRrSumGame))
+        g_cwin.w[i] += w[i];
     g_cwin.sumC += u64(w, 16) / 4096.0;
     g_cwin.sumB += u64(w, 18) / 4096.0;
     g_cwin.sumAL += u64(w, 20) / 4096.0;
@@ -553,6 +616,17 @@ void collect_compose(uint32_t slot) {
     g_cwin.sumBown += u64(w, 26) / 4096.0;
     g_cwin.sumD += u64(w, bg3::water::kCsSunSumD) / 4096.0;
     g_cwin.sumRm += u64(w, bg3::water::kCsSunSumRemoved) / 4096.0;
+    g_cwin.sumLsL += u64(w, bg3::water::kCsLsSumL) / 4096.0;
+    g_cwin.sumLsRm += u64(w, bg3::water::kCsLsSumRemoved) / 4096.0;
+    g_cwin.sumLsChk += u64(w, bg3::water::kCsLsSumChk) / 4096.0;
+    g_cwin.sumLsChkL += u64(w, bg3::water::kCsLsSumChkL) / 4096.0;
+    g_cwin.sumLsBox += u64(w, bg3::water::kCsLsSumBox) / 4096.0;
+    g_cwin.sumRrGame += u64(w, bg3::water::kCsRrSumGame) / 4096.0;
+    g_cwin.sumRrNew += u64(w, bg3::water::kCsRrSumNew) / 4096.0;
+    g_cwin.sumRrAll += u64(w, bg3::water::kCsRrSumAll) / 4096.0;
+    g_cwin.sumRrShift += u64(w, bg3::water::kCsRrSumShift) / 4096.0;
+    g_cwin.sumRrWHidden += u64(w, bg3::water::kCsRrSumRwHidden) / 4096.0;
+    g_cwin.sumRrWTraced += u64(w, bg3::water::kCsRrSumRwTraced) / 4096.0;
   }
   if (g_cqp) {
     const uint32_t n = 1 + (std::min)(g_cpasses[slot], kMaxComposePasses);
@@ -637,6 +711,54 @@ void maybe_log_compose() {
               meanC > 0 ? 100.0 * removed_own / meanC : 0.0, (unsigned long long)w[kCsSunClamped], med, p90,
               (unsigned long long)W.no_sun_records);
   }
+  if (g_cls || W.no_ls_records || host->cfg_int("rt_water_ls_shadows", 0)) {
+    // M5.4b: the traced local-light visibility on the water (WATER_LS words, common/water_compose.h).
+    const double lrec = double(w[kCsLsRec]), lev = double(w[kCsLsLights]), ltr = double(w[kCsLsTraced]);
+    const double locc = double(w[kCsLsOccluded]), chk = double(w[kCsLsCheck]), chs = double(w[kCsLsChkSh]);
+    const double meanL = lrec > 0 ? W.sumLsL / lrec : 0.0, meanRm = lrec > 0 ? W.sumLsRm / lrec : 0.0;
+    const double removed_own = own > 0 ? W.sumLsRm / own : 0.0;
+    host->log("[water] local shadows (%llu frames, %llu passes with the light list, %llu without): local records %.0f/frame "
+              "= %.2f%% of owned (no local term %.2f%%, invalid %llu, list cut %llu); lights evaluated %.2f/record, with a "
+              "game shadow map %.2f/record (kept), traced %.2f/record, occluded %.2f%% of traced, unknown %llu (kept); "
+              "records with an occluded light %.2f%% of local records; sum check over %.0f records: within %.3f%% %.2f%%, "
+              "to %.0f%% %.2f%%, beyond %.2f%% (with a shadow-mapped light %.0f, within %.2f%%); ratio of the means sum / "
+              "L %.5f; local term F L %.5f per local record (projector share %.5f, kept), removed %.5f = %.2f%% of F L; "
+              "mean removed over owned %.6f = %.3f%% of mean C; clamped %llu; GPU %.3f ms median, p90 %.3f (the compose "
+              "dispatches with the light walk + the lighting copy); skipped: records without the local words %llu",
+              (unsigned long long)W.frames, (unsigned long long)W.ls_passes, (unsigned long long)W.ls_no_lights,
+              W.ran ? lrec / double(W.ran) : 0.0, pct(lrec, own), pct(double(w[kCsLsNone]), own),
+              (unsigned long long)w[kCsLsInvalid], (unsigned long long)w[kCsLsCut], lrec > 0 ? lev / lrec : 0.0,
+              lrec > 0 ? double(w[kCsLsShadowed]) / lrec : 0.0, lrec > 0 ? ltr / lrec : 0.0, pct(locc, ltr),
+              (unsigned long long)w[kCsLsUnknown], pct(double(w[kCsLsOccRec]), lrec), chk, 100.0 * double(kLsSumTol),
+              pct(double(w[kCsLsWithin]), chk), 100.0 * double(kLsSumFar), pct(double(w[kCsLsMid]), chk),
+              pct(double(w[kCsLsFar]), chk), chs, pct(double(w[kCsLsChkShWithin]), chs),
+              W.sumLsChkL > 0 ? W.sumLsChk / W.sumLsChkL : 0.0, meanL, lrec > 0 ? W.sumLsBox / lrec : 0.0, meanRm,
+              meanL > 0 ? 100.0 * meanRm / meanL : 0.0, removed_own, meanC > 0 ? 100.0 * removed_own / meanC : 0.0,
+              (unsigned long long)w[kCsLsClamped], med, p90, (unsigned long long)W.no_ls_records);
+  }
+  if (g_crr || W.no_rr_records || host->cfg_int("rt_water_refraction", 0)) {
+    // M5.5: the traced refraction (WATER_REFR words, common/water_compose.h kCsRr*).
+    const double rrec = double(w[kCsRrRec]), rtr = double(w[kCsRrTraced]), rhit = double(w[kCsRrHit]);
+    const double game = rhit > 0 ? W.sumRrGame / rhit : 0.0, nw = rhit > 0 ? W.sumRrNew / rhit : 0.0;
+    const double delta_own = own > 0 ? (W.sumRrNew - W.sumRrGame) / own : 0.0;
+    host->log("[water] refraction (%llu frames, %llu passes with the colour copy, %llu without): transmissive records "
+              "%.0f/frame = %.2f%% of owned (opaque %.2f%%, invalid %llu, no usable copy %llu); traced %.2f%% of "
+              "transmissive (not traced %llu): screen hit (composed) %.1f%%, hidden %.1f%%, off screen %.1f%%, miss "
+              "%.1f%%, aborted %llu; transmission-weighted hidden share %.2f%%; screen shift %.1f px per composed record; "
+              "refraction term (1 - a) Refr %.5f per transmissive record; composed: game %.5f -> traced %.5f per record "
+              "(ratio of the means %.4f); mean delta over owned %+.6f = %+.3f%% of mean C; clamped %llu; GPU %.3f ms "
+              "median, p90 %.3f (the compose dispatches with the refraction ray + the lighting copy); skipped: records "
+              "without the refraction words %llu",
+              (unsigned long long)W.frames, (unsigned long long)W.rr_passes, (unsigned long long)W.rr_no_copy,
+              W.ran ? rrec / double(W.ran) : 0.0, pct(rrec, own), pct(double(w[kCsRrOpaque]), own),
+              (unsigned long long)w[kCsRrInvalid], (unsigned long long)w[kCsRrNoCopy], pct(rtr, rrec),
+              (unsigned long long)w[kCsRrNotTraced], pct(rhit, rtr), pct(double(w[kCsRrHidden]), rtr),
+              pct(double(w[kCsRrOff]), rtr), pct(double(w[kCsRrMiss]), rtr), (unsigned long long)w[kCsRrAborted],
+              W.sumRrWTraced > 0 ? 100.0 * W.sumRrWHidden / W.sumRrWTraced : 0.0, rhit > 0 ? W.sumRrShift / rhit : 0.0,
+              rrec > 0 ? W.sumRrAll / rrec : 0.0, game, nw, W.sumRrGame > 0 ? W.sumRrNew / W.sumRrGame : 0.0, delta_own,
+              meanC > 0 ? 100.0 * delta_own / meanC : 0.0, (unsigned long long)w[kCsRrClamped], med, p90,
+              (unsigned long long)W.no_rr_records);
+  }
   g_cwin = CWindow{};
 }
 
@@ -652,14 +774,21 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
     return maybe_log_compose();
   }
   // M5.4: the sun words exist only if rt_water_shadows was on when the water FS were patched.
-  const bool sun = record_bytes_of(cb) == kRecordBytesSun;
-  const bool want_rf = compose_wanted(), want_sun = shadows_wanted() && sun;
+  // M5.4b: the local-light words (with the sun's) only if rt_water_ls_shadows was on then.
+  // M5.5: the refraction words (with the local-light and sun words) only if rt_water_refraction was on then.
+  const bool refr = record_bytes_of(cb) == kRecordBytesRefr;
+  const bool ls = refr || record_bytes_of(cb) == kRecordBytesLs;
+  const bool sun = ls || record_bytes_of(cb) == kRecordBytesSun;
+  const bool want_rf = compose_wanted(), want_sun = shadows_wanted() && sun, want_ls = ls_wanted() && ls;
+  const bool want_rr = refr_wanted() && refr;
   if (shadows_wanted() && !sun) ++g_cwin.no_sun_records;
-  if (!want_rf && !want_sun) {
+  if (ls_wanted() && !ls) ++g_cwin.no_ls_records;
+  if (refr_wanted() && !refr) ++g_cwin.no_rr_records;
+  if (!want_rf && !want_sun && !want_ls && !want_rr) {
     g_st.frame = 0;
     return maybe_log_compose();
   }
-  if (!ensure_compose(alpha_layout, in.push_bytes, sun)) {
+  if (!ensure_compose(alpha_layout, in.push_bytes, sun, ls, refr)) {
     ++g_cwin.layout;
     g_st.frame = 0;
     return maybe_log_compose();
@@ -691,7 +820,11 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   prm.a[2] = uint32_t((std::max)(host->cfg_int("rt_debug", 0), 0));
   // M5.3's variant: bit 0 always (the pass runs only with the compose key). The WATER_SHADOWS one:
   // each term by its key, live (common/water_compose.h kFlagRf, kFlagSun).
-  prm.a[3] = sun ? (want_rf ? kFlagRf : 0u) | (want_sun ? kFlagSun : 0u) : 1u;
+  // M5.4b: bit 2 by its key (each pass clears it again without its light list, compose_at_pass_end).
+  // M5.5: bit 3 by its key (each pass clears it again without its colour copy, compose_at_pass_end).
+  prm.a[3] = sun ? (want_rf ? kFlagRf : 0u) | (want_sun ? kFlagSun : 0u) | (want_ls ? kFlagLs : 0u) | (want_rr ? kFlagRefr : 0u)
+                 : 1u;
+  g_st.flags = prm.a[3];
   prm.b[0] = host->cfg_float("rf_mirror_rough", 0.1f);
   vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes, sizeof prm, &prm);
   if (!g_cimg_init) {
@@ -748,7 +881,8 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
 // The pass is most often recorded before this frame's lighting is flushed (core/gi.cpp: run_post
 // at the end of the lighting's command buffer): it binds what the GPU makes current, not this
 // frame's stash (common/water_compose.h lighting_use).
-void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
+void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Binding* lights, bool lights_ok,
+                         const Bg3Binding* copy, bool copy_ok) {
   using namespace bg3::water;
   const VkDeviceFuncs& vk = *host->vk;
   const uint64_t now = host->frame_index();
@@ -790,6 +924,18 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
                                                                               : p->color_layouts[0];
   const VkImageLayout G = VK_IMAGE_LAYOUT_GENERAL;
   // The pass's colour writes and the FS's record stores (fragment stage) before our reads.
+  // M5.4b: this pass's flags word first (kFlagLs only with its water draw's light list): the earlier
+  // dispatches' reads of the params, then the update, then this dispatch's read.
+  // M5.5: likewise kFlagRefr only with its water draw's colour copy.
+  const bool ls_list = g_cls && lights_ok && lights;
+  const bool rr_copy = g_crr && copy_ok && copy && copy->view;
+  if (g_cls) {
+    memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT | kCS);
+    const uint32_t flags = (ls_list ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr);
+    vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes + 12, 4, &flags);
+    if (g_st.flags & kFlagLs) ++(ls_list ? g_cwin.ls_passes : g_cwin.ls_no_lights);
+    if (g_st.flags & kFlagRefr) ++(rr_copy ? g_cwin.rr_passes : g_cwin.rr_no_copy);
+  }
   memory_barrier(cmd, kAll, kCS);
   if (from != G) image_barrier(cmd, p->color_images[0], from, G, kAll, kCS);
   if (g_cqp && pass < kMaxComposePasses) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 2 + pass * 2);
@@ -805,14 +951,36 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   VkWriteDescriptorSetAccelerationStructureKHR as{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
   as.accelerationStructureCount = 1;
   as.pAccelerationStructures = &tlas;
-  const struct { uint32_t b; VkDescriptorType t; const VkDescriptorBufferInfo* bi; const VkDescriptorImageInfo* ii; } src[10] = {
+  // M5.4b: the water draw's light list at 22..28 (kWaterLsBindings order), or, without it, valid
+  // stand-ins the shader never reads (the pass's flags word has kFlagLs cleared).
+  VkDescriptorBufferInfo lb[6];
+  VkDescriptorImageInfo li{VK_NULL_HANDLE, g_dep.view, G};
+  for (uint32_t i = 0; i < 6; ++i) {
+    const uint32_t k = i < 4 ? i : i + 1;   // b0 b10 b11 b12 | b26 (i = 4, the UBO below) | b27
+    lb[i] = ls_list ? VkDescriptorBufferInfo{lights[k].buffer, lights[k].offset, lights[k].range}
+                    : VkDescriptorBufferInfo{g_cdev, 0, kCStatBytes};
+  }
+  const VkDescriptorBufferInfo lubo = ls_list ? VkDescriptorBufferInfo{lights[4].buffer, lights[4].offset, 544}
+                                              : VkDescriptorBufferInfo{g_cdev, 0, 544};
+  if (ls_list) li = {VK_NULL_HANDLE, lights[6].view, lights[6].layout};
+  // M5.5: the water draw's colour copy at 68 in the layout it was bound with (read-only during the pass),
+  // or, without it, a valid stand-in the shader never reads (kFlagRefr cleared for this pass).
+  const VkDescriptorImageInfo ci = rr_copy ? VkDescriptorImageInfo{VK_NULL_HANDLE, copy->view, copy->layout}
+                                           : VkDescriptorImageInfo{VK_NULL_HANDLE, g_dep.view, G};
+  const struct { uint32_t b; VkDescriptorType t; const VkDescriptorBufferInfo* bi; const VkDescriptorImageInfo* ii; } src[18] = {
       {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufs[0], nullptr}, {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufs[1], nullptr},
       {5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, &imgs[0]},  {18, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, nullptr},
       {20, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bufs[2], nullptr}, {60, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufs[3], nullptr},
       {61, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bufs[4], nullptr}, {62, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, &imgs[1]},
-      {66, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bufs[5], nullptr}, {67, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, &imgs[2]}};
-  VkWriteDescriptorSet wr[10];
-  for (uint32_t i = 0; i < 10; ++i) {
+      {66, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bufs[5], nullptr}, {67, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, &imgs[2]},
+      {22, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[0], nullptr},   {23, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[1], nullptr},
+      {24, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[2], nullptr},   {25, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[3], nullptr},
+      {26, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &lubo, nullptr},    {27, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[5], nullptr},
+      {28, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, &li},
+      {68, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, &ci}};
+  const uint32_t nw = g_crr ? 18u : g_cls ? 17u : 10u;
+  VkWriteDescriptorSet wr[18];
+  for (uint32_t i = 0; i < nw; ++i) {
     wr[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     wr[i].dstBinding = src[i].b;
     wr[i].descriptorCount = 1;
@@ -822,7 +990,7 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
     if (src[i].b == 18) wr[i].pNext = &as;
   }
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_compose.p);
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 0, 10, wr);
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 0, nw, wr);
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 1, 1, &alpha, 0, nullptr);
   vk.CmdPushConstants(cmd, g_clayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, uint32_t(g_st.push.size()), g_st.push.data());
   vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);
@@ -854,6 +1022,9 @@ void release_compose() {
   g_chost = g_cdev = VK_NULL_HANDLE;
   g_chost_mem = g_cdev_mem = VK_NULL_HANDLE;
   g_csun = false;
+  g_cls = false;
+  g_crr = false;
+  g_cpush_nb = 0;
   g_cmap = nullptr;
   if (g_cqp) host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_cqp);
   g_cqp = VK_NULL_HANDLE;
@@ -999,18 +1170,23 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   g_written[slot] = true;
   g_out_frame = now;
   g_out_w = in.w, g_out_h = in.h;
-  if (compose_wanted() || shadows_wanted()) compose_at_lighting(cmd, in, alpha_layout);   // M5.3, M5.4
+  if (compose_wanted() || shadows_wanted() || ls_wanted() || refr_wanted())
+    compose_at_lighting(cmd, in, alpha_layout);   // M5.3, M5.4, M5.4b, M5.5
   maybe_log();
 }
 
 void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   // A supported water draw anywhere in the pass (S8: the water is drawn between other forward
   // draws, so neither the first nor the last FS is water); always taken, so no note outlives it.
-  const bool drawn = core_water_pass_take(cmd);
+  Bg3Binding lights[7] = {};   // M5.4b: the first water draw's light list (core/em_policy.cpp)
+  bool lights_ok = false;
+  Bg3Binding copy = {};        // M5.5: the first water draw's colour copy (its set 2 b4)
+  bool copy_ok = false;
+  const bool drawn = core_water_pass_take(cmd, lights, &lights_ok, &copy, &copy_ok);
   const int view = host->cfg_int("rt_debug", 0);
   const bool views = view >= 21 && view <= 24 && water_rf_wanted();
-  // M5.3, or M5.4 alone on a buffer with the sun words (else compose_at_lighting stashed nothing).
-  const bool comp = compose_wanted() || (shadows_wanted() && g_csun);
+  // M5.3, or M5.4 / M5.4b alone on a buffer with their words (else compose_at_lighting stashed nothing).
+  const bool comp = compose_wanted() || (shadows_wanted() && g_csun) || (ls_wanted() && g_cls) || (refr_wanted() && g_crr);
   if (!views && !comp) return;
   if (p->color_count != 1 || p->color_formats[0] != VK_FORMAT_B10G11R11_UFLOAT_PACK32 ||
       p->depth_format != VK_FORMAT_D24_UNORM_S8_UINT || !p->color_views[0] || !p->color_images[0])
@@ -1020,7 +1196,7 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   for (const auto& a : kAudited) ends |= a.fs == p->first_fs_hash || a.fs == p->last_fs_hash;
   if (!ends && !drawn) return;
   std::lock_guard<std::mutex> lock(g_mu);
-  if (comp) compose_at_pass_end(cmd, p);   // M5.3 / M5.4, before the views (they show M5.2's data)
+  if (comp) compose_at_pass_end(cmd, p, lights, lights_ok, &copy, copy_ok);   // M5.3 / M5.4 / M5.4b / M5.5, before the views
   if (!views) return;
   ++g_win.view_passes;
   if (!ends) ++g_win.view_passes_inner;

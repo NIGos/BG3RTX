@@ -12,6 +12,8 @@ and the game's per-light shading, D-EN1), `shaders/gi/rt_local_shadows_prep.hlsl
 Tools: `scripts/live_phases.py` (live setting phases during one auto-run),
 `scripts/ab_compare.py` (A/B stills and crops from two captures).
 Measured in the Steel Watch Foundry (the auto-run save), RTX 5090, 2560x1067.
+Reused on the forward water (M5.4b `rt_water_ls_shadows`, docs/PLAN_M5_WATER.md): the water FS's set 2
+b10/b11/b12/b26/b27/b28 have these structures, and `bg3_light_eval` / `bg3_atlas_shadow` reproduce its loops.
 
 ### 9.1 The light list (D-EN1)
 

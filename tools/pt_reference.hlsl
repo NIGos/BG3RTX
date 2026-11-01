@@ -14,7 +14,7 @@
 //     declared fallback PT_ALBEDO / PT_ROUGH / reflectance 0.5 (a pack without the VT cache).
 // Not modelled (reported by the harness): sky/environment radiance (a miss returns 0, its share is
 // the miss fraction), emission, projector/box lights, cloud shadows, the atmosphere LUT (PT_SUN_T
-// approximates the transmittance), roofs the camera cut away (absent from the TLAS), transmission.
+// approximates the transmittance), roofs the camera cut away (absent from the TLAS; PT_ROOFS=1 below), transmission.
 // With a pack that carries the lighting inputs (common/replay_pack.h sets 2-3; frame_replay
 // --native-ambient sets these):
 //   PT_SUN_LUT=1  the sun's colour from the game's transmittance LUT (bg3_sun.hlsli bg3_sun_colour,
@@ -66,6 +66,53 @@
 #define NATIVE_HIT_SLOTS_BINDING 46
 #include "rt/native_hit_direct.hlsli"
 #include "../common/native_hit_bounce.h"
+// PT_ROOFS=1: the roofs the camera cut away (absent from the TLAS of a pack captured with
+// rt_cascade_casters=0), from the asset database's roof volumes (tools/pt_roofs.py writes
+// captures/pt_roofs.hlsli for the pack). Two declared rules:
+//   sun rays: the production roof rule (gi/sun_roof.hlsli, core/sun_trust.cpp padding 3 m around,
+//     PT_ROOF_SUN_UP 50 m up): a sun ray through a padded volume is occluded (gi_hit_sun leaves it out);
+//   path rays: a ray crossing a volume's roof plane (its top + PT_ROOF_PLANE_UP, 3 m padding around)
+//     upward before its hit (or a miss) ends there with no radiance (the roof's underside is unlit by the
+//     sun and its bounce is not in the pack: a lower bound). First rays that end so are reported in the
+//     "aborted" fraction (no query aborts in a pack run without PT_ROOFS: check that line first).
+#if PT_ROOFS
+#include "../captures/pt_roofs.hlsli"
+#ifndef PT_ROOF_PAD_XZ
+#define PT_ROOF_PAD_XZ 3.0
+#endif
+#ifndef PT_ROOF_SUN_UP
+#define PT_ROOF_SUN_UP 50.0
+#endif
+#ifndef PT_ROOF_PLANE_UP
+#define PT_ROOF_PLANE_UP 3.0
+#endif
+float3 pt_qrot_inv(float4 q, float3 v) { const float3 u = -q.xyz, t = 2.0 * cross(u, v); return v + q.w * t + cross(u, t); }
+bool pt_sun_under_roof(float3 o, float3 d) {   // gi/sun_roof.hlsli sun_under_roof on the padded volumes
+  [loop] for (uint i = 0; i < kPtRoofCount; ++i) {
+    const float4 q = kPtRoof[3u * i + 1u];
+    const float3 h = kPtRoof[3u * i + 2u].xyz + float3(PT_ROOF_PAD_XZ, 0.5 * PT_ROOF_SUN_UP, PT_ROOF_PAD_XZ);
+    const float3 lo = pt_qrot_inv(q, o - kPtRoof[3u * i].xyz) - float3(0, 0.5 * PT_ROOF_SUN_UP, 0), ld = pt_qrot_inv(q, d);
+    const float3 inv = 1.0 / select(abs(ld) > 1e-8, ld, select(ld >= 0.0, 1e-8, -1e-8));
+    const float3 t1 = (-h - lo) * inv, t2 = (h - lo) * inv, tn = min(t1, t2), tf = max(t1, t2);
+    if (min(min(tf.x, tf.y), tf.z) >= max(max(max(tn.x, tn.y), tn.z), 0.0)) return true;
+  }
+  return false;
+}
+float pt_roof_plane(float3 o, float3 d, float tmax) {   // nearest upward roof-plane crossing in (0, tmax), else -1
+  float best = -1.0;
+  [loop] for (uint i = 0; i < kPtRoofCount; ++i) {
+    const float4 q = kPtRoof[3u * i + 1u];
+    const float3 h = kPtRoof[3u * i + 2u].xyz;
+    const float3 lo = pt_qrot_inv(q, o - kPtRoof[3u * i].xyz), ld = pt_qrot_inv(q, d);
+    if (!(ld.y > 1e-6)) continue;
+    const float tr = (h.y + PT_ROOF_PLANE_UP - lo.y) / ld.y;
+    if (!(tr > 0.0) || tr >= tmax || (best >= 0.0 && tr >= best)) continue;
+    const float2 xz = lo.xz + ld.xz * tr;
+    if (all(abs(xz) <= h.xz + PT_ROOF_PAD_XZ)) best = tr;
+  }
+  return best;
+}
+#endif
 
 #ifndef PT_SPP
 #define PT_SPP 4
@@ -156,6 +203,9 @@ PtPath pt_trace(uint2 fp, float3 P, float3 N, float4 org, float dist, float pa, 
   [loop] for (uint b = 1; b <= PT_BOUNCES; ++b) {
     RtHit hh = rt_closest_hit(o, dir, PT_TMAX, cone);
     if (hh.aborted) { if (b == 1) r.cls = 4; break; }
+#if PT_ROOFS
+    if (pt_roof_plane(o, dir, hh.t >= 0.0 ? hh.t : PT_TMAX) >= 0.0) { if (b == 1) r.cls = 4; break; }   // the cut-away roof
+#endif
     if (hh.t < 0.0) {   // a miss: environment radiance not in the traced bounce (PT_ENV: mode 7 only)
 #if PT_ENV
       const float3 le = pt_env(dir);
@@ -212,7 +262,12 @@ PtPath pt_trace(uint2 fp, float3 P, float3 N, float4 org, float dist, float pa, 
         L = normalize(L + (tt * cos(phi) + bb * sin(phi)) * rr);
       }
       RtCone sc = {foot, 0};
+#if PT_ROOFS
+      uint vis = rt_visibility(rt_offset_ray(p, ng), L, PT_TMAX, sc);
+      if (vis == kRtLit && pt_sun_under_roof(rt_offset_ray(p, ng), L)) vis = kRtOccluded;
+#else
       const uint vis = rt_visibility(rt_offset_ray(p, ng), L, PT_TMAX, sc);
+#endif
       if (vis == kRtUnknown) r.sununknown += 1.0;
       else {
 #if PT_SUN_LUT

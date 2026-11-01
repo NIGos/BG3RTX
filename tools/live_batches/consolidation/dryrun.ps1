@@ -4,7 +4,7 @@
 #    the plan, expect_runner names the plan's phase count, burst serials are unique.
 # 2. Run A (real jobs, fake game): job 1 cannot see its expect lines, so it is INVALID and
 #    every later job must stay blocked in pending (stop-on-failure).
-# 3. Run B (same jobs, expect/forbid/post stripped): all 7 run in order and are valid.
+# 3. Run B (same jobs, expect/forbid/post stripped): all 6 run in order and are valid.
 # Scratch root only (outside any checkout); the receipt written there is fake and has no authority.
 param([string]$Out = (Join-Path $env:TEMP "bg3rtx-consolidation-dryrun\$(Get-Date -Format 'yyyyMMdd-HHmmss')"))
 $ErrorActionPreference = 'Stop'
@@ -18,7 +18,7 @@ $fail = 0
 function Check([string]$what, [bool]$ok) { Write-Host ("{0} {1}" -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $what); if (-not $ok) { $script:fail++ } }
 
 $jobFiles = @(Get-ChildItem (Join-Path $here 'jobs') -Filter '*.json' | Sort-Object Name)
-Check "7 job files" ($jobFiles.Count -eq 7)
+Check "6 job files (cb2 retired 2026-11-01)" ($jobFiles.Count -eq 6)
 $serials = @()
 foreach ($f in $jobFiles) {
   $job = Get-Content $f.FullName -Raw | ConvertFrom-Json
@@ -53,7 +53,7 @@ function New-Root([string]$dir, [switch]$Strip) {
   $t = (Get-Date).AddMinutes(-10); $entries = @()
   foreach ($f in $jobFiles) {
     $job = Get-Content $f.FullName -Raw | ConvertFrom-Json
-    if ($Strip) { foreach ($k in 'expect', 'expect_runner', 'forbid', 'post') { $job.PSObject.Properties.Remove($k) } }
+    if ($Strip) { foreach ($k in 'expect', 'expect_every', 'expect_runner', 'forbid', 'post') { $job.PSObject.Properties.Remove($k) } }
     $dst = Join-Path $dir "captures\queue\pending\$($f.Name)"
     $job | ConvertTo-Json -Depth 16 | Set-Content $dst
     (Get-Item $dst).LastWriteTime = ($t = $t.AddSeconds(1))
@@ -78,11 +78,11 @@ $a = New-Root (Join-Path $Out 'a-real')
 $recs = @(Invoke-Queue $a)
 $left = @(Get-ChildItem (Join-Path $a 'captures\queue\pending') -Filter '*.json')
 Check "run A: only job 1 ran and it is INVALID (fake game has no expect lines)" ($recs.Count -eq 1 -and $recs[0].job -eq 'cb1-regression-camp-fg2' -and -not $recs[0].valid -and $recs[0].outcome -match '^INVALID')
-Check "run A: the 6 dependent jobs stayed in pending, not run" ($left.Count -eq 6)
+Check "run A: the 5 dependent jobs stayed in pending, not run" ($left.Count -eq 5)
 
 $b = New-Root (Join-Path $Out 'b-structural') -Strip
 $recs = @(Invoke-Queue $b)
-Check "run B: 7 runs recorded, job 1 first" ($recs.Count -eq 7 -and $recs[0].job -eq 'cb1-regression-camp-fg2')
+Check "run B: 6 runs recorded, job 1 first" ($recs.Count -eq 6 -and $recs[0].job -eq 'cb1-regression-camp-fg2')
 Check "run B: every run valid, done, single (not session), visible_unfocused_fg" (-not ($recs | Where-Object { -not $_.valid -or $_.outcome -notmatch '^Run ended: done' -or $_.session -or $_.window_mode -ne 'visible_unfocused_fg' }))
 Check "run B: pending empty" (@(Get-ChildItem (Join-Path $b 'captures\queue\pending') -Filter '*.json').Count -eq 0)
 Write-Host "scratch: $Out"

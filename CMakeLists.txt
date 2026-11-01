@@ -290,6 +290,15 @@ add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
 add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
+# Offline Python tooling checks (no build products): host-visible atomics lint, every-window
+# queue gates, progress fragments, the coverage HANDLING table.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling)
+    add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  endforeach()
+endif()
 # Asset database loader (layer/assetdb.cpp) against data/assetdb; skips when not built.
 add_executable(se_classification_test tests/se_classification_test.cpp layer/sebridge.cpp)
 target_include_directories(se_classification_test PRIVATE ${VULKAN_SDK}/Include)
