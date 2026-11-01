@@ -12,7 +12,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=0"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=0"
  },
  {
   "label": "base-off-a-q",
@@ -27,7 +27,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": -1,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=0"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=0"
  },
  {
   "label": "base-off-a-e",
@@ -42,7 +42,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": 1,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=0"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=0"
  },
  {
   "label": "cost-on-q",
@@ -57,7 +57,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": -1,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=1"
  },
  {
   "label": "cost-on-e",
@@ -72,7 +72,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": 1,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=1"
  },
  {
   "label": "cost-on-rot-r",
@@ -87,7 +87,7 @@
   "motion_end": 14,
   "pixels_per_second": 60,
   "direction": 1,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=1"
  },
  {
   "label": "cost-on-rot-l",
@@ -102,7 +102,7 @@
   "motion_end": 14,
   "pixels_per_second": 60,
   "direction": -1,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=1"
  },
  {
   "label": "base-off-b-q",
@@ -117,7 +117,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": -1,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=0"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=0"
  },
  {
   "label": "base-off-b-e",
@@ -132,7 +132,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": 1,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=0"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=0"
  },
  {
   "label": "restore",
@@ -147,6 +147,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=0"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,rt_hit_material_capture_unlocked=1,rt_hit_material_lean_hooks=0"
  }
 ]
