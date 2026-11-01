@@ -382,15 +382,21 @@ class Cache:
 
     def put(self, key, data, request, entry):
         sha = self.put_blob(data)
-        self.db.execute("INSERT OR REPLACE INTO compiled VALUES (?,?,?,?,?,?)",
-                        (key, sha, len(data), request, entry, time.time()))
+        try:  # best effort: the blob is on disk; a locked index only costs a recompile next time
+            self.db.execute("INSERT OR REPLACE INTO compiled VALUES (?,?,?,?,?,?)",
+                            (key, sha, len(data), request, entry, time.time()))
+        except sqlite3.OperationalError:
+            pass
         return sha
 
     def is_valid(self, sha, val_id):
         return self.db.execute("SELECT 1 FROM validated WHERE sha=? AND val=?", (sha, val_id)).fetchone() is not None
 
     def put_valid(self, sha, val_id):
-        self.db.execute("INSERT OR IGNORE INTO validated VALUES (?,?)", (sha, val_id))
+        try:
+            self.db.execute("INSERT OR IGNORE INTO validated VALUES (?,?)", (sha, val_id))
+        except sqlite3.OperationalError:
+            pass
 
     def commit(self):
         self.db.commit()
