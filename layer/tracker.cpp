@@ -763,7 +763,9 @@ static VKAPI_ATTR void VKAPI_CALL DestroyRenderPass(VkDevice device, VkRenderPas
 
 static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t wc, const VkWriteDescriptorSet* w,
                                                        uint32_t cc, const VkCopyDescriptorSet* c) {
+  t_game_descriptor_update = true;   // replay.cpp's record skips the game's writes
   device_of(device)->vk.UpdateDescriptorSets(device, wc, w, cc, c);
+  t_game_descriptor_update = false;
   diag(DIAG_DESC_WRITES, wc + cc);
   for (uint32_t i = 0; i < wc; ++i) track_set_write(w[i]);
   omm::sampler_descriptor_ranges(device_of(device),wc,w,cc,c);

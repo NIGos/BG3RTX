@@ -1363,6 +1363,12 @@ bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selec
 }
 
 uint64_t rt_scene_oldest_live() { return g_oldest_live.load(); }
+
+bool rt_replay_region(VkBuffer info, VkDeviceSize info_offset, BvhReplayRegion* out) {
+  if (!g_rt) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  return bvh_replay_region(info, info_offset, out);
+}
 bool rt_hit_material_use(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkDescriptorSet alpha,uint64_t identity,VkDescriptorSet* query_alpha){
   if(query_alpha)*query_alpha={};
   static std::atomic<uint64_t> last_query_log{UINT64_MAX};const auto now=frame_index();

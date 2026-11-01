@@ -1,4 +1,4 @@
-# BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 24)
+# BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 25 on branch replay-writer)
 
 ## M5.1 water geometry (branch m5-water, offline, READY_FOR_LIVE, 2026-11-01)
 
@@ -11,6 +11,19 @@
 - Key off: no hook, no allocation; no shader changed (741/741 compile). 69 CTests (+water_policy_test), QA pass.
 - Live: `tools/live_batches/m5_water/` (5 min, dry run passes). Details: PLAN_M5_WATER "M5.1 status".
 
+## Offline frame replay, step 3: live `replay_pack` writer (branch replay-writer, offline, READY_FOR_LIVE)
+
+- Key `replay_pack=0` (diagnostic, not in presets): a serial takes one pack of the next base-variant
+  gi_hit_direct dispatch; -1 one per trace. ABI 25: `Bg3HostApi::replay_pack` (layer + core rebuilt together).
+- Core: `replay_after_hit_gi` after the dispatch (push, set-0 writes, set 1, TLAS). Layer `layer/replay.cpp`:
+  records the material set's writes (wrapped `dd->vk`), copies set 0/1, the instance array, InstInfo spans or
+  whole soup/pool, image mips (budget 1 GB, largest dropped), samplers; writes after GPU done on a thread.
+- Log: `[replay] pack N written: <MB> MB (<n> images omitted), frame <f>, pass gi_hit_direct, instances <n> -> <dir>`.
+- Rendering unchanged (copies only); no existing shader changed (742/742 compile, + `replay_copy.hlsl`).
+  72 CTests (+`replay_pack_test`), frame_replay_test unchanged (356 qualified), QA pass, nodiag layer builds.
+- Cost and texture coverage not measured live (game textures without TRANSFER_SRC are omitted).
+  Live: `tools/live_batches/replay_capture/` (S8, ~3 min, dry run passes).
+
 ## Offline frame replay, steps 1-2 for gi_hit_direct (branch frame-replay, offline, 2026-11-01)
 
 - `binrame_replay.exe` (tools/frame_replay.md): loads a replay pack (common/replay_pack.h), rebuilds BLAS/TLAS
@@ -19,8 +32,7 @@
   `policy` / `hit material` lines and the GPU time. About 3 s per shader edit.
 - CTest `frame_replay_test`: synthetic lit + dark packs; 356 hidden hits qualified (reason 0), supported and
   nonzero; two dispatches bit-identical; dark bounce exactly 0 with giRaw.a bit-equal. 69 CTests pass.
-- Not built: the live `replay_pack` writer (needs one host call, ABI 25; design in tools/frame_replay.md).
-  The live job `tools/live_batches/replay_capture/` (S8, one pack) passes its dry run and waits for it.
+- The live writer is step 3 above.
 
 ## M4.3 gi_hit_sun + shared sun roof rule (branch gi-hit-sun, offline, READY_FOR_LIVE)
 One current summary. Older entries, verbatim: [archive/PROGRESS_CODEX_2026-11-01.md](archive/PROGRESS_CODEX_2026-11-01.md)
