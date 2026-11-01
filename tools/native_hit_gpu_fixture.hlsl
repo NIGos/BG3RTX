@@ -35,9 +35,13 @@
 // Mode 6 (emission): p is the ray origin, v its unit direction, c48 the absolute camera (em_shift), footprint
 //   the cone width; the main TLAS gives t (rt_closest_hit), then native_hit_emission: a.rgb its radiance,
 //   12 its status (kHe*), b.x the main hit t, b.y 1 if aborted, 28 the record index; material status 0.
+// Mode 7 (two-sided frame, rt_hit_material_instanced): p the ray origin, v its direction, n the authored N,
+//   c48 the triangle's geometric normal; rt_closest_hit, then a.x = nv_two_sided_sign(c48, n, RtHit.dir) (the
+//   consumer's N-column sign), a.y the hit t, 12 1 if aborted; b.rgb RtHit.dir; material status 0.
 [[vk::binding(60, 0)]] ByteAddressBuffer fxCases;
 [[vk::binding(61, 0)]] RWByteAddressBuffer fxOut;
-static const uint kFxDirect = 0u, kFxSun = 1u, kFxAo = 2u, kFxFurnace = 3u, kFxCombined = 4u, kFxSunDir = 5u, kFxEmission = 6u;
+static const uint kFxDirect = 0u, kFxSun = 1u, kFxAo = 2u, kFxFurnace = 3u, kFxCombined = 4u, kFxSunDir = 5u, kFxEmission = 6u,
+                  kFxTwoSided = 7u;
 
 NativeHitMaterial fx_material(float3 albedo, float rough, float metal, float refl, float3 n, uint channel) {
   NtInput i;
@@ -101,6 +105,12 @@ void main(uint id : SV_DispatchThreadID) {
     const HitEmission e = native_hit_emission(p, v, h.t, p + v * h.t, footprint, c48, HIT_EM_TOL);
     ra = e.radiance; sa = e.status; rb = float3(h.t, h.aborted ? 1.0 : 0.0, 0.0); sb = e.rec;
     m.status = 0u;   // no material in this mode
+  }
+  if (mode == kFxTwoSided) {
+    RtCone cone = {footprint, 0.0};
+    const RtHit h = rt_closest_hit(p, v, 100.0, cone);
+    ra = float3(nv_two_sided_sign(c48, n, h.dir), h.t, 0.0); sa = h.aborted ? 1u : 0u;
+    rb = h.dir; sb = 0u; m.status = 0u;
   }
   fxOut.Store3(o, asuint(ra)); fxOut.Store(o + 12u, sa);
   fxOut.Store3(o + 16u, asuint(rb)); fxOut.Store(o + 28u, sb);

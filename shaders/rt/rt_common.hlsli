@@ -1171,6 +1171,7 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
 struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; bool aborted;
 #ifdef RT_HIT_MATERIAL
   float2 bary;
+  float3 dir;   // the ray direction (two-sided materials: nv_two_sided_sign at the hit)
 #endif
 };
 RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
@@ -1254,6 +1255,7 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
   h.o2w = hit ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
 #ifdef RT_HIT_MATERIAL
   [branch]if(q.CommittedStatus()==COMMITTED_TRIANGLE_HIT)h.bary=q.CommittedTriangleBarycentrics();
+  h.dir=d;
 #endif
 #ifdef RT_SCENE_REBASE
   // Ray t is translation-invariant. Return transforms in lighting space so

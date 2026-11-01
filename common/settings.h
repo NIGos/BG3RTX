@@ -271,6 +271,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hit_material", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Native prepass capture"},{"rt_bvh_split","1","Split hit identity"}}},
 
+  {"exp_hit_material_instanced", "Native hit materials: wind and two-sided foliage",
+   "Extends Native hit materials to the instanced wind-animated (ATM_Wind_Vertex_RG_VT) and two-sided alpha-test "
+   "(Base_AlphaTest_2s_VT) draws: their depth and G-buffer draws are joined per frame and every hit is still checked "
+   "against the native positions and UVs. Enable at startup with Native hit materials; then Off/On is a live A/B. "
+   "Quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Partial, "Enable at startup; then live A/B", true,
+   {{"off", "Off", 0, {{"rt_hit_material_instanced", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_hit_material_instanced", "1"}}, {{"exp_hit_material",1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"}}},
+
   {"exp_gi_hit_direct", "Shaded hidden-surface bounce",
    "Adds physically shadowed point/spot bounce from verified hidden native VT surfaces. "
    "Keeps successful screen and radiance-cache hits, and the existing ambient occlusion. "
@@ -383,7 +393,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 214 keys of bg3rtx.ini, in file order.
+// 216 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -494,6 +504,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_native_scalp", "0"},
     {"rt_native_tileset", "0"},
     {"rt_hit_material", "0"},
+    {"rt_hit_material_instanced", "0"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
     {"rt_native_hair", "0"},

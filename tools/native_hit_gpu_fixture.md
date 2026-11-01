@@ -54,6 +54,11 @@ Each dispatch has one froxel listing that dispatch's lights.
    with the camera moved 0.5 m since the build, a ray 0.3 m off the quad meets it and one 0.2 m inside
    leaves it (7e: the sign of `em_shift`).
 
+8. Two-sided frame at hits (`rt_hit_material_instanced`, Base_AlphaTest_2s_VT FS 923131c7): rays from
+   above, below and oblique onto the open floor, authored N up or down, ng either sign. `RtHit.dir` must be
+   the traced direction bit for bit (8b) and the consumer's N-column sign `nv_two_sided_sign(ng, N, dir)` on
+   the GPU must equal the C++ function (8a; front and back both present).
+
 ## Tolerance
 
 All consumers store these radiances in FP16 targets (rgba16f), so the bound is half an FP16 ULP:
