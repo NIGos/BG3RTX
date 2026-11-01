@@ -17,6 +17,21 @@ function Fail($why) {
   exit 1
 }
 
+# Run a native gate step and capture stdout+stderr as text. Windows PowerShell 5
+# turns every redirected stderr line into an error record, which under 'Stop'
+# aborts on the first one (CMake's '-- GLOB mismatch!' when a merge adds files,
+# compiler or Python warnings). The step's exit code alone decides pass/fail.
+function Invoke-Gate([scriptblock]$step) {
+  $ErrorActionPreference = 'Continue'
+  # A step that never ran (command not found) must not inherit a previous 0.
+  $global:LASTEXITCODE = 1
+  try {
+    $out = & $step 2>&1 | ForEach-Object { "$_" }
+    $script:gateCode = $LASTEXITCODE
+  } finally { $ErrorActionPreference = 'Stop' }
+  return $out
+}
+
 if ((git branch --show-current) -ne 'main') { Fail 'target checkout is not on main' }
 git rev-parse -q --verify MERGE_HEAD 2>$null | Out-Null
 if ($LASTEXITCODE -eq 0) { Fail 'an existing merge must be resolved first' }
@@ -47,8 +62,8 @@ try {
   if ($mergeCode -ne 0) { Fail "merge failed: $($mergeOutput -join ' ')" }
   if (-not $script:mergeStarted) { Write-Host "ALREADY MERGED: $Ref"; exit 0 }
 
-  $build = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\build.ps1') -Test 2>&1 | ForEach-Object { "$_" }
-  if ($LASTEXITCODE -ne 0) {
+  $build = Invoke-Gate { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\build.ps1') -Test }
+  if ($script:gateCode -ne 0) {
     $build | Select-Object -Last 15 | ForEach-Object { Write-Host "  $_" }
     Fail 'build or unit tests failed'
   }
@@ -56,15 +71,15 @@ try {
 
   # The shared compiler covers all entries (including multi-entry rr_post),
   # honors source DXC options, and fails when DXC is absent or any compile fails.
-  $shaders = py -3 tools\compile_shaders.py 2>&1 | ForEach-Object { "$_" }
-  if ($LASTEXITCODE -ne 0) {
+  $shaders = Invoke-Gate { py -3 tools\compile_shaders.py }
+  if ($script:gateCode -ne 0) {
     $shaders | Select-Object -Last 20 | ForEach-Object { Write-Host "  $_" }
     Fail 'runtime shader compilation failed'
   }
   $shaders | Select-Object -Last 1 | ForEach-Object { Write-Host "  $_" }
 
-  $qa = py -3 tests\qa_detectors_test.py 2>&1 | ForEach-Object { "$_" }
-  if ($LASTEXITCODE -ne 0) {
+  $qa = Invoke-Gate { py -3 tests\qa_detectors_test.py }
+  if ($script:gateCode -ne 0) {
     $qa | Select-Object -Last 8 | ForEach-Object { Write-Host "  $_" }
     Fail 'QA detector tests failed'
   }
