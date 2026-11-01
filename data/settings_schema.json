@@ -220,6 +220,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_wind_rgb": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_wind_rgb": "1"}, "needs": {"exp_hit_material_instanced": 1}}
      ]},
+    {"id": "exp_hit_material_mask", "label": "Native hit materials: colour-mask props",
+     "description": "Adds the static instanced colour-mask material (Base_MSK_VT) to the native hit materials: the Base_VT layers with the albedo tinted by its colour mask and three material colours, decoded as the game's shader does. Live Off/On with Native hit materials on. Quality and GPU cost remain unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_hit_material": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_mask": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_mask": "1"}, "needs": {"exp_hit_material": 1}}
+     ]},
     {"id": "exp_gi_hit_direct", "label": "Shaded hidden-surface bounce",
      "description": "Adds physically shadowed point/spot bounce from verified hidden native VT surfaces. Keeps successful screen and radiance-cache hits, and the existing ambient occlusion. Unsupported materials or lights retain the current GI fallback. Requires Native hit materials at startup and GI fallback 0. True offscreen light coverage, quality and GPU cost remain unqualified.",
      "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,

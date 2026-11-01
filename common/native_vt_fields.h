@@ -72,6 +72,15 @@ inline NvFields nv_detail_fields(NvFields base,NvVec3 detail_wzy,float mask_x,fl
  if(!tb_finite(aux)||!tb_finite(r.roughness))return r;
  r.aux=aux;r.status=0;return r;
 }
+// Base_MSK_VT (FS a5f44c48, VS 2d2ac3c3; native_vt_surface.h LayoutMask): the albedo layer A tinted by the
+// 2D colour mask m (1:6 at the UV, sampler 0:7) with the 1:1 colours c0 (byte 0), c1 (16), c2 (32), as the FS:
+//   RT1.rgb = clamp(mix(A, (((c0 * m.x) + (c1 * m.y)) + (c2 * m.z)) * A, (m.x + m.y) + m.z))
+// Returns the value before the clamp (nv_fields clamps the albedo). GLSL mix(x, y, s) = x * (1 - s) + y * s.
+inline NvVec3 nv_mask_albedo(NvVec3 a,NvVec3 m,NvVec3 c0,NvVec3 c1,NvVec3 c2){
+ const float s=(m.x+m.y)+m.z;
+ const NvVec3 t=tb_vec(((c0.x*m.x)+(c1.x*m.y))+(c2.x*m.z),((c0.y*m.x)+(c1.y*m.y))+(c2.y*m.z),((c0.z*m.x)+(c1.z*m.y))+(c2.z*m.z));
+ return tb_vec(a.x*(1-s)+(t.x*a.x)*s,a.y*(1-s)+(t.y*a.y)*s,a.z*(1-s)+(t.z*a.z)*s);
+}
 // ENV_DetailMap_Iridescent (FS 9064a6bd, VS c32ce535; native_vt_surface.h LayoutIridescent). All
 // samples are plain 2D (sampler 0:7): a = normal A 1:2 at UV * 2; p = physical 1:3, b = normal B
 // 1:4, c = albedo 1:5 at UV * tiling (1:1 _m1); i = iridescent colour 1:6 at UV * 20. view_t =

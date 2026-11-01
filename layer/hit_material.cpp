@@ -55,6 +55,9 @@ struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{},reflect
  uint32_t layout{};View detail_normal,detail_mask;omm::BoundSampler detail_sampler;uint32_t detail[4]{};
  // LayoutIridescent (pool only): 2D views 1:2..1:6 (sampler 0:7 in `sampler`), 1:1 _m0.._m5 (bits).
  std::array<View,5> plain{};uint32_t plain_floats[6]{};
+ // LayoutMask (pool only): the 2D colour mask 1:6 in detail_mask with its sampler 0:7 in detail_sampler (slot
+ // mask_sampler), the 1:1 colours c0, c1, c2 (bits).
+ uint32_t mask_sampler{},colours[9]{};
  // Instanced per-draw rows (native_hit_instanced.h): family, and whether the gather reads the
  // packet's staged engine/1:1 bytes (Deferred::staged at local x 512) instead of the draw's UBOs.
  // The VS inputs at record (native_hit_instanced.h pair_check; wind: wind_clip_tolerance) and the
@@ -94,6 +97,13 @@ bool instanced_live(){return instanced_on && cfg_hot(CfgHot::rt_hit_material_ins
 // rt_hit_material_wind_rgb (startup, needs rt_hit_material_instanced): the third instanced family (wind RGB 2S
 // translucency, native_hit_instanced.h WindRgb). Off: every instanced:: lookup below sees only wind and 2S.
 bool wind_rgb_on{};
+// rt_hit_material_mask (live, read once per frame in pool_rollover): the Base_MSK_VT pool pair (native_vt_surface.h
+// LayoutMask). Off: pool_recipe_on never returns it, so its draws stay "other pair" exactly as before.
+std::atomic<bool> pool_mask_on{false};
+const native_vt::Recipe* pool_recipe_on(uint64_t vs,uint64_t fs){
+ const auto* r=pool::pool_recipe(vs,fs);
+ return r && r->layout==native_vt::LayoutMask && !pool_mask_on.load(std::memory_order_relaxed)?nullptr:r;
+}
 // The VS inputs of an instanced draw (native_hit_instanced.h WindInputs), read from the game's mapped UBOs
 // at record: frame 0:0 word 0, camera 0:2 _m2/_m6; wind: scene 0:1 wind words, material 1:1 _m0.._m3;
 // 2S: the per-draw translation 1:0 _m1. Unread (ok false) never pairs (pair_check).
@@ -368,7 +378,7 @@ bool capture_tileset(VkCommandBuffer cmd,Material& material){
 // recipe of an instanced pair (native_hit_instanced.h): the same LayoutBase bindings, per-draw row.
 bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* recipe=nullptr,uint32_t* failures=nullptr){
  auto* state=cmd_state(cmd);
- if(!state || !(recipe?(pool::pool_recipe(state->vs,state->fs)==recipe || instanced::recipe(state->vs,state->fs,wind_rgb_on)==recipe):audited_static_family(state->vs,state->fs)))return false;
+ if(!state || !(recipe?(pool_recipe_on(state->vs,state->fs)==recipe || instanced::recipe(state->vs,state->fs,wind_rgb_on)==recipe):audited_static_family(state->vs,state->fs)))return false;
  omm::OrdinaryBindingFacts buffer_facts[3]{};bool queried[3]{};uint32_t failed=0;
  auto buffer=[&](uint32_t n,uint32_t set,uint32_t slot,VkDeviceSize minimum,Bg3Binding& out){
   queried[n]=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&out);
@@ -387,13 +397,17 @@ bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* rec
  // LayoutDetail: the VT table/normal/albedo/physical move to 1:4..7; 1:3 and 1:8 are the 2D detail
  // normal and mask, sampled with the set 0 binding 7 sampler (FS 613ead9c).
  const bool detail=vt && vt->layout==native_vt::LayoutDetail;const uint32_t first=detail?4u:3u;
- material.layout=detail?native_vt::LayoutDetail:plain?native_vt::LayoutIridescent:native_vt::LayoutBase;
+ // LayoutMask (FS a5f44c48): table/normal/albedo at 1:3..5 as LayoutBase, physical at 1:7, the 2D colour mask
+ // at 1:6 with the set 0 binding 7 sampler (kept in detail_mask/detail_sampler).
+ const bool mask=vt && vt->layout==native_vt::LayoutMask;
+ material.layout=detail?native_vt::LayoutDetail:plain?native_vt::LayoutIridescent:mask?native_vt::LayoutMask:native_vt::LayoutBase;
  ViewFacts views[4]{};View* targets[4]={&material.table,&material.normal,&material.albedo,&material.physical};
  if(plain){ViewFacts f[5]{};for(uint32_t i=0;i<5;++i)if(!view(cmd,2+i,VK_IMAGE_VIEW_TYPE_2D,material.plain[i],f[i],true))failed|=1u<<(i<4?3+i:11);}
- else for(uint32_t i=0;i<4;++i)if(!view(cmd,first+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
- if(detail){
+ else for(uint32_t i=0;i<4;++i)if(!view(cmd,mask && i==3?7u:first+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
+ if(detail || mask){
   ViewFacts d[2]{};
-  if(!view(cmd,3,VK_IMAGE_VIEW_TYPE_2D,material.detail_normal,d[0],true) || !view(cmd,8,VK_IMAGE_VIEW_TYPE_2D,material.detail_mask,d[1],true))failed|=1u<<11;
+  if(mask?!view(cmd,6,VK_IMAGE_VIEW_TYPE_2D,material.detail_mask,d[1],true):
+     (!view(cmd,3,VK_IMAGE_VIEW_TYPE_2D,material.detail_normal,d[0],true) || !view(cmd,8,VK_IMAGE_VIEW_TYPE_2D,material.detail_mask,d[1],true)))failed|=1u<<11;
   const bool bound=omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,material.detail_sampler);const auto& ds=material.detail_sampler.sampler;
   if(!bound || !omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0) || !omm::ordinary_sampler_current(material.detail_sampler) ||
      !ds.complete || ds.info.flags || ds.info.compareEnable || ds.info.unnormalizedCoordinates || ds.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)failed|=1u<<12;
@@ -472,6 +486,8 @@ struct PoolMaterial {
  bool detail_layout() const {return recipe && recipe->layout==native_vt::LayoutDetail;}
  std::array<View,5> plain{};uint32_t plain_floats[6]{}; // LayoutIridescent only (sampler 0:7 in `sampler`)
  bool plain_layout() const {return recipe && recipe->layout==native_vt::LayoutIridescent;}
+ uint32_t colours[9]{}; // LayoutMask: 1:1 c0 @0, c1 @16, c2 @32 (mask view/sampler in detail_mask/detail_sampler)
+ bool mask_layout() const {return recipe && recipe->layout==native_vt::LayoutMask;}
  uint64_t checked{};bool current{}; // currency of the last check (once per frame per record)
  // Persistent across material refreshes: the pool mesh (from the BVH build) and its UV/basis.
  PoolMesh mesh{};pool::BasisTrack basis{};
@@ -530,7 +546,7 @@ void pool_log(uint64_t frame){
   pool_slots.used(),nh_pool_rows,(unsigned long long)b.row_instances,(unsigned long long)b.rows,(unsigned long long)b.no_slot);
  // Records and ready UV/basis per pool pair (FS): which variant the qualified share comes from.
  char pairs[512];int k=0;
- for(const auto& r:native_vt::recipes){if(!pool::pool_recipe(r.vs,r.fs) || k<0 || k>=int(sizeof pairs))continue;uint64_t records=0,with_basis=0;
+ for(const auto& r:native_vt::recipes){if(!pool_recipe_on(r.vs,r.fs) || k<0 || k>=int(sizeof pairs))continue;uint64_t records=0,with_basis=0;
   pool_table.for_each([&](uint64_t,const auto& e){if(e.payload.recipe!=&r)return;++records;with_basis+=e.payload.basis.state==pool::Basis::Ready;});
   k+=snprintf(pairs+k,sizeof pairs-k,"%s%08llx/%08llx %llu/%llu",k?"; ":"",(unsigned long long)(r.vs>>32),(unsigned long long)(r.fs>>32),(unsigned long long)records,(unsigned long long)with_basis);}
  log("[hit material pool pairs] frame %llu records/ready UV-basis by pair (VS/FS): %s",(unsigned long long)frame,k>0?pairs:"none");
@@ -563,13 +579,15 @@ void pool_rollover(uint64_t frame,uint64_t epoch){
  if(pool_counter_frame==frame)return;
  if(pool_counter_frame && pool_counter_frame%120==0 && cfg_hot(CfgHot::rt_stats))pool_log(pool_counter_frame);
  pool_table.end_frame();pool_counter_frame=frame;pool_basis.rows=pool_basis.row_instances=0;
+ pool_mask_on.store(cfg_int("rt_hit_material_mask",0)!=0,std::memory_order_relaxed);
  pool_jobs_poll(frame,epoch);
 }
 bool pool_current(PoolMaterial& m,uint64_t frame){
  if(m.checked!=frame){m.checked=frame;
   if(m.plain_layout()){m.current=omm::ordinary_sampler_current(m.sampler);for(const auto& v:m.plain)m.current=m.current&&current(v);return m.current;}
   m.current=current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical)&&omm::ordinary_sampler_current(m.sampler)&&
-  (!m.detail_layout() || (current(m.detail_normal)&&current(m.detail_mask)&&omm::ordinary_sampler_current(m.detail_sampler)));}
+  (!m.detail_layout() || (current(m.detail_normal)&&current(m.detail_mask)&&omm::ordinary_sampler_current(m.detail_sampler)))&&
+  (!m.mask_layout() || (current(m.detail_mask)&&omm::ordinary_sampler_current(m.detail_sampler)));}
  return m.current;
 }
 }
@@ -862,7 +880,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
                   uint32_t stride,VkBuffer* xfb,VkDeviceSize* offset,VkDeviceSize* bytes){
  if(!on || !state || !cfg_hot(CfgHot::rt_hit_material))return false;const auto frame=frame_index();CpuTimer timer(CpuMaterial);
  uint64_t geometry=0,position=0;const bool keyed=pool_keys(inst,*state,args,&geometry,&position);
- const auto* recipe=pool::pool_recipe(state->vs,state->fs);
+ const auto* recipe=pool_recipe_on(state->vs,state->fs);
  pool::Observation o{pool::mix(state->vs,state->fs),position,pool::Status::Family};PoolMaterial payload{};uint32_t failures=0;
  bool due=false,throttled=false;
  if(keyed && recipe && poolPipeline){
@@ -885,7 +903,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
    if(ok && constant)std::memcpy(&payload.reflectance,&half,4); // FS 3df678c0: RT2.y is 0.5, no 1:1 UBO
    // The 1:1 bytes the recipe reads: the reflectance at its byte; LayoutDetail also its
    // strength/tiling (bytes 0/4), mask power and roughness add (12/16).
-   uint32_t ubo[8]{};const uint32_t ubo_bytes=native_vt::material_bytes(*recipe);
+   uint32_t ubo[12]{};const uint32_t ubo_bytes=native_vt::material_bytes(*recipe); // LayoutMask: 44 bytes
    if(ok && !(read_mapped(m.engine.buffer,m.engine.offset,payload.engine,engine) && (constant || read_mapped(m.physical_ubo.buffer,m.physical_ubo.offset,ubo,ubo_bytes)))){ok=false;failures|=1u<<10;}
    if(ok && !constant)payload.reflectance=ubo[recipe->reflectance_offset/4u];
    payload.recipe=recipe;
@@ -893,6 +911,9 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
     payload.detail[0]=ubo[0];payload.detail[1]=ubo[1];payload.detail[2]=ubo[3];payload.detail[3]=ubo[4];}
    // LayoutIridescent: its five 2D views and the 1:1 floats _m0.._m5 (native_vt_surface.h).
    if(ok && payload.plain_layout()){payload.plain=m.plain;std::memcpy(payload.plain_floats,ubo,24);}
+   // LayoutMask: the colour mask view and its sampler, the three 1:1 vec3 colours at bytes 0/16/32.
+   if(ok && payload.mask_layout()){payload.detail_mask=m.detail_mask;payload.detail_sampler=m.detail_sampler;
+    for(uint32_t c=0;c<3;++c)std::memcpy(payload.colours+3*c,ubo+4*c,12);}
    o.status=ok?pool::Status::Qualified:pool::Status::Binding;
    if(ok){
     payload.table=m.table;payload.normal=m.normal;payload.albedo=m.albedo;payload.physical=m.physical;payload.sampler=m.sampler;
@@ -903,6 +924,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
      for(const View* v:{&m.detail_normal,&m.detail_mask})h=pool::mix(pool::mix(h,v->id),v->image_id);
      for(uint32_t w:payload.detail)h=pool::mix(h,w);}
     if(payload.plain_layout()){for(const auto& v:m.plain)h=pool::mix(pool::mix(h,v.id),v.image_id);for(uint32_t w:payload.plain_floats)h=pool::mix(h,w);}
+    if(payload.mask_layout()){h=pool::mix(pool::mix(pool::mix(h,m.detail_sampler.sampler.id),m.detail_mask.id),m.detail_mask.image_id);for(uint32_t w:payload.colours)h=pool::mix(h,w);}
     o.identity=pool::mix(h,payload.reflectance);
    }
   }
@@ -927,7 +949,7 @@ PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const
  auto& m=r->payload;
  if(const uint32_t old=pool::basis_rebind(m.basis,mesh.gen);old<nh_pool_rows)pool_slots.release(old);
  m.mesh=mesh;
- if(status!=pool::Status::Qualified)return use;
+ if(status!=pool::Status::Qualified || (m.mask_layout() && !pool_mask_on.load(std::memory_order_relaxed)))return use;
  use.wants_basis=!mesh.basis_bytes;
  if(m.basis.state==pool::Basis::Ready){
   if(m.basis.slot>=nh_pool_rows)m.basis.slot=pool_slots.acquire();
@@ -1092,6 +1114,8 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    if(m.detail_layout()){x.layout=native_vt::LayoutDetail;x.detail_normal=m.detail_normal;x.detail_mask=m.detail_mask;x.detail_sampler=m.detail_sampler;
     std::memcpy(x.detail,m.detail,16);}
    if(m.plain_layout()){x.layout=native_vt::LayoutIridescent;x.plain=m.plain;std::memcpy(x.plain_floats,m.plain_floats,24);}
+   if(m.mask_layout()){if(!pool_mask_on.load(std::memory_order_relaxed))return;
+    x.layout=native_vt::LayoutMask;x.detail_mask=m.detail_mask;x.detail_sampler=m.detail_sampler;std::memcpy(x.colours,m.colours,36);}
    x.row.valid=m.basis.slot+1;x.row.triangles=m.mesh.tris;x.row.pre=uint32_t(m.mesh.pool_off);x.row.deferred=uint32_t(m.mesh.basis_off);
    x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=3;
    const uint32_t gen=uint32_t(m.mesh.gen);std::memcpy(&x.row.parameters[2],&gen,4);
@@ -1102,6 +1126,8 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    // LayoutIridescent: no UV transform/tile set (the gather skips them, push word 3 = 2); the
    // row's p0/p1 carry its 1:1 floats instead (strength, tiling, iridescence, lo; hi, thickness).
    if(m.plain_layout()){std::memcpy(x.row.p0,m.plain_floats,16);std::memcpy(x.row.p1,m.plain_floats+4,8);for(uint32_t w=0;w<9;++w)e[w]=0;}
+   // LayoutMask: c2 in p1.yzw (row bytes 68..79; the VT layers read only p1.x, the mip clamp), staged with p1.
+   if(m.mask_layout())for(uint32_t w=0;w<3;++w)e[5+w]=m.colours[6+w];
    q.pool_rows.push_back(x);pool_engine.push_back(e);
   });
  }
@@ -1115,7 +1141,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    const bool plain=m.layout==native_vt::LayoutIridescent;
    if(!(plain?budget.plan_sampler(m.sampler.sampler.id,plan):budget.plan(m.sampler.sampler.id,{identity(m.normal),identity(m.albedo),identity(m.physical)},plan))){++pool_overflow;continue;}
    // LayoutDetail: its detail sampler (set 0:7) gets a slot too; new clones are appended in index order.
-   const bool detail=m.layout==native_vt::LayoutDetail;ResourcePlan second{};
+   const bool detail=m.layout==native_vt::LayoutDetail || m.layout==native_vt::LayoutMask;ResourcePlan second{};
    if(detail && !budget.plan_second_sampler(plan,m.detail_sampler.sampler.id,second)){++pool_overflow;continue;}
    VkSampler made[2]{};bool failed=false;
    for(uint32_t n=0;n<2 && !failed;++n){
@@ -1124,7 +1150,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    }
    if(failed){for(auto s:made)if(s)dd->vk.DestroySampler(dd->device,s,nullptr);++pool_overflow;continue;}
    for(auto s:made)if(s)q.pool_samplers.push_back(s);
-   budget.commit(plan);if(detail){budget.commit_sampler(second);m.row.padding[3]=second.indices.sampler;}
+   budget.commit(plan);if(detail){budget.commit_sampler(second);(m.layout==native_vt::LayoutMask?m.mask_sampler:m.row.padding[3])=second.indices.sampler;}
    m.row.sampler=plan.indices.sampler;m.row.normal=plan.indices.normal;m.row.albedo=plan.indices.albedo;m.row.physical=plan.indices.physical;
    q.pool_rows[w]=m;pool_engine[w]=pool_engine[i];++w;
   }
@@ -1148,6 +1174,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   if(m.layout==native_vt::LayoutIridescent)for(const auto& v:m.plain)need(v);
   else if(m.row.reserved!=2)need(m.table);else for(const auto& v:m.tileset_views)need(v);
   if(m.layout==native_vt::LayoutDetail){need(m.detail_normal);need(m.detail_mask);}
+  if(m.layout==native_vt::LayoutMask)need(m.detail_mask);
   if(table_views.size()+added.size()>table_free)return false;
   for(const View* v:added){table_views.push_back(*v);tables.push_back({VK_NULL_HANDLE,v->view,v->layout});}
   return true;
@@ -1167,7 +1194,10 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   // Detail words (native_hit_records.h nh_pool_row_detail): layout, the two 2D table indices,
   // the detail sampler slot (set above), then strength, tiling, mask power, roughness add.
   if(m.layout==native_vt::LayoutDetail){m.row.padding[0]=native_vt::LayoutDetail;m.row.padding[1]=table_index(m.detail_normal);m.row.padding[2]=table_index(m.detail_mask);
-   std::memcpy(m.row.padding+4,m.detail,16);}}
+   std::memcpy(m.row.padding+4,m.detail,16);}
+  // Mask words (native_hit_records.h): layout 3 | mask sampler slot << 8, the mask's 2D table index, c0, c1.
+  if(m.layout==native_vt::LayoutMask){m.row.padding[0]=native_vt::LayoutMask|(m.mask_sampler<<8);m.row.padding[1]=table_index(m.detail_mask);
+   std::memcpy(m.row.padding+2,m.colours,24);}}
  tables_used=uint32_t(tables.size());log_capacity(q.materials.empty() && q.pool_rows.empty()?"tables full":"mapped");log_instanced();
  if(q.materials.empty() && q.pool_rows.empty())return false;
  uint32_t first_table=0;q.rows_bytes=q.pool_rows.empty()?row_bytes:row_bytes+pool_rows_bytes;
@@ -1181,7 +1211,8 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  }
  for(auto& m:q.pool_rows){
   if(m.layout==native_vt::LayoutIridescent){for(uint32_t n=0;n<5;++n)m.row.padding[1+n]+=first_table;continue;}
-  m.row.table+=first_table;if(m.layout==native_vt::LayoutDetail){m.row.padding[1]+=first_table;m.row.padding[2]+=first_table;}}
+  m.row.table+=first_table;if(m.layout==native_vt::LayoutDetail){m.row.padding[1]+=first_table;m.row.padding[2]+=first_table;}
+  if(m.layout==native_vt::LayoutMask)m.row.padding[1]+=first_table;}
  // Gather inputs in the layout of hit_material_gather.hlsl's Engine (v[4] p0, v[5] p1, words.y
  // tile-set index, words.z channel) and Physical (x reflectance).
  for(size_t i=0;i<q.pool_rows.size();++i){auto* at=static_cast<unsigned char*>(q.pool_ubo.mapped)+i*512u;std::memset(at,0,512);
@@ -1202,6 +1233,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   auto sampler_at=[&](uint32_t i){return VkDescriptorImageInfo{i<shared?packet->samplers[i]:q.pool_samplers[i-shared],VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};};
   samplers[m.row.sampler]=sampler_at(m.row.sampler);
   if(m.layout==native_vt::LayoutDetail)samplers[m.row.padding[3]]=sampler_at(m.row.padding[3]);
+  if(m.layout==native_vt::LayoutMask)samplers[m.mask_sampler]=sampler_at(m.mask_sampler);
   for(const View* view:{&m.table,&m.normal,&m.albedo,&m.physical,&m.detail_normal,&m.detail_mask,&m.plain[0],&m.plain[1],&m.plain[2],&m.plain[3],&m.plain[4]}){if(!view->view)continue;
    slot.handles.push_back(uint64_t(view->view));slot.handles.push_back(uint64_t(view->image));life_note(cmd,uint64_t(view->view));life_note(cmd,uint64_t(view->image));}
  }

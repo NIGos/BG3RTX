@@ -480,6 +480,24 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Live: batch `m4_wind_rgb` (S8, 144 s). Expected: up to +13 points of qualified share at S8, about +3 to +7 at
     camp (0d91554d is 6.6% of camp's unsupported alpha triangles; hits per triangle are higher for these trees than
     for grass), 0 at S6 (not in that scene).
+- **Pool family: Base_MSK_VT (2026-11-01; offline, READY_FOR_LIVE, not qualified).** Live key
+  `rt_hit_material_mask=0` (GUI Experimental "Native hit materials: colour-mask props").
+  - Why "pool without row" (14.9% of S8 replay lookups, 133 instances): every one is a class A G-buffer pair with no
+    recipe (layer log `without record: other pair 67/172`; basis ready 99/100, no slot shortage). The pack has no
+    VS/FS per pool instance, so the split is from the S8 traces (class A pairs without a recipe, draws per frame):
+    54df894a/7a07134e ENV_DetailMap_HeightGradient_VT 17.9, 6044c8cf/02807a68 ENV_Tileset_MultipleTextures 13
+    (TileConstruction; the house has 170 tile objects), 2aff0bdc/d54ed410 9, 66602480/fc32acdc 8, 2d2ac3c3/a5f44c48
+    Base_MSK_VT 5, f474891e/cebfa2f6 5, 2d2ac3c3/fa18b37c 4.
+  - Built: the smallest, Base_MSK_VT (`LayoutMask`, native_vt_surface.h). Classifier vs 14678345 (pinned in
+    `tests/material_families_test.py` BaseMask): only RT1 differs (albedo x colour mask 1:6 at the UV with sampler 0:7
+    and the 1:1 colours at 0/16/32: `nv_mask_albedo`), RT2.y reads 1:1 byte 12, physical moves to 1:7. Row: word 224
+    = 3 | mask sampler slot << 8, 228 mask view, 232..252 c0/c1, c2 in p1.yzw (68..79; the VT layers read only p1.x).
+  - Not built: Tileset 02807a68 needs per-vertex COLOR (the blend weights) in the pool basis (44 B/vertex, UV + N/B/T)
+    and a 6044c8cf XFB map (COLOR at location 1 shifts N/B/T); HeightGradient 7a07134e needs the absolute world
+    position (camera _m6) at the hit, 3 more 2D views and 20 floats: more than the 256 B row holds.
+  - Offline: key off, the S8 replay is bit-identical (giRaw fnv1a a54c4dfd1cc9acb9, all 512 x 64 counters equal with
+    HM_BLOCKERS) with the new pool SPIR-V; the qualified share after it cannot be replayed (the pack holds only the
+    rows and views captured live). Live: batch `m4_hit_mask` (S8 + inn). Predicted S8 +1.1 points (0.3-3).
 - **Cost and bias breakdown (2026-11-01; offline, READY_FOR_LIVE).** Live (m4r1 030749/031149, m4p 11xxxx,
   diagnostics off): rf pass +1.5-1.6 ms at S6 (0.42 -> 1.94-2.0), +2.0 at S8 (0.57 -> 2.55), budget 0.2-0.4.
   - Where it goes (counts per frame from the stats windows, which include the tier (a) checks): S6 has

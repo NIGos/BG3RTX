@@ -28,7 +28,10 @@ enum Capture : uint32_t {CapturePool=0,CaptureNone=1,CaptureDraw=2};
 // 2D detail normal 1:3 and a 2D detail mask 1:8 sampled with sampler 0:7;
 // LayoutIridescent = ENV_DetailMap_Iridescent (native_vt_fields.h nv_iridescent_fields): no VT
 // and no tile set, five plain 2D textures 1:2..1:6 sampled with sampler 0:7.
-enum Layout : uint32_t {LayoutBase=0,LayoutDetail=1,LayoutIridescent=2};
+// LayoutMask = Base_MSK_VT (native_vt_fields.h nv_mask_albedo): the LayoutBase VT layers with the
+// physical layer at 1:7, plus a 2D colour mask 1:6 sampled at the UV with sampler 0:7 that tints the albedo
+// with the three 1:1 colours (rt_hit_material_mask; layer/hit_material.cpp pool_mask_on).
+enum Layout : uint32_t {LayoutBase=0,LayoutDetail=1,LayoutIridescent=2,LayoutMask=3};
 // reflectance_offset: byte of the reflectance float in the material UBO 1:1 (FS 8e49cde8: 16).
 // two_sided: the FS multiplies the N column by (gl_FrontFacing ? 1 : -1) (nv_two_sided_sign).
 struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset,channel_offset;uint32_t reflectance=ReflectanceUbo;
@@ -73,11 +76,18 @@ inline constexpr Recipe recipes[]={
  // @20, ...}; 2D normal A 1:2 (UV * 2), physical 1:3, normal B 1:4, albedo 1:5 (UV * tiling),
  // iridescent colour 1:6 (UV * 20), sampler 0:7. RT2.w class 4 (thin translucency). VS c32ce535
  // is class A: 2d2ac3c3 plus W (camera-relative world) at location 4, the view vector -W.
- {0x9064a6bde6a4161cull,0xc32ce535d664fbbcull,0,0,0,ReflectanceUbo,12,CapturePool,LayoutIridescent}};
+ {0x9064a6bde6a4161cull,0xc32ce535d664fbbcull,0,0,0,ReflectanceUbo,12,CapturePool,LayoutIridescent},
+ // Base_MSK_VT STI (pool, rt_hit_material_mask): classifier vs 14678345 (tests/material_families_test.py
+ // BaseMask) "same sampling + one texture2D": only RT1.rgb differs, RT2.y reads 1:1 _m1 (byte 12). Engine UBO
+ // 1:0 and the table/normal/albedo VT layers at 1:3/1:4/1:5 as 14678345; physical at 1:7; 2D colour mask 1:6
+ // at the VS UV with sampler 0:7; 1:1 {vec3 c0 @0, reflectance @12, vec3 c1 @16, vec3 c2 @32}.
+ // RT1.rgb = clamp(mix(A, (c0 m.x + c1 m.y + c2 m.z) A, m.x + m.y + m.z)) (nv_mask_albedo). VS 2d2ac3c3.
+ {0xa5f44c487527d272ull,0x2d2ac3c38992b7f0ull,0,32,36,ReflectanceUbo,12,CapturePool,LayoutMask}};
 inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
 // Material UBO 1:1 bytes the recipe reads (0: no 1:1 binding).
 // LayoutIridescent: _m0.._m5 (24; the thickness _m5 is the class 4 RT3.z term, not decoded yet).
-inline uint32_t material_bytes(const Recipe& r){return r.reflectance==ReflectanceConstant?0u:(r.layout==LayoutDetail?20u:r.layout==LayoutIridescent?24u:r.reflectance_offset+4u);}
+// LayoutMask: the three colours and the reflectance (c2 ends at byte 44).
+inline uint32_t material_bytes(const Recipe& r){return r.reflectance==ReflectanceConstant?0u:(r.layout==LayoutDetail?20u:r.layout==LayoutIridescent?24u:r.layout==LayoutMask?44u:r.reflectance_offset+4u);}
 // RT2.w material class the FS writes (FRAME_MAP): 4 thin translucency for LayoutIridescent, else 0.
 inline uint32_t material_class(const Recipe& r){return r.layout==LayoutIridescent?4u:0u;}
 // Both deferred variants: sampler 1:2, table 1:3, normal 1:4, albedo 1:5,

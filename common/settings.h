@@ -327,6 +327,15 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hit_material_wind_rgb", "1"}}, {{"exp_hit_material_instanced",1}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"},{"rt_hit_material_instanced","1","Instanced rows startup"}}},
 
+  {"exp_hit_material_mask", "Native hit materials: colour-mask props",
+   "Adds the static instanced colour-mask material (Base_MSK_VT) to the native hit materials: the Base_VT layers "
+   "with the albedo tinted by its colour mask and three material colours, decoded as the game's shader does. "
+   "Live Off/On with Native hit materials on. Quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hit_material_mask", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_hit_material_mask", "1"}}, {{"exp_hit_material",1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"}}},
+
   {"exp_gi_hit_direct", "Shaded hidden-surface bounce",
    "Adds physically shadowed point/spot bounce from verified hidden native VT surfaces. "
    "Keeps successful screen and radiance-cache hits, and the existing ambient occlusion. "
@@ -527,7 +536,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 233 keys of bg3rtx.ini, in file order.
+// 234 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -649,6 +658,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_instanced", "0"},
     {"rt_hit_material_recycle", "0"},
     {"rt_hit_material_wind_rgb", "0"},
+    {"rt_hit_material_mask", "0"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
     {"rt_native_hair", "0"},
