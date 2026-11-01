@@ -1,5 +1,17 @@
 # BG3RTX progress - 2026-11-01 (main f31c62b, ABI 25)
 
+## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
+
+- Preset change: `rt_hit_material`, `rt_hit_material_instanced`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`,
+  `rt_hit_emission=1` on in Ultra only (knobs out of Experimental, under Advanced); Ultra adds `rt_emissive=1` and
+  capture sizes for the 64 B hit-material vertex (`rt_xfb_mb` 1024, `rt_cascade_mb` 427 = 384/160 x 64/24).
+  `rt_emissive` 0 -> 1 needs a restart. Settings test 542 checks, 75 CTests pass.
+- Measured so far (PLAN_M4 "Promotion"): rf_hit_shade tier (a) L_b / L_a S8 0.926, S6 1.091 after the box fix (was
+  1.48); costs rf_hit_shade +1.4 to +1.8 ms (rf pass), gi_hit_direct + sun +0.52 ms (gi trace), instanced +0.14 ms.
+- Live batch `tools/live_batches/m4_promotion` (camp, inn, S6, S8; ~18 min, 1.2-1.8 GB; dry run passes): bundle
+  OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
+  Merge the branch only if the energy and capacity gates pass.
+
 ## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01)
 
 - Live S14 (m4i 07:46): instanced key ON raised qualified 22% -> 36-40% but reason `clip` 0 -> 0.4-1.9M per 120
@@ -143,7 +155,10 @@ Plan: [RENDERING_EXECUTION_PLAN.md](RENDERING_EXECUTION_PLAN.md). Resume: [HANDO
 
 ## Open questions for the user
 
-- None blocking. Promotion of any M4 key to the Ultra preset waits for its gates (below).
+- M4 promotion (not blocking, after `m4_promotion` runs): `rf_hit_shade` fails the strict M4.2 bias gate
+  (tier (a) L_b / L_a 0.93 at S8, 1.09 at S6; any bias is significant with 10^7 hits) and costs +1.4 to +1.8 ms.
+  Promote it with the bundle (bias within 9%) or keep it out of Ultra? Conservative default: decide on the batch's
+  energy and cost numbers; the branch includes it.
 - Not blocking (M4.4): the plan said screen hits already contain emission; the code says they do not
   (prevRadiance is before compose). `rt_hit_emission=2` adds it at screen hits too. The live gate tests 1
   and 2; which one to qualify for presets is your call after it (conservative default: 1).

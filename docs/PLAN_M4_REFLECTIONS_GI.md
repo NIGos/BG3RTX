@@ -4,6 +4,52 @@
 Runs after the consolidation live batch passes. Live jobs for increment 1:
 [tools/live_batches/m4_m5_first/](../tools/live_batches/m4_m5_first/README.md).
 
+## Promotion to Ultra (2026-11-01; preset change on branch, NOT merged; decided by `m4_promotion`)
+
+Bundle: `rt_hit_material` (restart), `rt_hit_material_instanced` (startup patch, then live), `gi_hit_direct`,
+`gi_hit_sun`, `rf_hit_shade`, `rt_hit_emission=1` (hidden hits; needs `rt_emissive=1` at startup). The branch
+turns them on in Ultra only (`common/settings.h`: knobs out of Experimental, preset `{0,0,0,1}`; `kPresetExtra`
+Ultra adds `rt_emissive=1`, `rt_xfb_mb=1024`, `rt_cascade_mb=427`). The hit-material record widens the capture
+vertex from 24 to 64 B, so equal vertex capacity is 384 x 64 / 24 = 1024 MB and ceil(160 x 64 / 24) = 427 MB
+(peaks seen at 1408/587: camera 59 + 198 MB, cascade 208 MB, S8). VRAM +640 MB camera, +3 x 267 MB cascade rings.
+`rt_emissive` 0 -> 1 is now a restart in `key_change_needs_restart` (D-EM allocates at device creation; off is live).
+
+Gate results already measured (queue logs in `captures/queue/logs`, read with `python -m tools.m4_promotion_gate <log>`):
+
+| Key | Gate | Measured | Run |
+|---|---|---|---|
+| rt_hit_material | qualified share of hit lookups | S8 48.1%, S6 27.9% (S8 was 0.4%, then 17%); classifier built share 54.4% | m4r1 030749 / 031149 (26f7735) |
+| rt_hit_material_instanced | qualified share ON vs OFF | S14 22.3-23.6% -> 40.4% | m4i 074646 (e86fa5e) |
+| | clip rejects (gate < 0.04%) | 1.9% of lookups before the wind tolerance fix; fix unmeasured live | m4i 074646 |
+| | cost ON - OFF | gi trace +0.14 ms, rt passes +0.11, frame +1.17 ms (OFF spread 0.28) | m4i 074646 |
+| | energy (scene colour 5c3fdabc) | +0.27%, OFF spread 0.04%: brighter, explained by more qualified GI hits (GI hit direct added +8.6%) | m4i 074646 |
+| gi_hit_direct (+ gi_hit_sun) | never darker, nonzero | R3 static: 0 negative px, 21517 positive; S6 nonzero 8810 of 32563 qualified | R3; m4r1 055118 |
+| | cost ON - OFF (with sun) | S8 gi trace +0.52 ms, whole GI +0.67, frame +1.40 (spread 0.13) | m4r1 030749 |
+| gi_hit_sun | participation, roof rule | S8 lit 278764 of 12.45M evaluated, S6 2410; roof-unsupported 0 (casters on). S3 gate not run | m4r1 030749 / 055118 |
+| rf_hit_shade | tier (a) L_b / L_a | S8 0.926 (mean L_b - L_a -0.0095 = -136 SE; AO 0.771 vs 0.775); S6 1.091 (+0.0064 = +317 SE) after the box AO fix (was 1.48) | m4r1 030749 / 031149, 055118 |
+| | strict M4.2 z gate | FAILS at both (any bias is significant with 10^7 hits); bias within 9% | same |
+| | tier (b) shaded share | S8 24.0%, S6 3.0% | same |
+| | cost ON - OFF | S8 rf pass +1.84 ms, frame +2.32; S6 rf +1.36, frame +2.80 (budget M4.2: +0.2-0.4) | m4r1 030749 / 031149 |
+| rt_hit_emission | participation (S6) | rf tier b emissive 6.9% of 9.48M lookups; GI hidden 23856 of 221200; uncalibrated skipped 58520 | m4r1 055118 |
+| D-EM families | AF gate | 5 of 6 pass; 304be1c7 excluded (`rt_em_fx_pulse=0`); 159a6211 legitimately 0 | ef1 (TRACK_D_EMISSIVE 13.22) |
+
+Notes: at S6 the gi trace and rt passes timers read lower with `rf_hit_shade` on (work moves between timed
+ranges); read the frame time and the whole-GI line. S6 rf +1.76 ms with emission on vs +1.36 without is a
+cross-run hint only.
+
+Still unmeasured (the batch measures all but the last two):
+- `rt_hit_emission` OFF/ON/OFF at S6: energy and cost.
+- Energy of each step toggled live (scene colour float mean): +gi_hit_direct, +gi_hit_sun, +rf_hit_shade,
+  +instanced, +emission, at camp, inn, S6, S8.
+- Total cost of the bundle (live keys + D-EM capture) on camp, inn, S6, S8; rf_hit_shade bias at camp and inn.
+- gi_hit_sun at S3 camp (lit > 0); capture capacity at 1024/427 on all four scenes.
+- Not in this batch: the startup hit-material capture cost (restart key, stays on in both states) and motion (M4.1).
+
+Batch `tools/live_batches/m4_promotion` (4 launches, ~18 min, ~1.2-1.8 GB). Pass, to merge the preset branch:
+all 4 runs valid; bundle ON scene colour within the OFF-a/OFF-b spread or brighter with the step that carries it
+named (no step darker beyond the spread); emission ON within or brighter; capacity 0 overflow; costs reported
+(user call: quality before frame rate on Ultra). The rf_hit_shade bias decision stays the user's (strict gate fails).
+
 ## Current state (exact keys)
 
 | Part | Key, default | State |

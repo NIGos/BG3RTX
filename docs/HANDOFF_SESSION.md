@@ -52,7 +52,8 @@ history; its evidence details are kept in [archive/PROGRESS_CODEX_2026-11-01.md]
 
 ## Live batches prepared (not authorized)
 
-Under `tools/live_batches/`: `m4_round1`, `m4_m5_first`, `em_forge`, `pool_lag`, `lean_regression`.
+Under `tools/live_batches/`: `m4_promotion` (decides the Ultra preset branch; gate table `python -m tools.m4_promotion_gate`),
+`m4_round1`, `m4_m5_first`, `em_forge`, `pool_lag`, `lean_regression`.
 Each README states its gates. Ask the user for a concrete batch once its offline checks are done.
 
 ## Working pattern
