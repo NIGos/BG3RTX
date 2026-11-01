@@ -366,6 +366,17 @@ add_dependencies(native_hit_gpu_fixture native_hit_gpu_fixture_spv)
 add_test(NAME native_hit_gpu_fixture COMMAND native_hit_gpu_fixture ${NATIVE_HIT_FIXTURE_SPV})
 set_tests_properties(native_hit_gpu_fixture PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
 
+# Offline frame replay (tools/frame_replay.md): loads a replay pack, rebuilds
+# the TLAS, dispatches the REAL production pass shader (compiled from this checkout's shaders/ at run
+# time with the layer's DXC flags). The test writes a synthetic pack and replays it twice.
+add_executable(frame_replay tools/frame_replay.cpp)
+target_include_directories(frame_replay PRIVATE ${VULKAN_SDK}/Include)
+target_link_directories(frame_replay PRIVATE ${VULKAN_SDK}/Lib)
+target_link_libraries(frame_replay PRIVATE vulkan-1)
+target_compile_definitions(frame_replay PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}" BG3RTX_DXC="${VULKAN_SDK}/Bin/dxc.exe")
+add_test(NAME frame_replay_test COMMAND frame_replay --self-test ${CMAKE_BINARY_DIR}/frame_replay_test)
+set_tests_properties(frame_replay_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp core/em_policy.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # SHaRC radiance cache: inject the D-EM effects-target emission. AUTO follows whether

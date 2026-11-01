@@ -1,0 +1,47 @@
+[
+ {
+  "label": "warmup",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 15,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 15,
+  "motion_end": 15,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,rt_stats=0,replay_pack=0"
+ },
+ {
+  "label": "diag-replay-pack",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 15,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 15,
+  "motion_end": 15,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,rt_stats=1,replay_pack=1"
+ },
+ {
+  "label": "restore",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 5,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 5,
+  "motion_end": 5,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=0,rt_stats=0,replay_pack=0"
+ }
+]
