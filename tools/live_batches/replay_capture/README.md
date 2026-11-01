@@ -21,7 +21,10 @@ Question: one real gi_hit_direct frame for the offline harness (`bin\frame_repla
 
 Duration: plan 35 s; one launch, about 3 min (5 min timeout). Disk: the pack (at most 3300 MB, the job's cap; about 3.03 GB) plus logs, about 3.3 GB; the post step then frees the older packs.
 
-## Keep only the newest pack
+## Keep only the newest pack (per scene)
+Camp and inn packs with the cascade casters: [ambient/README.md](ambient/README.md) (`post_replay.ps1 -Scene`). Since
+2026-11-01 the step deletes only older packs of the same scene tag (`scene.txt`; this job's packs are untagged), so
+the S8 pack and the camp / inn packs do not delete each other.
 The job's `post` step (`post_replay.ps1 -Log {log}`, run by the queue in the test tree after the run) does it:
 1. finds this run's `[replay] pack 1 written: ... -> <dir>` (none: deletes nothing);
 2. runs `bin\frame_replay.exe --pack <dir>` (output `<dir>\replay`, console in `replay.txt`);

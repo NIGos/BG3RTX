@@ -94,6 +94,9 @@ reference, but live S8 brightened 2.9%: unexplained downstream of giRaw, so it s
 "Go / no-go on the full pack").
 
 Next measurements: one interior night pack (S3/S6) for the local-light share, and the live stage check above.
+Casters in the pack (2026-11-01, branch worktree-agent-af9746e0d070a8c33): new packs carry the cascade instance's
+triangles (`casters` directive) and the PT traces them (`PT_CASTERS=1`, automatic) instead of the asset-DB volumes.
+Camp and inn packs: tools/live_batches/replay_capture/ambient (READY_FOR_LIVE); `tools/ambient_table.py` prints the rows.
 The writer now captures those inputs (sky cubes, probes, DFG, transmittance LUT) and
 `frame_replay --native-ambient` makes the comparison (tools/frame_replay.md "Native ambient"); the S8
 number needs one new pack.

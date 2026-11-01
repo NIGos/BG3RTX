@@ -54,5 +54,11 @@ measured (the estimate uses 60) plus logs: 1.2-1.8 GB; delete the trace folders 
 Start, results and rollback: as in ../lean_regression/README.md with this folder, prefix `m4p` and receipt
 `m4-promotion.json`.
 
+Known flaw of the step shots (m4p3 112657, 2026-11-01): `warmup-on` compiles only the all-on variant, so each
+`shot-step-*` toggles to a variant not yet built; the DXC compile (about 4 s, 1-2 fps) ends just before the trace at
+4 s, and the trace measures the first 1-2 frames of the new state. At S6 the scene also moves by about 1% per shot
+(animated lava, 54.5% of the frame's luminance), so two OFF shots cannot set the band there. Before a rerun: one
+warmup phase per step variant, and at S6 more OFF repeats or the lava excluded. S6 diagnostic: [s6_diag](s6_diag/README.md).
+
 Offline check: `powershell -File tools\live_batches\m4_promotion\dryrun.ps1 [-Out <scratch dir>]`. Last result
 2026-11-01: all checks passed (Windows PowerShell 5).

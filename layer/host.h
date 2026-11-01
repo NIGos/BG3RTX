@@ -574,6 +574,7 @@ struct RtCapture {
   uint32_t cascade_tris, cascade_stride;
   float cascade_t[3];
   uint64_t cascade_sig;   // the cascade draw list (same: the BLAS may be refitted)
+  uint64_t cascade_frame = 0;   // the frame whose converted soup it is (geo_cascade_soup; replay pack)
   sun_coverage::NativeEpoch native_epoch;
   VkBuffer native_frame_buffer = VK_NULL_HANDLE;
   VkDeviceSize native_frame_offset = 0;
@@ -801,6 +802,11 @@ struct BvhReplayRegion {
   VkDeviceSize ring_bytes = 0, instances_offset = 0;
   uint32_t count = 0;
   std::vector<uint32_t> info;   // count x (base, meta, rec, tris)
+  // rt_cascade_casters: the region's cascade instance (InstInfo tris 0) and the soup its BLAS was built
+  // from (geo_cascade_soup of casc_frame: its buffer, triangles, stride, draw list). casc_tris 0: none.
+  uint32_t casc_instance = 0, casc_tris = 0, casc_stride = 0;
+  VkBuffer casc_xfb = VK_NULL_HANDLE;
+  uint64_t casc_frame = 0, casc_sig = 0;
 };
 bool bvh_replay_region(VkBuffer info, VkDeviceSize info_offset, BvhReplayRegion* out);
 bool rt_replay_region(VkBuffer info, VkDeviceSize info_offset, BvhReplayRegion* out);

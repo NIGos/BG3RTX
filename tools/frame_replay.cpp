@@ -534,6 +534,9 @@ struct ReplayHooks {
 // gi_hit_direct contract does not carry. Bound as set 3 b8 (R32_UINT, one texel per 4 bytes) and Push::ls_flags
 // bit 25 (a trust slot this frame) is set, as core/gi.cpp does when the slot exists.
 fs::path g_sun_trust;
+// --no-casters: leave a pack's rt_cascade_casters instance out of the TLAS (mask 0, as packs before the
+// "casters" directive), for an A/B against the replay with the cut-away roofs.
+bool g_no_casters = false;
 
 Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const fs::path& hlsl_override,
               const std::vector<std::string>& extra_defines, const fs::path& out, uint32_t repeat, bool quiet,
@@ -556,6 +559,33 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       : compile(hlsl_override.empty() ? fs::path(source_root()) / "shaders" / pass.shader : hlsl_override, defines, out / "pass.spv");
   auto file = [&](const std::string& name) { return read_file(pack / name); };
 
+  // rt_cascade_casters (the "casters" directive): the cascade instance's triangles go into the soup (b6)
+  // past its captured range and its InstInfo (b7) entry points at them (rp::caster_patch), so the TLAS
+  // build below and rt_hit_normal see real triangles. The live entry had none (GI rays never read it).
+  std::vector<uint8_t> casters, info_patched;
+  uint64_t casters_base = 0;
+  if (!m.casters.file.empty() && !g_no_casters) {
+    casters = file(m.casters.file);
+    rp::Buffer* soup = nullptr; const rp::Buffer* info_b = nullptr;
+    for (auto& b : m.buffers) { if (b.set == 1 && b.binding == 6) soup = &b; if (b.set == 1 && b.binding == 7) info_b = &b; }
+    uint64_t end = 0;
+    if (rp::casters_valid(m.casters, m.instance_count, casters.size()) && soup && info_b && !info_b->file.empty()) {
+      info_patched = file(info_b->file);
+      if (info_patched.size() >= size_t(m.instance_count) * 16)
+        end = rp::caster_patch(reinterpret_cast<uint32_t*>(info_patched.data()), m.instance_count, m.casters, soup->bytes);
+    }
+    if (end) {
+      casters_base = end - casters.size();
+      soup->bytes = end;
+      result.warnings.push_back("casters: instance " + std::to_string(m.casters.instance) + ", " + std::to_string(m.casters.tris) +
+                                " triangles of stride " + std::to_string(m.casters.stride) + " in the TLAS (mask and flags as live), appended to the soup at " +
+                                std::to_string(casters_base));
+    } else {
+      casters.clear(); info_patched.clear();
+      result.warnings.push_back("casters: the pack's directive does not match its InstInfo / file (left out, mask 0)");
+    }
+  }
+
   // Buffers: the declared range, filled from the file and the ranges.
   std::map<uint64_t, Buf> buffers;   // key set << 32 | binding
   auto key = [](uint32_t s, uint32_t b) { return (uint64_t(s) << 32) | b; };
@@ -565,9 +595,13 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     check(slot && (slot->kind == rp::kUbo || slot->kind == rp::kSsbo), "buffer slot " + std::to_string(b.set) + "/" + std::to_string(b.binding));
     Buf buf = make_buffer(b.bytes, slot->kind == rp::kUbo ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : ssbo, false);
     buf.size = b.bytes;   // the descriptor range is the captured one, not the 16-byte minimum
-    if (!b.file.empty()) { auto d = file(b.file); check(d.size() <= b.bytes, "buffer file larger than its range"); upload(buf, 0, d.data(), d.size()); }
+    if (!b.file.empty()) {
+      auto d = b.set == 1 && b.binding == 7 && !info_patched.empty() ? info_patched : file(b.file);
+      check(d.size() <= b.bytes, "buffer file larger than its range"); upload(buf, 0, d.data(), d.size());
+    }
     buffers[key(b.set, b.binding)] = buf;
   }
+  if (!casters.empty()) upload(buffers[key(1, 6)], casters_base, casters.data(), casters.size());
   std::map<std::string, std::vector<uint8_t>> range_files;   // the live writer puts many slices in one file
   for (const auto& r : m.ranges) {
     auto it = buffers.find(key(r.set, r.binding)); check(it != buffers.end(), "range before its buffer");
@@ -708,7 +742,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                         uint64_t(base) + uint64_t(tris) * 3 * stride <= src->second.size;
     if (!usable) { ++skipped; in.mask = 0; in.accelerationStructureReference = empty.address; continue; }
     auto it = blas.find(k);
-    if (it == blas.end()) { it = blas.emplace(k, build_blas(src->second.address + base, tris, stride, !(meta & rp::kInfoAlpha))).first; ++built; }
+    // The cascade instance's BLAS is not opaque, as live (layer/bvhsplit.cpp: the sun's variant tests its candidates).
+    const bool opaque = !(meta & rp::kInfoAlpha) && !(!casters.empty() && i == m.casters.instance);
+    if (it == blas.end()) { it = blas.emplace(k, build_blas(src->second.address + base, tris, stride, opaque)).first; ++built; }
     in.accelerationStructureReference = it->second.address;
   }
   if (skipped) result.warnings.push_back(std::to_string(skipped) + " instances left out of the TLAS (legacy soup, hair AABBs, no triangles, or outside the captured buffers): mask 0");
@@ -976,7 +1012,11 @@ static_assert(sizeof(Push) == 256 && offsetof(Push, rt_tmax) == 84 && offsetof(P
 // atmosphere sun path (colour 1, intensity 1) through a transmittance LUT (0.7, 0.6, 0.5).
 struct SynthAmbient { float irr[3] = {0.25f, 0.5f, 1.0f}, spec = 2, probe = 3, ao = 0.5f, albedo[3] = {0.8f, 0.6f, 0.4f}, lut[3] = {0.7f, 0.6f, 0.5f}; };
 constexpr SynthAmbient kSynthAmbient{};
-void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting = false) {
+// casters (with box; pt_reference_test 9-11): the face y = -L is not in instance 0 but in an rt_cascade_casters
+// instance 1 as the live writer packs it (InstInfo {0, stride, 0, 0}, mask 0x02, instanceCustomIndex 0xFFFFFF, not
+// opaque, the "casters" directive), stored 1 m higher and moved down by the instance's translation; the
+// variant defines say RT_CASCADE_MASKS=1 (GI rays trace 0x01).
+void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting = false, bool casters = false) {
   fs::create_directories(dir);
   constexpr uint32_t W = 128, H = 128, frame = 3, stamp = 7;
   constexpr float kFront = 4.3f;   // F: 20 cm in front of K, far beyond the on-screen depth tolerance (~2 cm footprint)
@@ -984,7 +1024,7 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
   constexpr uint32_t stride = 64, record = bg3::native_hit::nh_alpha_rows;
   // Soup: 64-byte vertices (position float4 at 0, UV at 16), non-indexed. A quad in the plane y
   // over [x0,x1] x [z0,z1], wound so that cross(p1 - p0, p2 - p0) points along `ny`.
-  std::vector<uint8_t> soup, basis;
+  std::vector<uint8_t> soup, basis, caster_soup;
   auto vertex = [&](std::vector<uint8_t>& out, V3 p, float u, float v, V3 b0, V3 b1, V3 b2) {
     float rec[16] = {p.x, p.y, p.z, 1, u, v, b0.x, b0.y, b0.z, b1.x, b1.y, b1.z, b2.x, b2.y, b2.z, 0};
     const auto* bytes = reinterpret_cast<const uint8_t*>(rec); out.insert(out.end(), bytes, bytes + sizeof rec);
@@ -1002,15 +1042,16 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
   constexpr float kBox = 2.0f;
   if (box) {
     // Six inward faces: corners c0..c3, wound so the geometric normal points to the centre.
-    auto face = [&](V3 a, V3 b, V3 c, V3 d, V3 n) {
+    auto face = [&](V3 a, V3 b, V3 c, V3 d, V3 n, std::vector<uint8_t>* to = nullptr) {
       V3 q[4] = {a, b, c, d};
       int order[6] = {0, 1, 2, 0, 2, 3};
       if (dot3(cross(sub(q[1], q[0]), sub(q[2], q[0])), n) < 0) { order[1] = 2; order[2] = 1; order[4] = 3; order[5] = 2; }
-      for (int k : order) vertex(soup, q[k], 0, 0, {1, 0, 0}, n, {0, 0, 1});
+      for (int k : order) vertex(to ? *to : soup, q[k], 0, 0, {1, 0, 0}, n, {0, 0, 1});
     };
     const float L = kBox;
     face({-L, L, -L}, {L, L, -L}, {L, L, L}, {-L, L, L}, {0, -1, 0});      // y = +L (the screen)
-    face({-L, -L, -L}, {L, -L, -L}, {L, -L, L}, {-L, -L, L}, {0, 1, 0});   // y = -L
+    if (casters) face({-L, 1 - L, -L}, {L, 1 - L, -L}, {L, 1 - L, L}, {-L, 1 - L, L}, {0, 1, 0}, &caster_soup);   // y = -L, 1 m up
+    else face({-L, -L, -L}, {L, -L, -L}, {L, -L, L}, {-L, -L, L}, {0, 1, 0});   // y = -L
     face({L, -L, -L}, {L, L, -L}, {L, L, L}, {L, -L, L}, {-1, 0, 0});      // x = +L
     face({-L, -L, -L}, {-L, L, -L}, {-L, L, L}, {-L, -L, L}, {1, 0, 0});   // x = -L
     face({-L, -L, L}, {L, -L, L}, {L, L, L}, {-L, L, L}, {0, 0, -1});      // z = +L
@@ -1024,8 +1065,9 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
   }
   const uint32_t kBase = uint32_t(soup.size());
   if (!box) quad(4.5f, -0.6f, 0.6f, -0.6f, 0.6f, +1, true);   // K (instance 1, tris 0-1, with material)
-  const uint32_t info[8] = {0, stride, 0, box ? 12u : 4u, kBase, stride | bg3::native_hit::nh_opaque_meta, record, 2};
-  const uint32_t instances_used = box ? 1 : 2;
+  uint32_t info[8] = {0, stride, 0, box ? 12u : 4u, kBase, stride | bg3::native_hit::nh_opaque_meta, record, 2};
+  if (casters) { info[3] = 10; info[4] = 0; info[5] = stride; info[6] = 0; info[7] = 0; }   // the live cascade entry: no vertices
+  const uint32_t instances_used = box && !casters ? 1 : 2;
   // Hit-material records (native_hit_material.hlsli rt_hit_material, opaque prepass row).
   const uint32_t recordsBytes = 16 + bg3::native_hit::nh_material_rows * 256 + 16;
   std::vector<uint8_t> records(recordsBytes);
@@ -1108,6 +1150,11 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
     inst[i].flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
     inst[i].accelerationStructureReference = 0x1000u + i;   // opaque BLAS keys
   }
+  if (casters) {   // layer/bvhsplit.cpp's cascade instance (common/cascade_casters.h kMask, kCustomIndex)
+    inst[1].instanceCustomIndex = 0xFFFFFFu; inst[1].mask = 0x02; inst[1].flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+    inst[1].transform.matrix[1][3] = -1;
+    write_vec(dir / "casters.bin", caster_soup);
+  }
   write_file(dir / "instances.bin", inst, sizeof inst[0] * instances_used);
   // The manifest through the writer the live capture uses (rp::serialize); the soup as two sparse
   // slices of one file, as the live writer stores the InstInfo spans (B + F, then K).
@@ -1134,6 +1181,7 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
   img(1, 14, 1, rp::kRgba32Sfloat, 1, 1, "albedo.rgba32f"); img(1, 14, 2, rp::kRgba32Sfloat, 1, 1, "nrm.rgba32f"); img(1, 14, 3, rp::kRgba32Sfloat, 1, 1, "params.rgba32f");
   m.samplers.push_back({1, 15, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
   m.instances = "instances.bin"; m.instance_count = instances_used;
+  if (casters) { m.casters = {"casters.bin", 1, uint32_t(caster_soup.size() / (3 * stride)), stride}; m.defines = "RT_CASCADE_MASKS=1"; }
   m.outputs.push_back({0, 8, rp::kRgba16Sfloat, W / 2, H / 2, ""}); m.outputs.push_back({0, 13, rp::kR32Sfloat, W / 2, H / 2, ""});
   if (lighting) {
     const SynthAmbient& q = kSynthAmbient;
@@ -1599,7 +1647,7 @@ void native_ambient_report(const fs::path& pack, const PtAccum& na, const PtAccu
   const double k = s_vis > 0 ? s_scr / s_vis : 0;
   auto far_rgb = [&](size_t i, int c) { return k * (pt.mean(0, c, i) - pt.mean(3, c, i)) + (env ? pt.mean(7, c, i) : 0.0); };
   struct Sum { double E = 0, Eao = 0, Eaoa = 0, sky = 0, lit = 0, spec = 0, probe = 0, ao = 0, a = 0, pt_far = 0, far_on = 0, off = 0, env = 0, env1 = 0, miss = 0,
-               t[3] = {0, 0, 0}, cloud = 0, atmo = 0; } S;
+               t[3] = {0, 0, 0}, cloud = 0, atmo = 0, tot = 0, vis_far = 0, hid_far = 0, live = 0, sun = 0, local = 0; } S;
   constexpr int TX = 16, TY = 9;
   struct Tile { double n = 0, nat = 0, ref = 0, refs = 0; };
   std::vector<Tile> tiles(TX * TY);
@@ -1613,6 +1661,8 @@ void native_ambient_report(const fs::path& pack, const PtAccum& na, const PtAccu
       S.lit += L(na, 1, i); S.probe += na.mean(1, 3, i); S.spec += na.mean(1, 4, i);
       S.pt_far += pfar; S.far_on += pt.mean(1, 4, i) + pt.mean(3, 4, i); S.off += pt.mean(4, 4, i); S.env += e; S.env1 += env ? pt.mean(7, 4, i) : 0.0;
       S.miss += pt.mean(0, 3, i);
+      S.tot += L(pt, 0, i); S.vis_far += pt.mean(1, 4, i); S.hid_far += pt.mean(3, 4, i); S.live += L(pt, 3, i);
+      S.sun += pt.mean(5, 4, i); S.local += pt.mean(6, 4, i);
       for (int c = 0; c < 3; ++c) S.t[c] += na.mean(2, c, i);
       S.cloud += na.mean(2, 3, i); S.atmo += na.mean(2, 4, i);
       Tile& t = tiles[(y * TY / na.h) * TX + x * TX / na.w];
@@ -1632,6 +1682,12 @@ void native_ambient_report(const fs::path& pack, const PtAccum& na, const PtAccu
   add("PT far field (total minus live domain, first hit beyond gi_rt_radius %.3g m or faded): %.6g PT units (first hits beyond it on screen %.6g, off screen %.6g); "
       "k = %.3f; k x PT far %.6g; PT environment through misses %.6g (first vertex %.6g; first-ray miss fraction %.4f)%s",
       radius, M(S.pt_far), M(S.far_on), M(S.off), k, k * M(S.pt_far), M(S.env), M(S.env1), M(S.miss), env ? "" : " (PT_ENV off: no sky cube in the pack)");
+  // The traced bounce's split over the same pixels (pt_report's definitions): first hits beyond gi_rt_radius
+  // on screen (visible / hidden), off screen (not split by distance), the live domain; sun / local lights.
+  auto share = [&](double x) { return S.tot > 0 ? 100.0 * x / S.tot : 0.0; };
+  add("PT split (compared pixels, %% of PT total): far field on screen beyond gi_rt_radius %.1f%% (visible %.1f, hidden %.1f), off screen %.1f%%, "
+      "live domain %.1f%%; sun %.1f%%, local point/spot %.1f%%",
+      share(S.vis_far + S.hid_far), share(S.vis_far), share(S.hid_far), share(S.off), share(S.live), share(S.sun), share(S.local));
   const double ref = k * M(S.pt_far) + M(S.env), refs = k * M(S.pt_far);
   add("native vs PT far field: E_native x AO / (k x PT far) %.3f, E_native x AO / (k x PT far + PT env) %.3f, E_native / (k x PT far + PT env) %.3f, "
       "E_native x AO x live a / (k x PT far + PT env) %.3f",
@@ -1699,6 +1755,7 @@ int pt_self_test(const fs::path& dir) {
     std::printf("%-62s %s  %s\n", name, ok ? "PASS" : "FAIL", detail.c_str());
   };
   synthesize(dir / "box", true, true);
+  synthesize(dir / "casters", true, true, false, true);
   synthesize(dir / "lit", false);
   synthesize(dir / "dark", true);
   struct Stat { double mean = 0, se = 0, miss = 0, lo = 1e30, hi = -1e30; };
@@ -1751,7 +1808,24 @@ int pt_self_test(const fs::path& dir) {
     for (uint32_t k = 0; k < kPtModes; ++k) same &= lit.rgba[k] == lit2.rgba[k] && lit.aux[k] == lit2.aux[k];
     line("7 deterministic: two PT runs bit-identical (all modes)", same, "");
   }
-  line("8 no validation errors", g_validation_errors.load() == 0, std::to_string(g_validation_errors.load()) + " errors");
+  {
+    // rt_cascade_casters (the "casters" directive): the box's floor is only in the cascade instance (mask 0x02,
+    // moved 1 m down by its transform). PT_CASTERS=1 traces it: the box is closed again, exactly as 1 and 2
+    // (its vertices continue the paths: the replay appended them to the soup). Without PT_CASTERS the pack's
+    // variant (RT_CASCADE_MASKS) traces 0x01, as the live GI rays: the floor is open.
+    auto d = furnace; d.push_back("PT_ALBEDO=0.5"); d.push_back("PT_BOUNCES=1"); d.push_back("PT_RR_START=99");
+    auto c = d; c.push_back("PT_CASTERS=1");
+    const Stat s1 = stat(pt_run(dir / "casters", c, 1, 1, dir / "casters-out"), 0);
+    line("8 casters: PT_CASTERS closes the box (B=1: every ray hits Le 1)", std::abs(s1.lo - 1) < 1e-3 && std::abs(s1.hi - 1) < 1e-3 && s1.miss == 0, fmt(s1, 1));
+    auto c3 = furnace; c3.push_back("PT_ALBEDO=0.5"); c3.push_back("PT_BOUNCES=3"); c3.push_back("PT_RR_START=99"); c3.push_back("PT_CASTERS=1");
+    // The near rule off (RT_CASCADE_TMIN 0.5 m skips the floor from wall points within 0.5 m of it: -0.6% here).
+    c3.push_back("RT_CASCADE_TMIN=0.0"); c3.push_back("RT_CASCADE_TMIN_REL=0.0");
+    const Stat s3 = stat(pt_run(dir / "casters", c3, 1, 1, dir / "casters-out"), 0);
+    line("9 casters: paths continue off the caster face (B=3, near rule off: 1.75)", std::abs(s3.lo - 1.75) < 2e-3 && std::abs(s3.hi - 1.75) < 2e-3, fmt(s3, 1.75));
+    const Stat s0 = stat(pt_run(dir / "casters", d, 1, 1, dir / "casters-out"), 0);
+    line("10 casters: mask 0x01 without PT_CASTERS (the live GI rays): floor open", s0.miss > 0.05 && s0.mean < 1 - s0.miss + 1e-3, fmt(s0, 1 - s0.miss));
+  }
+  line("11 no validation errors", g_validation_errors.load() == 0, std::to_string(g_validation_errors.load()) + " errors");
   std::printf("%s: %d failure(s)\n", failures ? "FAIL" : "PASS", failures);
   return failures ? 1 : 0;
 }
@@ -1870,6 +1944,7 @@ int main(int argc, char** argv) {
   fs::path pack, out, hlsl, spv, synth, test;
   std::vector<std::string> defines;
   uint32_t repeat = 1;
+  bool synth_box = false, synth_lighting = false, synth_casters = false;
   bool validation = true, dark = false, pt = false, pt_cost_only = false, pt_skip_cost = false, native = false;
   uint32_t pt_iters = 32;
   fs::path pt_test;
@@ -1884,6 +1959,9 @@ int main(int argc, char** argv) {
     else if (args[i] == "--no-validation") validation = false;
     else if (args[i] == "--synthesize") synth = next();
     else if (args[i] == "--dark") dark = true;
+    else if (args[i] == "--box") synth_box = true;            // --synthesize: the closed box (PT furnace)
+    else if (args[i] == "--lighting") synth_lighting = true;  // --synthesize: with the lighting inputs (kSynthAmbient)
+    else if (args[i] == "--casters") synth_casters = true;    // --synthesize: the box's floor as rt_cascade_casters
     else if (args[i] == "--self-test") test = next();
     else if (args[i] == "--load-test") return load_test();
     else if (args[i] == "--pt-self-test") pt_test = next();
@@ -1893,11 +1971,12 @@ int main(int argc, char** argv) {
     else if (args[i] == "--pt-skip-cost") pt_skip_cost = true;
     else if (args[i] == "--native-ambient") native = true;
     else if (args[i] == "--sun-trust") g_sun_trust = next();
+    else if (args[i] == "--no-casters") g_no_casters = true;
     else die("unknown argument " + args[i] + " (see tools/frame_replay.md)");
   }
   if (!test.empty()) return self_test(test);
   if (!pt_test.empty()) return pt_self_test(pt_test);
-  if (!synth.empty()) { synthesize(synth, dark); std::printf("synthetic pack written to %s\n", synth.string().c_str()); return 0; }
+  if (!synth.empty()) { synthesize(synth, dark, synth_box || synth_casters, synth_lighting, synth_casters); std::printf("synthetic pack written to %s\n", synth.string().c_str()); return 0; }
   check(!pack.empty(), "usage: frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V] [--repeat N]");
   if (int r = init_gpu(validation, false)) return r;
   if (out.empty()) out = pack / (native ? "native-ambient" : pt || pt_cost_only ? "pt-reference" : "replay");
@@ -1907,6 +1986,14 @@ int main(int argc, char** argv) {
     std::vector<uint8_t> cam;
     for (auto& b : m.buffers) if (b.set == 0 && b.binding == 0 && !b.file.empty()) cam = read_file(pack / b.file);
     if (cam.size() >= 400) { float mu; std::memcpy(&mu, cam.data() + 24 * 16 + 4, 4); sun_transmittance(mu, t); }
+  };
+  // A pack with the cascade casters: the PT traces them (PT_CASTERS, tools/pt_reference.hlsl) unless
+  // --no-casters, or the command line chooses PT_CASTERS / PT_ROOFS itself.
+  auto casters_define = [&](const rp::Manifest& m, std::vector<std::string>& d, std::string& params) {
+    if (m.casters.file.empty() || g_no_casters) return;
+    for (auto& x : d) if (x.rfind("PT_CASTERS", 0) == 0 || x.rfind("PT_ROOFS", 0) == 0) return;
+    d.push_back("PT_CASTERS=1");
+    params += "PT_CASTERS=1 (the pack's cascade casters: " + std::to_string(m.casters.tris) + " triangles) ";
   };
   if (native) {
     // tools/native_ambient.hlsl + tools/pt_reference.hlsl over the pack (tools/frame_replay.md "Native ambient").
@@ -1923,6 +2010,7 @@ int main(int argc, char** argv) {
     if (li.sky) d.push_back("PT_ENV=1");
     std::string params;
     for (auto& x : d) params += x + " ";
+    casters_define(m, d, params);
     params += "PT iterations " + std::to_string(pt_iters);
     const PtAccum na = pt_run(pack, {}, 1, 3, out, true, "native_ambient.hlsl");
     const PtAccum a = pt_run(pack, d, pt_iters, li.sky ? kPtModesEnv : kPtModes, out);
@@ -1947,6 +2035,7 @@ int main(int argc, char** argv) {
       char d[96]; std::snprintf(d, sizeof d, "PT_SUN_T=float3(%.4f,%.4f,%.4f)", t[0], t[1], t[2]);
       defines.push_back(d); params += std::string(d) + " (estimated) ";
     }
+    casters_define(m, defines, params);
     if (!pt_skip_cost) pt_cost(pack, defines, out);
     if (!pt_cost_only) {
       const PtAccum a = pt_run(pack, defines, pt_iters, kPtModes, out);
