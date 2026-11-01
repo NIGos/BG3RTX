@@ -1,9 +1,10 @@
 // Pins the M5.3 water composition contracts (common/water_compose.h, common/water_fs_patch.h):
 // the record buffer arithmetic, the publication, the B10G11R11 ownership check against both
 // rounding modes of a software encoder, and the FS patch's refusals. Optional arguments:
-//   water_compose_test <dumped 7b44a567771ecbec.spv> [<patched output .spv>]
-// patches the dumped game module (FNV-1a hash checked against the table key) and writes the
-// result for spirv-val / spirv-cross (CMake passes the dump when captures/ has it).
+//   water_compose_test <dump dir, e.g. captures/shaders> [<output dir>]
+// patches every dumped game module of the id table (<hash>.spv, FNV-1a hash checked against the
+// table key) and writes water_fs_<hash hi>_patched.spv for spirv-val / spirv-cross (CMake passes
+// captures/shaders when it exists).
 #include "../common/water_compose.h"
 #include "../common/water_fs_patch.h"
 #include "../common/water_policy.h"
@@ -13,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <string>
 #include <vector>
 
 using namespace bg3::water;
@@ -87,18 +89,29 @@ int main(int argc, char** argv) {
     CHECK(audited);
   }
 
-  // 5. The dumped module, when given.
-  if (argc >= 2) {
-    std::ifstream f(argv[1], std::ios::binary);
+  CHECK(fs_ids(0x99c1fcef82b253c1ull) == &kFsIds[1]);   // S8 ExtraWaves
+  CHECK(fs_ids(0xc4e92ccdb08dd777ull) == &kFsIds[2]);   // S8 NoCaustics_Waves
+
+  // 5. The dumped modules in the given directory: every table entry whose dump is there.
+  unsigned patched = 0;
+  for (const FsIds& fi : kFsIds) {
+    if (argc < 2) break;
+    char name[64];
+    std::snprintf(name, sizeof name, "/%016llx.spv", (unsigned long long)fi.fs);
+    std::ifstream f(std::string(argv[1]) + name, std::ios::binary);
+    if (!f) {
+      std::printf("no dump of %016llx: its patch is not exercised\n", (unsigned long long)fi.fs);
+      continue;
+    }
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     CHECK(!bytes.empty() && bytes.size() % 4 == 0);
-    CHECK(fnv(bytes.data(), bytes.size()) == ids.fs);
+    CHECK(fnv(bytes.data(), bytes.size()) == fi.fs);
     std::vector<uint32_t> words(bytes.size() / 4);
     std::memcpy(words.data(), bytes.data(), bytes.size());
     const uint64_t addr = 0x0000123456789a00ull;
-    const PatchStatus st = patch_fs(words.data(), words.size(), ids, addr, cap, out);
-    std::printf("patch %s: %zu -> %zu words, bound %u -> %u\n", patch_status_name(st), words.size(), out.size(),
-                words[3], out.empty() ? 0u : out[3]);
+    const PatchStatus st = patch_fs(words.data(), words.size(), fi, addr, cap, out);
+    std::printf("patch %016llx %s: %zu -> %zu words, bound %u -> %u\n", (unsigned long long)fi.fs,
+                patch_status_name(st), words.size(), out.size(), words[3], out.empty() ? 0u : out[3]);
     CHECK(st == PatchStatus::kApplied);
     CHECK(out.size() > words.size() && out[3] > words[3]);
     // Every original instruction is still there, in order (the patch only inserts).
@@ -122,21 +135,40 @@ int main(int argc, char** argv) {
     }
     // Patching twice is refused (the capability is there).
     std::vector<uint32_t> twice;
-    CHECK(patch_fs(out.data(), out.size(), ids, addr, cap, twice) == PatchStatus::kAlreadyPatched);
+    CHECK(patch_fs(out.data(), out.size(), fi, addr, cap, twice) == PatchStatus::kAlreadyPatched);
     // A table that does not fit (types swapped) is refused.
-    FsIds wrong = ids;
+    FsIds wrong = fi;
     std::swap(wrong.a, wrong.X);
     CHECK(patch_fs(words.data(), words.size(), wrong, addr, cap, twice) == PatchStatus::kIdMismatch);
-    wrong = ids;
-    wrong.pos = ids.N;
+    wrong = fi;
+    wrong.pos = fi.N;
     CHECK(patch_fs(words.data(), words.size(), wrong, addr, cap, twice) == PatchStatus::kIdMismatch);
     if (argc >= 3) {
-      std::ofstream o(argv[2], std::ios::binary);
+      std::snprintf(name, sizeof name, "/water_fs_%08x_patched.spv", unsigned(fi.fs >> 32));
+      std::ofstream o(std::string(argv[2]) + name, std::ios::binary);
       o.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size() * 4));
     }
-  } else {
-    std::printf("no dumped module given: the patch of the game module is not exercised\n");
+    ++patched;
   }
+  // Another table's fi never fit a module (they name values of other types or nothing).
+  if (patched == kFsIdsCount && argc >= 2) {
+    for (const FsIds& fi : kFsIds) {
+      char name[64];
+      std::snprintf(name, sizeof name, "/%016llx.spv", (unsigned long long)fi.fs);
+      std::ifstream f(std::string(argv[1]) + name, std::ios::binary);
+      std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+      std::vector<uint32_t> words(bytes.size() / 4);
+      std::memcpy(words.data(), bytes.data(), bytes.size());
+      for (const FsIds& other : kFsIds) {
+        if (&other == &fi) continue;
+        FsIds swapped = other;
+        swapped.fs = fi.fs;
+        std::vector<uint32_t> tmp;
+        CHECK(patch_fs(words.data(), words.size(), swapped, 0x1000, cap, tmp) == PatchStatus::kIdMismatch);
+      }
+    }
+  }
+  if (!patched) std::printf("no dumped module given: the patch of the game modules is not exercised\n");
   std::printf("water_compose_test: %u checks passed\n", checks);
   return 0;
 }

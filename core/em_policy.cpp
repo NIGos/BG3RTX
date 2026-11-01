@@ -6,7 +6,12 @@
 // tests/emissive_core_test.cpp compares these records bit for bit with the former layer path.
 // The same entry carries the M5.1 water policy (common/water_policy.h): forward ==
 // BG3_EM_REQ_WATER returns a water::WaterRec (layer/water.cpp captures by its class).
+// It also notes the command buffer of each supported water draw: core/water.cpp finds the
+// forward pass that holds water by it (core_water_pass_take), whatever draws open or close it.
+#include <atomic>
 #include <cstring>
+#include <mutex>
+#include <vector>
 
 #include "core.h"
 #include "../common/emissive_policy.h"
@@ -50,7 +55,37 @@ struct CoreReader {
 
 Calib to_calib(const Bg3EmCalib& c) { return Calib{c.scale, c.updates, c.log_u}; }
 
+// Command buffers whose open render pass recorded a supported water draw. Bounded: an entry
+// leaves at that buffer's next pass begin or end; a buffer abandoned without one is dropped
+// when the list is full (its only effect: one pass end of a reused handle looks at water).
+std::mutex g_wp_mu;
+std::vector<VkCommandBuffer> g_wp;
+std::atomic<uint32_t> g_wp_n{0};
+constexpr size_t kWpMax = 64;
+
+void water_draw_note(VkCommandBuffer cmd) {
+  std::lock_guard<std::mutex> lock(g_wp_mu);
+  for (VkCommandBuffer c : g_wp)
+    if (c == cmd) return;
+  if (g_wp.size() >= kWpMax) g_wp.erase(g_wp.begin());
+  g_wp.push_back(cmd);
+  g_wp_n.store(uint32_t(g_wp.size()), std::memory_order_relaxed);
+}
+
 }  // namespace
+
+bool core_water_pass_take(VkCommandBuffer cmd) {
+  if (!g_wp_n.load(std::memory_order_relaxed)) return false;   // the common case: no lock
+  std::lock_guard<std::mutex> lock(g_wp_mu);
+  for (size_t i = 0; i < g_wp.size(); ++i)
+    if (g_wp[i] == cmd) {
+      g_wp[i] = g_wp.back();
+      g_wp.pop_back();
+      g_wp_n.store(uint32_t(g_wp.size()), std::memory_order_relaxed);
+      return true;
+    }
+  return false;
+}
 
 bool core_em_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out) {
   std::memset(out, 0, sizeof *out);
@@ -59,6 +94,7 @@ bool core_em_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out) {
   if (in->forward == BG3_EM_REQ_WATER) {   // M5.1: the water class and record of a forward draw
     const bg3::water::WaterRec w = bg3::water::make_record(rd, in->fs, in->decal, in->info, in->name ? in->name : "");
     std::memcpy(out->rec, &w, sizeof w);
+    if (w.cls == bg3::water::kSupported) water_draw_note(in->cmd);
     return true;
   }
   const EmMaterial mat{in->info, in->name ? in->name : "", in->forward != 0, in->decal != 0};

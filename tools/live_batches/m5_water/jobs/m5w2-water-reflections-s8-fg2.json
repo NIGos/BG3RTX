@@ -48,11 +48,12 @@
   "\\[water\\] coverage \\(\\d+ frames\\): water passes [0-9.]+/frame \\([0-9.]+ draws/frame, [0-9.]+ water\\), captured [1-9]\\d* of \\d+ water draws \\([0-9.]+%\\), triangles \\d+ of \\d+ supported \\([0-9.]+%\\); depth write on \\d+, off \\d+, dynamic \\d+; sampled draws [1-9]\\d*: non-finite \\d+, collapsed \\d+, height -?[0-9.]+\\.\\.-?[0-9.]+ m from the camera",
   "\\[water\\] build GPU [0-9.]+ ms median, p90 [0-9.]+ \\([1-9]\\d* timed of [1-9]\\d* builds; [0-9.]+ geometries, [0-9]+ triangles per build; busy \\d+, failed \\d+; soup \\d+ MB\\)",
   "\\[water\\] families: captured [0-9a-f]{16} FLUID_Water_Plane\\w* \\d+ \\(Roughness_Base [0-9.]+, Reflectance_Base [0-9.]+, flags 0x[0-9a-f]+\\)",
+  "\\[water\\] families: captured .*c4e92ccdb08dd777 FLUID_Water_Plane_flowmap_NoCaustics_Waves [1-9]\\d* \\(Roughness_Base",
   "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
   "\\[water\\] reflection images \\d+x\\d+",
   "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\): water px (?!0\\.00%)[0-9.]+% of [0-9]+ px/frame \\(in front (?!0\\.00%)[0-9.]+%, empty G-buffer [0-9.]+%, at bed [0-9.]+%\\), behind bed \\d+ \\([0-9.]+% of water hits\\); rays [1-9][0-9.]*/frame: screen hit [0-9.]+%, hidden [0-9.]+% \\(skin \\d+\\), off screen [0-9.]+%, miss [0-9.]+%, aborted \\d+, invalid \\d+; normal fallback [0-9.]+%; mean E [0-9.]+, mean screen L [0-9.]+, mean E\\*L [0-9.]+; shift on;",
   "\\[water\\] reflections GPU [0-9.]+ ms median, p90 [0-9.]+ \\([1-9]\\d* timed; water primary \\+ reflection dispatches\\); scene [1-9][0-9.]* draws, [1-9]\\d* triangles, age [0-9.]+ frames; F0 [0-9.]+ \\(Reflectance_Base [0-9.]+, Roughness_Base [0-9.]+, family \\d+\\); views \\d+ over \\d+ water passes",
-  "\\[water\\] reflections GPU .*; views [1-9]\\d* over [1-9]\\d* water passes"
+  "\\[water\\] reflections GPU .*; views [1-9]\\d* over [1-9]\\d* water passes \\(\\d+ with water between other draws\\)"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -78,6 +79,6 @@
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "PLAN_M5 M5.2 rt_water_reflections at the S1 docks (geometry on throughout), lean: a 15 s precheck with the key on (its [water] reflections lines need traced frames and water pixels > 0: a view without water is INVALID), then OFF / ON / OFF with diag-off cost windows and one PNG each, and two debug-view PNGs over the water (rt_debug 22 reflection radiance, 21 coverage). Gates: image ON within the OFF-a/OFF-b spread (measured, not composed: the key must change no colour); behind bed 0 beyond the derived tolerance; screen-hit / miss / hidden / off-screen shares and mean E reported; shift on; [water] reflections GPU ms median and p90; cost-on minus cost-off frame and rt GPU ms against the OFF spread.",
+ "purpose": "PLAN_M5 M5.2 rt_water_reflections at S8 Water Queens House (geometry on throughout), lean: a 15 s precheck with the key on (its [water] reflections lines need traced frames and water in front of the bed > 0: a view without water is INVALID), then OFF / ON / OFF with diag-off cost windows and one PNG each, and two debug-view PNGs over the water (rt_debug 22 reflection radiance, 21 coverage; the views line must count views over water passes, which at S8 hold the water between other forward draws). Both S8 planes are captured (7b44a567 huge_PixelLighting and c4e92ccd NoCaustics_Waves). Gates: image ON within the OFF-a/OFF-b spread (measured, not composed: the key must change no colour); screen-hit / miss / hidden / off-screen shares and mean E reported; shift on; [water] reflections GPU ms median and p90; cost-on minus cost-off frame and rt GPU ms against the OFF spread.",
  "estimated_phase_seconds": 140
 }

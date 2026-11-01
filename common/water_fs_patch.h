@@ -49,11 +49,22 @@ struct FsIds {
 // captures/alpha_cache/7b44a567771ecbec.glsl lines 1443-1975 (2026-11-01): the final colour
 // _4335 = mix(_4332 (refraction copy), fma(fma(_3901, _2063, _2062 e) + foam, _4096.www,
 // _4096.xyz), _784) with _3901 = direct + (_3382 + _3379) * _3799: dC/dKs = _784 _4096.w _2063 _3799.
+// The S8 Water Queens House FS (alpha_cache glsl = spirv-cross of the dumps, read 2026-11-01) end
+// the same way, the same terms under other ids:
+//   99c1fcef ExtraWaves: _4533 = mix(_4530, fma(fma(_4099, _2261, _2260 e) + foam, _4294.www,
+//     _4294.xyz), _809), _4099 = direct + (_3580 + _3577) * _3997, Ks _3577 = probes * (_3501 _3550.x
+//     + _3550.y) after the loop, N.V = dot(normalize(-_5), _1294), roughness _1678;
+//   c4e92ccd NoCaustics_Waves: _3671 = mix(_3668, fma(fma(_3322, _1484, _1483 e), _3510.www,
+//     _3510.xyz), _425) (no foam term), _3322 = direct + (_2803 + _2800) * _3220, F0 _2724, DFG _2773,
+//     N _665, roughness _899.
 // The other audited water FS are not in the table yet: their draws keep the game's pipeline
 // (counted by the layer as "no variant").
 inline constexpr FsIds kFsIds[] = {
     {0x7b44a567771ecbecull, 784, 4096, 3799, 2063, 3379, 3303, 3352, 1207, 4335, 1480, 5},
+    {0x99c1fcef82b253c1ull, 809, 4294, 3997, 2261, 3577, 3501, 3550, 1294, 4533, 1678, 5},
+    {0xc4e92ccdb08dd777ull, 425, 3510, 3220, 1484, 2800, 2724, 2773, 665, 3671, 899, 5},
 };
+inline constexpr uint32_t kFsIdsCount = uint32_t(sizeof kFsIds / sizeof kFsIds[0]);
 
 enum class PatchStatus : uint32_t {
   kApplied = 0,

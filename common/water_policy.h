@@ -60,6 +60,12 @@ inline constexpr Audited kAudited[] = {
     {0x06e66a6fbd88a6b3ull, 0x7a485e6aa7dac575ull, "FLUID_Water_Plane_flowmap_PixelLighting_noCaustics_Shadows"},
     {0x857ccb90efda19c3ull, 0xffc5bb290d99c144ull, "FLUID_Water_Plane_flowmap_noCaustics"},
     {0x68068cab0ff17c8dull, 0xbbdf7b8a2aa13eabull, "FLUID_Water_Plane"},
+    // S8 Water Queens House (live log m5w2 s8, 2026-11-01: counted unknown). Not in a trace: the
+    // pairs are the asset DB's StaticInstancedForward variants (both modules of one bshd), the
+    // dumps in captures/shaders. ExtraWaves' VS is 60d4357d's plus a second UV output;
+    // NoCaustics_Waves' noise is at world xz * m5 + time * m7, the offset clamped below by m15.
+    {0x99c1fcef82b253c1ull, 0xe0530238c64ad123ull, "FLUID_Water_Plane_flowmap_huge_PixelLighting_ExtraWaves"},
+    {0xc4e92ccdb08dd777ull, 0x8113bd39597e2bd9ull, "FLUID_Water_Plane_flowmap_NoCaustics_Waves"},
 };
 inline constexpr uint32_t kAuditedCount = uint32_t(sizeof kAudited / sizeof kAudited[0]);
 inline constexpr uint32_t kNoFamily = UINT32_MAX;
