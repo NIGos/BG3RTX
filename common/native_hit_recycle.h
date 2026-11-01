@@ -56,6 +56,25 @@ class Pool {
     }
     return false;
   }
+  // rt_hit_material_lean_hooks: the smallest retained buffer of this usage and memory kind that holds
+  // k.bytes and is at most twice it (users give explicit ranges; a larger buffer is never read past
+  // them). Sizes that move every frame (the query copies while the camera turns) then reuse instead of
+  // allocating a new rounded size and evicting an old one (sw3 2026-11-01: 1.2-1.8 allocations and
+  // frees per frame, 31-40 MB, with exact keys).
+  bool take_fit(const Key& k, H& out) {
+    size_t best = entries_.size();
+    for (size_t i = 0; i < entries_.size(); ++i) {
+      const Key& e = entries_[i].key;
+      if (e.usage != k.usage || e.host != k.host || e.bytes < k.bytes || e.bytes > 2 * k.bytes) continue;
+      if (best == entries_.size() || e.bytes < entries_[best].key.bytes) best = i;
+    }
+    if (best == entries_.size()) return false;
+    out = entries_[best].handle;
+    retained_ -= entries_[best].key.bytes;
+    entries_.erase(entries_.begin() + ptrdiff_t(best));
+    ++reused_;
+    return true;
+  }
   // Keeps a retired buffer. Over the cap the oldest ones go to `evict` (the caller frees them);
   // one larger than the whole cap is evicted at once.
   void give(const Key& k, const H& h, uint64_t frame, std::vector<H>& evict) {
