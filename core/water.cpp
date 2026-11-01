@@ -45,6 +45,7 @@ constexpr VkDeviceSize kParamBytes = 256;
 constexpr VkDeviceSize kRtStatsBytes = 64 * 1024;   // rt_common.hlsli guard counters (never read)
 constexpr VkPipelineStageFlags kCS = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags kAll = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+constexpr uint32_t kGroup = 16;         // water_reflect.hlsl kGroup (numthreads kGroup x kGroup)
 
 struct Params {   // shaders/rt/water_reflect.hlsl WaterParams
   float cam_build[3];
@@ -66,10 +67,9 @@ bool g_img_init = false;
 uint64_t g_out_frame = 0;      // frame whose lighting wrote wOut / wT (views need this frame's)
 uint32_t g_out_w = 0, g_out_h = 0;
 
-VkBuffer g_host = VK_NULL_HANDLE, g_rts = VK_NULL_HANDLE;
-VkDeviceMemory g_host_mem = VK_NULL_HANDLE, g_rts_mem = VK_NULL_HANDLE;
+VkBuffer g_host = VK_NULL_HANDLE, g_rts = VK_NULL_HANDLE, g_dev = VK_NULL_HANDLE;
+VkDeviceMemory g_host_mem = VK_NULL_HANDLE, g_rts_mem = VK_NULL_HANDLE, g_dev_mem = VK_NULL_HANDLE;
 uint8_t* g_map = nullptr;
-void* g_rts_map = nullptr;
 VkQueryPool g_qp = VK_NULL_HANDLE;
 uint32_t g_slot = 0;
 bool g_written[kRing] = {};
@@ -102,16 +102,53 @@ void release_images() {
   g_img_init = false;
 }
 
+// A device-local buffer (the core/sharc.cpp pattern: the memory types from BG3_DEVICE_INFO_KEY).
+// The shaders' atomics go here, never to host-visible memory: in the m5w2 live run the
+// statistics' per-wave atomics into the host buffer (PCIe) cost ~15 ms per frame.
+bool make_device_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& b, VkDeviceMemory& m) {
+  const VkDeviceFuncs& vk = *host->vk;
+  const auto* d = static_cast<const Bg3DeviceInfo*>(host->persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)));
+  if (!d || d->version < 1) return false;
+  VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bci.size = size;
+  bci.usage = usage;
+  if (vk.CreateBuffer(host->device, &bci, nullptr, &b) != VK_SUCCESS) return b = VK_NULL_HANDLE, false;
+  VkMemoryRequirements req;
+  vk.GetBufferMemoryRequirements(host->device, b, &req);
+  VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  mai.allocationSize = req.size;
+  mai.memoryTypeIndex = UINT32_MAX;
+  for (uint32_t i = 0; i < d->memory.memoryTypeCount && mai.memoryTypeIndex == UINT32_MAX; ++i)
+    if ((req.memoryTypeBits & (1u << i)) && (d->memory.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+      mai.memoryTypeIndex = i;
+  if (mai.memoryTypeIndex == UINT32_MAX || vk.AllocateMemory(host->device, &mai, nullptr, &m) != VK_SUCCESS ||
+      vk.BindBufferMemory(host->device, b, m, 0) != VK_SUCCESS) {
+    vk.DestroyBuffer(host->device, b, nullptr);
+    if (m) vk.FreeMemory(host->device, m, nullptr);
+    b = VK_NULL_HANDLE, m = VK_NULL_HANDLE;
+    return false;
+  }
+  return true;
+}
+
 bool ensure_buffers() {
   if (g_host) return true;
   void* m = nullptr;
   if (!host->alloc_host_buffer ||
+      !make_device_buffer(kStatBytes,
+                          VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                              VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                          g_dev, g_dev_mem) ||
+      !make_device_buffer(kRtStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, g_rts, g_rts_mem) ||
       !host->alloc_host_buffer(kRing * (kStatBytes + kParamBytes),
                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
                                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                               &g_host, &g_host_mem, &m) ||
-      !host->alloc_host_buffer(kRtStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &g_rts, &g_rts_mem, &g_rts_map))
+                               &g_host, &g_host_mem, &m)) {
+    for (VkBuffer* b : {&g_dev, &g_rts, &g_host}) host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)*b), *b = VK_NULL_HANDLE;
+    for (VkDeviceMemory* dm : {&g_dev_mem, &g_rts_mem, &g_host_mem})
+      host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)*dm), *dm = VK_NULL_HANDLE;
     return false;
+  }
   g_map = static_cast<uint8_t*>(m);
   std::memset(g_map, 0, size_t(kRing * (kStatBytes + kParamBytes)));
   VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
@@ -761,7 +798,9 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   g_win.age += now - sc.built_frame;
   g_win.refl = sc.reflectance, g_win.rough = sc.roughness, g_win.f0 = prm.f0, g_win.family = sc.family;
 
-  vk.CmdFillBuffer(cmd, g_host, stat_off(slot), kStatBytes, 0);
+  // The previous frame's copy out of g_dev (an earlier command buffer) before this fill.
+  memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT);
+  vk.CmdFillBuffer(cmd, g_dev, 0, kStatBytes, 0);   // the device-local counters (copied to the slot below)
   if (!g_img_init) {
     image_barrier(cmd, g_out.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     image_barrier(cmd, g_t.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
@@ -787,7 +826,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
       {in.vp.buffer, in.vp.offset, in.vp.range},
       {g_rts, 0, kRtStatsBytes},
       {g_host, param_off(slot), sizeof(Params)},
-      {g_host, stat_off(slot), kStatBytes},
+      {g_dev, 0, kStatBytes},
       cam2 ? VkDescriptorBufferInfo{in.cam2.buffer, in.cam2.offset, 224} : VkDescriptorBufferInfo{in.cam.buffer, in.cam.offset, in.cam.range},
       {}};
   VkDescriptorImageInfo imgs[6] = {{VK_NULL_HANDLE, in.mat.view, in.mat.layout}, {VK_NULL_HANDLE, in.dep.view, in.dep.layout},
@@ -816,7 +855,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
       case 65: wr[i].pBufferInfo = &bufs[5]; break;
     }
   }
-  const uint32_t gx = (in.w + 7) / 8, gy = (in.h + 7) / 8;
+  const uint32_t gx = (in.w + kGroup - 1) / kGroup, gy = (in.h + kGroup - 1) / kGroup;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_primary.p);
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 0, kNumBind, wr);
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 1, 1, &in.alpha, 0, nullptr);
@@ -826,8 +865,12 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_reflect.p);
   vk.CmdDispatch(cmd, gx, gy, 1);
   if (g_qp) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_qp, slot * 2 + 1);
-  // The views (later passes, other command buffers) and the host read of the statistics.
-  memory_barrier(cmd, kCS, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT);
+  // The views (later passes, other command buffers), the copy of the counters to this slot and
+  // its host read kRing frames later.
+  memory_barrier(cmd, kCS, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
+  const VkBufferCopy cp{0, stat_off(slot), kStatBytes};
+  vk.CmdCopyBuffer(cmd, g_dev, g_host, 1, &cp);
+  memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
   g_written[slot] = true;
   g_out_frame = now;
   g_out_w = in.w, g_out_h = in.h;
@@ -892,10 +935,10 @@ void water_release() {
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_view_dsl);
   g_layout = g_view_layout = VK_NULL_HANDLE;
   g_push = g_view_dsl = g_alpha_layout = VK_NULL_HANDLE;
-  for (VkBuffer* b : {&g_host, &g_rts}) host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)*b), *b = VK_NULL_HANDLE;
-  for (VkDeviceMemory* m : {&g_host_mem, &g_rts_mem}) host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)*m), *m = VK_NULL_HANDLE;
+  for (VkBuffer* b : {&g_host, &g_rts, &g_dev}) host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)*b), *b = VK_NULL_HANDLE;
+  for (VkDeviceMemory* m : {&g_host_mem, &g_rts_mem, &g_dev_mem})
+    host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)*m), *m = VK_NULL_HANDLE;
   g_map = nullptr;
-  g_rts_map = nullptr;
   if (g_qp) host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_qp);
   g_qp = VK_NULL_HANDLE;
   for (bool& w : g_written) w = false;

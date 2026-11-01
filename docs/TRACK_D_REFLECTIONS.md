@@ -281,7 +281,9 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   shows shaded tier (b) white.
 - **Expected bias of L_b vs L_a** (the gate measures it): L_a carries the GI/RT AO darkening,
   the game's native sun mask and D-RF's own reflections at the hit; L_b has AO 1 and the
-  probe. Emission and local diffuse probes are missing from L_b (counted). The sun ray traces
+  probe. Emission and local diffuse probes are missing from L_b (counted). Emission: L_a lacks it too
+  (prevRadiance is before compose); `rt_hit_emission` adds it to shaded tier (b) hits, and with `=2` to
+  tier (a) hits after this check (TRACK_D_EMISSIVE 13.23). The sun ray traces
   mask 0x01 in the cascade variants (no off-camera cascade casters).
 - **Offline gates.** `py -3 tests/rf_hit_shade_shader_test.py`: every key-off request of the
   merge-base compiles byte-identical (rt_reflections, its SHaRC variant, D-LS, gi_hit_direct: 644/644);

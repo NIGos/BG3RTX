@@ -9,7 +9,9 @@
 //   - box light: f469db78's box loop (shaders/rt/bg3_boxes.hlsli): colour x ramp x edges along _m9;
 //   - BSDF: the declared PBRT/Ashikhmin-Shirley FresnelBlend with GGX D (common/transport_bsdf.h);
 //   - AO: the hybrid GI rule (gi_trace_rt.hlsl): weight 1 - (t/R)^2, closed form for a wall;
-//   - sun disc: rt_shadow.hlsl's uniform tangent-disc sample, circular-segment area for an edge.
+//   - sun disc: rt_shadow.hlsl's uniform tangent-disc sample, circular-segment area for an edge;
+//   - emission at hits (rt_hit_emission): the D-EM record radiance (em_common.hlsli em_radiance), the
+//     record policy and the latency shift, on coplanar emissive quads in an emissive TLAS of their own.
 // Tolerance (derived, not tuned): every consumer stores these radiances in FP16 targets (giRaw,
 // rf output: rgba16f), whose rounding is half an ULP = 2^-11 relative. A GPU FP32 difference below
 // that is invisible; the FP32 shader error itself (pow/exp2/log2 within 3 + 2|x| ULP, rsqrt 2 ULP,
@@ -33,6 +35,7 @@
 #include <string>
 #include <vector>
 #pragma comment(lib, "vulkan-1.lib")
+#include "../common/emissive_policy.h"   // em::EmRec and its flags: the record layout the host writes
 
 namespace {
 VkDevice dev;
@@ -221,14 +224,16 @@ void cube(Vec c, float h) {
 // case reaches another region's geometry: light rays < 10 m, AO rays 1 m, sun rays leave above z 100).
 constexpr float kY = 60;
 float cx(int k) { return -950.0f + 100.0f * k; }
-enum { RPoint, RLamp, ROcc, RSunOpen, RRoof, RDisc, RCorner, RAoOpen, RBox, RBoxShadow, REnergy, RCount };
+enum { RPoint, RLamp, ROcc, RSunOpen, RRoof, RDisc, RCorner, RAoOpen, RBox, RBoxShadow, REnergy, REmit, RCount };
 
 struct FxCase { float p[3]; uint32_t mode; float n[3]; uint32_t key; float v[3]; float footprint; float c48[3]; float rough, metal, refl;
                 uint32_t channel, pad; };
 static_assert(sizeof(FxCase) == 80);
 struct FxOut { float a[3]; uint32_t sa; float b[3]; uint32_t sb; float c[3]; uint32_t lights; float ao, factor, unused; uint32_t mstatus; };
 static_assert(sizeof(FxOut) == 64);
-enum { kFxDirect = 0, kFxSun = 1, kFxAo = 2, kFxFurnace = 3, kFxCombined = 4, kFxSunDir = 5 };
+enum { kFxDirect = 0, kFxSun = 1, kFxAo = 2, kFxFurnace = 3, kFxCombined = 4, kFxSunDir = 5, kFxEmission = 6 };
+// native_hit_emission.hlsli statuses.
+enum { kHeUsed = 0, kHeNone = 1, kHeExcluded = 2, kHeUnvalidated = 3 };
 constexpr uint32_t kHdOk = 0;
 
 struct Dispatch {
@@ -371,6 +376,7 @@ int main(int argc, char** argv) {
     quad({cx(RCorner), kY - 15, 0}, {cx(RCorner), kY + 15, 0}, {cx(RCorner), kY + 15, 10}, {cx(RCorner), kY - 15, 10});   // wall x = cx
     for (int k : {RBox, RBoxShadow}) hquad(cx(k) - 1.75f, cx(k) - 1.25f, kY - 0.25f, kY + 0.25f, 2.0f);   // D: inside the box
     hquad(cx(RBoxShadow) + 3.75f, cx(RBoxShadow) + 4.25f, kY - 0.25f, kY + 0.25f, 6.0f);                    // E: beyond the box
+    hquad(cx(REmit) + 0.5f, cx(REmit) + 1.5f, kY - 0.5f, kY + 0.5f, 2.5f);                                  // F: over the emitter
     const uint32_t triangles = uint32_t(soup.size() / 9);
     Buffer vertices, instances, blasStore, tlasStore, scratch;
     const auto inputUsage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -410,6 +416,73 @@ int main(int argc, char** argv) {
     const VkDeviceSize alignment = std::max<VkDeviceSize>(asProps.minAccelerationStructureScratchOffsetAlignment, 1);
     make_buffer(scratch, std::max(bs.buildScratchSize, ts.buildScratchSize) + alignment, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
     bottom.scratchData.deviceAddress = top.scratchData.deviceAddress = (scratch.address + alignment - 1) / alignment * alignment;
+
+    // ---- the emissive scene (case 7; layer/emissive.cpp's format): one BLAS of five draws (one geometry
+    // each, the geometry index is the emInfo entry), coplanar with region REmit's floor (z = 0), one TLAS ----
+    struct EmVertex { float p[3]; float pad; float uv[2]; float pad2[2]; };   // soup stride 32, uv at +16
+    static_assert(sizeof(EmVertex) == 32);
+    constexpr int kEmDraws = 5;
+    const float ec = cx(REmit);
+    const float emX[kEmDraws] = {ec, ec + 5, ec - 5, ec + 9, ec - 9}, emHalf[kEmDraws] = {2, 1, 1, 1, 1};
+    std::vector<EmVertex> emVerts;
+    for (int g = 0; g < kEmDraws; ++g) {
+      const float x0 = emX[g] - emHalf[g], x1 = emX[g] + emHalf[g], y0 = kY - 2, y1 = kY + 2;
+      const EmVertex q[4] = {{{x0, y0, 0}, 0, {0, 0}, {}}, {{x1, y0, 0}, 0, {1, 0}, {}}, {{x1, y1, 0}, 0, {1, 1}, {}}, {{x0, y1, 0}, 0, {0, 1}, {}}};
+      for (int i : {0, 1, 2, 0, 2, 3}) emVerts.push_back(q[i]);
+    }
+    Buffer emSoupBuf, emInstances, emBlasStore, emTlasStore, emScratch;
+    make_buffer(emSoupBuf, emVerts.size() * sizeof(EmVertex), inputUsage); std::memcpy(emSoupBuf.map, emVerts.data(), emVerts.size() * sizeof(EmVertex));
+    make_buffer(emInstances, 64, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+    std::vector<VkAccelerationStructureGeometryKHR> emGeoms(kEmDraws, geometry);
+    std::vector<uint32_t> emTris(kEmDraws, 2);
+    for (int g = 0; g < kEmDraws; ++g) {
+      auto& t = emGeoms[g].geometry.triangles;
+      t.vertexData.deviceAddress = emSoupBuf.address + VkDeviceAddress(g) * 6 * sizeof(EmVertex);
+      t.vertexStride = sizeof(EmVertex); t.maxVertex = 5;
+    }
+    VkAccelerationStructureBuildGeometryInfoKHR emBottom = bottom;
+    emBottom.geometryCount = kEmDraws; emBottom.pGeometries = emGeoms.data(); emBottom.dstAccelerationStructure = VK_NULL_HANDLE;
+    VkAccelerationStructureBuildSizesInfoKHR ebs{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+    sizesAS(dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &emBottom, emTris.data(), &ebs);
+    make_buffer(emBlasStore, ebs.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false);
+    ac.buffer = emBlasStore.b; ac.size = ebs.accelerationStructureSize; ac.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    VkAccelerationStructureKHR emBlas; vkcheck(createAS(dev, &ac, nullptr, &emBlas), "emissive BLAS"); emBottom.dstAccelerationStructure = emBlas;
+    ba.accelerationStructure = emBlas;
+    VkAccelerationStructureInstanceKHR emObject = object;
+    emObject.accelerationStructureReference = addressAS(dev, &ba);
+    std::memcpy(emInstances.map, &emObject, sizeof emObject);
+    VkAccelerationStructureGeometryKHR emTopGeometry = topGeometry;
+    emTopGeometry.geometry.instances.data.deviceAddress = emInstances.address;
+    VkAccelerationStructureBuildGeometryInfoKHR emTop = top;
+    emTop.pGeometries = &emTopGeometry; emTop.dstAccelerationStructure = VK_NULL_HANDLE;
+    VkAccelerationStructureBuildSizesInfoKHR ets{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+    sizesAS(dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &emTop, &one, &ets);
+    make_buffer(emTlasStore, ets.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false);
+    ac.buffer = emTlasStore.b; ac.size = ets.accelerationStructureSize; ac.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    VkAccelerationStructureKHR emTlas; vkcheck(createAS(dev, &ac, nullptr, &emTlas), "emissive TLAS"); emTop.dstAccelerationStructure = emTlas;
+    make_buffer(emScratch, std::max(ebs.buildScratchSize, ets.buildScratchSize) + alignment, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
+    emBottom.scratchData.deviceAddress = emTop.scratchData.deviceAddress = (emScratch.address + alignment - 1) / alignment * alignment;
+    // Records (em::EmRec, the host's layout): 0 constant, 1 x mask.r (texture 1), 2 approximate (not
+    // calibrated), 3 approximate and calibrated, 4 excluded. InstInfo: base, stride | kEmInfoEmissive, record, triangles.
+    Buffer emInfoBuf, emPoolBuf, emRecBuf, emLightBuf, emStatsBuf, emHeaderBuf, emGlobalBuf;
+    make_buffer(emInfoBuf, 16 * kEmDraws, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT); make_buffer(emPoolBuf, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    make_buffer(emRecBuf, sizeof(bg3::em::EmRec) * kEmDraws, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT); make_buffer(emLightBuf, 80, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    make_buffer(emStatsBuf, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT); make_buffer(emHeaderBuf, 4096, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    make_buffer(emGlobalBuf, 64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    const float emRad[kEmDraws][3] = {{3, 2, 1}, {4, 4, 4}, {5, 5, 5}, {1, 0.5f, 0.25f}, {6, 6, 6}};
+    const uint32_t emFlags[kEmDraws] = {0, 0, bg3::em::kFlagApprox, bg3::em::kFlagApprox | bg3::em::kFlagCalibrated, bg3::em::kFlagExcluded};
+    for (int g = 0; g < kEmDraws; ++g) {
+      bg3::em::EmRec r{};
+      std::memcpy(r.radiance, emRad[g], 12);
+      r.mode = g == 1 ? bg3::em::kModeMaskR : bg3::em::kModeConst;
+      r.tex = g == 1 ? 1u : 0u;
+      r.uv[0] = r.uv[1] = 1; r.uv2[0] = r.uv2[1] = 1;
+      r.flags = emFlags[g]; r.glob = 0xFFFFFFFFu; r.draw = uint32_t(g);
+      std::memcpy(static_cast<char*>(emRecBuf.map) + g * sizeof r, &r, sizeof r);
+      const uint32_t info[4] = {uint32_t(g * 6 * sizeof(EmVertex)), uint32_t(sizeof(EmVertex)) | (1u << 11), uint32_t(g), 2u};
+      std::memcpy(static_cast<char*>(emInfoBuf.map) + g * 16, info, 16);
+    }
+    { auto* h = static_cast<uint32_t*>(emHeaderBuf.map); h[2] = 1; h[3] = kEmDraws; h[7] = 1; }   // build camera (words 8-10) at 0
 
     // ---- resources of the four sets (the bindings spirv-reflect lists for the fixture SPIR-V) ----
     Buffer cam, viewport, stats, lflags, lscale, lclusters, lindex, llights, lconsts, cam2, cases, out;
@@ -455,6 +528,10 @@ int main(int argc, char** argv) {
     vkcheck(vkCreateImageView(dev, &vi, nullptr, &view), "view");
     vi.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY; vkcheck(vkCreateImageView(dev, &vi, nullptr, &arrayView), "array view");
     vi.image = slots; vi.viewType = VK_IMAGE_VIEW_TYPE_2D; vi.format = VK_FORMAT_R32G32B32A32_UINT; vkcheck(vkCreateImageView(dev, &vi, nullptr, &slotsView), "slots view");
+    // The emissive mask (case 7): a 1x1 RGBA16F image, r = 0.25 (exact in FP16; any linear sample of one texel is it).
+    VkImage mask; VkDeviceMemory maskMem; VkImageView maskView;
+    make_image(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, 1, 1, mask, maskMem);
+    vi.image = mask; vi.viewType = VK_IMAGE_VIEW_TYPE_2D; vi.format = VK_FORMAT_R16G16B16A16_SFLOAT; vkcheck(vkCreateImageView(dev, &vi, nullptr, &maskView), "mask view");
     VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     si.magFilter = si.minFilter = VK_FILTER_LINEAR; si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     VkSampler sampler; vkcheck(vkCreateSampler(dev, &si, nullptr, &sampler), "sampler");
@@ -468,10 +545,14 @@ int main(int argc, char** argv) {
         {0, 46, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}, {0, 60, S, 1}, {0, 61, S, 1},
         {1, 0, S, 1}, {1, 1, S, 1}, {1, 2, I, 4096}, {1, 3, I, 16}, {1, 4, M, 1}, {1, 5, M, 1}, {1, 6, S, 1}, {1, 7, S, 1}, {1, 8, S, 1}, {1, 9, S, 1},
         {2, 16, M, 1}, {2, 29, S, 1}, {2, 45, I, 1},
-        {3, 0, U, 1}, {3, 1, I, 1}, {3, 2, I, 1}, {3, 3, I, 1}, {3, 4, I, 1}, {3, 5, I, 1}, {3, 6, M, 1}};
-    VkDescriptorSetLayout setLayouts[4];
+        {3, 0, U, 1}, {3, 1, I, 1}, {3, 2, I, 1}, {3, 3, I, 1}, {3, 4, I, 1}, {3, 5, I, 1}, {3, 6, M, 1},
+        // the emissive scene (em_common.hlsli, EM_SET 4): the host's layout (common/hit_emission_bindings.h)
+        {4, 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1}, {4, 1, S, 1}, {4, 2, S, 1}, {4, 3, S, 1}, {4, 4, S, 1}, {4, 5, S, 1},
+        {4, 6, I, 256}, {4, 7, M, 1}, {4, 8, S, 1}, {4, 9, S, 1}, {4, 10, S, 1}, {4, 11, I, 16}};
+    constexpr uint32_t kSets = 5;
+    VkDescriptorSetLayout setLayouts[kSets];
     std::vector<VkDescriptorPoolSize> poolSizes;
-    for (uint32_t s = 0; s < 4; ++s) {
+    for (uint32_t s = 0; s < kSets; ++s) {
       std::vector<VkDescriptorSetLayoutBinding> list;
       for (const B& b : bindings) if (b.set == s) {
         list.push_back({b.binding, b.type, b.count, VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
@@ -482,10 +563,10 @@ int main(int argc, char** argv) {
       vkcheck(vkCreateDescriptorSetLayout(dev, &dl, nullptr, setLayouts + s), "set layout");
     }
     VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-    dp.maxSets = 4; dp.poolSizeCount = uint32_t(poolSizes.size()); dp.pPoolSizes = poolSizes.data();
+    dp.maxSets = kSets; dp.poolSizeCount = uint32_t(poolSizes.size()); dp.pPoolSizes = poolSizes.data();
     VkDescriptorPool descriptorPool; vkcheck(vkCreateDescriptorPool(dev, &dp, nullptr, &descriptorPool), "descriptor pool");
-    VkDescriptorSet sets[4];
-    VkDescriptorSetAllocateInfo da{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO}; da.descriptorPool = descriptorPool; da.descriptorSetCount = 4; da.pSetLayouts = setLayouts;
+    VkDescriptorSet sets[kSets];
+    VkDescriptorSetAllocateInfo da{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO}; da.descriptorPool = descriptorPool; da.descriptorSetCount = kSets; da.pSetLayouts = setLayouts;
     vkcheck(vkAllocateDescriptorSets(dev, &da, sets), "descriptor sets");
     auto writeBuffer = [&](uint32_t s, uint32_t b, const Buffer& buffer, VkDescriptorType type, VkDeviceSize range = VK_WHOLE_SIZE) {
       VkDescriptorBufferInfo bi{buffer.b, 0, range};
@@ -507,14 +588,24 @@ int main(int argc, char** argv) {
     writeImages(1, 2, I, 4096, view, RO); writeImages(1, 3, I, 16, arrayView, RO); writeImages(1, 4, M, 1, view, RO); writeImages(1, 5, M, 1, view, RO);
     writeImages(2, 16, M, 1, view, RO); writeBuffer(2, 29, boxes, S); writeImages(2, 45, I, 1, view, RO);
     writeBuffer(3, 0, atmo, U); for (uint32_t b = 1; b <= 5; ++b) writeImages(3, b, I, 1, view, RO); writeImages(3, 6, M, 1, view, RO);
+    writeBuffer(4, 1, emInfoBuf, S); writeBuffer(4, 2, emPoolBuf, S); writeBuffer(4, 3, emSoupBuf, S); writeBuffer(4, 4, emRecBuf, S);
+    writeBuffer(4, 5, emLightBuf, S); writeBuffer(4, 8, emStatsBuf, S); writeBuffer(4, 9, emHeaderBuf, S); writeBuffer(4, 10, emGlobalBuf, S);
+    writeImages(4, 6, I, 256, view, RO); writeImages(4, 7, M, 1, view, RO); writeImages(4, 11, I, 16, arrayView, RO);
+    {   // emTex[1]: the mask
+      VkDescriptorImageInfo mi{VK_NULL_HANDLE, maskView, RO};
+      VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}; w.dstSet = sets[4]; w.dstBinding = 6; w.dstArrayElement = 1; w.descriptorCount = 1;
+      w.descriptorType = I; w.pImageInfo = &mi; vkUpdateDescriptorSets(dev, 1, &w, 0, nullptr);
+    }
     {
       VkWriteDescriptorSetAccelerationStructureKHR aw{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR}; aw.accelerationStructureCount = 1; aw.pAccelerationStructures = &tlas;
       VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, &aw}; w.dstSet = sets[0]; w.dstBinding = 18; w.descriptorCount = 1; w.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
       vkUpdateDescriptorSets(dev, 1, &w, 0, nullptr);
+      aw.pAccelerationStructures = &emTlas; w.dstSet = sets[4]; w.dstBinding = 0;
+      vkUpdateDescriptorSets(dev, 1, &w, 0, nullptr);
     }
     VkPushConstantRange pushRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
     VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    pl.setLayoutCount = 4; pl.pSetLayouts = setLayouts; pl.pushConstantRangeCount = 1; pl.pPushConstantRanges = &pushRange;
+    pl.setLayoutCount = kSets; pl.pSetLayouts = setLayouts; pl.pushConstantRangeCount = 1; pl.pPushConstantRanges = &pushRange;
     VkPipelineLayout layout; vkcheck(vkCreatePipelineLayout(dev, &pl, nullptr, &layout), "pipeline layout");
     VkPipeline pipeline;
     {
@@ -542,19 +633,24 @@ int main(int argc, char** argv) {
       VkAccelerationStructureBuildRangeInfoKHR br{triangles, 0, 0, 0}, tr{1, 0, 0, 0};
       const auto* bp = &br; const auto* tp = &tr;
       buildAS(cmd, 1, &bottom, &bp);
+      std::vector<VkAccelerationStructureBuildRangeInfoKHR> ebr(kEmDraws, VkAccelerationStructureBuildRangeInfoKHR{2, 0, 0, 0});
+      const auto* ebp = ebr.data();
+      buildAS(cmd, 1, &emBottom, &ebp);
       barrier(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
               VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
       buildAS(cmd, 1, &top, &tp);
+      buildAS(cmd, 1, &emTop, &tp);
       VkImageMemoryBarrier ib{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
       ib.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; ib.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; ib.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
       ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-      VkImageMemoryBarrier two[2] = {ib, ib}; two[0].image = texture; two[1].image = slots;
-      vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 2, two);
-      VkClearColorValue white{{1, 1, 1, 1}}, zero{}; vkCmdClearColorImage(cmd, texture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &white, 1, &ib.subresourceRange);
+      VkImageMemoryBarrier two[3] = {ib, ib, ib}; two[0].image = texture; two[1].image = slots; two[2].image = mask;
+      vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 3, two);
+      VkClearColorValue white{{1, 1, 1, 1}}, zero{}, quarter{{0.25f, 0.5f, 0.75f, 1}}; vkCmdClearColorImage(cmd, texture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &white, 1, &ib.subresourceRange);
       vkCmdClearColorImage(cmd, slots, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &ib.subresourceRange);
+      vkCmdClearColorImage(cmd, mask, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &quarter, 1, &ib.subresourceRange);
       for (auto& b : two) { b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; }
-      two[0].newLayout = RO; two[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
-      vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 2, two);
+      two[0].newLayout = RO; two[1].newLayout = VK_IMAGE_LAYOUT_GENERAL; two[2].newLayout = RO;
+      vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 3, two);
     });
     double gpuSeconds = 0;
     // One dispatch: upload its lights, boxes, sun and cases; run; return the results.
@@ -582,7 +678,7 @@ int main(int argc, char** argv) {
                 VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_UNIFORM_READ_BIT);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 4, sets, 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, kSets, sets, 0, nullptr);
         vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &d.push);
         vkCmdDispatch(cmd, uint32_t((d.cases.size() + 63) / 64), 1, 1);
         barrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
@@ -879,13 +975,60 @@ int main(int argc, char** argv) {
       report.line("6b hd_scatter == declared FresnelBlend", bsdf.ok, fmt("%.0f directions, worst rel %.2e", bsdf.n, bsdf.worst));
       report.line("6c white furnace albedo <= 1", furnaceOk, "max " + worst);
     }
+    // ---- 7. emission at hits (rt_hit_emission): native_hit_emission over the emissive scene ----
+    {
+      Dispatch d; d.push = default_push();
+      d.push.rt_ao_radius = 0.01f;   // HIT_EM_TOL = rt_em_tol (bg3rtx.ini)
+      // A ray straight down from z = 3 onto region REmit's floor (z = 0): the main TLAS hit is the floor,
+      // the emissive quad lies on it (the coplanar duplicate the host captures).
+      auto down = [&](float x, float y, Vec cam = {0, 0, 0}) {
+        FxCase c = make_case({x, y, 3}, kFxEmission);
+        c.v[0] = 0; c.v[1] = 0; c.v[2] = -1; c.footprint = 0.01f;
+        c.c48[0] = cam.x; c.c48[1] = cam.y; c.c48[2] = cam.z;
+        return c;
+      };
+      struct Want { const char* group; uint32_t status, rec; D3 L; };
+      std::vector<Want> want;
+      auto add = [&](const FxCase& c, const char* g, uint32_t st, uint32_t rec, D3 L) { d.cases.push_back(c); want.push_back({g, st, rec, L}); };
+      const D3 none{0, 0, 0};
+      for (float x : {-1.5f, -0.5f, 0.0f}) for (float y : {-1.5f, 0.0f, 1.5f})
+        add(down(ec + x, kY + y), "7a", kHeUsed, 0, {3, 2, 1});                  // constant record: its radiance exactly
+      for (float x : {-0.5f, 0.5f}) add(down(ec + 5 + x, kY + 1), "7b", kHeUsed, 1, {1, 1, 1});   // x mask.r 0.25
+      add(down(ec - 5, kY), "7c", kHeUnvalidated, 2, none);                         // approximate, not calibrated
+      add(down(ec + 9, kY), "7c", kHeUsed, 3, {1, 0.5, 0.25});                      // approximate, calibrated
+      add(down(ec - 9, kY), "7c", kHeExcluded, 4, none);                            // excluded family
+      add(down(ec + 12, kY), "7d", kHeNone, 0xFFFFFFFFu, none);                     // floor, no emitter
+      add(down(ec + 1, kY), "7d", kHeNone, 0xFFFFFFFFu, none);                      // occluder F in front (t 0.5)
+      // em_shift: the scene was built with the camera at 0; the camera is now at +0.5 x, so a point of this
+      // frame is 0.5 further along x in the scene: x = ec - 2.3 meets the quad (ec - 1.8), ec + 1.7 leaves it.
+      add(down(ec - 2.3f, kY, {0.5f, 0, 0}), "7e", kHeUsed, 0, {3, 2, 1});
+      add(down(ec + 1.7f, kY - 1.5f, {0.5f, 0, 0}), "7e", kHeNone, 0xFFFFFFFFu, none);
+      add(down(ec - 2.3f, kY), "7e", kHeNone, 0xFFFFFFFFu, none);                   // the same ray without the shift
+      auto r = run(d);
+      const char* groups[] = {"7a", "7b", "7c", "7d", "7e"};
+      const char* names[] = {"7a emissive quad: the record's radiance", "7b emissive quad: radiance x mask.r",
+                             "7c record policy (approx/calibrated/excluded)", "7d no emitter / occluder in front: 0",
+                             "7e latency shift em_shift (sign)"};
+      for (int gi = 0; gi < 5; ++gi) {
+        Cmp cmp; bool ok = true; int n = 0;
+        for (size_t i = 0; i < r.size(); ++i) {
+          if (std::strcmp(want[i].group, groups[gi]) != 0) continue;
+          ++n;
+          compare(cmp, r[i].a, r[i].sa, want[i].L, want[i].status);
+          if (r[i].sb != want[i].rec) { ok = false; std::printf("  record %u (want %u)\n", r[i].sb, want[i].rec); }
+          if (r[i].b[1] != 0.0f) { ok = false; std::printf("  main query aborted\n"); }
+        }
+        report.line(names[gi], ok && cmp.ok && n > 0, fmt("%.0f rays, worst rel %.2e", n, cmp.worst));
+      }
+    }
     std::printf("dispatch+readback %.3f s\n", gpuSeconds);
     vkDeviceWaitIdle(dev);
     vkDestroyCommandPool(dev, commandPool, nullptr); vkDestroyPipeline(dev, pipeline, nullptr); vkDestroyPipelineLayout(dev, layout, nullptr);
     vkDestroyDescriptorPool(dev, descriptorPool, nullptr); for (auto l : setLayouts) vkDestroyDescriptorSetLayout(dev, l, nullptr);
     vkDestroySampler(dev, sampler, nullptr); vkDestroyImageView(dev, view, nullptr); vkDestroyImageView(dev, arrayView, nullptr); vkDestroyImageView(dev, slotsView, nullptr);
     vkDestroyImage(dev, texture, nullptr); vkDestroyImage(dev, slots, nullptr); vkFreeMemory(dev, textureMem, nullptr); vkFreeMemory(dev, slotsMem, nullptr);
-    destroyAS(dev, tlas, nullptr); destroyAS(dev, blas, nullptr);
+    destroyAS(dev, tlas, nullptr); destroyAS(dev, blas, nullptr); destroyAS(dev, emTlas, nullptr); destroyAS(dev, emBlas, nullptr);
+    vkDestroyImageView(dev, maskView, nullptr); vkDestroyImage(dev, mask, nullptr); vkFreeMemory(dev, maskMem, nullptr);
   }
   vkDestroyDevice(dev, nullptr);
   destroyDebug(instance, messenger, nullptr);

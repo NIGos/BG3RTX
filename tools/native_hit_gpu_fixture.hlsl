@@ -19,6 +19,11 @@
 #include "../shaders/rt/native_hit_direct.hlsli"
 #define NATIVE_HIT_SUN_DISC 1
 #include "../shaders/rt/native_hit_sun.hlsli"
+// rt_hit_emission (case 7): the real em_lookup / em_radiance / record policy over an emissive scene of
+// its own (the host's set layout, shaders/rt/em_common.hlsli), here as set 4.
+#define EM_SET 4
+#include "../shaders/rt/em_common.hlsli"
+#include "../shaders/rt/native_hit_emission.hlsli"
 
 // Case record, 80 bytes (FxCase in the .cpp).
 //   0 p, 12 mode, 16 n, 28 key, 32 v (outgoing), 44 footprint, 48 albedo, 60 roughness,
@@ -27,9 +32,12 @@
 // Result record, 64 bytes: 0 a.rgb (point/spot/box direct, or the furnace f cos), 12 its status,
 //   16 b.rgb (sun; mode 5 the sun-disc sample direction), 28 its status, 32 c.rgb (direct .native), 44 lights, 48 AO, 52 AO-on-direct factor,
 //   56 unused, 60 material status.
+// Mode 6 (emission): p is the ray origin, v its unit direction, c48 the absolute camera (em_shift), footprint
+//   the cone width; the main TLAS gives t (rt_closest_hit), then native_hit_emission: a.rgb its radiance,
+//   12 its status (kHe*), b.x the main hit t, b.y 1 if aborted, 28 the record index; material status 0.
 [[vk::binding(60, 0)]] ByteAddressBuffer fxCases;
 [[vk::binding(61, 0)]] RWByteAddressBuffer fxOut;
-static const uint kFxDirect = 0u, kFxSun = 1u, kFxAo = 2u, kFxFurnace = 3u, kFxCombined = 4u, kFxSunDir = 5u;
+static const uint kFxDirect = 0u, kFxSun = 1u, kFxAo = 2u, kFxFurnace = 3u, kFxCombined = 4u, kFxSunDir = 5u, kFxEmission = 6u;
 
 NativeHitMaterial fx_material(float3 albedo, float rough, float metal, float refl, float3 n, uint channel) {
   NtInput i;
@@ -86,6 +94,13 @@ void main(uint id : SV_DispatchThreadID) {
     inc.radiance = 1.0.xxx; inc.direction = c48; inc.distance = 0; inc.status = HdOk;
     HdDirect t = hd_scatter(m.scattering, m.normal, n, v, inc, true, 1.0);
     ra = t.radiance; sa = t.status;
+  }
+  if (mode == kFxEmission) {
+    RtCone cone = {footprint, 0.0};
+    const RtHit h = rt_closest_hit(p, v, 100.0, cone);
+    const HitEmission e = native_hit_emission(p, v, h.t, p + v * h.t, footprint, c48, HIT_EM_TOL);
+    ra = e.radiance; sa = e.status; rb = float3(h.t, h.aborted ? 1.0 : 0.0, 0.0); sb = e.rec;
+    m.status = 0u;   // no material in this mode
   }
   fxOut.Store3(o, asuint(ra)); fxOut.Store(o + 12u, sa);
   fxOut.Store3(o + 16u, asuint(rb)); fxOut.Store(o + 28u, sb);

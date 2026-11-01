@@ -120,9 +120,10 @@ struct Push {
   float rt_bias, rt_tmax;
   uint32_t rt_debug;
   float rt_strength;
-  float rt_ao_radius;   // unused, 0 (rt_ao removed 2026-10-31)
+  float rt_ao_radius;   // rt_hit_emission dispatches only: rt_em_tol (native_hit_emission.hlsli HIT_EM_TOL); else unused, 0
   uint32_t rt_ao_rays;  // hit_ao_rays: AO rays at gi_hit_direct / rf_hit_shade hits (native_hit_direct.hlsli native_hit_ao)
-  uint32_t ls_kmode, sharc_fx;   // sharc_fx: sharc_inject.hlsl, the D-EM effects target is bound (49); ls_kmode: unused, 0 (ls_k removed 2026-10-31)
+  uint32_t ls_kmode, sharc_fx;   // sharc_fx: sharc_inject.hlsl, the D-EM effects target is bound (49); ls_kmode: rt_hit_emission
+                                 // dispatches only, bit 0 screen hits too (HIT_EM_FLAGS); else unused, 0 (ls_k removed 2026-10-31)
   float gi_rt_radius, gi_rt_tol;
   uint32_t gi_rt_fallback, rt_stats;
   float sun_radius;
@@ -263,6 +264,14 @@ Pipe g_rf;
 Pipe g_rf_shade, g_rf_shade_sharc;
 VkPipelineLayout g_rf_shade_layout = VK_NULL_HANDLE, g_rf_shade_sharc_layout = VK_NULL_HANDLE;
 bool g_rf_hit_logged = false, g_rf_hit_contract_logged = false;
+// rt_hit_emission (M4.4, rt/native_hit_emission.hlsli): the hit-GI and rf_hit_shade variants with the
+// host's D-EM emissive scene (Bg3HostApi::rt_emissive) as one more set: GI set 2 (the empty one),
+// D-RF set 5. Index: GI [2 x sun + sharc], D-RF [sharc]. Built over the host's emissive set layout
+// (g_hit_em_dsl): dropped if it changes, and the D-RF ones with ensure_rf_layout's.
+Pipe g_hit_gi_em[4], g_rf_shade_em[2];
+VkPipelineLayout g_hit_gi_em_layout[4] = {}, g_rf_shade_em_layout[2] = {};
+VkDescriptorSetLayout g_hit_em_dsl = VK_NULL_HANDLE;
+bool g_hit_em_logged = false;
 bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
@@ -609,11 +618,11 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
     host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_sharc_layout);
     g_rf_sharc = Pipe{};
     g_rf_sharc_layout = VK_NULL_HANDLE;
-    for (Pipe* p : {&g_rf_shade, &g_rf_shade_sharc}) {
+    for (Pipe* p : {&g_rf_shade, &g_rf_shade_sharc, &g_rf_shade_em[0], &g_rf_shade_em[1]}) {
       for (VkPipeline v : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
       *p = Pipe{};
     }
-    for (VkPipelineLayout* l : {&g_rf_shade_layout, &g_rf_shade_sharc_layout}) {
+    for (VkPipelineLayout* l : {&g_rf_shade_layout, &g_rf_shade_sharc_layout, &g_rf_shade_em_layout[0], &g_rf_shade_em_layout[1]}) {
       host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
       *l = VK_NULL_HANDLE;
     }
@@ -991,7 +1000,12 @@ constexpr double kRfHitScale = 8192.0;   // fxh in rt_reflections.hlsl
 static_assert(bg3::transport::NtsStatsCount == kRfHitFirst, "rf hit shade counters follow the tileset ones");
 constexpr uint32_t kGiSunFirst = kHitPolicyFirst + kHitPolicyCount, kGiSunCount = 11;
 static_assert(kGiSunFirst == 320, "native_hit_sun.hlsli NATIVE_HIT_SUN_STAT_BASE 320 (gi_trace_rt.hlsl RT_HIT_GI_SUN)");
-constexpr uint32_t kStatsCounters = kGiSunFirst + kGiSunCount; //253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+// [331..349] rt_hit_emission (rt/native_hit_emission.hlsli kHitEmStatFirst): per domain (GI hidden hits,
+// GI screen hits, D-RF tier b, D-RF tier a) lookups / emissive hits used / skipped by the record policy /
+// added luminance x 1024 (clamped at 64); excluded-family hits, unvalidated-family hits, clamped values.
+constexpr uint32_t kHitEmFirst = kGiSunFirst + kGiSunCount, kHitEmCount = 19;
+static_assert(kHitEmFirst == 331, "native_hit_emission.hlsli kHitEmStatFirst 331");
+constexpr uint32_t kStatsCounters = kHitEmFirst + kHitEmCount; //331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
@@ -1057,6 +1071,32 @@ void rf_hit_fold(const uint32_t* c) {
                 t[9] ? double(t[8]) / double(t[9]) : 0.0, t[9] ? double(t[18]) / double(t[9]) : 0.0);
   }
   g_rfh = RfHitWindow{};
+}
+
+// rt_hit_emission: its own 300-frame window (GI counts under rt_stats, D-RF under rf_stats).
+struct HitEmWindow {
+  uint64_t sum[kHitEmCount] = {};
+  uint32_t frames = 0;
+} g_hem;
+
+void hit_em_fold(const uint32_t* c) {
+  for (uint32_t i = 0; i < kHitEmCount; ++i)
+    for (int b = 0; b < 64; ++b) g_hem.sum[i] += c[(kHitEmFirst + i) * 64 + b];
+  if (++g_hem.frames < 300) return;
+  const uint64_t* t = g_hem.sum;
+  if (t[0] | t[4] | t[8] | t[12]) {
+    auto u = [&](uint32_t i) { return (unsigned long long)t[i]; };
+    const double q = 1.0 / 1024.0;
+    const int pulse = host->cfg_int("rt_em_fx_pulse", 0);
+    host->log("hit emission (%u frames): GI hidden hits: lookups %llu, emissive %llu, skipped %llu, added weighted luminance %.4f; "
+              "GI screen hits: lookups %llu, emissive %llu, skipped %llu, added %.4f; rf tier b: lookups %llu, emissive %llu, "
+              "skipped %llu, added luminance %.4f; rf tier a: lookups %llu, emissive %llu, skipped %llu, added %.4f; "
+              "skipped by family: excluded %llu, approximate uncalibrated %llu; clamped %llu; capture exclusion "
+              "rt_em_fx_pulse=%d (304be1c7 %s; its draws are on the [em] soup line)",
+              g_hem.frames, u(0), u(1), u(2), t[3] * q, u(4), u(5), u(6), t[7] * q, u(8), u(9), u(10), t[11] * q, u(12), u(13),
+              u(14), t[15] * q, u(16), u(17), u(18), pulse, pulse ? "captured" : "not captured");
+  }
+  g_hem = HitEmWindow{};
 }
 
 bool stats_init() {
@@ -1128,6 +1168,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
         for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
     for (int i = 27; i <= 30; ++i) std::memcpy(&g_ls_raw[i - 27], &c[i * 64], 4);   // raw floats (latest)
     rf_hit_fold(c);
+    hit_em_fold(c);
     std::memcpy(&g_frame_m4, &c[70 * 64], 4);
     if (c[152 * 64]) {
       float pose[7];
@@ -1698,6 +1739,88 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
   return true;
 }
 
+// ---- rt_hit_emission (M4.4): the emissive scene set for the hit-GI / rf_hit_shade variants ----
+void hit_em_drop() {
+  for (Pipe* p : {&g_hit_gi_em[0], &g_hit_gi_em[1], &g_hit_gi_em[2], &g_hit_gi_em[3], &g_rf_shade_em[0], &g_rf_shade_em[1]}) {
+    for (VkPipeline v : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
+    *p = Pipe{};
+  }
+  for (VkPipelineLayout* l : {&g_hit_gi_em_layout[0], &g_hit_gi_em_layout[1], &g_hit_gi_em_layout[2], &g_hit_gi_em_layout[3],
+                              &g_rf_shade_em_layout[0], &g_rf_shade_em_layout[1]}) {
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
+    *l = VK_NULL_HANDLE;
+  }
+  g_hit_em_dsl = VK_NULL_HANDLE;
+}
+
+// The host's emissive scene to bind in `cmd` when rt_hit_emission is on (needs rt_emissive=1): the latest
+// build's set when it is at most 3 frames old (em_debug's rule), else VK_NULL_HANDLE (the variants
+// without emission run, as with the key off). Asking keeps the scene's game images alive until `cmd` ran.
+VkDescriptorSet hit_em_set(VkCommandBuffer cmd) {
+  if (host->cfg_int("rt_hit_emission", 0) <= 0 || !host->rt_emissive) return VK_NULL_HANDLE;
+  VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+  VkDescriptorSet set = VK_NULL_HANDLE;
+  Bg3EmissiveInfo info{};
+  if (!host->rt_emissive(cmd, &layout, &set, &info) || !set || !layout || info.built_frame + 3 < host->frame_index())
+    return VK_NULL_HANDLE;
+  if (g_hit_em_dsl != layout) {   // the host's layout never changes in practice
+    if (g_hit_em_dsl) host->log("hit emission: the emissive set layout changed; rebuilding its variants");
+    hit_em_drop();
+    g_hit_em_dsl = layout;
+  }
+  return set;
+}
+
+// The push fields the emission variants read (native_hit_emission.hlsli HIT_EM_FLAGS / HIT_EM_TOL), and
+// the dependency on the emissive build (the host's own submission after the previous frame's), as em_debug.
+void hit_em_prepare(VkCommandBuffer cmd, Push& hp) {
+  hp.ls_kmode = host->cfg_int("rt_hit_emission", 0) >= 2 ? 1u : 0u;
+  hp.rt_ao_radius = host->cfg_float("rt_em_tol", 0.01f);
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+  host->vk->CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+                               VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+}
+
+bool make_em_layout(VkDescriptorSetLayout* sets, uint32_t n, VkPipelineLayout& out) {
+  if (out) return true;
+  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
+  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  lci.setLayoutCount = n;
+  lci.pSetLayouts = sets;
+  lci.pushConstantRangeCount = 1;
+  lci.pPushConstantRanges = &pc;
+  if (host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &out) != VK_SUCCESS) {
+    out = VK_NULL_HANDLE;
+    return false;
+  }
+  return true;
+}
+
+bool ensure_empty_dsl() {
+  if (g_empty_dsl) return true;
+  VkDescriptorSetLayoutCreateInfo ei{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+  return host->vk->CreateDescriptorSetLayout(host->device, &ei, nullptr, &g_empty_dsl) == VK_SUCCESS;
+}
+
+// rf_hit_shade + emission: rf_hit_shade's sets 0-3, set 4 SHaRC's (or empty), set 5 the emissive scene.
+bool ensure_rf_hit_em_layout(bool sharc) {
+  namespace rfh = bg3::native_hit_rf;
+  static_assert(rfh::kSetEmissive == 5);
+  VkPipelineLayout& out = g_rf_shade_em_layout[sharc ? 1 : 0];
+  if (out) return true;
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!g_hit_em_dsl || !ensure_rf_hit_layout(sharc) || !ensure_empty_dsl() || !host->rt_alpha ||
+      !host->rt_alpha(&host_layout, &unused) || !host_layout)
+    return false;
+  VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : g_empty_dsl;
+  if (!sh) return false;
+  VkDescriptorSetLayout sets[6] = {g_rf_set_layout, host_layout, g_rf_game_layout, g_sun_dsl, sh, g_hit_em_dsl};
+  return make_em_layout(sets, 6, out);
+}
+
 // rf_hit_shade (M4.2 tier b): the D-RF dispatch with the material AlphaDSL (rt_hit_material_use)
 // as set 1 and the sun set as set 3. False before anything is dispatched: the caller then runs the
 // ordinary D-RF, so a missing input keeps today's reflections exactly.
@@ -1710,9 +1833,16 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
     return false;
   const bool sharc = s.rf_sharc;
   if (!ensure_rf_hit_layout(sharc)) return false;
-  const VkPipelineLayout layout = sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
-  Pipe& p = sharc ? g_rf_shade_sharc : g_rf_shade;
-  if (!refresh(p, sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl", layout)) return false;
+  // rt_hit_emission: the same pass with the emissive scene as set 5; any missing piece runs it without.
+  const unsigned ei = sharc ? 1u : 0u;
+  VkDescriptorSet em = hit_em_set(cmd);
+  if (em && !(ensure_rf_hit_em_layout(sharc) &&
+              refresh(g_rf_shade_em[ei], sharc ? "gi/rt_reflections_sharc_hit_shade_em.hlsl" : "gi/rt_reflections_hit_shade_em.hlsl",
+                      g_rf_shade_em_layout[ei])))
+    em = VK_NULL_HANDLE;
+  const VkPipelineLayout layout = em ? g_rf_shade_em_layout[ei] : sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
+  Pipe& p = em ? g_rf_shade_em[ei] : sharc ? g_rf_shade_sharc : g_rf_shade;
+  if (!em && !refresh(p, sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl", layout)) return false;
   auto traversal = prepare_omm_traversal(cmd, b, p.pipeline);
   if (!traversal.valid()) return false;
   VkDescriptorSet material_alpha = b.alpha;
@@ -1726,6 +1856,7 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 3, sets, s.game_set1_ndyn,
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
   if (sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
+  if (em) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, bg3::native_hit_rf::kSetEmissive, 1, &em, 0, nullptr);
   // The hit light policy reads the per-light data from the sun set's b7 (ls_flags bit 0) when that
   // set holds the image and a join has run.
   Push hp = pc;
@@ -1735,8 +1866,14 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
   hp.ls_flags = (hp.ls_flags & ~1u) | (slots && g_lsl_ok && host->cfg_int("ls_lights", 1) ? 1u : 0u);
   // Bit 25: the sun set's b8 holds this frame's trust slot (roof volumes; native_hit_sun.hlsli).
   hp.ls_flags |= g_sunt_ok && g_sunt.view ? (1u << 25) : 0u;
+  if (em) hit_em_prepare(cmd, hp);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof hp, &hp);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  if (!g_hit_em_logged && host->cfg_int("rt_hit_emission", 0) > 0) {
+    g_hit_em_logged = true;
+    host->log("hit emission: first rf_hit_shade dispatch %s the emissive scene (sharc %d)",
+              em ? "with" : "without (no fresh D-EM build: needs rt_emissive=1)", sharc);
+  }
   return true;
 }
 
@@ -1812,6 +1949,20 @@ bool ensure_hit_gi_sun_layout(VkDescriptorSetLayout alpha,bool sharc){
  return true;
 }
 
+// The hit GI + emission: the GI hit push set, the material AlphaDSL set 1, the emissive scene set 2
+// (common/native_hit_gi_bindings.h kSetEmissive), the sun set 3 (gi_hit_sun) and SHaRC's set 4.
+bool ensure_hit_gi_em_layout(VkDescriptorSetLayout alpha, bool sun, bool sharc) {
+  static_assert(bg3::native_hit_gi::kSetEmissive == 2 && bg3::native_hit_gi::kSetSun == 3);
+  VkPipelineLayout& out = g_hit_gi_em_layout[(sun ? 2 : 0) + (sharc ? 1 : 0)];
+  if (out) return true;
+  if (!g_hit_em_dsl || !ensure_hit_gi_layout(alpha, sharc) || !g_hit_gi_set_layout || !ensure_empty_dsl()) return false;
+  if (sun && (!ensure_ls_layout() || !g_sun_dsl)) return false;
+  VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : VK_NULL_HANDLE;
+  if (sharc && !sh) return false;
+  VkDescriptorSetLayout sets[5] = {g_hit_gi_set_layout, alpha, g_hit_em_dsl, sun ? g_sun_dsl : g_empty_dsl, sh};
+  return make_em_layout(sets, sharc ? 5u : sun ? 4u : 3u, out);
+}
+
 // replay_pack (diagnostics, tools/frame_replay.md "Live writer"): a positive serial asks the host for
 // one replay pack of the next base-variant gi_hit_direct dispatch (once per serial, across core
 // reloads); -1 takes one with every trace. Capture only: called after the dispatch is recorded.
@@ -1823,7 +1974,8 @@ void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,
  int* done=static_cast<int*>(host->persist("bg3rtx.replay_pack.done",sizeof(int)));
  if(key>0 && *done==key)return;
  if(variant){
-  if(key>0)host->log("[replay] pack %d failed: gi_hit_direct runs the %s variant; the pack contract is the base variant (gi_hit_sun=0, sharc=0)",key,variant);
+  if(key>0 && std::strcmp(variant,"emission")==0)host->log("[replay] pack %d failed: gi_hit_direct runs the rt_hit_emission variant (set 2): emission variant not supported by the pack contract",key);
+  else if(key>0)host->log("[replay] pack %d failed: gi_hit_direct runs the %s variant; the pack contract is the base variant (gi_hit_sun=0, sharc=0)",key,variant);
   if(key>0)*done=key;
   return;
  }
@@ -1851,9 +2003,15 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
   if(!sun && !g_hit_gi_sun_logged)host->log("gi: gi_hit_sun: no sun set or layout this frame; the direct-only hit GI runs");
   g_hit_gi_sun_logged=g_hit_gi_sun_logged || !sun;
  }
- VkPipelineLayout layout=sun?(s.sharc?g_hit_gi_sun_sharc_layout:g_hit_gi_sun_layout):(s.sharc?g_hit_gi_layout:g_hit_gi_plain_layout);
- Pipe& p=sun?(s.sharc?g_hit_gi_sun_sharc:g_hit_gi_sun):(s.sharc?g_hit_gi_sharc:g_hit_gi);
- if(!refresh(p,sun?(s.sharc?"gi/gi_trace_rt_sharc_hit_sun.hlsl":"gi/gi_trace_rt_hit_sun.hlsl")
+ // rt_hit_emission: the same variant with the emissive scene as set 2; any missing piece runs it without.
+ const unsigned em_index=(sun?2u:0u)+(s.sharc?1u:0u);
+ static const char* const kEmFiles[4]={"gi/gi_trace_rt_hit_direct_em.hlsl","gi/gi_trace_rt_sharc_hit_direct_em.hlsl",
+                                       "gi/gi_trace_rt_hit_sun_em.hlsl","gi/gi_trace_rt_sharc_hit_sun_em.hlsl"};
+ VkDescriptorSet em=hit_em_set(cmd);
+ if(em && !(ensure_hit_gi_em_layout(alpha_layout,sun!=VK_NULL_HANDLE,s.sharc) && refresh(g_hit_gi_em[em_index],kEmFiles[em_index],g_hit_gi_em_layout[em_index])))em=VK_NULL_HANDLE;
+ VkPipelineLayout layout=em?g_hit_gi_em_layout[em_index]:sun?(s.sharc?g_hit_gi_sun_sharc_layout:g_hit_gi_sun_layout):(s.sharc?g_hit_gi_layout:g_hit_gi_plain_layout);
+ Pipe& p=em?g_hit_gi_em[em_index]:sun?(s.sharc?g_hit_gi_sun_sharc:g_hit_gi_sun):(s.sharc?g_hit_gi_sharc:g_hit_gi);
+ if(!em && !refresh(p,sun?(s.sharc?"gi/gi_trace_rt_sharc_hit_sun.hlsl":"gi/gi_trace_rt_hit_sun.hlsl")
                   :(s.sharc?"gi/gi_trace_rt_sharc_hit_direct.hlsl":"gi/gi_trace_rt_hit_direct.hlsl"),layout))return false;
  auto traversal=prepare_omm_traversal(cmd,b,p.pipeline);if(!traversal.valid())return false;
  VkDescriptorSet material_alpha=b.alpha;
@@ -1864,15 +2022,23 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,write_count,writes);
  vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,1,1,&material_alpha,0,nullptr);
  if(sun)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,bg3::native_hit_gi::kSetSun,1,&sun,0,nullptr);
+ if(em)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,bg3::native_hit_gi::kSetEmissive,1,&em,0,nullptr);
  if(s.sharc)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,4,1,&s.sh.set,0,nullptr);
  // The hit light policy's per-light data (b46): the latest join's, the GI runs before this
  // frame's (native_hit_direct.hlsli checks each slot's key).
  Push hp=pc;hp.ls_flags=(hp.ls_flags&~1u)|(g_lsl_ok && host->cfg_int("ls_lights",1)?1u:0u);
  // gi_hit_sun: bit 25, the sun set b8 holds this frame's trust slot (header and roof volumes).
  if(sun)hp.ls_flags|=g_sunt_ok && g_sunt.view?(1u<<25):0u;
+ if(em)hit_em_prepare(cmd,hp);
  vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof hp,&hp);
  vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);
- replay_after_hit_gi(cmd,writes,write_count,material_alpha,b.tlas,hp,sun?"gi_hit_sun":s.sharc?"SHaRC":nullptr);
+ if(!g_hit_em_logged && host->cfg_int("rt_hit_emission",0)>0){
+  g_hit_em_logged=true;
+  host->log("hit emission: first hit-GI dispatch %s the emissive scene (sun %d, sharc %d)",
+            em?"with":"without (no fresh D-EM build: needs rt_emissive=1)",sun!=VK_NULL_HANDLE,s.sharc);
+ }
+ // The pack contract is the base variant: an emission dispatch (extra set 2) is refused, not packed.
+ replay_after_hit_gi(cmd,writes,write_count,material_alpha,b.tlas,hp,em?"emission":sun?"gi_hit_sun":s.sharc?"SHaRC":nullptr);
  return true;
 }
 
@@ -2748,6 +2914,9 @@ void gi_release() {
     *l = VK_NULL_HANDLE;
   }
   g_rf_hit_logged = g_rf_hit_contract_logged = false;
+  hit_em_drop();
+  g_hit_em_logged = false;
+  g_hem = HitEmWindow{};
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_queries);
   g_queries = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_rt_queries);

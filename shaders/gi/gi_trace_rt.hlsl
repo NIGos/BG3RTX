@@ -55,6 +55,17 @@
 #define NATIVE_HIT_SUN_XBASE 325u
 #include "../rt/native_hit_sun.hlsli"
 #endif
+#if RT_HIT_EMISSION
+// rt_hit_emission (gi_trace_rt*_hit_*_em.hlsl, docs/PLAN_M4_REFLECTIONS_GI.md M4.4): the D-EM emissive
+// scene as set 2 (the empty set of the hit-GI layouts; core/gi.cpp hit_gi_dispatch). A hidden hit on a
+// captured emitter adds its record's emission where fallback0 added no bounce; with HIT_EM_FLAGS bit 0
+// a screen hit adds it too: prevRadiance is the lit diffuse + specular before compose adds the effects
+// target (gi_composite.hlsl), so the screen value has no emission either. SHaRC hits are not touched
+// (the injection already adds the effects target, sharc_inject.hlsl).
+#define EM_SET 2
+#include "../rt/em_common.hlsli"
+#include "../rt/native_hit_emission.hlsli"
+#endif
 #endif
 #if SHARC_QUERY_PASS
 #define SHARC_RT_QUERY 1
@@ -149,6 +160,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
       stat_add(11, onscreen && !visible, bin);
       stat_add(12, t >= 0.0 && !aborted && !onscreen, bin);
     }
+#if RT_HIT_GI_DIRECT && RT_HIT_EMISSION
+    if (visible && (HIT_EM_FLAGS & 1u) != 0u) {
+      const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, cone.f0 + cone.spread * t, cam2.c[13].xyz, HIT_EM_TOL);
+      bounce += he.radiance * w;
+      if (pc.rt_stats != 0u) hit_em_count(1u, he, dot(he.radiance * w, float3(0.2126, 0.7152, 0.0722)), fp.x ^ fp.y);
+    }
+#endif
     if (t < 0.0 && !aborted) continue;
 #if SHARC_QUERY_PASS
     if (aborted) {
@@ -192,6 +210,15 @@ void main(uint3 tid : SV_DispatchThreadID) {
       const float k0 = saturate(t / R0);
       w = 1.0 - k0 * k0;
       if (w <= 0.0) continue;   // beyond the base radius: a miss, as before
+    }
+#endif
+#if RT_HIT_GI_DIRECT && RT_HIT_EMISSION
+    // rt_hit_emission: the hit's own emission where fallback0 adds no bounce (an addition, the
+    // occlusion is unchanged); the point/spot (and sun) term below adds to it.
+    if (!visible && !aborted && t >= 0.0 && pc.gi_rt_fallback == 0u) {
+      const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, cone.f0 + cone.spread * t, cam2.c[13].xyz, HIT_EM_TOL);
+      bounce += he.radiance * w;
+      if (pc.rt_stats != 0u) hit_em_count(0u, he, dot(he.radiance * w, float3(0.2126, 0.7152, 0.0722)), fp.x ^ fp.y);
     }
 #endif
 #if RT_HIT_GI_DIRECT

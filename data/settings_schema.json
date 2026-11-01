@@ -192,13 +192,23 @@
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"gi_hit_sun": "1"}, "needs": {"exp_gi_hit_direct": 1}}
      ]},
     {"id": "exp_rf_hit_shade", "label": "Shaded hidden-surface reflections",
-     "description": "Reflection rays that hit a surface hidden from the camera are shaded with that surface's verified native material and lighting (point and spot lights, the sun with a traced shadow ray, the game's ambient) instead of keeping the reflection probe. Unsupported materials or lights keep the probe. Requires Native hit materials at startup. No emission at hits; quality and GPU cost remain unqualified.",
+     "description": "Reflection rays that hit a surface hidden from the camera are shaded with that surface's verified native material and lighting (point and spot lights, the sun with a traced shadow ray, the game's ambient) instead of keeping the reflection probe. Unsupported materials or lights keep the probe. Requires Native hit materials at startup. Emission at the hits: Emission at ray hits. Quality and GPU cost remain unqualified.",
      "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
      "required_on": {"rt": "1", "rt_hit_material": "1", "rt_reflections": "1"},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "caps": [], "keys": {"rf_hit_shade": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rf_hit_shade": "1"}, "needs": {"exp_hit_material": 1, "reflections": 1}}
+     ]},
+    {"id": "exp_hit_emission", "label": "Emission at ray hits",
+     "description": "Bounce and reflection rays that hit a glowing surface (lava, braziers, glowing runes) add that surface's emitted light, from the captured emissive geometry. Hidden hits: only where Shaded hidden-surface bounce or reflections shade the hit. All hits: also hits the screen shows (the screen value has no emission). Needs Emissive geometry capture (rt_emissive=1) at startup and Shaded hidden-surface bounce and/or reflections. Quality and GPU cost remain unqualified.",
+     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_emissive": "1", "rt_hit_material": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_emission": "0"}, "needs": {}},
+       {"id": "hidden", "label": "Hidden hits", "caps": ["ray_query"], "keys": {"rt_hit_emission": "1"}, "needs": {"exp_hit_material": 1}},
+       {"id": "all", "label": "All hits", "caps": ["ray_query"], "keys": {"rt_hit_emission": "2"}, "needs": {"exp_hit_material": 1}}
      ]},
     {"id": "exp_hit_reference", "label": "Experimental lighting reference",
      "description": "Shows a limited reference using point and spot lights on supported opaque surfaces. Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. Requires Native hit materials at startup. No sunlight, sky, emission or full-scene quality claim. This replaces the display for inspection; it is not a gameplay quality preset.",

@@ -74,6 +74,16 @@
 #define NATIVE_HIT_SUN_ROOF 1
 #define NATIVE_HIT_SHADE_FULL 1
 #include "../rt/native_hit_shade.hlsli"
+#if RT_HIT_EMISSION
+// rt_hit_emission (rt_reflections*_hit_shade_em.hlsl, docs/PLAN_M4_REFLECTIONS_GI.md M4.4): the D-EM
+// emissive scene as set 5 (core/gi.cpp rf_hit_dispatch; set 4 is SHaRC's or empty). A shaded tier (b)
+// hit adds its record's emission to L_b; with HIT_EM_FLAGS bit 0 a tier (a) hit adds it to the screen
+// value too (prevRadiance is the lit buffer before compose adds the effects target, so it has none).
+// Cached (SHaRC) hits are not touched: the injection already adds the effects target.
+#define EM_SET 5
+#include "../rt/em_common.hlsli"
+#include "../rt/native_hit_emission.hlsli"
+#endif
 #endif
 
 [[vk::binding(30, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> rfHitDist;
@@ -293,6 +303,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
               // fade: the hit is not read from the screen).
               w = rough_w * saturate(pc.rf_strength);
               Lrt = hs.radiance;
+#if RT_HIT_EMISSION
+              const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, cone.f0 + cone.spread * t, cam2.c[13].xyz, HIT_EM_TOL);
+              Lrt += he.radiance;
+              if (pc.rf_stats != 0u) hit_em_count(2u, he, lum(he.radiance), (fp.x >> 3) * 7u + (fp.y >> 3) * 13u);
+#endif
               hit_t = t;
               shaded = true;
               hs_probes = hs.local_probes ? 1u : 0u;
@@ -322,6 +337,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
             cached = true;
           }
           sharc_stat(kShRfFound, cached);
+        }
+#endif
+#if RF_HIT_SHADE && RT_HIT_EMISSION
+        // Tier (a): after the rf_hit_shade check above took L_a (both sides of that check lack emission).
+        if (tier == 1 && (HIT_EM_FLAGS & 1u) != 0u) {
+          const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, cone.f0 + cone.spread * t, cam2.c[13].xyz, HIT_EM_TOL);
+          Lrt += he.radiance;
+          if (pc.rf_stats != 0u) hit_em_count(3u, he, lum(he.radiance), (fp.x >> 3) * 7u + (fp.y >> 3) * 13u);
         }
 #endif
       }

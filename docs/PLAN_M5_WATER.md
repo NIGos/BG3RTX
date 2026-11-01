@@ -117,7 +117,12 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
 - Offline: 71 CTests (water_policy_test: publication, torn reads under a concurrent writer, staleness,
   shift, F0), all shaders compile, ordinary SPIR-V byte-identical (no existing shader changed).
 - Live: job `m5w2` in tools/live_batches/m5_water/ (S1 docks, OFF/ON/OFF PNGs, views 22 and 21, cost).
-- Gate: image ON = OFF within the OFF-repeat spread; behind bed 0; tiers, E and cost reported.
+- Gate: image ON = OFF within the OFF-repeat spread; in front > 0 at a view with visible water; tiers, E and cost reported.
+  "Behind bed" is occluded water, not a violation: the water draw writes no depth but depth-tests.
+  m5w2 (11-01): QuickSave_3784 loaded the Steel Watch Foundry, not the docks: the sea plane 19 m below
+  the camera was hit by 95.75% of the rays and occluded at 100% (no water on screen), so no reflection
+  ray ran. Cost 15.1-15.9 ms: the statistics' per-wave atomics went to host-visible memory (gi GPU cost
+  2.1 -> 19.5 ms). Fixed (branch water-fix): device-local counters, reduced per 16x16 group, copied to the host slot.
 
 #### Composition plan (M5.3, not built)
 1. The water FS (7b44a567, end of main) is opaque: `C = mix(Refr, (Lw * X + G) * T + S, a)`, Refr the
