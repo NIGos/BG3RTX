@@ -574,12 +574,57 @@ class Result:
         return p.read_bytes() if p else None
 
 
+# Child processes start at BelowNormal even if this process was not lowered.
+_LOW = {"creationflags": 0x00004000} if sys.platform == "win32" else {}
+
+
+class _DxcSlot:
+    """Machine-wide cap on concurrent dxc processes, shared by every run (parallel agents, merge-green):
+    max(2, cores / 2) lock files; a compile holds one while dxc runs. Each dxc takes ~0.5 GB, so two
+    unshared 8-job runs made the PC unusable (2026-11-01)."""
+    _dir = Path(os.environ.get("TEMP", ".")) / "bg3rtx_dxc_slots"
+    _count = int(os.environ.get("BG3RTX_DXC_SLOTS", "0")) or max(2, (os.cpu_count() or 4) // 2)
+    _waited_note = [False]
+
+    def __enter__(self):
+        self._dir.mkdir(parents=True, exist_ok=True)
+        start = time.time()
+        while True:
+            for i in range(self._count):
+                f = open(self._dir / f"slot{i}.lock", "a+b")
+                try:
+                    if sys.platform == "win32":
+                        import msvcrt
+                        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self._f = f
+                    return self
+                except OSError:
+                    f.close()
+            if time.time() - start > 10 and not self._waited_note[0]:
+                self._waited_note[0] = True
+                print(f"  waiting for a dxc slot ({self._count} machine-wide, shared with other runs)", flush=True)
+            time.sleep(0.2)
+
+    def __exit__(self, *exc):
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+                self._f.seek(0)
+                msvcrt.locking(self._f.fileno(), msvcrt.LK_UNLCK, 1)
+        finally:
+            self._f.close()
+
+
 def _run_dxc(tool, tree, request, entry, out):
     file, defines = split_request(request)
     disk = tree.materialize()
     src = Path(disk) / SHADERS / file
     cmd = tool.command(src, Path(disk) / SHADERS, entry, defines, first_line_args(tree.read(SHADERS + "/" + file)), out)
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    with _DxcSlot():
+        r = subprocess.run(cmd, capture_output=True, text=True, **_LOW)
     if r.returncode or not out.exists():
         return None, f"[{entry}] " + (r.stdout + r.stderr).strip()[:4000]
     data = out.read_bytes()
@@ -588,7 +633,7 @@ def _run_dxc(tool, tree, request, entry, out):
 
 
 def _run_val(tool, path):
-    r = subprocess.run([str(tool.spirv_val), *VAL_ARGS, str(path)], capture_output=True, text=True)
+    r = subprocess.run([str(tool.spirv_val), *VAL_ARGS, str(path)], capture_output=True, text=True, **_LOW)
     return r.returncode == 0, (r.stdout + r.stderr).strip()[:4000]
 
 
