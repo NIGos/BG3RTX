@@ -29,7 +29,8 @@ days), L (a week or more). Live tests still need explicit user steering (AGENTS.
 - Needs a replay-pack capture mode first (lighting set 1, G-buffer, TLAS inputs, camera).
 - Highest ceiling, but large; start only after B, F and D.
 - Status 2026-11-01: harness `tools/frame_replay` + pack format + synthetic CTest done for gi_hit_direct
-  (tools/frame_replay.md); the live pack writer and rf_hit_shade's extra sets are next.
+  (tools/frame_replay.md); live pack writer `replay_pack` built (ABI 25, READY_FOR_LIVE); rf_hit_shade's
+  extra sets are next.
 
 ## E. Re-analysis of existing captures (S, low gain)
 - Mine `captures/` logs and dumps for numbers not yet extracted.

@@ -1,6 +1,6 @@
 # Session handoff - 2026-11-01
 
-Main 5202bc2, ABI 24 (rebuild both DLLs together). Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) next:
+Main 5202bc2, ABI 25 once replay-writer is merged (rebuild both DLLs together). Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) next:
 it has the live numbers and the "How to test in game" section. The previous handoff (10-31) is in git
 history; its evidence details are kept in [archive/PROGRESS_CODEX_2026-11-01.md](archive/PROGRESS_CODEX_2026-11-01.md).
 
