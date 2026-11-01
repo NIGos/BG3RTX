@@ -106,6 +106,13 @@ Limits that decide the order:
     on the dump), so never pooled; instanced, so no per-draw row. Row `CaptureNone`: counted in
     `[hit material families] ... audited recipe, no capture path`, never qualified. Path: per-draw
     rows for instanced draws (prepass vs G-buffer clip check per instance), not the pool.
+  - 1e9145e4/923131c7 Base_AlphaTest_2s_VT (2.4%): FS = 14678345 with engine 1:0 tile-set index @44,
+    channel @48 (flag @52) and mat3(T, N * (gl_FrontFacing ? 1 : -1), B). At a hit the facing comes
+    from the geometry (`nv_two_sided_sign`: viewer and authored N on the same side of the plane). VS
+    audit: UV/N/B/T as 2d2ac3c3, but every matrix row's translation adds the per-draw engine offset
+    1:0 @32 before W = M P: not class A, never pooled. Row `CaptureNone` (counted as above). Path:
+    class A with a per-draw translation offset (bvhsplit instance transform + UBO offset), or the
+    instanced per-draw rows above.
 - Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;
   terrain draws patches from `_m0[gl_InstanceIndex]` + a heightmap, needs its own recipe.
 - Skinned characters (class B always-skinned VSs, CHAR_* STI FSs): positions from the skinning

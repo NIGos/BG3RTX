@@ -49,6 +49,33 @@ int main(int argc, char** argv) {
     CHECK(pool_recipe(kWindVs, kWindFs) == nullptr && uncaptured_recipe(kWindVs, kWindFs));
     CHECK(!uncaptured_recipe(kStiVs, kSti) && !uncaptured_recipe(kStiVs, kWindFs) && pool_recipe(kStiVs, kSti) == &sti);
   }
+  // 2. Base_AlphaTest_2s_VT (1e9145e4/923131c7): VARIANT of 14678345, fields only
+  //    ubo1_0._m1@32->_m2@44 (tile-set index), _m2@36->_m3@48 (channel word, `& 7`),
+  //    _m3@40->_m4@52 (flag, not read by the decode), plus the two-sided N column (out0).
+  {
+    const auto* a = vt::recipe(0x923131c7039f33daull);
+    CHECK(a && a->vs == 0x1e9145e4b621a5e0ull);
+    CHECK(a->transform_offset == 0 && a->tileset_index_offset == 44 && a->channel_offset == 48);
+    CHECK(engine_bytes(*a) == 52);  // max(p0+p1 32, index 48, channel 52)
+    CHECK(a->reflectance == vt::ReflectanceUbo && a->reflectance_offset == 0 && vt::material_bytes(*a) == 4);
+    CHECK(a->two_sided && !sti.two_sided && a->layout == vt::LayoutBase);
+    vt::Surface x, y;
+    CHECK(vt::decode(0x923131c7039f33daull, samples(.6f), x) == vt::Status::SupportedFields);
+    CHECK(vt::decode(kSti, samples(.6f), y) == vt::Status::SupportedFields && same(x, y));
+    // VS 1e9145e4 adds the per-draw engine offset to the instance translation: not class A.
+    CHECK(a->capture == vt::CaptureNone && pool_recipe(a->vs, a->fs) == nullptr && uncaptured_recipe(a->vs, a->fs));
+    // Facing at a hit: the N column flips when the viewer is behind the authored normal,
+    // whatever the triangle's winding (ng either sign).
+    using bg3::transport::nv_two_sided_sign;using V = bg3::transport::NvVec3;
+    const V up{0, 0, 1}, down{0, 0, -1}, from_above{0, 0, -1}, from_below{0, 0, 1};
+    for (const V ng : {up, down}) {
+      CHECK(nv_two_sided_sign(ng, up, from_above) == 1.f);    // viewer on the N side: front
+      CHECK(nv_two_sided_sign(ng, up, from_below) == -1.f);   // behind: N flipped toward the viewer
+      CHECK(nv_two_sided_sign(ng, down, from_below) == 1.f);
+      CHECK(nv_two_sided_sign(ng, down, from_above) == -1.f);
+    }
+    CHECK(nv_two_sided_sign(up, V{.6f, 0, .8f}, V{.6f, 0, -.8f}) == 1.f);  // oblique, same side
+  }
   // Dumped VS modules: class A exactly when the recipe has a pool capture path.
   for (int i = 1; i < argc; ++i) {
     std::ifstream f(argv[i], std::ios::binary);std::string bytes((std::istreambuf_iterator<char>(f)), {});

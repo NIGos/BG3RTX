@@ -38,7 +38,14 @@ inline constexpr Recipe recipes[]={
  // 50fbfceb: same UV/N/B/T outputs as 2d2ac3c3 (inputs moved: rows 0..2, P 4, UV 5, quaternion
  // 6), but W = M P + wind(time, vertex color RG, distance fade) before the clip transform: not
  // class A, so no pool mesh (and no static mesh to check the raster positions against).
- {0x8e49cde81b680054ull,0x50fbfceb06192473ull,0,32,36,ReflectanceUbo,16,CaptureNone}};
+ {0x8e49cde81b680054ull,0x50fbfceb06192473ull,0,32,36,ReflectanceUbo,16,CaptureNone},
+ // Base_AlphaTest_2s_VT STI: 14678345 with the engine UBO 1:0 {vec4 p[2]; vec3 offset @32; uint
+ // tile-set index @44, flag @48 (bit 3), channel @52} and mat3(T, N * (gl_FrontFacing ? 1 : -1), B)
+ // (two_sided). Classifier: _m1@32->_m2@44, _m2@36->_m3@48, _m3@40->_m4@52; the FS reads
+ // `(_m3 & 7) << 4` (channel @48) and `_m4 != 0` (flag @52). VS 1e9145e4: UV/N/B/T as 2d2ac3c3,
+ // but each matrix row's translation gets the per-draw engine offset (1:0 @32) added before
+ // W = M P: not class A (the matrix is not the plain instance rows), never pooled.
+ {0x923131c7039f33daull,0x1e9145e4b621a5e0ull,0,44,48,ReflectanceUbo,0,CaptureNone,LayoutBase,true}};
 inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
 // Material UBO 1:1 bytes the recipe reads (0: no 1:1 binding).
 inline uint32_t material_bytes(const Recipe& r){return r.reflectance==ReflectanceConstant?0u:(r.layout==LayoutDetail?20u:r.reflectance_offset+4u);}

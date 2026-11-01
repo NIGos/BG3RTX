@@ -20,6 +20,16 @@ inline float nv_unit(float x){return tb_min(1,tb_max(0,x));}
 // 0.5, no 1:1 binding (3da860be, 3df678c0); 2 mix(0.5, normal-layer sample x, UBO 1:1 x)
 // (81657854: the normal layer's x, which the frame normal (wzy) does not use). nv_fields clamps.
 inline float nv_reflectance(NvUint mode,float ubo,float normal_x){return mode==1u?0.5f:(mode==2u?0.5f+(normal_x-0.5f)*ubo:ubo);}
+// Two-sided VT variants (Base_AlphaTest_2s_VT FS 923131c7): the native FS scales the N column of
+// mat3(T, N, B) by (gl_FrontFacing ? 1 : -1). At a ray hit the facing is taken from the geometry,
+// independent of the winding and of the pipeline's frontFace: front when the ray origin and the
+// interpolated vertex normal n lie on the same side of the triangle plane (any normal ng of it),
+// i.e. the authored N faces the viewer. This equals the raster rule for triangles whose winding
+// agrees with their authored normals. d: ray direction. Returns the N column's sign.
+inline float nv_two_sided_sign(NvVec3 ng,NvVec3 n,NvVec3 d){
+ const float view=-((ng.x*d.x+ng.y*d.y)+ng.z*d.z),side=(ng.x*n.x+ng.y*n.y)+ng.z*n.z;
+ return view*side<0?-1.f:1.f;
+}
 inline NvFields nv_fields(NvVec3 albedo,NvVec3 normal_wzy,NvVec3 physical,float reflectance){
  NvFields r;r.albedo=tb_vec(0,0,0);r.frame_normal=tb_vec(0,0,0);r.roughness=0;r.reflectance=0;r.metalness=0;r.aux=0;r.status=1;
  if(!tb_finite3(albedo)||!tb_finite3(normal_wzy)||!tb_finite3(physical)||!tb_finite(reflectance))return r;
