@@ -812,6 +812,47 @@ fix needs descriptor indirection (update-after-bind sets or a proxy TLAS), not a
 `rt_scene_wait` is 0 (no wait, traces the previous frame's scene) or 1 (default).
 Mode 2 removed 2026-10-31: stale scene after rotation; see live batch consolidation-20261031d job cb2.
 
+### Hit-material CPU on the scene commit path (2026-11-01, `rt_hit_material_recycle`, default 0, READY_FOR_LIVE)
+
+User report: with native hit materials on, RT shadows detach during rotation/pans and flicker, the stale-scene
+symptom `rt_scene_wait` had fixed. `[rt] scene wait` per 600 frames: without `rt_hit_material` 0 timeouts in steady
+lines (lr1 camp 08:40, mean 4.8-5.0 ms); with it 15-278 timeouts, mean 5.9-11.8 ms (m4i 111403), 3-232 (m4p4 113146),
+and 5-456, mean 9.8-12.5 ms in the user's own run (17:26-17:35, every experimental key on). Water-only runs ~0. A mean
+at 12 ms is the `rt_scene_wait_ms` cap: the commit came after the lighting thread gave up, so it traced frame N-1.
+
+Cause (code read; no CPU timer existed for it): the provider allocated and freed GPU memory every frame on the
+recording threads, under locks the commit path takes. Per frame: a deferred packet (1 MB rows + 1-4 x 32 MB XFB chunks
++ 2 MB staged) in the G-buffer material hooks, a query (rows, up to 256 MB of copies, pool UBO, remap counters) on the
+lighting thread, up to 8 UV/basis jobs (XFB + host status), the slot's source stream when its need moves past the 2x
+hysteresis; and `collect()` freed the retired ones of 2-3 frames earlier, from whichever hook ran first: the prepass
+begin, `scene_prepare` (under the scene lock, before the BVH build), or `deferred_begin`, which also ran `collect()`
+(a std::set rebuild over every owner) on every G-buffer draw under the provider mutex that the prepass hooks
+(`note_prepass`, `note_opaque_prepass`) need per draw. The lighting thread's query also held the scene lock `g_mu`
+for its whole recording (allocations, set clone, descriptor writes), the lock the next capture end needs to commit.
+Pans move the copied sizes every frame (more reallocations), which matches the worse moving windows.
+
+Fix, `rt_hit_material_recycle=1` (live A/B, layer only): retired buffers go to a pool (common/native_hit_recycle.h:
+exact key = rounded size, usage, memory kind; sizes rounded to 8 per octave, at most 12.5% over; cap 512 MB = one
+frame's largest transient set 384 MB + rounding; idle 120 frames freed; all freed when the key goes off). A buffer
+is given back exactly where it used to be freed (no GPU user left), its contents are undefined as a fresh
+allocation's, and every user writes what it reads (rows cleared + frame header each use), so the frame-pairing checks
+(slot frame, generation, row header, publication word) are unchanged and rows of another frame are still rejected.
+`collect()` runs once per new packet / new query instead of per G-buffer draw / RT pass. The query finds and pins
+its slot under `g_mu` (last_use = now, so no build can take it), then records without it. The commit order and
+the GPU work are unchanged (scene_prepare's copy must stay before the in-place convert).
+
+Measure (cpu_timing=1): `[cpu] hit material over N frames` (prepass hooks, scene_prepare, G-buffer material hooks,
+query; collect, allocations n/frame and MB/frame, frees, reused, retained) and the `[cpu] scene build recording`
+line's new tail "capture end to commit, of which scene lock wait, hit material scene_prepare".
+`rt_scene_wait_log_frames` (default 600) sets the scene-wait line cadence; lean jobs use 120.
+
+Gate: every lean job gates `[rt] scene wait` with 0 timeouts in every traced cost-* window
+(`py -3 scripts/queue_gates.py --lint-scene-wait`, a CTest via tests/queue_gates_test.py and a lean_dryrun check;
+`queue_gates.SCENE_WAIT_GATE`). Live A/B prepared: `tools/live_batches/scene_wait` (S8 + camp, not authorized).
+Expected with 1: 0 timeouts, wait mean back to the no-hit-material 2-5 ms; allocations ~0/frame, reused 5-20/frame.
+User check after it passes: FG on, S8 or camp with the hit-material bundle, rotate with Q/E or the mouse: shadows
+stay on their casters.
+
 ## Base frame CPU cost - 2026-10-30, default-off candidate
 
 `rt_alpha_stream=0/1` selects ordinary copies or aligned streaming loads for alpha

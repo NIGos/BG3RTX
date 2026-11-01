@@ -1,0 +1,127 @@
+{
+ "name": "sw1-s8-fg2",
+ "save": "Water Queens House",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 456,
+ "repeat": 1,
+ "live_batch": "scene-wait",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_scene_wait_log_frames=120,qa_exposure_hold=0,cpu_timing=1,rt_scene_wait_log_frames=120,rt_hit_material_recycle=0",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/scene_wait/plans/sw_pan.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[geo\\] transform feedback",
+  "\\[geo\\] RT capture",
+  "\\[geo\\] WARNING",
+  "\\[cascade\\] casters",
+  "\\[em\\] emissive capture",
+  "\\[em\\] soup",
+  "gi: GPU cost",
+  "gi: trace pass",
+  "rf: reflection pass",
+  "ls: local-light shadow pass",
+  "GI hit direct",
+  "GI hit sun",
+  "hit material",
+  "rf hit shade",
+  "hit emission",
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "\\[cpu\\]"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "\\[geo\\] RT capture, last \\d+ frames: .* MB of a 1024 MB buffer",
+  "\\[rt\\] scene wait: 120 frames",
+  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+",
+  "\\[cpu\\] hit material over \\d+ frames, .*\\(rt_hit_material_recycle 0\\)",
+  "\\[cpu\\] hit material over \\d+ frames, .*\\(rt_hit_material_recycle 1\\)",
+  "\\[cpu\\] scene build recording, ms/build over \\d+: .*capture end to commit [0-9.]+, of which scene lock wait",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[cascade\\] could not allocate"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=3 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=4 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=5 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=14\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "Scene-wait fix A/B (rt_hit_material_recycle, docs/TRACK_D_SCENE_BUILD.md 'Hit-material CPU on the scene commit path'), S8 polished stone (the reflection scene of m4p4: 3-232 timeouts per 600 frames). Startup: the M4 Ultra bundle (rt_hit_material=1 and instanced, GI hit direct/sun, rf hit shade, emission), cpu_timing=1, 120-frame scene-wait lines, recycle 0. Live: rt_stats windows recycle 0 then 1 (materials still qualify), PNG shots OFF/ON/OFF static with the exposure held (no energy change), one static ON cost window, then pans Q/E with recycle 0, 1, 0. Gate: 0 timeouts in every ON window; every other window logs complete scene-wait lines (the recycle-0 baseline).",
+ "estimated_phase_seconds": 176,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-on-static",
+    "cost-on-q",
+    "cost-on-e"
+   ],
+   "min": 1
+  },
+  {
+   "name": "scene wait logged in every recycle-0 / diagnostics window (the baseline of the A/B)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "\\[rt\\] scene wait: 120 frames, \\d+ waited",
+   "windows": [
+    "diag-rec0",
+    "diag-rec1",
+    "base-off-a-q",
+    "base-off-a-e",
+    "base-off-b-q",
+    "base-off-b-e"
+   ],
+   "min": 1
+  },
+  {
+   "name": "one trace written in every shot-* window (the OFF/ON/OFF energy comparison)",
+   "select": "\\[trace\\] frame \\d+ written: ",
+   "match": "\\[trace\\] frame \\d+ written: ",
+   "windows": [
+    "shot-off-a",
+    "shot-on",
+    "shot-off-b"
+   ],
+   "min": 1,
+   "event": true
+  }
+ ]
+}

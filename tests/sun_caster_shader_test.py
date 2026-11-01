@@ -1,95 +1,54 @@
-"""Offline DXC gate: every ordinary entry identical, current-sun entries valid."""
+"""Offline DXC gate: every ordinary entry identical, every current entry valid.
+
+Every file plus every GI variant request (shaders/variants.txt) compiles and passes spirv-val;
+the define-free files that exist in the baseline are byte-identical to it, entry by entry.
+Compiles through tools/shader_identity.py (shared cache; unchanged inputs are identical by
+construction). Result: captures/sun-coverage-20261030/shader-check/result.json.
+"""
 import argparse
-import concurrent.futures
-import hashlib
 import json
 from pathlib import Path
-import re
-import shlex
-import subprocess
-import tempfile
-import zipfile
-
-from shader_baseline import default_baseline
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.shader_identity import (SHADERS, compile_requests, default_baseline, default_jobs, gate_setup,  # noqa: E402
+                                   identical, identity)
 
 
 def main():
-    parser = argparse.ArgumentParser(__doc__)
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline', default=default_baseline(),
                         help='Commit of the key-off reference (default: merge-base with main)')
     parser.add_argument('--dxc', required=True)
     parser.add_argument('--spirv-val', required=True)
     parser.add_argument('--sharc', required=True)
+    parser.add_argument('--jobs', type=int, default=default_jobs())
+    parser.add_argument('--no-cache', action='store_true')
     args = parser.parse_args()
     out = ROOT / 'captures/sun-coverage-20261030/shader-check'
     out.mkdir(parents=True, exist_ok=True)
-    archive = out / 'baseline.zip'
-    subprocess.run(['git', 'archive', '--format=zip', '--output', str(archive), args.baseline,
-                    'shaders', 'common'], cwd=ROOT, check=True)
-    # Deep wrapper chains exceed Windows MAX_PATH in the retained evidence tree.
-    # Keep the exact archived baseline source in a short, owned scratch directory.
-    baseline_temp = tempfile.TemporaryDirectory(prefix='b3-')
+    tool, cache, base, new = gate_setup(args.baseline, args.dxc, args.sharc, args.spirv_val, args.no_cache)
+    requests = new.requests()
+    ordinary = [r for r in requests if '?' not in r and SHADERS + '/' + r in base.ids]
     try:
-        old = Path(baseline_temp.name)
-        assert old.resolve().parent == Path(tempfile.gettempdir()).resolve()
-        with zipfile.ZipFile(archive) as contents:
-            contents.extractall(old)
-
-        def compile_one(request, destination, include, entry):
-            # request: "<file>?NAME=VALUE;..." (common/shader_variant.h), the defines as -D.
-            file, _, defs = request.partition('?')
-            source = include / file
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            first = source.read_text(encoding='utf-8').splitlines()[0]
-            extra = shlex.split(first[len('// dxc:'):]) if first.startswith('// dxc:') else []
-            command = [args.dxc, str(source), '-spirv', '-fspv-target-env=vulkan1.3', '-HV', '2021',
-                       '-T', 'cs_6_6', '-E', entry, '-I', str(include), '-I', args.sharc,
-                       '-D', 'BG3RTX=1', '-D', 'BG3RTX_SHARC_SDK=1',
-                       *[a for d in defs.split(';') if d for a in ('-D', d)], '-O3', '-Fo', str(destination), *extra]
-            result = subprocess.run(command, capture_output=True, text=True)
-            if result.returncode:
-                raise RuntimeError(f'{request}/{entry}: {result.stdout}\n{result.stderr}')
-            return hashlib.sha256(destination.read_bytes()).hexdigest()
-
-        def check(item):
-            relative, entry, ordinary = item
-            name = relative.partition('?')[0] + '.' + hashlib.sha1(relative.encode()).hexdigest()[:12]
-            dest = out / 'current' / (name + '.' + entry + '.spv')
-            current = compile_one(relative, dest, ROOT / 'shaders', entry)
-            if ordinary:
-                before = compile_one(relative,
-                                     out / 'old' / (name + '.' + entry + '.spv'),
-                                     old / 'shaders', entry)
-                if before != current:
-                    raise RuntimeError(f'Ordinary byte identity failed: {relative}/{entry}')
-            result = subprocess.run([args.spirv_val, '--target-env', 'vulkan1.3', str(dest)], capture_output=True, text=True)
-            if result.returncode:
-                raise RuntimeError(f'{relative}/{entry}: {result.stdout}\n{result.stderr}')
-            return {'shader': relative, 'entry': entry, 'ordinary': ordinary, 'sha256': current}
-
-        # Every file plus every GI variant request (shaders/variants.txt). A request with
-        # defines is compiled and validated; only define-free files are compared to the baseline.
-        requests = [p.relative_to(ROOT / 'shaders').as_posix() for p in sorted((ROOT / 'shaders').rglob('*.hlsl'))]
-        requests += [l for l in (ROOT / 'shaders' / 'variants.txt').read_text(encoding='utf-8').splitlines()
-                     if l and not l.startswith('#')]
-        items = []
-        for relative in requests:
-            file = relative.partition('?')[0]
-            entries = re.findall(r'\[numthreads\([^)]*\)\]\s*void\s+(\w+)', (ROOT / 'shaders' / file).read_text(encoding='utf-8')) or ['main']
-            ordinary = '?' not in relative and (old / 'shaders' / file).exists()
-            for entry in entries:
-                items.append((relative, entry, ordinary))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-            records = list(pool.map(check, items))
-        result = {'baseline': args.baseline, 'ordinary_identical': sum(r['ordinary'] for r in records),
-                  'new_compiled_validated': sum(not r['ordinary'] for r in records), 'entries': records}
-        (out / 'result.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
-        print(f"{result['ordinary_identical']} ordinary entries byte-identical; "
-              f"{result['new_compiled_validated']} new entries compiled/validated")
+        same = {r: (s, log) for r, s, log in identity(base, new, ordinary, tool, cache, args.jobs, 'sun-caster ordinary')}
+        cur = compile_requests(new, requests, tool=tool, cache=cache, jobs=args.jobs, label='sun-caster current', validate=True)
     finally:
-        baseline_temp.cleanup()
+        base.cleanup()
+    records = []
+    for r in requests:
+        res = cur[r]
+        if not res.ok or not res.valid:
+            raise RuntimeError(f'{r}: {res.log}')
+        if r in same and not identical(same[r][0]):
+            raise RuntimeError(f'Ordinary byte identity failed ({same[r][0]}): {r}\n{same[r][1]}')
+        records += [{'shader': r, 'entry': e.name, 'ordinary': r in same, 'sha256': e.sha} for e in res.entries]
+    result = {'baseline': args.baseline, 'ordinary_identical': sum(x['ordinary'] for x in records),
+              'new_compiled_validated': sum(not x['ordinary'] for x in records), 'entries': records}
+    (out / 'result.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+    print(f"{result['ordinary_identical']} ordinary entries byte-identical; "
+          f"{result['new_compiled_validated']} new entries compiled/validated")
 
 
 if __name__ == '__main__':

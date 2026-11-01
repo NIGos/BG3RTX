@@ -82,6 +82,25 @@ bg3.exe ──► Vulkan loader ──► VK_LAYER_BG3RTX_host (bin/VkLayer_bg3r
   pair a `-D`, the whole string the cache key. `common/shader_variant.h` builds the GI
   requests; `shaders/variants.txt` lists them all (CTest `shader_variant_test`) for the compile check.
 
+## Offline shader compiles
+
+`tools/shader_identity.py` is the one offline compiler (importable and a CLI). It compiles a
+request exactly as `layer/shaders.cpp` does (shader_debug=0) and caches each entry's SPIR-V in
+`build/shader_cache` of the main checkout (shared by every worktree; `BG3RTX_SHADER_CACHE`
+overrides it). The key is the DXC binaries and version, the argument template, the request
+string, entry and profile, and the git blob id of the source and of every file it can include
+(transitively, conservatively: every `#include` line, every search candidate, missing ones too).
+An include edit recompiles exactly the requests that reach it; a new DXC recompiles all. A
+baseline commit is read from git blobs, so a second gate against the same baseline compiles
+nothing, and a request whose inputs are equal in both trees is identical by construction.
+Hits re-hash their SPIR-V blob; failures are never cached. Long runs print progress every 15 s.
+
+- `py -3 tools/compile_shaders.py`: every request compiles (merge-green), plus the descriptor
+  contract checkers on the compiled modules.
+- `py -3 tools/shader_identity.py --baseline <rev> [--filter RE]`: key-off byte identity.
+- `tests/*_shader_test.py`: feature gates (key off identical, key on compiles + spirv-val +
+  contract), thin wrappers over `feature_gate` / `identity` / `compile_requests`.
+
 ## Identifying passes
 
 Command buffers are recorded on several threads, so a pass's position in the

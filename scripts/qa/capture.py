@@ -188,7 +188,17 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
         elif shared:
             cmd += ["-Shared"]
         log(f"[{scene_id}] game run: {len(phases)} traces ({', '.join(n for n, _ in phases)})")
-        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        # The game run takes minutes with its output captured: a heartbeat every 30 s (elapsed, the
+        # finished trace folders of this run so far), flushed.
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace")
+        while True:
+            try:
+                so, se = proc.communicate(timeout=30)
+                break
+            except subprocess.TimeoutExpired:
+                log(f"[{scene_id}] game run: {time.time() - t0:.0f} s, {_traces_so_far(tag, t0)} of {len(phases)} traces written")
+                sys.stdout.flush()
+        r = subprocess.CompletedProcess(cmd, proc.returncode, so, se)
         (out_dir / "auto-run.out").write_text(r.stdout + r.stderr)
     finally:
         lp.terminate()
@@ -220,6 +230,16 @@ def run_scene(scene_id, save, out_dir: Path, full_res=False, temporal=3, referen
             "run_mode": mode, "exclusive": mode == "exclusive", "log_tail": _log_lines(tag)}
     (out_dir / "run.json").write_text(json.dumps(meta, indent=1))
     return meta
+
+
+def _traces_so_far(tag, t0) -> int:
+    """Finished trace folders of this run (done.txt, newer than its start), for the heartbeat."""
+    cap_re = rf"\d{{8}}-\d{{6}}-{re.escape(tag)}" if tag else r"\d{8}-\d{6}"
+    try:
+        return sum(1 for p in CAPS.iterdir() if re.fullmatch(cap_re, p.name) and p.stat().st_mtime >= t0 - 1
+                   and (p / "done.txt").exists())
+    except OSError:
+        return 0
 
 
 def _log_lines(tag=""):

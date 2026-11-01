@@ -50,7 +50,11 @@ $limit = [math]::Ceiling($liveRate)
 $exe = if ($Exe) { $Exe } else { Join-Path $tree 'bin\frame_replay.exe' }
 if (-not (Test-Path -LiteralPath $exe)) { Write-Host "post-replay: $exe missing; older packs kept"; exit 2 }
 $out = if ($ReplayOut) { $ReplayOut } else { Join-Path $pack 'replay' }
-$replay = @(& $exe --pack $pack --out $out 2>&1 | ForEach-Object { "$_" })
+# frame_replay prints "[replay] progress: ..." every 30 s of a long run: shown as it arrives (the rest is captured).
+filter Show-ReplayProgress { $l = "$_"; if ($l -match '^\[replay\] progress:') { Write-Host "post-replay: $l" }; $l }
+$t0 = Get-Date
+$replay = @(& $exe --pack $pack --out $out 2>&1 | Show-ReplayProgress)
+Write-Host ("post-replay: replay ran {0:N0} s" -f ((Get-Date) - $t0).TotalSeconds)
 $code = $LASTEXITCODE
 New-Item -ItemType Directory -Force $out | Out-Null
 $replay | Set-Content -LiteralPath (Join-Path $out 'replay.txt')
@@ -67,7 +71,7 @@ Write-Host ("post-replay: replay hit material attempted {0} qualified {1} sampli
 # native_ambient.txt. A pack without lighting inputs says so and is not compared.
 $na = @()
 $keep = $ErrorActionPreference
-try { $ErrorActionPreference = 'Continue'; $na = @(& $exe --pack $pack --native-ambient --out $out 2>&1 | ForEach-Object { "$_" }) }
+try { $ErrorActionPreference = 'Continue'; $t0 = Get-Date; $na = @(& $exe --pack $pack --native-ambient --out $out 2>&1 | Show-ReplayProgress); Write-Host ("post-replay: native ambient ran {0:N0} s" -f ((Get-Date) - $t0).TotalSeconds) }
 catch { $na += "$_" } finally { $ErrorActionPreference = $keep }
 $na | Set-Content -LiteralPath (Join-Path $out 'native_ambient.txt')
 $naLines = @($na | Select-String -Pattern '^\s*(native ambient means|PT far field|native vs PT far field|per tile \(16 x 9|sun transmittance)')

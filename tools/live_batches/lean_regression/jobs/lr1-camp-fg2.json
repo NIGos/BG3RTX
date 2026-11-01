@@ -7,7 +7,7 @@
  "timeout": 456,
  "repeat": 1,
  "live_batch": "lean-regression",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,ls_samples=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt=1,rt_scene_wait=1,rt_cascade_casters=0,ls_box=0,cpu_timing=1",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,ls_samples=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt=1,rt_scene_wait=1,rt_cascade_casters=0,ls_box=0,cpu_timing=1,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -51,7 +51,7 @@
   "sun stats \\(600 frames, replace 1",
   "rt stats \\(120 frames, alpha test \\w+\\): primary-ray check match",
   "rt epoch \\(120 frames\\)",
-  "\\[rt\\] scene wait: 600 frames"
+  "\\[rt\\] scene wait: 120 frames"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -71,5 +71,18 @@
  ],
  "stop_on_dump": true,
  "purpose": "Lean regression, outdoor: RT on/off cost (diag off), rt_cascade_casters OFF/ON/OFF (the RT-on cost windows are its OFF repeats), PNG trace pair RT off/on, one short primary-match window (diag on).",
- "estimated_phase_seconds": 156
+ "estimated_phase_seconds": 156,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-on-a",
+    "cost-casters-on",
+    "cost-on-b"
+   ],
+   "min": 1
+  }
+ ]
 }

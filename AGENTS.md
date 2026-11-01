@@ -65,6 +65,8 @@ These rules come from mistakes already made in this repo. They apply on every br
   so far, flushed) and cache what does not change (e.g. baseline SPIR-V hashes per commit; compile only
   requests whose sources or includes changed). A silent, recompute-everything tool is a bug: fix it first.
   One shared helper, not one copy per feature.
+  Offline shader compiles and SPIR-V byte identity: `tools/shader_identity.py` (cached, progress; the
+  `tests/*_shader_test.py` gates and merge-green's `tools/compile_shaders.py` use it). Don't call DXC directly.
 - GPU statistics counters live in device-local memory, reduced per workgroup, copied to the host after
   the timed region: host-visible atomics cost 15 ms (water reflections) and 7 ms (water compose) in 2026-11.
   CTest `host_atomics_lint_test` fails on a new shader atomic into a host-visible buffer (classify it there).

@@ -7,7 +7,7 @@
  "timeout": 499,
  "repeat": 1,
  "live_batch": "m4m5-first",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_hit_material=1,rt_xfb_mb=1408,rt_cascade_mb=587,gi=1,gi_rt=1,gi_rt_fallback=0,gi_hit_direct=0,rt_stats=0,qa_exposure_hold=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_hit_material=1,rt_xfb_mb=1408,rt_cascade_mb=587,gi=1,gi_rt=1,gi_rt_fallback=0,gi_hit_direct=0,rt_stats=0,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -72,5 +72,18 @@
  ],
  "stop_on_dump": true,
  "purpose": "PLAN_M4 M4.1, lean: gi_hit_direct OFF/ON/OFF in one run, each a 20 s static cost window (diag off) plus an 8 s PNG trace phase and a Q/E turn; rt_stats only in the warm-up (participation). Gate: no GI radiance below OFF beyond the OFF-a/OFF-b spread in the PNG pairs, added bounce in hidden-hit crops, cost = gi trace pass median ON minus OFF (static and turn). No bursts: the transient gate needs a follow-up.",
- "estimated_phase_seconds": 199
+ "estimated_phase_seconds": 199,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  }
+ ]
 }

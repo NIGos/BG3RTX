@@ -171,6 +171,8 @@ add_executable(native_hit_order_test tests/native_hit_order_test.cpp)
 add_test(NAME native_hit_order_test COMMAND native_hit_order_test)
 add_executable(native_hit_join_test tests/native_hit_join_test.cpp)
 add_test(NAME native_hit_join_test COMMAND native_hit_join_test)
+add_executable(native_hit_recycle_test tests/native_hit_recycle_test.cpp)
+add_test(NAME native_hit_recycle_test COMMAND native_hit_recycle_test)
 add_executable(native_hit_abi_test tests/native_hit_abi_test.cpp)
 target_include_directories(native_hit_abi_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME native_hit_abi_test COMMAND native_hit_abi_test)
@@ -292,10 +294,11 @@ target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOUR
 add_test(NAME settings_test COMMAND settings_test)
 # Offline Python tooling checks (no build products): host-visible atomics lint, every-window
 # queue gates, the lean-batch energy gates, progress fragments, the coverage HANDLING table, the native ambient
-# table, the gi_hit_direct replay invariant (tools/gi_hit_invariant.py).
+# table, the gi_hit_direct replay invariant (tools/gi_hit_invariant.py), the shader compile cache keys
+# (tools/shader_identity.py).
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant)
+  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
