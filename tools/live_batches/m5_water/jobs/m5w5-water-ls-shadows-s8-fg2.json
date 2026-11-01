@@ -87,5 +87,27 @@
  ],
  "stop_on_dump": true,
  "purpose": "PLAN_M5 M5.4b rt_water_ls_shadows (local lights) at S8 Water Queens House: geometry and reflections on throughout, compose and sun shadows off (isolates the local-light visibility), rt_water_ls_shadows=1 at launch so the water FS are patched with the sun and local-light words (96-B records), toggled live. The audited water FS shadow only lights with a game shadow map (atlas); ON walks the FS's own froxel list (its set 2 light buffers, captured at the water draw), checks the recomputed per-light sum against the FS's recorded point + spot sum, and removes F c_k of each unshadowed light whose traced ray is occluded: C' = max(C - F sum (1 - V_k) c_k, 0). A 15 s precheck with the key on (its [water] local shadows line needs local records and checked records, else INVALID: a view without local light on the water), then OFF / ON / OFF with diag-off cost windows and one PNG each, and the view (rt_debug 27: red occluded, green lit, dark magenta only shadow-mapped lights, blue unknown, white sum check beyond 10%). Gates: sum check within 0.098% for at least 99% of checked records (the half precision of the record; the FS model test 4g has 100%), ratio of the means 1 within 0.1%; shot-off-a vs shot-off-b within the OFF repeat noise; shot-on darker than OFF only on water pixels the view marks red, never brighter; [water] local shadows GPU median (ON minus OFF of the compose GPU line) against the < 0.15 ms estimate and cost-on minus cost-off against the OFF spread.",
- "estimated_phase_seconds": 132
+ "estimated_phase_seconds": 132,
+ "expect_every": [
+  {
+   "name": "compose ran on most frames, every complete key-on window (was 3 of 120 in m5w3 070927)",
+   "select": "\\[water\\] compose \\(\\d+ frames, ",
+   "match": "\\[water\\] compose \\(120 frames, (1[01]\\d|120) composed, [0-9.]+ passes/frame\\): records [1-9][0-9.]*/frame, owned (?!0\\.00%)[0-9.]+%",
+   "windows": [
+    "precheck-ls-on",
+    "cost-on"
+   ],
+   "min": 1
+  },
+  {
+   "name": "local-light sum check (PLAN_M5_WATER M5.4b gate): within 2^-10 on >= 99% of records, ratio of the means 1 within 0.1%, every complete key-on window",
+   "select": "\\[water\\] local shadows \\(\\d+ frames, ",
+   "match": "local records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned .*sum check over [1-9]\\d* records: within 0\\.098% (99\\.\\d\\d|100\\.00)%, .*ratio of the means sum / L (0\\.999\\d\\d|1\\.000\\d\\d|1\\.00100);",
+   "windows": [
+    "precheck-ls-on",
+    "cost-on"
+   ],
+   "min": 1
+  }
+ ]
 }

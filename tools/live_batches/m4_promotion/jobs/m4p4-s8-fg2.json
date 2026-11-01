@@ -91,5 +91,23 @@
  ],
  "stop_on_dump": true,
  "purpose": "M4 promotion gate, S8 polished stone: rf_hit_shade tier (b) share 24%, the reflection scene. Startup: the Ultra bundle (rt_hit_material=1, rt_hit_material_instanced=1, rt_emissive=1, rt_xfb_mb=1024, rt_cascade_mb=427). Live: one diag window (rt_stats + rf_stats, bundle ON), cost OFF / ON / OFF (diagnostics off), one PNG per state, a PNG per cumulative step (gi_hit_direct, +gi_hit_sun, +rf_hit_shade, +instanced). Bundle OFF = the five live keys 0 and rt_emissive 0 (the Ctrl+Shift+F9 live path). Also cost-ao0 (bundle ON with hit_ao_rays=0, right after cost-on: the AO rays' cost at hits) and, with the new core, the rf hit shade boxes line (L_b's projector part) in diag-on.",
- "estimated_phase_seconds": 157
+ "estimated_phase_seconds": 157,
+ "expect_every": [
+  {
+   "name": "one trace written in every shot-* window (each energy comparison needs it; m4p1 111854 lost shot-step-sun/-rf)",
+   "select": "\\[trace\\] frame \\d+ written: ",
+   "match": "\\[trace\\] frame \\d+ written: ",
+   "windows": [
+    "shot-off-a",
+    "shot-step-gi",
+    "shot-step-sun",
+    "shot-step-rf",
+    "shot-step-inst",
+    "shot-on",
+    "shot-off-b"
+   ],
+   "min": 1,
+   "event": true
+  }
+ ]
 }

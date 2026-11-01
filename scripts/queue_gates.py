@@ -23,6 +23,15 @@ then every frame it covers ran with the window's settings. The first line after 
 straddles two windows and is skipped (not passed). This rule is derived from the log cadence,
 not tuned.
 
+An entry with "event": true judges one-off lines instead (e.g. "[trace] frame N written" in each
+shot-* window): every selected line from the window's applied settings to its end counts, with
+no straddle rule, and "min" is the number of events the window must hold.
+
+Plan drift: the runner's "[pan-plan] window N ... set=<keys>" line carries the keys the phase
+applied. When the plan's step N has a "set" and it differs, the plan file changed after the run
+(m4p3 / m4p4 11:2x ran before cost-ao0 was inserted, so every later label was one phase off):
+the windowed gates then fail with "plan drift" instead of judging the wrong windows.
+
     py -3 scripts/queue_gates.py --gates gates.json --log run.log [--runner runner.txt --plan plan.json]
 
 Prints one line per failure and exits 1 if any gate fails; exit 0 and "every-window gates: ok".
@@ -37,6 +46,7 @@ _TS = re.compile(r"(\d\d):(\d\d):(\d\d)\.(\d{3})")
 _WINDOW = re.compile(r"(\d\d:\d\d:\d\d\.\d{3}) \[pan-plan\] window (\d+)\b")
 _COMPLETE = re.compile(r"(\d\d:\d\d:\d\d\.\d{3}) \[motion-plan\] complete")
 _CFG = re.compile(r"\[cfg\] settings read")
+_SET = re.compile(r" set=(\S*)")
 
 
 def _sec(stamp):
@@ -75,23 +85,36 @@ def stamped_lines(text):
 
 
 def windows(runner_text, plan, game_lines):
-    """[{label, index, start, applied, end}] from the runner's [pan-plan] lines."""
+    """[{label, index, start, applied, end, set}] from the runner's [pan-plan] lines."""
     clock = _Clock()
     starts, complete = [], None
     for line in runner_text.splitlines():
         m = _WINDOW.search(line)
         if m:
-            starts.append((clock(_sec(m.group(1))), int(m.group(2))))
+            sm = _SET.search(line)
+            starts.append((clock(_sec(m.group(1))), int(m.group(2)), sm.group(1) if sm else None))
             continue
         m = _COMPLETE.search(line)
         if m:
             complete = clock(_sec(m.group(1)))
     out = []
-    for k, (start, index) in enumerate(starts):
+    for k, (start, index, applied_set) in enumerate(starts):
         end = starts[k + 1][0] if k + 1 < len(starts) else (complete if complete is not None else float("inf"))
         label = plan[index].get("label", str(index)) if 0 <= index < len(plan) else str(index)
         applied = next((t for t, l in game_lines if start <= t < end and _CFG.search(l)), start)
-        out.append({"label": label, "index": index, "start": start, "applied": applied, "end": end})
+        out.append({"label": label, "index": index, "start": start, "applied": applied, "end": end, "set": applied_set})
+    return out
+
+
+def plan_drift(wins, plan):
+    """Windows whose runner `set=` differs from the plan step's "set" (the plan changed after the run)."""
+    out = []
+    for w in wins:
+        i = w["index"]
+        if w.get("set") is None or not (0 <= i < len(plan)) or "set" not in plan[i]:
+            continue
+        if str(plan[i]["set"]) != w["set"]:
+            out.append(w)
     return out
 
 
@@ -100,6 +123,7 @@ def check(gates, game_text, runner_text="", plan=None):
     plan = plan or []
     lines = stamped_lines(game_text)
     wins = None
+    drift = []
     failures = []
     for g in gates:
         sel = re.compile(g["select"])
@@ -117,6 +141,15 @@ def check(gates, game_text, runner_text="", plan=None):
             continue
         if wins is None:
             wins = windows(runner_text, plan, lines)
+            drift = plan_drift(wins, plan)
+            if drift:
+                w = drift[0]
+                failures.append(f"plan drift: {len(drift)} window(s) ran other keys than the plan says (first: window "
+                                f"{w['index']} '{w['label']}' ran set={w['set'][:120]}); the plan changed after the run, "
+                                f"window labels are not trusted")
+        if drift:
+            continue
+        event = bool(g.get("event"))
         for label in labels:
             hits = [w for w in wins if w["label"] == label]
             if not hits:
@@ -128,13 +161,17 @@ def check(gates, game_text, runner_text="", plan=None):
                 for t, l in picked:
                     if t >= w["end"]:
                         break
-                    if prev is not None and prev >= w["applied"]:
+                    if event:
+                        if t >= w["applied"]:
+                            judged.append(l)
+                    elif prev is not None and prev >= w["applied"]:
                         judged.append(l)
                     prev = t
                 bad = [l for l in judged if not match.search(l)]
                 where = f"window '{label}' (phase {w['index']})"
                 if len(judged) < need:
-                    failures.append(f"every-window {name}: {where} has {len(judged)} complete line(s), need {need}")
+                    kind = "event line(s)" if event else "complete line(s)"
+                    failures.append(f"every-window {name}: {where} has {len(judged)} {kind}, need {need}")
                 if bad:
                     failures.append(f"every-window {name}: {where}: {len(bad)} of {len(judged)} line(s) fail /{g['match']}/; first: {bad[0][:200]}")
     return failures

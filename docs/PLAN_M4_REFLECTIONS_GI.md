@@ -55,9 +55,13 @@ Still unmeasured (the batch measures all but the last two):
 - Not in this batch: the startup hit-material capture cost (restart key, stays on in both states) and motion (M4.1).
 
 Batch `tools/live_batches/m4_promotion` (4 launches, ~18 min, ~1.2-1.8 GB). Pass, to merge the preset branch:
-all 4 runs valid; bundle ON scene colour within the OFF-a/OFF-b spread or brighter with the step that carries it
-named (no step darker beyond the spread); emission ON within or brighter; capacity 0 overflow; costs reported
-(user call: quality before frame rate on Ultra). The rf_hit_shade bias decision stays the user's (strict gate fails).
+all 4 runs valid (a trace in every shot window); each step's and the bundle's scene colour change equal to the
+delta predicted in `tools/live_batches/m4_promotion/predicted.json` (committed before the run; empty = no change)
+within the derived band, two-sided (GATE_AUDIT_20261101 S4: the old "within the OFF-a/OFF-b spread or brighter
+with the step named" flagged 46% of pure noise and passed any explained brightening); capacity 0 overflow; costs
+reported (user call: quality before frame rate on Ultra). The rf_hit_shade bias decision stays the user's (strict
+gate fails). m4p3 112657 read with the plan it ran (eeca1fd): S6 steps -1.05 / -1.82 / -3.10% (gi, +sun, +inst,
+rt_emissive 0) against a 1.73% band, in-run OFF spread 0.07%: darker, unexplained, to be predicted or fixed first.
 
 ## Current state (exact keys)
 
