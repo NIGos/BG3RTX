@@ -33,6 +33,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/shaders.cpp
   layer/util.cpp
   layer/dump.cpp
+  layer/replay.cpp
   layer/ngx.cpp
   layer/rrpost.cpp
   layer/geocapture.cpp
@@ -376,6 +377,10 @@ target_link_libraries(frame_replay PRIVATE vulkan-1)
 target_compile_definitions(frame_replay PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}" BG3RTX_DXC="${VULKAN_SDK}/Bin/dxc.exe")
 add_test(NAME frame_replay_test COMMAND frame_replay --self-test ${CMAKE_BINARY_DIR}/frame_replay_test)
 set_tests_properties(frame_replay_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+# The pack writer's CPU side (common/replay_pack.h: manifest writer round trip, InstInfo spans,
+# budget) that the live writer (layer/replay.cpp) and --synthesize share.
+add_executable(replay_pack_test tests/replay_pack_test.cpp)
+add_test(NAME replay_pack_test COMMAND replay_pack_test)
 
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp core/em_policy.cpp core/water.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)

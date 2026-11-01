@@ -63,22 +63,40 @@ Estimate for a 2560 x 1440 render frame, to be replaced by the first live pack's
   budget (`omitted`); geometry and set 0 are never dropped (a pack over budget without textures is
   "over budget" and not written).
 
-## Live writer (NOT built yet; the live job tools/live_batches/replay_capture waits for it)
+## Live writer (layer/replay.cpp, core/gi.cpp `replay_after_hit_gi`; ABI 25)
 
-Key `replay_pack` (serial, 0 off; diagnostics only, `BG3RTX_DIAGNOSTICS`; capture only, no rendering
-change). On a new serial, at the next `gi_hit_direct` dispatch:
-1. Core (core/gi.cpp `hit_gi_dispatch`, hot-reloadable): after `CmdDispatch`, copy into host buffers
-   (`alloc_host_buffer`) every set-0 resource from its `writes` (buffers by VkDescriptorBufferInfo;
-   game images from the Snapshot `Bg3Binding` (render targets have TRANSFER_SRC, tracker.cpp
-   force_transfer_src); core images giRaw, giRawDepth, prevRadiance, rtOrigin, hdSlots need
-   TRANSFER_SRC at `alloc_image`), plus `hp` (the pushed constants) and the groups `(g_hw+7)/8`.
-2. Layer (needs one host call, ABI 25: `replay_scene(cmd, tlas, query_alpha, dir)`): resolve the
-   query AlphaDSL to its build's buffers (alphatest.cpp: rec, soups, InstInfo, pool, stamp; the hit
-   records/basis of hit_material.cpp), copy the instance array of that scene slot after the submit
-   fixup (bvhsplit.cpp ring, host-mapped), the InstInfo-referenced soup/pool slices and pool basis
-   ranges, and the referenced texture elements (tracker view -> image) within the budget.
-3. Write `captures/replay-<stamp>-<serial>/` after that frame's fence (one wait, diagnostics only),
-   then log `[replay] pack <serial> written: <dir>, <bytes> bytes (<n> images omitted), frame <f>,
-   pass gi_hit_direct, instances <n>` (or `[replay] pack <serial> failed|over budget: <why>`).
-Open questions for that step: whether the AlphaDSL's descriptor contents can be read back from the
-layer's own write records (alphatest.cpp) rather than re-derived; the VT cache sizes at S8.
+Key `replay_pack` (bg3rtx.ini, 0 off; not in the GUI presets): a positive serial takes one pack at the
+next base-variant `gi_hit_direct` dispatch, once per serial (kept across core reloads); -1 one pack with
+every trace (hotkey, `trace.request`, auto). Diagnostics only: the layer built with BG3RTX_DIAGNOSTICS=OFF
+leaves `Bg3HostApi::replay_pack` null and the core does nothing. Capture only, no rendering change.
+1. Core (hot-reloadable): right after the pass's `vkCmdDispatch` it calls the one new host call
+   `int replay_pack(cmd, const Bg3ReplayDispatch*)` with the pushed constants, the push descriptor set 0
+   as pushed, the output bindings (b8 giRaw, b13 giRawDepth), the material set 1 and the TLAS. A
+   gi_hit_sun or SHaRC variant is refused (`[replay] pack N failed: ... variant`).
+2. Layer (stable): it wraps a few `dd->vk` entries (image, view, sampler, buffer creation; the material
+   sets' allocation and the layer's own writes and copies into them: tracker.cpp marks the game's
+   vkUpdateDescriptorSets so those are skipped). From those records it plans and records, in the same
+   command buffer, copies into host-visible staging chunks (256 MB each):
+   - set 0: UBOs from the game's host mapping at record (or a transfer copy), SSBOs and images by GPU
+     copies (depth as R32F), outputs after the dispatch as the live reference (`output ... s0b8.live`);
+     rtStats (b20) is left out (the replay counts into its own buffer);
+   - set 1: whole buffers (records, alpha records/soup, stamp, InstInfo, hit records, basis); the soup
+     b6 and pool b8 whole when they fit the budget (pool first: its basis rows lie outside the
+     InstInfo spans), else the InstInfo spans merged (4 KB gaps) as `range` slices of one file
+     (`range S B OFFSET FILE FOFF BYTES`); every recorded image element with all mips of its view; the
+     samplers (b4/b5 immutable, b15 as written);
+   - the TLAS instance array of the scene ring region whose InstInfo set 1 binds (rt_replay_region).
+   Buffers without TRANSFER_SRC are copied by `shaders/replay_copy.hlsl`. Images without TRANSFER_SRC
+   (most game textures), in a format the pack does not carry, or over the budget (largest first) are
+   `omitted`; the counts per reason are the manifest's first `note`.
+3. When the GPU has run that frame (life_gpu_done, no wait) a worker thread checks the staging marker,
+   writes `captures/replay-<stamp>-<serial>/` and logs
+   `[replay] pack <serial> written: <MB> MB (<n> images omitted), frame <f>, pass gi_hit_direct, instances <n> -> <dir>`
+   (or `failed: <why>` / `over budget: <MB> MB without textures`). At record it logs
+   `[replay] pack <serial> recorded at frame ...` with the copy counts and the geometry mode.
+Cost: one frame records the copies (a few ms of CPU, a GPU copy of up to 1 GB) and allocates the
+staging; the file writing is off the render thread. Not measured live yet (`READY_FOR_LIVE`).
+CTests: `replay_pack_test` (manifest writer round trip, InstInfo spans, budget); `frame_replay_test`
+writes its synthetic pack with the same writer (`rp::serialize`, soup as two file slices) and replays it.
+Open: the share of textures with TRANSFER_SRC (omitted ones fail material lookups as reason 6) and the
+VT cache sizes at S8: the first live pack's note line answers both.

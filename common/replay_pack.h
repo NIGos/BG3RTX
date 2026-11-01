@@ -12,7 +12,8 @@
 //   dispatch X Y Z                          workgroup counts
 //   push FILE                               the 256 push-constant bytes
 //   buffer S B BYTES [FILE]                 descriptor range of BYTES; FILE fills it from 0 (rest zero)
-//   range S B OFFSET FILE                   a further slice at OFFSET (sparse: only what instances use)
+//   range S B OFFSET FILE [FOFF BYTES]      a further slice at OFFSET (sparse: only what instances use):
+//                                           FILE whole, or BYTES of it from byte FOFF (many slices, one file)
 //   image S B E FORMAT W H LAYERS MIPS FILE VkFormat number; mip-major, each mip all layers, packed
 //   omitted S B E                           an image left out over the budget: bound NaN, so a
 //                                           material lookup that needs it fails as "sampling" (6)
@@ -27,6 +28,7 @@
 // (b8, object space, kInfoPool), stride meta & 255, exactly as the layer builds the BLAS
 // (layer/bvhsplit.cpp tri_geometry); opaque unless kInfoAlpha. So the pack holds those buffers
 // (sparse ranges) and the instance array as read at submit.
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <iterator>
@@ -122,7 +124,7 @@ inline uint64_t image_bytes(uint32_t f, uint32_t w, uint32_t h, uint32_t layers,
 }
 
 struct Buffer { uint32_t set, binding; uint64_t bytes; std::string file; };
-struct Range { uint32_t set, binding; uint64_t offset; std::string file; };
+struct Range { uint32_t set, binding; uint64_t offset; std::string file; uint64_t file_offset = 0, bytes = 0; };   // bytes 0: whole file
 struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::string file; };
 struct Omitted { uint32_t set, binding, element; };
 struct Sampler { uint32_t set, binding, element, mag, min, mip, au, av, aw; float aniso, max_lod; };
@@ -162,7 +164,11 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
     else if (k == "push") ok = bool(t >> m.push);
     else if (k == "instances") ok = bool(t >> m.instances >> m.instance_count);
     else if (k == "buffer") { Buffer b{}; ok = bool(t >> b.set >> b.binding >> b.bytes); t >> b.file; m.buffers.push_back(b); }
-    else if (k == "range") { Range r{}; ok = bool(t >> r.set >> r.binding >> r.offset >> r.file); m.ranges.push_back(r); }
+    else if (k == "range") {
+      Range r{}; ok = bool(t >> r.set >> r.binding >> r.offset >> r.file);
+      if (ok && (t >> r.file_offset)) ok = bool(t >> r.bytes) && r.bytes; else r.file_offset = 0;
+      m.ranges.push_back(r);
+    }
     else if (k == "image") {
       Image i{}; ok = bool(t >> i.set >> i.binding >> i.element >> i.format >> i.w >> i.h >> i.layers >> i.mips >> i.file);
       ok = ok && i.w && i.h && i.layers && i.mips && image_bytes(i.format, i.w, i.h, i.layers, i.mips);
@@ -180,5 +186,86 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
   if (!find_pass(m.pass)) { error = "unknown pass '" + m.pass + "'"; return false; }
   if (m.push.empty() || !m.groups[0] || !m.groups[1] || !m.groups[2]) { error = "push or dispatch missing"; return false; }
   return true;
+}
+// ---- writer side (layer/replay.cpp, tools/frame_replay.cpp --synthesize) ----
+
+// The manifest text of `m` (parse(serialize(m)) == m for every field the grammar carries).
+inline std::string serialize(const Manifest& m) {
+  std::ostringstream o;
+  o.precision(9);
+  o << "bg3rtx_replay_pack " << (m.version ? m.version : kVersion) << "\n";
+  o << "pass " << m.pass << "\n";
+  o << "defines " << (m.defines.empty() ? "-" : m.defines) << "\n";
+  o << "frame " << m.frame << "\n";
+  for (const auto& n : m.notes) o << "note" << (n.empty() || n[0] == ' ' ? "" : " ") << n << "\n";
+  o << "dispatch " << m.groups[0] << " " << m.groups[1] << " " << m.groups[2] << "\n";
+  o << "push " << m.push << "\n";
+  for (const auto& b : m.buffers) o << "buffer " << b.set << " " << b.binding << " " << b.bytes << (b.file.empty() ? "" : " " + b.file) << "\n";
+  for (const auto& r : m.ranges) {
+    o << "range " << r.set << " " << r.binding << " " << r.offset << " " << r.file;
+    if (r.bytes) o << " " << r.file_offset << " " << r.bytes;
+    o << "\n";
+  }
+  for (const auto& i : m.images)
+    o << "image " << i.set << " " << i.binding << " " << i.element << " " << i.format << " " << i.w << " " << i.h << " " << i.layers << " "
+      << i.mips << " " << i.file << "\n";
+  for (const auto& x : m.omitted) o << "omitted " << x.set << " " << x.binding << " " << x.element << "\n";
+  for (const auto& s : m.samplers)
+    o << "sampler " << s.set << " " << s.binding << " " << s.element << " " << s.mag << " " << s.min << " " << s.mip << " " << s.au << " "
+      << s.av << " " << s.aw << " " << s.aniso << " " << s.max_lod << "\n";
+  if (!m.instances.empty()) o << "instances " << m.instances << " " << m.instance_count << "\n";
+  for (const auto& x : m.outputs)
+    o << "output " << x.set << " " << x.binding << " " << x.format << " " << x.w << " " << x.h << (x.reference.empty() ? "" : " " + x.reference) << "\n";
+  return o.str();
+}
+
+// A byte span of a buffer. merge_spans sorts and joins spans that overlap or are at most `gap`
+// bytes apart (the gap is copied too: fewer, larger copies), so each byte is written once.
+struct Span { uint64_t offset, bytes; };
+inline void merge_spans(std::vector<Span>& v, uint64_t gap) {
+  std::vector<Span> in;
+  for (const Span& s : v) if (s.bytes) in.push_back(s);
+  std::sort(in.begin(), in.end(), [](const Span& a, const Span& b) { return a.offset < b.offset; });
+  v.clear();
+  for (const Span& s : in) {
+    if (!v.empty() && s.offset <= v.back().offset + v.back().bytes + gap) {
+      const uint64_t end = std::max(v.back().offset + v.back().bytes, s.offset + s.bytes);
+      v.back().bytes = end - v.back().offset;
+    } else {
+      v.push_back(s);
+    }
+  }
+}
+inline uint64_t span_bytes(const std::vector<Span>& v) { uint64_t n = 0; for (const Span& s : v) n += s.bytes; return n; }
+
+// The spans of the soup (b6) and pool (b8) that a frame's InstInfo entries (16 B each: base, meta,
+// rec, tris; layer/bvhsplit.cpp) name, as the BLAS builds read them: tris * 3 vertices of stride
+// meta & 255 from base, opaque soup unless kInfoPool. Legacy soup, hair AABBs and empty entries name
+// nothing (frame_replay leaves them out of the TLAS too).
+inline void instinfo_spans(const uint32_t* info, uint32_t count, std::vector<Span>& soup, std::vector<Span>& pool) {
+  for (uint32_t i = 0; i < count; ++i) {
+    const uint32_t base = info[i * 4], meta = info[i * 4 + 1], tris = info[i * 4 + 3], stride = meta & 255u;
+    if (!tris || stride < 12 || (meta & (kInfoLegacy | kInfoHair))) continue;
+    (meta & kInfoPool ? pool : soup).push_back({base, uint64_t(tris) * 3 * stride});
+  }
+}
+
+// The budget (tools/frame_replay.md "Size"): `fixed` bytes are never dropped (set 0, geometry,
+// records); the droppable images go largest first until the total fits. Returns the indices
+// dropped; `over` when even the fixed part does not fit (the pack is then not written).
+inline std::vector<size_t> drop_over_budget(uint64_t fixed, const std::vector<uint64_t>& droppable, uint64_t budget, bool& over) {
+  std::vector<size_t> order(droppable.size()), dropped;
+  for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+  std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return droppable[a] > droppable[b]; });
+  uint64_t total = fixed;
+  for (uint64_t b : droppable) total += b;
+  over = fixed > budget;
+  for (size_t i : order) {
+    if (total <= budget) break;
+    total -= droppable[i];
+    dropped.push_back(i);
+  }
+  std::sort(dropped.begin(), dropped.end());
+  return dropped;
 }
 }  // namespace bg3::replay

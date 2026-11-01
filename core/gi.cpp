@@ -1812,6 +1812,31 @@ bool ensure_hit_gi_sun_layout(VkDescriptorSetLayout alpha,bool sharc){
  return true;
 }
 
+// replay_pack (diagnostics, tools/frame_replay.md "Live writer"): a positive serial asks the host for
+// one replay pack of the next base-variant gi_hit_direct dispatch (once per serial, across core
+// reloads); -1 takes one with every trace. Capture only: called after the dispatch is recorded.
+void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,uint32_t n,VkDescriptorSet set1,
+                         VkAccelerationStructureKHR tlas,const Push& hp,const char* variant){
+ if(!host->replay_pack)return;
+ const int key=host->cfg_int("replay_pack",0);
+ if(key==0 || key<-1)return;
+ int* done=static_cast<int*>(host->persist("bg3rtx.replay_pack.done",sizeof(int)));
+ if(key>0 && *done==key)return;
+ if(variant){
+  if(key>0)host->log("[replay] pack %d failed: gi_hit_direct runs the %s variant; the pack contract is the base variant (gi_hit_sun=0, sharc=0)",key,variant);
+  if(key>0)*done=key;
+  return;
+ }
+ static const uint32_t outputs[2]={8u,13u};   // giRaw, giRawDepth (common/replay_pack.h kGiHitDirect)
+ Bg3ReplayDispatch d{};
+ d.serial=key>0?key:0;d.pass="gi_hit_direct";d.defines="";d.frame=hp.frame;
+ d.groups[0]=(g_hw+7)/8;d.groups[1]=(g_hh+7)/8;d.groups[2]=1;
+ d.push=&hp;d.push_bytes=sizeof hp;d.set0=writes;d.set0_count=n;d.outputs=outputs;d.output_count=2;
+ d.set1=set1;d.tlas=tlas;
+ const int r=host->replay_pack(cmd,&d);
+ if(key>0 && r!=0)*done=key;
+}
+
 // Qualified hidden-hit GI uses native local-light inputs, material set1 and
 // optional SHaRC set4. gi_hit_sun adds the D-LS sun set as set 3 (this frame's write_sun_set);
 // without it (ring full, layout failure) the direct-only variant runs, as gi_hit_sun=0.
@@ -1846,7 +1871,9 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  // gi_hit_sun: bit 25, the sun set b8 holds this frame's trust slot (header and roof volumes).
  if(sun)hp.ls_flags|=g_sunt_ok && g_sunt.view?(1u<<25):0u;
  vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof hp,&hp);
- vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);return true;
+ vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);
+ replay_after_hit_gi(cmd,writes,write_count,material_alpha,b.tlas,hp,sun?"gi_hit_sun":s.sharc?"SHaRC":nullptr);
+ return true;
 }
 
 // D-RF pass alone, 2 timestamps per frame, medians over 300 frames.

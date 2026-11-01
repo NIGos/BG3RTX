@@ -211,6 +211,11 @@ void core_init(DeviceData* dd) {
   g_host.rt_sun_scene = &rt_sun_scene;
   g_host.rt_hit_material_use=&rt_hit_material_use;
   g_host.read_bound = &host_read_bound;
+#if BG3RTX_DIAGNOSTICS
+  g_host.replay_pack = &replay_pack;
+#else
+  g_host.replay_pack = nullptr;
+#endif
 
   clean_hot_dir();
   std::unique_lock<std::shared_mutex> lock(g_core_mu);

@@ -283,6 +283,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
   if (!dd->vk.n) dd->vk.n = reinterpret_cast<PFN_vk##n>(gdpa(*out, "vk" #n "KHR"));
   BG3RTX_DEVICE_FUNCS(LOADD)
 #undef LOADD
+  if (!g_main) replay_device_created(dd);   // before anything of ours creates objects on it
 
   for (uint32_t i = 0; i < ci->enabledExtensionCount; ++i) dd->extensions.emplace_back(ci->ppEnabledExtensionNames[i]);
 
@@ -340,6 +341,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   sl_device_destroy(dd);
   if (dd == g_main) {
     core_shutdown();
+    replay_device_destroyed(dd);
     terrain_capture_device_destroyed(dd);
     em_device_destroyed(dd);
     water_device_destroyed(dd);
@@ -578,6 +580,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
   }
   trace_on_present(queue, info);
   pan_on_present(queue);
+  replay_on_present();
   framecap_on_present();
   if (g_headless) {
     std::vector<VkPipelineStageFlags> stages(info->waitSemaphoreCount, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);

@@ -396,6 +396,7 @@ void alpha_device_created(DeviceData* dd) {
   dci.bindingCount = uint32_t(bindings.size());
   dci.pBindings = bindings.data();
   ok = ok && vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) == VK_SUCCESS;
+  if (ok) replay_note_alpha_layout(g_dsl, g_wrap, g_clamp);   // replay packs record this layout's sets
   VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, ((g_omm_layout?7u:6u)+(native_hit::enabled()?2u:0u)) * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches+(native_hit::enabled()?native_hit::cache_slots:0u)) * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLER, (2+(native_hit::enabled()?native_hit::sampler_slots:0u)+(g_tileset_layout?kNativeSamplers:0u)) * kRing},

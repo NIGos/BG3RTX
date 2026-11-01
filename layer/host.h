@@ -366,6 +366,22 @@ inline void pan_on_submit(const std::vector<VkCommandBuffer>&) {}
 inline void pan_on_present(VkQueue) {}
 inline void pan_pass_end(VkCommandBuffer, CmdState*) {}
 #endif
+// Offline replay pack writer (replay.cpp, diagnostics only; tools/frame_replay.md "Live writer").
+// tracker.cpp's vkUpdateDescriptorSets hook sets this while it forwards the game's call: the
+// replay's descriptor record (wrapping dd->vk) keeps only the layer's own material-set writes.
+extern thread_local bool t_game_descriptor_update;
+#if BG3RTX_DIAGNOSTICS
+void replay_device_created(DeviceData* dd);   // wraps a few dd->vk entries (object and material-set records)
+void replay_device_destroyed(DeviceData* dd);
+void replay_note_alpha_layout(VkDescriptorSetLayout layout, VkSampler wrap, VkSampler clamp);   // alphatest.cpp
+int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* dispatch);   // Bg3HostApi::replay_pack (ABI 25)
+void replay_on_present();
+#else
+inline void replay_device_created(DeviceData*) {}
+inline void replay_device_destroyed(DeviceData*) {}
+inline void replay_note_alpha_layout(VkDescriptorSetLayout, VkSampler, VkSampler) {}
+inline void replay_on_present() {}
+#endif
 bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,
                      VkDeviceSize destination_offset = 0);
 VkBuffer rt_scene_pose();
@@ -777,6 +793,16 @@ void fault_poll_start(DeviceData* dd);    // devfault.cpp: active device-loss de
 void bvh_on_present();
 void bvh_forget_buffer(VkBuffer b);
 std::string bvh_describe_address(VkDeviceAddress a);   // device-fault reports ("" if not the split's)
+// Replay pack (layer/replay.cpp): a scene ring region by its InstInfo descriptor. rt_replay_region
+// takes rtscene's lock and calls bvh_replay_region.
+struct BvhReplayRegion {
+  VkBuffer ring = VK_NULL_HANDLE;
+  VkDeviceSize ring_bytes = 0, instances_offset = 0;
+  uint32_t count = 0;
+  std::vector<uint32_t> info;   // count x (base, meta, rec, tris)
+};
+bool bvh_replay_region(VkBuffer info, VkDeviceSize info_offset, BvhReplayRegion* out);
+bool rt_replay_region(VkBuffer info, VkDeviceSize info_offset, BvhReplayRegion* out);
 void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size);
 
 // ---- Track D D-EM: emissive geometry (emissive.cpp, docs/TRACK_D_EMISSIVE.md section 13) ----
