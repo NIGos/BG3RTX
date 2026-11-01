@@ -260,6 +260,12 @@ struct CpuTimer {
 std::mutex recycle_mutex;
 recycle::Pool<Buffer> recycled;
 bool recycle_live(){return cfg_hot(CfgHot::rt_hit_material_recycle)!=0;}
+// rt_hit_material_capture_unlocked=1: the G-buffer material hooks read a draw's bindings (capture /
+// capture_tileset: tracker lookups, sampler and view currency) without the provider mutex, which the
+// prepass hooks (note_prepass, note_opaque_prepass) take on every draw while the scene is recorded.
+// capture() touches no provider state but its rt_stats log throttles (capture_log_mutex).
+bool capture_unlocked(){return cfg_hot(CfgHot::rt_hit_material_capture_unlocked)!=0;}
+std::mutex capture_log_mutex;
 void free_now(Buffer& b){
  CpuTimer t(CpuFree);if(cpu_on.load(std::memory_order_relaxed))cpu_frees.fetch_add(1,std::memory_order_relaxed);
  if(b.mapped)dd->vk.UnmapMemory(dd->device,b.m);if(b.b)dd->vk.DestroyBuffer(dd->device,b.b,nullptr);if(b.m)dd->vk.FreeMemory(dd->device,b.m,nullptr);b={};
@@ -355,7 +361,7 @@ bool capture_tileset(VkCommandBuffer cmd,Material& material){
  if(!omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0) || !omm::ordinary_sampler_current(material.sampler))failed|=1u<<12;
  const auto& c=material.sampler.sampler;
  if(!c.complete || c.info.flags || c.info.compareEnable || c.info.unnormalizedCoordinates || c.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)failed|=1u<<13;
- if(failed && cfg_hot(CfgHot::rt_stats) && frame_index()%120==0){
+ if(failed && cfg_hot(CfgHot::rt_stats) && frame_index()%120==0){std::lock_guard log_lock(capture_log_mutex);
   static uint64_t frame=UINT64_MAX;static uint32_t count=0;if(frame!=frame_index()){frame=frame_index();count=0;}
   if(count++<2){log("[hit material tileset capture] frame %llu failures 0x%x (UBO bits0..1, native2D views2..10, sampler metadata/frozen/policy11..13); sampler generation %llu",(unsigned long long)frame,failed,(unsigned long long)c.id);
    for(uint32_t i=0;i<9;++i)if(failed&(1u<<(2+i))){const auto& f=facts[i];log("[hit material tileset view] binding %u queried/known/current %u/%u/%u format/type %u/%u mip/layer %u/%u extent %u/%u frozen set/layout/version %llu/%llu/%llu",
@@ -412,7 +418,7 @@ bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* rec
  // Two full prerequisite records per 120-frame window, not one missing-term
  // experiment at a time. These are actual draw bindings, not a native-proof claim.
  static uint64_t logged_frame=UINT64_MAX;static uint32_t logged=0;const auto frame=frame_index();
- if(cfg_hot(CfgHot::rt_stats) && frame%120==0){if(logged_frame!=frame){logged_frame=frame;logged=0;}
+ if(cfg_hot(CfgHot::rt_stats) && frame%120==0){std::lock_guard log_lock(capture_log_mutex);if(logged_frame!=frame){logged_frame=frame;logged=0;}
   if(logged++<2){
    log("[hit material capture] frame %llu failures 0x%x (bits0..2 buffers,3..6 views,7 sampler metadata,8 frozen sampler,9 sampler policy) pipe %u",
     (unsigned long long)frame,failed,state->pipe_id[0]);
@@ -709,7 +715,7 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  if(!on || !cfg_hot(CfgHot::rt_hit_material) || !one_time(state))return false;
  if(tileset_deferred(state->vs,state->fs) && !tileset_active())return false;Bg3Binding camera{};if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera) || !camera.buffer)return false;
  CpuTimer timer(CpuMaterial);
- auto draw=key(cmd,*state,args);std::lock_guard lock(mutex);const bool lean=recycle_live();if(!lean)collect();
+ auto draw=key(cmd,*state,args);std::unique_lock lock(mutex);const bool lean=recycle_live();if(!lean)collect();
  auto it=packets.find(state->recording);
  if(it==packets.end()){
   // rt_hit_material_recycle: collect once per new packet, not per G-buffer draw (it only frees
@@ -721,7 +727,7 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
   if(!create(p->rows,packet_rows,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT)){destroy_packet(*p);return false;}
   it=packets.emplace(state->recording,std::move(p)).first;
  }
- auto& p=*it->second;
+ const auto hold=it->second;auto& p=*hold; // held: collect() keeps a packet with another owner
  if(p.finalized || p.frame!=frame_index() || p.camera!=camera.buffer || p.camera_offset!=camera.offset){p.valid=false;return false;}
  const bool tileset=tileset_deferred(state->vs,state->fs);
  // rt_hit_material_instanced: the instanced wind / 2S pairs take the per-draw path, any instance count.
@@ -739,7 +745,12 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  // Count real audited duplicates even beyond the storage bound. Unrelated
  // shader families never reserve an audited candidate's geometry identity.
  if(p.materials.size()>=material_slots){++p.slot_overflow;return false;}
- Material material{};if(!(tileset?capture_tileset(cmd,material):capture(cmd,material,irecipe))){++p.binding_declined;if(counts)++counts->bindings;return false;}
+ // rt_hit_material_capture_unlocked: only this recording's thread writes this packet until it is
+ // finalized (other threads read finalized packets only), so the binding reads run unlocked.
+ const bool unlocked=capture_unlocked();if(unlocked)lock.unlock();
+ Material material{};const bool captured=tileset?capture_tileset(cmd,material):capture(cmd,material,irecipe);
+ if(unlocked)lock.lock();
+ if(!captured){++p.binding_declined;if(counts)++counts->bindings;return false;}
  // Instanced pairs: the record-time engine (STI layout) and 1:1 bytes staged in the gather's layout.
  unsigned char stage[instanced::kStageBytes];
  if(irecipe){uint32_t engine[16]{},ubo[8]{};const uint32_t eb=pool::engine_bytes(*irecipe),mb=native_vt::material_bytes(*irecipe);
@@ -879,7 +890,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
   else{
    // Same bindings as the audited pair (native_vt_surface.h). capture() keeps its own
    // statics, so it runs under the main mutex, never under pool_mutex.
-   Material m{};bool ok;{std::lock_guard lock(mutex);ok=capture(cmd,m,recipe,&failures);}
+   Material m{};bool ok;if(capture_unlocked())ok=capture(cmd,m,recipe,&failures);else{std::lock_guard lock(mutex);ok=capture(cmd,m,recipe,&failures);}
    const uint32_t engine=pool::engine_bytes(*recipe);
    const bool constant=recipe->reflectance==native_vt::ReflectanceConstant;const float half=0.5f;
    if(ok && constant)std::memcpy(&payload.reflectance,&half,4); // FS 3df678c0: RT2.y is 0.5, no 1:1 UBO
