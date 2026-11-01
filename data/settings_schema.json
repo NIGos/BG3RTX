@@ -219,6 +219,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_omm": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query", "opacity_micromap"], "keys": {"rt_omm": "1"}, "needs": {"rt_geometry": 2}}
      ]},
+    {"id": "exp_water_geometry", "label": "Water geometry capture",
+     "description": "Captures the game's forward water surfaces (docks, rivers, lakes) into a ray-tracing scene of their own, with a record per surface. Data only: nothing is drawn differently yet (first water step). Look at the log's [water] lines; the picture must not change. Experimental: coverage and GPU cost are unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_geometry": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1"}, "needs": {"rt_geometry": 1}}
+     ]},
     {"id": "exp_current_sun", "label": "Current cascade sun shadows",
      "description": "Uses the current four native sun-caster domains with finite per-layer rays and native receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the static BVH split to be enabled. Unsupported receiver/input domains retain native shadows. Physical sun size is unchanged. Restart required; in-game quality and GPU cost are unqualified.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,

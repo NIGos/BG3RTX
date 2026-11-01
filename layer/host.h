@@ -71,7 +71,7 @@ enum class CfgHot : int {
   fg_input_copy, pan_inputs, rt_event_flush, sl_log_barriers, rt_build, rt_bvh_split, rt_omm,
   rt_hit_material, rt_native_hair, rt_native_scalp, rt_mesh_audit_frames, rt_mesh_audits,
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_sun_cascade_current, rt_cascade_index, rt_alpha_cut,
-  rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test,
+  rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry,
   Count
 };
 int cfg_hot(CfgHot key);
@@ -822,6 +822,29 @@ void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandB
 void em_on_present();
 // ABI 9: the emissive scene for the core (host_api.h Bg3HostApi::rt_emissive).
 bool em_scene(VkCommandBuffer cmd, VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
+
+// ---- M5.1 water geometry (water.cpp, docs/PLAN_M5_WATER.md, rt_water_geometry) ----
+// The forward water draws (common/water_policy.h, run by the core) are captured through the
+// D-EM pass hook (geocapture.cpp) into a soup, a BLAS and a TLAS of their own per game
+// submission. Data only: the water TLAS is bound nowhere (no image change).
+struct WaterRange { VkBuffer soup; VkDeviceSize off, bytes; uint32_t prims; };
+void water_device_created(DeviceData* dd);   // stores the device; allocates nothing
+void water_device_destroyed(DeviceData* dd);
+bool water_wanted();                          // rt_water_geometry=1 and RT on the device
+bool water_is_pass(const Bg3PassInfo& p, uint32_t gbuf_w, uint32_t gbuf_h);   // the forward/effects signature
+bool water_pass_begin(VkCommandBuffer cmd);   // outside the pass; false: no water capture in it
+// Per draw of such a pass: 0 not a water draw, 1 a water draw counted but not captured,
+// 2 captured: bind XFB to *out (soup, off, bytes) for this draw. depth_write: the pipeline's
+// (1, 0, -1 dynamic/unknown).
+int water_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const EmDrawIn& in, int depth_write,
+               WaterRange* out);
+// After the pass, outside it: the captured ranges to camera-relative world (pass camera UBO).
+void water_pass_done(VkCommandBuffer cmd, VkBuffer ubo, VkDeviceSize ubo_off, uint32_t stride,
+                     const std::vector<WaterRange>& ranges, uint32_t pass_draws, uint32_t water_draws);
+void water_forget_cmd(VkCommandBuffer cmd);   // re-begun command buffer: its draws go (cmd.cpp)
+// Right after the game's submit, the queue lock held (layer.cpp): builds this batch's water scene.
+void water_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
+void water_on_present();                      // harvests builds, logs "[water]" every rt_timing_frames
 
 // ---- Track D phase 3: alpha-tested geometry in the ray queries (alphatest.cpp) ----
 // One line of shaders/rt/alpha_fs.txt (scripts/alpha_table.py).

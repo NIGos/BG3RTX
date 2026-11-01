@@ -48,6 +48,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/hit_material.cpp
   layer/bvhsplit.cpp
   layer/emissive.cpp
+  layer/water.cpp
   layer/devfault.cpp
   layer/aftermath.cpp
   layer/streamline.cpp
@@ -327,6 +328,9 @@ add_executable(native_hit_pool_test tests/native_hit_pool_test.cpp)
 add_test(NAME native_hit_pool_test COMMAND native_hit_pool_test)
 add_executable(emissive_policy_test tests/emissive_policy_test.cpp)
 add_test(NAME emissive_policy_test COMMAND emissive_policy_test)
+# M5.1 water policy (common/water_policy.h): classes of the asset-DB water families, records.
+add_executable(water_policy_test tests/water_policy_test.cpp)
+add_test(NAME water_policy_test COMMAND water_policy_test)
 # D-EM policy in the core (ABI 24): core/em_policy.cpp against the former layer path, bit for bit.
 add_executable(emissive_core_test tests/emissive_core_test.cpp core/em_policy.cpp)
 target_include_directories(emissive_core_test PRIVATE ${VULKAN_SDK}/Include)

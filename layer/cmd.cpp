@@ -462,6 +462,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->geo = {};
   s->geo_material_active=s->geo_material_no_writes=false;
   em_forget_cmd(cmd);   // D-EM: draws of an earlier recording that was never submitted
+  water_forget_cmd(cmd);   // M5.1 water, likewise
   s->geo_ts = -1;
   s->vb.fill({});
   s->ib = VK_NULL_HANDLE;

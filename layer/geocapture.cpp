@@ -316,8 +316,12 @@ std::atomic<bool> g_submit_wanted{false};
 // An effects pass of the emissive capture (D-EM, emissive.cpp): CmdState::geo holds
 // one with Kind::Em. Passes are recorded on several threads.
 struct EmPass {
+  bool em = false;           // D-EM engaged: em_pass_begin captures or times this pass
   bool capture = false;      // rt_emissive: draws are captured (otherwise only timed)
+  bool water = false;        // rt_water_geometry: water draws are captured (water.cpp)
   bool xfb_active = false;
+  uint32_t draws = 0, water_draws = 0;      // all draws of the pass; water draws (water.cpp census)
+  std::vector<WaterRange> water_ranges;     // captured water draws
   int ts = -1;
   VkBuffer ubo = VK_NULL_HANDLE;   // the pass's camera UBO (set 0 binding 2)
   VkDeviceSize ubo_off = 0;
@@ -1904,11 +1908,18 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
       frame_index() <= main_seen.load() + 4)
     gbuf = false;
   if (gbuf) main_seen = frame_index();
-  // D-EM: an effects pass (the game's emissive draws, emissive.cpp).
-  if (g_on && !gbuf && em_is_fx_pass(s->pass, g_gbuf_w, g_gbuf_h)) {
+  // D-EM: an effects pass (the game's emissive draws, emissive.cpp). The forward pass has the
+  // same signature: M5.1 water (water.cpp) captures its water draws through the same hook.
+  const bool em_fx = g_on && !gbuf && em_is_fx_pass(s->pass, g_gbuf_w, g_gbuf_h);
+  const bool water_fx = g_on && !gbuf && water_is_pass(s->pass, g_gbuf_w, g_gbuf_h);
+  if (em_fx || water_fx) {
     auto* e = new EmPass;
-    e->capture = em_pass_begin(cmd, s, &e->ts);
-    if (e->capture || e->ts >= 0) {
+    if (em_fx) {
+      e->capture = em_pass_begin(cmd, s, &e->ts);
+      e->em = e->capture || e->ts >= 0;
+    }
+    e->water = water_fx && water_pass_begin(cmd);
+    if (e->em || e->water) {
       set_geo(s, e);
     } else {
       delete e;
@@ -2072,12 +2083,50 @@ void rt_capture_stats(const Capture& c) {
   }
 }
 
+// The pass's camera UBO (set 0 binding 2), from its first draw that has one.
+static void em_pass_ubo(VkCommandBuffer cmd, EmPass* e) {
+  if (e->ubo) return;
+  Bg3Binding b;
+  if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+      (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
+      b.offset % g_ubo_align == 0) {
+    e->ubo = b.buffer;
+    e->ubo_off = b.offset;
+  }
+}
+
+// M5.1: a draw of a forward/effects pass with rt_water_geometry on. True: captured as water.
+static bool water_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args, EmPass* e) {
+  PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    auto it = g_pipes.find(s->pipe[0]);
+    if (it != g_pipes.end()) pi = it->second;
+  }
+  EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
+              pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
+  WaterRange r{};
+  const int w = water_draw(cmd, s, args, in, pi.depth_write, &r);
+  if (w) ++e->water_draws;
+  if (w != 2) return false;
+  em_pass_ubo(cmd, e);
+  p_bind_xfb(cmd, 0, 1, &r.soup, &r.off, &r.bytes);
+  p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
+  e->xfb_active = true;
+  e->water_ranges.push_back(r);
+  return true;
+}
+
 // D-EM: a draw of an effects pass. Emissive material draws that are not cached meshes
 // are captured into the emissive soup (emissive.cpp decides).
+// With rt_water_geometry, water.cpp sees each draw first.
 static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   auto* e = geo_empass(s);
-  if (e && !e->capture) return em_note_draw(s);   // timed only (rt_emissive=0)
   if (!e) return;
+  ++e->draws;
+  if (e->water && water_pre_draw(cmd, s, args, e)) return;
+  if (!e->em) return;
+  if (!e->capture) return em_note_draw(s);   // timed only (rt_emissive=0)
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
   {
     std::lock_guard<std::mutex> lock(g_mu);
@@ -2092,15 +2141,7 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
           pi.em_raster[0], pi.em_raster[1], pi.em_raster[2], pi.em_raster[3], pi.em_raster[4],
           pi.em_raster[5], pi.em_raster[6], pi.em_raster[7], pi.em_raster[8], unsigned(pi.em_dynamic));
   }
-  if (!e->ubo) {
-    Bg3Binding b;
-    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
-        (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
-        b.offset % g_ubo_align == 0) {
-      e->ubo = b.buffer;
-      e->ubo_off = b.offset;
-    }
-  }
+  em_pass_ubo(cmd, e);
   EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
               pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
   VkBuffer soup = VK_NULL_HANDLE;
@@ -2362,7 +2403,8 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
   if (geo_is(s, GeoKind::Em)) {
     auto* e = geo_empass(s);
     s->geo = {};
-    if (e) em_pass_done(cmd, s, e->ubo, e->ubo_off, g_stride, e->ranges, e->ts);
+    if (e && e->em) em_pass_done(cmd, s, e->ubo, e->ubo_off, g_stride, e->ranges, e->ts);
+    if (e && e->water) water_pass_done(cmd, e->ubo, e->ubo_off, g_stride, e->water_ranges, e->draws, e->water_draws);
     delete e;
     return;
   }
