@@ -12,6 +12,10 @@ inline bool storage_range_supported(uint64_t size,uint64_t limit){return size &&
 // default follows the stride, rounded (384 -> 1024 and 160 -> 427 at 64 B). A cap the user
 // changed is kept as set; 24 bytes or less keeps the default.
 inline constexpr int kXfbDefaultMb=384, kCascadeDefaultMb=160, kBaseStride=24;
+// The alpha region floor (rt_alpha_mb 64) follows the stride the same way: 64 -> 171 MB at 64 B, so the
+// first frames after a scene change (region at its floor, demand from the last frame unknown) hold the
+// same triangles as at 24 B (su1 S8 2026-11-01: 0.58 alpha draws/frame made opaque in the first window).
+inline constexpr int kAlphaDefaultMb=64;
 inline int effective_mb(int value,int default_mb,uint32_t stride){
  if(value!=default_mb || stride<=uint32_t(kBaseStride) || value<=0)return value;
  return int((uint64_t(value)*stride+kBaseStride/2)/kBaseStride);

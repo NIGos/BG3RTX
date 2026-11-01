@@ -511,7 +511,9 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
     // rt_alpha_mb, capped by rt_alpha_max_pct of the buffer and by what the
     // opaque triangles needed last frame.
     const VkDeviceSize mb = VkDeviceSize(1) << 20, size = c.xfb.size;
-    VkDeviceSize floor_b = VkDeviceSize((std::max)(cfg_int("rt_alpha_mb", 64), 1)) * mb;
+    // rt_alpha_mb left at its default follows the vertex size, as rt_xfb_mb does (rt_capture_budget.h).
+    VkDeviceSize floor_b = VkDeviceSize((std::max)(capture_budget::effective_mb(cfg_int("rt_alpha_mb", 64),
+        capture_budget::kAlphaDefaultMb, g_stride), 1)) * mb;
     const VkDeviceSize amb=capture_budget::alpha_region(size,floor_b,g_alpha_region.load(),
       g_alpha_demand_prev.load(),g_opaque_demand_prev.load(),cfg_int("rt_alpha_auto",1)!=0,
       cfg_int("rt_alpha_max_pct",60));

@@ -212,6 +212,25 @@ static bool ab_overridden(const char* key) {
 
 static void ab_poll_hotkey() {
   static bool was_down = false;
+  // The toggle's cost: the longest gap between presents in the 3 s after it (a shader fetched
+  // or compiled on the render thread, a pipeline created) is logged once.
+  static LARGE_INTEGER freq{}, last{}, since{};
+  static double longest_ms = 0;
+  static unsigned presents = 0;
+  LARGE_INTEGER now;
+  QueryPerformanceCounter(&now);
+  if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
+  if (since.QuadPart) {
+    longest_ms = (std::max)(longest_ms, double(now.QuadPart - last.QuadPart) * 1000.0 / double(freq.QuadPart));
+    ++presents;
+    const double ms = double(now.QuadPart - since.QuadPart) * 1000.0 / double(freq.QuadPart);
+    if (ms >= 3000.0) {
+      log("[ab] toggle cost: longest gap between presents %.1f ms in the %u presents of the %.0f ms after it", longest_ms,
+          presents, ms);
+      since.QuadPart = 0;
+    }
+  }
+  last = now;
   bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
               (GetAsyncKeyState(VK_F9) & 0x8000);
   if (down && !was_down && cfg_int("ab_hotkey", 1)) {
@@ -219,6 +238,9 @@ static void ab_poll_hotkey() {
     g_ab_off.store(off);
     log("[ab] Ctrl+Shift+F9: ray tracing %s (the game's own image %s)", off ? "OFF" : "ON",
         off ? "shown" : "replaced again");
+    since = now;
+    longest_ms = 0;
+    presents = 0;
   }
   was_down = down;
 }
@@ -369,6 +391,7 @@ static const CfgHotKey kCfgHot[] = {
   {"rt_alpha_cut", 1}, {"rt_alpha_stochastic", 1}, {"rt_alpha_unknown", 1}, {"rt_alpha_test", 1},
   {"rt_water_geometry", 0}, {"rt_water_compose", 0}, {"rt_hit_material_instanced", 0},
   {"rt_water_shadows", 0}, {"rt_water_ls_shadows", 0}, {"rt_water_refraction", 0}, {"rt_hit_material_recycle", 0},
+  {"rt_hit_material_capture_unlocked", 0},
 };
 static_assert(sizeof kCfgHot / sizeof kCfgHot[0] == size_t(CfgHot::Count), "kCfgHot must list every CfgHot");
 static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];
