@@ -295,11 +295,23 @@ inline constexpr Knob kKnobs[] = {
    "Reflection rays that hit a surface hidden from the camera are shaded with that surface's verified native "
    "material and lighting (point and spot lights, the sun with a traced shadow ray, the game's ambient) "
    "instead of keeping the reflection probe. Unsupported materials or lights keep the probe. Requires "
-   "Native hit materials at startup. No emission at hits; quality and GPU cost remain unqualified.",
+   "Native hit materials at startup. Emission at the hits: Emission at ray hits. Quality and GPU cost remain unqualified.",
    Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
    {{"off", "Off", 0, {{"rf_hit_shade", "0"}}, {}},
     {"on", "On", kCapRayQuery, {{"rf_hit_shade", "1"}}, {{"exp_hit_material",1},{"reflections",1}}}},
    {}, {0,0,0,0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"},{"rt_reflections","1","Ray-traced reflections"}}},
+
+  {"exp_hit_emission", "Emission at ray hits",
+   "Bounce and reflection rays that hit a glowing surface (lava, braziers, glowing runes) add that surface's "
+   "emitted light, from the captured emissive geometry. Hidden hits: only where Shaded hidden-surface bounce "
+   "or reflections shade the hit. All hits: also hits the screen shows (the screen value has no emission). "
+   "Needs Emissive geometry capture (rt_emissive=1) at startup and Shaded hidden-surface bounce and/or "
+   "reflections. Quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   {{"off", "Off", 0, {{"rt_hit_emission", "0"}}, {}},
+    {"hidden", "Hidden hits", kCapRayQuery, {{"rt_hit_emission", "1"}}, {{"exp_hit_material",1}}},
+    {"all", "All hits", kCapRayQuery, {{"rt_hit_emission", "2"}}, {{"exp_hit_material",1}}}},
+   {}, {0,0,0,0}, true, {{"rt","1","RT device setup"},{"rt_emissive","1","Emissive geometry capture startup"},{"rt_hit_material","1","Native material startup"}}},
 
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -371,7 +383,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 213 keys of bg3rtx.ini, in file order.
+// 214 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -470,6 +482,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_em_backdrop", "0"},
     {"rt_em_decal", "1"},
     {"rt_em_fx_pulse", "0"},
+    {"rt_hit_emission", "0"},
     {"rt_water_geometry", "0"},
     {"rt_water_xfb_mb", "32"},
     {"rt_water_xfb_max_mb", "256"},

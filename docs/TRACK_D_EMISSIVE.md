@@ -951,3 +951,58 @@ This also drops it in GF, where it passed: conservative until the AF cause is kn
   draw against the pass end (a per-draw dump or a mid-pass copy), or the blend state of
   each later draw that covers them. Note: the record dump only fires outside 0.8-1.25, so
   0.84 logged no dump; the em-forge plan assumed one. The exclusion stays (`rt_em_fx_pulse=0`).
+
+### 13.23 First consumer: emission at ray hits (`rt_hit_emission`, M4.4, 2026-11-01; offline, READY_FOR_LIVE)
+
+Key `rt_hit_emission=0` (live; GUI Experimental "Emission at ray hits", `exp_hit_emission`: Off / Hidden
+hits / All hits; needs `rt_emissive=1` at startup and `rt_hit_material=1`; acts through `gi_hit_direct`
+and/or `rf_hit_shade`). Plan: PLAN_M4_REFLECTIONS_GI.md M4.4.
+
+- **What.** A GI bounce ray or a reflection ray whose main-TLAS hit lies on a captured emitter adds that
+  emitter's record radiance (`shaders/rt/native_hit_emission.hlsli`): `em_lookup` within
+  `rt_em_tol` x the hit's camera distance + 1 cm, `em_radiance` at the hit's uv with the ray-cone
+  footprint. This is the projected check's lookup (`em_debug.hlsl`), so a hit gets exactly the record the
+  check validated. Units need no conversion: the lit buffer and the effects target are both pre-exposed
+  (compose adds one to the other as is).
+- **Record policy.** Exact families: used. Approximate families: only once calibrated
+  (`kEmFlagCalibrated`). Excluded families (`kFlagExcluded`; `rt_em_fx_pulse=0` drops `304be1c7` at
+  capture, so it is never in the TLAS): never. Two-sided, as the check.
+- **Where (energy).** The screen value has no emission: `prevRadiance` is the lit diffuse + specular
+  that `gi_composite.hlsl` keeps before compose adds the effects target (`sharc_inject.hlsl` adds that
+  target explicitly for the same reason). So nothing on screen counts emission today, and adding it
+  where a value lacks it never counts it twice:
+  - `1` hidden hits: GI hidden hits where fallback0 added no bounce (the `gi_hit_direct` domain; the
+    emission adds even when the material is unknown, the occlusion is unchanged), and shaded D-RF tier (b)
+    hits (L_b + emission). Unshaded tier (b) hits keep the probe.
+  - `2` also screen hits: GI on-screen hits and D-RF tier (a) hits. The rf_hit_shade tier (a) check takes
+    L_a before the addition (both sides of that check lack emission).
+  - SHaRC hits are never touched: the injection already adds the effects target (`sharc_em`).
+- **Layout.** No ABI change, no push descriptor: the host's emissive set (`Bg3HostApi::rt_emissive`,
+  contract `common/hit_emission_bindings.h`) as GI set 2 (the empty one) and D-RF set 5 (after SHaRC's 4).
+  Variants: `gi/gi_trace_rt{,_sharc}_hit_{direct,sun}_em.hlsl`, `gi/rt_reflections{,_sharc}_hit_shade_em.hlsl`.
+  The core (`hit_em_set`) binds the latest build when it is at most 3 frames old; else the variant without
+  emission runs. Push fields reused (unused elsewhere): `ls_kmode` bit 0 screen hits, `rt_ao_radius` rt_em_tol.
+- **Log** (every 300 frames; GI under `rt_stats=1`, D-RF under `rf_stats=1`):
+  `hit emission (300 frames): GI hidden hits: lookups N, emissive N, skipped N, added weighted luminance X;
+  GI screen hits: lookups N, emissive N, skipped N, added X; rf tier b: lookups N, emissive N, skipped N,
+  added luminance X; rf tier a: lookups N, emissive N, skipped N, added X; skipped by family: excluded N,
+  approximate uncalibrated N; clamped N; capture exclusion rt_em_fx_pulse=0 (304be1c7 not captured; its
+  draws are on the [em] soup line)`. Counters 331-349 (luminance x 1024, clamped at 64).
+- **Offline gates.** `py -3 tests/hit_emission_shader_test.py`: every key-off request of the merge-base
+  compiles byte-identical; every `*_em` request compiles, passes spirv-val and its contract (`--em`).
+  `native_hit_gpu_fixture` case 7: coplanar emissive quads in an emissive TLAS of their own, the real
+  `native_hit_emission`: constant record exact, x mask.r exact, policy (approximate 0, calibrated used,
+  excluded 0), no emitter and an occluder in front give 0, the `em_shift` latency shift sign.
+- **Live gate (not run).** S5/S6 lava and S3 braziers, one run, `rt_hit_emission` 0/1/2/0 with
+  `rt_stats=1 rf_stats=1`: the log line above nonzero; per pixel GI never darker than key off (it only
+  adds); the `rt_debug` 16-18 D-EM checks unchanged; crops show the glow in bounce and reflections.
+  Cost: `gi: trace pass` and `rf: reflection pass` GPU medians ON minus OFF. Expected small (one ray
+  query into a TLAS of tens of instances per eligible hit), not measured.
+- **Not done: emitters as light sources at hidden hits** (one sampled emitter + shadow ray from the light
+  list). Not cheap and clean yet: (a) the light list has per-group power sums but no prefix CDF, so a
+  sampler would walk up to 256 groups per hit, or the build needs a scan pass; (b) many emitters
+  (lava, braziers) already have artist point lights in the game's list: lighting with both counts that
+  light twice, so it needs a per-family "has an authored light" policy first; (c) the screen's own
+  direct lighting lacks emitter light too, so the hit-only version would make hidden surfaces brighter
+  than the same surfaces on screen. Next step: a scan pass for the CDF in the build, then the policy,
+  then screen + hits together.

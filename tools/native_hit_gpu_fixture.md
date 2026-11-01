@@ -3,7 +3,7 @@
 CTest `native_hit_gpu_fixture` (built by default, part of `.\scripts\build.ps1 -Test`).
 It runs the real hidden-hit shading functions on the GPU against closed-form references:
 `native_hit_direct` (point, spot and box lights, the screen's light policy),
-`native_hit_sun` (disc sampling), `native_hit_ao` and `hd_scatter`.
+`native_hit_sun` (disc sampling), `native_hit_ao`, `hd_scatter` and `native_hit_emission`.
 The include chain and defines are rf_hit_shade's (`NATIVE_HIT_BOXES`, `NATIVE_HIT_DLS_POLICY`)
 plus gi_hit_sun's `NATIVE_HIT_SUN_DISC`. Not covered: the roof-volume rule
 (`NATIVE_HIT_SUN_ROOF`, its trust slots), the ambient (`NATIVE_HIT_SHADE_FULL`),
@@ -19,7 +19,7 @@ Any validation error fails the run.
 
 ## Scenes
 
-The scenes are opaque triangles in one real TLAS. There are eleven 30 m floors, 100 m apart.
+The scenes are opaque triangles in one real TLAS. There are twelve 30 m floors, 100 m apart.
 Each dispatch has one froxel listing that dispatch's lights.
 
 1. Point lights (inverse square; the m5 < 0 model with b13[0]) and a spot light, checked against
@@ -45,6 +45,14 @@ Each dispatch has one froxel listing that dispatch's lights.
 6. Energy: direct + sun on a white floor equals the sum of the two references (the zero fallback
    adds nothing). `hd_scatter` matches the FresnelBlend formula on 368640 directions.
    White furnace: the albedo is at most 1 (worst 0.968), for roughness 0.3/0.6/1 and wo 0/60/85 deg.
+7. Emission at hits (`rt_hit_emission`, `rt/native_hit_emission.hlsli`): five emissive quads in an
+   emissive TLAS of their own (the host's set layout as set 4, records in the `em::EmRec` layout),
+   coplanar with a floor of the main TLAS, under rays from 3 m above. The main hit gives t; the real
+   `native_hit_emission` must return: a constant record's radiance exactly (7a); radiance x mask.r of a
+   1x1 FP16 mask exactly (7b); 0 for an approximate uncalibrated and an excluded record, the radiance for
+   a calibrated one (7c); 0 off the emitters and under an occluder 2.5 m up, outside the tolerance (7d);
+   with the camera moved 0.5 m since the build, a ray 0.3 m off the quad meets it and one 0.2 m inside
+   leaves it (7e: the sign of `em_shift`).
 
 ## Tolerance
 

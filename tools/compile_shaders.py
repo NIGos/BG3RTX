@@ -67,6 +67,11 @@ with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor(8) as pool:
     material_gi = [(str(Path(tmp) / spv_name(f, "main")), "RT_NATIVE_TILESET=1" in defines(f))
                    for f, rc, _ in res if not rc and f.partition("?")[0].endswith(
                        ("gi_trace_rt_hit_direct.hlsl", "gi_trace_rt_sharc_hit_direct.hlsl"))]
+    # rt_hit_emission: the hit-GI variants plus the emissive set 2 (--em), with and without the sun.
+    em_gi = [(str(Path(tmp) / spv_name(f, "main")), "RT_NATIVE_TILESET=1" in defines(f), "_hit_sun_em" in f.partition("?")[0])
+             for f, rc, _ in res if not rc and f.partition("?")[0].endswith(
+                 ("gi_trace_rt_hit_direct_em.hlsl", "gi_trace_rt_sharc_hit_direct_em.hlsl",
+                  "gi_trace_rt_hit_sun_em.hlsl", "gi_trace_rt_sharc_hit_sun_em.hlsl"))]
     # gi_hit_sun: the same contract plus the sun set 3 and the roof volumes b47 (--sun).
     sun_gi = [(str(Path(tmp) / spv_name(f, "main")), "RT_NATIVE_TILESET=1" in defines(f))
               for f, rc, _ in res if not rc and f.partition("?")[0].endswith(
@@ -82,23 +87,29 @@ with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor(8) as pool:
             refs = [p for p, t in references if t == tileset]
             if not gi and not refs and not sgi:
                 continue
-            result = subprocess.run([str(checker), *(["--tileset"] if tileset else []), *gi, "--sun", *sgi, "--reference", *refs], capture_output=True, text=True)
+            egi = [p for p, t, s in em_gi if t == tileset and not s]
+            esgi = [p for p, t, s in em_gi if t == tileset and s]
+            result = subprocess.run([str(checker), *(["--tileset"] if tileset else []), *gi, "--sun", *sgi,
+                                     "--em", *esgi, "--nosun", *egi, "--reference", *refs], capture_output=True, text=True)
             if result.returncode:
                 res.append(("GI host descriptor interface", result.returncode, result.stdout + result.stderr))
             else:
-                print(f"GI/reference host descriptor interface checked: {len(gi)} GI + {len(sgi)} GI sun + {len(refs)} reference SPIR-V modules; native tileset={tileset}")
+                print(f"GI/reference host descriptor interface checked: {len(gi)} GI + {len(sgi)} GI sun + {len(egi) + len(esgi)} GI emission + {len(refs)} reference SPIR-V modules; native tileset={tileset}")
     elif material_gi or references or sun_gi:
         print("SKIP GI/reference host descriptor interface: build native_hit_gi_bindings_test first; shader compilation alone is not interface validation")
     # rf_hit_shade (common/native_hit_rf_bindings.h): each compiled tier (b) module against its layout.
     rf_hit = [(f, str(Path(tmp) / spv_name(f, "main"))) for f, rc, _ in res if not rc and
-              f.partition("?")[0] in ("gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl")]
+              f.partition("?")[0] in ("gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
+                                      "gi/rt_reflections_hit_shade_em.hlsl", "gi/rt_reflections_sharc_hit_shade_em.hlsl")]
     rf_checker = root / "bin" / "native_hit_rf_bindings_test.exe"
     if rf_hit and rf_checker.exists():
         for f, spv in rf_hit:
             d = defines(f)
             flags = (["--sharc"] if "sharc" in f.partition("?")[0] else []) + \
                     (["--tileset"] if "RT_NATIVE_TILESET=1" in d else []) + \
-                    (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else []) +                     (["--cascade"] if "RT_CASCADE_MASKS=1" in d else [])
+                    (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else []) + \
+                    (["--cascade"] if "RT_CASCADE_MASKS=1" in d else []) + \
+                    (["--em"] if f.partition("?")[0].endswith("_em.hlsl") else [])
             result = subprocess.run([str(rf_checker), *flags, spv], capture_output=True, text=True)
             if result.returncode:
                 res.append(("rf hit shade descriptor interface " + f, result.returncode, result.stdout + result.stderr))
