@@ -32,6 +32,8 @@ These rules come from mistakes already made in this repo. They apply on every br
 - `common/settings.h` = the one table of settings. New key: add it to `bg3rtx.ini`, run
   `python scripts/gen_settings_defaults.py`, and the settings test must pass.
 - `data/assetdb` = offline game data (lights, materials, roofs, probes); `tools/assets` builds it.
+- Offline work runs at BelowNormal priority (`scripts/low-priority.ps1`, dot-sourced by build and
+  merge-green; children inherit it). The game stays Normal: below builds it starves its level load.
 - Tests: `.\scripts\build.ps1 -Test` (build + all CTests); `tests/qa_detectors_test.py`; QA
   harness `python -m scripts.qa` (docs/QA.md). Add a unit test for any non-trivial CPU logic.
 
@@ -61,6 +63,9 @@ These rules come from mistakes already made in this repo. They apply on every br
 ## Measuring correctly
 - GPU statistics counters live in device-local memory, reduced per workgroup, copied to the host after
   the timed region: host-visible atomics cost 15 ms (water reflections) and 7 ms (water compose) in 2026-11.
+  CTest `host_atomics_lint_test` fails on a new shader atomic into a host-visible buffer (classify it there).
+- A gate must hold in every ON window, not in one: use the job's `expect_every` (select, match,
+  plan `windows`; scripts/queue_gates.py) for per-window stats lines; plain `expect` is any-line.
 - Compare A/B within ONE run (toggle the key during the same moving session), never images
   across runs: two pans never match.
 - Energy: a quality change must not change mean brightness. Rejected temporal history falls
@@ -99,6 +104,9 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Plain English with normal spacing: always a space between words and numbers ("weekly 100%",
   not "weekly100%"). Short sentences. Keep handoff and progress files concise (handoff ~150 lines).
 - Progress entries: what changed, the key numbers before/after, kept/rejected/paused. No log dumps.
+- Branches never edit `docs/PROGRESS_CODEX.md`: write the entry to `docs/progress/<branch>.md`
+  (format in docs/progress/README.md). The coordinator folds them after merges with
+  `py -3 scripts/fold_progress.py` and keeps PROGRESS at ~150 lines.
 - If a user decision is needed, put the question at the top of `docs/PROGRESS_CODEX.md`, take the
   conservative option or do other work, and keep going.
 

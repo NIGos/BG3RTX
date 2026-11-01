@@ -41,10 +41,13 @@ SSS_FS = {"6f535075", "d1669194"}
 COMPOSE_FS = {"5c3fdabc"}   # compose: lit diffuse + specular + effects target (AUDIT_ENGINE_DATA R5)
 SKY_FS = {"c9f013fc": "sky", "68d5b764": "clouds"}
 
-# Our coverage per family (main, 2026-10-27; TRACK_D 9.10, 10, 12, 13). Columns:
-# caster (in the TLAS), sun, local (D-LS), gi (receives RT GI / AO), refl (D-RF on it),
-# em (its emission captured by D-EM, branch agent-a2212c228ec492214, not in main).
-Y, N, NA, PART, BR = "yes", "no", "n/a", "partial", "branch"
+# Our coverage per family (main d9234f5, 2026-11-01; TRACK_D 9.10, 10, 12, 13, TRACK_D_EMISSIVE,
+# PLAN_M4_REFLECTIONS_GI, PLAN_M5_WATER). Columns: caster (in the TLAS), sun, local (D-LS),
+# gi (receives RT GI / AO), refl (D-RF on it), em (its emission captured by D-EM).
+# "key": implemented in main behind an experimental key that is off by default (HANDLING_KEYS
+# names it); it counts as handled only once the key is qualified and on in a preset.
+Y, N, NA, PART, KEY = "yes", "no", "n/a", "partial", "key"
+HANDLING_DATE = "2026-11-01 (main d9234f5)"
 HANDLING = {
     "G-buffer: standard": (Y, Y, Y, Y, Y, NA),
     "G-buffer: unlit": (Y, NA, NA, NA, NA, N),
@@ -56,19 +59,34 @@ HANDLING = {
     "G-buffer: cloth/GGX": (Y, Y, Y, Y, Y, NA),
     "G-buffer: empty (sky or forward-only)": (NA, NA, NA, NA, NA, N),
     "decal": (NA, Y, Y, Y, Y, N),
-    "effects: emissive (EMI)": (NA, NA, NA, NA, NA, BR),
-    "effects: emissive decal": (NA, NA, NA, NA, NA, BR),
+    "effects: emissive (EMI)": (NA, NA, NA, NA, NA, KEY),
+    # Counted by D-EM, not captured: a box projected onto the surface, not geometry.
+    "effects: emissive decal": (NA, NA, NA, NA, NA, N),
     "effects: sky/clouds": (NA, NA, NA, NA, NA, N),
     "effects: backdrop": (N, NA, NA, NA, NA, N),
     "effects: VFX plane": (N, N, N, N, N, N),
-    "forward: water": (N, N, N, N, N, NA),
-    "forward: lava/emissive": (N, N, N, N, N, BR),
+    # M5.1 builds a water TLAS of its own that only the water passes trace: not a caster.
+    "forward: water": (N, KEY, N, N, KEY, NA),
+    # Emissive forward materials (ENV_Lava StaticInstancedForward) are captured as the
+    # approximate "forward" kind; the forward pass itself gets no RT lighting.
+    "forward: lava/emissive": (N, N, N, N, N, KEY),
     "forward: glass/refractive": (N, N, N, N, N, NA),
     "forward: VFX/particles": (N, N, N, N, N, N),
     "forward: transparent other": (N, N, N, N, N, N),
     "forward: unknown FS": (N, N, N, N, N, N),
     "SSS blur": (NA, NA, NA, NA, NA, NA),
     "UI": (NA, NA, NA, NA, NA, NA),
+}
+# The off-by-default keys behind the "key" cells, and the experimental keys that refine a
+# family's "yes" (all 0 in bg3rtx.ini and in every preset on 2026-11-01).
+HANDLING_KEYS = {
+    "G-buffer: standard": "native materials at GI/reflection hits: rt_hit_material, rt_hit_material_instanced "
+                          "(wind and two-sided alpha-test rows), gi_hit_direct, gi_hit_sun, rf_hit_shade; emission at "
+                          "hits: rt_hit_emission; cut-away roofs and off-screen casters for the sun: rt_cascade_casters",
+    "effects: emissive (EMI)": "rt_emissive (capture), rt_hit_emission (added at GI/reflection hits)",
+    "forward: lava/emissive": "rt_emissive (capture, approximate forward kind), rt_hit_emission",
+    "forward: water": "M5.1 rt_water_geometry, M5.2 rt_water_reflections, M5.3 rt_water_compose (refl), "
+                      "M5.4 rt_water_shadows (sun)",
 }
 BEGIN, END = "<!-- coverage:begin -->", "<!-- coverage:end -->"
 GCLASS = ["standard", "unlit", "anisotropic", "skin", "thin translucency", "hair", "cloth", "cloth/GGX"]
@@ -483,6 +501,9 @@ def to_markdown(results):
                 cells.append(f"{tag} ({d} dr)".strip())
         if seen:
             lines.append(f"| {fam} | " + " | ".join(HANDLING[fam]) + " | " + " | ".join(cells) + " |")
+    lines += ["", f"Handling columns as of {HANDLING_DATE}. \"key\": implemented behind an experimental key,",
+              "off by default. Keys per family:", ""]
+    lines += [f"- {fam}: {keys}" for fam, keys in HANDLING_KEYS.items()]
     kinds = ["decal", "effects", "forward"]
     lines += ["", "Pixels changed per pass kind (median over the measured captures, sum over that",
               "kind's passes; max in brackets when much higher):", "",

@@ -65,6 +65,28 @@
   "\\[water\\] compose ratio A L / B over [1-9]\\d* composed px: below 0\\.5 [0-9.]+%, 0\\.5\\.\\.2\\.0 [0-9.]+%, above 2\\.0 [0-9.]+%; ratio of the means [0-9.]+",
   "\\[water\\] compose GPU 0\\.[0-4]\\d\\d ms median, p90 [0-9.]+ \\([1-9]\\d* timed frames[^)]*\\); copy [0-9.]+ ms median, p90 [0-9.]+; compose dispatches [0-9.]+ ms median, p90 [0-9.]+"
  ],
+ "expect_every": [
+  {
+   "name": "composed passes and owned share, every complete compose-on window",
+   "select": "\\[water\\] compose \\(\\d+ frames, ",
+   "match": "\\[water\\] compose \\(120 frames, (1[01]\\d|120) composed, [0-9.]+ passes/frame\\): records [1-9][0-9.]*/frame, owned (?!0\\.00%)[0-9.]+% ",
+   "windows": [
+    "precheck-compose-on",
+    "cost-on"
+   ],
+   "min": 1
+  },
+  {
+   "name": "compose GPU median, every complete compose-on window",
+   "select": "\\[water\\] compose GPU ",
+   "match": "\\[water\\] compose GPU 0\\.[0-4]\\d\\d ms median, p90 [0-9.]+ \\([1-9]\\d* timed frames",
+   "windows": [
+    "precheck-compose-on",
+    "cost-on"
+   ],
+   "min": 1
+  }
+ ],
  "forbid": [
   "\\[crash\\] exception 0x",
   "VK_ERROR_DEVICE_LOST",

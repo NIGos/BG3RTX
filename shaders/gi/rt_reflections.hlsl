@@ -67,7 +67,7 @@
 #define NATIVE_HIT_DLS_POLICY 1
 #define NATIVE_HIT_SLOTS_SET 3
 #define NATIVE_HIT_SLOTS_BINDING 7
-// The projector (box) part of L_b for the bias breakdown (counters 372-373, core/gi.cpp "rf hit shade boxes").
+// The projector (box) part of L_b for the bias breakdown (counters 383-384, core/gi.cpp "rf hit shade boxes").
 #define NATIVE_HIT_BOX_TERM 1
 #include "../rt/native_hit_direct.hlsli"
 // The sun at the hit follows the R0 roof rule (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF; roof
@@ -473,8 +473,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_addv(310, hs_checked != 0u ? fxh(lum(hs_La) * hs_La_share) : 0u, bin);
     stat_addv(311, hs_checked != 0u ? fxh(lum(hs_La) * (1.0 - hs_La_share)) : 0u, bin);
     // core/gi.cpp kRfBoxFirst: L_b's projector (box) part at checked tier (a) / shaded tier (b) hits.
-    stat_addv(372, hs_checked != 0u ? fxh(lum(hs_box)) : 0u, bin);
-    stat_addv(373, shaded ? fxh(lum(hs_box)) : 0u, bin);
+    stat_addv(383, hs_checked != 0u ? fxh(lum(hs_box)) : 0u, bin);
+    stat_addv(384, shaded ? fxh(lum(hs_box)) : 0u, bin);
 #endif
   }
 }

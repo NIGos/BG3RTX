@@ -1,5 +1,33 @@
 # BG3RTX progress - 2026-11-01 (main f31c62b, ABI 25)
 
+## M5.5 step 1 water refraction (offline, READY_FOR_LIVE, 2026-11-01; on top of M5.4b)
+
+- Medium mapped (PLAN_M5_WATER M5.5): the water FS's transmittance is 1 - a, a grey quadratic ramp over the
+  camera-axis depth difference d (not a path length); the bed is the pre-water colour copy at the pixel plus a wave
+  jitter (no Snell); caustics are a flipbook added to the surface; the reflection is scaled by a. S8 sea opaque
+  (template OpacityBlendDistance 0), pool transmissive (OpacityBlendDistance 4).
+- S8 offline model (replay pack depth): refracted rays of the transmissive pool 65% screen hit, 35% hidden (8.9%
+  transmission-weighted), 0% off screen; Snell shift 52 px median. Off-screen rays change nothing at S8.
+- `rt_water_refraction=0` (GUI `exp_water_refraction`; on needs a restart, off is live): 104-B records add the FS's
+  Refr and 1 - a; the compose traces refract(-V, N, 1/n) (n 1.326 from the FS's own F0) and reads the water draw's
+  colour copy at the hit: C' = max(C + (1 - a) (Copy(hit) - Refr), 0); unresolved rays keep Refr.
+- Key off: plain, sun, LS compose SPIR-V byte-identical; M5.3 / M5.4 / M5.4b patches word for word (FNV pinned);
+  refraction patches pass spirv-val. Test 4j (swap = FS with Refr replaced, identity bit for bit, Snell). 75 CPU
+  CTests. Expected cost < 0.05 ms. Live: job `m5w6` (S8, OFF/ON/OFF, rt_debug 28); dry run passes (21.1 min, 1.31 GB).
+
+## M5.4b water local-light shadows (offline, READY_FOR_LIVE, 2026-11-01; on top of M5.4)
+
+- `rt_water_ls_shadows=0` (GUI `exp_water_ls_shadows`; on needs a restart, off is live). The patched FS also stores
+  its points + spots sum L, F = a T X, F0, diffuse colour, channel, froxel depth, P, N, roughness (96-B records).
+  The compose walks the FS's own froxel list (the water draw's set 2 light buffers, captured at the draw: the
+  D-LS structures), recomputes each light (bg3_light_eval, bg3_atlas_shadow), checks the sum against L, and traces
+  every light the game leaves unshadowed: C' = max(C - F sum (1 - V_k) c_k, 0). Shadow-mapped lights keep the atlas.
+- Sum match offline (test 4g, the FS loops vs our recompute): 9124/9124 records within 2^-10 (one half ulp); a
+  dropped light never within. Live gate: `sum check` within >= 99%, ratio of the means 1 within 0.1%.
+- Key off: plain and sun compose SPIR-V byte-identical, M5.3 and M5.4 patches word for word (FNV pinned); the LS
+  patches pass spirv-val. 76 CTests. Expected cost < 0.15 ms. Live: job `m5w5` (S8, OFF/ON/OFF, rt_debug 27);
+  dry run passes (batch now 16.9 min, 1.06 GB).
+
 ## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
 
 - Preset change: `rt_hit_material`, `rt_hit_material_instanced`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`,
@@ -24,6 +52,7 @@
   tiles; the PT sun from the game's LUT (`PT_SUN_LUT`). Self-test 13-16 closed form, 76 CTests pass.
 - Pending: one `rc1-replay-s8-fg2` run (expect line `lighting inputs: 19 of 19 slots bound`); its post
   step prints the S8 native / PT far-field ratio. No real pack with these inputs exists yet.
+
 ## M5.4 water sun shadows (offline, READY_FOR_LIVE, 2026-11-01)
 
 - Finding: the audited water FS (7b44a567, 99c1fcef, c4e92ccd) light the water with sun visibility 1. Their sun
@@ -36,6 +65,30 @@
   device-local, reduced per 8x8 group. 75 CTests, the sun patch passes spirv-val on the three dumps.
 - Expected cost < 0.05 ms (one first-hit ray per sunlit water pixel). Live: job `m5w4` (S8, OFF/ON/OFF, rt_debug 26),
   dry run passes. Local lights (M5.4b) designed, not built: PLAN_M5_WATER M5.4.
+## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
+
+- Preset change: `rt_hit_material`, `rt_hit_material_instanced`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`,
+  `rt_hit_emission=1` on in Ultra only (knobs out of Experimental, under Advanced); Ultra adds `rt_emissive=1` and
+  capture sizes for the 64 B hit-material vertex (`rt_xfb_mb` 1024, `rt_cascade_mb` 427 = 384/160 x 64/24).
+  `rt_emissive` 0 -> 1 needs a restart. Settings test 542 checks, 75 CTests pass.
+- Measured so far (PLAN_M4 "Promotion"): rf_hit_shade tier (a) L_b / L_a S8 0.926, S6 1.091 after the box fix (was
+  1.48); costs rf_hit_shade +1.4 to +1.8 ms (rf pass), gi_hit_direct + sun +0.52 ms (gi trace), instanced +0.14 ms.
+- Live batch `tools/live_batches/m4_promotion` (camp, inn, S6, S8; ~18 min, 1.2-1.8 GB; dry run passes): bundle
+  OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
+  Merge the branch only if the energy and capacity gates pass.
+
+## gi_far: far-field sun bounce (branch, offline, READY_FOR_LIVE; promotion waits for a corrected reference, 2026-11-01)
+
+- Key `gi_far=0` / `gi_far_m=6` (GUI Experimental, off / 4 / 6 / 8 m, needs gi_hit_sun). RT_GI_FAR on the gi_hit_sun
+  files only; off is byte-identical SPIR-V (368 requests). Rays reach gi_far_m; screen hits and qualified sun-lit
+  hits replace the native ambient (qualified keep rho x w); every other hit keeps the old 1 m rule; roof rule for
+  the GI ray. Design: TRACK_C_GI "Far-field sun bounce". Fixture case 10 passes.
+- S8 replay (screen tier only, no VT cache): bounce 0.0069 -> 0.0105 / 0.0118 / 0.0129 at 4 / 6 / 8 m, 32 / 44 / 54%
+  of the PT's visible-far tier; giRaw.a 0.916 -> 0.886 / 0.875 / 0.867. Pass 0.58 -> 1.63 / 2.15 / 2.69 ms at
+  2.73 Mpx: +0.8 / +1.2 / +1.6 ms at 4K Performance before hit shading.
+- PT with the cut-away roofs (`PT_ROOFS=1`, tools/pt_roofs.py): far field on screen 56 -> 33%, sun 99 -> 84%, PT
+  total 14x lower. Go/no-go needs > ~30% far field from a casters-on, VT-cache, native-ambient pack. Live batch
+  `tools/live_batches/gi_far` (camp + S8, ~8 min, 0.4 GB; dry run passes) prepared, not queued.
 
 ## M6 offline PT reference on the S8 replay pack (offline, tools only, 2026-11-01)
 

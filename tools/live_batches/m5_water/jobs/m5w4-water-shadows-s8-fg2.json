@@ -92,5 +92,27 @@
  ],
  "stop_on_dump": true,
  "purpose": "PLAN_M5 M5.4 rt_water_shadows (sun) at S8 Water Queens House: geometry and reflections on throughout, compose off (isolates the sun visibility), rt_water_shadows=1 at launch so the water FS are patched with the sun words (40-B records), toggled live. The audited water FS have sun visibility 1 (no cascade), so the temple and columns cast no shadow on the pool in the game; ON removes the FS's own unshadowed sun term D where one traced sun ray is occluded: C' = max(C - (1 - V) D, 0). A 15 s precheck with the key on (its [water] shadows line needs sun records and traced rays, else INVALID), then OFF / ON / OFF with diag-off cost windows and one PNG each, and the shadow view (rt_debug 26: red occluded, green lit, blue unknown). Gates: shot-off-a vs shot-off-b within the OFF repeat noise; shot-on darker than OFF only on water pixels the shadow view marks red (columns/temple shadows on the pool), never brighter; occluded share > 0 and removed % of mean C reported; [water] shadows GPU median against the < 0.05 ms estimate and cost-on minus cost-off against the OFF spread.",
- "estimated_phase_seconds": 132
+ "estimated_phase_seconds": 132,
+ "expect_every": [
+  {
+   "name": "sun records traced, every complete shadows-on window",
+   "select": "\\[water\\] shadows \\(\\d+ frames, ",
+   "match": "\\[water\\] shadows \\(120 frames, [1-9]\\d* passes, variant sun\\): sun records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned \\(no sun term [0-9.]+%, invalid 0\\); traced (?!0\\.00%)[0-9.]+% of sun records",
+   "windows": [
+    "precheck-shadows-on",
+    "cost-on"
+   ],
+   "min": 1
+  },
+  {
+   "name": "clamped below one record per frame (window total of 120 frames; was 145573 with C_target - D), every complete shadows-on window",
+   "select": "\\[water\\] shadows \\(\\d+ frames, ",
+   "match": "; clamped (\\d|[1-9]\\d|1[01]\\d); GPU ",
+   "windows": [
+    "precheck-shadows-on",
+    "cost-on"
+   ],
+   "min": 1
+  }
+ ]
 }

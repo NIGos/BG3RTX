@@ -38,7 +38,8 @@ the asset-DB tables are written by hand.
   TRACK_D_SUN.md 12 (sun replace) and TRACK_D_EMISSIVE.md 13 (D-EM). Update
   it when an effect changes. Columns: **caster** in the TLAS; receives the RT **sun**, the
   RT **local** shadows (D-LS), RT **GI**/AO, **refl**ections (D-RF); its emission captured by
-  **D-EM** ("branch": `worktree-agent-a2212c228ec492214`, not in main).
+  **D-EM** (`rt_emissive`). "key": in main behind an experimental key, off by default
+  (`HANDLING_KEYS` names it). Table dated 2026-11-01 (main d9234f5).
 
 **Caveats:**
 - S1's save `QuickSave_3784` now opens on the docks: 5 of its 6 measured captures show the
@@ -67,19 +68,27 @@ captures (max in brackets when much higher) and the most draws seen in one frame
 | G-buffer: cloth/GGX | yes | yes | yes | yes | yes | n/a |  |  | <0.1% | 0.1% | <0.1% | <0.1% | <0.1% | <0.1% | <0.1% |  |
 | G-buffer: empty (sky or forward-only) | n/a | n/a | n/a | n/a | n/a | no | 29.6% | 0% | 0% | 0% | 0% | 0.1% | 0% | 0% | 0% | 0.2% |
 | decal | n/a | yes | yes | yes | yes | no | 0% (max 9.3%) (40 dr) | 0.6% (21 dr) | 3.9% (20 dr) | 4.3% (26 dr) | 0.1% (16 dr) | 1.3% (114 dr) | <0.1% (6 dr) | 0.2% (91 dr) | 1.1% (24 dr) | 0.2% (max 9.3%) (40 dr) |
-| effects: emissive (EMI) | n/a | n/a | n/a | n/a | n/a | branch | 0.6% (20 dr) | <0.1% (12 dr) | 0.1% (22 dr) | 8.2% (45 dr) | 0.9% (31 dr) | 0.5% (49 dr) | 0.4% (37 dr) | <0.1% (8 dr) | (3 dr) | 0.6% (20 dr) |
-| effects: emissive decal | n/a | n/a | n/a | n/a | n/a | branch | 0% (1 dr) |  | (1 dr) |  |  |  | <0.1% (4 dr) |  | (3 dr) | 0% (1 dr) |
+| effects: emissive (EMI) | n/a | n/a | n/a | n/a | n/a | key | 0.6% (20 dr) | <0.1% (12 dr) | 0.1% (22 dr) | 8.2% (45 dr) | 0.9% (31 dr) | 0.5% (49 dr) | 0.4% (37 dr) | <0.1% (8 dr) | (3 dr) | 0.6% (20 dr) |
+| effects: emissive decal | n/a | n/a | n/a | n/a | n/a | no | 0% (1 dr) |  | (1 dr) |  |  |  | <0.1% (4 dr) |  | (3 dr) | 0% (1 dr) |
 | effects: sky/clouds | n/a | n/a | n/a | n/a | n/a | no | 29.6% (2 dr) | 0% (2 dr) | 0% (2 dr) | 0% (2 dr) | 0% (2 dr) | 0.1% (2 dr) | 0% (2 dr) | 0% (1 dr) | 0% (2 dr) | 0.2% (2 dr) |
 | effects: backdrop | no | n/a | n/a | n/a | n/a | no | <0.1% (1 dr) | <0.1% (1 dr) |  |  |  | (1 dr) | (1 dr) |  | (1 dr) | (1 dr) |
 | effects: VFX plane | no | no | no | no | no | no | 0% (4 dr) |  | 0% (9 dr) | 0.1% (12 dr) | <0.1% (13 dr) | 0% (13 dr) | 0% (1 dr) | 0% (3 dr) | 0% (10 dr) | 0% (4 dr) |
-| forward: water | no | no | no | no | no | n/a | 89.2% (1 dr) | <0.1% (6 dr) | (12 dr) | (23 dr) |  | 0% (10 dr) | (5 dr) |  | (2 dr) | <0.1% (6 dr) |
-| forward: lava/emissive | no | no | no | no | no | branch |  |  |  | (1 dr) |  |  |  |  |  |  |
+| forward: water | no | key | no | no | key | n/a | 89.2% (1 dr) | <0.1% (6 dr) | (12 dr) | (23 dr) |  | 0% (10 dr) | (5 dr) |  | (2 dr) | <0.1% (6 dr) |
+| forward: lava/emissive | no | no | no | no | no | key |  |  |  | (1 dr) |  |  |  |  |  |  |
 | forward: glass/refractive | no | no | no | no | no | n/a | (4 dr) | (4 dr) |  |  | <0.1% (3 dr) |  |  |  |  | (4 dr) |
 | forward: VFX/particles | no | no | no | no | no | no | (24 dr) | 0.3% (43 dr) | (30 dr) | 0.3% (68 dr) | 0.7% (16 dr) | (62 dr) | 5.1% (96 dr) | 0.2% (74 dr) | 0.1% (16 dr) | <0.1% (25 dr) |
 | forward: transparent other | no | no | no | no | no | no |  | (3 dr) |  | (6 dr) |  | (12 dr) | (2 dr) | (6 dr) |  |  |
 | forward: unknown FS | no | no | no | no | no | no |  |  |  | (5 dr) |  |  |  | 0% (2 dr) |  |  |
 | SSS blur | n/a | n/a | n/a | n/a | n/a | n/a | (2 dr) | (2 dr) | (2 dr) | (2 dr) | (2 dr) | (2 dr) | (2 dr) | (2 dr) | (2 dr) | (2 dr) |
 | UI | n/a | n/a | n/a | n/a | n/a | n/a | (258 dr) | (228 dr) | (9 dr) | (245 dr) | (225 dr) | (247 dr) | (254 dr) | (211 dr) | (238 dr) | (258 dr) |
+
+Handling columns as of 2026-11-01 (main d9234f5). "key": implemented behind an experimental key,
+off by default. Keys per family:
+
+- G-buffer: standard: native materials at GI/reflection hits: rt_hit_material, rt_hit_material_instanced (wind and two-sided alpha-test rows), gi_hit_direct, gi_hit_sun, rf_hit_shade; emission at hits: rt_hit_emission; cut-away roofs and off-screen casters for the sun: rt_cascade_casters
+- effects: emissive (EMI): rt_emissive (capture), rt_hit_emission (added at GI/reflection hits)
+- forward: lava/emissive: rt_emissive (capture, approximate forward kind), rt_hit_emission
+- forward: water: M5.1 rt_water_geometry, M5.2 rt_water_reflections, M5.3 rt_water_compose (refl), M5.4 rt_water_shadows (sun)
 
 Pixels changed per pass kind (median over the measured captures, sum over that
 kind's passes; max in brackets when much higher):

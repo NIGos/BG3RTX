@@ -475,7 +475,7 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     byte-identical (rf_hit_shade_shader_test). Next, if more is needed: compact the tier (b) lanes per group
     (groupshared job list) to remove the divergence; a 3-phase direct loop (domain checks before rays) saves the
     S6 rays of hits that fail later ("other" 24k hits/frame).
-  - New counters 372-373, log `rf hit shade boxes`: L_b's projector (box) part at tier (a) checks and shaded
+  - New counters 383-384, log `rf hit shade boxes`: L_b's projector (box) part at tier (a) checks and shaded
     tier (b) hits. The m4_promotion S6/S8 plans add `cost-ao0` (bundle ON, `hit_ao_rays=0`).
   - Bias (tier (a), L_b / L_a). S8 0.925: diffuse-like L_b (direct 0.0019 + sun 0.0038 + ambient diffuse 0.0954)
     = 0.101 vs L_a diffuse 0.115 (-0.014): the screen's diffuse includes the hybrid GI bounce that replaces part

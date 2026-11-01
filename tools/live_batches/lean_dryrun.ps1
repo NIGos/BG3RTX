@@ -8,7 +8,7 @@
 # 2. Run A (real jobs, fake game): job 1 cannot see its expect lines, so it is INVALID and the
 #    dependent jobs stay in pending (stop-on-failure). With -Independent (no requires_success_of):
 #    every job runs and every one is INVALID.
-# 3. Run B (expect/forbid/post stripped): every job runs in order and is valid.
+# 3. Run B (expect/expect_every/forbid/post stripped): every job runs in order and is valid.
 # Scratch root only (outside any checkout); the receipt written there is fake and has no authority.
 param([Parameter(Mandatory)][string]$Batch, [string]$Receipt = '',
       [string]$Out = '', [double]$MaxMinutes = 20, [double]$MaxMB = 2048,
@@ -96,7 +96,7 @@ function New-Root([string]$dir, [switch]$Strip) {
   $t = (Get-Date).AddMinutes(-10); $entries = @()
   foreach ($f in $jobFiles) {
     $job = Get-Content $f.FullName -Raw | ConvertFrom-Json
-    if ($Strip) { foreach ($k in 'expect', 'expect_runner', 'forbid', 'post') { $job.PSObject.Properties.Remove($k) } }
+    if ($Strip) { foreach ($k in 'expect', 'expect_every', 'expect_runner', 'forbid', 'post') { $job.PSObject.Properties.Remove($k) } }
     $dst = Join-Path $dir "captures\queue\pending\$($f.Name)"
     $job | ConvertTo-Json -Depth 16 | Set-Content $dst
     (Get-Item $dst).LastWriteTime = ($t = $t.AddSeconds(1))

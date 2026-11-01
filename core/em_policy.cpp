@@ -58,27 +58,65 @@ Calib to_calib(const Bg3EmCalib& c) { return Calib{c.scale, c.updates, c.log_u};
 // Command buffers whose open render pass recorded a supported water draw. Bounded: an entry
 // leaves at that buffer's next pass begin or end; a buffer abandoned without one is dropped
 // when the list is full (its only effect: one pass end of a reused handle looks at water).
+// M5.4b: with rt_water_ls_shadows, the first water draw's set 2 light bindings ride along.
+struct WaterPassNote {
+  VkCommandBuffer cmd = VK_NULL_HANDLE;
+  Bg3Binding lights[7] = {};
+  bool lights_ok = false;
+  Bg3Binding copy = {};   // M5.5: the draw's set 2 b4 (the colour copy its FS refracts through)
+  bool copy_ok = false;
+};
 std::mutex g_wp_mu;
-std::vector<VkCommandBuffer> g_wp;
+std::vector<WaterPassNote> g_wp;
 std::atomic<uint32_t> g_wp_n{0};
 constexpr size_t kWpMax = 64;
 
+bool is_storage(VkDescriptorType t) {
+  return t == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER || t == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+}
+bool is_uniform(VkDescriptorType t) {
+  return t == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || t == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+}
+// The FS's froxel light list as the D-LS structures (shaders/rt/bg3_lights.hlsli): b0 exposure float[],
+// b10 froxels (ivec4), b11 index list (int), b12 lights (80 B), b26 constants (std140, 544 B), b27
+// shadow views (96 B), b28 the shadow atlas.
+bool capture_lights(VkCommandBuffer cmd, Bg3Binding* b) {
+  for (uint32_t i = 0; i < 7; ++i)
+    if (!host->query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 2, kWaterLsBindings[i], 0, &b[i])) return false;
+  for (uint32_t i : {0u, 1u, 2u, 3u, 5u})
+    if (!is_storage(b[i].type) || !b[i].buffer || !b[i].range) return false;
+  return is_uniform(b[4].type) && b[4].buffer && b[4].range >= 544 && b[3].range >= 80 &&
+         b[6].type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE && b[6].view;
+}
+
 void water_draw_note(VkCommandBuffer cmd) {
   std::lock_guard<std::mutex> lock(g_wp_mu);
-  for (VkCommandBuffer c : g_wp)
-    if (c == cmd) return;
+  for (const WaterPassNote& n : g_wp)
+    if (n.cmd == cmd) return;
   if (g_wp.size() >= kWpMax) g_wp.erase(g_wp.begin());
-  g_wp.push_back(cmd);
+  WaterPassNote n;
+  n.cmd = cmd;
+  if (host->cfg_int("rt_water_ls_shadows", 0) != 0) n.lights_ok = capture_lights(cmd, n.lights);
+  if (host->cfg_int("rt_water_refraction", 0) != 0)
+    n.copy_ok = host->query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 2, 4, 0, &n.copy) &&
+                n.copy.type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE && n.copy.view;
+  g_wp.push_back(n);
   g_wp_n.store(uint32_t(g_wp.size()), std::memory_order_relaxed);
 }
 
 }  // namespace
 
-bool core_water_pass_take(VkCommandBuffer cmd) {
+bool core_water_pass_take(VkCommandBuffer cmd, Bg3Binding* lights, bool* lights_ok, Bg3Binding* copy, bool* copy_ok) {
+  if (lights_ok) *lights_ok = false;
+  if (copy_ok) *copy_ok = false;
   if (!g_wp_n.load(std::memory_order_relaxed)) return false;   // the common case: no lock
   std::lock_guard<std::mutex> lock(g_wp_mu);
   for (size_t i = 0; i < g_wp.size(); ++i)
-    if (g_wp[i] == cmd) {
+    if (g_wp[i].cmd == cmd) {
+      if (lights) std::memcpy(lights, g_wp[i].lights, sizeof g_wp[i].lights);
+      if (lights_ok) *lights_ok = g_wp[i].lights_ok;
+      if (copy) *copy = g_wp[i].copy;
+      if (copy_ok) *copy_ok = g_wp[i].copy_ok;
       g_wp[i] = g_wp.back();
       g_wp.pop_back();
       g_wp_n.store(uint32_t(g_wp.size()), std::memory_order_relaxed);

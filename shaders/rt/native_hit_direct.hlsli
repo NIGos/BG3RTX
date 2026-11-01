@@ -45,7 +45,7 @@ void hd_xstat(uint k,bool c){if(g_hd_stats && g_hd_xbase!=0u)stat_add(g_hd_xbase
 #include "bg3_boxes.hlsli"
 #endif
 #ifdef NATIVE_HIT_BOX_TERM
-// rf_hit_shade's bias breakdown (rt_reflections.hlsl, counters 372-373): the projector (box) part of
+// rf_hit_shade's bias breakdown (rt_reflections.hlsl, counters 383-384): the projector (box) part of
 // the last native_hit_direct_eval's radiance, before the AO-on-direct factor. Diagnostics only.
 static float3 g_hd_box=0;
 #endif

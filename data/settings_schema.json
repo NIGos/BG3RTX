@@ -210,6 +210,17 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"gi_hit_sun": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"gi_hit_sun": "1"}, "needs": {"exp_gi_hit_direct": 1}}
      ]},
+    {"id": "exp_gi_far", "label": "Far-field sun bounce",
+     "description": "Lengthens the bounce rays from 1 m to the chosen reach. Surfaces up to that distance that are on screen, or hidden with a verified native material lit by the sun, replace the game's ambient light for their ray. Other surfaces beyond 1 m keep the game's ambient. Requires Sunlit hidden-surface bounce. Quality and GPU cost remain unqualified.",
+     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
+     "required_on": {"gi_hit_sun": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"gi_far": "0"}, "needs": {}},
+       {"id": "m4", "label": "4 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "4"}, "needs": {"exp_gi_hit_sun": 1}},
+       {"id": "m6", "label": "6 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "6"}, "needs": {"exp_gi_hit_sun": 1}},
+       {"id": "m8", "label": "8 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "8"}, "needs": {"exp_gi_hit_sun": 1}}
+     ]},
     {"id": "exp_rf_hit_shade", "label": "Shaded hidden-surface reflections",
      "description": "Reflection rays that hit a surface hidden from the camera are shaded with that surface's verified native material and lighting (point and spot lights, the sun with a traced shadow ray, the game's ambient) instead of keeping the reflection probe. Unsupported materials or lights keep the probe. Requires Native hit materials at startup. Emission at the hits: Emission at ray hits. Quality and GPU cost remain unqualified.",
      "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
@@ -283,6 +294,24 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_shadows": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_shadows": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
+     ]},
+    {"id": "exp_water_ls_shadows", "label": "Water local-light shadows",
+     "description": "Ray-traced shadows of lamps, torches and other local lights on the water. The game shadows only the few lights that have a shadow map; every other light reaches the water through walls and boats. Here one ray per light and water pixel removes that light where something blocks it, and keeps everything else of the water as the game draws it (shadow-mapped lights keep the game's shadow). Look at a canal or pool lit by lanterns at night: the shadows of piers, posts and hulls on the water. Debug view rt_debug 27 shows lit (green) and shadowed (red) water. Needs Water reflections (measured). Restart required to turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
+     "apply": "restart", "apply_note": "restart to enable", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_water_geometry": "1", "rt_water_reflections": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_ls_shadows": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_ls_shadows": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
+     ]},
+    {"id": "exp_water_refraction", "label": "Water refraction",
+     "description": "Ray-traced refraction through clear water. The game shows the pool or sea bed straight behind each water pixel, as if the water had no index of refraction. Here one ray per water pixel bends at the wave surface (Snell's law, the water's own index) and the bed is shown where that ray really meets it: the bed looks shallower and shifts with the waves. The water's colour and opacity stay the game's; where the bent ray's target is hidden or off screen the game's view is kept. Look at a clear pool from an angle (Water Queens House): the tiles and steps under the water. Debug view rt_debug 28 shows where it applies (green). Needs Water reflections (measured). Restart required to turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
+     "apply": "restart", "apply_note": "restart to enable", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_water_geometry": "1", "rt_water_reflections": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_refraction": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_refraction": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
      ]},
     {"id": "exp_current_sun", "label": "Current cascade sun shadows",
      "description": "Uses the current four native sun-caster domains with finite per-layer rays and native receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the static BVH split to be enabled. Unsupported receiver/input domains retain native shadows. Physical sun size is unchanged. Restart required; in-game quality and GPU cost are unqualified.",

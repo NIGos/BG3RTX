@@ -511,6 +511,8 @@ try {
 Assert-QueueLaunchProcesses
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
+# The game keeps Normal priority on purpose: offline builds (dxc, cl) run BelowNormal, and a
+# BelowNormal game starved its own level load behind them (2026-11-01).
 $game.EnableRaisingEvents = $true
 # Keep the process handle so ExitCode survives a quick game/crash-handler exit.
 [void]$game.Handle
