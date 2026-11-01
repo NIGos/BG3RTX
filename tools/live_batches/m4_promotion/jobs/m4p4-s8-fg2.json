@@ -173,7 +173,8 @@
     "cost-on",
     "cost-ao0",
     "cost-off-b"
-   ]
+   ],
+   "when_present": true
   },
   {
    "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
@@ -199,7 +200,8 @@
     "cost-ao0",
     "cost-gi1",
     "cost-off-b"
-   ]
+   ],
+   "when_present": true
   }
  ]
 }

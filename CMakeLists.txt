@@ -31,6 +31,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/tracer.cpp
   layer/hotreload.cpp
   layer/shaders.cpp
+  layer/shader_cache.cpp
   layer/util.cpp
   layer/dump.cpp
   layer/replay.cpp
@@ -223,6 +224,9 @@ add_executable(shader_variant_test tests/shader_variant_test.cpp)
 add_test(NAME shader_variant_test COMMAND shader_variant_test ${CMAKE_SOURCE_DIR})
 add_executable(variant_matrix_test tests/variant_matrix_test.cpp)
 add_test(NAME variant_matrix_test COMMAND variant_matrix_test ${CMAKE_SOURCE_DIR})
+# The runtime SPIR-V cache (layer/shader_cache.cpp): keys against tests/shader_cache_key_golden.txt (Python's), the store.
+add_executable(shader_cache_test tests/shader_cache_test.cpp layer/shader_cache.cpp)
+add_test(NAME shader_cache_test COMMAND shader_cache_test ${CMAKE_SOURCE_DIR})
 add_executable(ls_exact_k_test tests/ls_exact_k_test.cpp)
 add_test(NAME ls_exact_k_test COMMAND ls_exact_k_test)
 add_executable(native_hair_receiver_test tests/native_hair_receiver_test.cpp)
@@ -300,7 +304,7 @@ add_test(NAME settings_test COMMAND settings_test)
 # (tools/shader_identity.py).
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity hit_material_blockers roof_cap)
+  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()

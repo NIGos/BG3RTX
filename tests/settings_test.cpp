@@ -349,120 +349,345 @@ static void test_dependencies_and_caps() {
   CHECK(!key_change_needs_restart("sharc_log2", "22", "21"));   // reallocated by the core
 }
 
-static void test_rendering_experiments() {
-  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_hit_material_instanced","exp_gi_hit_direct","exp_gi_hit_sun","exp_rf_hit_shade","exp_rf_hit_gi","exp_water_geometry","exp_water_reflections","exp_water_compose","exp_water_shadows","exp_water_ls_shadows","exp_water_refraction","exp_water_game_shadow","exp_hit_material_recycle"};
-  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","rt_hit_material_instanced","gi_hit_direct","gi_hit_sun","rf_hit_shade","rf_hit_gi","rt_water_geometry","rt_water_reflections","rt_water_compose","rt_water_shadows","rt_water_ls_shadows","rt_water_refraction","rt_water_game_shadow","rt_hit_material_recycle"};
-  static_assert(std::size(ids)==std::size(keys));
-  for(size_t i=0;i<std::size(ids);++i){
-    const auto* knob=find_knob(ids[i]);CHECK(knob!=nullptr);if(!knob)continue;
-    CHECK(knob->experimental);CHECK(choice_count(*knob)==2);CHECK_EQ(code_default(keys[i]),"0");
-    for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,keys[i]),"0");CHECK(knob->preset[p]==0);}
-    KVList pairs;knob_kvs(*knob,1,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;
-    CHECK(knob_value(*knob,on)==1);CHECK_EQ(get(on,keys[i]),"1");
-    auto values=preset_values(kHigh);values[knob_index(ids[i])]=1;
-    auto user=render_user_ini("# preserved\ncustom_key=7\n",kHigh,values);auto parsed=parse_ini(user);
-    CHECK_EQ(get(parsed,"custom_key"),"7");CHECK(knob_value(*knob,parsed)==1);
-    CHECK(!unmet_need(*knob,1,preset_values(kLow)).empty());
+static Map on_map(const Knob& k, int c) {
+  KVList pairs;
+  knob_kvs(k, c, pairs);
+  Map m;
+  for (auto& kv : pairs) m[kv.first] = kv.second;
+  return m;
+}
+
+// Keys every GUI entry wrote before the 2026-11-01 rationalization (docs/GUI_AUDIT_20261101.md):
+// each must still be written by a knob or be listed in kIniOnlyKeys (no orphan key).
+static const char* const kOldKnobKeys[] = {
+    "rt_cascade_casters", "ls_box", "ls_k", "ls_rest_samples", "rt_native_scalp", "rt_alpha_spill",
+    "rt_native_tileset", "rt_native_hair", "rt_hair_physical_origin", "rt_hit_material",
+    "rt_hit_material_instanced", "rt_hit_material_recycle", "fg_letterbox", "rt_hit_material_wind_rgb",
+    "gi_hit_direct", "gi_hit_sun", "gi_far", "gi_far_m", "rf_hit_shade", "rf_hit_gi", "rt_hit_emission",
+    "rt_hit_reference", "rt_omm", "rt_water_geometry", "rt_water_reflections", "rt_water_compose",
+    "rt_water_shadows", "rt_water_ls_shadows", "rt_water_refraction", "rt_water_game_shadow",
+    "rt_sun_cascade_current"};
+
+// The old knob ids, each with the one key its "On" wrote.
+static const char* const kOldOn[][2] = {
+    {"exp_roof_shadows", "rt_cascade_casters"}, {"exp_box_lights", "ls_box"},
+    {"exp_hit_material", "rt_hit_material"}, {"exp_hit_material_instanced", "rt_hit_material_instanced"},
+    {"exp_hit_material_recycle", "rt_hit_material_recycle"}, {"exp_hit_material_wind_rgb", "rt_hit_material_wind_rgb"},
+    {"exp_gi_hit_direct", "gi_hit_direct"}, {"exp_gi_hit_sun", "gi_hit_sun"}, {"exp_rf_hit_shade", "rf_hit_shade"},
+    {"exp_rf_hit_gi", "rf_hit_gi"}, {"exp_water_geometry", "rt_water_geometry"},
+    {"exp_water_reflections", "rt_water_reflections"}, {"exp_water_compose", "rt_water_compose"},
+    {"exp_water_shadows", "rt_water_shadows"}, {"exp_water_ls_shadows", "rt_water_ls_shadows"},
+    {"exp_water_game_shadow", "rt_water_game_shadow"}, {"exp_water_refraction", "rt_water_refraction"},
+    {"exp_native_scalp", "rt_native_scalp"}, {"exp_native_hair", "rt_native_hair"},
+    {"exp_native_tileset", "rt_native_tileset"}};
+
+static void test_gui_levels() {
+  // 8 user-facing experimental entries; developer-only: the lighting reference, exact-k, current cascade sun.
+  int user_exp = 0;
+  std::vector<std::string> dev;
+  for (const Knob& k : kKnobs) {
+    if (k.experimental && !k.dev_only) ++user_exp;
+    if (k.dev_only) dev.push_back(k.id);
+    CHECK(knob_visible(k, true));
+    CHECK(knob_visible(k, false) == !k.dev_only);
+    // Developer-only choices are the last ones of a knob (the GUI stops at the first one).
+    bool seen_dev = false;
+    for (int c = 0; c < choice_count(k); ++c) {
+      if (seen_dev) CHECK(k.choices[c].dev);
+      seen_dev = seen_dev || k.choices[c].dev;
+      CHECK(!(c == 0 && k.choices[c].dev));
+      // Every mark is a key the choice writes; Off has none.
+      for (const char* mk : k.choices[c].mark) {
+        if (!mk) continue;
+        CHECK(c > 0);
+        bool found = false;
+        for (const KV& kv : k.choices[c].kv) found = found || (kv.key && std::string(kv.key) == mk);
+        CHECK(found);
+      }
+      for (const KeyNeed& n : k.required_on)
+        if (n.key) CHECK(n.min_choice >= 1 && n.min_choice < choice_count(k));
+    }
+    // Every key a knob writes is a key of bg3rtx.ini.
+    for (const std::string& key : knob_keys(k)) {
+      if (!code_default(key)) CHECK_EQ(std::string(k.id) + " writes unknown key " + key, "");
+    }
+    // Off in every preset for experimental knobs.
+    if (k.experimental)
+      for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
+  CHECK(user_exp == 8);
+  CHECK(dev == (std::vector<std::string>{"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
+  CHECK(dev_mode("1"));
+  CHECK(!dev_mode("0"));
+  CHECK(!dev_mode(code_default("dev")));   // the release profile hides them
+
+  // Main list: Roof sun shadows and Box light shadows (Off / Shadowed / All), not experimental.
+  const Knob* roof = find_knob("roof_shadows");
+  const Knob* box = find_knob("box_lights");
+  CHECK(roof && box);
+  if (roof && box) {
+    CHECK(!roof->experimental && !box->experimental && !roof->advanced && !box->advanced);
+    CHECK(choice_count(*box) == 3);
+    CHECK_EQ(box->choices[1].label, "Shadowed");
+    CHECK_EQ(box->choices[2].label, "All");
+    for (int c = 0; c < 3; ++c) CHECK_EQ(get(on_map(*box, c), "ls_box"), std::to_string(c));
+    CHECK(roof->preset[kUltra] == 1);
+    for (int p = 0; p < kPresetCount; ++p) CHECK(box->preset[p] == 0);
+    CHECK(knob_index("roof_shadows") < knob_index("gi"));
+    CHECK(knob_index("box_lights") < knob_index("reflections"));
+  }
+
+  // Each level writes exactly these keys (a lower level resets the higher levels' keys).
+  struct Level {
+    const char* knob;
+    std::vector<const char*> keys;
+    std::vector<std::vector<const char*>> values;   // per choice
+  };
+  const Level levels[] = {
+      {"exp_hidden_surface",
+       {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_recycle", "rt_hit_material_wind_rgb",
+        "gi_hit_direct", "gi_hit_sun", "rf_hit_shade", "rf_hit_gi"},
+       {{"0", "0", "0", "0", "0", "0", "0", "0"},
+        {"1", "1", "1", "1", "0", "0", "0", "0"},
+        {"1", "1", "1", "1", "1", "1", "0", "0"},
+        {"1", "1", "1", "1", "1", "1", "1", "1"}}},
+      {"exp_hit_emission", {"rt_hit_emission", "rt_emissive"}, {{"0", "0"}, {"1", "1"}, {"2", "1"}}},
+      {"exp_gi_far", {"gi_far", "gi_far_m"}, {{"0", nullptr}, {"1", "6"}}},
+      {"exp_water",
+       {"rt_water_geometry", "rt_water_reflections", "rt_water_compose", "rt_water_shadows", "rt_water_ls_shadows",
+        "rt_water_game_shadow", "rt_water_refraction"},
+       {{"0", "0", "0", "0", "0", "0", "0"},
+        {"1", "1", "1", "0", "0", "0", "0"},
+        {"1", "1", "1", "1", "1", "1", "0"},
+        {"1", "1", "1", "1", "1", "1", "1"}}},
+      {"exp_native_coverage", {"rt_native_hair", "rt_native_scalp", "rt_native_tileset"},
+       {{"0", "0", "0"}, {"1", "1", "0"}, {"1", "1", "1"}}},
+  };
+  for (const Level& l : levels) {
+    const Knob* k = find_knob(l.knob);
+    CHECK(k != nullptr);
+    if (!k) continue;
+    CHECK(k->experimental && !k->dev_only);
+    CHECK(choice_count(*k) == int(l.values.size()));
+    for (int c = 0; c < choice_count(*k); ++c) {
+      Map m = on_map(*k, c);
+      size_t written = 0;
+      for (size_t j = 0; j < l.keys.size(); ++j) {
+        if (!l.values[c][j]) {
+          CHECK(!m.count(l.keys[j]));
+          continue;
+        }
+        ++written;
+        CHECK_EQ(std::string(l.knob) + "[" + std::to_string(c) + "] " + l.keys[j] + "=" + get(m, l.keys[j]),
+                 std::string(l.knob) + "[" + std::to_string(c) + "] " + l.keys[j] + "=" + l.values[c][j]);
+      }
+      CHECK(m.size() == written);
+      CHECK(knob_value(*k, m) == c);   // each level reads back as itself
+    }
+    CHECK(knob_value(*k, code_defaults()) == 0);
+  }
+  CHECK(find_knob("exp_hit_emission")->choices[2].dev);   // rt_hit_emission=2 is developer-only
+  CHECK(find_knob("exp_hidden_surface")->apply == Apply::Partial);
+  CHECK(find_knob("exp_water")->apply == Apply::Partial);
+  CHECK(find_knob("exp_native_coverage")->apply == Apply::Restart);
+  CHECK(find_knob("exp_hair_physical_origin")->advanced);
+
+  // No orphan key: every key the old entries wrote is still written by a knob or is ini-only.
+  for (const char* key : kOldKnobKeys) {
+    bool ini_only = false;
+    for (const char* k : kIniOnlyKeys) ini_only = ini_only || std::string(k) == key;
+    if (!is_knob_key(key) && !ini_only) CHECK_EQ(std::string("orphan key ") + key, "");
+    CHECK(code_default(key) != nullptr);
+  }
+  for (const char* k : kIniOnlyKeys) {
+    CHECK(!is_knob_key(k));
+    CHECK_EQ(code_default(k), "0");
+  }
+  CHECK(find_knob("exp_fg_letterbox") == nullptr);
+  // A hand-set ini-only key survives a save.
+  CHECK_EQ(get(parse_ini(render_user_ini("fg_letterbox=1\n", kHigh, preset_values(kHigh))), "fg_letterbox"), "1");
+
+  // Old knob ids resolve to the new knob, and their "On" key alone reads back as the alias level.
+  for (const auto& o : kOldOn) {
+    const Knob* k = find_knob(o[0]);
+    CHECK(k != nullptr);
+    if (!k) continue;
+    int want = -2;
+    for (const KnobAlias& a : kKnobAliases)
+      if (std::string(a.old_id) == o[0]) want = a.on_choice;
+    CHECK(want >= 1 && want < choice_count(*k));
+    Map m = code_defaults();
+    m[o[1]] = "1";
+    if (knob_value(*k, m) != want)
+      CHECK_EQ(std::string(o[0]) + " -> " + std::to_string(knob_value(*k, m)), std::string(o[0]) + " -> " + std::to_string(want));
+  }
+  for (const KnobAlias& a : kKnobAliases) CHECK(knob_index(a.knob) >= 0 && knob_index(a.old_id) == knob_index(a.knob));
+
+  // Dependencies: shown (unmet_need, unmet_key_need) and enforced on save (enforce_needs).
+  {
+    const int hs = knob_index("exp_hidden_surface"), far = knob_index("exp_gi_far"), em = knob_index("exp_hit_emission");
+    const int nc = knob_index("exp_native_coverage"), ho = knob_index("exp_hair_physical_origin");
+    auto v = preset_values(kHigh);
+    v[far] = 1;
+    v[hs] = 1;
+    CHECK(!unmet_need(kKnobs[far], 1, v).empty());   // needs + Bounce
+    v[hs] = 2;
+    CHECK(unmet_need(kKnobs[far], 1, v).empty());
+    v[knob_index("reflections")] = 0;
+    CHECK(unmet_need(kKnobs[hs], 2, v).empty());
+    CHECK(!unmet_need(kKnobs[hs], 3, v).empty());    // + Reflections needs Reflections on
+    v[knob_index("gi")] = 1;                         // screen-space GI
+    CHECK(!unmet_need(kKnobs[hs], 2, v).empty());    // + Bounce needs ray-traced GI
+    CHECK(unmet_need(kKnobs[hs], 1, v).empty());
+    v = preset_values(kHigh);
+    v[em] = 1;
+    CHECK(!unmet_need(kKnobs[em], 1, v).empty());
+    v[ho] = 1;
+    CHECK(!unmet_need(kKnobs[ho], 1, v).empty());
+    v[nc] = 1;
+    CHECK(unmet_need(kKnobs[ho], 1, v).empty());
+    CHECK(!unmet_need(kKnobs[hs], 1, preset_values(kMedium)).empty());   // Medium: opaque geometry only
+    // enforce_needs lowers the chain and nothing else.
+    v = preset_values(kHigh);
+    v[hs] = 3;
+    v[far] = 1;
+    v[em] = 1;
+    v[knob_index("reflections")] = 0;
+    auto changed = enforce_needs(v);
+    CHECK(v[hs] == 2 && v[far] == 1 && v[em] == 1);
+    CHECK(changed == std::vector<int>{hs});
+    v[knob_index("rt_geometry")] = 1;
+    enforce_needs(v);
+    CHECK(v[hs] == 0 && v[far] == 0 && v[em] == 0);
+    for (int p = 0; p < kPresetCount; ++p) {
+      auto pv = preset_values(p);
+      CHECK(enforce_needs(pv).empty());
+    }
+    // Raw prerequisites from a level on: GI fallback 0 matters from + Bounce only.
+    Map src = code_defaults();
+    src["gi_rt_fallback"] = "1";
+    CHECK(unmet_key_need(kKnobs[hs], 1, src).empty());
+    CHECK(!unmet_key_need(kKnobs[hs], 2, src).empty());
+    src["gi_rt_fallback"] = "0";
+    CHECK(unmet_key_need(kKnobs[hs], 3, src).empty());
+    src["rt_bvh_split"] = "0";
+    CHECK(!unmet_key_need(kKnobs[hs], 1, src).empty());
+    CHECK(unmet_key_need(kKnobs[hs], 0, src).empty());
+  }
+
+  // Restart notes: the first enable of hidden-surface shading (rt_hit_material, the instanced rows'
+  // startup patch, the wind RGB family) and of each water level; everything above is live.
+  CHECK(key_change_needs_restart("rt_hit_material", "0", "1"));
+  CHECK(key_change_needs_restart("rt_hit_material_wind_rgb", "0", "1"));
+  CHECK(key_change_needs_restart("rt_hit_material_wind_rgb", "1", "0"));
+  CHECK(key_change_needs_restart("rt_hit_material_instanced", "0", "1"));
+  CHECK(!key_change_needs_restart("rt_hit_material_instanced", "1", "0"));
+  CHECK(!key_change_needs_restart("rt_hit_material_recycle", "0", "1"));
+  for (const char* key : {"gi_hit_direct", "gi_hit_sun", "rf_hit_shade", "rf_hit_gi", "rt_hit_emission", "rt_emissive",
+                          "gi_far", "gi_far_m", "ls_box", "rt_alpha_spill", "fg_letterbox", "ls_k", "rt_hit_reference"})
+    CHECK(!key_change_needs_restart(key, "0", "1"));
+  for (const char* key : {"rt_water_compose", "rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow",
+                          "rt_water_refraction"}) {
+    CHECK(key_change_needs_restart(key, "0", "1"));
+    CHECK(!key_change_needs_restart(key, "1", "0"));
+  }
+  CHECK(!key_change_needs_restart("rt_water_geometry", "0", "1"));
+  for (const char* key : {"rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current"})
+    CHECK(key_change_needs_restart(key, "0", "1"));
+  CHECK(!key_change_needs_restart("rt_native_scalp", "0", "1"));
+}
+
+// The user's bg3rtx_user.ini of 2026-11-01 (copied read-only into tests/fixtures/settings): it loads as
+// levels, and saving it keeps every key it had and adds only the keys of those levels.
+static void test_user_ini_migration() {
+  const std::string text = read_file(BG3RTX_SOURCE_DIR "/tests/fixtures/settings/user_ini_20261101.ini");
+  CHECK(!text.empty());
+  const Map base = parse_ini(read_file(BG3RTX_SOURCE_DIR "/bg3rtx.ini"));
+  const Map user = parse_ini(text);
+  Map raw;
+  apply_layer(raw, base);
+  apply_layer(raw, user);
+  std::vector<int> v = knob_values(raw);
+  for (int i = 0; i < kKnobCount; ++i)
+    if (v[i] < 0) CHECK_EQ(std::string(kKnobs[i].id) + " reads back as custom", "");
+  CHECK(preset_from_id(get(user, "preset")) == kUltra);
+  CHECK(v[knob_index("box_lights")] == 2);
+  CHECK(v[knob_index("exp_alpha_spill")] == 1);
+  CHECK(v[knob_index("exp_hidden_surface")] == 3);
+  CHECK(v[knob_index("exp_hit_emission")] == 1);
+  CHECK(v[knob_index("exp_water")] == 3);
+  CHECK(v[knob_index("exp_native_coverage")] == 0);
+  CHECK(v[knob_index("exp_gi_far")] == 0);
+  CHECK(v[knob_index("roof_shadows")] == 1);   // Ultra
+  // The file is already enforceable: nothing it selects lacks a dependency in Ultra.
+  auto enforced = v;
+  CHECK(enforce_needs(enforced).empty());
+
+  const std::string out = render_user_ini(text, kUltra, v);
+  const Map w = parse_ini(out);
+  // Every key of the old file keeps its value (except where a level adds keys it lacked).
+  for (auto& kv : user)
+    if (!same_value(get(w, kv.first.c_str()), kv.second))
+      CHECK_EQ(kv.first + "=" + get(w, kv.first.c_str()), kv.first + "=" + kv.second);
+  // The levels' keys the file lacked.
+  for (const char* key : {"rt_hit_material_recycle", "rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
+    CHECK_EQ(get(w, key), "1");
+  CHECK_EQ(get(w, "rt_emissive"), "1");             // now written by Emission at ray hits
+  CHECK(out.find("rt_emissive=1") == out.rfind("rt_emissive=1"));   // once, no longer under "Other keys"
+  CHECK_EQ(get(w, "rt_xfb_mb"), "1024");            // unmanaged keys kept
+  CHECK_EQ(get(w, "rt_cascade_mb"), "427");
+  CHECK_EQ(get(w, "rt_debug"), "0");
+  // Round trip: the saved file reads back as the same levels, now exactly.
+  Map raw2;
+  apply_layer(raw2, base);
+  apply_layer(raw2, w);
+  CHECK(knob_values(raw2) == v);
+  CHECK_EQ(render_user_ini(out, kUltra, v), out);
+  // The added keys that need a restart are marked: the wind RGB rows and the pond's game shadow.
+  int restart = 0;
+  for (const char* key : {"rt_hit_material_recycle", "rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
+    restart += key_change_needs_restart(key, lookup(raw, key), get(w, key));
+  CHECK(restart == 2);
+}
+
+static void test_rendering_experiments() {
   const auto kept=parse_ini(render_user_ini("rt=0\nrt_bvh_split=0\ncustom_key=7\n",kHigh,preset_values(kHigh)));
-  CHECK_EQ(get(kept,"rt"),"0");CHECK_EQ(get(kept,"rt_bvh_split"),"0");
+  CHECK_EQ(get(kept,"rt"),"0");CHECK_EQ(get(kept,"rt_bvh_split"),"0");CHECK_EQ(get(kept,"custom_key"),"7");
   CHECK(!unmet_key_need(*find_knob("exp_omm"),1,kept).empty());
   CHECK(unmet_key_need(*find_knob("exp_omm"),0,kept).empty());
   CHECK(unmet_key_need(*find_knob("exp_omm"),1,code_defaults()).empty());
   CHECK(schema_json().find("\"required_on\"")!=std::string::npos);
-  CHECK(key_change_needs_restart("rt_native_hair","0","1"));
-  CHECK(key_change_needs_restart("rt_native_tileset","0","1"));
-  CHECK(key_change_needs_restart("rt_omm","1","0"));
-  CHECK(key_change_needs_restart("rt_sun_cascade_current","0","1"));
-  CHECK(key_change_needs_restart("rt_hit_material","0","1"));
-  CHECK(!key_change_needs_restart("gi_hit_direct","0","1"));
-  CHECK(!key_change_needs_restart("rt_hit_material_recycle","0","1"));
-  CHECK(!key_change_needs_restart("fg_letterbox","0","1"));
-  // fg_letterbox: experimental, off everywhere, live; needs Frame generation (on in every preset, so no Low check).
-  {
-    const auto* lb=find_knob("exp_fg_letterbox");CHECK(lb!=nullptr);
-    if(lb){
-      CHECK(lb->experimental);CHECK(choice_count(*lb)==2);CHECK_EQ(code_default("fg_letterbox"),"0");
-      for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,"fg_letterbox"),"0");CHECK(lb->preset[p]==0);}
-      KVList pairs;knob_kvs(*lb,1,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;CHECK_EQ(get(on,"fg_letterbox"),"1");
-      auto values=preset_values(kHigh);values[knob_index("frame_generation")]=0;
-      CHECK(!unmet_need(*lb,1,values).empty());
+  // Every experimental knob: its keys are off in every preset and a saved non-Off value reads back.
+  for(const Knob& k:kKnobs){
+    if(!k.experimental)continue;
+    for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;
+      for(const std::string& key:knob_keys(k))if(m.count(key)&&!same_value(m[key],code_default(key)))CHECK_EQ(std::string(k.id)+" preset "+key+"="+m[key],"");}
+    for(int c=1;c<choice_count(k);++c){
+      auto values=preset_values(kHigh);values[knob_index(k.id)]=c;
+      auto parsed=parse_ini(render_user_ini("# preserved\ncustom_key=7\n",kHigh,values));
+      CHECK_EQ(get(parsed,"custom_key"),"7");CHECK(knob_value(k,parsed)==c);
+      CHECK(!unmet_need(k,c,preset_values(kLow)).empty());
     }
   }
-  CHECK(!key_change_needs_restart("rt_hit_material_instanced","1","0"));   // startup patch, then live
-  CHECK(key_change_needs_restart("rt_water_compose","0","1"));    // variants are created with the pipelines
-  CHECK(!key_change_needs_restart("rt_water_compose","1","0"));   // off is live (the game's pipeline)
-  auto gi_sources=code_defaults();gi_sources["rt_hit_material"]="1";gi_sources["gi_rt_fallback"]="1";
-  CHECK(!unmet_key_need(*find_knob("exp_gi_hit_direct"),1,gi_sources).empty());
-  gi_sources["gi_rt_fallback"]="0";CHECK(unmet_key_need(*find_knob("exp_gi_hit_direct"),1,gi_sources).empty());
-  gi_sources["rt_hit_material"]="0";CHECK(!unmet_key_need(*find_knob("exp_gi_hit_direct"),1,gi_sources).empty());
-  CHECK(unmet_key_need(*find_knob("exp_gi_hit_direct"),0,gi_sources).empty());
-  CHECK(!key_change_needs_restart("gi_hit_sun","0","1"));
-  auto sun_sources=code_defaults();
-  CHECK(!unmet_key_need(*find_knob("exp_gi_hit_sun"),1,sun_sources).empty());   // gi_hit_direct=0 by default
-  sun_sources["gi_hit_direct"]="1";CHECK(unmet_key_need(*find_knob("exp_gi_hit_sun"),1,sun_sources).empty());
-  CHECK(unmet_key_need(*find_knob("exp_gi_hit_sun"),0,sun_sources).empty());
-  // gi_far: experimental, off in every preset, live, needs gi_hit_sun; choices off / 4 / 6 / 8 m.
-  {
-    const auto* far=find_knob("exp_gi_far");CHECK(far!=nullptr);
-    if(far){
-      CHECK(far->experimental);CHECK(choice_count(*far)==4);CHECK_EQ(code_default("gi_far"),"0");CHECK_EQ(code_default("gi_far_m"),"6");
-      for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,"gi_far"),"0");CHECK(far->preset[p]==0);}
-      const char* metres[]={"4","6","8"};
-      for(int c=1;c<4;++c){KVList pairs;knob_kvs(*far,c,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;
-        CHECK_EQ(get(on,"gi_far"),"1");CHECK_EQ(get(on,"gi_far_m"),metres[c-1]);CHECK(knob_value(*far,on)==c);}
-      CHECK(knob_value(*far,code_defaults())==0);
-      CHECK(!key_change_needs_restart("gi_far","0","1"));CHECK(!key_change_needs_restart("gi_far_m","6","8"));
-      auto far_sources=code_defaults();
-      CHECK(!unmet_key_need(*far,1,far_sources).empty());   // gi_hit_sun=0 by default
-      far_sources["gi_hit_sun"]="1";CHECK(unmet_key_need(*far,1,far_sources).empty());
-      CHECK(!unmet_need(*far,2,preset_values(kHigh)).empty());   // needs the Sunlit hidden-surface bounce knob
-    }
-  }
-  CHECK(!key_change_needs_restart("rf_hit_shade","0","1"));
-  auto rf_sources=code_defaults();
-  CHECK(!unmet_key_need(*find_knob("exp_rf_hit_shade"),1,rf_sources).empty());   // rt_hit_material=0 by default
-  rf_sources["rt_hit_material"]="1";CHECK(unmet_key_need(*find_knob("exp_rf_hit_shade"),1,rf_sources).empty());
-  rf_sources["rt_reflections"]="0";CHECK(!unmet_key_need(*find_knob("exp_rf_hit_shade"),1,rf_sources).empty());
-  CHECK(unmet_key_need(*find_knob("exp_rf_hit_shade"),0,rf_sources).empty());
-  // rt_hit_emission (M4.4): three choices, off in every preset, live, needs the D-EM capture at startup.
-  {
-    const auto* em=find_knob("exp_hit_emission");CHECK(em!=nullptr);
-    if(em){
-      CHECK(em->experimental);CHECK(choice_count(*em)==3);CHECK_EQ(code_default("rt_hit_emission"),"0");
-      for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,"rt_hit_emission"),"0");CHECK(em->preset[p]==0);}
-      for(int c=1;c<=2;++c){KVList pairs;knob_kvs(*em,c,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;
-        CHECK_EQ(get(on,"rt_hit_emission"),c==1?"1":"2");CHECK(knob_value(*em,on)==c);}
-      CHECK(!key_change_needs_restart("rt_hit_emission","0","2"));
-      auto em_sources=code_defaults();em_sources["rt_hit_material"]="1";
-      CHECK(!unmet_key_need(*em,1,em_sources).empty());   // rt_emissive=0 by default
-      em_sources["rt_emissive"]="1";CHECK(unmet_key_need(*em,1,em_sources).empty());CHECK(unmet_key_need(*em,2,em_sources).empty());
-      em_sources["rt_hit_material"]="0";CHECK(!unmet_key_need(*em,2,em_sources).empty());
-      CHECK(unmet_key_need(*em,0,em_sources).empty());
-    }
-  }
-  // ls_k (TRACK_D_LOCAL_LIGHTS 9.11): off / k1 / k2, off in every preset, live, needs Local light shadows Full.
+  // ls_k (TRACK_D_LOCAL_LIGHTS 9.11), developer only: needs Local light shadows Full.
   {
     const auto* lk=find_knob("exp_ls_exact_k");CHECK(lk!=nullptr);
     if(lk){
-      CHECK(lk->experimental);CHECK(choice_count(*lk)==3);CHECK_EQ(code_default("ls_k"),"0");CHECK_EQ(code_default("ls_rest_samples"),"1");
-      for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,"ls_k"),"0");CHECK(lk->preset[p]==0);}
-      for(int c=0;c<=2;++c){KVList pairs;knob_kvs(*lk,c,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;
-        CHECK_EQ(get(on,"ls_k"),c==0?"0":c==1?"1":"2");CHECK_EQ(get(on,"ls_rest_samples"),"1");CHECK(knob_value(*lk,on)==c);}
-      CHECK(!key_change_needs_restart("ls_k","0","1"));
-      auto v=preset_values(kHigh);v[knob_index("exp_ls_exact_k")]=1;CHECK(unmet_need(*lk,1,v).empty());   // High: Full local shadows
-      v[knob_index("local_shadows")]=1;CHECK(!unmet_need(*lk,1,v).empty());   // Fast (RIS) cannot take it
-      CHECK(!unmet_need(*lk,2,preset_values(kLow)).empty());
+      CHECK(choice_count(*lk)==3);CHECK_EQ(code_default("ls_k"),"0");CHECK_EQ(code_default("ls_rest_samples"),"1");
+      for(int c=0;c<=2;++c){Map on=on_map(*lk,c);CHECK_EQ(get(on,"ls_k"),std::to_string(c));CHECK_EQ(get(on,"ls_rest_samples"),"1");CHECK(knob_value(*lk,on)==c);}
+      auto v=preset_values(kHigh);v[knob_index("exp_ls_exact_k")]=1;CHECK(unmet_need(*lk,1,v).empty());
+      v[knob_index("local_shadows")]=1;CHECK(!unmet_need(*lk,1,v).empty());
     }
   }
-  CHECK(!key_change_needs_restart("rt_native_scalp","0","1"));
-  CHECK(find_knob("exp_native_scalp")->apply==Apply::Hitch);
+  CHECK(find_knob("exp_native_coverage")->apply==Apply::Restart);
   Gpu gpu{0x10de,0x2b85,"NVIDIA GeForce RTX 5090",true,true};
   CHECK(!choice_supported(*find_knob("exp_omm"),1,gpu_caps(gpu)));
   gpu.opacity_micromap=true;CHECK(choice_supported(*find_knob("exp_omm"),1,gpu_caps(gpu)));
   gpu.ray_query=false;CHECK(!(gpu_caps(gpu)&kCapOpacityMicromap));
   CHECK(schema_json().find("\"experimental\": true")!=std::string::npos);
   CHECK(schema_json().find("\"experimental\": false")!=std::string::npos);
+  CHECK(schema_json().find("\"developer\": true")!=std::string::npos);
   CHECK(schema_json().find("opacity_micromap")!=std::string::npos);
 }
 
@@ -495,6 +720,8 @@ int main(int argc, char** argv) {
   test_user_ini_writer();
   test_dependencies_and_caps();
   test_rendering_experiments();
+  test_gui_levels();
+  test_user_ini_migration();
   test_schema_file();
   std::printf("%d checks, %d failed\n", g_checks, g_failed);
   return g_failed;

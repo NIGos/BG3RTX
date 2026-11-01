@@ -22,6 +22,9 @@ byte-identity gates) compiles through this module:
 - Progress: a line at least every 15 s (BG3RTX_PROGRESS_SECONDS) with done/total, cached, rate,
   ETA and failures so far, flushed. The process runs at BelowNormal priority (tools/low_priority.py).
 
+layer/shader_cache.cpp is the C++ twin of git_blob_id, SourceTree.closure and entry_key (the runtime
+cache): change both together; tests/shader_cache_key_test.py (--write) and shader_cache_test check them.
+
 The cache defaults to build/shader_cache of the main checkout (shared by every worktree; the
 content addressing makes sharing safe); BG3RTX_SHADER_CACHE overrides it.
 

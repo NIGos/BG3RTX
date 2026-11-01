@@ -107,7 +107,8 @@
    "min": 1,
    "windows": [
     "cost-casters-on"
-   ]
+   ],
+   "when_present": true
   }
  ]
 }
