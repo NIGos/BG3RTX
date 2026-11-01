@@ -31,6 +31,15 @@ days), L (a week or more). Live tests still need explicit user steering (AGENTS.
 - Status 2026-11-01: harness `tools/frame_replay` + pack format + synthetic CTest done for gi_hit_direct
   (tools/frame_replay.md); live pack writer `replay_pack` built (ABI 25, READY_FOR_LIVE); rf_hit_shade's
   extra sets are next.
+- First live pack (S8): 973 MB, giRaw 95.0% bit-equal with live, but hit material qualified 0: 4336
+  image elements omitted (no TRANSFER_SRC), so hits failed as "sampling" (125705 of 189768).
+- Texture read (2026-11-01, layer only, no ABI change): images without TRANSFER_SRC are read by
+  `shaders/replay_image.hlsl` through a sampled view and stored decoded (BC1/2/3/7 as RGBA8, sRGB kept;
+  BC4/BC5 as R8/RG8; BC6H as RGBA16F; `image ... SOURCE` names the game format). Self-test on the RTX
+  5090: BC1/2/3/7 and BC6H bit-exact, BC4/BC5 within 0.5/255. Textures now fill the pack up to the
+  2 GB cap (alpha-only ones dropped first); integer formats stay omitted. READY_FOR_LIVE: the job
+  `rc1-replay-s8-fg2` checks `written: ... (<n> images omitted, <r> read by shader)`; offline, the
+  replay must show hit material qualified > 0 and sampling near 0.
 
 ## E. Re-analysis of existing captures (S, low gain)
 - Mine `captures/` logs and dumps for numbers not yet extracted.
