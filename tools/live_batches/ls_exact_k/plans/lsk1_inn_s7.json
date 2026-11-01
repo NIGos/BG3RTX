@@ -162,6 +162,78 @@
   ]
  },
  {
+  "label": "shot-k1-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "ls_k=1,ls_rest_samples=1,ls_stats=0,rt_stats=0,rt_debug=0,ls_debug=0",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-off-c",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "ls_k=0,ls_rest_samples=1,ls_stats=0,rt_stats=0,rt_debug=0,ls_debug=0",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-k1-c",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "ls_k=1,ls_rest_samples=1,ls_stats=0,rt_stats=0,rt_debug=0,ls_debug=0",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-off-d",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "ls_k=0,ls_rest_samples=1,ls_stats=0,rt_stats=0,rt_debug=0,ls_debug=0",
+  "trace_at": [
+   5
+  ]
+ },
+ {
   "label": "restore",
   "kind": "static",
   "speed": "static",
