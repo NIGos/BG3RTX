@@ -10,7 +10,7 @@
  "requires_success_of": [
   "m5w2-water-reflections-s8-fg2"
  ],
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_water_shadows=0,rt_water_ls_shadows=0,rt_water_refraction=1,sharc_device=1,rt_stats=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_water_shadows=0,rt_water_ls_shadows=0,rt_water_refraction=1,sharc_device=1,rt_stats=0,qa_exposure_hold=0",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -36,7 +36,8 @@
   "\\[crash\\]",
   "FAILED",
   "\\[water\\]",
-  "gi: GPU cost"
+  "gi: GPU cost",
+  "\\[rrpost\\] exposure (held|hold|probe)"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -56,7 +57,9 @@
   "\\[water\\] compose variants \\(\\d+ frames\\): FS patched [1-9]\\d*, refused \\d+ \\([^)]*\\), variant pipelines [1-9]\\d* \\(refused: blend \\d+, library \\d+; failed \\d+\\), water draws on a variant [1-9]\\d*, without \\d+",
   "\\[water\\] compose images \\d+x\\d+ \\(radiance RGBA16F, depth R32F: \\d+ MB\\)",
   "\\[water\\] compose \\(120 frames, (1[01]\\d|120) composed, [0-9.]+ passes/frame\\): records [1-9][0-9.]*/frame, owned (?!0\\.00%)[0-9.]+%",
-  "\\[water\\] refraction \\(120 frames, [1-9]\\d* passes with the colour copy, \\d+ without\\): transmissive records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned \\(opaque [0-9.]+%, invalid \\d+, no usable copy 0\\); traced [0-9.]+% of transmissive \\(not traced \\d+\\): screen hit \\(composed\\) (?!0\\.0%)[0-9.]+%, hidden [0-9.]+%, off screen [0-9.]+%, miss [0-9.]+%, aborted \\d+; transmission-weighted hidden share [0-9.]+%; screen shift [0-9.]+ px per composed record; refraction term \\(1 - a\\) Refr [0-9.]+ per transmissive record; composed: game [0-9.]+ -> traced [0-9.]+ per record \\(ratio of the means [0-9.]+\\); mean delta over owned [-+][0-9.]+ = [-+][0-9.]+% of mean C; clamped \\d+; GPU [0-9.]+ ms median, p90 [0-9.]+ \\(the compose dispatches with the refraction ray \\+ the lighting copy\\); skipped: records without the refraction words 0"
+  "\\[water\\] refraction \\(120 frames, [1-9]\\d* passes with the colour copy, \\d+ without\\): transmissive records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned \\(opaque [0-9.]+%, invalid \\d+, no usable copy 0\\); traced [0-9.]+% of transmissive \\(not traced \\d+\\): screen hit \\(composed\\) (?!0\\.0%)[0-9.]+%, hidden [0-9.]+%, off screen [0-9.]+%, miss [0-9.]+%, aborted \\d+; transmission-weighted hidden share [0-9.]+%; screen shift [0-9.]+ px per composed record; refraction term \\(1 - a\\) Refr [0-9.]+ per transmissive record; composed: game [0-9.]+ -> traced [0-9.]+ per record \\(ratio of the means [0-9.]+\\); mean delta over owned [-+][0-9.]+ = [-+][0-9.]+% of mean C; clamped \\d+; GPU [0-9.]+ ms median, p90 [0-9.]+ \\(the compose dispatches with the refraction ray \\+ the lighting copy\\); skipped: records without the refraction words 0",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",

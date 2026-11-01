@@ -12,7 +12,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0"
+  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
  },
  {
   "label": "precheck-compose-on",
@@ -27,7 +27,7 @@
   "motion_end": 15,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_debug=0,rt_stats=0"
+  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
  },
  {
   "label": "cost-off-a",
@@ -42,7 +42,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0"
+  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-off-a",
@@ -57,7 +57,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0",
+  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -75,7 +75,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_debug=0,rt_stats=0"
+  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-on",
@@ -90,7 +90,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_debug=0,rt_stats=0",
+  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_debug=0,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -108,7 +108,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_debug=25,rt_stats=0",
+  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_debug=25,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -126,7 +126,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0"
+  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-off-b",
@@ -141,7 +141,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0",
+  "set": "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -159,6 +159,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_debug=0,rt_stats=0"
+  "set": "rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
  }
 ]

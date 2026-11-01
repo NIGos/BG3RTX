@@ -23,6 +23,9 @@ off, so every comparison was INCOMPLETE), its tolerance was a one-sample range, 
 Read correctly, **m4p3 S6 shows the M4 bundle steps darker by 1.05%, 1.82% and 3.10%** (in-run OFF spread
 0.07%, derived band 1.73%), and **m5w4 shows +2.20% (141148) and +2.75% (121950) for a key that only
 removes light** (OFF spread 0.02% / 0.18%, band 1.17%). Both passed or hid behind the old rules.
+**Exposure recheck (section 7):** no run today held the eye adaptation. At a fixed exposure m5w4 is
+-0.12% / -0.55% (the "brightening" was the adaptation: s1b13[0] +2.9% / +2.8% in the ON shot), gf1 -0.14%
+(was +3.97%), gf2 -0.32% (was +2.87%). The S6 darkening is real: the S6 exposure did not move (ratio 1.0000).
 
 ## 2. Top 10 issues
 
@@ -43,7 +46,9 @@ removes light** (OFF spread 0.02% / 0.18%, band 1.17%). Both passed or hid behin
    shot-step-gi -1.05%, +sun -1.82%, +inst -3.10% (all `rt_emissive=0`), then shot-on -0.45% and
    shot-em-off-a -0.21% (`rt_emissive=1`). `gi_hit_direct` should only add light. Hypothesis to check
    first: with the D-EM capture off, hidden hits on lava replace a non-zero fallback that carried the glow.
-5. **m5w4 brighter for a light-removing key** (finding): scene colour +2.20% / +2.75% with sun shadows
+   Not the eye adaptation: s1b13[0] is 0.00136865 in every S6 trace (exposure ratio 1.0000, section 7).
+5. **m5w4 brighter for a light-removing key** (finding; **resolved by section 7: eye adaptation**, at a fixed
+   exposure -0.12% (121950) / -0.55% (141148), darker as a shadow must be): scene colour +2.20% / +2.75% with sun shadows
    on the water, while `[water] shadows` removes 46.7% of mean C over owned pixels. Either the 5c3fdabc
    dump is not the image the key changes (the water FS `c4e92ccd` and `423e0548` write the same image in
    the trace) or the key changes something outside the water. The M5 owner must explain or predict it.
@@ -167,6 +172,8 @@ Counts (rows J, Q, S, D = 70): before 30 OK / 28 weak / 12 broken; after 43 OK /
 
 ## 4. Energy gate replay (scene colour 5c3fdabc, new gate; old verdict in brackets)
 
+Raw scene colour (before the exposure correction). Section 7 repeats it at a fixed exposure.
+
 | Run | Comparison | d | Band | Old | New |
 |---|---|---|---|---|---|
 | m4p3 112657 (S6, plan eeca1fd) | step-gi / +sun / +inst / on | -1.05 / -1.82 / -3.10 / -0.45% | 1.73% | INCOMPLETE (drift) | within / FAIL / FAIL / within; step-rf INCOMPLETE (no trace) |
@@ -207,3 +214,61 @@ needs about 3 OFF shots (OFF / ON / OFF / ON / OFF), not 2. S8's sigma (0.458%) 
   gates are the ones that run (ps1 change, not done here).
 - `scripts/auto-run.ps1` skips a phase's `trace_at` when a compile stall carries the loop past the phase
   (all four m4p runs lost shot-step-rf): take the trace late rather than never, or warm the variant first.
+
+## 7. Energy recheck at a fixed exposure (branch worktree-agent-a80bee797afaacedd)
+
+The lighting is pre-exposed by s1b13[0] = 0.8333 / 2^EV, so the eye adaptation scales the scene colour.
+**No run today held it** (0 `exposure held` lines in all 28 logs). `tools/m4_promotion_gate.py` now divides
+each trace's scene colour by the `[rrpost] exposure probe` s1b13[0] of its frame (found for every trace
+today), then applies the two-sided band of section 2 (OFF-OFF noise pairs normalised the same way).
+Exposure = s1b13[0] ON / mean OFF. Band: t x sigma x sqrt(3/2), sigma pooled per save. "Before" is the
+verdict written today (docs, or the old OFF-pair rule); "raw gate" is section 4.
+
+| Run | Comparison | Raw | Exposure | Fixed exposure | In-run OFF spread | Band | Held | Before | Raw gate | After |
+|---|---|---|---|---|---|---|---|---|---|---|
+| gf1 141602 camp | on | +3.97% | 1.0411 | **-0.14%** | 0.11% | 0.75% | no | brighter: explain | FAIL | **within** |
+| gf2 141905 S8 | on, predicted -2.0% | +2.87% | 1.0320 | **-0.32%** | 0.21% | 1.56% | no | brighter, unexplained (keep off) | FAIL | FAIL: 1.68% above the prediction (post hoc) |
+| m5w4 121950 S8 | on (D record) | +2.75% | 1.0288 | **-0.12%** | 0.13% | 1.56% | no | brighter: explain | FAIL | **within** |
+| m5w4 141148 S8 | on (R = C - D) | +2.20% | 1.0276 | **-0.55%** | 0.01% | 1.56% | no | brighter: explain | FAIL | **within, darker** (needs a prediction) |
+| m4p3 112657 S6 | step-gi / +sun / +inst / on / on vs em-off | -1.05 / -1.82 / -3.10 / -0.45 / +0.16% | 1.0000 (all) | same | 0.07% | 1.73% | no | INCOMPLETE (drift) | within / FAIL / FAIL / within / within | unchanged: **the S6 darkening is real** |
+| m4p4 113146 S8 | step-gi / +sun / +inst / on | +0.06 / +0.00 / +0.26 / +0.15% | 1.0004 / 0.9997 / 1.0038 / 1.0030 | +0.02 / +0.03 / -0.12 / -0.15% | 0.14% | 2.13% | no | INCOMPLETE | within | within (+inst and on flip sign) |
+| m4p1 111854 camp | step-gi / +inst / on | -0.04 / -0.00 / -0.12% | 0.9987 / 1.0006 / 0.9963 | +0.09 / -0.06 / +0.25% | 0.26% | 1.73% | no | within | within | within |
+| m4p2 112258 inn | gi / +sun / +inst / on | +0.71 / +1.01 / +0.61 / -0.04% | 1.0000 | same | 1.15% | 2.47% | no | within | within | within (capacity FAIL stays) |
+| bx1 151641 S6 | on-a / on-b | -1.05 / -2.31% | 1.0000 | same | 0.01% | 1.36% | no | DARKER | within / FAIL | unchanged (shadows: needs a prediction) |
+| bx2 152015 S7 | on-a / on-b | +0.13 / -0.19% | 1.0000 | same | 0.33% | 1.94% | no | within | within | within |
+| lsk1 071324 S7 | k1 / k2 / k1-b / k1-c | -0.38 / +0.04 / -0.34 / +0.12% | 1.0000 | same | 0.20-0.89% | 2.33% | no | equal energy | within | within |
+| m4i 074646 / 093913 / 111403 S14 | on | +0.27 / +0.10 / +0.76% | 1.0000 | same | 0.04 / 0.15 / 1.75% | 2.77% | no | brighter, explained / within | within | within |
+| m5w3 070927 / 083416 / 093518 / 121606 S8 | on | -0.21 / -0.36 / -0.45 / +0.03% | 1.0005 / 1.0033 / 1.0031 / 1.0030 | -0.25 / -0.68 / -0.76 / -0.26% | 0.37 / 1.23 / 1.57 / 0.34% | 1.56% | no | within (083416 INVALID) | within | within (all darker: the probe leak, as derived) |
+| m5w5 122327 S8 | on | -0.04% | 1.0008 | -0.12% | 0.13% | 1.56% | no | passes (ratio 1.0000) | within | within |
+| m5w6 131651 S8 | on | +0.10% | 0.9998 | +0.11% | 0.02% | 1.56% | no | +0.07%, within noise | within | within |
+| lr1 083902 / 142244 camp | RT on vs off (1 OFF) | +3.83 / +3.67% | 1.0140 / 1.0088 | +2.39 / +2.77% | - | - | no | no energy gate | - | no energy gate (RT changes the lighting) |
+| lr2 084249 inn / lr3 084746 S6 | RT on vs off / box on vs off (1 OFF) | -0.05 / +0.38% | 1.0000 | same | - | - | no | no energy gate | - | no energy gate |
+
+lr1 / lr2 / lr3 02:2x and lsk1 062607: trace folders deleted, not recomputable. m4p1-4 shot-step-rf (and m4p1
+shot-step-sun): no trace (issue 8).
+
+**Verdicts that change with the exposure correction:**
+- gf1 camp: FAIL ("brighter") -> within. gi_far adds no measurable energy at the camp (-0.14%).
+- gf2 S8: the sign flips (+2.87% -> -0.32%, the sign of the offline -2.0%). Still FAIL against -2.0%, 0.12%
+  beyond the band; "live energy unexplained" becomes "live darkening about 6x smaller than offline".
+- m5w4 121950 / 141148: FAIL (brighter for a shadow key) -> within; the image gets darker, as a shadow must.
+  Finding 5 was the eye adaptation, not a wrong buffer.
+- Old OFF-pair rule only (reference now): m4p4 shot-on within -> DARKER; gf1 and m5w4 brighter -> DARKER.
+
+**Not the eye adaptation:** S6 (m4p3, bx1), S7 / inn (bx2, lsk1, m4p2) and S14 (m4i) kept one s1b13[0]
+in every trace of a run (exposure ratio exactly 1.0000), so those verdicts stand: the S6 M4 bundle darkening
+(-1.82 / -3.10%) and the bx1 box-shadow -2.31% are real changes of the lit image.
+
+**Pool noise.** With normalised pairs the S8 sigma is 0.612% (0.458% raw). The bimodal OFF-b is not the
+adaptation: in m4r1 (10-31, four runs) s1b13[0] fell 0.4% while the normalised OFF-b rose 1.3-1.7%. Without
+the m4r1 and m5w3 083416 / 093518 pairs (14 left) sigma is 0.26% and the band 0.68%: m5w4 141148 (-0.55%)
+is still within, gf2 still fails. The scene state that changes OFF-b at S8 is still to be found.
+
+**Changes.** All 17 energy-gated lean plans (box_lights, ls_exact_k, m4_instanced, m4_m5_first, m4_promotion,
+m4_round1, m5_water; gi_far already did) set `qa_exposure_hold=1` from the first cost/shot phase to the
+last phase before `restore` (0 before it and in `restore`); their jobs start with `qa_exposure_hold=0`, keep
+the `[rrpost] exposure` lines and expect `exposure held` and `hold released`. Lint:
+`py -3 scripts/queue_gates.py --lint-exposure-hold` (also in `queue_gates_test`) fails an energy-gated plan
+(an ON shot between two OFF shots, as the gate tool compares them) that does not hold from its first to its
+last compared shot, holds in phase 0, or lacks the `exposure held` expect line. Dry runs of the nine
+batches passed (Windows PowerShell 5). With the hold, the exposure ratio must read 1.0000 (a check of the hold).

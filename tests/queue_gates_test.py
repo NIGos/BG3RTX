@@ -143,6 +143,30 @@ def main():
               all(re.compile(g["select"]) and re.compile(g["match"]) and set(g.get("windows") or []) <= labels for g in ee))
     check(f"jobs with expect_every: {with_ee} (m4i, m4p1-4, m5w3-6 at least)", with_ee >= 9)
 
+    # Exposure hold lint: an energy-gated plan (ON shot between two OFF shots) must hold the eye adaptation.
+    def ph(label, hold=None):
+        return {"label": label, "set": "k=1" + ("" if hold is None else f",qa_exposure_hold={hold}")}
+    held_job = {"expect": [r"\[rrpost\] exposure held \(qa_exposure_hold=1\) at EV [-0-9.]+"]}
+    good = [ph("warmup", 0), ph("cost-off-a", 1), ph("shot-off-a", 1), ph("shot-on", 1), ph("cost-off-b", 1), ph("shot-off-b", 1), ph("restore", 0)]
+    check("hold lint: held from cost-off-a to the last shot, released in restore: ok", queue_gates.exposure_hold_problems(good, held_job) == [])
+    unheld = [ph("warmup"), ph("shot-off-a"), ph("shot-on"), ph("shot-off-b"), ph("restore")]
+    p = queue_gates.exposure_hold_problems(unheld, held_job)
+    check("hold lint: unheld OFF/ON/OFF shots flagged (gf2 S8 2026-11-01: +2.87% raw was -0.32%)", len(p) == 1 and "shot-off-a, shot-on, shot-off-b" in p[0])
+    gap = [dict(x) for x in good]
+    gap[4] = ph("cost-off-b", 0)   # a release and a new latch between the shots holds another EV
+    p = queue_gates.exposure_hold_problems(gap, held_job)
+    check("hold lint: a release between the compared shots is flagged", len(p) == 1 and "cost-off-b" in p[0])
+    first = [ph("shot-off-a", 1), ph("shot-on", 1), ph("shot-off-b", 1)]
+    check("hold lint: a hold in phase 0 (no warm-up exposure to latch) is flagged",
+          any("phase 0" in x for x in queue_gates.exposure_hold_problems(first, held_job)))
+    check("hold lint: held plan but no 'exposure held' expect line is flagged",
+          any("expect" in x for x in queue_gates.exposure_hold_problems(good, {"expect": []})))
+    single = [ph("warmup"), ph("shot-rt-off"), ph("shot-rt-on"), ph("restore")]
+    check("hold lint: one OFF shot (lean_regression RT pair) is no energy gate", queue_gates.exposure_hold_problems(single, {}) == [])
+    bad = queue_gates.lint_batches(ROOT / "tools" / "live_batches")
+    check("hold lint: every energy-gated job under tools/live_batches holds the exposure"
+          + ("" if not bad else ": " + "; ".join(f"{Path(k).name}: {v[0][:90]}" for k, v in bad.items())), not bad)
+
     if fails:
         print(f"{fails} check(s) failed")
         return 1
