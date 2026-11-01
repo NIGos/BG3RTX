@@ -1113,7 +1113,21 @@ static_assert(kRfBoxFirst == 383, "rt_reflections.hlsl stat_addv(383/384) rf hit
 // host slot after the pass's end timestamp. Logged as "ls box trace" and "ls box bound".
 constexpr uint32_t kLsBoxXFirst = kRfBoxFirst + kRfBoxCount;
 static_assert(kLsBoxXFirst == 385, "rt_local_shadows.hlsl box counters copied to rtStats 385..416");
-constexpr uint32_t kStatsCounters = kLsBoxXFirst + kLsBoxXCount; //385..416 ls box (device-local);383..384 rf box part;372..382 gi_far;356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+// [417..418] qualified-hit GI non-finite guard (gi_trace_rt.hlsl kGiHitNfFirst, RT_HIT_GI_DIRECT variants):
+// rays whose hit term was not finite and >= 0 (they took fallback0), pixels whose mean bounce exceeded the
+// RGBA16F maximum (stored as 65504). On the "GI hit direct" line (frame_replay prints the same).
+constexpr uint32_t kGiHitNfFirst = kLsBoxXFirst + kLsBoxXCount, kGiHitNfCount = 2;
+static_assert(kGiHitNfFirst == 417, "gi_trace_rt.hlsl kGiHitNfFirst 417");
+// rtStats counter map (64 bins x uint each; a new range starts at the previous kStatsCounters and moves it):
+//   0..15 core RT/GI (pixels, primary check, hybrid GI tiers)  16..38 D-LS      39..47 rt_shadow materials
+//   48..63 D-RF                 64..75 RT audit fixes          80..111 alpha candidates   112..117 ls_check
+//   118..121 guards / loop caps 122..126 primary fade class    127 material w/o record    128..133 unknown per pass
+//   134..135 GI hit direct zero 136..152 pool/soup cohorts     160..175 GI hit lights      176..199 rf hit lights / sun
+//   200..252 box diagnostics    253..268 hit material reasons  269..281 reference           282..286 GI hit direct
+//   287..288 tileset            289..311 rf hit shade          312..319 hit policy / AO     320..330 GI hit sun, rf sun roof
+//   331..349 hit emission       350..355 ls exact-k            356..371 instanced clip      372..382 gi_far
+//   383..384 rf box part        385..416 ls box (device-local) 417..418 GI hit non-finite
+constexpr uint32_t kStatsCounters = kGiHitNfFirst + kGiHitNfCount;
 static_assert(kStatsCounters <= 512, "frame_replay reserves 512 stats counters");
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
@@ -1369,7 +1383,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   if(host->cfg_int("rt_native_tileset",0) && host->cfg_int("rt_hit_material",0))
     host->log("hit material tileset (%u frames): qualified family2 %llu; native primary matches %llu",g_stats_n,
       (unsigned long long)t[bg3::transport::NtsStatQualified],(unsigned long long)t[bg3::transport::NtsStatPrimaryMatch]);
-  if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/8192.0,t[134],t[135]);
+  if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu; non-finite hit terms (fallback0) %llu, bounce over the half-float max (stored 65504) %llu px",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/8192.0,t[134],t[135],t[kGiHitNfFirst],t[kGiHitNfFirst+1]);
   // gi_hit_sun: the sun at the same hits (native_hit_sun.hlsli, counters 320-328). Evaluated = qualified
   // hits with a supported point/spot term whose sun inputs are bound; the added luminance is the
   // sun's share of the GI bounce sum (x the ray fade w, as the direct sum above).

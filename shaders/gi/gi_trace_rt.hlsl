@@ -71,6 +71,23 @@
 #define SHARC_RT_QUERY 1
 #include "sharc_common.hlsli"
 #endif
+#if RT_HIT_GI_DIRECT
+// Non-finite guard of the qualified-hit bounce (rt_stats=1 counters 417-418, core/gi.cpp kGiHitNfFirst, on
+// the "GI hit direct" line). giRaw is RGBA16F and gi_composite.hlsl reverts a non-finite pixel to the game's
+// diffuse: one Inf or NaN there drops the bounce of every pixel whose 3x3 history gather reads it, while
+// the occlusion (alpha) stays, so it shows as darkening, never as a non-finite scene colour.
+//   417: qualified-hit rays whose term is not finite and >= 0: the ray takes fallback0 (occlusion w, no
+//        bounce: exactly the key-off ray), never the poisoned sum;
+//   418: pixels whose mean bounce exceeds the half-float maximum 65504 (the giRaw encoding), stored as
+//        65504 instead of +Inf (the energy above the encoding limit is lost, counted here).
+static const uint kGiHitNfFirst = 417u;
+static const float kGiRawHalfMax = 65504.0;
+bool gi_hit_term_ok(float3 c, uint bin) {
+  const bool ok = all(isfinite(c)) && all(c >= 0.0);
+  if (pc.rt_stats != 0u) stat_add(kGiHitNfFirst, !ok, bin);
+  return ok;
+}
+#endif
 
 #if RT_GI_FAR
 // gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"; core/gi.cpp hit_gi_dispatch, request flag kGiFar on
@@ -398,7 +415,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
           const float far_rho=gi_far_luminance(material.scattering.value.Rd);
           const GiFarHit fh=gi_far_hit(fr,t,RB,far_local,direct.radiance,far_sun,far_sun_l,far_rho);
-          if(fh.radiance){
+          if(fh.radiance && gi_hit_term_ok(fh.bounce,hit_bin)){
             if(pc.rt_stats!=0u){
               far_stat(5u,fh.occ);far_stat(7u,gi_far_luminance(fh.bounce));far_stat(9u,fr.w*saturate(far_rho));
               if(t>RB){g_far_stat[2]+=1u;g_far_stat[3]+=far_local==kGiFarLocalOutside?1u:0u;}
@@ -410,10 +427,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
           // No known radiance (sun unsupported beyond R0, or the local term outside the froxels without
           // the sun): the fallback below, with the base fade.
 #elif RT_HIT_GI_SUN
-          bounce+=(direct.radiance+sun_l)*w;occ+=w;continue;
+          if(gi_hit_term_ok(direct.radiance+sun_l,hit_bin)){bounce+=(direct.radiance+sun_l)*w;occ+=w;continue;}
 #else
-          bounce+=direct.radiance*w;occ+=w;continue;
+          if(gi_hit_term_ok(direct.radiance,hit_bin)){bounce+=direct.radiance*w;occ+=w;continue;}
 #endif
+          // Not finite: fallback0 below (the key-off ray).
         }
       }
     }
@@ -445,6 +463,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (shc.debug == 4u) bounce = tiers;
   if (shc.debug == 6u) bounce = leak;
 #endif
+#if RT_HIT_GI_DIRECT
+  float3 gi_out = bounce / n;   // every term finite and >= 0: only an overflow can exceed the half maximum
+  const bool gi_over = !all(gi_out <= kGiRawHalfMax);
+  if (pc.rt_stats != 0u) stat_add(kGiHitNfFirst + 1u, gi_over, (id.x >> 3) * 7 + (id.y >> 3) * 13);
+  gi_out = select(gi_out <= kGiRawHalfMax, gi_out, kGiRawHalfMax.xxx);
+  giRaw[id] = float4(gi_out, saturate(1.0 - occ / n));
+#else
   giRaw[id] = float4(bounce / n, saturate(1.0 - occ / n));
+#endif
   giRawDepth[id] = d;
 }
