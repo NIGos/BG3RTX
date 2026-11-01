@@ -1,5 +1,9 @@
 # BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 25 on branch replay-writer)
 
+## Removed features reviewed (offline, READY_FOR_LIVE, 2026-11-01)
+
+- `ls_k` re-added as the LS_K D-LS variant (off; GUI `exp_ls_exact_k`; unbiased cost option, 873/873 key-off shaders byte-identical, 74 CTests incl. GPU fixture case 8; live job `lsk1` S7, not queued; TRACK_D_LOCAL_LIGHTS 9.11). `gi_bounce_spec` not re-added: camera-direction specular is not physical, and hidden hits already bounce receiver-direction specular (TRACK_C_GI).
+
 ## M5.3 water reflections composed (branch m5-compose, offline, READY_FOR_LIVE, 2026-11-01)
 
 - `rt_water_compose=0` (GUI `exp_water_compose`, needs `exp_water_reflections`; on needs a restart, off live):

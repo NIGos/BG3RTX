@@ -54,6 +54,13 @@ Each dispatch has one froxel listing that dispatch's lights.
    with the camera moved 0.5 m since the build, a ray 0.3 m off the quad meets it and one 0.2 m inside
    leaves it (7e: the sign of `em_shift`).
 
+8. D-LS exact-k selection (`ls_k`, `common/ls_exact_k.h`, the header gi/rt_local_shadows*_k.hlsl
+   include; no scene): four six-light weight sets, K 1/2/4, NR 1/2, the two uniforms on a 4096-cell
+   midpoint grid. The exact set is the K largest weights in list order, exactly (8a); sample j is
+   drawn with p_j = w_j / sum_R w and the grid mean of the estimator is the full sum (8b, 8c), within
+   the grid bound (|R| + 1) / N; a sample's scaled weight never exceeds sum_R w (8c); the GPU selection
+   equals the C++ header's, at most one boundary cell per decision may differ (8d; 0 observed).
+
 ## Tolerance
 
 All consumers store these radiances in FP16 targets (rgba16f), so the bound is half an FP16 ULP:

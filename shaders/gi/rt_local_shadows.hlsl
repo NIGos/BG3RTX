@@ -26,6 +26,9 @@
 // (no denoiser), one deterministic ray to the light centre (hard shadows).
 // ls_samples > 0 instead traces that many rays per pixel to lights chosen by
 // RIS over the unshadowed luminance (unbiased, noisier, cheaper with many lights).
+// ls_k > 0 (default 0; variant LS_K=1, gi/rt_local_shadows*_k.hlsl, TRACK_D_LOCAL_LIGHTS 9.11):
+// the ls_k strongest lights exactly, ls_rest_samples RIS rays for the rest (unbiased, at most
+// ls_k + ls_rest_samples rays per pixel; common/ls_exact_k.h). With LS_K=0 none of it is compiled.
 //
 // Per-light data (ls_lights=1, ls_flags bit 0; docs/SE_BRIDGE.md): lsSlots holds, per
 // light array slot, what rt_local_shadows_match.hlsl joined to it from the Script
@@ -84,6 +87,9 @@
 #endif
 #if LS_BOX
 #include "../rt/bg3_boxes.hlsli"
+#endif
+#ifndef LS_K
+#define LS_K 0
 #endif
 
 [[vk::binding(46, 0)]] [[vk::image_format("rgba32ui")]] RWTexture2D<uint4> lsSlots;
@@ -1068,6 +1074,136 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
 }
 #endif
 
+#if LS_K
+// ---- exact-k + RIS remainder (ls_k > 0; TRACK_D_LOCAL_LIGHTS.md 9.11, common/ls_exact_k.h) ----
+//
+// The lights this pass traces at a pixel (the same set as ls_main: ls_light_traced and
+// bg3_light_eval_mat's tests) are split by w = lum(c_d + c_s), their exact unshadowed
+// contribution: the ls_k largest are traced as in ls_main; ls_rest_samples lights of the rest
+// are drawn with p_j = w_j / sum_R w and their terms (delta and ao_direct sums alike) scaled by
+// 1 / (n p_j). Unbiased: the expected output is ls_main's. Energy: the same terms, the same
+// ls_finish tail. Noise for RR (QUALITY R1): one pcg3d draw per (pixel, frame), from an input
+// domain disjoint from ls_rand's (x | 2^20), so independent of every ray direction.
+// The QA ambient floor, ls_samples and the debug views run ls_main (the exact sum).
+#include "../../common/ls_exact_k.h"
+
+bool ls_k_active() { return lk_k(pc.ls_kmode) != 0u && pc.ls_samples == 0u && pc.ls_debug == 0u && !ls_qa_off(); }
+
+bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
+  if (any(fp >= pc.full)) return false;
+  g_rt_pass = kRtPassLocal;
+  float d = gDepth.Load(int3(fp, 0));
+  if (d <= 0.0) return false;
+  LsLite s = (LsLite)0;
+  #ifdef RT_HAIR_PHYSICAL_ORIGIN
+  s.pixel=fp;
+  #endif
+  if (!ls_lite(fp, d, s)) return false;   // the lighting skips unlit pixels
+
+  const uint3 cl = bg3_cluster(fp, d);
+  const uint end_p = cl.x + cl.y, end_s = end_p + cl.z;
+  const uint K = lk_k(pc.ls_kmode), NR = lk_rest(pc.ls_kmode);
+
+  // 1. the traced lights in one pass: the running top-K and the remainder reservoirs
+  const uint3 ru = pcg3d(uint3(fp.x | 0x100000u, fp.y, pc.frame));
+  LkSel sel = lk_begin(u01(ru.x), u01(ru.y));
+  LsPixel px = (LsPixel)0;
+  ls_surface(fp, s, px.sf, px.mt);
+  for (uint i = cl.x; i < end_s; ++i) {
+    const uint li = bg3_light_index(i);
+    const bool spot = i >= end_p;
+    float3 lpos;
+    float R;
+    if (!ls_light_traced(li, spot, s, lpos, R)) continue;
+    float3 cd, ct, cs, Ld;
+    float d2, nol;
+    if (!bg3_light_eval_mat(load_light(li), spot, px.sf, px.mt, cd, ct, cs, Ld, d2, nol)) continue;
+    const float cw = lum(cd + cs);
+    if (!(cw > 0.0) || !isfinite(cw)) continue;   // c = 0: no delta, no ray
+    sel = lk_add(sel, cw, i, K);
+  }
+  sel = lk_end(sel, NR);
+
+  // 2. the rays (at most K + NR per pixel); unk: aborted (unknown) ones
+  uint lit = 0, unk = 0;
+  for (uint q = 0; q < 6u; ++q) {
+    const uint e = lk_entry(sel, q);
+    if (e == kLkNone) continue;
+    const uint li = bg3_light_index(e);
+    float3 lpos;
+    float R;
+    ls_light_ray(li, lpos, R);
+    // the second remainder sample may repeat the first light: its own random stream
+    const uint vs = trace_light(s.P, s.N, s.org, lpos, fp, q == 5u ? li ^ 0x155u : li, s.cone, R);
+    if (vs == kRtLit) lit |= 1u << q;
+    if (vs == kRtUnknown) unk |= 1u << q;
+  }
+
+  // 3. the surface (reloaded, as in ls_main), the exact terms of the selected lights
+  ls_surface(WaveReadLaneAt(fp, WaveGetLaneIndex()), s, px.sf, px.mt);
+  float3 dd = 0, ds = 0, td = 0, ts = 0;
+  for (uint q3 = 0; q3 < 6u; ++q3) {
+    const uint e = lk_entry(sel, q3);
+    if (e == kLkNone) continue;
+    Bg3Light l = load_light(bg3_light_index(e));
+    float3 cd, ct, cs, Ld;
+    float d2, nol;
+    const bool spot = e >= end_p;
+    if (!bg3_light_eval_mat(l, spot, px.sf, px.mt, cd, ct, cs, Ld, d2, nol)) continue;
+    const float v = (lit >> q3) & 1u ? 1.0 : 0.0;
+    float sh = 1.0, t = v;
+    if ((l.flags & 1u) != 0u) {
+      sh = bg3_atlas_shadow(l, spot, px.sf, Ld, d2, saturate(nol));
+      if (ls_atlas_fallback(l.pos)) t = min(v, sh);
+    }
+    if ((unk >> q3) & 1u) t = sh;   // unknown ray: the game's own term (see the top)
+    const float f = lk_factor(sel, q3, NR);
+    dd += cd * ((t - sh) * f);
+    ds += cs * ((t - sh) * f);
+    td += cd * (t * f);
+    ts += cs * (t * f);
+  }
+#if LS_BOX
+  ls_box_all(fp, s, end_s, bg3_cluster_projectors(fp, d), px, dd, ds, td, ts);
+#endif
+  ls_finish(fp, px.sf, px.mt, dd, ds, td, ts, o_d, o_s);
+
+#if LS_FULL
+  if (pc.ls_stats != 0) {   // core/gi.cpp "ls exact-k stats" (kLkStatFirst) and the ls stats counters that keep their meaning
+    const uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
+    uint n_rays = 0, n_occ = 0, n_rr = 0, n_rocc = 0;
+    for (uint q4 = 0; q4 < 6u; ++q4) {
+      if (lk_entry(sel, q4) == kLkNone) continue;
+      const bool occ = ((lit >> q4) & 1u) == 0u && ((unk >> q4) & 1u) == 0u;
+      ++n_rays;
+      n_occ += occ ? 1u : 0u;
+      n_rr += q4 >= 4u ? 1u : 0u;
+      n_rocc += q4 >= 4u && occ ? 1u : 0u;
+    }
+    const float wall = sel.rsum + sel.ew.x + sel.ew.y + sel.ew.z + sel.ew.w;
+    const float3 gd = gDiffuse[fp], gs = gSpecular[fp];
+    const bool vpx = bg3_cluster_projectors(fp, d) == 0u;
+    float ao, fdif, fspec;
+    ls_ao_factors(fp, px.sf, ao, fdif, fspec);
+    stat_addv(16, 1u, bin);
+    stat_addv(19, n_rays, bin);
+    stat_addv(20, n_occ, bin);
+    stat_addv(21, vpx ? fx(lum(gd + gs)) : 0u, bin);
+    stat_addv(24, fx(-lum(dd * fdif + ds * fspec)), bin);
+    stat_addv(25, sel.n > 0u ? 1u : 0u, bin);
+    stat_addv(26, cl.y + cl.z, bin);
+    stat_addv(kLkStatFirst + 0u, sel.n, bin);
+    stat_addv(kLkStatFirst + 1u, sel.n > K ? 1u : 0u, bin);
+    stat_addv(kLkStatFirst + 2u, sel.n > K ? sel.n - K : 0u, bin);
+    stat_addv(kLkStatFirst + 3u, n_rr, bin);
+    stat_addv(kLkStatFirst + 4u, n_rocc, bin);
+    stat_addv(kLkStatFirst + 5u, sel.n > K && wall > 0.0 ? fx(sel.rsum / wall) : 0u, bin);
+  }
+#endif
+  return true;
+}
+#endif
+
 #ifndef LS_NO_MAIN
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -1076,7 +1212,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
   gAux[tid.xy].zw = float2(1, 0);
 #endif
   float3 od = 0, os = 0;
+#if LS_K
+  if (ls_k_active() ? ls_main_k(tid.xy, od, os) : ls_main(tid.xy, od, os)) {
+#else
   if (ls_main(tid.xy, od, os)) {
+#endif
     gDiffuse[tid.xy] = od;
     gSpecular[tid.xy] = os;
   }

@@ -676,7 +676,9 @@ backlog item 12 to cast. Do it with item 12.
 
 ### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, measured, off by default)
 
-`ls_k` and `ls_rest_samples` (with `ls_main_k`): removed 2026-10-31, see CONSOLIDATION.md C1.
+`ls_k` and `ls_rest_samples` (with `ls_main_k`): removed 2026-10-31 (CONSOLIDATION.md C1: over
+budget), **re-added 2026-11-01 as a shader variant, off by default** (see "Re-add" at the end of
+this section). The history below is the runtime-branch version of 2026-10-27.
 
 Why: Grymforge is over the 0.5 ms budget (0.73 ms with the 9.10 policy; `ls stats`: 6.09
 listed, 4.34 evaluated, **3.83 traced** lights per pixel, against 2.1-2.3 in the foundry).
@@ -787,3 +789,28 @@ Campsite (S3): `ls_k=0` 1.024 / 1.029, `ls_k=1` 0.929 (−9.5%), `ls_k=2` 1.017 
   over 0.5. Grymforge's budget miss is the floor and the 3.8 traced lights per pixel;
   1b (ReSTIR) does not remove either. A lower-resolution visibility or a per-froxel
   light cull (lights fully occluded for the whole froxel) are the levers left.
+
+**Re-add (2026-11-01, branch of this worktree; offline, READY_FOR_LIVE).** Why it is back: it is
+physically valid (unbiased, same energy, the same exact terms and `ls_finish` tail as `ls_main`)
+and nothing superseded it (no ReSTIR, `ls_samples` RIS is the noisier all-light variant). It was
+removed only for the 0.5 ms Grymforge budget, which is a preset question, not a correctness one.
+- Variant, not a runtime branch: `LS_K=1` in `gi/rt_local_shadows{,_box,_full,_full_box}_k.hlsl`.
+  core/gi.cpp builds them only with `ls_k > 0`, `ls_samples=0`, `ls_debug=0`, `ls_check=0`,
+  `ls_impl=1` (`common/ls_exact_k.h use_variant`); a twin that fails to build leaves the
+  every-light pass (logged `LS_K pipeline UNAVAILABLE`). Key off: 873/873 baseline requests
+  byte-identical (`py -3 tests/ls_exact_k_shader_test.py`), 72 LS_K requests compile and validate.
+- The selection (top-K, reservoirs, list-order sort, factors) is one shared header,
+  `common/ls_exact_k.h`, run by the shader, the CPU test `ls_exact_k_test` (exact set, P(j) =
+  w_j / sum_R w, grid mean = full sum, sample weight <= sum_R w) and GPU fixture case 8 (the same
+  checks on the GPU, and its selection equals the C++ one: 0 differing cells of 81920).
+- Registers (RTX 5090, `tools/pipeline_stats.py`): default 128 = k 128; box 128 vs box_k 168;
+  full_k 255 (stats only).
+- Counters moved to 350-355 (`kLkStatFirst`; 122-127 are the primary-fade counters now). Logs:
+  `ls exact-k: active|inactive (ls_k K, ls_rest_samples N)`, `ls exact-k stats` (ls_stats=1),
+  and the `ls: local-light shadow pass GPU` line names `exact-k K + N (variant 0|1)`.
+- GUI: Experimental "Local light sampling (exact-k)" (`exp_ls_exact_k`: Off / 1 / 2 exact
+  lights, needs Local light shadows Full), off in every preset.
+- Expected cost: the 9.11 numbers (k1 −22% of a 0.78 ms Grymforge pass, −9.5% at camp; k2 −8%
+  / −1%). Live gate: job `lsk1-exact-k-inn-s7-fg2` (tools/live_batches/ls_exact_k, S7 inn, one
+  launch, NOT queued). Keep k only where its `ls:` GPU median is below the OFF-a/OFF-b spread
+  and the PNG mean equals OFF within that spread.
