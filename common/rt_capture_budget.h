@@ -6,6 +6,30 @@ namespace bg3::capture_budget {
 inline constexpr uint64_t mib=uint64_t(1)<<20;
 inline bool storage_range_supported(uint64_t size,uint64_t limit){return size && limit && size<=limit;}
 
+// The mesh pool (layer/bvhsplit.cpp pool_alloc, set 1 binding 8) stays below 2^31 bytes and within
+// maxStorageBufferRange: every 2026-11-01 run whose pool doubled to 2048 MB (exactly 2^31) read it out of
+// range from then on (`[core] guard: set 1 N out-of-range`, 0.7-4.2M per frame: m4p2, su1, sw1, sw3 and the
+// user's CTY run), none that stayed at 1024 MB did. The capacity for `needed` bytes after `current`:
+// doubling from `first` (or `current`), clamped to the cap; 0 when `needed` cannot fit (the mesh stays uncached).
+inline constexpr uint64_t kMeshPoolHardCap=(uint64_t(1)<<31)-mib;   // 2047 MB
+inline uint64_t mesh_pool_capacity(uint64_t current,uint64_t needed,uint64_t first,uint64_t cfg_max,uint64_t storage_limit){
+ uint64_t cap_max=(std::min)(cfg_max,kMeshPoolHardCap);
+ if(storage_limit)cap_max=(std::min)(cap_max,storage_limit/mib*mib);
+ if(current+needed>cap_max || current>=cap_max)return 0;
+ uint64_t cap=current?current*2:first;
+ while(cap<current+needed)cap*=2;
+ return (std::min)(cap,cap_max);
+}
+// The cascade capture after a frame that overflowed: its demand (captured + left-out bytes) + 25%, in
+// 16 MB steps, under the same 2047 MB / device-range cap; never below `current`.
+inline uint64_t cascade_grow(uint64_t current,uint64_t demand,uint64_t storage_limit){
+ const uint64_t step=16*mib;
+ uint64_t cap=kMeshPoolHardCap;
+ if(storage_limit)cap=(std::min)(cap,storage_limit/mib*mib);
+ const uint64_t want=(std::min)((demand+demand/4+step-1)/step*step,cap);
+ return (std::max)(want,current);
+}
+
 // The default MB caps (rt_xfb_mb 384, rt_cascade_mb 160) hold one frame's soup at 24-byte
 // vertices. A wider capture layout, fixed at startup (rt_hit_material 64, native tileset 80,
 // native Hair 88), holds the same triangles in stride/24 times the bytes: a cap left at its

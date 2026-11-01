@@ -143,5 +143,22 @@ int main(){
  check(!storage_range_supported(size,size-1));
  check(!storage_range_supported(size,0));
  check(!storage_range_supported(0,size));
+ // Mesh pool: doubles 256 -> 512 -> 1024, then stops below 2^31 (2047 MB), never past the device range.
+ {
+  const uint64_t M=mib,G=1024*M;
+  check(mesh_pool_capacity(0,10*M,256*M,3072*M,0xFFFFFFFFull)==256*M);
+  check(mesh_pool_capacity(256*M,10*M,256*M,3072*M,0xFFFFFFFFull)==512*M);
+  check(mesh_pool_capacity(G,10*M,256*M,3072*M,0xFFFFFFFFull)==kMeshPoolHardCap);   // was 2048 MB
+  check(mesh_pool_capacity(G,10*M,256*M,3072*M,0xFFFFFFFFull)<(uint64_t(1)<<31));
+  check(mesh_pool_capacity(kMeshPoolHardCap-M,2*M,256*M,3072*M,0xFFFFFFFFull)==0);   // full: uncached
+  check(mesh_pool_capacity(G,10*M,256*M,1536*M,0xFFFFFFFFull)==1536*M);              // the ini max
+  check(mesh_pool_capacity(G,10*M,256*M,3072*M,1200*M)==1200*M);                     // the device range
+  check(mesh_pool_capacity(512*M,600*M,256*M,3072*M,0xFFFFFFFFull)==2*G-M);         // 1112 MB -> clamped
+  // Cascade: 427 MB full with 30 MB left out -> 457 * 1.25 = 571.25 -> 576 MB; capped; never shrinks.
+  check(cascade_grow(427*M,457*M,0xFFFFFFFFull)==576*M);
+  check(cascade_grow(427*M,3000*M,0xFFFFFFFFull)==kMeshPoolHardCap);
+  check(cascade_grow(427*M,457*M,512*M)==512*M);
+  check(cascade_grow(800*M,457*M,0xFFFFFFFFull)==800*M);
+ }
  std::printf("RT capture budget: %u CPU checks; explicit MB limits unchanged; no GPU claim\n",checks);
 }

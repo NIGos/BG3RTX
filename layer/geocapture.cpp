@@ -93,6 +93,13 @@ int cascade_mb() {
   return (std::clamp)(capture_budget::effective_mb(cfg_int("rt_cascade_mb", 160), capture_budget::kCascadeDefaultMb, g_stride),
                       4, 1024);
 }
+// Grow on overflow: a frame whose casters did not fit (buffer full) raises the next buffers to its
+// demand (captured + left-out bytes) + 25%, in 16 MB steps, below 2048 MB and the device's SSBO range
+// (capture_budget::cascade_grow). 2026-11-01: 427 of 427 MB used, 1.3 draws per frame left out.
+std::atomic<uint64_t> g_cc_grown{0};
+uint64_t cascade_bytes() {
+  return (std::max)(uint64_t(cascade_mb()) << 20, g_cc_grown.load());
+}
 std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the last G-buffer pass
 std::atomic<uint64_t> g_gbuf_depth{0};            // the last G-buffer pass's depth image (the prepass writes it)
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
@@ -282,6 +289,7 @@ struct Capture {
   int ts = -1;                                       // timestamp pair of the captured pass
   uint64_t rec = 0;                                  // build record of its command buffer (submitted?)
   uint32_t c_seen = 0, c_dup = 0, c_alpha = 0, c_drop = 0, c_ubo = 0, c_full = 0, c_added = 0;
+  uint64_t c_over = 0;                       // cascade: bytes of the draws left out for a full buffer
   uint64_t c_sig = 1469598103934665603ull;   // cascade: the added draws in order (rt_cascade_refit)
   uint64_t c_tris = 0;
   sun_coverage::NativeEpoch c_native_epoch;
@@ -1054,7 +1062,7 @@ std::vector<float> g_cc_ms;
 std::atomic<uint64_t> g_cc_alpha_known{0}, g_cc_alpha_uv{0};   // skipped alpha-tested cascade draws
 struct CcStats {
   uint64_t frames = 0, seen = 0, dup = 0, alpha = 0, drop = 0, ubo = 0, full = 0, added = 0, tris = 0, tris_max = 0;
-  uint64_t bytes = 0, bytes_max = 0, keys = 0, unconverted = 0;
+  uint64_t bytes = 0, bytes_max = 0, demand_max = 0, keys = 0, unconverted = 0;
   uint64_t builds[6] = {}, build_tris = 0;
 };
 CcStats g_cc_st;
@@ -1115,7 +1123,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   Capture& c = all_current ? g_sun_ccap[layer][f % 3] : g_ccap[f % 3];
   if (c.state == 1 && c.record_frame == f) return;   // one such pass per frame: never expected
   // (state 1 from an older frame: that recording never ended its pass; start over)
-  const VkDeviceSize bytes = VkDeviceSize(cascade_mb()) << 20;
+  const VkDeviceSize bytes = cascade_bytes();
   if (c.xfb.b && c.xfb.size != bytes) {free_buf(c.xfb);c.c_legacy_transfer=false;} // deferred destruction
   if (!c.xfb.b) {
     static int s_logged_mb = 0;
@@ -1153,6 +1161,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.rt_ubo = VK_NULL_HANDLE;
   c.rt_ubo_off = 0;
   c.c_seen = c.c_dup = c.c_alpha = c.c_drop = c.c_ubo = c.c_full = c.c_added = 0;
+  c.c_over = 0;
   c.c_sig = 1469598103934665603ull;
   c.c_tris = 0;
   c.c_native_epoch = {}; c.c_native_frame = VK_NULL_HANDLE; c.c_native_offset = 0;
@@ -1282,6 +1291,7 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   if (!reserved) return;
   if (c->cursor + reserved > c->xfb.size) {
     ++c->c_full;
+    c->c_over += reserved;
     return;
   }
   if(current_sun && legacy_keep && c->c_legacy_target) {
@@ -1405,6 +1415,17 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   st.tris_max = (std::max)(st.tris_max, uint64_t(tris));
   st.bytes += c->cursor;
   st.bytes_max = (std::max)(st.bytes_max, uint64_t(c->cursor));
+  st.demand_max = (std::max)(st.demand_max, uint64_t(c->cursor) + c->c_over);
+  if (c->c_full && c->xfb.b) {   // grow the next buffers to this frame's demand (cascade_bytes)
+    const uint64_t demand = uint64_t(c->cursor) + c->c_over;
+    const uint64_t grown = capture_budget::cascade_grow(c->xfb.size, demand, g_storage_range);
+    if (grown > c->xfb.size && grown > g_cc_grown.load()) {
+      g_cc_grown = grown;
+      log("[cascade] buffer full: %u draws (%.1f MB) left out, demand %.1f MB of %.0f MB; the capture grows to %llu MB",
+          c->c_full, double(c->c_over) / 1048576.0, double(demand) / 1048576.0, double(c->xfb.size) / 1048576.0,
+          (unsigned long long)(grown >> 20));
+    }
+  }
   st.keys += g_cc_keys.size(f);
   st.unconverted += tris && !converted;
   c->state = 0;
@@ -1458,12 +1479,12 @@ void cascade_on_present() {
       g_cc_alpha_uv.exchange(0) / double(st.frames ? st.frames : 1));
   log("[cascade] casters: cascade %d, %llu frames; per frame: draws seen %.1f, skipped as duplicates %.1f, "
       "alpha-tested skipped %.1f, not sizeable %.1f, other matrix %.1f, buffer full %.1f, added %.1f; triangles %.0f "
-      "(max %llu), %.2f MB (max %.2f of %d MB); camera pass keys %.0f; captures not converted %llu; next-frame builds "
+      "(max %llu), %.2f MB (max %.2f of %d MB, demand max %.2f MB); camera pass keys %.0f; captures not converted %llu; next-frame builds "
       "%llu: with the instance %llu (%.0f triangles), no soup %llu, unsubmitted %llu, no camera %llu, legacy %llu, "
       "BLAS failed %llu; captured pass GPU median %.3f ms (its draws + XFB + conversion)",
       layer, (unsigned long long)st.frames, st.seen / n, st.dup / n, st.alpha / n, st.drop / n, st.ubo / n, st.full / n,
       st.added / n, st.tris / n, (unsigned long long)st.tris_max, st.bytes / n * mb, st.bytes_max * mb,
-      cascade_mb(), st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
+      int(cascade_bytes() >> 20), st.demand_max * mb, st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
       (unsigned long long)st.builds[0], st.builds[0] ? double(st.build_tris) / double(st.builds[0]) : 0.0,
       (unsigned long long)st.builds[1], (unsigned long long)st.builds[2], (unsigned long long)st.builds[3],
       (unsigned long long)st.builds[4], (unsigned long long)st.builds[5], ms);
