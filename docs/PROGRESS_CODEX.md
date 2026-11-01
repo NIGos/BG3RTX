@@ -1,4 +1,15 @@
-# BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 25 on branch replay-writer)
+# BG3RTX progress - 2026-11-01 (main 13c8817, ABI 25)
+
+## Live 2026-11-01 ~06:00: water S8, emission S6, replay textures (main 13c8817)
+
+- Merged: hit-emission, water-fix, m5-compose, replay textures (all merge-green).
+- `QuickSave_3784` now loads the Steel Watch Foundry (the sea is 19 m below, all hidden): water jobs moved to S8.
+- M5.2 at S8: reflections GPU 15 ms -> 0.113 ms (water-fix kept: device-local counters); gi 1.7 ms; water in
+  front 7.6%, rays screen hit 5.1%, hidden 4.3%. INVALID on `views 0 over 0 water passes`: S8 water is
+  FS family 99c1fcef `..._PixelLighting_ExtraWaves`, not audited, so not captured; compose cannot run. Agent auditing it.
+- rt_hit_emission at S6 (Forge, on all run): rf tier b emissive 7% of lookups, energy added, no fault. ON/OFF A/B still owed.
+- Replay pack with shader-read textures: 906 MB, but 4098 of 4099 images dropped by the budget (decoded
+  hit caches too big for the 2 GB cap); only 1 read. Next: size the caches, capture referenced pages only.
 
 ## M5.3 water reflections composed (branch m5-compose, offline, READY_FOR_LIVE, 2026-11-01)
 
