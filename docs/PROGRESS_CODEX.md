@@ -1,4 +1,16 @@
-# BG3RTX progress - 2026-11-01 (main 13c8817, ABI 25)
+# BG3RTX progress - 2026-11-01 (main f31c62b, ABI 25)
+
+## Live 2026-11-01 ~07:10 (main f31c62b): water S8 valid, ls_k biased, replay sizes
+
+- Water S8 (audit merged): both planes captured (7b44a567 + c4e92ccd NoCaustics_Waves), views 120/120, reflections 0.12 ms.
+  Compose: 6 FS patched, 174 draws on variants, GPU 0.022 ms, but composed on 3 of 120 frames
+  ("passes without this frame's lighting 117"), 66% of rays off screen (probe kept on 87%), and where composed
+  the traced term is 28% of the probe it replaces (mean -0.4%). Agent fixing all three.
+- ls_k at S7: cost OFF 0.717, k1 0.555 (-23%), k2 0.654 ms. Local-light buffer 3-4% darker than OFF in every
+  alternation (final image unchanged): biased, stays off. Agent on the root cause.
+- Replay: the hit VT cache is one 32688x26352 x2 BC image of 2054 MB; the pack (976 MB) keeps every other texture.
+  Shading hits offline needs it: next step a capped tile subset or a one-off 3.1 GB pack.
+- Raw captures before 07:00 deleted (3.0 GB -> 0.7 GB).
 
 ## Live 2026-11-01 ~06:00: water S8, emission S6, replay textures (main 13c8817)
 
@@ -25,6 +37,20 @@
 - Debug view `rt_debug=25` (delta). Log `[water] compose`, `compose energy`, `compose GPU`, `compose variants`.
 - Key off: nothing allocated or bound; no existing shader changed. 73 CTests (patch checked with spirv-val on the
   dumped FS), 745 shaders, QA detectors. Layer change: restart. Live: job `m5w3`, dry run passes.
+
+## Hit material: instanced wind and two-sided alpha-test rows (offline, READY_FOR_LIVE, 2026-11-01)
+
+- `rt_hit_material_instanced=0` (GUI `exp_hit_material_instanced`; startup patches the two G-buffer VSs, then live
+  A/B; needs `rt_hit_material=1`): per-draw rows for the instanced draws of 50fbfceb/8e49cde8 (wind) and
+  1e9145e4/923131c7 (two-sided alpha-test). They had no record because neither VS is class A (never pooled) and
+  the per-draw path took one instance only. Now depth alpha record + G-buffer XFB of all instances, joined by
+  draw words + index range; per-hit clip/UV check unchanged; 2S flips N with `nv_two_sided_sign`.
+- Classifier built share 48.2% -> 54.4% (+6.2, same 139 traces). No ABI change. 73 CTests (new
+  `native_hit_instanced_test`), GPU fixture 9a/9b. SPIR-V vs 2bf305e: 872/872 requests byte-identical (the flip and RtHit.dir are in
+  new `RT_HIT_INSTANCED=1` consumer variants, requested only with the startup key; 296 new, spirv-val clean).
+- Live (prepared, not queued): `tools/live_batches/m4_instanced` job `m4i-instanced-s14-fg2` (S14, 149 s, dry run
+  passes). Deciding: `[hit material instanced]` mapped > 0 per family; `hit material` qualified share ON - OFF;
+  reasons row/clip ON - OFF; cost ON - OFF on `[pace]` and `gi: trace pass`. Details: TRACK_D_REFLECTIONS 14.
 
 ## M5.2 water reflections, measured (branch m5-water-rf, offline, READY_FOR_LIVE, 2026-11-01)
 

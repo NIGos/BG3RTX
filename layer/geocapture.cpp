@@ -1622,8 +1622,10 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   // Class A VS 54df894a (ENV_DetailMap_VT pool pair): UV at 3, N/B/T at 4/5/6, same offsets.
   // Class A VS c32ce535 (ENV_DetailMap_Iridescent pool pair): 2d2ac3c3's interface plus W at 4.
   const bool detail_vs=t_last_hash==0x54df894ab5230cbbull;
+  // rt_hit_material_instanced at startup: the instanced wind / 2S G-buffer VSs 50fbfceb and 1e9145e4
+  // (2d2ac3c3's output interface; native_hit_instanced.h).
   const bool vt_frame=native_hit::enabled() && (t_last_hash==0x3812bc980438747full || t_last_hash==0x2d2ac3c38992b7f0ull || detail_vs ||
-                                                t_last_hash==0xc32ce535d664fbbcull);
+                                                t_last_hash==0xc32ce535d664fbbcull || native_hit::instanced_patch_vs(t_last_hash));
   bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && native_tileset_coverage::vertex(t_last_hash),&t_last_tileset_outputs,
                      g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs,detail_vs?4u:1u);
   if (!ok) return false;

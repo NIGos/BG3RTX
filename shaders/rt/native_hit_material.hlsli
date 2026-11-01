@@ -243,6 +243,12 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
   float3 b0=asfloat(gHitBasis.Load3(start)),b1=asfloat(gHitBasis.Load3(start+h1.x)),b2=asfloat(gHitBasis.Load3(start+2u*h1.x));
   basis[component]=b0+(b1-b0)*hit.bary.x+(b2-b0)*hit.bary.y;
  }
+ // Row word 220 bit 0 (rt_hit_material_instanced, RT_HIT_INSTANCED variants, common/native_hit_instanced.h): two-sided FS
+ // (Base_AlphaTest_2s_VT 923131c7) scales the N column by (gl_FrontFacing ? 1 : -1); at a hit the
+ // facing is the geometry's: nv_two_sided_sign of the captured triangle, its interpolated N and the ray.
+#ifdef RT_HIT_INSTANCED
+ if((gHitRecords.Load(row+220u)&1u)!=0u)basis[0]*=nv_two_sided_sign(cross(position[1]-position[0],position[2]-position[0]),basis[0],hit.dir);
+#endif
  // Native FS mat3(T,N,B) with original interpolated VS outputs (loc3/1/2).
  float3 normal=basis[2]*fields.frame_normal.x+basis[0]*fields.frame_normal.y+basis[1]*fields.frame_normal.z;
  if(!all(isfinite(normal)) || !(dot(normal,normal)>0))return hit_material_unknown(8);

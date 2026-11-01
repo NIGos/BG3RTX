@@ -183,6 +183,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material": "1"}, "needs": {"rt_geometry": 2}}
      ]},
+    {"id": "exp_hit_material_instanced", "label": "Native hit materials: wind and two-sided foliage",
+     "description": "Extends Native hit materials to the instanced wind-animated (ATM_Wind_Vertex_RG_VT) and two-sided alpha-test (Base_AlphaTest_2s_VT) draws: their depth and G-buffer draws are joined per frame and every hit is still checked against the native positions and UVs. Enable at startup with Native hit materials; then Off/On is a live A/B. Quality and GPU cost remain unqualified.",
+     "apply": "partial", "apply_note": "Enable at startup; then live A/B", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_hit_material": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_instanced": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_instanced": "1"}, "needs": {"exp_hit_material": 1}}
+     ]},
     {"id": "exp_gi_hit_direct", "label": "Shaded hidden-surface bounce",
      "description": "Adds physically shadowed point/spot bounce from verified hidden native VT surfaces. Keeps successful screen and radiance-cache hits, and the existing ambient occlusion. Unsupported materials or lights retain the current GI fallback. Requires Native hit materials at startup and GI fallback 0. True offscreen light coverage, quality and GPU cost remain unqualified.",
      "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,

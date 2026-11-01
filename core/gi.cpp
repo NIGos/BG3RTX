@@ -90,10 +90,11 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
-  // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset (1 was rt_scene_rebase).
-  VkPipeline variants[64] = {};
-  uint64_t variant_generations[64] = {};
-  std::string variant_files[64];
+  // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset, 64 instanced hit rows
+  // (request flag kHitInstanced; 1 was rt_scene_rebase).
+  VkPipeline variants[128] = {};
+  uint64_t variant_generations[128] = {};
+  std::string variant_files[128];
 };
 
 // Bound pipeline capability, including a first-frame capability publication race.
@@ -804,12 +805,15 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   const bool physical_origin=scalp && g_hair_origin_frame && bg3::hair_origin::alternate_entry(file);
   const bool tileset=std::strncmp(file,"gi/",3)==0 && bg3::native_tileset::enabled(static_cast<uint32_t*>(host->persist(bg3::native_tileset::capability_key,sizeof(uint32_t))));
-  const unsigned variant = (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  // rt_hit_material_instanced at startup (the layer's capability word): RT_HIT_INSTANCED on the consumers.
+  const bool instanced=sv::hit_material_entry(file) && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::instanced_capability_key,sizeof(uint32_t))));
+  const unsigned variant = (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
-  const std::string selected = sv::request(file, variant | (sun_current ? unsigned(sv::kSunCurrent) : 0u));
+  const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
+                                                 (sun_current ? unsigned(sv::kSunCurrent) : 0u));
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
-  if (scalp || omm || tileset) p.pipeline = p.variants[variant];
+  if (scalp || omm || tileset || instanced) p.pipeline = p.variants[variant];
   Bg3ShaderBlob blob{};
   if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == selected;
   if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
