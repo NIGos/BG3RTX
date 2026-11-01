@@ -2,6 +2,8 @@
 
 Lean format of [../lean_regression/README.md](../lean_regression/README.md): one foreground launch (the game takes focus and the pointer: the user must be away), FG 2, the key toggled inside the run, 20 s diag-off `cost-*` windows, one PNG per 8 s `shot-*` / `diag-view-*` phase, no float bursts. Receipt `m5-water.json`; the plan goes to test-main `captures\live_batches\m5_water\plans`.
 
+Ultra note (2026-11-01): every job runs with `rt_cascade_casters=1` (the Ultra setting). Before, water skipped every pass with it on (`[water] reflections (300 frames, 0 traced)` in the user's Ultra run); the water pipelines now build the `RT_CASCADE_MASKS` requests, and each job expects `[water] rt/water_reflect.hlsl?RT_CASCADE_MASKS=1 water_reflect: built` (plus the compose one when compose runs) and forbids `reflections skipped: no water variant`.
+
 Done: `m5w1-water-geometry-s1-fg2` (M5.1 `rt_water_geometry`, branch m5-water) ran at the S1 docks on 2026-11-01: 99% of water draws captured, 1.45M triangles, build 0.27 ms, depth write off. Its files are in `done/` (not part of the batch any more).
 
 Save note (2026-11-01): `QuickSave_3784` now loads the Steel Watch Foundry interior (water-fix check of m5w2: the sea plane is 19 m below, every hit occluded). The jobs moved to S8 Water Queens House, and the reflections expect line now needs `in front` above 0.00%.

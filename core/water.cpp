@@ -54,12 +54,14 @@
 #include <cmath>
 #include <cstring>
 #include <mutex>
+#include <string>
 #include <vector>
 
 #include "core.h"
 #include "../common/water_compose.h"
 #include "../common/water_policy.h"
 #include "../common/water_scene.h"
+#include "../common/shader_variant.h"
 
 namespace {
 
@@ -83,7 +85,9 @@ std::mutex g_mu;
 VkDescriptorSetLayout g_push = VK_NULL_HANDLE, g_alpha_layout = VK_NULL_HANDLE, g_view_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_view_layout = VK_NULL_HANDLE;
 uint32_t g_push_bytes = 0;
-struct Pipe { VkPipeline p = VK_NULL_HANDLE; uint64_t gen = 0; };
+struct Pipe { VkPipeline p = VK_NULL_HANDLE; uint64_t gen = 0; std::string req; };   // req: the request p runs
+// rt_cascade_casters (live, as core/gi.cpp refresh): the water requests trace the cascade's masks.
+bool cascade_on() { return host->cfg_int("rt_cascade_casters", 0) != 0; }
 Pipe g_primary, g_reflect, g_view;
 
 Bg3Image g_out{}, g_t{};
@@ -185,16 +189,21 @@ bool ensure_buffers() {
 VkDeviceSize stat_off(uint32_t slot) { return VkDeviceSize(slot) * kStatBytes; }
 VkDeviceSize param_off(uint32_t slot) { return kRing * kStatBytes + VkDeviceSize(slot) * kParamBytes; }
 
-bool make_pipe(Pipe& p, const char* file, const char* entry, VkPipelineLayout layout) {
+bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout layout) {
+  // The variant of the scene layout (rt_cascade_casters); a pipeline of another request never runs.
+  // water_view traces nothing: always its plain file.
+  const bool traces = std::strncmp(base, "rt/water_view", 13) != 0;
+  const std::string req = bg3::shader_variant::water_request(base, traces && cascade_on());
+  const char* file = req.c_str();
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(file, entry, "cs_6_6", &blob)) return p.p != VK_NULL_HANDLE;
-  if (p.p && blob.generation == p.gen) return true;
+  if (!host->get_shader(file, entry, "cs_6_6", &blob)) return p.p != VK_NULL_HANDLE && p.req == req;
+  if (p.p && blob.generation == p.gen && p.req == req) return true;
   const VkDeviceFuncs& vk = *host->vk;
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
   mci.pCode = blob.code;
   VkShaderModule mod = VK_NULL_HANDLE;
-  if (vk.CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) return p.p != VK_NULL_HANDLE;
+  if (vk.CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) return p.p != VK_NULL_HANDLE && p.req == req;
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, entry,
                nullptr};
@@ -204,11 +213,13 @@ bool make_pipe(Pipe& p, const char* file, const char* entry, VkPipelineLayout la
   vk.DestroyShaderModule(host->device, mod, nullptr);
   if (r != VK_SUCCESS) {
     host->log("[water] %s %s: pipeline creation failed (%d)", file, entry, r);
-    return p.p != VK_NULL_HANDLE;
+    return p.p != VK_NULL_HANDLE && p.req == req;
   }
   host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.p);
+  if (p.req != req) host->log("[water] %s %s: built", file, entry);
   p.p = np;
   p.gen = blob.generation;
+  p.req = req;
   return true;
 }
 
@@ -1059,13 +1070,25 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
     ++g_win.skip[u];
     return skip();
   }
-  // The ordinary rt_common.hlsli variant only: these change the alpha set or the scene's
-  // primitives (core/gi.cpp Pipe variants); counted, never traced with the wrong layout.
-  if (host->cfg_int("rt_omm", 0) || host->cfg_int("rt_native_tileset", 0) || host->cfg_int("rt_native_scalp", 0) ||
-      host->cfg_int("rt_native_hair", 0) || host->cfg_int("rt_hair_physical_origin", 0) ||
-      host->cfg_int("rt_cascade_casters", 0)) {
-    ++g_win.skip_variant;
-    return skip();
+  // rt_cascade_casters runs the RT_CASCADE_MASKS requests (make_pipe). These others change the
+  // alpha set or the scene's primitives (core/gi.cpp Pipe variants) and have no water variant:
+  // counted, logged once per change, never traced with the wrong layout.
+  {
+    static const char* const kNo[] = {"rt_omm", "rt_native_tileset", "rt_native_scalp", "rt_native_hair",
+                                      "rt_hair_physical_origin"};
+    static unsigned s_logged = 0;
+    unsigned on = 0;
+    std::string names;
+    for (unsigned i = 0; i < 5; ++i)
+      if (host->cfg_int(kNo[i], 0)) on |= 1u << i, names += names.empty() ? kNo[i] : std::string(", ") + kNo[i];
+    if (on != s_logged) {
+      s_logged = on;
+      if (on) host->log("[water] reflections skipped: no water variant for %s", names.c_str());
+    }
+    if (on) {
+      ++g_win.skip_variant;
+      return skip();
+    }
   }
   VkDescriptorSetLayout alpha_layout = VK_NULL_HANDLE;
   VkDescriptorSet alpha_any = VK_NULL_HANDLE;

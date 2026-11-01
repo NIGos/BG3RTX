@@ -59,6 +59,16 @@ int main(int argc, char** argv) {
     const std::string f(r, std::strchr(r, '?'));
     CHECK(std::filesystem::exists(root / "shaders" / f));
     want.insert(r);
+    want.insert(water_request(r, true));
+  }
+  // rt_cascade_casters on the water passes (core/water.cpp): masks on every request, the sun ray with WATER_SHADOWS.
+  CHECK(water_request("rt/water_reflect.hlsl", false) == "rt/water_reflect.hlsl");
+  CHECK(water_request("rt/water_reflect.hlsl", true) == "rt/water_reflect.hlsl?RT_CASCADE_MASKS=1");
+  CHECK(water_request("rt/water_compose.hlsl?WATER_SHADOWS=1", true) ==
+        "rt/water_compose.hlsl?WATER_SHADOWS=1;RT_CASCADE_MASKS=1;RT_CASCADE_SUN_HIT=1");
+  for (const char* b : kWaterBases) {
+    CHECK(std::filesystem::exists(root / "shaders" / b));
+    want.insert(water_request(b, true));
   }
   const std::filesystem::path manifest = root / "shaders" / "variants.txt";
   if (write) {

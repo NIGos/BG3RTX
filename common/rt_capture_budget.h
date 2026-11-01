@@ -5,6 +5,17 @@
 namespace bg3::capture_budget {
 inline constexpr uint64_t mib=uint64_t(1)<<20;
 inline bool storage_range_supported(uint64_t size,uint64_t limit){return size && limit && size<=limit;}
+
+// The default MB caps (rt_xfb_mb 384, rt_cascade_mb 160) hold one frame's soup at 24-byte
+// vertices. A wider capture layout, fixed at startup (rt_hit_material 64, native tileset 80,
+// native Hair 88), holds the same triangles in stride/24 times the bytes: a cap left at its
+// default follows the stride, rounded (384 -> 1024 and 160 -> 427 at 64 B). A cap the user
+// changed is kept as set; 24 bytes or less keeps the default.
+inline constexpr int kXfbDefaultMb=384, kCascadeDefaultMb=160, kBaseStride=24;
+inline int effective_mb(int value,int default_mb,uint32_t stride){
+ if(value!=default_mb || stride<=uint32_t(kBaseStride) || value<=0)return value;
+ return int((uint64_t(value)*stride+kBaseStride/2)/kBaseStride);
+}
 // Explicit opt-in layouts: native tileset COLOR (40), material basis (64),
 // native tileset material frame (80), native Hair (88).
 // Ordinary POSITION and POSITION/UV layouts retain their established policy.
