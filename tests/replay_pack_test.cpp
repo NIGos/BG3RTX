@@ -117,6 +117,87 @@ int main() {
           "alias_ranges: aliased slices round-trip through the manifest");
   }
 
+  // 5. Shader read of images without TRANSFER_SRC (layer/replay.cpp, shaders/replay_image.hlsl).
+  {
+    rp::ShaderRead r;
+    check(rp::shader_read_format(146, false, r) && r.pack_format == 43 && r.encode == rp::kEncSrgb8 && r.channels == 4,
+          "shader_read_format: BC7 SRGB -> RGBA8 SRGB");
+    check(rp::shader_read_format(131, false, r) && r.pack_format == 37 && r.encode == rp::kEncUnorm8 && r.channels == 4 &&
+              rp::shader_read_format(137, false, r) && r.pack_format == 37,
+          "shader_read_format: BC1 / BC3 UNORM -> RGBA8 UNORM");
+    check(rp::shader_read_format(139, false, r) && r.pack_format == 9 && r.channels == 1 && rp::shader_read_format(142, false, r) &&
+              r.pack_format == 17 && r.encode == rp::kEncSnorm8 && r.channels == 2,
+          "shader_read_format: BC4 UNORM -> R8, BC5 SNORM -> RG8 SNORM");
+    check(rp::shader_read_format(143, false, r) && r.pack_format == rp::kRgba16Sfloat && r.encode == rp::kEncHalf && r.channels == 4 &&
+              rp::shader_read_format(144, false, r) && r.pack_format == rp::kRgba16Sfloat,
+          "shader_read_format: BC6H -> RGBA16F");
+    check(rp::shader_read_format(44, false, r) && r.pack_format == 37 && rp::shader_read_format(50, false, r) && r.pack_format == 43 &&
+              rp::shader_read_format(122, false, r) && r.pack_format == rp::kRgba16Sfloat && rp::shader_read_format(64, false, r) && r.pack_format == 91,
+          "shader_read_format: BGRA8 -> RGBA8, B10G11R11 -> RGBA16F, A2B10G10R10 -> RGBA16");
+    check(rp::shader_read_format(139, true, r) && r.pack_format == 37 && r.channels == 4 && rp::shader_read_format(83, true, r) &&
+              r.pack_format == rp::kRgba16Sfloat && r.channels == 4,
+          "shader_read_format: a swizzled view is stored with 4 channels");
+    check(!rp::shader_read_format(rp::kRgba32Uint, false, r) && !rp::shader_read_format(126, false, r) && !rp::shader_read_format(147, false, r),
+          "shader_read_format: integer, depth and ETC2 formats are not read");
+    // Every mapped pack format is one the pack carries, with the texel bytes the encoding writes.
+    bool sizes = true;
+    for (uint32_t f = 1; f < 200; ++f)
+      for (bool sw : {false, true}) {
+        if (!rp::shader_read_format(f, sw, r)) continue;
+        uint32_t block;
+        sizes = sizes && rp::block_bytes(r.pack_format, block) == rp::shader_read_texel_bytes(r) && block == 1 &&
+                rp::shader_read_per_thread(r) * rp::shader_read_texel_bytes(r) >= 4;
+      }
+    check(sizes, "shader_read_format: pack formats carried, texel bytes match the encoding");
+    // Pieces: contiguous in the file, aligned to whole thread words, at most max_bytes, sum = image_bytes.
+    auto pieces_ok = [&](uint32_t f, uint32_t w, uint32_t h, uint32_t layers, uint32_t mips, uint64_t max_bytes, size_t& n) {
+      rp::ShaderRead s;
+      if (!rp::shader_read_format(f, false, s)) return false;
+      const auto v = rp::shader_read_pieces(s, w, h, layers, mips, max_bytes);
+      n = v.size();
+      uint64_t at = 0;
+      const uint64_t per = rp::shader_read_per_thread(s), tb = rp::shader_read_texel_bytes(s);
+      for (const auto& p : v) {
+        if (p.file_offset != at || p.first % per || p.bytes != p.count * tb || (p.bytes > max_bytes && p.count > per)) return false;
+        at += p.bytes;
+      }
+      return at == rp::image_bytes(s.pack_format, w, h, layers, mips);
+    };
+    size_t n1 = 0, n2 = 0, n3 = 0;
+    check(pieces_ok(139, 13, 9, 3, 3, 1ull << 30, n1) && n1 == 3, "shader_read_pieces: one piece per mip when they fit (R8, 13x9x3, 3 mips)");
+    check(pieces_ok(139, 13, 9, 3, 3, 64, n2) && n2 > 6, "shader_read_pieces: 64-byte pieces cover the image exactly");
+    check(pieces_ok(143, 4096, 4096, 2, 13, (256ull << 20) - 32, n3) && n3 == 14, "shader_read_pieces: a 256 MB RGBA16F mip 0 of 2 layers splits in two");
+    // Transfer pieces of a BC7 cache array larger than a staging chunk.
+    {
+      auto tp = rp::transfer_pieces(145, 16384, 8192, 4, 1, 256ull << 20);   // 128 MB per layer: two layers per piece
+      uint64_t sum = 0; bool ok = tp.size() == 2;
+      for (const auto& p : tp) { ok = ok && p.layers == 2 && p.rows == 8192 && p.file_offset == sum; sum += p.bytes; }
+      check(ok && sum == rp::image_bytes(145, 16384, 8192, 4, 1), "transfer_pieces: layer groups of a 512 MB BC7 array");
+      tp = rp::transfer_pieces(145, 16384, 16386, 1, 2, 100ull << 20);   // one 256 MB layer: block rows, the last clipped
+      sum = 0; ok = !tp.empty();
+      for (const auto& p : tp) { ok = ok && p.file_offset == sum && p.bytes <= (100ull << 20) && (p.row % 4) == 0 && (p.rows % 4 == 0 || p.row + p.rows == (p.mip ? 8193u : 16386u)); sum += p.bytes; }
+      check(ok && sum == rp::image_bytes(145, 16384, 16386, 1, 2) && tp.back().mip == 1, "transfer_pieces: block rows of one oversized layer, last clipped");
+      check(rp::transfer_pieces(37, 1u << 20, 4, 1, 1, 1024).empty(), "transfer_pieces: a row larger than a piece has no plan");
+      tp = rp::transfer_pieces(rp::kR32Sfloat, 2560, 1440, 1, 1, 256ull << 20);
+      check(tp.size() == 1 && tp[0].bytes == 2560ull * 1440 * 4, "transfer_pieces: a set-0 image is one region");
+    }
+    // Budget with priority: images the hit material reads (1) go after the alpha-only ones (0).
+    bool over = false;
+    auto d = rp::drop_over_budget(600, {100, 300, 50, 200}, 1000, over, {1, 1, 0, 0});
+    check(!over && d.size() == 2 && d[0] == 2 && d[1] == 3, "drop_over_budget: priority 0 dropped first, even when smaller");
+    d = rp::drop_over_budget(600, {100, 300, 50, 200}, 1100, over, {1, 1, 0, 0});
+    check(!over && d.size() == 1 && d[0] == 3, "drop_over_budget: within a priority the largest first");
+    // The manifest names the source format of a decoded image and round-trips it.
+    rp::Manifest s;
+    s.version = rp::kVersion; s.pass = "gi_hit_direct"; s.push = "push.bin"; s.groups[0] = s.groups[1] = s.groups[2] = 1;
+    s.images = {{1, 14, 3, 43, 4096, 4096, 8, 1, "img4.bin", 146}, {1, 2, 9, 109, 64, 64, 1, 7, "img5.bin", 0}};
+    rp::Manifest sb;
+    const std::string st = rp::serialize(s);
+    check(rp::parse(st, sb, error) && sb.images.size() == 2 && sb.images[0].source_format == 146 && sb.images[1].source_format == 0 &&
+              rp::serialize(sb) == st && st.find("img4.bin 146\n") != std::string::npos && st.find("img5.bin\n") != std::string::npos,
+          "manifest: image SOURCE format round-trips (absent = copied as is)");
+  }
+
   std::printf("%s: %d failure(s)\n", g_fail ? "FAIL" : "PASS", g_fail);
   return g_fail ? 1 : 0;
 }
