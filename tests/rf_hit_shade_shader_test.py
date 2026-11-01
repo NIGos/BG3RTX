@@ -30,10 +30,14 @@ def rf_contract(r, paths, em=False):
     file, d = split_request(r)
     flags = (["--sharc"] if "sharc" in file else []) + (["--tileset"] if "RT_NATIVE_TILESET=1" in d else []) + \
             (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else []) + \
-            (["--cascade"] if "RT_CASCADE_MASKS=1" in d else []) + (["--em"] if em else [])
+            (["--cascade"] if "RT_CASCADE_MASKS=1" in d else []) + (["--em"] if em else []) + \
+            (["--gi"] if "RF_HIT_GI=1" in d else [])
     c = subprocess.run([str(checker), *flags, *map(str, paths)], capture_output=True, text=True)
     return "" if c.returncode == 0 else "contract: " + c.stdout + c.stderr
 
 
 if __name__ == "__main__":
-    sys.exit(feature_gate(__doc__, FEATURE, "rf_hit_shade", rf_contract))
+    # rf_hit_gi (RF_HIT_GI=1) requests of every hit-shade file, emission twins included, are new feature requests.
+    in_feature = lambda r: split_request(r)[0] in FEATURE or "RF_HIT_GI=1" in split_request(r)[1]  # noqa: E731
+    contract = lambda r, paths: rf_contract(r, paths, em=split_request(r)[0].endswith("_em.hlsl"))  # noqa: E731
+    sys.exit(feature_gate(__doc__, in_feature, "rf_hit_shade", contract))

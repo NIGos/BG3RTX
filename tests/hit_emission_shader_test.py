@@ -39,4 +39,6 @@ def contract(r, paths):
 
 
 if __name__ == "__main__":
-    sys.exit(feature_gate(__doc__, FEATURE, "rt_hit_emission", contract))
+    # rf_hit_gi requests (RF_HIT_GI=1) are tests/rf_hit_shade_shader_test.py's feature, compiled there.
+    sys.exit(feature_gate(__doc__, lambda r: split_request(r)[0] in FEATURE and "RF_HIT_GI=1" not in split_request(r)[1],
+                          "rt_hit_emission", contract, foreign=lambda r: "RF_HIT_GI=1" in r))

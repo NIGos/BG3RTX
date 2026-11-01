@@ -753,10 +753,12 @@ def unchanged_since(tree):
 # ---------------------------------------------------------------------------------------------
 # The common feature gate of the *_shader_test.py wrappers
 # ---------------------------------------------------------------------------------------------
-def feature_gate(doc, feature_files, label, contract=None, argv=None):
+def feature_gate(doc, feature_files, label, contract=None, argv=None, foreign=None):
     """Key off: every baseline request byte-identical here; key on: every request of
-    `feature_files` compiles, passes spirv-val and `contract(request, paths)` ('' ok, None not
-    checked, text = failure). Exit code 1 on any failure, a missing or unexpected request."""
+    `feature_files` (file names, or a predicate on the request) compiles, passes spirv-val and
+    `contract(request, paths)` ('' ok, None not checked, text = failure). `foreign(request)`: a new
+    request another feature's gate owns (a tree with several features merged), not unexpected here.
+    Exit code 1 on any failure, a missing or unexpected request."""
     ap = argparse.ArgumentParser(description=doc)
     ap.add_argument("--baseline", default=default_baseline())
     ap.add_argument("--jobs", type=int, default=default_jobs())
@@ -772,8 +774,14 @@ def feature_gate(doc, feature_files, label, contract=None, argv=None):
     try:
         old_list, new_list = base.requests(), new.requests()
         missing = [r for r in old_list if r not in new_list]
-        feature = [r for r in new_list if split_request(r)[0] in feature_files]
-        unexpected = [r for r in new_list if r not in old_list and r not in feature]
+        in_feature = feature_files if callable(feature_files) else (lambda r: split_request(r)[0] in feature_files)
+        feature = [r for r in new_list if in_feature(r)]
+        # A new request with a define no baseline request has belongs to another new feature (several
+        # merged in one tree, e.g. RF_HIT_GI and RT_HIT_WIND_RGB): its own gate compiles it.
+        known = {d.partition("=")[0] for r in old_list for d in split_request(r)[1]}
+        def other_feature(r):
+            return (foreign and foreign(r)) or any(d.partition("=")[0] not in known for d in split_request(r)[1])
+        unexpected = [r for r in new_list if r not in old_list and r not in feature and not other_feature(r)]
         ident = identity(base, new, [r for r in old_list if r in new_list], tool, cache, args.jobs, label + " key-off")
         on = compile_requests(new, feature, tool=tool, cache=cache, jobs=args.jobs, label=label + " key-on", validate=True)
     finally:

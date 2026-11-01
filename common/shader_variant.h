@@ -15,7 +15,9 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024 };
+// rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
+// instanced family's clip counters (rtStats 427..434); without it the instanced variants are unchanged.
 
 // rt_hit_material_instanced at startup (common/native_hit_instanced.h): the files that include
 // rt/native_hit_material.hlsli get RT_HIT_INSTANCED=1 (RtHit.dir, the two-sided N column of row word
@@ -38,6 +40,17 @@ inline bool hit_material_entry(const char* file) {
 inline bool gi_far_entry(const char* file) {
   static const char* const names[] = {"gi/gi_trace_rt_hit_sun.hlsl", "gi/gi_trace_rt_sharc_hit_sun.hlsl",
                                       "gi/gi_trace_rt_hit_sun_em.hlsl", "gi/gi_trace_rt_sharc_hit_sun_em.hlsl"};
+  for (const char* n : names)
+    if (std::strcmp(n, file) == 0) return true;
+  return false;
+}
+
+// rf_hit_gi (docs/TRACK_D_REFLECTIONS.md 14 "Indirect diffuse at hits"): the rf_hit_shade files get
+// RF_HIT_GI=1 (the screen's indirect diffuse and ls_box=2 box visibility at hits). Like kSunCurrent it
+// selects other Pipes (core/gi.cpp g_rf_shade_gi), not a slot.
+inline bool rf_hit_gi_entry(const char* file) {
+  static const char* const names[] = {"gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
+                                      "gi/rt_reflections_hit_shade_em.hlsl", "gi/rt_reflections_sharc_hit_shade_em.hlsl"};
   for (const char* n : names)
     if (std::strcmp(n, file) == 0) return true;
   return false;
@@ -100,17 +113,19 @@ inline unsigned allowed(const char* file) {
   if (cascade_entry(file)) f |= kCascade;
   if (hair_origin::alternate_entry(file)) f |= kHairOrigin;
   if (sun_current_entry(file)) f |= kSunCurrent;
-  if (hit_material_entry(file)) f |= kHitInstanced;
+  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb;
   if (gi_far_entry(file)) f |= kGiFar;
+  if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   return f;
 }
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,
-// each name once: tileset, Hair origin, OMM, current sun, scalp, instanced, cascade, then gi_far.
+// each name once: tileset, Hair origin, OMM, current sun, scalp, instanced, cascade, gi_far, then rf_hit_gi.
 inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
+  if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb);
   std::string out = file;
   char sep = '?';
   auto add = [&](const char* def) {
@@ -138,11 +153,13 @@ inline std::string request(const char* file, unsigned flags) {
     add("RT_NATIVE_HAIR=1");
   }
   if (flags & kHitInstanced) add("RT_HIT_INSTANCED=1");
+  if (flags & kHitWindRgb) add("RT_HIT_WIND_RGB=1");
   if (flags & kCascade) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF
   }
   if (flags & kGiFar) add("RT_GI_FAR=1");
+  if (flags & kRfHitGi) add("RF_HIT_GI=1");
   return out;
 }
 

@@ -261,12 +261,28 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   float3 normal=normalize(geometric_normal);
   if(!(dot(normal,incident.direction)>0)){result.status=HdNormalDomain;return result;}
   uint visibility=kRtLit;
+#ifdef NATIVE_HIT_BOX_LS2
+  // rf_hit_gi: the screen's box rule when its D-LS box pass ran with ls_box=2 (ls_flags bits 26 and 27;
+  // rt_local_shadows.hlsl ls_box_traced / ls_box_ray): boxes without a game shadow map are traced too, up
+  // to the end of their light-side fade-in, and shadow-mapped ones end at their shadow view's near plane.
+  // Otherwise (ls_box 0 / 1) as below: shadow-mapped boxes to the box exit, the others unshadowed.
+  const bool ls2=(pc.ls_flags&(1u<<26))!=0u && (pc.ls_flags&(1u<<27))!=0u;
+  if((box.flags&1u)!=0u || ls2){
+   float3 origin=rt_offset_ray(surface_position,normal);
+   float tmax=bg3_box_exit(box,origin,incident.direction);   // the box is the light's extent
+   if(ls2)tmax=min(tmax,(box.flags&1u)!=0u?bg3_box_shadow_near(box,origin,incident.direction)
+                                         :bg3_box_fixture_end(box,origin,incident.direction));
+   RtCone cone={footprint,0};
+   if(tmax>0)visibility=rt_visibility(origin,incident.direction,tmax,cone);
+  }
+#else
   if((box.flags&1u)!=0u){
    float3 origin=rt_offset_ray(surface_position,normal);
    const float tmax=bg3_box_exit(box,origin,incident.direction);   // the box is the light's extent
    RtCone cone={footprint,0};
    if(tmax>0)visibility=rt_visibility(origin,incident.direction,tmax,cone);
   }
+#endif
   if(visibility==kRtUnknown){result.status=HdUnknownVisibility;return result;}
   term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
   if(term.status!=HdOk){result.status=term.status;return result;}

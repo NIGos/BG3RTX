@@ -193,6 +193,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_instanced": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_instanced": "1"}, "needs": {"exp_hit_material": 1}}
      ]},
+    {"id": "exp_hit_material_wind_rgb", "label": "Native hit materials: RGB wind foliage",
+     "description": "Adds the instanced RGB wind, two-sided, translucent foliage (ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT) to the wind and two-sided foliage rows: its depth and G-buffer draws are joined per frame and every hit is checked bit for bit against the native positions and UVs. Hits get the front (reflection) lobe; the leaf transmission is missing. Restart required, with the wind and two-sided foliage rows on. Quality and GPU cost remain unqualified.",
+     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_hit_material": "1", "rt_hit_material_instanced": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_wind_rgb": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_wind_rgb": "1"}, "needs": {"exp_hit_material_instanced": 1}}
+     ]},
     {"id": "exp_gi_hit_direct", "label": "Shaded hidden-surface bounce",
      "description": "Adds physically shadowed point/spot bounce from verified hidden native VT surfaces. Keeps successful screen and radiance-cache hits, and the existing ambient occlusion. Unsupported materials or lights retain the current GI fallback. Requires Native hit materials at startup and GI fallback 0. True offscreen light coverage, quality and GPU cost remain unqualified.",
      "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
@@ -230,6 +239,15 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "caps": [], "keys": {"rf_hit_shade": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rf_hit_shade": "1"}, "needs": {"exp_hit_material": 1, "reflections": 1}}
+     ]},
+    {"id": "exp_rf_hit_gi", "label": "Indirect light in hidden-surface reflections",
+     "description": "Shaded hidden-surface reflections also get the bounce light the screen's ray-traced GI gives the same surface (gathered along the hit's ambient-occlusion rays, from the screen and the radiance cache), and the box lights follow the screen's box shadows. Requires Shaded hidden-surface reflections and ray-traced GI. Quality and GPU cost remain unqualified.",
+     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
+     "required_on": {"rf_hit_shade": "1", "gi_rt": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rf_hit_gi": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rf_hit_gi": "1"}, "needs": {"exp_rf_hit_shade": 1, "gi": 1}}
      ]},
     {"id": "exp_hit_emission", "label": "Emission at ray hits",
      "description": "Bounce and reflection rays that hit a glowing surface (lava, braziers, glowing runes) add that surface's emitted light, from the captured emissive geometry. Hidden hits: only where Shaded hidden-surface bounce or reflections shade the hit. All hits: also hits the screen shows (the screen value has no emission). Needs Emissive geometry capture (rt_emissive=1) at startup and Shaded hidden-surface bounce and/or reflections. Quality and GPU cost remain unqualified.",

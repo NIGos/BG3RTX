@@ -298,7 +298,7 @@ add_test(NAME settings_test COMMAND settings_test)
 # (tools/shader_identity.py).
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity)
+  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity hit_material_blockers)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
@@ -326,6 +326,8 @@ add_executable(fg_stability_test tests/fg_stability_test.cpp)
 add_test(NAME fg_stability_test COMMAND fg_stability_test)
 add_executable(fg_copy_lease_test tests/fg_copy_lease_test.cpp)
 add_test(NAME fg_copy_lease_test COMMAND fg_copy_lease_test)
+add_executable(fg_extent_test tests/fg_extent_test.cpp)
+add_test(NAME fg_extent_test COMMAND fg_extent_test)
 add_executable(async_capture_queue_test tests/async_capture_queue_test.cpp)
 add_test(NAME async_capture_queue_test COMMAND async_capture_queue_test)
 # rt_cascade_casters (common/cascade_casters.h, docs/TRACK_D_RT.md 6.7 item 2).
@@ -339,6 +341,9 @@ add_test(NAME ufloat_interval_test COMMAND ufloat_interval_test)
 # Box light math (common/box_light.h, rt/bg3_boxes.hlsli) against the game's box loop; ls_box=2 segments.
 add_executable(box_light_test tests/box_light_test.cpp)
 add_test(NAME box_light_test COMMAND box_light_test)
+# rf_hit_gi: the hit's composition against the screen's chain (common/hit_gi_compose.h).
+add_executable(hit_gi_compose_test tests/hit_gi_compose_test.cpp)
+add_test(NAME hit_gi_compose_test COMMAND hit_gi_compose_test)
 add_executable(native_sun_packets_test tests/native_sun_packets_test.cpp)
 add_test(NAME native_sun_packets_test COMMAND native_sun_packets_test)
 add_executable(native_hit_qualify_test tests/native_hit_qualify_test.cpp)

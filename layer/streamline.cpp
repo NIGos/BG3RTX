@@ -26,6 +26,7 @@
 #include "host.h"
 #include "../common/fg_stability.h"
 #include "../common/fg_copy_lease.h"
+#include "../common/fg_extent.h"
 #include "../common/async_capture_queue.h"
 
 #include <psapi.h>
@@ -592,6 +593,9 @@ struct Img {
 
 std::mutex g_mu;
 Img g_depth, g_mvec, g_hudless, g_ui;
+// fg_letterbox=1 (common/fg_extent.h): where the game's output lands in a larger swapchain (the
+// DLSS-G backbuffer subrect), from the last UI composite; w 0: the hudless extent at 0,0 (as before).
+fg::Rect g_bb_rect{};
 VkImageView g_depth_only_view = VK_NULL_HANDLE;   // ours: depth aspect only
 VkImage g_depth_only_for = VK_NULL_HANDLE;
 std::unordered_map<VkImage, VkImageLayout> g_layout;   // queue-order layout at the last submit
@@ -2025,10 +2029,22 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
     VkDescriptorSet ds = s->sets[0][1];
     VkImage i_h = VK_NULL_HANDLE, i_u = VK_NULL_HANDLE;
     VkImageView v_h = VK_NULL_HANDLE, v_u = VK_NULL_HANDLE;
+    fg::Extent out_ext{};
     {
       std::shared_lock<std::shared_mutex> lock(tracker().mu);
       auto si = tracker().sets.find(ds);
       if (si != tracker().sets.end()) {
+        // The game's output extent: the pass extent, or (fg_letterbox=1) the largest sampled image
+        // inside a larger swapchain pass (borderless / fake fullscreen on a bigger desktop).
+        std::vector<fg::Extent> sampled;
+        for (auto& [key, e] : si->second) {
+          if (!e.view) continue;
+          auto vi = tracker().views.find(e.view);
+          if (vi == tracker().views.end()) continue;
+          auto ii = tracker().images.find(vi->second.image);
+          if (ii != tracker().images.end()) sampled.push_back({ii->second.ci.extent.width, ii->second.ci.extent.height});
+        }
+        out_ext = fg::output_extent(sampled.data(), uint32_t(sampled.size()), {p.width, p.height}, cfg_int("fg_letterbox", 0) != 0);
         for (auto& [key, e] : si->second) {
           if (!e.view) continue;
           auto vi = tracker().views.find(e.view);
@@ -2036,7 +2052,7 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
           auto ii = tracker().images.find(vi->second.image);
           if (ii == tracker().images.end()) continue;
           const auto& ci = ii->second.ci;
-          if (ci.extent.width != p.width || ci.extent.height != p.height) continue;
+          if (!out_ext.w || ci.extent.width != out_ext.w || ci.extent.height != out_ext.h) continue;
           bool rgba8 = ci.format == VK_FORMAT_R8G8B8A8_UNORM || ci.format == VK_FORMAT_B8G8R8A8_UNORM ||
                        ci.format == VK_FORMAT_R8G8B8A8_SRGB || ci.format == VK_FORMAT_B8G8R8A8_SRGB;
           if (rgba8 && !i_u) {
@@ -2050,6 +2066,16 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
       }
     }
     std::lock_guard<std::mutex> lock(g_mu);
+    const bool letterboxed = out_ext.w && (out_ext.w != p.width || out_ext.h != p.height);
+    if (i_h) {
+      const fg::Rect r = letterboxed ? fg::backbuffer_rect(out_ext, {p.width, p.height}, s->has_viewport, s->viewport.x,
+                                                           s->viewport.y, s->viewport.width, s->viewport.height)
+                                     : fg::Rect{};
+      if (letterboxed && (r.x != g_bb_rect.x || r.y != g_bb_rect.y || r.w != g_bb_rect.w || r.h != g_bb_rect.h))
+        log("[sl] game output %ux%u in a %ux%u swapchain pass (fg_letterbox): backbuffer subrect %d,%d %ux%u", out_ext.w,
+            out_ext.h, p.width, p.height, r.x, r.y, r.w, r.h);
+      g_bb_rect = r;
+    }
     if (i_h && i_h != g_hudless.image)
       log("[sl] hudless = image %p (composite fs %016llx)", (void*)i_h, (unsigned long long)p.first_fs_hash);
     if (i_u && i_u != g_ui.image)
@@ -2064,7 +2090,8 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
       if (i_h) fill_img(g_hudless, i_h, v_h);
       if (i_u) fill_img(g_ui, i_u, v_u);
     }
-    if (i_h && i_u && p.color_views[0] && (cfg_int("fg_ui_pq", 0) || cfg_int("pan_inputs", 0)))
+    // The PQ UI record writes the pass extent: only when the output is the pass size.
+    if (i_h && i_u && !letterboxed && p.color_views[0] && (cfg_int("fg_ui_pq", 0) || cfg_int("pan_inputs", 0)))
       g_uipq_pending[cmd] = UiPqPending{p.color_images[0], p.color_views[0], v_h, v_u, i_h, i_u, p.width, p.height};
     set_watch();
   }
@@ -2348,6 +2375,8 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
       sl::Extent dx{0, 0, g_depth.w, g_depth.h};
       sl::Extent ox{0, 0, g_hudless.w, g_hudless.h};
       sl::Extent ux{0, 0, g_ui.w, g_ui.h};
+      // fg_letterbox: the game's output region of the larger swapchain; else the hudless extent at 0,0.
+      sl::Extent bx = g_bb_rect.w ? sl::Extent{uint32_t(g_bb_rect.y), uint32_t(g_bb_rect.x), g_bb_rect.w, g_bb_rect.h} : ox;
       auto life = sl::ResourceLifecycle(cfg_int("fg_lifecycle", int(sl::ResourceLifecycle::eValidUntilPresent)));
       std::vector<sl::ResourceTag> tags = {
           sl::ResourceTag(&depth, sl::kBufferTypeDepth, life, &dx),
@@ -2358,7 +2387,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
       tags.emplace_back(cfg_int("fg_tag_hudless", 1) ? &hud : nullptr, sl::kBufferTypeHUDLessColor, life, &ox);
       tags.emplace_back(cfg_int("fg_tag_ui", 1) ? &ui : nullptr, sl::kBufferTypeUIColorAndAlpha, life, &ux);
       if (cfg_int("fg_tag_backbuffer", 1))
-        tags.emplace_back(nullptr, sl::kBufferTypeBackbuffer, sl::ResourceLifecycle::eValidUntilPresent, &ox);
+        tags.emplace_back(nullptr, sl::kBufferTypeBackbuffer, sl::ResourceLifecycle::eValidUntilPresent, &bx);
       sl::Result tr = g_sl.SetTagForFrame(*g_token, 0, tags.data(), uint32_t(tags.size()), nullptr);
       sl::Constants c{};
       fill_constants(c, g_mvec.w, g_mvec.h, use_camera_snapshot ? &camera_snapshot : nullptr, camera_snapshot_valid);
