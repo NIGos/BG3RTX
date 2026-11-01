@@ -72,6 +72,33 @@ inline NvFields nv_detail_fields(NvFields base,NvVec3 detail_wzy,float mask_x,fl
  if(!tb_finite(aux)||!tb_finite(r.roughness))return r;
  r.aux=aux;r.status=0;return r;
 }
+// ENV_DetailMap_Iridescent (FS 9064a6bd, VS c32ce535; native_vt_surface.h LayoutIridescent). All
+// samples are plain 2D (sampler 0:7): a = normal A 1:2 at UV * 2; p = physical 1:3, b = normal B
+// 1:4, c = albedo 1:5 at UV * tiling (1:1 _m1); i = iridescent colour 1:6 at UV * 20. view_t =
+// normalize(-W) * mat3(T, N, B) (the FS's camera direction in the frame; normalized here). As the FS:
+//   n = normalize(fma((1, 0, -1) * strength, normalize(a) * p.w, normalize(b)))   (a, b: wzy*2-1, z negated)
+//   t = pow(max(|1 - clamp(dot(n, normalize(view_t)))|, 1e-4), 1) * p.w * iridescence
+//   RT1 albedo = clamp(mix(c, i, t)), aux = p.z; RT2 = (clamp(p.y), clamp(mix(lo, hi, p.w)), clamp(p.x))
+// (strength _m0, iridescence _m2, lo/hi _m3/_m4). Status 1 non-finite, 2 degenerate normal/view.
+inline NvFields nv_iridescent_fields(NvVec3 a_wzy,NvVec3 b_wzy,float px,float py,float pz,float pw,NvVec3 albedo,NvVec3 iridescent,
+                                     NvVec3 view_t,float strength,float iridescence,float lo,float hi){
+ NvFields r;r.albedo=tb_vec(0,0,0);r.frame_normal=tb_vec(0,0,0);r.roughness=0;r.reflectance=0;r.metalness=0;r.aux=0;r.status=1;
+ if(!tb_finite3(a_wzy)||!tb_finite3(b_wzy)||!tb_finite(px)||!tb_finite(py)||!tb_finite(pz)||!tb_finite(pw)||!tb_finite3(albedo)||
+    !tb_finite3(iridescent)||!tb_finite3(view_t)||!tb_finite(strength)||!tb_finite(iridescence)||!tb_finite(lo)||!tb_finite(hi))return r;
+ NvVec3 a=tb_vec(a_wzy.x*2-1,a_wzy.y*2-1,1-a_wzy.z*2),b=tb_vec(b_wzy.x*2-1,b_wzy.y*2-1,1-b_wzy.z*2);
+ float la=(a.x*a.x+a.y*a.y)+a.z*a.z,lb=(b.x*b.x+b.y*b.y)+b.z*b.z,lv=(view_t.x*view_t.x+view_t.y*view_t.y)+view_t.z*view_t.z;
+ if(!(la>0)||!(lb>0)||!(lv>0)||!tb_finite(la+lb+lv)){r.status=2;return r;}
+ la=tb_sqrt(la);lb=tb_sqrt(lb);lv=tb_sqrt(lv);
+ NvVec3 f=tb_vec((a.x/la*pw)*strength+b.x/lb,b.y/lb,-((a.z/la*pw)*strength)+b.z/lb);
+ float lf=(f.x*f.x+f.y*f.y)+f.z*f.z;if(!(lf>0)||!tb_finite(lf)){r.status=2;return r;}
+ lf=tb_sqrt(lf);r.frame_normal=tb_vec(f.x/lf,f.y/lf,f.z/lf);
+ const float c=nv_unit((r.frame_normal.x*view_t.x+r.frame_normal.y*view_t.y+r.frame_normal.z*view_t.z)/lv);
+ const float t=(tb_max(tb_abs(1-c),1e-4f)*pw)*iridescence;
+ r.albedo=tb_vec(nv_unit(albedo.x*(1-t)+iridescent.x*t),nv_unit(albedo.y*(1-t)+iridescent.y*t),nv_unit(albedo.z*(1-t)+iridescent.z*t));
+ r.roughness=nv_unit(py);r.reflectance=nv_unit(lo*(1-pw)+hi*pw);r.metalness=nv_unit(px);r.aux=pz;
+ if(!tb_finite3(r.albedo)||!tb_finite(r.reflectance))return r;
+ r.status=0;return r;
+}
 #ifdef __cplusplus
 }
 #endif

@@ -8,6 +8,9 @@ struct Engine {float4 v[6];uint4 words;};struct Physical {float4 value;};
 struct Push {uint row,record,reserved0,reserved1;};[[vk::push_constant]] Push push;
 [numthreads(1,1,1)]
 void main(){
+ // reserved1 2: a pool row of a 2D-only layout (native_vt_surface.h LayoutIridescent): no UV
+ // transform and no tile set; its p0/p1 words hold the row's own material floats (staged).
+ if(push.reserved1!=2u){
  uint index=engine.words.y,bytes;tilesets.GetDimensions(bytes);
  if(index>=bytes/128u)return;
  if(push.reserved0!=0u){
@@ -18,6 +21,7 @@ void main(){
  }else{
   if(any(asuint(engine.v[4])!=rows.Load4(push.row+48u)) || any(asuint(engine.v[5])!=rows.Load4(push.row+64u)))return;
   [unroll]for(uint i=0;i<8;++i)if(any(tilesets.Load4(index*128u+i*16u)!=rows.Load4(push.row+80u+i*16u)))return;
+ }
  }
  // reserved1 1: the pair's RT2.y is the constant 0.5 (FS 3da860be, native_vt_surface.h
  // ReflectanceConstant); binding 1 is then a placeholder and is not read.

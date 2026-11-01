@@ -81,7 +81,8 @@ NativeLayer hit_material_2d(uint index,uint sampler,float2 uv,float g){
 // Pool instance with a material row (native_hit_records.h nh_pool_meta, native_hit_pool.h): the
 // qualified record (VS 2d2ac3c3 with FS 14678345, 3df678c0 or 81657854: the 8995 sampling recipe
 // and FS frame, they differ only in the reflectance term, row word 220; VS 54df894a with FS
-// 613ead9c adds the detail layers, row words 224..255) in the
+// 613ead9c adds the detail layers, row words 224..255; VS c32ce535 with FS 9064a6bd samples five
+// plain 2D views instead of the VT layers, word 224 = 2) in the
 // query's pool region, its UV and object-space N/B/T in the mesh pool. The basis was extracted
 // from the G-buffer XFB of instance 0 after the positions matched M_0 * P within the mesh cache
 // tolerance (rt/mesh_extract_basis.hlsl); the row binds it to this mesh by pool base, triangle
@@ -111,16 +112,42 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  float2 d1=uv[1]-uv[0],d2=uv[2]-uv[0];float uvarea=abs(d1.x*d2.y-d1.y*d2.x);
  if(!(area>0 && uvarea>0) || !isfinite(area+uvarea))return hit_material_unknown(5);
  float g=footprint*sqrt(uvarea/area);float2 u=uv[0]+d1*hit.bary.x+d2*hit.bary.y;
+ float3 basis[3];
+ [unroll]for(uint component=0;component<3;++component){
+  float3 w[3];
+  [unroll]for(uint v=0;v<3;++v){float3 b=mul(a,asfloat(gMeshPool.Load3(first+v*nh_pool_basis_vertex+8u+12u*component)));w[v]=b*rsqrt(dot(b,b));}
+  basis[component]=w[0]+(w[1]-w[0])*hit.bary.x+(w[2]-w[0])*hit.bary.y;
+ }
+ const uint4 detail=gHitRecords.Load4(row+nh_pool_row_detail);
+ NvFields fields;
+ if(detail.x==2u){
+  // ENV_DetailMap_Iridescent (word 224 = 2; native_vt_fields.h nv_iridescent_fields): five 2D
+  // table views (words 228..244 = bindings 1:2..1:6) with the row sampler (set 0:7), the 1:1
+  // floats at 48 (strength, tiling, iridescence, reflectance lo) and 64 (hi). The FS view
+  // vector is normalize(-W), W the camera-relative world position (VS location 4): here the
+  // hit's interpolated position, in the frame mat3(T, N, B) of the interpolated VS outputs.
+  const uint4 views=gHitRecords.Load4(row+nh_pool_row_detail+4u);const uint colour=gHitRecords.Load(row+nh_pool_row_detail+20u);
+  const float4 q=asfloat(gHitRecords.Load4(row+48u));const float hi=asfloat(gHitRecords.Load(row+64u));
+  const float2 ut=u*q.y;const float gt=g*abs(q.y);
+  NativeLayer na=hit_material_2d(views.x,h1.z,u*2.0,g*2.0),ph=hit_material_2d(views.y,h1.z,ut,gt),nb=hit_material_2d(views.z,h1.z,ut,gt),
+              co=hit_material_2d(views.w,h1.z,ut,gt),ir=hit_material_2d(colour,h1.z,u*20.0,g*20.0);
+  if(!na.known || !ph.known || !nb.known || !co.known || !ir.known)return hit_material_unknown(6);
+  const float3 w=position[0]+(position[1]-position[0])*hit.bary.x+(position[2]-position[0])*hit.bary.y;
+  if(!(dot(w,w)>0))return hit_material_unknown(5);
+  const float3 v=-w*rsqrt(dot(w,w));
+  fields=nv_iridescent_fields(na.value.wzy,nb.value.wzy,ph.value.x,ph.value.y,ph.value.z,ph.value.w,co.value.rgb,ir.value.rgb,
+                              float3(dot(v,basis[2]),dot(v,basis[0]),dot(v,basis[1])),q.x,q.z,q.w,hi);
+  if(fields.status!=0)return hit_material_unknown(7);
+ }else{
  NativeLayer al=hit_material_layer(row,u,g,h1.y,h2.y,h1.z,0),nl=hit_material_layer(row,u,g,h1.y,h2.x,h1.z,1),pl=hit_material_layer(row,u,g,h1.y,h2.z,h1.z,2);
  if(!al.known || !nl.known || !pl.known)return hit_material_unknown(6);
  // Row word 220: the record pair's reflectance mode (native_vt_fields.h nv_reflectance; 81657854
  // mixes 0.5 with the normal layer's x by the UBO value; 3df678c0's 0.5 is already in word 208).
  const float reflectance=nv_reflectance(gHitRecords.Load(row+220u),asfloat(gHitRecords.Load(row+208u)),nl.value.x);
- NvFields fields=nv_fields(al.value.rgb,nl.value.wzy,pl.value.xyz,reflectance);
+ fields=nv_fields(al.value.rgb,nl.value.wzy,pl.value.xyz,reflectance);
  if(fields.status!=0)return hit_material_unknown(7);
  // ENV_DetailMap_VT (word 224 = 1): detail UV = (UV * |A P| / |P|) * tiling at the interpolated
  // object position (the FS's interpolated W - T and P), footprint scaled alike.
- const uint4 detail=gHitRecords.Load4(row+nh_pool_row_detail);
  if(detail.x==1u){
   const float4 dp=asfloat(gHitRecords.Load4(row+nh_pool_row_detail+16u));
   const float3 p0=inst_pos(ii,hit.prim,0),p1=inst_pos(ii,hit.prim,1),p2=inst_pos(ii,hit.prim,2);
@@ -132,11 +159,6 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
   fields=nv_detail_fields(fields,dn.value.wzy,dm.value.x,dm.value.y,pl.value.y,pl.value.z,dp.x,dp.z,dp.w);
   if(fields.status!=0)return hit_material_unknown(7);
  }
- float3 basis[3];
- [unroll]for(uint component=0;component<3;++component){
-  float3 w[3];
-  [unroll]for(uint v=0;v<3;++v){float3 b=mul(a,asfloat(gMeshPool.Load3(first+v*nh_pool_basis_vertex+8u+12u*component)));w[v]=b*rsqrt(dot(b,b));}
-  basis[component]=w[0]+(w[1]-w[0])*hit.bary.x+(w[2]-w[0])*hit.bary.y;
  }
  // Native FS mat3(T,N,B) with the VS outputs at locations 3/1/2 (FS 14678345 _237, as 8995).
  float3 normal=basis[2]*fields.frame_normal.x+basis[0]*fields.frame_normal.y+basis[1]*fields.frame_normal.z;

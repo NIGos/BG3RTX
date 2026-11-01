@@ -1,5 +1,17 @@
 # BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 24)
 
+## Hit material: ENV_DetailMap_Iridescent pool recipe (branch forge-family, offline, READY_FOR_LIVE, 2026-11-01)
+
+- c32ce535/9064a6bd (3.8% combined, the S6 forge family): new LayoutIridescent pool recipe, five plain 2D
+  textures + sampler 0:7, decode `nv_iridescent_fields` (camera-angle albedo mix, reflectance mix by p.w).
+  VS c32ce535 and its depth VS e6fc6bf6 are class A (dumps). Built share 44.3% -> 48.0% (regenerated
+  with 129 traces; the `log vtx` column is empty: the source logs rotated).
+- The FS writes class 4 (thin translucency): the hit gets the exact class 0 front lobe, no transmission.
+- 50fbfceb (wind) and 1e9145e4 (alpha-test 2S) stay "no capture path": neither option is clean (PLAN_M4).
+- Key `rt_hit_material` (off). Ordinary shaders byte-identical (584 of 753 modules; the 169 hit-material
+  consumers + the gather change). 71 CTests, QA detectors pass. No ABI change. Live check: S6,
+  `[hit material pool pairs]` c32ce535/9064a6bd records/ready > 0, `hit material` qualified up.
+
 ## M5.1 water geometry (branch m5-water, offline, READY_FOR_LIVE, 2026-11-01)
 
 - `rt_water_geometry=0` (GUI `exp_water_geometry`, live): forward water draws of the 7 audited FLUID_Water_Plane
@@ -53,9 +65,9 @@ and Experimental in the GUI.
 - What landed: capture caps lifted (rows 4096, samplers 64, views 256), pool hit path for BVH-cached
   statics (STI 2d2ac3c3/14678345: UV/basis capture, pool rows, pool lookup), reflectance-variant pairs
   (2d2ac3c3/3df678c0, 2d2ac3c3/81657854, 3812bc98/3da860be), reasons logged by the real consumers.
-- Ranking of what is left: [MATERIAL_FAMILIES.md](MATERIAL_FAMILIES.md). Built pairs hold 31.9% of the
-  combined share. Largest next: 54df894a/613ead9c (12.4%, NEW recipe); cheap: 50fbfceb/8e49cde8 (COPY, 3.9%),
-  1e9145e4/923131c7 (VARIANT, 2.4%).
+- Ranking of what is left: [MATERIAL_FAMILIES.md](MATERIAL_FAMILIES.md). Built pairs hold 48.0% of the
+  combined share (54df894a/613ead9c and c32ce535/9064a6bd built since). Largest next: 735d5a19/83831811
+  (3.4%, wind VS); 50fbfceb and 1e9145e4 need a new capture path (PLAN_M4 "Families 2").
 
 ### Reflections tier (b): `rf_hit_shade` (live)
 - In-frame check on tier (a) hits, ratio L_b / L_a (hit shading against the game's screen result):
