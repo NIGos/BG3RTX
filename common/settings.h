@@ -763,7 +763,7 @@ inline constexpr KV kDefaults[] = {
     {"fg_letterbox", "0"},
     {"fg_ui_pq", "0"},
 };
-// 23 keys of data/release.ini, in file order.
+// 44 keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {
     {"dev", "0"},
     {"dump_shaders", "0"},
@@ -788,6 +788,27 @@ inline constexpr KV kReleaseDefaults[] = {
     {"rr_test_fail", "0"},
     {"rt_emissive", "0"},
     {"rt_em_overlap_check", "0"},
+    {"rt_primary_check", "0"},
+    {"rt_primary_epoch", "0"},
+    {"rt_primary_identity", "0"},
+    {"rt_primary_fade_class", "0"},
+    {"cpu_timing", "0"},
+    {"crash_dump", "0"},
+    {"pan_capture", "0"},
+    {"pan_prepare", "0"},
+    {"pan_inputs", "0"},
+    {"replay_pack", "0"},
+    {"rt_order_trace", "0"},
+    {"rt_stability_log", "0"},
+    {"rt_capture_state_log", "0"},
+    {"rt_mesh_draw_log", "0"},
+    {"rt_mesh_capture", "0"},
+    {"sharc_debug", "0"},
+    {"sharc_stats", "0"},
+    {"sharc_leak_check", "0"},
+    {"sharc_fine_check", "0"},
+    {"ls_check", "0"},
+    {"rt_em_log", "0"},
 };
 // END GENERATED DEFAULTS
 // clang-format on
