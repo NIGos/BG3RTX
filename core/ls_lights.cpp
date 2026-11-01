@@ -105,7 +105,7 @@ bool ensure() {
   if (g_failed) return false;
   void* m = nullptr;
   if (!host->alloc_host_buffer || !host->alloc_host_buffer(kSlotBytes * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &g_buf, &g_mem, &m) ||
-      !host->alloc_image(kLslSlots, 3, VK_FORMAT_R32G32B32A32_UINT, VK_IMAGE_USAGE_STORAGE_BIT, &g_slots)) {
+      !host->alloc_image(kLslSlots, 3, VK_FORMAT_R32G32B32A32_UINT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &g_slots)) {
     host->log("ls: per-light data allocation failed; every light uses ls_source_radius");
     g_failed = true;
     lsl_release();
