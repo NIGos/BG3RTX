@@ -350,8 +350,8 @@ static void test_dependencies_and_caps() {
 }
 
 static void test_rendering_experiments() {
-  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_gi_hit_direct","exp_gi_hit_sun","exp_rf_hit_shade","exp_water_geometry"};
-  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","gi_hit_direct","gi_hit_sun","rf_hit_shade","rt_water_geometry"};
+  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_gi_hit_direct","exp_gi_hit_sun","exp_rf_hit_shade","exp_water_geometry","exp_water_reflections"};
+  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","gi_hit_direct","gi_hit_sun","rf_hit_shade","rt_water_geometry","rt_water_reflections"};
   static_assert(std::size(ids)==std::size(keys));
   for(size_t i=0;i<std::size(ids);++i){
     const auto* knob=find_knob(ids[i]);CHECK(knob!=nullptr);if(!knob)continue;

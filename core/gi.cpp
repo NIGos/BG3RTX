@@ -2542,6 +2542,12 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   const bool em_view = pc.rt_debug >= 16 && pc.rt_debug <= 20;
   if (em_view || em_check_due())
     em_debug(cmd, s.cam, s.vp, s.dep, s.dif, s.spe, s.l_cam2, g_w, g_h, em_view ? pc.rt_debug - 10 : 0);
+  // M5.2 water reflections (core/water.cpp, rt_water_reflections): measured, not composed.
+  if (s.tlas && s.alpha && water_rf_wanted()) {
+    Push wpc = pc;
+    wpc.rt_stats = 0;
+    water_rf(cmd, WaterRfIn{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h});
+  }
   timestamp(cmd, 3);
   g_slot_written[g_slot] = true;
   g_slot = (g_slot + 1) % kRing;

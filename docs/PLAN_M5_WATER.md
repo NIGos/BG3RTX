@@ -88,18 +88,55 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
 - Not done: the per-pixel coverage pass (needs the water scene in the core: ABI 25) and the record buffer
   on the GPU (no consumer). Live job: `tools/live_batches/m5_water/` (replaces the `mm2` draft).
 
-### M5.2 Native water term recompute, replacement disabled: `rt_water_check=0`
-- Extract the forward FLUID shader's reflection, sun and local terms from the dumped SPIR-V
-  (`captures/shaders`), recompute the reflection term at water pixels with the same resources
-  and compare (D-EN4 style, as `rf_validate`). Needs the water receiver's displaced shading
-  normal and roughness: from the shader's own evaluation, not from XFB positions.
-- Gate: mean |residual| over water pixels below the derived encoding/derivative bound.
+### M5.2 Ray-traced reflections on the water, measured: `rt_water_reflections=0`
+(Reordered 2026-11-01: the trace comes first, the native-term recompute is part of M5.3's composition.)
+- Built (branch m5-water-rf, offline, READY_FOR_LIVE): `core/water.cpp`, `shaders/rt/water_reflect.hlsl`,
+  `shaders/rt/water_view.hlsl`, `common/water_scene.h` (+ `tests/water_policy_test.cpp`). GUI
+  `exp_water_reflections` (Experimental, needs `exp_water_geometry`). Live key, off in every preset.
+- Scene without ABI: layer/water.cpp publishes each submitted build (TLAS, the pass's absolute camera
+  from its UBO byte 208, the first supported draw's roles) in persist memory `bg3rtx.water_scene`
+  (sequence lock, the BG3_DEVICE_INFO_KEY pattern); the core uses a build at most 2 frames old.
+  The ABI 25 water scene (records on the GPU) can replace it later; main's ABI 25 is the replay pack.
+- Where: core/gi.cpp run_post after the GI composite (diffuse + specular = the final lit opaque,
+  pre-fog, pre-SSS), two dispatches with the scene TLAS + alpha set of the other RT passes:
+  `water_primary` (water TLAS vs the bed depth, shifted by cam_now - cam_build: exact static, one
+  frame of water animation lag) and `water_reflect` (one mirror ray per visible water pixel).
+- Normal: the GEOMETRIC normal of the displaced wave mesh, from the neighbours' water hits (per axis
+  the better-continuing neighbour); world up where an axis has none (counted). The FS's shading
+  normal (three flow-mapped normal maps, 7b44a567 `_1205`) is not reconstructed: M5.3 needs it.
+- Radiance: tier (a) only, as D-RF: the hit projects on screen, depth_same_surface at that pixel's
+  geometric normal (k = 1), ray-facing, not skin. Misses (sky), hidden, off-screen and aborted rays
+  are unresolved and counted, never invented. Weight E = Schlick(F0 = 0.16 Reflectance_Base^2).
+- Output: `wOut` (L, E) at render resolution, the composition input; nothing in the game's image
+  changes. Views over the forward water target (it has STORAGE: trace 20261030-152728 i50311 usage
+  31), written at the end of passes whose first/last FS is audited water: `rt_debug` 21 coverage
+  (the M5.1 view), 22 L, 23 tiers, 24 E*L.
+- Log: `[water] reflections` (water share, in front / empty G-buffer / at bed / behind bed, ray
+  tiers, normal fallbacks, mean E, L, E*L, shift, skipped frames by reason) and `[water] reflections
+  GPU` (median, p90; scene size and age; F0; view count) every rt_timing_frames.
+- Offline: 71 CTests (water_policy_test: publication, torn reads under a concurrent writer, staleness,
+  shift, F0), all shaders compile, ordinary SPIR-V byte-identical (no existing shader changed).
+- Live: job `m5w2` in tools/live_batches/m5_water/ (S1 docks, OFF/ON/OFF PNGs, views 22 and 21, cost).
+- Gate: image ON = OFF within the OFF-repeat spread; behind bed 0; tiers, E and cost reported.
 
-### M5.3 Water reflections: `rt_water_reflections=0`
-- Replace only the validated reflection term at its composition point: a forward FS define
-  variant if the layer can swap the water pipeline, else a delta pass with the exact old term.
-  Hit radiance: tier (a) screen, tier (b) once M4.2 passes, else the native term.
-- Gate: P6 "Composition", "Physics", "Motion" (one moving run, key toggled), S1 and S8.
+#### Composition plan (M5.3, not built)
+1. The water FS (7b44a567, end of main) is opaque: `C = mix(Refr, (Lw * X + G) * T + S, a)`, Refr the
+   colour copy (set 2 b4), X `_2063` / G `_2062` atmosphere terms, T, S froxel fog (set 2 b17), a the
+   depth/foam opacity `_784`, and `Lw = direct + (Kd + Ks) * k`, k = set 2 b0 `_m0[0]` * 100.
+2. `Ks` (`_3379` after the probe loop) = probes (cube b22 at the roughness mip, local b32[] by the b20
+   records) * (F0 * DFG.x + DFG.y), DFG the LUT b25 at (N.V, roughness): the only reflection term.
+3. The pass target has STORAGE, so a delta pass at the water pass's end replaces Ks exactly:
+   `C' = C + a * T * X * k * w * (E_lut * L_rt - Ks)`, w = 1 on tier (a) hits, 0 otherwise (C' = C).
+4. It needs the FS's own N (normal maps + flow, `_1207`), roughness `_1480`, F0 `_1470`, a, T, X, Ks per
+   water pixel: recomputed from its sets 1-2 (queried in the layer's water draw hook, as D-EM does),
+   with the trace's E and L_rt taken at that N (the geometric normal of M5.2 only locates the surface).
+5. First with replacement off: recomputed C against the game's C over water pixels (D-EN4 style),
+   gate below the encoding bound. Fallback if a or the fog cannot be recomputed exactly: a water
+   pipeline swap (an FS define variant computing Ks from our wOut).
+6. No double count: the native Ks is subtracted exactly; unresolved rays keep it. Gates: P6
+   "Composition", "Physics", "Motion" (one moving run, key toggled), S1 and S8; tier (b) after M4.2.
+
+### M5.3 Water reflections composed (the plan above), `rt_water_reflections=2` or its own key
 
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
 ### M5.5 Transmission and absorption, only after medium and material mapping are proven.

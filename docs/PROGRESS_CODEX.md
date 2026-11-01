@@ -1,5 +1,17 @@
 # BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 24)
 
+## M5.2 water reflections, measured (branch m5-water-rf, offline, READY_FOR_LIVE, 2026-11-01)
+
+- `rt_water_reflections=0` (GUI `exp_water_reflections`, live, needs `rt_water_geometry=1`): per visible water
+  pixel the water TLAS hit against the bed depth, the wave mesh's geometric normal and one mirror ray into the
+  scene TLAS, resolved from the screen (tier a), weight Schlick E (F0 0.0196 at the docks). Output wOut (L, E);
+  NOT composed: the image does not change. Views over the water: `rt_debug` 21 coverage, 22 L, 23 tiers, 24 E*L.
+- Water scene to the core without an ABI bump: persist key `bg3rtx.water_scene` (sequence lock, the
+  device-info pattern), written by layer/water.cpp per build (TLAS, build camera, roles).
+- Composition (M5.3) needs the FS's own normal, opacity and fog: plan in PLAN_M5_WATER "Composition plan".
+- Key off: nothing runs; no existing shader changed (ordinary SPIR-V byte-identical). 71 CTests, QA detectors.
+- Live: job `m5w2` (S1, OFF/ON/OFF PNGs, views 22/21, `[water] reflections` + `GPU` lines), dry run passes.
+
 ## Hit material: ENV_DetailMap_Iridescent pool recipe (branch forge-family, offline, READY_FOR_LIVE, 2026-11-01)
 
 - c32ce535/9064a6bd (3.8% combined, the S6 forge family): new LayoutIridescent pool recipe, five plain 2D

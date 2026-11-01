@@ -332,6 +332,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_water_geometry", "1"}}, {{"rt_geometry", 1}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
 
+  {"exp_water_reflections", "Water reflections (measured)",
+   "Traces a reflection ray from every visible water pixel (the captured water surface, its wave shape) into "
+   "the ray-traced scene and measures what it would reflect. Measured only: the picture does not change yet. "
+   "Look at the log's [water] reflections lines, or the debug views rt_debug 21-24. Needs Water geometry "
+   "capture. Experimental: quality and GPU cost are unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_water_reflections", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_water_reflections", "1"}}, {{"rt_geometry", 1}, {"exp_water_geometry", 1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_water_geometry","1","Water geometry capture"}}},
+
   {"exp_current_sun", "Current cascade sun shadows",
    "Uses the current four native sun-caster domains with finite per-layer rays and native "
    "receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the "
@@ -361,7 +371,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 212 keys of bg3rtx.ini, in file order.
+// 213 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -462,6 +472,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_geometry", "0"},
     {"rt_water_xfb_mb", "32"},
     {"rt_water_xfb_max_mb", "256"},
+    {"rt_water_reflections", "0"},
     {"rt_alpha", "1"},
     {"rt_alpha_test", "1"},
     {"rt_alpha_cut", "1"},
