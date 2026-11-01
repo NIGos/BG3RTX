@@ -794,7 +794,11 @@ def analyze_all(dirs, out: Path, keep_raw=False):
     t0 = time.time()
     results = []
     with ThreadPoolExecutor(max_workers=8) as pool:
-        for d in dirs:
+        for i, d in enumerate(dirs):
+            if len(dirs) > 1:   # several scenes: say which one, with the ETA from the scenes done
+                el = time.time() - t0
+                eta = f", ETA {el / i * (len(dirs) - i):.0f} s" if i else ""
+                print(f"analysing {d.name} ({i + 1}/{len(dirs)}, {el:.0f} s elapsed{eta})", flush=True)
             if not (d / "raw").exists():
                 if (d / "result.json").exists():
                     results.append(json.loads((d / "result.json").read_text()))

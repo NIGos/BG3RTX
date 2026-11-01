@@ -8,12 +8,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "low-priority.ps1")
+. (Join-Path $PSScriptRoot "longrun.ps1")
 $root = if ($MainRoot) { (Resolve-Path -LiteralPath $MainRoot).Path } else { Split-Path $PSScriptRoot -Parent }
 Set-Location -LiteralPath $root
 $script:mergeStarted = $false
 
 function Fail($why) {
   if ($script:mergeStarted) { git merge --abort 2>$null }
+  Write-LongrunSummary 'merge-green steps'
   Write-Host "NOT MERGED: $why"
   exit 1
 }
@@ -22,14 +24,19 @@ function Fail($why) {
 # turns every redirected stderr line into an error record, which under 'Stop'
 # aborts on the first one (CMake's '-- GLOB mismatch!' when a merge adds files,
 # compiler or Python warnings). The step's exit code alone decides pass/fail.
-function Invoke-Gate([scriptblock]$step) {
+# Each step prints its start, end and duration; while it runs, a heartbeat every ~30 s of output
+# (elapsed, lines so far, the last line); every line goes to build\merge-green-<name>.log as it arrives.
+function Invoke-Gate([string]$name, [scriptblock]$step) {
+  Start-LongrunStep $name
+  $hb = New-LongrunHeartbeat $name 30 (Join-Path $root "build\merge-green-$name.log")
   $ErrorActionPreference = 'Continue'
   # A step that never ran (command not found) must not inherit a previous 0.
   $global:LASTEXITCODE = 1
   try {
-    $out = & $step 2>&1 | ForEach-Object { "$_" }
+    $out = & $step 2>&1 | ForEach-Object { $l = "$_"; $hb.Tick($l); $l }
     $script:gateCode = $LASTEXITCODE
   } finally { $ErrorActionPreference = 'Stop' }
+  Stop-LongrunStep $name $(if ($script:gateCode -eq 0) { 'passed' } else { "FAILED (exit $($script:gateCode))" })
   return $out
 }
 
@@ -63,7 +70,7 @@ try {
   if ($mergeCode -ne 0) { Fail "merge failed: $($mergeOutput -join ' ')" }
   if (-not $script:mergeStarted) { Write-Host "ALREADY MERGED: $Ref"; exit 0 }
 
-  $build = Invoke-Gate { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\build.ps1') -Test }
+  $build = Invoke-Gate 'build-ctest' { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\build.ps1') -Test }
   if ($script:gateCode -ne 0) {
     $build | Select-Object -Last 15 | ForEach-Object { Write-Host "  $_" }
     Fail 'build or unit tests failed'
@@ -72,14 +79,14 @@ try {
 
   # The shared compiler covers all entries (including multi-entry rr_post),
   # honors source DXC options, and fails when DXC is absent or any compile fails.
-  $shaders = Invoke-Gate { py -3 tools\compile_shaders.py }
+  $shaders = Invoke-Gate 'shaders' { py -3 tools\compile_shaders.py }
   if ($script:gateCode -ne 0) {
     $shaders | Select-Object -Last 20 | ForEach-Object { Write-Host "  $_" }
     Fail 'runtime shader compilation failed'
   }
   $shaders | Select-Object -Last 1 | ForEach-Object { Write-Host "  $_" }
 
-  $qa = Invoke-Gate { py -3 tests\qa_detectors_test.py }
+  $qa = Invoke-Gate 'qa' { py -3 tests\qa_detectors_test.py }
   if ($script:gateCode -ne 0) {
     $qa | Select-Object -Last 8 | ForEach-Object { Write-Host "  $_" }
     Fail 'QA detector tests failed'
@@ -87,6 +94,7 @@ try {
   git commit -q --no-edit -m "Merge $Ref (merge-green: build, all CTests, shaders, QA passed)"
   if ($LASTEXITCODE -ne 0) { Fail 'merge commit failed' }
   $script:mergeStarted = $false
+  Write-LongrunSummary 'merge-green steps'
   Write-Host "MERGED $Ref onto $head -> $((git rev-parse --short HEAD).Trim())"
 } catch { Fail $_.Exception.Message }
 

@@ -7,7 +7,7 @@
  "timeout": 413,
  "repeat": 1,
  "live_batch": "gi-far",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_radius=1.0,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_xfb_mb=1024,rt_cascade_mb=427,rf_hit_shade=0,rt_hit_emission=0,rt_emissive=0,gi_hit_direct=1,gi_hit_sun=1,gi_far=0,gi_far_m=6,qa_exposure_hold=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_radius=1.0,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_xfb_mb=1024,rt_cascade_mb=427,rf_hit_shade=0,rt_hit_emission=0,rt_emissive=0,gi_hit_direct=1,gi_hit_sun=1,gi_far=0,gi_far_m=6,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -80,5 +80,18 @@
  ],
  "stop_on_dump": true,
  "purpose": "gi_far OFF/ON/OFF (S3 outdoor sun: far sun-lit hidden hits, expect qualified sun-lit > 0). Startup: Ultra + rt_hit_material=1, rt_hit_material_instanced=1, rt_cascade_casters=1, gi_hit_direct=1, gi_hit_sun=1 in both states; only gi_far toggles live (gi_far_m 6). One diag window (rt_stats, gi_far ON: the GI far line gives ON and the old rule on the same rays), cost OFF / ON / OFF with diagnostics off, one PNG trace per state. The game's eye adaptation is held (qa_exposure_hold=1) from cost-off-a to shot-off-b: unheld, it raised the pre-exposure 3.2% (S8) / 4.1% (camp) in the ON shot of the 2026-11-01 run, which read as +2.87% / +3.97%.",
- "estimated_phase_seconds": 113
+ "estimated_phase_seconds": 113,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  }
+ ]
 }

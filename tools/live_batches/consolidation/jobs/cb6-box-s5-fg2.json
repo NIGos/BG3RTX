@@ -73,5 +73,17 @@
  "estimated_phase_seconds": 365,
  "requires_success_of": [
   "cb1-regression-camp-fg2"
+ ],
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-on",
+    "cost-off"
+   ],
+   "min": 1
+  }
  ]
 }

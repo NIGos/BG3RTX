@@ -7,6 +7,7 @@
 param([switch]$Core, [switch]$Watch, [switch]$Launcher, [switch]$Test, [string]$Config = "RelWithDebInfo")
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "low-priority.ps1")
+. (Join-Path $PSScriptRoot "longrun.ps1")
 $root = Split-Path $PSScriptRoot
 $build = Join-Path $root "build"
 
@@ -32,12 +33,28 @@ function Invoke-Build([string]$target) {
 
 Enter-VsShell
 if (-not $Watch) {
+  if ($Test) { Start-LongrunStep 'build' }
   Invoke-Build $(if ($Core) { "bg3rtx_core" } elseif ($Launcher) { "bg3rtx_launcher" } else { "" })
   if ($Test) {
+    Stop-LongrunStep 'build'
     # merge-green relies on this being the complete configured suite. An empty
     # test registry is a configuration failure, not a successful validation.
-    ctest --test-dir $build --output-on-failure --no-tests=error
-    if ($LASTEXITCODE) { throw "unit tests failed" }
+    # ctest prints one line per finished test (n/total, time); the slowest ones are summarised after it.
+    Start-LongrunStep 'ctest'
+    $times = New-Object System.Collections.Generic.List[object]
+    ctest --test-dir $build --output-on-failure --no-tests=error | ForEach-Object {
+      if ($_ -match '^\s*\d+/\d+ Test\s+#\d+: (\S+) \.*\s*(.*?)\s+([0-9.]+) sec') { $times.Add([pscustomobject]@{ Name = $matches[1]; Sec = [double]$matches[3] }) }
+      $_
+    }
+    $code = $LASTEXITCODE
+    Stop-LongrunStep 'ctest' $(if ($code) { "FAILED (exit $code)" } else { 'passed' })
+    if ($times.Count) {
+      $sum = ($times | Measure-Object Sec -Sum).Sum
+      $top = $times | Sort-Object Sec -Descending | Select-Object -First 5 | ForEach-Object { '{0} {1:N1} s' -f $_.Name, $_.Sec }
+      Write-Host ("slowest tests of {0} ({1:N0} s summed): {2}" -f $times.Count, $sum, ($top -join ', '))
+    }
+    Write-LongrunSummary 'build.ps1 steps'
+    if ($code) { throw "unit tests failed" }
   }
   return
 }

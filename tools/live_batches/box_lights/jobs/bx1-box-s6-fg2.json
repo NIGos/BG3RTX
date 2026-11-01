@@ -7,7 +7,7 @@
  "timeout": 460,
  "repeat": 1,
  "live_batch": "box-lights",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,ls_impl=1,ls_samples=0,ls_shadowed=3,ls_k=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_scene_wait=1,rt_cascade_casters=0,ls_box=0,ls_native_direct_validate=0,cpu_timing=1,qa_exposure_hold=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,ls_impl=1,ls_samples=0,ls_shadowed=3,ls_k=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_scene_wait=1,rt_cascade_casters=0,ls_box=0,ls_native_direct_validate=0,cpu_timing=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -79,5 +79,18 @@
  ],
  "stop_on_dump": true,
  "purpose": "TRACK_D_LOCAL_LIGHTS 9.10 ls_box=2 (every box light; unshadowed ones to the end of their light-side fade-in, shadow-mapped ones to their shadow view's near plane): mode-1 and mode-2 ls_stats windows (ls box trace: shadow-mapped occluded share and 'occluded where the atlas term is 1', unshadowed traced/occluded, removed; ls box bound: recompute above the game's B10G11R11 value), OFF/ON/OFF cost windows (diag off), alternated OFF/ON PNG shots for the scene-colour float mean (dumps.json fs 5c3fdabc), one ls_debug=2 view.",
- "estimated_phase_seconds": 160
+ "estimated_phase_seconds": 160,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  }
+ ]
 }

@@ -65,6 +65,8 @@ These rules come from mistakes already made in this repo. They apply on every br
   so far, flushed) and cache what does not change (e.g. baseline SPIR-V hashes per commit; compile only
   requests whose sources or includes changed). A silent, recompute-everything tool is a bug: fix it first.
   One shared helper, not one copy per feature.
+  Offline shader compiles and SPIR-V byte identity: `tools/shader_identity.py` (cached, progress; the
+  `tests/*_shader_test.py` gates and merge-green's `tools/compile_shaders.py` use it). Don't call DXC directly.
 - GPU statistics counters live in device-local memory, reduced per workgroup, copied to the host after
   the timed region: host-visible atomics cost 15 ms (water reflections) and 7 ms (water compose) in 2026-11.
   CTest `host_atomics_lint_test` fails on a new shader atomic into a host-visible buffer (classify it there).
@@ -99,6 +101,24 @@ These rules come from mistakes already made in this repo. They apply on every br
   dumps: the bloom's darkest-of-four filter darkens noise (TRACK_D_LOCAL_LIGHTS 9.11, 2026-11-01).
 - Keep what a test or comparison still reads (the current replay pack, gate baselines); delete superseded
   packs and analysed raw dumps.
+
+## Coordinating agents (lessons of 2026-11-01)
+- Work in 2-3 streams, one per area (files that change together). Inside a stream, one agent fixes the items
+  in sequence: after the first fix it already knows the code. Resume a finished agent for a follow-up in its
+  area instead of spawning a new one. Never one agent per tiny task.
+- Briefs carry the evidence and exact file:line pointers, ask for the smallest fix that passes the gate,
+  forbid new frameworks, and cap the report (~15 lines: commit, cause, fix, numbers, what is left).
+- The coordinator does not implement: it merges, resolves conflicts, reads logs and assigns work.
+- Bundle verified branches into one merge-green (merge them in a worktree first, resolve conflicts there).
+- Shared registries cause most conflicts: allocate rtStats counters only after the last index of the table
+  next to kStatsCounters in core/gi.cpp; add Python tests to the single CMake foreach list; branches write
+  docs/progress/<branch>.md, never PROGRESS_CODEX.md.
+- Offline first: replay pack, PT reference, fixtures, unit tests. A live run confirms one named observable,
+  with its predicted delta committed before the run (predicted.json).
+- Every feature that may ship is also tested in the real preset with the other qualified keys on (the
+  smoke_ultra job): isolated A/B runs missed water being skipped under rt_cascade_casters, buffer overflow
+  with hit materials and the scene-wait timeouts they caused.
+- When a live result disproves a hypothesis or a gate was wrong, write it down in the same batch.
 
 ## Merging
 - Only `scripts/merge-green.ps1`, after reading the deciding log numbers yourself.

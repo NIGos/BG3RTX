@@ -529,6 +529,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
   DeviceData* dd = device_of(queue);
   uint64_t frame = ++g_frame;
   cmd_cpu_report(frame);
+  native_hit::cpu_report(frame);
   if (frame <= 4 || (frame & 63) == 0) guard_check("vkQueuePresentKHR", true);   // on the presenting thread
   diag(DIAG_PRESENT);
   static int presents_logged = 0;
