@@ -276,10 +276,11 @@ int main(int argc, char** argv) {
     CHECK(ratio_bin(2.01f, 1.0f) == kCsRatioHigh && ratio_bin(1.0f, 0.0f) == 0u);
   }
 
-  // 4e. M5.4 sun visibility: D = a T X Dsun is the FS's dC/dDsun times its unshadowed sun term, so
-  //     shadow(C, D, V) is the FS with its sun visibility 1 replaced by V, for any V in [0, 1]; V = 1
-  //     (lit, unknown) is the identity; only the visibility changes (same unshadowed radiance). With
-  //     M5.3 on as well, the two terms are independent: compose then shadow = the FS with both swapped.
+  // 4e. M5.4 sun visibility: D = a T X Dsun is the FS's dC/dDsun times its unshadowed sun term and
+  //     R = C - D the FS with its sun at 0, so shadow(C, R, V) is the FS with its sun visibility 1
+  //     replaced by V, for any V in [0, 1]; V = 1 (lit, unknown) is the identity; only the visibility
+  //     changes (same unshadowed radiance). With M5.3 on as well, the two terms are independent:
+  //     compose then shadow = the FS with both swapped.
   {
     const FsTerms base{0.25f, 0.04f, 0.3f, 2.2f, 0.09f, 0.0101725f, 0.93f, 0.002f, 0.97f, 0.003f, 0.8f, 0.6f};
     for (float a : {0.0f, 0.35f, 1.0f})
@@ -287,29 +288,79 @@ int main(int argc, char** argv) {
         for (float v : {0.0f, 0.25f, 1.0f}) {
           FsTerms f = base;
           f.a = a, f.sun = sun;
-          const float c = fs_colour(f), D = record_d(f);
+          const float c = fs_colour(f), D = record_d(f), R = record_r(f);
           FsTerms g = f;
           g.sun = sun * v;
           const float want = fs_colour(g);
           const float tol = 4e-6f * (1.0f + std::fabs(c) + D);
-          CHECK(std::fabs(shadow(c, D, v) - (want > 0.0f ? want : 0.0f)) <= tol);
-          if (v == 1.0f) CHECK(shadow(c, D, v) == c);   // lit / unknown: bit-identical
+          CHECK(std::fabs(shadow(c, R, v) - (want > 0.0f ? want : 0.0f)) <= tol);
+          if (v == 1.0f) CHECK(shadow(c, R, v) == c);   // lit / unknown: bit-identical
           CHECK(D >= 0.0f && D <= c - f.refr * (1.0f - f.a) + tol);   // D is part of C, never more
           // dC/dDsun numerically (C is linear in the sun term): D / Dsun.
           FsTerms h = f;
           h.sun = sun + 1.0f;
           CHECK(std::fabs((fs_colour(h) - c) - record_d(h) + D) <= tol);
-          // Both swaps at once (rt_water_compose and rt_water_shadows): C + A L - B - (1 - V) D.
+          // Both swaps at once (rt_water_compose and rt_water_shadows): the shader's (occluded ? R : C)
+          // + A L - B.
           const float A = record_a(f), B = record_b(f), L = 0.4f * f.k * f.sp;
           FsTerms both = g;
           both.sp = L / f.k;
           const float wb = fs_colour(both);
-          CHECK(std::fabs(shadow(c + A * L - B, D, v) - (wb > 0.0f ? wb : 0.0f)) <= tol + 4e-6f * B);
+          CHECK(std::fabs(shadow(c + A * L - B, R + A * L - B, v) - (wb > 0.0f ? wb : 0.0f)) <= tol + 4e-6f * B);
         }
-    CHECK(shadow(0.1f, 0.3f, 0.0f) == 0.0f);   // half-precision D above C clamps, never negative
+    CHECK(shadow(0.1f, -0.001f, 0.0f) == 0.0f);   // an f32-rounded R below 0 clamps, never negative
+    CHECK(shadow(0.1f, NAN, 1.0f) == 0.1f);       // lit: the target's value, whatever the record holds
     CHECK(kCsSunRec == 32u && kCsSunClamped < kCsSunSumD && kCsSunSumRemoved + 2 == kCsSunWords);
     CHECK(kCsSunSumD % 2 == 0 && kCsSunSumRemoved % 2 == 0 && kCsSunWords * 4 <= 256);   // 64-bit pairs, one slot
     CHECK(kCsRatioHigh < kCsSunRec && (kFlagRf & kFlagSun) == 0);
+  }
+
+  // 4j. M5.4 through the real encodings (m5w4 S8 2026-11-01: the shadowed pool's sun-dominated pixels
+  //     black or bright, 1213 clamped records per frame). The FS writes C to the B10G11R11 target
+  //     (6 / 5 mantissa bits, round to nearest or toward zero) and the record in half. At V = 0 the
+  //     compose must give the FS evaluated with its sun colour set to 0, within the record's half
+  //     rounding of that value (2^-11, relative) plus the f32 rounding of C - D in the FS (a few ulps
+  //     of C): whatever the sun's share of C, up to the glint (C ~ 1000, rest ~ 0.05). The formula
+  //     before this fix, C_target - half(D), misses it by up to one ulp of the target's C: where the
+  //     sun is 98% or more of C that is the whole rest (the check counts those cases: it fails).
+  {
+    uint32_t seed = 4242u, n = 0, old_bad = 0, old_clamped = 0;
+    for (int i = 0; i < 20000; ++i) {
+      FsTerms f{};
+      f.refr = 0.3f * u01(seed) * u01(seed);
+      f.direct = 0.05f * u01(seed) * u01(seed);          // the local lights
+      f.kd = 0.5f * u01(seed), f.sp = 4.0f * u01(seed), f.e = 0.02f + 0.5f * u01(seed);
+      f.k = (i & 1) ? 0.0101725f : 1.0f;
+      f.x = 0.5f + 0.5f * u01(seed), f.ge = 0.01f * u01(seed), f.t = 0.6f + 0.4f * u01(seed);
+      f.s = 0.01f * u01(seed), f.a = (i % 5 == 0) ? 1.0f : u01(seed);
+      f.sun = std::pow(10.0f, -3.0f + 6.5f * u01(seed));   // 1e-3 .. 3e3: up to the glint
+      FsTerms g = f;
+      g.sun = 0.0f;                                         // the FS with the sun colour set to 0
+      const float want = fs_colour(g), c = fs_colour(f), D = record_d(f);
+      if (!(c > 0.0f) || c > 6.0e4f) continue;
+      ++n;
+      const float R = to_half(record_r(f));                // the record's w8 / w9 (f32 C - D, then half)
+      const float tol = std::ldexp(std::fabs(want), -11) + 8.0f * std::ldexp(c + D, -24) + 1e-7f;
+      for (int mb : {6, 5})
+        for (bool nearest : {true, false}) {
+          const float ct = encode(c, mb, nearest);         // the target the compose reads (owned: same_encoded)
+          CHECK(same_encoded(c, ct, mb));
+          CHECK(std::fabs(shadow(ct, R, 0.0f) - (want > 0.0f ? want : 0.0f)) <= tol);
+          CHECK(shadow(ct, R, 1.0f) == ct);                 // lit: the target bit for bit
+          const float old = ct - to_half(D);
+          old_clamped += old < 0.0f;
+          old_bad += std::fabs((old > 0.0f ? old : 0.0f) - want) > tol;
+        }
+    }
+    std::printf("4j: %u FS samples x 4 encodings; C_target - D: %u beyond the half tolerance, %u clamped at 0\n", n,
+                old_bad, old_clamped);
+    CHECK(n > 19000 && old_bad > 0 && old_clamped > 0);   // the check catches the old formula
+    // The m5w4 pool's glint pixel: C = 976 with a rest of 0.05 (red, 6 bits): one target ulp is 8.
+    FsTerms f{};   // a = X = T = k = 1: C = Lw = ambient 0.05 + sun 975.95
+    f.x = 1.0f, f.t = 1.0f, f.k = 1.0f, f.a = 1.0f, f.kd = 0.05f, f.sun = 975.95f;
+    const float c = fs_colour(f), ct = encode(c, 6, true);
+    CHECK(std::fabs(c - 976.0f) < 1e-3f && std::fabs(ct - c) <= 8.0f);
+    CHECK(std::fabs(shadow(ct, to_half(record_r(f)), 0.0f) - 0.05f) < 1e-4f);
   }
 
   // 4g. M5.4b sum match, offline (the FS model): over random froxel lists at water points (points and
@@ -423,7 +474,8 @@ int main(int argc, char** argv) {
         const float L = 0.4f * f.k * f.sp;
         all.sp = L / f.k;
         const float wa = fs_colour(all);
-        const float got = ls_shadow(shadow(c + record_a(f) * L - record_b(f), record_d(f), 0.0f) + 0.0f, F, removed);
+        const float AL_B = record_a(f) * L - record_b(f);
+        const float got = ls_shadow(shadow(c + AL_B, record_r(f) + AL_B, 0.0f), F, removed);
         // shadow() clamps at 0 between the terms; the shader clamps once: equal whenever nothing clamps.
         if (wa > 0.0f) CHECK(std::fabs(got - wa) <= tol + 4e-6f * (record_b(f) + record_d(f)));
       }
@@ -619,10 +671,13 @@ int main(int argc, char** argv) {
     CHECK(st_ls == PatchStatus::kApplied && out_ls.size() > out_sun.size() && out_ls[3] > out_sun[3]);
     CHECK(patch_fs(words.data(), words.size(), fi, addr, cap_sun, out_sun2, true, false) == PatchStatus::kApplied &&
           out_sun2 == out_sun);
-    // FNV-1a of the M5.4 sun patch made by branch worktree-agent-ae7ec6c83bc4f7137 (fc07ad4), same addr / cap.
-    const uint64_t m54 = fi.fs == 0x7b44a567771ecbecull ? 0xe865b2c838f5f27dull
-                       : fi.fs == 0x99c1fcef82b253c1ull ? 0xe3d58680bf9a621cull
-                       : fi.fs == 0xc4e92ccdb08dd777ull ? 0x3e2eb1959148399cull : 0;
+    std::printf("patch %016llx with the sun term: FNV-1a %016llx\n", (unsigned long long)fi.fs,
+                (unsigned long long)fnv(out_sun.data(), out_sun.size() * 4));
+    // FNV-1a of the M5.4 sun patch, same addr / cap: words 8-9 hold R = C - D and lum(D) since the m5w4
+    // fix (branch worktree-agent-abd9303a6e22b012e; fc07ad4 stored D: e865b2c8..., e3d58680..., 3e2eb195...).
+    const uint64_t m54 = fi.fs == 0x7b44a567771ecbecull ? 0x3bd081bf3d86accdull
+                       : fi.fs == 0x99c1fcef82b253c1ull ? 0x3e33b8e12f2960c4ull
+                       : fi.fs == 0xc4e92ccdb08dd777ull ? 0x206d5c9203866002ull : 0;
     CHECK(fnv(out_sun.data(), out_sun.size() * 4) == m54);
     {
       FsIds bad = fi;   // a local id of the wrong type is refused only when the local words are asked for
@@ -637,11 +692,11 @@ int main(int argc, char** argv) {
       bad.ls_d12 = fi.C;   // a vec3 of main that is not a loop sum still types; the table is the claim (spirv-val)
       CHECK(patch_fs(words.data(), words.size(), bad, addr, cap_ls, tmp, true, true) == PatchStatus::kApplied);
     }
-    // M5.4b off M5.5: the local-light patch word for word as before the refraction code (FNV-1a of the LS patch
-    // made by 48e1347, same addr / cap).
-    const uint64_t m54b = fi.fs == 0x7b44a567771ecbecull ? 0x5389606ce4c6d88eull
-                        : fi.fs == 0x99c1fcef82b253c1ull ? 0x9e156a501b26fbb6ull
-                        : fi.fs == 0xc4e92ccdb08dd777ull ? 0x092432cf04848295ull : 0;
+    // M5.4b off M5.5: the local-light patch word for word as before the refraction code (FNV-1a of the LS patch,
+    // same addr / cap; 48e1347 made 5389606c..., 9e156a50..., 092432cf... before the m5w4 fix's sun words R, lum D).
+    const uint64_t m54b = fi.fs == 0x7b44a567771ecbecull ? 0x80c211df1fd943d2ull
+                        : fi.fs == 0x99c1fcef82b253c1ull ? 0xe8f4bc47583553a9ull
+                        : fi.fs == 0xc4e92ccdb08dd777ull ? 0x891555672bce545cull : 0;
     CHECK(fnv(out_ls.data(), out_ls.size() * 4) == m54b);
     // M5.5 on: the refraction words on top of the local-light record (2 more stores).
     const uint32_t cap_rr = capacity_of_mb(record_mb(160, kRecordBytesRefr), kRecordBytesRefr);

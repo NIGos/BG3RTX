@@ -45,11 +45,16 @@ inline constexpr uint32_t kHeaderBytes = 64;
 inline constexpr uint32_t kRecordBytes = 32;
 inline constexpr uint32_t kRecordWords = kRecordBytes / 4;
 // M5.4 (rt_water_shadows on when the water pipelines are created): the record grows by two words,
-//   w8 half2(D.r, D.g)  w9 half2(D.b, 1)
+//   w8 half2(R.r, R.g)  w9 half2(R.b, lum(D))
 // D = G * Dsun, Dsun = the FS's sun term in Lw (diffuse + specular, cloud shadow and k included,
-// NO geometric visibility: the audited water FS sample no cascade, only the clouds), so dC/dDsun = G
-// and C' = C - (1 - V) D replaces the FS's sun visibility (1) by the traced V. Without the key at
-// creation the patch, the buffer and the compose shader are the M5.3 ones, word for word.
+// NO geometric visibility: the audited water FS sample no cascade, only the clouds), so dC/dDsun = G,
+// and R = C - D (in the FS, f32) is the FS's colour with sun visibility 0. The compose replaces the
+// FS's sun visibility (1) by the traced V: C' = V C + (1 - V) R, i.e. R where the sun ray is occluded,
+// C (bit for bit) where it is lit. R and not D is recorded: C - D formed in the compose from the
+// B10G11R11 target (one ulp = 2^-6 / 2^-5 of C) loses the rest wherever the sun is most of C (the
+// glint), which turned the shadowed S8 pool's sun-dominated pixels black or bright (m5w4 2026-11-01:
+// 1213 clamped records per frame). lum(D) > 0 marks a sun term (statistics, debug view 26). Without
+// the key at creation the patch, the buffer and the compose shader are the M5.3 ones, word for word.
 inline constexpr uint32_t kRecordBytesSun = 40;
 inline constexpr uint32_t kRecordWordsSun = kRecordBytesSun / 4;
 // M5.4b (rt_water_ls_shadows on when the water pipelines are created): the sun record plus the FS's
@@ -67,7 +72,7 @@ inline constexpr uint32_t kRecordWordsSun = kRecordBytesSun / 4;
 // structures of shaders/rt/bg3_lights.hlsli: identical decorations), recomputes each light's term
 // c_k with the FS's own BRDF (bg3_light_eval) and the game's atlas term s_k for shadow-mapped lights,
 // checks sum c_k s_k == L, and traces the lights the game leaves unshadowed:
-//   C' = max(C [+ A L - B] [- (1 - V) D] - F * sum_k (1 - V_k) c_k, 0).
+//   C' = max((occluded ? R : C) [+ A L - B] - F * sum_k (1 - V_k) c_k, 0).
 inline constexpr uint32_t kRecordBytesLs = 96;
 inline constexpr uint32_t kRecordWordsLs = kRecordBytesLs / 4;
 // M5.5 step 1 (rt_water_refraction on when the water pipelines are created): the M5.4b record plus the
@@ -173,14 +178,17 @@ inline float compose(float c, float a, float l, float b) {
 // D = a T X Dsun = dC/dDsun * Dsun: the record's sun word, the colour the FS's unshadowed sun adds.
 // The FS lights the water with sun visibility 1 (no cascade sample in any audited water FS; the
 // cloud shadow is part of its sun radiance and stays). The compose swaps that 1 for the traced
-// visibility V of one ray towards the sun disc: C' = max(C - (1 - V) D, 0) (with M5.3 on, the
-// reflection's A L - B is added in the same expression: the two terms are independent in the FS).
-// V = 1 (lit, or an aborted / unknown ray: the FS's own value) leaves C bit-identical; only the
-// visibility changes, never the unshadowed radiance.
+// visibility V of one ray towards the sun disc: C' = V C + (1 - V) R with R = C - D the FS's colour
+// without its sun term, recorded by the FS itself (with M5.3 on, the reflection's A L - B is added in
+// the same expression: the two terms are independent in the FS). V = 1 (lit, or an aborted / unknown
+// ray: the FS's own value) leaves C bit-identical; only the visibility changes, never the unshadowed
+// radiance. C here is the target's value (B10G11R11), R the record's (half of the FS's f32 C - D).
 inline float record_d(const FsTerms& f) { return f.x * (f.a * f.t) * f.sun; }
-inline float shadow(float c, float d, float v) {
-  const float r = c - (1.0f - v) * d;
-  return r > 0.0f ? r : 0.0f;
+inline float record_r(const FsTerms& f) { return fs_colour(f) - record_d(f); }   // the FS's f32 C - D
+inline float shadow(float c, float r, float v) {
+  if (v == 1.0f) return c;
+  const float s = v * c + (1.0f - v) * r;
+  return s > 0.0f ? s : 0.0f;
 }
 // ---- M5.4b local-light visibility (rt_water_ls_shadows; water_compose.hlsl WATER_LS) ----
 // F = a T X m = dC/dL (the record's w10-w11): the FS adds its local sums with the same factor as the

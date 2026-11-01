@@ -36,6 +36,15 @@ Gate results already measured (queue logs in `captures/queue/logs`, read with `p
 Notes: at S6 the gi trace and rt passes timers read lower with `rf_hit_shade` on (work moves between timed
 ranges); read the frame time and the whole-GI line. S6 rf +1.76 ms with emission on vs +1.36 without is a
 cross-run hint only.
+m4p 11xxxx (2026-11-01): S6 `gi: GPU cost` (an average, not a median) +9.12 ms but trace +0.41, rf +1.58, rt passes
++0.45. The jump comes with `rt_emissive=1` (shot-step-inst -> cost-em-off-a, 11:29:48), not with a hit key, and
+stays with `rt_hit_emission=0` (em-off windows 10.4 ms). Inside the gi timer's [2, 3] range `run_post` calls
+`em_debug` mode 0 (the D-EM projected check, one non-opaque primary ray per pixel against the emissive TLAS)
+every `rt_em_check_frames=16` frames; at S6 that TLAS holds ~335k triangles / 55.8k lights (camp, S8 few), so a
+~100 ms check frame every 16 frames would read as +7 ms average while every median is flat (inferred from the
+timer ranges and the timing; the check's own GPU time is not logged: time it, or set rt_em_check_frames=0, to confirm). Owner: D-EM
+(core/emissive.cpp em_check_due, shaders/rt/em_debug.hlsl). rf_hit_shade cost cuts and bias terms:
+TRACK_D_REFLECTIONS 14 "Cost and bias breakdown".
 
 Still unmeasured (the batch measures all but the last two):
 - `rt_hit_emission` OFF/ON/OFF at S6: energy and cost.

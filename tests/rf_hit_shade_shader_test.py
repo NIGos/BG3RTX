@@ -109,7 +109,7 @@ def main():
                 d = r.partition("?")[2]
                 flags = (["--sharc"] if "sharc" in r.partition("?")[0] else []) + \
                         (["--tileset"] if "RT_NATIVE_TILESET=1" in d else []) + \
-                        (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else [])
+                        (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else []) +                         (["--cascade"] if "RT_CASCADE_MASKS=1" in d else [])
                 c = subprocess.run([str(checker), *flags, *map(str, paths)], capture_output=True, text=True)
                 if c.returncode:
                     return r, "contract: " + c.stdout + c.stderr
