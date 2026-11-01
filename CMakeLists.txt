@@ -341,6 +341,25 @@ if(BG3RTX_HAIR_GPU_PROBE)
   target_link_libraries(native_hair_gpu_probe PRIVATE vulkan-1)
 endif()
 
+# Windowless analytic GPU fixture of the hidden-hit shading functions (tools/native_hit_gpu_fixture.md):
+# the real native_hit_direct / native_hit_sun / native_hit_ao / hd_scatter on closed-form scenes. Its
+# SPIR-V is compiled from the shader headers at build time; the test skips (77) without a ray-query device.
+set(NATIVE_HIT_FIXTURE_SPV ${CMAKE_BINARY_DIR}/native_hit_gpu_fixture.spv)
+file(GLOB NATIVE_HIT_FIXTURE_DEPS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shaders/rt/*.hlsli
+     ${CMAKE_SOURCE_DIR}/shaders/gi/*.hlsli ${CMAKE_SOURCE_DIR}/common/*.h)
+add_custom_command(OUTPUT ${NATIVE_HIT_FIXTURE_SPV}
+  COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/native_hit_gpu_fixture.hlsl -spirv -fspv-target-env=vulkan1.3
+          -HV 2021 -T cs_6_6 -E main -O3 -Fo ${NATIVE_HIT_FIXTURE_SPV}
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/native_hit_gpu_fixture.hlsl ${NATIVE_HIT_FIXTURE_DEPS} VERBATIM)
+add_custom_target(native_hit_gpu_fixture_spv ALL DEPENDS ${NATIVE_HIT_FIXTURE_SPV})
+add_executable(native_hit_gpu_fixture tools/native_hit_gpu_fixture.cpp)
+target_include_directories(native_hit_gpu_fixture PRIVATE ${VULKAN_SDK}/Include)
+target_link_directories(native_hit_gpu_fixture PRIVATE ${VULKAN_SDK}/Lib)
+target_link_libraries(native_hit_gpu_fixture PRIVATE vulkan-1)
+add_dependencies(native_hit_gpu_fixture native_hit_gpu_fixture_spv)
+add_test(NAME native_hit_gpu_fixture COMMAND native_hit_gpu_fixture ${NATIVE_HIT_FIXTURE_SPV})
+set_tests_properties(native_hit_gpu_fixture PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
 add_library(bg3rtx_core SHARED core/core.cpp core/gi.cpp core/ls_lights.cpp core/sun_trust.cpp core/sharc.cpp core/emissive.cpp core/em_policy.cpp)
 target_include_directories(bg3rtx_core PRIVATE ${VULKAN_SDK}/Include)
 # SHaRC radiance cache: inject the D-EM effects-target emission. AUTO follows whether
