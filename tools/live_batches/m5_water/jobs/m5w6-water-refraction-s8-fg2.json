@@ -87,5 +87,27 @@
  ],
  "stop_on_dump": true,
  "purpose": "PLAN_M5 M5.5 step 1 rt_water_refraction at S8 Water Queens House: geometry and reflections on throughout, compose, sun and local-light shadows off (isolates the refraction), rt_water_refraction=1 at launch so the water FS are patched with the 104-B records (the M5.4b words plus the FS's refraction sample Refr and its weight 1 - a), toggled live. The audited water FS see the bed through the pre-water colour copy at the pixel itself plus a wave offset (no Snell bending); ON traces refract(-V, N, 1/n) from the FS's own N with n from its own F0 (1.326) and, where the hit resolves on screen, reads the water draw's own colour copy there: C' = max(C + (1 - a) (Copy(hit) - Refr), 0). The medium (a over the view-depth difference) is the game's. Offline S8 model (replay pack depth, flat planes): the transmissive pool (c4e92ccd, 2.05% of the view) has 65% screen hits, 35% hidden (8.9% transmission-weighted), 0% off screen; the sea (7b44a567) is opaque (a = 1 with the template's OpacityBlendDistance 0) and must log as opaque. A 15 s precheck with the key on (its [water] refraction line needs transmissive records and screen hits, else INVALID: no clear water in view), then OFF / ON / OFF with diag-off cost windows and one PNG each, and the view (rt_debug 28: green composed, red hidden, blue off screen, magenta miss, dark grey opaque). Gates: shot-off-a vs shot-off-b within the OFF repeat noise; shot-on minus shot-off-a only on pixels the view marks green (the pool bed shifted towards the camera by about the offline median 52 px at 2560 wide, never on the sea or the stone); ratio of the means within the spatial spread of the copy (a displaced sample of the same bed: no systematic brightening; reported, the term is a geometry correction); clamped near 0; [water] refraction GPU (compose GPU ON minus OFF) against the < 0.05 ms estimate and cost-on minus cost-off against the OFF spread.",
- "estimated_phase_seconds": 132
+ "estimated_phase_seconds": 132,
+ "expect_every": [
+  {
+   "name": "compose ran on most frames, every complete key-on window (was 3 of 120 in m5w3 070927)",
+   "select": "\\[water\\] compose \\(\\d+ frames, ",
+   "match": "\\[water\\] compose \\(120 frames, (1[01]\\d|120) composed, [0-9.]+ passes/frame\\): records [1-9][0-9.]*/frame, owned (?!0\\.00%)[0-9.]+%",
+   "windows": [
+    "precheck-refraction-on",
+    "cost-on"
+   ],
+   "min": 1
+  },
+  {
+   "name": "refraction ran with the colour copy, every complete key-on window",
+   "select": "\\[water\\] refraction \\(\\d+ frames, ",
+   "match": "\\[water\\] refraction \\(120 frames, [1-9]\\d* passes with the colour copy, \\d+ without\\): transmissive records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned \\(opaque [0-9.]+%, invalid \\d+, no usable copy 0\\)",
+   "windows": [
+    "precheck-refraction-on",
+    "cost-on"
+   ],
+   "min": 1
+  }
+ ]
 }

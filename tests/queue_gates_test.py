@@ -104,14 +104,44 @@ def main():
         p = subprocess.run(base + [str(d / "run.log")], capture_output=True, text=True)
         check("CLI exits 0 when every window holds", p.returncode == 0 and "ok" in p.stdout)
 
-    for batch, job in (("m4_instanced", "m4i-instanced-s14-fg2.json"), ("m5_water", "m5w3-water-compose-s8-fg2.json")):
-        spec = json.loads((ROOT / "tools" / "live_batches" / batch / "jobs" / job).read_text(encoding="utf-8"))
-        plan = json.loads((ROOT / "tools" / "live_batches" / batch / "plans" /
+    # Events: one-off lines (a trace per shot window) are counted from the applied settings to the
+    # window's end, without the straddle rule (the first and only trace line of a window counts).
+    ev_plan = [{"label": "shot-off-a"}, {"label": "shot-on"}, {"label": "shot-off-b"}]
+    ev_runner = "\n".join(["10:00:00.000 [pan-plan] window 0 serial 0 set=k=0", "10:00:06.000 [pan-plan] window 1 serial 0 set=k=1",
+                           "10:00:12.000 [pan-plan] window 2 serial 0 set=k=0", "10:00:18.000 [motion-plan] complete phases=3"])
+    ev_log = "\n".join(["10:00:00.020  [cfg] settings read", "10:00:04.100  [trace] frame 1 written: 4 submits -> a",
+                        "10:00:06.020  [cfg] settings read", "10:00:12.020  [cfg] settings read",
+                        "10:00:16.100  [trace] frame 3 written: 4 submits -> c"])
+    tr = {"select": r"\[trace\] frame \d+ written: ", "match": r"\[trace\] frame \d+ written: ", "event": True,
+          "windows": ["shot-off-a", "shot-on", "shot-off-b"]}
+    f = queue_gates.check([tr], ev_log, ev_runner, ev_plan)
+    check("event gate: the shot window without a trace fails, the others count their single line",
+          len(f) == 1 and "'shot-on'" in f[0] and "0 event line(s)" in f[0])
+    f = queue_gates.check([dict(tr, event=False)], ev_log, ev_runner, ev_plan)
+    check("without event, the straddle rule drops a window's only line (why trace gates need event)", len(f) == 3)
+
+    # Plan drift: the runner says which keys each window applied; a plan edited after the run fails.
+    drift_plan = [{"label": "shot-off-a", "set": "k=0"}, {"label": "shot-on", "set": "k=1,hit_ao_rays=2"}, {"label": "shot-off-b", "set": "k=0"}]
+    f = queue_gates.check([tr], ev_log, ev_runner, drift_plan)
+    check("plan drift fails the windowed gates instead of judging shifted windows", len(f) == 1 and f[0].startswith("plan drift: 1 window"))
+    same_plan = [{"label": "shot-off-a", "set": "k=0"}, {"label": "shot-on", "set": "k=1"}, {"label": "shot-off-b", "set": "k=0"}]
+    f = queue_gates.check([tr], ev_log, ev_runner, same_plan)
+    check("matching sets: no drift", len(f) == 1 and "plan drift" not in f[0])
+
+    jobs = sorted((ROOT / "tools" / "live_batches").glob("*/jobs/*.json"))
+    with_ee = 0
+    for jf in jobs:
+        spec = json.loads(jf.read_text(encoding="utf-8"))
+        ee = spec.get("expect_every") or []
+        if not ee:
+            continue
+        with_ee += 1
+        plan = json.loads((jf.parent.parent / "plans" /
                            Path(spec["args"][spec["args"].index("-MovePlan") + 1]).name).read_text(encoding="utf-8"))
         labels = {p["label"] for p in plan}
-        ee = spec.get("expect_every") or []
-        check(f"{job}: expect_every present, regexes compile, windows are plan labels",
-              bool(ee) and all(re.compile(g["select"]) and re.compile(g["match"]) and set(g["windows"]) <= labels for g in ee))
+        check(f"{jf.name}: expect_every regexes compile, windows are plan labels",
+              all(re.compile(g["select"]) and re.compile(g["match"]) and set(g.get("windows") or []) <= labels for g in ee))
+    check(f"jobs with expect_every: {with_ee} (m4i, m4p1-4, m5w3-6 at least)", with_ee >= 9)
 
     if fails:
         print(f"{fails} check(s) failed")

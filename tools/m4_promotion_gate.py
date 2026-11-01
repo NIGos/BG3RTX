@@ -3,44 +3,68 @@
     py -3 -m tools.m4_promotion_gate                      # latest log of every m4_promotion job
     py -3 -m tools.m4_promotion_gate <job>.<n>.<HHMMSS>.log [...]   # given queue logs (any lean batch)
     options: --batch m4_promotion  --queue-logs <dir>  --captures-root <dir> (if the trace dirs moved)
+             --pool run (OFF noise from the run's own OFF shots only; default: every lean run of the save)
+
+Exit 1 when any gate fails (energy, plan drift, capacity), 0 when all hold.
 
 Per log: the job's plan (tools/live_batches/*/jobs/<job>.json -> its -MovePlan in plans/) names the
-phases; the runner's `[pan-plan] window i` lines time them. A periodic line (`gi: trace pass ...
-(300 frames)`, `[pace] ... over 600 frames`) counts for a phase only when the whole window it averages
-lies inside the phase: the previous line of the same kind is after the phase's `[cfg] settings read`
-and the line itself is before the next phase starts. Nothing is tuned: the data says which lines count.
+phases; the runner's `[pan-plan] window i ... set=<keys>` lines time them. When the plan file changed
+after the run (the runner's set= differs from the plan step), the plan version from git history whose
+sets match is used; if none matches, the run fails with PLAN DRIFT (labels would be one phase off:
+m4p3 / m4p4 11:2x ran before cost-ao0 was inserted). A periodic line (`gi: trace pass ... (300 frames)`,
+`[pace] ... over 600 frames`) counts for a phase only when the whole window it averages lies inside the
+phase: the previous line of the same kind is after the phase's `[cfg] settings read` and the line itself
+is before the next phase starts. Nothing is tuned: the data says which lines count.
 
-Gates printed (the coordinator decides):
+Gates:
 - Energy: scene colour before post (dump of pass 5c3fdabc, slot 0, in each trace's dumps.json; the
-  float mean, not a PNG preview and not the bloom chain: TRACK_D_LOCAL_LIGHTS 9.11). ON vs the mean of
-  OFF-a/OFF-b: `within` if |ON - OFF| <= |OFF-b - OFF-a|; `brighter`/`darker` otherwise (a change that
-  needs its physical explanation; darker is the energy-rule failure: the bundle only adds light where
-  the old term was zero or replaces a probe by a shaded hit).
-  Exposure: the lighting is pre-exposed by s1b13[0] = 0.8333 / 2^EV (TRACK_A_RR "Pre-exposure"), so the
-  game's eye adaptation scales every buffer before post. Each trace's value is the `[rrpost] exposure
-  probe (frame N)` line of the trace frame (`lighting s1b13 = [x ...]`); with all three present the
-  verdict is on scene colour / s1b13[0] (raw change and the exposure ratio printed beside it). gi_far
-  S8 2026-11-01: raw +2.87%, exposure ON / OFF 1.032, normalised -0.32% (the sign flip was the adaptation).
-- Cost: every GPU line, ON minus the mean of OFF-a/OFF-b, against |OFF-b - OFF-a|.
+  float mean, not a PNG preview and not the bloom chain: TRACK_D_LOCAL_LIGHTS 9.11). Each ON shot is
+  compared with the mean of the nearest OFF shot before and after it (shot-off-* family; S6 also the
+  shot-em-off-* family for shot-on). d = (ON - OFF mean) / OFF mean. Two-sided, against a PREDICTED
+  delta p written before the run (tools/live_batches/<batch>/predicted.json; no entry: p = 0):
+      pass  |d - p| <= t(1 - ALPHA_FW / 2m, dof) * sigma * sqrt(3/2)
+  sigma: the relative std of one shot's scene-colour mean at a static view, from consecutive OFF-OFF
+  pairs (sigma^2 = sum d_ij^2 / 2n over n pairs, dof n) of every lean run on the same save (and the
+  run's own); m: the run's comparisons (Bonferroni); sqrt(3/2): ON minus the mean of two OFFs. The old
+  rule |d| <= |OFF-b - OFF-a| is printed for reference only: a one-sample range, it flags 46% of pure
+  noise (P(|N(0, 1.5)| > |N(0, 2)|)) and lsk1 071324's own OFF repeats fail it (+0.61%, -0.28%), while a
+  one-sided "brighter: explain" passed m5w4's +2.2% for a key that only removes light. A prediction
+  committed after the run started is marked "post hoc" and does not pass.
+  Exposure first: the lighting is pre-exposed by s1b13[0] = 0.8333 / 2^EV (TRACK_A_RR "Pre-exposure"), so
+  the game's eye adaptation scales every buffer before post. Each trace's value is the `[rrpost] exposure
+  probe (frame N)` line of the trace frame (`lighting s1b13 = [x ...]`, within EXPOSURE_FRAMES); d and the
+  OFF-OFF noise pairs use scene colour / s1b13[0] when every shot of the comparison has it, else the raw
+  value (marked). The raw change and the exposure ratio ON / OFF are printed beside it. gi_far S8
+  2026-11-01: raw +2.87%, exposure ON / OFF 1.032, normalised -0.32% (the sign flip was the adaptation).
+  Jobs with an energy gate hold the adaptation (`qa_exposure_hold=1` in every shot-* phase;
+  scripts/queue_gates.py exposure_hold_problems), so the correction is a check, not the measurement.
+- Cost: every GPU line, ON minus the mean of OFF-a/OFF-b, against |OFF-b - OFF-a| (reported, not gated).
 - Participation and bias: the last diag-* window's hit material, GI hit direct/sun, rf hit shade (tier a
-  ratio L_b / L_a, mean (L_b - L_a) / standard error), hit emission, instanced clip lines.
+  ratio L_b / L_a, mean (L_b - L_a) / standard error), hit emission, instanced clip lines (reported).
 - Capacity: `[geo] RT capture` (alpha made opaque, opaque dropped) and `[cascade] casters` (buffer full)
-  per frame over the run, all 0 expected.
+  per frame over the run: any value above 0 fails.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
+import math
 import re
 import statistics
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 SCENE_FS = "5c3fdabc"   # BG3 compose: lit HDR scene colour before transparents and post (RR's input)
+ALPHA_FW = 0.05         # scripts/qa/thresholds.py: 5% family-wise false alarm, Bonferroni per family
 
 TS = re.compile(r"^(\d\d):(\d\d):(\d\d)\.(\d{3})\s+(.*)$")
 WINDOW = re.compile(r"^(\d\d:\d\d:\d\d\.\d{3}) \[pan-plan\] window (\d+) ")
+WINDOW_SET = re.compile(r" set=(\S*)")
 TRACE = re.compile(r"\[trace\] frame (\d+) written: .* -> (.+)$")
 # layer/rrpost.cpp rrpost_on_present: the pre-exposure the lighting used (s1b13[0]), per present.
 EXPOSURE = re.compile(r"\[rrpost\] exposure probe \(frame (\d+)\):.* lighting s1b13 = \[([-+0-9.eE]+)")
@@ -78,6 +102,19 @@ CAPACITY = [
 CAPACITY_PEAK = re.compile(r"\[geo\] RT capture, .*alpha region ([0-9.]+) MB \(peak demand ([0-9.]+) MB\), opaque peak ([0-9.]+) MB of a ([0-9.]+) MB buffer")
 
 
+def t_quantile(p, dof):
+    """Student t quantile (scripts/qa/em_gate.py: exact for dof 1 and 2, Cornish-Fisher above)."""
+    from statistics import NormalDist
+    if dof <= 1.0:
+        return math.tan(math.pi * (p - 0.5))
+    if dof <= 2.0:
+        return (2 * p - 1) / math.sqrt(2 * p * (1 - p))
+    z = NormalDist().inv_cdf(p)
+    v = dof
+    return (z + (z ** 3 + z) / (4 * v) + (5 * z ** 5 + 16 * z ** 3 + 3 * z) / (96 * v ** 2)
+            + (3 * z ** 7 + 19 * z ** 5 + 17 * z ** 3 - 15 * z) / (384 * v ** 3))
+
+
 def secs(hms: str) -> float:
     h, m, s = hms.split(":")
     return int(h) * 3600 + int(m) * 60 + float(s)
@@ -102,15 +139,59 @@ def main_checkout() -> Path:
     return REPO
 
 
-def find_job(name: str):
+def find_job_file(name: str):
     for f in sorted((REPO / "tools" / "live_batches").glob(f"*/jobs/{name}.json")):
-        job = json.loads(f.read_text(encoding="utf-8"))
-        args = job.get("args", [])
-        plan_rel = args[args.index("-MovePlan") + 1] if "-MovePlan" in args else None
-        if plan_rel:
-            plan = f.parent.parent / "plans" / Path(plan_rel).name
-            if plan.exists():
-                return job, json.loads(plan.read_text(encoding="utf-8"))
+        return f
+    return None
+
+
+def plan_path(job_file: Path, job: dict):
+    args = job.get("args", [])
+    if "-MovePlan" not in args:
+        return None
+    p = job_file.parent.parent / "plans" / Path(args[args.index("-MovePlan") + 1]).name
+    return p if p.exists() else None
+
+
+def find_job(name: str):
+    f = find_job_file(name)
+    if f:
+        job = json.loads(f.read_text(encoding="utf-8-sig"))
+        p = plan_path(f, job)
+        if p:
+            return job, json.loads(p.read_text(encoding="utf-8-sig"))
+    return None, None
+
+
+def _git(*args):
+    try:
+        r = subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        return r.stdout if r.returncode == 0 else ""
+    except OSError:
+        return ""
+
+
+def plan_matches(plan, sets):
+    """True when every runner window's set= equals the plan step's set (windows without set= pass)."""
+    for i, s in sets.items():
+        if s is None:
+            continue
+        if not (0 <= i < len(plan)) or str(plan[i].get("set", "")) != s:
+            return False
+    return True
+
+
+def plan_from_history(path: Path, sets):
+    """(plan, commit) of the newest committed version of `path` whose sets match the runner's."""
+    rel = path.resolve().relative_to(REPO.resolve()).as_posix()
+    for h in _git("log", "--format=%H", "--", rel).split():
+        txt = _git("show", f"{h}:{rel}")
+        try:
+            plan = json.loads(txt.lstrip("\ufeff"))
+        except ValueError:
+            continue
+        if plan_matches(plan, sets):
+            return plan, h[:7]
     return None, None
 
 
@@ -118,19 +199,35 @@ class Run:
     def __init__(self, log: Path, captures_root: Path | None = None, plan: Path | None = None):
         self.log = log
         self.name = log.name.split(".")[0]
-        if plan:
-            self.job, self.plan = {"save": "?"}, json.loads(plan.read_text(encoding="utf-8"))
-        else:
-            self.job, self.plan = find_job(self.name)
-        if not self.plan:
-            raise SystemExit(f"{log.name}: no job/plan {self.name} under tools/live_batches/*/jobs")
-        self.labels = [p["label"] for p in self.plan]
+        self.batch = None
+        self.drift = None      # None, "plan <commit> from history", or "PLAN DRIFT ..."
         runner = log.with_suffix(".runner.txt")
-        starts = {}
+        starts, sets = {}, {}
         for line in runner.read_text(encoding="utf-8", errors="replace").splitlines() if runner.exists() else []:
             m = WINDOW.match(line)
             if m:
-                starts.setdefault(int(m.group(2)), secs(m.group(1)))
+                i = int(m.group(2))
+                starts.setdefault(i, secs(m.group(1)))
+                sm = WINDOW_SET.search(line)
+                sets.setdefault(i, sm.group(1) if sm else None)
+        if plan:
+            self.job, self.plan = {"save": "?"}, json.loads(plan.read_text(encoding="utf-8-sig"))
+        else:
+            self.job, self.plan = find_job(self.name)
+            jf = find_job_file(self.name)
+            if jf:
+                self.batch = jf.parent.parent
+            if self.plan and not plan_matches(self.plan, sets):
+                old, h = plan_from_history(plan_path(jf, self.job), sets)
+                if old:
+                    self.plan, self.drift = old, f"plan from {h} (the plan file changed after this run)"
+                else:
+                    self.drift = "PLAN DRIFT: the runner's window keys match no committed version of the plan"
+        if not self.plan:
+            raise SystemExit(f"{log.name}: no job/plan {self.name} under tools/live_batches/*/jobs")
+        if self.drift is None and plan and not plan_matches(self.plan, sets):
+            self.drift = "PLAN DRIFT: the runner's window keys differ from the given plan"
+        self.labels = [p["label"] for p in self.plan]
         if len(starts) != len(self.plan):
             print(f"warning: {log.name}: {len(starts)} of {len(self.plan)} phases started (incomplete run?)")
         raw = []
@@ -142,7 +239,7 @@ class Run:
         self.lines = [(t[i], raw[i][1]) for i in range(len(raw))]
         base = self.lines[0][0] if self.lines else 0.0
         self.phases = []   # (label, effective start, end)
-        idx = sorted(starts)
+        idx = sorted(i for i in starts if 0 <= i < len(self.plan))
         for i in idx:   # the runner's clock on the log's (unwrapped) day
             while starts[i] < base - 43200:
                 starts[i] += 86400
@@ -152,6 +249,9 @@ class Run:
             cfg = next((tt for tt, txt in self.lines if s <= tt <= s + 3 and "[cfg] settings read" in txt), s)
             self.phases.append((self.labels[i], cfg, end))
         self.captures_root = captures_root
+
+    def failed_drift(self):
+        return bool(self.drift and self.drift.startswith("PLAN DRIFT"))
 
     def phase_of(self, label):
         return next((p for p in self.phases if p[0] == label), None)
@@ -189,17 +289,18 @@ class Run:
 
     def pre_exposure(self, frame: int):
         """s1b13[0] of the probe line at `frame`, else the nearest within EXPOSURE_FRAMES; None if absent."""
+        if not hasattr(self, "_probes"):
+            self._probes = [(int(m.group(1)), float(m.group(2))) for _, txt in self.lines for m in [EXPOSURE.search(txt)] if m]
         best = None
-        for _, txt in self.lines:
-            m = EXPOSURE.search(txt)
-            if m:
-                df = abs(int(m.group(1)) - frame)
-                if df <= EXPOSURE_FRAMES and (best is None or df < best[0]):
-                    best = (df, float(m.group(2)))
+        for f, v in self._probes:
+            df = abs(f - frame)
+            if df <= EXPOSURE_FRAMES and (best is None or df < best[0]):
+                best = (df, v)
         return best[1] if best and best[1] > 0 else None
 
     def scene_colour(self, label, fs=SCENE_FS):
-        """(luminance, nonfinite dumps, pre-exposure or None) of the phase's trace (last dump of pass fs, slot 0)."""
+        """(luminance, nonfinite px of that same dump, pre-exposure s1b13[0] or None) of the phase's trace,
+        or (reason, path), or None."""
         p = self.phase_of(label)
         if not p:
             return None
@@ -221,8 +322,9 @@ class Run:
                         return ("no scene-colour dump", str(f))
                     _, d = max(cand, key=lambda c: c[0])
                     r, g, b = d["mean"][:3]
-                    nonfinite = sum(int(x.get("nonfinite", 0) or 0) for x in dumps.values())
-                    return (0.2126 * r + 0.7152 * g + 0.0722 * b, nonfinite, self.pre_exposure(frame))
+                    # Only the scene-colour dump itself: other dumps (the depth buffer's far plane holds
+                    # non-finite values by design) say nothing about the energy (m4p3 112657: 2917 from depth).
+                    return (0.2126 * r + 0.7152 * g + 0.0722 * b, int(d.get("nonfinite", 0) or 0), self.pre_exposure(frame))
         return None
 
     def capacity(self):
@@ -240,10 +342,22 @@ class Run:
                         "%.0f / %.0f of %s" % (max(float(m.group(2)) for m in peaks), max(float(m.group(3)) for m in peaks), peaks[-1].group(4)), len(peaks)))
         return out
 
+    def started(self) -> float:
+        """Epoch seconds of the run's start: the HHMMSS of the queue log's name on the day of its mtime
+        (the day before when that time is later than the mtime: a run across midnight)."""
+        mtime = self.log.stat().st_mtime
+        parts = self.log.name.split(".")
+        hms = parts[2] if len(parts) > 3 and re.fullmatch(r"\d{6}", parts[2]) else None
+        if not hms:
+            return mtime
+        lt = time.localtime(mtime)
+        start = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, int(hms[:2]), int(hms[2:4]), int(hms[4:]), 0, 0, -1))
+        return start - 86400 if start > mtime else start
+
 
 def triples(labels, prefix):
     """(off-a, on, off-b) label triples: <prefix>-off-a/-off-b against every other <prefix>-* label;
-    plus the S6 emission triple <prefix>-em-off-a / <prefix>-on / <prefix>-em-off-b."""
+    plus the S6 emission triple <prefix>-em-off-a / <prefix>-on / <prefix>-em-off-b. (Cost windows.)"""
     out = []
     a, b = f"{prefix}-off-a", f"{prefix}-off-b"
     if a in labels and b in labels:
@@ -256,34 +370,164 @@ def triples(labels, prefix):
     return out
 
 
-def energy_verdict(d, s):
-    """d: relative change of ON against the OFF mean; s: relative OFF-a/OFF-b spread."""
-    return "within" if abs(d) <= s else ("brighter: explain" if d > 0 else "DARKER: energy rule")
+def is_off(label):
+    return "-off-" in label or label.endswith("-off")
 
 
-def energy(run):
+def off_family(label):
+    return "em" if "-em-off" in label else "base"
+
+
+def energy_triples(labels):
+    """(off before, on, off after, key) for every ON shot: the nearest OFF shot of the base family before
+    and after it in plan order (with only one side, the two nearest OFFs); shot-on also against the
+    shot-em-off-* family when it has one on both sides (S6 emission). key names the prediction."""
+    shots = [l for l in labels if l.startswith("shot-")]
     out = []
-    for a, on, b in triples(run.labels, "shot"):
+    for fam in ("base", "em"):
+        offs = [i for i, l in enumerate(shots) if is_off(l) and off_family(l) == fam]
+        if len(offs) < 2:
+            continue
+        for i, l in enumerate(shots):
+            if is_off(l) or (fam == "em" and l != "shot-on"):
+                continue
+            before = [j for j in offs if j < i]
+            after = [j for j in offs if j > i]
+            if before and after:
+                a, b = before[-1], after[0]
+            elif fam == "em":
+                continue
+            else:
+                near = sorted(offs, key=lambda j: (abs(j - i), j))[:2]
+                a, b = min(near), max(near)
+            out.append((shots[a], l, shots[b], l if fam == "base" else f"{l}@em-off"))
+    return out
+
+
+def off_pairs(run):
+    """Relative differences of consecutive OFF shots of one family: the shot-to-shot noise at a static view."""
+    shots = [l for l in run.labels if l.startswith("shot-") and is_off(l)]
+    out = []
+    for fam in ("base", "em"):
+        seq = [l for l in shots if off_family(l) == fam]
+        vals = []
+        for l in seq:
+            v = run.scene_colour(l)
+            vals.append(v if v and not isinstance(v[0], str) else None)
+        for x, y in zip(vals, vals[1:]):
+            if x and y and x[0] and y[0]:
+                if x[2] and y[2]:   # exposure-normalised (the adaptation drifts between OFF shots too)
+                    x0, y0 = x[0] / x[2], y[0] / y[2]
+                else:
+                    x0, y0 = x[0], y[0]
+                out.append((y0 - x0) / ((x0 + y0) / 2))
+    return out
+
+
+_POOL = {}
+
+
+def pooled_noise(save, queue_logs: Path | None, own_log: str = "", own_pairs=(), captures_root=None):
+    """(sigma, dof, runs) of the relative shot noise: OFF-OFF pairs of every lean run on this save in the
+    queue logs (runs with plan drift excluded), plus the evaluated run's own pairs."""
+    key = (save, str(queue_logs))
+    if key not in _POOL:
+        pairs = {}
+        if queue_logs and queue_logs.exists() and save not in (None, "?"):
+            names = []
+            for f in sorted((REPO / "tools" / "live_batches").glob("*/jobs/*.json")):
+                try:
+                    if json.loads(f.read_text(encoding="utf-8-sig")).get("save") == save:
+                        names.append(f.stem)
+                except ValueError:
+                    continue
+            for name in names:
+                for log in sorted(queue_logs.glob(f"{name}.*.log")):
+                    try:
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            r = Run(log, captures_root)
+                    except (SystemExit, OSError, ValueError, KeyError):
+                        continue
+                    if not r.failed_drift():
+                        p = off_pairs(r)
+                        if p:
+                            pairs[str(log.resolve())] = p
+        _POOL[key] = pairs
+    pairs = dict(_POOL[key])
+    if own_log and own_pairs:
+        pairs[own_log] = list(own_pairs)
+    flat = [d for ps in pairs.values() for d in ps]
+    if not flat:
+        return None, 0, 0
+    return math.sqrt(sum(d * d for d in flat) / (2 * len(flat))), len(flat), len(pairs)
+
+
+def predictions(run):
+    """{key: entry} for the run's job from <batch>/predicted.json; and the file's commit time."""
+    if not run.batch:
+        return {}, None
+    f = run.batch / "predicted.json"
+    if not f.exists():
+        return {}, None
+    data = json.loads(f.read_text(encoding="utf-8-sig"))
+    rel = f.resolve().relative_to(REPO.resolve()).as_posix()
+    dirty = bool(_git("status", "--porcelain", "--", rel).strip())
+    ct = _git("log", "-1", "--format=%ct", "--", rel).strip()
+    committed = None if dirty or not ct else float(ct)
+    return data.get(run.name, {}) or {}, committed
+
+
+def energy_verdict(d, band, p=None, post_hoc=False):
+    """Two-sided: pass when |d - p| <= band (p = 0 without a prediction)."""
+    if band is None:
+        return "NO NOISE ESTIMATE", False
+    if p is None:
+        if abs(d) <= band:
+            return "within (no change)", True
+        return ("CHANGED WITHOUT A PREDICTION: brighter" if d > 0 else "CHANGED WITHOUT A PREDICTION: darker"), False
+    if abs(d - p) <= band:
+        return ("as predicted, post hoc (does not pass)", False) if post_hoc else ("as predicted", True)
+    return ("BRIGHTER than predicted" if d > p else "DARKER than predicted"), False
+
+
+def energy(run, queue_logs: Path | None = None, pool="save"):
+    trip = energy_triples(run.labels)
+    own = off_pairs(run)
+    if pool == "run":
+        n = len(own)
+        sigma, dof, nruns = (math.sqrt(sum(d * d for d in own) / (2 * n)), n, 1) if n else (None, 0, 0)
+    else:
+        sigma, dof, nruns = pooled_noise(run.job.get("save"), queue_logs, str(run.log.resolve()), own, run.captures_root)
+    m = max(len(trip), 1)
+    band = t_quantile(1 - ALPHA_FW / (2 * m), dof) * sigma * math.sqrt(1.5) if sigma is not None and dof >= 1 else None
+    pred, committed = predictions(run)
+    started = run.started()
+    out = []
+    for a, on, b, key in trip:
         vals = [run.scene_colour(x) for x in (a, on, b)]
         if any(not v or isinstance(v[0], str) for v in vals):
-            out.append({"a": a, "on": on, "b": b, "values": vals, "verdict": "INCOMPLETE"})
+            out.append({"a": a, "on": on, "b": b, "key": key, "values": vals, "verdict": "INCOMPLETE", "ok": False})
             continue
         va, vo, vb = (v[0] for v in vals)
         off = (va + vb) / 2
-        raw_d, raw_s = (vo - off) / off, abs(vb - va) / off
-        pre = [v[2] if len(v) > 2 else None for v in vals]
-        e = {"a": a, "on": on, "b": b, "values": (va, vo, vb), "raw_d": raw_d, "raw_s": raw_s,
-             "nonfinite": sum(v[1] for v in vals), "pre": pre, "exposure": None}
+        raw_d = (vo - off) / off
+        pre = [v[2] for v in vals]
         if all(pre):
-            # Verdict on scene colour / pre-exposure: the eye adaptation scales the whole lit image.
+            # Exposure-normalised: the eye adaptation scales the whole lit image (gf2 S8: +2.87% raw, -0.32%).
             na, no, nb = va / pre[0], vo / pre[1], vb / pre[2]
             noff = (na + nb) / 2
-            e["d"], e["s"] = (no - noff) / noff, abs(nb - na) / noff
-            e["exposure"] = pre[1] / ((pre[0] + pre[2]) / 2)
+            d, s = (no - noff) / noff, abs(nb - na) / noff
+            exposure = pre[1] / ((pre[0] + pre[2]) / 2)
         else:
-            e["d"], e["s"] = raw_d, raw_s
-        e["verdict"] = energy_verdict(e["d"], e["s"])   # on the raw change when an exposure is unknown
-        out.append(e)
+            d, s, exposure = raw_d, abs(vb - va) / off, None
+        entry = pred.get(key)
+        p = entry.get("predicted") if isinstance(entry, dict) else None
+        post_hoc = p is not None and (committed is None or committed > started)
+        verdict, ok = energy_verdict(d, band, p, post_hoc)
+        out.append({"a": a, "on": on, "b": b, "key": key, "values": (va, vo, vb), "d": d, "s": s, "p": p,
+                    "raw_d": raw_d, "exposure": exposure, "pre": pre,
+                    "band": band, "sigma": sigma, "dof": dof, "pool_runs": nruns,
+                    "verdict": verdict, "ok": ok, "nonfinite": sum(v[1] for v in vals)})
     return out
 
 
@@ -310,22 +554,49 @@ def fmt(x, nd=3):
     return "n/a" if x is None else f"{x:.{nd}f}"
 
 
-def report(run: Run):
+def report(run: Run, queue_logs: Path | None = None, pool="save"):
+    """Prints the tables; returns the list of failed gates."""
+    failed = []
     print(f"\n## {run.name} ({run.job.get('save', '?')}) - {run.log.name}")
+    if run.drift:
+        print(f"note: {run.drift}")
+    if run.failed_drift():
+        print("FAIL: plan drift, no gate evaluated")
+        return ["plan drift"]
     print(f"phases {len(run.phases)}/{len(run.plan)}: " + ", ".join(p[0] for p in run.phases))
 
-    print("\n### Energy: scene colour before post (5c3fdabc float mean luminance) / pre-exposure s1b13[0]")
-    print("| comparison | OFF-a | ON | OFF-b | raw ON vs OFF | exposure ON / OFF | ON vs mean OFF | OFF spread | verdict |")
-    print("|---|---|---|---|---|---|---|---|---|")
-    for e in energy(run):
+    print("\n### Energy: scene colour before post (5c3fdabc float mean luminance) / pre-exposure s1b13[0], two-sided against the prediction")
+    rows = energy(run, queue_logs, pool)
+    if rows and rows[0].get("sigma") is not None:
+        r0 = next((r for r in rows if "band" in r), rows[0])
+        if r0.get("sigma") is not None:
+            print(f"shot noise sigma {100 * r0['sigma']:.3f}% from {r0['dof']} OFF-OFF pairs of {r0['pool_runs']} run(s); "
+                  f"band +-{100 * r0['band']:.2f}% (t at {ALPHA_FW}/{2 * max(len(rows), 1)}, dof {r0['dof']}, x sqrt(3/2))")
+    print("| comparison | OFF before | ON | OFF after | raw ON vs OFF | exposure ON / OFF | ON vs mean OFF | predicted | band | old OFF-pair rule | verdict |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|")
+    for e in rows:
         if e["verdict"] == "INCOMPLETE":
-            print(f"| {e['on']} | {e['values']} | | | | | | | INCOMPLETE |")
+            print(f"| {e['key']} | {e['values']} | | | | | | | | | INCOMPLETE |")
+            failed.append(f"energy {e['key']}: INCOMPLETE")
             continue
         va, vo, vb = e["values"]
-        ex = "unknown (raw verdict)" if e["exposure"] is None else f"{e['exposure']:.4f}"
-        print(f"| {e['on']} vs {e['a']}/{e['b']} | {va:.5f} | {vo:.5f} | {vb:.5f} | {100 * e['raw_d']:+.2f}% | {ex} | "
-              f"{100 * e['d']:+.2f}% | {100 * e['s']:.2f}% | "
-              f"{e['verdict']}{'' if e['nonfinite'] == 0 else ', nonfinite %d' % e['nonfinite']} |")
+        old = "within" if abs(e["d"]) <= e["s"] else ("brighter: explain" if e["d"] > 0 else "DARKER")
+        pp = "none" if e["p"] is None else f"{100 * e['p']:+.2f}%"
+        band = "n/a" if e["band"] is None else f"{100 * e['band']:.2f}%"
+        ex = "unknown (raw)" if e["exposure"] is None else f"{e['exposure']:.4f}"
+        print(f"| {e['key']} vs {e['a']}/{e['b']} | {va:.5f} | {vo:.5f} | {vb:.5f} | {100 * e['raw_d']:+.2f}% | {ex} | {100 * e['d']:+.2f}% | {pp} | {band} | "
+              f"{old} (spread {100 * e['s']:.2f}%) | {e['verdict']}{'' if e['nonfinite'] == 0 else ', nonfinite %d' % e['nonfinite']} |")
+        if not e["ok"]:
+            failed.append(f"energy {e['key']}: {e['verdict']}")
+    steps = [l for l in run.labels if l.startswith("shot-step-")]
+    if steps:
+        vals = {l: run.scene_colour(l) for l in ["shot-off-a"] + steps + ["shot-on"]}
+        ok = [(l, v) for l, v in vals.items() if v and not isinstance(v[0], str)]
+        norm = bool(ok) and all(v[2] for _, v in ok)   # exposure-normalised when every shot has its probe
+        seq = [(l, v[0] / v[2] if norm else v[0]) for l, v in ok]
+        if len(seq) > 1:
+            print(f"step increments ({'exposure-normalised' if norm else 'raw'}; each cumulative step minus the previous one, relative): " + ", ".join(
+                f"{b[0]} {100 * (b[1] - a[1]) / a[1]:+.2f}%" for a, b in zip(seq, seq[1:])))
 
     st = stages(run)
     if st:
@@ -391,11 +662,15 @@ def report(run: Run):
             print(f"- instanced rows (key {m.group(1)}): wind {m.group(2)} rows {m.group(3)} tri, 2S {m.group(4)} rows {m.group(5)} tri")
         m = run.last_in(label, DIAG["instanced clip"])
         if m:
-            print(f"- instanced clip: rejected {m.group(1)} = {m.group(2)}% of lookups (gate < 0.04%)")
+            print(f"- instanced clip: rejected {m.group(1)} = {m.group(2)}% of lookups (gate < 0.04% in every window: the job's expect_every)")
 
-    print("\n### Capacity over the run (all 0 expected)")
+    print("\n### Capacity over the run (all 0 expected; above 0 fails)")
     for name, v, n in run.capacity():
         print(f"- {name}: {v if isinstance(v, str) else fmt(v, 2)} (max of {n} lines)")
+        if isinstance(v, float) and v > 0:
+            failed.append(f"capacity {name} {v:.2f}")
+    print("\nGATES: " + ("all hold" if not failed else "FAIL: " + "; ".join(failed)))
+    return failed
 
 
 def main(argv=None):
@@ -405,6 +680,7 @@ def main(argv=None):
     ap.add_argument("--queue-logs", type=Path, default=main_checkout() / "captures" / "queue" / "logs")
     ap.add_argument("--captures-root", type=Path, default=None)
     ap.add_argument("--plan", type=Path, default=None, help="plan json (default: from the job of the log's name)")
+    ap.add_argument("--pool", choices=("save", "run"), default="save", help="OFF noise from every lean run of the save, or this run only")
     a = ap.parse_args(argv)
     logs = list(a.logs)
     if not logs:
@@ -417,9 +693,10 @@ def main(argv=None):
                 print(f"{name}: no log in {a.queue_logs}")
     if not logs:
         return 1
+    failed = 0
     for log in logs:
-        report(Run(log, a.captures_root, a.plan))
-    return 0
+        failed += bool(report(Run(log, a.captures_root, a.plan), a.queue_logs, a.pool))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

@@ -60,7 +60,8 @@
   "FAILED, keeping previous",
   "compile call failed",
   "RR creation failed",
-  "RR evaluate failed"
+  "RR evaluate failed",
+  "\\[bvh\\] audits while the camera moved: \\d+ ok, [1-9]\\d* failed"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",

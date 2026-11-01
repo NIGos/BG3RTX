@@ -113,6 +113,16 @@
     "cost-on"
    ],
    "min": 1
+  },
+  {
+   "name": "compose ran on most frames, every complete key-on window (was 3 of 120 in m5w3 070927)",
+   "select": "\\[water\\] compose \\(\\d+ frames, ",
+   "match": "\\[water\\] compose \\(120 frames, (1[01]\\d|120) composed, [0-9.]+ passes/frame\\): records [1-9][0-9.]*/frame, owned (?!0\\.00%)[0-9.]+%",
+   "windows": [
+    "precheck-shadows-on",
+    "cost-on"
+   ],
+   "min": 1
   }
  ]
 }

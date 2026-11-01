@@ -1,0 +1,9 @@
+{
+ "_rule": "Predicted relative change of the scene colour before post (5c3fdabc float mean) of each ON shot against its OFF neighbours, written and committed BEFORE the run (tools/m4_promotion_gate.py; a later commit is post hoc and does not pass). null: no change predicted.",
+ "gf1-camp-fg2": {
+  "shot-on": {"predicted": null, "source": "none written before 141602", "written": null}
+ },
+ "gf2-s8-fg2": {
+  "shot-on": {"predicted": -0.02, "source": "coordinator's pre-run expectation for gi_far at S8 (native ambient replaced under roofs), recorded post hoc by the gate audit 2026-11-01; measured 141905: +2.87%", "written": "2026-11-01"}
+ }
+}
