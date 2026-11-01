@@ -92,6 +92,60 @@ int main(int argc, char** argv) {
   CHECK(fs_ids(0x99c1fcef82b253c1ull) == &kFsIds[1]);   // S8 ExtraWaves
   CHECK(fs_ids(0xc4e92ccdb08dd777ull) == &kFsIds[2]);   // S8 NoCaustics_Waves
 
+  // 4b. The composition's algebra against the FS's end of main (ISSUE 3 of m5w3: is A L / B = 0.28
+  //     a unit factor?). A and B are the exact derivative of the FS colour along its probe term:
+  //     replacing k Sp by L in the FS gives what the composition gives, for any L; L = k Sp is the
+  //     identity. So the composed change is a T X E (L - k Sp), with no free factor (no k in A, no
+  //     second E, no exposure). Values: the S8 water's ranges (F0 0.0196, k = 9.8e-5 * 100, the
+  //     log's mean C ~ 0.3 and B ~ 0.014), plus extremes.
+  {
+    const FsTerms base{0.25f, 0.04f, 0.3f, 2.2f, 0.09f, 0.0101725f, 0.93f, 0.002f, 0.97f, 0.003f, 0.8f};
+    for (float a : {0.0f, 0.35f, 0.8f, 1.0f})
+      for (float e : {0.0196f, 0.09f, 0.6f})
+        for (float k : {0.0101725f, 1.0f})
+          for (float lscale : {0.0f, 0.28f, 1.0f, 3.0f}) {
+            FsTerms f = base;
+            f.a = a, f.e = e, f.k = k;
+            const float c = fs_colour(f);
+            const float A = record_a(f), B = record_b(f);
+            const float L = lscale * f.k * f.sp;   // the traced radiance, in the lighting's units
+            FsTerms g = f;
+            g.sp = L / f.k;                          // the FS with the probe radiance that L means
+            const float want = fs_colour(g);
+            const float got = compose(c, A, L, B);
+            const float tol = 4e-6f * (1.0f + std::fabs(c) + B);
+            CHECK(std::fabs(got - (want > 0.0f ? want : 0.0f)) <= tol);
+            if (lscale == 1.0f) CHECK(std::fabs(got - c) <= tol);   // a ray that sees the probe: no change
+            CHECK(std::fabs((A * L) / (B > 0.0f ? B : 1.0f) - (B > 0.0f ? lscale : 0.0f)) <= 1e-4f);
+            // The FS's dC/dSp, numerically (C is linear in Sp: a full step is exact): a T X k E = B / Sp
+            // (B carries k, A does not).
+            FsTerms h = f;
+            h.sp = f.sp * 2.0f;
+            const float dcdsp = (fs_colour(h) - c) / (h.sp - f.sp);
+            CHECK(std::fabs(dcdsp - B / f.sp) <= 2e-3f * (B / f.sp) + 1e-6f);
+            CHECK(std::fabs(dcdsp - A * f.k) <= 2e-3f * (A * f.k) + 1e-6f);
+          }
+    // m5w3 per composed pixel: B 0.01383, A L 0.00452: L / (k Sp) = 0.327 is what the hits saw.
+    CHECK(ratio_bin(0.00452f, 0.01383f) == kCsRatioLow);
+    CHECK(ratio_bin(1.0f, 1.0f) == kCsRatioMid && ratio_bin(0.5f, 1.0f) == kCsRatioMid && ratio_bin(2.0f, 1.0f) == kCsRatioMid);
+    CHECK(ratio_bin(2.01f, 1.0f) == kCsRatioHigh && ratio_bin(1.0f, 0.0f) == 0u);
+  }
+
+  // 4c. The statistics words (shaders/rt/water_compose.hlsl mirrors them): six tiers after the ray
+  //     count, before the skin / clamped words; the m5w3 shader wrote tier k at 6 + k (tier 1 into
+  //     the ray count).
+  CHECK(kCsTier1 == kCsRays + 1 && kCsTier1 + 5 < kCsSkin && kCsSkin + 1 == kCsClamped);
+  CHECK(kCsComposed < kCsRatioLow && kCsRatioHigh < 32u);
+
+  // 4d. Which lighting a forward water pass composes with (BUG 1 of m5w3: 117 of 120 passes refused).
+  CHECK(lighting_use(0, 100) == LightingUse::kNone);           // no lighting yet, or the last one skipped
+  CHECK(lighting_use(100, 100) == LightingUse::kThisFrame);    // lighting recorded first
+  CHECK(lighting_use(99, 100) == LightingUse::kEarlier);       // the pass recorded before the lighting's flush
+  CHECK(lighting_use(100 - kLightingLagFrames, 100) == LightingUse::kEarlier);   // 2 presents per app frame + 1
+  CHECK(lighting_use(100 - kLightingLagFrames - 1, 100) == LightingUse::kNone);  // lighting stopped
+  CHECK(lighting_use(101, 100) == LightingUse::kNone);         // never from the future
+  CHECK(kLightingLagFrames == 2 + 1);
+
   // 5. The dumped modules in the given directory: every table entry whose dump is there.
   unsigned patched = 0;
   for (const FsIds& fi : kFsIds) {

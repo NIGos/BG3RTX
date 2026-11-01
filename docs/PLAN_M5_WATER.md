@@ -176,12 +176,57 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
   one ulp of B10G11R11, derived). The traced path's own fog (water to the hit) is not applied (as D-RF).
 - Limits: the variants exist only if the key was on when the water pipelines were created; 160 MB record
   buffer (`rt_water_compose_mb`, 5.2 Mpx); shaderInt64 required (`sharc_device=1`); the pass must have an
-  audited water FS first or last or a supported water draw (as the M5.2 views); compose needs this frame's lighting recorded first.
+  audited water FS first or last or a supported water draw (as the M5.2 views); compose needs a lighting
+  of this or the previous app frame (after m5w3, below).
 - Log: `[water] compose variants` (layer), `[water] compose` (records, owned, kept, tiers, unresolved share),
   `compose energy` (mean C, B removed, A L added, mean delta absolute and % of C), `compose GPU` (copy +
   compose dispatches). Offline: 73 CTests (+water_compose_test with the dumped FS), 745 shaders, ordinary
   SPIR-V byte-identical (no existing shader changed), QA detectors, dry run of `m5w3`.
 - Live: job `m5w3` (S8 Water Queens House, compose on at launch, OFF/ON/OFF PNGs, rt_debug 25, cost), after `m5w2`.
+
+#### M5.3 after m5w3 (S8, 2026-11-01, branch worktree-agent-a5b61ff5fff911842, offline; READY_FOR_LIVE)
+m5w3 deciding lines: `compose variants: FS patched 4 ... water draws on a variant 174, without 0` (patching
+works); `compose (120 frames, 3 composed, 1.00 passes/frame) ... passes without this frame's lighting 117`;
+`compose energy: composed 12.75% of owned: probe removed (B) 0.01383, traced added (A L) 0.00452`; compose
+GPU 0.022 ms, reflections 0.12 ms.
+- BUG 1 (3 of 120 frames composed). run_post, and so the lighting copy and the stash, is recorded when the
+  lighting's command buffer ends (core/gi.cpp `flush`); the game records the forward water pass in another
+  command buffer, mostly before that. The pass required the stash of the same frame index and refused 117 of
+  120. The GPU runs the frame's lighting before its forward pass in either case, so the compose now reads
+  only GPU-current lighting data: one radiance/depth pair (already) and ONE camera block (was per slot) that
+  each copy overwrites; the scene TLAS + set is the stash's when it is this frame's, else the pass stamps the
+  current pair itself (`rt_scene`, `rt_scene_set` only for a build of this frame: never a wait). The stash
+  (push constants, statistics slot) may be the previous lighting's: `lighting_use` in water_compose.h,
+  lag 3 frame indices (2 presents per app frame with FG + 1 between the two recordings). A lighting that
+  skips the copy clears the stash. Residual: if the frame's own lighting skips AFTER the pass was recorded,
+  that pass composes with the previous frame's radiance and camera (a consistent pair, one frame old).
+  Log tail: `passes on this frame's lighting N, on the previous lighting M, refused: no recent lighting N,
+  no scene N; newer scene taken N`.
+- ISSUE 2 was a statistics bug. The shader counted tier k at word 6 + k: tier 1 into the ray count and
+  every logged tier was the next one. Corrected from the same line (rays = traced + tier 1): screen hit
+  15.1%, hidden 6.6%, off screen 2.2%, sky miss 76.1% of traced rays, the M5.2 split (14.8 / 5.9 / 1.6 /
+  77.7). Fixed (words 8..13, `kCsTier1`, test). Misses already keep the probe, which is the game's own
+  environment at R (the TLAS has no sky and stops at rf_tmax): that is "the game's sky" for them. Tier (b)
+  for hidden + off-screen hits (8.8% of rays) is not feasible in the compose pass: rf_hit_shade needs the
+  game's lighting set 1 (query_set at the lighting dispatch), the D-LS sun set and the material set from
+  `rt_hit_material_use`, all bound in the lighting's command buffer, and the forward pass is recorded
+  before it (BUG 1). Plan, next step (`rt_water_hit_shade=0`): at the lighting (run_post, after water_rf),
+  trace the previous frame's records (N, t; static water: P from the camera shift as M5.2) and shade their
+  tier 2/3 hits with `native_hit_lit` (TRACK_D_REFLECTIONS 14) into an L_b image with the hit's t; the
+  compose takes L_b where its own ray's hit distance matches (depth_tol of the hit) and the material is
+  qualified, else the probe. Gate as rf_hit_shade: the tier (a) L_b / L_a check on water rays first.
+- ISSUE 3 (A L / B = 0.33 where composed) is not a unit factor. The algebra is exact: A = a T X E,
+  B = a T X k Ks are dC/dKs of the FS's end of main, so the change is a T X E (L - k Sp) (unit test 4b with
+  the FS model: composed = the FS with k Sp replaced by L, for any L; L = k Sp is the identity). Units: the
+  FS's k is set 2 b0 `_m0[0]` * 100, the pre-exposure (the same buffer scales its light colours), and the
+  lighting's probe term is S * s1b13[0] * 100 with the same value (rrpost probe: b0 = b1 = s1b13); E is the
+  FS's own LUT value in both A and Ks. So the composed hits are a third as bright as the probe's radiance in
+  that direction: tier 1 means on-screen geometry, where the global probe holds sky or a distant capture.
+  Physically justified darkening (the probe leak); mean delta over owned -0.32% of mean C. The new line
+  `compose ratio A L / B over N composed px: below 0.5 X%, 0.5..2.0 Y%, above 2.0 Z%` decides it live: a
+  unit mismatch puts every pixel in one bin, occlusion spreads them with mass near 1 (diagnostic split).
+- Expect lines (m5w3): `compose (120 frames, (1[01]\d|120) composed`: with the fix every lighting slot
+  gets a pass; 100 allows a slot without one where the recording order flips between frames.
 
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
 ### M5.5 Transmission and absorption, only after medium and material mapping are proven.

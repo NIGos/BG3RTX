@@ -19,11 +19,15 @@
 // The patched FS stores its probe-term factors per pixel (common/water_compose.h). Here:
 //  - compose_at_lighting (in water_rf, after the reflection dispatches): the record buffer's
 //    header (pitch), this frame's lit radiance / depth / class and camera constants copied
-//    (water_copy), and the stash the water passes use;
+//    (water_copy, into one image pair and ONE camera block the GPU overwrites each frame), and
+//    the stash the water passes use (push constants, statistics slot);
 //  - compose_at_pass_end (water_on_pass_end, every forward pass whose first or last FS is
-//    audited water or that recorded a supported water draw, this frame's lighting only): water_compose replaces the FS's probe term with the
-//    traced reflection where it resolves, C' = max(C + A L - B, 0); rt_debug 25 the delta view;
-//  - "[water] compose", "compose energy", "compose GPU" every rt_timing_frames.
+//    audited water or that recorded a supported water draw, with this frame's lighting stash or
+//    the previous one's: the pass is mostly recorded before the lighting is flushed, and the GPU
+//    runs the lighting first either way; common/water_compose.h lighting_use): water_compose
+//    replaces the FS's probe term with the traced reflection where it resolves,
+//    C' = max(C + A L - B, 0); rt_debug 25 the delta view;
+//  - "[water] compose", "compose energy", "compose ratio", "compose GPU" every rt_timing_frames.
 // Key off: nothing is allocated, dispatched or bound; core/gi.cpp only tests the key.
 #include <algorithm>
 #include <cmath>
@@ -361,7 +365,10 @@ constexpr uint32_t kMaxComposePasses = 4;                 // timed compose dispa
 constexpr uint32_t kCQ = 2 + 2 * kMaxComposePasses;      // timestamps per frame slot
 constexpr uint32_t kCStatWords = 32;
 constexpr VkDeviceSize kCStatBytes = 256, kCParamBytes = 256, kCCamBytes = 768;   // cam at 0, vp at 512
-constexpr VkDeviceSize kCVpOff = 512, kCSlotBytes = kCStatBytes + kCParamBytes + kCCamBytes;
+constexpr VkDeviceSize kCVpOff = 512, kCSlotBytes = kCStatBytes + kCParamBytes;
+// ONE camera block after the slots (common/water_compose.h lighting_use): every frame's copy
+// overwrites it, the compose reads the camera of the lighting the GPU ran last, as wRad / wDep.
+constexpr VkDeviceSize kCCamOff = kRing * kCSlotBytes, kCHostBytes = kCCamOff + kCCamBytes;
 
 struct ComposeParams {   // shaders/rt/water_compose.hlsl ComposeParams
   uint32_t a[4];         // pitch, capacity, rt_debug, flags (bit 0 apply)
@@ -400,7 +407,10 @@ struct CWindow {
   uint64_t w[kCStatWords] = {};
   double sumC = 0, sumB = 0, sumAL = 0, sumPos = 0, sumNeg = 0, sumBown = 0;
   std::vector<float> ms;
-  uint64_t no_buffer = 0, layout = 0, size = 0, not_this_frame = 0, untimed = 0;
+  uint64_t no_buffer = 0, layout = 0, size = 0, untimed = 0;
+  // Passes: on this frame's lighting stash, on the previous lighting's (the pass recorded first),
+  // refused (no recent lighting, no scene to stamp), and a newer scene than the stash's taken.
+  uint64_t this_frame = 0, earlier = 0, no_lighting = 0, no_scene = 0, newer_scene = 0;
 };
 CWindow g_cwin;
 
@@ -452,13 +462,13 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes) {
   VkDevice dev = host->device;
   if (!g_chost) {
     void* m = nullptr;
-    if (!host->alloc_host_buffer(kRing * kCSlotBytes,
+    if (!host->alloc_host_buffer(kCHostBytes,
                                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
                                      VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                  &g_chost, &g_chost_mem, &m))
       return false;
     g_cmap = static_cast<uint8_t*>(m);
-    std::memset(g_cmap, 0, size_t(kRing * kCSlotBytes));
+    std::memset(g_cmap, 0, size_t(kCHostBytes));
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
     qi.queryCount = kRing * kCQ;
@@ -537,19 +547,24 @@ void maybe_log_compose() {
   if (++g_cwin.frames < every) return;
   CWindow& W = g_cwin;
   const uint64_t* w = W.w;
-  const double rec = double(w[1]), own = double(w[2]), rays = double(w[7]), comp = double(w[28]);
+  using namespace bg3::water;
+  const double rec = double(w[1]), own = double(w[2]), rays = double(w[kCsRays]), comp = double(w[kCsComposed]);
+  const uint32_t t1 = kCsTier1;
   host->log("[water] compose (%llu frames, %llu composed, %.2f passes/frame): records %.0f/frame, owned %.2f%% (not owned "
             "%.2f%%), invalid %llu, kept: rough %.2f%%, below the surface %.2f%%; rays %.0f/frame: screen hit (composed) "
             "%.1f%%, hidden %.1f%% (skin %llu), off screen %.1f%%, miss %.1f%%, aborted %llu, invalid %llu; unresolved "
             "(probe kept) %.2f%% of owned; clamped %llu; skipped frames: no record buffer %llu, layout %llu, size %llu; "
-            "passes without this frame's lighting %llu",
+            "passes on this frame's lighting %llu, on the previous lighting %llu, refused: no recent lighting %llu, no "
+            "scene %llu; newer scene taken %llu",
             (unsigned long long)W.frames, (unsigned long long)W.ran, W.ran ? double(W.passes) / double(W.ran) : 0.0,
             W.ran ? rec / double(W.ran) : 0.0, pct(own, rec), pct(rec - own, rec), (unsigned long long)w[4],
-            pct(double(w[5]), own), pct(double(w[6]), own), W.ran ? rays / double(W.ran) : 0.0, pct(double(w[8]), rays),
-            pct(double(w[9]), rays), (unsigned long long)w[14], pct(double(w[10]), rays), pct(double(w[11]), rays),
-            (unsigned long long)w[12], (unsigned long long)w[13], pct(own - comp, own), (unsigned long long)w[15],
+            pct(double(w[5]), own), pct(double(w[6]), own), W.ran ? rays / double(W.ran) : 0.0,
+            pct(double(w[t1]), rays), pct(double(w[t1 + 1]), rays), (unsigned long long)w[kCsSkin],
+            pct(double(w[t1 + 2]), rays), pct(double(w[t1 + 3]), rays), (unsigned long long)w[t1 + 4],
+            (unsigned long long)w[t1 + 5], pct(own - comp, own), (unsigned long long)w[kCsClamped],
             (unsigned long long)W.no_buffer, (unsigned long long)W.layout, (unsigned long long)W.size,
-            (unsigned long long)W.not_this_frame);
+            (unsigned long long)W.this_frame, (unsigned long long)W.earlier, (unsigned long long)W.no_lighting,
+            (unsigned long long)W.no_scene, (unsigned long long)W.newer_scene);
   const double meanC = own > 0 ? W.sumC / own : 0.0, delta = W.sumPos - W.sumNeg;
   host->log("[water] compose energy: mean C %.5f over owned; composed %.2f%% of owned: probe removed (B) %.5f, traced "
             "added (A L) %.5f, delta %+.5f (+%.5f / -%.5f) per composed pixel; mean delta over owned %+.6f = %+.3f%% of mean "
@@ -558,6 +573,14 @@ void maybe_log_compose() {
             comp > 0 ? delta / comp : 0.0, comp > 0 ? W.sumPos / comp : 0.0, comp > 0 ? W.sumNeg / comp : 0.0,
             own > 0 ? delta / own : 0.0, meanC > 0 && own > 0 ? 100.0 * (delta / own) / meanC : 0.0,
             own > 0 ? W.sumBown / own : 0.0);
+  // L / (k Sp) per composed pixel (water_compose.h ratio_bin): one bin = a unit factor; a spread
+  // with mass near 1 = the probe's error (sky where the hit geometry is), the physical case.
+  const double rbins = double(w[kCsRatioLow] + w[kCsRatioMid] + w[kCsRatioHigh]);
+  host->log("[water] compose ratio A L / B over %.0f composed px: below %.1f %.1f%%, %.1f..%.1f %.1f%%, above %.1f %.1f%%; "
+            "ratio of the means %.3f",
+            rbins, double(kRatioLow), pct(double(w[kCsRatioLow]), rbins), double(kRatioLow), double(kRatioHigh),
+            pct(double(w[kCsRatioMid]), rbins), double(kRatioHigh), pct(double(w[kCsRatioHigh]), rbins),
+            W.sumB > 0 ? W.sumAL / W.sumB : 0.0);
   std::vector<float> ms = W.ms;
   std::sort(ms.begin(), ms.end());
   const double med = ms.empty() ? 0.0 : double(ms[ms.size() / 2]);
@@ -622,10 +645,9 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
     vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ);
   }
   const VkImageLayout G = VK_IMAGE_LAYOUT_GENERAL;
-  const VkDeviceSize cam_off = cslot_off(slot) + kCStatBytes + kCParamBytes;
   VkDescriptorBufferInfo bufs[3] = {{in.cam.buffer, in.cam.offset, in.cam.range},
                                     {in.vp.buffer, in.vp.offset, in.vp.range},
-                                    {g_chost, cam_off, kCCamBytes}};
+                                    {g_chost, kCCamOff, kCCamBytes}};
   VkDescriptorImageInfo imgs[6] = {{VK_NULL_HANDLE, in.mat.view, in.mat.layout}, {VK_NULL_HANDLE, in.dep.view, in.dep.layout},
                                    {VK_NULL_HANDLE, in.dif.view, G},              {VK_NULL_HANDLE, in.spe.view, G},
                                    {VK_NULL_HANDLE, g_rad.view, G},               {VK_NULL_HANDLE, g_dep.view, G}};
@@ -663,13 +685,45 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
 }
 
 // At the end of a forward water pass (outside it): C' = max(C + A L - B, 0) where resolved.
+// The pass is most often recorded before this frame's lighting is flushed (core/gi.cpp: run_post
+// at the end of the lighting's command buffer): it binds what the GPU makes current, not this
+// frame's stash (common/water_compose.h lighting_use).
 void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
+  using namespace bg3::water;
   const VkDeviceFuncs& vk = *host->vk;
-  if (g_st.frame != host->frame_index() || !g_st.frame) {
-    ++g_cwin.not_this_frame;
+  const uint64_t now = host->frame_index();
+  const LightingUse use = lighting_use(g_st.frame, now);
+  if (use == LightingUse::kNone) {
+    ++g_cwin.no_lighting;
     return;
   }
   if (p->width != g_st.w || p->height != g_st.h || !g_compose.p || !g_rad.view || !g_dep.view) return;
+  // The scene pair. The stash's was handed out (stamped) for the frame the lighting recorded in;
+  // a pass of a later frame stamps the current pair itself, or the slot could be rebuilt before
+  // this command buffer runs. rt_scene never waits; rt_scene_set waits only for a scene older than
+  // this frame, so it is called only when the current build is this frame's.
+  VkAccelerationStructureKHR tlas = g_st.tlas;
+  VkDescriptorSet alpha = g_st.alpha;
+  if (use != LightingUse::kThisFrame) {
+    uint64_t built = 0;
+    VkAccelerationStructureKHR cur = VK_NULL_HANDLE;
+    if (!host->rt_scene || !host->rt_scene(&cur, &built) || !cur) {
+      tlas = VK_NULL_HANDLE;
+    } else if (cur != g_st.tlas) {
+      alpha = VK_NULL_HANDLE;
+      if (built >= now && host->rt_scene_set && host->rt_scene_set(&cur, &alpha, &built) && alpha) {
+        tlas = cur;
+        ++g_cwin.newer_scene;
+      } else {
+        tlas = VK_NULL_HANDLE;
+      }
+    }
+  }
+  if (!tlas || !alpha) {
+    ++g_cwin.no_scene;
+    return;
+  }
+  ++(use == LightingUse::kThisFrame ? g_cwin.this_frame : g_cwin.earlier);
   const uint32_t slot = g_st.slot;
   const uint32_t pass = g_cpasses[slot]++;
   const VkImageLayout from = p->color_layouts[0] == VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -680,9 +734,8 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   if (from != G) image_barrier(cmd, p->color_images[0], from, G, kAll, kCS);
   if (g_cqp && pass < kMaxComposePasses) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 2 + pass * 2);
   else ++g_cwin.untimed;
-  const VkDeviceSize cam_off = cslot_off(slot) + kCStatBytes + kCParamBytes;
-  VkDescriptorBufferInfo bufs[6] = {{g_chost, cam_off, 400},
-                                    {g_chost, cam_off + kCVpOff, 16},
+  VkDescriptorBufferInfo bufs[6] = {{g_chost, kCCamOff, 400},
+                                    {g_chost, kCCamOff + kCVpOff, 16},
                                     {g_rts, 0, kRtStatsBytes},
                                     {g_chost, cslot_off(slot) + kCStatBytes, sizeof(ComposeParams)},
                                     {g_chost, cslot_off(slot), kCStatBytes},
@@ -691,7 +744,7 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
                                    {VK_NULL_HANDLE, p->color_views[0], G}};
   VkWriteDescriptorSetAccelerationStructureKHR as{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
   as.accelerationStructureCount = 1;
-  as.pAccelerationStructures = &g_st.tlas;
+  as.pAccelerationStructures = &tlas;
   const struct { uint32_t b; VkDescriptorType t; const VkDescriptorBufferInfo* bi; const VkDescriptorImageInfo* ii; } src[10] = {
       {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufs[0], nullptr}, {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufs[1], nullptr},
       {5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, &imgs[0]},  {18, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, nullptr},
@@ -710,7 +763,7 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   }
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_compose.p);
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 0, 10, wr);
-  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 1, 1, &g_st.alpha, 0, nullptr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 1, 1, &alpha, 0, nullptr);
   vk.CmdPushConstants(cmd, g_clayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, uint32_t(g_st.push.size()), g_st.push.data());
   vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);
   if (g_cqp && pass < kMaxComposePasses)
@@ -754,6 +807,9 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   const uint64_t now = host->frame_index();
   if (now == g_last_frame) return;   // once per frame (the first lighting)
   g_last_frame = now;
+  // A lighting that does not copy leaves the GPU copy a frame stale: no pass composes with it
+  // (common/water_compose.h lighting_use).
+  auto skip = [] { g_st.frame = 0; maybe_log(); };
   using namespace bg3::water;
   const Scene* pub = static_cast<const Scene*>(host->persist(kSceneKey, sizeof(Scene)));
   Scene sc{};
@@ -761,7 +817,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   const Usable u = usable(rd, sc, now);
   if (u != kUsable) {
     ++g_win.skip[u];
-    return maybe_log();
+    return skip();
   }
   // The ordinary rt_common.hlsli variant only: these change the alpha set or the scene's
   // primitives (core/gi.cpp Pipe variants); counted, never traced with the wrong layout.
@@ -769,7 +825,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
       host->cfg_int("rt_native_hair", 0) || host->cfg_int("rt_hair_physical_origin", 0) ||
       host->cfg_int("rt_cascade_casters", 0)) {
     ++g_win.skip_variant;
-    return maybe_log();
+    return skip();
   }
   VkDescriptorSetLayout alpha_layout = VK_NULL_HANDLE;
   VkDescriptorSet alpha_any = VK_NULL_HANDLE;
@@ -777,11 +833,11 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
       !ensure_buffers() || !ensure_layouts(alpha_layout, in.push_bytes)) {
     ++g_win.skip_layout;
     if (!g_failed_logged) g_failed_logged = true, host->log("[water] reflections unavailable (layout, buffers or pipelines)");
-    return maybe_log();
+    return skip();
   }
   if (!in.w || !in.h || !ensure_images(in.w, in.h)) {
     ++g_win.skip_size;
-    return maybe_log();
+    return skip();
   }
   const VkDeviceFuncs& vk = *host->vk;
   const uint32_t slot = g_slot;

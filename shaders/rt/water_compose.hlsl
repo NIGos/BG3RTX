@@ -15,7 +15,10 @@
 //   (gDiffuse + gSpecular, the M5.2 tier (a) source), its depth and material class, and the
 //   lighting's camera constants, into images / a buffer of ours, so the composition at the end
 //   of the forward water pass does not depend on the game's lighting targets still being
-//   intact then. Thread (0,0) copies the camera (CameraCB, ViewportCB) into cCam.
+//   intact then. Thread (0,0) copies the camera (CameraCB, ViewportCB) into cCam: one block
+//   (not per frame slot) that every frame's copy overwrites, so the compose reads the camera of
+//   the lighting the GPU ran last, the same lighting as wRad / wDepOut, whatever the order the
+//   CPU recorded the lighting and the forward pass in (core/water.cpp, common/water_compose.h).
 // water_compose (the end of each forward water pass, core/water.cpp water_on_pass_end): per
 //   pixel with a record (and the record's colour IS the target's: overlapping water fragments
 //   store in any order, the attachment keeps the last), one mirror ray along reflect(-V, N)
@@ -29,7 +32,7 @@
 //   (kept), 7 rays, 8..13 tiers 1..6 (as water_reflect), 14 skin rejections, 15 clamped at 0,
 //   16/17 sum lum(C) over owned, 18/19 sum lum(B) over composed, 20/21 sum lum(A L) over composed,
 //   22/23 sum positive lum(C' - C), 24/25 sum negative |lum(C' - C)|, 26/27 sum lum(B) over owned,
-//   28 composed; sums x 4096 (64-bit).
+//   28 composed, 29/30/31 composed with A L / B below 0.5 / 0.5..2 / above 2; sums x 4096 (64-bit).
 // Key off: nothing of this runs (no ordinary shader includes this file).
 #include "../gi/gi_common.hlsli"
 #include "rt_common.hlsli"
@@ -178,7 +181,9 @@ void water_compose(uint3 tid : SV_DispatchThreadID) {
   cstat(5, valid && !smooth);
   cstat(6, valid && smooth && !above);
   cstat(7, trace && tier != 6u);
-  [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(6u + k, trace && tier == k);
+  // Tiers 1..6 at words 8..13 (common/water_compose.h kCsTier1). Was 6 + k: tier 1 went into the
+  // ray count (7) and every logged tier was the next one (m5w3: "off screen 66%" were sky misses).
+  [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(7u + k, trace && tier == k);
   cstat(14, trace && tier == 2u && skin);
   cstat(15, composed && any(Cu < 0.0));
   csum64(16, lum(Ct), own);
@@ -188,6 +193,13 @@ void water_compose(uint3 tid : SV_DispatchThreadID) {
   csum64(24, max(-d, 0.0), composed);
   csum64(26, lum(B), valid);
   cstat(28, composed);
+  // A L / B per composed pixel (common/water_compose.h ratio_bin): L / (k Sp), the traced radiance
+  // over the probe's in that direction. A unit mismatch is one factor for every pixel (one bin);
+  // occlusion of the probe's sky by the hit geometry spreads it.
+  const float rb = lum(B), ra = lum(A * L), rr = rb > 0.0 ? ra / rb : 0.0;
+  cstat(29, composed && rb > 0.0 && rr < 0.5);
+  cstat(30, composed && rb > 0.0 && rr >= 0.5 && rr <= 2.0);
+  cstat(31, composed && rb > 0.0 && rr > 2.0);
   if (!has) return;
   // rt_debug 25, over every record of this pass (exact codes, no tonemap of ours):
   //   composed: green = the relative brightening d / lum(C), red = the relative darkening;
