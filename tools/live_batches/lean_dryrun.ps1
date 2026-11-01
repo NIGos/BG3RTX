@@ -12,7 +12,10 @@
 # Scratch root only (outside any checkout); the receipt written there is fake and has no authority.
 param([Parameter(Mandatory)][string]$Batch, [string]$Receipt = '',
       [string]$Out = '', [double]$MaxMinutes = 20, [double]$MaxMB = 2048,
-      [switch]$Independent, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10)
+      [switch]$Independent, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force)
+# Reuse: a passed check whose inputs (this script, the batch folder, scripts\*.ps1 / *.py, the parameters
+# but -Out) are byte-identical to a previous pass prints that pass's lines and exits 0 without the fake
+# queue runs (captures\.cache\lean_dryrun-<batch>.json). -Force always reruns.
 $ErrorActionPreference = 'Stop'
 $here = Join-Path $PSScriptRoot $Batch
 if (-not (Test-Path $here)) { throw "no batch folder $here" }
@@ -22,8 +25,21 @@ $scripts = Join-Path $repo 'scripts'
 . (Join-Path $scripts 'camera-plan.ps1')
 . (Join-Path $scripts 'queue-permission.ps1')
 . (Join-Path $scripts 'queue-window-mode.ps1')
+. (Join-Path $scripts 'longrun.ps1')
+$inputs = @($PSCommandPath) + @(Get-ChildItem $here -Recurse -File | ForEach-Object FullName) +
+  @(Get-ChildItem $scripts -File -Include '*.ps1', '*.py' -Recurse | ForEach-Object FullName)
+$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB")
+$reuse = if ($Force) { $null } else { Get-LongrunReuse "lean_dryrun-$Batch" $inputHash }
+if ($reuse) {
+  foreach ($l in @($reuse.lines)) { Write-Host $l }
+  Write-Host "reused: inputs unchanged since the pass of $($reuse.utc) UTC (no fake queue runs; -Force reruns)"
+  Write-Host 'all checks passed'
+  exit 0
+}
 $fail = 0
-function Check([string]$what, [bool]$ok) { Write-Host ("{0} {1}" -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $what); if (-not $ok) { $script:fail++ } }
+$said = New-Object System.Collections.Generic.List[string]
+function Say([string]$line) { Write-Host $line; $script:said.Add($line) }
+function Check([string]$what, [bool]$ok) { Say ("{0} {1}" -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $what); if (-not $ok) { $script:fail++ } }
 function Apply-Set($state, [string]$set) {
   foreach ($a in ($set -split ',' | Where-Object { $_ })) { $kv = $a -split '=', 2; if ($kv.Count -ne 2) { return $false }; $state[$kv[0]] = $kv[1] }
   $true
@@ -82,7 +98,7 @@ foreach ($job in $jobs) {
 }
 $min = ($totalSec + $jobs.Count * $LoadSec) / 60.0
 $mb = $totalTraces * $TraceMB + $jobs.Count * $LogMB
-Write-Host ("estimate: plans {0} s, {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb)
+Say ("estimate: plans {0} s, {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb)
 Check "batch within $MaxMinutes min" ($min -le $MaxMinutes)
 Check "batch within $MaxMB MB" ($mb -le $MaxMB)
 
@@ -111,14 +127,25 @@ function New-Root([string]$dir, [switch]$Strip) {
     ConvertTo-Json -Depth 12 | Set-Content (Join-Path $auth $Receipt)
   $dir
 }
-function Invoke-Queue([string]$dir) {
+# The fake queue run; a line per recorded run (n of the jobs, elapsed) while it lasts.
+function Invoke-Queue([string]$dir, [string]$name) {
   $env:BG3RTX_FAKE_LOAD_SEC = '3'
-  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $scripts 'test-queue.ps1') -DryRun -Root $dir -PermissionSession synthetic-dryrun | Out-Null
-  @(Get-Content (Join-Path $dir 'captures\queue\results.jsonl') -ErrorAction SilentlyContinue | ConvertFrom-Json)
+  $jsonl = Join-Path $dir 'captures\queue\results.jsonl'
+  Start-LongrunStep $name
+  $p = Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $scripts 'test-queue.ps1')`"",
+    '-DryRun', '-Root', "`"$dir`"", '-PermissionSession', 'synthetic-dryrun') -NoNewWindow -PassThru -RedirectStandardOutput "$dir.queue.out"
+  $seen = 0
+  while (-not $p.WaitForExit(1000)) {
+    $n = @(Get-Content -LiteralPath $jsonl -ErrorAction SilentlyContinue).Count
+    if ($n -ne $seen) { $seen = $n; Write-Host ("[{0:HH:mm:ss}] {1}: {2} of {3} job(s) recorded" -f (Get-Date), $name, $n, $jobs.Count) }
+  }
+  $recs = @(Get-Content $jsonl -ErrorAction SilentlyContinue | ConvertFrom-Json)
+  Stop-LongrunStep $name "$($recs.Count) run(s) recorded"
+  $recs
 }
 
 $a = New-Root (Join-Path $Out 'a-real')
-$recs = @(Invoke-Queue $a)
+$recs = @(Invoke-Queue $a 'run A')
 $left = @(Get-ChildItem (Join-Path $a 'captures\queue\pending') -Filter '*.json')
 if ($Independent) {
   Check "run A: all $($jobs.Count) jobs ran and each is INVALID (fake game has no expect lines)" ($recs.Count -eq $jobs.Count -and -not ($recs | Where-Object { $_.valid -or $_.outcome -notmatch '^INVALID' }))
@@ -129,10 +156,11 @@ Check "run A: the $($jobs.Count - 1) dependent job(s) stayed in pending, not run
 }
 
 $b = New-Root (Join-Path $Out 'b-structural') -Strip
-$recs = @(Invoke-Queue $b)
+$recs = @(Invoke-Queue $b 'run B')
 Check "run B: $($jobs.Count) runs recorded, job 1 first" ($recs.Count -eq $jobs.Count -and $recs[0].job -eq $first)
 Check "run B: every run valid, done, single (not session), foreground (no window_mode)" (-not ($recs | Where-Object { -not $_.valid -or $_.outcome -notmatch '^Run ended: done' -or $_.session -or $_.window_mode }))
 Check "run B: pending empty" (@(Get-ChildItem (Join-Path $b 'captures\queue\pending') -Filter '*.json').Count -eq 0)
 Write-Host "scratch: $Out"
 if ($fail) { Write-Host "$fail check(s) failed"; exit 1 }
+Save-LongrunReuse "lean_dryrun-$Batch" $inputHash $said
 Write-Host 'all checks passed'
