@@ -5,6 +5,7 @@
 // is the real gi_common.hlsli one. Nothing here is a copy of production shading code: every call below is
 // the production function; this file only builds the material and stores results.
 #define RT_HIT_MATERIAL 1   // as rf_hit_shade / gi_hit_sun (RtHit.bary, native_hit_position)
+#define RT_HIT_INSTANCED 1  // the rt_hit_material_instanced variants (RtHit.dir, case 9)
 #include "../shaders/gi/gi_common.hlsli"
 #include "../shaders/rt/rt_common.hlsli"
 #include "../shaders/rt/bg3_lights.hlsli"
@@ -41,10 +42,13 @@
 //   reflectance (entries 0-5; w <= 0: no candidate), K = channel & 15, NR = channel >> 4, uniforms p.xy.
 //   12 the exact entries (4 bits each, 0xF empty), 28 the samples (8 bits each, 0xFF empty), 44 candidates;
 //   a.xy the samples' factors (0 empty), a.z sum_R w; material status 0.
+// Mode 8 (two-sided frame, rt_hit_material_instanced): p the ray origin, v its direction, n the authored N,
+//   c48 the triangle's geometric normal; rt_closest_hit, then a.x = nv_two_sided_sign(c48, n, RtHit.dir) (the
+//   consumer's N-column sign), a.y the hit t, 12 1 if aborted; b.rgb RtHit.dir; material status 0.
 [[vk::binding(60, 0)]] ByteAddressBuffer fxCases;
 [[vk::binding(61, 0)]] RWByteAddressBuffer fxOut;
 static const uint kFxDirect = 0u, kFxSun = 1u, kFxAo = 2u, kFxFurnace = 3u, kFxCombined = 4u, kFxSunDir = 5u, kFxEmission = 6u,
-                  kFxExactK = 7u;
+                  kFxExactK = 7u, kFxTwoSided = 8u;
 
 NativeHitMaterial fx_material(float3 albedo, float rough, float metal, float refl, float3 n, uint channel) {
   NtInput i;
@@ -122,6 +126,12 @@ void main(uint id : SV_DispatchThreadID) {
     ra = float3(lk_entry(s, 4u) == kLkNone ? 0.0 : lk_factor(s, 4u, NR), lk_entry(s, 5u) == kLkNone ? 0.0 : lk_factor(s, 5u, NR), s.rsum);
     lights = s.n;
     m.status = 0u;   // no material in this mode
+  }
+  if (mode == kFxTwoSided) {
+    RtCone cone = {footprint, 0.0};
+    const RtHit h = rt_closest_hit(p, v, 100.0, cone);
+    ra = float3(nv_two_sided_sign(c48, n, h.dir), h.t, 0.0); sa = h.aborted ? 1u : 0u;
+    rb = h.dir; sb = 0u; m.status = 0u;
   }
   fxOut.Store3(o, asuint(ra)); fxOut.Store(o + 12u, sa);
   fxOut.Store3(o + 16u, asuint(rb)); fxOut.Store(o + 28u, sb);

@@ -29,6 +29,12 @@ int main(int argc, char** argv) {
         "gi/gi_trace_rt.hlsl?RT_NATIVE_TILESET=1;RT_HAIR_PHYSICAL_ORIGIN=1;RT_OMM_SCENE=1;RT_NATIVE_SCALP=1;"
         "RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1");
   CHECK(!cascade_entry("gi/rt_sun_resolve.hlsl") && !cascade_entry("gi/rt_hit_two_bounce.hlsl"));
+  // rt_hit_material_instanced: only the hit-material consumers, last but cascade; never the ordinary files.
+  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced) == "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1");
+  CHECK(request("gi/gi_trace_rt_hit_direct.hlsl", kHitInstanced | kCascade | kTileset) ==
+        "gi/gi_trace_rt_hit_direct.hlsl?RT_NATIVE_TILESET=1;RT_HIT_INSTANCED=1;RT_CASCADE_MASKS=1");
+  CHECK(request("gi/gi_trace_rt.hlsl", kHitInstanced) == "gi/gi_trace_rt.hlsl");
+  CHECK(request("gi/rt_shadow.hlsl", kHitInstanced) == "gi/rt_shadow.hlsl");
 
   std::set<std::string> want;
   size_t bases = 0;
@@ -37,7 +43,7 @@ int main(int argc, char** argv) {
     const std::string file = "gi/" + e.path().filename().string();
     ++bases;
     const unsigned a = allowed(file.c_str());
-    for (unsigned m = 0; m < 128; ++m)
+    for (unsigned m = 0; m < 256; ++m)
       if ((m & a) == m && m) {
         const std::string r = request(file.c_str(), m);
         if (r != file) want.insert(r);

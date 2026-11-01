@@ -19,7 +19,10 @@ enum Reflectance : uint32_t {ReflectanceUbo=0,ReflectanceConstant=1,ReflectanceN
 // audited but its VS is neither the per-draw VS 3812bc98 nor class A (spirv_xfb.h
 // analyze_vs_instancing), so its meshes are never pooled and its instanced draws have no
 // per-draw row: counted in "[hit material families]", never qualified (PLAN_M4 "next families").
-enum Capture : uint32_t {CapturePool=0,CaptureNone=1};
+// CaptureDraw: not pooled either, but its instanced draws get per-draw rows (prepass alpha record
+// + G-buffer XFB of all instances) with rt_hit_material_instanced (native_hit_instanced.h); with
+// that key off it is counted as CaptureNone.
+enum Capture : uint32_t {CapturePool=0,CaptureNone=1,CaptureDraw=2};
 // layout: LayoutBase = the 8995 sampling (sampler 1:2, table 1:3, normal/albedo/physical 1:4..6);
 // LayoutDetail = ENV_DetailMap_VT (native_vt_detail below): the same VT layers at 1:4..7 plus a
 // 2D detail normal 1:3 and a 2D detail mask 1:8 sampled with sampler 0:7;
@@ -39,15 +42,17 @@ inline constexpr Recipe recipes[]={
  // ATM_Wind_Vertex_RG_VT STI: 14678345 with RT2.y = clamp(1:1 _m4) (byte 16 of a 32 B UBO). VS
  // 50fbfceb: same UV/N/B/T outputs as 2d2ac3c3 (inputs moved: rows 0..2, P 4, UV 5, quaternion
  // 6), but W = M P + wind(time, vertex color RG, distance fade) before the clip transform: not
- // class A, so no pool mesh (and no static mesh to check the raster positions against).
- {0x8e49cde81b680054ull,0x50fbfceb06192473ull,0,32,36,ReflectanceUbo,16,CaptureNone},
+ // class A, so no pool mesh (and no static mesh to check the raster positions against). Per-draw
+ // rows of its instanced draws (depth VS 1719e9d0 + alpha FS 4bed5db2): native_hit_instanced.h.
+ {0x8e49cde81b680054ull,0x50fbfceb06192473ull,0,32,36,ReflectanceUbo,16,CaptureDraw},
  // Base_AlphaTest_2s_VT STI: 14678345 with the engine UBO 1:0 {vec4 p[2]; vec3 offset @32; uint
  // tile-set index @44, flag @48 (bit 3), channel @52} and mat3(T, N * (gl_FrontFacing ? 1 : -1), B)
  // (two_sided). Classifier: _m1@32->_m2@44, _m2@36->_m3@48, _m3@40->_m4@52; the FS reads
  // `(_m3 & 7) << 4` (channel @48) and `_m4 != 0` (flag @52). VS 1e9145e4: UV/N/B/T as 2d2ac3c3,
  // but each matrix row's translation gets the per-draw engine offset (1:0 @32) added before
- // W = M P: not class A (the matrix is not the plain instance rows), never pooled.
- {0x923131c7039f33daull,0x1e9145e4b621a5e0ull,0,44,48,ReflectanceUbo,0,CaptureNone,LayoutBase,true},
+ // W = M P: not class A (the matrix is not the plain instance rows), never pooled. Per-draw rows of
+ // its instanced draws (depth VS 106a0550 adds the same offset): native_hit_instanced.h.
+ {0x923131c7039f33daull,0x1e9145e4b621a5e0ull,0,44,48,ReflectanceUbo,0,CaptureDraw,LayoutBase,true},
  // ENV_DetailMap_VT STI (pool): the 14678345 VT layers and engine UBO 1:0 at 1:4..7 plus a 2D
  // detail normal 1:3 and mask 1:8 (sampler 0:7); 1:1 {strength, tiling, reflectance @8, mask
  // power, roughness add} (native_vt_fields.h nv_detail_fields). VS 54df894a is class A: UV at

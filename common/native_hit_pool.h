@@ -25,10 +25,11 @@ inline const native_vt::Recipe* pool_recipe(uint64_t vs, uint64_t fs) {
   const auto* r = native_vt::recipe(fs);
   return r && r->vs == vs && vs != 0x3812bc980438747full && r->capture == native_vt::CapturePool ? r : nullptr;
 }
-// An audited FS decode whose pair has no geometry path (counted, never qualified).
+// An audited FS decode whose pair has no pool path (CaptureNone, or CaptureDraw while
+// rt_hit_material_instanced is off): counted in "[hit material families]", never pooled.
 inline bool uncaptured_recipe(uint64_t vs, uint64_t fs) {
   const auto* r = native_vt::recipe(fs);
-  return r && r->vs == vs && r->capture == native_vt::CaptureNone;
+  return r && r->vs == vs && r->capture != native_vt::CapturePool;
 }
 // Engine UBO (set 1 binding 0) bytes the recipe reads: the UV transform p0 and the mip clamp p1,
 // the tile-set index and the light channel word (STI: 40 of the UBO's 48 bytes).

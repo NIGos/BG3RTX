@@ -372,6 +372,35 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   `RT_CASCADE_SUN_HIT`) traces mask 0xFF with the cascade filter, as rt_shadow.hlsl. The
   `rf hit shade sun` line adds `roof-unsupported N, unknown visibility N` (counters 329-330).
   Live check: S8 tier (a) mean(L_b - L_a) with `rt_cascade_casters` 0 and 1.
+- **Instanced wind and two-sided rows (2026-11-01; offline, READY_FOR_LIVE, not qualified).** Key
+  `rt_hit_material_instanced=0` (GUI Experimental "Native hit materials: wind and two-sided foliage",
+  `exp_hit_material_instanced`; needs `rt_hit_material=1`; the startup value patches the G-buffer VS, then 0/1
+  is live). Covers ATM_Wind_Vertex_RG_VT 50fbfceb/8e49cde8 (3.9% combined) and Base_AlphaTest_2s_VT
+  1e9145e4/923131c7 (2.4%): classifier built share 48.2% -> 54.4% (same 139 traces).
+  - Why they had no record: neither VS is class A (wind displaces W; 2S adds the per-draw 1:0 @32 offset to the
+    instance rows), so the meshes are never pooled; their BVH geometry is the per-frame prepass XFB of all
+    instances, and the per-draw path took only instances == 1 and the 3812bc98 pair. Both depth passes are
+    alpha-tested (depth VS 1719e9d0 + FS 4bed5db2 `vt p0=0 idx=32`; 106a0550 + a VT alpha FS).
+  - Path (`common/native_hit_instanced.h`, `layer/hit_material.cpp`): the depth draw (by VS) and the G-buffer draw
+    (exact pair) share a key of the draw words + index range + family (no vertex-buffer words, no first
+    instance). Rows hold triangles x instances in the XFB's instance-major order; both XFBs are the VSs' clip
+    positions per instance, so the per-instance transform is in the captured vertices (as the BVH soup). The
+    G-buffer VS gets the 24/36/48 N/B/T patch (2d2ac3c3's interface). The STI engine bytes and the 1:1 reflectance
+    (8e49cde8: byte 16) are staged in the gather's 8995 layout (512 B per row, as the pool rows); the join then
+    checks p0/p1 and the tile-set matrices against the depth draw's alpha record, and each hit checks clip + UV
+    per vertex (fail closed). Alpha cut: these hits come from the traversal's alpha test of that same record.
+  - Two-sided (923131c7): row word 220 bit 0; the per-draw consumer scales the N column by
+    `nv_two_sided_sign(ng, N, RtHit.dir)`, both only in the `RT_HIT_INSTANCED=1` variants of the 15 consumer files
+    (`common/shader_variant.h` kHitInstanced, core slot bit 64). The core requests them when the layer's startup
+    capability `native-hit-instanced-v1` is set; the live key only gates the rows (word 220 is 0 on every other row).
+    Key off: all 872 requests of 2bf305e byte-identical; the 296 new variants compile and pass spirv-val.
+  - Offline: `native_hit_instanced_test` (54 checks: families, key, geometry, staging, flags), recipe test, GPU
+    fixture 9a/9b (12 rays, both sides), 73 CTests. Log (`rt_stats`): `[hit material instanced] frame F key K; wind:
+    prepass N, G-buffer N (pipeline N, bindings N, stream N) captured N, mapped N rows N triangles; alpha-test 2S: ...`.
+  - Risks: the wind VSs' non-`precise` terms may round differently (reason `clip` rises); two draws with one key in
+    a pass are declined. Cost (not measured): XFB of the instanced G-buffer draws (64 B per vertex) plus 2x query
+    copies, inside the existing caps; expected 0.2 to 1 ms on Ultra.
+  - Live: `tools/live_batches/m4_instanced` (S14 Lower City: wind 9.7% + 2S 4.1% of the placed geometry), OFF/ON/OFF.
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.
