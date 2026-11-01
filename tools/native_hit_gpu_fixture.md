@@ -35,6 +35,9 @@ Each dispatch has one froxel listing that dispatch's lights.
 4. Box light: inside or outside the box, z ramp, edges, smoothstep and smootherstep curves,
    direction _m9, b13[0]. Without _m8 bit 0, blockers are ignored (the game look). With it,
    a blocker inside the box occludes and one beyond the box exit does not.
+   AO-on-direct share (4c): with the screen's box pass off (Push::ls_flags bit 26 clear) every box
+   term is also in `.native`, bit for bit, so the caller applies mix(1, AO, m0.y) to it, as the game
+   does on screen; with bit 26 set `.native` is 0 and the radiance is unchanged.
 5. AO: an open floor gives exactly 1. A wall at 0.1 m and at 0.5 m (R = 1) is checked against
    the closed form of the hybrid GI weight 1 - (t/R)^2 under cosine rays:
    E[w] = (1/pi) int g(h / (R cos phi)) dphi, with g(a) = (1 - a^2 + 2 a^2 ln a) / 2.

@@ -749,6 +749,10 @@ int main(int argc, char** argv) {
     }
     // ---- 4. box (projector) light: inside/outside, ramps, direction _m9, its ray only with a shadow map ----
     {
+      // 4c: the box term's AO-on-direct share (native_hit_direct.hlsli hd_box_game). With the screen's box
+      // pass off (ls_flags bit 26 clear: the game keeps box diffuse x mix(1, AO, m0.y)) every box term is in
+      // .native, bit for bit; with it on (bit 26) .native is 0 and the radiance is unchanged, bit for bit.
+      bool boxNativeOk = true; int boxNativeN = 0;
       for (int shadow = 0; shadow < 2; ++shadow) {
         const float c = cx(shadow ? RBoxShadow : RBox);
         Box b{}; b.col[0] = 2; b.col[1] = 1.5f; b.col[2] = 1; b.m1 = 1;   // x b13[0], no cookie
@@ -767,6 +771,13 @@ int main(int argc, char** argv) {
         pts.push_back({c + 2, kY, 0}); occl.push_back(false);
         for (Vec p : pts) d.cases.push_back(make_case(p, kFxDirect));
         auto r = run(d);
+        Dispatch dt = d; dt.push.ls_flags |= 1u << 26;
+        auto rt = run(dt);
+        for (size_t i = 0; i < r.size(); ++i) {
+          ++boxNativeN;
+          for (int k = 0; k < 3; ++k)
+            boxNativeOk &= r[i].c[k] == r[i].a[k] && rt[i].c[k] == 0.0f && rt[i].a[k] == r[i].a[k] && rt[i].sa == r[i].sa;
+        }
         Cmp cmp; int inside = 0;
         const D3 Ld = unit(f3(b.dir));
         for (size_t i = 0; i < r.size(); ++i) {
@@ -779,6 +790,8 @@ int main(int argc, char** argv) {
                     cmp.ok, fmt(shadow ? "%.0f inside, D occludes, E beyond exit lit, worst rel %.2e" : "%.0f inside, 2 outside, D ignored, worst rel %.2e",
                                 inside, cmp.worst));
       }
+      report.line("4c box term x AO factor unless D-LS boxes", boxNativeOk,
+                  fmt("%.0f pts: .native = box term (bit 26 clear), 0 with bit 26", boxNativeN));
     }
     // ---- 5. AO: open plane 1, corner the hybrid GI rule's expectation ----
     {

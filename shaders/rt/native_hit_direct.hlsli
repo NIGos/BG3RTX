@@ -70,6 +70,12 @@ static const uint kHdRtlShadow=32u,kHdRtlCastShadow=64u,kHdRtlPlayer=256u;
 static uint g_hd_pbase=0u;
 void hd_pstat(uint k,bool c){if(g_hd_stats && g_hd_pbase!=0u)stat_add(g_hd_pbase+k,c,g_hd_bin);}
 bool hd_policy_on(){return (pc.ls_flags&(1u<<24))!=0u;}
+#ifdef NATIVE_HIT_BOXES
+// Box (projector) lights the screen leaves to the game (its D-LS box pass did not run this frame:
+// ls_box=0, Push::ls_flags bit 26 clear): the game's lighting keeps their diffuse x mix(1, AO, m0.y)
+// (docs/LIGHT_CONVENTIONS.md 2), so the hit returns them in .native for the same factor.
+bool hd_box_game(){return hd_policy_on() && (pc.ls_flags&(1u<<26))==0u;}
+#endif
 // ls_skip_light (rt_local_shadows.hlsl), on the same Push bits.
 bool hd_skip_light(uint4 si){
  if(((pc.ls_flags>>(8u+min(si.z&255u,4u)))&1u)==0u)return true;
@@ -253,6 +259,9 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
   if(term.status!=HdOk){result.status=term.status;return result;}
   result.radiance+=term.radiance;++result.lights;
+#ifdef NATIVE_HIT_DLS_POLICY
+  if(hd_box_game())result.native+=term.radiance;   // x the AO-on-direct factor (native_hit_ao_direct)
+#endif
 #endif
  }
 #endif
