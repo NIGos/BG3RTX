@@ -9,7 +9,7 @@ history; its evidence details are kept in [archive/PROGRESS_CODEX_2026-11-01.md]
 - [../AGENTS.md](../AGENTS.md): never touch saves, `D:\BG3_Tools`, snapshot tags; never launch the game
   outside `scripts/test-queue.ps1`; never hold `captures/queue/results.md` open.
 - Worktrees with junctions (`external/`, `data/assetdb`): unlink the junctions first
-  (`cmd /c rmdir <junction>`), then remove, then check the targets. A careless removal emptied the
+  with `scripts/remove-worktree.ps1 -Name <folder>`, which also checks the targets. A careless removal emptied the
   shared SDKs once on 11-01 (restored).
 - Live tests need explicit user steering for the batch. Prepare jobs outside every `pending` inbox.
   Old approvals and markers do not grant it.

@@ -11,7 +11,9 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Hold `captures/queue/results.md` open (`tail -f` included): it stopped the runner once.
 - Archive, delete or clean a checkout that has NTFS junctions to shared folders
   (`external/`, `data/assetdb`). Cleanup followed them and emptied the SDKs once.
-  Remove the junctions first (`cmd /c rmdir <junction>`, never a recursive delete), then check
+  Remove worktrees only with `scripts/remove-worktree.ps1 -Name <folder>` (unlinks junctions with
+  `[IO.Directory]::Delete(path,$false)`, checks the shared file count before and after; `cmd /c rmdir` from bash
+  once failed silently and emptied the SDKs again on 2026-10-31). Never a recursive delete; then check
   the targets still exist.
 - Write to the backups in `D:\BG3_Tools` (read-only for recovery).
 
