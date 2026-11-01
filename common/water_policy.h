@@ -66,6 +66,20 @@ inline constexpr Audited kAudited[] = {
     // NoCaustics_Waves' noise is at world xz * m5 + time * m7, the offset clamped below by m15.
     {0x99c1fcef82b253c1ull, 0xe0530238c64ad123ull, "FLUID_Water_Plane_flowmap_huge_PixelLighting_ExtraWaves"},
     {0xc4e92ccdb08dd777ull, 0x8113bd39597e2bd9ull, "FLUID_Water_Plane_flowmap_NoCaustics_Waves"},
+    // Pre-audit of every dumped Fluids forward pair (2026-11-01, offline, tools/water_audit.py: the asset DB's
+    // pairs, the dumps in captures/shaders; no trace). VS: gl_Position = vec4(P, 1) * set 0 b2 _m2 with y
+    // negated, P = the transformed vertex + vec3(0, h, 0) (Debris: none); FS: no discard, no FragDepth.
+    // huge_PL_Shadow shares 60d4357d with the docks plane. PL_noCaustics is the Flymm Cargos basement water
+    // (level CTY_DockWarehouseBasement_A, NAT_RVR_DockWarehouseBasement_*): both its instanced and its
+    // static (non-instanced: the per-object matrix) variant. Not audited: WIP 0f9a1874/0516c804
+    // (the VS displaces x, y and z by one height), BloodRiver (not FLUID_Water), the undumped variants.
+    {0xced49ee370940201ull, 0x60d4357d7b95d027ull, "FLUID_Water_Plane_flowmap_huge_PixelLighting_Shadow"},
+    {0xd44c390bcbb9eea5ull, 0x1d64d76a57981794ull, "FLUID_Water_Plane_flowmap_Brine"},
+    {0xfb7cc2ea451d3e08ull, 0xd7d9539d80ed55ebull, "FLUID_Water_Plane_flowmap_huge_PixelLighting_SphereMask"},
+    {0x2bd6cb9de954c2f9ull, 0xffc5bb290d99c144ull, "FLUID_Water_Plane_flowmap_PixelLighting_noCaustics"},
+    {0x269de9047e587ea2ull, 0x8cdf7b4a7c02a18cull, "FLUID_Water_Plane_flowmap_PixelLighting_noCaustics"},
+    {0x4af3450ed83beb10ull, 0xbf2b63d076573791ull, "FLUID_Water_Plane_flowmap_OnlyNormals"},
+    {0x7813e701eb642285ull, 0x0f00693c5c54c611ull, "FLUID_Water_Plane_Debris"},
 };
 inline constexpr uint32_t kAuditedCount = uint32_t(sizeof kAudited / sizeof kAudited[0]);
 inline constexpr uint32_t kNoFamily = UINT32_MAX;

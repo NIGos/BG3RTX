@@ -291,10 +291,10 @@ add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
 # Offline Python tooling checks (no build products): host-visible atomics lint, every-window
-# queue gates, the lean-batch energy gate, progress fragments, the coverage HANDLING table.
+# queue gates, the lean-batch energy gate, progress fragments, the coverage HANDLING table, the promotion gate tables.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-  foreach(py_test host_atomics_lint queue_gates m4_promotion_gate fold_progress coverage_handling)
+  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling m4_promotion_gate m5_promotion_gate)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
@@ -365,8 +365,19 @@ foreach(_d "${CMAKE_SOURCE_DIR}/captures/shaders" "${CMAKE_SOURCE_DIR}/../captur
 endforeach()
 if(BG3RTX_WATER_FS_DUMP)
   add_test(NAME water_compose_test COMMAND water_compose_test "${BG3RTX_WATER_FS_DUMP}" "${CMAKE_BINARY_DIR}")
+  set_tests_properties(water_compose_test PROPERTIES FIXTURES_SETUP water_fs_patched)
 else()
   add_test(NAME water_compose_test COMMAND water_compose_test)
+endif()
+# The water FS/VS pre-audit (tools/water_audit.py) against the id tables, and spirv-val of every module
+# water_compose_test patched (skips without the dumps, the asset DB or the SPIR-V tools).
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME water_audit_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/water_audit_test.py
+           "${CMAKE_BINARY_DIR}" WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  if(BG3RTX_WATER_FS_DUMP)
+    set_tests_properties(water_audit_test PROPERTIES FIXTURES_REQUIRED water_fs_patched)
+  endif()
 endif()
 # D-EM policy in the core (ABI 24): core/em_policy.cpp against the former layer path, bit for bit.
 add_executable(emissive_core_test tests/emissive_core_test.cpp core/em_policy.cpp)

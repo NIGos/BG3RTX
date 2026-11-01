@@ -79,8 +79,7 @@ struct FsIds {
 //   c4e92ccd NoCaustics_Waves: _3671 = mix(_3668, fma(fma(_3322, _1484, _1483 e), _3510.www,
 //     _3510.xyz), _425) (no foam term), _3322 = direct + (_2803 + _2800) * _3220, F0 _2724, DFG _2773,
 //     N _665, roughness _899.
-// The other audited water FS are not in the table yet: their draws keep the game's pipeline
-// (counted by the layer as "no variant").
+// Audited water FS outside the table keep the game's pipeline (counted by the layer as "no variant").
 // M5.4 sun ids (2026-11-01, spirv-dis --raw-id of the three dumps): in each FS Lw =
 // ((Ld + Sd) + (Ls + Ss)) * m + (Kd + Ks) k with Sd = (Lsun * diffuse BRDF) * N.L and Ss = (Lsun *
 // specular BRDF) * N.L, Lsun = sun colour (atmosphere) * cloud shadow * exposure: the sun has no
@@ -106,6 +105,27 @@ inline constexpr FsIds kFsIds[] = {
      2772, 2770, 3057, 3055, 1665, 1668, 1664, 4, 4530},
     {0xc4e92ccdb08dd777ull, 425, 3510, 3220, 1484, 2800, 2724, 2773, 665, 3671, 899, 5, 3310, 3313, 3319,
      1995, 1993, 2280, 2278, 886, 889, 885, 4, 3668},
+    // Pre-audit (2026-11-01, offline): derived by tools/water_audit.py from the raw-id disassembly of each dump
+    // (the structure above, step by step; it reproduces the three tables above id for id, and water_audit_test
+    // keeps every row equal to its derivation). flowmap_PixelLighting and huge_PL_V2 (audited for capture),
+    // flowmap_Brine, huge_PL_SphereMask, and PL_noCaustics (Flymm Cargos basement): its instanced and static
+    // FS have the same ids (one body, another engine CB layout: the channel at +4 / +72). No shadow-map sample in
+    // any of them (the sun term has no game visibility, as above). Not mapped: PL_noCaustics_Shadows 06e66a6f and
+    // huge_PL_Shadow ced49ee3 (the same structure, but Lsun carries the game's cascade shadow: 7 Dref samples,
+    // M5.4 would shadow it twice), Debris 7813e701 (a debris mask scales the probe term and the direct factor),
+    // flowmap 1d4bff2e, flowmap_noCaustics 857ccb90, Water_Plane 68068cab, OnlyNormals 4af3450e (no light loops).
+    {0xfda628a5f89e5b6eull, 724, 3890, 3593, 1857, 3173, 3097, 3146, 1043, 4084, 1274, 5, 3683, 3686, 3692,
+     2368, 2366, 2653, 2651, 1261, 1264, 1260, 4, 4081},
+    {0x64d9cb772d595ce4ull, 776, 4128, 3831, 2095, 3411, 3335, 3384, 1211, 4368, 1512, 5, 3921, 3924, 3930,
+     2606, 2604, 2891, 2889, 1499, 1502, 1498, 4, 4365},
+    {0xd44c390bcbb9eea5ull, 430, 3688, 3398, 1662, 2978, 2902, 2951, 682, 3850, 1079, 9, 3488, 3491, 3497,
+     2173, 2171, 2458, 2456, 1066, 1069, 1065, 4, 3847},
+    {0xfb7cc2ea451d3e08ull, 795, 4043, 3746, 2010, 3326, 3250, 3299, 1196, 4280, 1427, 5, 3836, 3839, 3845,
+     2521, 2519, 2806, 2804, 1414, 1417, 1413, 4, 4277},
+    {0x2bd6cb9de954c2f9ull, 418, 3512, 3222, 1486, 2802, 2726, 2775, 670, 3674, 901, 9, 3312, 3315, 3321,
+     1997, 1995, 2282, 2280, 888, 891, 887, 4, 3671},
+    {0x269de9047e587ea2ull, 418, 3512, 3222, 1486, 2802, 2726, 2775, 670, 3674, 901, 9, 3312, 3315, 3321,
+     1997, 1995, 2282, 2280, 888, 891, 887, 4, 3671},
 };
 inline constexpr uint32_t kFsIdsCount = uint32_t(sizeof kFsIds / sizeof kFsIds[0]);
 

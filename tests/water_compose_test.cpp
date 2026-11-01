@@ -236,6 +236,15 @@ int main(int argc, char** argv) {
 
   CHECK(fs_ids(0x99c1fcef82b253c1ull) == &kFsIds[1]);   // S8 ExtraWaves
   CHECK(fs_ids(0xc4e92ccdb08dd777ull) == &kFsIds[2]);   // S8 NoCaustics_Waves
+  // The pre-audit of 2026-11-01 (tools/water_audit.py derives each row; water_audit_test pins them).
+  CHECK(kFsIdsCount == 9);
+  CHECK(fs_ids(0x2bd6cb9de954c2f9ull) == &kFsIds[7]);   // Flymm Cargos basement, instanced
+  CHECK(fs_ids(0x269de9047e587ea2ull) == &kFsIds[8]);   // the same template, static
+  CHECK(fs_ids(0x06e66a6fbd88a6b3ull) == nullptr);      // the game's sun shadow map in Lsun: not mapped
+  CHECK(fs_ids(0xced49ee370940201ull) == nullptr);
+  CHECK(fs_ids(0x7813e701eb642285ull) == nullptr);      // Debris: a mask scales the probe term
+  for (uint32_t i = 0; i < kFsIdsCount; ++i)
+    for (uint32_t j = i + 1; j < kFsIdsCount; ++j) CHECK(kFsIds[i].fs != kFsIds[j].fs);
 
   // 4b. The composition's algebra against the FS's end of main (ISSUE 3 of m5w3: is A L / B = 0.28
   //     a unit factor?). A and B are the exact derivative of the FS colour along its probe term:
@@ -645,10 +654,14 @@ int main(int argc, char** argv) {
     CHECK(st == PatchStatus::kApplied);
     CHECK(out.size() > words.size() && out[3] > words[3]);
     // M5.4 off: the M5.3 module word for word (FNV-1a of the patch made by main 92c71e0, same addr / cap).
+    // The pins exist for the three FS mapped before the code paths were extended (they prove each
+    // extension leaves the earlier module unchanged); the FS mapped later go through the same calls
+    // (the off-paths are compared call against call below) and print their hashes.
+    const bool pinned = fi.fs == 0x7b44a567771ecbecull || fi.fs == 0x99c1fcef82b253c1ull || fi.fs == 0xc4e92ccdb08dd777ull;
     const uint64_t m53 = fi.fs == 0x7b44a567771ecbecull ? 0x7118fb90f4599508ull
                        : fi.fs == 0x99c1fcef82b253c1ull ? 0xb0d6c3fdb58567e3ull
                        : fi.fs == 0xc4e92ccdb08dd777ull ? 0x59718e7c5505cc1dull : 0;
-    CHECK(fnv(out.data(), out.size() * 4) == m53);
+    if (pinned) CHECK(fnv(out.data(), out.size() * 4) == m53);
     // M5.4 on: the sun words (two more stores and their values) on top of the same module.
     std::vector<uint32_t> out_sun;
     const PatchStatus st_sun = patch_fs(words.data(), words.size(), fi, addr, cap_sun, out_sun, true);
@@ -678,7 +691,7 @@ int main(int argc, char** argv) {
     const uint64_t m54 = fi.fs == 0x7b44a567771ecbecull ? 0x3bd081bf3d86accdull
                        : fi.fs == 0x99c1fcef82b253c1ull ? 0x3e33b8e12f2960c4ull
                        : fi.fs == 0xc4e92ccdb08dd777ull ? 0x206d5c9203866002ull : 0;
-    CHECK(fnv(out_sun.data(), out_sun.size() * 4) == m54);
+    if (pinned) CHECK(fnv(out_sun.data(), out_sun.size() * 4) == m54);
     {
       FsIds bad = fi;   // a local id of the wrong type is refused only when the local words are asked for
       bad.ls_chan = fi.ls_d12;
@@ -697,7 +710,7 @@ int main(int argc, char** argv) {
     const uint64_t m54b = fi.fs == 0x7b44a567771ecbecull ? 0x80c211df1fd943d2ull
                         : fi.fs == 0x99c1fcef82b253c1ull ? 0xe8f4bc47583553a9ull
                         : fi.fs == 0xc4e92ccdb08dd777ull ? 0x891555672bce545cull : 0;
-    CHECK(fnv(out_ls.data(), out_ls.size() * 4) == m54b);
+    if (pinned) CHECK(fnv(out_ls.data(), out_ls.size() * 4) == m54b);
     // M5.5 on: the refraction words on top of the local-light record (2 more stores).
     const uint32_t cap_rr = capacity_of_mb(record_mb(160, kRecordBytesRefr), kRecordBytesRefr);
     std::vector<uint32_t> out_rr, out_ls2;
@@ -774,6 +787,9 @@ int main(int argc, char** argv) {
         if (&other == &fi) continue;
         FsIds swapped = other;
         swapped.fs = fi.fs;
+        // One body under two hashes (the static and instanced PL_noCaustics: another engine CB layout)
+        // has the same ids: that table fits by construction.
+        if (std::memcmp(&swapped.a, &fi.a, offsetof(FsIds, refr) + sizeof fi.refr - offsetof(FsIds, a)) == 0) continue;
         std::vector<uint32_t> tmp;
         CHECK(patch_fs(words.data(), words.size(), swapped, 0x1000, cap, tmp) == PatchStatus::kIdMismatch);
       }
