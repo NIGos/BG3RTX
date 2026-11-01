@@ -387,6 +387,19 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_water_compose", "1"}}, {{"rt_geometry", 1}, {"exp_water_reflections", 1}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_water_geometry","1","Water geometry capture"},{"rt_water_reflections","1","Water reflections (measured)"}}},
 
+  {"exp_water_shadows", "Water sun shadows",
+   "Ray-traced sun shadows on the water. The game lights its water with the sun everywhere (only clouds "
+   "darken it), so columns, walls and roofs cast no shadow on it; here one ray per water pixel towards the "
+   "sun removes the sun's light where something blocks it, and keeps everything else of the water as the "
+   "game draws it. Look at a pool or canal next to a building in sunlight: its shadow on the water, and no "
+   "sun glints in it. Debug view rt_debug 26 shows lit (green) and shadowed (red) water. Needs Water "
+   "reflections (measured). Restart required to turn it on (the water shaders are prepared at load); "
+   "turning it off is live. Experimental: unqualified.",
+   Kind::Choice, Apply::Restart, "restart to enable", true,
+   {{"off", "Off", 0, {{"rt_water_shadows", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_water_shadows", "1"}}, {{"rt_geometry", 1}, {"exp_water_reflections", 1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_water_geometry","1","Water geometry capture"},{"rt_water_reflections","1","Water reflections (measured)"}}},
+
   {"exp_current_sun", "Current cascade sun shadows",
    "Uses the current four native sun-caster domains with finite per-layer rays and native "
    "receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the "
@@ -522,6 +535,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_xfb_max_mb", "256"},
     {"rt_water_reflections", "0"},
     {"rt_water_compose", "0"},
+    {"rt_water_shadows", "0"},
     {"rt_water_compose_mb", "160"},
     {"rt_alpha", "1"},
     {"rt_alpha_test", "1"},
@@ -691,6 +705,8 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
   // M5.3: the water FS variants exist only if the key was on when the pipelines were created.
   if (key == "rt_water_compose") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // M5.4: likewise (the sun words of the record are patched in at creation).
+  if (key == "rt_water_shadows") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
                                          "sharc_device", "rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material"};
   for (const char* k : kRestart)

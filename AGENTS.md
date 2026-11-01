@@ -59,6 +59,8 @@ These rules come from mistakes already made in this repo. They apply on every br
 - A failed or confounded measurement: note it in one line and fix the test, not the theory.
 
 ## Measuring correctly
+- GPU statistics counters live in device-local memory, reduced per workgroup, copied to the host after
+  the timed region: host-visible atomics cost 15 ms (water reflections) and 7 ms (water compose) in 2026-11.
 - Compare A/B within ONE run (toggle the key during the same moving session), never images
   across runs: two pans never match.
 - Energy: a quality change must not change mean brightness. Rejected temporal history falls
@@ -79,6 +81,15 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Disk budget ~2 GB per batch; delete raw dumps after analysis, keep the summaries.
 - Target 2-5 minutes per scene.
 - The window may take focus when the user allows it (removes the unfocused 30 fps cap).
+- When the user is at the PC, run jobs with `"window_mode": "visible_unfocused_fg"`: the game never takes
+  focus (PostMessage input, FG kept); a fully covered or minimised game window aborts the run. Judge GPU ms
+  and energy there, not frame time.
+- Don't run builds, shader compiles or GPU tests during a live batch's cost windows: CPU/GPU contention
+  moved the inn frame time by 3.4 ms on 2026-11-01. If they overlap, judge only the GPU ms lines.
+- Energy is the float mean of the pre-post scene colour in `dumps.json`, never PNG previews or bloom
+  dumps: the bloom's darkest-of-four filter darkens noise (TRACK_D_LOCAL_LIGHTS 9.11, 2026-11-01).
+- Keep what a test or comparison still reads (the current replay pack, gate baselines); delete superseded
+  packs and analysed raw dumps.
 
 ## Merging
 - Only `scripts/merge-green.ps1`, after reading the deciding log numbers yourself.

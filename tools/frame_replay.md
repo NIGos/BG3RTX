@@ -32,6 +32,43 @@ frame_replay --load-test                (manual: the 2 GB S8 hit cache shape thr
   `GI hit direct lights`, `GI hit direct policy`, `hit material` (wording of core/gi.cpp), plus a guard
   line. With a live `output ... FILE` reference it prints the bit-equal share and mean/max |diff|.
 
+## PT reference: `--pt-reference` (tools/pt_reference.hlsl, M6 offline)
+
+```
+frame_replay --pack <dir> --pt-reference [--pt-iters N] [--out <dir>] [--define PT_ALBEDO=0.3]...   (default out <pack>/pt-reference)
+frame_replay --pack <dir> --pt-cost                                                                  (only the cost kernels)
+frame_replay --pt-self-test <dir>                                                                    (CTest pt_reference_test)
+```
+- An offline, cache-free, unfiltered opaque path tracer over the pack, NOT a game shader: the harness
+  compiles `tools/pt_reference.hlsl` with the gi_hit_direct contract (it binds a subset) instead of the pass.
+- Per GI pixel it estimates giRaw.rgb's quantity (cosine-weighted mean incident radiance) from the raster
+  G-buffer point, without radius, screen radiance or fallback: N-vertex paths (default 8, Russian roulette
+  from vertex 3), NEE at every vertex for the froxel's point/spot lights (`native_hit_direct`, the screen's
+  light policy, RT shadows) and the sun (cam `_m0`, colour x b13[0], disc-sampled RT ray), the declared
+  FresnelBlend BSDF (diffuse + GGX, `common/transport_bsdf.h`), continuation by `hb_continuation`.
+- Materials: `rt_hit_material` where it qualifies; else the declared fallback `PT_ALBEDO` (0.5), `PT_ROUGH`
+  (0.5), reflectance 0.5. So texture sampling is optional: a pack without the VT cache shades every hit
+  with the fallback, a pack with it uses the native layers where the rows qualify.
+- Not in the pack, so not in the PT (each reported): sky/environment (a miss is 0; its share is the miss
+  fraction), emission, projector lights, cloud shadows, the atmosphere LUT (`PT_SUN_T`, estimated from the
+  sun elevation with Kasten-Young air mass + Rayleigh/aerosol depth unless given), roofs the camera cut away.
+- 7 modes per iteration (Push::debug; same seed via Push::ls_kmode, Push::frame stays the hit-material
+  epoch), so every split is over the same paths: total, 1-vertex, screen radiance at visible hits, the live
+  domain (first hit within gi_rt_radius, its fade), diagnostics, and the energy by first hit (visible /
+  hidden / off screen, near / far), by light (sun / local). Outputs: `pt_report.txt` (the numbers),
+  `pt_tiles.csv` (16 x 9 tiles), `pt_total.pfm`, `pt_live_domain.pfm`, `live_giRaw.pfm`, `pt_compare.bmp`
+  (live | PT live domain | PT total, one exposure).
+- Calibration k = game screen radiance / PT radiance on the visible first hits of the same paths: it
+  absorbs the fallback albedo, the estimated sun transmittance and what the PT lacks (ambient, emission).
+  Shares (%) are scale-free; absolute comparisons use PT x k.
+- Cost kernels (`pt cost` lines): 1 spp with 1 and 2 vertices, rays up to 300 m and 8 m, median of 9
+  dispatches, scaled per Mpx to the DLSS 4K render resolutions.
+- CTest `pt_reference_test`: a closed box (synthetic pack) where every vertex emits 1: Lambert rho 0.5 with
+  1 and 3 vertices gives exactly 1 and 1.75; rho 0.8 with Russian roulette gives 5 within 4 standard errors;
+  the FresnelBlend white furnace with 4 vertices stays in (2.5, 4] (no energy gain); closure (miss 0); the
+  slab pack's native material row qualifies and its light lights the PT, the dark pack gives exactly 0;
+  two runs bit-identical; no validation errors.
+
 ## Pack format (common/replay_pack.h)
 
 A folder with `manifest.txt` (grammar in the header) and raw files: `push`, `buffer`/`range` (sparse
