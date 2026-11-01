@@ -100,7 +100,8 @@
     "cost-on-e",
     "cost-on-rot-r",
     "cost-on-rot-l"
-   ]
+   ],
+   "when_present": true
   }
  ],
  "forbid": [
