@@ -56,3 +56,59 @@ for mode in ('invalid-ref', 'build-fail', 'shader-fail', 'qa-fail', 'success'):
             again = call(root, 'feature')
             assert again.returncode == 0 and 'ALREADY MERGED' in again.stdout, (again.stdout, again.stderr)
         print(mode, 'PASS')
+
+# A merge that adds globbed sources makes the real build.ps1 re-run CMake
+# (CONFIGURE_DEPENDS), which prints '-- GLOB mismatch!' on stderr. The gate
+# must pass on the first run; the CTest proves configure saw the new files.
+CMAKE_FIXTURE = '''cmake_minimum_required(VERSION 3.20)
+project(fixture LANGUAGES NONE)
+file(GLOB SRC CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp ${CMAKE_SOURCE_DIR}/shaders/*.hlsl)
+list(LENGTH SRC n)
+add_custom_target(count ALL COMMAND ${CMAKE_COMMAND} -E echo "globbed ${n}")
+enable_testing()
+add_test(NAME glob_current COMMAND ${CMAKE_COMMAND} -DN=${n} -DROOT=${CMAKE_SOURCE_DIR} -P ${CMAKE_SOURCE_DIR}/check.cmake)
+'''
+CHECK = '''file(GLOB now ${ROOT}/src/*.cpp ${ROOT}/shaders/*.hlsl)
+list(LENGTH now m)
+if(NOT m EQUAL N)
+  message(FATAL_ERROR "configure saw ${N} sources, tree has ${m}")
+endif()
+'''
+for mode in ('adds-files', 'adds-files-test-fail'):
+    with tempfile.TemporaryDirectory(prefix='merge-gate-', dir=scratch) as tmp:
+        root = Path(tmp)
+        git(root, 'init', '-q', '-b', 'main')
+        git(root, 'config', 'user.name', 'Merge gate fixture')
+        git(root, 'config', 'user.email', 'fixture@example.invalid')
+        write(root, '.gitignore', '/build/\n')
+        write(root, 'scripts/build.ps1', (gate.parent / 'build.ps1').read_text())
+        write(root, 'CMakeLists.txt', CMAKE_FIXTURE)
+        write(root, 'check.cmake', CHECK)
+        write(root, 'src/a.cpp', 'int a;\n')
+        write(root, 'tools/compile_shaders.py', 'raise SystemExit(0)\n')
+        write(root, 'tests/qa_detectors_test.py', 'raise SystemExit(0)\n')
+        write(root, 'scripts/test-tree.ps1', "Set-Content -LiteralPath 'refreshed.txt' -Value done\n")
+        git(root, 'add', '.')
+        git(root, 'commit', '-qm', 'base')
+        # Configure and build main first, as the real main tree always is.
+        first = run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                     str(root / 'scripts/build.ps1'), '-Test'], root, False)
+        assert first.returncode == 0, (mode, first.stdout, first.stderr)
+        before = git(root, 'rev-parse', 'HEAD')
+        git(root, 'switch', '-qc', 'feature')
+        write(root, 'src/new_pass.cpp', 'int b;\n')
+        write(root, 'shaders/new_pass.hlsl', '[numthreads(1,1,1)] void main() {}\n')
+        if mode == 'adds-files-test-fail':
+            write(root, 'check.cmake', 'message(FATAL_ERROR "fixture test fails")\n')
+        git(root, 'add', '.')
+        git(root, 'commit', '-qm', 'feature adds sources')
+        git(root, 'switch', '-q', 'main')
+        result = call(root, 'feature')
+        ok = mode == 'adds-files'
+        merged = git(root, 'rev-parse', 'HEAD') != before
+        assert result.returncode == (0 if ok else 1), (mode, result.stdout, result.stderr)
+        assert merged == ok, (mode, result.stdout, result.stderr)
+        assert not (root / '.git/MERGE_HEAD').exists(), mode
+        if not ok:
+            assert 'build or unit tests failed' in result.stdout, (mode, result.stdout)
+        print(mode, 'PASS')
