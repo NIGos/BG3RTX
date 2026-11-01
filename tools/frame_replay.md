@@ -11,6 +11,7 @@ lights, no probes, no sky cubes, no sun set. `rf_hit_shade` needs those in the p
 frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V]... [--repeat N] [--no-validation]
 frame_replay --synthesize <dir> [--dark]
 frame_replay --self-test <dir>          (CTest frame_replay_test)
+frame_replay --load-test                (manual: the 2 GB S8 hit cache shape through the staged upload)
 ```
 - Windowless, own Vulkan device, implicit layers disabled (never the game layer), below-normal priority.
 - On every run it compiles the pass shader from this checkout's `shaders/` with the layer's DXC flags
@@ -56,13 +57,25 @@ x 3-layer, 3-mip images of all 37 mapped formats: uncompressed texels keep their
 RGBA8), every stored texel is within half a step of the game format's decoded value, and the piece
 split does not change the bytes. RTX 5090, 2026-11-01: BC1/2/3/7 (UNORM and sRGB) and BC6H come back
 bit-exact (0.00 steps); BC4/BC5 0.50 / 0.49 steps (the decoder keeps more than 8 bits); A2B10G10R10
-0.50 steps of 16 bits.
+0.50 steps of 16 bits. Check 12 uploads BC3, R8, RGBA16F and BC7 arrays through a tiny staging
+(block rows, layer groups, whole mips; 62 pieces), from memory and streamed from a file, and reads
+every mip and layer back bit-equal.
 Pack 3.5 MB (the hit-record table is 3.1 MB of it). Wall about 3.3 s; dispatch 0.004 ms (RTX 5090).
 
-## Size (at most 2 GB per pack, `bg3::replay::kPackHardCapBytes`)
+## Size (at most `replay_pack_cap_mb` per pack: default 2048 MB, `bg3::replay::kPackHardCapBytes`)
+
+Ini key `replay_pack_cap_mb` (diagnostics, not a GUI knob; `rp::pack_cap_bytes`: <= 0 is the default,
+clamped to 256..16384 MB) sets the cap; the rules below are relative to it. The S8 replay job sets
+3300 (one-off, user-approved) so the 2054 MB hit cache fits. The writer stages in 256 MB host-visible
+chunks; the replay uploads every image and buffer in pieces of at most 256 MB (`fill_image_pieces`,
+the writer's `rp::transfer_pieces` plan; image files streamed, never one 2 GB host allocation), checks
+the device's maximum image size and layers, and prints `[replay] loaded <n> images (largest <MB> MB),
+device-local <MB> MB of a <MB> MB heap`. `frame_replay --load-test` (manual, not a CTest) creates
+and fills that S8 cache shape: RTX 5090, 2026-11-01, 10 pieces in 0.9 s, mip 1 read back bit-equal,
+2218 MB device-local of a 32187 MB heap, no validation errors. A 3 GB pack fits a 32 GB GPU easily.
 
 The geometry is taken whole while the never-dropped part stays under 1 GB (`kPackBudgetBytes`); the
-textures fill the rest up to the 2 GB hard cap (`rp::fill_budget`): highest `rp::texture_priority`
+textures fill the rest up to the cap (`rp::fill_budget`): highest `rp::texture_priority`
 first (2: gHitCache b14 and the table gAlphaTex b2, whose VT page tables and 2D views the hit
 material samples too; 1: the alpha tile caches b3), within a priority smallest first, each image
 that still fits. An image larger than what is left is dropped and the smaller ones still go in.
@@ -88,7 +101,7 @@ S8 packs (2026-11-01), what they measured:
   copy, `rp::raw_compatible`, e.g. BC7 UNORM / SRGB: each `image` line keeps its view's format) or
   are shader reads of the same range (another format: its own read). Other differences stay
   omitted; the note `two views of one image (omitted): ...` names the mips, layers and formats.
-- Measured per pack: the note and log line `[replay] pack <n> textures: <MB> MB free under the cap
+- Measured per pack: the note and log line `[replay] pack <n> textures: <MB> MB free under the <cap> MB cap
   for <n> droppable images of <MB> MB; kept ..., dropped ...; by binding (kept/images, MB kept/all):
   ...; largest: <bindings>[<element>] <VkFormat> <w>x<h> x<layers> m<mips> copy|read <MB> MB
   p<priority> kept|dropped; ...` (the 10 largest).
@@ -101,8 +114,8 @@ Estimate for a 2560 x 1440 render frame, to be replaced by the first live pack's
   2-4 M unique triangles; static meshes counted once per BLAS key, not per instance); pool basis ranges.
 - textures: the elements the material set binds (gAlphaTex, gAlphaCache, gHitCache; unused slots
   hold the layer's 4 x 4 dummies) with their mip chains. Only they are dropped (`omitted`), as above;
-  geometry and set 0 never (a pack whose never-dropped part passes the 2 GB hard cap
-  `kPackHardCapBytes` is "over budget" and not written; its log line lists the MB per slot).
+  geometry and set 0 never (a pack whose never-dropped part passes the cap (`replay_pack_cap_mb`)
+  is "over budget" and not written; its log line lists the cap and the MB per slot).
 - Only each descriptor's bound bytes are captured (`rp::bound_bytes`). A set-1 buffer bound inside
   the soup or pool VkBuffer reuses the geometry's slices (`rp::alias_ranges`, `range` lines into the
   soup's file): with the split BVH gAlphaSoup b1 binds the whole soup like b6. First live pack (S8,

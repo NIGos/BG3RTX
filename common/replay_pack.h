@@ -44,10 +44,21 @@ inline constexpr int kVersion = 1;
 // Geometry budget (tools/frame_replay.md "Size"): the soup / pool are captured whole while the
 // never-dropped part stays under it, else as the InstInfo spans.
 inline constexpr uint64_t kPackBudgetBytes = 1ull << 30;
-// Hard cap (disk budget): a pack whose never-dropped part (set 0, buffers, geometry) passes it is
+// Hard cap (disk budget, default): a pack whose never-dropped part (set 0, buffers, geometry) passes it is
 // "over budget" and not written; under it the textures fill the rest up to this cap (fill_budget:
 // the hit material's bindings first, smallest first, each image that still fits).
 inline constexpr uint64_t kPackHardCapBytes = 2ull << 30;
+// The cap the writer uses: ini `replay_pack_cap_mb` (default 2048 = kPackHardCapBytes). A key
+// <= 0 keeps the default; the value is clamped to [kPackCapMinMb, kPackCapMaxMb] (a pack is staged
+// in host-visible chunks and replayed on one GPU: tools/frame_replay.md "Size").
+inline constexpr int kPackCapMinMb = 256;
+inline constexpr int kPackCapMaxMb = 16384;
+inline uint64_t pack_cap_bytes(int cap_mb) {
+  if (cap_mb <= 0) return kPackHardCapBytes;
+  if (cap_mb < kPackCapMinMb) cap_mb = kPackCapMinMb;
+  if (cap_mb > kPackCapMaxMb) cap_mb = kPackCapMaxMb;
+  return uint64_t(cap_mb) << 20;
+}
 inline constexpr uint64_t kWholeSize = ~0ull;   // VK_WHOLE_SIZE
 
 enum Kind : uint32_t { kUbo, kSsbo, kSampled2D, kSampled2DArray, kStorage, kSampler, kTlas };
