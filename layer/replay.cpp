@@ -15,7 +15,12 @@
 //          smallest first, each image that still fits; "[replay] pack N textures: ..." lists what
 //          was kept per binding and the 10 largest);
 //          the samplers' states; the TLAS instance array of the scene ring region (bvhsplit.cpp)
-//          whose InstInfo set 1 binds.
+//          whose InstInfo set 1 binds;
+//   sets 2-3: the deferred lighting's inputs as the game bound them for the tiled lighting
+//          (add_lighting, rp::kLightingSources): G-buffer albedo/material, AO, sky irradiance and
+//          specular cubes, DFG LUT, local probe records and the cubes they name, the atmosphere
+//          constants, transmittance LUT and cloud shadows; all droppable ("[replay] pack N lighting
+//          inputs: ..." says what was bound, kept and its MB).
 // Buffers without TRANSFER_SRC usage are read by a small compute shader (shaders/replay_copy.hlsl).
 // Images without TRANSFER_SRC (most game textures and the VT caches) are read through a sampled
 // 2D-array view by shaders/replay_image.hlsl and stored decoded (rp::shader_read_format: BCn as
@@ -509,7 +514,12 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
   uint32_t mips = v.range.levelCount == VK_REMAINING_MIP_LEVELS ? im.mips - base_mip : (std::min)(v.range.levelCount, im.mips - base_mip);
   uint32_t layers = v.range.layerCount == VK_REMAINING_ARRAY_LAYERS ? im.layers - base_layer : (std::min)(v.range.layerCount, im.layers - base_layer);
   if (set == 0 || slot.kind == rp::kStorage) mips = 1;   // set 0 reads mip 0 (Load / SampleLevel 0)
-  if (slot.kind != rp::kSampled2DArray) layers = 1;
+  if (slot.kind == rp::kSampledCube) {   // lighting set 2: the cube's 6 faces (a cube view; the read uses a 2D-array view of them)
+    if (v.type != VK_IMAGE_VIEW_TYPE_CUBE || layers < 6) return omit_format("not a cube view");
+    layers = 6;
+  } else if (slot.kind != rp::kSampled2DArray) {
+    layers = 1;
+  }
   const uint32_t w = (std::max)(im.w >> base_mip, 1u), h = (std::max)(im.h >> base_mip, 1u);
   const uint32_t priority = rp::texture_priority(set, binding);
   // An image already captured: the same capture when this view stores the same bytes (same range;
@@ -593,16 +603,18 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
   return true;
 }
 
-void add_sampler(Plan& p, uint32_t binding, uint32_t element, VkSampler s) {
+bool add_sampler(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkSampler s) {
   SamplerRec r{};
   {
     std::shared_lock<std::shared_mutex> lock(g_obj_mu);
     auto it = s ? g_samplers.find(s) : g_samplers.end();
-    if (it == g_samplers.end()) return;
+    if (it == g_samplers.end()) return false;
     r = it->second;
   }
-  p.m.samplers.push_back({1, binding, element, r.mag, r.min, r.mip, r.au, r.av, r.aw, r.aniso, r.max_lod});
+  p.m.samplers.push_back({set, binding, element, r.mag, r.min, r.mip, r.au, r.av, r.aw, r.aniso, r.max_lod});
+  return true;
 }
+void add_sampler(Plan& p, uint32_t binding, uint32_t element, VkSampler s) { add_sampler(p, 1, binding, element, s); }
 
 std::string mb(uint64_t bytes) { char b[32]; snprintf(b, sizeof b, "%.1f", double(bytes) / (1024.0 * 1024.0)); return b; }
 
@@ -629,6 +641,121 @@ std::string slot_sizes(const Plan& p, const rp::Pass& pass, bool fixed_only) {
   }
   if (rest) out += ", others " + mb(rest);
   return out + " MB";
+}
+
+// ---- sets 2-3: the deferred lighting's inputs (rp::kLightingSources) ----
+// The core records the pack in its pre-lighting hook (core/gi.cpp run_pre -> hit_gi_dispatch), where
+// the game has bound the tiled lighting's sets on the compute bind point and the core's own binds
+// are not tracked (it restores the game's afterwards), so query_binding / query_set see the lighting's
+// descriptors: its set 1 (probes, cubes, DFG LUT, G-buffer, AO before the RT AO fold, which runs
+// later in run_pre) and set 5 (atmosphere). Every input is optional and droppable: an absent one is a
+// manifest note, never a failed pack. The local probe cubes (set 1 b45, bindless) are those the
+// frame's probe records name when the records are host-readable (rp::probe_cube_elements), else every
+// cube element bound (2D cookie elements of the same binding are skipped).
+struct LightingStats { uint32_t slots = 0, bound = 0, cubes_named = 0, cubes_bound = 0, cube_elems = 0, beyond = 0, records = 0; bool records_read = false;
+                       uint32_t samplers_game = 0, samplers_declared = 0; std::string absent; };
+LightingStats add_lighting(Plan& p, VkCommandBuffer cmd, const rp::Pass& pass) {
+  LightingStats st;
+  rp::Manifest& m = p.m;
+  auto absent = [&](const rp::Slot& s, const char* why) {
+    st.absent += std::string(st.absent.empty() ? "" : ", ") + "s" + std::to_string(s.set) + "b" + std::to_string(s.binding) + " " + s.name + " (" + why + ")";
+  };
+  VkDescriptorSet game1 = VK_NULL_HANDLE;
+  {
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    uint32_t dyn[64], n = 64;
+    if (!query_set(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, 1, &game1, &layout, dyn, &n)) game1 = VK_NULL_HANDLE;
+  }
+  std::vector<uint32_t> named;   // b45 elements the probe records name
+  const rp::Slot* cube_slot = nullptr;
+  for (uint32_t i = 0; i < pass.slot_count; ++i) {
+    const rp::Slot& s = pass.slots[i];
+    if (s.set < 2) continue;
+    ++st.slots;
+    if (s.set == 3 && s.binding == 6) {   // ours: linear clamp (core/gi.cpp write_sun_set)
+      m.samplers.push_back({3, 6, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
+      ++st.bound; ++st.samplers_declared;
+      continue;
+    }
+    const rp::LightingSource* src = rp::lighting_source(s.set, s.binding);
+    if (!src) { absent(s, "no source"); continue; }
+    if (s.kind == rp::kSampledCube && s.count > 1) { cube_slot = &s; continue; }   // b45 below
+    if (s.kind == rp::kSampler) {
+      VkSampler sampler = VK_NULL_HANDLE;
+      if (game1) {
+        std::shared_lock<std::shared_mutex> lock(tracker().mu);
+        auto it = tracker().sets.find(game1);
+        if (it != tracker().sets.end()) {
+          auto e = it->second.find(desc_key(src->game_binding, 0));
+          if (e != it->second.end()) sampler = e->second.sampler;
+        }
+      }
+      if (add_sampler(p, s.set, s.binding, 0, sampler)) { ++st.bound; ++st.samplers_game; continue; }
+      // Not recorded (immutable in the game's layout): declared trilinear clamp, the state the
+      // probes' cube sampling and the LUT lookups assume (tools/frame_replay.md "Lighting inputs").
+      m.samplers.push_back({s.set, s.binding, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
+      ++st.bound; ++st.samplers_declared;
+      continue;
+    }
+    Bg3Binding b{};
+    if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, src->game_set, src->game_binding, 0, &b)) { absent(s, "not bound"); continue; }
+    if (s.kind == rp::kUbo || s.kind == rp::kSsbo) {
+      if (!b.buffer) { absent(s, "no buffer"); continue; }
+      const size_t buffers = m.buffers.size(), copies = p.copies.size(), notes = m.notes.size();
+      if (!add_buffer(p, s.set, s.binding, {b.buffer, b.offset, b.range}, s.kind == rp::kUbo, s.name)) {
+        m.buffers.resize(buffers); p.copies.resize(copies); m.notes.resize(notes);   // nothing half-captured
+        absent(s, p.why.c_str()); p.why.clear();
+        continue;
+      }
+      ++st.bound;
+      if (s.set == 2 && s.binding == 33 && b.range) {
+        std::vector<uint8_t> records(size_t(b.range));
+        st.records = uint32_t(b.range / rp::kProbeStride);
+        if (read_mapped(b.buffer, b.offset, records.data(), records.size())) {
+          st.records_read = true;
+          named = rp::probe_cube_elements(records.data(), records.size(), 0xffffffffu, st.beyond);
+        }
+      }
+      continue;
+    }
+    if (!b.view) { absent(s, "no view"); continue; }
+    const size_t omitted = m.omitted.size();
+    if (!add_image(p, s.set, s.binding, 0, b.view, b.layout, s, false, true)) { absent(s, p.why.c_str()); p.why.clear(); continue; }
+    if (m.omitted.size() > omitted) absent(s, "omitted"); else ++st.bound;
+  }
+  // b45: the bindless probe cubes.
+  if (cube_slot) {
+    std::vector<std::pair<uint32_t, DescEntry>> elems;
+    if (game1) {
+      std::shared_lock<std::shared_mutex> lock(tracker().mu);
+      auto it = tracker().sets.find(game1);
+      if (it != tracker().sets.end())
+        for (const auto& [k, e] : it->second)
+          if (uint32_t(k >> 32) == cube_slot->binding && e.view) elems.push_back({uint32_t(k), e});
+    }
+    std::sort(elems.begin(), elems.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::set<uint32_t> want(named.begin(), named.end());
+    const size_t omitted = m.omitted.size();
+    for (const auto& [el, e] : elems) {
+      bool cube = false;
+      {
+        std::shared_lock<std::shared_mutex> lock(g_obj_mu);
+        auto v = g_views.find(e.view);
+        cube = v != g_views.end() && v->second.type == VK_IMAGE_VIEW_TYPE_CUBE;
+      }
+      if (!cube) continue;   // a projector cookie (2D) in the same bindless binding
+      ++st.cube_elems;
+      if (st.records_read && !want.count(el)) continue;
+      if (el >= cube_slot->count) { ++st.beyond; continue; }
+      if (!add_image(p, 2, cube_slot->binding, el, e.view, e.layout, *cube_slot, false, true)) { p.why.clear(); continue; }
+      ++st.cubes_bound;
+    }
+    st.cubes_bound -= (std::min)(st.cubes_bound, uint32_t(m.omitted.size() - omitted));
+    st.cubes_named = st.records_read ? uint32_t(named.size()) : st.cube_elems;
+    if (st.cubes_bound || !st.records_read) ++st.bound; else absent(*cube_slot, "no cube named by the records");
+  }
+  if (!game1) st.absent += std::string(st.absent.empty() ? "" : "; ") + "the lighting's set 1 is not a tracked descriptor set";
+  return st;
 }
 
 // The worker: writes every file of the pack from the staging, then the manifest.
@@ -838,6 +965,9 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
       else for (uint32_t el = 0; el < slot.count; ++el) if (const Desc* e = entry(slot.binding, el)) add_sampler(p, slot.binding, el, e->sampler);
     }
   }
+  // ---- sets 2-3: the deferred lighting's inputs (add_lighting; tools/frame_replay.md "Lighting inputs") ----
+  LightingStats lighting;
+  if (pass->set_count > 2) lighting = add_lighting(p, cmd, *pass);
   // The TLAS instance array (InstInfo order) of the same ring region.
   m.instances = "instances.bin";
   m.instance_count = region.count;
@@ -999,6 +1129,26 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     if (ic.shader) { ++read_images; read_bytes += ic.bytes; read_bc += rp::block_compressed(uint32_t(ic.view_format)); }
     else ++copied_images;
   }
+  // What the lighting inputs added (after the budget): kept / dropped uses, probe cubes kept, bytes.
+  std::string lighting_line;
+  if (pass->set_count > 2) {
+    uint32_t kept = 0, dropped = 0, cubes = 0;
+    for (const auto& u : p.uses) {
+      if (u.set < 2) continue;
+      if (p.images[u.image].dropped) { ++dropped; continue; }
+      ++kept;
+      cubes += u.set == 2 && u.binding == 45;
+    }
+    uint64_t bytes = 0;
+    for (const Copy& c : p.copies) if (c.set >= 2 && !c.dropped) bytes += c.bytes;
+    char d[512];
+    snprintf(d, sizeof d, " lighting inputs: %u of %u slots bound; probe cubes %u named by %u records (%s), %u of %u bound cube elements captured, %u beyond the slot, kept %u; "
+             "images kept %u, dropped %u (budget); samplers game %u, declared %u; %s MB", lighting.bound, lighting.slots, lighting.cubes_named, lighting.records,
+             lighting.records_read ? "records read" : "records not host-readable: every cube element", lighting.cubes_bound, lighting.cube_elems,
+             lighting.beyond, cubes, kept, dropped, lighting.samplers_game, lighting.samplers_declared, mb(bytes).c_str());
+    lighting_line = d;
+    if (!lighting.absent.empty()) lighting_line += "; absent: " + lighting.absent;
+  }
   for (const auto& u : p.uses) {
     const ImageCopy& ic = p.images[u.image];
     const std::string& file = p.copies[ic.first_copy].file;
@@ -1024,6 +1174,10 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   if (omit_view_create) m.notes.push_back(" " + std::to_string(omit_view_create) + " shader-read views failed to create (omitted)");
   m.notes.push_back(textures);
   if (!conflicts.empty()) m.notes.push_back(conflicts);
+  if (!lighting_line.empty()) {
+    m.notes.push_back(lighting_line);
+    log("[replay] pack %s%s", label.c_str(), lighting_line.c_str());
+  }
 
   // ---- staging: chunks, placement ----
   auto job = std::make_unique<Job>();

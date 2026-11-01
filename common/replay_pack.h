@@ -14,7 +14,8 @@
 //   buffer S B BYTES [FILE]                 descriptor range of BYTES; FILE fills it from 0 (rest zero)
 //   range S B OFFSET FILE [FOFF BYTES]      a further slice at OFFSET (sparse: only what instances use):
 //                                           FILE whole, or BYTES of it from byte FOFF (many slices, one file)
-//   image S B E FORMAT W H LAYERS MIPS FILE [SOURCE]   VkFormat number; mip-major, each mip all layers,
+//   image S B E FORMAT W H LAYERS MIPS FILE [SOURCE]   VkFormat number; mip-major, each mip all layers
+//                                           (a kSampledCube slot: 6 layers, the cube faces in order),
 //                                           packed. SOURCE: the game view's VkFormat when the writer read
 //                                           the image through a shader (no TRANSFER_SRC usage) and stored
 //                                           it decoded in FORMAT (BCn -> R8/RG8/RGBA8/RGBA16F, shader_read_format)
@@ -61,7 +62,8 @@ inline uint64_t pack_cap_bytes(int cap_mb) {
 }
 inline constexpr uint64_t kWholeSize = ~0ull;   // VK_WHOLE_SIZE
 
-enum Kind : uint32_t { kUbo, kSsbo, kSampled2D, kSampled2DArray, kStorage, kSampler, kTlas };
+// kSampledCube: a cube view; its pack image has 6 layers (+X -X +Y -Y +Z -Z, as Vulkan orders them).
+enum Kind : uint32_t { kUbo, kSsbo, kSampled2D, kSampled2DArray, kStorage, kSampler, kTlas, kSampledCube };
 struct Slot {
   uint32_t set, binding;
   Kind kind;
@@ -94,7 +96,61 @@ inline constexpr Slot kGiHitDirect[] = {
     {1, 8, kSsbo, 1, 0, "gMeshPool"},    {1, 9, kSsbo, 1, 0, "gSceneStamp"},
     {1, 12, kSsbo, 1, 0, "gHitRecords"}, {1, 13, kSsbo, 1, 0, "gHitBasis"},
     {1, 14, kSampled2DArray, 256, 0, "gHitCache"},      {1, 15, kSampler, 64, 0, "gHitSampler"},
+    // Sets 2-3: the deferred lighting's inputs (not read by gi_hit_direct; tools/native_ambient.hlsl and
+    // tools/pt_reference.hlsl PT_SUN_LUT / PT_ENV read them; tools/frame_replay.md "Lighting inputs").
+    // Set 2 = the tiled lighting's own set 1 (f469db78) at its binding numbers, as D-RF binds it
+    // (shaders/rt/bg3_ambient.hlsli, native_hit_shade.hlsli): G-buffer albedo / material, AO, the global
+    // irradiance (b34/b36) and specular (b35/b37) cubes, the DFG LUT, the local probe records and cubes.
+    // Set 3 = the sun set in the shaders/rt/bg3_sun.hlsli layout (atmosphere constants, transmittance
+    // LUT, cloud shadows). Sources: kLightingSources. Packs without them bind zero dummies.
+    {2, 2, kSampled2D, 1, 0, "lgAlbedo"},  {2, 3, kSampled2D, 1, 0, "lgMaterial"}, {2, 6, kSampled2D, 1, 0, "lgAO"},
+    {2, 16, kSampler, 1, 0, "lgSampCube"}, {2, 32, kSampler, 1, 0, "lgSampLut"},   {2, 33, kSsbo, 1, 0, "lgProbes"},
+    {2, 34, kSampledCube, 1, 0, "lgIrrCube0"}, {2, 35, kSampledCube, 1, 0, "lgSpecCube0"},
+    {2, 36, kSampledCube, 1, 0, "lgIrrCube1"}, {2, 37, kSampledCube, 1, 0, "lgSpecCube1"},
+    {2, 38, kSampled2D, 1, 0, "lgDfg"},    {2, 45, kSampledCube, 4096, 0, "lgCubes"},
+    {3, 0, kUbo, 1, 0, "lAtmo"},           {3, 1, kSampled2D, 1, 0, "lTransLut"},
+    {3, 2, kSampled2D, 1, 0, "lCloudA0"},  {3, 3, kSampled2D, 1, 0, "lCloudA1"},
+    {3, 4, kSampled2D, 1, 0, "lCloudB0"},  {3, 5, kSampled2D, 1, 0, "lCloudB1"},  {3, 6, kSampler, 1, 0, "lLinearClamp"},
 };
+// Where the live writer reads each set 2-3 slot: the game's descriptor (set, binding) bound for the
+// tiled lighting dispatch (layer/replay.cpp, at the core's pre-lighting hook; the lighting's set 5
+// is its atmosphere set). Set 3 b6 (lLinearClamp) has no game source: the writer declares a
+// linear clamp sampler, as core/gi.cpp write_sun_set binds its own.
+struct LightingSource { uint32_t set, binding, game_set, game_binding; };
+inline constexpr LightingSource kLightingSources[] = {
+    {2, 2, 1, 2},   {2, 3, 1, 3},   {2, 6, 1, 6},   {2, 16, 1, 16}, {2, 32, 1, 32}, {2, 33, 1, 33},
+    {2, 34, 1, 34}, {2, 35, 1, 35}, {2, 36, 1, 36}, {2, 37, 1, 37}, {2, 38, 1, 38}, {2, 45, 1, 45},
+    {3, 0, 5, 0},   {3, 1, 5, 1},   {3, 2, 5, 4},   {3, 3, 5, 5},   {3, 4, 1, 42},  {3, 5, 1, 43},
+};
+inline const LightingSource* lighting_source(uint32_t set, uint32_t binding) {
+  for (const LightingSource& s : kLightingSources) if (s.set == set && s.binding == binding) return &s;
+  return nullptr;
+}
+// Local env probe records (set 2 b33, f469db78 struct _57, 144 bytes): m5 at 136 (bit 0 box, bit 1 a
+// diffuse cube pair in bits 3-16 / 17-30, bit 2 a specular pair), m6 at 140 (that specular pair,
+// bits 0-15 / 16-31). Each
+// pair field is index + 1 (0 = none) of an rgb cube at element 2 i and its weight cube at 2 i + 1 of
+// the bindless array b45 (bg3_ambient.hlsli bg3_probe_cube). Returns the b45 elements the records
+// name, sorted and unique, below `limit` (the slot's count); `beyond` counts those at or above it.
+inline constexpr uint32_t kProbeStride = 144;
+inline std::vector<uint32_t> probe_cube_elements(const uint8_t* records, uint64_t bytes, uint32_t limit, uint32_t& beyond) {
+  std::vector<uint32_t> out;
+  beyond = 0;
+  auto u32 = [&](uint64_t at) { uint32_t v = 0; for (int k = 0; k < 4; ++k) v |= uint32_t(records[at + k]) << (8 * k); return v; };
+  auto pair = [&](uint32_t field) {
+    if (!field) return;
+    const uint64_t e = uint64_t(field - 1) * 2;
+    for (uint64_t x : {e, e + 1}) { if (x < limit) out.push_back(uint32_t(x)); else ++beyond; }
+  };
+  for (uint64_t r = 0; records && r + kProbeStride <= bytes; r += kProbeStride) {
+    const uint32_t m5 = u32(r + 136), m6 = u32(r + 140);
+    if (m5 & 2u) { pair((m5 >> 3) & 16383u); pair((m5 >> 17) & 16383u); }
+    if (m5 & 4u) { pair(m6 & 65535u); pair(m6 >> 16); }
+  }
+  std::sort(out.begin(), out.end());
+  out.erase(std::unique(out.begin(), out.end()), out.end());
+  return out;
+}
 struct Pass {
   const char* name;
   const char* shader;   // relative to shaders/
@@ -102,7 +158,7 @@ struct Pass {
   uint32_t slot_count, set_count, push_bytes;
 };
 inline constexpr Pass kPasses[] = {
-    {"gi_hit_direct", "gi/gi_trace_rt_hit_direct.hlsl", kGiHitDirect, uint32_t(std::size(kGiHitDirect)), 2, 256},
+    {"gi_hit_direct", "gi/gi_trace_rt_hit_direct.hlsl", kGiHitDirect, uint32_t(std::size(kGiHitDirect)), 4, 256},
 };
 inline const Pass* find_pass(const std::string& name) {
   for (const Pass& p : kPasses) if (name == p.name) return &p;
@@ -269,6 +325,31 @@ struct Manifest {
   std::vector<std::string> notes;
 };
 
+// What a pack carries of the lighting inputs (sets 2-3; older packs: none): the native ambient
+// replica needs the irradiance cube and the DFG LUT, the PT's sky the specular cube, its LUT sun
+// the atmosphere constants and the transmittance LUT.
+struct LightingInputs { bool ambient = false, sky = false, sun_lut = false, probes = false; uint32_t images = 0, probe_cubes = 0; };
+inline LightingInputs lighting_inputs(const Manifest& m) {
+  LightingInputs r;
+  bool irr = false, dfg = false, lut = false, atmo = false;
+  for (const Image& i : m.images) {
+    if (i.set < 2) continue;
+    ++r.images;
+    if (i.set == 2 && i.binding == 34) irr = true;
+    if (i.set == 2 && i.binding == 38) dfg = true;
+    if (i.set == 2 && i.binding == 35) r.sky = true;
+    if (i.set == 2 && i.binding == 45) ++r.probe_cubes;
+    if (i.set == 3 && i.binding == 1) lut = true;
+  }
+  for (const Buffer& b : m.buffers) {
+    if (b.set == 3 && b.binding == 0 && !b.file.empty()) atmo = true;
+    if (b.set == 2 && b.binding == 33 && !b.file.empty()) r.probes = true;
+  }
+  r.ambient = irr && dfg;
+  r.sun_lut = lut && atmo;
+  return r;
+}
+
 // Parses manifest text; false with `error` set on the first malformed line.
 inline bool parse(const std::string& text, Manifest& m, std::string& error) {
   std::istringstream lines(text);
@@ -407,9 +488,14 @@ inline void instinfo_spans(const uint32_t* info, uint32_t count, std::vector<Spa
 // samples gHitCache (b14) and the texture table gAlphaTex (b2: its VT page tables and 2D detail /
 // iridescent / tile-set views; the writer cannot tell those entries from the alpha test's, and the
 // whole table is small), so both rank above the alpha test's own tile caches (b3). An image bound
-// by several bindings takes the highest.
-inline constexpr uint32_t kPriorityAlphaCache = 1, kPriorityHit = 2;
+// by several bindings takes the highest. The lighting inputs (sets 2-3: G-buffer, AO, global cubes,
+// LUTs, clouds; tens of MB) rank first; the local probe cubes (set 2 b45, as many as the records
+// name) rank between the hit material and the alpha caches, so they never displace the VT hit cache
+// (the S8 pack keeps its 2054 MB cache under replay_pack_cap_mb=3300; probes fill what is left).
+inline constexpr uint32_t kPriorityAlphaCache = 1, kPriorityProbes = 2, kPriorityHit = 3, kPriorityLighting = 4;
 inline uint32_t texture_priority(uint32_t set, uint32_t binding) {
+  if (set == 2) return binding == 45 ? kPriorityProbes : kPriorityLighting;
+  if (set == 3) return kPriorityLighting;
   if (set != 1) return 0;
   return binding == 14 || binding == 2 ? kPriorityHit : binding == 3 ? kPriorityAlphaCache : 0u;
 }

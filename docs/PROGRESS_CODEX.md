@@ -12,6 +12,19 @@
   OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
   Merge the branch only if the energy and capacity gates pass.
 
+## Replay pack lighting inputs + `--native-ambient` (offline, layer + tools, READY_FOR_LIVE, 2026-11-01)
+
+- The pack now carries the deferred lighting's inputs as sets 2-3 (tools/frame_replay.md "Lighting inputs"):
+  G-buffer albedo/material, AO, sky irradiance + specular cubes, DFG LUT, probe records + the cubes they name,
+  atmosphere constants, transmittance LUT, clouds. Read in the core's pre-lighting hook with query_binding:
+  no ABI, core or shader change; only with `replay_pack` set (default path untouched). Budget priority:
+  lighting 4 > hit cache 3 > probe cubes 2 > alpha caches 1, so the S8 2054 MB cache still fits 3300 MB.
+- `frame_replay --native-ambient`: native diffuse ambient per GI pixel (tools/native_ambient.hlsl, the
+  in-game replica functions) vs k x PT far field (> 1 m) + PT sky at misses (`PT_ENV`), mean and 16 x 9
+  tiles; the PT sun from the game's LUT (`PT_SUN_LUT`). Self-test 13-16 closed form, 76 CTests pass.
+- Pending: one `rc1-replay-s8-fg2` run (expect line `lighting inputs: 19 of 19 slots bound`); its post
+  step prints the S8 native / PT far-field ratio. No real pack with these inputs exists yet.
+
 ## M6 offline PT reference on the S8 replay pack (offline, tools only, 2026-11-01)
 
 - `frame_replay --pack <dir> --pt-reference` (tools/pt_reference.hlsl; tools/frame_replay.md): N-vertex

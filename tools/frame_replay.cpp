@@ -233,13 +233,14 @@ std::vector<uint8_t> download(const Buf& src, VkDeviceSize bytes) {
   return out;
 }
 struct Img { VkImage image{}; VkDeviceMemory mem{}; VkImageView view{}; uint32_t format = 0, w = 1, h = 1, layers = 1, mips = 1; bool storage = false; };
-Img make_image(uint32_t format, uint32_t w, uint32_t h, uint32_t layers, uint32_t mips, bool storage, bool array) {
+Img make_image(uint32_t format, uint32_t w, uint32_t h, uint32_t layers, uint32_t mips, bool storage, bool array, bool cube = false) {
   Img im; im.format = format; im.w = w; im.h = h; im.layers = layers; im.mips = mips; im.storage = storage;
   check(w <= g.max_image_2d && h <= g.max_image_2d && layers <= g.max_layers,
         "image " + std::to_string(w) + "x" + std::to_string(h) + "x" + std::to_string(layers) + " over the device limits " +
             std::to_string(g.max_image_2d) + " / " + std::to_string(g.max_layers) + " layers");
   VkImageCreateInfo ii{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
   ii.imageType = VK_IMAGE_TYPE_2D; ii.format = VkFormat(format); ii.extent = {w, h, 1}; ii.mipLevels = mips; ii.arrayLayers = layers;
+  if (cube) { check(layers == 6 && w == h, "a cube image has 6 square layers"); ii.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT; }
   ii.samples = VK_SAMPLE_COUNT_1_BIT; ii.tiling = VK_IMAGE_TILING_OPTIMAL;
   ii.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | (storage ? VK_IMAGE_USAGE_STORAGE_BIT : VK_IMAGE_USAGE_SAMPLED_BIT);
   vkcheck(vkCreateImage(g.dev, &ii, nullptr, &im.image), "image");
@@ -248,7 +249,7 @@ Img make_image(uint32_t format, uint32_t w, uint32_t h, uint32_t layers, uint32_
   ai.memoryTypeIndex = memory_type(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   vkcheck(vkAllocateMemory(g.dev, &ai, nullptr, &im.mem), "image memory"); g.device_bytes += req.size; vkcheck(vkBindImageMemory(g.dev, im.image, im.mem, 0), "image bind");
   VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-  vi.image = im.image; vi.viewType = array ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D; vi.format = VkFormat(format);
+  vi.image = im.image; vi.viewType = cube ? VK_IMAGE_VIEW_TYPE_CUBE : array ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D; vi.format = VkFormat(format);
   vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mips, 0, layers};
   vkcheck(vkCreateImageView(g.dev, &vi, nullptr, &im.view), "image view");
   return im;
@@ -558,15 +559,17 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   uint32_t decoded = 0, decoded_bc = 0;
   for (const auto& i : m.images) {
     const rp::Slot* slot = rp::find_slot(pass, i.set, i.binding);
-    check(slot && (slot->kind == rp::kSampled2D || slot->kind == rp::kSampled2DArray || slot->kind == rp::kStorage) && i.element < slot->count,
+    check(slot && (slot->kind == rp::kSampled2D || slot->kind == rp::kSampled2DArray || slot->kind == rp::kSampledCube || slot->kind == rp::kStorage) &&
+              i.element < slot->count,
           "image slot " + std::to_string(i.set) + "/" + std::to_string(i.binding));
+    if (slot->kind == rp::kSampledCube) check(i.layers == 6 && i.w == i.h, std::string("cube image of ") + slot->name + " (6 square layers)");
     if (slot->kind == rp::kStorage) check(i.format == slot->storage_format, std::string("storage format of ") + slot->name);
-    const bool array = slot->kind == rp::kSampled2DArray, storage = slot->kind == rp::kStorage;
+    const bool array = slot->kind == rp::kSampled2DArray, storage = slot->kind == rp::kStorage, cube = slot->kind == rp::kSampledCube;
     const std::string k = i.file + "|" + std::to_string(i.format) + "|" + std::to_string(i.w) + "x" + std::to_string(i.h) + "x" +
-                          std::to_string(i.layers) + "x" + std::to_string(i.mips) + (array ? "|a" : "") + (storage ? "|s" : "");
+                          std::to_string(i.layers) + "x" + std::to_string(i.mips) + (array ? "|a" : "") + (storage ? "|s" : "") + (cube ? "|c" : "");
     auto known = by_file.find(k);
     if (known == by_file.end()) {
-      Img im = make_image(i.format, i.w, i.h, i.layers, i.mips, storage, array);
+      Img im = make_image(i.format, i.w, i.h, i.layers, i.mips, storage, array, cube);
       fill_image_file(im, pack / i.file);   // streamed: a VT cache is ~2 GB
       known = by_file.emplace(k, im).first;
       if (i.source_format) { ++decoded; decoded_bc += rp::block_compressed(i.source_format); }
@@ -594,6 +597,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   Img zeroArr = make_image(VK_FORMAT_R32G32B32A32_SFLOAT, 1, 1, 1, 1, false, true); fill_image(zeroArr, {});
   Img nan2d = make_image(VK_FORMAT_R32G32B32A32_SFLOAT, 1, 1, 1, 1, false, false); fill_image(nan2d, nan_bytes);
   Img nanArr = make_image(VK_FORMAT_R32G32B32A32_SFLOAT, 1, 1, 1, 1, false, true); fill_image(nanArr, nan_bytes);
+  std::vector<uint8_t> nan6; for (int f = 0; f < 6; ++f) nan6.insert(nan6.end(), nan_bytes.begin(), nan_bytes.end());
+  Img zeroCube = make_image(VK_FORMAT_R32G32B32A32_SFLOAT, 1, 1, 6, 1, false, false, true); fill_image(zeroCube, {});
+  Img nanCube = make_image(VK_FORMAT_R32G32B32A32_SFLOAT, 1, 1, 6, 1, false, false, true); fill_image(nanCube, nan6);
   std::map<uint32_t, Img> storage_dummy;   // per format
   std::map<uint64_t, std::map<uint32_t, bool>> omitted;
   for (const auto& o : m.omitted) omitted[key(o.set, o.binding)][o.element] = true;
@@ -700,7 +706,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     switch (k) {
       case rp::kUbo: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
       case rp::kSsbo: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-      case rp::kSampled2D: case rp::kSampled2DArray: return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+      case rp::kSampled2D: case rp::kSampled2DArray: case rp::kSampledCube: return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
       case rp::kStorage: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
       case rp::kSampler: return VK_DESCRIPTOR_TYPE_SAMPLER;
       default: return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
@@ -724,7 +730,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   VkDescriptorSetAllocateInfo da{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO}; da.descriptorPool = descriptorPool;
   da.descriptorSetCount = pass.set_count; da.pSetLayouts = setLayouts.data();
   vkcheck(vkAllocateDescriptorSets(g.dev, &da, sets.data()), "descriptor sets");
-  std::vector<std::string> missing;
+  std::vector<std::string> missing, missing_lighting;   // lighting: sets 2-3 (older packs have none)
   std::vector<Buf> dummies;
   for (uint32_t i = 0; i < pass.slot_count; ++i) {
     const rp::Slot& slot = pass.slots[i];
@@ -739,7 +745,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       if (slot.set == 0 && slot.binding == 20) bi = {stats.b, 0, VK_WHOLE_SIZE};
       else if (it != buffers.end()) bi = {it->second.b, 0, it->second.size};
       else {
-        missing.push_back(slot.name);
+        (slot.set < 2 ? missing : missing_lighting).push_back(slot.name);
         dummies.push_back(make_buffer(256, slot.kind == rp::kUbo ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false));
         bi = {dummies.back().b, 0, 256};
       }
@@ -767,10 +773,11 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
           continue;
         }
         const bool isNan = om != omitted.end() && om->second.count(e);
-        const Img& d = slot.kind == rp::kSampled2DArray ? (isNan ? nanArr : zeroArr) : (isNan ? nan2d : zero2d);
+        const Img& d = slot.kind == rp::kSampledCube ? (isNan ? nanCube : zeroCube) : slot.kind == rp::kSampled2DArray ? (isNan ? nanArr : zeroArr)
+                                                                                                   : (isNan ? nan2d : zero2d);
         ii.push_back({VK_NULL_HANDLE, d.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
       }
-      if (!any && slot.count == 1) missing.push_back(slot.name);
+      if (!any && slot.count == 1) (slot.set < 2 ? missing : missing_lighting).push_back(slot.name);
       w.pImageInfo = ii.data();
     }
     vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr);
@@ -778,6 +785,11 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   if (!missing.empty()) {
     std::string s = "not in the pack (bound zero dummies):";
     for (auto& x : missing) s += " " + x;
+    result.warnings.push_back(s);
+  }
+  if (!missing_lighting.empty()) {
+    std::string s = std::to_string(missing_lighting.size()) + " lighting inputs (sets 2-3) not in the pack (bound zero dummies):";
+    for (auto& x : missing_lighting) s += " " + x;
     result.warnings.push_back(s);
   }
 
@@ -915,7 +927,14 @@ static_assert(sizeof(Push) == 256 && offsetof(Push, rt_tmax) == 84 && offsetof(P
 
 // box (the PT furnace, tools/pt_reference.hlsl): the camera inside a closed cube |x|, |y|, |z| <= 2 of
 // 12 inward triangles without a material record (instance 0 only); every pixel sees the face y = 2.
-void synthesize(const fs::path& dir, bool dark, bool box = false) {
+// lighting (the native ambient checks, tools/native_ambient.hlsl): also the lighting inputs of sets
+// 2-3 in closed form (kSynthAmbient): sky irradiance cube (0.25, 0.5, 1), specular cube 2, DFG LUT
+// (1, 0, 1), AO 0.5, albedo (0.8, 0.6, 0.4), roughness 0.5, one sphere probe of radius 100 around
+// the camera with a diffuse cube 3 (weight 1) listed in the froxel, m27 = m28 = 1, m29 = 0; the
+// atmosphere sun path (colour 1, intensity 1) through a transmittance LUT (0.7, 0.6, 0.5).
+struct SynthAmbient { float irr[3] = {0.25f, 0.5f, 1.0f}, spec = 2, probe = 3, ao = 0.5f, albedo[3] = {0.8f, 0.6f, 0.4f}, lut[3] = {0.7f, 0.6f, 0.5f}; };
+constexpr SynthAmbient kSynthAmbient{};
+void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting = false) {
   fs::create_directories(dir);
   constexpr uint32_t W = 128, H = 128, frame = 3, stamp = 7;
   constexpr float kFront = 4.3f;   // F: 20 cm in front of K, far beyond the on-screen depth tolerance (~2 cm footprint)
@@ -995,10 +1014,19 @@ void synthesize(const fs::path& dir, bool dark, bool box = false) {
   const float vp[4] = {0.5f, 0.5f, 0, 0};
   // One froxel listing the light (as tools/native_hit_gpu_fixture.cpp): tile 1, 1 x 1 tiles, slice z 0.
   std::vector<float> lconsts(136); lconsts[30 * 4 + 2] = 1; lconsts[30 * 4 + 3] = 1; { const uint32_t one = 1; std::memcpy(&lconsts[31 * 4], &one, 4); }
+  if (lighting) {   // m27, m28 1; m29 0; m30, m31 8; tiles of 128 px: every pixel in the one froxel (bg3_cluster_raw reads pixels)
+    lconsts[31 * 4 + 2] = lconsts[31 * 4 + 3] = 1; lconsts[32 * 4 + 1] = lconsts[32 * 4 + 2] = 8;
+    const uint32_t tile = W; std::memcpy(&lconsts[31 * 4], &tile, 4);
+  }
+  if (lighting) {   // the atmosphere sun path (bg3_sun.hlsli bg3_sun_colour): cam.x[i] = float 40 + 4 i
+    cam[40 + 5 * 4] = 1; cam[40 + 5 * 4 + 1] = 1;                          // x[5].x atmosphere on, .y intensity (.z clouds A off)
+    cam[40 + 13 * 4] = cam[40 + 13 * 4 + 1] = cam[40 + 13 * 4 + 2] = 1;   // x[13] colour, .w 0
+    cam[40 + 14 * 4 + 1] = 1;                                              // x[14] sun direction (0, 1, 0)
+  }
   std::vector<float> cam2(56); cam2[12 * 4 + 1] = 1;
   std::vector<uint32_t> lflags(8); { const float m0[2] = {1, 0.5f}; std::memcpy(lflags.data(), m0, 8); lflags[4] = lflags[5] = 1; }
   const float scale[4] = {1, 0, 0, 0};
-  const uint32_t clusters[4] = {0, 1, 0, 0};
+  const uint32_t clusters[4] = {0, lighting ? 1u | (1u << 24) : 1u, 0, 0};   // lighting: the light, then probe 0 (index list entry 1)
   std::vector<uint32_t> index(64);
   Light light{}; light.pos[0] = 0; light.pos[1] = 4.75f; light.pos[2] = 0; light.inv_r = 1.0f / 3; light.m3 = 1; light.m4 = 2; light.m5 = 0;
   light.chan = 1; light.strength = 1; for (float& c : light.col) c = dark ? 0.0f : 2.0f;
@@ -1065,6 +1093,32 @@ void synthesize(const fs::path& dir, bool dark, bool box = false) {
   m.samplers.push_back({1, 15, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
   m.instances = "instances.bin"; m.instance_count = instances_used;
   m.outputs.push_back({0, 8, rp::kRgba16Sfloat, W / 2, H / 2, ""}); m.outputs.push_back({0, 13, rp::kR32Sfloat, W / 2, H / 2, ""});
+  if (lighting) {
+    const SynthAmbient& q = kSynthAmbient;
+    auto full = [&](float r, float g, float b, float a) { std::vector<float> v(size_t(W) * H * 4); for (size_t i = 0; i < v.size(); i += 4) { v[i] = r; v[i + 1] = g; v[i + 2] = b; v[i + 3] = a; } return v; };
+    auto cube = [&](float r, float g, float b) { std::vector<float> v; for (int f = 0; f < 6; ++f) v.insert(v.end(), {r, g, b, 1.0f}); return v; };
+    write_vec(dir / "albedo_g.rgba32f", full(q.albedo[0], q.albedo[1], q.albedo[2], 1)); write_vec(dir / "material_g.rgba32f", full(0.5f, 0.5f, 0, 0));
+    write_vec(dir / "ao_g.rgba32f", full(q.ao, q.ao, q.ao, 1));
+    write_vec(dir / "irr.cube", cube(q.irr[0], q.irr[1], q.irr[2])); write_vec(dir / "spec.cube", cube(q.spec, q.spec, q.spec));
+    write_vec(dir / "probe_rgb.cube", cube(q.probe, q.probe, q.probe)); write_vec(dir / "probe_w.cube", cube(1, 1, 1));
+    const float dfg[4] = {1, 0, 1, 0}, lut[4] = {q.lut[0], q.lut[1], q.lut[2], 1}, atmo[4] = {636000, 696000, 0, 0};
+    write_vec(dir / "dfg.rgba32f", vec(dfg, 4)); write_vec(dir / "lut.rgba32f", vec(lut, 4)); write_vec(dir / "atmo.bin", vec(atmo, 4));
+    // One sphere probe (f469db78 _57, 144 B): m0 (fade radius 100, radius^2 1e4, -, fade width 1), identity
+    // world -> probe rows, m3 0, m4 1, m5 = has diffuse | diffuse pair 1 (elements 0, 1), m6 0.
+    std::vector<float> probe(36); probe[0] = 100; probe[1] = 1e4f; probe[3] = 1; probe[4] = 1; probe[9] = 1; probe[14] = 1; probe[33] = 1;
+    { const uint32_t m5 = 2u | (1u << 3); std::memcpy(&probe[34], &m5, 4); }
+    write_vec(dir / "probes.bin", probe);
+    img(2, 2, 0, rp::kRgba32Sfloat, W, H, "albedo_g.rgba32f"); img(2, 3, 0, rp::kRgba32Sfloat, W, H, "material_g.rgba32f");
+    img(2, 6, 0, rp::kRgba32Sfloat, W, H, "ao_g.rgba32f"); img(2, 38, 0, rp::kRgba32Sfloat, 1, 1, "dfg.rgba32f");
+    auto cimg = [&](uint32_t b, uint32_t e, const char* file) { m.images.push_back({2, b, e, rp::kRgba32Sfloat, 1, 1, 6, 1, file}); };
+    cimg(34, 0, "irr.cube"); cimg(36, 0, "irr.cube"); cimg(35, 0, "spec.cube"); cimg(37, 0, "spec.cube");
+    cimg(45, 0, "probe_rgb.cube"); cimg(45, 1, "probe_w.cube");
+    buf(2, 33, probe.size() * 4, "probes.bin"); buf(3, 0, 16, "atmo.bin");
+    img(3, 1, 0, rp::kRgba32Sfloat, 1, 1, "lut.rgba32f");
+    m.samplers.push_back({2, 16, 0, 1, 1, 1, 2, 2, 2, 0, 1000}); m.samplers.push_back({2, 32, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
+    m.samplers.push_back({3, 6, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
+    m.notes.push_back(" synthetic lighting inputs (sets 2-3): kSynthAmbient");
+  }
   const std::string mf = rp::serialize(m);
   { rp::Manifest back; std::string error; check(rp::parse(mf, back, error), "synthetic manifest does not parse: " + error); }
   write_file(dir / "manifest.txt", mf.data(), mf.size());
@@ -1244,14 +1298,17 @@ int load_test() {
 // hit-material epoch), every mode of one iteration the same seed, so all modes see the same paths;
 // Push::debug = mode, rt_stats 0. Sums each mode's giRaw (rgba) and giRawDepth (aux) in double; the
 // mean is sum / iters (the shader averages its PT_SPP).
-constexpr uint32_t kPtModes = 7;
+constexpr uint32_t kPtModes = 7, kPtModesEnv = 8;   // 8: + mode 7, the environment at misses (PT_ENV)
 struct PtAccum {
   uint32_t w = 0, h = 0, iters = 0, modes = 0;
-  std::vector<double> rgba[kPtModes], aux[kPtModes];
+  std::vector<double> rgba[kPtModesEnv], aux[kPtModesEnv];
   std::vector<double> gpu_ms;
   double mean(uint32_t mode, uint32_t c, size_t i) const { return (c < 4 ? rgba[mode][i * 4 + c] : aux[mode][i]) / std::max(iters, 1u); }
 };
-PtAccum pt_run(const fs::path& pack, std::vector<std::string> defines, uint32_t iters, uint32_t modes, const fs::path& out, bool quiet = true) {
+// `shader` (in tools/): pt_reference.hlsl, or native_ambient.hlsl (--native-ambient, same mode protocol).
+PtAccum pt_run(const fs::path& pack, std::vector<std::string> defines, uint32_t iters, uint32_t modes, const fs::path& out, bool quiet = true,
+               const std::string& shader = "pt_reference.hlsl") {
+  check(modes <= kPtModesEnv, "at most 8 modes");
   PtAccum acc; acc.iters = iters; acc.modes = modes;
   ReplayHooks hooks;
   hooks.patch = [&](uint32_t run, std::vector<uint8_t>& push) {
@@ -1284,11 +1341,11 @@ PtAccum pt_run(const fs::path& pack, std::vector<std::string> defines, uint32_t 
   { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
   std::vector<std::string> all = defines;
   for (size_t a = 0; a < m.defines.size();) { size_t e = m.defines.find(';', a); all.push_back(m.defines.substr(a, e - a)); if (e == std::string::npos) break; a = e + 1; }
-  std::string key; for (auto& d : all) key += d + ";";
+  std::string key = shader + "|"; for (auto& d : all) key += d + ";";
   auto it = cache.find(key);
   if (it == cache.end()) {
     fs::create_directories(out);
-    it = cache.emplace(key, compile(fs::path(source_root()) / "tools" / "pt_reference.hlsl", all, out / "pt_reference.spv")).first;
+    it = cache.emplace(key, compile(fs::path(source_root()) / "tools" / shader, all, out / (fs::path(shader).stem().string() + ".spv"))).first;
   }
   replay(pack, &it->second, {}, {}, out, iters * modes, quiet, &hooks);
   return acc;
@@ -1460,6 +1517,122 @@ void pt_cost(const fs::path& pack, const std::vector<std::string>& base, const f
   }
 }
 
+// ---------------------------------------------------------------- native ambient (tools/native_ambient.hlsl)
+// --native-ambient: the game's diffuse ambient at each GI pixel (E_native, the giRaw.rgb quantity, from
+// the pack's lighting inputs) against the PT reference's far field over the same paths and pixels:
+// PT total minus its live domain (first hits within gi_rt_radius x the live fade), calibrated by k
+// (game / PT on visible first hits, as pt_report), plus the environment the PT's misses see (PT_ENV,
+// game units). Pixels: those the live pass shaded (live giRawDepth > 0), else every shaded pixel.
+// Luminance (Rec. 709) throughout.
+void native_ambient_report(const fs::path& pack, const PtAccum& na, const PtAccum& pt, const fs::path& out, const std::string& params,
+                           const float est_t[3]) {
+  rp::Manifest m; std::string error;
+  { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
+  check(na.w == pt.w && na.h == pt.h && na.modes >= 3 && pt.modes >= kPtModes, "native ambient and PT runs over the same pixels");
+  const size_t n = size_t(na.w) * na.h;
+  std::string live_rgba, live_depth;
+  for (const auto& o : m.outputs) { if (o.binding == 8) live_rgba = o.reference; if (o.binding == 13) live_depth = o.reference; }
+  std::vector<float> lv(n * 4, 0.0f), ld(n, 0.0f);
+  const bool have_live = !live_rgba.empty() && fs::exists(pack / live_rgba) && !live_depth.empty() && fs::exists(pack / live_depth);
+  if (have_live) {
+    auto raw = read_file(pack / live_rgba); check(raw.size() == n * 8, "live giRaw size");
+    const auto* hp = reinterpret_cast<const uint16_t*>(raw.data());
+    for (size_t i = 0; i < n * 4; ++i) lv[i] = half_to_float(hp[i]);
+    auto d = read_file(pack / live_depth); check(d.size() == n * 4, "live giRawDepth size"); std::memcpy(ld.data(), d.data(), d.size());
+  }
+  float radius = 0;
+  { auto push = read_file(pack / m.push); if (push.size() >= sizeof(Push)) std::memcpy(&radius, push.data() + offsetof(Push, gi_rt_radius), 4); }
+  auto lum = [](double r, double g, double b) { return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  auto L = [&](const PtAccum& a, uint32_t mode, size_t i) { return lum(a.mean(mode, 0, i), a.mean(mode, 1, i), a.mean(mode, 2, i)); };
+  const bool env = pt.modes > 7;
+  auto use = [&](size_t i) {
+    const double E = L(na, 0, i);
+    if (!std::isfinite(E) || !std::isfinite(L(pt, 0, i))) return false;
+    return have_live ? ld[i] > 0 && std::isfinite(lv[i * 4]) : E > 0;
+  };
+  // Calibration k over the compared pixels (pt_report: screen radiance / PT radiance on visible first hits).
+  double cnt = 0, s_scr = 0, s_vis = 0;
+  for (size_t i = 0; i < n; ++i) if (use(i)) { cnt += 1; s_scr += L(pt, 2, i); s_vis += pt.mean(0, 4, i) + pt.mean(1, 4, i); }
+  check(cnt > 0, "no shaded pixels to compare");
+  const double k = s_vis > 0 ? s_scr / s_vis : 0;
+  auto far_rgb = [&](size_t i, int c) { return k * (pt.mean(0, c, i) - pt.mean(3, c, i)) + (env ? pt.mean(7, c, i) : 0.0); };
+  struct Sum { double E = 0, Eao = 0, Eaoa = 0, sky = 0, lit = 0, spec = 0, probe = 0, ao = 0, a = 0, pt_far = 0, far_on = 0, off = 0, env = 0, env1 = 0, miss = 0,
+               t[3] = {0, 0, 0}, cloud = 0, atmo = 0; } S;
+  constexpr int TX = 16, TY = 9;
+  struct Tile { double n = 0, nat = 0, ref = 0, refs = 0; };
+  std::vector<Tile> tiles(TX * TY);
+  for (uint32_t y = 0; y < na.h; ++y)
+    for (uint32_t x = 0; x < na.w; ++x) {
+      const size_t i = size_t(y) * na.w + x;
+      if (!use(i)) continue;
+      const double E = L(na, 0, i), ao = na.mean(0, 3, i), la = have_live ? lv[i * 4 + 3] : 1.0;
+      const double pfar = L(pt, 0, i) - L(pt, 3, i), e = env ? L(pt, 7, i) : 0.0;
+      S.E += E; S.Eao += E * ao; S.Eaoa += E * ao * la; S.sky += na.mean(0, 4, i); S.ao += ao; S.a += la;
+      S.lit += L(na, 1, i); S.probe += na.mean(1, 3, i); S.spec += na.mean(1, 4, i);
+      S.pt_far += pfar; S.far_on += pt.mean(1, 4, i) + pt.mean(3, 4, i); S.off += pt.mean(4, 4, i); S.env += e; S.env1 += env ? pt.mean(7, 4, i) : 0.0;
+      S.miss += pt.mean(0, 3, i);
+      for (int c = 0; c < 3; ++c) S.t[c] += na.mean(2, c, i);
+      S.cloud += na.mean(2, 3, i); S.atmo += na.mean(2, 4, i);
+      Tile& t = tiles[(y * TY / na.h) * TX + x * TX / na.w];
+      t.n += 1; t.nat += E * ao; t.ref += k * pfar + e; t.refs += k * pfar;
+    }
+  auto M = [&](double v) { return v / cnt; };
+  std::vector<std::string> lines;
+  char b[1024];
+  auto add = [&](const char* fmt, auto... v) { std::snprintf(b, sizeof b, fmt, v...); lines.push_back(b); std::printf("  %s\n", b); };
+  const rp::LightingInputs li = rp::lighting_inputs(m);
+  add("native ambient: %s; %ux%u GI pixels, %.0f compared (%s); lighting inputs %u images, %u probe cubes, probe records %s, LUT sun %s, sky cube %s",
+      params.c_str(), na.w, na.h, cnt, have_live ? "live giRawDepth > 0" : "no live reference: every shaded pixel", li.images, li.probe_cubes,
+      li.probes ? "yes" : "no", li.sun_lut ? "yes" : "no", li.sky ? "yes" : "no");
+  add("native ambient means (luminance, the giRaw.rgb quantity, game units): E_native %.6g (sky irradiance only %.6g), x game AO %.6g (AO %.4f), "
+      "x game AO x live a %.6g (live a %.4f); froxels listing a local probe %.1f%%; as lit (x diffuse colour x AO) %.6g, specular ambient %.6g",
+      M(S.E), M(S.sky), M(S.Eao), M(S.ao), M(S.Eaoa), M(S.a), 100.0 * M(S.probe), M(S.lit), M(S.spec));
+  add("PT far field (total minus live domain, first hit beyond gi_rt_radius %.3g m or faded): %.6g PT units (first hits beyond it on screen %.6g, off screen %.6g); "
+      "k = %.3f; k x PT far %.6g; PT environment through misses %.6g (first vertex %.6g; first-ray miss fraction %.4f)%s",
+      radius, M(S.pt_far), M(S.far_on), M(S.off), k, k * M(S.pt_far), M(S.env), M(S.env1), M(S.miss), env ? "" : " (PT_ENV off: no sky cube in the pack)");
+  const double ref = k * M(S.pt_far) + M(S.env), refs = k * M(S.pt_far);
+  add("native vs PT far field: E_native x AO / (k x PT far) %.3f, E_native x AO / (k x PT far + PT env) %.3f, E_native / (k x PT far + PT env) %.3f, "
+      "E_native x AO x live a / (k x PT far + PT env) %.3f",
+      refs > 0 ? M(S.Eao) / refs : 0.0, ref > 0 ? M(S.Eao) / ref : 0.0, ref > 0 ? M(S.E) / ref : 0.0, ref > 0 ? M(S.Eaoa) / ref : 0.0);
+  std::vector<double> r_env, r_far;
+  double abs_err = 0, sum_ref = 0;
+  std::ofstream csv(out / "native_ambient_tiles.csv");
+  csv << "tx,ty,pixels,native_x_ao,k_pt_far_plus_env,k_pt_far\n";
+  for (int ty = 0; ty < TY; ++ty)
+    for (int tx = 0; tx < TX; ++tx) {
+      Tile& t = tiles[ty * TX + tx];
+      if (t.n < 1) continue;
+      t.nat /= t.n; t.ref /= t.n; t.refs /= t.n;
+      csv << tx << "," << ty << "," << t.n << "," << t.nat << "," << t.ref << "," << t.refs << "\n";
+      if (t.ref > 0) r_env.push_back(t.nat / t.ref);
+      if (t.refs > 0) r_far.push_back(t.nat / t.refs);
+      abs_err += t.n * std::abs(t.nat - t.ref); sum_ref += t.n * t.ref;
+    }
+  auto q = [](std::vector<double> v, double p) { if (v.empty()) return 0.0; std::sort(v.begin(), v.end()); return v[size_t(p * (v.size() - 1))]; };
+  add("per tile (16 x 9, %zu with pixels): E_native x AO / (k x PT far + PT env) p10 %.3f median %.3f p90 %.3f, pixel-weighted mean |native - ref| / ref %.3f; "
+      "/ (k x PT far) p10 %.3f median %.3f p90 %.3f",
+      r_env.size(), q(r_env, 0.1), q(r_env, 0.5), q(r_env, 0.9), sum_ref > 0 ? abs_err / sum_ref : 0.0, q(r_far, 0.1), q(r_far, 0.5), q(r_far, 0.9));
+  add("sun transmittance: game LUT %.4f %.4f %.4f (atmosphere path on %.0f%% of pixels), Kasten-Young estimate %.4f %.4f %.4f; cloud shadow mean %.4f",
+      M(S.t[0]), M(S.t[1]), M(S.t[2]), 100.0 * M(S.atmo), est_t[0], est_t[1], est_t[2], M(S.cloud));
+  { std::ofstream f(out / "native_ambient_report.txt"); for (auto& l : lines) f << l << "\n"; }
+  write_pfm_rgb(out / "native_ambient.pfm", na.w, na.h, [&](size_t i, int c) { return float(na.mean(0, c, i) * na.mean(0, 3, i)); });
+  write_pfm_rgb(out / "pt_far_field.pfm", na.w, na.h, [&](size_t i, int c) { return float(far_rgb(i, c)); });
+  const uint32_t sw = std::max(1u, na.w / 640), W = na.w / sw, H = na.h / sw;
+  std::vector<uint8_t> strip(size_t(W) * 3 * H * 3);
+  const double exposure = M(S.Eao) > 0 ? 0.5 / M(S.Eao) : 1.0;
+  auto tone = [&](double v) { v = std::max(0.0, v * exposure); v = v / (1 + v); v = v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1 / 2.4) - 0.055; return uint8_t(std::clamp(v, 0.0, 1.0) * 255 + 0.5); };
+  for (uint32_t y = 0; y < H; ++y)
+    for (uint32_t x = 0; x < W; ++x) {
+      const size_t i = size_t(y * sw) * na.w + x * sw;
+      for (int c = 0; c < 3; ++c) {
+        strip[(size_t(y) * W * 3 + x) * 3 + c] = tone(na.mean(0, c, i) * na.mean(0, 3, i));
+        strip[(size_t(y) * W * 3 + W + x) * 3 + c] = tone(far_rgb(i, c));
+        strip[(size_t(y) * W * 3 + 2 * W + x) * 3 + c] = tone(na.mean(0, c, i));
+      }
+    }
+  write_bmp(out / "native_compare.bmp", W * 3, H, strip);
+}
+
 // CTest pt_reference_test: the furnace (closed box, every vertex emits Le = 1, Lambertian albedo rho):
 // mean incident radiance = sum_{k<B} rho^k exactly for B vertices (each Lambert sample's f cos / pdf
 // is rho; every ray hits), Le / (1 - rho) with Russian roulette (unbiased; checked within 4 standard
@@ -1594,6 +1767,45 @@ int self_test(const fs::path& dir) {
     }
     line("12 staged image upload: pieces read back bit-equal", bad == 0, std::to_string(bad) + " of 8 differ, " + std::to_string(pieces) + " pieces");
   }
+  {   // 13-16: the lighting inputs (sets 2-3: cubes, LUTs, probe records, samplers) load and replay in closed
+      // form (synthesize kSynthAmbient; tools/native_ambient.hlsl, pt_reference PT_ENV / PT_SUN_LUT). The
+      // packs above carry none: 1-7 replay with their zero dummies.
+    const SynthAmbient& q = kSynthAmbient;
+    synthesize(dir / "ambient", true, false, true);
+    const PtAccum na = pt_run(dir / "ambient", {}, 1, 3, dir / "ambient-out", true, "native_ambient.hlsl");
+    const size_t n = size_t(na.w) * na.h;
+    const double k100 = 100.0, E = q.probe * k100, sky = (0.2126 * q.irr[0] + 0.7152 * q.irr[1] + 0.0722 * q.irr[2]) * k100;
+    double e_err = 0, sky_err = 0, ao_err = 0, lit_err = 0, probe = 0, t_err = 0, cloud_err = 0, atmo = 0;
+    for (size_t i = 0; i < n; ++i) {
+      for (int c = 0; c < 3; ++c) {
+        e_err = std::max(e_err, std::abs(na.mean(0, c, i) - E));
+        lit_err = std::max(lit_err, std::abs(na.mean(1, c, i) - E * q.albedo[c] * q.ao));
+        t_err = std::max(t_err, std::abs(na.mean(2, c, i) - q.lut[c]));
+      }
+      sky_err = std::max(sky_err, std::abs(na.mean(0, 4, i) - sky)); ao_err = std::max(ao_err, std::abs(na.mean(0, 3, i) - q.ao));
+      probe += na.mean(1, 3, i); cloud_err = std::max(cloud_err, std::abs(na.mean(2, 3, i) - 1.0)); atmo += na.mean(2, 4, i);
+    }
+    char d[200];
+    std::snprintf(d, sizeof d, "%zu px: max |E - %.0f| %.3g, |sky part - %.3f| %.3g, |AO - %.2f| %.3g", n, E, e_err, sky, sky_err, q.ao, ao_err);
+    line("13 lighting inputs load: E_native = local probe over the sky x b13 100, AO", n > 0 && e_err < 0.25 && sky_err < 1e-3 && ao_err < 1e-3, d);
+    std::snprintf(d, sizeof d, "max |as lit - E x albedo x AO| %.3g, probe listed at %.0f of %zu px", lit_err, probe, n);
+    line("14 native ambient as lit = E_native x diffuse colour x AO", lit_err < 0.1 && probe == double(n), d);
+    std::snprintf(d, sizeof d, "max |t - LUT| %.3g, |cloud - 1| %.3g, atmosphere path at %.0f of %zu px", t_err, cloud_err, atmo, n);
+    line("15 sun transmittance read from the pack's LUT (set 3)", t_err < 1e-3 && cloud_err < 1e-6 && atmo == double(n), d);
+    // PT_ENV: a miss sees the specular cube x m27 x b13 100 (game units), kept out of the traced bounce.
+    const PtAccum pe = pt_run(dir / "ambient", {"PT_ENV=1", "PT_SUN_LUT=1", "PT_SUN=0", "PT_LIGHTS=0", "PT_BOUNCES=1"}, 2, kPtModesEnv,
+                              dir / "ambient-pt", true);
+    double misses = 0, env_err = 0, total = 0;
+    for (size_t i = 0; i < size_t(pe.w) * pe.h; ++i) {
+      total += std::abs(pe.mean(0, 0, i)) + std::abs(pe.mean(0, 1, i)) + std::abs(pe.mean(0, 2, i));
+      const double miss = pe.mean(7, 3, i);
+      if (!(miss > 0)) continue;
+      misses += 1;
+      env_err = std::max(env_err, std::abs(pe.mean(7, 4, i) / miss - q.spec * k100));
+    }
+    std::snprintf(d, sizeof d, "%.0f px with first-ray misses, max |env / miss - %.0f| %.3g, traced total %.3g", misses, q.spec * k100, env_err, total);
+    line("16 PT_ENV: a miss sees the specular cube x b13 100; total untouched", misses > 0 && env_err < 1e-3 && total == 0, d);
+  }
   line("8 no validation errors", g_validation_errors.load() == 0, std::to_string(g_validation_errors.load()) + " errors");
   std::printf("%s: %d failure(s); GPU dispatch %.3f ms\n", failures ? "FAIL" : "PASS", failures, a.gpu_ms);
   return failures ? 1 : 0;
@@ -1605,7 +1817,7 @@ int main(int argc, char** argv) {
   fs::path pack, out, hlsl, spv, synth, test;
   std::vector<std::string> defines;
   uint32_t repeat = 1;
-  bool validation = true, dark = false, pt = false, pt_cost_only = false, pt_skip_cost = false;
+  bool validation = true, dark = false, pt = false, pt_cost_only = false, pt_skip_cost = false, native = false;
   uint32_t pt_iters = 32;
   fs::path pt_test;
   for (size_t i = 0; i < args.size(); ++i) {
@@ -1626,6 +1838,7 @@ int main(int argc, char** argv) {
     else if (args[i] == "--pt-iters") pt_iters = uint32_t(std::max(1, std::atoi(next().c_str())));
     else if (args[i] == "--pt-cost") pt_cost_only = true;
     else if (args[i] == "--pt-skip-cost") pt_skip_cost = true;
+    else if (args[i] == "--native-ambient") native = true;
     else die("unknown argument " + args[i] + " (see tools/frame_replay.md)");
   }
   if (!test.empty()) return self_test(test);
@@ -1633,21 +1846,50 @@ int main(int argc, char** argv) {
   if (!synth.empty()) { synthesize(synth, dark); std::printf("synthetic pack written to %s\n", synth.string().c_str()); return 0; }
   check(!pack.empty(), "usage: frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V] [--repeat N]");
   if (int r = init_gpu(validation, false)) return r;
-  if (out.empty()) out = pack / (pt || pt_cost_only ? "pt-reference" : "replay");
+  if (out.empty()) out = pack / (native ? "native-ambient" : pt || pt_cost_only ? "pt-reference" : "replay");
+  // The Kasten-Young estimate of the sun's transmittance at the pack's sun elevation (cam.x[14].y).
+  auto estimate_t = [&](const rp::Manifest& m, float t[3]) {
+    t[0] = t[1] = t[2] = 1;
+    std::vector<uint8_t> cam;
+    for (auto& b : m.buffers) if (b.set == 0 && b.binding == 0 && !b.file.empty()) cam = read_file(pack / b.file);
+    if (cam.size() >= 400) { float mu; std::memcpy(&mu, cam.data() + 24 * 16 + 4, 4); sun_transmittance(mu, t); }
+  };
+  if (native) {
+    // tools/native_ambient.hlsl + tools/pt_reference.hlsl over the pack (tools/frame_replay.md "Native ambient").
+    fs::create_directories(out);
+    rp::Manifest m; std::string error;
+    { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
+    const rp::LightingInputs li = rp::lighting_inputs(m);
+    check(li.ambient, "the pack has no lighting inputs (set 2 b34 irradiance cube and b38 DFG LUT): capture it with a writer that has "
+                      "them (tools/frame_replay.md \"Lighting inputs\")");
+    float est[3]; estimate_t(m, est);
+    std::vector<std::string> d = defines;
+    if (li.sun_lut) d.push_back("PT_SUN_LUT=1");
+    else { char x[96]; std::snprintf(x, sizeof x, "PT_SUN_T=float3(%.4f,%.4f,%.4f)", est[0], est[1], est[2]); d.push_back(x); }
+    if (li.sky) d.push_back("PT_ENV=1");
+    std::string params;
+    for (auto& x : d) params += x + " ";
+    params += "PT iterations " + std::to_string(pt_iters);
+    const PtAccum na = pt_run(pack, {}, 1, 3, out, true, "native_ambient.hlsl");
+    const PtAccum a = pt_run(pack, d, pt_iters, li.sky ? kPtModesEnv : kPtModes, out);
+    native_ambient_report(pack, na, a, out, params, est);
+    if (g_validation_errors.load()) { std::printf("FAIL %u validation errors\n", g_validation_errors.load()); return 1; }
+    std::printf("written to %s\n", out.string().c_str());
+    return 0;
+  }
   if (pt || pt_cost_only) {
     // tools/pt_reference.hlsl over the pack (tools/frame_replay.md "PT reference"). The sun's
-    // transmittance (atmosphere LUT not in the pack) is estimated unless --define PT_SUN_T=... is given.
+    // transmittance: the pack's LUT when it has the lighting inputs, else estimated, unless --define PT_SUN_T=... is given.
     fs::create_directories(out);
     rp::Manifest m; std::string error;
     { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
     std::string params;
     bool has_t = false;
     for (auto& d : defines) { has_t |= d.rfind("PT_SUN_T=", 0) == 0; params += d + " "; }
-    if (!has_t) {
-      std::vector<uint8_t> cam;
-      for (auto& b : m.buffers) if (b.set == 0 && b.binding == 0 && !b.file.empty()) cam = read_file(pack / b.file);
-      float t[3] = {1, 1, 1};
-      if (cam.size() >= 400) { float mu; std::memcpy(&mu, cam.data() + 24 * 16 + 4, 4); sun_transmittance(mu, t); }   // cam.x[14].y
+    if (!has_t && rp::lighting_inputs(m).sun_lut) {   // a pack with the lighting inputs: the game's LUT and clouds
+      defines.push_back("PT_SUN_LUT=1"); params += "PT_SUN_LUT=1 (the pack's transmittance LUT) ";
+    } else if (!has_t) {
+      float t[3]; estimate_t(m, t);   // cam.x[14].y
       char d[96]; std::snprintf(d, sizeof d, "PT_SUN_T=float3(%.4f,%.4f,%.4f)", t[0], t[1], t[2]);
       defines.push_back(d); params += std::string(d) + " (estimated) ";
     }

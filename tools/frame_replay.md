@@ -4,6 +4,8 @@ Re-run one production pass on one captured frame without the game (docs/OFFLINE_
 Pass: `gi_hit_direct` (`shaders/gi/gi_trace_rt_hit_direct.hlsl`, base variant). It was chosen over
 `rf_hit_shade` because it reads only two sets (the GI push set and the material set 1): no box
 lights, no probes, no sky cubes, no sun set. `rf_hit_shade` needs those in the pack first.
+Since 2026-11-01 the pack also carries the deferred lighting's inputs (sets 2-3, "Lighting inputs"):
+the probes, the sky cubes, the DFG LUT and the sun set, which `--native-ambient` and the PT read.
 
 ## Harness: `bin\frame_replay.exe` (tools/frame_replay.cpp)
 
@@ -12,6 +14,7 @@ frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define
 frame_replay --synthesize <dir> [--dark]
 frame_replay --self-test <dir>          (CTest frame_replay_test)
 frame_replay --load-test                (manual: the 2 GB S8 hit cache shape through the staged upload)
+frame_replay --pack <dir> --native-ambient [--pt-iters N] [--out <dir>]   (default out <pack>/native-ambient)
 ```
 - Windowless, own Vulkan device, implicit layers disabled (never the game layer), below-normal priority.
 - On every run it compiles the pass shader from this checkout's `shaders/` with the layer's DXC flags
@@ -52,6 +55,12 @@ frame_replay --pt-self-test <dir>                                               
 - Not in the pack, so not in the PT (each reported): sky/environment (a miss is 0; its share is the miss
   fraction), emission, projector lights, cloud shadows, the atmosphere LUT (`PT_SUN_T`, estimated from the
   sun elevation with Kasten-Young air mass + Rayleigh/aerosol depth unless given), roofs the camera cut away.
+- A pack with the lighting inputs: `--pt-reference` takes the sun from the game's transmittance LUT and
+  its two cloud-shadow layers (`PT_SUN_LUT=1`, `bg3_sun_colour`, `bg3_cloud_shadow` at every vertex).
+  `PT_ENV=1` (set by `--native-ambient`) adds mode 7: the environment radiance a miss sees (the global
+  specular cubes b35 / b37 at mip 0, x `_m27` / `_m28`, blended by `_m29`, x b13[0] 100), carried by the
+  path throughput, in game units, kept out of modes 0-6 so the traced split is unchanged. Indoors a miss
+  through a cut roof sees this sky too (the native lighting would use a local probe there): declared.
 - 7 modes per iteration (Push::debug; same seed via Push::ls_kmode, Push::frame stays the hit-material
   epoch), so every split is over the same paths: total, 1-vertex, screen radiance at visible hits, the live
   domain (first hit within gi_rt_radius, its fade), diagnostics, and the energy by first hit (visible /
@@ -68,6 +77,69 @@ frame_replay --pt-self-test <dir>                                               
   the FresnelBlend white furnace with 4 vertices stays in (2.5, 4] (no energy gain); closure (miss 0); the
   slab pack's native material row qualifies and its light lights the PT, the dark pack gives exactly 0;
   two runs bit-identical; no validation errors.
+
+## Native ambient: `--native-ambient` (tools/native_ambient.hlsl)
+
+The far field the 1 m GI rays do not reach is, in game, the native probe ambient. This compares it with
+the PT reference over the same GI pixels, on a pack that has the lighting inputs (else it stops with
+"the pack has no lighting inputs").
+- `tools/native_ambient.hlsl` (not a game shader) replays the tiled lighting's diffuse ambient at each GI
+  pixel's G-buffer point from the pack's set 2, with the in-game replicas' functions: the sky irradiance
+  cubes b34 / b36 at N (x `_m27` / `_m28`, blend `_m29`) x DFG.z, the local diffuse probes listed in the
+  pixel's froxel lerped over it (`native_hit_diffuse_probes`), x b13[0] 100. E_native (diffuse colour 1)
+  is the giRaw.rgb quantity, so it compares with the PT directly; the lighting multiplies both by the
+  diffuse colour. Also: the game AO (b6 .x), the as-lit term (x diffuse colour x AO), the specular
+  ambient (`bg3_spec_ambient` x SO), and the sun transmittance read from the LUT (`bg3_sun_colour` /
+  colour x intensity) with the cloud shadow. Declared: roughness without the quad specular AA; skin as
+  albedo x (1 - metalness); no aerial perspective (1 indoors).
+- The PT runs as `--pt-reference` with `PT_SUN_LUT=1` (LUT in the pack) and `PT_ENV=1` (sky cube in the
+  pack), `--pt-iters` iterations (default 32). Far field = PT total - PT live domain (first hits within
+  gi_rt_radius x the live fade), x k (game / PT on visible first hits, as pt_report); reference =
+  k x PT far + PT environment (game units).
+- Pixels: those the live pass shaded (live giRawDepth > 0). Luminance (Rec. 709). Output
+  `native_ambient_report.txt`, `native_ambient_tiles.csv` (16 x 9), `native_ambient.pfm` (E_native x AO),
+  `pt_far_field.pfm` (k x PT far + env), `native_compare.bmp` (native x AO | reference | native). The
+  deciding lines:
+  - `native ambient means (...): E_native <v> (sky irradiance only <v>), x game AO <v> (AO <a>), x game AO x live a <v> ...`
+  - `PT far field (...): <v> PT units (...); k = <k>; k x PT far <v>; PT environment through misses <v> (...)`
+  - `native vs PT far field: E_native x AO / (k x PT far) <r>, E_native x AO / (k x PT far + PT env) <r>, ...`
+    (above 1: the native term is brighter than the traced far field; below 1: darker)
+  - `per tile (16 x 9, ...): E_native x AO / (k x PT far + PT env) p10 <> median <> p90 <>, ...`
+  - `sun transmittance: game LUT <rgb> (...), Kasten-Young estimate <rgb>; cloud shadow mean <c>`
+- Limits: k absorbs the fallback albedo where the pack has no VT cache (one global k, region numbers
+  are rough until the VT-cache pack); the native AO is the game's SSAO before the RT AO fold.
+- Cost: one native dispatch per mode (3) plus the PT run (S8 2026-11-01: 11.6 s GPU for 32 x 7).
+- Not run on a real pack yet: no pack with lighting inputs exists (needs one live capture, READY_FOR_LIVE).
+
+## Lighting inputs (sets 2-3 of the pack, common/replay_pack.h `kLightingSources`)
+
+Set 2 = the tiled lighting's own set 1 (f469db78) at its binding numbers, as D-RF binds it as set 2:
+b2 RT1 albedo, b3 RT2 material, b6 AO, b16 / b32 samplers, b33 local probe records (144 B), b34 / b36
+sky irradiance cubes, b35 / b37 global specular cubes (the sky/environment radiance), b38 DFG LUT,
+b45 the probe cubes (bindless, `kSampledCube`, 4096 elements). Set 3 = the sun set in the
+`shaders/rt/bg3_sun.hlsli` layout: b0 the atmosphere constants (game set 5 b0), b1 the transmittance
+LUT (set 5 b1), b2 / b3 cloud layer A (set 5 b4 / b5), b4 / b5 cloud layer B (set 1 b42 / b43), b6 a
+declared linear clamp sampler. Cubes are `image` lines with 6 layers (the faces in Vulkan order);
+the replay makes them cube-compatible and binds cube views. Older packs have none of it: the replay
+binds zero dummies and notes "N lighting inputs (sets 2-3) not in the pack".
+- Live writer: the core records the pack inside its pre-lighting hook (`run_pre`), where the game's
+  lighting sets are bound on the compute bind point and the core's own binds are not tracked, so the
+  layer reads them with `query_binding` / `query_set` (no ABI change, no core change). The AO is the
+  game's SSAO before the RT AO fold (it runs later in `run_pre`). Every input is droppable and
+  optional (an absent one is a note). b45: the cube elements the frame's probe records name
+  (`rp::probe_cube_elements`: diffuse pair m5 bits 3-16 / 17-30 when bit 1, specular pair m6 when bit
+  2; elements 2 i, 2 i + 1) when the records are host-mapped, else every cube element bound; 2D
+  cookie elements of the same binding are skipped. Samplers: the game's when recorded, else declared
+  trilinear clamp.
+- Budget priority (`rp::texture_priority`): lighting inputs 4 (first), hit material 3, probe cubes 2,
+  alpha caches 1: the S8 pack keeps its 2054 MB hit cache under `replay_pack_cap_mb=3300`, the probe
+  cubes take what is left, smallest first.
+- Log and note: `[replay] pack <n> lighting inputs: <b> of 19 slots bound; probe cubes <c> named by <r>
+  records (records read | records not host-readable: every cube element), <k> of <e> bound cube
+  elements captured, <x> beyond the slot, kept <c>; images kept <k>, dropped <d> (budget); samplers game
+  <g>, declared <d>; <MB> MB[; absent: ...]`. The `textures` line lists them per binding (`s2b34 1/1`).
+- Size estimate (2560 x 1067): RT1 + RT2 22 MB, AO 11-22 MB, global cubes and LUTs a few MB, clouds 1-4
+  MB, probe records < 1 MB; probe cubes unknown (the first pack's line), capped by what the budget leaves.
 
 ## Pack format (common/replay_pack.h)
 
@@ -97,6 +169,13 @@ bit-exact (0.00 steps); BC4/BC5 0.50 / 0.49 steps (the decoder keeps more than 8
 0.50 steps of 16 bits. Check 12 uploads BC3, R8, RGBA16F and BC7 arrays through a tiny staging
 (block rows, layer groups, whole mips; 62 pieces), from memory and streamed from a file, and reads
 every mip and layer back bit-equal.
+Checks 13-16 load a third synthetic pack with lighting inputs in closed form (kSynthAmbient: sky
+irradiance cube (0.25, 0.5, 1), specular cube 2, DFG (1, 0, 1), AO 0.5, one sphere probe with a diffuse
+cube 3 listed in the froxel, a transmittance LUT (0.7, 0.6, 0.5) on the atmosphere sun path) and run
+`tools/native_ambient.hlsl` and the PT with `PT_ENV=1 PT_SUN_LUT=1`: E_native = 300 (the probe over the
+sky, x b13 100) with the sky part 48.295 and AO 0.5; as lit = E x albedo x AO; the transmittance read
+back within 4e-4 (half floats); a first-ray miss sees exactly 200 (specular cube x b13 100) and the
+traced total stays 0. RTX 5090 2026-11-01: all pass, errors at float rounding.
 Pack 3.5 MB (the hit-record table is 3.1 MB of it). Wall about 3.3 s; dispatch 0.004 ms (RTX 5090).
 
 ## Size (at most `replay_pack_cap_mb` per pack: default 2048 MB, `bg3::replay::kPackHardCapBytes`)
@@ -113,8 +192,9 @@ and fills that S8 cache shape: RTX 5090, 2026-11-01, 10 pieces in 0.9 s, mip 1 r
 
 The geometry is taken whole while the never-dropped part stays under 1 GB (`kPackBudgetBytes`); the
 textures fill the rest up to the cap (`rp::fill_budget`): highest `rp::texture_priority`
-first (2: gHitCache b14 and the table gAlphaTex b2, whose VT page tables and 2D views the hit
-material samples too; 1: the alpha tile caches b3), within a priority smallest first, each image
+first (4: the lighting inputs of sets 2-3; 3: gHitCache b14 and the table gAlphaTex b2, whose VT
+page tables and 2D views the hit material samples too; 2: the local probe cubes set 2 b45; 1: the
+alpha tile caches b3), within a priority smallest first, each image
 that still fits. An image larger than what is left is dropped and the smaller ones still go in.
 
 S8 packs (2026-11-01), what they measured:
@@ -208,8 +288,9 @@ leaves `Bg3HostApi::replay_pack` null and the core does nothing. Capture only, n
 Cost: one frame records the copies and reads (a few ms of CPU, GPU copies of up to 2 GB) and allocates
 the staging; the file writing is off the render thread. Not measured live yet (`READY_FOR_LIVE`).
 CTests: `replay_pack_test` (manifest writer round trip with the SOURCE field, InstInfo spans, the
-budget fill with priorities and the S8 case, raw-compatible formats, shader-read format mapping and
-pieces, transfer pieces); `frame_replay_test` writes its synthetic pack with the same writer,
+budget fill with priorities and the S8 case with and without lighting inputs, raw-compatible formats,
+shader-read format mapping and pieces, transfer pieces, the lighting contract and sources, probe
+record elements, `lighting_inputs`); `frame_replay_test` writes its synthetic pack with the same writer,
 replays it, and runs the image read on every mapped format.
 Open: the exact VT cache sizes, formats, layers and mips at S8 (the next pack's `textures` line),
 then the choice between a larger cap for this one job and a hit-sampled tile capture.
