@@ -44,11 +44,11 @@
 // Key off: nothing of this runs (no ordinary shader includes this file).
 //
 // M5.4 water shadows (WATER_SHADOWS=1, rt_water_shadows on when the water pipelines were created:
-// the records have kRecordBytesSun with the FS's unshadowed sun colour D, common/water_compose.h).
-// The audited water FS light the water with sun visibility 1 (clouds only, no cascade), so where
-// the record has a sun term one ray towards the sun disc (rt_shadow.hlsl's sample, the lighting's
-// sun_radius and rt_tmax) gives V and C' = max(C [+ A L - B] - (1 - V) D, 0): only the visibility
-// changes. Lit and unknown rays keep D. rt_debug 26: the shadow view. Statistics: the same group
+// the records have kRecordBytesSun with the FS's colour without its sun term R = C - D and lum(D),
+// common/water_compose.h). The audited water FS light the water with sun visibility 1 (clouds only,
+// no cascade), so where the record has a sun term one ray towards the sun disc (rt_shadow.hlsl's
+// sample, the lighting's sun_radius and rt_tmax) gives V and C' = max(V C + (1 - V) R [+ A L - B], 0):
+// only the visibility changes. Lit and unknown rays keep C. rt_debug 26: the shadow view. Statistics: the same group
 // reduction into the device-local slot, with the sun words 32..43 (kCsSun*, sums at 40 and 42).
 //
 // M5.4b water local-light shadows (WATER_LS=1 on top of WATER_SHADOWS, rt_water_ls_shadows on when the
@@ -308,14 +308,17 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   }
   const bool composed = tier == 1u;
 #ifdef WATER_SHADOWS
-  // M5.4: the FS's sun visibility (1) replaced by one traced ray: remove (1 - V) D.
+  // M5.4: the FS's sun visibility (1) replaced by one traced ray: occluded, the FS's own colour
+  // without its sun term R = C - D (f32 in the FS, then half: common/water_compose.h; not C - D here,
+  // where the B10G11R11 target's rounding of C swamps the rest wherever the sun is most of C).
   uint2 r2 = 0u;
   if (has) r2 = cRec.Load2(at + 32u);
-  const float2 d01 = f16tof32(uint2(r2.x, r2.x >> 16)), d2m = f16tof32(uint2(r2.y, r2.y >> 16));
-  const float3 D = float3(d01, d2m.x);
+  const float2 r01 = f16tof32(uint2(r2.x, r2.x >> 16)), r2d = f16tof32(uint2(r2.y, r2.y >> 16));
+  const float3 Rs = float3(r01, r2d.x);
+  const float lumD = r2d.y;   // lum(D) of the FS's unshadowed sun term
   const bool sun_on = (cp.a.w & 2u) != 0u;   // kFlagSun: rt_water_shadows
-  const bool d_ok = all(isfinite(D)) && all(D >= 0.0) && d2m.y == 1.0;
-  const bool sunrec = sun_on && valid && d_ok && any(D > 0.0);
+  const bool d_ok = all(isfinite(Rs)) && isfinite(lumD) && lumD >= 0.0;
+  const bool sunrec = sun_on && valid && d_ok && lumD > 0.0;
   const float3 Ls = normalize(cam.v0.xyz);
   uint sv = kRtLit;
   bool straced = false;
@@ -339,7 +342,8 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     }
   }
   const bool occluded = straced && sv == kRtOccluded;
-  const float3 Rm = occluded ? D : 0.0.xxx;   // (1 - V) D
+  const float3 Cs = occluded ? Rs : Ct;           // V C + (1 - V) R
+  const float rmL = occluded ? lumD : 0.0;        // lum((1 - V) D)
 #ifdef WATER_LS
   // M5.4b: the FS's local lights, walked as the FS walks them; the unshadowed ones traced.
   uint4 r3 = 0u, r4 = 0u, r5 = 0u;
@@ -420,10 +424,10 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const bool lsocc = nOcc != 0u;
   const float3 Rls = lsocc ? Fl * lsRem : 0.0.xxx;   // F sum_k (1 - V_k) c_k
   const uint lsbin = lswalk ? ls_check_bin(lsSum, Lrec) : 0u;
-  const float3 Cu = Ct + (composed ? A * L - B : 0.0.xxx) - Rm - Rls;
+  const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx) - Rls;
   const float3 Cn = composed || occluded || lsocc ? max(Cu, 0.0) : Ct;
 #else
-  const float3 Cu = Ct + (composed ? A * L - B : 0.0.xxx) - Rm;
+  const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx);
   const float3 Cn = composed || occluded ? max(Cu, 0.0) : Ct;
 #endif
 #else
@@ -466,11 +470,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   cstat(33, straced);
   cstat(34, occluded);
   cstat(35, straced && sv == kRtUnknown);
-  cstat(36, sun_on && valid && d_ok && !any(D > 0.0));
+  cstat(36, sun_on && valid && d_ok && !(lumD > 0.0));
   cstat(37, sun_on && valid && !d_ok);
   cstat(38, occluded && any(Cu < 0.0));
-  csum64(40, lum(D), sunrec);
-  csum64(42, lum(Rm), sunrec);
+  csum64(40, lumD, sunrec);
+  csum64(42, rmL, sunrec);
 #endif
 #ifdef WATER_LS
   // common/water_compose.h kCsLs*.
@@ -508,7 +512,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   // 0.25), lit = green 0.35, unknown (aborted, kept) = blue, no sun term = dark grey, a sun term at
   // N.L <= 0 of the FS's N (not traced) = dark magenta, not owned / invalid = yellow.
   if (cp.a.z == 26u) {
-    const float share = lum(Rm) / max(lum(Ct), 1e-4);
+    const float share = rmL / max(lum(Ct), 1e-4);
     target[fp] = !own || !valid ? float3(1, 1, 0)
                : !sunrec ? float3(0.08, 0.08, 0.08)
                : !straced ? float3(0.25, 0, 0.25)
