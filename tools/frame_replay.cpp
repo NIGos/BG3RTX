@@ -462,6 +462,22 @@ std::vector<std::string> gi_hit_direct_lines(const Stats& s) {
                   u(t[p]), u(t[p + 1]), u(t[p + 2]), t[p + 2] ? double(t[p + 3]) / 8192.0 / double(t[p + 2]) : 0.0);
     out.push_back(line);
   }
+  const unsigned gs = 320;   // gi_hit_sun (core/gi.cpp kGiSunFirst, the same wording)
+  if (t[gs] | t[gs + 7]) {
+    std::snprintf(line, sizeof line, "GI hit sun (%u frames): evaluated %llu, zero sun colour x clouds x b13 %llu, N.L <= 0 %llu, traced lit %llu, traced occluded %llu, "
+                  "roof-unsupported (no cut-away roofs in the TLAS) %llu, unknown visibility %llu, other unsupported %llu; added weighted luminance sum %.7f",
+                  n, u(t[gs]), u(t[gs + 1]), u(t[gs + 2]), u(t[gs + 3]), u(t[gs + 4]), u(t[gs + 5]), u(t[gs + 6]), u(t[gs + 7]), double(t[gs + 8]) / 8192.0);
+    out.push_back(line);
+  }
+  const unsigned f = 372;    // gi_far (core/gi.cpp kGiFarFirst, the same wording)
+  if (t[f]) {
+    const double q = 8192.0 * double(t[f]);
+    std::snprintf(line, sizeof line, "GI far (%u frames): rays %llu; beyond the base radius: screen hits %llu, qualified sun-lit %llu (outside the froxels %llu), "
+                  "kept as native ambient %llu (of them roof rule %llu); per ray: ambient visibility %.5f (old rule %.5f), bounce %.7f (old rule %.7f), ambient kept at qualified hits %.5f",
+                  n, u(t[f]), u(t[f + 1]), u(t[f + 2]), u(t[f + 3]), u(t[f + 4]), u(t[f + 10]), 1.0 - double(t[f + 5]) / q, 1.0 - double(t[f + 6]) / q,
+                  double(t[f + 7]) / q, double(t[f + 8]) / q, double(t[f + 9]) / q);
+    out.push_back(line);
+  }
   uint64_t total = 0; for (unsigned i = 253; i < 263; ++i) total += t[i];
   if (total) {
     std::snprintf(line, sizeof line, "hit material (%u frames): attempted %llu qualified %llu unsupported %llu; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters "
@@ -512,13 +528,25 @@ struct ReplayHooks {
   std::function<void(uint32_t run, const RunResult&)> each;
 };
 
+// --sun-trust <file> (offline gi_hit_sun / gi_far, tools/frame_replay.md): the D-LS sun set's b8, the trust
+// header + roof volumes image (core/sun_trust.h layout, written by tools/pt_roofs.py --trust), which the
+// gi_hit_direct contract does not carry. Bound as set 3 b8 (R32_UINT, one texel per 4 bytes) and Push::ls_flags
+// bit 25 (a trust slot this frame) is set, as core/gi.cpp does when the slot exists.
+fs::path g_sun_trust;
+
 Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const fs::path& hlsl_override,
               const std::vector<std::string>& extra_defines, const fs::path& out, uint32_t repeat, bool quiet,
               const ReplayHooks* hooks = nullptr) {
   Replay result;
   rp::Manifest m; std::string error;
   { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
-  const rp::Pass& pass = *rp::find_pass(m.pass);
+  rp::Pass pass = *rp::find_pass(m.pass);
+  static std::vector<rp::Slot> trust_slots;
+  if (!g_sun_trust.empty()) {
+    trust_slots.assign(pass.slots, pass.slots + pass.slot_count);
+    trust_slots.push_back({3, 8, rp::kStorage, 1, VK_FORMAT_R32_UINT, "sunTrust"});
+    pass.slots = trust_slots.data(); pass.slot_count = uint32_t(trust_slots.size());
+  }
   fs::create_directories(out);
   // Shader: the production file from this checkout (or an override), the pack's variant defines.
   std::vector<std::string> defines = extra_defines;
@@ -580,6 +608,16 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     result.warnings.push_back(std::to_string(decoded) + " of " + std::to_string(by_file.size()) + " images were read by the writer's shader and stored decoded (" +
                               std::to_string(decoded_bc) + " from BCn; rp::shader_read_format)");
   if (!m.omitted.empty()) result.warnings.push_back(std::to_string(m.omitted.size()) + " image elements omitted by the writer (bound NaN)");
+  if (!g_sun_trust.empty()) {
+    auto d = read_file(g_sun_trust);
+    check(d.size() >= 192 && d.size() % 4 == 0, "--sun-trust file: the 192-byte header + 48-byte volumes (tools/pt_roofs.py --trust)");
+    Img im = make_image(VK_FORMAT_R32_UINT, uint32_t(d.size() / 4), 1, 1, 1, true, false);
+    fill_image(im, d);
+    images[key(3, 8)][0] = im;
+    uint32_t n = 0, flags = 0; std::memcpy(&n, d.data(), 4); std::memcpy(&flags, d.data() + 4, 4);
+    result.warnings.push_back("sun trust from " + g_sun_trust.filename().string() + ": " + std::to_string(n) + " roof volumes, flags " + std::to_string(flags) +
+                              "; Push::ls_flags bit 25 set");
+  }
   struct Out { Img img; std::string name, reference; };
   std::vector<Out> outputs;
   for (const auto& o : m.outputs) {
@@ -821,6 +859,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     std::memset(stats.map, 0, size_t(stats.size));
     push = push_pack;
     if (hooks && hooks->patch) hooks->patch(run, push);
+    if (!g_sun_trust.empty()) {   // Push::ls_flags (offset 188, static_assert below) bit 25: a sun trust slot exists
+      uint32_t lf; std::memcpy(&lf, push.data() + 188, 4); lf |= 1u << 25; std::memcpy(push.data() + 188, &lf, 4);
+    }
     submit([&](VkCommandBuffer c) {
       barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
               VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -1617,6 +1658,17 @@ void native_ambient_report(const fs::path& pack, const PtAccum& na, const PtAccu
   { std::ofstream f(out / "native_ambient_report.txt"); for (auto& l : lines) f << l << "\n"; }
   write_pfm_rgb(out / "native_ambient.pfm", na.w, na.h, [&](size_t i, int c) { return float(na.mean(0, c, i) * na.mean(0, 3, i)); });
   write_pfm_rgb(out / "pt_far_field.pfm", na.w, na.h, [&](size_t i, int c) { return float(far_rgb(i, c)); });
+  // Per-pixel terms for offline comparisons (the gi_far emulation, docs/TRACK_C_GI.md): E_native (diffuse colour
+  // 1), the as-lit ambient (x diffuse colour x AO), the game AO; PT total / live domain / environment (PT units,
+  // uncalibrated), the screen radiance at visible first hits and the PT's radiance there (luminance, as k).
+  write_pfm_rgb(out / "native_E.pfm", na.w, na.h, [&](size_t i, int c) { return float(na.mean(0, c, i)); });
+  write_pfm_rgb(out / "native_lit.pfm", na.w, na.h, [&](size_t i, int c) { return float(na.mean(1, c, i)); });
+  write_pfm_rgb(out / "native_ao.pfm", na.w, na.h, [&](size_t i, int) { return float(na.mean(0, 3, i)); });
+  write_pfm_rgb(out / "pt_total_rgb.pfm", pt.w, pt.h, [&](size_t i, int c) { return float(pt.mean(0, c, i)); });
+  write_pfm_rgb(out / "pt_live_rgb.pfm", pt.w, pt.h, [&](size_t i, int c) { return float(pt.mean(3, c, i)); });
+  if (env) write_pfm_rgb(out / "pt_env_rgb.pfm", pt.w, pt.h, [&](size_t i, int c) { return float(pt.mean(7, c, i)); });
+  write_pfm_rgb(out / "pt_k_terms.pfm", pt.w, pt.h, [&](size_t i, int c) {
+    return float(c == 0 ? L(pt, 2, i) : c == 1 ? pt.mean(0, 4, i) + pt.mean(1, 4, i) : 0.0); });
   const uint32_t sw = std::max(1u, na.w / 640), W = na.w / sw, H = na.h / sw;
   std::vector<uint8_t> strip(size_t(W) * 3 * H * 3);
   const double exposure = M(S.Eao) > 0 ? 0.5 / M(S.Eao) : 1.0;
@@ -1839,6 +1891,7 @@ int main(int argc, char** argv) {
     else if (args[i] == "--pt-cost") pt_cost_only = true;
     else if (args[i] == "--pt-skip-cost") pt_skip_cost = true;
     else if (args[i] == "--native-ambient") native = true;
+    else if (args[i] == "--sun-trust") g_sun_trust = next();
     else die("unknown argument " + args[i] + " (see tools/frame_replay.md)");
   }
   if (!test.empty()) return self_test(test);

@@ -82,8 +82,18 @@ first-ray miss 64.2 -> 28.2% (+ 37.5% roof), k 0.49 -> 10.3. The numbers above a
 field; step 1 (`gi_far`, docs/TRACK_C_GI.md) is built energy-safe and waits for a casters-on, VT-cache,
 native-ambient pack before promotion.
 
-Next measurements: rerun on the VT-cache pack (per-region error with real materials), one interior
-pack, and capture the native ambient term (or the sky cube) so the far-field comparison closes.
+**Full S8 pack (2026-11-01 evening).** `replay-20261101-142819-1`: casters on (but the caster instance carries no
+geometry in the pack, so `PT_ROOFS=1` is still needed), VT cache, lighting inputs 19 of 19. With roofs, real
+materials, env and the sun LUT: far field 53.6% of the traced bounce on screen beyond 1 m (visible 15.2, hidden
+38.3), off screen 35.8% (not split), live domain 8.4%; sun 70.3 / local 29.7%; k = 15.2. Native ambient vs the
+reference: E x AO / (k x PT far + env) 1.44 (median tile 1.75), so the native term is brighter than the traced far
+field + sky, not darker (the 0.66 / 0.70 without roofs was sun through cut roofs). The far field passes the 30%
+share bar, but its traced part is small next to the native ambient (k x PT far 0.081 vs E x AO 0.443).
+Step 1 (`gi_far`): emulated exactly offline (the live `GI far` line within 2%); it darkens S8 by 2% toward the
+reference, but live S8 brightened 2.9%: unexplained downstream of giRaw, so it stays off (docs/TRACK_C_GI.md
+"Go / no-go on the full pack").
+
+Next measurements: one interior night pack (S3/S6) for the local-light share, and the live stage check above.
 The writer now captures those inputs (sky cubes, probes, DFG, transmittance LUT) and
 `frame_replay --native-ambient` makes the comparison (tools/frame_replay.md "Native ambient"); the S8
 number needs one new pack.

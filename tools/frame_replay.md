@@ -77,6 +77,12 @@ frame_replay --pt-self-test <dir>                                               
   rays that do so are reported in the `aborted` fraction (0 without PT_ROOFS on a pack without aborts).
 - gi_far offline: `--define RT_GI_FAR=1 --define GI_FAR_M=6` runs the pass with the far rule (the pack's push holds
   the base pass's radius; GI_FAR_M stands in for gi_far_m).
+- gi_hit_sun / gi_far with the sun tier: `--hlsl shaders/gi/gi_trace_rt_hit_sun.hlsl --sun-trust <file>`. The sun
+  variant also reads the D-LS sun set's b8 (trust header + roof volumes, core/sun_trust.h), which the pack lacks:
+  `py -3 tools/pt_roofs.py --pack <dir> --level <name> --trust <file>` writes it (padded as core/sun_trust.cpp:
+  3 m around, 50 m up), the replay binds it at set 3 b8 and sets Push::ls_flags bit 25. Without it every far
+  qualified hit takes the old rule (roof volumes unknown). The console then prints `GI hit sun` and `GI far` with
+  the live log's wording. A casters-on pack does not help: the caster instance has no geometry in the pack.
 - Cost kernels (`pt cost` lines): 1 spp with 1 and 2 vertices, rays up to 300 m and 8 m, median of 9
   dispatches, scaled per Mpx to the DLSS 4K render resolutions.
 - CTest `pt_reference_test`: a closed box (synthetic pack) where every vertex emits 1: Lambert rho 0.5 with
@@ -113,6 +119,9 @@ the PT reference over the same GI pixels, on a pack that has the lighting inputs
     (above 1: the native term is brighter than the traced far field; below 1: darker)
   - `per tile (16 x 9, ...): E_native x AO / (k x PT far + PT env) p10 <> median <> p90 <>, ...`
   - `sun transmittance: game LUT <rgb> (...), Kasten-Young estimate <rgb>; cloud shadow mean <c>`
+- Per-pixel terms for offline comparisons (PFM, bottom-up rows): `native_E.pfm` (E_native), `native_lit.pfm` (as
+  lit), `native_ao.pfm` (game AO), `pt_total_rgb.pfm` / `pt_live_rgb.pfm` / `pt_env_rgb.pfm` (PT units), and
+  `pt_k_terms.pfm` (r: screen radiance at visible first hits, g: the PT's radiance there; k = sum r / sum g).
 - Limits: k absorbs the fallback albedo where the pack has no VT cache (one global k, region numbers
   are rough until the VT-cache pack); the native AO is the game's SSAO before the RT AO fold.
 - Cost: one native dispatch per mode (3) plus the PT run (S8 2026-11-01: 11.6 s GPU for 32 x 7).
