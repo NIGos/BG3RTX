@@ -1,5 +1,16 @@
 # BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 25 on branch replay-writer)
 
+## M5.3 water reflections composed (branch m5-compose, offline, READY_FOR_LIVE, 2026-11-01)
+
+- `rt_water_compose=0` (GUI `exp_water_compose`, needs `exp_water_reflections`; on needs a restart, off live):
+  the audited water FS 7b44a567 is patched at creation to store its own probe-term factors per pixel
+  (`common/water_fs_patch.h`, BDA stores, no layout change); a pass at the end of each water pass replaces
+  the probe term with the traced reflection where it resolves: `C' = max(C + A L - B, 0)`, A = a T X E,
+  B = a T X k Ks (exact, the FS's own normal, opacity, fog, atmosphere and LUT). Unresolved keeps the probe.
+- Debug view `rt_debug=25` (delta). Log `[water] compose`, `compose energy`, `compose GPU`, `compose variants`.
+- Key off: nothing allocated or bound; no existing shader changed. 73 CTests (patch checked with spirv-val on the
+  dumped FS), 745 shaders, QA detectors. Layer change: restart. Live: job `m5w3`, dry run passes.
+
 ## M5.2 water reflections, measured (branch m5-water-rf, offline, READY_FOR_LIVE, 2026-11-01)
 
 - `rt_water_reflections=0` (GUI `exp_water_reflections`, live, needs `rt_water_geometry=1`): per visible water
