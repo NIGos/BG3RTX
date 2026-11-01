@@ -18,18 +18,29 @@
 // Classification and record are policy (common/water_policy.h), run by the core through
 // Bg3CoreApi::em_record with forward == BG3_EM_REQ_WATER (hot-reloaded, no ABI change). Here:
 // the asset-DB lookup, the capture, the build, the counters and the "[water]" log lines.
+// M5.3 (rt_water_compose, common/water_compose.h): the audited water FS modules are patched when
+// they are created with the key on (common/water_fs_patch.h: the FS stores its probe-term factors
+// into one device buffer of ours), each pipeline using one gets a variant with the patched FS (the
+// game's layout, render pass and state), and around each audited water draw the variant is bound
+// while the key is on; the game's pipeline is rebound right after the draw. Its colour output is
+// the game's. The core (core/water.cpp) composes at the end of the pass.
 // Key off: no pass is hooked for water and nothing is allocated (resources are created at the
-// first enabled pass, so the key is live).
+// first enabled pass, so the key is live). rt_water_compose=0 when the water pipelines are created
+// (game start or level load): no module is patched, no buffer allocated, no variant exists.
 #include "host.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <atomic>
 #include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
 
 #include "assetdb.h"
+#include "../common/water_compose.h"
+#include "../common/water_fs_patch.h"
 #include "../common/water_policy.h"
 #include "../common/water_scene.h"
 
@@ -431,9 +442,162 @@ bool build(Slot& s, uint32_t i, const std::vector<const PDraw*>& draws) {
   return true;
 }
 
+// ---- M5.3 composition variants (creation hooks; g_cmp_mu, never taken around g_mu) ----
+struct Compose {
+  Buf buf;
+  uint32_t cap = 0;
+  uint64_t addr = 0;
+  bool tried = false, ok = false;
+  std::unordered_map<VkShaderModule, std::shared_ptr<const std::vector<uint32_t>>> mods;   // patched words
+  std::unordered_map<VkPipeline, VkPipeline> variant;                                       // game's -> ours
+  uint64_t mods_patched = 0, mods_refused = 0, pipes = 0, refused_blend = 0, refused_library = 0, failed = 0;
+  water::PatchStatus last_refusal = water::PatchStatus::kApplied;
+};
+std::mutex g_cmp_mu;
+Compose g_cmp;
+std::atomic<uint64_t> g_swaps{0}, g_no_variant{0};
+std::atomic<bool> g_any_variant{false};
+
+// g_cmp_mu held. The record buffer, once (its address and capacity are baked into every patched
+// module, so it lives until the device is destroyed).
+bool compose_buffer() {
+  if (g_cmp.tried) return g_cmp.ok;
+  g_cmp.tried = true;
+  DeviceData* dd = g_dd;
+  if (!dd || !rt_enabled() || !dd->vk.GetBufferDeviceAddress) return false;
+  const auto* info = static_cast<const Bg3DeviceInfo*>(persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)));
+  if (!info || !(info->features & BG3_DEV_INT64)) {   // the patch's 64-bit address constant
+    log("[water] compose UNAVAILABLE (rt_water_compose=1): shaderInt64 is not enabled on the device "
+        "(sharc_device=1 enables it where supported); no water FS is patched");
+    return false;
+  }
+  g_cmp.cap = water::capacity_of_mb(cfg_int("rt_water_compose_mb", 160));
+  const VkDeviceSize bytes = water::buffer_bytes(g_cmp.cap);
+  if (!make_buf(g_cmp.buf, bytes,
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                false)) {
+    log("[water] compose UNAVAILABLE: the %llu MB record buffer could not be allocated", (unsigned long long)(bytes >> 20));
+    return false;
+  }
+  VkBufferDeviceAddressInfo ai{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
+  ai.buffer = g_cmp.buf.b;
+  g_cmp.addr = dd->vk.GetBufferDeviceAddress(dd->device, &ai);
+  if (!g_cmp.addr) {
+    free_buf(g_cmp.buf);
+    log("[water] compose UNAVAILABLE: no device address for the record buffer");
+    return false;
+  }
+  water::publish_buffer(static_cast<water::ComposeBuffer*>(persist(water::kComposeKey, sizeof(water::ComposeBuffer))),
+                        uint64_t(g_cmp.buf.b), bytes, g_cmp.cap);
+  g_cmp.ok = true;
+  log("[water] compose record buffer %llu MB (%u records of %u B: up to %.1f Mpx); patching the audited water FS",
+      (unsigned long long)(bytes >> 20), g_cmp.cap, water::kRecordBytes, double(g_cmp.cap) / 1e6);
+  return true;
+}
+
 }  // namespace
 
 // ================= entry points =================
+
+void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, size_t bytes) {
+  const water::FsIds* ids = water::fs_ids(hash);
+  if (!ids && !g_any_variant.load(std::memory_order_relaxed)) return;   // the common case: no lock
+  std::lock_guard<std::mutex> lock(g_cmp_mu);
+  g_cmp.mods.erase(m);   // a reused handle
+  if (!ids || !g_dd || cfg_int("rt_water_compose", 0) == 0 || bytes % 4 || !compose_buffer()) return;
+  auto words = std::make_shared<std::vector<uint32_t>>();
+  const water::PatchStatus st = water::patch_fs(code, bytes / 4, *ids, g_cmp.addr, g_cmp.cap, *words);
+  if (st != water::PatchStatus::kApplied) {
+    ++g_cmp.mods_refused;
+    g_cmp.last_refusal = st;
+    log("[water] compose: FS %016llx NOT patched (%s): its draws keep the game's probe reflections",
+        (unsigned long long)hash, water::patch_status_name(st));
+    return;
+  }
+  ++g_cmp.mods_patched;
+  log("[water] compose: FS %016llx patched (%zu -> %zu words)", (unsigned long long)hash, bytes / 4, words->size());
+  g_cmp.mods[m] = std::move(words);
+  g_any_variant.store(true, std::memory_order_relaxed);   // from here on modules and pipelines are looked at
+}
+
+void water_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_t n, const VkGraphicsPipelineCreateInfo* cis,
+                          const VkPipeline* out) {
+  if (!g_any_variant.load(std::memory_order_relaxed)) return;
+  std::lock_guard<std::mutex> lock(g_cmp_mu);
+  if (g_cmp.mods.empty() || !g_dd || device != g_dd->device) return;
+  const VkDeviceFuncs& vk = g_dd->vk;
+  for (uint32_t i = 0; i < n; ++i) {
+    if (!out[i]) continue;
+    const VkGraphicsPipelineCreateInfo& ci = cis[i];
+    int fs = -1;
+    for (uint32_t k = 0; k < ci.stageCount; ++k)
+      if (ci.pStages[k].stage == VK_SHADER_STAGE_FRAGMENT_BIT && ci.pStages[k].module && g_cmp.mods.count(ci.pStages[k].module))
+        fs = int(k);
+    if (fs < 0) continue;
+    // Opaque output only (the record is the attachment's value), never a library pipeline.
+    bool library = false, dyn_blend = false;
+    for (auto p = static_cast<const VkBaseInStructure*>(ci.pNext); p; p = p->pNext)
+      library |= p->sType == VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR ||
+                 p->sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT;
+    if (ci.pDynamicState)
+      for (uint32_t d = 0; d < ci.pDynamicState->dynamicStateCount; ++d) {
+        const VkDynamicState st = ci.pDynamicState->pDynamicStates[d];
+        dyn_blend |= st == VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT || st == VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT ||
+                     st == VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT || st == VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT;
+      }
+    const VkPipelineColorBlendStateCreateInfo* cb = ci.pColorBlendState;
+    const bool opaque = cb && cb->attachmentCount >= 1 && cb->pAttachments && !cb->pAttachments[0].blendEnable &&
+                        !cb->logicOpEnable && (cb->pAttachments[0].colorWriteMask & 7u) == 7u && !dyn_blend;
+    if (library) {
+      ++g_cmp.refused_library;
+      continue;
+    }
+    if (!opaque) {
+      if (g_cmp.refused_blend++ < 4) log("[water] compose: a water pipeline blends or masks its output: no variant");
+      continue;
+    }
+    const auto words = g_cmp.mods[ci.pStages[fs].module];
+    VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    mci.codeSize = words->size() * 4;
+    mci.pCode = words->data();
+    VkShaderModule mod = VK_NULL_HANDLE;
+    if (vk.CreateShaderModule(device, &mci, nullptr, &mod) != VK_SUCCESS) {
+      ++g_cmp.failed;
+      continue;
+    }
+    std::vector<VkPipelineShaderStageCreateInfo> stages(ci.pStages, ci.pStages + ci.stageCount);
+    stages[size_t(fs)].module = mod;
+    VkGraphicsPipelineCreateInfo vci = ci;
+    vci.pStages = stages.data();
+    vci.flags &= ~VkPipelineCreateFlags(VK_PIPELINE_CREATE_DERIVATIVE_BIT);
+    vci.basePipelineHandle = VK_NULL_HANDLE;
+    vci.basePipelineIndex = -1;
+    VkPipeline v = VK_NULL_HANDLE;
+    const VkResult r = vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &v);
+    vk.DestroyShaderModule(device, mod, nullptr);
+    if (r != VK_SUCCESS || !v) {
+      if (g_cmp.failed++ < 4) log("[water] compose: variant pipeline creation failed (%d)", r);
+      continue;
+    }
+    auto it = g_cmp.variant.find(out[i]);
+    if (it != g_cmp.variant.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
+    g_cmp.variant[out[i]] = v;
+    ++g_cmp.pipes;
+  }
+}
+
+void water_forget_pipeline(VkPipeline p) {
+  if (!g_any_variant.load(std::memory_order_relaxed)) return;
+  std::lock_guard<std::mutex> lock(g_cmp_mu);
+  auto it = g_cmp.variant.find(p);
+  if (it == g_cmp.variant.end()) return;
+  defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
+  g_cmp.variant.erase(it);
+}
+
+void water_unswap(VkCommandBuffer cmd, const CmdState* s) {
+  if (g_dd && s->pipe[0]) g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[0]);
+}
 
 void water_device_created(DeviceData* dd) {
   if (!g_dd) g_dd = dd;   // nothing is allocated until the key is on (ensure_ready)
@@ -457,6 +621,13 @@ void water_device_destroyed(DeviceData* dd) {
   if (g_qp) defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(g_qp));
   g_qp = VK_NULL_HANDLE;
   free_buf(g_soup);
+  {
+    std::lock_guard<std::mutex> cl(g_cmp_mu);
+    for (auto& [p, v] : g_cmp.variant) vk.DestroyPipeline(dd->device, v, nullptr);
+    free_buf(g_cmp.buf);
+    g_cmp = Compose{};
+    g_any_variant.store(false);
+  }
   for (Retired& r : g_retired) free_buf(r.b);
   g_retired.clear();
   g_pending.clear();
@@ -483,7 +654,8 @@ bool water_pass_begin(VkCommandBuffer cmd) {
 }
 
 int water_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const EmDrawIn& in, int depth_write,
-               WaterRange* out) {
+               WaterRange* out, bool* swapped) {
+  *swapped = false;
   const auto core = core_shared_lock();   // the policy is the core's (before g_mu)
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_ready) return 0;
@@ -502,6 +674,23 @@ int water_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const 
   if (rec.cls != water::kSupported) {
     ++g_win.other[{s->fs, rec.cls}];
     return 1;
+  }
+  // M5.3: the composition variant in place of the game's pipeline for this draw (geocapture
+  // geo_post_draw rebinds the game's). Same layout: the game's bound sets stay valid.
+  if (cfg_hot(CfgHot::rt_water_compose)) {
+    VkPipeline v = VK_NULL_HANDLE;
+    if (g_any_variant.load(std::memory_order_relaxed)) {
+      std::lock_guard<std::mutex> cl(g_cmp_mu);
+      auto it = g_cmp.variant.find(s->pipe[0]);
+      if (it != g_cmp.variant.end()) v = it->second;
+    }
+    if (v) {
+      g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, v);
+      *swapped = true;
+      g_swaps.fetch_add(1, std::memory_order_relaxed);
+    } else {
+      g_no_variant.fetch_add(1, std::memory_order_relaxed);
+    }
   }
   const bool list = in.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   uint64_t prims = 0;
@@ -761,6 +950,17 @@ void water_on_present() {
     }
     if (!fam.empty() || !other.empty())
       log("[water] families: captured %s; counted %s", fam.empty() ? "none" : fam.c_str(), other.empty() ? "none" : other.c_str());
+  }
+  const uint64_t swaps = g_swaps.exchange(0), novar = g_no_variant.exchange(0);
+  if (cfg_hot(CfgHot::rt_water_compose) || swaps) {
+    std::lock_guard<std::mutex> cl(g_cmp_mu);
+    log("[water] compose variants (%llu frames): FS patched %llu, refused %llu (%s), variant pipelines %llu (refused: "
+        "blend %llu, library %llu; failed %llu), water draws on a variant %llu, without %llu%s",
+        (unsigned long long)w.frames, (unsigned long long)g_cmp.mods_patched, (unsigned long long)g_cmp.mods_refused,
+        g_cmp.mods_refused ? water::patch_status_name(g_cmp.last_refusal) : "-", (unsigned long long)g_cmp.pipes,
+        (unsigned long long)g_cmp.refused_blend, (unsigned long long)g_cmp.refused_library,
+        (unsigned long long)g_cmp.failed, (unsigned long long)swaps, (unsigned long long)novar,
+        g_cmp.tried ? "" : " (no water FS was patched: rt_water_compose must be on when the water pipelines are created; restart with it on)");
   }
   g_win = Window{};
 }
