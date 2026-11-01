@@ -167,6 +167,53 @@ def main():
     check("hold lint: every energy-gated job under tools/live_batches holds the exposure"
           + ("" if not bad else ": " + "; ".join(f"{Path(k).name}: {v[0][:90]}" for k, v in bad.items())), not bad)
 
+    # Scene-wait lint: every lean job gates "[rt] scene wait" with 0 timeouts in its traced cost windows.
+    sw_plan = [{"label": "warmup", "seconds": 20}, {"label": "cost-off-a", "seconds": 20, "set": "k=0"},
+               {"label": "cost-on", "seconds": 20, "set": "k=1"}, {"label": "cost-rt-off", "seconds": 20, "set": "rt=0"},
+               {"label": "shot-on", "seconds": 8, "set": "rt=1"}, {"label": "restore", "seconds": 5}]
+    sw_gate = dict(queue_gates.SCENE_WAIT_GATE, windows=["cost-off-a", "cost-on"])
+    sw_job = {"set": "rt=1,rt_scene_wait_log_frames=120", "expect": [r"\[rt\] scene wait: 120 frames"], "expect_every": [sw_gate]}
+    check("scene wait lint: traced cost windows only (rt=0 and shot windows excluded)",
+          queue_gates.scene_wait_windows(sw_job, sw_plan) == ["cost-off-a", "cost-on"])
+    check("scene wait lint: the canonical gate over both cost windows: ok", queue_gates.scene_wait_problems(sw_job, sw_plan) == [])
+    p = queue_gates.scene_wait_problems(dict(sw_job, expect_every=[]), sw_plan)
+    check("scene wait lint: a lean job without the gate is flagged", len(p) == 1 and "no expect_every entry" in p[0])
+    p = queue_gates.scene_wait_problems(dict(sw_job, expect_every=[dict(sw_gate, windows=["cost-on"])]), sw_plan)
+    check("scene wait lint: a gate missing a cost window is flagged", len(p) == 1 and "cost-off-a" in p[0])
+    loose = dict(sw_gate, match=r"got this frame's scene")
+    check("scene wait lint: a match that passes a line with timeouts is no gate",
+          any("no expect_every entry" in x for x in queue_gates.scene_wait_problems(dict(sw_job, expect_every=[loose]), sw_plan)))
+    check("scene wait lint: a gate without windows (every line of the run) covers all",
+          queue_gates.scene_wait_problems(dict(sw_job, expect_every=[dict(queue_gates.SCENE_WAIT_GATE)]), sw_plan) == [])
+    p = queue_gates.scene_wait_problems(dict(sw_job, set="rt=1", expect=[r"\[rt\] scene wait: 600 frames"]), sw_plan)
+    check("scene wait lint: 600-frame lines cannot fill a 20 s cost window at 30 fps (two lines + settle = 41 s)",
+          len(p) == 1 and "rt_scene_wait_log_frames=120" in p[0])
+    p = queue_gates.scene_wait_problems(dict(sw_job, expect=[r"\[rt\] scene wait: 600 frames"]), sw_plan)
+    check("scene wait lint: an expect naming another cadence is flagged", len(p) == 1 and "600 frames" in p[0])
+    check("scene wait lint: a plan without cost windows is no lean job", queue_gates.scene_wait_problems({"set": "rt=1"}, [{"label": "diag-a", "seconds": 15}]) == [])
+    # The gate itself on a run: 120-frame lines (~2 s at 60 fps), straddle rule as for any stats line.
+    sw_runner = "\n".join(["10:00:00.000 [pan-plan] window 0 serial 0", "10:00:20.000 [pan-plan] window 1 serial 0 set=k=0",
+                           "10:00:40.000 [pan-plan] window 2 serial 0 set=k=1", "10:01:00.000 [pan-plan] window 3 serial 0 set=rt=0",
+                           "10:01:20.000 [motion-plan] complete phases=4"])
+    def sw(t, timeouts):
+        return (f"{t}  [rt] scene wait: 120 frames, 120 waited ({120 - timeouts} got this frame's scene, {timeouts} timeouts, "
+                f"0 skipped), wait mean 2.0 ms, max 6.0 ms")
+    def sw_log(on_timeouts):
+        lines = ["10:00:01.000  [cfg] settings read", sw("10:00:10.000", 14), "10:00:20.100  [cfg] settings read"]
+        lines += [sw(f"10:00:{s:02d}.000", 0) for s in range(22, 40, 2)]
+        lines += ["10:00:40.100  [cfg] settings read", sw("10:00:41.000", 3)]   # straddles the toggle: not judged
+        lines += [sw(f"10:00:{s:02d}.000", t) for s, t in zip(range(43, 60, 2), on_timeouts)]
+        return "\n".join(lines)
+    gates = [dict(queue_gates.SCENE_WAIT_GATE, windows=["cost-off-a", "cost-on"])]
+    plan4 = [{"label": "warmup"}, {"label": "cost-off-a", "set": "k=0"}, {"label": "cost-on", "set": "k=1"}, {"label": "cost-rt-off", "set": "rt=0"}]
+    check("scene wait gate: 0 timeouts in every judged line of both windows passes (the load and toggle lines are not judged)",
+          queue_gates.check(gates, sw_log([0] * 9), sw_runner, plan4) == [])
+    f = queue_gates.check(gates, sw_log([0, 0, 0, 0, 2, 0, 0, 0, 0]), sw_runner, plan4)
+    check("scene wait gate: one line with 2 timeouts in cost-on fails it", len(f) == 1 and "cost-on" in f[0] and "1 of " in f[0])
+    bad = queue_gates.lint_scene_wait(ROOT / "tools" / "live_batches")
+    check("scene wait lint: every lean job under tools/live_batches gates the scene wait"
+          + ("" if not bad else ": " + "; ".join(f"{Path(k).name}: {v[0][:90]}" for k, v in bad.items())), not bad)
+
     if fails:
         print(f"{fails} check(s) failed")
         return 1

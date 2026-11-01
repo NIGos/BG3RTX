@@ -1,8 +1,7 @@
-# Session handoff - 2026-11-01 afternoon
+# Session handoff - 2026-11-01 evening (PAUSED by the user)
 
-Main ac57418, ABI 25 (layer and core rebuilt together). Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) next: open
-user questions, the consolidation report, live numbers per stage and "How to test in game".
-Ranked next steps come from [META_AUDIT_20261101.md](META_AUDIT_20261101.md) section 6.
+Main f87c042, ABI 25. Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) next, then [GATE_AUDIT_20261101.md](GATE_AUDIT_20261101.md)
+and [META_AUDIT_20261101.md](META_AUDIT_20261101.md). Live tests are paused until the user says otherwise.
 
 ## Rules (read before any work)
 
@@ -16,38 +15,35 @@ Ranked next steps come from [META_AUDIT_20261101.md](META_AUDIT_20261101.md) sec
 - Branches write `docs/progress/<branch>.md`, never PROGRESS; the coordinator folds them.
 - Merge only with `scripts/merge-green.ps1`; features off by default until their gates pass.
 
-## Running now
+## Running now (pause)
 
-- Foreground live tests are running (latest queue logs: S8 water `m5w2` 13:12 and `m5w6` 13:16).
-  Do not build, compile shaders or run GPU tests while they run.
+- Live tests suspended (coordinator flag; queue empty, no bg3.exe). No feature work until the user resumes.
+- Maintenance only: shader tooling (`tools/shader_identity.py`: content-addressed cache + progress, replacing
+  the seven `tests/*_shader_test.py` blind recompiles) and an audit of the other long tools (progress, caching).
 
-## Branches not merged
+## Branches not merged (all offline-verified; each still needs the noted step)
 
-- worktree-agent-a9e0aabd4d7f18008: M4 bundle on in Ultra. Do not merge: `m4_promotion` failed (S6 NaN).
-- worktree-agent-abd9303a6e22b012e: M5.4 R = C - D speck fix, merged with main, 80 CTests. Needs one m5w4 run.
-- worktree-agent-ab66efcab091c48ec: `ls_box=2` shadows the unshadowed box lights. Offline.
-- low-prio: the live game keeps Normal priority (BelowNormal starved the level load).
+| Branch | What | Still needed |
+|---|---|---|
+| worktree-agent-a05080ba75170ea35 (0be532f) | `rf_hit_gi`: GI bounce at reflection hits (S8 bias 0.925 -> ~1.00 expected) | shader identity gate; m4p3/m4p4 run |
+| worktree-agent-a87dc09be59810f7c (b22c94c) | `rt_hit_material_wind_rgb` third instanced family (S8 +13 pts expected) + blocker ranking tool | shader identity gate; `m4_wind_rgb` run |
+| worktree-agent-a4f18c6ce7ff7c559 (70b7c53 WIP) | water shadow-sampling families + `rt_water_game_shadow`; camp water job | compile new compose variants, byte identity, m5_promotion dryrun |
+| worktree-agent-a9e0aabd4d7f18008 | M4 bundle on in Ultra | do not merge until m4_promotion passes |
 
-## Next, in order
+Warning: the first two branches BOTH allocate rtStats 419..426: renumber one before merging (table next to
+kStatsCounters in core/gi.cpp).
 
-1. **M4 promotion.**
-   - Fix the S6 Forge NaN with the bundle on (2.9k -> 8.7k px). Find which key adds them (toggle per step in one run).
-   - Rerun `m4_promotion` (4 launches, ~18 min) with a two-sided per-step energy gate and the predicted delta
-     written before the run, capacity at 1024/427 MB, and `hit_ao_rays` 0/2 inside the cost window to explain
-     `rf_hit_shade`'s +1.4-1.8 ms. Bundle whole-GI cost was camp +4.8, S8 +3.4, S6 +9.1 ms: explain it.
-   - `rt_hit_material_instanced` passed (0 clip rejects in every window): it may rejoin the bundle.
-   - Separately: `gi_hit_sun` at S3; one M4.1 moving run with isolated GI trace ms.
-   - `rf_hit_shade` promotion stays the user's call (bias S8 -7%, S6 +9%).
-2. **M5 water.**
-   - One m5w4 run of the R = C - D fix (clamped < 120 per ON window), then merge it.
-   - One moving m5w3 window; a reflection crop against a reference to settle the 0.31 ratio.
-   - A save with open sea for S1. Then `rt_water_hit_shade` (tier (b) for the 8.8% hidden rays).
-   - M5.5 next steps only after step 1 (live: 69.6% composed, 0.24 ms) is reviewed in game.
-3. **M6 step 1.** Re-capture the PT pack with `rt_cascade_casters=1` (or roofs in the PT sun rays), with the VT
-   cache and the native ambient/sky, plus one interior pack (S3 or S6). The native / PT far+env ratio 0.70 is
-   preliminary (no roofs). Only if far-field sun stays above ~30%: qualify `gi_far` live (batch `gi_far`).
-4. **Housekeeping.** Refresh the coverage HANDLING table and recapture S1-S14; derive the `ls_check` threshold;
-   keep PROGRESS at ~150 lines.
+## Next, in order (after the pause)
+
+1. Land the shader tooling; rerun the identity gates of the branches above; merge them in one merge-green.
+2. Live (needs user go): `m5_promotion` (S8 + Flymm + camp) -> water in Ultra if it passes; `m4_promotion/s6_diag`
+   (S6 darkening = animated lava + compile stalls, offline); `replay_capture/ambient` (camp + inn packs, ~6 GB kept
+   as references) for the native ambient / reference ratio; `gi_far` gf2 diag was run 16:14 (analyse with the
+   updated gate tool: exposure-corrected); m4p3/m4p4 with `rf_hit_gi`; `m4_wind_rgb`; box lights visual check.
+3. `rf_hit_shade` stays experimental until its bias is within the game's spread (user decision); S6 excess is in
+   the direct and box terms, next fix there.
+4. Release-hardening (user asked about a Nexus beta): release defaults, FG with a desktop resolution different from
+   the game's, acts 2-3, long sessions, installer, README, licences.
 
 ## Live batches prepared (not authorized)
 
