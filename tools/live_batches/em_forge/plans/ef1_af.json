@@ -111,6 +111,51 @@
   "set": "rt_em_fx_pulse=0,rt_debug=0,qa_exposure_hold=1"
  },
  {
+  "label": "check-off",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 12,
+  "motion_end": 12,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_em_fx_pulse=0,rt_debug=0,qa_exposure_hold=1,rt_em_check_frames=0,rt_em_check_slices=16"
+ },
+ {
+  "label": "check-full",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 12,
+  "motion_end": 12,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_em_fx_pulse=0,rt_debug=0,qa_exposure_hold=1,rt_em_check_frames=16,rt_em_check_slices=1"
+ },
+ {
+  "label": "check-sliced",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 12,
+  "motion_end": 12,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_em_fx_pulse=0,rt_debug=0,qa_exposure_hold=1,rt_em_check_frames=16,rt_em_check_slices=16"
+ },
+ {
   "label": "restore",
   "kind": "static",
   "speed": "static",
@@ -123,6 +168,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_em_fx_pulse=0,rt_debug=0,qa_exposure_hold=0"
+  "set": "rt_em_fx_pulse=0,rt_debug=0,qa_exposure_hold=0,rt_em_check_frames=16,rt_em_check_slices=16"
  }
 ]

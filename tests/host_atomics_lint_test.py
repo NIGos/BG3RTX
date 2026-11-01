@@ -52,9 +52,9 @@ ATOMIC_TARGETS = {
          D, "water pipelines bind g_rts at binding 20")],
     "shaders/gi/sharc_common.hlsli:shState": [
         ("core/sharc.cpp", "make_buf(g_state, kStateBytes, sb | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);", D, "g_state")],
-    "shaders/rt/em_common.hlsli:emStats": [
-        ("layer/emissive.cpp", "ok = ok && make_buf(g_host, kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_host.map;",
-         H, "g_host region kOffStats (debug views)")],
+    "shaders/rt/em_debug.hlsl:emDev": [
+        ("core/emissive.cpp", "if (!make_device_buffer(kStatBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_dev,",
+         D, "g_dev (the D-EM check's counters; its flush entry stores them into the host's emStats, no atomics)")],
     "shaders/rt/em_sanitize.hlsl:Header": [
         ("layer/emissive.cpp", "ok = ok && make_buf(g_host, kRegion * kRing, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true) && g_host.map;",
          H, "g_host region kOffHeader")],
@@ -107,7 +107,6 @@ ATOMIC_TARGETS = {
 KNOWN_HOST_ATOMICS = {
     ("shaders/rt/hit_material_instanced_remap.hlsl:remap", "layer/hit_material.cpp"): "instanced remap counters (added 2026-11-01 after review: per instance, a few hundred atomics per frame, key off by default; move to device-local with the next hit_material change)",
     ("shaders/rt/rt_common.hlsli:rtStats", "core/gi.cpp"): "rt_stats counters (~80 ms/frame with rt_primary_check)",
-    ("shaders/rt/em_common.hlsli:emStats", "layer/emissive.cpp"): "D-EM debug-view statistics",
     ("shaders/rt/em_sanitize.hlsl:Header", "layer/emissive.cpp"): "D-EM build header (collapsed triangles)",
     ("shaders/rt/hair_bounds.hlsl:Status", "layer/alphatest.cpp"): "hair build status",
     ("shaders/rt/mesh_extract.hlsl:Status", "layer/bvhsplit.cpp"): "split extract status",
@@ -134,7 +133,7 @@ HOST_STORAGE = {
     ("layer/bvhsplit.cpp", '"OMM scene source stamps"'): ("plain", ["shaders/rt/omm_scene_validate.hlsl:rows"]),
     ("layer/bvhsplit.cpp", '"split status"'): ("atomic", ["shaders/rt/mesh_extract.hlsl:Status"]),
     ("layer/bvhsplit.cpp", '"sun four-cascade instances"'): ("plain", ["shaders/rt/sun_caster_validate.hlsl:Instances"]),
-    ("layer/emissive.cpp", "g_host"): ("atomic", ["shaders/rt/em_common.hlsli:emStats", "shaders/rt/em_sanitize.hlsl:Header"]),
+    ("layer/emissive.cpp", "g_host"): ("atomic", ["shaders/rt/em_sanitize.hlsl:Header"]),
     ("layer/emissive.cpp", "g_inst"): ("plain", ["shaders/rt/em_common.hlsli:emInfo", "shaders/rt/em_lights.hlsl:instances"]),
     ("layer/emissive.cpp", "g_globals"): ("plain", ["shaders/rt/em_common.hlsli:emGlobal", "shaders/rt/em_copy.hlsl:Dst"]),
     ("layer/geocapture.cpp", "c->ubo"): ("plain", ["shaders/geo_ubo_copy.hlsl:Out"]),

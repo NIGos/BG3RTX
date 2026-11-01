@@ -1006,3 +1006,28 @@ and/or `rf_hit_shade`). Plan: PLAN_M4_REFLECTIONS_GI.md M4.4.
   direct lighting lacks emitter light too, so the hit-only version would make hidden surfaces brighter
   than the same surfaces on screen. Next step: a scan pass for the CDF in the build, then the policy,
   then screen + hits together.
+
+### 13.24 The projected check's cost: device-local counters, sliced (2026-11-01; offline, READY_FOR_LIVE)
+- **Finding (inferred, not measured).** S6 Adamantine Forge, m4p3-s6-fg2: `rt_emissive` 0 -> 1 raised the 300-frame
+  average `gi: GPU cost` 1.65 -> 10.4 ms while every pass median stayed flat: one frame in 16 cost about 140 ms more.
+  That frame ran the calibration's projected check (`em_debug.hlsl` mode 0, from run_post inside the gi timer): up to
+  3 emissive ray queries per pixel (at the depth, in front, the overlap test) and, per pixel, 4-14 atomics into
+  `emStats`, which lives in the host's host-visible region (PCIe; the META_AUDIT host-atomics pattern).
+- **Needed, not a diagnostic.** `rt_em_calib` sets the approximate families' scale from it (13.4), and
+  `rt_hit_emission` skips an approximate family until it is calibrated. So the check stays on, but cheaper.
+- **Change (core and shader only, no ABI).** (1) The counters go to `g_dev` (device-local, core/emissive.cpp):
+  per workgroup in groupshared, per record one lane per distinct record and wave (64-bit sums as two 32-bit halves,
+  no shaderInt64); the shader's `flush` entry then adds the non-zero words into `emStats` with plain loads and
+  stores. The host's layout and reading are unchanged. (2) `rt_em_check_slices` (16): one interleaved 4x4 slice of
+  the pixels every `rt_em_check_frames / slices` frames (every frame by default), so every pixel is still checked
+  once per 16 frames and no frame traces them all; 1 is the old full-screen run. The calibration's gates count full
+  checks: `em::calib_checks` / `calib_px_per_check` (the core scales the host's run counts by the slices). Views
+  (rt_debug 16-20) stay full-screen. (3) Its own timer and line, per rt_timing_frames: `[em] check GPU cost (N
+  frames): R runs (V views), X ms per run median (check pass, max, timed), Y ms/frame; P pixels per run; schedule`.
+- **Expected.** Per run 1/16 of the old ray work and no PCIe atomics: well under 1 ms; per frame the same ray work
+  as before on average, without the 1-in-16 spike.
+- **Live gate (em_forge `ef1-af-em-fg2`, phases check-off / check-full / check-sliced, 12 s each).** The `[em]
+  check GPU cost` lines give the run and frame cost of both schedules; `gi: GPU cost` mean in check-sliced within
+  the check-off spread plus that ms/frame; approx families still calibrated (`scale` != 1.000 in `[em] ours/game
+  per family`). Note: in that list and in `[em] projected check`, "frames" and bright px per frame are now per run
+  (1/16 of the pixels); the calibration rule itself is scaled.
