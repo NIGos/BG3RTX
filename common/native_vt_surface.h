@@ -45,7 +45,12 @@ inline constexpr Recipe recipes[]={
  // `(_m3 & 7) << 4` (channel @48) and `_m4 != 0` (flag @52). VS 1e9145e4: UV/N/B/T as 2d2ac3c3,
  // but each matrix row's translation gets the per-draw engine offset (1:0 @32) added before
  // W = M P: not class A (the matrix is not the plain instance rows), never pooled.
- {0x923131c7039f33daull,0x1e9145e4b621a5e0ull,0,44,48,ReflectanceUbo,0,CaptureNone,LayoutBase,true}};
+ {0x923131c7039f33daull,0x1e9145e4b621a5e0ull,0,44,48,ReflectanceUbo,0,CaptureNone,LayoutBase,true},
+ // ENV_DetailMap_VT STI (pool): the 14678345 VT layers and engine UBO 1:0 at 1:4..7 plus a 2D
+ // detail normal 1:3 and mask 1:8 (sampler 0:7); 1:1 {strength, tiling, reflectance @8, mask
+ // power, roughness add} (native_vt_fields.h nv_detail_fields). VS 54df894a is class A: UV at
+ // location 3, N/B/T at 4/5/6 (vt_frame location 4), W/T/P at 0/1/2 (the detail UV scale).
+ {0x613ead9c442b9c8aull,0x54df894ab5230cbbull,0,32,36,ReflectanceUbo,8,CapturePool,LayoutDetail}};
 inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
 // Material UBO 1:1 bytes the recipe reads (0: no 1:1 binding).
 inline uint32_t material_bytes(const Recipe& r){return r.reflectance==ReflectanceConstant?0u:(r.layout==LayoutDetail?20u:r.reflectance_offset+4u);}

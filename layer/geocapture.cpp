@@ -1614,9 +1614,11 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   t_last_hash = hash64(ci->pCode, ci->codeSize);
   // Smooth N/B/T at locations 1/2/3 (offsets 24/36/48): the audited per-draw VS and the STI pool
   // VS 2d2ac3c3 (same output interface, native_hit_pool.h; its UV/basis capture of instance 0).
-  const bool vt_frame=native_hit::enabled() && (t_last_hash==0x3812bc980438747full || t_last_hash==0x2d2ac3c38992b7f0ull);
+  // Class A VS 54df894a (ENV_DetailMap_VT pool pair): UV at 3, N/B/T at 4/5/6, same offsets.
+  const bool detail_vs=t_last_hash==0x54df894ab5230cbbull;
+  const bool vt_frame=native_hit::enabled() && (t_last_hash==0x3812bc980438747full || t_last_hash==0x2d2ac3c38992b7f0ull || detail_vs);
   bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && native_tileset_coverage::vertex(t_last_hash),&t_last_tileset_outputs,
-                     g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs);
+                     g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs,detail_vs?4u:1u);
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
   if (rt_enabled()) {

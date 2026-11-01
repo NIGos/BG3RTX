@@ -70,9 +70,18 @@ NativeLayer hit_material_tileset_layer(uint row,uint layer,float2 uv,float g,flo
  result.known=all(isfinite(result.value));return result;
 }
 #endif
+// One 2D texture-table view (ENV_DetailMap_VT detail normal/mask) with a declared isotropic
+// ray-cone footprint g in its own UV units, as the VT layers.
+NativeLayer hit_material_2d(uint index,uint sampler,float2 uv,float g){
+ NativeLayer result=(NativeLayer)0;
+ if(index==0 || index>=4096 || sampler>=nh_sampler_slots || !(g>0) || !isfinite(g) || !all(isfinite(uv)))return result;
+ result.value=gAlphaTex[NonUniformResourceIndex(index)].SampleGrad(gHitSampler[NonUniformResourceIndex(sampler)],uv,float2(g,0),float2(0,g));
+ result.known=all(isfinite(result.value));return result;
+}
 // Pool instance with a material row (native_hit_records.h nh_pool_meta, native_hit_pool.h): the
 // qualified record (VS 2d2ac3c3 with FS 14678345, 3df678c0 or 81657854: the 8995 sampling recipe
-// and FS frame, they differ only in the reflectance term, row word 220) in the
+// and FS frame, they differ only in the reflectance term, row word 220; VS 54df894a with FS
+// 613ead9c adds the detail layers, row words 224..255) in the
 // query's pool region, its UV and object-space N/B/T in the mesh pool. The basis was extracted
 // from the G-buffer XFB of instance 0 after the positions matched M_0 * P within the mesh cache
 // tolerance (rt/mesh_extract_basis.hlsl); the row binds it to this mesh by pool base, triangle
@@ -109,6 +118,20 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  const float reflectance=nv_reflectance(gHitRecords.Load(row+220u),asfloat(gHitRecords.Load(row+208u)),nl.value.x);
  NvFields fields=nv_fields(al.value.rgb,nl.value.wzy,pl.value.xyz,reflectance);
  if(fields.status!=0)return hit_material_unknown(7);
+ // ENV_DetailMap_VT (word 224 = 1): detail UV = (UV * |A P| / |P|) * tiling at the interpolated
+ // object position (the FS's interpolated W - T and P), footprint scaled alike.
+ const uint4 detail=gHitRecords.Load4(row+nh_pool_row_detail);
+ if(detail.x==1u){
+  const float4 dp=asfloat(gHitRecords.Load4(row+nh_pool_row_detail+16u));
+  const float3 p0=inst_pos(ii,hit.prim,0),p1=inst_pos(ii,hit.prim,1),p2=inst_pos(ii,hit.prim,2);
+  const float3 p=p0+(p1-p0)*hit.bary.x+(p2-p0)*hit.bary.y;
+  const float scale=nv_detail_scale(length(mul(a,p)),length(p));
+  const float2 du=(u*scale)*dp.y;const float dg=(g*scale)*abs(dp.y);
+  NativeLayer dn=hit_material_2d(detail.y,detail.w,du,dg),dm=hit_material_2d(detail.z,detail.w,du,dg);
+  if(!dn.known || !dm.known)return hit_material_unknown(6);
+  fields=nv_detail_fields(fields,dn.value.wzy,dm.value.x,dm.value.y,pl.value.y,pl.value.z,dp.x,dp.z,dp.w);
+  if(fields.status!=0)return hit_material_unknown(7);
+ }
  float3 basis[3];
  [unroll]for(uint component=0;component<3;++component){
   float3 w[3];

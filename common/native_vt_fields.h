@@ -30,6 +30,11 @@ inline float nv_two_sided_sign(NvVec3 ng,NvVec3 n,NvVec3 d){
  const float view=-((ng.x*d.x+ng.y*d.y)+ng.z*d.z),side=(ng.x*n.x+ng.y*n.y)+ng.z*n.z;
  return view*side<0?-1.f:1.f;
 }
+#ifdef __cplusplus
+inline float nv_pow(float x,float y){return std::pow(x,y);}
+#else
+float nv_pow(float x,float y){return pow(x,y);}
+#endif
 inline NvFields nv_fields(NvVec3 albedo,NvVec3 normal_wzy,NvVec3 physical,float reflectance){
  NvFields r;r.albedo=tb_vec(0,0,0);r.frame_normal=tb_vec(0,0,0);r.roughness=0;r.reflectance=0;r.metalness=0;r.aux=0;r.status=1;
  if(!tb_finite3(albedo)||!tb_finite3(normal_wzy)||!tb_finite3(physical)||!tb_finite(reflectance))return r;
@@ -39,6 +44,33 @@ inline NvFields nv_fields(NvVec3 albedo,NvVec3 normal_wzy,NvVec3 physical,float 
  float length=tb_sqrt(length2);r.frame_normal=tb_vec(n.x/length,n.y/length,n.z/length);
  r.albedo=tb_vec(nv_unit(albedo.x),nv_unit(albedo.y),nv_unit(albedo.z));
  r.roughness=nv_unit(physical.y);r.reflectance=nv_unit(reflectance);r.metalness=nv_unit(physical.x);r.aux=physical.z;r.status=0;return r;
+}
+// ENV_DetailMap_VT (FS 613ead9c, VS 54df894a; native_vt_surface.h LayoutDetail). The detail UV is
+// (UV * (|W - T| / |P|)) * tiling with W the world position, T the instance translation and P the
+// object position (VS locations 0/1/2): the ratio is |A P| / |P| (A the instance 3x3).
+inline float nv_detail_scale(float world_length,float object_length){return world_length/object_length;}
+// On top of nv_fields (the VT layers; reflectance = 1:1 byte 8), with the 2D detail normal dn (1:3)
+// and mask (1:8) sampled at the detail UV and the 1:1 strength (byte 0), mask power (12) and
+// roughness add (16), as FS 613ead9c:
+//   frame = normalize(fma(normalize(dn.wzy * 2 - 1, z negated) * strength, (1, 0, 1), base frame))
+//   RT2.x roughness = clamp(fma(1 - mask.y, roughness add, physical.y))
+//   RT1.w aux = clamp(pow(max(|mask.x|, 1e-4), mask power)) * physical.z
+// Albedo, metalness (physical.x) and reflectance are the base ones. Status 2: degenerate normal.
+inline NvFields nv_detail_fields(NvFields base,NvVec3 detail_wzy,float mask_x,float mask_y,float physical_y,float physical_z,
+                                 float strength,float mask_power,float roughness_add){
+ NvFields r=base;if(base.status!=0)return r;r.status=1;
+ if(!tb_finite3(detail_wzy)||!tb_finite(mask_x)||!tb_finite(mask_y)||!tb_finite(physical_y)||!tb_finite(physical_z)||
+    !tb_finite(strength)||!tb_finite(mask_power)||!tb_finite(roughness_add))return r;
+ NvVec3 d=tb_vec(detail_wzy.x*2-1,detail_wzy.y*2-1,1-detail_wzy.z*2);
+ float l2=(d.x*d.x+d.y*d.y)+d.z*d.z;if(!tb_finite(l2)||l2<=0){r.status=2;return r;}
+ float l=tb_sqrt(l2);
+ NvVec3 f=tb_vec(d.x/l*strength+base.frame_normal.x,base.frame_normal.y,d.z/l*strength+base.frame_normal.z);
+ float f2=(f.x*f.x+f.y*f.y)+f.z*f.z;if(!tb_finite(f2)||f2<=0){r.status=2;return r;}
+ float fl=tb_sqrt(f2);r.frame_normal=tb_vec(f.x/fl,f.y/fl,f.z/fl);
+ r.roughness=nv_unit((1-mask_y)*roughness_add+physical_y);
+ const float aux=nv_unit(nv_pow(tb_max(tb_abs(mask_x),1e-4f),mask_power))*physical_z;
+ if(!tb_finite(aux)||!tb_finite(r.roughness))return r;
+ r.aux=aux;r.status=0;return r;
 }
 #ifdef __cplusplus
 }

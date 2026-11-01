@@ -113,6 +113,17 @@ Limits that decide the order:
     1:0 @32 before W = M P: not class A, never pooled. Row `CaptureNone` (counted as above). Path:
     class A with a per-draw translation offset (bvhsplit instance transform + UBO offset), or the
     instanced per-draw rows above.
+  - 54df894a/613ead9c ENV_DetailMap_VT (12.4%, built, READY_FOR_LIVE): pool pair (VS class A). Decode
+    from the dumped GLSL: VT layers and engine 1:0 as 14678345 but at 1:4..7; 2D detail normal 1:3
+    and mask 1:8 with sampler 0:7 at detail UV = (UV * |A P| / |P|) * 1:1 _m1 (FS: |W - T| / |P| of
+    VS outputs 0/1/2); frame = normalize(fma(n_detail * _m0, (1,0,1), n_base)); roughness =
+    clamp(fma(1 - mask.y, _m4, phys.y)); aux = clamp(pow(max(|mask.x|, 1e-4), _m3)) * phys.z;
+    reflectance _m2 (byte 8). `nv_detail_fields` (shared C++/HLSL, unit-tested vs the FS statements).
+    VS 54df894a: UV at 3, N/B/T at 4/5/6 -> `patch_vs` frame location 4 (same XFB 16/24/36/48, so
+    mesh_extract_basis is unchanged). Pool row words 224..255: layout, detail table indices, detail
+    sampler slot, the four 1:1 floats. Detail derivative: declared isotropic ray cone as the VT layers.
+    Check: `[hit material pool pairs]` 54df894a/613ead9c records/ready > 0; `[hit material pool]`
+    failures bits 11/12 = 0; `[hit material pool basis]` mismatch 0; `hit material` qualified up.
 - Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;
   terrain draws patches from `_m0[gl_InstanceIndex]` + a heightmap, needs its own recipe.
 - Skinned characters (class B always-skinned VSs, CHAR_* STI FSs): positions from the skinning
