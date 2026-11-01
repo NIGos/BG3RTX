@@ -34,20 +34,24 @@ struct Row {
  uint32_t stride{},table{},sampler{},frame{};
  uint32_t normal{},albedo{},physical{},reserved{};
  float p0[4]{},p1[4]{},t[32]{},parameters[4]{};
- uint32_t padding[8]{};
+ uint32_t padding[8]{}; // pool rows: the detail words (native_hit_records.h nh_pool_row_detail)
 };
 static_assert(sizeof(Row)==record_bytes);
 static_assert(offsetof(Row,pre)==8 && offsetof(Row,deferred)==12 && offsetof(Row,stride)==16);
 static_assert(offsetof(Row,p0)==48 && offsetof(Row,t)==80 && offsetof(Row,parameters)==208);
 struct View {VkImageView view{};VkImage image{};VkImageLayout layout{};uint64_t id{};uint32_t image_id{};};
 struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};uint64_t vs{},fs{};bool opaque{};};
-struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{},reflectance{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;std::array<View,9> tileset_views{};};
+struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{},reflectance{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;std::array<View,9> tileset_views{};
+ // LayoutDetail recipes (native_vt_surface.h, pool only): 2D detail normal 1:3, mask 1:8, sampler 0:7,
+ // material UBO 1:1 strength/tiling/mask power/roughness add (bits).
+ uint32_t layout{};View detail_normal,detail_mask;omm::BoundSampler detail_sampler;uint32_t detail[4]{};};
 struct Deferred {
  std::vector<Buffer> chunks;Buffer rows;uint64_t command{},recording{},frame{};VkBuffer camera{};VkDeviceSize camera_offset{},cursor{},total{};
  DrawJoin join;std::vector<Material> materials;std::vector<VkSampler> samplers;ResourceBudget resources;
  bool finalized{},valid{true};uint32_t seen{},audited_unique{},audited_duplicate{},family_declined{},pipeline_declined{},binding_declined{};
  uint32_t slot_overflow{},sampler_overflow{},cache_overflow{},stream_overflow{};
  FamilyCensus declined; // G-buffer draws of other native pairs (what to qualify next)
+ uint32_t uncaptured_draws{},uncaptured_instanced{};uint64_t uncaptured_vertices{}; // audited FS, no geometry path (native_vt::CaptureNone)
 };
 struct Slot {
  Buffer data;VkDeviceSize data_bytes{};VkDescriptorSet set{};uint64_t command{},recording{},frame{};uint32_t generation{};
@@ -261,9 +265,21 @@ bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* rec
  // Reflectance mode of the pair (native_vt_surface.h): the 0.5 variants have no 1:1 binding.
  const auto* vt=recipe?recipe:native_vt::recipe(state->fs);material.reflectance=vt?vt->reflectance:native_vt::ReflectanceUbo;
  buffer(0,1,0,recipe?pool::engine_bytes(*recipe):112u,material.engine);buffer(2,0,12,128,material.tilesets);
- if(material.reflectance!=native_vt::ReflectanceConstant)buffer(1,1,1,16,material.physical_ubo);else material.physical_ubo={};
+ // 1:1 bytes the recipe reads (FS 8e49cde8: its reflectance is byte 16 of 32); the per-draw pairs 16.
+ const uint32_t ubo_bytes=vt?std::max(16u,native_vt::material_bytes(*vt)):16u;
+ if(material.reflectance!=native_vt::ReflectanceConstant)buffer(1,1,1,ubo_bytes,material.physical_ubo);else material.physical_ubo={};
+ // LayoutDetail: the VT table/normal/albedo/physical move to 1:4..7; 1:3 and 1:8 are the 2D detail
+ // normal and mask, sampled with the set 0 binding 7 sampler (FS 613ead9c).
+ const bool detail=vt && vt->layout==native_vt::LayoutDetail;const uint32_t first=detail?4u:3u;material.layout=detail?native_vt::LayoutDetail:native_vt::LayoutBase;
  ViewFacts views[4]{};View* targets[4]={&material.table,&material.normal,&material.albedo,&material.physical};
- for(uint32_t i=0;i<4;++i)if(!view(cmd,3+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
+ for(uint32_t i=0;i<4;++i)if(!view(cmd,first+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
+ if(detail){
+  ViewFacts d[2]{};
+  if(!view(cmd,3,VK_IMAGE_VIEW_TYPE_2D,material.detail_normal,d[0],true) || !view(cmd,8,VK_IMAGE_VIEW_TYPE_2D,material.detail_mask,d[1],true))failed|=1u<<11;
+  const bool bound=omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,material.detail_sampler);const auto& ds=material.detail_sampler.sampler;
+  if(!bound || !omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0) || !omm::ordinary_sampler_current(material.detail_sampler) ||
+     !ds.complete || ds.info.flags || ds.info.compareEnable || ds.info.unnormalizedCoordinates || ds.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)failed|=1u<<12;
+ }
  bool sampler_bound=omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,2,0,material.sampler);
  omm::OrdinaryBindingFacts sampler_binding{};
  bool sampler_frozen=omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,2,0,&sampler_binding);
@@ -328,6 +344,8 @@ void publish_word(Query& query,uint32_t value){
 struct PoolMaterial {
  View table,normal,albedo,physical;omm::BoundSampler sampler;uint32_t engine[12]{},reflectance{};
  const native_vt::Recipe* recipe{}; // the record's pair (offsets of engine[], reflectance mode)
+ View detail_normal,detail_mask;omm::BoundSampler detail_sampler;uint32_t detail[4]{}; // LayoutDetail only
+ bool detail_layout() const {return recipe && recipe->layout==native_vt::LayoutDetail;}
  uint64_t checked{};bool current{}; // currency of the last check (once per frame per record)
  // Persistent across material refreshes: the pool mesh (from the BVH build) and its UV/basis.
  PoolMesh mesh{};pool::BasisTrack basis{};
@@ -351,10 +369,10 @@ PoolBasisStats pool_basis;
 // This frame's tile-set table binding (set 0 binding 12) of the STI G-buffer draws (pool rows' gather).
 struct PoolTilesets {Bg3Binding binding{};uint64_t frame{};} pool_tilesets;
 constexpr uint32_t kPoolDone=0x454e4f44u,kPoolRan=0x42564853u;
-struct PoolObserved {uint64_t frame{};uint32_t draws{},recipe{},captured{},throttled{},no_key{},overflow{};uint32_t failures[12]{};};
+struct PoolObserved {uint64_t frame{};uint32_t draws{},recipe{},captured{},throttled{},no_key{},overflow{};uint32_t failures[13]{};};
 PoolObserved pool_obs[2]; // this frame and the previous one (the G-buffer may record after the BVH build)
 uint64_t pool_counter_frame{};
-void pool_capture_bits(uint32_t bits,uint32_t (&out)[12]){for(uint32_t b=0;b<12;++b)if(bits&(1u<<b))++out[b];}
+void pool_capture_bits(uint32_t bits,uint32_t (&out)[13]){for(uint32_t b=0;b<13;++b)if(bits&(1u<<b))++out[b];}
 PoolObserved& pool_observed(uint64_t frame){
  if(pool_obs[0].frame!=frame){pool_obs[1]=pool_obs[0];pool_obs[0]={};pool_obs[0].frame=frame;}
  return pool_obs[0];
@@ -373,9 +391,9 @@ void pool_log(uint64_t frame){
  for(size_t i=1;i<size_t(pool::Status::Count) && n>=0 && n<int(sizeof reasons);++i)
   n+=snprintf(reasons+n,sizeof reasons-n,"%s%s %llu/%llu",i>1?"; ":"",pool::kStatusName[i],(unsigned long long)c.draws[i],(unsigned long long)c.instances[i]);
  log("[hit material pool] frame %llu without record (draws/instances): %s",(unsigned long long)frame,reasons);
- log("[hit material pool] frame %llu G-buffer class A draws %u, STI pair %u, captured %u, refresh not due %u, no geometry key %u, table full %u; capture failures by bit (0..2 buffers, 3..6 views, 7..9 sampler, 10 parameters) %u/%u/%u %u/%u/%u/%u %u/%u/%u %u",
+ log("[hit material pool] frame %llu G-buffer class A draws %u, STI pair %u, captured %u, refresh not due %u, no geometry key %u, table full %u; capture failures by bit (0..2 buffers, 3..6 views, 7..9 sampler, 10 parameters, 11/12 detail views/sampler) %u/%u/%u %u/%u/%u/%u %u/%u/%u %u %u/%u",
   (unsigned long long)frame,o->draws,o->recipe,o->captured,o->throttled,o->no_key,o->overflow,o->failures[0],o->failures[1],o->failures[2],o->failures[3],o->failures[4],o->failures[5],o->failures[6],
-  o->failures[7],o->failures[8],o->failures[9],o->failures[10]);
+  o->failures[7],o->failures[8],o->failures[9],o->failures[10],o->failures[11],o->failures[12]);
  uint64_t ranges=0,bytes=0,ready=0,pending=0,failed=0;
  pool_table.for_each([&](uint64_t,const auto& r){const auto& m=r.payload;if(m.mesh.basis_bytes){++ranges;bytes+=m.mesh.basis_bytes;}
   ready+=m.basis.state==pool::Basis::Ready;pending+=m.basis.state==pool::Basis::Pending;failed+=m.basis.state==pool::Basis::Failed;});
@@ -385,11 +403,11 @@ void pool_log(uint64_t frame){
   (unsigned long long)b.jobs,(unsigned long long)b.results[0],(unsigned long long)b.results[1],(unsigned long long)b.results[2],(unsigned long long)b.results[3],(unsigned long long)b.results[4],double(b.err_max),
   pool_slots.used(),nh_pool_rows,(unsigned long long)b.row_instances,(unsigned long long)b.rows,(unsigned long long)b.no_slot);
  // Records and ready UV/basis per pool pair (FS): which variant the qualified share comes from.
- char pairs[256];int k=0;
+ char pairs[512];int k=0;
  for(const auto& r:native_vt::recipes){if(!pool::pool_recipe(r.vs,r.fs) || k<0 || k>=int(sizeof pairs))continue;uint64_t records=0,with_basis=0;
   pool_table.for_each([&](uint64_t,const auto& e){if(e.payload.recipe!=&r)return;++records;with_basis+=e.payload.basis.state==pool::Basis::Ready;});
-  k+=snprintf(pairs+k,sizeof pairs-k,"%sFS %08llx %llu/%llu",k?"; ":"",(unsigned long long)(r.fs>>32),(unsigned long long)records,(unsigned long long)with_basis);}
- log("[hit material pool pairs] frame %llu records/ready UV-basis by pair (VS 2d2ac3c3): %s",(unsigned long long)frame,k>0?pairs:"none");
+  k+=snprintf(pairs+k,sizeof pairs-k,"%s%08llx/%08llx %llu/%llu",k?"; ":"",(unsigned long long)(r.vs>>32),(unsigned long long)(r.fs>>32),(unsigned long long)records,(unsigned long long)with_basis);}
+ log("[hit material pool pairs] frame %llu records/ready UV-basis by pair (VS/FS): %s",(unsigned long long)frame,k>0?pairs:"none");
 }
 void pool_release_slot(PoolMaterial& m){if(m.basis.slot<nh_pool_rows)pool_slots.release(m.basis.slot);m.basis.slot=UINT32_MAX;}
 // Results of recorded captures (under pool_mutex, once per frame from the build's first lookup).
@@ -422,7 +440,8 @@ void pool_rollover(uint64_t frame,uint64_t epoch){
  pool_jobs_poll(frame,epoch);
 }
 bool pool_current(PoolMaterial& m,uint64_t frame){
- if(m.checked!=frame){m.checked=frame;m.current=current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical)&&omm::ordinary_sampler_current(m.sampler);}
+ if(m.checked!=frame){m.checked=frame;m.current=current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical)&&omm::ordinary_sampler_current(m.sampler)&&
+  (!m.detail_layout() || (current(m.detail_normal)&&current(m.detail_mask)&&omm::ordinary_sampler_current(m.detail_sampler)));}
  return m.current;
 }
 }
@@ -552,6 +571,7 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  const bool tileset=tileset_deferred(state->vs,state->fs);const bool audited=audited_static_family(state->vs,state->fs)||tileset;
  const auto qualify=deferred_qualify(audited,tileset,exactPipeline,args.kind,args.instances,stride);
  if(qualify==DeferredQualify::FamilyDeclined){++p.family_declined;
+  if(pool::uncaptured_recipe(state->vs,state->fs)){++p.uncaptured_draws;p.uncaptured_instanced+=args.instances>1;p.uncaptured_vertices+=uint64_t(args.count)*args.instances;}
   if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0)p.declined.add(state->vs,state->fs,args.instances,uint64_t(args.count)*args.instances);return false;}++p.seen;
  if(qualify==DeferredQualify::PipelineDeclined){++p.pipeline_declined;return false;}
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
@@ -616,6 +636,9 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
   for(const auto& e:p.declined.top(8))log("[hit material families]   vs/fs %016llx/%016llx draws %u instanced %u vertices %llu",
    (unsigned long long)e.vs,(unsigned long long)e.fs,e.draws,e.instanced,(unsigned long long)e.vertices);
  }
+ // Audited FS decodes whose VS has no geometry path (native_vt::CaptureNone: not class A, never pooled).
+ if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0)log("[hit material families] frame %llu audited recipe, no capture path (VS not class A): draws %u instanced %u vertices %llu",
+  (unsigned long long)p.frame,p.uncaptured_draws,p.uncaptured_instanced,(unsigned long long)p.uncaptured_vertices);
 }
 void slot_in_use(uint32_t index,uint64_t frame){if(!on || index>=kSceneSlots)return;std::lock_guard lock(mutex);for(auto h:slots[index].handles)life_extend(h,frame);}
 bool pool_keys(const InstPipe& inst,const CmdState& s,const DrawArgs& args,uint64_t* geometry,uint64_t* position){
@@ -688,14 +711,23 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
    const uint32_t engine=pool::engine_bytes(*recipe);
    const bool constant=recipe->reflectance==native_vt::ReflectanceConstant;const float half=0.5f;
    if(ok && constant)std::memcpy(&payload.reflectance,&half,4); // FS 3df678c0: RT2.y is 0.5, no 1:1 UBO
-   if(ok && !(read_mapped(m.engine.buffer,m.engine.offset,payload.engine,engine) && (constant || read_mapped(m.physical_ubo.buffer,m.physical_ubo.offset,&payload.reflectance,4)))){ok=false;failures|=1u<<10;}
+   // The 1:1 bytes the recipe reads: the reflectance at its byte; LayoutDetail also its
+   // strength/tiling (bytes 0/4), mask power and roughness add (12/16).
+   uint32_t ubo[8]{};const uint32_t ubo_bytes=native_vt::material_bytes(*recipe);
+   if(ok && !(read_mapped(m.engine.buffer,m.engine.offset,payload.engine,engine) && (constant || read_mapped(m.physical_ubo.buffer,m.physical_ubo.offset,ubo,ubo_bytes)))){ok=false;failures|=1u<<10;}
+   if(ok && !constant)payload.reflectance=ubo[recipe->reflectance_offset/4u];
    payload.recipe=recipe;
+   if(ok && payload.detail_layout()){payload.detail_normal=m.detail_normal;payload.detail_mask=m.detail_mask;payload.detail_sampler=m.detail_sampler;
+    payload.detail[0]=ubo[0];payload.detail[1]=ubo[1];payload.detail[2]=ubo[3];payload.detail[3]=ubo[4];}
    o.status=ok?pool::Status::Qualified:pool::Status::Binding;
    if(ok){
     payload.table=m.table;payload.normal=m.normal;payload.albedo=m.albedo;payload.physical=m.physical;payload.sampler=m.sampler;
     uint64_t h=pool::mix(o.identity,m.sampler.sampler.id);
     for(const View* v:{&m.table,&m.normal,&m.albedo,&m.physical})h=pool::mix(pool::mix(h,v->id),v->image_id);
     for(uint32_t w=0;w<engine/4u;++w)h=pool::mix(h,payload.engine[w]);
+    if(payload.detail_layout()){h=pool::mix(h,m.detail_sampler.sampler.id);
+     for(const View* v:{&m.detail_normal,&m.detail_mask})h=pool::mix(pool::mix(h,v->id),v->image_id);
+     for(uint32_t w:payload.detail)h=pool::mix(h,w);}
     o.identity=pool::mix(h,payload.reflectance);
    }
   }
@@ -832,6 +864,8 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    if(!recipe || m.basis.state!=pool::Basis::Ready || m.basis.slot>=nh_pool_rows || m.basis.gen!=m.mesh.gen || !m.mesh.basis_bytes ||
       r.seen.status!=pool::Status::Qualified || r.conflict || r.prev_conflict || !pool_current(m,frame_index()))return;
    Material x{};x.table=m.table;x.normal=m.normal;x.albedo=m.albedo;x.physical=m.physical;x.sampler=m.sampler;
+   if(m.detail_layout()){x.layout=native_vt::LayoutDetail;x.detail_normal=m.detail_normal;x.detail_mask=m.detail_mask;x.detail_sampler=m.detail_sampler;
+    std::memcpy(x.detail,m.detail,16);}
    x.row.valid=m.basis.slot+1;x.row.triangles=m.mesh.tris;x.row.pre=uint32_t(m.mesh.pool_off);x.row.deferred=uint32_t(m.mesh.basis_off);
    x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=3;
    const uint32_t gen=uint32_t(m.mesh.gen);std::memcpy(&x.row.parameters[2],&gen,4);
@@ -849,9 +883,18 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   size_t w=0;
   for(size_t i=0;i<q.pool_rows.size();++i){auto& m=q.pool_rows[i];ResourcePlan plan{};
    if(!budget.plan(m.sampler.sampler.id,{identity(m.normal),identity(m.albedo),identity(m.physical)},plan)){++pool_overflow;continue;}
-   if(plan.indices.new_sampler){auto info=m.sampler.sampler.info;info.pNext=nullptr;VkSampler sampler{};
-    if(dd->vk.CreateSampler(dd->device,&info,nullptr,&sampler)!=VK_SUCCESS){++pool_overflow;continue;}q.pool_samplers.push_back(sampler);}
-   budget.commit(plan);m.row.sampler=plan.indices.sampler;m.row.normal=plan.indices.normal;m.row.albedo=plan.indices.albedo;m.row.physical=plan.indices.physical;
+   // LayoutDetail: its detail sampler (set 0:7) gets a slot too; new clones are appended in index order.
+   const bool detail=m.layout==native_vt::LayoutDetail;ResourcePlan second{};
+   if(detail && !budget.plan_second_sampler(plan,m.detail_sampler.sampler.id,second)){++pool_overflow;continue;}
+   VkSampler made[2]{};bool failed=false;
+   for(uint32_t n=0;n<2 && !failed;++n){
+    if(!(n?detail && second.indices.new_sampler:plan.indices.new_sampler))continue;
+    auto info=(n?m.detail_sampler:m.sampler).sampler.info;info.pNext=nullptr;failed=dd->vk.CreateSampler(dd->device,&info,nullptr,&made[n])!=VK_SUCCESS;
+   }
+   if(failed){for(auto s:made)if(s)dd->vk.DestroySampler(dd->device,s,nullptr);++pool_overflow;continue;}
+   for(auto s:made)if(s)q.pool_samplers.push_back(s);
+   budget.commit(plan);if(detail){budget.commit_sampler(second);m.row.padding[3]=second.indices.sampler;}
+   m.row.sampler=plan.indices.sampler;m.row.normal=plan.indices.normal;m.row.albedo=plan.indices.albedo;m.row.physical=plan.indices.physical;
    q.pool_rows[w]=m;pool_engine[w]=pool_engine[i];++w;
   }
   q.pool_rows.resize(w);pool_engine.resize(w);
@@ -872,6 +915,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    if(std::any_of(table_views.begin(),table_views.end(),[&](const View& t){return same(t,v);}) || std::any_of(added.begin(),added.end(),[&](const View* t){return same(*t,v);}))return;
    added.push_back(&v);};
   if(m.row.reserved!=2)need(m.table);else for(const auto& v:m.tileset_views)need(v);
+  if(m.layout==native_vt::LayoutDetail){need(m.detail_normal);need(m.detail_mask);}
   if(table_views.size()+added.size()>table_free)return false;
   for(const View* v:added){table_views.push_back(*v);tables.push_back({VK_NULL_HANDLE,v->view,v->layout});}
   return true;
@@ -884,7 +928,11 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   if(m.row.reserved==1)m.row.table=table_index(m.table);
   if(m.row.reserved==2)for(uint32_t n=0;n<9;++n){uint32_t index=table_index(m.tileset_views[n]);std::memcpy(m.row.t+n,&index,4);}
  }
- for(auto& m:q.pool_rows)m.row.table=table_index(m.table);
+ for(auto& m:q.pool_rows){m.row.table=table_index(m.table);
+  // Detail words (native_hit_records.h nh_pool_row_detail): layout, the two 2D table indices,
+  // the detail sampler slot (set above), then strength, tiling, mask power, roughness add.
+  if(m.layout==native_vt::LayoutDetail){m.row.padding[0]=native_vt::LayoutDetail;m.row.padding[1]=table_index(m.detail_normal);m.row.padding[2]=table_index(m.detail_mask);
+   std::memcpy(m.row.padding+4,m.detail,16);}}
  tables_used=uint32_t(tables.size());log_capacity(q.materials.empty() && q.pool_rows.empty()?"tables full":"mapped");
  if(q.materials.empty() && q.pool_rows.empty())return false;
  uint32_t first_table=0;q.rows_bytes=q.pool_rows.empty()?row_bytes:row_bytes+pool_rows_bytes;
@@ -896,7 +944,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  for(auto& m:q.materials){if(m.row.reserved==1)m.row.table+=first_table;
   if(m.row.reserved==2)for(uint32_t n=0;n<9;++n){uint32_t index;std::memcpy(&index,m.row.t+n,4);index+=first_table;std::memcpy(m.row.t+n,&index,4);}
  }
- for(auto& m:q.pool_rows)m.row.table+=first_table;
+ for(auto& m:q.pool_rows){m.row.table+=first_table;if(m.layout==native_vt::LayoutDetail){m.row.padding[1]+=first_table;m.row.padding[2]+=first_table;}}
  // Gather inputs in the layout of hit_material_gather.hlsl's Engine (v[4] p0, v[5] p1, words.y
  // tile-set index, words.z channel) and Physical (x reflectance).
  for(size_t i=0;i<q.pool_rows.size();++i){auto* at=static_cast<unsigned char*>(q.pool_ubo.mapped)+i*512u;std::memset(at,0,512);
@@ -914,8 +962,11 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  for(const auto& m:q.pool_rows){
   caches[m.row.normal]={VK_NULL_HANDLE,m.normal.view,m.normal.layout};caches[m.row.albedo]={VK_NULL_HANDLE,m.albedo.view,m.albedo.layout};caches[m.row.physical]={VK_NULL_HANDLE,m.physical.view,m.physical.layout};
   const size_t shared=packet->samplers.size();
-  samplers[m.row.sampler]={m.row.sampler<shared?packet->samplers[m.row.sampler]:q.pool_samplers[m.row.sampler-shared],VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};
-  for(const View* view:{&m.table,&m.normal,&m.albedo,&m.physical}){slot.handles.push_back(uint64_t(view->view));slot.handles.push_back(uint64_t(view->image));life_note(cmd,uint64_t(view->view));life_note(cmd,uint64_t(view->image));}
+  auto sampler_at=[&](uint32_t i){return VkDescriptorImageInfo{i<shared?packet->samplers[i]:q.pool_samplers[i-shared],VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};};
+  samplers[m.row.sampler]=sampler_at(m.row.sampler);
+  if(m.layout==native_vt::LayoutDetail)samplers[m.row.padding[3]]=sampler_at(m.row.padding[3]);
+  for(const View* view:{&m.table,&m.normal,&m.albedo,&m.physical,&m.detail_normal,&m.detail_mask}){if(!view->view)continue;
+   slot.handles.push_back(uint64_t(view->view));slot.handles.push_back(uint64_t(view->image));life_note(cmd,uint64_t(view->view));life_note(cmd,uint64_t(view->image));}
  }
  if(!q.pool_rows.empty())life_note(cmd,uint64_t(pool_table_binding.buffer));
  VkDescriptorBufferInfo buffers[2]={{q.rows.b,0,q.rows_bytes},{q.data.b,0,std::max<VkDeviceSize>(cursor,256)}};

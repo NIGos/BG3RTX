@@ -23,7 +23,7 @@ inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& 
                      int* uv_location = nullptr, uint32_t* native_hair_outputs = nullptr,
                      bool native_vt_frame = false, uint32_t* native_vt_outputs = nullptr,
                      bool native_tileset_color = false, uint32_t* native_tileset_outputs = nullptr,
-                     bool native_tileset_material = false) {
+                     bool native_tileset_material = false, uint32_t native_vt_location = 1) {
   if (uv_location) *uv_location = -1;
   if (native_hair_outputs) *native_hair_outputs = 0;
   if (native_vt_outputs) *native_vt_outputs = 0;
@@ -192,7 +192,9 @@ inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& 
   // Exact static VT VS 3812bc980438747f is authorized by the caller, not by
   // structural resemblance. It exports smooth N/B/T at locations1/2/3, no W.
   // Capture the original values; do not reconstruct its quaternion/frame math.
-  if(native_vt_frame && stride>=64u && uv_loc==0 && hair_flags==0u) {
+  // native_vt_location: the N location (1; 4 for VS 54df894a, UV at 3 and N/B/T at 4/5/6),
+  // the UV one location below it; the frame always lands at 24/36/48.
+  if(native_vt_frame && stride>=64u && native_vt_location>=1u && native_vt_location<=13u && uv_loc==int(native_vt_location)-1 && hair_flags==0u) {
     uint32_t vars[3]={};
     for(unsigned slot=0;slot<3;++slot) for(const auto& v:ins) {
       const uint32_t* a=code+v.pos;
@@ -204,7 +206,7 @@ inline bool patch_vs(const uint32_t* code, size_t words, std::vector<uint32_t>& 
       for(const auto& t:ins)if(t.op==22 && t.n>=3 && code[t.pos+1]==element && code[t.pos+2]==32)f32=true;
       for(const auto& d:ins)if(d.op==71 && d.n>=3 && code[d.pos+1]==a[2]){
         const auto kind=code[d.pos+2];
-        if(kind==30 && d.n>=4 && code[d.pos+3]==slot+1)located=true;
+        if(kind==30 && d.n>=4 && code[d.pos+3]==slot+native_vt_location)located=true;
         if(kind==31 || kind==35 || kind==36 || kind==37 || kind==13 || kind==14)unsafe=true;
       }
       if(f32 && located && !unsafe){if(vars[slot])return false;vars[slot]=a[2];}

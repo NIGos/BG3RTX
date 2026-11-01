@@ -64,12 +64,15 @@ SCENE_LEVELS = {
 # ---- recipes and shaders ----------------------------------------------------------------
 
 def recipes(path: Path = SURFACE_H) -> list[dict]:
-    """Rows of native_vt_surface.h `recipes[]`: fs, vs, reflectance mode (0 = audited base)."""
+    """Rows of native_vt_surface.h `recipes[]`: fs, vs, reflectance mode (0 = audited base), and
+    the optional trailing fields (1:1 reflectance byte, Capture, Layout, two-sided). A row is a
+    classification base only without them; a CaptureNone row is audited but not built."""
     t = path.read_text(encoding="utf-8")
     out = []
-    for m in re.finditer(r"\{0x([0-9a-f]{16})ull,0x([0-9a-f]{16})ull,(\d+),(\d+),(\d+)(?:,(Reflectance\w+))?\}", t):
+    for m in re.finditer(r"\{0x([0-9a-f]{16})ull,0x([0-9a-f]{16})ull,(\d+),(\d+),(\d+)(?:,(Reflectance\w+))?((?:,\w+)*)\}", t):
+        extra = [x for x in m.group(7).split(",") if x]
         out.append({"fs": m.group(1), "vs": m.group(2), "offsets": tuple(int(m.group(i)) for i in (3, 4, 5)),
-                    "mode": m.group(6) or "ReflectanceUbo"})
+                    "mode": m.group(6) or "ReflectanceUbo", "extra": extra, "capture": "CaptureNone" not in extra})
     return out
 
 
@@ -185,7 +188,12 @@ def world_rows(wd: dict, tpairs: dict, gb_draws: dict) -> tuple[dict, dict, dict
     return allw, scene, unmapped
 
 
-def next_step(cls: str, built: bool, vs_ok: bool, verdict, vs: str, bases: dict | None = None) -> str:
+def next_step(cls: str, built: bool, vs_ok: bool, verdict, vs: str, bases: dict | None = None,
+              uncaptured: bool = False, blocked_vs: bool = False) -> str:
+    if uncaptured:
+        return f"FS decode audited; VS {vs[:8]} not class A: no capture path (PLAN_M4 next families)"
+    if blocked_vs:
+        return f"VS {vs[:8]} not class A (no capture path, PLAN_M4 next families): FS audit waits on it"
     if built:
         return "built: live gate pending (`[hit material]` qualified up)" if cls != "SUPPORTED" else "audited recipe"
     if cls == "COPY":
@@ -220,10 +228,12 @@ def build(world_cache: str | None, no_world: bool, game: str, log=print) -> list
     tot_b = sum(b for c, b in allw.values()) or 1.0
     tot_s = sum(b for c, b in scene.values()) or 1.0
     rec = recipes()
-    bases = {r["fs"]: r for r in rec if r["mode"] == "ReflectanceUbo"}
+    bases = {r["fs"]: r for r in rec if r["mode"] == "ReflectanceUbo" and not r["extra"]}
     base = set(bases)
-    built = {(r["vs"], r["fs"]) for r in rec}
-    vs_ok = {r["vs"] for r in rec}
+    built = {(r["vs"], r["fs"]) for r in rec if r["capture"]}
+    vs_ok = {r["vs"] for r in rec if r["capture"]}
+    uncaptured = {(r["vs"], r["fs"]) for r in rec if not r["capture"]}
+    blocked_vs = {r["vs"] for r in rec if not r["capture"]} - vs_ok
     src = Sources()
     rec_glsl = {h: src.glsl(h) for h in sorted(base)}
     rec_glsl = {h: t for h, t in rec_glsl.items() if t}
@@ -246,7 +256,7 @@ def build(world_cache: str | None, no_world: bool, game: str, log=print) -> list
         row = {
             "vs": vs, "fs": fs, "name": nm, "templates": len(names), "class": cls,
             "recipe": v.recipe[:8] if v and v.cls != "SUPPORTED" else "", "term": v.term if v else "",
-            "built": (vs, fs) in built, "vs_audited": vs in vs_ok,
+            "built": (vs, fs) in built, "vs_audited": vs in vs_ok, "uncaptured": (vs, fs) in uncaptured or vs in blocked_vs,
             "world_objects": round(c), "world_share": c / tot_c, "world_geo_share": b / tot_b,
             "scene_geo_share": sc, "frame_share": fsh, "gbuffer_draws": e["gbuffer_draws"],
             "traces": e["captures"], "passes": "/".join(sorted(e["passes"])),
@@ -254,7 +264,7 @@ def build(world_cache: str | None, no_world: bool, game: str, log=print) -> list
             "log_vertices": lvx.get("vertices", 0),
         }
         row["combined"] = (row["world_geo_share"] + row["scene_geo_share"] + row["frame_share"]) / 3
-        row["next"] = next_step(cls, row["built"], row["vs_audited"], v, vs, bases) if v else next_step(cls, False, False, None, vs)
+        row["next"] = next_step(cls, row["built"], row["vs_audited"], v, vs, bases, (vs, fs) in uncaptured, vs in blocked_vs) if v else next_step(cls, False, False, None, vs)
         rows.append(row)
     src.close()
     rows.sort(key=lambda r: -r["combined"])
@@ -330,7 +340,7 @@ def markdown(rows, meta, top: int) -> str:
     for r in rows[:top]:
         if r["class"] in ("COPY", "VARIANT"):
             L.append(f"- {r['vs'][:8]}/{r['fs'][:8]} {r['class']} of {r['recipe']}: {r['term']}")
-    todo = [r for r in rows if not r["built"] and r["class"] != "SUPPORTED"]
+    todo = [r for r in rows if not r["built"] and not r.get("uncaptured") and r["class"] != "SUPPORTED"]
     cheap = [r for r in todo if r["class"] == "COPY" or r["term"].startswith("fields only")]
     L += ["", "## Next (generated: not built, by combined share)", ""]
     if todo:
