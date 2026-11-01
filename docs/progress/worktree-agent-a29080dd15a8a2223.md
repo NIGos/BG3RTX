@@ -34,3 +34,13 @@
   and logged (`[hit material pool basis] over kBasisCapBytes ...`, at 1, 2, 4, ... meshes). The cap stays
   256 MB until one live window gives the over-cap demand (raising it pushes the mesh pool toward its cap).
 - smoke_ultra forbids `over kBasisCapBytes` and `mesh pool full at` too (the guard forbid was already there).
+
+## Basis cap and the alpha floor after loading (branch worktree-agent-a29080dd15a8a2223, offline verified, 2026-11-01)
+
+- smoke_ultra 23:48 confirmed the mesh-pool fix: `[core] guard:` out-of-range 0 for the whole run (was ~1.5M/frame).
+- Hit-material basis: at 256 MB, 128-255 meshes (154 MB at 128) waited, a demand of 410-565 MB.
+  `kBasisCapBytes` 256 -> 768 MB (inside the 2047 MB mesh pool beside 200-400 MB of vertices).
+- Alpha "region full 0.30" in the first window: the region (window line: 336 MB at its end) was at its
+  171 MB floor on the S8 load frame, which wanted 223.8 MB (36 draws, 52.9 MB made opaque once); the
+  region had shrunk to the floor while loading. The floor at a wide stride with the default rt_alpha_mb is
+  now 40% of the buffer (409 MB of 1024): the day's largest alpha demand was 404.6 MB, opaque peak 463.8 MB.

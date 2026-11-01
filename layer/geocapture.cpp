@@ -522,6 +522,8 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
     // rt_alpha_mb left at its default follows the vertex size, as rt_xfb_mb does (rt_capture_budget.h).
     VkDeviceSize floor_b = VkDeviceSize((std::max)(capture_budget::effective_mb(cfg_int("rt_alpha_mb", 64),
         capture_budget::kAlphaDefaultMb, g_stride), 1)) * mb;
+    // A wide stride's first frame after loading: 40% of the buffer (rt_capture_budget.h alpha_floor).
+    floor_b = capture_budget::alpha_floor(floor_b, size, cfg_int("rt_alpha_mb", 64) == capture_budget::kAlphaDefaultMb, g_stride);
     const VkDeviceSize amb=capture_budget::alpha_region(size,floor_b,g_alpha_region.load(),
       g_alpha_demand_prev.load(),g_opaque_demand_prev.load(),cfg_int("rt_alpha_auto",1)!=0,
       cfg_int("rt_alpha_max_pct",60));
