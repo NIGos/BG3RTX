@@ -7,7 +7,7 @@ Per family with >= 1 bright px per frame, from the `[em] ours/game per family` l
           calibrated, so their energy is compared: what the light list carries)
   s_w     sample std of ln r_w over the windows after the first (the first holds the
           calibration's start), at the run's fixed view: the measured temporal noise
-  N       bright px per frame (independent-pixel upper bound: neighbours share texels, so the
+  N       bright px per full-screen check (independent-pixel upper bound: neighbours share texels, so the
           true count is lower and the tolerance larger: the gate errs toward failing)
   exact families:  test the mean of ln r_w;   sigma^2 = s_w^2 / W + 1 / N
   approx families: test the last window;      sigma^2 = s_w^2 + 1 / N
@@ -40,15 +40,27 @@ def t_quantile(p, dof):
             + (3 * z ** 7 + 19 * z ** 5 + 17 * z ** 3 - 15 * z) / (384 * v ** 3))
 
 
+slice_pat = re.compile(r"\[em\] check GPU cost .*schedule rt_em_check_frames -?\d+, slice 1/(\d+)")
+
+
 def windows(path):
+    """Per window {family: (name, ratio, bright px per full-screen check, approx)}. Since
+    rt_em_check_slices (TRACK_D_EMISSIVE 13.24) a run of the check covers 1/S of the pixels and the
+    layer's "bright px" is per run: x S from the latest `[em] check GPU cost` line (S = 1 without
+    one, as in older logs; a job must keep that line in its patterns)."""
     out = []
+    slices = 1
     for line in open(path, encoding="utf-8", errors="replace"):
+        m = slice_pat.search(line)
+        if m:
+            slices = max(int(m.group(1)), 1)
+            continue
         if "[em] ours/game per family" not in line:
             continue
         fam = {}
         for m in pat.finditer(line):
             f, name, r, rb, nb, _, approx = m.groups()
-            fam[f] = (name, float(rb) if (rb and not approx) else float(r), int(nb), bool(approx))
+            fam[f] = (name, float(rb) if (rb and not approx) else float(r), int(nb) * slices, bool(approx))
         if "(part 1/" in line or "(part" not in line:
             out.append(fam)
         else:

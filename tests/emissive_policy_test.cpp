@@ -294,6 +294,12 @@ int main() {
     Calib none; calib_apply(r, &none); CHECK(r.radiance[0] == 2);
     calib_apply(r, &w); CHECK(near(r.radiance[0], 0.5f) && r.flags == (kFlagApprox | kFlagCalibrated));
     EmRec exact{}; exact.radiance[0] = 2; calib_apply(exact, &w); CHECK(exact.radiance[0] == 2 && exact.flags == 0);
+    // rt_em_check_slices: 16 runs of 1/16 of the pixels are one check (the gates' unit).
+    CHECK(calib_checks(64, 16) == 4 && calib_checks(63, 16) == 3 && calib_checks(4, 1) == 4 && calib_checks(4, 0) == 4);
+    CHECK(calib_px_per_check(12.5, 16) == 200.0 && calib_px_per_check(200.0, 1) == 200.0);
+    Calib s;
+    CHECK(!calib_first(s, 2.0, kFlagApprox, calib_checks(63, 16), 800) && calib_first(s, 2.0, kFlagApprox, calib_checks(64, 16), 800));
+    CHECK(calib_window(s, 1.0, kFlagApprox, calib_px_per_check(12.5, 16)) && !calib_window(s, 1.0, kFlagApprox, 12.5));
   }
   std::printf("emissive_policy_test: %u checks passed\n", checks);
   return 0;

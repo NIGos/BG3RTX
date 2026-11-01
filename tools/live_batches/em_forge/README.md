@@ -6,17 +6,25 @@ One launch, foreground (the game takes focus and the pointer: the user must be a
    - `warmup` 20 s, `gate-excl-a` 20 s: `rt_em_fx_pulse=0`, the family excluded.
    - `gate-fx-a`, `gate-fx-b` 25 s each: `rt_em_fx_pulse=1`, the family captured. Its ratio per window and its record dump (radiance, mode, CB words 0-7, time, pulse, hits with ours = 0, ours without the maps).
    - `diag-view-19`, `diag-view-20` 8 s each: one PNG trace each of the family alone, ours (19) and the game's effects target (20).
-   - `gate-excl-b` 15 s: `rt_em_fx_pulse=0` again; `restore` 5 s.
+   - `gate-excl-b` 15 s: `rt_em_fx_pulse=0` again.
+   - `check-off`, `check-full`, `check-sliced` 12 s each (family excluded): the calibration's projected check off
+     (`rt_em_check_frames=0`), the whole screen every 16 frames (`rt_em_check_slices=1`, the old schedule, now with
+     device-local counters), one 1/16 slice every frame (`rt_em_check_slices=16`, the default). `restore` 5 s.
 
 What each line answers:
 - Exclusion works: the `[em] soup ...` line shows `draws of excluded families (rt_em_fx_pulse=0: 304be1c7)` above 0 in the excl windows and 0.00 in the fx windows. `[em] emissive families` shows the family's draws, with 0 captured while it is excluded. The other families' ratios in the excl windows equal those in the fx windows within their window spread (s_w).
 - The family's gate: `py -3 -m scripts.qa.em_gate <kept log>`. `304be1c7` appears only in the fx windows (about 20 windows). The other families use every window.
 - Level or pattern: in the record dump, `per hit ours`, `ours without the maps` and `game`. If game / ours is the same in every window and the PNG pair shows the same pattern at different brightness, a factor is missing: compare the CB words with the fragment shader (captures/alpha_cache/304be1c71df194cb.glsl). If the PNG pair shows different patterns (bright texels where the game is dark), the mask lookup or the geometry is wrong, not a constant.
 - Cost: `[em] per build` build median and the effects-pass ms with capture, excl windows against fx windows.
+- Check cost (the S6 finding: `gi: GPU cost` average 1.65 -> 10.4 ms with `rt_emissive=1` while every pass median
+  stayed flat, m4p3-s6-fg2 2026-11-01): `[em] check GPU cost` per 120-frame window gives ms per run (median, max)
+  and ms/frame. check-full: one run per 16 frames over every pixel; check-sliced: one run per frame over 1/16. Pass:
+  check-sliced max per run below 1 ms, and `gi: GPU cost` mean in check-sliced within the check-off spread plus the
+  logged ms/frame. Calibration still works: `[em] ours/game per family` shows approx families with `scale` != 1.000.
 
 Pass (to lift the exclusion): `304be1c7` passes em_gate in AF, the other gated families still pass, and GF still passes (a GF run of the same job with the save changed). Until then `rt_em_fx_pulse` stays 0.
 
-Duration: plan 126 s, with the load about 4-5 min (at most 7 min of timeout). Disk: 2 PNG traces at about 50-60 MB plus the log, about 0.15 GB.
+Duration: plan 162 s, with the load about 4-5 min (at most 7 min of timeout). Disk: 2 PNG traces at about 50-60 MB plus the log, about 0.15 GB.
 
 ## Start (only after the user's explicit go for this batch)
 ```powershell

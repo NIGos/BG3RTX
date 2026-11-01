@@ -152,10 +152,19 @@ bool core_em_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out) {
   return true;
 }
 
+// Set by core/emissive.cpp at each run of the check (here, so that emissive_core_test links
+// this file alone); read on the host's thread at the calibration.
+static std::atomic<uint32_t> g_check_slices{1};
+void em_note_check_slices(uint32_t slices) { g_check_slices.store(slices ? slices : 1u, std::memory_order_relaxed); }
+uint32_t em_check_slices() { return g_check_slices.load(std::memory_order_relaxed); }
+
 bool core_em_calib_update(Bg3EmCalib* cal, uint32_t first, double ratio, uint32_t flags, uint64_t frames,
                           double bright) {
   Calib c = to_calib(*cal);
-  const bool changed = first ? calib_first(c, ratio, flags, frames, bright) : calib_window(c, ratio, flags, bright);
+  // The host counts runs of the check, each over 1/slices of the pixels (rt_em_check_slices).
+  const uint32_t slices = em_check_slices();
+  const bool changed = first ? calib_first(c, ratio, flags, calib_checks(frames, slices), bright)
+                             : calib_window(c, ratio, flags, calib_px_per_check(bright, slices));
   *cal = Bg3EmCalib{c.scale, c.updates, c.log_u};
   return changed;
 }
