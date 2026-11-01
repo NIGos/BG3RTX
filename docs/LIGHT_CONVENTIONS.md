@@ -25,7 +25,8 @@
 - **Why 16/25 and 16/58.** `layer/assetdb.cpp` counts box matches over every *valid* b29 slot
   (`n_proj`), not the froxel-listed ones (`pref` is only summed). b25 shows how many stale
   slots that can be (Grymforge: 1,182 valid, 39 listed). Both rates understate the listed
-  set; fix: count `m_proj` for `pref[i]` slots only. Other suspects: 685 boxes are
+  set; fix: count `m_proj` for `pref[i]` slots only (done 2026-11-01: the log now reads
+  "froxel-listed matched", over `n_proj_ref`). Other suspects: 685 boxes are
   CombinedLights, 32 in not-starting-loaded sub-levels, 15 moving; character rigs are not placed.
 
 ## 3. Lights inside roofed rooms (sun roof rule context)
@@ -49,7 +50,10 @@
 - **Light-side asymmetries left:** (1) **box lights at hits skip the game's AO-on-direct**:
   S6 has m0.y = 1; with `ls_box=0` the screen keeps box diffuse x AO (0.76 there), while
   the hit adds boxes outside `.native`, so `ao_direct=1` gives them no factor: **x1.32 on box
-  diffuse**; S6 lists 2.4-2.6 projectors per pixel. (2) Channel: Forge masks are 161 / 159 /
+  diffuse**; S6 lists 2.4-2.6 projectors per pixel. **Fixed 2026-11-01:** while the screen's
+  D-LS box pass does not run (Push::ls_flags bit 26 clear), rf_hit_shade returns the box term in
+  `.native`, so it gets `native_hit_ao_factor(A)` as the game-visibility point/spot lights do
+  (whole term, as for them; fixture 4c). With the box pass on, boxes keep D-LS's give-back. (2) Channel: Forge masks are 161 / 159 /
   191; a hit channel 0 where the G-buffer says 1-4 gives x1.46 on points. (3) Visibility:
   52.5% of hit light rays are lit, 35% on screen (another population).
 - **Most likely cause:** the projector term at hits (no AO factor, unknown real weight), not

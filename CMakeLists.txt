@@ -326,6 +326,8 @@ add_executable(native_hit_qualify_test tests/native_hit_qualify_test.cpp)
 add_test(NAME native_hit_qualify_test COMMAND native_hit_qualify_test)
 add_executable(native_hit_pool_test tests/native_hit_pool_test.cpp)
 add_test(NAME native_hit_pool_test COMMAND native_hit_pool_test)
+add_executable(native_vt_recipes_test tests/native_vt_recipes_test.cpp)
+add_test(NAME native_vt_recipes_test COMMAND native_vt_recipes_test)
 add_executable(emissive_policy_test tests/emissive_policy_test.cpp)
 add_test(NAME emissive_policy_test COMMAND emissive_policy_test)
 # M5.1 water policy (common/water_policy.h): classes of the asset-DB water families, records.

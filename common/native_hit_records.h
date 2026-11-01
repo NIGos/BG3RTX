@@ -29,6 +29,10 @@ NH_UINT nh_pool_row_base=32u+nh_material_rows*256u;
 NH_UINT nh_pool_basis_header=16u;
 NH_UINT nh_pool_basis_vertex=44u;
 NH_UINT nh_pool_basis_magic=0x53414250u; // "PBAS"
+// Pool row words 224..255 (Row::padding, LayoutDetail recipes only): 224 layout (1 = detail),
+// 228/232 the detail normal/mask views (texture-table indices), 236 the detail sampler slot,
+// 240..252 strength, tiling, mask power, roughness add (floats; native_vt_fields.h nv_detail_fields).
+NH_UINT nh_pool_row_detail=224u;
 #undef NH_UINT
 #ifdef __cplusplus
 inline bool opaque_material_record(uint32_t ordinal,uint32_t& record){if(ordinal>=nh_opaque_rows)return false;record=nh_alpha_rows+ordinal;return true;}

@@ -726,8 +726,8 @@ int main(int argc, char** argv) {
       }
       // The disc sample's own cone (native_hit_sun_dir): every direction within sun_radius of L, and the
       // largest angle of 2^16 samples reaches it (sqrt(u1) <= 1: max ratio 1 - O(1e-5)). With |L.y| >= 0.99
-      // its tangent t = (1,0,0) is not orthogonal to L, which shrinks the disc by |t x L| = sqrt(1 - L.x^2).
-      // Reported as a finding, not a failure (the renderer is not changed here): FINDING lines.
+      // its tangent used to be t = (1,0,0), not orthogonal to L, which shrank the disc by |t x L| = sqrt(1 - L.x^2)
+      // (printed as FINDING until the frame became normalize(cross((0,0,1), L)), 2026-11-01): now a gate.
       for (int zenith = 0; zenith < 2; ++zenith) {
         Dispatch g; g.push = default_push(); g.push.sun_radius = 0.02f;
         const D3 Lz = zenith ? unit(D3{0.12, 0.99, 0.0}) : D3{0, 0, 1};
@@ -744,12 +744,15 @@ int main(int argc, char** argv) {
         // sqrt(u1) samples is 1 - 1/(2 x 2^16) on average; 1e-3 is far beyond both.
         const bool ok = inside && maxRatio >= 1 - 1e-3;
         const std::string detail = fmt("L.y %.3f: max angle / sun_radius %.5f (want 1)", Lz.y, maxRatio);
-        if (zenith && !ok) std::printf("%-44s FINDING  %s\n", "3g sun disc frame near zenith (|L.y|>=0.99)", detail.c_str());
-        else report.line(zenith ? "3g sun disc frame near zenith (|L.y|>=0.99)" : "3f sun disc sample cone (L +z)", ok, detail);
+        report.line(zenith ? "3g sun disc frame near zenith (|L.y|>=0.99)" : "3f sun disc sample cone (L +z)", ok, detail);
       }
     }
     // ---- 4. box (projector) light: inside/outside, ramps, direction _m9, its ray only with a shadow map ----
     {
+      // 4c: the box term's AO-on-direct share (native_hit_direct.hlsli hd_box_game). With the screen's box
+      // pass off (ls_flags bit 26 clear: the game keeps box diffuse x mix(1, AO, m0.y)) every box term is in
+      // .native, bit for bit; with it on (bit 26) .native is 0 and the radiance is unchanged, bit for bit.
+      bool boxNativeOk = true; int boxNativeN = 0;
       for (int shadow = 0; shadow < 2; ++shadow) {
         const float c = cx(shadow ? RBoxShadow : RBox);
         Box b{}; b.col[0] = 2; b.col[1] = 1.5f; b.col[2] = 1; b.m1 = 1;   // x b13[0], no cookie
@@ -768,6 +771,13 @@ int main(int argc, char** argv) {
         pts.push_back({c + 2, kY, 0}); occl.push_back(false);
         for (Vec p : pts) d.cases.push_back(make_case(p, kFxDirect));
         auto r = run(d);
+        Dispatch dt = d; dt.push.ls_flags |= 1u << 26;
+        auto rt = run(dt);
+        for (size_t i = 0; i < r.size(); ++i) {
+          ++boxNativeN;
+          for (int k = 0; k < 3; ++k)
+            boxNativeOk &= r[i].c[k] == r[i].a[k] && rt[i].c[k] == 0.0f && rt[i].a[k] == r[i].a[k] && rt[i].sa == r[i].sa;
+        }
         Cmp cmp; int inside = 0;
         const D3 Ld = unit(f3(b.dir));
         for (size_t i = 0; i < r.size(); ++i) {
@@ -780,6 +790,8 @@ int main(int argc, char** argv) {
                     cmp.ok, fmt(shadow ? "%.0f inside, D occludes, E beyond exit lit, worst rel %.2e" : "%.0f inside, 2 outside, D ignored, worst rel %.2e",
                                 inside, cmp.worst));
       }
+      report.line("4c box term x AO factor unless D-LS boxes", boxNativeOk,
+                  fmt("%.0f pts: .native = box term (bit 26 clear), 0 with bit 26", boxNativeN));
     }
     // ---- 5. AO: open plane 1, corner the hybrid GI rule's expectation ----
     {

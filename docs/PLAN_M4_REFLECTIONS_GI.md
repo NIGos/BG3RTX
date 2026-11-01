@@ -99,6 +99,31 @@ Limits that decide the order:
   classes and the next step per pair: docs/MATERIAL_FAMILIES.md (`python -m tools.material_families`).
   Next, larger audits: 54df894a/613ead9c (two-layer VT blend + 2D mask, VS 54df894a, 7 VS outputs),
   c32ce535/9064a6bd (plain 2D textures, set 0:7 sampler), class B 1ed985dd/f111e292 (FS 2257579f/288876d1).
+- Families 2 (branch families-2, behind `rt_hit_material`, no ABI change). Shares: docs/MATERIAL_FAMILIES.md.
+  - 50fbfceb/8e49cde8 ATM_Wind_Vertex_RG_VT (3.9%): FS = 14678345 with RT2.y = 1:1 byte 16 (row
+    `reflectance_offset`). VS audit: UV/N/B/T as 2d2ac3c3 (inputs moved), but W = M P + wind(time,
+    vertex color RG, 30-45 m fade) before the clip transform: not class A (`analyze_vs_instancing`
+    on the dump), so never pooled; instanced, so no per-draw row. Row `CaptureNone`: counted in
+    `[hit material families] ... audited recipe, no capture path`, never qualified. Path: per-draw
+    rows for instanced draws (prepass vs G-buffer clip check per instance), not the pool.
+  - 1e9145e4/923131c7 Base_AlphaTest_2s_VT (2.4%): FS = 14678345 with engine 1:0 tile-set index @44,
+    channel @48 (flag @52) and mat3(T, N * (gl_FrontFacing ? 1 : -1), B). At a hit the facing comes
+    from the geometry (`nv_two_sided_sign`: viewer and authored N on the same side of the plane). VS
+    audit: UV/N/B/T as 2d2ac3c3, but every matrix row's translation adds the per-draw engine offset
+    1:0 @32 before W = M P: not class A, never pooled. Row `CaptureNone` (counted as above). Path:
+    class A with a per-draw translation offset (bvhsplit instance transform + UBO offset), or the
+    instanced per-draw rows above.
+  - 54df894a/613ead9c ENV_DetailMap_VT (12.4%, built, READY_FOR_LIVE): pool pair (VS class A). Decode
+    from the dumped GLSL: VT layers and engine 1:0 as 14678345 but at 1:4..7; 2D detail normal 1:3
+    and mask 1:8 with sampler 0:7 at detail UV = (UV * |A P| / |P|) * 1:1 _m1 (FS: |W - T| / |P| of
+    VS outputs 0/1/2); frame = normalize(fma(n_detail * _m0, (1,0,1), n_base)); roughness =
+    clamp(fma(1 - mask.y, _m4, phys.y)); aux = clamp(pow(max(|mask.x|, 1e-4), _m3)) * phys.z;
+    reflectance _m2 (byte 8). `nv_detail_fields` (shared C++/HLSL, unit-tested vs the FS statements).
+    VS 54df894a: UV at 3, N/B/T at 4/5/6 -> `patch_vs` frame location 4 (same XFB 16/24/36/48, so
+    mesh_extract_basis is unchanged). Pool row words 224..255: layout, detail table indices, detail
+    sampler slot, the four 1:1 floats. Detail derivative: declared isotropic ray cone as the VT layers.
+    Check: `[hit material pool pairs]` 54df894a/613ead9c records/ready > 0; `[hit material pool]`
+    failures bits 11/12 = 0; `[hit material pool basis]` mismatch 0; `hit material` qualified up.
 - Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;
   terrain draws patches from `_m0[gl_InstanceIndex]` + a heightmap, needs its own recipe.
 - Skinned characters (class B always-skinned VSs, CHAR_* STI FSs): positions from the skinning

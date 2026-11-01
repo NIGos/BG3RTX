@@ -1,4 +1,4 @@
-# BG3RTX current progress — 2026-10-31
+# BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 24)
 
 ## M5.1 water geometry (branch m5-water, offline, READY_FOR_LIVE, 2026-11-01)
 
@@ -12,178 +12,124 @@
 - Live: `tools/live_batches/m5_water/` (5 min, dry run passes). Details: PLAN_M5_WATER "M5.1 status".
 
 ## M4.3 gi_hit_sun + shared sun roof rule (branch gi-hit-sun, offline, READY_FOR_LIVE)
+One current summary. Older entries, verbatim: [archive/PROGRESS_CODEX_2026-11-01.md](archive/PROGRESS_CODEX_2026-11-01.md)
+(10-31 evening to 11-01) and [archive/PROGRESS_CODEX_2026-10-31.md](archive/PROGRESS_CODEX_2026-10-31.md) (before).
+Plan: [RENDERING_EXECUTION_PLAN.md](RENDERING_EXECUTION_PLAN.md). Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md).
 
-- `gi_hit_sun=0` (GUI `exp_gi_hit_sun`): the sun at gi_hit_direct's supported hidden hits, rf_hit_shade's
-  code (`rt/native_hit_sun.hlsli`) + sun-disc sampling; still only the zero fallback is replaced.
-- R0 roof rule shared by gi_hit_sun and rf_hit_shade: no casters + hit under a roof volume (or volumes
-  unknown) = sun unsupported, counted (`GI hit sun`, `rf hit shade sun` roof-unsupported). Answers the S8
-  tier (a) x 1.26 (sun 0.037 at hits ~95% under roofs).
-- Offline: 741/741 compile, contracts pass; vs main 697 SPIR-V byte-identical, the 48 rf_hit_shade
-  variants differ (roof rule, key off by default), 32 new gi_hit_sun variants; 67 CTests, QA detectors pass.
-- Live (pending): S3 OFF/ON/OFF gi_hit_sun; S8 rf_hit_shade tier (a) with rt_cascade_casters 0/1.
-## D-EM AF 304be1c7 (branch em-forge, offline, 2026-11-01)
+## Open questions for the user
 
-- Fragment shader re-derived: the record already matches it term for term (no missing intensity, layer or exposure). Cause of AF 0.36 not found offline.
-- Excluded: `rt_em_fx_pulse=0` (default; 1 captures it). Counter on the `[em] soup` line. rt_emissive stays 0. Tests: policy 9b pins the record; core test covers both values. No ABI or shader change.
-- READY_FOR_LIVE: `tools/live_batches/em_forge/` (one AF run, about 5 min; dry run passes). Details: TRACK_D_EMISSIVE 13.22.
+- None blocking. Promotion of any M4 key to the Ultra preset waits for its gates (below).
 
-## Stage 0 closed (Claude, /goal, 2026-10-31 evening)
+## Stage 0: closed (2026-10-31 evening)
 
-- Done: consolidation (CONSOLIDATION.md), live batch cb1-cb7 + lean regression lr1-lr3: no regression vs pre-consolidation (same pass costs, same primary match). Real fps, focused, diagnostics off: camp 60 RT on / 93 off, inn ~71 / 89, forge ~100.
-- Diagnostics rt_stats + rt_primary_check cost ~80 ms/frame: never in cost windows (AGENTS.md "Lean live tests").
-- rt_cascade_casters ON in Ultra (physically correct, no regression, +0.3 to +1.3 ms; user saw outdoor roof shadows change correctly).
-- ls_box stays Experimental: S6 occluded = traced on 99.999% of box rays (suspect), no projector population for the accuracy gate.
-- rt_scene_wait=2 removed (stale scene after rotation). Lean batches: ~11 min and 0.4 GB instead of 90 min and 35 GB.
-- Open, being fixed: inn rotation mismatch is the static POOL geometry lagging in rotation (static 99%, rotation 83%; pool in front 17-19%), not camera-fade walls (they keep casting shadows, by design).
-- Open: M4 features barely participate (hit material qualifies <1% of hits; gi_hit_direct nonzero 0; rf_hit_shade 0.05%): diagnosing.
-- Branch hit-lighting (offline, not live): rf_hit_shade ambient now has the game's local diffuse probes (they replace the sky irradiance indoors); the "60x" L_a was the rf_debug=8 window (valid window: L_b 0.077 vs L_a 0.047); term counters x 8192 (x 128 rounded direct/sun to 0); hit point from barycentrics; new `GI hit direct lights`, `rf hit shade lights`, `rf hit shade sun` lines. Next live run: those lines decide whether "all occluded" is self-intersection and why the sun is 0.
-- Meta-audit: docs/META_AUDIT_20261031.md. Try in game: roof shadows outdoors (Ultra), nothing else new yet.
+- Consolidation done ([CONSOLIDATION.md](CONSOLIDATION.md)). Live batch cb1-cb7 and lean regression
+  lr1-lr3: no regression against pre-consolidation (same pass costs, same primary match).
+- Real fps, focused, diagnostics off: camp 60 RT on / 93 off, inn ~71 / 89, forge ~100.
+- `rt_stats` + `rt_primary_check` cost ~80 ms per frame: never inside cost windows (lean jobs).
+- `rt_cascade_casters` ON in Ultra (roof sun shadows; +0.3 to +1.3 ms; user confirmed outdoor roofs).
+- `ls_box` stays Experimental (S6: 99.999% of box rays traced occluded, suspect; no accuracy gate yet).
+- `rt_scene_wait=2` removed (stale scene after rotation). Lean batches: ~11 min and 0.4 GB instead of
+  90 min and 35 GB.
+- Meta-audit of what was closed too early: [META_AUDIT_20261031.md](META_AUDIT_20261031.md).
 
-## Paused at the user's request - latest checkpoint
+## Stage 1: M4 offscreen reflections and GI hit lighting (in progress)
 
-No further development or live jobs until the user resumes. Test game is closed;
-private queue pending/running are empty and its finite authorization is consumed.
-User cannot currently reproduce rug/plank rectangles or Astarion hairline band.
-Personal trial 047e105 ABI 19 is unchanged. OMM/Current Sun user smoke test positive.
-A slight dialogue shadow flicker remains; its source is not established.
-Current Sun full log has one window with 368956 actual samples, then GPU scene
-readiness failures. The combined epoch/late-write counter does not prove lag.
+Plan and gates: [PLAN_M4_REFLECTIONS_GI.md](PLAN_M4_REFLECTIONS_GI.md). Every key below is off by default
+and Experimental in the GUI.
 
-GI R3 d19ecd7: VALID 580 s, FG 2 real presentation, no focus activation, no
-NVIDIA 153/dumps/build drift. Three K16 bursts, 176 samples each; FG active all 48.
-565595 stable pixels; GI negative-envelope pixels 0, positive 21517.
-Previous stipple ROI: 14/12812 final mean-low pixels; old R2 was 1144/19043.
-Different runs/denominators: descriptive reduction, not a direct cross-run A/B.
-Final full-image review, motion and visible gain remain unqualified; keep GI OFF.
-Whole GI median OFF A/ON/OFF B: 2.097/2.288/2.048 ms. Not isolated bounce cost.
-Evidence/contact sheets: docs/evidence/gi-descriptor-r3-20261031/.
-New logic in core where possible. ABI 21. Merge once per verified milestone.
+### Hit material coverage (`rt_hit_material`, restart)
+- Qualified share of hits, live: S8 0.4% -> ~17%, S6 ~6.7%.
+- What landed: capture caps lifted (rows 4096, samplers 64, views 256), pool hit path for BVH-cached
+  statics (STI 2d2ac3c3/14678345: UV/basis capture, pool rows, pool lookup), reflectance-variant pairs
+  (2d2ac3c3/3df678c0, 2d2ac3c3/81657854, 3812bc98/3da860be), reasons logged by the real consumers.
+- Ranking of what is left: [MATERIAL_FAMILIES.md](MATERIAL_FAMILIES.md). Built pairs hold 31.9% of the
+  combined share. Largest next: 54df894a/613ead9c (12.4%, NEW recipe); cheap: 50fbfceb/8e49cde8 (COPY, 3.9%),
+  1e9145e4/923131c7 (VARIANT, 2.4%).
 
-## M4.2 rf_hit_shade (branch rf-hit-shade, offline only)
+### Reflections tier (b): `rf_hit_shade` (live)
+- In-frame check on tier (a) hits, ratio L_b / L_a (hit shading against the game's screen result):
+  - S8 Water Queens House: **0.95** with `rt_cascade_casters` on. AO estimate at the hit 0.805 against
+    the screen's 0.802.
+  - S6 Adamantine Forge: **1.48**. Cause analysed offline ([LIGHT_CONVENTIONS.md](LIGHT_CONVENTIONS.md) 4):
+    not units, b13, PreExpose or BRDF; box lights at hits skipped the game's AO-on-direct (x1.32 on box
+    diffuse). Fix landed after the run (a9b7e75): unmeasured.
+- Hit lighting now matches the screen's light policy: D-LS light set, projector (box) lights at hits,
+  local diffuse probes in the ambient, exact hit point, AO estimate, per-term log.
 
-Key `rf_hit_shade=0` (live, GUI `exp_rf_hit_shade`, needs startup `rt_hit_material=1`).
-Hidden/off-screen reflection hits on qualified materials get L_b (point/spot + sun ray +
-the game's ambient at AO 1) instead of the probe. No ABI change, no new push descriptor.
-Offline: key-off SPIR-V byte-identical, contract test, settings test. READY_FOR_LIVE:
-gate is the `rf hit shade` line (tier a mean L_b - L_a within z x SE). Cost not measured
-(expected +0.2-0.4 ms). Details: TRACK_D_REFLECTIONS 14.
+### GI hidden-hit bounce: `gi_hit_direct` (live)
+- Nonzero contribution live (was 0 of 22871 supported: the ray traced into the light's own fixture;
+  it now stops `ls_clear` short of the light, as D-LS).
+- Motion qualification and isolated GPU ms (M4.1) still open.
 
-## Camp rugs and planks
+### Sun at GI hidden hits: `gi_hit_sun` (live, merged)
+- Landed with the shared R0 roof rule: without casters, a hit under a roof volume (or with volumes
+  unknown) gets no sun, counted. The same rule applies to `rf_hit_shade`. Live gate (S3 OFF/ON/OFF) pending.
 
-Status: not reproducible since 10-31, kept as a watch item.
-Symptoms are recorded in four user screenshots. Their precise mesh/shader identity
-and the responsible RT effect have not yet been established. Do not call them fixed.
-A rectangular shadow alone does not establish a cutout or identify its caster.
+### Emissive (D-EM, `rt_emissive` stays 0)
+- AF gate: 5 of 6 families pass.
+- 304be1c7 excluded (`rt_em_fx_pulse=0`): the record matches its shader term for term; the deficit is
+  additive, the game adds a non-pulsing light there. TRACK_D_EMISSIVE 13.22.
+- 159a6211 is legitimately 0 (GlowMultiplier 0 in its live record).
 
-First hypothesis: alpha capture partition overflow produces false solid geometry.
-The preserved 10:28–10:38 trial log has 77 windows; 11 contain 0.01–0.92 alpha
-substitutions per frame. The last three windows have none; opaque drops are zero.
-These counts demonstrate the defect, not its attribution to the pictured pixels.
+### Inn rotation primary match (~83%)
+- Pool not lagging: mesh audits while the camera moves, 0 failed ([INN_ROTATION_MATCH.md](INN_ROTATION_MATCH.md)).
+- About half of the "in front" mismatch is camera-faded walls (`rt_primary_fade_class`). User decision:
+  faded walls keep casting shadows in every RT effect; only the measurement excludes them.
+- In normal play the scene is ready in time (scene wait got this frame's scene, 0 timeouts).
 
-The default-off rt_alpha_spill key is implemented in main. It uses free opaque
-storage while preserving direct AlphaRec ownership, alpha flags and Hair bounds.
-It changes neither total memory limits nor shader coverage. Recipe failures and
-both storage ranges being full remain unsupported; they must not pass a gate.
+### Offline tooling (no game launch)
+- `python -m tools.material_families`: ranking of G-buffer shader families with COPY/VARIANT/NEW class.
+- `native_hit_gpu_fixture` (CTest): windowless analytic GPU fixture of the hit-shading functions, 23 checks.
+- `python -m tools.assets.check_conventions`: light conventions of the asset DB (flags, units, box ramps,
+  roofed rooms). Found the box join denominator (fixed 12e592b) and the Kelvin x Color rule.
+- Ranked offline work: [OFFLINE_OPPORTUNITIES.md](OFFLINE_OPPORTUNITIES.md) (B, F, D done first; A frame replay next).
 
-Next: same-run spill OFF/ON/OFF at the same camp view, all other effects unchanged.
-Require actual rescued draws and matching source geometry; a zero-participation
-comparison is inconclusive. Check final image, visibility and primary-depth data.
-If it does not explain the rectangles, reject that attribution before testing the
-separate legacy-cascade cutout hypothesis. Do not enable several fixes together.
+### Incident (2026-11-01)
+- Removing a worktree followed its NTFS junctions and emptied the shared SDKs (`external/`) once.
+  Restored. Worktrees are now removed with a safe script that unlinks the junctions first and checks
+  the targets afterwards (AGENTS.md "Never").
 
-A prepared legacy bridge addresses one exact native TileBlend shadow family.
-It is not yet merged, deployed or linked to the pictured rugs/planks. Its layer
-work is necessary for native draw inputs, immutable geometry, BLAS and lifetime.
-No new public ABI is required. Keep this candidate separate until attribution.
+## How to test in game
 
-## Astarion hairline
+All in the settings window, section Experimental (off in every preset). Leave the preset on Ultra so
+GI is Ray-traced, Reflections on and Roof sun shadows (cascade casters) on.
 
-Status: not reproducible since 10-31, kept as a watch item.
-Confirmed source defect: native Hair, Pubes and Scalp all write material class 5.
-Class 5 alone cannot identify a Hair receiver for physical-origin rebasing.
-A nearby Hair primitive may depth-match a Scalp pixel at the boundary.
-This is a real identity gap; screenshot causality remains unproven.
+Dependency order:
+1. **Native hit materials** (`exp_hit_material`): **restart required**. Everything below needs it.
+2. Then, live (the first enable compiles shaders, a short hitch):
+   - **Shaded hidden-surface bounce** (`exp_gi_hit_direct`): needs Global illumination Ray-traced.
+   - **Sunlit hidden-surface bounce** (`exp_gi_hit_sun`): needs Shaded hidden-surface bounce on.
+   - **Shaded hidden-surface reflections** (`exp_rf_hit_shade`): needs Reflections on.
 
-Main has a conservative competing-Scalp guard. It preserves the virtual origin
-for ambiguous, unreadable or capped queries. It does not change alpha, occluders,
-ray bias or the existing depth tolerance. The guard runs only in the existing
-rt_hair_physical_origin variant, which is OFF by default.
+Where to look:
+- **S8 Water Queens House** (polished stone): reflections of surfaces behind the camera or behind
+  columns should show the lit surface instead of the flat probe colour. Toggle the reflections option
+  off and on at the same view.
+- **S6 Adamantine Forge**: same check; reflections there may still read too bright (the 1.48 run predates
+  the box fix). Report it if they do.
+- **S3 Campsite - 27h** (outdoor): GI bounce from sunlit ground and walls into shaded areas with the sun
+  option on; it should never get darker when an option is turned on.
+- **Inn interiors**: camera-faded walls still cast shadows by design; not a defect.
+- **Ctrl+Shift+F9** switches every RT effect off and on for a whole-lighting comparison.
 
-Offline evidence: 31 CPU checks; 16 ordinary shader identities and 16 enabled
-validations; 22 standalone GPU cases with zero validation errors. The GPU test
-includes nonzero rebasing and a negative control, not real native raster pixels.
+Costs of these options are not measured yet; quality is not qualified. Report visible defects, the save
+and the option combination.
 
-Prepared: core-only diagnostic switch using unused Push.ls_flags bit 21, with unchanged
-push size and ABI. Keep physical origins ON in both phases; compare only guard
-OFF/ON/OFF. Toggling physical origins themselves would confound this hypothesis.
-Candidate 09fc3eb builds; all 60 CTests pass. Image A/B remains unmeasured.
+## Watch items (not reproducible since 10-31, no cause established)
 
-## Live boundary and trial
+- Camp rug/plank rectangles: `rt_alpha_spill` ready for an OFF/ON/OFF if they return.
+- Astarion hairline band: Hair/Pubes/Scalp share class 5 (real identity gap); guard ready, image A/B open.
+- Slight dialogue shadow flicker: source not established; needs temporal native/RT evidence.
+- GI R3 (descriptor fix): VALID run, but final image review, motion and visible gain unqualified.
 
-User paused the goal and requested safe shutdown plus complete handoff updates.
-Latest background-test permission was used for the completed GI batch; do not
-reuse its consumed receipt or launch pending drafts on resume without steering.
-Only scripts/test-queue.ps1 may launch; preserve markers, saves and unowned games.
-Personal hair-origin-live remains 047e105 ABI 19; never mix its DLLs with ABI 21.
-No new user trial was installed. Camp and Hair A/B remain unqualified/nonreproduced.
+## Milestones
 
-## Verified source state
-
-Main d3e06e1 is pushed. merge-green passed both DLLs/launcher, 60 CTests,
-1232 runtime shader files and QA. All new experimental defaults remain OFF.
-It includes native STI materials, ST depth coverage, TileBlend camera coverage,
-the receiver guard and alpha spill. Source checks are not in-game qualification.
-
-Development: codex/omm-bake in C:/Users/quali/.codex/worktrees/omm-bake/BG3RTX.
-Reviewed current-Sun-only shadow recipe 2e01c3c/92f9995 is beyond main.
-It reads seven native floats (28 bytes), preserves camera/legacy classification,
-and reuses two views and owned sampler 19. Five combined CTests pass.
-The separate legacy bridge is reviewed but parked; keep its source generation, ranges,
-opaque complements, pool/BLAS retirement and per-scene completeness explicit.
-
-Standalone GPU coverage proofs passed with zero validation errors:
-- Native tileset: 32 cases through all four query entry points.
-- TileBlend: 53 cases, including 18 UNKNOWN cases, through all four queries.
-- Material fields: 14 cases through closest_hit plus actual gather/join.
-- Hair receiver guard: 22 cases through the actual guard helper.
-These do not establish native graphics-XFB execution, image quality or game cost.
-Alpha spill has 105 budget checks; central settings/schema have 335 checks.
-
-## Remaining rendering program
-
-The full RENDERING_EXECUTION_PLAN remains active; it has not been narrowed.
-| Milestone | Current state and remaining work |
+| Milestone | State |
 |---|---|
-| M0 | Queue authorization/ownership implemented; respect the live boundary. |
-| M1 | Scoped Hair evidence and offline cutout fixes. Camp rug rectangles and Astarion hairline band: not reproducible since 10-31, kept as watch items. |
-| M2 | 27 native-matched components, 24506 triangles; room closure unproven. |
-| M3 | Supported hit materials; persistent materials, world lights and state open. |
-| M4 | GI descriptor fix implemented; corrected image recheck still pending. |
-| M5 | OMM user smoke test positive, quality unqualified; water next after M3/M4. |
-| M6 | Shared direct/two-surface reference; opaque-room PT and feasibility undecided. |
-
-Persistent terrain has 13512 triangles and 738 holes; its actual texture identity,
-normal projection and runtime state remain unresolved. POSITION agreement alone
-does not certify authored UV, tangent frames, material bindings or opacity.
-RTX Hair has no proven groom/radius/deformation provider; native cards remain.
-Sun half-angle 0.00459 radians is correct. Do not enlarge it or blur missing casters.
-Old experimental GI R2 images are rejected despite positive contribution counters.
-The dedicated GI/reference descriptor fixes are in main; both effects stay OFF.
-
-## Evidence, costs and next decisions
-
-Preserved regression log/config/screenshots:
-captures/user-camp-regression-20261031 in the development tree.
-Manifest: docs/evidence/user-camp-regression-20261031.json.
-Guard, spill, TileBlend and GPU evidence are under docs/evidence/.
-GPU pass costs of the new fixes are unmeasured. Fixture wall times are not costs.
-Measure timing separately from diagnostics, capture and validation overhead.
-Keep rendered and displayed FG rates separate; missing RT never passes a test.
-
-Resume order: reproduce dialogue flicker with temporal native/RT evidence;
-review GI R3 final images, then motion/visible gain before any default promotion.
-Camp/Hair candidates remain ready only if the original defect returns.
-No automatic queued continuation. Full program remains incomplete and paused.
-Preserve saves, backup files, snapshot tags and shared junction targets.
-
-History: [pre-trim progress archive](archive/PROGRESS_CODEX_2026-10-31.md).
+| M0 | Queue authorization and ownership done; respect the live boundary. |
+| M1 | Watch items above; offline cutout fixes ready. |
+| M2 | 27 native-matched components; room closure unproven. Only when an offscreen need requires it. |
+| M3 | Hit materials: S8 ~17%, S6 ~6.7% qualified; more families next. World lights open. |
+| M4 | rf_hit_shade, gi_hit_direct, gi_hit_sun built and running live; gates open (above). |
+| M5 | Water: M5.1 `rt_water_geometry` in progress offline ([PLAN_M5_WATER.md](PLAN_M5_WATER.md)). |
+| M6 | Shared opaque reference / PT research last. |

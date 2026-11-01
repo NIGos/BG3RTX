@@ -56,6 +56,17 @@ struct ResourceBudget {
   }
   out.indices.normal=mapped[0];out.indices.albedo=mapped[1];out.indices.physical=mapped[2];return true;
  }
+ // A second sampler of the same material (ENV_DetailMap_VT: VT sampler 1:2 plus detail sampler
+ // 0:7), planned against the budget as `first` would leave it. Commit first, then commit_sampler.
+ bool plan_second_sampler(const ResourcePlan& first,uint64_t sampler,ResourcePlan& out) const {
+  out=ResourcePlan{};
+  if(!sampler){out.failure=ResourceFailure::Invalid;return false;}
+  uint32_t index=sampler==first.sampler?first.indices.sampler:find_sampler(samplers,sampler);
+  out.indices.new_sampler=index==UINT32_MAX;
+  if(out.indices.new_sampler){index=sampler_count+(first.indices.new_sampler?1u:0u);if(index>=nh_sampler_slots){out.failure=ResourceFailure::Samplers;return false;}}
+  out.indices.sampler=index;out.sampler=sampler;return true;
+ }
+ void commit_sampler(const ResourcePlan& p){if(p.indices.new_sampler){samplers.push_back(p.sampler);++sampler_count;}}
  void commit(const ResourcePlan& p){
   if(p.indices.new_sampler){samplers.push_back(p.sampler);++sampler_count;}
   for(uint32_t a=0;a<p.added_count;++a){caches.push_back(p.added[a]);++cache_count;}

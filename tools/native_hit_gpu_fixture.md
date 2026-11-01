@@ -35,6 +35,9 @@ Each dispatch has one froxel listing that dispatch's lights.
 4. Box light: inside or outside the box, z ramp, edges, smoothstep and smootherstep curves,
    direction _m9, b13[0]. Without _m8 bit 0, blockers are ignored (the game look). With it,
    a blocker inside the box occludes and one beyond the box exit does not.
+   AO-on-direct share (4c): with the screen's box pass off (Push::ls_flags bit 26 clear) every box
+   term is also in `.native`, bit for bit, so the caller applies mix(1, AO, m0.y) to it, as the game
+   does on screen; with bit 26 set `.native` is 0 and the radiance is unchanged.
 5. AO: an open floor gives exactly 1. A wall at 0.1 m and at 0.5 m (R = 1) is checked against
    the closed form of the hybrid GI weight 1 - (t/R)^2 under cosine rays:
    E[w] = (1/pi) int g(h / (R cos phi)) dphi, with g(a) = (1 - a^2 + 2 a^2 ln a) / 2.
@@ -51,14 +54,13 @@ precision of pow, exp2 and rsqrt), far below that bound. The worst observed erro
 An expected zero must be exactly 0. Monte Carlo cases use 5 standard deviations of the
 estimator, taken from its analytic variance.
 
-## Finding (not a failure)
+## Sun-disc frame near the zenith (fixed 2026-11-01)
 
-`3g`: the disc sample's tangent frame (`shaders/rt/native_hit_sun.hlsli:53`) falls back to
-t = (1,0,0) when |L.y| >= 0.99, and that t is not orthogonal to L. Y is up in lighting space,
-so this happens with the sun within 8 degrees of the zenith. The disc then shrinks: the largest
-sampled angle is 0.995 of `sun_radius` at L.y 0.993. The same frame is used in
-`gi/rt_shadow.hlsl:111`, `gi/rt_local_shadows.hlsl:151` and `gi/ls_ref/ls_ref_body.hlsli:698`.
-The `RT_SUN_CURRENT` path (`rt_shadow.hlsl:104`) already uses the orthogonal
-`normalize(cross((0,0,1), L))`. The run prints it as FINDING. It turns into PASS once fixed.
+`3g` checks the disc sample's tangent frame with the sun within 8 degrees of the zenith
+(|L.y| >= 0.99, Y up in lighting space). It used to fall back to t = (1,0,0), which is not
+orthogonal to L: the disc shrank to 0.995 of `sun_radius` at L.y 0.993 (printed as FINDING).
+`native_hit_sun.hlsli`, `gi/rt_shadow.hlsl`, `gi/rt_local_shadows.hlsl` and the frozen
+`gi/ls_ref/ls_ref_body.hlsli` (a marked hand edit, so `ls_check` stays bit-exact) now use
+`normalize(cross((0,0,1), L))`, as the `RT_SUN_CURRENT` path. `3g` is now a PASS line.
 
 Runtime on an RTX 5090: about 2 s wall in total. The dispatches and readbacks take 0.03 s.

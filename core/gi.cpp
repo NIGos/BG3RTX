@@ -2335,7 +2335,7 @@ void sharc_post(VkCommandBuffer cmd, const Snapshot& s, const Push& base) {
 
 void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   g_hair_origin_frame=s.hair_physical_origin;
-  bool local_applied=false, reflection_applied=false;
+  bool local_applied=false, reflection_applied=false, ls_box_applied=false;
   Bound b;
   bind_all(b, s);
   Push pc = make_push();
@@ -2418,6 +2418,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
     if (s.pan && refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout)) lsp = g_pan_ls.pipeline;
     local_applied=lsp && ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8, box ? &s : nullptr);
+    ls_box_applied = box && local_applied && !s.pan;   // the screen traced its box lights this frame
     if (s.pan && local_applied) {
       Bg3Binding im{};
       im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -2452,6 +2453,10 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     rb.w[kLsBindings].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     rb.w[kLsBindings].pImageInfo = &rb.rf_hit;
     Push rp = pc;
+    // Bit 26: the screen's D-LS box pass ran (ls_box=1): rf_hit_shade's boxes then follow its
+    // give-back; clear, the screen keeps the game's box x AO and the hit applies the same factor
+    // (native_hit_direct.hlsli hd_box_game).
+    if (ls_box_applied) rp.ls_flags |= 1u << 26;
     rp.rf_validate = s.rf_validate ? 1u : 0u;
     rf_timing_collect();
     // The reprojection samples the MVs in SHADER_READ_ONLY (as the GI traces do).
