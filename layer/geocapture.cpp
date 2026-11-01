@@ -85,6 +85,14 @@ uint32_t g_stride = 16;
 bool g_tileset_capture = false;
 uint32_t g_stride_without_tileset=16;
 bool g_alpha_mode = false;
+// The effective capture sizes: a cap left at its default follows the stride (common/rt_capture_budget.h).
+int xfb_mb() {
+  return capture_budget::effective_mb(cfg_int("rt_xfb_mb", 384), capture_budget::kXfbDefaultMb, g_stride);
+}
+int cascade_mb() {
+  return (std::clamp)(capture_budget::effective_mb(cfg_int("rt_cascade_mb", 160), capture_budget::kCascadeDefaultMb, g_stride),
+                      4, 1024);
+}
 std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the last G-buffer pass
 std::atomic<uint64_t> g_gbuf_depth{0};            // the last G-buffer pass's depth image (the prepass writes it)
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
@@ -436,7 +444,9 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
     // The per-frame RT capture holds one frame's soup (3.2M triangles = 152 MB
     // in the test scene) and is read in place by the AS build.
     const bool rt = !readback && rt_enabled();
-    VkDeviceSize mb = VkDeviceSize((std::max)(rt ? cfg_int("rt_xfb_mb", 384) : cfg_int("geo_xfb_mb", 768), 16));
+    const int set_mb = rt ? cfg_int("rt_xfb_mb", 384) : cfg_int("geo_xfb_mb", 768);
+    VkDeviceSize mb = VkDeviceSize((std::max)(rt ? xfb_mb() : set_mb, 16));
+    if (rt) log("[geo] RT capture buffer %llu MB (rt_xfb_mb %d, %u-byte vertices)", (unsigned long long)mb, set_mb, g_stride);
     if(rt && !capture_budget::storage_range_supported(mb<<20,g_storage_range)){
       log("[geo] RT capture refused: %llu MB needs full SSBO range, device limit %llu bytes",
           (unsigned long long)mb,(unsigned long long)g_storage_range);return false;
@@ -1103,8 +1113,14 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   Capture& c = all_current ? g_sun_ccap[layer][f % 3] : g_ccap[f % 3];
   if (c.state == 1 && c.record_frame == f) return;   // one such pass per frame: never expected
   // (state 1 from an older frame: that recording never ended its pass; start over)
-  const VkDeviceSize bytes = VkDeviceSize((std::clamp)(cfg_int("rt_cascade_mb", 64), 4, 1024)) << 20;
+  const VkDeviceSize bytes = VkDeviceSize(cascade_mb()) << 20;
   if (c.xfb.b && c.xfb.size != bytes) {free_buf(c.xfb);c.c_legacy_transfer=false;} // deferred destruction
+  if (!c.xfb.b) {
+    static int s_logged_mb = 0;
+    if (s_logged_mb != int(bytes >> 20))
+      s_logged_mb = int(bytes >> 20), log("[cascade] capture buffer %d MB (rt_cascade_mb %d, %u-byte vertices)", s_logged_mb,
+                                          cfg_int("rt_cascade_mb", 160), g_stride);
+  }
   if (!c.xfb.b && !make_buf(c.xfb, bytes, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | rt_xfb_usage(), false)) {
     if (!g_cc_alloc_failed)
       log("[cascade] could not allocate %llu MB for the cascade capture", (unsigned long long)(bytes >> 20));
@@ -1445,7 +1461,7 @@ void cascade_on_present() {
       "BLAS failed %llu; captured pass GPU median %.3f ms (its draws + XFB + conversion)",
       layer, (unsigned long long)st.frames, st.seen / n, st.dup / n, st.alpha / n, st.drop / n, st.ubo / n, st.full / n,
       st.added / n, st.tris / n, (unsigned long long)st.tris_max, st.bytes / n * mb, st.bytes_max * mb,
-      cfg_int("rt_cascade_mb", 64), st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
+      cascade_mb(), st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
       (unsigned long long)st.builds[0], st.builds[0] ? double(st.build_tris) / double(st.builds[0]) : 0.0,
       (unsigned long long)st.builds[1], (unsigned long long)st.builds[2], (unsigned long long)st.builds[3],
       (unsigned long long)st.builds[4], (unsigned long long)st.builds[5], ms);

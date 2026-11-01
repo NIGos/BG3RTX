@@ -75,6 +75,14 @@
 // the forward pass's own copy, bound at 68): C' = max(C + (1 - a) (Copy(hit) - Refr), 0). The medium is
 // the FS's (its opacity a over the view-depth difference); hidden, off-screen, miss and aborted rays keep
 // Refr. rt_debug 28: the view. Statistics: words 96..119 of the slot (kCsRr*).
+//
+// M5.4c the game's sun shadow (WATER_GSH=1 on top of any WATER_SHADOWS variant, rt_water_game_shadow with
+// rt_water_shadows on when the water pipelines were created: 8 more bytes per record after the form's last,
+// common/water_compose.h kGshBytes). The FS that sample the game's cascade shadow map (PL_noCaustics_Shadows,
+// huge_PL_Shadow) carry its visibility Vg as a scalar factor of their sun radiance: they record Dg = D (1 - Vg)
+// / Vg, the sun light the game's shadow removed, and Vg (the other FS Dg = 0, Vg = 1). The traced sun ray
+// replaces Vg: lit gives C + Dg (kFlagGsh), occluded R (as M5.4: the FS at sun visibility 0), unknown C.
+// rt_debug 26: a restored record is cyan. Statistics: words 44..53 of the slot (kCsGsh*).
 #include "../gi/gi_common.hlsli"
 #include "rt_common.hlsli"
 #ifdef WATER_LS
@@ -96,7 +104,13 @@ struct ComposeParams {
 [[vk::binding(68, 0)]] Texture2D<float4> wCopy;   // the water draw's colour copy (its set 2 b4: the FS's Refr source)
 #endif
 
-#if defined(WATER_REFR)
+#if defined(WATER_GSH) && defined(WATER_REFR)   // M5.4c: the form + kGshBytes, the words at the form's end
+static const uint kHeaderBytes = 64u, kRecordBytes = 112u, kGshAt = 104u;
+#elif defined(WATER_GSH) && defined(WATER_LS)
+static const uint kHeaderBytes = 64u, kRecordBytes = 104u, kGshAt = 96u;
+#elif defined(WATER_GSH)
+static const uint kHeaderBytes = 64u, kRecordBytes = 48u, kGshAt = 40u;
+#elif defined(WATER_REFR)
 static const uint kHeaderBytes = 64u, kRecordBytes = 104u;  // common/water_compose.h kRecordBytesRefr
 #elif defined(WATER_LS)
 static const uint kHeaderBytes = 64u, kRecordBytes = 96u;   // common/water_compose.h kRecordBytesLs
@@ -114,6 +128,8 @@ static const uint kVpOffset = 512u;                         // cCam: CameraCB (2
 static const uint kGsWords = 120u;  // common/water_compose.h kCsRrWords
 #elif defined(WATER_LS)
 static const uint kGsWords = 91u;   // common/water_compose.h kCsLsWords
+#elif defined(WATER_SHADOWS) && defined(WATER_GSH)
+static const uint kGsWords = 54u;   // common/water_compose.h kCsGshWords
 #elif defined(WATER_SHADOWS)
 static const uint kGsWords = 44u;   // common/water_compose.h kCsSunWords
 #else
@@ -135,7 +151,18 @@ void cstatn(uint word, uint n) {
   const uint s = WaveActiveSum(n);
   if (WaveIsFirstLane() && s != 0u) InterlockedAdd(gsStat[word], s);
 }
-#ifdef WATER_REFR
+#if defined(WATER_REFR) && defined(WATER_GSH)
+bool is_sum_lo(uint w) {   // + the sun sums, the M5.4c sums 48..52, the local sums 80..88 and the refraction sums 108..118
+  return ((w >= 16u && w <= 26u) || w == 40u || w == 42u || (w >= 48u && w <= 52u) || (w >= 80u && w <= 88u) ||
+          (w >= 108u && w <= 118u)) &&
+         (w & 1u) == 0u;
+}
+#elif defined(WATER_GSH)
+bool is_sum_lo(uint w) {   // + the sun sums, the M5.4c sums 48..52 and the local sums 80..88
+  return ((w >= 16u && w <= 26u) || w == 40u || w == 42u || (w >= 48u && w <= 52u) || (w >= 80u && w <= 88u)) &&
+         (w & 1u) == 0u;
+}
+#elif defined(WATER_REFR)
 bool is_sum_lo(uint w) {   // + the sun sums, the local sums 80..88 and the refraction sums 108..118
   return ((w >= 16u && w <= 26u) || w == 40u || w == 42u || (w >= 80u && w <= 88u) || (w >= 108u && w <= 118u)) &&
          (w & 1u) == 0u;
@@ -145,6 +172,8 @@ bool is_sum_lo(uint w) {   // + the sun sums and the local sums 80..88
   return ((w >= 16u && w <= 26u) || w == 40u || w == 42u || (w >= 80u && w <= 88u)) && (w & 1u) == 0u;
 }
 #endif
+#elif defined(WATER_SHADOWS) && defined(WATER_GSH)
+bool is_sum_lo(uint w) { return ((w >= 16u && w <= 26u) || w == 40u || w == 42u || (w >= 48u && w <= 52u)) && (w & 1u) == 0u; }
 #elif defined(WATER_SHADOWS)
 bool is_sum_lo(uint w) { return ((w >= 16u && w <= 26u) || w == 40u || w == 42u) && (w & 1u) == 0u; }   // + the sun sums
 #else
@@ -357,7 +386,21 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const float lumD = r2d.y;   // lum(D) of the FS's unshadowed sun term
   const bool sun_on = (cp.a.w & 2u) != 0u;   // kFlagSun: rt_water_shadows
   const bool d_ok = all(isfinite(Rs)) && isfinite(lumD) && lumD >= 0.0;
+#ifdef WATER_GSH
+  // M5.4c: the sun light the game's shadow removed Dg = D_u - D and its visibility Vg (1: no game shadow).
+  uint2 rg = 0u;
+  if (has) rg = cRec.Load2(at + kGshAt);
+  const float2 g01 = f16tof32(uint2(rg.x, rg.x >> 16)), g2v = f16tof32(uint2(rg.y, rg.y >> 16));
+  const float3 Dg = float3(g01, g2v.x);
+  const float Vg = g2v.y;
+  const bool gsh_on = (cp.a.w & 16u) != 0u;   // kFlagGsh: rt_water_game_shadow
+  const bool g_ok = all(isfinite(Dg)) && isfinite(Vg) && Vg >= 0.0 && Vg <= 1.0;
+  const bool gshrec = sun_on && valid && d_ok && g_ok && Vg < 1.0;
+  // A record the game shadowed fully has lum(D) = Vg lum(D_u) below the half's range: its sun term is Dg's.
+  const bool sunrec = sun_on && valid && d_ok && (lumD > 0.0 || (gshrec && any(Dg > 0.0)));
+#else
   const bool sunrec = sun_on && valid && d_ok && lumD > 0.0;
+#endif
   const float3 Ls = normalize(cam.v0.xyz);
   uint sv = kRtLit;
   bool straced = false;
@@ -376,12 +419,26 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     const float3 so = P + N * (t * spa);   // the scene TLAS has no water: one footprint clears the surface
     RtCone scone = {t * spa, spa};
     if (all(isfinite(so)) && all(isfinite(sdir))) {
+#if defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
+      g_rt_cascade_ray = true;   // rt_cascade_casters: the sun ray (only) sees the cascade's casters
+#endif
       sv = rt_visibility(so, sdir, pc.rt_tmax, scone);
+#if defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
+      g_rt_cascade_ray = false;
+#endif
       straced = true;
     }
   }
   const bool occluded = straced && sv == kRtOccluded;
+#ifdef WATER_GSH
+  // M5.4c: lit where the game shadowed: the FS at sun visibility 1, C + Dg (V (C + Dg) + (1 - V) R at V = 1).
+  const bool restored = gsh_on && gshrec && straced && sv == kRtLit && any(Dg != 0.0);
+  const bool sunchg = occluded || restored;
+  const float3 Cs = occluded ? Rs : restored ? Ct + Dg : Ct;
+#else
+  const bool sunchg = occluded;
   const float3 Cs = occluded ? Rs : Ct;           // V C + (1 - V) R
+#endif
   const float rmL = occluded ? lumD : 0.0;        // lum((1 - V) D)
 #ifdef WATER_LS
   // M5.4b: the FS's local lights, walked as the FS walks them; the unshadowed ones traced.
@@ -526,14 +583,14 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const bool rr_hit = rtier == 1u && all(isfinite(Lc));
   const float3 Rr = rr_hit ? Rw * (max(Lc, 0.0) - Refr) : 0.0.xxx;   // (1 - a) (Copy(hit) - Refr)
   const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx) - Rls + Rr;
-  const float3 Cn = composed || occluded || lsocc || rr_hit ? max(Cu, 0.0) : Ct;
+  const float3 Cn = composed || sunchg || lsocc || rr_hit ? max(Cu, 0.0) : Ct;
 #else
   const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx) - Rls;
-  const float3 Cn = composed || occluded || lsocc ? max(Cu, 0.0) : Ct;
+  const float3 Cn = composed || sunchg || lsocc ? max(Cu, 0.0) : Ct;
 #endif
 #else
   const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx);
-  const float3 Cn = composed || occluded ? max(Cu, 0.0) : Ct;
+  const float3 Cn = composed || sunchg ? max(Cu, 0.0) : Ct;
 #endif
 #else
   const float3 Cu = Ct + A * L - B;
@@ -580,6 +637,16 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   cstat(38, occluded && any(Cu < 0.0));
   csum64(40, lumD, sunrec);
   csum64(42, rmL, sunrec);
+#endif
+#ifdef WATER_GSH
+  // common/water_compose.h kCsGsh*.
+  cstat(44, gshrec);
+  cstat(45, restored);
+  cstat(46, occluded && g_ok && Vg == 1.0);
+  cstat(47, sun_on && valid && !g_ok);
+  csum64(48, lum(Dg), gshrec);
+  csum64(50, lum(Dg), restored);
+  csum64(52, Vg, gshrec);
 #endif
 #ifdef WATER_LS
   // common/water_compose.h kCsLs*.
@@ -643,6 +710,9 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
                : !sunrec ? float3(0.08, 0.08, 0.08)
                : !straced ? float3(0.25, 0, 0.25)
                : occluded ? float3(max(saturate(share), 0.25), 0, 0)
+#ifdef WATER_GSH
+               : restored ? float3(0, 0.6, 0.6)
+#endif
                : sv == kRtUnknown ? float3(0, 0, 1)
                : float3(0, 0.35, 0);
     return;
@@ -691,15 +761,15 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
                    : float3(0, 0, 0.3);
     target[fp] = c;
 #if defined(WATER_REFR)
-  } else if (composed || occluded || lsocc || rr_hit) {   // each term only where its flag traced it
+  } else if (composed || sunchg || lsocc || rr_hit) {   // each term only where its flag traced it
     target[fp] = Cn;
   }
 #elif defined(WATER_LS)
-  } else if (composed || occluded || lsocc) {   // each term only where its flag traced it
+  } else if (composed || sunchg || lsocc) {   // each term only where its flag traced it
     target[fp] = Cn;
   }
 #elif defined(WATER_SHADOWS)
-  } else if (composed || occluded) {   // each term only where its flag traced it
+  } else if (composed || sunchg) {   // each term only where its flag traced it
     target[fp] = Cn;
   }
 #else

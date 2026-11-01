@@ -86,6 +86,20 @@ inline constexpr uint32_t kRecordWordsLs = kRecordBytesLs / 4;
 // is seen changes. Unresolved rays (hidden, off screen, miss) keep the FS's Refr.
 inline constexpr uint32_t kRecordBytesRefr = 104;
 inline constexpr uint32_t kRecordWordsRefr = kRecordBytesRefr / 4;
+// M5.4c (rt_water_game_shadow with rt_water_shadows on when the water pipelines are created): two more
+// words after the sun form's last (the 40-, 96- or 104-byte record), for the FS that sample the game's
+// cascade shadow map (common/water_fs_patch.h FsIds::vg: PL_noCaustics_Shadows, huge_PL_Shadow):
+//   wG0 half2(Dg.r, Dg.g)   wG1 half2(Dg.b, Vg)
+// Their Lsun carries the game's sun visibility Vg (pow(PCF, 2.2) over the cascades) as a scalar factor, so
+// the FS's sun term is D = Vg D_u (D_u the same term at visibility 1: every operation from Vg to the colour
+// is a product, derived and checked by tools/water_audit.py) and Dg = D (1 - Vg) / Vg = D_u - D is the sun
+// light the game's shadow removed. R = C - D (w8-w9) is the FS at sun visibility 0 as before. The compose
+// swaps Vg for the traced V: C' = V (C + Dg) + (1 - V) R = R + V D_u (gsh_shadow below): lit gives C + Dg,
+// occluded R, unknown C. V = Vg gives C (exactly where Vg = 1: Dg = 0). FS without a Vg store Dg = 0, Vg = 1.
+// Without the words, a game-shadowed FS stores lum(D) = 0: the sun step skips it (its game shadow stays).
+inline constexpr uint32_t kGshBytes = 8;
+inline constexpr uint32_t kGshWords = kGshBytes / 4;
+inline constexpr uint32_t kBufGsh = 1u;   // ComposeBuffer::flags: the records carry the M5.4c words
 
 inline constexpr const char* kComposeKey = "bg3rtx.water_compose";
 inline constexpr uint32_t kComposeVersion = 1;
@@ -98,7 +112,8 @@ struct ComposeBuffer {
   uint64_t buffer;      // VkBuffer (STORAGE_BUFFER | SHADER_DEVICE_ADDRESS | TRANSFER_DST)
   uint64_t bytes;       // its size
   uint32_t record_bytes;   // kRecordBytes, kRecordBytesSun (M5.4), kRecordBytesLs (M5.4b) or kRecordBytesRefr (M5.5); 0 (an older layer) = kRecordBytes
-  uint32_t pad[9];
+  uint32_t flags;          // kBufGsh (M5.4c: + kGshBytes per record, sun forms only); 0 from an older layer
+  uint32_t pad[8];
 };
 static_assert(sizeof(ComposeBuffer) == 64, "ComposeBuffer layout is shared by the layer and the core");
 
@@ -123,12 +138,17 @@ inline int record_mb(int mb, uint32_t record_bytes) {
   return record_bytes >= kRecordBytesLs ? int((int64_t(mb) * record_bytes + kRecordBytes - 1) / kRecordBytes) : mb;
 }
 
+// M5.4c: whether the records carry the game-shadow words (a sun form only), and the record stride.
+inline bool gsh_of(const ComposeBuffer& b) { return (b.flags & kBufGsh) != 0 && record_bytes_of(b) >= kRecordBytesSun; }
+inline uint32_t stride_of(const ComposeBuffer& b) { return record_bytes_of(b) + (gsh_of(b) ? kGshBytes : 0u); }
+
 inline void publish_buffer(ComposeBuffer* dst, uint64_t buffer, uint64_t bytes, uint32_t capacity,
-                           uint32_t record_bytes = kRecordBytes) {
+                           uint32_t record_bytes = kRecordBytes, uint32_t flags = 0) {
   dst->buffer = buffer;
   dst->bytes = bytes;
   dst->capacity = capacity;
   dst->record_bytes = record_bytes;
+  dst->flags = flags;
   std::atomic_ref<uint32_t>(dst->version).store(kComposeVersion, std::memory_order_release);
 }
 inline bool read_buffer(const ComposeBuffer* src, ComposeBuffer& out) {
@@ -136,7 +156,7 @@ inline bool read_buffer(const ComposeBuffer* src, ComposeBuffer& out) {
   const uint32_t v = std::atomic_ref<uint32_t>(const_cast<ComposeBuffer*>(src)->version).load(std::memory_order_acquire);
   if (v != kComposeVersion) return false;
   out = *src;
-  return out.buffer != 0 && out.capacity != 0 && out.bytes >= buffer_bytes(out.capacity, record_bytes_of(out));
+  return out.buffer != 0 && out.capacity != 0 && out.bytes >= buffer_bytes(out.capacity, stride_of(out));
 }
 
 // Whether a B10G11R11 channel value t (read back from the attachment) is the encoding of the
@@ -163,9 +183,10 @@ struct FsTerms {
   float refr, direct, kd, sp, e, k, x, ge, t, s, a;
   float sun = 0.0f;   // M5.4: the sun term of Lw (direct holds the local lights), visibility 1 in the FS
   float local = 0.0f; // M5.4b: the point + spot lights' sum L of Lw (the FS's own per-light visibility)
+  float vg = 1.0f;    // M5.4c: the game's sun visibility in Lsun (1: the FS samples no shadow map)
 };
 inline float fs_colour(const FsTerms& f) {
-  const float lw = f.direct + f.sun + f.local + (f.kd + f.sp * f.e) * f.k;
+  const float lw = f.direct + f.sun * f.vg + f.local + (f.kd + f.sp * f.e) * f.k;
   return f.refr + ((lw * f.x + f.ge) * f.t + f.s - f.refr) * f.a;
 }
 inline float record_a(const FsTerms& f) { return f.x * (f.a * f.t) * f.e; }
@@ -183,11 +204,22 @@ inline float compose(float c, float a, float l, float b) {
 // the same expression: the two terms are independent in the FS). V = 1 (lit, or an aborted / unknown
 // ray: the FS's own value) leaves C bit-identical; only the visibility changes, never the unshadowed
 // radiance. C here is the target's value (B10G11R11), R the record's (half of the FS's f32 C - D).
-inline float record_d(const FsTerms& f) { return f.x * (f.a * f.t) * f.sun; }
+inline float record_d(const FsTerms& f) { return f.x * (f.a * f.t) * (f.sun * f.vg); }   // the FS's D (Vg in it)
 inline float record_r(const FsTerms& f) { return fs_colour(f) - record_d(f); }   // the FS's f32 C - D
 inline float shadow(float c, float r, float v) {
   if (v == 1.0f) return c;
   const float s = v * c + (1.0f - v) * r;
+  return s > 0.0f ? s : 0.0f;
+}
+// ---- M5.4c the game's sun shadow (rt_water_game_shadow; water_compose.hlsl WATER_GSH) ----
+// The game-shadowed FS (FsIds::vg): D = Vg D_u, so the record's Dg = D (1 - Vg) / Vg (in the FS, f32) is the
+// sun light the game's shadow removed, and C + Dg the FS at sun visibility 1. The compose swaps Vg for the
+// traced V: C' = V (C + Dg) + (1 - V) R = R + V D_u. V = 1 with Vg = 1 (Dg = 0) is C bit for bit; V = Vg is C
+// within the record's rounding (R and Dg halves); V = 0 is R, the same as M5.4 (independent of Vg).
+inline float record_dg(const FsTerms& f) { return record_d(f) * ((1.0f - f.vg) / f.vg); }
+inline float gsh_shadow(float c, float r, float dg, float v) {
+  if (v == 1.0f && dg == 0.0f) return c;
+  const float s = v * (c + dg) + (1.0f - v) * r;
   return s > 0.0f ? s : 0.0f;
 }
 // ---- M5.4b local-light visibility (rt_water_ls_shadows; water_compose.hlsl WATER_LS) ----
@@ -305,6 +337,14 @@ inline constexpr uint32_t kCsSunRec = 32, kCsSunTraced = 33, kCsSunOccluded = 34
 inline constexpr uint32_t kCsSunNone = 36, kCsSunInvalid = 37, kCsSunClamped = 38;
 inline constexpr uint32_t kCsSunSumD = 40, kCsSunSumRemoved = 42;   // 64-bit pairs
 inline constexpr uint32_t kCsSunWords = 44;
+// M5.4c words (WATER_GSH variants only, after the sun's, inside the 64-word slot of WATER_SHADOWS): records
+// with a game sun shadow (sun records with Vg < 1), restored (lit by the traced ray where the game shadowed:
+// C + Dg), occluded where the game left it lit (Vg = 1: R, as M5.4), invalid words; then 64-bit sums x 4096
+// of lum(Dg) over game-shadowed records, of the restored lum(Dg), and of Vg over game-shadowed records.
+inline constexpr uint32_t kCsGshRec = 44, kCsGshRestored = 45, kCsGshOccLit = 46, kCsGshInvalid = 47;
+inline constexpr uint32_t kCsGshSumDg = 48, kCsGshSumRestored = 50, kCsGshSumVg = 52;   // 64-bit pairs
+inline constexpr uint32_t kCsGshWords = 54;
+static_assert(kCsGshWords <= 64, "the M5.4c words fit the WATER_SHADOWS slot and precede the local words (64)");
 // M5.4b local-light words (WATER_LS variant only; the slot grows to 128 words): local records (owned,
 // valid, words written, a local term), no local term, invalid words, then per record the counts of the
 // lights the FS evaluates (channel, range, cone, N.L), of those with a game shadow map (kept), traced
@@ -326,7 +366,9 @@ inline constexpr uint32_t kCsSlotWordsLs = 128;   // core/water.cpp kCStatBytes 
 // applies its term; a clear bit leaves its term the FS's.
 // Bit 3 the traced refraction (rt_water_refraction, WATER_REFR variant only; cleared per pass without the
 // water draw's colour copy).
-inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u, kFlagRefr = 8u;
+// Bit 4 the game's sun shadow replaced (rt_water_game_shadow, WATER_GSH variants only: with bit 1, a
+// game-shadowed record lit by the traced ray gets C + Dg; clear, the game's Vg stays where the ray is lit).
+inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u, kFlagRefr = 8u, kFlagGsh = 16u;
 inline uint32_t ratio_bin(float al, float b) {   // 0 none (B = 0), else the word
   if (!(b > 0.0f)) return 0;
   const float r = al / b;

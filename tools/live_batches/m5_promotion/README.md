@@ -7,7 +7,7 @@ toggling keys inside the run, `rt_stats` only in `diag-stats-on`, diag-off 20 s 
 `shot-*`, `diag-view-*` and the first pan of each pair. Independent jobs. Receipt `m5-promotion.json`; plans go to
 test-main `captures\live_batches\m5_promotion\plans`.
 
-Startup (both jobs): `preset=ultra` (main's Ultra, so roof casters on) plus the whole water chain as the preset
+Startup (all jobs): `preset=ultra` (main's Ultra, so roof casters on) plus the whole water chain as the preset
 commit sets it: `rt_water_geometry=1 rt_water_reflections=1 rt_water_compose=1 rt_water_shadows=1
 rt_water_ls_shadows=1 rt_water_refraction=1 sharc_device=1`. The four restart keys patch the audited water FS with the
 104-B record at pipeline creation; afterwards each key is a live switch. The test tree is main: the keys are explicit.
@@ -19,11 +19,30 @@ rt_water_ls_shadows=1 rt_water_refraction=1 sharc_device=1`. The four restart ke
 |---|---|---|---|
 | `m5p1-s8-fg2` | Water Queens House | 215 s, 18 traces | the only water scene measured so far (pool c4e92ccd, sea 7b44a567) |
 | `m5p2-flymm-fg2` | Flymm Cargos Basement - 101h 05m | 215 s, 18 traces | second scene: flooded basement, open water over most of the save thumbnail, light shafts and lanterns; never captured |
+| `m5p3-camp-fg2` | Campsite - 27h | 215 s, 18 traces | M5.4c: the pond's FS 06e66a6f samples the game's sun shadow; `rt_water_game_shadow=1` at startup (follows rt_water_shadows), `[water] game shadow` gated (invalid 0) |
+
+All three jobs set `rt_cascade_casters=1` (the Ultra value) explicitly and expect the water's `RT_CASCADE_MASKS=1`
+pipelines (`[water] rt/water_reflect.hlsl?RT_CASCADE_MASKS=1 water_reflect: built` and the compose one); the
+scene-wait gate (`0 timeouts` in every cost window, `rt_scene_wait_log_frames=120`) holds in all three.
 
 S1 docks (`QuickSave_3784`) now loads the Steel Watch Foundry. Other candidates checked (read-only, `scripts/save_index.py`
 thumbnails and 218 captures scanned for the audited water FS): S14 Lower City and S7 inn draw 7b44a567 at about 0% of the
 screen; S3 camp draws 06e66a6f (not mapped for the compose); Wyrms Crossing / Rivington need the missing mods;
 `QuickSave_3781` shows the same basement as Flymm (a quick save can be overwritten: the named save is used).
+
+Flymm's water family (offline, 11-01, read-only game data): both saves are in CTY_Main_A; the basement is the level
+CTY_DockWarehouseBasement_A, whose water planes `NAT_RVR_DockWarehouseBasement_Dock_NoSub` and `_Grates` use
+FLUID_Water_Plane_flowmap_PixelLighting_noCaustics (plus Fall_Core / Fall_Foam: excluded flow). Both forward variants of
+that template (instanced 2bd6cb9d/ffc5bb29, static 269de904/8cdf7b4a) are now audited and mapped
+(`py -3 -m tools.water_audit`): the Flymm run is expected valid. A material override at the placement was not checked:
+the `[water] families` line decides.
+
+Shader dump (both jobs, `dump_shaders=1`): the layer writes only the modules that have no file yet in the test tree's
+`captures/shaders` (about 6100 there), so the run dumps the water pairs that have none (an unknown family in the
+`[water] families` "counted" list, the GlowLichen / flowmap_Shadows / flowmap_Test / Minimap / Reflections instanced
+pairs and every static water variant but PL_noCaustics). No hash filter exists (a layer change); the cost is the new
+modules' files at pipeline creation. After the run: `py -3 -m tools.water_audit --dump <test tree>\captures\shaders --emit`
+audits them (VS contract, compose structure, shadow-map samples) and prints the table rows to add.
 
 Phases (both): `warmup-on` 10 s, `diag-stats-on` 12 s (rt_stats=1, chain on), `cost-off-a` 20 s, `shot-off-a` 10 s
 (traces at 2, 5, 8 s), cumulative steps of 8 s with one trace each: `shot-step-rf` (+geometry, +measured reflections:
@@ -63,10 +82,9 @@ compose delta, 26 sun shadow, then 28 refraction at S8 or 27 local shadows at Fl
   the same time into the same pan) show no lagging or smeared reflections.
 Merge the preset commit with merge-green only if both runs are valid and every gate above passes.
 
-Duration: plans 430 s, 2 launches, about 11.2 min (dry-run estimate; at most 16 min of timeouts). Disk: 36 PNG traces
-at about 43 MB (measured at S8, 1280-wide previews) plus logs: about 1.6 GB; delete the trace folders after the script
-has run and the summary is in the progress file. Start, results and rollback: as in ../lean_regression/README.md with
+Duration: plans 645 s, 3 launches, about 16.8 min (dry-run estimate). Disk: 54 PNG traces at about 43-45 MB plus logs:
+about 2.3-2.5 GB, above the ~2 GB batch budget: run the gate script on each job as it finishes and delete its trace
+folders before the next job (the dry run's limits are 18 min / 2.6 GB for that reason). The summary goes in the progress file. Start, results and rollback: as in ../lean_regression/README.md with
 this folder, prefix `m5p` and receipt `m5-promotion.json`.
 
-Offline check: `powershell -File tools\live_batches\m5_promotion\dryrun.ps1 [-Out <scratch dir>]`. Last result
-2026-11-01: all checks passed (Windows PowerShell 5).
+Offline check: `powershell -File tools\live_batches\m5_promotion\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01: all checks passed with the 3 jobs (Windows PowerShell 5).

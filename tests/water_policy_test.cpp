@@ -80,7 +80,31 @@ int main() {
       CHECK(classify(a.fs, hi(a.vs), &d, name) == kNotWater);
     }
   }
-  CHECK(kAuditedCount == 9);
+  CHECK(kAuditedCount == 16);
+  // The pre-audit of 2026-11-01 (tools/water_audit.py): appended, so the families 0..8 keep their index.
+  CHECK(family_of(0xced49ee370940201ull, 0x60d4357du) == 9);    // huge_PL_Shadow, the docks VS
+  CHECK(family_of(0xd44c390bcbb9eea5ull, 0x1d64d76au) == 10);   // flowmap_Brine
+  CHECK(family_of(0xfb7cc2ea451d3e08ull, 0xd7d9539du) == 11);   // huge_PL_SphereMask
+  // Flymm Cargos basement (PL_noCaustics): the instanced and the static variant are two families.
+  CHECK(family_of(0x2bd6cb9de954c2f9ull, 0xffc5bb29u) == 12);
+  CHECK(family_of(0x269de9047e587ea2ull, 0x8cdf7b4au) == 13);
+  CHECK(family_of(0x269de9047e587ea2ull, 0xffc5bb29u) == kNoFamily);   // the static FS with the instanced VS
+  CHECK(family_of(0x4af3450ed83beb10ull, 0xbf2b63d0u) == 14);   // flowmap_OnlyNormals
+  CHECK(family_of(0x7813e701eb642285ull, 0x0f00693cu) == 15);   // Debris
+  // Not audited: WIP (its VS displaces x, y and z), Avernus_BloodRiver (not FLUID_Water: unknown by name).
+  CHECK(family_of(0x0f9a18741e9f7790ull, 0x0516c804u) == kNoFamily);
+  {
+    const std::string wip = "Fluids/FLUID_Water_Plane_WIP";
+    const Bg3MaterialInfo m = mat(wip.c_str(), BG3_MAT_CLASS_REFRACTIVE, kPlaneFlags);
+    CHECK(classify(0x0f9a18741e9f7790ull, 0x0516c804u, &m, wip) == kUnknown);
+    const std::string br = "Fluids/FLUID_Avernus_BloodRiver";
+    const Bg3MaterialInfo b = mat(br.c_str(), BG3_MAT_CLASS_REFRACTIVE, kPlaneFlags & ~BG3_MAT_F_FORWARD_LIT);
+    CHECK(classify(0x5446be18a63164adull, 0xd6b0f0e7u, &b, br) == kUnknown);
+  }
+  // Every pair is unique (family_of returns the first match).
+  for (uint32_t i = 0; i < kAuditedCount; ++i)
+    for (uint32_t j = i + 1; j < kAuditedCount; ++j)
+      CHECK(!(kAudited[i].fs == kAudited[j].fs && hi(kAudited[i].vs) == hi(kAudited[j].vs)));
   // The S1 docks plane (COVERAGE gap 1).
   CHECK(family_of(0x7b44a567771ecbecull, 0x60d4357du) == 0);
   // The S8 Water Queens House planes (asset-DB pairs, VS dumps read 2026-11-01).

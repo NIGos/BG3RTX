@@ -39,7 +39,8 @@
   "rt stats",
   "rf: reflection pass",
   "rf hit shade",
-  "\\[rrpost\\] exposure (held|hold|probe)"
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "\\[geo\\] RT capture"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -94,6 +95,18 @@
     "cost-off-b"
    ],
    "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-gi-on",
+    "cost-rf-on",
+    "cost-off-b"
+   ]
   }
  ]
 }

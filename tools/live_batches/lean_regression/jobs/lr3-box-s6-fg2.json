@@ -35,7 +35,8 @@
   "ls box",
   "ls check",
   "ls stats",
-  "ls: local-light shadow pass GPU"
+  "ls: local-light shadow pass GPU",
+  "\\[geo\\] RT capture"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -87,6 +88,17 @@
     "cost-box-off-b"
    ],
    "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-box-off-a",
+    "cost-box-on",
+    "cost-box-off-b"
+   ]
   }
  ]
 }

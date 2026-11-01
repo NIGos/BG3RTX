@@ -19,6 +19,15 @@ int main(){
  check(opaque_partition_demand(700*mib,400*mib,true)==300*mib);
  check(opaque_partition_demand(700*mib,0,true)==700*mib);
  check(opaque_partition_demand(700*mib,701*mib,true)==0); // Saturate; never wrap the reservation.
+ // Default caps follow the startup stride; set caps and narrow layouts are kept.
+ check(effective_mb(kXfbDefaultMb,kXfbDefaultMb,64)==1024);
+ check(effective_mb(kCascadeDefaultMb,kCascadeDefaultMb,64)==427);
+ check(effective_mb(kXfbDefaultMb,kXfbDefaultMb,88)==1408); // the hair jobs' hand-set sizes
+ check(effective_mb(kCascadeDefaultMb,kCascadeDefaultMb,88)==587);
+ check(effective_mb(kXfbDefaultMb,kXfbDefaultMb,24)==384);
+ check(effective_mb(kXfbDefaultMb,kXfbDefaultMb,16)==384);
+ check(effective_mb(1408,kXfbDefaultMb,64)==1408);
+ check(effective_mb(200,kCascadeDefaultMb,64)==200);
  check(!corrected_partition_feedback(16));
  check(!corrected_partition_feedback(24));
  check(corrected_partition_feedback(40));

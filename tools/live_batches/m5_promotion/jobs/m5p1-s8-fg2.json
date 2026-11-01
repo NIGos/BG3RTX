@@ -7,7 +7,7 @@
  "timeout": 475,
  "repeat": 1,
  "live_batch": "m5-promotion",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_scene_wait_log_frames=120",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=1,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -64,7 +64,9 @@
   "\\[water\\] families: captured .*c4e92ccdb08dd777 FLUID_Water_Plane_flowmap_NoCaustics_Waves [1-9]\\d* \\(Roughness_Base",
   "\\[water\\] shadows \\(120 frames, [1-9]\\d* passes, variant sun\\): .*occluded (?!0\\.00%)[0-9.]+% of traced",
   "\\[water\\] local shadows \\(120 frames, [1-9]\\d* passes with the light list, \\d+ without\\): local records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned .*sum check over [1-9]\\d* records",
-  "\\[water\\] refraction \\(120 frames, [1-9]\\d* passes with the colour copy, \\d+ without\\): transmissive records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned \\(opaque [0-9.]+%, invalid \\d+, no usable copy 0\\); traced [0-9.]+% of transmissive \\(not traced \\d+\\): screen hit \\(composed\\) (?!0\\.0%)[0-9.]+%"
+  "\\[water\\] refraction \\(120 frames, [1-9]\\d* passes with the colour copy, \\d+ without\\): transmissive records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned \\(opaque [0-9.]+%, invalid \\d+, no usable copy 0\\); traced [0-9.]+% of transmissive \\(not traced \\d+\\): screen hit \\(composed\\) (?!0\\.0%)[0-9.]+%",
+  "\\[water\\] rt/water_reflect\\.hlsl\\?RT_CASCADE_MASKS=1 water_reflect: built",
+  "\\[water\\] rt/water_compose\\.hlsl\\?\\S*RT_CASCADE_MASKS=1\\S* water_compose: built"
  ],
  "expect_every": [
   {
@@ -168,6 +170,28 @@
     "cost-off-b"
    ],
    "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ]
   }
  ],
  "forbid": [
@@ -181,13 +205,14 @@
   "\\[water\\] water geometry UNAVAILABLE",
   "\\[water\\] build submission failed",
   "\\[water\\] reflections unavailable",
-  "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+  "\\[water\\] rt/water_\\w+\\.hlsl\\S* \\w+: pipeline creation failed",
   "\\[water\\] compose UNAVAILABLE",
   "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
   "\\[water\\] compose: variant pipeline creation failed",
   "\\[water\\] compose: a water pipeline blends",
   "\\[rrpost\\] exposure hold REFUSED",
-  "\\[cascade\\] could not allocate"
+  "\\[cascade\\] could not allocate",
+  "\\[water\\] reflections skipped: no water variant"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
