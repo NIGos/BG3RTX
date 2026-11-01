@@ -304,6 +304,54 @@ int main() {
           "manifest: image SOURCE format round-trips (absent = copied as is)");
   }
 
+  // 6. rt_cascade_casters: the casters directive, its InstInfo patch, the variant defines a pack keeps.
+  {
+    rp::Manifest c;
+    c.version = rp::kVersion; c.pass = "gi_hit_direct"; c.push = "push.bin"; c.groups[0] = c.groups[1] = c.groups[2] = 1;
+    c.instances = "instances.bin"; c.instance_count = 3;
+    c.casters = {"casters.bin", 2, 759945, 16};
+    rp::Manifest cb;
+    const std::string ct = rp::serialize(c);
+    check(rp::parse(ct, cb, error) && cb.casters.file == "casters.bin" && cb.casters.instance == 2 && cb.casters.tris == 759945 &&
+              cb.casters.stride == 16 && rp::serialize(cb) == ct && ct.find("casters casters.bin 2 759945 16\n") != std::string::npos,
+          "manifest: the casters directive round-trips");
+    rp::Manifest none;
+    check(rp::parse("bg3rtx_replay_pack 1\npass gi_hit_direct\npush p\ndispatch 1 1 1\n", none, error) && none.casters.file.empty() &&
+              rp::serialize(none).find("casters") == std::string::npos,
+          "manifest: a pack without casters has none and writes none");
+    rp::Manifest bad;
+    check(!rp::parse("bg3rtx_replay_pack 1\npass gi_hit_direct\npush p\ndispatch 1 1 1\ncasters c.bin 0 0 16\n", bad, error) &&
+              !rp::parse("bg3rtx_replay_pack 1\npass gi_hit_direct\npush p\ndispatch 1 1 1\ncasters c.bin 0 5 16\ncasters d.bin 0 5 16\n", bad, error),
+          "manifest: casters with 0 triangles or twice is rejected");
+    const uint64_t bytes = rp::caster_bytes(759945, 16);
+    check(bytes == 759945ull * 48 && rp::casters_valid(c.casters, 3, bytes) && !rp::casters_valid(c.casters, 2, bytes) &&
+              !rp::casters_valid(c.casters, 3, bytes - 4) && !rp::casters_valid({"c", 0, 1, 8}, 1, 24) && !rp::casters_valid({"c", 0, 1, 18}, 1, 54) &&
+              !rp::casters_valid({"", 0, 1, 16}, 1, 48),
+          "casters_valid: instance in the TLAS, file of tris x 3 x stride, stride >= 12 and a multiple of 4");
+    // The live layout (layer/bvhsplit.cpp): instance 2 is the cascade one, {0, stride, 0, 0}.
+    uint32_t inf[12] = {0, 64, 0, 2, 4096, 32 | rp::kInfoPool, 0, 4, 0, 16, 0, 0};
+    const uint64_t end = rp::caster_patch(inf, 3, {"c", 2, 10, 16}, 1000);
+    check(end == 1008 + 480 && inf[8] == 1008 && inf[9] == 16 && inf[10] == 0 && inf[11] == 10 && inf[0] == 0 && inf[3] == 2 && inf[7] == 4,
+          "caster_patch: the entry points past the soup (16-aligned) with its triangles; others untouched");
+    std::vector<rp::Span> soup_s, pool_s;
+    rp::instinfo_spans(inf, 3, soup_s, pool_s);
+    check(soup_s.size() == 2 && soup_s[1].offset == 1008 && soup_s[1].bytes == 480, "caster_patch: the patched entry names its span in the soup");
+    uint32_t again[12]; std::memcpy(again, inf, sizeof inf);
+    uint32_t wrong[12] = {0, 64, 0, 2, 4096, 32 | rp::kInfoPool, 0, 4, 0, 24, 0, 0};
+    uint32_t alpha[12] = {0, 64, 0, 2, 4096, 32 | rp::kInfoPool, 0, 4, 0, 16 | rp::kInfoAlpha, 0, 0};
+    check(rp::caster_patch(again, 3, {"c", 2, 10, 16}, 1000) == 0 && rp::caster_patch(wrong, 3, {"c", 2, 10, 16}, 1000) == 0 &&
+              rp::caster_patch(alpha, 3, {"c", 2, 10, 16}, 1000) == 0 && rp::caster_patch(inf, 2, {"c", 2, 10, 16}, 1000) == 0 &&
+              wrong[8] == 0 && wrong[11] == 0,
+          "caster_patch: refuses an entry with triangles, another stride, alpha, or past the TLAS");
+    uint32_t big[4] = {0, 16, 0, 0};
+    check(rp::caster_patch(big, 1, {"c", 0, 100, 16}, 0xFFFFF000ull) == 0 && big[3] == 0, "caster_patch: refuses a soup past 4 GB");
+    std::string dropped;
+    check(rp::contract_defines("RT_OMM_SCENE=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1;RT_CASCADE_MASKS=1", &dropped) == "RT_CASCADE_MASKS=1" &&
+              dropped == "RT_OMM_SCENE=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1" && rp::contract_defines("", &dropped).empty() &&
+              dropped.empty() && rp::contract_defines("RT_CASCADE_MASKS=1") == "RT_CASCADE_MASKS=1" && rp::contract_defines("RT_OMM_SCENE=1").empty(),
+          "contract_defines: RT_CASCADE_MASKS kept, bindings the contract lacks dropped and named");
+  }
+
   std::printf("%s: %d failure(s)\n", g_fail ? "FAIL" : "PASS", g_fail);
   return g_fail ? 1 : 0;
 }

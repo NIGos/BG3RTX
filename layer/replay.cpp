@@ -15,7 +15,11 @@
 //          smallest first, each image that still fits; "[replay] pack N textures: ..." lists what
 //          was kept per binding and the 10 largest);
 //          the samplers' states; the TLAS instance array of the scene ring region (bvhsplit.cpp)
-//          whose InstInfo set 1 binds;
+//          whose InstInfo set 1 binds; with rt_cascade_casters the cascade instance's triangles
+//          (casters.bin, the "casters" directive: the converted cascade soup its BLAS was built
+//          from, bvh_replay_region; its InstInfo has none), so the replay TLAS has the cut-away
+//          roofs ("[replay] pack N casters: ..."; left out with a note if the soup's ring slot moved on);
+//          the variant's defines the pass contract carries (rp::contract_defines: RT_CASCADE_MASKS);
 //   sets 2-3: the deferred lighting's inputs as the game bound them for the tiled lighting
 //          (add_lighting, rp::kLightingSources): G-buffer albedo/material, AO, sky irradiance and
 //          specular cubes, DFG LUT, local probe records and the cubes they name, the atmosphere
@@ -895,7 +899,11 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   rp::Manifest& m = p.m;
   m.version = rp::kVersion;
   m.pass = pass->name;
-  m.defines = d->defines ? d->defines : "";
+  {
+    std::string dropped;
+    m.defines = rp::contract_defines(d->defines ? d->defines : "", &dropped);
+    if (!dropped.empty()) m.notes.push_back(" live variant defines not in the pack contract (the replay compiles without them): " + dropped);
+  }
   m.frame = d->frame;
   m.groups[0] = d->groups[0]; m.groups[1] = d->groups[1]; m.groups[2] = d->groups[2];
   m.push = "push.bin";
@@ -974,6 +982,33 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   if (!add_buffer_bytes(p, {region.ring, region.instances_offset, VkDeviceSize(region.count) * 64}, false, 0,
                         VkDeviceSize(region.count) * 64, "instances.bin", 0, "the instance ring"))
     return fail(p.why);   // untagged: counted as "instances.bin"
+  // rt_cascade_casters: the cascade instance's triangles (its InstInfo has none; the BLAS was built from
+  // the converted cascade soup, layer/bvhsplit.cpp), so the replay's TLAS has the cut-away roofs. Only
+  // while the soup's ring slot still holds that frame's conversion (geo_cascade_soup: same buffer, draw
+  // list, triangles); else it is left out with a note (the replay then leaves the instance out, mask 0).
+  std::string casters_note;
+  if (region.casc_tris) {
+    CascadeSoup now{};
+    const int why = geo_cascade_soup(region.casc_frame, &now);
+    const uint64_t bytes = rp::caster_bytes(region.casc_tris, region.casc_stride);
+    if (why || now.xfb != region.casc_xfb || now.sig != region.casc_sig || now.tris != region.casc_tris || now.stride != region.casc_stride) {
+      casters_note = " casters: instance " + std::to_string(region.casc_instance) + " (" + std::to_string(region.casc_tris) +
+                     " triangles) left out: the cascade soup of frame " + std::to_string(region.casc_frame) + " was replaced (" + std::to_string(why) + ")";
+    } else {
+      const size_t before = p.copies.size();
+      if (!add_buffer_bytes(p, {region.casc_xfb, 0, VkDeviceSize(bytes)}, false, 0, VkDeviceSize(bytes), "casters.bin", 0, "the cascade soup"))
+        return fail(p.why);
+      uint64_t got = 0;
+      for (size_t k = before; k < p.copies.size(); ++k) got += p.copies[k].bytes;
+      if (got != bytes) return fail("the cascade soup copy is not whole words");
+      m.casters = {"casters.bin", region.casc_instance, region.casc_tris, region.casc_stride};
+      casters_note = " casters: instance " + std::to_string(region.casc_instance) + ", " + std::to_string(region.casc_tris) +
+                     " triangles of stride " + std::to_string(region.casc_stride) + ", " + mb(bytes) + " MB (soup of frame " +
+                     std::to_string(region.casc_frame) + ")";
+    }
+    m.notes.push_back(casters_note);
+    log("[replay] pack %s%s", label.c_str(), casters_note.c_str());
+  }
 
   // ---- geometry (b6, b8): whole when it fits the budget, else the InstInfo spans ----
   uint64_t fixed = 0;

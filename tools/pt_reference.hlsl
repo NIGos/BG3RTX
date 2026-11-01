@@ -14,7 +14,8 @@
 //     declared fallback PT_ALBEDO / PT_ROUGH / reflectance 0.5 (a pack without the VT cache).
 // Not modelled (reported by the harness): sky/environment radiance (a miss returns 0, its share is
 // the miss fraction), emission, projector/box lights, cloud shadows, the atmosphere LUT (PT_SUN_T
-// approximates the transmittance), roofs the camera cut away (absent from the TLAS; PT_ROOFS=1 below), transmission.
+// approximates the transmittance), roofs the camera cut away (absent from the TLAS without rt_cascade_casters:
+// PT_ROOFS=1 below; with them PT_CASTERS=1 above), transmission.
 // With a pack that carries the lighting inputs (common/replay_pack.h sets 2-3; frame_replay
 // --native-ambient sets these):
 //   PT_SUN_LUT=1  the sun's colour from the game's transmittance LUT (bg3_sun.hlsli bg3_sun_colour,
@@ -40,6 +41,25 @@
 //   7 (PT_ENV) environment at misses      first-vertex miss fraction   environment at first-vertex misses
 // PT_FURNACE_LE > 0 (CTest): every vertex also emits PT_FURNACE_LE; PT_LAMBERT=1 scatters with a
 // Lambertian of albedo PT_ALBEDO (common/transport_bsdf.h tb_sample) for the closed-form furnace.
+// PT_CASTERS=1 (frame_replay sets it for a pack with the "casters" directive, common/replay_pack.h): the
+// cut-away roofs as real triangles, the rt_cascade_casters instance (mask 0x02) the live writer captured.
+// Declared rules:
+//   shadow rays (sun and local lights, rt_visibility): trace 0xFF and take a cascade triangle beyond
+//     RT_CASCADE_TMIN / RT_CASCADE_TMIN_REL x |origin| (0.5 m / 2%, the live sun variant's rule: the shadow-LOD
+//     copy of the surface a ray leaves is not an occluder; RT_CASCADE_SUN in rt/rt_common.hlsli);
+//   path rays: the nearest cascade triangle beyond the same distance and before the scene hit is the hit
+//     (pt_caster_hit): a vertex with the fallback material (no material record), its normal from the
+//     triangle (the replay appends the casters to the soup, common/replay_pack.h caster_patch).
+// GI rays of the pack's own variant (RT_CASCADE_MASKS) keep tracing 0x01 elsewhere; only this shader adds them.
+#ifndef PT_CASTERS
+#define PT_CASTERS 0
+#endif
+#if PT_CASTERS
+#ifndef RT_CASCADE_MASKS
+#define RT_CASCADE_MASKS 1
+#endif
+#define RT_CASCADE_SUN 1
+#endif
 #define RT_HIT_MATERIAL 1
 #include "gi/gi_common.hlsli"
 #include "rt/rt_common.hlsli"
@@ -111,6 +131,44 @@ float pt_roof_plane(float3 o, float3 d, float tmax) {   // nearest upward roof-p
     if (all(abs(xz) <= h.xz + PT_ROOF_PAD_XZ)) best = tr;
   }
   return best;
+}
+#endif
+
+#if PT_CASTERS
+// The cascade instance's nearest triangle in (max(RT_CASCADE_TMIN, RT_CASCADE_TMIN_REL x |o|), tmax), as an
+// RtHit of rt_closest_hit's form; t < 0: none.
+RtHit pt_caster_hit(float3 o, float3 d, float tmax) {
+  RtHit h = (RtHit)0;
+  h.t = -1.0;
+  h.o2w = float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+  const float tmin = max(RT_CASCADE_TMIN, RT_CASCADE_TMIN_REL * length(o));
+  if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax) || !(tmax > tmin)) return h;
+  RayQuery<RT_SKIP_PROCEDURAL> q;
+  RayDesc r = (RayDesc)0;
+  r.Origin = o;
+#ifdef RT_SCENE_REBASE
+  r.Origin = rt_scene_ray_origin(o);
+#endif
+  r.Direction = d;
+  r.TMin = tmin;
+  r.TMax = tmax;
+  q.TraceRayInline(gScene, 0, 0x02, r);
+  while (q.Proceed())
+    if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && q.CandidateInstanceID() == kRtCascadeId) q.CommitNonOpaqueTriangleHit();
+  if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT) return h;
+  h.t = q.CommittedRayT();
+  h.geom = q.CommittedGeometryIndex();
+  h.prim = q.CommittedPrimitiveIndex();
+  h.inst = q.CommittedInstanceIndex();
+  h.o2w = q.CommittedObjectToWorld3x4();
+  h.bary = q.CommittedTriangleBarycentrics();
+#ifdef RT_SCENE_REBASE
+  const float3 delta = rt_scene_translation();
+  h.o2w[0][3] -= delta.x;
+  h.o2w[1][3] -= delta.y;
+  h.o2w[2][3] -= delta.z;
+#endif
+  return h;
 }
 #endif
 
@@ -203,6 +261,9 @@ PtPath pt_trace(uint2 fp, float3 P, float3 N, float4 org, float dist, float pa, 
   [loop] for (uint b = 1; b <= PT_BOUNCES; ++b) {
     RtHit hh = rt_closest_hit(o, dir, PT_TMAX, cone);
     if (hh.aborted) { if (b == 1) r.cls = 4; break; }
+#if PT_CASTERS
+    { const RtHit hc = pt_caster_hit(o, dir, hh.t >= 0.0 ? hh.t : PT_TMAX); if (hc.t >= 0.0) hh = hc; }   // a cut-away roof first
+#endif
 #if PT_ROOFS
     if (pt_roof_plane(o, dir, hh.t >= 0.0 ? hh.t : PT_TMAX) >= 0.0) { if (b == 1) r.cls = 4; break; }   // the cut-away roof
 #endif

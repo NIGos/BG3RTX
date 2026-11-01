@@ -549,6 +549,10 @@ int g_tlas_prev = -1;           // slot of the last TLAS build (the refit source
 uint64_t g_tlas_prev_rec = 0;   // its build record (refit only once submitted)
 uint32_t g_slot_n[kSceneSlots] = {};   // instances each slot's ring region holds (fault reports)
 uint64_t g_slot_frame[kSceneSlots] = {};
+// rt_cascade_casters: each slot's cascade instance and the soup its BLAS came from (replay pack,
+// bvh_replay_region). tris 0: the slot's build had none.
+struct SlotCascade { uint32_t instance = 0, tris = 0, stride = 0; VkBuffer xfb = VK_NULL_HANDLE; uint64_t frame = 0, sig = 0; };
+SlotCascade g_slot_casc[kSceneSlots];
 constexpr VkBuildAccelerationStructureFlagsKHR kTlasFlags =
     VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
 // The TLAS is refit while its instance list (count, BLAS and flags in order) holds:
@@ -1569,6 +1573,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // not opaque, so the sun's variant can ignore its hits near the ray origin (rt_common.hlsli
   // RT_CASCADE_TMIN). InstInfo: no vertices (tris 0), never read by those rays.
   bool casc_build = false, casc_refit = false;
+  SlotCascade slot_casc{};
   VkDeviceSize casc_scratch = 0;
   // rt_cascade_refit=1: the same draw list as the last build (cap.cascade_sig, same triangle
   // count) refits the BLAS instead of rebuilding it, up to rt_cascade_rebuild_frames refits.
@@ -1610,6 +1615,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
       in.accelerationStructureReference = g_casc_as.addr;
       const uint32_t inf[4] = {0, cap.cascade_stride & 0xffu, 0, 0};
+      slot_casc = {n, cap.cascade_tris, cap.cascade_stride, cap.cascade_xfb, cap.cascade_frame, cap.cascade_sig};
       std::memcpy(inst_out + n, &in, sizeof in);
       std::memcpy(info_out + n * 4, inf, sizeof inf);
       inst_ref.push_back(in.accelerationStructureReference);
@@ -1958,6 +1964,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   }
   g_slot_n[slot] = n;
   g_slot_frame[slot] = now;
+  g_slot_casc[slot] = slot_casc;
   ++g_st.builds;
   out->tlas = g_tlas[slot].as;
   out->instances = n;
@@ -2706,6 +2713,11 @@ bool bvh_replay_region(VkBuffer info, VkDeviceSize info_offset, BvhReplayRegion*
   out->count = n;
   out->info.resize(size_t(n) * 4);
   std::memcpy(out->info.data(), g_ring.map + info_offset, size_t(n) * 16);
+  const SlotCascade& c = g_slot_casc[slot];
+  if (c.tris && c.instance < n) {
+    out->casc_instance = c.instance; out->casc_tris = c.tris; out->casc_stride = c.stride;
+    out->casc_xfb = c.xfb; out->casc_frame = c.frame; out->casc_sig = c.sig;
+  }
   return true;
 }
 

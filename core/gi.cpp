@@ -2139,8 +2139,18 @@ bool ensure_hit_gi_em_layout(VkDescriptorSetLayout alpha, bool sun, bool sharc) 
 // replay_pack (diagnostics, tools/frame_replay.md "Live writer"): a positive serial asks the host for
 // one replay pack of the next base-variant gi_hit_direct dispatch (once per serial, across core
 // reloads); -1 takes one with every trace. Capture only: called after the dispatch is recorded.
+// The defines of the variant `p` runs (its request string after '?', "A=1;B=2"; "" for the base file): the
+// pack must compile what ran (RT_CASCADE_MASKS: GI rays trace 0x01, never the cascade instance).
+std::string pipe_defines(const Pipe& p){
+ if(!p.pipeline)return {};
+ for(int i=0;i<256;++i)if(p.variants[i]==p.pipeline){
+  const std::string& f=p.variant_files[i];const size_t q=f.find('?');
+  return q==std::string::npos?std::string():f.substr(q+1);
+ }
+ return {};
+}
 void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,uint32_t n,VkDescriptorSet set1,
-                         VkAccelerationStructureKHR tlas,const Push& hp,const char* variant){
+                         VkAccelerationStructureKHR tlas,const Push& hp,const char* variant,const std::string& defines){
  if(!host->replay_pack)return;
  const int key=host->cfg_int("replay_pack",0);
  if(key==0 || key<-1)return;
@@ -2154,7 +2164,7 @@ void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,
  }
  static const uint32_t outputs[2]={8u,13u};   // giRaw, giRawDepth (common/replay_pack.h kGiHitDirect)
  Bg3ReplayDispatch d{};
- d.serial=key>0?key:0;d.pass="gi_hit_direct";d.defines="";d.frame=hp.frame;
+ d.serial=key>0?key:0;d.pass="gi_hit_direct";d.defines=defines.c_str();d.frame=hp.frame;
  d.groups[0]=(g_hw+7)/8;d.groups[1]=(g_hh+7)/8;d.groups[2]=1;
  d.push=&hp;d.push_bytes=sizeof hp;d.set0=writes;d.set0_count=n;d.outputs=outputs;d.output_count=2;
  d.set1=set1;d.tlas=tlas;
@@ -2219,7 +2229,8 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
             em?"with":"without (no fresh D-EM build: needs rt_emissive=1)",sun!=VK_NULL_HANDLE,s.sharc);
  }
  // The pack contract is the base variant: an emission dispatch (extra set 2) is refused, not packed.
- replay_after_hit_gi(cmd,writes,write_count,material_alpha,b.tlas,hp,em?"emission":sun?"gi_hit_sun":s.sharc?"SHaRC":nullptr);
+ replay_after_hit_gi(cmd,writes,write_count,material_alpha,b.tlas,hp,em?"emission":sun?"gi_hit_sun":s.sharc?"SHaRC":nullptr,
+                     host->replay_pack && host->cfg_int("replay_pack",0)!=0?pipe_defines(p):std::string());
  return true;
 }
 

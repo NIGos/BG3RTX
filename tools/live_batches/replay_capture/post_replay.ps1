@@ -1,30 +1,42 @@
-# Post step of rc1-replay-s8-fg2 (the queue runs it in the test tree after the run, README "Gates"):
-#   powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/replay_capture/post_replay.ps1 -Log <kept log> [-DryRun]
-# 1. Finds the pack this run wrote (`[replay] pack 1 written: ... -> <dir>`); none: keeps everything.
+# Post step of rc1-replay-s8-fg2 and of the ambient jobs rc2 / rc3 (the queue runs it in the test tree after the
+# run, README "Gates" and ambient/README.md):
+#   powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/replay_capture/post_replay.ps1 -Log <kept log> [-Scene <name>] [-DryRun]
+# 1. Finds the pack this run wrote (`[replay] pack <serial> written: ... -> <dir>`); none: keeps everything.
 # 2. Replays it offline (bin\frame_replay.exe --pack <dir>, output <dir>\replay).
 # 3. The offline gate: the replay's `hit material (1 frames)` line has qualified > 0 and sampling
 #    (reason 6: a lookup into an image the writer omitted, bound NaN) at most the live rate, the
 #    ceiling of the live 120-frame lines' sampling per frame (0 at S8 on 2026-11-01).
 #    Then (informational) frame_replay --native-ambient into the same folder: its deciding lines.
-# 4. Gate passed: deletes the older captures\replay-* packs of this tree (only the newest pack is
-#    kept; nothing useless accumulates). Gate failed or no replay: deletes nothing, says why.
+# 4. Gate passed: deletes the older captures\replay-* packs of this tree of the same scene (only the newest
+#    pack per scene is kept; nothing useless accumulates). Gate failed or no replay: deletes nothing, says why.
+# -Scene <name> (the ambient jobs): the pack is tagged (scene.txt = name), the gate is the native ambient
+#    comparison instead of the hit material (the replay ran, its casters went into the TLAS when the pack has
+#    them, and `native vs PT far field` was printed), tools/ambient_table.py prints the scene's row, and only
+#    older packs tagged with the same name are deleted. Without -Scene only untagged older packs are.
 # Deletion is never recursive: each file of the pack and of its one `replay` output folder is
 # removed, then the empty folders with [IO.Directory]::Delete(path, $false). A folder with a
 # reparse point (junction, symlink) or any other subfolder is left alone and reported.
 # -Exe / -ReplayOut: for the offline check of this script (defaults: the tree's bin\frame_replay.exe,
 # <pack>\replay). -DryRun: says what it would delete, deletes nothing.
-param([Parameter(Mandatory)][string]$Log, [switch]$DryRun, [string]$Exe = '', [string]$ReplayOut = '')
+param([Parameter(Mandatory)][string]$Log, [switch]$DryRun, [string]$Exe = '', [string]$ReplayOut = '', [string]$Scene = '')
 $ErrorActionPreference = 'Stop'
 $tree = (Get-Location).Path
 $captures = Join-Path $tree 'captures'
 if (-not (Test-Path -LiteralPath $Log)) { Write-Host "post-replay: no log ($Log); packs kept"; exit 2 }
 $text = Get-Content -LiteralPath $Log
-$written = @($text | Select-String -Pattern '\[replay\] pack 1 written: ([0-9.]+) MB .* -> (.+)$' | Select-Object -Last 1)
+$written = @($text | Select-String -Pattern '\[replay\] pack \S+ written: ([0-9.]+) MB .* -> (.+)$' | Select-Object -Last 1)
 if (-not $written.Count) { Write-Host 'post-replay: no pack written in this run; older packs kept'; exit 2 }
 $pack = $written[0].Matches[0].Groups[2].Value.Trim()
 if (-not (Test-Path -LiteralPath (Join-Path $pack 'manifest.txt'))) { Write-Host "post-replay: $pack has no manifest; older packs kept"; exit 2 }
 $pack = (Resolve-Path -LiteralPath $pack).Path
-Write-Host ("post-replay: new pack {0} ({1} MB)" -f $pack, $written[0].Matches[0].Groups[1].Value)
+Write-Host ("post-replay: new pack {0} ({1} MB){2}" -f $pack, $written[0].Matches[0].Groups[1].Value, $(if ($Scene) { ", scene $Scene" } else { '' }))
+if ($Scene -and $Scene -notmatch '^[\w-]+$') { Write-Host "post-replay: scene name '$Scene' is not a word; packs kept"; exit 2 }
+if ($Scene) { Set-Content -LiteralPath (Join-Path $pack 'scene.txt') $Scene }
+function Get-PackScene([string]$dir) {
+  $f = Join-Path $dir 'scene.txt'
+  if (Test-Path -LiteralPath $f) { return ((Get-Content -LiteralPath $f -Raw) -as [string]).Trim() }
+  ''
+}
 
 # Live reference: the 120-frame hit material lines of this run (sampling = the 6th reason).
 $liveRate = 0.0
@@ -44,9 +56,10 @@ New-Item -ItemType Directory -Force $out | Out-Null
 $replay | Set-Content -LiteralPath (Join-Path $out 'replay.txt')
 $hm = @($replay | Select-String -Pattern 'hit material \(1 frames\): attempted (\d+) qualified (\d+) unsupported \d+; reasons [^ ]+ (\d+)/(\d+)/(\d+)/(\d+)/(\d+)/(\d+)/' | Select-Object -First 1)
 $vs = @($replay | Select-String -Pattern 'vs live giRaw: .*' | Select-Object -First 1)
-if ($code -ne 0 -or -not $hm.Count) { Write-Host "post-replay: replay failed (exit $code, see replay.txt); older packs kept"; exit 1 }
-$g = $hm[0].Matches[0].Groups
-$attempted = [int64]$g[1].Value; $qualified = [int64]$g[2].Value; $sampling = [int64]$g[8].Value
+# -Scene: the hit material line is reported, not required (a pack whose GI rays hit nothing has none).
+if ($code -ne 0 -or (-not $Scene -and -not $hm.Count)) { Write-Host "post-replay: replay failed (exit $code, see replay.txt); older packs kept"; exit 1 }
+$attempted = 0; $qualified = 0; $sampling = 0
+if ($hm.Count) { $g = $hm[0].Matches[0].Groups; $attempted = [int64]$g[1].Value; $qualified = [int64]$g[2].Value; $sampling = [int64]$g[8].Value }
 Write-Host ("post-replay: replay hit material attempted {0} qualified {1} sampling {2} (limit {3}: live {4:N2}/frame over {5} lines); {6}" -f
   $attempted, $qualified, $sampling, $limit, $liveRate, $live.Count, $(if ($vs.Count) { $vs[0].Line.Trim() } else { 'no live reference' }))
 # Informational (not part of the gate): the native ambient vs the PT far field (tools/frame_replay.md
@@ -60,7 +73,21 @@ $na | Set-Content -LiteralPath (Join-Path $out 'native_ambient.txt')
 $naLines = @($na | Select-String -Pattern '^\s*(native ambient means|PT far field|native vs PT far field|per tile \(16 x 9|sun transmittance)')
 if ($naLines.Count) { foreach ($l in $naLines) { Write-Host ('post-replay: ' + $l.Line.Trim()) } }
 else { Write-Host ('post-replay: native ambient not compared: ' + $(if ($na.Count) { $na[-1].Trim() } else { 'no output' }) + ' (native_ambient.txt)') }
-if (-not ($qualified -gt 0 -and $sampling -le $limit)) { Write-Host 'post-replay: offline gate FAILED; older packs kept'; exit 1 }
+if ($Scene) {
+  # The ambient jobs' gate: the comparison exists, with the casters in the TLAS when the pack has them.
+  $hasCasters = [bool](Select-String -LiteralPath (Join-Path $pack 'manifest.txt') -Pattern '^casters ' -Quiet)
+  $inTlas = [bool](@($replay | Select-String -Pattern 'casters: instance \d+, \d+ triangles .* in the TLAS').Count)
+  $compared = [bool](@($naLines | Where-Object { $_.Line -match 'native vs PT far field' }).Count)
+  $py = Get-Command py -ErrorAction SilentlyContinue
+  $table = Join-Path $tree 'tools\ambient_table.py'
+  if ($compared -and $py -and (Test-Path -LiteralPath $table)) {
+    $keep = $ErrorActionPreference
+    try { $ErrorActionPreference = 'Continue'; & $py.Source -3 $table --scene $Scene $pack 2>&1 | ForEach-Object { Write-Host ('post-replay: ' + "$_") } }
+    finally { $ErrorActionPreference = $keep }
+  }
+  Write-Host ("post-replay: ambient gate: casters {0}, native ambient compared {1}" -f $(if (-not $hasCasters) { 'not in the pack' } elseif ($inTlas) { 'in the TLAS' } else { 'NOT in the TLAS' }), $compared)
+  if (-not ($compared -and (-not $hasCasters -or $inTlas))) { Write-Host 'post-replay: offline gate FAILED; older packs kept'; exit 1 }
+} elseif (-not ($qualified -gt 0 -and $sampling -le $limit)) { Write-Host 'post-replay: offline gate FAILED; older packs kept'; exit 1 }
 
 # Gate passed: remove the older packs, never recursively.
 function Remove-Pack([string]$dir) {
@@ -81,6 +108,7 @@ function Remove-Pack([string]$dir) {
 $freed = 0.0; $removed = 0
 foreach ($d in @(Get-ChildItem -LiteralPath $captures -Directory -Force | Where-Object { $_.Name -match '^replay-\d{8}-\d{6}-[\w-]+$' })) {
   if ($d.FullName -eq $pack) { continue }
+  if ((Get-PackScene $d.FullName) -ne $Scene) { continue }   # another scene's newest pack (untagged = '')
   $mb = (@(Get-ChildItem -LiteralPath $d.FullName -File -Force) + @(Get-ChildItem -LiteralPath (Join-Path $d.FullName 'replay') -File -Force -ErrorAction SilentlyContinue) |
          Measure-Object Length -Sum).Sum / 1MB
   $why = Remove-Pack $d.FullName
@@ -88,5 +116,5 @@ foreach ($d in @(Get-ChildItem -LiteralPath $captures -Directory -Force | Where-
   $freed += $mb; $removed++
   Write-Host ("post-replay: {0} {1} ({2:N0} MB)" -f $(if ($DryRun) { 'would delete' } else { 'deleted' }), $d.Name, $mb)
 }
-Write-Host ("post-replay: offline gate passed; {0} older pack(s) {1}, {2:N0} MB; newest kept: {3}" -f $removed, $(if ($DryRun) { 'to delete' } else { 'deleted' }), $freed, (Split-Path $pack -Leaf))
+Write-Host ("post-replay: offline gate passed; {0} older pack(s) of scene '{4}' {1}, {2:N0} MB; newest kept: {3}" -f $removed, $(if ($DryRun) { 'to delete' } else { 'deleted' }), $freed, (Split-Path $pack -Leaf), $Scene)
 exit 0

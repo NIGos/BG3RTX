@@ -11,7 +11,7 @@ the probes, the sky cubes, the DFG LUT and the sun set, which `--native-ambient`
 
 ```
 frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V]... [--repeat N] [--no-validation]
-frame_replay --synthesize <dir> [--dark]
+frame_replay --synthesize <dir> [--dark] [--box] [--lighting] [--casters]
 frame_replay --self-test <dir>          (CTest frame_replay_test)
 frame_replay --load-test                (manual: the 2 GB S8 hit cache shape through the staged upload)
 frame_replay --pack <dir> --native-ambient [--pt-iters N] [--out <dir>]   (default out <pack>/native-ambient)
@@ -24,6 +24,15 @@ frame_replay --pack <dir> --native-ambient [--pt-iters N] [--out <dir>]   (defau
   opaque soup or mesh pool, opaque unless kInfoAlpha), as layer/bvhsplit.cpp does, then the TLAS from
   the pack's instance array in its order (InstanceIndex = InstInfo index). Legacy soup, hair AABB and
   empty instances are kept with mask 0 and counted in a note.
+- rt_cascade_casters (`casters FILE INSTANCE TRIS STRIDE` in the manifest, 2026-11-01): the cascade instance's
+  triangles (the cut-away roofs and off-screen walls; its live InstInfo is `{0, stride, 0, 0}`) are appended to
+  the soup b6 at the next 16-byte boundary past its captured range and its InstInfo entry points there
+  (`rp::caster_patch`); its BLAS is built not opaque and the instance keeps the live mask 0x02, custom index
+  0xFFFFFF and transform. Note: `casters: instance <i>, <n> triangles of stride <s> in the TLAS ...`.
+  `--no-casters` leaves it out (mask 0, the older behaviour) for an A/B. GI rays of the pack's variant
+  (`RT_CASCADE_MASKS=1`, recorded in `defines` since this change) trace 0x01, as live, so the replay of the pass
+  is unchanged by them; packs before it have `defines -` and no casters and replay as before (S8 142819-1:
+  bit-equal 99.5738%, the same counters, 2026-11-01).
 - Every descriptor of the pass contract (common/replay_pack.h `kGiHitDirect`) is bound: pack data,
   else a zero dummy (listed as "not in the pack"). An image the writer `omitted` is bound NaN, so a
   material lookup that needs it fails as "sampling" (reason 6) instead of shading with garbage.
@@ -75,6 +84,14 @@ frame_replay --pt-self-test <dir>                                               
   through a padded volume (3 m around, `PT_ROOF_SUN_UP` 50 m up: the production rule) are occluded; path rays that
   cross a volume's roof plane (`PT_ROOF_PLANE_UP` 3 m above the trigger top) end there with no radiance, and first
   rays that do so are reported in the `aborted` fraction (0 without PT_ROOFS on a pack without aborts).
+- Cut-away roofs as triangles (`PT_CASTERS=1`, set by `--pt-reference` / `--native-ambient` for a pack with the
+  `casters` directive unless `--no-casters` or a `PT_CASTERS` / `PT_ROOFS` define is given): shadow rays (sun and
+  local lights) trace 0xFF and take a cascade triangle beyond `RT_CASCADE_TMIN` / `RT_CASCADE_TMIN_REL` x |origin|
+  (0.5 m / 2%: the live sun variant's rule, the shadow-LOD copy of the surface a ray leaves is no occluder); path
+  rays take the nearest cascade triangle beyond the same distance and before the scene hit (`pt_caster_hit`) as a
+  vertex with the fallback material and the triangle's normal. The near rule lets paths leaving a wall within
+  0.5 m of a roof pass it (-0.6% in the test box). The parameters line says `PT_CASTERS=1 (the pack's cascade
+  casters: <n> triangles)`.
 - gi_far offline: `--define RT_GI_FAR=1 --define GI_FAR_M=6` runs the pass with the far rule (the pack's push holds
   the base pass's radius; GI_FAR_M stands in for gi_far_m).
 - gi_hit_sun / gi_far with the sun tier: `--hlsl shaders/gi/gi_trace_rt_hit_sun.hlsl --sun-trust <file>`. The sun
@@ -82,14 +99,17 @@ frame_replay --pt-self-test <dir>                                               
   `py -3 tools/pt_roofs.py --pack <dir> --level <name> --trust <file>` writes it (padded as core/sun_trust.cpp:
   3 m around, 50 m up), the replay binds it at set 3 b8 and sets Push::ls_flags bit 25. Without it every far
   qualified hit takes the old rule (roof volumes unknown). The console then prints `GI hit sun` and `GI far` with
-  the live log's wording. A casters-on pack does not help: the caster instance has no geometry in the pack.
+  the live log's wording. A pack with the `casters` directive needs no trust file for the roofs' geometry: its
+  sun ray (RT_CASCADE_SUN_HIT) sees the cascade instance as live (the trust volumes still gate the replace).
 - Cost kernels (`pt cost` lines): 1 spp with 1 and 2 vertices, rays up to 300 m and 8 m, median of 9
   dispatches, scaled per Mpx to the DLSS 4K render resolutions.
 - CTest `pt_reference_test`: a closed box (synthetic pack) where every vertex emits 1: Lambert rho 0.5 with
   1 and 3 vertices gives exactly 1 and 1.75; rho 0.8 with Russian roulette gives 5 within 4 standard errors;
   the FresnelBlend white furnace with 4 vertices stays in (2.5, 4] (no energy gain); closure (miss 0); the
   slab pack's native material row qualifies and its light lights the PT, the dark pack gives exactly 0;
-  two runs bit-identical; no validation errors.
+  two runs bit-identical; the casters box (its floor only in a cascade instance, moved 1 m by its transform):
+  PT_CASTERS closes it (B=1: exactly 1, miss 0; B=3 with the near rule off: 1.75), without it the pack's
+  RT_CASCADE_MASKS rays see the floor open (mean = 1 - miss); no validation errors.
 
 ## Native ambient: `--native-ambient` (tools/native_ambient.hlsl)
 
@@ -118,6 +138,12 @@ the PT reference over the same GI pixels, on a pack that has the lighting inputs
   - `native vs PT far field: E_native x AO / (k x PT far) <r>, E_native x AO / (k x PT far + PT env) <r>, ...`
     (above 1: the native term is brighter than the traced far field; below 1: darker)
   - `per tile (16 x 9, ...): E_native x AO / (k x PT far + PT env) p10 <> median <> p90 <>, ...`
+  - `PT split (compared pixels, % of PT total): far field on screen beyond gi_rt_radius <f>% (visible <v>, hidden <h>),
+    off screen <o>%, live domain <l>%; sun <s>%, local point/spot <q>%` (pt_report's definitions over these pixels)
+- Per-scene table: `py -3 tools/ambient_table.py <pack> [<pack> ...]` (or `--scene NAME <pack>`) prints one markdown row
+  per pack from its `native_ambient_report.txt`: E x AO, k x PT far, env, the ratio, the tiles p10 / median / p90, the
+  far-field share (on screen + off screen), sun / local, k and the roof model (casters / volumes / none). CTest
+  `ambient_table_test`.
   - `sun transmittance: game LUT <rgb> (...), Kasten-Young estimate <rgb>; cloud shadow mean <c>`
 - Per-pixel terms for offline comparisons (PFM, bottom-up rows): `native_E.pfm` (E_native), `native_lit.pfm` (as
   lit), `native_ao.pfm` (game AO), `pt_total_rgb.pfm` / `pt_live_rgb.pfm` / `pt_env_rgb.pfm` (PT units), and
@@ -125,7 +151,8 @@ the PT reference over the same GI pixels, on a pack that has the lighting inputs
 - Limits: k absorbs the fallback albedo where the pack has no VT cache (one global k, region numbers
   are rough until the VT-cache pack); the native AO is the game's SSAO before the RT AO fold.
 - Cost: one native dispatch per mode (3) plus the PT run (S8 2026-11-01: 11.6 s GPU for 32 x 7).
-- Not run on a real pack yet: no pack with lighting inputs exists (needs one live capture, READY_FOR_LIVE).
+- Run on S8 (142819-1, docs/PT_FEASIBILITY_OFFLINE.md); camp and inn packs with the casters: the live batch
+  tools/live_batches/replay_capture/ambient (READY_FOR_LIVE).
 
 ## Lighting inputs (sets 2-3 of the pack, common/replay_pack.h `kLightingSources`)
 
@@ -164,7 +191,9 @@ buffer slices at their real offsets, so record offsets stay valid), `image` (VkF
 an optional last field names the game format of an image stored decoded),
 `omitted`, `sampler`, `instances` (VkAccelerationStructureInstanceKHR as read at submit, the BLAS
 address kept only as a key), `output` (+ the live result). The geometry is not duplicated: it is the
-soup / pool slices the InstInfo entries name.
+soup / pool slices the InstInfo entries name, plus `casters` (rt_cascade_casters: `casters.bin`, the converted
+cascade soup, 52 MB at camp and 84 MB at the inn on 2026-10-31 logs). `defines` holds the live variant's
+defines the contract carries (`rp::contract_defines`: RT_CASCADE_MASKS); a note names the others it left out.
 
 ## Synthetic pack and CTest `frame_replay_test`
 
@@ -281,7 +310,14 @@ leaves `Bg3HostApi::replay_pack` null and the core does nothing. Capture only, n
      gHitCache: what the alpha test and the hit material can index) with all mips of its view (both
      sample with a computed LOD, so any mip can be read), each VkImage once; the samplers (b4/b5
      immutable, b15 as written);
-   - the TLAS instance array of the scene ring region whose InstInfo set 1 binds (rt_replay_region).
+   - the TLAS instance array of the scene ring region whose InstInfo set 1 binds (rt_replay_region);
+   - rt_cascade_casters: the cascade instance's triangles, from the converted cascade soup its BLAS was built
+     from (bvhsplit.cpp records the instance, buffer, triangles, stride, draw list and soup frame per ring slot)
+     while `geo_cascade_soup` of that frame still returns the same buffer and draw list, as `casters.bin`
+     (shader copy). Log and note `[replay] pack N casters: instance <i>, <n> triangles of stride <s>, <MB> MB
+     (soup of frame <f>)`, or `... left out: the cascade soup of frame <f> was replaced (<why>)`.
+   The core passes the running variant's defines (core/gi.cpp `pipe_defines`); the pack keeps those of
+   `rp::contract_defines` (RT_CASCADE_MASKS) and notes the rest.
    Buffers without TRANSFER_SRC are copied by `shaders/replay_copy.hlsl`. Images without TRANSFER_SRC
    (most game textures, the VT caches, the layer's dummies), or whose view swizzles, are read by
    `shaders/replay_image.hlsl` through a new SAMPLED-only 2D-array view of the game view's format and

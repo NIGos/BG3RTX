@@ -950,6 +950,7 @@ void attach_cascade(RtCapture& cap, const float* cam, uint64_t now) {
   cap.cascade_tris = soup.tris;
   cap.cascade_stride = soup.stride;
   cap.cascade_sig = soup.sig;
+  cap.cascade_frame = from;
 }
 }  // namespace
 
@@ -1037,6 +1038,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   capx.cascade_xfb = VK_NULL_HANDLE;
   capx.cascade_tris = 0;
   capx.cascade_sig = 0;
+  capx.cascade_frame = 0;
   {
     const uint64_t now = frame_index();
     if (source_camera_valid) {

@@ -26,6 +26,13 @@
 //                                           (= InstInfo order); accelerationStructureReference is an
 //                                           opaque BLAS key, the geometry comes from InstInfo
 //   output S B FORMAT W H [FILE]            a storage image the pass writes; FILE: the live result
+//   casters FILE INSTANCE TRIS STRIDE       rt_cascade_casters: the cascade-only soup (cut-away roofs,
+//                                           off-screen walls) of TLAS instance INSTANCE, TRIS non-indexed
+//                                           triangles of STRIDE bytes (position first), in the soup's own
+//                                           camera-relative space (the instance's transform moves it into
+//                                           this frame's). Its InstInfo says tris 0 (live shaders never read
+//                                           its vertices): the replay builds its BLAS from FILE and appends
+//                                           FILE to the soup (b6) at caster_patch's base for the PT.
 //   note TEXT                               free text (scene, build, keys)
 // The geometry is NOT duplicated: each TLAS instance's InstInfo (set 1 b7: base, meta, rec, tris)
 // names its non-indexed triangle list in the opaque soup (b6, camera-relative) or the mesh pool
@@ -311,6 +318,7 @@ struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::
 struct Omitted { uint32_t set, binding, element; };
 struct Sampler { uint32_t set, binding, element, mag, min, mip, au, av, aw; float aniso, max_lod; };
 struct Output { uint32_t set, binding, format, w, h; std::string reference; };
+struct Casters { std::string file; uint32_t instance = 0, tris = 0, stride = 0; };   // file empty: none
 struct Manifest {
   int version = 0;
   std::string pass, defines, push, instances;
@@ -322,8 +330,59 @@ struct Manifest {
   std::vector<Omitted> omitted;
   std::vector<Sampler> samplers;
   std::vector<Output> outputs;
+  Casters casters;
   std::vector<std::string> notes;
 };
+
+// The variant defines a pack records (the live request's "A=1;B=2", core/gi.cpp pipe_defines): only those
+// the pass contract carries the bindings for. RT_CASCADE_MASKS (rt_cascade_casters: GI rays trace 0x01, so
+// they never meet the cascade instance) changes no binding. The others (OMM scene, native hair / scalp,
+// tile set, instanced rows) bind more than the contract holds: left out, as every pack before the casters,
+// and returned in `dropped` for the pack's note.
+inline std::string contract_defines(const std::string& live, std::string* dropped = nullptr) {
+  static const char* const kKept[] = {"RT_CASCADE_MASKS"};
+  std::string out;
+  if (dropped) dropped->clear();
+  for (size_t a = 0; a < live.size();) {
+    size_t e = live.find(';', a);
+    if (e == std::string::npos) e = live.size();
+    const std::string d = live.substr(a, e - a), name = d.substr(0, d.find('='));
+    bool keep = false;
+    for (const char* k : kKept) keep |= name == k;
+    if (!d.empty()) {
+      std::string& to = keep ? out : (dropped ? *dropped : out);
+      if (keep || dropped) to += (to.empty() ? "" : ";") + d;
+    }
+    a = e + 1;
+  }
+  return out;
+}
+
+// ---- rt_cascade_casters in the pack (the "casters" directive) ----
+// The caster instance's bytes: TRIS x 3 vertices of STRIDE (layer/bvhsplit.cpp builds its BLAS from them).
+inline uint64_t caster_bytes(uint32_t tris, uint32_t stride) { return uint64_t(tris) * 3 * stride; }
+// A usable casters directive: an instance of the TLAS, triangles, a stride with the position (12 B) that
+// the shaders' InstInfo stride field (meta & 255) can hold, and the file of exactly that size.
+inline bool casters_valid(const Casters& c, uint32_t instance_count, uint64_t file_bytes) {
+  return !c.file.empty() && c.instance < instance_count && c.tris && c.stride >= 12 && c.stride <= 255 && c.stride % 4 == 0 &&
+         file_bytes == caster_bytes(c.tris, c.stride);
+}
+// The replay's InstInfo for the caster instance (frame_replay): the live entry is {0, stride, 0, 0} (no
+// vertices, never read live). The replay appends the casters to the soup (b6) at the first multiple of 16
+// at or past `soup_bytes` (the soup buffer as the pack binds it) and points the entry there, so rt_hit_normal
+// and native_hit_position see real triangles (kInfoPool and kInfoAlpha stay clear: solid, no material
+// record). Returns the soup size with the casters appended; 0 (info untouched) when the entry is not
+// {*, stride, 0, 0} of this stride or the result passes 4 GB (a 32-bit InstInfo base).
+inline uint64_t caster_patch(uint32_t* info, uint32_t count, const Casters& c, uint64_t soup_bytes) {
+  if (c.instance >= count || !c.tris) return 0;
+  uint32_t* e = info + size_t(c.instance) * 4;
+  if ((e[1] & 255u) != c.stride || (e[1] & (kInfoPool | kInfoLegacy | kInfoAlpha | kInfoHair)) || e[2] || e[3]) return 0;
+  const uint64_t base = (soup_bytes + 15) & ~uint64_t(15), end = base + caster_bytes(c.tris, c.stride);
+  if (end > 0xFFFFFFFFull) return 0;
+  e[0] = uint32_t(base);
+  e[3] = c.tris;
+  return end;
+}
 
 // What a pack carries of the lighting inputs (sets 2-3; older packs: none): the native ambient
 // replica needs the irradiance cube and the DFG LUT, the PT's sky the specular cube, its LUT sun
@@ -386,6 +445,7 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
       Sampler s{}; ok = bool(t >> s.set >> s.binding >> s.element >> s.mag >> s.min >> s.mip >> s.au >> s.av >> s.aw >> s.aniso >> s.max_lod);
       m.samplers.push_back(s);
     } else if (k == "output") { Output o{}; ok = bool(t >> o.set >> o.binding >> o.format >> o.w >> o.h); t >> o.reference; m.outputs.push_back(o); }
+    else if (k == "casters") ok = m.casters.file.empty() && bool(t >> m.casters.file >> m.casters.instance >> m.casters.tris >> m.casters.stride) && m.casters.tris;
     else if (k == "note") { std::string rest; std::getline(t, rest); m.notes.push_back(rest); }
     else ok = false;
     if (!ok) { error = "manifest line " + std::to_string(number) + ": " + line; return false; }
@@ -422,6 +482,8 @@ inline std::string serialize(const Manifest& m) {
     o << "sampler " << s.set << " " << s.binding << " " << s.element << " " << s.mag << " " << s.min << " " << s.mip << " " << s.au << " "
       << s.av << " " << s.aw << " " << s.aniso << " " << s.max_lod << "\n";
   if (!m.instances.empty()) o << "instances " << m.instances << " " << m.instance_count << "\n";
+  if (!m.casters.file.empty())
+    o << "casters " << m.casters.file << " " << m.casters.instance << " " << m.casters.tris << " " << m.casters.stride << "\n";
   for (const auto& x : m.outputs)
     o << "output " << x.set << " " << x.binding << " " << x.format << " " << x.w << " " << x.h << (x.reference.empty() ? "" : " " + x.reference) << "\n";
   return o.str();
