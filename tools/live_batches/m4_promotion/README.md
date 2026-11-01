@@ -17,8 +17,8 @@ Startup (every job): `preset=ultra` plus the bundle as the branch's Ultra sets i
 |---|---|---|---|
 | `m4p1-camp-fg2` | Campsite - 27h | 137 s, 7 PNG | S3 outdoor: gi_hit_sun gate (expect: `GI hit sun` traced lit > 0), foliage |
 | `m4p2-inn-fg2` | The Blushing Mermaid - 96h 39m | 137 s, 7 PNG | interior, many local lights; no M4 key measured here yet |
-| `m4p3-s6-fg2` | Adamantine Forge | 209 s, 9 PNG | emitters: `rt_hit_emission` OFF/ON/OFF (expect: rf tier b emissive > 0); rf bias 1.09 |
-| `m4p4-s8-fg2` | Water Queens House | 157 s, 7 PNG | reflections: tier (b) 24% shaded; rf bias 0.93 |
+| `m4p3-s6-fg2` | Adamantine Forge | 306 s, 10 PNG | emitters: `rt_hit_emission` OFF/ON/OFF (expect: rf tier b emissive > 0); rf bias 1.09 |
+| `m4p4-s8-fg2` | Water Queens House | 254 s, 8 PNG | reflections: tier (b) 24% shaded; rf bias 0.93 |
 
 Phases: `warmup-on` 10 s (compiles every variant), `diag-on` 20 s (bundle ON, stats), `cost-off-a` 20 + `shot-off-a`,
 cumulative step PNGs `shot-step-gi` (+gi_hit_direct), `shot-step-sun` (+gi_hit_sun), `shot-step-rf` (+rf_hit_shade),
@@ -27,6 +27,13 @@ cumulative step PNGs `shot-step-gi` (+gi_hit_direct), `shot-step-sun` (+gi_hit_s
 of the AO rays at hits; every other phase sets `hit_ao_rays=2`); with a core that has it, diag-on also logs
 `rf hit shade boxes` (L_b's projector part). S6 adds `cost-em-off-a` / `shot-em-off-a` before `cost-on` and `cost-em-off-b` /
 `shot-em-off-b` after it (bundle ON with `rt_hit_emission=0`, capture on). Shots: 6 s, trace at 4 s.
+S6 and S8 also measure `rf_hit_gi` (docs/TRACK_D_REFLECTIONS.md 14 "Indirect diffuse at hits"; needs a core with it,
+every other phase sets `rf_hit_gi=0 ls_box=0`): `warmup-gi` 6 s after warmup-on (compiles the RF_HIT_GI variant and
+the ls_box=2 pass), then after diag-on `diag-gi1` 25 s (bundle ON + `rf_hit_gi=1`), `diag-gi2` 20 s (`rf_hit_gi=2`:
+the tier (a) check from the screen's own GI) and `diag-gi1-box2` 20 s (`rf_hit_gi=1 ls_box=2`), each with `rf_stats=1`
+only; after cost-ao0 `cost-gi1` 20 + `shot-gi1` (bundle ON + `rf_hit_gi=1`; prediction in predicted.json). Deciding:
+the `rf hit gi` ratio L_b / L_a of each diag-gi window against the user's gate (tier (a) bias within the game's own
+spread); expected S8 0.925 -> 1.0-1.03, S6 1.089 -> 1.15-1.25 (S6's excess is in the direct term).
 
 Validity: the expect lines (stride-64 XFB, `[geo] RT capture ... of a 1024 MB buffer`, cascade `of 427 MB`, D-EM
 capture available, `[hit material instanced] ... key 1`, `hit material`, `GI hit direct`, `GI hit sun`, `rf hit
@@ -49,10 +56,10 @@ The script finds the latest log of each job in `captures\queue\logs`, times the 
 - Capacity during the plan: alpha made opaque, opaque dropped, cascade buffer full, all 0 at 1024/427.
 Merge `m4-promotion` with merge-green only if all four runs are valid and the energy and capacity gates pass.
 
-Duration: plans 600 s, with 4 loads about 18 min (dry-run estimate). Disk: 30 PNG traces, about 40 MB each
+Duration: plans 834 s, with 4 loads about 22 min (dry-run estimate; the dry run allows 23 min). Disk: 32 PNG traces, about 40 MB each
 measured (the estimate uses 60) plus logs: 1.2-1.8 GB; delete the trace folders after the script has run.
 Start, results and rollback: as in ../lean_regression/README.md with this folder, prefix `m4p` and receipt
 `m4-promotion.json`.
 
 Offline check: `powershell -File tools\live_batches\m4_promotion\dryrun.ps1 [-Out <scratch dir>]`. Last result
-2026-11-01: all checks passed (Windows PowerShell 5).
+2026-11-01 (with the rf_hit_gi windows): all checks passed (Windows PowerShell 5), 21.9 min, 1960 MB.

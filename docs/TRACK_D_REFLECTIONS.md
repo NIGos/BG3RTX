@@ -487,6 +487,48 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     (30% of S6's light evaluations; the box AO fix alone moved 1.48 -> 1.09; the new boxes line measures their
     share), the lights' specular lobe toward the reflection ray (hd_scatter returns diffuse + specular), and the
     GI bounce working the other way (L_a has it). The AO estimator is not the cause (0.804 vs 0.794).
+- **Indirect diffuse at hits: `rf_hit_gi` (2026-11-01; offline, READY_FOR_LIVE, off).** The S8 diffuse gap
+  (L_b 0.101 vs L_a 0.115) is the GI composite's bounce: the screen's diffuse is ambient x b6 (b6 = the traced
+  visibility, `gi_ao_apply`) + history.rgb x diffuse colour x gi_strength (`gi_composite`); the hit had only the
+  first. Key `rf_hit_gi=0` (live; needs `rf_hit_shade=1`; GUI Experimental "Indirect light in hidden-surface
+  reflections", `exp_rf_hit_gi`). Variant define `RF_HIT_GI=1` on the four hit-shade files
+  (`common/shader_variant.h` kRfHitGi, own Pipes `g_rf_shade_gi`); key off, every existing request byte-identical.
+  - Composition: `common/hit_gi_compose.h` `hg_compose` (direct, sun, ambient x A, specular x SO(A), + bounce x
+    diffuse colour x gi_strength; strength 0 when the GI composite does not run). The AO-fold rule is the
+    screen's: A replaces SSAO for diffuse and specular (gi_ao=1; with gi_ao < 1 the screen mixes SSAO, a hit has none).
+  - Sources. `rf_hit_gi=1`: the screen's estimator at every hit. The `hit_ao_rays` rays (same rays and weights
+    as `native_hit_ao`, so A is unchanged) also apply the GI trace's bounce rule (gi_rt_fallback 0): a ray hit the
+    screen shows adds `prev_bounce_at` x w; with SHaRC a hidden ray hit found in the cache adds its radiance x w.
+    `rf_hit_gi=2`: as 1, but the tier (a) check takes the screen's own b6 and GI history at its pixel (exact
+    screen terms: the check then measures only the material and lighting replication).
+  - Not reproduced (lower bound, darker never brighter): the GI's own hidden-hit shading (gi_hit_direct /
+    gi_hit_sun / gi_far) and SHaRC's radius split; 2 rays per hit instead of the screen's temporal history (noisier).
+  - Box lights (the S6 question). With `ls_box` 0/1 the screen keeps the game's box term for boxes without a
+    shadow map (unshadowed) and the game's atlas (ls_box=0) or a ray to the box exit (ls_box=1) for shadow-mapped
+    ones; the hit traces shadow-mapped boxes to the box exit and leaves the others unshadowed: the same rule,
+    except atlas vs ray at ls_box=0. With `ls_box=2` the screen also traces the unshadowed boxes (to the end of
+    their light-side fade-in) and ends shadow-mapped ones at the shadow view's near plane; the hit did not.
+    `RF_HIT_GI` applies that rule at hits when the screen's box pass ran in mode 2 (Push::ls_flags bits 26 and 27,
+    `native_hit_direct.hlsli` NATIVE_HIT_BOX_LS2). The intensity is the same math (`common/box_light.h`, checked
+    against the game's loop by `box_light_test`); left: the cookie at mip 0 (same mean) and the hit's outgoing
+    direction (the reflection ray, more grazing: its specular lobe differs from the camera's by design).
+  - Log (`rf_stats=1`, device-local counters 419-426, set 6 b0): `rf hit gi (300 frames, N tier a hits, N of them
+    from the screen's GI): tier a GI term X vs the screen's GI term there X; ratio L_b / L_a X (without the GI term
+    X); tier b shaded GI term X; AO-ray hits N, screen source N (P%), cache source N (P%)`.
+  - Unit test `hit_gi_compose_test` (CTest): a hit identical to a screen pixel (mode 2) composes exactly the
+    transcribed screen chain (gi_ao_apply, the lighting's b6 rules, gi_composite) for 16800 random cases over every
+    m0.x / m0.y / gi_ao / ao_direct combination; the per-ray weight is gi_trace_rt's; Monte Carlo under a ceiling
+    matches the closed form. Shaders: `rf_hit_shade_shader_test` (key-off byte identity, every RF_HIT_GI request
+    compiles, validates and matches the contract with `--gi`).
+  - Expected (tier (a), the user's gate): S8 L_b / L_a 0.925 -> about 1.0-1.03 with mode 2 (the +0.014 diffuse
+    gap closes; +0.004 specular stays), 0.98-1.03 with mode 1 (the estimator misses the GI's hidden-hit shading).
+    S6 1.089 -> about 1.15-1.25: the GI term adds to a hit whose direct is already too bright (L_b direct + ambient
+    0.073 vs L_a diffuse 0.059, which itself includes the bounce): S6's excess is in the direct term, not the GI.
+    `diag-gi1-box2` (ls_box=2) gives its box part (`rf hit shade boxes`) with the screen's mode-2 visibility.
+  - Cost (not measured): per AO ray one projection, two loads and the depth test (S8 ~234k, S6 ~70k rays/frame):
+    expected +0.02 to 0.1 ms on `rf: reflection pass`; with ls_box=2 the unshadowed boxes' rays (S8 up to ~0.7M
+    short rays/frame) up to +0.3 ms. Live: m4_promotion m4p3/m4p4 `diag-gi1`, `diag-gi2`, `diag-gi1-box2`,
+    `cost-gi1`, `shot-gi1`.
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.

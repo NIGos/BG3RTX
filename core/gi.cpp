@@ -290,6 +290,31 @@ Pipe g_hit_gi_em[4], g_rf_shade_em[2];
 VkPipelineLayout g_hit_gi_em_layout[4] = {}, g_rf_shade_em_layout[2] = {};
 VkDescriptorSetLayout g_hit_em_dsl = VK_NULL_HANDLE;
 bool g_hit_em_logged = false;
+// rf_hit_gi (docs/TRACK_D_REFLECTIONS.md 14 "Indirect diffuse at hits"): the rf_hit_shade passes compiled
+// with RF_HIT_GI=1 (common/shader_variant.h kRfHitGi), index [2 x emission + sharc]; layout: rf_hit_shade's
+// sets 0-3, set 4 SHaRC's or empty, set 5 the emissive scene or empty, set 6 the device-local counters
+// (ensure_rg; common/native_hit_rf_bindings.h kSetRfGi). Dropped with the rf_hit_shade / emission layouts.
+Pipe g_rf_shade_gi[4];
+VkPipelineLayout g_rf_shade_gi_layout[4] = {};
+constexpr uint32_t kRfGiCount = 8;   // rt_reflections.hlsl kRgN
+constexpr VkDeviceSize kRfGiBytes = VkDeviceSize(kRfGiCount) * 64 * 4;
+VkBuffer g_rg_buf = VK_NULL_HANDLE;
+VkDeviceMemory g_rg_mem = VK_NULL_HANDLE;
+VkDescriptorSetLayout g_rg_dsl = VK_NULL_HANDLE;
+VkDescriptorPool g_rg_pool = VK_NULL_HANDLE;
+VkDescriptorSet g_rg_set = VK_NULL_HANDLE;
+bool g_rg_ran = false;   // this frame's D-RF ran an RF_HIT_GI variant (its counters are copied after the pass)
+int g_rg_logged = -1;   // the logged (mode, built) state: mode x 2 + built, -1 none
+void rf_gi_drop() {
+  for (Pipe& p : g_rf_shade_gi) {
+    for (VkPipeline v : p.variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
+    p = Pipe{};
+  }
+  for (VkPipelineLayout& l : g_rf_shade_gi_layout) {
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)l);
+    l = VK_NULL_HANDLE;
+  }
+}
 bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
@@ -644,6 +669,7 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
       host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
       *l = VK_NULL_HANDLE;
     }
+    rf_gi_drop();
     host->log("rf: the lighting's set 1 layout changed (%p -> %p); rebuilding", (void*)g_rf_game_layout, (void*)game);
   }
   if (!make_layout(kRfBindings, &g_rf_set_layout, &g_rf_layout, host_layout, game)) {
@@ -789,6 +815,67 @@ bool ensure_bx() {
   return true;
 }
 
+// rf_hit_gi's counters (rt_reflections.hlsl RF_HIT_GI rfGiStats, set 6 b0): device-local like the box
+// statistics, their own layout and one descriptor set; zeroed before the D-RF pass, copied into rtStats
+// kRfGiFirst after its end timestamp (run_post).
+bool ensure_rg() {
+  if (g_rg_set) return true;
+  const VkDeviceFuncs& vk = *host->vk;
+  const auto* d = static_cast<const Bg3DeviceInfo*>(host->persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)));
+  if (!d || d->version < 1) return false;
+  if (!g_rg_buf) {
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size = kRfGiBytes;
+    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (vk.CreateBuffer(host->device, &bci, nullptr, &g_rg_buf) != VK_SUCCESS) return g_rg_buf = VK_NULL_HANDLE, false;
+    VkMemoryRequirements req;
+    vk.GetBufferMemoryRequirements(host->device, g_rg_buf, &req);
+    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = UINT32_MAX;
+    for (uint32_t i = 0; i < d->memory.memoryTypeCount && mai.memoryTypeIndex == UINT32_MAX; ++i)
+      if ((req.memoryTypeBits & (1u << i)) && (d->memory.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        mai.memoryTypeIndex = i;
+    if (mai.memoryTypeIndex == UINT32_MAX || vk.AllocateMemory(host->device, &mai, nullptr, &g_rg_mem) != VK_SUCCESS ||
+        vk.BindBufferMemory(host->device, g_rg_buf, g_rg_mem, 0) != VK_SUCCESS) {
+      vk.DestroyBuffer(host->device, g_rg_buf, nullptr);
+      if (g_rg_mem) vk.FreeMemory(host->device, g_rg_mem, nullptr);
+      g_rg_buf = VK_NULL_HANDLE, g_rg_mem = VK_NULL_HANDLE;
+      return false;
+    }
+  }
+  if (!g_rg_dsl) {
+    const auto& rb = bg3::native_hit_rf::rf_gi_stats;
+    VkDescriptorSetLayoutBinding b{rb.binding, rb.type, rb.count, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    sci.bindingCount = 1;
+    sci.pBindings = &b;
+    if (vk.CreateDescriptorSetLayout(host->device, &sci, nullptr, &g_rg_dsl) != VK_SUCCESS) return g_rg_dsl = VK_NULL_HANDLE, false;
+  }
+  if (!g_rg_pool) {
+    VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
+    VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    pci.maxSets = 1;
+    pci.poolSizeCount = 1;
+    pci.pPoolSizes = &ps;
+    if (vk.CreateDescriptorPool(host->device, &pci, nullptr, &g_rg_pool) != VK_SUCCESS) return g_rg_pool = VK_NULL_HANDLE, false;
+  }
+  VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+  ai.descriptorPool = g_rg_pool;
+  ai.descriptorSetCount = 1;
+  ai.pSetLayouts = &g_rg_dsl;
+  if (vk.AllocateDescriptorSets(host->device, &ai, &g_rg_set) != VK_SUCCESS) return g_rg_set = VK_NULL_HANDLE, false;
+  VkDescriptorBufferInfo bi{g_rg_buf, 0, kRfGiBytes};
+  VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+  w.dstSet = g_rg_set;
+  w.dstBinding = bg3::native_hit_rf::rf_gi_stats.binding;
+  w.descriptorCount = 1;
+  w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  w.pBufferInfo = &bi;
+  vk.UpdateDescriptorSets(host->device, 1, &w, 0, nullptr);
+  return true;
+}
+
 // ls_box: D-LS's push set 0, the host's set 1, the sun set 2, the game's layout of the
 // lighting's set 1 as set 3, and the device-local box statistics as set 4 (ensure_bx). A
 // different game layout rebuilds the box pipelines.
@@ -872,6 +959,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
       host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
   const bool sun_current = &p == &g_rt_shadow_current;
+  // rf_hit_gi: its own Pipes (like the current-caster sun), not a slot.
+  const bool rf_gi = &p >= g_rf_shade_gi && &p < g_rf_shade_gi + 4;
   const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   const bool physical_origin=scalp && g_hair_origin_frame && bg3::hair_origin::alternate_entry(file);
@@ -883,7 +972,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
   const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
-                                                 (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u));
+                                                 (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u) |
+                                                 (rf_gi ? unsigned(sv::kRfHitGi) : 0u));
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];
@@ -1118,6 +1208,13 @@ static_assert(kLsBoxXFirst == 385, "rt_local_shadows.hlsl box counters copied to
 // RGBA16F maximum (stored as 65504). On the "GI hit direct" line (frame_replay prints the same).
 constexpr uint32_t kGiHitNfFirst = kLsBoxXFirst + kLsBoxXCount, kGiHitNfCount = 2;
 static_assert(kGiHitNfFirst == 417, "gi_trace_rt.hlsl kGiHitNfFirst 417");
+// [419..426] rf_hit_gi (rt_reflections.hlsl RF_HIT_GI, rf_stats=1): counted in a device-local buffer (set 6
+// b0, ensure_rg), reduced per 8x8 group, copied into this range after the D-RF end timestamp. Tier (a)
+// checks, their GI term, the screen's GI term at the same pixels, checks shaded from the screen's GI
+// (rf_hit_gi=2), the GI term of shaded tier (b) hits (x 8192), AO-ray hits, with a screen / cache source.
+// Logged with the rf hit shade window as "rf hit gi".
+constexpr uint32_t kRfGiFirst = kGiHitNfFirst + kGiHitNfCount;
+static_assert(kRfGiFirst == 419, "rt_reflections.hlsl rf_hit_gi counters copied to rtStats 419..426");
 // rtStats counter map (64 bins x uint each; a new range starts at the previous kStatsCounters and moves it):
 //   0..15 core RT/GI (pixels, primary check, hybrid GI tiers)  16..38 D-LS      39..47 rt_shadow materials
 //   48..63 D-RF                 64..75 RT audit fixes          80..111 alpha candidates   112..117 ls_check
@@ -1127,7 +1224,8 @@ static_assert(kGiHitNfFirst == 417, "gi_trace_rt.hlsl kGiHitNfFirst 417");
 //   287..288 tileset            289..311 rf hit shade          312..319 hit policy / AO     320..330 GI hit sun, rf sun roof
 //   331..349 hit emission       350..355 ls exact-k            356..371 instanced clip      372..382 gi_far
 //   383..384 rf box part        385..416 ls box (device-local) 417..418 GI hit non-finite
-constexpr uint32_t kStatsCounters = kGiHitNfFirst + kGiHitNfCount;
+//   419..426 rf hit gi (device-local)
+constexpr uint32_t kStatsCounters = kRfGiFirst + kRfGiCount;
 static_assert(kStatsCounters <= 512, "frame_replay reserves 512 stats counters");
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
@@ -1152,6 +1250,7 @@ CameraMotionWindow g_epoch_motion;
 struct RfHitWindow {
   uint64_t sum[kRfHitCount] = {};
   uint64_t box[kRfBoxCount] = {};
+  uint64_t gi[kRfGiCount] = {};   // rf_hit_gi (kRfGiFirst; zero without the RF_HIT_GI variant)
   double d_sum = 0, d_sq = 0;
   uint32_t d_frames = 0, frames = 0;
 } g_rfh;
@@ -1163,6 +1262,8 @@ void rf_hit_fold(const uint32_t* c) {
   for (uint32_t i = 0; i < kRfHitCount; ++i) g_rfh.sum[i] += f[i];
   for (uint32_t i = 0; i < kRfBoxCount; ++i)
     for (int b = 0; b < 64; ++b) g_rfh.box[i] += c[(kRfBoxFirst + i) * 64 + b];
+  for (uint32_t i = 0; i < kRfGiCount; ++i)
+    for (int b = 0; b < 64; ++b) g_rfh.gi[i] += c[(kRfGiFirst + i) * 64 + b];
   if (f[6]) {   // checked tier (a) hits this frame
     const double d = (double(f[8]) - double(f[9])) / kRfHitScale / double(f[6]);
     g_rfh.d_sum += d;
@@ -1201,6 +1302,19 @@ void rf_hit_fold(const uint32_t* c) {
               "lights %.5f of %.5f",
               g_rfh.frames, g_rfh.box[0] * q / ck, t[8] * q / ck, t[1] ? g_rfh.box[1] * q / double(t[1]) : 0.0,
               t[1] ? t[5] * q / double(t[1]) : 0.0);
+    // rf_hit_gi: the hit's indirect diffuse (the GI composite's term) at tier (a) checks against the
+    // screen's own at the same pixels, L_b / L_a with and without it, and the estimator's AO-ray sources.
+    const uint64_t* g = g_rfh.gi;
+    if (g[0] || g[4] || g[5]) {
+      const double gk = g[0] ? double(g[0]) : 1.0;
+      host->log("rf hit gi (%u frames, %llu tier a hits, %llu of them from the screen's GI): tier a GI term %.5f vs the "
+                "screen's GI term there %.5f; ratio L_b / L_a %.3f (without the GI term %.3f); tier b shaded GI term %.5f; "
+                "AO-ray hits %llu, screen source %llu (%.1f%%), cache source %llu (%.1f%%)",
+                g_rfh.frames, (unsigned long long)g[0], (unsigned long long)g[3], g[1] * q / gk, g[2] * q / gk,
+                t[9] ? double(t[8]) / double(t[9]) : 0.0, t[9] ? (double(t[8]) - double(g[1])) / double(t[9]) : 0.0,
+                t[1] ? g[4] * q / double(t[1]) : 0.0, (unsigned long long)g[5], (unsigned long long)g[6],
+                g[5] ? 100.0 * g[6] / double(g[5]) : 0.0, (unsigned long long)g[7], g[5] ? 100.0 * g[7] / double(g[5]) : 0.0);
+    }
   }
   g_rfh = RfHitWindow{};
 }
@@ -1938,6 +2052,7 @@ void hit_em_drop() {
     *l = VK_NULL_HANDLE;
   }
   g_hit_em_dsl = VK_NULL_HANDLE;
+  rf_gi_drop();   // its emission layouts hold g_hit_em_dsl (the others are rebuilt on demand)
 }
 
 // The host's emissive scene to bind in `cmd` when rt_hit_emission is on (needs rt_emissive=1): the latest
@@ -2008,6 +2123,25 @@ bool ensure_rf_hit_em_layout(bool sharc) {
   return make_em_layout(sets, 6, out);
 }
 
+// rf_hit_gi: rf_hit_shade's sets 0-3, set 4 SHaRC's (or empty), set 5 the emissive scene (or empty), set 6
+// the device-local counters.
+bool ensure_rf_hit_gi_layout(bool sharc, bool em) {
+  namespace rfh = bg3::native_hit_rf;
+  static_assert(rfh::kSetRfGi == 6);
+  VkPipelineLayout& out = g_rf_shade_gi_layout[(em ? 2 : 0) + (sharc ? 1 : 0)];
+  if (out) return true;
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if ((em && !g_hit_em_dsl) || !ensure_rg() || !ensure_rf_hit_layout(sharc) || !ensure_empty_dsl() || !host->rt_alpha ||
+      !host->rt_alpha(&host_layout, &unused) || !host_layout)
+    return false;
+  VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : g_empty_dsl;
+  if (!sh) return false;
+  VkDescriptorSetLayout sets[7] = {g_rf_set_layout, host_layout, g_rf_game_layout, g_sun_dsl, sh, em ? g_hit_em_dsl : g_empty_dsl,
+                                   g_rg_dsl};
+  return make_em_layout(sets, 7, out);
+}
+
 // rf_hit_shade (M4.2 tier b): the D-RF dispatch with the material AlphaDSL (rt_hit_material_use)
 // as set 1 and the sun set as set 3. False before anything is dispatched: the caller then runs the
 // ordinary D-RF, so a missing input keeps today's reflections exactly.
@@ -2027,9 +2161,33 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
               refresh(g_rf_shade_em[ei], sharc ? "gi/rt_reflections_sharc_hit_shade_em.hlsl" : "gi/rt_reflections_hit_shade_em.hlsl",
                       g_rf_shade_em_layout[ei])))
     em = VK_NULL_HANDLE;
-  const VkPipelineLayout layout = em ? g_rf_shade_em_layout[ei] : sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
-  Pipe& p = em ? g_rf_shade_em[ei] : sharc ? g_rf_shade_sharc : g_rf_shade;
-  if (!em && !refresh(p, sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl", layout)) return false;
+  VkPipelineLayout layout = em ? g_rf_shade_em_layout[ei] : sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
+  Pipe* pp = em ? &g_rf_shade_em[ei] : sharc ? &g_rf_shade_sharc : &g_rf_shade;
+  // rf_hit_gi (1 the estimator at every hit, 2 the tier (a) check from the screen's GI): the RF_HIT_GI twin
+  // with the counter set 6; a twin that cannot be built leaves the variant above (logged once).
+  const uint32_t gi_mode = uint32_t((std::min)((std::max)(host->cfg_int("rf_hit_gi", 0), 0), 2));
+  g_rg_ran = false;
+  if (gi_mode) {
+    const unsigned gk = (em ? 2u : 0u) + ei;
+    const char* gf = em ? (sharc ? "gi/rt_reflections_sharc_hit_shade_em.hlsl" : "gi/rt_reflections_hit_shade_em.hlsl")
+                        : (sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl");
+    g_rg_ran = ensure_rf_hit_gi_layout(sharc, em != VK_NULL_HANDLE) && refresh(g_rf_shade_gi[gk], gf, g_rf_shade_gi_layout[gk]);
+    if (g_rg_ran) {
+      layout = g_rf_shade_gi_layout[gk];
+      pp = &g_rf_shade_gi[gk];
+    }
+    if (g_rg_logged != int(gi_mode * 2 + (g_rg_ran ? 1 : 0))) {
+      g_rg_logged = int(gi_mode * 2 + (g_rg_ran ? 1 : 0));
+      host->log("rf hit gi: mode %u %s (sharc %d, emission %d)", gi_mode,
+                g_rg_ran ? "active" : "UNAVAILABLE, rf_hit_shade without it", sharc, em != VK_NULL_HANDLE);
+    }
+  } else if (g_rg_logged > 0) {
+    g_rg_logged = 0;
+    host->log("rf hit gi: off");
+  }
+  Pipe& p = *pp;
+  if (!em && !g_rg_ran && !refresh(p, sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl", layout))
+    return false;
   auto traversal = prepare_omm_traversal(cmd, b, p.pipeline);
   if (!traversal.valid()) return false;
   VkDescriptorSet material_alpha = b.alpha;
@@ -2044,6 +2202,7 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
   if (sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
   if (em) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, bg3::native_hit_rf::kSetEmissive, 1, &em, 0, nullptr);
+  if (g_rg_ran) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, bg3::native_hit_rf::kSetRfGi, 1, &g_rg_set, 0, nullptr);
   // The hit light policy reads the per-light data from the sun set's b7 (ls_flags bit 0) when that
   // set holds the image and a join has run.
   Push hp = pc;
@@ -2054,6 +2213,12 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
   // Bit 25: the sun set's b8 holds this frame's trust slot (roof volumes; native_hit_sun.hlsli).
   hp.ls_flags |= g_sunt_ok && g_sunt.view ? (1u << 25) : 0u;
   if (em) hit_em_prepare(cmd, hp);
+  if (g_rg_ran) {
+    // Push::rf_so (no other D-RF reader since rf_so was removed) carries the mode; the GI composite's
+    // bounce exists only when it runs this frame (strength 0 otherwise: no indirect diffuse at hits).
+    hp.rf_so = gi_mode;
+    if (!s.gi) hp.strength = 0.0f;
+  }
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof hp, &hp);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
   if (!g_hit_em_logged && host->cfg_int("rt_hit_emission", 0) > 0) {
@@ -2889,6 +3054,15 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     // The reprojection samples the MVs in SHADER_READ_ONLY (as the GI traces do).
     bool mv_move = rp.has_mv && g_mv_image && g_mv_layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     if (mv_move) image_layout(cmd, g_mv_image, g_mv_layout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, kAll, kCS);
+    // rf_hit_gi's device-local counters: zeroed before the timed region (rf_stats only).
+    const bool rg_stats = rp.rf_stats && host->cfg_int("rf_hit_gi", 0) && host->cfg_int("rf_hit_shade", 0) && g_stats_buf &&
+                          ensure_rg();
+    if (rg_stats) {
+      memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT);
+      host->vk->CmdFillBuffer(cmd, g_rg_buf, 0, kRfGiBytes, 0);
+      memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
+    }
+    g_rg_ran = false;
     rf_timestamp(cmd, 0);
     // rf_hit_shade (M4.2): tier (b) hits shaded with their native material and lighting. It
     // needs the startup material provider and the sun set (D-LS's of this frame, else a fresh
@@ -2905,6 +3079,12 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
     reflection_applied = hit_shade || rf_dispatch(cmd, rb, s, rp);
     rf_timestamp(cmd, 1);
+    if (rg_stats && hit_shade && g_rg_ran) {   // after the end timestamp: outside the timed region
+      memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
+      const VkBufferCopy cp{0, VkDeviceSize(g_stats_slot) * kStatsSlot + VkDeviceSize(kRfGiFirst) * 64 * 4, kRfGiBytes};
+      host->vk->CmdCopyBuffer(cmd, g_rg_buf, g_stats_buf, 1, &cp);
+      memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kAll | VK_PIPELINE_STAGE_HOST_BIT);
+    }
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
     if (host->set_spec_hit_distance)
@@ -3149,6 +3329,15 @@ void gi_release() {
     *l = VK_NULL_HANDLE;
   }
   g_rf_hit_logged = g_rf_hit_contract_logged = false;
+  rf_gi_drop();
+  g_rg_logged = -1;
+  g_rg_ran = false;
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, (uint64_t)g_rg_pool);   // frees g_rg_set
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rg_dsl);
+  host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_rg_buf);
+  host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_rg_mem);
+  g_rg_pool = VK_NULL_HANDLE, g_rg_dsl = VK_NULL_HANDLE, g_rg_buf = VK_NULL_HANDLE, g_rg_mem = VK_NULL_HANDLE;
+  g_rg_set = VK_NULL_HANDLE;
   hit_em_drop();
   g_hit_em_logged = false;
   g_hem = HitEmWindow{};

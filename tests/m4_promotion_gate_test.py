@@ -226,6 +226,13 @@ def main():
     check("report returns no failure for the synthetic run (within, capacity 0)", failed == [])
     nb = {(e["a"], e["on"]): e for e in g.energy(run, None, pool="run")}[("shot-off-a", "shot-on")]
     check("no exposure probe lines: d on the raw change, marked", nb["exposure"] is None and nb["d"] == nb["raw_d"])
+    # rf_hit_gi: the core's "rf hit gi" line (core/gi.cpp rf_hit_fold, its printf format) parses.
+    gi_line = ("rf hit gi (300 frames, 51234 tier a hits, 0 of them from the screen's GI): tier a GI term 0.01234 vs the "
+               "screen's GI term there 0.01456; ratio L_b / L_a 1.012 (without the GI term 0.917); tier b shaded GI term 0.00987; "
+               "AO-ray hits 1200, screen source 800 (66.7%), cache source 0 (0.0%)")
+    m = g.DIAG["rf hit gi"].search(gi_line)
+    check("rf hit gi line parsed (ratio 1.012, without 0.917, screen source 66.7%)",
+          m is not None and m.group(5) == "1.012" and m.group(6) == "0.917" and m.group(10) == "66.7")
     exposure_case()
     print("all checks passed" if not fails else f"{fails} check(s) failed")
     return 1 if fails else 0

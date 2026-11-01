@@ -82,7 +82,8 @@ def main():
         old_list = requests(base / "shaders")
         new_list = requests(ROOT / "shaders")
         missing = [r for r in old_list if r not in new_list]
-        feature = [r for r in new_list if r.partition("?")[0] in FEATURE]
+        # rf_hit_gi (RF_HIT_GI=1) requests of every hit-shade file, emission twins included, are new feature requests.
+        feature = [r for r in new_list if r.partition("?")[0] in FEATURE or "RF_HIT_GI=1" in r.partition("?")[2]]
         unexpected = [r for r in new_list if r not in old_list and r not in feature]
         (tmp / "old").mkdir()
         (tmp / "new").mkdir()
@@ -109,7 +110,7 @@ def main():
                 d = r.partition("?")[2]
                 flags = (["--sharc"] if "sharc" in r.partition("?")[0] else []) + \
                         (["--tileset"] if "RT_NATIVE_TILESET=1" in d else []) + \
-                        (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else []) +                         (["--cascade"] if "RT_CASCADE_MASKS=1" in d else [])
+                        (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else []) +                         (["--cascade"] if "RT_CASCADE_MASKS=1" in d else []) +                         (["--em"] if r.partition("?")[0].endswith("_em.hlsl") else []) +                         (["--gi"] if "RF_HIT_GI=1" in d else [])
                 c = subprocess.run([str(checker), *flags, *map(str, paths)], capture_output=True, text=True)
                 if c.returncode:
                     return r, "contract: " + c.stdout + c.stderr

@@ -20,6 +20,10 @@ inline constexpr uint32_t set_count(bool sharc){return sharc?5u:4u;}
 // (hit_emission_bindings.h) as set 5, after SHaRC's set 4 (an empty set 4 without SHaRC;
 // core/gi.cpp ensure_rf_hit_em_layout).
 inline constexpr uint32_t kSetEmissive=5;
+// rf_hit_gi (gi/rt_reflections*_hit_shade*.hlsl?RF_HIT_GI=1): its device-local counters as set 6 b0 (core/gi.cpp
+// ensure_rg; empty sets 4 / 5 where the variant has no SHaRC / emission; ensure_rf_hit_gi_layout).
+inline constexpr uint32_t kSetRfGi=6;
+inline constexpr Binding rf_gi_stats{0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1};
 // D-RF's push set: core/gi.cpp kRfBindings (0-30, binding_type()) + rtOrigin 40. With the
 // physical Hair origin, 12 (gAO) leaves and 50 joins (native_hair_origin.h binding_enabled).
 inline constexpr std::array<Binding,33> push={{

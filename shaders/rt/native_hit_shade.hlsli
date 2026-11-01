@@ -42,6 +42,10 @@ struct NativeHitShade {float3 radiance,direct,sun,ambient,native,ambient_d,ambie
 #ifdef NATIVE_HIT_BOX_TERM
  float3 box;   // the projector (box) part of direct, after its AO-on-direct factor (bias breakdown only)
 #endif
+#ifdef NATIVE_HIT_GI
+ float3 gi;     // the indirect diffuse the screen's GI composite adds (bounce x diffuse colour x gi_strength)
+ float3 dcol;   // the hit's diffuse colour (for the screen's GI term at the same pixel, rt_reflections.hlsl)
+#endif
 };
 
 #include "native_hit_sun.hlsli"
@@ -127,12 +131,94 @@ float native_hit_spec_occlusion(float A,float nov_raw,float a){
  return saturate(pow(max(abs(nov_raw+A),9.9999997e-05),exp2(-16.0*a-1.0))-1.0+A);
 }
 
+#ifdef NATIVE_HIT_GI
+#include "../../common/hit_gi_compose.h"
+// rf_hit_gi (docs/TRACK_D_REFLECTIONS.md 14 "Indirect diffuse at hits"): the hit gets the screen's
+// indirect diffuse. The screen's diffuse at a point is the game's ambient x b6 (b6 = the hybrid GI's
+// traced visibility, gi_ao_apply.hlsl) + the GI bounce x the diffuse colour (gi_composite.hlsl); the
+// hit had only the first. Composition: common/hit_gi_compose.h (CPU test hit_gi_compose_test).
+// Sources of A and the bounce:
+//  - g_hg_use_screen (the tier (a) check with rf_hit_gi=2, a hit the camera sees at its pixel): the
+//    screen's own b6 there and its GI history (gather_history), set by the caller: exactly the screen's
+//    terms, so the check isolates the material / lighting replication;
+//  - else the screen's estimator at the hit (native_hit_ao_gi): the AO rays (hit_ao_rays, gi_rt_radius,
+//    cosine about the geometric normal) also take the GI trace's bounce rule (gi_trace_rt.hlsl with
+//    gi_rt_fallback 0): a ray hit the screen shows (depth_same_surface x gi_rt_depth_k) adds last frame's
+//    diffuse radiance there (prev_bounce_at) x the ray's weight; with SHaRC (SHARC_QUERY_PASS) a hidden /
+//    off-screen ray hit the cache knows adds the cache's radiance; any other hit only occludes.
+// Not reproduced: the GI's own hidden-hit shading (gi_hit_direct / gi_hit_sun, gi_far) and the screen's
+// SHaRC radius split; both only add, so the hit's bounce is a lower bound of the screen's there.
+static bool g_hg_use_screen=false;
+static float4 g_hg_screen=0;   // rgb the GI history at the pixel, a its b6 (the folded AO the lighting read)
+static uint g_hg_hits=0,g_hg_screen_src=0,g_hg_cache_src=0;   // AO-ray hits, of them with a screen / cache source
+
+// Ray hit point ph: on screen and the same surface there (gi_trace_rt.hlsl's test, gi_rt_depth_k)?
+// L: last frame's diffuse radiance at that pixel.
+bool native_hit_gi_screen(float3x3 inv,float3 ph,out bool onscreen,out float3 L){
+ L=0;float2 quv;float qd;
+ onscreen=project(inv,ph,quv,qd) && all(quv>=0.0) && all(quv<=1.0);
+ if(!onscreen)return false;
+ const int2 qp=min(int2(quv*float2(pc.full)),int2(pc.full)-1);
+ const float sd=gDepth.Load(int3(qp,0));
+ const float4 oq=rt_origin_at(uint2(qp));
+ const bool has_tlas=pc.rt_origin!=0u && oq.w<kOriginNoHit;
+ const float3 ngq=pc.rt_origin!=0u?oq.xyz:depth_geo_normal(qp,ray_at((float2(qp)+0.5)/float2(pc.full))*sd);
+ if(!(sd>0.0 && depth_same_surface(qp,qd,sd,ngq,has_tlas,oq.w,pc.gi_rt_tol)))return false;
+ L=prev_bounce_at(qp);
+ return all(isfinite(L));
+}
+
+// native_hit_ao's estimator (same rays, same random stream, same weights: A is the same) plus the
+// GI's bounce along those rays: mean L x w over the rays.
+float native_hit_ao_gi(float3 position,float3 geometric_normal,float footprint,uint3 key,out float3 bounce){
+ bounce=0;
+ const uint rays=min(pc.rt_ao_rays,8u);
+ if(rays==0u)return 1.0;
+ const float3 n=normalize(geometric_normal);
+ const float R=max(pc.gi_rt_radius,0.01);
+ const float3 o=rt_offset_ray(position,n);
+ RtCone cone={footprint,0};
+ uint seed=pcg3d(key^uint3(0x510e527fu,0x9b05688cu,0x1f83d9abu)).x;
+ const float3x3 inv=frustum_inverse();
+ float occ=0;
+ [loop]for(uint i=0;i<rays;++i){
+  float3 dir=cosine_hemisphere(n,rand01(seed),rand01(seed));
+  RtHit h=rt_closest_hit(o,dir,R,cone);
+  const float w=hg_ray_weight(h.t,h.aborted,R);
+  occ+=w;
+  if(h.aborted || h.t<0.0)continue;   // unknown or miss: no radiance (the GI's rule)
+  ++g_hg_hits;
+  const float3 ph=o+dir*h.t;
+  bool onscreen;float3 L;
+  if(native_hit_gi_screen(inv,ph,onscreen,L)){bounce+=L*w;++g_hg_screen_src;continue;}
+#if SHARC_QUERY_PASS
+  if((shc.flags&(onscreen?1u:2u))!=0u){
+   float3 Lc;bool near;SharcCell cell;
+   if(sharc_ray_hit(h,ph,dir,h.t,sharc_cam(),cone,Lc,near,cell)){bounce+=Lc*w;++g_hg_cache_src;}
+  }
+#endif
+ }
+ bounce/=float(rays);
+ if(!(lFlags.m0.x>0.0))return 1.0;   // the game does not use b6: AO 1 (the bounce still adds, as on screen)
+ const float A=saturate(1.0-occ/float(rays));
+ hd_pstat(2u,true);
+ if(g_hd_stats && g_hd_pbase!=0u){
+  uint v=WaveActiveSum(uint(A*8192.0+0.5));
+  if(WaveIsFirstLane() && v)rtStats.InterlockedAdd(((g_hd_pbase+3u)*64u+(WaveReadLaneFirst(g_hd_bin)&63u))*4u,v);
+ }
+ return A;
+}
+#endif
+
 // key: the pixel and frame, for the AO rays' random stream.
 NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float footprint,uint3 key){
  NativeHitShade r;r.radiance=0;r.direct=0;r.sun=0;r.ambient=0;r.native=0;r.ambient_d=0;r.ambient_s=0;r.radiance_ao1=0;r.ao=1;
  r.local_probes=false;r.status=kHitShadeMaterial;
 #ifdef NATIVE_HIT_BOX_TERM
  r.box=0;
+#endif
+#ifdef NATIVE_HIT_GI
+ r.gi=0;r.dcol=0;
 #endif
  // Exact early-out (2026-11-01, cost): a hit outside the froxel grid (off screen, beyond the last
  // slice) can never be shaded: native_hit_direct_eval fails on the same native_hit_cluster at the
@@ -156,6 +242,26 @@ NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float 
  float3 amb_d,amb_s;
  native_hit_ambient(lit.material,position,outgoing,cluster,r.local_probes,amb_d,amb_s);
  r.radiance_ao1=(qa_local?0.0.xxx:lit.direct.radiance)+sun.radiance+amb_d+amb_s;
+#ifdef NATIVE_HIT_GI
+ // A and the GI bounce from the screen at the hit's pixel or from the estimator, then the screen's
+ // composition (common/hit_gi_compose.h); the box part as below.
+ float3 bounce;
+ if(g_hg_use_screen){r.ao=lFlags.m0.x>0.0?saturate(g_hg_screen.a):1.0;bounce=max(g_hg_screen.rgb,0.0);}
+ else r.ao=native_hit_ao_gi(position,rt_hit_normal(hit),footprint,key,bounce);
+ {
+  HgIn hi;hi.amb_d=amb_d;hi.amb_s=amb_s;
+  hi.traced=qa_local?0.0.xxx:lit.direct.radiance-lit.direct.native;hi.game=qa_local?0.0.xxx:lit.direct.native;
+  hi.sun=sun.radiance;hi.dcol=lit.material.parameters.value.diffuse_color;
+  hi.nov_raw=dot(outgoing,lit.material.normal);hi.a=lit.material.parameters.value.base_roughness;
+  HgFrame hf;hf.m0x=lFlags.m0.x;hf.m0y=lFlags.m0.y;hf.ao_direct=pc.ao_direct;hf.strength=pc.strength;
+  const HgOut ho=hg_compose(hi,hf,r.ao,bounce);
+  r.direct=ho.direct;r.native=hi.game*ho.f;r.sun=ho.sun;r.ambient_d=ho.amb_d;r.ambient_s=ho.amb_s;
+  r.ambient=r.ambient_d+r.ambient_s;r.gi=ho.gi;r.dcol=hi.dcol;r.radiance=ho.radiance;
+#ifdef NATIVE_HIT_BOX_TERM
+  r.box=qa_local?0.0.xxx:g_hd_box*(hd_box_game()?ho.f:((pc.ao_direct&3u)==1u?1.0:ho.f));
+#endif
+ }
+#else
  // The screen's AO at the hit, applied term by term as the lighting applies b6.
  r.ao=native_hit_ao(position,rt_hit_normal(hit),footprint,key);
  const float f=native_hit_ao_factor(r.ao);
@@ -172,6 +278,7 @@ NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float 
  r.ambient_s=amb_s*native_hit_spec_occlusion(r.ao,dot(outgoing,lit.material.normal),lit.material.parameters.value.base_roughness);
  r.ambient=r.ambient_d+r.ambient_s;
  r.radiance=r.direct+r.sun+r.ambient;
+#endif
  r.status=all(isfinite(r.radiance)) && all(r.radiance>=0) && all(isfinite(r.radiance_ao1))?kHitShadeOk:kHitShadeInvalid;
  return r;
 }

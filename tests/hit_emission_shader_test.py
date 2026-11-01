@@ -37,7 +37,7 @@ def contract(r, paths):
         checker = ROOT / "bin" / "native_hit_rf_bindings_test.exe"
         flags = (["--sharc"] if "sharc" in file else []) + (["--tileset"] if "RT_NATIVE_TILESET=1" in d else []) + \
                 (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else []) + \
-                (["--cascade"] if "RT_CASCADE_MASKS=1" in d else []) + ["--em"]
+                (["--cascade"] if "RT_CASCADE_MASKS=1" in d else []) + ["--em"] +                 (["--gi"] if "RF_HIT_GI=1" in d else [])
     if not checker.exists():
         return None
     c = subprocess.run([str(checker), *flags, *map(str, paths)], capture_output=True, text=True)
@@ -62,7 +62,8 @@ def main():
         new_list = requests(ROOT / "shaders")
         missing = [r for r in old_list if r not in new_list]
         feature = [r for r in new_list if r.partition("?")[0] in FEATURE]
-        unexpected = [r for r in new_list if r not in old_list and r not in feature]
+        # rf_hit_gi requests (RF_HIT_GI=1) are tests/rf_hit_shade_shader_test.py's feature, compiled there.
+        unexpected = [r for r in new_list if r not in old_list and r not in feature and "RF_HIT_GI=1" not in r]
         for d in ("old", "new", "on"):
             (tmp / d).mkdir()
 

@@ -69,12 +69,22 @@
 #define NATIVE_HIT_SLOTS_BINDING 7
 // The projector (box) part of L_b for the bias breakdown (counters 383-384, core/gi.cpp "rf hit shade boxes").
 #define NATIVE_HIT_BOX_TERM 1
+#if RF_HIT_GI
+// rf_hit_gi (rt_reflections*_hit_shade*.hlsl?RF_HIT_GI=1): the screen's ls_box=2 box visibility at hits.
+#define NATIVE_HIT_BOX_LS2 1
+#endif
 #include "../rt/native_hit_direct.hlsli"
 // The sun at the hit follows the R0 roof rule (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF; roof
 // volumes in the sun set b8): under a roof the TLAS may lack, the sun is unsupported and the
 // hit keeps the probe (tier c).
 #define NATIVE_HIT_SUN_ROOF 1
 #define NATIVE_HIT_SHADE_FULL 1
+#if RF_HIT_GI
+// rf_hit_gi (docs/TRACK_D_REFLECTIONS.md 14 "Indirect diffuse at hits"): the hit gets the screen's
+// indirect diffuse (rt/native_hit_shade.hlsli NATIVE_HIT_GI). Push::rf_so (otherwise unused) is the
+// mode: 1 the estimator at every hit, 2 the tier (a) check takes the screen's own GI at its pixel.
+#define NATIVE_HIT_GI 1
+#endif
 #include "../rt/native_hit_shade.hlsli"
 #if RT_HIT_EMISSION
 // rt_hit_emission (rt_reflections*_hit_shade_em.hlsl, docs/PLAN_M4_REFLECTIONS_GI.md M4.4): the D-EM
@@ -110,6 +120,30 @@ uint fxl(float v) { return uint(clamp(v, 0.0, 4.0) * 4096.0 + 0.5); }
 // x 128 rounded every b13[0]-scaled direct and sun term (~1e-3) to 0 (live S8: "direct 0, sun 0").
 uint fxh(float v) { return uint(clamp(v, 0.0, 8.0) * 8192.0 + 0.5); }
 #endif
+#if RF_HIT_GI
+#if !RF_HIT_SHADE
+#error RF_HIT_GI needs RF_HIT_SHADE
+#endif
+// rf_hit_gi's counters (core/gi.cpp kRfGiFirst 419, "rf hit gi"): device-local (set 6 b0, core/gi.cpp
+// ensure_rg), reduced per 8x8 group in groupshared memory (one atomic per counter and group), copied into
+// rtStats after the pass's end timestamp. Never host-visible atomics (META_AUDIT 2026-11-01 5).
+//   0 tier (a) checks, 1 their GI term (luminance x 8192), 2 the screen's GI term at the same pixels
+//   (its history there x the hit's diffuse colour x gi_strength), 3 checks shaded from the screen's GI
+//   (rf_hit_gi=2), 4 the GI term of shaded tier (b) hits, 5 AO-ray hits within gi_rt_radius, 6 of them
+//   with a screen source, 7 with a cache source.
+[[vk::binding(0, 6)]] RWByteAddressBuffer rfGiStats;
+static const uint kRgN = 8u;
+groupshared uint gsRg[kRgN];
+void rg_add(uint k, uint v) {
+  const uint w = WaveActiveSum(v);
+  if (WaveIsFirstLane() && w != 0u) InterlockedAdd(gsRg[k], w);
+}
+void rg_flush(uint gi, uint2 gid) {
+  if (gi >= kRgN) return;
+  const uint v = gsRg[gi];
+  if (v != 0u) rfGiStats.InterlockedAdd((gi * 64u + ((gid.x * 7u + gid.y * 13u) & 63u)) * 4u, v);
+}
+#endif
 
 // GGX visible normals within the spherical cap that keeps the reflection above the
 // horizon (Eto & Tokuyoshi 2023, isotropic). wi in tangent space (z = normal).
@@ -127,8 +161,12 @@ float3 sample_vndf_bounded(float3 wi, float alpha, float2 u) {
   return normalize(float3(c.xy * alpha, c.z));
 }
 
+#if RF_HIT_GI
+void rf_pixel(uint3 tid) {
+#else
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
+#endif
   uint2 fp = tid.xy;
   if (any(fp >= pc.full)) return;
   g_rt_pass = kRtPassRefl;
@@ -195,6 +233,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 hs_native = 0, hs_amb_d = 0, hs_amb_s = 0, hs_Lb1 = 0;
   float hs_ao = 1, hs_ao_screen = 1, hs_La_share = 1;
   float3 hs_box = 0;   // L_b's projector (box) part (tier a check and shaded tier b)
+#endif
+#if RF_HIT_GI
+  float hg_gi = 0, hg_screen_gi = 0;   // the hit's GI term, the screen's at the tier (a) pixel (luminance)
+  bool hg_from_screen = false;
 #endif
   if (eligible) {
     float3 Nn = normalize(sf.N);
@@ -275,6 +317,19 @@ void main(uint3 tid : SV_DispatchThreadID) {
           g_hd_xbase = 196u;
           g_hd_pbase = 316u;   // policy / AO counters (core/gi.cpp kHitPolicyFirst + 4)
           g_hd_bin = (fp.x >> 3) * 7u + (fp.y >> 3) * 13u;
+#if RF_HIT_GI
+          // Tier (a): the camera sees the hit at qp, so the screen's own terms there are known: its GI
+          // history (this frame's, as gi_composite gathers it) and b6 as the lighting read it. With
+          // rf_hit_gi=2 the check shades from them (exact screen terms); with 1 they are only counted.
+          float3 hg_screen_b = 0;
+          if (tier == 1) {
+            const int2 qg = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
+            const float4 gh = gather_history(uint2(qg), gDepth.Load(int3(qg, 0)));
+            hg_screen_b = all(isfinite(gh.rgb)) ? max(gh.rgb, 0.0) : 0.0.xxx;
+            g_hg_screen = float4(hg_screen_b, lgAO.Load(int3(qg, 0)).x);
+            g_hg_use_screen = pc.rf_so == 2u;
+          }
+#endif
           NativeHitShade hs = native_hit_shade(hh, o + dir * t, -dir, cone.f0 + cone.spread * t, uint3(fp, pc.frame));
           // Hit-material reasons (253+status, 127) for the normal stats windows; run_post's push
           // has rt_stats 0, so the D-RF stats key gates it (core/gi.cpp "hit material" line).
@@ -297,6 +352,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
               const int2 qq = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
               hs_ao_screen = lFlags.m0.x > 0.0 ? saturate(lgAO.Load(int3(qq, 0)).x) : 1.0;
               hs_La_share = saturate(prevRadiance[prev_radiance_px(qq)].a);
+#if RF_HIT_GI
+              hg_gi = lum(hs.gi);
+              hg_screen_gi = lum(hg_screen_b * hs.dcol * pc.strength);
+              hg_from_screen = g_hg_use_screen;
+#endif
             }
           } else {
             hs_asked = 1u;
@@ -317,6 +377,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
               hs_probes = hs.local_probes ? 1u : 0u;
               hs_Lb = hs.radiance;
               hs_box = hs.box;
+#if RF_HIT_GI
+              hg_gi = lum(hs.gi);
+#endif
             }
           }
         }
@@ -476,5 +539,27 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_addv(383, hs_checked != 0u ? fxh(lum(hs_box)) : 0u, bin);
     stat_addv(384, shaded ? fxh(lum(hs_box)) : 0u, bin);
 #endif
+#if RF_HIT_GI
+    // core/gi.cpp kRfGiFirst (the device-local set 6 counters; hs_checked is 0 under any rf_debug).
+    rg_add(0u, hs_checked);
+    rg_add(1u, hs_checked != 0u ? fxh(hg_gi) : 0u);
+    rg_add(2u, hs_checked != 0u ? fxh(hg_screen_gi) : 0u);
+    rg_add(3u, hs_checked != 0u && hg_from_screen ? 1u : 0u);
+    rg_add(4u, shaded ? fxh(hg_gi) : 0u);
+    rg_add(5u, g_hg_hits);
+    rg_add(6u, g_hg_screen_src);
+    rg_add(7u, g_hg_cache_src);
+#endif
   }
 }
+
+#if RF_HIT_GI
+[numthreads(8, 8, 1)]
+void main(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex, uint3 gid : SV_GroupID) {
+  if (gi < kRgN) gsRg[gi] = 0u;
+  GroupMemoryBarrierWithGroupSync();
+  rf_pixel(tid);
+  GroupMemoryBarrierWithGroupSync();
+  if (pc.rf_stats != 0u) rg_flush(gi, gid.xy);
+}
+#endif
