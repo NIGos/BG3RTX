@@ -95,6 +95,19 @@ baseline commit is read from git blobs, so a second gate against the same baseli
 nothing, and a request whose inputs are equal in both trees is identical by construction.
 Hits re-hash their SPIR-V blob; failures are never cached. Long runs print progress every 15 s.
 
+## Runtime shader cache
+
+`layer/shaders.cpp` keys every entry with the same function (`layer/shader_cache.cpp`, the C++
+twin of `entry_key`/`closure`; `tests/shader_cache_key_test.py` + `shader_cache_test` check both
+against one golden file) and a runtime tool id (dxcompiler.dll bytes and version, arguments,
+SHaRC, shader_debug). SPIR-V lives in `%LOCALAPPDATA%\BG3RTX\shader_cache\<key>.spv` (or
+`%BG3RTX_SHADER_CACHE%\runtime`; `none` turns it off): checksummed header, a corrupt entry is a
+miss and recompiles, LRU-pruned above 512 MB. Hot reload recomputes the keys and rebuilds only
+entries whose inputs changed. `requests.txt` there lists the last 5 sessions' requests; a
+background thread (below normal priority) fetches or compiles them at the first request, the
+render thread waits only for an entry already in progress. Log: `[shaders] cache: N hits, M
+compiled, ... ms`. Change an argument in `compile()` together with `kArgsTemplate`.
+
 - `py -3 tools/compile_shaders.py`: every request compiles (merge-green), plus the descriptor
   contract checkers on the compiled modules.
 - `py -3 tools/shader_identity.py --baseline <rev> [--filter RE]`: key-off byte identity.
