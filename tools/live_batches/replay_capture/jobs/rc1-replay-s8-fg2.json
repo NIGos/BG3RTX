@@ -7,7 +7,7 @@
  "timeout": 300,
  "repeat": 1,
  "live_batch": "replay-capture",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_hit_material=1,rt_xfb_mb=1408,rt_cascade_mb=587,gi=1,gi_rt=1,gi_rt_fallback=0,gi_hit_direct=1,rt_stats=0,rf_hit_shade=0,rt_reflections=1,replay_pack=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_hit_material=1,rt_xfb_mb=1408,rt_cascade_mb=587,gi=1,gi_rt=1,gi_rt_fallback=0,gi_hit_direct=1,rt_stats=0,rf_hit_shade=0,rt_reflections=1,replay_pack=0,replay_pack_cap_mb=3300",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -41,7 +41,7 @@
   "\\[cfg\\] settings read",
   "\\[replay\\] pack 1 recorded at frame \\d+: (2[7-9]|[3-9]\\d|[1-9]\\d{2,}) image copies, ([2-9]|[1-9]\\d+) image reads \\(\\d+ BCn decoded, [0-9]+\\.[0-9] MB in [1-9]\\d* pieces\\), ",
   "\\[replay\\] pack 1 written: [0-9]+\\.[0-9] MB \\(\\d+ images omitted, ([2-9]|[1-9]\\d+) read by shader\\), frame \\d+, pass gi_hit_direct, instances [1-9]\\d* -> .+",
-  "\\[replay\\] pack 1 textures: [0-9]+\\.[0-9] MB free under the cap for [1-9]\\d* droppable images of [0-9]+\\.[0-9] MB; kept [1-9]\\d* \\(.*by binding \\(kept/images, MB kept/all\\):.* s1b2 (\\d+)/\\1 .*largest: ",
+  "\\[replay\\] pack 1 textures: [0-9]+\\.[0-9] MB free under the 3300\\.0 MB cap for [1-9]\\d* droppable images of [0-9]+\\.[0-9] MB; kept [1-9]\\d* \\(.*by binding \\(kept/images, MB kept/all\\):.* s1b2 (\\d+)/\\1 .* s1b3\\+b14 2/2 .*largest: ",
   "GI hit direct \\([0-9]+ frames\\): candidates [1-9]\\d* qualified \\d+ direct supported \\d+ nonzero \\d+",
   "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified \\d+ unsupported \\d+"
  ],
@@ -61,7 +61,8 @@
   "\\[motion-plan\\] complete phases=3\\b",
   "^Run ended: done"
  ],
+ "post": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/replay_capture/post_replay.ps1 -Log \"{log}\"",
  "stop_on_dump": true,
- "purpose": "Offline frame replay (tools/frame_replay.md): one gi_hit_direct replay pack at S8 (static view), taken inside a 15 s rt_stats window so the live 'GI hit direct' / 'hit material' lines of the same frames are the replay's reference. Needs a layer + core build with the replay_pack writer (layer/replay.cpp, ABI 25) and its texture read (shaders/replay_image.hlsl). Texture budget (rp::fill_budget): the textures line measures every droppable image; the table images must all be kept.",
+ "purpose": "Offline frame replay (tools/frame_replay.md): one gi_hit_direct replay pack at S8 (static view), taken inside a 15 s rt_stats window so the live 'GI hit direct' / 'hit material' lines of the same frames are the replay's reference. Needs a layer + core build with the replay_pack writer (layer/replay.cpp, ABI 25) and its texture read (shaders/replay_image.hlsl). Texture budget (rp::fill_budget) under replay_pack_cap_mb=3300 (one-off, user-approved: pack about 976 + 2054 MB = 3.03 GB): the table images and both VT cache images (s1b3+b14 2/2, the 2054 MB hit cache included) must be kept. Post step (post_replay.ps1): replays the new pack offline and, only when its hit material qualified > 0 and sampling <= the live rate, deletes the older captures/replay-* packs (the newest is kept).",
  "estimated_phase_seconds": 35
 }

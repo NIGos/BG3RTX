@@ -62,6 +62,8 @@ struct Gpu {
   PFN_vkGetAccelerationStructureDeviceAddressKHR addressAS{};
   bool validation = false;
   std::string name;
+  uint32_t max_image_2d = 0, max_layers = 0;
+  uint64_t device_bytes = 0;   // device-local memory allocated (never freed before exit)
 };
 Gpu g;
 std::atomic<unsigned> g_validation_errors{};
@@ -128,6 +130,8 @@ int init_gpu(bool want_validation, bool require_validation) {
   vkGetPhysicalDeviceProperties2(g.physical, &props2);
   g.name = props2.properties.deviceName;
   g.tick_ns = props2.properties.limits.timestampPeriod;
+  g.max_image_2d = props2.properties.limits.maxImageDimension2D;
+  g.max_layers = props2.properties.limits.maxImageArrayLayers;
   vkGetPhysicalDeviceMemoryProperties(g.physical, &g.memory);
   uint32_t nq = 0; vkGetPhysicalDeviceQueueFamilyProperties(g.physical, &nq, nullptr);
   std::vector<VkQueueFamilyProperties> families(nq); vkGetPhysicalDeviceQueueFamilyProperties(g.physical, &nq, families.data());
@@ -194,18 +198,26 @@ Buf make_buffer(VkDeviceSize bytes, VkBufferUsageFlags usage, bool host) {
   ai.memoryTypeIndex = memory_type(req.memoryTypeBits, host ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
                                                              : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   vkcheck(vkAllocateMemory(g.dev, &ai, nullptr, &out.m), "buffer memory");
+  if (!host) g.device_bytes += req.size;
   vkcheck(vkBindBufferMemory(g.dev, out.b, out.m, 0), "bind buffer");
   VkBufferDeviceAddressInfo address{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO}; address.buffer = out.b;
   out.address = vkGetBufferDeviceAddress(g.dev, &address);
   if (host) { vkcheck(vkMapMemory(g.dev, out.m, 0, out.size, 0, &out.map), "map"); std::memset(out.map, 0, size_t(out.size)); }
   return out;
 }
+// Host staging of one upload step (buffers and images): a multi-GB pack image or buffer goes up in
+// pieces of at most this, through one reused staging buffer (tools/frame_replay.md "Size").
+constexpr uint64_t kStageBytes = 256ull << 20;
 void upload(const Buf& dst, VkDeviceSize offset, const void* data, size_t n) {
   if (!n) return;
   check(offset + n <= dst.size, "upload inside the buffer");
-  Buf staging = make_buffer(n, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true);
-  std::memcpy(staging.map, data, n);
-  submit([&](VkCommandBuffer c) { VkBufferCopy r{0, offset, n}; vkCmdCopyBuffer(c, staging.b, dst.b, 1, &r); });
+  Buf staging = make_buffer(std::min<uint64_t>(n, kStageBytes), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true);
+  for (size_t at = 0; at < n;) {
+    const size_t k = size_t(std::min<uint64_t>(n - at, kStageBytes));
+    std::memcpy(staging.map, static_cast<const uint8_t*>(data) + at, k);
+    submit([&](VkCommandBuffer c) { VkBufferCopy r{0, offset + at, k}; vkCmdCopyBuffer(c, staging.b, dst.b, 1, &r); });
+    at += k;
+  }
   vkDestroyBuffer(g.dev, staging.b, nullptr); vkFreeMemory(g.dev, staging.m, nullptr);
 }
 std::vector<uint8_t> download(const Buf& src, VkDeviceSize bytes) {
@@ -223,6 +235,9 @@ std::vector<uint8_t> download(const Buf& src, VkDeviceSize bytes) {
 struct Img { VkImage image{}; VkDeviceMemory mem{}; VkImageView view{}; uint32_t format = 0, w = 1, h = 1, layers = 1, mips = 1; bool storage = false; };
 Img make_image(uint32_t format, uint32_t w, uint32_t h, uint32_t layers, uint32_t mips, bool storage, bool array) {
   Img im; im.format = format; im.w = w; im.h = h; im.layers = layers; im.mips = mips; im.storage = storage;
+  check(w <= g.max_image_2d && h <= g.max_image_2d && layers <= g.max_layers,
+        "image " + std::to_string(w) + "x" + std::to_string(h) + "x" + std::to_string(layers) + " over the device limits " +
+            std::to_string(g.max_image_2d) + " / " + std::to_string(g.max_layers) + " layers");
   VkImageCreateInfo ii{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
   ii.imageType = VK_IMAGE_TYPE_2D; ii.format = VkFormat(format); ii.extent = {w, h, 1}; ii.mipLevels = mips; ii.arrayLayers = layers;
   ii.samples = VK_SAMPLE_COUNT_1_BIT; ii.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -231,7 +246,7 @@ Img make_image(uint32_t format, uint32_t w, uint32_t h, uint32_t layers, uint32_
   VkMemoryRequirements req; vkGetImageMemoryRequirements(g.dev, im.image, &req);
   VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO}; ai.allocationSize = req.size;
   ai.memoryTypeIndex = memory_type(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  vkcheck(vkAllocateMemory(g.dev, &ai, nullptr, &im.mem), "image memory"); vkcheck(vkBindImageMemory(g.dev, im.image, im.mem, 0), "image bind");
+  vkcheck(vkAllocateMemory(g.dev, &ai, nullptr, &im.mem), "image memory"); g.device_bytes += req.size; vkcheck(vkBindImageMemory(g.dev, im.image, im.mem, 0), "image bind");
   VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
   vi.image = im.image; vi.viewType = array ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D; vi.format = VkFormat(format);
   vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mips, 0, layers};
@@ -239,32 +254,97 @@ Img make_image(uint32_t format, uint32_t w, uint32_t h, uint32_t layers, uint32_
   return im;
 }
 VkImageLayout layout_of(const Img& im) { return im.storage ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; }
-// Fills every mip and layer from `data` (mip-major, packed), or zero when `data` is empty.
-void fill_image(const Img& im, const std::vector<uint8_t>& data) {
+// Fills every mip and layer (mip-major, packed: the pack's file layout) in pieces of at most
+// `stage_max` bytes (rp::transfer_pieces, as the live writer copied them: whole mips, layer groups,
+// else block rows), several pieces per submit through one reused host staging buffer. `source`
+// writes `bytes` of the packed image at `offset` to `dst`; null = zero. A 2 GB VT cache never needs
+// one 2 GB host allocation (nor the file in memory).
+using ImageSource = std::function<void(uint64_t offset, uint64_t bytes, uint8_t* dst)>;
+void fill_image_pieces(const Img& im, const ImageSource& source, uint64_t stage_max = kStageBytes) {
+  const auto pieces = rp::transfer_pieces(im.format, im.w, im.h, im.layers, im.mips, stage_max);
+  check(!pieces.empty(), "image pieces (format " + std::to_string(im.format) + ", a block row over the staging size)");
+  uint64_t largest = 0, total = 0;
+  for (const auto& p : pieces) { largest = std::max(largest, p.bytes); total += (p.bytes + 15) & ~15ull; }
+  Buf staging = make_buffer(std::max<uint64_t>(std::max(largest, std::min(total, stage_max)), 16), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true);
+  uint8_t* map = static_cast<uint8_t*>(staging.map);
+  VkImageMemoryBarrier ib{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+  ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; ib.image = im.image;
+  ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, im.mips, 0, im.layers};
+  for (size_t k = 0; k < pieces.size();) {
+    std::vector<VkBufferImageCopy> regions;
+    const bool first = k == 0;
+    for (uint64_t at = 0; k < pieces.size(); ++k) {
+      const auto& p = pieces[k];
+      at = (at + 15) & ~15ull;   // a multiple of every texel / block size
+      if (!regions.empty() && at + p.bytes > staging.size) break;
+      if (source) source(p.file_offset, p.bytes, map + at);
+      else std::memset(map + at, 0, size_t(p.bytes));
+      VkBufferImageCopy r{}; r.bufferOffset = at; r.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, p.mip, p.layer, p.layers};
+      r.imageOffset = {0, int32_t(p.row), 0}; r.imageExtent = {std::max(im.w >> p.mip, 1u), p.rows, 1};
+      regions.push_back(r);
+      at += p.bytes;
+    }
+    const bool last = k == pieces.size();
+    submit([&](VkCommandBuffer c) {
+      if (first) {
+        ib.srcAccessMask = 0; ib.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        ib.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; ib.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
+      }
+      vkCmdCopyBufferToImage(c, staging.b, im.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, uint32_t(regions.size()), regions.data());
+      if (last) {
+        ib.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; ib.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        ib.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; ib.newLayout = layout_of(im);
+        vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
+      }
+    });
+  }
+  vkDestroyBuffer(g.dev, staging.b, nullptr); vkFreeMemory(g.dev, staging.m, nullptr);
+}
+// From `data` (packed), or zero when `data` is empty.
+void fill_image(const Img& im, const std::vector<uint8_t>& data, uint64_t stage_max = kStageBytes) {
+  check(data.empty() || data.size() == rp::image_bytes(im.format, im.w, im.h, im.layers, im.mips), "image data size");
+  if (data.empty()) { fill_image_pieces(im, nullptr, stage_max); return; }
+  fill_image_pieces(im, [&](uint64_t offset, uint64_t bytes, uint8_t* dst) { std::memcpy(dst, data.data() + offset, size_t(bytes)); }, stage_max);
+}
+// Streamed from a pack file, piece by piece.
+void fill_image_file(const Img& im, const fs::path& p, uint64_t stage_max = kStageBytes) {
+  std::ifstream f(p, std::ios::binary | std::ios::ate);
+  check(bool(f), "read " + p.string());
   const uint64_t bytes = rp::image_bytes(im.format, im.w, im.h, im.layers, im.mips);
-  check(data.empty() || data.size() == bytes, "image data size");
-  Buf staging = make_buffer(std::max<uint64_t>(bytes, 16), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true);
-  if (!data.empty()) std::memcpy(staging.map, data.data(), data.size());
+  check(uint64_t(f.tellg()) == bytes, "image data size: " + p.string());
+  fill_image_pieces(im, [&](uint64_t offset, uint64_t n, uint8_t* dst) {
+    f.seekg(std::streamoff(offset));
+    f.read(reinterpret_cast<char*>(dst), std::streamsize(n));
+    check(bool(f), "read " + p.string());
+  }, stage_max);
+}
+// Every mip and layer back, packed (the self-test's round trip).
+std::vector<uint8_t> read_image_all(const Img& im) {
+  const uint64_t bytes = rp::image_bytes(im.format, im.w, im.h, im.layers, im.mips);
+  Buf staging = make_buffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true);
   submit([&](VkCommandBuffer c) {
     VkImageMemoryBarrier ib{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-    ib.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; ib.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; ib.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; ib.image = im.image;
-    ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, im.mips, 0, im.layers};
-    vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
-    std::vector<VkBufferImageCopy> regions;
+    ib.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; ib.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    ib.oldLayout = layout_of(im); ib.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ib.image = im.image; ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, im.mips, 0, im.layers};
+    vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
     VkDeviceSize at = 0;
     for (uint32_t m = 0; m < im.mips; ++m) {
       const uint32_t mw = std::max(im.w >> m, 1u), mh = std::max(im.h >> m, 1u);
       VkBufferImageCopy r{}; r.bufferOffset = at; r.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, m, 0, im.layers}; r.imageExtent = {mw, mh, 1};
-      regions.push_back(r);
+      vkCmdCopyImageToBuffer(c, im.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.b, 1, &r);
       at += rp::image_bytes(im.format, mw, mh, im.layers, 1);
     }
-    vkCmdCopyBufferToImage(c, staging.b, im.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, uint32_t(regions.size()), regions.data());
-    ib.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; ib.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    ib.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; ib.newLayout = layout_of(im);
+    ib.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT; ib.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    std::swap(ib.oldLayout, ib.newLayout);
     vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
+    barrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
   });
+  std::vector<uint8_t> out(static_cast<size_t>(bytes));
+  std::memcpy(out.data(), staging.map, out.size());
   vkDestroyBuffer(g.dev, staging.b, nullptr); vkFreeMemory(g.dev, staging.m, nullptr);
+  return out;
 }
 std::vector<uint8_t> read_image(const Img& im) {
   const uint64_t bytes = rp::image_bytes(im.format, im.w, im.h, 1, 1);
@@ -487,7 +567,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     auto known = by_file.find(k);
     if (known == by_file.end()) {
       Img im = make_image(i.format, i.w, i.h, i.layers, i.mips, storage, array);
-      fill_image(im, file(i.file));
+      fill_image_file(im, pack / i.file);   // streamed: a VT cache is ~2 GB
       known = by_file.emplace(k, im).first;
       if (i.source_format) { ++decoded; decoded_bc += rp::block_compressed(i.source_format); }
     }
@@ -716,6 +796,15 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   VkPipeline pipeline; vkcheck(vkCreateComputePipelines(g.dev, VK_NULL_HANDLE, 1, &cpi, nullptr, &pipeline), "compute pipeline");
   VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; qi.queryType = VK_QUERY_TYPE_TIMESTAMP; qi.queryCount = 2;
   VkQueryPool queries; vkcheck(vkCreateQueryPool(g.dev, &qi, nullptr, &queries), "query pool");
+  if (!quiet) {   // what the pack costs the GPU (a 2 GB VT cache included; host staging is kStageBytes)
+    uint64_t heap = 0;
+    for (uint32_t h = 0; h < g.memory.memoryHeapCount; ++h)
+      if (g.memory.memoryHeaps[h].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) heap = std::max<uint64_t>(heap, g.memory.memoryHeaps[h].size);
+    uint64_t largest = 0;
+    for (const auto& [k, im] : by_file) largest = std::max(largest, rp::image_bytes(im.format, im.w, im.h, im.layers, im.mips));
+    std::printf("[replay] loaded %zu images (largest %.1f MB), device-local %.1f MB of a %.1f MB heap, staging pieces of %.0f MB\n", by_file.size(),
+                largest / 1048576.0, g.device_bytes / 1048576.0, heap / 1048576.0, kStageBytes / 1048576.0);
+  }
   for (uint32_t run = 0; run < repeat; ++run) {
     std::memset(stats.map, 0, size_t(stats.size));
     push = push_pack;
@@ -1113,6 +1202,42 @@ ReadCheck check_shader_reads(const fs::path& dir) {
   return rc;
 }
 
+// --load-test (manual, not a CTest: 2 GB of device memory): the S8 hit VT cache of 2026-11-01
+// (BC3 sRGB 32688 x 26352, 2 layers, 2 mips, 2053.7 MB) created and filled through the staged
+// upload; its last mip is read back and compared.
+int load_test() {
+  if (int r = init_gpu(true, false)) return r;
+  const uint32_t f = 138, w = 32688, h = 26352, layers = 2, mips = 2;
+  auto pattern = [](uint64_t at) { uint64_t x = (at / 8 + 1) * 0x9E3779B97F4A7C15ull; x ^= x >> 29; return uint8_t(x >> (8 * (at % 8))); };
+  const auto t0 = GetTickCount64();
+  Img im = make_image(f, w, h, layers, mips, false, true);
+  fill_image_pieces(im, [&](uint64_t offset, uint64_t n, uint8_t* dst) { for (uint64_t i = 0; i < n; ++i) dst[i] = pattern(offset + i); });
+  const double fill_s = (GetTickCount64() - t0) / 1000.0;
+  const uint64_t mip0 = rp::image_bytes(f, w, h, layers, 1), mip1 = rp::image_bytes(f, w >> 1, h >> 1, layers, 1);
+  Buf staging = make_buffer(mip1, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true);
+  submit([&](VkCommandBuffer c) {
+    VkImageMemoryBarrier ib{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    ib.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; ib.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT; ib.oldLayout = layout_of(im);
+    ib.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ib.image = im.image; ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mips, 0, layers};
+    vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
+    VkBufferImageCopy r{}; r.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 1, 0, layers}; r.imageExtent = {w >> 1, h >> 1, 1};
+    vkCmdCopyImageToBuffer(c, im.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.b, 1, &r);
+    barrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
+  });
+  uint64_t bad = 0;
+  const uint8_t* back = static_cast<const uint8_t*>(staging.map);
+  for (uint64_t i = 0; i < mip1; ++i) bad += back[i] != pattern(mip0 + i);
+  uint64_t heap = 0;
+  for (uint32_t k = 0; k < g.memory.memoryHeapCount; ++k)
+    if (g.memory.memoryHeaps[k].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) heap = std::max<uint64_t>(heap, g.memory.memoryHeaps[k].size);
+  std::printf("load test: %ux%u x%u m%u BC3 %.1f MB filled in %zu pieces (%.0f MB staging) in %.1f s; mip 1 read back: %llu bytes differ; "
+              "device-local %.1f MB of a %.1f MB heap; validation errors %u\n",
+              w, h, layers, mips, rp::image_bytes(f, w, h, layers, mips) / 1048576.0, rp::transfer_pieces(f, w, h, layers, mips, kStageBytes).size(),
+              kStageBytes / 1048576.0, fill_s, (unsigned long long)bad, g.device_bytes / 1048576.0, heap / 1048576.0, g_validation_errors.load());
+  return bad || g_validation_errors.load() ? 1 : 0;
+}
+
 // ---------------------------------------------------------------- PT reference (tools/pt_reference.hlsl)
 // Runs the offline path tracer over a pack: `iters` iterations x `modes` dispatches. Iteration i
 // pushes Push::ls_kmode = i + 1 (the shader's seed with Push::frame, which stays the pack's: it is the
@@ -1446,6 +1571,29 @@ int self_test(const fs::path& dir) {
   line("9 image read: uncompressed texels keep their bits", rc.formats > 0 && rc.exact_fail == 0, std::to_string(rc.exact_fail) + " formats differ");
   line("10 image read: stored texels within half a step (BCn too)", rc.formats > 0 && rc.tol_fail == 0, rc.detail);
   line("11 image read: piece plan does not change the bytes", rc.piece_fail == 0, std::to_string(rc.piece_fail) + " formats differ");
+  {   // 12: the staged upload of large pack images (a 2 GB VT cache): a staging this small forces
+      // block rows of one layer, layer groups and whole mips; from memory and streamed from a file,
+      // every mip and layer reads back bit-equal.
+    struct Case { uint32_t f, w, h, layers, mips; uint64_t stage; };
+    const Case cases[] = {{138, 37, 29, 3, 3, 160}, {9, 13, 9, 3, 3, 40}, {97, 13, 9, 2, 2, 300}, {146, 64, 64, 2, 4, 1u << 20}};
+    uint32_t bad = 0; size_t pieces = 0;
+    uint64_t seed = 0xD1B54A32D192ED03ull;
+    for (const Case& c : cases) {
+      std::vector<uint8_t> src(size_t(rp::image_bytes(c.f, c.w, c.h, c.layers, c.mips)));
+      for (auto& b : src) { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; b = uint8_t(seed); }
+      if (c.f == 97) for (size_t i = 0; i + 1 < src.size(); i += 2) src[i + 1] &= 0x3B;   // finite halves
+      pieces += rp::transfer_pieces(c.f, c.w, c.h, c.layers, c.mips, c.stage).size();
+      Img a = make_image(c.f, c.w, c.h, c.layers, c.mips, false, true);
+      fill_image(a, src, c.stage);
+      bad += read_image_all(a) != src;
+      const fs::path p = dir / ("stage-" + std::to_string(c.f) + ".bin");
+      write_vec(p, src);
+      Img b = make_image(c.f, c.w, c.h, c.layers, c.mips, false, true);
+      fill_image_file(b, p, c.stage);
+      bad += read_image_all(b) != src;
+    }
+    line("12 staged image upload: pieces read back bit-equal", bad == 0, std::to_string(bad) + " of 8 differ, " + std::to_string(pieces) + " pieces");
+  }
   line("8 no validation errors", g_validation_errors.load() == 0, std::to_string(g_validation_errors.load()) + " errors");
   std::printf("%s: %d failure(s); GPU dispatch %.3f ms\n", failures ? "FAIL" : "PASS", failures, a.gpu_ms);
   return failures ? 1 : 0;
@@ -1472,6 +1620,7 @@ int main(int argc, char** argv) {
     else if (args[i] == "--synthesize") synth = next();
     else if (args[i] == "--dark") dark = true;
     else if (args[i] == "--self-test") test = next();
+    else if (args[i] == "--load-test") return load_test();
     else if (args[i] == "--pt-self-test") pt_test = next();
     else if (args[i] == "--pt-reference") pt = true;
     else if (args[i] == "--pt-iters") pt_iters = uint32_t(std::max(1, std::atoi(next().c_str())));

@@ -201,6 +201,35 @@ int main() {
     for (int i = 0; i < 20; ++i) { s8.push_back((67ull << 20) / 20); s8p.push_back(rp::texture_priority(1, 2)); }
     d = rp::fill_budget(906ull << 20, s8, rp::kPackHardCapBytes, over, s8p);
     check(!over && d.size() == 1 && d[0] == 0, "fill_budget: S8, only the cache larger than the free space is dropped");
+    // replay_pack_cap_mb (rp::pack_cap_bytes): default and clamps; the S8 pack of 2026-11-01
+    // (976 MB fixed, the 2054 MB b14 hit cache, the 2 x 1 MB rest) needs 3300 MB to keep the cache.
+    check(rp::pack_cap_bytes(2048) == rp::kPackHardCapBytes && rp::pack_cap_bytes(0) == rp::kPackHardCapBytes &&
+              rp::pack_cap_bytes(-5) == rp::kPackHardCapBytes && rp::pack_cap_bytes(1) == (uint64_t(rp::kPackCapMinMb) << 20) &&
+              rp::pack_cap_bytes(1 << 30) == (uint64_t(rp::kPackCapMaxMb) << 20) && rp::pack_cap_bytes(3300) == (3300ull << 20),
+          "pack_cap_bytes: 2048 and <= 0 are the default 2 GB, clamped to [256, 16384] MB");
+    {
+      const std::vector<uint64_t> live = {2053ull << 20, 1ull << 20, 1ull << 20};
+      const std::vector<uint32_t> livep = {rp::texture_priority(1, 14), rp::texture_priority(1, 14), rp::texture_priority(1, 3)};
+      d = rp::fill_budget(976ull << 20, live, rp::pack_cap_bytes(2048), over, livep);
+      check(!over && d.size() == 1 && d[0] == 0, "fill_budget: S8 at the default cap drops the 2054 MB hit cache");
+      d = rp::fill_budget(976ull << 20, live, rp::pack_cap_bytes(3300), over, livep);
+      check(!over && d.empty(), "fill_budget: S8 at replay_pack_cap_mb=3300 keeps every image");
+      d = rp::fill_budget(976ull << 20, live, rp::pack_cap_bytes(900), over, livep);
+      check(over && d.size() == 3, "fill_budget: fixed part over a smaller cap is over budget (pack not written)");
+      // That cache through the replay's 256 MB staging (tools/frame_replay.cpp fill_image_pieces):
+      // block-row pieces of one layer for mip 0, contiguous, each under the staging, covering the file.
+      const uint64_t bytes = rp::image_bytes(138, 32688, 26352, 2, 2);
+      const auto pieces = rp::transfer_pieces(138, 32688, 26352, 2, 2, 256ull << 20);
+      uint64_t at = 0, largest = 0;
+      bool contiguous = true, aligned = true;
+      for (const auto& p : pieces) {
+        contiguous &= p.file_offset == at;
+        aligned &= p.row % 4 == 0 && (p.rows % 4 == 0 || p.row + p.rows == ((p.mip ? 26352u >> p.mip : 26352u)));
+        at += p.bytes; largest = (std::max)(largest, p.bytes);
+      }
+      check((bytes >> 20) == 2053 && at == bytes && contiguous && aligned && largest <= (256ull << 20) && pieces.size() == 10,
+            "transfer_pieces: the 2054 MB S8 hit cache in 10 staged pieces (4 row bands per mip-0 layer, 1 per mip-1 layer) of <= 256 MB");
+    }
     check(rp::texture_priority(1, 14) == rp::kPriorityHit && rp::texture_priority(1, 2) == rp::kPriorityHit &&
               rp::texture_priority(1, 3) == rp::kPriorityAlphaCache && rp::texture_priority(0, 14) == 0,
           "texture_priority: hit cache and table above the alpha caches; set 0 never droppable anyway");

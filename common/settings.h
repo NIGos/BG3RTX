@@ -508,6 +508,7 @@ inline constexpr KV kDefaults[] = {
     {"pan_prepare", "0"},
     {"pan_inputs", "0"},
     {"replay_pack", "0"},
+    {"replay_pack_cap_mb", "2048"},
     {"fg_input_copy", "1"},
     {"qa_zero", "0"},
     {"qa_exposure_hold", "0"},
