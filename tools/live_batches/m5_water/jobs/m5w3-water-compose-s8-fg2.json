@@ -39,7 +39,8 @@
   "gi: GPU cost",
   "\\[rrpost\\] exposure (held|hold|probe)",
   "\\[geo\\] RT capture",
-  "\\[cascade\\] casters"
+  "\\[cascade\\] casters",
+  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -70,7 +71,8 @@
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
   "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
   "\\[water\\] rt/water_reflect\\.hlsl\\?RT_CASCADE_MASKS=1 water_reflect: built",
-  "\\[water\\] rt/water_compose\\.hlsl\\?\\S*RT_CASCADE_MASKS=1\\S* water_compose: built"
+  "\\[water\\] rt/water_compose\\.hlsl\\?\\S*RT_CASCADE_MASKS=1\\S* water_compose: built",
+  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)"
  ],
  "expect_every": [
   {
@@ -125,6 +127,16 @@
     "cost-on",
     "cost-off-b"
    ]
+  },
+  {
+   "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+   "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+   "windows": [
+    "precheck-compose-on",
+    "cost-on"
+   ],
+   "min": 1
   }
  ],
  "forbid": [
