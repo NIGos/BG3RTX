@@ -47,9 +47,10 @@ int main(int argc, char** argv) {
     vt::Surface a, b;
     CHECK(vt::decode(kWindFs, samples(.35f), a) == vt::Status::SupportedFields);
     CHECK(vt::decode(kSti, samples(.35f), b) == vt::Status::SupportedFields && same(a, b));
-    // VS 50fbfceb is not class A (wind displaces W before the clip transform): no pool record,
-    // counted as an audited recipe without a capture path.
-    CHECK(w->capture == vt::CaptureNone);
+    // VS 50fbfceb is not class A (wind displaces W before the clip transform): no pool record;
+    // per-draw rows of its instanced draws (CaptureDraw, rt_hit_material_instanced), else counted
+    // as an audited recipe without a capture path.
+    CHECK(w->capture == vt::CaptureDraw);
     CHECK(pool_recipe(kWindVs, kWindFs) == nullptr && uncaptured_recipe(kWindVs, kWindFs));
     CHECK(!uncaptured_recipe(kStiVs, kSti) && !uncaptured_recipe(kStiVs, kWindFs) && pool_recipe(kStiVs, kSti) == &sti);
   }
@@ -67,7 +68,7 @@ int main(int argc, char** argv) {
     CHECK(vt::decode(0x923131c7039f33daull, samples(.6f), x) == vt::Status::SupportedFields);
     CHECK(vt::decode(kSti, samples(.6f), y) == vt::Status::SupportedFields && same(x, y));
     // VS 1e9145e4 adds the per-draw engine offset to the instance translation: not class A.
-    CHECK(a->capture == vt::CaptureNone && pool_recipe(a->vs, a->fs) == nullptr && uncaptured_recipe(a->vs, a->fs));
+    CHECK(a->capture == vt::CaptureDraw && pool_recipe(a->vs, a->fs) == nullptr && uncaptured_recipe(a->vs, a->fs));
     // Facing at a hit: the N column flips when the viewer is behind the authored normal,
     // whatever the triangle's winding (ng either sign).
     using bg3::transport::nv_two_sided_sign;using V = bg3::transport::NvVec3;

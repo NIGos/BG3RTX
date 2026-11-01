@@ -150,6 +150,10 @@ Limits that decide the order:
     = rows + UBO offset, mesh-cache check with it) AND alpha pool material rows (today pool rows are
     opaque only, `pool_row = !alpha`); the per-draw option needs instanced alpha rows. Neither is a
     small step; the wind per-draw path is the cheaper one (no alpha, no host BVH change).
+    Built 2026-11-01 as the per-draw option for both (`rt_hit_material_instanced`, TRACK_D_REFLECTIONS 14):
+    4bed5db2 is an alpha-table FS, so both are instanced ALPHA rows (no opaque depth family needed); the
+    key is draw words + index range; the STI engine bytes are staged in the gather's layout (no new gather
+    mode); 2S flips the N column at the hit (`nv_two_sided_sign`). No host BVH change.
 - Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;
   terrain draws patches from `_m0[gl_InstanceIndex]` + a heightmap, needs its own recipe.
 - Skinned characters (class B always-skinned VSs, CHAR_* STI FSs): positions from the skinning

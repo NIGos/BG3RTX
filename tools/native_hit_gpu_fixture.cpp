@@ -22,6 +22,7 @@
 #undef VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #include <windows.h>
+#include "../common/native_vt_fields.h"   // nv_two_sided_sign (case 9 reference)
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -232,7 +233,7 @@ struct FxCase { float p[3]; uint32_t mode; float n[3]; uint32_t key; float v[3];
 static_assert(sizeof(FxCase) == 80);
 struct FxOut { float a[3]; uint32_t sa; float b[3]; uint32_t sb; float c[3]; uint32_t lights; float ao, factor, unused; uint32_t mstatus; };
 static_assert(sizeof(FxOut) == 64);
-enum { kFxDirect = 0, kFxSun = 1, kFxAo = 2, kFxFurnace = 3, kFxCombined = 4, kFxSunDir = 5, kFxEmission = 6, kFxExactK = 7 };
+enum { kFxDirect = 0, kFxSun = 1, kFxAo = 2, kFxFurnace = 3, kFxCombined = 4, kFxSunDir = 5, kFxEmission = 6, kFxExactK = 7, kFxTwoSided = 8 };
 // native_hit_emission.hlsli statuses.
 enum { kHeUsed = 0, kHeNone = 1, kHeExcluded = 2, kHeUnvalidated = 3 };
 constexpr uint32_t kHdOk = 0;
@@ -1099,6 +1100,42 @@ int main(int argc, char** argv) {
       report.line("8b exact-k: P(sample j) = w_j / sum_R w", freqOk, fmt("grid %.0f, worst |freq - p| %.2e", N, worstFreq));
       report.line("8c exact-k: mean = full sum, factor <= sum_R w", meanOk && boundOk, fmt("worst rel mean %.2e", worstMean));
       report.line("8d exact-k: GPU selection == C++ header", sameOk, fmt("boundary-cell differences %.0f", double(mismatches)));
+    }
+    // ---- 9. two-sided frame at a hit (rt_hit_material_instanced, Base_AlphaTest_2s_VT): RtHit.dir is the ray
+    //      direction rt_closest_hit traced (bit for bit), and the consumer's N-column sign
+    //      nv_two_sided_sign(ng, N, dir) on the GPU equals the C++ one, from both sides of the open floor ----
+    {
+      Dispatch d; d.push = default_push();
+      std::vector<float> want;
+      auto ray = [&](float x, float z, D3 dir, D3 n, D3 ng, float t) {
+        FxCase c = make_case({cx(RAoOpen) + x, kY, z}, kFxTwoSided);
+        const D3 u = unit(dir);
+        c.v[0] = float(u.x); c.v[1] = float(u.y); c.v[2] = float(u.z); c.footprint = 0.01f;
+        c.n[0] = float(n.x); c.n[1] = float(n.y); c.n[2] = float(n.z);
+        c.c48[0] = float(ng.x); c.c48[1] = float(ng.y); c.c48[2] = float(ng.z);
+        d.cases.push_back(c); want.push_back(t);
+      };
+      const D3 up{0, 0, 1}, dn{0, 0, -1}, tilt = unit(D3{0.6, 0, 0.8});
+      for (const D3& ng : {up, dn}) {
+        ray(-2, 3, dn, up, ng, 3); ray(-1, 3, dn, dn, ng, 3);          // from above: front, back
+        ray(1, -3, up, up, ng, 3); ray(2, -3, up, dn, ng, 3);          // from below: back, front
+        ray(4, 3, D3{0.6, 0, -0.8}, tilt, ng, 3.75f);                  // oblique, N toward the viewer
+        ray(5, 3, D3{0.6, 0, -0.8}, D3{-tilt.x, 0, -tilt.z}, ng, 3.75f);
+      }
+      auto r = run(d);
+      bool signOk = true, dirOk = true, hitOk = true;
+      int front = 0, back = 0;
+      for (size_t i = 0; i < r.size(); ++i) {
+        const FxCase& c = d.cases[i];
+        using V = bg3::transport::NvVec3;
+        const float ref = bg3::transport::nv_two_sided_sign(V{c.c48[0], c.c48[1], c.c48[2]}, V{c.n[0], c.n[1], c.n[2]}, V{c.v[0], c.v[1], c.v[2]});
+        if (r[i].a[0] != ref) { signOk = false; std::printf("  case %zu sign %g (want %g)\n", i, r[i].a[0], ref); }
+        (ref > 0 ? front : back) += 1;
+        if (std::memcmp(r[i].b, c.v, 12) != 0) { dirOk = false; std::printf("  case %zu RtHit.dir differs from the ray\n", i); }
+        if (r[i].sa != 0 || std::abs(r[i].a[1] - want[i]) > 1e-4f) { hitOk = false; std::printf("  case %zu t %g aborted %u\n", i, r[i].a[1], r[i].sa); }
+      }
+      report.line("9a two-sided N sign == C++ (both sides)", signOk && front > 0 && back > 0, fmt("%.0f rays, %.0f front, %.0f back", double(r.size()), front, back));
+      report.line("9b RtHit.dir is the traced ray, floor hit", dirOk && hitOk, fmt("%.0f rays", double(r.size())));
     }
     std::printf("dispatch+readback %.3f s\n", gpuSeconds);
     vkDeviceWaitIdle(dev);
