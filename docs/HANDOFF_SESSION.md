@@ -33,6 +33,21 @@ and [META_AUDIT_20261101.md](META_AUDIT_20261101.md). Live tests are paused unti
 Warning: the first two branches BOTH allocate rtStats 419..426: renumber one before merging (table next to
 kStatsCounters in core/gi.cpp).
 
+## Bugfix round (user, 2026-11-01 evening) - before any feature work
+
+Found by the user playing with every experimental key on (bg3rtx.log 17:11-17:31):
+1. **Stale scene with hit materials:** `[rt] scene wait` 456 timeouts / 600 (mean 12 ms vs ~2 ms without
+   `rt_hit_material`): shadows detach on rotation/pan and flicker. Agent on it (move the provider's work off
+   the scene-commit critical path; scene-wait gate in every job).
+2. **Water does nothing in Ultra:** `core/water.cpp:1066` skips every water pass when `rt_cascade_casters=1`
+   (Ultra default); every water job ran with casters off. Needs the cascade-mask variants.
+3. **Capture buffers too small with hit materials** (64 B vertices): `rt_xfb_mb` 384 / `rt_cascade_mb` 160 dropped
+   roof casters (86-132/frame) and scene draws. User ini raised to 1024/427; the default must follow the key.
+4. **Gates never tested the real preset with features combined:** add an Ultra "all qualified experimental on"
+   smoke job (capacity 0, scene-wait timeouts 0, water participation > 0 in every window).
+5. rtStats 419..426 claimed by two branches (rf_hit_gi, wind_rgb): renumber before merging.
+6. FG off when the desktop resolution differs from the game's in fake fullscreen (layer size match).
+
 ## Next, in order (after the pause)
 
 1. Land the shader tooling; rerun the identity gates of the branches above; merge them in one merge-green.
