@@ -1152,20 +1152,23 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
     ++g_win.skip[u];
     return skip();
   }
-  // rt_cascade_casters runs the RT_CASCADE_MASKS requests (make_pipe). These others change the
-  // alpha set or the scene's primitives (core/gi.cpp Pipe variants) and have no water variant:
-  // counted, logged once per change, never traced with the wrong layout.
+  // rt_cascade_casters runs the RT_CASCADE_MASKS requests (make_pipe). The keys of
+  // shader_variant::kWaterNoVariant change the alpha set or the scene's primitives (core/gi.cpp
+  // Pipe variants) and have no water variant: counted, logged once per change ("skipped: no
+  // variant for", the convention smoke_ultra forbids), never traced with the wrong layout.
   {
-    static const char* const kNo[] = {"rt_omm", "rt_native_tileset", "rt_native_scalp", "rt_native_hair",
-                                      "rt_hair_physical_origin"};
+    const auto& kNo = bg3::shader_variant::kWaterNoVariant;
+    constexpr unsigned kN = unsigned(sizeof kNo / sizeof kNo[0]);
+    static_assert(kN <= 32, "one bit per key");
     static unsigned s_logged = 0;
     unsigned on = 0;
     std::string names;
-    for (unsigned i = 0; i < 5; ++i)
-      if (host->cfg_int(kNo[i], 0)) on |= 1u << i, names += names.empty() ? kNo[i] : std::string(", ") + kNo[i];
+    for (unsigned i = 0; i < kN; ++i)
+      if (host->cfg_int(kNo[i].key, 0))
+        on |= 1u << i, names += names.empty() ? kNo[i].key : std::string(", ") + kNo[i].key;
     if (on != s_logged) {
       s_logged = on;
-      if (on) host->log("[water] reflections skipped: no water variant for %s", names.c_str());
+      if (on) host->log("[water] reflections skipped: no variant for %s", names.c_str());
     }
     if (on) {
       ++g_win.skip_variant;

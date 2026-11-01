@@ -21,15 +21,19 @@ Two passes in the pre-lighting hook (`core/gi.cpp`, a few lines around the sun d
      floors, roof floors; box triggers as is, prism triggers as polygon bounds × Height),
      padded by `rt_sun_roof_pad` (1 m) sideways and `rt_sun_roof_up` (3 m) upwards (not
      derived yet: the DB holds no roof meshes, see 12.4), the ones within the roof query
-     radius of the camera, nearest first, at most `kSunMaxVolumes` (256). The radius is
+     radius of the camera, nearest first, at most `kSunMaxVolumes` (512; shaders
+     `SUN_MAX_VOLUMES`). The radius is
      derived per frame (`core/sun_trust.cpp roof_radius`): the farthest pixel whose trust
      still depends on the roof test (read back from `rt_sun_resolve.hlsl`, header byte 48)
      + `rt_tmax` (the ray's reach), so every volume a counted ray can meet is in the query;
-     `rt_sun_roof_radius` > 0 overrides it. Volumes beyond 256 are dropped farthest first,
+     `rt_sun_roof_radius` > 0 overrides it. Volumes beyond the cap are dropped farthest first,
      logged once per level (`sun: WARNING N roof volumes ...`) and counted in `sun stats`
      (`over kSunMaxVolumes on N frames`). `scripts/roof_stats.py` (asset DB): at most 398
      volumes in a level (CTY_Main_A), at most 183 within 300 or 600 m of any volume centre
-     and 287 within 1000 m, so 256 holds for a radius up to 600 m. A ray that starts
+     and 287 within 1000 m. The old cap 256 held only up to 600 m: on 2026-11-01 the radius
+     reached 1980 m in CTY_Main_A (farthest roof-tested pixel 1680 m) and 103 of 359 volumes
+     were dropped on 306 of 600 frames. 512 holds every level whole (`roof_stats.py --check`,
+     CTest `roof_cap_test`); smoke_ultra forbids the WARNING. A ray that starts
      in or passes through one is untrusted: the camera may have cut that roof away (it is
      then missing from the TLAS but still in the game's cascades). This covers "inside a
      roofed room", "under a floor with a higher floor" and "in the shadow of a roof".

@@ -18,7 +18,11 @@
 #pragma once
 #include "core.h"
 
-constexpr uint32_t kSunMaxVolumes = 256;
+// Every roof volume of a level fits: scripts/roof_stats.py (asset DB) counts at most 398 in one
+// level (CTY_Main_A), and the derived query radius (farthest roof-tested pixel + rt_tmax) reached
+// 1980 m there on 2026-11-01, i.e. the whole level (359 of 398 within it, 103 were dropped at 256).
+// The shaders read the same cap (SUN_MAX_VOLUMES, shaders/gi/sun_trust.hlsli; tests/roof_cap_test.py).
+constexpr uint32_t kSunMaxVolumes = 512;
 constexpr uint32_t kSunHeader = 192;   // bytes before the 48-byte volume records
 
 struct SunTrustFrame {

@@ -204,7 +204,7 @@
   "\\[water\\] compose: a water pipeline blends",
   "\\[rrpost\\] exposure hold REFUSED",
   "\\[cascade\\] could not allocate",
-  "\\[water\\] reflections skipped: no water variant"
+  "skipped: no variant for"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
