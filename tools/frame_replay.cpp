@@ -9,6 +9,9 @@
 //   frame_replay --synthesize <dir> [--dark]     write the synthetic pack (the CTest's)
 //   frame_replay --self-test <dir>               CTest frame_replay_test: synthesize lit + dark packs,
 //                                                replay each twice from disk, check determinism and terms
+//   frame_replay --pack <dir> --pt-reference [--pt-iters N] | --pt-cost
+//                                                offline path-traced reference (tools/pt_reference.hlsl)
+//   frame_replay --pt-self-test <dir>            CTest pt_reference_test: furnace + slab checks
 // Edit shaders/..., rerun: the shader is recompiled from the checkout on every run (seconds).
 // Exit 77 (CTest SKIP_RETURN_CODE): no Vulkan device with ray queries, or (self-test) no validation layer.
 #undef VK_NO_PROTOTYPES
@@ -421,8 +424,16 @@ void write_pfm(const fs::path& p, const ImageResult& r) {
   std::ofstream f(p, std::ios::binary); f << header; f.write(reinterpret_cast<const char*>(rgb.data()), std::streamsize(rgb.size() * 4));
 }
 
+// Optional per-run control (--pt-reference): patch the pushed constants before run r, receive each
+// run's result instead of keeping it (only the last run stays in Replay::runs).
+struct ReplayHooks {
+  std::function<void(uint32_t run, std::vector<uint8_t>& push)> patch;
+  std::function<void(uint32_t run, const RunResult&)> each;
+};
+
 Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const fs::path& hlsl_override,
-              const std::vector<std::string>& extra_defines, const fs::path& out, uint32_t repeat, bool quiet) {
+              const std::vector<std::string>& extra_defines, const fs::path& out, uint32_t repeat, bool quiet,
+              const ReplayHooks* hooks = nullptr) {
   Replay result;
   rp::Manifest m; std::string error;
   { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
@@ -691,8 +702,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   }
 
   // ---- pipeline, push constants, dispatch ----
-  auto push = file(m.push);
-  check(push.size() == pass.push_bytes, "push constant bytes");
+  const auto push_pack = file(m.push);
+  check(push_pack.size() == pass.push_bytes, "push constant bytes");
+  std::vector<uint8_t> push = push_pack;
   VkPushConstantRange pushRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, pass.push_bytes};
   VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   pl.setLayoutCount = pass.set_count; pl.pSetLayouts = setLayouts.data(); pl.pushConstantRangeCount = 1; pl.pPushConstantRanges = &pushRange;
@@ -706,6 +718,8 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   VkQueryPool queries; vkcheck(vkCreateQueryPool(g.dev, &qi, nullptr, &queries), "query pool");
   for (uint32_t run = 0; run < repeat; ++run) {
     std::memset(stats.map, 0, size_t(stats.size));
+    push = push_pack;
+    if (hooks && hooks->patch) hooks->patch(run, push);
     submit([&](VkCommandBuffer c) {
       barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
               VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -737,14 +751,16 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
         std::printf("  output %s %ux%u: mean %.7g %.7g %.7g %.7g, non-finite %llu, fnv1a %016llx\n", r.name.c_str(), r.w, r.h, r.mean[0], r.mean[1],
                     r.mean[2], r.mean[3], (unsigned long long)r.nonfinite, (unsigned long long)r.hash);
     }
+    if (hooks && hooks->each) hooks->each(run, rr);
+    if (hooks && run + 1 < repeat) continue;   // many runs: keep only the last (outputs below)
     result.runs.push_back(std::move(rr));
   }
   // Outputs (the last run), and the live reference comparison when the pack has one.
-  for (size_t i = 0; i < outputs.size(); ++i) {
+  for (size_t i = 0; i < outputs.size() && !hooks; ++i) {
     const auto& r = result.runs.back().outputs[i];
     write_vec(out / (r.name + ".raw"), r.raw);
     write_pfm(out / (r.name + ".pfm"), r);
-    if (!outputs[i].reference.empty() && r.format == VK_FORMAT_R16G16B16A16_SFLOAT) {
+    if (!hooks && !outputs[i].reference.empty() && r.format == VK_FORMAT_R16G16B16A16_SFLOAT) {
       auto live = file(outputs[i].reference);
       if (live.size() != r.raw.size()) { result.warnings.push_back("reference " + outputs[i].reference + " has another size"); continue; }
       const auto* a = reinterpret_cast<const uint16_t*>(r.raw.data()); const auto* b = reinterpret_cast<const uint16_t*>(live.data());
@@ -808,7 +824,9 @@ static_assert(sizeof(Push) == 256 && offsetof(Push, rt_tmax) == 84 && offsetof(P
               offsetof(Push, gi_rt_radius) == 112 && offsetof(Push, sun_radius) == 128 && offsetof(Push, ls_source_radius) == 144 &&
               offsetof(Push, ls_flags) == 188, "Push must match gi_common.hlsli");
 
-void synthesize(const fs::path& dir, bool dark) {
+// box (the PT furnace, tools/pt_reference.hlsl): the camera inside a closed cube |x|, |y|, |z| <= 2 of
+// 12 inward triangles without a material record (instance 0 only); every pixel sees the face y = 2.
+void synthesize(const fs::path& dir, bool dark, bool box = false) {
   fs::create_directories(dir);
   constexpr uint32_t W = 128, H = 128, frame = 3, stamp = 7;
   constexpr float kFront = 4.3f;   // F: 20 cm in front of K, far beyond the on-screen depth tolerance (~2 cm footprint)
@@ -831,11 +849,33 @@ void synthesize(const fs::path& dir, bool dark) {
     const V3 b0{1, 0, 0}, b1{0, ny, 0}, b2{0, 0, 1};
     for (int k : order) { vertex(soup, c[k], uv[k][0], uv[k][1], b0, b1, b2); if (with_basis) vertex(basis, c[k], uv[k][0], uv[k][1], b0, b1, b2); }
   };
-  quad(5.0f, -10, 10, -10, 10, -1, false);        // B (instance 0, tris 0-1)
-  quad(kFront, -0.6f, 0.6f, -0.6f, 0.6f, -1, false);  // F (instance 0, tris 2-3)
+  constexpr float kBox = 2.0f;
+  if (box) {
+    // Six inward faces: corners c0..c3, wound so the geometric normal points to the centre.
+    auto face = [&](V3 a, V3 b, V3 c, V3 d, V3 n) {
+      V3 q[4] = {a, b, c, d};
+      int order[6] = {0, 1, 2, 0, 2, 3};
+      if (dot3(cross(sub(q[1], q[0]), sub(q[2], q[0])), n) < 0) { order[1] = 2; order[2] = 1; order[4] = 3; order[5] = 2; }
+      for (int k : order) vertex(soup, q[k], 0, 0, {1, 0, 0}, n, {0, 0, 1});
+    };
+    const float L = kBox;
+    face({-L, L, -L}, {L, L, -L}, {L, L, L}, {-L, L, L}, {0, -1, 0});      // y = +L (the screen)
+    face({-L, -L, -L}, {L, -L, -L}, {L, -L, L}, {-L, -L, L}, {0, 1, 0});   // y = -L
+    face({L, -L, -L}, {L, L, -L}, {L, L, L}, {L, -L, L}, {-1, 0, 0});      // x = +L
+    face({-L, -L, -L}, {-L, L, -L}, {-L, L, L}, {-L, -L, L}, {1, 0, 0});   // x = -L
+    face({-L, -L, L}, {L, -L, L}, {L, L, L}, {-L, L, L}, {0, 0, -1});      // z = +L
+    face({-L, -L, -L}, {L, -L, -L}, {L, L, -L}, {-L, L, -L}, {0, 0, 1});   // z = -L
+    const std::vector<uint8_t> keep = soup;
+    quad(4.5f, -0.6f, 0.6f, -0.6f, 0.6f, +1, true);   // only for the (unused) basis buffer
+    soup = keep;
+  } else {
+    quad(5.0f, -10, 10, -10, 10, -1, false);        // B (instance 0, tris 0-1)
+    quad(kFront, -0.6f, 0.6f, -0.6f, 0.6f, -1, false);  // F (instance 0, tris 2-3)
+  }
   const uint32_t kBase = uint32_t(soup.size());
-  quad(4.5f, -0.6f, 0.6f, -0.6f, 0.6f, +1, true);   // K (instance 1, tris 0-1, with material)
-  const uint32_t info[8] = {0, stride, 0, 4, kBase, stride | bg3::native_hit::nh_opaque_meta, record, 2};
+  if (!box) quad(4.5f, -0.6f, 0.6f, -0.6f, 0.6f, +1, true);   // K (instance 1, tris 0-1, with material)
+  const uint32_t info[8] = {0, stride, 0, box ? 12u : 4u, kBase, stride | bg3::native_hit::nh_opaque_meta, record, 2};
+  const uint32_t instances_used = box ? 1 : 2;
   // Hit-material records (native_hit_material.hlsli rt_hit_material, opaque prepass row).
   const uint32_t recordsBytes = 16 + bg3::native_hit::nh_material_rows * 256 + 16;
   std::vector<uint8_t> records(recordsBytes);
@@ -880,7 +920,7 @@ void synthesize(const fs::path& dir, bool dark) {
     for (uint32_t x = 0; x < W; ++x) {
       const float u = (x + 0.5f) / W, v = (y + 0.5f) / H, rx = 2 * A * u - A, rz = 2 * A * v - A;
       const bool slab = std::abs(rx * kFront) <= 0.6f && std::abs(rz * kFront) <= 0.6f;
-      depth[y * W + x] = slab ? kFront : 5.0f;
+      depth[y * W + x] = box ? kBox : slab ? kFront : 5.0f;
     }
   // Push (gi_common.hlsli Push; bg3rtx.ini production defaults where the pass reads them).
   Push pc{};
@@ -909,12 +949,13 @@ void synthesize(const fs::path& dir, bool dark) {
     inst[i].flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
     inst[i].accelerationStructureReference = 0x1000u + i;   // opaque BLAS keys
   }
-  write_file(dir / "instances.bin", inst, sizeof inst);
+  write_file(dir / "instances.bin", inst, sizeof inst[0] * instances_used);
   // The manifest through the writer the live capture uses (rp::serialize); the soup as two sparse
   // slices of one file, as the live writer stores the InstInfo spans (B + F, then K).
   rp::Manifest m;
   m.version = rp::kVersion; m.pass = "gi_hit_direct"; m.frame = frame;
-  m.notes.push_back(" synthetic: back plane, slab front/back, one point light" + std::string(dark ? " of colour 0 (dark)" : " (lit)"));
+  m.notes.push_back(box ? std::string(" synthetic: closed box (PT furnace), no material record") :
+                          " synthetic: back plane, slab front/back, one point light" + std::string(dark ? " of colour 0 (dark)" : " (lit)"));
   m.groups[0] = (W / 2 + 7) / 8; m.groups[1] = (H / 2 + 7) / 8; m.groups[2] = 1;
   m.push = "push.bin";
   auto buf = [&](uint32_t s, uint32_t b, uint64_t bytes, const char* f) { m.buffers.push_back({s, b, bytes, f ? f : ""}); };
@@ -926,14 +967,14 @@ void synthesize(const fs::path& dir, bool dark) {
   buf(1, 0, 16, "alpharec.bin"); buf(1, 1, 256, nullptr); buf(1, 8, 256, nullptr);
   buf(1, 6, soup.size(), nullptr);
   m.ranges.push_back({1, 6, 0, "soup.bin", 0, kBase});
-  m.ranges.push_back({1, 6, kBase, "soup.bin", kBase, soup.size() - kBase});
+  if (!box) m.ranges.push_back({1, 6, kBase, "soup.bin", kBase, soup.size() - kBase});
   buf(1, 7, 32, "instinfo.bin");
   buf(1, 9, 512, "stamp.bin"); buf(1, 12, recordsBytes, "records.bin");
   buf(1, 13, basis.size(), "basis.bin");
   img(1, 2, 1, rp::kRgba32Sfloat, 1, 1, "page.rgba32f");
   img(1, 14, 1, rp::kRgba32Sfloat, 1, 1, "albedo.rgba32f"); img(1, 14, 2, rp::kRgba32Sfloat, 1, 1, "nrm.rgba32f"); img(1, 14, 3, rp::kRgba32Sfloat, 1, 1, "params.rgba32f");
   m.samplers.push_back({1, 15, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
-  m.instances = "instances.bin"; m.instance_count = 2;
+  m.instances = "instances.bin"; m.instance_count = instances_used;
   m.outputs.push_back({0, 8, rp::kRgba16Sfloat, W / 2, H / 2, ""}); m.outputs.push_back({0, 13, rp::kR32Sfloat, W / 2, H / 2, ""});
   const std::string mf = rp::serialize(m);
   { rp::Manifest back; std::string error; check(rp::parse(mf, back, error), "synthetic manifest does not parse: " + error); }
@@ -1072,6 +1113,298 @@ ReadCheck check_shader_reads(const fs::path& dir) {
   return rc;
 }
 
+// ---------------------------------------------------------------- PT reference (tools/pt_reference.hlsl)
+// Runs the offline path tracer over a pack: `iters` iterations x `modes` dispatches. Iteration i
+// pushes Push::ls_kmode = i + 1 (the shader's seed with Push::frame, which stays the pack's: it is the
+// hit-material epoch), every mode of one iteration the same seed, so all modes see the same paths;
+// Push::debug = mode, rt_stats 0. Sums each mode's giRaw (rgba) and giRawDepth (aux) in double; the
+// mean is sum / iters (the shader averages its PT_SPP).
+constexpr uint32_t kPtModes = 7;
+struct PtAccum {
+  uint32_t w = 0, h = 0, iters = 0, modes = 0;
+  std::vector<double> rgba[kPtModes], aux[kPtModes];
+  std::vector<double> gpu_ms;
+  double mean(uint32_t mode, uint32_t c, size_t i) const { return (c < 4 ? rgba[mode][i * 4 + c] : aux[mode][i]) / std::max(iters, 1u); }
+};
+PtAccum pt_run(const fs::path& pack, std::vector<std::string> defines, uint32_t iters, uint32_t modes, const fs::path& out, bool quiet = true) {
+  PtAccum acc; acc.iters = iters; acc.modes = modes;
+  ReplayHooks hooks;
+  hooks.patch = [&](uint32_t run, std::vector<uint8_t>& push) {
+    const uint32_t iteration = run / modes + 1, mode = run % modes, zero = 0;
+    std::memcpy(push.data() + offsetof(Push, ls_kmode), &iteration, 4);
+    std::memcpy(push.data() + offsetof(Push, debug), &mode, 4);
+    std::memcpy(push.data() + offsetof(Push, rt_stats), &zero, 4);
+  };
+  hooks.each = [&](uint32_t run, const RunResult& rr) {
+    const uint32_t mode = run % modes;
+    acc.gpu_ms.push_back(rr.gpu_ms);
+    for (const auto& o : rr.outputs) {
+      const size_t n = size_t(o.w) * o.h;
+      if (o.name == "giRaw") {
+        acc.w = o.w; acc.h = o.h;
+        auto& v = acc.rgba[mode]; if (v.empty()) v.assign(n * 4, 0.0);
+        const auto* hp = reinterpret_cast<const uint16_t*>(o.raw.data());
+        for (size_t i = 0; i < n * 4; ++i) { const float x = half_to_float(hp[i]); if (std::isfinite(x)) v[i] += x; }
+      } else if (o.name == "giRawDepth") {
+        auto& v = acc.aux[mode]; if (v.empty()) v.assign(n, 0.0);
+        const auto* fp = reinterpret_cast<const float*>(o.raw.data());
+        for (size_t i = 0; i < n; ++i) if (std::isfinite(fp[i])) v[i] += fp[i];
+      }
+    }
+  };
+  // One DXC compile per define set (the pack's variant defines appended as replay() does): the
+  // self-test runs the same variant on several packs.
+  static std::map<std::string, std::vector<uint32_t>> cache;
+  rp::Manifest m; std::string error;
+  { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
+  std::vector<std::string> all = defines;
+  for (size_t a = 0; a < m.defines.size();) { size_t e = m.defines.find(';', a); all.push_back(m.defines.substr(a, e - a)); if (e == std::string::npos) break; a = e + 1; }
+  std::string key; for (auto& d : all) key += d + ";";
+  auto it = cache.find(key);
+  if (it == cache.end()) {
+    fs::create_directories(out);
+    it = cache.emplace(key, compile(fs::path(source_root()) / "tools" / "pt_reference.hlsl", all, out / "pt_reference.spv")).first;
+  }
+  replay(pack, &it->second, {}, {}, out, iters * modes, quiet, &hooks);
+  return acc;
+}
+double median(std::vector<double> v) { if (v.empty()) return 0; std::sort(v.begin(), v.end()); return v[v.size() / 2]; }
+// Approximate sun transmittance for the atmosphere path (the pack has no LUT): Kasten-Young air
+// mass at the sun's elevation (lighting space y up, bg3_sun.hlsli), Rayleigh optical depth at
+// 680 / 550 / 440 nm (0.036, 0.097, 0.236) plus 0.1 aerosol. A declared estimate, not the game's LUT.
+void sun_transmittance(float mu, float t[3]) {
+  if (!(mu > -0.05f)) { t[0] = t[1] = t[2] = 0; return; }
+  const double z = std::acos(std::clamp<double>(mu, -1, 1)) * 180.0 / 3.14159265358979;
+  const double am = 1.0 / (std::max<double>(mu, 0) + 0.50572 * std::pow(std::max(96.07995 - z, 1e-3), -1.6364));
+  const double tau[3] = {0.036 + 0.1, 0.097 + 0.1, 0.236 + 0.1};
+  for (int k = 0; k < 3; ++k) t[k] = float(std::exp(-tau[k] * am));
+}
+void write_bmp(const fs::path& p, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb) {
+  const uint32_t row = (w * 3 + 3) & ~3u, size = 54 + row * h;
+  std::vector<uint8_t> f(size, 0);
+  auto u32 = [&](size_t at, uint32_t v) { std::memcpy(&f[at], &v, 4); };
+  f[0] = 'B'; f[1] = 'M'; u32(2, size); u32(10, 54); u32(14, 40); u32(18, w); u32(22, h);
+  f[26] = 1; f[28] = 24; u32(34, row * h);
+  for (uint32_t y = 0; y < h; ++y)
+    for (uint32_t x = 0; x < w; ++x)
+      for (int k = 0; k < 3; ++k) f[54 + size_t(h - 1 - y) * row + x * 3 + (2 - k)] = rgb[(size_t(y) * w + x) * 3 + k];
+  write_file(p, f.data(), f.size());
+}
+void write_pfm_rgb(const fs::path& p, uint32_t w, uint32_t h, const std::function<float(size_t, int)>& at) {
+  std::string header = "PF\n" + std::to_string(w) + " " + std::to_string(h) + "\n-1.0\n";
+  std::vector<float> rgb(size_t(w) * h * 3);
+  for (uint32_t y = 0; y < h; ++y)
+    for (uint32_t x = 0; x < w; ++x)
+      for (int k = 0; k < 3; ++k) rgb[(size_t(h - 1 - y) * w + x) * 3 + k] = at(size_t(y) * w + x, k);
+  std::ofstream f(p, std::ios::binary); f << header; f.write(reinterpret_cast<const char*>(rgb.data()), std::streamsize(rgb.size() * 4));
+}
+
+// The comparison against the pack's live giRaw (s0b8.live) over the pixels the live pass shaded
+// (live giRawDepth > 0): image means, the energy split by first-hit class / distance / light,
+// per-region (16 x 9 tiles) ratios, images. Luminance (Rec. 709) throughout.
+void pt_report(const fs::path& pack, const PtAccum& a, const fs::path& out, const std::string& params) {
+  rp::Manifest m; std::string error;
+  { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
+  std::string live_rgba, live_depth;
+  for (const auto& o : m.outputs) { if (o.binding == 8) live_rgba = o.reference; if (o.binding == 13) live_depth = o.reference; }
+  const size_t n = size_t(a.w) * a.h;
+  std::vector<float> lv(n * 4, 0.0f), ld(n, 1.0f);
+  const bool have_live = !live_rgba.empty() && fs::exists(pack / live_rgba);
+  if (have_live) {
+    auto raw = read_file(pack / live_rgba); check(raw.size() == n * 8, "live giRaw size");
+    const auto* hp = reinterpret_cast<const uint16_t*>(raw.data());
+    for (size_t i = 0; i < n * 4; ++i) lv[i] = half_to_float(hp[i]);
+    if (!live_depth.empty() && fs::exists(pack / live_depth)) {
+      auto d = read_file(pack / live_depth); check(d.size() == n * 4, "live giRawDepth size"); std::memcpy(ld.data(), d.data(), d.size());
+    }
+  }
+  float radius = 0;
+  { auto push = read_file(pack / m.push); if (push.size() >= sizeof(Push)) std::memcpy(&radius, push.data() + offsetof(Push, gi_rt_radius), 4); }
+  auto lum = [](double r, double g, double b) { return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  auto L = [&](uint32_t mode, size_t i) { return lum(a.mean(mode, 0, i), a.mean(mode, 1, i), a.mean(mode, 2, i)); };
+  // Image means over the shaded pixels.
+  double cnt = 0, s_live = 0, s_live_a = 0;
+  double s[kPtModes][5] = {};   // per mode: lum rgb, a, aux, (unused)
+  for (size_t i = 0; i < n; ++i) {
+    if (!(ld[i] > 0) || !std::isfinite(lv[i * 4])) continue;
+    cnt += 1; s_live += lum(lv[i * 4], lv[i * 4 + 1], lv[i * 4 + 2]); s_live_a += lv[i * 4 + 3];
+    for (uint32_t k = 0; k < a.modes; ++k) { s[k][0] += L(k, i); s[k][1] += a.mean(k, 3, i); s[k][2] += a.mean(k, 4, i); }
+  }
+  check(cnt > 0, "no shaded pixels to compare");
+  auto M = [&](uint32_t mode, int c) { return mode < a.modes ? s[mode][c] / cnt : 0.0; };
+  const double E = M(0, 0), live = s_live / cnt;
+  auto pct = [&](double x) { return E > 0 ? 100.0 * x / E : 0.0; };
+  std::vector<std::string> lines;
+  char b[1024];
+  auto add = [&](const char* fmt, auto... v) { std::snprintf(b, sizeof b, fmt, v...); lines.push_back(b); std::printf("  %s\n", b); };
+  add("pt reference: %s; %u iterations x %u modes, %ux%u GI pixels, %.0f shaded (live giRawDepth > 0)", params.c_str(), a.iters, a.modes, a.w, a.h, cnt);
+  add("dispatch GPU ms: median %.3f, total %.1f s", median(a.gpu_ms), [&] { double t = 0; for (double x : a.gpu_ms) t += x; return t * 1e-3; }());
+  add("means (luminance of mean incident radiance, the giRaw.rgb quantity): live giRaw %.6g (live a %.4f); PT total %.6g, PT 1-bounce %.6g", live, s_live_a / cnt, E, M(1, 0));
+  double k = 1;   // game / PT on visible first hits (below)
+  if (a.modes >= kPtModes) {
+    const double vis = M(0, 2) + M(1, 2), hid = M(2, 2) + M(3, 2), off = M(4, 2);
+    add("PT energy by first hit: visible on screen %.1f%% (near %.1f, far %.1f), on screen but hidden %.1f%% (near %.1f, far %.1f), off screen %.1f%%",
+        pct(vis), pct(M(0, 2)), pct(M(1, 2)), pct(hid), pct(M(2, 2)), pct(M(3, 2)), pct(off));
+    add("PT energy by light: sun %.1f%%, local point/spot %.1f%%; multi-bounce (vertex >= 2) %.1f%%", pct(M(5, 2)), pct(M(6, 2)), pct(E - M(1, 0)));
+    add("ray fractions: miss (sky/unknown environment, 0 in PT) %.4f, first hit visible %.4f, hidden on screen %.4f, near (t < gi_rt_radius) %.4f, aborted %.5f, "
+        "qualified hit material %.5f", M(0, 1), M(1, 1), M(6, 1), M(3, 1), M(4, 1), M(2, 1));
+    add("PT energy by distance: first hit beyond gi_rt_radius %.1f%% (visible %.1f, hidden %.1f, off screen part not split); live domain (near x fade) %.1f%%",
+        pct(M(1, 2) + M(3, 2)), pct(M(1, 2)), pct(M(3, 2)), pct(M(3, 0)));
+    // Diagnostics per channel (mode 5 rgb is not a colour).
+    double dr = 0, dg = 0, db = 0;
+    for (size_t i = 0; i < n; ++i) if (ld[i] > 0 && std::isfinite(lv[i * 4])) { dr += a.mean(5, 0, i); dg += a.mean(5, 1, i); db += a.mean(5, 2, i); }
+    add("vertex diagnostics: no froxel light list (local lights unsupported) %.4f, sun ray unknown %.5f, fallback material %.4f; mean vertices per path %.3f",
+        dr / cnt, dg / cnt, db / cnt, M(5, 1));
+    const double ptvis = vis, scr = M(2, 0);
+    k = ptvis > 0 ? scr / ptvis : 0;
+    add("calibration on visible first hits (same paths): screen radiance %.6g vs PT radiance %.6g -> k = %.3f (game / PT: material, ambient, emission the PT lacks)", scr, ptvis, k);
+    add("live domain (first hit t < %.3g m, live fade): PT %.6g, PT x k %.6g, of it hidden/off-screen (fallback0 adds 0) %.6g = %.1f%%; screen tier (game radiance x fade) %.6g",
+        radius, M(3, 0), M(3, 0) * k, M(6, 0), M(3, 0) > 0 ? 100.0 * M(6, 0) / M(3, 0) : 0.0, M(4, 0));
+    add("live vs PT: live / PT-live-domain %.3f, live / (k x PT-live-domain) %.3f, live / screen tier %.3f (live above it: in-game hidden-hit direct %.6g), "
+        "live / PT total %.3f, live / (k x PT total) %.3f",
+        M(3, 0) > 0 ? live / M(3, 0) : 0.0, M(3, 0) * k > 0 ? live / (M(3, 0) * k) : 0.0, M(4, 0) > 0 ? live / M(4, 0) : 0.0, live - M(4, 0),
+        E > 0 ? live / E : 0.0, E * k > 0 ? live / (E * k) : 0.0);
+  }
+  // Per region: 16 x 9 tiles, mean luminance live vs PT (live domain and total).
+  constexpr int TX = 16, TY = 9;
+  struct Tile { double n = 0, live = 0, dom = 0, total = 0, scr = 0; };
+  std::vector<Tile> tiles(TX * TY);
+  for (uint32_t y = 0; y < a.h; ++y)
+    for (uint32_t x = 0; x < a.w; ++x) {
+      const size_t i = size_t(y) * a.w + x;
+      if (!(ld[i] > 0) || !std::isfinite(lv[i * 4])) continue;
+      Tile& t = tiles[(y * TY / a.h) * TX + x * TX / a.w];
+      t.n += 1; t.live += lum(lv[i * 4], lv[i * 4 + 1], lv[i * 4 + 2]); t.total += L(0, i);
+      if (a.modes > 4) { t.dom += L(3, i); t.scr += L(4, i); }
+    }
+  std::vector<double> r_near, r_total, gap;
+  double abs_dom = 0, sum_dom = 0;
+  std::ofstream csv(out / "pt_tiles.csv");
+  csv << "tx,ty,pixels,live,pt_live_domain,pt_total,screen_tier\n";
+  for (int ty = 0; ty < TY; ++ty)
+    for (int tx = 0; tx < TX; ++tx) {
+      Tile& t = tiles[ty * TX + tx];
+      if (t.n < 1) continue;
+      t.live /= t.n; t.dom /= t.n; t.total /= t.n; t.scr /= t.n;
+      csv << tx << "," << ty << "," << t.n << "," << t.live << "," << t.dom << "," << t.total << "," << t.scr << "\n";
+      if (t.dom > 0) r_near.push_back(t.live / (k * t.dom));
+      abs_dom += t.n * std::abs(t.live - k * t.dom); sum_dom += t.n * k * t.dom;
+      if (t.total > 0) r_total.push_back(t.live / (k * t.total));
+      gap.push_back(t.total - t.live);
+    }
+  auto q = [](std::vector<double> v, double p) { if (v.empty()) return 0.0; std::sort(v.begin(), v.end()); return v[size_t(p * (v.size() - 1))]; };
+  add("per region (16 x 9 tiles, %zu with pixels, PT x k): live / PT-live-domain p10 %.3f median %.3f p90 %.3f, pixel-weighted mean |live - PT| / PT %.3f; "
+      "live / PT total p10 %.3f median %.3f p90 %.3f", gap.size(), q(r_near, 0.1), q(r_near, 0.5), q(r_near, 0.9), sum_dom > 0 ? abs_dom / sum_dom : 0.0,
+      q(r_total, 0.1), q(r_total, 0.5), q(r_total, 0.9));
+  { std::ofstream f(out / "pt_report.txt"); for (auto& l : lines) f << l << "\n"; }
+  // Images: PFM (linear) and one BMP strip live | PT live domain | PT total at one exposure.
+  write_pfm_rgb(out / "pt_total.pfm", a.w, a.h, [&](size_t i, int k) { return float(a.mean(0, k, i)); });
+  if (a.modes > 3) write_pfm_rgb(out / "pt_live_domain.pfm", a.w, a.h, [&](size_t i, int k) { return float(a.mean(3, k, i)); });
+  write_pfm_rgb(out / "live_giRaw.pfm", a.w, a.h, [&](size_t i, int k) { return lv[i * 4 + k]; });
+  const uint32_t sw = std::max(1u, a.w / 640), W = a.w / sw, H = a.h / sw;
+  std::vector<uint8_t> strip(size_t(W) * 3 * H * 3);
+  const double exposure = E > 0 ? 0.5 / E : 1.0;
+  auto tone = [&](double v) { v = std::max(0.0, v * exposure); v = v / (1 + v); v = v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1 / 2.4) - 0.055; return uint8_t(std::clamp(v, 0.0, 1.0) * 255 + 0.5); };
+  for (uint32_t y = 0; y < H; ++y)
+    for (uint32_t x = 0; x < W; ++x) {
+      const size_t i = size_t(y * sw) * a.w + x * sw;
+      for (int k = 0; k < 3; ++k) {
+        strip[(size_t(y) * W * 3 + x) * 3 + k] = tone(lv[i * 4 + k]);
+        strip[(size_t(y) * W * 3 + W + x) * 3 + k] = tone(a.modes > 3 ? a.mean(3, k, i) : 0.0);
+        strip[(size_t(y) * W * 3 + 2 * W + x) * 3 + k] = tone(a.mean(0, k, i));
+      }
+    }
+  write_bmp(out / "pt_compare.bmp", W * 3, H, strip);
+}
+
+// Cost of real-time-sized PT kernels on this pack (mode 0 only, rt_stats 0): 1 spp with 1 and 2
+// path vertices (RR off), each with sun + local-light NEE shadow rays, rays up to 300 m and 8 m.
+// Median of `runs` dispatches.
+void pt_cost(const fs::path& pack, const std::vector<std::string>& base, const fs::path& out) {
+  const uint32_t runs = 9;
+  struct Config { uint32_t bounces; const char* tmax; };
+  for (const Config& c : {Config{1, "300.0"}, Config{2, "300.0"}, Config{1, "8.0"}, Config{2, "8.0"}}) {
+    std::vector<std::string> d = base;
+    d.push_back("PT_SPP=1"); d.push_back("PT_BOUNCES=" + std::to_string(c.bounces)); d.push_back("PT_RR_START=99");
+    d.push_back(std::string("PT_TMAX=") + c.tmax);
+    PtAccum a = pt_run(pack, d, runs, 1, out);
+    const double px = double(a.w) * a.h, ms = median(a.gpu_ms);
+    std::printf("  pt cost: 1 spp, %u vertex%s, rays <= %s m (NEE sun + local at each): median %.3f ms at %ux%u (%.3f ms per Mpx); scaled to DLSS 4K "
+                "render Quality 2560x1440 %.2f ms, Balanced 2227x1253 %.2f ms, Performance 1920x1080 %.2f ms\n", c.bounces, c.bounces > 1 ? "es" : "",
+                c.tmax, ms, a.w, a.h, ms / px * 1e6, ms / px * 2560 * 1440, ms / px * 2227 * 1253, ms / px * 1920 * 1080);
+  }
+}
+
+// CTest pt_reference_test: the furnace (closed box, every vertex emits Le = 1, Lambertian albedo rho):
+// mean incident radiance = sum_{k<B} rho^k exactly for B vertices (each Lambert sample's f cos / pdf
+// is rho; every ray hits), Le / (1 - rho) with Russian roulette (unbiased; checked within 4 standard
+// errors), a FresnelBlend white furnace bounded by B (energy conservation), closure (miss 0), and on
+// the slab pack: native hit material + point light lit, dark control exactly 0, deterministic.
+int pt_self_test(const fs::path& dir) {
+  if (int r = init_gpu(true, true)) return r;
+  int failures = 0;
+  auto line = [&](const char* name, bool ok, const std::string& detail) {
+    if (!ok) ++failures;
+    std::printf("%-62s %s  %s\n", name, ok ? "PASS" : "FAIL", detail.c_str());
+  };
+  synthesize(dir / "box", true, true);
+  synthesize(dir / "lit", false);
+  synthesize(dir / "dark", true);
+  struct Stat { double mean = 0, se = 0, miss = 0, lo = 1e30, hi = -1e30; };
+  auto stat = [](const PtAccum& a, uint32_t c) {
+    Stat s; const size_t n = size_t(a.w) * a.h; double sq = 0;
+    for (size_t i = 0; i < n; ++i) { const double v = a.mean(0, c, i); s.mean += v; sq += v * v; s.miss += a.mean(0, 3, i); s.lo = std::min(s.lo, v); s.hi = std::max(s.hi, v); }
+    s.mean /= double(n); s.miss /= double(n);
+    s.se = std::sqrt(std::max(0.0, sq / double(n) - s.mean * s.mean) / double(n));
+    return s;
+  };
+  auto fmt = [](const Stat& s, double want) { char t[160]; std::snprintf(t, sizeof t, "mean %.6f (expected %.6f, SE %.2g), pixels %.6f..%.6f, miss %.4f", s.mean, want, s.se, s.lo, s.hi, s.miss); return std::string(t); };
+  const std::vector<std::string> furnace = {"PT_FURNACE_LE=1.0", "PT_LAMBERT=1", "PT_LIGHTS=0", "PT_SUN=0", "PT_SPP=4"};
+  // fp16 output: a value near 2 has a step of 2^-10; the deterministic cases are within 1e-3 relative.
+  {
+    auto d = furnace; d.push_back("PT_ALBEDO=0.5"); d.push_back("PT_BOUNCES=1"); d.push_back("PT_RR_START=99");
+    const Stat s = stat(pt_run(dir / "box", d, 1, 1, dir / "box-out"), 0);
+    line("1 furnace B=1: every ray hits an emitter of Le 1", std::abs(s.lo - 1) < 1e-3 && std::abs(s.hi - 1) < 1e-3 && s.miss == 0, fmt(s, 1));
+  }
+  {
+    auto d = furnace; d.push_back("PT_ALBEDO=0.5"); d.push_back("PT_BOUNCES=3"); d.push_back("PT_RR_START=99");
+    const Stat s = stat(pt_run(dir / "box", d, 1, 1, dir / "box-out"), 0);
+    line("2 furnace B=3 rho 0.5: 1 + rho + rho^2 = 1.75 per pixel", std::abs(s.lo - 1.75) < 2e-3 && std::abs(s.hi - 1.75) < 2e-3, fmt(s, 1.75));
+  }
+  PtAccum rr;
+  {
+    auto d = furnace; d.push_back("PT_ALBEDO=0.8"); d.push_back("PT_BOUNCES=96"); d.push_back("PT_RR_START=2");
+    rr = pt_run(dir / "box", d, 8, 1, dir / "box-out");
+    const Stat s = stat(rr, 0);
+    const double want = (1 - std::pow(0.8, 96)) / (1 - 0.8);
+    line("3 furnace rho 0.8, Russian roulette: Le / (1 - rho) = 5 (4 SE)", std::abs(s.mean - want) < 4 * s.se + 5e-3 && s.se > 0, fmt(s, want));
+  }
+  {
+    // FresnelBlend (the reference's BSDF), white substrate Rd = 1, F0 0.04, 4 vertices: each
+    // vertex's directional albedo <= 1, so 1 <= L <= 4 (energy conservation), and > 1 + 0.5 x 3.
+    std::vector<std::string> d = {"PT_FURNACE_LE=1.0", "PT_LIGHTS=0", "PT_SUN=0", "PT_SPP=4", "PT_ALBEDO=1.0", "PT_BOUNCES=4", "PT_RR_START=99"};
+    const Stat s = stat(pt_run(dir / "box", d, 8, 1, dir / "box-out"), 0);
+    line("4 FresnelBlend white furnace, 4 vertices: 2.5 < L <= 4 (no gain)", s.mean > 2.5 && s.mean <= 4 + 4 * s.se, fmt(s, 4));
+  }
+  {
+    std::vector<std::string> d = {"PT_SPP=4", "PT_BOUNCES=4"};
+    const PtAccum lit = pt_run(dir / "lit", d, 2, kPtModes, dir / "lit-out");
+    const PtAccum lit2 = pt_run(dir / "lit", d, 2, kPtModes, dir / "lit-out");
+    const PtAccum dark = pt_run(dir / "dark", d, 2, kPtModes, dir / "dark-out");
+    const Stat sl = stat(lit, 0), sd = stat(dark, 0);
+    double qual = 0; const size_t n = size_t(lit.w) * lit.h;
+    for (size_t i = 0; i < n; ++i) qual += lit.mean(2, 3, i);
+    line("5 slab: native hit material qualifies, point light lights the PT", sl.mean > 0 && qual > 0 && sl.miss > 0, fmt(sl, sl.mean) + ", qualified sum " + std::to_string(qual));
+    line("6 slab dark control (light colour 0): PT exactly 0", sd.lo == 0 && sd.hi == 0, fmt(sd, 0));
+    bool same = true;
+    for (uint32_t k = 0; k < kPtModes; ++k) same &= lit.rgba[k] == lit2.rgba[k] && lit.aux[k] == lit2.aux[k];
+    line("7 deterministic: two PT runs bit-identical (all modes)", same, "");
+  }
+  line("8 no validation errors", g_validation_errors.load() == 0, std::to_string(g_validation_errors.load()) + " errors");
+  std::printf("%s: %d failure(s)\n", failures ? "FAIL" : "PASS", failures);
+  return failures ? 1 : 0;
+}
+
 int self_test(const fs::path& dir) {
   if (int r = init_gpu(true, true)) return r;
   int failures = 0;
@@ -1124,7 +1457,9 @@ int main(int argc, char** argv) {
   fs::path pack, out, hlsl, spv, synth, test;
   std::vector<std::string> defines;
   uint32_t repeat = 1;
-  bool validation = true, dark = false;
+  bool validation = true, dark = false, pt = false, pt_cost_only = false, pt_skip_cost = false;
+  uint32_t pt_iters = 32;
+  fs::path pt_test;
   for (size_t i = 0; i < args.size(); ++i) {
     auto next = [&]() -> std::string { check(i + 1 < args.size(), "missing value after " + args[i]); return args[++i]; };
     if (args[i] == "--pack") pack = next();
@@ -1137,13 +1472,45 @@ int main(int argc, char** argv) {
     else if (args[i] == "--synthesize") synth = next();
     else if (args[i] == "--dark") dark = true;
     else if (args[i] == "--self-test") test = next();
+    else if (args[i] == "--pt-self-test") pt_test = next();
+    else if (args[i] == "--pt-reference") pt = true;
+    else if (args[i] == "--pt-iters") pt_iters = uint32_t(std::max(1, std::atoi(next().c_str())));
+    else if (args[i] == "--pt-cost") pt_cost_only = true;
+    else if (args[i] == "--pt-skip-cost") pt_skip_cost = true;
     else die("unknown argument " + args[i] + " (see tools/frame_replay.md)");
   }
   if (!test.empty()) return self_test(test);
+  if (!pt_test.empty()) return pt_self_test(pt_test);
   if (!synth.empty()) { synthesize(synth, dark); std::printf("synthetic pack written to %s\n", synth.string().c_str()); return 0; }
   check(!pack.empty(), "usage: frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V] [--repeat N]");
   if (int r = init_gpu(validation, false)) return r;
-  if (out.empty()) out = pack / "replay";
+  if (out.empty()) out = pack / (pt || pt_cost_only ? "pt-reference" : "replay");
+  if (pt || pt_cost_only) {
+    // tools/pt_reference.hlsl over the pack (tools/frame_replay.md "PT reference"). The sun's
+    // transmittance (atmosphere LUT not in the pack) is estimated unless --define PT_SUN_T=... is given.
+    fs::create_directories(out);
+    rp::Manifest m; std::string error;
+    { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
+    std::string params;
+    bool has_t = false;
+    for (auto& d : defines) { has_t |= d.rfind("PT_SUN_T=", 0) == 0; params += d + " "; }
+    if (!has_t) {
+      std::vector<uint8_t> cam;
+      for (auto& b : m.buffers) if (b.set == 0 && b.binding == 0 && !b.file.empty()) cam = read_file(pack / b.file);
+      float t[3] = {1, 1, 1};
+      if (cam.size() >= 400) { float mu; std::memcpy(&mu, cam.data() + 24 * 16 + 4, 4); sun_transmittance(mu, t); }   // cam.x[14].y
+      char d[96]; std::snprintf(d, sizeof d, "PT_SUN_T=float3(%.4f,%.4f,%.4f)", t[0], t[1], t[2]);
+      defines.push_back(d); params += std::string(d) + " (estimated) ";
+    }
+    if (!pt_skip_cost) pt_cost(pack, defines, out);
+    if (!pt_cost_only) {
+      const PtAccum a = pt_run(pack, defines, pt_iters, kPtModes, out);
+      pt_report(pack, a, out, params.empty() ? "defaults" : params);
+    }
+    if (g_validation_errors.load()) { std::printf("FAIL %u validation errors\n", g_validation_errors.load()); return 1; }
+    std::printf("written to %s\n", out.string().c_str());
+    return 0;
+  }
   std::vector<uint32_t> code;
   if (!spv.empty()) { auto b = read_file(spv); code.resize(b.size() / 4); std::memcpy(code.data(), b.data(), code.size() * 4); }
   replay(pack, spv.empty() ? nullptr : &code, hlsl, defines, out, repeat, false);
