@@ -32,7 +32,8 @@
   "gi: GPU cost",
   "\\[rrpost\\] exposure (held|probe)",
   "\\[geo\\] RT capture",
-  "\\[cascade\\] casters"
+  "\\[cascade\\] casters",
+  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -62,7 +63,8 @@
   "\\[water\\] compose: FS 06e66a6fbd88a6b3 patched \\(\\d+ -> \\d+ words, with the sun, local-light and refraction terms; the game's sun shadow Vg recorded\\)",
   "\\[water\\] game shadow \\(120 frames, variant gsh\\): game-shadowed records [0-9.]+/frame = [0-9.]+% of owned \\(invalid 0\\)",
   "\\[water\\] rt/water_reflect\\.hlsl\\?RT_CASCADE_MASKS=1 water_reflect: built",
-  "\\[water\\] rt/water_compose\\.hlsl\\?\\S*RT_CASCADE_MASKS=1\\S* water_compose: built"
+  "\\[water\\] rt/water_compose\\.hlsl\\?\\S*RT_CASCADE_MASKS=1\\S* water_compose: built",
+  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)"
  ],
  "expect_every": [
   {
@@ -172,6 +174,17 @@
     "cost-on",
     "cost-off-b"
    ]
+  },
+  {
+   "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+   "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+   "windows": [
+    "cost-on",
+    "move-on-q",
+    "move-on-e"
+   ],
+   "min": 1
   }
  ],
  "forbid": [
