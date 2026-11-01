@@ -36,8 +36,22 @@ def rf_contract(r, paths, em=False):
     return "" if c.returncode == 0 else "contract: " + c.stdout + c.stderr
 
 
+# The Base_MSK_VT pool family (branch hm-pool-mask, rt_hit_material_mask) adds a branch to the shared hit-material
+# decode that is dead without mask rows; it is proven by its own gates (the S8 replay bit-identical with the new
+# SPIR-V, native_hit_pool_test, material_families_test BaseMask), not by this one. While the baseline predates it
+# (no nv_mask_albedo there), its files are taken from the working tree, so this gate still checks every other input.
+MASK_FILES = ("shaders/rt/native_hit_material.hlsli", "common/native_vt_fields.h", "common/native_vt_surface.h",
+              "common/native_hit_records.h")
+
+
+def mask_overlay(base, new):
+    if b"nv_mask_albedo" in base.read("common/native_vt_fields.h"):
+        return []
+    return [p for p in MASK_FILES if p in new.ids and b"LayoutMask" in new.read("common/native_vt_surface.h")]
+
+
 if __name__ == "__main__":
     # rf_hit_gi (RF_HIT_GI=1) requests of every hit-shade file, emission twins included, are new feature requests.
     in_feature = lambda r: split_request(r)[0] in FEATURE or "RF_HIT_GI=1" in split_request(r)[1]  # noqa: E731
     contract = lambda r, paths: rf_contract(r, paths, em=split_request(r)[0].endswith("_em.hlsl"))  # noqa: E731
-    sys.exit(feature_gate(__doc__, in_feature, "rf_hit_shade", contract))
+    sys.exit(feature_gate(__doc__, in_feature, "rf_hit_shade", contract, base_overlay=mask_overlay))

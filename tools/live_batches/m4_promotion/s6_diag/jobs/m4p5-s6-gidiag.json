@@ -7,7 +7,7 @@
  "timeout": 450,
  "repeat": 1,
  "live_batch": "m4-s6-diag",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=0,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=0,rt_emissive=0,rt_em_fx_pulse=0,rt_xfb_mb=1024,gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_emission=0,hit_ao_rays=2,gi_far=0,replay_pack=0,replay_pack_cap_mb=3300",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=0,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=0,rt_emissive=0,rt_em_fx_pulse=0,rt_xfb_mb=1024,gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_emission=0,hit_ao_rays=2,gi_far=0,replay_pack=0,replay_pack_cap_mb=3300,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -33,7 +33,9 @@
   "gi: trace pass",
   "GI hit direct",
   "hit material",
-  "rt stats"
+  "rt stats",
+  "\\[rt\\] scene wait",
+  "\\[rrpost\\] exposure (held|hold|probe)"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -48,7 +50,8 @@
   "\\[replay\\] pack 1 written: [0-9]+\\.[0-9] MB \\(\\d+ images omitted, \\d+ read by shader\\), frame \\d+, pass gi_hit_direct, instances [1-9]\\d* -> .+",
   "\\[replay\\] pack 1 textures: .*by binding \\(kept/images, MB kept/all\\):.* s1b3\\+b14 (\\d+)/\\1 ",
   "GI hit direct \\(\\d+ frames\\): candidates [1-9]\\d* qualified [1-9]\\d* direct supported \\d+ nonzero \\d+; .*non-finite hit terms \\(fallback0\\) \\d+, bounce over the half-float max \\(stored 65504\\) \\d+ px",
-  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+"
+  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -85,5 +88,57 @@
  ],
  "stop_on_dump": true,
  "purpose": "S6 darkening diagnostic (docs/TRACK_C_GI.md 'S6 darkening'): is the m4p3 step darkening gi_hit_direct or the forge's animated lava? Every variant compiled in warmup (no DXC stall before a shot, unlike m4p3); one replay pack of the gi_hit_direct base variant (diag-pack, rt_stats: the GI hit direct line with the non-finite counters) for the offline invariant (py -3 -m tools.gi_hit_invariant --pack <dir>: giRaw.a bit-equal, mean hit >= base); five OFF and four gi_hit_direct shots interleaved (each ON bracketed by two OFF: linear drift cancels); gi_debug=3 (visibility only) and gi_debug=2 (the GI's added diffuse only) pairs. Startup: rt_hit_material=1, rt_cascade_casters=0 and rt_hit_material_instanced=0 (the pack contract's base variant, no defines), rt_emissive=0. replay_pack_cap_mb=3300 as rc1 (needs the user's approval for this job too). No post step: the S8 pack stays (replay_capture's post step would delete every older pack).",
- "estimated_phase_seconds": 150
+ "estimated_phase_seconds": 150,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "shot-off-1",
+    "shot-gi-1",
+    "shot-off-2",
+    "shot-gi-2",
+    "shot-off-3",
+    "shot-gi-3",
+    "shot-off-4",
+    "shot-gi-4",
+    "shot-off-5",
+    "shot-vis-off-1",
+    "shot-vis-gi-1",
+    "shot-vis-off-2",
+    "shot-vis-gi-2",
+    "shot-add-off-1",
+    "shot-add-gi-1",
+    "shot-add-off-2",
+    "shot-add-gi-2"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "shot-off-1",
+    "shot-gi-1",
+    "shot-off-2",
+    "shot-gi-2",
+    "shot-off-3",
+    "shot-gi-3",
+    "shot-off-4",
+    "shot-gi-4",
+    "shot-off-5",
+    "shot-vis-off-1",
+    "shot-vis-gi-1",
+    "shot-vis-off-2",
+    "shot-vis-gi-2",
+    "shot-add-off-1",
+    "shot-add-gi-1",
+    "shot-add-off-2",
+    "shot-add-gi-2"
+   ]
+  }
+ ]
 }
