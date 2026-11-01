@@ -35,6 +35,7 @@ the windowed gates then fail with "plan drift" instead of judging the wrong wind
     py -3 scripts/queue_gates.py --gates gates.json --log run.log [--runner runner.txt --plan plan.json]
     py -3 scripts/queue_gates.py --lint-exposure-hold [tools/live_batches]
     py -3 scripts/queue_gates.py --lint-scene-wait [tools/live_batches | tools/live_batches/<batch>]
+    py -3 scripts/queue_gates.py --lint-capacity [tools/live_batches | tools/live_batches/<batch>]   (CAPACITY_GATES)
 
 Exposure hold lint: a job whose plan has an energy gate (an ON shot between two OFF shots, as
 tools/m4_promotion_gate.py compares them) must set qa_exposure_hold=1 in every phase from its first compared
@@ -330,8 +331,10 @@ def _job_files(batches_dir):
     return sorted((d / "jobs").glob("*.json")) if (d / "jobs").is_dir() else sorted(d.glob("*/jobs/*.json"))
 
 
-def lint_scene_wait(batches_dir):
-    """{job file: problems} for every lean job (-MovePlan with cost-* windows) under batches_dir (or one batch)."""
+def lint_scene_wait(batches_dir, problems_of=None):
+    """{job file: problems} for every lean job (-MovePlan with cost-* windows) under batches_dir (or one batch).
+    problems_of(job, plan): the check (default scene_wait_problems; lint_capacity passes capacity_problems)."""
+    scene_wait = problems_of or scene_wait_problems
     out = {}
     for jf in _job_files(batches_dir):
         job = json.loads(jf.read_text(encoding="utf-8-sig"))
@@ -341,9 +344,60 @@ def lint_scene_wait(batches_dir):
         pf = jf.parent.parent / "plans" / Path(args[args.index("-MovePlan") + 1]).name
         if not pf.exists():
             continue
-        problems = scene_wait_problems(job, json.loads(pf.read_text(encoding="utf-8-sig")))
+        problems = scene_wait(job, json.loads(pf.read_text(encoding="utf-8-sig")))
         if problems:
             out[str(jf)] = problems
+    return out
+
+
+# Capacity gates, next to the scene-wait gate and judged the same way (traced cost-* windows, canonical entries,
+# behaviour checked on a good and a bad real line). A full RT capture buffer drops opaque draws from the RT scene;
+# a full cascade buffer drops roof casters (missing shadows). Both counters are per-frame means of integer
+# events, printed 0.00 / 0.0 only when no frame of the line had one, so the bound is 0. The cascade gate applies
+# to the windows that set rt_cascade_casters=1 (in the job or the plan; a preset alone does not count). Lines every rt_timing_frames (default 300) frames.
+CAPACITY_GATES = [
+    ({"name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+      "select": r"\[geo\] RT capture, last \d+ frames:",
+      "match": r"opaque draws dropped \(buffer full\) 0\.00,", "min": 1},
+     None,
+     "16:19:41.796  [geo] RT capture, last 120 frames: alpha region 336 MB (peak demand 217.5 MB), opaque peak 98.4 MB of a "
+     "1024 MB buffer; per frame: alpha draws made opaque (region full) 0.00, opaque draws dropped (buffer full) 0.00, indirect",
+     "16:19:41.796  [geo] RT capture, last 120 frames: alpha region 336 MB (peak demand 217.5 MB), opaque peak 1024.0 MB of a "
+     "1024 MB buffer; per frame: alpha draws made opaque (region full) 0.00, opaque draws dropped (buffer full) 0.02, indirect"),
+    ({"name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+      "select": r"\[cascade\] casters: cascade \d+, \d+ frames;",
+      "match": r", buffer full 0\.0, added ", "min": 1},
+     "rt_cascade_casters",
+     "16:19:41.589  [cascade] casters: cascade 2, 120 frames; per frame: draws seen 128.0, skipped as duplicates 1.0, "
+     "alpha-tested skipped 62.0, not sizeable 0.0, other matrix 0.0, buffer full 0.0, added 65.0; triangles 1092822",
+     "16:19:41.589  [cascade] casters: cascade 2, 120 frames; per frame: draws seen 128.0, skipped as duplicates 1.0, "
+     "alpha-tested skipped 62.0, not sizeable 0.0, other matrix 0.0, buffer full 0.5, added 65.0; triangles 1092822"),
+]
+
+
+def capacity_problems(job, plan):
+    """Problems of a lean job without the capacity gates over its traced cost windows; [] when fine."""
+    need = scene_wait_windows(job, plan)
+    if not need:
+        return []
+    states = {str(p.get("label", "")): st for p, st in zip(plan, phase_states(job, plan))}
+    out = []
+    for gate, key, good, bad in CAPACITY_GATES:
+        want = [w for w in need if key is None or _on(states[w], key, "0")]
+        if not want:
+            continue
+        covered = set()
+        for e in job.get("expect_every", []):
+            try:
+                sel, match = re.compile(e["select"]), re.compile(e["match"])
+            except (KeyError, re.error, TypeError):
+                continue
+            if not e.get("event") and sel.search(good) and sel.search(bad) and match.search(good) and not match.search(bad):
+                covered |= set(e.get("windows") or want)
+        missing = [w for w in want if w not in covered]
+        if missing:
+            out.append(f"{gate['name'].split(':')[0]}: no gate like queue_gates.CAPACITY_GATES ('{gate['select']}') "
+                       f"over {', '.join(missing)}")
     return out
 
 
@@ -376,6 +430,8 @@ def main(argv=None):
     ap.add_argument("--lint-scene-wait", nargs="?", const=str(Path(__file__).resolve().parent.parent / "tools" / "live_batches"),
                     default=None, metavar="DIR", help="lint every lean job under DIR (*/jobs or one batch's jobs): "
                     "the scene-wait gate in every cost window")
+    ap.add_argument("--lint-capacity", nargs="?", const=str(Path(__file__).resolve().parent.parent / "tools" / "live_batches"),
+                    default=None, metavar="DIR", help="lint every lean job under DIR: the capacity gates in every traced cost window")
     ap.add_argument("--gates", help="JSON file: the job's expect_every list")
     ap.add_argument("--log", help="the run's kept game log slice")
     ap.add_argument("--runner", default="", help="the run's runner log ([pan-plan] window lines)")
@@ -388,6 +444,14 @@ def main(argv=None):
                 print(f"{jf}: {p}")
         if not bad:
             print("exposure hold lint: ok")
+        return 1 if bad else 0
+    if a.lint_capacity:
+        bad = lint_scene_wait(a.lint_capacity, capacity_problems)
+        for jf, problems in bad.items():
+            for p in problems:
+                print(f"{jf}: {p}")
+        if not bad:
+            print("capacity lint: ok")
         return 1 if bad else 0
     if a.lint_scene_wait:
         bad = lint_scene_wait(a.lint_scene_wait)

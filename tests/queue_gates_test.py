@@ -214,6 +214,22 @@ def main():
     check("scene wait lint: every lean job under tools/live_batches gates the scene wait"
           + ("" if not bad else ": " + "; ".join(f"{Path(k).name}: {v[0][:90]}" for k, v in bad.items())), not bad)
 
+    # Capacity lint: the RT capture and (with the casters on) the cascade buffer gates over the traced cost windows.
+    cap = [g for g, _, _, _ in queue_gates.CAPACITY_GATES]
+    for g, _, good, badline in queue_gates.CAPACITY_GATES:
+        check(f"capacity gate '{g['select']}': selects both sample lines, passes the good one, fails the bad one",
+              bool(re.search(g["select"], good) and re.search(g["select"], badline) and re.search(g["match"], good)
+                   and not re.search(g["match"], badline)))
+    cj = {"set": "rt=1,rt_cascade_casters=0", "expect_every": [dict(cap[0], windows=["cost-off-a", "cost-on"])]}
+    check("capacity lint: casters off: the RT capture gate alone over both cost windows is ok", queue_gates.capacity_problems(cj, sw_plan) == [])
+    p = queue_gates.capacity_problems(dict(cj, set="rt=1,rt_cascade_casters=1"), sw_plan)
+    check("capacity lint: casters on without the cascade gate is flagged", len(p) == 1 and "cascade" in p[0])
+    p = queue_gates.capacity_problems(dict(cj, expect_every=[]), sw_plan)
+    check("capacity lint: no gate is flagged", len(p) == 1 and "cost-off-a, cost-on" in p[0])
+    p = queue_gates.capacity_problems(dict(cj, expect_every=[dict(cap[0], match="opaque draws dropped", windows=["cost-on", "cost-off-a"])]), sw_plan)
+    check("capacity lint: a match that passes a full buffer is no gate", len(p) == 1)
+    check("capacity lint: a plan without cost windows is no lean job", queue_gates.capacity_problems({"set": "rt=1"}, [{"label": "diag-a"}]) == [])
+
     if fails:
         print(f"{fails} check(s) failed")
         return 1
