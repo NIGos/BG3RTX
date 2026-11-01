@@ -322,9 +322,13 @@ class Run:
                         return ("no scene-colour dump", str(f))
                     _, d = max(cand, key=lambda c: c[0])
                     r, g, b = d["mean"][:3]
-                    # Only the scene-colour dump itself: other dumps (the depth buffer's far plane holds
-                    # non-finite values by design) say nothing about the energy (m4p3 112657: 2917 from depth).
-                    return (0.2126 * r + 0.7152 * g + 0.0722 * b, int(d.get("nonfinite", 0) or 0), self.pre_exposure(frame))
+                    # Non-finite values of the measured buffer itself, and of every other dump of the trace
+                    # (S6: the game's own D32F depth of 76433aef, ~2900 per trace with every RT key off too;
+                    # docs/QA.md "Non-finite"): never summed together, never summed across traces.
+                    scene_nf = int(d.get("nonfinite", 0) or 0)
+                    other_nf = {f"{x.get('pass_fs', '?')[:8]} {x.get('fmt', '?')}": int(x.get("nonfinite", 0) or 0)
+                                for x in dumps.values() if x is not d and int(x.get("nonfinite", 0) or 0)}
+                    return (0.2126 * r + 0.7152 * g + 0.0722 * b, scene_nf, self.pre_exposure(frame), other_nf)
         return None
 
     def capacity(self):
@@ -524,10 +528,24 @@ def energy(run, queue_logs: Path | None = None, pool="save"):
         p = entry.get("predicted") if isinstance(entry, dict) else None
         post_hoc = p is not None and (committed is None or committed > started)
         verdict, ok = energy_verdict(d, band, p, post_hoc)
+        # Per trace (OFF before, ON, OFF after): the scene colour's own non-finite count; other dumps by (pass,
+        # format), those non-finite in an OFF trace too marked game-owned (as scripts/qa/analyze.py).
+        off_sigs = set(vals[0][3]) | set(vals[2][3])
+        other = [{k: (n, k in off_sigs) for k, n in v[3].items()} for v in vals]
         out.append({"a": a, "on": on, "b": b, "key": key, "values": (va, vo, vb), "d": d, "s": s, "p": p,
                     "raw_d": raw_d, "exposure": exposure, "pre": pre,
                     "band": band, "sigma": sigma, "dof": dof, "pool_runs": nruns,
-                    "verdict": verdict, "ok": ok, "nonfinite": sum(v[1] for v in vals)})
+                    "verdict": verdict, "ok": ok, "nonfinite": tuple(v[1] for v in vals), "other_nonfinite": other})
+    return out
+
+
+def other_nonfinite(rows):
+    """{'<pass> <fmt>': {trace label: (count, game_owned)}} over the traces of the given energy rows."""
+    out = {}
+    for e in rows:
+        for label, o in zip((e["a"], e["on"], e["b"]), e.get("other_nonfinite") or ()):
+            for k, (n, game) in o.items():
+                out.setdefault(k, {})[label] = (n, game)
     return out
 
 
@@ -584,10 +602,16 @@ def report(run: Run, queue_logs: Path | None = None, pool="save"):
         pp = "none" if e["p"] is None else f"{100 * e['p']:+.2f}%"
         band = "n/a" if e["band"] is None else f"{100 * e['band']:.2f}%"
         ex = "unknown (raw)" if e["exposure"] is None else f"{e['exposure']:.4f}"
+        nf = e["nonfinite"]
         print(f"| {e['key']} vs {e['a']}/{e['b']} | {va:.5f} | {vo:.5f} | {vb:.5f} | {100 * e['raw_d']:+.2f}% | {ex} | {100 * e['d']:+.2f}% | {pp} | {band} | "
-              f"{old} (spread {100 * e['s']:.2f}%) | {e['verdict']}{'' if e['nonfinite'] == 0 else ', nonfinite %d' % e['nonfinite']} |")
+              f"{old} (spread {100 * e['s']:.2f}%) | {e['verdict']}{'' if not any(nf) else ', scene colour non-finite %d/%d/%d' % nf} |")
         if not e["ok"]:
             failed.append(f"energy {e['key']}: {e['verdict']}")
+    for k, per in sorted(other_nonfinite([e for e in rows if e["verdict"] != "INCOMPLETE"]).items()):
+        game = all(g for _, g in per.values())
+        print(f"- other dump {k}: non-finite per trace "
+              f"({'game-owned: in the OFF traces too' if game else 'NOT in the OFF traces: ours'}; not the measured buffer): "
+              + ", ".join(f"{l} {n}" for l, (n, _) in per.items()))
     steps = [l for l in run.labels if l.startswith("shot-step-")]
     if steps:
         vals = {l: run.scene_colour(l) for l in ["shot-off-a"] + steps + ["shot-on"]}

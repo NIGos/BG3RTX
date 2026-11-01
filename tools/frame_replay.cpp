@@ -423,7 +423,7 @@ std::vector<uint32_t> compile(const fs::path& hlsl, const std::vector<std::strin
 }
 
 // ---------------------------------------------------------------- statistics (core/gi.cpp wording, 1 frame)
-constexpr uint32_t kCounters = 512;   // >= core/gi.cpp kStatsCounters (417)
+constexpr uint32_t kCounters = 512;   // >= core/gi.cpp kStatsCounters (419)
 struct Stats { uint64_t t[kCounters] = {}; };
 Stats fold(const std::vector<uint8_t>& raw) {
   Stats s; const auto* c = reinterpret_cast<const uint32_t*>(raw.data());
@@ -441,8 +441,9 @@ std::vector<std::string> gi_hit_direct_lines(const Stats& s) {
   }
   if (t[282]) {
     std::snprintf(line, sizeof line, "GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; "
-                  "fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu",
-                  n, u(t[282]), u(t[283]), u(t[284]), u(t[285]), double(t[286]) / 8192.0, u(t[134]), u(t[135]));
+                  "fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu; "
+                  "non-finite hit terms (fallback0) %llu, bounce over the half-float max (stored 65504) %llu px",
+                  n, u(t[282]), u(t[283]), u(t[284]), u(t[285]), double(t[286]) / 8192.0, u(t[134]), u(t[135]), u(t[417]), u(t[418]));
     out.push_back(line);
   }
   const unsigned b = 160, x = 172;

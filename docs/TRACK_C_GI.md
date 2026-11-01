@@ -156,6 +156,29 @@ the existing GI trace interval. Live contribution, motion and cost remain
 unqualified until same-run A/B. This changes lighting by an accounted addition;
 it does not claim unchanged-transport energy preservation or full M4 completion.
 
+S6 "non-finite" alarm of m4p3 (2026-11-01, branch worktree-agent-ad96013fbc66f09f7): not ours.
+- The gate printed `nonfinite 8692` for step-gi. That was the sum over all dumps of three traces
+  (OFF-a 2917 + step 2865 + OFF-b 2910), all of them in the game's own 2048x2048 D32F depth of
+  pass `76433aef` (QA.md "Non-finite": garbage texels +-3.4e38 and NaN, the same with every RT key off).
+  The measured scene colour (`5c3fdabc` slot 0) has 0 non-finite values in all 8 S6 traces.
+- `tools/m4_promotion_gate.py` now prints the scene colour's own count per trace and every other
+  non-finite dump per trace, marked game-owned when an OFF trace has it too (test case added).
+- So the -1 to -3% darkening of step-gi / sun / inst is not explained by NaN in the measured buffer.
+  By reading, every hit term is finite and >= 0 when its status is OK (hd_scatter, native_hit_sun,
+  em_radiance guards), so the bounce sum cannot darken. One hidden path remains: giRaw is RGBA16F and
+  gi_composite reverts a non-finite pixel to the game's diffuse, after a 3x3 history gather. A mean
+  bounce above 65504 would store +Inf and drop the bounce of about 36 full-res pixels while the
+  occlusion stays: darker, with a finite scene colour.
+- Guard (hit-GI variants only, key-off SPIR-V byte-identical): a qualified-hit term that is not finite
+  and >= 0 takes fallback0 (the key-off ray), counter 417; a mean bounce above the half maximum is
+  stored as 65504, counter 418 (energy above the encoding limit, counted, never +Inf). Both are on the
+  `GI hit direct` line: `non-finite hit terms (fallback0) N, bounce over the half-float max (stored 65504) M px`.
+  Checked against ac57418: the 48 key-off gi_trace_rt / gi_trace_rt_sharc requests are byte-identical,
+  all 448 hit-GI requests compile and pass spirv-val.
+- Rerun of m4p3 decides: N = M = 0 in diag-on means the darkening has another cause (next suspects:
+  the hit-GI dispatch's alpha set from `rt_hit_material_use` instead of `b.alpha`, i.e. occlusion; and
+  the scene drift between shots, the em-off pair alone spreads 0.80%).
+
 ## Sun at qualified hidden hits (`gi_hit_sun=0`, M4.3, 2026-11-01; offline, READY_FOR_LIVE)
 
 Key `gi_hit_sun=0` (live; GUI Experimental "Sunlit hidden-surface bounce", `exp_gi_hit_sun`,
