@@ -59,7 +59,10 @@ Each dispatch has one froxel listing that dispatch's lights.
    midpoint grid. The exact set is the K largest weights in list order, exactly (8a); sample j is
    drawn with p_j = w_j / sum_R w and the grid mean of the estimator is the full sum (8b, 8c), within
    the grid bound (|R| + 1) / N; a sample's scaled weight never exceeds sum_R w (8c); the GPU selection
-   equals the C++ header's, at most one boundary cell per decision may differ (8d; 0 observed).
+   equals the C++ header's, at most one boundary cell per decision may differ (8d; 0 observed). With RGB
+   contributions of other chromas than their luminance weight and visibilities 0 / 1 / 0.25 (occluded,
+   lit, soft), the grid mean of the shader's delta `sum_E c(t - 1) + f c_j (t_j - 1)` per channel is the
+   full sum, from the GPU's own selection and factors, within the same grid bound (8e; worst 3e-4 rel).
 
 ## Tolerance
 
