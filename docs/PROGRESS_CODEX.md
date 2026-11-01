@@ -1,5 +1,18 @@
 # BG3RTX progress - 2026-11-01 (main f31c62b, ABI 25)
 
+## M5.4b water local-light shadows (offline, READY_FOR_LIVE, 2026-11-01; on top of M5.4)
+
+- `rt_water_ls_shadows=0` (GUI `exp_water_ls_shadows`; on needs a restart, off is live). The patched FS also stores
+  its points + spots sum L, F = a T X, F0, diffuse colour, channel, froxel depth, P, N, roughness (96-B records).
+  The compose walks the FS's own froxel list (the water draw's set 2 light buffers, captured at the draw: the
+  D-LS structures), recomputes each light (bg3_light_eval, bg3_atlas_shadow), checks the sum against L, and traces
+  every light the game leaves unshadowed: C' = max(C - F sum (1 - V_k) c_k, 0). Shadow-mapped lights keep the atlas.
+- Sum match offline (test 4g, the FS loops vs our recompute): 9124/9124 records within 2^-10 (one half ulp); a
+  dropped light never within. Live gate: `sum check` within >= 99%, ratio of the means 1 within 0.1%.
+- Key off: plain and sun compose SPIR-V byte-identical, M5.3 and M5.4 patches word for word (FNV pinned); the LS
+  patches pass spirv-val. 76 CTests. Expected cost < 0.15 ms. Live: job `m5w5` (S8, OFF/ON/OFF, rt_debug 27);
+  dry run passes (batch now 16.9 min, 1.06 GB).
+
 ## M5.4 water sun shadows (offline, READY_FOR_LIVE, 2026-11-01)
 
 - Finding: the audited water FS (7b44a567, 99c1fcef, c4e92ccd) light the water with sun visibility 1. Their sun

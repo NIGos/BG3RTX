@@ -37,9 +37,19 @@ m5w3 ran at S8 on 2026-11-01: patching worked (`water draws on a variant 174, wi
 - Shadows: `occluded % of traced` > 0 at S8 (the deciding observable: the game's water has sun visibility 1), `unknown` near 0, `clamped` near 0; `removed % of D` and `mean removed over owned % of mean C` reported (physical darkening, no brightness gate).
 - Cost: `[water] shadows GPU` median and p90 (copy + compose with the sun ray; estimate < 0.05 ms); cost-on minus cost-off frame time against the OFF spread.
 
+4. `m5w5-water-ls-shadows-s8-fg2` (Water Queens House, S8, 132 s, after `m5w2`): [PLAN_M5](../../../docs/PLAN_M5_WATER.md) M5.4b `rt_water_ls_shadows` (local lights; a layer change: test-main must be that build). `rt_water_ls_shadows=1` at launch (96-B records with the sun and local-light words), compose and sun shadows off throughout (the A/B isolates the local-light visibility), the key toggled live. Warm-up OFF, `precheck-ls-on` (15 s: its `[water] local shadows` expect line needs local records and checked records, else INVALID: no local light on this water), OFF-a / ON / OFF-b with a cost window and a PNG each, and `diag-view-ls` (`rt_debug=27`: red occluded, its brightness the removed share of C; green lit; dark magenta only shadow-mapped lights; blue unknown; dark grey no local term; white sum check beyond 10%; yellow invalid).
+
+## Gates of m5w5 (read the deciding numbers in the log)
+- Valid run: as m5w2, plus `compose record buffer ... of 96 B`, `FS ... patched (... with the sun and local-light terms)`, `passes with the light list` > 0 and `without` near 0, `skipped: records without the local words 0`.
+- Sum match first (the gate of the recompute): `sum check ... within 0.098%` for at least 99% of the checked records, `beyond` near 0, `ratio of the means` 1 within 0.1%. Below that, the replacement is not judged (the light list or a term differs from the FS's).
+- Key off is the game: `shot-off-a` vs `shot-off-b` within the OFF repeat noise.
+- Image: `shot-on` only darker than OFF, only where `diag-view-ls` is red. Brighter anywhere is a FAIL.
+- Shadows: `occluded % of traced` and `removed % of F L` reported; `unknown` and `clamped` near 0.
+- Cost: `[water] compose GPU` ON minus OFF (estimate < 0.15 ms); cost-on minus cost-off frame time against the OFF spread.
+
 Not in this batch: motion (one moving run with the key toggled, where the one-frame water geometry latency and the screen-space resolve matter to the image); the other six audited water FS (no id table yet: they keep the probe; mapped: 7b44a567, 99c1fcef, c4e92ccd).
 
-Duration: plans 404 s; three launches, about 13 min (at most 22 min of timeouts). Disk: 13 PNG traces at about 60 MB plus logs, about 0.8 GB.
+Duration: plans 536 s; four launches, about 17 min (at most 30 min of timeouts). Disk: 17 PNG traces at about 60 MB plus logs, about 1.1 GB.
 Start, results and rollback: as in ../lean_regression/README.md with this folder, prefix `m5w` and receipt `m5-water.json` (test-main must be the m5-water-rf commit under test).
 
-Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2 + m5w3 + m5w4, M5.4 branch on main 92c71e0): all checks passed.
+Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2 + m5w3 + m5w4 + m5w5, M5.4b branch; budget now 20 min / 1.5 GB): all checks passed.
