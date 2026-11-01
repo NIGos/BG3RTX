@@ -224,8 +224,35 @@ inline constexpr Knob kKnobs[] = {
     {"boost", "On + Boost", 0, {{"reflex", "2"}}, {}}},
    {}, {1, 1, 1, 1}},
 
+  // M5 water chain (docs/PLAN_M5_WATER.md "Promotion": m5_promotion passed at S8, Flymm and camp, 11-01): Advanced,
+  // before the Experimental section; "+ Refraction" in Ultra, Off elsewhere. The compose levels patch the
+  // audited water FS at pipeline creation (restart to turn on, key_change_needs_restart) and need 64-bit
+  // shader integers at device creation (sharc_device=1).
+  {"exp_water", "RT water",
+   "Ray-traced water. Reflections: the docks, piers and boats reflected in the water where the reflected point is "
+   "on screen, with the water's own Fresnel, opacity and fog (about 0.1 ms; the game's probe elsewhere). "
+   "+ Shadows: ray-traced sun and local-light shadows on the water, and the game's own sun shadow on the few "
+   "water surfaces that have one (the camp's pond) replaced by the traced one. + Refraction: the pool or sea bed "
+   "seen through the bent ray (Snell's law), so it looks shallower and moves with the waves. All levels together "
+   "about 0.5-0.7 ms (Water Queens House) and up to 520 MB of video memory for the water records. "
+   "Turning a level on needs a restart (the water shaders are prepared at load); turning it down is live. "
+   "On in Ultra. Debug views rt_debug 25-28.",
+   Kind::Choice, Apply::Partial, "on: restart; off: live", true,
+   {{"off", "Off", 0, {{"rt_water_geometry", "0"}, {"rt_water_reflections", "0"}, {"rt_water_compose", "0"},
+      {"rt_water_shadows", "0"}, {"rt_water_ls_shadows", "0"}, {"rt_water_game_shadow", "0"}, {"rt_water_refraction", "0"}}, {}},
+    {"reflections", "Reflections", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
+      {"rt_water_shadows", "0"}, {"rt_water_ls_shadows", "0"}, {"rt_water_game_shadow", "0"}, {"rt_water_refraction", "0"}},
+     {{"rt_geometry", 1}}, {"rt_water_compose", "rt_water_reflections", "rt_water_geometry"}},
+    {"shadows", "+ Shadows", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
+      {"rt_water_shadows", "1"}, {"rt_water_ls_shadows", "1"}, {"rt_water_game_shadow", "1"}, {"rt_water_refraction", "0"}},
+     {{"rt_geometry", 1}}, {"rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"}},
+    {"refraction", "+ Refraction", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
+      {"rt_water_shadows", "1"}, {"rt_water_ls_shadows", "1"}, {"rt_water_game_shadow", "1"}, {"rt_water_refraction", "1"}},
+     {{"rt_geometry", 1}}, {"rt_water_refraction"}}},
+   {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}},
+
   // Experimental: features being tested, off in every preset (docs/GUI_AUDIT_20261101.md: 28 entries
-  // became these 8). Each level writes every key it covers, so a file reads back as one level.
+  // became these 8, 7 since RT water left). Each level writes every key it covers, so a file reads back as one level.
   {"exp_hidden_surface", "Hidden-surface shading",
    "Gives ray hits on surfaces the camera does not see their verified native material (static virtual-texture "
    "views, reflectance, tangent frame), including the wind-animated and two-sided foliage rows, with the capture "
@@ -236,15 +263,15 @@ inline constexpr Knob kKnobs[] = {
    "keep the current renderer. The first enable needs a restart; the levels above Materials are live. "
    "Experimental: quality and GPU cost remain partly unqualified.",
    Kind::Choice, Apply::Partial, "first enable: restart; levels live", false,
-   {{"off", "Off", 0, {{"rt_hit_material", "0"}, {"rt_hit_material_instanced", "0"}, {"rt_hit_material_recycle", "0"},
+   {{"off", "Off", 0, {{"rt_hit_material", "0"}, {"rt_hit_material_instanced", "0"},
       {"rt_hit_material_wind_rgb", "0"}, {"gi_hit_direct", "0"}, {"gi_hit_sun", "0"}, {"rf_hit_shade", "0"}, {"rf_hit_gi", "0"}}, {}},
-    {"materials", "Materials", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"}, {"rt_hit_material_recycle", "1"},
+    {"materials", "Materials", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"},
       {"rt_hit_material_wind_rgb", "1"}, {"gi_hit_direct", "0"}, {"gi_hit_sun", "0"}, {"rf_hit_shade", "0"}, {"rf_hit_gi", "0"}},
-     {{"rt_geometry", 2}}, {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb", "rt_hit_material_recycle"}},
-    {"bounce", "+ Bounce", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"}, {"rt_hit_material_recycle", "1"},
+     {{"rt_geometry", 2}}, {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb"}},
+    {"bounce", "+ Bounce", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"},
       {"rt_hit_material_wind_rgb", "1"}, {"gi_hit_direct", "1"}, {"gi_hit_sun", "1"}, {"rf_hit_shade", "0"}, {"rf_hit_gi", "0"}},
      {{"rt_geometry", 2}, {"gi", 2}}, {"gi_hit_direct", "gi_hit_sun"}},
-    {"reflections", "+ Reflections", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"}, {"rt_hit_material_recycle", "1"},
+    {"reflections", "+ Reflections", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"},
       {"rt_hit_material_wind_rgb", "1"}, {"gi_hit_direct", "1"}, {"gi_hit_sun", "1"}, {"rf_hit_shade", "1"}, {"rf_hit_gi", "1"}},
      {{"rt_geometry", 2}, {"gi", 2}, {"reflections", 1}}, {"rf_hit_shade", "rf_hit_gi"}}},
    {}, {0, 0, 0, 0}, true,
@@ -271,28 +298,6 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"gi_far", "0"}}, {}},
     {"m6", "6 m", kCapRayQuery, {{"gi_far", "1"}, {"gi_far_m", "6"}}, {{"exp_hidden_surface", 2}}, {"gi_far"}}},
    {}, {0, 0, 0, 0}, true, {}},
-
-  {"exp_water", "RT water",
-   "Ray-traced water. Reflections: the docks, piers and boats reflected in the water where the reflected point is "
-   "on screen, with the water's own Fresnel, opacity and fog (about 0.1 ms; the game's probe elsewhere). "
-   "+ Shadows: ray-traced sun and local-light shadows on the water, and the game's own sun shadow on the few "
-   "water surfaces that have one (the camp's pond) replaced by the traced one. + Refraction: the pool or sea bed "
-   "seen through the bent ray (Snell's law), so it looks shallower and moves with the waves (about 0.24 ms). "
-   "Turning a level on needs a restart (the water shaders are prepared at load); turning it down is live. "
-   "Debug views rt_debug 25-28. Experimental: unqualified.",
-   Kind::Choice, Apply::Partial, "on: restart; off: live", false,
-   {{"off", "Off", 0, {{"rt_water_geometry", "0"}, {"rt_water_reflections", "0"}, {"rt_water_compose", "0"},
-      {"rt_water_shadows", "0"}, {"rt_water_ls_shadows", "0"}, {"rt_water_game_shadow", "0"}, {"rt_water_refraction", "0"}}, {}},
-    {"reflections", "Reflections", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
-      {"rt_water_shadows", "0"}, {"rt_water_ls_shadows", "0"}, {"rt_water_game_shadow", "0"}, {"rt_water_refraction", "0"}},
-     {{"rt_geometry", 1}}, {"rt_water_compose", "rt_water_reflections", "rt_water_geometry"}},
-    {"shadows", "+ Shadows", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
-      {"rt_water_shadows", "1"}, {"rt_water_ls_shadows", "1"}, {"rt_water_game_shadow", "1"}, {"rt_water_refraction", "0"}},
-     {{"rt_geometry", 1}}, {"rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"}},
-    {"refraction", "+ Refraction", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
-      {"rt_water_shadows", "1"}, {"rt_water_ls_shadows", "1"}, {"rt_water_game_shadow", "1"}, {"rt_water_refraction", "1"}},
-     {{"rt_geometry", 1}}, {"rt_water_refraction"}}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
 
   {"exp_native_coverage", "Native coverage",
    "Uses the game's own coverage for ray queries where the audit verified it. Hair + scalp: the CHAR_Hair strand "
@@ -406,6 +411,11 @@ inline constexpr KnobAlias kKnobAliases[] = {
 // Keys of retired GUI entries that have no knob now: still read by the layer, set by hand in
 // bg3rtx_user.ini (kept as written). fg_letterbox: the layer has no automatic mode yet.
 inline constexpr const char* kIniOnlyKeys[] = {"fg_letterbox"};
+// Fixes that passed their gates and are on by default without a GUI entry (keys kept for A/B):
+// the hit-material provider's buffer reuse, unlocked captures and lean per-draw hooks (scene_wait sw3
+// 2026-11-01 22:13: 0 scene-wait timeouts in every pan and rotation, hooks ~2 ms instead of 5-6).
+inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_hit_material_capture_unlocked",
+                                                 "rt_hit_material_lean_hooks"};
 
 // Internal keys a preset sets besides its knobs (never shown in a UI).
 // Ultra: rare forced BVH rebuilds (SETTINGS_DESIGN 5.4 #4). With the BVH split
@@ -543,9 +553,9 @@ inline constexpr KV kDefaults[] = {
     {"rt_native_tileset", "0"},
     {"rt_hit_material", "0"},
     {"rt_hit_material_instanced", "0"},
-    {"rt_hit_material_recycle", "0"},
-    {"rt_hit_material_capture_unlocked", "0"},
-    {"rt_hit_material_lean_hooks", "0"},
+    {"rt_hit_material_recycle", "1"},
+    {"rt_hit_material_capture_unlocked", "1"},
+    {"rt_hit_material_lean_hooks", "1"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_material_mask", "0"},
     {"rt_hit_reference", "0"},

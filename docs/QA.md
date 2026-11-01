@@ -335,9 +335,10 @@ Not changed here (rendering defaults are the coordinator's). Agent inventory of 
   takes the game's own term (sun mask; D-LS shadow map, or unshadowed where the game never
   shadows; reflection probe), GI and AO count it as occluded. Counted per pass in the
   `[core] guard:` line; `rt_max_candidates` forces aborts for tests (TRACK_D_REFLECTIONS.md 13).
-- *Fixed (logged, not silent):* `kSunMaxVolumes` 256: volumes beyond it are dropped
-  farthest first, logged once per level (`sun: WARNING N roof volumes ...`) and counted in
-  `sun stats`. Measured: at most 183 within 600 m of any volume centre (TRACK_D_SUN.md 12.1).
+- *Fixed:* `kSunMaxVolumes` was 256 and dropped 103 of 359 volumes in CTY_Main_A (2026-11-01,
+  radius 1980 m). Now 512, above the 398 of the largest level (`roof_stats.py --check`,
+  `roof_cap_test`); overflow is still logged (`sun: WARNING N roof volumes ...`, `sun stats`)
+  and forbidden in smoke_ultra (TRACK_D_SUN.md 12.1).
 - *Fixed:* code defaults differed from the ini (`rt_sun_near`, `rt_sun_top`, `gi_rays`,
   `gi_steps` and 10 more). `common/settings.h` `kDefaults` is generated from `bg3rtx.ini`
   (`scripts/gen_settings_defaults.py`), `cfg_*` fall back to it, a disagreeing call-site

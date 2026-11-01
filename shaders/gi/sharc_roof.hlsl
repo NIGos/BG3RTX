@@ -34,7 +34,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     } else {
       const float3 P = ray_at((float2(fp) + 0.5) / float2(pc.full)) * d;
       const float3 cam_abs = roofCam2.c[13].xyz;
-      const uint n = min(st_u(0), 256u);
+      const uint n = min(st_u(0), SUN_MAX_VOLUMES);
       bool inside = false;
       for (uint i = 0; i < n && !inside; ++i) {
         const uint a = 192u + i * 48u;

@@ -84,7 +84,7 @@
   "\\[water\\] compose: variant pipeline creation failed",
   "\\[water\\] compose: a water pipeline blends",
   "no water FS was patched: rt_water_compose, rt_water_shadows, rt_water_ls_shadows or rt_water_refraction must be on",
-  "\\[water\\] reflections skipped: no water variant"
+  "skipped: no variant for"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",

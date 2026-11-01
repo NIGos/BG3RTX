@@ -37,6 +37,7 @@
 #include "hit_material.h"
 #include "../common/dyn_hold.h"
 #include "../common/cascade_casters.h"
+#include "../common/rt_capture_budget.h"
 #include "omm_native_plain.h"
 #include "omm_submit.h"
 #include "../common/omm_material_cache.h"
@@ -306,13 +307,32 @@ RangeAlloc g_pool_ra;
 bool g_pool_grew = false;
 uint64_t g_pool_epoch = 1;          // +1 whenever g_pool is replaced (hit material basis jobs, native_hit_pool.h)
 VkDeviceSize g_basis_bytes = 0;     // pool ranges holding hit-material UV/basis (native_hit::pool::kBasisCapBytes)
+// Live meshes that wanted a UV/basis range while the cap was full, and their bytes: logged when the count
+// first passes 1, 2, 4, ... ("over kBasisCapBytes", smoke_ultra forbids it); 2026-11-01 ran at 240 of 256 MB.
+uint64_t g_basis_over = 0, g_basis_over_logged = 0;
+VkDeviceSize g_basis_over_bytes = 0;
 
 bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
   if (g_pool.b && g_pool_ra.alloc(size, 16, off)) return true;
-  VkDeviceSize cap = g_pool.size ? g_pool.size * 2 : VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_mb", 256), 16)) << 20;
-  while (cap < g_pool.size + size) cap *= 2;
-  VkDeviceSize max_cap = VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_max_mb", 3072), 64)) << 20;
-  if (cap > max_cap) return false;
+  // Below 2^31 bytes and within maxStorageBufferRange (common/rt_capture_budget.h mesh_pool_capacity:
+  // at 2048 MB set 1 read the pool out of range). Full: the mesh stays uncached, logged once per size.
+  static VkDeviceSize s_range = 0, s_full_logged = 0;
+  if (!s_range) {
+    VkPhysicalDeviceProperties p{};
+    g_dd->inst->GetPhysicalDeviceProperties(g_dd->physical, &p);
+    s_range = p.limits.maxStorageBufferRange;
+  }
+  const VkDeviceSize cap = capture_budget::mesh_pool_capacity(
+      g_pool.size, size, VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_mb", 256), 16)) << 20,
+      VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_max_mb", 3072), 64)) << 20, s_range);
+  if (!cap) {
+    if (s_full_logged != g_pool.size) {
+      s_full_logged = g_pool.size;
+      log("[bvh] mesh pool full at %llu MB (cap: below 2048 MB, rt_mesh_pool_max_mb, device range %llu MB): "
+          "new meshes stay uncached", (unsigned long long)(g_pool.size >> 20), (unsigned long long)(s_range >> 20));
+    }
+    return false;
+  }
   Buf nb;
   if (!make_buf(nb, cap,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
@@ -361,6 +381,7 @@ struct Mesh {
   uint64_t gen = 0;                   // unique per created mesh: results of an evicted one never apply to a new one
   uint64_t geo_key = 0;               // native_hit pool material record (rt_hit_material; 0 none)
   VkDeviceSize basis_off = 0, basis_size = 0;   // its UV/basis range in the pool (0: none)
+  VkDeviceSize basis_over = 0;  // wanted a basis range but kBasisCapBytes was full (counted in g_basis_over)
   std::unique_ptr<std::vector<NativeOmmVariant>> omm;
 };
 uint64_t g_mesh_gen = 0;
@@ -877,6 +898,7 @@ void evict(uint64_t key) {
   as_destroy(m.as);
   if (m.pool_size) g_pending_free.push_back({frame_index(), -1, m.pool_off, m.pool_size});
   if (m.basis_size) { g_pending_free.push_back({frame_index(), -1, m.basis_off, m.basis_size}); g_basis_bytes -= (std::min)(g_basis_bytes, m.basis_size); }
+  if (m.basis_over) { g_basis_over -= (std::min)(g_basis_over, uint64_t(1)); g_basis_over_bytes -= (std::min)(g_basis_over_bytes, m.basis_over); }
   g_meshes.erase(it);
   g_any_mesh = !g_meshes.empty();
 }
@@ -961,6 +983,8 @@ void bvh_device_destroyed(DeviceData* dd) {
   g_buf_meshes.clear();
   g_any_mesh = false;
   g_basis_bytes = 0;
+  g_basis_over = g_basis_over_logged = 0;
+  g_basis_over_bytes = 0;
   ++g_pool_epoch;
   for (auto& c : g_chunks)
     if (c.buf.b) free_buf(c.buf);
@@ -1519,6 +1543,19 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           pool_alloc(cmd, need, &mm.basis_off)) {
         mm.basis_size = need;   // passed to the record by the next lookup; extracted at its G-buffer draw
         g_basis_bytes += need;
+        if (mm.basis_over) { --g_basis_over; g_basis_over_bytes -= (std::min)(g_basis_over_bytes, mm.basis_over); mm.basis_over = 0; }
+      } else if (use.wants_basis && !alpha && !mm.basis_size && !mm.basis_over &&
+                 g_basis_bytes + need > native_hit::pool::kBasisCapBytes) {
+        mm.basis_over = need;   // its hits keep the base material (no pool row) until a range frees up
+        ++g_basis_over;
+        g_basis_over_bytes += need;
+        if (g_basis_over > g_basis_over_logged) {
+          g_basis_over_logged = g_basis_over * 2 - 1;   // next line at twice the count
+          log("[hit material pool basis] over kBasisCapBytes (%.1f of %.0f MB used): %llu meshes (%.1f MB) wait "
+              "for a UV/basis range; their hits use no pool row", double(g_basis_bytes) / 1048576.0,
+              double(native_hit::pool::kBasisCapBytes) / 1048576.0, (unsigned long long)g_basis_over,
+              double(g_basis_over_bytes) / 1048576.0);
+        }
       }
     }
     const bool pool_row = !alpha && use.slot < native_hit::nh_pool_rows;

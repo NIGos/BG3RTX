@@ -10,7 +10,7 @@ float3 qrot_inv(float4 q, float3 v) {   // rotate by the conjugate of q (world -
 
 // Does the ray o + t d, t >= 0, pass through a roof volume (camera-relative o)?
 bool sun_under_roof(float3 o, float3 d, float3 cam_abs) {
-  const uint n = min(st_u(0), 256u);
+  const uint n = min(st_u(0), SUN_MAX_VOLUMES);
   for (uint i = 0; i < n; ++i) {
     const uint a = 192u + i * 48u;   // kSunHeader
     float4 c = st_f4(a);

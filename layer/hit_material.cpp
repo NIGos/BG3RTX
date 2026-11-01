@@ -91,6 +91,7 @@ struct Query {
 constexpr VkDeviceSize pool_rows_bytes=VkDeviceSize(nh_pool_rows)*record_bytes;
 static_assert(nh_pool_row_base==row_bytes,"pool rows follow the publication word");
 DeviceData* dd{};bool on{};std::mutex mutex;
+std::mutex pending_mutex; // see prepass_begin
 // rt_hit_material_instanced: its startup value (the G-buffer VS frame patch), then the live key.
 bool instanced_on{};
 bool instanced_live(){return instanced_on && cfg_hot(CfgHot::rt_hit_material_instanced)!=0;}
@@ -635,7 +636,7 @@ void device_created(DeviceData* device){std::lock_guard lock(mutex);if(dd)return
  wind_rgb_on=instanced_on && cfg_int("rt_hit_material_wind_rgb",0)!=0;
  capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),wind_rgb_on);
  capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),instanced_on);}
-void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
+void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_guard pl(pending_mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
  for(auto& [id,q]:queries)destroy_query(*q);queries.clear();
  for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();
  for(auto& s:slots){destroy(s.data);s={};}
@@ -650,7 +651,12 @@ void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);if(dd!=dev
  gather_pipeline={};join_pipeline={};tileset_gather_pipeline={};gather_layout={};join_layout={};gather_dsl={};join_dsl={};pending.clear();owners.clear();submitted_queues.clear();marked.clear();dd=nullptr;on=false;
 }
 size_t pre_hint=0; // under mutex: the prepass candidates of the last prepared scene
-void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(!one_time(s))return;CpuTimer timer(CpuPrepass);std::lock_guard lock(mutex);collect();
+// `pending` (the prepass candidates per recording) has its own leaf lock: writers of the map and of a
+// recording's entry outside its hooks (prepass_begin, scene_prepare, device_destroyed) hold mutex and
+// pending_mutex; with rt_hit_material_lean_hooks the per-draw prepass hooks take pending_mutex alone, so
+// they no longer wait behind the G-buffer material hooks on mutex (sw3 22:13: 0.6-0.7 ms/frame of waits).
+// (pending_mutex is declared next to mutex.)
+void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(!one_time(s))return;CpuTimer timer(CpuPrepass);std::lock_guard lock(mutex);collect();std::lock_guard pl(pending_mutex);
  for(auto i=pending.begin();i!=pending.end();)if(current_recording(i->second.command)!=i->second.recording)i=pending.erase(i);else ++i;
  if(pending.size()>=128 && !pending.contains(s->recording))return;
  auto& p=pending[s->recording];p={};p.command=handle(cmd);p.recording=s->recording;p.join.begin(p.command,p.recording);
@@ -665,7 +671,7 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
     !(family!=instanced::None?instanced::prepass_geometry_ok(vertices,args.instances,triangles,stride):prepass_geometry_ok(tileset,vertices,args.instances,triangles,stride)))return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
  if(!prepass_alpha_ok(tileset,snapshot.rec.kind,snapshot.rec.channel,snapshot.rec.p0[1],snapshot.rec.p0[2]))return;
- Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family!=instanced::None)pre.inputs=read_inputs(cmd,family);std::unique_lock lock(mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return;
+ Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family!=instanced::None)pre.inputs=read_inputs(cmd,family);std::unique_lock lock(lean_hooks()?pending_mutex:mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return;
  ++p->second.candidate_draws;
  if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record)){
   p->second.pre.push_back(pre);if(family!=instanced::None)++p->second.instanced_prepass[family];}
@@ -674,7 +680,7 @@ uint32_t note_opaque_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs&
  if(!on || !cfg_hot(CfgHot::rt_hit_material) || !one_time(state) || !opaque_depth_family(state->vs,state->fs) || !opaque_prepass_geometry_ok(args.kind,args.instances,args.count,triangles,stride))return UINT32_MAX;
  CpuTimer timer(CpuPrepass);
  Pre pre{};pre.key=key(cmd,*state,args);pre.raw=raw;pre.stride=stride;pre.triangles=triangles;pre.vs=state->vs;pre.fs=state->fs;pre.opaque=true;
- std::unique_lock lock(mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return UINT32_MAX;
+ std::unique_lock lock(lean_hooks()?pending_mutex:mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return UINT32_MAX;
  ++p->second.candidate_draws;
  if(!p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX))return UINT32_MAX;
  if(p->second.opaque_count>=nh_opaque_rows){++p->second.opaque_overflow;return UINT32_MAX;}
@@ -686,7 +692,7 @@ void prepass_observe(VkCommandBuffer,CmdState*,const DrawArgs&){
  // Only actual note_prepass candidates reserve a material join identity.
 }
 void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
- if(!on || !cfg_hot(CfgHot::rt_hit_material) || index>=kSceneSlots)return;auto* state=cmd_state(cmd);if(!one_time(state))return;CpuTimer timer(CpuScenePrepare);std::lock_guard lock(mutex);collect();
+ if(!on || !cfg_hot(CfgHot::rt_hit_material) || index>=kSceneSlots)return;auto* state=cmd_state(cmd);if(!one_time(state))return;CpuTimer timer(CpuScenePrepare);std::lock_guard lock(mutex);collect();std::lock_guard pl(pending_mutex);
  auto& s=slots[index];s.set={};s.handles.clear();s.pre.clear();s.owners.clear();s.prepared=s.attached=false;s.capacity_logged=false;
  auto p=pending.find(state->recording);if(!cap.split || p==pending.end() || !p->second.join.current(handle(cmd),state->recording))return;
  s.command=handle(cmd);s.recording=state->recording;s.frame=frame_index();s.cursor=0;s.generation=0;
