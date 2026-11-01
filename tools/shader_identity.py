@@ -332,7 +332,8 @@ class Cache:
     def __init__(self, directory=None):
         self.dir = Path(directory) if directory else default_cache_dir()
         (self.dir / "spv").mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(self.dir / "index.sqlite3"), timeout=120, check_same_thread=False)
+        self.db = sqlite3.connect(str(self.dir / "index.sqlite3"), timeout=120, check_same_thread=False,
+                                  isolation_level=None)  # autocommit: no write lock held across a run (parallel runs hit "database is locked")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS compiled (key TEXT PRIMARY KEY, sha TEXT, size INTEGER, "
                         "request TEXT, entry TEXT, at REAL)")
@@ -351,7 +352,10 @@ class Cache:
             return None
         sha, size = row
         # 'at' = last use: pruning keeps what was used recently.
-        self.db.execute("UPDATE compiled SET at=? WHERE key=?", (time.time(), key))
+        try:  # LRU touch is best effort: never fail a run because another process holds the lock
+            self.db.execute("UPDATE compiled SET at=? WHERE key=?", (time.time(), key))
+        except sqlite3.OperationalError:
+            pass
         if sha in self._verified:
             return sha
         p = self.blob_path(sha)
@@ -381,15 +385,21 @@ class Cache:
 
     def put(self, key, data, request, entry):
         sha = self.put_blob(data)
-        self.db.execute("INSERT OR REPLACE INTO compiled VALUES (?,?,?,?,?,?)",
-                        (key, sha, len(data), request, entry, time.time()))
+        try:  # best effort: the blob is on disk; a locked index only costs a recompile next time
+            self.db.execute("INSERT OR REPLACE INTO compiled VALUES (?,?,?,?,?,?)",
+                            (key, sha, len(data), request, entry, time.time()))
+        except sqlite3.OperationalError:
+            pass
         return sha
 
     def is_valid(self, sha, val_id):
         return self.db.execute("SELECT 1 FROM validated WHERE sha=? AND val=?", (sha, val_id)).fetchone() is not None
 
     def put_valid(self, sha, val_id):
-        self.db.execute("INSERT OR IGNORE INTO validated VALUES (?,?)", (sha, val_id))
+        try:
+            self.db.execute("INSERT OR IGNORE INTO validated VALUES (?,?)", (sha, val_id))
+        except sqlite3.OperationalError:
+            pass
 
     def commit(self):
         self.db.commit()
@@ -577,12 +587,57 @@ class Result:
         return p.read_bytes() if p else None
 
 
+# Child processes start at BelowNormal even if this process was not lowered.
+_LOW = {"creationflags": 0x00004000} if sys.platform == "win32" else {}
+
+
+class _DxcSlot:
+    """Machine-wide cap on concurrent dxc processes, shared by every run (parallel agents, merge-green):
+    max(2, cores / 2) lock files; a compile holds one while dxc runs. Each dxc takes ~0.5 GB, so two
+    unshared 8-job runs made the PC unusable (2026-11-01)."""
+    _dir = Path(os.environ.get("TEMP", ".")) / "bg3rtx_dxc_slots"
+    _count = int(os.environ.get("BG3RTX_DXC_SLOTS", "0")) or max(2, (os.cpu_count() or 4) // 2)
+    _waited_note = [False]
+
+    def __enter__(self):
+        self._dir.mkdir(parents=True, exist_ok=True)
+        start = time.time()
+        while True:
+            for i in range(self._count):
+                f = open(self._dir / f"slot{i}.lock", "a+b")
+                try:
+                    if sys.platform == "win32":
+                        import msvcrt
+                        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self._f = f
+                    return self
+                except OSError:
+                    f.close()
+            if time.time() - start > 10 and not self._waited_note[0]:
+                self._waited_note[0] = True
+                print(f"  waiting for a dxc slot ({self._count} machine-wide, shared with other runs)", flush=True)
+            time.sleep(0.2)
+
+    def __exit__(self, *exc):
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+                self._f.seek(0)
+                msvcrt.locking(self._f.fileno(), msvcrt.LK_UNLCK, 1)
+        finally:
+            self._f.close()
+
+
 def _run_dxc(tool, tree, request, entry, out):
     file, defines = split_request(request)
     disk = tree.materialize()
     src = Path(disk) / SHADERS / file
     cmd = tool.command(src, Path(disk) / SHADERS, entry, defines, first_line_args(tree.read(SHADERS + "/" + file)), out)
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    with _DxcSlot():
+        r = subprocess.run(cmd, capture_output=True, text=True, **_LOW)
     if r.returncode or not out.exists():
         return None, f"[{entry}] " + (r.stdout + r.stderr).strip()[:4000]
     data = out.read_bytes()
@@ -591,7 +646,7 @@ def _run_dxc(tool, tree, request, entry, out):
 
 
 def _run_val(tool, path):
-    r = subprocess.run([str(tool.spirv_val), *VAL_ARGS, str(path)], capture_output=True, text=True)
+    r = subprocess.run([str(tool.spirv_val), *VAL_ARGS, str(path)], capture_output=True, text=True, **_LOW)
     return r.returncode == 0, (r.stdout + r.stderr).strip()[:4000]
 
 
