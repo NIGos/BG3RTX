@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 7);
+  CHECK(user_exp == 5);   // 7 before the M4 bundle (Hidden-surface shading, Emission at ray hits) left
   CHECK(dev == (std::vector<std::string>{"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));
@@ -468,7 +468,9 @@ static void test_gui_levels() {
     const Knob* k = find_knob(l.knob);
     CHECK(k != nullptr);
     if (!k) continue;
-    CHECK(k->experimental == (std::string(l.knob) != "exp_water") && !k->dev_only);
+    // Promoted (Advanced, in Ultra): RT water (M5), Hidden-surface shading "+ Bounce" and Emission "Hidden hits" (M4).
+    const std::string id = l.knob;
+    CHECK(k->experimental == (id != "exp_water" && id != "exp_hidden_surface" && id != "exp_hit_emission") && !k->dev_only);
     CHECK(choice_count(*k) == int(l.values.size()));
     for (int c = 0; c < choice_count(*k); ++c) {
       Map m = on_map(*k, c);
@@ -647,7 +649,7 @@ static void test_user_ini_migration() {
   for (const char* key : {"rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
     CHECK_EQ(get(ew, key), "1");
   CHECK(get(ew, "rt_hit_material_recycle") == "1");   // automatic (default 1): no level writes it
-  CHECK_EQ(get(w, "rt_emissive"), "1");             // now written by Emission at ray hits
+  CHECK_EQ(get(ew, "rt_emissive"), "1");            // Emission at ray hits: Ultra's own level now (Hidden hits)
   CHECK(out.find("rt_emissive=1") == out.rfind("rt_emissive=1"));   // once, no longer under "Other keys"
   CHECK_EQ(get(w, "rt_xfb_mb"), "1024");            // unmanaged keys kept
   CHECK_EQ(get(w, "rt_cascade_mb"), "427");
@@ -658,12 +660,13 @@ static void test_user_ini_migration() {
   apply_layer(raw2, w);
   CHECK(knob_values(raw2) == v);
   CHECK_EQ(render_user_ini(out, kUltra, v), out);
-  // The added keys that need a restart are marked: the wind RGB rows. The pond's game shadow no longer: the
-  // Ultra preset itself turns it on now (raw holds the preset's 1).
+  // No added key needs a restart any more: the wind RGB rows and the pond's game shadow are turned on by the
+  // Ultra preset itself now (Hidden-surface shading "+ Bounce", RT water; raw holds the preset's 1).
   int restart = 0;
   for (const char* key : {"rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
     restart += key_change_needs_restart(key, lookup(raw, key), get(ew, key));
-  CHECK(restart == 1);
+  CHECK(restart == 0);
+  CHECK_EQ(lookup(raw, "rt_hit_material_wind_rgb"), "1");
   CHECK_EQ(lookup(raw, "rt_water_game_shadow"), "1");
 }
 

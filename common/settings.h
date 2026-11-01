@@ -251,8 +251,8 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 1}}, {"rt_water_refraction"}}},
    {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}},
 
-  // Experimental: features being tested, off in every preset (docs/GUI_AUDIT_20261101.md: 28 entries
-  // became these 8, 7 since RT water left). Each level writes every key it covers, so a file reads back as one level.
+  // M4 hidden-surface bundle (docs/PLAN_M4_REFLECTIONS_GI.md "Promotion", m4_promotion without rf_hit_shade): Advanced,
+  // before the Experimental section; "+ Bounce" and "Hidden hits" in Ultra, Off elsewhere.
   {"exp_hidden_surface", "Hidden-surface shading",
    "Gives ray hits on surfaces the camera does not see their verified native material (static virtual-texture "
    "views, reflectance, tangent frame), including the wind-animated and two-sided foliage rows, with the capture "
@@ -261,8 +261,8 @@ inline constexpr Knob kKnobs[] = {
    "+ Reflections: reflection rays that hit them are shaded with that material and lighting, and get the screen's "
    "bounce light, instead of keeping the reflection probe (about +1.4 to +1.8 ms). Unsupported materials or lights "
    "keep the current renderer. The first enable needs a restart; the levels above Materials are live. "
-   "Experimental: quality and GPU cost remain partly unqualified.",
-   Kind::Choice, Apply::Partial, "first enable: restart; levels live", false,
+   "+ Bounce in Ultra (M4 promotion); + Reflections stays experimental: its quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Partial, "first enable: restart; levels live", true,
    {{"off", "Off", 0, {{"rt_hit_material", "0"}, {"rt_hit_material_instanced", "0"},
       {"rt_hit_material_wind_rgb", "0"}, {"gi_hit_direct", "0"}, {"gi_hit_sun", "0"}, {"rf_hit_shade", "0"}, {"rf_hit_gi", "0"}}, {}},
     {"materials", "Materials", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"},
@@ -274,7 +274,7 @@ inline constexpr Knob kKnobs[] = {
     {"reflections", "+ Reflections", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"},
       {"rt_hit_material_wind_rgb", "1"}, {"gi_hit_direct", "1"}, {"gi_hit_sun", "1"}, {"rf_hit_shade", "1"}, {"rf_hit_gi", "1"}},
      {{"rt_geometry", 2}, {"gi", 2}, {"reflections", 1}}, {"rf_hit_shade", "rf_hit_gi"}}},
-   {}, {0, 0, 0, 0}, true,
+   {}, {0, 0, 0, 2}, false,
    {{"rt","1","RT device setup"},{"rt_alpha","1","Native prepass capture"},{"rt_bvh_split","1","Split hit identity"},
     {"gi_rt_fallback","0","GI fallback 0 (zero-bounce hidden hits)",2}}},
 
@@ -282,13 +282,15 @@ inline constexpr Knob kKnobs[] = {
    "Bounce and reflection rays that hit a glowing surface (lava, braziers, glowing runes) on a hidden surface add "
    "that surface's emitted light, from the captured emissive geometry (this setting turns the emissive capture, "
    "rt_emissive, on with it). It shows where Hidden-surface shading + Bounce or + Reflections shades the hit. "
-   "Experimental: quality and GPU cost remain unqualified.",
-   Kind::Choice, Apply::Live, "live; first enable compiles shaders", false,
+   "Hidden hits in Ultra (M4 promotion).",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
    {{"off", "Off", 0, {{"rt_hit_emission", "0"}, {"rt_emissive", "0"}}, {}},
     {"hidden", "Hidden hits", kCapRayQuery, {{"rt_hit_emission", "1"}, {"rt_emissive", "1"}}, {{"exp_hidden_surface", 1}}, {"rt_hit_emission"}},
     {"all", "All hits (developer)", kCapRayQuery, {{"rt_hit_emission", "2"}, {"rt_emissive", "1"}}, {{"exp_hidden_surface", 1}}, {"rt_hit_emission"}, true}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
+   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"}}},
 
+  // Experimental: features being tested, off in every preset (docs/GUI_AUDIT_20261101.md: 28 entries
+  // became these 8, 5 since RT water and the M4 bundle left). Each level writes every key it covers, so a file reads back as one level.
   {"exp_gi_far", "Far-field sun bounce",
    "Lengthens the bounce rays from 1 m to 6 m. Surfaces up to that distance that are on screen, or hidden with a "
    "verified native material lit by the sun, replace the game's ambient light for their ray. Other surfaces beyond "
