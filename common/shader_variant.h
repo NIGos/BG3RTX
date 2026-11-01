@@ -14,7 +14,8 @@ namespace bg3::shader_variant {
 
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
-enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128 };
+enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
+                  kGiFar = 256 };
 
 // rt_hit_material_instanced at startup (common/native_hit_instanced.h): the files that include
 // rt/native_hit_material.hlsli get RT_HIT_INSTANCED=1 (RtHit.dir, the two-sided N column of row word
@@ -27,6 +28,16 @@ inline bool hit_material_entry(const char* file) {
       "gi/rt_hit_material.hlsl", "gi/rt_hit_two_bounce.hlsl", "gi/rt_reflections_hit_shade.hlsl",
       "gi/rt_reflections_hit_shade_em.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
       "gi/rt_reflections_sharc_hit_shade_em.hlsl"};
+  for (const char* n : names)
+    if (std::strcmp(n, file) == 0) return true;
+  return false;
+}
+
+// gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"): the gi_hit_sun files get RT_GI_FAR=1 (long GI rays,
+// shaders/gi/gi_far.hlsli). The far field is sun bounce, so the direct-only files never get it.
+inline bool gi_far_entry(const char* file) {
+  static const char* const names[] = {"gi/gi_trace_rt_hit_sun.hlsl", "gi/gi_trace_rt_sharc_hit_sun.hlsl",
+                                      "gi/gi_trace_rt_hit_sun_em.hlsl", "gi/gi_trace_rt_sharc_hit_sun_em.hlsl"};
   for (const char* n : names)
     if (std::strcmp(n, file) == 0) return true;
   return false;
@@ -71,12 +82,13 @@ inline unsigned allowed(const char* file) {
   if (hair_origin::alternate_entry(file)) f |= kHairOrigin;
   if (sun_current_entry(file)) f |= kSunCurrent;
   if (hit_material_entry(file)) f |= kHitInstanced;
+  if (gi_far_entry(file)) f |= kGiFar;
   return f;
 }
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,
-// each name once: tileset, Hair origin, OMM, current sun, scalp, cascade.
+// each name once: tileset, Hair origin, OMM, current sun, scalp, instanced, cascade, then gi_far.
 inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
@@ -111,6 +123,7 @@ inline std::string request(const char* file, unsigned flags) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF
   }
+  if (flags & kGiFar) add("RT_GI_FAR=1");
   return out;
 }
 

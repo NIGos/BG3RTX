@@ -91,10 +91,10 @@ struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
   // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset, 64 instanced hit rows
-  // (request flag kHitInstanced; 1 was rt_scene_rebase).
-  VkPipeline variants[128] = {};
-  uint64_t variant_generations[128] = {};
-  std::string variant_files[128];
+  // (request flag kHitInstanced), 128 gi_far (request flag kGiFar; 1 was rt_scene_rebase).
+  VkPipeline variants[256] = {};
+  uint64_t variant_generations[256] = {};
+  std::string variant_files[256];
 };
 
 // Bound pipeline capability, including a first-frame capability publication race.
@@ -257,6 +257,7 @@ VkPipelineLayout g_hit_gi_plain_layout=VK_NULL_HANDLE,g_hit_reference_layout=VK_
 VkPipelineLayout g_rt_sharc_layout = VK_NULL_HANDLE, g_rf_sharc_layout = VK_NULL_HANDLE, g_hit_gi_layout=VK_NULL_HANDLE;
 VkPipelineLayout g_hit_gi_sun_layout=VK_NULL_HANDLE,g_hit_gi_sun_sharc_layout=VK_NULL_HANDLE;
 bool g_hit_gi_sun_logged=false;
+bool g_gi_far_logged=false,g_gi_far_nosun_logged=false;   // gi_far: the last logged state
 Pipe g_trace_rt_sharc, g_rf_sharc, g_sharc_resolve, g_sharc_inject, g_sharc_inject_lock, g_sharc_debug, g_sharc_roof;
 bool g_sharc_logged = false, g_sharc_missing_logged = false, g_sharc_paused_logged = false, g_sharc_em_logged = false;
 bool g_ls_logged = false, g_ls_missing_logged = false;
@@ -807,13 +808,15 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool tileset=std::strncmp(file,"gi/",3)==0 && bg3::native_tileset::enabled(static_cast<uint32_t*>(host->persist(bg3::native_tileset::capability_key,sizeof(uint32_t))));
   // rt_hit_material_instanced at startup (the layer's capability word): RT_HIT_INSTANCED on the consumers.
   const bool instanced=sv::hit_material_entry(file) && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::instanced_capability_key,sizeof(uint32_t))));
-  const unsigned variant = (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  // gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"): the gi_hit_sun files with RT_GI_FAR, live.
+  const bool far_on=sv::gi_far_entry(file) && host->cfg_int("gi_far",0)!=0;
+  const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
   const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
-                                                 (sun_current ? unsigned(sv::kSunCurrent) : 0u));
+                                                 (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u));
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
-  if (scalp || omm || tileset || instanced) p.pipeline = p.variants[variant];
+  if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];
   Bg3ShaderBlob blob{};
   if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == selected;
   if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
@@ -1024,7 +1027,14 @@ static_assert(kLsKFirst == bg3::ls_exact_k::kLkStatFirst, "common/ls_exact_k.h k
 // tolerance, UV differs, beyond x1-16, x16-256, over x256, rigid offset. Logged as "hit material instanced clip".
 constexpr uint32_t kHitClipFirst = kLsKFirst + kLsKCount, kHitClipCount = 16;
 static_assert(kHitClipFirst == 356, "native_hit_material.hlsli hit_material_count base 356");
-constexpr uint32_t kStatsCounters = kHitClipFirst + kHitClipCount; //356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+// [372..382] gi_far (gi_trace_rt.hlsl RT_GI_FAR kGiFarStatFirst; per 8x8 group): rays; beyond the base radius
+// screen hits, qualified sun-lit hits, of which outside the froxel volume, hits kept as native ambient;
+// x 8192: occlusion sum, the old rule's on the same rays, bounce luminance sum, the old rule's, ambient
+// kept at qualified hits (w x rho); qualified sun-lit hits beyond the base radius left out by the roof rule.
+// Logged as "GI far".
+constexpr uint32_t kGiFarFirst = kHitClipFirst + kHitClipCount, kGiFarCount = 11;
+static_assert(kGiFarFirst == 372, "gi_trace_rt.hlsl kGiFarStatFirst 372");
+constexpr uint32_t kStatsCounters = kGiFarFirst + kGiFarCount; //372..382 gi_far;356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
@@ -1278,6 +1288,12 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
     "roof-unsupported (no cut-away roofs in the TLAS) %llu, unknown visibility %llu, other unsupported %llu; added weighted luminance sum %.7f",
     g_stats_n,t[kGiSunFirst],t[kGiSunFirst+1],t[kGiSunFirst+2],t[kGiSunFirst+3],t[kGiSunFirst+4],t[kGiSunFirst+5],t[kGiSunFirst+6],t[kGiSunFirst+7],
     double(t[kGiSunFirst+8])/8192.0);
+  // gi_far: ON (this frame's rule) and the old rule on the same rays, as means per ray: the ambient
+  // visibility the AO fold gets (1 - occlusion) and the bounce luminance (before the composite's albedo).
+  if(t[kGiFarFirst]){const double n=double(t[kGiFarFirst]),q=8192.0*n;const unsigned f=kGiFarFirst;
+    host->log("GI far (%u frames): rays %llu; beyond the base radius: screen hits %llu, qualified sun-lit %llu (outside the froxels %llu), "
+      "kept as native ambient %llu (of them roof rule %llu); per ray: ambient visibility %.5f (old rule %.5f), bounce %.7f (old rule %.7f), ambient kept at qualified hits %.5f",
+      g_stats_n,t[f],t[f+1],t[f+2],t[f+3],t[f+4],t[f+10],1.0-double(t[f+5])/q,1.0-double(t[f+6])/q,double(t[f+7])/q,double(t[f+8])/q,double(t[f+9])/q);}
   // native_hit_direct.hlsli diagnostics: why a hit's point/spot term is zero or unsupported.
   // x: the 4 more counters (g_hd_xbase): blocker within 1 m of the light, rays to lights of
   // radius >= 10 m, projector entries listed / evaluated (rf_hit_shade; gi_hit_direct skips them).
@@ -2066,6 +2082,14 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  // The hit light policy's per-light data (b46): the latest join's, the GI runs before this
  // frame's (native_hit_direct.hlsli checks each slot's key).
  Push hp=pc;hp.ls_flags=(hp.ls_flags&~1u)|(g_lsl_ok && host->cfg_int("ls_lights",1)?1u:0u);
+ // gi_far (the sun files' RT_GI_FAR variant, refresh): rays of gi_far_m in Push::radius (gi_trace's march
+ // radius, unused by this pass); gi_rt_radius stays the base radius. Without the sun set it is not run.
+ const bool far_on=sun && host->cfg_int("gi_far",0)!=0;
+ if(far_on)hp.radius=(std::min)((std::max)(host->cfg_float("gi_far_m",6.0f),0.01f),64.0f);
+ if(far_on!=g_gi_far_logged){g_gi_far_logged=far_on;
+  host->log("gi: gi_far %s (rays %.1f m, base radius %.1f m, sharc %d)",far_on?"on":"off",far_on?hp.radius:pc.gi_rt_radius,pc.gi_rt_radius,s.sharc);}
+ if(!sun && host->cfg_int("gi_far",0) && !g_gi_far_nosun_logged){g_gi_far_nosun_logged=true;
+  host->log("gi: gi_far needs gi_hit_sun and the sun set; the base hit GI runs");}
  // gi_hit_sun: bit 25, the sun set b8 holds this frame's trust slot (header and roof volumes).
  if(sun)hp.ls_flags|=g_sunt_ok && g_sunt.view?(1u<<25):0u;
  if(em)hit_em_prepare(cmd,hp);
