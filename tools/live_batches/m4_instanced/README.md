@@ -11,7 +11,8 @@ phase. Receipt `m4-instanced.json`; the plan goes to test-main `captures\live_ba
    counts `hit material`). Phases: warm-up, diag OFF / ON / OFF (15 s each), cost OFF / ON / OFF (20 s), PNGs
    OFF / ON / OFF.
    Validity (expect lines): the ON window logs `[hit material instanced] ... key 1` with wind and 2S prepass > 0
-   and G-buffer > 0 (both families in view), an OFF window logs `key 0; wind: prepass 0, G-buffer 0`, the
+   and G-buffer > 0 (both families in view), the wind inputs line and the `hit material instanced clip` line with
+   rejected below 0.04% of all lookups, an OFF window logs `key 0; wind: prepass 0, G-buffer 0`, the
    `hit material` reasons line, `GI hit direct`, `gi: trace pass` and `[geo] transform feedback ... (stride 64)`.
 
 ## Deciding lines and gates
@@ -21,9 +22,16 @@ phase. Receipt `m4-instanced.json`; the plan goes to test-main `captures\live_ba
   the alpha record's views differ). Key 0 windows: mapped 0.
 - Share: `hit material (N frames): attempted A qualified Q ...`: Q/A in diag-on minus the mean of diag-off-a/b,
   larger than |off-b - off-a|. `of base, instance without a material record` / A goes down by about as much.
-- Exactness: the reasons `row` (3: the join refused the snapshot vs the alpha record) and `clip` (4: prepass and
-  G-buffer XFB vertices not bit-equal, e.g. the wind VSs' non-`precise` terms) ON minus OFF. If clip rises by
-  about the mapped share, the wind VS pair is not bit-exact: next step is a tolerance compare for these rows.
+- Exactness: the reasons `row` (3: the join refused the snapshot vs the alpha record) and `clip` (4) ON minus OFF.
+  First run (2026-11-01, log m4i-instanced-s14-fg2.1.074646): clip 0 -> 0.4-1.9M per 120 frames at a static
+  camera, qualified + clip constant: the wind rows (TRACK_D_REFLECTIONS 14). Wind rows now compare clip positions
+  within a derived fp32 tolerance (2S stays bit-exact). Deciding lines (diag-on): `[hit material instanced] ...
+  wind inputs prepass vs G-buffer: equal N, time only N, other differ N, unread N; rows with the derived clip
+  tolerance N` (the condition) and `hit material instanced clip (120 frames): wind: checked, bit-exact, within the
+  derived tolerance, UV differs, beyond x1-16 / x16-256 / over x256, rigid offset; alpha-test 2S: ...; rejected R
+  = P% of all lookups`. Gate (expect line): P < 0.04%, below the spread of the key-off qualified share at this
+  static camera in the first run (0.2230-0.2234, 0.046%). Rejects that remain: beyond x256 or rigid offset =
+  real mismatches (another instance or vertex), kept fail-closed; `other differ` > 0 = the passes' VS inputs differ.
 - Energy: mean PNG luminance shot-on minus shot-off-a against |shot-off-b - shot-off-a|; no darker region.
 - Cost: cost-on minus the mean of cost-off-a/b for `[pace] rendered frame time` (median), `gi: trace pass ... GPU
   median` and `rt passes: GPU cost`. Expected: XFB of the instanced G-buffer draws (64 B per vertex, all instances)

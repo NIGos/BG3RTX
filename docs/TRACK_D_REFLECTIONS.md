@@ -401,6 +401,33 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     a pass are declined. Cost (not measured): XFB of the instanced G-buffer draws (64 B per vertex) plus 2x query
     copies, inside the existing caps; expected 0.2 to 1 ms on Ultra.
   - Live: `tools/live_batches/m4_instanced` (S14 Lower City: wind 9.7% + 2S 4.1% of the placed geometry), OFF/ON/OFF.
+  - First live run (2026-11-01, log m4i-instanced-s14-fg2.1.074646): qualified 22% -> 36-40%, +0.14 ms gi trace,
+    +0.1 ms rt passes; mapped wind 5 rows 31841 tri, 2S 12 rows 90407 tri. Reason `clip` 0 -> 0.4-1.9M per 120
+    frames (up to 6% of lookups).
+- **Wind clip tolerance (2026-11-01; offline, READY_FOR_LIVE).** Root cause: the wind rows. The camera was static,
+  clip varied 0.59M-1.86M per window while qualified + clip stayed 13.1-13.3M: the same hits pass or fail over time.
+  2S (106a0550 / 1e9145e4) is `precise` end to end on static inputs, so it cannot vary; the wind VSs (1719e9d0 /
+  50fbfceb) evaluate the displacement o = (normalize(Wvec + d) |d| - d) fade outside `precise`, so the driver may
+  fuse a mul + add in one module and not the other. The phase works in absolute world xz (u x 500 m) and the gust
+  changes |o|, so the share of flipped clip bits varies with the wind. Only UV, N/B/T are read from the G-buffer XFB
+  and none of them depends on o.
+  - Fix (`common/native_hit_instanced.h` `wind_clip_tolerance`, RT_HIT_INSTANCED only): the layer reads the wind VS
+    inputs at both draws (frame 0:0 time, scene 0:1 wind, camera 0:2 _m2/_m6, material 1:1 _m0.._m3). If they
+    are bitwise equal, or only the time differs (the time term evaluated in each pass), the row gets word 220 bit 1
+    and tau_c = a_c + b_c |W|inf (words 224/240): the first-order bound of every fusable site (phase, wind vector,
+    normalize/length, n L - d, fade), through the precise _22 + o and the 4-term clip dot, rounded up. UV stays
+    bit-exact, 2S and any other input difference stay bit-exact (fail closed). Word 220 bits 8..9 tag the family.
+  - Unit test (`native_hit_instanced_test`, 71 checks): fp32 simulation of both VSs with every fusable site fused
+    or not: 20000 vertices, 13% with differing clip bits, all within tau (worst 0.004 tau; tau ~1.5 mm in world at
+    |cam| 500 m, loose by the L <= 2 sqrt3 R term); with the time 1/60 s apart all within (worst 0.12 tau); the same
+    vertex of another instance 5 cm away is always outside tau.
+  - Log: `[hit material instanced] ... wind inputs prepass vs G-buffer: equal, time only (max |dt|), other differ,
+    unread; rows with the derived clip tolerance` and `hit material instanced clip (120 frames)` per family:
+    checked, bit-exact, within tolerance, UV differs, beyond x1-16 / x16-256 / over x256, rigid offset (counters
+    356..371); rejected = P% of all lookups. Key off: every request without RT_HIT_INSTANCED byte-identical.
+  - Expected live: wind inputs equal (time only at most), clip rejects < 0.04% of lookups (job expect line), and
+    the qualified share up by about the old clip share (+1.9 to +6 points). Cost: none measurable (3 more loads and a
+    compare per instanced hit; 8 mapped UBO reads per wind draw).
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.
