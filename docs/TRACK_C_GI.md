@@ -170,8 +170,8 @@ S6 "non-finite" alarm of m4p3 (2026-11-01, branch worktree-agent-ad96013fbc66f09
   bounce above 65504 would store +Inf and drop the bounce of about 36 full-res pixels while the
   occlusion stays: darker, with a finite scene colour.
 - Guard (hit-GI variants only, key-off SPIR-V byte-identical): a qualified-hit term that is not finite
-  and >= 0 takes fallback0 (the key-off ray), counter 383; a mean bounce above the half maximum is
-  stored as 65504, counter 384 (energy above the encoding limit, counted, never +Inf). Both are on the
+  and >= 0 takes fallback0 (the key-off ray), counter 417; a mean bounce above the half maximum is
+  stored as 65504, counter 418 (energy above the encoding limit, counted, never +Inf). Both are on the
   `GI hit direct` line: `non-finite hit terms (fallback0) N, bounce over the half-float max (stored 65504) M px`.
   Checked against ac57418: the 48 key-off gi_trace_rt / gi_trace_rt_sharc requests are byte-identical,
   all 448 hit-GI requests compile and pass spirv-val.

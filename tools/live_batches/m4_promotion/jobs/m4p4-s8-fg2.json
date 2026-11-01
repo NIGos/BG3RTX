@@ -4,10 +4,10 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 437,
+ "timeout": 457,
  "repeat": 1,
  "live_batch": "m4-promotion",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -84,12 +84,12 @@
   "\\[motion-trace\\] phase=5 label=shot-step-sun repeat=0",
   "\\[motion-trace\\] phase=6 label=shot-step-rf repeat=0",
   "\\[motion-trace\\] phase=7 label=shot-step-inst repeat=0",
-  "\\[motion-trace\\] phase=9 label=shot-on repeat=0",
-  "\\[motion-trace\\] phase=11 label=shot-off-b repeat=0",
-  "\\[motion-plan\\] complete phases=13\\b",
+  "\\[motion-trace\\] phase=10 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=12 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=14\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "M4 promotion gate, S8 polished stone: rf_hit_shade tier (b) share 24%, the reflection scene. Startup: the Ultra bundle (rt_hit_material=1, rt_hit_material_instanced=1, rt_emissive=1, rt_xfb_mb=1024, rt_cascade_mb=427). Live: one diag window (rt_stats + rf_stats, bundle ON), cost OFF / ON / OFF (diagnostics off), one PNG per state, a PNG per cumulative step (gi_hit_direct, +gi_hit_sun, +rf_hit_shade, +instanced). Bundle OFF = the five live keys 0 and rt_emissive 0 (the Ctrl+Shift+F9 live path).",
- "estimated_phase_seconds": 137
+ "purpose": "M4 promotion gate, S8 polished stone: rf_hit_shade tier (b) share 24%, the reflection scene. Startup: the Ultra bundle (rt_hit_material=1, rt_hit_material_instanced=1, rt_emissive=1, rt_xfb_mb=1024, rt_cascade_mb=427). Live: one diag window (rt_stats + rf_stats, bundle ON), cost OFF / ON / OFF (diagnostics off), one PNG per state, a PNG per cumulative step (gi_hit_direct, +gi_hit_sun, +rf_hit_shade, +instanced). Bundle OFF = the five live keys 0 and rt_emissive 0 (the Ctrl+Shift+F9 live path). Also cost-ao0 (bundle ON with hit_ao_rays=0, right after cost-on: the AO rays' cost at hits) and, with the new core, the rf hit shade boxes line (L_b's projector part) in diag-on.",
+ "estimated_phase_seconds": 157
 }

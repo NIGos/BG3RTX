@@ -56,6 +56,7 @@ DIAG = {
     "GI hit sun": re.compile(r"GI hit sun \(\d+ frames\): evaluated (\d+), .*traced lit (\d+), traced occluded (\d+), roof-unsupported [^)]*\) (\d+).*added weighted luminance sum ([0-9.]+)"),
     "rf hit shade": re.compile(r"rf hit shade \(\d+ frames\): tier b hidden hits (\d+), shaded (\d+) \(([0-9.]+)%\).*tier a check: (\d+) hits .*mean L_b ([0-9.]+), mean L_a ([0-9.]+), mean \(L_b - L_a\) per frame (-?[0-9.]+), standard error ([0-9.]+) \((\d+) frames\)"),
     "rf hit shade terms": re.compile(r"rf hit shade terms .*AO at the hit ([0-9.]+) vs the screen's AO there ([0-9.]+);.*ratio L_b / L_a ([0-9.]+) \(at AO 1 ([0-9.]+)\)"),
+    "rf hit shade boxes": re.compile(r"rf hit shade boxes \(\d+ frames\): tier a L_b projector lights ([0-9.]+) of L_b ([0-9.]+); tier b shaded L_b projector lights ([0-9.]+) of ([0-9.]+)"),
     "hit emission": re.compile(r"hit emission \(\d+ frames\): GI hidden hits: lookups (\d+), emissive (\d+), skipped (\d+), added weighted luminance ([0-9.]+);.*rf tier b: lookups (\d+), emissive (\d+), skipped (\d+), added luminance ([0-9.]+);.*approximate uncalibrated (\d+)"),
     "instanced clip": re.compile(r"hit material instanced clip \(\d+ frames\): .*rejected (\d+) = ([0-9.]+)% of all lookups"),
     "instanced rows": re.compile(r"\[hit material instanced\] frame \d+ key (\d); wind: .*mapped (\d+) rows (\d+) triangles; alpha-test 2S: .*mapped (\d+) rows (\d+) triangles"),
@@ -341,6 +342,9 @@ def report(run: Run):
         m = run.last_in(label, DIAG["rf hit shade terms"])
         if m:
             print(f"- rf hit shade terms: ratio L_b / L_a {m.group(3)} (AO 1: {m.group(4)}); AO at hit {m.group(1)} vs screen {m.group(2)}")
+        m = run.last_in(label, DIAG["rf hit shade boxes"])
+        if m:
+            print(f"- rf hit shade boxes: tier a projector part {m.group(1)} of L_b {m.group(2)}; tier b shaded {m.group(3)} of {m.group(4)}")
         m = run.last_in(label, DIAG["hit emission"])
         if m:
             print(f"- hit emission: GI hidden lookups {m.group(1)} emissive {m.group(2)} added {m.group(4)}; rf tier b lookups {m.group(5)} "

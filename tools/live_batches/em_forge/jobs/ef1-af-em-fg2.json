@@ -4,10 +4,10 @@
  "session": false,
  "traces": 0,
  "hold": 90,
- "timeout": 426,
+ "timeout": 462,
  "repeat": 1,
  "live_batch": "em-forge",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,ls_samples=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt=1,rt_scene_wait=1,cpu_timing=1,qa_exposure_hold=0,rt_emissive=1,rt_em_calib=1,rt_em_check_frames=16,rt_em_overlap_check=0,rt_em_dbg_fam_hi=12363,rt_em_dbg_fam_lo=57799,rt_em_fx_pulse=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,ls_samples=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt=1,rt_scene_wait=1,cpu_timing=1,qa_exposure_hold=0,rt_emissive=1,rt_em_calib=1,rt_em_check_frames=16,rt_em_check_slices=16,rt_em_overlap_check=0,rt_em_dbg_fam_hi=12363,rt_em_dbg_fam_lo=57799,rt_em_fx_pulse=0",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -37,7 +37,9 @@
   "\\[em\\] per build",
   "\\[em\\] luminance scale",
   "\\[em\\] BLAS",
-  "304be1c7"
+  "304be1c7",
+  "\\[em\\] check GPU cost",
+  "gi: GPU cost"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -54,7 +56,11 @@
   "draws of excluded families \\(rt_em_fx_pulse=0: 304be1c7\\) (0\\.0[1-9]|0\\.[1-9]|[1-9])",
   "draws of excluded families \\(rt_em_fx_pulse=0: 304be1c7\\) 0\\.00 per build",
   "304be1c7 Base/Base_GM_Pulse_FX [0-9.]+, bright [0-9.]+ \\([0-9]+ bright px",
-  "\\[em\\] per build: .*build median [0-9.]+ ms"
+  "\\[em\\] per build: .*build median [0-9.]+ ms",
+  "\\[em\\] check GPU cost \\(\\d+ frames\\): 0 runs .*schedule rt_em_check_frames 0, slice 1/0 every 0 frames \\(check off\\)",
+  "\\[em\\] check GPU cost \\(\\d+ frames\\): [1-9]\\d* runs \\(0 views\\), [0-9.]+ ms per run median .*schedule rt_em_check_frames 16, slice 1/1 every 16 frames",
+  "\\[em\\] check GPU cost \\(\\d+ frames\\): [1-9]\\d* runs \\(0 views\\), [0-9.]+ ms per run median .*schedule rt_em_check_frames 16, slice 1/16 every 1 frames",
+  "gi: GPU cost [0-9.]+ ms/frame"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -70,10 +76,13 @@
   "\\[motion-plan\\] pointer centred in owned foreground game",
   "\\[motion-trace\\] phase=4 label=diag-view-19 repeat=0",
   "\\[motion-trace\\] phase=5 label=diag-view-20 repeat=0",
-  "\\[motion-plan\\] complete phases=8\\b",
+  "\\[motion-trace\\] phase=7 label=check-off repeat=0",
+  "\\[motion-trace\\] phase=8 label=check-full repeat=0",
+  "\\[motion-trace\\] phase=9 label=check-sliced repeat=0",
+  "\\[motion-plan\\] complete phases=11\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "D-EM AF family 304be1c7: rt_em_fx_pulse 0/1/0 in one run (exclusion counter, then the family's per-window ours/game ratio and record dump), rt_debug 19/20 PNG pair of the family alone, em_gate on the log.",
- "estimated_phase_seconds": 126
+ "purpose": "D-EM AF family 304be1c7: rt_em_fx_pulse 0/1/0 in one run (exclusion counter, then the family's per-window ours/game ratio and record dump), rt_debug 19/20 PNG pair of the family alone, em_gate on the log. Then the projected check's cost (rt_em_check_frames 0 / 16 with rt_em_check_slices 1 / 16 with 16, 12 s each): \"[em] check GPU cost\" per run and per frame, and gi: GPU cost mean against median.",
+ "estimated_phase_seconds": 162
 }

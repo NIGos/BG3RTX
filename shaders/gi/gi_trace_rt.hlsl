@@ -72,15 +72,15 @@
 #include "sharc_common.hlsli"
 #endif
 #if RT_HIT_GI_DIRECT
-// Non-finite guard of the qualified-hit bounce (rt_stats=1 counters 383-384, core/gi.cpp kGiHitNfFirst, on
+// Non-finite guard of the qualified-hit bounce (rt_stats=1 counters 417-418, core/gi.cpp kGiHitNfFirst, on
 // the "GI hit direct" line). giRaw is RGBA16F and gi_composite.hlsl reverts a non-finite pixel to the game's
 // diffuse: one Inf or NaN there drops the bounce of every pixel whose 3x3 history gather reads it, while
 // the occlusion (alpha) stays, so it shows as darkening, never as a non-finite scene colour.
-//   383: qualified-hit rays whose term is not finite and >= 0: the ray takes fallback0 (occlusion w, no
+//   417: qualified-hit rays whose term is not finite and >= 0: the ray takes fallback0 (occlusion w, no
 //        bounce: exactly the key-off ray), never the poisoned sum;
-//   384: pixels whose mean bounce exceeds the half-float maximum 65504 (the giRaw encoding), stored as
+//   418: pixels whose mean bounce exceeds the half-float maximum 65504 (the giRaw encoding), stored as
 //        65504 instead of +Inf (the energy above the encoding limit is lost, counted here).
-static const uint kGiHitNfFirst = 383u;
+static const uint kGiHitNfFirst = 417u;
 static const float kGiRawHalfMax = 65504.0;
 bool gi_hit_term_ok(float3 c, uint bin) {
   const bool ok = all(isfinite(c)) && all(c >= 0.0);

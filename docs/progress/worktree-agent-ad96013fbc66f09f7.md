@@ -7,7 +7,7 @@
   game-owned or ours. Test case in `tests/m4_promotion_gate_test.py`, now in CTest.
 - The darkening (step-gi -1.05%, sun -1.82%, inst -3.10%) stays open: not NaN in the measured buffer.
 - Guard in the hit-GI variants only (key-off SPIR-V byte-identical): non-finite or negative hit term
-  -> fallback0 (counter 383); mean bounce above the RGBA16F max -> 65504 (counter 384), so no +Inf can
+  -> fallback0 (counter 417); mean bounce above the RGBA16F max -> 65504 (counter 418), so no +Inf can
   reach gi_composite's revert (which would drop ~36 px of bounce and keep the occlusion: darker).
   Logged on the `GI hit direct` line. Kept, off with the keys; cost: two predicated counters.
 - Rerun m4p3: read `non-finite hit terms (fallback0)` and `bounce over the half-float max` in diag-on.

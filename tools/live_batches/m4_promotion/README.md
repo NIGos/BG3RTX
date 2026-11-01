@@ -17,13 +17,15 @@ Startup (every job): `preset=ultra` plus the bundle as the branch's Ultra sets i
 |---|---|---|---|
 | `m4p1-camp-fg2` | Campsite - 27h | 137 s, 7 PNG | S3 outdoor: gi_hit_sun gate (expect: `GI hit sun` traced lit > 0), foliage |
 | `m4p2-inn-fg2` | The Blushing Mermaid - 96h 39m | 137 s, 7 PNG | interior, many local lights; no M4 key measured here yet |
-| `m4p3-s6-fg2` | Adamantine Forge | 189 s, 9 PNG | emitters: `rt_hit_emission` OFF/ON/OFF (expect: rf tier b emissive > 0); rf bias 1.09 |
-| `m4p4-s8-fg2` | Water Queens House | 137 s, 7 PNG | reflections: tier (b) 24% shaded; rf bias 0.93 |
+| `m4p3-s6-fg2` | Adamantine Forge | 209 s, 9 PNG | emitters: `rt_hit_emission` OFF/ON/OFF (expect: rf tier b emissive > 0); rf bias 1.09 |
+| `m4p4-s8-fg2` | Water Queens House | 157 s, 7 PNG | reflections: tier (b) 24% shaded; rf bias 0.93 |
 
 Phases: `warmup-on` 10 s (compiles every variant), `diag-on` 20 s (bundle ON, stats), `cost-off-a` 20 + `shot-off-a`,
 cumulative step PNGs `shot-step-gi` (+gi_hit_direct), `shot-step-sun` (+gi_hit_sun), `shot-step-rf` (+rf_hit_shade),
 `shot-step-inst` (+instanced), then `cost-on` 20 + `shot-on` (+rt_emissive, +rt_hit_emission), `cost-off-b` 20 +
-`shot-off-b`, `restore` 5 s. S6 adds `cost-em-off-a` / `shot-em-off-a` before `cost-on` and `cost-em-off-b` /
+`shot-off-b`, `restore` 5 s. S6 and S8 add `cost-ao0` after `cost-on` (bundle ON with `hit_ao_rays=0`: the cost
+of the AO rays at hits; every other phase sets `hit_ao_rays=2`); with a core that has it, diag-on also logs
+`rf hit shade boxes` (L_b's projector part). S6 adds `cost-em-off-a` / `shot-em-off-a` before `cost-on` and `cost-em-off-b` /
 `shot-em-off-b` after it (bundle ON with `rt_hit_emission=0`, capture on). Shots: 6 s, trace at 4 s.
 
 Validity: the expect lines (stride-64 XFB, `[geo] RT capture ... of a 1024 MB buffer`, cascade `of 427 MB`, D-EM

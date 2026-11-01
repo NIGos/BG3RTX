@@ -1,0 +1,82 @@
+{
+ "name": "bx2-box-s7-fg2",
+ "save": "The Blushing Mermaid - 96h 39m",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 460,
+ "repeat": 1,
+ "live_batch": "box-lights",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,ls_impl=1,ls_samples=0,ls_shadowed=3,ls_k=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_scene_wait=1,rt_cascade_casters=0,ls_box=0,ls_native_direct_validate=0,cpu_timing=1",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/box_lights/plans/bx_s7.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "rt applied",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[cpu\\] capture hooks",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "ls box",
+  "ls stats",
+  "ls: local-light shadow pass GPU",
+  "gi: GPU cost"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "ls box: active \\(mode 1;",
+  "ls box: active \\(mode 2;",
+  "ls box: inactive \\(mode 0;",
+  "ls box stats \\(120 frames\\): evaluated (?!0\\.000)[0-9.]+/px",
+  "ls box trace \\(120 frames\\): mode 2; shadow-mapped traced \\d+, .*unshadowed traced [1-9]\\d*",
+  "ls box bound \\(120 frames\\): px [1-9]\\d* ",
+  "ls: local-light shadow pass GPU median .*box 2\\)",
+  "ls: local-light shadow pass GPU median .*box 0\\)"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "ls box: requested but native set/layout or pipeline unavailable"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=7 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-on-a repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-off-b repeat=0",
+  "\\[motion-trace\\] phase=10 label=shot-on-b repeat=0",
+  "\\[motion-trace\\] phase=11 label=view-removed repeat=0",
+  "\\[motion-plan\\] complete phases=13\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "TRACK_D_LOCAL_LIGHTS 9.10 ls_box=2 (every box light; unshadowed ones to the end of their light-side fade-in, shadow-mapped ones to their shadow view's near plane): mode-1 and mode-2 ls_stats windows (ls box trace: shadow-mapped occluded share and 'occluded where the atlas term is 1', unshadowed traced/occluded, removed; ls box bound: recompute above the game's B10G11R11 value), OFF/ON/OFF cost windows (diag off), alternated OFF/ON PNG shots for the scene-colour float mean (dumps.json fs 5c3fdabc), one ls_debug=2 view.",
+ "estimated_phase_seconds": 160,
+ "requires_success_of": [
+  "bx1-box-s6-fg2"
+ ]
+}

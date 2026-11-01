@@ -44,6 +44,11 @@ void hd_xstat(uint k,bool c){if(g_hd_stats && g_hd_xbase!=0u)stat_add(g_hd_xbase
 #ifdef NATIVE_HIT_BOXES
 #include "bg3_boxes.hlsli"
 #endif
+#ifdef NATIVE_HIT_BOX_TERM
+// rf_hit_shade's bias breakdown (rt_reflections.hlsl, counters 383-384): the projector (box) part of
+// the last native_hit_direct_eval's radiance, before the AO-on-direct factor. Diagnostics only.
+static float3 g_hd_box=0;
+#endif
 #ifdef NATIVE_HIT_DLS_POLICY
 // The screen's light policy at hits (gi_hit_direct, rf_hit_shade; hit_ls_policy=1, Push::ls_flags
 // bit 24; docs/TRACK_D_REFLECTIONS.md 14). D-LS (rt_local_shadows.hlsl ls_light_traced) decides
@@ -150,6 +155,9 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
 #ifdef NATIVE_HIT_DLS_POLICY
  result.native=0;
 #endif
+#ifdef NATIVE_HIT_BOX_TERM
+ g_hd_box=0;
+#endif
  if(!isfinite(footprint) || footprint<0){result.status=kHitDirectDomain;return result;}
  if(material.status!=0){result.status=HdUnknownMaterial;return result;}
  uint4 cluster;if(!native_hit_cluster(surface_position,cluster))return result;
@@ -231,10 +239,14 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
 #ifdef NATIVE_HIT_BOXES
   uint bi=lIndex.Load((cluster.x+count+p)*4u);
   if(!bg3_box_in(bi))return result;   // no record: source
-  Bg3Box box=load_box(bi);
   HD_XSTAT(3u,true);
+  // bg3_box_reaches from the record's channel word and box rows only (cost, 2026-11-01): most listed
+  // boxes do not reach the hit (live S8 ~2 box entries per hit), so the rest of the 128-byte record
+  // (and the cookie) is loaded only for a box that does. bg3_box_reaches_rec: the same function
+  // (common/box_light.h bl_reaches, box_light_test) as bg3_box_reaches: exact.
   float3 uvw;
-  if(!bg3_box_reaches(box,material.channel,surface_position,uvw))continue;   // channel / outside: known zero
+  if(!bg3_box_reaches_rec(bi,material.channel,surface_position,uvw))continue;   // channel off or outside: known zero
+  Bg3Box box=load_box(bi);
   const float g=bg3_box_falloff(box,uvw);
   if(!(g>0))continue;
   if(!all(isfinite(box.dir)) || !(dot(box.dir,box.dir)>1e-20)){result.status=HdInvalid;return result;}
@@ -259,6 +271,9 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
   if(term.status!=HdOk){result.status=term.status;return result;}
   result.radiance+=term.radiance;++result.lights;
+#ifdef NATIVE_HIT_BOX_TERM
+  g_hd_box+=term.radiance;
+#endif
 #ifdef NATIVE_HIT_DLS_POLICY
   if(hd_box_game())result.native+=term.radiance;   // x the AO-on-direct factor (native_hit_ao_direct)
 #endif

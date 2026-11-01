@@ -381,7 +381,9 @@ $displayUser = Join-Path $script:DisplayUsers "$PID.json"
 if ($Background) {
   # Borderless at the desktop resolution; the player's values come back after the
   # last background run (gamelock.ps1, Enter-/Exit-BackgroundDisplay).
-  Enter-BackgroundDisplay $ensureHere $displayUser -Windowed:$UnfocusedFG
+  # Real-present runs stay windowed: a borderless desktop-sized swapchain (e.g. a 3840x2160 desktop with
+# a 3840x1600 game output) breaks the FG input size match (layer/streamline.cpp), 2026-11-01.
+Enter-BackgroundDisplay $ensureHere $displayUser -Windowed:($UnfocusedFG -or $RealPresent)
   if (-not $Foreground) { $env:BG3RTX_BACKGROUND = "1" }
 }
 
@@ -511,9 +513,8 @@ try {
 Assert-QueueLaunchProcesses
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
-# No-activate runs share the PC with the user: the game runs BelowNormal so their foreground work
-# keeps the CPU (GPU ms and energy stay valid; CPU frame time is not comparable to focused runs).
-if ($NoActivate -and -not $env:BG3RTX_NORMAL_PRIORITY) { try { $game.PriorityClass = 'BelowNormal' } catch { } }
+# The game keeps Normal priority on purpose: offline builds (dxc, cl) run BelowNormal, and a
+# BelowNormal game starved its own level load behind them (2026-11-01).
 $game.EnableRaisingEvents = $true
 # Keep the process handle so ExitCode survives a quick game/crash-handler exit.
 [void]$game.Handle

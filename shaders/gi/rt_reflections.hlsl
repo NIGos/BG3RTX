@@ -67,6 +67,8 @@
 #define NATIVE_HIT_DLS_POLICY 1
 #define NATIVE_HIT_SLOTS_SET 3
 #define NATIVE_HIT_SLOTS_BINDING 7
+// The projector (box) part of L_b for the bias breakdown (counters 383-384, core/gi.cpp "rf hit shade boxes").
+#define NATIVE_HIT_BOX_TERM 1
 #include "../rt/native_hit_direct.hlsli"
 // The sun at the hit follows the R0 roof rule (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF; roof
 // volumes in the sun set b8): under a roof the TLAS may lack, the sun is unsupported and the
@@ -192,6 +194,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // pixel (b6 as the lighting read it), L_a's diffuse / specular parts (prevRadiance .a share).
   float3 hs_native = 0, hs_amb_d = 0, hs_amb_s = 0, hs_Lb1 = 0;
   float hs_ao = 1, hs_ao_screen = 1, hs_La_share = 1;
+  float3 hs_box = 0;   // L_b's projector (box) part (tier a check and shaded tier b)
 #endif
   if (eligible) {
     float3 Nn = normalize(sf.N);
@@ -290,6 +293,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
               hs_amb_s = hs.ambient_s;
               hs_Lb1 = hs.radiance_ao1;
               hs_ao = hs.ao;
+              hs_box = hs.box;
               const int2 qq = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
               hs_ao_screen = lFlags.m0.x > 0.0 ? saturate(lgAO.Load(int3(qq, 0)).x) : 1.0;
               hs_La_share = saturate(prevRadiance[prev_radiance_px(qq)].a);
@@ -312,6 +316,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
               shaded = true;
               hs_probes = hs.local_probes ? 1u : 0u;
               hs_Lb = hs.radiance;
+              hs_box = hs.box;
             }
           }
         }
@@ -467,6 +472,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_addv(309, hs_checked != 0u ? fxh(hs_ao_screen) : 0u, bin);
     stat_addv(310, hs_checked != 0u ? fxh(lum(hs_La) * hs_La_share) : 0u, bin);
     stat_addv(311, hs_checked != 0u ? fxh(lum(hs_La) * (1.0 - hs_La_share)) : 0u, bin);
+    // core/gi.cpp kRfBoxFirst: L_b's projector (box) part at checked tier (a) / shaded tier (b) hits.
+    stat_addv(383, hs_checked != 0u ? fxh(lum(hs_box)) : 0u, bin);
+    stat_addv(384, shaded ? fxh(lum(hs_box)) : 0u, bin);
 #endif
   }
 }

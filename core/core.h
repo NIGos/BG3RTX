@@ -23,6 +23,10 @@ bool core_em_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out);
 bool core_em_calib_update(Bg3EmCalib* cal, uint32_t first, double ratio, uint32_t flags, uint64_t frames, double bright);
 void core_em_calib_apply(uint32_t* rec, const Bg3EmCalib* cal);
 bool em_check_due();
+// Runs of the projected check per full-screen check (rt_em_check_slices; 1 after a view):
+// emissive.cpp notes it per run, em_policy.cpp holds it for the calibration.
+void em_note_check_slices(uint32_t slices);
+uint32_t em_check_slices();
 // True once per pass when a supported water draw (water policy, em_record) was recorded in cmd
 // since its last pass begin / take: the pass end that follows holds water.
 // M5.4b (rt_water_ls_shadows): `lights` (7 entries, kWaterLsBindings order) receives the first water

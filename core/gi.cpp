@@ -242,7 +242,17 @@ Pipe g_ls_native_full, g_ls_native_full_box;
 Pipe g_ls_k, g_ls_box_k, g_ls_full_k, g_ls_full_box_k;
 VkPipelineLayout g_ls_box_layout = VK_NULL_HANDLE;
 VkDescriptorSetLayout g_ls_box_game = VK_NULL_HANDLE;
+// The box statistics (set 4 b0 of g_ls_box_layout): device-local counters, never host-visible
+// atomics (META_AUDIT 2026-11-01 5: the m5w2/m5w3 lesson). One set, written once.
+constexpr uint32_t kLsBoxXCount = 32;   // rt_local_shadows.hlsl kBxN
+constexpr VkDeviceSize kLsBoxXBytes = VkDeviceSize(kLsBoxXCount) * 64 * 4;
+VkBuffer g_bx_buf = VK_NULL_HANDLE;
+VkDeviceMemory g_bx_mem = VK_NULL_HANDLE;
+VkDescriptorSetLayout g_bx_dsl = VK_NULL_HANDLE;
+VkDescriptorPool g_bx_pool = VK_NULL_HANDLE;
+VkDescriptorSet g_bx_set = VK_NULL_HANDLE;
 bool g_ls_box_missing_logged = false, g_ls_box_active = false;
+int g_ls_box_mode = 0;   // the ls_box value of the active box pass (1, 2), for the timing window
 bool g_ls_k_active = false, g_ls_k_missing_logged = false;   // the D-LS dispatch ran an LS_K variant (ls_k > 0)
 LslFrame g_lsl{};   // this frame's upload (bindings 45, 46)
 bool g_lsl_ok = false;
@@ -720,10 +730,70 @@ bool ensure_ls_layout() {
   return make_layout(kLsBindings, &g_ls_set_layout, &g_ls_layout, host_layout, g_sun_dsl);
 }
 
-// ls_box: D-LS's push set 0, the host's set 1, the sun set 2, and the game's layout of the
-// lighting's set 1 as set 3. A different game layout rebuilds the box pipelines.
+// The box statistics buffer: device-local (the core/water.cpp pattern, memory types from
+// BG3_DEVICE_INFO_KEY), its set layout and its one descriptor set (set 4 of g_ls_box_layout).
+bool ensure_bx() {
+  if (g_bx_set) return true;
+  const VkDeviceFuncs& vk = *host->vk;
+  const auto* d = static_cast<const Bg3DeviceInfo*>(host->persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)));
+  if (!d || d->version < 1) return false;
+  if (!g_bx_buf) {
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size = kLsBoxXBytes;
+    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (vk.CreateBuffer(host->device, &bci, nullptr, &g_bx_buf) != VK_SUCCESS) return g_bx_buf = VK_NULL_HANDLE, false;
+    VkMemoryRequirements req;
+    vk.GetBufferMemoryRequirements(host->device, g_bx_buf, &req);
+    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = UINT32_MAX;
+    for (uint32_t i = 0; i < d->memory.memoryTypeCount && mai.memoryTypeIndex == UINT32_MAX; ++i)
+      if ((req.memoryTypeBits & (1u << i)) && (d->memory.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        mai.memoryTypeIndex = i;
+    if (mai.memoryTypeIndex == UINT32_MAX || vk.AllocateMemory(host->device, &mai, nullptr, &g_bx_mem) != VK_SUCCESS ||
+        vk.BindBufferMemory(host->device, g_bx_buf, g_bx_mem, 0) != VK_SUCCESS) {
+      vk.DestroyBuffer(host->device, g_bx_buf, nullptr);
+      if (g_bx_mem) vk.FreeMemory(host->device, g_bx_mem, nullptr);
+      g_bx_buf = VK_NULL_HANDLE, g_bx_mem = VK_NULL_HANDLE;
+      return false;
+    }
+  }
+  if (!g_bx_dsl) {
+    VkDescriptorSetLayoutBinding b{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    sci.bindingCount = 1;
+    sci.pBindings = &b;
+    if (vk.CreateDescriptorSetLayout(host->device, &sci, nullptr, &g_bx_dsl) != VK_SUCCESS) return g_bx_dsl = VK_NULL_HANDLE, false;
+  }
+  if (!g_bx_pool) {
+    VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
+    VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    pci.maxSets = 1;
+    pci.poolSizeCount = 1;
+    pci.pPoolSizes = &ps;
+    if (vk.CreateDescriptorPool(host->device, &pci, nullptr, &g_bx_pool) != VK_SUCCESS) return g_bx_pool = VK_NULL_HANDLE, false;
+  }
+  VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+  ai.descriptorPool = g_bx_pool;
+  ai.descriptorSetCount = 1;
+  ai.pSetLayouts = &g_bx_dsl;
+  if (vk.AllocateDescriptorSets(host->device, &ai, &g_bx_set) != VK_SUCCESS) return g_bx_set = VK_NULL_HANDLE, false;
+  VkDescriptorBufferInfo bi{g_bx_buf, 0, kLsBoxXBytes};
+  VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+  w.dstSet = g_bx_set;
+  w.dstBinding = 0;
+  w.descriptorCount = 1;
+  w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  w.pBufferInfo = &bi;
+  vk.UpdateDescriptorSets(host->device, 1, &w, 0, nullptr);
+  return true;
+}
+
+// ls_box: D-LS's push set 0, the host's set 1, the sun set 2, the game's layout of the
+// lighting's set 1 as set 3, and the device-local box statistics as set 4 (ensure_bx). A
+// different game layout rebuilds the box pipelines.
 bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
-  if (!game || !ensure_ls_layout()) return false;
+  if (!game || !ensure_ls_layout() || !ensure_bx()) return false;
   if (g_ls_box_layout && g_ls_box_game == game) return true;
   VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
   VkDescriptorSet unused;
@@ -739,9 +809,9 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
               (void*)g_ls_box_game, (void*)game);
   }
   VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
-  VkDescriptorSetLayout sets[4] = {g_ls_set_layout, host_layout, g_sun_dsl, game};
+  VkDescriptorSetLayout sets[5] = {g_ls_set_layout, host_layout, g_sun_dsl, game, g_bx_dsl};
   VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-  lci.setLayoutCount = 4;
+  lci.setLayoutCount = 5;
   lci.pSetLayouts = sets;
   lci.pushConstantRangeCount = 1;
   lci.pPushConstantRanges = &pc;
@@ -1034,12 +1104,31 @@ static_assert(kHitClipFirst == 356, "native_hit_material.hlsli hit_material_coun
 // Logged as "GI far".
 constexpr uint32_t kGiFarFirst = kHitClipFirst + kHitClipCount, kGiFarCount = 11;
 static_assert(kGiFarFirst == 372, "gi_trace_rt.hlsl kGiFarStatFirst 372");
-// [383..384] qualified-hit GI non-finite guard (gi_trace_rt.hlsl kGiHitNfFirst, RT_HIT_GI_DIRECT variants):
+// [383..384] rf_hit_shade bias breakdown (rt_reflections.hlsl NATIVE_HIT_BOX_TERM): L_b's projector (box) part
+// x 8192 at checked tier (a) hits / at shaded tier (b) hits (logged with the rf hit shade window).
+constexpr uint32_t kRfBoxFirst = kGiFarFirst + kGiFarCount, kRfBoxCount = 2;
+static_assert(kRfBoxFirst == 383, "rt_reflections.hlsl stat_addv(383/384) rf hit shade box part");
+// [385..416] D-LS box lights (ls_box, ls_stats=1; rt_local_shadows.hlsl LS_BOX && LS_FULL, kBx*): counted in a
+// device-local buffer (set 4 b0 of the box layout), reduced per 8x8 group, copied into this range of the
+// host slot after the pass's end timestamp. Logged as "ls box trace" and "ls box bound".
+constexpr uint32_t kLsBoxXFirst = kRfBoxFirst + kRfBoxCount;
+static_assert(kLsBoxXFirst == 385, "rt_local_shadows.hlsl box counters copied to rtStats 385..416");
+// [417..418] qualified-hit GI non-finite guard (gi_trace_rt.hlsl kGiHitNfFirst, RT_HIT_GI_DIRECT variants):
 // rays whose hit term was not finite and >= 0 (they took fallback0), pixels whose mean bounce exceeded the
-// RGBA16F maximum (stored as 65504). On the "GI hit direct" line.
-constexpr uint32_t kGiHitNfFirst = kGiFarFirst + kGiFarCount, kGiHitNfCount = 2;
-static_assert(kGiHitNfFirst == 383, "gi_trace_rt.hlsl kGiHitNfFirst 383");
-constexpr uint32_t kStatsCounters = kGiHitNfFirst + kGiHitNfCount; //383..384 GI hit non-finite;372..382 gi_far;356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+// RGBA16F maximum (stored as 65504). On the "GI hit direct" line (frame_replay prints the same).
+constexpr uint32_t kGiHitNfFirst = kLsBoxXFirst + kLsBoxXCount, kGiHitNfCount = 2;
+static_assert(kGiHitNfFirst == 417, "gi_trace_rt.hlsl kGiHitNfFirst 417");
+// rtStats counter map (64 bins x uint each; a new range starts at the previous kStatsCounters and moves it):
+//   0..15 core RT/GI (pixels, primary check, hybrid GI tiers)  16..38 D-LS      39..47 rt_shadow materials
+//   48..63 D-RF                 64..75 RT audit fixes          80..111 alpha candidates   112..117 ls_check
+//   118..121 guards / loop caps 122..126 primary fade class    127 material w/o record    128..133 unknown per pass
+//   134..135 GI hit direct zero 136..152 pool/soup cohorts     160..175 GI hit lights      176..199 rf hit lights / sun
+//   200..252 box diagnostics    253..268 hit material reasons  269..281 reference           282..286 GI hit direct
+//   287..288 tileset            289..311 rf hit shade          312..319 hit policy / AO     320..330 GI hit sun, rf sun roof
+//   331..349 hit emission       350..355 ls exact-k            356..371 instanced clip      372..382 gi_far
+//   383..384 rf box part        385..416 ls box (device-local) 417..418 GI hit non-finite
+constexpr uint32_t kStatsCounters = kGiHitNfFirst + kGiHitNfCount;
+static_assert(kStatsCounters <= 512, "frame_replay reserves 512 stats counters");
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
@@ -1062,6 +1151,7 @@ CameraMotionWindow g_epoch_motion;
 // check for a frame-to-frame standard error (the live gate: mean within z x that error).
 struct RfHitWindow {
   uint64_t sum[kRfHitCount] = {};
+  uint64_t box[kRfBoxCount] = {};
   double d_sum = 0, d_sq = 0;
   uint32_t d_frames = 0, frames = 0;
 } g_rfh;
@@ -1071,6 +1161,8 @@ void rf_hit_fold(const uint32_t* c) {
   for (uint32_t i = 0; i < kRfHitCount; ++i)
     for (int b = 0; b < 64; ++b) f[i] += c[(kRfHitFirst + i) * 64 + b];
   for (uint32_t i = 0; i < kRfHitCount; ++i) g_rfh.sum[i] += f[i];
+  for (uint32_t i = 0; i < kRfBoxCount; ++i)
+    for (int b = 0; b < 64; ++b) g_rfh.box[i] += c[(kRfBoxFirst + i) * 64 + b];
   if (f[6]) {   // checked tier (a) hits this frame
     const double d = (double(f[8]) - double(f[9])) / kRfHitScale / double(f[6]);
     g_rfh.d_sum += d;
@@ -1103,6 +1195,12 @@ void rf_hit_fold(const uint32_t* c) {
                 g_rfh.frames, (unsigned long long)t[6], t[11] * q / ck, t[15] * q / ck, t[12] * q / ck, t[16] * q / ck,
                 t[17] * q / ck, t[18] * q / ck, t[19] * q / ck, t[20] * q / ck, t[21] * q / ck, t[22] * q / ck,
                 t[9] ? double(t[8]) / double(t[9]) : 0.0, t[9] ? double(t[18]) / double(t[9]) : 0.0);
+    // The projector (box) part of L_b (after its AO-on-direct factor), the bias breakdown's missing term:
+    // a share of "L_b direct" above (tier a) and of the shaded mean (tier b).
+    host->log("rf hit shade boxes (%u frames): tier a L_b projector lights %.5f of L_b %.5f; tier b shaded L_b projector "
+              "lights %.5f of %.5f",
+              g_rfh.frames, g_rfh.box[0] * q / ck, t[8] * q / ck, t[1] ? g_rfh.box[1] * q / double(t[1]) : 0.0,
+              t[1] ? t[5] * q / double(t[1]) : 0.0);
   }
   g_rfh = RfHitWindow{};
 }
@@ -1423,6 +1521,30 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               0.5/16777216.0);
 
   }
+  {   // D-LS box lights, device-local counters (rt_local_shadows.hlsl kBx*; ls_box with ls_stats=1)
+    const uint64_t* x = t + kLsBoxXFirst;
+    auto q24 = [&](uint32_t i) { return (double(x[i]) + 4294967296.0 * double(x[i + 1])) / 16777216.0; };
+    const double lit = t[21] ? double(t[21]) / 256.0 : 0.0;   // the game's lit luminance (stat 21, 1/256 units)
+    auto pct = [](double a, double b) { return b > 0.0 ? 100.0 * a / b : 0.0; };
+    if (x[5] | x[9] | x[11] | x[12])
+      host->log("ls box trace (%u frames): mode %d; shadow-mapped traced %llu, occluded %llu (%.2f%%), occluded where the "
+                "game's atlas term is 1 %llu, segment cut at the shadow view's near plane %llu; unshadowed traced %llu, "
+                "occluded %llu (%.2f%%), receiver in the light-side fade-in (not traced) %llu; unknown %llu; removed "
+                "unshadowed %.3f%%, shadow-mapped %.3f%% of the lit luminance",
+                g_stats_n, g_ls_box_mode, (unsigned long long)x[5], (unsigned long long)x[6], pct(double(x[6]), double(x[5])),
+                (unsigned long long)x[7], (unsigned long long)x[8], (unsigned long long)x[9], (unsigned long long)x[10],
+                pct(double(x[10]), double(x[9])), (unsigned long long)x[11], (unsigned long long)x[12], pct(q24(24), lit),
+                pct(q24(26), lit));
+    if (x[0])
+      host->log("ls box bound (%u frames): px %llu (a box light evaluated, not hair, debug 0); recompute at or above the "
+                "game's stored value's upper neighbour (B10G11R11) on %llu px (%.4f%%), channels %llu of %llu; "
+                "inconclusive %llu px; mean game %.9g, recompute %.9g (%.2f%% of game), box %.9g (%.2f%%), excess %.9g "
+                "(Q24 half-step %.9g)",
+                g_stats_n, (unsigned long long)x[0], (unsigned long long)x[1], pct(double(x[1]), double(x[0])),
+                (unsigned long long)x[4], (unsigned long long)x[3], (unsigned long long)x[2], q24(16) / double(x[0]),
+                q24(18) / double(x[0]), pct(q24(18), q24(16)), q24(20) / double(x[0]), pct(q24(20), q24(16)),
+                q24(22) / double(x[0]), 0.5 / 16777216.0);
+  }
   if(t[229]) {
     double excess=(double(t[235])+4294967296.0*double(t[236]))/16777216.0/double(t[229]);
     host->log("ls native format (%u frames): px %llu invalid %llu unbounded %llu failing %llu; "
@@ -1650,6 +1772,10 @@ Push make_push() {
   // rf_hit_shade hits follow D-LS's light policy (lights it leaves to the game unshadowed, stop
   // short by max(R, ls_clear)). Only those variants read it.
   pc.ls_flags |= host->cfg_int("hit_ls_policy", 1) ? (1u << 24) : 0u;
+  // Bit 27: ls_box=2 (rt_local_shadows.hlsl ls_box_all_lights): the box lights without a game shadow map
+  // are traced too (to the end of their light-side fade-in), and the shadow-mapped ones only over the
+  // segment their game shadow view covers. Only the LS_BOX variants read it.
+  pc.ls_flags |= host->cfg_int("ls_box", 0) >= 2 ? (1u << 27) : 0u;
   // hit_ao_rays: AO rays at those hits (native_hit_ao; 0 = AO 1, the old L_b).
   pc.rt_ao_rays = uint32_t((std::min)((std::max)(host->cfg_int("hit_ao_rays", 2), 0), 8));
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;
@@ -1774,6 +1900,7 @@ bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, material_use ? 1u : 2u, sets, 0, nullptr);
   if (box) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 3, 1, &box->game_set1,
                                    box->game_set1_ndyn, box->game_set1_ndyn ? box->game_set1_dyn : nullptr);
+  if (box) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &g_bx_set, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, gx, gy, 1);
   return true;
@@ -2204,7 +2331,7 @@ void ls_timing_collect() {
             host->cfg_int("ls_samples", 0), host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1), int(g_ls_k_active),
             host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
             host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
-            host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1), int(g_ls_box_active));
+            host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1), g_ls_box_active ? g_ls_box_mode : 0);
   v.clear();
   j.clear();
 }
@@ -2619,6 +2746,14 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     Push lp = pc;
     lp.ls_has_mask = s.shadow.view ? 1u : 0u;
     const VkDescriptorSet sun = sun_set;
+    // The box statistics (ls_box with ls_stats): zero the device-local counters before the timed
+    // region; the previous frame's copy out of them (earlier in the queue) comes first.
+    const bool bx_stats = lp.ls_stats && host->cfg_int("ls_box", 0) && g_bx_buf && g_stats_buf;
+    if (bx_stats) {
+      memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT);
+      host->vk->CmdFillBuffer(cmd, g_bx_buf, 0, kLsBoxXBytes, 0);
+      memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
+    }
     ls_timestamp(cmd, 0);   // the timing covers the join pass and the shadow pass
     // Per-light data: the join pass writes one record per light array slot.
     g_lsl_ok = lsl_begin(&g_lsl) && refresh(g_ls_match, "gi/rt_local_shadows_match.hlsl", g_ls_layout);
@@ -2694,9 +2829,12 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
                 host->cfg_int("ls_rest_samples", 1), missing ? "; LS_K pipeline UNAVAILABLE, tracing every light" : "");
       g_ls_ms.clear();g_ls_join_ms.clear();
     }
-    if (box != g_ls_box_active) {
+    const int box_mode = box ? (std::min)(host->cfg_int("ls_box", 0), 2) : 0;
+    if (box != g_ls_box_active || box_mode != g_ls_box_mode) {
       g_ls_box_active = box;
-      host->log("ls box: %s (native lighting set %p, dynamic offsets %u)", box ? "active" : "inactive", (void*)s.game_set1, s.game_set1_ndyn);
+      g_ls_box_mode = box_mode;
+      host->log("ls box: %s (mode %d; native lighting set %p, dynamic offsets %u)", box ? "active" : "inactive", box_mode,
+                (void*)s.game_set1, s.game_set1_ndyn);
       g_ls_ms.clear();g_ls_join_ms.clear();
     }
     if (s.pan && refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout)) lsp = g_pan_ls.pipeline;
@@ -2709,6 +2847,12 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       host->pan_capture(cmd, "local", &im);
     }
     ls_timestamp(cmd, 2);
+    if (bx_stats && ls_box_applied) {   // after the end timestamp: outside the timed region
+      memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
+      const VkBufferCopy cp{0, VkDeviceSize(g_stats_slot) * kStatsSlot + VkDeviceSize(kLsBoxXFirst) * 64 * 4, kLsBoxXBytes};
+      host->vk->CmdCopyBuffer(cmd, g_bx_buf, g_stats_buf, 1, &cp);
+      memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kAll | VK_PIPELINE_STAGE_HOST_BIT);
+    }
     if (s.shadow.view) image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kAll);
     image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
@@ -3025,6 +3169,12 @@ void gi_release() {
   g_ls_box_layout = VK_NULL_HANDLE;
   g_ls_box_game = VK_NULL_HANDLE;
   g_ls_box_active = g_ls_box_missing_logged = false;
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, (uint64_t)g_bx_pool);   // frees g_bx_set
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_bx_dsl);
+  host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_bx_buf);
+  host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_bx_mem);
+  g_bx_pool = VK_NULL_HANDLE, g_bx_dsl = VK_NULL_HANDLE, g_bx_buf = VK_NULL_HANDLE, g_bx_mem = VK_NULL_HANDLE;
+  g_bx_set = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_SAMPLER, (uint64_t)g_linear_clamp);
   g_linear_clamp = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, (uint64_t)g_sun_pool);   // frees the sets

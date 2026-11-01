@@ -38,7 +38,11 @@ static const uint kHitShadeOk=0u,kHitShadeMaterial=1u,kHitShadeDirect=2u,kHitSha
 // material_status: rt_hit_material's. Terms as added (after A); native: the direct part from lights
 // at the game's visibility; ambient_d / ambient_s: the ambient's diffuse / specular parts;
 // radiance_ao1: the same hit at AO 1 (the L_b before hit_ao_rays, for the tier (a) log); ao: A.
-struct NativeHitShade {float3 radiance,direct,sun,ambient,native,ambient_d,ambient_s,radiance_ao1;float ao;uint status,material_status;bool local_probes;};
+struct NativeHitShade {float3 radiance,direct,sun,ambient,native,ambient_d,ambient_s,radiance_ao1;float ao;uint status,material_status;bool local_probes;
+#ifdef NATIVE_HIT_BOX_TERM
+ float3 box;   // the projector (box) part of direct, after its AO-on-direct factor (bias breakdown only)
+#endif
+};
 
 #include "native_hit_sun.hlsli"
 
@@ -127,6 +131,18 @@ float native_hit_spec_occlusion(float A,float nov_raw,float a){
 NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float footprint,uint3 key){
  NativeHitShade r;r.radiance=0;r.direct=0;r.sun=0;r.ambient=0;r.native=0;r.ambient_d=0;r.ambient_s=0;r.radiance_ao1=0;r.ao=1;
  r.local_probes=false;r.status=kHitShadeMaterial;
+#ifdef NATIVE_HIT_BOX_TERM
+ r.box=0;
+#endif
+ // Exact early-out (2026-11-01, cost): a hit outside the froxel grid (off screen, beyond the last
+ // slice) can never be shaded: native_hit_direct_eval fails on the same native_hit_cluster at the
+ // same native_hit_position. Test it before the material decode (3 VT layers), which every off-screen
+ // hit on a qualified row paid (S6: ~60% of qualified decodes ended as "source"). Output identical;
+ // only with the stats key off, so the reason counters (material vs lighting) stay as they were.
+ if(!g_hd_stats){
+  uint4 early;
+  if(!native_hit_cluster(native_hit_position(hit,position),early)){r.status=kHitShadeDirect;r.material_status=1u;return r;}
+ }
  NativeHitLit lit=native_hit_lit(hit,position,outgoing,footprint);r.material_status=lit.material.status;
  position=native_hit_position(hit,position);   // the same exact point native_hit_lit lit
  if(lit.material.status!=0u)return r;
@@ -145,6 +161,10 @@ NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float 
  const float f=native_hit_ao_factor(r.ao);
  r.direct=qa_local?0.0.xxx:native_hit_ao_direct(lit.direct,r.ao);
  r.native=qa_local?0.0.xxx:lit.direct.native*f;
+#ifdef NATIVE_HIT_BOX_TERM
+ // As native_hit_ao_direct: box terms are in .native (x f) when the screen leaves them to the game.
+ r.box=qa_local?0.0.xxx:g_hd_box*(hd_box_game()?f:((pc.ao_direct&3u)==1u?1.0:f));
+#endif
  // The sun keeps mix(1, AO, m0.y) unless D-LS's ao_direct=1 gives it back (bit 2 its shadow ray
  // traced, bit 3 its inputs bound: rt_local_shadows.hlsl).
  r.sun=sun.radiance*((pc.ao_direct&3u)==1u && (pc.ao_direct&12u)==12u?1.0:f);
