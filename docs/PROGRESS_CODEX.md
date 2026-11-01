@@ -24,6 +24,18 @@
   tiles; the PT sun from the game's LUT (`PT_SUN_LUT`). Self-test 13-16 closed form, 76 CTests pass.
 - Pending: one `rc1-replay-s8-fg2` run (expect line `lighting inputs: 19 of 19 slots bound`); its post
   step prints the S8 native / PT far-field ratio. No real pack with these inputs exists yet.
+## M5.4 water sun shadows (offline, READY_FOR_LIVE, 2026-11-01)
+
+- Finding: the audited water FS (7b44a567, 99c1fcef, c4e92ccd) light the water with sun visibility 1. Their sun
+  term has the clouds but no cascade sample, so the temple and columns cast no shadow on the S8 pool.
+- `rt_water_shadows=0` (GUI `exp_water_shadows`; on needs a restart, off is live; needs `rt_water_reflections`):
+  the patched FS also stores its unshadowed sun term D = a T X (Sd + Ss) (40-B records), and the compose pass
+  traces one sun-disc ray per record: C' = max(C - (1 - V) D, 0). Only the visibility changes; lit and unknown
+  rays keep C. Alone or with `rt_water_compose`. rt_debug 26 the shadow view; log `[water] shadows`.
+- Key off: patch, buffer and compose SPIR-V are M5.3's word for word (FNV pinned in the test). Counters are
+  device-local, reduced per 8x8 group. 75 CTests, the sun patch passes spirv-val on the three dumps.
+- Expected cost < 0.05 ms (one first-hit ray per sunlit water pixel). Live: job `m5w4` (S8, OFF/ON/OFF, rt_debug 26),
+  dry run passes. Local lights (M5.4b) designed, not built: PLAN_M5_WATER M5.4.
 
 ## M6 offline PT reference on the S8 replay pack (offline, tools only, 2026-11-01)
 
@@ -37,6 +49,18 @@
 - Cost (5090, 1 spp, per Mpx): 1 vertex 300 m 1.36 ms, 2 vertices 2.29 ms; 8 m 0.88 / 0.97 ms. ReSTIR PT
   estimate 6.5-9 ms at 4K DLSS Performance. Decision: no real-time PT now; far-field sun bounce first
   (longer GI rays + `gi_hit_sun` at hidden hits), then traced SHaRC. Game path unchanged (no shader edits).
+
+## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
+
+- Preset change: `rt_hit_material`, `rt_hit_material_instanced`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`,
+  `rt_hit_emission=1` on in Ultra only (knobs out of Experimental, under Advanced); Ultra adds `rt_emissive=1` and
+  capture sizes for the 64 B hit-material vertex (`rt_xfb_mb` 1024, `rt_cascade_mb` 427 = 384/160 x 64/24).
+  `rt_emissive` 0 -> 1 needs a restart. Settings test 542 checks, 75 CTests pass.
+- Measured so far (PLAN_M4 "Promotion"): rf_hit_shade tier (a) L_b / L_a S8 0.926, S6 1.091 after the box fix (was
+  1.48); costs rf_hit_shade +1.4 to +1.8 ms (rf pass), gi_hit_direct + sun +0.52 ms (gi trace), instanced +0.14 ms.
+- Live batch `tools/live_batches/m4_promotion` (camp, inn, S6, S8; ~18 min, 1.2-1.8 GB; dry run passes): bundle
+  OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
+  Merge the branch only if the energy and capacity gates pass.
 
 ## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01)
 ## rt_hit_material_instanced clip rejects: pairing and instance order (offline, READY_FOR_LIVE, 2026-11-01)

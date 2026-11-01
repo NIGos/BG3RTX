@@ -275,6 +275,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_compose": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_compose": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
      ]},
+    {"id": "exp_water_shadows", "label": "Water sun shadows",
+     "description": "Ray-traced sun shadows on the water. The game lights its water with the sun everywhere (only clouds darken it), so columns, walls and roofs cast no shadow on it; here one ray per water pixel towards the sun removes the sun's light where something blocks it, and keeps everything else of the water as the game draws it. Look at a pool or canal next to a building in sunlight: its shadow on the water, and no sun glints in it. Debug view rt_debug 26 shows lit (green) and shadowed (red) water. Needs Water reflections (measured). Restart required to turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
+     "apply": "restart", "apply_note": "restart to enable", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_water_geometry": "1", "rt_water_reflections": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_shadows": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_shadows": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
+     ]},
     {"id": "exp_current_sun", "label": "Current cascade sun shadows",
      "description": "Uses the current four native sun-caster domains with finite per-layer rays and native receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the static BVH split to be enabled. Unsupported receiver/input domains retain native shadows. Physical sun size is unchanged. Restart required; in-game quality and GPU cost are unqualified.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
