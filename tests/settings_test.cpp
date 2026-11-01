@@ -372,7 +372,7 @@ static const char* const kOldKnobKeys[] = {
 static const char* const kOldOn[][2] = {
     {"exp_roof_shadows", "rt_cascade_casters"}, {"exp_box_lights", "ls_box"},
     {"exp_hit_material", "rt_hit_material"}, {"exp_hit_material_instanced", "rt_hit_material_instanced"},
-    {"exp_hit_material_recycle", "rt_hit_material_recycle"}, {"exp_hit_material_wind_rgb", "rt_hit_material_wind_rgb"},
+    {"exp_hit_material_wind_rgb", "rt_hit_material_wind_rgb"},
     {"exp_gi_hit_direct", "gi_hit_direct"}, {"exp_gi_hit_sun", "gi_hit_sun"}, {"exp_rf_hit_shade", "rf_hit_shade"},
     {"exp_rf_hit_gi", "rf_hit_gi"}, {"exp_water_geometry", "rt_water_geometry"},
     {"exp_water_reflections", "rt_water_reflections"}, {"exp_water_compose", "rt_water_compose"},
@@ -382,7 +382,7 @@ static const char* const kOldOn[][2] = {
     {"exp_native_tileset", "rt_native_tileset"}};
 
 static void test_gui_levels() {
-  // 8 user-facing experimental entries; developer-only: the lighting reference, exact-k, current cascade sun.
+  // 7 user-facing experimental entries (RT water left for Ultra); developer-only: the lighting reference, exact-k, current cascade sun.
   int user_exp = 0;
   std::vector<std::string> dev;
   for (const Knob& k : kKnobs) {
@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 8);
+  CHECK(user_exp == 7);
   CHECK(dev == (std::vector<std::string>{"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));
@@ -446,12 +446,12 @@ static void test_gui_levels() {
   };
   const Level levels[] = {
       {"exp_hidden_surface",
-       {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_recycle", "rt_hit_material_wind_rgb",
+       {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
         "gi_hit_direct", "gi_hit_sun", "rf_hit_shade", "rf_hit_gi"},
-       {{"0", "0", "0", "0", "0", "0", "0", "0"},
-        {"1", "1", "1", "1", "0", "0", "0", "0"},
-        {"1", "1", "1", "1", "1", "1", "0", "0"},
-        {"1", "1", "1", "1", "1", "1", "1", "1"}}},
+       {{"0", "0", "0", "0", "0", "0", "0"},
+        {"1", "1", "1", "0", "0", "0", "0"},
+        {"1", "1", "1", "1", "1", "0", "0"},
+        {"1", "1", "1", "1", "1", "1", "1"}}},
       {"exp_hit_emission", {"rt_hit_emission", "rt_emissive"}, {{"0", "0"}, {"1", "1"}, {"2", "1"}}},
       {"exp_gi_far", {"gi_far", "gi_far_m"}, {{"0", nullptr}, {"1", "6"}}},
       {"exp_water",
@@ -468,7 +468,7 @@ static void test_gui_levels() {
     const Knob* k = find_knob(l.knob);
     CHECK(k != nullptr);
     if (!k) continue;
-    CHECK(k->experimental && !k->dev_only);
+    CHECK(k->experimental == (std::string(l.knob) != "exp_water") && !k->dev_only);
     CHECK(choice_count(*k) == int(l.values.size()));
     for (int c = 0; c < choice_count(*k); ++c) {
       Map m = on_map(*k, c);
@@ -497,6 +497,7 @@ static void test_gui_levels() {
   for (const char* key : kOldKnobKeys) {
     bool ini_only = false;
     for (const char* k : kIniOnlyKeys) ini_only = ini_only || std::string(k) == key;
+    for (const char* k : kAutomaticKeys) ini_only = ini_only || std::string(k) == key;
     if (!is_knob_key(key) && !ini_only) CHECK_EQ(std::string("orphan key ") + key, "");
     CHECK(code_default(key) != nullptr);
   }
@@ -505,6 +506,13 @@ static void test_gui_levels() {
     CHECK_EQ(code_default(k), "0");
   }
   CHECK(find_knob("exp_fg_letterbox") == nullptr);
+  // Automatic fixes: default 1, written by no knob, in no preset or release override (A/B keys only).
+  for (const char* k : kAutomaticKeys) {
+    CHECK(!is_knob_key(k));
+    CHECK_EQ(code_default(k), "1");
+    for (int p = 0; p < kPresetCount; ++p) { Map m; for (auto& kv : expand_preset(p)) m[kv.first] = kv.second; CHECK(m.count(k) == 0); }   // no preset writes it
+    CHECK(!key_change_needs_restart(k, "1", "0"));
+  }
   // A hand-set ini-only key survives a save.
   CHECK_EQ(get(parse_ini(render_user_ini("fg_letterbox=1\n", kHigh, preset_values(kHigh))), "fg_letterbox"), "1");
 
@@ -626,13 +634,19 @@ static void test_user_ini_migration() {
 
   const std::string out = render_user_ini(text, kUltra, v);
   const Map w = parse_ini(out);
+  // Effective values of the saved file (bg3rtx.ini, then its preset, then its keys): since RT water is on in
+  // Ultra, the file no longer needs to write the water keys (they equal the preset's), so check effective values.
+  const Map ew = merge_layers({&base, &w});
   // Every key of the old file keeps its value (except where a level adds keys it lacked).
   for (auto& kv : user)
-    if (!same_value(get(w, kv.first.c_str()), kv.second))
-      CHECK_EQ(kv.first + "=" + get(w, kv.first.c_str()), kv.first + "=" + kv.second);
+    if (!same_value(get(ew, kv.first.c_str()), kv.second))
+      CHECK_EQ(kv.first + "=" + get(ew, kv.first.c_str()), kv.first + "=" + kv.second);
+  for (const char* key : {"rt_water_compose", "rt_water_shadows", "rt_water_refraction"})
+    CHECK(!w.count(key));   // from the Ultra preset now
   // The levels' keys the file lacked.
-  for (const char* key : {"rt_hit_material_recycle", "rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
-    CHECK_EQ(get(w, key), "1");
+  for (const char* key : {"rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
+    CHECK_EQ(get(ew, key), "1");
+  CHECK(get(ew, "rt_hit_material_recycle") == "1");   // automatic (default 1): no level writes it
   CHECK_EQ(get(w, "rt_emissive"), "1");             // now written by Emission at ray hits
   CHECK(out.find("rt_emissive=1") == out.rfind("rt_emissive=1"));   // once, no longer under "Other keys"
   CHECK_EQ(get(w, "rt_xfb_mb"), "1024");            // unmanaged keys kept
@@ -644,11 +658,13 @@ static void test_user_ini_migration() {
   apply_layer(raw2, w);
   CHECK(knob_values(raw2) == v);
   CHECK_EQ(render_user_ini(out, kUltra, v), out);
-  // The added keys that need a restart are marked: the wind RGB rows and the pond's game shadow.
+  // The added keys that need a restart are marked: the wind RGB rows. The pond's game shadow no longer: the
+  // Ultra preset itself turns it on now (raw holds the preset's 1).
   int restart = 0;
-  for (const char* key : {"rt_hit_material_recycle", "rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
-    restart += key_change_needs_restart(key, lookup(raw, key), get(w, key));
-  CHECK(restart == 2);
+  for (const char* key : {"rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
+    restart += key_change_needs_restart(key, lookup(raw, key), get(ew, key));
+  CHECK(restart == 1);
+  CHECK_EQ(lookup(raw, "rt_water_game_shadow"), "1");
 }
 
 static void test_rendering_experiments() {
@@ -703,6 +719,51 @@ static void test_schema_file() {
   CHECK(norm == want);
 }
 
+// Stage 3 of the M5 water promotion (m5_promotion passed 11-01): RT water "+ Refraction" in Ultra, Off elsewhere.
+static void test_ultra_water() {
+  const char* keys[] = {"rt_water_geometry", "rt_water_reflections", "rt_water_compose", "rt_water_shadows",
+                        "rt_water_ls_shadows", "rt_water_game_shadow", "rt_water_refraction"};
+  const Knob* w = find_knob("exp_water");
+  CHECK(w != nullptr);
+  if (!w) return;
+  CHECK(!w->experimental && w->advanced && !w->dev_only);
+  CHECK(w->preset[kUltra] == 3 && w->preset[kLow] == 0 && w->preset[kMedium] == 0 && w->preset[kHigh] == 0);
+  for (int p = 0; p < kPresetCount; ++p) {
+    Map m;
+    for (auto& kv : expand_preset(p)) m[kv.first] = kv.second;
+    for (const char* k : keys) {
+      const std::string want = p == kUltra ? "1" : "0";
+      CHECK_EQ(std::string(kPresetId[p]) + " " + k + "=" + get(m, k), std::string(kPresetId[p]) + " " + k + "=" + want);
+    }
+    // Ultra: every dependency met (knobs and the startup keys: rt, sharc_device).
+    std::vector<int> v = preset_values(p);
+    CHECK(enforce_needs(v).empty());
+    if (p == kUltra) {
+      Map eff = code_defaults();
+      for (auto& kv : expand_preset(p)) eff[kv.first] = kv.second;
+      CHECK(unmet_need(*w, 3, preset_values(p)).empty());
+      CHECK(unmet_key_need(*w, 3, eff).empty());
+      eff["sharc_device"] = "0";   // no 64-bit shader integers: the compose cannot be created
+      CHECK(!unmet_key_need(*w, 1, eff).empty());
+      CHECK(knob_value(*w, eff) == 3);
+    }
+  }
+  // The compose keys need a restart to turn on and are live to turn off; geometry and reflections are live.
+  for (const char* k : {"rt_water_compose", "rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow",
+                        "rt_water_refraction"}) {
+    CHECK(key_change_needs_restart(k, "0", "1"));
+    CHECK(!key_change_needs_restart(k, "1", "0"));
+  }
+  CHECK(!key_change_needs_restart("rt_water_geometry", "0", "1") && !key_change_needs_restart("rt_water_reflections", "0", "1"));
+  CHECK(key_change_needs_restart("sharc_device", "1", "0"));
+  CHECK(w->apply == Apply::Partial);
+  // Before the Experimental section in the GUI order (after every main entry, before the first experimental one).
+  int iw = knob_index("exp_water"), first_exp = kKnobCount;
+  for (int i = 0; i < kKnobCount; ++i)
+    if (kKnobs[i].experimental) first_exp = (std::min)(first_exp, i);
+  CHECK(iw < first_exp);
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -722,6 +783,7 @@ int main(int argc, char** argv) {
   test_rendering_experiments();
   test_gui_levels();
   test_user_ini_migration();
+  test_ultra_water();
   test_schema_file();
   std::printf("%d checks, %d failed\n", g_checks, g_failed);
   return g_failed;
