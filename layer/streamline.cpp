@@ -2044,7 +2044,11 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
           auto ii = tracker().images.find(vi->second.image);
           if (ii != tracker().images.end()) sampled.push_back({ii->second.ci.extent.width, ii->second.ci.extent.height});
         }
-        out_ext = fg::output_extent(sampled.data(), uint32_t(sampled.size()), {p.width, p.height}, cfg_int("fg_letterbox", 0) != 0);
+        const int letterbox_key = cfg_int("fg_letterbox", 0) != 0 ? 1 : 0;
+        static std::atomic<int> letterbox_logged{-1};   // activation line on every change (lean jobs expect it)
+        if (letterbox_logged.exchange(letterbox_key) != letterbox_key)
+          log("[sl] fg_letterbox=%d: UI composite pass %ux%u", letterbox_key, p.width, p.height);
+        out_ext = fg::output_extent(sampled.data(), uint32_t(sampled.size()), {p.width, p.height}, letterbox_key != 0);
         for (auto& [key, e] : si->second) {
           if (!e.view) continue;
           auto vi = tracker().views.find(e.view);

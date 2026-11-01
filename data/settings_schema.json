@@ -193,6 +193,24 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_instanced": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_instanced": "1"}, "needs": {"exp_hit_material": 1}}
      ]},
+    {"id": "exp_hit_material_recycle", "label": "Hit materials: reuse buffers (fixes stale scene)",
+     "description": "Native hit materials allocated and freed hundreds of MB of GPU buffers every frame on the game's recording threads, so the ray-traced passes often missed this frame's scene and traced the previous one: shadows detach and flicker while the camera turns. This reuses the retired buffers instead (and records the material query without the scene lock). Turn the camera with Q/E: shadows should stay on their casters. Live A/B; needs Native hit materials. Experimental: the stale-scene gate has not run live yet.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_hit_material": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_recycle": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_recycle": "1"}, "needs": {"exp_hit_material": 1}}
+     ]},
+    {"id": "exp_fg_letterbox", "label": "Frame generation: letterboxed output",
+     "description": "For borderless or fake fullscreen on a desktop larger than the game's resolution (for example 3840x1600 on a 3840x2160 screen): frame generation finds its inputs at the game's size and is told where the image sits in the larger window. Without it frame generation stays off in that setup. Same-size windows are unaffected. Needs Frame generation; the key is live, a layer update needs a game restart. Experimental: not checked live yet.",
+     "apply": "live", "apply_note": "live (a layer update needs a restart)", "advanced": true, "experimental": true,
+     "required_on": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"fg_letterbox": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["fg"], "keys": {"fg_letterbox": "1"}, "needs": {"frame_generation": 1}}
+     ]},
     {"id": "exp_hit_material_wind_rgb", "label": "Native hit materials: RGB wind foliage",
      "description": "Adds the instanced RGB wind, two-sided, translucent foliage (ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT) to the wind and two-sided foliage rows: its depth and G-buffer draws are joined per frame and every hit is checked bit for bit against the native positions and UVs. Hits get the front (reflection) lobe; the leaf transmission is missing. Restart required, with the wind and two-sided foliage rows on. Quality and GPU cost remain unqualified.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,

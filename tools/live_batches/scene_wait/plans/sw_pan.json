@@ -12,7 +12,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=0,fg_letterbox=0"
  },
  {
   "label": "diag-rec0",
@@ -27,7 +27,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=1,rt_hit_material_recycle=0,qa_exposure_hold=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=1,rt_hit_material_recycle=0,qa_exposure_hold=0,fg_letterbox=0"
  },
  {
   "label": "diag-rec1",
@@ -42,7 +42,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=1,rt_hit_material_recycle=1,qa_exposure_hold=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=1,rt_hit_material_recycle=1,qa_exposure_hold=0,fg_letterbox=1"
  },
  {
   "label": "shot-off-a",
@@ -57,7 +57,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1,fg_letterbox=0",
   "trace_at": [
    5
   ]
@@ -75,7 +75,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=1,qa_exposure_hold=1",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=1,qa_exposure_hold=1,fg_letterbox=1",
   "trace_at": [
    5
   ]
@@ -93,7 +93,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1,fg_letterbox=0",
   "trace_at": [
    5
   ]
@@ -111,7 +111,7 @@
   "motion_end": 15,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=1,qa_exposure_hold=1"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=1,qa_exposure_hold=1,fg_letterbox=1"
  },
  {
   "label": "base-off-a-q",
@@ -126,7 +126,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": -1,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1,fg_letterbox=0"
  },
  {
   "label": "base-off-a-e",
@@ -141,7 +141,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": 1,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1,fg_letterbox=0"
  },
  {
   "label": "cost-on-q",
@@ -156,7 +156,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": -1,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=1,qa_exposure_hold=1"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=1,qa_exposure_hold=1,fg_letterbox=1"
  },
  {
   "label": "cost-on-e",
@@ -171,7 +171,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": 1,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=1,qa_exposure_hold=1"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=1,qa_exposure_hold=1,fg_letterbox=1"
  },
  {
   "label": "base-off-b-q",
@@ -186,7 +186,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": -1,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1,fg_letterbox=0"
  },
  {
   "label": "base-off-b-e",
@@ -201,7 +201,7 @@
   "motion_end": 11,
   "pixels_per_second": 0,
   "direction": 1,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=1,fg_letterbox=0"
  },
  {
   "label": "restore",
@@ -216,6 +216,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,rt_stats=0,rt_hit_material_recycle=0,qa_exposure_hold=0,fg_letterbox=0"
  }
 ]
