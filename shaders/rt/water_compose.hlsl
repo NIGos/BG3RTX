@@ -129,11 +129,11 @@ static const uint kGsWords = 120u;  // common/water_compose.h kCsRrWords
 #elif defined(WATER_LS)
 static const uint kGsWords = 91u;   // common/water_compose.h kCsLsWords
 #elif defined(WATER_SHADOWS) && defined(WATER_GSH)
-static const uint kGsWords = 54u;   // common/water_compose.h kCsGshWords
+static const uint kGsWords = 57u;   // common/water_compose.h kCsGsWordsMin (kCsGshWords 54 + kCsNonFinite)
 #elif defined(WATER_SHADOWS)
-static const uint kGsWords = 44u;   // common/water_compose.h kCsSunWords
+static const uint kGsWords = 57u;   // common/water_compose.h kCsGsWordsMin (kCsSunWords 44, kCsNonFinite 56)
 #else
-static const uint kGsWords = 32u;
+static const uint kGsWords = 57u;   // common/water_compose.h kCsGsWordsMin (32 words, kCsNonFinite 56)
 #endif
 groupshared uint gsStat[kGsWords];
 void cstat(uint word, bool cond) {
@@ -583,19 +583,23 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const bool rr_hit = rtier == 1u && all(isfinite(Lc));
   const float3 Rr = rr_hit ? Rw * (max(Lc, 0.0) - Refr) : 0.0.xxx;   // (1 - a) (Copy(hit) - Refr)
   const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx) - Rls + Rr;
-  const float3 Cn = composed || sunchg || lsocc || rr_hit ? max(Cu, 0.0) : Ct;
+  const bool chg = composed || sunchg || lsocc || rr_hit;
 #else
   const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx) - Rls;
-  const float3 Cn = composed || sunchg || lsocc ? max(Cu, 0.0) : Ct;
+  const bool chg = composed || sunchg || lsocc;
 #endif
 #else
   const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx);
-  const float3 Cn = composed || sunchg ? max(Cu, 0.0) : Ct;
+  const bool chg = composed || sunchg;
 #endif
 #else
   const float3 Cu = Ct + A * L - B;
-  const float3 Cn = composed ? max(Cu, 0.0) : Ct;
+  const bool chg = composed;
 #endif
+  // Fail-closed (common/water_compose.h compose_writes, kCsNonFinite): a non-finite term keeps the game's C.
+  const bool cfin = all(isfinite(Cu));
+  const float3 Cn = chg && cfin ? max(Cu, 0.0) : Ct;
+  cstat(56, chg && !cfin);   // kCsNonFinite
   const float d = lum(Cn) - lum(Ct);
   cstat(1, has);
   cstat(2, own);

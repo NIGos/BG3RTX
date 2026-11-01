@@ -27,6 +27,12 @@ An entry with "event": true judges one-off lines instead (e.g. "[trace] frame N 
 shot-* window): every selected line from the window's applied settings to its end counts, with
 no straddle rule, and "min" is the number of events the window must hold.
 
+An entry with "when_present": true judges a line that only a pass which ran prints: a window
+without any selected line (not even a straddling one) passes, as the pass did not run there;
+once the window has one, "min" and "match" apply as usual. The cascade-capacity gate is one: the
+casters line counts the sun cascade's frames, and an interior has none (m5p2 Flymm 11-01: 4 lines
+during the load, none in a cost window, the run INVALID for a buffer that never filled).
+
 Plan drift: the runner's "[pan-plan] window N ... set=<keys>" line carries the keys the phase
 applied. When the plan's step N has a "set" and it differs, the plan file changed after the run
 (m4p3 / m4p4 11:2x ran before cost-ao0 was inserted, so every later label was one phase off):
@@ -169,6 +175,8 @@ def check(gates, game_text, runner_text="", plan=None):
                 failures.append(f"every-window {name}: window '{label}' not found in the runner log")
                 continue
             for w in hits:
+                if g.get("when_present") and not any(w["applied"] <= t < w["end"] for t, _ in picked):
+                    continue   # the pass did not run in this window (docstring)
                 judged = []
                 prev = None
                 for t, l in picked:
@@ -355,6 +363,7 @@ def lint_scene_wait(batches_dir, problems_of=None):
 # a full cascade buffer drops roof casters (missing shadows). Both counters are per-frame means of integer
 # events, printed 0.00 / 0.0 only when no frame of the line had one, so the bound is 0. The cascade gate applies
 # to the windows that set rt_cascade_casters=1 (in the job or the plan; a preset alone does not count). Lines every rt_timing_frames (default 300) frames.
+# The cascade line counts the sun cascade pass's frames, so it is "when_present" (an interior has no cascade pass).
 CAPACITY_GATES = [
     ({"name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
       "select": r"\[geo\] RT capture, last \d+ frames:",
@@ -366,7 +375,7 @@ CAPACITY_GATES = [
      "1024 MB buffer; per frame: alpha draws made opaque (region full) 0.00, opaque draws dropped (buffer full) 0.02, indirect"),
     ({"name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
       "select": r"\[cascade\] casters: cascade \d+, \d+ frames;",
-      "match": r", buffer full 0\.0, added ", "min": 1},
+      "match": r", buffer full 0\.0, added ", "min": 1, "when_present": True},
      "rt_cascade_casters",
      "16:19:41.589  [cascade] casters: cascade 2, 120 frames; per frame: draws seen 128.0, skipped as duplicates 1.0, "
      "alpha-tested skipped 62.0, not sizeable 0.0, other matrix 0.0, buffer full 0.0, added 65.0; triangles 1092822",
@@ -392,7 +401,9 @@ def capacity_problems(job, plan):
                 sel, match = re.compile(e["select"]), re.compile(e["match"])
             except (KeyError, re.error, TypeError):
                 continue
-            if not e.get("event") and sel.search(good) and sel.search(bad) and match.search(good) and not match.search(bad):
+            # "when_present" as the canonical entry: the cascade line is printed only where the cascade pass ran.
+            if (not e.get("event") and bool(e.get("when_present")) == bool(gate.get("when_present")) and sel.search(good)
+                    and sel.search(bad) and match.search(good) and not match.search(bad)):
                 covered |= set(e.get("windows") or want)
         missing = [w for w in want if w not in covered]
         if missing:

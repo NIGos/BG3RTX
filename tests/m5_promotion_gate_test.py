@@ -38,10 +38,13 @@ OFF = "rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_water_sh
 STEP = "rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_water_shadows=0"
 
 
-def compose_lines(t, rec, own, comp, d_sun, clamped=0, d_rf=0.0):
+def compose_lines(t, rec, own, comp, d_sun, clamped=0, d_rf=-0.1, al=0.01):
+    # The energy line's "mean delta over owned" (d_rf) is lum(C') - lum(C) of the composed pixels with every term
+    # of the variant: here the sun removal on them (m5p1 S8 11-01: -0.137 of -0.343), which the shadows line
+    # counts again. The prediction takes the reflection's own term, (A L - B) x composed share = 0 here.
     return [
         f"{hms(t)}  [core] [water] compose (120 frames, {comp} composed, 1.00 passes/frame): records {rec}/frame, owned {own:.2f}% (not owned 0.00%), invalid 0, kept: rough 10.00%, below the surface 0.00%; rays 100/frame: screen hit (composed) 10.0%, hidden 1.0% (skin 0), off screen 1.0%, miss 88.0%, aborted 0, invalid 0; unresolved (probe kept) 90.00% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 0",
-        f"{hms(t)}  [core] [water] compose energy: mean C 0.40000 over owned; composed 10.00% of owned: probe removed (B) 0.01000, traced added (A L) 0.00500, delta -0.00500 (+0.00100 / -0.00600) per composed pixel; mean delta over owned {d_rf:+.6f} = -0.100% of mean C; probe term B over owned 0.08000",
+        f"{hms(t)}  [core] [water] compose energy: mean C 0.40000 over owned; composed 10.00% of owned: probe removed (B) 0.01000, traced added (A L) {al:.5f}, delta -1.00000 (+0.00100 / -1.00100) per composed pixel; mean delta over owned {d_rf:+.6f} = -25.000% of mean C; probe term B over owned 0.08000",
         f"{hms(t)}  [core] [water] compose ratio A L / B over 1000 composed px: below 0.5 30.0%, 0.5..2.0 60.0%, above 2.0 10.0%; ratio of the means 0.400",
         f"{hms(t)}  [core] [water] compose GPU 0.100 ms median, p90 0.110 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.020 ms median, p90 0.020; compose dispatches 0.080 ms median, p90 0.090",
         f"{hms(t)}  [core] [water] shadows (120 frames, 120 passes, variant sun): sun records {rec}/frame = 99.00% of owned (no sun term 1.00%, invalid 0); traced 100.00% of sun records, occluded 60.00% of traced (traced shadow share 60.00% of sun records), unknown 0 (kept); sun term D 0.20000 per sun record, removed 0.16000 = 80.00% of D; mean removed over owned {d_sun:.6f} = 40.000% of mean C; clamped {clamped}; GPU 0.100 ms median, p90 0.110 (the compose dispatches with the sun ray + the lighting copy); skipped: records without the sun words 0",
@@ -94,7 +97,10 @@ def main():
             dumps = {"d1": {"pass_fs": "5c3fdabc477f316a", "slot": 0, "fmt": "R11G11B10F", "w": W_, "h": H_, "mean": [pre] * 3, "nonfinite": 0},
                      "d2": {"pass_fs": "0000000000000000", "slot": 0, "fmt": "RGBA8", "w": W_, "h": H_, "mean": [0.9, 0.9, 0.9, 1], "nonfinite": 0},
                      "d3": {"pass_fs": "0000000000000000", "slot": 0, "fmt": "R11G11B10F", "w": W_, "h": H_, "mean": [post] * 3,
-                            "nonfinite": 7 if label == "shot-step-rf" else 0}}
+                            "nonfinite": 7 if label == "shot-step-rf" else 0},
+                     # a depth image's infinite texels vary per frame with every key off (m5p2 Flymm): not counted
+                     "d4": {"pass_fs": "76433aef79eadc86", "slot": "depth", "fmt": "D32F", "w": 2048, "h": 2048, "mean": [0.5],
+                            "nonfinite": 3600 if label == "shot-on" else 3300}}
             (cap / "dumps.json").write_text(json.dumps(dumps))
             log.append(f"{hms(t + ts)}  [rrpost] exposure probe (frame {frame}): 2cdd9f08 b0 = [{e:g} 1 2 3 4 5], b1 = [1 2 3 4 5 6], lighting s1b13 = [1 2 3 4]; applied k = 1; 0.8333/2^b0[2] = 1, 0.8333/2^b1[2] = 1")
             log.append(f"{hms(t + ts + 0.1)}  [trace] frame {frame} written: 4 submits, 10 images -> {cap}")
@@ -110,7 +116,8 @@ def main():
     check("three traces in shot-off-a, RR colour input (not the RGBA8 guide) / exposure = 200, 201, 199",
           isinstance(v, list) and len(v) == 3 and all(abs(x["post"] - p / E_OFF) < 1e-6 for x, p in zip(v, POST_OFF[:3])))
     preds = g.predicted_raw(run, "cost-on")
-    check("cost-on: the straddling window (removed 9.9) is dropped; 5 windows predict -0.02",
+    check("cost-on: the straddling window (removed 9.9) is dropped; 5 windows predict -0.02 (the energy line's "
+          "sun-inclusive mean delta -0.1 is not counted twice)",
           len(preds) == 5 and all(abs(p + 0.02) < 1e-12 for p in preds))
     check("shot-on (no complete window) falls back to cost-on's windows", len(g.predicted_raw(run, "shot-on")) == 5)
     rows = {e["x"]: e for e in (g.energy_row(run, *tr) for tr in g.shot_triples(run.labels))}
