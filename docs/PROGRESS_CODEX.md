@@ -13,6 +13,30 @@
   patches pass spirv-val. 76 CTests. Expected cost < 0.15 ms. Live: job `m5w5` (S8, OFF/ON/OFF, rt_debug 27);
   dry run passes (batch now 16.9 min, 1.06 GB).
 
+## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
+
+- Preset change: `rt_hit_material`, `rt_hit_material_instanced`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`,
+  `rt_hit_emission=1` on in Ultra only (knobs out of Experimental, under Advanced); Ultra adds `rt_emissive=1` and
+  capture sizes for the 64 B hit-material vertex (`rt_xfb_mb` 1024, `rt_cascade_mb` 427 = 384/160 x 64/24).
+  `rt_emissive` 0 -> 1 needs a restart. Settings test 542 checks, 75 CTests pass.
+- Measured so far (PLAN_M4 "Promotion"): rf_hit_shade tier (a) L_b / L_a S8 0.926, S6 1.091 after the box fix (was
+  1.48); costs rf_hit_shade +1.4 to +1.8 ms (rf pass), gi_hit_direct + sun +0.52 ms (gi trace), instanced +0.14 ms.
+- Live batch `tools/live_batches/m4_promotion` (camp, inn, S6, S8; ~18 min, 1.2-1.8 GB; dry run passes): bundle
+  OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
+  Merge the branch only if the energy and capacity gates pass.
+
+## Replay pack lighting inputs + `--native-ambient` (offline, layer + tools, READY_FOR_LIVE, 2026-11-01)
+
+- The pack now carries the deferred lighting's inputs as sets 2-3 (tools/frame_replay.md "Lighting inputs"):
+  G-buffer albedo/material, AO, sky irradiance + specular cubes, DFG LUT, probe records + the cubes they name,
+  atmosphere constants, transmittance LUT, clouds. Read in the core's pre-lighting hook with query_binding:
+  no ABI, core or shader change; only with `replay_pack` set (default path untouched). Budget priority:
+  lighting 4 > hit cache 3 > probe cubes 2 > alpha caches 1, so the S8 2054 MB cache still fits 3300 MB.
+- `frame_replay --native-ambient`: native diffuse ambient per GI pixel (tools/native_ambient.hlsl, the
+  in-game replica functions) vs k x PT far field (> 1 m) + PT sky at misses (`PT_ENV`), mean and 16 x 9
+  tiles; the PT sun from the game's LUT (`PT_SUN_LUT`). Self-test 13-16 closed form, 76 CTests pass.
+- Pending: one `rc1-replay-s8-fg2` run (expect line `lighting inputs: 19 of 19 slots bound`); its post
+  step prints the S8 native / PT far-field ratio. No real pack with these inputs exists yet.
 ## M5.4 water sun shadows (offline, READY_FOR_LIVE, 2026-11-01)
 
 - Finding: the audited water FS (7b44a567, 99c1fcef, c4e92ccd) light the water with sun visibility 1. Their sun
@@ -76,6 +100,26 @@
   Merge the branch only if the energy and capacity gates pass.
 
 ## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01)
+## rt_hit_material_instanced clip rejects: pairing and instance order (offline, READY_FOR_LIVE, 2026-11-01)
+
+- Live S14 (m4i 09:39) disproved the rounding theory: wind "within tolerance 0, over x256", 2S "differs", UV
+  differs 0, rigid 0; 2.6%, 3.1%, 0%, 0.4% of lookups per window at a static camera, the same share for both
+  families (24/27%, 10/16%, 2.2/2.4% of their hits) and 0 on the static per-draw rows. Same mesh, other instance
+  positions, whole frames. Causes in the pairing: (1) the instanced key has no frame identity and the packet /
+  source epoch `frame_index()` counts presents, which moves mid-frame (same log: "query reject source epoch
+  current 4320 source 4319"), so a previous-frame G-buffer packet can join; (2) the two passes may upload the same
+  instances in another order (rows are instance-major).
+- Fix (layer only, instanced rows only): both draws' VS inputs are read at record (frame time 0:0, camera 0:2;
+  2S translation 1:0 @32; wind UBO words) and must be equal (`pair_check`), else the row is not mapped; a new
+  `rt/hit_material_instanced_remap.hlsl` maps each depth instance to the G-buffer instance with the same first
+  triangle (clip + UV bit-exact) and copies that block. Per-hit check unchanged (bit-exact, fail closed).
+- New lines (per window): `pairs since the last line (wind/2S): same frame, other frame (time), camera,
+  placement, wind inputs, unread` and `instance order ...: rows, same order, permuted, unmatched`; they replace
+  the per-frame wind inputs line. 128 checks (reproduces the live signature: UV equal, clip differs, not rigid,
+  then all bit-exact after the remap), 75 CTests; no existing shader changed. Layer change: restart. Gate: clip
+  rejects < 0.04% in every ON window. Cost not measured (two small dispatches per instanced row).
+
+## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01; live: not the cause)
 
 - Live S14 (m4i 07:46): instanced key ON raised qualified 22% -> 36-40% but reason `clip` 0 -> 0.4-1.9M per 120
   frames. Static camera, qualified + clip constant, clip varying: the wind rows (2S is all `precise`, static). The

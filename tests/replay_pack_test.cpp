@@ -233,6 +233,63 @@ int main() {
     check(rp::texture_priority(1, 14) == rp::kPriorityHit && rp::texture_priority(1, 2) == rp::kPriorityHit &&
               rp::texture_priority(1, 3) == rp::kPriorityAlphaCache && rp::texture_priority(0, 14) == 0,
           "texture_priority: hit cache and table above the alpha caches; set 0 never droppable anyway");
+    check(rp::texture_priority(2, 34) == rp::kPriorityLighting && rp::texture_priority(3, 1) == rp::kPriorityLighting &&
+              rp::texture_priority(2, 45) == rp::kPriorityProbes && rp::kPriorityLighting > rp::kPriorityHit &&
+              rp::kPriorityHit > rp::kPriorityProbes && rp::kPriorityProbes > rp::kPriorityAlphaCache,
+          "texture_priority: lighting inputs first, probe cubes below the hit material, above the alpha caches");
+    {   // The S8 pack under replay_pack_cap_mb=3300 with lighting inputs: 976 MB fixed, the 2054 MB hit
+        // cache, 60 MB of lighting images and 400 MB of probe cubes (more than the 211 MB left): the
+        // cache and the lighting images stay, the probe cubes take what is left, smallest first.
+      std::vector<uint64_t> sz = {2053ull << 20, 30ull << 20, 30ull << 20};
+      std::vector<uint32_t> pr = {rp::texture_priority(1, 14), rp::texture_priority(2, 2), rp::texture_priority(3, 1)};
+      for (int i = 0; i < 100; ++i) { sz.push_back(4ull << 20); pr.push_back(rp::texture_priority(2, 45)); }
+      d = rp::fill_budget(976ull << 20, sz, rp::pack_cap_bytes(3300), over, pr);
+      bool cache_kept = true, lighting_kept = true;
+      for (size_t i : d) { cache_kept &= i != 0; lighting_kept &= i != 1 && i != 2; }
+      check(!over && cache_kept && lighting_kept && d.size() == 100 - (3300 - 976 - 2053 - 60) / 4,
+            "fill_budget: S8 + lighting inputs keeps the hit cache and the lighting images, probe cubes fill the rest");
+    }
+    {   // Lighting contract: every set 2-3 slot but the declared sampler has a game source, sources name slots.
+      const rp::Pass& gp = *rp::find_pass("gi_hit_direct");
+      bool ok = gp.set_count == 4;
+      uint32_t slots = 0;
+      for (uint32_t i = 0; i < gp.slot_count; ++i) {
+        const rp::Slot& s = gp.slots[i];
+        if (s.set < 2) continue;
+        ++slots;
+        ok &= (s.set == 3 && s.binding == 6) ? rp::lighting_source(3, 6) == nullptr : rp::lighting_source(s.set, s.binding) != nullptr;
+      }
+      for (const auto& src : rp::kLightingSources) ok &= rp::find_slot(gp, src.set, src.binding) != nullptr;
+      const rp::Slot* cubes = rp::find_slot(gp, 2, 45);
+      ok &= slots == std::size(rp::kLightingSources) + 1 && cubes && cubes->kind == rp::kSampledCube && rp::find_slot(gp, 2, 34)->kind == rp::kSampledCube &&
+            rp::lighting_source(3, 2)->game_set == 5 && rp::lighting_source(3, 2)->game_binding == 4 && rp::lighting_source(3, 4)->game_binding == 42;
+      check(ok, "lighting contract: sets 2-3 slots, game sources (set 3 = set 5 b0 b1 b4 b5, set 1 b42 b43), cube kinds");
+    }
+    {   // Probe records -> b45 elements: diffuse pair (m5 bit 1, bits 3-16 / 17-30), specular pair (m5 bit 2, m6).
+      std::vector<uint8_t> rec(3 * rp::kProbeStride + 7, 0);   // a trailing partial record is ignored
+      auto put = [&](size_t at, uint32_t v) { for (int k = 0; k < 4; ++k) rec[at + k] = uint8_t(v >> (8 * k)); };
+      put(0 * 144 + 136, 2u | (1u << 3) | (3u << 17)); put(0 * 144 + 140, 5u);      // diffuse 1, 3; m6 ignored (no bit 2)
+      put(1 * 144 + 136, 4u | 1u);  put(1 * 144 + 140, 2u | (2049u << 16));          // box, specular 2 and 2049 (beyond)
+      put(2 * 144 + 136, 6u | (1u << 3)); put(2 * 144 + 140, 1u);                    // both: diffuse 1 again, specular 1
+      uint32_t beyond = 0;
+      const auto e = rp::probe_cube_elements(rec.data(), rec.size(), 4096, beyond);
+      const std::vector<uint32_t> want = {0, 1, 2, 3, 4, 5};
+      check(e == want && beyond == 2, "probe_cube_elements: pairs 2i, 2i+1 per field, unique, sorted; past the slot counted");
+      const auto none = rp::probe_cube_elements(nullptr, 0, 4096, beyond);
+      check(none.empty() && beyond == 0, "probe_cube_elements: no records, no elements");
+    }
+    {   // lighting_inputs: what a pack carries (older packs: nothing).
+      rp::Manifest l;
+      check(!rp::lighting_inputs(l).ambient && !rp::lighting_inputs(l).sun_lut, "lighting_inputs: an older pack has none");
+      l.images = {{2, 34, 0, 97, 32, 32, 6, 6, "a"}, {2, 38, 0, 83, 128, 128, 1, 1, "b"}, {2, 35, 0, 97, 128, 128, 6, 8, "c"},
+                  {2, 45, 0, 97, 64, 64, 6, 7, "d"}, {2, 45, 1, 97, 64, 64, 6, 7, "e"}, {3, 1, 0, 97, 256, 64, 1, 1, "f"}};
+      l.buffers = {{3, 0, 16, "atmo"}, {2, 33, 288, "probes"}};
+      const auto li = rp::lighting_inputs(l);
+      check(li.ambient && li.sky && li.sun_lut && li.probes && li.images == 6 && li.probe_cubes == 2,
+            "lighting_inputs: irradiance + DFG = ambient, specular cube = sky, LUT + constants = sun, probe records and cubes");
+      l.buffers.clear();
+      check(!rp::lighting_inputs(l).sun_lut, "lighting_inputs: a LUT without the atmosphere constants is no LUT sun");
+    }
     check(rp::raw_compatible(145, 146) && rp::raw_compatible(137, 138) && rp::raw_compatible(37, 43) && !rp::raw_compatible(131, 145) &&
               !rp::raw_compatible(37, 97) && !rp::raw_compatible(145, 107) && !rp::raw_compatible(0, 0),
           "raw_compatible: BC7/BC3 UNORM-SRGB and RGBA8 share bytes; BC1 vs BC7, RGBA8 vs RGBA16F, BC7 vs RGBA32UI do not");

@@ -15,6 +15,14 @@
 // Not modelled (reported by the harness): sky/environment radiance (a miss returns 0, its share is
 // the miss fraction), emission, projector/box lights, cloud shadows, the atmosphere LUT (PT_SUN_T
 // approximates the transmittance), roofs the camera cut away (absent from the TLAS; PT_ROOFS=1 below), transmission.
+// With a pack that carries the lighting inputs (common/replay_pack.h sets 2-3; frame_replay
+// --native-ambient sets these):
+//   PT_SUN_LUT=1  the sun's colour from the game's transmittance LUT (bg3_sun.hlsli bg3_sun_colour,
+//                 set 3) and its two cloud-shadow layers at every vertex, instead of PT_SUN_T;
+//   PT_ENV=1      mode 7: the environment radiance a miss sees, the game's global specular cube at
+//                 mip 0 (b35 / b37 blended by _m29, x _m27 / _m28, x b13[0] 100: bg3_ambient.hlsli's
+//                 scale) along the ray, carried by the path throughput; kept OUT of modes 0-6 (the
+//                 traced bounce split stays the same), in game units (no k).
 //
 // Push::debug selects what one dispatch writes (the same seeds: every mode traces the same paths):
 // ("near": first hit t < gi_rt_radius, the live pass's ray length; w its fade 1 - (t/R)^2)
@@ -29,11 +37,28 @@
 //     unknown, b fallback material
 //   6 L x w, near hits not visible       hidden-on-screen fraction    the local lights' part
 //     (what fallback0 leaves at 0)
+//   7 (PT_ENV) environment at misses      first-vertex miss fraction   environment at first-vertex misses
 // PT_FURNACE_LE > 0 (CTest): every vertex also emits PT_FURNACE_LE; PT_LAMBERT=1 scatters with a
 // Lambertian of albedo PT_ALBEDO (common/transport_bsdf.h tb_sample) for the closed-form furnace.
 #define RT_HIT_MATERIAL 1
 #include "gi/gi_common.hlsli"
 #include "rt/rt_common.hlsli"
+#ifndef PT_SUN_LUT
+#define PT_SUN_LUT 0
+#endif
+#ifndef PT_ENV
+#define PT_ENV 0
+#endif
+#if PT_SUN_LUT || PT_ENV
+#include "rt/bg3_lights.hlsli"
+#endif
+#if PT_ENV
+#include "rt/bg3_ambient.hlsli"
+#endif
+#if PT_SUN_LUT
+#define BG3_SUN_SET 3
+#include "rt/bg3_sun.hlsli"
+#endif
 #include "rt/native_hit_material.hlsli"
 #define NATIVE_HIT_PROJECTOR_SKIP 1
 #define NATIVE_HIT_DLS_POLICY 1
@@ -129,9 +154,24 @@ float pt_lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 // atmosphere path's colour x intensity x PT_SUN_T (the transmittance the pack does not carry), else
 // _m2; x b13[0] as native_hit_sun. Cloud shadows: 1 (their maps are not in the pack).
 float3 pt_sun_radiance() {
+#if PT_SUN_LUT
+  float3 c = bg3_sun_colour();
+#else
   float3 c = (cam.x[5].x > 0.0 && cam.x[13].w == 0.0) ? cam.x[13].xyz * cam.x[5].y * PT_SUN_T : cam.v1.xyz;
+#endif
   return c * asfloat(lScale.Load(0));
 }
+
+#if PT_ENV
+// The environment a miss sees (game units): the global specular cubes at mip 0 (a = 0 in
+// bg3_spec_ambient: mip _m30 - 8), blended as the lighting blends them, x b13[0] 100.
+float3 pt_env(float3 dir) {
+  float m27 = lConsts.c[31].z, m28 = lConsts.c[31].w, m29 = lConsts.c[32].x, m30 = lConsts.c[32].y, m31 = lConsts.c[32].z;
+  float3 g = lgSpecCube0.SampleLevel(lgSampCube, dir, max(m30 - 8.0, 0.0)).rgb * m27;
+  [branch] if (m29 > 0.0) g = lerp(g, lgSpecCube1.SampleLevel(lgSampCube, dir, max(m31 - 8.0, 0.0)).rgb * m28, m29);
+  return g * asfloat(lScale.Load(0)) * 100.0;
+}
+#endif
 
 NativeHitMaterial pt_fallback_material(float3 ng) {
   NtInput input;
@@ -144,7 +184,7 @@ NativeHitMaterial pt_fallback_material(float3 ng) {
 }
 
 struct PtPath {
-  float3 total, first, sun, local;
+  float3 total, first, sun, local, env, env1;   // env, env1: PT_ENV (mode 7), all misses / first-vertex miss
   uint cls;          // first hit: 0 miss, 1 visible on screen, 2 hidden on screen, 3 off screen, 4 aborted
   float t1, w;       // first hit distance, live fade weight
   float3 screen;     // prev_bounce_at at a visible first hit
@@ -166,7 +206,13 @@ PtPath pt_trace(uint2 fp, float3 P, float3 N, float4 org, float dist, float pa, 
 #if PT_ROOFS
     if (pt_roof_plane(o, dir, hh.t >= 0.0 ? hh.t : PT_TMAX) >= 0.0) { if (b == 1) r.cls = 4; break; }   // the cut-away roof
 #endif
-    if (hh.t < 0.0) break;   // a miss: environment radiance unknown in the pack (0)
+    if (hh.t < 0.0) {   // a miss: environment radiance not in the traced bounce (PT_ENV: mode 7 only)
+#if PT_ENV
+      const float3 le = pt_env(dir);
+      if (all(isfinite(le))) { r.env += thr * le; if (b == 1) r.env1 = le; }
+#endif
+      break;
+    }
     const float t = hh.t;
     const float foot = cone.f0 + cone.spread * t;
     if (b == 1) {
@@ -224,6 +270,9 @@ PtPath pt_trace(uint2 fp, float3 P, float3 N, float4 org, float dist, float pa, 
 #endif
       if (vis == kRtUnknown) r.sununknown += 1.0;
       else {
+#if PT_SUN_LUT
+        inc.radiance = sunE * bg3_cloud_shadow(p);
+#endif
         HdDirect s = hd_scatter(m.scattering, m.normal, ng, -dir, inc, true, vis == kRtLit ? 1.0 : 0.0);
         if (s.status == HdOk) ls = s.radiance;
       }
@@ -290,7 +339,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
     else if (mode == 3u) { acc += float4(near ? r.total * r.w : 0.0.xxx, near ? 1.0 : 0.0); aux += r.cls == 2u && !near ? lt : 0.0; }
     else if (mode == 4u) { acc += float4(near ? r.screen * r.w : 0.0.xxx, r.cls == 4u ? 1.0 : 0.0); aux += r.cls == 3u ? lt : 0.0; }
     else if (mode == 5u) { const float v = max(r.vertices, 1.0); acc += float4(r.nolist / v, r.sununknown / v, r.fallback / v, r.vertices); aux += pt_lum(r.sun); }
-    else { acc += float4(near && r.cls != 1u ? r.total * r.w : 0.0.xxx, r.cls == 2u ? 1.0 : 0.0); aux += pt_lum(r.local); }
+    else if (mode == 6u) { acc += float4(near && r.cls != 1u ? r.total * r.w : 0.0.xxx, r.cls == 2u ? 1.0 : 0.0); aux += pt_lum(r.local); }
+    else { acc += float4(r.env, r.cls == 0u ? 1.0 : 0.0); aux += pt_lum(r.env1); }
   }
   giRaw[id] = acc / float(PT_SPP);
   giRawDepth[id] = aux / float(PT_SPP);

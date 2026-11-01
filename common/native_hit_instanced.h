@@ -7,9 +7,11 @@
 // Both depth passes are alpha-tested (shaders/rt/alpha_fs.txt: 4bed5db2 `vt ... p0=0 idx=32`), so the
 // prepass side is the existing alpha record (note_prepass) and every hit already passed its cut.
 // The depth and G-buffer VSs compute the same clip position per instance (dumped GLSL: same input
-// locations, same arithmetic), so the prepass and G-buffer XFB of one draw hold the same vertices in
-// the same instance-major order; the consumer's per-vertex clip + UV check still decides each hit
-// (fail closed): bit-exact, except the wind rows' clip positions within wind_clip_tolerance below. Pure policy on plain numbers; tests/native_hit_instanced_test.cpp pins it.
+// locations, same arithmetic), so the prepass and G-buffer XFB of one draw hold the same vertices per
+// instance, instance-major, but not necessarily in the same instance order and only when both draws are
+// of one game frame (pair_check, match_instance below); the consumer's per-vertex clip + UV check still
+// decides each hit (fail closed): bit-exact, except the wind rows' clip positions within
+// wind_clip_tolerance below. Pure policy on plain numbers; tests/native_hit_instanced_test.cpp pins it.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -127,15 +129,19 @@ inline uint32_t family_flags(Family f) { return uint32_t(f) << kRowFamilyShift; 
 // If only t differs between the passes (the time-dependent term evaluated in each pass), F also differs
 // by |dt| m1 |s5| 0.1 and the same chain carries it. Any other input difference: no tolerance (exact,
 // fail closed). Result: tau_c = a_c + b_c |W|inf per vertex (|W| the BVH vertex), rounded up to float.
+// The VS inputs of one instanced draw, read from the game's mapped UBOs at record (both families: the
+// pairing certificate below; wind: also the tolerance's inputs; 2S: also the per-draw translation).
 struct WindInputs {
   bool ok = false;
   float time = 0;              // 0:0 word 0
-  float scene[3]{};            // 0:1 _m1, _m3, _m5 (bytes 12, 28, 44)
-  float material[4]{};         // 1:1 _m0.._m3
+  float scene[3]{};            // 0:1 _m1, _m3, _m5 (bytes 12, 28, 44); wind only
+  float material[4]{};         // 1:1 _m0.._m3; wind only
   float camera[3]{};           // 0:2 _m6 (byte 208)
   float viewproj[16]{};        // 0:2 _m2 (bytes 128..191, row-major as GLSL reads it: clip_c = sum_k W_k m[k][c] + m[3][c])
+  float translation[3]{};      // 1:0 _m1 (bytes 32..43): added to the instance rows by 106a0550 / 1e9145e4; 2S only
 };
-inline constexpr uint32_t kSceneWindOffsets[3] = {12, 28, 44}, kCameraViewProjOffset = 128, kCameraPositionOffset = 208;
+inline constexpr uint32_t kSceneWindOffsets[3] = {12, 28, 44}, kCameraViewProjOffset = 128, kCameraPositionOffset = 208,
+                          kTranslationOffset = 32;
 enum WindMatch : uint32_t { MatchUnread = 0, MatchEqual = 1, MatchTimeOnly = 2, MatchDiffer = 3 };
 inline WindMatch wind_match(const WindInputs& a, const WindInputs& b) {
   if (!a.ok || !b.ok) return MatchUnread;
@@ -192,4 +198,74 @@ inline bool wind_clip_tolerance(const WindInputs& pre, const WindInputs& def, Cl
   }
   return true;
 }
+
+// ---- Why the clip check rejected (live 2026-11-01, m4i-instanced-s14-fg2.1.093913) ----
+// Rejects were not rounding: wind "within the derived tolerance 0, over x256", 2S "differs", UV differs 0,
+// rigid 0, in bursts at a static camera (2.6%, 3.1%, 0%, then 0.4% of all lookups per window) and at the
+// same per-window share for both families (24/27%, 10/16%, 2.2/2.4% of their checked hits), while the
+// static per-draw rows (instances 1) had 0 clip rejects in the same frames. So whole frames held rows
+// whose depth and G-buffer XFBs place the same mesh (UV bit-exact) with other instance positions. Two
+// causes in the pairing, both fixed here; the per-hit clip + UV check stays bit-exact (fail closed).
+//  1. The pair is from two game frames. The instanced key (draw words + index range) is the same every
+//     frame, and the packet <-> source epoch is frame_index(), which counts presents: it moves in the
+//     middle of a game frame's recording (the same run: "[hit material query reject] source epoch
+//     current 4320 source 4319"), so a G-buffer packet of the previous game frame can carry the source's
+//     index when the current one is recorded after the query. Certificate: both draws' CPU-read VS
+//     inputs (pair_check): the frame time (0:0 word 0, one value per game frame), the camera _m2/_m6
+//     and, per family, the 2S translation or the wind UBO words. Any difference: the row is not mapped.
+//  2. The two passes hold the same instances in another order (per-pass instance uploads). The rows are
+//     instance-major, so every reordered instance fails at the hit. rt/hit_material_instanced_remap.hlsl
+//     maps each depth instance to the G-buffer instance with the same first triangle (match_instance)
+//     and copies that block into the row; an instance without a match keeps its own block (the hit
+//     check rejects it). match_instance / remap_instances are the CPU reference of that shader.
+enum PairOutcome : uint32_t { PairSame = 0, PairUnread = 1, PairOtherFrame = 2, PairCamera = 3, PairPlacement = 4, PairWind = 5, kPairOutcomes = 6 };
+inline constexpr const char* kPairName[] = {"same frame", "unread", "other frame (time)", "camera", "placement", "wind inputs"};
+inline PairOutcome pair_check(Family family, const WindInputs& pre, const WindInputs& def) {
+  if (family == None || !pre.ok || !def.ok) return PairUnread;
+  if (std::memcmp(&pre.time, &def.time, 4)) return PairOtherFrame;
+  if (std::memcmp(pre.viewproj, def.viewproj, sizeof pre.viewproj) || std::memcmp(pre.camera, def.camera, sizeof pre.camera)) return PairCamera;
+  if (family == AlphaTest2s && std::memcmp(pre.translation, def.translation, sizeof pre.translation)) return PairPlacement;
+  if (family == Wind && (std::memcmp(pre.scene, def.scene, sizeof pre.scene) || std::memcmp(pre.material, def.material, sizeof pre.material)))
+    return PairWind;
+  return PairSame;
+}
+// Instance blocks of a row: triangles x 3 vertices of `stride` bytes, instance-major; each block holds
+// count (= 3 triangles / instances) vertices. The match key is the first triangle's clip (16 B) and UV
+// (8 B) per vertex: an affine placement is fixed by three vertices, and the hit check certifies the rest.
+inline constexpr uint32_t kMatchVertexBytes = 24, kMatchNone = 0xffffffffu;
+inline bool remap_ok(uint32_t instances, uint32_t triangles, uint32_t stride, uint32_t& block) {
+  block = 0;
+  if (instances < 2 || stride < kMatchVertexBytes || stride % 4 || (uint64_t(triangles) * 3) % instances) return false;
+  const uint64_t vertices = uint64_t(triangles) * 3 / instances, bytes = vertices * stride * instances;
+  if (vertices < 3 || bytes > UINT32_MAX) return false;
+  block = uint32_t(vertices * stride);
+  return true;
+}
+// The G-buffer instance for depth instance i: the first j from i on (wrapping; the same order first).
+inline uint32_t match_instance(const unsigned char* pre, const unsigned char* def, uint32_t instances, uint32_t block,
+                               uint32_t stride, uint32_t i) {
+  const unsigned char* a = pre + uint64_t(i) * block;
+  for (uint32_t k = 0, j = i; k < instances; ++k, j = j + 1 == instances ? 0 : j + 1) {
+    const unsigned char* b = def + uint64_t(j) * block;
+    bool same = true;
+    for (uint32_t v = 0; same && v < 3; ++v) same = std::memcmp(a + v * stride, b + v * stride, kMatchVertexBytes) == 0;
+    if (same) return j;
+  }
+  return kMatchNone;
+}
+enum Order : uint32_t { OrderRows = 0, OrderSame = 1, OrderPermuted = 2, OrderUnmatched = 3, kOrderCounters = 4 };
+// out = def with each depth instance's matched G-buffer block (its own block when unmatched); counts as
+// the shader's per-family counters (rows, instances in the same order, permuted, unmatched).
+inline void remap_instances(const unsigned char* pre, const unsigned char* def, unsigned char* out, uint32_t instances,
+                            uint32_t block, uint32_t stride, uint64_t (&counts)[kOrderCounters]) {
+  ++counts[OrderRows];
+  for (uint32_t i = 0; i < instances; ++i) {
+    const uint32_t j = match_instance(pre, def, instances, block, stride, i);
+    ++counts[j == i ? OrderSame : j == kMatchNone ? OrderUnmatched : OrderPermuted];
+    std::memcpy(out + uint64_t(i) * block, def + uint64_t(j == kMatchNone ? i : j) * block, block);
+  }
+}
+// The remap buffer (host-visible, per query): 4 counters per family at 16 x family bytes, then the
+// permutation words of each remapped row.
+inline constexpr uint32_t kRemapPermBase = 64;
 }  // namespace bg3::native_hit::instanced

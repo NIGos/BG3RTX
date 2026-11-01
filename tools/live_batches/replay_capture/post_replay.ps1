@@ -5,6 +5,7 @@
 # 3. The offline gate: the replay's `hit material (1 frames)` line has qualified > 0 and sampling
 #    (reason 6: a lookup into an image the writer omitted, bound NaN) at most the live rate, the
 #    ceiling of the live 120-frame lines' sampling per frame (0 at S8 on 2026-11-01).
+#    Then (informational) frame_replay --native-ambient into the same folder: its deciding lines.
 # 4. Gate passed: deletes the older captures\replay-* packs of this tree (only the newest pack is
 #    kept; nothing useless accumulates). Gate failed or no replay: deletes nothing, says why.
 # Deletion is never recursive: each file of the pack and of its one `replay` output folder is
@@ -48,6 +49,17 @@ $g = $hm[0].Matches[0].Groups
 $attempted = [int64]$g[1].Value; $qualified = [int64]$g[2].Value; $sampling = [int64]$g[8].Value
 Write-Host ("post-replay: replay hit material attempted {0} qualified {1} sampling {2} (limit {3}: live {4:N2}/frame over {5} lines); {6}" -f
   $attempted, $qualified, $sampling, $limit, $liveRate, $live.Count, $(if ($vs.Count) { $vs[0].Line.Trim() } else { 'no live reference' }))
+# Informational (not part of the gate): the native ambient vs the PT far field (tools/frame_replay.md
+# "Native ambient"), into the same output folder (files only: Remove-Pack accepts it), console in
+# native_ambient.txt. A pack without lighting inputs says so and is not compared.
+$na = @()
+$keep = $ErrorActionPreference
+try { $ErrorActionPreference = 'Continue'; $na = @(& $exe --pack $pack --native-ambient --out $out 2>&1 | ForEach-Object { "$_" }) }
+catch { $na += "$_" } finally { $ErrorActionPreference = $keep }
+$na | Set-Content -LiteralPath (Join-Path $out 'native_ambient.txt')
+$naLines = @($na | Select-String -Pattern '^\s*(native ambient means|PT far field|native vs PT far field|per tile \(16 x 9|sun transmittance)')
+if ($naLines.Count) { foreach ($l in $naLines) { Write-Host ('post-replay: ' + $l.Line.Trim()) } }
+else { Write-Host ('post-replay: native ambient not compared: ' + $(if ($na.Count) { $na[-1].Trim() } else { 'no output' }) + ' (native_ambient.txt)') }
 if (-not ($qualified -gt 0 -and $sampling -le $limit)) { Write-Host 'post-replay: offline gate FAILED; older packs kept'; exit 1 }
 
 # Gate passed: remove the older packs, never recursively.

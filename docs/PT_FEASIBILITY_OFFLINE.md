@@ -84,6 +84,9 @@ native-ambient pack before promotion.
 
 Next measurements: rerun on the VT-cache pack (per-region error with real materials), one interior
 pack, and capture the native ambient term (or the sky cube) so the far-field comparison closes.
+The writer now captures those inputs (sky cubes, probes, DFG, transmittance LUT) and
+`frame_replay --native-ambient` makes the comparison (tools/frame_replay.md "Native ambient"); the S8
+number needs one new pack.
 
 ## Decision
 
