@@ -329,7 +329,8 @@ class Cache:
     def __init__(self, directory=None):
         self.dir = Path(directory) if directory else default_cache_dir()
         (self.dir / "spv").mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(self.dir / "index.sqlite3"), timeout=120, check_same_thread=False)
+        self.db = sqlite3.connect(str(self.dir / "index.sqlite3"), timeout=120, check_same_thread=False,
+                                  isolation_level=None)  # autocommit: no write lock held across a run (parallel runs hit "database is locked")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS compiled (key TEXT PRIMARY KEY, sha TEXT, size INTEGER, "
                         "request TEXT, entry TEXT, at REAL)")
