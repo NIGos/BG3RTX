@@ -75,16 +75,20 @@ int main() {
   rp::merge_spans(gap, 4096);
   check(gap.size() == 2 && gap[0].offset == 0 && gap[0].bytes == 4864 && gap[1].offset == 9000 && rp::span_bytes(gap) == 4872, "merge_spans: a gap of 4096 bytes is copied with them, 4136 is not");
 
-  // 3. Budget: the largest droppable images go first; fixed bytes never.
+  // 3. Budget: smallest first, each image that still fits; fixed bytes never dropped.
   bool over = false;
-  auto dropped = rp::drop_over_budget(600, {100, 300, 50, 200}, 1000, over);
-  check(!over && dropped.size() == 1 && dropped[0] == 1, "drop_over_budget: 1250 > 1000 drops the 300 only");
-  dropped = rp::drop_over_budget(600, {100, 300, 50, 200}, 700, over);
-  check(!over && dropped.size() == 3 && dropped[0] == 0 && dropped[1] == 1 && dropped[2] == 3, "drop_over_budget: to 700 keeps the 50");
-  dropped = rp::drop_over_budget(1200, {100}, 1000, over);
-  check(over && dropped.size() == 1, "drop_over_budget: fixed over the budget is reported");
-  dropped = rp::drop_over_budget(10, {100, 200}, 1000, over);
-  check(!over && dropped.empty(), "drop_over_budget: under the budget drops nothing");
+  auto dropped = rp::fill_budget(600, {100, 300, 50, 200}, 1000, over);
+  check(!over && dropped.size() == 1 && dropped[0] == 1, "fill_budget: 1250 > 1000 drops the 300 only");
+  dropped = rp::fill_budget(600, {100, 300, 50, 200}, 700, over);
+  check(!over && dropped.size() == 3 && dropped[0] == 0 && dropped[1] == 1 && dropped[2] == 3, "fill_budget: to 700 keeps the 50 only");
+  dropped = rp::fill_budget(600, {100, 300, 50, 200}, 950, over);
+  check(!over && dropped.size() == 1 && dropped[0] == 1, "fill_budget: the 300 does not fit after 50 + 100 + 200, the smaller ones stay");
+  dropped = rp::fill_budget(600, {100, 300, 50, 200}, 1250, over);
+  check(!over && dropped.empty(), "fill_budget: exactly at the budget drops nothing");
+  dropped = rp::fill_budget(1200, {100}, 1000, over);
+  check(over && dropped.size() == 1, "fill_budget: fixed over the budget is reported, everything dropped");
+  dropped = rp::fill_budget(10, {100, 200}, 1000, over);
+  check(!over && dropped.empty(), "fill_budget: under the budget drops nothing");
 
   // 4. Range-only capture: a descriptor's bound bytes, never the whole buffer.
   check(rp::bound_bytes(1000, 200, 300) == 300, "bound_bytes: offset/range inside the buffer");
@@ -181,12 +185,28 @@ int main() {
       tp = rp::transfer_pieces(rp::kR32Sfloat, 2560, 1440, 1, 1, 256ull << 20);
       check(tp.size() == 1 && tp[0].bytes == 2560ull * 1440 * 4, "transfer_pieces: a set-0 image is one region");
     }
-    // Budget with priority: images the hit material reads (1) go after the alpha-only ones (0).
+    // Budget with priority: the hit material's bindings (2) are kept before the alpha caches (1).
     bool over = false;
-    auto d = rp::drop_over_budget(600, {100, 300, 50, 200}, 1000, over, {1, 1, 0, 0});
-    check(!over && d.size() == 2 && d[0] == 2 && d[1] == 3, "drop_over_budget: priority 0 dropped first, even when smaller");
-    d = rp::drop_over_budget(600, {100, 300, 50, 200}, 1100, over, {1, 1, 0, 0});
-    check(!over && d.size() == 1 && d[0] == 3, "drop_over_budget: within a priority the largest first");
+    auto d = rp::fill_budget(600, {100, 300, 50, 200}, 1050, over, {2, 2, 1, 1});
+    check(!over && d.size() == 1 && d[0] == 3, "fill_budget: priority 2 kept first, then the smaller priority-1 image that still fits");
+    d = rp::fill_budget(600, {100, 300, 50, 200}, 1000, over, {2, 2, 1, 1});
+    check(!over && d.size() == 2 && d[0] == 2 && d[1] == 3, "fill_budget: lower priority dropped first, even when smaller");
+    d = rp::fill_budget(600, {100, 300, 50, 200}, 950, over, {2, 2, 1, 1});
+    check(!over && d.size() == 1 && d[0] == 1, "fill_budget: a priority-2 image that cannot fit leaves the room to the priority-1 ones");
+    // S8 2026-11-01 (MB): 906 fixed, a hit cache larger than the 1142 MB left, a 300 MB alpha
+    // cache, the 4 x 4 dummy and 20 table images of 67 MB. The old drop order (lowest priority,
+    // largest first) emptied the pack; the fill keeps everything except the cache that cannot fit.
+    std::vector<uint64_t> s8 = {1200ull << 20, 300ull << 20, 64};
+    std::vector<uint32_t> s8p = {rp::texture_priority(1, 14), rp::texture_priority(1, 3), rp::texture_priority(1, 14)};
+    for (int i = 0; i < 20; ++i) { s8.push_back((67ull << 20) / 20); s8p.push_back(rp::texture_priority(1, 2)); }
+    d = rp::fill_budget(906ull << 20, s8, rp::kPackHardCapBytes, over, s8p);
+    check(!over && d.size() == 1 && d[0] == 0, "fill_budget: S8, only the cache larger than the free space is dropped");
+    check(rp::texture_priority(1, 14) == rp::kPriorityHit && rp::texture_priority(1, 2) == rp::kPriorityHit &&
+              rp::texture_priority(1, 3) == rp::kPriorityAlphaCache && rp::texture_priority(0, 14) == 0,
+          "texture_priority: hit cache and table above the alpha caches; set 0 never droppable anyway");
+    check(rp::raw_compatible(145, 146) && rp::raw_compatible(137, 138) && rp::raw_compatible(37, 43) && !rp::raw_compatible(131, 145) &&
+              !rp::raw_compatible(37, 97) && !rp::raw_compatible(145, 107) && !rp::raw_compatible(0, 0),
+          "raw_compatible: BC7/BC3 UNORM-SRGB and RGBA8 share bytes; BC1 vs BC7, RGBA8 vs RGBA16F, BC7 vs RGBA32UI do not");
     // The manifest names the source format of a decoded image and round-trips it.
     rp::Manifest s;
     s.version = rp::kVersion; s.pass = "gi_hit_direct"; s.push = "push.bin"; s.groups[0] = s.groups[1] = s.groups[2] = 1;
