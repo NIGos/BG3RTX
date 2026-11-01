@@ -9,364 +9,246 @@
   "knobs": [
     {"id": "rr", "label": "Ray Reconstruction",
      "description": "DLSS Ray Reconstruction replaces the game's DLSS upscaler and denoises the ray-traced effects. Needs an NVIDIA RTX GPU and the game's upscaler set to DLSS. Off: DLSS Super Resolution, and the effects switch to their non-denoised paths. About +1.8 ms on an RTX 5090.",
-     "apply": "hitch", "apply_note": "brief hitch (history reset)", "advanced": false, "experimental": false,
+     "apply": "hitch", "apply_note": "brief hitch (history reset)", "advanced": false, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rr": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["dlss"], "keys": {"rr": "1"}, "needs": {}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rr": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": ["dlss"], "keys": {"rr": "1"}, "needs": {}, "migrate_from": [], "developer": false}
      ]},
     {"id": "rt_geometry", "label": "Ray-traced geometry",
      "description": "Builds the game's geometry into a ray-tracing scene every frame. Every ray-traced effect below needs it. Static meshes are built once and cached, so the update costs about 0.5 ms on an RTX 5090, panning or not (it was 1.4-2.9 ms while the camera moved). Opaque leaves alpha-tested casters (grates, foliage, chains) out. Off frees that cost and the geometry capture.",
-     "apply": "partial", "apply_note": "Opaque <-> Full: restart", "advanced": false, "experimental": false,
+     "apply": "partial", "apply_note": "Opaque <-> Full: restart", "advanced": false, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 2},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_build": "0", "rt_alpha": "0"}, "needs": {}},
-       {"id": "opaque", "label": "Opaque only", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "0"}, "needs": {}},
-       {"id": "full", "label": "Full (with alpha-tested)", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "1"}, "needs": {}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_build": "0", "rt_alpha": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "opaque", "label": "Opaque only", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "full", "label": "Full (with alpha-tested)", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "1"}, "needs": {}, "migrate_from": [], "developer": false}
      ]},
     {"id": "sun_shadows", "label": "Sun shadows",
      "description": "Ray-traced sun shadows replace the game's shadow-map detail; screen-space keeps the game's sun shadows with contact shadows. About 0.1 ms.",
-     "apply": "live", "apply_note": "", "advanced": false, "experimental": false,
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "ss", "label": "Screen-space", "caps": [], "keys": {"rt_shadows": "0", "contact_shadows": "1"}, "needs": {}},
-       {"id": "rt", "label": "Ray-traced", "caps": ["ray_query"], "keys": {"rt_shadows": "1", "contact_shadows": "1"}, "needs": {"rt_geometry": 1}}
+       {"id": "ss", "label": "Screen-space", "caps": [], "keys": {"rt_shadows": "0", "contact_shadows": "1"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "rt", "label": "Ray-traced", "caps": ["ray_query"], "keys": {"rt_shadows": "1", "contact_shadows": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false}
+     ]},
+    {"id": "roof_shadows", "label": "Roof sun shadows",
+     "description": "Captures the roofs the camera cuts away (from the game's sun shadow map) into the ray-traced scene, so ray-traced sun shadows also work under them. On in Ultra since 2026-10-31: physically correct, no regression in the camp and inn gates, about +0.3 to +1.3 ms.",
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_cascade_casters": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_cascade_casters": "1"}, "needs": {"rt_geometry": 1, "sun_shadows": 1}, "migrate_from": [], "developer": false}
      ]},
     {"id": "gi", "label": "Global illumination",
      "description": "One bounce of indirect light and ambient occlusion. Screen-space traces the depth buffer; ray-traced traces the scene. RT High uses 2 rays per pixel (less noise in dim interiors, about +0.2 ms).",
-     "apply": "live", "apply_note": "", "advanced": false, "experimental": false,
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 1, "medium": 2, "high": 2, "ultra": 3},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"gi": "0"}, "needs": {}},
-       {"id": "ss", "label": "Screen-space", "caps": [], "keys": {"gi": "1", "gi_rt": "0", "gi_rays": "2", "gi_steps": "12"}, "needs": {}},
-       {"id": "rt", "label": "Ray-traced", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "1"}, "needs": {"rt_geometry": 1}},
-       {"id": "rt_high", "label": "Ray-traced High", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "2"}, "needs": {"rt_geometry": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"gi": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "ss", "label": "Screen-space", "caps": [], "keys": {"gi": "1", "gi_rt": "0", "gi_rays": "2", "gi_steps": "12"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "rt", "label": "Ray-traced", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false},
+       {"id": "rt_high", "label": "Ray-traced High", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "2"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false}
      ]},
     {"id": "local_shadows", "label": "Local light shadows",
      "description": "Ray-traced shadows for torches, lamps and spells, so lights without a shadow map stop leaking through walls. Fast samples 1 light per pixel (noisier, needs Ray Reconstruction). Full also traces the lights that have a game shadow map, keeping the game's map only where a caster may be off screen. Full+ replaces those maps everywhere (off-screen casters can be lost). About 0.2-0.4 ms.",
-     "apply": "live", "apply_note": "", "advanced": false, "experimental": false,
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 2},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_local_shadows": "0"}, "needs": {}},
-       {"id": "fast", "label": "Fast", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "1", "ls_shadowed": "0"}, "needs": {"rt_geometry": 1}},
-       {"id": "full", "label": "Full", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "3"}, "needs": {"rt_geometry": 1}},
-       {"id": "full_plus", "label": "Full + shadowed lights", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "1"}, "needs": {"rt_geometry": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_local_shadows": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "fast", "label": "Fast", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "1", "ls_shadowed": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false},
+       {"id": "full", "label": "Full", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "3"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false},
+       {"id": "full_plus", "label": "Full + shadowed lights", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false}
+     ]},
+    {"id": "box_lights", "label": "Box light shadows",
+     "description": "Ray-traced shadows for the game's box (projector) lights, 37% of its placed lights. Look at lit interiors: shadows of furniture and characters from these lights. About +0.25 ms. Off in every preset until the live box-light check passes. \"All\" also shadows the ones the game leaves unshadowed (they light through walls now): look for light leaking into the next room, and check that the main-menu skull keeps its beam.",
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"ls_box": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "Shadowed", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false},
+       {"id": "all", "label": "All", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false}
      ]},
     {"id": "reflections", "label": "Reflections",
      "description": "Ray-traced reflections replace the game's reflection probes where the reflected point is on screen. Higher settings reach rougher surfaces. Without Ray Reconstruction only mirror-like surfaces are traced. About 0.15-0.45 ms.",
-     "apply": "live", "apply_note": "", "advanced": false, "experimental": false,
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 3},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_reflections": "0"}, "needs": {}},
-       {"id": "glossy", "label": "Glossy", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.4"}, "needs": {"rt_geometry": 1, "gi": 1}},
-       {"id": "standard", "label": "Standard", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.6"}, "needs": {"rt_geometry": 1, "gi": 1}},
-       {"id": "rough", "label": "Rough", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.8"}, "needs": {"rt_geometry": 1, "gi": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_reflections": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "glossy", "label": "Glossy", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.4"}, "needs": {"rt_geometry": 1, "gi": 1}, "migrate_from": [], "developer": false},
+       {"id": "standard", "label": "Standard", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.6"}, "needs": {"rt_geometry": 1, "gi": 1}, "migrate_from": [], "developer": false},
+       {"id": "rough", "label": "Rough", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.8"}, "needs": {"rt_geometry": 1, "gi": 1}, "migrate_from": [], "developer": false}
      ]},
     {"id": "frame_generation", "label": "Frame generation",
      "description": "DLSS Frame Generation: 2x on RTX 40 and later, 3x/4x on RTX 50. Needs Reflex.",
-     "apply": "partial", "apply_note": "Off <-> on: restart", "advanced": false, "experimental": false,
+     "apply": "partial", "apply_note": "Off <-> on: restart", "advanced": false, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 1, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"fg": "0"}, "needs": {}},
-       {"id": "2x", "label": "2x", "caps": ["fg"], "keys": {"fg": "2"}, "needs": {}},
-       {"id": "3x", "label": "3x", "caps": ["mfg"], "keys": {"fg": "3"}, "needs": {}},
-       {"id": "4x", "label": "4x", "caps": ["mfg"], "keys": {"fg": "4"}, "needs": {}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"fg": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "2x", "label": "2x", "caps": ["fg"], "keys": {"fg": "2"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "3x", "label": "3x", "caps": ["mfg"], "keys": {"fg": "3"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "4x", "label": "4x", "caps": ["mfg"], "keys": {"fg": "4"}, "needs": {}, "migrate_from": [], "developer": false}
      ]},
     {"id": "rt_intensity", "label": "RT lighting intensity",
      "description": "Scales the ray-traced bounce light, local-light shadows and reflections together. 100% is physically matched to the game; lower blends towards the original look.",
-     "apply": "live", "apply_note": "", "advanced": false, "experimental": false,
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 100, "medium": 100, "high": 100, "ultra": 100},
      "kind": "slider", "min": 50, "max": 100, "step": 5, "off_value": null, "unit": "%", "keys": ["gi_strength", "ls_strength", "rf_strength"], "scale": 0.01},
     {"id": "fps_cap", "label": "Frame cap (rendered fps)",
      "description": "Caps the rendered frame rate (with frame generation 2x the display shows twice as many). Through the Reflex limiter when frame generation is on, a sleep limiter otherwise.",
-     "apply": "live", "apply_note": "", "advanced": false, "experimental": false,
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 58},
      "kind": "slider", "min": 30, "max": 240, "step": 1, "off_value": 0, "unit": "fps", "keys": ["fps_cap"], "scale": 1},
     {"id": "reflex", "label": "NVIDIA Reflex",
      "description": "Low-latency mode. Frame generation needs it on.",
-     "apply": "live", "apply_note": "", "advanced": true, "experimental": false,
+     "apply": "live", "apply_note": "", "advanced": true, "experimental": false, "developer": false,
      "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 1, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"reflex": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": [], "keys": {"reflex": "1"}, "needs": {}},
-       {"id": "boost", "label": "On + Boost", "caps": [], "keys": {"reflex": "2"}, "needs": {}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"reflex": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": [], "keys": {"reflex": "1"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "boost", "label": "On + Boost", "caps": [], "keys": {"reflex": "2"}, "needs": {}, "migrate_from": [], "developer": false}
      ]},
-    {"id": "exp_roof_shadows", "label": "Roof sun shadows",
-     "description": "Captures the roofs the camera cuts away (from the game's sun shadow map) into the ray-traced scene, so ray-traced sun shadows also work under them. On in Ultra since 2026-10-31: physically correct, no regression in the camp and inn gates, about +0.3 to +1.3 ms.",
-     "apply": "live", "apply_note": "", "advanced": true, "experimental": false,
-     "required_on": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_cascade_casters": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_cascade_casters": "1"}, "needs": {"rt_geometry": 1, "sun_shadows": 1}}
-     ]},
-    {"id": "exp_box_lights", "label": "Box light shadows",
-     "description": "Ray-traced shadows for the game's box (projector) lights, 37% of its placed lights. Look at lit interiors: shadows of furniture and characters from these lights. About +0.25 ms. \"All box lights\" also shadows the ones the game leaves unshadowed (they light through walls now): look for light leaking into the next room, and check that the main-menu skull keeps its beam.",
-     "apply": "live", "apply_note": "experimental", "advanced": true, "experimental": true,
-     "required_on": {},
+    {"id": "exp_hidden_surface", "label": "Hidden-surface shading",
+     "description": "Gives ray hits on surfaces the camera does not see their verified native material (static virtual-texture views, reflectance, tangent frame), including the wind-animated and two-sided foliage rows, with the capture buffers reused (no stale scene). Materials: the material data only. + Bounce: the GI bounce from those hidden surfaces is shaded with point, spot and sun light and traced shadows (never darker; about +0.5 ms with sun). + Reflections: reflection rays that hit them are shaded with that material and lighting, and get the screen's bounce light, instead of keeping the reflection probe (about +1.4 to +1.8 ms). Unsupported materials or lights keep the current renderer. The first enable needs a restart; the levels above Materials are live. Experimental: quality and GPU cost remain partly unqualified.",
+     "apply": "partial", "apply_note": "first enable: restart; levels live", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1", "gi_rt_fallback": "0"},
+     "required_from_choice": {"rt": 1, "rt_alpha": 1, "rt_bvh_split": 1, "gi_rt_fallback": 2},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"ls_box": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}},
-       {"id": "all", "label": "All box lights", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}}
-     ]},
-    {"id": "exp_ls_exact_k", "label": "Local light sampling (exact-k)",
-     "description": "Cost option for interiors with many lights: the strongest 1 or 2 lights of each pixel keep their own shadow ray, and one ray is shared by the rest, picked in proportion to their light and weighted so the mean brightness is unchanged (unbiased, a little noisier before Ray Reconstruction). Needs Local light shadows Full. Look at a lamp-lit inn: the shadows and brightness must match Off. Measured 2026-10-27: -22% (k1) of the 0.7 ms pass in Grymforge, about -10% at camp. Quality and cost on this build are unqualified.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
-     "required_on": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"ls_k": "0", "ls_rest_samples": "1"}, "needs": {}},
-       {"id": "k1", "label": "1 exact light", "caps": ["ray_query"], "keys": {"ls_k": "1", "ls_rest_samples": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 2}},
-       {"id": "k2", "label": "2 exact lights", "caps": ["ray_query"], "keys": {"ls_k": "2", "ls_rest_samples": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 2}}
-     ]},
-    {"id": "exp_native_scalp", "label": "Native scalp coverage",
-     "description": "Uses audited native scalp coverage in ray queries. Needs Full ray-traced geometry. Unsupported material/input domains keep the existing path. First use may compile shaders. Experimental: in-game quality and GPU cost still need qualification.",
-     "apply": "hitch", "apply_note": "first-use shader compilation", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_native_scalp": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_native_scalp": "1"}, "needs": {"rt_geometry": 2}}
-     ]},
-    {"id": "exp_alpha_spill", "label": "Preserve cutout capture on overflow",
-     "description": "Uses free space in the existing capture buffer when its cutout partition fills. Retains native coverage and hair geometry for exact split draws. Does not increase memory limits or fix missing material inputs. Experimental: game quality and GPU cost are unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_alpha_spill": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_alpha_spill": "1"}, "needs": {"rt_geometry": 2}}
-     ]},
-    {"id": "exp_native_tileset", "label": "Native tileset coverage",
-     "description": "Captures native instanced floor and wall coverage for ray queries. Requires a restart and Full ray-traced geometry. SeeThrough and missing native inputs remain unknown. Experimental: quality and GPU cost are unqualified.",
-     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_native_tileset": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_native_tileset": "1"}, "needs": {"rt_geometry": 2}}
-     ]},
-    {"id": "exp_native_hair", "label": "Native hair coverage",
-     "description": "Captures the audited CHAR_Hair strand coverage and depth for ray queries. Other hair families remain separate coverage gaps. Needs Full ray-traced geometry. Restart required because the captured vertex layout changes. In-game quality and cost are unqualified.",
-     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_native_hair": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_native_hair": "1"}, "needs": {"rt_geometry": 2}}
-     ]},
-    {"id": "exp_hair_physical_origin", "label": "Physical hair ray origins",
-     "description": "Starts secondary rays on the selected native hair card while retaining native camera depth for primary checks. Enable at startup with Native hair coverage to reserve the auxiliary image; then Off/On is a live A/B. Starting Off requires a restart before enabling. Quality and GPU cost remain unqualified.",
-     "apply": "partial", "apply_note": "Enable at startup; then live A/B", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_native_hair": "1", "rt_origin": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hair_physical_origin": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hair_physical_origin": "1"}, "needs": {"rt_geometry": 2, "exp_native_hair": 1}}
-     ]},
-    {"id": "exp_hit_material", "label": "Native hit materials",
-     "description": "Captures the audited static virtual-texture material views, reflectance and native tangent frame for ray hits. Only fresh triangles with verified native draw correspondence are supported; unknown inputs keep the current renderer. This supplies material parameters, not offscreen lighting or a replacement BSDF. Restart required. Actual gameplay participation, quality and GPU cost remain unqualified.",
-     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material": "1"}, "needs": {"rt_geometry": 2}}
-     ]},
-    {"id": "exp_hit_material_instanced", "label": "Native hit materials: wind and two-sided foliage",
-     "description": "Extends Native hit materials to the instanced wind-animated (ATM_Wind_Vertex_RG_VT) and two-sided alpha-test (Base_AlphaTest_2s_VT) draws: their depth and G-buffer draws are joined per frame and every hit is still checked against the native positions and UVs. Enable at startup with Native hit materials; then Off/On is a live A/B. Quality and GPU cost remain unqualified.",
-     "apply": "partial", "apply_note": "Enable at startup; then live A/B", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_hit_material": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_instanced": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_instanced": "1"}, "needs": {"exp_hit_material": 1}}
-     ]},
-    {"id": "exp_hit_material_recycle", "label": "Hit materials: reuse buffers (fixes stale scene)",
-     "description": "Native hit materials allocated and freed hundreds of MB of GPU buffers every frame on the game's recording threads, so the ray-traced passes often missed this frame's scene and traced the previous one: shadows detach and flicker while the camera turns. This reuses the retired buffers instead (and records the material query without the scene lock). Turn the camera with Q/E: shadows should stay on their casters. Live A/B; needs Native hit materials. Experimental: the stale-scene gate has not run live yet.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_hit_material": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_recycle": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_recycle": "1"}, "needs": {"exp_hit_material": 1}}
-     ]},
-    {"id": "exp_fg_letterbox", "label": "Frame generation: letterboxed output",
-     "description": "For borderless or fake fullscreen on a desktop larger than the game's resolution (for example 3840x1600 on a 3840x2160 screen): frame generation finds its inputs at the game's size and is told where the image sits in the larger window. Without it frame generation stays off in that setup. Same-size windows are unaffected. Needs Frame generation; the key is live, a layer update needs a game restart. Experimental: not checked live yet.",
-     "apply": "live", "apply_note": "live (a layer update needs a restart)", "advanced": true, "experimental": true,
-     "required_on": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"fg_letterbox": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["fg"], "keys": {"fg_letterbox": "1"}, "needs": {"frame_generation": 1}}
-     ]},
-    {"id": "exp_hit_material_wind_rgb", "label": "Native hit materials: RGB wind foliage",
-     "description": "Adds the instanced RGB wind, two-sided, translucent foliage (ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT) to the wind and two-sided foliage rows: its depth and G-buffer draws are joined per frame and every hit is checked bit for bit against the native positions and UVs. Hits get the front (reflection) lobe; the leaf transmission is missing. Restart required, with the wind and two-sided foliage rows on. Quality and GPU cost remain unqualified.",
-     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_hit_material": "1", "rt_hit_material_instanced": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material_wind_rgb": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hit_material_wind_rgb": "1"}, "needs": {"exp_hit_material_instanced": 1}}
-     ]},
-    {"id": "exp_gi_hit_direct", "label": "Shaded hidden-surface bounce",
-     "description": "Adds physically shadowed point/spot bounce from verified hidden native VT surfaces. Keeps successful screen and radiance-cache hits, and the existing ambient occlusion. Unsupported materials or lights retain the current GI fallback. Requires Native hit materials at startup and GI fallback 0. True offscreen light coverage, quality and GPU cost remain unqualified.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_hit_material": "1", "gi_rt": "1", "gi_rt_fallback": "0"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"gi_hit_direct": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"gi_hit_direct": "1"}, "needs": {"exp_hit_material": 1, "gi": 1}}
-     ]},
-    {"id": "exp_gi_hit_sun", "label": "Sunlit hidden-surface bounce",
-     "description": "Adds the sun's direct light, with a ray-traced shadow, to the shaded hidden-surface bounce. Added only where the GI fallback added no bounce. Under roofs the camera cut away the sun is left out unless Roof sun shadows (cascade casters) is on. Requires Shaded hidden-surface bounce. Quality and GPU cost remain unqualified.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
-     "required_on": {"gi_hit_direct": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"gi_hit_sun": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"gi_hit_sun": "1"}, "needs": {"exp_gi_hit_direct": 1}}
-     ]},
-    {"id": "exp_gi_far", "label": "Far-field sun bounce",
-     "description": "Lengthens the bounce rays from 1 m to the chosen reach. Surfaces up to that distance that are on screen, or hidden with a verified native material lit by the sun, replace the game's ambient light for their ray. Other surfaces beyond 1 m keep the game's ambient. Requires Sunlit hidden-surface bounce. Quality and GPU cost remain unqualified.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
-     "required_on": {"gi_hit_sun": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"gi_far": "0"}, "needs": {}},
-       {"id": "m4", "label": "4 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "4"}, "needs": {"exp_gi_hit_sun": 1}},
-       {"id": "m6", "label": "6 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "6"}, "needs": {"exp_gi_hit_sun": 1}},
-       {"id": "m8", "label": "8 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "8"}, "needs": {"exp_gi_hit_sun": 1}}
-     ]},
-    {"id": "exp_rf_hit_shade", "label": "Shaded hidden-surface reflections",
-     "description": "Reflection rays that hit a surface hidden from the camera are shaded with that surface's verified native material and lighting (point and spot lights, the sun with a traced shadow ray, the game's ambient) instead of keeping the reflection probe. Unsupported materials or lights keep the probe. Requires Native hit materials at startup. Emission at the hits: Emission at ray hits. Quality and GPU cost remain unqualified.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_hit_material": "1", "rt_reflections": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rf_hit_shade": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rf_hit_shade": "1"}, "needs": {"exp_hit_material": 1, "reflections": 1}}
-     ]},
-    {"id": "exp_rf_hit_gi", "label": "Indirect light in hidden-surface reflections",
-     "description": "Shaded hidden-surface reflections also get the bounce light the screen's ray-traced GI gives the same surface (gathered along the hit's ambient-occlusion rays, from the screen and the radiance cache), and the box lights follow the screen's box shadows. Requires Shaded hidden-surface reflections and ray-traced GI. Quality and GPU cost remain unqualified.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
-     "required_on": {"rf_hit_shade": "1", "gi_rt": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rf_hit_gi": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rf_hit_gi": "1"}, "needs": {"exp_rf_hit_shade": 1, "gi": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material": "0", "rt_hit_material_instanced": "0", "rt_hit_material_recycle": "0", "rt_hit_material_wind_rgb": "0", "gi_hit_direct": "0", "gi_hit_sun": "0", "rf_hit_shade": "0", "rf_hit_gi": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "materials", "label": "Materials", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_recycle": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "0", "gi_hit_sun": "0", "rf_hit_shade": "0", "rf_hit_gi": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb", "rt_hit_material_recycle"], "developer": false},
+       {"id": "bounce", "label": "+ Bounce", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_recycle": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "0", "rf_hit_gi": "0"}, "needs": {"rt_geometry": 2, "gi": 2}, "migrate_from": ["gi_hit_direct", "gi_hit_sun"], "developer": false},
+       {"id": "reflections", "label": "+ Reflections", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_recycle": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "1", "rf_hit_gi": "1"}, "needs": {"rt_geometry": 2, "gi": 2, "reflections": 1}, "migrate_from": ["rf_hit_shade", "rf_hit_gi"], "developer": false}
      ]},
     {"id": "exp_hit_emission", "label": "Emission at ray hits",
-     "description": "Bounce and reflection rays that hit a glowing surface (lava, braziers, glowing runes) add that surface's emitted light, from the captured emissive geometry. Hidden hits: only where Shaded hidden-surface bounce or reflections shade the hit. All hits: also hits the screen shows (the screen value has no emission). Needs Emissive geometry capture (rt_emissive=1) at startup and Shaded hidden-surface bounce and/or reflections. Quality and GPU cost remain unqualified.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_emissive": "1", "rt_hit_material": "1"},
+     "description": "Bounce and reflection rays that hit a glowing surface (lava, braziers, glowing runes) on a hidden surface add that surface's emitted light, from the captured emissive geometry (this setting turns the emissive capture, rt_emissive, on with it). It shows where Hidden-surface shading + Bounce or + Reflections shades the hit. Experimental: quality and GPU cost remain unqualified.",
+     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {"rt": "1"},
+     "required_from_choice": {"rt": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_emission": "0"}, "needs": {}},
-       {"id": "hidden", "label": "Hidden hits", "caps": ["ray_query"], "keys": {"rt_hit_emission": "1"}, "needs": {"exp_hit_material": 1}},
-       {"id": "all", "label": "All hits", "caps": ["ray_query"], "keys": {"rt_hit_emission": "2"}, "needs": {"exp_hit_material": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_emission": "0", "rt_emissive": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "hidden", "label": "Hidden hits", "caps": ["ray_query"], "keys": {"rt_hit_emission": "1", "rt_emissive": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": ["rt_hit_emission"], "developer": false},
+       {"id": "all", "label": "All hits (developer)", "caps": ["ray_query"], "keys": {"rt_hit_emission": "2", "rt_emissive": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": ["rt_hit_emission"], "developer": true}
      ]},
-    {"id": "exp_hit_reference", "label": "Experimental lighting reference",
-     "description": "Shows a limited reference using point and spot lights on supported opaque surfaces. Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. Requires Native hit materials at startup. No sunlight, sky, emission or full-scene quality claim. This replaces the display for inspection; it is not a gameplay quality preset.",
-     "apply": "live", "apply_note": "live; native materials need startup", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_hit_material": "1"},
+    {"id": "exp_gi_far", "label": "Far-field sun bounce",
+     "description": "Lengthens the bounce rays from 1 m to 6 m. Surfaces up to that distance that are on screen, or hidden with a verified native material lit by the sun, replace the game's ambient light for their ray. Other surfaces beyond 1 m keep the game's ambient. Needs Hidden-surface shading + Bounce. Experimental: the live energy check (-0.3% exposure-normalised) disagrees in size with the reference, so it stays off.",
+     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_reference": "0"}, "needs": {}},
-       {"id": "direct", "label": "Direct only", "caps": ["ray_query"], "keys": {"rt_hit_reference": "1"}, "needs": {"rt_geometry": 2, "exp_hit_material": 1}},
-       {"id": "two", "label": "Two surfaces", "caps": ["ray_query"], "keys": {"rt_hit_reference": "2"}, "needs": {"rt_geometry": 2, "exp_hit_material": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"gi_far": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "m6", "label": "6 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "6"}, "needs": {"exp_hidden_surface": 2}, "migrate_from": ["gi_far"], "developer": false}
+     ]},
+    {"id": "exp_water", "label": "RT water",
+     "description": "Ray-traced water. Reflections: the docks, piers and boats reflected in the water where the reflected point is on screen, with the water's own Fresnel, opacity and fog (about 0.1 ms; the game's probe elsewhere). + Shadows: ray-traced sun and local-light shadows on the water, and the game's own sun shadow on the few water surfaces that have one (the camp's pond) replaced by the traced one. + Refraction: the pool or sea bed seen through the bent ray (Snell's law), so it looks shallower and moves with the waves (about 0.24 ms). Turning a level on needs a restart (the water shaders are prepared at load); turning it down is live. Debug views rt_debug 25-28. Experimental: unqualified.",
+     "apply": "partial", "apply_note": "on: restart; off: live", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {"rt": "1"},
+     "required_from_choice": {"rt": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_geometry": "0", "rt_water_reflections": "0", "rt_water_compose": "0", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "reflections", "label": "Reflections", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_compose", "rt_water_reflections", "rt_water_geometry"], "developer": false},
+       {"id": "shadows", "label": "+ Shadows", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"], "developer": false},
+       {"id": "refraction", "label": "+ Refraction", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false}
+     ]},
+    {"id": "exp_native_coverage", "label": "Native coverage",
+     "description": "Uses the game's own coverage for ray queries where the audit verified it. Hair + scalp: the CHAR_Hair strand coverage and depth, and the scalp coverage (other hair families remain gaps). + Tilesets: also the instanced floor and wall coverage (SeeThrough and missing native inputs remain unknown). Needs Full ray-traced geometry. Restart required (the captured vertex layout changes). Experimental: quality and GPU cost are unqualified.",
+     "apply": "restart", "apply_note": "restart required", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {"rt": "1"},
+     "required_from_choice": {"rt": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_native_hair": "0", "rt_native_scalp": "0", "rt_native_tileset": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "hair", "label": "Hair + scalp", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_hair", "rt_native_scalp"], "developer": false},
+       {"id": "tilesets", "label": "+ Tilesets", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_tileset"], "developer": false}
+     ]},
+    {"id": "exp_hair_physical_origin", "label": "Physical hair ray origins (advanced)",
+     "description": "Starts secondary rays on the selected native hair card while retaining native camera depth for primary checks. Enable at startup with Native coverage to reserve the auxiliary image; then Off/On is a live A/B. Starting Off requires a restart before enabling. Quality and GPU cost remain unqualified.",
+     "apply": "partial", "apply_note": "Enable at startup; then live A/B", "advanced": true, "experimental": true, "developer": false,
+     "required_on": {"rt": "1", "rt_native_hair": "1", "rt_origin": "1"},
+     "required_from_choice": {"rt": 1, "rt_native_hair": 1, "rt_origin": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hair_physical_origin": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hair_physical_origin": "1"}, "needs": {"rt_geometry": 2, "exp_native_coverage": 1}, "migrate_from": [], "developer": false}
      ]},
     {"id": "exp_omm", "label": "Opacity micromaps",
      "description": "Experimental hardware opacity micromaps for the audited static alpha-material subset. Requires Full ray-traced geometry, Vulkan 1.3, EXT opacity micromaps, buffer device address, timeline semaphores, synchronization2 and the static BVH split. Unsupported or stale inputs use the reference scene. Useful in-game coverage and speed are not qualified. Restart required to negotiate device features.",
-     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
+     "apply": "restart", "apply_note": "restart required", "advanced": false, "experimental": true, "developer": false,
      "required_on": {"rt": "1", "rt_bvh_split": "1"},
+     "required_from_choice": {"rt": 1, "rt_bvh_split": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_omm": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query", "opacity_micromap"], "keys": {"rt_omm": "1"}, "needs": {"rt_geometry": 2}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_omm": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": ["ray_query", "opacity_micromap"], "keys": {"rt_omm": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false}
      ]},
-    {"id": "exp_water_geometry", "label": "Water geometry capture",
-     "description": "Captures the game's forward water surfaces (docks, rivers, lakes) into a ray-tracing scene of their own, with a record per surface. Data only: nothing is drawn differently yet (first water step). Look at the log's [water] lines; the picture must not change. Experimental: coverage and GPU cost are unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1"},
+    {"id": "exp_alpha_spill", "label": "Preserve cutout capture on overflow",
+     "description": "Uses free space in the existing capture buffer when its cutout partition fills. Retains native coverage and hair geometry for exact split draws. Does not increase memory limits or fix missing material inputs. Experimental until the capacity gates hold (0 drops); then it becomes automatic.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1"},
+     "required_from_choice": {"rt": 1, "rt_alpha": 1, "rt_bvh_split": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_geometry": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1"}, "needs": {"rt_geometry": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_alpha_spill": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_alpha_spill": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false}
      ]},
-    {"id": "exp_water_reflections", "label": "Water reflections (measured)",
-     "description": "Traces a reflection ray from every visible water pixel (the captured water surface, its wave shape) into the ray-traced scene and measures what it would reflect. Measured only: the picture does not change yet. Look at the log's [water] reflections lines, or the debug views rt_debug 21-24. Needs Water geometry capture. Experimental: quality and GPU cost are unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_water_geometry": "1"},
+    {"id": "exp_hit_reference", "label": "Experimental lighting reference",
+     "description": "Shows a limited reference using point and spot lights on supported opaque surfaces. Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. Requires Hidden-surface shading at startup. No sunlight, sky, emission or full-scene quality claim. This replaces the display for inspection; it is not a gameplay quality preset.",
+     "apply": "live", "apply_note": "live; native materials need startup", "advanced": false, "experimental": true, "developer": true,
+     "required_on": {"rt": "1", "rt_hit_material": "1"},
+     "required_from_choice": {"rt": 1, "rt_hit_material": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_reflections": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_reflections": "1"}, "needs": {"rt_geometry": 1, "exp_water_geometry": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_reference": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "direct", "label": "Direct only", "caps": ["ray_query"], "keys": {"rt_hit_reference": "1"}, "needs": {"rt_geometry": 2, "exp_hidden_surface": 1}, "migrate_from": [], "developer": false},
+       {"id": "two", "label": "Two surfaces", "caps": ["ray_query"], "keys": {"rt_hit_reference": "2"}, "needs": {"rt_geometry": 2, "exp_hidden_surface": 1}, "migrate_from": [], "developer": false}
      ]},
-    {"id": "exp_water_compose", "label": "Water reflections (composed)",
-     "description": "Puts the ray-traced water reflections into the picture: where a reflection ray finds what it reflects on screen, it replaces the game's reflection probe on the water, with the water's own Fresnel, opacity and fog; elsewhere the game's probe stays. Look at the docks: the piers and boats reflected in the water. Debug view rt_debug 25 shows the change. Needs Water reflections (measured). Restart required to turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
-     "apply": "restart", "apply_note": "restart to enable", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_water_geometry": "1", "rt_water_reflections": "1"},
+    {"id": "exp_ls_exact_k", "label": "Local light sampling (exact-k)",
+     "description": "Cost option for interiors with many lights: the strongest 1 or 2 lights of each pixel keep their own shadow ray, and one ray is shared by the rest, picked in proportion to their light and weighted so the mean brightness is unchanged. Needs Local light shadows Full. Off by user decision (developer only).",
+     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": false, "experimental": true, "developer": true,
+     "required_on": {},
+     "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_compose": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_compose": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
-     ]},
-    {"id": "exp_water_shadows", "label": "Water sun shadows",
-     "description": "Ray-traced sun shadows on the water. The game lights its water with the sun everywhere (only clouds darken it), so columns, walls and roofs cast no shadow on it; here one ray per water pixel towards the sun removes the sun's light where something blocks it, and keeps everything else of the water as the game draws it. Look at a pool or canal next to a building in sunlight: its shadow on the water, and no sun glints in it. Debug view rt_debug 26 shows lit (green) and shadowed (red) water. Needs Water reflections (measured). Restart required to turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
-     "apply": "restart", "apply_note": "restart to enable", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_water_geometry": "1", "rt_water_reflections": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_shadows": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_shadows": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
-     ]},
-    {"id": "exp_water_ls_shadows", "label": "Water local-light shadows",
-     "description": "Ray-traced shadows of lamps, torches and other local lights on the water. The game shadows only the few lights that have a shadow map; every other light reaches the water through walls and boats. Here one ray per light and water pixel removes that light where something blocks it, and keeps everything else of the water as the game draws it (shadow-mapped lights keep the game's shadow). Look at a canal or pool lit by lanterns at night: the shadows of piers, posts and hulls on the water. Debug view rt_debug 27 shows lit (green) and shadowed (red) water. Needs Water reflections (measured). Restart required to turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
-     "apply": "restart", "apply_note": "restart to enable", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_water_geometry": "1", "rt_water_reflections": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_ls_shadows": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_ls_shadows": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
-     ]},
-    {"id": "exp_water_refraction", "label": "Water refraction",
-     "description": "Ray-traced refraction through clear water. The game shows the pool or sea bed straight behind each water pixel, as if the water had no index of refraction. Here one ray per water pixel bends at the wave surface (Snell's law, the water's own index) and the bed is shown where that ray really meets it: the bed looks shallower and shifts with the waves. The water's colour and opacity stay the game's; where the bent ray's target is hidden or off screen the game's view is kept. Look at a clear pool from an angle (Water Queens House): the tiles and steps under the water. Debug view rt_debug 28 shows where it applies (green). Needs Water reflections (measured). Restart required to turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
-     "apply": "restart", "apply_note": "restart to enable", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_water_geometry": "1", "rt_water_reflections": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_refraction": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_refraction": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
-     ]},
-    {"id": "exp_water_game_shadow", "label": "Water game shadow replaced",
-     "description": "Replaces the game's own sun shadow on the few water surfaces that have one (the camp's pond, some large lakes) by the ray-traced sun shadow. Without it Water sun shadows leaves those surfaces as the game shadows them (soft, blocky, often missing small casters); with it a traced ray decides: lit water gets back the sun light the game's shadow took, shadowed water loses it. Look at the water by the camp (Campsite) in daylight: tree and tent shadows on the pond. Debug view rt_debug 26 shows restored water in cyan. Needs Water sun shadows. Restart required to turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
-     "apply": "restart", "apply_note": "restart to enable", "advanced": true, "experimental": true,
-     "required_on": {"rt": "1", "rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_shadows": "1"},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_game_shadow": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_game_shadow": "1"}, "needs": {"rt_geometry": 1, "exp_water_shadows": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"ls_k": "0", "ls_rest_samples": "1"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "k1", "label": "1 exact light", "caps": ["ray_query"], "keys": {"ls_k": "1", "ls_rest_samples": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 2}, "migrate_from": [], "developer": false},
+       {"id": "k2", "label": "2 exact lights", "caps": ["ray_query"], "keys": {"ls_k": "2", "ls_rest_samples": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 2}, "migrate_from": [], "developer": false}
      ]},
     {"id": "exp_current_sun", "label": "Current cascade sun shadows",
-     "description": "Uses the current four native sun-caster domains with finite per-layer rays and native receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the static BVH split to be enabled. Unsupported receiver/input domains retain native shadows. Physical sun size is unchanged. Restart required; in-game quality and GPU cost are unqualified.",
-     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,
+     "description": "Uses the current four native sun-caster domains with finite per-layer rays and native receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the static BVH split. Gives one window of samples, then falls back while the scene is unready (DIALOGUE_SHADOWS.md): developer only until fixed. Restart required.",
+     "apply": "restart", "apply_note": "restart required", "advanced": false, "experimental": true, "developer": true,
      "required_on": {"rt": "1", "rt_bvh_split": "1", "rt_cascade_casters": "1"},
+     "required_from_choice": {"rt": 1, "rt_bvh_split": 1, "rt_cascade_casters": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_sun_cascade_current": "0"}, "needs": {}},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_sun_cascade_current": "1"}, "needs": {"rt_geometry": 1, "exp_roof_shadows": 1}}
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_sun_cascade_current": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_sun_cascade_current": "1"}, "needs": {"rt_geometry": 1, "roof_shadows": 1}, "migrate_from": [], "developer": false}
      ]}
   ]
 }
