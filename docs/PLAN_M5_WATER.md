@@ -280,7 +280,8 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
 - Energy rule: the unshadowed radiance is the FS's own; only V changes. Static camera: ON can only be
   darker, by exactly the occluded records' D (logged as "removed"); V = 1 everywhere is the identity
   (unit test 4e). Brightening is impossible by construction (D >= 0, clamp at 0).
-- Local lights (M5.4b, not built): the loop sums are not separable per light in the record. Plan: record
+- Local lights (M5.4b, built 2026-11-01: see "M5.4b status" below; the design changed: every unshadowed
+  light is traced, not one RIS light, and the FS's own froxel list is walked): the loop sums are not separable per light in the record. Plan was: record
   Ld + Ls (G times, two more words) and reuse the D-LS selection (TRACK_D_LOCAL_LIGHTS RIS, one light
   per pixel) only for lights WITHOUT a game shadow map (V_game = 1 in the FS): evaluate that light's
   unshadowed term with the FS's own BRDF terms (Burley diffuse 0.3183, GGX with the FS's F0/roughness),
@@ -315,6 +316,43 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
   traced > 0 and occluded > 0 in the ON phase at S8 (the temple and columns over the pool), `removed`
   > 0 and only on water (shot-on minus shot-off-a coloured only where rt_debug 26 is red), shot-off-a vs
   shot-off-b within the OFF repeat noise, GPU median against the estimate.
+
+#### M5.4b status: local-light shadows (2026-11-01, branch worktree-agent-acc8d7bdca31e7569, offline, READY_FOR_LIVE)
+- What the FS does (spirv-dis --raw-id of the three dumps): three loops over the froxel's list (set 2 b10
+  froxels, b11 index list, b12 lights: points, then spots; b16 projectors), each carrying (specular,
+  diffuse) as loop header phis, with the game's atlas term (b27 views, b28 atlas) only for lights with
+  `m7` bit 0. The set 2 b10/b11/b12/b26/b27 decorations are the D-LS ones of f469db78 (b23/b24/b25/b39/b40;
+  same offsets, 80-B lights, 544-B std140 constants), and the loops' per-light terms are bg3_light_eval's.
+- Built: `rt_water_ls_shadows` (GUI `exp_water_ls_shadows`, Experimental; restart to enable, off is live;
+  alone or with the compose and sun keys). The record grows to 96 B (`kRecordBytesLs`, 3 x the MB of
+  `rt_water_compose_mb`): F = a T X m, F0, the points + spots sum L (the spot loop's header phis), the
+  channel, the diffuse colour, the projector share, the froxel depth input, P, N and roughness in f32
+  (ids per FS in water_fs_patch.h). The first water draw of a pass hands its own set 2 b0/b10/b11/b12/
+  b26/b27/b28 to the core (core/em_policy.cpp, at the draw: the pass end may have another draw's sets);
+  the WATER_LS compose binds them at 22..28 (bg3_lights.hlsli), walks the FS's froxel exactly as the FS
+  (log2 z slice, pixel tile, counts), recomputes c_k (bg3_light_eval) and s_k (bg3_atlas_shadow, the
+  12-tap PCF with the FS's IGN) and traces one hard ray to each unshadowed light's centre (ls_clear short).
+  `C' = max(C [+ A L - B] [- (1 - V) D] - F sum_k (1 - V_k) c_k, 0)`. Shadow-mapped, lit and unknown lights
+  keep their term: nothing occluded = the target is not written. Projector lights are not replaced.
+- Sum match (the gate first, as planned): per record `max_c |sum_k c_k s_k - L| / max_c` binned at 2^-10 (one
+  half ulp: the record's rounding, the f32 recompute ~1e-6) and 10%. Offline (water_compose_test 4g, the
+  FS's loops transcribed from the glsl against bg3_light_eval, random lists: channels, ranges, cones,
+  back-facing lights, both falloff models, the global scale, atlas-shadowed lights): 9124 of 9124 checked
+  records within 2^-10; a dropped light is never within (3965 cases), an extra light is far. Live: the
+  `sum check` bins of `[water] local shadows` (gate: within >= 99%, ratio of the means 1 within 0.1%).
+- Offline: 76 CTests (4g sum match, 4h removal algebra: identity at V = 1 bit for bit, F = dC/dL, with the
+  sun and reflection swaps; 4i words), the three LS-patched dumps pass spirv-val and decompile to the 14
+  stores; the sun-only patch equals the M5.4 module word for word (FNV pinned), the M5.3 one likewise; the
+  plain and WATER_SHADOWS compose SPIR-V byte-identical (SHA1 before / after), the LS variant validates.
+- Log `[water] local shadows`: passes with / without the light list, local records, lights evaluated /
+  shadow-mapped / traced per record, occluded % of traced, the sum check bins, removed % of F L and of mean
+  C, projector share, clamped, GPU. rt_debug 27: red occluded (share), green lit, dark magenta only
+  shadow-mapped lights, blue unknown, dark grey no local term, white sum check beyond 10%, yellow invalid.
+- Cost estimate: D-LS traces 2.31 rays/px over 2.73 Mpx in 0.34 ms; the water records (~290k at S8's main
+  view, ~10% of that) with the same list: ~0.04-0.08 ms, plus the atlas PCF of shadow-mapped lights for the
+  check. Expected compose GPU ON minus OFF < 0.15 ms.
+- Live: job `m5w5-water-ls-shadows-s8-fg2` (S8, 132 s, OFF/ON/OFF). If S8's water has no local light, its
+  precheck expect line fails (INVALID, not a pass): then a lantern-lit water scene is needed.
 ### M5.5 Transmission and absorption, only after medium and material mapping are proven.
 
 ## Open questions
