@@ -511,6 +511,9 @@ try {
 Assert-QueueLaunchProcesses
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
+# No-activate runs share the PC with the user: the game runs BelowNormal so their foreground work
+# keeps the CPU (GPU ms and energy stay valid; CPU frame time is not comparable to focused runs).
+if ($NoActivate -and -not $env:BG3RTX_NORMAL_PRIORITY) { try { $game.PriorityClass = 'BelowNormal' } catch { } }
 $game.EnableRaisingEvents = $true
 # Keep the process handle so ExitCode survives a quick game/crash-handler exit.
 [void]$game.Handle

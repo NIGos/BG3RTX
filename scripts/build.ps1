@@ -6,6 +6,7 @@
 #   .\scripts\build.ps1 -Test         build everything, then run every registered CTest
 param([switch]$Core, [switch]$Watch, [switch]$Launcher, [switch]$Test, [string]$Config = "RelWithDebInfo")
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "low-priority.ps1")
 $root = Split-Path $PSScriptRoot
 $build = Join-Path $root "build"
 
