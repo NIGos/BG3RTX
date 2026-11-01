@@ -20,8 +20,8 @@
 //  - compose_at_lighting (in water_rf, after the reflection dispatches): the record buffer's
 //    header (pitch), this frame's lit radiance / depth / class and camera constants copied
 //    (water_copy), and the stash the water passes use;
-//  - compose_at_pass_end (water_on_pass_end, every pass whose first or last FS is audited
-//    water, this frame's lighting only): water_compose replaces the FS's probe term with the
+//  - compose_at_pass_end (water_on_pass_end, every forward pass whose first or last FS is
+//    audited water or that recorded a supported water draw, this frame's lighting only): water_compose replaces the FS's probe term with the
 //    traced reflection where it resolves, C' = max(C + A L - B, 0); rt_debug 25 the delta view;
 //  - "[water] compose", "compose energy", "compose GPU" every rt_timing_frames.
 // Key off: nothing is allocated, dispatched or bound; core/gi.cpp only tests the key.
@@ -82,7 +82,7 @@ struct Window {
   uint64_t skip[bg3::water::kUsableCount] = {};
   uint64_t skip_variant = 0, skip_layout = 0, skip_size = 0;
   uint64_t w[kStatWords] = {};
-  uint64_t views = 0, view_passes = 0;
+  uint64_t views = 0, view_passes = 0, view_passes_inner = 0;   // inner: water neither first nor last FS
   double sumE = 0, sumL = 0, sumEL = 0;
   std::vector<float> ms;
   uint64_t tris = 0, draws = 0, age = 0;
@@ -348,11 +348,11 @@ void maybe_log() {
   const double p90 = ms.empty() ? 0.0 : double(ms[(std::min)(ms.size() - 1, ms.size() * 9 / 10)]);
   host->log("[water] reflections GPU %.3f ms median, p90 %.3f (%zu timed; water primary + reflection dispatches); scene "
             "%.1f draws, %.0f triangles, age %.2f frames; F0 %.4f (Reflectance_Base %.3f, Roughness_Base %.3f, family %d); "
-            "views %llu over %llu water passes",
+            "views %llu over %llu water passes (%llu with water between other draws)",
             med, p90, ms.size(), W.ran ? double(W.draws) / double(W.ran) : 0.0,
             W.ran ? double(W.tris) / double(W.ran) : 0.0, W.ran ? double(W.age) / double(W.ran) : 0.0, double(W.f0),
             double(W.refl), double(W.rough), W.family == UINT32_MAX ? -1 : int(W.family), (unsigned long long)W.views,
-            (unsigned long long)W.view_passes);
+            (unsigned long long)W.view_passes, (unsigned long long)W.view_passes_inner);
   g_win = Window{};
 }
 
@@ -879,6 +879,9 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
 }
 
 void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
+  // A supported water draw anywhere in the pass (S8: the water is drawn between other forward
+  // draws, so neither the first nor the last FS is water); always taken, so no note outlives it.
+  const bool drawn = core_water_pass_take(cmd);
   const int view = host->cfg_int("rt_debug", 0);
   const bool views = view >= 21 && view <= 24 && water_rf_wanted();
   const bool comp = compose_wanted();
@@ -887,13 +890,14 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
       p->depth_format != VK_FORMAT_D24_UNORM_S8_UINT || !p->color_views[0] || !p->color_images[0])
     return;
   using bg3::water::kAudited;
-  bool water = false;
-  for (const auto& a : kAudited) water |= a.fs == p->first_fs_hash || a.fs == p->last_fs_hash;
-  if (!water) return;
+  bool ends = false;
+  for (const auto& a : kAudited) ends |= a.fs == p->first_fs_hash || a.fs == p->last_fs_hash;
+  if (!ends && !drawn) return;
   std::lock_guard<std::mutex> lock(g_mu);
   if (comp) compose_at_pass_end(cmd, p);   // M5.3, before the views (they show M5.2's data)
   if (!views) return;
   ++g_win.view_passes;
+  if (!ends) ++g_win.view_passes_inner;
   // This frame's or the previous one's (the lighting may be recorded after this pass on another thread).
   if (g_out_frame + 2 < host->frame_index() || !g_out_frame || p->width != g_out_w || p->height != g_out_h || !g_out.view || !ensure_view())
     return;

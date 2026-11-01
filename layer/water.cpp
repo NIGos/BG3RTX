@@ -933,8 +933,11 @@ void water_on_present() {
     for (const auto& [k, f] : w.family) {
       if (fam.size() > 1200) break;
       char b[224];
+      // A hot-reloaded core may know more audited pairs than this layer was built with.
+      const bool known = k < water::kAuditedCount;
       std::snprintf(b, sizeof b, "%s%016llx %s %llu (Roughness_Base %.3f, Reflectance_Base %.3f, flags 0x%x)",
-                    fam.empty() ? "" : "; ", (unsigned long long)water::kAudited[k].fs, water::kAudited[k].name,
+                    fam.empty() ? "" : "; ", known ? (unsigned long long)water::kAudited[k].fs : 0ull,
+                    known ? water::kAudited[k].name : "family-from-a-newer-core",
                     (unsigned long long)f.n, double(f.rough), double(f.refl), f.flags);
       fam += b;
     }

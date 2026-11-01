@@ -80,13 +80,31 @@ int main() {
       CHECK(classify(a.fs, hi(a.vs), &d, name) == kNotWater);
     }
   }
-  CHECK(kAuditedCount == 7);
+  CHECK(kAuditedCount == 9);
   // The S1 docks plane (COVERAGE gap 1).
   CHECK(family_of(0x7b44a567771ecbecull, 0x60d4357du) == 0);
+  // The S8 Water Queens House planes (asset-DB pairs, VS dumps read 2026-11-01).
+  CHECK(family_of(0x99c1fcef82b253c1ull, 0xe0530238u) == 7);
+  CHECK(family_of(0xc4e92ccdb08dd777ull, 0x8113bd39u) == 8);
+  // Pairs are exact: ExtraWaves' FS with the docks VS (an identical body, one output less) is unknown.
+  CHECK(family_of(0x99c1fcef82b253c1ull, 0x60d4357du) == kNoFamily);
+  {
+    // The ExtraWaves record: its own DB offsets (Reflectance_Base s1b1+276, Roughness_Base +284).
+    const std::string xw = "Fluids/FLUID_Water_Plane_flowmap_huge_PixelLighting_ExtraWaves";
+    Bg3MaterialInfo m = mat(xw.c_str(), BG3_MAT_CLASS_REFRACTIVE, kPlaneFlags);
+    m.slot[BG3_MAT_REFLECTANCE] = scalar(1, 1, 276, 0.35f);
+    m.slot[BG3_MAT_ROUGHNESS] = scalar(1, 1, 284, 0.0f);
+    Fake f;
+    f.put(1, 1, 276, 0.25f);
+    f.put(1, 1, 284, 0.0625f);
+    const WaterRec r = make_record(f, 0x99c1fcef82b253c1ull, 0xe0530238u, &m, xw);
+    CHECK(r.cls == kSupported && r.family == 7 && r.flags == 0);
+    CHECK(r.reflectance == 0.25f && r.roughness == 0.0625f && f.reads == 2);
+  }
   // 2. Other forward water families of the DB.
   struct Case { const char* name; uint32_t cls, flags; Class want; };
   const Case cases[] = {
-      // planes not traced: counted as unknown (their VS is unaudited)
+      // planes not audited (or another shader pair of an audited name): counted as unknown
       {"Fluids/FLUID_Water_Plane_Minimap", BG3_MAT_CLASS_WATER, BG3_MAT_F_OPAQUE | BG3_MAT_F_WATER, kUnknown},
       {"Fluids/FLUID_Water_Plane_flowmap_huge_PixelLighting_ExtraWaves", BG3_MAT_CLASS_REFRACTIVE, kPlaneFlags, kUnknown},
       {"Fluids/FLUID_Avernus_BloodRiver", BG3_MAT_CLASS_REFRACTIVE, kPlaneFlags & ~BG3_MAT_F_FORWARD_LIT, kUnknown},
