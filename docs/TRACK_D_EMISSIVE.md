@@ -928,3 +928,26 @@ not gated): its luminance-scale copy reads 0 in AF. A lead for (a) if both draw 
 This also drops it in GF, where it passed: conservative until the AF cause is known.
 **Live job:** `tools/live_batches/em_forge/` (0/1/0 in one AF run, record dump, rt_debug
 19/20 pair). Lift the exclusion only when em_gate passes AF and GF with `rt_em_fx_pulse=1`.
+
+**em-forge result (ef1-af-em-fg2, 2026-11-01), offline reading (em-fix2).**
+- `159a6211` reads 0 because its constants make it 0: words 6-7 are switch 1 and
+  GlowMultiplier (+28) 0, and its shader (`159a6211a89e8abd.glsl`) multiplies by `_m5` = 0.
+  Time and pulse are right (79.02 -> 1.508, 81.1 -> 9.255 = 1 + 9 (cos t / 2 + 1/2)). No fix;
+  `emissive_policy_test` 9c pins the logged words. The game's 0.0016 there is other emitters.
+- `304be1c7` (fx windows): bright 0.841 (0.818-0.858), all-hit 0.91, 0 overlapped, s_w 0.017.
+  AF CB words (p2 dump): colour (0.8513, 0.1011, 0.0026), m1 1, m2 7, m3 10, switch 0,
+  intensity 1. Our record equals the dumped one (9c), so the per-record terms are exact.
+- **The deficit is an additive, non-pulsing term in the game's pixel, not a factor.** Per
+  window the ratio follows the bright-pixel count (the game's pulse phase) with correlation
+  0.995 (bright) and 0.994 (all-hit), and it is below 1 in all 20 windows. With game = ours + E,
+  E / ours goes 0.167-0.222 (x1.33) while the window-mean pulse swings about x1.3. A wrong
+  factor would give a constant ratio; a time, phase or frequency error would average to 1
+  over a period and swing above 1. Mask channel (switch 0: `glow.r`, mode 1) matches. So
+  E is about 19% of ours at the mean pulse, on the bright texels, and depends on the view
+  (0.36 on 10-28, 0.84 now).
+- Draws after it in the effects pass (trace `20261101-004514`): `f298bf4d` x5, lava x6,
+  `ded335a6`, `159a6211` x6 (same glow map and VS), `4d3f7dab` x6, `10086377` particles x3.
+- **Evidence still needed:** the effects target at the family's pixels right after its own
+  draw against the pass end (a per-draw dump or a mid-pass copy), or the blend state of
+  each later draw that covers them. Note: the record dump only fires outside 0.8-1.25, so
+  0.84 logged no dump; the em-forge plan assumed one. The exclusion stays (`rt_em_fx_pulse=0`).

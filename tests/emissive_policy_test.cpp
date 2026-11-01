@@ -212,6 +212,34 @@ int main() {
     EmRecordOut o3; EmRec rv = run(f, 0x159a6211a89e8abdull, vt, "Base/Base_GM_Pulse_VT", o3);
     CHECK(rv.radiance[0] == r.radiance[0] && rv.mode == r.mode && rv.flags == (kFlagPulse | kFlagLuminance) && rv.glob == 3);
   }
+  // 9c. The live AF records (ef1-af-em-fg2, 2026-11-01 record dump; p2-emissive-overlap-af), CB
+  // words exactly as logged (%.4g). 159a6211: switch (+24) 1 and GlowMultiplier (+28) 0, so the
+  // fragment shader (captures/alpha_cache/159a6211a89e8abd.glsl) writes glow.rgb * 0 * pulse *
+  // global: radiance 0, mode 2, flags 0x5 is the exact record, not a read fault.
+  {
+    auto near3 = [](float a, float b) { return std::fabs(a - b) <= 1e-3f * std::fabs(b) + 1e-6f; };
+    auto vt = generic_info();
+    vt.flags = BG3_MAT_F_LUMINANCE_EMISSIVE;
+    vt.slot[BG3_MAT_EMISSIVE_INTENSITY] = cb_slot(BG3_MAT_KIND_SCALAR, 1, 0, 28, 1.f);
+    vt.slot[BG3_MAT_EMISSIVE_MAP] = tex_slot(1, 1);
+    Fake f; f.floats(1, 0, {0.8513f, 0.8513f, 0.8513f, 1, 1, 10, 1, 0}); f.views.insert({1, 1}); f.lum = 7;
+    const float times[2] = {79.02f, 81.1f}, pulses[2] = {1.508f, 9.255f};   // logged pairs
+    for (int i = 0; i < 2; ++i) {
+      f.floats(0, 0, {times[i]});
+      EmRecordOut o; EmRec r = run(f, 0x159a6211a89e8abdull, vt, "Base/Base_GM_Pulse_VT", o);
+      CHECK(r.radiance[0] == 0 && r.radiance[1] == 0 && r.radiance[2] == 0 && r.mode == kModeMaskRGB);
+      CHECK(r.flags == (kFlagLuminance | kFlagPulse) && r.glob == 7 && o.pulse_no_time == 0);
+      CHECK(near3(o.pulse, pulses[i]) && o.m45[0] == 1 && o.m45[1] == 0);
+    }
+    // 304be1c7 (rt_em_fx_pulse=1), AF words 0.8513 0.1011 0.002586 1 7 10, 6-7 0 1 at time 74.65:
+    // logged radiance 8.168 0.9705 0.02481, mode 1, flags 0x4, pulse 9.595.
+    auto fx = vt; fx.flags = 0;
+    Fake g; g.floats(1, 0, {0.8513f, 0.1011f, 0.002586f, 1, 7, 10, 0, 1}); g.floats(0, 0, {74.65f});
+    g.views.insert({1, 1}); g.pulse_fx = true;
+    EmRecordOut o; EmRec r = run(g, 0x304be1c71df194cbull, fx, "Base/Base_GM_Pulse_FX", o);
+    CHECK(r.mode == kModeMaskR && r.flags == kFlagPulse && near3(o.pulse, 9.595f));
+    CHECK(near3(r.radiance[0], 8.168f) && near3(r.radiance[1], 0.9705f) && near3(r.radiance[2], 0.02481f));
+  }
   // 10. ENV_Base_MutipleUV: intensity +16 x 0.75, map dropped; else radiance x 0.75.
   {
     Fake f; f.floats(1, 0, {1, 1, 1, 4, 2}); f.views.insert({2, 5});
