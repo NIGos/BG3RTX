@@ -444,6 +444,19 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_water_refraction", "1"}}, {{"rt_geometry", 1}, {"exp_water_reflections", 1}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_water_geometry","1","Water geometry capture"},{"rt_water_reflections","1","Water reflections (measured)"}}},
 
+  {"exp_water_game_shadow", "Water game shadow replaced",
+   "Replaces the game's own sun shadow on the few water surfaces that have one (the camp's pond, "
+   "some large lakes) by the ray-traced sun shadow. Without it Water sun shadows leaves those surfaces "
+   "as the game shadows them (soft, blocky, often missing small casters); with it a traced ray decides: "
+   "lit water gets back the sun light the game's shadow took, shadowed water loses it. Look at the "
+   "water by the camp (Campsite) in daylight: tree and tent shadows on the pond. Debug view rt_debug 26 "
+   "shows restored water in cyan. Needs Water sun shadows. Restart required to turn it on (the water "
+   "shaders are prepared at load); turning it off is live. Experimental: unqualified.",
+   Kind::Choice, Apply::Restart, "restart to enable", true,
+   {{"off", "Off", 0, {{"rt_water_game_shadow", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_water_game_shadow", "1"}}, {{"rt_geometry", 1}, {"exp_water_shadows", 1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_water_geometry","1","Water geometry capture"},{"rt_water_reflections","1","Water reflections (measured)"},{"rt_water_shadows","1","Water sun shadows"}}},
+
   {"exp_current_sun", "Current cascade sun shadows",
    "Uses the current four native sun-caster domains with finite per-layer rays and native "
    "receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the "
@@ -473,7 +486,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 229 keys of bg3rtx.ini, in file order.
+// 230 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -583,6 +596,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_shadows", "0"},
     {"rt_water_ls_shadows", "0"},
     {"rt_water_refraction", "0"},
+    {"rt_water_game_shadow", "0"},
     {"rt_water_compose_mb", "160"},
     {"rt_alpha", "1"},
     {"rt_alpha_test", "1"},
@@ -762,6 +776,8 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "rt_water_ls_shadows") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // M5.5: likewise (the refraction words of the record are patched in at creation).
   if (key == "rt_water_refraction") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // M5.4c: likewise (the game-shadow words of the record are patched in at creation).
+  if (key == "rt_water_game_shadow") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
                                          "sharc_device", "rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material"};
   for (const char* k : kRestart)

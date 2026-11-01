@@ -50,6 +50,13 @@
 // and, where the hit resolves on screen, reads the water draw's own colour copy (its set 2 b4, captured at
 // the draw, core/em_policy.cpp, pushed at 68) there: C' = max(C + (1 - a) (Copy(hit) - Refr), 0). A pass
 // without the copy gets kFlagRefr cleared. "[water] refraction" every rt_timing_frames; rt_debug 28 the view.
+//
+// M5.4c the game's sun shadow on the water (rt_water_game_shadow, default 0; with rt_water_shadows, and both on
+// when the water pipelines are created: 8 more bytes per record, common/water_compose.h kGshBytes). The FS
+// that sample the game's cascade shadow map (PL_noCaustics_Shadows, huge_PL_Shadow) record the sun light that
+// shadow removed (Dg) and its Vg; the ;WATER_GSH=1 compose variant gives a record lit by the traced sun ray
+// C + Dg (occluded R and unknown C as M5.4): the game's Vg replaced by V. Without the words those FS record no
+// sun term (the sun step skips them). "[water] game shadow" every rt_timing_frames; rt_debug 26 shows it.
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -430,6 +437,7 @@ uint8_t* g_cmap = nullptr;
 bool g_csun = false;   // M5.4: the WATER_SHADOWS compose (40-byte records)
 bool g_cls = false;    // M5.4b: the WATER_SHADOWS;WATER_LS compose (96-byte records, bindings 22..28)
 bool g_crr = false;    // M5.5: the WATER_SHADOWS;WATER_LS;WATER_REFR compose (104-byte records, binding 68)
+bool g_cgsh = false;   // M5.4c: the ;WATER_GSH=1 variant of the above (the records + kGshBytes)
 VkQueryPool g_cqp = VK_NULL_HANDLE;
 uint32_t g_cslot = 0;
 bool g_cwritten[kRing] = {};
@@ -461,6 +469,10 @@ struct CWindow {
   // with the water draw's colour copy (and without: the flag cleared for that pass), buffers without the words.
   double sumRrGame = 0, sumRrNew = 0, sumRrAll = 0, sumRrShift = 0, sumRrWHidden = 0, sumRrWTraced = 0;
   uint64_t rr_passes = 0, rr_no_copy = 0, no_rr_records = 0;
+  // M5.4c: lum(Dg) over game-shadowed records, the restored lum(Dg), Vg over game-shadowed records; buffers
+  // without the words while the key is on.
+  double sumGshDg = 0, sumGshRestored = 0, sumGshVg = 0;
+  uint64_t no_gsh_records = 0;
   std::vector<float> ms, ms_copy, ms_comp;   // per timed frame: total, the lighting copy, the compose dispatches
   uint64_t no_buffer = 0, layout = 0, size = 0, untimed = 0;
   // Passes: on this frame's lighting stash, on the previous lighting's (the pass recorded first),
@@ -475,6 +487,7 @@ bool compose_wanted() { return host->cfg_int("rt_water_compose", 0) != 0 && wate
 bool shadows_wanted() { return host->cfg_int("rt_water_shadows", 0) != 0 && water_rf_wanted(); }
 bool ls_wanted() { return host->cfg_int("rt_water_ls_shadows", 0) != 0 && water_rf_wanted(); }
 bool refr_wanted() { return host->cfg_int("rt_water_refraction", 0) != 0 && water_rf_wanted(); }
+bool gsh_wanted() { return host->cfg_int("rt_water_game_shadow", 0) != 0 && shadows_wanted(); }
 
 void release_compose_images() {
   for (Bg3Image* im : {&g_rad, &g_dep}) {
@@ -525,10 +538,10 @@ constexpr uint32_t kNumCBindLs = kNumCBindRefr - 1;   // M5.4b: the layout with 
 constexpr uint32_t kNumCBind = kNumCBindLs - 7;       // M5.3 / M5.4: the layout without the light list
 uint32_t g_cpush_nb = 0;   // the binding count g_cpush was made with
 
-bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, bool sun, bool ls, bool refr) {
+bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, bool sun, bool ls, bool refr, bool gsh) {
   const VkDeviceFuncs& vk = *host->vk;
   VkDevice dev = host->device;
-  if (g_compose.p && (g_csun != sun || g_cls != ls || g_crr != refr)) {   // the record layout of the buffer decides the variant
+  if (g_compose.p && (g_csun != sun || g_cls != ls || g_crr != refr || g_cgsh != gsh)) {   // the record layout of the buffer decides the variant
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
     g_compose = Pipe{};
   }
@@ -546,6 +559,7 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
   g_csun = sun;
   g_cls = ls;
   g_crr = refr;
+  g_cgsh = gsh;
   if (!g_chost) {
     void* m = nullptr;
     if (!make_device_buffer(kCDevBytes,
@@ -598,10 +612,13 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
   }
   return make_pipe(g_copy, "rt/water_compose.hlsl", "water_copy", g_clayout) &&
          make_pipe(g_compose,
-                   refr  ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1"
-                   : ls  ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1"
-                   : sun ? "rt/water_compose.hlsl?WATER_SHADOWS=1"
-                         : "rt/water_compose.hlsl",
+                   refr && gsh ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1"
+                   : ls && gsh ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1"
+                   : gsh       ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1"
+                   : refr      ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1"
+                   : ls        ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1"
+                   : sun       ? "rt/water_compose.hlsl?WATER_SHADOWS=1"
+                               : "rt/water_compose.hlsl",
                    "water_compose", g_clayout);
 }
 
@@ -616,7 +633,8 @@ void collect_compose(uint32_t slot) {
     using bg3::water::kCsLsRec, bg3::water::kCsLsSumL, bg3::water::kCsLsChkShWithin;
     using bg3::water::kCsRrRec, bg3::water::kCsRrSumGame;
     for (uint32_t i = 0; i < kCStatWords; ++i)   // the counters (the 64-bit sums below)
-      if (i < 16 || (i > 27 && i < bg3::water::kCsSunSumD) || (i >= kCsLsRec && i < kCsLsSumL) || i == kCsLsChkShWithin ||
+      if (i < 16 || (i > 27 && i < bg3::water::kCsSunSumD) || (i >= bg3::water::kCsGshRec && i < bg3::water::kCsGshSumDg) ||
+          (i >= kCsLsRec && i < kCsLsSumL) || i == kCsLsChkShWithin ||
           (i >= kCsRrRec && i < kCsRrSumGame))
         g_cwin.w[i] += w[i];
     g_cwin.sumC += u64(w, 16) / 4096.0;
@@ -638,6 +656,9 @@ void collect_compose(uint32_t slot) {
     g_cwin.sumRrShift += u64(w, bg3::water::kCsRrSumShift) / 4096.0;
     g_cwin.sumRrWHidden += u64(w, bg3::water::kCsRrSumRwHidden) / 4096.0;
     g_cwin.sumRrWTraced += u64(w, bg3::water::kCsRrSumRwTraced) / 4096.0;
+    g_cwin.sumGshDg += u64(w, bg3::water::kCsGshSumDg) / 4096.0;
+    g_cwin.sumGshRestored += u64(w, bg3::water::kCsGshSumRestored) / 4096.0;
+    g_cwin.sumGshVg += u64(w, bg3::water::kCsGshSumVg) / 4096.0;
   }
   if (g_cqp) {
     const uint32_t n = 1 + (std::min)(g_cpasses[slot], kMaxComposePasses);
@@ -722,6 +743,20 @@ void maybe_log_compose() {
               meanC > 0 ? 100.0 * removed_own / meanC : 0.0, (unsigned long long)w[kCsSunClamped], med, p90,
               (unsigned long long)W.no_sun_records);
   }
+  if (g_cgsh || W.no_gsh_records || host->cfg_int("rt_water_game_shadow", 0)) {
+    // M5.4c: the game's sun shadow replaced on the FS that sample it (WATER_GSH words, common/water_compose.h).
+    const double grec = double(w[kCsGshRec]), grest = double(w[kCsGshRestored]);
+    const double meanDg = grec > 0 ? W.sumGshDg / grec : 0.0, meanRest = grest > 0 ? W.sumGshRestored / grest : 0.0;
+    const double restored_own = own > 0 ? W.sumGshRestored / own : 0.0;
+    host->log("[water] game shadow (%llu frames, variant %s): game-shadowed records %.0f/frame = %.2f%% of owned (invalid "
+              "%llu), mean Vg %.4f; lit by the traced ray (restored C + Dg) %.2f%% of them; occluded where the game was "
+              "lit %llu; Dg %.5f per game-shadowed record, restored %.5f per restored record; mean restored over owned "
+              "%.6f = %.3f%% of mean C; skipped: records without the words %llu",
+              (unsigned long long)W.frames, g_cgsh ? "gsh" : "none", W.ran ? grec / double(W.ran) : 0.0, pct(grec, own),
+              (unsigned long long)w[kCsGshInvalid], grec > 0 ? W.sumGshVg / grec : 0.0, pct(grest, grec),
+              (unsigned long long)w[kCsGshOccLit], meanDg, meanRest, restored_own,
+              meanC > 0 ? 100.0 * restored_own / meanC : 0.0, (unsigned long long)W.no_gsh_records);
+  }
   if (g_cls || W.no_ls_records || host->cfg_int("rt_water_ls_shadows", 0)) {
     // M5.4b: the traced local-light visibility on the water (WATER_LS words, common/water_compose.h).
     const double lrec = double(w[kCsLsRec]), lev = double(w[kCsLsLights]), ltr = double(w[kCsLsTraced]);
@@ -792,14 +827,16 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   const bool sun = ls || record_bytes_of(cb) == kRecordBytesSun;
   const bool want_rf = compose_wanted(), want_sun = shadows_wanted() && sun, want_ls = ls_wanted() && ls;
   const bool want_rr = refr_wanted() && refr;
+  const bool gsh = sun && gsh_of(cb), want_gsh = gsh_wanted() && gsh;   // M5.4c: the game-shadow words
   if (shadows_wanted() && !sun) ++g_cwin.no_sun_records;
+  if (gsh_wanted() && !gsh) ++g_cwin.no_gsh_records;
   if (ls_wanted() && !ls) ++g_cwin.no_ls_records;
   if (refr_wanted() && !refr) ++g_cwin.no_rr_records;
   if (!want_rf && !want_sun && !want_ls && !want_rr) {
     g_st.frame = 0;
     return maybe_log_compose();
   }
-  if (!ensure_compose(alpha_layout, in.push_bytes, sun, ls, refr)) {
+  if (!ensure_compose(alpha_layout, in.push_bytes, sun, ls, refr, gsh)) {
     ++g_cwin.layout;
     g_st.frame = 0;
     return maybe_log_compose();
@@ -833,7 +870,9 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   // each term by its key, live (common/water_compose.h kFlagRf, kFlagSun).
   // M5.4b: bit 2 by its key (each pass clears it again without its light list, compose_at_pass_end).
   // M5.5: bit 3 by its key (each pass clears it again without its colour copy, compose_at_pass_end).
-  prm.a[3] = sun ? (want_rf ? kFlagRf : 0u) | (want_sun ? kFlagSun : 0u) | (want_ls ? kFlagLs : 0u) | (want_rr ? kFlagRefr : 0u)
+  // M5.4c: bit 4 by its key (the WATER_GSH variant only).
+  prm.a[3] = sun ? (want_rf ? kFlagRf : 0u) | (want_sun ? kFlagSun : 0u) | (want_ls ? kFlagLs : 0u) | (want_rr ? kFlagRefr : 0u) |
+                       (want_gsh ? kFlagGsh : 0u)
                  : 1u;
   g_st.flags = prm.a[3];
   prm.b[0] = host->cfg_float("rf_mirror_rough", 0.1f);
@@ -1035,6 +1074,7 @@ void release_compose() {
   g_csun = false;
   g_cls = false;
   g_crr = false;
+  g_cgsh = false;
   g_cpush_nb = 0;
   g_cmap = nullptr;
   if (g_cqp) host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_cqp);
