@@ -41,6 +41,10 @@ inline constexpr int kVersion = 1;
 // Target size of one pack (tools/frame_replay.md "Size"): the writer drops images over it (omitted)
 // largest first; buffers ranges that instances reference are never dropped.
 inline constexpr uint64_t kPackBudgetBytes = 1ull << 30;
+// Hard cap (disk budget): a pack whose never-dropped part (set 0, buffers, geometry) passes it is
+// "over budget" and not written; under it the textures are dropped down to kPackBudgetBytes.
+inline constexpr uint64_t kPackHardCapBytes = 2ull << 30;
+inline constexpr uint64_t kWholeSize = ~0ull;   // VK_WHOLE_SIZE
 
 enum Kind : uint32_t { kUbo, kSsbo, kSampled2D, kSampled2DArray, kStorage, kSampler, kTlas };
 struct Slot {
@@ -237,6 +241,32 @@ inline void merge_spans(std::vector<Span>& v, uint64_t gap) {
   }
 }
 inline uint64_t span_bytes(const std::vector<Span>& v) { uint64_t n = 0; for (const Span& s : v) n += s.bytes; return n; }
+
+// The bytes a buffer descriptor binds (only these are captured, never the whole VkBuffer):
+// `range` (kWholeSize = to the end) clipped to the buffer; 0 when the offset is past its end.
+inline uint64_t bound_bytes(uint64_t buffer_size, uint64_t offset, uint64_t range) {
+  if (offset >= buffer_size) return 0;
+  const uint64_t rest = buffer_size - offset;
+  return range == kWholeSize ? rest : std::min(range, rest);
+}
+
+// A descriptor bound inside a buffer range another descriptor already captured (split BVH:
+// gAlphaSoup b1 binds the same whole soup as gOpaqueSoup b6) reuses that capture's file slices
+// instead of copying the bytes again. `src`: the captured slices (explicit bytes) of the descriptor
+// at [src_base, src_base + src_bytes) of the buffer. Appends the same bytes as slices of (set,
+// binding) bound at [dst_base, dst_base + dst_bytes), clipped to it. False (nothing appended) when
+// the destination is not inside the source's bound range: it is then captured on its own.
+inline bool alias_ranges(const std::vector<Range>& src, uint64_t src_base, uint64_t src_bytes, uint32_t set, uint32_t binding,
+                         uint64_t dst_base, uint64_t dst_bytes, std::vector<Range>& out) {
+  if (!dst_bytes || dst_base < src_base || dst_base + dst_bytes > src_base + src_bytes) return false;
+  const uint64_t hi_d = dst_base + dst_bytes;
+  for (const Range& r : src) {
+    const uint64_t a = src_base + r.offset, lo = std::max(a, dst_base), hi = std::min(a + r.bytes, hi_d);
+    if (!r.bytes || hi <= lo) continue;
+    out.push_back({set, binding, lo - dst_base, r.file, r.file_offset + (lo - a), hi - lo});
+  }
+  return true;
+}
 
 // The spans of the soup (b6) and pool (b8) that a frame's InstInfo entries (16 B each: base, meta,
 // rec, tris; layer/bvhsplit.cpp) name, as the BLAS builds read them: tris * 3 vertices of stride

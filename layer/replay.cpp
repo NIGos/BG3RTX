@@ -213,6 +213,8 @@ struct Copy {
   std::string file;
   uint64_t file_offset = 0;
   bool droppable = false, dropped = false;
+  int set = -1;                           // the descriptor it fills (per-slot sizes); -1: by file
+  uint32_t binding = 0;
 };
 struct Chunk { VkBuffer b = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; uint8_t* map = nullptr; VkDeviceSize size = 0; };
 
@@ -342,11 +344,16 @@ bool add_buffer_bytes(Plan& p, const VkDescriptorBufferInfo& bi, bool ubo, VkDev
   return true;
 }
 
+// The descriptor's bound bytes (rp::bound_bytes): only those are captured, never the whole VkBuffer.
 VkDeviceSize resolve_range(const VkDescriptorBufferInfo& bi) {
-  if (bi.range != VK_WHOLE_SIZE) return bi.range;
   std::shared_lock<std::shared_mutex> lock(g_obj_mu);
   auto it = g_bufs.find(bi.buffer);
-  return it != g_bufs.end() && it->second.size > bi.offset ? it->second.size - bi.offset : 0;
+  if (it == g_bufs.end()) return bi.range == VK_WHOLE_SIZE ? 0 : bi.range;
+  return rp::bound_bytes(it->second.size, bi.offset, bi.range == VK_WHOLE_SIZE ? rp::kWholeSize : bi.range);
+}
+
+void tag(Plan& p, size_t from, uint32_t set, uint32_t binding) {
+  for (size_t k = from; k < p.copies.size(); ++k) { p.copies[k].set = int(set); p.copies[k].binding = binding; }
 }
 
 std::string slot_file(uint32_t set, uint32_t binding, const char* ext) {
@@ -359,7 +366,10 @@ bool add_buffer(Plan& p, uint32_t set, uint32_t binding, VkDescriptorBufferInfo 
   if (!bi.buffer || !bi.range) { p.m.notes.push_back(" s" + std::to_string(set) + " b" + std::to_string(binding) + " (" + what + "): no buffer bound"); return true; }
   const std::string file = slot_file(set, binding, ".bin");
   p.m.buffers.push_back({set, binding, uint64_t(bi.range), file});
-  return add_buffer_bytes(p, bi, ubo, 0, bi.range, file, 0, what);
+  const size_t before = p.copies.size();
+  const bool ok = add_buffer_bytes(p, bi, ubo, 0, bi.range, file, 0, what);
+  tag(p, before, set, binding);
+  return ok;
 }
 
 // One image descriptor element. Returns false only for a hard failure (set 0); an image set 1
@@ -430,6 +440,7 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
     c.bytes = bytes;
     c.file = output ? slot_file(set, binding, ".live") : "img" + std::to_string(p.images.size() - 1) + ".bin";
     c.droppable = droppable;
+    c.set = int(set); c.binding = binding;
     p.copies.push_back(std::move(c));
     copy = p.copies.size() - 1;
     p.image_copy[v.image] = copy;
@@ -450,6 +461,31 @@ void add_sampler(Plan& p, uint32_t binding, uint32_t element, VkSampler s) {
 }
 
 std::string mb(uint64_t bytes) { char b[32]; snprintf(b, sizeof b, "%.1f", double(bytes) / (1024.0 * 1024.0)); return b; }
+
+// MB per descriptor slot (all its pieces and elements), largest first: "s1b6 gOpaqueSoup 236.8, ...".
+std::string slot_sizes(const Plan& p, const rp::Pass& pass, bool fixed_only) {
+  std::map<std::string, uint64_t> by;
+  for (const Copy& c : p.copies) {
+    if (c.dropped || (fixed_only && c.droppable)) continue;
+    std::string k = c.file;
+    if (c.set >= 0) {
+      const rp::Slot* sl = rp::find_slot(pass, uint32_t(c.set), c.binding);
+      k = "s" + std::to_string(c.set) + "b" + std::to_string(c.binding) + " " + (sl ? sl->name : "?");
+    }
+    by[k] += c.bytes;
+  }
+  std::vector<std::pair<uint64_t, std::string>> v;
+  for (const auto& [k, n] : by) v.push_back({n, k});
+  std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+  std::string out;
+  uint64_t rest = 0;
+  for (size_t i = 0; i < v.size(); ++i) {
+    if (i >= 12) { rest += v[i].first; continue; }
+    out += (out.empty() ? "" : ", ") + v[i].second + " " + mb(v[i].first);
+  }
+  if (rest) out += ", others " + mb(rest);
+  return out + " MB";
+}
 
 // The worker: writes every file of the pack from the staging, then the manifest.
 void write_pack(Job* job) {
@@ -624,12 +660,20 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   if (!rt_replay_region(info->buffer, info->offset, &region)) return fail("set 1 b7 is not a scene ring region of the split BVH");
   std::vector<rp::Span> spans[2];   // b6 soup, b8 pool
   rp::instinfo_spans(region.info.data(), region.count, spans[0], spans[1]);
+  // Set-1 buffers bound into the soup or pool VkBuffer (split BVH: b1 gAlphaSoup binds the whole
+  // soup, as b6) reuse the geometry capture's slices below instead of a whole copy of their own.
+  const Desc* geo_desc[2] = {entry(6, 0), entry(8, 0)};
+  struct Alias { uint32_t binding; const char* name; VkDescriptorBufferInfo bi; int geo; };
+  std::vector<Alias> aliases;
   for (uint32_t s = 0; s < pass->slot_count; ++s) {
     const rp::Slot& slot = pass->slots[s];
     if (slot.set != 1) continue;
     if (slot.kind == rp::kSsbo && slot.binding != 6 && slot.binding != 8) {
       const Desc* e = entry(slot.binding, 0);
       if (!e || !e->buffer) { m.notes.push_back(" s1 b" + std::to_string(slot.binding) + " (" + slot.name + "): not recorded, bound zero"); continue; }
+      int geo = -1;
+      for (int g = 0; g < 2; ++g) if (geo_desc[g] && geo_desc[g]->buffer == e->buffer) geo = g;
+      if (geo >= 0) { aliases.push_back({slot.binding, slot.name, {e->buffer, e->offset, e->range}, geo}); continue; }
       if (!add_buffer(p, 1, slot.binding, {e->buffer, e->offset, e->range}, false, slot.name)) return fail(p.why);
     } else if (slot.kind == rp::kSampled2D || slot.kind == rp::kSampled2DArray) {
       for (uint32_t el = 0; el < slot.count; ++el)
@@ -646,19 +690,22 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   m.instance_count = region.count;
   if (!add_buffer_bytes(p, {region.ring, region.instances_offset, VkDeviceSize(region.count) * 64}, false, 0,
                         VkDeviceSize(region.count) * 64, "instances.bin", 0, "the instance ring"))
-    return fail(p.why);
+    return fail(p.why);   // untagged: counted as "instances.bin"
 
   // ---- geometry (b6, b8): whole when it fits the budget, else the InstInfo spans ----
   uint64_t fixed = 0;
   for (const Copy& c : p.copies) if (!c.droppable) fixed += c.bytes;
   std::string geometry;
   const uint32_t geo_binding[2] = {6, 8};
+  VkDescriptorBufferInfo geo_bi[2]{};
+  std::vector<rp::Range> geo_slices[2];   // what each geometry binding captured, as file slices
   for (int g : {1, 0}) {   // the pool first: its basis rows (pool-material hits) live outside the InstInfo spans
     const uint32_t b = geo_binding[g];
     const Desc* e = entry(b, 0);
     if (!e || !e->buffer) { m.notes.push_back(" s1 b" + std::to_string(b) + ": not recorded, bound zero"); continue; }
     VkDescriptorBufferInfo bi{e->buffer, e->offset, e->range};
     bi.range = resolve_range(bi);
+    geo_bi[g] = bi;
     auto& v = spans[g];
     for (auto& sp : v) { if (sp.offset >= bi.range) sp.bytes = 0; else sp.bytes = (std::min)(sp.bytes, bi.range - sp.offset); }
     rp::merge_spans(v, 4096);
@@ -668,6 +715,7 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
       geometry += std::string(geometry.empty() ? "" : ", ") + name + " whole " + mb(bi.range) + " MB";
       if (!add_buffer(p, 1, b, bi, false, name)) return fail(p.why);
       fixed += bi.range;
+      if (bi.range) geo_slices[g].push_back({1, b, 0, slot_file(1, b, ".bin"), 0, uint64_t(bi.range)});
     } else {
       geometry += std::string(geometry.empty() ? "" : ", ") + name + " " + std::to_string(v.size()) + " spans " + mb(sparse) + " MB of " + mb(bi.range);
       m.buffers.push_back({1, b, uint64_t(bi.range), ""});
@@ -676,17 +724,38 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
       for (const auto& sp : v) {
         const size_t before = p.copies.size();
         if (!add_buffer_bytes(p, bi, false, sp.offset, sp.bytes, file, at, name)) return fail(p.why);
+        tag(p, before, 1, b);
         for (size_t k = before; k < p.copies.size(); ++k) {   // the word-aligned pieces actually copied
           const Copy& c = p.copies[k];
           m.ranges.push_back({1, b, uint64_t(c.kind == Copy::kTransfer ? c.src_offset - bi.offset : c.src_offset), file, c.file_offset, c.bytes});
+          geo_slices[g].push_back(m.ranges.back());
           at = c.file_offset + c.bytes;
           fixed += c.bytes;
         }
       }
     }
   }
-  if (fixed + kAlign > rp::kPackBudgetBytes) {
-    log("[replay] pack %s over budget: %s MB without textures (%s)", label.c_str(), mb(fixed).c_str(), geometry.c_str());
+  // The aliases: the geometry's slices inside their bound range (no bytes copied twice), else whole.
+  for (const Alias& a : aliases) {
+    VkDescriptorBufferInfo bi = a.bi;
+    bi.range = resolve_range(bi);
+    const VkDescriptorBufferInfo& gb = geo_bi[a.geo];
+    std::vector<rp::Range> slices;
+    if (gb.buffer && rp::alias_ranges(geo_slices[a.geo], gb.offset, gb.range, 1, a.binding, bi.offset, bi.range, slices)) {
+      m.buffers.push_back({1, a.binding, uint64_t(bi.range), ""});
+      m.ranges.insert(m.ranges.end(), slices.begin(), slices.end());
+      m.notes.push_back(" s1 b" + std::to_string(a.binding) + " (" + a.name + "): " + mb(bi.range) + " MB bound in the " +
+                        (a.geo ? "pool" : "soup") + " buffer at " + std::to_string(bi.offset) + ", " + std::to_string(slices.size()) +
+                        " of its captured slices reused");
+      continue;
+    }
+    const size_t before = p.copies.size();
+    if (!add_buffer(p, 1, a.binding, a.bi, false, a.name)) return fail(p.why);
+    for (size_t k = before; k < p.copies.size(); ++k) fixed += p.copies[k].bytes;
+  }
+  if (fixed + kAlign > rp::kPackHardCapBytes) {
+    log("[replay] pack %s over budget: %s MB without textures (%s); by slot: %s", label.c_str(), mb(fixed).c_str(), geometry.c_str(),
+        slot_sizes(p, *pass, true).c_str());
     return -1;
   }
   // ---- the budget: droppable images, largest first ----
@@ -843,6 +912,8 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
 
   uint64_t total = 0;
   for (const Copy& c : p.copies) if (!c.dropped) total += c.bytes;
+  const std::string by_slot = slot_sizes(p, *pass, false);
+  p.m.notes.push_back(" by slot: " + by_slot);
   job->label = label;
   job->dir = root_dir() + "\\captures\\replay-" + capture_stamp() + "-" + label;
   job->record_frame = frame_index();
@@ -852,9 +923,9 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   job->m = std::move(p.m);
   job->copies = std::move(p.copies);
   log("[replay] pack %s recorded at frame %llu: %u image, %u transfer and %u shader copies, %s MB in %zu staging chunks "
-      "(%s); written once the GPU has run it",
+      "(%s); written once the GPU has run it; by slot: %s",
       label.c_str(), (unsigned long long)job->record_frame, n_images, n_transfer, n_shader, mb(total).c_str(), job->chunks.size(),
-      geometry.c_str());
+      geometry.c_str(), by_slot.c_str());
   g_job = std::move(job);
   return 1;
 }

@@ -60,8 +60,16 @@ Estimate for a 2560 x 1440 render frame, to be replaced by the first live pack's
   2-4 M unique triangles; static meshes counted once per BLAS key, not per instance); pool basis ranges.
 - textures: only the elements the frame's records and alpha records index (gAlphaTex, gAlphaCache,
   gHitCache) with their mip chains. They are dropped first, largest first, when the total passes the
-  budget (`omitted`); geometry and set 0 are never dropped (a pack over budget without textures is
-  "over budget" and not written).
+  budget (`omitted`); geometry and set 0 are never dropped (a pack whose never-dropped part passes
+  the 2 GB hard cap `kPackHardCapBytes` is "over budget" and not written; its log line lists the MB
+  per slot).
+- Only each descriptor's bound bytes are captured (`rp::bound_bytes`). A set-1 buffer bound inside
+  the soup or pool VkBuffer reuses the geometry's slices (`rp::alias_ranges`, `range` lines into the
+  soup's file): with the split BVH gAlphaSoup b1 binds the whole soup like b6. First live pack (S8,
+  2026-11-01): 1874 MB without textures, of which b1 whole was 1408 MB; set 0 + other buffers about
+  157 MB, pool spans 73 MB, soup spans 237 MB. Expected now: about 160 MB + pool whole 512 MB (it
+  fits the budget) + soup spans 237 MB = about 0.9 GB. The record line and a manifest note give the
+  MB per slot (`by slot: ...`).
 
 ## Live writer (layer/replay.cpp, core/gi.cpp `replay_after_hit_gi`; ABI 25)
 
