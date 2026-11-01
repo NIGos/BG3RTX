@@ -175,6 +175,75 @@ core only with the key on: key off runs the unchanged `gi_hit_direct` SPIR-V.
 - Live gate: as M4.1 at S3 Campsite; cost = `gi: trace pass` GPU median ON minus OFF (one more
   ray per supported hit, expected +0.1 ms).
 
+## Far-field sun bounce (`gi_far=0`, `gi_far_m=6`, 2026-11-01; offline, READY_FOR_LIVE)
+
+Key `gi_far` (live; GUI Experimental "Far-field sun bounce" off / 4 / 6 / 8 m, needs `exp_gi_hit_sun`).
+Variant: request flag `kGiFar` adds `RT_GI_FAR=1` to the four gi_hit_sun files only (common/shader_variant.h);
+key off runs the unchanged SPIR-V (all 368 existing gi_trace_rt* requests byte-identical, checked). The rule is
+`shaders/gi/gi_far.hlsli`, the ray length is `Push::radius` (gi_trace's march radius, unused by this pass).
+- How the native ambient meets RT GI today (replacement per ray, not a residual): giRaw.a = 1 - sum(occ) / rays
+  replaces the game's SSAO in the AO target (gi_ao_apply.hlsl, `lerp(ao, vis, gi_ao)`), so it scales the game's
+  diffuse SH/probe ambient and, through Lagarde's SO, its specular ambient; giRaw.rgb is added to the diffuse x
+  albedo (gi_composite.hlsl). A hit with weight w removes w of the ambient for its ray and adds its radiance x w.
+- gi_far: rays reach R = gi_far_m. A hit with known radiance replaces the ambient with the far fade w = 1 - (t/R)^2:
+  screen hits (last frame's radiance), and qualified native-material hits with a supported sun term (plus the
+  point/spot term; off screen outside the froxel volume it is declared 0, local lights were 1-16% of the
+  reference). A qualified hit keeps rho x w of the ambient (rho = hit diffuse albedo luminance): its own
+  ambient-lit radiance, approximated as rho x the receiver's ambient, which the direct terms lack (the
+  reference's multi-bounce share is 14-22%, the same order).
+- Unqualified hits beyond 1 m (no material, unsupported sun or lights, aborted query): exactly the old rule,
+  occlusion with the base fade w0 = 1 - (t/R0)^2, 0 beyond R0, so the native ambient stays for that ray. No
+  declared fallback material: the true far-field gap is uncertain (below), so only rays whose radiance we
+  know change. Misses stay misses (ambient kept).
+- Roofs: GI rays do not see the cut-away roofs (rt_cascade_casters puts them in mask 0x02, sun rays only).
+  A far qualified hit whose ray segment passes a padded roof volume (gi/sun_roof.hlsli boxes, sun set b8;
+  every ray from inside a roofed room), or any while the volumes are unknown, takes the old rule (counted).
+- Denoiser (RR): the same giRaw / temporal / composite chain; RR sees the composited diffuse. The input gets
+  more variance: far hits are sparser and brighter (a sunlit wall at 4 m behind a dim receiver), at 1 spp per
+  ray. Watch for stippling in the shots; the temporal pass and RR are unchanged.
+- Energy: per ray, ambient visibility and bounce change by (w - w0) for screen hits and by w(1 - rho) - w0 /
+  (direct + sun) x w for qualified hits. Mean brightness rises where the replaced native ambient is darker
+  than the traced far radiance and falls otherwise; the `GI far` line (rt_stats) gives both, ON and the old
+  rule evaluated on the same rays of the same frame, so the live mean change must match its sign and size.
+- Counters 372-382 (per thread over its rays, wave sum, one atomic per 8x8 group into the host-visible rt_stats
+  buffer; rt_stats windows only). A device-local buffer would need a new hit-GI binding (shared contract).
+
+Offline (S8 pack 071930, frame_replay `--define RT_GI_FAR=1 --define GI_FAR_M=m`, the gi_hit_direct variant: no
+sun set, 0 qualified hits since the pack has no VT cache, so only the screen tier is exercised):
+
+| R | bounce luminance | giRaw.a | GPU ms, 2.73 Mpx (rt_stats 0) | at 4K Performance |
+|---|---:|---:|---:|---:|
+| 1 m (off) | 0.00693 | 0.916 | 0.58 | - |
+| 4 m | 0.01046 | 0.886 | 1.63 | +0.80 ms |
+| 6 m | 0.01177 | 0.875 | 2.15 | +1.19 ms |
+| 8 m | 0.01285 | 0.867 | 2.69 | +1.60 ms |
+
+The PT's visible-far tier at the calibrated scale is 0.0110 (14.7% x k PT total; with roofs 9.7% x k PT total,
+the same 0.0110): 4 / 6 / 8 m recover 32 / 44 / 54% of it. The hidden-far tier (41.5%, with roofs 23.0%)
+needs qualified materials: not measurable on this pack. In game add the hit shading at qualified far hits
+(gi_hit_direct + sun measured +0.52 ms at 1 m). GPU fixture case 10 checks the per-ray rule exactly.
+
+Roof-corrected reference (coordinator audit, 2026-11-01): the pack has rt_cascade_casters=0 and S8 is mostly
+under cut-away roofs. `PT_ROOFS=1` (tools/pt_roofs.py, the asset DB's 159 CTY_Main_A roof volumes) occludes sun
+rays through the padded volumes (the production rule) and ends path rays at the roof plane:
+
+| S8 PT | no roofs | roofs (plane +3 m) | roofs (plane +0 m) | sun rule only |
+|---|---:|---:|---:|---:|
+| PT total (luminance) | 0.152 | 0.0111 | 0.0110 | 0.0115 |
+| sun / local | 98.9 / 1.2% | 84.4 / 15.7% | 84.3 / 15.7% | 84.8 / 15.3% |
+| first hit beyond 1 m, on screen (visible + hidden) | 56.2% | 32.7% | 32.2% | 31.9% |
+| first hit off screen (not split by distance) | 29.5% | 59.8% | 60.2% | 60.7% |
+| first rays: miss / roof | 64.2% / - | 28.2 / 37.5% | 27.4 / 39.2% | 64.2% / - |
+| live domain (1 m, fade) | 11.6% | 5.7% | 5.8% | 5.6% |
+
+**Go / no-go.** The far-field share falls from 56-86% to 32-92% (the off-screen part is not split by distance),
+the sun's from 99% to 84%, and the PT total by 14x: most of the uncorrected far field was sun through roofs the
+camera removed. The calibration k rises from 0.49 to 10, so most of S8's screen radiance comes from light the
+PT lacks (the native ambient, emission). gi_far is kept energy-safe (native for unqualified hits and misses).
+Promotion needs the corrected number above about 30% far field from a pack with casters on, real materials (VT
+cache) and the native ambient (another agent adds the ambient capture), then the live batch
+`tools/live_batches/gi_far` (camp + S8, OFF / ON / OFF, about 8 min).
+
 ## `gi_bounce_spec`: not re-added (review 2026-11-01)
 
 What it did (removed dbbe0fc, 2026-10-31): `prev_bounce_at` returned last frame's full radiance

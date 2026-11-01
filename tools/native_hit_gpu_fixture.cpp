@@ -233,7 +233,8 @@ struct FxCase { float p[3]; uint32_t mode; float n[3]; uint32_t key; float v[3];
 static_assert(sizeof(FxCase) == 80);
 struct FxOut { float a[3]; uint32_t sa; float b[3]; uint32_t sb; float c[3]; uint32_t lights; float ao, factor, unused; uint32_t mstatus; };
 static_assert(sizeof(FxOut) == 64);
-enum { kFxDirect = 0, kFxSun = 1, kFxAo = 2, kFxFurnace = 3, kFxCombined = 4, kFxSunDir = 5, kFxEmission = 6, kFxExactK = 7, kFxTwoSided = 8 };
+enum { kFxDirect = 0, kFxSun = 1, kFxAo = 2, kFxFurnace = 3, kFxCombined = 4, kFxSunDir = 5, kFxEmission = 6, kFxExactK = 7, kFxTwoSided = 8,
+       kFxFar = 9 };
 // native_hit_emission.hlsli statuses.
 enum { kHeUsed = 0, kHeNone = 1, kHeExcluded = 2, kHeUnvalidated = 3 };
 constexpr uint32_t kHdOk = 0;
@@ -1164,6 +1165,51 @@ int main(int argc, char** argv) {
       }
       report.line("9a two-sided N sign == C++ (both sides)", signOk && front > 0 && back > 0, fmt("%.0f rays, %.0f front, %.0f back", double(r.size()), front, back));
       report.line("9b RtHit.dir is the traced ray, floor hit", dirOk && hitOk, fmt("%.0f rays", double(r.size())));
+    }
+    // ---- 10. gi_far per-ray rule (shaders/gi/gi_far.hlsli, gi_trace_rt.hlsl RT_GI_FAR): R0 1 m, R 6 m. A ray
+    //      down onto the sunlit open floor at distance t: a qualified hit replaces the ambient with the sun
+    //      bounce x w = 1 - (t/R)^2 and occludes w (1 - rho); an unqualified hit, or a sun-unsupported one
+    //      beyond R0, is the old fallback w0 = max(0, 1 - (t/R0)^2) (0 beyond R0: the native ambient stays);
+    //      beyond R a miss ----
+    {
+      Dispatch d; d.push = default_push(); d.push.gi_rt_radius = 1; d.push.radius = 6; d.global = 0.7f;
+      d.sun_dir[0] = 0.6f; d.sun_dir[2] = 0.8f; d.sun_col[0] = 5; d.sun_col[1] = 4; d.sun_col[2] = 3;
+      const D3 L = unit(D3{0.6, 0, 0.8}), V = unit(D3{0.3, 0.2, -0.9}), sunE = D3{5, 4, 3} * 0.7;
+      struct Ray { double t; uint32_t flags; };
+      std::vector<Ray> rays;
+      int k = 0;
+      for (double t : {0.4, 0.9, 1.5, 3.0, 5.5, 7.0})
+        for (uint32_t flags : {0u, 1u, 2u}) {
+          const double x = cx(RSunOpen) - 12 + 2.0 * (k % 12), y = kY - 6 + 4.0 * (k / 12); ++k;
+          FxCase c = make_case({float(x - V.x * t), float(y - V.y * t), float(-V.z * t)}, kFxFar, kMat, 0, 21);
+          c.v[0] = float(V.x); c.v[1] = float(V.y); c.v[2] = float(V.z); c.footprint = 0.001f; c.pad = flags;
+          d.cases.push_back(c); rays.push_back({t, flags});
+        }
+      auto r = run(d);
+      Cmp sun; bool ruleOk = true, rhoOk = true;
+      const double rho = 0.2126 * kMat.albedo.x + 0.7152 * kMat.albedo.y + 0.0722 * kMat.albedo.z;   // metal 0: Rd = albedo
+      int beyond = 0;
+      for (size_t i = 0; i < r.size(); ++i) {
+        const double t = rays[i].t, R = 6, R0 = 1;
+        // flags 2 (sun unsupported): the complete local term (0 here, no lights) still counts within R0, as gi_hit_direct.
+        const bool hit = t < R, qualified = hit && rays[i].flags == 0, has = qualified || (hit && rays[i].flags == 2 && t <= R0);
+        const double w = hit ? 1 - (t / R) * (t / R) : 0, w0 = hit ? std::max(0.0, 1 - (t / R0) * (t / R0)) : 0;
+        const D3 lit = mul(fresnel_blend(kMat, kN, D3{-V.x, -V.y, -V.z}, L), sunE) * dot(kN, L);
+        const double occ = has ? w * (1 - rho) : w0;
+        const D3 bounce = qualified ? lit * w : D3{0, 0, 0};
+        const float tg = *reinterpret_cast<const float*>(&r[i].sb);
+        auto close = [&](double g, double want) { return std::abs(g - want) <= 1e-4 * std::max(1.0, std::abs(want)); };
+        bool ok = r[i].sa == 0 && (hit ? close(tg, t) : tg < 0) && close(r[i].b[0], occ) && close(r[i].b[1], w) && close(r[i].b[2], w0) &&
+                  r[i].lights == (has ? 1u : 0u);
+        if (qualified) { const float sb[3] = {r[i].c[0], r[i].c[1], r[i].c[2]}; compare(sun, sb, kHdOk, lit); }
+        for (int c = 0; c < 3; ++c) ok &= close(r[i].a[c], c == 0 ? bounce.x : c == 1 ? bounce.y : bounce.z);
+        if (!ok) { ruleOk = false; std::printf("  case %zu t %.2f flags %u: occ %g (want %g) w %g w0 %g bounce %g (want %g) t %g\n", i, t, rays[i].flags, r[i].b[0], occ, r[i].b[1], r[i].b[2], r[i].a[0], bounce.x, tg); }
+        rhoOk &= std::abs(r[i].ao - rho) <= 1e-5;
+        beyond += qualified && t > R0;
+      }
+      report.line("10a gi_far sun at the hit (outgoing -ray)", sun.ok, fmt("%.0f hits, worst rel %.2e", sun.n, sun.worst));
+      report.line("10b gi_far rule: w (1 - rho) / w0 / miss", ruleOk && rhoOk && beyond == 3,
+                  fmt("%.0f rays, %.0f qualified beyond R0, rho %.4f", double(r.size()), beyond, rho));
     }
     std::printf("dispatch+readback %.3f s\n", gpuSeconds);
     vkDeviceWaitIdle(dev);

@@ -313,6 +313,18 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"gi_hit_sun", "1"}}, {{"exp_gi_hit_direct",1}}}},
    {}, {0,0,0,0}, true, {{"gi_hit_direct","1","Shaded hidden-surface bounce"}}},
 
+  {"exp_gi_far", "Far-field sun bounce",
+   "Lengthens the bounce rays from 1 m to the chosen reach. Surfaces up to that distance that are on screen, or "
+   "hidden with a verified native material lit by the sun, replace the game's ambient light for their ray. Other "
+   "surfaces beyond 1 m keep the game's ambient. Requires Sunlit hidden-surface bounce. Quality and GPU cost "
+   "remain unqualified.",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   {{"off", "Off", 0, {{"gi_far", "0"}}, {}},
+    {"m4", "4 m", kCapRayQuery, {{"gi_far", "1"}, {"gi_far_m", "4"}}, {{"exp_gi_hit_sun",1}}},
+    {"m6", "6 m", kCapRayQuery, {{"gi_far", "1"}, {"gi_far_m", "6"}}, {{"exp_gi_hit_sun",1}}},
+    {"m8", "8 m", kCapRayQuery, {{"gi_far", "1"}, {"gi_far_m", "8"}}, {{"exp_gi_hit_sun",1}}}},
+   {}, {0,0,0,0}, true, {{"gi_hit_sun","1","Sunlit hidden-surface bounce"}}},
+
   {"exp_rf_hit_shade", "Shaded hidden-surface reflections",
    "Reflection rays that hit a surface hidden from the camera are shaded with that surface's verified native "
    "material and lighting (point and spot lights, the sun with a traced shadow ray, the game's ambient) "
@@ -400,6 +412,20 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_water_shadows", "1"}}, {{"rt_geometry", 1}, {"exp_water_reflections", 1}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_water_geometry","1","Water geometry capture"},{"rt_water_reflections","1","Water reflections (measured)"}}},
 
+  {"exp_water_ls_shadows", "Water local-light shadows",
+   "Ray-traced shadows of lamps, torches and other local lights on the water. The game shadows only the "
+   "few lights that have a shadow map; every other light reaches the water through walls and boats. Here "
+   "one ray per light and water pixel removes that light where something blocks it, and keeps everything "
+   "else of the water as the game draws it (shadow-mapped lights keep the game's shadow). Look at a canal "
+   "or pool lit by lanterns at night: the shadows of piers, posts and hulls on the water. Debug view "
+   "rt_debug 27 shows lit (green) and shadowed (red) water. Needs Water reflections (measured). Restart "
+   "required to turn it on (the water shaders are prepared at load); turning it off is live. "
+   "Experimental: unqualified.",
+   Kind::Choice, Apply::Restart, "restart to enable", true,
+   {{"off", "Off", 0, {{"rt_water_ls_shadows", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_water_ls_shadows", "1"}}, {{"rt_geometry", 1}, {"exp_water_reflections", 1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_water_geometry","1","Water geometry capture"},{"rt_water_reflections","1","Water reflections (measured)"}}},
+
   {"exp_current_sun", "Current cascade sun shadows",
    "Uses the current four native sun-caster domains with finite per-layer rays and native "
    "receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the "
@@ -429,7 +455,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 221 keys of bg3rtx.ini, in file order.
+// 225 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -536,6 +562,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_reflections", "0"},
     {"rt_water_compose", "0"},
     {"rt_water_shadows", "0"},
+    {"rt_water_ls_shadows", "0"},
     {"rt_water_compose_mb", "160"},
     {"rt_alpha", "1"},
     {"rt_alpha_test", "1"},
@@ -561,6 +588,8 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},
     {"gi_hit_sun", "0"},
+    {"gi_far", "0"},
+    {"gi_far_m", "6"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},
@@ -707,6 +736,8 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "rt_water_compose") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // M5.4: likewise (the sun words of the record are patched in at creation).
   if (key == "rt_water_shadows") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // M5.4b: likewise (the local-light words of the record are patched in at creation).
+  if (key == "rt_water_ls_shadows") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
                                          "sharc_device", "rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material"};
   for (const char* k : kRestart)

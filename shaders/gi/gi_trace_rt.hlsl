@@ -72,8 +72,74 @@
 #include "sharc_common.hlsli"
 #endif
 
+#if RT_GI_FAR
+// gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"; core/gi.cpp hit_gi_dispatch, request flag kGiFar on
+// the gi_hit_sun files): rays of Push::radius (gi_far_m) instead of gi_rt_radius, the per-ray rule of
+// gi_far.hlsli. Needs RT_HIT_GI_DIRECT (the qualified-hit code below). Push::radius is gi_trace's screen
+// march radius, unused by this pass otherwise; the base radius R0 stays gi_rt_radius (SHaRC: its base).
+#if !RT_HIT_GI_DIRECT
+#error RT_GI_FAR needs RT_HIT_GI_DIRECT
+#endif
+#include "gi_far.hlsli"
+// rt_stats=1 counters 372-381 (core/gi.cpp kGiFarFirst, "GI far"): per thread over its rays, then one
+// wave sum and one atomic per 8x8 group per counter (the stats buffer is host-visible). The old rule
+// (gi_hit_direct / gi_hit_sun without gi_far: every hit occludes with w0 within R0) is evaluated on the
+// same rays, so ON and OFF of one frame are compared without a second run.
+//   0 rays; beyond R0: 1 screen hits, 2 qualified sun-lit hits, 3 of which outside the froxel volume,
+//   4 hits kept as native ambient; x 8192: 5 occlusion sum, 6 the old rule's, 7 bounce luminance sum,
+//   8 the old rule's, 9 ambient kept at qualified hits (w x rho).
+//   10 qualified sun-lit hits beyond R0 left out by the roof rule.
+static const uint kGiFarStatFirst = 372u, kGiFarStatCount = 11u;
+#if RT_HIT_GI_SUN
+// The roof rule for the far GI ray itself (the sun ray from the hit has its own, native_hit_sun.hlsli):
+// the TLAS has no roof the camera cut away for GI rays (rt_cascade_casters puts them in mask 0x02, seen
+// by sun rays only), so a ray from a roofed room would reach sunlit surfaces through the missing roof.
+// A segment [0, t] through a padded roof volume (gi/sun_roof.hlsli's boxes from the sun set b8; any
+// ray from inside one) takes no far radiance from a hidden hit; nor does any hit while the volumes are
+// unknown (no trust slot: Push::ls_flags bit 25; no asset DB roofs: header flag 2). Conservative: the
+// native ambient stays for those rays.
+bool gi_far_roof_clear(float3 o, float3 d, float t) {
+  if ((pc.ls_flags & (1u << 25)) == 0u || (st_u(4) & 2u) == 0u) return false;
+  const float3 cam_abs = cam2.c[13].xyz;
+  const uint n = min(st_u(0), 256u);
+  for (uint i = 0; i < n; ++i) {
+    const uint a = 192u + i * 48u;   // kSunHeader
+    const float4 c = st_f4(a), q = st_f4(a + 16u);
+    const float3 h = st_f4(a + 32u).xyz;
+    const float3 lo = qrot_inv(q, o - (c.xyz - cam_abs)), ld = qrot_inv(q, d);
+    const float3 inv = 1.0 / select(abs(ld) > 1e-8, ld, select(ld >= 0.0, 1e-8, -1e-8));
+    const float3 t1 = (-h - lo) * inv, t2 = (h - lo) * inv, tn = min(t1, t2), tf = max(t1, t2);
+    const float t0 = max(max(max(tn.x, tn.y), tn.z), 0.0), t3 = min(min(tf.x, tf.y), tf.z);
+    if (t3 >= t0 && t0 <= t) return false;
+  }
+  return true;
+}
+#endif
+static uint g_far_stat[kGiFarStatCount];
+groupshared uint gs_far_stat[kGiFarStatCount];
+void far_stat(uint k, float v) { g_far_stat[k] += uint(clamp(v, 0.0, 8.0) * 8192.0 + 0.5); }
+void gi_trace_px(uint3 tid);
+[numthreads(8, 8, 1)]
+void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV_GroupIndex) {
+  for (uint k = 0; k < kGiFarStatCount; ++k) g_far_stat[k] = 0u;
+  gi_trace_px(tid);
+  if (pc.rt_stats != 0u) {   // uniform (a push constant): the barriers are reached by the whole group
+    if (gix < kGiFarStatCount) gs_far_stat[gix] = 0u;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint k = 0; k < kGiFarStatCount; ++k) {
+      const uint s = WaveActiveSum(g_far_stat[k]);
+      if (WaveIsFirstLane() && s) InterlockedAdd(gs_far_stat[k], s);
+    }
+    GroupMemoryBarrierWithGroupSync();
+    const uint bin = (gid.x * 7u + gid.y * 13u) & 63u;
+    if (gix < kGiFarStatCount && gs_far_stat[gix]) rtStats.InterlockedAdd(((kGiFarStatFirst + gix) * 64u + bin) * 4u, gs_far_stat[gix]);
+  }
+}
+void gi_trace_px(uint3 tid) {
+#else
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
+#endif
   g_rt_pass = kRtPassGI;   // aborted queries count as this pass's unknowns (rt_common.hlsli)
   uint2 id = tid.xy;
   if (any(id >= pc.half)) return;
@@ -94,7 +160,21 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float pa = pixel_angle(uv);
   RtCone cone = {dist * pa * 2.0, pa * 2.0};   // half resolution
   const float4 org = rt_origin_at(fp);
+#if RT_GI_FAR
+#ifdef GI_FAR_M
+  // Offline only (frame_replay --define GI_FAR_M=6): a replay pack's push holds the base pass's radius.
+  const float R = max(float(GI_FAR_M), pc.gi_rt_radius);
+#else
+  const float R = max(pc.radius, pc.gi_rt_radius);
+#endif
+#if SHARC_QUERY_PASS
+  const float RB = max(shc.gi_base_radius, 0.01);   // the base radius (SHaRC's gi_base_radius)
+#else
+  const float RB = max(pc.gi_rt_radius, 0.01);      // the base radius (gi_rt_radius)
+#endif
+#else
   const float R = pc.gi_rt_radius;
+#endif
 
   uint seed = pixel_seed(fp, 0u);
   float3 bounce = 0, seen = 0;
@@ -127,6 +207,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
     const float u = aborted ? (t >= 0.0 ? saturate(t / R) : 1.0) : 0.0;
     float k = saturate(t / R);
     float w = aborted ? 1.0 - u * u / 3.0 : 1.0 - k * k;
+#if RT_GI_FAR
+    // w: the far fade (radiance hits); fr.w0: the base fade (every other hit, as without gi_far).
+    const GiFarRay fr = gi_far_ray(t, aborted, R, RB);
+    if (pc.rt_stats != 0u) {
+      g_far_stat[0] += 1u;
+      if (t >= 0.0 || aborted) far_stat(6u, fr.w0);   // the old rule occludes every hit with w0
+    }
+#endif
     float2 quv;
     float qd;
     bool onscreen = !aborted && t >= 0.0 && project(inv, o + dir * t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
@@ -146,6 +234,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
           seen += L;
           nseen += 1.0;
           visible = true;
+#if RT_GI_FAR
+          if (pc.rt_stats != 0u) {
+            far_stat(7u, gi_far_luminance(L * w));
+            if (t <= RB) far_stat(8u, gi_far_luminance(L * fr.w0));
+            else g_far_stat[1] += 1u;
+          }
+#endif
         }
       }
     }
@@ -207,9 +302,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
         continue;
       }
       tiers.z += 1.0;
+#if !RT_GI_FAR
       const float k0 = saturate(t / R0);
       w = 1.0 - k0 * k0;
       if (w <= 0.0) continue;   // beyond the base radius: a miss, as before
+#endif
+      // gi_far: w stays the far fade for a qualified hit below; the fallback uses fr.w0 (0 beyond R0).
     }
 #endif
 #if RT_HIT_GI_DIRECT && RT_HIT_EMISSION
@@ -235,8 +333,18 @@ void main(uint3 tid : SV_DispatchThreadID) {
         g_hd_stats=pc.rt_stats!=0u;g_hd_base=160u;g_hd_xbase=172u;g_hd_pbase=312u;g_hd_bin=hit_bin;g_hd_inst=hh.inst;g_hd_prim=hh.prim;
         const float3 hit_p=native_hit_position(hh,o+dir*t);
         NativeHitDirect direct=native_hit_direct(material,hit_p,-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
+#if RT_GI_FAR
+        // Off screen, outside the froxel volume (no light list exists there): the point/spot term is
+        // declared 0 and the sun alone lights the hit (gi_far.hlsli kGiFarLocalOutside).
+        const uint far_local=direct.status==HdOk?kGiFarLocalKnown:(!onscreen && direct.status==kHitDirectSource)?kGiFarLocalOutside:kGiFarLocalUnknown;
+        if(far_local==kGiFarLocalOutside){direct.radiance=0;direct.native=0;direct.lights=0u;}
+#endif
         if(pc.rt_stats!=0u)stat_add(284u,direct.status==HdOk,hit_bin);
+#if RT_GI_FAR
+        if(far_local!=kGiFarLocalUnknown){
+#else
         if(direct.status==HdOk){
+#endif
 #if RT_HIT_GI_SUN
           // gi_hit_sun: the sun at the same hit (counters 320-328, core/gi.cpp "GI hit sun"). It
           // joins the point/spot term in the same zero-fallback replacement (the fallback added no
@@ -279,7 +387,29 @@ void main(uint3 tid : SV_DispatchThreadID) {
             uint value=uint(clamp(dot(direct.radiance*w,float3(.2126,.7152,.0722)),0.0,8.0)*8192.0+0.5);
             uint sum=WaveActiveSum(value);if(WaveIsFirstLane() && sum)rtStats.InterlockedAdd((286u*64u+(WaveReadLaneFirst(hit_bin)&63u))*4u,sum);
           }
+#if RT_GI_FAR
 #if RT_HIT_GI_SUN
+          // Beyond R0 the hit needs the sun (gi_far_hit) and a roof-clear ray: else the fallback.
+          const bool far_roof=t>RB && sun_ok && !gi_far_roof_clear(o,dir,t);
+          if(pc.rt_stats!=0u && far_roof)g_far_stat[10]+=1u;
+          const bool far_sun=sun_ok && !far_roof;const float3 far_sun_l=sun_l;
+#else
+          const bool far_sun=false;const float3 far_sun_l=0.0.xxx;
+#endif
+          const float far_rho=gi_far_luminance(material.scattering.value.Rd);
+          const GiFarHit fh=gi_far_hit(fr,t,RB,far_local,direct.radiance,far_sun,far_sun_l,far_rho);
+          if(fh.radiance){
+            if(pc.rt_stats!=0u){
+              far_stat(5u,fh.occ);far_stat(7u,gi_far_luminance(fh.bounce));far_stat(9u,fr.w*saturate(far_rho));
+              if(t>RB){g_far_stat[2]+=1u;g_far_stat[3]+=far_local==kGiFarLocalOutside?1u:0u;}
+              // The old rule's bounce on this ray: the complete local term (+ the sun) within R0, with w0.
+              else if(far_local==kGiFarLocalKnown)far_stat(8u,gi_far_luminance((direct.radiance+far_sun_l)*fr.w0));
+            }
+            bounce+=fh.bounce;occ+=fh.occ;continue;
+          }
+          // No known radiance (sun unsupported beyond R0, or the local term outside the froxels without
+          // the sun): the fallback below, with the base fade.
+#elif RT_HIT_GI_SUN
           bounce+=(direct.radiance+sun_l)*w;occ+=w;continue;
 #else
           bounce+=direct.radiance*w;occ+=w;continue;
@@ -288,11 +418,26 @@ void main(uint3 tid : SV_DispatchThreadID) {
       }
     }
 #endif
+#if RT_GI_FAR
+    if (visible) {
+      occ += w;
+      if (pc.rt_stats != 0u) far_stat(5u, w);
+    } else if (pc.gi_rt_fallback != 1) {
+      // As without gi_far: the base fade, so a hit beyond R0 without known radiance keeps the native ambient.
+      occ += fr.w0;
+      wfall += fr.w0;
+      if (pc.rt_stats != 0u) {
+        far_stat(5u, fr.w0);
+        g_far_stat[4] += !aborted && t > RB ? 1u : 0u;
+      }
+    }
+#else
     if (visible) occ += w;
     else if (pc.gi_rt_fallback != 1) {
       occ += w;
       wfall += w;
     }
+#endif
   }
   if (pc.gi_rt_fallback == 2 && nseen > 0.0) bounce += seen / nseen * wfall;
   float n = float(max(pc.rays, 1u));

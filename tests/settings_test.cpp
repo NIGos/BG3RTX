@@ -350,8 +350,8 @@ static void test_dependencies_and_caps() {
 }
 
 static void test_rendering_experiments() {
-  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_hit_material_instanced","exp_gi_hit_direct","exp_gi_hit_sun","exp_rf_hit_shade","exp_water_geometry","exp_water_reflections","exp_water_compose","exp_water_shadows"};
-  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","rt_hit_material_instanced","gi_hit_direct","gi_hit_sun","rf_hit_shade","rt_water_geometry","rt_water_reflections","rt_water_compose","rt_water_shadows"};
+  const char* ids[]={"exp_native_scalp","exp_native_hair","exp_native_tileset","exp_omm","exp_current_sun","exp_hit_material","exp_hit_material_instanced","exp_gi_hit_direct","exp_gi_hit_sun","exp_rf_hit_shade","exp_water_geometry","exp_water_reflections","exp_water_compose","exp_water_shadows","exp_water_ls_shadows"};
+  const char* keys[]={"rt_native_scalp","rt_native_hair","rt_native_tileset","rt_omm","rt_sun_cascade_current","rt_hit_material","rt_hit_material_instanced","gi_hit_direct","gi_hit_sun","rf_hit_shade","rt_water_geometry","rt_water_reflections","rt_water_compose","rt_water_shadows","rt_water_ls_shadows"};
   static_assert(std::size(ids)==std::size(keys));
   for(size_t i=0;i<std::size(ids);++i){
     const auto* knob=find_knob(ids[i]);CHECK(knob!=nullptr);if(!knob)continue;
@@ -389,6 +389,23 @@ static void test_rendering_experiments() {
   CHECK(!unmet_key_need(*find_knob("exp_gi_hit_sun"),1,sun_sources).empty());   // gi_hit_direct=0 by default
   sun_sources["gi_hit_direct"]="1";CHECK(unmet_key_need(*find_knob("exp_gi_hit_sun"),1,sun_sources).empty());
   CHECK(unmet_key_need(*find_knob("exp_gi_hit_sun"),0,sun_sources).empty());
+  // gi_far: experimental, off in every preset, live, needs gi_hit_sun; choices off / 4 / 6 / 8 m.
+  {
+    const auto* far=find_knob("exp_gi_far");CHECK(far!=nullptr);
+    if(far){
+      CHECK(far->experimental);CHECK(choice_count(*far)==4);CHECK_EQ(code_default("gi_far"),"0");CHECK_EQ(code_default("gi_far_m"),"6");
+      for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,"gi_far"),"0");CHECK(far->preset[p]==0);}
+      const char* metres[]={"4","6","8"};
+      for(int c=1;c<4;++c){KVList pairs;knob_kvs(*far,c,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;
+        CHECK_EQ(get(on,"gi_far"),"1");CHECK_EQ(get(on,"gi_far_m"),metres[c-1]);CHECK(knob_value(*far,on)==c);}
+      CHECK(knob_value(*far,code_defaults())==0);
+      CHECK(!key_change_needs_restart("gi_far","0","1"));CHECK(!key_change_needs_restart("gi_far_m","6","8"));
+      auto far_sources=code_defaults();
+      CHECK(!unmet_key_need(*far,1,far_sources).empty());   // gi_hit_sun=0 by default
+      far_sources["gi_hit_sun"]="1";CHECK(unmet_key_need(*far,1,far_sources).empty());
+      CHECK(!unmet_need(*far,2,preset_values(kHigh)).empty());   // needs the Sunlit hidden-surface bounce knob
+    }
+  }
   CHECK(!key_change_needs_restart("rf_hit_shade","0","1"));
   auto rf_sources=code_defaults();
   CHECK(!unmet_key_need(*find_knob("exp_rf_hit_shade"),1,rf_sources).empty());   // rt_hit_material=0 by default

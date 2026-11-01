@@ -38,13 +38,18 @@ $jobs = @(
      forbid=@('\[core\] guard:') },
   @{ name='n-visible-unfocused'; save='Rivington'; set='fg=4,headless=1'; traces=1; session=$true;
      args=@('-Foreground'); window_mode='visible_unfocused'; patterns=$guard;
-     expect_runner=@('\[fake-window-mode\] no_activate=True real_present=True foreground=False session=False') }
+     expect_runner=@('\[fake-window-mode\] no_activate=True real_present=True foreground=False session=False') },
+  # expect_every (scripts/queue_gates.py): every "[core] guard:" line must match, not just one.
+  @{ name='o-every-holds'; save='Rivington'; set='gi=6'; traces=1; patterns=$guard;
+     expect_every=@(@{ select='\[core\] guard:'; match='gi=6 '; min=2 }) },
+  @{ name='p-every-fails'; save='Rivington'; set='gi=6'; traces=1; patterns=$guard; expect=@('gi=6 ');
+     expect_every=@(@{ select='\[core\] guard:'; match='gi=7 ' }) }
 )
 $t = (Get-Date).AddMinutes(-10)
 foreach ($j in $jobs) {
   $j.live_batch="synthetic-dryrun"
   $f = Join-Path $Out "captures\queue\pending\$($j.name).json"
-  $j | ConvertTo-Json | Set-Content $f
+  $j | ConvertTo-Json -Depth 8 | Set-Content $f
   (Get-Item $f).LastWriteTime = ($t = $t.AddSeconds(1))
 }
 
@@ -53,7 +58,7 @@ foreach ($j in $jobs) {
 . (Join-Path $PSScriptRoot 'queue-window-mode.ps1')
 $auth=Join-Path $Out 'captures/queue/authorizations';New-Item -ItemType Directory -Force $auth | Out-Null
 $build=Get-QueueBuildIdentity $Out
-$entries=@($jobs | ForEach-Object {$normalized=ConvertTo-QueueWindowJob ([pscustomobject]$_);@{hash=(Get-QueueJobHash $normalized $Out);tree=$Out;build=$build;runs=$(if($_.repeat){$_.repeat}else{1})}})
+$entries=@($jobs | ForEach-Object {$normalized=ConvertTo-QueueWindowJob (Get-Content -Raw (Join-Path $Out "captures\queue\pending\$($_.name).json") | ConvertFrom-Json);@{hash=(Get-QueueJobHash $normalized $Out);tree=$Out;build=$build;runs=$(if($_.repeat){$_.repeat}else{1})}})
 @{version=1;status='approved';runner_session='synthetic-dryrun';user_steering='FAKE TEST ONLY, not user permission';steering_source='offline harness';expires_utc=[datetimeoffset]::UtcNow.AddHours(1).ToString('o');jobs=$entries} | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $auth 'synthetic-dryrun.json')
 $env:BG3RTX_FAKE_LOAD_SEC = "3"
 $t0 = Get-Date
@@ -70,7 +75,7 @@ function Check([string]$what, [bool]$ok) {
 }
 function Has($lines, [string]$re) { [bool](@($lines) -match $re) }
 function Sess($k) { ($by[$k].session -split '#')[0] }
-Check "14 jobs, 15 runs recorded" ($recs.Count -eq 15)
+Check "16 jobs, 17 runs recorded" ($recs.Count -eq 17)
 Check "a, b, c share one session" ((Sess "a-gi0#1") -and (Sess "a-gi0#1") -eq (Sess "b-gi1-phases#1") -and (Sess "b-gi1-phases#1") -eq (Sess "c-refl0#1"))
 Check "a is run 1 of its session (nothing saved), c run 3 (saved > 0)" ($by["a-gi0#1"].saved_sec -eq 0 -and $by["c-refl0#1"].session -like "*#3" -and $by["c-refl0#1"].saved_sec -gt 0)
 Check "a sees its own setting (gi=0)" (Has $by["a-gi0#1"].lines 'gi=0 ')
@@ -89,6 +94,8 @@ Check "every normal run reports done unless faulted" (-not ($recs | Where-Object
 Check 'early single-run exit is INVALID even when every game-log expect matches' (-not $by['k-single-exit#1'].valid -and $by['k-single-exit#1'].outcome -match 'successful terminal state')
 Check 'failed post-analysis gate is INVALID' (-not $by['l-post-fails#1'].valid -and $by['l-post-fails#1'].outcome -match 'post-analysis gate passed')
 Check 'forbidden fault pattern is INVALID' (-not $by['m-forbidden#1'].valid -and $by['m-forbidden#1'].outcome -match 'forbidden log pattern')
+Check 'expect_every: every selected line matches -> valid' ($by['o-every-holds#1'].valid)
+Check 'expect_every: plain expect matches but every-window gate fails -> INVALID' (-not $by['p-every-fails#1'].valid -and $by['p-every-fails#1'].outcome -match 'every-window')
 Check 'visible-unfocused field reaches single runner with forced settings' ($by['n-visible-unfocused#1'].valid -and -not $by['n-visible-unfocused#1'].session)
 Check "no session left running (no session.ready / trace.request)" (-not (Test-Path (Join-Path $Out "captures\session.ready")) -and -not (Test-Path (Join-Path $Out "trace.request")))
 Get-Content (Join-Path $Out "captures\queue\results.md")
