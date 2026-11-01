@@ -1,4 +1,16 @@
-# BG3RTX progress - 2026-11-01 (main 13c8817, ABI 25)
+# BG3RTX progress - 2026-11-01 (main f31c62b, ABI 25)
+
+## Live 2026-11-01 ~07:10 (main f31c62b): water S8 valid, ls_k biased, replay sizes
+
+- Water S8 (audit merged): both planes captured (7b44a567 + c4e92ccd NoCaustics_Waves), views 120/120, reflections 0.12 ms.
+  Compose: 6 FS patched, 174 draws on variants, GPU 0.022 ms, but composed on 3 of 120 frames
+  ("passes without this frame's lighting 117"), 66% of rays off screen (probe kept on 87%), and where composed
+  the traced term is 28% of the probe it replaces (mean -0.4%). Agent fixing all three.
+- ls_k at S7: cost OFF 0.717, k1 0.555 (-23%), k2 0.654 ms. Local-light buffer 3-4% darker than OFF in every
+  alternation (final image unchanged): biased, stays off. Agent on the root cause.
+- Replay: the hit VT cache is one 32688x26352 x2 BC image of 2054 MB; the pack (976 MB) keeps every other texture.
+  Shading hits offline needs it: next step a capped tile subset or a one-off 3.1 GB pack.
+- Raw captures before 07:00 deleted (3.0 GB -> 0.7 GB).
 
 ## Live 2026-11-01 ~06:00: water S8, emission S6, replay textures (main 13c8817)
 
