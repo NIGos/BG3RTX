@@ -43,7 +43,8 @@ struct FsIds {
   uint32_t C;           // vec3: the colour _4335 before max(0)
   uint32_t rough;       // float: roughness _1480 (with the FS's specular AA)
   uint32_t pos;         // Input variable vec3: camera-relative world position _5
-  // M5.4 (record words 8-9 with `sun`): the FS's sun term in Lw = (sun_d + sun_s) * sun_m, the
+  // M5.4 (record words 8-9 with `sun`: C without the sun term, and lum of the term): the FS's sun
+  // term in Lw = (sun_d + sun_s) * sun_m, the
   // operands of its OpFAdd chain before the probe term (spirv-dis --raw-id of the dumps):
   uint32_t sun_d;       // vec3: sun diffuse * N.L, added to the local lights' diffuse sum
   uint32_t sun_s;       // vec3: sun specular * N.L, added to the local lights' specular sum
@@ -298,27 +299,28 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   emit(types, OpConstant, {t_uint, c_cap, capacity});
   emit(types, OpConstant, {t_float, c_one, 0x3f800000u});
   emit(types, OpConstantNull, {t_v3, c_zero3});
-  // M5.4: the record stride and word offsets 8, 9 (after every M5.3 declaration: sun = false is unchanged).
-  uint32_t c_stride = c_u[kRecordWords], c_w8 = 0, c_w9 = 0;
+  // M5.4: the record stride, word offsets 8, 9 and the luminance weights (after every M5.3
+  // declaration: sun = false is unchanged).
+  uint32_t c_stride = c_u[kRecordWords], c_w8 = 0, c_w9 = 0, c_lum = 0;
   if (sun) {
     c_w9 = id(), c_stride = id();
     emit(types, OpConstant, {t_uint, c_w9, 9});
     emit(types, OpConstant, {t_uint, c_stride, refr ? kRecordWordsRefr : ls ? kRecordWordsLs : kRecordWordsSun});
     c_w8 = c_u[kRecordWords];   // 8
-  }
-  // M5.4b: word offsets 10..23, the channel mask 31, the luminance weights (after every M5.4
-  // declaration: ls = false is unchanged).
-  uint32_t c_wl[kRecordWordsLs] = {}, c_31 = 0, c_lum = 0;
-  if (ls) {
-    for (uint32_t k = kRecordWordsSun; k < kRecordWordsLs; ++k) c_wl[k] = id(), emit(types, OpConstant, {t_uint, c_wl[k], k});
-    c_31 = id();
-    emit(types, OpConstant, {t_uint, c_31, 31});
     const uint32_t lr = id(), lg = id(), lb = id();
     emit(types, OpConstant, {t_float, lr, 0x3e59b3d0u});   // 0.2126
     emit(types, OpConstant, {t_float, lg, 0x3f371759u});   // 0.7152
     emit(types, OpConstant, {t_float, lb, 0x3d93dd98u});   // 0.0722
     c_lum = id();
     emit(types, OpConstantComposite, {t_v3, c_lum, lr, lg, lb});
+  }
+  // M5.4b: word offsets 10..23 and the channel mask 31 (after every M5.4 declaration: ls = false
+  // is unchanged).
+  uint32_t c_wl[kRecordWordsLs] = {}, c_31 = 0;
+  if (ls) {
+    for (uint32_t k = kRecordWordsSun; k < kRecordWordsLs; ++k) c_wl[k] = id(), emit(types, OpConstant, {t_uint, c_wl[k], k});
+    c_31 = id();
+    emit(types, OpConstant, {t_uint, c_31, 31});
   }
   // M5.5: word offsets 24, 25 (after every M5.4b declaration: refr = false is unchanged).
   uint32_t c_w24 = 0, c_w25 = 0;
@@ -389,10 +391,17 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     const uint32_t p = op2(OpAccessChain, t_puint, {base, c_u[0], at});
     emit(body, OpStore, {p, v[k], MemAligned, 4});
   }
-  if (sun) {   // D = G * (sun_d + sun_s) * sun_m: w8 half2(D.r, D.g), w9 half2(D.b, 1)
+  if (sun) {
+    // D = G * (sun_d + sun_s) * sun_m, R = C - D in f32 (the FS's colour with its sun term removed):
+    // w8 half2(R.r, R.g), w9 half2(R.b, lum(D)). R, not D: where the sun dominates C (the glint, up
+    // to ~1000), C - D taken in the compose from the B10G11R11 target (6/5-bit mantissa) and a half D
+    // lost the rest (refraction, probe, ambient: a few % of C) in the target's rounding (m5w4: black
+    // and bright specks in the shadowed pool, 1213 clamped records per frame). R is exact to half.
     const uint32_t S = op2(OpVectorTimesScalar, t_v3, {op2(OpFAdd, t_v3, {ids.sun_d, ids.sun_s}), ids.sun_m});
     const uint32_t D = op2(OpFMul, t_v3, {G, S});
-    const uint32_t s8 = half2(c(D, 0), c(D, 1)), s9 = half2(c(D, 2), c_one);
+    const uint32_t R = op2(OpFSub, t_v3, {ids.C, D});
+    const uint32_t lumD = op2(OpDot, t_float, {D, c_lum});
+    const uint32_t s8 = half2(c(R, 0), c(R, 1)), s9 = half2(c(R, 2), lumD);
     const uint32_t p8 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w8})});
     emit(body, OpStore, {p8, s8, MemAligned, 4});
     const uint32_t p9 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w9})});

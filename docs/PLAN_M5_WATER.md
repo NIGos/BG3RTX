@@ -270,7 +270,8 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
   (the M5.3 G = a T X times the FS's own SSA values; ids per FS in water_fs_patch.h kFsIds: 7b44a567
   %3889 %3892 %3898, 99c1fcef %4087 %4090 %4096, c4e92ccd %3310 %3313 %3319). Two more words per record
   (half3 D + a marker), 40 B instead of 32.
-- Replacement, visibility only: `C' = max(C - (1 - V) D, 0)`, V from one ray towards the sun disc from
+- Replacement, visibility only: `C' = max(C - (1 - V) D, 0)` (built as `V C + (1 - V) R`, R = C - D
+  recorded by the FS: see "M5.4 fix" below), V from one ray towards the sun disc from
   the FS's own surface point (P = t dir, its shading N for the offset; rt_shadow.hlsl's disc sample,
   `sun_radius`, `rt_tmax`) into the scene TLAS (no water in it: no self-shadow). Lit and unknown
   (aborted) rays keep C bit-identically; the clouds stay in D (they are the game's radiance, not
@@ -316,6 +317,41 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
   traced > 0 and occluded > 0 in the ON phase at S8 (the temple and columns over the pool), `removed`
   > 0 and only on water (shot-on minus shot-off-a coloured only where rt_debug 26 is red), shot-off-a vs
   shot-off-b within the OFF repeat noise, GPU median against the estimate.
+
+#### M5.4 fix: the record holds R = C - D (2026-11-01, branch worktree-agent-abd9303a6e22b012e, offline, READY_FOR_LIVE)
+- Live m5w4 at S8 (log `m5w4-water-shadows-s8-fg2.1.121950`): the shadow geometry is right (the far,
+  sun-side rim shadows the far half of the pool; the game's glint sat inside that shadow), the shadowed
+  half dark with black and bright specks. `clamped 145573` is the 120-frame total (the log prints the raw
+  window counter), not per frame: 1213 per frame = 0.44% of the sun records, 0.7% of the occluded ones.
+- Audit of the three dumps (spirv-dis --raw-id): D is exactly dC/dSun times the sun term. Sd = Lsun x
+  diffuse x N.L, Ss = Lsun x GGX x N.L, Lsun = sun colour x clouds x b0 (the probe has b0 x 100: both the
+  FS's own); C = mix(refr, fma(fma(Lw, X, e), T, S), a): a, T and X are all in G; no later multiply, no
+  exposure or fog mismatch, no ambient or caustics in Sd/Ss, M5.3's B is a disjoint term. So C - D is the
+  FS with the sun at 0 in exact arithmetic.
+- Root cause: precision. The compose formed C - D from the B10G11R11 target (one ulp 2^-6 of C for R/G,
+  2^-5 for B; the ownership check allows 1 ulp) and a half D. On the shadowed pool the sun is a median
+  66% of C (rt_debug 26 share; 10% of the pixels above 97%, the glint up to C ~ 976 with a rest ~0.05):
+  there the target's rounding is larger than the rest, so C - D clamps to black or keeps up to an ulp of
+  the glint (bright specks). The model test (4e) used exact floats and could not see it.
+- Fix (key-on path only): the FS stores R = C - D in f32 then half, and lum(D) (words 8-9:
+  `half2(R.r, R.g)`, `half2(R.b, lum D)`, no new words); the compose writes `V C + (1 - V) R` (+ A L - B
+  with M5.3, - F sum with M5.4b): R where occluded, C bit for bit where lit or unknown. Statistics: sun term
+  and removed from lum(D). Key off: the M5.3 patch FNV and the plain water_compose SPIR-V unchanged (SHA1
+  7695c1ff... before and after); the sun and LS compose variants change and pass spirv-val.
+- Test 4j (would have caught it): 20000 random FS terms (sun 1e-3..3e3, up to the glint) through the real
+  encodings (B10G11R11 6 / 5 bits, nearest and toward zero; the record in half): at V = 0 the compose equals
+  the FS evaluated with its sun colour set to 0 within the record's half rounding; the old C_target - D
+  fails it (counted) and clamps.
+- Expected live (same S8 view): occluded % of traced ~62.6%, sun term D ~0.22 per sun record, removed
+  ~80% of D and ~46% of mean C (the darkening is the FS's own sun share: unchanged), `clamped` 0 in every
+  ON window (was ~145k per 120 frames; gate below 120 per window, expect_every), no black or bright specks
+  in the shadowed half (shot-on). The shadowed half stays darker than the lit half: the FS's water there
+  is mostly sun (refraction of the shaded pool floor plus the sky probe remain, blue-tinted).
+- Open, same class: the M5.4b local-light removal still subtracts F sum (1 - V_k) c_k from the target's C,
+  so a pixel lit almost only by one occluded unshadowed lantern can speckle the same way. Not a small fix:
+  which lights are occluded is known only in the compose, so the FS would have to record Q = C - F L
+  (half3, two more words after main's refraction words 24-25: record 112 B, buffer sizing, offsets, pins)
+  and the compose write Q + F (sum_k s_k c_k - removed). Do it if m5w5 shows `clamped` above ~0.
 
 #### M5.4b status: local-light shadows (2026-11-01, branch worktree-agent-acc8d7bdca31e7569, offline, READY_FOR_LIVE)
 - What the FS does (spirv-dis --raw-id of the three dumps): three loops over the froxel's list (set 2 b10
