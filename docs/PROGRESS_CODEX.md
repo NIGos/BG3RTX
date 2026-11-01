@@ -12,6 +12,19 @@
   OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
   Merge the branch only if the energy and capacity gates pass.
 
+## M6 offline PT reference on the S8 replay pack (offline, tools only, 2026-11-01)
+
+- `frame_replay --pack <dir> --pt-reference` (tools/pt_reference.hlsl; tools/frame_replay.md): N-vertex
+  opaque PT (sun + froxel lights NEE, FresnelBlend, native hit material else fallback albedo 0.5), split by
+  first hit / distance / light over the same paths; CTest `pt_reference_test` (furnace exact, RR unbiased).
+- S8 pack 071930 (no VT cache: all hits fallback): sun 99% of the traced bounce, multi-bounce 21% (14% at
+  albedo 0.3), hidden-on-screen first hits 48%, off screen 30%; the 1 m live domain 11.6%. Live GI within
+  its domain = 0.97 x calibrated PT (k 0.49). 56-86% comes from beyond 1 m, today the native ambient
+  (not in the pack). Per-region error 84% (one k, no real albedo).
+- Cost (5090, 1 spp, per Mpx): 1 vertex 300 m 1.36 ms, 2 vertices 2.29 ms; 8 m 0.88 / 0.97 ms. ReSTIR PT
+  estimate 6.5-9 ms at 4K DLSS Performance. Decision: no real-time PT now; far-field sun bounce first
+  (longer GI rays + `gi_hit_sun` at hidden hits), then traced SHaRC. Game path unchanged (no shader edits).
+
 ## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01)
 
 - Live S14 (m4i 07:46): instanced key ON raised qualified 22% -> 36-40% but reason `clip` 0 -> 0.4-1.9M per 120
