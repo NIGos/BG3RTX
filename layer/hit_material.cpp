@@ -48,6 +48,7 @@ struct Deferred {
  bool finalized{},valid{true};uint32_t seen{},audited_unique{},audited_duplicate{},family_declined{},pipeline_declined{},binding_declined{};
  uint32_t slot_overflow{},sampler_overflow{},cache_overflow{},stream_overflow{};
  FamilyCensus declined; // G-buffer draws of other native pairs (what to qualify next)
+ uint32_t uncaptured_draws{},uncaptured_instanced{};uint64_t uncaptured_vertices{}; // audited FS, no geometry path (native_vt::CaptureNone)
 };
 struct Slot {
  Buffer data;VkDeviceSize data_bytes{};VkDescriptorSet set{};uint64_t command{},recording{},frame{};uint32_t generation{};
@@ -261,7 +262,9 @@ bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* rec
  // Reflectance mode of the pair (native_vt_surface.h): the 0.5 variants have no 1:1 binding.
  const auto* vt=recipe?recipe:native_vt::recipe(state->fs);material.reflectance=vt?vt->reflectance:native_vt::ReflectanceUbo;
  buffer(0,1,0,recipe?pool::engine_bytes(*recipe):112u,material.engine);buffer(2,0,12,128,material.tilesets);
- if(material.reflectance!=native_vt::ReflectanceConstant)buffer(1,1,1,16,material.physical_ubo);else material.physical_ubo={};
+ // 1:1 bytes the recipe reads (FS 8e49cde8: its reflectance is byte 16 of 32); the per-draw pairs 16.
+ const uint32_t ubo_bytes=vt?std::max(16u,native_vt::material_bytes(*vt)):16u;
+ if(material.reflectance!=native_vt::ReflectanceConstant)buffer(1,1,1,ubo_bytes,material.physical_ubo);else material.physical_ubo={};
  ViewFacts views[4]{};View* targets[4]={&material.table,&material.normal,&material.albedo,&material.physical};
  for(uint32_t i=0;i<4;++i)if(!view(cmd,3+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
  bool sampler_bound=omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,2,0,material.sampler);
@@ -385,11 +388,11 @@ void pool_log(uint64_t frame){
   (unsigned long long)b.jobs,(unsigned long long)b.results[0],(unsigned long long)b.results[1],(unsigned long long)b.results[2],(unsigned long long)b.results[3],(unsigned long long)b.results[4],double(b.err_max),
   pool_slots.used(),nh_pool_rows,(unsigned long long)b.row_instances,(unsigned long long)b.rows,(unsigned long long)b.no_slot);
  // Records and ready UV/basis per pool pair (FS): which variant the qualified share comes from.
- char pairs[256];int k=0;
+ char pairs[512];int k=0;
  for(const auto& r:native_vt::recipes){if(!pool::pool_recipe(r.vs,r.fs) || k<0 || k>=int(sizeof pairs))continue;uint64_t records=0,with_basis=0;
   pool_table.for_each([&](uint64_t,const auto& e){if(e.payload.recipe!=&r)return;++records;with_basis+=e.payload.basis.state==pool::Basis::Ready;});
-  k+=snprintf(pairs+k,sizeof pairs-k,"%sFS %08llx %llu/%llu",k?"; ":"",(unsigned long long)(r.fs>>32),(unsigned long long)records,(unsigned long long)with_basis);}
- log("[hit material pool pairs] frame %llu records/ready UV-basis by pair (VS 2d2ac3c3): %s",(unsigned long long)frame,k>0?pairs:"none");
+  k+=snprintf(pairs+k,sizeof pairs-k,"%s%08llx/%08llx %llu/%llu",k?"; ":"",(unsigned long long)(r.vs>>32),(unsigned long long)(r.fs>>32),(unsigned long long)records,(unsigned long long)with_basis);}
+ log("[hit material pool pairs] frame %llu records/ready UV-basis by pair (VS/FS): %s",(unsigned long long)frame,k>0?pairs:"none");
 }
 void pool_release_slot(PoolMaterial& m){if(m.basis.slot<nh_pool_rows)pool_slots.release(m.basis.slot);m.basis.slot=UINT32_MAX;}
 // Results of recorded captures (under pool_mutex, once per frame from the build's first lookup).
@@ -552,6 +555,7 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  const bool tileset=tileset_deferred(state->vs,state->fs);const bool audited=audited_static_family(state->vs,state->fs)||tileset;
  const auto qualify=deferred_qualify(audited,tileset,exactPipeline,args.kind,args.instances,stride);
  if(qualify==DeferredQualify::FamilyDeclined){++p.family_declined;
+  if(pool::uncaptured_recipe(state->vs,state->fs)){++p.uncaptured_draws;p.uncaptured_instanced+=args.instances>1;p.uncaptured_vertices+=uint64_t(args.count)*args.instances;}
   if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0)p.declined.add(state->vs,state->fs,args.instances,uint64_t(args.count)*args.instances);return false;}++p.seen;
  if(qualify==DeferredQualify::PipelineDeclined){++p.pipeline_declined;return false;}
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
@@ -616,6 +620,9 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
   for(const auto& e:p.declined.top(8))log("[hit material families]   vs/fs %016llx/%016llx draws %u instanced %u vertices %llu",
    (unsigned long long)e.vs,(unsigned long long)e.fs,e.draws,e.instanced,(unsigned long long)e.vertices);
  }
+ // Audited FS decodes whose VS has no geometry path (native_vt::CaptureNone: not class A, never pooled).
+ if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0)log("[hit material families] frame %llu audited recipe, no capture path (VS not class A): draws %u instanced %u vertices %llu",
+  (unsigned long long)p.frame,p.uncaptured_draws,p.uncaptured_instanced,(unsigned long long)p.uncaptured_vertices);
 }
 void slot_in_use(uint32_t index,uint64_t frame){if(!on || index>=kSceneSlots)return;std::lock_guard lock(mutex);for(auto h:slots[index].handles)life_extend(h,frame);}
 bool pool_keys(const InstPipe& inst,const CmdState& s,const DrawArgs& args,uint64_t* geometry,uint64_t* position){
@@ -688,7 +695,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
    const uint32_t engine=pool::engine_bytes(*recipe);
    const bool constant=recipe->reflectance==native_vt::ReflectanceConstant;const float half=0.5f;
    if(ok && constant)std::memcpy(&payload.reflectance,&half,4); // FS 3df678c0: RT2.y is 0.5, no 1:1 UBO
-   if(ok && !(read_mapped(m.engine.buffer,m.engine.offset,payload.engine,engine) && (constant || read_mapped(m.physical_ubo.buffer,m.physical_ubo.offset,&payload.reflectance,4)))){ok=false;failures|=1u<<10;}
+   if(ok && !(read_mapped(m.engine.buffer,m.engine.offset,payload.engine,engine) && (constant || read_mapped(m.physical_ubo.buffer,m.physical_ubo.offset+recipe->reflectance_offset,&payload.reflectance,4)))){ok=false;failures|=1u<<10;}
    payload.recipe=recipe;
    o.status=ok?pool::Status::Qualified:pool::Status::Binding;
    if(ok){

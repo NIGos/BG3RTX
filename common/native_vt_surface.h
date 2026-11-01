@@ -15,14 +15,33 @@ using V3=std::array<float,3>;using V4=std::array<float,4>;
 // (8995 or 14678345) only in that RT2.y term; the rest of the dumped GLSL is identical after
 // renaming (audit 2026-10-31, captures/alpha_cache, PLAN_M4 "next families").
 enum Reflectance : uint32_t {ReflectanceUbo=0,ReflectanceConstant=1,ReflectanceNormalMix=2};
-struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset,channel_offset;uint32_t reflectance=ReflectanceUbo;};
+// capture: whether the layer has a geometry path for the pair. CaptureNone: the FS decode is
+// audited but its VS is neither the per-draw VS 3812bc98 nor class A (spirv_xfb.h
+// analyze_vs_instancing), so its meshes are never pooled and its instanced draws have no
+// per-draw row: counted in "[hit material families]", never qualified (PLAN_M4 "next families").
+enum Capture : uint32_t {CapturePool=0,CaptureNone=1};
+// layout: LayoutBase = the 8995 sampling (sampler 1:2, table 1:3, normal/albedo/physical 1:4..6);
+// LayoutDetail = ENV_DetailMap_VT (native_vt_detail below): the same VT layers at 1:4..7 plus a
+// 2D detail normal 1:3 and a 2D detail mask 1:8 sampled with sampler 0:7.
+enum Layout : uint32_t {LayoutBase=0,LayoutDetail=1};
+// reflectance_offset: byte of the reflectance float in the material UBO 1:1 (FS 8e49cde8: 16).
+// two_sided: the FS multiplies the N column by (gl_FrontFacing ? 1 : -1) (nv_two_sided_sign).
+struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset,channel_offset;uint32_t reflectance=ReflectanceUbo;
+ uint32_t reflectance_offset=0;uint32_t capture=CapturePool;uint32_t layout=LayoutBase;bool two_sided=false;};
 inline constexpr Recipe recipes[]={
  {0x8995da1e4060f53bull,0x3812bc980438747full,64,100,104},
  {0x14678345c10aefbcull,0x2d2ac3c38992b7f0ull,0,32,36},
  {0x3da860bebbe9133bull,0x3812bc980438747full,64,100,104,ReflectanceConstant},   // per-draw, 8995 with 0.5
  {0x3df678c09f13ea60ull,0x2d2ac3c38992b7f0ull,0,32,36,ReflectanceConstant},      // pool, 14678345 with 0.5
- {0x8165785442a20e57ull,0x2d2ac3c38992b7f0ull,0,32,36,ReflectanceNormalMix}};    // pool, mix(0.5, n.x, p)
+ {0x8165785442a20e57ull,0x2d2ac3c38992b7f0ull,0,32,36,ReflectanceNormalMix},     // pool, mix(0.5, n.x, p)
+ // ATM_Wind_Vertex_RG_VT STI: 14678345 with RT2.y = clamp(1:1 _m4) (byte 16 of a 32 B UBO). VS
+ // 50fbfceb: same UV/N/B/T outputs as 2d2ac3c3 (inputs moved: rows 0..2, P 4, UV 5, quaternion
+ // 6), but W = M P + wind(time, vertex color RG, distance fade) before the clip transform: not
+ // class A, so no pool mesh (and no static mesh to check the raster positions against).
+ {0x8e49cde81b680054ull,0x50fbfceb06192473ull,0,32,36,ReflectanceUbo,16,CaptureNone}};
 inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
+// Material UBO 1:1 bytes the recipe reads (0: no 1:1 binding).
+inline uint32_t material_bytes(const Recipe& r){return r.reflectance==ReflectanceConstant?0u:(r.layout==LayoutDetail?20u:r.reflectance_offset+4u);}
 // Both deferred variants: sampler 1:2, table 1:3, normal 1:4, albedo 1:5,
 // physical 1:6; Reflectance is material UBO 1:1 byte 0. Engine UBO is 1:0.
 struct Samples {
