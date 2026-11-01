@@ -312,7 +312,8 @@ the replay still needs the asset-DB roof volumes: `PT_ROOFS=1` for the PT, and f
   diffuse radiance, median ratio 1.13): 4 / 6 / 8 m **-1.4 / -2.0 / -2.4%** of the screen radiance (6 m: ambient
   -2.83%, bounce +0.88%). Toward the reference, no overshoot: the game stays above it on 89% of tiles, per-tile
   |I - ref| / ref 1.40 -> 1.31 (6 m) -> 1.30 (8 m), mean I / ref 1.555 -> 1.507 -> 1.497.
-- **Live S8 went the other way: +2.87%** (scene colour 5c3fdabc, OFF spread 0.23%; diffuse buffer d1669194
+- **Live S8 went the other way: +2.87%** (raw; the eye adaptation, see the next section: -0.32% at a fixed exposure)
+  (scene colour 5c3fdabc, OFF spread 0.23%; diffuse buffer d1669194
   +2.93%). The bounce alone gives at most +0.88%, so the live change is not explained by the `GI far` line: the
   batch's energy gate fails. The ray data agree, so the difference is downstream of giRaw (temporal, AO fold,
   composite, the D-LS `ao_direct` give-back that reads the folded AO, RR). Camp (+3.97%) has no pack.
@@ -320,6 +321,30 @@ the replay still needs the asset-DB roof volumes: `PT_ROOFS=1` for the PT, and f
   monotonically, and `gi_far_rho` touches 0.1-0.3% of rays. Next: one live window ON / OFF with `ls_stats=1` and the
   GI images in the trace (giRaw, the folded AO, gDiffuse before and after the composite) to find the stage that
   turns -2% into +2.9%; then rerun gf2. Cost if ever on: GI trace S8 0.97 -> 3.00 ms, camp 2.63 -> 5.70 ms.
+
+### Live energy: the eye adaptation, not a GI stage (2026-11-01, offline from the gf1/gf2 logs and traces)
+
+- Derivation, per pixel (gi_ao = 1, ao_direct = 1, m0.y = 0.5, RR mode: gi_temporal passes giRaw through and
+  gather_history is a normalised depth-weighted mean, both linear and the same for a and rgb):
+  D = k (E dcol A + f(A) D_untraced + D_traced) + dcol B, with A the folded visibility, f(A) = 1 - 0.5 (1 - A), k the
+  pre-exposure s1b13[0]. The give-back makes traced direct light A-independent: the game writes td f(A), D-LS adds
+  td (1 - f(A)) (its cap can only lower that). So dD = k (E dcol + 0.5 D_untraced) dA + dcol dB + D dk / k: with
+  dA < 0, every GI stage can only darken except the bounce (+0.88% offline); the sun's give-back adds only where its
+  recompute exceeds the game's sun (lit on 7.5% of S8 px). The SSS pass and the compose are linear; RR comes after
+  the measured buffers. No stage of ours can turn -2% into +2.9%.
+- The traces say it is dk: the change is a uniform factor. S8 diffuse +2.91 / +2.93 / +2.94% in R / G / B; per tile
+  (16 x 9, PNG decoded) ON / OFF median 1.030, p10 1.021, p90 1.037, the same width as OFF-b / OFF-a (0.993-1.010).
+  The `[rrpost] exposure probe` lines at the trace frames: s1b13[0] OFF-a 3.05704e-4, ON 3.15530e-4, OFF-b 3.05773e-4
+  (EV 11.413 -> 11.367 -> 11.412): ON / OFF 1.0320. Camp 9.4642e-5 / 9.8496e-5 / 9.4566e-5: 1.0411. The ON shots
+  also show the adaptation still moving (re-exposure 0.996 / 0.995, every OFF shot 1.000). The gf jobs had no
+  `qa_exposure_hold`.
+- At a fixed exposure: **S8 scene colour -0.32%, diffuse -0.26% (OFF spread 0.21%); camp -0.14% (0.11%).** The sign
+  agrees with the offline -2.0%; the size does not (S8 -0.3 vs -2.0%). That gap is open: the next gf2 run holds the
+  exposure and measures the stages (tools/live_batches/gi_far README "Stages": folded visibility, bounce, give-back).
+- Fix of the test: `tools/m4_promotion_gate.py` (the gate table of every lean batch) divides each scene colour by
+  its trace frame's s1b13[0] and prints the raw change and the exposure ratio beside it (CTest
+  m4_promotion_gate_test); the gi_far plans hold the exposure. The m4_promotion runs moved little (camp shot-on
+  exposure 0.9963: -0.12% raw, +0.25% normalised).
 
 ## `gi_bounce_spec`: not re-added (review 2026-11-01)
 

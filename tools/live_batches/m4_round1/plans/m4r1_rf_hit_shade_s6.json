@@ -12,7 +12,7 @@
   "motion_end": 15,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0"
+  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0,qa_exposure_hold=0"
  },
  {
   "label": "diag-precheck-reasons",
@@ -27,7 +27,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,rf_hit_shade=1,rt_stats=1,rf_stats=0,rf_debug=0"
+  "set": "gi_hit_direct=1,rf_hit_shade=1,rt_stats=1,rf_stats=0,rf_debug=0,qa_exposure_hold=0"
  },
  {
   "label": "diag-precheck-rf",
@@ -42,7 +42,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=1,rt_stats=0,rf_stats=1,rf_debug=0"
+  "set": "gi_hit_direct=0,rf_hit_shade=1,rt_stats=0,rf_stats=1,rf_debug=0,qa_exposure_hold=0"
  },
  {
   "label": "cost-off-a",
@@ -57,7 +57,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0"
+  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-off-a",
@@ -72,7 +72,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0",
+  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -90,7 +90,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=1,rt_stats=0,rf_stats=0,rf_debug=0"
+  "set": "gi_hit_direct=0,rf_hit_shade=1,rt_stats=0,rf_stats=0,rf_debug=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-on",
@@ -105,7 +105,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=1,rt_stats=0,rf_stats=0,rf_debug=0",
+  "set": "gi_hit_direct=0,rf_hit_shade=1,rt_stats=0,rf_stats=0,rf_debug=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -123,7 +123,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=1,rt_stats=0,rf_stats=1,rf_debug=8",
+  "set": "gi_hit_direct=0,rf_hit_shade=1,rt_stats=0,rf_stats=1,rf_debug=8,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -141,7 +141,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0"
+  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-off-b",
@@ -156,7 +156,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0",
+  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -174,6 +174,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0"
+  "set": "gi_hit_direct=0,rf_hit_shade=0,rt_stats=0,rf_stats=0,rf_debug=0,qa_exposure_hold=0"
  }
 ]

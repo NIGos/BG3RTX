@@ -7,7 +7,7 @@
  "timeout": 480,
  "repeat": 1,
  "live_batch": "m4-round1",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_hit_material=1,rt_xfb_mb=1408,rt_cascade_mb=587,gi=1,gi_rt=1,gi_rt_fallback=0,gi_hit_direct=0,rt_stats=0,rf_hit_shade=0,rt_reflections=1",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_hit_material=1,rt_xfb_mb=1408,rt_cascade_mb=587,gi=1,gi_rt=1,gi_rt_fallback=0,gi_hit_direct=0,rt_stats=0,rf_hit_shade=0,rt_reflections=1,qa_exposure_hold=0",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -38,7 +38,8 @@
   "hit material",
   "rt stats",
   "rf: reflection pass",
-  "rf hit shade"
+  "rf hit shade",
+  "\\[rrpost\\] exposure (held|hold|probe)"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -55,7 +56,9 @@
   "rf hit shade \\(300 frames\\): tier b hidden hits [1-9]\\d*, shaded \\d+ \\([0-9.]+%\\), .*tier a check: \\d+ hits .*standard error [0-9.]+ \\(\\d+ frames\\), mean \\|L_b - L_a\\| [0-9.]+; L_b terms direct [0-9.]+, sun [0-9.]+, ambient [0-9.]+",
   "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
   "rf: reflection pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames; .*debug 0,",
-  "rf: reflection pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames; .*debug 8,"
+  "rf: reflection pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames; .*debug 8,",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
