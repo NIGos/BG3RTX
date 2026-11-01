@@ -16,6 +16,7 @@
 // BG3_BOX_SET (rf_hit_shade: set 2, rt/native_hit_direct.hlsli NATIVE_HIT_BOXES).
 #pragma once
 #include "bg3_materials.hlsli"
+#include "../../common/box_light.h"   // the shared math (tests/box_light_test.cpp: against the game's loop)
 
 // BG3_BOX_SET: the set the lighting's set 1 is bound as (3 in D-LS; rf_hit_shade binds it as 2).
 #ifndef BG3_BOX_SET
@@ -67,26 +68,9 @@ float3 bg3_box_uvw(Bg3Box b, float3 P) {
   return float3(dot(b.r0, q), dot(b.r1, q), dot(b.r2, q));
 }
 // f469db78: lit only strictly inside the box.
-bool bg3_box_inside(float3 uvw) { return all(abs(uvw - 0.5) < 0.5); }
-
-// One ramp: _304[curve] . (t, t^2, smoothstep, smootherstep). A curve index past 3 reads
-// past the game's constant array; it is treated as no light.
-float bg3_box_curve(uint k, float t) {
-  const float t2 = t * t;
-  const float4 v = float4(t, t2, smoothstep(0.0, 1.0, t), (t2 * t) * (t * (t * 6.0 - 15.0) + 10.0));
-  return k == 0u ? v.x : k == 1u ? v.y : k == 2u ? v.z : k == 3u ? v.w : 0.0;
-}
-// The box falloff x * y * z (f469db78 _1320.x * _1320.y * _1320.z).
-float bg3_box_falloff(Bg3Box b, float3 uvw) {
-  const uint k = b.m4 >> 24;
-  float z = 1.0;
-  if (uvw.z < b.ramp.x) z = bg3_box_curve(k, uvw.z * b.ramp.z);
-  else if (uvw.z > b.ramp.y) z = bg3_box_curve(k, (1.0 - uvw.z) * b.ramp.w);
-  const float2 e = (0.5 - abs(uvw.xy - 0.5)) * b.edge;
-  const float x = e.x < 1.0 ? bg3_box_curve(k, e.x) : 1.0;
-  const float y = e.y < 1.0 ? bg3_box_curve(k, e.y) : 1.0;
-  return (x * y) * z;
-}
+bool bg3_box_inside(float3 uvw) { return bl_inside(uvw); }
+// The box falloff x * y * z (f469db78 _1320.x * _1320.y * _1320.z; common/box_light.h bl_falloff).
+float bg3_box_falloff(Bg3Box b, float3 uvw) { return bl_falloff(uvw, b.ramp, b.edge, b.m4 >> 24); }
 
 // The light's colour at uv: _m0, times the cookie when it has one. `duv_x`, `duv_y`: the
 // uv differences across the pixel's 2x2 quad (the game's quad swaps), zeroed as the game
@@ -148,17 +132,14 @@ bool bg3_box_eval_mat(Bg3Box b, float3 col_in, float g, Bg3Surface sf, Bg3Mat m,
   float loh = saturate(dot(Ld, H));
   float noh = saturate(dot(sf.N, H));
   float a = sf.a;
-  float fd = (2.0 * loh * loh * a + lerp(0.0, 0.5, a)) - 1.0;
-  float burley = (1.0 + fd * bg3_pow5(1.0 - nolc)) * (1.0 + fd * bg3_pow5(1.0 - sf.nov));
-  d += col * (sf.diff_col * (0.31830987 * (burley * lerp(1.0, 0.66225165, a))));
+  // The standard lobes (common/box_light.h bl_std_lobes, checked against f469db78 by box_light_test).
+  const BlLobes lb = bl_std_lobes(nolc, sf.nov, loh, noh, a);
+  d += col * (sf.diff_col * lb.diff);
   float3 ggx = 0;
   if (m.cls != 6u) {
-    float k2 = (a + 1.0) * 0.5;
-    k2 *= k2;
-    float3 F = sf.f0 + (1.0 - sf.f0) * bg3_pow5(1.0 - loh);
-    float vis = 0.5 / (nolc * sqrt((sf.nov - sf.nov * k2) * sf.nov + k2) + sf.nov * sqrt((nolc - nolc * k2) * nolc + k2));
-    float D = m.cls == 3u ? bg3_sss_D(noh, a, m) : m.cls == 2u ? bg3_aniso_D(noh, dot(H, m.T), a, m.aniso) : bg3_ggx_D(noh, a);
-    ggx = F * (vis * D);
+    float3 F = sf.f0 + (1.0 - sf.f0) * lb.f5;
+    float D = m.cls == 3u ? bg3_sss_D(noh, a, m) : m.cls == 2u ? bg3_aniso_D(noh, dot(H, m.T), a, m.aniso) : lb.D;
+    ggx = F * (lb.vis * D);
   }
   if (m.cls == 6u || m.cls == 7u) {
     float3 sheen = m.rt3.rgb * bg3_sheen(noh, nolc, sf.nov, a);
@@ -221,12 +202,27 @@ float bg3_box_atlas_shadow(Bg3Box b, Bg3Surface sf, float nolc) {
 // the light's extent: casters beyond its light-side face are outside the light). The box
 // map is affine, so the world parameter is the box-space one. <= 0: already outside.
 float bg3_box_exit(Bg3Box b, float3 o, float3 dir) {
-  const float3 u = bg3_box_uvw(b, o);
   const float3 dv = float3(dot(b.r0.xyz, dir), dot(b.r1.xyz, dir), dot(b.r2.xyz, dir));
-  float t = 3.0e38;
-  [unroll] for (uint i = 0; i < 3u; ++i) {
-    if (dv[i] > 0.0) t = min(t, (1.0 - u[i]) / dv[i]);
-    else if (dv[i] < 0.0) t = min(t, (0.0 - u[i]) / dv[i]);
-  }
-  return t;
+  return bl_exit(bg3_box_uvw(b, o), dv);
+}
+
+// ls_box=2, a box light with a game shadow map (_m8 bit 0): the distance along `dir` from `o` to
+// its shadow view's near plane (common/box_light.h bl_shadow_near): nothing nearer the light can be in
+// the game's map, so the traced segment that replaces the atlas term covers the same space.
+float bg3_box_shadow_near(Bg3Box b, float3 o, float3 dir) {
+  const uint slot = b.flags >> 2;
+  if (!bg3_in(lShadows, slot, 96u)) return kBlFar;
+  const uint a = slot * 96u;
+  const float4 r2 = asfloat(lShadows.Load4(a + 32));
+  const float2 dp = asfloat(lShadows.Load2(a + 84));
+  const float dw = asfloat(lShadows.Load(a + 92));
+  const float ref0 = ((dot(r2, float4(o, 1.0)) - dp.y) / dp.x) / dw;
+  const float slope = (dot(r2.xyz, dir) / dp.x) / dw;
+  const float t = bl_shadow_near(ref0, slope);
+  return isfinite(t) ? t : kBlFar;
+}
+// ls_box=2, a box light without one: the end of the segment that may shadow it, the light-side
+// plane where its z fade-in ends (common/box_light.h bl_fixture_end; <= 0: the receiver is in it).
+float bg3_box_fixture_end(Bg3Box b, float3 o, float3 dir) {
+  return bl_fixture_end(bg3_box_uvw(b, o).z, dot(b.r2.xyz, dir), b.ramp);
 }

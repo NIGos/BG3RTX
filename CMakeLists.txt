@@ -323,6 +323,9 @@ target_include_directories(native_light_validation_test PRIVATE ${VULKAN_SDK}/In
 add_test(NAME native_light_validation_test COMMAND native_light_validation_test)
 add_executable(ufloat_interval_test tests/ufloat_interval_test.cpp)
 add_test(NAME ufloat_interval_test COMMAND ufloat_interval_test)
+# Box light math (common/box_light.h, rt/bg3_boxes.hlsli) against the game's box loop; ls_box=2 segments.
+add_executable(box_light_test tests/box_light_test.cpp)
+add_test(NAME box_light_test COMMAND box_light_test)
 add_executable(native_sun_packets_test tests/native_sun_packets_test.cpp)
 add_test(NAME native_sun_packets_test COMMAND native_sun_packets_test)
 add_executable(native_hit_qualify_test tests/native_hit_qualify_test.cpp)

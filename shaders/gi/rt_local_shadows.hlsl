@@ -88,6 +88,53 @@
 #if LS_BOX
 #include "../rt/bg3_boxes.hlsli"
 #endif
+#if LS_BOX && LS_FULL
+#include "../../common/ufloat_interval.h"
+// Box statistics (ls_stats=1): a device-local buffer (set 4 b0, core/gi.cpp ensure_bx), reduced per
+// 8x8 group in groupshared memory (one atomic per counter and group), copied after the pass into
+// rtStats 372.. (kLsBoxXFirst). Counters 0-15 counts, 16-31 eight 64-bit sums (Q24: 24 fractional bits)
+// as (low, high) words. Never host-visible atomics (META_AUDIT 2026-11-01 5).
+[[vk::binding(0, 4)]] RWByteAddressBuffer lsBoxStats;
+static const uint kBxN = 32u, kBxPairs = 16u;
+groupshared uint gsBx[kBxN];
+void bx_add(uint k, uint v) {
+  const uint w = WaveActiveSum(v);
+  if (WaveIsFirstLane() && w != 0u) InterlockedAdd(gsBx[k], w);
+}
+void bx_sum(uint k, float x) {
+  const float w = WaveActiveSum(isfinite(x) && x > 0.0 ? x : 0.0);
+  if (WaveIsFirstLane() && w > 0.0) {
+    const float q = min(round(w * 16777216.0), 1.8e19);
+    const uint hi = uint(floor(q / 4294967296.0));
+    const uint lo = uint(q - float(hi) * 4294967296.0);
+    uint old;
+    InterlockedAdd(gsBx[k], lo, old);
+    const uint up = hi + (old > 0xffffffffu - lo ? 1u : 0u);
+    if (up != 0u) InterlockedAdd(gsBx[k + 1u], up);
+  }
+}
+// After the group's barrier: thread gi adds counter gi (or the sum pair 16 + 2 (gi - 16)) to the bin of
+// its group (the host sums the 64 bins of each counter).
+void bx_flush(uint gi, uint2 gid) {
+  const uint bin = (gid.x * 7u + gid.y * 13u) & 63u;
+  if (gi < kBxPairs) {
+    const uint v = gsBx[gi];
+    if (v != 0u) lsBoxStats.InterlockedAdd((gi * 64u + bin) * 4u, v);
+  } else if (gi < kBxPairs + (kBxN - kBxPairs) / 2u) {
+    const uint k = kBxPairs + 2u * (gi - kBxPairs);
+    const uint lo = gsBx[k], hi = gsBx[k + 1u];
+    uint old = 0u;
+    if (lo != 0u) lsBoxStats.InterlockedAdd((k * 64u + bin) * 4u, lo, old);
+    const uint up = hi + (lo != 0u && old > 0xffffffffu - lo ? 1u : 0u);
+    if (up != 0u) lsBoxStats.InterlockedAdd(((k + 1u) * 64u + bin) * 4u, up);
+  }
+}
+// The counters (core/gi.cpp "ls box trace", "ls box bound").
+static const uint kBxBoundPx = 0u, kBxBoundOver = 1u, kBxBoundInconcl = 2u, kBxBoundCh = 3u, kBxBoundChOver = 4u;
+static const uint kBxShTraced = 5u, kBxShOcc = 6u, kBxShOccAtlasLit = 7u, kBxShCut = 8u;
+static const uint kBxUnTraced = 9u, kBxUnOcc = 10u, kBxUnFixture = 11u, kBxUnknown = 12u;
+static const uint kBxGame = 16u, kBxRec = 18u, kBxBox = 20u, kBxExcess = 22u, kBxRemUn = 24u, kBxRemSh = 26u;
+#endif
 #ifndef LS_K
 #define LS_K 0
 #endif
@@ -413,12 +460,18 @@ float3 ls_box_dir(Bg3Box b) { return b.dir * rsqrt(max(dot(b.dir, b.dir), 1e-20)
 
 // Phase 1: does this pass trace box light `bi` at this pixel (the game adds light, and the
 // rules above)?
+// ls_box=2 (Push::ls_flags bit 27): the box lights without a game shadow map are traced too, and
+// every box ray covers only the segment that can shadow it (ls_box_ray).
+bool ls_box_all_lights() { return (pc.ls_flags & (1u << 27)) != 0u; }
+
 bool ls_box_traced(uint bi, LsLite s) {
   const Bg3Box b = load_box(bi);
   if ((b.flags & 1u) != 0u && ((pc.ls_shadowed == 0u && !ls_qa_off()) || s.cls == kMatHair)) return false;
-  // Box lights the game draws without a shadow map keep the game's look (artists place
-  // decorative casters inside such boxes: the main-menu skull).
-  if ((b.flags & 1u) == 0u) return false;
+  // ls_box=1: box lights the game draws without a shadow map keep the game's look (artists place
+  // decorative casters inside such boxes: the main-menu skull). ls_box=2 traces them up to the end
+  // of their light-side fade-in, where such fixtures sit (rt/bg3_boxes.hlsli bg3_box_fixture_end):
+  // visibility only, t <= s = 1, so it can only remove light, where a caster is on the segment.
+  if ((b.flags & 1u) == 0u && !ls_box_all_lights()) return false;
   float3 uvw;
   if (!bg3_box_reaches(b, s.channel, s.P, uvw)) return false;
   if (!(bg3_box_falloff(b, uvw) > 0.0)) return false;   // c = 0: no delta
@@ -428,12 +481,29 @@ bool ls_box_traced(uint bi, LsLite s) {
   return saturate(nol) > 0.0;
 }
 
-// The ray's origin and extent towards box light `b` (tmax <= 0: the origin left the box).
+// The ray's origin and extent towards box light `b` (tmax <= 0: the origin left the box, or with
+// ls_box=2 the receiver lies in the light's fade-in / before its shadow view: nothing to trace, lit).
+// ls_box=2 ends it, within the box, at the shadow view's near plane (a light with a game shadow map:
+// the segment the atlas term it replaces covers) or at the end of the light-side fade-in (without one).
 float ls_box_ray(Bg3Box b, LsLite s, out float3 o, out float3 dir) {
   dir = ls_box_dir(b);
   o = RT_SECONDARY_ORIGIN(s.pixel,s.org, s.P, s.N, s.cone.f0, dir);
-  return bg3_box_exit(b, o, dir);
+  float t = bg3_box_exit(b, o, dir);
+  if (ls_box_all_lights())
+    t = min(t, (b.flags & 1u) != 0u ? bg3_box_shadow_near(b, o, dir) : bg3_box_fixture_end(b, o, dir));
+  return t;
 }
+#if LS_FULL
+// Statistics: 1 when ls_box=2 cut the segment short of the box exit (still traced), 2 when the cut
+// leaves nothing to trace (the receiver in the fade-in / before the near plane), 0 otherwise.
+uint ls_box_cut(Bg3Box b, LsLite s) {
+  if (!ls_box_all_lights()) return 0u;
+  float3 o, dir;
+  const float t = ls_box_ray(b, s, o, dir);
+  const float te = bg3_box_exit(b, o, dir);
+  return !(te > 0.0) ? 0u : !(t > 0.0) ? 2u : t < te ? 1u : 0u;
+}
+#endif
 
 // Phase 2: the ray (kRtLit / kRtOccluded / kRtUnknown).
 uint ls_box_trace(uint bi, LsLite s) {
@@ -679,6 +749,10 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   uint n_unk = 0;                 // rays aborted by the candidate cap (unknown; ls_debug=10)
   uint n_matched = 0, n_se = 0, n_skipped = 0, n_unmatched = 0;   // per-light data (ls_stats)
   float3 dbg_owner = 0;                                            // ls_debug=9
+#if LS_BOX
+  // ls_stats bound (debug 0): every evaluated point/spot light with the game's own shadow term.
+  float3 rec_d = 0, rec_s = 0;
+#endif
   // RIS reservoirs (ls_samples > 0)
   const uint ns = qa ? 0u : min(pc.ls_samples, 2u);   // (QA: the exact sum)
   float wsum = 0;
@@ -699,6 +773,13 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
     float s = 1.0;
     if (shadowed && (validate || pc.ls_shadowed != 0 || qa)) s = bg3_atlas_shadow(l, spot, sf, Ld, d2, saturate(nol));
     n_shadowed += shadowed ? 1u : 0u;
+#if LS_BOX
+    {   // (ls_shadowed=0 does not compute s: the bound needs the game's own term)
+      const float sg = shadowed && !(validate || pc.ls_shadowed != 0 || qa) ? bg3_atlas_shadow(l, spot, sf, Ld, d2, saturate(nol)) : s;
+      rec_d += cd * sg + ct;
+      rec_s += cs * sg;
+    }
+#endif
     if (validate) {
       md += cd * s + ct;
       ms += cs * s;
@@ -786,6 +867,11 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   float3 bdd = 0, bds = 0;   // stats: the box lights' delta
   uint nb_ev = 0, nb_sh = 0, nb_tr = 0, nb_occ = 0, nb_unk = 0, nb_ck = 0;
 #if LS_BOX
+  // ls_stats, per kind (device-local counters kBx*): traced, occluded, occluded where the atlas term
+  // is 1, segment cut by ls_box=2 (shadow-mapped); traced, occluded, receiver in the fade-in
+  // (unshadowed); unknown; the light each kind's rays remove.
+  uint xb_sh_tr = 0, xb_sh_occ = 0, xb_sh_lit = 0, xb_sh_cut = 0, xb_un_tr = 0, xb_un_occ = 0, xb_un_fix = 0, xb_unk = 0;
+  float3 xb_rem_sh_d = 0, xb_rem_sh_s = 0, xb_rem_un_d = 0, xb_rem_un_s = 0;
   if (n_proj > 0u) {
     LsLite bs_ = (LsLite)0;
     ls_lite(fp, d, bs_);
@@ -827,6 +913,24 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       ts += cs * t;
       bdd += cd * (t - sh) - (qa ? ct : 0.0);
       bds += cs * (t - sh);
+      if (!qa) {
+        const uint cut = ls_box_cut(load_box(bi), bs_);
+        if (shadowed) {
+          ++xb_sh_tr;
+          xb_sh_occ += occ ? 1u : 0u;
+          xb_sh_lit += occ && sh == 1.0 ? 1u : 0u;
+          xb_sh_cut += cut == 1u ? 1u : 0u;
+          xb_rem_sh_d += cd * (sh - t);
+          xb_rem_sh_s += cs * (sh - t);
+        } else {
+          ++xb_un_tr;
+          xb_un_occ += occ ? 1u : 0u;
+          xb_un_fix += cut == 2u ? 1u : 0u;
+          xb_rem_un_d += cd * (sh - t);
+          xb_rem_un_s += cs * (sh - t);
+        }
+        xb_unk += vs == kRtUnknown ? 1u : 0u;
+      }
       vd_all += cd * (vs == kRtUnknown ? sh : vs == kRtLit ? 1.0 : 0.0);
     }
   }
@@ -948,6 +1052,61 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
         stat_addv(206, fx(-lum(bdd * fdif + bds * fspec)), bin);
       }
     }
+#if LS_BOX
+    // The box accuracy bound in normal play (debug 0; device-local counters). The game's stored diffuse /
+    // specular = transmittance x (direct x mix(1, AO, m0.y) + ambient x AO) + in-scatter, every term >= 0,
+    // so the recompute of its direct local light (every evaluated point/spot and box light with the
+    // game's own shadow term, x the same AO factors; no sun) can only be at or below it. The stored value
+    // is B10G11R11 (6/6/5-bit mantissas): it fixes the true value only to the open interval between its
+    // neighbours (common/ufloat_interval.h), so a channel whose recompute reaches the upper neighbour is a
+    // violation: an over-estimate beyond the encoding precision, no tuned allowance. Hair (shadow-mapped
+    // lights keep the game's model) and frames under QA are left out. One-sided: an under-estimate is not
+    // seen here (ls_native_direct_validate is the two-sided check), and fog transmittance < 1 can flag.
+    {
+      const bool bnd = !validate && !qa && nb_ev > 0u && cls != kMatHair;
+      uint b_over = 0u, b_inc = 0u, b_ch = 0u, b_chover = 0u;
+      float b_exc = 0.0;
+      const float3 rd = (rec_d + bgd) * fdif, rs = (rec_s + bgs) * fspec;
+      if (bnd) {
+        [unroll] for (uint lobe = 0u; lobe < 2u; ++lobe) {
+          const float3 nat = lobe == 0u ? gd : gs;
+          const float3 est = lobe == 0u ? rd : rs;
+          [unroll] for (uint c = 0u; c < 3u; ++c) {
+            const UfInterval iv = uf_interval(nat[c], c == 2u ? 5u : 6u);
+            if (iv.status != 1u || !isfinite(est[c]) || est[c] < 0.0) {
+              b_inc = 1u;
+              continue;
+            }
+            ++b_ch;
+            if (!(est[c] < iv.upper)) {
+              ++b_chover;
+              b_over = 1u;
+              b_exc += (est[c] - iv.upper) * (c == 0u ? 0.2126 : c == 1u ? 0.7152 : 0.0722);
+            }
+          }
+        }
+      }
+      bx_add(kBxBoundPx, bnd ? 1u : 0u);
+      bx_add(kBxBoundOver, b_over);
+      bx_add(kBxBoundInconcl, b_inc);
+      bx_add(kBxBoundCh, b_ch);
+      bx_add(kBxBoundChOver, b_chover);
+      bx_sum(kBxGame, bnd ? lum(gd + gs) : 0.0);
+      bx_sum(kBxRec, bnd ? lum(rd + rs) : 0.0);
+      bx_sum(kBxBox, bnd ? lum(bgd * fdif + bgs * fspec) : 0.0);
+      bx_sum(kBxExcess, b_exc);
+      bx_add(kBxShTraced, xb_sh_tr);
+      bx_add(kBxShOcc, xb_sh_occ);
+      bx_add(kBxShOccAtlasLit, xb_sh_lit);
+      bx_add(kBxShCut, xb_sh_cut);
+      bx_add(kBxUnTraced, xb_un_tr);
+      bx_add(kBxUnOcc, xb_un_occ);
+      bx_add(kBxUnFixture, xb_un_fix);
+      bx_add(kBxUnknown, xb_unk);
+      bx_sum(kBxRemUn, lum(xb_rem_un_d * fdif + xb_rem_un_s * fspec));
+      bx_sum(kBxRemSh, lum(xb_rem_sh_d * fdif + xb_rem_sh_s * fspec));
+    }
+#endif
     {   // (also with ls_box=0: there the recompute lacks the box lights, the comparison's baseline)
       // Keep the same raster population with boxes off/on. Requiring a
       // recomputed light would drop box-only pixels from the off baseline.
@@ -1205,8 +1364,17 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
 #endif
 
 #ifndef LS_NO_MAIN
+#if LS_BOX && LS_FULL && defined(PAN_CAPTURE)
+#error "the box statistics' group barrier needs every thread of the group (no early return)"
+#endif
 [numthreads(8, 8, 1)]
+#if LS_BOX && LS_FULL
+void main(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex, uint3 gid : SV_GroupID) {
+  if (gi < kBxN) gsBx[gi] = 0u;
+  GroupMemoryBarrierWithGroupSync();
+#else
 void main(uint3 tid : SV_DispatchThreadID) {
+#endif
 #ifdef PAN_CAPTURE
   if (any(tid.xy >= pc.full)) return;
   gAux[tid.xy].zw = float2(1, 0);
@@ -1220,5 +1388,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
     gDiffuse[tid.xy] = od;
     gSpecular[tid.xy] = os;
   }
+#if LS_BOX && LS_FULL
+  GroupMemoryBarrierWithGroupSync();
+  if (pc.ls_stats != 0u) bx_flush(gi, gid.xy);
+#endif
 }
 #endif

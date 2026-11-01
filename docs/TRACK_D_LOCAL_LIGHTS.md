@@ -663,6 +663,48 @@ templates). Validation as 9.3: `ls_debug=4` with the projector pixels included.
 (Implemented as `ls_box`: only box lights with a game shadow map are traced; the
 `ls_box_unshadowed` A/B key: removed 2026-10-31, see CONSOLIDATION.md C1.)
 
+**`ls_box=2` (2026-11-01, off by default, READY_FOR_LIVE; GUI "Box light shadows: All box lights").**
+Why S6 traced only 0.009 box lights per px (lr3 08:49:39 `ls box stats`): not culling or the froxel
+list (listed 2.44/px, evaluated 1.141/px), but the rule above: `ls_box=1` traces only `_m8 & 1`
+boxes (0.009/px); the other 1.13/px (37.9% of the lit luminance with them) keep visibility 1.
+Those 0.009/px were occluded 847,547 of 847,557 times: the ray ran to the box's light-side face,
+past the game's shadow view (casters nearer the light than its near plane cannot be in the map).
+- **Unshadowed boxes** are traced from the receiver along `_m9` up to the end of the light-side z
+  fade-in (uvw.z = `ramp.x` on the z = 0 side, `ramp.y` on the z = 1 side; the editor position is
+  the z = 0 face). Geometry in the fade-in is the emitting fixture (the main-menu skull case);
+  with no fade-in the segment runs to the face. Receiver inside the fade-in: not traced.
+  Visibility only: s = 1, t in {0, 1, unknown = 1}, so the delta c (t - 1) only removes light.
+- **Shadow-mapped boxes** are traced only up to their shadow view's near plane (ref = 0 of
+  `((z - dp.y) / dp.x) / dw`; "lit iff ref < stored", so depth grows away from the light).
+  Unverified: whether the game clamps casters in front of the near plane (pancaking); the
+  counter "occluded where the game's atlas term is 1" decides it (mode 1 vs mode 2 at S6).
+- Math in `common/box_light.h` (bg3_boxes.hlsli uses it); `box_light_test`: falloff, curves and
+  the standard-class terms against a literal transcription of f469db78 (diffuse 9.6e-7 relative,
+  specular within its derived bound), exit, near plane and fade-in segments.
+- **Accuracy check that samples in normal play** (`ls box bound`, ls_stats, debug 0): the game's
+  stored value is transmittance x (direct x mix(1, AO, m0.y) + ambient x AO) + in-scatter, all
+  >= 0, so the recompute of its direct local light (every evaluated point/spot/box light, the
+  game's own shadow terms, the same AO factors) cannot exceed it. Threshold from the encoding:
+  a channel fails when the recompute reaches the upper neighbour of the stored B10G11R11 value
+  (`common/ufloat_interval.h`). One-sided (an under-estimate passes); fog transmittance < 1
+  could flag. The old `projector validation px` counts only in `ls_debug=4`, hence 0 in lr3.
+- **`ls_debug=4` recomputing ~1/4 (S7, sup-boxval 21:04):** debug 4 zeroes AO, and the game
+  multiplies direct light by mix(1, AO, m0.y): with m0.y = 1 (S6) game and recompute are both 0
+  (P3 273); with m0.y = 0.5 (S7) both keep half. The residual (game 0.0127 vs 0.0027 on px
+  without projectors, recompute above game on 0.004% of px) is additive and AO-independent. The
+  only such term left in the lighting's output is the game's in-scatter (code reading; S6, where
+  debug 4 reads exactly 0, then has none) (`_2986 = fma(_2478, T, inscatter x _m19 x 10 x b13)`, f469db78 line 1623),
+  not zeroed by the prep pass, plus its transmittance T. Not fixed in debug 4; the two-sided check is
+  `ls_native_direct_validate` (S6 +0.60%, P3 290/291), the in-play one `ls box bound`.
+- Device-local counters (set 4 of the box layout, reduced per 8x8 group, copied into rtStats
+  372-403 after the timed region): `ls box trace` (per kind: traced, occluded, atlas-lit
+  occluded, cut segments, removed) and `ls box bound`. Only the LS_BOX variants changed; every
+  other shader is byte-identical.
+- Expected cost: +0.15 to +0.3 ms on the D-LS pass (S6 +1.13 rays/px over 2.21; S7 measured
+  0.95 -> 1.20 ms with all boxes traced, sup-box-s7). Live job: `tools/live_batches/box_lights`.
+- User check: S6 forge and S7 inn with "All box lights": light no longer leaks into the next
+  room or through floors; the main-menu skull keeps its beam.
+
 **Forward receivers: design note (later).** Water, glass, particles and VFX are drawn after
 the deferred lighting by the game's forward passes, which evaluate the sun with the cascades
 and the local lights with the atlas themselves. To make them receive: (a) sun — write the

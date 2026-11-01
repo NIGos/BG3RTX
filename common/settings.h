@@ -210,10 +210,13 @@ inline constexpr Knob kKnobs[] = {
 
   {"exp_box_lights", "Box light shadows",
    "Ray-traced shadows for the game's box (projector) lights, 37% of its placed lights. Look at lit "
-   "interiors: shadows of furniture and characters from these lights. About +0.25 ms.",
+   "interiors: shadows of furniture and characters from these lights. About +0.25 ms. \"All box lights\" also "
+   "shadows the ones the game leaves unshadowed (they light through walls now): look for light leaking into "
+   "the next room, and check that the main-menu skull keeps its beam.",
    Kind::Choice, Apply::Live, "experimental", true,
    {{"off", "Off", 0, {{"ls_box", "0"}}, {}},
-    {"on", "On", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}}},
+    {"on", "On", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}},
+    {"all", "All box lights", kCapRayQuery, {{"ls_box", "2"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}}},
    {}, {0, 0, 0, 0}, true},
 
   {"exp_ls_exact_k", "Local light sampling (exact-k)",
@@ -429,7 +432,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 221 keys of bg3rtx.ini, in file order.
+// 222 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
