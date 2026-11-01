@@ -50,8 +50,25 @@
 // sun_radius and rt_tmax) gives V and C' = max(C [+ A L - B] - (1 - V) D, 0): only the visibility
 // changes. Lit and unknown rays keep D. rt_debug 26: the shadow view. Statistics: the same group
 // reduction into the device-local slot, with the sun words 32..43 (kCsSun*, sums at 40 and 42).
+//
+// M5.4b water local-light shadows (WATER_LS=1 on top of WATER_SHADOWS, rt_water_ls_shadows on when the
+// water pipelines were created: 96-byte records with the FS's point + spot sum L, its factor F = a T X m,
+// its BRDF inputs, froxel depth, position and normal, common/water_compose.h kRecordBytesLs). The
+// audited water FS shadow only the lights with a game shadow map (the atlas); every other light has
+// visibility 1. Per record the pass walks the FS's own froxel list (the forward pass's set 2 b0, b10,
+// b11, b12, b26, b27, b28 re-bound at 22..28: the D-LS structures of bg3_lights.hlsli, the same
+// decorations), recomputes each light's term c_k with bg3_light_eval (the FS's loops: identical terms,
+// tests/water_compose_test 4g) and s_k (bg3_atlas_shadow) for shadow-mapped lights, checks
+// sum c_k s_k against L (the gate: kLsSumTol), and traces one ray to the centre of each light the game
+// leaves unshadowed: C' = max(C [...] - F sum_k (1 - V_k) c_k, 0). Lit, unknown and shadow-mapped lights
+// keep their term exactly (no ray, nothing removed): C' = C where nothing is occluded. Projector lights
+// (the FS's third loop) are not replaced (their share is logged). rt_debug 27: the view. Statistics:
+// words 64..90 of the 128-word slot (kCsLs*).
 #include "../gi/gi_common.hlsli"
 #include "rt_common.hlsli"
+#ifdef WATER_LS
+#include "bg3_lights.hlsli"
+#endif
 
 struct ComposeParams {
   uint4 a;    // x pitch (records per row), y capacity (records), z rt_debug, w flags (bit 0 apply)
@@ -65,7 +82,9 @@ struct ComposeParams {
 [[vk::binding(66, 0)]] RWByteAddressBuffer cRec;                                     // the FS's records
 [[vk::binding(67, 0)]] [[vk::image_format("r11g11b10f")]] RWTexture2D<float3> target;   // the forward water target
 
-#ifdef WATER_SHADOWS
+#if defined(WATER_LS)
+static const uint kHeaderBytes = 64u, kRecordBytes = 96u;   // common/water_compose.h kRecordBytesLs
+#elif defined(WATER_SHADOWS)
 static const uint kHeaderBytes = 64u, kRecordBytes = 40u;   // common/water_compose.h kRecordBytesSun
 #else
 static const uint kHeaderBytes = 64u, kRecordBytes = 32u;   // common/water_compose.h
@@ -75,7 +94,9 @@ static const uint kVpOffset = 512u;                         // cCam: CameraCB (2
 // Group-reduced statistics (words 1..31; word 0 is one add per dispatch): cstat / csum64 add a
 // wave's count / sum into gsStat, cstat_flush (after a group barrier every thread reaches) adds the
 // group's non-zero words to cStats, with the carry into the high word for the 64-bit sums.
-#ifdef WATER_SHADOWS
+#if defined(WATER_LS)
+static const uint kGsWords = 91u;   // common/water_compose.h kCsLsWords
+#elif defined(WATER_SHADOWS)
 static const uint kGsWords = 44u;   // common/water_compose.h kCsSunWords
 #else
 static const uint kGsWords = 32u;
@@ -90,11 +111,38 @@ void csum64(uint word, float v, bool cond) {
   const uint s = WaveActiveSum(q);
   if (WaveIsFirstLane() && s != 0u) InterlockedAdd(gsStat[word], s);
 }
-#ifdef WATER_SHADOWS
+#if defined(WATER_LS)
+// A per-lane count (lights per record): at most kMaxFroxelLights per lane, 64 lanes: no overflow.
+void cstatn(uint word, uint n) {
+  const uint s = WaveActiveSum(n);
+  if (WaveIsFirstLane() && s != 0u) InterlockedAdd(gsStat[word], s);
+}
+bool is_sum_lo(uint w) {   // + the sun sums and the local sums 80..88
+  return ((w >= 16u && w <= 26u) || w == 40u || w == 42u || (w >= 80u && w <= 88u)) && (w & 1u) == 0u;
+}
+#elif defined(WATER_SHADOWS)
 bool is_sum_lo(uint w) { return ((w >= 16u && w <= 26u) || w == 40u || w == 42u) && (w & 1u) == 0u; }   // + the sun sums
 #else
 bool is_sum_lo(uint w) { return w >= 16u && w <= 26u && (w & 1u) == 0u; }   // 16, 18, .. 26 (hi = w + 1)
 #endif
+#if defined(WATER_LS)
+// 91 words over 64 lanes: each lane flushes its words gi, gi + 64.
+void cstat_flush(uint gi) {
+  GroupMemoryBarrierWithGroupSync();
+  for (uint w = gi; w < kGsWords; w += 64u) {
+    if (w == 0u) continue;   // word 0: one add per dispatch
+    const uint s = gsStat[w];
+    if (s == 0u) continue;
+    if (is_sum_lo(w)) {
+      uint old;
+      cStats.InterlockedAdd(w * 4u, s, old);
+      if (old + s < old) cStats.InterlockedAdd(w * 4u + 4u, 1u);
+    } else {
+      cStats.InterlockedAdd(w * 4u, s);
+    }
+  }
+}
+#else
 void cstat_flush(uint gi) {
   GroupMemoryBarrierWithGroupSync();
   if (gi >= 1u && gi < kGsWords) {
@@ -110,7 +158,40 @@ void cstat_flush(uint gi) {
     }
   }
 }
+#endif
 float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+
+#ifdef WATER_LS
+// The FS's froxel: log2-sliced depth z (its location-0 input) and the 2D tile of its pixel, set 2 b26
+// (_m21.._m26, the offsets of bg3_lights.hlsli lConsts): first index, point and spot counts, cut.
+uint4 ls_cluster(uint2 fp, float z) {
+  const uint tsize = max(asuint(lConsts.c[31].x), 1u);
+  const uint2 tile = fp / tsize;
+  const float zmax = float(asuint(lConsts.c[31].y));
+  const float sl = float(int(clamp(mad(log2(z), lConsts.c[30].x, lConsts.c[30].y), 0.0, zmax)));
+  const uint idx = uint(int(mad(mad(sl, lConsts.c[30].w, float(tile.y)), lConsts.c[30].z, float(tile.x))));
+  if (!bg3_in(lClusters, idx, 16u)) return uint4(0, 0, 0, 0);
+  const uint4 c = lClusters.Load4(idx * 16u);
+  uint np = c.y & 4095u, ns = (c.y >> 12) & 4095u, cut = 0u;
+  if (c.x > 0xffffffffu - 2u * 4096u) return uint4(0, 0, 0, 1u);
+  if (np + ns > kMaxFroxelLights) {
+    cut = 1u;
+    np = min(np, kMaxFroxelLights);
+    ns = min(ns, kMaxFroxelLights - np);
+  }
+  return uint4(c.x, np, ns, cut);
+}
+// common/water_compose.h ls_check_bin: 0 unchecked, 1 within kLsSumTol, 2 up to kLsSumFar, 3 beyond.
+uint ls_check_bin(float3 sum, float3 rec) {
+  if (!all(isfinite(sum)) || !all(isfinite(rec))) return 3u;
+  const float mx = max(max(max(rec.r, rec.g), rec.b), max(max(sum.r, sum.g), sum.b));
+  const float3 e = abs(sum - rec);
+  const float err = max(max(e.r, e.g), e.b);
+  if (!(mx >= 6.103515625e-05)) return 0u;
+  const float r = err / mx;
+  return r <= (1.0 / 1024.0) ? 1u : r <= 0.1 ? 2u : 3u;
+}
+#endif
 
 [numthreads(8, 8, 1)]
 void water_copy(uint3 tid : SV_DispatchThreadID) {
@@ -143,7 +224,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   g_rt_pass = kRtPassRefl;
   const uint2 fp = tid.xy;
   if (all(fp == 0)) cStats.InterlockedAdd(0, 1u);
+#ifdef WATER_LS
+  for (uint gw = gi; gw < kGsWords; gw += 64u) gsStat[gw] = 0u;
+#else
   if (gi < kGsWords) gsStat[gi] = 0u;
+#endif
   GroupMemoryBarrierWithGroupSync();
   const bool inside = all(fp < pc.full);
   const uint idx = fp.y * cp.a.x + fp.x;
@@ -255,8 +340,92 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   }
   const bool occluded = straced && sv == kRtOccluded;
   const float3 Rm = occluded ? D : 0.0.xxx;   // (1 - V) D
+#ifdef WATER_LS
+  // M5.4b: the FS's local lights, walked as the FS walks them; the unshadowed ones traced.
+  uint4 r3 = 0u, r4 = 0u, r5 = 0u;
+  uint2 r6 = 0u;
+  if (has) {
+    r3 = cRec.Load4(at + 40u);   // w10..w13
+    r4 = cRec.Load4(at + 56u);   // w14..w17
+    r5 = cRec.Load4(at + 72u);   // w18..w21
+    r6 = cRec.Load2(at + 88u);   // w22, w23
+  }
+  const float2 f01 = f16tof32(uint2(r3.x, r3.x >> 16)), f2f0 = f16tof32(uint2(r3.y, r3.y >> 16));
+  const float2 l01 = f16tof32(uint2(r3.z, r3.z >> 16)), l2c = f16tof32(uint2(r3.w, r3.w >> 16));
+  const float2 df01 = f16tof32(uint2(r4.x, r4.x >> 16)), df2b = f16tof32(uint2(r4.y, r4.y >> 16));
+  const float3 Fl = float3(f01, f2f0.x), Lrec = float3(l01, l2c.x), dif = float3(df01, df2b.x);
+  const float lz = asfloat(r4.z);
+  const float3 Pl = asfloat(uint3(r4.w, r5.x, r5.y)), Nl = asfloat(uint3(r5.z, r5.w, r6.x));
+  const float rl = asfloat(r6.y);
+  const bool ls_on = (cp.a.w & 4u) != 0u;   // kFlagLs: rt_water_ls_shadows
+  const float lnl = length(Nl);
+  const bool ls_ok = l2c.y >= 1.0 && l2c.y <= 32.0 && all(isfinite(Fl)) && all(Fl >= 0.0) && all(isfinite(Lrec)) &&
+                     all(Lrec >= 0.0) && all(isfinite(dif)) && isfinite(f2f0.y) && isfinite(lz) && lz > 0.0 &&
+                     all(isfinite(Pl)) && isfinite(rl) && lnl > 0.5 && lnl < 1.5 && isfinite(df2b.y);
+  const bool lswalk = ls_on && valid && ls_ok;
+  const bool lsrec = lswalk && any(Lrec > 0.0);
+  uint nEval = 0u, nSh = 0u, nTr = 0u, nOcc = 0u, nUnk = 0u, lsCut = 0u;
+  float3 lsSum = 0.0.xxx, lsRem = 0.0.xxx;
+  if (lswalk) {
+    g_rt_pass = kRtPassLocal;
+    Bg3Surface sf = (Bg3Surface)0;
+    sf.P = Pl;
+    sf.N = Nl;   // the FS's normalised _1207 / _1294 / _665, as its loops read it
+    sf.V = normalize(-Pl);
+    sf.diff_col = dif;
+    sf.f0 = f2f0.yyy;
+    sf.a = rl;
+    sf.nov = max(dot(Nl, sf.V), 9.9999997e-06);
+    sf.channel = uint(l2c.y - 1.0 + 0.5);
+    // The FS's PCF rotation: fract(52.98 fract(0.0671 x + 0.00584 y)) at gl_FragCoord (pixel centre).
+    const float2 fc = float2(fp) + 0.5;
+    sf.ign = frac(52.98291778564453125 * frac(mad(0.067110560834407806396484375, fc.x, 0.005837149918079376220703125 * fc.y)));
+    const uint4 cl = ls_cluster(fp, lz);
+    lsCut = cl.w;
+    const float lpa = pixel_angle(uv);
+    const float lt = length(Pl);
+    const float3 lo = Pl + Nl * (lt * lpa);   // the scene TLAS has no water: one footprint clears it
+    RtCone lcone = {lt * lpa, lpa};
+    const uint n = cl.y + cl.z;
+    [loop] for (uint i = 0u; i < n; ++i) {
+      const uint li = bg3_light_index(cl.x + i);
+      const Bg3Light lg = load_light(li);
+      const bool spot = i >= cl.y;
+      float3 dd, ss, Ld;
+      float d2, nol;
+      if (!bg3_light_eval(lg, spot, sf, dd, ss, Ld, d2, nol)) continue;
+      ++nEval;
+      const float3 ck = dd + ss;
+      if ((lg.flags & 1u) != 0u) {   // a game shadow map: its atlas term, kept as the FS's
+        ++nSh;
+        lsSum += ck * bg3_atlas_shadow(lg, spot, sf, Ld, d2, nol);
+        continue;
+      }
+      lsSum += ck;
+      if (!any(ck > 0.0)) continue;
+      const float3 tl = lg.pos - lo;
+      const float dist = length(tl);
+      const float tmax = dist - pc.ls_clear;
+      if (!(tmax > 0.0) || !all(isfinite(lo))) continue;   // the light at the surface: lit
+      ++nTr;
+      const uint lv = rt_visibility(lo, tl / dist, tmax, lcone);
+      if (lv == kRtOccluded) {
+        ++nOcc;
+        lsRem += ck;
+      } else if (lv == kRtUnknown) {
+        ++nUnk;
+      }
+    }
+  }
+  const bool lsocc = nOcc != 0u;
+  const float3 Rls = lsocc ? Fl * lsRem : 0.0.xxx;   // F sum_k (1 - V_k) c_k
+  const uint lsbin = lswalk ? ls_check_bin(lsSum, Lrec) : 0u;
+  const float3 Cu = Ct + (composed ? A * L - B : 0.0.xxx) - Rm - Rls;
+  const float3 Cn = composed || occluded || lsocc ? max(Cu, 0.0) : Ct;
+#else
   const float3 Cu = Ct + (composed ? A * L - B : 0.0.xxx) - Rm;
   const float3 Cn = composed || occluded ? max(Cu, 0.0) : Ct;
+#endif
 #else
   const float3 Cu = Ct + A * L - B;
   const float3 Cn = composed ? max(Cu, 0.0) : Ct;
@@ -303,6 +472,31 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   csum64(40, lum(D), sunrec);
   csum64(42, lum(Rm), sunrec);
 #endif
+#ifdef WATER_LS
+  // common/water_compose.h kCsLs*.
+  cstat(64, lsrec);
+  cstat(65, lswalk && !any(Lrec > 0.0));
+  cstat(66, ls_on && valid && !ls_ok);
+  cstatn(67, nEval);
+  cstatn(68, nSh);
+  cstatn(69, nTr);
+  cstatn(70, nOcc);
+  cstatn(71, nUnk);
+  cstat(72, lsocc);
+  cstat(73, lsbin != 0u);
+  cstat(74, lsbin == 1u);
+  cstat(75, lsbin == 2u);
+  cstat(76, lsbin == 3u);
+  cstat(77, lsocc && any(Cu < 0.0));
+  cstat(78, lswalk && lsCut != 0u);
+  cstat(79, lsbin != 0u && nSh != 0u);
+  cstat(90, lsbin == 1u && nSh != 0u);
+  csum64(80, lum(Fl * Lrec), lsrec);
+  csum64(82, lum(Rls), lsrec);
+  csum64(84, lum(Fl * lsSum), lsbin != 0u);
+  csum64(86, lum(Fl * Lrec), lsbin != 0u);
+  csum64(88, max(df2b.y, 0.0), lsrec);
+#endif
   cstat_flush(gi);
   if (!has) return;
   // rt_debug 25, over every record of this pass (exact codes, no tonemap of ours):
@@ -324,6 +518,23 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     return;
   }
 #endif
+#ifdef WATER_LS
+  // rt_debug 27, over every record of this pass: a light occluded = red (the removed share of C, at
+  // least 0.25), every traced light lit = green 0.35, only shadow-mapped lights (nothing traced) =
+  // dark magenta, an unknown ray and nothing occluded = blue, no local term = dark grey; the sum check
+  // beyond kLsSumFar = white (the gate's failures, over every other code); not owned / invalid = yellow.
+  if (cp.a.z == 27u) {
+    const float share = lum(Rls) / max(lum(Ct), 1e-4);
+    target[fp] = !own || !valid || !ls_ok ? float3(1, 1, 0)
+               : lsbin == 3u ? float3(1, 1, 1)
+               : !lsrec ? float3(0.08, 0.08, 0.08)
+               : lsocc ? float3(max(saturate(share), 0.25), 0, 0)
+               : nUnk != 0u ? float3(0, 0, 1)
+               : nTr == 0u ? float3(0.25, 0, 0.25)
+               : float3(0, 0.35, 0);
+    return;
+  }
+#endif
   if (cp.a.z == 25u) {
     const float rel = d / max(lum(Ct), 1e-4);
     const float3 c = !own || !valid ? float3(1, 1, 0)
@@ -331,7 +542,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
                    : composed ? float3(max(-rel, 0.0), max(rel, 0.0), 0.0)
                    : float3(0, 0, 0.3);
     target[fp] = c;
-#ifdef WATER_SHADOWS
+#if defined(WATER_LS)
+  } else if (composed || occluded || lsocc) {   // each term only where its flag traced it
+    target[fp] = Cn;
+  }
+#elif defined(WATER_SHADOWS)
   } else if (composed || occluded) {   // each term only where its flag traced it
     target[fp] = Cn;
   }

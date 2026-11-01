@@ -48,6 +48,18 @@ struct FsIds {
   uint32_t sun_d;       // vec3: sun diffuse * N.L, added to the local lights' diffuse sum
   uint32_t sun_s;       // vec3: sun specular * N.L, added to the local lights' specular sum
   uint32_t sun_m;       // float: the factor of (diffuse + specular) sums, mix(1, 1, b26 _m1) = 1
+  // M5.4b (record words 10-23 with `ls`): the local lights. The FS walks three loops over its froxel's
+  // list (points, spots: b12 records; projectors: b16), each carrying (specular, diffuse) sums as loop
+  // header phis; the points + spots sums are the spot loop's header phis (they dominate the end of
+  // main), the totals the projector loop's (the operands of the sun's OpFAdd).
+  uint32_t ls_d12;      // vec3: diffuse sum after the point and spot loops
+  uint32_t ls_s12;      // vec3: specular sum after the point and spot loops
+  uint32_t ls_d;        // vec3: diffuse sum after the projector loop (Ld of Lw)
+  uint32_t ls_s;        // vec3: specular sum after the projector loop (Ls of Lw)
+  uint32_t ls_dif;      // vec3: the diffuse colour of the loops' Burley term
+  uint32_t ls_f0;       // vec3: the F0 of the loops' Schlick term (vec3(0.16 spec^2): grey)
+  uint32_t ls_chan;     // uint: set 1 b0 _m1, the light channel (loaded at the top level of main)
+  uint32_t ls_z;        // Input variable float: location 0, the froxel depth (log2-sliced)
 };
 
 // The audited table. 7b44a567 FLUID_Water_Plane_flowmap_huge_PixelLighting (S1 docks), from
@@ -71,10 +83,21 @@ struct FsIds {
 // textureGather is the local lights' atlas b28). 7b44a567: %3889 %3892 * %3898 (Lsun %3803 =
 // %2064 * (%2236 clouds * b0)), 99c1fcef: %4087 %4090 * %4096, c4e92ccd: %3310 %3313 * %3319
 // (Lsun %3224 = %1485 * (%1657 clouds * b0)).
+// M5.4b local ids (2026-11-01, spirv-dis --raw-id of the three dumps; glsl = spirv-cross of them):
+//   c4e92ccd: point loop header phis %1696 (spec) %1698 (diff), spot loop %1993 %1995 = phi(%1696,
+//     %1698, ...), projector loop %2278 %2280 = phi(%1993, %1995, ...), Lw's `%3311 = %2280 + sun_d`;
+//     diffuse colour %886 and F0 %889 (the Burley / Schlick operands in all three loops), channel
+//     %885 = OpLoad (OpAccessChain %48 (set 1 b0) %int_1), z = Input %4 (log2(_4) * b26 _m21 + _m22);
+//   99c1fcef: spot %2770 %2772, projector %3055 %3057, dif %1665, F0 %1668, channel %1664 (%49 set 1 b0);
+//   7b44a567: spot %2572 %2574, projector %2857 %2859, dif %1467, F0 %1470, channel %1466.
+// The loops' N, V and roughness are the record's (N, normalize(-_5), roughness ids above).
 inline constexpr FsIds kFsIds[] = {
-    {0x7b44a567771ecbecull, 784, 4096, 3799, 2063, 3379, 3303, 3352, 1207, 4335, 1480, 5, 3889, 3892, 3898},
-    {0x99c1fcef82b253c1ull, 809, 4294, 3997, 2261, 3577, 3501, 3550, 1294, 4533, 1678, 5, 4087, 4090, 4096},
-    {0xc4e92ccdb08dd777ull, 425, 3510, 3220, 1484, 2800, 2724, 2773, 665, 3671, 899, 5, 3310, 3313, 3319},
+    {0x7b44a567771ecbecull, 784, 4096, 3799, 2063, 3379, 3303, 3352, 1207, 4335, 1480, 5, 3889, 3892, 3898,
+     2574, 2572, 2859, 2857, 1467, 1470, 1466, 4},
+    {0x99c1fcef82b253c1ull, 809, 4294, 3997, 2261, 3577, 3501, 3550, 1294, 4533, 1678, 5, 4087, 4090, 4096,
+     2772, 2770, 3057, 3055, 1665, 1668, 1664, 4},
+    {0xc4e92ccdb08dd777ull, 425, 3510, 3220, 1484, 2800, 2724, 2773, 665, 3671, 899, 5, 3310, 3313, 3319,
+     1995, 1993, 2280, 2278, 886, 889, 885, 4},
 };
 inline constexpr uint32_t kFsIdsCount = uint32_t(sizeof kFsIds / sizeof kFsIds[0]);
 
@@ -99,10 +122,11 @@ enum : uint32_t {
   OpName = 5, OpMemberName = 6, OpExtension = 10, OpExtInstImport = 11, OpExtInst = 12, OpMemoryModel = 14,
   OpEntryPoint = 15, OpExecutionMode = 16, OpCapability = 17, OpTypeBool = 20, OpTypeInt = 21, OpTypeFloat = 22,
   OpTypeVector = 23, OpTypeRuntimeArray = 29, OpTypeStruct = 30, OpTypePointer = 32, OpConstant = 43,
-  OpConstantNull = 46, OpFunction = 54, OpFunctionEnd = 56, OpVariable = 59, OpLoad = 61, OpStore = 62,
+  OpConstantComposite = 44, OpConstantNull = 46, OpFunction = 54, OpFunctionEnd = 56, OpVariable = 59, OpLoad = 61, OpStore = 62,
   OpAccessChain = 65, OpDecorate = 71, OpMemberDecorate = 72, OpCompositeConstruct = 80,
-  OpCompositeExtract = 81, OpConvertFToU = 109, OpConvertUToPtr = 120, OpBitcast = 124, OpIAdd = 128, OpFAdd = 129,
-  OpIMul = 132, OpFMul = 133, OpVectorTimesScalar = 142, OpLogicalAnd = 167, OpSelect = 169,
+  OpCompositeExtract = 81, OpConvertFToU = 109, OpConvertUToF = 112, OpConvertUToPtr = 120, OpBitcast = 124, OpIAdd = 128,
+  OpFAdd = 129, OpFSub = 131, OpIMul = 132, OpFMul = 133, OpVectorTimesScalar = 142, OpDot = 148, OpLogicalAnd = 167,
+  OpSelect = 169, OpBitwiseAnd = 199,
   OpULessThan = 176, OpPhi = 245, OpLabel = 248, OpKill = 252, OpReturn = 253, OpTerminateInvocation = 4416,
   OpDemoteToHelperInvocation = 5380,
   CapInt64 = 11, CapPsb = 5347, AddrPsb64 = 5348, ScInput = 1, ScPsb = 5349, ModeEarlyTests = 9,
@@ -127,11 +151,14 @@ inline void emit_string(std::vector<uint32_t>& v, uint32_t op, const char* s) {
 // its records (common/water_compose.h buffer_bytes): both baked in, so every store stays inside
 // the buffer whatever the header holds (pitch is read from it: uninitialised memory can only
 // misplace records, which the ownership check rejects). sun (M5.4): the record of
-// kRecordWordsSun words with the sun term; false emits exactly the M5.3 module.
+// kRecordWordsSun words with the sun term; false emits exactly the M5.3 module. ls (M5.4b): the
+// record of kRecordWordsLs words, the sun's plus the local-light words (implies sun); false emits
+// exactly the M5.4 module.
 inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids, uint64_t addr, uint32_t capacity,
-                            std::vector<uint32_t>& out, bool sun = false) {
+                            std::vector<uint32_t>& out, bool sun = false, bool ls = false) {
   using namespace fsp;
   out.clear();
+  if (ls) sun = true;
   if (!code || words < 5 || code[0] != 0x07230203u) return PatchStatus::kNotSpirv;
   struct Ins { size_t at; uint32_t op, n; };
   std::vector<Ins> ins;
@@ -231,6 +258,9 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
       !is(ids.f0, t_v3) || !is(ids.dfg, t_v4) || !is(ids.N, t_v3) || !is(ids.C, t_v3) || !is(ids.rough, t_float))
     return PatchStatus::kIdMismatch;
   if (sun && (!is(ids.sun_d, t_v3) || !is(ids.sun_s, t_v3) || !is(ids.sun_m, t_float))) return PatchStatus::kIdMismatch;
+  if (ls && (!is(ids.ls_d12, t_v3) || !is(ids.ls_s12, t_v3) || !is(ids.ls_d, t_v3) || !is(ids.ls_s, t_v3) ||
+             !is(ids.ls_dif, t_v3) || !is(ids.ls_f0, t_v3) || !is(ids.ls_chan, t_uint)))
+    return PatchStatus::kIdMismatch;
   auto input_of = [&](uint32_t var, uint32_t pointee) {
     auto v = var_ptr.find(var);
     if (v == var_ptr.end()) return false;
@@ -238,6 +268,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     return p != ptr_of.end() && p->second.first == ScInput && p->second.second == pointee;
   };
   if (!input_of(ids.pos, t_v3) || !input_of(frag_coord, t_v4)) return PatchStatus::kIdMismatch;
+  if (ls && !input_of(ids.ls_z, t_float)) return PatchStatus::kIdMismatch;
 
   // ---- new declarations ----
   auto id = [&]() { return bound++; };
@@ -262,8 +293,22 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   if (sun) {
     c_w9 = id(), c_stride = id();
     emit(types, OpConstant, {t_uint, c_w9, 9});
-    emit(types, OpConstant, {t_uint, c_stride, kRecordWordsSun});
+    emit(types, OpConstant, {t_uint, c_stride, ls ? kRecordWordsLs : kRecordWordsSun});
     c_w8 = c_u[kRecordWords];   // 8
+  }
+  // M5.4b: word offsets 10..23, the channel mask 31, the luminance weights (after every M5.4
+  // declaration: ls = false is unchanged).
+  uint32_t c_wl[kRecordWordsLs] = {}, c_31 = 0, c_lum = 0;
+  if (ls) {
+    for (uint32_t k = kRecordWordsSun; k < kRecordWordsLs; ++k) c_wl[k] = id(), emit(types, OpConstant, {t_uint, c_wl[k], k});
+    c_31 = id();
+    emit(types, OpConstant, {t_uint, c_31, 31});
+    const uint32_t lr = id(), lg = id(), lb = id();
+    emit(types, OpConstant, {t_float, lr, 0x3e59b3d0u});   // 0.2126
+    emit(types, OpConstant, {t_float, lg, 0x3f371759u});   // 0.7152
+    emit(types, OpConstant, {t_float, lb, 0x3d93dd98u});   // 0.0722
+    c_lum = id();
+    emit(types, OpConstantComposite, {t_v3, c_lum, lr, lg, lb});
   }
   std::vector<uint32_t> decos;
   emit(decos, OpDecorate, {t_arr, DecArrayStride, 4});
@@ -335,6 +380,31 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     emit(body, OpStore, {p8, s8, MemAligned, 4});
     const uint32_t p9 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w9})});
     emit(body, OpStore, {p9, s9, MemAligned, 4});
+    if (ls) {   // M5.4b words 10..23 (common/water_compose.h kRecordBytesLs)
+      const uint32_t F = op2(OpVectorTimesScalar, t_v3, {G, ids.sun_m});
+      const uint32_t L12 = op2(OpFAdd, t_v3, {ids.ls_d12, ids.ls_s12});
+      const uint32_t Lt = op2(OpFAdd, t_v3, {ids.ls_d, ids.ls_s});
+      const uint32_t box = op2(OpDot, t_float, {op2(OpFMul, t_v3, {F, op2(OpFSub, t_v3, {Lt, L12})}), c_lum});
+      const uint32_t ch = op2(OpFAdd, t_float, {op2(OpConvertUToF, t_float, {op2(OpBitwiseAnd, t_uint, {ids.ls_chan, c_31})}), c_one});
+      const uint32_t z = op2(OpLoad, t_float, {ids.ls_z});
+      uint32_t lw[kRecordWordsLs] = {};
+      lw[10] = half2(c(F, 0), c(F, 1));
+      lw[11] = half2(c(F, 2), c(ids.ls_f0, 0));
+      lw[12] = half2(c(L12, 0), c(L12, 1));
+      lw[13] = half2(c(L12, 2), ch);
+      lw[14] = half2(c(ids.ls_dif, 0), c(ids.ls_dif, 1));
+      lw[15] = half2(c(ids.ls_dif, 2), box);
+      lw[16] = op2(OpBitcast, t_uint, {z});
+      for (uint32_t i = 0; i < 3; ++i) {
+        lw[17 + i] = op2(OpBitcast, t_uint, {c(P, i)});
+        lw[20 + i] = op2(OpBitcast, t_uint, {c(ids.N, i)});
+      }
+      lw[23] = op2(OpBitcast, t_uint, {ids.rough});
+      for (uint32_t k = kRecordWordsSun; k < kRecordWordsLs; ++k) {
+        const uint32_t p = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_wl[k]})});
+        emit(body, OpStore, {p, lw[k], MemAligned, 4});
+      }
+    }
   }
 
   // ---- assemble ----
