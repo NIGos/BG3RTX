@@ -8,6 +8,7 @@ where it is missing (game data is not committed).
 """
 import os
 import unittest
+from collections import Counter
 from pathlib import Path
 
 from tools.material_families import glsl
@@ -130,6 +131,57 @@ class AuditedPairs(unittest.TestCase):
         self.assertEqual(v.cls, "VARIANT")
         moved = {(f, t) for b, f, t in v.fields if b == "ubo1_0"}
         self.assertTrue({(64, 0), (100, 32), (104, 36)} <= moved, moved)
+
+
+WIND_RGB = ["14678345c10aefbc", "838318119b2f43d8", "923131c7039f33da"]
+
+
+@unittest.skipUnless(all((CACHE / f"{h}.glsl").exists() for h in WIND_RGB), "no dumped GLSL in captures/alpha_cache")
+class WindRgbTranslucency(unittest.TestCase):
+    """native_vt_surface.h recipe 83831811 (rt_hit_material_wind_rgb): the classifier's differing statements
+    against 14678345 are exactly the terms the recipe row accounts for."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.src = {h: (CACHE / f"{h}.glsl").read_text(encoding="utf-8", errors="ignore") for h in WIND_RGB}
+        cls.forms = {h: glsl.Forms.of(t) for h, t in cls.src.items()}
+
+    def _only(self, a, b):
+        x, y = self.forms[a].erased, self.forms[b].erased
+        return Counter(y.stmts) - Counter(x.stmts), Counter(x.stmts) - Counter(y.stmts)
+
+    def test_same_sampling_three_outputs(self):
+        v = glsl.compare(self.forms[WIND_RGB[0]], self.forms[WIND_RGB[1]], WIND_RGB[0])
+        self.assertEqual((v.cls, v.outputs), ("VARIANT", ("out0", "out2", "out3")))
+        self.assertIn("same sampling", v.term)
+
+    def test_terms(self):
+        added, removed = self._only(WIND_RGB[0], WIND_RGB[1])
+        self.assertEqual((sum(added.values()), sum(removed.values())), (5, 5))
+        add = "\n".join(added)
+        # out0: the N column times (gl_FrontFacing ? 1 : -1), as the built two-sided recipe 923131c7
+        self.assertIn("in1 * fma(float(gl_FrontFacing), 2.0, -1.0)", add)
+        two_sided = "\n".join(Counter(self.forms[WIND_RGB[2]].erased.stmts))
+        self.assertIn("in1 * fma(float(gl_FrontFacing), 2.0, -1.0)", two_sided)
+        # out2: RT2.w is the constant class 4 with the channel bits (no flag bit from the engine UBO)
+        out2 = [s for s in added if s.startswith("out2 =")]
+        self.assertEqual(len(out2), 1)
+        self.assertIn("float((4u | ((ubo1_0._m? & 7u) << 4u)) | 0u)", out2[0])
+        # out3: the translucency inputs (engine word / 255, 0, physical.w, 0), not read by the class 0 decode
+        out3 = [s for s in added if s.startswith("out3 =")]
+        self.assertEqual(len(out3), 1)
+        self.assertTrue(out3[0].startswith("out3 = vec4(float(ubo1_0._m?) * 0.0039215688593685626983642578125, 0.0, clamp("))
+        self.assertTrue(out3[0].rstrip().endswith(".w, 0.0, 1.0), 0.0)"))
+
+    def test_reflectance_is_1_1_byte_20(self):
+        # plain forms keep member names: RT2.y reads _m5 of the 8-float 1:1 block (std140 byte 20) where
+        # 14678345 reads _m0 (byte 0); the physical sampling expressions around it are the same.
+        a = [s for s in self.forms[WIND_RGB[0]].plain.stmts if s.startswith("out2 =")][0]
+        b = [s for s in self.forms[WIND_RGB[1]].plain.stmts if s.startswith("out2 =")][0]
+        self.assertIn("clamp(ubo1_1._m0, 0.0, 1.0)", a)
+        self.assertIn("clamp(ubo1_1._m5, 0.0, 1.0)", b)
+        blk = self.forms[WIND_RGB[1]].plain.blocks.get("ubo1_1", [])
+        self.assertEqual(glsl.std140_offsets(blk)[5], 20)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,11 @@
 #pragma once
-// Per-draw material rows for INSTANCED draws of two VT STI families whose VS is not class A, so
+// Per-draw material rows for INSTANCED draws of VT STI families (two, a third behind its own key) whose VS is not class A, so
 // their meshes are never pooled and their BVH geometry is the per-frame prepass XFB (all instances,
 // each in world space): rt_hit_material_instanced (startup: the G-buffer VS frame patch; then live).
 //   Wind      ATM_Wind_Vertex_RG_VT       depth VS 1719e9d0 (+ alpha FS 4bed5db2), G-buffer 50fbfceb/8e49cde8
 //   2S alpha  Base_AlphaTest_2s_VT        depth VS 106a0550 (+ a VT alpha FS),     G-buffer 1e9145e4/923131c7
+//   Wind RGB  ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT (rt_hit_material_wind_rgb, startup):
+//             depth VS 633929ef (+ alpha FS 0d91554d),   G-buffer 735d5a19/83831811
 // Both depth passes are alpha-tested (shaders/rt/alpha_fs.txt: 4bed5db2 `vt ... p0=0 idx=32`), so the
 // prepass side is the existing alpha record (note_prepass) and every hit already passed its cut.
 // The depth and G-buffer VSs compute the same clip position per instance (dumped GLSL: same input
@@ -20,31 +22,42 @@
 #include "native_hit_qualify.h"
 #include "native_vt_surface.h"
 namespace bg3::native_hit::instanced {
-enum Family : uint32_t { None = 0, Wind = 1, AlphaTest2s = 2 };
+// WindRgb (3): ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT. Asset DB: its StaticInstancedDepth variant is
+// 633929ef/0d91554d, its StaticInstancedDeferred variant 735d5a19/83831811. The dumped VSs have the same interface
+// as the wind pair (inputs 0..6, outputs UV/N/B/T at 0..3; depth: UV, W) and textually the same position
+// arithmetic (the RG wind of 1719e9d0/50fbfceb plus a vertical flutter term in 1:1 _m3/_m4 and vertex colour b,
+// all inside the precise _26 = _25 + offset * fade). No clip tolerance is derived for the flutter term: the rows
+// are checked bit for bit (the wind rows were 100% bit-exact live, m4i 2026-11-01), fail closed. Off unless
+// rt_hit_material_wind_rgb (startup; gate() below), so the two other families are unchanged with it off.
+enum Family : uint32_t { None = 0, Wind = 1, AlphaTest2s = 2, WindRgb = 3 };
+inline constexpr uint32_t kFamilies = 4;   // per-family counter arrays (index 0 unused); word 220 bits 8..9 hold 0..3
 struct Pair { uint64_t depth_vs, vs, fs; Family family; };
 inline constexpr Pair kPairs[] = {
     {0x1719e9d0d14390f5ull, 0x50fbfceb06192473ull, 0x8e49cde81b680054ull, Wind},
-    {0x106a055077bc19d6ull, 0x1e9145e4b621a5e0ull, 0x923131c7039f33daull, AlphaTest2s}};
-inline constexpr const char* kFamilyName[] = {"none", "wind", "alpha-test 2S"};
+    {0x106a055077bc19d6ull, 0x1e9145e4b621a5e0ull, 0x923131c7039f33daull, AlphaTest2s},
+    {0x633929ef4f08b8aeull, 0x735d5a19130262bdull, 0x838318119b2f43d8ull, WindRgb}};
+inline constexpr const char* kFamilyName[] = {"none", "wind", "alpha-test 2S", "wind RGB 2S"};
+// A family the startup keys leave off is None: WindRgb needs rt_hit_material_wind_rgb.
+inline Family gate(Family f, bool wind_rgb) { return f == WindRgb && !wind_rgb ? None : f; }
 // The family of a depth-prepass draw (by its VS: the depth FS is any alpha-table VT FS).
-inline Family depth_family(uint64_t vs) {
-  for (const auto& p : kPairs) if (p.depth_vs == vs) return p.family;
+inline Family depth_family(uint64_t vs, bool wind_rgb = false) {
+  for (const auto& p : kPairs) if (p.depth_vs == vs) return gate(p.family, wind_rgb);
   return None;
 }
 // The family of a G-buffer draw (the exact audited pair).
-inline Family deferred_family(uint64_t vs, uint64_t fs) {
-  for (const auto& p : kPairs) if (p.vs == vs && p.fs == fs) return p.family;
+inline Family deferred_family(uint64_t vs, uint64_t fs, bool wind_rgb = false) {
+  for (const auto& p : kPairs) if (p.vs == vs && p.fs == fs) return gate(p.family, wind_rgb);
   return None;
 }
 // The G-buffer VSs whose UV/N/B/T outputs (locations 0/1/2/3, as 2d2ac3c3) get the XFB frame patch.
-inline bool frame_vs(uint64_t vs) {
-  for (const auto& p : kPairs) if (p.vs == vs) return true;
+inline bool frame_vs(uint64_t vs, bool wind_rgb = false) {
+  for (const auto& p : kPairs) if (p.vs == vs) return gate(p.family, wind_rgb) != None;
   return false;
 }
 // The recipe of an instanced pair (native_vt_surface.h CaptureDraw rows).
-inline const native_vt::Recipe* recipe(uint64_t vs, uint64_t fs) {
+inline const native_vt::Recipe* recipe(uint64_t vs, uint64_t fs, bool wind_rgb = false) {
   const auto* r = native_vt::recipe(fs);
-  return deferred_family(vs, fs) != None && r && r->vs == vs && r->capture == native_vt::CaptureDraw ? r : nullptr;
+  return deferred_family(vs, fs, wind_rgb) != None && r && r->vs == vs && r->capture == native_vt::CaptureDraw ? r : nullptr;
 }
 // Draw key shared by the depth and the G-buffer draw: the draw words (kind, count, instances, first,
 // vertex offset) and the index binding of the ordinary key, the family; no vertex-buffer words (the two
@@ -136,6 +149,7 @@ struct WindInputs {
   float time = 0;              // 0:0 word 0
   float scene[3]{};            // 0:1 _m1, _m3, _m5 (bytes 12, 28, 44); wind only
   float material[4]{};         // 1:1 _m0.._m3; wind only
+  float flutter = 0;           // 1:1 _m4 (byte 16): the wind RGB VSs' flutter amplitude; WindRgb only
   float camera[3]{};           // 0:2 _m6 (byte 208)
   float viewproj[16]{};        // 0:2 _m2 (bytes 128..191, row-major as GLSL reads it: clip_c = sum_k W_k m[k][c] + m[3][c])
   float translation[3]{};      // 1:0 _m1 (bytes 32..43): added to the instance rows by 106a0550 / 1e9145e4; 2S only
@@ -225,8 +239,10 @@ inline PairOutcome pair_check(Family family, const WindInputs& pre, const WindIn
   if (std::memcmp(&pre.time, &def.time, 4)) return PairOtherFrame;
   if (std::memcmp(pre.viewproj, def.viewproj, sizeof pre.viewproj) || std::memcmp(pre.camera, def.camera, sizeof pre.camera)) return PairCamera;
   if (family == AlphaTest2s && std::memcmp(pre.translation, def.translation, sizeof pre.translation)) return PairPlacement;
-  if (family == Wind && (std::memcmp(pre.scene, def.scene, sizeof pre.scene) || std::memcmp(pre.material, def.material, sizeof pre.material)))
+  if ((family == Wind || family == WindRgb) &&
+      (std::memcmp(pre.scene, def.scene, sizeof pre.scene) || std::memcmp(pre.material, def.material, sizeof pre.material)))
     return PairWind;
+  if (family == WindRgb && std::memcmp(&pre.flutter, &def.flutter, 4)) return PairWind;
   return PairSame;
 }
 // Instance blocks of a row: triangles x 3 vertices of `stride` bytes, instance-major; each block holds

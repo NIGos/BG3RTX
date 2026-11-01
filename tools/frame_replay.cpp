@@ -423,7 +423,7 @@ std::vector<uint32_t> compile(const fs::path& hlsl, const std::vector<std::strin
 }
 
 // ---------------------------------------------------------------- statistics (core/gi.cpp wording, 1 frame)
-constexpr uint32_t kCounters = 512;   // >= core/gi.cpp kStatsCounters (427)
+constexpr uint32_t kCounters = 512;   // >= core/gi.cpp kStatsCounters (435)
 struct Stats { uint64_t t[kCounters] = {}; };
 Stats fold(const std::vector<uint8_t>& raw) {
   Stats s; const auto* c = reinterpret_cast<const uint32_t*>(raw.data());
@@ -494,7 +494,7 @@ std::vector<std::string> gi_hit_direct_lines(const Stats& s) {
 
 // ---------------------------------------------------------------- replay
 struct ImageResult { std::string name; uint32_t format, w, h; std::vector<uint8_t> raw; uint64_t hash; double mean[4]; uint64_t nonfinite; };
-struct RunResult { std::vector<ImageResult> outputs; Stats stats; double gpu_ms; };
+struct RunResult { std::vector<ImageResult> outputs; Stats stats; double gpu_ms; std::vector<uint8_t> raw_stats; };
 struct Replay { std::vector<RunResult> runs; std::vector<std::string> warnings; };
 
 ImageResult summarize(const std::string& name, uint32_t format, uint32_t w, uint32_t h, std::vector<uint8_t> raw) {
@@ -942,6 +942,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     rr.gpu_ms = double(ticks[1] - ticks[0]) * g.tick_ns * 1e-6;
     std::vector<uint8_t> raw(static_cast<size_t>(stats.size)); std::memcpy(raw.data(), stats.map, raw.size());
     rr.stats = fold(raw);
+    rr.raw_stats = std::move(raw);
     for (auto& o : outputs) rr.outputs.push_back(summarize(o.name, o.img.format, o.img.w, o.img.h, read_image(o.img)));
     if (!quiet || run == 0) {
       std::printf("[replay] %s run %u: dispatch %u x %u x %u, GPU %.3f ms\n", m.pass.c_str(), run, m.groups[0], m.groups[1], m.groups[2], rr.gpu_ms);
@@ -971,6 +972,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   }
   { std::ofstream f(out / "stats.txt"); for (auto& l : gi_hit_direct_lines(result.runs.back().stats)) f << l << "\n";
     f << "gpu_ms " << result.runs.back().gpu_ms << "\nblas " << built << " skipped_instances " << skipped << "\n"; }
+  // The raw counters (kCounters x 64 bins of uint32): per-slot diagnostics such as HM_BLOCKERS
+  // (native_hit_material.hlsli, tools/hit_material_blockers.py) read their slots from it.
+  if (!hooks) write_vec(out / "rtstats.bin", result.runs.back().raw_stats);
   for (auto& w : result.warnings) std::printf("  note: %s\n", w.c_str());
   return result;
 }

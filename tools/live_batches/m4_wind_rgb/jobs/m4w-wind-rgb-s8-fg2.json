@@ -1,0 +1,132 @@
+{
+ "name": "m4w-wind-rgb-s8-fg2",
+ "save": "Water Queens House",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 480,
+ "repeat": 1,
+ "live_batch": "m4-wind-rgb",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_xfb_mb=1408,rt_cascade_mb=587,gi=1,gi_rt=1,gi_rt_fallback=0,gi_hit_direct=0,rt_stats=0,rf_hit_shade=0,rt_hit_emission=0,rt_reflections=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/m4_wind_rgb/plans/m4w_wind_rgb_s8.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "rt applied",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[geo\\] transform feedback",
+  "\\[geo\\] \\d+ vertex shader modules",
+  "gi: GPU cost",
+  "gi: trace pass",
+  "GI hit direct",
+  "hit material",
+  "rt stats",
+  "\\[rrpost\\] exposure (held|hold|probe)"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "\\[geo\\] transform feedback enabled: vertex shaders get Position \\+ UV XFB decorations \\(stride 64\\)",
+  "\\[hit material instanced\\] frame \\d+ key 0; wind: prepass 0, G-buffer 0 ",
+  "\\[hit material capacity\\] frame \\d+ ",
+  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified \\d+ unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters \\d+(/\\d+){8}; of base, instance without a material record \\d+",
+  "GI hit direct \\([0-9]+ frames\\): candidates [1-9]\\d* qualified \\d+",
+  "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
+  "\\[hit material instanced\\] frame \\d+ wind RGB 2S: prepass [1-9]\\d*, G-buffer [1-9]\\d* \\(pipeline \\d+, bindings \\d+, stream \\d+\\) captured [1-9]\\d*, mapped [1-9]\\d* rows [1-9]\\d* triangles",
+  "\\[hit material instanced\\] frame \\d+ wind RGB 2S since the last line: pairs same frame [1-9]\\d*, ",
+  "hit material instanced clip wind RGB 2S \\(\\d+ frames\\): checked [1-9]\\d*, bit-exact [1-9]\\d*, "
+ ],
+ "expect_every": [
+  {
+   "name": "wind RGB 2S rows mapped, every diag-on window",
+   "select": "\\[hit material instanced\\] frame \\d+ wind RGB 2S: prepass",
+   "match": "captured [1-9]\\d*, mapped [1-9]\\d* rows [1-9]\\d* triangles",
+   "windows": [
+    "diag-on"
+   ],
+   "min": 1
+  },
+  {
+   "name": "wind RGB 2S clip: checked > 0, rejected < 0.04% of all lookups, every diag-on stats window",
+   "select": "hit material instanced clip wind RGB 2S \\(\\d+ frames\\)",
+   "match": "checked [1-9]\\d*, bit-exact [1-9]\\d*, .*; rejected \\d+ = 0\\.0[0-3]\\d\\d% of all lookups",
+   "windows": [
+    "diag-on"
+   ],
+   "min": 1
+  },
+  {
+   "name": "wind / 2S clip rejects stay < 0.04% with the third family on, every diag-on stats window",
+   "select": "hit material instanced clip \\(\\d+ frames\\)",
+   "match": "; rejected \\d+ = 0\\.0[0-3]\\d\\d% of all lookups",
+   "windows": [
+    "diag-on"
+   ],
+   "min": 1
+  },
+  {
+   "name": "no instanced rows with the key off, every diag-off window",
+   "select": "\\[hit material instanced\\] frame \\d+ key 0;",
+   "match": "key 0; wind: prepass 0, G-buffer 0 ",
+   "windows": [
+    "diag-off-a",
+    "diag-off-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  }
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=7 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=11\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "rt_hit_material_wind_rgb at S8 (Water Queens House): ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT (depth 633929ef/0d91554d, G-buffer 735d5a19/83831811) is the largest single blocker in the S8 replay pack, 13.3% of hit-material lookups (tools/hit_material_blockers.py). Startup rt_hit_material=1, rt_hit_material_instanced=1, rt_hit_material_wind_rgb=1 (G-buffer VS frame patch), then live OFF/ON/OFF of rt_hit_material_instanced with the exposure held in every A/B window: rt_stats windows (wind RGB 2S prepass/G-buffer/captured/mapped, pairing, clip check; hit material qualified and reasons), diag-off cost windows, OFF/ON/OFF PNGs.",
+ "estimated_phase_seconds": 144
+}

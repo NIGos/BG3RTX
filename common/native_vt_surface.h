@@ -53,6 +53,15 @@ inline constexpr Recipe recipes[]={
  // W = M P: not class A (the matrix is not the plain instance rows), never pooled. Per-draw rows of
  // its instanced draws (depth VS 106a0550 adds the same offset): native_hit_instanced.h.
  {0x923131c7039f33daull,0x1e9145e4b621a5e0ull,0,44,48,ReflectanceUbo,0,CaptureDraw,LayoutBase,true},
+ // ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT STI (rt_hit_material_wind_rgb): classifier vs 14678345 "same
+ // sampling, 10 statements differ, outputs out0,out2,out3" (tests/material_families_test.py pins each): out0 the
+ // two-sided N column (as 923131c7), out2 RT2.y = clamp(1:1 _m5) (byte 20 of 8 floats) and RT2.w = 4 | channel << 4
+ // (material class 4, thin translucency, no flag bit), out3 = (1:0 _m3 / 255, 0, physical.w, 0) the translucency
+ // inputs. Albedo, normal and physical sampling and the engine UBO 1:0 (p @0, tile set @32, channel @36) are
+ // 14678345's. The hit gets the exact class 0 front lobe; the transmission lobe is missing (as the class 4
+ // Iridescent pool rows: darker only for light from behind). VS 735d5a19: 50fbfceb's interface (wind RGB, not
+ // class A): per-draw rows of its instanced draws (depth VS 633929ef + alpha FS 0d91554d), native_hit_instanced.h.
+ {0x838318119b2f43d8ull,0x735d5a19130262bdull,0,32,36,ReflectanceUbo,20,CaptureDraw,LayoutBase,true},
  // ENV_DetailMap_VT STI (pool): the 14678345 VT layers and engine UBO 1:0 at 1:4..7 plus a 2D
  // detail normal 1:3 and mask 1:8 (sampler 0:7); 1:1 {strength, tiling, reflectance @8, mask
  // power, roughness add} (native_vt_fields.h nv_detail_fields). VS 54df894a is class A: UV at

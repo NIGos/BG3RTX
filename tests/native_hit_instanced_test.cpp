@@ -315,6 +315,56 @@ static void pairing_tests() {
   CHECK(next_differs == differs);
   CHECK(kPairOutcomes == sizeof kPairName / sizeof kPairName[0] && kRemapPermBase >= 16 * 3);
 }
+// ---- The third family, wind RGB 2S translucency (rt_hit_material_wind_rgb, startup) ----
+// Off (the default) it does not exist for any lookup, so wind and 2S keep every decision they had.
+static void wind_rgb_tests() {
+  using namespace instanced;
+  constexpr uint64_t kDepth = 0x633929ef4f08b8aeull, kVs = 0x735d5a19130262bdull, kFs = 0x838318119b2f43d8ull;
+  // 1. Gate: key off -> None everywhere (depth, G-buffer, frame patch, recipe); on -> WindRgb.
+  CHECK(depth_family(kDepth) == None && deferred_family(kVs, kFs) == None && !frame_vs(kVs) && recipe(kVs, kFs) == nullptr);
+  CHECK(depth_family(kDepth, true) == WindRgb && deferred_family(kVs, kFs, true) == WindRgb && frame_vs(kVs, true) && !frame_vs(kDepth, true));
+  CHECK(deferred_family(kVs, kStiFs, true) == None && deferred_family(kWindVs, kFs, true) == None && deferred_family(kDepth, kFs, true) == None);
+  // The other families answer the same with the key on or off.
+  for (bool on : {false, true}) {
+    CHECK(depth_family(kWindDepth, on) == Wind && depth_family(k2sDepth, on) == AlphaTest2s && depth_family(kWindVs, on) == None);
+    CHECK(deferred_family(kWindVs, kWindFs, on) == Wind && deferred_family(k2sVs, k2sFs, on) == AlphaTest2s);
+    CHECK(frame_vs(kWindVs, on) && frame_vs(k2sVs, on) && !frame_vs(kStiVs, on));
+    CHECK(recipe(kWindVs, kWindFs, on) == vt::recipe(kWindFs) && recipe(k2sVs, k2sFs, on) == vt::recipe(k2sFs));
+  }
+  CHECK(gate(WindRgb, false) == None && gate(Wind, false) == Wind && gate(AlphaTest2s, false) == AlphaTest2s);
+  // 2. Recipe: a per-draw row, two-sided, reflectance 1:1 byte 20, staged into the gather's layout.
+  const auto* r = recipe(kVs, kFs, true);
+  CHECK(r && r == vt::recipe(kFs) && r->capture == vt::CaptureDraw && r->two_sided && r->reflectance_offset == 20);
+  CHECK(row_flags(*r) == kRowTwoSided && family_flags(WindRgb) == 0x300 && (family_flags(WindRgb) & (kRowTolerant | kRowTwoSided)) == 0);
+  uint32_t engine[10], material[8];
+  for (uint32_t i = 0; i < 10; ++i) engine[i] = 0x1000u + i;
+  for (uint32_t i = 0; i < 8; ++i) material[i] = 0x2000u + i;
+  unsigned char s[kStageBytes];
+  auto word = [&](uint32_t byte) { uint32_t v; std::memcpy(&v, s + byte, 4); return v; };
+  CHECK(stage(*r, engine, 10, material, 6, s));
+  for (uint32_t i = 0; i < 8; ++i) CHECK(word(64 + 4 * i) == 0x1000u + i);
+  CHECK(word(100) == 0x1008u && word(104) == 0x1009u && word(kStagePhysical) == 0x2005u);   // index @32, channel @36, _m5
+  CHECK(!stage(*r, engine, 10, material, 5, s) && pool::engine_bytes(*r) == 40 && vt::material_bytes(*r) == 24);
+  // 3. Pairing: as wind (time, camera, scene and 1:1 _m0.._m3), plus the flutter amplitude 1:1 _m4.
+  WindInputs frame{};frame.ok = true;frame.time = 12.5f;frame.scene[0] = .3f;frame.scene[1] = .1f;frame.scene[2] = 1.2f;
+  for (int k = 0; k < 4; ++k) frame.material[k] = .25f * float(k + 1);
+  frame.flutter = .4f;frame.camera[0] = 100.f;frame.viewproj[0] = 1.f;
+  CHECK(pair_check(WindRgb, frame, frame) == PairSame);
+  WindInputs f2 = frame;f2.flutter = .41f;
+  CHECK(pair_check(WindRgb, frame, f2) == PairWind && pair_check(Wind, frame, f2) == PairSame);   // wind never reads _m4
+  f2 = frame;f2.material[3] += .01f;
+  CHECK(pair_check(WindRgb, frame, f2) == PairWind);
+  f2 = frame;f2.time += 1.f / 30.f;
+  CHECK(pair_check(WindRgb, frame, f2) == PairOtherFrame);
+  f2 = frame;f2.viewproj[12] += 1e-4f;
+  CHECK(pair_check(WindRgb, frame, f2) == PairCamera);
+  f2 = frame;f2.translation[0] += 64.f;
+  CHECK(pair_check(WindRgb, frame, f2) == PairSame);   // no per-draw translation in the wind VSs
+  CHECK(pair_check(WindRgb, WindInputs{}, frame) == PairUnread);
+  // 4. Sizes: one counter block per family, the family names, the remap counters below the permutations.
+  CHECK(kFamilies == 4 && sizeof kFamilyName / sizeof kFamilyName[0] == kFamilies && kRemapPermBase >= 16 * kFamilies);
+  CHECK(uint32_t(WindRgb) < kFamilies && uint32_t(WindRgb) <= 3u);   // word 220 bits 8..9
+}
 int main() {
   using namespace instanced;
   // 1. Families: depth by VS only, G-buffer by the exact pair; the class A STI pair is none of them.
@@ -385,6 +435,7 @@ int main() {
   CHECK((kRowTolerant & kRowTwoSided) == 0 && (kRowTolerant & (3u << kRowFamilyShift)) == 0 && kRowToleranceWord == 224);
   wind_tests();
   pairing_tests();
+  wind_rgb_tests();
   std::printf("native_hit_instanced_test: %u checks passed\n", checks);
   return 0;
 }

@@ -456,6 +456,30 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     differs, rigid 0 as live; after the remap all bit-exact; a replaced instance stays rejected; pair_check per
     input). No existing shader changed. Cost (not measured): mode 0 is O(instances) in the same order, at most
     instances^2 first-vertex compares; mode 1 one 4 B copy per word of the reordered instances.
+- **Third family: wind RGB 2S (2026-11-01; offline, READY_FOR_LIVE, not qualified).** Startup key
+  `rt_hit_material_wind_rgb=0` (GUI Experimental "Native hit materials: RGB wind foliage", needs the instanced rows).
+  Why: the S8 replay pack ranked by `tools/hit_material_blockers.py` (frame_replay `--define HM_BLOCKERS=1`, the
+  outcome per TLAS instance): soup alpha instances of depth FS 0d91554d block 13.3% of all lookups, the largest
+  single item. Asset DB: 0d91554d is the StaticInstancedDepth FS of four ATM_Wind_Vertex_RGB_AlphaTest_2S templates;
+  in the logs its triangles match 735d5a19/83831811 (camp 126.9k of 128.3k), which holds 2.6% of traced G-buffer
+  draws against 0.05% for the plain 2S one. Pair: depth VS 633929ef + FS 0d91554d, G-buffer 735d5a19/83831811.
+  - Recipe (classifier vs 14678345, "same sampling, 10 statements differ, outputs out0,out2,out3", pinned in
+    `tests/material_families_test.py`): out0 the two-sided N column (as 923131c7), RT2.y = clamp(1:1 _m5) (byte 20),
+    RT2.w = class 4 (thin translucency) with the channel bits, out3 the translucency inputs. Engine UBO as 14678345.
+    The hit gets the exact class 0 front lobe; the transmission lobe is missing (as the Iridescent pool rows).
+  - Capture: VS 735d5a19 has 50fbfceb's interface and the depth VS 633929ef 1719e9d0's; the position arithmetic is
+    textually equal in both (RG wind plus a flutter term: 1:1 _m3/_m4, vertex colour b). No clip tolerance is
+    derived for the flutter term: the rows are checked bit for bit (the RG wind rows were 101357 of 101357
+    bit-exact live), fail closed. Pairing as wind plus 1:1 _m4. Family 3 in word 220 bits 8..9; clip counters
+    427..434, logged as `hit material instanced clip wind RGB 2S`; layer lines `[hit material instanced] frame F
+    wind RGB 2S: ...` and `... wind RGB 2S since the last line: pairs ...; instance order ...`.
+  - Off (default): `instanced::gate` makes the family None for every lookup, so wind and 2S are unchanged;
+    only the `audited recipe, no capture path` census counts its draws. Shaders: every request without
+    RT_HIT_INSTANCED should stay byte-identical (gate PENDING: tools/shader_identity.py); the instanced requests change
+    only by the third family's counters.
+  - Live: batch `m4_wind_rgb` (S8, 144 s). Expected: up to +13 points of qualified share at S8, about +3 to +7 at
+    camp (0d91554d is 6.6% of camp's unsupported alpha triangles; hits per triangle are higher for these trees than
+    for grass), 0 at S6 (not in that scene).
 - **Cost and bias breakdown (2026-11-01; offline, READY_FOR_LIVE).** Live (m4r1 030749/031149, m4p 11xxxx,
   diagnostics off): rf pass +1.5-1.6 ms at S6 (0.42 -> 1.94-2.0), +2.0 at S8 (0.57 -> 2.55), budget 0.2-0.4.
   - Where it goes (counts per frame from the stats windows, which include the tier (a) checks): S6 has

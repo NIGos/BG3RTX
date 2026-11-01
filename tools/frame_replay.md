@@ -45,6 +45,11 @@ frame_replay --pack <dir> --native-ambient [--pt-iters N] [--out <dir>]   (defau
   log's lines for this pass with "1 frames": `rt stats ... hybrid GI`, `GI hit direct`,
   `GI hit direct lights`, `GI hit direct policy`, `hit material` (wording of core/gi.cpp), plus a guard
   line. With a live `output ... FILE` reference it prints the bit-equal share and mean/max |diff|.
+- `rtstats.bin`: the raw counters (512 x 64 bins of uint32). With `--define HM_BLOCKERS=1` (replay only, never a
+  game variant) hit_material_count also counts every lookup per TLAS instance (< 1024) and outcome (qualified,
+  base without a record, row, other) in counters 448..511; `py -3 tools/hit_material_blockers.py --pack <dir>
+  --stats <out>/rtstats.bin` ranks the blockers by capture class and instance (extent, area, distance, alpha FS).
+  The outputs are bit-identical to the run without the define (S8 pack: same giRaw fnv1a).
 
 ## PT reference: `--pt-reference` (tools/pt_reference.hlsl, M6 offline)
 
