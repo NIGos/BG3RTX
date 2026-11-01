@@ -228,6 +228,32 @@ GPU 0.022 ms, reflections 0.12 ms.
 - Expect lines (m5w3): `compose (120 frames, (1[01]\d|120) composed`: with the fix every lighting slot
   gets a pass; 100 allows a slot without one where the recording order flips between frames.
 
+#### M5.3 compose cost (m5w3-fg2 rerun, 2026-11-01, offline fix; READY_FOR_LIVE)
+After the BUG 1 fix every frame composed, but `compose GPU 7.2 ms median, p90 8.0` at the main S8 view
+(records ~290k/frame), 2.0-2.6 ms at the view with 85k records; frame time OFF 13.25 ms, ON 15.70 ms.
+M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
+- Cause: the statistics. `cStats`, the params and the camera block lived in the host-visible buffer
+  (`alloc_host_buffer`), and the compose did ~25 wave atomics per record wave into it, 6 of them returning
+  the old value (the 64-bit carry): a PCIe round trip each, the 15 ms bug of m5w2 again. The log fits it:
+  cost is linear in the records, 7.9 ms at 297k and 2.1 ms at 85k (27 us per 1000 records, about 0.9 us
+  per 32-lane wave), with an intercept near 0 ms. The copy (2.7 Mpx, ~100 MB) and the image barriers are
+  not the cost.
+- Fix: `g_cdev` (device-local, `make_device_buffer`) holds the statistics slots, the params (now
+  `CmdUpdateBuffer` at the lighting) and the camera block. The host buffer only receives each slot's
+  256 B of statistics by `CmdCopyBuffer` after every compose dispatch, after the end timestamp, so it is
+  outside the timed region. The shader reduces every word per 8x8 group in groupshared first: one L2 atomic
+  per non-zero word per group. The 64-bit sums stay exact: a group's quantised sum is at most
+  64 x 1e4 x 4096 < 2^32 (`kCsGroupSumMax`, static_assert). The composed colour, the target writes and
+  the record consumption are unchanged (the diff touches only cstat / csum64 and adds the flush): the
+  same image and the same statistics integers. Test 4e of water_compose_test checks that the group
+  adds equal the per-wave adds, including the worst case (every lane at the clamp) across the carry.
+- The log line is split: `compose GPU T ms median, p90 P (...); copy C ms median, p90 ..; compose
+  dispatches D ms median, p90 ..` (`compose_ms`, test 4f).
+- Expected cost: under 0.5 ms (copy ~0.05 ms: ~100 MB at the 5090's bandwidth; compose ~0.1-0.2 ms,
+  the M5.2 cost for the same rays plus one 32 B record read per pixel). The m5w3 expect line now needs
+  `compose GPU 0\.[0-4]\d\d ms median`: the 0.5 ms bound is 4 times M5.2's 0.12 ms for the same rays over
+  two full-screen passes. Frame time ON minus OFF should fall from 2.45 ms to within the OFF spread.
+
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
 ### M5.5 Transmission and absorption, only after medium and material mapping are proven.
 

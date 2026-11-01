@@ -368,7 +368,12 @@ constexpr VkDeviceSize kCStatBytes = 256, kCParamBytes = 256, kCCamBytes = 768; 
 constexpr VkDeviceSize kCVpOff = 512, kCSlotBytes = kCStatBytes + kCParamBytes;
 // ONE camera block after the slots (common/water_compose.h lighting_use): every frame's copy
 // overwrites it, the compose reads the camera of the lighting the GPU ran last, as wRad / wDep.
-constexpr VkDeviceSize kCCamOff = kRing * kCSlotBytes, kCHostBytes = kCCamOff + kCCamBytes;
+// Layout of g_cdev (DEVICE-LOCAL: the shaders' statistics atomics, the params and the camera all
+// live here; m5w3-fg2 had them in host-visible memory and the compose's per-wave atomics over PCIe
+// cost 7.2 ms at 275k records). g_chost (host-visible) only receives each slot's statistics,
+// copied after every compose dispatch, outside the timed region; it uses the same slot offsets.
+constexpr VkDeviceSize kCCamOff = kRing * kCSlotBytes, kCDevBytes = kCCamOff + kCCamBytes;
+constexpr VkDeviceSize kCHostBytes = kRing * kCSlotBytes;
 
 struct ComposeParams {   // shaders/rt/water_compose.hlsl ComposeParams
   uint32_t a[4];         // pitch, capacity, rt_debug, flags (bit 0 apply)
@@ -384,8 +389,8 @@ Bg3Image g_rad{}, g_dep{};
 uint32_t g_cw = 0, g_ch = 0;
 bool g_cimg_init = false, g_cbuf_zeroed = false;
 uint64_t g_cbuf_seen = 0;   // the record buffer the zero fill was for
-VkBuffer g_chost = VK_NULL_HANDLE;
-VkDeviceMemory g_chost_mem = VK_NULL_HANDLE;
+VkBuffer g_chost = VK_NULL_HANDLE, g_cdev = VK_NULL_HANDLE;
+VkDeviceMemory g_chost_mem = VK_NULL_HANDLE, g_cdev_mem = VK_NULL_HANDLE;
 uint8_t* g_cmap = nullptr;
 VkQueryPool g_cqp = VK_NULL_HANDLE;
 uint32_t g_cslot = 0;
@@ -406,7 +411,7 @@ struct CWindow {
   uint64_t frames = 0, ran = 0, passes = 0;
   uint64_t w[kCStatWords] = {};
   double sumC = 0, sumB = 0, sumAL = 0, sumPos = 0, sumNeg = 0, sumBown = 0;
-  std::vector<float> ms;
+  std::vector<float> ms, ms_copy, ms_comp;   // per timed frame: total, the lighting copy, the compose dispatches
   uint64_t no_buffer = 0, layout = 0, size = 0, untimed = 0;
   // Passes: on this frame's lighting stash, on the previous lighting's (the pass recorded first),
   // refused (no recent lighting, no scene to stamp), and a newer scene than the stash's taken.
@@ -462,11 +467,18 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes) {
   VkDevice dev = host->device;
   if (!g_chost) {
     void* m = nullptr;
-    if (!host->alloc_host_buffer(kCHostBytes,
-                                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-                                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                 &g_chost, &g_chost_mem, &m))
+    if (!make_device_buffer(kCDevBytes,
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                            g_cdev, g_cdev_mem))
       return false;
+    if (!host->alloc_host_buffer(kCHostBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &g_chost, &g_chost_mem, &m)) {
+      host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_cdev);
+      host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_cdev_mem);
+      g_cdev = VK_NULL_HANDLE, g_cdev_mem = VK_NULL_HANDLE;
+      g_chost = VK_NULL_HANDLE, g_chost_mem = VK_NULL_HANDLE;
+      return false;
+    }
     g_cmap = static_cast<uint8_t*>(m);
     std::memset(g_cmap, 0, size_t(kCHostBytes));
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
@@ -526,17 +538,13 @@ void collect_compose(uint32_t slot) {
   if (g_cqp) {
     const uint32_t n = 1 + (std::min)(g_cpasses[slot], kMaxComposePasses);
     uint64_t t[kCQ * 2] = {};
+    bg3::water::ComposeMs ms;
     if (host->vk->GetQueryPoolResults(host->device, g_cqp, slot * kCQ, n * 2, sizeof t, t, 16,
-                                      VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_SUCCESS) {
-      const double period = host->cfg_float("gpu_timestamp_period_ns", 1.0f) * 1e-6;
-      double ms = 0;
-      bool ok = true;
-      for (uint32_t i = 0; i < n; ++i) {
-        const uint64_t* q = t + i * 4;   // (start, avail, end, avail)
-        ok = ok && q[1] && q[3] && q[2] >= q[0];
-        if (ok) ms += double(q[2] - q[0]) * period;
-      }
-      if (ok && ms >= 0 && ms < 1000) g_cwin.ms.push_back(float(ms));
+                                      VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_SUCCESS &&
+        bg3::water::compose_ms(t, n, host->cfg_float("gpu_timestamp_period_ns", 1.0f) * 1e-6, ms)) {
+      g_cwin.ms.push_back(float(ms.copy + ms.compose));
+      g_cwin.ms_copy.push_back(float(ms.copy));
+      g_cwin.ms_comp.push_back(float(ms.compose));
     }
   }
   g_cpasses[slot] = 0;
@@ -581,13 +589,18 @@ void maybe_log_compose() {
             rbins, double(kRatioLow), pct(double(w[kCsRatioLow]), rbins), double(kRatioLow), double(kRatioHigh),
             pct(double(w[kCsRatioMid]), rbins), double(kRatioHigh), pct(double(w[kCsRatioHigh]), rbins),
             W.sumB > 0 ? W.sumAL / W.sumB : 0.0);
-  std::vector<float> ms = W.ms;
-  std::sort(ms.begin(), ms.end());
-  const double med = ms.empty() ? 0.0 : double(ms[ms.size() / 2]);
-  const double p90 = ms.empty() ? 0.0 : double(ms[(std::min)(ms.size() - 1, ms.size() * 9 / 10)]);
+  auto quant = [](std::vector<float> v, double& med, double& p90) {
+    std::sort(v.begin(), v.end());
+    med = v.empty() ? 0.0 : double(v[v.size() / 2]);
+    p90 = v.empty() ? 0.0 : double(v[(std::min)(v.size() - 1, v.size() * 9 / 10)]);
+  };
+  double med, p90, cmed, cp90, dmed, dp90;
+  quant(W.ms, med, p90);
+  quant(W.ms_copy, cmed, cp90);
+  quant(W.ms_comp, dmed, dp90);
   host->log("[water] compose GPU %.3f ms median, p90 %.3f (%zu timed frames: the lighting copy + the compose dispatches; "
-            "%llu passes beyond %u untimed)",
-            med, p90, ms.size(), (unsigned long long)W.untimed, kMaxComposePasses);
+            "%llu passes beyond %u untimed); copy %.3f ms median, p90 %.3f; compose dispatches %.3f ms median, p90 %.3f",
+            med, p90, W.ms.size(), (unsigned long long)W.untimed, kMaxComposePasses, cmed, cp90, dmed, dp90);
   g_cwin = CWindow{};
 }
 
@@ -626,14 +639,15 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   }
   const uint32_t header[4] = {in.w, cb.capacity, 0, 0};
   vk.CmdUpdateBuffer(cmd, rb, 0, sizeof header, header);
-  vk.CmdFillBuffer(cmd, g_chost, cslot_off(slot), kCStatBytes, 0);
+  vk.CmdFillBuffer(cmd, g_cdev, cslot_off(slot), kCStatBytes, 0);    // the shader's counters
+  vk.CmdFillBuffer(cmd, g_chost, cslot_off(slot), kCStatBytes, 0);   // the readback, if no pass copies
   ComposeParams prm{};
   prm.a[0] = in.w;
   prm.a[1] = cb.capacity;
   prm.a[2] = uint32_t((std::max)(host->cfg_int("rt_debug", 0), 0));
   prm.a[3] = 1u;
   prm.b[0] = host->cfg_float("rf_mirror_rough", 0.1f);
-  std::memcpy(g_cmap + cslot_off(slot) + kCStatBytes, &prm, sizeof prm);
+  vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes, sizeof prm, &prm);
   if (!g_cimg_init) {
     image_barrier(cmd, g_rad.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
     image_barrier(cmd, g_dep.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
@@ -647,7 +661,7 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   const VkImageLayout G = VK_IMAGE_LAYOUT_GENERAL;
   VkDescriptorBufferInfo bufs[3] = {{in.cam.buffer, in.cam.offset, in.cam.range},
                                     {in.vp.buffer, in.vp.offset, in.vp.range},
-                                    {g_chost, kCCamOff, kCCamBytes}};
+                                    {g_cdev, kCCamOff, kCCamBytes}};
   VkDescriptorImageInfo imgs[6] = {{VK_NULL_HANDLE, in.mat.view, in.mat.layout}, {VK_NULL_HANDLE, in.dep.view, in.dep.layout},
                                    {VK_NULL_HANDLE, in.dif.view, G},              {VK_NULL_HANDLE, in.spe.view, G},
                                    {VK_NULL_HANDLE, g_rad.view, G},               {VK_NULL_HANDLE, g_dep.view, G}};
@@ -734,11 +748,11 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   if (from != G) image_barrier(cmd, p->color_images[0], from, G, kAll, kCS);
   if (g_cqp && pass < kMaxComposePasses) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 2 + pass * 2);
   else ++g_cwin.untimed;
-  VkDescriptorBufferInfo bufs[6] = {{g_chost, kCCamOff, 400},
-                                    {g_chost, kCCamOff + kCVpOff, 16},
+  VkDescriptorBufferInfo bufs[6] = {{g_cdev, kCCamOff, 400},
+                                    {g_cdev, kCCamOff + kCVpOff, 16},
                                     {g_rts, 0, kRtStatsBytes},
-                                    {g_chost, cslot_off(slot) + kCStatBytes, sizeof(ComposeParams)},
-                                    {g_chost, cslot_off(slot), kCStatBytes},
+                                    {g_cdev, cslot_off(slot) + kCStatBytes, sizeof(ComposeParams)},
+                                    {g_cdev, cslot_off(slot), kCStatBytes},
                                     {VkBuffer(g_st.buf.buffer), 0, g_st.buf.bytes}};
   VkDescriptorImageInfo imgs[3] = {{VK_NULL_HANDLE, g_dep.view, G}, {VK_NULL_HANDLE, g_rad.view, G},
                                    {VK_NULL_HANDLE, p->color_views[0], G}};
@@ -768,8 +782,13 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);
   if (g_cqp && pass < kMaxComposePasses)
     vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 3 + pass * 2);
-  // The consumed records, the statistics and the target before the later passes and the host.
-  memory_barrier(cmd, kCS, kAll | VK_PIPELINE_STAGE_HOST_BIT);
+  // The consumed records, the statistics and the target before the later passes and the copy.
+  memory_barrier(cmd, kCS, kAll);
+  // The slot's cumulative statistics to the host slot (256 B, after the end timestamp: outside the
+  // timed region); the last pass's copy holds every pass's counts when the host reads it kRing later.
+  const VkBufferCopy sc{cslot_off(slot), cslot_off(slot), kCStatBytes};
+  vk.CmdCopyBuffer(cmd, g_cdev, g_chost, 1, &sc);
+  memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kAll | VK_PIPELINE_STAGE_HOST_BIT);
   if (from != G) image_barrier(cmd, p->color_images[0], G, from, kCS, kAll);
   host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
 }
@@ -783,8 +802,10 @@ void release_compose() {
   g_cpush = g_calpha = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_chost);
   host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_chost_mem);
-  g_chost = VK_NULL_HANDLE;
-  g_chost_mem = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_cdev);
+  host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_cdev_mem);
+  g_chost = g_cdev = VK_NULL_HANDLE;
+  g_chost_mem = g_cdev_mem = VK_NULL_HANDLE;
   g_cmap = nullptr;
   if (g_cqp) host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_cqp);
   g_cqp = VK_NULL_HANDLE;
