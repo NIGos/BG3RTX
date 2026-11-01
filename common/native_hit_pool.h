@@ -19,7 +19,7 @@ namespace bg3::native_hit::pool {
 // The pool pair: a deferred recipe of native_vt_surface.h whose VS is not the audited per-draw
 // VS (3812bc98, class B, never pooled: its FSs 8995da1e/3da860be take the per-draw path).
 // Today: VS 2d2ac3c3 with FS 14678345 (STI), 3df678c0 (reflectance 0.5) or 81657854
-// (reflectance mix(0.5, normal x, p)). Recipes without a capture path (native_vt::CaptureNone:
+// (reflectance mix(0.5, normal x, p)); VS 54df894a with FS 613ead9c; VS c32ce535 with FS 9064a6bd. Recipes without a capture path (native_vt::CaptureNone:
 // their VS is not class A, so they are never pooled) are not pool pairs.
 inline const native_vt::Recipe* pool_recipe(uint64_t vs, uint64_t fs) {
   const auto* r = native_vt::recipe(fs);
@@ -32,7 +32,9 @@ inline bool uncaptured_recipe(uint64_t vs, uint64_t fs) {
 }
 // Engine UBO (set 1 binding 0) bytes the recipe reads: the UV transform p0 and the mip clamp p1,
 // the tile-set index and the light channel word (STI: 40 of the UBO's 48 bytes).
+// LayoutIridescent: its whole 16 B block {channel, flag, profile, pad} (no transform, no table).
 inline uint32_t engine_bytes(const native_vt::Recipe& r) {
+  if (r.layout == native_vt::LayoutIridescent) return 16u;
   return std::max({r.transform_offset + 32u, r.tileset_index_offset + 4u, r.channel_offset + 4u});
 }
 // Pipeline state of the G-buffer draw. Same rule as exact_material_pipeline without the
