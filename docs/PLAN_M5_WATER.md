@@ -136,7 +136,35 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
 6. No double count: the native Ks is subtracted exactly; unresolved rays keep it. Gates: P6
    "Composition", "Physics", "Motion" (one moving run, key toggled), S1 and S8; tier (b) after M4.2.
 
-### M5.3 Water reflections composed (the plan above), `rt_water_reflections=2` or its own key
+### M5.3 Water reflections composed: `rt_water_compose=0`
+
+#### M5.3 status (2026-11-01, branch m5-compose, offline, READY_FOR_LIVE)
+- Built: `rt_water_compose` (GUI `exp_water_compose`, Experimental, needs `exp_water_reflections`; enabling needs a
+  restart, off is live). Files: `common/water_compose.h` (record, buffer, ownership check),
+  `common/water_fs_patch.h` (FS patch), `layer/water.cpp` (variants, swap), `core/water.cpp` +
+  `shaders/rt/water_compose.hlsl` (copy, compose, rt_debug 25), `tests/water_compose_test.cpp`.
+- Plan step 4 (recompute the FS's N, a, T, X, Ks from its sets) was dropped: N needs the FS's interpolated UV
+  and tangent frame, and a, T, X need its flow-mapped textures at that UV; none of it exists after the pass.
+  The "minimal extra copy" instead: the FS writes its own values. `water_fs_patch.h` adds to the audited FS
+  (only 7b44a567 huge_PixelLighting has an id table yet; the other six keep the probe, counted "without") eight
+  stores at the end of main through a physical-storage-buffer address baked into the module (the game's
+  layout and sets untouched) plus EarlyFragmentTests (valid: no discard, no depth write). Record per pixel:
+  `A = a T X E`, `B = a T X k Ks`, N, C, t, roughness (ids `_784 _4096.w _2063 _3799 _3379 _3303 _3352 _1207
+  _4335 _1480 _5`). The patched dump passes `spirv-val` (vulkan1.3) and decompiles to the intended stores.
+- Composition at the end of each water pass: `C' = max(C + A L - B, 0)` where the mirror ray along the FS's
+  own N resolves on screen (tier a, as M5.2), the probe kept otherwise. L is lit radiance (b10 + b11), whose
+  unit is the probe's times k (D-EN4), so A has no k and B does: a ray that sees what the probe holds
+  changes nothing. Kept as well: roughness above `rf_mirror_rough` (the probe is a filtered lobe), N.V <= 0,
+  and records whose C is not the target's (overlapping water fragments store in any order; the check is
+  one ulp of B10G11R11, derived). The traced path's own fog (water to the hit) is not applied (as D-RF).
+- Limits: the variants exist only if the key was on when the water pipelines were created; 160 MB record
+  buffer (`rt_water_compose_mb`, 5.2 Mpx); shaderInt64 required (`sharc_device=1`); the pass must have an
+  audited water FS first or last (as the M5.2 views); compose needs this frame's lighting recorded first.
+- Log: `[water] compose variants` (layer), `[water] compose` (records, owned, kept, tiers, unresolved share),
+  `compose energy` (mean C, B removed, A L added, mean delta absolute and % of C), `compose GPU` (copy +
+  compose dispatches). Offline: 73 CTests (+water_compose_test with the dumped FS), 745 shaders, ordinary
+  SPIR-V byte-identical (no existing shader changed), QA detectors, dry run of `m5w3`.
+- Live: job `m5w3` (S1, compose on at launch, OFF/ON/OFF PNGs, rt_debug 25, cost), after `m5w2`.
 
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
 ### M5.5 Transmission and absorption, only after medium and material mapping are proven.

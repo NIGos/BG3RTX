@@ -13,9 +13,18 @@ Done: `m5w1-water-geometry-s1-fg2` (M5.1 `rt_water_geometry`, branch m5-water) r
 - Reflections, reported (no pass threshold yet: the first measurement of the observable): `screen hit`, `hidden`, `off screen`, `miss` shares of the rays, `aborted` (expect 0), `invalid 0`, `normal fallback`, `mean E` (Schlick with F0 0.0196 at the docks: grazing views raise it), `mean screen L`, `mean E*L`. The `diag-view-reflect` PNG must show the docks / shore reflected the right way up on the water (a wrong normal or shift shows as noise or a mirrored offset); `diag-view-coverage` mostly green on the water, no red.
 - Cost: `[water] reflections GPU` median and p90 (the two dispatches); cost-on minus cost-off frame time and `rt passes: GPU cost` against the cost-off-a / cost-off-b spread. Quality before frame rate: report, no budget gate.
 
-Not in this batch: composition into the forward water result (M5.3, plan in PLAN_M5 M5.2 "Composition plan"); motion (one moving run with the key toggled comes with M5.3, where the shift and the one-frame water latency matter to the image).
+2. `m5w3-water-compose-s1-fg2` (QuickSave_3784, S1 docks, 132 s, after `m5w2`): [PLAN_M5](../../../docs/PLAN_M5_WATER.md) M5.3 `rt_water_compose` (branch m5-compose; a layer change: test-main must be that build). `rt_water_compose=1` at launch (the patched water FS variants are created with the water pipelines), geometry and reflections on in every phase but `restore`, the compose key toggled live. Warm-up OFF, `precheck-compose-on` (15 s: the `[water] compose` expect lines need records, owned and composed pixels above 0, else INVALID), OFF-a / ON / OFF-b with a cost window and a PNG each, and `diag-view-delta` (`rt_debug=25`: green brighter, red darker relative to C, dark blue unresolved (probe kept), dark cyan rough or below the surface, yellow not owned).
 
-Duration: plan 140 s; one launch, about 5 min (at most 8 min of timeouts). Disk: 5 PNG traces at about 60 MB plus logs, about 0.3 GB.
+## Gates of m5w3 (read the deciding numbers in the log)
+- Valid run: as m5w2, plus `[water] compose variants` with `FS patched 1`, `variant pipelines` > 0, `water draws on a variant` > 0 in the ON phases, `refused 0`, `failed 0`; no `compose UNAVAILABLE` / `NOT patched`.
+- Key off is the game: `shot-off-a` vs `shot-off-b` within the OFF repeat noise (QA detectors as in lean_regression).
+- Image: `shot-on` minus `shot-off-a` only on water pixels (the delta view's coloured pixels); the docks' piers and hulls reflected the right way up on the water. Review against the `diag-view-delta` PNG.
+- Composition: `owned` share (not owned is overlapping water), `unresolved (probe kept)` share, `kept: rough` share, tiers; `compose energy`: B removed vs A L added, mean delta per composed pixel and over owned as % of mean C (reported: the traced reflection is meant to differ from the probe; no brightness gate on a correction of the probe's error), `clamped` near 0.
+- Cost: `[water] compose GPU` median and p90 (copy + compose dispatches); cost-on minus cost-off frame time against the OFF spread.
+
+Not in this batch: motion (one moving run with the key toggled, where the one-frame water geometry latency and the screen-space resolve matter to the image); the other six audited water FS (no id table yet: they keep the probe).
+
+Duration: plans 272 s; two launches, about 9 min (at most 15 min of timeouts). Disk: 9 PNG traces at about 60 MB plus logs, about 0.6 GB.
 Start, results and rollback: as in ../lean_regression/README.md with this folder, prefix `m5w` and receipt `m5-water.json` (test-main must be the m5-water-rf commit under test).
 
-Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2, after merging main 3e08c03): all checks passed.
+Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2 + m5w3, branch m5-compose on main 3e7f126): all checks passed.
