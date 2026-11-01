@@ -7,45 +7,45 @@ traces and logs; no game run). Regenerate after new traces or recipes.
 
 - World: 371625 placed Scenery/Items objects over the 113 asset-DB worlds, 366822 resolved to a material template (visual -> LOD 0 material -> template -> Deferred ST/STI VS/FS pair from the asset DB). Geometry weight: GR2 uncompressed section bytes (all LODs), a triangle proxy; there is no triangle count without decoding GR2.
 - Test scenes: S1-S14 by sub-level (`SCENE_LEVELS` in `tools/material_families/cli.py`; S2, S3 and S10 use their whole world). Each scene weighs equally.
-- Frames: 110 traces (S1, S3, S6, S7, S8), 507 VS/FS pairs. Frame share = G-buffer draws, mean over traced S-scenes. Traces have no vertex counts; `log vtx` = vertices of declined pairs from `[hit material families]` log lines (8 pairs, S8 only).
+- Frames: 129 traces (S1, S3, S6, S7, S8), 507 VS/FS pairs. Frame share = G-buffer draws, mean over traced S-scenes. Traces have no vertex counts; `log vtx` = vertices of declined pairs from `[hit material families]` log lines (0 pairs, S8 only).
 - Class: the FS's SPIRV-Cross GLSL (captures/alpha_cache) normalized (`glsl.py`: resources by kind/set/ordinal, I/O by location, value-numbered temporaries) against the audited recipes 14678345, 8995da1e. COPY = differences reach one output (one term); VARIANT = same sampling, other field decode; NEW = other sampling.
-- combined = mean(world geo share, test-scene geo share, frame draw share). Pairs already built (native_vt_surface.h) hold 44.3% of it.
+- combined = mean(world geo share, test-scene geo share, frame draw share). Pairs already built (native_vt_surface.h) hold 48.0% of it.
 - Engine families (not ranked, other units): tileset (TileConstruction) 49367 objects, terrain 821 objects.
 
 ## Top 30
 
 | # | VS/FS | Template (canonical) | Class | World geo | Scenes geo | Frames | Draws / traces | Log vtx | Combined | Next step |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | 2d2ac3c3/14678345 | Base/Base_VT:StaticInstancedDeferred (+2) | SUPPORTED | 22.4% | 23.3% | 20.1% | 10321 / 110 |  | 21.9% | audited recipe |
-| 2 | 54df894a/613ead9c | Environment/ENV_DetailMap_VT:StaticInstancedDeferred (+1) | NEW (built) | 13.8% | 19.5% | 3.9% | 1848 / 110 | 685k | 12.4% | built: live gate pending (`[hit material]` qualified up) |
-| 3 | 3812bc98/8995da1e | Base/Base_VT:StaticDeferred (+5) | SUPPORTED | 8.8% | 10.6% | 4.4% | 3124 / 107 |  | 7.9% | audited recipe |
-| 4 | 50fbfceb/8e49cde8 | Atmosphere/ATM_Wind_Vertex_RG_VT:StaticInstancedDeferred | COPY of 14678345 | 6.8% | 3.3% | 1.4% | 576 / 86 |  | 3.9% | FS decode audited; VS 50fbfceb not class A: no capture path (PLAN_M4 next families) |
-| 5 | c32ce535/9064a6bd | Environment/ENV_DetailMap_Iridescent:StaticInstancedDeferred | NEW | 2.2% | 6.2% | 2.9% | 816 / 24 |  | 3.8% | full recipe audit (texture2D:texture x5) |
-| 6 | 735d5a19/83831811 | Atmosphere/ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT:StaticInstancedDeferred | VARIANT of 14678345 | 4.7% | 3.0% | 2.6% | 1377 / 86 |  | 3.4% | field-decode audit vs 14678345 (outputs out0,out2,out3); audit VS 735d5a19 (outputs, XFB) |
-| 7 | 105e47e4/35a18400 | InstancePaint/IP_Wind_GrassFlowers_AlphaTest_2S_VT:StaticInstancedDeferred (+1) | VARIANT of 14678345 | 0.2% | 0.2% | 9.7% | 3797 / 86 |  | 3.3% | field-decode audit vs 14678345 (outputs *control*,out0,out1,out2,out4); audit VS 105e47e4 (outputs, XFB) |
-| 8 | 6044c8cf/02807a68 | Environment/ENV_Tileset_MultipleTextures:StaticInstancedDeferred (+1) | NEW | 1.2% | 1.1% | 5.2% | 3324 / 106 | 274k | 2.5% | full recipe audit (texture2D:texture x9) |
-| 9 | 1e9145e4/923131c7 | Base/Base_AlphaTest_2s_VT:StaticInstancedDeferred | VARIANT of 14678345 | 3.4% | 1.6% | 2.1% | 1382 / 83 |  | 2.4% | FS decode audited; VS 1e9145e4 not class A: no capture path (PLAN_M4 next families) |
-| 10 | 27ef2b49/2e34c667 | Atmosphere/ATM_Wind_Bushes_AlphaTest_2S_PBR_Translucency_VT:StaticInstancedDeferred | VARIANT of 14678345 | 3.6% | 1.9% | 0.7% | 384 / 86 |  | 2.0% | field-decode audit vs 14678345 (outputs out0,out1,out2,out3,out4); audit VS 27ef2b49 (outputs, XFB) |
-| 11 | 0de1b186/641822a7 | InstancePaint/IP_Base_VT:StaticInstancedDeferred (+2) | VARIANT of 14678345 | 0.4% | 0.3% | 5.4% | 1514 / 51 |  | 2.0% | field-decode audit vs 14678345 (outputs *control*,out0,out1,out2,out4); audit VS 0de1b186 (outputs, XFB) |
-| 12 | 1ed985dd/2257579f | Characters/CHAR_BASE_VertCut_VT:StaticDeferred (+4) | NEW | 0.5% | 0.7% | 4.6% | 2318 / 96 | 472k | 1.9% | full recipe audit (texture2D:texelFetch, texture2D:texture x2, texture2DArray:textureGrad x3) |
-| 13 | 2d2ac3c3/437af033 | Base/BASE_AlphaTest_ColorVar_VT:StaticInstancedDeferred | NEW | 0.6% | 1.6% | 1.9% | 1551 / 32 |  | 1.3% | full recipe audit (texture2D:texelFetch, texture2D:texture, texture2DArray:textureGrad x3) |
-| 14 | b1e18895/3c5a0241 | Environment/ENV_DetailMap_VT:StaticDeferred (+1) | NEW | 1.4% | 2.0% | 0.4% | 194 / 17 |  | 1.3% | full recipe audit (texture2D:texelFetch, texture2D:texture x2, texture2DArray:textureGrad x3) |
-| 15 | 0462b19d/d3281e24 | Environment/ENV_Base_TileBlend_Test_DirtGradient:StaticDeferred | NEW | 2.0% | 1.8% | 0 | 0 / 0 |  | 1.3% | full recipe audit (texture2D:texture x12) |
-| 16 | c1d7d262/0ecdfd36 | Environment/ENV_Base_TileBlend_Test_DirtGradient:StaticInstancedDeferred | NEW | 2.0% | 1.8% | 0 | 0 / 0 |  | 1.3% | full recipe audit (texture2D:texture x12) |
-| 17 | 54df894a/7a07134e | Environment/ENV_DetailMap_HeightGradient_VT:StaticInstancedDeferred | NEW | 1.4% | 1.0% | 1.3% | 1004 / 70 | 433k | 1.2% | full recipe audit (texture2D:texelFetch, texture2D:texture x4, texture2DArray:textureGrad x3) |
-| 18 | a618ddae/cad41eff | Environment/ENV_Tileset_MultipleTextures_AlphaTest:StaticInstancedDeferred | NEW | 0.5% | 0.2% | 3.0% | 2343 / 30 |  | 1.2% | full recipe audit (texture2D:texture x9) |
-| 19 | 2d2ac3c3/3df678c0 | Base/Base_GM_Pulse_VT_FX:StaticInstancedDeferred (+1) | COPY of 14678345 (built) | 0.8% | 1.2% | 1.5% | 798 / 96 |  | 1.2% | built: live gate pending (`[hit material]` qualified up) |
+| 1 | 2d2ac3c3/14678345 | Base/Base_VT:StaticInstancedDeferred (+2) | SUPPORTED | 22.4% | 23.3% | 20.1% | 12522 / 129 |  | 22.0% | audited recipe |
+| 2 | 54df894a/613ead9c | Environment/ENV_DetailMap_VT:StaticInstancedDeferred (+1) | NEW (built) | 13.7% | 19.4% | 3.9% | 2200 / 129 |  | 12.3% | built: live gate pending (`[hit material]` qualified up) |
+| 3 | 3812bc98/8995da1e | Base/Base_VT:StaticDeferred (+5) | SUPPORTED | 8.7% | 10.5% | 4.5% | 3751 / 126 |  | 7.9% | audited recipe |
+| 4 | 50fbfceb/8e49cde8 | Atmosphere/ATM_Wind_Vertex_RG_VT:StaticInstancedDeferred | COPY of 14678345 | 6.8% | 3.3% | 1.4% | 739 / 99 |  | 3.9% | FS decode audited; VS 50fbfceb not class A: no capture path (PLAN_M4 next families) |
+| 5 | c32ce535/9064a6bd | Environment/ENV_DetailMap_Iridescent:StaticInstancedDeferred | NEW (built) | 2.2% | 6.2% | 2.9% | 1020 / 30 |  | 3.8% | built: live gate pending (`[hit material]` qualified up) |
+| 6 | 735d5a19/83831811 | Atmosphere/ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT:StaticInstancedDeferred | VARIANT of 14678345 | 4.7% | 3.0% | 2.6% | 1679 / 99 |  | 3.4% | field-decode audit vs 14678345 (outputs out0,out2,out3); audit VS 735d5a19 (outputs, XFB) |
+| 7 | 105e47e4/35a18400 | InstancePaint/IP_Wind_GrassFlowers_AlphaTest_2S_VT:StaticInstancedDeferred (+1) | VARIANT of 14678345 | 0.2% | 0.2% | 9.7% | 4962 / 99 |  | 3.4% | field-decode audit vs 14678345 (outputs *control*,out0,out1,out2,out4); audit VS 105e47e4 (outputs, XFB) |
+| 8 | 6044c8cf/02807a68 | Environment/ENV_Tileset_MultipleTextures:StaticInstancedDeferred (+1) | NEW | 1.2% | 1.1% | 5.1% | 3918 / 125 |  | 2.5% | full recipe audit (texture2D:texture x9) |
+| 9 | 1e9145e4/923131c7 | Base/Base_AlphaTest_2s_VT:StaticInstancedDeferred | VARIANT of 14678345 | 3.4% | 1.6% | 2.1% | 1619 / 96 |  | 2.4% | FS decode audited; VS 1e9145e4 not class A: no capture path (PLAN_M4 next families) |
+| 10 | 27ef2b49/2e34c667 | Atmosphere/ATM_Wind_Bushes_AlphaTest_2S_PBR_Translucency_VT:StaticInstancedDeferred | VARIANT of 14678345 | 3.6% | 1.9% | 0.6% | 451 / 99 |  | 2.0% | field-decode audit vs 14678345 (outputs out0,out1,out2,out3,out4); audit VS 27ef2b49 (outputs, XFB) |
+| 11 | 0de1b186/641822a7 | InstancePaint/IP_Base_VT:StaticInstancedDeferred (+2) | VARIANT of 14678345 | 0.4% | 0.3% | 5.4% | 2126 / 59 |  | 2.0% | field-decode audit vs 14678345 (outputs *control*,out0,out1,out2,out4); audit VS 0de1b186 (outputs, XFB) |
+| 12 | 1ed985dd/2257579f | Characters/CHAR_BASE_VertCut_VT:StaticDeferred (+4) | NEW | 0.5% | 0.7% | 4.6% | 2819 / 115 |  | 1.9% | full recipe audit (texture2D:texelFetch, texture2D:texture x2, texture2DArray:textureGrad x3) |
+| 13 | b1e18895/3c5a0241 | Environment/ENV_DetailMap_VT:StaticDeferred (+1) | NEW | 1.5% | 2.2% | 0.4% | 246 / 22 |  | 1.4% | full recipe audit (texture2D:texelFetch, texture2D:texture x2, texture2DArray:textureGrad x3) |
+| 14 | 2d2ac3c3/437af033 | Base/BASE_AlphaTest_ColorVar_VT:StaticInstancedDeferred | NEW | 0.6% | 1.6% | 1.9% | 1796 / 37 |  | 1.3% | full recipe audit (texture2D:texelFetch, texture2D:texture, texture2DArray:textureGrad x3) |
+| 15 | c1d7d262/0ecdfd36 | Environment/ENV_Base_TileBlend_Test_DirtGradient:StaticInstancedDeferred | NEW | 2.0% | 1.8% | 0 | 0 / 0 |  | 1.3% | full recipe audit (texture2D:texture x12) |
+| 16 | 0462b19d/d3281e24 | Environment/ENV_Base_TileBlend_Test_DirtGradient:StaticDeferred | NEW | 2.0% | 1.8% | 0 | 0 / 0 |  | 1.3% | full recipe audit (texture2D:texture x12) |
+| 17 | 54df894a/7a07134e | Environment/ENV_DetailMap_HeightGradient_VT:StaticInstancedDeferred | NEW | 1.4% | 1.0% | 1.3% | 1131 / 78 |  | 1.2% | full recipe audit (texture2D:texelFetch, texture2D:texture x4, texture2DArray:textureGrad x3) |
+| 18 | a618ddae/cad41eff | Environment/ENV_Tileset_MultipleTextures_AlphaTest:StaticInstancedDeferred | NEW | 0.5% | 0.2% | 2.9% | 2658 / 33 |  | 1.2% | full recipe audit (texture2D:texture x9) |
+| 19 | 2d2ac3c3/3df678c0 | Base/Base_GM_Pulse_VT_FX:StaticInstancedDeferred (+1) | COPY of 14678345 (built) | 0.8% | 1.2% | 1.6% | 965 / 115 |  | 1.2% | built: live gate pending (`[hit material]` qualified up) |
 | 20 | c1d7d262/8fa247e4 | Environment/ENV_Base_TileBlend_ColorVar:StaticInstancedDeferred (+1) | NEW | 2.1% | 1.2% | 0 | 0 / 0 |  | 1.1% | full recipe audit (texture2D:texture x13) |
 | 21 | 0462b19d/320eb2d7 | Environment/ENV_Base_TileBlend_ColorVar:StaticDeferred (+1) | NEW | 2.1% | 1.2% | 0 | 0 / 0 |  | 1.1% | full recipe audit (texture2D:texture x13) |
-| 22 | b1e18895/16c9463a | Environment/ENV_DetailMap_Projection_Fresnel_VT:StaticDeferred (+1) | NEW | 1.7% | 1.0% | 0.3% | 250 / 65 |  | 1.0% | full recipe audit (texture2D:texelFetch, texture2D:texture x5, texture2DArray:textureGrad x3) |
-| 23 | 2d2ac3c3/a5f44c48 | Base/Base_MSK_VT:StaticInstancedDeferred (+1) | NEW | 0.5% | 1.2% | 0.9% | 538 / 62 |  | 0.9% | full recipe audit (texture2D:texelFetch, texture2D:texture, texture2DArray:textureGrad x3) |
-| 24 | f111e292/288876d1 | Characters/CHAR_BASE_VT:StaticDeferred (+6) | NEW | 0.1% | <0.1% | 2.4% | 1622 / 95 | 342k | 0.8% | full recipe audit (texture2D:texelFetch, texture2D:texture x2, texture2DArray:textureGrad x3) |
-| 25 | 9cc7094f/4464f442 | Atmosphere/ATM_Wind_Vertex_RGB_AlphaTest_2S_VT:StaticInstancedDeferred | VARIANT of 14678345 | 1.5% | 0.9% | 0.1% | 32 / 26 |  | 0.8% | recipe row like 14678345 with 1:0 offsets 0/32/36, reflectance 1:1 byte 20 + term out0; audit VS 9cc7094f (outputs, XFB) |
-| 26 | 2d2ac3c3/81657854 | Engine_Default_HLOD_VT:StaticInstancedDeferred | COPY of 14678345 (built) | 0 | 0 | 2.2% | 1294 / 108 | 512k | 0.7% | built: live gate pending (`[hit material]` qualified up) |
-| 27 | 54df894a/a3d8b72c | Environment/ENV_DetailMap_Projection_Fresnel_VT:StaticInstancedDeferred (+1) | NEW | 1.0% | 0.6% | 0.4% | 148 / 82 |  | 0.7% | full recipe audit (texture2D:texelFetch, texture2D:texture x5, texture2DArray:textureGrad x3) |
-| 28 | 3f3de5c4/40e5cb15 | InstancePaint/IP_Wind_Bushes_AlphaTest_2S_PBR_Translucency_VT:StaticInstancedDeferred | VARIANT of 14678345 | 1.1% | 0.7% | <0.1% | 9 / 9 |  | 0.6% | field-decode audit vs 14678345 (outputs *control*,out0,out1,out2,out3,out4); audit VS 3f3de5c4 (outputs, XFB) |
-| 29 | 41a168e2/42a95e17 | Characters/CHAR_Hair:StaticDeferred | NEW | <0.1% | 0.2% | 1.3% | 716 / 96 | 839k | 0.5% | full recipe audit (texture2D:texture x3, texture2D:textureLod) |
-| 30 | 6561beef/ce81ffaa | Atmosphere/ATM_Wind_Bushes_AlphaTest_2S_PBR_VT:StaticInstancedDeferred (+1) | VARIANT of 14678345 | 1.0% | 0.4% | 0.1% | 27 / 20 |  | 0.5% | recipe row like 14678345 with 1:0 offsets 0/44/36 + term out2; audit VS 6561beef (outputs, XFB) |
+| 22 | b1e18895/16c9463a | Environment/ENV_DetailMap_Projection_Fresnel_VT:StaticDeferred (+1) | NEW | 1.6% | 0.9% | 0.3% | 276 / 73 |  | 1.0% | full recipe audit (texture2D:texelFetch, texture2D:texture x5, texture2DArray:textureGrad x3) |
+| 23 | 2d2ac3c3/a5f44c48 | Base/Base_MSK_VT:StaticInstancedDeferred (+1) | NEW | 0.5% | 1.3% | 0.9% | 689 / 75 |  | 0.9% | full recipe audit (texture2D:texelFetch, texture2D:texture, texture2DArray:textureGrad x3) |
+| 24 | f111e292/288876d1 | Characters/CHAR_BASE_VT:StaticDeferred (+6) | NEW | 0.1% | <0.1% | 2.4% | 1911 / 114 |  | 0.8% | full recipe audit (texture2D:texelFetch, texture2D:texture x2, texture2DArray:textureGrad x3) |
+| 25 | 9cc7094f/4464f442 | Atmosphere/ATM_Wind_Vertex_RGB_AlphaTest_2S_VT:StaticInstancedDeferred | VARIANT of 14678345 | 1.5% | 0.9% | 0.1% | 34 / 28 |  | 0.8% | recipe row like 14678345 with 1:0 offsets 0/32/36, reflectance 1:1 byte 20 + term out0; audit VS 9cc7094f (outputs, XFB) |
+| 26 | 2d2ac3c3/81657854 | Engine_Default_HLOD_VT:StaticInstancedDeferred | COPY of 14678345 (built) | 0 | 0 | 2.2% | 1537 / 127 |  | 0.7% | built: live gate pending (`[hit material]` qualified up) |
+| 27 | 54df894a/a3d8b72c | Environment/ENV_DetailMap_Projection_Fresnel_VT:StaticInstancedDeferred (+1) | NEW | 1.1% | 0.6% | 0.4% | 181 / 95 |  | 0.7% | full recipe audit (texture2D:texelFetch, texture2D:texture x5, texture2DArray:textureGrad x3) |
+| 28 | 3f3de5c4/40e5cb15 | InstancePaint/IP_Wind_Bushes_AlphaTest_2S_PBR_Translucency_VT:StaticInstancedDeferred | VARIANT of 14678345 | 1.1% | 0.7% | <0.1% | 12 / 12 |  | 0.6% | field-decode audit vs 14678345 (outputs *control*,out0,out1,out2,out3,out4); audit VS 3f3de5c4 (outputs, XFB) |
+| 29 | 41a168e2/42a95e17 | Characters/CHAR_Hair:StaticDeferred | NEW | <0.1% | 0.2% | 1.3% | 865 / 115 |  | 0.5% | full recipe audit (texture2D:texture x3, texture2D:textureLod) |
+| 30 | 6561beef/ce81ffaa | Atmosphere/ATM_Wind_Bushes_AlphaTest_2S_PBR_VT:StaticInstancedDeferred (+1) | VARIANT of 14678345 | 1.0% | 0.4% | 0.1% | 34 / 25 |  | 0.5% | recipe row like 14678345 with 1:0 offsets 0/44/36 + term out2; audit VS 6561beef (outputs, XFB) |
 
 Differing terms of the COPY and VARIANT rows (recipe -> shader):
 
@@ -63,7 +63,7 @@ Differing terms of the COPY and VARIANT rows (recipe -> shader):
 
 ## Next (generated: not built, by combined share)
 
-- Largest: c32ce535/9064a6bd Environment/ENV_DetailMap_Iridescent:StaticInstancedDeferred (NEW, 3.8%): full recipe audit (texture2D:texture x5).
+- Largest: 735d5a19/83831811 Atmosphere/ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT:StaticInstancedDeferred (VARIANT, 3.4%): field-decode audit vs 14678345 (outputs out0,out2,out3); audit VS 735d5a19 (outputs, XFB).
 - Cheap: 9cc7094f/4464f442 Atmosphere/ATM_Wind_Vertex_RGB_AlphaTest_2S_VT:StaticInstancedDeferred (VARIANT, 0.8%): recipe row like 14678345 with 1:0 offsets 0/32/36, reflectance 1:1 byte 20 + term out0; audit VS 9cc7094f (outputs, XFB).
 - Cheap: 6561beef/ce81ffaa Atmosphere/ATM_Wind_Bushes_AlphaTest_2S_PBR_VT:StaticInstancedDeferred (VARIANT, 0.5%): recipe row like 14678345 with 1:0 offsets 0/44/36 + term out2; audit VS 6561beef (outputs, XFB).
 - Cheap: 2d2ac3c3/651863a6 Base/Base_GM_VT:StaticInstancedDeferred (COPY, 0.4%): recipe row: out2: `clamp(ubo1_1._m0, 0.0, 1.0)` -> `0.5`.

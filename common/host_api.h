@@ -21,8 +21,9 @@
 // 23: get_shader accepts "<file>?NAME=VALUE;..." defines (common/shader_variant.h); no layout change.
 // 24: D-EM policy in the core (TRACK_D 13.21): Bg3HostApi::read_bound, Bg3CoreApi::em_record /
 //     em_calib_update / em_calib_apply (appended).
+// 25: Bg3HostApi::replay_pack (appended; diagnostics, tools/frame_replay.md "Live writer").
 // Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
-#define BG3RTX_ABI_VERSION 24
+#define BG3RTX_ABI_VERSION 25
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -184,6 +185,24 @@ struct Bg3SunSceneInfo {
   float clip_from_lighting[3][4];
 };
 
+// ABI 25 (diagnostics only, tools/frame_replay.md "Live writer"): one compute dispatch the core
+// just recorded, as the offline replay pack needs it. Everything is only read during the call.
+struct Bg3ReplayDispatch {
+  int32_t serial;               // replay_pack serial (> 0), or 0: take the pack only while a trace records
+  const char* pass;             // a common/replay_pack.h kPasses name ("gi_hit_direct")
+  const char* defines;          // the shader variant's -D pairs, "" for the base variant
+  uint64_t frame;               // Push::frame of the dispatch
+  uint32_t groups[3];
+  const void* push;             // the pushed constants
+  uint32_t push_bytes;
+  const VkWriteDescriptorSet* set0;   // the push descriptor set 0 as pushed for the dispatch
+  uint32_t set0_count;
+  const uint32_t* outputs;      // set-0 bindings the pass writes (copied after it: the live reference)
+  uint32_t output_count;
+  VkDescriptorSet set1;         // the host's material set bound as set 1 (rt_hit_material_use)
+  VkAccelerationStructureKHR tlas;
+};
+
 struct Bg3HostApi {
   uint32_t abi_version;
   void (*log)(const char* fmt, ...);
@@ -321,6 +340,12 @@ struct Bg3HostApi {
   // host mapping. False when nothing is bound, the range is shorter or it is not host-mapped.
   bool (*read_bound)(VkCommandBuffer cmd, VkPipelineBindPoint bind_point, uint32_t set, uint32_t binding,
                      uint64_t offset, void* dst, size_t n);
+  // ABI 25 (diagnostics): records the copies of one replay pack of the dispatch just recorded in
+  // `cmd` (right after its vkCmdDispatch); the host writes the pack once the GPU has run it and logs
+  // "[replay] pack ...". > 0 recorded, 0 not now (ask again next frame: a pack still being written,
+  // no trace recording), < 0 failed (logged; do not ask again for this serial). Null in a layer
+  // built without BG3RTX_DIAGNOSTICS.
+  int (*replay_pack)(VkCommandBuffer cmd, const Bg3ReplayDispatch* dispatch);
 };
 
 struct Bg3CoreApi {

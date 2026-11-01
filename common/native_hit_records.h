@@ -32,6 +32,9 @@ NH_UINT nh_pool_basis_magic=0x53414250u; // "PBAS"
 // Pool row words 224..255 (Row::padding, LayoutDetail recipes only): 224 layout (1 = detail),
 // 228/232 the detail normal/mask views (texture-table indices), 236 the detail sampler slot,
 // 240..252 strength, tiling, mask power, roughness add (floats; native_vt_fields.h nv_detail_fields).
+// LayoutIridescent rows (224 = 2): 228..244 the five 2D views 1:2..1:6 (texture-table indices),
+// sampled with the row sampler (word 24); the 1:1 floats at 48..60 (strength, tiling, iridescence,
+// reflectance lo) and 64 (hi) in place of p0/p1 (no VT; native_vt_fields.h nv_iridescent_fields).
 NH_UINT nh_pool_row_detail=224u;
 #undef NH_UINT
 #ifdef __cplusplus

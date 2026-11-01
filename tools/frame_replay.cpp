@@ -447,9 +447,15 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     if (!b.file.empty()) { auto d = file(b.file); check(d.size() <= b.bytes, "buffer file larger than its range"); upload(buf, 0, d.data(), d.size()); }
     buffers[key(b.set, b.binding)] = buf;
   }
+  std::map<std::string, std::vector<uint8_t>> range_files;   // the live writer puts many slices in one file
   for (const auto& r : m.ranges) {
     auto it = buffers.find(key(r.set, r.binding)); check(it != buffers.end(), "range before its buffer");
-    auto d = file(r.file); upload(it->second, r.offset, d.data(), d.size());
+    auto f = range_files.find(r.file);
+    if (f == range_files.end()) f = range_files.emplace(r.file, file(r.file)).first;
+    const auto& d = f->second;
+    const uint64_t n = r.bytes ? r.bytes : d.size();
+    check(r.file_offset + n <= d.size() && r.offset + n <= it->second.size, "range outside its file or buffer: " + r.file);
+    upload(it->second, r.offset, d.data() + r.file_offset, size_t(n));
   }
   Buf stats = make_buffer(kCounters * 64 * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true);
   // Images (inputs), outputs, dummies.
@@ -887,25 +893,33 @@ void synthesize(const fs::path& dir, bool dark) {
     inst[i].accelerationStructureReference = 0x1000u + i;   // opaque BLAS keys
   }
   write_file(dir / "instances.bin", inst, sizeof inst);
-  std::string mf = "bg3rtx_replay_pack 1\npass gi_hit_direct\ndefines -\nframe " + std::to_string(frame) + "\n";
-  auto line = [&](const std::string& s) { mf += s + "\n"; };
-  line("note synthetic: back plane, slab front/back, one point light" + std::string(dark ? " of colour 0 (dark)" : " (lit)"));
-  line("dispatch " + std::to_string((W / 2 + 7) / 8) + " " + std::to_string((H / 2 + 7) / 8) + " 1");
-  line("push push.bin");
-  line("buffer 0 0 400 cam.bin"); line("buffer 0 1 16 vp.bin"); line("buffer 0 21 32 lflags.bin"); line("buffer 0 22 16 lscale.bin");
-  line("buffer 0 23 16 lclusters.bin"); line("buffer 0 24 256 lindex.bin"); line("buffer 0 25 80 llights.bin"); line("buffer 0 26 544 lconsts.bin");
-  line("buffer 0 29 224 cam2.bin");
-  const std::string wh = std::to_string(W) + " " + std::to_string(H), half = std::to_string(W / 2) + " " + std::to_string(H / 2);
-  line("image 0 5 0 100 " + wh + " 1 1 depth.r32f"); line("image 0 2 0 103 " + wh + " 1 1 normal.rg32f"); line("image 0 11 0 97 " + wh + " 1 1 prev.rgba16f");
-  line("buffer 1 0 16 alpharec.bin"); line("buffer 1 1 256"); line("buffer 1 8 256");
-  line("buffer 1 6 " + std::to_string(soup.size()) + " soup.bin"); line("buffer 1 7 32 instinfo.bin");
-  line("buffer 1 9 512 stamp.bin"); line("buffer 1 12 " + std::to_string(recordsBytes) + " records.bin");
-  line("buffer 1 13 " + std::to_string(basis.size()) + " basis.bin");
-  line("image 1 2 1 109 1 1 1 1 page.rgba32f");
-  line("image 1 14 1 109 1 1 1 1 albedo.rgba32f"); line("image 1 14 2 109 1 1 1 1 nrm.rgba32f"); line("image 1 14 3 109 1 1 1 1 params.rgba32f");
-  line("sampler 1 15 0 1 1 1 2 2 2 0 1000");
-  line("instances instances.bin 2");
-  line("output 0 8 97 " + half); line("output 0 13 100 " + half);
+  // The manifest through the writer the live capture uses (rp::serialize); the soup as two sparse
+  // slices of one file, as the live writer stores the InstInfo spans (B + F, then K).
+  rp::Manifest m;
+  m.version = rp::kVersion; m.pass = "gi_hit_direct"; m.frame = frame;
+  m.notes.push_back(" synthetic: back plane, slab front/back, one point light" + std::string(dark ? " of colour 0 (dark)" : " (lit)"));
+  m.groups[0] = (W / 2 + 7) / 8; m.groups[1] = (H / 2 + 7) / 8; m.groups[2] = 1;
+  m.push = "push.bin";
+  auto buf = [&](uint32_t s, uint32_t b, uint64_t bytes, const char* f) { m.buffers.push_back({s, b, bytes, f ? f : ""}); };
+  buf(0, 0, 400, "cam.bin"); buf(0, 1, 16, "vp.bin"); buf(0, 21, 32, "lflags.bin"); buf(0, 22, 16, "lscale.bin");
+  buf(0, 23, 16, "lclusters.bin"); buf(0, 24, 256, "lindex.bin"); buf(0, 25, 80, "llights.bin"); buf(0, 26, 544, "lconsts.bin");
+  buf(0, 29, 224, "cam2.bin");
+  auto img = [&](uint32_t s, uint32_t b, uint32_t e, uint32_t f, uint32_t w, uint32_t h, const char* file) { m.images.push_back({s, b, e, f, w, h, 1, 1, file}); };
+  img(0, 5, 0, rp::kR32Sfloat, W, H, "depth.r32f"); img(0, 2, 0, rp::kR32G32Sfloat, W, H, "normal.rg32f"); img(0, 11, 0, rp::kRgba16Sfloat, W, H, "prev.rgba16f");
+  buf(1, 0, 16, "alpharec.bin"); buf(1, 1, 256, nullptr); buf(1, 8, 256, nullptr);
+  buf(1, 6, soup.size(), nullptr);
+  m.ranges.push_back({1, 6, 0, "soup.bin", 0, kBase});
+  m.ranges.push_back({1, 6, kBase, "soup.bin", kBase, soup.size() - kBase});
+  buf(1, 7, 32, "instinfo.bin");
+  buf(1, 9, 512, "stamp.bin"); buf(1, 12, recordsBytes, "records.bin");
+  buf(1, 13, basis.size(), "basis.bin");
+  img(1, 2, 1, rp::kRgba32Sfloat, 1, 1, "page.rgba32f");
+  img(1, 14, 1, rp::kRgba32Sfloat, 1, 1, "albedo.rgba32f"); img(1, 14, 2, rp::kRgba32Sfloat, 1, 1, "nrm.rgba32f"); img(1, 14, 3, rp::kRgba32Sfloat, 1, 1, "params.rgba32f");
+  m.samplers.push_back({1, 15, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
+  m.instances = "instances.bin"; m.instance_count = 2;
+  m.outputs.push_back({0, 8, rp::kRgba16Sfloat, W / 2, H / 2, ""}); m.outputs.push_back({0, 13, rp::kR32Sfloat, W / 2, H / 2, ""});
+  const std::string mf = rp::serialize(m);
+  { rp::Manifest back; std::string error; check(rp::parse(mf, back, error), "synthetic manifest does not parse: " + error); }
   write_file(dir / "manifest.txt", mf.data(), mf.size());
 }
 

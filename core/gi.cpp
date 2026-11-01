@@ -1963,6 +1963,32 @@ bool ensure_hit_gi_em_layout(VkDescriptorSetLayout alpha, bool sun, bool sharc) 
   return make_em_layout(sets, sharc ? 5u : sun ? 4u : 3u, out);
 }
 
+// replay_pack (diagnostics, tools/frame_replay.md "Live writer"): a positive serial asks the host for
+// one replay pack of the next base-variant gi_hit_direct dispatch (once per serial, across core
+// reloads); -1 takes one with every trace. Capture only: called after the dispatch is recorded.
+void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,uint32_t n,VkDescriptorSet set1,
+                         VkAccelerationStructureKHR tlas,const Push& hp,const char* variant){
+ if(!host->replay_pack)return;
+ const int key=host->cfg_int("replay_pack",0);
+ if(key==0 || key<-1)return;
+ int* done=static_cast<int*>(host->persist("bg3rtx.replay_pack.done",sizeof(int)));
+ if(key>0 && *done==key)return;
+ if(variant){
+  if(key>0 && std::strcmp(variant,"emission")==0)host->log("[replay] pack %d failed: gi_hit_direct runs the rt_hit_emission variant (set 2): emission variant not supported by the pack contract",key);
+  else if(key>0)host->log("[replay] pack %d failed: gi_hit_direct runs the %s variant; the pack contract is the base variant (gi_hit_sun=0, sharc=0)",key,variant);
+  if(key>0)*done=key;
+  return;
+ }
+ static const uint32_t outputs[2]={8u,13u};   // giRaw, giRawDepth (common/replay_pack.h kGiHitDirect)
+ Bg3ReplayDispatch d{};
+ d.serial=key>0?key:0;d.pass="gi_hit_direct";d.defines="";d.frame=hp.frame;
+ d.groups[0]=(g_hw+7)/8;d.groups[1]=(g_hh+7)/8;d.groups[2]=1;
+ d.push=&hp;d.push_bytes=sizeof hp;d.set0=writes;d.set0_count=n;d.outputs=outputs;d.output_count=2;
+ d.set1=set1;d.tlas=tlas;
+ const int r=host->replay_pack(cmd,&d);
+ if(key>0 && r!=0)*done=key;
+}
+
 // Qualified hidden-hit GI uses native local-light inputs, material set1 and
 // optional SHaRC set4. gi_hit_sun adds the D-LS sun set as set 3 (this frame's write_sun_set);
 // without it (ring full, layout failure) the direct-only variant runs, as gi_hit_sun=0.
@@ -2011,6 +2037,8 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
   host->log("hit emission: first hit-GI dispatch %s the emissive scene (sun %d, sharc %d)",
             em?"with":"without (no fresh D-EM build: needs rt_emissive=1)",sun!=VK_NULL_HANDLE,s.sharc);
  }
+ // The pack contract is the base variant: an emission dispatch (extra set 2) is refused, not packed.
+ replay_after_hit_gi(cmd,writes,write_count,material_alpha,b.tlas,hp,em?"emission":sun?"gi_hit_sun":s.sharc?"SHaRC":nullptr);
  return true;
 }
 

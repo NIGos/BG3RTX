@@ -124,6 +124,32 @@ Limits that decide the order:
     sampler slot, the four 1:1 floats. Detail derivative: declared isotropic ray cone as the VT layers.
     Check: `[hit material pool pairs]` 54df894a/613ead9c records/ready > 0; `[hit material pool]`
     failures bits 11/12 = 0; `[hit material pool basis]` mismatch 0; `hit material` qualified up.
+  - c32ce535/9064a6bd ENV_DetailMap_Iridescent (3.8%, the S6 forge family; branch forge-family, built,
+    READY_FOR_LIVE): pool pair. VS c32ce535 = 2d2ac3c3 plus W at location 4 (class A; its depth VS
+    e6fc6bf6 is class A too, so the meshes are pooled); same XFB frame patch (location 1). FS from the
+    dumped GLSL: no VT, no tile set; engine 1:0 {channel @0, flag @4, profile @8}; five 2D views 1:2..1:6
+    with sampler 0:7: normal A at UV * 2, physical/normal B/albedo at UV * tiling (_m1), iridescent colour
+    at UV * 20; n = normalize(fma((1, 0, -1) * _m0, n_A * p.w, n_B)); albedo = clamp(mix(albedo, colour,
+    max(|1 - clamp(dot(n, V))|, 1e-4) * p.w * _m2)) with V = normalize(-W) in mat3(T, N, B) (at a hit:
+    the interpolated camera-relative position, i.e. the camera direction the G-buffer would use);
+    RT2 = (p.y, mix(_m3, _m4, p.w), p.x). `nv_iridescent_fields` (shared, unit-tested vs the FS, 108
+    cases). Row: word 224 = 2, 228..244 the 2D table indices, floats in p0/p1, gather mode 2 (no tile
+    set). The FS writes material class 4 (thin translucency, RT3 = profile, thickness): the hit gets the
+    exact class 0 front lobe; the transmission lobe is missing (darker only for light from behind).
+    Check (S6): `[hit material pool pairs]` c32ce535/9064a6bd records/ready > 0, `[hit material pool]`
+    failure bits 3..6/11 = 0, basis mismatch 0, `hit material` qualified up, GI/RF energy A/B.
+  - Capture paths for 50fbfceb and 1e9145e4 (forge-family audit, asset DB depth pairs + dumps): not
+    built. Wind: the depth VS 1719e9d0 applies the same displacement as 50fbfceb (time, vertex colour,
+    camera-distance fade), so its positions never equal a static pool mesh: the pool option is
+    impossible; "no capture path" is correct. The per-draw option is viable (pre and G-buffer XFB of
+    the same frame compute the same W; 1719e9d0 exports UV at 0) but needs: the depth pair
+    1719e9d0/4bed5db2 as an opaque depth family, instanced prepass/deferred rows (triangles x
+    instances), draw keys for the STI input layouts, and a gather mode for the STI engine layout
+    (p0 @0, not 8995's @64). Alpha-test 2S: its depth VS 106a0550 adds the same per-draw offset (class
+    C), so it is not pooled either; the pool option needs class C pooling in bvhsplit (TLAS transform
+    = rows + UBO offset, mesh-cache check with it) AND alpha pool material rows (today pool rows are
+    opaque only, `pool_row = !alpha`); the per-draw option needs instanced alpha rows. Neither is a
+    small step; the wind per-draw path is the cheaper one (no alpha, no host BVH change).
 - Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;
   terrain draws patches from `_m0[gl_InstanceIndex]` + a heightmap, needs its own recipe.
 - Skinned characters (class B always-skinned VSs, CHAR_* STI FSs): positions from the skinning

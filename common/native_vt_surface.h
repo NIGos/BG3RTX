@@ -22,8 +22,10 @@ enum Reflectance : uint32_t {ReflectanceUbo=0,ReflectanceConstant=1,ReflectanceN
 enum Capture : uint32_t {CapturePool=0,CaptureNone=1};
 // layout: LayoutBase = the 8995 sampling (sampler 1:2, table 1:3, normal/albedo/physical 1:4..6);
 // LayoutDetail = ENV_DetailMap_VT (native_vt_detail below): the same VT layers at 1:4..7 plus a
-// 2D detail normal 1:3 and a 2D detail mask 1:8 sampled with sampler 0:7.
-enum Layout : uint32_t {LayoutBase=0,LayoutDetail=1};
+// 2D detail normal 1:3 and a 2D detail mask 1:8 sampled with sampler 0:7;
+// LayoutIridescent = ENV_DetailMap_Iridescent (native_vt_fields.h nv_iridescent_fields): no VT
+// and no tile set, five plain 2D textures 1:2..1:6 sampled with sampler 0:7.
+enum Layout : uint32_t {LayoutBase=0,LayoutDetail=1,LayoutIridescent=2};
 // reflectance_offset: byte of the reflectance float in the material UBO 1:1 (FS 8e49cde8: 16).
 // two_sided: the FS multiplies the N column by (gl_FrontFacing ? 1 : -1) (nv_two_sided_sign).
 struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset,channel_offset;uint32_t reflectance=ReflectanceUbo;
@@ -50,10 +52,20 @@ inline constexpr Recipe recipes[]={
  // detail normal 1:3 and mask 1:8 (sampler 0:7); 1:1 {strength, tiling, reflectance @8, mask
  // power, roughness add} (native_vt_fields.h nv_detail_fields). VS 54df894a is class A: UV at
  // location 3, N/B/T at 4/5/6 (vt_frame location 4), W/T/P at 0/1/2 (the detail UV scale).
- {0x613ead9c442b9c8aull,0x54df894ab5230cbbull,0,32,36,ReflectanceUbo,8,CapturePool,LayoutDetail}};
+ {0x613ead9c442b9c8aull,0x54df894ab5230cbbull,0,32,36,ReflectanceUbo,8,CapturePool,LayoutDetail},
+ // ENV_DetailMap_Iridescent STI (pool): engine UBO 1:0 {uint channel @0 (`& 7`), flag @4 (RT2.w
+ // bit 3), profile @8 (RT3.x), pad}, no UV transform and no tile-set table (transform and index
+ // offsets unused, 0); 1:1 {strength, tiling, iridescence, reflectance lo @12 / hi @16, thickness
+ // @20, ...}; 2D normal A 1:2 (UV * 2), physical 1:3, normal B 1:4, albedo 1:5 (UV * tiling),
+ // iridescent colour 1:6 (UV * 20), sampler 0:7. RT2.w class 4 (thin translucency). VS c32ce535
+ // is class A: 2d2ac3c3 plus W (camera-relative world) at location 4, the view vector -W.
+ {0x9064a6bde6a4161cull,0xc32ce535d664fbbcull,0,0,0,ReflectanceUbo,12,CapturePool,LayoutIridescent}};
 inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
 // Material UBO 1:1 bytes the recipe reads (0: no 1:1 binding).
-inline uint32_t material_bytes(const Recipe& r){return r.reflectance==ReflectanceConstant?0u:(r.layout==LayoutDetail?20u:r.reflectance_offset+4u);}
+// LayoutIridescent: _m0.._m5 (24; the thickness _m5 is the class 4 RT3.z term, not decoded yet).
+inline uint32_t material_bytes(const Recipe& r){return r.reflectance==ReflectanceConstant?0u:(r.layout==LayoutDetail?20u:r.layout==LayoutIridescent?24u:r.reflectance_offset+4u);}
+// RT2.w material class the FS writes (FRAME_MAP): 4 thin translucency for LayoutIridescent, else 0.
+inline uint32_t material_class(const Recipe& r){return r.layout==LayoutIridescent?4u:0u;}
 // Both deferred variants: sampler 1:2, table 1:3, normal 1:4, albedo 1:5,
 // physical 1:6; Reflectance is material UBO 1:1 byte 0. Engine UBO is 1:0.
 struct Samples {

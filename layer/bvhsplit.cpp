@@ -2688,4 +2688,25 @@ void bvh_on_present() {
         (unsigned long long)s.audits_moving_ok, (unsigned long long)s.audits_moving_failed, s.err_max_moving);
 }
 
+// Replay pack (layer/replay.cpp, rt_replay_region; caller holds rtscene's lock): the ring region
+// whose InstInfo starts at `info_offset` of `info` (a set 1 b7 descriptor): its TLAS instance array
+// (same buffer, the region's start, matrices fixed up at submit), the instance count and a CPU copy
+// of the InstInfo (written at record, final once the build is recorded).
+bool bvh_replay_region(VkBuffer info, VkDeviceSize info_offset, BvhReplayRegion* out) {
+  if (!out || !g_ring.b || !g_ring.map || info != g_ring.b || !g_region_bytes || info_offset < g_info_off) return false;
+  const VkDeviceSize rel = info_offset - g_info_off;
+  if (rel % g_region_bytes) return false;
+  const uint32_t slot = uint32_t(rel / g_region_bytes);
+  if (slot >= kRingSlots) return false;
+  const uint32_t n = g_slot_n[slot];
+  if (!n || n > g_ring_inst) return false;
+  out->ring = g_ring.b;
+  out->ring_bytes = g_ring.size;
+  out->instances_offset = VkDeviceSize(slot) * g_region_bytes;
+  out->count = n;
+  out->info.resize(size_t(n) * 4);
+  std::memcpy(out->info.data(), g_ring.map + info_offset, size_t(n) * 16);
+  return true;
+}
+
 }  // namespace bg3

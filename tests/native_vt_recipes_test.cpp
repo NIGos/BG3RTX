@@ -164,6 +164,68 @@ int main(int argc, char** argv) {
     CHECK(bg3::patch_vs(code.data(), code.size(), plain, 64, &uv, &hair, true, &frame) && uv == 3 && frame == 0);  // location 1: no frame
     std::vector<uint32_t> off;CHECK(bg3::patch_vs(code.data(), code.size(), off, 64) && off == plain);       // unchanged without the flag
   }
+  // 4. ENV_DetailMap_Iridescent (c32ce535/9064a6bd): NEW recipe, five plain 2D textures. Bindings
+  //    (dumped GLSL): engine 1:0 {uint _m0 channel (`& 7`), _m1 flag, _m2 profile (RT3.x), _m3},
+  //    1:1 {float _m0.._m7}: _m0 strength, _m1 tiling, _m2 iridescence, _m3/_m4 reflectance
+  //    lo/hi (RT2.y = mix by p.w), _m5 thickness (RT3.z); sampler 0:7; RT2.w = 4 | flag << 3 | ch << 4.
+  {
+    const auto* r = vt::recipe(0x9064a6bde6a4161cull);
+    CHECK(r && r->vs == 0xc32ce535d664fbbcull && r->layout == vt::LayoutIridescent && r->capture == vt::CapturePool);
+    CHECK(r->channel_offset == 0 && engine_bytes(*r) == 16 && vt::material_bytes(*r) == scalar_member(6));
+    CHECK(r->reflectance == vt::ReflectanceUbo && r->reflectance_offset == scalar_member(3) && !r->two_sided);
+    CHECK(vt::material_class(*r) == 4 && vt::material_class(sti) == 0);
+    CHECK(pool_recipe(r->vs, r->fs) == r && !uncaptured_recipe(r->vs, r->fs) && pool_recipe(kStiVs, r->fs) == nullptr && pool_recipe(r->vs, kSti) == nullptr);
+    // Row words: layout at 224, five 2D views at 228..244, all inside the 256 B row.
+    CHECK(bg3::native_hit::nh_pool_row_detail + 20 + 4 <= 256);
+    using namespace bg3::transport;
+    auto unit = [](double x) { return std::min(1.0, std::max(0.0, x)); };
+    // The FS 9064a6bd statements (_86 .. _242, _10) written out independently, in double.
+    auto reference = [&](const float a_wzy[3], const float b_wzy[3], const float p[4], const float c[3], const float ir[3], const float v[3],
+                         float m0, float m2, float m3, float m4, double out[9]) {
+      double a[3] = {a_wzy[0] * 2.0 - 1, a_wzy[1] * 2.0 - 1, -(a_wzy[2] * 2.0 - 1)}, b[3] = {b_wzy[0] * 2.0 - 1, b_wzy[1] * 2.0 - 1, -(b_wzy[2] * 2.0 - 1)};
+      const double la = std::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]), lb = std::sqrt(b[0] * b[0] + b[1] * b[1] + b[2] * b[2]);
+      const double k[3] = {1.0 * m0, 0.0 * m0, -1.0 * m0};  // _86 = vec3(1, 0, -1) * _m0
+      double f[3];for (int i = 0; i < 3; ++i) f[i] = std::fma(k[i], a[i] / la * p[3], b[i] / lb);
+      const double lf = std::sqrt(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+      const double lv = std::sqrt(double(v[0]) * v[0] + double(v[1]) * v[1] + double(v[2]) * v[2]);
+      double d = 0;for (int i = 0; i < 3; ++i) { out[i] = f[i] / lf;d += out[i] * (v[i] / lv); }
+      const double t = std::pow(std::max(std::fabs(1.0 - unit(d)), 9.9999997473787516355514526367188e-05), 1.0) * p[3] * m2;
+      for (int i = 0; i < 3; ++i) out[3 + i] = unit(c[i] * (1 - t) + ir[i] * t);  // clamp(mix(c, i, t))
+      out[6] = unit(p[1]);out[7] = unit(m3 * (1.0 - p[3]) + m4 * p[3]);out[8] = unit(p[0]);  // RT2.x, .y, .z
+    };
+    unsigned cases = 0;
+    const float views[3][3] = {{.2f, .9f, .35f}, {-.7f, .1f, .7f}, {0.f, 1.f, 0.f}};
+    for (float m0 : {0.f, .5f, 1.f, 2.f}) for (float m2 : {0.f, .8f, 3.f}) for (float pw : {0.f, .45f, 1.f}) for (const auto& v : views) {
+      const float a[3] = {.62f, .41f, .35f}, b[3] = {.48f, .57f, .22f}, p[4] = {.15f, .7f, .33f, pw};
+      const float c[3] = {.4f, .3f, .2f}, ir[3] = {.1f, .8f, .95f};const float m3 = .3f, m4 = .9f;
+      const NvFields got = nv_iridescent_fields({a[0], a[1], a[2]}, {b[0], b[1], b[2]}, p[0], p[1], p[2], p[3], {c[0], c[1], c[2]}, {ir[0], ir[1], ir[2]},
+                                                {v[0], v[1], v[2]}, m0, m2, m3, m4);
+      double want[9];reference(a, b, p, c, ir, v, m0, m2, m3, m4, want);
+      CHECK(got.status == 0);
+      CHECK(std::fabs(got.frame_normal.x - want[0]) < 2e-6 && std::fabs(got.frame_normal.y - want[1]) < 2e-6 && std::fabs(got.frame_normal.z - want[2]) < 2e-6);
+      CHECK(std::fabs(got.albedo.x - want[3]) < 4e-6 && std::fabs(got.albedo.y - want[4]) < 4e-6 && std::fabs(got.albedo.z - want[5]) < 4e-6);
+      CHECK(std::fabs(got.roughness - want[6]) < 1e-6 && std::fabs(got.reflectance - want[7]) < 1e-6 && std::fabs(got.metalness - want[8]) < 1e-6);
+      CHECK(got.aux == p[2]);
+      ++cases;
+    }
+    CHECK(cases == 108);
+    // Iridescence 0 keeps the albedo layer; strength 0 or p.w 0 keeps normal B (the z term is -_m0).
+    const NvFields plain = nv_iridescent_fields({.62f, .41f, .35f}, {.48f, .57f, .22f}, .15f, .7f, .33f, 0.f, {.4f, .3f, .2f}, {.1f, .8f, .95f},
+                                                {0, 1, 0}, 1.f, 0.f, .3f, .9f);
+    const NvFields base_b = nv_fields({.4f, .3f, .2f}, {.48f, .57f, .22f}, {.15f, .7f, .33f}, .3f);
+    CHECK(plain.status == 0 && base_b.status == 0 && plain.albedo.x == .4f && plain.albedo.z == .2f && plain.reflectance == base_b.reflectance);
+    CHECK(std::fabs(plain.frame_normal.x - base_b.frame_normal.x) < 1e-7 && std::fabs(plain.frame_normal.z - base_b.frame_normal.z) < 1e-7);
+    // Grazing view (dot 0): t = p.w * iridescence; head-on view along n: t = 1e-4 * p.w * iridescence.
+    const NvFields head = nv_iridescent_fields({.5f, .5f, .5f}, {.5f, .5f, .5f}, 0, .5f, 0, 1.f, {0, 0, 0}, {1, 1, 1}, {0, 0, 1}, 0.f, 1.f, 0, 0);
+    CHECK(head.status == 2);  // normal (0,0,0) after the decode: degenerate
+    const NvFields up = nv_iridescent_fields({.5f, .5f, 0.f}, {.5f, .5f, 0.f}, 0, .5f, 0, 1.f, {0, 0, 0}, {1, 1, 1}, {0, 0, 1}, 0.f, 1.f, 0, 0);
+    CHECK(up.status == 0 && std::fabs(up.frame_normal.z - 1.f) < 1e-7 && std::fabs(up.albedo.x - 1e-4f) < 1e-9);
+    const NvFields side = nv_iridescent_fields({.5f, .5f, 0.f}, {.5f, .5f, 0.f}, 0, .5f, 0, 1.f, {0, 0, 0}, {1, 1, 1}, {1, 0, 0}, 0.f, 1.f, 0, 0);
+    CHECK(side.status == 0 && side.albedo.x == 1.f);
+    CHECK(nv_iridescent_fields({.5f, .5f, 0.f}, {.5f, .5f, 0.f}, 0, .5f, 0, 1.f, {0, 0, 0}, {1, 1, 1}, {0, 0, 0}, 0.f, 1.f, 0, 0).status == 2);  // no view
+    CHECK(nv_iridescent_fields({.5f, .5f, 0.f}, {.5f, .5f, 0.f}, 0, .5f, 0, NAN, {0, 0, 0}, {1, 1, 1}, {1, 0, 0}, 0.f, 1.f, 0, 0).status == 1);
+    CHECK(nv_iridescent_fields({.5f, .5f, 0.f}, {.5f, .5f, 0.f}, 0, .5f, 0, 1.f, {0, 0, 0}, {1, 1, 1}, {1, 0, 0}, INFINITY, 1.f, 0, 0).status == 1);
+  }
   // Dumped VS modules: class A exactly when the recipe has a pool capture path.
   for (int i = 1; i < argc; ++i) {
     std::ifstream f(argv[i], std::ios::binary);std::string bytes((std::istreambuf_iterator<char>(f)), {});
