@@ -200,8 +200,13 @@ class Run:
                         return ("no scene-colour dump", str(f))
                     _, d = max(cand, key=lambda c: c[0])
                     r, g, b = d["mean"][:3]
-                    nonfinite = sum(int(x.get("nonfinite", 0) or 0) for x in dumps.values())
-                    return (0.2126 * r + 0.7152 * g + 0.0722 * b, nonfinite)
+                    # Non-finite values of the measured buffer itself, and of every other dump of the trace
+                    # (S6: the game's own D32F depth of 76433aef, ~2900 per trace with every RT key off too;
+                    # docs/QA.md "Non-finite"): never summed together, never summed across traces.
+                    scene_nf = int(d.get("nonfinite", 0) or 0)
+                    other_nf = {f"{x.get('pass_fs', '?')[:8]} {x.get('fmt', '?')}": int(x.get("nonfinite", 0) or 0)
+                                for x in dumps.values() if x is not d and int(x.get("nonfinite", 0) or 0)}
+                    return (0.2126 * r + 0.7152 * g + 0.0722 * b, scene_nf, other_nf)
         return None
 
     def capacity(self):
@@ -250,8 +255,22 @@ def energy(run):
         va, vo, vb = (v[0] for v in vals)
         off = (va + vb) / 2
         d, s = (vo - off) / off, abs(vb - va) / off
+        # Per trace (OFF-a, ON, OFF-b): the scene colour's own non-finite count; other dumps by (pass, format),
+        # those non-finite in an OFF trace too marked game-owned (as scripts/qa/analyze.py).
+        off_sigs = set(vals[0][2]) | set(vals[2][2])
+        other = [{k: (n, k in off_sigs) for k, n in v[2].items()} for v in vals]
         out.append({"a": a, "on": on, "b": b, "values": (va, vo, vb), "d": d, "s": s,
-                    "verdict": energy_verdict(d, s), "nonfinite": sum(v[1] for v in vals)})
+                    "verdict": energy_verdict(d, s), "nonfinite": tuple(v[1] for v in vals), "other_nonfinite": other})
+    return out
+
+
+def other_nonfinite(run):
+    """{'<pass> <fmt>': {trace label: (count, game_owned)}} over every energy triple's traces."""
+    out = {}
+    for e in energy(run):
+        for label, o in zip((e["a"], e["on"], e["b"]), e.get("other_nonfinite") or ()):
+            for k, (n, game) in o.items():
+                out.setdefault(k, {})[label] = (n, game)
     return out
 
 
@@ -271,8 +290,14 @@ def report(run: Run):
             print(f"| {e['on']} | {e['values']} | | | | | INCOMPLETE |")
             continue
         va, vo, vb = e["values"]
+        nf = e["nonfinite"]
         print(f"| {e['on']} vs {e['a']}/{e['b']} | {va:.5f} | {vo:.5f} | {vb:.5f} | {100 * e['d']:+.2f}% | {100 * e['s']:.2f}% | "
-              f"{e['verdict']}{'' if e['nonfinite'] == 0 else ', nonfinite %d' % e['nonfinite']} |")
+              f"{e['verdict']}{'' if not any(nf) else ', scene colour non-finite %d/%d/%d' % nf} |")
+    for k, per in sorted(other_nonfinite(run).items()):
+        game = all(g for _, g in per.values())
+        print(f"- other dump {k}: non-finite per trace "
+              f"({'game-owned: in the OFF traces too' if game else 'NOT in the OFF traces: ours'}; not the measured buffer): "
+              + ", ".join(f"{l} {n}" for l, (n, _) in per.items()))
 
     print("\n### Cost (GPU ms, medians of the windows fully inside each phase; n = windows)")
     for a, on, b in triples(run.labels, "cost"):
