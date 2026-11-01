@@ -39,6 +39,9 @@
   "^\\S+\\s+\\[core\\] sun:",
   "\\[core\\] guard:",
   "skipped: no variant for",
+  "\\[bvh\\] mesh pool",
+  "\\[hit material pool basis\\]",
+  "\\[cascade\\] buffer full",
   "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)"
  ],
  "expect": [
@@ -178,7 +181,9 @@
   "skipped: no variant for",
   "sun: WARNING \\d+ roof volumes within",
   "over kSunMaxVolumes on [1-9]",
-  "set 1 [1-9]\\d* out-of-range reads skipped"
+  "set 1 [1-9]\\d* out-of-range reads skipped",
+  "\\[hit material pool basis\\] over kBasisCapBytes",
+  "\\[bvh\\] mesh pool full at"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",

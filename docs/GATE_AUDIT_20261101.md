@@ -282,13 +282,13 @@ smoke_ultra or lean-job gate fails when it is hit.
 | Limit | Where | Logged | Gated | Hit 2026-11-01 | Status |
 |---|---|---|---|---|---|
 | Roof volumes `kSunMaxVolumes` 256 | core/sun_trust.h, 3 shader loops | WARNING + `sun stats` | now (forbid) | yes: 359 within 1980 m, 103 dropped on 306/600 frames | **fixed**: 512 > 398 (largest level), `roof_cap_test` |
-| Set-1 range guard (InstInfo / vertex / alpha record reads) | rt_common.hlsli:509,842,1325 | `[core] guard:` (cumulative) | now (forbid nonzero) | yes: 0 at frame 574, 19.2e9 by frame 16216 (~1.5e6 per frame) | **open, visible**: alpha unknown or normal 0 at those hits |
+| Set-1 range guard (InstInfo / vertex / alpha record reads) | rt_common.hlsli:509,842,1325 | `[core] guard:` (cumulative) | now (forbid nonzero) | yes: 0 at frame 574, 19.2e9 by frame 16216 (~1.5e6 per frame) | **fixed (pending live)**: nonzero only in runs whose mesh pool reached 2048 MB (2^31); the pool now stays at 2047 MB or less |
 | Water reflections under `rt_cascade_casters` | core/water.cpp | `variant N` only | expect_every | yes: variant 300/300 in all windows | fixed on main by 64c0f5d (18:15, after the run) |
 | Water under rt_omm / tileset / scalp / hair / hair origin | core/water.cpp, `kWaterNoVariant` | `skipped: no variant for` | now (forbid) | no (keys off) | by design, matrix-tested; 24 variant requests compile |
-| Cascade casters buffer (rt_cascade_mb 427) | layer/geocapture.cpp | `buffer full N` | expect_every (CAPACITY_GATES) | yes: 1.3/frame, 427.0 of 427 MB | open (cascade owner) |
+| Cascade casters buffer (rt_cascade_mb 427) | layer/geocapture.cpp | `buffer full N` | expect_every (CAPACITY_GATES) | yes: 1.3/frame, 427.0 of 427 MB | **fixed**: grows on overflow to demand + 25%, logged, `demand max` printed |
 | RT capture alpha region / opaque buffer | layer/geocapture.cpp | `region full`, `buffer full` | opaque: CAPACITY_GATES | alpha 1.15/frame (load), opaque 0.03/frame | open (capture owner) |
 | Emissive soup | layer/emissive.cpp | `soup full` | no | 0.10/build in 13 windows | open, small |
-| Hit-material basis pool 256 MB | common/native_hit_pool.h | pool size only; over-cap skip silent | no | 240.1 of 256 MB (94%) | open: log the skip count |
+| Hit-material basis pool 256 MB | common/native_hit_pool.h | now `over kBasisCapBytes` | now (forbid) | 240.1 of 256 MB (94%) | logged + gated; cap kept until the over-cap demand is measured |
 | Alpha records 8192 / textures 4095 / caches 15 | layer/alphatest.cpp | `records full` etc. | no | no (522 draws, 29 textures max) | ok |
 | Emissive records 1024 / tex 256 / inst 16384 | layer/emissive.cpp | yes | no | no | ok |
 | Water draws 256, hit-material records 16384 and tables | layer/water.cpp, native_hit_pool.h | `overflow N` | no | no | ok |
