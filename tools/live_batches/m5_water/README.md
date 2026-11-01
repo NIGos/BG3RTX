@@ -18,4 +18,4 @@ Not in this batch: composition into the forward water result (M5.3, plan in PLAN
 Duration: plan 140 s; one launch, about 5 min (at most 8 min of timeouts). Disk: 5 PNG traces at about 60 MB plus logs, about 0.3 GB.
 Start, results and rollback: as in ../lean_regression/README.md with this folder, prefix `m5w` and receipt `m5-water.json` (test-main must be the m5-water-rf commit under test).
 
-Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2): see the commit that added it.
+Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2, after merging main 3e08c03): all checks passed.
