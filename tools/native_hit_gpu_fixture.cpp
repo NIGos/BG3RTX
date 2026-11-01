@@ -1027,7 +1027,8 @@ int main(int argc, char** argv) {
     // Six light weights per case, K 1, 2 and 4, NR 1-2, the uniforms on a midpoint grid of N cells (the second an
     // odd-multiplier permutation of it). Analytic references: the exact set is the K largest weights in list order
     // (8a, exact); sample j is drawn with p_j = w_j / sum_R w and the estimator's grid mean is the full sum (8b, 8c);
-    // a sample's scaled weight never exceeds sum_R w (8c); the GPU's selection equals the C++ header's (8d).
+    // a sample's scaled weight never exceeds sum_R w (8c); the GPU's selection equals the C++ header's (8d); with
+    // RGB contributions and occluded / soft-shadowed lights, the delta's grid mean per channel is the full sum (8e).
     // Grid bound: every reservoir decision resolves its boundary to one cell of the rescaled uniform, so a
     // probability over |R| decisions is off by at most (|R| + 1) / N. GPU and C++ may differ only in cells that
     // straddle a boundary (FP32 division of the rescale): at most one per decision and uniform, 2 |R|.
@@ -1046,8 +1047,16 @@ int main(int argc, char** argv) {
           d.cases.push_back(cs);
         }
       auto r = run(d);
-      bool exactOk = true, freqOk = true, meanOk = true, boundOk = true, sameOk = true;
-      double worstFreq = 0, worstMean = 0; size_t mismatches = 0, at = 0;
+      bool exactOk = true, freqOk = true, meanOk = true, boundOk = true, sameOk = true, shadowOk = true;
+      double worstFreq = 0, worstMean = 0, worstShadow = 0; size_t mismatches = 0, at = 0;
+      // 8e: the shader's delta with shadows, from the GPU's selection and factors: RGB contributions of other
+      // chromas than their luminance weight and visibilities 0 / 1 / soft (no game shadow, s = 1).
+      static const double kChroma[4][3] = {{1.0, 0.55, 0.2}, {0.3, 0.6, 1.0}, {1.0, 1.0, 1.0}, {0.9, 0.2, 0.1}};
+      static const double kVis[5] = {0.0, 1.0, 0.25, 1.0, 0.0};
+      auto colour = [](const float* w, uint32_t i, int ch) {
+        const double* c = kChroma[i % 4];
+        return double(w[i]) * c[ch] / (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]);
+      };
       for (const auto& w : sets) for (const auto& c : combos) {
         const uint32_t K = c[0], NR = c[1];
         std::vector<std::pair<float, uint32_t>> sorted;
@@ -1060,6 +1069,13 @@ int main(int argc, char** argv) {
         for (uint32_t q = 0; q < 4; ++q) wantEx |= (q < exact.size() ? exact[q] : 15u) << (4 * q);
         const size_t nR = sorted.size() - exact.size();
         double freq[6] = {}, mean = 0; size_t groupMismatch = 0;
+        double dd[3] = {}, wantDd[3] = {}, cmax[3] = {};
+        for (uint32_t i = 0; i < 6; ++i)
+          if (w[i] > 0)
+            for (int ch = 0; ch < 3; ++ch) {
+              wantDd[ch] += colour(w, i, ch) * (kVis[i % 5] - 1.0);
+              cmax[ch] = (std::max)(cmax[ch], colour(w, i, ch) / w[i]);
+            }
         for (uint32_t g = 0; g < N; ++g, ++at) {
           const FxOut& o = r[at];
           const FxCase& cs = d.cases[at];
@@ -1071,12 +1087,18 @@ int main(int argc, char** argv) {
           for (uint32_t q = 0; q < 2; ++q) cpuSb |= (lk::lk_entry(s, 4 + q) == lk::kLkNone ? 255u : lk::lk_entry(s, 4 + q)) << (8 * q);
           if (cpuSb != o.sb) ++groupMismatch;
           double est = 0;
-          for (uint32_t q = 0; q < 4; ++q) { const uint32_t e = (o.sa >> (4 * q)) & 15u; if (e != 15u) est += w[e]; }
+          for (uint32_t q = 0; q < 4; ++q) {
+            const uint32_t e = (o.sa >> (4 * q)) & 15u;
+            if (e == 15u) continue;
+            est += w[e];
+            for (int ch = 0; ch < 3; ++ch) dd[ch] += colour(w, e, ch) * (kVis[e % 5] - 1.0) / N;
+          }
           for (uint32_t q = 0; q < NR; ++q) {
             const uint32_t e = (o.sb >> (8 * q)) & 255u;
             if (e == 255u) continue;
             const double f = o.a[q];
             est += w[e] * f;
+            for (int ch = 0; ch < 3; ++ch) dd[ch] += colour(w, e, ch) * (kVis[e % 5] - 1.0) * f / N;
             if (w[e] * f * NR > rsum * (1 + 1e-6) + 1e-12) boundOk = false;
             if (std::abs(f - rsum / (double(w[e]) * NR)) > 1e-6 * f) boundOk = false;
             if (q == 0) freq[e] += 1.0 / N;
@@ -1093,6 +1115,11 @@ int main(int argc, char** argv) {
         const double dm = std::abs(mean - total);
         worstMean = (std::max)(worstMean, dm / total);
         if (dm > fb * rsum + 1e-6 * total) meanOk = false;
+        for (int ch = 0; ch < 3; ++ch) {   // grid bound per channel: fb x the largest scaled sample term
+          const double e = std::abs(dd[ch] - wantDd[ch]), b = fb * rsum * cmax[ch] + 1e-6 * total * cmax[ch];
+          worstShadow = (std::max)(worstShadow, e / (std::abs(wantDd[ch]) + 1e-12));
+          if (e > b) shadowOk = false;
+        }
         if (groupMismatch > 2 * nR) sameOk = false;
         mismatches += groupMismatch;
       }
@@ -1100,6 +1127,7 @@ int main(int argc, char** argv) {
       report.line("8b exact-k: P(sample j) = w_j / sum_R w", freqOk, fmt("grid %.0f, worst |freq - p| %.2e", N, worstFreq));
       report.line("8c exact-k: mean = full sum, factor <= sum_R w", meanOk && boundOk, fmt("worst rel mean %.2e", worstMean));
       report.line("8d exact-k: GPU selection == C++ header", sameOk, fmt("boundary-cell differences %.0f", double(mismatches)));
+      report.line("8e exact-k: shadowed RGB delta mean = full sum", shadowOk, fmt("worst rel %.2e", worstShadow));
     }
     // ---- 9. two-sided frame at a hit (rt_hit_material_instanced, Base_AlphaTest_2s_VT): RtHit.dir is the ray
     //      direction rt_closest_hit traced (bit for bit), and the consumer's N-column sign

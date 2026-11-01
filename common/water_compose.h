@@ -95,4 +95,58 @@ inline bool same_encoded(float c, float t, int mantissa_bits) {
   return std::fabs(t - c) <= ulp;
 }
 
+// ---- The FS's end of main and the composition, per channel (pinned by tests/water_compose_test) ----
+// The audited FS (common/water_fs_patch.h table): C = mix(Refr, ((direct + (Kd + Ks) k) X + Ge) T + S, a),
+// Ks = Sp E (Sp the probe radiance at R, E = F0 DFG.x + DFG.y), k = exposure (set 2 b0 _m0[0], the same
+// pre-exposure as the lighting's s1b13[0]) * 100. dC/dKs = a T X k exactly, so the record's
+// A = a T X E and B = a T X k Ks, and the composition C' = max(C + A L - B, 0) swaps k Sp for L
+// (the hit's lit radiance, in the lighting's pre-exposed units, in which the lighting's own probe
+// term is Sp k). L = k Sp gives C' = C; the energy change is a T X E (L - k Sp): a darker traced
+// hit than the probe's radiance in that direction, never a unit factor.
+struct FsTerms {
+  float refr, direct, kd, sp, e, k, x, ge, t, s, a;
+};
+inline float fs_colour(const FsTerms& f) {
+  const float lw = f.direct + (f.kd + f.sp * f.e) * f.k;
+  return f.refr + ((lw * f.x + f.ge) * f.t + f.s - f.refr) * f.a;
+}
+inline float record_a(const FsTerms& f) { return f.x * (f.a * f.t) * f.e; }
+inline float record_b(const FsTerms& f) { return f.x * (f.a * f.t * f.k) * (f.sp * f.e); }
+inline float compose(float c, float a, float l, float b) {
+  const float v = c + a * l - b;
+  return v > 0.0f ? v : 0.0f;
+}
+
+// ---- Which lighting a forward water pass composes with (core/water.cpp compose_at_pass_end) ----
+// run_post (and so the lighting's copy) is recorded when the lighting's command buffer ENDS
+// (core/gi.cpp flush), and the game records the forward water pass in another command buffer,
+// most often before that: in m5w3 (S8, 11-01) 117 of 120 passes found only the previous frame's
+// lighting stash. The GPU still runs the frame's lighting before its forward pass (the water draws
+// over the lit opaque), so everything the compose reads from the lighting is GPU-current: one
+// radiance / depth image and ONE camera block that the copy overwrites each frame, the scene TLAS
+// + set taken at the pass (hand_out stamps it for the frame that records it). The stash only gives
+// the push constants and the statistics slot, so the latest lighting may be this frame's or the
+// previous one's. Frame indices advance at each present: with frame generation 2 presents per app
+// frame, plus one present that may land between the lighting's and the pass's recording, the
+// previous app frame's lighting is at most 3 indices old. A lighting that did not copy (water_rf or
+// compose_at_lighting skipped) clears the stash (frame 0): the GPU copy would be a frame stale.
+inline constexpr uint64_t kLightingLagFrames = 3;
+enum class LightingUse : uint32_t { kNone = 0, kThisFrame, kEarlier };
+inline LightingUse lighting_use(uint64_t stash_frame, uint64_t now) {
+  if (!stash_frame || stash_frame > now) return LightingUse::kNone;
+  if (stash_frame == now) return LightingUse::kThisFrame;
+  return stash_frame + kLightingLagFrames >= now ? LightingUse::kEarlier : LightingUse::kNone;
+}
+
+// Statistics words of shaders/rt/water_compose.hlsl (cStats), mirrored there.
+inline constexpr uint32_t kCsRays = 7, kCsTier1 = 8;   // tiers 1..6 at kCsTier1 + tier - 1
+inline constexpr uint32_t kCsSkin = 14, kCsClamped = 15, kCsComposed = 28;
+inline constexpr uint32_t kCsRatioLow = 29, kCsRatioMid = 30, kCsRatioHigh = 31;   // A L / B per composed pixel
+inline constexpr float kRatioLow = 0.5f, kRatioHigh = 2.0f;
+inline uint32_t ratio_bin(float al, float b) {   // 0 none (B = 0), else the word
+  if (!(b > 0.0f)) return 0;
+  const float r = al / b;
+  return r < kRatioLow ? kCsRatioLow : r > kRatioHigh ? kCsRatioHigh : kCsRatioMid;
+}
+
 }  // namespace bg3::water
