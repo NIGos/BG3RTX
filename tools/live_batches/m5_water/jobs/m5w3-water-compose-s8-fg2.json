@@ -10,7 +10,7 @@
  "requires_success_of": [
   "m5w2-water-reflections-s8-fg2"
  ],
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,sharc_device=1,rt_stats=0,qa_exposure_hold=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,sharc_device=1,rt_stats=0,qa_exposure_hold=0",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -66,7 +66,9 @@
   "\\[water\\] compose ratio A L / B over [1-9]\\d* composed px: below 0\\.5 [0-9.]+%, 0\\.5\\.\\.2\\.0 [0-9.]+%, above 2\\.0 [0-9.]+%; ratio of the means [0-9.]+",
   "\\[water\\] compose GPU 0\\.[0-4]\\d\\d ms median, p90 [0-9.]+ \\([1-9]\\d* timed frames[^)]*\\); copy [0-9.]+ ms median, p90 [0-9.]+; compose dispatches [0-9.]+ ms median, p90 [0-9.]+",
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
-  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
+  "\\[water\\] rt/water_reflect\\.hlsl\\?RT_CASCADE_MASKS=1 water_reflect: built",
+  "\\[water\\] rt/water_compose\\.hlsl\\?\\S*RT_CASCADE_MASKS=1\\S* water_compose: built"
  ],
  "expect_every": [
   {
@@ -101,12 +103,13 @@
   "\\[water\\] water geometry UNAVAILABLE",
   "\\[water\\] build submission failed",
   "\\[water\\] reflections unavailable",
-  "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+  "\\[water\\] rt/water_\\w+\\.hlsl\\S* \\w+: pipeline creation failed",
   "\\[water\\] compose UNAVAILABLE",
   "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
   "\\[water\\] compose: variant pipeline creation failed",
   "\\[water\\] compose: a water pipeline blends",
-  "no water FS was patched: rt_water_compose must be on"
+  "no water FS was patched: rt_water_compose must be on",
+  "\\[water\\] reflections skipped: no water variant"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",

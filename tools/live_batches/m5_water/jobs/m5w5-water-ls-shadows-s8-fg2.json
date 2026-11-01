@@ -10,7 +10,7 @@
  "requires_success_of": [
   "m5w2-water-reflections-s8-fg2"
  ],
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_water_shadows=0,rt_water_ls_shadows=1,sharc_device=1,rt_stats=0,qa_exposure_hold=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=0,rt_water_shadows=0,rt_water_ls_shadows=1,sharc_device=1,rt_stats=0,qa_exposure_hold=0",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -59,7 +59,9 @@
   "\\[water\\] compose \\(120 frames, (1[01]\\d|120) composed, [0-9.]+ passes/frame\\): records [1-9][0-9.]*/frame, owned (?!0\\.00%)[0-9.]+%",
   "\\[water\\] local shadows \\(120 frames, [1-9]\\d* passes with the light list, \\d+ without\\): local records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned \\(no local term [0-9.]+%, invalid \\d+, list cut \\d+\\); lights evaluated [0-9.]+/record, with a game shadow map [0-9.]+/record \\(kept\\), traced [0-9.]+/record, occluded [0-9.]+% of traced, unknown \\d+ \\(kept\\); records with an occluded light [0-9.]+% of local records; sum check over [1-9]\\d* records: within 0\\.098% [0-9.]+%, to 10% [0-9.]+%, beyond [0-9.]+% \\(with a shadow-mapped light \\d+, within [0-9.]+%\\); ratio of the means sum / L [0-9.]+; local term F L [0-9.]+ per local record \\(projector share [0-9.]+, kept\\), removed [0-9.]+ = [0-9.]+% of F L; mean removed over owned [0-9.]+ = [0-9.]+% of mean C; clamped \\d+; GPU [0-9.]+ ms median, p90 [0-9.]+ \\(the compose dispatches with the light walk \\+ the lighting copy\\); skipped: records without the local words 0",
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
-  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
+  "\\[water\\] rt/water_reflect\\.hlsl\\?RT_CASCADE_MASKS=1 water_reflect: built",
+  "\\[water\\] rt/water_compose\\.hlsl\\?\\S*RT_CASCADE_MASKS=1\\S* water_compose: built"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -72,12 +74,13 @@
   "\\[water\\] water geometry UNAVAILABLE",
   "\\[water\\] build submission failed",
   "\\[water\\] reflections unavailable",
-  "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+  "\\[water\\] rt/water_\\w+\\.hlsl\\S* \\w+: pipeline creation failed",
   "\\[water\\] compose UNAVAILABLE",
   "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
   "\\[water\\] compose: variant pipeline creation failed",
   "\\[water\\] compose: a water pipeline blends",
-  "no water FS was patched: rt_water_compose, rt_water_shadows or rt_water_ls_shadows must be on"
+  "no water FS was patched: rt_water_compose, rt_water_shadows or rt_water_ls_shadows must be on",
+  "\\[water\\] reflections skipped: no water variant"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",

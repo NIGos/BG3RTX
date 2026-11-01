@@ -73,6 +73,19 @@ inline constexpr const char* kFixedRequests[] = {"rt/water_compose.hlsl?WATER_SH
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1"};
 
+// rt_cascade_casters for the water passes (core/water.cpp): the TLAS holds the cascade's casters
+// (mask 0x02), so the reflection, refraction and local-light rays trace 0x01 (RT_CASCADE_MASKS) and the
+// compose's sun ray (WATER_SHADOWS) sees them too (RT_CASCADE_SUN_HIT: g_rt_cascade_ray around it),
+// as gi_hit_sun's sun ray at a GI hit. Off: the request unchanged.
+inline constexpr const char* kWaterBases[] = {"rt/water_reflect.hlsl", "rt/water_compose.hlsl"};
+inline std::string water_request(const char* req, bool cascade) {
+  std::string out = req;
+  if (!cascade) return out;
+  out += out.find('?') == std::string::npos ? "?RT_CASCADE_MASKS=1" : ";RT_CASCADE_MASKS=1";
+  if (out.find("WATER_SHADOWS=1") != std::string::npos) out += ";RT_CASCADE_SUN_HIT=1";
+  return out;
+}
+
 // The current-caster sun pipe (core/gi.cpp g_rt_shadow_current) runs this file only.
 inline bool sun_current_entry(const char* file) { return std::strcmp(file, "gi/rt_shadow.hlsl") == 0; }
 
