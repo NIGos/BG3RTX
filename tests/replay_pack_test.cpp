@@ -86,6 +86,37 @@ int main() {
   dropped = rp::drop_over_budget(10, {100, 200}, 1000, over);
   check(!over && dropped.empty(), "drop_over_budget: under the budget drops nothing");
 
+  // 4. Range-only capture: a descriptor's bound bytes, never the whole buffer.
+  check(rp::bound_bytes(1000, 200, 300) == 300, "bound_bytes: offset/range inside the buffer");
+  check(rp::bound_bytes(1000, 200, rp::kWholeSize) == 800, "bound_bytes: whole size = to the end of the buffer");
+  check(rp::bound_bytes(1000, 900, 300) == 100 && rp::bound_bytes(1000, 1000, 16) == 0, "bound_bytes: clipped to the buffer, past it 0");
+  {
+    // Soup b6 bound [0, 10000) captured as two slices of one file; b1 bound to the same bytes reuses
+    // them (no copy); a b1 bound at [5000, 9000) gets them clipped and shifted; one outside is refused.
+    const std::vector<rp::Range> soup_slices = {{1, 6, 1000, "s1b6.ranges.bin", 0, 2000}, {1, 6, 6000, "s1b6.ranges.bin", 2000, 4000}};
+    std::vector<rp::Range> out;
+    bool ok = rp::alias_ranges(soup_slices, 0, 10000, 1, 1, 0, 10000, out);
+    check(ok && out.size() == 2 && out[0].binding == 1 && out[0].offset == 1000 && out[0].file_offset == 0 && out[0].bytes == 2000 &&
+              out[1].offset == 6000 && out[1].file_offset == 2000 && out[1].bytes == 4000 && out[1].file == "s1b6.ranges.bin",
+          "alias_ranges: the same bound range reuses every slice");
+    out.clear();
+    ok = rp::alias_ranges(soup_slices, 0, 10000, 1, 1, 5000, 4000, out);
+    check(ok && out.size() == 1 && out[0].offset == 1000 && out[0].file_offset == 2000 && out[0].bytes == 3000,
+          "alias_ranges: a sub-range clips and shifts the slices");
+    out.clear();
+    ok = rp::alias_ranges(soup_slices, 4096, 10000, 1, 1, 0, 10000, out);
+    check(!ok && out.empty(), "alias_ranges: outside the captured range is captured on its own");
+    // The aliased manifest round-trips and names no new bytes (the slices stay in the soup's file).
+    rp::Manifest a;
+    a.version = rp::kVersion; a.pass = "gi_hit_direct"; a.push = "push.bin"; a.groups[0] = a.groups[1] = a.groups[2] = 1;
+    a.buffers = {{1, 6, 10000, ""}, {1, 1, 10000, ""}};
+    a.ranges = soup_slices;
+    rp::alias_ranges(soup_slices, 0, 10000, 1, 1, 0, 10000, a.ranges);
+    rp::Manifest ab;
+    check(rp::parse(rp::serialize(a), ab, error) && ab.ranges.size() == 4 && ab.ranges[3].binding == 1 && ab.ranges[3].file_offset == 2000,
+          "alias_ranges: aliased slices round-trip through the manifest");
+  }
+
   std::printf("%s: %d failure(s)\n", g_fail ? "FAIL" : "PASS", g_fail);
   return g_fail ? 1 : 0;
 }
