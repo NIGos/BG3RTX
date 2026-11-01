@@ -229,6 +229,9 @@ def main():
     p = queue_gates.capacity_problems(dict(cj, expect_every=[dict(cap[0], match="opaque draws dropped", windows=["cost-on", "cost-off-a"])]), sw_plan)
     check("capacity lint: a match that passes a full buffer is no gate", len(p) == 1)
     check("capacity lint: a plan without cost windows is no lean job", queue_gates.capacity_problems({"set": "rt=1"}, [{"label": "diag-a"}]) == [])
+    bad = queue_gates.lint_scene_wait(ROOT / "tools" / "live_batches", queue_gates.capacity_problems)
+    check("capacity lint: every lean job under tools/live_batches gates the RT capture (and the cascade with the casters on)"
+          + ("" if not bad else ": " + "; ".join(f"{Path(k).name}: {v[0][:90]}" for k, v in bad.items())), not bad)
 
     if fails:
         print(f"{fails} check(s) failed")

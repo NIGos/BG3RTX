@@ -102,6 +102,12 @@ $lint = @(& py -3 (Join-Path $scripts 'queue_gates.py') --lint-scene-wait $here 
 $ErrorActionPreference = $eap
 foreach ($l in $lint) { if ($lintExit) { Write-Host "  $l" } }
 Check "scene-wait gate lint (queue_gates.py --lint-scene-wait): $(if ($lintExit) { "$($lint.Count) problem(s)" } else { 'ok' })" ($lintExit -eq 0)
+# And the capacity gates: RT capture drops 0 and (with rt_cascade_casters=1) cascade buffer full 0 per cost window.
+$eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+$lint = @(& py -3 (Join-Path $scripts 'queue_gates.py') --lint-capacity $here 2>&1 | ForEach-Object { "$_" }); $lintExit = $LASTEXITCODE
+$ErrorActionPreference = $eap
+foreach ($l in $lint) { if ($lintExit) { Write-Host "  $l" } }
+Check "capacity gate lint (queue_gates.py --lint-capacity): $(if ($lintExit) { "$($lint.Count) problem(s)" } else { 'ok' })" ($lintExit -eq 0)
 $min = ($totalSec + $jobs.Count * $LoadSec) / 60.0
 $mb = $totalTraces * $TraceMB + $jobs.Count * $LogMB
 Say ("estimate: plans {0} s, {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb)
