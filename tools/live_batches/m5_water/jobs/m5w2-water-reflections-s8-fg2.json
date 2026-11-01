@@ -7,7 +7,7 @@
  "timeout": 440,
  "repeat": 1,
  "live_batch": "m5-water",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=0,rt_stats=0,qa_exposure_hold=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=0,rt_stats=0,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -83,5 +83,18 @@
  ],
  "stop_on_dump": true,
  "purpose": "PLAN_M5 M5.2 rt_water_reflections at S8 Water Queens House (geometry on throughout), lean: a 15 s precheck with the key on (its [water] reflections lines need traced frames and water in front of the bed > 0: a view without water is INVALID), then OFF / ON / OFF with diag-off cost windows and one PNG each, and two debug-view PNGs over the water (rt_debug 22 reflection radiance, 21 coverage; the views line must count views over water passes, which at S8 hold the water between other forward draws). Both S8 planes are captured (7b44a567 huge_PixelLighting and c4e92ccd NoCaustics_Waves). Gates: image ON within the OFF-a/OFF-b spread (measured, not composed: the key must change no colour); screen-hit / miss / hidden / off-screen shares and mean E reported; shift on; [water] reflections GPU ms median and p90; cost-on minus cost-off frame and rt GPU ms against the OFF spread.",
- "estimated_phase_seconds": 140
+ "estimated_phase_seconds": 140,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  }
+ ]
 }

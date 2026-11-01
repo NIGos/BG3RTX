@@ -7,7 +7,7 @@
  "timeout": 479,
  "repeat": 1,
  "live_batch": "ls-exact-k",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,ls_check=0,ls_impl=1,ls_samples=0,ls_shadowed=3,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_stats=0,ls_k=0,ls_rest_samples=1,qa_exposure_hold=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,ls_check=0,ls_impl=1,ls_samples=0,ls_shadowed=3,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_stats=0,ls_k=0,ls_rest_samples=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -81,5 +81,19 @@
  ],
  "stop_on_dump": true,
  "purpose": "TRACK_D_LOCAL_LIGHTS 9.11 ls_k (exact-k + RIS remainder, re-added 2026-11-01 as the LS_K variant) at the S7 inn (candles, many local lights per pixel), lean: a 15 s ls_stats precheck at ls_k=1 (its exact-k stats line needs pixels over the cap: a view with at most one traced light per pixel is INVALID), then OFF / k1 / k2 / OFF with diag-off cost windows and one PNG each. Gates: float mean luminance (dumps.json) of the scene colour before post (fs 5c3fdabc), each k shot against its neighbouring OFF shots within the four-OFF spread (unbiased: same energy; never the PNG previews or the bloom dumps p1-p9, TRACK_D_LOCAL_LIGHTS 9.11), no new hard_dark or firefly region (QA detectors, dump maxima within 2x of OFF); cost: 'ls: local-light shadow pass GPU median' of k1 / k2 against the mean of OFF-a and OFF-b, reported with the OFF spread.",
- "estimated_phase_seconds": 179
+ "estimated_phase_seconds": 179,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-k1",
+    "cost-k2",
+    "cost-off-b"
+   ],
+   "min": 1
+  }
+ ]
 }

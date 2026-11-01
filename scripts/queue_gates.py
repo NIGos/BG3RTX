@@ -34,11 +34,17 @@ the windowed gates then fail with "plan drift" instead of judging the wrong wind
 
     py -3 scripts/queue_gates.py --gates gates.json --log run.log [--runner runner.txt --plan plan.json]
     py -3 scripts/queue_gates.py --lint-exposure-hold [tools/live_batches]
+    py -3 scripts/queue_gates.py --lint-scene-wait [tools/live_batches | tools/live_batches/<batch>]
 
 Exposure hold lint: a job whose plan has an energy gate (an ON shot between two OFF shots, as
 tools/m4_promotion_gate.py compares them) must set qa_exposure_hold=1 in every phase from its first compared
 shot to its last (not in phase 0: the hold latches the exposure of the moment) and expect the
 "[rrpost] exposure held" line. Unheld, the eye adaptation moved the 2026-11-01 gi_far S8 ON shot by +3.2%.
+
+Scene-wait lint: every lean job (a -MovePlan with cost-* windows) must gate "[rt] scene wait" with 0 timeouts
+in every cost-* window that traces (rt and rt_scene_wait on), with a log cadence that gives each such window
+complete lines. A timeout means the RT passes traced the previous frame's scene (shadows detach while turning):
+the hit-material runs of 2026-11-01 had 15-456 per 600 frames and no gate saw them (SCENE_WAIT_GATE below).
 
 Prints one line per failure and exits 1 if any gate fails; exit 0 and "every-window gates: ok".
 """
@@ -224,6 +230,123 @@ def exposure_hold_problems(plan, job=None):
     return out
 
 
+# Scene-wait gate (layer/rtscene.cpp wait_for_frame_scene). The canonical entry; a job may name it differently
+# but its select/match must behave like this one on SCENE_WAIT_GOOD / SCENE_WAIT_BAD. 0 timeouts is the bound:
+# without rt_hit_material the cost windows of lr1 camp 08:39 had 0 in every steady line (the only ones were the
+# first line after the load, which no cost window judges), so any timeout in a cost window is a regression.
+SCENE_WAIT_GATE = {
+    "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+    "select": r"\[rt\] scene wait: \d+ frames",
+    "match": r"got this frame's scene, 0 timeouts",
+    "min": 1,
+}
+SCENE_WAIT_GOOD = ("08:40:14.044  [rt] scene wait: 120 frames, 120 waited (120 got this frame's scene, 0 timeouts, "
+                   "0 skipped), wait mean 2.005 ms, max 6.789 ms")
+SCENE_WAIT_BAD = ("17:28:29.254  [rt] scene wait: 120 frames, 120 waited (119 got this frame's scene, 1 timeouts, "
+                  "0 skipped), wait mean 2.169 ms, max 12.993 ms")
+# The lowest frame rate of a lean cost window: the unfocused / FG 2 pacing floor of 30 rendered fps (the
+# "30 fps ceiling" of every unfocused run, TRACK_D_SCENE_BUILD.md). A window judges a line only when the line
+# before it was also printed after the window's settings were applied (straddle rule), so it needs two
+# lines: 2 x cadence / 30 s, plus the settings read latency (~1 s) and one line of slack for the toggle's
+# shader rebuilds.
+SCENE_WAIT_MIN_FPS = 30.0
+SCENE_WAIT_SETTLE_S = 1.0
+
+
+def _apply(state, set_string):
+    for kv in str(set_string or "").split(","):
+        if "=" in kv:
+            k, v = kv.split("=", 1)
+            state[k.strip()] = v.strip()
+
+
+def phase_states(job, plan):
+    """Effective settings of every plan phase: the job's set, then the phases' sets in order (cumulative)."""
+    state = {}
+    _apply(state, job.get("set", ""))
+    out = []
+    for step in plan:
+        _apply(state, step.get("set", ""))
+        out.append(dict(state))
+    return out
+
+
+def _on(state, key, default="1"):
+    return str(state.get(key, default)) not in ("0", "")
+
+
+def scene_wait_windows(job, plan):
+    """Labels of the cost-* phases whose frames trace (rt and rt_scene_wait on): the windows the gate must cover."""
+    states = phase_states(job, plan)
+    return [str(p.get("label", "")) for p, st in zip(plan, states)
+            if str(p.get("label", "")).startswith("cost-") and _on(st, "rt") and _on(st, "rt_scene_wait")]
+
+
+def _scene_wait_entry(entry):
+    try:
+        sel, match = re.compile(entry["select"]), re.compile(entry["match"])
+    except (KeyError, re.error, TypeError):
+        return False
+    return (not entry.get("event") and bool(sel.search(SCENE_WAIT_GOOD)) and bool(sel.search(SCENE_WAIT_BAD))
+            and bool(match.search(SCENE_WAIT_GOOD)) and not match.search(SCENE_WAIT_BAD))
+
+
+def scene_wait_problems(job, plan):
+    """Problems (strings) of a lean job without a correct scene-wait gate; [] when fine or not a lean job."""
+    need = scene_wait_windows(job, plan)
+    if not need:
+        return []
+    out = []
+    entries = [e for e in job.get("expect_every", []) if isinstance(e, dict) and _scene_wait_entry(e)]
+    if not entries:
+        out.append("scene wait: no expect_every entry gates '[rt] scene wait' lines with 0 timeouts "
+                   f"(add queue_gates.SCENE_WAIT_GATE with windows {need})")
+    else:
+        covered = set()
+        for e in entries:
+            covered |= set(e.get("windows") or need)   # no windows: every line of the run (covers all)
+        missing = [w for w in need if w not in covered]
+        if missing:
+            out.append(f"scene wait: the gate does not cover the cost window(s) {', '.join(missing)}")
+    states = {str(p.get("label", "")): st for p, st in zip(plan, phase_states(job, plan))}
+    seconds = {str(p.get("label", "")): float(p.get("seconds", 0)) for p in plan}
+    for w in need:
+        frames = int(states[w].get("rt_scene_wait_log_frames", 600))
+        want = 2.0 * frames / SCENE_WAIT_MIN_FPS + SCENE_WAIT_SETTLE_S
+        if seconds[w] < want:
+            out.append(f"scene wait: cost window {w} ({seconds[w]:.0f} s) cannot hold two {frames}-frame lines at "
+                       f"{SCENE_WAIT_MIN_FPS:.0f} fps (needs {want:.0f} s): set rt_scene_wait_log_frames=120")
+            break
+    exp = " ".join(job.get("expect", []))
+    cadence = {int(st.get("rt_scene_wait_log_frames", 600)) for st in states.values()}
+    stale = [c for c in re.findall(r"scene wait: (\d+) frames", exp) if int(c) not in cadence]
+    if stale:
+        out.append(f"scene wait: expect names '{stale[0]} frames' lines but the job logs every {sorted(cadence)} frames")
+    return out
+
+
+def _job_files(batches_dir):
+    d = Path(batches_dir)
+    return sorted((d / "jobs").glob("*.json")) if (d / "jobs").is_dir() else sorted(d.glob("*/jobs/*.json"))
+
+
+def lint_scene_wait(batches_dir):
+    """{job file: problems} for every lean job (-MovePlan with cost-* windows) under batches_dir (or one batch)."""
+    out = {}
+    for jf in _job_files(batches_dir):
+        job = json.loads(jf.read_text(encoding="utf-8-sig"))
+        args = job.get("args", [])
+        if "-MovePlan" not in args:
+            continue
+        pf = jf.parent.parent / "plans" / Path(args[args.index("-MovePlan") + 1]).name
+        if not pf.exists():
+            continue
+        problems = scene_wait_problems(job, json.loads(pf.read_text(encoding="utf-8-sig")))
+        if problems:
+            out[str(jf)] = problems
+    return out
+
+
 def lint_batches(batches_dir):
     """{job file: problems} for every tools/live_batches/*/jobs/*.json whose -MovePlan has an energy gate."""
     out = {}
@@ -250,6 +373,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--lint-exposure-hold", nargs="?", const=str(Path(__file__).resolve().parent.parent / "tools" / "live_batches"),
                     default=None, metavar="DIR", help="lint every job under DIR/*/jobs: energy-gated plans must hold the exposure")
+    ap.add_argument("--lint-scene-wait", nargs="?", const=str(Path(__file__).resolve().parent.parent / "tools" / "live_batches"),
+                    default=None, metavar="DIR", help="lint every lean job under DIR (*/jobs or one batch's jobs): "
+                    "the scene-wait gate in every cost window")
     ap.add_argument("--gates", help="JSON file: the job's expect_every list")
     ap.add_argument("--log", help="the run's kept game log slice")
     ap.add_argument("--runner", default="", help="the run's runner log ([pan-plan] window lines)")
@@ -263,8 +389,16 @@ def main(argv=None):
         if not bad:
             print("exposure hold lint: ok")
         return 1 if bad else 0
+    if a.lint_scene_wait:
+        bad = lint_scene_wait(a.lint_scene_wait)
+        for jf, problems in bad.items():
+            for p in problems:
+                print(f"{jf}: {p}")
+        if not bad:
+            print("scene wait lint: ok")
+        return 1 if bad else 0
     if not a.gates or not a.log:
-        ap.error("--gates and --log are required (or --lint-exposure-hold)")
+        ap.error("--gates and --log are required (or --lint-exposure-hold / --lint-scene-wait)")
     gates = json.loads(_read(a.gates) or "[]")
     if isinstance(gates, dict):
         gates = [gates]
