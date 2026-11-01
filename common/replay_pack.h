@@ -14,8 +14,11 @@
 //   buffer S B BYTES [FILE]                 descriptor range of BYTES; FILE fills it from 0 (rest zero)
 //   range S B OFFSET FILE [FOFF BYTES]      a further slice at OFFSET (sparse: only what instances use):
 //                                           FILE whole, or BYTES of it from byte FOFF (many slices, one file)
-//   image S B E FORMAT W H LAYERS MIPS FILE VkFormat number; mip-major, each mip all layers, packed
-//   omitted S B E                           an image left out over the budget: bound NaN, so a
+//   image S B E FORMAT W H LAYERS MIPS FILE [SOURCE]   VkFormat number; mip-major, each mip all layers,
+//                                           packed. SOURCE: the game view's VkFormat when the writer read
+//                                           the image through a shader (no TRANSFER_SRC usage) and stored
+//                                           it decoded in FORMAT (BCn -> R8/RG8/RGBA8/RGBA16F, shader_read_format)
+//   omitted S B E                           an image left out (budget, format): bound NaN, so a
 //                                           material lookup that needs it fails as "sampling" (6)
 //   sampler S B E MAG MIN MIPMODE AU AV AW ANISO MAXLOD   (Vk enums as numbers; ANISO 0 = off)
 //   instances FILE COUNT                    VkAccelerationStructureInstanceKHR x COUNT, TLAS order
@@ -38,11 +41,12 @@
 
 namespace bg3::replay {
 inline constexpr int kVersion = 1;
-// Target size of one pack (tools/frame_replay.md "Size"): the writer drops images over it (omitted)
-// largest first; buffers ranges that instances reference are never dropped.
+// Geometry budget (tools/frame_replay.md "Size"): the soup / pool are captured whole while the
+// never-dropped part stays under it, else as the InstInfo spans.
 inline constexpr uint64_t kPackBudgetBytes = 1ull << 30;
 // Hard cap (disk budget): a pack whose never-dropped part (set 0, buffers, geometry) passes it is
-// "over budget" and not written; under it the textures are dropped down to kPackBudgetBytes.
+// "over budget" and not written; under it the textures fill the rest up to this cap (drop_over_budget:
+// textures the hit material does not read go first, then the largest).
 inline constexpr uint64_t kPackHardCapBytes = 2ull << 30;
 inline constexpr uint64_t kWholeSize = ~0ull;   // VK_WHOLE_SIZE
 
@@ -104,8 +108,8 @@ inline constexpr uint32_t kInfoPool = 1u << 8, kInfoLegacy = 1u << 9, kInfoAlpha
 inline uint32_t block_bytes(uint32_t f, uint32_t& block) {
   block = 1;
   switch (f) {
-    case 9: case 13: return 1;                                     // R8 UNORM / UINT
-    case 16: case 70: case 74: case 76: return 2;                  // RG8 UNORM, R16 UNORM / UINT / SFLOAT
+    case 9: case 10: case 13: return 1;                            // R8 UNORM / SNORM / UINT
+    case 16: case 17: case 70: case 74: case 76: return 2;         // RG8 UNORM / SNORM, R16 UNORM / UINT / SFLOAT
     case 37: case 38: case 41: case 43: case 44: case 50: case 58: case 64: case 77: case 81: case 83:
     case 98: case 99: case 100: case 122: case 123: return 4;      // RGBA8, RGB10A2, RG16, R32, B10G11R11, E5B9G9R9
     case 97: case 91: case 103: case 102: return 8;                // RGBA16F, RGBA16 UNORM, RG32F, RG32UI
@@ -127,9 +131,116 @@ inline uint64_t image_bytes(uint32_t f, uint32_t w, uint32_t h, uint32_t layers,
   return n;
 }
 
+// ---- shader read (layer/replay.cpp, shaders/replay_image.hlsl) ----
+// A game image without TRANSFER_SRC usage cannot be copied, but it is SAMPLED: the writer reads every
+// texel through a 2D-array view of the game view's format (Load: no filtering, the decoded value the
+// pass's shader would fetch) and stores it in `pack_format`. BCn cannot be read back as raw blocks,
+// so it is stored decoded at the precision the decoder delivers to the filter: 8 bits per channel for
+// BC1/2/3/7 (sRGB kept as sRGB, so the replay's sampler linearizes and filters as the game's does),
+// BC4/BC5 as R8/RG8 (UNORM or SNORM: the values the hardware rounds to 8 bits before the filter, at
+// most 0.5/255 off where it keeps more), BC6H as RGBA16F (exact: it decodes to half floats).
+// Uncompressed formats keep their bits (BGRA8 is stored as RGBA8, B10G11R11 / E5B9G9R9 as RGBA16F,
+// A2B10G10R10 as RGBA16 UNORM). Integer and depth formats are not read this way (omitted "format").
+// `swizzled`: the game view has a non-identity component mapping; the read applies it, so the value
+// is stored with 4 channels (the replay binds an identity view).
+enum Encode : uint32_t { kEncNone, kEncUnorm8, kEncSnorm8, kEncSrgb8, kEncUnorm16, kEncHalf, kEncFloat };
+struct ShaderRead { uint32_t pack_format = 0, encode = kEncNone, channels = 0; };
+inline uint32_t encode_bits(uint32_t e) { return e == kEncFloat ? 32 : (e == kEncUnorm16 || e == kEncHalf) ? 16 : e ? 8 : 0; }
+inline bool shader_read_format(uint32_t f, bool swizzled, ShaderRead& r) {
+  auto set = [&](uint32_t pf, uint32_t e, uint32_t c) { r = {pf, e, c}; return true; };
+  switch (f) {
+    case 9: return swizzled ? set(37, kEncUnorm8, 4) : set(9, kEncUnorm8, 1);           // R8 UNORM
+    case 10: return swizzled ? set(38, kEncSnorm8, 4) : set(10, kEncSnorm8, 1);         // R8 SNORM
+    case 16: return swizzled ? set(37, kEncUnorm8, 4) : set(16, kEncUnorm8, 2);         // RG8 UNORM
+    case 17: return swizzled ? set(38, kEncSnorm8, 4) : set(17, kEncSnorm8, 2);         // RG8 SNORM
+    case 37: case 44: return set(37, kEncUnorm8, 4);                                    // RGBA8 / BGRA8 UNORM
+    case 38: return set(38, kEncSnorm8, 4);
+    case 43: case 50: return set(43, kEncSrgb8, 4);                                     // RGBA8 / BGRA8 SRGB
+    case 64: return set(91, kEncUnorm16, 4);                                            // A2B10G10R10 UNORM
+    case 70: return swizzled ? set(91, kEncUnorm16, 4) : set(70, kEncUnorm16, 1);       // R16 UNORM
+    case 77: return swizzled ? set(91, kEncUnorm16, 4) : set(77, kEncUnorm16, 2);       // RG16 UNORM
+    case 91: return set(91, kEncUnorm16, 4);
+    case 76: return swizzled ? set(97, kEncHalf, 4) : set(76, kEncHalf, 1);             // R16 SFLOAT
+    case 83: return swizzled ? set(97, kEncHalf, 4) : set(83, kEncHalf, 2);             // RG16 SFLOAT
+    case 97: case 122: case 123: return set(97, kEncHalf, 4);                           // RGBA16F, B10G11R11, E5B9G9R9
+    case 100: return swizzled ? set(109, kEncFloat, 4) : set(100, kEncFloat, 1);        // R32 SFLOAT
+    case 103: return swizzled ? set(109, kEncFloat, 4) : set(103, kEncFloat, 2);        // RG32 SFLOAT
+    case 109: return set(109, kEncFloat, 4);
+    case 131: case 133: case 135: case 137: case 145: return set(37, kEncUnorm8, 4);    // BC1 / BC2 / BC3 / BC7 UNORM
+    case 132: case 134: case 136: case 138: case 146: return set(43, kEncSrgb8, 4);     // the same, SRGB
+    case 139: return swizzled ? set(37, kEncUnorm8, 4) : set(9, kEncUnorm8, 1);         // BC4 UNORM
+    case 140: return swizzled ? set(38, kEncSnorm8, 4) : set(10, kEncSnorm8, 1);        // BC4 SNORM
+    case 141: return swizzled ? set(37, kEncUnorm8, 4) : set(16, kEncUnorm8, 2);        // BC5 UNORM
+    case 142: return swizzled ? set(38, kEncSnorm8, 4) : set(17, kEncSnorm8, 2);        // BC5 SNORM
+    case 143: case 144: return set(97, kEncHalf, 4);                                    // BC6H UFLOAT / SFLOAT
+    default: return false;
+  }
+}
+inline bool block_compressed(uint32_t f) { return f >= 131 && f <= 146; }
+inline uint32_t shader_read_texel_bytes(const ShaderRead& r) { return r.channels * encode_bits(r.encode) / 8; }
+// Texels one thread of replay_image.hlsl encodes: it always writes whole 32-bit words.
+inline uint32_t shader_read_per_thread(const ShaderRead& r) { const uint32_t tb = shader_read_texel_bytes(r); return tb >= 4 ? 1 : 4 / tb; }
+// One dispatch range of a shader read: texels [first, first + count) of mip `mip` in the packed
+// layout (layer-major, rows, x), which is `bytes` of the image's file at `file_offset`. Pieces start
+// at a multiple of shader_read_per_thread texels, so each thread's words belong to one piece; the
+// staging slot of a piece is rounded up to 4 bytes (the last thread's word).
+struct ReadPiece { uint32_t mip; uint64_t first, count, file_offset, bytes; };
+inline std::vector<ReadPiece> shader_read_pieces(const ShaderRead& r, uint32_t w, uint32_t h, uint32_t layers, uint32_t mips, uint64_t max_bytes) {
+  std::vector<ReadPiece> out;
+  const uint64_t tb = shader_read_texel_bytes(r), per = shader_read_per_thread(r);
+  if (!tb) return out;
+  const uint64_t cap = (std::max)(per, (max_bytes / tb) / per * per);
+  uint64_t at = 0;
+  for (uint32_t m = 0; m < mips; ++m) {
+    const uint64_t mw = w >> m ? w >> m : 1, mh = h >> m ? h >> m : 1, n = mw * mh * layers;
+    for (uint64_t first = 0; first < n; first += cap) {
+      const uint64_t count = (std::min)(cap, n - first);
+      out.push_back({m, first, count, at + first * tb, count * tb});
+    }
+    at += n * tb;
+  }
+  return out;
+}
+// One region of a transfer copy (vkCmdCopyImageToBuffer) of at most `max_bytes`: mip `mip`, layers
+// [layer, layer + layers), texel rows [row, row + rows) (a multiple of the block height, the last
+// one clipped), `bytes` of the file at `file_offset`. Whole mips when they fit, else layer groups,
+// else block rows of one layer. Empty when a single block row is larger than `max_bytes`.
+struct CopyPiece { uint32_t mip, layer, layers, row, rows; uint64_t file_offset, bytes; };
+inline std::vector<CopyPiece> transfer_pieces(uint32_t f, uint32_t w, uint32_t h, uint32_t layers, uint32_t mips, uint64_t max_bytes) {
+  std::vector<CopyPiece> out;
+  uint32_t block;
+  const uint64_t bb = block_bytes(f, block);
+  if (!bb) return out;
+  uint64_t at = 0;
+  for (uint32_t m = 0; m < mips; ++m) {
+    const uint32_t mw = w >> m ? w >> m : 1, mh = h >> m ? h >> m : 1;
+    const uint64_t brow = uint64_t((mw + block - 1) / block) * bb, bh = (mh + block - 1) / block, layer_bytes = brow * bh;
+    if (layer_bytes * layers <= max_bytes) {
+      out.push_back({m, 0, layers, 0, mh, at, layer_bytes * layers});
+    } else if (layer_bytes <= max_bytes) {
+      const uint32_t group = uint32_t(max_bytes / layer_bytes);
+      for (uint32_t l = 0; l < layers; l += group) {
+        const uint32_t n = (std::min)(group, layers - l);
+        out.push_back({m, l, n, 0, mh, at + layer_bytes * l, layer_bytes * n});
+      }
+    } else {
+      if (brow > max_bytes) return {};
+      const uint64_t rows = max_bytes / brow;   // block rows per piece
+      for (uint32_t l = 0; l < layers; ++l)
+        for (uint64_t r = 0; r < bh; r += rows) {
+          const uint64_t n = (std::min)(rows, bh - r);
+          const uint32_t row = uint32_t(r * block), texel_rows = (std::min)(uint32_t(n * block), mh - row);
+          out.push_back({m, l, 1, row, texel_rows, at + layer_bytes * l + brow * r, brow * n});
+        }
+    }
+    at += layer_bytes * layers;
+  }
+  return out;
+}
+
 struct Buffer { uint32_t set, binding; uint64_t bytes; std::string file; };
 struct Range { uint32_t set, binding; uint64_t offset; std::string file; uint64_t file_offset = 0, bytes = 0; };   // bytes 0: whole file
-struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::string file; };
+struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::string file; uint32_t source_format = 0; };   // 0: copied as is
 struct Omitted { uint32_t set, binding, element; };
 struct Sampler { uint32_t set, binding, element, mag, min, mip, au, av, aw; float aniso, max_lod; };
 struct Output { uint32_t set, binding, format, w, h; std::string reference; };
@@ -175,6 +286,7 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
     }
     else if (k == "image") {
       Image i{}; ok = bool(t >> i.set >> i.binding >> i.element >> i.format >> i.w >> i.h >> i.layers >> i.mips >> i.file);
+      if (ok && !(t >> i.source_format)) i.source_format = 0;
       ok = ok && i.w && i.h && i.layers && i.mips && image_bytes(i.format, i.w, i.h, i.layers, i.mips);
       m.images.push_back(i);
     } else if (k == "omitted") { Omitted o{}; ok = bool(t >> o.set >> o.binding >> o.element); m.omitted.push_back(o); }
@@ -212,7 +324,7 @@ inline std::string serialize(const Manifest& m) {
   }
   for (const auto& i : m.images)
     o << "image " << i.set << " " << i.binding << " " << i.element << " " << i.format << " " << i.w << " " << i.h << " " << i.layers << " "
-      << i.mips << " " << i.file << "\n";
+      << i.mips << " " << i.file << (i.source_format ? " " + std::to_string(i.source_format) : "") << "\n";
   for (const auto& x : m.omitted) o << "omitted " << x.set << " " << x.binding << " " << x.element << "\n";
   for (const auto& s : m.samplers)
     o << "sampler " << s.set << " " << s.binding << " " << s.element << " " << s.mag << " " << s.min << " " << s.mip << " " << s.au << " "
@@ -281,12 +393,17 @@ inline void instinfo_spans(const uint32_t* info, uint32_t count, std::vector<Spa
 }
 
 // The budget (tools/frame_replay.md "Size"): `fixed` bytes are never dropped (set 0, geometry,
-// records); the droppable images go largest first until the total fits. Returns the indices
-// dropped; `over` when even the fixed part does not fit (the pack is then not written).
-inline std::vector<size_t> drop_over_budget(uint64_t fixed, const std::vector<uint64_t>& droppable, uint64_t budget, bool& over) {
+// records); the droppable images go lowest `priority` first (none given: all equal), within one
+// priority largest first, until the total fits. Returns the indices dropped; `over` when even the
+// fixed part does not fit (the pack is then not written).
+inline std::vector<size_t> drop_over_budget(uint64_t fixed, const std::vector<uint64_t>& droppable, uint64_t budget, bool& over,
+                                            const std::vector<uint32_t>& priority = {}) {
   std::vector<size_t> order(droppable.size()), dropped;
   for (size_t i = 0; i < order.size(); ++i) order[i] = i;
-  std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return droppable[a] > droppable[b]; });
+  auto pri = [&](size_t i) { return i < priority.size() ? priority[i] : 0u; };
+  std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+    return pri(a) != pri(b) ? pri(a) < pri(b) : droppable[a] > droppable[b];
+  });
   uint64_t total = fixed;
   for (uint64_t b : droppable) total += b;
   over = fixed > budget;

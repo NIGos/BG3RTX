@@ -460,15 +460,32 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   Buf stats = make_buffer(kCounters * 64 * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true);
   // Images (inputs), outputs, dummies.
   std::map<uint64_t, std::map<uint32_t, Img>> images;   // slot -> element -> image
+  // The writer stores each VkImage once and names its file from every descriptor element that binds
+  // it (the 4 x 4 dummies fill thousands of slots, a VT cache is shared by gAlphaCache and gHitCache):
+  // one image per file, view type and shape.
+  std::map<std::string, Img> by_file;
+  uint32_t decoded = 0, decoded_bc = 0;
   for (const auto& i : m.images) {
     const rp::Slot* slot = rp::find_slot(pass, i.set, i.binding);
     check(slot && (slot->kind == rp::kSampled2D || slot->kind == rp::kSampled2DArray || slot->kind == rp::kStorage) && i.element < slot->count,
           "image slot " + std::to_string(i.set) + "/" + std::to_string(i.binding));
     if (slot->kind == rp::kStorage) check(i.format == slot->storage_format, std::string("storage format of ") + slot->name);
-    Img im = make_image(i.format, i.w, i.h, i.layers, i.mips, slot->kind == rp::kStorage, slot->kind == rp::kSampled2DArray);
-    fill_image(im, file(i.file));
-    images[key(i.set, i.binding)][i.element] = im;
+    const bool array = slot->kind == rp::kSampled2DArray, storage = slot->kind == rp::kStorage;
+    const std::string k = i.file + "|" + std::to_string(i.format) + "|" + std::to_string(i.w) + "x" + std::to_string(i.h) + "x" +
+                          std::to_string(i.layers) + "x" + std::to_string(i.mips) + (array ? "|a" : "") + (storage ? "|s" : "");
+    auto known = by_file.find(k);
+    if (known == by_file.end()) {
+      Img im = make_image(i.format, i.w, i.h, i.layers, i.mips, storage, array);
+      fill_image(im, file(i.file));
+      known = by_file.emplace(k, im).first;
+      if (i.source_format) { ++decoded; decoded_bc += rp::block_compressed(i.source_format); }
+    }
+    images[key(i.set, i.binding)][i.element] = known->second;
   }
+  if (decoded)
+    result.warnings.push_back(std::to_string(decoded) + " of " + std::to_string(by_file.size()) + " images were read by the writer's shader and stored decoded (" +
+                              std::to_string(decoded_bc) + " from BCn; rp::shader_read_format)");
+  if (!m.omitted.empty()) result.warnings.push_back(std::to_string(m.omitted.size()) + " image elements omitted by the writer (bound NaN)");
   struct Out { Img img; std::string name, reference; };
   std::vector<Out> outputs;
   for (const auto& o : m.outputs) {
@@ -923,6 +940,138 @@ void synthesize(const fs::path& dir, bool dark) {
   write_file(dir / "manifest.txt", mf.data(), mf.size());
 }
 
+// ---------------------------------------------------------------- the writer's image read (self-test 9-11)
+// layer/replay.cpp reads game images without TRANSFER_SRC through shaders/replay_image.hlsl; this
+// runs the same shader with the same piece plan (rp::shader_read_pieces, 16-byte aligned staging
+// slots, packed into the file layout) on images of every mapped format.
+struct ReadPipe { VkDescriptorSetLayout dsl{}; VkPipelineLayout pl{}; VkPipeline pipe{}; VkDescriptorPool pool{}; };
+ReadPipe make_read_pipe(const std::vector<uint32_t>& code) {
+  ReadPipe r;
+  VkDescriptorSetLayoutBinding b[2] = {{0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                       {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+  VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; dl.bindingCount = 2; dl.pBindings = b;
+  vkcheck(vkCreateDescriptorSetLayout(g.dev, &dl, nullptr, &r.dsl), "read set layout");
+  VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT, 0, 32};
+  VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  pl.setLayoutCount = 1; pl.pSetLayouts = &r.dsl; pl.pushConstantRangeCount = 1; pl.pPushConstantRanges = &push;
+  vkcheck(vkCreatePipelineLayout(g.dev, &pl, nullptr, &r.pl), "read pipeline layout");
+  VkShaderModuleCreateInfo smi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO}; smi.codeSize = code.size() * 4; smi.pCode = code.data();
+  VkShaderModule module; vkcheck(vkCreateShaderModule(g.dev, &smi, nullptr, &module), "read shader module");
+  VkComputePipelineCreateInfo cpi{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  cpi.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, module, "main"}; cpi.layout = r.pl;
+  vkcheck(vkCreateComputePipelines(g.dev, VK_NULL_HANDLE, 1, &cpi, nullptr, &r.pipe), "read pipeline");
+  VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
+  VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO}; dp.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+  dp.maxSets = 1; dp.poolSizeCount = 2; dp.pPoolSizes = sizes;
+  vkcheck(vkCreateDescriptorPool(g.dev, &dp, nullptr, &r.pool), "read pool");
+  return r;
+}
+std::vector<uint8_t> shader_read(const ReadPipe& rpipe, const Img& im, const rp::ShaderRead& r, uint64_t max_piece) {
+  const auto pieces = rp::shader_read_pieces(r, im.w, im.h, im.layers, im.mips, max_piece);
+  std::vector<uint64_t> slot;
+  uint64_t at = 0;
+  for (const auto& p : pieces) { at = (at + 15) & ~15ull; slot.push_back(at); at += (p.bytes + 3) & ~3ull; }
+  Buf staging = make_buffer(at, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true);
+  std::memset(staging.map, 0xCD, size_t(staging.size));
+  VkDescriptorSetAllocateInfo da{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO}; da.descriptorPool = rpipe.pool; da.descriptorSetCount = 1; da.pSetLayouts = &rpipe.dsl;
+  VkDescriptorSet set; vkcheck(vkAllocateDescriptorSets(g.dev, &da, &set), "read set");
+  VkDescriptorImageInfo ii{VK_NULL_HANDLE, im.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkDescriptorBufferInfo bi{staging.b, 0, staging.size};
+  VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+  w[0].dstSet = set; w[0].dstBinding = 0; w[0].descriptorCount = 1; w[0].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; w[0].pImageInfo = &ii;
+  w[1].dstSet = set; w[1].dstBinding = 1; w[1].descriptorCount = 1; w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; w[1].pBufferInfo = &bi;
+  vkUpdateDescriptorSets(g.dev, 2, w, 0, nullptr);
+  const uint64_t per = rp::shader_read_per_thread(r);
+  submit([&](VkCommandBuffer c) {
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, rpipe.pipe);
+    vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, rpipe.pl, 0, 1, &set, 0, nullptr);
+    for (size_t k = 0; k < pieces.size(); ++k) {
+      const auto& p = pieces[k];
+      const uint32_t push[8] = {uint32_t(slot[k]), uint32_t(p.first), uint32_t(p.count), std::max(im.w >> p.mip, 1u), std::max(im.h >> p.mip, 1u),
+                                p.mip, r.encode, r.channels};
+      vkCmdPushConstants(c, rpipe.pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push, push);
+      vkCmdDispatch(c, uint32_t(((p.count + per - 1) / per + 255) / 256), 1, 1);
+    }
+    barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
+  });
+  vkFreeDescriptorSets(g.dev, rpipe.pool, 1, &set);
+  std::vector<uint8_t> out(size_t(rp::image_bytes(r.pack_format, im.w, im.h, im.layers, im.mips)));
+  for (size_t k = 0; k < pieces.size(); ++k) std::memcpy(out.data() + pieces[k].file_offset, static_cast<uint8_t*>(staging.map) + slot[k], size_t(pieces[k].bytes));
+  vkDestroyBuffer(g.dev, staging.b, nullptr); vkFreeMemory(g.dev, staging.m, nullptr);
+  return out;
+}
+struct ReadCheck { uint32_t formats = 0, skipped = 0, exact_fail = 0, tol_fail = 0, piece_fail = 0; std::string detail; };
+ReadCheck check_shader_reads(const fs::path& dir) {
+  ReadCheck rc;
+  const ReadPipe rpipe = make_read_pipe(compile(fs::path(source_root()) / "shaders" / "replay_image.hlsl", {}, dir / "replay_image.spv"));
+  const rp::ShaderRead as_float{rp::kRgba32Sfloat, rp::kEncFloat, 4};
+  const uint32_t formats[] = {37, 44, 43, 50, 38, 9, 10, 16, 17, 64, 70, 77, 91, 76, 83, 97, 100, 103, 109, 122, 123,
+                              131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146};
+  constexpr uint32_t W = 13, H = 9, L = 3, M = 3;   // odd sizes, partial blocks, 3 layers, mips 13x9 / 6x4 / 3x2
+  uint64_t seed = 0x9E3779B97F4A7C15ull;
+  auto rnd = [&]() { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; return uint32_t(seed); };
+  std::string worst;
+  for (uint32_t f : formats) {
+    rp::ShaderRead r;
+    check(rp::shader_read_format(f, false, r), "shader_read_format " + std::to_string(f));
+    VkFormatProperties fp; vkGetPhysicalDeviceFormatProperties(g.physical, VkFormat(f), &fp);
+    if (!(fp.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) { ++rc.skipped; continue; }
+    ++rc.formats;
+    // Source texels: random, made finite for float formats and free of SNORM -128 (it reads as -127).
+    std::vector<uint8_t> src(size_t(rp::image_bytes(f, W, H, L, M)));
+    for (auto& b : src) b = uint8_t(rnd());
+    if (f == 10 || f == 17 || f == 38) for (auto& b : src) if (b == 0x80) b = 0x81;
+    if (f == 76 || f == 83 || f == 97)   // normal halves (exponent 1..30)
+      for (size_t i = 0; i + 1 < src.size(); i += 2) { uint16_t v = uint16_t(rnd()); v = uint16_t((v & 0x83FF) | ((1 + (v >> 10 & 31) % 30) << 10)); std::memcpy(&src[i], &v, 2); }
+    if (f == 100 || f == 103 || f == 109)   // normal floats of magnitude 2^-27 .. 2^36
+      for (size_t i = 0; i + 3 < src.size(); i += 4) { uint32_t v = rnd(); v = (v & 0x807FFFFFu) | ((100u + (v >> 23 & 255) % 64) << 23); std::memcpy(&src[i], &v, 4); }
+    if (f == 122) for (size_t i = 0; i + 3 < src.size(); i += 4) { uint32_t v; std::memcpy(&v, &src[i], 4); v &= ~((1u << 10) | (1u << 21) | (1u << 31)); std::memcpy(&src[i], &v, 4); }
+    Img im = make_image(f, W, H, L, M, false, true);
+    fill_image(im, src);
+    const auto packed = shader_read(rpipe, im, r, 200);   // many pieces per mip
+    if (packed != shader_read(rpipe, im, r, 1ull << 30)) ++rc.piece_fail;
+    // Exact: uncompressed formats stored in their own layout keep their bits (BGRA8 swizzled to RGBA8).
+    if (!rp::block_compressed(f) && r.pack_format == f && packed != src) ++rc.exact_fail;
+    if (f == 44 || f == 50) {
+      std::vector<uint8_t> sw = src;
+      for (size_t i = 0; i + 3 < sw.size(); i += 4) std::swap(sw[i], sw[i + 2]);
+      if (packed != sw) ++rc.exact_fail;
+    }
+    // Tolerance: the stored texels read back (as the replay's image) against the game format's.
+    Img back = make_image(r.pack_format, W, H, L, M, false, true);
+    fill_image(back, packed);
+    const auto a = shader_read(rpipe, im, as_float, 1ull << 30), b = shader_read(rpipe, back, as_float, 1ull << 30);
+    const float* fa = reinterpret_cast<const float*>(a.data()), * fb = reinterpret_cast<const float*>(b.data());
+    double max_units = 0;   // in steps of the stored encoding
+    for (size_t i = 0; i < a.size() / 4; ++i) {
+      double x = fa[i], y = fb[i], step;
+      switch (r.encode) {
+        case rp::kEncUnorm8: step = 1.0 / 255; break;
+        case rp::kEncSnorm8: step = 1.0 / 127; break;
+        case rp::kEncSrgb8: {   // colour compared in sRGB space; alpha is linear
+          auto enc = [](double l) { l = std::clamp(l, 0.0, 1.0); return l <= 0.0031308 ? l * 12.92 : 1.055 * std::pow(l, 1 / 2.4) - 0.055; };
+          if (i % 4 != 3) { x = enc(x); y = enc(y); }
+          step = 1.0 / 255; break;
+        }
+        case rp::kEncUnorm16: step = 1.0 / 65535; break;
+        case rp::kEncHalf: step = std::max(std::abs(x) * std::ldexp(1.0, -10), std::ldexp(1.0, -24)); break;
+        default: step = std::max(std::abs(x) * std::ldexp(1.0, -23), 1e-45); break;
+      }
+      if (std::isnan(x) && std::isnan(y)) continue;
+      max_units = std::max(max_units, std::abs(x - y) / step);
+    }
+    // At most half a step (rounding), plus the GPU's sRGB conversion error for the sRGB formats.
+    const double limit = r.encode == rp::kEncSrgb8 ? 0.51 : 0.5 + 1e-3;
+    if (!(max_units <= limit)) ++rc.tol_fail;
+    if (rp::block_compressed(f) || max_units > 0) {
+      char s[64]; std::snprintf(s, sizeof s, "%s%u %.2f", worst.empty() ? "" : ", ", f, max_units);
+      worst += s;
+    }
+  }
+  rc.detail = std::to_string(rc.formats) + " formats (" + std::to_string(rc.skipped) + " unsupported), max |diff| in stored steps: " + worst;
+  return rc;
+}
+
 int self_test(const fs::path& dir) {
   if (int r = init_gpu(true, true)) return r;
   int failures = 0;
@@ -960,6 +1109,10 @@ int self_test(const fs::path& dir) {
   }
   line("6 dark control: bounce exactly 0, nonzero 0", zero && d.stats.t[285] == 0 && d.stats.t[282] == t[282], "candidates " + std::to_string(d.stats.t[282]));
   line("7 occlusion (giRaw.a) independent of the light", occ, "lit vs dark alpha bit-equal");
+  const ReadCheck rc = check_shader_reads(dir);
+  line("9 image read: uncompressed texels keep their bits", rc.formats > 0 && rc.exact_fail == 0, std::to_string(rc.exact_fail) + " formats differ");
+  line("10 image read: stored texels within half a step (BCn too)", rc.formats > 0 && rc.tol_fail == 0, rc.detail);
+  line("11 image read: piece plan does not change the bytes", rc.piece_fail == 0, std::to_string(rc.piece_fail) + " formats differ");
   line("8 no validation errors", g_validation_errors.load() == 0, std::to_string(g_validation_errors.load()) + " errors");
   std::printf("%s: %d failure(s); GPU dispatch %.3f ms\n", failures ? "FAIL" : "PASS", failures, a.gpu_ms);
   return failures ? 1 : 0;
