@@ -1563,7 +1563,7 @@ void join_check(Db& d, const Pending& p) {
       float pd = -1;
       uint32_t pj = nearest(d, g_grid, w, 2.0f * tol, &pd,
                             [&](uint32_t j) { return d.lights[j].type == BG3_DB_LIGHT_BOX; });
-      if (pj != kNone) ++m_proj[a];
+      if (pj != kNone && pref[i]) ++m_proj[a];   // the rate over the froxel-listed slots (n_proj_ref)
       if (a == 0) {  // projector rows: slot P<i>, near-face anchor, box size from the matrix
         float sx = 1.0f / std::sqrt(m[0][0] * m[0][0] + m[0][1] * m[0][1] + m[0][2] * m[0][2]);
         float sy = 1.0f / std::sqrt(m[1][0] * m[1][0] + m[1][1] * m[1][1] + m[1][2] * m[1][2]);
@@ -1630,8 +1630,8 @@ void join_check(Db& d, const Pending& p) {
       pct(col_any, m_all), hyp[0], hyp[1], hyp[2], hyp[3], hyp[4], rad_ok, type_ok);
   log("[assetdb] join lights near camera: %u database point/spot lights within %.0f m, %u of them in the runtime array",
       near_db, near_r, near_db_used);
-  log("[assetdb] join projectors b29: %u valid of %u slots, %u in the froxel lists; matched as box lights "
-      "(anchor near face / centre / far face): %u / %u / %u",
+  log("[assetdb] join projectors b29: %u valid of %u slots, %u in the froxel lists; froxel-listed matched as box "
+      "lights (anchor near face / centre / far face): %u / %u / %u",
       n_proj, pslots, n_proj_ref, m_proj[0], m_proj[1], m_proj[2]);
   log("[assetdb] join shaders: frame draws %llu: VS material %.1f%% + engine %.1f%%, FS material %.1f%% + engine "
       "%.1f%%; modules created %llu: material %llu (%.1f%%), engine %llu (%.1f%%), unknown %llu",

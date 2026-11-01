@@ -50,7 +50,7 @@ static uint g_hs_seed=0u;
 float3 native_hit_sun_dir(float3 L){
  if(!(pc.sun_radius>0.0))return L;
  const float u1=rand01(g_hs_seed),u2=rand01(g_hs_seed);
- const float3 t=abs(L.y)<0.99?normalize(cross(float3(0,1,0),L)):float3(1,0,0);
+ const float3 t=abs(L.y)<0.99?normalize(cross(float3(0,1,0),L)):normalize(cross(float3(0,0,1),L));   // orthonormal near the zenith (as RT_SUN_CURRENT)
  const float3 b=cross(L,t);
  const float rr=sqrt(u1)*tan(pc.sun_radius),phi=6.2831853*u2;
  return normalize(L+(t*cos(phi)+b*sin(phi))*rr);

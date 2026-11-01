@@ -148,7 +148,7 @@ uint trace_light(float3 P, float3 N, float4 org, float3 lpos, uint2 fp, uint key
     float ct = 1.0 - u01(r.x) * (1.0 - cos_max);
     float st = sqrt(max(1.0 - ct * ct, 0.0));
     float phi = 6.2831853 * u01(r.y);
-    float3 t = abs(Ld.y) < 0.99 ? normalize(cross(float3(0, 1, 0), Ld)) : float3(1, 0, 0);
+    float3 t = abs(Ld.y) < 0.99 ? normalize(cross(float3(0, 1, 0), Ld)) : normalize(cross(float3(0, 0, 1), Ld));
     float3 b = cross(Ld, t);
     dir = normalize(Ld * ct + (t * cos(phi) + b * sin(phi)) * st);
   }
