@@ -63,6 +63,8 @@ struct WaterPassNote {
   VkCommandBuffer cmd = VK_NULL_HANDLE;
   Bg3Binding lights[7] = {};
   bool lights_ok = false;
+  Bg3Binding copy = {};   // M5.5: the draw's set 2 b4 (the colour copy its FS refracts through)
+  bool copy_ok = false;
 };
 std::mutex g_wp_mu;
 std::vector<WaterPassNote> g_wp;
@@ -95,20 +97,26 @@ void water_draw_note(VkCommandBuffer cmd) {
   WaterPassNote n;
   n.cmd = cmd;
   if (host->cfg_int("rt_water_ls_shadows", 0) != 0) n.lights_ok = capture_lights(cmd, n.lights);
+  if (host->cfg_int("rt_water_refraction", 0) != 0)
+    n.copy_ok = host->query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 2, 4, 0, &n.copy) &&
+                n.copy.type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE && n.copy.view;
   g_wp.push_back(n);
   g_wp_n.store(uint32_t(g_wp.size()), std::memory_order_relaxed);
 }
 
 }  // namespace
 
-bool core_water_pass_take(VkCommandBuffer cmd, Bg3Binding* lights, bool* lights_ok) {
+bool core_water_pass_take(VkCommandBuffer cmd, Bg3Binding* lights, bool* lights_ok, Bg3Binding* copy, bool* copy_ok) {
   if (lights_ok) *lights_ok = false;
+  if (copy_ok) *copy_ok = false;
   if (!g_wp_n.load(std::memory_order_relaxed)) return false;   // the common case: no lock
   std::lock_guard<std::mutex> lock(g_wp_mu);
   for (size_t i = 0; i < g_wp.size(); ++i)
     if (g_wp[i].cmd == cmd) {
       if (lights) std::memcpy(lights, g_wp[i].lights, sizeof g_wp[i].lights);
       if (lights_ok) *lights_ok = g_wp[i].lights_ok;
+      if (copy) *copy = g_wp[i].copy;
+      if (copy_ok) *copy_ok = g_wp[i].copy_ok;
       g_wp[i] = g_wp.back();
       g_wp.pop_back();
       g_wp_n.store(uint32_t(g_wp.size()), std::memory_order_relaxed);

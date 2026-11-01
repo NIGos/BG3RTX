@@ -64,6 +64,17 @@
 // keep their term exactly (no ray, nothing removed): C' = C where nothing is occluded. Projector lights
 // (the FS's third loop) are not replaced (their share is logged). rt_debug 27: the view. Statistics:
 // words 64..90 of the 128-word slot (kCsLs*).
+//
+// M5.5 step 1 water refraction (WATER_REFR=1 on top of WATER_SHADOWS;WATER_LS, rt_water_refraction on when
+// the water pipelines were created: 104-byte records with the FS's screen-space refraction sample Refr and
+// its weight 1 - a = dC/dRefr, common/water_compose.h kRecordBytesRefr). The audited water FS see the bed
+// through a screen-space sample of the pre-water colour copy (set 2 b4) at the pixel itself plus a small
+// wave offset: no Snell bending, so the bed is seen where the VIEW ray meets it. Here one ray along
+// refract(-V, N, 1 / n) (the FS's own N; n from the FS's own F0, water 1.326) into the scene TLAS; where
+// its hit resolves on screen (tier (a), as the reflection) the same colour copy is read there (bilinear,
+// the forward pass's own copy, bound at 68): C' = max(C + (1 - a) (Copy(hit) - Refr), 0). The medium is
+// the FS's (its opacity a over the view-depth difference); hidden, off-screen, miss and aborted rays keep
+// Refr. rt_debug 28: the view. Statistics: words 96..119 of the slot (kCsRr*).
 #include "../gi/gi_common.hlsli"
 #include "rt_common.hlsli"
 #ifdef WATER_LS
@@ -81,8 +92,13 @@ struct ComposeParams {
 [[vk::binding(64, 0)]] RWByteAddressBuffer cCam;                                     // water_copy: CameraCB + ViewportCB
 [[vk::binding(66, 0)]] RWByteAddressBuffer cRec;                                     // the FS's records
 [[vk::binding(67, 0)]] [[vk::image_format("r11g11b10f")]] RWTexture2D<float3> target;   // the forward water target
+#ifdef WATER_REFR
+[[vk::binding(68, 0)]] Texture2D<float4> wCopy;   // the water draw's colour copy (its set 2 b4: the FS's Refr source)
+#endif
 
-#if defined(WATER_LS)
+#if defined(WATER_REFR)
+static const uint kHeaderBytes = 64u, kRecordBytes = 104u;  // common/water_compose.h kRecordBytesRefr
+#elif defined(WATER_LS)
 static const uint kHeaderBytes = 64u, kRecordBytes = 96u;   // common/water_compose.h kRecordBytesLs
 #elif defined(WATER_SHADOWS)
 static const uint kHeaderBytes = 64u, kRecordBytes = 40u;   // common/water_compose.h kRecordBytesSun
@@ -94,7 +110,9 @@ static const uint kVpOffset = 512u;                         // cCam: CameraCB (2
 // Group-reduced statistics (words 1..31; word 0 is one add per dispatch): cstat / csum64 add a
 // wave's count / sum into gsStat, cstat_flush (after a group barrier every thread reaches) adds the
 // group's non-zero words to cStats, with the carry into the high word for the 64-bit sums.
-#if defined(WATER_LS)
+#if defined(WATER_REFR)
+static const uint kGsWords = 120u;  // common/water_compose.h kCsRrWords
+#elif defined(WATER_LS)
 static const uint kGsWords = 91u;   // common/water_compose.h kCsLsWords
 #elif defined(WATER_SHADOWS)
 static const uint kGsWords = 44u;   // common/water_compose.h kCsSunWords
@@ -117,9 +135,16 @@ void cstatn(uint word, uint n) {
   const uint s = WaveActiveSum(n);
   if (WaveIsFirstLane() && s != 0u) InterlockedAdd(gsStat[word], s);
 }
+#ifdef WATER_REFR
+bool is_sum_lo(uint w) {   // + the sun sums, the local sums 80..88 and the refraction sums 108..118
+  return ((w >= 16u && w <= 26u) || w == 40u || w == 42u || (w >= 80u && w <= 88u) || (w >= 108u && w <= 118u)) &&
+         (w & 1u) == 0u;
+}
+#else
 bool is_sum_lo(uint w) {   // + the sun sums and the local sums 80..88
   return ((w >= 16u && w <= 26u) || w == 40u || w == 42u || (w >= 80u && w <= 88u)) && (w & 1u) == 0u;
 }
+#endif
 #elif defined(WATER_SHADOWS)
 bool is_sum_lo(uint w) { return ((w >= 16u && w <= 26u) || w == 40u || w == 42u) && (w & 1u) == 0u; }   // + the sun sums
 #else
@@ -190,6 +215,20 @@ uint ls_check_bin(float3 sum, float3 rec) {
   if (!(mx >= 6.103515625e-05)) return 0u;
   const float r = err / mx;
   return r <= (1.0 / 1024.0) ? 1u : r <= 0.1 ? 2u : 3u;
+}
+#endif
+#ifdef WATER_REFR
+// The colour copy at uv (viewport [0, 1]), bilinear between texel centres (the copy has the target's
+// size: checked by the caller), as the FS's own linear sample of it.
+float3 copy_bilinear(float2 quv) {
+  const float2 x = quv * float2(pc.full) - 0.5;
+  const float2 f = floor(x), w = x - f;
+  const int2 i = int2(f), hi = int2(pc.full) - 1;
+  const float3 c00 = wCopy.Load(int3(clamp(i, int2(0, 0), hi), 0)).rgb;
+  const float3 c10 = wCopy.Load(int3(clamp(i + int2(1, 0), int2(0, 0), hi), 0)).rgb;
+  const float3 c01 = wCopy.Load(int3(clamp(i + int2(0, 1), int2(0, 0), hi), 0)).rgb;
+  const float3 c11 = wCopy.Load(int3(clamp(i + int2(1, 1), int2(0, 0), hi), 0)).rgb;
+  return lerp(lerp(c00, c10, w.x), lerp(c01, c11, w.x), w.y);
 }
 #endif
 
@@ -424,8 +463,74 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const bool lsocc = nOcc != 0u;
   const float3 Rls = lsocc ? Fl * lsRem : 0.0.xxx;   // F sum_k (1 - V_k) c_k
   const uint lsbin = lswalk ? ls_check_bin(lsSum, Lrec) : 0u;
+#ifdef WATER_REFR
+  // M5.5 step 1: the FS's screen sample Refr replaced by the colour copy where the refracted ray's hit is.
+  uint2 r7 = 0u;
+  if (has) r7 = cRec.Load2(at + 96u);   // w24, w25
+  const float2 rr01 = f16tof32(uint2(r7.x, r7.x >> 16)), rr2w = f16tof32(uint2(r7.y, r7.y >> 16));
+  const float3 Refr = float3(rr01, rr2w.x);
+  const float Rw = rr2w.y;   // 1 - a = dC/dRefr
+  const bool rr_on = (cp.a.w & 8u) != 0u;   // kFlagRefr: rt_water_refraction
+  uint cw = 0u, chh = 0u;
+  wCopy.GetDimensions(cw, chh);
+  const bool copy_ok = cw == pc.full.x && chh == pc.full.y;
+  const bool rr_words = all(isfinite(Refr)) && all(Refr >= 0.0) && isfinite(Rw) && Rw >= 0.0 && Rw <= 1.0;
+  const bool rr_valid = rr_on && valid && rr_words;
+  const bool rr_rec = rr_valid && Rw > 0.0 && copy_ok;
+  // n from the FS's own F0 (w11 high half; common/water_compose.h ior_from_f0): water 0.0196 -> 1.326.
+  const float rf0 = f2f0.y;
+  const bool has_n = rf0 >= 0.0 && rf0 < 1.0;
+  const float rsf = sqrt(saturate(rf0));
+  const float3 Tdir = has_n ? refract(-V, N, (1.0 - rsf) / (1.0 + rsf)) : 0.0.xxx;   // eta = 1 / n
+  const bool rtraced = rr_rec && above && has_n && any(Tdir != 0.0);
+  uint rtier = 0u;
+  float3 Lc = 0.0.xxx;
+  float rshift = 0.0;
+  if (rtraced) {
+    g_rt_pass = kRtPassRefl;
+    const float rpa = pixel_angle(uv);
+    RtCone rcone = {t * rpa, rpa};   // the scene TLAS has no water: the ray starts at the surface
+    bool raborted;
+    if (!all(isfinite(P)) || !all(isfinite(Tdir))) {
+      rtier = 6u;
+    } else {
+      const float th = rt_closest(P, Tdir, pc.rf_tmax, rcone, raborted);
+      if (raborted) rtier = 5u;
+      else if (th < 0.0) rtier = 4u;
+      else {
+        const float3 H = P + Tdir * th;
+        float2 quv;
+        float qd;
+        const bool onscreen = project(frustum_inverse(), H, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
+        rtier = 3u;
+        if (onscreen) {
+          rtier = 2u;
+          const int2 qp = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
+          const float sd = gDepth.Load(int3(qp, 0));
+          if (sd > 0.0) {
+            const float3 Pq = ray_at((float2(qp) + 0.5) / float2(pc.full)) * sd;
+            float3 ngq = depth_geo_normal(qp, Pq);
+            if (dot(ngq, Pq) > 0.0) ngq = -ngq;   // towards the camera
+            // The copy shows at qp the surface the ray hit (the bed, a submerged wall, a wading leg): its
+            // colour as the FS's own Refr source holds it.
+            if (depth_same_surface(qp, qd, sd, ngq, false, 0.0, 1.0) && dot(ngq, Tdir) < 0.0) {
+              rtier = 1u;
+              Lc = copy_bilinear(quv);
+              rshift = length(quv * float2(pc.full) - (float2(fp) + 0.5));
+            }
+          }
+        }
+      }
+    }
+  }
+  const bool rr_hit = rtier == 1u && all(isfinite(Lc));
+  const float3 Rr = rr_hit ? Rw * (max(Lc, 0.0) - Refr) : 0.0.xxx;   // (1 - a) (Copy(hit) - Refr)
+  const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx) - Rls + Rr;
+  const float3 Cn = composed || occluded || lsocc || rr_hit ? max(Cu, 0.0) : Ct;
+#else
   const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx) - Rls;
   const float3 Cn = composed || occluded || lsocc ? max(Cu, 0.0) : Ct;
+#endif
 #else
   const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx);
   const float3 Cn = composed || occluded ? max(Cu, 0.0) : Ct;
@@ -501,6 +606,27 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   csum64(86, lum(Fl * Lrec), lsbin != 0u);
   csum64(88, max(df2b.y, 0.0), lsrec);
 #endif
+#ifdef WATER_REFR
+  // common/water_compose.h kCsRr*.
+  cstat(96, rr_rec);
+  cstat(97, rr_valid && Rw == 0.0);
+  cstat(98, rr_on && valid && !rr_words);
+  cstat(99, rtraced);
+  cstat(100, rr_hit);
+  cstat(101, rtraced && rtier == 2u);
+  cstat(102, rtraced && rtier == 3u);
+  cstat(103, rtraced && rtier == 4u);
+  cstat(104, rtraced && (rtier == 5u || rtier == 6u || (rtier == 1u && !rr_hit)));
+  cstat(105, rr_rec && !rtraced);
+  cstat(106, rr_hit && any(Cu < 0.0));
+  cstat(107, rr_valid && Rw > 0.0 && !copy_ok);
+  csum64(108, lum(Rw * Refr), rr_hit);
+  csum64(110, lum(Rw * max(Lc, 0.0)), rr_hit);
+  csum64(112, lum(Rw * Refr), rr_rec);
+  csum64(114, rshift, rr_hit);
+  csum64(116, Rw, rtraced && rtier == 2u);
+  csum64(118, Rw, rtraced);
+#endif
   cstat_flush(gi);
   if (!has) return;
   // rt_debug 25, over every record of this pass (exact codes, no tonemap of ours):
@@ -539,6 +665,24 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     return;
   }
 #endif
+#ifdef WATER_REFR
+  // rt_debug 28, over every record of this pass: the refracted hit composed = green (its weight 1 - a, at
+  // least 0.15), hidden = red, off screen = blue, miss = magenta, aborted = white, not traced (N.V <= 0,
+  // no index) = dark cyan, opaque water (1 - a = 0) = dark grey, no usable copy = orange, not owned /
+  // invalid = yellow.
+  if (cp.a.z == 28u) {
+    target[fp] = !own || !valid || !rr_words ? float3(1, 1, 0)
+               : Rw == 0.0 ? float3(0.08, 0.08, 0.08)
+               : !copy_ok ? float3(1, 0.4, 0)
+               : !rtraced ? float3(0, 0.25, 0.25)
+               : rr_hit ? float3(0, max(Rw, 0.15), 0)
+               : rtier == 2u ? float3(0.8, 0, 0)
+               : rtier == 3u ? float3(0, 0, 0.8)
+               : rtier == 4u ? float3(0.6, 0, 0.6)
+               : float3(1, 1, 1);
+    return;
+  }
+#endif
   if (cp.a.z == 25u) {
     const float rel = d / max(lum(Ct), 1e-4);
     const float3 c = !own || !valid ? float3(1, 1, 0)
@@ -546,7 +690,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
                    : composed ? float3(max(-rel, 0.0), max(rel, 0.0), 0.0)
                    : float3(0, 0, 0.3);
     target[fp] = c;
-#if defined(WATER_LS)
+#if defined(WATER_REFR)
+  } else if (composed || occluded || lsocc || rr_hit) {   // each term only where its flag traced it
+    target[fp] = Cn;
+  }
+#elif defined(WATER_LS)
   } else if (composed || occluded || lsocc) {   // each term only where its flag traced it
     target[fp] = Cn;
   }

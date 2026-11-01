@@ -1,5 +1,20 @@
 # BG3RTX progress - 2026-11-01 (main f31c62b, ABI 25)
 
+## M5.5 step 1 water refraction (offline, READY_FOR_LIVE, 2026-11-01; on top of M5.4b)
+
+- Medium mapped (PLAN_M5_WATER M5.5): the water FS's transmittance is 1 - a, a grey quadratic ramp over the
+  camera-axis depth difference d (not a path length); the bed is the pre-water colour copy at the pixel plus a wave
+  jitter (no Snell); caustics are a flipbook added to the surface; the reflection is scaled by a. S8 sea opaque
+  (template OpacityBlendDistance 0), pool transmissive (OpacityBlendDistance 4).
+- S8 offline model (replay pack depth): refracted rays of the transmissive pool 65% screen hit, 35% hidden (8.9%
+  transmission-weighted), 0% off screen; Snell shift 52 px median. Off-screen rays change nothing at S8.
+- `rt_water_refraction=0` (GUI `exp_water_refraction`; on needs a restart, off is live): 104-B records add the FS's
+  Refr and 1 - a; the compose traces refract(-V, N, 1/n) (n 1.326 from the FS's own F0) and reads the water draw's
+  colour copy at the hit: C' = max(C + (1 - a) (Copy(hit) - Refr), 0); unresolved rays keep Refr.
+- Key off: plain, sun, LS compose SPIR-V byte-identical; M5.3 / M5.4 / M5.4b patches word for word (FNV pinned);
+  refraction patches pass spirv-val. Test 4j (swap = FS with Refr replaced, identity bit for bit, Snell). 75 CPU
+  CTests. Expected cost < 0.05 ms. Live: job `m5w6` (S8, OFF/ON/OFF, rt_debug 28); dry run passes (21.1 min, 1.31 GB).
+
 ## M5.4b water local-light shadows (offline, READY_FOR_LIVE, 2026-11-01; on top of M5.4)
 
 - `rt_water_ls_shadows=0` (GUI `exp_water_ls_shadows`; on needs a restart, off is live). The patched FS also stores
@@ -37,6 +52,7 @@
   tiles; the PT sun from the game's LUT (`PT_SUN_LUT`). Self-test 13-16 closed form, 76 CTests pass.
 - Pending: one `rc1-replay-s8-fg2` run (expect line `lighting inputs: 19 of 19 slots bound`); its post
   step prints the S8 native / PT far-field ratio. No real pack with these inputs exists yet.
+
 ## M5.4 water sun shadows (offline, READY_FOR_LIVE, 2026-11-01)
 
 - Finding: the audited water FS (7b44a567, 99c1fcef, c4e92ccd) light the water with sun visibility 1. Their sun

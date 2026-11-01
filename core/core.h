@@ -29,7 +29,10 @@ bool em_check_due();
 // draw's own set 2 b0, b10, b11, b12, b26, b27, b28 (its froxel light list, queried at the draw), and
 // `lights_ok` whether all seven were captured with the expected types.
 inline constexpr uint32_t kWaterLsBindings[7] = {0, 10, 11, 12, 26, 27, 28};
-bool core_water_pass_take(VkCommandBuffer cmd, Bg3Binding* lights = nullptr, bool* lights_ok = nullptr);
+// M5.5 (rt_water_refraction): `copy` receives the first water draw's set 2 b4, the colour copy its FS
+// samples as the refraction (a sampled image), `copy_ok` whether it was captured.
+bool core_water_pass_take(VkCommandBuffer cmd, Bg3Binding* lights = nullptr, bool* lights_ok = nullptr,
+                          Bg3Binding* copy = nullptr, bool* copy_ok = nullptr);
 
 // water.cpp (M5.2 water reflections, rt_water_reflections; docs/PLAN_M5_WATER.md): the trace in
 // run_post (after the views), its views (rt_debug 21-24) at the end of the forward water pass.
