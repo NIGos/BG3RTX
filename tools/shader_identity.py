@@ -349,7 +349,10 @@ class Cache:
             return None
         sha, size = row
         # 'at' = last use: pruning keeps what was used recently.
-        self.db.execute("UPDATE compiled SET at=? WHERE key=?", (time.time(), key))
+        try:  # LRU touch is best effort: never fail a run because another process holds the lock
+            self.db.execute("UPDATE compiled SET at=? WHERE key=?", (time.time(), key))
+        except sqlite3.OperationalError:
+            pass
         if sha in self._verified:
             return sha
         p = self.blob_path(sha)
