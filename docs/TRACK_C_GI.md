@@ -179,6 +179,30 @@ S6 "non-finite" alarm of m4p3 (2026-11-01, branch worktree-agent-ad96013fbc66f09
   the hit-GI dispatch's alpha set from `rt_hit_material_use` instead of `b.alpha`, i.e. occlusion; and
   the scene drift between shots, the em-off pair alone spreads 0.80%).
 
+S6 darkening (m4p3 112657: step-gi -1.05%, +sun -1.82%, +inst -3.10%; 2026-11-01, branch
+worktree-agent-a128d3e3a3182b5e8, offline): the forge's animated lava, not the bundle (live confirmation pending).
+- Shader, offline: the S8 replay pack run with the base pass (`gi/gi_trace_rt.hlsl`) and the hit variant on the
+  same rays (`py -3 -m tools.gi_hit_invariant`): giRaw.a bit-equal on 100% of 2.73 M pixels, mean luminance +0.0755%,
+  6 pixels lower beyond the half rounding (rays the two compiled shaders classify differently at the screen hit's
+  depth test, both directions; lost 3.0e-8 vs added 6.8e-6 per pixel). So the occlusion is the key-off one: the
+  material set (`alpha_clone_hit_set`) copies bindings 0-3, 6-11 and 19 of the scene's alpha set, the traversal is
+  the same. Excluded: a different alpha set (more occluded rays) and an ambient term removed at qualified hits.
+  Also excluded, by reading: lost lava glow. fallback0 adds no bounce and screen hits read prevRadiance without the
+  effects target, so a shaded hit replaces 0, never a glow.
+- The steps cannot carry their own darkening: in diag-on the sun added 0.75 against 11208 for the point/spot
+  term (indoors), and the instanced rows are 0 at S6 (`wind 0 rows, 2S 0 rows`). The +inst shot also includes
+  rf_hit_shade (step-rf had no trace), whose tier (a) check is brighter (L_b / L_a 1.09).
+- Where it sits (the traces' PNG previews decoded to linear, `tools/preview_energy_split.py`; decoded frame means
+  within 0.07% of the float means): lava pixels hold 54.5% of the frame's luminance. Of inst's -3.10%, -2.56% is
+  lava; the rest is -1.07% relative, against -0.87% / +0.87% for the two OFF shots on the same pixels (the frame
+  spread 0.07% was a cancellation: lava +0.32% against the rest -0.40%). The lava change follows the game's glow
+  buffer (pass 48eedb24, a game pass before the lighting that reads no output of ours we know of): OFF +8% / -8%, gi -5%, sun -16%, inst -25%, ON shots
+  -6 to -24%. The m4p3 step shots also came 1-2 frames after a 4 s DXC compile of each new variant (1-2 fps,
+  a 5 s GPU stall before step-inst): the warmup compiled only the all-on variant.
+- So at S6 two OFF shots cannot set the band: the scene moves by about 1% per shot. Live check prepared,
+  not run: `tools/live_batches/m4_promotion/s6_diag` (one S6 replay pack for the offline invariant, 5 OFF / 4 ON
+  interleaved shots with every variant precompiled, gi_debug=3 and 2 pairs; README has the predictions).
+
 ## Sun at qualified hidden hits (`gi_hit_sun=0`, M4.3, 2026-11-01; offline, READY_FOR_LIVE)
 
 Key `gi_hit_sun=0` (live; GUI Experimental "Sunlit hidden-surface bounce", `exp_gi_hit_sun`,
