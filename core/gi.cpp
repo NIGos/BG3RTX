@@ -22,6 +22,7 @@
 #include <mutex>
 #include "../common/native_hair_origin.h"
 #include "../common/shader_variant.h"
+#include "../common/ls_exact_k.h"
 #include "../common/native_hit_capability.h"
 #include <unordered_map>
 #include <unordered_set>
@@ -123,7 +124,8 @@ struct Push {
   float rt_ao_radius;   // rt_hit_emission dispatches only: rt_em_tol (native_hit_emission.hlsli HIT_EM_TOL); else unused, 0
   uint32_t rt_ao_rays;  // hit_ao_rays: AO rays at gi_hit_direct / rf_hit_shade hits (native_hit_direct.hlsli native_hit_ao)
   uint32_t ls_kmode, sharc_fx;   // sharc_fx: sharc_inject.hlsl, the D-EM effects target is bound (49); ls_kmode: rt_hit_emission
-                                 // dispatches only, bit 0 screen hits too (HIT_EM_FLAGS); else unused, 0 (ls_k removed 2026-10-31)
+                                 // dispatches: bit 0 screen hits too (HIT_EM_FLAGS); the D-LS dispatch: ls_k / ls_rest_samples
+                                 // (common/ls_exact_k.h, read only by the LS_K variants); else 0
   float gi_rt_radius, gi_rt_tol;
   uint32_t gi_rt_fallback, rt_stats;
   float sun_radius;
@@ -234,9 +236,13 @@ Pipe g_ls_full, g_ls_ref, g_ls_check, g_ls_full_check;
 // bound as set 3. Its pipeline layout holds the game's set layout, so it is rebuilt if that changes.
 Pipe g_ls_box, g_ls_full_box;
 Pipe g_ls_native_full, g_ls_native_full_box;
+// D-LS exact-k + RIS remainder (ls_k > 0, docs/TRACK_D_LOCAL_LIGHTS.md 9.11): the same four passes
+// compiled with LS_K=1 (gi/rt_local_shadows*_k.hlsl); with ls_k=0 they are never built.
+Pipe g_ls_k, g_ls_box_k, g_ls_full_k, g_ls_full_box_k;
 VkPipelineLayout g_ls_box_layout = VK_NULL_HANDLE;
 VkDescriptorSetLayout g_ls_box_game = VK_NULL_HANDLE;
 bool g_ls_box_missing_logged = false, g_ls_box_active = false;
+bool g_ls_k_active = false, g_ls_k_missing_logged = false;   // the D-LS dispatch ran an LS_K variant (ls_k > 0)
 LslFrame g_lsl{};   // this frame's upload (bindings 45, 46)
 bool g_lsl_ok = false;
 SunTrustFrame g_sunt{};   // rt_sun_replace: this frame's trust slot (bindings 47, 48)
@@ -721,7 +727,7 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
   VkDescriptorSet unused;
   if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
   if (g_ls_box_layout) {
-    for (Pipe* p : {&g_ls_box, &g_ls_full_box, &g_ls_native_full_box}) {
+    for (Pipe* p : {&g_ls_box, &g_ls_full_box, &g_ls_native_full_box, &g_ls_box_k, &g_ls_full_box_k}) {
       host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
       *p = Pipe{};
     }
@@ -1005,7 +1011,11 @@ static_assert(kGiSunFirst == 320, "native_hit_sun.hlsli NATIVE_HIT_SUN_STAT_BASE
 // added luminance x 1024 (clamped at 64); excluded-family hits, unvalidated-family hits, clamped values.
 constexpr uint32_t kHitEmFirst = kGiSunFirst + kGiSunCount, kHitEmCount = 19;
 static_assert(kHitEmFirst == 331, "native_hit_emission.hlsli kHitEmStatFirst 331");
-constexpr uint32_t kStatsCounters = kHitEmFirst + kHitEmCount; //331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+// [350..355] D-LS exact-k (ls_k, ls_stats=1; common/ls_exact_k.h kLkStatFirst): candidates, px over the cap,
+// remainder lights, remainder rays, their occluded ones, the remainder's weight share on capped px (x256).
+constexpr uint32_t kLsKFirst = kHitEmFirst + kHitEmCount, kLsKCount = bg3::ls_exact_k::kLkStatCount;
+static_assert(kLsKFirst == bg3::ls_exact_k::kLkStatFirst, "common/ls_exact_k.h kLkStatFirst 350");
+constexpr uint32_t kStatsCounters = kLsKFirst + kLsKCount; //350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
@@ -1338,6 +1348,17 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               g_ls_box_active ? "all pixels including projectors" : "px without projector lights", t[21] / px / 256.0, t[22] / px / 256.0,
               t[15] / px / 256.0, t[21] ? 100.0 * t[15] / double(t[21]) : 0.0, t[23] / px / 256.0, t[21] ? 100.0 * t[23] / double(t[21]) : 0.0, 100.0 * t[20] / px, g_ls_raw[0], g_ls_raw[1], g_ls_raw[2],
               g_ls_raw[3], t[31] / px, int(g_ls_box_active));
+  }
+  if (t[16] && t[kLsKFirst]) {   // D-LS exact-k (rt_local_shadows.hlsl ls_main_k; TRACK_D_LOCAL_LIGHTS.md 9.11)
+    const double px = double(t[16]), hit = double(t[kLsKFirst + 1] ? t[kLsKFirst + 1] : 1),
+                 rr = double(t[kLsKFirst + 3] ? t[kLsKFirst + 3] : 1);
+    host->log("ls exact-k stats (%u frames): ls_k %d, ls_rest_samples %d: traced lights (ls_k=0 would trace) %.2f/px; "
+              "rays %.2f/px (exact %.2f, remainder %.2f), occluded %.2f/px; over the cap (k-hit) %.1f%% of px; "
+              "remainder %.2f lights/px, %.2f per capped px; remainder rays occluded %.1f%%; remainder share of the "
+              "weight on capped px %.1f%%",
+              g_stats_n, host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1), t[kLsKFirst] / px, t[19] / px,
+              (t[19] - t[kLsKFirst + 3]) / px, t[kLsKFirst + 3] / px, t[20] / px, 100.0 * t[kLsKFirst + 1] / px,
+              t[kLsKFirst + 2] / px, t[kLsKFirst + 2] / hit, 100.0 * t[kLsKFirst + 4] / rr, 100.0 * t[kLsKFirst + 5] / 256.0 / hit);
   }
   if (t[16] && (t[200] || t[208])) {
     const double px = double(t[16]);
@@ -2131,9 +2152,9 @@ void ls_timing_collect() {
   std::sort(v.begin(), v.end());
   std::sort(j.begin(), j.end());
   host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
-            "samples %d, soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d, box %d)",
+            "samples %d, exact-k %d + %d (variant %d), soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d, box %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
-            host->cfg_int("ls_samples", 0),
+            host->cfg_int("ls_samples", 0), host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1), int(g_ls_k_active),
             host->cfg_int("ls_soft", -1), host->cfg_int("ls_shadowed", 3),
             host->cfg_int("ls_debug", 0), host->cfg_int("ls_lights", 1), g_lsl_ok ? "ran" : "off",
             host->cfg_int("ls_owners", 0x1F), host->cfg_int("ls_impl", 1), int(g_ls_box_active));
@@ -2571,7 +2592,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     // The default-settings variant, or the one with every mode (more registers, docs/TRACK_D_RT.md 9.9).
     const bool full = lp.ls_samples || lp.ls_debug || lp.ls_stats;
     VkPipeline lsp = g_ls.pipeline;
-    bool box = false;
+    bool box = false, kv = false, k_ran = false;
     lp.ls_pass = host->cfg_int("ls_check", 0) == 2 ? 2u : 0u;   // reference against itself
     if(s.native_direct_validation) {
       lsp=VK_NULL_HANDLE;
@@ -2589,10 +2610,19 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     } else if (!host->cfg_int("ls_impl", 1)) {
       if (refresh(g_ls_ref, "gi/rt_local_shadows_ref.hlsl", g_ls_layout)) lsp = g_ls_ref.pipeline;
     } else {
+      // ls_k > 0 (TRACK_D_LOCAL_LIGHTS.md 9.11): the LS_K twin of the variant below; ls_k=0 never builds it.
+      // A twin that fails to build leaves the every-light variant (same expected output, logged).
+      kv = bg3::ls_exact_k::use_variant(host->cfg_int("ls_k", 0), int(lp.ls_samples), int(lp.ls_debug), 0, 1, false);
+      if (kv) lp.ls_kmode = bg3::ls_exact_k::kmode(host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1));
       if (host->cfg_int("ls_box", 0)) {
         if (s.box_ready && ensure_ls_box_layout(s.game_set1_layout)) {
+          Pipe& kvariant = full ? g_ls_full_box_k : g_ls_box_k;
+          if (kv && refresh(kvariant, full ? "gi/rt_local_shadows_full_box_k.hlsl" : "gi/rt_local_shadows_box_k.hlsl", g_ls_box_layout)) {
+            lsp = kvariant.pipeline;
+            box = k_ran = true;
+          }
           Pipe& variant = full ? g_ls_full_box : g_ls_box;
-          if (refresh(variant, full ? "gi/rt_local_shadows_full_box.hlsl" : "gi/rt_local_shadows_box.hlsl", g_ls_box_layout)) {
+          if (!box && refresh(variant, full ? "gi/rt_local_shadows_full_box.hlsl" : "gi/rt_local_shadows_box.hlsl", g_ls_box_layout)) {
             lsp = variant.pipeline;
             box = true;
           }
@@ -2602,7 +2632,20 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
           g_ls_box_missing_logged = true;
         }
       }
-      if (!box && full && refresh(g_ls_full, "gi/rt_local_shadows_full.hlsl", g_ls_layout)) lsp = g_ls_full.pipeline;
+      Pipe& kvariant = full ? g_ls_full_k : g_ls_k;
+      if (!box && kv && refresh(kvariant, full ? "gi/rt_local_shadows_full_k.hlsl" : "gi/rt_local_shadows_k.hlsl", g_ls_layout)) {
+        lsp = kvariant.pipeline;
+        k_ran = true;
+      } else if (!box && full && refresh(g_ls_full, "gi/rt_local_shadows_full.hlsl", g_ls_layout)) lsp = g_ls_full.pipeline;
+    }
+    k_ran = k_ran && !s.pan;   // the pan capture below replaces the pass (pan_local.hlsl, LS_K=0)
+    if (k_ran != g_ls_k_active || (kv && !k_ran && !s.pan && !g_ls_k_missing_logged)) {
+      g_ls_k_active = k_ran;
+      const bool missing = kv && !k_ran && !s.pan;
+      g_ls_k_missing_logged = missing;
+      host->log("ls exact-k: %s (ls_k %d, ls_rest_samples %d%s)", k_ran ? "active" : "inactive", host->cfg_int("ls_k", 0),
+                host->cfg_int("ls_rest_samples", 1), missing ? "; LS_K pipeline UNAVAILABLE, tracing every light" : "");
+      g_ls_ms.clear();g_ls_join_ms.clear();
     }
     if (box != g_ls_box_active) {
       g_ls_box_active = box;
@@ -2896,6 +2939,7 @@ void gi_release() {
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
   for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
+                  &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_rf_shade, &g_rf_shade_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
     for (VkPipeline variant : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant);

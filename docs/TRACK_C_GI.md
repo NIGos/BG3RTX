@@ -175,6 +175,28 @@ core only with the key on: key off runs the unchanged `gi_hit_direct` SPIR-V.
 - Live gate: as M4.1 at S3 Campsite; cost = `gi: trace pass` GPU median ON minus OFF (one more
   ray per supported hit, expected +0.1 ms).
 
+## `gi_bounce_spec`: not re-added (review 2026-11-01)
+
+What it did (removed dbbe0fc, 2026-10-31): `prev_bounce_at` returned last frame's full radiance
+(diffuse + the specular the camera saw) as the radiance a GI ray picks up at a screen hit,
+instead of its diffuse part `rgb x a`. Verdict: **not physically valid, and its valid form
+already exists.**
+- Wrong direction: specular radiance leaves the hit towards the camera. A GI receiver sees
+  the hit from another direction, where the hit's lobe has a different value (usually far
+  smaller; the sun glints are the extreme case). Reusing it is view-dependent radiance applied
+  to the wrong outgoing direction, not a BRDF split. The measured symptoms were that error:
+  sparse bright 1-spp bounce hits (QA S3 2.3 per mille), the S14 halo of moving highlights
+  (flicker 2.84 per mille, fail; docs/QA.md).
+- The valid term, the hit's specular towards the receiver with one Fresnel split
+  (diffuse + specular <= 1, white furnace max 0.968, GPU fixture 6c), is what `hd_scatter`
+  (FresnelBlend) evaluates at qualified hidden hits with `outgoing = -ray direction`
+  (`gi_hit_direct`, `gi_hit_sun`). No double counting with D-RF: D-RF is the receiver's own
+  specular; this path is receiver diffuse <- hit specular.
+- Open gap (a new feature, not a re-add): screen hits still bounce only the hit's diffuse,
+  so metals (no diffuse) bounce nothing from screen hits. The valid fix evaluates the hit's
+  lights through `hd_scatter` at screen hits too (a light loop and shadow rays per GI hit:
+  the cost of `gi_hit_direct` on every hit). Candidate for the M4 backlog, not started.
+
 ## Next
 - QA and defaults for the radiance cache (above); its traced update (v2).
 - ReSTIR-style reuse.

@@ -410,6 +410,20 @@ static void test_rendering_experiments() {
       CHECK(unmet_key_need(*em,0,em_sources).empty());
     }
   }
+  // ls_k (TRACK_D_LOCAL_LIGHTS 9.11): off / k1 / k2, off in every preset, live, needs Local light shadows Full.
+  {
+    const auto* lk=find_knob("exp_ls_exact_k");CHECK(lk!=nullptr);
+    if(lk){
+      CHECK(lk->experimental);CHECK(choice_count(*lk)==3);CHECK_EQ(code_default("ls_k"),"0");CHECK_EQ(code_default("ls_rest_samples"),"1");
+      for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,"ls_k"),"0");CHECK(lk->preset[p]==0);}
+      for(int c=0;c<=2;++c){KVList pairs;knob_kvs(*lk,c,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;
+        CHECK_EQ(get(on,"ls_k"),c==0?"0":c==1?"1":"2");CHECK_EQ(get(on,"ls_rest_samples"),"1");CHECK(knob_value(*lk,on)==c);}
+      CHECK(!key_change_needs_restart("ls_k","0","1"));
+      auto v=preset_values(kHigh);v[knob_index("exp_ls_exact_k")]=1;CHECK(unmet_need(*lk,1,v).empty());   // High: Full local shadows
+      v[knob_index("local_shadows")]=1;CHECK(!unmet_need(*lk,1,v).empty());   // Fast (RIS) cannot take it
+      CHECK(!unmet_need(*lk,2,preset_values(kLow)).empty());
+    }
+  }
   CHECK(!key_change_needs_restart("rt_native_scalp","0","1"));
   CHECK(find_knob("exp_native_scalp")->apply==Apply::Hitch);
   Gpu gpu{0x10de,0x2b85,"NVIDIA GeForce RTX 5090",true,true};

@@ -24,6 +24,8 @@
 #define EM_SET 4
 #include "../shaders/rt/em_common.hlsli"
 #include "../shaders/rt/native_hit_emission.hlsli"
+// D-LS exact-k (case 8, ls_k): the selection header gi/rt_local_shadows*_k.hlsl include (no scene).
+#include "../common/ls_exact_k.h"
 
 // Case record, 80 bytes (FxCase in the .cpp).
 //   0 p, 12 mode, 16 n, 28 key, 32 v (outgoing), 44 footprint, 48 albedo, 60 roughness,
@@ -35,9 +37,14 @@
 // Mode 6 (emission): p is the ray origin, v its unit direction, c48 the absolute camera (em_shift), footprint
 //   the cone width; the main TLAS gives t (rt_closest_hit), then native_hit_emission: a.rgb its radiance,
 //   12 its status (kHe*), b.x the main hit t, b.y 1 if aborted, 28 the record index; material status 0.
+// Mode 7 (exact-k selection, common/ls_exact_k.h): six light weights in c48.xyz, roughness, metalness,
+//   reflectance (entries 0-5; w <= 0: no candidate), K = channel & 15, NR = channel >> 4, uniforms p.xy.
+//   12 the exact entries (4 bits each, 0xF empty), 28 the samples (8 bits each, 0xFF empty), 44 candidates;
+//   a.xy the samples' factors (0 empty), a.z sum_R w; material status 0.
 [[vk::binding(60, 0)]] ByteAddressBuffer fxCases;
 [[vk::binding(61, 0)]] RWByteAddressBuffer fxOut;
-static const uint kFxDirect = 0u, kFxSun = 1u, kFxAo = 2u, kFxFurnace = 3u, kFxCombined = 4u, kFxSunDir = 5u, kFxEmission = 6u;
+static const uint kFxDirect = 0u, kFxSun = 1u, kFxAo = 2u, kFxFurnace = 3u, kFxCombined = 4u, kFxSunDir = 5u, kFxEmission = 6u,
+                  kFxExactK = 7u;
 
 NativeHitMaterial fx_material(float3 albedo, float rough, float metal, float refl, float3 n, uint channel) {
   NtInput i;
@@ -100,6 +107,20 @@ void main(uint id : SV_DispatchThreadID) {
     const RtHit h = rt_closest_hit(p, v, 100.0, cone);
     const HitEmission e = native_hit_emission(p, v, h.t, p + v * h.t, footprint, c48, HIT_EM_TOL);
     ra = e.radiance; sa = e.status; rb = float3(h.t, h.aborted ? 1.0 : 0.0, 0.0); sb = e.rec;
+    m.status = 0u;   // no material in this mode
+  }
+  if (mode == kFxExactK) {
+    const float w[6] = {c48.x, c48.y, c48.z, rough, metal, refl};
+    const uint K = channel & 15u, NR = channel >> 4;
+    LkSel s = lk_begin(p.x, p.y);
+    for (uint i = 0; i < 6u; ++i)
+      if (w[i] > 0.0) s = lk_add(s, w[i], i, K);
+    s = lk_end(s, NR);
+    sa = 0u; sb = 0u;
+    for (uint q = 0; q < 4u; ++q) sa |= (lk_entry(s, q) == kLkNone ? 15u : lk_entry(s, q)) << (4u * q);
+    for (uint r = 0; r < 2u; ++r) sb |= (lk_entry(s, 4u + r) == kLkNone ? 255u : lk_entry(s, 4u + r)) << (8u * r);
+    ra = float3(lk_entry(s, 4u) == kLkNone ? 0.0 : lk_factor(s, 4u, NR), lk_entry(s, 5u) == kLkNone ? 0.0 : lk_factor(s, 5u, NR), s.rsum);
+    lights = s.n;
     m.status = 0u;   // no material in this mode
   }
   fxOut.Store3(o, asuint(ra)); fxOut.Store(o + 12u, sa);
