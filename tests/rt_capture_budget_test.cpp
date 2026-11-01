@@ -25,6 +25,8 @@ int main(){
  check(effective_mb(kXfbDefaultMb,kXfbDefaultMb,88)==1408); // the hair jobs' hand-set sizes
  check(effective_mb(kCascadeDefaultMb,kCascadeDefaultMb,88)==587);
  check(effective_mb(kXfbDefaultMb,kXfbDefaultMb,24)==384);
+ check(effective_mb(kAlphaDefaultMb,kAlphaDefaultMb,64)==171 && effective_mb(kAlphaDefaultMb,kAlphaDefaultMb,24)==64);
+ check(effective_mb(96,kAlphaDefaultMb,64)==96); // set by hand: kept
  check(effective_mb(kXfbDefaultMb,kXfbDefaultMb,16)==384);
  check(effective_mb(1408,kXfbDefaultMb,64)==1408);
  check(effective_mb(200,kCascadeDefaultMb,64)==200);
