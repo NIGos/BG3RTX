@@ -131,7 +131,10 @@ static void on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   s.draws = p->draw_count;
 }
 
-static void on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* p) { gi_on_pass_begin(cmd, p); }
+static void on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* p) {
+  core_water_pass_take(cmd);   // a stale note (a pass end not seen) never names this pass
+  gi_on_pass_begin(cmd, p);
+}
 static void on_dispatch(VkCommandBuffer cmd, const Bg3DispatchInfo* d) { gi_on_dispatch(cmd, d); }
 static void on_cmd_end(VkCommandBuffer cmd) { gi_on_cmd_end(cmd); }
 static void on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) { gi_on_dispatch_pre(cmd, d); }

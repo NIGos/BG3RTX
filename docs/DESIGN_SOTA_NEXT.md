@@ -317,8 +317,8 @@ whose two children both have importance 0 (smallest probability sum 0.001 in sce
 
 | Key | Default | Meaning |
 |---|---|---|
-| `ls_k` (was `ls_exact_k`, TRACK_D_LOCAL_LIGHTS.md 9.11; removed 2026-10-31, see CONSOLIDATION.md C1) | 0 (measured: k1 −22%, k2 −8% at Grymforge, over budget either way) | Lights traced exactly per pixel; 0 = all (the pass before) |
-| `ls_rest_samples` (was `ls_remainder`; removed 2026-10-31 with `ls_k`) | 1 | 0 drop R (biased, debug only), 1-2 RIS rays; ReSTIR (1b) would be a separate key |
+| `ls_k` (was `ls_exact_k`, TRACK_D_LOCAL_LIGHTS.md 9.11; removed 2026-10-31, re-added 2026-11-01 as the LS_K variant) | 0 (measured: k1 −22%, k2 −8% at Grymforge, over budget either way) | Lights traced exactly per pixel; 0 = all (the pass before) |
+| `ls_rest_samples` (was `ls_remainder`; with `ls_k`) | 1 | 0 drop R (biased, debug only), 1-2 RIS rays; ReSTIR (1b) would be a separate key |
 | `ls_restir_m_max` | 20 | Temporal M cap |
 | `ls_restir_visreuse` | 0 | Bitterli visibility reuse (biased A/B) |
 | `lt_build` | 0 | Build the light BVH every frame |

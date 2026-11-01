@@ -216,6 +216,18 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}}},
    {}, {0, 0, 0, 0}, true},
 
+  {"exp_ls_exact_k", "Local light sampling (exact-k)",
+   "Cost option for interiors with many lights: the strongest 1 or 2 lights of each pixel keep their own "
+   "shadow ray, and one ray is shared by the rest, picked in proportion to their light and weighted so the "
+   "mean brightness is unchanged (unbiased, a little noisier before Ray Reconstruction). Needs Local light "
+   "shadows Full. Look at a lamp-lit inn: the shadows and brightness must match Off. Measured 2026-10-27: "
+   "-22% (k1) of the 0.7 ms pass in Grymforge, about -10% at camp. Quality and cost on this build are unqualified.",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   {{"off", "Off", 0, {{"ls_k", "0"}, {"ls_rest_samples", "1"}}, {}},
+    {"k1", "1 exact light", kCapRayQuery, {{"ls_k", "1"}, {"ls_rest_samples", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 2}}},
+    {"k2", "2 exact lights", kCapRayQuery, {{"ls_k", "2"}, {"ls_rest_samples", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 2}}}},
+   {}, {0, 0, 0, 0}, true},
+
   {"exp_native_scalp", "Native scalp coverage",
    "Uses audited native scalp coverage in ray queries. Needs Full ray-traced geometry. "
    "Unsupported material/input domains keep the existing path. First use may compile shaders. "
@@ -394,7 +406,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 217 keys of bg3rtx.ini, in file order.
+// 219 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -553,6 +565,8 @@ inline constexpr KV kDefaults[] = {
     {"ls_clear", "0.2"},
     {"ls_min_radius", "0"},
     {"ls_samples", "0"},
+    {"ls_k", "0"},
+    {"ls_rest_samples", "1"},
     {"ls_strength", "1.0"},
     {"ls_debug", "0"},
     {"ls_stats", "0"},

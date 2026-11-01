@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 #pragma comment(lib, "vulkan-1.lib")
+#include "../common/ls_exact_k.h"        // case 8: the D-LS exact-k selection (ls_k), as C++ for the reference
 #include "../common/emissive_policy.h"   // em::EmRec and its flags: the record layout the host writes
 
 namespace {
@@ -231,7 +232,7 @@ struct FxCase { float p[3]; uint32_t mode; float n[3]; uint32_t key; float v[3];
 static_assert(sizeof(FxCase) == 80);
 struct FxOut { float a[3]; uint32_t sa; float b[3]; uint32_t sb; float c[3]; uint32_t lights; float ao, factor, unused; uint32_t mstatus; };
 static_assert(sizeof(FxOut) == 64);
-enum { kFxDirect = 0, kFxSun = 1, kFxAo = 2, kFxFurnace = 3, kFxCombined = 4, kFxSunDir = 5, kFxEmission = 6 };
+enum { kFxDirect = 0, kFxSun = 1, kFxAo = 2, kFxFurnace = 3, kFxCombined = 4, kFxSunDir = 5, kFxEmission = 6, kFxExactK = 7 };
 // native_hit_emission.hlsli statuses.
 enum { kHeUsed = 0, kHeNone = 1, kHeExcluded = 2, kHeUnvalidated = 3 };
 constexpr uint32_t kHdOk = 0;
@@ -1020,6 +1021,84 @@ int main(int argc, char** argv) {
         }
         report.line(names[gi], ok && cmp.ok && n > 0, fmt("%.0f rays, worst rel %.2e", n, cmp.worst));
       }
+    }
+    // ---- 8. D-LS exact-k selection (ls_k, common/ls_exact_k.h as gi/rt_local_shadows*_k.hlsl runs it) ----
+    // Six light weights per case, K 1, 2 and 4, NR 1-2, the uniforms on a midpoint grid of N cells (the second an
+    // odd-multiplier permutation of it). Analytic references: the exact set is the K largest weights in list order
+    // (8a, exact); sample j is drawn with p_j = w_j / sum_R w and the estimator's grid mean is the full sum (8b, 8c);
+    // a sample's scaled weight never exceeds sum_R w (8c); the GPU's selection equals the C++ header's (8d).
+    // Grid bound: every reservoir decision resolves its boundary to one cell of the rescaled uniform, so a
+    // probability over |R| decisions is off by at most (|R| + 1) / N. GPU and C++ may differ only in cells that
+    // straddle a boundary (FP32 division of the rescale): at most one per decision and uniform, 2 |R|.
+    {
+      namespace lk = bg3::ls_exact_k;
+      const float sets[][6] = {{0.5f, 3.0f, 0.25f, 1.5f, 0.0f, 2.0f}, {7.0f, 0.01f, 0.02f, 0.03f, 5.0f, 0.0f},
+                               {4.0f, 1.0f, 9.0f, 0.5f, 0.75f, 3.0f}, {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}};
+      const uint32_t combos[][2] = {{1, 1}, {1, 2}, {2, 1}, {2, 2}, {4, 1}};
+      constexpr uint32_t N = 4096;
+      Dispatch d; d.push = default_push();
+      for (const auto& w : sets) for (const auto& c : combos)
+        for (uint32_t g = 0; g < N; ++g) {
+          FxCase cs = make_case({(float(g) + 0.5f) / float(N), (float((g * 2731u) % N) + 0.5f) / float(N), 0}, kFxExactK);
+          cs.c48[0] = w[0]; cs.c48[1] = w[1]; cs.c48[2] = w[2]; cs.rough = w[3]; cs.metal = w[4]; cs.refl = w[5];
+          cs.channel = c[0] | (c[1] << 4);
+          d.cases.push_back(cs);
+        }
+      auto r = run(d);
+      bool exactOk = true, freqOk = true, meanOk = true, boundOk = true, sameOk = true;
+      double worstFreq = 0, worstMean = 0; size_t mismatches = 0, at = 0;
+      for (const auto& w : sets) for (const auto& c : combos) {
+        const uint32_t K = c[0], NR = c[1];
+        std::vector<std::pair<float, uint32_t>> sorted;
+        for (uint32_t i = 0; i < 6; ++i) if (w[i] > 0) sorted.push_back({w[i], i});
+        std::sort(sorted.begin(), sorted.end(), [](auto a, auto b) { return a.first > b.first; });
+        std::vector<uint32_t> exact; double rsum = 0, total = 0;
+        for (size_t i = 0; i < sorted.size(); ++i) { total += sorted[i].first; if (i < K) exact.push_back(sorted[i].second); else rsum += sorted[i].first; }
+        std::sort(exact.begin(), exact.end());
+        uint32_t wantEx = 0;
+        for (uint32_t q = 0; q < 4; ++q) wantEx |= (q < exact.size() ? exact[q] : 15u) << (4 * q);
+        const size_t nR = sorted.size() - exact.size();
+        double freq[6] = {}, mean = 0; size_t groupMismatch = 0;
+        for (uint32_t g = 0; g < N; ++g, ++at) {
+          const FxOut& o = r[at];
+          const FxCase& cs = d.cases[at];
+          if (o.sa != wantEx || o.lights != sorted.size()) exactOk = false;
+          lk::LkSel s = lk::lk_begin(cs.p[0], cs.p[1]);
+          for (uint32_t i = 0; i < 6; ++i) if (w[i] > 0) s = lk::lk_add(s, w[i], i, K);
+          s = lk::lk_end(s, NR);
+          uint32_t cpuSb = 0;
+          for (uint32_t q = 0; q < 2; ++q) cpuSb |= (lk::lk_entry(s, 4 + q) == lk::kLkNone ? 255u : lk::lk_entry(s, 4 + q)) << (8 * q);
+          if (cpuSb != o.sb) ++groupMismatch;
+          double est = 0;
+          for (uint32_t q = 0; q < 4; ++q) { const uint32_t e = (o.sa >> (4 * q)) & 15u; if (e != 15u) est += w[e]; }
+          for (uint32_t q = 0; q < NR; ++q) {
+            const uint32_t e = (o.sb >> (8 * q)) & 255u;
+            if (e == 255u) continue;
+            const double f = o.a[q];
+            est += w[e] * f;
+            if (w[e] * f * NR > rsum * (1 + 1e-6) + 1e-12) boundOk = false;
+            if (std::abs(f - rsum / (double(w[e]) * NR)) > 1e-6 * f) boundOk = false;
+            if (q == 0) freq[e] += 1.0 / N;
+          }
+          mean += est / N;
+        }
+        const double fb = (double(nR) + 1) / N;
+        for (uint32_t i = 0; i < 6; ++i) {
+          const bool inR = w[i] > 0 && std::find(exact.begin(), exact.end(), i) == exact.end();
+          const double dev = std::abs(freq[i] - (inR ? w[i] / rsum : 0.0));
+          worstFreq = (std::max)(worstFreq, dev);
+          if (dev > fb) freqOk = false;
+        }
+        const double dm = std::abs(mean - total);
+        worstMean = (std::max)(worstMean, dm / total);
+        if (dm > fb * rsum + 1e-6 * total) meanOk = false;
+        if (groupMismatch > 2 * nR) sameOk = false;
+        mismatches += groupMismatch;
+      }
+      report.line("8a exact-k: exact set = K largest, list order", exactOk, fmt("%.0f selections", double(r.size())));
+      report.line("8b exact-k: P(sample j) = w_j / sum_R w", freqOk, fmt("grid %.0f, worst |freq - p| %.2e", N, worstFreq));
+      report.line("8c exact-k: mean = full sum, factor <= sum_R w", meanOk && boundOk, fmt("worst rel mean %.2e", worstMean));
+      report.line("8d exact-k: GPU selection == C++ header", sameOk, fmt("boundary-cell differences %.0f", double(mismatches)));
     }
     std::printf("dispatch+readback %.3f s\n", gpuSeconds);
     vkDeviceWaitIdle(dev);
