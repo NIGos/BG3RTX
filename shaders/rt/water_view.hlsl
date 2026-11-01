@@ -5,7 +5,8 @@
 // top of the water the game just drew. Only pixels the lighting-time pass classified are
 // written (the rest of the frame is the game's); each later water pass is overwritten again.
 //   21 coverage (PLAN_M5 M5.1): green water in front of the bed, blue water over an empty
-//      G-buffer pixel, yellow at the bed within the tolerance, red BEHIND the bed (violation)
+//      G-buffer pixel, yellow at the bed within the tolerance, red behind the opaque depth
+//      (occluded: the water draw depth-tests)
 //   22 the reflection radiance L where resolved (tier (a), unweighted), magenta a TLAS miss
 //      (sky: unresolved), dark blue every other unresolved ray (hidden, off screen, aborted)
 //   23 tiers: green screen hit, blue hidden on screen, cyan off screen, magenta miss, red

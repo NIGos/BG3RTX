@@ -7,7 +7,11 @@
 //   shift, common/water_scene.h). The water writes no depth (M5.1), so gDepth is the bed.
 //   Classes (wT.y): 1 water in front of the bed, 2 water over an empty G-buffer pixel,
 //   3 water at the bed within the derived tolerance (shoreline: not traced), 4 water BEHIND
-//   the bed beyond it (a violation: visible water cannot be behind what it covers).
+//   the opaque depth beyond it: OCCLUDED water, not a violation. The forward water draw writes
+//   no depth but depth-tests against the opaque D24S8, so it is hidden there (m5w2 live,
+//   QuickSave_3784 = the Steel Watch Foundry interior: the "huge" sea plane 19 m below the
+//   camera is hit by 95.75% of the primary rays and is behind the foundry floor at all of
+//   them, 100% class 4, and the water pass output shows no water).
 //   Tolerance (rt/depth_tol.hlsli): the bed's depth_tol at its own geometric normal over the
 //   DLSS jitter (kJitterPx, the bed was rasterised at the jittered sample, our ray is at the
 //   centre) plus kTlasRel (the water TLAS is the XFB of the same raster draws, compared with a
@@ -36,7 +40,12 @@
 //   a = E > 0 where resolved (the composition input), else -tier (0 not traced); wT.xy =
 //   (t_water, class). Tiers: 0 not traced, 1 screen hit, 2 hidden on screen, 3 off screen,
 //   4 miss (sky), 5 aborted (candidate cap), 6 invalid ray. Normal fallbacks: counted only.
-// Statistics (wStats, words; core/water.cpp logs "[water] reflections"):
+// Statistics (wStats, words; core/water.cpp logs "[water] reflections"). wStats is a
+// DEVICE-LOCAL buffer copied to the host slot after the dispatches (core/water.cpp): the
+// m5w2 live run had it in host-visible memory, where every wave's InterlockedAdd crossed
+// PCIe (~4 per wave, ~340k per frame at 2560x1067, all on 4 words): the cause of the
+// dispatches' 15.1-15.9 ms (the D-RF pass traces a full screen in 0.59 ms). Counters are
+// also reduced per 16x16 group in groupshared (one global atomic per word per group):
 //   0 ran, 1 pixels, 2 with bed depth, 3 water hits, 4 front, 5 empty G-buffer, 6 at bed,
 //   7 behind, 8 rays, 9..14 tiers 1..6, 15 normal fallback, 16/17 sum E x 65536 (64-bit),
 //   18/19 sum lum(L) x 4096 over tier 1, 20/21 sum lum(E L) x 4096 over tier 1, 22 skin
@@ -59,9 +68,23 @@ struct Camera2 { float4 v[14]; };   // the lighting's set 0 b2: v[13].xyz = abso
 
 static const float kNoHit = -1.0;
 
+// Group-reduced counters (words 1..22; word 0 and 23 are plain stores): wstat adds a wave's
+// count into gsStat, wstat_flush (after a group barrier, every thread reaches it) adds the
+// group's non-zero words to wStats.
+static const uint kGroup = 16u;   // core/water.cpp kGroup: the dispatch size
+static const uint kGsWords = 23u;
+groupshared uint gsStat[kGsWords];
+void wstat_begin(uint gi) {
+  if (gi < kGsWords) gsStat[gi] = 0u;
+  GroupMemoryBarrierWithGroupSync();
+}
 void wstat(uint word, bool cond) {
   const uint n = WaveActiveCountBits(cond);
-  if (WaveIsFirstLane() && n != 0u) wStats.InterlockedAdd(word * 4u, n);
+  if (WaveIsFirstLane() && n != 0u) InterlockedAdd(gsStat[word], n);
+}
+void wstat_flush(uint gi) {
+  GroupMemoryBarrierWithGroupSync();
+  if (gi < kGsWords && gsStat[gi] != 0u) wStats.InterlockedAdd(gi * 4u, gsStat[gi]);
 }
 // A wave's sum of v (quantised, >= 0) into the 64-bit counter at `word` (lo, hi).
 void wsum64(uint word, float v, float scale, bool cond) {
@@ -97,8 +120,9 @@ float water_hit(float3 dir, float3 shift) {
 
 float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
-[numthreads(8, 8, 1)]
-void water_primary(uint3 tid : SV_DispatchThreadID) {
+[numthreads(kGroup, kGroup, 1)]
+void water_primary(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
+  wstat_begin(gi);
   const uint2 fp = tid.xy;
   if (all(fp == 0)) wStats.Store(0, 1u);
   const bool inside = all(fp < pc.full);
@@ -129,6 +153,7 @@ void water_primary(uint3 tid : SV_DispatchThreadID) {
   wstat(5, inside && cls == 2u);
   wstat(6, inside && cls == 3u);
   wstat(7, inside && cls == 4u);
+  wstat_flush(gi);
   if (all(fp == 0)) wStats.Store(23 * 4, (wp.flags.x & 3u) == 3u ? 1u : 0u);
   if (inside) wT[fp] = float2(tw, float(cls));
 }
@@ -146,8 +171,9 @@ bool water_pos(int2 q, out float3 P, out float t) {
   return true;
 }
 
-[numthreads(8, 8, 1)]
-void water_reflect(uint3 tid : SV_DispatchThreadID) {
+[numthreads(kGroup, kGroup, 1)]
+void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
+  wstat_begin(gi);
   g_rt_pass = kRtPassRefl;
   const uint2 fp = tid.xy;
   const bool inside = all(fp < pc.full);
@@ -223,6 +249,7 @@ void water_reflect(uint3 tid : SV_DispatchThreadID) {
   [unroll] for (uint k = 1u; k <= 6u; ++k) wstat(8u + k, water && tier == k);
   wstat(15, water && fallback);
   wstat(22, water && tier == 2u && skin);
+  wstat_flush(gi);
   wsum64(16, E, 65536.0, water && tier != 6u);
   wsum64(18, lum(L), 4096.0, tier == 1u);
   wsum64(20, lum(E * L), 4096.0, tier == 1u);
