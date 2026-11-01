@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 using namespace bg3::native_hit;
 namespace vt = bg3::native_vt;
 static unsigned checks;
@@ -176,6 +177,144 @@ static void wind_tests() {
   }
   CHECK(caught == 2000);
 }
+// ---- The live clip rejects (m4i-instanced-s14-fg2.1.093913): pairing and instance order ----
+// The 2S VSs (106a0550 depth / 1e9145e4 G-buffer, dumped GLSL; precise throughout): W = P * rows with the
+// per-draw translation t added to the rows' w, clip = vec4(W, 1) * _m2, clip.y negated; UV = input.
+struct Inst2s { float rows[3][4]; };
+static void vs_2s(const instanced::WindInputs& in, const Inst2s& inst, const float p[3], const float uv[2], unsigned char* out) {
+  float w[3], clip[4];
+  for (int k = 0; k < 3; ++k) {
+    const float tw = inst.rows[k][3] + in.translation[k];
+    w[k] = ((p[0] * inst.rows[k][0] + p[1] * inst.rows[k][1]) + p[2] * inst.rows[k][2]) + tw;
+  }
+  for (int c = 0; c < 4; ++c) clip[c] = ((w[0] * in.viewproj[c] + w[1] * in.viewproj[4 + c]) + w[2] * in.viewproj[8 + c]) + in.viewproj[12 + c];
+  clip[1] = -clip[1];
+  std::memset(out, 0, 64);
+  std::memcpy(out, clip, 16);
+  std::memcpy(out + 16, uv, 8);
+  std::memcpy(out + 24, w, 12);  // stands in for the N/B/T words (offsets 24..60)
+}
+// One draw's XFB (stride 64): every instance's triangles in instance-major order, `order` the draw's
+// instance stream (an index into `insts` per instance slot).
+static std::vector<unsigned char> xfb_2s(const instanced::WindInputs& in, const std::vector<Inst2s>& insts, const std::vector<uint32_t>& order,
+                                         const std::vector<float>& mesh, uint32_t vertices) {
+  std::vector<unsigned char> out(size_t(order.size()) * vertices * 64);
+  for (size_t s = 0; s < order.size(); ++s)
+    for (uint32_t v = 0; v < vertices; ++v) {
+      const float* m = mesh.data() + 5 * v;
+      vs_2s(in, insts[order[s]], m, m + 3, out.data() + (s * vertices + v) * 64);
+    }
+  return out;
+}
+// The consumer's per-hit check on triangle `prim` (native_hit_material.hlsli hm_clip_instanced, 2S: no
+// tolerance): 1 bit-exact, 3 UV differs, 6 clip differs; *rigid as its rigid-offset test with tau 0.
+static uint32_t hit_check(const std::vector<unsigned char>& pre, const std::vector<unsigned char>& def, uint32_t prim, bool* rigid) {
+  bool exact = true, uv = true;
+  float d[3][4];
+  for (uint32_t v = 0; v < 3; ++v) {
+    const unsigned char* a = pre.data() + (prim * 3 + v) * 64;
+    const unsigned char* b = def.data() + (prim * 3 + v) * 64;
+    uv = uv && std::memcmp(a + 16, b + 16, 8) == 0;
+    const bool same = std::memcmp(a, b, 16) == 0;
+    exact = exact && same;
+    float fa[4], fb[4];
+    std::memcpy(fa, a, 16);
+    std::memcpy(fb, b, 16);
+    for (int c = 0; c < 4; ++c) d[v][c] = same ? 0.0f : fa[c] - fb[c];
+  }
+  bool r = !exact;
+  for (int c = 0; c < 4; ++c) r = r && d[1][c] - d[0][c] == 0.0f && d[2][c] - d[0][c] == 0.0f;
+  if (rigid) *rigid = r;
+  return !uv ? 3u : exact ? 1u : 6u;
+}
+static void pairing_tests() {
+  using namespace instanced;
+  // A 2S mesh of 4 triangles (12 vertices: position + UV), 9 rotated / scaled foliage instances.
+  const uint32_t vertices = 12, instances = 9, stride = 64, tris = vertices / 3 * instances;
+  std::vector<float> mesh;
+  for (uint32_t v = 0; v < vertices; ++v) {
+    mesh.push_back(rnd(-0.6f, 0.6f)); mesh.push_back(rnd(0.0f, 1.8f)); mesh.push_back(rnd(-0.6f, 0.6f));
+    mesh.push_back(rnd(0.0f, 1.0f)); mesh.push_back(rnd(0.0f, 1.0f));
+  }
+  std::vector<Inst2s> insts(instances);
+  for (auto& in : insts) {
+    const float a = rnd(0.0f, 6.2831853f), sc = rnd(0.8f, 1.3f), ca = std::cos(a) * sc, sa = std::sin(a) * sc;
+    const float rows[3][4] = {{ca, 0, sa, rnd(-8.0f, 8.0f)}, {0, sc, 0, rnd(-0.5f, 0.5f)}, {-sa, 0, ca, rnd(-8.0f, 8.0f)}};
+    std::memcpy(in.rows, rows, sizeof rows);
+  }
+  WindInputs frame = wind_inputs(1234.5f);
+  frame.translation[0] = 96.0f; frame.translation[1] = -2.0f; frame.translation[2] = -40.0f;
+  std::vector<uint32_t> depth_order(instances), gbuf_order;
+  for (uint32_t i = 0; i < instances; ++i) depth_order[i] = i;
+  gbuf_order = {0, 1, 2, 5, 3, 4, 6, 8, 7};  // the G-buffer pass uploads three instances in another order
+  const auto pre = xfb_2s(frame, insts, depth_order, mesh, vertices);
+  const auto def = xfb_2s(frame, insts, gbuf_order, mesh, vertices);
+  // Reproduction: the live signature on every reordered instance, at one game frame (pair_check same).
+  CHECK(pair_check(AlphaTest2s, frame, frame) == PairSame);
+  uint32_t exact = 0, uv_differs = 0, differs = 0, rigid = 0;
+  for (uint32_t prim = 0; prim < tris; ++prim) {
+    bool r = false;
+    const uint32_t o = hit_check(pre, def, prim, &r);
+    exact += o == 1; uv_differs += o == 3; differs += o == 6; rigid += r;
+  }
+  std::printf("instance order: %u triangles, bit-exact %u, UV differs %u, differs %u, rigid offset %u (before the remap)\n", tris, exact, uv_differs, differs, rigid);
+  CHECK(uv_differs == 0 && rigid == 0 && differs == 5 * (vertices / 3) && exact == tris - differs);
+  // Fix: the remap gives every depth instance its G-buffer block, then every hit is bit-exact.
+  uint32_t block = 0;
+  CHECK(remap_ok(instances, tris, stride, block) && block == vertices * stride);
+  CHECK(!remap_ok(1, tris / instances, stride, block) && !remap_ok(instances, tris + 1, stride, block) && !remap_ok(instances, tris, 20, block));
+  CHECK(remap_ok(6, 6, stride, block) && block == 3 * stride);  // one triangle per instance: the minimum
+  CHECK(!remap_ok(3, 1, stride, block) && !remap_ok(6, 3, stride, block) && block == 0);
+  CHECK(remap_ok(instances, tris, stride, block));
+  std::vector<unsigned char> fixed(def.size());
+  uint64_t counts[kOrderCounters]{};
+  remap_instances(pre.data(), def.data(), fixed.data(), instances, block, stride, counts);
+  std::printf("remap counts: rows %llu same %llu permuted %llu unmatched %llu\n", (unsigned long long)counts[0], (unsigned long long)counts[1], (unsigned long long)counts[2], (unsigned long long)counts[3]);
+  CHECK(counts[OrderRows] == 1 && counts[OrderSame] == 4 && counts[OrderPermuted] == 5 && counts[OrderUnmatched] == 0);
+  for (uint32_t prim = 0; prim < tris; ++prim) CHECK(hit_check(pre, fixed, prim, nullptr) == 1);
+  CHECK(std::memcmp(pre.data(), fixed.data(), pre.size()) == 0);
+  // Same order: identity, nothing moves.
+  uint64_t same[kOrderCounters]{};
+  remap_instances(pre.data(), pre.data(), fixed.data(), instances, block, stride, same);
+  CHECK(same[OrderSame] == instances && same[OrderPermuted] == 0 && same[OrderUnmatched] == 0);
+  // Fail closed: a G-buffer draw with one other instance (culled / replaced) keeps that block, so the
+  // hit check still rejects it; the matched instances move.
+  std::vector<Inst2s> other = insts;
+  other[4].rows[0][3] += 0.05f;
+  const auto def_other = xfb_2s(frame, other, gbuf_order, mesh, vertices);
+  uint64_t c2[kOrderCounters]{};
+  remap_instances(pre.data(), def_other.data(), fixed.data(), instances, block, stride, c2);
+  CHECK(c2[OrderUnmatched] == 1 && c2[OrderSame] + c2[OrderPermuted] == instances - 1);
+  uint32_t rejected = 0;
+  for (uint32_t prim = 0; prim < tris; ++prim) rejected += hit_check(pre, fixed, prim, nullptr) != 1;
+  CHECK(rejected == vertices / 3);
+  // Duplicated placement (two identical instances): either block is the same bytes.
+  std::vector<Inst2s> dup = insts;dup[7] = dup[6];
+  const auto pre_dup = xfb_2s(frame, dup, depth_order, mesh, vertices), def_dup = xfb_2s(frame, dup, gbuf_order, mesh, vertices);
+  uint64_t c3[kOrderCounters]{};
+  remap_instances(pre_dup.data(), def_dup.data(), fixed.data(), instances, block, stride, c3);
+  CHECK(c3[OrderUnmatched] == 0 && std::memcmp(pre_dup.data(), fixed.data(), pre_dup.size()) == 0);
+  // Pairing (the other cause): a G-buffer packet of another game frame joins through the frame-invariant
+  // key. The frame time differs (one value per game frame): not mapped, whatever its geometry holds.
+  WindInputs next = frame;next.time += 1.0f / 30.0f;
+  CHECK(pair_check(AlphaTest2s, frame, next) == PairOtherFrame && pair_check(Wind, frame, next) == PairOtherFrame);
+  WindInputs moved = frame;moved.viewproj[12] += 1e-4f;   // jitter / camera
+  CHECK(pair_check(AlphaTest2s, frame, moved) == PairCamera && pair_check(Wind, frame, moved) == PairCamera);
+  moved = frame;moved.camera[0] += 0.25f;
+  CHECK(pair_check(AlphaTest2s, frame, moved) == PairCamera);
+  WindInputs cell = frame;cell.translation[2] += 64.0f;   // the same mesh and instance count in another cell
+  CHECK(pair_check(AlphaTest2s, frame, cell) == PairPlacement && pair_check(Wind, frame, cell) == PairSame);  // wind has no translation
+  WindInputs gust = frame;gust.scene[2] += 0.01f;
+  CHECK(pair_check(Wind, frame, gust) == PairWind && pair_check(AlphaTest2s, frame, gust) == PairSame);
+  CHECK(pair_check(AlphaTest2s, frame, WindInputs{}) == PairUnread && pair_check(Wind, WindInputs{}, frame) == PairUnread && pair_check(None, frame, frame) == PairUnread);
+  // Reproduction of that cause with the geometry: next frame's instance stream in another order -> the
+  // same signature (UV equal, clip differs, not rigid); pair_check refuses the row before any hit.
+  const auto def_next = xfb_2s(next, insts, gbuf_order, mesh, vertices);
+  uint32_t next_differs = 0;
+  for (uint32_t prim = 0; prim < tris; ++prim) next_differs += hit_check(pre, def_next, prim, nullptr) == 6;
+  CHECK(next_differs == differs);
+  CHECK(kPairOutcomes == sizeof kPairName / sizeof kPairName[0] && kRemapPermBase >= 16 * 3);
+}
 int main() {
   using namespace instanced;
   // 1. Families: depth by VS only, G-buffer by the exact pair; the class A STI pair is none of them.
@@ -245,6 +384,7 @@ int main() {
   CHECK(family_flags(Wind) == 0x100 && family_flags(AlphaTest2s) == 0x200 && family_flags(None) == 0);
   CHECK((kRowTolerant & kRowTwoSided) == 0 && (kRowTolerant & (3u << kRowFamilyShift)) == 0 && kRowToleranceWord == 224);
   wind_tests();
+  pairing_tests();
   std::printf("native_hit_instanced_test: %u checks passed\n", checks);
   return 0;
 }

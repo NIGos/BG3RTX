@@ -54,6 +54,16 @@ days), L (a week or more). Live tests still need explicit user steering (AGENTS.
   allocation; `--load-test` fills that cache shape on the RTX 5090 in 0.9 s, 2218 MB of a 32 GB heap).
   The job's post step replays the new pack and, if hit material qualified > 0 and sampling <= live,
   deletes the older packs (only the newest is kept).
+- Lighting inputs (2026-11-01, offline, layer + tools only, no ABI or core change): the pack now also
+  carries the deferred lighting's inputs as sets 2-3 (tools/frame_replay.md "Lighting inputs"): G-buffer
+  albedo/material, AO, the sky irradiance and specular cubes, DFG LUT, the local probe records and the
+  cubes they name, the atmosphere constants, transmittance LUT and clouds. Answers the PT reference's
+  open observable (56-86% of the S8 bounce lies beyond the 1 m rays, where the game uses its native
+  ambient): `frame_replay --native-ambient` replays the native diffuse ambient per GI pixel
+  (tools/native_ambient.hlsl) and compares it with k x PT far field + the PT's sky at misses (mean,
+  16 x 9 tiles); the PT also takes the sun from the game's LUT. Self-test 13-16 closed form; the S8
+  number needs one new pack (the job's post step prints it). These inputs also unblock an
+  rf_hit_shade replay contract later.
 
 ## E. Re-analysis of existing captures (S, low gain)
 - Mine `captures/` logs and dumps for numbers not yet extracted.

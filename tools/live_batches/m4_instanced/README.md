@@ -23,15 +23,16 @@ phase. Receipt `m4-instanced.json`; the plan goes to test-main `captures\live_ba
 - Share: `hit material (N frames): attempted A qualified Q ...`: Q/A in diag-on minus the mean of diag-off-a/b,
   larger than |off-b - off-a|. `of base, instance without a material record` / A goes down by about as much.
 - Exactness: the reasons `row` (3: the join refused the snapshot vs the alpha record) and `clip` (4) ON minus OFF.
-  First run (2026-11-01, log m4i-instanced-s14-fg2.1.074646): clip 0 -> 0.4-1.9M per 120 frames at a static
-  camera, qualified + clip constant: the wind rows (TRACK_D_REFLECTIONS 14). Wind rows now compare clip positions
-  within a derived fp32 tolerance (2S stays bit-exact). Deciding lines (diag-on): `[hit material instanced] ...
-  wind inputs prepass vs G-buffer: equal N, time only N, other differ N, unread N; rows with the derived clip
-  tolerance N` (the condition) and `hit material instanced clip (120 frames): wind: checked, bit-exact, within the
-  derived tolerance, UV differs, beyond x1-16 / x16-256 / over x256, rigid offset; alpha-test 2S: ...; rejected R
-  = P% of all lookups`. Gate (expect line): P < 0.04%, below the spread of the key-off qualified share at this
-  static camera in the first run (0.2230-0.2234, 0.046%). Rejects that remain: beyond x256 or rigid offset =
-  real mismatches (another instance or vertex), kept fail-closed; `other differ` > 0 = the passes' VS inputs differ.
+  First run (07:46): clip 0 -> 0.4-1.9M per 120 frames. Second run (09:39, with the wind tolerance): wind "within
+  the derived tolerance 0, over x256", 2S "differs", UV differs 0, rigid 0, both families at the same share per
+  window, 0 on the static rows: pairs from two game frames or instances in another order (TRACK_D_REFLECTIONS 14,
+  "Pairing and instance order"). Deciding lines (diag-on): `[hit material instanced] ... pairs since the last line
+  (wind/2S): same frame, other frame (time), camera, placement, wind inputs, unread` (only same-frame rows map),
+  `... instance order since the last line (wind/2S, retired queries): rows, instances in the same order, permuted,
+  unmatched` (the remap) and `hit material instanced clip (120 frames): ...; rejected R = P% of all lookups`.
+  Gate: P < 0.04% in every ON window (the expect line needs one; read every window), below the spread of the
+  key-off qualified share at this static camera in the first run (0.2230-0.2234, 0.046%). `other frame` > 0 or
+  `permuted` > 0 says which cause was live; `unmatched` > 0 = instances only one pass holds, kept fail-closed.
 - Energy: mean PNG luminance shot-on minus shot-off-a against |shot-off-b - shot-off-a|; no darker region.
 - Cost: cost-on minus the mean of cost-off-a/b for `[pace] rendered frame time` (median), `gi: trace pass ... GPU
   median` and `rt passes: GPU cost`. Expected: XFB of the instanced G-buffer draws (64 B per vertex, all instances)
