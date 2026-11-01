@@ -571,6 +571,16 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     expected +0.02 to 0.1 ms on `rf: reflection pass`; with ls_box=2 the unshadowed boxes' rays (S8 up to ~0.7M
     short rays/frame) up to +0.3 ms. Live: m4_promotion m4p3/m4p4 `diag-gi1`, `diag-gi2`, `diag-gi1-box2`,
     `cost-gi1`, `shot-gi1`.
+  - **The S6 direct excess is the BRDF, not the boxes (2026-11-01, branch rf-hit-box; offline).** Live m4p3 161852
+    (`rf hit shade boxes`): the box part of tier (a) L_b is 0.00508 of 0.0764 (6.6%), all of it already at the game's
+    visibility with the AO factor; point/spot give 0.0606 of the 0.0657 direct. Box record math, channel, falloff,
+    cookie, shadow strength and AO factors match f469db78 (box_light_test). What differs for every light is the lobe:
+    the hit used the declared FresnelBlend, the screen the game's Burley x mix(1, 0.6622, a) + GGX/Smith-joint/Schlick
+    (f469db78 _1597/_1598, the same for point, spot and box). `RF_HIT_GI` now also defines NATIVE_HIT_GAME_BRDF:
+    `HD_SCATTER` -> `hd_game_scatter` (common/native_hit_direct.h) for point/spot, box and sun at hits, same domain
+    checks and status codes (the supported set is unchanged). Not reproduced: the screen-quad AA roughness term
+    (a hit has no derivatives; a = max(0.09, r)). Test: `box_light_test` section 8, hit == the game's box loop on
+    random records and surfaces (2^-14 relative), and the FresnelBlend / game energy ratio over the same cases.
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.

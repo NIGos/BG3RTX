@@ -64,7 +64,7 @@ HdDirect native_hit_sun(NativeHitMaterial material,float3 position,float3 outgoi
  HdIncident incident;incident.direction=L;incident.distance=0;incident.status=HdOk;
  incident.radiance=bg3_sun_colour()*(bg3_cloud_shadow(position)*asfloat(lScale.Load(0)));
  if(!all(isfinite(incident.radiance)) || any(incident.radiance<0)){r.status=HdInvalid;return r;}
- HdDirect term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,1);
+ HdDirect term=HD_SCATTER(material,material.normal,geometric_normal,outgoing,incident,true,1);
  hs_sun_stat(0u,true);hs_sun_stat(1u,!any(incident.radiance>0));
  hs_sun_stat(2u,term.status==HdOk && any(incident.radiance>0) && !any(term.radiance>0));
  if(term.status!=HdOk || !any(term.radiance>0))return term;
@@ -90,5 +90,5 @@ HdDirect native_hit_sun(NativeHitMaterial material,float3 position,float3 outgoi
 #endif
  hs_sun_stat(3u,visibility==kRtLit);hs_sun_stat(4u,visibility==kRtOccluded);
  if(visibility==kRtUnknown){r.status=HdUnknownVisibility;return r;}
- return hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
+ return HD_SCATTER(material,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
 }
