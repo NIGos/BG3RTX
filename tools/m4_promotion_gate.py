@@ -94,6 +94,7 @@ DIAG = {
     "GI hit sun": re.compile(r"GI hit sun \(\d+ frames\): evaluated (\d+), .*traced lit (\d+), traced occluded (\d+), roof-unsupported [^)]*\) (\d+).*added weighted luminance sum ([0-9.]+)"),
     "rf hit shade": re.compile(r"rf hit shade \(\d+ frames\): tier b hidden hits (\d+), shaded (\d+) \(([0-9.]+)%\).*tier a check: (\d+) hits .*mean L_b ([0-9.]+), mean L_a ([0-9.]+), mean \(L_b - L_a\) per frame (-?[0-9.]+), standard error ([0-9.]+) \((\d+) frames\)"),
     "rf hit shade terms": re.compile(r"rf hit shade terms .*AO at the hit ([0-9.]+) vs the screen's AO there ([0-9.]+);.*ratio L_b / L_a ([0-9.]+) \(at AO 1 ([0-9.]+)\)"),
+    "rf hit gi": re.compile(r"rf hit gi \(\d+ frames, (\d+) tier a hits, (\d+) of them from the screen's GI\): tier a GI term ([0-9.]+) vs the screen's GI term there ([0-9.]+); ratio L_b / L_a ([0-9.]+) \(without the GI term ([0-9.]+)\); tier b shaded GI term ([0-9.]+); AO-ray hits (\d+), screen source (\d+) \(([0-9.]+)%\), cache source (\d+)"),
     "rf hit shade boxes": re.compile(r"rf hit shade boxes \(\d+ frames\): tier a L_b projector lights ([0-9.]+) of L_b ([0-9.]+); tier b shaded L_b projector lights ([0-9.]+) of ([0-9.]+)"),
     "hit emission": re.compile(r"hit emission \(\d+ frames\): GI hidden hits: lookups (\d+), emissive (\d+), skipped (\d+), added weighted luminance ([0-9.]+);.*rf tier b: lookups (\d+), emissive (\d+), skipped (\d+), added luminance ([0-9.]+);.*approximate uncalibrated (\d+)"),
     "instanced clip": re.compile(r"hit material instanced clip \(\d+ frames\): .*rejected (\d+) = ([0-9.]+)% of all lookups"),
@@ -722,6 +723,11 @@ def report(run: Run, queue_logs: Path | None = None, pool="save"):
         m = run.last_in(label, DIAG["rf hit shade boxes"])
         if m:
             print(f"- rf hit shade boxes: tier a projector part {m.group(1)} of L_b {m.group(2)}; tier b shaded {m.group(3)} of {m.group(4)}")
+        m = run.last_in(label, DIAG["rf hit gi"])
+        if m:
+            print(f"- rf hit gi: ratio L_b / L_a {m.group(5)} (without the GI term {m.group(6)}); tier a GI term {m.group(3)} vs the "
+                  f"screen's {m.group(4)} ({m.group(1)} hits, {m.group(2)} from the screen's GI); tier b GI term {m.group(7)}; "
+                  f"AO-ray screen source {m.group(10)}%")
         m = run.last_in(label, DIAG["hit emission"])
         if m:
             print(f"- hit emission: GI hidden lookups {m.group(1)} emissive {m.group(2)} added {m.group(4)}; rf tier b lookups {m.group(5)} "

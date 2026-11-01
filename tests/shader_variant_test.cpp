@@ -40,6 +40,13 @@ int main(int argc, char** argv) {
   CHECK(request("gi/gi_trace_rt_sharc_hit_sun_em.hlsl", kGiFar) == "gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_GI_FAR=1");
   CHECK(request("gi/gi_trace_rt_hit_direct.hlsl", kGiFar) == "gi/gi_trace_rt_hit_direct.hlsl");
   CHECK(request("gi/gi_trace_rt.hlsl", kGiFar) == "gi/gi_trace_rt.hlsl");
+  // rf_hit_gi: the four rf_hit_shade files only, last; never the ordinary D-RF or the GI files.
+  CHECK(request("gi/rt_reflections_hit_shade.hlsl", kRfHitGi | kCascade) ==
+        "gi/rt_reflections_hit_shade.hlsl?RT_CASCADE_MASKS=1;RF_HIT_GI=1");
+  CHECK(request("gi/rt_reflections_sharc_hit_shade_em.hlsl", kRfHitGi | kHitInstanced) ==
+        "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RF_HIT_GI=1");
+  CHECK(request("gi/rt_reflections.hlsl", kRfHitGi) == "gi/rt_reflections.hlsl");
+  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl");
 
   std::set<std::string> want;
   size_t bases = 0;
@@ -48,7 +55,7 @@ int main(int argc, char** argv) {
     const std::string file = "gi/" + e.path().filename().string();
     ++bases;
     const unsigned a = allowed(file.c_str());
-    for (unsigned m = 0; m < 512; ++m)
+    for (unsigned m = 0; m < 1024; ++m)
       if ((m & a) == m && m) {
         const std::string r = request(file.c_str(), m);
         if (r != file) want.insert(r);

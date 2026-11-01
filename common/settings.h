@@ -338,6 +338,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rf_hit_shade", "1"}}, {{"exp_hit_material",1},{"reflections",1}}}},
    {}, {0,0,0,0}, true, {{"rt","1","RT device setup"},{"rt_hit_material","1","Native material startup"},{"rt_reflections","1","Ray-traced reflections"}}},
 
+  {"exp_rf_hit_gi", "Indirect light in hidden-surface reflections",
+   "Shaded hidden-surface reflections also get the bounce light the screen's ray-traced GI gives the same "
+   "surface (gathered along the hit's ambient-occlusion rays, from the screen and the radiance cache), and the "
+   "box lights follow the screen's box shadows. Requires Shaded hidden-surface reflections and ray-traced GI. "
+   "Quality and GPU cost remain unqualified.",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   {{"off", "Off", 0, {{"rf_hit_gi", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rf_hit_gi", "1"}}, {{"exp_rf_hit_shade",1},{"gi",1}}}},
+   {}, {0,0,0,0}, true, {{"rf_hit_shade","1","Shaded hidden-surface reflections"},{"gi_rt","1","Ray-traced GI"}}},
+
   {"exp_hit_emission", "Emission at ray hits",
    "Bounce and reflection rays that hit a glowing surface (lava, braziers, glowing runes) add that surface's "
    "emitted light, from the captured emissive geometry. Hidden hits: only where Shaded hidden-surface bounce "
@@ -473,7 +483,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 229 keys of bg3rtx.ini, in file order.
+// 230 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -675,6 +685,7 @@ inline constexpr KV kDefaults[] = {
     {"rf_stats", "0"},
     {"rf_validate", "0"},
     {"rf_hit_shade", "0"},
+    {"rf_hit_gi", "0"},
     {"hit_ls_policy", "1"},
     {"hit_ao_rays", "2"},
     {"rr_spec_hit_distance", "1"},

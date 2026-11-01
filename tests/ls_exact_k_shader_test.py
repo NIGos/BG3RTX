@@ -20,4 +20,5 @@ FEATURE = ("gi/rt_local_shadows_k.hlsl", "gi/rt_local_shadows_box_k.hlsl", "gi/r
            "gi/rt_local_shadows_full_box_k.hlsl")
 
 if __name__ == "__main__":
-    sys.exit(feature_gate(__doc__, FEATURE, "ls_k (LS_K)"))
+    # rf_hit_gi requests (RF_HIT_GI=1) are tests/rf_hit_shade_shader_test.py's feature, compiled there.
+    sys.exit(feature_gate(__doc__, FEATURE, "ls_k (LS_K)", foreign=lambda r: "RF_HIT_GI=1" in r))

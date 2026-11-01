@@ -423,7 +423,7 @@ std::vector<uint32_t> compile(const fs::path& hlsl, const std::vector<std::strin
 }
 
 // ---------------------------------------------------------------- statistics (core/gi.cpp wording, 1 frame)
-constexpr uint32_t kCounters = 512;   // >= core/gi.cpp kStatsCounters (419)
+constexpr uint32_t kCounters = 512;   // >= core/gi.cpp kStatsCounters (427)
 struct Stats { uint64_t t[kCounters] = {}; };
 Stats fold(const std::vector<uint8_t>& raw) {
   Stats s; const auto* c = reinterpret_cast<const uint32_t*>(raw.data());

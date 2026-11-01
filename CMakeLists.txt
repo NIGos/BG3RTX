@@ -339,6 +339,9 @@ add_test(NAME ufloat_interval_test COMMAND ufloat_interval_test)
 # Box light math (common/box_light.h, rt/bg3_boxes.hlsli) against the game's box loop; ls_box=2 segments.
 add_executable(box_light_test tests/box_light_test.cpp)
 add_test(NAME box_light_test COMMAND box_light_test)
+# rf_hit_gi: the hit's composition against the screen's chain (common/hit_gi_compose.h).
+add_executable(hit_gi_compose_test tests/hit_gi_compose_test.cpp)
+add_test(NAME hit_gi_compose_test COMMAND hit_gi_compose_test)
 add_executable(native_sun_packets_test tests/native_sun_packets_test.cpp)
 add_test(NAME native_sun_packets_test COMMAND native_sun_packets_test)
 add_executable(native_hit_qualify_test tests/native_hit_qualify_test.cpp)
