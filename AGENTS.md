@@ -102,6 +102,24 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Keep what a test or comparison still reads (the current replay pack, gate baselines); delete superseded
   packs and analysed raw dumps.
 
+## Coordinating agents (lessons of 2026-11-01)
+- Work in 2-3 streams, one per area (files that change together). Inside a stream, one agent fixes the items
+  in sequence: after the first fix it already knows the code. Resume a finished agent for a follow-up in its
+  area instead of spawning a new one. Never one agent per tiny task.
+- Briefs carry the evidence and exact file:line pointers, ask for the smallest fix that passes the gate,
+  forbid new frameworks, and cap the report (~15 lines: commit, cause, fix, numbers, what is left).
+- The coordinator does not implement: it merges, resolves conflicts, reads logs and assigns work.
+- Bundle verified branches into one merge-green (merge them in a worktree first, resolve conflicts there).
+- Shared registries cause most conflicts: allocate rtStats counters only after the last index of the table
+  next to kStatsCounters in core/gi.cpp; add Python tests to the single CMake foreach list; branches write
+  docs/progress/<branch>.md, never PROGRESS_CODEX.md.
+- Offline first: replay pack, PT reference, fixtures, unit tests. A live run confirms one named observable,
+  with its predicted delta committed before the run (predicted.json).
+- Every feature that may ship is also tested in the real preset with the other qualified keys on (the
+  smoke_ultra job): isolated A/B runs missed water being skipped under rt_cascade_casters, buffer overflow
+  with hit materials and the scene-wait timeouts they caused.
+- When a live result disproves a hypothesis or a gate was wrong, write it down in the same batch.
+
 ## Merging
 - Only `scripts/merge-green.ps1`, after reading the deciding log numbers yourself.
 - Features stay off by default until their gates pass. Push main and the branch after a merge.
