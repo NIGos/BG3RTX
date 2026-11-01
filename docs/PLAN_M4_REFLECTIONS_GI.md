@@ -95,6 +95,8 @@ Limits that decide the order:
   modes (`native_vt_surface.h`, `nv_reflectance`), 3812bc98/3da860be as a per-draw pair (gather push word 3),
   both 2d2ac3c3 FSs as pool pairs (row word 220 = mode). Check: `[hit material pool pairs]` records/ready
   per FS > 0; `hit material` row and base down, qualified up; `[hit material capacity]` opaque used vs mapped.
+  Offline ranking of all families (world placements, test scenes, traces) with COPY/VARIANT/NEW
+  classes and the next step per pair: docs/MATERIAL_FAMILIES.md (`python -m tools.material_families`).
   Next, larger audits: 54df894a/613ead9c (two-layer VT blend + 2D mask, VS 54df894a, 7 VS outputs),
   c32ce535/9064a6bd (plain 2D textures, set 0:7 sampler), class B 1ed985dd/f111e292 (FS 2257579f/288876d1).
 - Tileblend/terrain (tileset, 64e25689 terrain VS): tileset works with `rt_native_tileset=1`;

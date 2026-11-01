@@ -20,6 +20,7 @@ not yet authorized are in [live-test-drafts/](live-test-drafts/).
 - [SE_BRIDGE.md](SE_BRIDGE.md): Script Extender bridge for game state the GPU never sees.
 - [SETTINGS_DESIGN.md](SETTINGS_DESIGN.md): settings table, presets, layered ini, launcher, cost budget.
 - [COVERAGE.md](COVERAGE.md): what the game draws against what our RT handles, gaps ranked by screen impact.
+- [MATERIAL_FAMILIES.md](MATERIAL_FAMILIES.md): G-buffer shader families ranked for the hit-material provider (world, scenes, traces) with their recipe class (`python -m tools.material_families`).
 
 ## Per-effect TRACK docs
 
