@@ -4,10 +4,10 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 413,
+ "timeout": 457,
  "repeat": 1,
  "live_batch": "gi-far",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_radius=1.0,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_xfb_mb=1024,rt_cascade_mb=427,rf_hit_shade=0,rt_hit_emission=0,rt_emissive=0,gi_hit_direct=1,gi_hit_sun=1,gi_far=0,gi_far_m=6",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_radius=1.0,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_xfb_mb=1024,rt_cascade_mb=427,rf_hit_shade=0,rt_hit_emission=0,rt_emissive=0,gi_hit_direct=1,gi_hit_sun=1,gi_far=0,gi_far_m=6,qa_exposure_hold=0",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -35,7 +35,9 @@
   "GI hit direct",
   "GI hit sun",
   "hit material",
-  "rt stats"
+  "rt stats",
+  "ls stats",
+  "\\[rrpost\\] exposure (held|hold|probe)"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -54,7 +56,10 @@
   "GI hit sun \\(\\d+ frames\\): evaluated \\d+, ",
   "GI far \\(\\d+ frames\\): rays [1-9]\\d*; beyond the base radius: screen hits \\d+, qualified sun-lit \\d+ \\(outside the froxels \\d+\\), kept as native ambient \\d+ \\(of them roof rule \\d+\\); per ray: ambient visibility [0-9.]+ \\(old rule [0-9.]+\\), bounce [0-9.]+ \\(old rule [0-9.]+\\)",
   "gi: GPU cost [0-9.]+ ms/frame",
-  "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms"
+  "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
+  "ls stats \\(\\d+ frames\\): ao_direct 1 gives back [0-9.]+ per px"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -72,10 +77,14 @@
   "\\[motion-trace\\] phase=3 label=shot-off-a repeat=0",
   "\\[motion-trace\\] phase=5 label=shot-on repeat=0",
   "\\[motion-trace\\] phase=7 label=shot-off-b repeat=0",
-  "\\[motion-plan\\] complete phases=9\\b",
+  "\\[motion-trace\\] phase=10 label=view-vis-off repeat=0",
+  "\\[motion-trace\\] phase=11 label=view-vis-on repeat=0",
+  "\\[motion-trace\\] phase=12 label=view-bounce-off repeat=0",
+  "\\[motion-trace\\] phase=13 label=view-bounce-on repeat=0",
+  "\\[motion-plan\\] complete phases=15\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "gi_far OFF/ON/OFF (S8 roofed interior, the PT reference scene: expect the roof rule > 0). Startup: Ultra + rt_hit_material=1, rt_hit_material_instanced=1, rt_cascade_casters=1, gi_hit_direct=1, gi_hit_sun=1 in both states; only gi_far toggles live (gi_far_m 6). One diag window (rt_stats, gi_far ON: the GI far line gives ON and the old rule on the same rays), cost OFF / ON / OFF with diagnostics off, one PNG trace per state.",
- "estimated_phase_seconds": 113
+ "purpose": "gi_far OFF/ON/OFF (S8 roofed interior, the PT reference scene: expect the roof rule > 0). Startup: Ultra + rt_hit_material=1, rt_hit_material_instanced=1, rt_cascade_casters=1, gi_hit_direct=1, gi_hit_sun=1 in both states; only gi_far toggles live (gi_far_m 6). One diag window (rt_stats, gi_far ON: the GI far line gives ON and the old rule on the same rays), cost OFF / ON / OFF with diagnostics off, one PNG trace per state. The eye adaptation is held (qa_exposure_hold=1) from cost-off-a on: unheld, it raised the pre-exposure s1b13[0] 3.2% in the 2026-11-01 ON shot, read as +2.87% (normalised -0.32%; offline predicts -2.0%). Stage windows after the A/B: diag-ls-off/on (ls stats: the ao_direct give-back), view-vis-off/on (gi_debug=3: diffuse = 0.2 x the folded visibility), view-bounce-off/on (gi_debug=2: diffuse = 4 x bounce x diffuse colour).",
+ "estimated_phase_seconds": 157
 }

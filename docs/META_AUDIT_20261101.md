@@ -2,6 +2,8 @@
 
 This audit was read-only: no code, builds, GPU tools or game. It repeats the 10-31 audit ([META_AUDIT_20261031.md](META_AUDIT_20261031.md)). Sources: the 11-01 queue logs (up to 09:42), PLAN_M4 "Promotion", PLAN_M5_WATER, PT_FEASIBILITY_OFFLINE, TRACK_D_REFLECTIONS 14 and TRACK_D_LOCAL_LIGHTS 9.11.
 
+Section 7, the gate audit (every live gate replayed on the logs; 70 gates, 30 OK / 28 weak / 12 broken before the fixes): [GATE_AUDIT_20261101.md](GATE_AUDIT_20261101.md).
+
 ## 1. Status of the 10-31 items
 - **Water, partly.** M5.1-M5.3 are live at S8.
   - Compose cost fixed: 8.171 ms median (m5w3 083416, 297k records) became 0.096 ms (093518). Every frame composes now (112-120 of 120).

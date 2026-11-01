@@ -7,7 +7,7 @@
  "timeout": 479,
  "repeat": 1,
  "live_batch": "ls-exact-k",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,ls_check=0,ls_impl=1,ls_samples=0,ls_shadowed=3,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_stats=0,ls_k=0,ls_rest_samples=1",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,ls_check=0,ls_impl=1,ls_samples=0,ls_shadowed=3,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_stats=0,ls_k=0,ls_rest_samples=1,qa_exposure_hold=0",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -33,7 +33,8 @@
   "ls stats",
   "ls exact-k",
   "ls: local-light shadow pass GPU",
-  "gi: GPU cost"
+  "gi: GPU cost",
+  "\\[rrpost\\] exposure (held|hold|probe)"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -51,7 +52,9 @@
   "ls exact-k stats \\(\\d+ frames\\): ls_k 1, ls_rest_samples 1: traced lights \\(ls_k=0 would trace\\) [0-9.]+/px; rays [0-9.]+/px \\(exact [0-9.]+, remainder [0-9.]+\\), occluded [0-9.]+/px; over the cap \\(k-hit\\) (?!0\\.0%)[0-9.]+% of px",
   "ls: local-light shadow pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+, of which join [0-9.]+ \\(\\d+ frames; samples 0, exact-k 0 \\+ 1 \\(variant 0\\)",
   "ls: local-light shadow pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+, of which join [0-9.]+ \\(\\d+ frames; samples 0, exact-k 1 \\+ 1 \\(variant 1\\)",
-  "ls: local-light shadow pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+, of which join [0-9.]+ \\(\\d+ frames; samples 0, exact-k 2 \\+ 1 \\(variant 1\\)"
+  "ls: local-light shadow pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+, of which join [0-9.]+ \\(\\d+ frames; samples 0, exact-k 2 \\+ 1 \\(variant 1\\)",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",

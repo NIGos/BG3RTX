@@ -10,7 +10,7 @@
  "requires_success_of": [
   "m5w2-water-reflections-s8-fg2"
  ],
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,sharc_device=1,rt_stats=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,sharc_device=1,rt_stats=0,qa_exposure_hold=0",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -36,7 +36,8 @@
   "\\[crash\\]",
   "FAILED",
   "\\[water\\]",
-  "gi: GPU cost"
+  "gi: GPU cost",
+  "\\[rrpost\\] exposure (held|hold|probe)"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -63,7 +64,9 @@
   "\\[water\\] compose \\(120 frames, (1[01]\\d|120) composed, [0-9.]+ passes/frame\\): records [1-9][0-9.]*/frame, owned (?!0\\.00%)[0-9.]+% \\(not owned [0-9.]+%\\), invalid \\d+, kept: rough [0-9.]+%, below the surface [0-9.]+%; rays [0-9.]+/frame: screen hit \\(composed\\) [0-9.]+%, hidden [0-9.]+% \\(skin \\d+\\), off screen [0-9.]+%, miss [0-9.]+%, aborted \\d+, invalid \\d+; unresolved \\(probe kept\\) [0-9.]+% of owned; clamped \\d+; skipped frames: no record buffer \\d+, layout \\d+, size \\d+; passes on this frame's lighting \\d+, on the previous lighting \\d+, refused: no recent lighting \\d+, no scene \\d+; newer scene taken \\d+",
   "\\[water\\] compose energy: mean C [0-9.]+ over owned; composed (?!0\\.00%)[0-9.]+% of owned: probe removed \\(B\\) [0-9.]+, traced added \\(A L\\) [0-9.]+, delta [-+][0-9.]+ \\(\\+[0-9.]+ / -[0-9.]+\\) per composed pixel; mean delta over owned [-+][0-9.]+ = [-+][0-9.]+% of mean C; probe term B over owned [0-9.]+",
   "\\[water\\] compose ratio A L / B over [1-9]\\d* composed px: below 0\\.5 [0-9.]+%, 0\\.5\\.\\.2\\.0 [0-9.]+%, above 2\\.0 [0-9.]+%; ratio of the means [0-9.]+",
-  "\\[water\\] compose GPU 0\\.[0-4]\\d\\d ms median, p90 [0-9.]+ \\([1-9]\\d* timed frames[^)]*\\); copy [0-9.]+ ms median, p90 [0-9.]+; compose dispatches [0-9.]+ ms median, p90 [0-9.]+"
+  "\\[water\\] compose GPU 0\\.[0-4]\\d\\d ms median, p90 [0-9.]+ \\([1-9]\\d* timed frames[^)]*\\); copy [0-9.]+ ms median, p90 [0-9.]+; compose dispatches [0-9.]+ ms median, p90 [0-9.]+",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
  ],
  "expect_every": [
   {

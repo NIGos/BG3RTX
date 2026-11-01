@@ -12,7 +12,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0"
+  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=0"
  },
  {
   "label": "diag-box1-stats",
@@ -27,7 +27,7 @@
   "motion_end": 15,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=1,ls_stats=1,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0"
+  "set": "ls_box=1,ls_stats=1,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=0"
  },
  {
   "label": "settle-box2",
@@ -42,7 +42,7 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0"
+  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=0"
  },
  {
   "label": "diag-box2-stats",
@@ -57,7 +57,7 @@
   "motion_end": 15,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=2,ls_stats=1,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0"
+  "set": "ls_box=2,ls_stats=1,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=0"
  },
  {
   "label": "cost-off-a",
@@ -72,7 +72,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0"
+  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=1"
  },
  {
   "label": "cost-on",
@@ -87,7 +87,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0"
+  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=1"
  },
  {
   "label": "cost-off-b",
@@ -102,7 +102,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0"
+  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-off-a",
@@ -117,7 +117,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0",
+  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -135,7 +135,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0",
+  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -153,7 +153,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0",
+  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -171,7 +171,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0",
+  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -189,7 +189,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=2",
+  "set": "ls_box=2,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=2,qa_exposure_hold=1",
   "trace_at": [
    5
   ]
@@ -207,6 +207,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0"
+  "set": "ls_box=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,ls_debug=0,qa_exposure_hold=0"
  }
 ]

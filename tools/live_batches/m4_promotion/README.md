@@ -35,10 +35,12 @@ shade` + `terms`, gi trace and rf pass medians; camp: sun traced lit > 0; S6: `h
 ## Deciding numbers and gates (`py -3 -m tools.m4_promotion_gate`, after the runs)
 The script finds the latest log of each job in `captures\queue\logs`, times the phases from the runner, and prints:
 - Energy: float mean luminance of the scene colour before post (pass 5c3fdabc, slot 0, from each trace's
-  `dumps.json`; never PNG previews or the bloom chain: TRACK_D_LOCAL_LIGHTS 9.11). ON and each step vs the OFF-a/OFF-b
-  mean, against |OFF-b - OFF-a|. Pass: `within`, or `brighter` with the step that carries it (GI hidden-hit bounce
-  and emission only add; tier (b) replaces a probe by the shaded hit). `DARKER` beyond the spread fails the energy
-  rule. S6: emission ON vs em-off-a/em-off-b, within or brighter.
+  `dumps.json`; never PNG previews or the bloom chain: TRACK_D_LOCAL_LIGHTS 9.11). ON and each step vs the mean of
+  its nearest OFF shots, two-sided against the delta in `predicted.json` (fill it and commit BEFORE queuing; empty =
+  no change): pass when |d - predicted| <= t x sigma x sqrt(3/2), sigma from the OFF-OFF pairs of every lean run on
+  the save (docs/GATE_AUDIT_20261101.md S4). S6: shot-on also vs em-off-a/em-off-b (key `shot-on@em-off`).
+  The script exits 1 on any failed gate (energy, plan drift, capacity). Validity also needs one trace in every
+  shot window (`expect_every` event gate; m4p1 111854 lost shot-step-sun and shot-step-rf).
 - Cost: every GPU line (frame time, whole GI, gi trace, rf pass, ls, rt passes, scene build, cascade capture) ON
   minus the OFF mean, with the OFF spread; only 300/600-frame windows lying wholly inside the phase count. Reported,
   not gated (quality before frame rate on Ultra; the user decides). Known per key: PLAN_M4 "Promotion".

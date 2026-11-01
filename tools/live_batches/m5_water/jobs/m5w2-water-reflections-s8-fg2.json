@@ -7,7 +7,7 @@
  "timeout": 440,
  "repeat": 1,
  "live_batch": "m5-water",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=0,rt_stats=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=0,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_water_geometry=1,rt_water_reflections=0,rt_stats=0,qa_exposure_hold=0",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -33,7 +33,8 @@
   "\\[crash\\]",
   "FAILED",
   "\\[water\\]",
-  "gi: GPU cost"
+  "gi: GPU cost",
+  "\\[rrpost\\] exposure (held|hold|probe)"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -53,7 +54,9 @@
   "\\[water\\] reflection images \\d+x\\d+",
   "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\): water px (?!0\\.00%)[0-9.]+% of [0-9]+ px/frame \\(in front (?!0\\.00%)[0-9.]+%, empty G-buffer [0-9.]+%, at bed [0-9.]+%\\), behind bed \\d+ \\([0-9.]+% of water hits\\); rays [1-9][0-9.]*/frame: screen hit [0-9.]+%, hidden [0-9.]+% \\(skin \\d+\\), off screen [0-9.]+%, miss [0-9.]+%, aborted \\d+, invalid \\d+; normal fallback [0-9.]+%; mean E [0-9.]+, mean screen L [0-9.]+, mean E\\*L [0-9.]+; shift on;",
   "\\[water\\] reflections GPU [0-9.]+ ms median, p90 [0-9.]+ \\([1-9]\\d* timed; water primary \\+ reflection dispatches\\); scene [1-9][0-9.]* draws, [1-9]\\d* triangles, age [0-9.]+ frames; F0 [0-9.]+ \\(Reflectance_Base [0-9.]+, Roughness_Base [0-9.]+, family \\d+\\); views \\d+ over \\d+ water passes",
-  "\\[water\\] reflections GPU .*; views [1-9]\\d* over [1-9]\\d* water passes \\(\\d+ with water between other draws\\)"
+  "\\[water\\] reflections GPU .*; views [1-9]\\d* over [1-9]\\d* water passes \\(\\d+ with water between other draws\\)",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
