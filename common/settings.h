@@ -236,15 +236,15 @@ inline constexpr Knob kKnobs[] = {
    "keep the current renderer. The first enable needs a restart; the levels above Materials are live. "
    "Experimental: quality and GPU cost remain partly unqualified.",
    Kind::Choice, Apply::Partial, "first enable: restart; levels live", false,
-   {{"off", "Off", 0, {{"rt_hit_material", "0"}, {"rt_hit_material_instanced", "0"}, {"rt_hit_material_recycle", "0"},
+   {{"off", "Off", 0, {{"rt_hit_material", "0"}, {"rt_hit_material_instanced", "0"},
       {"rt_hit_material_wind_rgb", "0"}, {"gi_hit_direct", "0"}, {"gi_hit_sun", "0"}, {"rf_hit_shade", "0"}, {"rf_hit_gi", "0"}}, {}},
-    {"materials", "Materials", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"}, {"rt_hit_material_recycle", "1"},
+    {"materials", "Materials", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"},
       {"rt_hit_material_wind_rgb", "1"}, {"gi_hit_direct", "0"}, {"gi_hit_sun", "0"}, {"rf_hit_shade", "0"}, {"rf_hit_gi", "0"}},
-     {{"rt_geometry", 2}}, {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb", "rt_hit_material_recycle"}},
-    {"bounce", "+ Bounce", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"}, {"rt_hit_material_recycle", "1"},
+     {{"rt_geometry", 2}}, {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb"}},
+    {"bounce", "+ Bounce", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"},
       {"rt_hit_material_wind_rgb", "1"}, {"gi_hit_direct", "1"}, {"gi_hit_sun", "1"}, {"rf_hit_shade", "0"}, {"rf_hit_gi", "0"}},
      {{"rt_geometry", 2}, {"gi", 2}}, {"gi_hit_direct", "gi_hit_sun"}},
-    {"reflections", "+ Reflections", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"}, {"rt_hit_material_recycle", "1"},
+    {"reflections", "+ Reflections", kCapRayQuery, {{"rt_hit_material", "1"}, {"rt_hit_material_instanced", "1"},
       {"rt_hit_material_wind_rgb", "1"}, {"gi_hit_direct", "1"}, {"gi_hit_sun", "1"}, {"rf_hit_shade", "1"}, {"rf_hit_gi", "1"}},
      {{"rt_geometry", 2}, {"gi", 2}, {"reflections", 1}}, {"rf_hit_shade", "rf_hit_gi"}}},
    {}, {0, 0, 0, 0}, true,
@@ -406,6 +406,11 @@ inline constexpr KnobAlias kKnobAliases[] = {
 // Keys of retired GUI entries that have no knob now: still read by the layer, set by hand in
 // bg3rtx_user.ini (kept as written). fg_letterbox: the layer has no automatic mode yet.
 inline constexpr const char* kIniOnlyKeys[] = {"fg_letterbox"};
+// Fixes that passed their gates and are on by default without a GUI entry (keys kept for A/B):
+// the hit-material provider's buffer reuse, unlocked captures and lean per-draw hooks (scene_wait sw3
+// 2026-11-01 22:13: 0 scene-wait timeouts in every pan and rotation, hooks ~2 ms instead of 5-6).
+inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_hit_material_capture_unlocked",
+                                                 "rt_hit_material_lean_hooks"};
 
 // Internal keys a preset sets besides its knobs (never shown in a UI).
 // Ultra: rare forced BVH rebuilds (SETTINGS_DESIGN 5.4 #4). With the BVH split
@@ -543,9 +548,9 @@ inline constexpr KV kDefaults[] = {
     {"rt_native_tileset", "0"},
     {"rt_hit_material", "0"},
     {"rt_hit_material_instanced", "0"},
-    {"rt_hit_material_recycle", "0"},
-    {"rt_hit_material_capture_unlocked", "0"},
-    {"rt_hit_material_lean_hooks", "0"},
+    {"rt_hit_material_recycle", "1"},
+    {"rt_hit_material_capture_unlocked", "1"},
+    {"rt_hit_material_lean_hooks", "1"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},

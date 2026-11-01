@@ -372,7 +372,7 @@ static const char* const kOldKnobKeys[] = {
 static const char* const kOldOn[][2] = {
     {"exp_roof_shadows", "rt_cascade_casters"}, {"exp_box_lights", "ls_box"},
     {"exp_hit_material", "rt_hit_material"}, {"exp_hit_material_instanced", "rt_hit_material_instanced"},
-    {"exp_hit_material_recycle", "rt_hit_material_recycle"}, {"exp_hit_material_wind_rgb", "rt_hit_material_wind_rgb"},
+    {"exp_hit_material_wind_rgb", "rt_hit_material_wind_rgb"},
     {"exp_gi_hit_direct", "gi_hit_direct"}, {"exp_gi_hit_sun", "gi_hit_sun"}, {"exp_rf_hit_shade", "rf_hit_shade"},
     {"exp_rf_hit_gi", "rf_hit_gi"}, {"exp_water_geometry", "rt_water_geometry"},
     {"exp_water_reflections", "rt_water_reflections"}, {"exp_water_compose", "rt_water_compose"},
@@ -446,12 +446,12 @@ static void test_gui_levels() {
   };
   const Level levels[] = {
       {"exp_hidden_surface",
-       {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_recycle", "rt_hit_material_wind_rgb",
+       {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
         "gi_hit_direct", "gi_hit_sun", "rf_hit_shade", "rf_hit_gi"},
-       {{"0", "0", "0", "0", "0", "0", "0", "0"},
-        {"1", "1", "1", "1", "0", "0", "0", "0"},
-        {"1", "1", "1", "1", "1", "1", "0", "0"},
-        {"1", "1", "1", "1", "1", "1", "1", "1"}}},
+       {{"0", "0", "0", "0", "0", "0", "0"},
+        {"1", "1", "1", "0", "0", "0", "0"},
+        {"1", "1", "1", "1", "1", "0", "0"},
+        {"1", "1", "1", "1", "1", "1", "1"}}},
       {"exp_hit_emission", {"rt_hit_emission", "rt_emissive"}, {{"0", "0"}, {"1", "1"}, {"2", "1"}}},
       {"exp_gi_far", {"gi_far", "gi_far_m"}, {{"0", nullptr}, {"1", "6"}}},
       {"exp_water",
@@ -497,6 +497,7 @@ static void test_gui_levels() {
   for (const char* key : kOldKnobKeys) {
     bool ini_only = false;
     for (const char* k : kIniOnlyKeys) ini_only = ini_only || std::string(k) == key;
+    for (const char* k : kAutomaticKeys) ini_only = ini_only || std::string(k) == key;
     if (!is_knob_key(key) && !ini_only) CHECK_EQ(std::string("orphan key ") + key, "");
     CHECK(code_default(key) != nullptr);
   }
@@ -505,6 +506,13 @@ static void test_gui_levels() {
     CHECK_EQ(code_default(k), "0");
   }
   CHECK(find_knob("exp_fg_letterbox") == nullptr);
+  // Automatic fixes: default 1, written by no knob, in no preset or release override (A/B keys only).
+  for (const char* k : kAutomaticKeys) {
+    CHECK(!is_knob_key(k));
+    CHECK_EQ(code_default(k), "1");
+    for (int p = 0; p < kPresetCount; ++p) { Map m; for (auto& kv : expand_preset(p)) m[kv.first] = kv.second; CHECK(m.count(k) == 0); }   // no preset writes it
+    CHECK(!key_change_needs_restart(k, "1", "0"));
+  }
   // A hand-set ini-only key survives a save.
   CHECK_EQ(get(parse_ini(render_user_ini("fg_letterbox=1\n", kHigh, preset_values(kHigh))), "fg_letterbox"), "1");
 
@@ -631,8 +639,9 @@ static void test_user_ini_migration() {
     if (!same_value(get(w, kv.first.c_str()), kv.second))
       CHECK_EQ(kv.first + "=" + get(w, kv.first.c_str()), kv.first + "=" + kv.second);
   // The levels' keys the file lacked.
-  for (const char* key : {"rt_hit_material_recycle", "rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
+  for (const char* key : {"rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
     CHECK_EQ(get(w, key), "1");
+  CHECK(!w.count("rt_hit_material_recycle") || get(w, "rt_hit_material_recycle") == "1");   // automatic: no level writes 0
   CHECK_EQ(get(w, "rt_emissive"), "1");             // now written by Emission at ray hits
   CHECK(out.find("rt_emissive=1") == out.rfind("rt_emissive=1"));   // once, no longer under "Other keys"
   CHECK_EQ(get(w, "rt_xfb_mb"), "1024");            // unmanaged keys kept
@@ -646,7 +655,7 @@ static void test_user_ini_migration() {
   CHECK_EQ(render_user_ini(out, kUltra, v), out);
   // The added keys that need a restart are marked: the wind RGB rows and the pond's game shadow.
   int restart = 0;
-  for (const char* key : {"rt_hit_material_recycle", "rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
+  for (const char* key : {"rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
     restart += key_change_needs_restart(key, lookup(raw, key), get(w, key));
   CHECK(restart == 2);
 }
