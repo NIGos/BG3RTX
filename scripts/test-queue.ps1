@@ -18,6 +18,9 @@
 #     "patterns": ["\\[core\\] guard:", "\\[em\\] per build"],  # log lines to keep (last match each)
 #     "stop_on_dump": true,                  # stop repeating once an Aftermath dump appears
 #     "expect": ["\\[assetdb\\] loaded", "sharc: first frame"],  # must appear, else the run is INVALID
+#     "expect_every": [{"select": "rt stats \\(", "match": "...", "windows": ["diag-on"]}],
+#                                            # EVERY complete selected line in those move-plan windows
+#                                            # must match (scripts/queue_gates.py), else INVALID
 #     "post": "py -3 scripts/qa/x.py {captures}",               # optional command after each run
 #     "command": "py -3 -m scripts.qa run --scenes S6",         # instead of auto-run, for tools
 #                                                               # that launch the game themselves
@@ -534,6 +537,24 @@ function Run-Job($file) {
         if (-not (Select-String -LiteralPath $r.keptLog -Pattern $p -Quiet)) { $missing += $p }
       }
     } elseif ($job.expect) { $missing += @($job.expect) }
+    # "expect_every": every selected stats line inside the named move-plan windows must match
+    # (scripts/queue_gates.py), so one good window cannot hide bad ones.
+    if ($job.expect_every) {
+      if ($r.keptLog -and (Test-Path -LiteralPath $r.keptLog)) {
+        $gateFile = "$($r.keptLog).expect_every.json"
+        ConvertTo-Json -InputObject @($job.expect_every) -Depth 8 | Set-Content -LiteralPath $gateFile -Encoding UTF8
+        $gateArgs = @((Join-Path $PSScriptRoot 'queue_gates.py'), '--gates', $gateFile, '--log', $r.keptLog)
+        if ($r.runner_log) { $gateArgs += @('--runner', [string]$r.runner_log) }
+        $ix = [array]::IndexOf([string[]]@($job.args), '-MovePlan')
+        if ($ix -ge 0 -and $ix + 1 -lt @($job.args).Count) { $gateArgs += @('--plan', (Join-Path $tree @($job.args)[$ix + 1])) }
+        $gateOut = @(& py -3 @gateArgs 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -ne 0) {
+          $missing += @($gateOut | Where-Object { $_ } | Select-Object -First 6)
+          if (-not $gateOut) { $missing += 'every-window gates did not run' }
+        }
+        $lines += @($gateOut | Select-Object -Last 6)
+      } else { $missing += 'every-window gates: no kept game log' }
+    }
     if ($job.forbid -and $r.keptLog -and (Test-Path -LiteralPath $r.keptLog)) {
       foreach ($pattern in @($job.forbid)) {
         if (Select-String -LiteralPath $r.keptLog -Pattern $pattern -Quiet) { $missing += "forbidden log pattern: $pattern" }

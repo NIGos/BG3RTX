@@ -57,6 +57,17 @@
   "GI hit direct \\([0-9]+ frames\\): candidates [1-9]\\d* qualified \\d+",
   "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms"
  ],
+ "expect_every": [
+  {
+   "name": "clip rejected share, every complete diag-on stats window",
+   "select": "hit material instanced clip \\(\\d+ frames\\)",
+   "match": "wind: checked [1-9]\\d*, .*; rejected \\d+ = 0\\.0[0-3]\\d\\d% of all lookups",
+   "windows": [
+    "diag-on"
+   ],
+   "min": 1
+  }
+ ],
  "forbid": [
   "\\[crash\\] exception 0x",
   "VK_ERROR_DEVICE_LOST",
