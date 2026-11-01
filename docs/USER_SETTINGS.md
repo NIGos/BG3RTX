@@ -55,17 +55,53 @@ a change reaches a running game:
 | Ray Reconstruction | Off / On | live, brief hitch |
 | Ray-traced geometry | Off / Opaque only / Full | Off/Opaque live; **Opaque <-> Full needs a restart** |
 | Sun shadows | Screen-space / Ray-traced | live |
+| Roof sun shadows | Off / On (on in Ultra) | live |
 | Global illumination | Off / Screen-space / Ray-traced / Ray-traced High | live |
 | Local light shadows | Off / Fast / Full / Full + shadowed lights | live |
+| Box light shadows | Off / Shadowed / All (off in every preset) | live |
 | Reflections | Off / Glossy / Standard / Rough | live |
 | Frame generation | Off / 2x / 3x / 4x | 2x/3x/4x live; **Off <-> on needs a restart** |
 | RT lighting intensity | 50-100 % | live |
 | Frame cap (rendered fps) | Off / 30-240 | live |
 | NVIDIA Reflex (Advanced) | Off / On / On + Boost | live |
 
+**Experimental (being tested, off in every preset).** Each entry is one choice with levels; a
+higher level includes the lower ones and writes all of their ini keys.
+
+| Setting | Choices | Needs | Applies |
+|---|---|---|---|
+| Hidden-surface shading | Off / Materials / + Bounce / + Reflections | Full geometry; + Bounce: RT GI; + Reflections: Reflections on | **first enable: restart**; levels above Materials live |
+| Emission at ray hits | Off / Hidden hits | Hidden-surface shading | live |
+| Far-field sun bounce | Off / 6 m | Hidden-surface shading + Bounce | live |
+| RT water | Off / Reflections / + Shadows / + Refraction | Ray-traced geometry | **raising a level: restart**; lowering live |
+| Native coverage | Off / Hair + scalp / + Tilesets | Full geometry | **restart** |
+| Physical hair ray origins (advanced) | Off / On | Native coverage | enable at startup, then live |
+| Opacity micromaps | Off / On | Full geometry, GPU support | **restart** |
+| Preserve cutout capture on overflow | Off / On | Full geometry | live |
+
+What each level writes: Hidden-surface shading Materials = `rt_hit_material`,
+`rt_hit_material_instanced`, `rt_hit_material_recycle`, `rt_hit_material_wind_rgb`; + Bounce adds
+`gi_hit_direct`, `gi_hit_sun`; + Reflections adds `rf_hit_shade`, `rf_hit_gi`. Emission = `rt_hit_emission=1`
+and `rt_emissive=1`. Far-field = `gi_far=1`, `gi_far_m=6`. RT water Reflections = `rt_water_geometry`,
+`rt_water_reflections`, `rt_water_compose`; + Shadows adds `rt_water_shadows`, `rt_water_ls_shadows`,
+`rt_water_game_shadow`; + Refraction adds `rt_water_refraction`. Native coverage Hair + scalp =
+`rt_native_hair`, `rt_native_scalp`; + Tilesets adds `rt_native_tileset`.
+
+**Developer only** (shown when `dev=1`, the developer `bg3rtx.ini`): Experimental lighting
+reference (`rt_hit_reference`), Local light sampling exact-k (`ls_k`), Current cascade sun shadows
+(`rt_sun_cascade_current`), and Emission at ray hits "All hits" (`rt_hit_emission=2`).
+**No entry:** `fg_letterbox` (frame generation in a swapchain larger than the game's output) stays
+an ini key you can add by hand; buffer reuse and the foliage rows come with Hidden-surface shading;
+capture buffer sizes follow the scene.
+
 - **Dependencies.** Every ray-traced effect needs "Ray-traced geometry", and reflections also
   need global illumination. A red marker shows that a dependency is off; the effect cannot
-  work until it is on.
+  work until it is on. **Save** lowers a choice whose required setting is off (the status line
+  names it).
+- **Files from older versions.** A `bg3rtx_user.ini` written before these levels loads as the
+  highest level any of its keys selects (for example `rf_hit_shade=1` reads as Hidden-surface
+  shading + Reflections). Saving writes that level's keys; the marker shows "restart required"
+  when one of the added keys needs a game start.
 - **Restart required.** An orange marker shows a change that applies at the next start.
 - **While the game runs.** You can keep the window open, change settings and press **Save**:
   the game applies them within about a second.
@@ -104,9 +140,8 @@ launcher keeps them when it saves. Delete the file to go back to the defaults.
 
 ## Command line (advanced)
 
-The experimental `ls_box=0` key remains off until box-light recompute and shadow
-checks pass. Development branches can compare `ls_box=1` with `0`; it is not
-an approved player setting yet. See `docs/P3_BOX_LIGHTS.md` for validation status.
+Box light shadows (`ls_box`) stay off in every preset until the live box-light check passes
+(`docs/P3_BOX_LIGHTS.md`).
 
 ```
 BG3RTX.exe --preset ultra          write bg3rtx_user.ini with a preset (limited to your GPU)
