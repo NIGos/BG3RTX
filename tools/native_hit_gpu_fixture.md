@@ -63,6 +63,10 @@ Each dispatch has one froxel listing that dispatch's lights.
    contributions of other chromas than their luminance weight and visibilities 0 / 1 / 0.25 (occluded,
    lit, soft), the grid mean of the shader's delta `sum_E c(t - 1) + f c_j (t_j - 1)` per channel is the
    full sum, from the GPU's own selection and factors, within the same grid bound (8e; worst 3e-4 rel).
+9. Two-sided frame at hits (`rt_hit_material_instanced`, Base_AlphaTest_2s_VT FS 923131c7): rays from
+   above, below and oblique onto the open floor, authored N up or down, ng either sign. `RtHit.dir` must be
+   the traced direction bit for bit (9b) and the consumer's N-column sign `nv_two_sided_sign(ng, N, dir)` on
+   the GPU must equal the C++ function (9a; front and back both present).
 
 ## Tolerance
 
