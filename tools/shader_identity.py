@@ -776,7 +776,12 @@ def feature_gate(doc, feature_files, label, contract=None, argv=None, foreign=No
         missing = [r for r in old_list if r not in new_list]
         in_feature = feature_files if callable(feature_files) else (lambda r: split_request(r)[0] in feature_files)
         feature = [r for r in new_list if in_feature(r)]
-        unexpected = [r for r in new_list if r not in old_list and r not in feature and not (foreign and foreign(r))]
+        # A new request with a define no baseline request has belongs to another new feature (several
+        # merged in one tree, e.g. RF_HIT_GI and RT_HIT_WIND_RGB): its own gate compiles it.
+        known = {d.partition("=")[0] for r in old_list for d in split_request(r)[1]}
+        def other_feature(r):
+            return (foreign and foreign(r)) or any(d.partition("=")[0] not in known for d in split_request(r)[1])
+        unexpected = [r for r in new_list if r not in old_list and r not in feature and not other_feature(r)]
         ident = identity(base, new, [r for r in old_list if r in new_list], tool, cache, args.jobs, label + " key-off")
         on = compile_requests(new, feature, tool=tool, cache=cache, jobs=args.jobs, label=label + " key-on", validate=True)
     finally:

@@ -15,7 +15,9 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024 };
+// rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
+// instanced family's clip counters (rtStats 427..434); without it the instanced variants are unchanged.
 
 // rt_hit_material_instanced at startup (common/native_hit_instanced.h): the files that include
 // rt/native_hit_material.hlsli get RT_HIT_INSTANCED=1 (RtHit.dir, the two-sided N column of row word
@@ -94,7 +96,7 @@ inline unsigned allowed(const char* file) {
   if (cascade_entry(file)) f |= kCascade;
   if (hair_origin::alternate_entry(file)) f |= kHairOrigin;
   if (sun_current_entry(file)) f |= kSunCurrent;
-  if (hit_material_entry(file)) f |= kHitInstanced;
+  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb;
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   return f;
@@ -106,6 +108,7 @@ inline unsigned allowed(const char* file) {
 inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
+  if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb);
   std::string out = file;
   char sep = '?';
   auto add = [&](const char* def) {
@@ -133,6 +136,7 @@ inline std::string request(const char* file, unsigned flags) {
     add("RT_NATIVE_HAIR=1");
   }
   if (flags & kHitInstanced) add("RT_HIT_INSTANCED=1");
+  if (flags & kHitWindRgb) add("RT_HIT_WIND_RGB=1");
   if (flags & kCascade) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF

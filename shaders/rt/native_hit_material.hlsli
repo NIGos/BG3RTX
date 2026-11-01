@@ -325,7 +325,12 @@ void hit_material_count(RtHit hit,uint status,uint bin){
  // wind RGB 2S 427..): checked, bit-exact, within the derived tolerance, UV differs, beyond x1-16, x16-256,
  // over x256, rigid offset.
  const uint family=g_hm_clip&3u,outcome=(g_hm_clip>>2)&7u;
+#ifdef RT_HIT_WIND_RGB
+ // rt_hit_material_wind_rgb at startup: the wind RGB 2S family's counters 427..434 too.
  [unroll]for(uint f=1;f<4;++f){const uint base=f<3u?356u+(f-1u)*8u:427u;const bool mine=family==f;
+#else
+ [unroll]for(uint f=1;f<3;++f){const uint base=356u+(f-1u)*8u;const bool mine=family==f;
+#endif
   stat_add(base,mine,bin);
   [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
   stat_add(base+7u,mine && (g_hm_clip&32u)!=0u,bin);}

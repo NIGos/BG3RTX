@@ -969,11 +969,14 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool instanced=sv::hit_material_entry(file) && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::instanced_capability_key,sizeof(uint32_t))));
   // gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"): the gi_hit_sun files with RT_GI_FAR, live.
   const bool far_on=sv::gi_far_entry(file) && host->cfg_int("gi_far",0)!=0;
+  // rt_hit_material_wind_rgb at startup: its clip counters (RT_HIT_WIND_RGB). Constant for the session,
+  // so it shares the instanced variant slot (the request string is compared below).
+  const bool wind_rgb=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::wind_rgb_capability_key,sizeof(uint32_t))));
   const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
   const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
                                                  (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u) |
-                                                 (rf_gi ? unsigned(sv::kRfHitGi) : 0u));
+                                                 (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u));
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];

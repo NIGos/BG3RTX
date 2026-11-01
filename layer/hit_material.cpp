@@ -586,8 +586,9 @@ bool instanced_patch_vs(uint64_t vs){return instanced_on && instanced::frame_vs(
 void device_created(DeviceData* device){std::lock_guard lock(mutex);if(dd)return;dd=device;on=cfg_hot(CfgHot::rt_hit_material)!=0 && cfg_int("rt_alpha",1)!=0 && cfg_int("rt_bvh_split",1)!=0;
  instanced_on=on && cfg_int("rt_hit_material_instanced",0)!=0;
  wind_rgb_on=instanced_on && cfg_int("rt_hit_material_wind_rgb",0)!=0;
+ capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),wind_rgb_on);
  capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),instanced_on);}
-void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
+void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
  for(auto& [id,q]:queries)destroy_query(*q);queries.clear();
  for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();
  for(auto& s:slots){destroy(s.data);s={};}

@@ -8,4 +8,6 @@ inline bool capable(uint32_t* word){return word && std::atomic_ref<uint32_t>(*wo
 // rt_hit_material_instanced at startup (layer/hit_material.cpp): the core then requests the hit-material
 // consumers with RT_HIT_INSTANCED=1 (common/shader_variant.h kHitInstanced); the live key only gates the rows.
 inline constexpr const char* instanced_capability_key="native-hit-instanced-v1";
+// rt_hit_material_wind_rgb at startup: the instanced consumers also get RT_HIT_WIND_RGB=1 (kHitWindRgb).
+inline constexpr const char* wind_rgb_capability_key="native-hit-wind-rgb-v1";
 }
