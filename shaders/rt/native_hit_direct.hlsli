@@ -242,12 +242,10 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   HD_XSTAT(3u,true);
   // bg3_box_reaches from the record's channel word and box rows only (cost, 2026-11-01): most listed
   // boxes do not reach the hit (live S8 ~2 box entries per hit), so the rest of the 128-byte record
-  // (and the cookie) is loaded only for a box that does. Same arithmetic as bg3_box_reaches: exact.
-  const uint ba=bi*kBoxStride;
-  if(((lBoxes.Load(ba+40u)&16777215u)&(1u<<(material.channel&31u)))==0u)continue;   // channel: known zero
-  const float4 bq=float4(surface_position,1.0);
-  const float3 uvw=float3(dot(asfloat(lBoxes.Load4(ba+48u)),bq),dot(asfloat(lBoxes.Load4(ba+64u)),bq),dot(asfloat(lBoxes.Load4(ba+80u)),bq));
-  if(!bg3_box_inside(uvw))continue;   // outside: known zero
+  // (and the cookie) is loaded only for a box that does. bg3_box_reaches_rec: the same function
+  // (common/box_light.h bl_reaches, box_light_test) as bg3_box_reaches: exact.
+  float3 uvw;
+  if(!bg3_box_reaches_rec(bi,material.channel,surface_position,uvw))continue;   // channel off or outside: known zero
   Bg3Box box=load_box(bi);
   const float g=bg3_box_falloff(box,uvw);
   if(!(g>0))continue;
