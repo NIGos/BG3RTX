@@ -198,7 +198,7 @@ core only with the key on: key off runs the unchanged `gi_hit_direct` SPIR-V.
 - Live gate: as M4.1 at S3 Campsite; cost = `gi: trace pass` GPU median ON minus OFF (one more
   ray per supported hit, expected +0.1 ms).
 
-## Far-field sun bounce (`gi_far=0`, `gi_far_m=6`, 2026-11-01; offline, READY_FOR_LIVE)
+## Far-field sun bounce (`gi_far=0`, `gi_far_m=6`, 2026-11-01; live S8 energy gate failed, kept off)
 
 Key `gi_far` (live; GUI Experimental "Far-field sun bounce" off / 4 / 6 / 8 m, needs `exp_gi_hit_sun`).
 Variant: request flag `kGiFar` adds `RT_GI_FAR=1` to the four gi_hit_sun files only (common/shader_variant.h);
@@ -266,6 +266,36 @@ PT lacks (the native ambient, emission). gi_far is kept energy-safe (native for 
 Promotion needs the corrected number above about 30% far field from a pack with casters on, real materials (VT
 cache) and the native ambient (another agent adds the ambient capture), then the live batch
 `tools/live_batches/gi_far` (camp + S8, OFF / ON / OFF, about 8 min).
+
+### Go / no-go on the full pack (2026-11-01 evening, offline): **keep off**
+
+Pack `replay-20261101-142819-1` (rc1, S8, `rt_cascade_casters=1`, VT cache 2054 MB, lighting inputs 19 of 19).
+The caster instance is in the pack's TLAS array but has no geometry (InstInfo tris 0, left out with mask 0), so
+the replay still needs the asset-DB roof volumes: `PT_ROOFS=1` for the PT, and for the pass the new
+`frame_replay --sun-trust` (the sun set b8 image from `tools/pt_roofs.py --trust`, 159 padded volumes).
+
+- Reference (PT_ROOFS, PT_SUN_LUT, PT_ENV, real materials, 32 iterations): far field = 53.6% of the traced bounce
+  on screen beyond 1 m (visible 15.2, hidden 38.3) + up to 35.8% off screen (not split); live domain 8.4%; sun /
+  local 70 / 30%; multi-bounce 24.9%; first rays: roof 39.6%, miss 20.0%. k = 15.2: the PT's sun + local light is
+  1/15 of the game's radiance at visible hits (S8 is lit by the native ambient). Native vs PT far + env:
+  E x AO / (k x PT far + env) **1.44** (tiles p10 0.90, median 1.75, p90 3.01); E / ref 1.76; k = 1: 1.91.
+  The preliminary 0.70 (no roofs) flips: sun through the cut roofs made the old reference too bright.
+- Emulation: the gi_hit_sun pass with `RT_GI_FAR=1 GI_FAR_M=6` on the pack reproduces the live `GI far` line
+  (ambient visibility 0.8326 vs live 0.8343, old rule 0.8790 vs 0.8803; bounce 0.0146 vs 0.0147, old 0.0090 vs
+  0.0092; screen hits beyond 1 m 5.1% of rays vs 5.0%). Qualified sun-lit far hits 0.10% (live 0.28%: the volume
+  rule is stricter than the casters).
+- Image change it predicts (diffuse = dcol x (E x a + giRaw.rgb), gi_ao = 1; the native model explains the pack's
+  diffuse radiance, median ratio 1.13): 4 / 6 / 8 m **-1.4 / -2.0 / -2.4%** of the screen radiance (6 m: ambient
+  -2.83%, bounce +0.88%). Toward the reference, no overshoot: the game stays above it on 89% of tiles, per-tile
+  |I - ref| / ref 1.40 -> 1.31 (6 m) -> 1.30 (8 m), mean I / ref 1.555 -> 1.507 -> 1.497.
+- **Live S8 went the other way: +2.87%** (scene colour 5c3fdabc, OFF spread 0.23%; diffuse buffer d1669194
+  +2.93%). The bounce alone gives at most +0.88%, so the live change is not explained by the `GI far` line: the
+  batch's energy gate fails. The ray data agree, so the difference is downstream of giRaw (temporal, AO fold,
+  composite, the D-LS `ao_direct` give-back that reads the folded AO, RR). Camp (+3.97%) has no pack.
+- Verdict: keep `gi_far` off. No rule change indicated: the rule moves S8 the right way and longer rays help
+  monotonically, and `gi_far_rho` touches 0.1-0.3% of rays. Next: one live window ON / OFF with `ls_stats=1` and the
+  GI images in the trace (giRaw, the folded AO, gDiffuse before and after the composite) to find the stage that
+  turns -2% into +2.9%; then rerun gf2. Cost if ever on: GI trace S8 0.97 -> 3.00 ms, camp 2.63 -> 5.70 ms.
 
 ## `gi_bounce_spec`: not re-added (review 2026-11-01)
 
