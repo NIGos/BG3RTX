@@ -45,7 +45,7 @@
   "\\[cfg\\] settings read",
   "\\[trace\\] frame \\d+ written",
   "ls exact-k: active \\(ls_k 1, ls_rest_samples 1\\)",
-  "ls exact-k: active \\(ls_k 2, ls_rest_samples 1\\)",
+  "ls: local-light shadow pass GPU median .*exact-k 2 \\+ 1 \\(variant 1\\)",
   "ls exact-k: inactive \\(ls_k 0, ls_rest_samples 1\\)",
   "ls stats \\(\\d+ frames\\): [0-9.]+M px/frame; lights per pixel: listed [0-9.]+, evaluated [0-9.]+ \\(with a game shadow [0-9.]+\\), traced (?!0\\.00)[0-9.]+",
   "ls exact-k stats \\(\\d+ frames\\): ls_k 1, ls_rest_samples 1: traced lights \\(ls_k=0 would trace\\) [0-9.]+/px; rays [0-9.]+/px \\(exact [0-9.]+, remainder [0-9.]+\\), occluded [0-9.]+/px; over the cap \\(k-hit\\) (?!0\\.0%)[0-9.]+% of px",
