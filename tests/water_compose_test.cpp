@@ -198,6 +198,51 @@ int main(int argc, char** argv) {
   CHECK(lighting_use(101, 100) == LightingUse::kNone);         // never from the future
   CHECK(kLightingLagFrames == 2 + 1);
 
+  // 4e. The statistics' group reduction (the 7.2 ms of m5w3-fg2): a group's sum in one 32-bit
+  //     groupshared word, then one 64-bit add, gives the same counter as the per-wave adds it
+  //     replaced, for any values up to the shader's clamp (worst case: every lane at the clamp).
+  {
+    CHECK(uint64_t(uint32_t(kCsGroupSumMax)) == kCsGroupSumMax);
+    CHECK(float(10000.0f * 4096.0f + 0.5f) <= float(kCsQuantMax) + 4.0f &&
+          kCsGroupLanes * (kCsQuantMax + 4) < (1ull << 32));   // float rounding of the quantiser stays inside
+    uint32_t lo_w = 0xfffff000u, hi_w = 7, lo_g = lo_w, hi_g = hi_w;   // start near a carry
+    uint64_t want = (uint64_t(hi_w) << 32) | lo_w;
+    uint32_t seed = 12345;
+    for (int g = 0; g < 4000; ++g) {
+      uint32_t gsum = 0;
+      for (int wave = 0; wave < 2; ++wave) {   // 32-lane waves: two per 8x8 group
+        uint64_t wsum = 0;
+        for (int l = 0; l < 32; ++l) {
+          seed = seed * 1664525u + 1013904223u;
+          const uint64_t q = (g % 7 == 0) ? kCsQuantMax : (seed >> 8) % (kCsQuantMax + 1);
+          wsum += q;
+        }
+        add64(lo_w, hi_w, uint32_t(wsum));
+        gsum += uint32_t(wsum);
+        want += wsum;
+      }
+      add64(lo_g, hi_g, gsum);
+    }
+    CHECK(lo_w == lo_g && hi_w == hi_g);
+    CHECK(((uint64_t(hi_g) << 32) | lo_g) == want);
+  }
+
+  // 4f. "[water] compose GPU": pair 0 the lighting copy, the rest the compose dispatches.
+  {
+    const uint64_t q[12] = {100, 1, 300, 1, 1000, 1, 1500, 1, 2000, 1, 2100, 1};
+    ComposeMs ms;
+    CHECK(compose_ms(q, 3, 0.001, ms) && std::fabs(ms.copy - 0.2) < 1e-12 && std::fabs(ms.compose - 0.6) < 1e-12);
+    CHECK(compose_ms(q, 1, 0.001, ms) && ms.compose == 0.0);
+    uint64_t bad[12];
+    std::memcpy(bad, q, sizeof q);
+    bad[7] = 0;   // an end timestamp not available
+    CHECK(!compose_ms(bad, 3, 0.001, ms));
+    std::memcpy(bad, q, sizeof q);
+    bad[6] = 900;   // reversed
+    CHECK(!compose_ms(bad, 3, 0.001, ms));
+    CHECK(!compose_ms(q, 0, 0.001, ms));
+  }
+
   // 5. The dumped modules in the given directory: every table entry whose dump is there.
   unsigned patched = 0;
   for (const FsIds& fi : kFsIds) {

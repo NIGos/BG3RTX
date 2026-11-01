@@ -188,4 +188,36 @@ inline uint32_t ratio_bin(float al, float b) {   // 0 none (B = 0), else the wor
   return r < kRatioLow ? kCsRatioLow : r > kRatioHigh ? kCsRatioHigh : kCsRatioMid;
 }
 
+// ---- The statistics' cost (shaders/rt/water_compose.hlsl cstat_flush, core/water.cpp) ----
+// cStats is device-local and every word is reduced per 8x8 group in groupshared before one global
+// atomic (m5w3-fg2: per-wave atomics into host-visible memory cost 7.2 ms at 275k records). The
+// 64-bit sums (words 16..27, lo/hi) are added per group into a 32-bit groupshared word: exact while
+// the group's sum of quantised values (each <= 1e4 * 4096 + 0.5, the shader's clamp) fits 32 bits.
+inline constexpr uint32_t kCsGroupLanes = 64;                 // numthreads(8, 8, 1)
+inline constexpr uint64_t kCsQuantMax = 10000ull * 4096ull;   // uint(clamp(v, 0, 1e4) * 4096 + 0.5)
+inline constexpr uint64_t kCsGroupSumMax = kCsGroupLanes * kCsQuantMax;
+static_assert(kCsGroupSumMax < (1ull << 32), "a group's quantised sum must be exact in a 32-bit groupshared word");
+// The 64-bit counter add of the flush: lo += s, carry into hi (the shader's InterlockedAdd pair).
+inline void add64(uint32_t& lo, uint32_t& hi, uint32_t s) {
+  const uint32_t old = lo;
+  lo = old + s;
+  if (uint32_t(old + s) < old) ++hi;
+}
+
+// "[water] compose GPU": the timestamps of one frame slot, pairs (start, end) with availability
+// (q[4 i] start, q[4 i + 1] its availability, q[4 i + 2] end, q[4 i + 3]): pair 0 the lighting copy,
+// pairs 1..n-1 the compose dispatches. False when any pair is unavailable or reversed.
+struct ComposeMs {
+  double copy = 0, compose = 0;
+};
+inline bool compose_ms(const uint64_t* q, uint32_t pairs, double ms_per_tick, ComposeMs& out) {
+  out = ComposeMs{};
+  for (uint32_t i = 0; i < pairs; ++i) {
+    const uint64_t* p = q + i * 4;
+    if (!p[1] || !p[3] || p[2] < p[0]) return false;
+    (i == 0 ? out.copy : out.compose) += double(p[2] - p[0]) * ms_per_tick;
+  }
+  return pairs != 0 && out.copy + out.compose < 1000.0;
+}
+
 }  // namespace bg3::water
