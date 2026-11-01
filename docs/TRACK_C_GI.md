@@ -173,6 +173,8 @@ S6 "non-finite" alarm of m4p3 (2026-11-01, branch worktree-agent-ad96013fbc66f09
   and >= 0 takes fallback0 (the key-off ray), counter 383; a mean bounce above the half maximum is
   stored as 65504, counter 384 (energy above the encoding limit, counted, never +Inf). Both are on the
   `GI hit direct` line: `non-finite hit terms (fallback0) N, bounce over the half-float max (stored 65504) M px`.
+  Checked against ac57418: the 48 key-off gi_trace_rt / gi_trace_rt_sharc requests are byte-identical,
+  all 448 hit-GI requests compile and pass spirv-val.
 - Rerun of m4p3 decides: N = M = 0 in diag-on means the darkening has another cause (next suspects:
   the hit-GI dispatch's alpha set from `rt_hit_material_use` instead of `b.alpha`, i.e. occlusion; and
   the scene drift between shots, the em-off pair alone spreads 0.80%).
