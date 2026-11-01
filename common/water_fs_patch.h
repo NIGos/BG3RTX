@@ -60,6 +60,10 @@ struct FsIds {
   uint32_t ls_f0;       // vec3: the F0 of the loops' Schlick term (vec3(0.16 spec^2): grey)
   uint32_t ls_chan;     // uint: set 1 b0 _m1, the light channel (loaded at the top level of main)
   uint32_t ls_z;        // Input variable float: location 0, the froxel depth (log2-sliced)
+  // M5.5 step 1 (record words 24-25 with `refr`): the FS's refraction sample, the vec4 texture() of its
+  // colour copy (set 2 b4) that the end of main mixes: C = mix(Refr.xyz, surface, a). Defined at the top
+  // level of main just before C (it is C's operand), so it dominates the stores.
+  uint32_t refr;        // vec4: _4332 / _4530 / _3668
 };
 
 // The audited table. 7b44a567 FLUID_Water_Plane_flowmap_huge_PixelLighting (S1 docks), from
@@ -91,13 +95,16 @@ struct FsIds {
 //   99c1fcef: spot %2770 %2772, projector %3055 %3057, dif %1665, F0 %1668, channel %1664 (%49 set 1 b0);
 //   7b44a567: spot %2572 %2574, projector %2857 %2859, dif %1467, F0 %1470, channel %1466.
 // The loops' N, V and roughness are the record's (N, normalize(-_5), roughness ids above).
+// M5.5 refraction sample (glsl of the dumps, 2026-11-01): 7b44a567 `vec4 _4332 = texture(sampler2D(_22
+// (set 2 b4), _51), clamp(uv + wave offset ...))`, 99c1fcef `_4530` (_23 = set 2 b4), c4e92ccd `_3668`
+// (_22 = set 2 b4); C = mix(_4332.xyz, ..., vec3(_784)) etc.: the a of the table is the mix weight.
 inline constexpr FsIds kFsIds[] = {
     {0x7b44a567771ecbecull, 784, 4096, 3799, 2063, 3379, 3303, 3352, 1207, 4335, 1480, 5, 3889, 3892, 3898,
-     2574, 2572, 2859, 2857, 1467, 1470, 1466, 4},
+     2574, 2572, 2859, 2857, 1467, 1470, 1466, 4, 4332},
     {0x99c1fcef82b253c1ull, 809, 4294, 3997, 2261, 3577, 3501, 3550, 1294, 4533, 1678, 5, 4087, 4090, 4096,
-     2772, 2770, 3057, 3055, 1665, 1668, 1664, 4},
+     2772, 2770, 3057, 3055, 1665, 1668, 1664, 4, 4530},
     {0xc4e92ccdb08dd777ull, 425, 3510, 3220, 1484, 2800, 2724, 2773, 665, 3671, 899, 5, 3310, 3313, 3319,
-     1995, 1993, 2280, 2278, 886, 889, 885, 4},
+     1995, 1993, 2280, 2278, 886, 889, 885, 4, 3668},
 };
 inline constexpr uint32_t kFsIdsCount = uint32_t(sizeof kFsIds / sizeof kFsIds[0]);
 
@@ -153,11 +160,13 @@ inline void emit_string(std::vector<uint32_t>& v, uint32_t op, const char* s) {
 // misplace records, which the ownership check rejects). sun (M5.4): the record of
 // kRecordWordsSun words with the sun term; false emits exactly the M5.3 module. ls (M5.4b): the
 // record of kRecordWordsLs words, the sun's plus the local-light words (implies sun); false emits
-// exactly the M5.4 module.
+// exactly the M5.4 module. refr (M5.5 step 1): the record of kRecordWordsRefr words, the local-light
+// record's plus the refraction words (implies ls); false emits exactly the M5.4b module.
 inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids, uint64_t addr, uint32_t capacity,
-                            std::vector<uint32_t>& out, bool sun = false, bool ls = false) {
+                            std::vector<uint32_t>& out, bool sun = false, bool ls = false, bool refr = false) {
   using namespace fsp;
   out.clear();
+  if (refr) ls = true;
   if (ls) sun = true;
   if (!code || words < 5 || code[0] != 0x07230203u) return PatchStatus::kNotSpirv;
   struct Ins { size_t at; uint32_t op, n; };
@@ -261,6 +270,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   if (ls && (!is(ids.ls_d12, t_v3) || !is(ids.ls_s12, t_v3) || !is(ids.ls_d, t_v3) || !is(ids.ls_s, t_v3) ||
              !is(ids.ls_dif, t_v3) || !is(ids.ls_f0, t_v3) || !is(ids.ls_chan, t_uint)))
     return PatchStatus::kIdMismatch;
+  if (refr && !is(ids.refr, t_v4)) return PatchStatus::kIdMismatch;
   auto input_of = [&](uint32_t var, uint32_t pointee) {
     auto v = var_ptr.find(var);
     if (v == var_ptr.end()) return false;
@@ -293,7 +303,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   if (sun) {
     c_w9 = id(), c_stride = id();
     emit(types, OpConstant, {t_uint, c_w9, 9});
-    emit(types, OpConstant, {t_uint, c_stride, ls ? kRecordWordsLs : kRecordWordsSun});
+    emit(types, OpConstant, {t_uint, c_stride, refr ? kRecordWordsRefr : ls ? kRecordWordsLs : kRecordWordsSun});
     c_w8 = c_u[kRecordWords];   // 8
   }
   // M5.4b: word offsets 10..23, the channel mask 31, the luminance weights (after every M5.4
@@ -309,6 +319,13 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     emit(types, OpConstant, {t_float, lb, 0x3d93dd98u});   // 0.0722
     c_lum = id();
     emit(types, OpConstantComposite, {t_v3, c_lum, lr, lg, lb});
+  }
+  // M5.5: word offsets 24, 25 (after every M5.4b declaration: refr = false is unchanged).
+  uint32_t c_w24 = 0, c_w25 = 0;
+  if (refr) {
+    c_w24 = id(), c_w25 = id();
+    emit(types, OpConstant, {t_uint, c_w24, 24});
+    emit(types, OpConstant, {t_uint, c_w25, 25});
   }
   std::vector<uint32_t> decos;
   emit(decos, OpDecorate, {t_arr, DecArrayStride, 4});
@@ -403,6 +420,14 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
       for (uint32_t k = kRecordWordsSun; k < kRecordWordsLs; ++k) {
         const uint32_t p = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_wl[k]})});
         emit(body, OpStore, {p, lw[k], MemAligned, 4});
+      }
+      if (refr) {   // M5.5 words 24, 25: w24 half2(Refr.r, Refr.g), w25 half2(Refr.b, 1 - a)
+        const uint32_t rw = op2(OpFSub, t_float, {c_one, ids.a});
+        const uint32_t s24 = half2(c(ids.refr, 0), c(ids.refr, 1)), s25 = half2(c(ids.refr, 2), rw);
+        const uint32_t p24 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w24})});
+        emit(body, OpStore, {p24, s24, MemAligned, 4});
+        const uint32_t p25 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w25})});
+        emit(body, OpStore, {p25, s25, MemAligned, 4});
       }
     }
   }

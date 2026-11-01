@@ -368,7 +368,7 @@ static const CfgHotKey kCfgHot[] = {
   {"rt_em_backdrop", 0}, {"rt_em_decal", 1}, {"rt_sun_cascade_current", 0}, {"rt_cascade_index", 1},
   {"rt_alpha_cut", 1}, {"rt_alpha_stochastic", 1}, {"rt_alpha_unknown", 1}, {"rt_alpha_test", 1},
   {"rt_water_geometry", 0}, {"rt_water_compose", 0}, {"rt_hit_material_instanced", 0},
-  {"rt_water_shadows", 0}, {"rt_water_ls_shadows", 0},
+  {"rt_water_shadows", 0}, {"rt_water_ls_shadows", 0}, {"rt_water_refraction", 0},
 };
 static_assert(sizeof kCfgHot / sizeof kCfgHot[0] == size_t(CfgHot::Count), "kCfgHot must list every CfgHot");
 static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];

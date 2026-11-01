@@ -27,6 +27,7 @@
 // M5.4 (rt_water_shadows): patches and swaps like rt_water_compose; on when the record buffer is
 // created, the records get the FS's sun term too (40 B instead of 32: kRecordBytesSun).
 // M5.4b (rt_water_ls_shadows): likewise, with the sun and the local-light words (96 B: kRecordBytesLs).
+// M5.5 (rt_water_refraction): likewise, the local-light record plus the refraction words (104 B: kRecordBytesRefr).
 // Key off: no pass is hooked for water and nothing is allocated (resources are created at the
 // first enabled pass, so the key is live). rt_water_compose=0 and rt_water_shadows=0 when the water
 // pipelines are created (game start or level load): no module is patched, no buffer allocated, no
@@ -478,9 +479,11 @@ bool compose_buffer() {
   }
   // M5.4: the sun words (two more per record) when rt_water_shadows is on now; M5.4b: the sun and the
   // local-light words (96 B) when rt_water_ls_shadows is on. Fixed for the device.
-  g_cmp.record_bytes = cfg_int("rt_water_ls_shadows", 0) != 0 ? water::kRecordBytesLs
-                       : cfg_int("rt_water_shadows", 0) != 0  ? water::kRecordBytesSun
-                                                              : water::kRecordBytes;
+  // M5.5: the local-light record plus the refraction words (104 B) when rt_water_refraction is on.
+  g_cmp.record_bytes = cfg_int("rt_water_refraction", 0) != 0   ? water::kRecordBytesRefr
+                       : cfg_int("rt_water_ls_shadows", 0) != 0 ? water::kRecordBytesLs
+                       : cfg_int("rt_water_shadows", 0) != 0    ? water::kRecordBytesSun
+                                                                : water::kRecordBytes;
   g_cmp.cap = water::capacity_of_mb(water::record_mb(cfg_int("rt_water_compose_mb", 160), g_cmp.record_bytes),
                                     g_cmp.record_bytes);
   const VkDeviceSize bytes = water::buffer_bytes(g_cmp.cap, g_cmp.record_bytes);
@@ -516,14 +519,16 @@ void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, si
   std::lock_guard<std::mutex> lock(g_cmp_mu);
   g_cmp.mods.erase(m);   // a reused handle
   if (!ids || !g_dd ||
-      (cfg_int("rt_water_compose", 0) == 0 && cfg_int("rt_water_shadows", 0) == 0 && cfg_int("rt_water_ls_shadows", 0) == 0) ||
+      (cfg_int("rt_water_compose", 0) == 0 && cfg_int("rt_water_shadows", 0) == 0 && cfg_int("rt_water_ls_shadows", 0) == 0 &&
+       cfg_int("rt_water_refraction", 0) == 0) ||
       bytes % 4 ||
       !compose_buffer())
     return;
   auto words = std::make_shared<std::vector<uint32_t>>();
-  const bool ls = g_cmp.record_bytes == water::kRecordBytesLs;      // M5.4b: the sun and local-light words
+  const bool refr = g_cmp.record_bytes == water::kRecordBytesRefr;  // M5.5: the local-light record + the refraction words
+  const bool ls = refr || g_cmp.record_bytes == water::kRecordBytesLs;   // M5.4b: the sun and local-light words
   const bool sun = ls || g_cmp.record_bytes == water::kRecordBytesSun;   // M5.4: the record with the sun words
-  const water::PatchStatus st = water::patch_fs(code, bytes / 4, *ids, g_cmp.addr, g_cmp.cap, *words, sun, ls);
+  const water::PatchStatus st = water::patch_fs(code, bytes / 4, *ids, g_cmp.addr, g_cmp.cap, *words, sun, ls, refr);
   if (st != water::PatchStatus::kApplied) {
     ++g_cmp.mods_refused;
     g_cmp.last_refusal = st;
@@ -533,7 +538,7 @@ void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, si
   }
   ++g_cmp.mods_patched;
   log("[water] compose: FS %016llx patched (%zu -> %zu words%s)", (unsigned long long)hash, bytes / 4, words->size(),
-      ls ? ", with the sun and local-light terms" : sun ? ", with the sun term" : "");
+      refr ? ", with the sun, local-light and refraction terms" : ls ? ", with the sun and local-light terms" : sun ? ", with the sun term" : "");
   g_cmp.mods[m] = std::move(words);
   g_any_variant.store(true, std::memory_order_relaxed);   // from here on modules and pipelines are looked at
 }
@@ -695,7 +700,8 @@ int water_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const 
   }
   // M5.3: the composition variant in place of the game's pipeline for this draw (geocapture
   // geo_post_draw rebinds the game's). Same layout: the game's bound sets stay valid.
-  if (cfg_hot(CfgHot::rt_water_compose) || cfg_hot(CfgHot::rt_water_shadows) || cfg_hot(CfgHot::rt_water_ls_shadows)) {   // M5.3 / M5.4
+  if (cfg_hot(CfgHot::rt_water_compose) || cfg_hot(CfgHot::rt_water_shadows) || cfg_hot(CfgHot::rt_water_ls_shadows) ||
+      cfg_hot(CfgHot::rt_water_refraction)) {   // M5.3 / M5.4
     VkPipeline v = VK_NULL_HANDLE;
     if (g_any_variant.load(std::memory_order_relaxed)) {
       std::lock_guard<std::mutex> cl(g_cmp_mu);
@@ -973,7 +979,8 @@ void water_on_present() {
       log("[water] families: captured %s; counted %s", fam.empty() ? "none" : fam.c_str(), other.empty() ? "none" : other.c_str());
   }
   const uint64_t swaps = g_swaps.exchange(0), novar = g_no_variant.exchange(0);
-  if (cfg_hot(CfgHot::rt_water_compose) || cfg_hot(CfgHot::rt_water_shadows) || cfg_hot(CfgHot::rt_water_ls_shadows) || swaps) {
+  if (cfg_hot(CfgHot::rt_water_compose) || cfg_hot(CfgHot::rt_water_shadows) || cfg_hot(CfgHot::rt_water_ls_shadows) ||
+      cfg_hot(CfgHot::rt_water_refraction) || swaps) {
     std::lock_guard<std::mutex> cl(g_cmp_mu);
     log("[water] compose variants (%llu frames): FS patched %llu, refused %llu (%s), variant pipelines %llu (refused: "
         "blend %llu, library %llu; failed %llu), water draws on a variant %llu, without %llu%s",
@@ -981,7 +988,7 @@ void water_on_present() {
         g_cmp.mods_refused ? water::patch_status_name(g_cmp.last_refusal) : "-", (unsigned long long)g_cmp.pipes,
         (unsigned long long)g_cmp.refused_blend, (unsigned long long)g_cmp.refused_library,
         (unsigned long long)g_cmp.failed, (unsigned long long)swaps, (unsigned long long)novar,
-        g_cmp.tried ? "" : " (no water FS was patched: rt_water_compose, rt_water_shadows or rt_water_ls_shadows must be on when the water pipelines are created; restart with it on)");
+        g_cmp.tried ? "" : " (no water FS was patched: rt_water_compose, rt_water_shadows, rt_water_ls_shadows or rt_water_refraction must be on when the water pipelines are created; restart with it on)");
   }
   g_win = Window{};
 }
